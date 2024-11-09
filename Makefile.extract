@@ -1,0 +1,23 @@
+# Compiler and flags
+CC = gcc
+CFLAGS = -Wall -O2
+LDFLAGS = 
+
+# Output binary
+TARGET = extract_params
+
+# Source files
+SRC = src/extract_params.c
+
+# Build the extraction tool
+all: $(TARGET)
+
+$(TARGET): $(SRC)
+	$(CC) $(CFLAGS) -o $(TARGET) $(SRC) $(LDFLAGS)
+
+# Clean up the build
+clean:
+	rm -f $(TARGET)
+
+.PHONY: all clean
+

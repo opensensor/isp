@@ -1,0 +1,199 @@
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdarg.h>
+#include <sys/ioctl.h>
+
+// Updated ISP device structure based on binary ninja offsets
+typedef struct {
+    char dev_name[32];     // Device name/path 
+    int fd;                // File descriptor (offset 0x20)
+    int is_open;           // Device open status (offset 0x24)
+    char sensor_name[80];  // Sensor name buffer (offset 0x28)
+    char padding1[0x60];   // Padding to 0xac
+    void* buf_info;        // Buffer info pointer (offset 0xac)
+    int wdr_mode;          // WDR mode flag (offset 0xb0)
+    void* wdr_buf_info;    // WDR buffer info pointer (offset 0xb4)
+    char padding2[0x28];   // Padding to match 0xE0 size
+} IMPISPDev;
+
+static IMPISPDev* gISPdev = NULL;
+
+// Define the buffer info structure
+struct imp_buffer_info {
+    uint32_t paddr;
+    uint32_t size;
+};
+
+// Define function pointer types for allocation functions
+typedef int (*alloc_func_t)(int size);
+typedef int (*get_paddr_func_t)(int result);
+typedef void (*free_func_t)(void *ptr);
+
+// Define the AllocManager structure with function pointers
+typedef struct {
+    alloc_func_t alloc;
+    get_paddr_func_t get_paddr;
+    free_func_t free_mem;
+} AllocManager;
+
+// Global instance of AllocManager
+static AllocManager g_alloc;
+
+// Mock implementation of logging function
+void imp_log_fun(int level, int option, int arg2, const char *file, const char *func, int line, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    vprintf(fmt, args);
+    va_end(args);
+    printf("\n");
+}
+
+// Function prototypes
+int IMP_init(void);
+int allocMem(AllocManager *manager, int size, const char *name);
+void freeMem(void *ptr);
+int IMP_ISP_Open(void);
+
+// Example allocation and free functions (replace with actual implementations)
+int my_alloc_function(int size) {
+    printf("Allocating %d bytes\n", size);
+    return size; // Mock allocation, returns size as a "handle"
+}
+
+int my_get_paddr_function(int result) {
+    return result + 1000; // Mock physical address retrieval
+}
+
+void my_free_function(void *ptr) {
+    printf("Freeing memory at %p\n", ptr);
+    free(ptr);
+}
+
+// Initialization function to set up allocation methods
+int IMP_init(void) {
+    // Assign function pointers to the allocation manager
+    g_alloc.alloc = my_alloc_function;
+    g_alloc.get_paddr = my_get_paddr_function;
+    g_alloc.free_mem = my_free_function;
+    return 0;
+}
+
+// Function to open the ISP device (stub implementation)
+int IMP_ISP_Open(void) {
+    if (gISPdev == NULL) {
+        gISPdev = (IMPISPDev *)calloc(1, sizeof(IMPISPDev));
+        if (gISPdev == NULL) {
+            imp_log_fun(6, 0, 2, __FILE__, __func__, __LINE__, "Failed to allocate gISPdev");
+            return -1;
+        }
+        strcpy(gISPdev->dev_name, "/dev/tx-isp");
+        gISPdev->fd = open(gISPdev->dev_name, O_RDWR | O_NONBLOCK);
+        if (gISPdev->fd < 0) {
+            imp_log_fun(6, 0, 2, __FILE__, __func__, __LINE__, "Cannot open device");
+            free(gISPdev);
+            gISPdev = NULL;
+            return -1;
+        }
+        gISPdev->is_open = 1;
+        return 0;
+    }
+    return 0;
+}
+
+// Implementing allocMem function
+int allocMem(AllocManager *manager, int size, const char *name) {
+    if (manager == NULL || manager->alloc == NULL) {
+        imp_log_fun(6, 0, 2, __FILE__, __func__, __LINE__, "allocMem: Invalid manager or alloc function");
+        return 0;
+    }
+
+    // Call the allocation function
+    int result = manager->alloc(size);
+    if (result == 0) {
+        return 0;
+    }
+
+    // Allocate memory for the structure
+    void *alloc_struct = calloc(1, 0x38);
+    if (alloc_struct == NULL) {
+        imp_log_fun(6, 0, 2, __FILE__, __func__, __LINE__, "allocMem: Allocation failed");
+        return 0;
+    }
+
+    // Initialize the allocated structure
+    *(int32_t *)alloc_struct = 0;
+    strncpy((char *)alloc_struct + 4, name, 0x1f);
+    *(int32_t *)((char *)alloc_struct + 0x24) = result;
+    *(int32_t *)((char *)alloc_struct + 0x2c) = size;
+    *(int32_t *)((char *)alloc_struct + 0x30) = 1;
+
+    // Call the get_paddr function if set
+    if (manager->get_paddr != NULL) {
+        *(int32_t *)((char *)alloc_struct + 0x28) = manager->get_paddr(result);
+    }
+
+    return result;
+}
+
+
+int main(void) {
+    printf("Starting ISP initialization...\n");
+    printf("ISP physical base address: 0x%08x\n", ISP_BASE_ADDR);
+
+    /* Initialize IMP system first */
+    IMPSensorInfo sinfo;
+    memset(&sinfo, 0, sizeof(IMPSensorInfo));
+    strcpy(sinfo.name, "gc2053");  // Example sensor
+    sinfo.cbus_type = TX_SENSOR_CONTROL_INTERFACE_I2C;
+    strcpy(sinfo.i2c.type, "gc2053");
+    sinfo.i2c.addr = 0x37;  // Example address
+
+    IMP_ISP_Open();
+    // IMP_ISP_AddSensor(&sinfo);
+    IMP_ISP_EnableSensor();
+    IMP_System_Init();
+    IMP_ISP_EnableTuning();
+
+    /* Now try direct register access */
+    int mem_fd = open("/dev/mem", O_RDWR | O_SYNC);
+    if (mem_fd < 0) {
+        perror("Failed to open /dev/mem");
+        return 1;
+    }
+
+    void *map_base = mmap(NULL, ISP_MAP_SIZE, PROT_READ | PROT_WRITE, 
+                         MAP_SHARED, mem_fd, ISP_BASE_ADDR);
+    if (map_base == MAP_FAILED) {
+        perror("Failed to mmap");
+        close(mem_fd);
+        return 1;
+    }
+
+    printf("Memory mapped successfully at %p\n", map_base);
+    printf("Virtual to physical offset: 0x%lx\n", 
+           (unsigned long)map_base - ISP_BASE_ADDR);
+
+    /* Test register access */
+    printf("\nTesting register access...\n");
+    uint32_t test_value = 0xAA55AA55;
+    verify_register_write(map_base, REG_CONTROL, test_value);
+
+    /* Read initial status */
+    uint32_t initial_status = read_isp_register(map_base, REG_STATUS);
+    printf("Initial status register: 0x%08x\n", initial_status);
+
+    /* Cleanup */
+    if (munmap(map_base, ISP_MAP_SIZE) != 0) {
+        perror("Failed to unmap memory");
+    }
+    close(mem_fd);
+
+    return 0;
+}
+
+

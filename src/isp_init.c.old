@@ -1,0 +1,275 @@
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include <string.h>
+
+// Base address and size definitions
+#define ISP_BASE_ADDR        0x13300000
+#define ISP_MAP_SIZE         0x100000
+#define ISP_OFFSET_PARAMS    0x137f0
+#define NUM_ENTRIES          471
+
+// Register offsets from binary analysis
+#define REG_CONTROL          0x4
+#define REG_BAYER_PATTERN    0x8
+#define REG_BYPASS           0xc
+#define REG_DEIR_CONTROL     0x1c
+#define REG_STATUS           0x30
+#define REG_BUFFER_BASE      0xa02c
+#define REG_BUFFER_CONFIG    0xa04c
+
+// Global variables
+static void *map_base = NULL;
+
+// Function prototypes
+static void write_isp_register(uint32_t offset, uint32_t value);
+static uint32_t read_isp_register(uint32_t offset);
+static int init_buffer_config(void);
+static void init_bayer_pattern(uint32_t pattern);
+static int verify_register_write(uint32_t offset, uint32_t value);
+
+/* Function declarations that would be in IMP */
+static int IMP_ISP_Open(void);
+// static int IMP_ISP_AddSensor(IMPSensorInfo *sensor);
+static int IMP_ISP_EnableSensor(void);
+static int IMP_System_Init(void);
+static int IMP_ISP_EnableTuning(void);
+
+// Function to safely write to a memory-mapped ISP register
+static void write_isp_register(uint32_t offset, uint32_t value) {
+    if (map_base == NULL) {
+        printf("Error: Memory not mapped\n");
+        return;
+    }
+    volatile uint32_t *reg = (uint32_t *)((char *)map_base + offset);
+    *reg = value;
+    printf("Wrote 0x%08x to register offset 0x%08x\n", value, offset);
+}
+
+// Function to safely read from a memory-mapped ISP register
+static uint32_t read_isp_register(uint32_t offset) {
+    if (map_base == NULL) {
+        printf("Error: Memory not mapped\n");
+        return 0;
+    }
+    volatile uint32_t *reg = (uint32_t *)((char *)map_base + offset);
+    uint32_t value = *reg;
+    printf("Read 0x%08x from register offset 0x%08x\n", value, offset);
+    return value;
+}
+
+// Verify register write by reading back
+static int verify_register_write(uint32_t offset, uint32_t value) {
+    write_isp_register(offset, value);
+    uint32_t readback = read_isp_register(offset);
+    
+    if (readback != value) {
+        printf("Register verification failed at offset 0x%x: wrote 0x%x, read 0x%x\n",
+               offset, value, readback);
+        return -1;
+    }
+    return 0;
+}
+
+// Initialize bayer pattern and DEIR settings
+static void init_bayer_pattern(uint32_t pattern) {
+    printf("\nInitializing Bayer pattern with value 0x%x\n", pattern);
+    
+    if (pattern >= 0x15) {
+        printf("Error: Unsupported bayer pattern: 0x%x\n", pattern);
+        return;
+    }
+
+    uint32_t reg_value;
+    uint32_t deir_enabled = 0;
+
+    if (pattern <= 3) {
+        reg_value = pattern;
+    } else if (pattern <= 0x13) {
+        reg_value = pattern + 4;
+        deir_enabled = 1;
+    } else { // pattern == 0x14
+        deir_enabled = 1;
+        reg_value = 0;
+    }
+
+    verify_register_write(REG_BAYER_PATTERN, reg_value);
+    
+    // Configure DEIR control register
+    uint32_t deir_reg_value = deir_enabled ? 0x10003f00 : 0x3f00;
+    verify_register_write(REG_DEIR_CONTROL, deir_reg_value);
+}
+
+// Initialize buffer configuration
+static int init_buffer_config(void) {
+    printf("\nInitializing buffer configuration\n");
+    
+    // Read initial status
+    uint32_t initial_status = read_isp_register(REG_STATUS);
+    printf("Initial status register: 0x%08x\n", initial_status);
+
+    // Allocate memory for buffers (this is just an example, adjust sizes as needed)
+    uint32_t buffer_size = 0x6000;
+    void *buffer = malloc(buffer_size);
+    if (!buffer) {
+        printf("Failed to allocate buffer memory\n");
+        return -1;
+    }
+
+    // Calculate physical address (this is simplified and may need adjustment)
+    uint32_t phys_addr = (uint32_t)(uintptr_t)buffer;
+    printf("Buffer allocated at virtual address: %p\n", buffer);
+    
+    // Configure buffer registers with verification
+    if (verify_register_write(REG_BUFFER_BASE, phys_addr) < 0) return -1;
+    if (verify_register_write(REG_BUFFER_BASE + 0x4, phys_addr + 0x1000) < 0) return -1;
+    if (verify_register_write(REG_BUFFER_BASE + 0x8, phys_addr + 0x2000) < 0) return -1;
+    if (verify_register_write(REG_BUFFER_BASE + 0xc, phys_addr + 0x3000) < 0) return -1;
+    if (verify_register_write(REG_BUFFER_BASE + 0x10, phys_addr + 0x4000) < 0) return -1;
+    if (verify_register_write(REG_BUFFER_BASE + 0x14, phys_addr + 0x4800) < 0) return -1;
+    if (verify_register_write(REG_BUFFER_BASE + 0x18, phys_addr + 0x5000) < 0) return -1;
+    if (verify_register_write(REG_BUFFER_BASE + 0x1c, phys_addr + 0x5800) < 0) return -1;
+    
+    // Set buffer configuration
+    if (verify_register_write(REG_BUFFER_CONFIG, 0x33) < 0) return -1;
+
+    // Read final status
+    uint32_t final_status = read_isp_register(REG_STATUS);
+    printf("Final status register: 0x%08x\n", final_status);
+
+    return 0;
+}
+
+// Initialize ISP parameters
+static void isp_init_params(uint32_t *params_array) {
+    printf("\nInitializing ISP parameters...\n");
+    
+    // Read initial status
+    uint32_t initial_status = read_isp_register(REG_STATUS);
+    printf("Initial status before parameter load: 0x%08x\n", initial_status);
+    
+    for (int i = 0; i < NUM_ENTRIES; i++) {
+        verify_register_write(ISP_OFFSET_PARAMS + i * 4, params_array[i]);
+    }
+    
+    // Read final status
+    uint32_t final_status = read_isp_register(REG_STATUS);
+    printf("Final status after parameter load: 0x%08x\n", final_status);
+}
+
+
+int IMP_ISP_Open(void) {
+    int result = 0;
+
+    printf("IMP_ISP_Open called\n");
+    // Check if device is already initialized
+    if (gISPdev == 0) {
+        // Allocate device structure (0xE0 bytes as seen in binary ninja)
+        gISPdev = (IMPISPDev*)calloc(1, sizeof(IMPISPDev));
+
+        if (gISPdev == NULL) {
+            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
+                       __FILE__, __func__, __LINE__,
+                       "Failed to alloc gISPdev!\n");
+            return -1;
+        }
+
+        // Copy device name (as seen at 0x8b778)
+        strcpy(gISPdev->dev_name, "/dev/tx-isp");
+
+        // Open the device with flags 0x80002 (O_RDWR | O_NONBLOCK)
+        gISPdev->fd = open(gISPdev->dev_name, O_RDWR | O_NONBLOCK);
+
+        if (gISPdev->fd < 0) {
+            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
+                       __FILE__, __func__, __LINE__,
+                       "Cannot open %s\n", gISPdev->dev_name);
+            free(gISPdev);
+            gISPdev = NULL;
+            return -1;
+        }
+
+        // Set device as open (offset 0x24 set to 1 in binary ninja)
+        gISPdev->is_open = 1;
+
+        // Log successful open
+        imp_log_fun(IMP_LOG_INFO, IMP_Log_Get_Option(), 2,
+                   __FILE__, __func__, __LINE__,
+                   "~~~~~~ %s[%d] ~~~~~~~\n", "IMP_ISP_Open", __LINE__);
+    }
+
+    return result;
+}
+
+
+
+int main(int argc, char *argv[]) {
+    printf("Starting ISP initialization...\n");
+    printf("ISP physical base address: 0x%08x\n", ISP_BASE_ADDR);
+
+    /* Initialize IMP system first */
+    IMP_ISP_Open();
+
+
+    // Open memory device
+    int mem_fd = open("/dev/mem", O_RDWR | O_SYNC);
+    if (mem_fd < 0) {
+        perror("Failed to open /dev/mem");
+        return 1;
+    }
+
+    // Map the ISP memory region
+    map_base = mmap(NULL, ISP_MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, 
+                   mem_fd, ISP_BASE_ADDR);
+    if (map_base == MAP_FAILED) {
+        perror("Failed to mmap");
+        close(mem_fd);
+        return 1;
+    }
+
+    printf("Memory mapped successfully at %p\n", map_base);
+    printf("Virtual to physical offset: 0x%lx\n", 
+           (unsigned long)map_base - ISP_BASE_ADDR);
+
+    // Initialize parameter array
+    static uint32_t tparams_day[NUM_ENTRIES] = {0};
+    for (int i = 0; i < NUM_ENTRIES; i++) {
+        tparams_day[i] = i * 3;  // Example initialization
+    }
+
+    // Test register access
+    printf("\nTesting register access...\n");
+    uint32_t test_value = 0xAA55AA55;
+    verify_register_write(REG_CONTROL, test_value);
+
+    // Initialize bayer pattern (example pattern - adjust as needed)
+    init_bayer_pattern(0x4);
+
+    // Initialize buffer configuration
+    if (init_buffer_config() != 0) {
+        printf("Failed to initialize buffer configuration\n");
+        goto cleanup;
+    }
+
+    // Initialize the parameters
+    isp_init_params(tparams_day);
+
+    printf("\nISP initialization completed\n");
+    printf("Final register dump:\n");
+    printf("Control (0x4): 0x%08x\n", read_isp_register(REG_CONTROL));
+    printf("Bayer Pattern (0x8): 0x%08x\n", read_isp_register(REG_BAYER_PATTERN));
+    printf("DEIR Control (0x1c): 0x%08x\n", read_isp_register(REG_DEIR_CONTROL));
+    printf("Status (0x30): 0x%08x\n", read_isp_register(REG_STATUS));
+
+cleanup:
+    // Clean up
+    if (map_base != MAP_FAILED) {
+        munmap(map_base, ISP_MAP_SIZE);
+    }
+    close(mem_fd);
+
+    return 0;
+}

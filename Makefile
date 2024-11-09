@@ -1,21 +1,18 @@
-CC = mipsel-linux-gnu-gcc
-CFLAGS = -Wall -O2
-LDFLAGS =
-
-SRC = src/isp.c src/sensor.c
-OBJ = $(SRC:.c=.o)
-
-TARGET = libisp.a
+CC = $(shell echo ~/output/cinnado_d1_t31l/host/bin/mipsel-linux-gcc)
+CFLAGS = -Wall -O2 -Iinclude
+SRC = src/isp_init.c
+OBJ = src/isp_init.o
+TARGET = isp_init
 
 all: $(TARGET)
 
 $(TARGET): $(OBJ)
-    ar rcs $@ $^
+	$(CC) $(OBJ) -o $(TARGET)
 
-%.o: %.c
-    $(CC) $(CFLAGS) -c $< -o $@
+src/isp_init.o: $(SRC)
+	$(CC) $(CFLAGS) -c $(SRC) -o $(OBJ)
 
 clean:
-    rm -f $(OBJ) $(TARGET)
+	rm -f $(OBJ) $(TARGET)
 
-.PHONY: all clean
+
