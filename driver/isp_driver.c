@@ -222,6 +222,7 @@ struct IspSubdev
 };
 
 #define isp_printf(level, seq, fmt, ...) seq_printf(seq, fmt, ##__VA_ARGS__)
+EXPORT_SYMBOL(isp_printf);
 
 uint32_t globe_ispdev = 0x0;
 
