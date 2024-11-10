@@ -960,21 +960,21 @@ int32_t tx_isp_subdev_deinit(struct IspDeviceConfig* arg1)
 //    }
 //
 //    // Handle memory region release
-//    void* memory_region = arg1->memory_region;
-//    int32_t irq_number;
+      void* memory_region = arg1->memory_region;
+      int32_t irq_number;
 //
-//    if (memory_region == NULL)
-//    {
-//        irq_number = arg1->irq_number;
-//    }
-//    else
-//    {
-//        // Release the memory region if it's allocated
-//        int32_t start_address = *(uint32_t*)memory_region;
-//        release_mem_region(start_address, *((uint32_t*)((char*)memory_region + 4)) + 1 - start_address);
-//        arg1->memory_region = NULL;  // Set memory region to NULL
-//        irq_number = arg1->irq_number;
-//    }
+      if (memory_region == NULL)
+      {
+          irq_number = arg1->irq_number;
+      }
+      else
+      {
+          // Release the memory region if it's allocated
+          int32_t start_address = *(uint32_t*)memory_region;
+          release_mem_region(start_address, *((uint32_t*)((char*)memory_region + 4)) + 1 - start_address);
+          arg1->memory_region = NULL;  // Set memory region to NULL
+          irq_number = arg1->irq_number;
+      }
 //
 //    // Free the IRQ if it's valid
     if (irq_number != 0)
