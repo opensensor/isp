@@ -1049,13 +1049,13 @@ int32_t tx_isp_subdev_deinit(struct IspDeviceConfig* arg1)
     }
 
     // Call the module deinit function and store the result
-    int32_t result = tx_isp_module_deinit(arg1);
+    tx_isp_module_deinit(arg1);
 
     // Reset the parameter value
     arg1->parameter_value = 0;
 
     // Return the result from module deinit
-    return result;
+    return 0;
 }
 EXPORT_SYMBOL(tx_isp_subdev_deinit);
 
