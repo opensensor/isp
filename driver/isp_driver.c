@@ -902,12 +902,12 @@ int32_t isp_subdev_release_clks(struct IspSubdev* isp_subdev)
         // Loop through the clocks and release each one
         while (i < isp_subdev->num_clocks)
         {
-            // Call private function to release each clock
-            clk_put(*(uint32_t*)allocated_clocks_1);
+            // Cast allocated_clocks_1 to a pointer to struct clk, and call clk_put
+            clk_put(*(struct clk**)allocated_clocks_1);
 
-            // Move to the next clock in the list
+            // Move to the next clock in the list (assuming each clock is a pointer to struct clk)
             i += 1;
-            allocated_clocks_1 += 4;  // Assuming each clock entry is 4 bytes
+            allocated_clocks_1 += sizeof(struct clk*);  // Move by the size of a pointer
         }
 
         // Free the allocated memory for clocks
