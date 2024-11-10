@@ -221,7 +221,13 @@ struct IspSubdev
     struct device *dev;      // Device associated with this sub-device (for clock management)
 };
 
-#define isp_printf(level, seq, fmt, ...) seq_printf(seq, fmt, ##__VA_ARGS__)
+void isp_printf(int level, struct seq_file *seq, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    seq_vprintf(seq, fmt, args);
+    va_end(args);
+}
 EXPORT_SYMBOL(isp_printf);
 
 uint32_t globe_ispdev = 0x0;
