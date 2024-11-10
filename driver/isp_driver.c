@@ -18,6 +18,7 @@
 #include <linux/fs.h>      // For file operations
 #include <linux/cdev.h>    // For character device support
 #include <linux/vmalloc.h>
+#include <linux/delay.h>   // For msleep
 #include <linux/slab.h>      // For kmalloc and kfree
 #include <linux/uaccess.h>   // For copy_to_user and copy_from_user
 #include <linux/miscdevice.h>
@@ -234,9 +235,9 @@ void isp_printf(int level, struct seq_file *seq, const char *fmt, ...)
 EXPORT_SYMBOL(isp_printf);
 
 // Private wrapper functions (example)
-int private_i2c_del_driver(struct i2c_driver *driver)
+void private_i2c_del_driver(struct i2c_driver *driver)
 {
-    return i2c_del_driver(driver);
+    i2c_del_driver(driver);
 }
 
 int private_gpio_request(unsigned int gpio, const char *label)
