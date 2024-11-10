@@ -270,11 +270,6 @@ int private_capable(int capability)
     return capable(capability);
 }
 
-int private_driver_get_interface(struct device_driver *drv)
-{
-    return driver_get_interface(drv);
-}
-
 int private_i2c_set_clientdata(struct i2c_client *client, void *data)
 {
     i2c_set_clientdata(client, data);
@@ -301,13 +296,11 @@ void private_clk_enable(struct clk *clk)
     clk_enable(clk);
 }
 
-// The function definition for private_get_driver_interface
-
 struct DriverInterface {
     void* field_00;
 };
 
-int32_t private_get_driver_interface(struct DriverInterface* arg1) {
+int32_t private_driver_get_interface(struct DriverInterface* arg1) {
     // Return error if input is NULL
     if (arg1 == NULL)
         return 0xffffffff;
@@ -351,13 +344,12 @@ EXPORT_SYMBOL(private_msleep);
 EXPORT_SYMBOL(private_clk_disable);
 EXPORT_SYMBOL(private_i2c_get_clientdata);
 EXPORT_SYMBOL(private_capable);
-EXPORT_SYMBOL(private_driver_get_interface);
 EXPORT_SYMBOL(private_i2c_set_clientdata);
 EXPORT_SYMBOL(private_i2c_transfer);
 EXPORT_SYMBOL(private_i2c_add_driver);
 EXPORT_SYMBOL(private_gpio_direction_output);
 EXPORT_SYMBOL(private_clk_enable);
-EXPORT_SYMBOL(private_get_driver_interface);
+EXPORT_SYMBOL(private_driver_get_interface);
 
 void tx_isp_free_irq(int32_t* irq_pointer)
 {
