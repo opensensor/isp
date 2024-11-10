@@ -227,6 +227,84 @@ struct IspSubdev
     struct device *dev;      // Device associated with this sub-device (for clock management)
 };
 
+// Struct representing the configuration of the ISP device
+struct IspDeviceConfig
+{
+    // 4-byte padding for alignment
+    __padding char _0[4];
+
+    // Field at offset 4 (void pointer)
+    void* field_04;
+
+    // 4-byte integer field at offset 8
+    int32_t field_08;
+
+    // 4-byte padding for alignment
+    __padding char _c[4];
+
+    // 4-byte padding at offset 10
+    __padding char _10[4];
+
+    // Padding of 28 bytes
+    __padding char _14[0x1c];
+
+    // Flag indicating whether the misc device needs deregistration
+    int32_t misc_deregister_flag;
+
+    // Field at offset 34
+    int32_t field_34;
+
+    // Padding of 8 bytes
+    __padding char _38[8];
+
+    // Padding of 56 bytes for some field
+    __padding char _40[0x38];
+
+    // Field at offset 78
+    int32_t field_78;
+
+    // Field at offset 7C (pointer to some resource)
+    void* field_7c;
+
+    // IRQ number for the device
+    int32_t irq_number;
+
+    // Padding of 8 bytes
+    __padding char _84[8];
+
+    // Padding of 40 bytes for some other field
+    __padding char _8c[0x28];
+
+    // Pointer to the memory region for the device
+    void* memory_region;
+
+    // Register-mapped address for the device
+    int32_t register_mapped_address;
+
+    // Padding of 4 bytes
+    __padding char _bc[4];
+
+    // Clock settings for the ISP
+    int32_t clock_settings;
+
+    // Parameter value for the device
+    int32_t parameter_value;
+
+    // Some 16-bit fields
+    int16_t field_c8;
+    int16_t field_ca;
+
+    // Input pads and allocated input pads
+    int32_t input_pads;
+    int32_t allocated_input_pads;
+};
+
+struct IspSubdev
+{
+    void* allocated_clocks;  // Pointer to the allocated clocks
+    int32_t num_clocks;      // Number of clocks
+};
+
 void isp_printf(int level, struct seq_file *seq, const char *fmt, ...)
 {
     va_list args;
@@ -298,6 +376,16 @@ void private_clk_enable(struct clk *clk)
     clk_enable(clk);
 }
 
+void private_clk_put(struct clk *clk)
+{
+    clk_put(clk);
+}
+
+int private_clk_set_rate(struct clk *clk, unsigned long rate)
+{
+    return clk_set_rate(clk, rate);
+}
+
 struct DriverInterface {
     void* field_00;
 };
@@ -352,6 +440,8 @@ EXPORT_SYMBOL(private_i2c_add_driver);
 EXPORT_SYMBOL(private_gpio_direction_output);
 EXPORT_SYMBOL(private_clk_enable);
 EXPORT_SYMBOL(private_driver_get_interface);
+EXPORT_SYMBOL(private_clk_put);
+EXPORT_SYMBOL(private_clk_set_rate);
 
 void tx_isp_free_irq(int32_t* irq_pointer)
 {
@@ -847,6 +937,133 @@ err_free_irq:
     return ret;
 }
 EXPORT_SYMBOL(tx_isp_subdev_init);
+
+
+int32_t isp_subdev_release_clks(struct IspSubdev* isp_subdev)
+{
+    // Check if there are any allocated clocks to release
+    void* allocated_clocks = isp_subdev->allocated_clocks;
+    if (allocated_clocks != 0)
+    {
+        void* allocated_clocks_1 = allocated_clocks;
+        int32_t i = 0;
+
+        // Loop through the clocks and release each one
+        while (i < isp_subdev->num_clocks)
+        {
+            // Call private function to release each clock
+            clk_put(*(uint32_t*)allocated_clocks_1);
+
+            // Move to the next clock in the list
+            i += 1;
+            allocated_clocks_1 += 4;  // Assuming each clock entry is 4 bytes
+        }
+
+        // Free the allocated memory for clocks
+        kfree(allocated_clocks);
+
+        // Set the allocated_clocks pointer to NULL
+        isp_subdev->allocated_clocks = NULL;
+    }
+
+    return 0;  // Return 0 as per the assembly code
+}
+
+// Define the IRQHandler structure
+struct IRQHandler
+{
+    int32_t irq_number;  // The IRQ number to be freed
+};
+
+void tx_isp_free_irq(struct IRQHandler* irq_pointer)
+{
+    // Check if the irq_pointer is not NULL
+    if (irq_pointer != 0)
+    {
+        int32_t irq_number = irq_pointer->irq_number;
+
+        // Check if the IRQ number is zero
+        if (irq_number == 0)
+        {
+            irq_pointer->irq_number = 0;  // Set IRQ number to zero if it is already zero
+        }
+        else
+        {
+            // Call private function to free the IRQ
+            free_irq(irq_number, irq_pointer);
+
+            // Set the IRQ number to zero after freeing it
+            irq_pointer->irq_number = 0;
+        }
+    }
+}
+
+int32_t tx_isp_subdev_deinit(struct IspDeviceConfig* arg1)
+{
+    // Check if the misc_deregister_flag is non-zero
+    if (arg1->misc_deregister_flag != 0)
+    {
+        // Deregister the misc device
+        misc_deregister((int32_t*)((char*)arg1 + 0xc));  // Accessing misc device pointer
+    }
+
+    // Release clocks associated with the subdevice
+    isp_subdev_release_clks(arg1);
+
+    // Free input pads if they are allocated
+    int32_t input_pads = arg1->input_pads;
+    if (input_pads != 0)
+    {
+        kfree(input_pads);
+    }
+
+    // Free allocated input pads if they are allocated
+    int32_t allocated_input_pads = arg1->allocated_input_pads;
+    if (allocated_input_pads != 0)
+    {
+        kfree(allocated_input_pads);
+    }
+
+    // Unmap register-mapped address if it is non-zero
+    int32_t register_mapped_address = arg1->register_mapped_address;
+    if (register_mapped_address != 0)
+    {
+        iounmap(register_mapped_address);
+    }
+
+    // Handle memory region release
+    void* memory_region = arg1->memory_region;
+    int32_t irq_number;
+
+    if (memory_region == NULL)
+    {
+        irq_number = arg1->irq_number;
+    }
+    else
+    {
+        // Release the memory region if it's allocated
+        int32_t start_address = *(uint32_t*)memory_region;
+        release_mem_region(start_address, *((uint32_t*)((char*)memory_region + 4)) + 1 - start_address);
+        arg1->memory_region = NULL;  // Set memory region to NULL
+        irq_number = arg1->irq_number;
+    }
+
+    // Free the IRQ if it's valid
+    if (irq_number != 0)
+    {
+        tx_isp_free_irq(&arg1->irq_number);
+    }
+
+    // Call the module deinit function and store the result
+    int32_t result = tx_isp_module_deinit(arg1);
+
+    // Reset the parameter value
+    arg1->parameter_value = 0;
+
+    // Return the result from module deinit
+    return result;
+}
+EXPORT_SYMBOL(tx_isp_subdev_deinit);
 
 // Individual device proc handlers
 static int isp_fs_show(struct seq_file *m, void *v)
