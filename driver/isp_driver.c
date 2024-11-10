@@ -299,12 +299,6 @@ struct IspDeviceConfig
     int32_t allocated_input_pads;
 };
 
-struct IspSubdev
-{
-    void* allocated_clocks;  // Pointer to the allocated clocks
-    int32_t num_clocks;      // Number of clocks
-};
-
 void isp_printf(int level, struct seq_file *seq, const char *fmt, ...)
 {
     va_list args;
