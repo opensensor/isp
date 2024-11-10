@@ -969,29 +969,6 @@ struct IRQHandler
     int32_t irq_number;  // The IRQ number to be freed
 };
 
-void tx_isp_free_irq(struct IRQHandler* irq_pointer)
-{
-    // Check if the irq_pointer is not NULL
-    if (irq_pointer != 0)
-    {
-        int32_t irq_number = irq_pointer->irq_number;
-
-        // Check if the IRQ number is zero
-        if (irq_number == 0)
-        {
-            irq_pointer->irq_number = 0;  // Set IRQ number to zero if it is already zero
-        }
-        else
-        {
-            // Call private function to free the IRQ
-            free_irq(irq_number, irq_pointer);
-
-            // Set the IRQ number to zero after freeing it
-            irq_pointer->irq_number = 0;
-        }
-    }
-}
-
 int32_t tx_isp_subdev_deinit(struct IspDeviceConfig* arg1)
 {
     // Check if the misc_deregister_flag is non-zero
