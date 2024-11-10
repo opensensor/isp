@@ -928,55 +928,55 @@ struct IRQHandler
 
 int32_t tx_isp_subdev_deinit(struct IspDeviceConfig* arg1)
 {
-    // Check if the misc_deregister_flag is non-zero
-    if (arg1->misc_deregister_flag != 0)
-    {
-        // Deregister the misc device
-        misc_deregister((int32_t*)((char*)arg1 + 0xc));  // Accessing misc device pointer
-    }
-
-    // Release clocks associated with the subdevice
-    isp_subdev_release_clks(arg1);
-
-    // Free input pads if they are allocated
-    int32_t input_pads = arg1->input_pads;
-    if (input_pads != 0)
-    {
-        kfree(input_pads);
-    }
-
-    // Free allocated input pads if they are allocated
-    int32_t allocated_input_pads = arg1->allocated_input_pads;
-    if (allocated_input_pads != 0)
-    {
-        kfree(allocated_input_pads);
-    }
-
-    // Unmap register-mapped address if it is non-zero
-    int32_t register_mapped_address = arg1->register_mapped_address;
-    if (register_mapped_address != 0)
-    {
-        iounmap(register_mapped_address);
-    }
-
-    // Handle memory region release
-    void* memory_region = arg1->memory_region;
-    int32_t irq_number;
-
-    if (memory_region == NULL)
-    {
-        irq_number = arg1->irq_number;
-    }
-    else
-    {
-        // Release the memory region if it's allocated
-        int32_t start_address = *(uint32_t*)memory_region;
-        release_mem_region(start_address, *((uint32_t*)((char*)memory_region + 4)) + 1 - start_address);
-        arg1->memory_region = NULL;  // Set memory region to NULL
-        irq_number = arg1->irq_number;
-    }
-
-    // Free the IRQ if it's valid
+//    // Check if the misc_deregister_flag is non-zero
+//    if (arg1->misc_deregister_flag != 0)
+//    {
+//        // Deregister the misc device
+//        misc_deregister((int32_t*)((char*)arg1 + 0xc));  // Accessing misc device pointer
+//    }
+//
+//    // Release clocks associated with the subdevice
+      isp_subdev_release_clks(arg1);
+//
+//    // Free input pads if they are allocated
+//    int32_t input_pads = arg1->input_pads;
+//    if (input_pads != 0)
+//    {
+//        kfree(input_pads);
+//    }
+//
+//    // Free allocated input pads if they are allocated
+//    int32_t allocated_input_pads = arg1->allocated_input_pads;
+//    if (allocated_input_pads != 0)
+//    {
+//        kfree(allocated_input_pads);
+//    }
+//
+//    // Unmap register-mapped address if it is non-zero
+//    int32_t register_mapped_address = arg1->register_mapped_address;
+//    if (register_mapped_address != 0)
+//    {
+//        iounmap(register_mapped_address);
+//    }
+//
+//    // Handle memory region release
+//    void* memory_region = arg1->memory_region;
+//    int32_t irq_number;
+//
+//    if (memory_region == NULL)
+//    {
+//        irq_number = arg1->irq_number;
+//    }
+//    else
+//    {
+//        // Release the memory region if it's allocated
+//        int32_t start_address = *(uint32_t*)memory_region;
+//        release_mem_region(start_address, *((uint32_t*)((char*)memory_region + 4)) + 1 - start_address);
+//        arg1->memory_region = NULL;  // Set memory region to NULL
+//        irq_number = arg1->irq_number;
+//    }
+//
+//    // Free the IRQ if it's valid
     if (irq_number != 0)
     {
         tx_isp_free_irq(&arg1->irq_number);
