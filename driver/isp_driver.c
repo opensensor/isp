@@ -230,26 +230,26 @@ struct IspSubdev
 // Struct representing the configuration of the ISP device
 struct IspDeviceConfig
 {
-    __padding char _0[4];
+    char _0[4];                  // Padding to align next field
     void* field_04;
     int32_t field_08;
-    __padding char _c[4];
-    __padding char _10[4];
-    __padding char _14[0x1c];
+    char _c[4];                  // Padding
+    char _10[4];                 // Padding
+    char _14[0x1c];              // Padding
     int32_t misc_deregister_flag;
     int32_t field_34;
-    __padding char _38[8];
-    __padding char _40[0x38];
+    char _38[8];                 // Padding
+    char _40[0x38];              // Padding
     int32_t field_78;
     void* field_7c;
-    int32_t irq_number;              // Ensure this field exists
-    __padding char _84[8];
-    __padding char _8c[0x28];
-    void* memory_region;             // Ensure this field exists
+    int32_t irq_number;          // Ensure this field exists
+    char _84[8];                 // Padding
+    char _8c[0x28];              // Padding
+    void* memory_region;         // Ensure this field exists
     int32_t register_mapped_address;
-    __padding char _bc[4];
+    char _bc[4];                 // Padding
     int32_t clock_settings;
-    int32_t parameter_value;         // Ensure this field exists
+    int32_t parameter_value;     // Ensure this field exists
     int16_t field_c8;
     int16_t field_ca;
     int32_t input_pads;
