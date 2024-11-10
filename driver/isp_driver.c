@@ -230,71 +230,28 @@ struct IspSubdev
 // Struct representing the configuration of the ISP device
 struct IspDeviceConfig
 {
-    // 4-byte padding for alignment
     __padding char _0[4];
-
-    // Field at offset 4 (void pointer)
     void* field_04;
-
-    // 4-byte integer field at offset 8
     int32_t field_08;
-
-    // 4-byte padding for alignment
     __padding char _c[4];
-
-    // 4-byte padding at offset 10
     __padding char _10[4];
-
-    // Padding of 28 bytes
     __padding char _14[0x1c];
-
-    // Flag indicating whether the misc device needs deregistration
     int32_t misc_deregister_flag;
-
-    // Field at offset 34
     int32_t field_34;
-
-    // Padding of 8 bytes
     __padding char _38[8];
-
-    // Padding of 56 bytes for some field
     __padding char _40[0x38];
-
-    // Field at offset 78
     int32_t field_78;
-
-    // Field at offset 7C (pointer to some resource)
     void* field_7c;
-
-    // IRQ number for the device
-    int32_t irq_number;
-
-    // Padding of 8 bytes
+    int32_t irq_number;              // Ensure this field exists
     __padding char _84[8];
-
-    // Padding of 40 bytes for some other field
     __padding char _8c[0x28];
-
-    // Pointer to the memory region for the device
-    void* memory_region;
-
-    // Register-mapped address for the device
+    void* memory_region;             // Ensure this field exists
     int32_t register_mapped_address;
-
-    // Padding of 4 bytes
     __padding char _bc[4];
-
-    // Clock settings for the ISP
     int32_t clock_settings;
-
-    // Parameter value for the device
-    int32_t parameter_value;
-
-    // Some 16-bit fields
+    int32_t parameter_value;         // Ensure this field exists
     int16_t field_c8;
     int16_t field_ca;
-
-    // Input pads and allocated input pads
     int32_t input_pads;
     int32_t allocated_input_pads;
 };
