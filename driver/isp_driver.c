@@ -264,78 +264,78 @@ void isp_printf(int level, struct seq_file *seq, const char *fmt, ...)
     va_end(args);
 }
 EXPORT_SYMBOL(isp_printf);
-
-// Private wrapper functions (example)
-void private_i2c_del_driver(struct i2c_driver *driver)
-{
-    i2c_del_driver(driver);
-}
-
-int private_gpio_request(unsigned int gpio, const char *label)
-{
-    return gpio_request(gpio, label);
-}
-
-void private_gpio_free(unsigned int gpio)
-{
-    gpio_free(gpio);
-}
-
-void private_msleep(unsigned int msecs)
-{
-    msleep(msecs);
-}
-
-void private_clk_disable(struct clk *clk)
-{
-    clk_disable(clk);
-}
-
-void *private_i2c_get_clientdata(struct i2c_client *client)
-{
-    return i2c_get_clientdata(client);
-}
-
-int private_capable(int capability)
-{
-    return capable(capability);
-}
-
-int private_i2c_set_clientdata(struct i2c_client *client, void *data)
-{
-    i2c_set_clientdata(client, data);
-    return 0;
-}
-
-int private_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
-{
-    return i2c_transfer(adap, msgs, num);
-}
-
-int private_i2c_add_driver(struct i2c_driver *driver)
-{
-    return i2c_add_driver(driver);
-}
-
-int private_gpio_direction_output(unsigned int gpio, int value)
-{
-    return gpio_direction_output(gpio, value);
-}
-
-void private_clk_enable(struct clk *clk)
-{
-    clk_enable(clk);
-}
-
-void private_clk_put(struct clk *clk)
-{
-    clk_put(clk);
-}
-
-int private_clk_set_rate(struct clk *clk, unsigned long rate)
-{
-    return clk_set_rate(clk, rate);
-}
+//
+//// Private wrapper functions (example)
+//void private_i2c_del_driver(struct i2c_driver *driver)
+//{
+//    i2c_del_driver(driver);
+//}
+//
+//int private_gpio_request(unsigned int gpio, const char *label)
+//{
+//    return gpio_request(gpio, label);
+//}
+//
+//void private_gpio_free(unsigned int gpio)
+//{
+//    gpio_free(gpio);
+//}
+//
+//void private_msleep(unsigned int msecs)
+//{
+//    msleep(msecs);
+//}
+//
+//void private_clk_disable(struct clk *clk)
+//{
+//    clk_disable(clk);
+//}
+//
+//void *private_i2c_get_clientdata(struct i2c_client *client)
+//{
+//    return i2c_get_clientdata(client);
+//}
+//
+//int private_capable(int capability)
+//{
+//    return capable(capability);
+//}
+//
+//int private_i2c_set_clientdata(struct i2c_client *client, void *data)
+//{
+//    i2c_set_clientdata(client, data);
+//    return 0;
+//}
+//
+//int private_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
+//{
+//    return i2c_transfer(adap, msgs, num);
+//}
+//
+//int private_i2c_add_driver(struct i2c_driver *driver)
+//{
+//    return i2c_add_driver(driver);
+//}
+//
+//int private_gpio_direction_output(unsigned int gpio, int value)
+//{
+//    return gpio_direction_output(gpio, value);
+//}
+//
+//void private_clk_enable(struct clk *clk)
+//{
+//    clk_enable(clk);
+//}
+//
+//void private_clk_put(struct clk *clk)
+//{
+//    clk_put(clk);
+//}
+//
+//int private_clk_set_rate(struct clk *clk, unsigned long rate)
+//{
+//    return clk_set_rate(clk, rate);
+//}
 
 struct DriverInterface {
     void* field_00;
