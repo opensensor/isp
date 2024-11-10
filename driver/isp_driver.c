@@ -327,7 +327,7 @@ int32_t private_driver_get_interface(struct DriverInterface* arg1) {
 
         // If the flags do not match, print the error and return 0xffffffff
         if (a2_1 != 0xca654 || v1_1 != a2_1) {
-            isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x\n", a2_1, (void*)v1_1, v1_1);
+            isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x\n", "private_driver_get_interface");
             return 0xffffffff;
         }
     }
