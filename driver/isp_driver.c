@@ -889,6 +889,12 @@ err_free_irq:
 }
 EXPORT_SYMBOL(tx_isp_subdev_init);
 
+void tx_isp_set_subdevdata(struct tx_isp_subdev *sd, void *data)
+{
+    sd->dev_priv = data;
+}
+EXPORT_SYMBOL(tx_isp_set_subdevdata);
+
 
 int32_t isp_subdev_release_clks(struct IspSubdev* isp_subdev)
 {
