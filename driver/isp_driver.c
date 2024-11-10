@@ -28,7 +28,9 @@
 #include <linux/interrupt.h>
 #include <linux/clk.h>
 #include <linux/printk.h>
-
+#include <linux/i2c.h>
+#include <linux/gpio.h>
+#include <linux/capability.h>
 
 #define ISP_BASE_ADDR        0x13300000
 #define ISP_MAP_SIZE         0x1000
@@ -75,6 +77,7 @@ static uint32_t cppsr = 0xFFFFFFFF;
 static uint32_t subsoctype = 0xFFFFFFFF;
 static uint32_t subremark = 0xFFFFFFFF;
 static IMPISPDev* gISPdev = NULL;
+uint32_t globe_ispdev = 0x0;
 static struct resource *mem_region;
 
 static struct class *tisp_class;
@@ -230,7 +233,87 @@ void isp_printf(int level, struct seq_file *seq, const char *fmt, ...)
 }
 EXPORT_SYMBOL(isp_printf);
 
-uint32_t globe_ispdev = 0x0;
+// Private wrapper functions (example)
+int private_i2c_del_driver(struct i2c_driver *driver)
+{
+    return i2c_del_driver(driver);
+}
+
+int private_gpio_request(unsigned int gpio, const char *label)
+{
+    return gpio_request(gpio, label);
+}
+
+void private_gpio_free(unsigned int gpio)
+{
+    gpio_free(gpio);
+}
+
+void private_msleep(unsigned int msecs)
+{
+    msleep(msecs);
+}
+
+void private_clk_disable(struct clk *clk)
+{
+    clk_disable(clk);
+}
+
+void *private_i2c_get_clientdata(struct i2c_client *client)
+{
+    return i2c_get_clientdata(client);
+}
+
+int private_capable(int capability)
+{
+    return capable(capability);
+}
+
+int private_driver_get_interface(struct device_driver *drv)
+{
+    return driver_get_interface(drv);
+}
+
+int private_i2c_set_clientdata(struct i2c_client *client, void *data)
+{
+    i2c_set_clientdata(client, data);
+    return 0;
+}
+
+int private_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
+{
+    return i2c_transfer(adap, msgs, num);
+}
+
+int private_i2c_add_driver(struct i2c_driver *driver)
+{
+    return i2c_add_driver(driver);
+}
+
+int private_gpio_direction_output(unsigned int gpio, int value)
+{
+    return gpio_direction_output(gpio, value);
+}
+
+void private_clk_enable(struct clk *clk)
+{
+    clk_enable(clk);
+}
+
+// Export the private wrappers for kernel functions
+EXPORT_SYMBOL(private_i2c_del_driver);
+EXPORT_SYMBOL(private_gpio_request);
+EXPORT_SYMBOL(private_gpio_free);
+EXPORT_SYMBOL(private_msleep);
+EXPORT_SYMBOL(private_clk_disable);
+EXPORT_SYMBOL(private_i2c_get_clientdata);
+EXPORT_SYMBOL(private_capable);
+EXPORT_SYMBOL(private_driver_get_interface);
+EXPORT_SYMBOL(private_i2c_set_clientdata);
+EXPORT_SYMBOL(private_i2c_transfer);
+EXPORT_SYMBOL(private_i2c_add_driver);
+EXPORT_SYMBOL(private_gpio_direction_output);
+EXPORT_SYMBOL(private_clk_enable);
 
 void tx_isp_free_irq(int32_t* irq_pointer)
 {
@@ -725,6 +808,7 @@ err_free_irq:
     tx_isp_module_deinit(arg2);
     return ret;
 }
+EXPORT_SYMBOL(tx_isp_subdev_init);
 
 // Individual device proc handlers
 static int isp_fs_show(struct seq_file *m, void *v)
