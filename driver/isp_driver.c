@@ -301,6 +301,48 @@ void private_clk_enable(struct clk *clk)
     clk_enable(clk);
 }
 
+// The function definition for private_get_driver_interface
+
+struct DriverInterface {
+    void* field_00;
+};
+
+int32_t private_get_driver_interface(struct DriverInterface* arg1) {
+    // Return error if input is NULL
+    if (arg1 == NULL)
+        return 0xffffffff;
+
+    // Get the common driver interface (as described in the disassembly)
+    void* v0 = get_driver_common_interfaces();
+
+    // Set the field_00 of arg1 to the value returned by get_driver_common_interfaces
+    arg1->field_00 = v0;
+
+    // Initialize result to 0
+    int32_t result = 0;
+
+    // Check if v0 is not NULL
+    if (v0 != NULL) {
+        // Dereference v0 to read the flags and compare them
+        uint32_t a2_1 = *(uint32_t*)v0;
+        uint32_t v1_1 = *(uint32_t*)((char*)v0 + 0x1e0);  // v0 + 0x1e0 (offset)
+
+        // If the first flag is equal to 0xca654, set result to 0
+        if (a2_1 == 0xca654) {
+            result = 0;
+        }
+
+        // If the flags do not match, print the error and return 0xffffffff
+        if (a2_1 != 0xca654 || v1_1 != a2_1) {
+            isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x\n", a2_1, (void*)v1_1, v1_1);
+            return 0xffffffff;
+        }
+    }
+
+    // Return result, which will be 0 if everything is fine
+    return result;
+}
+
 // Export the private wrappers for kernel functions
 EXPORT_SYMBOL(private_i2c_del_driver);
 EXPORT_SYMBOL(private_gpio_request);
@@ -315,6 +357,7 @@ EXPORT_SYMBOL(private_i2c_transfer);
 EXPORT_SYMBOL(private_i2c_add_driver);
 EXPORT_SYMBOL(private_gpio_direction_output);
 EXPORT_SYMBOL(private_clk_enable);
+EXPORT_SYMBOL(private_get_driver_interface);
 
 void tx_isp_free_irq(int32_t* irq_pointer)
 {
