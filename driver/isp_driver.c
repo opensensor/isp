@@ -1732,14 +1732,14 @@ int private_misc_register(struct miscdevice *misc_dev, const char *proc_name, co
 }
 
 
-// Function to deregister a misc device and remove associated /proc entry
-void private_misc_deregister(struct miscdevice *misc_dev, const char *proc_name)
+void private_misc_deregister(struct miscdevice *misc_dev)
 {
-    if (proc_name) {
-        remove_proc_entry(proc_name, NULL);
+    if (misc_dev->minor >= 0) {
+        remove_proc_entry(misc_dev->minor, NULL);
     }
     misc_deregister(misc_dev);
 }
+EXPORT_SYMBOL(private_misc_deregister);
 
 
 static int tx_isp_create_graph_and_nodes(struct isp_graph_data *graph_data)
