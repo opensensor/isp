@@ -10,6 +10,7 @@
 #include <linux/err.h>
 #include <linux/dma-mapping.h>
 #include <linux/firmware.h>
+#include <linux/of_device.h>
 #include <linux/io.h>
 #include <linux/platform_device.h>
 #include <linux/of.h>
@@ -24,6 +25,10 @@
 #include <linux/uaccess.h>
 #include <linux/seq_file.h>
 #include <linux/proc_fs.h>
+#include <linux/interrupt.h>
+#include <linux/clk.h>
+#include <linux/printk.h>
+
 
 #define ISP_BASE_ADDR        0x13300000
 #define ISP_MAP_SIZE         0x1000
@@ -70,6 +75,7 @@ static uint32_t cppsr = 0xFFFFFFFF;
 static uint32_t subsoctype = 0xFFFFFFFF;
 static uint32_t subremark = 0xFFFFFFFF;
 static IMPISPDev* gISPdev = NULL;
+static struct resource *mem_region;
 
 static struct class *tisp_class;
 static struct device *tisp_device;
@@ -139,6 +145,579 @@ struct proc_data {
     void *private_data;
 };
 
+typedef struct {
+    uint32_t handler_status;
+    // Other fields related to interrupt status
+} InterruptStatus;
+
+typedef struct {
+    void* current_handler;
+    // Pointer to next handler in the list
+    struct HandlerList* next;
+} HandlerList;
+
+typedef struct {
+    int32_t result;
+    // Other handler data fields
+} HandlerData;
+
+typedef struct {
+    InterruptStatus* interrupt_status;
+    HandlerList* handler_list;
+    HandlerList* handler_list_end;
+} DeviceContext;
+
+
+// Structs for handling interrupt-related data and configurations
+struct irq_task {
+    void (*task_function)(void);
+    uint32_t status;
+    void* task_data;
+};
+
+struct irq_handler_data {
+    struct irq_task *task_list;
+    int task_count;
+    int32_t irq_number;  // IRQ number
+    void* handler_function;  // Pointer to the interrupt handler function
+    void* disable_function;  // Pointer to the function to disable the IRQ
+    raw_spinlock_t rlock;    // Add the raw spinlock here
+};
+
+// Struct for passing IRQ-related information to functions
+struct irq_info
+{
+    int32_t irq_type;  // IRQ type or identifier
+};
+
+struct ClockConfig
+{
+    const char *clock_name;  // Change to const char* to hold the clock name
+    int32_t clock_rate;      // Clock rate
+};
+
+
+struct IspDevice
+{
+    char _0[8];              // Reserved/unused padding
+    char _8[0x30];           // Reserved padding (likely for alignment)
+    char _38[8];             // Reserved padding
+    char _40[0x38];          // Reserved padding
+    char _78[8];             // Reserved padding
+    spinlock_t lock;         // Spinlock for synchronization
+    void (*irq_handler)(struct IspDevice*, unsigned long flags);  // Function pointer for the IRQ handler
+    int32_t irq_enabled;     // Flag indicating whether IRQs are enabled
+};
+
+struct IspSubdev
+{
+    char _0[4];              // Reserved/unused padding
+    int32_t clock_source;    // The clock source (integer value)
+    char _8[0x38];           // Reserved padding (likely for alignment)
+    char _40[0x40];          // Reserved padding (likely for alignment)
+    char _80[0x3c];          // Reserved padding (likely for alignment)
+    void* allocated_clocks;  // Pointer to allocated clocks (generic pointer)
+    int32_t num_clocks;      // Number of clocks allocated (integer value)
+    struct device *dev;      // Device associated with this sub-device (for clock management)
+};
+
+#define isp_printf(level, seq, fmt, ...) seq_printf(seq, fmt, ##__VA_ARGS__)
+
+uint32_t globe_ispdev = 0x0;
+
+void tx_isp_free_irq(int32_t* irq_pointer)
+{
+    if (irq_pointer != 0)
+    {
+        int32_t irq_number = *(uint32_t*)irq_pointer;
+
+        if (irq_number == 0)
+            *(uint32_t*)irq_pointer = 0;
+        else
+        {
+            free_irq(irq_number, irq_pointer);
+            *(uint32_t*)irq_pointer = 0;
+        }
+    }
+}
+
+int32_t isp_irq_handle(int32_t irq, void* device_context)
+{
+    int32_t result = 1;
+
+    // Cast the device_context to the correct type
+    DeviceContext* ctx = (DeviceContext*)device_context;
+
+    // Ensure device_context is valid
+    if (ctx != NULL && ctx->interrupt_status != NULL)
+    {
+        InterruptStatus* interrupt_status = ctx->interrupt_status;
+
+        // Check interrupt status and handler status
+        if (interrupt_status != NULL)
+        {
+            int32_t handler_status = interrupt_status->handler_status;
+
+            if (handler_status == 0)
+            {
+                result = 1;
+            }
+            else
+            {
+                result = 1;
+
+                // Call the handler function if it is valid
+                if (handler_status == 2)
+                {
+                    result = 2;
+                }
+            }
+        }
+    }
+    else
+    {
+        result = 1;
+    }
+
+    // Process the handler list
+    HandlerList* handler_list = ctx->handler_list;
+    void* current_handler = handler_list ? handler_list->current_handler : NULL;
+
+    while (current_handler != NULL)
+    {
+        HandlerData* handler_data = (HandlerData*)current_handler;
+
+        if (handler_data != NULL)
+        {
+            int32_t handler_result = handler_data->result;
+
+            if (handler_result != 0 && handler_result == 2)
+            {
+                result = 2;
+            }
+        }
+
+        // Move to the next handler in the list
+        handler_list = handler_list->next;
+        current_handler = handler_list ? handler_list->current_handler : NULL;
+
+        if (handler_list == ctx->handler_list_end)
+        {
+            break;
+        }
+    }
+
+    return result;
+}
+
+static irqreturn_t isp_irq_thread_handle(int irq, void* interrupt_data)
+{
+    // Ensure interrupt_data is valid
+    if (interrupt_data == NULL)
+        return IRQ_NONE;
+
+    struct irq_handler_data *handler_data = (struct irq_handler_data *)interrupt_data;
+    struct irq_task *current_task = handler_data->task_list;
+    struct irq_task *buffer_start = handler_data->task_list;  // Assume first task as start
+
+    // Iterate over tasks, executing task functions
+    while (current_task != NULL)
+    {
+        // Check if the task is valid and has a function to execute
+        if (current_task->task_function != NULL && current_task->status != 0)
+        {
+            current_task->task_function();
+        }
+
+        // Move to next task, or break if we've reached the buffer start
+        if (current_task == buffer_start)
+            break;
+        current_task++;
+    }
+
+    return IRQ_HANDLED;
+}
+
+
+int32_t tx_isp_enable_irq(struct IspDevice* arg1)
+{
+    unsigned long flags = 0;  // Use unsigned long for flags
+    spin_lock_irqsave(&arg1->lock, flags);  // Lock and save interrupt flags
+
+    // Check if irq_handler is set and call it if non-null
+    if (arg1->irq_handler != NULL)
+    {
+        arg1->irq_handler(arg1, flags);  // Call the IRQ handler function with the device context
+    }
+
+    spin_unlock_irqrestore(&arg1->lock, flags);  // Restore interrupt flags and release lock
+    return 0;  // Return 0 for success
+}
+
+
+int32_t tx_isp_disable_irq(struct IspDevice* arg1)
+{
+    unsigned long flags = 0;  // Use unsigned long for flags
+    spin_lock_irqsave(&arg1->lock, flags);  // Lock and save interrupt flags
+
+    // Check if IRQ is enabled and if irq_handler is set, then call it
+    if (arg1->irq_enabled && arg1->irq_handler != NULL)
+    {
+        arg1->irq_handler(arg1, flags);  // Call the IRQ handler function
+    }
+
+    spin_unlock_irqrestore(&arg1->lock, flags);  // Restore interrupt flags and release lock
+    return 0;  // Return 0 for success
+}
+
+int32_t tx_isp_request_irq(struct irq_info* irqInfo, struct irq_handler_data* irqHandlerData)
+{
+    // Check if either struct pointer is NULL
+    if (irqInfo == NULL || irqHandlerData == NULL)
+    {
+        isp_printf(2, "%s[%d] the parameters are invalid...", "tx_isp_request_irq");
+        return 0xffffffea;  // Return error code for invalid parameters
+    }
+
+    // Get IRQ number using the platform-specific function
+    int32_t irqNumber = platform_get_irq(irqInfo, 0);
+
+    // Check if the IRQ number is valid
+    if (irqNumber >= 0)
+    {
+        // Initialize the spinlock for the handler data struct
+        spin_lock_init(irqHandlerData);
+
+        // Request the IRQ and set up the threading handlers
+        unsigned long irq_flags = (unsigned long)irqInfo->irq_type;
+		if (request_threaded_irq(irqNumber, isp_irq_handle, isp_irq_thread_handle, irq_flags, "isp_driver", irqHandlerData) != 0)
+        {
+            // If IRQ request failed, print an error message and reset the handler data struct
+            isp_printf(2, "%s[%d] Failed to request irq(%d)...", "tx_isp_request_irq", irqNumber);
+            irqHandlerData->irq_number = 0;
+            return 0xfffffffc;  // Return error code for failed IRQ request
+        }
+
+        // Set up the IRQ handler data struct
+        irqHandlerData->handler_function = tx_isp_enable_irq;
+        irqHandlerData->irq_number = irqNumber;
+        irqHandlerData->disable_function = tx_isp_disable_irq;
+
+        // Disable the IRQ initially
+        tx_isp_disable_irq(irqHandlerData);
+    }
+    else
+    {
+        // If IRQ number is invalid, reset the handler data struct
+        irqHandlerData->irq_number = 0;
+    }
+
+    return 0;  // Return success
+}
+
+int32_t isp_subdev_init_clks(struct IspSubdev* ispSubdev, struct ClockConfig* clockConfig)
+{
+    // Get the number of clocks from the IspSubdev struct
+    int32_t num_clocks = ispSubdev->num_clocks;
+
+    // Calculate memory size needed for the clocks array
+    int32_t memorySize = num_clocks * sizeof(struct clk *);  // Use size of struct clk*
+
+    // If no clocks are present, return null for allocated clocks
+    if (num_clocks != 0)
+    {
+        // Allocate memory for the clocks array
+        struct clk **clocksArray = kmalloc(memorySize, GFP_KERNEL);
+
+        // Check if memory allocation failed
+        if (!clocksArray)
+        {
+            printk(KERN_ERR "Failed to allocate memory for clocks\n");
+            return -ENOMEM;  // Return error code for allocation failure
+        }
+
+        // Initialize the allocated memory to zero
+        memset(clocksArray, 0, memorySize);
+
+        // Set up pointers to iterate over the ClockConfig struct and allocated memory
+        struct ClockConfig* currentClockConfig = clockConfig;
+        struct clk** currentClock = clocksArray;
+        int32_t clockIndex = 0;
+
+        // Iterate through all the clocks
+        while (clockIndex < num_clocks)
+        {
+            // Get the clock handle using the clock source and clock name from the struct
+            struct clk *clockHandle = clk_get(ispSubdev->dev, currentClockConfig->clock_name);  // Correct type
+
+            // Check if clockHandle is valid (non-NULL)
+            if (IS_ERR(clockHandle))
+            {
+                // Print error if getting the clock handle failed
+                printk(KERN_ERR "Failed to get clock %s\n", currentClockConfig->clock_name);
+
+                // Free previously allocated clocks and return error
+                for (int32_t i = 0; i < clockIndex; i++)
+                {
+                    clk_put(clocksArray[i]);
+                }
+                kfree(clocksArray);
+                return PTR_ERR(clockHandle);  // Return the error code
+            }
+
+            // Store the clock handle in the allocated memory
+            clocksArray[clockIndex] = clockHandle;
+
+            // If the clock rate is specified, set it
+            int32_t clockRateResult = 0;
+            if (currentClockConfig->clock_rate != 0xFFFF)  // Check if valid rate is specified
+            {
+                clockRateResult = clk_set_rate(clockHandle, currentClockConfig->clock_rate);
+                if (clockRateResult < 0)
+                {
+                    // Print error if setting the clock rate failed
+                    printk(KERN_ERR "Failed to set clock rate for %s\n", currentClockConfig->clock_name);
+                    // Free previously allocated clocks and return error
+                    for (int32_t i = 0; i <= clockIndex; i++)
+                    {
+                        clk_put(clocksArray[i]);
+                    }
+                    kfree(clocksArray);
+                    return clockRateResult;
+                }
+            }
+
+            // Move to the next clock config and increment clockIndex
+            clockIndex++;
+            currentClockConfig++;  // Move to the next ClockConfig entry
+        }
+
+        // Store the allocated clocks array in the IspSubdev struct
+        ispSubdev->allocated_clocks = clocksArray;
+
+        // Return success
+        return 0;
+    }
+    else
+    {
+        // If there are no clocks, set allocated_clocks to null
+        ispSubdev->allocated_clocks = NULL;
+    }
+
+    return 0;  // Return success if no clocks to process
+}
+
+
+// Function definition based on the assembly
+int32_t tx_isp_notify(int32_t arg1, int32_t notificationType)
+{
+    uint32_t globe_ispdev_1 = globe_ispdev;
+    int32_t* deviceListPointer = (int32_t*)((char*)globe_ispdev_1 + 0x38); // Casting to correct pointer type
+    int32_t resultStatus = 0;
+    int32_t operationResult = 0;
+    int32_t notificationFlag = (notificationType & 0xff000000);
+    void* devicePointer = (void*)*((uint32_t*)deviceListPointer);
+
+    while (true)
+    {
+        if (devicePointer == 0)
+        {
+            deviceListPointer = &deviceListPointer[1];
+        }
+        else
+        {
+            int32_t (*callbackFunction)(void); // Function pointer declaration with a prototype
+
+            if (notificationFlag == 0x1000000)
+            {
+                void* callbackData = *(void**)((char*)devicePointer + 0xc4);
+
+                if (callbackData != 0)
+                {
+                    callbackFunction = (int32_t (*)(void))*(uint32_t*)((char*)callbackData + 0x1c);
+
+                    if (callbackFunction == 0)
+                    {
+                        resultStatus = 0xfffffdfd;
+                    }
+                    else
+                    {
+                        resultStatus = 0;
+
+                        if (operationResult != 0)
+                        {
+                            resultStatus = 0xfffffdfd;
+
+                            if (operationResult != 0xfffffdfd)
+                                return operationResult;
+                        }
+                    }
+                }
+                else
+                {
+                    resultStatus = 0xfffffdfd;
+                }
+            }
+            else if (notificationFlag == 0x2000000)
+            {
+                void* secondaryCallbackData = (void*)*(uint32_t*)(*(uint32_t*)((char*)devicePointer + 0xc4) + 0xc);
+                resultStatus = 0xfffffdfd;
+
+                if (secondaryCallbackData != 0)
+                {
+                    callbackFunction = (int32_t (*)(void))*(uint32_t*)((char*)secondaryCallbackData + 8);
+                    if (callbackFunction != 0)
+                    {
+                        operationResult = callbackFunction();
+                        resultStatus = (operationResult == 0) ? 0 : 0xfffffdfd;
+                    }
+                }
+            }
+            else
+            {
+                resultStatus = 0;
+            }
+
+            deviceListPointer = &deviceListPointer[1];
+        }
+
+        if ((char*)globe_ispdev_1 + 0x78 == (char*)deviceListPointer)
+            break;
+
+        devicePointer = *(void**)deviceListPointer;
+    }
+
+    if (resultStatus == 0xfffffdfd)
+        return 0;
+
+    return resultStatus;
+}
+
+int32_t tx_isp_module_init(int32_t* arg1, void* arg2) {
+    // Validate the parameters
+    if (arg2 == NULL) {
+        isp_printf(2, "%s the parameters are invalid!\n", "tx_isp_module_init");
+        return 0xffffffea; // Invalid parameters
+    }
+
+    // Check if arg1 is valid
+    if (arg1 != NULL) {
+        int32_t a1 = arg1[0x16]; // Fetch value from arg1[0x16]
+
+        // If value at arg1[0x16] is non-zero, copy 4 bytes from that address into arg2
+        if (a1 != 0) {
+            memcpy(arg2, (void*)a1, 4); // Assuming `a1` points to valid memory
+        }
+    }
+
+    // Initialize values in arg2
+    *(uint32_t*)((char*)arg2 + 0x78) = 0; // Set 0 at offset 0x78
+    memset((char*)arg2 + 0x38, 0, 0x40); // Zero 0x40 bytes starting at offset 0x38
+    *(uint32_t*)((char*)arg2 + 0x08) = *(uint32_t*)arg1; // Copy value from arg1 to offset 0x08 of arg2
+    *(uint32_t*)((char*)arg2 + 0x7c) = (uint32_t)tx_isp_notify; // Set function pointer at offset 0x7c
+    *(uint32_t*)((char*)arg2 + 0x30) = 0; // Set 0 at offset 0x30
+    *(uint32_t*)((char*)arg2 + 0x34) = 0; // Set 0 at offset 0x34
+    *(uint32_t*)((char*)arg2 + 0x04) = (uint32_t)&arg1[4]; // Set the address of arg1[4] at offset 0x04 of arg2
+
+    return 0; // Success
+}
+
+// Function to deinitialize the ISP module
+void tx_isp_module_deinit(struct tisp_device *tisp_dev)
+{
+    if (!tisp_dev) return;
+
+    if (tisp_dev->reg_base) {
+        iounmap(tisp_dev->reg_base);
+        tisp_dev->reg_base = NULL;
+    }
+    pr_info("ISP module deinitialized successfully\n");
+}
+
+int32_t tx_isp_subdev_init(int32_t* arg1, void* arg2, int32_t arg3) {
+    struct platform_device *pdev;
+    struct resource *mem_region;
+    void __iomem *mapped_regs;
+    int32_t ret;
+
+    if ((arg1 == NULL) || (arg2 == NULL)) {
+        isp_printf(2, "%s the parameters are invalid!\n", "tx_isp_subdev_init");
+        return -EINVAL;
+    }
+
+    // Set the specific value at offset 0xc4
+    *(uint32_t*)((char*)arg2 + 0xc4) = arg3;
+
+    // Initialize the ISP module
+    ret = tx_isp_module_init(arg1, arg2);
+    if (ret != 0) {
+        isp_printf(2, "Failed to init isp module!\n", "tx_isp_subdev_init");
+        return -EFAULT;
+    }
+
+    // Get platform device
+    pdev = to_platform_device(((struct device *)arg2));
+    if (!pdev) {
+        isp_printf(2, "Invalid platform device\n", "tx_isp_subdev_init");
+        return -ENODEV;
+    }
+
+    // Handle memory regions if needed
+    if (arg1[0x16]) {
+        // Request IRQ
+        ret = tx_isp_request_irq(arg1, ((char*)arg2 + 0x80));
+        if (ret != 0) {
+            isp_printf(2, "Failed to request irq!\n", "tx_isp_subdev_init");
+            tx_isp_module_deinit(arg2);
+            return ret;
+        }
+
+        // Get memory resource
+        mem_region = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+        if (!mem_region) {
+            isp_printf(2, "Unable to get memory resource\n", "tx_isp_subdev_init");
+            ret = -ENODEV;
+            goto err_free_irq;
+        }
+
+        // Map registers
+        mapped_regs = ioremap(mem_region->start,
+                            resource_size(mem_region));
+        if (!mapped_regs) {
+            isp_printf(2, "Unable to map registers\n", "tx_isp_subdev_init");
+            ret = -ENOMEM;
+            goto err_free_irq;
+        }
+
+        // Store mapped register base
+        *(void __iomem **)((char*)arg2 + 0xb8) = mapped_regs;
+
+        // Setup clocks
+        char *s1_1 = (char*)arg1[0x16];
+        *(uint32_t*)((char*)arg2 + 0xc0) = *(uint32_t*)(s1_1 + 4);
+
+        struct ClockConfig *clock_config = (struct ClockConfig *)(s1_1 + 8);
+        ret = isp_subdev_init_clks(arg2, clock_config);
+        if (ret != 0) {
+            isp_printf(2, "Failed to init clocks!\n", "tx_isp_subdev_init");
+            goto err_unmap;
+        }
+    }
+
+    return 0;
+
+err_unmap:
+    if (*(void __iomem **)((char*)arg2 + 0xb8)) {
+        iounmap(*(void __iomem **)((char*)arg2 + 0xb8));
+    }
+    if (mem_region) {
+        release_mem_region(mem_region->start, resource_size(mem_region));
+    }
+err_free_irq:
+    tx_isp_free_irq(((char*)arg2 + 0x80));
+    tx_isp_module_deinit(arg2);
+    return ret;
+}
 
 // Individual device proc handlers
 static int isp_fs_show(struct seq_file *m, void *v)
@@ -288,19 +867,6 @@ static void remove_isp_proc_entries(void)
     if (g_dev_status) kfree(g_dev_status);
 }
 
-static void cleanup_isp_proc_entries(void)
-{
-    if (isp_proc_dir) {
-        remove_proc_entry("isp-fs", isp_proc_dir);
-        remove_proc_entry("isp-m0", isp_proc_dir);
-        remove_proc_entry("isp-w00", isp_proc_dir);
-        remove_proc_entry("isp-w01", isp_proc_dir);
-        remove_proc_entry("isp-w02", isp_proc_dir);
-        remove_proc_entry("isp", jz_proc_dir);
-        isp_proc_dir = NULL;
-    }
-}
-
 static int create_isp_proc_entries(struct isp_graph_data *graph_data)
 {
     int ret = 0;
@@ -430,17 +996,6 @@ static void populate_device_list(struct isp_graph_data *graph_data, unsigned int
     graph_data->device_count = i;
 }
 
-// Function to deinitialize the ISP module
-void tx_isp_module_deinit(struct tisp_device *tisp_dev)
-{
-    if (!tisp_dev) return;
-
-    if (tisp_dev->reg_base) {
-        iounmap(tisp_dev->reg_base);
-        tisp_dev->reg_base = NULL;
-    }
-    pr_info("ISP module deinitialized successfully\n");
-}
 
 // Function to simulate imp_log_fun in kernel space
 static void imp_log_fun(int level, int option, int arg2,
