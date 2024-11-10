@@ -1913,8 +1913,8 @@ static int tisp_probe(struct platform_device *pdev)
 
     dev_info(&pdev->dev, "TISP device probed successfully\n");
 
-    IMP_ISP_Open();  // Call IMP_ISP_Open after successful probe
-    IMP_ISP_AddSensor("sc2336");  // Add sensor after successful probe
+    // IMP_ISP_Open();  // Call IMP_ISP_Open after successful probe
+    // IMP_ISP_AddSensor("sc2336");  // Add sensor after successful probe
 
     return 0;
 
