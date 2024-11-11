@@ -3464,84 +3464,84 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	    struct isp_i2c_board_info board_info = {0};
 	    struct i2c_adapter *adapter;
 	    struct i2c_client *client;
+	    struct jz_driver_common_interfaces *ifaces;
 
 	    if (!gISPdev || !gISPdev->is_open) {
 	        dev_err(gISPdev->dev, "ISP device not initialized or not open\n");
 	        return -EINVAL;
 	    }
 
-	    if (copy_from_user(sensor_name, (void __user *)arg, sizeof(sensor_name))) {
-	        dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
-	                __func__, __LINE__);
-	        return -EFAULT;
+	    // Get driver interfaces
+	    ifaces = get_driver_common_interfaces();
+	    if (!ifaces) {
+	        // Fall back to direct calls if interfaces not available
+	        pr_info("Using direct I2C interface\n");
+	        if (copy_from_user(sensor_name, (void __user *)arg, sizeof(sensor_name))) {
+	            dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
+	                    __func__, __LINE__);
+	            return -EFAULT;
+	        }
+
+	        // Store in global device structure
+	        strncpy(gISPdev->sensor_name, sensor_name, sizeof(gISPdev->sensor_name) - 1);
+	        gISPdev->sensor_name[sizeof(gISPdev->sensor_name) - 1] = '\0';
+
+	        // Let's add some debug prints
+	        pr_info("Registering sensor: %s, gISPdev=%p\n", sensor_name, gISPdev);
+
+	        adapter = i2c_get_adapter(0);
+	        if (!adapter) {
+	            dev_err(gISPdev->dev, "Failed to get I2C adapter\n");
+	            return -ENODEV;
+	        }
+
+	        // Setup board info
+	        strncpy(board_info.type, "sc2336", sizeof(board_info.type) - 1);
+	        board_info.addr = 0x30; // Adjust address based on your sensor
+
+	        // Initialize I2C device
+	        client = isp_i2c_new_subdev_board(adapter, &board_info, NULL);
+	        i2c_put_adapter(adapter);
+	        if (IS_ERR(client)) {
+	            dev_err(gISPdev->dev, "Failed to initialize sensor\n");
+	            return PTR_ERR(client);
+	        }
+	        gISPdev->sensor_i2c_client = client;
+
+	        // Print confirmation
+	        dev_info(gISPdev->dev, "Successfully registered sensor: %s\n",
+	                 gISPdev->sensor_name);
 	    }
-
-	    // Let's add some debug prints
-	    pr_info("Registering sensor: %s, gISPdev=%p\n", sensor_name, gISPdev);
-
-	    // Store in global device structure
-	    strncpy(gISPdev->sensor_name, sensor_name, sizeof(gISPdev->sensor_name) - 1);
-	    gISPdev->sensor_name[sizeof(gISPdev->sensor_name) - 1] = '\0';
-
-	    // Get the I2C adapter (usually adapter 0 or 1 for sensor)
-	    adapter = i2c_get_adapter(0); // Adjust adapter number as needed
-	    if (!adapter) {
-	        dev_err(gISPdev->dev, "Failed to get I2C adapter\n");
-	        return -ENODEV;
-	    }
-
-	    // Setup board info
-	    strncpy(board_info.type, "sc2336", sizeof(board_info.type) - 1);
-	    board_info.addr = 0x30; // Adjust address based on your sensor
-
-	    // Initialize I2C device
-	    client = isp_i2c_new_subdev_board(adapter, &board_info, NULL);
-	    i2c_put_adapter(adapter);
-	    if (IS_ERR(client)) {
-	        dev_err(gISPdev->dev, "Failed to initialize sensor\n");
-	        return PTR_ERR(client);
-	    }
-	    gISPdev->sensor_i2c_client = client; // Store client in global structure
-
-	    // Print confirmation
-	    dev_info(gISPdev->dev, "Successfully registered sensor: %s\n",
-	             gISPdev->sensor_name);
 
 	    break;
 	}
-    case VIDIOC_GET_SENSOR_LIST: {
-        struct sensor_list {
-            char name[32];
-            int count;
-        } sensors;
+	case VIDIOC_GET_SENSOR_LIST: {
+	    struct sensor_list {
+	        char name[80];  // Keep consistent with IMPISPDev
+	        int count;
+	    } sensors;
 
-        pr_info("VIDIOC_GET_SENSOR_LIST\n");
-        // Always perform null checks first
-        if (!argp) {
-            dev_err(gISPdev->dev, "Null userspace pointer\n");
-            return -EINVAL;
-        }
+	    pr_info("GET_SENSOR_LIST called\n");
 
-        // Clear our local structure
-        memset(&sensors, 0, sizeof(sensors));
+	    // Clear our local structure first
+	    memset(&sensors, 0, sizeof(sensors));
 
-        // Copy from user and verify zeros
-        if (copy_from_user(&sensors, argp, sizeof(sensors))) {
-            dev_err(gISPdev->dev, "Failed to copy from user\n");
-            return -EFAULT;
-        }
+	    // If we have a registered sensor, set it
+	    if (gISPdev && gISPdev->sensor_name[0] != '\0') {
+	        strncpy(sensors.name, gISPdev->sensor_name, sizeof(sensors.name) - 1);
+	        sensors.name[sizeof(sensors.name) - 1] = '\0';
+	        sensors.count = 1;
+	        pr_info("Returning sensor: %s\n", sensors.name);
+	    }
 
-        // At this point we could populate sensors.name and sensors.count
-        // if we had a valid sensor, but OEM returns zeros so we will too
+	    // Copy to user - no initial copy_from_user needed
+	    if (copy_to_user(argp, &sensors, sizeof(sensors))) {
+	        pr_err("Failed to copy to user\n");
+	        return -EFAULT;
+	    }
 
-        // Copy our zero-filled structure back to user
-        if (copy_to_user(argp, &sensors, sizeof(sensors))) {
-            dev_err(gISPdev->dev, "Failed to copy to user\n");
-            return -EFAULT;
-        }
-
-        return 0;
-    }
+	    return 0;
+	}
     case TX_ISP_SET_BUF: {
       	pr_info("TX_ISP_SET_BUF\n");
         struct isp_buf_info buf;
