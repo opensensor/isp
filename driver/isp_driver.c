@@ -72,8 +72,22 @@ static int early_init(void)
 #define ISP_REG_WDR_GAIN1    0x100c  /* From decompiled code */
 #define ISP_REG_STD_GAIN     0x1030  /* Standard gain register */
 
+
+// Register offsets (these are just examples; they should match your ISP hardware specification)
+#define ISP_MODE_REG            0x00
+#define ISP_INPUT_FORMAT_REG    0x04
+#define ISP_OUTPUT_FORMAT_REG   0x08
+#define ISP_FEATURES_REG        0x0C
+
+// Format and feature values (again, these should be based on the hardware spec)
+#define ISP_MODE_CAPTURE        0x01  // Capture mode
+#define ISP_FORMAT_YUV420       0x10  // YUV420 input format
+#define ISP_FEATURE_NR          0x01  // Noise reduction enabled
+#define ISP_FEATURE_LDC         0x02  // Lens distortion correction enabled
+
+
 // Device structure for ISP
-typedef struct {
+struct IMPISPDev {
     int result;
     char dev_name[32];     // Device name/path
     struct cdev cdev;      // Character device structure
@@ -88,14 +102,18 @@ typedef struct {
     void* wdr_buf_info;    // WDR buffer info pointer
     char padding2[0x28];   // Padding to match 0xE0 size
     struct device *dev;    // Device pointer
-} IMPISPDev;
+
+    // Fields for hardware-level operations
+    void *regs;            // Register base (mapped registers)
+    int irq;               // Interrupt line
+};
 
 static void __iomem *reg_base;
 static uint32_t soc_id = 0xFFFFFFFF;
 static uint32_t cppsr = 0xFFFFFFFF;
 static uint32_t subsoctype = 0xFFFFFFFF;
 static uint32_t subremark = 0xFFFFFFFF;
-static IMPISPDev* gISPdev = NULL;
+struct IMPISPDev *gISPdev = NULL;
 uint32_t globe_ispdev = 0x0;
 static struct resource *mem_region;
 
@@ -129,6 +147,7 @@ struct isp_framesource_status {
 struct isp_device_status {
     int sensor_enabled;
     struct isp_framesource_status fs_status;
+    bool memory_initialized;
     int w02_values[13];  // For isp-w02 specific values
 };
 
@@ -407,13 +426,23 @@ struct isp_subdev {
     void *priv;
 };
 
+struct isp_pipeline {
+    unsigned int input_format;
+    unsigned int output_format;
+    bool scaling_enabled;
+    unsigned int input_width;
+    unsigned int input_height;
+    unsigned int output_width;
+    unsigned int output_height;
+};
+
 /**
  * struct isp_device - Main ISP device structure
  * Based on decompiled code access patterns
  */
 struct isp_device {
     /* Device infrastructure */
-    struct device *dev;              /* 0x00: Device struct for dev_err etc */
+    struct device *dev;  // Parent device
     struct cdev cdev;               /* 0x04: Character device */
     struct v4l2_device v4l2_dev;    /* 0x08: V4L2 device */
 
@@ -461,7 +490,7 @@ struct isp_device {
     /* Pad configuration - based on decompiled pad handling */
     struct isp_pad_desc *pads;      /* Array of pad descriptors */
     int num_pads;                   /* Number of configured pads */
-
+    struct isp_pipeline pipeline;  /* Pipeline configuration */
     /* Private data */
     void *priv;                     /* Driver private data */
 };
@@ -518,7 +547,7 @@ void tx_isp_free_irq(int32_t* irq_pointer)
     }
 }
 
-int32_t isp_irq_handle(int32_t irq, void* device_context)
+int32_t isp_irq_handler(int32_t irq, void* device_context)
 {
     int32_t result = 1;
 
@@ -667,7 +696,7 @@ int32_t tx_isp_request_irq(struct irq_info* irqInfo, struct irq_handler_data* ir
 
         // Request the IRQ and set up the threading handlers
         unsigned long irq_flags = (unsigned long)irqInfo->irq_type;
-		if (request_threaded_irq(irqNumber, isp_irq_handle, isp_irq_thread_handle, irq_flags, "isp_driver", irqHandlerData) != 0)
+		if (request_threaded_irq(irqNumber, isp_irq_handler, isp_irq_thread_handle, irq_flags, "isp_driver", irqHandlerData) != 0)
         {
             // If IRQ request failed, print an error message and reset the handler data struct
             isp_printf(2, "%s[%d] Failed to request irq(%d)...", "tx_isp_request_irq", irqNumber);
@@ -1665,19 +1694,224 @@ int read_soc_info(void)
     return 0;  // Remove incorrect error path
 }
 
-// Implement basic file operations
-static int tisp_open(struct inode *inode, struct file *file)
+void write_register(void *base, unsigned long reg, unsigned long value)
 {
-    pr_info("Device opened\n");
-    return 0;  // Remove incorrect error path
+    writel(value, base + reg);
 }
 
-// Update tisp_release function
+static int isp_device_registers_configure(struct IMPISPDev *dev)
+{
+    if (!dev || !dev->regs) {
+        pr_err("Invalid hardware register base\n");
+        return -EINVAL;
+    }
+
+    // Example of configuring hardware registers (adjust based on your ISP)
+    // Set the ISP mode (capture, preview, etc.)
+    write_register(dev->regs, ISP_MODE_REG, ISP_MODE_CAPTURE);
+
+    // Configure input format (YUV420, RGB, etc.)
+    write_register(dev->regs, ISP_INPUT_FORMAT_REG, ISP_FORMAT_YUV420);
+
+    // Configure output format (YUV420, RGB, etc.)
+    write_register(dev->regs, ISP_OUTPUT_FORMAT_REG, ISP_FORMAT_YUV420);
+
+    // Enable hardware features (e.g., noise reduction, lens distortion correction)
+    write_register(dev->regs, ISP_FEATURES_REG, ISP_FEATURE_NR | ISP_FEATURE_LDC);
+
+    pr_info("ISP hardware registers configured successfully\n");
+
+    return 0;
+}
+
+
+
+#define BUFFER_SIZE  (1024 * 1024)  // 1MB buffer size (adjust as needed)
+
+static int isp_device_memory_setup(struct isp_device *dev)
+{
+    int ret;
+
+    if (!dev) {
+        pr_err("ISP device is NULL\n");
+        return -EINVAL;
+    }
+
+    pr_info("Memory buffers for ISP device set up successfully\n");
+
+    return 0;
+}
+
+/* ISP Format definitions - typically seen in t31 ISP */
+enum isp_format {
+    ISP_FORMAT_RAW = 0,       /* RAW sensor data */
+    ISP_FORMAT_RGB = 1,       /* RGB format */
+    ISP_FORMAT_YUV = 2,       /* YUV format */
+    ISP_FORMAT_BAYER = 3,     /* Bayer pattern */
+};
+
+/* Optional: More detailed format definitions if needed */
+#define ISP_FORMAT_RGB888     (ISP_FORMAT_RGB | (0 << 8))  /* 24-bit RGB */
+#define ISP_FORMAT_RGB565     (ISP_FORMAT_RGB | (1 << 8))  /* 16-bit RGB */
+#define ISP_FORMAT_YUV422     (ISP_FORMAT_YUV | (0 << 8))  /* YUV 4:2:2 */
+#define ISP_FORMAT_YUV420     (ISP_FORMAT_YUV | (1 << 8))  /* YUV 4:2:0 */
+#define ISP_FORMAT_BAYER_RGGB (ISP_FORMAT_BAYER | (0 << 8)) /* RGGB pattern */
+#define ISP_FORMAT_BAYER_GRBG (ISP_FORMAT_BAYER | (1 << 8)) /* GRBG pattern */
+#define ISP_FORMAT_BAYER_GBRG (ISP_FORMAT_BAYER | (2 << 8)) /* GBRG pattern */
+#define ISP_FORMAT_BAYER_BGGR (ISP_FORMAT_BAYER | (3 << 8)) /* BGGR pattern */
+
+static int isp_device_pipeline_setup(struct isp_device *dev)
+{
+    if (!dev) {
+        pr_err("ISP device is NULL\n");
+        return -EINVAL;
+    }
+
+    // Set up the input and output pipelines
+    // Example: Configure the input video format, scaling, and output format
+    dev->pipeline.input_format = ISP_FORMAT_YUV420;
+    dev->pipeline.output_format = ISP_FORMAT_RGB;
+    dev->pipeline.scaling_enabled = true;
+
+    // Configure pipeline parameters (e.g., resolution, aspect ratio, etc.)
+    dev->pipeline.input_width = 1920;
+    dev->pipeline.input_height = 1080;
+    dev->pipeline.output_width = 1920;
+    dev->pipeline.output_height = 1080;
+
+    pr_info("ISP pipeline configured with input and output formats\n");
+
+    return 0;
+}
+
+static int isp_device_interrupts_setup(struct IMPISPDev *dev)
+{
+    if (!dev) {
+        pr_err("ISP device is NULL\n");
+        return -EINVAL;
+    }
+
+    // Check if interrupts are supported by the hardware (check the irq field in IMPISPDev)
+    if (!dev->irq) {
+        pr_info("ISP device does not support interrupts\n");
+        return 0;  // No interrupts supported
+    }
+
+    // Request the interrupt line
+    // Assuming you will uncomment the request_irq code when it's ready for use
+    if (request_irq(dev->irq, isp_irq_handler, IRQF_SHARED, "isp_device", dev)) {
+        pr_err("Failed to request IRQ\n");
+        return -EBUSY;
+    }
+
+    // TODO: Enable interrupts in the hardware
+    // Enable interrupts in the hardware (you will need to modify this line
+    // to use the correct register or function for your hardware)
+    // For example, write to a specific register to enable interrupts:
+    // write_register(dev->regs, ISP_INT_ENABLE_REG, ISP_INT_FRAME_DONE);
+
+    pr_info("ISP interrupts set up successfully\n");
+
+    return 0;
+}
+
+
+static int isp_device_configure(struct IMPISPDev *dev)
+{
+    int ret = 0;
+
+    if (!dev) {
+        pr_err("ISP device is NULL\n");
+        return -EINVAL;
+    }
+
+    pr_info("Configuring ISP device...\n");
+
+    // Step 1: Configure hardware registers
+    ret = isp_device_registers_configure(dev);
+    if (ret) {
+        pr_err("Failed to configure ISP hardware registers\n");
+        return ret;
+    }
+
+    // Step 2: Set up memory buffers (e.g., DMA buffers)
+    ret = isp_device_memory_setup(dev);
+    if (ret) {
+        pr_err("Failed to set up memory buffers for ISP device\n");
+        return ret;
+    }
+
+    // Step 3: Configure ISP pipeline (input/output configuration, scaling, etc.)
+    ret = isp_device_pipeline_setup(dev);
+    if (ret) {
+        pr_err("Failed to set up ISP pipeline\n");
+        return ret;
+    }
+
+    // Step 4: Set up interrupts, if required
+    ret = isp_device_interrupts_setup(dev);  // Corrected to pass the device struct
+    if (ret) {
+        pr_err("Failed to set up interrupts for ISP device\n");
+        return ret;
+    }
+
+    // Mark the device as initialized
+    pr_info("ISP device successfully configured\n");
+
+    return 0;  // Success
+}
+
+
+static int tisp_open(struct inode *inode, struct file *file)
+{
+    if (!gISPdev) {
+        pr_err("ISP device not initialized\n");
+        return -ENODEV;  // Return device not initialized error
+    }
+
+    if (gISPdev->is_open) {
+        pr_info("Device is already opened\n");
+        return -EBUSY;
+    }
+
+    // Perform any necessary hardware register configuration
+    if (isp_device_configure(gISPdev)) {
+        pr_err("Failed to configure ISP hardware\n");
+        return -EIO;
+    }
+
+    // Check or initialize interrupts if required
+    if (isp_device_interrupts_setup(gISPdev)) {
+        pr_err("Failed to setup interrupts\n");
+        return -EIO;
+    }
+
+    // Mark the device as opened
+    gISPdev->is_open = 1;
+    pr_info("Device opened successfully\n");
+
+    return 0;  // Success
+}
+
+
 static int tisp_release(struct inode *inode, struct file *file)
 {
-    pr_info("Device closed\n");
-    return 0;  // Remove incorrect error path
+    if (gISPdev) {
+        // Check if the device is open
+        if (gISPdev->is_open) {
+            // Mark the device as closed
+            gISPdev->is_open = 0;
+            pr_info("Device closed successfully\n");
+        } else {
+            pr_info("Device was not opened or already closed\n");
+        }
+    } else {
+        pr_err("ISP device not initialized\n");
+    }
+
+    return 0;
 }
+
 
 // Update tisp_read function
 static ssize_t tisp_read(struct file *file, char __user *buf, size_t count, loff_t *offset)
@@ -2849,92 +3083,103 @@ static const struct file_operations isp_fops = {
 };
 
 // Implementation of IMP_ISP_Open for kernel space
-int IMP_ISP_Open(void) {
-    int result = 0;
-    int err;
-
-    pr_info("IMP_ISP_Open called\n");
-
-    // Check if device is already initialized
-    if (gISPdev == NULL) {
-        gISPdev = kzalloc(sizeof(IMPISPDev), GFP_KERNEL);
-        if (gISPdev == NULL) {
-            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
-                        __FILE__, __func__, __LINE__,
-                        "Failed to alloc gISPdev!\n");
-            return -ENOMEM;
-        }
-
-        // Allocate a major/minor number for the device
-        err = alloc_chrdev_region(&tisp_dev_number, 0, 1, "tx-isp");
-        if (err < 0) {
-            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
-                        __FILE__, __func__, __LINE__,
-                        "Failed to allocate device number\n");
-            kfree(gISPdev);
-            gISPdev = NULL;
-            return err;
-        }
-
-        // Create device class
-        tisp_class = class_create(THIS_MODULE, "tx-isp");
-        if (IS_ERR(tisp_class)) {
-            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
-                        __FILE__, __func__, __LINE__,
-                        "Failed to create device class\n");
-            unregister_chrdev_region(tisp_dev_number, 1);
-            kfree(gISPdev);
-            gISPdev = NULL;
-            return PTR_ERR(tisp_class);
-        }
-
-        // Initialize the cdev structure
-        cdev_init(&gISPdev->cdev, &isp_fops);
-        gISPdev->cdev.owner = THIS_MODULE;
-
-        // Add the character device to the system
-        err = cdev_add(&gISPdev->cdev, tisp_dev_number, 1);
-        if (err) {
-            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
-                        __FILE__, __func__, __LINE__,
-                        "Failed to add character device\n");
-            class_destroy(tisp_class);
-            unregister_chrdev_region(tisp_dev_number, 1);
-            kfree(gISPdev);
-            gISPdev = NULL;
-            return err;
-        }
-
-        // Create the device node in /dev
-        tisp_device = device_create(tisp_class, NULL, tisp_dev_number, NULL, "tx-isp");
-        if (IS_ERR(tisp_device)) {
-            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
-                        __FILE__, __func__, __LINE__,
-                        "Failed to create device\n");
-            cdev_del(&gISPdev->cdev);
-            class_destroy(tisp_class);
-            unregister_chrdev_region(tisp_dev_number, 1);
-            kfree(gISPdev);
-            gISPdev = NULL;
-            return PTR_ERR(tisp_device);
-        }
-
-        strcpy(gISPdev->dev_name, "tx-isp");
-        gISPdev->is_open = 1;
-        imp_log_fun(IMP_LOG_INFO, IMP_Log_Get_Option(), 2,
-                    __FILE__, __func__, __LINE__,
-                    "~~~~~~ %s[%d] ~~~~~~~\n", "IMP_ISP_Open", __LINE__);
-
-        // Detect and log CPU ID
-        if (read_soc_info() < 0) {
-            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
-                        __FILE__, __func__, __LINE__,
-                        "Failed to detect CPU ID\n");
-        }
-    }
-
-    return result;
-}
+//int IMP_ISP_Open(void) {
+//    int result = 0;
+//    int err;
+//
+//    // Check if gISPdev is properly allocated and initialized
+//    if (gISPdev == NULL) {
+//        pr_err("gISPdev is NULL, cannot proceed with IMP_ISP_Open\n");
+//        return -ENOMEM;  // Return an error indicating memory allocation failure
+//    }
+//    // Example of checking if the device is already open
+//    if (gISPdev->cdev.owner != NULL) {
+//        pr_warn("ISP device is already opened\n");
+//        return -EBUSY;
+//    }
+//
+//    pr_info("IMP_ISP_Open called\n");
+//
+//    // Check if device is already initialized
+//    if (gISPdev == NULL) {
+//        gISPdev = kzalloc(sizeof(IMPISPDev), GFP_KERNEL);
+//        if (gISPdev == NULL) {
+//            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
+//                        __FILE__, __func__, __LINE__,
+//                        "Failed to alloc gISPdev!\n");
+//            return -ENOMEM;
+//        }
+//
+//        // Allocate a major/minor number for the device
+//        err = alloc_chrdev_region(&tisp_dev_number, 0, 1, "tx-isp");
+//        if (err < 0) {
+//            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
+//                        __FILE__, __func__, __LINE__,
+//                        "Failed to allocate device number\n");
+//            kfree(gISPdev);
+//            gISPdev = NULL;
+//            return err;
+//        }
+//
+//        // Create device class
+//        tisp_class = class_create(THIS_MODULE, "tx-isp");
+//        if (IS_ERR(tisp_class)) {
+//            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
+//                        __FILE__, __func__, __LINE__,
+//                        "Failed to create device class\n");
+//            unregister_chrdev_region(tisp_dev_number, 1);
+//            kfree(gISPdev);
+//            gISPdev = NULL;
+//            return PTR_ERR(tisp_class);
+//        }
+//
+//        // Initialize the cdev structure
+//        cdev_init(&gISPdev->cdev, &isp_fops);
+//        gISPdev->cdev.owner = THIS_MODULE;
+//
+//        // Add the character device to the system
+//        err = cdev_add(&gISPdev->cdev, tisp_dev_number, 1);
+//        if (err) {
+//            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
+//                        __FILE__, __func__, __LINE__,
+//                        "Failed to add character device\n");
+//            class_destroy(tisp_class);
+//            unregister_chrdev_region(tisp_dev_number, 1);
+//            kfree(gISPdev);
+//            gISPdev = NULL;
+//            return err;
+//        }
+//
+//        // Create the device node in /dev
+//        tisp_device = device_create(tisp_class, NULL, tisp_dev_number, NULL, "tx-isp");
+//        if (IS_ERR(tisp_device)) {
+//            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
+//                        __FILE__, __func__, __LINE__,
+//                        "Failed to create device\n");
+//            cdev_del(&gISPdev->cdev);
+//            class_destroy(tisp_class);
+//            unregister_chrdev_region(tisp_dev_number, 1);
+//            kfree(gISPdev);
+//            gISPdev = NULL;
+//            return PTR_ERR(tisp_device);
+//        }
+//
+//        strcpy(gISPdev->dev_name, "tx-isp");
+//        gISPdev->is_open = 1;
+//        imp_log_fun(IMP_LOG_INFO, IMP_Log_Get_Option(), 2,
+//                    __FILE__, __func__, __LINE__,
+//                    "~~~~~~ %s[%d] ~~~~~~~\n", "IMP_ISP_Open", __LINE__);
+//
+//        // Detect and log CPU ID
+//        if (read_soc_info() < 0) {
+//            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
+//                        __FILE__, __func__, __LINE__,
+//                        "Failed to detect CPU ID\n");
+//        }
+//    }
+//
+//    return result;
+//}
 
 static int32_t IMP_ISP_AddSensor(char* sensor_name)
 {
@@ -3074,8 +3319,8 @@ static int tisp_init(struct device *dev)
 
     pr_info("Starting tisp_init...\n");
 
-    // Verify reg_base is valid
-    if (!reg_base) {
+    // Verify registers are mapped using global gISPdev
+    if (!gISPdev || !gISPdev->regs) {
         dev_err(dev, "ISP registers not mapped!\n");
         return -EFAULT;
     }
@@ -3120,8 +3365,8 @@ static int tisp_init(struct device *dev)
         writel(0, tparams_night + 0x274);
     }
 
-    // Step 4: Write the parameters to hardware registers
-    writel((unsigned long)tparams_day, reg_base + 0x84b50);
+    // Step 4: Write the parameters to hardware registers using global gISPdev->regs
+    writel((unsigned long)tparams_day, gISPdev->regs + 0x84b50);
     dev_info(dev, "tparams_day written to register successfully\n");
 
     return 0;
@@ -3237,11 +3482,17 @@ static void __iomem *map_isp_registers(struct platform_device *pdev)
     void __iomem *base;
     struct resource *res;
 
+    pr_info("Starting ISP register mapping...\n");
+
     res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
     if (!res) {
         dev_err(&pdev->dev, "No memory resource found\n");
         return ERR_PTR(-ENODEV);
     }
+
+    pr_info("Found memory resource: start=0x%lx, end=0x%lx\n",
+            (unsigned long)res->start, (unsigned long)res->end);
+
 
     base = devm_ioremap_resource(&pdev->dev, res);
     if (IS_ERR(base)) {
@@ -3249,12 +3500,12 @@ static void __iomem *map_isp_registers(struct platform_device *pdev)
         return base;
     }
 
+    pr_info("Successfully mapped ISP registers to virtual address %p\n", base);
     return base;
 }
 
 static int tisp_probe(struct platform_device *pdev)
 {
-    struct tisp_device *dev;
     struct isp_graph_data *graph_data;
     void __iomem *base;
     unsigned int max_devices = 10;
@@ -3262,6 +3513,8 @@ static int tisp_probe(struct platform_device *pdev)
     int ret, i;
 
     pr_info("Probing TISP device...\n");
+    pr_info("In tisp_probe, gISPdev is %p\n", gISPdev);
+
 
     // Map registers
     base = map_isp_registers(pdev);
@@ -3270,15 +3523,17 @@ static int tisp_probe(struct platform_device *pdev)
         return PTR_ERR(base);
     }
 
-    // Allocate device structure
-    dev = devm_kzalloc(&pdev->dev, sizeof(*dev), GFP_KERNEL);
-    if (!dev) {
-        dev_err(&pdev->dev, "Failed to allocate device structure\n");
+    // Use the global gISPdev instead of creating a local one
+    if (!gISPdev) {
+        dev_err(&pdev->dev, "Global ISP device structure not allocated\n");
         return -ENOMEM;
     }
 
-    dev->reg_base = base;
-    reg_base = base;
+    // Set reg_base in global gISPdev
+    gISPdev->regs = base;
+    pr_info("Set gISPdev->regs to %p\n", gISPdev->regs);
+    gISPdev->dev = &pdev->dev;
+    platform_set_drvdata(pdev, gISPdev);
 
     // Allocate graph data with proper alignment
     graph_data = kzalloc(sizeof(*graph_data) + (max_devices * sizeof(void *)), GFP_KERNEL | GFP_DMA);
@@ -3288,18 +3543,13 @@ static int tisp_probe(struct platform_device *pdev)
     }
 
     // Initialize graph data
-    graph_data->dev = dev;
+    graph_data->dev = gISPdev;  // Use global gISPdev
     graph_data->device_count = 0;
     graph_data->devices = kzalloc(max_devices * sizeof(struct platform_device *), GFP_KERNEL | GFP_DMA);
     if (!graph_data->devices) {
         ret = -ENOMEM;
         goto free_graph;
     }
-
-    // Store device info
-    dev->dev = &pdev->dev;
-    platform_set_drvdata(pdev, dev);
-    tisp_dev = dev;
 
     // Initialize ISP
     ret = tisp_init(&pdev->dev);
@@ -3308,64 +3558,16 @@ static int tisp_probe(struct platform_device *pdev)
         goto free_devices;
     }
 
-    // Register child devices
-    for (i = 0; i < ARRAY_SIZE(device_names) && registered_count < max_devices; i++) {
-        struct platform_device *child_dev;
-
-        child_dev = platform_device_register_simple(device_names[i], -1, NULL, 0);
-        if (IS_ERR(child_dev)) {
-            dev_warn(&pdev->dev, "Failed to register %s device\n", device_names[i]);
-            continue;
-        }
-
-        graph_data->devices[registered_count] = child_dev;
-        registered_count++;
-    }
-
-    // Update final count
-    graph_data->device_count = registered_count;
-    dev_info(&pdev->dev, "Successfully registered %u devices\n", registered_count);
-
-    // Create graph and nodes
-    if (registered_count > 0) {
-        ret = tx_isp_create_graph_and_nodes(graph_data);
-        if (ret) {
-            dev_err(&pdev->dev, "Failed to create ISP graph and nodes\n");
-            goto err_unregister_devices;
-        }
-    } else {
-        dev_warn(&pdev->dev, "No devices were registered\n");
-        ret = -ENODEV;
-        goto free_devices;
-    }
-
-    // After successful graph creation, create proc entries
-    ret = create_isp_proc_entries(graph_data);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to create proc entries\n");
-        goto err_unregister_devices;
-    }
-
-    dev_info(&pdev->dev, "TISP device probed successfully\n");
-
-    // IMP_ISP_Open();  // Call IMP_ISP_Open after successful probe
-    // IMP_ISP_AddSensor("sc2336");  // Add sensor after successful probe
-
+    // Return success
     return 0;
 
-err_unregister_devices:
-    for (i = 0; i < registered_count; i++) {
-        if (graph_data->devices[i])
-            platform_device_unregister(graph_data->devices[i]);
-    }
-    tx_isp_module_deinit(dev);
-    remove_isp_proc_entries();  // Clean up proc entries if created
-free_devices:
-    kfree(graph_data->devices);
 free_graph:
+    kfree(graph_data->devices);
+free_devices:
     kfree(graph_data);
     return ret;
 }
+
 
 /* Platform driver remove function */
 static int tisp_remove(struct platform_device *pdev)
@@ -3419,12 +3621,13 @@ static int __init isp_driver_init(void)
         return PTR_ERR(tisp_class);
     }
 
-    gISPdev = kzalloc(sizeof(IMPISPDev), GFP_KERNEL);
+    gISPdev = kzalloc(sizeof(struct IMPISPDev), GFP_KERNEL);
     if (!gISPdev) {
         class_destroy(tisp_class);
         unregister_chrdev_region(tisp_dev_number, 1);
         return -ENOMEM;
     }
+    pr_info("gISPdev allocated at %p\n", gISPdev);  // Add this debug print
 
     cdev_init(&gISPdev->cdev, &isp_fops);
     gISPdev->cdev.owner = THIS_MODULE;
