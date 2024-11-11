@@ -63,7 +63,7 @@ static int early_init(void)
 #define SUBTYPE_ADDR         0x13540238
 #define SUBREMARK_ADDR       0x13540231
 
-#define VIDIOC_GET_SENSOR_LIST 0xc050561a
+#define VIDIOC_GET_SENSOR_ENUMERATION 0xc050561a
 
 // Log level definitions
 #define IMP_LOG_ERROR   6
@@ -295,11 +295,11 @@ struct IspSubdev
 };
 
 struct sensor_list {
-    char sensor_name[32];  // Can hold the "sc2336" sensor name
+    char sensor_name[80];  // Can hold the "sc2336" sensor name
     int num_sensors;       // Number of currently registered sensors
 };
 
-#define MAX_SENSORS 4
+#define MAX_SENSORS 1
 
 struct sensor_info {
     char name[32];
@@ -3384,7 +3384,7 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
     return ret;
 }
 
-// Structure to hold information about a sensor
+// Updated structure based on your previous definition and observations
 struct sensor_list_info {
     char name[80];          // Sensor name
     int id;                 // Sensor ID
@@ -3393,9 +3393,9 @@ struct sensor_list_info {
     int resolution_height;  // Sensor resolution height
     int framerate;          // Max frame rate
     int capabilities;       // Bitmask for sensor capabilities
-    int reserved[8];        // Reserved space to match the original size (padding)
+    void *sensor_ops;       // Pointer to sensor operations (expected by binary)
+    void *reserved_ptr;     // Reserved space (pointer)
 };
-
 
 /**
  * isp_driver_ioctl - IOCTL handler for ISP driver
@@ -3408,6 +3408,7 @@ struct sensor_list_info {
 static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     void __user *argp = (void __user *)arg;
+    struct sensor_list_info sensor_list[MAX_SENSORS];
     int ret = 0;
 
     pr_info("ISP IOCTL called: cmd=0x%x\n", cmd);  // Add this debug line
@@ -3467,32 +3468,35 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
 	    break;
 	}
-	case VIDIOC_GET_SENSOR_LIST: {
-	    struct sensor_list_info sensor_list;
-	    memset(&sensor_list, 0, sizeof(sensor_list));
+		case VIDIOC_GET_SENSOR_ENUMERATION: {
+		struct sensor_list_req {
+	        int idx;    // Input index
+	        char name[32];  // Output name
+	    } __attribute__((packed));
 
-	    if (!gISPdev->sensor_name[0]) {
-	        pr_err("No sensor registered\n");
-	        return -ENODATA;
-	    }
+	    struct sensor_list_req req;
 
-	    // Populate the sensor list information
-	    strncpy(sensor_list.name, gISPdev->sensor_name, sizeof(sensor_list.name) - 1);
-	    sensor_list.name[sizeof(sensor_list.name) - 1] = '\0';
-	    sensor_list.id = 0;
-	    sensor_list.status = 1;  // Assuming the sensor is active
-	    sensor_list.resolution_width = 1920;   // Example values, replace as needed
-	    sensor_list.resolution_height = 1080;
-	    sensor_list.framerate = 30;
-	    sensor_list.capabilities = 0x01; // Example capabilities bitmask
-
-	    // Copy the structure back to user space
-	    if (copy_to_user(argp, &sensor_list, sizeof(sensor_list))) {
-	        pr_err("Failed to copy sensor list to user space\n");
+	    // Get the request struct from userspace
+	    if (copy_from_user(&req, (void __user *)arg, sizeof(req))) {
+	        pr_err("Failed to copy request from user\n");
 	        return -EFAULT;
 	    }
 
-	    pr_info("Sensor list provided: %s\n", sensor_list.name);
+	    // Check if index is valid
+	    if (req.idx >= MAX_SENSORS) {
+	        return -EINVAL;
+	    }
+
+	    // Fill in the name for this index
+	    snprintf(req.name, sizeof(req.name), "sc2336");
+
+	    // Copy the result back to userspace
+	    if (copy_to_user((void __user *)arg, &req, sizeof(req))) {
+	        pr_err("Failed to copy result to user\n");
+	        return -EFAULT;
+	    }
+
+	    pr_info("Provided sensor info for index %d: %s\n", req.idx, req.name);
 	    return 0;
 	}
     case TX_ISP_SET_BUF: {
