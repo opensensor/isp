@@ -3242,6 +3242,94 @@ int isp_sensor_read_reg(struct i2c_client *client, u16 reg, u8 *val)
     return 0;
 }
 
+
+// Add these defines
+#define SENSOR_REG_STANDBY    0x0100
+#define SENSOR_REG_MODE       0x0101
+#define SENSOR_REG_H_SIZE     0x0102
+#define SENSOR_REG_V_SIZE     0x0103
+
+static int sensor_setup_streaming(struct IMPISPDev *dev)
+{
+    struct i2c_client *client = dev->sensor_i2c_client;
+    int ret;
+
+    if (!client) {
+        pr_err("No sensor I2C client\n");
+        return -ENODEV;
+    }
+
+    // Basic sensor initialization sequence
+    ret = isp_sensor_write_reg(client, SENSOR_REG_STANDBY, 0x00);  // Exit standby
+    if (ret < 0)
+        return ret;
+
+    // Set resolution (example for 1920x1080)
+    ret = isp_sensor_write_reg(client, SENSOR_REG_H_SIZE, 0x07);  // 1920 >> 8
+    if (ret < 0)
+        return ret;
+
+    ret = isp_sensor_write_reg(client, SENSOR_REG_H_SIZE + 1, 0x80);  // 1920 & 0xFF
+    if (ret < 0)
+        return ret;
+
+    ret = isp_sensor_write_reg(client, SENSOR_REG_V_SIZE, 0x04);  // 1080 >> 8
+    if (ret < 0)
+        return ret;
+
+    ret = isp_sensor_write_reg(client, SENSOR_REG_V_SIZE + 1, 0x38);  // 1080 & 0xFF
+    if (ret < 0)
+        return ret;
+
+    // Enable streaming
+    ret = isp_sensor_write_reg(client, SENSOR_REG_MODE, 0x01);
+    if (ret < 0)
+        return ret;
+
+    pr_info("Sensor streaming setup complete\n");
+    return 0;
+}
+
+static int start_streaming(struct IMPISPDev *dev)
+{
+    int ret;
+
+    // Setup sensor for streaming
+    ret = sensor_setup_streaming(dev);
+    if (ret) {
+        pr_err("Failed to setup sensor streaming\n");
+        return ret;
+    }
+
+    // Enable ISP streaming
+    writel(0x01, dev->regs + ISP_CTRL_REG);  // Enable ISP streaming
+
+    // Enable MIPI receiver
+    writel(0x01, dev->regs + ISP_MIPI_CTRL);
+
+    pr_info("Streaming started\n");
+    return 0;
+}
+
+static int stop_streaming(struct IMPISPDev *dev)
+{
+    struct i2c_client *client = dev->sensor_i2c_client;
+
+    // Stop sensor streaming
+    if (client)
+        isp_sensor_write_reg(client, SENSOR_REG_MODE, 0x00);
+
+    // Disable ISP streaming
+    writel(0x00, dev->regs + ISP_CTRL_REG);
+
+    // Disable MIPI receiver
+    writel(0x00, dev->regs + ISP_MIPI_CTRL);
+
+    pr_info("Streaming stopped\n");
+    return 0;
+}
+
+
 // Add these defines at the top of the file
 #define SENSOR_CMD_BASIC         0x2000000  // Register sensor
 #define SENSOR_CMD_READ_ID       0x2000011  // Read sensor ID
@@ -3349,42 +3437,6 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
     return ret;
 }
 
-
-/* Add this function to register sensors */
-static int register_sensor(struct IMPISPDev *dev, const char *name, struct i2c_client *client)
-{
-    int idx;
-
-    mutex_lock(&dev->sensor_lock);
-
-    if (dev->num_sensors >= MAX_SENSOR_NAMES) {
-        mutex_unlock(&dev->sensor_lock);
-        return -ENOSPC;
-    }
-
-    /* Find empty slot or existing sensor */
-    for (idx = 0; idx < MAX_SENSOR_NAMES; idx++) {
-        if (!dev->sensors[idx].registered ||
-            strncmp(dev->sensors[idx].name, name, SENSOR_NAME_LEN) == 0)
-            break;
-    }
-
-    if (idx >= MAX_SENSOR_NAMES) {
-        mutex_unlock(&dev->sensor_lock);
-        return -ENOSPC;
-    }
-
-    /* Register sensor */
-    strlcpy(dev->sensors[idx].name, name, SENSOR_NAME_LEN);
-    dev->sensors[idx].registered = true;
-    dev->sensors[idx].client = client;
-    if (!dev->sensors[idx].client)
-        dev->num_sensors++;
-
-    mutex_unlock(&dev->sensor_lock);
-    return 0;
-}
-
 /**
  * isp_driver_ioctl - IOCTL handler for ISP driver
  * @file: File structure
@@ -3397,6 +3449,8 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 {
     void __user *argp = (void __user *)arg;
     int ret = 0;
+
+    pr_info("ISP IOCTL called: cmd=0x%x\n", cmd);  // Add this debug line
 
     // Basic validation
     if (!gISPdev || !gISPdev->is_open) {
@@ -3616,6 +3670,38 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	        return -EFAULT;
 	    break;
 	}
+	// Add these cases to your ioctl handler:
+	case VIDIOC_STREAMON:
+	    pr_info("Stream ON requested\n");
+	    ret = start_streaming(gISPdev);
+	    break;
+
+	case VIDIOC_STREAMOFF:
+	    pr_info("Stream OFF requested\n");
+	    ret = stop_streaming(gISPdev);
+	    break;
+
+	case VIDIOC_S_FMT: {
+	    struct v4l2_format fmt;
+	    if (copy_from_user(&fmt, argp, sizeof(fmt)))
+	        return -EFAULT;
+
+	    pr_info("Set format: %dx%d, format: %d\n",
+	            fmt.fmt.pix.width, fmt.fmt.pix.height, fmt.fmt.pix.pixelformat);
+	    // TODO: Configure ISP format
+	    break;
+	}
+
+	case VIDIOC_S_CROP: {
+	    struct v4l2_crop crop;
+	    if (copy_from_user(&crop, argp, sizeof(crop)))
+	        return -EFAULT;
+
+	    pr_info("Set crop: %dx%d at (%d,%d)\n",
+	            crop.c.width, crop.c.height, crop.c.left, crop.c.top);
+	    // TODO: Configure ISP cropping
+	    break;
+	}
 
     case SENSOR_CMD_READ_ID:
 	case SENSOR_CMD_WRITE_REG:
@@ -3634,6 +3720,13 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
     return ret;
 }
+
+static const struct v4l2_file_operations isp_v4l2_fops = {
+    .owner          = THIS_MODULE,
+    .open           = tisp_open,
+    .release        = tisp_release,
+    .unlocked_ioctl = isp_driver_ioctl,
+};
 
 // Update file operations structure
 static const struct file_operations isp_fops = {
@@ -4274,7 +4367,7 @@ static int __init isp_driver_init(void)
     }
     pr_info("gISPdev allocated at %p\n", gISPdev);  // Add this debug print
 
-    cdev_init(&gISPdev->cdev, &isp_fops);
+    cdev_init(&gISPdev->cdev, &isp_v4l2_fops);  // Use V4L2 fops instead
     gISPdev->cdev.owner = THIS_MODULE;
 
     ret = cdev_add(&gISPdev->cdev, tisp_dev_number, 1);
