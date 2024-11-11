@@ -743,6 +743,124 @@ int32_t tx_isp_request_irq(struct irq_info* irqInfo, struct irq_handler_data* ir
     return 0;  // Return success
 }
 
+struct isp_i2c_board_info {
+    char type[32];          // Sensor type/name
+    u16 addr;               // I2C device address
+    unsigned short flags;    // I2C flags
+    void *platform_data;    // Platform specific data
+    int irq;                // IRQ if needed
+};
+
+/* Initialize sensor as I2C device */
+static struct i2c_client *isp_i2c_new_sensor_device(struct i2c_adapter *adapter,
+                                                   struct isp_i2c_board_info *info)
+{
+    struct i2c_board_info board_info;
+
+    /* Initialize board_info properly */
+    memset(&board_info, 0, sizeof(board_info));
+    strlcpy(board_info.type, info->type, I2C_NAME_SIZE);
+    board_info.addr = info->addr;
+    board_info.platform_data = info->platform_data;
+    board_info.irq = info->irq;
+    board_info.flags = info->flags;
+
+    /* Try to load the sensor module first */
+    request_module(info->type);
+
+    /* Create new I2C device */
+    struct i2c_client *client = i2c_new_device(adapter, &board_info);
+    if (!client) {
+        pr_err("Failed to create I2C device for %s\n", info->type);
+        return NULL;
+    }
+
+    /* Verify the driver bound successfully */
+    if (!client->dev.driver) {
+        pr_err("No driver bound to %s sensor\n", info->type);
+        i2c_unregister_device(client);
+        return NULL;
+    }
+
+    return client;
+}
+
+int isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
+                            struct isp_i2c_board_info *info,
+                            void *client_data)
+{
+    struct i2c_client *client;
+    int ret = 0;
+
+    if (!adapter || !info) {
+        pr_err("Invalid adapter or board info\n");
+        return -EINVAL;
+    }
+
+    /* Create I2C device */
+    client = isp_i2c_new_sensor_device(adapter, info);
+    if (!client) {
+        pr_err("Failed to create sensor I2C device\n");
+        return -ENODEV;
+    }
+
+    /* Store any private data */
+    i2c_set_clientdata(client, client_data);
+
+    /* Basic sensor validation - read chip ID or similar */
+    struct i2c_msg msgs[2];
+    u8 reg_addr = 0x00; /* Chip ID register - adjust based on sensor */
+    u8 chip_id = 0;
+
+    /* Setup read transaction */
+    msgs[0].addr = client->addr;
+    msgs[0].flags = 0;
+    msgs[0].len = 1;
+    msgs[0].buf = &reg_addr;
+
+    msgs[1].addr = client->addr;
+    msgs[1].flags = I2C_M_RD;
+    msgs[1].len = 1;
+    msgs[1].buf = &chip_id;
+
+    ret = i2c_transfer(adapter, msgs, 2);
+    if (ret != 2) {
+        pr_err("Failed to read sensor chip ID\n");
+        i2c_unregister_device(client);
+        return -EIO;
+    }
+
+    pr_info("Sensor %s initialized successfully at address 0x%02x\n",
+            info->type, info->addr);
+
+    return 0;
+}
+
+/* Helper function to configure sensor via I2C */
+int isp_sensor_write_reg(struct i2c_client *client, u16 reg, u8 val)
+{
+    struct i2c_msg msg;
+    u8 buf[3];
+    int ret;
+
+    buf[0] = reg >> 8;    // Register address high byte
+    buf[1] = reg & 0xFF;  // Register address low byte
+    buf[2] = val;         // Value to write
+
+    msg.addr = client->addr;
+    msg.flags = 0;
+    msg.len = 3;
+    msg.buf = buf;
+
+    ret = i2c_transfer(client->adapter, &msg, 1);
+    if (ret != 1) {
+        pr_err("Failed to write sensor register 0x%04x\n", reg);
+        return -EIO;
+    }
+
+    return 0;
+}
+
 int32_t isp_subdev_init_clks(struct IspSubdev* ispSubdev, struct ClockConfig* clockConfig)
 {
     // Get the number of clocks from the IspSubdev struct
@@ -2913,6 +3031,8 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     switch (cmd) {
 	case VIDIOC_REGISTER_SENSOR: {
 	    char sensor_name[80];  // Match size with IMPISPDev sensor_name
+	    struct isp_i2c_board_info board_info = {0};
+	    struct i2c_adapter *adapter;
 
 	    if (!gISPdev || !gISPdev->is_open) {
 	        dev_err(gISPdev->dev, "ISP device not initialized or not open\n");
@@ -2931,6 +3051,25 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	    // Store in global device structure
 	    strncpy(gISPdev->sensor_name, sensor_name, sizeof(gISPdev->sensor_name) - 1);
 	    gISPdev->sensor_name[sizeof(gISPdev->sensor_name) - 1] = '\0';
+
+        // Get the I2C adapter (usually adapter 0 or 1 for sensor)
+	    adapter = i2c_get_adapter(0); // Adjust adapter number as needed
+	    if (!adapter) {
+	        dev_err(gISPdev->dev, "Failed to get I2C adapter\n");
+	        return -ENODEV;
+	    }
+
+	    // Setup board info
+	    strncpy(board_info.type, "sc2336", sizeof(board_info.type) - 1);
+	    board_info.addr = 0x30; // Adjust address based on your sensor
+
+	    // Initialize I2C device
+	    ret = isp_i2c_new_subdev_board(adapter, &board_info, NULL);
+	    i2c_put_adapter(adapter);
+	    if (ret) {
+	        dev_err(gISPdev->dev, "Failed to initialize sensor\n");
+	        return ret;
+	    }
 
 	    // Print confirmation
 	    dev_info(gISPdev->dev, "Successfully registered sensor: %s\n",
