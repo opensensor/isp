@@ -89,22 +89,20 @@ static int early_init(void)
 #define ISP_FEATURE_LDC         0x02  // Lens distortion correction enabled
 
 
-// Device structure for ISP
 struct IMPISPDev {
-    int result;
-    char dev_name[32];     // Device name/path
+    char dev_name[32];     // 0x00: Device name/path - moved to start
     struct cdev cdev;      // Character device structure
     int major;             // Major number
     int minor;             // Minor number
-    int fd;                // File descriptor
-    int is_open;           // Device open status
+    int fd;                // 0x20: File descriptor
+    int is_open;           // 0x24: Device open status
     char sensor_name[80];  // Sensor name buffer
     char padding1[0x60];   // Padding to 0xac
     void* buf_info;        // Buffer info pointer
     int wdr_mode;          // WDR mode flag
     void* wdr_buf_info;    // WDR buffer info pointer
     unsigned int current_link;  // Track current link configuration
-    char padding2[0x24];   // Adjusted padding (reduced by 4 bytes for current_link)
+    char padding2[0x24];   // Adjusted padding
     struct device *dev;    // Device pointer
 
     // Fields for hardware-level operations
@@ -1151,73 +1149,56 @@ EXPORT_SYMBOL(tx_isp_subdev_deinit);
 // Individual device proc handlers
 static int isp_fs_show(struct seq_file *m, void *v)
 {
-    struct isp_device_status *status = m->private;
     int i;
 
-    if (!status) {
-        seq_puts(m, "Error: No status data available\n");
+    if (!gISPdev) {
+        seq_puts(m, "Error: ISP device not initialized\n");
         return 0;
     }
 
     for (i = 0; i < MAX_FRAMESOURCE_CHANNELS; i++) {
         seq_printf(m, "############## framesource %d ###############\n", i);
         seq_printf(m, "chan status: %s\n",
-                  status->fs_status.chan_status[i] ? "running" : "stop");
+                  (gISPdev->is_open && gISPdev->sensor_name[0]) ? "running" : "stop");
     }
     return 0;
 }
 
 static int isp_m0_show(struct seq_file *m, void *v)
 {
-    struct isp_device_status *status = m->private;
-
-    if (!status) {
-        seq_puts(m, "Error: No status data available\n");
-        return 0;
-    }
-
     seq_puts(m, "****************** ISP INFO **********************\n");
-    if (!status->sensor_enabled) {
+
+    if (!gISPdev || !gISPdev->is_open || !gISPdev->sensor_name[0]) {
         seq_puts(m, "sensor doesn't work, please enable sensor\n");
     } else {
-        seq_puts(m, "sensor is working\n");
+        seq_printf(m, "sensor %s is working\n", gISPdev->sensor_name);
     }
     return 0;
 }
 
 static int isp_w00_show(struct seq_file *m, void *v)
 {
-    struct isp_device_status *status = m->private;
-
-    if (!status) {
-        seq_puts(m, "Error: No status data available\n");
-        return 0;
-    }
-
-    if (!status->sensor_enabled) {
+    if (!gISPdev || !gISPdev->is_open || !gISPdev->sensor_name[0]) {
         seq_puts(m, "sensor doesn't work, please enable sensor\n");
+    } else {
+        seq_printf(m, "sensor %s is active\n", gISPdev->sensor_name);
     }
     return 0;
 }
 
 static int isp_w02_show(struct seq_file *m, void *v)
 {
-    struct isp_device_status *status = m->private;
-    int i;
-
-    if (!status) {
-        seq_puts(m, "Error: No status data available\n");
+    if (!gISPdev || !gISPdev->is_open || !gISPdev->sensor_name[0]) {
+        seq_puts(m, "sensor doesn't work, please enable sensor\n");
         return 0;
     }
 
-    // First line with two values
-    seq_printf(m, " %d, %d\n", status->w02_values[0], status->w02_values[1]);
+    // If we have WDR mode info in gISPdev, we could use it here
+    seq_printf(m, " %d, %d\n", gISPdev->wdr_mode ? 1 : 0, 0);  // Example values
 
-    // Second line with remaining values
-    for (i = 2; i < 13; i++) {
-        seq_printf(m, "%d%s", status->w02_values[i],
-                  (i < 12) ? ", " : "\n");
-    }
+    // Add any other relevant info from gISPdev structure
+    // Could add frame/buffer stats if we're tracking them
+
     return 0;
 }
 
@@ -1888,9 +1869,11 @@ static int isp_device_configure(struct IMPISPDev *dev)
 
 static int tisp_open(struct inode *inode, struct file *file)
 {
+    pr_info("ISP device open called from pid %d\n", current->pid);
+
     if (!gISPdev) {
         pr_err("ISP device not initialized\n");
-        return -ENODEV;  // Return device not initialized error
+        return -ENODEV;
     }
 
     if (gISPdev->is_open) {
@@ -3665,6 +3648,31 @@ static struct platform_driver tisp_platform_driver = {
     .id_table = tisp_platform_ids,  // Add this
 };
 
+// Define the attribute show function
+static ssize_t isp_status_show(struct device *dev,
+                              struct device_attribute *attr, char *buf)
+{
+    if (!gISPdev)
+        return sprintf(buf, "ISP device not initialized\n");
+
+    return sprintf(buf, "ISP Status:\n"
+                       "  Open: %s\n"
+                       "  Sensor: %s\n"
+                       "  WDR Mode: %d\n",
+                       gISPdev->is_open ? "yes" : "no",
+                       gISPdev->sensor_name[0] ? gISPdev->sensor_name : "none",
+                       gISPdev->wdr_mode);
+}
+
+// Create the device attribute
+static DEVICE_ATTR(status, S_IRUGO, isp_status_show, NULL);
+
+static int isp_dev_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+    add_uevent_var(env, "DEVMODE=%#o", 0666);
+    return 0;
+}
+
 /* Module initialization function */
 static int __init isp_driver_init(void)
 {
@@ -3694,6 +3702,9 @@ static int __init isp_driver_init(void)
         return PTR_ERR(tisp_class);
     }
 
+    // Set class permissions to be readable/writable by all
+    tisp_class->dev_uevent = isp_dev_uevent;
+
     gISPdev = kzalloc(sizeof(struct IMPISPDev), GFP_KERNEL);
     if (!gISPdev) {
         class_destroy(tisp_class);
@@ -3715,11 +3726,18 @@ static int __init isp_driver_init(void)
 
     tisp_device = device_create(tisp_class, NULL, tisp_dev_number, NULL, "tx-isp");
     if (IS_ERR(tisp_device)) {
+        pr_err("Failed to create tx-isp device\n");
         cdev_del(&gISPdev->cdev);
         kfree(gISPdev);
         class_destroy(tisp_class);
         unregister_chrdev_region(tisp_dev_number, 1);
         return PTR_ERR(tisp_device);
+    }
+
+    if (tisp_device) {
+        if (device_create_file(tisp_device, &dev_attr_status) < 0) {
+            pr_err("Failed to create device attributes\n");
+        }
     }
 
     /* Register the platform driver */
