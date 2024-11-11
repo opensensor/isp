@@ -88,9 +88,35 @@ static int early_init(void)
 #define ISP_FEATURE_NR          0x01  // Noise reduction enabled
 #define ISP_FEATURE_LDC         0x02  // Lens distortion correction enabled
 
+/* Standard V4L2 IOCTL definitions are in the 0x56xx range */
+/* Custom ISP commands */
+#define VIDIOC_BASE         0x56AA  // Choose a base that doesn't conflict
+#define VIDIOC_SET_ROTATION _IOWR('V', VIDIOC_BASE + 0x20, struct isp_rotation_params)
+
+/* Structure definitions for IOCTL parameters */
+struct isp_rotation_params {
+    int angle;          // Rotation angle (0, 90, 180, 270)
+    int rot_height;     // Output height after rotation
+    int rot_width;      // Output width after rotation
+    unsigned int flags; // Reserved for future use
+};
+
+/* Additional ISP-specific commands */
+#define VIDIOC_SET_FLIP     _IOW('V', VIDIOC_BASE + 0x21, int)
+#define VIDIOC_SET_MIRROR   _IOW('V', VIDIOC_BASE + 0x22, int)
+#define VIDIOC_SET_CROP     _IOWR('V', VIDIOC_BASE + 0x23, struct v4l2_crop)
+#define VIDIOC_SET_FORMAT   _IOWR('V', VIDIOC_BASE + 0x24, struct v4l2_format)
+
+/* Define error codes */
+#define ISP_ERROR_BASE          1000
+#define ISP_ERROR_INVALID_PARAM (ISP_ERROR_BASE + 1)
+#define ISP_ERROR_BUSY         (ISP_ERROR_BASE + 2)
+#define ISP_ERROR_TIMEOUT      (ISP_ERROR_BASE + 3)
+#define ISP_ERROR_NO_MEMORY    (ISP_ERROR_BASE + 4)
+#define ISP_ERROR_NOT_READY    (ISP_ERROR_BASE + 5)
 
 struct IMPISPDev {
-    char dev_name[32];     // 0x00: Device name/path - moved to start
+    char dev_name[32];     // 0x00: Device name/path
     struct cdev cdev;      // Character device structure
     int major;             // Major number
     int minor;             // Minor number
@@ -105,9 +131,13 @@ struct IMPISPDev {
     char padding2[0x24];   // Adjusted padding
     struct device *dev;    // Device pointer
 
-    // Fields for hardware-level operations
-    void *regs;            // Register base (mapped registers)
+    // Hardware access fields
+    void __iomem *regs;    // ISP register base
+    void __iomem *ctrl_regs; // Control register base (0xb0000000)
     int irq;               // Interrupt line
+    struct i2c_client *sensor_i2c_client;
+    unsigned int width;    // Current frame width
+    unsigned int height;   // Current frame height
 };
 
 static void __iomem *reg_base;
@@ -752,6 +782,7 @@ struct isp_i2c_board_info {
 };
 
 /* Initialize sensor as I2C device */
+/* Initialize sensor as I2C device */
 static struct i2c_client *isp_i2c_new_sensor_device(struct i2c_adapter *adapter,
                                                    struct isp_i2c_board_info *info)
 {
@@ -785,23 +816,23 @@ static struct i2c_client *isp_i2c_new_sensor_device(struct i2c_adapter *adapter,
     return client;
 }
 
-int isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
-                            struct isp_i2c_board_info *info,
-                            void *client_data)
+struct i2c_client *isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
+                                           struct isp_i2c_board_info *info,
+                                           void *client_data)
 {
     struct i2c_client *client;
     int ret = 0;
 
     if (!adapter || !info) {
         pr_err("Invalid adapter or board info\n");
-        return -EINVAL;
+        return ERR_PTR(-EINVAL);
     }
 
     /* Create I2C device */
     client = isp_i2c_new_sensor_device(adapter, info);
     if (!client) {
         pr_err("Failed to create sensor I2C device\n");
-        return -ENODEV;
+        return ERR_PTR(-ENODEV);
     }
 
     /* Store any private data */
@@ -827,13 +858,13 @@ int isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
     if (ret != 2) {
         pr_err("Failed to read sensor chip ID\n");
         i2c_unregister_device(client);
-        return -EIO;
+        return ERR_PTR(-EIO);
     }
 
     pr_info("Sensor %s initialized successfully at address 0x%02x\n",
             info->type, info->addr);
 
-    return 0;
+    return client;
 }
 
 /* Helper function to configure sensor via I2C */
@@ -1984,9 +2015,132 @@ static int isp_device_configure(struct IMPISPDev *dev)
     return 0;  // Success
 }
 
+#define ISP_INIT_TIMEOUT_MS 200
+#define ISP_CTRL_REG        0x100
+#define ISP_STATUS_REG      0x104
+#define ISP_READY_BIT       0x01
 
-static int tisp_open(struct inode *inode, struct file *file)
+/* Clock and power control registers based on T31 */
+#define CPM_BASE            0x10000000
+#define CPM_CLKGR           0x00000020
+#define CPM_CLKGR1          0x00000028
+#define CPM_ISP_CLK_GATE    BIT(3)
+#define CPM_MIPI_CLK_GATE   BIT(4)
+
+/* ISP specific registers */
+#define ISP_CLK_CTRL        0x08
+#define ISP_RST_CTRL        0x04
+#define ISP_POWER_CTRL      0x0C
+#define ISP_MIPI_CTRL       0x30
+
+static int isp_power_on(struct IMPISPDev *dev)
 {
+    void __iomem *cpm_base;
+    u32 val;
+
+    /* Map CPM registers */
+    cpm_base = ioremap(CPM_BASE, 0x100);
+    if (!cpm_base) {
+        pr_err("Failed to map CPM registers\n");
+        return -ENOMEM;
+    }
+
+    /* Enable clocks */
+    val = readl(cpm_base + CPM_CLKGR);
+    val &= ~(CPM_ISP_CLK_GATE | CPM_MIPI_CLK_GATE);
+    writel(val, cpm_base + CPM_CLKGR);
+
+    /* Enable ISP power domain if needed */
+    val = readl(cpm_base + CPM_CLKGR1);
+    val &= ~BIT(2);  // ISP power domain bit
+    writel(val, cpm_base + CPM_CLKGR1);
+
+    /* Wait for power stabilization */
+    usleep_range(1000, 2000);
+
+    iounmap(cpm_base);
+    return 0;
+}
+
+static int isp_reset_hw(struct IMPISPDev *dev)
+{
+    u32 val;
+
+    /* Assert reset */
+    writel(0x1, dev->regs + ISP_RST_CTRL);
+    usleep_range(1000, 2000);
+
+    /* De-assert reset */
+    writel(0x0, dev->regs + ISP_RST_CTRL);
+    usleep_range(1000, 2000);
+
+    /* Enable core clock */
+    val = readl(dev->regs + ISP_CLK_CTRL);
+    val |= 0x1;
+    writel(val, dev->regs + ISP_CLK_CTRL);
+
+    /* Enable power */
+    val = readl(dev->regs + ISP_POWER_CTRL);
+    val |= 0x1;
+    writel(val, dev->regs + ISP_POWER_CTRL);
+
+    /* Wait for power stabilization */
+    usleep_range(5000, 10000);
+
+    return 0;
+}
+
+static int isp_hw_init(struct IMPISPDev *dev)
+{
+    void __iomem *ctrl_reg;
+    void __iomem *status_reg;
+    unsigned long timeout;
+    u32 val;
+    int ret;
+
+    if (!dev || !dev->regs) {
+        pr_err("Invalid ISP device state\n");
+        return -EINVAL;
+    }
+
+    /* Power up sequence first */
+    ret = isp_power_on(dev);
+    if (ret) {
+        pr_err("Failed to power on ISP\n");
+        return ret;
+    }
+
+    /* Reset hardware */
+    ret = isp_reset_hw(dev);
+    if (ret) {
+        pr_err("Failed to reset ISP hardware\n");
+        return ret;
+    }
+
+    ctrl_reg = dev->regs + ISP_CTRL_REG;
+    status_reg = dev->regs + ISP_STATUS_REG;
+
+    /* Read initial values */
+    val = readl(ctrl_reg);
+    pr_info("Initial ctrl reg value: 0x%08x\n", val);
+
+    /* Enable ISP core */
+    writel(0x1, ctrl_reg);
+    val = readl(ctrl_reg);
+    pr_info("Read back value after enable: 0x%08x\n", val);
+
+    /* Configure MIPI interface */
+    val = readl(dev->regs + ISP_MIPI_CTRL);
+    val |= 0x1;  // Enable MIPI interface
+    writel(val, dev->regs + ISP_MIPI_CTRL);
+
+   	return 0;
+}
+
+static int tisp_open(struct file *file)
+{
+    int ret;
+
     pr_info("ISP device open called from pid %d\n", current->pid);
 
     if (!gISPdev) {
@@ -1999,44 +2153,96 @@ static int tisp_open(struct inode *inode, struct file *file)
         return -EBUSY;
     }
 
-    // Perform any necessary hardware register configuration
-    if (isp_device_configure(gISPdev)) {
-        pr_err("Failed to configure ISP hardware\n");
-        return -EIO;
-    }
+    // Add debug prints for gISPdev state
+    pr_info("gISPdev state: addr=%p, regs=%p\n", gISPdev, gISPdev->regs);
 
-    // Check or initialize interrupts if required
-    if (isp_device_interrupts_setup(gISPdev)) {
-        pr_err("Failed to setup interrupts\n");
-        return -EIO;
+    // Initialize hardware with power and clocks
+    ret = isp_hw_init(gISPdev);
+    if (ret) {
+        pr_err("Failed to initialize ISP hardware: %d\n", ret);
+        return ret;
     }
 
     // Mark the device as opened
     gISPdev->is_open = 1;
-    pr_info("Device opened successfully\n");
+    file->private_data = gISPdev;
 
-    return 0;  // Success
+    pr_info("Device opened successfully\n");
+    return 0;
+}
+
+
+
+/* Add rotation support */
+#define MAX_ROTATION_ANGLE 270
+
+static int isp_set_rotation(struct IMPISPDev *dev, int angle,
+                          int *rot_height, int *rot_width)
+{
+    u32 rot_ctrl;
+
+    if (!dev) {
+        pr_err("Invalid ISP device\n");
+        return -EINVAL;
+    }
+
+    /* Validate rotation angle */
+    if (angle != 0 && angle != 90 && angle != 180 && angle != 270) {
+        pr_err("Invalid rotation angle: %d\n", angle);
+        return -EINVAL;
+    }
+
+    /* Calculate rotated dimensions */
+    if (angle == 90 || angle == 270) {
+        *rot_width = dev->height;
+        *rot_height = dev->width;
+    } else {
+        *rot_width = dev->width;
+        *rot_height = dev->height;
+    }
+
+    /* Configure rotation registers */
+    switch (angle) {
+        case 0:
+            rot_ctrl = 0x0;
+            break;
+        case 90:
+            rot_ctrl = 0x1;
+            break;
+        case 180:
+            rot_ctrl = 0x2;
+            break;
+        case 270:
+            rot_ctrl = 0x3;
+            break;
+    }
+
+    /* Apply rotation configuration */
+    writel(rot_ctrl, dev->regs + 0x50);  // Rotation control register
+
+    /* Update output dimensions */
+    writel(*rot_width, dev->regs + 0x54);
+    writel(*rot_height, dev->regs + 0x58);
+
+    return 0;
 }
 
 
 static int tisp_release(struct inode *inode, struct file *file)
 {
     if (gISPdev) {
-        // Check if the device is open
-        if (gISPdev->is_open) {
-            // Mark the device as closed
-            gISPdev->is_open = 0;
-            pr_info("Device closed successfully\n");
-        } else {
-            pr_info("Device was not opened or already closed\n");
+        if (gISPdev->ctrl_regs) {
+            iounmap(gISPdev->ctrl_regs);
+            gISPdev->ctrl_regs = NULL;
         }
-    } else {
-        pr_err("ISP device not initialized\n");
+        if (gISPdev->regs) {
+            iounmap(gISPdev->regs);
+            gISPdev->regs = NULL;
+        }
+        gISPdev->is_open = 0;
     }
-
     return 0;
 }
-
 
 // Update tisp_read function
 static ssize_t tisp_read(struct file *file, char __user *buf, size_t count, loff_t *offset)
@@ -3008,6 +3214,176 @@ static int calculate_wdr_buffer_size(struct isp_device *isp, struct isp_wdr_buf_
     return ret;
 }
 
+int isp_sensor_read_reg(struct i2c_client *client, u16 reg, u8 *val)
+{
+    struct i2c_msg msgs[2];
+    u8 buf[2];
+    int ret;
+
+    buf[0] = reg >> 8;
+    buf[1] = reg & 0xFF;
+
+    msgs[0].addr = client->addr;
+    msgs[0].flags = 0;
+    msgs[0].len = 2;
+    msgs[0].buf = buf;
+
+    msgs[1].addr = client->addr;
+    msgs[1].flags = I2C_M_RD;
+    msgs[1].len = 1;
+    msgs[1].buf = val;
+
+    ret = i2c_transfer(client->adapter, msgs, 2);
+    if (ret != 2) {
+        pr_err("Failed to read sensor register 0x%04x\n", reg);
+        return -EIO;
+    }
+
+    return 0;
+}
+
+// Add these defines at the top of the file
+#define SENSOR_CMD_BASIC         0x2000000  // Register sensor
+#define SENSOR_CMD_READ_ID       0x2000011  // Read sensor ID
+#define SENSOR_CMD_WRITE_REG     0x2000012  // Write sensor register
+#define SENSOR_CMD_READ_REG      0x2000013  // Read sensor register
+#define SENSOR_CMD_SET_GAIN      0x2000005  // Set sensor gain
+#define SENSOR_CMD_SET_EXP       0x2000006  // Set exposure time
+#define SENSOR_CMD_STREAM_ON     0x2000007  // Start streaming
+#define SENSOR_CMD_STREAM_OFF    0x2000008  // Stop streaming
+
+struct sensor_reg_data {
+    uint16_t reg;
+    uint8_t val;
+};
+
+/* Handle sensor-specific IOCTL commands */
+static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __user *arg)
+{
+    struct i2c_client *client = dev->sensor_i2c_client; // Add this field to IMPISPDev
+    struct sensor_reg_data reg_data;
+    int ret = 0;
+    uint8_t val = 0;
+
+    if (!client) {
+        pr_err("No I2C client available for sensor\n");
+        return -ENODEV;
+    }
+
+    switch (cmd) {
+        case SENSOR_CMD_READ_ID: {
+            // Read sensor ID - typically register 0x0000 for most sensors
+            ret = isp_sensor_read_reg(client, 0x0000, &val);
+            if (ret < 0)
+                return ret;
+            ret = put_user(val, (uint8_t __user *)arg);
+            break;
+        }
+
+        case SENSOR_CMD_WRITE_REG: {
+            if (copy_from_user(&reg_data, arg, sizeof(reg_data)))
+                return -EFAULT;
+            ret = isp_sensor_write_reg(client, reg_data.reg, reg_data.val);
+            break;
+        }
+
+        case SENSOR_CMD_READ_REG: {
+            if (copy_from_user(&reg_data, arg, sizeof(reg_data)))
+                return -EFAULT;
+            ret = isp_sensor_read_reg(client, reg_data.reg, &val);
+            if (ret < 0)
+                return ret;
+            reg_data.val = val;
+            ret = copy_to_user(arg, &reg_data, sizeof(reg_data));
+            break;
+        }
+
+        case SENSOR_CMD_STREAM_ON: {
+            // SC2336 specific streaming configuration
+            ret = isp_sensor_write_reg(client, 0x0100, 0x01); // Stream on
+            if (ret < 0) {
+                pr_err("Failed to start sensor streaming\n");
+                return ret;
+            }
+            pr_info("Sensor streaming started\n");
+            break;
+        }
+
+        case SENSOR_CMD_STREAM_OFF: {
+            ret = isp_sensor_write_reg(client, 0x0100, 0x00); // Stream off
+            pr_info("Sensor streaming stopped\n");
+            break;
+        }
+
+        case SENSOR_CMD_SET_GAIN: {
+            uint16_t gain;
+            if (get_user(gain, (uint16_t __user *)arg))
+                return -EFAULT;
+            // Convert gain to sensor specific register values
+            // This is sensor specific - adjust for SC2336
+            ret = isp_sensor_write_reg(client, 0x3508, (gain >> 8) & 0xFF);
+            if (ret == 0)
+                ret = isp_sensor_write_reg(client, 0x3509, gain & 0xFF);
+            break;
+        }
+
+        case SENSOR_CMD_SET_EXP: {
+            uint32_t exp;
+            if (get_user(exp, (uint32_t __user *)arg))
+                return -EFAULT;
+            // Convert exposure to sensor specific register values
+            // This is sensor specific - adjust for SC2336
+            ret = isp_sensor_write_reg(client, 0x3500, (exp >> 12) & 0xFF);
+            if (ret == 0)
+                ret = isp_sensor_write_reg(client, 0x3501, (exp >> 4) & 0xFF);
+            if (ret == 0)
+                ret = isp_sensor_write_reg(client, 0x3502, (exp & 0x0F) << 4);
+            break;
+        }
+
+        default:
+            pr_err("Unknown sensor command: 0x%x\n", cmd);
+            return -EINVAL;
+    }
+
+    return ret;
+}
+
+
+/* Add this function to register sensors */
+static int register_sensor(struct IMPISPDev *dev, const char *name, struct i2c_client *client)
+{
+    int idx;
+
+    mutex_lock(&dev->sensor_lock);
+
+    if (dev->num_sensors >= MAX_SENSOR_NAMES) {
+        mutex_unlock(&dev->sensor_lock);
+        return -ENOSPC;
+    }
+
+    /* Find empty slot or existing sensor */
+    for (idx = 0; idx < MAX_SENSOR_NAMES; idx++) {
+        if (!dev->sensors[idx].registered ||
+            strncmp(dev->sensors[idx].name, name, SENSOR_NAME_LEN) == 0)
+            break;
+    }
+
+    if (idx >= MAX_SENSOR_NAMES) {
+        mutex_unlock(&dev->sensor_lock);
+        return -ENOSPC;
+    }
+
+    /* Register sensor */
+    strlcpy(dev->sensors[idx].name, name, SENSOR_NAME_LEN);
+    dev->sensors[idx].registered = true;
+    dev->sensors[idx].client = client;
+    if (!dev->sensors[idx].client)
+        dev->num_sensors++;
+
+    mutex_unlock(&dev->sensor_lock);
+    return 0;
+}
 
 /**
  * isp_driver_ioctl - IOCTL handler for ISP driver
@@ -3033,6 +3409,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	    char sensor_name[80];  // Match size with IMPISPDev sensor_name
 	    struct isp_i2c_board_info board_info = {0};
 	    struct i2c_adapter *adapter;
+	    struct i2c_client *client;
 
 	    if (!gISPdev || !gISPdev->is_open) {
 	        dev_err(gISPdev->dev, "ISP device not initialized or not open\n");
@@ -3052,7 +3429,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	    strncpy(gISPdev->sensor_name, sensor_name, sizeof(gISPdev->sensor_name) - 1);
 	    gISPdev->sensor_name[sizeof(gISPdev->sensor_name) - 1] = '\0';
 
-        // Get the I2C adapter (usually adapter 0 or 1 for sensor)
+	    // Get the I2C adapter (usually adapter 0 or 1 for sensor)
 	    adapter = i2c_get_adapter(0); // Adjust adapter number as needed
 	    if (!adapter) {
 	        dev_err(gISPdev->dev, "Failed to get I2C adapter\n");
@@ -3064,12 +3441,13 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	    board_info.addr = 0x30; // Adjust address based on your sensor
 
 	    // Initialize I2C device
-	    ret = isp_i2c_new_subdev_board(adapter, &board_info, NULL);
+	    client = isp_i2c_new_subdev_board(adapter, &board_info, NULL);
 	    i2c_put_adapter(adapter);
-	    if (ret) {
+	    if (IS_ERR(client)) {
 	        dev_err(gISPdev->dev, "Failed to initialize sensor\n");
-	        return ret;
+	        return PTR_ERR(client);
 	    }
+	    gISPdev->sensor_i2c_client = client; // Store client in global structure
 
 	    // Print confirmation
 	    dev_info(gISPdev->dev, "Successfully registered sensor: %s\n",
@@ -3083,6 +3461,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
             int count;
         } sensors;
 
+        pr_info("VIDIOC_GET_SENSOR_LIST\n");
         // Always perform null checks first
         if (!argp) {
             dev_err(gISPdev->dev, "Null userspace pointer\n");
@@ -3110,6 +3489,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         return 0;
     }
     case TX_ISP_SET_BUF: {
+      	pr_info("TX_ISP_SET_BUF\n");
         struct isp_buf_info buf;
         if (copy_from_user(&buf, argp, sizeof(buf))) {
             dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
@@ -3121,6 +3501,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
 
     case TX_ISP_VIDEO_LINK_SETUP: {
+      	pr_info("TX_ISP_VIDEO_LINK_SETUP\n");
         unsigned int link;
         if (copy_from_user(&link, argp, sizeof(link))) {
             dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
@@ -3132,6 +3513,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
 
     case TX_ISP_SET_AE_ALGO_OPEN: {
+      	pr_info("TX_ISP_SET_AE_ALGO_OPEN\n");
         struct isp_ae_algo ae;
         if (copy_from_user(&ae, argp, sizeof(ae))) {
             dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
@@ -3148,6 +3530,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
 
     case TX_ISP_SET_AWB_ALGO_OPEN: {
+      	pr_info("TX_ISP_SET_AWB_ALGO_OPEN\n");
         struct isp_awb_algo awb;
         if (copy_from_user(&awb, argp, sizeof(awb))) {
             dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
@@ -3164,6 +3547,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
 
     case TX_ISP_WDR_OPEN: {
+      	pr_info("TX_ISP_WDR_OPEN\n");
         // Handle WDR enable - matches case 0x800456d8
         unsigned int wdr_en = 1;
         ret = isp_set_wdr_mode(gISPdev, wdr_en);
@@ -3171,6 +3555,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
 
     case TX_ISP_WDR_CLOSE: {
+      	pr_info("TX_ISP_WDR_CLOSE\n");
         // Handle WDR disable - matches case 0x800456d9
         unsigned int wdr_en = 0;
         ret = isp_set_wdr_mode(gISPdev, wdr_en);
@@ -3178,6 +3563,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
 
     case TX_ISP_WDR_GET_BUF: {
+        pr_info("TX_ISP_WDR_GET_BUF\n");
         // Calculate and return WDR buffer size - matches case 0x800856d7
         struct isp_wdr_buf_size size;
         ret = calculate_wdr_buffer_size(gISPdev, &size);
@@ -3190,6 +3576,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
 
     case TX_ISP_SET_AE_ALGO_CLOSE: {
+        pr_info("TX_ISP_SET_AE_ALGO_CLOSE\n");
         // TODO
         // Cleanup AE algorithm - matches case 0x800456de
         // tisp_ae_algo_deinit();
@@ -3200,6 +3587,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
 
     case TX_ISP_SET_AWB_ALGO_CLOSE: {
+      	pr_info("TX_ISP_SET_AWB_ALGO_CLOSE\n");
         // TODO
         // Cleanup AWB algorithm - matches case 0x800456e4
         //tisp_awb_algo_deinit();
@@ -3207,6 +3595,37 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         kfree(awb_info_mine);
         break;
     }
+
+    case VIDIOC_SET_ROTATION: {
+	    struct {
+	        int angle;
+	        int rot_height;
+	        int rot_width;
+	    } rot_params;
+
+	    if (copy_from_user(&rot_params, argp, sizeof(rot_params)))
+	        return -EFAULT;
+
+	    ret = isp_set_rotation(gISPdev, rot_params.angle,
+	                          &rot_params.rot_height, &rot_params.rot_width);
+	    if (ret)
+	        return ret;
+
+	    // Copy back the calculated dimensions
+	    if (copy_to_user(argp, &rot_params, sizeof(rot_params)))
+	        return -EFAULT;
+	    break;
+	}
+
+    case SENSOR_CMD_READ_ID:
+	case SENSOR_CMD_WRITE_REG:
+	case SENSOR_CMD_READ_REG:
+	case SENSOR_CMD_SET_GAIN:
+	case SENSOR_CMD_SET_EXP:
+	case SENSOR_CMD_STREAM_ON:
+	case SENSOR_CMD_STREAM_OFF:
+	    ret = handle_sensor_ioctl(gISPdev, cmd, argp);
+	    break;
 
     default:
         dev_dbg(gISPdev->dev, "Unhandled ioctl cmd: 0x%x\n", cmd);
@@ -3841,6 +4260,9 @@ static int __init isp_driver_init(void)
         return PTR_ERR(tisp_class);
     }
 
+    // Set default device permissions through udev
+    tisp_class->dev_uevent = isp_dev_uevent;
+
     // Set class permissions to be readable/writable by all
     tisp_class->dev_uevent = isp_dev_uevent;
 
@@ -3874,6 +4296,7 @@ static int __init isp_driver_init(void)
     }
 
     if (tisp_device) {
+        // Create status attribute
         if (device_create_file(tisp_device, &dev_attr_status) < 0) {
             pr_err("Failed to create device attributes\n");
         }
