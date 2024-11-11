@@ -37,9 +37,12 @@
 #include <linux/wait.h>
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-dma-contig.h>
+#include <media/v4l2-device.h>
 
-
-#include "isp_driver_common.h"
+#include <tx-isp-device.h>
+#include <tx-isp-common.h>
+#include <tx-isp-debug.h>
+#include <isp_driver_common.h>
 
 // Add these at the top after includes
 static int __init_or_module early_init(void) __attribute__((constructor));
@@ -416,15 +419,35 @@ struct isp_reg_block {
     u32 ae_stats[16];   /* AE statistics registers */
 };
 
+struct isp_pad_desc {
+    char *name;                // 0x00: Pad name
+    uint8_t type;             // 0x04: Pad type (1=source, 2=sink)
+    uint8_t index;            // 0x05: Pad index
+    uint32_t flags;           // Flags for pad capabilities
+    uint32_t link_type;       // Type of link
+    uint32_t link_state;      // State of link
+    void *source;             // Source pad pointer
+    void *sink;               // Sink pad pointer
+    void *entity;             // Entity pointer
+};
+
 /**
  * struct isp_subdev - ISP sub-device structure
  * Referenced in decompiled at multiple offsets
  */
 struct isp_subdev {
+    char name[32];             // 0x00: Device name
+    char *name_ptr;            // 0x08: Pointer to name
     struct v4l2_subdev sd;
     struct mutex lock;
     u32 index;
     void *priv;
+    void __iomem *regs;        // Add this for register mapping
+    struct tx_isp_subdev_ops *ops;  // Add this for ops
+    uint16_t num_sink_pads;    // 0xc8: Number of sink pads
+    uint16_t num_src_pads;     // 0xca: Number of source pads
+    uint32_t sink_pads;        // 0xcc: Base address of sink pads array
+    uint32_t src_pads;         // 0xd0: Base address of source pads array
 };
 
 struct isp_pipeline {
@@ -942,79 +965,86 @@ void tx_isp_module_deinit(struct tx_isp_subdev *tisp_dev)
     pr_info("ISP module deinitialized successfully\n");
 }
 
-int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd, struct tx_isp_subdev_ops *ops) {
+
+int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
+                      struct tx_isp_subdev_ops *ops)
+{
     struct resource *mem_region;
     void __iomem *mapped_regs;
-    int32_t ret;
+    int ret;
 
-    if ((pdev == NULL) || (sd == NULL)) {
-        isp_printf(2, "%s the parameters are invalid!\n", "tx_isp_subdev_init");
+    if (!pdev || !sd) {
+        isp_printf(2, "%s the parameters are invalid!\n", __func__);
         return -EINVAL;
     }
 
-    // Set the specific value at offset 0xc4
-    *(struct tx_isp_subdev_ops**)((char*)sd + 0xc4) = ops;
+    // Initialize module and IRQ device parts
+    spin_lock_init(&sd->irqdev.slock);
+    sd->irqdev.irq = -1;  // Will be set later
+
+    // Initialize basic members
+    sd->res = NULL;
+    sd->base = NULL;
+    sd->clks = NULL;
+    sd->clk_num = 0;
+    sd->ops = ops;
+
+    // Initialize expanded members
+    sd->num_outpads = 0;
+    sd->num_inpads = 0;
+    sd->outpads = NULL;
+    sd->inpads = NULL;
+    sd->dev_priv = NULL;
+    sd->host_priv = NULL;
 
     // Initialize the ISP module
     ret = tx_isp_module_init(pdev, sd);
-    if (ret != 0) {
-        isp_printf(2, "Failed to init isp module!\n", "tx_isp_subdev_init");
+    if (ret) {
+        isp_printf(2, "Failed to init isp module!\n");
         return -EFAULT;
     }
 
     // Handle memory regions if needed
     if (pdev->resource && pdev->resource[0x16].start) {
-        // Request IRQ
-        ret = tx_isp_request_irq(pdev, ((char*)sd + 0x80));
-        if (ret != 0) {
-            isp_printf(2, "Failed to request irq!\n", "tx_isp_subdev_init");
+        ret = tx_isp_request_irq(pdev, &sd->irqdev);
+        if (ret) {
+            isp_printf(2, "Failed to request irq!\n");
             tx_isp_module_deinit(sd);
             return ret;
         }
 
-        // Get memory resource
         mem_region = platform_get_resource(pdev, IORESOURCE_MEM, 0);
         if (!mem_region) {
-            isp_printf(2, "Unable to get memory resource\n", "tx_isp_subdev_init");
+            isp_printf(2, "Unable to get memory resource\n");
             ret = -ENODEV;
             goto err_free_irq;
         }
 
-        // Map registers
-        mapped_regs = ioremap(mem_region->start,
-                            resource_size(mem_region));
+        mapped_regs = ioremap(mem_region->start, resource_size(mem_region));
         if (!mapped_regs) {
-            isp_printf(2, "Unable to map registers\n", "tx_isp_subdev_init");
+            isp_printf(2, "Unable to map registers\n");
             ret = -ENOMEM;
             goto err_free_irq;
         }
 
-        // Store mapped register base
-        *(void __iomem **)((char*)sd + 0xb8) = mapped_regs;
-
-        // Setup clocks
-	//struct resource *res = &pdev->resource[0x16];  // Access resource at index 0x16 (if valid)
-	//*(uint32_t*)((char*)sd + 0xc0) = *(uint32_t*)((char*)res + 4);  // Copy 32-bit value from resource
-
-        //struct ClockConfig *clock_config = (struct ClockConfig *)(s1_1 + 8);
-        //ret = isp_subdev_init_clks(sd, clock_config);
-        //if (ret != 0) {
-        //    isp_printf(2, "Failed to init clocks!\n", "tx_isp_subdev_init");
-        //    goto err_unmap;
-        //}
+        // Store mapped registers and resource
+        sd->base = mapped_regs;
+        sd->res = mem_region;
     }
 
     return 0;
 
 err_unmap:
-    if (*(void __iomem **)((char*)sd + 0xb8)) {
-        iounmap(*(void __iomem **)((char*)sd + 0xb8));
+    if (sd->base) {
+        iounmap(sd->base);
+        sd->base = NULL;
     }
-    if (mem_region) {
-        release_mem_region(mem_region->start, resource_size(mem_region));
+    if (sd->res) {
+        release_mem_region(sd->res->start, resource_size(sd->res));
+        sd->res = NULL;
     }
 err_free_irq:
-    tx_isp_free_irq(((char*)sd + 0x80));
+    tx_isp_free_irq(&sd->irqdev);
     tx_isp_module_deinit(sd);
     return ret;
 }
@@ -1653,13 +1683,6 @@ err_module_deinit:
 return 0;
 }
 
-/* Platform driver ID table */
-static const struct of_device_id tisp_of_match[] = {
-    { .compatible = "vendor,tisp-driver" },
-    { /* sentinel */ }
-};
-MODULE_DEVICE_TABLE(of, tisp_of_match);
-
 static struct bus_type soc_bus_type = {
 	.name  = "soc",
 };
@@ -1941,23 +1964,6 @@ static ssize_t tisp_write(struct file *file, const char __user *buf, size_t coun
 #define MAX_LINK_PADS    16
 
 /**
- * struct isp_pad_desc - Video pad descriptor from decompiled code
- * @flags: Pad capabilities and state flags
- * @link_state: Current link state
- * @source: Pointer to source pad
- * @sink: Pointer to sink pad
- * @link_type: Type of link connection
- */
-struct isp_pad_desc {
-    u8 flags;
-    u8 link_state;
-    void *source;       // +0x8 in struct
-    void *sink;         // +0xc in struct
-    void *entity;       // +0x10 in struct
-    u32 link_type;      // +0x14 in struct
-};
-
-/**
  * struct isp_link_config - Link configuration data from decompiled
  * Based on the array at offset 0x6ad7c and 0x6ad80 in decompiled
  */
@@ -1973,22 +1979,72 @@ static struct isp_link_config link_configs[] = {
 };
 
 /**
- * find_subdev_link_pad - Helper to find a pad by type
- * Implementation of function seen at multiple places in decompiled
+ * find_subdev_link_pad - Helper to find a pad by type and index
+ * @dev: IMPISPDev structure
+ * @pad: Pad descriptor to match against
+ *
+ * Based on decompiled implementation at 0xd368
  */
-static struct isp_pad_desc *find_subdev_link_pad(struct isp_device *isp,
+static struct isp_pad_desc *find_subdev_link_pad(struct IMPISPDev *dev,
                                                 struct isp_pad_desc *pad)
 {
-    if (!isp || !pad)
+    struct isp_subdev **subdev_list;
+    struct isp_subdev *subdev;
+    uint8_t *name1, *name2;
+    uint8_t pad_type, pad_index;
+
+    if (!dev || !pad)
         return NULL;
 
-    /* Logic from decompiled function at offset 0xe31c/0xe330 */
-    struct isp_pad_desc *found = NULL;
+    // Start at subdev list offset 0x38 from device base
+    subdev_list = (struct isp_subdev **)(dev + 0x38);
 
-    /* Walk through device pad list looking for matching pad */
-    /* This abstracts the complex pointer arithmetic in decompiled */
+    // Iterate through subdev list until offset 0x78
+    while (subdev_list < (struct isp_subdev **)(dev + 0x78)) {
+        subdev = *subdev_list;
 
-    return found;
+        if (subdev) {
+            // Compare subdev names - offset 0x8 contains name
+            name1 = *(uint8_t **)(subdev + 0x8);
+            name2 = *(uint8_t **)pad;
+
+            // String comparison loop
+            while (*name1 && *name2 && (*name1 == *name2)) {
+                name1++;
+                name2++;
+            }
+
+            // If names match
+            if (*name1 == *name2) {
+                pad_type = *(uint8_t *)(pad + 4); // offset from decompiled +4
+                pad_index = *(uint8_t *)(pad + 5); // offset from decompiled +5
+
+                if (pad_type == 1) {
+                    // Source pad lookup
+                    uint16_t num_src_pads = *(uint16_t *)(subdev + 0xca);
+                    if (pad_index < num_src_pads) {
+                        uint32_t pad_base = *(uint32_t *)(subdev + 0xd0);
+                        return (struct isp_pad_desc *)(pad_base + (pad_index * 0x24));
+                    }
+                }
+                else if (pad_type == 2) {
+                    // Sink pad lookup
+                    uint16_t num_sink_pads = *(uint16_t *)(subdev + 0xc8);
+                    if (pad_index < num_sink_pads) {
+                        uint32_t pad_base = *(uint32_t *)(subdev + 0xcc);
+                        return (struct isp_pad_desc *)(pad_base + (pad_index * 0x24));
+                    }
+                }
+
+                pr_err("Can't find the matched pad!\n");
+                return NULL;
+            }
+        }
+
+        subdev_list++;
+    }
+
+    return NULL;
 }
 
 /**
@@ -2443,7 +2499,6 @@ int setup_wdr_buffers(struct isp_device *isp, struct isp_wdr_buf_info *buf_info)
 }
 
 
-
 /**
  * setup_isp_buffers - Configure ISP buffer memory regions
  * @isp: ISP device structure
@@ -2873,22 +2928,33 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
 
     switch (cmd) {
-    case VIDIOC_REGISTER_SENSOR: {
-        char sensor_name[80];  // Match size with IMPISPDev sensor_name
+	case VIDIOC_REGISTER_SENSOR: {
+	    char sensor_name[80];  // Match size with IMPISPDev sensor_name
 
-        if (copy_from_user(sensor_name, (void __user *)arg, sizeof(sensor_name))) {
-            dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
-                    __func__, __LINE__);
-            return -EFAULT;
-        }
+	    if (!gISPdev || !gISPdev->is_open) {
+	        dev_err(gISPdev->dev, "ISP device not initialized or not open\n");
+	        return -EINVAL;
+	    }
 
-        // Store in global device structure
-        strncpy(gISPdev->sensor_name, sensor_name, sizeof(gISPdev->sensor_name) - 1);
-        gISPdev->sensor_name[sizeof(gISPdev->sensor_name) - 1] = '\0';
+	    if (copy_from_user(sensor_name, (void __user *)arg, sizeof(sensor_name))) {
+	        dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
+	                __func__, __LINE__);
+	        return -EFAULT;
+	    }
 
-        dev_info(gISPdev->dev, "Registered sensor: %s\n", sensor_name);
-        break;
-    }
+	    // Let's add some debug prints
+	    pr_info("Registering sensor: %s, gISPdev=%p\n", sensor_name, gISPdev);
+
+	    // Store in global device structure
+	    strncpy(gISPdev->sensor_name, sensor_name, sizeof(gISPdev->sensor_name) - 1);
+	    gISPdev->sensor_name[sizeof(gISPdev->sensor_name) - 1] = '\0';
+
+	    // Print confirmation
+	    dev_info(gISPdev->dev, "Successfully registered sensor: %s\n",
+	             gISPdev->sensor_name);
+
+	    break;
+	}
     case VIDIOC_GET_SENSOR_LIST: {
         struct sensor_list {
             char name[32];
@@ -3514,9 +3580,50 @@ static int tisp_probe(struct platform_device *pdev)
         goto free_devices;
     }
 
+        // Register child devices
+    for (i = 0; i < ARRAY_SIZE(device_names) && registered_count < max_devices; i++) {
+        struct platform_device *child_dev;
+        child_dev = platform_device_register_simple(device_names[i], -1, NULL, 0);
+        if (IS_ERR(child_dev)) {
+            dev_warn(&pdev->dev, "Failed to register %s device\n", device_names[i]);
+            continue;
+        }
+        graph_data->devices[registered_count] = child_dev;
+        registered_count++;
+    }
+    // Update final count
+    graph_data->device_count = registered_count;
+    dev_info(&pdev->dev, "Successfully registered %u devices\n", registered_count);
+    // Create graph and nodes
+    if (registered_count > 0) {
+        ret = tx_isp_create_graph_and_nodes(graph_data);
+        if (ret) {
+            dev_err(&pdev->dev, "Failed to create ISP graph and nodes\n");
+            goto err_unregister_devices;
+        }
+    } else {
+        dev_warn(&pdev->dev, "No devices were registered\n");
+        ret = -ENODEV;
+        goto free_devices;
+    }
+    // After successful graph creation, create proc entries
+    ret = create_isp_proc_entries(graph_data);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to create proc entries\n");
+        goto err_unregister_devices;
+    }
+    dev_info(&pdev->dev, "TISP device probed successfully\n");
+
+
     // Return success
     return 0;
 
+err_unregister_devices:
+    for (i = 0; i < registered_count; i++) {
+        if (graph_data->devices[i])
+            platform_device_unregister(graph_data->devices[i]);
+    }
+    remove_isp_proc_entries();  // Clean up proc entries if created
 free_graph:
     kfree(graph_data->devices);
 free_devices:
@@ -3537,6 +3644,16 @@ static int tisp_remove(struct platform_device *pdev)
     return 0;
 }
 
+/* Platform device ID matching table */
+static struct platform_device_id tisp_platform_ids[] = {
+    {
+        .name = "tisp-driver",
+        .driver_data = 0,
+    },
+    { /* sentinel */ }
+};
+MODULE_DEVICE_TABLE(platform, tisp_platform_ids);
+
 /* Platform driver structure */
 static struct platform_driver tisp_platform_driver = {
     .probe = tisp_probe,
@@ -3544,9 +3661,9 @@ static struct platform_driver tisp_platform_driver = {
     .driver = {
         .name = "tisp-driver",
         .owner = THIS_MODULE,
-        .of_match_table = of_match_ptr(tisp_of_match),
-    }
-}; // Added missing semicolon here
+    },
+    .id_table = tisp_platform_ids,  // Add this
+};
 
 /* Module initialization function */
 static int __init isp_driver_init(void)
@@ -3606,13 +3723,16 @@ static int __init isp_driver_init(void)
     }
 
     /* Register the platform driver */
+    pr_info("Registering platform driver\n");
     ret = platform_driver_register(&tisp_platform_driver);
     if (ret) {
-        pr_err("Failed to register platform driver\n");
+        pr_err("Failed to register platform driver: %d\n", ret);
         goto err_destroy_device;
     }
+    pr_info("Platform driver registered successfully\n");
 
     /* Create and register the platform device */
+    pr_info("Registering platform device with name 'tisp-driver'\n");
     pdev = platform_device_register_simple("tisp-driver", -1, res, ARRAY_SIZE(res));
     if (IS_ERR(pdev)) {
         ret = PTR_ERR(pdev);
@@ -3620,6 +3740,7 @@ static int __init isp_driver_init(void)
         platform_driver_unregister(&tisp_platform_driver);
         goto err_destroy_device;
     }
+    pr_info("Platform device registered successfully\n");
 
     pr_info("ISP driver loaded successfully\n");
     return 0;
