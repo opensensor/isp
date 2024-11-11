@@ -32,8 +32,22 @@
 #include <linux/i2c.h>
 #include <linux/gpio.h>
 #include <linux/capability.h>
+#include <linux/videodev2.h>
+#include <linux/errno.h>
+#include <linux/wait.h>
+#include <media/videobuf2-core.h>
+#include <media/videobuf2-dma-contig.h>
+
 
 #include "isp_driver_common.h"
+
+// Add these at the top after includes
+static int __init_or_module early_init(void) __attribute__((constructor));
+static int early_init(void)
+{
+    printk(KERN_INFO "ISP: Early initialization starting\n");
+    return 0;
+}
 
 #define ISP_BASE_ADDR        0x13300000
 #define ISP_MAP_SIZE         0x1000
@@ -46,15 +60,17 @@
 #define SUBTYPE_ADDR         0x13540238
 #define SUBREMARK_ADDR       0x13540231
 
-#define VIDIOC_REGISTER_SENSOR 0x805056c1
-#define VIDIOC_SET_BUF_INFO    0x800856d4
-#define VIDIOC_SET_WDR_BUF_INFO 0x800856d6
 #define VIDIOC_GET_SENSOR_LIST 0xc050561a
 
 // Log level definitions
 #define IMP_LOG_ERROR   6
 #define IMP_LOG_INFO    3
 #define IMP_LOG_DEBUG   4
+
+/* Hardware interface helper macros */
+#define ISP_REG_WDR_GAIN0    0x1000  /* From decompiled code */
+#define ISP_REG_WDR_GAIN1    0x100c  /* From decompiled code */
+#define ISP_REG_STD_GAIN     0x1030  /* Standard gain register */
 
 // Device structure for ISP
 typedef struct {
@@ -227,155 +243,124 @@ struct IspSubdev
     struct device *dev;      // Device associated with this sub-device (for clock management)
 };
 
-// Struct representing the configuration of the ISP device
-struct IspDeviceConfig
-{
-    char _0[4];                  // Padding to align next field
-    void* field_04;
-    int32_t field_08;
-    char _c[4];                  // Padding
-    char _10[4];                 // Padding
-    char _14[0x1c];              // Padding
-    int32_t misc_deregister_flag;
-    int32_t field_34;
-    char _38[8];                 // Padding
-    char _40[0x38];              // Padding
-    int32_t field_78;
-    void* field_7c;
-    int32_t irq_number;          // Ensure this field exists
-    char _84[8];                 // Padding
-    char _8c[0x28];              // Padding
-    void* memory_region;         // Ensure this field exists
-    int32_t register_mapped_address;
-    char _bc[4];                 // Padding
-    int32_t clock_settings;
-    int32_t parameter_value;     // Ensure this field exists
-    int16_t field_c8;
-    int16_t field_ca;
-    int32_t input_pads;
-    int32_t allocated_input_pads;
+struct sensor_list {
+    char sensor_name[32];  // Can hold the "sc2336" sensor name
+    int num_sensors;       // Number of currently registered sensors
 };
 
-void isp_printf(int level, struct seq_file *seq, const char *fmt, ...)
-{
-    va_list args;
-    va_start(args, fmt);
-    seq_vprintf(seq, fmt, args);
-    va_end(args);
-}
-EXPORT_SYMBOL(isp_printf);
+#define MAX_SENSORS 4
+
+struct sensor_info {
+    char name[32];
+    bool registered;
+};
+
+static struct sensor_info registered_sensors[MAX_SENSORS];
+static int num_registered_sensors = 0;
+
 //
 //// Private wrapper functions (example)
-//void private_i2c_del_driver(struct i2c_driver *driver)
-//{
-//    i2c_del_driver(driver);
-//}
-//
-//int private_gpio_request(unsigned int gpio, const char *label)
-//{
-//    return gpio_request(gpio, label);
-//}
-//
-//void private_gpio_free(unsigned int gpio)
-//{
-//    gpio_free(gpio);
-//}
-//
-//void private_msleep(unsigned int msecs)
-//{
-//    msleep(msecs);
-//}
-//
-//void private_clk_disable(struct clk *clk)
-//{
-//    clk_disable(clk);
-//}
-//
-//void *private_i2c_get_clientdata(struct i2c_client *client)
-//{
-//    return i2c_get_clientdata(client);
-//}
-//
-//int private_capable(int capability)
-//{
-//    return capable(capability);
-//}
-//
-//int private_i2c_set_clientdata(struct i2c_client *client, void *data)
-//{
-//    i2c_set_clientdata(client, data);
-//    return 0;
-//}
-//
-//int private_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
-//{
-//    return i2c_transfer(adap, msgs, num);
-//}
-//
-//int private_i2c_add_driver(struct i2c_driver *driver)
-//{
-//    return i2c_add_driver(driver);
-//}
-//
-//int private_gpio_direction_output(unsigned int gpio, int value)
-//{
-//    return gpio_direction_output(gpio, value);
-//}
-//
-//void private_clk_enable(struct clk *clk)
-//{
-//    clk_enable(clk);
-//}
-//
-//void private_clk_put(struct clk *clk)
-//{
-//    clk_put(clk);
-//}
-//
-//int private_clk_set_rate(struct clk *clk, unsigned long rate)
-//{
-//    return clk_set_rate(clk, rate);
-//}
+void private_i2c_del_driver(struct i2c_driver *driver)
+{
+    i2c_del_driver(driver);
+}
+
+int private_gpio_request(unsigned int gpio, const char *label)
+{
+    return gpio_request(gpio, label);
+}
+
+void private_gpio_free(unsigned int gpio)
+{
+    gpio_free(gpio);
+}
+
+void private_msleep(unsigned int msecs)
+{
+    msleep(msecs);
+}
+
+void private_clk_disable(struct clk *clk)
+{
+    clk_disable(clk);
+}
+
+void *private_i2c_get_clientdata(const struct i2c_client *client)
+{
+    return i2c_get_clientdata(client);
+}
+
+bool private_capable(int cap)
+{
+    return capable(cap);
+}
+
+void private_i2c_set_clientdata(struct i2c_client *client, void *data)
+{
+    i2c_set_clientdata(client, data);
+}
+
+int private_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
+{
+    return i2c_transfer(adap, msgs, num);
+}
+
+int private_i2c_add_driver(struct i2c_driver *driver)
+{
+    return i2c_add_driver(driver);
+}
+
+int private_gpio_direction_output(unsigned int gpio, int value)
+{
+    return gpio_direction_output(gpio, value);
+}
+
+int private_clk_enable(struct clk *clk)
+{
+    return clk_enable(clk);
+}
+
+void private_clk_put(struct clk *clk)
+{
+    clk_put(clk);
+}
+
+int private_clk_set_rate(struct clk *clk, unsigned long rate)
+{
+    return clk_set_rate(clk, rate);
+}
+
+
+
+int32_t private_driver_get_interface()
+{
+    struct jz_driver_common_interfaces *pfaces = NULL;  // Declare pfaces locally
+    int32_t result = private_get_driver_interface(&pfaces);  // Call the function with the address of pfaces
+
+    if (result != 0) {
+        // Handle error, pfaces should still be NULL if the function failed
+        return result;
+    }
+
+    // Proceed with further logic, now that pfaces is properly initialized
+    // Example: check flags or other interface fields
+    if (pfaces != NULL) {
+        // You can now access pfaces->flags_0, pfaces->flags_1, etc.
+        if (pfaces->flags_0 != pfaces->flags_1) {
+            ISP_ERROR("Mismatch between flags_0 and flags_1");
+            return -1;  // Some error condition
+        }
+    }
+
+    return 0;  // Success
+}
+EXPORT_SYMBOL(private_driver_get_interface);
+
 
 struct DriverInterface {
     void* field_00;
 };
 
-int32_t private_driver_get_interface(struct DriverInterface* arg1) {
-    // Return error if input is NULL
-    if (arg1 == NULL)
-        return 0xffffffff;
-
-    // Get the common driver interface (as described in the disassembly)
-    void* v0 = get_driver_common_interfaces();
-
-    // Set the field_00 of arg1 to the value returned by get_driver_common_interfaces
-    arg1->field_00 = v0;
-
-    // Initialize result to 0
-    int32_t result = 0;
-
-    // Check if v0 is not NULL
-    if (v0 != NULL) {
-        // Dereference v0 to read the flags and compare them
-        uint32_t a2_1 = *(uint32_t*)v0;
-        uint32_t v1_1 = *(uint32_t*)((char*)v0 + 0x1e0);  // v0 + 0x1e0 (offset)
-
-        // If the first flag is equal to 0xca654, set result to 0
-        if (a2_1 == 0xca654) {
-            result = 0;
-        }
-
-        // If the flags do not match, print the error and return 0xffffffff
-        if (a2_1 != 0xca654 || v1_1 != a2_1) {
-            isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x\n", "private_driver_get_interface");
-            return 0xffffffff;
-        }
-    }
-
-    // Return result, which will be 0 if everything is fine
-    return result;
-}
 
 // Export the private wrappers for kernel functions
 EXPORT_SYMBOL(private_i2c_del_driver);
@@ -390,9 +375,132 @@ EXPORT_SYMBOL(private_i2c_transfer);
 EXPORT_SYMBOL(private_i2c_add_driver);
 EXPORT_SYMBOL(private_gpio_direction_output);
 EXPORT_SYMBOL(private_clk_enable);
-EXPORT_SYMBOL(private_driver_get_interface);
 EXPORT_SYMBOL(private_clk_put);
 EXPORT_SYMBOL(private_clk_set_rate);
+
+#include <linux/device.h>
+#include <linux/cdev.h>
+#include <linux/mutex.h>
+#include <linux/videodev2.h>
+
+/* Register block structure based on decompiled access patterns */
+struct isp_reg_block {
+    u32 width;          /* 0xec offset in decompiled */
+    u32 height;         /* 0xf0 offset */
+    u32 gain;
+    u32 exposure;
+    u32 gain_factor;
+    u32 wdr_enable;     /* 0x17c offset seen in decompiled */
+    u32 reserved[50];   /* Padding for other registers */
+    u32 af_stats[16];   /* AF statistics registers */
+    u32 ae_stats[16];   /* AE statistics registers */
+};
+
+/**
+ * struct isp_subdev - ISP sub-device structure
+ * Referenced in decompiled at multiple offsets
+ */
+struct isp_subdev {
+    struct v4l2_subdev sd;
+    struct mutex lock;
+    u32 index;
+    void *priv;
+};
+
+/**
+ * struct isp_device - Main ISP device structure
+ * Based on decompiled code access patterns
+ */
+struct isp_device {
+    /* Device infrastructure */
+    struct device *dev;              /* 0x00: Device struct for dev_err etc */
+    struct cdev cdev;               /* 0x04: Character device */
+    struct v4l2_device v4l2_dev;    /* 0x08: V4L2 device */
+
+    /* Hardware interface */
+    void __iomem *base;             /* Base address for register access */
+    struct isp_reg_block __iomem *regs;  /* 0x2c: Register block - heavily accessed */
+
+    /* Video device handling */
+    struct video_device *video_dev;  /* Video device structure */
+    struct vb2_queue vb2_queue;      /* Video buffer queue */
+
+    /* Sub-devices - array seen at 0x2c with multiple entries */
+    struct isp_subdev *subdevs[16];  /* Array of subdevices */
+    int num_subdevs;
+
+    /* Link configuration */
+    unsigned int current_link;       /* 0x10c: Current link configuration */
+    struct mutex link_lock;          /* Protect link configuration */
+
+    /* Buffer management */
+    struct list_head buffer_queue;    /* Queue of buffers */
+    spinlock_t buffer_lock;          /* Protect buffer queue */
+
+    /* Algorithm state */
+    struct {
+        bool ae_enabled;
+        bool awb_enabled;
+        bool af_enabled;
+        bool wdr_enabled;            /* WDR mode state */
+    } algo_state;
+
+    /* IRQ handling */
+    int irq;                         /* IRQ number */
+    spinlock_t irq_lock;            /* Protect IRQ handling */
+
+    /* DMA handling */
+    struct {
+        dma_addr_t addr;            /* DMA address */
+        size_t size;                /* DMA buffer size */
+    } dma_buf;
+
+    /* Memory optimization */
+    bool memopt_enabled;            /* Memory optimization enabled flag */
+
+    /* Pad configuration - based on decompiled pad handling */
+    struct isp_pad_desc *pads;      /* Array of pad descriptors */
+    int num_pads;                   /* Number of configured pads */
+
+    /* Private data */
+    void *priv;                     /* Driver private data */
+};
+
+/**
+ * Function declarations for ISP register access
+ */
+static inline u32 isp_reg_read(struct isp_reg_t *regs, size_t offset)
+{
+    return readl((void __iomem *)regs + offset);
+}
+
+static inline void isp_reg_write(struct isp_reg_t *regs, size_t offset, u32 val)
+{
+    writel(val, (void __iomem *)regs + offset);
+}
+
+/* Initialization helper */
+static inline void isp_device_init(struct isp_device *isp)
+{
+    mutex_init(&isp->link_lock);
+    spin_lock_init(&isp->buffer_lock);
+    spin_lock_init(&isp->irq_lock);
+    INIT_LIST_HEAD(&isp->buffer_queue);
+}
+
+/**
+ * isp_get_subdev - Get subdevice by index
+ * @isp: ISP device
+ * @index: Subdevice index
+ *
+ * Helper function to safely access subdevice array
+ */
+static inline struct isp_subdev *isp_get_subdev(struct isp_device *isp, int index)
+{
+    if (index >= ARRAY_SIZE(isp->subdevs))
+        return NULL;
+    return isp->subdevs[index];
+}
 
 void tx_isp_free_irq(int32_t* irq_pointer)
 {
@@ -792,52 +900,45 @@ int32_t tx_isp_module_init(int32_t* arg1, void* arg2) {
 }
 
 // Function to deinitialize the ISP module
-void tx_isp_module_deinit(struct tisp_device *tisp_dev)
+void tx_isp_module_deinit(struct tx_isp_subdev *tisp_dev)
 {
     if (!tisp_dev) return;
 
-    if (tisp_dev->reg_base) {
-        iounmap(tisp_dev->reg_base);
-        tisp_dev->reg_base = NULL;
+    if (tisp_dev->base) {
+        iounmap(tisp_dev->base);
+        tisp_dev->base = NULL;
     }
+
     pr_info("ISP module deinitialized successfully\n");
 }
 
-int32_t tx_isp_subdev_init(int32_t* arg1, void* arg2, int32_t arg3) {
-    struct platform_device *pdev;
+int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd, struct tx_isp_subdev_ops *ops) {
     struct resource *mem_region;
     void __iomem *mapped_regs;
     int32_t ret;
 
-    if ((arg1 == NULL) || (arg2 == NULL)) {
+    if ((pdev == NULL) || (sd == NULL)) {
         isp_printf(2, "%s the parameters are invalid!\n", "tx_isp_subdev_init");
         return -EINVAL;
     }
 
     // Set the specific value at offset 0xc4
-    *(uint32_t*)((char*)arg2 + 0xc4) = arg3;
+    *(struct tx_isp_subdev_ops**)((char*)sd + 0xc4) = ops;
 
     // Initialize the ISP module
-    ret = tx_isp_module_init(arg1, arg2);
+    ret = tx_isp_module_init(pdev, sd);
     if (ret != 0) {
         isp_printf(2, "Failed to init isp module!\n", "tx_isp_subdev_init");
         return -EFAULT;
     }
 
-    // Get platform device
-    pdev = to_platform_device(((struct device *)arg2));
-    if (!pdev) {
-        isp_printf(2, "Invalid platform device\n", "tx_isp_subdev_init");
-        return -ENODEV;
-    }
-
     // Handle memory regions if needed
-    if (arg1[0x16]) {
+    if (pdev->resource && pdev->resource[0x16].start) {
         // Request IRQ
-        ret = tx_isp_request_irq(arg1, ((char*)arg2 + 0x80));
+        ret = tx_isp_request_irq(pdev, ((char*)sd + 0x80));
         if (ret != 0) {
             isp_printf(2, "Failed to request irq!\n", "tx_isp_subdev_init");
-            tx_isp_module_deinit(arg2);
+            tx_isp_module_deinit(sd);
             return ret;
         }
 
@@ -859,41 +960,35 @@ int32_t tx_isp_subdev_init(int32_t* arg1, void* arg2, int32_t arg3) {
         }
 
         // Store mapped register base
-        *(void __iomem **)((char*)arg2 + 0xb8) = mapped_regs;
+        *(void __iomem **)((char*)sd + 0xb8) = mapped_regs;
 
         // Setup clocks
-        char *s1_1 = (char*)arg1[0x16];
-        *(uint32_t*)((char*)arg2 + 0xc0) = *(uint32_t*)(s1_1 + 4);
+	//struct resource *res = &pdev->resource[0x16];  // Access resource at index 0x16 (if valid)
+	//*(uint32_t*)((char*)sd + 0xc0) = *(uint32_t*)((char*)res + 4);  // Copy 32-bit value from resource
 
-        struct ClockConfig *clock_config = (struct ClockConfig *)(s1_1 + 8);
-        ret = isp_subdev_init_clks(arg2, clock_config);
-        if (ret != 0) {
-            isp_printf(2, "Failed to init clocks!\n", "tx_isp_subdev_init");
-            goto err_unmap;
-        }
+        //struct ClockConfig *clock_config = (struct ClockConfig *)(s1_1 + 8);
+        //ret = isp_subdev_init_clks(sd, clock_config);
+        //if (ret != 0) {
+        //    isp_printf(2, "Failed to init clocks!\n", "tx_isp_subdev_init");
+        //    goto err_unmap;
+        //}
     }
 
     return 0;
 
 err_unmap:
-    if (*(void __iomem **)((char*)arg2 + 0xb8)) {
-        iounmap(*(void __iomem **)((char*)arg2 + 0xb8));
+    if (*(void __iomem **)((char*)sd + 0xb8)) {
+        iounmap(*(void __iomem **)((char*)sd + 0xb8));
     }
     if (mem_region) {
         release_mem_region(mem_region->start, resource_size(mem_region));
     }
 err_free_irq:
-    tx_isp_free_irq(((char*)arg2 + 0x80));
-    tx_isp_module_deinit(arg2);
+    tx_isp_free_irq(((char*)sd + 0x80));
+    tx_isp_module_deinit(sd);
     return ret;
 }
 EXPORT_SYMBOL(tx_isp_subdev_init);
-
-void tx_isp_set_subdevdata(struct tx_isp_subdev *sd, void *data)
-{
-    sd->dev_priv = data;
-}
-EXPORT_SYMBOL(tx_isp_set_subdevdata);
 
 
 int32_t isp_subdev_release_clks(struct IspSubdev* isp_subdev)
@@ -932,7 +1027,7 @@ struct IRQHandler
     int32_t irq_number;  // The IRQ number to be freed
 };
 
-int32_t tx_isp_subdev_deinit(struct IspDeviceConfig* arg1)
+void tx_isp_subdev_deinit(struct tx_isp_subdev *sd)
 {
 //    // Check if the misc_deregister_flag is non-zero
 //    if (arg1->misc_deregister_flag != 0)
@@ -942,7 +1037,7 @@ int32_t tx_isp_subdev_deinit(struct IspDeviceConfig* arg1)
 //    }
 //
 //    // Release clocks associated with the subdevice
-      isp_subdev_release_clks(arg1);
+      isp_subdev_release_clks(sd);
 //
 //    // Free input pads if they are allocated
 //    int32_t input_pads = arg1->input_pads;
@@ -966,36 +1061,30 @@ int32_t tx_isp_subdev_deinit(struct IspDeviceConfig* arg1)
 //    }
 //
 //    // Handle memory region release
-      void* memory_region = arg1->memory_region;
+      void* memory_region = sd->base;
       int32_t irq_number;
 //
       if (memory_region == NULL)
       {
-          irq_number = arg1->irq_number;
+	  irq_number = sd->irqdev.irq;
       }
       else
       {
           // Release the memory region if it's allocated
           int32_t start_address = *(uint32_t*)memory_region;
           release_mem_region(start_address, *((uint32_t*)((char*)memory_region + 4)) + 1 - start_address);
-          arg1->memory_region = NULL;  // Set memory region to NULL
-          irq_number = arg1->irq_number;
+          sd->base = NULL;  // Set memory region to NULL
+	  irq_number = sd->irqdev.irq;
       }
 //
 //    // Free the IRQ if it's valid
     if (irq_number != 0)
     {
-        tx_isp_free_irq(&arg1->irq_number);
+	tx_isp_free_irq(&sd->irqdev.irq);
     }
 
     // Call the module deinit function and store the result
-    tx_isp_module_deinit(arg1);
-
-    // Reset the parameter value
-    arg1->parameter_value = 0;
-
-    // Return the result from module deinit
-    return 0;
+    tx_isp_module_deinit(sd);
 }
 EXPORT_SYMBOL(tx_isp_subdev_deinit);
 
@@ -1121,6 +1210,226 @@ static struct proc_data *proc_data_m0 = NULL;
 static struct proc_data *proc_data_w00 = NULL;
 static struct proc_data *proc_data_w01 = NULL;
 static struct proc_data *proc_data_w02 = NULL;
+
+
+/**
+ * struct isp_reg_t - ISP register map
+ * Based on actual hardware layout and decompiled access patterns
+ */
+struct isp_reg_t {
+    /* Base registers - 0x00-0x0C */
+    u32 ctrl;
+    u32 status;
+    u32 int_mask;
+    u32 int_status;
+
+    /* Core configuration - 0x10-0x1C */
+    u32 config[4];
+
+    /* Image size registers */
+    u32 input_width;   /* Input width register */
+    u32 input_height;  /* Input height register */
+    u32 output_width;  /* Output width register */
+    u32 output_height; /* Output height register */
+
+    /* Image parameters */
+    u32 reserved1[36]; /* Padding to 0x9C */
+    u32 exposure;      /* 0x9C: Exposure register */
+    u32 reserved2[3];
+    u32 gain;          /* 0xAC: Gain register */
+    u32 reserved3[12]; /* Padding to 0xE4 */
+    u32 gain_factor;   /* 0xE4: Gain factor register */
+    u32 reserved4[2];
+    u32 exp_factor;    /* Fixed 0x400 value */
+
+    /* WDR configuration */
+    u32 reserved5[53];  /* Padding to 0x17C */
+    u32 wdr_enable;    /* 0x17C: WDR enable register */
+    u32 reserved6[31];  /* Additional padding */
+
+    /* Statistics and algorithm registers */
+    union {
+        struct {
+            u32 ae_stats[64];   /* AE statistics */
+            u32 awb_stats[64];  /* AWB statistics */
+            u32 af_stats[32];   /* AF statistics */
+        };
+        u32 stats_regs[160];   /* Combined stats access */
+    };
+};
+
+/* Helper functions for register access */
+static inline u32 isp_get_width(struct isp_reg_t *regs)
+{
+    return readl(&regs->output_width);
+}
+
+static inline u32 isp_get_height(struct isp_reg_t *regs)
+{
+    return readl(&regs->output_height);
+}
+
+/**
+ * struct isp_awb_info - AWB information structure
+ * Based on decompiled access patterns
+ */
+struct isp_awb_info {
+    /* Current settings */
+    u32 r_gain;
+    u32 g_gain;
+    u32 b_gain;
+
+    /* Color temperature */
+    u32 curr_ct;    /* Current color temperature */
+    u32 target_ct;  /* Target color temperature */
+
+    /* Algorithm state */
+    u32 frame_cnt;
+    u32 stable_cnt;
+    u32 converge_cnt;
+
+    /* Statistics */
+    u32 r_avg;
+    u32 g_avg;
+    u32 b_avg;
+
+    /* Reserved for future use */
+    u32 reserved[16];
+};
+
+
+/**
+ * struct isp_ae_algo - Auto Exposure algorithm parameters
+ * Based on decompiled structure at case 0x800456dd
+ */
+struct isp_ae_algo {
+    u32 magic;              /* Must be 0x336ac */
+    u32 version;            /* Algorithm version */
+    u32 params[30];         /* Algorithm parameters - size from decompiled */
+
+    /* Window configuration */
+    struct {
+        u16 x;
+        u16 y;
+        u16 width;
+        u16 height;
+    } windows[16];          /* AE windows configuration */
+
+    /* Control parameters */
+    u32 target_luminance;
+    u32 min_exposure;
+    u32 max_exposure;
+    u32 min_gain;
+    u32 max_gain;
+
+    /* Algorithm state */
+    u32 current_luminance;
+    u32 converge_cnt;
+    u32 stable_cnt;
+
+    /* Reserved for future use */
+    u32 reserved[16];
+};
+
+/**
+ * struct isp_ae_info - AE information structure
+ * Based on decompiled access patterns
+ */
+struct isp_ae_info {
+    /* Current settings */
+    u32 gain;
+    u32 exposure;
+    u32 gain_factor;
+    u32 exposure_factor;    /* Fixed 0x400 from decompiled */
+
+    /* WDR specific settings */
+    u32 wdr_gain;
+    u32 wdr_exposure;
+
+    /* Algorithm state */
+    u32 frame_cnt;
+    u32 stable_cnt;
+    u32 converge_cnt;
+
+    /* Statistics */
+    u32 current_lum;
+    u32 target_lum;
+    u32 avg_lum;
+
+    /* Reserved for future use */
+    u32 reserved[16];
+};
+
+/**
+ * struct isp_ae_stats - AE statistics structure
+ * Based on decompiled memory allocation size
+ */
+struct isp_ae_stats {
+    /* Raw statistics from hardware */
+    u32 hist[256];         /* Luminance histogram */
+    u32 zones[16][16];     /* Zone-based statistics */
+
+    /* Processed statistics */
+    u32 avg_lum;           /* Average luminance */
+    u32 max_lum;           /* Maximum luminance */
+    u32 min_lum;           /* Minimum luminance */
+
+    /* Window statistics */
+    struct {
+        u32 sum;           /* Sum of pixels in window */
+        u32 count;         /* Number of pixels in window */
+    } windows[16];         /* Per-window statistics */
+};
+
+/**
+ * struct isp_awb_algo - Auto White Balance algorithm parameters
+ * Based on decompiled structure at case 0x800456e2
+ */
+struct isp_awb_algo {
+    u32 params[6];         /* Size 0x18 from decompiled */
+
+    /* Color gain settings */
+    u32 r_gain;
+    u32 g_gain;
+    u32 b_gain;
+
+    /* Color temperature range */
+    u32 min_color_temp;
+    u32 max_color_temp;
+
+    /* Algorithm state */
+    u32 current_temp;
+    u32 converge_cnt;
+
+    /* Reserved for future use */
+    u32 reserved[8];
+};
+
+// TODO: Define the AWB statistics structure
+/* Function declarations for hardware-specific operations */
+// int tisp_ae_algo_deinit(void);
+//int tisp_awb_algo_deinit(void);
+
+
+
+/**
+ * tisp_awb_algo_init - Low level AWB algorithm initialization
+ * This would be implemented in the hardware-specific layer
+ */
+static int tisp_awb_algo_init(int enable)
+{
+    int ret = 0;
+
+    if (enable) {
+        /* Initialize AWB algorithm */
+        /* Implementation specific to hardware */
+    } else {
+        /* Disable AWB algorithm */
+        /* Implementation specific to hardware */
+    }
+
+    return ret;
+}
 
 
 static void remove_isp_proc_entries(void)
@@ -1332,7 +1641,6 @@ static dma_addr_t tparams_night_phys;
 static uint32_t data_a2f64;
 static uint32_t isp_memopt = 1;
 
-
 int read_soc_info(void);
 
 /* Read SoC information from hardware registers */
@@ -1384,31 +1692,1151 @@ static ssize_t tisp_write(struct file *file, const char __user *buf, size_t coun
     return count;
 }
 
+/* Pad capabilities/flags from decompiled code inspection */
+#define PAD_FL_SINK       BIT(0)
+#define PAD_FL_SOURCE     BIT(1)
+#define PAD_FL_ACTIVE     BIT(2) // value 0x4 in decompiled code
 
-static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+/* Link types/states seen in decompiled */
+#define LINK_STATE_INACTIVE  0
+#define LINK_STATE_SOURCE    3  // Seen in decompiled at 0xe418, 0xe430
+#define LINK_STATE_ENABLED   4  // From check at 0xe390
+
+/* Maximum number of links from decompiled array size at 0x6ad80 */
+#define MAX_LINK_PADS    16
+
+/**
+ * struct isp_pad_desc - Video pad descriptor from decompiled code
+ * @flags: Pad capabilities and state flags
+ * @link_state: Current link state
+ * @source: Pointer to source pad
+ * @sink: Pointer to sink pad
+ * @link_type: Type of link connection
+ */
+struct isp_pad_desc {
+    u8 flags;
+    u8 link_state;
+    void *source;       // +0x8 in struct
+    void *sink;         // +0xc in struct
+    void *entity;       // +0x10 in struct
+    u32 link_type;      // +0x14 in struct
+};
+
+/**
+ * struct isp_link_config - Link configuration data from decompiled
+ * Based on the array at offset 0x6ad7c and 0x6ad80 in decompiled
+ */
+struct isp_link_config {
+    struct isp_pad_desc *pads;
+    int num_pads;
+};
+
+/* From decompiled - appears to be a fixed config table */
+static struct isp_link_config link_configs[] = {
+    /* Would contain the OEM's pad configurations */
+    /* We'd need to reverse engineer the full table */
+};
+
+/**
+ * find_subdev_link_pad - Helper to find a pad by type
+ * Implementation of function seen at multiple places in decompiled
+ */
+static struct isp_pad_desc *find_subdev_link_pad(struct isp_device *isp,
+                                                struct isp_pad_desc *pad)
+{
+    if (!isp || !pad)
+        return NULL;
+
+    /* Logic from decompiled function at offset 0xe31c/0xe330 */
+    struct isp_pad_desc *found = NULL;
+
+    /* Walk through device pad list looking for matching pad */
+    /* This abstracts the complex pointer arithmetic in decompiled */
+
+    return found;
+}
+
+/**
+ * subdev_video_destroy_link - Destroy an existing video link
+ * Implementation of function called at 0xe3dc in decompiled
+ */
+static int subdev_video_destroy_link(struct isp_pad_desc *pad)
+{
+    if (!pad)
+        return -EINVAL;
+
+    /* Clear link state */
+    pad->link_state = LINK_STATE_INACTIVE;
+    pad->source = NULL;
+    pad->sink = NULL;
+
+    return 0;
+}
+
+/**
+ * setup_video_link - Configure video link routing
+ * @isp: ISP device structure
+ * @link: Link identifier from userspace
+ *
+ * Based on decompiled code at case 0x800456d0
+ */
+int setup_video_link(struct isp_device *isp, unsigned int link)
+{
+    struct isp_pad_desc *source_pad, *sink_pad;
+    int i;
+
+    /* Validate link index - must be < 2 as seen at 0xe2a4 */
+    if (link >= 2) {
+        dev_err(isp->dev, "link(%d) is invalid!\n", link);
+        return -EINVAL;
+    }
+
+    /* Check if link is already configured to this setting */
+    if (link == isp->current_link)
+        return 0;
+
+    /* Get link configuration */
+    struct isp_link_config *config = &link_configs[link];
+    struct isp_pad_desc *pad = config->pads;
+
+    /* Process all pads in this configuration */
+    for (i = 0; i < config->num_pads; i++, pad += 5) { // +5 from decompiled struct size
+        /* Find source and sink pads - matches logic at 0xe31c */
+        source_pad = find_subdev_link_pad(isp, pad);
+        sink_pad = find_subdev_link_pad(isp, pad + 2); // +2 matches decompiled offset
+
+        if (!source_pad || !sink_pad)
+            continue;
+
+        /* Verify pad types are compatible - logic from 0xe35c */
+        if (!(source_pad->flags & sink_pad->flags & pad->link_type)) {
+            dev_err(isp->dev, "The link type is mismatch!\n");
+            return -EINVAL;
+        }
+
+        /* Check if either pad is already active - check at 0xe390 */
+        if (source_pad->link_state == LINK_STATE_ENABLED ||
+            sink_pad->link_state == LINK_STATE_ENABLED) {
+            dev_err(isp->dev, "Please stop active links firstly!\n");
+            return -EINVAL;
+        }
+
+        /* Handle existing source links */
+        if (source_pad->link_state == LINK_STATE_SOURCE &&
+            sink_pad != source_pad->sink) {
+            /* Destroy existing link */
+            subdev_video_destroy_link((struct isp_pad_desc *)source_pad->source);
+        }
+
+        /* Handle existing sink links */
+        if (sink_pad->link_state == LINK_STATE_SOURCE &&
+            source_pad != sink_pad->source) {
+            /* Destroy existing link */
+            subdev_video_destroy_link((struct isp_pad_desc *)sink_pad->source);
+        }
+
+        /* Setup new link - matches logic from 0xe408 to 0xe430 */
+        source_pad->source = source_pad;
+        source_pad->sink = sink_pad;
+        source_pad->entity = &source_pad->source;
+        source_pad->link_type = pad->link_type | 1; // Set enabled bit
+        source_pad->link_state = LINK_STATE_SOURCE;
+
+        sink_pad->source = sink_pad;
+        sink_pad->sink = source_pad;
+        sink_pad->entity = &source_pad->source;
+        sink_pad->link_type = pad->link_type | 1; // Set enabled bit
+        sink_pad->link_state = LINK_STATE_SOURCE;
+    }
+
+    /* Update current link setting - matches 0xe468 */
+    isp->current_link = link;
+
+    return 0;
+}
+
+/**
+ * struct isp_wdr_buf_info - WDR buffer information structure
+ * Based on access patterns in decompiled code around 0x800856d6
+ */
+struct isp_wdr_buf_info {
+    unsigned long addr;
+    unsigned int size;
+};
+
+/**
+ * struct isp_wdr_buf_size - WDR buffer size information
+ * Used for TW_ISP_WDR_GET_BUF ioctl
+ */
+struct isp_wdr_buf_size {
+    __u32 size;        /* Required buffer size */
+    __u32 tsize;       /* Total size needed */
+};
+
+/* WDR Mode definitions seen in decompiled code */
+#define WDR_MODE_NONE   0
+#define WDR_MODE_LINE   1    /* Line-interleaved WDR */
+#define WDR_MODE_FRAME  2    /* Frame-based WDR */
+
+/* WDR-related IOCTLs seen in decompiled */
+#define TX_ISP_WDR_SET_BUF    _IOW('V', 0x56d6, struct isp_wdr_buf_info)
+#define TX_ISP_WDR_GET_BUF    _IOR('V', 0x56d7, struct isp_wdr_buf_size)
+#define TX_ISP_WDR_OPEN       _IOW('V', 0x56d8, int)
+#define TX_ISP_WDR_CLOSE      _IOW('V', 0x56d9, int)
+
+
+// Custom IOCTL commands matching the decompiled code
+#define TX_ISP_SET_BUF           _IOW('V', 0x56d5, struct isp_buf_info)
+#define TX_ISP_VIDEO_LINK_SETUP  _IOW('V', 0x56d0, unsigned int)
+#define TX_ISP_SET_AE_ALGO_OPEN  _IOW('V', 0x56dd, struct isp_ae_algo)
+#define TX_ISP_SET_AWB_ALGO_OPEN _IOW('V', 0x56e2, struct isp_awb_algo)
+
+
+// Register definitions from the decompiled code
+#define ISP_REG_BASE      0x7800
+#define ISP_REG_BUF0     (ISP_REG_BASE + 0x20)  // 0x7820
+#define ISP_REG_BUF0_SIZE (ISP_REG_BASE + 0x24)  // 0x7824
+#define ISP_REG_BUF1     (ISP_REG_BASE + 0x28)  // 0x7828
+#define ISP_REG_BUF1_SIZE (ISP_REG_BASE + 0x2c)  // 0x782c
+#define ISP_REG_BUF2     (ISP_REG_BASE + 0x30)  // 0x7830
+#define ISP_REG_BUF2_SIZE (ISP_REG_BASE + 0x34)  // 0x7834
+#define ISP_REG_BUF3     (ISP_REG_BASE + 0x40)  // 0x7840
+#define ISP_REG_BUF3_SIZE (ISP_REG_BASE + 0x44)  // 0x7844
+#define ISP_REG_BUF4     (ISP_REG_BASE + 0x48)  // 0x7848
+#define ISP_REG_BUF4_SIZE (ISP_REG_BASE + 0x4c)  // 0x784c
+#define ISP_REG_BUF5     (ISP_REG_BASE + 0x50)  // 0x7850
+#define ISP_REG_BUF5_SIZE (ISP_REG_BASE + 0x54)  // 0x7854
+#define ISP_REG_BUF6     (ISP_REG_BASE + 0x58)  // 0x7858
+#define ISP_REG_BUF6_SIZE (ISP_REG_BASE + 0x5c)  // 0x785c
+#define ISP_REG_BUF7     (ISP_REG_BASE + 0x60)  // 0x7860
+#define ISP_REG_BUF7_SIZE (ISP_REG_BASE + 0x64)  // 0x7864
+#define ISP_REG_BUF8     (ISP_REG_BASE + 0x68)  // 0x7868
+#define ISP_REG_BUF8_SIZE (ISP_REG_BASE + 0x6c)  // 0x786c
+#define ISP_REG_CTRL     (ISP_REG_BASE + 0x38)  // 0x7838
+#define ISP_REG_START    (ISP_REG_BASE + 0x3c)  // 0x783c
+
+// WDR Register definitions from decompiled code
+#define WDR_REG_BASE     0x2000
+#define WDR_REG_BUF      (WDR_REG_BASE + 0x04)  // 0x2004
+#define WDR_REG_LINE     (WDR_REG_BASE + 0x08)  // 0x2008
+#define WDR_REG_HEIGHT   (WDR_REG_BASE + 0x0c)  // 0x200c
+
+// WDR modes from decompiled code
+#define WDR_MODE_NONE    0
+#define WDR_MODE_LINE    1
+#define WDR_MODE_FRAME   2
+
+struct wdr_reg_info {
+    uint32_t width;      // offset 0x124 in decompiled
+    uint32_t height;     // offset 0x128 in decompiled
+    uint32_t wdr_mode;   // offset 0x90 in decompiled
+    uint32_t frame_size; // offset 0xe8 in decompiled
+};
+
+/* Magic number from decompiled code at 0xef64 */
+#define AE_ALGO_MAGIC   0x336ac
+
+/* Global state variables seen in decompiled */
+static void *ae_info_mine;
+static void *ae_statis_mine;
+static void *awb_info_mine;
+static int ae_algo_comp;
+static int awb_algo_comp;
+
+/* Wait queues seen in decompiled code */
+static DECLARE_WAIT_QUEUE_HEAD(ae_wait);
+static DECLARE_WAIT_QUEUE_HEAD(awb_wait);
+
+/* System register access functions */
+static inline u32 system_reg_read(u32 reg)
+{
+    void __iomem *addr = ioremap(reg, 4);
+    u32 val;
+
+    if (!addr)
+        return 0;
+
+    val = readl(addr);
+    iounmap(addr);
+
+    return val;
+}
+
+static inline void system_reg_write(u32 reg, u32 val)
+{
+    void __iomem *addr = ioremap(reg, 4);
+
+    if (!addr)
+        return;
+
+    writel(val, addr);
+    iounmap(addr);
+}
+
+
+/**
+ * private_math_exp2 - Exponential calculation helper
+ * Based on decompiled function
+ *
+ * @value: Input value
+ * @shift: Shift amount for fixed-point calculation
+ * @round: Rounding value
+ *
+ * Return: Calculated exponential value
+ *
+ * This exact prototype matches the decompiled code
+ */
+uint32_t private_math_exp2(uint32_t val, const unsigned char shift_in,
+                          const unsigned char shift_out)
+{
+    uint64_t result;
+
+    result = (uint64_t)val << shift_in;
+    result += (1 << (shift_out - 1));  // Rounding
+
+    return (uint32_t)(result >> shift_out);
+}
+
+
+
+/**
+ * tisp_ae_algo_init implementation with correct return type
+ */
+int tisp_ae_algo_init(int enable, struct isp_ae_algo *ae)
 {
     int ret = 0;
 
-    switch (cmd) {
-        case VIDIOC_REGISTER_SENSOR:
-            pr_info("Registering sensor: %s\n", (char *)arg);
-            break;
-        case VIDIOC_SET_BUF_INFO:
-            pr_info("Setting buffer info\n");
-            break;
-        case VIDIOC_SET_WDR_BUF_INFO:
-            pr_info("Setting WDR buffer info\n");
-            break;
-        case VIDIOC_GET_SENSOR_LIST:
-            pr_info("Getting sensor list\n");
-            break;
-        default:
-            return -ENOTTY;
+    if (enable) {
+        /* Initialize AE algorithm with provided parameters */
+        if (!ae)
+            return -EINVAL;
+
+        /* Setup AE algorithm parameters */
+        /* Implementation specific to hardware */
+    } else {
+        /* Disable AE algorithm */
+        /* Implementation specific to hardware */
     }
 
-    return ret;  // Remove incorrect error path
+    return ret;
 }
 
+
+/**
+ * Helper function to disable WDR (implementation would be driver-specific)
+ * This matches the tisp_s_wdr_en(0) call in decompiled code
+ */
+static void isp_disable_wdr(struct isp_device *isp)
+{
+    // Implementation would:
+    // 1. Clear WDR enable bits in hardware
+    // 2. Reset WDR-related registers
+    // 3. Update driver state
+
+    // This is called when buffer setup fails to ensure
+    // WDR is properly disabled
+
+    // Actual implementation would depend on specific
+    // hardware requirements
+}
+
+
+/**
+ * init_ae_algo - Initialize Auto Exposure algorithm
+ * @isp: ISP device structure
+ * @ae: AE algorithm parameters from userspace
+ *
+ * Based on decompiled code around case 0x800456dd
+ */
+int init_ae_algo(struct isp_device *isp, struct isp_ae_algo *ae)
+{
+    struct isp_ae_info *ae_info;
+    struct isp_reg_t *regs;
+
+    /* Validate magic number - check at 0xef64 */
+    if (ae->magic != AE_ALGO_MAGIC) {
+        dev_err(isp->dev, "[ %s:%d ] Ae Algo Function registration failed\n",
+                __func__, __LINE__);
+        return -EINVAL;
+    }
+
+    /* Initialize algorithm - matches tisp_ae_algo_init(1, ae) at 0xefa4 */
+    tisp_ae_algo_init(1, ae);
+
+    /* Allocate statistics buffer - matches 0xf048/0xf068 */
+    ae_info = kmalloc(sizeof(*ae_info), GFP_KERNEL);
+    if (!ae_info)
+        return -ENOMEM;
+
+    ae_statis_mine = kmalloc(sizeof(struct isp_ae_stats), GFP_KERNEL);
+    if (!ae_statis_mine) {
+        kfree(ae_info);
+        return -ENOMEM;
+    }
+
+    /* Store globally - matches 0xf060 */
+    ae_info_mine = ae_info;
+
+    /* Get register base */
+    regs = isp->regs;
+
+    /* Setup initial parameters - matches logic from 0xefb4 to 0xf040 */
+    ae_info->gain = readl(&regs->gain);
+    ae_info->exposure = readl(&regs->exposure);
+    ae_info->gain_factor = private_math_exp2(readl(&regs->gain_factor), 0x10, 0xa);
+    ae_info->exposure_factor = 0x400; // Fixed value from 0xefdc
+
+    /* Setup WDR-specific parameters if enabled */
+    if (readl(&regs->wdr_enable)) {
+        ae_info->wdr_gain = system_reg_read(0x1000);
+        ae_info->wdr_exposure = system_reg_read(0x100c);
+    } else {
+        ae_info->wdr_gain = system_reg_read(0x1030);
+    }
+
+    /* Initialize completion tracking - matches 0xf070 */
+    ae_algo_comp = 0;
+
+    /* Initialize wait queue - matches 0xf090 */
+    init_waitqueue_head(&ae_wait);
+
+    return 0;
+}
+
+/**
+ * init_awb_algo - Initialize Auto White Balance algorithm
+ * @isp: ISP device structure
+ * @awb: AWB algorithm parameters from userspace
+ *
+ * Based on decompiled code around case 0x800456e2
+ */
+int init_awb_algo(struct isp_device *isp, struct isp_awb_algo *awb)
+{
+    struct isp_awb_info *awb_info;
+
+    /* Initialize algorithm - matches tisp_awb_algo_init(1) at 0xf26c */
+    tisp_awb_algo_init(1);
+
+    /* Allocate info structure - matches 0xf290 */
+    awb_info = kmalloc(sizeof(*awb_info), GFP_KERNEL);
+    if (!awb_info)
+        return -ENOMEM;
+
+    /* Store globally - matches assignment at 0xf290 */
+    awb_info_mine = awb_info;
+
+    /* Initialize completion tracking - matches 0xf298 */
+    awb_algo_comp = 0;
+
+    /* Initialize wait queue - matches 0xf2b8 */
+    init_waitqueue_head(&awb_wait);
+
+    return 0;
+}
+
+
+/* WDR register offsets within main register block */
+#define ISP_WDR_WIDTH_OFFSET    0x124  /* From decompiled code */
+#define ISP_WDR_HEIGHT_OFFSET   0x128
+#define ISP_WDR_MODE_OFFSET     0x90
+#define ISP_WDR_FRAME_OFFSET    0xe8
+
+/**
+ * setup_wdr_buffers - Configure WDR buffer memory regions
+ * @isp: ISP device structure
+ * @buf_info: WDR Buffer information from userspace
+ *
+ * Based on decompiled code at case 0x800856d6
+ */
+int setup_wdr_buffers(struct isp_device *isp, struct isp_wdr_buf_info *buf_info)
+{
+    uint32_t required_size;
+    uint32_t line_width;
+    uint32_t height;
+    struct isp_reg_t *regs = isp->regs;  // Use main register block
+
+    /* Debug print matching decompiled code */
+    dev_dbg(isp->dev, "%s:%d::tsize is %d, buf info size: %d\n",
+            __func__, __LINE__, required_size, buf_info->size);
+
+    /* Get WDR mode from registers */
+    uint32_t wdr_mode = isp_reg_read(regs, ISP_WDR_MODE_OFFSET);
+
+    /* Calculate required buffer size based on WDR mode */
+    switch (wdr_mode) {
+    case WDR_MODE_LINE:
+        /* Line-interleaved WDR mode */
+        line_width = isp_reg_read(regs, ISP_WDR_WIDTH_OFFSET) << 1;
+        height = isp_reg_read(regs, ISP_WDR_HEIGHT_OFFSET);
+        required_size = line_width * height;
+        break;
+
+    case WDR_MODE_FRAME:
+        /* Frame-based WDR mode */
+        required_size = isp_reg_read(regs, ISP_WDR_FRAME_OFFSET);
+        line_width = isp_reg_read(regs, ISP_WDR_WIDTH_OFFSET) << 1;
+        height = required_size / line_width;
+        break;
+
+    default:
+        /* Not in WDR mode */
+        dev_err(isp->dev, "Not in WDR mode, buffer setup not needed\n");
+        return -EINVAL;
+    }
+
+    /* Verify buffer size is sufficient */
+    if (buf_info->size < required_size) {
+        dev_err(isp->dev, "%s,%d: buf size too small\n", __func__, __LINE__);
+
+        /* Clear WDR mode and disable WDR */
+        isp_reg_write(regs, ISP_WDR_MODE_OFFSET, WDR_MODE_NONE);
+        isp_disable_wdr(isp);
+
+        return -EINVAL;
+    }
+
+    /* Program WDR buffer registers */
+    system_reg_write(WDR_REG_BUF, buf_info->addr);
+    system_reg_write(WDR_REG_LINE, line_width);
+    system_reg_write(WDR_REG_HEIGHT, height);
+
+    dev_dbg(isp->dev, "WDR buffer setup complete: addr=0x%08x, line=%d, height=%d\n",
+            buf_info->addr, line_width, height);
+
+    return 0;
+}
+
+
+
+/**
+ * setup_isp_buffers - Configure ISP buffer memory regions
+ * @isp: ISP device structure
+ * @buf_info: Buffer information from userspace
+ *
+ * Based on decompiled code at case 0x800856d4
+ */
+int setup_isp_buffers(struct isp_device *isp, struct isp_buf_info *buf_info)
+{
+    uint32_t width, height;
+    uint32_t base_addr = buf_info->paddr;  // Changed from addr to paddr
+    uint32_t total_size = buf_info->size;
+    uint32_t offset = 0;
+    struct isp_reg_t *regs = isp->regs;
+
+    // Get width and height using helper functions
+    width = isp_get_width(regs);
+    height = isp_get_height(regs);
+
+    // Calculate main buffer size (matches decompiled logic)
+    uint32_t line_size = ((width + 7) >> 3) << 3;
+    uint32_t main_size = line_size * height;
+
+    // Verify buffer size is sufficient
+    if (total_size < main_size) {
+        pr_err("%s,%d: buf size too small\n", __func__, __LINE__);
+        return -EINVAL;
+    }
+
+    // Setup main buffer (BUF0)
+    system_reg_write(ISP_REG_BUF0, base_addr);
+    system_reg_write(ISP_REG_BUF0_SIZE, line_size);
+    offset += main_size;
+
+    // Setup second buffer (BUF1)
+    // Size is main_size >> 1 in decompiled code
+    uint32_t second_size = main_size >> 1;
+    if (total_size < (offset + second_size)) {
+        pr_err("%s,%d: buf size too small\n", __func__, __LINE__);
+        return -EINVAL;
+    }
+    system_reg_write(ISP_REG_BUF1, base_addr + offset);
+    system_reg_write(ISP_REG_BUF1_SIZE, line_size);
+    offset += second_size;
+
+    // Setup third buffer (BUF2)
+    // Complex size calculation from decompiled code
+    uint32_t third_line_size = ((((width + 0x1f) >> 5) + 7) >> 3) << 3;
+    uint32_t third_height = (((height + 0xf) >> 4) + 1);
+    uint32_t third_size = third_line_size * third_height;
+
+    if (total_size < (offset + third_size)) {
+        pr_err("%s,%d: buf size too small\n", __func__, __LINE__);
+        return -EINVAL;
+    }
+    system_reg_write(ISP_REG_BUF2, base_addr + offset);
+    system_reg_write(ISP_REG_BUF2_SIZE, third_line_size);
+    offset += third_size;
+
+    // Memory optimization path splitting based on isp_memopt
+    if (isp_memopt) {
+        // Simple path - just set addresses with zero sizes
+        system_reg_write(ISP_REG_BUF3, base_addr + offset);
+        system_reg_write(ISP_REG_BUF3_SIZE, 0);
+        system_reg_write(ISP_REG_BUF4, base_addr + offset);
+        system_reg_write(ISP_REG_BUF4_SIZE, 0);
+        system_reg_write(ISP_REG_BUF5, base_addr + offset);
+        system_reg_write(ISP_REG_BUF5_SIZE, 0);
+    } else {
+        // Complex path with additional buffers
+        uint32_t stat_size = third_size << 2;
+
+        // Setup statistics buffers
+        system_reg_write(ISP_REG_BUF3, base_addr + offset);
+        system_reg_write(ISP_REG_BUF3_SIZE, third_line_size);
+        offset += third_size;
+
+        system_reg_write(ISP_REG_BUF4, base_addr + offset);
+        system_reg_write(ISP_REG_BUF4_SIZE, third_line_size);
+        offset += third_size;
+
+        system_reg_write(ISP_REG_BUF5, base_addr + offset);
+        system_reg_write(ISP_REG_BUF5_SIZE, third_line_size);
+        offset += third_size;
+
+        // Setup additional scaled buffers
+        uint32_t scaled_line_size = ((((width >> 1) + 7) >> 3) << 3);
+        uint32_t scaled_size = scaled_line_size * height;
+
+        if (total_size < (offset + scaled_size)) {
+            pr_err("%s,%d: buf size too small\n", __func__, __LINE__);
+            return -EINVAL;
+        }
+
+        system_reg_write(ISP_REG_BUF6, base_addr + offset);
+        system_reg_write(ISP_REG_BUF6_SIZE, scaled_line_size);
+        offset += scaled_size;
+
+        uint32_t half_scaled_size = scaled_size >> 1;
+        if (total_size < (offset + half_scaled_size)) {
+            pr_err("%s,%d: buf size too small\n", __func__, __LINE__);
+            return -EINVAL;
+        }
+
+        system_reg_write(ISP_REG_BUF7, base_addr + offset);
+        system_reg_write(ISP_REG_BUF7_SIZE, scaled_line_size);
+        offset += half_scaled_size;
+
+        // Final small buffer
+        uint32_t tiny_line_size = ((((width >> 5) + 7) >> 3) << 3);
+        uint32_t tiny_size = (tiny_line_size * height) >> 5;
+
+        if (total_size < (offset + tiny_size)) {
+            pr_err("%s,%d: buf size too small\n", __func__, __LINE__);
+            return -EINVAL;
+        }
+
+        system_reg_write(ISP_REG_BUF8, base_addr + offset);
+        system_reg_write(ISP_REG_BUF8_SIZE, tiny_line_size);
+    }
+
+    // Final control registers (matching decompiled code)
+    system_reg_write(ISP_REG_CTRL, 0);
+    system_reg_write(ISP_REG_START, 1);
+
+    return 0;
+}
+
+//static long tx_isp_unlocked_ioctl(void *priv, unsigned int cmd, void __user *arg)
+//{
+//    struct isp_device *isp = priv;
+//    int ret = 0;
+//
+//    switch (cmd) {
+//        case TX_ISP_SET_BUF: {
+//            struct isp_buf_info buf;
+//            if (copy_from_user(&buf, arg, sizeof(buf))) {
+//                pr_err("[%s][%d] copy from user error\n", __func__, __LINE__);
+//                return -EFAULT;
+//            }
+//
+//            // Validate buffer size and setup memory regions
+//            // This matches the extensive buffer setup code seen in the decompilation
+//            ret = setup_isp_buffers(isp, &buf);
+//            break;
+//        }
+//
+//        case TX_ISP_WDR_SET_BUF: {
+//            struct isp_wdr_buf_info wdr_buf;
+//            if (copy_from_user(&wdr_buf, arg, sizeof(wdr_buf))) {
+//                pr_err("[%s][%d] copy from user error\n", __func__, __LINE__);
+//                return -EFAULT;
+//            }
+//
+//            // Setup WDR buffer handling matching decompiled logic
+//            ret = setup_wdr_buffers(isp, &wdr_buf);
+//            break;
+//        }
+//
+//        case TX_ISP_VIDEO_LINK_SETUP: {
+//            unsigned int link;
+//            if (copy_from_user(&link, arg, sizeof(link))) {
+//                pr_err("[%s][%d] copy from user error\n", __func__, __LINE__);
+//                return -EFAULT;
+//            }
+//
+//            if (link >= 2) {
+//                pr_err("link(%d) is invalid!\n", link);
+//                return -EINVAL;
+//            }
+//
+//            // Handle video link setup matching decompiled logic
+//            ret = setup_video_link(isp, link);
+//            break;
+//        }
+//
+//        case TX_ISP_SET_AE_ALGO_OPEN: {
+//            struct isp_ae_algo ae;
+//            if (copy_from_user(&ae, arg, sizeof(ae))) {
+//                pr_err("[%s][%d] copy from user error\n", __func__, __LINE__);
+//                return -EFAULT;
+//            }
+//
+//            if (ae.magic != 0x336ac) {
+//                pr_err("AE Algo Function registration failed - invalid magic\n");
+//                return -EINVAL;
+//            }
+//
+//            // Initialize AE algorithm matching decompiled logic
+//            ret = init_ae_algo(isp, &ae);
+//            break;
+//        }
+//
+//        case TX_ISP_SET_AWB_ALGO_OPEN: {
+//            struct isp_awb_algo awb;
+//            if (copy_from_user(&awb, arg, sizeof(awb))) {
+//                pr_err("[%s][%d] copy from user error\n", __func__, __LINE__);
+//                return -EFAULT;
+//            }
+//
+//            // Initialize AWB algorithm matching decompiled logic
+//            ret = init_awb_algo(isp, &awb);
+//            break;
+//        }
+//
+//        // Add other IOCTL commands seen in decompilation
+//        // Including 0x800856d7, 0x800456d8, etc.
+//
+//        default:
+//            return -ENOTTY;
+//    }
+//
+//    return ret;
+//}
+
+/* Global state tracking */
+static uint32_t g_wdr_en;           /* Global WDR enable state at 0xa2ea4 */
+static uint32_t data_84b6c = 0;     /* Constant from decompiled code */
+
+/**
+ * tisp_s_wdr_en - Enable/disable WDR mode and configure related modules
+ * Based on decompiled function at 0x64824
+ *
+ * @arg1: WDR enable flag (1=enable, 0=disable)
+ */
+static int tisp_s_wdr_en(uint32_t arg1)
+{
+    u32 reg_val;
+
+    /* Set up initial registers - matches 0x6486c */
+    system_reg_write(0x24, system_reg_read(0x24) | 1);
+
+    /* Wait for hardware ready - matches do-while at 0x64880 */
+    while (!(system_reg_read(0x28) & 1))
+        ;
+
+    /* Toggle control bit - matches 0x64888-0x648a8 */
+    reg_val = system_reg_read(0x20);
+    system_reg_write(0x20, reg_val | 4);
+    system_reg_write(0x20, reg_val & ~4);
+
+    /* Get and modify top register - matches 0x648b0 */
+    reg_val = system_reg_read(0xc);
+
+    /* Debug print matching decompiled at 0x648e4 */
+    isp_printf(0, "%s:%d::wdr en is %d,top is 0x%x\n",
+            "tisp_s_wdr_en", __LINE__, arg1, reg_val);
+
+    u32 new_val;
+    u32 addr_val;
+
+    if (arg1 != 1) {
+        /* Disable WDR - matches 0x64958-0x64968 */
+        new_val = (reg_val & 0xb577ff7d) | 0x34000009;
+        new_val |= (data_84b6c << 7);  // data_84b6c would need to be defined
+        addr_val = 0x1c;
+        g_wdr_en = 0;  // global variable seen at 0x6495c
+    } else {
+        /* Enable WDR - matches 0x6490c-0x64934 */
+        new_val = (reg_val & 0xa1ffdf76) | 0x880002;
+        addr_val = 0x10;
+        g_wdr_en = arg1;
+    }
+
+    /* Program control registers - matches 0x6496c-0x64978 */
+    system_reg_write(0x804, addr_val);
+    system_reg_write(0xc, new_val);
+
+    /* Configure all subsystems - matches 0x64988-0x64a48 */
+//    tisp_dpc_wdr_en(arg1);
+//    tisp_lsc_wdr_en(arg1);
+//    tisp_gamma_wdr_en(arg1);
+//    tisp_sharpen_wdr_en(arg1);
+//    tisp_ccm_wdr_en(arg1);
+//    tisp_bcsh_wdr_en(arg1);
+//    tisp_rdns_wdr_en(arg1);
+//    tisp_adr_wdr_en(arg1);
+//    tisp_defog_wdr_en(arg1);
+//    tisp_mdns_wdr_en(arg1);
+//    tisp_dmsc_wdr_en(arg1);
+//    tisp_ae_wdr_en(arg1);
+//    tisp_sdns_wdr_en(arg1);
+
+    /* Initialize additional modules - matches 0x64a58-0x64a68 */
+//    tiziano_clm_init();
+//    tiziano_ydns_init();
+
+    /* Final control register - matches 0x64a74 */
+    system_reg_write(0x800, 1);
+
+    /* Final debug print matching decompiled at 0x64a90 */
+    isp_printf(0, "%s:%d::wdr en is %d,top is 0x%x\n",
+            "tisp_s_wdr_en", __LINE__, arg1, new_val);
+
+    return 0;
+}
+
+// TODO: Implement the following functions based on decompiled code
+/* Subsystem WDR enable function declarations */
+//static void tisp_dpc_wdr_en(uint32_t en);
+//static void tisp_lsc_wdr_en(uint32_t en);
+//static void tisp_gamma_wdr_en(uint32_t en);
+//static void tisp_sharpen_wdr_en(uint32_t en);
+//static void tisp_ccm_wdr_en(uint32_t en);
+//static void tisp_bcsh_wdr_en(uint32_t en);
+//static void tisp_rdns_wdr_en(uint32_t en);
+//static void tisp_adr_wdr_en(uint32_t en);
+//static void tisp_defog_wdr_en(uint32_t en);
+//static void tisp_mdns_wdr_en(uint32_t en);
+//static void tisp_dmsc_wdr_en(uint32_t en);
+//static void tisp_ae_wdr_en(uint32_t en);
+//static void tisp_sdns_wdr_en(uint32_t en);
+//static void tiziano_clm_init(void);
+//static void tiziano_ydns_init(void);
+
+
+
+/* IOCTL command definitions - completing the set */
+#define TX_ISP_SET_AE_ALGO_CLOSE  _IOW('V', 0x56de, int)
+#define TX_ISP_SET_AWB_ALGO_CLOSE _IOW('V', 0x56e4, int)
+
+/* Global WDR state tracking - seen in decompiled */
+static int wdr_switch = 0;
+
+/**
+ * isp_set_wdr_mode - Enable/disable WDR mode
+ * Based on decompiled code around 0x800456d8/0x800456d9
+ *
+ * @isp: ISP device structure
+ * @enable: WDR enable flag (1=enable, 0=disable)
+ */
+static int isp_set_wdr_mode(struct isp_device *isp, int enable)
+{
+    struct isp_reg_t *regs = isp->regs;
+    int ret = 0;
+
+    if (enable) {
+        /* Enable WDR mode - from case 0x800456d8 */
+        isp_reg_write(regs, offsetof(struct isp_reg_t, wdr_enable), 1);
+
+        /* Apply WDR settings from decompiled */
+        if (wdr_switch) {
+            /* Configure WDR hardware settings */
+            if (isp->regs) {
+                /* Set WDR parameters - matches decompiled at 0xed90 */
+                system_reg_write(0x2000013, 1);
+                tisp_s_wdr_en(1);
+
+                /* Reset statistics buffers */
+                void *stats = isp->regs + offsetof(struct isp_reg_t, ae_stats);
+                memset(stats, 0, sizeof(u32) * 160);  // Clear all stats registers
+            }
+            wdr_switch = 1;
+        }
+    } else {
+        /* Disable WDR mode - from case 0x800456d9 */
+        isp_reg_write(regs, offsetof(struct isp_reg_t, wdr_enable), 0);
+
+        if (wdr_switch) {
+            /* Disable WDR in hardware */
+            system_reg_write(0x2000013, 0);
+            tisp_s_wdr_en(0);
+            wdr_switch = 0;
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * calculate_wdr_buffer_size - Calculate required WDR buffer size
+ * Based on decompiled code around 0x800856d7
+ *
+ * @isp: ISP device structure
+ * @size: Buffer size information structure
+ */
+static int calculate_wdr_buffer_size(struct isp_device *isp, struct isp_wdr_buf_size *size)
+{
+    struct isp_reg_t *regs = isp->regs;
+    uint32_t wdr_mode;
+    int ret = 0;
+
+    /* Get current WDR mode */
+    wdr_mode = isp_reg_read(regs, offsetof(struct isp_reg_t, wdr_enable));
+
+    if (wdr_mode == WDR_MODE_LINE) {
+        /* Line-interleaved mode */
+        size->tsize = (isp_reg_read(regs, offsetof(struct isp_reg_t, output_width)) << 1) *
+                      isp_reg_read(regs, offsetof(struct isp_reg_t, output_height));
+    } else if (wdr_mode == WDR_MODE_FRAME) {
+        /* Frame-based mode - get from hardware register */
+        size->tsize = isp_reg_read(regs, offsetof(struct isp_reg_t, gain_factor)); // 0xe8 offset
+    } else {
+        isp_printf(1, "Not in WDR mode, buffer calculation failed\n");
+        return -EINVAL;
+    }
+
+    /* Calculate required size based on decompiled logic */
+    size->size = size->tsize;  // Base size
+
+    /* Add additional space for statistics if needed */
+    if (!isp_memopt) {
+        size->size += (size->tsize >> 1) + (size->tsize >> 2);
+    }
+
+    return ret;
+}
+
+
+//static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+//{
+//    int ret = 0;
+//
+//    pr_info("ISP driver IOCTL: cmd=0x%x, arg=0x%lx\n", cmd, arg);
+//    switch (cmd) {
+//        case VIDIOC_REGISTER_SENSOR:
+//            pr_info("Registering sensor: %s\n", (char *)arg);
+//            break;
+//        case VIDIOC_SET_BUF_INFO:
+//            pr_info("Setting buffer info\n");
+//            break;
+//        case VIDIOC_SET_WDR_BUF_INFO:
+//            pr_info("Setting WDR buffer info\n");
+//            break;
+//        case VIDIOC_GET_SENSOR_LIST:
+//            pr_info("Getting sensor list\n");
+//            break;
+//        default:
+//            return -ENOTTY;
+//    }
+//
+//    return ret;  // Remove incorrect error path
+//}
+
+/**
+ * isp_driver_ioctl - IOCTL handler for ISP driver
+ * @file: File structure
+ * @cmd: IOCTL command
+ * @arg: Command argument
+ *
+ * Based on decompiled tx_isp_unlocked_ioctl function
+ */
+static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    struct isp_device *isp = file->private_data;
+    void __user *argp = (void __user *)arg;
+    int ret = 0;
+
+    switch (cmd) {
+    case VIDIOC_REGISTER_SENSOR: {
+        char sensor_name[80];  // Match size with IMPISPDev sensor_name
+
+        if (!gISPdev || !gISPdev->is_open) {
+            dev_err(isp->dev, "ISP device not initialized or not open\n");
+            return -EINVAL;
+        }
+
+        if (copy_from_user(sensor_name, (void __user *)arg, sizeof(sensor_name))) {
+            dev_err(isp->dev, "[%s][%d] copy from user error\n",
+                    __func__, __LINE__);
+            return -EFAULT;
+        }
+
+        // Store in global device structure
+        strncpy(gISPdev->sensor_name, sensor_name, sizeof(gISPdev->sensor_name) - 1);
+        gISPdev->sensor_name[sizeof(gISPdev->sensor_name) - 1] = '\0';
+
+        dev_info(isp->dev, "Registered sensor: %s (gISPdev: %p)\n",
+                 sensor_name, gISPdev);
+        break;
+    }
+    case VIDIOC_GET_SENSOR_LIST: {
+        struct sensor_list {
+            char name[32];
+            int count;
+        } sensors;
+        void __user *argp = (void __user *)arg;
+
+        // Always perform null checks first
+        if (!argp) {
+            dev_err(isp->dev, "Null userspace pointer\n");
+            return -EINVAL;
+        }
+
+        // Clear our local structure
+        memset(&sensors, 0, sizeof(sensors));
+
+        // Copy from user and verify zeros
+        if (copy_from_user(&sensors, argp, sizeof(sensors))) {
+            dev_err(isp->dev, "Failed to copy from user\n");
+            return -EFAULT;
+        }
+
+        // Device state checks
+        if (!gISPdev) {
+            dev_dbg(isp->dev, "ISP device not initialized\n");
+            // Don't fail - just return zeros as per OEM behavior
+            goto copy_out;
+        }
+
+        // At this point we could populate sensors.name and sensors.count
+        // if we had a valid sensor, but OEM returns zeros so we will too
+
+        copy_out:
+            // Copy our zero-filled structure back to user
+            if (copy_to_user(argp, &sensors, sizeof(sensors))) {
+                dev_err(isp->dev, "Failed to copy to user\n");
+                return -EFAULT;
+            }
+
+        return 0;
+    }
+    case TX_ISP_SET_BUF: {
+        struct isp_buf_info buf;
+        if (copy_from_user(&buf, argp, sizeof(buf))) {
+            dev_err(isp->dev, "[%s][%d] copy from user error\n",
+                    __func__, __LINE__);
+            return -EFAULT;
+        }
+        ret = setup_isp_buffers(isp, &buf);
+        break;
+    }
+
+    case TX_ISP_WDR_SET_BUF: {
+        struct isp_wdr_buf_info wdr_buf;
+        if (copy_from_user(&wdr_buf, argp, sizeof(wdr_buf))) {
+            dev_err(isp->dev, "[%s][%d] copy from user error\n",
+                    __func__, __LINE__);
+            return -EFAULT;
+        }
+        ret = setup_wdr_buffers(isp, &wdr_buf);
+        break;
+    }
+
+    case TX_ISP_VIDEO_LINK_SETUP: {
+        unsigned int link;
+        if (copy_from_user(&link, argp, sizeof(link))) {
+            dev_err(isp->dev, "[%s][%d] copy from user error\n",
+                    __func__, __LINE__);
+            return -EFAULT;
+        }
+        ret = setup_video_link(isp, link);
+        break;
+    }
+
+    case TX_ISP_SET_AE_ALGO_OPEN: {
+        struct isp_ae_algo ae;
+        if (copy_from_user(&ae, argp, sizeof(ae))) {
+            dev_err(isp->dev, "[%s][%d] copy from user error\n",
+                    __func__, __LINE__);
+            return -EFAULT;
+        }
+        ret = init_ae_algo(isp, &ae);
+        if (!ret && copy_to_user(argp, &ae, sizeof(ae))) {
+            dev_err(isp->dev, "[%s][%d] copy to user error\n",
+                    __func__, __LINE__);
+            return -EFAULT;
+        }
+        break;
+    }
+
+    case TX_ISP_SET_AWB_ALGO_OPEN: {
+        struct isp_awb_algo awb;
+        if (copy_from_user(&awb, argp, sizeof(awb))) {
+            dev_err(isp->dev, "[%s][%d] copy from user error\n",
+                    __func__, __LINE__);
+            return -EFAULT;
+        }
+        ret = init_awb_algo(isp, &awb);
+        if (!ret && copy_to_user(argp, &awb, sizeof(awb))) {
+            dev_err(isp->dev, "[%s][%d] copy to user error\n",
+                    __func__, __LINE__);
+            return -EFAULT;
+        }
+        break;
+    }
+
+    case TX_ISP_WDR_OPEN: {
+        // Handle WDR enable - matches case 0x800456d8
+        unsigned int wdr_en = 1;
+        ret = isp_set_wdr_mode(isp, wdr_en);
+        break;
+    }
+
+    case TX_ISP_WDR_CLOSE: {
+        // Handle WDR disable - matches case 0x800456d9
+        unsigned int wdr_en = 0;
+        ret = isp_set_wdr_mode(isp, wdr_en);
+        break;
+    }
+
+    case TX_ISP_WDR_GET_BUF: {
+        // Calculate and return WDR buffer size - matches case 0x800856d7
+        struct isp_wdr_buf_size size;
+        ret = calculate_wdr_buffer_size(isp, &size);
+        if (!ret && copy_to_user(argp, &size, sizeof(size))) {
+            dev_err(isp->dev, "[%s][%d] copy to user error\n",
+                    __func__, __LINE__);
+            return -EFAULT;
+        }
+        break;
+    }
+
+    case TX_ISP_SET_AE_ALGO_CLOSE: {
+        // TODO
+        // Cleanup AE algorithm - matches case 0x800456de
+        // tisp_ae_algo_deinit();
+        // tisp_ae_algo_init(0, NULL);
+        kfree(ae_info_mine);
+        kfree(ae_statis_mine);
+        break;
+    }
+
+    case TX_ISP_SET_AWB_ALGO_CLOSE: {
+        // TODO
+        // Cleanup AWB algorithm - matches case 0x800456e4
+        //tisp_awb_algo_deinit();
+        //tisp_awb_algo_init(0);
+        kfree(awb_info_mine);
+        break;
+    }
+
+    default:
+        dev_dbg(isp->dev, "Unhandled ioctl cmd: 0x%x\n", cmd);
+        return -ENOTTY;
+    }
+
+    return ret;
+}
 
 // Update file operations structure
 static const struct file_operations isp_fops = {
@@ -1735,7 +3163,8 @@ int private_misc_register(struct miscdevice *misc_dev, const char *proc_name, co
 void private_misc_deregister(struct miscdevice *misc_dev)
 {
     if (misc_dev->minor >= 0) {
-        remove_proc_entry(misc_dev->minor, NULL);
+	// TODO
+	//remove_proc_entry((long)misc_dev->minor, NULL);  // Cast minor to long
     }
     misc_deregister(misc_dev);
 }
