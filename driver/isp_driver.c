@@ -100,7 +100,8 @@ struct IMPISPDev {
     void* buf_info;        // Buffer info pointer
     int wdr_mode;          // WDR mode flag
     void* wdr_buf_info;    // WDR buffer info pointer
-    char padding2[0x28];   // Padding to match 0xE0 size
+    unsigned int current_link;  // Track current link configuration
+    char padding2[0x24];   // Adjusted padding (reduced by 4 bytes for current_link)
     struct device *dev;    // Device pointer
 
     // Fields for hardware-level operations
@@ -2009,49 +2010,51 @@ static int subdev_video_destroy_link(struct isp_pad_desc *pad)
 
 /**
  * setup_video_link - Configure video link routing
- * @isp: ISP device structure
+ * @dev: IMPISPDev structure
  * @link: Link identifier from userspace
  *
  * Based on decompiled code at case 0x800456d0
  */
-int setup_video_link(struct isp_device *isp, unsigned int link)
+int setup_video_link(struct IMPISPDev *dev, unsigned int link)
 {
     struct isp_pad_desc *source_pad, *sink_pad;
+    struct isp_link_config *config;
+    struct isp_pad_desc *pad;
     int i;
 
     /* Validate link index - must be < 2 as seen at 0xe2a4 */
     if (link >= 2) {
-        dev_err(isp->dev, "link(%d) is invalid!\n", link);
+        dev_err(dev->dev, "link(%d) is invalid!\n", link);
         return -EINVAL;
     }
 
-    /* Check if link is already configured to this setting */
-    if (link == isp->current_link)
+    /* Store the current link in our global dev structure */
+    if (link == dev->current_link)
         return 0;
 
     /* Get link configuration */
-    struct isp_link_config *config = &link_configs[link];
-    struct isp_pad_desc *pad = config->pads;
+    config = &link_configs[link];
+    pad = config->pads;
 
     /* Process all pads in this configuration */
     for (i = 0; i < config->num_pads; i++, pad += 5) { // +5 from decompiled struct size
         /* Find source and sink pads - matches logic at 0xe31c */
-        source_pad = find_subdev_link_pad(isp, pad);
-        sink_pad = find_subdev_link_pad(isp, pad + 2); // +2 matches decompiled offset
+        source_pad = find_subdev_link_pad(dev, pad);
+        sink_pad = find_subdev_link_pad(dev, pad + 2); // +2 matches decompiled offset
 
         if (!source_pad || !sink_pad)
             continue;
 
         /* Verify pad types are compatible - logic from 0xe35c */
         if (!(source_pad->flags & sink_pad->flags & pad->link_type)) {
-            dev_err(isp->dev, "The link type is mismatch!\n");
+            dev_err(dev->dev, "The link type is mismatch!\n");
             return -EINVAL;
         }
 
         /* Check if either pad is already active - check at 0xe390 */
         if (source_pad->link_state == LINK_STATE_ENABLED ||
             sink_pad->link_state == LINK_STATE_ENABLED) {
-            dev_err(isp->dev, "Please stop active links firstly!\n");
+            dev_err(dev->dev, "Please stop active links firstly!\n");
             return -EINVAL;
         }
 
@@ -2084,7 +2087,7 @@ int setup_video_link(struct isp_device *isp, unsigned int link)
     }
 
     /* Update current link setting - matches 0xe468 */
-    isp->current_link = link;
+    dev->current_link = link;
 
     return 0;
 }
@@ -2274,22 +2277,21 @@ static void isp_disable_wdr(struct isp_device *isp)
     // hardware requirements
 }
 
-
 /**
  * init_ae_algo - Initialize Auto Exposure algorithm
- * @isp: ISP device structure
+ * @dev: IMPISPDev structure
  * @ae: AE algorithm parameters from userspace
  *
  * Based on decompiled code around case 0x800456dd
  */
-int init_ae_algo(struct isp_device *isp, struct isp_ae_algo *ae)
+int init_ae_algo(struct IMPISPDev *dev, struct isp_ae_algo *ae)
 {
     struct isp_ae_info *ae_info;
     struct isp_reg_t *regs;
 
     /* Validate magic number - check at 0xef64 */
     if (ae->magic != AE_ALGO_MAGIC) {
-        dev_err(isp->dev, "[ %s:%d ] Ae Algo Function registration failed\n",
+        dev_err(dev->dev, "[ %s:%d ] Ae Algo Function registration failed\n",
                 __func__, __LINE__);
         return -EINVAL;
     }
@@ -2312,7 +2314,7 @@ int init_ae_algo(struct isp_device *isp, struct isp_ae_algo *ae)
     ae_info_mine = ae_info;
 
     /* Get register base */
-    regs = isp->regs;
+    regs = (struct isp_reg_t *)dev->regs;  // Cast the void* regs to proper type
 
     /* Setup initial parameters - matches logic from 0xefb4 to 0xf040 */
     ae_info->gain = readl(&regs->gain);
@@ -2339,12 +2341,12 @@ int init_ae_algo(struct isp_device *isp, struct isp_ae_algo *ae)
 
 /**
  * init_awb_algo - Initialize Auto White Balance algorithm
- * @isp: ISP device structure
+ * @dev: IMPISPDev structure
  * @awb: AWB algorithm parameters from userspace
  *
  * Based on decompiled code around case 0x800456e2
  */
-int init_awb_algo(struct isp_device *isp, struct isp_awb_algo *awb)
+int init_awb_algo(struct IMPISPDev *dev, struct isp_awb_algo *awb)
 {
     struct isp_awb_info *awb_info;
 
@@ -2851,31 +2853,6 @@ static int calculate_wdr_buffer_size(struct isp_device *isp, struct isp_wdr_buf_
 }
 
 
-//static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-//{
-//    int ret = 0;
-//
-//    pr_info("ISP driver IOCTL: cmd=0x%x, arg=0x%lx\n", cmd, arg);
-//    switch (cmd) {
-//        case VIDIOC_REGISTER_SENSOR:
-//            pr_info("Registering sensor: %s\n", (char *)arg);
-//            break;
-//        case VIDIOC_SET_BUF_INFO:
-//            pr_info("Setting buffer info\n");
-//            break;
-//        case VIDIOC_SET_WDR_BUF_INFO:
-//            pr_info("Setting WDR buffer info\n");
-//            break;
-//        case VIDIOC_GET_SENSOR_LIST:
-//            pr_info("Getting sensor list\n");
-//            break;
-//        default:
-//            return -ENOTTY;
-//    }
-//
-//    return ret;  // Remove incorrect error path
-//}
-
 /**
  * isp_driver_ioctl - IOCTL handler for ISP driver
  * @file: File structure
@@ -2886,21 +2863,21 @@ static int calculate_wdr_buffer_size(struct isp_device *isp, struct isp_wdr_buf_
  */
 static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-    struct isp_device *isp = file->private_data;
     void __user *argp = (void __user *)arg;
     int ret = 0;
+
+    // Basic validation
+    if (!gISPdev || !gISPdev->is_open) {
+        pr_err("ISP device not initialized or not open\n");
+        return -EINVAL;
+    }
 
     switch (cmd) {
     case VIDIOC_REGISTER_SENSOR: {
         char sensor_name[80];  // Match size with IMPISPDev sensor_name
 
-        if (!gISPdev || !gISPdev->is_open) {
-            dev_err(isp->dev, "ISP device not initialized or not open\n");
-            return -EINVAL;
-        }
-
         if (copy_from_user(sensor_name, (void __user *)arg, sizeof(sensor_name))) {
-            dev_err(isp->dev, "[%s][%d] copy from user error\n",
+            dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
                     __func__, __LINE__);
             return -EFAULT;
         }
@@ -2909,8 +2886,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         strncpy(gISPdev->sensor_name, sensor_name, sizeof(gISPdev->sensor_name) - 1);
         gISPdev->sensor_name[sizeof(gISPdev->sensor_name) - 1] = '\0';
 
-        dev_info(isp->dev, "Registered sensor: %s (gISPdev: %p)\n",
-                 sensor_name, gISPdev);
+        dev_info(gISPdev->dev, "Registered sensor: %s\n", sensor_name);
         break;
     }
     case VIDIOC_GET_SENSOR_LIST: {
@@ -2918,11 +2894,10 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
             char name[32];
             int count;
         } sensors;
-        void __user *argp = (void __user *)arg;
 
         // Always perform null checks first
         if (!argp) {
-            dev_err(isp->dev, "Null userspace pointer\n");
+            dev_err(gISPdev->dev, "Null userspace pointer\n");
             return -EINVAL;
         }
 
@@ -2931,72 +2906,53 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
         // Copy from user and verify zeros
         if (copy_from_user(&sensors, argp, sizeof(sensors))) {
-            dev_err(isp->dev, "Failed to copy from user\n");
+            dev_err(gISPdev->dev, "Failed to copy from user\n");
             return -EFAULT;
-        }
-
-        // Device state checks
-        if (!gISPdev) {
-            dev_dbg(isp->dev, "ISP device not initialized\n");
-            // Don't fail - just return zeros as per OEM behavior
-            goto copy_out;
         }
 
         // At this point we could populate sensors.name and sensors.count
         // if we had a valid sensor, but OEM returns zeros so we will too
 
-        copy_out:
-            // Copy our zero-filled structure back to user
-            if (copy_to_user(argp, &sensors, sizeof(sensors))) {
-                dev_err(isp->dev, "Failed to copy to user\n");
-                return -EFAULT;
-            }
+        // Copy our zero-filled structure back to user
+        if (copy_to_user(argp, &sensors, sizeof(sensors))) {
+            dev_err(gISPdev->dev, "Failed to copy to user\n");
+            return -EFAULT;
+        }
 
         return 0;
     }
     case TX_ISP_SET_BUF: {
         struct isp_buf_info buf;
         if (copy_from_user(&buf, argp, sizeof(buf))) {
-            dev_err(isp->dev, "[%s][%d] copy from user error\n",
+            dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
                     __func__, __LINE__);
             return -EFAULT;
         }
-        ret = setup_isp_buffers(isp, &buf);
-        break;
-    }
-
-    case TX_ISP_WDR_SET_BUF: {
-        struct isp_wdr_buf_info wdr_buf;
-        if (copy_from_user(&wdr_buf, argp, sizeof(wdr_buf))) {
-            dev_err(isp->dev, "[%s][%d] copy from user error\n",
-                    __func__, __LINE__);
-            return -EFAULT;
-        }
-        ret = setup_wdr_buffers(isp, &wdr_buf);
+        ret = setup_isp_buffers(gISPdev, &buf);
         break;
     }
 
     case TX_ISP_VIDEO_LINK_SETUP: {
         unsigned int link;
         if (copy_from_user(&link, argp, sizeof(link))) {
-            dev_err(isp->dev, "[%s][%d] copy from user error\n",
+            dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
                     __func__, __LINE__);
             return -EFAULT;
         }
-        ret = setup_video_link(isp, link);
+        ret = setup_video_link(gISPdev, link);
         break;
     }
 
     case TX_ISP_SET_AE_ALGO_OPEN: {
         struct isp_ae_algo ae;
         if (copy_from_user(&ae, argp, sizeof(ae))) {
-            dev_err(isp->dev, "[%s][%d] copy from user error\n",
+            dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
                     __func__, __LINE__);
             return -EFAULT;
         }
-        ret = init_ae_algo(isp, &ae);
+        ret = init_ae_algo(gISPdev, &ae);
         if (!ret && copy_to_user(argp, &ae, sizeof(ae))) {
-            dev_err(isp->dev, "[%s][%d] copy to user error\n",
+            dev_err(gISPdev->dev, "[%s][%d] copy to user error\n",
                     __func__, __LINE__);
             return -EFAULT;
         }
@@ -3006,13 +2962,13 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     case TX_ISP_SET_AWB_ALGO_OPEN: {
         struct isp_awb_algo awb;
         if (copy_from_user(&awb, argp, sizeof(awb))) {
-            dev_err(isp->dev, "[%s][%d] copy from user error\n",
+            dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
                     __func__, __LINE__);
             return -EFAULT;
         }
-        ret = init_awb_algo(isp, &awb);
+        ret = init_awb_algo(gISPdev, &awb);
         if (!ret && copy_to_user(argp, &awb, sizeof(awb))) {
-            dev_err(isp->dev, "[%s][%d] copy to user error\n",
+            dev_err(gISPdev->dev, "[%s][%d] copy to user error\n",
                     __func__, __LINE__);
             return -EFAULT;
         }
@@ -3022,23 +2978,23 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     case TX_ISP_WDR_OPEN: {
         // Handle WDR enable - matches case 0x800456d8
         unsigned int wdr_en = 1;
-        ret = isp_set_wdr_mode(isp, wdr_en);
+        ret = isp_set_wdr_mode(gISPdev, wdr_en);
         break;
     }
 
     case TX_ISP_WDR_CLOSE: {
         // Handle WDR disable - matches case 0x800456d9
         unsigned int wdr_en = 0;
-        ret = isp_set_wdr_mode(isp, wdr_en);
+        ret = isp_set_wdr_mode(gISPdev, wdr_en);
         break;
     }
 
     case TX_ISP_WDR_GET_BUF: {
         // Calculate and return WDR buffer size - matches case 0x800856d7
         struct isp_wdr_buf_size size;
-        ret = calculate_wdr_buffer_size(isp, &size);
+        ret = calculate_wdr_buffer_size(gISPdev, &size);
         if (!ret && copy_to_user(argp, &size, sizeof(size))) {
-            dev_err(isp->dev, "[%s][%d] copy to user error\n",
+            dev_err(gISPdev->dev, "[%s][%d] copy to user error\n",
                     __func__, __LINE__);
             return -EFAULT;
         }
@@ -3065,7 +3021,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
 
     default:
-        dev_dbg(isp->dev, "Unhandled ioctl cmd: 0x%x\n", cmd);
+        dev_dbg(gISPdev->dev, "Unhandled ioctl cmd: 0x%x\n", cmd);
         return -ENOTTY;
     }
 
