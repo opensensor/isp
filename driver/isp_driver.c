@@ -3384,6 +3384,19 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
     return ret;
 }
 
+// Structure to hold information about a sensor
+struct sensor_list_info {
+    char name[80];          // Sensor name
+    int id;                 // Sensor ID
+    int status;             // Sensor status (e.g., 1 for active)
+    int resolution_width;   // Sensor resolution width
+    int resolution_height;  // Sensor resolution height
+    int framerate;          // Max frame rate
+    int capabilities;       // Bitmask for sensor capabilities
+    int reserved[8];        // Reserved space to match the original size (padding)
+};
+
+
 /**
  * isp_driver_ioctl - IOCTL handler for ISP driver
  * @file: File structure
@@ -3454,38 +3467,34 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
 	    break;
 	}
-    case VIDIOC_GET_SENSOR_LIST: {
-        struct sensor_list {
-            char name[32];
-            int count;
-        } sensors;
+	case VIDIOC_GET_SENSOR_LIST: {
+	    struct sensor_list_info sensor_list;
+	    memset(&sensor_list, 0, sizeof(sensor_list));
 
-        // Always perform null checks first
-        if (!argp) {
-            dev_err(gISPdev->dev, "Null userspace pointer\n");
-            return -EINVAL;
-        }
+	    if (!gISPdev->sensor_name[0]) {
+	        pr_err("No sensor registered\n");
+	        return -ENODATA;
+	    }
 
-        // Clear our local structure
-        memset(&sensors, 0, sizeof(sensors));
+	    // Populate the sensor list information
+	    strncpy(sensor_list.name, gISPdev->sensor_name, sizeof(sensor_list.name) - 1);
+	    sensor_list.name[sizeof(sensor_list.name) - 1] = '\0';
+	    sensor_list.id = 0;
+	    sensor_list.status = 1;  // Assuming the sensor is active
+	    sensor_list.resolution_width = 1920;   // Example values, replace as needed
+	    sensor_list.resolution_height = 1080;
+	    sensor_list.framerate = 30;
+	    sensor_list.capabilities = 0x01; // Example capabilities bitmask
 
-        // Copy from user and verify zeros
-        if (copy_from_user(&sensors, argp, sizeof(sensors))) {
-            dev_err(gISPdev->dev, "Failed to copy from user\n");
-            return -EFAULT;
-        }
+	    // Copy the structure back to user space
+	    if (copy_to_user(argp, &sensor_list, sizeof(sensor_list))) {
+	        pr_err("Failed to copy sensor list to user space\n");
+	        return -EFAULT;
+	    }
 
-        // At this point we could populate sensors.name and sensors.count
-        // if we had a valid sensor, but OEM returns zeros so we will too
-
-        // Copy our zero-filled structure back to user
-        if (copy_to_user(argp, &sensors, sizeof(sensors))) {
-            dev_err(gISPdev->dev, "Failed to copy to user\n");
-            return -EFAULT;
-        }
-
-        return 0;
-    }
+	    pr_info("Sensor list provided: %s\n", sensor_list.name);
+	    return 0;
+	}
     case TX_ISP_SET_BUF: {
       	pr_info("TX_ISP_SET_BUF\n");
         struct isp_buf_info buf;
