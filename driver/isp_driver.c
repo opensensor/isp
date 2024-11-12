@@ -115,6 +115,21 @@ struct isp_rotation_params {
 #define ISP_ERROR_NO_MEMORY    (ISP_ERROR_BASE + 4)
 #define ISP_ERROR_NOT_READY    (ISP_ERROR_BASE + 5)
 
+// Hardware register definitions
+#define ISP_BASE            0x13300000
+
+// Buffer control registers
+#define ISP_BUF0_REG       (ISP_BASE + 0x1000)
+#define ISP_BUF0_SIZE_REG  (ISP_BASE + 0x1004)
+#define ISP_BUF1_REG       (ISP_BASE + 0x1008)
+#define ISP_BUF1_SIZE_REG  (ISP_BASE + 0x100C)
+#define ISP_BUF2_REG       (ISP_BASE + 0x1010)
+#define ISP_BUF2_SIZE_REG  (ISP_BASE + 0x1014)
+
+// Control registers
+#define ISP_CTRL_REG       (ISP_BASE + 0x1100)
+#define ISP_START_REG      (ISP_BASE + 0x1104)
+
 struct IMPISPDev {
     char dev_name[32];     // 0x00: Device name/path
     struct cdev cdev;      // Character device structure
@@ -122,18 +137,18 @@ struct IMPISPDev {
     int minor;             // Minor number
     int fd;                // 0x20: File descriptor
     int is_open;           // 0x24: Device open status
-    char sensor_name[80];  // Sensor name buffer
-    char padding1[0x60];   // Padding to 0xac
-    struct sensor_buffer_info *buf_info;  // Buffer info pointer (changed from void*)
-    int wdr_mode;          // WDR mode flag
-    struct sensor_control_info *wdr_buf_info; // Control info pointer (changed from void*)
+    char sensor_name[80];  // 0x28: Sensor name buffer
+    char padding1[0x24];   // Padding to align to 0xac
+    struct sensor_buffer_info *buf_info;  // 0xac: Buffer info pointer
+    int wdr_mode;          // 0xb0: WDR mode flag
+    struct sensor_control_info *wdr_buf_info; // 0xb4: WDR buffer info pointer
     unsigned int current_link;  // Track current link configuration
-    char padding2[0x24];   // Adjusted padding
+    char padding2[0x24];   // Additional padding
     struct device *dev;    // Device pointer
 
     // Hardware access fields
     void __iomem *regs;    // ISP register base
-    void __iomem *ctrl_regs; // Control register base (0xb0000000)
+    void __iomem *ctrl_regs; // Control register base
     int irq;               // Interrupt line
     struct i2c_client *sensor_i2c_client;
     unsigned int width;    // Current frame width
@@ -1882,19 +1897,6 @@ static int isp_device_registers_configure(struct IMPISPDev *dev)
 
 #define BUFFER_SIZE  (1024 * 1024)  // 1MB buffer size (adjust as needed)
 
-static int isp_device_memory_setup(struct isp_device *dev)
-{
-    int ret;
-
-    if (!dev) {
-        pr_err("ISP device is NULL\n");
-        return -EINVAL;
-    }
-
-    pr_info("Memory buffers for ISP device set up successfully\n");
-
-    return 0;
-}
 
 /* ISP Format definitions - typically seen in t31 ISP */
 enum isp_format {
@@ -1915,18 +1917,52 @@ enum isp_format {
 #define ISP_FORMAT_BAYER_BGGR (ISP_FORMAT_BAYER | (3 << 8)) /* BGGR pattern */
 
 
-struct sensor_buffer_info {
-    uint32_t buffer_start; // Physical address of the buffer (using uint32_t)
-    uint32_t buffer_size;  // Size of the buffer
-    uint32_t frame_count;  // Number of frames in the buffer
-    uint8_t is_buffer_full; // Flag indicating if the buffer is full
+struct imp_mem_info {
+    // 0x00-0x5F: Reserved/unused
+    char name[32];        // 0x60: Name string (31 chars + null)
+    char pad[32];         // Padding to 0x80
+    uint32_t method;      // 0x80: Allocation method
+    uint32_t phys_addr;   // 0x84: Physical address (this is what kernel needs)
+    uint32_t virt_addr;   // 0x88: Virtual address
+    uint32_t size;        // 0x8c: Size of allocation
+    uint32_t flags;       // 0x90: Flags/attributes
 };
 
+// Match the IMP_Get_Info layout exactly
+struct alloc_info {
+    char unused[0x60];      // 0x00-0x5F: Unused
+    char name[32];          // 0x60: Name from IMP_Get_Info
+    char padding[28];       // Padding to align to 0x80
+    uint32_t method;        // 0x80: Allocation method
+    uint32_t phys_addr;     // 0x84: Physical address
+    uint32_t virt_addr;     // 0x88: Virtual address
+    uint32_t size;          // 0x8C: Buffer size
+    uint32_t flags;         // 0x90: Flags/attributes
+};
+
+// Reverse the field order to match IMP_Get_Info writes
+struct sensor_buffer_info {
+    char unused[0x80];     // Padding up to 0x80
+    uint32_t method;       // 0x80: First field written
+    uint32_t buffer_start; // 0x84: Physical address (used by ISP)
+    uint32_t virt_addr;    // 0x88: Virtual address
+    uint32_t buffer_size;  // 0x8c: Size field
+    uint32_t flags;        // 0x90: Flags
+    // Optional: extra fields if needed
+    uint32_t frame_count;
+    uint8_t is_buffer_full;
+};
+
+// Update WDR buffer info similarly
 struct sensor_control_info {
-    int exposure_time;       // Exposure time in microseconds
-    int gain;                // Sensor gain value
-    int white_balance;       // White balance setting
-    int iso;                 // ISO sensitivity level
+    uint32_t buffer_start;
+    uint32_t buffer_size;
+    char padding[0x60];
+    char name[32];
+    uint32_t method;
+    uint32_t phys_addr;
+    uint32_t virt_addr;
+    uint32_t flags;
 };
 
 static int isp_device_pipeline_setup(struct isp_device *dev)
@@ -1983,6 +2019,27 @@ static int isp_device_interrupts_setup(struct IMPISPDev *dev)
 
     return 0;
 }
+
+
+// In isp_device_memory_setup, remove buffer allocation:
+static int isp_device_memory_setup(struct IMPISPDev *dev)
+{
+    if (!dev) {
+        pr_err("ISP device is NULL\n");
+        return -EINVAL;
+    }
+
+    // Only need to check if buffer info structure exists - actual buffer allocation
+    // will be handled by userspace through IMP_Alloc()
+    if (!dev->buf_info) {
+        pr_err("Buffer info structure not initialized\n");
+        return -EINVAL;
+    }
+
+    pr_info("ISP device memory setup ready for userspace buffers\n");
+    return 0;
+}
+
 
 
 static int isp_device_configure(struct IMPISPDev *dev)
@@ -2194,32 +2251,11 @@ static inline void system_reg_write(u32 reg, u32 val)
     iounmap(addr);
 }
 
-static void cleanup_buffer_info(struct IMPISPDev *dev)
-{
-    if (dev) {
-        if (dev->buf_info) {
-            // Clear but don't free the actual buffer - it belongs to userspace
-            dev->buf_info->buffer_start = 0;
-            dev->buf_info->buffer_size = 0;
-            dev->buf_info->frame_count = 0;
-            dev->buf_info->is_buffer_full = 0;
-            kfree(dev->buf_info);
-            dev->buf_info = NULL;
-        }
-
-        if (dev->wdr_buf_info) {
-            kfree(dev->wdr_buf_info);
-            dev->wdr_buf_info = NULL;
-        }
-    }
-}
 
 
-
+// In tisp_open, remove buffer allocation, just allocate the info structures:
 static int tisp_open(struct file *file)
 {
-    int ret;
-
     pr_info("ISP device open called from pid %d\n", current->pid);
 
     if (!gISPdev) {
@@ -2244,7 +2280,7 @@ static int tisp_open(struct file *file)
         return -EIO;
     }
 
-    // Initialize buffer info structure (but don't allocate buffer)
+    // Just allocate info structures - no buffer allocation
     if (!gISPdev->buf_info) {
         gISPdev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
         if (!gISPdev->buf_info) {
@@ -2253,7 +2289,6 @@ static int tisp_open(struct file *file)
         }
     }
 
-    // Initialize WDR buffer info if needed
     if (!gISPdev->wdr_buf_info) {
         gISPdev->wdr_buf_info = kzalloc(sizeof(struct sensor_control_info), GFP_KERNEL);
         if (!gISPdev->wdr_buf_info) {
@@ -2265,15 +2300,71 @@ static int tisp_open(struct file *file)
     }
 
     // Set default resolution
-    gISPdev->width = 1920;   // Default width
-    gISPdev->height = 1080;  // Default height
+    gISPdev->width = 1920;
+    gISPdev->height = 1080;
 
-    // Mark the device as opened
     gISPdev->is_open = 1;
     file->private_data = gISPdev;
 
-    pr_info("Device opened successfully - waiting for buffer configuration from userspace\n");
-    pr_info("Default resolution set to %dx%d\n", gISPdev->width, gISPdev->height);
+    pr_info("Device opened successfully\n");
+    return 0;
+}
+
+// Update cleanup function to just free info structures:
+static void cleanup_buffer_info(struct IMPISPDev *dev)
+{
+    if (dev) {
+        if (dev->buf_info) {
+            // Just free the info structure - buffer is managed by IMP_Alloc
+            kfree(dev->buf_info);
+            dev->buf_info = NULL;
+        }
+
+        if (dev->wdr_buf_info) {
+            kfree(dev->wdr_buf_info);
+            dev->wdr_buf_info = NULL;
+        }
+    }
+}
+
+
+// Update setup_isp_buffers to just configure hardware:
+int setup_isp_buffers(struct IMPISPDev *dev)
+{
+    if (!dev || !dev->buf_info) {
+        pr_err("Invalid device or buffer info\n");
+        return -EINVAL;
+    }
+
+    if (!dev->buf_info->buffer_start || !dev->buf_info->buffer_size) {
+        pr_err("Buffer not initialized\n");
+        return -EINVAL;
+    }
+
+    // Calculate buffer layout using the physical address at 0x84 offset
+    const uint32_t line_size = ((dev->width + 7) >> 3) << 3;
+    const uint32_t main_size = line_size * dev->height;
+    const uint32_t second_size = main_size >> 1;
+
+    // Configure main buffer
+    system_reg_write(ISP_BUF0_REG, dev->buf_info->buffer_start);
+    system_reg_write(ISP_BUF0_SIZE_REG, line_size);
+
+    // Configure second buffer
+    system_reg_write(ISP_BUF1_REG, dev->buf_info->buffer_start + main_size);
+    system_reg_write(ISP_BUF1_SIZE_REG, line_size);
+
+    // Configure third buffer
+    const uint32_t third_line_size = ((((dev->width + 0x1f) >> 5) + 7) >> 3) << 3;
+    const uint32_t third_height = (((dev->height + 0xf) >> 4) + 1);
+
+    system_reg_write(ISP_BUF2_REG, dev->buf_info->buffer_start + main_size + second_size);
+    system_reg_write(ISP_BUF2_SIZE_REG, third_line_size);
+
+    pr_info("ISP buffers configured:\n");
+    pr_info("  Main buffer at 0x%08x\n", dev->buf_info->buffer_start);
+    pr_info("  Second buffer at 0x%08x\n", dev->buf_info->buffer_start + main_size);
+    pr_info("  Third buffer at 0x%08x\n", dev->buf_info->buffer_start + main_size + second_size);
 
     return 0;
 }
@@ -2901,73 +2992,6 @@ static int validate_isp_buffer(struct IMPISPDev *dev)
     return 0;
 }
 
-int setup_isp_buffers(struct IMPISPDev *dev)
-{
-    int ret;
-    uint32_t offset = 0;
-    void __iomem *mapped_base;
-
-    ret = validate_isp_buffer(dev);
-    if (ret) {
-        return ret;
-    }
-
-    // Map the physical memory provided by userspace
-    mapped_base = ioremap(dev->buf_info->buffer_start, dev->buf_info->buffer_size);
-    if (!mapped_base) {
-        pr_err("Failed to map buffer memory at 0x%08x\n", dev->buf_info->buffer_start);
-        return -ENOMEM;
-    }
-
-    // Calculate buffer sizes and offsets
-    uint32_t line_size = ((dev->width + 7) >> 3) << 3;  // Align to 8 bytes
-    uint32_t main_size = line_size * dev->height;
-
-    // Configure main buffer (BUF0)
-    system_reg_write(ISP_REG_BUF0, dev->buf_info->buffer_start);
-    system_reg_write(ISP_REG_BUF0_SIZE, line_size);
-    pr_info("Main buffer configured at 0x%08x, line size=%u\n",
-            dev->buf_info->buffer_start, line_size);
-    offset += main_size;
-
-    // Configure second buffer (BUF1) - half size
-    uint32_t second_size = main_size >> 1;
-    system_reg_write(ISP_REG_BUF1, dev->buf_info->buffer_start + offset);
-    system_reg_write(ISP_REG_BUF1_SIZE, line_size);
-    pr_info("Second buffer configured at 0x%08x, size=%u\n",
-            dev->buf_info->buffer_start + offset, second_size);
-    offset += second_size;
-
-    // Configure third buffer (BUF2) with specific requirements
-    uint32_t third_line_size = ((((dev->width + 0x1f) >> 5) + 7) >> 3) << 3;
-    uint32_t third_height = (((dev->height + 0xf) >> 4) + 1);
-    uint32_t third_size = third_line_size * third_height;
-
-    system_reg_write(ISP_REG_BUF2, dev->buf_info->buffer_start + offset);
-    system_reg_write(ISP_REG_BUF2_SIZE, third_line_size);
-    pr_info("Third buffer configured at 0x%08x, size=%u\n",
-            dev->buf_info->buffer_start + offset, third_size);
-
-    // Set control registers
-    system_reg_write(ISP_REG_CTRL, 0);
-    system_reg_write(ISP_REG_START, 1);
-
-    // Unmap the buffer when done with configuration
-    iounmap(mapped_base);
-
-    pr_info("ISP buffers configured successfully:\n"
-            "  Total size: %u bytes\n"
-            "  Main buffer: %u bytes at 0x%08x\n"
-            "  Second buffer: %u bytes at 0x%08x\n"
-            "  Third buffer: %u bytes at 0x%08x\n",
-            dev->buf_info->buffer_size,
-            main_size, dev->buf_info->buffer_start,
-            second_size, dev->buf_info->buffer_start + main_size,
-            third_size, dev->buf_info->buffer_start + main_size + second_size);
-
-    return 0;
-}
-
 /* Global state tracking */
 static uint32_t g_wdr_en;           /* Global WDR enable state at 0xa2ea4 */
 static uint32_t data_84b6c = 0;     /* Constant from decompiled code */
@@ -3385,49 +3409,62 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
             break;
         }
 		case 0xc0045627: {
-		    struct sensor_frame_channel {
-		        void *channel_ptr;
-		        void *control_data_ptr;
+		    struct {
+		        void *channel_ptr;      // Points to buffer info
+		        void *control_data_ptr; // Points to WDR info
 		        int status;
 		        char reserved[8];
-		    } frame_info;
+		    } frame_info = {0};  // Initialize all to 0
 
-		    printk(KERN_INFO "tx_isp: Handling ioctl 0xc0045627");
+		    pr_info("tx_isp: Handling channel setup request\n");
 
-		    // Ensure the device is valid
-		    if (!dev) {
-		        printk(KERN_ERR "tx_isp: Invalid device pointer");
+		    if (!gISPdev) {
+		        pr_err("tx_isp: Device not properly initialized\n");
 		        return -EINVAL;
 		    }
 
-		    // Check if the user-space pointer is valid
-		    if (arg == NULL) {
-		        printk(KERN_ERR "tx_isp: Received null pointer from user space");
-		        return -EFAULT;
-		    }
-
-		    // Initialize frame_info with non-null pointers
-		    memset(&frame_info, 0, sizeof(frame_info));
-
-		    if (dev->buf_info)
-		        frame_info.channel_ptr = dev->buf_info;
-		    else
-		        printk(KERN_ERR "tx_isp: buf_info is NULL");
-
-		    if (dev->wdr_buf_info)
-		        frame_info.control_data_ptr = dev->wdr_buf_info;
-		    else
-		        printk(KERN_ERR "tx_isp: wdr_buf_info is NULL");
-
+		    // Initialize the channel pointers
+		    frame_info.channel_ptr = gISPdev->buf_info;
+		    frame_info.control_data_ptr = gISPdev->wdr_buf_info;
 		    frame_info.status = 0;
+		    memset(frame_info.reserved, 0, sizeof(frame_info.reserved));
 
-		    // Copy the structure back to user space
-		    if (copy_to_user(arg, &frame_info, sizeof(frame_info)) != 0) {
-		        printk(KERN_ERR "tx_isp: Failed to copy data back to user space");
+		    pr_info("tx_isp: Channel setup info:\n");
+		    pr_info("  channel_ptr: %p\n", frame_info.channel_ptr);
+		    pr_info("  control_data_ptr: %p\n", frame_info.control_data_ptr);
+
+		    // Copy the structure to userspace
+		    if (copy_to_user((void __user *)arg, &frame_info, sizeof(frame_info))) {
+		        pr_err("tx_isp: Failed to copy frame info to userspace\n");
 		        return -EFAULT;
 		    }
 
-		    printk(KERN_INFO "tx_isp: IOCTL 0xc0045627 completed successfully");
+		    pr_info("tx_isp: Channel setup completed\n");
+		    return 0;
+		}
+		case 0x800856d7: { // Get WDR buffer requirements
+		    struct sensor_buffer_info wdr_info = {0};
+
+		    pr_info("tx_isp: Handling WDR buffer info request\n");
+
+		    if (!gISPdev || !gISPdev->wdr_mode) {
+		        pr_err("tx_isp: WDR not enabled\n");
+		        return -EINVAL;
+		    }
+
+		    // Calculate WDR buffer size
+		    uint32_t wdr_size = (gISPdev->width * gISPdev->height * 3) / 2;
+		    wdr_info.buffer_size = wdr_size;
+		    wdr_info.buffer_start = 0;  // Will be filled in by IMP_Alloc
+		    wdr_info.frame_count = 0;
+		    wdr_info.is_buffer_full = 0;
+
+		    if (copy_to_user((void __user *)arg, &wdr_info, sizeof(wdr_info))) {
+		        pr_err("tx_isp: Failed to copy WDR info to userspace\n");
+		        return -EFAULT;
+		    }
+
+		    pr_info("tx_isp: WDR buffer requirements sent: size=%u\n", wdr_size);
 		    return 0;
 		}
 
@@ -3564,120 +3601,84 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	    return 0;
 	}
 	case TX_ISP_SET_BUF: {
+	    struct sensor_buffer_info buf_info = {0};  // Initialize locally
+
 	    pr_info("tx_isp: Handling ioctl 0x800856d5 (TX_ISP_SET_BUF)\n");
 
-	    if (!gISPdev || !gISPdev->buf_info) {
-	        pr_err("tx_isp: Invalid device or buffer info\n");
+	    if (!gISPdev) {
+	        pr_err("tx_isp: Device not initialized\n");
 	        return -EINVAL;
 	    }
 
-	    // Check if userspace pointer is valid
-	    if (!arg) {
-	        pr_err("tx_isp: Invalid userspace pointer\n");
-	        return -EFAULT;
-	    }
-
-	    // Calculate minimum buffer size based on resolution
-	    uint32_t min_size = (gISPdev->width * gISPdev->height * 3) / 2;  // YUV420
-
-	    // If we don't have a buffer yet, allocate one
-	    if (!gISPdev->buf_info->buffer_start) {
-	        // Round up to page size
-	        min_size = PAGE_ALIGN(min_size);
-
-	        // Allocate DMA-able memory
-	        void *vaddr;
-	        dma_addr_t dma_handle;
-
-	        vaddr = dma_alloc_coherent(gISPdev->dev, min_size, &dma_handle, GFP_KERNEL | GFP_DMA);
-	        if (!vaddr) {
-	            pr_err("tx_isp: Failed to allocate DMA buffer\n");
+	    // Ensure buf_info structure exists
+	    if (!gISPdev->buf_info) {
+	        gISPdev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
+	        if (!gISPdev->buf_info) {
+	            pr_err("tx_isp: Failed to allocate buffer info\n");
 	            return -ENOMEM;
 	        }
-
-	        // Store the buffer info
-	        gISPdev->buf_info->buffer_start = dma_handle;
-	        gISPdev->buf_info->buffer_size = min_size;
-	        gISPdev->buf_info->frame_count = 0;
-	        gISPdev->buf_info->is_buffer_full = 0;
-
-	        pr_info("tx_isp: Allocated DMA buffer - paddr: 0x%08x, size: %d\n",
-	                (uint32_t)dma_handle, min_size);
 	    }
 
-	    // Copy our buffer info to userspace
-	    if (copy_to_user((void __user *)arg, gISPdev->buf_info,
-	                     sizeof(struct sensor_buffer_info)) != 0) {
-	        pr_err("tx_isp: Failed to copy buffer info to user space\n");
+	    // Calculate required size for YUV420
+	    uint32_t y_size = gISPdev->width * gISPdev->height;
+	    uint32_t uv_size = y_size / 2;
+	    uint32_t required_size = y_size + uv_size;
+
+	    // Fill in just the size requirement - let IMP_Alloc handle actual allocation
+	    buf_info.buffer_size = required_size;
+	    buf_info.buffer_start = 0;  // Will be filled in by IMP_Alloc
+	    buf_info.frame_count = 0;
+	    buf_info.is_buffer_full = 0;
+
+	    pr_info("tx_isp: Sending buffer requirements: size=%u\n", required_size);
+
+	    if (copy_to_user((void __user *)arg, &buf_info, sizeof(buf_info))) {
+	        pr_err("tx_isp: Failed to copy buffer info to userspace\n");
 	        return -EFAULT;
-	    }
-
-	    pr_info("tx_isp: Sent buffer info to userspace - paddr: 0x%08x, size: %d\n",
-	            gISPdev->buf_info->buffer_start, gISPdev->buf_info->buffer_size);
-
-	    // Set up ISP buffers now that we have memory
-	    int ret = setup_isp_buffers(gISPdev);
-	    if (ret != 0) {
-	        pr_err("tx_isp: Failed to set up ISP buffers: %d\n", ret);
-	        return ret;
 	    }
 
 	    return 0;
 	}
 
+	// And update handler to match
 	case VIDIOC_SET_BUF_INFO: {
-	    struct sensor_buffer_info user_buf_info;
+	    struct sensor_buffer_info user_buf_info = {0}; // Zero initialize
 
 	    pr_info("tx_isp: Handling ioctl VIDIOC_SET_BUF_INFO\n");
 
-	    if (!gISPdev || !gISPdev->buf_info) {
-	        pr_err("tx_isp: Device not properly initialized\n");
+	    if (!gISPdev) {
+	        pr_err("tx_isp: Device not initialized\n");
 	        return -EINVAL;
 	    }
 
-	    // Validate userspace pointer
-	    if (!arg) {
-	        pr_err("tx_isp: Invalid userspace pointer\n");
-	        return -EFAULT;
-	    }
-
-	    if (copy_from_user(&user_buf_info, (void __user *)arg, sizeof(user_buf_info)) != 0) {
+	    if (copy_from_user(&user_buf_info, (void __user *)arg, sizeof(user_buf_info))) {
 	        pr_err("tx_isp: Failed to copy buffer info from user\n");
 	        return -EFAULT;
 	    }
 
-	    // If we already have a buffer allocated, free it first
-	    if (gISPdev->buf_info->buffer_start) {
-	        void *vaddr = phys_to_virt(gISPdev->buf_info->buffer_start);
-	        dma_free_coherent(gISPdev->dev, gISPdev->buf_info->buffer_size,
-	                         vaddr, gISPdev->buf_info->buffer_start);
+	    pr_info("tx_isp: Received buffer info:\n");
+	    pr_info("  Method: 0x%x\n", user_buf_info.method);
+	    pr_info("  Physical addr: 0x%08x\n", user_buf_info.buffer_start);
+	    pr_info("  Virtual addr: 0x%08x\n", user_buf_info.virt_addr);
+	    pr_info("  Size: %u\n", user_buf_info.buffer_size);
+	    pr_info("  Flags: 0x%x\n", user_buf_info.flags);
+
+	    // Allocate buf_info if needed
+	    if (!gISPdev->buf_info) {
+	        gISPdev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
+	        if (!gISPdev->buf_info) {
+	            pr_err("tx_isp: Failed to allocate buffer info\n");
+	            return -ENOMEM;
+	        }
 	    }
 
-	    // Validate and store the new buffer info
-	    if (!user_buf_info.buffer_start || !user_buf_info.buffer_size) {
-	        pr_err("tx_isp: Invalid buffer parameters - addr: 0x%08x, size: %d\n",
-	               user_buf_info.buffer_start, user_buf_info.buffer_size);
-	        return -EINVAL;
-	    }
-
-	    // Calculate minimum required size
-	    uint32_t min_size = (gISPdev->width * gISPdev->height * 3) / 2;
-	    if (user_buf_info.buffer_size < min_size) {
-	        pr_err("tx_isp: Buffer too small - got %d bytes, need at least %d bytes\n",
-	               user_buf_info.buffer_size, min_size);
-	        return -EINVAL;
-	    }
-
-	    // Store the new buffer info
+	    // Copy complete structure preserving field order
 	    memcpy(gISPdev->buf_info, &user_buf_info, sizeof(struct sensor_buffer_info));
 
-	    pr_info("tx_isp: Updated buffer info - paddr: 0x%08x, size: %d\n",
-	            gISPdev->buf_info->buffer_start, gISPdev->buf_info->buffer_size);
-
-	    // Configure hardware with new buffer
+	    // Configure hardware
 	    int ret = setup_isp_buffers(gISPdev);
-	    if (ret != 0) {
-	        pr_err("tx_isp: Failed to set up ISP buffers: %d\n", ret);
+	    if (ret) {
+	        pr_err("tx_isp: Failed to setup ISP buffers: %d\n", ret);
 	        return ret;
 	    }
 
@@ -3818,6 +3819,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	    break;
 	}
 
+    case 0x800856d7:
     case 0xc0045627:
     case SENSOR_CMD_READ_ID:
 	case SENSOR_CMD_WRITE_REG:
@@ -3854,104 +3856,6 @@ static const struct file_operations isp_fops = {
     .write = tisp_write,
 };
 
-// Implementation of IMP_ISP_Open for kernel space
-//int IMP_ISP_Open(void) {
-//    int result = 0;
-//    int err;
-//
-//    // Check if gISPdev is properly allocated and initialized
-//    if (gISPdev == NULL) {
-//        pr_err("gISPdev is NULL, cannot proceed with IMP_ISP_Open\n");
-//        return -ENOMEM;  // Return an error indicating memory allocation failure
-//    }
-//    // Example of checking if the device is already open
-//    if (gISPdev->cdev.owner != NULL) {
-//        pr_warn("ISP device is already opened\n");
-//        return -EBUSY;
-//    }
-//
-//    pr_info("IMP_ISP_Open called\n");
-//
-//    // Check if device is already initialized
-//    if (gISPdev == NULL) {
-//        gISPdev = kzalloc(sizeof(IMPISPDev), GFP_KERNEL);
-//        if (gISPdev == NULL) {
-//            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
-//                        __FILE__, __func__, __LINE__,
-//                        "Failed to alloc gISPdev!\n");
-//            return -ENOMEM;
-//        }
-//
-//        // Allocate a major/minor number for the device
-//        err = alloc_chrdev_region(&tisp_dev_number, 0, 1, "tx-isp");
-//        if (err < 0) {
-//            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
-//                        __FILE__, __func__, __LINE__,
-//                        "Failed to allocate device number\n");
-//            kfree(gISPdev);
-//            gISPdev = NULL;
-//            return err;
-//        }
-//
-//        // Create device class
-//        tisp_class = class_create(THIS_MODULE, "tx-isp");
-//        if (IS_ERR(tisp_class)) {
-//            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
-//                        __FILE__, __func__, __LINE__,
-//                        "Failed to create device class\n");
-//            unregister_chrdev_region(tisp_dev_number, 1);
-//            kfree(gISPdev);
-//            gISPdev = NULL;
-//            return PTR_ERR(tisp_class);
-//        }
-//
-//        // Initialize the cdev structure
-//        cdev_init(&gISPdev->cdev, &isp_fops);
-//        gISPdev->cdev.owner = THIS_MODULE;
-//
-//        // Add the character device to the system
-//        err = cdev_add(&gISPdev->cdev, tisp_dev_number, 1);
-//        if (err) {
-//            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
-//                        __FILE__, __func__, __LINE__,
-//                        "Failed to add character device\n");
-//            class_destroy(tisp_class);
-//            unregister_chrdev_region(tisp_dev_number, 1);
-//            kfree(gISPdev);
-//            gISPdev = NULL;
-//            return err;
-//        }
-//
-//        // Create the device node in /dev
-//        tisp_device = device_create(tisp_class, NULL, tisp_dev_number, NULL, "tx-isp");
-//        if (IS_ERR(tisp_device)) {
-//            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
-//                        __FILE__, __func__, __LINE__,
-//                        "Failed to create device\n");
-//            cdev_del(&gISPdev->cdev);
-//            class_destroy(tisp_class);
-//            unregister_chrdev_region(tisp_dev_number, 1);
-//            kfree(gISPdev);
-//            gISPdev = NULL;
-//            return PTR_ERR(tisp_device);
-//        }
-//
-//        strcpy(gISPdev->dev_name, "tx-isp");
-//        gISPdev->is_open = 1;
-//        imp_log_fun(IMP_LOG_INFO, IMP_Log_Get_Option(), 2,
-//                    __FILE__, __func__, __LINE__,
-//                    "~~~~~~ %s[%d] ~~~~~~~\n", "IMP_ISP_Open", __LINE__);
-//
-//        // Detect and log CPU ID
-//        if (read_soc_info() < 0) {
-//            imp_log_fun(IMP_LOG_ERROR, IMP_Log_Get_Option(), 2,
-//                        __FILE__, __func__, __LINE__,
-//                        "Failed to detect CPU ID\n");
-//        }
-//    }
-//
-//    return result;
-//}
 
 static int32_t IMP_ISP_AddSensor(char* sensor_name)
 {
