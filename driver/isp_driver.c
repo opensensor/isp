@@ -1916,10 +1916,10 @@ enum isp_format {
 
 
 struct sensor_buffer_info {
-    void *buffer_start;     // Pointer to the start of the buffer
-    unsigned int buffer_size; // Size of the buffer
-    unsigned int frame_count; // Number of frames stored
-    int is_buffer_full;      // Flag indicating if the buffer is full
+    uint32_t buffer_start; // Physical address of the buffer (using uint32_t)
+    uint32_t buffer_size;  // Size of the buffer
+    uint32_t frame_count;  // Number of frames in the buffer
+    uint8_t is_buffer_full; // Flag indicating if the buffer is full
 };
 
 struct sensor_control_info {
@@ -2177,6 +2177,51 @@ static int isp_hw_init(struct IMPISPDev *dev)
    	return 0;
 }
 
+static int setup_buffer_info(struct IMPISPDev *dev)
+{
+    if (!dev) {
+        pr_err("Invalid device structure\n");
+        return -EINVAL;
+    }
+
+    // Allocate the buf_info structure if not already allocated
+    if (!dev->buf_info) {
+        dev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
+        if (!dev->buf_info) {
+            pr_err("Failed to allocate buffer info\n");
+            return -ENOMEM;
+        }
+    }
+
+    struct sensor_buffer_info *buf_info = dev->buf_info;
+
+    // Initialize the buffer fields if not already done
+    if (!buf_info->buffer_start) {
+		void *allocated_buf = kzalloc(4096, GFP_KERNEL);
+		if (!allocated_buf) {
+		    pr_err("Failed to allocate memory for buffer\n");
+		    return -ENOMEM;
+		}
+		buf_info->buffer_start = (uint32_t)virt_to_phys(allocated_buf); // Convert virtual to physical address
+        if (!buf_info->buffer_start) {
+            pr_err("Failed to allocate buffer data\n");
+            kfree(dev->buf_info);
+            dev->buf_info = NULL;
+            return -ENOMEM;
+        }
+        buf_info->buffer_size = 4096;
+        buf_info->frame_count = 0;
+        buf_info->is_buffer_full = 0;
+
+        pr_info("Buffer info successfully initialized\n");
+    } else {
+        pr_info("Buffer info already initialized\n");
+    }
+
+    return 0;
+}
+
+
 static int tisp_open(struct file *file)
 {
     int ret;
@@ -2203,6 +2248,13 @@ static int tisp_open(struct file *file)
     if (isp_device_interrupts_setup(gISPdev)) {
         pr_err("Failed to setup interrupts\n");
         return -EIO;
+    }
+
+    // Initialize buffer info
+    ret = setup_buffer_info(gISPdev);
+    if (ret) {
+        pr_err("Failed to set up buffer info\n");
+        return ret;
     }
 
     // Mark the device as opened
@@ -2794,132 +2846,82 @@ int setup_wdr_buffers(struct isp_device *isp, struct isp_wdr_buf_info *buf_info)
 
 
 /**
- * setup_isp_buffers - Configure ISP buffer memory regions
- * @isp: ISP device structure
+ * setup_isp_buffers - Configure ISP buffer memory regions using gISPdev
  * @buf_info: Buffer information from userspace
- *
- * Based on decompiled code at case 0x800856d4
  */
-int setup_isp_buffers(struct isp_device *isp, struct isp_buf_info *buf_info)
+int setup_isp_buffers(struct sensor_buffer_info *buf_info)
 {
-    uint32_t width, height;
-    uint32_t base_addr = buf_info->paddr;  // Changed from addr to paddr
-    uint32_t total_size = buf_info->size;
-    uint32_t offset = 0;
-    struct isp_reg_t *regs = isp->regs;
-
-    // Get width and height using helper functions
-    width = isp_get_width(regs);
-    height = isp_get_height(regs);
-
-    // Calculate main buffer size (matches decompiled logic)
-    uint32_t line_size = ((width + 7) >> 3) << 3;
-    uint32_t main_size = line_size * height;
-
-    // Verify buffer size is sufficient
-    if (total_size < main_size) {
-        pr_err("%s,%d: buf size too small\n", __func__, __LINE__);
+    if (!gISPdev || !buf_info) {
+        pr_err("Invalid ISP device or buffer info\n");
         return -EINVAL;
     }
 
-    // Setup main buffer (BUF0)
+    // Ensure that the ISP device has been properly initialized
+    if (gISPdev->width == 0 || gISPdev->height == 0) {
+        pr_err("Invalid ISP width or height\n");
+        return -EINVAL;
+    }
+
+    // Read width and height from gISPdev
+    uint32_t width = gISPdev->width;
+    uint32_t height = gISPdev->height;
+
+    // Get the base physical address and size of the buffer from the user
+    uint32_t base_addr = buf_info->buffer_start; // Physical address
+    uint32_t total_size = buf_info->buffer_size;
+    uint32_t offset = 0;
+
+    pr_info("Setting up ISP buffers: width=%d, height=%d, paddr=0x%08x, size=%u\n",
+            width, height, base_addr, total_size);
+
+    // Calculate the main buffer size
+    uint32_t line_size = ((width + 7) >> 3) << 3;  // Align to 8 bytes
+    uint32_t main_size = line_size * height;
+
+    // Validate the buffer size
+    if (total_size < main_size) {
+        pr_err("Buffer size too small for main buffer\n");
+        return -EINVAL;
+    }
+
+    // Set up main buffer (BUF0)
     system_reg_write(ISP_REG_BUF0, base_addr);
     system_reg_write(ISP_REG_BUF0_SIZE, line_size);
     offset += main_size;
+    pr_info("Configured main buffer at 0x%08x, size=%u\n", base_addr, main_size);
 
-    // Setup second buffer (BUF1)
-    // Size is main_size >> 1 in decompiled code
+    // Set up second buffer (BUF1)
     uint32_t second_size = main_size >> 1;
     if (total_size < (offset + second_size)) {
-        pr_err("%s,%d: buf size too small\n", __func__, __LINE__);
+        pr_err("Buffer size too small for second buffer\n");
         return -EINVAL;
     }
     system_reg_write(ISP_REG_BUF1, base_addr + offset);
     system_reg_write(ISP_REG_BUF1_SIZE, line_size);
     offset += second_size;
+    pr_info("Configured second buffer at 0x%08x, size=%u\n", base_addr + offset, second_size);
 
-    // Setup third buffer (BUF2)
-    // Complex size calculation from decompiled code
+    // Set up third buffer (BUF2)
     uint32_t third_line_size = ((((width + 0x1f) >> 5) + 7) >> 3) << 3;
     uint32_t third_height = (((height + 0xf) >> 4) + 1);
     uint32_t third_size = third_line_size * third_height;
 
     if (total_size < (offset + third_size)) {
-        pr_err("%s,%d: buf size too small\n", __func__, __LINE__);
+        pr_err("Buffer size too small for third buffer\n");
         return -EINVAL;
     }
     system_reg_write(ISP_REG_BUF2, base_addr + offset);
     system_reg_write(ISP_REG_BUF2_SIZE, third_line_size);
-    offset += third_size;
-
-    // Memory optimization path splitting based on isp_memopt
-    if (isp_memopt) {
-        // Simple path - just set addresses with zero sizes
-        system_reg_write(ISP_REG_BUF3, base_addr + offset);
-        system_reg_write(ISP_REG_BUF3_SIZE, 0);
-        system_reg_write(ISP_REG_BUF4, base_addr + offset);
-        system_reg_write(ISP_REG_BUF4_SIZE, 0);
-        system_reg_write(ISP_REG_BUF5, base_addr + offset);
-        system_reg_write(ISP_REG_BUF5_SIZE, 0);
-    } else {
-        // Complex path with additional buffers
-        uint32_t stat_size = third_size << 2;
-
-        // Setup statistics buffers
-        system_reg_write(ISP_REG_BUF3, base_addr + offset);
-        system_reg_write(ISP_REG_BUF3_SIZE, third_line_size);
-        offset += third_size;
-
-        system_reg_write(ISP_REG_BUF4, base_addr + offset);
-        system_reg_write(ISP_REG_BUF4_SIZE, third_line_size);
-        offset += third_size;
-
-        system_reg_write(ISP_REG_BUF5, base_addr + offset);
-        system_reg_write(ISP_REG_BUF5_SIZE, third_line_size);
-        offset += third_size;
-
-        // Setup additional scaled buffers
-        uint32_t scaled_line_size = ((((width >> 1) + 7) >> 3) << 3);
-        uint32_t scaled_size = scaled_line_size * height;
-
-        if (total_size < (offset + scaled_size)) {
-            pr_err("%s,%d: buf size too small\n", __func__, __LINE__);
-            return -EINVAL;
-        }
-
-        system_reg_write(ISP_REG_BUF6, base_addr + offset);
-        system_reg_write(ISP_REG_BUF6_SIZE, scaled_line_size);
-        offset += scaled_size;
-
-        uint32_t half_scaled_size = scaled_size >> 1;
-        if (total_size < (offset + half_scaled_size)) {
-            pr_err("%s,%d: buf size too small\n", __func__, __LINE__);
-            return -EINVAL;
-        }
-
-        system_reg_write(ISP_REG_BUF7, base_addr + offset);
-        system_reg_write(ISP_REG_BUF7_SIZE, scaled_line_size);
-        offset += half_scaled_size;
-
-        // Final small buffer
-        uint32_t tiny_line_size = ((((width >> 5) + 7) >> 3) << 3);
-        uint32_t tiny_size = (tiny_line_size * height) >> 5;
-
-        if (total_size < (offset + tiny_size)) {
-            pr_err("%s,%d: buf size too small\n", __func__, __LINE__);
-            return -EINVAL;
-        }
-
-        system_reg_write(ISP_REG_BUF8, base_addr + offset);
-        system_reg_write(ISP_REG_BUF8_SIZE, tiny_line_size);
-    }
+    pr_info("Configured third buffer at 0x%08x, size=%u\n", base_addr + offset, third_size);
 
     // Final control registers (matching decompiled code)
     system_reg_write(ISP_REG_CTRL, 0);
     system_reg_write(ISP_REG_START, 1);
+    pr_info("ISP buffers successfully set up\n");
 
     return 0;
 }
+
 
 //static long tx_isp_unlocked_ioctl(void *priv, unsigned int cmd, void __user *arg)
 //{
@@ -3632,7 +3634,41 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	    pr_info("tx_isp: IOCTL 0x800856d5 completed successfully\n");
 	    return 0;
 	}
+	case VIDIOC_SET_BUF_INFO: {
+	    struct isp_buf_info user_buf_info;
 
+	    pr_info("tx_isp: Handling ioctl 0x800856d4 (TX_ISP_SET_BUF_INFO)\n");
+
+	    if (!gISPdev) {
+	        pr_err("tx_isp: Invalid device\n");
+	        return -EINVAL;
+	    }
+
+	    // Copy the buffer info from userspace
+	    if (copy_from_user(&user_buf_info, (void __user *)arg, sizeof(struct isp_buf_info)) != 0) {
+	        pr_err("tx_isp: Failed to copy buffer info from user space\n");
+	        return -EFAULT;
+	    }
+
+	    pr_info("tx_isp: Received buffer info - paddr: 0x%08x, size: %u\n",
+	            user_buf_info.paddr, user_buf_info.size);
+
+	    // Validate the buffer information
+	    if (user_buf_info.paddr == 0 || user_buf_info.size == 0) {
+	        pr_err("tx_isp: Invalid buffer address or size\n");
+	        return -EINVAL;
+	    }
+
+	    // Call setup_isp_buffers to configure the hardware
+	    int ret = setup_isp_buffers(&user_buf_info);
+	    if (ret) {
+	        pr_err("tx_isp: Failed to set up ISP buffers\n");
+	        return ret;
+	    }
+
+	    pr_info("tx_isp: IOCTL 0x800856d4 completed successfully\n");
+	    return 0;
+	}
     case TX_ISP_VIDEO_LINK_SETUP: {
       	pr_info("TX_ISP_VIDEO_LINK_SETUP\n");
         unsigned int link;
