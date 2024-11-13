@@ -143,16 +143,16 @@ struct isp_rotation_params {
 #define ISP_BASE            0x13300000
 
 // Buffer control registers
-#define ISP_BUF0_REG       (ISP_BASE + 0x1000)
-#define ISP_BUF0_SIZE_REG  (ISP_BASE + 0x1004)
 #define ISP_BUF1_REG       (ISP_BASE + 0x1008)
 #define ISP_BUF1_SIZE_REG  (ISP_BASE + 0x100C)
 #define ISP_BUF2_REG       (ISP_BASE + 0x1010)
 #define ISP_BUF2_SIZE_REG  (ISP_BASE + 0x1014)
 
 // Control registers
-#define ISP_CTRL_REG       (ISP_BASE + 0x1100)
-#define ISP_START_REG      (ISP_BASE + 0x1104)
+#define ISP_CTRL_REG       0x0100  // Changed from 0x100
+#define ISP_INIT_OFFSET    0x0118  // Aligned offset
+#define ISP_BUF0_REG       0x1000
+#define ISP_BUF0_SIZE_REG  0x1004
 #define SENSOR_NAME_SIZE 80
 #define PADDING_SIZE_1 0x24
 #define PADDING_SIZE_2 0x24
@@ -441,16 +441,22 @@ struct irq_info
     int32_t irq_type;  // IRQ type or identifier
 };
 
-struct ClockConfig
-{
-    const char *clock_name;  // Change to const char* to hold the clock name
-    int32_t clock_rate;      // Clock rate
+struct ClockConfig {
+    const char *field_00;     // Clock name
+    int32_t field_04;         // Clock rate
 };
 
+// Define default clock configurations
 static struct ClockConfig isp_clocks[] = {
-    { .clock_name = "isp", .clock_rate = 125000000 },   // Set ISP clock to 125 MHz
+    {
+        .field_00 = "isp",         // Main /proc/jz/clock/isp entry
+        .field_04 = 250000000
+    },
+    {
+        .field_00 = "cgu_isp",     // /proc/jz/clock/cgu_isp entry
+        .field_04 = 250000000
+    }
 };
-static const int num_clocks = ARRAY_SIZE(isp_clocks);
 
 
 struct IspDevice
@@ -2359,43 +2365,72 @@ static inline int isp_reg_write(struct IMPISPDev *dev, uint32_t offset, uint32_t
 static int setup_frame_source(struct IMPISPDev *dev)
 {
     struct isp_framesource_state *fs;
-    uint32_t line_width;
-    uint32_t frame_size;
+    uint32_t line_width, frame_size;
+    void __iomem *regs;
 
-    if (!dev || !dev->fs_info || !dev->buf_info) {
-        pr_err("Invalid device state for frame source setup\n");
+    if (!dev || !dev->fs_info) {
+        pr_err("Invalid device state\n");
         return -EINVAL;
     }
 
     fs = dev->fs_info;
+    regs = dev->regs;
 
-    // Validate memory setup
-    if (!dev->dma_buf || !dev->dma_addr) {
-        pr_err("DMA buffer not properly initialized\n");
-        return -ENOMEM;
-    }
-
-    // Calculate buffer sizes
-    line_width = ((fs->width + 7) >> 3) << 3;
-    frame_size = line_width * fs->height;
-
-    // Configure hardware registers
-    if (!dev->regs) {
-        pr_err("Hardware registers not mapped\n");
+    if (!regs) {
+        pr_err("No register mapping\n");
         return -EINVAL;
     }
 
-    writel(dev->dma_addr, dev->regs + ISP_BUF0_REG);
-    writel(line_width, dev->regs + ISP_BUF0_SIZE_REG);
-    writel(dev->dma_addr + frame_size, dev->regs + ISP_BUF1_REG);
-    writel(line_width, dev->regs + ISP_BUF1_SIZE_REG);
+    pr_info("Using register base: %p\n", regs);
 
-    // Configure third buffer
+    // Calculate sizes for buffer setup
+    line_width = ((fs->width + 7) >> 3) << 3;
+    frame_size = line_width * fs->height;
+
+    // Get current buffer info from libimp
+    if (!dev->buf_info) {
+        pr_err("No buffer info available\n");
+        return -EINVAL;
+    }
+
+    pr_info("Using libimp buffer: phys=0x%08x virt=0x%08x size=%u\n",
+            dev->buf_info->buffer_start,
+            dev->buf_info->virt_addr,
+            dev->buf_info->buffer_size);
+
+    // Write buffer configuration with barriers between writes
+    writel(dev->buf_info->buffer_start, regs + 0x1000);
+    wmb();
+    writel(line_width, regs + 0x1004);
+    wmb();
+    writel(dev->buf_info->buffer_start + frame_size, regs + 0x1008);
+    wmb();
+    writel(line_width, regs + 0x100C);
+    wmb();
+
+    // Third buffer with special alignment
     uint32_t third_line_size = ((((fs->width + 0x1f) >> 5) + 7) >> 3) << 3;
-    writel(dev->dma_addr + (frame_size * 2), dev->regs + ISP_BUF2_REG);
-    writel(third_line_size, dev->regs + ISP_BUF2_SIZE_REG);
+    writel(dev->buf_info->buffer_start + (frame_size * 2), regs + 0x1010);
+    wmb();
+    writel(third_line_size, regs + 0x1014);
+    wmb();
 
-    fs->state = 1; // Mark as ready
+    // Verify every write
+    pr_info("Register verification:\n");
+    pr_info("  BUF0: wrote 0x%08x read 0x%08x\n",
+            dev->buf_info->buffer_start, readl(regs + 0x1000));
+    pr_info("  SIZE0: wrote 0x%08x read 0x%08x\n",
+            line_width, readl(regs + 0x1004));
+    pr_info("  BUF1: wrote 0x%08x read 0x%08x\n",
+            dev->buf_info->buffer_start + frame_size, readl(regs + 0x1008));
+    pr_info("  SIZE1: wrote 0x%08x read 0x%08x\n",
+            line_width, readl(regs + 0x100C));
+    pr_info("  BUF2: wrote 0x%08x read 0x%08x\n",
+            dev->buf_info->buffer_start + (frame_size * 2), readl(regs + 0x1010));
+    pr_info("  SIZE2: wrote 0x%08x read 0x%08x\n",
+            third_line_size, readl(regs + 0x1014));
+
+    fs->state = 1;
     return 0;
 }
 
@@ -3069,8 +3104,27 @@ struct isp_wdr_buf_size {
 
 
 // Register definitions from the decompiled code
-#define ISP_REG_BASE       0x13300000
+// Update these defines to match binary expectations
+#define ISP_REG_BASE       0x13300000    // Physical base address
 #define ISP_REG_SIZE       0x1000
+
+// Control registers block
+#define ISP_CTRL_OFFSET    0x0100
+#define ISP_STAT_OFFSET    0x0104
+#define ISP_INIT_OFFSET    0x0118
+
+// Buffer registers block - notice offset from base
+#define ISP_BUF_BASE       0x1000        // Buffer block offset
+#define ISP_BUF0_REG       (ISP_BUF_BASE + 0x00)  // Buffer 0 address
+#define ISP_BUF0_SIZE_REG  (ISP_BUF_BASE + 0x04)  // Buffer 0 size
+#define ISP_BUF1_REG       (ISP_BUF_BASE + 0x08)  // Buffer 1 address
+#define ISP_BUF1_SIZE_REG  (ISP_BUF_BASE + 0x0C)  // Buffer 1 size
+#define ISP_BUF2_REG       (ISP_BUF_BASE + 0x10)  // Buffer 2 address
+#define ISP_BUF2_SIZE_REG  (ISP_BUF_BASE + 0x14)  // Buffer 2 size
+
+// Configuration register block
+#define ISP_CFG_OFFSET     0x2000
+#define ISP_WDR_OFFSET     0x2100
 #define ISP_REG_BUF0     (ISP_REG_BASE + 0x20)  // 0x7820
 #define ISP_REG_BUF0_SIZE (ISP_REG_BASE + 0x24)  // 0x7824
 #define ISP_REG_BUF1     (ISP_REG_BASE + 0x28)  // 0x7828
@@ -3696,42 +3750,19 @@ static int validate_streaming_setup(struct IMPISPDev *dev)
 
 
 
-static int init_isp_registers(struct IMPISPDev *dev)
+static int test_isp_registers(struct IMPISPDev *dev)
 {
-    void __iomem *base;
-
-    pr_info("Initializing ISP registers\n");
-
-    // Map ISP registers if not already mapped
-    if (!dev->regs) {
-        base = ioremap(ISP_REG_BASE, ISP_REG_SIZE);
-        if (!base) {
-            pr_err("Failed to map ISP registers\n");
-            return -ENOMEM;
-        }
-        dev->regs = base;
+    if (!dev || !dev->regs) {
+        pr_err("No register mapping\n");
+        return -EINVAL;
     }
 
-    // Print register mappings for debug
-    pr_info("Register mappings:\n");
-    pr_info("  Base: %p\n", dev->regs);
-    pr_info("  CTRL: %p\n", dev->regs + ISP_CTRL_REG);
-    pr_info("  BUF0: %p\n", dev->regs + ISP_BUF0_REG);
+    pr_info("Using ISP register mapping:\n");
+    pr_info("  Virtual base: %p\n", dev->regs);
 
-    // Initialize control registers
-    writel(0x0, dev->regs + ISP_CTRL_REG);  // Reset control
-    writel(0x1, dev->regs + ISP_INIT_OFFSET); // Initialize
-    mb(); // Memory barrier for 3.10
-
-    // Configure DMA addresses if available
-    if (dev->dma_addr) {
-        writel(dev->dma_addr, dev->regs + ISP_BUF0_REG);
-        writel(dev->dma_addr + dev->dma_size/2, dev->regs + ISP_BUF1_REG);
-        mb();
-        pr_info("DMA buffers configured:\n");
-        pr_info("  Buffer 0: 0x%08x\n", (uint32_t)dev->dma_addr);
-        pr_info("  Buffer 1: 0x%08x\n", (uint32_t)(dev->dma_addr + dev->dma_size/2));
-    }
+    // Try a test read
+    u32 test_val = readl(dev->regs + ISP_CTRL_REG);
+    pr_info("Test register read: 0x%08x\n", test_val);
 
     return 0;
 }
@@ -3739,52 +3770,57 @@ static int init_isp_registers(struct IMPISPDev *dev)
 static int start_streaming(struct IMPISPDev *dev)
 {
     int ret;
-    pr_info("Starting streaming...\n");
+    void __iomem *regs;
 
-    // Validate device and registers
     if (!dev || !dev->regs) {
-        pr_err("Invalid device state or registers not mapped\n");
+        pr_err("Invalid device or registers\n");
         return -EINVAL;
     }
 
-    // Print register base for debugging
-    pr_info("Register base: %p\n", dev->regs);
+    regs = dev->regs;
 
-    // Verify register mapping
-    if (!dev->regs) {
-        ret = init_isp_registers(dev);
-        if (ret) {
-            pr_err("Failed to initialize ISP registers\n");
-            return ret;
-        }
-    }
+    // Read initial states
+    pr_info("Initial register states:\n");
+    pr_info("  CTRL: 0x%08x\n", readl(regs + ISP_CTRL_REG));
+    pr_info("  BUF0: 0x%08x\n", readl(regs + 0x1000));
+    pr_info("  SIZE0: 0x%08x\n", readl(regs + 0x1004));
 
-    // Setup frame source with proper error handling
-    ret = setup_frame_source(dev);
-    if (ret) {
-        pr_err("Failed to setup frame source: %d\n", ret);
-        return ret;
-    }
-
-    // Start sensor first
+    // Setup sensor first
     ret = sensor_setup_streaming(dev);
     if (ret) {
-        pr_err("Failed to setup sensor streaming: %d\n", ret);
+        pr_err("Failed to setup sensor streaming\n");
         return ret;
     }
 
-    // Carefully enable ISP streaming with proper offsets
-    writel(0x0, dev->regs + ISP_CTRL_REG);  // Reset first
-    mdelay(1);  // Small delay
-    writel(0x1, dev->regs + ISP_CTRL_REG);  // Then enable
-    mb();  // Memory barrier for 3.10
+    // Then frame source
+    ret = setup_frame_source(dev);
+    if (ret) {
+        pr_err("Failed to setup frame source\n");
+        return ret;
+    }
 
-    // Update state after successful streaming start
+    // Reset then enable streaming
+    writel(0x0, regs + ISP_CTRL_REG);
+    wmb();
+    mdelay(1);
+
+    writel(0x1, regs + ISP_CTRL_REG);
+    wmb();
+
+    // Verify streaming enabled
+    uint32_t ctrl = readl(regs + ISP_CTRL_REG);
+    pr_info("Control register after enable: 0x%08x\n", ctrl);
+
+    if (!(ctrl & 0x1)) {
+        pr_err("Failed to enable streaming - control reg: 0x%08x\n", ctrl);
+        return -EIO;
+    }
+
+    // Update state
     dev->is_open += 2;
     if (dev->fs_info)
         dev->fs_info->state = 2;
 
-    pr_info("Streaming started successfully\n");
     return 0;
 }
 
@@ -4805,86 +4841,116 @@ int tiziano_load_parameters(const char *filename, void __iomem *dest, size_t off
     return ret;
 }
 
-static int configure_isp_clock(struct device *dev) {
-    struct clk *isp_clk, *div_clk;
-    unsigned long target_rate = 125000000; // 125 MHz
-    unsigned long actual_rate;
+static int configure_isp_clocks(struct IMPISPDev *dev)
+{
+    struct clk **clk_array;
+    int i, ret = 0;
+    unsigned long rate;
+    size_t num_clocks = ARRAY_SIZE(isp_clocks);
 
-    // Step 1: Get the ISP clock
-    isp_clk = clk_get(dev, "isp");
-    if (IS_ERR(isp_clk)) {
-        dev_err(dev, "Failed to get ISP clock\n");
-        return PTR_ERR(isp_clk);
-    }
+    pr_info("Configuring ISP clocks...\n");
 
-    // Step 2: Get the divider clock for ISP
-    div_clk = clk_get(dev, "cgu_isp");
-    if (IS_ERR(div_clk)) {
-        dev_err(dev, "Failed to get ISP divider clock\n");
-        clk_put(isp_clk);
-        return PTR_ERR(div_clk);
-    }
-
-    // Step 3: Enable the ISP clock gate
-    if (clk_prepare_enable(isp_clk)) {
-        dev_err(dev, "Failed to enable ISP clock gate\n");
-        clk_put(isp_clk);
-        clk_put(div_clk);
+    // Validate input
+    if (!dev || !dev->dev) {
+        pr_err("Invalid device structure\n");
         return -EINVAL;
     }
 
-    // Step 4: Set the divider rate (if supported)
-    if (clk_set_rate(div_clk, target_rate)) {
-        dev_err(dev, "Failed to set ISP divider rate to %lu\n", target_rate);
-        clk_disable_unprepare(isp_clk);
-        clk_put(isp_clk);
-        clk_put(div_clk);
-        return -EINVAL;
+    // Debug prints to verify device structure
+    pr_info("Device structure: %p, dev->dev: %p\n", dev, dev->dev);
+
+    // Allocate array for clock pointers
+    clk_array = devm_kzalloc(dev->dev, sizeof(struct clk *) * num_clocks, GFP_KERNEL);
+    if (!clk_array) {
+        pr_err("Failed to allocate clock array\n");
+        return -ENOMEM;
     }
 
-    // Step 5: Set the ISP clock rate directly
-    if (clk_set_rate(isp_clk, target_rate)) {
-        dev_warn(dev, "Failed to set ISP clock rate to %lu Hz, trying alternative method\n", target_rate);
-
-        // Try to read the current rate
-        unsigned long current_rate = clk_get_rate(isp_clk);
-        dev_info(dev, "Current ISP clock rate: %lu Hz\n", current_rate);
-
-        // Try setting the parent clock rate if available
-        struct clk *parent = clk_get_parent(isp_clk);
-        if (parent) {
-            if (clk_set_rate(parent, target_rate)) {
-                dev_err(dev, "Failed to set parent clock rate to %lu Hz\n", target_rate);
-            } else {
-                dev_info(dev, "Successfully set parent clock rate to %lu Hz\n", target_rate);
-            }
-        } else {
-            dev_warn(dev, "No parent clock found for ISP clock\n");
+    // Get and configure each clock - with additional error checking
+    for (i = 0; i < num_clocks; i++) {
+        if (!isp_clocks[i].field_00) {
+            pr_err("Invalid clock name at index %d\n", i);
+            ret = -EINVAL;
+            goto cleanup;
         }
 
-        // Check if the rate was set correctly
-        current_rate = clk_get_rate(isp_clk);
-        if (current_rate != target_rate) {
-            dev_warn(dev, "ISP clock rate mismatch: wanted %lu Hz, got %lu Hz\n", target_rate, current_rate);
-        } else {
-            dev_info(dev, "ISP clock successfully set to %lu Hz\n", current_rate);
-            return 0;
+        pr_debug("Getting clock: %s\n", isp_clocks[i].field_00);
+
+        // Try to get the clock
+        clk_array[i] = devm_clk_get(dev->dev, isp_clocks[i].field_00);
+        if (IS_ERR_OR_NULL(clk_array[i])) {
+            ret = PTR_ERR(clk_array[i]) ?: -EINVAL;
+            pr_err("Failed to get %s clock: %d\n",
+                   isp_clocks[i].field_00, ret);
+            goto cleanup;
         }
 
-        // If we couldn't set the exact rate, continue with the current rate
-        dev_warn(dev, "Continuing with current ISP clock rate: %lu Hz\n", current_rate);
-        return 0;
-    }
+        // Enable the clock first
+        ret = clk_prepare_enable(clk_array[i]);
+        if (ret) {
+            pr_err("Failed to enable %s clock\n", isp_clocks[i].field_00);
+            goto cleanup;
+        }
 
-    // Step 6: Verify the clock rate
-    actual_rate = clk_get_rate(isp_clk);
-    if (actual_rate != target_rate) {
-        dev_warn(dev, "ISP clock rate mismatch: set %lu, got %lu\n", target_rate, actual_rate);
-    } else {
-        dev_info(dev, "ISP clock successfully set to %lu Hz\n", actual_rate);
-    }
+        // Only try to set rate if specified
+	    for (i = 0; i < ARRAY_SIZE(isp_clocks); i++) {
+	        if (!clk_array[i]) {
+	            pr_err("Clock %s not found\n", isp_clocks[i].field_00);
+	            continue;
+	        }
+
+	        // Only try to set rate if specified and not the default
+	        if (isp_clocks[i].field_04 != 0xFFFF) {
+	            // For older kernels, use the specified rate directly
+	            rate = isp_clocks[i].field_04;
+	            ret = clk_set_rate(clk_array[i], rate);
+	            if (ret) {
+	                pr_err("Failed to set %s clock rate to %lu Hz\n",
+	                       isp_clocks[i].field_00, rate);
+	                continue;
+	            }
+	        }
+
+	        // Log the configured rate, even if it wasn't set explicitly
+	        pr_info("Clock %s configured at %lu Hz\n",
+	                isp_clocks[i].field_00, clk_get_rate(clk_array[i]));
+	    }
+	}
+
+    // Store clocks in device structure
+    dev->clocks = clk_array;
+    dev->num_clocks = num_clocks;
 
     return 0;
+
+cleanup:
+    while (--i >= 0) {
+        if (!IS_ERR_OR_NULL(clk_array[i])) {
+            clk_disable_unprepare(clk_array[i]);
+            devm_clk_put(dev->dev, clk_array[i]);
+        }
+    }
+    devm_kfree(dev->dev, clk_array);
+    return ret;
+}
+
+static void cleanup_isp_clocks(struct IMPISPDev *dev)
+{
+    int i;
+
+    if (!dev || !dev->clocks)
+        return;
+
+    for (i = 0; i < dev->num_clocks; i++) {
+        if (!IS_ERR_OR_NULL(dev->clocks[i])) {
+            clk_disable_unprepare(dev->clocks[i]);
+            devm_clk_put(dev->dev, dev->clocks[i]);
+        }
+    }
+
+    kfree(dev->clocks);
+    dev->clocks = NULL;
+    dev->num_clocks = 0;
 }
 
 // Update the tisp_init function to properly handle register access
@@ -4945,9 +5011,6 @@ static int tisp_init(struct device *dev)
     // Step 4: Write the parameters to hardware registers using global gISPdev->regs
     writel((unsigned long)tparams_day, gISPdev->regs + 0x84b50);
     dev_info(dev, "tparams_day written to register successfully\n");
-
-
-   	// configure_isp_clock(dev);
 
     return 0;
 
@@ -5093,13 +5156,39 @@ static int tisp_probe(struct platform_device *pdev)
     int ret, i;
 
     pr_info("Probing TISP device...\n");
-    pr_info("In tisp_probe, gISPdev is %p\n", gISPdev);
 
-    // Map registers
+    // Validate gISPdev
+    if (!gISPdev) {
+        dev_err(&pdev->dev, "Global ISP device structure not allocated\n");
+        return -ENOMEM;
+    }
+
+    // Initialize device structure properly
+    gISPdev->dev = &pdev->dev;
+    if (!gISPdev->dev) {
+        dev_err(&pdev->dev, "Failed to set device pointer\n");
+        return -EINVAL;
+    }
+
+    // Set driver data
+    platform_set_drvdata(pdev, gISPdev);
+
+    // Map registers first
     base = map_isp_registers(pdev);
     if (IS_ERR(base)) {
         dev_err(&pdev->dev, "Failed to map ISP registers\n");
         return PTR_ERR(base);
+    }
+
+    // Set reg_base in global gISPdev
+    gISPdev->regs = base;
+    pr_info("Set gISPdev->regs to %p\n", gISPdev->regs);
+
+    // Now configure clocks with proper error handling
+    ret = configure_isp_clocks(gISPdev);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
+        goto err_unmap_regs;
     }
 
     // Use the global gISPdev instead of creating a local one
@@ -5108,9 +5197,6 @@ static int tisp_probe(struct platform_device *pdev)
         return -ENOMEM;
     }
 
-    // Set reg_base in global gISPdev
-    gISPdev->regs = base;
-    pr_info("Set gISPdev->regs to %p\n", gISPdev->regs);
     gISPdev->dev = &pdev->dev;
     platform_set_drvdata(pdev, gISPdev);
 
@@ -5199,20 +5285,9 @@ err_free_memory:
     }
     return ret;
 err_unregister_devices:
-  	// Clean up clocks if they were initialized
-	struct clk **clocksArray = platform_get_drvdata(pdev);
-	if (clocksArray) {
-    	for (int i = 0; i < ARRAY_SIZE(isp_clocks); i++) {
-    	    if (clocksArray[i])
-    	        clk_disable_unprepare(clocksArray[i]);
-    	    clk_put(clocksArray[i]);
-    	}
-    	kfree(clocksArray);
-	}
-    for (i = 0; i < registered_count; i++) {
-        if (graph_data->devices[i])
-            platform_device_unregister(graph_data->devices[i]);
-    }
+err_unmap_regs:
+    if (gISPdev->regs)
+        iounmap(gISPdev->regs);
     remove_isp_proc_entries();
 free_graph:
     kfree(graph_data->devices);
@@ -5231,20 +5306,12 @@ static int tisp_remove(struct platform_device *pdev) {
     pr_info("ISP device remove called\n");
 
     if (dev) {
+
         // Clean up memory first
         cleanup_isp_memory(dev);
 
         // Clean up device clocks
-        if (dev->clocks) {
-            int i;
-            for (i = 0; i < dev->num_clocks; i++) {
-                if (dev->clocks[i]) {
-                    clk_disable_unprepare(dev->clocks[i]);
-                    clk_put(dev->clocks[i]);
-                }
-            }
-            kfree(dev->clocks);
-        }
+		cleanup_isp_clocks(gISPdev);
 
         // Clean up I2C
         if (dev->sensor_i2c_client) {
