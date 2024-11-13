@@ -75,6 +75,9 @@ static struct isp_mem_region isp_mem = {0};
 #define SUBREMARK_ADDR       0x13540231
 
 #define VIDIOC_GET_SENSOR_ENUMERATION 0xc050561a
+#define VIDIOC_GET_SENSOR_INFO 0x40045626
+#define VIDIOC_ENABLE_STREAM 0x800456d2
+
 
 // Log level definitions
 #define IMP_LOG_ERROR   6
@@ -3309,7 +3312,7 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
                 ret = isp_sensor_write_reg(client, 0x3502, (exp & 0x0F) << 4);
             break;
         }
-				case 0xc0045627: {
+		case 0xc0045627: {
 		    struct {
 		        void *channel_ptr;      // Points to buffer info
 		        void *control_data_ptr; // Points to WDR info
@@ -3424,7 +3427,6 @@ struct sensor_list_info {
 
 // Add at the top of the file with other definitions
 #define RMEM_START  0x2A80000          // Starting address of the reserved memory region
-#define RMEM_TOTAL_SIZE   (22016 * 1024) // Total size of reserved memory: 22,016 KB (22 MB)
 #define DRIVER_RESERVED_SIZE (4 * 1024 * 1024) // Size reserved for our driver: 4MB
 
 struct isp_buffer_info {
@@ -3461,38 +3463,6 @@ static int isp_init_reserved_memory(struct device *dev) {
     return 0;
 }
 
-// Validate buffer parameters
-static int validate_buffer_info(struct isp_buffer_info *buf_info) {
-    // Basic pointer validation
-    if (!buf_info) {
-        pr_err("tx_isp: Null buffer info\n");
-        return -EINVAL;
-    }
-
-    // Check if the buffer is within our reserved memory range
-    if (buf_info->buffer_start < RMEM_START ||
-        buf_info->buffer_start >= (RMEM_START + RMEM_TOTAL_SIZE)) {
-        pr_err("tx_isp: Buffer address 0x%08x outside reserved range [0x%08x-0x%08x]\n",
-               buf_info->buffer_start, RMEM_START, RMEM_START + RMEM_TOTAL_SIZE);
-        return -EINVAL;
-    }
-
-    // Verify size doesn't exceed our reserved memory
-    if (buf_info->buffer_size > DRIVER_RESERVED_SIZE) {
-        pr_err("tx_isp: Buffer size %u exceeds maximum %u\n",
-               buf_info->buffer_size, DRIVER_RESERVED_SIZE);
-        return -EINVAL;
-    }
-
-    // Check alignment
-    if (!IS_ALIGNED(buf_info->buffer_start, PAGE_SIZE)) {
-        pr_err("tx_isp: Buffer address not page aligned: 0x%08x\n",
-               buf_info->buffer_start);
-        return -EINVAL;
-    }
-
-    return 0;
-}
 // Add these constants at the top of the file
 #define ISP_MAGIC_REQUEST   0x1        // Magic value for allocation request
 #define ISP_MAGIC_METHOD    0x1        // Expected method value
@@ -3502,40 +3472,40 @@ static int validate_buffer_info(struct isp_buffer_info *buf_info) {
 // Hardware configuration function remains the same
 
 // Hardware configuration function
-static int configure_isp_hardware_buffer(struct IMPISPDev *dev)
-{
-    if (!dev || !dev->buf_info || !dev->buf_info->buffer_start) {
-        pr_err("tx_isp: Invalid buffer configuration\n");
-        return -EINVAL;
-    }
-
-    const uint32_t line_size = ((dev->width + 7) >> 3) << 3;
-    const uint32_t main_size = line_size * dev->height;
-    const uint32_t second_size = main_size >> 1;
-
-    pr_info("tx_isp: Configuring hardware buffers:\n");
-    pr_info("  Base address: 0x%08x\n", dev->buf_info->buffer_start);
-    pr_info("  Line size: %u\n", line_size);
-    pr_info("  Main size: %u\n", main_size);
-
-    // Verify buffer size
-    if (dev->buf_info->buffer_size < (main_size + second_size)) {
-        pr_err("tx_isp: Buffer too small for configuration\n");
-        return -EINVAL;
-    }
-
-    system_reg_write(ISP_BUF0_REG, dev->buf_info->buffer_start);
-    system_reg_write(ISP_BUF0_SIZE_REG, line_size);
-
-    system_reg_write(ISP_BUF1_REG, dev->buf_info->buffer_start + main_size);
-    system_reg_write(ISP_BUF1_SIZE_REG, line_size);
-
-    const uint32_t third_line_size = ((((dev->width + 0x1f) >> 5) + 7) >> 3) << 3;
-    system_reg_write(ISP_BUF2_REG, dev->buf_info->buffer_start + main_size + second_size);
-    system_reg_write(ISP_BUF2_SIZE_REG, third_line_size);
-
-    return 0;
-}
+//static int configure_isp_hardware_buffer(struct IMPISPDev *dev)
+//{
+//    if (!dev || !dev->buf_info || !dev->buf_info->buffer_start) {
+//        pr_err("tx_isp: Invalid buffer configuration\n");
+//        return -EINVAL;
+//    }
+//
+//    const uint32_t line_size = ((dev->width + 7) >> 3) << 3;
+//    const uint32_t main_size = line_size * dev->height;
+//    const uint32_t second_size = main_size >> 1;
+//
+//    pr_info("tx_isp: Configuring hardware buffers:\n");
+//    pr_info("  Base address: 0x%08x\n", dev->buf_info->buffer_start);
+//    pr_info("  Line size: %u\n", line_size);
+//    pr_info("  Main size: %u\n", main_size);
+//
+//    // Verify buffer size
+//    if (dev->buf_info->buffer_size < (main_size + second_size)) {
+//        pr_err("tx_isp: Buffer too small for configuration\n");
+//        return -EINVAL;
+//    }
+//
+//    system_reg_write(ISP_BUF0_REG, dev->buf_info->buffer_start);
+//    system_reg_write(ISP_BUF0_SIZE_REG, line_size);
+//
+//    system_reg_write(ISP_BUF1_REG, dev->buf_info->buffer_start + main_size);
+//    system_reg_write(ISP_BUF1_SIZE_REG, line_size);
+//
+//    const uint32_t third_line_size = ((((dev->width + 0x1f) >> 5) + 7) >> 3) << 3;
+//    system_reg_write(ISP_BUF2_REG, dev->buf_info->buffer_start + main_size + second_size);
+//    system_reg_write(ISP_BUF2_SIZE_REG, third_line_size);
+//
+//    return 0;
+//}
 
 // Add these defines at the top
 #define ISP_ALLOC_FAILED    0
@@ -3808,6 +3778,14 @@ static void cleanup_isp_memory(void)
     }
 }
 
+
+struct isp_sensor_info {
+    int is_initialized;
+    int chip_id;
+    int width;
+    int height;
+};
+
 /**
  * isp_driver_ioctl - IOCTL handler for ISP driver
  * @file: File structure
@@ -3832,88 +3810,58 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
     switch (cmd) {
 	case VIDIOC_REGISTER_SENSOR: {
-		char sensor_name[80];  // Match size with IMPISPDev sensor_name
-		struct isp_i2c_board_info board_info = {0};
-		struct i2c_adapter *adapter;
-		struct i2c_client *client;
-		struct clk *isp_clk;
+	    char sensor_name[80];
+	    struct isp_i2c_board_info board_info = {0};
+	    struct i2c_adapter *adapter;
+	    struct i2c_client *client;
+	    int ret;
 
-		if (!gISPdev || !gISPdev->is_open) {
-		    dev_err(gISPdev->dev, "ISP device not initialized or not open\n");
-		    return -EINVAL;
-		}
+	    if (!gISPdev || !gISPdev->is_open) {
+	        dev_err(gISPdev->dev, "ISP device not initialized or not open\n");
+	        return -EINVAL;
+	    }
 
-//        // Get the ISP clock handle just before adding the sensor
-//	    isp_clk = clk_get(gISPdev->dev, "isp");
-//	    if (IS_ERR(isp_clk)) {
-//	        pr_err("Failed to get clock: isp\n");
-//	        return PTR_ERR(isp_clk);
-//	    }
-//	    pr_info("Successfully got clock: isp\n");
-//
-//	    // Set the clock rate
-//	    pr_info("Setting ISP clock rate to 125 MHz\n");
-//	    ret = clk_set_rate(isp_clk, 125000000);
-//	    if (ret) {
-//	        pr_err("Failed to set rate for clock isp\n");
-//	        clk_put(isp_clk);
-//	        return ret;
-//	    }
-//	    pr_info("ISP clock rate set to 125 MHz\n");
+	    if (copy_from_user(sensor_name, (void __user *)arg, sizeof(sensor_name))) {
+	        dev_err(gISPdev->dev, "copy from user error\n");
+	        return -EFAULT;
+	    }
 
-	    // Optionally enable the clock if needed
-//	    ret = clk_prepare_enable(isp_clk);
-//	    if (ret) {
-//	        pr_err("Failed to enable ISP clock\n");
-//	        clk_put(isp_clk);
-//	        return ret;
-//	    }
+	    adapter = i2c_get_adapter(0);
+	    if (!adapter) {
+	        dev_err(gISPdev->dev, "Failed to get I2C adapter\n");
+	        return -ENODEV;
+	    }
 
-		if (copy_from_user(sensor_name, (void __user *)arg, sizeof(sensor_name))) {
-		    dev_err(gISPdev->dev, "[%s][%d] copy from user error\n", __func__, __LINE__);
-		    return -EFAULT;
-		}
+	    strncpy(board_info.type, sensor_name, sizeof(board_info.type) - 1);
+	    board_info.addr = 0x30;
 
-		// Debug print to confirm the registration process
-		pr_info("Registering sensor: %s, gISPdev=%p\n", sensor_name, gISPdev);
+	    client = isp_i2c_new_subdev_board(adapter, &board_info, NULL);
+	    i2c_put_adapter(adapter);
 
-		// Store the sensor name in the global device structure
-		strncpy(gISPdev->sensor_name, sensor_name, sizeof(gISPdev->sensor_name) - 1);
-		gISPdev->sensor_name[sizeof(gISPdev->sensor_name) - 1] = '\0';
+	    if (!client) {
+	        dev_err(gISPdev->dev, "Failed to initialize I2C sensor device\n");
+	        return -ENODEV;
+	    }
 
-		// Get the I2C adapter (adjust the adapter number based on your setup)
-		adapter = i2c_get_adapter(0); // You may need to change 0 to 1 if your sensor is on adapter 1
-		if (!adapter) {
-		    dev_err(gISPdev->dev, "Failed to get I2C adapter\n");
-		    return -ENODEV;
-		}
+	    gISPdev->sensor_i2c_client = client;
 
-		// Set up the board info for the sensor
-		strncpy(board_info.type, sensor_name, sizeof(board_info.type) - 1);
-		board_info.type[sizeof(board_info.type) - 1] = '\0';
-		board_info.addr = 0x30; // Set the correct I2C address of your sensor
+	    // Perform a soft reset
+	    ret = i2c_smbus_write_byte_data(client, 0x0103, 0x01);
+	    if (ret < 0) {
+	        dev_err(gISPdev->dev, "Soft reset failed\n");
+	        i2c_unregister_device(client);
+	        gISPdev->sensor_i2c_client = NULL;
+	        return ret;
+	    }
+	    msleep(10);
 
-		// Create a new I2C device for the sensor
-		client = isp_i2c_new_subdev_board(adapter, &board_info, NULL);
-		i2c_put_adapter(adapter); // Release the adapter after use
+	    // Initialize sensor registers here
+	    i2c_smbus_write_byte_data(client, 0x0100, 0x00); // Stop streaming
+	    i2c_smbus_write_byte_data(client, 0x3018, 0x72); // Example PLL configuration
+	    i2c_smbus_write_byte_data(client, 0x3031, 0x0A); // Configure clock divider
+	    dev_info(gISPdev->dev, "Sensor initialized successfully\n");
 
-		if (!client) {
-		    dev_err(gISPdev->dev, "Failed to initialize I2C sensor device\n");
-		    return -ENODEV;
-		}
-
-		// Assign the initialized I2C client to the global device structure
-		gISPdev->sensor_i2c_client = client;
-
-        // Set a default resolution or adjust based on your specific sensors
-        gISPdev->width = 1920;
-        gISPdev->height = 1080;
-
-		// Print confirmation
-		dev_info(gISPdev->dev, "Successfully registered sensor: %s at address 0x%02x\n",
-		         gISPdev->sensor_name, board_info.addr);
-
-		break;
+	    break;
 	}
 	case VIDIOC_GET_SENSOR_ENUMERATION: {
 		struct sensor_list_req {
@@ -3945,6 +3893,57 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
 	    pr_info("Provided sensor info for index %d: %s\n", req.idx, req.name);
 	    return 0;
+	}
+    case VIDIOC_GET_SENSOR_INFO: {
+        pr_info("ISP IOCTL called: cmd=VIDIOC_GET_SENSOR_INFO\n");
+
+        // Check if the sensor is initialized
+        if (!gISPdev || !gISPdev->sensor_i2c_client) {
+            pr_err("Sensor not initialized\n");
+            return -ENODEV;
+        }
+
+        struct isp_sensor_info info;
+        info.is_initialized = 1;
+        info.chip_id = 0xcb3a;  // TODO: Get the actual chip ID
+        info.width = gISPdev->width;
+        info.height = gISPdev->height;
+
+        // Copy the info structure back to user space
+        if (copy_to_user((void __user *)arg, &info, sizeof(info))) {
+            pr_err("Failed to copy sensor info to user space\n");
+            return -EFAULT;
+        }
+
+        break;
+    }
+	case VIDIOC_ENABLE_STREAM: {
+	    pr_info("ISP IOCTL called: cmd=VIDIOC_ENABLE_STREAM\n");
+
+	    // Check if the sensor is initialized
+	    if (!gISPdev || !gISPdev->sensor_i2c_client) {
+	        pr_err("Sensor not initialized\n");
+	        return -ENODEV;
+	    }
+
+	    // Log buffer details before enabling stream
+	    pr_info("Buffer Info: virt_addr=0x%p, phys_addr=0x%lx, size=%d\n",
+	            gISPdev->buf.virt_addr, gISPdev->buf.phys_addr, gISPdev->buf.size);
+
+	    if (!gISPdev->buf.virt_addr || !gISPdev->buf.phys_addr) {
+	        pr_err("Buffer not allocated properly\n");
+	        return -ENOMEM;
+	    }
+
+	    // Enable streaming on the sensor
+	    ret = i2c_smbus_write_byte_data(gISPdev->sensor_i2c_client, 0x0100, 0x01);
+	    if (ret < 0) {
+	        pr_err("Failed to enable sensor streaming\n");
+	        return ret;
+	    }
+
+	    pr_info("Sensor streaming setup complete\n");
+	    break;
 	}
 	case TX_ISP_SET_BUF: {
 	 	return handle_set_buf_ioctl(gISPdev, arg);
@@ -4109,7 +4108,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         break;
 	}
 	// Add these cases to your ioctl handler:
-	case VIDIOC_STREAMON:
+	case VIDIOC_STREAMON: // cmd=0x80045612
 	    pr_info("Stream ON requested\n");
 	    ret = start_streaming(gISPdev);
 	    break;
@@ -4150,7 +4149,8 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	case SENSOR_CMD_SET_EXP:
 	case SENSOR_CMD_STREAM_ON:
 	case SENSOR_CMD_STREAM_OFF:
-	    ret = handle_sensor_ioctl(gISPdev, cmd, argp);
+        pr_info("Sensor command: 0x%x\n", cmd);
+	    // ret = handle_sensor_ioctl(gISPdev, cmd, argp);
 	    break;
 
     default:
