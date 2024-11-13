@@ -143,45 +143,77 @@ struct isp_rotation_params {
 // Control registers
 #define ISP_CTRL_REG       (ISP_BASE + 0x1100)
 #define ISP_START_REG      (ISP_BASE + 0x1104)
+#define SENSOR_NAME_SIZE 80
+#define PADDING_SIZE_1 0x24
+#define PADDING_SIZE_2 0x24
+
+struct sensor_buffer_info {
+    char unused[0x80];         // Padding to align with offsets
+    uint32_t method;           // Offset: 0x80
+    uint32_t buffer_start;     // Offset: 0x84 (Physical Address)
+    uint32_t virt_addr;        // Offset: 0x88 (Virtual Address)
+    uint32_t buffer_size;      // Offset: 0x8C (Size)
+    uint32_t flags;            // Offset: 0x90 (Flags)
+    uint32_t frame_count;      // Offset: 0x94 (Frame Count)
+    uint8_t is_buffer_full;    // Offset: 0x98 (Buffer Full Indicator)
+    char padding[3];           // Align to 32-bit boundary
+} __attribute__((packed, aligned(4)));
+
+struct sensor_control_info {
+    uint32_t buffer_start;     // 0x00: Buffer start address
+    uint32_t buffer_size;      // 0x04: Buffer size
+    char padding[0x60];        // Padding for alignment
+    char name[32];             // Named buffer identifier
+    uint32_t method;           // Memory allocation method
+    uint32_t phys_addr;        // Physical address
+    uint32_t virt_addr;        // Virtual address
+    uint32_t flags;            // Control flags
+} __attribute__((packed, aligned(4)));
 
 struct IMPISPDev {
-    char dev_name[32];     // 0x00: Device name/path
-    struct cdev cdev;      // Character device structure
-    int major;             // Major number
-    int minor;             // Minor number
-    int fd;                // 0x20: File descriptor
-    int is_open;           // 0x24: Device open status
-    char sensor_name[80];  // 0x28: Sensor name buffer
-    char padding1[0x24];   // Padding to align to 0xac
-    struct sensor_buffer_info *buf_info;  // 0xac: Buffer info pointer
-    int wdr_mode;          // 0xb0: WDR mode flag
-    struct sensor_control_info *wdr_buf_info; // 0xb4: WDR buffer info pointer
-    unsigned int current_link;  // Track current link configuration
-    char padding2[0x24];   // Additional padding
-    struct device *dev;    // Device pointer
+    // Base device info - verified offsets
+    char dev_name[32];                    // 0x00: Device name
+    struct cdev cdev;                     // Char device structure
+    int major;                            // Major number
+    int minor;                            // Minor number
+    int fd;                              // 0x20: File descriptor
+    int is_open;                         // 0x24: Open status
+    char sensor_name[SENSOR_NAME_SIZE];   // 0x28: 80 byte sensor name buffer
+    char padding1[PADDING_SIZE_1];        // 0x78: Padding to align to 0xAC
 
-    // Hardware access fields
-    void __iomem *regs;    // ISP register base
-    void __iomem *ctrl_regs; // Control register base
-    int irq;               // Interrupt line
+    // Critical offsets - must match prudynt
+    struct sensor_buffer_info *buf_info;  // 0xAC: Buffer info
+    int wdr_mode;                        // 0xB0: WDR mode
+    struct sensor_control_info *wdr_buf_info; // 0xB4: WDR buffer info
+    unsigned int current_link;            // Track link config
+    char padding2[PADDING_SIZE_2];        // Additional required padding
+
+    // Device and hardware access - after aligned section
+    struct device *dev;
+    void __iomem *regs;                  // Register base
+    void __iomem *ctrl_regs;             // Control registers
+    int irq;
     struct i2c_client *sensor_i2c_client;
-    unsigned int width;    // Current frame width
-    unsigned int height;   // Current frame height
 
-    // New fields for DMA handling
-    dma_addr_t dma_addr;   // DMA address for buffer
-    void *dma_buf;         // Kernel virtual address for the buffer
-    size_t dma_size;       // Size of the allocated buffer
+    // Frame dimensions
+    unsigned int width;
+    unsigned int height;
 
-    // Clock-related fields
+    // DMA info
+    dma_addr_t dma_addr;
+    void *dma_buf;
+    size_t dma_size;
+
+    // Runtime state
     struct clk **clocks;
     int num_clocks;
-
     bool memory_initialized;
 
-    void __iomem *isp_params;  // ISP parameters region
-    void __iomem *wdr_params;  // WDR parameters region
-};
+    // Parameter regions
+    void __iomem *isp_params;
+    void __iomem *wdr_params;
+} __attribute__((packed, aligned(4)));
+
 
 static void __iomem *reg_base;
 static uint32_t soc_id = 0xFFFFFFFF;
@@ -1888,30 +1920,6 @@ struct alloc_info {
     uint32_t flags;         // 0x90: Flags/attributes
 };
 
-// Revised sensor_buffer_info structure based on the observed offsets
-struct sensor_buffer_info {
-    char unused[0x80];         // Padding to align with offsets
-    uint32_t method;           // Offset: 0x80
-    uint32_t buffer_start;     // Offset: 0x84 (Physical Address)
-    uint32_t virt_addr;        // Offset: 0x88 (Virtual Address)
-    uint32_t buffer_size;      // Offset: 0x8C (Size)
-    uint32_t flags;            // Offset: 0x90 (Flags)
-    uint32_t frame_count;      // Offset: 0x94 (Frame Count)
-    uint8_t is_buffer_full;    // Offset: 0x98 (Buffer Full Indicator)
-};
-
-
-// Update WDR buffer info similarly
-struct sensor_control_info {
-    uint32_t buffer_start;
-    uint32_t buffer_size;
-    char padding[0x60];
-    char name[32];
-    uint32_t method;
-    uint32_t phys_addr;
-    uint32_t virt_addr;
-    uint32_t flags;
-};
 
 static int isp_device_pipeline_setup(struct isp_device *dev)
 {
