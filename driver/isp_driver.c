@@ -53,15 +53,18 @@ static int early_init(void)
 }
 
 
-// Keep just one structure definition
-struct isp_mem_region {
-    uint32_t phys_addr;
-    void *virt_addr;
-    size_t size;
+#define ISP_ALLOC_KMALLOC   1
+#define ISP_RMEM_BASE       0x02a80000
+#define ISP_RMEM_SIZE       22544384
+
+struct isp_memory_info {
+    void *virt_addr;         // Kernel virtual address
+    dma_addr_t phys_addr;    // Physical/DMA address
+    size_t size;             // Size of allocation
     bool initialized;
 };
 
-static struct isp_mem_region isp_mem = {0};
+static struct isp_memory_info isp_mem = {0};
 
 #define ISP_BASE_ADDR        0x13300000
 #define ISP_MAP_SIZE         0x1000
@@ -2371,8 +2374,12 @@ static void cleanup_isp_memory(struct IMPISPDev *dev) {
 
     dev->dma_addr = 0;
     dev->dma_size = 0;
-}
 
+    isp_mem.initialized = false;
+    isp_mem.virt_addr = NULL;
+    isp_mem.phys_addr = 0;
+    isp_mem.size = 0;
+}
 // Add cleanup for registers
 static void cleanup_isp_registers(struct IMPISPDev *dev)
 {
@@ -3275,30 +3282,28 @@ static void dump_memory_info(struct IMPISPDev *dev) {
     }
 }
 
-// Update the memory initialization
-static int init_isp_memory(struct IMPISPDev *dev) {
-    int ret;
-
-    pr_info("Initializing ISP memory\n");
-
+static int init_isp_memory(struct IMPISPDev *dev)
+{
     // Map the reserved memory region
-    dev->dma_addr = ISP_FINAL_PHYS;  // 0x02a80000
-    dev->dma_size = ISP_ALLOC_SIZE;  // 0x2a80000
-
-    // Map the physical memory
-    dev->dma_buf = ioremap(dev->dma_addr, dev->dma_size);
+    dev->dma_buf = ioremap(ISP_RMEM_BASE, ISP_RMEM_SIZE);
     if (!dev->dma_buf) {
-        pr_err("Failed to map DMA memory\n");
+        pr_err("Failed to map reserved memory\n");
         return -ENOMEM;
     }
 
-    // Clear the memory
-    memset_io(dev->dma_buf, 0, dev->dma_size);
+    dev->dma_addr = ISP_RMEM_BASE;
+    dev->dma_size = ISP_RMEM_SIZE;
+
+    // Store the actual virtual address from kmalloc for userspace
+    isp_mem.virt_addr = dev->dma_buf;
+    isp_mem.phys_addr = dev->dma_addr;
+    isp_mem.size = dev->dma_size;
+    isp_mem.initialized = true;
 
     pr_info("ISP memory initialized:\n");
     pr_info("  Physical: 0x%08x\n", (uint32_t)dev->dma_addr);
-    pr_info("  Virtual: %p\n", dev->dma_buf);
-    pr_info("  Size: 0x%08x\n", (uint32_t)dev->dma_size);
+    pr_info("  Kernel Virtual: %p\n", dev->dma_buf);
+    pr_info("  Size: %zu\n", dev->dma_size);
 
     return 0;
 }
@@ -3838,27 +3843,27 @@ static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
     pr_info("tx_isp: SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
             req.method, req.phys_addr, req.size);
 
-    // Initial magic sequence
-    if (req.method == ISP_MAGIC_METHOD && req.phys_addr == ISP_MAGIC_PHYS) {
+    // Magic sequence check first
+    if (req.method == 0x203a726f && req.phys_addr == 0x33326373) {
         if (!dev->buf_info) {
             dev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
             if (!dev->buf_info)
                 return -ENOMEM;
         }
 
-        // Return magic value for initial allocation
+        // Initial setup - match exactly what LIBIMP expects
         req.method = ISP_ALLOC_KMALLOC;
-        req.phys_addr = ISP_INIT_PHYS;  // Initial magic value 0x1
-        req.size = ISP_INIT_PHYS;       // Initial size also 0x1 per logs
-        req.virt_addr = (unsigned long)dev->dma_buf;
+        req.phys_addr = 0x1;
+        req.size = 0x1;
+        req.virt_addr = (unsigned long)isp_mem.virt_addr;  // Use actual virtual address
         req.flags = 0;
 
-        // Store these values
+        // Store initial values
         dev->buf_info->method = req.method;
         dev->buf_info->buffer_start = req.phys_addr;
         dev->buf_info->buffer_size = req.size;
         dev->buf_info->virt_addr = req.virt_addr;
-        dev->buf_info->flags = req.flags;
+        dev->buf_info->flags = 0;
 
         pr_info("tx_isp: Magic allocation: phys=0x%x size=0x%x virt=0x%lx\n",
                 req.phys_addr, req.size, req.virt_addr);
@@ -3868,20 +3873,27 @@ static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
         return 0;
     }
 
-    // Secondary allocation request
-    if (req.phys_addr == ISP_INIT_PHYS) {
+    // Handle actual memory request
+    if (req.phys_addr == 0x1) {
         req.method = ISP_ALLOC_KMALLOC;
-        req.phys_addr = ISP_FINAL_PHYS;  // Actual physical address
-        req.size = ISP_ALLOC_SIZE;       // Full allocation size
-        req.virt_addr = (unsigned long)dev->dma_buf;
+        req.phys_addr = isp_mem.phys_addr;  // Use actual physical address
+        req.size = isp_mem.size;            // Use actual size
+        req.virt_addr = (unsigned long)isp_mem.virt_addr;  // Use actual virtual address
         req.flags = 0;
+
+        // Update stored info
+        dev->buf_info->method = req.method;
+        dev->buf_info->buffer_start = req.phys_addr;
+        dev->buf_info->buffer_size = req.size;
+        dev->buf_info->virt_addr = req.virt_addr;
+        dev->buf_info->flags = 1;
 
         if (copy_to_user(argp, &req, sizeof(req)))
             return -EFAULT;
         return 0;
     }
 
-    pr_err("tx_isp: Unhandled SET_BUF request\n");
+    pr_err("tx_isp: Unhandled request\n");
     return -EINVAL;
 }
 
