@@ -3471,50 +3471,6 @@ static int isp_init_reserved_memory(struct device *dev) {
     return 0;
 }
 
-// Add these constants at the top of the file
-#define ISP_MAGIC_REQUEST   0x1        // Magic value for allocation request
-#define ISP_MAGIC_METHOD    0x1        // Expected method value
-#define ISP_MAX_BUFFER_SIZE (22 * 1024 * 1024)  // 22MB max
-#define ISP_MIN_BUFFER_SIZE (1 * 1024 * 1024)   // 1MB min
-
-// Hardware configuration function remains the same
-
-// Hardware configuration function
-//static int configure_isp_hardware_buffer(struct IMPISPDev *dev)
-//{
-//    if (!dev || !dev->buf_info || !dev->buf_info->buffer_start) {
-//        pr_err("tx_isp: Invalid buffer configuration\n");
-//        return -EINVAL;
-//    }
-//
-//    const uint32_t line_size = ((dev->width + 7) >> 3) << 3;
-//    const uint32_t main_size = line_size * dev->height;
-//    const uint32_t second_size = main_size >> 1;
-//
-//    pr_info("tx_isp: Configuring hardware buffers:\n");
-//    pr_info("  Base address: 0x%08x\n", dev->buf_info->buffer_start);
-//    pr_info("  Line size: %u\n", line_size);
-//    pr_info("  Main size: %u\n", main_size);
-//
-//    // Verify buffer size
-//    if (dev->buf_info->buffer_size < (main_size + second_size)) {
-//        pr_err("tx_isp: Buffer too small for configuration\n");
-//        return -EINVAL;
-//    }
-//
-//    system_reg_write(ISP_BUF0_REG, dev->buf_info->buffer_start);
-//    system_reg_write(ISP_BUF0_SIZE_REG, line_size);
-//
-//    system_reg_write(ISP_BUF1_REG, dev->buf_info->buffer_start + main_size);
-//    system_reg_write(ISP_BUF1_SIZE_REG, line_size);
-//
-//    const uint32_t third_line_size = ((((dev->width + 0x1f) >> 5) + 7) >> 3) << 3;
-//    system_reg_write(ISP_BUF2_REG, dev->buf_info->buffer_start + main_size + second_size);
-//    system_reg_write(ISP_BUF2_SIZE_REG, third_line_size);
-//
-//    return 0;
-//}
-
 // Add these defines at the top
 #define ISP_ALLOC_FAILED    0
 #define ISP_ALLOC_SUCCESS   1
@@ -3709,70 +3665,71 @@ struct isp_mem_request {
     uint32_t flags;
 };
 
-#define ISP_BUFFER_SIZE (4 * 1024 * 1024)  // 4MB base size
-#define ISP_TOTAL_SIZE  (8 * 1024 * 1024)  // 8MB max for camera operations
+// Add these defines at the top
+#define ISP_ALLOC_SIZE      0x2a80000  // Size from LIBIMP logs
+#define ISP_MAGIC_METHOD    0x203a726f
+#define ISP_MAGIC_PHYS      0x33326373
+
 static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
-   struct isp_mem_request req;
-   void __user *argp = (void __user *)arg;
+    struct isp_mem_request req;
+    void __user *argp = (void __user *)arg;
 
-   if (copy_from_user(&req, argp, sizeof(req))) {
-       pr_err("tx_isp: Failed to copy from user\n");
-       return -EFAULT;
-   }
+    if (copy_from_user(&req, argp, sizeof(req))) {
+        pr_err("tx_isp: Failed to copy from user\n");
+        return -EFAULT;
+    }
 
-   pr_info("tx_isp: SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
-           req.method, req.phys_addr, req.size);
+    pr_info("tx_isp: SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
+            req.method, req.phys_addr, req.size);
 
-   // Initial memory request
-   if (req.phys_addr == 0x1) {
-       pr_info("tx_isp: Initial memory request\n");
+    // Magic sequence - should be first call
+    if (req.method == ISP_MAGIC_METHOD && req.phys_addr == ISP_MAGIC_PHYS) {
+        if (!dev->buf_info) {
+            dev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
+            if (!dev->buf_info)
+                return -ENOMEM;
+        }
 
-       req.method = ISP_ALLOC_KMALLOC;
-       req.phys_addr = 0x1;                    // Keep what LIBIMP sent
-       req.size = 0x2a80000;                   // Physical address as size
-       req.virt_addr = (unsigned long)dev->dma_buf;
-       req.flags = 0;
+        // Match LIBIMP's first allocation size
+        req.method = ISP_ALLOC_KMALLOC;
+        req.phys_addr = 0x1;           // Initial magic value
+        req.size = ISP_ALLOC_SIZE;     // Size from LIBIMP (0x2a80000)
+        req.virt_addr = (unsigned long)dev->dma_buf;
+        req.flags = 0;
 
-       pr_info("tx_isp: Returning initial info: phys=0x%x size=0x%x virt=0x%lx\n",
-               req.phys_addr, req.size, req.virt_addr);
+        // Store in our buffer info
+        dev->buf_info->method = req.method;
+        dev->buf_info->buffer_start = req.phys_addr;
+        dev->buf_info->buffer_size = req.size;
+        dev->buf_info->virt_addr = req.virt_addr;
+        dev->buf_info->flags = req.flags;
 
-       if (copy_to_user(argp, &req, sizeof(req)))
-           return -EFAULT;
-       return 0;
-   }
+        pr_info("tx_isp: Magic allocation: phys=0x%x size=0x%x virt=0x%lx\n",
+                req.phys_addr, req.size, req.virt_addr);
 
-   // Magic sequence
-   if (req.method == 0x203a726f && req.phys_addr == 0x33326373) {
-       if (!dev->buf_info) {
-           dev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
-           if (!dev->buf_info)
-               return -ENOMEM;
-       }
+        if (copy_to_user(argp, &req, sizeof(req)))
+            return -EFAULT;
+        return 0;
+    }
 
-       // Use same values as initial request
-       req.method = ISP_ALLOC_KMALLOC;
-       req.phys_addr = 0x1;
-       req.size = 0x2a80000;
-       req.virt_addr = (unsigned long)dev->dma_buf;
-       req.flags = 0;
+    // Initial memory request (should be second call)
+    if (req.phys_addr == 0x1) {
+        req.method = ISP_ALLOC_KMALLOC;
+        req.phys_addr = 0x2a80000;     // Actual physical address
+        req.size = ISP_ALLOC_SIZE;     // Keep same size
+        req.virt_addr = (unsigned long)dev->dma_buf;
+        req.flags = 0;
 
-       // Store same info
-       dev->buf_info->method = ISP_ALLOC_KMALLOC;
-       dev->buf_info->buffer_start = 0x1;
-       dev->buf_info->buffer_size = 0x2a80000;
-       dev->buf_info->virt_addr = (unsigned long)dev->dma_buf;
-       dev->buf_info->flags = 0;
+        pr_info("tx_isp: Initial allocation: phys=0x%x size=0x%x virt=0x%lx\n",
+                req.phys_addr, req.size, req.virt_addr);
 
-       pr_info("tx_isp: Magic allocation: phys=0x%x size=0x%x virt=0x%lx\n",
-               req.phys_addr, req.size, req.virt_addr);
+        if (copy_to_user(argp, &req, sizeof(req)))
+            return -EFAULT;
+        return 0;
+    }
 
-       if (copy_to_user(argp, &req, sizeof(req)))
-           return -EFAULT;
-       return 0;
-   }
-
-   pr_err("tx_isp: Unhandled request\n");
-   return -EINVAL;
+    pr_err("tx_isp: Unhandled SET_BUF request\n");
+    return -EINVAL;
 }
 
 // Update cleanup to use existing structure
@@ -3947,59 +3904,51 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	case TX_ISP_SET_BUF: {
 	 	return handle_set_buf_ioctl(gISPdev, arg);
 	}
+	// Modified VIDIOC_SET_BUF_INFO handler:
 	case VIDIOC_SET_BUF_INFO: {
-	    struct sensor_buffer_info *user_buf_info;
+	    struct sensor_buffer_info buf_info = {0};
 	    void __user *argp = (void __user *)arg;
-	    const uint32_t allocated_size = 0x2a80000; // Use the same size as the initial allocation (42.5 MB)
+	    const uint32_t alloc_size = ISP_ALLOC_SIZE;  // Use same size consistently
 
 	    pr_info("tx_isp: Handling ioctl VIDIOC_SET_BUF_INFO\n");
 
-	    if (!gISPdev) {
-	        pr_err("tx_isp: Device not initialized\n");
+	    if (!gISPdev || !gISPdev->buf_info) {
+	        pr_err("tx_isp: Device or buffer info not initialized\n");
 	        return -EINVAL;
 	    }
 
-	    // Allocate buffer info if not already allocated
-	    if (!gISPdev->buf_info) {
-	        gISPdev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
-	        if (!gISPdev->buf_info) {
-	            pr_err("tx_isp: Failed to allocate buffer info\n");
-	            return -ENOMEM;
-	        }
-	    }
-
-	    user_buf_info = gISPdev->buf_info;
-
-	    // Copy from userspace using a direct pointer instead of copy_from_user
-	    if (copy_from_user(user_buf_info, argp, sizeof(struct sensor_buffer_info))) {
-	        pr_err("tx_isp: Failed to copy buffer info from userspace\n");
+	    if (copy_from_user(&buf_info, argp, sizeof(buf_info))) {
+	        pr_err("tx_isp: Failed to copy from user\n");
 	        return -EFAULT;
 	    }
 
 	    pr_info("tx_isp: Received buffer info from userspace:\n");
-	    pr_info("  Method: 0x%x\n", user_buf_info->method);
-	    pr_info("  Physical addr: 0x%08x\n", user_buf_info->buffer_start);
-	    pr_info("  Virtual addr: 0x%08x\n", user_buf_info->virt_addr);
-	    pr_info("  Size: %u\n", user_buf_info->buffer_size);
-	    pr_info("  Flags: 0x%x\n", user_buf_info->flags);
+	    pr_info("  Method: 0x%x\n", buf_info.method);
+	    pr_info("  Physical addr: 0x%08x\n", buf_info.buffer_start);
+	    pr_info("  Virtual addr: 0x%08x\n", buf_info.virt_addr);
+	    pr_info("  Size: %u\n", buf_info.buffer_size);
 
-	    // Adjust the fields to what LIBIMP expects
-	    user_buf_info->method = ISP_ALLOC_KMALLOC;
-	    user_buf_info->buffer_start = 0x2a80000;  // Physical address marker
-	    user_buf_info->virt_addr = (unsigned long)gISPdev->dma_buf;
-	    user_buf_info->buffer_size = allocated_size;
-	    user_buf_info->flags = 0x1;  // Set a non-zero flag to indicate readiness
+	    // Set up consistent parameters
+	    buf_info.method = ISP_ALLOC_KMALLOC;
+	    buf_info.buffer_start = 0x2a80000;          // Physical address
+	    buf_info.buffer_size = alloc_size;          // Consistent size
+	    buf_info.virt_addr = (unsigned long)gISPdev->dma_buf;
+	    buf_info.flags = 1;
+	    buf_info.frame_count = 0;
+	    buf_info.is_buffer_full = 0;
+
+	    // Update our stored info
+	    memcpy(gISPdev->buf_info, &buf_info, sizeof(buf_info));
 
 	    pr_info("tx_isp: Adjusted buffer info:\n");
-	    pr_info("  Method: 0x%x\n", user_buf_info->method);
-	    pr_info("  Physical addr: 0x%x\n", user_buf_info->buffer_start);
-	    pr_info("  Virtual addr: 0x%lx\n", user_buf_info->virt_addr);
-	    pr_info("  Size: %u\n", user_buf_info->buffer_size);
-	    pr_info("  Flags: 0x%x\n", user_buf_info->flags);
+	    pr_info("  Method: 0x%x\n", buf_info.method);
+	    pr_info("  Physical addr: 0x%x\n", buf_info.buffer_start);
+	    pr_info("  Virtual addr: 0x%lx\n", buf_info.virt_addr);
+	    pr_info("  Size: %u\n", buf_info.buffer_size);
+	    pr_info("  Flags: 0x%x\n", buf_info.flags);
 
-	    // Instead of using copy_to_user, we directly write to the userspace pointer
-	    if (copy_to_user(argp, user_buf_info, sizeof(struct sensor_buffer_info))) {
-	        pr_err("tx_isp: Failed to copy buffer info back to userspace\n");
+	    if (copy_to_user(argp, &buf_info, sizeof(buf_info))) {
+	        pr_err("tx_isp: Failed to copy back to user\n");
 	        return -EFAULT;
 	    }
 
