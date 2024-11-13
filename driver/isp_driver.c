@@ -38,6 +38,13 @@
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-dma-contig.h>
 #include <media/v4l2-device.h>
+#include <linux/semaphore.h>
+#include <linux/err.h>         // For IS_ERR and PTR_ERR
+#include <linux/device.h>
+#include <linux/cdev.h>
+#include <linux/mutex.h>
+#include <linux/videodev2.h>
+
 
 #include <tx-isp-device.h>
 #include <tx-isp-common.h>
@@ -167,6 +174,31 @@ struct isp_rotation_params {
 #define ISP_CONF_OFFSET    0x0130
 #define ISP_INIT_OFFSET    0x0118
 
+
+// Updated structure based on your previous definition and observations
+struct sensor_list_info {
+    char name[80];          // Sensor name
+    int id;                 // Sensor ID
+    int status;             // Sensor status (e.g., 1 for active)
+    int resolution_width;   // Sensor resolution width
+    int resolution_height;  // Sensor resolution height
+    int framerate;          // Max frame rate
+    int capabilities;       // Bitmask for sensor capabilities
+    void *sensor_ops;       // Pointer to sensor operations (expected by binary)
+    void *reserved_ptr;     // Reserved space (pointer)
+};
+
+
+// Add at the top of the file with other definitions
+#define RMEM_START  0x2A80000          // Starting address of the reserved memory region
+#define DRIVER_RESERVED_SIZE (4 * 1024 * 1024) // Size reserved for our driver: 4MB
+
+
+// Global variables
+void *reserved_buffer_virt;
+dma_addr_t reserved_buffer_phys = RMEM_START;
+size_t reserved_buffer_size = DRIVER_RESERVED_SIZE;
+
 struct sensor_buffer_info {
     char unused[0x80];         // Padding to align with offsets
     uint32_t method;           // Offset: 0x80
@@ -228,12 +260,71 @@ struct IMPISPDev {
     struct clk **clocks;
     int num_clocks;
     bool memory_initialized;
+    struct isp_framesource_state *fs_info;  // Add this field
+    uint32_t format;                        // Add this field
 
     // Parameter regions
     void __iomem *isp_params;
     void __iomem *wdr_params;
 } __attribute__((packed, aligned(4)));
 
+// Add these structure definitions
+struct isp_buffer_info {
+    uint32_t method;          // Allocation method
+    uint32_t buffer_start;    // Physical address
+    uint32_t virt_addr;       // Changed from vaddr
+    uint32_t buffer_size;     // Changed from size
+    uint32_t flags;           // Flags
+    uint32_t frame_count;     // Number of frames processed
+    uint8_t is_buffer_full;   // Buffer full indicator
+};
+
+
+struct isp_framesource_state {
+    uint32_t magic;          // 0x00: Magic identifier
+    uint32_t flags;          // 0x04: State flags
+    uint32_t chn_num;        // 0x18: Channel number
+    uint32_t state;          // 0x1c: Channel state
+    uint32_t width;          // 0x20: Frame width
+    uint32_t height;         // 0x24: Frame height
+    uint32_t fmt;            // 0x28: Pixel format
+    uint32_t buf_size;       // 0x54: Buffer size
+
+    // Memory management
+    uint32_t buf_cnt;        // Buffer count
+    uint32_t buf_flags;      // Buffer flags
+    void    *buf_base;       // Buffer base address
+    dma_addr_t dma_addr;     // DMA address
+
+    // Frame management
+    uint32_t frame_cnt;      // Frame counter
+    uint32_t buf_index;      // Current buffer index
+    struct file *fd;       // File pointer for V4L2 operations
+    struct video_device *vdev; // V4L2 video device
+    struct task_struct *thread; // Frame grab thread
+    void    *ext_buffer;     // Extended buffer pointer
+    struct isp_buffer_info *bufs;  // Buffer info array
+
+    // Synchronization
+    struct semaphore sem;    // Buffer semaphore
+};
+
+
+// Add validation macros
+#define VALIDATE_FS_STATE(fs) do { \
+    if (!fs || !fs->buf_base || !fs->ext_buffer) { \
+        pr_err("Invalid frame source state\n"); \
+        return -EINVAL; \
+    } \
+} while(0)
+
+#define VALIDATE_FS_ACCESS(fs, offset) do { \
+    if (offset >= sizeof(struct isp_framesource_state)) { \
+        pr_err("Invalid access: offset 0x%x exceeds size 0x%zx\n", \
+               offset, sizeof(struct isp_framesource_state)); \
+        return -EFAULT; \
+    } \
+} while(0)
 
 static void __iomem *reg_base;
 static uint32_t soc_id = 0xFFFFFFFF;
@@ -529,10 +620,32 @@ EXPORT_SYMBOL(private_clk_enable);
 EXPORT_SYMBOL(private_clk_put);
 EXPORT_SYMBOL(private_clk_set_rate);
 
-#include <linux/device.h>
-#include <linux/cdev.h>
-#include <linux/mutex.h>
-#include <linux/videodev2.h>
+
+// V4L2 helper functions for kernel space
+static int v4l2_s_fmt(struct file *filp, struct v4l2_format *fmt)
+{
+    struct video_device *vdev = video_devdata(filp);
+    int ret;
+
+    if (!vdev || !vdev->fops || !vdev->fops->unlocked_ioctl)
+        return -ENODEV;
+
+    ret = vdev->fops->unlocked_ioctl(filp, VIDIOC_S_FMT, (unsigned long)fmt);
+    return ret;
+}
+
+static int v4l2_ioctl(struct file *filp, unsigned int cmd, void *arg)
+{
+    struct video_device *vdev = video_devdata(filp);
+    int ret;
+
+    if (!vdev || !vdev->fops || !vdev->fops->unlocked_ioctl)
+        return -ENODEV;
+
+    ret = vdev->fops->unlocked_ioctl(filp, cmd, (unsigned long)arg);
+    return ret;
+}
+
 
 /* Register block structure based on decompiled access patterns */
 struct isp_reg_block {
@@ -2234,9 +2347,195 @@ static inline void system_reg_write(u32 reg, u32 val)
 static struct IMPISPDev *gISPdev_bak = NULL;  // Backup for reopen
 
 
+static int setup_frame_source(struct IMPISPDev *dev)
+{
+    struct isp_framesource_state *fs = dev->fs_info;
+    struct isp_buffer_info *bufs;
+    char dev_name[32];
+    struct file *filp;
+    int ret;
 
-// In tisp_open, remove buffer allocation, just allocate the info structures:
-static int tisp_open(struct file *file) {
+    VALIDATE_FS_STATE(fs);
+
+    // Configure buffer info
+    bufs = fs->bufs;
+    for (int i = 0; i < fs->buf_cnt; i++) {
+        bufs[i].virt_addr = (uint32_t)(uintptr_t)(fs->buf_base + (i * fs->buf_size));
+        bufs[i].buffer_start = fs->dma_addr + (i * fs->buf_size);
+        bufs[i].buffer_size = fs->buf_size;
+        bufs[i].flags = 0;
+    }
+
+    // Open frame source device using kernel file operations
+    snprintf(dev_name, sizeof(dev_name), "/dev/video%d", fs->chn_num);
+    filp = filp_open(dev_name, O_RDWR, 0);
+    if (IS_ERR(filp)) {
+        pr_err("Failed to open frame source: %s\n", dev_name);
+        return PTR_ERR(filp);
+    }
+    fs->fd = filp;
+
+    // Configure format using V4L2
+    struct v4l2_format fmt = {
+        .type = V4L2_BUF_TYPE_VIDEO_CAPTURE,
+        .fmt.pix = {
+            .width = fs->width,
+            .height = fs->height,
+            .pixelformat = fs->fmt,
+            .field = V4L2_FIELD_NONE,
+            .bytesperline = fs->width * 2, // Assuming YUYV
+            .sizeimage = fs->width * fs->height * 2
+        }
+    };
+
+    ret = v4l2_s_fmt(fs->fd, &fmt);
+    if (ret) {
+        pr_err("Failed to set format\n");
+        goto err_close;
+    }
+
+    fs->state = 1;  // Ready state
+    return 0;
+
+err_close:
+    filp_close(fs->fd, NULL);
+    fs->fd = NULL;
+    return ret;
+}
+// Update start_frame_source to use proper V4L2 kernel operations
+static int start_frame_source(struct IMPISPDev *dev)
+{
+    struct isp_framesource_state *fs = dev->fs_info;
+    struct v4l2_buffer buf;
+    enum v4l2_buf_type type;
+    int ret, i;
+
+    VALIDATE_FS_STATE(fs);
+
+    if (!fs->fd) {
+        pr_err("No file handle\n");
+        return -EINVAL;
+    }
+
+    // Queue initial buffers
+    memset(&buf, 0, sizeof(buf));
+    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buf.memory = V4L2_MEMORY_USERPTR;
+
+    for (i = 0; i < fs->buf_cnt; i++) {
+        buf.index = i;
+        buf.m.userptr = (unsigned long)fs->bufs[i].virt_addr;
+        buf.length = fs->bufs[i].buffer_size;
+
+        ret = v4l2_ioctl(fs->fd, VIDIOC_QBUF, &buf);
+        if (ret) {
+            pr_err("Failed to queue buffer %d\n", i);
+            goto stop_stream;
+        }
+    }
+
+    // Start streaming
+    type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    ret = v4l2_ioctl(fs->fd, VIDIOC_STREAMON, &type);
+    if (ret) {
+        pr_err("Failed to start streaming\n");
+        goto stop_stream;
+    }
+
+    fs->state = 2;  // Streaming state
+    return 0;
+
+stop_stream:
+    type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    v4l2_ioctl(fs->fd, VIDIOC_STREAMOFF, &type);
+    return ret;
+}
+
+
+// Clean up frame source
+static void cleanup_frame_source(struct IMPISPDev *dev)
+{
+    struct isp_framesource_state *fs = dev->fs_info;
+    if (!fs)
+        return;
+
+    if (fs->state == 2) {
+        enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        if (fs->fd)
+            v4l2_ioctl(fs->fd, VIDIOC_STREAMOFF, &type);
+    }
+
+    if (fs->fd) {
+        filp_close(fs->fd, NULL);
+        fs->fd = NULL;
+    }
+
+    if (fs->buf_base)
+        dma_free_coherent(dev->dev, fs->buf_size * fs->buf_cnt,
+                         fs->buf_base, fs->dma_addr);
+
+    kfree(fs->bufs);
+    kfree(fs->ext_buffer);
+    kfree(fs);
+    dev->fs_info = NULL;
+}
+
+static int init_frame_source(struct IMPISPDev *dev, int channel)
+{
+    struct isp_framesource_state *fs;
+
+    pr_info("Initializing frame source channel %d\n", channel);
+
+    // Validate input
+    if (!dev) {
+        pr_err("Invalid device pointer\n");
+        return -EINVAL;
+    }
+
+    // Allocate frame source state
+    fs = kzalloc(sizeof(*fs), GFP_KERNEL);
+    if (!fs) {
+        pr_err("Failed to allocate frame source state\n");
+        return -ENOMEM;
+    }
+
+    // Initialize basic parameters
+    fs->magic = 0x12345678;  // Magic identifier
+    fs->chn_num = channel;
+    fs->state = 0;           // Initial state
+    fs->width = dev->width ? dev->width : 1920;  // Default to 1080p if not set
+    fs->height = dev->height ? dev->height : 1080;
+    fs->fmt = V4L2_PIX_FMT_YUYV;  // Default format
+
+    // Buffer setup
+    fs->buf_cnt = 4;  // Default to 4 buffers
+    fs->buf_size = fs->width * fs->height * 2;  // Size for YUYV format
+    fs->buf_flags = 0;
+
+    // Allocate buffer info array
+    fs->bufs = kzalloc(sizeof(struct isp_buffer_info) * fs->buf_cnt, GFP_KERNEL);
+    if (!fs->bufs) {
+        pr_err("Failed to allocate buffer info array\n");
+        kfree(fs);
+        return -ENOMEM;
+    }
+
+    // Initialize synchronization
+    sema_init(&fs->sem, 1);
+
+    // Store in device
+    dev->fs_info = fs;
+
+    pr_info("Frame source initialized: %dx%d, %d buffers\n",
+            fs->width, fs->height, fs->buf_cnt);
+
+    return 0;
+}
+
+
+static int tisp_open(struct file *file)
+{
+    int ret;
     pr_info("ISP device open called from pid %d\n", current->pid);
 
     if (!gISPdev) {
@@ -2244,17 +2543,25 @@ static int tisp_open(struct file *file) {
         return -ENODEV;
     }
 
-    // Perform hardware register configuration
+    // Initialize frame source first
+    ret = init_frame_source(gISPdev, 0); // Channel 0 primary
+    if (ret) {
+        pr_err("Failed to initialize frame source: %d\n", ret);
+        return ret;
+    }
+
+    // Then do hardware register configuration
     if (isp_device_configure(gISPdev)) {
         pr_err("Failed to configure ISP hardware\n");
+        cleanup_frame_source(gISPdev);
         return -EIO;
     }
 
-    // Just allocate structures - initialization happens in SET_BUF
+    // Just allocate buffer info structures
     if (!gISPdev->buf_info) {
         gISPdev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
         if (!gISPdev->buf_info) {
-            pr_err("Failed to allocate buffer info\n");
+            cleanup_frame_source(gISPdev);
             return -ENOMEM;
         }
     }
@@ -2264,14 +2571,13 @@ static int tisp_open(struct file *file) {
         if (!gISPdev->wdr_buf_info) {
             kfree(gISPdev->buf_info);
             gISPdev->buf_info = NULL;
+            cleanup_frame_source(gISPdev);
             return -ENOMEM;
         }
     }
 
     gISPdev->is_open = 1;
     file->private_data = gISPdev;
-
-    pr_info("Device opened successfully\n");
     return 0;
 }
 
@@ -3282,31 +3588,31 @@ static void dump_memory_info(struct IMPISPDev *dev) {
     }
 }
 
-static int init_isp_memory(struct IMPISPDev *dev)
-{
-    // Map the reserved memory region
-    dev->dma_buf = ioremap(ISP_RMEM_BASE, ISP_RMEM_SIZE);
-    if (!dev->dma_buf) {
-        pr_err("Failed to map reserved memory\n");
+static int init_isp_memory(struct IMPISPDev *dev) {
+    void *virt_addr;
+    dma_addr_t phys_addr = ISP_RMEM_BASE;
+
+    pr_info("Initializing ISP memory at 0x%08x size=%u\n",
+            (unsigned int)phys_addr, ISP_RMEM_SIZE);
+
+    // Map the physical memory
+    virt_addr = ioremap(phys_addr, ISP_RMEM_SIZE);
+    if (!virt_addr) {
+        pr_err("Failed to map ISP memory\n");
         return -ENOMEM;
     }
 
-    dev->dma_addr = ISP_RMEM_BASE;
+    // Store the mappings
+    dev->dma_buf = virt_addr;
+    dev->dma_addr = phys_addr;
     dev->dma_size = ISP_RMEM_SIZE;
 
-    // Store the actual virtual address from kmalloc for userspace
-    isp_mem.virt_addr = dev->dma_buf;
-    isp_mem.phys_addr = dev->dma_addr;
-    isp_mem.size = dev->dma_size;
-    isp_mem.initialized = true;
-
-    pr_info("ISP memory initialized:\n");
-    pr_info("  Physical: 0x%08x\n", (uint32_t)dev->dma_addr);
-    pr_info("  Kernel Virtual: %p\n", dev->dma_buf);
-    pr_info("  Size: %zu\n", dev->dma_size);
+    pr_info("ISP memory mapped: virt=%p phys=0x%08x\n",
+            dev->dma_buf, (unsigned int)dev->dma_addr);
 
     return 0;
 }
+
 
 // Add validation before streaming
 static int validate_streaming_setup(struct IMPISPDev *dev) {
@@ -3606,38 +3912,6 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
     return ret;
 }
 
-// Updated structure based on your previous definition and observations
-struct sensor_list_info {
-    char name[80];          // Sensor name
-    int id;                 // Sensor ID
-    int status;             // Sensor status (e.g., 1 for active)
-    int resolution_width;   // Sensor resolution width
-    int resolution_height;  // Sensor resolution height
-    int framerate;          // Max frame rate
-    int capabilities;       // Bitmask for sensor capabilities
-    void *sensor_ops;       // Pointer to sensor operations (expected by binary)
-    void *reserved_ptr;     // Reserved space (pointer)
-};
-
-
-// Add at the top of the file with other definitions
-#define RMEM_START  0x2A80000          // Starting address of the reserved memory region
-#define DRIVER_RESERVED_SIZE (4 * 1024 * 1024) // Size reserved for our driver: 4MB
-
-struct isp_buffer_info {
-    uint32_t method;          // Allocation method
-    uint32_t buffer_start;    // Physical address
-    uint32_t virt_addr;       // Virtual address
-    uint32_t buffer_size;     // Buffer size
-    uint32_t flags;           // Flags
-    uint32_t frame_count;     // Number of frames processed
-    uint8_t is_buffer_full;   // Buffer full indicator
-};
-
-// Global variables
-void *reserved_buffer_virt;
-dma_addr_t reserved_buffer_phys = RMEM_START;
-size_t reserved_buffer_size = DRIVER_RESERVED_SIZE;
 
 // Initialize reserved memory
 static int isp_init_reserved_memory(struct device *dev) {
@@ -3834,6 +4108,12 @@ struct isp_mem_request {
 static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
     struct isp_mem_request req;
     void __user *argp = (void __user *)arg;
+    struct isp_framesource_state *fs = dev->fs_info;
+
+    if (!fs) {
+        pr_err("tx_isp: No frame source initialized\n");
+        return -EINVAL;
+    }
 
     if (copy_from_user(&req, argp, sizeof(req))) {
         pr_err("tx_isp: Failed to copy from user\n");
@@ -3843,7 +4123,7 @@ static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
     pr_info("tx_isp: SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
             req.method, req.phys_addr, req.size);
 
-    // Magic sequence check first
+    // Magic sequence check
     if (req.method == 0x203a726f && req.phys_addr == 0x33326373) {
         if (!dev->buf_info) {
             dev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
@@ -3851,22 +4131,27 @@ static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
                 return -ENOMEM;
         }
 
-        // Initial setup - match exactly what LIBIMP expects
+        // Maintain exact same values for initial request
         req.method = ISP_ALLOC_KMALLOC;
-        req.phys_addr = 0x1;
-        req.size = 0x1;
-        req.virt_addr = (unsigned long)isp_mem.virt_addr;  // Use actual virtual address
+        req.phys_addr = 0x1;  // Initial magic value
+        req.size = 0x1;       // Initial size
+        req.virt_addr = (unsigned long)dev->dma_buf;
         req.flags = 0;
 
-        // Store initial values
+        // Store actual values in our buffer info
         dev->buf_info->method = req.method;
-        dev->buf_info->buffer_start = req.phys_addr;
-        dev->buf_info->buffer_size = req.size;
-        dev->buf_info->virt_addr = req.virt_addr;
+        dev->buf_info->buffer_start = dev->dma_addr;
+        dev->buf_info->buffer_size = dev->dma_size;
+        dev->buf_info->virt_addr = (unsigned long)dev->dma_buf;
         dev->buf_info->flags = 0;
 
-        pr_info("tx_isp: Magic allocation: phys=0x%x size=0x%x virt=0x%lx\n",
-                req.phys_addr, req.size, req.virt_addr);
+        // Also update frame source buffer info
+        fs->dma_addr = dev->dma_addr;
+        fs->buf_base = dev->dma_buf;
+        fs->buf_size = dev->dma_size;
+
+        pr_info("tx_isp: Magic allocation setup: phys=0x%x virt=%p size=0x%x\n",
+                (unsigned int)dev->dma_addr, dev->dma_buf, dev->dma_size);
 
         if (copy_to_user(argp, &req, sizeof(req)))
             return -EFAULT;
@@ -3875,18 +4160,19 @@ static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
 
     // Handle actual memory request
     if (req.phys_addr == 0x1) {
+        // Return actual memory info - keep same sequence
         req.method = ISP_ALLOC_KMALLOC;
-        req.phys_addr = isp_mem.phys_addr;  // Use actual physical address
-        req.size = isp_mem.size;            // Use actual size
-        req.virt_addr = (unsigned long)isp_mem.virt_addr;  // Use actual virtual address
+        req.phys_addr = dev->dma_addr;
+        req.size = dev->dma_size;
+        req.virt_addr = (unsigned long)dev->dma_buf;
         req.flags = 0;
 
-        // Update stored info
-        dev->buf_info->method = req.method;
-        dev->buf_info->buffer_start = req.phys_addr;
-        dev->buf_info->buffer_size = req.size;
-        dev->buf_info->virt_addr = req.virt_addr;
-        dev->buf_info->flags = 1;
+        pr_info("tx_isp: Memory allocation: phys=0x%x virt=%p size=0x%x\n",
+                (unsigned int)dev->dma_addr, dev->dma_buf, dev->dma_size);
+
+        // Validate frame source setup
+        VALIDATE_FS_STATE(fs);
+        VALIDATE_FS_ACCESS(fs, 0x438);
 
         if (copy_to_user(argp, &req, sizeof(req)))
             return -EFAULT;
@@ -4063,8 +4349,8 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
 	    pr_info("tx_isp: Handling ioctl VIDIOC_SET_BUF_INFO\n");
 
-	    if (!gISPdev || !gISPdev->buf_info) {
-	        pr_err("tx_isp: Device or buffer info not initialized\n");
+	    if (!gISPdev || !gISPdev->buf_info || !gISPdev->dma_buf) {
+	        pr_err("tx_isp: Invalid device state\n");
 	        return -EINVAL;
 	    }
 
@@ -4073,33 +4359,23 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	        return -EFAULT;
 	    }
 
-	    pr_info("tx_isp: Received buffer info from userspace:\n");
-	    pr_info("  Method: 0x%x\n", buf_info.method);
-	    pr_info("  Physical addr: 0x%08x\n", buf_info.buffer_start);
-	    pr_info("  Virtual addr: 0x%08x\n", buf_info.virt_addr);
-	    pr_info("  Size: %u\n", buf_info.buffer_size);
-
-	    // Match what LIBIMP expects exactly
+	    // Use actual mapped addresses
 	    buf_info.method = ISP_ALLOC_KMALLOC;
-	    buf_info.buffer_start = ISP_FINAL_PHYS;
-	    buf_info.buffer_size = ISP_ALLOC_SIZE;
+	    buf_info.buffer_start = gISPdev->dma_addr;
+	    buf_info.buffer_size = gISPdev->dma_size;
 	    buf_info.virt_addr = (unsigned long)gISPdev->dma_buf;
 	    buf_info.flags = 1;
 
-	    // Copy values back to our stored info
+	    // Store consistent info
 	    memcpy(gISPdev->buf_info, &buf_info, sizeof(buf_info));
 
-	    pr_info("tx_isp: Adjusted buffer info:\n");
-	    pr_info("  Method: 0x%x\n", buf_info.method);
-	    pr_info("  Physical addr: 0x%x\n", buf_info.buffer_start);
-	    pr_info("  Virtual addr: 0x%lx\n", buf_info.virt_addr);
-	    pr_info("  Size: %u\n", buf_info.buffer_size);
-	    pr_info("  Flags: 0x%x\n", buf_info.flags);
+	    pr_info("tx_isp: Buffer info configured: phys=0x%x virt=%p size=%u\n",
+	            (unsigned int)buf_info.buffer_start,
+	            (void *)buf_info.virt_addr,
+	            buf_info.buffer_size);
 
-	    if (copy_to_user(argp, &buf_info, sizeof(buf_info))) {
-	        pr_err("tx_isp: Failed to copy back to user\n");
+	    if (copy_to_user(argp, &buf_info, sizeof(buf_info)))
 	        return -EFAULT;
-	    }
 
 	    pr_info("tx_isp: Buffer setup completed successfully\n");
 	    return 0;
@@ -4204,16 +4480,31 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         // ret = set_rotation(gISPdev, argp); // TODO
         break;
 	}
-	// Add these cases to your ioctl handler:
-	case VIDIOC_STREAMON: // cmd=0x80045612
+	case VIDIOC_STREAMON:
 	    pr_info("Stream ON requested\n");
-	    ret = start_streaming(gISPdev);
+	    ret = setup_frame_source(gISPdev);
+	    if (ret) {
+	        pr_err("Failed to setup frame source\n");
+	        return ret;
+	    }
+	    ret = start_frame_source(gISPdev);
+	    if (ret) {
+	        pr_err("Failed to start frame source\n");
+	        return ret;
+	    }
 	    break;
-
 	case VIDIOC_STREAMOFF:
 	    pr_info("Stream OFF requested\n");
-	    ret = stop_streaming(gISPdev);
+	    if (gISPdev->fs_info) {
+	        struct isp_framesource_state *fs = gISPdev->fs_info;
+	        if (fs->state == 2) {  // If streaming
+	            enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	            v4l2_ioctl(fs->fd, VIDIOC_STREAMOFF, &type);
+	            fs->state = 1;  // Back to ready state
+	        }
+	    }
 	    break;
+
 
 	case VIDIOC_S_FMT: {
 	    struct v4l2_format fmt;
