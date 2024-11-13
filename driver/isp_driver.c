@@ -3926,15 +3926,6 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	        return -ENODEV;
 	    }
 
-	    // Log buffer details before enabling stream
-	    pr_info("Buffer Info: virt_addr=0x%p, phys_addr=0x%lx, size=%d\n",
-	            gISPdev->buf.virt_addr, gISPdev->buf.phys_addr, gISPdev->buf.size);
-
-	    if (!gISPdev->buf.virt_addr || !gISPdev->buf.phys_addr) {
-	        pr_err("Buffer not allocated properly\n");
-	        return -ENOMEM;
-	    }
-
 	    // Enable streaming on the sensor
 	    ret = i2c_smbus_write_byte_data(gISPdev->sensor_i2c_client, 0x0100, 0x01);
 	    if (ret < 0) {
