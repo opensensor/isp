@@ -621,30 +621,23 @@ EXPORT_SYMBOL(private_clk_put);
 EXPORT_SYMBOL(private_clk_set_rate);
 
 
-// V4L2 helper functions for kernel space
+// V4L2 helper functions using direct file operations
 static int v4l2_s_fmt(struct file *filp, struct v4l2_format *fmt)
 {
-    struct video_device *vdev = video_devdata(filp);
-    int ret;
-
-    if (!vdev || !vdev->fops || !vdev->fops->unlocked_ioctl)
+    if (!filp || !filp->f_op || !filp->f_op->unlocked_ioctl)
         return -ENODEV;
 
-    ret = vdev->fops->unlocked_ioctl(filp, VIDIOC_S_FMT, (unsigned long)fmt);
-    return ret;
+    return filp->f_op->unlocked_ioctl(filp, VIDIOC_S_FMT, (unsigned long)fmt);
 }
 
 static int v4l2_ioctl(struct file *filp, unsigned int cmd, void *arg)
 {
-    struct video_device *vdev = video_devdata(filp);
-    int ret;
-
-    if (!vdev || !vdev->fops || !vdev->fops->unlocked_ioctl)
+    if (!filp || !filp->f_op || !filp->f_op->unlocked_ioctl)
         return -ENODEV;
 
-    ret = vdev->fops->unlocked_ioctl(filp, cmd, (unsigned long)arg);
-    return ret;
+    return filp->f_op->unlocked_ioctl(filp, cmd, (unsigned long)arg);
 }
+
 
 
 /* Register block structure based on decompiled access patterns */
