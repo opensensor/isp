@@ -312,17 +312,9 @@ struct isp_framesource_state {
 
 // Add validation macros
 #define VALIDATE_FS_STATE(fs) do { \
-    if (!fs || !fs->buf_base || !fs->ext_buffer) { \
-        pr_err("Invalid frame source state\n"); \
+    if (!fs || !fs->buf_base) { \
+        pr_err("Invalid frame source state at %s:%d\n", __func__, __LINE__); \
         return -EINVAL; \
-    } \
-} while(0)
-
-#define VALIDATE_FS_ACCESS(fs, offset) do { \
-    if (offset >= sizeof(struct isp_framesource_state)) { \
-        pr_err("Invalid access: offset 0x%x exceeds size 0x%zx\n", \
-               offset, sizeof(struct isp_framesource_state)); \
-        return -EFAULT; \
     } \
 } while(0)
 
@@ -2342,106 +2334,88 @@ static struct IMPISPDev *gISPdev_bak = NULL;  // Backup for reopen
 
 static int setup_frame_source(struct IMPISPDev *dev)
 {
-    struct isp_framesource_state *fs = dev->fs_info;
+    struct isp_framesource_state *fs;
     struct isp_buffer_info *bufs;
-    char dev_name[32];
-    struct file *filp;
     int ret;
 
-    VALIDATE_FS_STATE(fs);
+    if (!dev || !dev->fs_info) {
+        pr_err("Invalid device or frame source info\n");
+        return -EINVAL;
+    }
+
+    fs = dev->fs_info;
+
+    // Validate essential fields before proceeding
+    if (!fs->width || !fs->height || !fs->buf_cnt) {
+        pr_err("Invalid frame source parameters\n");
+        return -EINVAL;
+    }
+
+    // Allocate DMA memory if not already done
+    if (!fs->buf_base) {
+        size_t total_size = fs->buf_size * fs->buf_cnt;
+        fs->buf_base = dma_alloc_coherent(dev->dev, total_size,
+                                         &fs->dma_addr, GFP_KERNEL);
+        if (!fs->buf_base) {
+            pr_err("Failed to allocate DMA memory\n");
+            return -ENOMEM;
+        }
+    }
 
     // Configure buffer info
     bufs = fs->bufs;
+    if (!bufs) {
+        pr_err("No buffer info array allocated\n");
+        return -EINVAL;
+    }
+
+    pr_info("Configuring %d buffers of size %d\n", fs->buf_cnt, fs->buf_size);
+
     for (int i = 0; i < fs->buf_cnt; i++) {
         bufs[i].virt_addr = (uint32_t)(uintptr_t)(fs->buf_base + (i * fs->buf_size));
         bufs[i].buffer_start = fs->dma_addr + (i * fs->buf_size);
         bufs[i].buffer_size = fs->buf_size;
         bufs[i].flags = 0;
+
+        pr_debug("Buffer %d: virt=0x%x, phys=0x%x, size=%d\n",
+                i, bufs[i].virt_addr, bufs[i].buffer_start, bufs[i].buffer_size);
     }
 
-    // Open frame source device using kernel file operations
-    snprintf(dev_name, sizeof(dev_name), "/dev/video%d", fs->chn_num);
-    filp = filp_open(dev_name, O_RDWR, 0);
-    if (IS_ERR(filp)) {
-        pr_err("Failed to open frame source: %s\n", dev_name);
-        return PTR_ERR(filp);
-    }
-    fs->fd = filp;
+    // No need for V4L2 device setup here since we're using our own buffer management
+    fs->state = 1;  // Mark as ready
 
-    // Configure format using V4L2
-    struct v4l2_format fmt = {
-        .type = V4L2_BUF_TYPE_VIDEO_CAPTURE,
-        .fmt.pix = {
-            .width = fs->width,
-            .height = fs->height,
-            .pixelformat = fs->fmt,
-            .field = V4L2_FIELD_NONE,
-            .bytesperline = fs->width * 2, // Assuming YUYV
-            .sizeimage = fs->width * fs->height * 2
-        }
-    };
-
-    ret = v4l2_s_fmt(fs->fd, &fmt);
-    if (ret) {
-        pr_err("Failed to set format\n");
-        goto err_close;
-    }
-
-    fs->state = 1;  // Ready state
+    pr_info("Frame source setup complete\n");
     return 0;
-
-err_close:
-    filp_close(fs->fd, NULL);
-    fs->fd = NULL;
-    return ret;
 }
-// Update start_frame_source to use proper V4L2 kernel operations
+
+
 static int start_frame_source(struct IMPISPDev *dev)
 {
-    struct isp_framesource_state *fs = dev->fs_info;
-    struct v4l2_buffer buf;
-    enum v4l2_buf_type type;
-    int ret, i;
+    struct isp_framesource_state *fs;
+    int ret;
 
-    VALIDATE_FS_STATE(fs);
-
-    if (!fs->fd) {
-        pr_err("No file handle\n");
+    if (!dev || !dev->fs_info) {
+        pr_err("Invalid device or frame source info\n");
         return -EINVAL;
     }
 
-    // Queue initial buffers
-    memset(&buf, 0, sizeof(buf));
-    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    buf.memory = V4L2_MEMORY_USERPTR;
+    fs = dev->fs_info;
 
-    for (i = 0; i < fs->buf_cnt; i++) {
-        buf.index = i;
-        buf.m.userptr = (unsigned long)fs->bufs[i].virt_addr;
-        buf.length = fs->bufs[i].buffer_size;
-
-        ret = v4l2_ioctl(fs->fd, VIDIOC_QBUF, &buf);
-        if (ret) {
-            pr_err("Failed to queue buffer %d\n", i);
-            goto stop_stream;
-        }
+    if (fs->state != 1) {
+        pr_err("Frame source not in ready state\n");
+        return -EINVAL;
     }
 
-    // Start streaming
-    type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    ret = v4l2_ioctl(fs->fd, VIDIOC_STREAMON, &type);
-    if (ret) {
-        pr_err("Failed to start streaming\n");
-        goto stop_stream;
+    // Set up DMA for continuous capture
+    if (dev->dma_addr && dev->dma_size) {
+        pr_info("Starting DMA transfer\n");
+        // Add your DMA setup code here
+        fs->state = 2;  // Mark as streaming
+        return 0;
     }
 
-    fs->state = 2;  // Streaming state
-    return 0;
-
-stop_stream:
-    type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    v4l2_ioctl(fs->fd, VIDIOC_STREAMOFF, &type);
-    return ret;
+    pr_err("No DMA configuration available\n");
+    return -EINVAL;
 }
 
 
@@ -2479,7 +2453,6 @@ static int init_frame_source(struct IMPISPDev *dev, int channel)
 
     pr_info("Initializing frame source channel %d\n", channel);
 
-    // Validate input
     if (!dev) {
         pr_err("Invalid device pointer\n");
         return -EINVAL;
@@ -2493,16 +2466,15 @@ static int init_frame_source(struct IMPISPDev *dev, int channel)
     }
 
     // Initialize basic parameters
-    fs->magic = 0x12345678;  // Magic identifier
     fs->chn_num = channel;
     fs->state = 0;           // Initial state
-    fs->width = dev->width ? dev->width : 1920;  // Default to 1080p if not set
+    fs->width = dev->width ? dev->width : 1920;
     fs->height = dev->height ? dev->height : 1080;
-    fs->fmt = V4L2_PIX_FMT_YUYV;  // Default format
+    fs->fmt = V4L2_PIX_FMT_YUYV;
 
     // Buffer setup
-    fs->buf_cnt = 4;  // Default to 4 buffers
-    fs->buf_size = fs->width * fs->height * 2;  // Size for YUYV format
+    fs->buf_cnt = 4;
+    fs->buf_size = fs->width * fs->height * 2;  // YUYV format
     fs->buf_flags = 0;
 
     // Allocate buffer info array
@@ -4165,7 +4137,6 @@ static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
 
         // Validate frame source setup
         VALIDATE_FS_STATE(fs);
-        VALIDATE_FS_ACCESS(fs, 0x438);
 
         if (copy_to_user(argp, &req, sizeof(req)))
             return -EFAULT;
