@@ -3553,32 +3553,6 @@ static void dump_memory_info(struct IMPISPDev *dev) {
     }
 }
 
-static int init_isp_memory(struct IMPISPDev *dev) {
-    void *virt_addr;
-    dma_addr_t phys_addr = ISP_RMEM_BASE;
-
-    pr_info("Initializing ISP memory at 0x%08x size=%u\n",
-            (unsigned int)phys_addr, ISP_RMEM_SIZE);
-
-    // Map the physical memory
-    virt_addr = ioremap(phys_addr, ISP_RMEM_SIZE);
-    if (!virt_addr) {
-        pr_err("Failed to map ISP memory\n");
-        return -ENOMEM;
-    }
-
-    // Store the mappings
-    dev->dma_buf = virt_addr;
-    dev->dma_addr = phys_addr;
-    dev->dma_size = ISP_RMEM_SIZE;
-
-    pr_info("ISP memory mapped: virt=%p phys=0x%08x\n",
-            dev->dma_buf, (unsigned int)dev->dma_addr);
-
-    return 0;
-}
-
-
 // Add validation before streaming
 static int validate_streaming_setup(struct IMPISPDev *dev) {
     if (!dev || !dev->dma_buf || !dev->buf_info) {
@@ -4304,10 +4278,10 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	    pr_info("Sensor streaming setup complete\n");
 	    break;
 	}
-	case TX_ISP_SET_BUF: {
+	case TX_ISP_SET_BUF: { // 0x800856d5
 	 	return handle_set_buf_ioctl(gISPdev, arg);
 	}
-	case VIDIOC_SET_BUF_INFO: {
+	case VIDIOC_SET_BUF_INFO: { // 0x800856d4
 	    struct sensor_buffer_info buf_info = {0};
 	    void __user *argp = (void __user *)arg;
 
@@ -4672,6 +4646,88 @@ int tiziano_load_parameters(const char *filename, void __iomem *dest, size_t off
     return ret;
 }
 
+static int configure_isp_clock(struct device *dev) {
+    struct clk *isp_clk, *div_clk;
+    unsigned long target_rate = 125000000; // 125 MHz
+    unsigned long actual_rate;
+
+    // Step 1: Get the ISP clock
+    isp_clk = clk_get(dev, "isp");
+    if (IS_ERR(isp_clk)) {
+        dev_err(dev, "Failed to get ISP clock\n");
+        return PTR_ERR(isp_clk);
+    }
+
+    // Step 2: Get the divider clock for ISP
+    div_clk = clk_get(dev, "cgu_isp");
+    if (IS_ERR(div_clk)) {
+        dev_err(dev, "Failed to get ISP divider clock\n");
+        clk_put(isp_clk);
+        return PTR_ERR(div_clk);
+    }
+
+    // Step 3: Enable the ISP clock gate
+    if (clk_prepare_enable(isp_clk)) {
+        dev_err(dev, "Failed to enable ISP clock gate\n");
+        clk_put(isp_clk);
+        clk_put(div_clk);
+        return -EINVAL;
+    }
+
+    // Step 4: Set the divider rate (if supported)
+    if (clk_set_rate(div_clk, target_rate)) {
+        dev_err(dev, "Failed to set ISP divider rate to %lu\n", target_rate);
+        clk_disable_unprepare(isp_clk);
+        clk_put(isp_clk);
+        clk_put(div_clk);
+        return -EINVAL;
+    }
+
+    // Step 5: Set the ISP clock rate directly
+    if (clk_set_rate(isp_clk, target_rate)) {
+        dev_warn(dev, "Failed to set ISP clock rate to %lu Hz, trying alternative method\n", target_rate);
+
+        // Try to read the current rate
+        unsigned long current_rate = clk_get_rate(isp_clk);
+        dev_info(dev, "Current ISP clock rate: %lu Hz\n", current_rate);
+
+        // Try setting the parent clock rate if available
+        struct clk *parent = clk_get_parent(isp_clk);
+        if (parent) {
+            if (clk_set_rate(parent, target_rate)) {
+                dev_err(dev, "Failed to set parent clock rate to %lu Hz\n", target_rate);
+            } else {
+                dev_info(dev, "Successfully set parent clock rate to %lu Hz\n", target_rate);
+            }
+        } else {
+            dev_warn(dev, "No parent clock found for ISP clock\n");
+        }
+
+        // Check if the rate was set correctly
+        current_rate = clk_get_rate(isp_clk);
+        if (current_rate != target_rate) {
+            dev_warn(dev, "ISP clock rate mismatch: wanted %lu Hz, got %lu Hz\n", target_rate, current_rate);
+        } else {
+            dev_info(dev, "ISP clock successfully set to %lu Hz\n", current_rate);
+            return 0;
+        }
+
+        // If we couldn't set the exact rate, continue with the current rate
+        dev_warn(dev, "Continuing with current ISP clock rate: %lu Hz\n", current_rate);
+        return 0;
+    }
+
+    // Step 6: Verify the clock rate
+    actual_rate = clk_get_rate(isp_clk);
+    if (actual_rate != target_rate) {
+        dev_warn(dev, "ISP clock rate mismatch: set %lu, got %lu\n", target_rate, actual_rate);
+    } else {
+        dev_info(dev, "ISP clock successfully set to %lu Hz\n", actual_rate);
+    }
+
+    return 0;
+}
+
 // Update the tisp_init function to properly handle register access
 static int tisp_init(struct device *dev)
 {
@@ -4730,6 +4786,9 @@ static int tisp_init(struct device *dev)
     // Step 4: Write the parameters to hardware registers using global gISPdev->regs
     writel((unsigned long)tparams_day, gISPdev->regs + 0x84b50);
     dev_info(dev, "tparams_day written to register successfully\n");
+
+
+   	configure_isp_clock(dev);
 
     return 0;
 
@@ -4896,7 +4955,7 @@ static int tisp_probe(struct platform_device *pdev)
     gISPdev->dev = &pdev->dev;
     platform_set_drvdata(pdev, gISPdev);
 
- // Initialize reserved memory
+ 	// Initialize reserved memory
     ret = init_isp_reserved_memory(pdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to initialize reserved memory\n");
