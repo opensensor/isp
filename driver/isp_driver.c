@@ -2508,11 +2508,16 @@ static int init_frame_source(struct IMPISPDev *dev, int channel)
         return -EINVAL;
     }
 
-    // Allocate frame source state
-    fs = kzalloc(sizeof(*fs), GFP_KERNEL);
-    if (!fs) {
-        pr_err("Failed to allocate frame source state\n");
-        return -ENOMEM;
+    // Allocate frame source state if not already allocated
+    if (!dev->fs_info) {
+        fs = kzalloc(sizeof(*fs), GFP_KERNEL);
+        if (!fs) {
+            pr_err("Failed to allocate frame source state\n");
+            return -ENOMEM;
+        }
+        dev->fs_info = fs;
+    } else {
+        fs = dev->fs_info;
     }
 
     // Initialize basic parameters
@@ -2527,19 +2532,8 @@ static int init_frame_source(struct IMPISPDev *dev, int channel)
     fs->buf_size = fs->width * fs->height * 2;  // YUYV format
     fs->buf_flags = 0;
 
-    // Allocate buffer info array
-    fs->bufs = kzalloc(sizeof(struct isp_buffer_info) * fs->buf_cnt, GFP_KERNEL);
-    if (!fs->bufs) {
-        pr_err("Failed to allocate buffer info array\n");
-        kfree(fs);
-        return -ENOMEM;
-    }
-
     // Initialize synchronization
     sema_init(&fs->sem, 1);
-
-    // Store in device
-    dev->fs_info = fs;
 
     pr_info("Frame source initialized: %dx%d, %d buffers\n",
             fs->width, fs->height, fs->buf_cnt);
@@ -2707,6 +2701,26 @@ static void cleanup_isp_registers(struct IMPISPDev *dev)
     }
 }
 
+static void cleanup_frame_buffers(struct isp_framesource_state *fs)
+{
+    if (!fs)
+        return;
+
+    if (fs->buf_base) {
+        iounmap(fs->buf_base);
+        fs->buf_base = NULL;
+    }
+
+    if (fs->bufs) {
+        kfree(fs->bufs);
+        fs->bufs = NULL;
+    }
+
+    fs->dma_addr = 0;
+    fs->buf_cnt = 0;
+    fs->buf_size = 0;
+}
+
 
 static int tisp_release(struct inode *inode, struct file *file)
 {
@@ -2715,6 +2729,13 @@ static int tisp_release(struct inode *inode, struct file *file)
     pr_info("ISP device release called\n");
 
     if (dev) {
+        if (dev->fs_info) {
+            cleanup_frame_buffers(dev->fs_info);  // Add this line
+            kfree(dev->fs_info);
+            dev->fs_info = NULL;
+        }
+
+        // Rest of existing cleanup code...
         if (dev->is_open) {
             stop_streaming(dev);
         }
@@ -2725,13 +2746,10 @@ static int tisp_release(struct inode *inode, struct file *file)
             dev->fd = -1;
         }
 
-        // Clean up registers
+        // Clean up registers and other resources...
         cleanup_isp_registers(dev);
-
-        // Clean up memory
         cleanup_isp_memory(dev);
 
-        // Clean up mappings
         if (dev->ctrl_regs) {
             iounmap(dev->ctrl_regs);
             dev->ctrl_regs = NULL;
@@ -2741,7 +2759,6 @@ static int tisp_release(struct inode *inode, struct file *file)
             dev->regs = NULL;
         }
 
-        // Mark device as closed
         dev->is_open = 0;
     }
 
@@ -4133,13 +4150,12 @@ static int alloc_isp_memory(size_t size)
 #define ISP_ALLOC_CONTINUOUS 2
 
 struct isp_mem_request {
-    uint32_t method;
-    uint32_t phys_addr;
-    uint32_t virt_addr;
-    uint32_t size;
-    uint32_t flags;
+    uint32_t method;        // 0x80: Should match ISP_ALLOC_KMALLOC
+    uint32_t phys_addr;     // 0x84: Physical address from IMP_Alloc
+    uint32_t virt_addr;     // 0x88: Virtual address
+    uint32_t size;          // 0x8C: Buffer size
+    uint32_t flags;         // 0x90: Flags/attributes
 };
-
 
 /**
  * handle_set_buf_ioctl - Unified buffer allocation handler
@@ -4149,50 +4165,90 @@ struct isp_mem_request {
  *
  * Handles buffer allocation for both the global ISP device and per-channel frame sources.
  */
-static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
+// Add these defines for consistent memory handling
+#define ISP_BUFFER_BASE    0x02a80000  // Match the actual rmem base
+#define ISP_BUFFER_SIZE    22544384    // ~22MB total size
+#define ISP_FRAME_SIZE     (1920 * 1080 * 2)  // YUV422 format size
+
+static int handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg)
+{
     struct isp_mem_request req;
     void __user *argp = (void __user *)arg;
     struct isp_framesource_state *fs = dev->fs_info;
 
+    pr_info("tx_isp: Handling SET_BUF request\n");
+
+    // Validate frame source state
     if (!fs) {
         pr_err("tx_isp: No frame source initialized\n");
         return -EINVAL;
     }
 
     if (copy_from_user(&req, argp, sizeof(req))) {
-        pr_err("tx_isp: Failed to copy from user\n");
+        pr_err("tx_isp: Failed to copy request from user\n");
         return -EFAULT;
     }
 
     pr_info("tx_isp: SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
             req.method, req.phys_addr, req.size);
 
-    // Use reserved memory for the global buffer
+    // This matches libimp's magic number check
     if (req.method == 0x203a726f && req.phys_addr == 0x33326373) {
-        if (!fs->buf_base) {
-            // Allocate from pre-mapped reserved memory
-            fs->buf_base = gISPdev->dma_buf;
-            fs->dma_addr = gISPdev->dma_addr;
-            fs->buf_size = gISPdev->dma_size;
+        // Calculate buffer parameters
+        size_t total_size = min_t(size_t, RMEM_SIZE, 22544384); // Match libimp size
+        fs->buf_size = (dev->width * dev->height * 2); // YUV422 format
+        fs->buf_cnt = 4; // Match what libimp expects
 
-            pr_info("Using reserved memory: phys=0x%lx virt=%p size=0x%lx\n",
-                    (unsigned long)fs->dma_addr, fs->buf_base, (unsigned long)fs->buf_size);
+        if (!fs->buf_base) {
+            // Map our reserved memory region
+            fs->buf_base = ioremap(ISP_RMEM_BASE, total_size);
+            if (!fs->buf_base) {
+                pr_err("tx_isp: Failed to map buffer memory\n");
+                return -ENOMEM;
+            }
+            fs->dma_addr = ISP_RMEM_BASE;
+
+            // Initialize buffer info array
+            if (!fs->bufs) {
+                fs->bufs = kzalloc(sizeof(struct isp_buffer_info) * fs->buf_cnt, GFP_KERNEL);
+                if (!fs->bufs) {
+                    iounmap(fs->buf_base);
+                    fs->buf_base = NULL;
+                    return -ENOMEM;
+                }
+            }
+
+            // Set up buffer descriptors
+            for (int i = 0; i < fs->buf_cnt; i++) {
+                fs->bufs[i].method = ISP_ALLOC_KMALLOC;
+                fs->bufs[i].buffer_start = fs->dma_addr + (i * fs->buf_size);
+                fs->bufs[i].virt_addr = (uint32_t)fs->buf_base + (i * fs->buf_size);
+                fs->bufs[i].buffer_size = fs->buf_size;
+                fs->bufs[i].flags = 0;
+                fs->bufs[i].frame_count = 0;
+                fs->bufs[i].is_buffer_full = 0;
+            }
+
+            pr_info("tx_isp: Initialized %d buffers of size %u at phys=0x%x\n",
+                    fs->buf_cnt, fs->buf_size, fs->dma_addr);
         }
 
-        // Return buffer info to user space
+        // Return buffer info matching libimp's expectations
         req.method = ISP_ALLOC_KMALLOC;
         req.phys_addr = fs->dma_addr;
-        req.size = fs->buf_size;
-        req.virt_addr = (unsigned long)fs->buf_base;
+        req.virt_addr = (uint32_t)fs->buf_base;
+        req.size = fs->buf_cnt * fs->buf_size;
         req.flags = 0;
 
-        if (copy_to_user(argp, &req, sizeof(req)))
+        if (copy_to_user(argp, &req, sizeof(req))) {
+            pr_err("tx_isp: Failed to copy buffer info to user\n");
             return -EFAULT;
+        }
 
         return 0;
     }
 
-    pr_err("tx_isp: Unhandled request\n");
+    pr_err("tx_isp: Invalid buffer request\n");
     return -EINVAL;
 }
 
@@ -4366,46 +4422,52 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         fs->state = 2; // Mark as streaming
         pr_info("Sensor streaming setup complete\n");
         break;
-	case TX_ISP_SET_BUF: { // 0x800856d5
-    	return handle_set_buf_ioctl(gISPdev, arg);
-	}
-	case VIDIOC_SET_BUF_INFO: { // 0x800856d4
-	    struct sensor_buffer_info buf_info = {0};
-	    void __user *argp = (void __user *)arg;
+    // First, GET_BUF_INFO handler tells libimp initial memory size
+    case VIDIOC_GET_BUF_INFO: // 0x800856d5
+    {
+        struct {
+            uint32_t method;     // Should be 1
+            uint32_t phys_addr;  // Should be 1
+            uint32_t size;       // Should be our size
+        } info = {
+            .method = 1,
+            .phys_addr = 1,
+            .size = RMEM_SIZE
+        };
 
-	    pr_info("tx_isp: Handling ioctl VIDIOC_SET_BUF_INFO\n");
+        if (copy_to_user((void __user *)arg, &info, sizeof(info))) {
+            pr_err("Failed to copy buffer info to user\n");
+            return -EFAULT;
+        }
 
-	    if (!gISPdev || !gISPdev->buf_info || !gISPdev->dma_buf) {
-	        pr_err("tx_isp: Invalid device state\n");
-	        return -EINVAL;
-	    }
+        pr_info("tx_isp: GET_BUF_INFO: method=0x%x phys=0x%x size=0x%x\n",
+                info.method, info.phys_addr, info.size);
+        return 0;
+    }
 
-	    if (copy_from_user(&buf_info, argp, sizeof(buf_info))) {
-	        pr_err("tx_isp: Failed to copy from user\n");
-	        return -EFAULT;
-	    }
+    case VIDIOC_SET_BUF_INFO: // 0x800856d4
+    {
+        uint32_t phys_addr;
 
-	    // Use actual mapped addresses
-	    buf_info.method = ISP_ALLOC_KMALLOC;
-	    buf_info.buffer_start = gISPdev->dma_addr;
-	    buf_info.buffer_size = gISPdev->dma_size;
-	    buf_info.virt_addr = (unsigned long)gISPdev->dma_buf;
-	    buf_info.flags = 1;
+        if (copy_from_user(&phys_addr, (void __user *)arg, sizeof(phys_addr))) {
+            pr_err("tx_isp: Failed to copy physical address from user\n");
+            return -EFAULT;
+        }
 
-	    // Store consistent info
-	    memcpy(gISPdev->buf_info, &buf_info, sizeof(buf_info));
+        pr_info("tx_isp: SET_BUF_INFO received phys=0x%x\n", phys_addr);
 
-	    pr_info("tx_isp: Buffer info configured: phys=0x%x virt=%p size=%u\n",
-	            (unsigned int)buf_info.buffer_start,
-	            (void *)buf_info.virt_addr,
-	            buf_info.buffer_size);
+        // Store it in global buffer info
+        if (!gISPdev->buf_info) {
+            gISPdev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
+            if (!gISPdev->buf_info) {
+                pr_err("tx_isp: Failed to allocate buf_info\n");
+                return -ENOMEM;
+            }
+        }
 
-	    if (copy_to_user(argp, &buf_info, sizeof(buf_info)))
-	        return -EFAULT;
-
-	    pr_info("tx_isp: Buffer setup completed successfully\n");
-	    return 0;
-	}
+        gISPdev->buf_info->buffer_start = phys_addr;
+        return 0;
+    }
     case TX_ISP_VIDEO_LINK_SETUP: {
       	pr_info("TX_ISP_VIDEO_LINK_SETUP\n");
         unsigned int link;
@@ -5078,13 +5140,32 @@ static int framechan_open(struct inode *inode, struct file *file)
     int minor = iminor(inode);
     struct isp_framesource_state *fs = &gISPdev->frame_sources[minor];
 
-    if (!fs) {
-        pr_err("Frame source not initialized for channel %d\n", minor);
-        return -ENODEV;
+    pr_info("Opening frame channel %d\n", minor);
+
+    // Initialize the frame source if not done
+    if (!fs->is_open) {
+        fs->width = 1920;
+        fs->height = 1080;
+        fs->buf_cnt = 4;
+        fs->buf_size = fs->width * fs->height * 2;  // YUV422
+
+        // Map our reserved memory region for this channel
+        fs->buf_base = ioremap(ISP_RMEM_BASE + (minor * fs->buf_size * fs->buf_cnt),
+                              fs->buf_size * fs->buf_cnt);
+        if (!fs->buf_base) {
+            pr_err("Failed to map memory for channel %d\n", minor);
+            return -ENOMEM;
+        }
+
+        fs->dma_addr = ISP_RMEM_BASE + (minor * fs->buf_size * fs->buf_cnt);
+        fs->is_open = 1;
+
+        pr_info("Initialized channel %d: %dx%d, %d buffers at phys=0x%x virt=%p\n",
+                minor, fs->width, fs->height, fs->buf_cnt,
+                (unsigned int)fs->dma_addr, fs->buf_base);
     }
 
-    file->private_data = fs;  // Tie this open call to the frame source
-    pr_info("Opened /dev/framechan%d\n", minor);
+    file->private_data = fs;
     return 0;
 }
 
@@ -5522,7 +5603,12 @@ static void __exit isp_driver_exit(void)
     struct platform_device *pdev = NULL;
     struct device *dev = NULL;
 
-    remove_isp_proc_entries();  // Clean up proc entries
+    // Add this block
+    if (gISPdev && gISPdev->fs_info) {
+        cleanup_frame_buffers(gISPdev->fs_info);
+    }
+
+    remove_isp_proc_entries();
 
     /* Find our platform device */
     dev = bus_find_device_by_name(&platform_bus_type, NULL, "tisp-driver");
@@ -5532,6 +5618,7 @@ static void __exit isp_driver_exit(void)
         put_device(dev);
     }
 
+    // Rest of existing cleanup...
     platform_driver_unregister(&tisp_platform_driver);
     if (gISPdev) {
         cleanup_isp_memory(gISPdev);
