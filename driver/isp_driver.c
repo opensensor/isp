@@ -174,6 +174,11 @@ struct isp_rotation_params {
 #define ISP_INIT_OFFSET    0x0118
 
 
+#define MAX_CHANNELS 3  // Define the maximum number of frame channels
+static struct class *framechan_class;
+static dev_t framechan_dev;
+static struct cdev framechan_cdev;
+
 // Updated structure based on your previous definition and observations
 struct sensor_list_info {
     char name[80];          // Sensor name
@@ -221,6 +226,41 @@ struct sensor_control_info {
     uint32_t flags;            // Control flags
 } __attribute__((packed, aligned(4)));
 
+
+#define MAX_FRAME_SOURCES 3
+
+
+struct isp_framesource_state {
+    uint32_t magic;          // 0x00: Magic identifier
+    uint32_t flags;          // 0x04: State flags
+    uint32_t chn_num;        // 0x18: Channel number
+    uint32_t state;          // 0x1c: Channel state
+    uint32_t width;          // 0x20: Frame width
+    uint32_t height;         // 0x24: Frame height
+    uint32_t fmt;            // 0x28: Pixel format
+    uint32_t buf_size;       // 0x54: Buffer size
+
+    // Memory management
+    uint32_t buf_cnt;        // Buffer count
+    uint32_t buf_flags;      // Buffer flags
+    void    *buf_base;       // Buffer base address
+    dma_addr_t dma_addr;     // DMA address
+
+    // Frame management
+    uint32_t frame_cnt;      // Frame counter
+    uint32_t buf_index;      // Current buffer index
+    struct file *fd;       // File pointer for V4L2 operations
+    struct video_device *vdev; // V4L2 video device
+    struct task_struct *thread; // Frame grab thread
+    void    *ext_buffer;     // Extended buffer pointer
+    struct isp_buffer_info *bufs;  // Buffer info array
+
+    // Synchronization
+    struct semaphore sem;    // Buffer semaphore
+    int is_open; // Add this field
+};
+
+
 struct IMPISPDev {
     // Base device info - verified offsets
     char dev_name[32];                    // 0x00: Device name
@@ -265,6 +305,8 @@ struct IMPISPDev {
     // Parameter regions
     void __iomem *isp_params;
     void __iomem *wdr_params;
+
+    struct isp_framesource_state frame_sources[MAX_FRAME_SOURCES];
 } __attribute__((packed, aligned(4)));
 
 // Add these structure definitions
@@ -278,35 +320,6 @@ struct isp_buffer_info {
     uint8_t is_buffer_full;   // Buffer full indicator
 };
 
-
-struct isp_framesource_state {
-    uint32_t magic;          // 0x00: Magic identifier
-    uint32_t flags;          // 0x04: State flags
-    uint32_t chn_num;        // 0x18: Channel number
-    uint32_t state;          // 0x1c: Channel state
-    uint32_t width;          // 0x20: Frame width
-    uint32_t height;         // 0x24: Frame height
-    uint32_t fmt;            // 0x28: Pixel format
-    uint32_t buf_size;       // 0x54: Buffer size
-
-    // Memory management
-    uint32_t buf_cnt;        // Buffer count
-    uint32_t buf_flags;      // Buffer flags
-    void    *buf_base;       // Buffer base address
-    dma_addr_t dma_addr;     // DMA address
-
-    // Frame management
-    uint32_t frame_cnt;      // Frame counter
-    uint32_t buf_index;      // Current buffer index
-    struct file *fd;       // File pointer for V4L2 operations
-    struct video_device *vdev; // V4L2 video device
-    struct task_struct *thread; // Frame grab thread
-    void    *ext_buffer;     // Extended buffer pointer
-    struct isp_buffer_info *bufs;  // Buffer info array
-
-    // Synchronization
-    struct semaphore sem;    // Buffer semaphore
-};
 
 
 // Add validation macros
@@ -4127,10 +4140,24 @@ struct isp_mem_request {
     uint32_t flags;
 };
 
-static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
+
+/**
+ * handle_set_buf_ioctl - Unified buffer allocation handler
+ * @dev: Pointer to IMPISPDev (global device) or NULL if using frame source context
+ * @fs: Pointer to isp_framesource_state (per-frame channel), or NULL if using global device
+ * @arg: IOCTL argument from userspace
+ *
+ * Handles buffer allocation for both the global ISP device and per-channel frame sources.
+ */
+static long handle_set_buf_ioctl(struct IMPISPDev *dev, struct isp_framesource_state *fs, unsigned long arg)
+{
     struct isp_mem_request req;
     void __user *argp = (void __user *)arg;
-    struct isp_framesource_state *fs = dev->fs_info;
+
+    // Determine which context we are using (global or per-frame source)
+    if (dev && !fs) {
+        fs = dev->fs_info;
+    }
 
     if (!fs) {
         pr_err("tx_isp: No frame source initialized\n");
@@ -4145,64 +4172,72 @@ static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
     pr_info("tx_isp: SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
             req.method, req.phys_addr, req.size);
 
-    // Magic sequence check
+    // Case 1: Handle the magic allocation sequence (used by libimp)
     if (req.method == 0x203a726f && req.phys_addr == 0x33326373) {
-        if (!dev->buf_info) {
+        if (dev && !dev->buf_info) {
             dev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
             if (!dev->buf_info)
                 return -ENOMEM;
         }
 
-        // Maintain exact same values for initial request
+        // Allocate buffers for the frame source
+        if (!fs->buf_base) {
+            fs->buf_base = dma_alloc_coherent(gISPdev->dev, req.size, &fs->dma_addr, GFP_KERNEL);
+            if (!fs->buf_base) {
+                pr_err("Failed to allocate DMA buffer\n");
+                return -ENOMEM;
+            }
+            fs->buf_size = req.size;
+        }
+
+        // Update the request structure to return to user space
         req.method = ISP_ALLOC_KMALLOC;
-        req.phys_addr = 0x1;  // Initial magic value
-        req.size = 0x1;       // Initial size
-        req.virt_addr = (unsigned long)dev->dma_buf;
+        req.phys_addr = fs->dma_addr;
+        req.size = fs->buf_size;
+        req.virt_addr = (unsigned long)fs->buf_base;
         req.flags = 0;
-
-        // Store actual values in our buffer info
-        dev->buf_info->method = req.method;
-        dev->buf_info->buffer_start = dev->dma_addr;
-        dev->buf_info->buffer_size = dev->dma_size;
-        dev->buf_info->virt_addr = (unsigned long)dev->dma_buf;
-        dev->buf_info->flags = 0;
-
-        // Also update frame source buffer info
-        fs->dma_addr = dev->dma_addr;
-        fs->buf_base = dev->dma_buf;
-        fs->buf_size = dev->dma_size;
-
-        pr_info("tx_isp: Magic allocation setup: phys=0x%x virt=%p size=0x%x\n",
-                (unsigned int)dev->dma_addr, dev->dma_buf, dev->dma_size);
 
         if (copy_to_user(argp, &req, sizeof(req)))
             return -EFAULT;
+
+        pr_info("tx_isp: Magic allocation setup: phys=0x%x virt=%p size=0x%x\n",
+                (unsigned int)fs->dma_addr, fs->buf_base, fs->buf_size);
+
         return 0;
     }
 
-    // Handle actual memory request
+    // Case 2: Handle standard buffer allocation request
     if (req.phys_addr == 0x1) {
-        // Return actual memory info - keep same sequence
+        // Allocate buffer if not already allocated
+        if (!fs->buf_base) {
+            fs->buf_base = dma_alloc_coherent(gISPdev->dev, req.size, &fs->dma_addr, GFP_KERNEL);
+            if (!fs->buf_base) {
+                pr_err("Failed to allocate DMA buffer\n");
+                return -ENOMEM;
+            }
+            fs->buf_size = req.size;
+        }
+
+        // Return the allocated buffer info to user space
         req.method = ISP_ALLOC_KMALLOC;
-        req.phys_addr = dev->dma_addr;
-        req.size = dev->dma_size;
-        req.virt_addr = (unsigned long)dev->dma_buf;
+        req.phys_addr = fs->dma_addr;
+        req.size = fs->buf_size;
+        req.virt_addr = (unsigned long)fs->buf_base;
         req.flags = 0;
-
-        pr_info("tx_isp: Memory allocation: phys=0x%x virt=%p size=0x%x\n",
-                (unsigned int)dev->dma_addr, dev->dma_buf, dev->dma_size);
-
-        // Validate frame source setup
-        VALIDATE_FS_STATE(fs);
 
         if (copy_to_user(argp, &req, sizeof(req)))
             return -EFAULT;
+
+        pr_info("tx_isp: Memory allocation: phys=0x%x virt=%p size=0x%x\n",
+                (unsigned int)fs->dma_addr, fs->buf_base, fs->buf_size);
+
         return 0;
     }
 
     pr_err("tx_isp: Unhandled request\n");
     return -EINVAL;
 }
+
 
 struct isp_sensor_info {
     int is_initialized;
@@ -4374,7 +4409,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         pr_info("Sensor streaming setup complete\n");
         break;
 	case TX_ISP_SET_BUF: { // 0x800856d5
-	 	return handle_set_buf_ioctl(gISPdev, arg);
+    	return handle_set_buf_ioctl(gISPdev, NULL, arg);
 	}
 	case VIDIOC_SET_BUF_INFO: { // 0x800856d4
 	    struct sensor_buffer_info buf_info = {0};
@@ -5079,6 +5114,107 @@ static void __iomem *map_isp_registers(struct platform_device *pdev)
     return base;
 }
 
+
+static int framechan_open(struct inode *inode, struct file *file)
+{
+    int minor = iminor(inode);
+    struct isp_framesource_state *fs = &gISPdev->frame_sources[minor];
+
+    if (!fs) {
+        pr_err("Frame source not initialized for channel %d\n", minor);
+        return -ENODEV;
+    }
+
+    file->private_data = fs;  // Tie this open call to the frame source
+    pr_info("Opened /dev/framechan%d\n", minor);
+    return 0;
+}
+
+
+static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    struct isp_framesource_state *fs = file->private_data;
+
+    switch (cmd) {
+    case TX_ISP_SET_BUF:
+        pr_info("Setting buffer for frame source channel\n");
+        return handle_set_buf_ioctl(NULL, fs, arg);
+    default:
+        return -ENOTTY;
+    }
+}
+
+static int framechan_release(struct inode *inode, struct file *file)
+{
+    struct isp_framesource_state *fs = file->private_data;
+    if (fs) {
+        pr_info("Releasing frame channel\n");
+        fs->is_open = 0;
+    }
+    return 0;
+}
+
+static struct file_operations framechan_fops = {
+    .owner = THIS_MODULE,
+    .open = framechan_open,
+    .release = framechan_release,
+    .unlocked_ioctl = framechan_ioctl,
+};
+
+static int create_framechan_devices(struct device *dev)
+{
+    int i, ret;
+
+    // Allocate device numbers
+    ret = alloc_chrdev_region(&framechan_dev, 0, MAX_CHANNELS, "framechan");
+    if (ret) {
+        dev_err(dev, "Failed to allocate char device region\n");
+        return ret;
+    }
+
+    // Create device class
+    framechan_class = class_create(THIS_MODULE, "framechan_class");
+    if (IS_ERR(framechan_class)) {
+        unregister_chrdev_region(framechan_dev, MAX_CHANNELS);
+        dev_err(dev, "Failed to create device class\n");
+        return PTR_ERR(framechan_class);
+    }
+
+    // Create each device node
+    for (i = 0; i < MAX_CHANNELS; i++) {
+        cdev_init(&framechan_cdev, &framechan_fops);
+        framechan_cdev.owner = THIS_MODULE;
+        ret = cdev_add(&framechan_cdev, MKDEV(MAJOR(framechan_dev), i), 1);
+        if (ret) {
+            pr_err("Failed to add cdev for /dev/framechan%d\n", i);
+            return ret;
+        }
+
+        device_create(framechan_class, NULL, MKDEV(MAJOR(framechan_dev), i), NULL, "framechan%d", i);
+        pr_info("Created device /dev/framechan%d\n", i);
+    }
+
+
+
+    return 0;
+}
+
+
+static void remove_framechan_devices(void)
+{
+    int i;
+
+    if (framechan_class) {
+        for (i = 0; i < MAX_CHANNELS; i++) {
+            device_destroy(framechan_class, MKDEV(MAJOR(framechan_dev), i));
+        }
+        class_destroy(framechan_class);
+    }
+    unregister_chrdev_region(framechan_dev, MAX_CHANNELS);
+}
+
+
+
 static int tisp_probe(struct platform_device *pdev)
 {
     struct isp_graph_data *graph_data;
@@ -5209,6 +5345,13 @@ static int tisp_probe(struct platform_device *pdev)
         dev_err(&pdev->dev, "Failed to create proc entries\n");
         goto err_unregister_devices;
     }
+
+    ret = create_framechan_devices(&pdev->dev);
+	if (ret) {
+    	dev_err(&pdev->dev, "Failed to create frame channels\n");
+    	goto err_free_memory;
+	}
+
     dev_info(&pdev->dev, "TISP device probed successfully\n");
 
     // Return success
@@ -5222,6 +5365,7 @@ err_free_memory:
     }
     return ret;
 err_unregister_devices:
+    remove_framechan_devices();
 err_unmap_regs:
     if (gISPdev->regs)
         iounmap(gISPdev->regs);
