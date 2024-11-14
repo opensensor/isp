@@ -75,7 +75,6 @@ static struct isp_memory_info isp_mem = {0};
 
 #define ISP_BASE_ADDR        0x13300000
 #define ISP_MAP_SIZE         0x1000
-#define ISP_OFFSET_PARAMS    0x1000
 #define REG_CONTROL          0x100
 
 // CPU info register addresses
@@ -754,9 +753,30 @@ struct isp_device {
 /**
  * Function declarations for ISP register access
  */
-static inline u32 isp_reg_read(struct isp_reg_t *regs, size_t offset)
+// Add these register validation macros
+#define ISP_REG_VALID(reg) ((reg) >= ISP_BASE_ADDR && (reg) < (ISP_BASE_ADDR + ISP_MAP_SIZE))
+#define ISP_REG_OFFSET(reg) ((reg) - ISP_BASE_ADDR)
+
+// Improved register access functions
+static inline u32 isp_reg_read(struct IMPISPDev *dev, u32 reg)
 {
-    return readl((void __iomem *)regs + offset);
+    if (!dev || !dev->regs || !ISP_REG_VALID(reg)) {
+        pr_err("Invalid register access: dev=%p regs=%p reg=0x%x\n",
+               dev, dev ? dev->regs : NULL, reg);
+        return 0;
+    }
+    return readl(dev->regs + ISP_REG_OFFSET(reg));
+}
+
+static inline void isp_reg_write(struct IMPISPDev *dev, u32 reg, u32 val)
+{
+    if (!dev || !dev->regs || !ISP_REG_VALID(reg)) {
+        pr_err("Invalid register write: dev=%p regs=%p reg=0x%x val=0x%x\n",
+               dev, dev ? dev->regs : NULL, reg, val);
+        return;
+    }
+    writel(val, dev->regs + ISP_REG_OFFSET(reg));
+    wmb(); // Ensure write completes
 }
 
 
@@ -2342,25 +2362,6 @@ static struct IMPISPDev *gISPdev_bak = NULL;  // Backup for reopen
 #define ISP_BUF_UV_ADDR     (ISP_BUF_BASE + 0x08)  // UV buffer address
 #define ISP_BUF_UV_SIZE     (ISP_BUF_BASE + 0x0C)  // UV buffer size
 
-static inline int isp_reg_write(struct IMPISPDev *dev, uint32_t offset, uint32_t value)
-{
-    void __iomem *addr;
-
-    if (!dev || !dev->regs) {
-        pr_err("Invalid device or register mapping\n");
-        return -EINVAL;
-    }
-
-    // Validate offset is within register space
-    if (offset >= ISP_REG_SIZE) {
-        pr_err("Invalid register offset: 0x%x\n", offset);
-        return -EINVAL;
-    }
-
-    addr = dev->regs + offset;
-    writel(value, addr);
-    return 0;
-}
 
 static int setup_frame_source(struct IMPISPDev *dev)
 {
@@ -2435,37 +2436,67 @@ static int setup_frame_source(struct IMPISPDev *dev)
 }
 
 
-// Add this helper function to validate memory setup before starting streaming
+// Add these memory validation macros
+#define ISP_MEM_ALIGNED(addr) IS_ALIGNED((unsigned long)(addr), 4096)
+#define ISP_MEM_VALID(addr, size) ((addr) && (size) > 0 && ISP_MEM_ALIGNED(addr))
+
 static int validate_memory_setup(struct IMPISPDev *dev)
 {
-    if (!dev || !dev->fs_info) {
-        pr_err("Invalid device state\n");
+    if (!dev) {
+        pr_err("Invalid device pointer\n");
         return -EINVAL;
     }
 
-    struct isp_framesource_state *fs = dev->fs_info;
-
-    // Verify reserved memory is properly mapped
-    if (!dev->dma_buf || !dev->dma_addr) {
-        pr_err("Reserved memory not properly mapped\n");
+    // Verify DMA memory setup
+    if (!dev->dma_buf || !dev->dma_addr || !dev->dma_size) {
+        pr_err("DMA memory not properly initialized\n");
         return -ENOMEM;
     }
 
-    // Verify buffer info structures
-    if (!fs->bufs || !fs->buf_base) {
-        pr_err("Buffer structures not initialized\n");
+    // Verify buffer info structure
+    if (!dev->buf_info || !dev->buf_info->buffer_start ||
+        !dev->buf_info->buffer_size || !dev->buf_info->virt_addr) {
+        pr_err("Buffer info not properly initialized\n");
+        return -EINVAL;
+    }
+
+    // Verify alignments
+    if (!ISP_MEM_ALIGNED(dev->dma_addr) ||
+        !ISP_MEM_ALIGNED(dev->buf_info->buffer_start)) {
+        pr_err("Memory not properly aligned\n");
         return -EINVAL;
     }
 
     // Verify sizes
-    size_t required = fs->buf_size * fs->buf_cnt;
-    if (dev->dma_size < required) {
-        pr_err("Insufficient memory: need %zu, have %zu\n",
-               required, dev->dma_size);
-        return -ENOMEM;
+    if (dev->buf_info->buffer_size > dev->dma_size) {
+        pr_err("Buffer size exceeds DMA memory\n");
+        return -EINVAL;
     }
 
-    pr_info("Memory setup validated successfully\n");
+    // Verify frame source state if initialized
+    if (dev->fs_info) {
+        if (!dev->fs_info->width || !dev->fs_info->height ||
+            !dev->fs_info->buf_size) {
+            pr_err("Invalid frame source configuration\n");
+            return -EINVAL;
+        }
+
+        // Verify buffer can hold frame data
+        uint32_t min_size = dev->fs_info->width * dev->fs_info->height * 2;
+        if (dev->buf_info->buffer_size < min_size) {
+            pr_err("Buffer too small for frame size\n");
+            return -EINVAL;
+        }
+    }
+
+    pr_info("Memory validation passed:\n");
+    pr_info("  DMA buffer: %p\n", dev->dma_buf);
+    pr_info("  DMA addr: 0x%x\n", (unsigned int)dev->dma_addr);
+    pr_info("  DMA size: %zu\n", dev->dma_size);
+    pr_info("  Buffer start: 0x%x\n", dev->buf_info->buffer_start);
+    pr_info("  Buffer size: %u\n", dev->buf_info->buffer_size);
+    pr_info("  Virtual addr: 0x%x\n", dev->buf_info->virt_addr);
+
     return 0;
 }
 
@@ -2780,25 +2811,20 @@ static int stop_streaming(struct IMPISPDev *dev)
     return 0;
 }
 
-static void cleanup_isp_memory(struct IMPISPDev *dev) {
-    if (dev->dma_buf) {
-        iounmap(dev->dma_buf);
+static void cleanup_isp_memory(struct IMPISPDev *dev)
+{
+    if (!dev)
+        return;
+
+    if (dev->dma_buf && dev->dma_addr) {
+        dma_free_coherent(dev->dev, dev->dma_size,
+                         dev->dma_buf, dev->dma_addr);
         dev->dma_buf = NULL;
+        dev->dma_addr = 0;
     }
-
-    if (dev->buf_info) {
-        kfree(dev->buf_info);
-        dev->buf_info = NULL;
-    }
-
-    dev->dma_addr = 0;
-    dev->dma_size = 0;
-
-    isp_mem.initialized = false;
-    isp_mem.virt_addr = NULL;
-    isp_mem.phys_addr = 0;
-    isp_mem.size = 0;
 }
+
+
 // Add cleanup for registers
 static void cleanup_isp_registers(struct IMPISPDev *dev)
 {
@@ -4142,6 +4168,12 @@ static int init_isp_reserved_memory(struct platform_device *pdev)
         return -EINVAL;
     }
 
+    // Verify base address alignment
+    if (!ISP_MEM_ALIGNED(RMEM_BASE)) {
+        dev_err(&pdev->dev, "Reserved memory base not aligned\n");
+        return -EINVAL;
+    }
+
     // Store the base address
     gISPdev->dma_addr = RMEM_BASE;
     gISPdev->dma_size = RMEM_SIZE;
@@ -4153,20 +4185,33 @@ static int init_isp_reserved_memory(struct platform_device *pdev)
         return -ENOMEM;
     }
 
+    // Initialize buffer info if not already done
+    if (!gISPdev->buf_info) {
+        gISPdev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
+        if (!gISPdev->buf_info) {
+            dev_err(&pdev->dev, "Failed to allocate buffer info\n");
+            iounmap(gISPdev->dma_buf);
+            return -ENOMEM;
+        }
+    }
+
+    // Setup buffer info
+    gISPdev->buf_info->method = ISP_ALLOC_KMALLOC;
+    gISPdev->buf_info->buffer_start = gISPdev->dma_addr;
+    gISPdev->buf_info->buffer_size = gISPdev->dma_size;
+    gISPdev->buf_info->virt_addr = (unsigned long)gISPdev->dma_buf;
+    gISPdev->buf_info->flags = 1;
+
     pr_info("tx_isp: Reserved memory initialized:\n");
     pr_info("  Physical address: 0x%08x\n", (uint32_t)gISPdev->dma_addr);
     pr_info("  Virtual address: %p\n", gISPdev->dma_buf);
     pr_info("  Size: %zu bytes\n", gISPdev->dma_size);
-
-    // Add validation print
-    pr_info("tx_isp: Validating memory setup:\n");
-    pr_info("  gISPdev = %p\n", gISPdev);
-    pr_info("  dma_addr = 0x%08x\n", (uint32_t)gISPdev->dma_addr);
-    pr_info("  dma_buf = %p\n", gISPdev->dma_buf);
+    pr_info("  Buffer info: start=0x%x size=%u\n",
+            gISPdev->buf_info->buffer_start,
+            gISPdev->buf_info->buffer_size);
 
     return 0;
 }
-
 
 // Add to probe:
 #define ISP_PARAM_OFFSET 0x1000
@@ -4779,7 +4824,28 @@ static void configure_deir_control(void)
     /* Use readl/writel for register access */
 }
 
-int tiziano_load_parameters(const char *filename, void __iomem *dest, size_t offset)
+// Add validation for parameter loading
+static int validate_parameter_load(void __iomem *dest, size_t offset)
+{
+    uint32_t test_val;
+
+    // Try writing a test pattern
+    writel(0xdeadbeef, dest);
+    wmb();
+    test_val = readl(dest);
+
+    if (test_val != 0xdeadbeef) {
+        pr_err("Parameter write test failed: wrote 0xdeadbeef read 0x%08x\n", test_val);
+        return -EIO;
+    }
+
+    // Reset test location
+    writel(0, dest);
+    wmb();
+    return 0;
+}
+
+static int tiziano_load_parameters(const char *filename, void __iomem *dest, size_t offset)
 {
     struct file *file;
     mm_segment_t old_fs;
@@ -4787,239 +4853,366 @@ int tiziano_load_parameters(const char *filename, void __iomem *dest, size_t off
     ssize_t bytes_read;
     size_t file_size;
     char *buffer = NULL;
-    int ret = 0;
+    int ret;
 
     pr_info("Loading parameters from file: %s\n", filename);
 
-    // Step 1: Open the file
     old_fs = get_fs();
     set_fs(KERNEL_DS);
-    file = filp_open(filename, O_RDONLY, 0);
-    set_fs(old_fs);
 
+    file = filp_open(filename, O_RDONLY, 0);
     if (IS_ERR(file)) {
-        pr_err("Failed to open parameter file: %s\n", filename);
-        return -ENOENT;
+        ret = PTR_ERR(file);
+        pr_err("Failed to open parameter file: %d\n", ret);
+        goto restore_fs;
     }
 
-    // Step 2: Get the file size
     file_size = i_size_read(file->f_path.dentry->d_inode);
     if (file_size <= 0) {
-        pr_err("Parameter file is empty or inaccessible: %s\n", filename);
+        pr_err("Invalid parameter file size: %zu\n", file_size);
         ret = -EINVAL;
         goto close_file;
     }
 
-    // Step 3: Allocate a buffer to read the file
+    pr_info("Parameter file size: %zu bytes\n", file_size);
+
+    // Use vmalloc for large buffer
     buffer = vmalloc(file_size);
     if (!buffer) {
-        pr_err("Failed to allocate memory for parameters\n");
+        pr_err("Failed to allocate parameter buffer\n");
         ret = -ENOMEM;
         goto close_file;
     }
 
-    // Step 4: Read the file contents into the buffer
-    old_fs = get_fs();
-    set_fs(KERNEL_DS);
     bytes_read = kernel_read(file, pos, buffer, file_size);
-    set_fs(old_fs);
-
     if (bytes_read != file_size) {
-        pr_err("Failed to read the entire parameter file\n");
+        pr_err("Failed to read parameter file: %zd\n", bytes_read);
         ret = -EIO;
         goto free_buffer;
     }
 
-    pr_info("Copying %zu bytes to destination\n", offset);
-    memcpy_toio(dest, buffer, offset);
-    pr_info("Copy successful\n");
+    // Copy the parameters to the correct location
+    pr_info("Copying %zu bytes to destination\n", file_size);
+    memcpy_toio(dest, buffer, file_size);
+    wmb();
 
-    free_buffer:
-        vfree(buffer);
-    close_file:
-        filp_close(file, NULL);
+    // Verify write by reading back first few bytes
+    pr_info("Verifying parameter write...\n");
+    {
+        u32 verify = readl(dest);
+        pr_info("First 4 bytes: 0x%08x\n", verify);
+    }
+
+    ret = 0;
+
+free_buffer:
+    vfree(buffer);
+close_file:
+    filp_close(file, NULL);
+restore_fs:
+    set_fs(old_fs);
     return ret;
 }
+
+// Add these at the top of the file with other defines
+// Update the CPM register definitions for T31
+#define CPM_PHYS_BASE   0x10000000  // T31 CPM physical base
+#define CPM_REG_SIZE    0x1000      // Cover full register range
+#define CPM_ISPCDR      0x88        // Offset from CPM base
+#define CPM_CLKGR       0x20        // Offset from CPM base
+#define CPM_CLKGR1      0x28        // Additional control register
+
+
+#define ISP_OFFSET_PARAMS 159736  // Update to match actual parameter file size
+
+// Add these at top of file
+#define CPM_OPCR      0x24    // Operating Parameter Control Register offset
+#define CPM_LCR       0x04    // Low power control register offset
+
+#define MPLL_FREQ       500000000  // Base MPLL frequency is 500MHz
+#define ISP_TARGET_FREQ 125000000  // Target 125MHz for ISP
 
 static int configure_isp_clocks(struct IMPISPDev *dev)
 {
-    struct clk **clk_array;
-    int i, ret = 0;
-    unsigned long rate;
-    size_t num_clocks = ARRAY_SIZE(isp_clocks);
+    void __iomem *cpm_base;
+    uint32_t val, clkgr, clkgr1, opcr, lcr;
+    int ret = 0;
 
-    pr_info("Configuring ISP clocks...\n");
+    pr_info("Configuring ISP clocks for 125MHz...\n");
 
-    // Validate input
-    if (!dev || !dev->dev) {
-        pr_err("Invalid device structure\n");
-        return -EINVAL;
-    }
-
-    // Debug prints to verify device structure
-    pr_info("Device structure: %p, dev->dev: %p\n", dev, dev->dev);
-
-    // Allocate array for clock pointers
-    clk_array = devm_kzalloc(dev->dev, sizeof(struct clk *) * num_clocks, GFP_KERNEL);
-    if (!clk_array) {
-        pr_err("Failed to allocate clock array\n");
+    cpm_base = ioremap_nocache(CPM_PHYS_BASE, CPM_REG_SIZE);
+    if (!cpm_base) {
+        pr_err("Failed to map T31 CPM registers\n");
         return -ENOMEM;
     }
 
-    // Get and configure each clock - with additional error checking
-    for (i = 0; i < num_clocks; i++) {
-        if (!isp_clocks[i].field_00) {
-            pr_err("Invalid clock name at index %d\n", i);
-            ret = -EINVAL;
-            goto cleanup;
-        }
+    // Read all relevant registers first
+    clkgr = readl(cpm_base + CPM_CLKGR);
+    clkgr1 = readl(cpm_base + CPM_CLKGR1);
+    opcr = readl(cpm_base + CPM_OPCR);
+    lcr = readl(cpm_base + CPM_LCR);
+    val = readl(cpm_base + CPM_ISPCDR);
 
-        pr_debug("Getting clock: %s\n", isp_clocks[i].field_00);
+    pr_info("Initial register states:\n");
+    pr_info("  CPM_CLKGR  = 0x%08x\n", clkgr);
+    pr_info("  CPM_CLKGR1 = 0x%08x\n", clkgr1);
+    pr_info("  CPM_OPCR   = 0x%08x\n", opcr);
+    pr_info("  CPM_LCR    = 0x%08x\n", lcr);
+    pr_info("  CPM_ISPCDR = 0x%08x\n", val);
 
-        // Try to get the clock
-        clk_array[i] = devm_clk_get(dev->dev, isp_clocks[i].field_00);
-        if (IS_ERR_OR_NULL(clk_array[i])) {
-            ret = PTR_ERR(clk_array[i]) ?: -EINVAL;
-            pr_err("Failed to get %s clock: %d\n",
-                   isp_clocks[i].field_00, ret);
-            goto cleanup;
-        }
+    // 1. Enable power domains and wake up if needed
+    opcr |= BIT(23);  // Enable ISP power domain
+    writel(opcr, cpm_base + CPM_OPCR);
+    wmb();
 
-        // Enable the clock first
-        ret = clk_prepare_enable(clk_array[i]);
-        if (ret) {
-            pr_err("Failed to enable %s clock\n", isp_clocks[i].field_00);
-            goto cleanup;
-        }
+    // Wake from idle if needed
+    lcr &= ~BIT(31);  // Clear idle bit
+    writel(lcr, cpm_base + CPM_LCR);
+    wmb();
 
-        // Only try to set rate if specified
-	    for (i = 0; i < ARRAY_SIZE(isp_clocks); i++) {
-	        if (!clk_array[i]) {
-	            pr_err("Clock %s not found\n", isp_clocks[i].field_00);
-	            continue;
-	        }
+    // 2. Disable clock gates
+    clkgr &= ~(1 << 23);  // Clear ISP bit in CLKGR
+    writel(clkgr, cpm_base + CPM_CLKGR);
+    wmb();
 
-	        // Only try to set rate if specified and not the default
-	        if (isp_clocks[i].field_04 != 0xFFFF) {
-	            // For older kernels, use the specified rate directly
-	            rate = isp_clocks[i].field_04;
-	            ret = clk_set_rate(clk_array[i], rate);
-	            if (ret) {
-	                pr_err("Failed to set %s clock rate to %lu Hz\n",
-	                       isp_clocks[i].field_00, rate);
-	                continue;
-	            }
-	        }
+    clkgr1 &= ~(1 << 2);  // Clear ISP bit in CLKGR1
+    writel(clkgr1, cpm_base + CPM_CLKGR1);
+    wmb();
 
-	        // Log the configured rate, even if it wasn't set explicitly
-	        pr_info("Clock %s configured at %lu Hz\n",
-	                isp_clocks[i].field_00, clk_get_rate(clk_array[i]));
-	    }
-	}
+    // 3. Configure ISP clock for 125MHz
+    val = readl(cpm_base + CPM_ISPCDR);
+    val &= ~(0x3 << 30);          // Clear MUX
+    val &= ~(0xff << 4);          // Clear divider
+    val |= (1 << 30);            // Set MPLL as source
+    val |= (0x3 << 4);           // Set divide ratio to 4 (MPLL/4 = 125MHz)
+    val &= ~0xf;                 // Clear low control bits
+    val |= 0x1;                  // Set required control bit
 
-    // Store clocks in device structure
-    dev->clocks = clk_array;
-    dev->num_clocks = num_clocks;
+    pr_info("Writing ISPCDR: 0x%08x (for 125MHz)\n", val);
+    writel(val, cpm_base + CPM_ISPCDR);
+    wmb();
 
-    return 0;
+    // Longer delay for stability
+    msleep(1);
 
-cleanup:
-    while (--i >= 0) {
-        if (!IS_ERR_OR_NULL(clk_array[i])) {
-            clk_disable_unprepare(clk_array[i]);
-            devm_clk_put(dev->dev, clk_array[i]);
-        }
+    // 4. Read back and verify
+    clkgr = readl(cpm_base + CPM_CLKGR);
+    clkgr1 = readl(cpm_base + CPM_CLKGR1);
+    opcr = readl(cpm_base + CPM_OPCR);
+    lcr = readl(cpm_base + CPM_LCR);
+    val = readl(cpm_base + CPM_ISPCDR);
+
+    pr_info("Final register states:\n");
+    pr_info("  CPM_CLKGR  = 0x%08x\n", clkgr);
+    pr_info("  CPM_CLKGR1 = 0x%08x\n", clkgr1);
+    pr_info("  CPM_OPCR   = 0x%08x\n", opcr);
+    pr_info("  CPM_LCR    = 0x%08x\n", lcr);
+    pr_info("  CPM_ISPCDR = 0x%08x\n", val);
+
+    // 5. Verify configuration
+    if ((clkgr & (1 << 23)) || (clkgr1 & (1 << 2))) {
+        pr_err("Clock gates not cleared\n");
+        ret = -EIO;
+        goto unmap;
     }
-    devm_kfree(dev->dev, clk_array);
+
+    if (!(opcr & BIT(23))) {
+        pr_err("ISP power domain not enabled\n");
+        ret = -EIO;
+        goto unmap;
+    }
+
+    if (((val >> 30) & 0x3) != 1) {
+        pr_err("Incorrect clock source selected\n");
+        ret = -EIO;
+        goto unmap;
+    }
+
+    pr_info("ISP clock configured for 125MHz (MPLL/4)\n");
+
+unmap:
+    if (ret)
+        pr_err("ISP clock configuration failed: %d\n", ret);
+    mb();
+    iounmap(cpm_base);
     return ret;
 }
 
+// Update cleanup to match
 static void cleanup_isp_clocks(struct IMPISPDev *dev)
 {
-    int i;
+    void __iomem *cpm_base;
+    uint32_t val;
 
-    if (!dev || !dev->clocks)
+    pr_info("Cleaning up ISP clocks\n");
+
+    if (!dev) {
         return;
-
-    for (i = 0; i < dev->num_clocks; i++) {
-        if (!IS_ERR_OR_NULL(dev->clocks[i])) {
-            clk_disable_unprepare(dev->clocks[i]);
-            devm_clk_put(dev->dev, dev->clocks[i]);
-        }
     }
 
-    kfree(dev->clocks);
-    dev->clocks = NULL;
-    dev->num_clocks = 0;
+    cpm_base = ioremap_nocache(CPM_PHYS_BASE, CPM_REG_SIZE);
+    if (!cpm_base) {
+        pr_err("Failed to map CPM registers for cleanup\n");
+        return;
+    }
+
+    // Set both clock gates
+    val = readl(cpm_base + CPM_CLKGR);
+    val |= (1 << 23);
+    writel(val, cpm_base + CPM_CLKGR);
+    wmb();
+
+    val = readl(cpm_base + CPM_CLKGR1);
+    val |= (1 << 2);
+    writel(val, cpm_base + CPM_CLKGR1);
+    wmb();
+
+    pr_info("ISP clocks disabled\n");
+
+    mb();
+    iounmap(cpm_base);
 }
 
-// Update the tisp_init function to properly handle register access
+#define ISP_SOFT_RESET     (1 << 31)
+#define ISP_POWER_ON       (1 << 23)
+
+static int reset_isp_hardware(struct IMPISPDev *dev)
+{
+    void __iomem *cpm_base;
+    uint32_t clkgr, clkgr1, opcr;
+
+    pr_info("Resetting ISP hardware (minimal)...\n");
+
+    cpm_base = ioremap_nocache(CPM_PHYS_BASE, CPM_REG_SIZE);
+    if (!cpm_base) {
+        pr_err("Failed to map CPM registers for reset\n");
+        return -ENOMEM;
+    }
+
+    // Read current states - using registers we know work
+    clkgr = readl(cpm_base + CPM_CLKGR);
+    clkgr1 = readl(cpm_base + CPM_CLKGR1);
+    opcr = readl(cpm_base + CPM_OPCR);
+
+    pr_info("Reset sequence - initial states:\n");
+    pr_info("  CPM_CLKGR  = 0x%08x\n", clkgr);
+    pr_info("  CPM_CLKGR1 = 0x%08x\n", clkgr1);
+    pr_info("  CPM_OPCR   = 0x%08x\n", opcr);
+
+    // 1. First disable ISP clock
+    clkgr |= (1 << 23);  // Set ISP bit to disable
+    writel(clkgr, cpm_base + CPM_CLKGR);
+    wmb();
+
+    // 2. Also disable in CLKGR1
+    clkgr1 |= (1 << 2);  // Set ISP bit
+    writel(clkgr1, cpm_base + CPM_CLKGR1);
+    wmb();
+
+    // Wait a bit
+    msleep(1);
+
+    // 3. Enable power domain in OPCR if not already
+    opcr |= (1 << 23);  // Set ISP power bit
+    writel(opcr, cpm_base + CPM_OPCR);
+    wmb();
+
+    // Wait for power domain
+    msleep(1);
+
+    // 4. Re-enable clocks
+    clkgr &= ~(1 << 23);  // Clear ISP bit to enable
+    writel(clkgr, cpm_base + CPM_CLKGR);
+    wmb();
+
+    clkgr1 &= ~(1 << 2);  // Clear ISP bit
+    writel(clkgr1, cpm_base + CPM_CLKGR1);
+    wmb();
+
+    // Read back final states
+    clkgr = readl(cpm_base + CPM_CLKGR);
+    clkgr1 = readl(cpm_base + CPM_CLKGR1);
+    opcr = readl(cpm_base + CPM_OPCR);
+
+    pr_info("Reset sequence - final states:\n");
+    pr_info("  CPM_CLKGR  = 0x%08x\n", clkgr);
+    pr_info("  CPM_CLKGR1 = 0x%08x\n", clkgr1);
+    pr_info("  CPM_OPCR   = 0x%08x\n", opcr);
+
+    iounmap(cpm_base);
+    return 0;
+}
+
 static int tisp_init(struct device *dev)
 {
     int ret;
     const char *param_file = "/etc/sensor/sc2336-t31.bin";
+    void __iomem *reg_base;
     uint32_t reg_val;
 
-    pr_info("Starting tisp_init...\n");
+    pr_info("Starting ISP initialization sequence\n");
 
-    // Verify registers are mapped using global gISPdev
     if (!gISPdev || !gISPdev->regs) {
-        dev_err(dev, "ISP registers not mapped!\n");
-        return -EFAULT;
+        pr_err("Invalid ISP device state\n");
+        return -EINVAL;
     }
 
-    // Step 1: Allocate memory using vmalloc
-    tparams_day = vmalloc(ISP_OFFSET_PARAMS);
-    if (!tparams_day) {
-        dev_err(dev, "Failed to allocate tparams_day\n");
-        return -ENOMEM;
-    }
-    memset(tparams_day, 0, ISP_OFFSET_PARAMS);
+    reg_base = gISPdev->regs;
 
-    tparams_night = vmalloc(ISP_OFFSET_PARAMS);
-    if (!tparams_night) {
-        dev_err(dev, "Failed to allocate tparams_night\n");
-        vfree(tparams_day);
-        return -ENOMEM;
-    }
-    memset(tparams_night, 0, ISP_OFFSET_PARAMS);
+    // Step 1: Basic register initialization
+    writel(0, reg_base + 0x4);  // Initial value
+    wmb();
 
-    dev_info(dev, "tparams_day and tparams_night buffers allocated successfully\n");
+    // Step 2: Configure bypass register
+    reg_val = 0x8077efff;  // Value from decompiled code
+    reg_val &= 0xb577fffd;  // Standard mode
+    reg_val |= 0x34000009;  // Additional bits
+    writel(reg_val, reg_base + 0xc);
+    wmb();
 
-    // Step 2: Load parameters from the file
-    ret = tiziano_load_parameters(param_file, tparams_day, ISP_OFFSET_PARAMS);
+    // Step 3: Initialize frame sync
+    writel(0xffffffff, reg_base + 0x30);
+    wmb();
+
+    // Step 4: Configure mode register
+    writel(0x133, reg_base + 0x10);  // Non-WDR mode
+    wmb();
+
+    // Load parameters
+    ret = tiziano_load_parameters(param_file, gISPdev->dma_buf, 0);
     if (ret) {
-        dev_err(dev, "Failed to load parameters from file\n");
-        goto cleanup;
+        pr_err("Failed to load parameters\n");
+        return ret;
     }
-    dev_info(dev, "Parameters loaded successfully from %s\n", param_file);
 
-    // Step 3: Handle isp_memopt settings
+    // Apply memopt settings if needed
     if (isp_memopt == 1) {
-        dev_info(dev, "Applying isp_memopt settings\n");
-        writel(0, tparams_day + 0x264);
-        writel(isp_memopt, tparams_day + 0x26c);
-        writel(0, tparams_day + 0x27c);
-        writel(0, tparams_day + 0x274);
+        void __iomem *params = gISPdev->dma_buf;
 
-        writel(0, tparams_night + 0x264);
-        writel(isp_memopt, tparams_night + 0x26c);
-        writel(0, tparams_night + 0x27c);
-        writel(0, tparams_night + 0x274);
+        writel(0, params + 0x264);
+        writel(isp_memopt, params + 0x26c);
+        writel(0, params + 0x27c);
+        writel(0, params + 0x274);
+        wmb();
     }
 
-    // Step 4: Write the parameters to hardware registers using global gISPdev->regs
-    writel((unsigned long)tparams_day, gISPdev->regs + 0x84b50);
-    dev_info(dev, "tparams_day written to register successfully\n");
+    // Write parameter address to ISP
+    writel((unsigned int)gISPdev->dma_addr, reg_base + 0x84b50);
+    wmb();
 
+    // Wait for params to be loaded
+    usleep_range(1000, 2000);
+
+    // Finally enable ISP
+    writel(1, reg_base + 0x800);
+    wmb();
+
+    // Verify the enable
+    reg_val = readl(reg_base + 0x800);
+    pr_info("ISP enable register: 0x%08x\n", reg_val);
+
+    pr_info("ISP initialization sequence completed\n");
     return 0;
-
-cleanup:
-    if (tparams_night)
-        vfree(tparams_night);
-    if (tparams_day)
-        vfree(tparams_day);
-    return ret;
 }
 
 // Function to register a misc device and create optional /proc entries
@@ -5150,6 +5343,7 @@ static void __iomem *map_isp_registers(struct platform_device *pdev)
 static int tisp_probe(struct platform_device *pdev)
 {
     struct isp_graph_data *graph_data;
+    struct resource *res;
     void __iomem *base;
     unsigned int max_devices = 10;
     unsigned int registered_count = 0;
@@ -5173,12 +5367,44 @@ static int tisp_probe(struct platform_device *pdev)
     // Set driver data
     platform_set_drvdata(pdev, gISPdev);
 
-    // Map registers first
-    base = map_isp_registers(pdev);
-    if (IS_ERR(base)) {
-        dev_err(&pdev->dev, "Failed to map ISP registers\n");
-        return PTR_ERR(base);
+    // Reset ISP hardware before mapping
+    ret = reset_isp_hardware(gISPdev);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to reset ISP hardware\n");
+        return ret;
     }
+
+    // Wait a bit after reset
+    msleep(10);
+
+    // Map ISP registers
+    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+    if (!res) {
+        dev_err(&pdev->dev, "No memory resource\n");
+        return -ENODEV;
+    }
+
+    // Validate resource
+    pr_info("ISP register resource:\n");
+    pr_info("  Start:  0x%08llx\n", (unsigned long long)res->start);
+    pr_info("  End:    0x%08llx\n", (unsigned long long)res->end);
+    pr_info("  Size:   0x%08llx\n", (unsigned long long)(resource_size(res)));
+
+    // Request memory region first
+    if (!request_mem_region(res->start, resource_size(res), pdev->name)) {
+        dev_err(&pdev->dev, "Failed to request memory region\n");
+        return -EBUSY;
+    }
+
+    // Map with appropriate flags
+    base = ioremap_nocache(res->start, resource_size(res));
+    if (!base) {
+        dev_err(&pdev->dev, "Failed to map registers\n");
+        release_mem_region(res->start, resource_size(res));
+        return -ENOMEM;
+    }
+
+    gISPdev->regs = base;
 
     // Set reg_base in global gISPdev
     gISPdev->regs = base;
@@ -5188,11 +5414,11 @@ static int tisp_probe(struct platform_device *pdev)
     gISPdev->irq = 29;
 
     // Now configure clocks with proper error handling
-//    ret = configure_isp_clocks(gISPdev);
-//    if (ret) {
-//        dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
-//        goto err_unmap_regs;
-//    }
+    ret = configure_isp_clocks(gISPdev);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
+        goto err_unmap_regs;
+    }
 
     // Use the global gISPdev instead of creating a local one
     if (!gISPdev) {
