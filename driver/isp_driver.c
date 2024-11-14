@@ -75,6 +75,7 @@ static struct isp_memory_info isp_mem = {0};
 
 #define ISP_BASE_ADDR        0x13300000
 #define ISP_MAP_SIZE         0x1000
+#define ISP_OFFSET_PARAMS    0x1000
 #define REG_CONTROL          0x100
 
 // CPU info register addresses
@@ -142,16 +143,16 @@ struct isp_rotation_params {
 #define ISP_BASE            0x13300000
 
 // Buffer control registers
+#define ISP_BUF0_REG       (ISP_BASE + 0x1000)
+#define ISP_BUF0_SIZE_REG  (ISP_BASE + 0x1004)
 #define ISP_BUF1_REG       (ISP_BASE + 0x1008)
 #define ISP_BUF1_SIZE_REG  (ISP_BASE + 0x100C)
 #define ISP_BUF2_REG       (ISP_BASE + 0x1010)
 #define ISP_BUF2_SIZE_REG  (ISP_BASE + 0x1014)
 
 // Control registers
-#define ISP_CTRL_REG       0x0100  // Changed from 0x100
-#define ISP_INIT_OFFSET    0x0118  // Aligned offset
-#define ISP_BUF0_REG       0x1000
-#define ISP_BUF0_SIZE_REG  0x1004
+#define ISP_CTRL_REG       (ISP_BASE + 0x1100)
+#define ISP_START_REG      (ISP_BASE + 0x1104)
 #define SENSOR_NAME_SIZE 80
 #define PADDING_SIZE_1 0x24
 #define PADDING_SIZE_2 0x24
@@ -453,22 +454,16 @@ struct irq_info
     int32_t irq_type;  // IRQ type or identifier
 };
 
-struct ClockConfig {
-    const char *field_00;     // Clock name
-    int32_t field_04;         // Clock rate
+struct ClockConfig
+{
+    const char *clock_name;  // Change to const char* to hold the clock name
+    int32_t clock_rate;      // Clock rate
 };
 
-// Define default clock configurations
 static struct ClockConfig isp_clocks[] = {
-    {
-        .field_00 = "isp",         // Main /proc/jz/clock/isp entry
-        .field_04 = 250000000
-    },
-    {
-        .field_00 = "cgu_isp",     // /proc/jz/clock/cgu_isp entry
-        .field_04 = 250000000
-    }
+    { .clock_name = "isp", .clock_rate = 125000000 },   // Set ISP clock to 125 MHz
 };
+static const int num_clocks = ARRAY_SIZE(isp_clocks);
 
 
 struct IspDevice
@@ -766,30 +761,14 @@ struct isp_device {
 /**
  * Function declarations for ISP register access
  */
-// Add these register validation macros
-#define ISP_REG_VALID(reg) ((reg) >= ISP_BASE_ADDR && (reg) < (ISP_BASE_ADDR + ISP_MAP_SIZE))
-#define ISP_REG_OFFSET(reg) ((reg) - ISP_BASE_ADDR)
-
-// Improved register access functions
-static inline u32 isp_reg_read(struct IMPISPDev *dev, u32 reg)
+static inline u32 isp_reg_read(struct isp_reg_t *regs, size_t offset)
 {
-    if (!dev || !dev->regs || !ISP_REG_VALID(reg)) {
-        pr_err("Invalid register access: dev=%p regs=%p reg=0x%x\n",
-               dev, dev ? dev->regs : NULL, reg);
-        return 0;
-    }
-    return readl(dev->regs + ISP_REG_OFFSET(reg));
+    return readl((void __iomem *)regs + offset);
 }
 
-static inline void isp_reg_write(struct IMPISPDev *dev, u32 reg, u32 val)
+static inline void isp_reg_write(struct isp_reg_t *regs, size_t offset, u32 val)
 {
-    if (!dev || !dev->regs || !ISP_REG_VALID(reg)) {
-        pr_err("Invalid register write: dev=%p regs=%p reg=0x%x val=0x%x\n",
-               dev, dev ? dev->regs : NULL, reg, val);
-        return;
-    }
-    writel(val, dev->regs + ISP_REG_OFFSET(reg));
-    wmb(); // Ensure write completes
+    writel(val, (void __iomem *)regs + offset);
 }
 
 
@@ -2062,42 +2041,16 @@ struct imp_mem_info {
 };
 
 // Match the IMP_Get_Info layout exactly
-//struct alloc_info {
-//    uint32_t reserved1;        // Offset: 0x00
-//    uint32_t method;           // Offset: 0x04
-//    uint32_t phys_addr;        // Offset: 0x08
-//    uint32_t virt_addr;        // Offset: 0x0C
-//    uint32_t size;             // Offset: 0x10
-//    uint32_t flags;            // Offset: 0x14
-//    char name[32];             // Offset: 0x18 (32 bytes for the sensor name)
-//    uint32_t reserved2[4];     // Additional padding (4 * 4 bytes)
-//} __attribute__((packed));
-// Update the structure to match libimp's layout
-// Add these defines to match the binary values
-#define ISP_MAGIC_METHOD 0x203a726f
-#define ISP_MAGIC_PHYS   0x33326373
-
-// Update structure with correct alignment
 struct alloc_info {
-    char unused[0x80];        // Padding to match libimp offset
-    uint32_t method;          // Offset: 0x80
-    uint32_t buffer_start;    // Offset: 0x84 (Physical Address)
-    uint32_t virt_addr;       // Offset: 0x88
-    uint32_t buffer_size;     // Offset: 0x8C
-    uint32_t flags;           // Offset: 0x90
-} __attribute__((packed, aligned(4)));
-
-
-
-struct alloc_info2 {
-    char unused[0x84];        // Increased padding to shift fields correctly
-    char name[32];            // Offset: 0x84 (start of the name)
-    uint32_t method;          // Offset: 0xA4
-    uint32_t phys_addr;       // Offset: 0xA8
-    uint32_t virt_addr;       // Offset: 0xAC
-    uint32_t size;            // Offset: 0xB0
-    uint32_t flags;           // Offset: 0xB4
-} __attribute__((packed));
+    char unused[0x60];      // 0x00-0x5F: Unused
+    char name[32];          // 0x60: Name from IMP_Get_Info
+    char padding[28];       // Padding to align to 0x80
+    uint32_t method;        // 0x80: Allocation method
+    uint32_t phys_addr;     // 0x84: Physical address
+    uint32_t virt_addr;     // 0x88: Virtual address
+    uint32_t size;          // 0x8C: Buffer size
+    uint32_t flags;         // 0x90: Flags/attributes
+};
 
 
 static int isp_device_pipeline_setup(struct isp_device *dev)
@@ -2412,24 +2365,13 @@ static int setup_frame_source(struct IMPISPDev *dev)
         return -EINVAL;
     }
 
-    // Ensure buffer size is aligned to cache line size
-    #define CACHE_LINE_SIZE 32
-    fs->buf_size = ALIGN(fs->buf_size, CACHE_LINE_SIZE);
-
     // Allocate DMA memory if not already done
     if (!fs->buf_base) {
         size_t total_size = fs->buf_size * fs->buf_cnt;
-
-        // Reduce the size if it exceeds available memory
-        if (total_size > (24 * 1024 * 1024)) { // Limit to 24MB to leave space for other processes
-            pr_err("Requested DMA size exceeds available memory\n");
-            return -ENOMEM;
-        }
-
-        pr_info("Attempting to allocate %zu bytes for DMA\n", total_size);
-        fs->buf_base = dma_alloc_coherent(dev->dev, total_size, &fs->dma_addr, GFP_KERNEL | GFP_DMA);
+        fs->buf_base = dma_alloc_coherent(dev->dev, total_size,
+                                         &fs->dma_addr, GFP_KERNEL);
         if (!fs->buf_base) {
-            pr_err("Failed to allocate DMA memory of size %zu\n", total_size);
+            pr_err("Failed to allocate DMA memory\n");
             return -ENOMEM;
         }
     }
@@ -2444,15 +2386,10 @@ static int setup_frame_source(struct IMPISPDev *dev)
     pr_info("Configuring %d buffers of size %d\n", fs->buf_cnt, fs->buf_size);
 
     for (int i = 0; i < fs->buf_cnt; i++) {
-        bufs[i].virt_addr = (uint32_t)(fs->buf_base + (i * fs->buf_size));
+        bufs[i].virt_addr = (uint32_t)(uintptr_t)(fs->buf_base + (i * fs->buf_size));
         bufs[i].buffer_start = fs->dma_addr + (i * fs->buf_size);
         bufs[i].buffer_size = fs->buf_size;
         bufs[i].flags = 0;
-
-        if (!bufs[i].virt_addr || !bufs[i].buffer_start) {
-            pr_err("Invalid buffer configuration for buffer %d\n", i);
-            return -EINVAL;
-        }
 
         pr_debug("Buffer %d: virt=0x%x, phys=0x%x, size=%d\n",
                  i, bufs[i].virt_addr, bufs[i].buffer_start, bufs[i].buffer_size);
@@ -2527,6 +2464,8 @@ static int init_frame_source(struct IMPISPDev *dev, int channel)
 {
     struct isp_framesource_state *fs;
 
+    pr_info("Initializing frame source channel %d\n", channel);
+
     if (!dev) {
         pr_err("Invalid device pointer\n");
         return -EINVAL;
@@ -2538,37 +2477,37 @@ static int init_frame_source(struct IMPISPDev *dev, int channel)
         return -ENOMEM;
     }
 
-    // Initialize with conservative defaults
-    fs->width = 1920;
-    fs->height = 1080;
-    fs->buf_cnt = 4;
-    fs->buf_size = ALIGN(fs->width * fs->height * 2, PAGE_SIZE); // YUV422 aligned
+    // Initialize basic parameters
     fs->chn_num = channel;
+    fs->state = 0;           // Initial state
+    fs->width = dev->width ? dev->width : 1920;
+    fs->height = dev->height ? dev->height : 1080;
+    fs->fmt = V4L2_PIX_FMT_YUYV;
 
-    // Map the physical memory for this channel
-    fs->buf_base = ioremap(ISP_RMEM_BASE + (channel * fs->buf_size * fs->buf_cnt),
-                          fs->buf_size * fs->buf_cnt);
-    if (!fs->buf_base) {
-        pr_err("Failed to map buffer memory\n");
+    // Buffer setup
+    fs->buf_cnt = 4;
+    fs->buf_size = fs->width * fs->height * 2;  // YUYV format
+    fs->buf_flags = 0;
+
+    // Allocate buffer info array
+    fs->bufs = kzalloc(sizeof(struct isp_buffer_info) * fs->buf_cnt, GFP_KERNEL);
+    if (!fs->bufs) {
+        pr_err("Failed to allocate buffer info array\n");
         kfree(fs);
         return -ENOMEM;
     }
 
-    fs->dma_addr = ISP_RMEM_BASE + (channel * fs->buf_size * fs->buf_cnt);
+    // Initialize synchronization
     sema_init(&fs->sem, 1);
+
     dev->fs_info = fs;
 
-    pr_info("Frame source initialized: %dx%d, %d buffers at phys=0x%x\n",
-            fs->width, fs->height, fs->buf_cnt, (unsigned int)fs->dma_addr);
+    pr_info("Frame source initialized: %dx%d, %d buffers\n",
+            fs->width, fs->height, fs->buf_cnt);
 
     return 0;
 }
 
-
-struct isp_file_private {
-    struct file *filp;
-    struct IMPISPDev *dev;
-};
 
 static int tisp_open(struct file *file)
 {
@@ -2588,7 +2527,14 @@ static int tisp_open(struct file *file)
         return ret;
     }
 
-    // Initialize buffer info structures
+    // Then do hardware register configuration
+    if (isp_device_configure(gISPdev)) {
+        pr_err("Failed to configure ISP hardware\n");
+        cleanup_frame_source(gISPdev);
+        return -EIO;
+    }
+
+    // Just allocate buffer info structures
     if (!gISPdev->buf_info) {
         gISPdev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
         if (!gISPdev->buf_info) {
@@ -2597,7 +2543,16 @@ static int tisp_open(struct file *file)
         }
     }
 
-    // Store file and update state
+    if (!gISPdev->wdr_buf_info) {
+        gISPdev->wdr_buf_info = kzalloc(sizeof(struct sensor_control_info), GFP_KERNEL);
+        if (!gISPdev->wdr_buf_info) {
+            kfree(gISPdev->buf_info);
+            gISPdev->buf_info = NULL;
+            cleanup_frame_source(gISPdev);
+            return -ENOMEM;
+        }
+    }
+
     gISPdev->is_open = 1;
     file->private_data = gISPdev;
 
@@ -2752,27 +2707,17 @@ static int tisp_release(struct inode *inode, struct file *file)
     pr_info("ISP device release called\n");
 
     if (dev) {
-        if (dev->fs_info) {
-            cleanup_frame_buffers(dev->fs_info);  // Add this line
-            kfree(dev->fs_info);
-            dev->fs_info = NULL;
-        }
-
-        // Rest of existing cleanup code...
-        if (dev->is_open) {
+        // Stop streaming if active
+        if (dev->is_open)
             stop_streaming(dev);
-        }
 
-        // Close fd if open
-        if (dev->fd >= 0) {
-            put_unused_fd(dev->fd);
-            dev->fd = -1;
-        }
-
-        // Clean up registers and other resources...
+        // Clean up registers
         cleanup_isp_registers(dev);
+
+        // Clean up memory
         cleanup_isp_memory(dev);
 
+        // Clean up mappings
         if (dev->ctrl_regs) {
             iounmap(dev->ctrl_regs);
             dev->ctrl_regs = NULL;
@@ -2782,6 +2727,7 @@ static int tisp_release(struct inode *inode, struct file *file)
             dev->regs = NULL;
         }
 
+        // Mark device as closed
         dev->is_open = 0;
     }
 
@@ -3039,27 +2985,7 @@ struct isp_wdr_buf_size {
 
 
 // Register definitions from the decompiled code
-// Update these defines to match binary expectations
-#define ISP_REG_BASE       0x13300000    // Physical base address
-#define ISP_REG_SIZE       0x1000
-
-// Control registers block
-#define ISP_CTRL_OFFSET    0x0100
-#define ISP_STAT_OFFSET    0x0104
-#define ISP_INIT_OFFSET    0x0118
-
-// Buffer registers block - notice offset from base
-#define ISP_BUF_BASE       0x1000        // Buffer block offset
-#define ISP_BUF0_REG       (ISP_BUF_BASE + 0x00)  // Buffer 0 address
-#define ISP_BUF0_SIZE_REG  (ISP_BUF_BASE + 0x04)  // Buffer 0 size
-#define ISP_BUF1_REG       (ISP_BUF_BASE + 0x08)  // Buffer 1 address
-#define ISP_BUF1_SIZE_REG  (ISP_BUF_BASE + 0x0C)  // Buffer 1 size
-#define ISP_BUF2_REG       (ISP_BUF_BASE + 0x10)  // Buffer 2 address
-#define ISP_BUF2_SIZE_REG  (ISP_BUF_BASE + 0x14)  // Buffer 2 size
-
-// Configuration register block
-#define ISP_CFG_OFFSET     0x2000
-#define ISP_WDR_OFFSET     0x2100
+#define ISP_REG_BASE      0x7800
 #define ISP_REG_BUF0     (ISP_REG_BASE + 0x20)  // 0x7820
 #define ISP_REG_BUF0_SIZE (ISP_REG_BASE + 0x24)  // 0x7824
 #define ISP_REG_BUF1     (ISP_REG_BASE + 0x28)  // 0x7828
@@ -3642,6 +3568,9 @@ static int sensor_setup_streaming(struct IMPISPDev *dev)
 }
 
 
+// Add these defines for consistent memory values
+#define ISP_MAGIC_METHOD    0x203a726f
+#define ISP_MAGIC_PHYS      0x33326373
 #define ISP_INIT_PHYS       0x1
 #define ISP_FINAL_PHYS      0x02a80000
 #define ISP_ALLOC_SIZE      0x2a80000
@@ -3846,8 +3775,6 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
 
         case SENSOR_CMD_STREAM_ON: {
             // SC2336 specific streaming configuration
-            pr_err("Sensor streaming not implemented\n");
-            return -EINVAL;  // TODO debugging
             ret = isp_sensor_write_reg(client, 0x0100, 0x01); // Stream on
             if (ret < 0) {
                 pr_err("Failed to start sensor streaming\n");
@@ -4179,28 +4106,6 @@ struct isp_mem_request {
     uint32_t flags;         // 0x90: Flags/attributes
 };
 
-/**
- * handle_set_buf_ioctl - Unified buffer allocation handler
- * @dev: Pointer to IMPISPDev (global device) or NULL if using frame source context
- * @fs: Pointer to isp_framesource_state (per-frame channel), or NULL if using global device
- * @arg: IOCTL argument from userspace
- *
- * Handles buffer allocation for both the global ISP device and per-channel frame sources.
- */
-// Add these defines for consistent memory handling
-#define ISP_BUFFER_BASE    0x02a80000  // Match the actual rmem base
-#define ISP_BUFFER_SIZE    22544384    // ~22MB total size
-#define ISP_FRAME_SIZE     (1920 * 1080 * 2)  // YUV422 format size
-
-struct buf_info {
-    uint32_t method;          // Should be ISP_ALLOC_KMALLOC
-    uint32_t phys_addr;       // Physical address
-    uint32_t virt_addr;       // Virtual address
-    uint32_t size;           // Buffer size
-    uint32_t flags;          // Flags
-};
-
-
 static long handle_get_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
     struct isp_mem_request req;
     void __user *argp = (void __user *)arg;
@@ -4347,7 +4252,40 @@ static long handle_buffer_ioctls(struct IMPISPDev *dev, unsigned int cmd, unsign
         handle_get_buf_ioctl(dev, arg);
         return 0;
 	case VIDIOC_SET_BUF_INFO: { // 0x800856d4
-        handle_set_buf_ioctl(dev, arg);
+        struct sensor_buffer_info buf_info = {0};
+        void __user *argp = (void __user *)arg;
+
+        pr_info("tx_isp: Handling ioctl VIDIOC_SET_BUF_INFO\n");
+
+        if (!gISPdev || !gISPdev->buf_info || !gISPdev->dma_buf) {
+            pr_err("tx_isp: Invalid device state\n");
+            return -EINVAL;
+        }
+
+        if (copy_from_user(&buf_info, argp, sizeof(buf_info))) {
+            pr_err("tx_isp: Failed to copy from user\n");
+            return -EFAULT;
+        }
+
+        // Use actual mapped addresses
+        buf_info.method = ISP_ALLOC_KMALLOC;
+        buf_info.buffer_start = gISPdev->dma_addr;
+        buf_info.buffer_size = gISPdev->dma_size;
+        buf_info.virt_addr = (unsigned long)gISPdev->dma_buf;
+        buf_info.flags = 1;
+
+        // Store consistent info
+        memcpy(gISPdev->buf_info, &buf_info, sizeof(buf_info));
+
+        pr_info("tx_isp: Buffer info configured: phys=0x%x virt=%p size=%u\n",
+                (unsigned int)buf_info.buffer_start,
+                (void *)buf_info.virt_addr,
+                buf_info.buffer_size);
+
+        if (copy_to_user(argp, &buf_info, sizeof(buf_info)))
+            return -EFAULT;
+
+        pr_info("tx_isp: Buffer setup completed successfully\n");
 	    return 0;
 	}
     }
@@ -4485,44 +4423,65 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
         break;
     }
-    case VIDIOC_ENABLE_STREAM:
+    case VIDIOC_ENABLE_STREAM: {
         pr_info("ISP IOCTL called: cmd=VIDIOC_ENABLE_STREAM\n");
-        return -EINVAL;  // TODO debugging
 
         // Check if the sensor is initialized
-        if (!gISPdev || !gISPdev->sensor_i2c_client || !gISPdev->fs_info) {
-            pr_err("Sensor or frame source not initialized\n");
+        if (!gISPdev || !gISPdev->sensor_i2c_client) {
+            pr_err("Sensor not initialized\n");
             return -ENODEV;
         }
 
-        struct isp_framesource_state *fs = gISPdev->fs_info;
-        if (!fs->buf_base) {
-            pr_err("Frame source buffers not allocated\n");
-            return -EINVAL;
-        }
-
-        // Ensure all buffers are synchronized before starting DMA
-        for (int i = 0; i < fs->buf_cnt; i++) {
-            dma_sync_single_for_device(gISPdev->dev, fs->bufs[i].buffer_start,
-                                       fs->bufs[i].buffer_size, DMA_TO_DEVICE);
-        }
-
         // Enable streaming on the sensor
-        int ret = i2c_smbus_write_byte_data(gISPdev->sensor_i2c_client, 0x0100, 0x01);
+        ret = i2c_smbus_write_byte_data(gISPdev->sensor_i2c_client, 0x0100, 0x01);
         if (ret < 0) {
             pr_err("Failed to enable sensor streaming\n");
             return ret;
         }
 
-        fs->state = 2; // Mark as streaming
         pr_info("Sensor streaming setup complete\n");
         break;
-    // GET_BUF_INFO handler needs to return size for later IMP_Alloc call
-    case VIDIOC_GET_BUF_INFO:  // 0x800856d5
-    case VIDIOC_SET_BUF_INFO:  // 0x800856d4
-        ret = handle_buffer_ioctls(gISPdev, cmd, arg);
-        break;
+    }
+    case TX_ISP_SET_BUF: {
+        return handle_get_buf_ioctl(gISPdev, arg);
+    }
+    case VIDIOC_SET_BUF_INFO: {
+        struct sensor_buffer_info buf_info = {0};
+        void __user *argp = (void __user *)arg;
 
+        pr_info("tx_isp: Handling ioctl VIDIOC_SET_BUF_INFO\n");
+
+        if (!gISPdev || !gISPdev->buf_info || !gISPdev->dma_buf) {
+            pr_err("tx_isp: Invalid device state\n");
+            return -EINVAL;
+        }
+
+        if (copy_from_user(&buf_info, argp, sizeof(buf_info))) {
+            pr_err("tx_isp: Failed to copy from user\n");
+            return -EFAULT;
+        }
+
+        // Use actual mapped addresses
+        buf_info.method = ISP_ALLOC_KMALLOC;
+        buf_info.buffer_start = gISPdev->dma_addr;
+        buf_info.buffer_size = gISPdev->dma_size;
+        buf_info.virt_addr = (unsigned long)gISPdev->dma_buf;
+        buf_info.flags = 1;
+
+        // Store consistent info
+        memcpy(gISPdev->buf_info, &buf_info, sizeof(buf_info));
+
+        pr_info("tx_isp: Buffer info configured: phys=0x%x virt=%p size=%u\n",
+                (unsigned int)buf_info.buffer_start,
+                (void *)buf_info.virt_addr,
+                buf_info.buffer_size);
+
+        if (copy_to_user(argp, &buf_info, sizeof(buf_info)))
+            return -EFAULT;
+
+        pr_info("tx_isp: Buffer setup completed successfully\n");
+        return 0;
+    }
     case TX_ISP_VIDEO_LINK_SETUP: {
       	pr_info("TX_ISP_VIDEO_LINK_SETUP\n");
         unsigned int link;
@@ -4682,8 +4641,8 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	case SENSOR_CMD_STREAM_ON:
 	case SENSOR_CMD_STREAM_OFF:
         pr_info("Sensor command: 0x%x\n", cmd);
-	    ret = handle_sensor_ioctl(gISPdev, cmd, argp);
-	    break;
+        // ret = handle_sensor_ioctl(gISPdev, cmd, argp);
+        break;
 
     default:
         dev_dbg(gISPdev->dev, "Unhandled ioctl cmd: 0x%x\n", cmd);
@@ -4796,7 +4755,7 @@ static int tiziano_load_parameters(const char *filename, void __iomem *dest, siz
 
     file_size = i_size_read(file->f_path.dentry->d_inode);
     if (file_size <= 0) {
-        pr_err("Invalid parameter file size: %zu\n", file_size);
+        pr_err("Parameter file is empty or inaccessible: %s\n", filename);
         ret = -EINVAL;
         goto close_file;
     }
@@ -4999,15 +4958,14 @@ static int tisp_init(struct device *dev)
 {
     int ret;
     const char *param_file = "/etc/sensor/sc2336-t31.bin";
-    void __iomem *reg_base;
     uint32_t reg_val;
 
-    pr_info("Starting ISP initialization sequence\n");
+    pr_info("Starting tisp_init...\n");
 
     // Verify registers are mapped using global gISPdev
     if (!gISPdev || !gISPdev->regs) {
-        pr_err("Invalid ISP device state\n");
-        return -EINVAL;
+        dev_err(dev, "ISP registers not mapped!\n");
+        return -EFAULT;
     }
 
     // Step 1: Allocate memory using vmalloc
@@ -5037,22 +4995,22 @@ static int tisp_init(struct device *dev)
     dev_info(dev, "Parameters loaded successfully from %s\n", param_file);
 
     // Step 3: Handle isp_memopt settings
-//    if (isp_memopt == 1) {
-//        dev_info(dev, "Applying isp_memopt settings\n");
-//        writel(0, tparams_day + 0x264);
-//        writel(isp_memopt, tparams_day + 0x26c);
-//        writel(0, tparams_day + 0x27c);
-//        writel(0, tparams_day + 0x274);
-//
-//        writel(0, tparams_night + 0x264);
-//        writel(isp_memopt, tparams_night + 0x26c);
-//        writel(0, tparams_night + 0x27c);
-//        writel(0, tparams_night + 0x274);
-//    }
-//
-//    // Step 4: Write the parameters to hardware registers using global gISPdev->regs
-//    writel((unsigned long)tparams_day, gISPdev->regs + 0x84b50);
-//    dev_info(dev, "tparams_day written to register successfully\n");
+    if (isp_memopt == 1) {
+        dev_info(dev, "Applying isp_memopt settings\n");
+        writel(0, tparams_day + 0x264);
+        writel(isp_memopt, tparams_day + 0x26c);
+        writel(0, tparams_day + 0x27c);
+        writel(0, tparams_day + 0x274);
+
+        writel(0, tparams_night + 0x264);
+        writel(isp_memopt, tparams_night + 0x26c);
+        writel(0, tparams_night + 0x27c);
+        writel(0, tparams_night + 0x274);
+    }
+
+    // Step 4: Write the parameters to hardware registers using global gISPdev->regs
+    writel((unsigned long)tparams_day, gISPdev->regs + 0x84b50);
+    dev_info(dev, "tparams_day written to register successfully\n");
 
     return 0;
 
@@ -5189,93 +5147,93 @@ static void __iomem *map_isp_registers(struct platform_device *pdev)
     return base;
 }
 
-
-static int framechan_open(struct inode *inode, struct file *file)
-{
-    int minor = iminor(inode);
-    struct isp_framesource_state *fs;
-
-    pr_info("Opening frame channel %d\n", minor);
-
-    if (minor >= MAX_CHANNELS) {
-        pr_err("Invalid minor number: %d\n", minor);
-        return -EINVAL;
-    }
-
-    fs = &gISPdev->frame_sources[minor];
-
-    // Initialize state with checks
-    if (!fs->is_open) {
-        fs->width = 1920;
-        fs->height = 1080;
-        fs->buf_cnt = 4;
-        fs->buf_size = fs->width * fs->height * 2;
-
-        // Validate memory size
-        if ((minor + 1) * fs->buf_size * fs->buf_cnt > ISP_RMEM_SIZE) {
-            pr_err("Not enough memory for channel %d\n", minor);
-            return -ENOMEM;
-        }
-
-        fs->buf_base = ioremap(ISP_RMEM_BASE + (minor * fs->buf_size * fs->buf_cnt),
-                              fs->buf_size * fs->buf_cnt);
-        if (!fs->buf_base) {
-            return -ENOMEM;
-        }
-
-        fs->dma_addr = ISP_RMEM_BASE + (minor * fs->buf_size * fs->buf_cnt);
-        fs->is_open = 1;
-    }
-
-    file->private_data = fs;
-    return 0;
-}
-
-
-static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-    struct IMPISPDev *dev = gISPdev;
-    struct isp_framesource_state *fs = file->private_data;
-
-    pr_info("Handling frame channel IOCTL: cmd=0x%x\n", cmd);
-
-    if (!dev || !fs || !fs->is_open) {
-        pr_err("Invalid device state\n");
-        return -EINVAL;
-    }
-
-    // Validate memory before use
-    if (!fs->buf_base || !dev->dma_buf) {
-        pr_err("Buffer memory not initialized\n");
-        return -EINVAL;
-    }
-
-    dev->fs_info = fs;
-    return handle_set_buf_ioctl(dev, arg);
-}
-
-static int framechan_release(struct inode *inode, struct file *file)
-{
-    struct isp_framesource_state *fs = file->private_data;
-
-    if (fs && fs->is_open) {
-        mutex_lock(&fs->sem);
-        if (fs->buf_base) {
-            iounmap(fs->buf_base);
-            fs->buf_base = NULL;
-        }
-        fs->is_open = 0;
-        mutex_unlock(&fs->sem);
-    }
-    return 0;
-}
-
-static struct file_operations framechan_fops = {
-    .owner = THIS_MODULE,
-    .open = framechan_open,
-    .release = framechan_release,
-    .unlocked_ioctl = framechan_ioctl,
-};
+//
+//static int framechan_open(struct inode *inode, struct file *file)
+//{
+//    int minor = iminor(inode);
+//    struct isp_framesource_state *fs;
+//
+//    pr_info("Opening frame channel %d\n", minor);
+//
+//    if (minor >= MAX_CHANNELS) {
+//        pr_err("Invalid minor number: %d\n", minor);
+//        return -EINVAL;
+//    }
+//
+//    fs = &gISPdev->frame_sources[minor];
+//
+//    // Initialize state with checks
+//    if (!fs->is_open) {
+//        fs->width = 1920;
+//        fs->height = 1080;
+//        fs->buf_cnt = 4;
+//        fs->buf_size = fs->width * fs->height * 2;
+//
+//        // Validate memory size
+//        if ((minor + 1) * fs->buf_size * fs->buf_cnt > ISP_RMEM_SIZE) {
+//            pr_err("Not enough memory for channel %d\n", minor);
+//            return -ENOMEM;
+//        }
+//
+//        fs->buf_base = ioremap(ISP_RMEM_BASE + (minor * fs->buf_size * fs->buf_cnt),
+//                              fs->buf_size * fs->buf_cnt);
+//        if (!fs->buf_base) {
+//            return -ENOMEM;
+//        }
+//
+//        fs->dma_addr = ISP_RMEM_BASE + (minor * fs->buf_size * fs->buf_cnt);
+//        fs->is_open = 1;
+//    }
+//
+//    file->private_data = fs;
+//    return 0;
+//}
+//
+//
+//static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+//{
+//    struct IMPISPDev *dev = gISPdev;
+//    struct isp_framesource_state *fs = file->private_data;
+//
+//    pr_info("Handling frame channel IOCTL: cmd=0x%x\n", cmd);
+//
+//    if (!dev || !fs || !fs->is_open) {
+//        pr_err("Invalid device state\n");
+//        return -EINVAL;
+//    }
+//
+//    // Validate memory before use
+//    if (!fs->buf_base || !dev->dma_buf) {
+//        pr_err("Buffer memory not initialized\n");
+//        return -EINVAL;
+//    }
+//
+//    dev->fs_info = fs;
+//    return handle_set_buf_ioctl(dev, arg);
+//}
+//
+//static int framechan_release(struct inode *inode, struct file *file)
+//{
+//    struct isp_framesource_state *fs = file->private_data;
+//
+//    if (fs && fs->is_open) {
+//        mutex_lock(&fs->sem);
+//        if (fs->buf_base) {
+//            iounmap(fs->buf_base);
+//            fs->buf_base = NULL;
+//        }
+//        fs->is_open = 0;
+//        mutex_unlock(&fs->sem);
+//    }
+//    return 0;
+//}
+//
+//static struct file_operations framechan_fops = {
+//    .owner = THIS_MODULE,
+//    .open = framechan_open,
+//    .release = framechan_release,
+//    .unlocked_ioctl = framechan_ioctl,
+//};
 
 static int create_framechan_devices(struct device *dev)
 {
@@ -5297,18 +5255,18 @@ static int create_framechan_devices(struct device *dev)
     }
 
     // Create each device node
-    for (i = 0; i < MAX_CHANNELS; i++) {
-        cdev_init(&framechan_cdev, &framechan_fops);
-        framechan_cdev.owner = THIS_MODULE;
-        ret = cdev_add(&framechan_cdev, MKDEV(MAJOR(framechan_dev), i), 1);
-        if (ret) {
-            pr_err("Failed to add cdev for /dev/framechan%d\n", i);
-            return ret;
-        }
-
-        device_create(framechan_class, NULL, MKDEV(MAJOR(framechan_dev), i), NULL, "framechan%d", i);
-        pr_info("Created device /dev/framechan%d\n", i);
-    }
+//    for (i = 0; i < MAX_CHANNELS; i++) {
+//        cdev_init(&framechan_cdev, &framechan_fops);
+//        framechan_cdev.owner = THIS_MODULE;
+//        ret = cdev_add(&framechan_cdev, MKDEV(MAJOR(framechan_dev), i), 1);
+//        if (ret) {
+//            pr_err("Failed to add cdev for /dev/framechan%d\n", i);
+//            return ret;
+//        }
+//
+//        device_create(framechan_class, NULL, MKDEV(MAJOR(framechan_dev), i), NULL, "framechan%d", i);
+//        pr_info("Created device /dev/framechan%d\n", i);
+//    }
 
 
 
@@ -5341,24 +5299,9 @@ static int tisp_probe(struct platform_device *pdev)
     int ret, i;
 
     pr_info("Probing TISP device...\n");
+    pr_info("In tisp_probe, gISPdev is %p\n", gISPdev);
 
-    // Validate gISPdev
-    if (!gISPdev) {
-        dev_err(&pdev->dev, "Global ISP device structure not allocated\n");
-        return -ENOMEM;
-    }
-
-    // Initialize device structure properly
-    gISPdev->dev = &pdev->dev;
-    if (!gISPdev->dev) {
-        dev_err(&pdev->dev, "Failed to set device pointer\n");
-        return -EINVAL;
-    }
-
-    // Set driver data
-    platform_set_drvdata(pdev, gISPdev);
-
-    // Map registers first
+    // Map registers
     base = map_isp_registers(pdev);
     if (IS_ERR(base)) {
         dev_err(&pdev->dev, "Failed to map ISP registers\n");
@@ -5369,15 +5312,15 @@ static int tisp_probe(struct platform_device *pdev)
     gISPdev->regs = base;
     pr_info("Set gISPdev->regs to %p\n", gISPdev->regs);
 
-    // Set the IRQ value to 29
-    gISPdev->irq = 29;
+    // Set the IRQ value to 36
+    gISPdev->irq = 36;
 
     // Now configure clocks with proper error handling
-    ret = configure_isp_clocks(gISPdev);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
-        goto err_unmap_regs;
-    }
+    //ret = configure_isp_clocks(gISPdev);
+    //if (ret) {
+    //    dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
+    //    goto err_unmap_regs;
+    //}
 
     // Use the global gISPdev instead of creating a local one
     if (!gISPdev) {
@@ -5461,13 +5404,6 @@ static int tisp_probe(struct platform_device *pdev)
         dev_err(&pdev->dev, "Failed to create proc entries\n");
         goto err_unregister_devices;
     }
-
-    ret = create_framechan_devices(&pdev->dev);
-	if (ret) {
-    	dev_err(&pdev->dev, "Failed to create frame channels\n");
-    	goto err_free_memory;
-	}
-
     dev_info(&pdev->dev, "TISP device probed successfully\n");
 
     // Return success
@@ -5481,7 +5417,7 @@ err_free_memory:
     }
     return ret;
 err_unregister_devices:
-    remove_framechan_devices();
+    //remove_framechan_devices();
 err_unmap_regs:
     if (gISPdev->regs)
         iounmap(gISPdev->regs);
@@ -5508,7 +5444,7 @@ static int tisp_remove(struct platform_device *pdev) {
         cleanup_isp_memory(dev);
 
         // Clean up device clocks
-		cleanup_isp_clocks(gISPdev);
+		//cleanup_isp_clocks(gISPdev);
 
         // Clean up I2C
         if (dev->sensor_i2c_client) {
