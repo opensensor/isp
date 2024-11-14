@@ -971,7 +971,7 @@ int32_t tx_isp_request_irq(struct irq_info* irqInfo, struct irq_handler_data* ir
 		if (request_threaded_irq(irqNumber, isp_irq_handler, isp_irq_thread_handle, irq_flags, "isp_driver", irqHandlerData) != 0)
         {
             // If IRQ request failed, print an error message and reset the handler data struct
-            isp_printf(2, "%s[%d] Failed to request irq(%d)...", "IR", irqNumber);
+            isp_printf(2, "%s[%d] Failed to request irq(%d)...", "tx_isp_request_irq", irqNumber);
             irqHandlerData->irq_number = 0;
             return 0xfffffffc;  // Return error code for failed IRQ request
         }
@@ -2353,255 +2353,106 @@ static inline void system_reg_write(u32 reg, u32 val)
 #define ISP_ALLOC_CONTINUOUS 2
 static struct IMPISPDev *gISPdev_bak = NULL;  // Backup for reopen
 
-#define ISP_REG_BASE        0x13300000
-#define ISP_REG_SIZE        0x1000
-
-#define ISP_BUF_BASE        0x100        // Buffer registers offset
-#define ISP_BUF_Y_ADDR      (ISP_BUF_BASE + 0x00)  // Y buffer address
-#define ISP_BUF_Y_SIZE      (ISP_BUF_BASE + 0x04)  // Y buffer size
-#define ISP_BUF_UV_ADDR     (ISP_BUF_BASE + 0x08)  // UV buffer address
-#define ISP_BUF_UV_SIZE     (ISP_BUF_BASE + 0x0C)  // UV buffer size
-
 
 static int setup_frame_source(struct IMPISPDev *dev)
 {
     struct isp_framesource_state *fs;
-    uint32_t line_width, frame_size;
-    void __iomem *regs;
+    struct isp_buffer_info *bufs;
+    int ret;
 
     if (!dev || !dev->fs_info) {
-        pr_err("Invalid device state\n");
+        pr_err("Invalid device or frame source info\n");
         return -EINVAL;
     }
 
     fs = dev->fs_info;
-    regs = dev->regs;
 
-    if (!regs) {
-        pr_err("No register mapping\n");
+    // Validate essential fields before proceeding
+    if (!fs->width || !fs->height || !fs->buf_cnt) {
+        pr_err("Invalid frame source parameters\n");
         return -EINVAL;
     }
 
-    pr_info("Using register base: %p\n", regs);
+    // Ensure buffer size is aligned to cache line size
+    #define CACHE_LINE_SIZE 32
+    fs->buf_size = ALIGN(fs->buf_size, CACHE_LINE_SIZE);
 
-    // Calculate sizes for buffer setup
-    line_width = ((fs->width + 7) >> 3) << 3;
-    frame_size = line_width * fs->height;
+    // Allocate DMA memory if not already done
+    if (!fs->buf_base) {
+        size_t total_size = fs->buf_size * fs->buf_cnt;
 
-    // Get current buffer info from libimp
-    if (!dev->buf_info) {
-        pr_err("No buffer info available\n");
-        return -EINVAL;
-    }
-
-    pr_info("Using libimp buffer: phys=0x%08x virt=0x%08x size=%u\n",
-            dev->buf_info->buffer_start,
-            dev->buf_info->virt_addr,
-            dev->buf_info->buffer_size);
-
-    // Write buffer configuration with barriers between writes
-    writel(dev->buf_info->buffer_start, regs + 0x1000);
-    wmb();
-    writel(line_width, regs + 0x1004);
-    wmb();
-    writel(dev->buf_info->buffer_start + frame_size, regs + 0x1008);
-    wmb();
-    writel(line_width, regs + 0x100C);
-    wmb();
-
-    // Third buffer with special alignment
-    uint32_t third_line_size = ((((fs->width + 0x1f) >> 5) + 7) >> 3) << 3;
-    writel(dev->buf_info->buffer_start + (frame_size * 2), regs + 0x1010);
-    wmb();
-    writel(third_line_size, regs + 0x1014);
-    wmb();
-
-    // Verify every write
-    pr_info("Register verification:\n");
-    pr_info("  BUF0: wrote 0x%08x read 0x%08x\n",
-            dev->buf_info->buffer_start, readl(regs + 0x1000));
-    pr_info("  SIZE0: wrote 0x%08x read 0x%08x\n",
-            line_width, readl(regs + 0x1004));
-    pr_info("  BUF1: wrote 0x%08x read 0x%08x\n",
-            dev->buf_info->buffer_start + frame_size, readl(regs + 0x1008));
-    pr_info("  SIZE1: wrote 0x%08x read 0x%08x\n",
-            line_width, readl(regs + 0x100C));
-    pr_info("  BUF2: wrote 0x%08x read 0x%08x\n",
-            dev->buf_info->buffer_start + (frame_size * 2), readl(regs + 0x1010));
-    pr_info("  SIZE2: wrote 0x%08x read 0x%08x\n",
-            third_line_size, readl(regs + 0x1014));
-
-    fs->state = 1;
-    return 0;
-}
-
-
-// Add these memory validation macros
-#define ISP_MEM_ALIGNED(addr) IS_ALIGNED((unsigned long)(addr), 4096)
-#define ISP_MEM_VALID(addr, size) ((addr) && (size) > 0 && ISP_MEM_ALIGNED(addr))
-
-static int validate_memory_setup(struct IMPISPDev *dev)
-{
-    if (!dev) {
-        pr_err("Invalid device pointer\n");
-        return -EINVAL;
-    }
-
-    // Verify DMA memory setup
-    if (!dev->dma_buf || !dev->dma_addr || !dev->dma_size) {
-        pr_err("DMA memory not properly initialized\n");
-        return -ENOMEM;
-    }
-
-    // Verify buffer info structure
-    if (!dev->buf_info || !dev->buf_info->buffer_start ||
-        !dev->buf_info->buffer_size || !dev->buf_info->virt_addr) {
-        pr_err("Buffer info not properly initialized\n");
-        return -EINVAL;
-    }
-
-    // Verify alignments
-    if (!ISP_MEM_ALIGNED(dev->dma_addr) ||
-        !ISP_MEM_ALIGNED(dev->buf_info->buffer_start)) {
-        pr_err("Memory not properly aligned\n");
-        return -EINVAL;
-    }
-
-    // Verify sizes
-    if (dev->buf_info->buffer_size > dev->dma_size) {
-        pr_err("Buffer size exceeds DMA memory\n");
-        return -EINVAL;
-    }
-
-    // Verify frame source state if initialized
-    if (dev->fs_info) {
-        if (!dev->fs_info->width || !dev->fs_info->height ||
-            !dev->fs_info->buf_size) {
-            pr_err("Invalid frame source configuration\n");
-            return -EINVAL;
+        // Reduce the size if it exceeds available memory
+        if (total_size > (24 * 1024 * 1024)) { // Limit to 24MB to leave space for other processes
+            pr_err("Requested DMA size exceeds available memory\n");
+            return -ENOMEM;
         }
 
-        // Verify buffer can hold frame data
-        uint32_t min_size = dev->fs_info->width * dev->fs_info->height * 2;
-        if (dev->buf_info->buffer_size < min_size) {
-            pr_err("Buffer too small for frame size\n");
-            return -EINVAL;
+        pr_info("Attempting to allocate %zu bytes for DMA\n", total_size);
+        fs->buf_base = dma_alloc_coherent(dev->dev, total_size, &fs->dma_addr, GFP_KERNEL | GFP_DMA);
+        if (!fs->buf_base) {
+            pr_err("Failed to allocate DMA memory of size %zu\n", total_size);
+            return -ENOMEM;
         }
     }
 
-    pr_info("Memory validation passed:\n");
-    pr_info("  DMA buffer: %p\n", dev->dma_buf);
-    pr_info("  DMA addr: 0x%x\n", (unsigned int)dev->dma_addr);
-    pr_info("  DMA size: %zu\n", dev->dma_size);
-    pr_info("  Buffer start: 0x%x\n", dev->buf_info->buffer_start);
-    pr_info("  Buffer size: %u\n", dev->buf_info->buffer_size);
-    pr_info("  Virtual addr: 0x%x\n", dev->buf_info->virt_addr);
+    // Configure buffer info
+    bufs = fs->bufs;
+    if (!bufs) {
+        pr_err("No buffer info array allocated\n");
+        return -EINVAL;
+    }
 
+    pr_info("Configuring %d buffers of size %d\n", fs->buf_cnt, fs->buf_size);
+
+    for (int i = 0; i < fs->buf_cnt; i++) {
+        bufs[i].virt_addr = (uint32_t)(fs->buf_base + (i * fs->buf_size));
+        bufs[i].buffer_start = fs->dma_addr + (i * fs->buf_size);
+        bufs[i].buffer_size = fs->buf_size;
+        bufs[i].flags = 0;
+
+        if (!bufs[i].virt_addr || !bufs[i].buffer_start) {
+            pr_err("Invalid buffer configuration for buffer %d\n", i);
+            return -EINVAL;
+        }
+
+        pr_debug("Buffer %d: virt=0x%x, phys=0x%x, size=%d\n",
+                 i, bufs[i].virt_addr, bufs[i].buffer_start, bufs[i].buffer_size);
+    }
+
+    fs->state = 1;  // Mark as ready
+    pr_info("Frame source setup complete\n");
     return 0;
 }
 
 
-// Helper function for kernel IOCTL
-static int do_ioctl(int fd, unsigned int cmd, unsigned long arg)
-{
-    struct file *file;
-    int ret = -EBADF;
-
-    file = fget(fd);
-    if (!file)
-        return -EBADF;
-
-    if (file->f_op && file->f_op->unlocked_ioctl) {
-        ret = file->f_op->unlocked_ioctl(file, cmd, arg);
-    }
-
-    fput(file);
-    return ret;
-}
-
-
-
-static int sensor_setup_streaming(struct IMPISPDev *dev)
-{
-    struct i2c_client *client = dev->sensor_i2c_client;
-    int ret;
-
-    if (!client) {
-        pr_err("No sensor I2C client\n");
-        return -ENODEV;
-    }
-
-    // Basic sensor initialization sequence
-    ret = isp_sensor_write_reg(client, SENSOR_REG_STANDBY, 0x00);  // Exit standby
-    if (ret < 0)
-        return ret;
-
-    // Set resolution (example for 1920x1080)
-    ret = isp_sensor_write_reg(client, SENSOR_REG_H_SIZE, 0x07);  // 1920 >> 8
-    if (ret < 0)
-        return ret;
-
-    ret = isp_sensor_write_reg(client, SENSOR_REG_H_SIZE + 1, 0x80);  // 1920 & 0xFF
-    if (ret < 0)
-        return ret;
-
-    ret = isp_sensor_write_reg(client, SENSOR_REG_V_SIZE, 0x04);  // 1080 >> 8
-    if (ret < 0)
-        return ret;
-
-    ret = isp_sensor_write_reg(client, SENSOR_REG_V_SIZE + 1, 0x38);  // 1080 & 0xFF
-    if (ret < 0)
-        return ret;
-
-    // Enable streaming
-    ret = isp_sensor_write_reg(client, SENSOR_REG_MODE, 0x01);
-    if (ret < 0)
-        return ret;
-
-    pr_info("Sensor streaming setup complete\n");
-    return 0;
-}
 
 static int start_frame_source(struct IMPISPDev *dev)
 {
-    int ret = 0;
+    struct isp_framesource_state *fs;
+    int ret;
 
-    if (!dev) {
-        pr_err("Invalid device state\n");
+    if (!dev || !dev->fs_info) {
+        pr_err("Invalid device or frame source info\n");
         return -EINVAL;
     }
 
-    // Validate device state before proceeding
-    if (!dev->fs_info || !dev->buf_info) {
-        pr_err("Frame source or buffer info not initialized\n");
+    fs = dev->fs_info;
+
+    if (fs->state != 1) {
+        pr_err("Frame source not in ready state\n");
         return -EINVAL;
     }
 
-    // Initialize frame source if needed
-    if (!dev->fs_info->state) {
-        ret = setup_frame_source(dev);
-        if (ret) {
-            pr_err("Failed to setup frame source\n");
-            return ret;
-        }
+    // Set up DMA for continuous capture
+    if (dev->dma_addr && dev->dma_size) {
+        pr_info("Starting DMA transfer\n");
+        // Add your DMA setup code here
+        fs->state = 2;  // Mark as streaming
+        return 0;
     }
 
-    // Configure sensor streaming
-    if (dev->sensor_i2c_client) {
-        ret = sensor_setup_streaming(dev);
-        if (ret) {
-            pr_err("Failed to setup sensor streaming\n");
-            return ret;
-        }
-    }
-
-    // Update device state
-    dev->is_open += 2;
-    if (dev->fs_info)
-        dev->fs_info->state = 2;
-
-    pr_info("Frame source started successfully\n");
-    return 0;
+    pr_err("No DMA configuration available\n");
+    return -EINVAL;
 }
 
 
@@ -2811,20 +2662,25 @@ static int stop_streaming(struct IMPISPDev *dev)
     return 0;
 }
 
-static void cleanup_isp_memory(struct IMPISPDev *dev)
-{
-    if (!dev)
-        return;
-
-    if (dev->dma_buf && dev->dma_addr) {
-        dma_free_coherent(dev->dev, dev->dma_size,
-                         dev->dma_buf, dev->dma_addr);
+static void cleanup_isp_memory(struct IMPISPDev *dev) {
+    if (dev->dma_buf) {
+        iounmap(dev->dma_buf);
         dev->dma_buf = NULL;
-        dev->dma_addr = 0;
     }
+
+    if (dev->buf_info) {
+        kfree(dev->buf_info);
+        dev->buf_info = NULL;
+    }
+
+    dev->dma_addr = 0;
+    dev->dma_size = 0;
+
+    isp_mem.initialized = false;
+    isp_mem.virt_addr = NULL;
+    isp_mem.phys_addr = 0;
+    isp_mem.size = 0;
 }
-
-
 // Add cleanup for registers
 static void cleanup_isp_registers(struct IMPISPDev *dev)
 {
@@ -3691,6 +3547,47 @@ int isp_sensor_read_reg(struct i2c_client *client, u16 reg, u8 *val)
 
 
 
+static int sensor_setup_streaming(struct IMPISPDev *dev)
+{
+    struct i2c_client *client = dev->sensor_i2c_client;
+    int ret;
+
+    if (!client) {
+        pr_err("No sensor I2C client\n");
+        return -ENODEV;
+    }
+
+    // Basic sensor initialization sequence
+    ret = isp_sensor_write_reg(client, SENSOR_REG_STANDBY, 0x00);  // Exit standby
+    if (ret < 0)
+        return ret;
+
+    // Set resolution (example for 1920x1080)
+    ret = isp_sensor_write_reg(client, SENSOR_REG_H_SIZE, 0x07);  // 1920 >> 8
+    if (ret < 0)
+        return ret;
+
+    ret = isp_sensor_write_reg(client, SENSOR_REG_H_SIZE + 1, 0x80);  // 1920 & 0xFF
+    if (ret < 0)
+        return ret;
+
+    ret = isp_sensor_write_reg(client, SENSOR_REG_V_SIZE, 0x04);  // 1080 >> 8
+    if (ret < 0)
+        return ret;
+
+    ret = isp_sensor_write_reg(client, SENSOR_REG_V_SIZE + 1, 0x38);  // 1080 & 0xFF
+    if (ret < 0)
+        return ret;
+
+    // Enable streaming
+    ret = isp_sensor_write_reg(client, SENSOR_REG_MODE, 0x01);
+    if (ret < 0)
+        return ret;
+
+    pr_info("Sensor streaming setup complete\n");
+    return 0;
+}
+
 
 // Add these defines for consistent memory values
 #define ISP_MAGIC_METHOD    0x203a726f
@@ -3716,79 +3613,86 @@ static void dump_memory_info(struct IMPISPDev *dev) {
 }
 
 // Add validation before streaming
-static int validate_streaming_setup(struct IMPISPDev *dev)
-{
-    pr_info("Validating streaming setup...\n");
+static int init_isp_memory(struct IMPISPDev *dev) {
+    void *virt_addr;
+    dma_addr_t phys_addr = ISP_RMEM_BASE;
 
-    if (!dev) {
-        pr_err("NULL device pointer\n");
-        return -EINVAL;
+    pr_info("Initializing ISP memory at 0x%08x size=%u\n",
+            (unsigned int)phys_addr, ISP_RMEM_SIZE);
+
+    // Map the physical memory
+    virt_addr = ioremap(phys_addr, ISP_RMEM_SIZE);
+    if (!virt_addr) {
+        pr_err("Failed to map ISP memory\n");
+        return -ENOMEM;
     }
 
-    // Check basic device initialization
-    if (!dev->is_open) {
-        pr_err("Device not properly opened\n");
-        return -EINVAL;
-    }
+    // Store the mappings
+    dev->dma_buf = virt_addr;
+    dev->dma_addr = phys_addr;
+    dev->dma_size = ISP_RMEM_SIZE;
 
-    // Validate memory setup
-    if (!dev->dma_buf || !dev->dma_addr) {
-        pr_err("DMA memory not initialized (buf=%p, addr=0x%x)\n",
-               dev->dma_buf, (unsigned int)dev->dma_addr);
-        return -EINVAL;
-    }
-
-    // Validate buffer info
-    if (!dev->buf_info) {
-        pr_err("Buffer info not initialized\n");
-        return -EINVAL;
-    }
-
-    // Validate buffer mappings
-    if (!dev->buf_info->buffer_start || !dev->buf_info->virt_addr) {
-        pr_err("Invalid buffer mappings (phys=0x%x, virt=0x%x)\n",
-               dev->buf_info->buffer_start, dev->buf_info->virt_addr);
-        return -EINVAL;
-    }
-
-    // Validate frame source state
-    if (!dev->fs_info) {
-        pr_err("Frame source not initialized\n");
-        return -EINVAL;
-    }
-
-    // Validate sensor
-    if (!dev->sensor_i2c_client) {
-        pr_err("No sensor initialized\n");
-        return -EINVAL;
-    }
-
-    // Dump current state for debugging
-    pr_info("Streaming validation passed:\n");
-    pr_info("  DMA buffer: %p\n", dev->dma_buf);
-    pr_info("  DMA addr: 0x%x\n", (unsigned int)dev->dma_addr);
-    pr_info("  Buffer start: 0x%x\n", dev->buf_info->buffer_start);
-    pr_info("  Virtual addr: 0x%x\n", dev->buf_info->virt_addr);
-    pr_info("  Buffer size: %u\n", dev->buf_info->buffer_size);
+    pr_info("ISP memory mapped: virt=%p phys=0x%08x\n",
+            dev->dma_buf, (unsigned int)dev->dma_addr);
 
     return 0;
 }
 
 
-
-static int test_isp_registers(struct IMPISPDev *dev)
-{
-    if (!dev || !dev->regs) {
-        pr_err("No register mapping\n");
+// Add validation before streaming
+static int validate_streaming_setup(struct IMPISPDev *dev) {
+    if (!dev || !dev->dma_buf || !dev->buf_info) {
+        pr_err("Invalid device state for streaming\n");
         return -EINVAL;
     }
 
-    pr_info("Using ISP register mapping:\n");
-    pr_info("  Virtual base: %p\n", dev->regs);
+    // Verify memory mappings
+    if (!dev->buf_info->buffer_start || !dev->buf_info->virt_addr) {
+        pr_err("Invalid buffer mappings\n");
+        return -EINVAL;
+    }
 
-    // Try a test read
-    u32 test_val = readl(dev->regs + ISP_CTRL_REG);
-    pr_info("Test register read: 0x%08x\n", test_val);
+    // Debug dump
+    dump_memory_info(dev);
+    return 0;
+}
+
+
+
+static int init_isp_registers(struct IMPISPDev *dev)
+{
+    void __iomem *base;
+
+    pr_info("Initializing ISP registers\n");
+
+    // Map ISP registers
+    base = ioremap(ISP_REG_BASE, ISP_REG_SIZE);
+    if (!base) {
+        pr_err("Failed to map ISP registers\n");
+        return -ENOMEM;
+    }
+
+    dev->regs = base;
+
+    // Initialize control registers
+    writel(0x0, dev->regs + ISP_CTRL_OFFSET);  // Reset control
+    writel(0x1, dev->regs + ISP_INIT_OFFSET);  // Initialize
+
+    // Set up configuration
+    writel(0x0, dev->regs + ISP_CONF_OFFSET);
+
+    // Read back status to verify
+    u32 status = readl(dev->regs + ISP_STAT_OFFSET);
+    pr_info("ISP status after init: 0x%08x\n", status);
+
+    // Configure DMA addresses
+    if (dev->dma_addr) {
+        writel(dev->dma_addr, dev->regs + ISP_BUF0_REG);
+        writel(dev->dma_addr + dev->dma_size/2, dev->regs + ISP_BUF1_REG);
+        pr_info("Configured DMA buffers:\n");
+        pr_info("  Buffer 0: 0x%08x\n", dev->dma_addr);
+        pr_info("  Buffer 1: 0x%08x\n", dev->dma_addr + dev->dma_size/2);
+    }
 
     return 0;
 }
@@ -3796,57 +3700,31 @@ static int test_isp_registers(struct IMPISPDev *dev)
 static int start_streaming(struct IMPISPDev *dev)
 {
     int ret;
-    void __iomem *regs;
 
-    if (!dev || !dev->regs) {
-        pr_err("Invalid device or registers\n");
+    // Validate device state
+    if (!dev || !dev->regs || !dev->dma_buf) {
+        pr_err("Invalid device state for streaming\n");
         return -EINVAL;
     }
 
-    regs = dev->regs;
+    // Initialize ISP registers
+    ret = init_isp_registers(dev);
+    if (ret) {
+        pr_err("Failed to initialize ISP registers\n");
+        return ret;
+    }
 
-    // Read initial states
-    pr_info("Initial register states:\n");
-    pr_info("  CTRL: 0x%08x\n", readl(regs + ISP_CTRL_REG));
-    pr_info("  BUF0: 0x%08x\n", readl(regs + 0x1000));
-    pr_info("  SIZE0: 0x%08x\n", readl(regs + 0x1004));
-
-    // Setup sensor first
+    // Setup sensor
     ret = sensor_setup_streaming(dev);
     if (ret) {
         pr_err("Failed to setup sensor streaming\n");
         return ret;
     }
 
-    // Then frame source
-    ret = setup_frame_source(dev);
-    if (ret) {
-        pr_err("Failed to setup frame source\n");
-        return ret;
-    }
+    // Enable streaming - write to critical registers
+    writel(0x1, dev->regs + ISP_CTRL_OFFSET);
 
-    // Reset then enable streaming
-    writel(0x0, regs + ISP_CTRL_REG);
-    wmb();
-    mdelay(1);
-
-    writel(0x1, regs + ISP_CTRL_REG);
-    wmb();
-
-    // Verify streaming enabled
-    uint32_t ctrl = readl(regs + ISP_CTRL_REG);
-    pr_info("Control register after enable: 0x%08x\n", ctrl);
-
-    if (!(ctrl & 0x1)) {
-        pr_err("Failed to enable streaming - control reg: 0x%08x\n", ctrl);
-        return -EIO;
-    }
-
-    // Update state
-    dev->is_open += 2;
-    if (dev->fs_info)
-        dev->fs_info->state = 2;
-
+    pr_info("Streaming started successfully\n");
     return 0;
 }
 
@@ -4168,12 +4046,6 @@ static int init_isp_reserved_memory(struct platform_device *pdev)
         return -EINVAL;
     }
 
-    // Verify base address alignment
-    if (!ISP_MEM_ALIGNED(RMEM_BASE)) {
-        dev_err(&pdev->dev, "Reserved memory base not aligned\n");
-        return -EINVAL;
-    }
-
     // Store the base address
     gISPdev->dma_addr = RMEM_BASE;
     gISPdev->dma_size = RMEM_SIZE;
@@ -4185,30 +4057,16 @@ static int init_isp_reserved_memory(struct platform_device *pdev)
         return -ENOMEM;
     }
 
-    // Initialize buffer info if not already done
-    if (!gISPdev->buf_info) {
-        gISPdev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
-        if (!gISPdev->buf_info) {
-            dev_err(&pdev->dev, "Failed to allocate buffer info\n");
-            iounmap(gISPdev->dma_buf);
-            return -ENOMEM;
-        }
-    }
-
-    // Setup buffer info
-    gISPdev->buf_info->method = ISP_ALLOC_KMALLOC;
-    gISPdev->buf_info->buffer_start = gISPdev->dma_addr;
-    gISPdev->buf_info->buffer_size = gISPdev->dma_size;
-    gISPdev->buf_info->virt_addr = (unsigned long)gISPdev->dma_buf;
-    gISPdev->buf_info->flags = 1;
-
     pr_info("tx_isp: Reserved memory initialized:\n");
     pr_info("  Physical address: 0x%08x\n", (uint32_t)gISPdev->dma_addr);
     pr_info("  Virtual address: %p\n", gISPdev->dma_buf);
     pr_info("  Size: %zu bytes\n", gISPdev->dma_size);
-    pr_info("  Buffer info: start=0x%x size=%u\n",
-            gISPdev->buf_info->buffer_start,
-            gISPdev->buf_info->buffer_size);
+
+    // Add validation print
+    pr_info("tx_isp: Validating memory setup:\n");
+    pr_info("  gISPdev = %p\n", gISPdev);
+    pr_info("  dma_addr = 0x%08x\n", (uint32_t)gISPdev->dma_addr);
+    pr_info("  dma_buf = %p\n", gISPdev->dma_buf);
 
     return 0;
 }
@@ -4272,124 +4130,77 @@ struct isp_mem_request {
 static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
     struct isp_mem_request req;
     void __user *argp = (void __user *)arg;
+    struct isp_framesource_state *fs = dev->fs_info;
 
-    pr_info("Handling SET_BUF request\n");
-
-    if (!dev || !dev->fs_info) {
-        pr_err("Device or frame source not initialized\n");
+    if (!fs) {
+        pr_err("tx_isp: No frame source initialized\n");
         return -EINVAL;
     }
 
     if (copy_from_user(&req, argp, sizeof(req))) {
-        pr_err("Failed to copy request from user\n");
+        pr_err("tx_isp: Failed to copy from user\n");
         return -EFAULT;
     }
 
-    if (!dev || !dev->fs_info) {
-        pr_err("Device or frame source not initialized\n");
-        return -EINVAL;
-    }
-
-    if (copy_from_user(&req, argp, sizeof(req))) {
-        pr_err("Failed to copy request from user\n");
-        return -EFAULT;
-    }
-
-    pr_info("SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
+    pr_info("tx_isp: SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
             req.method, req.phys_addr, req.size);
 
-    // Handle initial magic sequence
-    if (req.method == ISP_ALLOC_MAGIC1 && req.phys_addr == ISP_ALLOC_MAGIC2) {
-        // First phase - return initial magic values
-        struct imp_buffer_info info = {
-            .method = ISP_ALLOC_KMALLOC,
-            .phys_addr = ISP_INIT_MAGIC,
-            .virt_addr = (uint32_t)dev->dma_buf,
-            .size = ISP_INIT_MAGIC,
-            .flags = 0
-        };
-
-        // Update buf_info structure
+    // Magic sequence check
+    if (req.method == 0x203a726f && req.phys_addr == 0x33326373) {
         if (!dev->buf_info) {
             dev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
             if (!dev->buf_info)
                 return -ENOMEM;
         }
 
-        // Store actual mapping info in device
-        dev->buf_info->method = ISP_ALLOC_KMALLOC;
-        dev->buf_info->buffer_start = dev->dma_addr;  // Physical address
-        dev->buf_info->buffer_size = RMEM_SIZE;       // Use reserved memory size
-        dev->buf_info->virt_addr = (uint32_t)dev->dma_buf;
+        // Maintain exact same values for initial request
+        req.method = ISP_ALLOC_KMALLOC;
+        req.phys_addr = 0x1;  // Initial magic value
+        req.size = 0x1;       // Initial size
+        req.virt_addr = (unsigned long)dev->dma_buf;
+        req.flags = 0;
+
+        // Store actual values in our buffer info
+        dev->buf_info->method = req.method;
+        dev->buf_info->buffer_start = dev->dma_addr;
+        dev->buf_info->buffer_size = dev->dma_size;
+        dev->buf_info->virt_addr = (unsigned long)dev->dma_buf;
         dev->buf_info->flags = 0;
 
-        pr_debug("Magic sequence init - phys: 0x%x virt: %p size: 0x%x\n",
-                (uint32_t)dev->dma_addr, dev->dma_buf, RMEM_SIZE);
+        // Also update frame source buffer info
+        fs->dma_addr = dev->dma_addr;
+        fs->buf_base = dev->dma_buf;
+        fs->buf_size = dev->dma_size;
 
-        if (copy_to_user(argp, &info, sizeof(info)))
+        pr_info("tx_isp: Magic allocation setup: phys=0x%x virt=%p size=0x%x\n",
+                (unsigned int)dev->dma_addr, dev->dma_buf, dev->dma_size);
+
+        if (copy_to_user(argp, &req, sizeof(req)))
             return -EFAULT;
-
         return 0;
     }
 
-    // Handle actual memory allocation request
-    if (req.phys_addr == ISP_INIT_MAGIC) {
-        struct imp_buffer_info info = {
-            .method = ISP_ALLOC_KMALLOC,
-            .phys_addr = dev->dma_addr,
-            .virt_addr = (uint32_t)dev->dma_buf,
-            .size = RMEM_SIZE,
-            .flags = 0
-        };
+    // Handle actual memory request
+    if (req.phys_addr == 0x1) {
+        // Return actual memory info - keep same sequence
+        req.method = ISP_ALLOC_KMALLOC;
+        req.phys_addr = dev->dma_addr;
+        req.size = dev->dma_size;
+        req.virt_addr = (unsigned long)dev->dma_buf;
+        req.flags = 0;
 
-        // Update frame source
-        struct isp_framesource_state *fs = dev->fs_info;
-        if (fs) {
-            fs->dma_addr = dev->dma_addr;
-            fs->buf_base = dev->dma_buf;
-            fs->buf_size = RMEM_SIZE;
-        }
+        pr_info("tx_isp: Memory allocation: phys=0x%x virt=%p size=0x%x\n",
+                (unsigned int)dev->dma_addr, dev->dma_buf, dev->dma_size);
 
-        pr_debug("Memory allocation - phys: 0x%x virt: %p size: 0x%x\n",
-                (uint32_t)dev->dma_addr, dev->dma_buf, RMEM_SIZE);
+        // Validate frame source setup
+        VALIDATE_FS_STATE(fs);
 
-        if (copy_to_user(argp, &info, sizeof(info)))
+        if (copy_to_user(argp, &req, sizeof(req)))
             return -EFAULT;
-
         return 0;
     }
 
-    // For actual memory setup
-    if (req.size > 0 && req.size <= RMEM_SIZE) {
-        // Configure hardware registers for buffer
-        uint32_t line_width = ((dev->width + 7) >> 3) << 3;
-        uint32_t frame_size = line_width * dev->height;
-
-        if (!dev->regs) {
-            pr_err("Hardware registers not mapped\n");
-            return -EINVAL;
-        }
-
-        // Set up main buffer
-        writel(dev->dma_addr, dev->regs + ISP_BUF0_REG);
-        writel(line_width, dev->regs + ISP_BUF0_SIZE_REG);
-
-        // Set up second buffer at offset
-        writel(dev->dma_addr + frame_size, dev->regs + ISP_BUF1_REG);
-        writel(line_width, dev->regs + ISP_BUF1_SIZE_REG);
-
-        // Set up additional buffer
-        uint32_t third_line_width = ((((dev->width + 0x1f) >> 5) + 7) >> 3) << 3;
-        writel(dev->dma_addr + (frame_size * 2), dev->regs + ISP_BUF2_REG);
-        writel(third_line_width, dev->regs + ISP_BUF2_SIZE_REG);
-
-        pr_debug("HW buffers configured - base: 0x%x line_width: %d frame_size: %d\n",
-                (uint32_t)dev->dma_addr, line_width, frame_size);
-
-        return 0;
-    }
-
-    pr_err("Invalid buffer request\n");
+    pr_err("tx_isp: Unhandled request\n");
     return -EINVAL;
 }
 
@@ -4531,25 +4342,37 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
         break;
     }
-	case VIDIOC_ENABLE_STREAM: {
-	    pr_info("ISP IOCTL called: cmd=VIDIOC_ENABLE_STREAM\n");
+    case VIDIOC_ENABLE_STREAM:
+        pr_info("ISP IOCTL called: cmd=VIDIOC_ENABLE_STREAM\n");
 
-	    // Check if the sensor is initialized
-	    if (!gISPdev || !gISPdev->sensor_i2c_client) {
-	        pr_err("Sensor not initialized\n");
-	        return -ENODEV;
-	    }
+        // Check if the sensor is initialized
+        if (!gISPdev || !gISPdev->sensor_i2c_client || !gISPdev->fs_info) {
+            pr_err("Sensor or frame source not initialized\n");
+            return -ENODEV;
+        }
 
-	    // Enable streaming on the sensor
-	    ret = i2c_smbus_write_byte_data(gISPdev->sensor_i2c_client, 0x0100, 0x01);
-	    if (ret < 0) {
-	        pr_err("Failed to enable sensor streaming\n");
-	        return ret;
-	    }
+        struct isp_framesource_state *fs = gISPdev->fs_info;
+        if (!fs->buf_base) {
+            pr_err("Frame source buffers not allocated\n");
+            return -EINVAL;
+        }
 
-	    pr_info("Sensor streaming setup complete\n");
-	    break;
-	}
+        // Ensure all buffers are synchronized before starting DMA
+        for (int i = 0; i < fs->buf_cnt; i++) {
+            dma_sync_single_for_device(gISPdev->dev, fs->bufs[i].buffer_start,
+                                       fs->bufs[i].buffer_size, DMA_TO_DEVICE);
+        }
+
+        // Enable streaming on the sensor
+        int ret = i2c_smbus_write_byte_data(gISPdev->sensor_i2c_client, 0x0100, 0x01);
+        if (ret < 0) {
+            pr_err("Failed to enable sensor streaming\n");
+            return ret;
+        }
+
+        fs->state = 2; // Mark as streaming
+        pr_info("Sensor streaming setup complete\n");
+        break;
 	case TX_ISP_SET_BUF: { // 0x800856d5
 	 	return handle_set_buf_ioctl(gISPdev, arg);
 	}
@@ -4691,26 +4514,19 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         break;
 	}
     // 0x80045612
-	case VIDIOC_STREAMON: {
-	    pr_info("Stream ON requested (cmd=0x80045612)\n");
-
-	    // Validate memory setup first
-	    ret = validate_streaming_setup(gISPdev);
+	case VIDIOC_STREAMON:
+	    pr_info("Stream ON requested\n");
+	    ret = setup_frame_source(gISPdev);
 	    if (ret) {
-	        pr_err("Invalid streaming setup: %d\n", ret);
+	        pr_err("Failed to setup frame source\n");
 	        return ret;
 	    }
-
-	    // Setup and start streaming with proper error handling
-	    ret = start_streaming(gISPdev);
+	    ret = start_frame_source(gISPdev);
 	    if (ret) {
-	        pr_err("Failed to start streaming: %d\n", ret);
+	        pr_err("Failed to start frame source\n");
 	        return ret;
 	    }
-
-	    pr_info("Streaming started successfully\n");
 	    break;
-	}
 	case VIDIOC_STREAMOFF:
 	    pr_info("Stream OFF requested\n");
 	    if (gISPdev->fs_info) {
@@ -4756,7 +4572,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	case SENSOR_CMD_STREAM_ON:
 	case SENSOR_CMD_STREAM_OFF:
         pr_info("Sensor command: 0x%x\n", cmd);
-	    // ret = handle_sensor_ioctl(gISPdev, cmd, argp);
+	    ret = handle_sensor_ioctl(gISPdev, cmd, argp);
 	    break;
 
     default:
@@ -4853,7 +4669,7 @@ static int tiziano_load_parameters(const char *filename, void __iomem *dest, siz
     ssize_t bytes_read;
     size_t file_size;
     char *buffer = NULL;
-    int ret;
+    int ret = 0;
 
     pr_info("Loading parameters from file: %s\n", filename);
 
@@ -4861,10 +4677,11 @@ static int tiziano_load_parameters(const char *filename, void __iomem *dest, siz
     set_fs(KERNEL_DS);
 
     file = filp_open(filename, O_RDONLY, 0);
+    set_fs(old_fs);
+
     if (IS_ERR(file)) {
-        ret = PTR_ERR(file);
-        pr_err("Failed to open parameter file: %d\n", ret);
-        goto restore_fs;
+        pr_err("Failed to open parameter file: %s\n", filename);
+        return -ENOENT;
     }
 
     file_size = i_size_read(file->f_path.dentry->d_inode);
@@ -4874,40 +4691,34 @@ static int tiziano_load_parameters(const char *filename, void __iomem *dest, siz
         goto close_file;
     }
 
-    pr_info("Parameter file size: %zu bytes\n", file_size);
+    // Step 3: Allocate a buffer to read the file
+    buffer = vmalloc(file_size);
+    if (!buffer) {
+        pr_err("Failed to allocate memory for parameters\n");
+        ret = -ENOMEM;
+        goto close_file;
+    }
 
-    // TODO
-//    // Use vmalloc for large buffer
-//    buffer = vmalloc(file_size);
-//    if (!buffer) {
-//        pr_err("Failed to allocate parameter buffer\n");
-//        ret = -ENOMEM;
-//        goto close_file;
-//    }
-//
-//    bytes_read = kernel_read(file, pos, buffer, file_size);
-//    if (bytes_read != file_size) {
-//        pr_err("Failed to read parameter file: %zd\n", bytes_read);
-//        ret = -EIO;
-//        goto free_buffer;
-//    }
-
-//    // Copy the parameters to the correct location
-//    pr_info("Copying %zu bytes to destination\n", file_size);
-//    memcpy_toio(dest, buffer, file_size);
-//    wmb();
-
-    pr_info("Finished loading parameters\n");
-
-    ret = 0;
-    return  ret;
-
-free_buffer:
-    vfree(buffer);
-close_file:
-    filp_close(file, NULL);
-restore_fs:
+    // Step 4: Read the file contents into the buffer
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+    bytes_read = kernel_read(file, pos, buffer, file_size);
     set_fs(old_fs);
+
+    if (bytes_read != file_size) {
+        pr_err("Failed to read the entire parameter file\n");
+        ret = -EIO;
+        goto free_buffer;
+    }
+
+    pr_info("Copying %zu bytes to destination\n", offset);
+    memcpy_toio(dest, buffer, offset);
+    pr_info("Copy successful\n");
+
+    free_buffer:
+        vfree(buffer);
+    close_file:
+        filp_close(file, NULL);
     return ret;
 }
 
@@ -5073,71 +4884,6 @@ static void cleanup_isp_clocks(struct IMPISPDev *dev)
 #define ISP_SOFT_RESET     (1 << 31)
 #define ISP_POWER_ON       (1 << 23)
 
-static int reset_isp_hardware(struct IMPISPDev *dev)
-{
-    void __iomem *cpm_base;
-    uint32_t clkgr, clkgr1, opcr;
-
-    pr_info("Resetting ISP hardware (minimal)...\n");
-
-    cpm_base = ioremap_nocache(CPM_PHYS_BASE, CPM_REG_SIZE);
-    if (!cpm_base) {
-        pr_err("Failed to map CPM registers for reset\n");
-        return -ENOMEM;
-    }
-
-    // Read current states
-    clkgr = readl(cpm_base + CPM_CLKGR);
-    clkgr1 = readl(cpm_base + CPM_CLKGR1);
-    opcr = readl(cpm_base + CPM_OPCR);
-
-    pr_info("Reset sequence - initial states:\n");
-    pr_info("  CPM_CLKGR  = 0x%08x\n", clkgr);
-    pr_info("  CPM_CLKGR1 = 0x%08x\n", clkgr1);
-    pr_info("  CPM_OPCR   = 0x%08x\n", opcr);
-
-    // 1. Disable clocks first
-    clkgr |= (1 << 23);
-    writel(clkgr, cpm_base + CPM_CLKGR);
-    wmb();
-
-    clkgr1 |= (1 << 2);
-    writel(clkgr1, cpm_base + CPM_CLKGR1);
-    wmb();
-
-    // 2. Reset via OPCR
-    opcr &= ~(1 << 23);  // Clear ISP power bit
-    writel(opcr, cpm_base + CPM_OPCR);
-    wmb();
-    msleep(10);
-
-    opcr |= (1 << 23);   // Set ISP power bit
-    writel(opcr, cpm_base + CPM_OPCR);
-    wmb();
-    msleep(10);
-
-    // 3. Re-enable clocks
-    clkgr &= ~(1 << 23);
-    writel(clkgr, cpm_base + CPM_CLKGR);
-    wmb();
-
-    clkgr1 &= ~(1 << 2);
-    writel(clkgr1, cpm_base + CPM_CLKGR1);
-    wmb();
-
-    // Read final states
-    clkgr = readl(cpm_base + CPM_CLKGR);
-    clkgr1 = readl(cpm_base + CPM_CLKGR1);
-    opcr = readl(cpm_base + CPM_OPCR);
-
-    pr_info("Reset sequence - final states:\n");
-    pr_info("  CPM_CLKGR  = 0x%08x\n", clkgr);
-    pr_info("  CPM_CLKGR1 = 0x%08x\n", clkgr1);
-    pr_info("  CPM_OPCR   = 0x%08x\n", opcr);
-
-    iounmap(cpm_base);
-    return 0;
-}
 
 static int tisp_init(struct device *dev)
 {
@@ -5148,48 +4894,64 @@ static int tisp_init(struct device *dev)
 
     pr_info("Starting ISP initialization sequence\n");
 
+    // Verify registers are mapped using global gISPdev
     if (!gISPdev || !gISPdev->regs) {
         pr_err("Invalid ISP device state\n");
         return -EINVAL;
     }
 
-    reg_base = gISPdev->regs;
+    // Step 1: Allocate memory using vmalloc
+    tparams_day = vmalloc(ISP_OFFSET_PARAMS);
+    if (!tparams_day) {
+        dev_err(dev, "Failed to allocate tparams_day\n");
+        return -ENOMEM;
+    }
+    memset(tparams_day, 0, ISP_OFFSET_PARAMS);
 
-    // Load parameters
-    ret = tiziano_load_parameters(param_file, gISPdev->dma_buf, 0);
+    tparams_night = vmalloc(ISP_OFFSET_PARAMS);
+    if (!tparams_night) {
+        dev_err(dev, "Failed to allocate tparams_night\n");
+        vfree(tparams_day);
+        return -ENOMEM;
+    }
+    memset(tparams_night, 0, ISP_OFFSET_PARAMS);
+
+    dev_info(dev, "tparams_day and tparams_night buffers allocated successfully\n");
+
+    // Step 2: Load parameters from the file
+    ret = tiziano_load_parameters(param_file, tparams_day, ISP_OFFSET_PARAMS);
     if (ret) {
-        pr_err("Failed to load parameters\n");
-        return ret;
+        dev_err(dev, "Failed to load parameters from file\n");
+        goto cleanup;
     }
+    dev_info(dev, "Parameters loaded successfully from %s\n", param_file);
 
-    // Apply memopt settings if needed
-    if (isp_memopt == 1) {
-        void __iomem *params = gISPdev->dma_buf;
-
-        writel(0, params + 0x264);
-        writel(isp_memopt, params + 0x26c);
-        writel(0, params + 0x27c);
-        writel(0, params + 0x274);
-        wmb();
-    }
-
-    // Write parameter address to ISP
-    writel((unsigned int)gISPdev->dma_addr, reg_base + 0x84b50);
-    wmb();
-
-    // Wait for params to be loaded
-    usleep_range(1000, 2000);
+    // Step 3: Handle isp_memopt settings
+//    if (isp_memopt == 1) {
+//        dev_info(dev, "Applying isp_memopt settings\n");
+//        writel(0, tparams_day + 0x264);
+//        writel(isp_memopt, tparams_day + 0x26c);
+//        writel(0, tparams_day + 0x27c);
+//        writel(0, tparams_day + 0x274);
 //
-//    // Finally enable ISP
-//    writel(1, reg_base + 0x800);
-//    wmb();
+//        writel(0, tparams_night + 0x264);
+//        writel(isp_memopt, tparams_night + 0x26c);
+//        writel(0, tparams_night + 0x27c);
+//        writel(0, tparams_night + 0x274);
+//    }
 //
-//    // Verify the enable
-//    reg_val = readl(reg_base + 0x800);
-//    pr_info("ISP enable register: 0x%08x\n", reg_val);
+//    // Step 4: Write the parameters to hardware registers using global gISPdev->regs
+//    writel((unsigned long)tparams_day, gISPdev->regs + 0x84b50);
+//    dev_info(dev, "tparams_day written to register successfully\n");
 
-    pr_info("ISP initialization sequence completed\n");
     return 0;
+
+cleanup:
+    if (tparams_night)
+        vfree(tparams_night);
+    if (tparams_day)
+        vfree(tparams_day);
+    return ret;
 }
 
 // Function to register a misc device and create optional /proc entries
@@ -5317,41 +5079,6 @@ static void __iomem *map_isp_registers(struct platform_device *pdev)
     return base;
 }
 
-static int setup_isp_registers(struct IMPISPDev *dev)
-{
-    void __iomem *reg_base;
-    uint32_t val;
-
-    if (!dev || !dev->regs) {
-        pr_err("Invalid device or register mapping\n");
-        return -EINVAL;
-    }
-
-    reg_base = dev->regs;
-
-    pr_info("Setting up ISP registers at %p\n", reg_base);
-
-    // Start with writing known values
-    __raw_writel(0x0, reg_base + 0x100);  // Clear control
-    wmb();
-    msleep(1);
-
-    __raw_writel(0x0, reg_base + 0x104);  // Clear status
-    wmb();
-    msleep(1);
-
-    __raw_writel(0x0, reg_base + 0x118);  // Clear init
-    wmb();
-    msleep(1);
-
-    // Try with a very small test read first
-    val = ioread8(reg_base);
-    pr_info("First byte read: 0x%02x\n", val);
-
-    return 0;
-}
-
-
 static int tisp_probe(struct platform_device *pdev)
 {
     struct isp_graph_data *graph_data;
@@ -5379,44 +5106,12 @@ static int tisp_probe(struct platform_device *pdev)
     // Set driver data
     platform_set_drvdata(pdev, gISPdev);
 
-    // Reset ISP hardware before mapping
-    ret = reset_isp_hardware(gISPdev);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to reset ISP hardware\n");
-        return ret;
+    // Map registers first
+    base = map_isp_registers(pdev);
+    if (IS_ERR(base)) {
+        dev_err(&pdev->dev, "Failed to map ISP registers\n");
+        return PTR_ERR(base);
     }
-
-    // Wait a bit after reset
-    msleep(10);
-
-    // Map ISP registers
-    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-    if (!res) {
-        dev_err(&pdev->dev, "No memory resource\n");
-        return -ENODEV;
-    }
-
-    // Validate resource
-    pr_info("ISP register resource:\n");
-    pr_info("  Start:  0x%08llx\n", (unsigned long long)res->start);
-    pr_info("  End:    0x%08llx\n", (unsigned long long)res->end);
-    pr_info("  Size:   0x%08llx\n", (unsigned long long)(resource_size(res)));
-
-    // Request memory region first
-    if (!request_mem_region(res->start, resource_size(res), pdev->name)) {
-        dev_err(&pdev->dev, "Failed to request memory region\n");
-        return -EBUSY;
-    }
-
-    // Map with appropriate flags
-    base = ioremap_nocache(res->start, resource_size(res));
-    if (!base) {
-        dev_err(&pdev->dev, "Failed to map registers\n");
-        release_mem_region(res->start, resource_size(res));
-        return -ENOMEM;
-    }
-
-    gISPdev->regs = base;
 
     // Set reg_base in global gISPdev
     gISPdev->regs = base;
@@ -5440,20 +5135,6 @@ static int tisp_probe(struct platform_device *pdev)
 
     gISPdev->dev = &pdev->dev;
     platform_set_drvdata(pdev, gISPdev);
-
-    // TODO does not work -- the system hangs
-//    ret = setup_isp_registers(gISPdev);
-//    if (ret) {
-//        dev_err(&pdev->dev, "Failed to setup ISP registers\n");
-//        return ret;
-//    }
-
-    // Now try the test read
-//    pr_info("Testing register access with __raw_readl\n");
-//    {
-//        uint32_t test = __raw_readl(base + 0x104);
-//        pr_info("Quick read test: 0x%08x\n", test);
-//    }
 
  	// Initialize reserved memory
     ret = init_isp_reserved_memory(pdev);
