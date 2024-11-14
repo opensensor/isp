@@ -4204,103 +4204,78 @@ struct buf_info {
 static long handle_get_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
     struct isp_mem_request req;
     void __user *argp = (void __user *)arg;
-    pr_info("tx_isp: Handling ioctl VIDIOC_GET_BUF_INFO\n");
+    struct isp_framesource_state *fs = dev->fs_info;
 
-    // Add mutex lock
-    mutex_lock(&dev->fs_info->sem);
-
-    if (copy_from_user(&req, argp, sizeof(req))) {
-        mutex_unlock(&dev->fs_info->sem);
-        return -EFAULT;
-    }
-
-    if (!dev || !dev->fs_info) {
-        pr_err("Device or frame source not initialized\n");
+    if (!fs) {
+        pr_err("tx_isp: No frame source initialized\n");
         return -EINVAL;
     }
 
     if (copy_from_user(&req, argp, sizeof(req))) {
-        pr_err("Failed to copy request from user\n");
+        pr_err("tx_isp: Failed to copy from user\n");
         return -EFAULT;
     }
 
-    if (!dev || !dev->fs_info) {
-        pr_err("Device or frame source not initialized\n");
-        return -EINVAL;
-    }
-
-    if (copy_from_user(&req, argp, sizeof(req))) {
-        pr_err("Failed to copy request from user\n");
-        return -EFAULT;
-    }
-
-    pr_info("SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
+    pr_info("tx_isp: SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
             req.method, req.phys_addr, req.size);
 
-    // Handle initial magic sequence
-    if (req.method == ISP_ALLOC_MAGIC1 && req.phys_addr == ISP_ALLOC_MAGIC2) {
-        struct imp_buffer_info info = {
-            .method = ISP_ALLOC_KMALLOC,
-            .phys_addr = ISP_INIT_MAGIC,  // Initial magic value that worked before
-            .virt_addr = (uint32_t)dev->dma_buf,
-            .size = ISP_INIT_MAGIC,
-            .flags = 0
-        };
-
+    // Magic sequence check
+    if (req.method == 0x203a726f && req.phys_addr == 0x33326373) {
         if (!dev->buf_info) {
             dev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
             if (!dev->buf_info)
                 return -ENOMEM;
         }
 
-        // Store full details in device structure
-        dev->buf_info->method = ISP_ALLOC_KMALLOC;
+        // Maintain exact same values for initial request
+        req.method = ISP_ALLOC_KMALLOC;
+        req.phys_addr = 0x1;  // Initial magic value
+        req.size = 0x1;       // Initial size
+        req.virt_addr = (unsigned long)dev->dma_buf;
+        req.flags = 0;
+
+        // Store actual values in our buffer info
+        dev->buf_info->method = req.method;
         dev->buf_info->buffer_start = dev->dma_addr;
-        dev->buf_info->buffer_size = RMEM_SIZE;
-        dev->buf_info->virt_addr = (uint32_t)dev->dma_buf;
+        dev->buf_info->buffer_size = dev->dma_size;
+        dev->buf_info->virt_addr = (unsigned long)dev->dma_buf;
         dev->buf_info->flags = 0;
 
-        pr_info("Magic sequence - initial values: phys=0x%x virt=0x%x size=%u\n",
-                info.phys_addr, info.virt_addr, info.size);
+        // Also update frame source buffer info
+        fs->dma_addr = dev->dma_addr;
+        fs->buf_base = dev->dma_buf;
+        fs->buf_size = dev->dma_size;
 
-        if (copy_to_user(argp, &info, sizeof(info)))
+        pr_info("tx_isp: Magic allocation setup: phys=0x%x virt=%p size=0x%x\n",
+                (unsigned int)dev->dma_addr, dev->dma_buf, dev->dma_size);
+
+        if (copy_to_user(argp, &req, sizeof(req)))
             return -EFAULT;
-
         return 0;
     }
 
-    // For actual memory setup
-    if (req.size > 0 && req.size <= RMEM_SIZE) {
-        // Configure hardware registers for buffer
-        uint32_t line_width = ((dev->width + 7) >> 3) << 3;
-        uint32_t frame_size = line_width * dev->height;
+    // Handle actual memory request
+    if (req.phys_addr == 0x1) {
+        // Return actual memory info - keep same sequence
+        req.method = ISP_ALLOC_KMALLOC;
+        req.phys_addr = dev->dma_addr;
+        req.size = dev->dma_size;
+        req.virt_addr = (unsigned long)dev->dma_buf;
+        req.flags = 0;
 
-        if (!dev->regs) {
-            pr_err("Hardware registers not mapped\n");
-            return -EINVAL;
-        }
+        pr_info("tx_isp: Memory allocation: phys=0x%x virt=%p size=0x%x\n",
+                (unsigned int)dev->dma_addr, dev->dma_buf, dev->dma_size);
 
-        // Set up main buffer
-        writel(dev->dma_addr, dev->regs + ISP_BUF0_REG);
-        writel(line_width, dev->regs + ISP_BUF0_SIZE_REG);
+        // Validate frame source setup
+        VALIDATE_FS_STATE(fs);
 
-        // Set up second buffer at offset
-        writel(dev->dma_addr + frame_size, dev->regs + ISP_BUF1_REG);
-        writel(line_width, dev->regs + ISP_BUF1_SIZE_REG);
-
-        // Set up additional buffer
-        uint32_t third_line_width = ((((dev->width + 0x1f) >> 5) + 7) >> 3) << 3;
-        writel(dev->dma_addr + (frame_size * 2), dev->regs + ISP_BUF2_REG);
-        writel(third_line_width, dev->regs + ISP_BUF2_SIZE_REG);
-
-        pr_debug("HW buffers configured - base: 0x%x line_width: %d frame_size: %d\n",
-                (uint32_t)dev->dma_addr, line_width, frame_size);
-
+        if (copy_to_user(argp, &req, sizeof(req)))
+            return -EFAULT;
         return 0;
     }
 
-    mutex_unlock(&dev->fs_info->sem);
-    return 0;
+    pr_err("tx_isp: Unhandled request\n");
+    return -EINVAL;
 }
 
 
