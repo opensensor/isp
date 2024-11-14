@@ -3846,6 +3846,8 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
 
         case SENSOR_CMD_STREAM_ON: {
             // SC2336 specific streaming configuration
+            pr_err("Sensor streaming not implemented\n");
+            return -EINVAL;  // TODO debugging
             ret = isp_sensor_write_reg(client, 0x0100, 0x01); // Stream on
             if (ret < 0) {
                 pr_err("Failed to start sensor streaming\n");
@@ -4199,11 +4201,18 @@ struct buf_info {
 };
 
 
-static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
+static long handle_get_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
     struct isp_mem_request req;
     void __user *argp = (void __user *)arg;
+    pr_info("tx_isp: Handling ioctl VIDIOC_GET_BUF_INFO\n");
 
-    pr_info("Handling SET_BUF request\n");
+    // Add mutex lock
+    mutex_lock(&dev->fs_info->sem);
+
+    if (copy_from_user(&req, argp, sizeof(req))) {
+        mutex_unlock(&dev->fs_info->sem);
+        return -EFAULT;
+    }
 
     if (!dev || !dev->fs_info) {
         pr_err("Device or frame source not initialized\n");
@@ -4230,58 +4239,29 @@ static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
 
     // Handle initial magic sequence
     if (req.method == ISP_ALLOC_MAGIC1 && req.phys_addr == ISP_ALLOC_MAGIC2) {
-        // First phase - return initial magic values
         struct imp_buffer_info info = {
             .method = ISP_ALLOC_KMALLOC,
-            .phys_addr = ISP_INIT_MAGIC,
+            .phys_addr = ISP_INIT_MAGIC,  // Initial magic value that worked before
             .virt_addr = (uint32_t)dev->dma_buf,
             .size = ISP_INIT_MAGIC,
             .flags = 0
         };
 
-        // Update buf_info structure
         if (!dev->buf_info) {
             dev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
             if (!dev->buf_info)
                 return -ENOMEM;
         }
 
-        // Store actual mapping info in device
+        // Store full details in device structure
         dev->buf_info->method = ISP_ALLOC_KMALLOC;
-        dev->buf_info->buffer_start = dev->dma_addr;  // Physical address
-        dev->buf_info->buffer_size = RMEM_SIZE;       // Use reserved memory size
+        dev->buf_info->buffer_start = dev->dma_addr;
+        dev->buf_info->buffer_size = RMEM_SIZE;
         dev->buf_info->virt_addr = (uint32_t)dev->dma_buf;
         dev->buf_info->flags = 0;
 
-        pr_debug("Magic sequence init - phys: 0x%x virt: %p size: 0x%x\n",
-                (uint32_t)dev->dma_addr, dev->dma_buf, RMEM_SIZE);
-
-        if (copy_to_user(argp, &info, sizeof(info)))
-            return -EFAULT;
-
-        return 0;
-    }
-
-    // Handle actual memory allocation request
-    if (req.phys_addr == ISP_INIT_MAGIC) {
-        struct imp_buffer_info info = {
-            .method = ISP_ALLOC_KMALLOC,
-            .phys_addr = dev->dma_addr,
-            .virt_addr = (uint32_t)dev->dma_buf,
-            .size = RMEM_SIZE,
-            .flags = 0
-        };
-
-        // Update frame source
-        struct isp_framesource_state *fs = dev->fs_info;
-        if (fs) {
-            fs->dma_addr = dev->dma_addr;
-            fs->buf_base = dev->dma_buf;
-            fs->buf_size = RMEM_SIZE;
-        }
-
-        pr_debug("Memory allocation - phys: 0x%x virt: %p size: 0x%x\n",
-                (uint32_t)dev->dma_addr, dev->dma_buf, RMEM_SIZE);
+        pr_info("Magic sequence - initial values: phys=0x%x virt=0x%x size=%u\n",
+                info.phys_addr, info.virt_addr, info.size);
 
         if (copy_to_user(argp, &info, sizeof(info)))
             return -EFAULT;
@@ -4319,8 +4299,8 @@ static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
         return 0;
     }
 
-    pr_err("Invalid buffer request\n");
-    return -EINVAL;
+    mutex_unlock(&dev->fs_info->sem);
+    return 0;
 }
 
 
@@ -4332,6 +4312,44 @@ struct isp_sensor_info {
     int height;
 };
 
+
+static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
+	struct sensor_buffer_info buf_info = {0};
+	void __user *argp = (void __user *)arg;
+
+	pr_info("tx_isp: Handling ioctl VIDIOC_SET_BUF_INFO\n");
+
+	if (!gISPdev || !gISPdev->buf_info || !gISPdev->dma_buf) {
+	    pr_err("tx_isp: Invalid device state\n");
+	    return -EINVAL;
+	}
+
+	if (copy_from_user(&buf_info, argp, sizeof(buf_info))) {
+	    pr_err("tx_isp: Failed to copy from user\n");
+	    return -EFAULT;
+	}
+
+	// Use actual mapped addresses
+	buf_info.method = ISP_ALLOC_KMALLOC;
+	buf_info.buffer_start = gISPdev->dma_addr;
+	buf_info.buffer_size = gISPdev->dma_size;
+	buf_info.virt_addr = (unsigned long)gISPdev->dma_buf;
+	buf_info.flags = 1;
+
+	// Store consistent info
+	memcpy(gISPdev->buf_info, &buf_info, sizeof(buf_info));
+
+	pr_info("tx_isp: Buffer info configured: phys=0x%x virt=%p size=%u\n",
+	        (unsigned int)buf_info.buffer_start,
+	        (void *)buf_info.virt_addr,
+	        buf_info.buffer_size);
+
+	if (copy_to_user(argp, &buf_info, sizeof(buf_info)))
+	    return -EFAULT;
+
+	pr_info("tx_isp: Buffer setup completed successfully\n");
+	return 0;
+}
 
 static long handle_buffer_ioctls(struct IMPISPDev *dev, unsigned int cmd, unsigned long arg)
 {
@@ -4351,44 +4369,10 @@ static long handle_buffer_ioctls(struct IMPISPDev *dev, unsigned int cmd, unsign
 
     switch(cmd) {
     case VIDIOC_GET_BUF_INFO:
-        pr_info("tx_isp: Handling ioctl VIDIOC_GET_BUF_INFO\n");
-        handle_set_buf_ioctl(dev, arg);
+        handle_get_buf_ioctl(dev, arg);
         return 0;
 	case VIDIOC_SET_BUF_INFO: { // 0x800856d4
-	    struct sensor_buffer_info buf_info = {0};
-	    void __user *argp = (void __user *)arg;
-
-	    pr_info("tx_isp: Handling ioctl VIDIOC_SET_BUF_INFO\n");
-
-	    if (!gISPdev || !gISPdev->buf_info || !gISPdev->dma_buf) {
-	        pr_err("tx_isp: Invalid device state\n");
-	        return -EINVAL;
-	    }
-
-	    if (copy_from_user(&buf_info, argp, sizeof(buf_info))) {
-	        pr_err("tx_isp: Failed to copy from user\n");
-	        return -EFAULT;
-	    }
-
-	    // Use actual mapped addresses
-	    buf_info.method = ISP_ALLOC_KMALLOC;
-	    buf_info.buffer_start = gISPdev->dma_addr;
-	    buf_info.buffer_size = gISPdev->dma_size;
-	    buf_info.virt_addr = (unsigned long)gISPdev->dma_buf;
-	    buf_info.flags = 1;
-
-	    // Store consistent info
-	    memcpy(gISPdev->buf_info, &buf_info, sizeof(buf_info));
-
-	    pr_info("tx_isp: Buffer info configured: phys=0x%x virt=%p size=%u\n",
-	            (unsigned int)buf_info.buffer_start,
-	            (void *)buf_info.virt_addr,
-	            buf_info.buffer_size);
-
-	    if (copy_to_user(argp, &buf_info, sizeof(buf_info)))
-	        return -EFAULT;
-
-	    pr_info("tx_isp: Buffer setup completed successfully\n");
+        handle_set_buf_ioctl(dev, arg);
 	    return 0;
 	}
     }
@@ -4528,6 +4512,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
     case VIDIOC_ENABLE_STREAM:
         pr_info("ISP IOCTL called: cmd=VIDIOC_ENABLE_STREAM\n");
+        return -EINVAL;  // TODO debugging
 
         // Check if the sensor is initialized
         if (!gISPdev || !gISPdev->sensor_i2c_client || !gISPdev->fs_info) {
@@ -5233,31 +5218,38 @@ static void __iomem *map_isp_registers(struct platform_device *pdev)
 static int framechan_open(struct inode *inode, struct file *file)
 {
     int minor = iminor(inode);
-    struct isp_framesource_state *fs = &gISPdev->frame_sources[minor];
+    struct isp_framesource_state *fs;
 
     pr_info("Opening frame channel %d\n", minor);
 
-    // Initialize the frame source if not done
+    if (minor >= MAX_CHANNELS) {
+        pr_err("Invalid minor number: %d\n", minor);
+        return -EINVAL;
+    }
+
+    fs = &gISPdev->frame_sources[minor];
+
+    // Initialize state with checks
     if (!fs->is_open) {
         fs->width = 1920;
         fs->height = 1080;
         fs->buf_cnt = 4;
-        fs->buf_size = fs->width * fs->height * 2;  // YUV422
+        fs->buf_size = fs->width * fs->height * 2;
 
-        // Map our reserved memory region for this channel
+        // Validate memory size
+        if ((minor + 1) * fs->buf_size * fs->buf_cnt > ISP_RMEM_SIZE) {
+            pr_err("Not enough memory for channel %d\n", minor);
+            return -ENOMEM;
+        }
+
         fs->buf_base = ioremap(ISP_RMEM_BASE + (minor * fs->buf_size * fs->buf_cnt),
                               fs->buf_size * fs->buf_cnt);
         if (!fs->buf_base) {
-            pr_err("Failed to map memory for channel %d\n", minor);
             return -ENOMEM;
         }
 
         fs->dma_addr = ISP_RMEM_BASE + (minor * fs->buf_size * fs->buf_cnt);
         fs->is_open = 1;
-
-        pr_info("Initialized channel %d: %dx%d, %d buffers at phys=0x%x virt=%p\n",
-                minor, fs->width, fs->height, fs->buf_cnt,
-                (unsigned int)fs->dma_addr, fs->buf_base);
     }
 
     file->private_data = fs;
@@ -5267,23 +5259,38 @@ static int framechan_open(struct inode *inode, struct file *file)
 
 static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-    struct IMPISPDev *dev = gISPdev; // Global device structure
-    int minor = iminor(file_inode(file)); // Get the minor number
-    struct isp_framesource_state *fs = &dev->frame_sources[minor];
+    struct IMPISPDev *dev = gISPdev;
+    struct isp_framesource_state *fs = file->private_data;
 
-    // Assign the frame source for the specific channel
+    pr_info("Handling frame channel IOCTL: cmd=0x%x\n", cmd);
+
+    if (!dev || !fs || !fs->is_open) {
+        pr_err("Invalid device state\n");
+        return -EINVAL;
+    }
+
+    // Validate memory before use
+    if (!fs->buf_base || !dev->dma_buf) {
+        pr_err("Buffer memory not initialized\n");
+        return -EINVAL;
+    }
+
     dev->fs_info = fs;
-
-    // Call the ioctl handler with the device context
     return handle_set_buf_ioctl(dev, arg);
 }
 
 static int framechan_release(struct inode *inode, struct file *file)
 {
     struct isp_framesource_state *fs = file->private_data;
-    if (fs) {
-        pr_info("Releasing frame channel\n");
+
+    if (fs && fs->is_open) {
+        mutex_lock(&fs->sem);
+        if (fs->buf_base) {
+            iounmap(fs->buf_base);
+            fs->buf_base = NULL;
+        }
         fs->is_open = 0;
+        mutex_unlock(&fs->sem);
     }
     return 0;
 }
