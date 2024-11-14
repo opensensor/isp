@@ -4149,15 +4149,10 @@ struct isp_mem_request {
  *
  * Handles buffer allocation for both the global ISP device and per-channel frame sources.
  */
-static long handle_set_buf_ioctl(struct IMPISPDev *dev, struct isp_framesource_state *fs, unsigned long arg)
-{
+static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
     struct isp_mem_request req;
     void __user *argp = (void __user *)arg;
-
-    // Determine which context we are using (global or per-frame source)
-    if (dev && !fs) {
-        fs = dev->fs_info;
-    }
+    struct isp_framesource_state *fs = dev->fs_info;
 
     if (!fs) {
         pr_err("tx_isp: No frame source initialized\n");
@@ -4172,25 +4167,19 @@ static long handle_set_buf_ioctl(struct IMPISPDev *dev, struct isp_framesource_s
     pr_info("tx_isp: SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
             req.method, req.phys_addr, req.size);
 
-    // Case 1: Handle the magic allocation sequence (used by libimp)
+    // Use reserved memory for the global buffer
     if (req.method == 0x203a726f && req.phys_addr == 0x33326373) {
-        if (dev && !dev->buf_info) {
-            dev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
-            if (!dev->buf_info)
-                return -ENOMEM;
-        }
-
-        // Allocate buffers for the frame source
         if (!fs->buf_base) {
-            fs->buf_base = dma_alloc_coherent(gISPdev->dev, req.size, &fs->dma_addr, GFP_KERNEL);
-            if (!fs->buf_base) {
-                pr_err("Failed to allocate DMA buffer\n");
-                return -ENOMEM;
-            }
-            fs->buf_size = req.size;
+            // Allocate from pre-mapped reserved memory
+            fs->buf_base = gISPdev->dma_buf;
+            fs->dma_addr = gISPdev->dma_addr;
+            fs->buf_size = gISPdev->dma_size;
+
+            pr_info("Using reserved memory: phys=0x%lx virt=%p size=0x%lx\n",
+                    (unsigned long)fs->dma_addr, fs->buf_base, (unsigned long)fs->buf_size);
         }
 
-        // Update the request structure to return to user space
+        // Return buffer info to user space
         req.method = ISP_ALLOC_KMALLOC;
         req.phys_addr = fs->dma_addr;
         req.size = fs->buf_size;
@@ -4199,37 +4188,6 @@ static long handle_set_buf_ioctl(struct IMPISPDev *dev, struct isp_framesource_s
 
         if (copy_to_user(argp, &req, sizeof(req)))
             return -EFAULT;
-
-        pr_info("tx_isp: Magic allocation setup: phys=0x%x virt=%p size=0x%x\n",
-                (unsigned int)fs->dma_addr, fs->buf_base, fs->buf_size);
-
-        return 0;
-    }
-
-    // Case 2: Handle standard buffer allocation request
-    if (req.phys_addr == 0x1) {
-        // Allocate buffer if not already allocated
-        if (!fs->buf_base) {
-            fs->buf_base = dma_alloc_coherent(gISPdev->dev, req.size, &fs->dma_addr, GFP_KERNEL);
-            if (!fs->buf_base) {
-                pr_err("Failed to allocate DMA buffer\n");
-                return -ENOMEM;
-            }
-            fs->buf_size = req.size;
-        }
-
-        // Return the allocated buffer info to user space
-        req.method = ISP_ALLOC_KMALLOC;
-        req.phys_addr = fs->dma_addr;
-        req.size = fs->buf_size;
-        req.virt_addr = (unsigned long)fs->buf_base;
-        req.flags = 0;
-
-        if (copy_to_user(argp, &req, sizeof(req)))
-            return -EFAULT;
-
-        pr_info("tx_isp: Memory allocation: phys=0x%x virt=%p size=0x%x\n",
-                (unsigned int)fs->dma_addr, fs->buf_base, fs->buf_size);
 
         return 0;
     }
@@ -4409,7 +4367,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         pr_info("Sensor streaming setup complete\n");
         break;
 	case TX_ISP_SET_BUF: { // 0x800856d5
-    	return handle_set_buf_ioctl(gISPdev, NULL, arg);
+    	return handle_set_buf_ioctl(gISPdev, arg);
 	}
 	case VIDIOC_SET_BUF_INFO: { // 0x800856d4
 	    struct sensor_buffer_info buf_info = {0};
@@ -5133,15 +5091,15 @@ static int framechan_open(struct inode *inode, struct file *file)
 
 static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-    struct isp_framesource_state *fs = file->private_data;
+    struct IMPISPDev *dev = gISPdev; // Global device structure
+    int minor = iminor(file_inode(file)); // Get the minor number
+    struct isp_framesource_state *fs = &dev->frame_sources[minor];
 
-    switch (cmd) {
-    case TX_ISP_SET_BUF:
-        pr_info("Setting buffer for frame source channel\n");
-        return handle_set_buf_ioctl(NULL, fs, arg);
-    default:
-        return -ENOTTY;
-    }
+    // Assign the frame source for the specific channel
+    dev->fs_info = fs;
+
+    // Call the ioctl handler with the device context
+    return handle_set_buf_ioctl(dev, arg);
 }
 
 static int framechan_release(struct inode *inode, struct file *file)
