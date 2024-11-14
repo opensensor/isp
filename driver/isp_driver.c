@@ -306,7 +306,8 @@ struct IMPISPDev {
     // Parameter regions
     void __iomem *isp_params;
     void __iomem *wdr_params;
-
+    struct clk *isp_clk;      // ISP core clock
+    struct clk *cgu_isp_clk;  // CGU ISP clock
     struct isp_framesource_state frame_sources[MAX_FRAME_SOURCES];
 } __attribute__((packed, aligned(4)));
 
@@ -4806,148 +4807,100 @@ static int tiziano_load_parameters(const char *filename, void __iomem *dest, siz
 #define CPM_OPCR      0x24    // Operating Parameter Control Register offset
 #define CPM_LCR       0x04    // Low power control register offset
 
-#define MPLL_FREQ       500000000  // Base MPLL frequency is 500MHz
-#define ISP_TARGET_FREQ 125000000  // Target 125MHz for ISP
+// Add this structure if not already present
+struct isp_platform_data {
+    unsigned long clock_rate;
+};
+
+// Update defines to match correct frequencies
+#define T31_ISP_FREQ     250000000   // 250MHz ISP core clock (matches AHB)
+#define T31_CGU_ISP_FREQ 125000000   // 125MHz CGU_ISP clock (matches APB)
+
+static struct isp_platform_data isp_pdata = {
+    .clock_rate = T31_ISP_FREQ,
+};
+
+
+// Add CGU ISP bit positions
+#define ISP_CLKGR_BIT    (1 << 23)   // ISP clock gate bit in CLKGR
+#define CGU_ISP_BIT      (1 << 2)    // CGU_ISP clock gate bit in CLKGR1
 
 static int configure_isp_clocks(struct IMPISPDev *dev)
 {
-    void __iomem *cpm_base;
-    uint32_t val, clkgr, clkgr1, opcr, lcr;
-    int ret = 0;
+    int ret;
 
-    pr_info("Configuring ISP clocks for 125MHz...\n");
+    pr_info("Configuring ISP clocks using standard API\n");
 
-    cpm_base = ioremap_nocache(CPM_PHYS_BASE, CPM_REG_SIZE);
-    if (!cpm_base) {
-        pr_err("Failed to map T31 CPM registers\n");
-        return -ENOMEM;
+    // Get ISP core clock
+    dev->isp_clk = clk_get(dev->dev, "isp");
+    if (IS_ERR(dev->isp_clk)) {
+        ret = PTR_ERR(dev->isp_clk);
+        pr_err("Failed to get ISP clock: %d\n", ret);
+        dev->isp_clk = NULL;
+        return ret;
     }
 
-    // Read all relevant registers first
-    clkgr = readl(cpm_base + CPM_CLKGR);
-    clkgr1 = readl(cpm_base + CPM_CLKGR1);
-    opcr = readl(cpm_base + CPM_OPCR);
-    lcr = readl(cpm_base + CPM_LCR);
-    val = readl(cpm_base + CPM_ISPCDR);
-
-    pr_info("Initial register states:\n");
-    pr_info("  CPM_CLKGR  = 0x%08x\n", clkgr);
-    pr_info("  CPM_CLKGR1 = 0x%08x\n", clkgr1);
-    pr_info("  CPM_OPCR   = 0x%08x\n", opcr);
-    pr_info("  CPM_LCR    = 0x%08x\n", lcr);
-    pr_info("  CPM_ISPCDR = 0x%08x\n", val);
-
-    // 1. Enable power domains and wake up if needed
-    opcr |= BIT(23);  // Enable ISP power domain
-    writel(opcr, cpm_base + CPM_OPCR);
-    wmb();
-
-    // Wake from idle if needed
-    lcr &= ~BIT(31);  // Clear idle bit
-    writel(lcr, cpm_base + CPM_LCR);
-    wmb();
-
-    // 2. Disable clock gates
-    clkgr &= ~(1 << 23);  // Clear ISP bit in CLKGR
-    writel(clkgr, cpm_base + CPM_CLKGR);
-    wmb();
-
-    clkgr1 &= ~(1 << 2);  // Clear ISP bit in CLKGR1
-    writel(clkgr1, cpm_base + CPM_CLKGR1);
-    wmb();
-
-    // 3. Configure ISP clock for 125MHz
-    val = readl(cpm_base + CPM_ISPCDR);
-    val &= ~(0x3 << 30);          // Clear MUX
-    val &= ~(0xff << 4);          // Clear divider
-    val |= (1 << 30);            // Set MPLL as source
-    val |= (0x3 << 4);           // Set divide ratio to 4 (MPLL/4 = 125MHz)
-    val &= ~0xf;                 // Clear low control bits
-    val |= 0x1;                  // Set required control bit
-
-    pr_info("Writing ISPCDR: 0x%08x (for 125MHz)\n", val);
-    writel(val, cpm_base + CPM_ISPCDR);
-    wmb();
-
-    // Longer delay for stability
-    msleep(1);
-
-    // 4. Read back and verify
-    clkgr = readl(cpm_base + CPM_CLKGR);
-    clkgr1 = readl(cpm_base + CPM_CLKGR1);
-    opcr = readl(cpm_base + CPM_OPCR);
-    lcr = readl(cpm_base + CPM_LCR);
-    val = readl(cpm_base + CPM_ISPCDR);
-
-    pr_info("Final register states:\n");
-    pr_info("  CPM_CLKGR  = 0x%08x\n", clkgr);
-    pr_info("  CPM_CLKGR1 = 0x%08x\n", clkgr1);
-    pr_info("  CPM_OPCR   = 0x%08x\n", opcr);
-    pr_info("  CPM_LCR    = 0x%08x\n", lcr);
-    pr_info("  CPM_ISPCDR = 0x%08x\n", val);
-
-    // 5. Verify configuration
-    if ((clkgr & (1 << 23)) || (clkgr1 & (1 << 2))) {
-        pr_err("Clock gates not cleared\n");
-        ret = -EIO;
-        goto unmap;
+    // Get CGU ISP clock
+    dev->cgu_isp_clk = clk_get(dev->dev, "cgu_isp");
+    if (IS_ERR(dev->cgu_isp_clk)) {
+        ret = PTR_ERR(dev->cgu_isp_clk);
+        pr_err("Failed to get CGU ISP clock: %d\n", ret);
+        dev->cgu_isp_clk = NULL;
+        goto err_put_isp;
     }
 
-    if (!(opcr & BIT(23))) {
-        pr_err("ISP power domain not enabled\n");
-        ret = -EIO;
-        goto unmap;
+    // Set CGU ISP clock rate to 125MHz
+    ret = clk_set_rate(dev->cgu_isp_clk, 125000000);
+    if (ret) {
+        pr_err("Failed to set CGU ISP clock rate: %d\n", ret);
+        goto err_put_cgu;
     }
 
-    if (((val >> 30) & 0x3) != 1) {
-        pr_err("Incorrect clock source selected\n");
-        ret = -EIO;
-        goto unmap;
+    // Enable ISP core clock
+    ret = clk_prepare_enable(dev->isp_clk);
+    if (ret) {
+        pr_err("Failed to enable ISP clock: %d\n", ret);
+        goto err_put_cgu;
     }
 
-    pr_info("ISP clock configured for 125MHz (MPLL/4)\n");
+    // Enable CGU ISP clock
+    ret = clk_prepare_enable(dev->cgu_isp_clk);
+    if (ret) {
+        pr_err("Failed to enable CGU ISP clock: %d\n", ret);
+        goto err_disable_isp;
+    }
 
-unmap:
-    if (ret)
-        pr_err("ISP clock configuration failed: %d\n", ret);
-    mb();
-    iounmap(cpm_base);
+    // Verify rates
+    pr_info("Clock rates after configuration:\n");
+    pr_info("  ISP Core: %lu Hz\n", clk_get_rate(dev->isp_clk));
+    pr_info("  CGU ISP: %lu Hz\n", clk_get_rate(dev->cgu_isp_clk));
+
+    return 0;
+
+err_disable_isp:
+    clk_disable_unprepare(dev->isp_clk);
+err_put_cgu:
+    clk_put(dev->cgu_isp_clk);
+    dev->cgu_isp_clk = NULL;
+err_put_isp:
+    clk_put(dev->isp_clk);
+    dev->isp_clk = NULL;
     return ret;
 }
 
-// Update cleanup to match
 static void cleanup_isp_clocks(struct IMPISPDev *dev)
 {
-    void __iomem *cpm_base;
-    uint32_t val;
-
-    pr_info("Cleaning up ISP clocks\n");
-
-    if (!dev) {
-        return;
+    if (dev->cgu_isp_clk) {
+        clk_disable_unprepare(dev->cgu_isp_clk);
+        clk_put(dev->cgu_isp_clk);
+        dev->cgu_isp_clk = NULL;
     }
 
-    cpm_base = ioremap_nocache(CPM_PHYS_BASE, CPM_REG_SIZE);
-    if (!cpm_base) {
-        pr_err("Failed to map CPM registers for cleanup\n");
-        return;
+    if (dev->isp_clk) {
+        clk_disable_unprepare(dev->isp_clk);
+        clk_put(dev->isp_clk);
+        dev->isp_clk = NULL;
     }
-
-    // Set both clock gates
-    val = readl(cpm_base + CPM_CLKGR);
-    val |= (1 << 23);
-    writel(val, cpm_base + CPM_CLKGR);
-    wmb();
-
-    val = readl(cpm_base + CPM_CLKGR1);
-    val |= (1 << 2);
-    writel(val, cpm_base + CPM_CLKGR1);
-    wmb();
-
-    pr_info("ISP clocks disabled\n");
-
-    mb();
-    iounmap(cpm_base);
 }
 
 #define ISP_SOFT_RESET     (1 << 31)
@@ -5314,13 +5267,15 @@ static int tisp_probe(struct platform_device *pdev)
 
     // Set the IRQ value to 36
     gISPdev->irq = 36;
+    pdev->dev.platform_data = &isp_pdata;
 
+    // TODO this breaks things
     // Now configure clocks with proper error handling
-    //ret = configure_isp_clocks(gISPdev);
-    //if (ret) {
-    //    dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
-    //    goto err_unmap_regs;
-    //}
+    ret = configure_isp_clocks(gISPdev);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
+        goto err_unmap_regs;
+    }
 
     // Use the global gISPdev instead of creating a local one
     if (!gISPdev) {
@@ -5444,7 +5399,7 @@ static int tisp_remove(struct platform_device *pdev) {
         cleanup_isp_memory(dev);
 
         // Clean up device clocks
-		//cleanup_isp_clocks(gISPdev);
+		cleanup_isp_clocks(gISPdev);
 
         // Clean up I2C
         if (dev->sensor_i2c_client) {
