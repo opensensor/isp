@@ -951,7 +951,7 @@ int32_t tx_isp_request_irq(struct irq_info* irqInfo, struct irq_handler_data* ir
 		if (request_threaded_irq(irqNumber, isp_irq_handler, isp_irq_thread_handle, irq_flags, "isp_driver", irqHandlerData) != 0)
         {
             // If IRQ request failed, print an error message and reset the handler data struct
-            isp_printf(2, "%s[%d] Failed to request irq(%d)...", "tx_isp_request_irq", irqNumber);
+            isp_printf(2, "%s[%d] Failed to request irq(%d)...", "IR", irqNumber);
             irqHandlerData->irq_number = 0;
             return 0xfffffffc;  // Return error code for failed IRQ request
         }
@@ -5184,12 +5184,15 @@ static int tisp_probe(struct platform_device *pdev)
     gISPdev->regs = base;
     pr_info("Set gISPdev->regs to %p\n", gISPdev->regs);
 
+    // Set the IRQ value to 29
+    gISPdev->irq = 29;
+
     // Now configure clocks with proper error handling
-    ret = configure_isp_clocks(gISPdev);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
-        goto err_unmap_regs;
-    }
+//    ret = configure_isp_clocks(gISPdev);
+//    if (ret) {
+//        dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
+//        goto err_unmap_regs;
+//    }
 
     // Use the global gISPdev instead of creating a local one
     if (!gISPdev) {
