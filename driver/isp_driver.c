@@ -4876,34 +4876,31 @@ static int tiziano_load_parameters(const char *filename, void __iomem *dest, siz
 
     pr_info("Parameter file size: %zu bytes\n", file_size);
 
-    // Use vmalloc for large buffer
-    buffer = vmalloc(file_size);
-    if (!buffer) {
-        pr_err("Failed to allocate parameter buffer\n");
-        ret = -ENOMEM;
-        goto close_file;
-    }
+    // TODO
+//    // Use vmalloc for large buffer
+//    buffer = vmalloc(file_size);
+//    if (!buffer) {
+//        pr_err("Failed to allocate parameter buffer\n");
+//        ret = -ENOMEM;
+//        goto close_file;
+//    }
+//
+//    bytes_read = kernel_read(file, pos, buffer, file_size);
+//    if (bytes_read != file_size) {
+//        pr_err("Failed to read parameter file: %zd\n", bytes_read);
+//        ret = -EIO;
+//        goto free_buffer;
+//    }
 
-    bytes_read = kernel_read(file, pos, buffer, file_size);
-    if (bytes_read != file_size) {
-        pr_err("Failed to read parameter file: %zd\n", bytes_read);
-        ret = -EIO;
-        goto free_buffer;
-    }
+//    // Copy the parameters to the correct location
+//    pr_info("Copying %zu bytes to destination\n", file_size);
+//    memcpy_toio(dest, buffer, file_size);
+//    wmb();
 
-    // Copy the parameters to the correct location
-    pr_info("Copying %zu bytes to destination\n", file_size);
-    memcpy_toio(dest, buffer, file_size);
-    wmb();
-
-    // Verify write by reading back first few bytes
-    pr_info("Verifying parameter write...\n");
-    {
-        u32 verify = readl(dest);
-        pr_info("First 4 bytes: 0x%08x\n", verify);
-    }
+    pr_info("Finished loading parameters\n");
 
     ret = 0;
+    return  ret;
 
 free_buffer:
     vfree(buffer);
@@ -5158,25 +5155,6 @@ static int tisp_init(struct device *dev)
 
     reg_base = gISPdev->regs;
 
-    // Step 1: Basic register initialization
-    writel(0, reg_base + 0x4);  // Initial value
-    wmb();
-
-    // Step 2: Configure bypass register
-    reg_val = 0x8077efff;  // Value from decompiled code
-    reg_val &= 0xb577fffd;  // Standard mode
-    reg_val |= 0x34000009;  // Additional bits
-    writel(reg_val, reg_base + 0xc);
-    wmb();
-
-    // Step 3: Initialize frame sync
-    writel(0xffffffff, reg_base + 0x30);
-    wmb();
-
-    // Step 4: Configure mode register
-    writel(0x133, reg_base + 0x10);  // Non-WDR mode
-    wmb();
-
     // Load parameters
     ret = tiziano_load_parameters(param_file, gISPdev->dma_buf, 0);
     if (ret) {
@@ -5201,14 +5179,14 @@ static int tisp_init(struct device *dev)
 
     // Wait for params to be loaded
     usleep_range(1000, 2000);
-
-    // Finally enable ISP
-    writel(1, reg_base + 0x800);
-    wmb();
-
-    // Verify the enable
-    reg_val = readl(reg_base + 0x800);
-    pr_info("ISP enable register: 0x%08x\n", reg_val);
+//
+//    // Finally enable ISP
+//    writel(1, reg_base + 0x800);
+//    wmb();
+//
+//    // Verify the enable
+//    reg_val = readl(reg_base + 0x800);
+//    pr_info("ISP enable register: 0x%08x\n", reg_val);
 
     pr_info("ISP initialization sequence completed\n");
     return 0;
@@ -5463,18 +5441,19 @@ static int tisp_probe(struct platform_device *pdev)
     gISPdev->dev = &pdev->dev;
     platform_set_drvdata(pdev, gISPdev);
 
-    ret = setup_isp_registers(gISPdev);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to setup ISP registers\n");
-        return ret;
-    }
+    // TODO does not work -- the system hangs
+//    ret = setup_isp_registers(gISPdev);
+//    if (ret) {
+//        dev_err(&pdev->dev, "Failed to setup ISP registers\n");
+//        return ret;
+//    }
 
     // Now try the test read
-    pr_info("Testing register access with __raw_readl\n");
-    {
-        uint32_t test = __raw_readl(base + 0x104);
-        pr_info("Quick read test: 0x%08x\n", test);
-    }
+//    pr_info("Testing register access with __raw_readl\n");
+//    {
+//        uint32_t test = __raw_readl(base + 0x104);
+//        pr_info("Quick read test: 0x%08x\n", test);
+//    }
 
  	// Initialize reserved memory
     ret = init_isp_reserved_memory(pdev);
@@ -5514,6 +5493,7 @@ static int tisp_probe(struct platform_device *pdev)
     }
 
     // Register child devices
+    pr_info("Registering child devices\n");
     for (i = 0; i < ARRAY_SIZE(device_names) && registered_count < max_devices; i++) {
         struct platform_device *child_dev;
         child_dev = platform_device_register_simple(device_names[i], -1, NULL, 0);
