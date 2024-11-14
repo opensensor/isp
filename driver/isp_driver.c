@@ -2062,16 +2062,42 @@ struct imp_mem_info {
 };
 
 // Match the IMP_Get_Info layout exactly
+//struct alloc_info {
+//    uint32_t reserved1;        // Offset: 0x00
+//    uint32_t method;           // Offset: 0x04
+//    uint32_t phys_addr;        // Offset: 0x08
+//    uint32_t virt_addr;        // Offset: 0x0C
+//    uint32_t size;             // Offset: 0x10
+//    uint32_t flags;            // Offset: 0x14
+//    char name[32];             // Offset: 0x18 (32 bytes for the sensor name)
+//    uint32_t reserved2[4];     // Additional padding (4 * 4 bytes)
+//} __attribute__((packed));
+// Update the structure to match libimp's layout
+// Add these defines to match the binary values
+#define ISP_MAGIC_METHOD 0x203a726f
+#define ISP_MAGIC_PHYS   0x33326373
+
+// Update structure with correct alignment
 struct alloc_info {
-    char unused[0x60];      // 0x00-0x5F: Unused
-    char name[32];          // 0x60: Name from IMP_Get_Info
-    char padding[28];       // Padding to align to 0x80
-    uint32_t method;        // 0x80: Allocation method
-    uint32_t phys_addr;     // 0x84: Physical address
-    uint32_t virt_addr;     // 0x88: Virtual address
-    uint32_t size;          // 0x8C: Buffer size
-    uint32_t flags;         // 0x90: Flags/attributes
-};
+    char unused[0x80];        // Padding to match libimp offset
+    uint32_t method;          // Offset: 0x80
+    uint32_t buffer_start;    // Offset: 0x84 (Physical Address)
+    uint32_t virt_addr;       // Offset: 0x88
+    uint32_t buffer_size;     // Offset: 0x8C
+    uint32_t flags;           // Offset: 0x90
+} __attribute__((packed, aligned(4)));
+
+
+
+struct alloc_info2 {
+    char unused[0x84];        // Increased padding to shift fields correctly
+    char name[32];            // Offset: 0x84 (start of the name)
+    uint32_t method;          // Offset: 0xA4
+    uint32_t phys_addr;       // Offset: 0xA8
+    uint32_t virt_addr;       // Offset: 0xAC
+    uint32_t size;            // Offset: 0xB0
+    uint32_t flags;           // Offset: 0xB4
+} __attribute__((packed));
 
 
 static int isp_device_pipeline_setup(struct isp_device *dev)
@@ -2501,42 +2527,39 @@ static int init_frame_source(struct IMPISPDev *dev, int channel)
 {
     struct isp_framesource_state *fs;
 
-    pr_info("Initializing frame source channel %d\n", channel);
-
     if (!dev) {
         pr_err("Invalid device pointer\n");
         return -EINVAL;
     }
 
-    // Allocate frame source state if not already allocated
-    if (!dev->fs_info) {
-        fs = kzalloc(sizeof(*fs), GFP_KERNEL);
-        if (!fs) {
-            pr_err("Failed to allocate frame source state\n");
-            return -ENOMEM;
-        }
-        dev->fs_info = fs;
-    } else {
-        fs = dev->fs_info;
+    fs = kzalloc(sizeof(*fs), GFP_KERNEL);
+    if (!fs) {
+        pr_err("Failed to allocate frame source state\n");
+        return -ENOMEM;
     }
 
-    // Initialize basic parameters
-    fs->chn_num = channel;
-    fs->state = 0;           // Initial state
-    fs->width = dev->width ? dev->width : 1920;
-    fs->height = dev->height ? dev->height : 1080;
-    fs->fmt = V4L2_PIX_FMT_YUYV;
-
-    // Buffer setup
+    // Initialize with conservative defaults
+    fs->width = 1920;
+    fs->height = 1080;
     fs->buf_cnt = 4;
-    fs->buf_size = fs->width * fs->height * 2;  // YUYV format
-    fs->buf_flags = 0;
+    fs->buf_size = ALIGN(fs->width * fs->height * 2, PAGE_SIZE); // YUV422 aligned
+    fs->chn_num = channel;
 
-    // Initialize synchronization
+    // Map the physical memory for this channel
+    fs->buf_base = ioremap(ISP_RMEM_BASE + (channel * fs->buf_size * fs->buf_cnt),
+                          fs->buf_size * fs->buf_cnt);
+    if (!fs->buf_base) {
+        pr_err("Failed to map buffer memory\n");
+        kfree(fs);
+        return -ENOMEM;
+    }
+
+    fs->dma_addr = ISP_RMEM_BASE + (channel * fs->buf_size * fs->buf_cnt);
     sema_init(&fs->sem, 1);
+    dev->fs_info = fs;
 
-    pr_info("Frame source initialized: %dx%d, %d buffers\n",
-            fs->width, fs->height, fs->buf_cnt);
+    pr_info("Frame source initialized: %dx%d, %d buffers at phys=0x%x\n",
+            fs->width, fs->height, fs->buf_cnt, (unsigned int)fs->dma_addr);
 
     return 0;
 }
@@ -3619,9 +3642,6 @@ static int sensor_setup_streaming(struct IMPISPDev *dev)
 }
 
 
-// Add these defines for consistent memory values
-#define ISP_MAGIC_METHOD    0x203a726f
-#define ISP_MAGIC_PHYS      0x33326373
 #define ISP_INIT_PHYS       0x1
 #define ISP_FINAL_PHYS      0x02a80000
 #define ISP_ALLOC_SIZE      0x2a80000
@@ -4170,87 +4190,139 @@ struct isp_mem_request {
 #define ISP_BUFFER_SIZE    22544384    // ~22MB total size
 #define ISP_FRAME_SIZE     (1920 * 1080 * 2)  // YUV422 format size
 
-static int handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg)
-{
+struct buf_info {
+    uint32_t method;          // Should be ISP_ALLOC_KMALLOC
+    uint32_t phys_addr;       // Physical address
+    uint32_t virt_addr;       // Virtual address
+    uint32_t size;           // Buffer size
+    uint32_t flags;          // Flags
+};
+
+
+static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
     struct isp_mem_request req;
     void __user *argp = (void __user *)arg;
-    struct isp_framesource_state *fs = dev->fs_info;
 
-    pr_info("tx_isp: Handling SET_BUF request\n");
+    pr_info("Handling SET_BUF request\n");
 
-    // Validate frame source state
-    if (!fs) {
-        pr_err("tx_isp: No frame source initialized\n");
+    if (!dev || !dev->fs_info) {
+        pr_err("Device or frame source not initialized\n");
         return -EINVAL;
     }
 
     if (copy_from_user(&req, argp, sizeof(req))) {
-        pr_err("tx_isp: Failed to copy request from user\n");
+        pr_err("Failed to copy request from user\n");
         return -EFAULT;
     }
 
-    pr_info("tx_isp: SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
+    if (!dev || !dev->fs_info) {
+        pr_err("Device or frame source not initialized\n");
+        return -EINVAL;
+    }
+
+    if (copy_from_user(&req, argp, sizeof(req))) {
+        pr_err("Failed to copy request from user\n");
+        return -EFAULT;
+    }
+
+    pr_info("SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
             req.method, req.phys_addr, req.size);
 
-    // This matches libimp's magic number check
-    if (req.method == 0x203a726f && req.phys_addr == 0x33326373) {
-        // Calculate buffer parameters
-        size_t total_size = min_t(size_t, RMEM_SIZE, 22544384); // Match libimp size
-        fs->buf_size = (dev->width * dev->height * 2); // YUV422 format
-        fs->buf_cnt = 4; // Match what libimp expects
+    // Handle initial magic sequence
+    if (req.method == ISP_ALLOC_MAGIC1 && req.phys_addr == ISP_ALLOC_MAGIC2) {
+        // First phase - return initial magic values
+        struct imp_buffer_info info = {
+            .method = ISP_ALLOC_KMALLOC,
+            .phys_addr = ISP_INIT_MAGIC,
+            .virt_addr = (uint32_t)dev->dma_buf,
+            .size = ISP_INIT_MAGIC,
+            .flags = 0
+        };
 
-        if (!fs->buf_base) {
-            // Map our reserved memory region
-            fs->buf_base = ioremap(ISP_RMEM_BASE, total_size);
-            if (!fs->buf_base) {
-                pr_err("tx_isp: Failed to map buffer memory\n");
+        // Update buf_info structure
+        if (!dev->buf_info) {
+            dev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
+            if (!dev->buf_info)
                 return -ENOMEM;
-            }
-            fs->dma_addr = ISP_RMEM_BASE;
-
-            // Initialize buffer info array
-            if (!fs->bufs) {
-                fs->bufs = kzalloc(sizeof(struct isp_buffer_info) * fs->buf_cnt, GFP_KERNEL);
-                if (!fs->bufs) {
-                    iounmap(fs->buf_base);
-                    fs->buf_base = NULL;
-                    return -ENOMEM;
-                }
-            }
-
-            // Set up buffer descriptors
-            for (int i = 0; i < fs->buf_cnt; i++) {
-                fs->bufs[i].method = ISP_ALLOC_KMALLOC;
-                fs->bufs[i].buffer_start = fs->dma_addr + (i * fs->buf_size);
-                fs->bufs[i].virt_addr = (uint32_t)fs->buf_base + (i * fs->buf_size);
-                fs->bufs[i].buffer_size = fs->buf_size;
-                fs->bufs[i].flags = 0;
-                fs->bufs[i].frame_count = 0;
-                fs->bufs[i].is_buffer_full = 0;
-            }
-
-            pr_info("tx_isp: Initialized %d buffers of size %u at phys=0x%x\n",
-                    fs->buf_cnt, fs->buf_size, fs->dma_addr);
         }
 
-        // Return buffer info matching libimp's expectations
-        req.method = ISP_ALLOC_KMALLOC;
-        req.phys_addr = fs->dma_addr;
-        req.virt_addr = (uint32_t)fs->buf_base;
-        req.size = fs->buf_cnt * fs->buf_size;
-        req.flags = 0;
+        // Store actual mapping info in device
+        dev->buf_info->method = ISP_ALLOC_KMALLOC;
+        dev->buf_info->buffer_start = dev->dma_addr;  // Physical address
+        dev->buf_info->buffer_size = RMEM_SIZE;       // Use reserved memory size
+        dev->buf_info->virt_addr = (uint32_t)dev->dma_buf;
+        dev->buf_info->flags = 0;
 
-        if (copy_to_user(argp, &req, sizeof(req))) {
-            pr_err("tx_isp: Failed to copy buffer info to user\n");
+        pr_debug("Magic sequence init - phys: 0x%x virt: %p size: 0x%x\n",
+                (uint32_t)dev->dma_addr, dev->dma_buf, RMEM_SIZE);
+
+        if (copy_to_user(argp, &info, sizeof(info)))
             return -EFAULT;
-        }
 
         return 0;
     }
 
-    pr_err("tx_isp: Invalid buffer request\n");
+    // Handle actual memory allocation request
+    if (req.phys_addr == ISP_INIT_MAGIC) {
+        struct imp_buffer_info info = {
+            .method = ISP_ALLOC_KMALLOC,
+            .phys_addr = dev->dma_addr,
+            .virt_addr = (uint32_t)dev->dma_buf,
+            .size = RMEM_SIZE,
+            .flags = 0
+        };
+
+        // Update frame source
+        struct isp_framesource_state *fs = dev->fs_info;
+        if (fs) {
+            fs->dma_addr = dev->dma_addr;
+            fs->buf_base = dev->dma_buf;
+            fs->buf_size = RMEM_SIZE;
+        }
+
+        pr_debug("Memory allocation - phys: 0x%x virt: %p size: 0x%x\n",
+                (uint32_t)dev->dma_addr, dev->dma_buf, RMEM_SIZE);
+
+        if (copy_to_user(argp, &info, sizeof(info)))
+            return -EFAULT;
+
+        return 0;
+    }
+
+    // For actual memory setup
+    if (req.size > 0 && req.size <= RMEM_SIZE) {
+        // Configure hardware registers for buffer
+        uint32_t line_width = ((dev->width + 7) >> 3) << 3;
+        uint32_t frame_size = line_width * dev->height;
+
+        if (!dev->regs) {
+            pr_err("Hardware registers not mapped\n");
+            return -EINVAL;
+        }
+
+        // Set up main buffer
+        writel(dev->dma_addr, dev->regs + ISP_BUF0_REG);
+        writel(line_width, dev->regs + ISP_BUF0_SIZE_REG);
+
+        // Set up second buffer at offset
+        writel(dev->dma_addr + frame_size, dev->regs + ISP_BUF1_REG);
+        writel(line_width, dev->regs + ISP_BUF1_SIZE_REG);
+
+        // Set up additional buffer
+        uint32_t third_line_width = ((((dev->width + 0x1f) >> 5) + 7) >> 3) << 3;
+        writel(dev->dma_addr + (frame_size * 2), dev->regs + ISP_BUF2_REG);
+        writel(third_line_width, dev->regs + ISP_BUF2_SIZE_REG);
+
+        pr_debug("HW buffers configured - base: 0x%x line_width: %d frame_size: %d\n",
+                (uint32_t)dev->dma_addr, line_width, frame_size);
+
+        return 0;
+    }
+
+    pr_err("Invalid buffer request\n");
     return -EINVAL;
 }
+
 
 
 struct isp_sensor_info {
@@ -4259,6 +4331,69 @@ struct isp_sensor_info {
     int width;
     int height;
 };
+
+
+static long handle_buffer_ioctls(struct IMPISPDev *dev, unsigned int cmd, unsigned long arg)
+{
+    // Ensure buffer info structures exist first
+    if (!dev->buf_info) {
+        dev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
+        if (!dev->buf_info) return -ENOMEM;
+    }
+
+    if (!dev->wdr_buf_info) {
+        dev->wdr_buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
+        if (!dev->wdr_buf_info) return -ENOMEM;
+    }
+
+    uint8_t buffer[0x94] = {0};
+    struct buf_info *info = (struct buf_info *)buffer;
+
+    switch(cmd) {
+    case VIDIOC_GET_BUF_INFO:
+        pr_info("tx_isp: Handling ioctl VIDIOC_GET_BUF_INFO\n");
+        handle_set_buf_ioctl(dev, arg);
+        return 0;
+	case VIDIOC_SET_BUF_INFO: { // 0x800856d4
+	    struct sensor_buffer_info buf_info = {0};
+	    void __user *argp = (void __user *)arg;
+
+	    pr_info("tx_isp: Handling ioctl VIDIOC_SET_BUF_INFO\n");
+
+	    if (!gISPdev || !gISPdev->buf_info || !gISPdev->dma_buf) {
+	        pr_err("tx_isp: Invalid device state\n");
+	        return -EINVAL;
+	    }
+
+	    if (copy_from_user(&buf_info, argp, sizeof(buf_info))) {
+	        pr_err("tx_isp: Failed to copy from user\n");
+	        return -EFAULT;
+	    }
+
+	    // Use actual mapped addresses
+	    buf_info.method = ISP_ALLOC_KMALLOC;
+	    buf_info.buffer_start = gISPdev->dma_addr;
+	    buf_info.buffer_size = gISPdev->dma_size;
+	    buf_info.virt_addr = (unsigned long)gISPdev->dma_buf;
+	    buf_info.flags = 1;
+
+	    // Store consistent info
+	    memcpy(gISPdev->buf_info, &buf_info, sizeof(buf_info));
+
+	    pr_info("tx_isp: Buffer info configured: phys=0x%x virt=%p size=%u\n",
+	            (unsigned int)buf_info.buffer_start,
+	            (void *)buf_info.virt_addr,
+	            buf_info.buffer_size);
+
+	    if (copy_to_user(argp, &buf_info, sizeof(buf_info)))
+	        return -EFAULT;
+
+	    pr_info("tx_isp: Buffer setup completed successfully\n");
+	    return 0;
+	}
+    }
+    return -EINVAL;
+}
 
 /**
  * isp_driver_ioctl - IOCTL handler for ISP driver
@@ -4422,52 +4557,12 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         fs->state = 2; // Mark as streaming
         pr_info("Sensor streaming setup complete\n");
         break;
-    // First, GET_BUF_INFO handler tells libimp initial memory size
-    case VIDIOC_GET_BUF_INFO: // 0x800856d5
-    {
-        struct {
-            uint32_t method;     // Should be 1
-            uint32_t phys_addr;  // Should be 1
-            uint32_t size;       // Should be our size
-        } info = {
-            .method = 1,
-            .phys_addr = 1,
-            .size = RMEM_SIZE
-        };
+    // GET_BUF_INFO handler needs to return size for later IMP_Alloc call
+    case VIDIOC_GET_BUF_INFO:  // 0x800856d5
+    case VIDIOC_SET_BUF_INFO:  // 0x800856d4
+        ret = handle_buffer_ioctls(gISPdev, cmd, arg);
+        break;
 
-        if (copy_to_user((void __user *)arg, &info, sizeof(info))) {
-            pr_err("Failed to copy buffer info to user\n");
-            return -EFAULT;
-        }
-
-        pr_info("tx_isp: GET_BUF_INFO: method=0x%x phys=0x%x size=0x%x\n",
-                info.method, info.phys_addr, info.size);
-        return 0;
-    }
-
-    case VIDIOC_SET_BUF_INFO: // 0x800856d4
-    {
-        uint32_t phys_addr;
-
-        if (copy_from_user(&phys_addr, (void __user *)arg, sizeof(phys_addr))) {
-            pr_err("tx_isp: Failed to copy physical address from user\n");
-            return -EFAULT;
-        }
-
-        pr_info("tx_isp: SET_BUF_INFO received phys=0x%x\n", phys_addr);
-
-        // Store it in global buffer info
-        if (!gISPdev->buf_info) {
-            gISPdev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
-            if (!gISPdev->buf_info) {
-                pr_err("tx_isp: Failed to allocate buf_info\n");
-                return -ENOMEM;
-            }
-        }
-
-        gISPdev->buf_info->buffer_start = phys_addr;
-        return 0;
-    }
     case TX_ISP_VIDEO_LINK_SETUP: {
       	pr_info("TX_ISP_VIDEO_LINK_SETUP\n");
         unsigned int link;
