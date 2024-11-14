@@ -5089,7 +5089,7 @@ static int reset_isp_hardware(struct IMPISPDev *dev)
         return -ENOMEM;
     }
 
-    // Read current states - using registers we know work
+    // Read current states
     clkgr = readl(cpm_base + CPM_CLKGR);
     clkgr1 = readl(cpm_base + CPM_CLKGR1);
     opcr = readl(cpm_base + CPM_OPCR);
@@ -5099,37 +5099,36 @@ static int reset_isp_hardware(struct IMPISPDev *dev)
     pr_info("  CPM_CLKGR1 = 0x%08x\n", clkgr1);
     pr_info("  CPM_OPCR   = 0x%08x\n", opcr);
 
-    // 1. First disable ISP clock
-    clkgr |= (1 << 23);  // Set ISP bit to disable
+    // 1. Disable clocks first
+    clkgr |= (1 << 23);
     writel(clkgr, cpm_base + CPM_CLKGR);
     wmb();
 
-    // 2. Also disable in CLKGR1
-    clkgr1 |= (1 << 2);  // Set ISP bit
+    clkgr1 |= (1 << 2);
     writel(clkgr1, cpm_base + CPM_CLKGR1);
     wmb();
 
-    // Wait a bit
-    msleep(1);
-
-    // 3. Enable power domain in OPCR if not already
-    opcr |= (1 << 23);  // Set ISP power bit
+    // 2. Reset via OPCR
+    opcr &= ~(1 << 23);  // Clear ISP power bit
     writel(opcr, cpm_base + CPM_OPCR);
     wmb();
+    msleep(10);
 
-    // Wait for power domain
-    msleep(1);
+    opcr |= (1 << 23);   // Set ISP power bit
+    writel(opcr, cpm_base + CPM_OPCR);
+    wmb();
+    msleep(10);
 
-    // 4. Re-enable clocks
-    clkgr &= ~(1 << 23);  // Clear ISP bit to enable
+    // 3. Re-enable clocks
+    clkgr &= ~(1 << 23);
     writel(clkgr, cpm_base + CPM_CLKGR);
     wmb();
 
-    clkgr1 &= ~(1 << 2);  // Clear ISP bit
+    clkgr1 &= ~(1 << 2);
     writel(clkgr1, cpm_base + CPM_CLKGR1);
     wmb();
 
-    // Read back final states
+    // Read final states
     clkgr = readl(cpm_base + CPM_CLKGR);
     clkgr1 = readl(cpm_base + CPM_CLKGR1);
     opcr = readl(cpm_base + CPM_OPCR);
@@ -5340,6 +5339,41 @@ static void __iomem *map_isp_registers(struct platform_device *pdev)
     return base;
 }
 
+static int setup_isp_registers(struct IMPISPDev *dev)
+{
+    void __iomem *reg_base;
+    uint32_t val;
+
+    if (!dev || !dev->regs) {
+        pr_err("Invalid device or register mapping\n");
+        return -EINVAL;
+    }
+
+    reg_base = dev->regs;
+
+    pr_info("Setting up ISP registers at %p\n", reg_base);
+
+    // Start with writing known values
+    __raw_writel(0x0, reg_base + 0x100);  // Clear control
+    wmb();
+    msleep(1);
+
+    __raw_writel(0x0, reg_base + 0x104);  // Clear status
+    wmb();
+    msleep(1);
+
+    __raw_writel(0x0, reg_base + 0x118);  // Clear init
+    wmb();
+    msleep(1);
+
+    // Try with a very small test read first
+    val = ioread8(reg_base);
+    pr_info("First byte read: 0x%02x\n", val);
+
+    return 0;
+}
+
+
 static int tisp_probe(struct platform_device *pdev)
 {
     struct isp_graph_data *graph_data;
@@ -5428,6 +5462,19 @@ static int tisp_probe(struct platform_device *pdev)
 
     gISPdev->dev = &pdev->dev;
     platform_set_drvdata(pdev, gISPdev);
+
+    ret = setup_isp_registers(gISPdev);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to setup ISP registers\n");
+        return ret;
+    }
+
+    // Now try the test read
+    pr_info("Testing register access with __raw_readl\n");
+    {
+        uint32_t test = __raw_readl(base + 0x104);
+        pr_info("Quick read test: 0x%08x\n", test);
+    }
 
  	// Initialize reserved memory
     ret = init_isp_reserved_memory(pdev);
