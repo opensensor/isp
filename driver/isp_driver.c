@@ -310,12 +310,17 @@ struct IMPISPDev {
     struct isp_framesource_state *fs_info;  // Add this field
     uint32_t format;                        // Add this field
 
+
+
     // Parameter regions
     void __iomem *isp_params;
     void __iomem *wdr_params;
-    struct clk *isp_clk;      // ISP core clock
-    struct clk *cgu_isp_clk;  // CGU ISP clock
+    struct clk *isp_clk;       // ISP core clock
+    struct clk *cgu_isp_clk;   // CGU ISP clock
+    struct clk *csi_clk;       // CSI clock
+    struct clk *ipu_clk;       // IPU clock
     struct isp_framesource_state frame_sources[MAX_FRAME_SOURCES];
+
 } __attribute__((packed, aligned(4)));
 
 // Add these structure definitions
@@ -2877,20 +2882,35 @@ static void cleanup_frame_buffers(struct isp_framesource_state *fs)
 
 static int enable_isp_streaming(struct IMPISPDev *dev, int channel, bool enable)
 {
-    // Simple streaming enable/disable per channel
-    if (enable) {
-        // Enable hardware streaming
-        writel(0x1, dev->regs + ISP_CTRL_REG);
-        wmb();
+    u32 val;
 
-        // Update counter as seen in decompiled code
-        dev->is_open += 2;
-        pr_info("ISP streaming enabled for channel %d\n", channel);
-    } else {
-        // Disable hardware streaming
-        writel(0x0, dev->regs + ISP_CTRL_REG);
-        wmb();
+    if (!dev || !dev->regs) {
+        pr_err("Invalid device state\n");
+        return -EINVAL;
     }
+
+    // Get sensor info - read the status register
+    val = readl(dev->regs + ISP_STAT_OFFSET);
+    if (!(val & ISP_READY_BIT)) {
+        pr_err("Sensor not ready\n");
+        return -EBUSY;
+    }
+
+    // Enable streaming in hardware
+    writel(ISP_CTRL_ENABLE | ISP_CTRL_CAPTURE,
+           dev->regs + ISP_CTRL_OFFSET);
+
+    // Configure link path
+    writel(0x01, dev->regs + 0x140); // Direct path
+
+    // Enable sensor output
+    if (dev->sensor_i2c_client) {
+        isp_sensor_write_reg(dev->sensor_i2c_client,
+                            SENSOR_REG_MODE, 0x01);
+    }
+
+    // Update state
+    dev->is_open += 2;
 
     return 0;
 }
@@ -3904,14 +3924,26 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
     }
 
     switch (cmd) {
-        case SENSOR_CMD_READ_ID: {
-            // Read sensor ID - typically register 0x0000 for most sensors
-            ret = isp_sensor_read_reg(client, 0x0000, &val);
-            if (ret < 0)
-                return ret;
-            ret = put_user(val, (uint8_t __user *)arg);
-            break;
-        }
+		case SENSOR_CMD_READ_ID: {
+		    uint8_t val_h = 0, val_l = 0;
+		    struct i2c_client *client = gISPdev->sensor_i2c_client;
+
+		    // Try reading ID registers
+		    ret = isp_sensor_read_reg(client, 0x3307, &val_h);
+		    if (ret) {
+		        pr_err("Failed to read ID high byte\n");
+		        return ret;
+		    }
+
+		    ret = isp_sensor_read_reg(client, 0x3308, &val_l);
+		    if (ret) {
+		        pr_err("Failed to read ID low byte\n");
+		        return ret;
+		    }
+
+		    pr_info("Sensor ID: 0x%02x%02x\n", val_h, val_l);
+		    return 0;
+		}
 
         case SENSOR_CMD_WRITE_REG: {
             if (copy_from_user(&reg_data, arg, sizeof(reg_data)))
@@ -4396,6 +4428,8 @@ static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
     return 0;
 }
 
+static int reset_gpio = GPIO_PA(18);  // Default reset GPIO
+static int pwdn_gpio = -1;  // Default power down GPIO disabled
 
 /**
  * isp_driver_ioctl - IOCTL handler for ISP driver
@@ -4420,59 +4454,32 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
 
     switch (cmd) {
-	case VIDIOC_REGISTER_SENSOR: {
-	    char sensor_name[80];
-	    struct isp_i2c_board_info board_info = {0};
-	    struct i2c_adapter *adapter;
-	    struct i2c_client *client;
-	    int ret;
+	case VIDIOC_REGISTER_SENSOR: { // cmd=0x805056c1
+	    struct i2c_client *client = gISPdev->sensor_i2c_client;
+	    unsigned char val_h = 0, val_l = 0;
+	    int i;
 
-	    if (!gISPdev || !gISPdev->is_open) {
-	        dev_err(gISPdev->dev, "ISP device not initialized or not open\n");
-	        return -EINVAL;
-	    }
+	    // Reset sensor with delay after
+	    isp_sensor_write_reg(client, 0x0103, 0x01);
+	    msleep(20);
 
-	    if (copy_from_user(sensor_name, (void __user *)arg, sizeof(sensor_name))) {
-	        dev_err(gISPdev->dev, "copy from user error\n");
-	        return -EFAULT;
-	    }
-
-	    adapter = i2c_get_adapter(0);
-	    if (!adapter) {
-	        dev_err(gISPdev->dev, "Failed to get I2C adapter\n");
-	        return -ENODEV;
-	    }
-
-	    strncpy(board_info.type, sensor_name, sizeof(board_info.type) - 1);
-	    board_info.addr = 0x30;
-
-	    client = isp_i2c_new_subdev_board(adapter, &board_info, NULL);
-	    i2c_put_adapter(adapter);
-
-	    if (!client) {
-	        dev_err(gISPdev->dev, "Failed to initialize I2C sensor device\n");
-	        return -ENODEV;
-	    }
-
-	    gISPdev->sensor_i2c_client = client;
-
-	    // Perform a soft reset
-	    ret = i2c_smbus_write_byte_data(client, 0x0103, 0x01);
-	    if (ret < 0) {
-	        dev_err(gISPdev->dev, "Soft reset failed\n");
-	        i2c_unregister_device(client);
-	        gISPdev->sensor_i2c_client = NULL;
-	        return ret;
-	    }
+	    // Init basic sensor settings before ID read
+	    isp_sensor_write_reg(client, 0x3018, 0x72);  // Init register from sc2336.c
+	    isp_sensor_write_reg(client, 0x3031, 0x0A);  // Init register from sc2336.c
 	    msleep(10);
 
-	    // Initialize sensor registers here
-	    i2c_smbus_write_byte_data(client, 0x0100, 0x00); // Stop streaming
-	    i2c_smbus_write_byte_data(client, 0x3018, 0x72); // Example PLL configuration
-	    i2c_smbus_write_byte_data(client, 0x3031, 0x0A); // Configure clock divider
-	    dev_info(gISPdev->dev, "Sensor initialized successfully\n");
+	    // Read ID with multiple retries
+	    for (i = 0; i < 3; i++) {
+	        // Read ID from correct registers now
+	        ret = isp_sensor_read_reg(client, 0x3107, &val_h);
+	        ret |= isp_sensor_read_reg(client, 0x3108, &val_l);
+	        pr_info("SC2336: ID = 0x%02x%02x (retry %d)\n", val_h, val_l, i);
 
-	    break;
+	        if (ret == 0) break;
+	        msleep(10);
+	    }
+
+	    return ret;
 	}
 	case VIDIOC_GET_SENSOR_ENUMERATION: {
 		struct sensor_list_req {
@@ -4991,6 +4998,24 @@ static int configure_isp_clocks(struct IMPISPDev *dev)
 
     pr_info("Configuring ISP clocks using standard API\n");
 
+   	// CSI clock must be enabled at 125MHz for ISP functionality
+    dev->csi_clk = clk_get(dev->dev, "csi");
+    if (!IS_ERR(dev->csi_clk)) {
+        ret = clk_prepare_enable(dev->csi_clk);
+        if (ret) {
+            pr_err("Failed to enable CSI clock\n");
+            goto err_put_csi;
+        }
+    }
+
+
+    // Get IPU clock first
+    dev->ipu_clk = clk_get(dev->dev, "ipu");
+    if (IS_ERR(dev->ipu_clk)) {
+        pr_warn("IPU clock not available\n");
+        dev->ipu_clk = NULL;
+    }
+
     // Get ISP core clock
     dev->isp_clk = clk_get(dev->dev, "isp");
     if (IS_ERR(dev->isp_clk)) {
@@ -5007,6 +5032,13 @@ static int configure_isp_clocks(struct IMPISPDev *dev)
         pr_err("Failed to get CGU ISP clock: %d\n", ret);
         dev->cgu_isp_clk = NULL;
         goto err_put_isp;
+    }
+
+    // Enable IPU clock
+    if (dev->ipu_clk) {
+        ret = clk_prepare_enable(dev->ipu_clk);
+        if (ret)
+            pr_warn("Failed to enable IPU clock\n");
     }
 
     // Set CGU ISP clock rate to 125MHz
@@ -5030,15 +5062,36 @@ static int configure_isp_clocks(struct IMPISPDev *dev)
         goto err_disable_isp;
     }
 
+    // Enable all required peripheral clocks
+    struct clk *lcd_clk = clk_get(dev->dev, "lcd");
+    if (!IS_ERR(lcd_clk)) {
+        clk_prepare_enable(lcd_clk);
+        clk_set_rate(lcd_clk, 250000000);
+    }
+
+    struct clk *aes_clk = clk_get(dev->dev, "aes");
+    if (!IS_ERR(aes_clk)) {
+        clk_prepare_enable(aes_clk);
+        clk_set_rate(aes_clk, 250000000);
+    }
+
     // Verify rates
+    // Verify rates including IPU
     pr_info("Clock rates after configuration:\n");
     pr_info("  ISP Core: %lu Hz\n", clk_get_rate(dev->isp_clk));
     pr_info("  CGU ISP: %lu Hz\n", clk_get_rate(dev->cgu_isp_clk));
+    pr_info("  IPU: %lu Hz\n", clk_get_rate(dev->ipu_clk));
 
     return 0;
 
 err_disable_isp:
     clk_disable_unprepare(dev->isp_clk);
+err_disable_csi:
+    if (dev->csi_clk)
+        clk_disable_unprepare(dev->csi_clk);
+err_put_csi:
+    if (dev->csi_clk)
+        clk_put(dev->csi_clk);
 err_put_cgu:
     clk_put(dev->cgu_isp_clk);
     dev->cgu_isp_clk = NULL;
@@ -5066,6 +5119,7 @@ static void cleanup_isp_clocks(struct IMPISPDev *dev)
 #define ISP_SOFT_RESET     (1 << 31)
 #define ISP_POWER_ON       (1 << 23)
 
+#define ISP_CLK_CTRL 0x08
 
 static int tisp_init(struct device *dev)
 {
@@ -5080,6 +5134,29 @@ static int tisp_init(struct device *dev)
         dev_err(dev, "ISP registers not mapped!\n");
         return -EFAULT;
     }
+
+    // sensor reset sequence here
+    if (reset_gpio != -1) {
+        ret = gpio_request(reset_gpio, "sensor_reset");
+        if (!ret) {
+            gpio_direction_output(reset_gpio, 0);
+            msleep(20);
+            gpio_direction_output(reset_gpio, 1);
+            msleep(20);
+        }
+    }
+
+    if (pwdn_gpio != -1) {
+        ret = gpio_request(pwdn_gpio, "sensor_pwdn");
+        if (!ret) {
+            gpio_direction_output(pwdn_gpio, 0);
+            msleep(10);
+        }
+    }
+
+    // Enable sensor clock
+    writel(0x1, gISPdev->regs + ISP_CLK_CTRL);
+    msleep(10);
 
     // Step 1: Allocate memory using vmalloc
     tparams_day = vmalloc(ISP_OFFSET_PARAMS);
@@ -5436,7 +5513,28 @@ static void remove_framechan_devices(void)
     unregister_chrdev_region(framechan_dev, MAX_CHANNELS);
 }
 
+static int setup_i2c_sensor(struct IMPISPDev *dev)
+{
+    struct i2c_client *client;
+    struct i2c_adapter *adapter;
+    struct i2c_board_info board_info = {
+        .type = "sc2336",
+        .addr = 0x30,  // Match sensor I2C address
+    };
 
+    adapter = i2c_get_adapter(0);  // Primary I2C bus
+    if (!adapter)
+        return -ENODEV;
+
+    client = i2c_new_device(adapter, &board_info);
+    if (!client) {
+        i2c_put_adapter(adapter);
+        return -ENODEV;
+    }
+
+    dev->sensor_i2c_client = client;
+    return 0;
+}
 
 static int tisp_probe(struct platform_device *pdev)
 {
@@ -5521,6 +5619,13 @@ static int tisp_probe(struct platform_device *pdev)
     graph_data->devices = kzalloc(max_devices * sizeof(struct platform_device *), GFP_KERNEL | GFP_DMA);
     if (!graph_data->devices) {
         ret = -ENOMEM;
+        goto free_graph;
+    }
+
+    // Setup I2C sensor
+    ret = setup_i2c_sensor(gISPdev);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to setup I2C sensor\n");
         goto free_graph;
     }
 
