@@ -671,17 +671,20 @@ struct isp_reg_block {
     u32 ae_stats[16];   /* AE statistics registers */
 };
 
+
+/* Update pad descriptor structure to match libimp exactly */
 struct isp_pad_desc {
-    char *name;                // 0x00: Pad name
+    uint32_t flags;            // 0x00: Pad flags
     uint8_t type;             // 0x04: Pad type (1=source, 2=sink)
     uint8_t index;            // 0x05: Pad index
-    uint32_t flags;           // Flags for pad capabilities
-    uint32_t link_type;       // Type of link
-    uint32_t link_state;      // State of link
-    void *source;             // Source pad pointer
-    void *sink;               // Sink pad pointer
-    void *entity;             // Entity pointer
-};
+    uint8_t reserved[2];      // 0x06-0x07: Alignment padding
+    uint32_t link_type;       // 0x08: Link type
+    uint32_t link_state;      // 0x0C: Link state
+    uint32_t reserved2[4];    // 0x10-0x1F: Reserved
+    void *source;             // 0x20: Source pad pointer
+    void *sink;               // 0x24: Sink pad pointer
+    void *entity;             // 0x28: Entity pointer
+} __attribute__((packed, aligned(4)));
 
 /**
  * struct isp_subdev - ISP sub-device structure
@@ -694,8 +697,8 @@ struct isp_subdev {
     struct mutex lock;
     u32 index;
     void *priv;
-    void __iomem *regs;        // Add this for register mapping
-    struct tx_isp_subdev_ops *ops;  // Add this for ops
+    void __iomem *regs;
+    struct tx_isp_subdev_ops *ops;
     uint16_t num_sink_pads;    // 0xc8: Number of sink pads
     uint16_t num_src_pads;     // 0xca: Number of source pads
     uint32_t sink_pads;        // 0xcc: Base address of sink pads array
@@ -787,6 +790,35 @@ struct isp_device {
 #define ISP_BUF1_SIZE_REG  (ISP_BASE + 0x100C)
 #define ISP_BUF2_REG       (ISP_BASE + 0x1010)
 #define ISP_BUF2_SIZE_REG  (ISP_BASE + 0x1014)
+
+
+/* Pad flags matching decompiled values */
+#define PAD_FL_SINK      (1 << 0)
+#define PAD_FL_SOURCE    (1 << 1)
+#define PAD_FL_ACTIVE    (1 << 2)
+
+/* Pad link states */
+#define LINK_STATE_INACTIVE  0
+#define LINK_STATE_SOURCE    3
+#define LINK_STATE_ENABLED   4
+
+/* Maximum number of links from decompiled array size at 0x6ad80 */
+#define MAX_LINK_PADS    16
+
+/**
+ * struct isp_link_config - Link configuration data from decompiled
+ * Based on the array at offset 0x6ad7c and 0x6ad80 in decompiled
+ */
+struct isp_link_config {
+    struct isp_pad_desc *pads;
+    int num_pads;
+};
+
+/* From decompiled - appears to be a fixed config table */
+static struct isp_link_config link_configs[] = {
+    /* Would contain the OEM's pad configurations */
+    /* We'd need to reverse engineer the full table */
+};
 
 /**
  * Function declarations for ISP register access
@@ -2436,6 +2468,10 @@ static int setup_frame_source(struct IMPISPDev *dev, int channel) {
     if (!fc)
         return -ENOMEM;
 
+    pr_info("Frame source setup: dev=%p channel=%d\n", dev, channel);
+    pr_info("dev offset 0x20=0x%x\n",
+            *((unsigned int*)((char*)dev + 0x20)));
+
     // Set up entry counts matching LIBIMP
     fc->buf_cnt = 4;
     fc->state = 1;  // Ready state
@@ -2687,6 +2723,14 @@ static int tisp_open(struct file *file)
         return -ENODEV;
     }
 
+    pr_info("ISP device open: file=%p f_flags=0x%x private_data=%p\n",
+        file, file->f_flags, file->private_data);
+
+    // Store file->f_flags as the fd - this should match what libimp expects
+    gISPdev->fd = file->f_flags;
+    pr_info("Stored fd %d at offset 0x20\n", gISPdev->fd);
+    gISPdev->is_open = 0;  // Reset counter
+
     // Initialize frame sources first
     ret = init_frame_source(gISPdev, 0);  // Initialize channel 0
     if (ret) {
@@ -2880,37 +2924,261 @@ static void cleanup_frame_buffers(struct isp_framesource_state *fs)
     fs->buf_size = 0;
 }
 
-static int enable_isp_streaming(struct IMPISPDev *dev, int channel, bool enable)
-{
-    u32 val;
 
-    if (!dev || !dev->regs) {
-        pr_err("Invalid device state\n");
+/**
+ * setup_video_link - Configure video link routing
+ * @dev: IMPISPDev structure
+ * @link: Link identifier from userspace
+ *
+ * Based on decompiled code at case 0x800456d0
+ */
+
+static int setup_video_link(struct IMPISPDev *dev, int link_num)
+{
+    void **subdev_list;
+    struct isp_subdev *isp_sd;
+    struct isp_pad_desc *src_pad, *sink_pad;
+
+    pr_info("Setting up video link %d\n", link_num);
+
+    if (link_num >= 2) {
+        pr_err("Invalid link number: %d\n", link_num);
         return -EINVAL;
     }
 
-    // Get sensor info - read the status register
-    val = readl(dev->regs + ISP_STAT_OFFSET);
-    if (!(val & ISP_READY_BIT)) {
-        pr_err("Sensor not ready\n");
+    // Get subdev list
+    subdev_list = *((void***)(((char*)dev) + 0x38));
+    if (!subdev_list || !subdev_list[0]) {
+        pr_err("No subdevs initialized\n");
+        return -EINVAL;
+    }
+
+    isp_sd = subdev_list[0];
+
+    // Get pads using stored addresses
+    sink_pad = (struct isp_pad_desc *)(uintptr_t)isp_sd->sink_pads;
+    src_pad = (struct isp_pad_desc *)(uintptr_t)isp_sd->src_pads;
+
+    // Critical: Check if links already enabled
+    if (sink_pad->link_state == LINK_STATE_ENABLED ||
+        src_pad->link_state == LINK_STATE_ENABLED) {
+        pr_err("Links already enabled\n");
         return -EBUSY;
     }
 
-    // Enable streaming in hardware
-    writel(ISP_CTRL_ENABLE | ISP_CTRL_CAPTURE,
-           dev->regs + ISP_CTRL_OFFSET);
+    // First destroy any existing links
+    sink_pad->link_state = LINK_STATE_INACTIVE;
+    src_pad->link_state = LINK_STATE_INACTIVE;
+    sink_pad->source = NULL;
+    src_pad->sink = NULL;
 
-    // Configure link path
-    writel(0x01, dev->regs + 0x140); // Direct path
+    // Now set up new link states
+    sink_pad->source = src_pad;
+    src_pad->sink = sink_pad;
+    sink_pad->link_state = LINK_STATE_SOURCE;  // Important: Must be 3
+    src_pad->link_state = LINK_STATE_SOURCE;
 
-    // Enable sensor output
-    if (dev->sensor_i2c_client) {
-        isp_sensor_write_reg(dev->sensor_i2c_client,
-                            SENSOR_REG_MODE, 0x01);
+    // Configure channel
+    if (link_num == 0) {
+        writel(0x1, dev->regs + 0x140);  // Direct path
+        writel(0x0, dev->regs + 0x144);  // No bypass
+    } else {
+        writel(0x0, dev->regs + 0x140);  // No direct
+        writel(0x1, dev->regs + 0x144);  // Bypass
+    }
+    wmb();
+
+    dev->current_link = link_num;
+    return 0;
+}
+
+
+
+struct isp_subdev_link {
+    struct isp_subdev *subdev;
+    uint32_t flags;
+    uint32_t state;
+    void *source;
+    void *sink;
+};
+
+static int setup_isp_subdevs(struct IMPISPDev *dev)
+{
+    struct isp_subdev *isp_sd;
+    struct isp_pad_desc *sink_pad, *src_pad;
+    void **subdev_list;
+    int i;
+
+    // Allocate subdev list at offset 0x38
+    subdev_list = kzalloc(0x40, GFP_KERNEL);
+    if (!subdev_list)
+        return -ENOMEM;
+
+    // Store subdev list pointer at offset 0x38
+    *((void**)(((char*)dev) + 0x38)) = subdev_list;
+
+    // Create main ISP subdev
+    isp_sd = kzalloc(sizeof(*isp_sd), GFP_KERNEL);
+    if (!isp_sd) {
+        kfree(subdev_list);
+        return -ENOMEM;
     }
 
-    // Update state
+    // Initialize subdev fields
+    strlcpy(isp_sd->name, "isp-subdev", sizeof(isp_sd->name));
+    isp_sd->name_ptr = isp_sd->name;
+    isp_sd->regs = dev->regs;
+    isp_sd->num_sink_pads = 1;
+    isp_sd->num_src_pads = 1;
+
+    // Allocate pads
+    sink_pad = kzalloc(sizeof(struct isp_pad_desc), GFP_KERNEL);
+    src_pad = kzalloc(sizeof(struct isp_pad_desc), GFP_KERNEL);
+    if (!sink_pad || !src_pad) {
+        kfree(sink_pad);
+        kfree(src_pad);
+        kfree(isp_sd);
+        kfree(subdev_list);
+        return -ENOMEM;
+    }
+
+    // Initialize sink pad with specific offsets matching decompiled
+    sink_pad->type = 2;  // Sink
+    sink_pad->index = 0; // First pad
+    sink_pad->flags = PAD_FL_SINK | PAD_FL_ACTIVE;
+    sink_pad->link_state = LINK_STATE_SOURCE; // Initial state
+    sink_pad->entity = dev; // Store parent device
+
+    // Initialize source pad
+    src_pad->type = 1;   // Source
+    src_pad->index = 0;  // First pad
+    src_pad->flags = PAD_FL_SOURCE | PAD_FL_ACTIVE;
+    src_pad->link_state = LINK_STATE_SOURCE;
+    src_pad->entity = dev;
+
+    // Important: cross-link the pads
+    sink_pad->source = src_pad;
+    src_pad->sink = sink_pad;
+
+    // Store pad addresses
+    isp_sd->sink_pads = (uint32_t)(uintptr_t)sink_pad;
+    isp_sd->src_pads = (uint32_t)(uintptr_t)src_pad;
+
+    // Store subdev in list
+    subdev_list[0] = isp_sd;
+
+    pr_info("Subdev setup complete: isp_sd=%p sink_pad=%p src_pad=%p\n",
+            isp_sd, sink_pad, src_pad);
+
+    return 0;
+}
+
+
+static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, bool enable)
+{
+    void **subdev_list;
+    struct isp_subdev *isp_sd;
+    struct isp_pad_desc *src_pad, *sink_pad;
+    int ret;
+
+    pr_info("\n=== ISP Stream Enable Debug ===\n");
+    pr_info("dev=%p file=%p channel=%d enable=%d\n",
+            dev, file, channel, enable);
+
+    if (!file || !dev) {
+        pr_err("Missing file or device handle\n");
+        return -EINVAL;
+    }
+
+    if (channel >= MAX_CHANNELS) {
+        pr_err("Invalid channel number: %d\n", channel);
+        return -EINVAL;
+    }
+
+    // Get frame source for this channel
+    struct isp_framesource_state *fs = &dev->frame_sources[channel];
+    if (!fs || !fs->is_open) {
+        pr_err("Frame source %d not initialized\n", channel);
+        return -EINVAL;
+    }
+
+    // Debug current state
+    pr_info("Frame source %d state:\n", channel);
+    pr_info("  is_open=%d state=%d\n", fs->is_open, fs->state);
+    pr_info("  size=%dx%d format=%d\n", fs->width, fs->height, fs->fmt);
+
+    // Get subdev list
+    subdev_list = *((void***)(((char*)dev) + 0x38));
+    pr_info("subdev_list=%p from offset 0x38\n", subdev_list);
+    if (!subdev_list || !subdev_list[0]) {
+        pr_err("No subdevs initialized\n");
+        return -EINVAL;
+    }
+
+    isp_sd = subdev_list[0];
+    pr_info("isp_sd=%p\n", isp_sd);
+
+    // Get pads
+    sink_pad = (struct isp_pad_desc *)(uintptr_t)isp_sd->sink_pads;
+    src_pad = (struct isp_pad_desc *)(uintptr_t)isp_sd->src_pads;
+    pr_info("sink_pad=%p src_pad=%p\n", sink_pad, src_pad);
+
+    pr_info("Before state change:\n");
+    pr_info("  sink_pad: state=%d type=%d flags=0x%x\n",
+            sink_pad->link_state, sink_pad->type, sink_pad->flags);
+    pr_info("  src_pad: state=%d type=%d flags=0x%x\n",
+            src_pad->link_state, src_pad->type, src_pad->flags);
+    pr_info("  current_link=%d\n", dev->current_link);
+
+    if (!enable) {
+        // Disable streaming
+        writel(0x0, dev->regs + 0x7838);
+        writel(0x0, dev->regs + 0x783c);
+        wmb();
+
+        sink_pad->link_state = LINK_STATE_SOURCE;
+        src_pad->link_state = LINK_STATE_SOURCE;
+        pr_info("Streaming disabled\n");
+        return 0;
+    }
+
+    // Ensure links are in correct state
+    if (sink_pad->link_state != LINK_STATE_SOURCE ||
+        src_pad->link_state != LINK_STATE_SOURCE) {
+        pr_err("Links not in correct state for streaming (expected state=%d)\n",
+              LINK_STATE_SOURCE);
+        return -EINVAL;
+    }
+
+    // Enable streaming
+    sink_pad->link_state = LINK_STATE_ENABLED;
+    src_pad->link_state = LINK_STATE_ENABLED;
+    pr_info("Link states updated to ENABLED\n");
+
+    // Debug register writes
+    pr_info("Writing to streaming registers:\n");
+    pr_info("  0x7838 = 1\n");
+    writel(0x1, dev->regs + 0x7838);
+    wmb();
+    pr_info("  0x783c = 1\n");
+    writel(0x1, dev->regs + 0x783c);
+    wmb();
+
+    // Read back register values
+    pr_info("Register values after write:\n");
+    pr_info("  0x7838 = 0x%x\n", readl(dev->regs + 0x7838));
+    pr_info("  0x783c = 0x%x\n", readl(dev->regs + 0x783c));
+
+    pr_info("Final state:\n");
+    pr_info("  sink_pad: state=%d type=%d flags=0x%x\n",
+            sink_pad->link_state, sink_pad->type, sink_pad->flags);
+    pr_info("  src_pad: state=%d type=%d flags=0x%x\n",
+            src_pad->link_state, src_pad->type, src_pad->flags);
+
+    // Update open counter using struct field
     dev->is_open += 2;
+    pr_info("Updated open counter: %d\n", dev->is_open);
+    pr_info("=== End Stream Enable Debug ===\n\n");
 
     return 0;
 }
@@ -2918,19 +3186,35 @@ static int enable_isp_streaming(struct IMPISPDev *dev, int channel, bool enable)
 static int tisp_release(struct inode *inode, struct file *file)
 {
     struct IMPISPDev *dev = file->private_data;
+    int channel = 0;
 
-    pr_info("ISP device release called\n");
+    pr_info("\n=== ISP Release Debug ===\n");
+    pr_info("file=%p flags=0x%x private_data=%p\n",
+            file, file->f_flags, file->private_data);
 
-    if (dev) {
-        // Clean up all frame sources
-        cleanup_frame_source(dev, 0);
-        cleanup_frame_source(dev, 1);
+    if (!dev) {
+        pr_err("No device in release\n");
+        return -EINVAL;
+    }
 
-        // Stop streaming if active
-        if (dev->is_open) {
-            enable_isp_streaming(dev, 0, false);
-            enable_isp_streaming(dev, 1, false);
-        }
+    // Get channel if this is a frame channel device
+    if (file->private_data) {
+        struct isp_framesource_state *fs = file->private_data;
+        channel = fs->chn_num;
+        pr_info("Releasing channel %d\n", channel);
+    }
+
+    // Stop streaming with proper file handle
+    if (dev->is_open) {
+        enable_isp_streaming(dev, file, channel, false);
+    }
+
+    // Clean up this channel's frame source
+    cleanup_frame_source(dev, channel);
+
+    // Only clean up global resources if this is the main device
+    if (file->f_flags == 0x2002) { // Check if main device file
+        pr_info("Main device release - cleaning up global resources\n");
 
         // Clean up memory
         cleanup_isp_memory(dev);
@@ -2945,10 +3229,10 @@ static int tisp_release(struct inode *inode, struct file *file)
             dev->regs = NULL;
         }
 
-        // Mark device as closed
         dev->is_open = 0;
     }
 
+    pr_info("Release complete for file %p\n", file);
     return 0;
 }
 
@@ -2967,33 +3251,6 @@ static ssize_t tisp_write(struct file *file, const char __user *buf, size_t coun
     return count;
 }
 
-/* Pad capabilities/flags from decompiled code inspection */
-#define PAD_FL_SINK       BIT(0)
-#define PAD_FL_SOURCE     BIT(1)
-#define PAD_FL_ACTIVE     BIT(2) // value 0x4 in decompiled code
-
-/* Link types/states seen in decompiled */
-#define LINK_STATE_INACTIVE  0
-#define LINK_STATE_SOURCE    3  // Seen in decompiled at 0xe418, 0xe430
-#define LINK_STATE_ENABLED   4  // From check at 0xe390
-
-/* Maximum number of links from decompiled array size at 0x6ad80 */
-#define MAX_LINK_PADS    16
-
-/**
- * struct isp_link_config - Link configuration data from decompiled
- * Based on the array at offset 0x6ad7c and 0x6ad80 in decompiled
- */
-struct isp_link_config {
-    struct isp_pad_desc *pads;
-    int num_pads;
-};
-
-/* From decompiled - appears to be a fixed config table */
-static struct isp_link_config link_configs[] = {
-    /* Would contain the OEM's pad configurations */
-    /* We'd need to reverse engineer the full table */
-};
 
 /**
  * find_subdev_link_pad - Helper to find a pad by type and index
@@ -3078,50 +3335,6 @@ static int subdev_video_destroy_link(struct isp_pad_desc *pad)
     pad->source = NULL;
     pad->sink = NULL;
 
-    return 0;
-}
-
-/**
- * setup_video_link - Configure video link routing
- * @dev: IMPISPDev structure
- * @link: Link identifier from userspace
- *
- * Based on decompiled code at case 0x800456d0
- */
-
-int setup_video_link(struct IMPISPDev *dev, unsigned int link)
-{
-    pr_info("Setting up video link %u\n", link);
-
-    if (!dev) {
-        pr_err("Invalid device pointer\n");
-        return -EINVAL;
-    }
-
-    // From OEM: Only links 0 and 1 are valid
-    if (link >= 2) {
-        dev_err(dev->dev, "Invalid link number %u\n", link);
-        return -EINVAL;
-    }
-
-    // Configure ISP link path based on link number
-    switch (link) {
-        case 0: // Direct path
-            writel(0x01, dev->regs + 0x140); // Enable direct path
-            writel(0x00, dev->regs + 0x144); // Disable bypass
-            break;
-
-        case 1: // Bypass path
-            writel(0x00, dev->regs + 0x140); // Disable direct path
-            writel(0x01, dev->regs + 0x144); // Enable bypass
-            break;
-    }
-    wmb();
-
-    // Update current link
-    dev->current_link = link;
-
-    pr_info("Video link %u configured successfully\n", link);
     return 0;
 }
 
@@ -4444,8 +4657,20 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     void __user *argp = (void __user *)arg;
     struct sensor_list_info sensor_list[MAX_SENSORS];
     int ret = 0;
+    int channel = 0;
 
     pr_info("ISP IOCTL called: cmd=0x%x\n", cmd);  // Add this debug line
+    pr_info("\n=== IOCTL Debug ===\n");
+    pr_info("cmd=0x%x arg=0x%lx\n", cmd, arg);
+    pr_info("file=%p flags=0x%x private_data=%p\n",
+            file, file->f_flags, file->private_data);
+
+    // Get channel number if this is a frame channel device
+    if (file->private_data) {
+        struct isp_framesource_state *fs = file->private_data;
+        channel = fs->chn_num;
+        pr_info("Using channel %d from frame source\n", channel);
+    }
 
     // Basic validation
     if (!gISPdev || !gISPdev->is_open) {
@@ -4536,21 +4761,12 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         break;
     }
 	case VIDIOC_ENABLE_STREAM: {
-	    pr_info("ISP IOCTL called: cmd=VIDIOC_ENABLE_STREAM\n");
-	    struct isp_framesource_state *fs = file->private_data;
-	    int channel = 0;  // Default to channel 0 if no frame source
+        int channel = 0;  // Default channel
+        struct isp_framesource_state *fs = &gISPdev->frame_sources[channel];
 
-	    if (fs && fs->is_open) {
-	        channel = fs->chn_num;
-	        pr_info("Enabling stream for channel %d\n", channel);
-	    }
-
-	    ret = enable_isp_streaming(gISPdev, channel, true);
-	    if (ret) {
-	        pr_err("Failed to enable streaming for channel %d: %d\n", channel, ret);
-	        return ret;
-	    }
-	    break;
+        ret = enable_isp_streaming(gISPdev, file, channel, 1);
+        pr_info("Stream enable returned %d\n", ret);
+        break;
 	}
     case TX_ISP_SET_BUF: {
         return handle_get_buf_ioctl(gISPdev, arg);
@@ -4742,14 +4958,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	}
 	case VIDIOC_STREAMOFF:
 	    pr_info("Stream OFF requested\n");
-	    if (gISPdev->fs_info) {
-	        struct isp_framesource_state *fs = gISPdev->fs_info;
-	        if (fs->state == 2) {  // If streaming
-	            enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	            v4l2_ioctl(fs->fd, VIDIOC_STREAMOFF, &type);
-	            fs->state = 1;  // Back to ready state
-	        }
-	    }
+	    return enable_isp_streaming(gISPdev, file, channel, false);
 	    break;
 	case VIDIOC_S_FMT: {
 	    struct v4l2_format fmt;
@@ -5603,6 +5812,13 @@ static int tisp_probe(struct platform_device *pdev)
     ret = setup_isp_memory_regions(gISPdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to setup memory regions\n");
+        goto err_free_memory;
+    }
+
+    // setup subdevs
+    ret = setup_isp_subdevs(gISPdev);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to setup subdevs: %d\n", ret);
         goto err_free_memory;
     }
 
