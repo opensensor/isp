@@ -2875,16 +2875,15 @@ int setup_video_link(struct IMPISPDev *dev, unsigned int link)
 {
     pr_info("Setting up video link %u\n", link);
 
+    if (!dev) {
+        pr_err("Invalid device pointer\n");
+        return -EINVAL;
+    }
+
     // From OEM: Only links 0 and 1 are valid
     if (link >= 2) {
         dev_err(dev->dev, "Invalid link number %u\n", link);
         return -EINVAL;
-    }
-
-    // Check if link already configured
-    if (link == dev->current_link) {
-        pr_info("Link %u already configured\n", link);
-        return 0;
     }
 
     // Configure ISP link path based on link number
@@ -4265,7 +4264,22 @@ static int enable_isp_streaming(struct IMPISPDev *dev, bool enable)
     }
 
     if (enable) {
-        // First enable sensor streaming
+        // First verify sensor status
+        u32 sensor_status = 0xffffffff;
+        ret = i2c_smbus_read_byte_data(dev->sensor_i2c_client, 0x0100);
+        if (ret < 0) {
+            pr_err("Failed to read sensor status\n");
+            return ret;
+        }
+
+        // Setup initial link configuration
+        ret = setup_video_link(dev, 0); // Use direct path
+        if (ret) {
+            pr_err("Failed to setup video link\n");
+            return ret;
+        }
+
+        // Then enable sensor streaming
         if (dev->sensor_i2c_client) {
             ret = i2c_smbus_write_byte_data(dev->sensor_i2c_client, 0x0100, 0x01);
             if (ret < 0) {
@@ -4274,7 +4288,7 @@ static int enable_isp_streaming(struct IMPISPDev *dev, bool enable)
             }
         }
 
-        // Then enable ISP streaming
+        // Finally enable ISP streaming
         ctrl = readl(dev->regs + ISP_CTRL_REG);
         ctrl |= BIT(0);  // Set streaming bit
         writel(ctrl, dev->regs + ISP_CTRL_REG);
@@ -4284,15 +4298,17 @@ static int enable_isp_streaming(struct IMPISPDev *dev, bool enable)
         dev->fs_info->state = 2;
         wmb();
 
+        // Update device status
+        dev->is_open += 2; // Match the OEM driver behavior
+
         pr_info("ISP streaming enabled\n");
     } else {
-        // Disable ISP streaming first
+        // Disable in reverse order
         ctrl = readl(dev->regs + ISP_CTRL_REG);
         ctrl &= ~BIT(0);  // Clear streaming bit
         writel(ctrl, dev->regs + ISP_CTRL_REG);
         wmb();
 
-        // Then disable sensor streaming
         if (dev->sensor_i2c_client) {
             ret = i2c_smbus_write_byte_data(dev->sensor_i2c_client, 0x0100, 0x00);
             if (ret < 0) {
@@ -4301,17 +4317,12 @@ static int enable_isp_streaming(struct IMPISPDev *dev, bool enable)
             }
         }
 
-        // Update frame source state
         dev->fs_info->state = 1;
         wmb();
-
-        pr_info("ISP streaming disabled\n");
     }
 
     return 0;
 }
-
-
 
 /**
  * isp_driver_ioctl - IOCTL handler for ISP driver
@@ -4660,7 +4671,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	case SENSOR_CMD_STREAM_ON:
 	case SENSOR_CMD_STREAM_OFF:
         pr_info("Sensor command: 0x%x\n", cmd);
-        // ret = handle_sensor_ioctl(gISPdev, cmd, argp);
+        ret = handle_sensor_ioctl(gISPdev, cmd, argp);
         break;
 
     default:
