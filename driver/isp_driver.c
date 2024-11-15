@@ -59,10 +59,15 @@ static int early_init(void)
     return 0;
 }
 
-
+#define ISP_BUFFER_ALIGN    4096
+#define ISP_MIN_BUFFER_SIZE (1 * 1024 * 1024)  // 1MB
+#define ISP_MAX_BUFFER_SIZE (16 * 1024 * 1024) // 16MB
 #define ISP_ALLOC_KMALLOC   1
 #define ISP_RMEM_BASE       0x02a80000
 #define ISP_RMEM_SIZE       22544384
+#define ISP_CTRL_ENABLE    BIT(0)    // Enable bit in control register
+#define ISP_CTRL_RESET     BIT(1)    // Reset bit
+#define ISP_CTRL_CAPTURE   BIT(2)    // Capture enable
 
 struct isp_memory_info {
     void *virt_addr;         // Kernel virtual address
@@ -254,6 +259,8 @@ struct isp_framesource_state {
     struct task_struct *thread;
     void    *ext_buffer;    // Extended buffer pointer
     struct isp_buffer_info *bufs;  // Buffer info array
+    spinlock_t lock;               // Add spinlock for IRQ handler
+    void    *private;             // Private data pointer
 
     // Synchronization
     struct semaphore sem;
@@ -759,6 +766,23 @@ struct isp_device {
     void *priv;                     /* Driver private data */
 };
 
+
+
+#define VBM_POOL_SIZE 0x99888  // From OEM driver
+#define VBM_MAX_POOLS 8
+#define ISP_INT_FRAME_DONE  BIT(0)    // Frame completion bit
+#define ISP_INT_STATUS_REG  0x24      // Status register offset
+#define ISP_INT_CLEAR_REG   0x28      // Clear register offset
+#define ISP_INT_MASK_REG    0x2C      // Interrupt mask register
+
+// Buffer control registers
+#define ISP_BUF0_REG       (ISP_BASE + 0x1000)
+#define ISP_BUF0_SIZE_REG  (ISP_BASE + 0x1004)
+#define ISP_BUF1_REG       (ISP_BASE + 0x1008)
+#define ISP_BUF1_SIZE_REG  (ISP_BASE + 0x100C)
+#define ISP_BUF2_REG       (ISP_BASE + 0x1010)
+#define ISP_BUF2_SIZE_REG  (ISP_BASE + 0x1014)
+
 /**
  * Function declarations for ISP register access
  */
@@ -813,29 +837,99 @@ void tx_isp_free_irq(int32_t* irq_pointer)
 }
 
 
-static irqreturn_t isp_irq_handler(int irq, void *dev_id)
+// This needs to be 0x308 bytes total based on the channel indexing
+struct frame_entry {
+    uint32_t flags;          // +0x00
+    uint32_t timestamp;      // +0x04
+    uint32_t frame_size;     // +0x08
+    uint32_t frame_type;     // +0x0C
+    uint32_t frame_num;      // +0x10
+    uint32_t frame_rate;     // +0x14
+    uint32_t num_slices;     // +0x18
+    void *slice_data;        // +0x1C
+    uint8_t reserved[0x308 - 0x20]; // Pad to full size
+} __attribute__((aligned(8)));
+
+struct frame_buffer {
+    struct frame_entry *entries;    // At 0x1094d4
+    uint32_t num_entries;          // At 0x1094c0
+    uint32_t write_idx;            // At 0x1094d8
+    struct semaphore frame_sem;     // At 0x109418
+    struct mutex lock;              // At 0x109438
+    uint32_t channel_offset;       // Add channel base offset
+    uint8_t padding[0x308 - sizeof(struct frame_entry*)]; // Match expected size
+};
+
+static void handle_frame_complete(struct isp_framesource_state *fs)
 {
+    struct frame_buffer *fb = fs->private;
+    struct frame_entry *entry;
+    unsigned long flags;
+    struct timespec ts;
+
+    spin_lock_irqsave(&fs->lock, flags);
+
+    // Get next entry
+    entry = &fb->entries[fb->write_idx % fb->num_entries];
+
+    // Fill frame info
+    entry->flags = 0x1;  // Mark as filled
+    ktime_get_ts(&ts);  // Use 3.10 time API
+    entry->timestamp = timespec_to_ns(&ts);
+    entry->frame_size = fs->buf_size;
+    entry->frame_type = 1; // I-frame
+    entry->frame_num = fs->frame_cnt;
+    entry->frame_rate = 30; // From sensor config
+    entry->num_slices = 1;
+    entry->slice_data = fs->buf_base + (fs->buf_index * fs->buf_size);
+
+    // Update indices
+    fb->write_idx++;
+    fs->frame_cnt++;
+
+    spin_unlock_irqrestore(&fs->lock, flags);
+
+    // Signal new frame
+    up(&fb->frame_sem);
+}
+
+#define ISP_INT_FRAME_DONE  BIT(0)    // Frame complete
+#define ISP_INT_DMA_ERR    BIT(1)    // DMA error
+#define ISP_INT_BUF_FULL   BIT(2)    // Buffer full
+
+static irqreturn_t isp_irq_handler(int irq, void *dev_id) {
     struct IMPISPDev *dev = dev_id;
-    struct isp_framesource_state *fs = dev->fs_info;
+    struct isp_framesource_state *fs;
     u32 status;
 
-    if (!dev || !fs)
+    if (!dev || !dev->regs) {
+        pr_err("Invalid device in IRQ handler\n");
         return IRQ_NONE;
+    }
 
-    status = readl(dev->regs + 0x24);  // Read interrupt status
-    if (!(status & 0x1))
+    // Read and log status for debugging
+    status = readl(dev->regs + ISP_INT_STATUS_REG);
+    pr_debug("ISP IRQ status: 0x%08x\n", status);
+
+    if (!(status & ISP_INT_FRAME_DONE)) {
+        if (status & ISP_INT_DMA_ERR)
+            pr_err("ISP DMA error\n");
+        if (status & ISP_INT_BUF_FULL)
+            pr_err("ISP buffer full\n");
         return IRQ_NONE;
+    }
 
-    // Clear interrupt
-    writel(status, dev->regs + 0x24);
+    // Clear only the handled interrupts
+    writel(status & ISP_INT_FRAME_DONE, dev->regs + ISP_INT_CLEAR_REG);
+    wmb();
 
-    // Update frame count and buffer index
-    fs->frame_cnt++;
-    fs->buf_index = (fs->buf_index + 1) % fs->buf_cnt;
+    fs = &dev->frame_sources[0];
+    if (!fs || !fs->is_open) {
+        pr_err("No active frame source in IRQ\n");
+        return IRQ_HANDLED;
+    }
 
-    // Signal frame completion
-    if (fs->bufs)
-        fs->bufs[fs->buf_index].frame_count++;
+    handle_frame_complete(fs);
 
     return IRQ_HANDLED;
 }
@@ -2311,63 +2405,52 @@ static struct IMPISPDev *gISPdev_bak = NULL;  // Backup for reopen
 #define SHARED_BUF_OFFSET 0x130
 #define CHAN_BUF_OFFSET  0x118
 
+#define VBM_POOL_SIZE 0x99888
+#define VBM_ALLOC_METHOD 0x3  // Seen in decompiled code
 
-// Update the buffer setup
-static int setup_frame_source(struct IMPISPDev *dev, int channel)
-{
-    struct isp_framesource_state *fs;
-    uint32_t line_width;
+struct frame_source_channel {
+    uint32_t state;              // 0x1c: State (1=ready, 2=streaming)
+    void *buf_base;              // Base buffer address
+    dma_addr_t dma_addr;         // DMA address
+    uint32_t buf_size;           // Buffer size per frame
+    uint32_t buf_cnt;            // Number of buffers (4)
+    uint32_t write_idx;          // Current write index
+    uint32_t frame_cnt;          // Frame counter
+    struct semaphore sem;        // Buffer semaphore
+    struct mutex lock;           // Access lock
+    uint32_t channel_offset;     // Channel offset in memory
+    // Add fields to match 0x2e8 total size seen in code
+};
+
+static int setup_frame_source(struct IMPISPDev *dev, int channel) {
+    struct isp_framesource_state *fs = &dev->frame_sources[channel];
+    struct frame_source_channel *fc;
     int ret;
 
-    if (!dev) {
-        pr_err("Invalid device state\n");
-        return -EINVAL;
-    }
+    fc = kzalloc(sizeof(*fc), GFP_KERNEL);
+    if (!fc)
+        return -ENOMEM;
 
-    fs = &dev->frame_sources[channel];
-    if (!fs) {
-        pr_err("Invalid frame source channel %d\n", channel);
-        return -EINVAL;
-    }
+    // Set up entry counts matching LIBIMP
+    fc->buf_cnt = 4;
+    fc->state = 1;  // Ready state
+    fc->channel_offset = channel * 0x2e8;  // From decompiled offset calc
 
-    // Initialize if not already done
-    if (!fs->is_open) {
-        fs->width = 1920;  // Default resolution
-        fs->height = 1080;
-        fs->buf_cnt = 4;
-        fs->state = 0;
-        fs->is_open = 1;
-        sema_init(&fs->sem, 1);
-        init_waitqueue_head(&fs->wait);
-    }
+    // Calculate buffer layout
+    fc->buf_size = fs->width * fs->height * 2; // YUV422
+    fc->buf_base = dev->dma_buf + (channel * fc->buf_size * fc->buf_cnt);
+    fc->dma_addr = dev->dma_addr + (channel * fc->buf_size * fc->buf_cnt);
 
-    // Calculate buffer requirements
-    line_width = ALIGN(fs->width * 2, 64);
-    fs->buf_size = line_width * fs->height;
+    sema_init(&fc->sem, 0);  // Start with no frames
+    mutex_init(&fc->lock);
 
-    pr_info("Setting up frame source channel %d:\n", channel);
-    pr_info("  Resolution: %dx%d\n", fs->width, fs->height);
-    pr_info("  Line width: %d (aligned)\n", line_width);
-    pr_info("  Buffer size: %d\n", fs->buf_size);
-    pr_info("  Buffer count: %d\n", fs->buf_cnt);
-    pr_info("  Total size: %zu\n", fs->buf_size * fs->buf_cnt);
+    // Store private data
+    fs->private = fc;
 
-    // Calculate buffer region for this channel
-    fs->dma_addr = dev->dma_addr + (channel * fs->buf_size * fs->buf_cnt);
-    fs->buf_base = dev->dma_buf + (channel * fs->buf_size * fs->buf_cnt);
-
-    // Pre-allocate buffer info array if needed
-    if (!fs->bufs) {
-        fs->bufs = kzalloc(sizeof(struct isp_buffer_info) * fs->buf_cnt, GFP_KERNEL);
-        if (!fs->bufs) {
-            pr_err("Failed to allocate buffer info array\n");
-            return -ENOMEM;
-        }
-    }
-
-    pr_info("Using DMA buffer for channel %d: phys=0x%x virt=%p size=%zu\n",
-            channel, (uint32_t)fs->dma_addr, fs->buf_base,
-            fs->buf_size * fs->buf_cnt);
+    pr_info("Frame source channel %d initialized:\n", channel);
+    pr_info("  buffer_base: %p\n", fc->buf_base);
+    pr_info("  dma_addr: 0x%x\n", (uint32_t)fc->dma_addr);
+    pr_info("  buf_size: %u x %d buffers\n", fc->buf_size, fc->buf_cnt);
 
     return 0;
 }
@@ -2449,64 +2532,59 @@ static int isp_frame_thread(void *data)
 }
 
 
-#define VBM_POOL_SIZE 0x99888  // From OEM driver
-#define VBM_MAX_POOLS 8
-
-static int start_frame_source(struct IMPISPDev *dev, int channel)
-{
-    struct isp_framesource_state *fs;
+static int start_frame_source(struct IMPISPDev *dev, int channel) {
+    struct isp_framesource_state *fs = &dev->frame_sources[channel];
+    struct sensor_buffer_info *buf_info;
     u32 val;
 
-    if (!dev) {
-        pr_err("Invalid device state\n");
+    if (!fs || !fs->is_open || !dev->buf_info) {
+        pr_err("Invalid frame source state\n");
         return -EINVAL;
     }
 
-    fs = &dev->frame_sources[channel];
-    if (!fs) {
-        pr_err("Invalid frame source for channel %d\n", channel);
+    // Get buffer info
+    buf_info = fs->bufs;  // Array of buffer infos
+    if (!buf_info) {
+        pr_err("No buffer info\n");
         return -EINVAL;
     }
 
-    // Verify frame source state
-    if (!fs->buf_base || !fs->dma_addr) {
-        pr_err("Frame source buffers not initialized for channel %d\n", channel);
-        return -EINVAL;
+    // Important: Update the frame source state flags matching libimp
+    fs->state = 2;  // Running state
+    fs->flags |= 0x2;  // Set bit from decompiled code
+    fs->frame_cnt = 0;
+    fs->buf_index = 0;
+
+    // Update base registers
+    writel(fs->dma_addr, dev->regs + (ISP_BUF0_REG - ISP_BASE));
+    writel(fs->buf_size, dev->regs + (ISP_BUF0_SIZE_REG - ISP_BASE));
+    wmb();
+
+    // Important: Initialize buffer metadata array
+    int i;
+    for (i = 0; i < fs->buf_cnt; i++) {
+        buf_info[i].method = ISP_ALLOC_KMALLOC;
+        buf_info[i].buffer_start = fs->dma_addr + (i * fs->buf_size);
+        buf_info[i].buffer_size = fs->buf_size;
+        buf_info[i].virt_addr = (unsigned long)(fs->buf_base + (i * fs->buf_size));
+        buf_info[i].flags = 0;
+        buf_info[i].frame_count = 0;
+        buf_info[i].is_buffer_full = 0;
     }
 
-    pr_info("Setting up frame source channel %d\n", channel);
-
-    // Initialize channel control registers
-    writel(0x0, dev->regs + 0x1c + (channel * 0x100));  // Clear channel config
-    writel(0x0, dev->regs + 0x20 + (channel * 0x100));  // Clear dimensions
-    wmb();
-    usleep_range(1000, 2000);
-
-    // Set frame dimensions for this channel
-    writel(fs->width, dev->regs + 0x20 + (channel * 0x100));
-    wmb();
-    writel(fs->height, dev->regs + 0x24 + (channel * 0x100));
+    // Set streaming state
+    val = readl(dev->regs + ISP_CTRL_REG);
+    val |= ISP_CTRL_ENABLE;
+    writel(val, dev->regs + ISP_CTRL_REG);
     wmb();
 
-    // Set buffer addresses for this channel
-    writel(fs->dma_addr, dev->regs + 0x1c4 + (channel * 0x100));
-    writel(fs->buf_size, dev->regs + 0x1c8 + (channel * 0x100));
-    wmb();
+    pr_info("Started streaming on channel %d with:\n", channel);
+    pr_info("  DMA addr: 0x%08x\n", (unsigned int)fs->dma_addr);
+    pr_info("  Buffer size: %zu\n", fs->buf_size);
+    pr_info("  State flags: 0x%x\n", fs->flags);
 
-    // Enable channel
-    val = readl(dev->regs + 0x100 + (channel * 0x100));
-    val |= 0x1;  // Set enable bit
-    writel(val, dev->regs + 0x100 + (channel * 0x100));
-    wmb();
-
-    // Update frame source state
-    fs->state = 2;  // Set to streaming state
-    wmb();
-
-    pr_info("Frame source channel %d streaming enabled\n", channel);
     return 0;
 }
-
 
 static void cleanup_frame_source(struct IMPISPDev *dev, int channel)
 {
@@ -4015,11 +4093,6 @@ struct imp_alloc_info {
 };
 
 
-// Add these at the top of the file
-#define ISP_BUFFER_ALIGN    4096
-#define ISP_MIN_BUFFER_SIZE (1 * 1024 * 1024)  // 1MB
-#define ISP_MAX_BUFFER_SIZE (16 * 1024 * 1024) // 16MB
-
 // Structure for tracking our memory allocations
 // Keep just one structure definition
 struct isp_memory_region {
@@ -5188,9 +5261,11 @@ static void __iomem *map_isp_registers(struct platform_device *pdev)
 }
 
 
+// And add buffer setup in open
 static int framechan_open(struct inode *inode, struct file *file) {
     struct isp_framesource_state *fs;
     int minor = iminor(inode);
+    uint32_t base_offset = 0x1094d4;  // From decompiled code
 
     fs = &gISPdev->frame_sources[minor];
     if (!fs->is_open) {
@@ -5199,44 +5274,91 @@ static int framechan_open(struct inode *inode, struct file *file) {
         fs->buf_cnt = 4;
         fs->buf_size = fs->width * fs->height * 2;
 
-        // Map dedicated buffer region for this channel
-        fs->buf_base = ioremap(ISP_RMEM_BASE +
-                             (minor * fs->buf_size * fs->buf_cnt),
-                             fs->buf_size * fs->buf_cnt);
+        // Map memory with proper offsets
+        fs->buf_base = gISPdev->dma_buf + base_offset +
+                      (minor * fs->buf_size * fs->buf_cnt);
+        fs->dma_addr = gISPdev->dma_addr + base_offset +
+                      (minor * fs->buf_size * fs->buf_cnt);
 
-        fs->dma_addr = ISP_RMEM_BASE + (minor * fs->buf_size * fs->buf_cnt);
-
-        // Initialize sync primitives
         mutex_init(&fs->sem);
         init_waitqueue_head(&fs->wait);
         fs->is_open = 1;
     }
 
+    // Important: Save fs pointer
     file->private_data = fs;
+
+    pr_info("Opened framechan%d: fs=%p base=%p\n",
+            minor, fs, fs->buf_base);
+
     return 0;
 }
-
 
 static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     struct IMPISPDev *dev = gISPdev;
     struct isp_framesource_state *fs = file->private_data;
+    u32 buf_index;
 
-    pr_info("Handling frame channel IOCTL: cmd=0x%x\n", cmd);
+    pr_info("Frame channel IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
 
     if (!dev || !fs || !fs->is_open) {
         pr_err("Invalid device state\n");
         return -EINVAL;
     }
 
-    // Validate memory before use
-    if (!fs->buf_base || !dev->dma_buf) {
-        pr_err("Buffer memory not initialized\n");
-        return -EINVAL;
-    }
+    // Log memory layout before handling command
+    pr_info("Memory state:\n");
+    pr_info("  fs=%p private=%p\n", fs, fs->private);
+    pr_info("  buf_base=%p dma_addr=0x%x\n",
+            fs->buf_base, (unsigned int)fs->dma_addr);
+    pr_info("  dev buf_info=%p\n", dev->buf_info);
 
-    dev->fs_info = fs;
-    return handle_set_buf_ioctl(dev, arg);
+    switch (cmd) {
+        case VIDIOC_S_FMT: {
+            struct v4l2_format fmt;
+            if (copy_from_user(&fmt, (void __user *)arg, sizeof(fmt)))
+                return -EFAULT;
+            pr_info("Set format: %dx%d\n", fmt.fmt.pix.width, fmt.fmt.pix.height);
+            fs->width = fmt.fmt.pix.width;
+            fs->height = fmt.fmt.pix.height;
+            return 0;
+        }
+
+        case VIDIOC_REQBUFS: {
+            struct v4l2_requestbuffers req;
+            if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
+                return -EFAULT;
+            pr_info("Request buffers: count=%d\n", req.count);
+            fs->buf_cnt = req.count;
+            return 0;
+        }
+
+        // Add more detailed buffer state handling
+        case VIDIOC_QUERYBUF: {
+            struct v4l2_buffer buf;
+            if (copy_from_user(&buf, (void __user *)arg, sizeof(buf)))
+                return -EFAULT;
+
+            buf_index = buf.index;
+            if (buf_index >= fs->buf_cnt)
+                return -EINVAL;
+
+            pr_info("Query buffer %d: offset=0x%x\n",
+                   buf_index, buf_index * fs->buf_size);
+
+            // Fill in buffer info
+            buf.length = fs->buf_size;
+            buf.m.offset = buf_index * fs->buf_size;
+
+            if (copy_to_user((void __user *)arg, &buf, sizeof(buf)))
+                return -EFAULT;
+            return 0;
+        }
+
+        default:
+            return -ENOTTY;
+    }
 }
 
 static int framechan_release(struct inode *inode, struct file *file)
