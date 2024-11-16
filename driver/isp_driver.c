@@ -123,6 +123,15 @@ static struct proc_data *proc_data_w02 = NULL;
 #define ISP_INT_MASK_REG   0x108
 #define ISP_INT_CLEAR_REG  0x10C
 
+// Add these register definitions at the top with other registers
+#define ISP_BYPASS_BASE   0x140    // Base offset for bypass control
+#define ISP_BYPASS_CTRL   0x140    // Bypass control register
+#define ISP_BYPASS_STATUS 0x144    // Bypass status register
+
+// Add these bit definitions
+#define ISP_BYPASS_EN     BIT(0)   // Enable bypass mode
+#define ISP_DIRECT_PATH   BIT(1)   // Enable direct path
+
 // WDR Register definitions from decompiled code
 #define WDR_REG_BASE     0x2000
 #define WDR_REG_BUF      (WDR_REG_BASE + 0x04)  // 0x2004
@@ -2923,7 +2932,13 @@ static int setup_frame_source(struct IMPISPDev *dev, int channel) {
     fc->write_idx = 0;
 
     // Calculate buffer layout
+    pr_info("Setting up frame source format: NV12\n");
     fc->buf_size = (fs->width / 2) * fs->height * 3; // NV12, rearrange to stay in 32-bit
+    fs->fmt = ISP_FMT_NV12;  // Force NV12 format
+
+    // Important: Set line stride for NV12
+    uint32_t aligned_width = ALIGN(fs->width, 8);
+    fs->buf_size = (aligned_width * fs->height * 3) / 2;
 
     // Initialize synchronization primitives
     spin_lock_init(&fc->state_lock);
@@ -3481,6 +3496,7 @@ struct isp_subdev_state {
     void __iomem *regs;     // Register mapping
     struct mutex lock;      // Protection
     char name[32];         // Device name
+    int bypass_mode;
 };
 
 static int setup_isp_subdevs(struct IMPISPDev *dev)
@@ -4666,7 +4682,7 @@ static int sensor_setup_streaming(struct IMPISPDev *dev)
 {
     struct i2c_client *client = dev->sensor_i2c_client;
     u8 val;
-    int ret;
+    int ret = 0;
 
     pr_info("SC2336: Setting up sensor streaming...\n");
 
@@ -4722,18 +4738,6 @@ static int sensor_setup_streaming(struct IMPISPDev *dev)
             return -EIO;
         }
     }
-
-    // Enable streaming
-    ret = isp_sensor_write_reg(client, 0x0100, 0x01);
-    if (ret) {
-        pr_err("Failed to start sensor streaming\n");
-        return ret;
-    }
-
-    // Verify streaming status
-    msleep(20);  // Give sensor time to start
-    ret = isp_sensor_read_reg(client, 0x0100, &val);
-    pr_info("SC2336: Streaming status = 0x%02x\n", val);
 
     return ret;
 }
@@ -5525,6 +5529,11 @@ static int configure_streaming_hardware(struct IMPISPDev *dev)
     wmb();
 
     // Step 3: Configure stream control registers
+    writel(ISP_FMT_NV12, dev->regs + ISP_INPUT_FORMAT_REG);   // NV12 input
+    writel(V4L2_PIX_FMT_NV12, dev->regs + ISP_OUTPUT_FORMAT_REG); // NV12 output
+    writel(fs->width, dev->regs + ISP_OFFSET_PARAMS + 0x00);  // Width
+    writel(fs->height, dev->regs + ISP_OFFSET_PARAMS + 0x04); // Height
+    wmb();
     writel(0x0, regs + ISP_STREAM_CTRL);  // Disable first
     writel(0x0, regs + ISP_STREAM_START);
     wmb();
@@ -5829,25 +5838,75 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         pr_info("tx_isp: Buffer setup completed successfully\n");
         return 0;
     }
-    case TX_ISP_VIDEO_LINK_SETUP: {
-        unsigned int link;
-        int __user *result = (void __user *)arg;
+    case 0xc008561c: {  // ISP Bypass control
+        struct {
+            uint32_t id;      // Control ID = 0x8000164
+            uint32_t value;   // Control value
+        } __attribute__((packed)) ctrl;
 
-        if (copy_from_user(&link, argp, sizeof(link))) {
-            pr_err("Failed to copy link setup\n");
+        if (copy_from_user(&ctrl, argp, sizeof(ctrl)))
+            return -EFAULT;
+
+        if (ctrl.id == 0x8000164) {
+            struct isp_subdev_state *sd = (struct isp_subdev_state *)ourISPdev->subdevs[0];
+            if (sd) {
+                mutex_lock(&sd->lock);
+
+                // Configure bypass mode
+                writel(ctrl.value ? 1 : 0, ourISPdev->regs + ISP_BYPASS_CTRL);
+                wmb();
+
+                // Store state
+                sd->bypass_mode = ctrl.value ? 1 : 0;
+
+                mutex_unlock(&sd->lock);
+                return 0;
+            }
+        }
+        return -EINVAL;
+    }
+    case 0x800456d0: {  // Create/setup links
+        int __user *enable = (int __user *)arg;
+        int enable_val;
+
+        if (get_user(enable_val, enable)) {
+            pr_err("Failed to get link enable value\n");
             return -EFAULT;
         }
 
-        ret = setup_video_link(ourISPdev, link);
-        if (ret == 0) {
-            // Write back 0 as expected before stream enable
-            if (put_user(0, result)) {
-                pr_err("Failed to update link result\n");
-                return -EFAULT;
+        pr_info("Creating ISP links with enable=%d\n", enable_val);
+
+        struct isp_subdev_state *sd = (struct isp_subdev_state *)ourISPdev->subdevs[0];
+        if (sd) {
+            mutex_lock(&sd->lock);
+
+            // Setup link based on bypass mode
+            if (sd->bypass_mode) {
+                // Bypass mode - direct link between source and sink
+                if (sd->src_pads && sd->sink_pads) {
+                    sd->src_pads->sink = sd->sink_pads;
+                    sd->sink_pads->source = sd->src_pads;
+                    sd->src_pads->link_state = enable_val ? LINK_STATE_ENABLED : LINK_STATE_INACTIVE;
+                    sd->sink_pads->link_state = enable_val ? LINK_STATE_ENABLED : LINK_STATE_INACTIVE;
+                }
+            } else {
+                // Normal mode - process through ISP
+                if (sd->src_pads && sd->sink_pads) {
+                    sd->src_pads->sink = sd->sink_pads;
+                    sd->sink_pads->source = sd->src_pads;
+                    sd->src_pads->link_state = enable_val ? LINK_STATE_SOURCE : LINK_STATE_INACTIVE;
+                    sd->sink_pads->link_state = enable_val ? LINK_STATE_SOURCE : LINK_STATE_INACTIVE;
+                }
             }
-            pr_info("Video link setup complete, wrote back 0\n");
+
+            mutex_unlock(&sd->lock);
         }
-        return ret;
+
+        // Write back link status
+        if (put_user(enable_val, enable))
+            return -EFAULT;
+
+        return 0;
     }
     case TX_ISP_SET_AE_ALGO_OPEN: {
       	pr_info("TX_ISP_SET_AE_ALGO_OPEN\n");
@@ -5911,7 +5970,47 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         }
         break;
     }
+    case 0x800456d3: {  // Disable links
+        pr_info("Disabling ISP links\n");
 
+        // Disable all active links
+        struct isp_subdev_state *sd = (struct isp_subdev_state *)ourISPdev->subdevs[0];
+        if (sd) {
+            mutex_lock(&sd->lock);
+            if (sd->src_pads)
+                sd->src_pads->link_state = LINK_STATE_INACTIVE;
+            if (sd->sink_pads)
+                sd->sink_pads->link_state = LINK_STATE_INACTIVE;
+            mutex_unlock(&sd->lock);
+        }
+
+        return 0;
+    }
+    case 0x800456d1: {  // Destroy links
+        pr_info("Destroying ISP links\n");
+        int __user *result = (int __user *)arg;
+
+        struct isp_subdev_state *sd = (struct isp_subdev_state *)ourISPdev->subdevs[0];
+        if (sd) {
+            mutex_lock(&sd->lock);
+            // Clear link state
+            if (sd->src_pads) {
+                sd->src_pads->source = NULL;
+                sd->src_pads->sink = NULL;
+            }
+            if (sd->sink_pads) {
+                sd->sink_pads->source = NULL;
+                sd->sink_pads->sink = NULL;
+            }
+            mutex_unlock(&sd->lock);
+        }
+
+        // Write back -1 as expected
+        if (put_user(-1, result))
+            return -EFAULT;
+
+        return 0;
+    }
     case TX_ISP_SET_AE_ALGO_CLOSE: {
         pr_info("TX_ISP_SET_AE_ALGO_CLOSE\n");
         // TODO
@@ -7001,11 +7100,28 @@ static void remove_framechan_devices(void)
     unregister_chrdev_region(framechan_dev, MAX_CHANNELS);
 }
 
+
+static int init_sensor_parameters(struct IMPISPDev *dev)
+{
+    struct i2c_client *client = dev->sensor_i2c_client;
+
+    // Set initial analog gain (adjust values based on sensor datasheet)
+    isp_sensor_write_reg(client, 0x3e08, 0x03); // Gain high byte
+    isp_sensor_write_reg(client, 0x3e09, 0x10); // Gain low byte
+
+    // Set initial exposure
+    isp_sensor_write_reg(client, 0x3e01, 0x0a); // Exposure high byte
+    isp_sensor_write_reg(client, 0x3e02, 0x00); // Exposure low byte
+
+    return 0;
+}
+
 static int setup_i2c_sensor(struct IMPISPDev *dev)
 {
     struct i2c_client *client;
     struct i2c_adapter *adapter;
     struct sensor_win_size *wsize;
+    int ret;
 
     // Allocate window size structure
     wsize = kzalloc(sizeof(*wsize), GFP_KERNEL);
@@ -7042,12 +7158,20 @@ static int setup_i2c_sensor(struct IMPISPDev *dev)
     client->dev.platform_data = wsize;
     dev->sensor_i2c_client = client;
 
+    // Initialize sensor parameters - add this call
+    ret = init_sensor_parameters(dev);
+    if (ret) {
+        pr_err("Failed to initialize sensor parameters: %d\n", ret);
+        i2c_unregister_device(client);
+        kfree(wsize);
+        return ret;
+    }
+
     pr_info("Sensor initialized with resolution %dx%d @ %d fps\n",
             wsize->width, wsize->height, wsize->fps);
 
     return 0;
 }
-
 
 static int tisp_probe(struct platform_device *pdev)
 {
