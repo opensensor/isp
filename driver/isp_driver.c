@@ -77,6 +77,53 @@ static struct proc_data *proc_data_w01 = NULL;
 static struct proc_data *proc_data_w02 = NULL;
 
 
+/* WDR Mode definitions seen in decompiled code */
+#define WDR_MODE_NONE   0
+#define WDR_MODE_LINE   1    /* Line-interleaved WDR */
+#define WDR_MODE_FRAME  2    /* Frame-based WDR */
+
+/* WDR-related IOCTLs seen in decompiled */
+#define TX_ISP_WDR_SET_BUF    _IOW('V', 0x56d6, struct isp_wdr_buf_info)
+#define TX_ISP_WDR_GET_BUF    _IOR('V', 0x56d7, struct isp_wdr_buf_size)
+#define TX_ISP_WDR_OPEN       _IOW('V', 0x56d8, int)
+#define TX_ISP_WDR_CLOSE      _IOW('V', 0x56d9, int)
+
+
+// Custom IOCTL commands matching the decompiled code
+#define TX_ISP_SET_BUF           _IOW('V', 0x56d5, struct isp_buf_info)
+#define TX_ISP_VIDEO_LINK_SETUP  _IOW('V', 0x56d0, unsigned int)
+#define TX_ISP_SET_AE_ALGO_OPEN  _IOW('V', 0x56dd, struct isp_ae_algo)
+#define TX_ISP_SET_AWB_ALGO_OPEN _IOW('V', 0x56e2, struct isp_awb_algo)
+
+
+// Register definitions from the decompiled code
+#define ISP_REG_BASE 0x13300000
+#define ISP_REG_SIZE 0x1000
+
+// Buffer control registers - exact offsets from libimp
+#define ISP_BUF_OFFSET     0x1000
+#define ISP_BUF0_OFFSET    0x1000  // Base buffer register
+#define ISP_BUF_SIZE_STEP  0x8     // Spacing between buffer registers
+#define ISP_BUF_COUNT      4       // Number of buffer registers
+
+// Control registers
+#define ISP_CTRL_REG       0x100
+#define ISP_STATUS_REG     0x104
+#define ISP_INT_MASK_REG   0x108
+#define ISP_INT_CLEAR_REG  0x10C
+
+// WDR Register definitions from decompiled code
+#define WDR_REG_BASE     0x2000
+#define WDR_REG_BUF      (WDR_REG_BASE + 0x04)  // 0x2004
+#define WDR_REG_LINE     (WDR_REG_BASE + 0x08)  // 0x2008
+#define WDR_REG_HEIGHT   (WDR_REG_BASE + 0x0c)  // 0x200c
+
+// WDR modes from decompiled code
+#define WDR_MODE_NONE    0
+#define WDR_MODE_LINE    1
+#define WDR_MODE_FRAME   2
+
+
 #define ISP_BUFFER_ALIGN    4096
 #define ISP_MIN_BUFFER_SIZE (1 * 1024 * 1024)  // 1MB
 #define ISP_MAX_BUFFER_SIZE (16 * 1024 * 1024) // 16MB
@@ -2691,56 +2738,129 @@ static int isp_frame_thread(void *data)
 }
 
 
+// Add these structures to match sensor expectations
+struct sensor_win_size {
+    uint32_t width;          // 0x00: Frame width
+    uint32_t height;         // 0x04: Frame height
+    uint32_t fps;           // 0x08: Frame rate
+    uint32_t max_fps;       // 0x0C: Maximum frame rate
+    uint32_t format;        // 0x10: Image format
+};
+
+// Update memory setup to match sensor requirements
+static int setup_isp_buffers(struct IMPISPDev *dev)
+{
+    struct sensor_win_size *wsize = dev->sensor_i2c_client->dev.platform_data;
+    if (!wsize) {
+        pr_err("No sensor window size information\n");
+        return -EINVAL;
+    }
+
+    // Use sensor window size for buffer calculations
+    uint32_t width = wsize->width;
+    uint32_t height = wsize->height;
+    uint32_t line_size = ((width + 7) >> 3) << 3;
+    uint32_t frame_size = line_size * height;
+
+    pr_info("Setting up buffers for %dx%d frame\n", width, height);
+
+    // Configure main buffer
+    writel(dev->dma_addr, dev->regs + ISP_BUF0_REG);
+    writel(line_size, dev->regs + ISP_BUF0_SIZE_REG);
+
+    // Configure second buffer at offset
+    writel(dev->dma_addr + frame_size, dev->regs + ISP_BUF1_REG);
+    writel(line_size, dev->regs + ISP_BUF1_SIZE_REG);
+
+    // Additional buffer setup
+    uint32_t third_line_size = ((((width + 0x1f) >> 5) + 7) >> 3) << 3;
+    uint32_t third_addr = dev->dma_addr + (frame_size * 2);
+    writel(third_addr, dev->regs + ISP_BUF2_REG);
+    writel(third_line_size, dev->regs + ISP_BUF2_SIZE_REG);
+
+    pr_info("Buffer setup complete:\n");
+    pr_info("  Main buffer: 0x%08x size=%u\n", dev->dma_addr, frame_size);
+    pr_info("  Second buffer: 0x%08x size=%u\n",
+            dev->dma_addr + frame_size, frame_size);
+    pr_info("  Third buffer: 0x%08x line_size=%u\n",
+            third_addr, third_line_size);
+
+    return 0;
+}
+
+
 static int start_frame_source(struct IMPISPDev *dev, int channel) {
     struct isp_framesource_state *fs = &dev->frame_sources[channel];
-    struct sensor_buffer_info *buf_info;
-    u32 val;
+    struct frame_source_channel *fc = fs->private;
+    void __iomem *regs = dev->regs;
+    int ret;
 
-    if (!fs || !fs->is_open || !dev->buf_info) {
+    if (!fs || !fc || !fs->is_open || !regs) {
         pr_err("Invalid frame source state\n");
         return -EINVAL;
     }
 
-    // Get buffer info
-    buf_info = fs->bufs;  // Array of buffer infos
-    if (!buf_info) {
-        pr_err("No buffer info\n");
+    pr_info("Starting frame source on channel %d:\n"
+            "  fs=%p fc=%p regs=%p\n"
+            "  dma_addr=0x%x buf_base=%p\n"
+            "  buf_size=%u count=%d\n",
+            channel, fs, fc, regs,
+            (unsigned int)fc->dma_addr, fc->buf_base,
+            fc->buf_size, fc->buf_cnt);
+
+    // Validate buffer setup
+    if (!fc->dma_addr || !fc->buf_base || !fc->buf_size) {
+        pr_err("Invalid buffer configuration\n");
         return -EINVAL;
     }
 
-    // Important: Update the frame source state flags matching libimp
+    // Configure base buffer register
+    writel(fc->dma_addr, regs + ISP_BUF0_OFFSET);
+    writel(fc->buf_size, regs + ISP_BUF0_OFFSET + 0x4);
+    wmb();
+
+    // Debug print register values
+    pr_info("Buffer registers:\n"
+            "  BUF0: addr=0x%x size=0x%x\n",
+            readl(regs + ISP_BUF0_OFFSET),
+            readl(regs + ISP_BUF0_OFFSET + 0x4));
+
+    // Configure additional buffers
+    for (int i = 1; i < fc->buf_cnt; i++) {
+        unsigned int reg_offset = ISP_BUF0_OFFSET + (i * ISP_BUF_SIZE_STEP);
+        writel(fc->dma_addr + (i * fc->buf_size), regs + reg_offset);
+        writel(fc->buf_size, regs + reg_offset + 0x4);
+    }
+    wmb();
+
+    // Enable frame processing
+    writel(0x1, regs + ISP_CTRL_REG);
+
+    // Initialize buffer queue
+    INIT_LIST_HEAD(&fs->ready_queue);
+    INIT_LIST_HEAD(&fs->done_queue);
+    fs->fifo_depth = 0;
+    fs->frame_depth = 1;
+    fs->fifo_initialized = true;
+
+    // Initialize buffer descriptors
+    for (int i = 0; i < fs->buf_cnt; i++) {
+        fs->bufs[i].frame_count = 0;
+        fs->bufs[i].is_buffer_full = 0;
+    }
+
+    // Update state
     fs->state = 2;  // Running state
-    fs->flags |= 0x2;  // Set bit from decompiled code
+    fs->flags |= 0x2;
     fs->frame_cnt = 0;
     fs->buf_index = 0;
 
-    // Update base registers
-    writel(fs->dma_addr, dev->regs + (ISP_BUF0_REG - ISP_BASE));
-    writel(fs->buf_size, dev->regs + (ISP_BUF0_SIZE_REG - ISP_BASE));
-    wmb();
-
-    // Important: Initialize buffer metadata array
-    int i;
-    for (i = 0; i < fs->buf_cnt; i++) {
-        buf_info[i].method = ISP_ALLOC_KMALLOC;
-        buf_info[i].buffer_start = fs->dma_addr + (i * fs->buf_size);
-        buf_info[i].buffer_size = fs->buf_size;
-        buf_info[i].virt_addr = (unsigned long)(fs->buf_base + (i * fs->buf_size));
-        buf_info[i].flags = 0;
-        buf_info[i].frame_count = 0;
-        buf_info[i].is_buffer_full = 0;
-    }
-
-    // Set streaming state
-    val = readl(dev->regs + ISP_CTRL_REG);
-    val |= ISP_CTRL_ENABLE;
-    writel(val, dev->regs + ISP_CTRL_REG);
-    wmb();
-
-    pr_info("Started streaming on channel %d with:\n", channel);
-    pr_info("  DMA addr: 0x%08x\n", (unsigned int)fs->dma_addr);
-    pr_info("  Buffer size: %zu\n", fs->buf_size);
-    pr_info("  State flags: 0x%x\n", fs->flags);
+    pr_info("Frame source started successfully\n"
+            "  state=%d flags=0x%x\n"
+            "  ctrl_reg=0x%x status=0x%x\n",
+            fs->state, fs->flags,
+            readl(regs + ISP_CTRL_REG),
+            readl(regs + ISP_STATUS_REG));
 
     return 0;
 }
@@ -2804,6 +2924,7 @@ static void cleanup_frame_source(struct IMPISPDev *dev, int channel)
 static int init_frame_source(struct IMPISPDev *dev, int channel)
 {
     struct isp_framesource_state *fs = &dev->frame_sources[channel];
+    struct frame_source_channel *fc;
 
     // Clear structure
     memset(fs, 0, sizeof(*fs));
@@ -2814,7 +2935,6 @@ static int init_frame_source(struct IMPISPDev *dev, int channel)
     fs->fmt = 0xa;  // YUV422 default format
     fs->state = 1;  // Ready state
     fs->chn_num = channel;
-    fs->is_open = 1;  // Mark as initialized
 
     // Set default resolution based on channel
     if (channel == 0) {
@@ -2825,16 +2945,67 @@ static int init_frame_source(struct IMPISPDev *dev, int channel)
         fs->height = 360;
     }
 
-    // Calculate buffer size right away
+    // Calculate buffer size
     fs->buf_size = fs->width * fs->height * 2; // YUV422
+
+    // Allocate private data structure
+    fc = kzalloc(sizeof(*fc), GFP_KERNEL);
+    if (!fc) {
+        pr_err("Failed to allocate frame channel data\n");
+        return -ENOMEM;
+    }
+
+    // Initialize channel data
+    fc->buf_cnt = fs->buf_cnt;
+    fc->state = 1;  // Ready state
+    fc->channel_offset = channel * 0x2e8;  // From decompiled offset calc
+    fc->write_idx = 0;
+    fc->buf_size = fs->buf_size;
+
+    // Calculate buffer addresses with proper base offset
+    uint32_t base_offset = 0x1094d4;  // Offset from decompiled code
+    fc->buf_base = dev->dma_buf + base_offset + (channel * fs->buf_size * fs->buf_cnt);
+    fc->dma_addr = dev->dma_addr + base_offset + (channel * fs->buf_size * fs->buf_cnt);
+
+    // Initialize synchronization primitives
+    mutex_init(&fc->lock);
+    sema_init(&fc->sem, 0);  // Start with no frames
+
+    // Store private data
+    fs->private = fc;
 
     // Initialize synchronization
     mutex_init(&fs->sem);
     init_waitqueue_head(&fs->wait);
     spin_lock_init(&fs->lock);
 
-    pr_info("Initialized frame source %d with default %dx%d buf_size=%d\n",
-            channel, fs->width, fs->height, fs->buf_size);
+    // Initialize buffer info array
+    fs->bufs = kzalloc(sizeof(struct isp_buffer_info) * fs->buf_cnt, GFP_KERNEL);
+    if (!fs->bufs) {
+        kfree(fc);
+        return -ENOMEM;
+    }
+
+    // Initialize each buffer
+    for (int i = 0; i < fs->buf_cnt; i++) {
+        fs->bufs[i].method = ISP_ALLOC_KMALLOC;
+        fs->bufs[i].buffer_start = fc->dma_addr + (i * fc->buf_size);
+        fs->bufs[i].virt_addr = (unsigned long)(fc->buf_base + (i * fc->buf_size));
+        fs->bufs[i].buffer_size = fc->buf_size;
+        fs->bufs[i].flags = 1;
+        fs->bufs[i].frame_count = 0;
+        fs->bufs[i].is_buffer_full = 0;
+    }
+
+    fs->is_open = 1;
+
+    pr_info("Initialized frame source %d:\n"
+            "  width=%d height=%d buf_size=%d\n"
+            "  dma_addr=0x%x buf_base=%p\n"
+            "  private=%p bufs=%p\n",
+            channel, fs->width, fs->height, fs->buf_size,
+            (unsigned int)fc->dma_addr, fc->buf_base,
+            fs->private, fs->bufs);
 
     return 0;
 }
@@ -2911,55 +3082,6 @@ static void cleanup_buffer_info(struct IMPISPDev *dev)
     }
 }
 
-// Add these structures to match sensor expectations
-struct sensor_win_size {
-    uint32_t width;          // 0x00: Frame width
-    uint32_t height;         // 0x04: Frame height
-    uint32_t fps;           // 0x08: Frame rate
-    uint32_t max_fps;       // 0x0C: Maximum frame rate
-    uint32_t format;        // 0x10: Image format
-};
-
-// Update memory setup to match sensor requirements
-static int setup_isp_buffers(struct IMPISPDev *dev)
-{
-    struct sensor_win_size *wsize = dev->sensor_i2c_client->dev.platform_data;
-    if (!wsize) {
-        pr_err("No sensor window size information\n");
-        return -EINVAL;
-    }
-
-    // Use sensor window size for buffer calculations
-    uint32_t width = wsize->width;
-    uint32_t height = wsize->height;
-    uint32_t line_size = ((width + 7) >> 3) << 3;
-    uint32_t frame_size = line_size * height;
-
-    pr_info("Setting up buffers for %dx%d frame\n", width, height);
-
-    // Configure main buffer
-    writel(dev->dma_addr, dev->regs + ISP_BUF0_REG);
-    writel(line_size, dev->regs + ISP_BUF0_SIZE_REG);
-
-    // Configure second buffer at offset
-    writel(dev->dma_addr + frame_size, dev->regs + ISP_BUF1_REG);
-    writel(line_size, dev->regs + ISP_BUF1_SIZE_REG);
-
-    // Additional buffer setup
-    uint32_t third_line_size = ((((width + 0x1f) >> 5) + 7) >> 3) << 3;
-    uint32_t third_addr = dev->dma_addr + (frame_size * 2);
-    writel(third_addr, dev->regs + ISP_BUF2_REG);
-    writel(third_line_size, dev->regs + ISP_BUF2_SIZE_REG);
-
-    pr_info("Buffer setup complete:\n");
-    pr_info("  Main buffer: 0x%08x size=%u\n", dev->dma_addr, frame_size);
-    pr_info("  Second buffer: 0x%08x size=%u\n",
-            dev->dma_addr + frame_size, frame_size);
-    pr_info("  Third buffer: 0x%08x line_size=%u\n",
-            third_addr, third_line_size);
-
-    return 0;
-}
 
 
 static int stop_streaming(struct IMPISPDev *dev)
@@ -3032,14 +3154,84 @@ static void cleanup_frame_buffers(struct isp_framesource_state *fs)
     fs->buf_size = 0;
 }
 
+// Add this structure for subdev state
+struct isp_subdev_state {
+    struct isp_pad_desc *src_pads;
+    struct isp_pad_desc *sink_pads;
+    uint16_t num_src_pads;  // 0xca offset
+    uint16_t num_sink_pads; // 0xc8 offset
+    void __iomem *regs;     // Register mapping
+    struct mutex lock;      // Protection
+    char name[32];         // Device name
+};
 
-/**
- * setup_video_link - Configure video link routing
- * @dev: IMPISPDev structure
- * @link: Link identifier from userspace
- *
- * Based on decompiled code at case 0x800456d0
- */
+static int setup_isp_subdevs(struct IMPISPDev *dev)
+{
+    struct isp_subdev_state *sd;
+    struct isp_pad_desc *src_pad, *sink_pad;
+    int ret;
+
+    pr_info("Setting up ISP subdevices\n");
+
+    // Allocate subdev state
+    sd = kzalloc(sizeof(*sd), GFP_KERNEL);
+    if (!sd) {
+        pr_err("Failed to allocate subdev\n");
+        return -ENOMEM;
+    }
+
+    // Initialize subdev
+    snprintf(sd->name, sizeof(sd->name), "isp-subdev");
+    sd->regs = dev->regs;
+    mutex_init(&sd->lock);
+
+    // Allocate pads
+    sd->num_src_pads = 1;
+    sd->num_sink_pads = 1;
+
+    src_pad = kzalloc(sizeof(*src_pad), GFP_KERNEL);
+    sink_pad = kzalloc(sizeof(*sink_pad), GFP_KERNEL);
+    if (!src_pad || !sink_pad) {
+        ret = -ENOMEM;
+        goto err_free;
+    }
+
+    // Initialize source pad
+    src_pad->type = 1;  // Source
+    src_pad->flags = PAD_FL_SOURCE;
+    src_pad->link_state = LINK_STATE_INACTIVE;
+    src_pad->entity = dev;
+
+    // Initialize sink pad
+    sink_pad->type = 2;  // Sink
+    sink_pad->flags = PAD_FL_SINK;
+    sink_pad->link_state = LINK_STATE_INACTIVE;
+    sink_pad->entity = dev;
+
+    sd->src_pads = src_pad;
+    sd->sink_pads = sink_pad;
+
+    // Store in device
+    dev->subdevs = kzalloc(sizeof(struct isp_subdev *), GFP_KERNEL);
+    if (!dev->subdevs) {
+        ret = -ENOMEM;
+        goto err_free_pads;
+    }
+    dev->subdevs[0] = (struct isp_subdev *)sd;
+
+    pr_info("Subdev setup complete:\n");
+    pr_info("  sd=%p src_pad=%p sink_pad=%p\n", sd, src_pad, sink_pad);
+
+    return 0;
+
+err_free_pads:
+    kfree(src_pad);
+    kfree(sink_pad);
+err_free:
+    kfree(sd);
+    return ret;
+}
+
 static struct isp_link_config link_configs[] = {
     [0] = {
         .pads = &(struct isp_pad_desc){
@@ -3069,81 +3261,78 @@ static const struct isp_link_type link_types[] = {
     [1] = { .type = 0x3, .pad_count = 2 }   // Bypass path - both source/sink flags
 };
 
+
+
+
+/**
+ * setup_video_link - Configure video link routing
+ * @dev: IMPISPDev structure
+ * @link: Link identifier from userspace
+ *
+ * Based on decompiled code at case 0x800456d0
+ */
 static int setup_video_link(struct IMPISPDev *dev, int link_num)
 {
-    void **subdev_list;
-    struct isp_subdev *isp_sd;
+    struct isp_subdev_state *sd;
     struct isp_pad_desc *src_pad, *sink_pad;
-    uint32_t link_type;
-    int ret;
+    int ret = 0;
 
     pr_info("Setting up video link %d\n", link_num);
 
-    if (link_num >= 2) {
-        pr_err("Invalid link number: %d\n", link_num);
-        return -EINVAL;
-    }
-
-    // Get link type from configuration - match binary
-    link_type = link_types[link_num].type;
-
-    // Get subdev list
-    subdev_list = *((void***)(((char*)dev) + 0x38));
-    if (!subdev_list || !subdev_list[0]) {
+    if (!dev || !dev->subdevs || !dev->subdevs[0]) {
         pr_err("No subdevs initialized\n");
         return -EINVAL;
     }
 
-    isp_sd = subdev_list[0];
-    if (!isp_sd) {
-        pr_err("Invalid subdev\n");
+    sd = (struct isp_subdev_state *)dev->subdevs[0];
+    src_pad = sd->src_pads;
+    sink_pad = sd->sink_pads;
+
+    if (!src_pad || !sink_pad) {
+        pr_err("Invalid pad configuration\n");
         return -EINVAL;
     }
 
-    // Get pads
-    sink_pad = (struct isp_pad_desc *)(uintptr_t)isp_sd->sink_pads;
-    src_pad = (struct isp_pad_desc *)(uintptr_t)isp_sd->src_pads;
+    pr_info("Configuring link:\n");
+    pr_info("  sd=%p src=%p sink=%p\n", sd, src_pad, sink_pad);
+    pr_info("  src flags=0x%x sink flags=0x%x\n",
+            src_pad->flags, sink_pad->flags);
 
-    if (!sink_pad || !src_pad) {
-        pr_err("Invalid pad pointers\n");
-        return -EINVAL;
-    }
+    mutex_lock(&sd->lock);
 
-    // Debug print pad flags
-    pr_info("Pad flags: src=0x%x sink=0x%x link=0x%x\n",
-            src_pad->flags, sink_pad->flags, link_type);
-
-    // Match binary's exact validation
-    if ((sink_pad->flags & src_pad->flags & link_type) == 0) {
-        pr_err("The link type is mismatch!\n");
-        return -EINVAL;
-    }
-
-    // Check current states
-    if (sink_pad->link_state == LINK_STATE_ENABLED ||
-        src_pad->link_state == LINK_STATE_ENABLED) {
-        pr_err("Links already enabled\n");
-        return -EINVAL;
-    }
-
-    // First destroy existing links
-    sink_pad->link_state = LINK_STATE_INACTIVE;
+    // Reset existing links
     src_pad->link_state = LINK_STATE_INACTIVE;
-    sink_pad->source = NULL;
+    sink_pad->link_state = LINK_STATE_INACTIVE;
+    src_pad->source = NULL;
     src_pad->sink = NULL;
+    sink_pad->source = NULL;
+    sink_pad->sink = NULL;
 
-    // Setup new links
-    sink_pad->source = src_pad;
-    src_pad->sink = sink_pad;
-    sink_pad->link_state = LINK_STATE_SOURCE;  // Must be 3
-    src_pad->link_state = LINK_STATE_SOURCE;   // Must be 3
+    // Setup new link
+    if (link_num == 0) {
+        src_pad->sink = sink_pad;
+        sink_pad->source = src_pad;
+        src_pad->link_state = LINK_STATE_SOURCE;
+        sink_pad->link_state = LINK_STATE_SOURCE;
 
-    // Configure hardware path
-    writel(link_num == 0 ? 1 : 0, dev->regs + 0x140);
-    writel(link_num == 0 ? 0 : 1, dev->regs + 0x144);
+        // Configure hardware path
+        writel(1, dev->regs + 0x140);  // Direct path
+        writel(0, dev->regs + 0x144);  // Disable bypass
+    } else {
+        src_pad->sink = NULL;
+        sink_pad->source = NULL;
+
+        // Configure bypass path
+        writel(0, dev->regs + 0x140);  // Disable direct
+        writel(1, dev->regs + 0x144);  // Enable bypass
+    }
     wmb();
 
     dev->current_link = link_num;
+
+    mutex_unlock(&sd->lock);
+
+    pr_info("Video link %d configured successfully\n", link_num);
     return 0;
 }
 
@@ -3154,101 +3343,89 @@ struct isp_subdev_link {
     void *source;
     void *sink;
 };
-//
-//static int setup_isp_subdevs(struct IMPISPDev *dev)
-//{
-//    if (!dev) {
-//        pr_err("Invalid device\n");
-//        return -EINVAL;
-//    }
-//
-//    pr_info("Setting up subdevs for device %p\n", dev);
-//
-//    // Create single subdev - libimp only uses one
-//    struct isp_subdev *isp_sd = kzalloc(sizeof(*isp_sd), GFP_KERNEL);
-//    if (!isp_sd) {
-//        pr_err("Failed to allocate subdev\n");
-//        return -ENOMEM;
-//    }
-//
-//    // Setup subdev
-//    strlcpy(isp_sd->name, "isp-subdev", sizeof(isp_sd->name));
-//    isp_sd->name_ptr = isp_sd->name;
-//    isp_sd->regs = dev->regs;
-//    isp_sd->num_sink_pads = 1;
-//    isp_sd->num_src_pads = 1;
-//
-//    // Allocate pads
-//    struct isp_pad_desc *sink_pad = kzalloc(sizeof(*sink_pad), GFP_KERNEL);
-//    struct isp_pad_desc *src_pad = kzalloc(sizeof(*src_pad), GFP_KERNEL);
-//    if (!sink_pad || !src_pad) {
-//        kfree(sink_pad);
-//        kfree(src_pad);
-//        kfree(isp_sd);
-//        return -ENOMEM;
-//    }
-//
-//    // Initialize source pad
-//    src_pad->flags = PAD_FLAGS_BOTH;
-//    src_pad->type = PAD_TYPE_SOURCE;
-//    src_pad->index = 0;
-//    src_pad->link_state = LINK_STATE_INACTIVE;
-//    src_pad->entity = dev;
-//
-//    // Initialize sink pad
-//    sink_pad->flags = PAD_FLAGS_BOTH;
-//    sink_pad->type = PAD_TYPE_SINK;
-//    sink_pad->index = 0;
-//    sink_pad->link_state = LINK_STATE_INACTIVE;
-//    sink_pad->entity = dev;
-//
-//    // Store pad pointers in subdev
-//    isp_sd->sink_pads = (uint32_t)(uintptr_t)sink_pad;
-//    isp_sd->src_pads = (uint32_t)(uintptr_t)src_pad;
-//
-//    // Allocate and store subdev list
-//    dev->subdevs = kzalloc(sizeof(struct isp_subdev *), GFP_KERNEL);
-//    if (!dev->subdevs) {
-//        kfree(sink_pad);
-//        kfree(src_pad);
-//        kfree(isp_sd);
-//        return -ENOMEM;
-//    }
-//    dev->subdevs[0] = isp_sd;
-//
-//    pr_info("Subdev setup complete:\n");
-//    pr_info("  subdev: %p\n", isp_sd);
-//    pr_info("  src_pad: %p type=%d flags=0x%x\n",
-//            src_pad, src_pad->type, src_pad->flags);
-//    pr_info("  sink_pad: %p type=%d flags=0x%x\n",
-//            sink_pad, sink_pad->type, sink_pad->flags);
-//
-//    return 0;
-//}
-static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, bool enable)
-{
+
+
+static int enable_stream(struct IMPISPDev *dev, int channel, bool enable) {
     struct isp_framesource_state *fs;
-    struct frame_source_channel *fc;
-    void __iomem *reg_base;
     unsigned long flags;
     int ret = 0;
 
-    if (!dev || !dev->regs || !dev->buf_info) {
+    pr_info("Enable stream request: channel=%d enable=%d\n", channel, enable);
+
+    if (!dev || !dev->regs) {
         pr_err("Invalid device state\n");
         return -EINVAL;
     }
 
-    reg_base = dev->regs;
-
-    // Get frame source from file->private_data if it exists
-    if (file->private_data) {
-        fs = file->private_data;
-        channel = fs->chn_num;
-    } else {
-        fs = &dev->frame_sources[channel];
-        file->private_data = fs;
+    fs = &dev->frame_sources[channel];
+    if (!fs || !fs->private) {
+        pr_err("Invalid frame source state\n");
+        return -EINVAL;
     }
 
+    spin_lock_irqsave(&fs->lock, flags);
+
+    // Check state
+    if (enable) {
+        if (fs->state != 2) {
+            pr_err("Channel %d not in streaming state\n", channel);
+            ret = -EINVAL;
+            goto unlock;
+        }
+
+        // Configure stream control registers
+        writel(0x1, dev->regs + ISP_STREAM_CTRL);
+        wmb();
+        writel(0x1, dev->regs + ISP_STREAM_START);
+        wmb();
+
+        // Update flag indicating streaming
+        fs->flags |= 0x4;  // Set streaming bit
+
+    } else {
+        if (!(fs->flags & 0x4)) {
+            pr_err("Channel %d not streaming\n", channel);
+            ret = -EINVAL;
+            goto unlock;
+        }
+
+        // Disable stream
+        writel(0x0, dev->regs + ISP_STREAM_CTRL);
+        writel(0x0, dev->regs + ISP_STREAM_START);
+        wmb();
+
+        // Clear streaming flag
+        fs->flags &= ~0x4;
+    }
+
+    // Read back status
+    pr_info("Stream %s on channel %d:\n"
+            "  ctrl=0x%x start=0x%x\n"
+            "  status=0x%x flags=0x%x\n",
+            enable ? "enabled" : "disabled",
+            channel,
+            readl(dev->regs + ISP_STREAM_CTRL),
+            readl(dev->regs + ISP_STREAM_START),
+            readl(dev->regs + ISP_STATUS_REG),
+            fs->flags);
+
+unlock:
+    spin_unlock_irqrestore(&fs->lock, flags);
+    return ret;
+}
+
+static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, bool enable) {
+    struct isp_framesource_state *fs;
+    struct frame_source_channel *fc;
+    int ret = 0;
+
+    if (!dev || !dev->regs) {
+        pr_err("Invalid device state\n");
+        return -EINVAL;
+    }
+
+    // Get frame source from file->private_data
+    fs = &dev->frame_sources[channel];
     fc = fs->private;
 
     if (!fs || !fc) {
@@ -3256,145 +3433,45 @@ static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int ch
         return -EINVAL;
     }
 
-    spin_lock_irqsave(&fs->lock, flags);
-
-    pr_info("Streaming state before %s:\n", enable ? "enable" : "disable");
-    pr_info("  fs=%p state=%d flags=0x%x\n", fs, fs->state, fs->flags);
-    pr_info("  dma_addr=0x%08x buf_base=%p\n",
-            (unsigned int)fs->dma_addr, fs->buf_base);
-    pr_info("  device buf_info: phys=0x%08x virt=%p\n",
-            dev->buf_info->buffer_start, (void *)dev->buf_info->virt_addr);
+    pr_info("Stream control: channel=%d enable=%d state=%d\n",
+            channel, enable, fs->state);
 
     if (enable) {
         // Check if already streaming
         if (fs->state == 2) {
             pr_warn("Channel %d already streaming\n", channel);
-            ret = -EBUSY;
-            goto unlock;
+            return -EBUSY;
         }
 
-        // Validate DMA setup
-        if (!fs->dma_addr || !fs->buf_base || !fs->buf_size) {
-            pr_err("Invalid buffer setup\n");
-            ret = -EINVAL;
-            goto unlock;
+        // Initialize frame source
+        ret = start_frame_source(dev, channel);
+        if (ret) {
+            pr_err("Failed to start frame source: %d\n", ret);
+            return ret;
         }
 
-        // Configure base buffer registers
-        writel(fs->dma_addr, reg_base + ISP_BUF0_REG);
-        writel(fs->buf_size, reg_base + ISP_BUF0_SIZE_REG);
-
-        // Configure additional frame buffers
-        for (int i = 1; i < fs->buf_cnt; i++) {
-            writel(fs->dma_addr + (i * fs->buf_size),
-                   reg_base + ISP_BUF0_REG + (i * 8));
-            writel(fs->buf_size,
-                   reg_base + ISP_BUF0_SIZE_REG + (i * 8));
-        }
-        wmb();
-
-        // Initialize buffer queue
-        INIT_LIST_HEAD(&fs->ready_queue);
-        INIT_LIST_HEAD(&fs->done_queue);
-        fs->fifo_depth = 0;
-        fs->frame_depth = 1;
-
-        // Initialize buffer descriptors
-        for (int i = 0; i < fs->buf_cnt; i++) {
-            fs->bufs[i].frame_count = 0;
-            fs->bufs[i].is_buffer_full = 0;
-        }
-
-        // Enable interrupts
-        writel(ISP_INT_FRAME_DONE | ISP_INT_BUF_FULL,
-               reg_base + ISP_INT_MASK_REG);
-
-        // Start streaming
-        fs->state = 2;
-        fs->flags |= 0x2;
-        fs->frame_cnt = 0;
-        fs->buf_index = 0;
-
-        // Enable frame processing
-        writel(0x1, reg_base + 0x7838);
-        wmb();
-        writel(0x1, reg_base + 0x783c);
-        wmb();
-
-        pr_info("Streaming enabled on channel %d:\n", channel);
-        pr_info("  DMA addr: 0x%08x\n", (unsigned int)fs->dma_addr);
-        pr_info("  Buffer size: %u x %d buffers\n", fs->buf_size, fs->buf_cnt);
-        pr_info("  State flags: 0x%x\n", fs->flags);
-
-        // Start frame processing thread
-        if (!fs->thread) {
-            spin_unlock_irqrestore(&fs->lock, flags);
-            fs->thread = kthread_run(isp_frame_thread, fs,
-                                   "isp-frame-%d", channel);
-            if (IS_ERR(fs->thread)) {
-                pr_err("Failed to start frame thread\n");
-                fs->thread = NULL;
-                stop_streaming(gISPdev);
-                return PTR_ERR(fs->thread);
-            }
-            spin_lock_irqsave(&fs->lock, flags);
-        }
+        // Note: Don't enable stream here - wait for VIDIOC_ENABLE_STREAM
 
     } else {
-        // Check if not streaming
+        // Check if in proper state
         if (fs->state != 2) {
-            pr_warn("Channel %d not streaming\n", channel);
-            ret = -EINVAL;
-            goto unlock;
+            pr_warn("Channel %d not in streaming state\n", channel);
+            return -EINVAL;
         }
 
-        // Disable frame processing
-        writel(0x0, reg_base + 0x7838);
-        writel(0x0, reg_base + 0x783c);
-        wmb();
-
-        // Disable interrupts
-        writel(0, reg_base + ISP_INT_MASK_REG);
-        writel(ISP_INT_FRAME_DONE | ISP_INT_BUF_FULL,
-               reg_base + ISP_INT_CLEAR_REG);
-
-        // Wait for pending operations
-        while (readl(reg_base + ISP_STATUS_REG) & 0x1) {
-            spin_unlock_irqrestore(&fs->lock, flags);
-            msleep(1);
-            spin_lock_irqsave(&fs->lock, flags);
+        // Disable stream first
+        ret = enable_stream(dev, channel, false);
+        if (ret) {
+            pr_err("Failed to disable stream: %d\n", ret);
+            return ret;
         }
-
-        // Stop frame thread
-        if (fs->thread) {
-            spin_unlock_irqrestore(&fs->lock, flags);
-            kthread_stop(fs->thread);
-            fs->thread = NULL;
-            spin_lock_irqsave(&fs->lock, flags);
-        }
-
-        // Reset queue state
-        INIT_LIST_HEAD(&fs->ready_queue);
-        INIT_LIST_HEAD(&fs->done_queue);
-        fs->fifo_depth = 0;
-        fs->frame_depth = 0;
 
         // Reset state
         fs->state = 1;
         fs->flags &= ~0x2;
-        fs->frame_cnt = 0;
-        fs->buf_index = 0;
-
-        pr_info("Streaming disabled on channel %d\n", channel);
     }
 
-unlock:
-    spin_unlock_irqrestore(&fs->lock, flags);
-
-    pr_info("Stream %s complete, new state=%d flags=0x%x\n",
-            enable ? "enable" : "disable", fs->state, fs->flags);
-
-    return ret;
+    return 0;
 }
 
 static int tisp_release(struct inode *inode, struct file *file)
@@ -3547,59 +3624,6 @@ struct isp_wdr_buf_size {
     __u32 size;        /* Required buffer size */
     __u32 tsize;       /* Total size needed */
 };
-
-/* WDR Mode definitions seen in decompiled code */
-#define WDR_MODE_NONE   0
-#define WDR_MODE_LINE   1    /* Line-interleaved WDR */
-#define WDR_MODE_FRAME  2    /* Frame-based WDR */
-
-/* WDR-related IOCTLs seen in decompiled */
-#define TX_ISP_WDR_SET_BUF    _IOW('V', 0x56d6, struct isp_wdr_buf_info)
-#define TX_ISP_WDR_GET_BUF    _IOR('V', 0x56d7, struct isp_wdr_buf_size)
-#define TX_ISP_WDR_OPEN       _IOW('V', 0x56d8, int)
-#define TX_ISP_WDR_CLOSE      _IOW('V', 0x56d9, int)
-
-
-// Custom IOCTL commands matching the decompiled code
-#define TX_ISP_SET_BUF           _IOW('V', 0x56d5, struct isp_buf_info)
-#define TX_ISP_VIDEO_LINK_SETUP  _IOW('V', 0x56d0, unsigned int)
-#define TX_ISP_SET_AE_ALGO_OPEN  _IOW('V', 0x56dd, struct isp_ae_algo)
-#define TX_ISP_SET_AWB_ALGO_OPEN _IOW('V', 0x56e2, struct isp_awb_algo)
-
-
-// Register definitions from the decompiled code
-#define ISP_REG_BASE      0x7800
-#define ISP_REG_BUF0     (ISP_REG_BASE + 0x20)  // 0x7820
-#define ISP_REG_BUF0_SIZE (ISP_REG_BASE + 0x24)  // 0x7824
-#define ISP_REG_BUF1     (ISP_REG_BASE + 0x28)  // 0x7828
-#define ISP_REG_BUF1_SIZE (ISP_REG_BASE + 0x2c)  // 0x782c
-#define ISP_REG_BUF2     (ISP_REG_BASE + 0x30)  // 0x7830
-#define ISP_REG_BUF2_SIZE (ISP_REG_BASE + 0x34)  // 0x7834
-#define ISP_REG_BUF3     (ISP_REG_BASE + 0x40)  // 0x7840
-#define ISP_REG_BUF3_SIZE (ISP_REG_BASE + 0x44)  // 0x7844
-#define ISP_REG_BUF4     (ISP_REG_BASE + 0x48)  // 0x7848
-#define ISP_REG_BUF4_SIZE (ISP_REG_BASE + 0x4c)  // 0x784c
-#define ISP_REG_BUF5     (ISP_REG_BASE + 0x50)  // 0x7850
-#define ISP_REG_BUF5_SIZE (ISP_REG_BASE + 0x54)  // 0x7854
-#define ISP_REG_BUF6     (ISP_REG_BASE + 0x58)  // 0x7858
-#define ISP_REG_BUF6_SIZE (ISP_REG_BASE + 0x5c)  // 0x785c
-#define ISP_REG_BUF7     (ISP_REG_BASE + 0x60)  // 0x7860
-#define ISP_REG_BUF7_SIZE (ISP_REG_BASE + 0x64)  // 0x7864
-#define ISP_REG_BUF8     (ISP_REG_BASE + 0x68)  // 0x7868
-#define ISP_REG_BUF8_SIZE (ISP_REG_BASE + 0x6c)  // 0x786c
-#define ISP_REG_CTRL     (ISP_REG_BASE + 0x38)  // 0x7838
-#define ISP_REG_START    (ISP_REG_BASE + 0x3c)  // 0x783c
-
-// WDR Register definitions from decompiled code
-#define WDR_REG_BASE     0x2000
-#define WDR_REG_BUF      (WDR_REG_BASE + 0x04)  // 0x2004
-#define WDR_REG_LINE     (WDR_REG_BASE + 0x08)  // 0x2008
-#define WDR_REG_HEIGHT   (WDR_REG_BASE + 0x0c)  // 0x200c
-
-// WDR modes from decompiled code
-#define WDR_MODE_NONE    0
-#define WDR_MODE_LINE    1
-#define WDR_MODE_FRAME   2
 
 struct wdr_reg_info {
     uint32_t width;      // offset 0x124 in decompiled
@@ -4964,12 +4988,17 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
         break;
     }
-	case VIDIOC_ENABLE_STREAM: {
-        int channel = 0;  // Default channel
-        ret = enable_isp_streaming(gISPdev, file, channel, 1);
-        pr_info("Stream enable returned %d\n", ret);
-        break;
-	}
+    case VIDIOC_ENABLE_STREAM: {
+        struct isp_framesource_state *fs = file->private_data;
+        int channel = fs ? fs->chn_num : 0;
+
+        pr_info("Enable stream IOCTL request on channel %d\n", channel);
+
+        ret = enable_stream(gISPdev, channel, 1);
+        pr_info("Enable stream returned %d\n", ret);
+
+        return ret;
+    }
     case TX_ISP_SET_BUF: {  // 0x800856d5
         struct imp_buffer_info *buf_info = (struct imp_buffer_info *)arg;
         pr_info("tx_isp: SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
@@ -5140,34 +5169,19 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     // 0x80045612
     case VIDIOC_STREAMON:  // 0x80045612
     {
+        struct isp_framesource_state *fs = &gISPdev->frame_sources[0];
         pr_info("Stream ON requested\n");
-        channel = 0;  // Default to first channel for ISP device
 
-        struct isp_framesource_state *fs = &gISPdev->frame_sources[channel];
-        if (!fs) {
-            pr_err("No frame source available\n");
-            return -EINVAL;
-        }
+        // Store frame source in file private data
+        file->private_data = fs;
 
-        // Make sure state is initialized
-        if (!fs->is_open) {
-            fs->width = 1920;  // Default resolution
-            fs->height = 1080;
-            fs->buf_cnt = 4;
-            fs->buf_size = 0;  // Will be calculated in setup
-            fs->state = 0;
-            fs->is_open = 1;
-            sema_init(&fs->sem, 1);
-            init_waitqueue_head(&fs->wait);
-        }
-
-        ret = setup_frame_source(gISPdev, channel);
+        ret = setup_frame_source(gISPdev, 0);
         if (ret) {
             pr_err("Failed to setup frame source: %d\n", ret);
             return ret;
         }
 
-        ret = start_frame_source(gISPdev, channel);
+        ret = start_frame_source(gISPdev, 0);
         if (ret) {
             pr_err("Failed to start frame source: %d\n", ret);
             return ret;
@@ -5988,10 +6002,16 @@ static int tisp_probe(struct platform_device *pdev)
         goto err_cleanup_memory;
     }
 
+    ret = setup_isp_subdevs(gISPdev);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to setup subdevices\n");
+        goto err_cleanup_memory;
+    }
+
     ret = create_framechan_devices(&pdev->dev);
 	if (ret) {
     	dev_err(&pdev->dev, "Failed to create frame channels\n");
-    	goto err_free_memory;
+    	goto err_cleanup_memory;
 	}
 
     dev_info(&pdev->dev, "TISP device probed successfully\n");
