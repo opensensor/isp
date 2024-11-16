@@ -2933,7 +2933,16 @@ static int setup_frame_source(struct IMPISPDev *dev, int channel) {
 
     // Calculate buffer layout
     pr_info("Setting up frame source format: NV12\n");
-    fc->buf_size = (fs->width / 2) * fs->height * 3; // NV12, rearrange to stay in 32-bit
+    // Force proper line size calculation for NV12
+    uint32_t y_line_size = ALIGN(fs->width, 32);  // Align to 32 bytes
+    uint32_t uv_line_size = ALIGN(fs->width/2, 32); // UV is half width
+
+    // Y plane size + UV plane size
+    fs->buf_size = (y_line_size * fs->height) +
+                   (uv_line_size * fs->height/2);
+
+    pr_info("Buffer config: y_line=%d uv_line=%d total=%d\n",
+            y_line_size, uv_line_size, fs->buf_size);
     fs->fmt = ISP_FMT_NV12;  // Force NV12 format
 
     // Important: Set line stride for NV12
@@ -5554,7 +5563,20 @@ static int configure_streaming_hardware(struct IMPISPDev *dev)
     pr_info("  Resolution: %dx%d\n", fs->width, fs->height);
     pr_info("  Buffer config: addr=0x%x size=%d count=%d\n",
             (unsigned int)fc->dma_addr, fc->buf_size, fc->buf_cnt);
+    // Add after register writes:
+    pr_info("ISP register state:\n");
+    pr_info("  CTRL: 0x%08x\n", readl(dev->regs + ISP_CTRL_REG));
+    pr_info("  FORMAT: in=0x%08x out=0x%08x\n",
+            readl(dev->regs + ISP_INPUT_FORMAT_REG),
+            readl(dev->regs + ISP_OUTPUT_FORMAT_REG));
+    pr_info("  BYPASS: 0x%08x\n", readl(dev->regs + ISP_BYPASS_BASE));
+    pr_info("  STATUS: 0x%08x\n", readl(dev->regs + ISP_STATUS_REG));
 
+    // Also read back buffer config
+    pr_info("Buffer config readback:\n");
+    pr_info("  BUF0: addr=0x%08x size=0x%08x\n",
+            readl(dev->regs + ISP_BUF0_OFFSET),
+            readl(dev->regs + ISP_BUF0_OFFSET + 0x4));
     return 0;
 }
 
@@ -5566,6 +5588,16 @@ static int handle_stream_enable(struct IMPISPDev *dev, bool enable)
         return -EINVAL;
 
     pr_info("Configuring stream enable=%d\n", enable);
+
+    // Add before enabling stream:
+    struct i2c_client *client = dev->sensor_i2c_client;
+
+    // Force sensor to output data
+    isp_sensor_write_reg(client, 0x0100, 0x01); // Streaming
+    isp_sensor_write_reg(client, 0x3f00, 0x00); // Format control
+    isp_sensor_write_reg(client, 0x3f04, 0x03); // Raw10
+
+    msleep(30); // Wait for sensor
 
     // Proper sequence:
     writel(0x1, regs + ISP_CTRL_REG);  // Enable core first
@@ -5645,33 +5677,52 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
 
     switch (cmd) {
-	case VIDIOC_REGISTER_SENSOR: { // cmd=0x805056c1
-	    struct i2c_client *client = ourISPdev->sensor_i2c_client;
-	    unsigned char val_h = 0, val_l = 0;
-	    int i;
+    case VIDIOC_REGISTER_SENSOR: {
+        struct i2c_client *client = ourISPdev->sensor_i2c_client;
+        unsigned char val_h = 0, val_l = 0;
+        int i;
 
-	    // Reset sensor with delay after
-	    isp_sensor_write_reg(client, 0x0103, 0x01);
-	    msleep(20);
+        // Reset sensor with delay after
+        isp_sensor_write_reg(client, 0x0103, 0x01);
+        msleep(20);
 
-	    // Init basic sensor settings before ID read
-	    isp_sensor_write_reg(client, 0x3018, 0x72);  // Init register from sc2336.c
-	    isp_sensor_write_reg(client, 0x3031, 0x0A);  // Init register from sc2336.c //  TODO try 0x3231564e
-	    msleep(10);
+        // Init basic sensor settings before ID read
+        isp_sensor_write_reg(client, 0x3018, 0x72);
+        isp_sensor_write_reg(client, 0x3031, 0x0A);
+        msleep(10);
 
-	    // Read ID with multiple retries
-	    for (i = 0; i < 3; i++) {
-	        // Read ID from correct registers now
-	        ret = isp_sensor_read_reg(client, 0x3107, &val_h);
-	        ret |= isp_sensor_read_reg(client, 0x3108, &val_l);
-	        pr_info("SC2336: ID = 0x%02x%02x (retry %d)\n", val_h, val_l, i);
+        // Read ID with multiple retries
+        for (i = 0; i < 3; i++) {
+            ret = isp_sensor_read_reg(client, 0x3107, &val_h);
+            ret |= isp_sensor_read_reg(client, 0x3108, &val_l);
+            pr_info("SC2336: ID = 0x%02x%02x (retry %d)\n", val_h, val_l, i);
 
-	        if (ret == 0) break;
-	        msleep(10);
-	    }
+            if (ret == 0) break;
+            msleep(10);
+        }
 
-	    return ret;
-	}
+        if (ret == 0) {
+            // Now that we've confirmed sensor comms, set up key registers
+            ret |= isp_sensor_write_reg(client, 0x3e08, 0x03); // Gain high
+            ret |= isp_sensor_write_reg(client, 0x3e09, 0x10); // Gain low
+            ret |= isp_sensor_write_reg(client, 0x3e01, 0x0a); // Exposure high
+            ret |= isp_sensor_write_reg(client, 0x3e02, 0x00); // Exposure low
+
+            // Add format control
+            ret |= isp_sensor_write_reg(client, 0x3f00, 0x00); // Output format
+            ret |= isp_sensor_write_reg(client, 0x3f04, 0x03); // Data format - RAW10
+            ret |= isp_sensor_write_reg(client, 0x3f05, 0x00); // VSYNC/HSYNC polarity
+
+            if (ret) {
+                pr_err("Failed to initialize sensor registers\n");
+                return ret;
+            }
+
+            pr_info("Sensor initialization complete\n");
+        }
+
+        return ret;
+    }
 	case VIDIOC_GET_SENSOR_ENUMERATION: {
 		struct sensor_list_req {
 	        int idx;    // Input index
@@ -7120,55 +7171,31 @@ static int setup_i2c_sensor(struct IMPISPDev *dev)
 {
     struct i2c_client *client;
     struct i2c_adapter *adapter;
-    struct sensor_win_size *wsize;
-    int ret;
 
-    // Allocate window size structure
-    wsize = kzalloc(sizeof(*wsize), GFP_KERNEL);
-    if (!wsize)
-        return -ENOMEM;
-
-    // Configure default resolution for SC2336
-    wsize->width = 1920;
-    wsize->height = 1080;
-    wsize->fps = 30;
-    wsize->max_fps = 30;
-    wsize->format = ISP_FMT_NV12;
+    // Just get the adapter and create device
+    adapter = i2c_get_adapter(0);
+    if (!adapter) {
+        pr_err("Failed to get I2C adapter 0\n");
+        return -ENODEV;
+    }
 
     struct i2c_board_info board_info = {
         .type = "sc2336",
         .addr = 0x30,  // Match sensor I2C address
-        .platform_data = wsize,  // Set platform data
     };
-
-    adapter = i2c_get_adapter(0);  // Primary I2C bus
-    if (!adapter) {
-        kfree(wsize);
-        return -ENODEV;
-    }
 
     client = i2c_new_device(adapter, &board_info);
     if (!client) {
-        kfree(wsize);
+        pr_err("Failed to create I2C device\n");
         i2c_put_adapter(adapter);
         return -ENODEV;
     }
 
-    // Store window size in sensor client platform data
-    client->dev.platform_data = wsize;
+    // Just store the client - no register access yet
     dev->sensor_i2c_client = client;
 
-    // Initialize sensor parameters - add this call
-    ret = init_sensor_parameters(dev);
-    if (ret) {
-        pr_err("Failed to initialize sensor parameters: %d\n", ret);
-        i2c_unregister_device(client);
-        kfree(wsize);
-        return ret;
-    }
-
-    pr_info("Sensor initialized with resolution %dx%d @ %d fps\n",
-            wsize->width, wsize->height, wsize->fps);
+    pr_info("I2C setup complete: adapter=%d client=%p\n",
+            adapter->nr, client);
 
     return 0;
 }
