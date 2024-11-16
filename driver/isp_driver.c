@@ -3077,48 +3077,50 @@ static void cleanup_frame_source(struct IMPISPDev *dev, int channel)
 static int init_frame_source(struct IMPISPDev *dev, int channel) {
     struct isp_framesource_state *fs = &dev->frame_sources[channel];
     struct frame_source_channel *fc;
-    uint32_t base_addr;
+    uint32_t base_offset = 0x1094d4;
 
     // Clear structure
     memset(fs, 0, sizeof(*fs));
 
+    // Allocate aligned channel data
+    fc = kzalloc(sizeof(*fc), GFP_KERNEL | GFP_DMA);
+    if (!fc) {
+        pr_err("Failed to allocate channel data\n");
+        return -ENOMEM;
+    }
+
     // Get dimensions from sensor
     struct sensor_win_size *wsize = dev->sensor_i2c_client->dev.platform_data;
     if (!wsize) {
+        kfree(fc);
         pr_err("No sensor window size information\n");
         return -EINVAL;
     }
 
     fs->width = wsize->width;
     fs->height = wsize->height;
+    fs->chn_num = channel;
 
     // Important: Use aligned buffer size
-    fs->buf_size = ALIGN(fs->width * fs->height * 2, ISP_FRAME_BUFFER_ALIGN);
+    fs->buf_size = ALIGN(fs->width * fs->height * 2, 8);
     fs->buf_cnt = 4;  // Must match libimp
 
-    // Calculate base address with correct offset
-    base_addr = ISP_DMA_BUFFER_BASE + ISP_FRAME_BUFFER_OFFSET +
-                (channel * fs->buf_size * fs->buf_cnt);
+    // Calculate aligned base address
+    uint32_t aligned_offset = ALIGN(base_offset +
+                                  (channel * fs->buf_size * fs->buf_cnt), 8);
 
-    // Allocate and initialize channel data
-    fc = kzalloc(sizeof(*fc), GFP_KERNEL);
-    if (!fc) {
-        pr_err("Failed to allocate channel data\n");
-        return -ENOMEM;
-    }
+    // Map DMA memory with proper alignment
+    fs->buf_base = dev->dma_buf + aligned_offset;
+    fs->dma_addr = dev->dma_addr + aligned_offset;
 
-    // Setup channel buffer info
-    fc->buf_cnt = fs->buf_cnt;
+    // Initialize channel data
+    fc->buf_base = fs->buf_base;
+    fc->dma_addr = fs->dma_addr;
     fc->buf_size = fs->buf_size;
+    fc->buf_cnt = fs->buf_cnt;
     fc->state = 1;  // Ready state
-    fc->channel_offset = channel * 0x2e8;
-    fc->write_idx = 0;
 
-    // Important: Use properly aligned addresses
-    fc->dma_addr = ALIGN(base_addr, ISP_FRAME_BUFFER_ALIGN);
-    fc->buf_base = dev->dma_buf + (fc->dma_addr - ISP_DMA_BUFFER_BASE);
-
-    // Initialize ALL synchronization primitives
+    // Initialize synchronization primitives
     mutex_init(&fc->lock);
     sema_init(&fc->sem, 0);
     spin_lock_init(&fc->queue_lock);
@@ -3127,45 +3129,15 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
     init_waitqueue_head(&fc->wait);
     atomic_set(&fc->frame_count, 0);
 
-    // Store private data
     fs->private = fc;
-    fs->dma_addr = fc->dma_addr;
-    fs->buf_base = fc->buf_base;
-
-    // Initialize sync primitives
-    mutex_init(&fs->sem);
-    init_waitqueue_head(&fs->wait);
-    spin_lock_init(&fs->lock);
-
-    // Initialize buffer info array
-    fs->bufs = kzalloc(sizeof(struct isp_buffer_info) * fs->buf_cnt, GFP_KERNEL);
-    if (!fs->bufs) {
-        kfree(fc);
-        return -ENOMEM;
-    }
-
-    // Initialize buffers
-    int i;
-    for (i = 0; i < fs->buf_cnt; i++) {
-        fs->bufs[i].method = ISP_ALLOC_KMALLOC;
-        fs->bufs[i].buffer_start = fc->dma_addr + (i * fc->buf_size);
-        fs->bufs[i].virt_addr = (unsigned long)(fc->buf_base + (i * fc->buf_size));
-        fs->bufs[i].buffer_size = fc->buf_size;
-        fs->bufs[i].flags = 1;
-    }
-
-    fs->state = 1;  // Ready state
-    fs->magic = 0x336ac;  // Match libimp magic
-    fs->fmt = 0xa;  // YUV422
+    fs->state = 1;
     fs->is_open = 1;
 
     pr_info("Initialized frame source %d:\n"
             "  width=%d height=%d buf_size=%d\n"
-            "  dma_addr=0x%x buf_base=%p\n"
-            "  private=%p bufs=%p\n",
+            "  dma_addr=0x%x buf_base=%p aligned_offset=0x%x\n",
             channel, fs->width, fs->height, fs->buf_size,
-            (unsigned int)fc->dma_addr, fc->buf_base,
-            fs->private, fs->bufs);
+            (unsigned int)fc->dma_addr, fc->buf_base, aligned_offset);
 
     return 0;
 }
@@ -6390,7 +6362,7 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
             struct frame_source_channel *fc = fs->private;
             int ret;
 
-            pr_info("Stream ON request for channel\n");
+            pr_info("Stream ON request for channel %d\n", fs->chn_num);
 
             // Validate state
             if (!fc || !fs->buf_base) {
@@ -6403,22 +6375,53 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
                 return 0;
             }
 
-            // Start streaming
-            fs->state = 2;  // Set to streaming state
-            fs->flags |= 0x2;  // Set streaming flag
+            // First set ready state
+            fs->state = 1;
 
-            // Configure DMA
+            // Initialize frame queues if needed
+            if (!fs->fifo_initialized) {
+                INIT_LIST_HEAD(&fs->ready_queue);
+                INIT_LIST_HEAD(&fs->done_queue);
+                fs->fifo_depth = 0;
+                fs->fifo_initialized = true;
+            }
+
+            // Allocate and initialize frame nodes (simulating VBMCreatePool)
+            for (int i = 0; i < fs->buf_cnt; i++) {
+                struct frame_node *node = alloc_frame_node(fc);
+                if (!node) {
+                    pr_err("Failed to allocate frame node %d\n", i);
+                    return -ENOMEM;
+                }
+                list_add_tail(&node->list, &fs->ready_queue);
+                atomic_inc(&fc->frame_count);
+            }
+
+            // Configure DMA buffer registers first
             writel(fc->dma_addr, ourISPdev->regs + ISP_BUF0_OFFSET);
             writel(fc->buf_size, ourISPdev->regs + ISP_BUF0_OFFSET + 0x4);
+
+            // Configure additional buffers if needed
+            for (int i = 1; i < fc->buf_cnt; i++) {
+                unsigned int reg_offset = ISP_BUF0_OFFSET + (i * ISP_BUF_SIZE_STEP);
+                writel(fc->dma_addr + (i * fc->buf_size), ourISPdev->regs + reg_offset);
+                writel(fc->buf_size, ourISPdev->regs + reg_offset + 0x4);
+            }
             wmb();
 
-            // Enable streaming
+            // Enable streaming last
             writel(0x1, ourISPdev->regs + ISP_STREAM_CTRL);
+            wmb();
+            udelay(100);  // Add small delay between writes
             writel(0x1, ourISPdev->regs + ISP_STREAM_START);
             wmb();
 
-            pr_info("Streaming started: dma=0x%x size=%d\n",
-                    (unsigned int)fc->dma_addr, fc->buf_size);
+            // Update state after streaming enabled
+            fs->state = 2;  // Now set streaming state
+            fs->flags |= 0x2;
+
+            pr_info("Streaming started on channel %d: dma=0x%x size=%d count=%d\n",
+                    fs->chn_num, (unsigned int)fc->dma_addr, fc->buf_size, fc->buf_cnt);
 
             return 0;
         }
@@ -6431,10 +6434,17 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
                 return -EINVAL;
             }
 
+            // Never return 0 for buffer size
+            uint32_t buf_size = fc->buf_size;
+            if (buf_size == 0) {
+                buf_size = fs->width * fs->height * 2;  // Default to YUV422 size
+                pr_info("Using calculated buffer size: %d\n", buf_size);
+            }
+
             memset(&info, 0, sizeof(info));
             info.channel = fs->chn_num;
-            info.buffer_size = fc->buf_size;
-            info.count = fc->buf_cnt;
+            info.buffer_size = buf_size;
+            info.count = fc->buf_cnt ? fc->buf_cnt : 4;  // Default to 4 buffers
             info.flags = fs->flags;
             info.status = fs->state;
 
@@ -6467,21 +6477,36 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
                     mode.channel, mode.mode, mode.width, mode.height,
                     mode.format, mode.flags);
 
+            // If width/height are 0, keep existing values
+            if (mode.width == 0 || mode.height == 0) {
+                mode.width = fs->width;
+                mode.height = fs->height;
+                pr_info("Using existing dimensions: %dx%d\n", mode.width, mode.height);
+            }
+
+            // If format is 0, keep existing format
+            if (mode.format == 0) {
+                mode.format = fs->fmt ? fs->fmt : 0x3231564e; // Default to YUV422
+                pr_info("Using format: 0x%x\n", mode.format);
+            }
+
             // Update frame source configuration
             fs->width = mode.width;
             fs->height = mode.height;
             fs->fmt = mode.format;
 
-            // Update buffer size if needed
-            uint32_t new_buf_size = mode.buf_size ? mode.buf_size :
-                                   (mode.width * mode.height * 2); // Default to YUV422
+            // Calculate buffer size if not provided
+            if (mode.buf_size == 0) {
+                mode.buf_size = mode.width * mode.height * 2; // YUV422
+                pr_info("Calculated buffer size: %d\n", mode.buf_size);
+            }
 
-            if (new_buf_size != fc->buf_size) {
-                // Only update if different to avoid unnecessary reconfigs
-                fc->buf_size = new_buf_size;
-                fs->buf_size = new_buf_size;
+            // Update buffer size
+            if (mode.buf_size != fc->buf_size) {
+                fc->buf_size = mode.buf_size;
+                fs->buf_size = mode.buf_size;
 
-                pr_info("Updated buffer size: %d bytes\n", new_buf_size);
+                pr_info("Updated buffer size: %d bytes\n", mode.buf_size);
 
                 // Reconfigure DMA if streaming
                 if (fs->state == 2) {
@@ -6501,16 +6526,27 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 static int framechan_release(struct inode *inode, struct file *file)
 {
     struct isp_framesource_state *fs = file->private_data;
+    struct frame_source_channel *fc;
 
-    if (fs && fs->is_open) {
-        mutex_lock(&fs->sem);
-        if (fs->buf_base) {
-            iounmap(fs->buf_base);
-            fs->buf_base = NULL;
+    if (!fs)
+        return 0;
+
+    fc = fs->private;
+    if (fc) {
+        // Clean up channel data
+        if (fs->state == 2) {
+            // Disable streaming first
+            writel(0, ourISPdev->regs + ISP_STREAM_START);
+            writel(0, ourISPdev->regs + ISP_STREAM_CTRL);
+            wmb();
+            fs->state = 1;
         }
-        fs->is_open = 0;
-        mutex_unlock(&fs->sem);
+
+        kfree(fc);
+        fs->private = NULL;
     }
+
+    fs->is_open = 0;
     return 0;
 }
 
