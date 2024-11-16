@@ -134,6 +134,12 @@ static struct proc_data *proc_data_w02 = NULL;
 #define ISP_CTRL_RESET     BIT(1)    // Reset bit
 #define ISP_CTRL_CAPTURE   BIT(2)    // Capture enable
 
+
+// Match libimp's DMA buffer layout
+#define ISP_FRAME_BUFFER_OFFSET 0x1094d4  // From libimp
+#define ISP_FRAME_BUFFER_ALIGN  0x1000
+#define ISP_DMA_BUFFER_BASE    0x2a80000
+
 struct isp_memory_info {
     void *virt_addr;         // Kernel virtual address
     dma_addr_t phys_addr;    // Physical/DMA address
@@ -590,6 +596,28 @@ struct sensor_info {
 static struct sensor_info registered_sensors[MAX_SENSORS];
 static int num_registered_sensors = 0;
 
+// Add these structures to match libimp's buffer management
+struct frame_node {
+    uint32_t magic;         // 0x336ac
+    uint32_t index;         // Buffer index
+    uint32_t frame_size;    // Frame data size
+    uint32_t timestamp;     // Frame timestamp
+    void *data;            // Frame data pointer
+    struct list_head list;  // For queue management
+};
+
+struct frame_queue {
+    spinlock_t lock;                // Protect queue access
+    struct list_head ready_list;    // Ready frames
+    struct list_head done_list;     // Completed frames
+    wait_queue_head_t wait;         // Wait queue for frames
+    atomic_t frame_count;           // Number of frames in queue
+    uint32_t max_frames;            // Maximum frames in queue
+};
+
+// Add to frame_source_channel structure
+struct frame_queue frame_queue;
+
 //
 //// Private wrapper functions (example)
 void private_i2c_del_driver(struct i2c_driver *driver)
@@ -1005,6 +1033,7 @@ static void handle_frame_complete(struct isp_framesource_state *fs)
 #define ISP_INT_DMA_ERR    BIT(1)    // DMA error
 #define ISP_INT_BUF_FULL   BIT(2)    // Buffer full
 
+/* Update frame_source_channel struct */
 struct frame_source_channel {
     uint32_t state;              // 0x1c: State (1=ready, 2=streaming)
     void *buf_base;              // Base buffer address
@@ -1016,70 +1045,73 @@ struct frame_source_channel {
     struct semaphore sem;        // Buffer semaphore
     struct mutex lock;           // Access lock
     uint32_t channel_offset;     // Channel offset in memory
-    // Add fields to match 0x2e8 total size seen in code
+
+    // Frame queue management
+    spinlock_t queue_lock;
+    struct list_head ready_list;
+    struct list_head done_list;
+    wait_queue_head_t wait;
+    atomic_t frame_count;
+    uint32_t max_frames;
+
+    // Pad to match expected size
+    uint8_t padding[0x2e8 - sizeof(struct mutex) - sizeof(struct semaphore) -
+                    sizeof(spinlock_t) - sizeof(struct list_head) * 2 -
+                    sizeof(wait_queue_head_t) - sizeof(atomic_t) -
+                    sizeof(uint32_t) * 8];
 };
 
-static irqreturn_t isp_irq_handler(int irq, void *dev_id) {
+static irqreturn_t isp_irq_handler(int irq, void *dev_id)
+{
     struct IMPISPDev *dev = dev_id;
     struct isp_framesource_state *fs;
     struct frame_source_channel *fc;
+    struct frame_node *node;
+    unsigned long flags;
+    struct timespec ts;
     u32 status;
 
-    if (!dev || !dev->regs) {
-        pr_err("Invalid device in IRQ handler\n");
+    if (!dev || !dev->regs)
         return IRQ_NONE;
-    }
 
-    // Read and log status for debugging
-    status = readl(dev->regs + ISP_INT_STATUS_REG);
-    pr_debug("ISP IRQ status: 0x%08x\n", status);
-
-    if (!(status & ISP_INT_FRAME_DONE)) {
-        if (status & ISP_INT_DMA_ERR)
-            pr_err("ISP DMA error\n");
-        if (status & ISP_INT_BUF_FULL)
-            pr_err("ISP buffer full\n");
+    status = readl(dev->regs + ISP_STATUS_REG);
+    if (!(status & ISP_INT_FRAME_DONE))
         return IRQ_NONE;
-    }
-
-    // Clear only the handled interrupts
-    writel(status & ISP_INT_FRAME_DONE, dev->regs + ISP_INT_CLEAR_REG);
-    wmb();
 
     fs = &dev->frame_sources[0];
-    if (!fs || !fs->is_open) {
-        pr_err("No active frame source in IRQ\n");
-        return IRQ_HANDLED;
-    }
-
     fc = fs->private;
-    if (!fc) {
-        pr_err("No frame channel data in IRQ\n");
+    if (!fs || !fc)
         return IRQ_HANDLED;
-    }
 
-    // Lock access to buffer state
-    if (mutex_trylock(&fc->lock)) {
-        // Update buffer indices
-        fs->buf_index = (fs->buf_index + 1) % fs->buf_cnt;
+    spin_lock_irqsave(&fc->queue_lock, flags);
+
+    // Get next ready node
+    if (!list_empty(&fc->ready_list)) {
+        node = list_first_entry(&fc->ready_list, struct frame_node, list);
+
+        // Fill frame info
+        node->index = fc->write_idx;
+        ktime_get_ts(&ts);
+        node->timestamp = timespec_to_ns(&ts);
+
+        // Move to done queue
+        list_move_tail(&node->list, &fc->done_list);
+
+        // Update indices
         fc->write_idx = (fc->write_idx + 1) % fc->buf_cnt;
-        fs->frame_cnt++;
 
-        // Configure next buffer
-        writel(fc->dma_addr + (fs->buf_index * fc->buf_size),
-               dev->regs + ISP_BUF0_REG);
-        writel(fc->buf_size, dev->regs + ISP_BUF0_SIZE_REG);
-        wmb();
-
-        mutex_unlock(&fc->lock);
+        // Wake up waiters
+        wake_up(&fc->wait);
     }
 
-    // Signal new frame
-    up(&fc->sem);
-    wake_up(&fs->wait);
+    spin_unlock_irqrestore(&fc->queue_lock, flags);
+
+    // Clear interrupt
+    writel(ISP_INT_FRAME_DONE, dev->regs + ISP_INT_CLEAR_REG);
 
     return IRQ_HANDLED;
 }
+
 
 static irqreturn_t isp_irq_thread_handle(int irq, void* interrupt_data)
 {
@@ -2921,22 +2953,16 @@ static void cleanup_frame_source(struct IMPISPDev *dev, int channel)
     fs->is_open = 0;
 }
 
-static int init_frame_source(struct IMPISPDev *dev, int channel)
-{
+
+static int init_frame_source(struct IMPISPDev *dev, int channel) {
     struct isp_framesource_state *fs = &dev->frame_sources[channel];
     struct frame_source_channel *fc;
+    uint32_t base_addr, buf_size;
 
     // Clear structure
     memset(fs, 0, sizeof(*fs));
 
-    // Initialize basic parameters
-    fs->magic = 0x336ac;  // Magic from decompiled code
-    fs->buf_cnt = 4;
-    fs->fmt = 0xa;  // YUV422 default format
-    fs->state = 1;  // Ready state
-    fs->chn_num = channel;
-
-    // Set default resolution based on channel
+    // Calculate buffer parameters
     if (channel == 0) {
         fs->width = 1920;
         fs->height = 1080;
@@ -2945,36 +2971,41 @@ static int init_frame_source(struct IMPISPDev *dev, int channel)
         fs->height = 360;
     }
 
-    // Calculate buffer size
-    fs->buf_size = fs->width * fs->height * 2; // YUV422
+    // Important: Use aligned buffer size
+    fs->buf_size = ALIGN(fs->width * fs->height * 2, ISP_FRAME_BUFFER_ALIGN);
+    fs->buf_cnt = 4;  // Must match libimp
 
-    // Allocate private data structure
+    // Calculate base address with correct offset
+    base_addr = ISP_DMA_BUFFER_BASE + ISP_FRAME_BUFFER_OFFSET +
+                (channel * fs->buf_size * fs->buf_cnt);
+
+    // Allocate and initialize channel data
     fc = kzalloc(sizeof(*fc), GFP_KERNEL);
     if (!fc) {
-        pr_err("Failed to allocate frame channel data\n");
+        pr_err("Failed to allocate channel data\n");
         return -ENOMEM;
     }
 
-    // Initialize channel data
+    // Setup channel buffer info
     fc->buf_cnt = fs->buf_cnt;
-    fc->state = 1;  // Ready state
-    fc->channel_offset = channel * 0x2e8;  // From decompiled offset calc
-    fc->write_idx = 0;
     fc->buf_size = fs->buf_size;
+    fc->state = 1;  // Ready state
+    fc->channel_offset = channel * 0x2e8;
+    fc->write_idx = 0;
 
-    // Calculate buffer addresses with proper base offset
-    uint32_t base_offset = 0x1094d4;  // Offset from decompiled code
-    fc->buf_base = dev->dma_buf + base_offset + (channel * fs->buf_size * fs->buf_cnt);
-    fc->dma_addr = dev->dma_addr + base_offset + (channel * fs->buf_size * fs->buf_cnt);
+    // Important: Use properly aligned addresses
+    fc->dma_addr = ALIGN(base_addr, ISP_FRAME_BUFFER_ALIGN);
+    fc->buf_base = dev->dma_buf + (fc->dma_addr - ISP_DMA_BUFFER_BASE);
 
-    // Initialize synchronization primitives
     mutex_init(&fc->lock);
-    sema_init(&fc->sem, 0);  // Start with no frames
+    sema_init(&fc->sem, 0);
 
     // Store private data
     fs->private = fc;
+    fs->dma_addr = fc->dma_addr;
+    fs->buf_base = fc->buf_base;
 
-    // Initialize synchronization
+    // Initialize sync primitives
     mutex_init(&fs->sem);
     init_waitqueue_head(&fs->wait);
     spin_lock_init(&fs->lock);
@@ -2986,17 +3017,18 @@ static int init_frame_source(struct IMPISPDev *dev, int channel)
         return -ENOMEM;
     }
 
-    // Initialize each buffer
+    // Initialize buffers
     for (int i = 0; i < fs->buf_cnt; i++) {
         fs->bufs[i].method = ISP_ALLOC_KMALLOC;
         fs->bufs[i].buffer_start = fc->dma_addr + (i * fc->buf_size);
         fs->bufs[i].virt_addr = (unsigned long)(fc->buf_base + (i * fc->buf_size));
         fs->bufs[i].buffer_size = fc->buf_size;
         fs->bufs[i].flags = 1;
-        fs->bufs[i].frame_count = 0;
-        fs->bufs[i].is_buffer_full = 0;
     }
 
+    fs->state = 1;  // Ready state
+    fs->magic = 0x336ac;
+    fs->fmt = 0xa;  // YUV422
     fs->is_open = 1;
 
     pr_info("Initialized frame source %d:\n"
@@ -3344,11 +3376,52 @@ struct isp_subdev_link {
     void *sink;
 };
 
+// Initialize frame queue in init_frame_source
+static int init_frame_queue(struct frame_source_channel *fc)
+{
+    spin_lock_init(&fc->queue_lock);
+    INIT_LIST_HEAD(&fc->ready_list);
+    INIT_LIST_HEAD(&fc->done_list);
+    init_waitqueue_head(&fc->wait);
+    atomic_set(&fc->frame_count, 0);
+    fc->max_frames = fc->buf_cnt;
+
+    return 0;
+}
+
+// Add buffer management functions
+static struct frame_node *alloc_frame_node(struct frame_source_channel *fc)
+{
+    struct frame_node *node;
+
+    node = kzalloc(sizeof(*node), GFP_KERNEL);
+    if (!node)
+        return NULL;
+
+    node->magic = 0x336ac;
+    node->frame_size = fc->buf_size;
+    node->data = fc->buf_base + (fc->write_idx * fc->buf_size);
+    INIT_LIST_HEAD(&node->list);
+
+    return node;
+}
+
+static void free_frame_node(struct frame_node *node)
+{
+    if (node) {
+        list_del(&node->list);
+        kfree(node);
+    }
+}
+
 
 static int enable_stream(struct IMPISPDev *dev, int channel, bool enable) {
     struct isp_framesource_state *fs;
+    struct frame_source_channel *fc;
+    void __iomem *regs;
     unsigned long flags;
     int ret = 0;
+    int i;
 
     pr_info("Enable stream request: channel=%d enable=%d\n", channel, enable);
 
@@ -3358,14 +3431,16 @@ static int enable_stream(struct IMPISPDev *dev, int channel, bool enable) {
     }
 
     fs = &dev->frame_sources[channel];
-    if (!fs || !fs->private) {
+    fc = fs->private;
+    regs = dev->regs;
+
+    if (!fs || !fc) {
         pr_err("Invalid frame source state\n");
         return -EINVAL;
     }
 
-    spin_lock_irqsave(&fs->lock, flags);
+    spin_lock_irqsave(&fc->queue_lock, flags);
 
-    // Check state
     if (enable) {
         if (fs->state != 2) {
             pr_err("Channel %d not in streaming state\n", channel);
@@ -3373,14 +3448,34 @@ static int enable_stream(struct IMPISPDev *dev, int channel, bool enable) {
             goto unlock;
         }
 
-        // Configure stream control registers
-        writel(0x1, dev->regs + ISP_STREAM_CTRL);
-        wmb();
-        writel(0x1, dev->regs + ISP_STREAM_START);
+        // Initialize frame nodes
+        for (i = 0; i < fc->buf_cnt; i++) {
+            struct frame_node *node = alloc_frame_node(fc);
+            if (!node) {
+                ret = -ENOMEM;
+                goto cleanup;
+            }
+            list_add_tail(&node->list, &fc->ready_list);
+            atomic_inc(&fc->frame_count);
+        }
+
+        // Configure DMA buffers
+        uint32_t buf_addr = fc->dma_addr;
+        uint32_t buf_size = fc->buf_size;
+
+        writel(buf_addr, regs + ISP_BUF0_OFFSET);
+        writel(buf_size, regs + ISP_BUF0_OFFSET + 0x4);
         wmb();
 
-        // Update flag indicating streaming
-        fs->flags |= 0x4;  // Set streaming bit
+        // Enable stream
+        fs->flags |= 0x4;
+        wmb();
+
+        writel(0x1, regs + ISP_STREAM_CTRL);
+        wmb();
+        udelay(10);
+        writel(0x1, regs + ISP_STREAM_START);
+        wmb();
 
     } else {
         if (!(fs->flags & 0x4)) {
@@ -3390,29 +3485,54 @@ static int enable_stream(struct IMPISPDev *dev, int channel, bool enable) {
         }
 
         // Disable stream
-        writel(0x0, dev->regs + ISP_STREAM_CTRL);
-        writel(0x0, dev->regs + ISP_STREAM_START);
+        writel(0x0, regs + ISP_STREAM_START);
+        wmb();
+        udelay(10);
+        writel(0x0, regs + ISP_STREAM_CTRL);
         wmb();
 
-        // Clear streaming flag
+        // Clean up frame queue
+        struct frame_node *node, *tmp;
+        list_for_each_entry_safe(node, tmp, &fc->ready_list, list) {
+            free_frame_node(node);
+        }
+        list_for_each_entry_safe(node, tmp, &fc->done_list, list) {
+            free_frame_node(node);
+        }
+
+        atomic_set(&fc->frame_count, 0);
         fs->flags &= ~0x4;
     }
 
     // Read back status
+    uint32_t ctrl = readl(regs + ISP_STREAM_CTRL);
+    uint32_t start = readl(regs + ISP_STREAM_START);
+    uint32_t status = readl(regs + ISP_STATUS_REG);
+
     pr_info("Stream %s on channel %d:\n"
             "  ctrl=0x%x start=0x%x\n"
-            "  status=0x%x flags=0x%x\n",
+            "  status=0x%x flags=0x%x\n"
+            "  buf_addr=0x%x buf_size=0x%x\n",
             enable ? "enabled" : "disabled",
-            channel,
-            readl(dev->regs + ISP_STREAM_CTRL),
-            readl(dev->regs + ISP_STREAM_START),
-            readl(dev->regs + ISP_STATUS_REG),
-            fs->flags);
+            channel, ctrl, start, status, fs->flags,
+            fc->dma_addr, fc->buf_size);
 
 unlock:
-    spin_unlock_irqrestore(&fs->lock, flags);
+    spin_unlock_irqrestore(&fc->queue_lock, flags);
+    return ret;
+
+cleanup:
+    if (ret < 0) {
+        struct frame_node *node, *tmp;
+        list_for_each_entry_safe(node, tmp, &fc->ready_list, list) {
+            free_frame_node(node);
+        }
+        atomic_set(&fc->frame_count, 0);
+    }
+    spin_unlock_irqrestore(&fc->queue_lock, flags);
     return ret;
 }
+
 
 static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, bool enable) {
     struct isp_framesource_state *fs;
