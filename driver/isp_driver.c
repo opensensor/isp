@@ -167,7 +167,75 @@ static struct isp_memory_info isp_mem = {0};
 #define VIDIOC_GET_SENSOR_ENUMERATION 0xc050561a
 #define VIDIOC_GET_SENSOR_INFO 0x40045626
 #define VIDIOC_ENABLE_STREAM 0x800456d2
+#define ISP_TUNING_ENABLE 0xc00c56c6
+#define VIDIOC_SET_CHANNEL_ATTR 0xc07056c3 // Set channel attributes
+#define VIDIOC_SET_FRAME_DEPTH 0xc0145608
+#define VIDIOC_SET_FIFO_ATTR 0xc044560f
+#define VIDIOC_STREAM_ON  0x80045612
+#define VIDIOC_GET_BUFFER_INFO 0x400456bf
+#define VIDIOC_SET_FRAME_MODE 0xc0445611
 
+// 0x44 byte structure based on command code
+struct frame_mode {
+    uint32_t channel;       // Channel number
+    uint32_t mode;          // Frame mode
+    uint32_t width;         // Frame width
+    uint32_t height;        // Frame height
+    uint32_t format;        // Pixel format
+    uint32_t flags;         // Mode flags
+    uint32_t buf_size;      // Buffer size
+    uint32_t reserved[10];  // Padding to 0x44 bytes
+} __attribute__((aligned(8)));  // Force 8-byte alignment
+
+struct buffer_info {
+    uint32_t channel;      // Channel number
+    uint32_t buffer_size;  // Buffer size
+    uint32_t count;        // Buffer count
+    uint32_t flags;        // Buffer flags
+    uint32_t status;       // Buffer status
+} __attribute__((aligned(4)));
+
+// Define the channel attribute structure (112 bytes / 0x70 bytes)
+struct channel_attr {
+    uint32_t enable;          // 0x00: Channel enable
+    uint32_t width;           // 0x04: Frame width
+    uint32_t height;          // 0x08: Frame height
+    uint32_t format;          // 0x0c: Pixel format
+    uint32_t crop_enable;     // 0x10: Crop enable
+    struct {
+        uint32_t x;           // 0x14: Crop x
+        uint32_t y;           // 0x18: Crop y
+        uint32_t width;       // 0x1c: Crop width
+        uint32_t height;      // 0x20: Crop height
+    } crop;
+    uint32_t scaler_enable;   // 0x24: Scaler enable
+    uint32_t scaler_outwidth; // 0x28: Output width
+    uint32_t scaler_outheight;// 0x2c: Output height
+    uint32_t picwidth;        // 0x30: Picture width
+    uint32_t picheight;       // 0x34: Picture height
+    char pad[0x38];          // Padding to 0x70 bytes
+} __attribute__((packed));
+
+struct frame_depth_config {
+    uint32_t channel;        // Channel number
+    uint32_t depth;          // Frame buffer depth
+    uint32_t reserved[3];    // Reserved/padding
+} __attribute__((packed));
+
+// 0x44 byte structure for FIFO attributes
+struct fifo_attr {
+    uint32_t channel;      // Channel number
+    uint32_t depth;        // FIFO depth
+    uint32_t thresh;       // Threshold
+    uint32_t flags;        // Flags/mode
+    uint32_t watermark;    // Watermark level
+    struct {
+        uint32_t width;    // Frame width
+        uint32_t height;   // Frame height
+        uint32_t format;   // Pixel format
+    } frame_info;
+    uint32_t reserved[8];  // Padding to 0x44 bytes
+} __attribute__((aligned(4))); // Important: Add alignment
 
 // Log level definitions
 #define IMP_LOG_ERROR   6
@@ -399,7 +467,9 @@ struct IMPISPDev {
     struct isp_framesource_state *fs_info;  // Add this field
     uint32_t format;                        // Add this field
 
-
+    // Tuning support
+    void __iomem *tuning_regs;
+    bool tuning_enabled;
 
     // Parameter regions
     void __iomem *isp_params;
@@ -1076,12 +1146,17 @@ struct frame_source_channel {
     atomic_t frame_count;
     uint32_t max_frames;
 
+    // FIFO configuration
+    uint32_t fifo_depth;         // FIFO depth from libimp
+    uint32_t fifo_thresh;        // FIFO threshold
+    uint32_t fifo_flags;         // FIFO flags/mode
+
     // Pad to match expected size
     uint8_t padding[0x2e8 - sizeof(struct mutex) - sizeof(struct semaphore) -
                     sizeof(spinlock_t) - sizeof(struct list_head) * 2 -
                     sizeof(wait_queue_head_t) - sizeof(atomic_t) -
-                    sizeof(uint32_t) * 8];
-};
+                    sizeof(uint32_t) * 11];  // Updated for new fields
+} __attribute__((aligned(4)));
 
 static irqreturn_t isp_irq_handler(int irq, void *dev_id)
 {
@@ -5363,6 +5438,36 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
         return ret;
     }
+    case ISP_TUNING_ENABLE: {
+        int enable;
+        if (copy_from_user(&enable, (void __user *)arg, sizeof(enable))) {
+            pr_err("Failed to copy tuning enable\n");
+            return -EFAULT;
+        }
+
+        pr_info("ISP tuning %s requested\n", enable ? "enable" : "disable");
+
+        // Store tuning state
+        ourISPdev->tuning_enabled = enable;
+
+        // Set up tuning registers
+        if (enable) {
+            // Map correct ISP tuning regions
+            // Base at 0x13380000
+            void __iomem *tuning_base = ioremap(0x13380000, 0x1b000);
+            if (!tuning_base) {
+                pr_err("Failed to map tuning registers\n");
+                return -ENOMEM;
+            }
+            ourISPdev->tuning_regs = tuning_base;
+
+            // Initialize tuning parameters
+            writel(0x1, tuning_base + 0x100); // Enable tuning
+            wmb();
+        }
+
+        return 0;
+    }
     case TX_ISP_SET_BUF: {  // 0x800856d5
         struct imp_buffer_info *buf_info = (struct imp_buffer_info *)arg;
         pr_info("tx_isp: SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
@@ -6114,39 +6219,66 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 {
     struct IMPISPDev *dev = ourISPdev;
     struct isp_framesource_state *fs = file->private_data;
+    struct frame_source_channel *fc;
     u32 buf_index;
+    int ret = 0;
 
     pr_info("Frame channel IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
 
-    if (!dev || !fs || !fs->is_open) {
-        pr_err("Invalid device state\n");
+    if (!fs || !fs->is_open) {
+        pr_err("Invalid frame source state\n");
         return -EINVAL;
     }
 
-    // Log memory layout before handling command
-    pr_info("Memory state:\n");
-    pr_info("  fs=%p private=%p\n", fs, fs->private);
-    pr_info("  buf_base=%p dma_addr=0x%x\n",
-            fs->buf_base, (unsigned int)fs->dma_addr);
-    pr_info("  dev buf_info=%p\n", dev->buf_info);
+    fc = fs->private;
+    if (!fc) {
+        pr_err("No channel data\n");
+        return -EINVAL;
+    }
 
-    switch (cmd) {
-        case VIDIOC_S_FMT: {
-            struct v4l2_format fmt;
-            if (copy_from_user(&fmt, (void __user *)arg, sizeof(fmt)))
-                return -EFAULT;
-            pr_info("Set format: %dx%d\n", fmt.fmt.pix.width, fmt.fmt.pix.height);
-            fs->width = fmt.fmt.pix.width;
-            fs->height = fmt.fmt.pix.height;
-            return 0;
-        }
+    pr_info("Memory state:\n"
+            "  fs=%p private=%p\n"
+            "  buf_base=%p dma_addr=0x%x\n"
+            "  dev buf_info=%p\n",
+            fs, fs->private,
+            fs->buf_base, (unsigned int)fs->dma_addr,
+            ourISPdev ? ourISPdev->buf_info : NULL);
 
-        case VIDIOC_REQBUFS: {
-            struct v4l2_requestbuffers req;
-            if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
+    switch(cmd) {
+        case VIDIOC_SET_CHANNEL_ATTR: {
+            struct channel_attr attr;
+
+            if (copy_from_user(&attr, (void __user *)arg, sizeof(attr))) {
+                pr_err("Failed to copy channel attributes\n");
                 return -EFAULT;
-            pr_info("Request buffers: count=%d\n", req.count);
-            fs->buf_cnt = req.count;
+            }
+
+            pr_info("Channel attr request:\n"
+                   "  enable=%d format=0x%x\n"
+                   "  size=%dx%d\n"
+                   "  crop=%d (%d,%d) %dx%d\n"
+                   "  scale=%d %dx%d\n"
+                   "  pic=%dx%d\n",
+                   attr.enable, attr.format,
+                   attr.width, attr.height,
+                   attr.crop_enable,
+                   attr.crop.x, attr.crop.y,
+                   attr.crop.width, attr.crop.height,
+                   attr.scaler_enable,
+                   attr.scaler_outwidth, attr.scaler_outheight,
+                   attr.picwidth, attr.picheight);
+
+            // Store format info
+            fs->width = attr.width;
+            fs->height = attr.height;
+            fs->fmt = attr.format;
+
+            // Update buffer configuration if needed
+            if (attr.enable) {
+                fs->buf_size = attr.width * attr.height * 2;  // YUV422
+                fc->buf_size = fs->buf_size;
+            }
+
             return 0;
         }
 
@@ -6171,7 +6303,196 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
                 return -EFAULT;
             return 0;
         }
+        case VIDIOC_SET_FRAME_DEPTH: {
+            struct frame_depth_config config;
+            struct frame_source_channel *fc = fs->private;
 
+            if (copy_from_user(&config, (void __user *)arg, sizeof(config))) {
+                pr_err("Failed to copy frame depth config\n");
+                return -EFAULT;
+            }
+
+            pr_info("Set frame depth: channel=%d depth=%d\n",
+                    config.channel, config.depth);
+
+            // Store frame depth
+            fs->frame_depth = config.depth;
+
+            // Initialize frame queue if needed
+            if (!fs->fifo_initialized) {
+                INIT_LIST_HEAD(&fs->ready_queue);
+                INIT_LIST_HEAD(&fs->done_queue);
+                fs->fifo_depth = 0;
+                fs->fifo_initialized = true;
+            }
+
+            // Allocate frame descriptors
+            if (fs->bufs) {
+                kfree(fs->bufs);
+            }
+            fs->bufs = kzalloc(sizeof(struct isp_buffer_info) * config.depth,
+                               GFP_KERNEL);
+            if (!fs->bufs) {
+                return -ENOMEM;
+            }
+
+            // Initialize buffers
+            for (int i = 0; i < config.depth; i++) {
+                fs->bufs[i].method = ISP_ALLOC_KMALLOC;
+                fs->bufs[i].buffer_start = fs->dma_addr + (i * fs->buf_size);
+                fs->bufs[i].virt_addr = (unsigned long)(fs->buf_base +
+                                                      (i * fs->buf_size));
+                fs->bufs[i].buffer_size = fs->buf_size;
+                fs->bufs[i].flags = 1;
+                fs->bufs[i].frame_count = 0;
+                fs->bufs[i].is_buffer_full = 0;
+            }
+
+            pr_info("Frame depth set: channel=%d depth=%d buf_size=%d\n",
+                    config.channel, config.depth, fs->buf_size);
+
+            return 0;
+        }
+        // Add to framechan_ioctl:
+        case VIDIOC_SET_FIFO_ATTR: {
+            struct fifo_attr attr;
+            struct frame_source_channel *fc = fs->private;
+
+            if (copy_from_user(&attr, (void __user *)arg, sizeof(attr))) {
+                pr_err("Failed to copy FIFO attributes\n");
+                return -EFAULT;
+            }
+
+            pr_info("Set FIFO attr: channel=%d depth=%d thresh=%d flags=0x%x\n",
+                    attr.channel, attr.depth, attr.thresh, attr.flags);
+            pr_info("Frame info: %dx%d format=0x%x\n",
+                    attr.frame_info.width, attr.frame_info.height,
+                    attr.frame_info.format);
+
+            // Store FIFO configuration in channel
+            fc->fifo_depth = attr.depth;
+            fc->fifo_thresh = attr.thresh;
+            fc->fifo_flags = attr.flags;
+
+            // Initialize FIFO if not done
+            spin_lock_init(&fc->queue_lock);
+            INIT_LIST_HEAD(&fc->ready_list);
+            INIT_LIST_HEAD(&fc->done_list);
+            init_waitqueue_head(&fc->wait);
+            atomic_set(&fc->frame_count, 0);
+
+            pr_info("FIFO initialized: depth=%d thresh=%d flags=0x%x\n",
+                    fc->fifo_depth, fc->fifo_thresh, fc->fifo_flags);
+
+            return 0;
+        }
+        case VIDIOC_STREAM_ON: {
+            struct frame_source_channel *fc = fs->private;
+            int ret;
+
+            pr_info("Stream ON request for channel\n");
+
+            // Validate state
+            if (!fc || !fs->buf_base) {
+                pr_err("Invalid channel state for streaming\n");
+                return -EINVAL;
+            }
+
+            if (fs->state == 2) {
+                pr_warn("Channel already streaming\n");
+                return 0;
+            }
+
+            // Start streaming
+            fs->state = 2;  // Set to streaming state
+            fs->flags |= 0x2;  // Set streaming flag
+
+            // Configure DMA
+            writel(fc->dma_addr, ourISPdev->regs + ISP_BUF0_OFFSET);
+            writel(fc->buf_size, ourISPdev->regs + ISP_BUF0_OFFSET + 0x4);
+            wmb();
+
+            // Enable streaming
+            writel(0x1, ourISPdev->regs + ISP_STREAM_CTRL);
+            writel(0x1, ourISPdev->regs + ISP_STREAM_START);
+            wmb();
+
+            pr_info("Streaming started: dma=0x%x size=%d\n",
+                    (unsigned int)fc->dma_addr, fc->buf_size);
+
+            return 0;
+        }
+        case VIDIOC_GET_BUFFER_INFO: {
+            struct buffer_info info;
+            struct frame_source_channel *fc = fs->private;
+
+            if (!fc) {
+                pr_err("No channel data for buffer info\n");
+                return -EINVAL;
+            }
+
+            memset(&info, 0, sizeof(info));
+            info.channel = fs->chn_num;
+            info.buffer_size = fc->buf_size;
+            info.count = fc->buf_cnt;
+            info.flags = fs->flags;
+            info.status = fs->state;
+
+            pr_info("Get buffer info: ch=%d size=%d count=%d flags=0x%x state=%d\n",
+                    info.channel, info.buffer_size, info.count,
+                    info.flags, info.status);
+
+            if (copy_to_user((void __user *)arg, &info, sizeof(info))) {
+                pr_err("Failed to copy buffer info to user\n");
+                return -EFAULT;
+            }
+
+            return 0;
+        }
+        case VIDIOC_SET_FRAME_MODE: {
+            struct frame_mode mode;
+            struct frame_source_channel *fc = fs->private;
+
+            if (!fc) {
+                pr_err("No channel data for frame mode\n");
+                return -EINVAL;
+            }
+
+            if (copy_from_user(&mode, (void __user *)arg, sizeof(mode))) {
+                pr_err("Failed to copy frame mode\n");
+                return -EFAULT;
+            }
+
+            pr_info("Set frame mode: ch=%d mode=%d size=%dx%d format=0x%x flags=0x%x\n",
+                    mode.channel, mode.mode, mode.width, mode.height,
+                    mode.format, mode.flags);
+
+            // Update frame source configuration
+            fs->width = mode.width;
+            fs->height = mode.height;
+            fs->fmt = mode.format;
+
+            // Update buffer size if needed
+            uint32_t new_buf_size = mode.buf_size ? mode.buf_size :
+                                   (mode.width * mode.height * 2); // Default to YUV422
+
+            if (new_buf_size != fc->buf_size) {
+                // Only update if different to avoid unnecessary reconfigs
+                fc->buf_size = new_buf_size;
+                fs->buf_size = new_buf_size;
+
+                pr_info("Updated buffer size: %d bytes\n", new_buf_size);
+
+                // Reconfigure DMA if streaming
+                if (fs->state == 2) {
+                    writel(fc->dma_addr, ourISPdev->regs + ISP_BUF0_OFFSET);
+                    writel(fc->buf_size, ourISPdev->regs + ISP_BUF0_OFFSET + 0x4);
+                    wmb();
+                }
+            }
+
+            return 0;
+        }
         default:
             return -ENOTTY;
     }
