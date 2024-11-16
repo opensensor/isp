@@ -91,3 +91,133 @@ does enable and communicate with the sensor and attempt to setup framebuffers.
 
 There is a crash after the first stream on ioctl cmd, that we are currently debugging.
 
+Current progress:
+
+```angular2html
+Loading ISP driver...
+gISPdev allocated at 81b8bc00
+Registering platform driver
+Platform driver registered successfully
+Registering platform device with name 'tisp-driver'
+Probing TISP device...
+ISP register mapping: base=b3300000 test_read=0x0
+Configuring ISP clocks using standard API
+Clock rates after configuration:
+  ISP Core: 250000000 Hz
+  CGU ISP: 125000000 Hz
+  IPU: 250000000 Hz
+tx_isp: Initializing reserved memory
+tx_isp: Reserved memory initialized:
+  Physical address: 0x02a80000
+  Virtual address: a2a80000
+  Size: 22544384 bytes
+tx_isp: Validating memory setup:
+  gISPdev = 81b8bc00
+  dma_addr = 0x02a80000
+  dma_buf = a2a80000
+Memory regions:
+  Params: a2a81000
+  WDR: a2a82000
+Starting tisp_init...
+tisp-driver tisp-driver: tparams_day and tparams_night buffers allocated successfully
+Loading parameters from file: /etc/sensor/sc2336-t31.bin
+Copying 159736 bytes to destination
+Copy successful
+tisp-driver tisp-driver: Parameters loaded successfully from /etc/sensor/sc2336-t31.bin
+tisp-driver tisp-driver: Applying isp_memopt settings
+tisp-driver tisp-driver: tparams_day written to register successfully
+Registering child devices
+tisp-driver tisp-driver: Successfully registered 8 devices
+Creating ISP graph with 8 devices
+ISP graph creation completed successfully
+Created device /dev/framechan0
+Created device /dev/framechan1
+Created device /dev/framechan2
+tisp-driver tisp-driver: TISP device probed successfully
+Platform device registered successfully
+ISP driver loaded successfully
+ISP device open called from pid 2157
+ISP device open: file=80ce57d0 f_flags=0x82051400
+Stored fd -2113596416 at offset 0x20
+Initialized frame source 0 with default 1920x1080 buf_size=4147200
+Set file->private_data to gISPdev=81b8bc00
+ISP IOCTL called: cmd=0x805056c1
+
+=== IOCTL Debug ===
+cmd=0x805056c1 arg=0x774b0c80
+file=820e7960 flags=0x2002 private_data=  (null)
+SC2336: ID = 0xcb3a (retry 0)
+ISP IOCTL called: cmd=0xc050561a
+
+=== IOCTL Debug ===
+cmd=0xc050561a arg=0x7faa4908
+file=820e7960 flags=0x2002 private_data=  (null)
+Provided sensor info for index 0: sc2336
+ISP IOCTL called: cmd=0xc050561a
+
+=== IOCTL Debug ===
+cmd=0xc050561a arg=0x7faa4908
+file=820e7960 flags=0x2002 private_data=  (null)
+ISP IOCTL called: cmd=0xc0045627
+
+=== IOCTL Debug ===
+cmd=0xc0045627 arg=0x7faa4960
+file=820e7960 flags=0x2002 private_data=  (null)
+Sensor command: 0xc0045627
+Stored sensor name: sc2336
+ISP IOCTL called: cmd=0x800856d5
+
+=== IOCTL Debug ===
+cmd=0x800856d5 arg=0x7faa4958
+file=820e7960 flags=0x2002 private_data=  (null)
+tx_isp: SET_BUF request: method=0x203a726f phys=0x33326373 size=0xcab99f17
+tx_isp: Magic allocation setup: phys=0x2a80000 virt=a2a80000 size=0x1580000
+ISP IOCTL called: cmd=0x800856d4
+
+=== IOCTL Debug ===
+cmd=0x800856d4 arg=0x7faa4958
+file=820e7960 flags=0x2002 private_data=  (null)
+tx_isp: Handling ioctl VIDIOC_SET_BUF_INFO
+tx_isp: Buffer info configured: phys=0x2a80000 virt=a2a80000 size=22544384
+tx_isp: Buffer setup completed successfully
+ISP IOCTL called: cmd=0x40045626
+
+=== IOCTL Debug ===
+cmd=0x40045626 arg=0x7faa4970
+file=820e7960 flags=0x2002 private_data=  (null)
+ISP IOCTL called: cmd=VIDIOC_GET_SENSOR_INFO
+ISP IOCTL called: cmd=0x80045612
+
+=== IOCTL Debug ===
+cmd=0x80045612 arg=0x0
+file=820e7960 flags=0x2002 private_data=  (null)
+Stream ON requested
+Frame source setup: dev=81b8bc00 channel=0
+dev offset 0x20=0x0
+Frame source channel 0 initialized:
+  buffer_base: a2b894d4
+  dma_addr: 0x2b894d4
+  buf_size: 4147200 x 4 buffers
+Started streaming on channel 0 with:
+  DMA addr: 0x02a80000
+  Buffer size: 22544384
+  State flags: 0x2
+ISP IOCTL called: cmd=0x800456d0
+
+=== IOCTL Debug ===
+cmd=0x800456d0 arg=0x7faa4970
+file=820e7960 flags=0x2002 private_data=  (null)
+TX_ISP_VIDEO_LINK_SETUP
+Setting up video link 0
+Pad flags: src=0x3 sink=0x3 link=0x3
+ISP IOCTL called: cmd=0x800456d2
+
+=== IOCTL Debug ===
+cmd=0x800456d2 arg=0x0
+file=820e7960 flags=0x2002 private_data=  (null)
+Stream enable returned 0
+do_page_fault() #2: sending SIGSEGV to prudynt for invalid write access to
+00000000 
+epc = 774e0dcc in prudynt[774b4000+5e000]
+ra  = 774e29c8 in prudynt[774b4000+5e000]
+```
