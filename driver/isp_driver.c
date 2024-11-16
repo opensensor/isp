@@ -2805,10 +2805,19 @@ struct sensor_win_size {
 static int setup_isp_buffers(struct IMPISPDev *dev)
 {
     struct sensor_win_size *wsize = dev->sensor_i2c_client->dev.platform_data;
+    void __iomem *regs;
+
     if (!wsize) {
         pr_err("No sensor window size information\n");
         return -EINVAL;
     }
+
+    if (!dev->regs) {
+        pr_err("No register mapping\n");
+        return -EINVAL;
+    }
+
+    regs = dev->regs;
 
     // Use sensor window size for buffer calculations
     uint32_t width = wsize->width;
@@ -2816,21 +2825,26 @@ static int setup_isp_buffers(struct IMPISPDev *dev)
     uint32_t line_size = ((width + 7) >> 3) << 3;
     uint32_t frame_size = line_size * height;
 
-    pr_info("Setting up buffers for %dx%d frame\n", width, height);
+    pr_info("Setting up buffers for %dx%d frame at base %p\n",
+            width, height, regs);
 
-    // Configure main buffer
-    writel(dev->dma_addr, dev->regs + ISP_BUF0_REG);
-    writel(line_size, dev->regs + ISP_BUF0_SIZE_REG);
+    // Important: Use ISP_BUF_OFFSET instead of ISP_BUF0_REG
+    // ISP_BUF_OFFSET is 0x1000 from our earlier defines
+    writel(dev->dma_addr, regs + ISP_BUF_OFFSET);
+    writel(line_size, regs + ISP_BUF_OFFSET + 0x4);
+    wmb();
 
-    // Configure second buffer at offset
-    writel(dev->dma_addr + frame_size, dev->regs + ISP_BUF1_REG);
-    writel(line_size, dev->regs + ISP_BUF1_SIZE_REG);
+    // Configure second buffer at proper offset
+    writel(dev->dma_addr + frame_size, regs + ISP_BUF_OFFSET + ISP_BUF_SIZE_STEP);
+    writel(line_size, regs + ISP_BUF_OFFSET + ISP_BUF_SIZE_STEP + 0x4);
+    wmb();
 
-    // Additional buffer setup
+    // Configure third buffer
     uint32_t third_line_size = ((((width + 0x1f) >> 5) + 7) >> 3) << 3;
     uint32_t third_addr = dev->dma_addr + (frame_size * 2);
-    writel(third_addr, dev->regs + ISP_BUF2_REG);
-    writel(third_line_size, dev->regs + ISP_BUF2_SIZE_REG);
+    writel(third_addr, regs + ISP_BUF_OFFSET + (ISP_BUF_SIZE_STEP * 2));
+    writel(third_line_size, regs + ISP_BUF_OFFSET + (ISP_BUF_SIZE_STEP * 2) + 0x4);
+    wmb();
 
     pr_info("Buffer setup complete:\n");
     pr_info("  Main buffer: 0x%08x size=%u\n", dev->dma_addr, frame_size);
@@ -2838,6 +2852,15 @@ static int setup_isp_buffers(struct IMPISPDev *dev)
             dev->dma_addr + frame_size, frame_size);
     pr_info("  Third buffer: 0x%08x line_size=%u\n",
             third_addr, third_line_size);
+
+    // Add register value verification
+    pr_info("Register verification:\n");
+    pr_info("  BUF0: addr=0x%08x size=0x%08x\n",
+            readl(regs + ISP_BUF_OFFSET),
+            readl(regs + ISP_BUF_OFFSET + 0x4));
+    pr_info("  BUF1: addr=0x%08x size=0x%08x\n",
+            readl(regs + ISP_BUF_OFFSET + ISP_BUF_SIZE_STEP),
+            readl(regs + ISP_BUF_OFFSET + ISP_BUF_SIZE_STEP + 0x4));
 
     return 0;
 }
@@ -2979,19 +3002,20 @@ static void cleanup_frame_source(struct IMPISPDev *dev, int channel)
 static int init_frame_source(struct IMPISPDev *dev, int channel) {
     struct isp_framesource_state *fs = &dev->frame_sources[channel];
     struct frame_source_channel *fc;
-    uint32_t base_addr, buf_size;
+    uint32_t base_addr;
 
     // Clear structure
     memset(fs, 0, sizeof(*fs));
 
-    // Calculate buffer parameters
-    if (channel == 0) {
-        fs->width = 1920;
-        fs->height = 1080;
-    } else {
-        fs->width = 640;
-        fs->height = 360;
+    // Get dimensions from sensor
+    struct sensor_win_size *wsize = dev->sensor_i2c_client->dev.platform_data;
+    if (!wsize) {
+        pr_err("No sensor window size information\n");
+        return -EINVAL;
     }
+
+    fs->width = wsize->width;
+    fs->height = wsize->height;
 
     // Important: Use aligned buffer size
     fs->buf_size = ALIGN(fs->width * fs->height * 2, ISP_FRAME_BUFFER_ALIGN);
@@ -3022,14 +3046,11 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
     // Initialize ALL synchronization primitives
     mutex_init(&fc->lock);
     sema_init(&fc->sem, 0);
-    spin_lock_init(&fc->queue_lock);  // Add this
-    INIT_LIST_HEAD(&fc->ready_list);  // And this
-    INIT_LIST_HEAD(&fc->done_list);   // And this
-    init_waitqueue_head(&fc->wait);   // And this
-    atomic_set(&fc->frame_count, 0);  // And this
-
-    mutex_init(&fc->lock);
-    sema_init(&fc->sem, 0);
+    spin_lock_init(&fc->queue_lock);
+    INIT_LIST_HEAD(&fc->ready_list);
+    INIT_LIST_HEAD(&fc->done_list);
+    init_waitqueue_head(&fc->wait);
+    atomic_set(&fc->frame_count, 0);
 
     // Store private data
     fs->private = fc;
@@ -3049,7 +3070,8 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
     }
 
     // Initialize buffers
-    for (int i = 0; i < fs->buf_cnt; i++) {
+    int i;
+    for (i = 0; i < fs->buf_cnt; i++) {
         fs->bufs[i].method = ISP_ALLOC_KMALLOC;
         fs->bufs[i].buffer_start = fc->dma_addr + (i * fc->buf_size);
         fs->bufs[i].virt_addr = (unsigned long)(fc->buf_base + (i * fc->buf_size));
@@ -3058,7 +3080,7 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
     }
 
     fs->state = 1;  // Ready state
-    fs->magic = 0x336ac;
+    fs->magic = 0x336ac;  // Match libimp magic
     fs->fmt = 0xa;  // YUV422
     fs->is_open = 1;
 
@@ -3073,14 +3095,13 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
     return 0;
 }
 
-
 static atomic_t isp_instance_counter = ATOMIC_INIT(0);
 
 static int tisp_open(struct file *file)
 {
     struct isp_instance *instance;
-    int fd;
     int ret = 0;
+    int fd;
 
     pr_info("ISP device open called from pid %d\n", current->pid);
 
@@ -3089,41 +3110,53 @@ static int tisp_open(struct file *file)
         return -ENODEV;
     }
 
+    // Reset stream count on open
     ourISPdev->stream_count = 0;
 
-    // Allocate new instance
+    // Initialize frame source first
+    ret = init_frame_source(ourISPdev, 0);
+    if (ret) {
+        pr_err("Failed to initialize frame source: %d\n", ret);
+        return ret;
+    }
+
+    // Allocate instance tracking
     instance = kzalloc(sizeof(*instance), GFP_KERNEL);
     if (!instance)
         return -ENOMEM;
 
-    // Initialize instance
-    instance->fd = fd;
-    instance->file = file;
-
-    pr_info("ISP device open: file=%p f_flags=0x%x fd=%d\n",
-            file, file->f_flags, fd);
-
-    // Initialize frame sources first
-    ret = init_frame_source(ourISPdev, 0);
-    if (ret) {
-        pr_err("Failed to initialize frame source: %d\n", ret);
+    // Get frame source pointer
+    struct isp_framesource_state *fs = &ourISPdev->frame_sources[0];
+    if (!fs || !fs->is_open) {
+        pr_err("Frame source not properly initialized\n");
         kfree(instance);
-        return ret;
+        return -EINVAL;
     }
 
-    instance->fs = &ourISPdev->frame_sources[0];
-    instance->fs->is_open = 1;  // Mark frame source as open
+    // Initialize instance data
+    instance->fd = fd = get_unused_fd_flags(O_CLOEXEC);
+    if (fd < 0) {
+        kfree(instance);
+        return fd;
+    }
 
-    // Add to global list
+    instance->file = file;
+    instance->fs = fs;
+
+    // Store frame source in file private_data
+    file->private_data = fs;
+
+    // Add to global list with lock protection
     spin_lock(&instances_lock);
     list_add_tail(&instance->list, &isp_instances);
     spin_unlock(&instances_lock);
 
-    // Store just the fd in file private data, not our internal structure
-    file->private_data = (void *)(long)fd;
-    ourISPdev->is_open = 1;  // Mark device as open
+    // Mark device and frame source as open
+    ourISPdev->is_open = 1;
+    fs->is_open = 1;
 
-    pr_info("Created instance with fd %d\n", fd);
+    pr_info("ISP opened: file=%p fs=%p instance=%p fd=%d\n",
+            file, fs, instance, fd);
 
     return 0;
 }
@@ -3617,7 +3650,11 @@ static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int ch
     }
 
     // Get frame source from file->private_data
-    fs = &dev->frame_sources[channel];
+    fs = file->private_data;
+    if (!fs) {
+        pr_err("No frame source state in file\n");
+        return -EINVAL;
+    }
     fc = fs->private;
 
     if (!fs || !fc) {
@@ -5064,6 +5101,143 @@ static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
     return 0;
 }
 
+// External structures for libimp interface
+struct sensor_stream_info {
+    uint32_t state;          // 0 = disabled, 1 = enabled
+    uint32_t format;         // Frame format
+    uint32_t width;
+    uint32_t height;
+    uint32_t flags;
+};
+
+struct sensor_enable_param {
+    uint32_t channel;       // Channel number
+    uint32_t enable;        // 0 = disable, 1 = enable
+    uint32_t flags;         // Reserved flags
+};
+
+static int configure_streaming_hardware(struct IMPISPDev *dev)
+{
+    void __iomem *regs = dev->regs;
+    struct isp_framesource_state *fs;
+    struct frame_source_channel *fc;
+    int ret;
+
+    if (!dev || !regs) {
+        pr_err("Invalid device state\n");
+        return -EINVAL;
+    }
+
+    fs = &dev->frame_sources[0];
+    fc = fs->private;
+    if (!fc) {
+        pr_err("No frame source channel\n");
+        return -EINVAL;
+    }
+
+    // Step 1: Basic validation before configuration
+    ret = validate_buffer_setup(dev);
+    if (ret) {
+        pr_err("Failed buffer validation\n");
+        return ret;
+    }
+
+    // Step 2: Configure DMA buffer addresses using existing defines
+    writel(fc->dma_addr, regs + ISP_BUF0_OFFSET);
+    writel(fc->buf_size, regs + ISP_BUF0_OFFSET + 0x4);
+
+    // Configure additional buffers
+    for (int i = 1; i < fc->buf_cnt; i++) {
+        unsigned int reg_offset = ISP_BUF0_OFFSET + (i * ISP_BUF_SIZE_STEP);
+        writel(fc->dma_addr + (i * fc->buf_size), regs + reg_offset);
+        writel(fc->buf_size, regs + reg_offset + 0x4);
+    }
+    wmb();
+
+    // Step 3: Configure stream control registers
+    writel(0x0, regs + ISP_STREAM_CTRL);  // Disable first
+    writel(0x0, regs + ISP_STREAM_START);
+    wmb();
+    udelay(100);
+
+    // Initialize control registers
+    writel(ISP_CTRL_ENABLE, regs + ISP_CTRL_REG);
+    writel(0x1, regs + ISP_CONF_OFFSET);
+    writel(0x1, regs + ISP_INIT_OFFSET);
+    wmb();
+
+    // Step 4: Configure interrupt handling
+    writel(0x1, regs + ISP_INT_MASK_REG);    // Enable frame done interrupt
+    writel(0xFFFFFFFF, regs + ISP_INT_CLEAR_REG); // Clear pending
+    wmb();
+
+    pr_info("Streaming hardware configured:\n");
+    pr_info("  Resolution: %dx%d\n", fs->width, fs->height);
+    pr_info("  Buffer config: addr=0x%x size=%d count=%d\n",
+            (unsigned int)fc->dma_addr, fc->buf_size, fc->buf_cnt);
+
+    return 0;
+}
+
+
+static int handle_stream_enable(struct IMPISPDev *dev, bool enable)
+{
+    void __iomem *regs = dev->regs;
+    int ret;
+
+    if (!regs) {
+        pr_err("No register mapping\n");
+        return -EINVAL;
+    }
+
+    if (enable) {
+        // Enable ISP streaming
+        writel(0x1, regs + ISP_STREAM_CTRL);
+        wmb();
+        udelay(100);  // Add delay between writes
+        writel(0x1, regs + ISP_STREAM_START);
+        wmb();
+
+        // Configure sensor if needed
+        if (dev->sensor_i2c_client) {
+            ret = isp_sensor_write_reg(dev->sensor_i2c_client,
+                                     SENSOR_REG_MODE, 0x01);
+            if (ret)
+                return ret;
+        }
+    } else {
+        // Disable streaming
+        writel(0x0, regs + ISP_STREAM_START);
+        wmb();
+        udelay(100);
+        writel(0x0, regs + ISP_STREAM_CTRL);
+        wmb();
+    }
+
+    return 0;
+}
+
+static int prepare_streaming(struct IMPISPDev *dev)
+{
+    int ret;
+
+    // Configure buffer locations
+    ret = setup_isp_buffers(dev);
+    if (ret)
+        return ret;
+
+    // Configure streaming hardware
+    ret = configure_streaming_hardware(dev);
+    if (ret)
+        goto cleanup_buffers;
+
+    return 0;
+
+cleanup_buffers:
+    cleanup_frame_buffers(&dev->frame_sources[0]);
+    return ret;
+}
+
 /**
  * isp_driver_ioctl - IOCTL handler for ISP driver
  * @file: File structure
@@ -5085,8 +5259,8 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     pr_info("ISP IOCTL called: cmd=0x%x\n", cmd);  // Add this debug line
     pr_info("\n=== IOCTL Debug ===\n");
     pr_info("cmd=0x%x arg=0x%lx\n", cmd, arg);
-    pr_info("file=%p flags=0x%x private_data=%p\n",
-            file, file->f_flags, file->private_data);
+    pr_info("file=%p flags=0x%x \n",
+            file, file->f_flags);
 
     // Basic validation
     if (!ourISPdev || !ourISPdev->is_open) {
@@ -5155,6 +5329,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	}
     case VIDIOC_GET_SENSOR_INFO: {
         pr_info("ISP IOCTL called: cmd=VIDIOC_GET_SENSOR_INFO\n");
+        int __user *result = (int __user *)arg;
 
         // Check if the sensor is initialized
         if (!ourISPdev || !ourISPdev->sensor_i2c_client) {
@@ -5162,34 +5337,37 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
             return -ENODEV;
         }
 
-        struct isp_sensor_info info;
-        info.is_initialized = 1;
-        info.chip_id = 0xcb3a;  // TODO: Get the actual chip ID
-        info.width = ourISPdev->width;
-        info.height = ourISPdev->height;
-
-        // Copy the info structure back to user space
-        if (copy_to_user((void __user *)arg, &info, sizeof(info))) {
-            pr_err("Failed to copy sensor info to user space\n");
+        // Write back 1 (not -1) to indicate sensor is present
+        if (put_user(1, result)) {
+            pr_err("Failed to update sensor result\n");
             return -EFAULT;
         }
 
-        break;
+        pr_info("Sensor info request: returning success (1)\n");
+        return 0;
     }
-    case VIDIOC_ENABLE_STREAM: {
-        struct isp_framesource_state *fs = file->private_data;
-        int channel = fs ? fs->chn_num : 0;
+    case VIDIOC_ENABLE_STREAM: { // 0x800456d2
+        struct sensor_enable_param param;
 
-        pr_info("Enable stream IOCTL request on channel %d\n", channel);
+        if (copy_from_user(&param, argp, sizeof(param)))
+            return -EFAULT;
 
-        ret = enable_stream(ourISPdev, channel, 1);
-        if (ret == 0) {
-            // Only update stream count on success, matching libimp behavior
-            ourISPdev->stream_count += 2;
+        // Configure hardware first
+        ret = handle_stream_enable(ourISPdev, param.enable);
+        if (ret < 0) {
+            pr_err("Failed to enable streaming: %d\n", ret);
+            return ret;
         }
-        pr_info("Enable stream returned %d\n", ret);
 
-        return ret;
+        // This part is critical - must increment by 2 on success
+        // This matches the behavior seen in the decompiled code:
+        // *(uint32_t*)(gISPdev_1 + 0x24) += 2;
+        ourISPdev->stream_count += 2;
+        pr_info("Stream %s, count=%d\n",
+                param.enable ? "enabled" : "disabled",
+                ourISPdev->stream_count);
+
+        return 0;
     }
     case TX_ISP_SET_BUF: {  // 0x800856d5
         struct imp_buffer_info *buf_info = (struct imp_buffer_info *)arg;
@@ -5259,15 +5437,24 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         return 0;
     }
     case TX_ISP_VIDEO_LINK_SETUP: {
-      	pr_info("TX_ISP_VIDEO_LINK_SETUP\n");
         unsigned int link;
+        int __user *result = (void __user *)arg;
+
         if (copy_from_user(&link, argp, sizeof(link))) {
-            dev_err(ourISPdev->dev, "[%s][%d] copy from user error\n",
-                    __func__, __LINE__);
+            pr_err("Failed to copy link setup\n");
             return -EFAULT;
         }
+
         ret = setup_video_link(ourISPdev, link);
-        break;
+        if (ret == 0) {
+            // Write back 0 as expected before stream enable
+            if (put_user(0, result)) {
+                pr_err("Failed to update link result\n");
+                return -EFAULT;
+            }
+            pr_info("Video link setup complete, wrote back 0\n");
+        }
+        return ret;
     }
     case TX_ISP_SET_AE_ALGO_OPEN: {
       	pr_info("TX_ISP_SET_AE_ALGO_OPEN\n");
@@ -5361,23 +5548,10 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     // 0x80045612
     case VIDIOC_STREAMON:  // 0x80045612
     {
-    	int fd = (int)(long)file->private_data;  // Keep existing fd
-    	struct isp_framesource_state *fs = &ourISPdev->frame_sources[0];
-        pr_info("Stream ON requested\n");
-
-        ret = setup_frame_source(ourISPdev, 0);
-        if (ret) {
-            pr_err("Failed to setup frame source: %d\n", ret);
-            return ret;
-        }
-
-        ret = start_frame_source(ourISPdev, 0);
-        if (ret) {
-            pr_err("Failed to start frame source: %d\n", ret);
-            return ret;
-        }
-
-        return 0;
+        // This is the initial stream enable from libimp
+        // Set up internal state but keep external interface clean
+        ret = prepare_streaming(ourISPdev);
+        return ret;
     }
 	case VIDIOC_STREAMOFF:
 	    pr_info("Stream OFF requested\n");
@@ -6088,22 +6262,46 @@ static int setup_i2c_sensor(struct IMPISPDev *dev)
 {
     struct i2c_client *client;
     struct i2c_adapter *adapter;
+    struct sensor_win_size *wsize;
+
+    // Allocate window size structure
+    wsize = kzalloc(sizeof(*wsize), GFP_KERNEL);
+    if (!wsize)
+        return -ENOMEM;
+
+    // Configure default resolution for SC2336
+    wsize->width = 1920;
+    wsize->height = 1080;
+    wsize->fps = 30;
+    wsize->max_fps = 30;
+    wsize->format = 0xa;  // YUV422 format
+
     struct i2c_board_info board_info = {
         .type = "sc2336",
         .addr = 0x30,  // Match sensor I2C address
+        .platform_data = wsize,  // Set platform data
     };
 
     adapter = i2c_get_adapter(0);  // Primary I2C bus
-    if (!adapter)
+    if (!adapter) {
+        kfree(wsize);
         return -ENODEV;
+    }
 
     client = i2c_new_device(adapter, &board_info);
     if (!client) {
+        kfree(wsize);
         i2c_put_adapter(adapter);
         return -ENODEV;
     }
 
+    // Store window size in sensor client platform data
+    client->dev.platform_data = wsize;
     dev->sensor_i2c_client = client;
+
+    pr_info("Sensor initialized with resolution %dx%d @ %d fps\n",
+            wsize->width, wsize->height, wsize->fps);
+
     return 0;
 }
 
