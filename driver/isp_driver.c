@@ -4962,6 +4962,277 @@ struct sensor_reg_data {
 };
 
 
+static int configure_sensor_streaming(struct IMPISPDev *dev)
+{
+    struct i2c_client *client = dev->sensor_i2c_client;
+    int ret;
+
+    pr_info("Configuring SC2336 sensor...\n");
+
+    // Reset sequence
+    ret = isp_sensor_write_reg(client, 0x0103, 0x01);
+    msleep(20);
+
+    // From the SC2336 driver - proper initialization sequence
+    ret |= isp_sensor_write_reg(client, 0x36e9, 0x80);
+    ret |= isp_sensor_write_reg(client, 0x37f9, 0x80);
+    ret |= isp_sensor_write_reg(client, 0x301f, 0x02); // Data format
+    ret |= isp_sensor_write_reg(client, 0x3106, 0x05);
+
+    // Timing control
+    ret |= isp_sensor_write_reg(client, 0x320c, 0x08);
+    ret |= isp_sensor_write_reg(client, 0x320d, 0xca);
+    ret |= isp_sensor_write_reg(client, 0x320e, 0x05);
+    ret |= isp_sensor_write_reg(client, 0x320f, 0xa0);
+
+    // Analog settings
+    ret |= isp_sensor_write_reg(client, 0x3301, 0x09);
+    ret |= isp_sensor_write_reg(client, 0x3306, 0x60);
+    ret |= isp_sensor_write_reg(client, 0x3633, 0x22);
+    ret |= isp_sensor_write_reg(client, 0x3639, 0xf4);
+
+    // Initial AE settings
+    ret |= isp_sensor_write_reg(client, 0x3e01, 0x4a);
+    ret |= isp_sensor_write_reg(client, 0x3e02, 0xb0);
+    ret |= isp_sensor_write_reg(client, 0x3e08, 0x1f);
+    ret |= isp_sensor_write_reg(client, 0x3e09, 0x20);
+
+    if (ret) {
+        pr_err("Failed to configure sensor registers\n");
+        return ret;
+    }
+
+    // Verify some key registers
+    u8 val;
+    isp_sensor_read_reg(client, 0x320e, &val);
+    pr_info("Frame timing H: 0x%02x\n", val);
+    isp_sensor_read_reg(client, 0x320f, &val);
+    pr_info("Frame timing L: 0x%02x\n", val);
+    isp_sensor_read_reg(client, 0x3e08, &val);
+    pr_info("Gain H: 0x%02x\n", val);
+    isp_sensor_read_reg(client, 0x3e09, &val);
+    pr_info("Gain L: 0x%02x\n", val);
+
+    // Finally enable streaming
+    ret = isp_sensor_write_reg(client, 0x0100, 0x01);
+    msleep(20);  // Let sensor start up
+
+    pr_info("Sensor streaming enabled\n");
+    return ret;
+}
+
+// Add these registers
+#define ISP_MIPI_CTRL     0x30
+#define ISP_MIPI_STATUS   0x34
+#define ISP_MIPI_TIMING   0x38
+
+static int configure_mipi_csi(struct IMPISPDev *dev)
+{
+    void __iomem *regs = dev->regs;
+
+    if (!regs) {
+        pr_err("Invalid register mapping for MIPI config\n");
+        return -EINVAL;
+    }
+
+    // Reset MIPI
+    writel(0x0, regs + ISP_MIPI_CTRL);
+    wmb();
+    msleep(10);
+
+    // Configure MIPI timing
+    writel(0x05001808, regs + ISP_MIPI_TIMING);
+    wmb();
+
+    // Enable MIPI with 2 lanes
+    writel(0x3, regs + ISP_MIPI_CTRL);
+    wmb();
+
+    pr_info("MIPI CSI Config:\n");
+    pr_info("CTRL=0x%x STATUS=0x%x\n",
+            readl(regs + ISP_MIPI_CTRL),
+            readl(regs + ISP_MIPI_STATUS));
+
+    return 0;
+}
+
+static int configure_streaming_hardware(struct IMPISPDev *dev)
+{
+    void __iomem *regs;
+    int ret;
+
+    if (!dev) {
+        pr_err("Invalid device pointer\n");
+        return -EINVAL;
+    }
+
+    regs = dev->regs;
+    if (!regs) {
+        pr_err("Invalid register mapping\n");
+        return -EINVAL;
+    }
+
+    pr_info("Configuring ISP hardware and sensor (regs=%p)...\n", regs);
+
+    // Remove the invalid range check and just verify the mapping is valid
+    ret = readl(regs + ISP_CTRL_REG);
+    if (ret == ~0U) {
+        pr_err("Invalid register read - bad mapping\n");
+        return -EIO;
+    }
+
+    // 1. First reset everything
+    writel(0x0, regs + ISP_CTRL_REG);
+    writel(0x0, regs + ISP_STREAM_CTRL);
+    writel(0x0, regs + ISP_STREAM_START);
+    wmb();
+    msleep(10);
+
+    // 2. Configure MIPI CSI
+    ret = configure_mipi_csi(dev);
+    if (ret) {
+        pr_err("Failed to configure MIPI CSI\n");
+        return ret;
+    }
+    msleep(10);
+
+    // 3. Configure sensor
+    ret = configure_sensor_streaming(dev);
+    if (ret) {
+        pr_err("Failed to configure sensor\n");
+        return ret;
+    }
+    msleep(10);
+
+    // 4. Now configure ISP format/buffers
+    writel(0x3231564e, regs + ISP_INPUT_FORMAT_REG);
+    writel(0x3231564e, regs + ISP_OUTPUT_FORMAT_REG);
+    wmb();
+
+    // Buffer setup
+    uint32_t buffer_size = dev->dma_size / 4;
+    writel(dev->dma_addr, regs + ISP_BUF0_REG);
+    writel(buffer_size, regs + ISP_BUF0_SIZE_REG);
+    writel(dev->dma_addr + buffer_size, regs + ISP_BUF1_REG);
+    writel(buffer_size, regs + ISP_BUF1_SIZE_REG);
+    wmb();
+
+    // 5. Configure image processing parameters
+    writel(128, regs + 0x1100); // Brightness
+    writel(128, regs + 0x1104); // Contrast
+    writel(128, regs + 0x1108); // Saturation
+    writel(128, regs + 0x110c); // Sharpness
+    wmb();
+
+    // 6. Set up interrupts
+    writel(0x1, regs + ISP_INT_MASK_REG);    // Enable frame done
+    writel(0xffffffff, regs + ISP_INT_CLEAR_REG); // Clear pending
+    wmb();
+
+    // 7. Critical: Enable sequence
+    pr_info("Starting streaming pipeline...\n");
+
+    writel(0x1, regs + ISP_CTRL_REG);        // Enable ISP core
+    wmb();
+    msleep(1);
+
+    writel(0x1, regs + ISP_STREAM_CTRL);     // Enable streaming
+    wmb();
+    msleep(1);
+
+    writel(0x1, regs + ISP_STREAM_START);    // Start capture
+    wmb();
+    msleep(10);  // Give time for first frame
+
+    // 8. Verify final state
+    pr_info("ISP Pipeline State:\n");
+    pr_info("CTRL=0x%x STREAM_CTRL=0x%x STREAM_START=0x%x\n",
+            readl(regs + ISP_CTRL_REG),
+            readl(regs + ISP_STREAM_CTRL),
+            readl(regs + ISP_STREAM_START));
+    pr_info("FORMAT: in=0x%x out=0x%x\n",
+            readl(regs + ISP_INPUT_FORMAT_REG),
+            readl(regs + ISP_OUTPUT_FORMAT_REG));
+    pr_info("MIPI: ctrl=0x%x status=0x%x\n",
+            readl(regs + ISP_MIPI_CTRL),
+            readl(regs + ISP_MIPI_STATUS));
+    pr_info("BUF0: addr=0x%x size=0x%x\n",
+            readl(regs + ISP_BUF0_REG),
+            readl(regs + ISP_BUF0_SIZE_REG));
+    pr_info("INT: mask=0x%x status=0x%x\n",
+            readl(regs + ISP_INT_MASK_REG),
+            readl(regs + ISP_STATUS_REG));
+
+    return 0;
+}
+
+static int handle_stream_enable(struct IMPISPDev *dev, bool enable)
+{
+    void __iomem *regs = dev->regs;
+
+    if (!regs)
+        return -EINVAL;
+
+    pr_info("Configuring stream enable=%d\n", enable);
+
+    // Add before enabling stream:
+    struct i2c_client *client = dev->sensor_i2c_client;
+
+    // Force sensor to output data
+    isp_sensor_write_reg(client, 0x0100, 0x01); // Streaming
+    isp_sensor_write_reg(client, 0x3f00, 0x00); // Format control
+    isp_sensor_write_reg(client, 0x3f04, 0x03); // Raw10
+
+    msleep(30); // Wait for sensor
+
+    // Proper sequence:
+    writel(0x1, regs + ISP_CTRL_REG);  // Enable core first
+    wmb();
+    udelay(100);
+
+    writel(0x1, regs + ISP_STREAM_CTRL);  // Enable stream control
+    wmb();
+    udelay(100);
+
+    writel(0x1, regs + ISP_STREAM_START);  // Start streaming
+    wmb();
+
+    // Enable sensor streaming
+    if (dev->sensor_i2c_client) {
+        int ret = isp_sensor_write_reg(dev->sensor_i2c_client,
+                                     SENSOR_REG_MODE, 0x01);
+        if (ret) {
+            pr_err("Failed to start sensor streaming\n");
+            return ret;
+        }
+    }
+
+    pr_info("Stream enabled successfully\n");
+    return 0;
+}
+
+static int prepare_streaming(struct IMPISPDev *dev)
+{
+    int ret;
+
+    // Configure buffer locations
+    ret = setup_isp_buffers(dev);
+    if (ret)
+        return ret;
+
+    // Configure streaming hardware
+    ret = configure_streaming_hardware(dev);
+    if (ret)
+        goto cleanup_buffers;
+
+    return 0;
+
+cleanup_buffers:
+    cleanup_frame_buffers(&dev->frame_sources[0]);
+    return ret;
+}
+
+
 /* Handle sensor-specific IOCTL commands */
 static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __user *arg)
 {
@@ -5015,15 +5286,12 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
             break;
         }
 
-        case SENSOR_CMD_STREAM_ON: {
-            // SC2336 specific streaming configuration
-            ret = isp_sensor_write_reg(client, 0x0100, 0x01); // Stream on
-            if (ret < 0) {
-                pr_err("Failed to start sensor streaming\n");
-                return ret;
-            }
-            pr_info("Sensor streaming started\n");
-            break;
+        case VIDIOC_STREAMON:  // 0x80045612
+        {
+            // This is the initial stream enable from libimp
+            // Set up internal state but keep external interface clean
+            ret = prepare_streaming(ourISPdev);
+            return ret;
         }
 
         case SENSOR_CMD_STREAM_OFF: {
@@ -5510,111 +5778,6 @@ struct sensor_enable_param {
     uint32_t flags;         // Reserved flags
 };
 
-static int configure_streaming_hardware(struct IMPISPDev *dev)
-{
-    void __iomem *regs = dev->regs;
-
-    // Reset ISP first
-    writel(0x0, regs + ISP_CTRL_REG);
-    wmb();
-    msleep(10);
-
-    // Configure format registers before enabling
-    writel(V4L2_PIX_FMT_NV12, regs + ISP_INPUT_FORMAT_REG);
-    writel(V4L2_PIX_FMT_NV12, regs + ISP_OUTPUT_FORMAT_REG);
-    wmb();
-
-    // Configure buffer addresses properly
-    writel(dev->dma_addr, regs + ISP_BUF0_OFFSET);
-    writel(dev->dma_size/4, regs + ISP_BUF0_OFFSET + 0x4);  // Quarter size per buffer
-    wmb();
-
-    // Enable proper interrupts
-    writel(0x1, regs + ISP_INT_MASK_REG);    // Enable frame done interrupt
-    writel(0xffffffff, regs + ISP_INT_CLEAR_REG); // Clear any pending
-    wmb();
-
-    // Set control bits properly
-    writel(0x1, regs + ISP_CTRL_REG);   // Enable processing
-    writel(0x1, regs + ISP_STREAM_CTRL); // Enable stream control
-    wmb();
-
-    pr_info("ISP hardware configured:\n"
-            "  CTRL=0x%x FORMAT=0x%x\n"
-            "  BUF0=0x%x size=0x%x\n",
-            readl(regs + ISP_CTRL_REG),
-            readl(regs + ISP_INPUT_FORMAT_REG),
-            readl(regs + ISP_BUF0_OFFSET),
-            readl(regs + ISP_BUF0_OFFSET + 0x4));
-
-    return 0;
-}
-
-static int handle_stream_enable(struct IMPISPDev *dev, bool enable)
-{
-    void __iomem *regs = dev->regs;
-
-    if (!regs)
-        return -EINVAL;
-
-    pr_info("Configuring stream enable=%d\n", enable);
-
-    // Add before enabling stream:
-    struct i2c_client *client = dev->sensor_i2c_client;
-
-    // Force sensor to output data
-    isp_sensor_write_reg(client, 0x0100, 0x01); // Streaming
-    isp_sensor_write_reg(client, 0x3f00, 0x00); // Format control
-    isp_sensor_write_reg(client, 0x3f04, 0x03); // Raw10
-
-    msleep(30); // Wait for sensor
-
-    // Proper sequence:
-    writel(0x1, regs + ISP_CTRL_REG);  // Enable core first
-    wmb();
-    udelay(100);
-
-    writel(0x1, regs + ISP_STREAM_CTRL);  // Enable stream control
-    wmb();
-    udelay(100);
-
-    writel(0x1, regs + ISP_STREAM_START);  // Start streaming
-    wmb();
-
-    // Enable sensor streaming
-    if (dev->sensor_i2c_client) {
-        int ret = isp_sensor_write_reg(dev->sensor_i2c_client,
-                                     SENSOR_REG_MODE, 0x01);
-        if (ret) {
-            pr_err("Failed to start sensor streaming\n");
-            return ret;
-        }
-    }
-
-    pr_info("Stream enabled successfully\n");
-    return 0;
-}
-
-static int prepare_streaming(struct IMPISPDev *dev)
-{
-    int ret;
-
-    // Configure buffer locations
-    ret = setup_isp_buffers(dev);
-    if (ret)
-        return ret;
-
-    // Configure streaming hardware
-    ret = configure_streaming_hardware(dev);
-    if (ret)
-        goto cleanup_buffers;
-
-    return 0;
-
-cleanup_buffers:
-    cleanup_frame_buffers(&dev->frame_sources[0]);
-    return ret;
-}
 
 /**
  * isp_driver_ioctl - IOCTL handler for ISP driver
@@ -5652,11 +5815,10 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         unsigned char val_h = 0, val_l = 0;
         int i;
 
-        // Reset sensor with delay after
-        isp_sensor_write_reg(client, 0x0103, 0x01);
+        // Add from sensor_init_regs_1920_1080_30fps_mipi[]
+        isp_sensor_write_reg(client, 0x0103, 0x01); // Reset
         msleep(20);
 
-        // From the driver's sensor_init_regs_1920_1080_30fps_mipi array
         isp_sensor_write_reg(client, 0x36e9, 0x80);
         isp_sensor_write_reg(client, 0x37f9, 0x80);
         isp_sensor_write_reg(client, 0x301f, 0x02);
@@ -5665,27 +5827,28 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         isp_sensor_write_reg(client, 0x320d, 0xca);
         isp_sensor_write_reg(client, 0x320e, 0x05);
         isp_sensor_write_reg(client, 0x320f, 0xa0);
+
+        // Core sensor settings
         isp_sensor_write_reg(client, 0x3301, 0x09);
         isp_sensor_write_reg(client, 0x3306, 0x60);
+        isp_sensor_write_reg(client, 0x3633, 0x22);
+        isp_sensor_write_reg(client, 0x3639, 0xf4);
 
-        msleep(10);
+        // AE/AG settings
+        isp_sensor_write_reg(client, 0x3e01, 0x4a);
+        isp_sensor_write_reg(client, 0x3e02, 0xb0);
+        isp_sensor_write_reg(client, 0x3e08, 0x1f);
+        isp_sensor_write_reg(client, 0x3e09, 0x20);
 
         // Read ID registers
         ret = isp_sensor_read_reg(client, 0x3107, &val_h);
         ret |= isp_sensor_read_reg(client, 0x3108, &val_l);
         pr_info("SC2336: ID = 0x%02x%02x\n", val_h, val_l);
 
-        // Important: Set initial exposure/gain
-        isp_sensor_write_reg(client, 0x3e00, 0x00);
-        isp_sensor_write_reg(client, 0x3e01, 0x4a);
-        isp_sensor_write_reg(client, 0x3e02, 0xb0);
-        isp_sensor_write_reg(client, 0x3e08, 0x03);
-        isp_sensor_write_reg(client, 0x3e09, 0x20);
-
         // Enable output
         isp_sensor_write_reg(client, 0x0100, 0x01);
+        msleep(20); // Let sensor stabilize
 
-        pr_info("Sensor initialization complete\n");
         return ret;
     }
 	case VIDIOC_GET_SENSOR_ENUMERATION: {
@@ -5854,33 +6017,34 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         pr_info("tx_isp: Buffer setup completed successfully\n");
         return 0;
     }
-    case 0xc008561c: {  // ISP Bypass control
-        struct {
-            uint32_t id;      // Control ID = 0x8000164
-            uint32_t value;   // Control value
-        } __attribute__((packed)) ctrl;
+        case VIDIOC_S_CTRL: {
+            struct v4l2_control ctrl;
 
-        if (copy_from_user(&ctrl, argp, sizeof(ctrl)))
-            return -EFAULT;
+            if (copy_from_user(&ctrl, (void __user *)arg, sizeof(ctrl)))
+                return -EFAULT;
 
-        if (ctrl.id == 0x8000164) {
-            struct isp_subdev_state *sd = (struct isp_subdev_state *)ourISPdev->subdevs[0];
-            if (sd) {
-                mutex_lock(&sd->lock);
+            pr_info("Setting control: id=0x%x value=%d\n", ctrl.id, ctrl.value);
 
-                // Configure bypass mode
-                writel(ctrl.value ? 1 : 0, ourISPdev->regs + ISP_BYPASS_CTRL);
-                wmb();
-
-                // Store state
-                sd->bypass_mode = ctrl.value ? 1 : 0;
-
-                mutex_unlock(&sd->lock);
-                return 0;
+            switch(ctrl.id) {
+                case V4L2_CID_BRIGHTNESS:
+                    writel(ctrl.value, ourISPdev->regs + 0x1100);
+                    break;
+                case V4L2_CID_CONTRAST:
+                    writel(ctrl.value, ourISPdev->regs + 0x1104);
+                    break;
+                case V4L2_CID_SATURATION:
+                    writel(ctrl.value, ourISPdev->regs + 0x1108);
+                    break;
+                case V4L2_CID_SHARPNESS:
+                    writel(ctrl.value, ourISPdev->regs + 0x110c);
+                    break;
+                default:
+                    pr_info("Unhandled control: id=0x%x\n", ctrl.id);
+                    return -EINVAL;
             }
+            wmb();
+            return 0;
         }
-        return -EINVAL;
-    }
     case 0x800456d0: {  // Create/setup links
         int __user *enable = (int __user *)arg;
         int enable_val;
@@ -6053,14 +6217,6 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         // ret = set_rotation(ourISPdev, argp); // TODO
         break;
 	}
-    // 0x80045612
-    case VIDIOC_STREAMON:  // 0x80045612
-    {
-        // This is the initial stream enable from libimp
-        // Set up internal state but keep external interface clean
-        ret = prepare_streaming(ourISPdev);
-        return ret;
-    }
 	case VIDIOC_STREAMOFF:
 	    pr_info("Stream OFF requested\n");
 	    return enable_isp_streaming(ourISPdev, file, channel, false);
@@ -6112,7 +6268,6 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	    // TODO: Configure ISP cropping
 	    break;
 	}
-
     case 0x800856d7:
     case 0xc0045627:
     case SENSOR_CMD_READ_ID:
@@ -6122,6 +6277,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	case SENSOR_CMD_SET_EXP:
 	case SENSOR_CMD_STREAM_ON:
 	case SENSOR_CMD_STREAM_OFF:
+    case VIDIOC_STREAMON:  // 0x80045612
         pr_info("Sensor command: 0x%x\n", cmd);
         ret = handle_sensor_ioctl(ourISPdev, cmd, argp);
         break;
