@@ -5183,37 +5183,35 @@ static int configure_streaming_hardware(struct IMPISPDev *dev)
 static int handle_stream_enable(struct IMPISPDev *dev, bool enable)
 {
     void __iomem *regs = dev->regs;
-    int ret;
 
-    if (!regs) {
-        pr_err("No register mapping\n");
+    if (!regs)
         return -EINVAL;
-    }
 
-    if (enable) {
-        // Enable ISP streaming
-        writel(0x1, regs + ISP_STREAM_CTRL);
-        wmb();
-        udelay(100);  // Add delay between writes
-        writel(0x1, regs + ISP_STREAM_START);
-        wmb();
+    pr_info("Configuring stream enable=%d\n", enable);
 
-        // Configure sensor if needed
-        if (dev->sensor_i2c_client) {
-            ret = isp_sensor_write_reg(dev->sensor_i2c_client,
+    // Proper sequence:
+    writel(0x1, regs + ISP_CTRL_REG);  // Enable core first
+    wmb();
+    udelay(100);
+
+    writel(0x1, regs + ISP_STREAM_CTRL);  // Enable stream control
+    wmb();
+    udelay(100);
+
+    writel(0x1, regs + ISP_STREAM_START);  // Start streaming
+    wmb();
+
+    // Enable sensor streaming
+    if (dev->sensor_i2c_client) {
+        int ret = isp_sensor_write_reg(dev->sensor_i2c_client,
                                      SENSOR_REG_MODE, 0x01);
-            if (ret)
-                return ret;
+        if (ret) {
+            pr_err("Failed to start sensor streaming\n");
+            return ret;
         }
-    } else {
-        // Disable streaming
-        writel(0x0, regs + ISP_STREAM_START);
-        wmb();
-        udelay(100);
-        writel(0x0, regs + ISP_STREAM_CTRL);
-        wmb();
     }
 
+    pr_info("Stream enabled successfully\n");
     return 0;
 }
 
@@ -5349,25 +5347,21 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     case VIDIOC_ENABLE_STREAM: { // 0x800456d2
         struct sensor_enable_param param;
 
-        if (copy_from_user(&param, argp, sizeof(param)))
-            return -EFAULT;
-
-        // Configure hardware first
-        ret = handle_stream_enable(ourISPdev, param.enable);
-        if (ret < 0) {
-            pr_err("Failed to enable streaming: %d\n", ret);
-            return ret;
+        // The decompiled code shows it's passing 0 directly as arg
+        // We shouldn't try to copy from user here since arg is the value
+        if (arg != 0) {
+            pr_err("Invalid enable stream argument\n");
+            return -EINVAL;
         }
 
-        // This part is critical - must increment by 2 on success
-        // This matches the behavior seen in the decompiled code:
-        // *(uint32_t*)(gISPdev_1 + 0x24) += 2;
-        ourISPdev->stream_count += 2;
-        pr_info("Stream %s, count=%d\n",
-                param.enable ? "enabled" : "disabled",
-                ourISPdev->stream_count);
+        // Don't try to copy param, just enable
+        ret = handle_stream_enable(ourISPdev, true);
+        if (ret == 0) {
+            ourISPdev->stream_count += 2;
+            pr_info("Stream enabled, count=%d\n", ourISPdev->stream_count);
+        }
 
-        return 0;
+        return ret;
     }
     case TX_ISP_SET_BUF: {  // 0x800856d5
         struct imp_buffer_info *buf_info = (struct imp_buffer_info *)arg;
