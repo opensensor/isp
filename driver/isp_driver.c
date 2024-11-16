@@ -508,15 +508,23 @@ struct IspSubdev
 };
 
 struct sensor_list {
-    char sensor_name[80];  // Can hold the "sc2336" sensor name
+    char sensor_name[80];  // Can hold the sensor name
     int num_sensors;       // Number of currently registered sensors
 };
 
 #define MAX_SENSORS 1
 
+#define SENSOR_PROC_PATH "/proc/jz/sensor/"
+
 struct sensor_info {
     char name[32];
-    bool registered;
+    u32 chip_id;
+    u32 width;
+    u32 height;
+    u32 i2c_addr;
+    u32 max_fps;
+    u32 min_fps;
+   	bool registered;
 };
 
 static struct sensor_info registered_sensors[MAX_SENSORS];
@@ -829,6 +837,104 @@ static inline void isp_reg_write(struct isp_reg_t *regs, size_t offset, u32 val)
     writel(val, (void __iomem *)regs + offset);
 }
 
+// Custom function to check if a character is whitespace
+static int is_whitespace(char c) {
+    return (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v');
+}
+
+// Function to trim leading and trailing whitespace
+static void trim_whitespace(char *str) {
+    char *end;
+
+    // Trim leading whitespace
+    while (is_whitespace(*str)) str++;
+
+    // If the string is empty after trimming
+    if (*str == '\0')
+        return;
+
+    // Trim trailing whitespace
+    end = str + strlen(str) - 1;
+    while (end > str && is_whitespace(*end)) end--;
+
+    // Null-terminate the string
+    *(end + 1) = '\0';
+}
+// Helper function to read a string from /proc
+static int read_proc_string(const char *proc_entry, char *buffer, size_t buffer_size) {
+    struct file *file;
+    mm_segment_t old_fs;
+    loff_t offset = 0;
+    int ret = -EINVAL;
+
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+    file = filp_open(proc_entry, O_RDONLY, 0);
+    if (IS_ERR(file)) {
+        pr_err("Failed to open %s\n", proc_entry);
+        set_fs(old_fs);
+        return PTR_ERR(file);
+    }
+
+    // Adjusted for Linux 3.10 kernel API
+    ret = kernel_read(file, offset, buffer, buffer_size - 1);
+    if (ret > 0) {
+        buffer[ret] = '\0'; // Null-terminate the string
+        ret = 0;
+    }
+
+    filp_close(file, NULL);
+    set_fs(old_fs);
+    return ret;
+}
+
+// Helper function to read an unsigned integer from /proc
+static int read_proc_u32(const char *proc_entry, u32 *value) {
+    char buffer[16];
+    int ret;
+
+    ret = read_proc_string(proc_entry, buffer, sizeof(buffer));
+    if (ret < 0)
+        return ret;
+
+    ret = kstrtou32(buffer, 0, value);
+    if (ret < 0)
+        pr_err("Failed to parse u32 from %s\n", buffer);
+
+    return ret;
+}
+
+static int get_sensor_info(struct sensor_info *info) {
+    if (read_proc_string(SENSOR_PROC_PATH "name", info->name, sizeof(info->name)) < 0) {
+        pr_err("Failed to read sensor name\n");
+        return -EINVAL;
+    }
+    if (read_proc_u32(SENSOR_PROC_PATH "chip_id", &info->chip_id) < 0) {
+        pr_err("Failed to read sensor chip_id\n");
+        return -EINVAL;
+    }
+    if (read_proc_u32(SENSOR_PROC_PATH "width", &info->width) < 0) {
+        pr_err("Failed to read sensor width\n");
+        return -EINVAL;
+    }
+    if (read_proc_u32(SENSOR_PROC_PATH "height", &info->height) < 0) {
+        pr_err("Failed to read sensor height\n");
+        return -EINVAL;
+    }
+    if (read_proc_u32(SENSOR_PROC_PATH "i2c_addr", &info->i2c_addr) < 0) {
+        pr_err("Failed to read sensor i2c_addr\n");
+        return -EINVAL;
+    }
+    if (read_proc_u32(SENSOR_PROC_PATH "max_fps", &info->max_fps) < 0) {
+        pr_err("Failed to read sensor max_fps\n");
+        return -EINVAL;
+    }
+    if (read_proc_u32(SENSOR_PROC_PATH "min_fps", &info->min_fps) < 0) {
+        pr_err("Failed to read sensor min_fps\n");
+        return -EINVAL;
+    }
+    return 0;
+}
 
 /* Initialization helper */
 static inline void isp_device_init(struct isp_device *isp)
@@ -1112,7 +1218,7 @@ int32_t tx_isp_request_irq(struct irq_info* irqInfo, struct irq_handler_data* ir
 }
 
 struct isp_i2c_board_info {
-    char type[32];          // Sensor type/name
+    char type[I2C_NAME_SIZE];          // Sensor type/name
     u16 addr;               // I2C device address
     unsigned short flags;    // I2C flags
     void *platform_data;    // Platform specific data
@@ -1483,11 +1589,159 @@ int32_t isp_subdev_release_clks(struct IspSubdev* isp_subdev)
     return 0;  // Return 0 as per the assembly code
 }
 
-// Define the IRQHandler structure
-struct IRQHandler
+
+static int tx_isp_mmap(struct file *filp, struct vm_area_struct *vma) {
+    struct IMPISPDev *dev = filp->private_data;
+    unsigned long size = vma->vm_end - vma->vm_start;
+
+    pr_info("tx_isp: mmap request size=%lu\n", size);
+
+    if (size > ISP_RMEM_SIZE) {
+        pr_err("tx_isp: mmap size too large\n");
+        return -EINVAL;
+    }
+
+    // Set up continuous memory mapping
+    vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+
+    if (remap_pfn_range(vma,
+                        vma->vm_start,
+                        dev->dma_addr >> PAGE_SHIFT,
+                        size,
+                        vma->vm_page_prot)) {
+        pr_err("tx_isp: mmap failed\n");
+        return -EAGAIN;
+    }
+
+    pr_info("tx_isp: mmap completed: virt=0x%lx size=%lu\n",
+            vma->vm_start, size);
+
+    return 0;
+}
+
+
+/* Configure DEIR control registers */
+static void configure_deir_control(void)
 {
-    int32_t irq_number;  // The IRQ number to be freed
+    /* Add your DEIR control register configurations here */
+    /* Use readl/writel for register access */
+}
+
+// Add validation for parameter loading
+static int validate_parameter_load(void __iomem *dest, size_t offset)
+{
+    uint32_t test_val;
+
+    // Try writing a test pattern
+    writel(0xdeadbeef, dest);
+    wmb();
+    test_val = readl(dest);
+
+    if (test_val != 0xdeadbeef) {
+        pr_err("Parameter write test failed: wrote 0xdeadbeef read 0x%08x\n", test_val);
+        return -EIO;
+    }
+
+    // Reset test location
+    writel(0, dest);
+    wmb();
+    return 0;
+}
+
+static int tiziano_load_parameters(const char *filename, void __iomem *dest, size_t offset)
+{
+    struct file *file;
+    mm_segment_t old_fs;
+    loff_t pos = 0;
+    ssize_t bytes_read;
+    size_t file_size;
+    char *buffer = NULL;
+    int ret = 0;
+
+    pr_info("Loading parameters from file: %s\n", filename);
+
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+
+    file = filp_open(filename, O_RDONLY, 0);
+    set_fs(old_fs);
+
+    if (IS_ERR(file)) {
+        pr_err("Failed to open parameter file: %s\n", filename);
+        return -ENOENT;
+    }
+
+    file_size = i_size_read(file->f_path.dentry->d_inode);
+    if (file_size <= 0) {
+        pr_err("Parameter file is empty or inaccessible: %s\n", filename);
+        ret = -EINVAL;
+        goto close_file;
+    }
+
+    // Step 3: Allocate a buffer to read the file
+    buffer = vmalloc(file_size);
+    if (!buffer) {
+        pr_err("Failed to allocate memory for parameters\n");
+        ret = -ENOMEM;
+        goto close_file;
+    }
+
+    // Step 4: Read the file contents into the buffer
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+    bytes_read = kernel_read(file, pos, buffer, file_size);
+    set_fs(old_fs);
+
+    if (bytes_read != file_size) {
+        pr_err("Failed to read the entire parameter file\n");
+        ret = -EIO;
+        goto free_buffer;
+    }
+
+    pr_info("Copying %zu bytes to destination\n", offset);
+    memcpy_toio(dest, buffer, offset);
+    pr_info("Copy successful\n");
+
+    free_buffer:
+        vfree(buffer);
+    close_file:
+        filp_close(file, NULL);
+    return ret;
+}
+
+// Add these at the top of the file with other defines
+// Update the CPM register definitions for T31
+#define CPM_PHYS_BASE   0x10000000  // T31 CPM physical base
+#define CPM_REG_SIZE    0x1000      // Cover full register range
+#define CPM_ISPCDR      0x88        // Offset from CPM base
+#define CPM_CLKGR       0x20        // Offset from CPM base
+#define CPM_CLKGR1      0x28        // Additional control register
+
+
+#define ISP_OFFSET_PARAMS 159736  // Update to match actual parameter file size
+
+// Add these at top of file
+#define CPM_OPCR      0x24    // Operating Parameter Control Register offset
+#define CPM_LCR       0x04    // Low power control register offset
+
+// Add this structure if not already present
+struct isp_platform_data {
+    unsigned long clock_rate;
 };
+
+// Update defines to match correct frequencies
+#define T31_ISP_FREQ     250000000   // 250MHz ISP core clock (matches AHB)
+#define T31_CGU_ISP_FREQ 125000000   // 125MHz CGU_ISP clock (matches APB)
+
+static struct isp_platform_data isp_pdata = {
+    .clock_rate = T31_ISP_FREQ,
+};
+
+
+// Add CGU ISP bit positions
+#define ISP_CLKGR_BIT    (1 << 23)   // ISP clock gate bit in CLKGR
+#define CGU_ISP_BIT      (1 << 2)    // CGU_ISP clock gate bit in CLKGR1
+
 
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd)
 {
@@ -4176,7 +4430,7 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
         }
 		case 0xc0045627: {
 		    int result_val;
-		    const char *sensor_name = "sc2336";  // This matches libimp's expectations
+		    char sensor_name[SENSOR_NAME_SIZE];
 
 		    // Get the -1 value passed in
 		    if (copy_from_user(&result_val, (void __user *)arg, sizeof(result_val))) {
@@ -4184,7 +4438,13 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
 		        return -EFAULT;
 		    }
 
-		    // Store the sensor name in our structure
+		    // Read the sensor name from /proc/jz/sensor/name
+		    if (read_proc_string("/proc/jz/sensor/name", sensor_name, sizeof(sensor_name)) < 0) {
+		        pr_err("Failed to read sensor name from /proc\n");
+		        return -ENODEV;
+		    }
+
+		    // Store the dynamically read sensor name in our structure
 		    strlcpy(gISPdev->sensor_name, sensor_name, SENSOR_NAME_SIZE);
 
 		    pr_info("Stored sensor name: %s\n", gISPdev->sensor_name);
@@ -4389,7 +4649,6 @@ static int setup_isp_memory_regions(struct IMPISPDev *dev) {
 #define ISP_ALLOC_MAGIC1   0x203a726f
 #define ISP_ALLOC_MAGIC2   0x33326373
 #define ISP_DEFAULT_SIZE   0x2a80000  // Match the size from logs
-
 
 // Function to allocate memory
 // Function to allocate memory using existing structure
@@ -4600,6 +4859,33 @@ static long handle_set_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
 static int reset_gpio = GPIO_PA(18);  // Default reset GPIO
 static int pwdn_gpio = -1;  // Default power down GPIO disabled
 
+
+static int setup_i2c_sensor(struct IMPISPDev *dev, char *sensor_name)
+{
+    struct i2c_client *client;
+    struct i2c_adapter *adapter;
+    struct i2c_board_info board_info = {
+        .addr = 0x30  // Match sensor I2C address
+    };
+
+    // Copy the sensor name into the fixed-size array
+    strlcpy(board_info.type, sensor_name, I2C_NAME_SIZE);
+
+    adapter = i2c_get_adapter(0);  // Primary I2C bus
+    if (!adapter)
+        return -ENODEV;
+
+    client = i2c_new_device(adapter, &board_info);
+    if (!client) {
+        i2c_put_adapter(adapter);
+        return -ENODEV;
+    }
+
+    dev->sensor_i2c_client = client;
+    return 0;
+}
+
+
 /**
  * isp_driver_ioctl - IOCTL handler for ISP driver
  * @file: File structure
@@ -4636,28 +4922,113 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
     switch (cmd) {
 	case VIDIOC_REGISTER_SENSOR: { // cmd=0x805056c1
-	    struct i2c_client *client = gISPdev->sensor_i2c_client;
+	    struct i2c_client *client;
+	    struct sensor_info sensor;
+	    char param_file[128];
 	    unsigned char val_h = 0, val_l = 0;
-	    int i;
+	    int i, ret;
 
-	    // Reset sensor with delay after
-	    isp_sensor_write_reg(client, 0x0103, 0x01);
+	    // Step 1: Read sensor information from /proc/jz/sensor/
+	    if (get_sensor_info(&sensor) < 0) {
+	        pr_err("Failed to read sensor information from /proc\n");
+	        return -ENODEV;
+	    }
+
+	    // Trim any whitespace from sensor name
+	    trim_whitespace(sensor.name);
+
+	    pr_info("Detected sensor: '%s'\n", sensor.name);
+
+	    // FIXED: Properly construct parameter file path without the newline issue
+	    snprintf(param_file, sizeof(param_file), "/etc/sensor/%s-t31.bin",
+	             sensor.name); // Combines name with suffix in one operation
+	    pr_info("Using parameter file: %s\n", param_file);
+
+	    // Step 1: Allocate memory using vmalloc
+	    tparams_day = vmalloc(ISP_OFFSET_PARAMS);
+	    if (!tparams_day) {
+	        dev_err(gISPdev->dev, "Failed to allocate tparams_day\n");
+	        return -ENOMEM;
+	    }
+	    memset(tparams_day, 0, ISP_OFFSET_PARAMS);
+
+	    tparams_night = vmalloc(ISP_OFFSET_PARAMS);
+	    if (!tparams_night) {
+	        dev_err(gISPdev->dev, "Failed to allocate tparams_night\n");
+	        vfree(tparams_day);
+	        return -ENOMEM;
+	    }
+	    memset(tparams_night, 0, ISP_OFFSET_PARAMS);
+
+	    dev_info(gISPdev->dev, "tparams_day and tparams_night buffers allocated successfully\n");
+
+	    // Step 2: Load parameters from the properly constructed file path
+	    ret = tiziano_load_parameters(param_file, tparams_day, ISP_OFFSET_PARAMS);
+	    if (ret) {
+	        dev_err(gISPdev->dev, "Failed to load parameters from file: %s\n", param_file);
+	        vfree(tparams_night);
+	        vfree(tparams_day);
+	        return ret;
+	    }
+	    dev_info(gISPdev->dev, "Parameters loaded successfully from %s\n", param_file);
+
+	    // Step 3: Handle isp_memopt settings
+	    if (isp_memopt == 1) {
+	        dev_info(gISPdev->dev, "Applying isp_memopt settings\n");
+	        writel(0, tparams_day + 0x264);
+	        writel(isp_memopt, tparams_day + 0x26c);
+	        writel(0, tparams_day + 0x27c);
+	        writel(0, tparams_day + 0x274);
+
+	        writel(0, tparams_night + 0x264);
+	        writel(isp_memopt, tparams_night + 0x26c);
+	        writel(0, tparams_night + 0x27c);
+	        writel(0, tparams_night + 0x274);
+	    }
+
+	    // Step 4: Write the parameters to hardware registers using global gISPdev->regs
+	    writel((unsigned long)tparams_day, gISPdev->regs + 0x84b50);
+	    dev_info(gISPdev->dev, "tparams_day written to register successfully\n");
+
+        // Setup I2C sensor
+    	ret = setup_i2c_sensor(gISPdev, sensor.name);
+    	if (ret) {
+        	dev_err(&gISPdev->dev, "Failed to setup I2C sensor\n");
+            return -ENODEV;
+   		}
+        client = gISPdev->sensor_i2c_client;
+
+	    pr_info("Registering sensor: %s (ID: 0x%x)\n", sensor.name, sensor.chip_id);
+	    pr_info("Resolution: %dx%d, I2C Addr: 0x%x, FPS: %d-%d\n",
+	            sensor.width, sensor.height, sensor.i2c_addr, sensor.min_fps, sensor.max_fps);
+
+	    // Step 2: Reset the sensor with a delay
+	    isp_sensor_write_reg(client, 0x0103, 0x01); // Reset sensor
 	    msleep(20);
 
-	    // Init basic sensor settings before ID read
-	    isp_sensor_write_reg(client, 0x3018, 0x72);  // Init register from sc2336.c
-	    isp_sensor_write_reg(client, 0x3031, 0x0A);  // Init register from sc2336.c
+	    // Step 3: Initialize basic sensor settings using the dynamically fetched info
+	    isp_sensor_write_reg(client, 0x3018, 0x72); // Example init register from sc2336.c
+	    isp_sensor_write_reg(client, 0x3031, 0x0A);
 	    msleep(10);
 
-	    // Read ID with multiple retries
+	    // Step 4: Read sensor ID with multiple retries
 	    for (i = 0; i < 3; i++) {
 	        // Read ID from correct registers now
 	        ret = isp_sensor_read_reg(client, 0x3107, &val_h);
 	        ret |= isp_sensor_read_reg(client, 0x3108, &val_l);
-	        pr_info("SC2336: ID = 0x%02x%02x (retry %d)\n", val_h, val_l, i);
+	        pr_info("Sensor ID = 0x%02x%02x (retry %d)\n", val_h, val_l, i);
 
-	        if (ret == 0) break;
+	        // Check if the read ID matches the expected chip_id
+	        if (ret == 0 && ((val_h << 8) | val_l) == sensor.chip_id) {
+	            pr_info("Sensor ID matched: 0x%02x%02x\n", val_h, val_l);
+	            break;
+	        }
 	        msleep(10);
+	    }
+
+	    if (i == 3) {
+	        pr_err("Failed to verify sensor ID after multiple retries\n");
+	        return -ENODEV;
 	    }
 
 	    return ret;
@@ -4669,6 +5040,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	    } __attribute__((packed));
 
 	    struct sensor_list_req req;
+	    struct sensor_info sensor;
 
 	    // Get the request struct from userspace
 	    if (copy_from_user(&req, (void __user *)arg, sizeof(req))) {
@@ -4681,8 +5053,13 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	        return -EINVAL;
 	    }
 
+       	// Step 1: Read sensor information from /proc/jz/sensor/
+	    if (get_sensor_info(&sensor) < 0) {
+	        pr_err("Failed to read sensor information from /proc\n");
+	        return -ENODEV;
+	    }
 	    // Fill in the name for this index
-	    snprintf(req.name, sizeof(req.name), "sc2336");
+	    snprintf(req.name, sizeof(req.name), "%s", sensor.name);
 
 	    // Copy the result back to userspace
 	    if (copy_to_user((void __user *)arg, &req, sizeof(req))) {
@@ -4973,178 +5350,6 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     return ret;
 }
 
-static int tx_isp_mmap(struct file *filp, struct vm_area_struct *vma) {
-    struct IMPISPDev *dev = filp->private_data;
-    unsigned long size = vma->vm_end - vma->vm_start;
-
-    pr_info("tx_isp: mmap request size=%lu\n", size);
-
-    if (size > RMEM_SIZE) {
-        pr_err("tx_isp: mmap size too large\n");
-        return -EINVAL;
-    }
-
-    // Set up continuous memory mapping
-    vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
-
-    if (remap_pfn_range(vma,
-                        vma->vm_start,
-                        dev->dma_addr >> PAGE_SHIFT,
-                        size,
-                        vma->vm_page_prot)) {
-        pr_err("tx_isp: mmap failed\n");
-        return -EAGAIN;
-    }
-
-    pr_info("tx_isp: mmap completed: virt=0x%lx size=%lu\n",
-            vma->vm_start, size);
-
-    return 0;
-}
-
-static const struct v4l2_file_operations isp_v4l2_fops = {
-    .owner          = THIS_MODULE,
-    .open           = tisp_open,
-    .release        = tisp_release,
-    .unlocked_ioctl = isp_driver_ioctl,
-    .mmap = tx_isp_mmap,
-};
-
-
-// Update file operations structure
-static const struct file_operations isp_fops = {
-    .owner = THIS_MODULE,
-    .unlocked_ioctl = isp_driver_ioctl,
-    .open = tisp_open,
-    .release = tisp_release,
-    .read = tisp_read,
-    .write = tisp_write,
-    .mmap = tx_isp_mmap,
-};
-
-
-/* Configure DEIR control registers */
-static void configure_deir_control(void)
-{
-    /* Add your DEIR control register configurations here */
-    /* Use readl/writel for register access */
-}
-
-// Add validation for parameter loading
-static int validate_parameter_load(void __iomem *dest, size_t offset)
-{
-    uint32_t test_val;
-
-    // Try writing a test pattern
-    writel(0xdeadbeef, dest);
-    wmb();
-    test_val = readl(dest);
-
-    if (test_val != 0xdeadbeef) {
-        pr_err("Parameter write test failed: wrote 0xdeadbeef read 0x%08x\n", test_val);
-        return -EIO;
-    }
-
-    // Reset test location
-    writel(0, dest);
-    wmb();
-    return 0;
-}
-
-static int tiziano_load_parameters(const char *filename, void __iomem *dest, size_t offset)
-{
-    struct file *file;
-    mm_segment_t old_fs;
-    loff_t pos = 0;
-    ssize_t bytes_read;
-    size_t file_size;
-    char *buffer = NULL;
-    int ret = 0;
-
-    pr_info("Loading parameters from file: %s\n", filename);
-
-    old_fs = get_fs();
-    set_fs(KERNEL_DS);
-
-    file = filp_open(filename, O_RDONLY, 0);
-    set_fs(old_fs);
-
-    if (IS_ERR(file)) {
-        pr_err("Failed to open parameter file: %s\n", filename);
-        return -ENOENT;
-    }
-
-    file_size = i_size_read(file->f_path.dentry->d_inode);
-    if (file_size <= 0) {
-        pr_err("Parameter file is empty or inaccessible: %s\n", filename);
-        ret = -EINVAL;
-        goto close_file;
-    }
-
-    // Step 3: Allocate a buffer to read the file
-    buffer = vmalloc(file_size);
-    if (!buffer) {
-        pr_err("Failed to allocate memory for parameters\n");
-        ret = -ENOMEM;
-        goto close_file;
-    }
-
-    // Step 4: Read the file contents into the buffer
-    old_fs = get_fs();
-    set_fs(KERNEL_DS);
-    bytes_read = kernel_read(file, pos, buffer, file_size);
-    set_fs(old_fs);
-
-    if (bytes_read != file_size) {
-        pr_err("Failed to read the entire parameter file\n");
-        ret = -EIO;
-        goto free_buffer;
-    }
-
-    pr_info("Copying %zu bytes to destination\n", offset);
-    memcpy_toio(dest, buffer, offset);
-    pr_info("Copy successful\n");
-
-    free_buffer:
-        vfree(buffer);
-    close_file:
-        filp_close(file, NULL);
-    return ret;
-}
-
-// Add these at the top of the file with other defines
-// Update the CPM register definitions for T31
-#define CPM_PHYS_BASE   0x10000000  // T31 CPM physical base
-#define CPM_REG_SIZE    0x1000      // Cover full register range
-#define CPM_ISPCDR      0x88        // Offset from CPM base
-#define CPM_CLKGR       0x20        // Offset from CPM base
-#define CPM_CLKGR1      0x28        // Additional control register
-
-
-#define ISP_OFFSET_PARAMS 159736  // Update to match actual parameter file size
-
-// Add these at top of file
-#define CPM_OPCR      0x24    // Operating Parameter Control Register offset
-#define CPM_LCR       0x04    // Low power control register offset
-
-// Add this structure if not already present
-struct isp_platform_data {
-    unsigned long clock_rate;
-};
-
-// Update defines to match correct frequencies
-#define T31_ISP_FREQ     250000000   // 250MHz ISP core clock (matches AHB)
-#define T31_CGU_ISP_FREQ 125000000   // 125MHz CGU_ISP clock (matches APB)
-
-static struct isp_platform_data isp_pdata = {
-    .clock_rate = T31_ISP_FREQ,
-};
-
-
-// Add CGU ISP bit positions
-#define ISP_CLKGR_BIT    (1 << 23)   // ISP clock gate bit in CLKGR
-#define CGU_ISP_BIT      (1 << 2)    // CGU_ISP clock gate bit in CLKGR1
-
 static int configure_isp_clocks(struct IMPISPDev *dev)
 {
     int ret;
@@ -5277,7 +5482,6 @@ static void cleanup_isp_clocks(struct IMPISPDev *dev)
 static int tisp_init(struct device *dev)
 {
     int ret;
-    const char *param_file = "/etc/sensor/sc2336-t31.bin";
     uint32_t reg_val;
 
     pr_info("Starting tisp_init...\n");
@@ -5310,50 +5514,6 @@ static int tisp_init(struct device *dev)
     // Enable sensor clock
     writel(0x1, gISPdev->regs + ISP_CLK_CTRL);
     msleep(10);
-
-    // Step 1: Allocate memory using vmalloc
-    tparams_day = vmalloc(ISP_OFFSET_PARAMS);
-    if (!tparams_day) {
-        dev_err(dev, "Failed to allocate tparams_day\n");
-        return -ENOMEM;
-    }
-    memset(tparams_day, 0, ISP_OFFSET_PARAMS);
-
-    tparams_night = vmalloc(ISP_OFFSET_PARAMS);
-    if (!tparams_night) {
-        dev_err(dev, "Failed to allocate tparams_night\n");
-        vfree(tparams_day);
-        return -ENOMEM;
-    }
-    memset(tparams_night, 0, ISP_OFFSET_PARAMS);
-
-    dev_info(dev, "tparams_day and tparams_night buffers allocated successfully\n");
-
-    // Step 2: Load parameters from the file
-    ret = tiziano_load_parameters(param_file, tparams_day, ISP_OFFSET_PARAMS);
-    if (ret) {
-        dev_err(dev, "Failed to load parameters from file\n");
-        goto cleanup;
-    }
-    dev_info(dev, "Parameters loaded successfully from %s\n", param_file);
-
-    // Step 3: Handle isp_memopt settings
-    if (isp_memopt == 1) {
-        dev_info(dev, "Applying isp_memopt settings\n");
-        writel(0, tparams_day + 0x264);
-        writel(isp_memopt, tparams_day + 0x26c);
-        writel(0, tparams_day + 0x27c);
-        writel(0, tparams_day + 0x274);
-
-        writel(0, tparams_night + 0x264);
-        writel(isp_memopt, tparams_night + 0x26c);
-        writel(0, tparams_night + 0x27c);
-        writel(0, tparams_night + 0x274);
-    }
-
-    // Step 4: Write the parameters to hardware registers using global gISPdev->regs
-    writel((unsigned long)tparams_day, gISPdev->regs + 0x84b50);
-    dev_info(dev, "tparams_day written to register successfully\n");
 
     return 0;
 
@@ -5614,6 +5774,28 @@ static struct file_operations framechan_fops = {
     .unlocked_ioctl = framechan_ioctl,
 };
 
+
+static const struct v4l2_file_operations isp_v4l2_fops = {
+    .owner          = THIS_MODULE,
+    .open           = tisp_open,
+    .release        = tisp_release,
+    .unlocked_ioctl = isp_driver_ioctl,
+    .mmap = tx_isp_mmap,
+};
+
+
+// Update file operations structure
+static const struct file_operations isp_fops = {
+    .owner = THIS_MODULE,
+    .unlocked_ioctl = isp_driver_ioctl,
+    .open = tisp_open,
+    .release = tisp_release,
+    .read = tisp_read,
+    .write = tisp_write,
+    .mmap = tx_isp_mmap,
+};
+
+
 static int create_framechan_devices(struct device *dev)
 {
     int i, ret;
@@ -5664,29 +5846,6 @@ static void remove_framechan_devices(void)
         class_destroy(framechan_class);
     }
     unregister_chrdev_region(framechan_dev, MAX_CHANNELS);
-}
-
-static int setup_i2c_sensor(struct IMPISPDev *dev)
-{
-    struct i2c_client *client;
-    struct i2c_adapter *adapter;
-    struct i2c_board_info board_info = {
-        .type = "sc2336",
-        .addr = 0x30,  // Match sensor I2C address
-    };
-
-    adapter = i2c_get_adapter(0);  // Primary I2C bus
-    if (!adapter)
-        return -ENODEV;
-
-    client = i2c_new_device(adapter, &board_info);
-    if (!client) {
-        i2c_put_adapter(adapter);
-        return -ENODEV;
-    }
-
-    dev->sensor_i2c_client = client;
-    return 0;
 }
 
 static int tisp_probe(struct platform_device *pdev)
@@ -5783,13 +5942,6 @@ static int tisp_probe(struct platform_device *pdev)
     graph_data->devices = kzalloc(max_devices * sizeof(struct platform_device *), GFP_KERNEL | GFP_DMA);
     if (!graph_data->devices) {
         ret = -ENOMEM;
-        goto free_graph;
-    }
-
-    // Setup I2C sensor
-    ret = setup_i2c_sensor(gISPdev);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to setup I2C sensor\n");
         goto free_graph;
     }
 
