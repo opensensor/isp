@@ -461,7 +461,6 @@ struct isp_framesource_state {
     } config;
 };
 
-
 /* Note for Claude, GPT, or anyone  that will listen
 This is our internal driver structure and should never be passed back to libimp.
 Instead, we need to return specific structures that libimp expects outside of this.
@@ -524,6 +523,7 @@ struct IMPISPDev {
     struct clk *csi_clk;       // CSI clock
     struct clk *ipu_clk;       // IPU clock
     struct isp_framesource_state frame_sources[MAX_FRAME_SOURCES];
+    struct tx_isp_sensor_win_setting *sensor_window_size;
 
 } __attribute__((packed, aligned(4)));
 
@@ -2943,11 +2943,27 @@ static int setup_frame_source(struct IMPISPDev *dev, int channel) {
 
     pr_info("Buffer config: y_line=%d uv_line=%d total=%d\n",
             y_line_size, uv_line_size, fs->buf_size);
-    fs->fmt = ISP_FMT_NV12;  // Force NV12 format
+    // Use NV12 format
+    fs->fmt = V4L2_PIX_FMT_NV12;
 
-    // Important: Set line stride for NV12
-    uint32_t aligned_width = ALIGN(fs->width, 8);
-    fs->buf_size = (aligned_width * fs->height * 3) / 2;
+    if (!dev->sensor_window_size) {
+        pr_err("No sensor window size information\n");
+        return -EINVAL;
+    }
+
+    // Use window size info
+    fs->width = dev->sensor_window_size->width;
+    fs->height = dev->sensor_window_size->height;
+    fs->fmt = V4L2_PIX_FMT_NV12;  // Output format still NV12
+
+    // Calculate buffer size...
+    uint32_t y_stride = ALIGN(fs->width, 32);
+    uint32_t y_size = y_stride * fs->height;
+    uint32_t uv_size = y_size / 2;
+    fs->buf_size = y_size + uv_size;
+
+    pr_info("Frame source setup from window size: %dx%d fmt=0x%x\n",
+            fs->width, fs->height, fs->fmt);
 
     // Initialize synchronization primitives
     spin_lock_init(&fc->state_lock);
@@ -3075,11 +3091,6 @@ static int setup_isp_buffers(struct IMPISPDev *dev)
 {
     struct sensor_win_size *wsize = dev->sensor_i2c_client->dev.platform_data;
     void __iomem *regs;
-
-    if (!wsize) {
-        pr_err("No sensor window size information\n");
-        return -EINVAL;
-    }
 
     if (!dev->regs) {
         pr_err("No register mapping\n");
@@ -5502,81 +5513,40 @@ struct sensor_enable_param {
 static int configure_streaming_hardware(struct IMPISPDev *dev)
 {
     void __iomem *regs = dev->regs;
-    struct isp_framesource_state *fs;
-    struct frame_source_channel *fc;
-    int ret;
 
-    if (!dev || !regs) {
-        pr_err("Invalid device state\n");
-        return -EINVAL;
-    }
+    // Reset ISP first
+    writel(0x0, regs + ISP_CTRL_REG);
+    wmb();
+    msleep(10);
 
-    fs = &dev->frame_sources[0];
-    fc = fs->private;
-    if (!fc) {
-        pr_err("No frame source channel\n");
-        return -EINVAL;
-    }
-
-    // Step 1: Basic validation before configuration
-    ret = validate_buffer_setup(dev);
-    if (ret) {
-        pr_err("Failed buffer validation\n");
-        return ret;
-    }
-
-    // Step 2: Configure DMA buffer addresses using existing defines
-    writel(fc->dma_addr, regs + ISP_BUF0_OFFSET);
-    writel(fc->buf_size, regs + ISP_BUF0_OFFSET + 0x4);
-
-    // Configure additional buffers
-    for (int i = 1; i < fc->buf_cnt; i++) {
-        unsigned int reg_offset = ISP_BUF0_OFFSET + (i * ISP_BUF_SIZE_STEP);
-        writel(fc->dma_addr + (i * fc->buf_size), regs + reg_offset);
-        writel(fc->buf_size, regs + reg_offset + 0x4);
-    }
+    // Configure format registers before enabling
+    writel(V4L2_PIX_FMT_NV12, regs + ISP_INPUT_FORMAT_REG);
+    writel(V4L2_PIX_FMT_NV12, regs + ISP_OUTPUT_FORMAT_REG);
     wmb();
 
-    // Step 3: Configure stream control registers
-    writel(ISP_FMT_NV12, dev->regs + ISP_INPUT_FORMAT_REG);   // NV12 input
-    writel(V4L2_PIX_FMT_NV12, dev->regs + ISP_OUTPUT_FORMAT_REG); // NV12 output
-    writel(fs->width, dev->regs + ISP_OFFSET_PARAMS + 0x00);  // Width
-    writel(fs->height, dev->regs + ISP_OFFSET_PARAMS + 0x04); // Height
-    wmb();
-    writel(0x0, regs + ISP_STREAM_CTRL);  // Disable first
-    writel(0x0, regs + ISP_STREAM_START);
-    wmb();
-    udelay(100);
-
-    // Initialize control registers
-    writel(ISP_CTRL_ENABLE, regs + ISP_CTRL_REG);
-    writel(0x1, regs + ISP_CONF_OFFSET);
-    writel(0x1, regs + ISP_INIT_OFFSET);
+    // Configure buffer addresses properly
+    writel(dev->dma_addr, regs + ISP_BUF0_OFFSET);
+    writel(dev->dma_size/4, regs + ISP_BUF0_OFFSET + 0x4);  // Quarter size per buffer
     wmb();
 
-    // Step 4: Configure interrupt handling
+    // Enable proper interrupts
     writel(0x1, regs + ISP_INT_MASK_REG);    // Enable frame done interrupt
-    writel(0xFFFFFFFF, regs + ISP_INT_CLEAR_REG); // Clear pending
+    writel(0xffffffff, regs + ISP_INT_CLEAR_REG); // Clear any pending
     wmb();
 
-    pr_info("Streaming hardware configured:\n");
-    pr_info("  Resolution: %dx%d\n", fs->width, fs->height);
-    pr_info("  Buffer config: addr=0x%x size=%d count=%d\n",
-            (unsigned int)fc->dma_addr, fc->buf_size, fc->buf_cnt);
-    // Add after register writes:
-    pr_info("ISP register state:\n");
-    pr_info("  CTRL: 0x%08x\n", readl(dev->regs + ISP_CTRL_REG));
-    pr_info("  FORMAT: in=0x%08x out=0x%08x\n",
-            readl(dev->regs + ISP_INPUT_FORMAT_REG),
-            readl(dev->regs + ISP_OUTPUT_FORMAT_REG));
-    pr_info("  BYPASS: 0x%08x\n", readl(dev->regs + ISP_BYPASS_BASE));
-    pr_info("  STATUS: 0x%08x\n", readl(dev->regs + ISP_STATUS_REG));
+    // Set control bits properly
+    writel(0x1, regs + ISP_CTRL_REG);   // Enable processing
+    writel(0x1, regs + ISP_STREAM_CTRL); // Enable stream control
+    wmb();
 
-    // Also read back buffer config
-    pr_info("Buffer config readback:\n");
-    pr_info("  BUF0: addr=0x%08x size=0x%08x\n",
-            readl(dev->regs + ISP_BUF0_OFFSET),
-            readl(dev->regs + ISP_BUF0_OFFSET + 0x4));
+    pr_info("ISP hardware configured:\n"
+            "  CTRL=0x%x FORMAT=0x%x\n"
+            "  BUF0=0x%x size=0x%x\n",
+            readl(regs + ISP_CTRL_REG),
+            readl(regs + ISP_INPUT_FORMAT_REG),
+            readl(regs + ISP_BUF0_OFFSET),
+            readl(regs + ISP_BUF0_OFFSET + 0x4));
+
     return 0;
 }
 
@@ -5686,41 +5656,36 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         isp_sensor_write_reg(client, 0x0103, 0x01);
         msleep(20);
 
-        // Init basic sensor settings before ID read
-        isp_sensor_write_reg(client, 0x3018, 0x72);
-        isp_sensor_write_reg(client, 0x3031, 0x0A);
+        // From the driver's sensor_init_regs_1920_1080_30fps_mipi array
+        isp_sensor_write_reg(client, 0x36e9, 0x80);
+        isp_sensor_write_reg(client, 0x37f9, 0x80);
+        isp_sensor_write_reg(client, 0x301f, 0x02);
+        isp_sensor_write_reg(client, 0x3106, 0x05);
+        isp_sensor_write_reg(client, 0x320c, 0x08);
+        isp_sensor_write_reg(client, 0x320d, 0xca);
+        isp_sensor_write_reg(client, 0x320e, 0x05);
+        isp_sensor_write_reg(client, 0x320f, 0xa0);
+        isp_sensor_write_reg(client, 0x3301, 0x09);
+        isp_sensor_write_reg(client, 0x3306, 0x60);
+
         msleep(10);
 
-        // Read ID with multiple retries
-        for (i = 0; i < 3; i++) {
-            ret = isp_sensor_read_reg(client, 0x3107, &val_h);
-            ret |= isp_sensor_read_reg(client, 0x3108, &val_l);
-            pr_info("SC2336: ID = 0x%02x%02x (retry %d)\n", val_h, val_l, i);
+        // Read ID registers
+        ret = isp_sensor_read_reg(client, 0x3107, &val_h);
+        ret |= isp_sensor_read_reg(client, 0x3108, &val_l);
+        pr_info("SC2336: ID = 0x%02x%02x\n", val_h, val_l);
 
-            if (ret == 0) break;
-            msleep(10);
-        }
+        // Important: Set initial exposure/gain
+        isp_sensor_write_reg(client, 0x3e00, 0x00);
+        isp_sensor_write_reg(client, 0x3e01, 0x4a);
+        isp_sensor_write_reg(client, 0x3e02, 0xb0);
+        isp_sensor_write_reg(client, 0x3e08, 0x03);
+        isp_sensor_write_reg(client, 0x3e09, 0x20);
 
-        if (ret == 0) {
-            // Now that we've confirmed sensor comms, set up key registers
-            ret |= isp_sensor_write_reg(client, 0x3e08, 0x03); // Gain high
-            ret |= isp_sensor_write_reg(client, 0x3e09, 0x10); // Gain low
-            ret |= isp_sensor_write_reg(client, 0x3e01, 0x0a); // Exposure high
-            ret |= isp_sensor_write_reg(client, 0x3e02, 0x00); // Exposure low
+        // Enable output
+        isp_sensor_write_reg(client, 0x0100, 0x01);
 
-            // Add format control
-            ret |= isp_sensor_write_reg(client, 0x3f00, 0x00); // Output format
-            ret |= isp_sensor_write_reg(client, 0x3f04, 0x03); // Data format - RAW10
-            ret |= isp_sensor_write_reg(client, 0x3f05, 0x00); // VSYNC/HSYNC polarity
-
-            if (ret) {
-                pr_err("Failed to initialize sensor registers\n");
-                return ret;
-            }
-
-            pr_info("Sensor initialization complete\n");
-        }
-
+        pr_info("Sensor initialization complete\n");
         return ret;
     }
 	case VIDIOC_GET_SENSOR_ENUMERATION: {
@@ -7171,31 +7136,50 @@ static int setup_i2c_sensor(struct IMPISPDev *dev)
 {
     struct i2c_client *client;
     struct i2c_adapter *adapter;
+    struct tx_isp_sensor_win_setting *win_size;  // Changed from wsize
 
-    // Just get the adapter and create device
+    // Allocate window size structure
+    win_size = kzalloc(sizeof(*win_size), GFP_KERNEL);
+    if (!win_size) {
+        pr_err("Failed to allocate window size info\n");
+        return -ENOMEM;
+    }
+
+    // Fill in window settings from driver
+    win_size->width = 1920;
+    win_size->height = 1080;
+    win_size->fps = 25 << 16 | 1;  // Match driver fps format
+    win_size->mbus_code = V4L2_MBUS_FMT_SBGGR10_1X10;
+    win_size->colorspace = V4L2_COLORSPACE_SRGB;
+
+    // Get I2C adapter
     adapter = i2c_get_adapter(0);
     if (!adapter) {
-        pr_err("Failed to get I2C adapter 0\n");
+        pr_err("Failed to get I2C adapter\n");
+        kfree(win_size);
         return -ENODEV;
     }
 
     struct i2c_board_info board_info = {
         .type = "sc2336",
-        .addr = 0x30,  // Match sensor I2C address
+        .addr = 0x30,
+        .platform_data = win_size,  // Use win_size here
     };
 
     client = i2c_new_device(adapter, &board_info);
     if (!client) {
         pr_err("Failed to create I2C device\n");
         i2c_put_adapter(adapter);
+        kfree(win_size);
         return -ENODEV;
     }
 
-    // Just store the client - no register access yet
+    // Store both client and window size
     dev->sensor_i2c_client = client;
+    dev->sensor_window_size = win_size;  // Use win_size here
 
-    pr_info("I2C setup complete: adapter=%d client=%p\n",
-            adapter->nr, client);
+    pr_info("Sensor I2C setup complete: %dx%d@%d fps\n",
+            win_size->width, win_size->height, win_size->fps >> 16);
 
     return 0;
 }
@@ -7353,6 +7337,10 @@ static int tisp_remove(struct platform_device *pdev) {
     pr_info("ISP device remove called\n");
 
     if (dev) {
+        if (dev->sensor_window_size) {
+            kfree(dev->sensor_window_size);
+            dev->sensor_window_size = NULL;
+        }
      	// Unregister /dev/isp-m0 device
        	misc_deregister(&isp_m0_miscdev);
 
