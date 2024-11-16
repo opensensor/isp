@@ -88,8 +88,7 @@ and `ingenic-sdk` https://github.com/themactep/ingenic-sdk
 Without these projects, there would be no point to trying to reverse engineer the ISP driver.
 
 ## Limitations
-This driver is incomplete but works to a certain degree and 
-does enable and communicate with the sensor and attempt to setup framebuffers.
+This driver is incomplete but works to a certain degree and enables the streamer, but we only get green frames.
 
 There is a crash after the first stream on ioctl cmd, that we are currently debugging.
 
@@ -97,7 +96,7 @@ Current progress:
 
 ```angular2html
 Loading ISP driver...
-gISPdev allocated at 81b8bc00
+ourISPdev allocated at 81a9fc00
 Registering platform driver
 Platform driver registered successfully
 Registering platform device with name 'tisp-driver'
@@ -105,21 +104,22 @@ Probing TISP device...
 ISP register mapping: base=b3300000 test_read=0x0
 Configuring ISP clocks using standard API
 Clock rates after configuration:
-  ISP Core: 250000000 Hz
-  CGU ISP: 125000000 Hz
-  IPU: 250000000 Hz
+ISP Core: 250000000 Hz
+CGU ISP: 125000000 Hz
+IPU: 250000000 Hz
 tx_isp: Initializing reserved memory
 tx_isp: Reserved memory initialized:
-  Physical address: 0x02a80000
-  Virtual address: a2a80000
-  Size: 22544384 bytes
+Physical address: 0x02a80000
+Virtual address: a2a80000
+Size: 22544384 bytes
 tx_isp: Validating memory setup:
-  gISPdev = 81b8bc00
-  dma_addr = 0x02a80000
-  dma_buf = a2a80000
+ourISPdev = 81a9fc00
+dma_addr = 0x02a80000
+dma_buf = a2a80000
 Memory regions:
-  Params: a2a81000
-  WDR: a2a82000
+Params: a2a81000
+WDR: a2a82000
+Sensor initialized with resolution 1920x1080 @ 30 fps
 Starting tisp_init...
 tisp-driver tisp-driver: tparams_day and tparams_night buffers allocated successfully
 Loading parameters from file: /etc/sensor/sc2336-t31.bin
@@ -128,98 +128,148 @@ Copy successful
 tisp-driver tisp-driver: Parameters loaded successfully from /etc/sensor/sc2336-t31.bin
 tisp-driver tisp-driver: Applying isp_memopt settings
 tisp-driver tisp-driver: tparams_day written to register successfully
-Registering child devices
-tisp-driver tisp-driver: Successfully registered 8 devices
-Creating ISP graph with 8 devices
-ISP graph creation completed successfully
+Setting up ISP subdevices
+Subdev setup complete:
+sd=80a3e300 src_pad=80a3e000 sink_pad=80a3e980
 Created device /dev/framechan0
 Created device /dev/framechan1
 Created device /dev/framechan2
 tisp-driver tisp-driver: TISP device probed successfully
 Platform device registered successfully
 ISP driver loaded successfully
-ISP device open called from pid 2157
-ISP device open: file=80ce57d0 f_flags=0x82051400
-Stored fd -2113596416 at offset 0x20
-Initialized frame source 0 with default 1920x1080 buf_size=4147200
-Set file->private_data to gISPdev=81b8bc00
+ISP device open called from pid 2126
+Initializing frame source channel 0
+Channel 0 initialized: 1920x1080, buffers=4 size=4147200 type_flags=0x0
+Channel 0: value at 0x58 offset: 0x0
+ISP opened: file=80956cf0 fs=81a9fd5e instance=80947e80 fd=6
 ISP IOCTL called: cmd=0x805056c1
 
 === IOCTL Debug ===
-cmd=0x805056c1 arg=0x774b0c80
-file=820e7960 flags=0x2002 private_data=  (null)
+cmd=0x805056c1 arg=0x77cdec80
+file=80cf7a00 flags=0x2002
 SC2336: ID = 0xcb3a (retry 0)
 ISP IOCTL called: cmd=0xc050561a
 
 === IOCTL Debug ===
-cmd=0xc050561a arg=0x7faa4908
-file=820e7960 flags=0x2002 private_data=  (null)
+cmd=0xc050561a arg=0x7f87a528
+file=80cf7a00 flags=0x2002
 Provided sensor info for index 0: sc2336
 ISP IOCTL called: cmd=0xc050561a
 
 === IOCTL Debug ===
-cmd=0xc050561a arg=0x7faa4908
-file=820e7960 flags=0x2002 private_data=  (null)
+cmd=0xc050561a arg=0x7f87a528
+file=80cf7a00 flags=0x2002
 ISP IOCTL called: cmd=0xc0045627
 
 === IOCTL Debug ===
-cmd=0xc0045627 arg=0x7faa4960
-file=820e7960 flags=0x2002 private_data=  (null)
+cmd=0xc0045627 arg=0x7f87a580
+file=80cf7a00 flags=0x2002
 Sensor command: 0xc0045627
 Stored sensor name: sc2336
 ISP IOCTL called: cmd=0x800856d5
 
 === IOCTL Debug ===
-cmd=0x800856d5 arg=0x7faa4958
-file=820e7960 flags=0x2002 private_data=  (null)
-tx_isp: SET_BUF request: method=0x203a726f phys=0x33326373 size=0xcab99f17
+cmd=0x800856d5 arg=0x7f87a578
+file=80cf7a00 flags=0x2002
+tx_isp: SET_BUF request: method=0x203a726f phys=0x33326373 size=0xdecd7a17
+tx_isp: SET_BUF request: method=0x203a726f phys=0x33326373 size=0xdecd7a17
 tx_isp: Magic allocation setup: phys=0x2a80000 virt=a2a80000 size=0x1580000
 ISP IOCTL called: cmd=0x800856d4
 
 === IOCTL Debug ===
-cmd=0x800856d4 arg=0x7faa4958
-file=820e7960 flags=0x2002 private_data=  (null)
+cmd=0x800856d4 arg=0x7f87a578
+file=80cf7a00 flags=0x2002
 tx_isp: Handling ioctl VIDIOC_SET_BUF_INFO
-tx_isp: Buffer info configured: phys=0x2a80000 virt=a2a80000 size=22544384
+Buffer info before update: method=0x33326373 phys=0x3633 size=0
+Buffer info after update:
+method=0x1
+phys=0x2a80000
+virt=a2a80000
+size=22544384
+flags=0x1
 tx_isp: Buffer setup completed successfully
 ISP IOCTL called: cmd=0x40045626
 
 === IOCTL Debug ===
-cmd=0x40045626 arg=0x7faa4970
-file=820e7960 flags=0x2002 private_data=  (null)
+cmd=0x40045626 arg=0x7f87a590
+file=80cf7a00 flags=0x2002
 ISP IOCTL called: cmd=VIDIOC_GET_SENSOR_INFO
+Sensor info request: returning success (1)
 ISP IOCTL called: cmd=0x80045612
 
 === IOCTL Debug ===
 cmd=0x80045612 arg=0x0
-file=820e7960 flags=0x2002 private_data=  (null)
-Stream ON requested
-Frame source setup: dev=81b8bc00 channel=0
-dev offset 0x20=0x0
-Frame source channel 0 initialized:
-  buffer_base: a2b894d4
-  dma_addr: 0x2b894d4
-  buf_size: 4147200 x 4 buffers
-Started streaming on channel 0 with:
-  DMA addr: 0x02a80000
-  Buffer size: 22544384
-  State flags: 0x2
+file=80cf7a00 flags=0x2002
+Setting up buffers for 1920x1080 frame at base b3300000
+Buffer setup complete:
+Main buffer: 0x02a80000 size=2073600
+Second buffer: 0x02c7a400 size=2073600
+Third buffer: 0x02e74800 line_size=64
+Register verification:
+BUF0: addr=0x02a80000 size=0x00000780
+BUF1: addr=0x00000000 size=0x00000780
+Streaming hardware configured:
+Resolution: 1920x1080
+Buffer config: addr=0x2b894d8 size=4147200 count=4
 ISP IOCTL called: cmd=0x800456d0
 
 === IOCTL Debug ===
-cmd=0x800456d0 arg=0x7faa4970
-file=820e7960 flags=0x2002 private_data=  (null)
-TX_ISP_VIDEO_LINK_SETUP
+cmd=0x800456d0 arg=0x7f87a590
+file=80cf7a00 flags=0x2002
 Setting up video link 0
-Pad flags: src=0x3 sink=0x3 link=0x3
+Configuring link:
+sd=80a3e300 src=80a3e000 sink=80a3e980
+src flags=0x2 sink flags=0x1
+Video link 0 configured successfully
+Video link setup complete, wrote back 0
 ISP IOCTL called: cmd=0x800456d2
 
 === IOCTL Debug ===
 cmd=0x800456d2 arg=0x0
-file=820e7960 flags=0x2002 private_data=  (null)
-Stream enable returned 0
-do_page_fault() #2: sending SIGSEGV to prudynt for invalid write access to
-00000000 
-epc = 774e0dcc in prudynt[774b4000+5e000]
-ra  = 774e29c8 in prudynt[774b4000+5e000]
+file=80cf7a00 flags=0x2002
+Configuring stream enable=1
+Stream enabled successfully
+Stream enabled, count=2
+ISP IOCTL called: cmd=0x800456d3
+
+=== IOCTL Debug ===
+cmd=0x800456d3 arg=0x0
+file=80cf7a00 flags=0x2002
+Opened framechan0: fs=81a9fd5e base=a2b894d8
+Frame channel IOCTL: cmd=0xc07056c3 arg=0x75df7828
+ISP-DBG: Channel attr request:
+enable=1 format=0x3231564e
+size=1920x1080
+crop=0 (0,0) 8x0
+scale=0 0x0
+pic=0x0
+Channel 0 configured: 1920x1080 fmt=0x3231564e size=3110400 state=1
+Frame Source State:
+Format: NV12 (0x3231564e)
+Resolution: 1920x1080
+Buffer: size=3110400 count=4
+State: 1 Flags: 0x1
+DMA: addr=0x02b894d8 base=a2b894d8
+Frame channel IOCTL: cmd=0xc0145608 arg=0x75df78f8
+Set frame depth: channel=1 depth=1
+Frame depth set: channel=1 depth=1 buf_size=3110400
+Channel 0 configured: 1920x1080 fmt=0x3231564e size=3110400 state=1
+DMA config: addr=0x02b894d8 base=a2b894d8 size=3110400 flags=0x1
+Frame channel IOCTL: cmd=0x80045612 arg=0x75df7914
+Stream ON request for channel 0
+Channel 0 streaming started:
+base=0x2b894d8 offset=0x0
+buf_size=3110400 count=4
+ctrl=0x1 start=0x1
+Opened framechan1: fs=81a9fe06 base=a3b5b4d4
+Frame channel IOCTL: cmd=0xc07056c3 arg=0x75c98828
+No channel data
+cgu_set_rate, parent = 1008000000, rate = 4096000, n = 7875, reg val = 0x22001ec3
+codec_codec_ctl: set sample rate...
+codec_codec_ctl: set device...
+codec_set_device: set device: MIC...
+
+=== ISP Release Debug ===
+file=80cf7a00 flags=0x2002 fd=-1
+codec_codec_ctl: set CODEC_TURN_OFF...
 ```
