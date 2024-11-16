@@ -351,6 +351,10 @@ struct isp_framesource_state {
 };
 
 
+/* Note for Claude, GPT, or anyone  that will listen
+This is our internal driver structure and should never be passed back to libimp.
+Instead, we need to return specific structures that libimp expects outside of this.
+ */
 struct IMPISPDev {
     // Base device info - verified offsets
     char dev_name[32];                    // 0x00: Device name
@@ -358,6 +362,7 @@ struct IMPISPDev {
     int major;                            // Major number
     int minor;                            // Minor number
     int fd;                 // Current fd for this instance
+    int stream_count;           // Stream counter
     struct list_head list;  // For tracking multiple opens
     spinlock_t fd_lock;     // Protect fd operations
     int is_open;
@@ -435,7 +440,7 @@ static uint32_t soc_id = 0xFFFFFFFF;
 static uint32_t cppsr = 0xFFFFFFFF;
 static uint32_t subsoctype = 0xFFFFFFFF;
 static uint32_t subremark = 0xFFFFFFFF;
-struct IMPISPDev *gISPdev = NULL;
+struct IMPISPDev *ourISPdev = NULL;
 uint32_t globe_ispdev = 0x0;
 static struct resource *mem_region;
 
@@ -1029,6 +1034,23 @@ static void handle_frame_complete(struct isp_framesource_state *fs)
     up(&fb->frame_sem);
 }
 
+static struct isp_framesource_state *get_fs_from_fd(int fd)
+{
+    struct isp_instance *instance;
+    struct isp_framesource_state *fs = NULL;
+
+    spin_lock(&instances_lock);
+    list_for_each_entry(instance, &isp_instances, list) {
+        if (instance->fd == fd) {
+            fs = instance->fs;
+            break;
+        }
+    }
+    spin_unlock(&instances_lock);
+
+    return fs;
+}
+
 #define ISP_INT_FRAME_DONE  BIT(0)    // Frame complete
 #define ISP_INT_DMA_ERR    BIT(1)    // DMA error
 #define ISP_INT_BUF_FULL   BIT(2)    // Buffer full
@@ -1565,7 +1587,7 @@ static int isp_fs_show(struct seq_file *m, void *v)
 {
     int i;
 
-    if (!gISPdev) {
+    if (!ourISPdev) {
         seq_puts(m, "Error: ISP device not initialized\n");
         return 0;
     }
@@ -1573,7 +1595,7 @@ static int isp_fs_show(struct seq_file *m, void *v)
     for (i = 0; i < MAX_FRAMESOURCE_CHANNELS; i++) {
         seq_printf(m, "############## framesource %d ###############\n", i);
         seq_printf(m, "chan status: %s\n",
-                  (gISPdev->is_open && gISPdev->sensor_name[0]) ? "running" : "stop");
+                  (ourISPdev->is_open && ourISPdev->sensor_name[0]) ? "running" : "stop");
     }
     return 0;
 }
@@ -1582,35 +1604,35 @@ static int isp_m0_show(struct seq_file *m, void *v)
 {
     seq_puts(m, "****************** ISP INFO **********************\n");
 
-    if (!gISPdev || !gISPdev->is_open || !gISPdev->sensor_name[0]) {
+    if (!ourISPdev || !ourISPdev->is_open || !ourISPdev->sensor_name[0]) {
         seq_puts(m, "sensor doesn't work, please enable sensor\n");
     } else {
-        seq_printf(m, "sensor %s is working\n", gISPdev->sensor_name);
+        seq_printf(m, "sensor %s is working\n", ourISPdev->sensor_name);
     }
     return 0;
 }
 
 static int isp_w00_show(struct seq_file *m, void *v)
 {
-    if (!gISPdev || !gISPdev->is_open || !gISPdev->sensor_name[0]) {
+    if (!ourISPdev || !ourISPdev->is_open || !ourISPdev->sensor_name[0]) {
         seq_puts(m, "sensor doesn't work, please enable sensor\n");
     } else {
-        seq_printf(m, "sensor %s is active\n", gISPdev->sensor_name);
+        seq_printf(m, "sensor %s is active\n", ourISPdev->sensor_name);
     }
     return 0;
 }
 
 static int isp_w02_show(struct seq_file *m, void *v)
 {
-    if (!gISPdev || !gISPdev->is_open || !gISPdev->sensor_name[0]) {
+    if (!ourISPdev || !ourISPdev->is_open || !ourISPdev->sensor_name[0]) {
         seq_puts(m, "sensor doesn't work, please enable sensor\n");
         return 0;
     }
 
-    // If we have WDR mode info in gISPdev, we could use it here
-    seq_printf(m, " %d, %d\n", gISPdev->wdr_mode ? 1 : 0, 0);  // Example values
+    // If we have WDR mode info in ourISPdev, we could use it here
+    seq_printf(m, " %d, %d\n", ourISPdev->wdr_mode ? 1 : 0, 0);  // Example values
 
-    // Add any other relevant info from gISPdev structure
+    // Add any other relevant info from ourISPdev structure
     // Could add frame/buffer stats if we're tracking them
 
     return 0;
@@ -2639,7 +2661,7 @@ static inline void system_reg_write(u32 reg, u32 val)
 #define RMEM_SIZE 22544384  // Match exact size LIBIMP expects
 #define ISP_ALLOC_KMALLOC 1
 #define ISP_ALLOC_CONTINUOUS 2
-static struct IMPISPDev *gISPdev_bak = NULL;  // Backup for reopen
+static struct IMPISPDev *ourISPdev_bak = NULL;  // Backup for reopen
 
 // Add these offsets from OEM driver
 #define SHARED_BUF_OFFSET 0x130
@@ -2997,6 +3019,15 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
     fc->dma_addr = ALIGN(base_addr, ISP_FRAME_BUFFER_ALIGN);
     fc->buf_base = dev->dma_buf + (fc->dma_addr - ISP_DMA_BUFFER_BASE);
 
+    // Initialize ALL synchronization primitives
+    mutex_init(&fc->lock);
+    sema_init(&fc->sem, 0);
+    spin_lock_init(&fc->queue_lock);  // Add this
+    INIT_LIST_HEAD(&fc->ready_list);  // And this
+    INIT_LIST_HEAD(&fc->done_list);   // And this
+    init_waitqueue_head(&fc->wait);   // And this
+    atomic_set(&fc->frame_count, 0);  // And this
+
     mutex_init(&fc->lock);
     sema_init(&fc->sem, 0);
 
@@ -3048,40 +3079,39 @@ static atomic_t isp_instance_counter = ATOMIC_INIT(0);
 static int tisp_open(struct file *file)
 {
     struct isp_instance *instance;
-    int ret;
+    int fd;
+    int ret = 0;
 
     pr_info("ISP device open called from pid %d\n", current->pid);
 
-    if (!gISPdev) {
+    if (!ourISPdev) {
         pr_err("ISP device not initialized\n");
         return -ENODEV;
     }
+
+    ourISPdev->stream_count = 0;
 
     // Allocate new instance
     instance = kzalloc(sizeof(*instance), GFP_KERNEL);
     if (!instance)
         return -ENOMEM;
 
-    // Generate unique fd
-    instance->fd = atomic_inc_return(&isp_instance_counter);
+    // Initialize instance
+    instance->fd = fd;
     instance->file = file;
 
     pr_info("ISP device open: file=%p f_flags=0x%x fd=%d\n",
-            file, file->f_flags, instance->fd);
-
-    // Store fd in device
-    gISPdev->fd = instance->fd;
-    gISPdev->is_open = 0;  // Reset counter
+            file, file->f_flags, fd);
 
     // Initialize frame sources first
-    ret = init_frame_source(gISPdev, 0);
+    ret = init_frame_source(ourISPdev, 0);
     if (ret) {
         pr_err("Failed to initialize frame source: %d\n", ret);
         kfree(instance);
         return ret;
     }
 
-    instance->fs = &gISPdev->frame_sources[0];
+    instance->fs = &ourISPdev->frame_sources[0];
     instance->fs->is_open = 1;  // Mark frame source as open
 
     // Add to global list
@@ -3089,13 +3119,15 @@ static int tisp_open(struct file *file)
     list_add_tail(&instance->list, &isp_instances);
     spin_unlock(&instances_lock);
 
-    // Store in file private data
-    file->private_data = instance;
-    gISPdev->is_open = 1;  // Mark device as open
+    // Store just the fd in file private data, not our internal structure
+    file->private_data = (void *)(long)fd;
+    ourISPdev->is_open = 1;  // Mark device as open
 
-    pr_info("Created instance with fd %d\n", instance->fd);
+    pr_info("Created instance with fd %d\n", fd);
+
     return 0;
 }
+
 
 // Update cleanup function to just free info structures:
 static void cleanup_buffer_info(struct IMPISPDev *dev)
@@ -3431,13 +3463,21 @@ static int enable_stream(struct IMPISPDev *dev, int channel, bool enable) {
     }
 
     fs = &dev->frame_sources[channel];
-    fc = fs->private;
-    regs = dev->regs;
-
-    if (!fs || !fc) {
+    if (!fs || !fs->is_open) {
         pr_err("Invalid frame source state\n");
         return -EINVAL;
     }
+
+    fc = fs->private;
+    if (!fc) {
+        pr_err("No frame source channel data\n");
+        return -EINVAL;
+    }
+
+    regs = dev->regs;
+
+    pr_info("Queue state before lock: ready=%d done=%d\n",
+            !list_empty(&fc->ready_list), !list_empty(&fc->done_list));
 
     spin_lock_irqsave(&fc->queue_lock, flags);
 
@@ -3448,10 +3488,30 @@ static int enable_stream(struct IMPISPDev *dev, int channel, bool enable) {
             goto unlock;
         }
 
+        // Reinitialize the frame count
+        atomic_set(&fc->frame_count, 0);
+
+        // First disable any existing stream
+        writel(0x0, regs + ISP_STREAM_START);
+        writel(0x0, regs + ISP_STREAM_CTRL);
+        wmb();
+        udelay(10);
+
+        // Clear and reinitialize queues
+        while (!list_empty(&fc->ready_list)) {
+            struct frame_node *node = list_first_entry(&fc->ready_list,
+                                                     struct frame_node, list);
+            list_del(&node->list);
+            kfree(node);
+        }
+
+        pr_info("Initializing %d frame nodes\n", fc->buf_cnt);
+
         // Initialize frame nodes
         for (i = 0; i < fc->buf_cnt; i++) {
             struct frame_node *node = alloc_frame_node(fc);
             if (!node) {
+                pr_err("Failed to allocate frame node %d\n", i);
                 ret = -ENOMEM;
                 goto cleanup;
             }
@@ -3459,15 +3519,22 @@ static int enable_stream(struct IMPISPDev *dev, int channel, bool enable) {
             atomic_inc(&fc->frame_count);
         }
 
-        // Configure DMA buffers
-        uint32_t buf_addr = fc->dma_addr;
-        uint32_t buf_size = fc->buf_size;
+        pr_info("Frame count after init: %d\n", atomic_read(&fc->frame_count));
 
+        // Configure DMA buffer - make sure addresses are aligned
+        uint32_t buf_addr = ALIGN(fc->dma_addr, 64);
+        uint32_t buf_size = ALIGN(fc->buf_size, 64);
+
+        pr_info("Programming DMA: addr=0x%x size=0x%x\n", buf_addr, buf_size);
+
+        // Program buffer registers
         writel(buf_addr, regs + ISP_BUF0_OFFSET);
         writel(buf_size, regs + ISP_BUF0_OFFSET + 0x4);
         wmb();
 
-        // Enable stream
+        pr_info("Buffer registers programmed, enabling stream...\n");
+
+        // Enable stream with proper sequencing
         fs->flags |= 0x4;
         wmb();
 
@@ -3476,6 +3543,8 @@ static int enable_stream(struct IMPISPDev *dev, int channel, bool enable) {
         udelay(10);
         writel(0x1, regs + ISP_STREAM_START);
         wmb();
+
+        pr_info("Stream enabled\n");
 
     } else {
         if (!(fs->flags & 0x4)) {
@@ -3504,6 +3573,9 @@ static int enable_stream(struct IMPISPDev *dev, int channel, bool enable) {
         fs->flags &= ~0x4;
     }
 
+    // Add delay before reading back status
+    udelay(100);
+
     // Read back status
     uint32_t ctrl = readl(regs + ISP_STREAM_CTRL);
     uint32_t start = readl(regs + ISP_STREAM_START);
@@ -3515,7 +3587,7 @@ static int enable_stream(struct IMPISPDev *dev, int channel, bool enable) {
             "  buf_addr=0x%x buf_size=0x%x\n",
             enable ? "enabled" : "disabled",
             channel, ctrl, start, status, fs->flags,
-            fc->dma_addr, fc->buf_size);
+            (unsigned int)fc->dma_addr, fc->buf_size);
 
 unlock:
     spin_unlock_irqrestore(&fc->queue_lock, flags);
@@ -3605,7 +3677,7 @@ static int tisp_release(struct inode *inode, struct file *file)
     if (instance) {
         // Stop streaming if active
         if (instance->fs && instance->fs->state == 2) {
-            enable_isp_streaming(gISPdev, file, 0, false);
+            enable_isp_streaming(ourISPdev, file, 0, false);
         }
 
         // Remove from global list
@@ -3618,7 +3690,7 @@ static int tisp_release(struct inode *inode, struct file *file)
 
     // Clean up frame source state
     for (int channel = 0; channel < MAX_FRAMESOURCE_CHANNELS; channel++) {
-    	cleanup_frame_source(gISPdev, channel);
+    	cleanup_frame_source(ourISPdev, channel);
     }
 
     file->private_data = NULL;
@@ -4475,7 +4547,7 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
     switch (cmd) {
 		case SENSOR_CMD_READ_ID: {
 		    uint8_t val_h = 0, val_l = 0;
-		    struct i2c_client *client = gISPdev->sensor_i2c_client;
+		    struct i2c_client *client = ourISPdev->sensor_i2c_client;
 
 		    // Try reading ID registers
 		    ret = isp_sensor_read_reg(client, 0x3307, &val_h);
@@ -4565,9 +4637,9 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
 		    }
 
 		    // Store the sensor name in our structure
-		    strlcpy(gISPdev->sensor_name, sensor_name, SENSOR_NAME_SIZE);
+		    strlcpy(ourISPdev->sensor_name, sensor_name, SENSOR_NAME_SIZE);
 
-		    pr_info("Stored sensor name: %s\n", gISPdev->sensor_name);
+		    pr_info("Stored sensor name: %s\n", ourISPdev->sensor_name);
 		    return 0;
 		}
         case 0x800856d7: {
@@ -4575,22 +4647,22 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
 
 		    pr_info("tx_isp: Handling WDR buffer info request\n");
 
-		    if (!gISPdev || !gISPdev->wdr_mode) {
+		    if (!ourISPdev || !ourISPdev->wdr_mode) {
 		        pr_err("tx_isp: WDR not enabled\n");
 		        return -EINVAL;
 		    }
 
 		    // Ensure WDR control buffer is allocated
-		    if (!gISPdev->wdr_buf_info) {
-		        gISPdev->wdr_buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
-		        if (!gISPdev->wdr_buf_info) {
+		    if (!ourISPdev->wdr_buf_info) {
+		        ourISPdev->wdr_buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
+		        if (!ourISPdev->wdr_buf_info) {
 		            pr_err("tx_isp: Failed to allocate WDR buffer info\n");
 		            return -ENOMEM;
 		        }
 		    }
 
 		    // Calculate WDR buffer size (assuming YUV420 format)
-		    uint32_t y_size = gISPdev->width * gISPdev->height;
+		    uint32_t y_size = ourISPdev->width * ourISPdev->height;
 		    uint32_t uv_size = y_size / 2;
 		    uint32_t wdr_size = y_size + uv_size;
 		    wdr_info.buffer_size = wdr_size;
@@ -4719,32 +4791,32 @@ static int init_isp_reserved_memory(struct platform_device *pdev)
 {
     pr_info("tx_isp: Initializing reserved memory\n");
 
-    if (!gISPdev) {
+    if (!ourISPdev) {
         dev_err(&pdev->dev, "ISP device not initialized\n");
         return -EINVAL;
     }
 
     // Store the base address
-    gISPdev->dma_addr = RMEM_BASE;
-    gISPdev->dma_size = RMEM_SIZE;
+    ourISPdev->dma_addr = RMEM_BASE;
+    ourISPdev->dma_size = RMEM_SIZE;
 
     // Map the reserved memory region
-    gISPdev->dma_buf = ioremap(RMEM_BASE, RMEM_SIZE);
-    if (!gISPdev->dma_buf) {
+    ourISPdev->dma_buf = ioremap(RMEM_BASE, RMEM_SIZE);
+    if (!ourISPdev->dma_buf) {
         dev_err(&pdev->dev, "Failed to map reserved memory\n");
         return -ENOMEM;
     }
 
     pr_info("tx_isp: Reserved memory initialized:\n");
-    pr_info("  Physical address: 0x%08x\n", (uint32_t)gISPdev->dma_addr);
-    pr_info("  Virtual address: %p\n", gISPdev->dma_buf);
-    pr_info("  Size: %zu bytes\n", gISPdev->dma_size);
+    pr_info("  Physical address: 0x%08x\n", (uint32_t)ourISPdev->dma_addr);
+    pr_info("  Virtual address: %p\n", ourISPdev->dma_buf);
+    pr_info("  Size: %zu bytes\n", ourISPdev->dma_size);
 
     // Add validation print
     pr_info("tx_isp: Validating memory setup:\n");
-    pr_info("  gISPdev = %p\n", gISPdev);
-    pr_info("  dma_addr = 0x%08x\n", (uint32_t)gISPdev->dma_addr);
-    pr_info("  dma_buf = %p\n", gISPdev->dma_buf);
+    pr_info("  ourISPdev = %p\n", ourISPdev);
+    pr_info("  dma_addr = 0x%08x\n", (uint32_t)ourISPdev->dma_addr);
+    pr_info("  dma_buf = %p\n", ourISPdev->dma_buf);
 
     return 0;
 }
@@ -5004,6 +5076,9 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 {
     void __user *argp = (void __user *)arg;
     struct sensor_list_info sensor_list[MAX_SENSORS];
+    int fd = (int)(unsigned long)file->private_data;
+    struct isp_framesource_state *fs = NULL;
+    struct isp_instance *instance;
     int ret = 0;
     int channel = 0;
 
@@ -5013,22 +5088,15 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     pr_info("file=%p flags=0x%x private_data=%p\n",
             file, file->f_flags, file->private_data);
 
-    // Get channel number if this is a frame channel device
-    if (file->private_data) {
-        struct isp_framesource_state *fs = file->private_data;
-        channel = fs->chn_num;
-        pr_info("Using channel %d from frame source\n", channel);
-    }
-
     // Basic validation
-    if (!gISPdev || !gISPdev->is_open) {
+    if (!ourISPdev || !ourISPdev->is_open) {
         pr_err("ISP device not initialized or not open\n");
         return -EINVAL;
     }
 
     switch (cmd) {
 	case VIDIOC_REGISTER_SENSOR: { // cmd=0x805056c1
-	    struct i2c_client *client = gISPdev->sensor_i2c_client;
+	    struct i2c_client *client = ourISPdev->sensor_i2c_client;
 	    unsigned char val_h = 0, val_l = 0;
 	    int i;
 
@@ -5089,7 +5157,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         pr_info("ISP IOCTL called: cmd=VIDIOC_GET_SENSOR_INFO\n");
 
         // Check if the sensor is initialized
-        if (!gISPdev || !gISPdev->sensor_i2c_client) {
+        if (!ourISPdev || !ourISPdev->sensor_i2c_client) {
             pr_err("Sensor not initialized\n");
             return -ENODEV;
         }
@@ -5097,8 +5165,8 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         struct isp_sensor_info info;
         info.is_initialized = 1;
         info.chip_id = 0xcb3a;  // TODO: Get the actual chip ID
-        info.width = gISPdev->width;
-        info.height = gISPdev->height;
+        info.width = ourISPdev->width;
+        info.height = ourISPdev->height;
 
         // Copy the info structure back to user space
         if (copy_to_user((void __user *)arg, &info, sizeof(info))) {
@@ -5114,7 +5182,11 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
         pr_info("Enable stream IOCTL request on channel %d\n", channel);
 
-        ret = enable_stream(gISPdev, channel, 1);
+        ret = enable_stream(ourISPdev, channel, 1);
+        if (ret == 0) {
+            // Only update stream count on success, matching libimp behavior
+            ourISPdev->stream_count += 2;
+        }
         pr_info("Enable stream returned %d\n", ret);
 
         return ret;
@@ -5124,16 +5196,16 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         pr_info("tx_isp: SET_BUF request: method=0x%x phys=0x%x size=0x%x\n",
                 buf_info->method, buf_info->phys_addr, buf_info->size);
 
-        if (gISPdev && gISPdev->buf_info) {
+        if (ourISPdev && ourISPdev->buf_info) {
             pr_info("tx_isp: Magic allocation setup: phys=0x%x virt=%p size=0x%x\n",
-                    (unsigned int)gISPdev->dma_addr, gISPdev->dma_buf, gISPdev->dma_size);
+                    (unsigned int)ourISPdev->dma_addr, ourISPdev->dma_buf, ourISPdev->dma_size);
 
-            struct isp_framesource_state *fs = &gISPdev->frame_sources[0];
+            struct isp_framesource_state *fs = &ourISPdev->frame_sources[0];
             pr_info("Frame source state: is_open=%d flags=0x%x dma=0x%x size=%u\n",
                     fs->is_open, fs->flags, (unsigned int)fs->dma_addr, fs->buf_size);
         }
 
-        return handle_get_buf_ioctl(gISPdev, arg);
+        return handle_get_buf_ioctl(ourISPdev, arg);
     }
     case VIDIOC_SET_BUF_INFO: {
         struct sensor_buffer_info buf_info = {0};
@@ -5141,15 +5213,15 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
         pr_info("tx_isp: Handling ioctl VIDIOC_SET_BUF_INFO\n");
 
-        if (!gISPdev) {
+        if (!ourISPdev) {
             pr_err("No ISP device\n");
             return -EINVAL;
         }
 
         // Allocate buf_info if not already done
-        if (!gISPdev->buf_info) {
-            gISPdev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
-            if (!gISPdev->buf_info) {
+        if (!ourISPdev->buf_info) {
+            ourISPdev->buf_info = kzalloc(sizeof(struct sensor_buffer_info), GFP_KERNEL);
+            if (!ourISPdev->buf_info) {
                 pr_err("Failed to allocate buffer info\n");
                 return -ENOMEM;
             }
@@ -5165,13 +5237,13 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
         // Use actual mapped addresses
         buf_info.method = ISP_ALLOC_KMALLOC;
-        buf_info.buffer_start = gISPdev->dma_addr;
-        buf_info.buffer_size = gISPdev->dma_size;
-        buf_info.virt_addr = (unsigned long)gISPdev->dma_buf;
+        buf_info.buffer_start = ourISPdev->dma_addr;
+        buf_info.buffer_size = ourISPdev->dma_size;
+        buf_info.virt_addr = (unsigned long)ourISPdev->dma_buf;
         buf_info.flags = 1;
 
         // Store consistent info
-        memcpy(gISPdev->buf_info, &buf_info, sizeof(buf_info));
+        memcpy(ourISPdev->buf_info, &buf_info, sizeof(buf_info));
 
         pr_info("Buffer info after update:\n");
         pr_info("  method=0x%x\n", buf_info.method);
@@ -5190,24 +5262,24 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
       	pr_info("TX_ISP_VIDEO_LINK_SETUP\n");
         unsigned int link;
         if (copy_from_user(&link, argp, sizeof(link))) {
-            dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
+            dev_err(ourISPdev->dev, "[%s][%d] copy from user error\n",
                     __func__, __LINE__);
             return -EFAULT;
         }
-        ret = setup_video_link(gISPdev, link);
+        ret = setup_video_link(ourISPdev, link);
         break;
     }
     case TX_ISP_SET_AE_ALGO_OPEN: {
       	pr_info("TX_ISP_SET_AE_ALGO_OPEN\n");
         struct isp_ae_algo ae;
         if (copy_from_user(&ae, argp, sizeof(ae))) {
-            dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
+            dev_err(ourISPdev->dev, "[%s][%d] copy from user error\n",
                     __func__, __LINE__);
             return -EFAULT;
         }
-        ret = init_ae_algo(gISPdev, &ae);
+        ret = init_ae_algo(ourISPdev, &ae);
         if (!ret && copy_to_user(argp, &ae, sizeof(ae))) {
-            dev_err(gISPdev->dev, "[%s][%d] copy to user error\n",
+            dev_err(ourISPdev->dev, "[%s][%d] copy to user error\n",
                     __func__, __LINE__);
             return -EFAULT;
         }
@@ -5218,13 +5290,13 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
       	pr_info("TX_ISP_SET_AWB_ALGO_OPEN\n");
         struct isp_awb_algo awb;
         if (copy_from_user(&awb, argp, sizeof(awb))) {
-            dev_err(gISPdev->dev, "[%s][%d] copy from user error\n",
+            dev_err(ourISPdev->dev, "[%s][%d] copy from user error\n",
                     __func__, __LINE__);
             return -EFAULT;
         }
-        ret = init_awb_algo(gISPdev, &awb);
+        ret = init_awb_algo(ourISPdev, &awb);
         if (!ret && copy_to_user(argp, &awb, sizeof(awb))) {
-            dev_err(gISPdev->dev, "[%s][%d] copy to user error\n",
+            dev_err(ourISPdev->dev, "[%s][%d] copy to user error\n",
                     __func__, __LINE__);
             return -EFAULT;
         }
@@ -5235,7 +5307,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
       	pr_info("TX_ISP_WDR_OPEN\n");
         // Handle WDR enable - matches case 0x800456d8
         unsigned int wdr_en = 1;
-        ret = isp_set_wdr_mode(gISPdev, wdr_en);
+        ret = isp_set_wdr_mode(ourISPdev, wdr_en);
         break;
     }
 
@@ -5243,7 +5315,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
       	pr_info("TX_ISP_WDR_CLOSE\n");
         // Handle WDR disable - matches case 0x800456d9
         unsigned int wdr_en = 0;
-        ret = isp_set_wdr_mode(gISPdev, wdr_en);
+        ret = isp_set_wdr_mode(ourISPdev, wdr_en);
         break;
     }
 
@@ -5251,9 +5323,9 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         pr_info("TX_ISP_WDR_GET_BUF\n");
         // Calculate and return WDR buffer size - matches case 0x800856d7
         struct isp_wdr_buf_size size;
-        ret = calculate_wdr_buffer_size(gISPdev, &size);
+        ret = calculate_wdr_buffer_size(ourISPdev, &size);
         if (!ret && copy_to_user(argp, &size, sizeof(size))) {
-            dev_err(gISPdev->dev, "[%s][%d] copy to user error\n",
+            dev_err(ourISPdev->dev, "[%s][%d] copy to user error\n",
                     __func__, __LINE__);
             return -EFAULT;
         }
@@ -5283,25 +5355,23 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
     case VIDIOC_SET_ROTATION: {
 		pr_info("VIDIOC_SET_ROTATION\n");
-        // ret = set_rotation(gISPdev, argp); // TODO
+        // ret = set_rotation(ourISPdev, argp); // TODO
         break;
 	}
     // 0x80045612
     case VIDIOC_STREAMON:  // 0x80045612
     {
-        struct isp_framesource_state *fs = &gISPdev->frame_sources[0];
+    	int fd = (int)(long)file->private_data;  // Keep existing fd
+    	struct isp_framesource_state *fs = &ourISPdev->frame_sources[0];
         pr_info("Stream ON requested\n");
 
-        // Store frame source in file private data
-        file->private_data = fs;
-
-        ret = setup_frame_source(gISPdev, 0);
+        ret = setup_frame_source(ourISPdev, 0);
         if (ret) {
             pr_err("Failed to setup frame source: %d\n", ret);
             return ret;
         }
 
-        ret = start_frame_source(gISPdev, 0);
+        ret = start_frame_source(ourISPdev, 0);
         if (ret) {
             pr_err("Failed to start frame source: %d\n", ret);
             return ret;
@@ -5311,7 +5381,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
 	case VIDIOC_STREAMOFF:
 	    pr_info("Stream OFF requested\n");
-	    return enable_isp_streaming(gISPdev, file, channel, false);
+	    return enable_isp_streaming(ourISPdev, file, channel, false);
 	    break;
 	case VIDIOC_S_FMT: {
 	    struct v4l2_format fmt;
@@ -5371,11 +5441,11 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	case SENSOR_CMD_STREAM_ON:
 	case SENSOR_CMD_STREAM_OFF:
         pr_info("Sensor command: 0x%x\n", cmd);
-        ret = handle_sensor_ioctl(gISPdev, cmd, argp);
+        ret = handle_sensor_ioctl(ourISPdev, cmd, argp);
         break;
 
     default:
-        dev_dbg(gISPdev->dev, "Unhandled ioctl cmd: 0x%x\n", cmd);
+        dev_dbg(ourISPdev->dev, "Unhandled ioctl cmd: 0x%x\n", cmd);
         return -ENOTTY;
     }
 
@@ -5383,7 +5453,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 }
 
 static int tx_isp_mmap(struct file *filp, struct vm_area_struct *vma) {
-    struct IMPISPDev *dev = gISPdev;
+    struct IMPISPDev *dev = ourISPdev;
     unsigned long size = vma->vm_end - vma->vm_start;
 
     pr_info("tx_isp: mmap request size=%lu\n", size);
@@ -5691,8 +5761,8 @@ static int tisp_init(struct device *dev)
 
     pr_info("Starting tisp_init...\n");
 
-    // Verify registers are mapped using global gISPdev
-    if (!gISPdev || !gISPdev->regs) {
+    // Verify registers are mapped using global ourISPdev
+    if (!ourISPdev || !ourISPdev->regs) {
         dev_err(dev, "ISP registers not mapped!\n");
         return -EFAULT;
     }
@@ -5717,7 +5787,7 @@ static int tisp_init(struct device *dev)
     }
 
     // Enable sensor clock
-    writel(0x1, gISPdev->regs + ISP_CLK_CTRL);
+    writel(0x1, ourISPdev->regs + ISP_CLK_CTRL);
     msleep(10);
 
     // Step 1: Allocate memory using vmalloc
@@ -5760,8 +5830,8 @@ static int tisp_init(struct device *dev)
         writel(0, tparams_night + 0x274);
     }
 
-    // Step 4: Write the parameters to hardware registers using global gISPdev->regs
-    writel((unsigned long)tparams_day, gISPdev->regs + 0x84b50);
+    // Step 4: Write the parameters to hardware registers using global ourISPdev->regs
+    writel((unsigned long)tparams_day, ourISPdev->regs + 0x84b50);
     dev_info(dev, "tparams_day written to register successfully\n");
 
     return 0;
@@ -5845,7 +5915,7 @@ static int framechan_open(struct inode *inode, struct file *file) {
     int minor = iminor(inode);
     uint32_t base_offset = 0x1094d4;  // From decompiled code
 
-    fs = &gISPdev->frame_sources[minor];
+    fs = &ourISPdev->frame_sources[minor];
     if (!fs->is_open) {
         fs->width = 1920;
         fs->height = 1080;
@@ -5853,9 +5923,9 @@ static int framechan_open(struct inode *inode, struct file *file) {
         fs->buf_size = fs->width * fs->height * 2;
 
         // Map memory with proper offsets
-        fs->buf_base = gISPdev->dma_buf + base_offset +
+        fs->buf_base = ourISPdev->dma_buf + base_offset +
                       (minor * fs->buf_size * fs->buf_cnt);
-        fs->dma_addr = gISPdev->dma_addr + base_offset +
+        fs->dma_addr = ourISPdev->dma_addr + base_offset +
                       (minor * fs->buf_size * fs->buf_cnt);
 
         mutex_init(&fs->sem);
@@ -5874,7 +5944,7 @@ static int framechan_open(struct inode *inode, struct file *file) {
 
 static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-    struct IMPISPDev *dev = gISPdev;
+    struct IMPISPDev *dev = ourISPdev;
     struct isp_framesource_state *fs = file->private_data;
     u32 buf_index;
 
@@ -6045,15 +6115,15 @@ static int tisp_probe(struct platform_device *pdev)
 
     pr_info("Probing TISP device...\n");
 
-    // Validate gISPdev
-    if (!gISPdev) {
+    // Validate ourISPdev
+    if (!ourISPdev) {
         dev_err(&pdev->dev, "Global ISP device structure not allocated\n");
         return -ENOMEM;
     }
 
     // Initialize device structure properly
-    gISPdev->dev = &pdev->dev;
-    if (!gISPdev->dev) {
+    ourISPdev->dev = &pdev->dev;
+    if (!ourISPdev->dev) {
         dev_err(&pdev->dev, "Failed to set device pointer\n");
         return -EINVAL;
     }
@@ -6067,7 +6137,7 @@ static int tisp_probe(struct platform_device *pdev)
     }
 
     // Store in device structure
-    gISPdev->regs = base;
+    ourISPdev->regs = base;
 
     // Verify mapping with test read
     uint32_t test_val = readl(base);
@@ -6075,24 +6145,24 @@ static int tisp_probe(struct platform_device *pdev)
             base, test_val);
 
     // Set the IRQ value to 36
-    gISPdev->irq = 36;
+    ourISPdev->irq = 36;
     pdev->dev.platform_data = &isp_pdata;
 
     // Now configure clocks with proper error handling
-    ret = configure_isp_clocks(gISPdev);
+    ret = configure_isp_clocks(ourISPdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
         goto err_unmap_regs;
     }
 
-    // Use the global gISPdev instead of creating a local one
-    if (!gISPdev) {
+    // Use the global ourISPdev instead of creating a local one
+    if (!ourISPdev) {
         dev_err(&pdev->dev, "Global ISP device structure not allocated\n");
         return -ENOMEM;
     }
 
-    gISPdev->dev = &pdev->dev;
-    platform_set_drvdata(pdev, gISPdev);
+    ourISPdev->dev = &pdev->dev;
+    platform_set_drvdata(pdev, ourISPdev);
 
  	// Initialize reserved memory
     ret = init_isp_reserved_memory(pdev);
@@ -6102,14 +6172,14 @@ static int tisp_probe(struct platform_device *pdev)
     }
 
     // Add this call here after memory initialization
-    ret = setup_isp_memory_regions(gISPdev);
+    ret = setup_isp_memory_regions(ourISPdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to setup memory regions\n");
         goto err_cleanup_memory;
     }
 
     // Setup I2C sensor
-    ret = setup_i2c_sensor(gISPdev);
+    ret = setup_i2c_sensor(ourISPdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to setup I2C sensor\n");
         goto err_cleanup_memory;
@@ -6122,7 +6192,7 @@ static int tisp_probe(struct platform_device *pdev)
         goto err_cleanup_memory;
     }
 
-    ret = setup_isp_subdevs(gISPdev);
+    ret = setup_isp_subdevs(ourISPdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to setup subdevices\n");
         goto err_cleanup_memory;
@@ -6140,20 +6210,20 @@ static int tisp_probe(struct platform_device *pdev)
     return 0;
 
 err_cleanup_memory:
-    cleanup_isp_memory(gISPdev);
+    cleanup_isp_memory(ourISPdev);
 err_cleanup_clocks:
-    cleanup_isp_clocks(gISPdev);
+    cleanup_isp_clocks(ourISPdev);
 err_free_memory:
     // Add proper cleanup
-    if (gISPdev->dma_buf) {
-        iounmap(gISPdev->dma_buf);
-        gISPdev->dma_buf = NULL;
+    if (ourISPdev->dma_buf) {
+        iounmap(ourISPdev->dma_buf);
+        ourISPdev->dma_buf = NULL;
     }
 err_unregister_devices:
     remove_framechan_devices();
 err_unmap_regs:
-    if (gISPdev->regs)
-        iounmap(gISPdev->regs);
+    if (ourISPdev->regs)
+        iounmap(ourISPdev->regs);
     remove_isp_proc_entries();
     return ret;
 }
@@ -6173,7 +6243,7 @@ static int tisp_remove(struct platform_device *pdev) {
         cleanup_isp_memory(dev);
 
         // Clean up device clocks
-		cleanup_isp_clocks(gISPdev);
+		cleanup_isp_clocks(ourISPdev);
 
         // Clean up I2C
         if (dev->sensor_i2c_client) {
@@ -6218,16 +6288,16 @@ static struct platform_driver tisp_platform_driver = {
 static ssize_t isp_status_show(struct device *dev,
                               struct device_attribute *attr, char *buf)
 {
-    if (!gISPdev)
+    if (!ourISPdev)
         return sprintf(buf, "ISP device not initialized\n");
 
     return sprintf(buf, "ISP Status:\n"
                        "  Open: %s\n"
                        "  Sensor: %s\n"
                        "  WDR Mode: %d\n",
-                       gISPdev->is_open ? "yes" : "no",
-                       gISPdev->sensor_name[0] ? gISPdev->sensor_name : "none",
-                       gISPdev->wdr_mode);
+                       ourISPdev->is_open ? "yes" : "no",
+                       ourISPdev->sensor_name[0] ? ourISPdev->sensor_name : "none",
+                       ourISPdev->wdr_mode);
 }
 
 // Create the device attribute
@@ -6271,20 +6341,20 @@ static int __init isp_driver_init(void)
     // Set class permissions to be readable/writable by all
     tisp_class->dev_uevent = isp_dev_uevent;
 
-    gISPdev = kzalloc(sizeof(struct IMPISPDev), GFP_KERNEL);
-    if (!gISPdev) {
+    ourISPdev = kzalloc(sizeof(struct IMPISPDev), GFP_KERNEL);
+    if (!ourISPdev) {
         class_destroy(tisp_class);
         unregister_chrdev_region(tisp_dev_number, 1);
         return -ENOMEM;
     }
-    pr_info("gISPdev allocated at %p\n", gISPdev);  // Add this debug print
+    pr_info("ourISPdev allocated at %p\n", ourISPdev);  // Add this debug print
 
-    cdev_init(&gISPdev->cdev, &isp_fops);
-    gISPdev->cdev.owner = THIS_MODULE;
+    cdev_init(&ourISPdev->cdev, &isp_fops);
+    ourISPdev->cdev.owner = THIS_MODULE;
 
-    ret = cdev_add(&gISPdev->cdev, tisp_dev_number, 1);
+    ret = cdev_add(&ourISPdev->cdev, tisp_dev_number, 1);
     if (ret) {
-        kfree(gISPdev);
+        kfree(ourISPdev);
         class_destroy(tisp_class);
         unregister_chrdev_region(tisp_dev_number, 1);
         return ret;
@@ -6293,8 +6363,8 @@ static int __init isp_driver_init(void)
     tisp_device = device_create(tisp_class, NULL, tisp_dev_number, NULL, "tx-isp");
     if (IS_ERR(tisp_device)) {
         pr_err("Failed to create tx-isp device\n");
-        cdev_del(&gISPdev->cdev);
-        kfree(gISPdev);
+        cdev_del(&ourISPdev->cdev);
+        kfree(ourISPdev);
         class_destroy(tisp_class);
         unregister_chrdev_region(tisp_dev_number, 1);
         return PTR_ERR(tisp_device);
@@ -6332,8 +6402,8 @@ static int __init isp_driver_init(void)
 
 err_destroy_device:
     device_destroy(tisp_class, tisp_dev_number);
-    cdev_del(&gISPdev->cdev);
-    kfree(gISPdev);
+    cdev_del(&ourISPdev->cdev);
+    kfree(ourISPdev);
     class_destroy(tisp_class);
     unregister_chrdev_region(tisp_dev_number, 1);
     return ret;
@@ -6346,8 +6416,8 @@ static void __exit isp_driver_exit(void)
     struct device *dev = NULL;
 
     // Add this block
-    if (gISPdev && gISPdev->fs_info) {
-        cleanup_frame_buffers(gISPdev->fs_info);
+    if (ourISPdev && ourISPdev->fs_info) {
+        cleanup_frame_buffers(ourISPdev->fs_info);
     }
 
     remove_isp_proc_entries();
@@ -6362,18 +6432,18 @@ static void __exit isp_driver_exit(void)
 
     // Rest of existing cleanup...
     platform_driver_unregister(&tisp_platform_driver);
-    if (gISPdev) {
-        cleanup_isp_memory(gISPdev);
-        if (gISPdev->buf_info) {
-            kfree(gISPdev->buf_info);
-            gISPdev->buf_info = NULL;
+    if (ourISPdev) {
+        cleanup_isp_memory(ourISPdev);
+        if (ourISPdev->buf_info) {
+            kfree(ourISPdev->buf_info);
+            ourISPdev->buf_info = NULL;
         }
-        if (gISPdev->wdr_buf_info) {
-            kfree(gISPdev->wdr_buf_info);
-            gISPdev->wdr_buf_info = NULL;
+        if (ourISPdev->wdr_buf_info) {
+            kfree(ourISPdev->wdr_buf_info);
+            ourISPdev->wdr_buf_info = NULL;
         }
-        kfree(gISPdev);
-        gISPdev = NULL;
+        kfree(ourISPdev);
+        ourISPdev = NULL;
     }
 
     platform_driver_unregister(&tisp_platform_driver);
