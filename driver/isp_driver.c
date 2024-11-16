@@ -6465,6 +6465,14 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 		        return -EINVAL;
 		    }
 
+		    pr_info("Channel %d configured: %dx%d fmt=0x%x size=%d state=%d\n",
+		            fs->chn_num, fs->width, fs->height, fs->fmt,
+		            fs->buf_size, fs->state);
+
+		    // Add DMA configuration debug info
+		    pr_info("DMA config: addr=0x%08x base=%p size=%u flags=0x%x\n",
+		            (unsigned int)fc->dma_addr, fc->buf_base, fc->buf_size, fs->flags);
+
             return 0;
         }
         // Add to framechan_ioctl:
@@ -6500,86 +6508,98 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 
             return 0;
         }
-        case VIDIOC_STREAM_ON: {
-            struct frame_source_channel *fc;
-            void __iomem *regs;
-            int ret;
+		case VIDIOC_STREAM_ON: {
+		    struct frame_source_channel *fc;
+		    void __iomem *regs;
+		    int ret;
 
-            pr_info("Stream ON request for channel %d\n", fs->chn_num);
+		    pr_info("Stream ON request for channel %d\n", fs->chn_num);
 
-            // Basic validation
-            if (!fs || !ourISPdev || !ourISPdev->regs) {
-                pr_err("Invalid device state\n");
-                return -EINVAL;
-            }
+		    // Basic validation
+		    if (!fs || !ourISPdev || !ourISPdev->regs) {
+		        pr_err("Invalid device state\n");
+		        return -EINVAL;
+		    }
 
-            fc = fs->private;
-            if (!fc || !fs->buf_base) {
-                pr_err("Invalid channel state\n");
-                return -EINVAL;
-            }
+		    fc = fs->private;
+		    if (!fc || !fs->buf_base) {
+		        pr_err("Invalid channel state\n");
+		        return -EINVAL;
+		    }
 
-            regs = ourISPdev->regs;
+		    regs = ourISPdev->regs;
 
-            // State checks
-            if (fs->state == 2) {
-                pr_info("Channel %d already streaming\n", fs->chn_num);
-                return 0;
-            }
+		    // State checks
+		    if (fs->state == 2) {
+		        pr_info("Channel %d already streaming\n", fs->chn_num);
+		        return 0;
+		    }
 
-            // Set initial state
-            fs->state = 1;  // Ready state first
+		    // Set initial state
+		    fs->state = 1;  // Ready state first
 
-            // Configure buffer sequence
-            uint32_t buf_offset = ISP_BUF0_OFFSET + (fs->chn_num * ISP_BUF_SIZE_STEP);
+		    // Configure buffer sequence with proper alignment
+		    uint32_t buf_offset = ISP_BUF0_OFFSET + (fs->chn_num * ISP_BUF_SIZE_STEP);
+		    uint32_t aligned_addr = ALIGN(fc->dma_addr + fc->channel_offset, 8);
 
-            // Set up main buffer - important offset calculation
-            writel(fc->dma_addr + (fc->channel_offset), regs + buf_offset);
-            writel(fc->buf_size, regs + buf_offset + 0x4);
-            wmb();
+		    // Set up main buffer
+		    writel(aligned_addr, regs + buf_offset);
+		    writel(fc->buf_size, regs + buf_offset + 0x4);
+		    wmb();
 
-            // Additional buffer setup if needed
-            if (fc->buf_cnt > 1) {
-                for (int i = 1; i < fc->buf_cnt; i++) {
-                    uint32_t offset = buf_offset + (i * ISP_BUF_SIZE_STEP);
-                    writel(fc->dma_addr + (fc->channel_offset) + (i * fc->buf_size),
-                           regs + offset);
-                    writel(fc->buf_size, regs + offset + 0x4);
-                }
-                wmb();
-            }
+		    // Additional buffer setup if needed
+		    if (fc->buf_cnt > 1) {
+		        for (int i = 1; i < fc->buf_cnt; i++) {
+		            uint32_t offset = buf_offset + (i * ISP_BUF_SIZE_STEP);
+		            writel(aligned_addr + (i * fc->buf_size),
+		                   regs + offset);
+		            writel(fc->buf_size, regs + offset + 0x4);
+		        }
+		        wmb();
+		    }
 
-            // Reset counters
-            fs->frame_cnt = 0;
-            fs->write_idx = 0;
+		    // Reset counters
+		    fs->frame_cnt = 0;
+		    fs->write_idx = 0;
 
-            // Important: Channel-specific control registers
-            uint32_t ctrl_offset = ISP_STREAM_CTRL + (fs->chn_num * 0x100);
-            uint32_t start_offset = ISP_STREAM_START + (fs->chn_num * 0x100);
+		    // Enable frame processing - sequence matters
+		    writel(0x1, regs + ISP_CTRL_REG);  // Enable core first
+		    wmb();
+		    udelay(100);
 
-            // Enable frame processing - sequence matters
-            writel(0x1, regs + ctrl_offset);
-            wmb();
-            udelay(100);  // Required delay between control writes
-            writel(0x1, regs + start_offset);
-            wmb();
+		    writel(0x1, regs + ISP_STREAM_CTRL);
+		    wmb();
+		    udelay(100);
 
-            // Set final streaming state
-            fs->state = 2;  // Streaming state
-            fs->flags |= 0x2;  // Set streaming flag
+		    writel(0x1, regs + ISP_STREAM_START);
+		    wmb();
 
-            pr_info("Channel %d streaming started:\n"
-                    "  base=0x%x offset=0x%x\n"
-                    "  buf_size=%u count=%d\n"
-                    "  ctrl=0x%x start=0x%x\n",
-                    fs->chn_num,
-                    (unsigned int)fc->dma_addr, fc->channel_offset,
-                    fc->buf_size, fc->buf_cnt,
-                    readl(regs + ctrl_offset),
-                    readl(regs + start_offset));
+		    // Enable sensor streaming
+		    if (ourISPdev->sensor_i2c_client) {
+		        ret = isp_sensor_write_reg(ourISPdev->sensor_i2c_client,
+		                                 SENSOR_REG_MODE, 0x01);
+		        if (ret) {
+		            pr_err("Failed to start sensor streaming\n");
+		            return ret;
+		        }
+		    }
 
-            return 0;
-        }
+		    // Set final streaming state
+		    fs->state = 2;  // Streaming state
+		    fs->flags |= 0x2;  // Set streaming flag
+
+		    pr_info("Channel %d streaming started:\n"
+		            "  base=0x%x offset=0x%x\n"
+		            "  buf_size=%u count=%d\n"
+		            "  ctrl=0x%x start=0x%x\n",
+		            fs->chn_num,
+		            (unsigned int)fc->dma_addr, fc->channel_offset,
+		            fc->buf_size, fc->buf_cnt,
+		            readl(regs + ISP_STREAM_CTRL),
+		            readl(regs + ISP_STREAM_START));
+
+		    return 0;
+		}
         case VIDIOC_GET_BUFFER_INFO: {
             struct buffer_info info;
             struct frame_source_channel *fc = fs->private;
