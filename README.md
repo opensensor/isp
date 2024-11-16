@@ -1,5 +1,7 @@
 # Open-Source ISP Driver for Ingenic T31 (SC2336)
 
+![Ingenic ISP Logo](./ingenic_isp.webp)
+
 ## Overview
 This project provides an open-source driver for the Ingenic T31 System on Chip (SoC) with support for the SC2336 image sensor. The primary goal of this driver is to interface with Ingenic's `libimp` library, enabling users to capture and process images through the Image Signal Processor (ISP) on Ingenic devices.
 
