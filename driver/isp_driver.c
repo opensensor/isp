@@ -1804,7 +1804,6 @@ static void tx_isp_disable_irq(struct irq_handler_data *handler)
     spin_unlock_irqrestore(&handler->lock, flags);
 }
 
-// Updated request function to match OEM pattern
 static int tx_isp_request_irq(struct platform_device *pdev, struct isp_irq_data *irq_data)
 {
     int ret;
@@ -1836,26 +1835,13 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct isp_irq_data 
     ourISPdev->irq_m0 = m0_irq;
     ourISPdev->irq_w02 = w02_irq;
 
-    // First clear any pending interrupts
+    // Just clear any pending interrupts - don't setup VIC yet
     writel(0xFFFFFFFF, regs + ISP_INT_CLEAR);
     writel(0xFFFFFFFF, regs + W02_REG_BASE + W02_INT_CLEAR);
     wmb();
 
-    // Enable VIC IRQ
-    writel(0x1, regs + 0x13c);
-    wmb();
-
-    // Enable all needed interrupts
-    writel(0x3f9, regs + ISP_INT_MASK);          // Main ISP interrupts
-    writel(0x3f9, regs + W02_REG_BASE + W02_INT_MASK); // W02 interrupts
-    wmb();
-
-    // Verify IRQ setup
-    pr_info("ISP IRQs enabled: base=%d m0=%d w02=%d\n", base_irq, m0_irq, w02_irq);
-    pr_info("IRQ masks: isp=0x%x vic=0x%x w02=0x%x\n",
-            readl(regs + ISP_INT_MASK),
-            readl(regs + 0x13c),
-            readl(regs + W02_REG_BASE + W02_INT_MASK));
+    pr_info("ISP IRQs requested: base=%d m0=%d w02=%d\n",
+            base_irq, m0_irq, w02_irq);
 
     return 0;
 }
@@ -4375,6 +4361,19 @@ static void tx_vic_disable_irq(void)
 }
 
 
+#define VIC_CTRL_REG        0x100   // VIC Control register
+#define VIC_STATE_REG       0x128   // VIC State register
+#define VIC_IRQ_REG         0x13c   // VIC IRQ enable register
+#define VIC_MODE_REG        0x104   // VIC Mode register
+
+// Also add VIC control bits
+#define VIC_CTRL_ENABLE     BIT(0)  // Enable VIC
+#define VIC_CTRL_IRQ_EN     BIT(1)  // Enable VIC IRQs
+#define VIC_CTRL_MODE       BIT(2)  // Set operating mode
+
+#define VIC_MODE_NORMAL     0x0     // Normal mode
+#define VIC_MODE_BYPASS     0x1     // Bypass mode
+
 static int vic_core_init(struct IMPISPDev *dev, int enable)
 {
     struct vic_control *vic = dev->vic;
@@ -4387,55 +4386,65 @@ static int vic_core_init(struct IMPISPDev *dev, int enable)
         return -EINVAL;
     }
 
+    pr_info("VIC init: initial state: ctrl=0x%x state=0x%x irq=0x%x mode=0x%x\n",
+            readl(regs + VIC_CTRL_REG),
+            readl(regs + VIC_STATE_REG),
+            readl(regs + VIC_IRQ_REG),
+            readl(regs + VIC_MODE_REG));
+
     spin_lock_irqsave(&vic->lock, flags);
 
     if (enable) {
-        if (vic->state != VIC_STATE_STREAM) {
-            // First make sure VIC is disabled
-            writel(0, regs + 0x13c);
-            wmb();
-            udelay(100);
+        // First disable everything
+        writel(0, regs + VIC_CTRL_REG);
+        writel(0, regs + VIC_IRQ_REG);
+        wmb();
+        udelay(100);
 
-            // Enable core control
-            writel(0x1, regs + VIC_CTRL);  // Add this register
-            wmb();
-            udelay(100);
+        // Set mode first
+        writel(VIC_MODE_NORMAL, regs + VIC_MODE_REG);
+        wmb();
+        udelay(100);
 
-            // Set state
-            writel(VIC_STATE_STREAM, regs + 0x128);
-            wmb();
-            udelay(100);
+        // Enable VIC core with IRQs
+        writel(VIC_CTRL_ENABLE | VIC_CTRL_IRQ_EN, regs + VIC_CTRL_REG);
+        wmb();
+        udelay(100);
 
-            // Finally enable IRQ
-            writel(1, regs + 0x13c);
-            wmb();
+        // Set stream state
+        writel(VIC_STATE_STREAM, regs + VIC_STATE_REG);
+        wmb();
+        udelay(100);
 
-            // Update our tracking
-            vic->state = VIC_STATE_STREAM;
-            vic->irq_enabled = 1;
-        }
+        // Finally enable IRQ
+        writel(1, regs + VIC_IRQ_REG);
+        wmb();
+
+        vic->state = VIC_STATE_STREAM;
+        vic->irq_enabled = 1;
     } else {
-        if (vic->state != VIC_STATE_READY) {
-            writel(0, regs + 0x13c);  // Disable IRQ
-            writel(0, regs + VIC_CTRL); // Disable core
-            writel(VIC_STATE_READY, regs + 0x128);
-            wmb();
+        // Disable everything
+        writel(0, regs + VIC_IRQ_REG);
+        writel(0, regs + VIC_CTRL_REG);
+        writel(VIC_STATE_READY, regs + VIC_STATE_REG);
+        wmb();
 
-            vic->state = VIC_STATE_READY;
-            vic->irq_enabled = 0;
-        }
+        vic->state = VIC_STATE_READY;
+        vic->irq_enabled = 0;
     }
 
     spin_unlock_irqrestore(&vic->lock, flags);
 
-    pr_info("VIC state change: state=%d enabled=%d hwstate=0x%x ctrl=0x%x irq=0x%x\n",
+    pr_info("VIC state change: state=%d enabled=%d hwstate=0x%x ctrl=0x%x irq=0x%x mode=0x%x\n",
             vic->state, vic->irq_enabled,
-            readl(regs + 0x128),
-            readl(regs + VIC_CTRL),
-            readl(regs + 0x13c));
+            readl(regs + VIC_STATE_REG),
+            readl(regs + VIC_CTRL_REG),
+            readl(regs + VIC_IRQ_REG),
+            readl(regs + VIC_MODE_REG));
 
     return ret;
 }
+
 
 static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, bool enable) {
     struct isp_framesource_state *fs;
@@ -6896,114 +6905,106 @@ static struct isp_platform_data isp_pdata = {
 // Add CGU ISP bit positions
 #define ISP_CLKGR_BIT    (1 << 23)   // ISP clock gate bit in CLKGR
 #define CGU_ISP_BIT      (1 << 2)    // CGU_ISP clock gate bit in CLKGR1
+#define CPM_CLKGR1      0x28    // Clock gate register 1
+#define CPM_CLKGR1_ISP  BIT(23) // ISP gate bit
+#define CPM_CLKGR1_VIC  BIT(24) // VIC gate bit
+#define CPM_CLKGR1      0x28    // Clock gate register 1
+#define CPM_CLKGR1_ISP  BIT(23) // ISP gate bit
+#define CPM_CLKGR1_VIC  BIT(24) // VIC gate bit
 
+// Update configure_isp_clocks to better log register states
 static int configure_isp_clocks(struct IMPISPDev *dev)
 {
     int ret;
+    struct clk *isp_clk, *cgu_isp_clk, *ipu_clk, *csi_clk;
 
     pr_info("Configuring ISP clocks using standard API\n");
 
-   	// CSI clock must be enabled at 125MHz for ISP functionality
-    dev->csi_clk = clk_get(dev->dev, "csi");
-    if (!IS_ERR(dev->csi_clk)) {
-        ret = clk_prepare_enable(dev->csi_clk);
-        if (ret) {
-            pr_err("Failed to enable CSI clock\n");
-            goto err_put_csi;
-        }
-    }
-
-
     // Get IPU clock first
-    dev->ipu_clk = clk_get(dev->dev, "ipu");
-    if (IS_ERR(dev->ipu_clk)) {
-        pr_warn("IPU clock not available\n");
-        dev->ipu_clk = NULL;
+    ipu_clk = devm_clk_get(dev->dev, "ipu");
+    if (!IS_ERR(ipu_clk)) {
+        ret = clk_prepare_enable(ipu_clk);
+        if (ret)
+            pr_warn("Failed to enable IPU clock\n");
+        else
+            pr_info("IPU clock enabled: %lu Hz\n",
+                    clk_get_rate(ipu_clk));
     }
 
-    // Get ISP core clock
-    dev->isp_clk = clk_get(dev->dev, "isp");
-    if (IS_ERR(dev->isp_clk)) {
-        ret = PTR_ERR(dev->isp_clk);
-        pr_err("Failed to get ISP clock: %d\n", ret);
-        dev->isp_clk = NULL;
+    // Get and enable ISP clock
+    isp_clk = devm_clk_get(dev->dev, "isp");
+    if (IS_ERR(isp_clk)) {
+        pr_err("Failed to get ISP clock\n");
+        return PTR_ERR(isp_clk);
+    }
+
+    ret = clk_prepare_enable(isp_clk);
+    if (ret) {
+        pr_err("Failed to enable ISP clock\n");
+        return ret;
+    }
+    pr_info("ISP clock enabled: %lu Hz\n", clk_get_rate(isp_clk));
+
+    // Get and setup CGU ISP clock
+    cgu_isp_clk = devm_clk_get(dev->dev, "cgu_isp");
+    if (IS_ERR(cgu_isp_clk)) {
+        pr_err("Failed to get CGU ISP clock\n");
+        clk_disable_unprepare(isp_clk);
+        return PTR_ERR(cgu_isp_clk);
+    }
+
+    ret = clk_set_rate(cgu_isp_clk, 125000000);
+    if (ret) {
+        pr_err("Failed to set CGU ISP rate\n");
+        clk_disable_unprepare(isp_clk);
         return ret;
     }
 
-    // Get CGU ISP clock
-    dev->cgu_isp_clk = clk_get(dev->dev, "cgu_isp");
-    if (IS_ERR(dev->cgu_isp_clk)) {
-        ret = PTR_ERR(dev->cgu_isp_clk);
-        pr_err("Failed to get CGU ISP clock: %d\n", ret);
-        dev->cgu_isp_clk = NULL;
-        goto err_put_isp;
+    ret = clk_prepare_enable(cgu_isp_clk);
+    if (ret) {
+        pr_err("Failed to enable CGU ISP clock\n");
+        clk_disable_unprepare(isp_clk);
+        return ret;
     }
+    pr_info("CGU ISP clock enabled: %lu Hz\n",
+            clk_get_rate(cgu_isp_clk));
 
-    // Enable IPU clock
-    if (dev->ipu_clk) {
-        ret = clk_prepare_enable(dev->ipu_clk);
+    // Get and enable CSI clock
+    csi_clk = devm_clk_get(dev->dev, "csi");
+    if (!IS_ERR(csi_clk)) {
+        ret = clk_set_rate(csi_clk, 125000000);
         if (ret)
-            pr_warn("Failed to enable IPU clock\n");
+            pr_warn("Failed to set CSI clock rate\n");
+        ret = clk_prepare_enable(csi_clk);
+        if (ret)
+            pr_warn("Failed to enable CSI clock\n");
+        else
+            pr_info("CSI clock enabled: %lu Hz\n",
+                    clk_get_rate(csi_clk));
     }
 
-    // Set CGU ISP clock rate to 125MHz
-    ret = clk_set_rate(dev->cgu_isp_clk, 125000000);
-    if (ret) {
-        pr_err("Failed to set CGU ISP clock rate: %d\n", ret);
-        goto err_put_cgu;
-    }
+    // Store clock handles
+    dev->isp_clk = isp_clk;
+    dev->cgu_isp_clk = cgu_isp_clk;
+    dev->ipu_clk = ipu_clk;
 
-    // Enable ISP core clock
-    ret = clk_prepare_enable(dev->isp_clk);
-    if (ret) {
-        pr_err("Failed to enable ISP clock: %d\n", ret);
-        goto err_put_cgu;
-    }
+    // After clocks are enabled, try accessing registers
+    mdelay(10);  // Wait for clocks to stabilize
 
-    // Enable CGU ISP clock
-    ret = clk_prepare_enable(dev->cgu_isp_clk);
-    if (ret) {
-        pr_err("Failed to enable CGU ISP clock: %d\n", ret);
-        goto err_disable_isp;
-    }
+    writel(0x0, dev->regs + ISP_CTRL_REG);  // Reset ISP
+    writel(0x0, dev->regs + VIC_CTRL_REG);  // Reset VIC
+    wmb();
+    mdelay(10);
 
-    // Enable all required peripheral clocks
-    struct clk *lcd_clk = clk_get(dev->dev, "lcd");
-    if (!IS_ERR(lcd_clk)) {
-        clk_prepare_enable(lcd_clk);
-        clk_set_rate(lcd_clk, 250000000);
-    }
+    // Try test write
+    writel(0x1, dev->regs + ISP_CTRL_REG);
+    wmb();
+    mdelay(1);
 
-    struct clk *aes_clk = clk_get(dev->dev, "aes");
-    if (!IS_ERR(aes_clk)) {
-        clk_prepare_enable(aes_clk);
-        clk_set_rate(aes_clk, 250000000);
-    }
-
-    // Verify rates
-    // Verify rates including IPU
-    pr_info("Clock rates after configuration:\n");
-    pr_info("  ISP Core: %lu Hz\n", clk_get_rate(dev->isp_clk));
-    pr_info("  CGU ISP: %lu Hz\n", clk_get_rate(dev->cgu_isp_clk));
-    pr_info("  IPU: %lu Hz\n", clk_get_rate(dev->ipu_clk));
+    pr_info("ISP control after clock setup: 0x%x\n",
+            readl(dev->regs + ISP_CTRL_REG));
 
     return 0;
-
-err_disable_isp:
-    clk_disable_unprepare(dev->isp_clk);
-err_disable_csi:
-    if (dev->csi_clk)
-        clk_disable_unprepare(dev->csi_clk);
-err_put_csi:
-    if (dev->csi_clk)
-        clk_put(dev->csi_clk);
-err_put_cgu:
-    clk_put(dev->cgu_isp_clk);
-    dev->cgu_isp_clk = NULL;
-err_put_isp:
-    clk_put(dev->isp_clk);
-    dev->isp_clk = NULL;
-    return ret;
 }
 
 static void cleanup_isp_clocks(struct IMPISPDev *dev)
@@ -7657,7 +7658,8 @@ static int handle_stream_on(struct isp_framesource_state *fs)
     // First reset everything
     writel(0, regs + ISP_CTRL_REG);
     writel(0, regs + ISP_INT_MASK);
-    writel(0, regs + 0x13c);
+    writel(0, regs + VIC_IRQ_REG);
+    writel(0, regs + VIC_CTRL_REG);
     writel(0xFFFFFFFF, regs + ISP_INT_CLEAR);
     writel(0xFFFFFFFF, regs + W02_REG_BASE + W02_INT_CLEAR);
     wmb();
@@ -7668,7 +7670,6 @@ static int handle_stream_on(struct isp_framesource_state *fs)
     wmb();
     udelay(100);
 
-    // Initialize VIC after core is enabled
     ret = vic_core_init(ourISPdev, 1);
     if (ret) {
         pr_err("Failed to initialize VIC\n");
@@ -7680,6 +7681,13 @@ static int handle_stream_on(struct isp_framesource_state *fs)
     writel(0x3f9, regs + W02_REG_BASE + W02_INT_MASK);
     wmb();
 
+    // Add register write verification
+    u32 ctrl = readl(regs + ISP_CTRL_REG);
+    if (!(ctrl & ISP_CTRL_ENABLE)) {
+        pr_err("Failed to enable ISP core: ctrl=0x%x\n", ctrl);
+        return -EIO;
+    }
+
     // Verify final state
     pr_info("Channel %d: IRQs enabled:\n"
             "  ISP Control: 0x%x\n"
@@ -7690,9 +7698,9 @@ static int handle_stream_on(struct isp_framesource_state *fs)
             fs->chn_num,
             readl(regs + ISP_CTRL_REG),
             readl(regs + ISP_INT_MASK),
-            readl(regs + 0x13c),
+            readl(regs + VIC_IRQ_REG),
             readl(regs + W02_REG_BASE + W02_INT_MASK),
-            readl(regs + 0x128));
+            readl(regs + VIC_STATE_REG));
 
     return 0;
 }
@@ -8059,12 +8067,6 @@ static int tisp_probe(struct platform_device *pdev)
     // Initialize device structures
     spin_lock_init(&ourISPdev->lock);
 
-    ret = init_vic(ourISPdev);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to initialize VIC\n");
-        goto err_unmap;
-    }
-
     // Initialize frame sources array
     for (int i = 0; i < MAX_FRAME_SOURCES; i++) {
         ourISPdev->frame_sources[i].chn_num = i;
@@ -8098,11 +8100,11 @@ static int tisp_probe(struct platform_device *pdev)
     }
 
     // Store IRQ numbers
-    ourISPdev->irq = ISP_BASE_IRQ;      // 36
-    ourISPdev->irq_m0 = ISP_M0_IRQ;     // 37
-    ourISPdev->irq_w02 = ISP_W02_IRQ;   // 38
+    ourISPdev->irq = ISP_BASE_IRQ;
+    ourISPdev->irq_m0 = ISP_M0_IRQ;
+    ourISPdev->irq_w02 = ISP_W02_IRQ;
 
-    // Request IRQ using irq_data structure
+    // Request IRQs before VIC init
     ret = tx_isp_request_irq(pdev, ourISPdev->irq_data);
     if (ret) {
         dev_err(&pdev->dev, "Failed to request ISP IRQs\n");
@@ -8178,6 +8180,19 @@ static int tisp_probe(struct platform_device *pdev)
     if (ret) {
         dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
         goto err_free_handlers;
+    }
+
+    // Reset VIC and ISP after clock config
+    writel(0, ourISPdev->regs + ISP_CTRL_REG);
+    writel(0, ourISPdev->regs + VIC_CTRL_REG);
+    wmb();
+    udelay(100);
+
+    // Now initialize VIC once IRQs are setup
+    ret = init_vic(ourISPdev);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to initialize VIC\n");
+        goto err_free_irq_data;
     }
 
     platform_set_drvdata(pdev, ourISPdev);
