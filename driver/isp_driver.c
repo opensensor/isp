@@ -5229,62 +5229,53 @@ cleanup:
 
 static int configure_streaming_hardware(struct IMPISPDev *dev)
 {
-    void __iomem *regs;
+    void __iomem *regs = dev->regs;
     u32 val;
     int ret = 0;
 
     pr_info("Configuring streaming hardware...\n");
 
-    // Validate our register mapping
-    if (!dev || !dev->regs) {
-        pr_err("Invalid device state\n");
+    // 1. Configure sensor first
+    struct i2c_client *client = dev->sensor_i2c_client;
+    if (!client) {
+        pr_err("No sensor I2C client\n");
         return -EINVAL;
     }
 
-    regs = dev->regs;
-
-    // Verify register access first
-    val = readl(regs + ISP_CTRL_REG);
-    pr_info("Initial control register: 0x%08x\n", val);
-
-    // Test write/read
-    writel(0x0, regs + ISP_CTRL_REG);
-    wmb();
-    val = readl(regs + ISP_CTRL_REG);
-    if (val != 0x0) {
-        pr_err("Register write verification failed\n");
-        return -EIO;
+    // Configure sensor for streaming
+    ret = isp_sensor_write_reg(client, 0x3200, 0x07); // Output width high
+    ret |= isp_sensor_write_reg(client, 0x3201, 0x80); // Width low (1920)
+    ret |= isp_sensor_write_reg(client, 0x3202, 0x04); // Height high
+    ret |= isp_sensor_write_reg(client, 0x3203, 0x38); // Height low (1080)
+    ret |= isp_sensor_write_reg(client, 0x3031, 0x0a); // RAW10 format
+    ret |= isp_sensor_write_reg(client, 0x3018, 0x72); // MIPI config
+    ret |= isp_sensor_write_reg(client, 0x0100, 0x01); // Start streaming
+    if (ret) {
+        pr_err("Failed to configure sensor: %d\n", ret);
+        return ret;
     }
 
-    // 1. Configure basic registers with validation
-    pr_info("Setting up basic registers...\n");
-
-    // Use safe register offsets
-    #define SAFE_WRITE(reg, val) do { \
-        if ((reg) > ISP_REG_SIZE) { \
-            pr_err("Invalid register offset 0x%x\n", reg); \
-            return -EINVAL; \
-        } \
-        writel((val), regs + (reg)); \
-        wmb(); \
-    } while(0)
-
-    SAFE_WRITE(ISP_CTRL_REG, 0x0);     // Disable control
-    SAFE_WRITE(ISP_STREAM_CTRL, 0x0);  // Disable stream
-    SAFE_WRITE(ISP_STREAM_START, 0x0); // Disable start
+    // 2. Configure basic hardware
+    writel(0x0, regs + ISP_CTRL_REG);     // Reset all
+    writel(0x0, regs + ISP_STREAM_CTRL);
+    writel(0x0, regs + ISP_STREAM_START);
+    wmb();
     msleep(10);
 
-    // 2. Configure DMA
-    uint32_t line_size = ALIGN(1920, 32);
-    uint32_t y_size = line_size * 1080;
-    uint32_t uv_size = y_size / 2;
-    uint32_t frame_size = y_size + uv_size;
+    // 3. Configure MIPI CSI (minimal setup)
+    u32 mipi_ctrl = readl(regs + ISP_MIPI_CTRL);
+    mipi_ctrl |= (1 << 31) |    // Enable
+                 (1 << 8)  |    // Clock lane
+                 (0x3);         // 2 data lanes
+    writel(mipi_ctrl, regs + ISP_MIPI_CTRL);
+    wmb();
+    msleep(10);
 
-    // Validate buffer addresses
-    if (!dev->dma_addr || !dev->dma_buf) {
-        pr_err("Invalid DMA configuration\n");
-        return -EINVAL;
-    }
+    // 4. Configure DMA
+    uint32_t line_size = ALIGN(1920, 32);  // Align to 32
+    uint32_t y_size = line_size * 1080;    // Y plane
+    uint32_t uv_size = y_size / 2;         // UV plane
+    uint32_t frame_size = y_size + uv_size;
 
     pr_info("Setting up DMA buffers:\n"
             "  Base: 0x%08x\n"
@@ -5292,35 +5283,35 @@ static int configure_streaming_hardware(struct IMPISPDev *dev)
             (unsigned int)dev->dma_addr,
             y_size, uv_size, frame_size);
 
-    // Configure buffers with validation
-    SAFE_WRITE(ISP_BUF0_OFFSET, dev->dma_addr);
-    SAFE_WRITE(ISP_BUF0_OFFSET + 0x4, line_size);
+    // Y buffer
+    writel(dev->dma_addr, regs + ISP_BUF0_OFFSET);
+    writel(line_size, regs + ISP_BUF0_OFFSET + 0x4);
 
-    SAFE_WRITE(ISP_BUF0_OFFSET + ISP_BUF_SIZE_STEP,
-               dev->dma_addr + y_size);
-    SAFE_WRITE(ISP_BUF0_OFFSET + ISP_BUF_SIZE_STEP + 0x4,
-               line_size / 2);
+    // UV buffer
+    writel(dev->dma_addr + y_size, regs + ISP_BUF0_OFFSET + ISP_BUF_SIZE_STEP);
+    writel(line_size / 2, regs + ISP_BUF0_OFFSET + ISP_BUF_SIZE_STEP + 0x4);
+    wmb();
 
-    // Verify writes
-    val = readl(regs + ISP_BUF0_OFFSET);
-    if (val != dev->dma_addr) {
-        pr_err("Buffer write verification failed\n");
-        return -EIO;
-    }
+    // 5. Configure format
+    writel(0x3231564e, regs + ISP_INPUT_FORMAT_REG);  // NV12
+    writel(0x3231564e, regs + ISP_OUTPUT_FORMAT_REG); // NV12
+    wmb();
+    msleep(10);
 
-    pr_info("Buffer verification:\n"
-            "  BUF0: wrote=0x%08x read=0x%08x\n"
-            "  Size: wrote=0x%08x read=0x%08x\n",
-            (unsigned int)dev->dma_addr,
-            readl(regs + ISP_BUF0_OFFSET),
-            line_size,
-            readl(regs + ISP_BUF0_OFFSET + 0x4));
+    // 6. Enable core
+    val = readl(regs + ISP_CTRL_REG);
+    val |= ISP_CTRL_ENABLE;
+    writel(val, regs + ISP_CTRL_REG);
+    wmb();
 
-    // 3. Basic control setup
-    val = ISP_CTRL_ENABLE;  // Just basic enable
-    SAFE_WRITE(ISP_CTRL_REG, val);
+    pr_info("Hardware configuration complete:\n"
+            "  MIPI ctrl: 0x%08x\n"
+            "  ISP ctrl: 0x%08x\n"
+            "  Format: 0x%08x\n",
+            readl(regs + ISP_MIPI_CTRL),
+            readl(regs + ISP_CTRL_REG),
+            readl(regs + ISP_INPUT_FORMAT_REG));
 
-    pr_info("Hardware configuration complete\n");
     return 0;
 }
 
@@ -6913,8 +6904,16 @@ static int framechan_open(struct inode *inode, struct file *file) {
     int minor = iminor(inode);
     uint32_t base_offset = 0x1094d4;  // From decompiled code
 
+    // Initialize the channel's private data
     fs = &ourISPdev->frame_sources[minor];
     if (!fs->is_open) {
+        struct frame_source_channel *fc;
+
+        // Allocate channel data
+        fc = kzalloc(sizeof(*fc), GFP_KERNEL);
+        if (!fc)
+            return -ENOMEM;
+
         fs->width = 1920;
         fs->height = 1080;
         fs->buf_cnt = 4;
@@ -6926,8 +6925,20 @@ static int framechan_open(struct inode *inode, struct file *file) {
         fs->dma_addr = ourISPdev->dma_addr + base_offset +
                       (minor * fs->buf_size * fs->buf_cnt);
 
-        mutex_init(&fs->sem);
-        init_waitqueue_head(&fs->wait);
+        // Initialize channel data
+        fc->buf_base = fs->buf_base;
+        fc->dma_addr = fs->dma_addr;
+        fc->buf_size = fs->buf_size;
+        fc->buf_cnt = fs->buf_cnt;
+        fc->state = 1;  // Ready state
+        fc->channel_offset = minor * (fs->buf_size * fs->buf_cnt);
+
+        mutex_init(&fc->lock);
+        spin_lock_init(&fc->queue_lock);
+        init_waitqueue_head(&fc->wait);
+        atomic_set(&fc->frame_count, 0);
+
+        fs->private = fc;
         fs->is_open = 1;
     }
 
@@ -7606,6 +7617,15 @@ static int tisp_probe(struct platform_device *pdev)
     if (ret) {
         dev_err(&pdev->dev, "Failed to setup subdevices\n");
         goto err_cleanup_proc;
+    }
+
+    // Keep links enabled
+    if (ourISPdev->subdevs && ourISPdev->subdevs[0]) {
+        struct isp_subdev_state *sd = ourISPdev->subdevs[0];
+        if (sd->src_pads && sd->sink_pads) {
+            sd->src_pads->link_state = LINK_STATE_ENABLED;
+            sd->sink_pads->link_state = LINK_STATE_ENABLED;
+        }
     }
 
     ret = create_framechan_devices(&pdev->dev);
