@@ -1094,6 +1094,118 @@ struct isp_device {
 /* Maximum number of links from decompiled array size at 0x6ad80 */
 #define MAX_LINK_PADS    16
 
+
+// Add to your existing CPM defines
+#define T31_CPM_SRBC       0x14    // Soft reset and bus control
+#define T31_CPM_MIPI_CTRL  0x0c    // MIPI control register
+
+// MIPI reset and control bits
+#define T31_MIPI_RST      BIT(26)  // MIPI reset bit
+#define T31_MIPI_EN       BIT(27)  // MIPI clock enable
+#define T31_MIPI_STOP     BIT(28)  // MIPI clock stop
+#define T31_MIPI_DIV_MASK 0x3F     // MIPI clock divider mask
+
+// Extended MIPI status bits
+/* MIPI register map */
+// Add to your register definitions
+#define ISP_MIPI_BASE        0x7800  // MIPI register block offset
+#define ISP_MIPI_CTRL        0x00    // Control register
+#define ISP_MIPI_STATUS      0x04    // Status register
+#define ISP_MIPI_TIMING      0x08    // Timing register
+#define ISP_MIPI_FORMAT      0x0C    // Data format register
+#define ISP_MIPI_VCID        0x10    // Virtual channel ID
+
+// MIPI control bits
+#define MIPI_CTRL_ENABLE     BIT(31) // Global enable
+#define MIPI_CTRL_CLK_EN     BIT(12) // Clock lane enable
+#define MIPI_CTRL_DPHY_EN    BIT(16) // DPHY enable
+#define MIPI_CTRL_LANES      0x3     // Two data lanes
+
+// MIPI status bits
+#define MIPI_STATUS_READY    BIT(0)  // Interface ready
+#define MIPI_STATUS_STOP     BIT(1)  // Lanes in stop state
+#define MIPI_STATUS_ERR      BIT(2)  // Error detected
+#define MIPI_STATUS_SYNC     BIT(3)  // Lanes synchronized
+
+// T31 CPM bits for MIPI
+#define T31_CPM_BASE         0x10000000
+#define T31_CPM_CLKGR        0x20    // Clock gate register
+#define T31_CPM_MIPI_CLK     BIT(4)  // MIPI clock bit
+#define T31_CPM_MIPI_CTRL    0x0c    // MIPI control register
+
+// Add to register definitions
+#define VIC_BASE            0x1e0    // VIC register base offset
+#define VIC_CTRL            0x100    // VIC control register
+#define VIC_STATUS          0x004    // VIC status register
+#define VIC_INT_MASK        0x1e8    // VIC interrupt mask
+#define VIC_INT_ENABLE      0x1e0    // VIC interrupt enable
+#define VIC_INT_CLEAR       0x008    // VIC interrupt clear
+#define VIC_DMA_ADDR        0x200    // VIC DMA buffer address
+#define VIC_DMA_SIZE        0x204    // VIC DMA buffer size
+#define VIC_LINE_STRIDE     0x208    // VIC line stride
+#define VIC_CH_ENABLE       0x3a8    // VIC channel enable
+
+// VIC status bits
+#define VIC_STATUS_READY    BIT(0)   // VIC ready
+#define VIC_STATUS_BUSY     BIT(1)   // VIC busy
+#define VIC_STATUS_ERROR    BIT(2)   // VIC error
+
+#define MIPI_STATUS_READY    BIT(0)  // Ready bit
+#define ISP_MIPI_CTRL        0x00    // Control register offset
+#define ISP_MIPI_STATUS      0x04    // Status register offset
+#define ISP_MIPI_BASE        0x7800  // Base offset from ISP
+
+
+// Add these registers
+#define ISP_MIPI_CTRL     0x30
+#define ISP_MIPI_STATUS   0x34
+#define ISP_MIPI_TIMING   0x38
+
+// Add these defines at the top
+#define ISP_MIPI_BASE     0x7800  // Base offset for MIPI registers
+#define ISP_MIPI_CTRL     0x30    // Control register offset
+#define ISP_MIPI_STATUS   0x34    // Status register offset
+#define ISP_MIPI_TIMING   0x38    // Timing register offset
+#define ISP_MIPI_RESET    0x3C    // Reset register offset
+
+// MIPI control bits
+#define MIPI_CTRL_ENABLE  BIT(31)
+#define MIPI_CTRL_CLK_EN  BIT(8)
+#define MIPI_CTRL_LANES   0x3     // 2 data lanes
+
+// MIPI status bits
+#define MIPI_STATUS_READY BIT(0)
+#define MIPI_STATUS_ERROR BIT(1)
+// Add these defines
+#define T31_CPM_BASE       0x10000000
+#define T31_CPM_MIPI_CTRL  0x0c   // MIPI control in CPM
+#define T31_CPM_CLKGATE    0x20   // Clock gate register
+#define T31_CPM_MIPI_CLK   BIT(4) // MIPI clock bit
+#define T31_CPM_CLKGATE    0x20
+#define T31_CPM_CLKGATE1   0x28        // Clock gate 1 register offset
+#define T31_CPM_CLKGR_ISP  BIT(23)     // ISP clock gate bit
+#define T31_CPM_CLKGR1_CGU BIT(2)      // CGU ISP clock gate bit
+// Clock control registers
+#define T31_CPM_ISPCDR     0x88        // ISP clock divider register
+#define T31_CPM_LCR        0x04        // Low power control register
+#define T31_CPM_OPCR       0x24        // Operating parameter control
+
+#define T31_CPM_MIPI_CTRL  0x0c
+#define T31_CPM_SRBC       0x14   // Soft reset and bus control
+#define T31_CPM_OPCR       0x24   // Operating parameter control
+
+
+#define T31_MIPI_DIV_MASK  0x3F
+#define T31_MIPI_STOP      BIT(28)
+#define T31_MIPI_EN        BIT(27)
+#define T31_MIPI_RST       BIT(26)
+
+// Add these defines
+#define CPM_MIPI_CTRL_EN   BIT(31)
+#define CPM_MIPI_RST_MASK  BIT(30)
+#define CPM_MIPI_CLK_EN    BIT(29)
+#define CPM_MIPI_CLK_SEL   BIT(28)
+
 /**
  * struct isp_link_config - Link configuration data from decompiled
  * Based on the array at offset 0x6ad7c and 0x6ad80 in decompiled
@@ -1316,22 +1428,6 @@ static void dump_frame_data(void *buf, size_t size)
     printk(KERN_CONT "\n");
 }
 
-// Top half handler - quick interrupt processing
-static irqreturn_t isp_irq_handler(int irq, void *dev_id)
-{
-    struct IMPISPDev *dev = dev_id;
-    u32 status;
-
-    // Quick check if this is our interrupt
-    status = readl(dev->regs + ISP_STATUS_REG);
-    if (!(status & ISP_INT_FRAME_DONE))
-        return IRQ_NONE;
-
-    // Schedule bottom half processing
-    return IRQ_WAKE_THREAD;
-}
-
-
 
 /* Structures to match OEM driver */
 struct isp_task {
@@ -1349,50 +1445,50 @@ struct isp_irq_data {
 
 // IRQ thread handler matching OEM pattern
 // Bottom half handler matches OEM implementation
+static irqreturn_t isp_irq_handler(int irq, void *dev_id)
+{
+    struct IMPISPDev *dev = dev_id;
+    void __iomem *vic_regs = dev->regs + 0x1e0;
+    u32 status, vic_status;
+
+    status = readl(dev->regs + ISP_STATUS_REG);
+    vic_status = readl(vic_regs + 0x4);
+
+    pr_debug("ISP IRQ - ISP status: 0x%08x VIC status: 0x%08x\n",
+            status, vic_status);
+
+    if (!(status & ISP_INT_FRAME_DONE))
+        return IRQ_NONE;
+
+    // Schedule bottom half processing
+    return IRQ_WAKE_THREAD;
+}
+
 static irqreturn_t isp_irq_thread_handler(int irq, void *dev_id)
 {
     struct IMPISPDev *dev = dev_id;
-    struct isp_irq_data *irq_data = dev->irq_data;
-    struct isp_task *current_task;
-    void *buffer_start;
-    int ret = IRQ_NONE;
+    struct isp_framesource_state *fs = &dev->frame_sources[0];
+    static u32 frame_count = 0;
 
-    if (!irq_data) {
-        pr_err("No IRQ data structure\n");
-        return IRQ_NONE;
+    // Debug frame data
+    void *buf = fs->buf_base + (fs->buf_index * fs->buf_size);
+    pr_info("Frame %d received: buf=%p size=%u index=%d\n",
+            frame_count++, buf, fs->buf_size, fs->buf_index);
+
+    // For first few frames, dump some data
+    if (frame_count < 3) {
+        pr_info("Frame data sample (first 16 bytes):\n");
+        print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET,
+                      16, 1, buf, 16, true);
     }
 
-    // Special case check matching OEM
-    if (irq_data == (void *)0x80) {
-        current_task = (struct isp_task *)((char *)irq_data - 0x48);
-        buffer_start = (void *)((char *)irq_data - 0x8);
-    } else {
-        // Normal interrupt handling path
-        void *handler = irq_data->interrupt_handler;
-        if (handler && irq_data->task_status) {
-            // Call main interrupt handler first
-            ret = ((int (*)(void))handler)();
-        }
-        current_task = (struct isp_task *)((char *)irq_data - 0x48);
-        buffer_start = (void *)((char *)irq_data - 0x8);
-    }
+    // Update buffer index
+    fs->buf_index = (fs->buf_index + 1) % fs->buf_cnt;
 
-    // Process all tasks in queue
-    while (current_task && current_task < buffer_start) {
-        if (current_task->task_ptr) {
-            // Get task data
-            void *task_data = current_task->task_data;
-            if (task_data) {
-                // Get and call task function
-                int (*task_func)(void) = current_task->task_func;
-                if (task_func) {
-                    pr_debug("Executing task function at %p\n", task_func);
-                    ret = task_func();
-                }
-            }
-        }
-        current_task++;
-    }
+    // Update DMA
+    writel(fs->dma_addr + (fs->buf_index * fs->buf_size),
+           dev->regs + ISP_BUF0_OFFSET);
+    wmb();
 
     return IRQ_HANDLED;
 }
@@ -3480,6 +3576,80 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
     return 0;
 }
 
+
+static int init_vic_and_mipi(struct IMPISPDev *dev)
+{
+    void __iomem *vic_regs = dev->regs + 0x1e0;
+    void __iomem *mipi_base = dev->regs + ISP_MIPI_BASE;
+    void __iomem *cpm_base;
+    u32 val;
+
+    pr_info("Initializing VIC and MIPI...\n");
+
+    // 1. Enable MIPI clocks first
+    cpm_base = ioremap(T31_CPM_BASE, 0x100);
+    if (!cpm_base) {
+        pr_err("Failed to map CPM\n");
+        return -ENOMEM;
+    }
+
+    // Enable MIPI clock in CPM
+    val = readl(cpm_base + T31_CPM_CLKGATE);
+    val &= ~T31_CPM_MIPI_CLK;
+    writel(val, cpm_base + T31_CPM_CLKGATE);
+    wmb();
+    msleep(5);
+
+    // 2. Reset VIC and MIPI
+    writel(0x0, mipi_base + ISP_MIPI_CTRL);
+    writel(0x0, vic_regs + 0x100);
+    wmb();
+    msleep(10);
+
+    // 3. Configure MIPI
+    val = BIT(31) |           // Global enable
+          (0x3 << 8) |        // 2 data lanes
+          BIT(12) |           // Clock lane enable
+          (0x8 << 16);        // FIFO threshold
+    writel(val, mipi_base + ISP_MIPI_CTRL);
+    wmb();
+    msleep(10);
+
+    // Read back MIPI status
+    val = readl(mipi_base + ISP_MIPI_STATUS);
+    pr_info("MIPI Status after init: 0x%08x\n", val);
+
+    // 4. Configure VIC
+    // Enable VIC interrupts
+    writel(0xFFFFFFFF, vic_regs + 0x8);  // Clear pending
+    writel(0x0, vic_regs + 0x1e8);       // Clear mask
+    writel(0x1, vic_regs + 0x1e0);       // Enable frame interrupt
+    wmb();
+
+    // Set format
+    writel(0x2c0, vic_regs + 0x24);  // NV12 format
+    wmb();
+
+    // Enable VIC
+    writel(0x1, vic_regs + 0x100);
+    writel(0x1, vic_regs + 0x3a8);
+    wmb();
+
+    val = readl(vic_regs + 0x4);
+    pr_info("VIC Status after init: 0x%08x\n", val);
+
+
+
+    // Verify interrupt setup
+    val = readl(vic_regs + 0x1e8);
+    pr_info("VIC interrupt mask: 0x%08x\n", val);
+    val = readl(vic_regs + 0x1e0);
+    pr_info("VIC interrupt enable: 0x%08x\n", val);
+
+    iounmap(cpm_base);
+    return 0;
+}
+
 static atomic_t isp_instance_counter = ATOMIC_INIT(0);
 
 static int tisp_open(struct file *file)
@@ -3493,6 +3663,13 @@ static int tisp_open(struct file *file)
     if (!ourISPdev) {
         pr_err("ISP device not initialized\n");
         return -ENODEV;
+    }
+
+    // Add VIC/MIPI initialization here
+    ret = init_vic_and_mipi(ourISPdev);
+    if (ret) {
+        pr_err("Failed to initialize VIC/MIPI: %d\n", ret);
+        return ret;
     }
 
     // Reset stream count on open
@@ -5087,55 +5264,6 @@ struct sensor_reg_data {
     uint8_t val;
 };
 
-// Add these registers
-#define ISP_MIPI_CTRL     0x30
-#define ISP_MIPI_STATUS   0x34
-#define ISP_MIPI_TIMING   0x38
-
-// Add these defines at the top
-#define ISP_MIPI_BASE     0x7800  // Base offset for MIPI registers
-#define ISP_MIPI_CTRL     0x30    // Control register offset
-#define ISP_MIPI_STATUS   0x34    // Status register offset
-#define ISP_MIPI_TIMING   0x38    // Timing register offset
-#define ISP_MIPI_RESET    0x3C    // Reset register offset
-
-// MIPI control bits
-#define MIPI_CTRL_ENABLE  BIT(31)
-#define MIPI_CTRL_CLK_EN  BIT(8)
-#define MIPI_CTRL_LANES   0x3     // 2 data lanes
-
-// MIPI status bits
-#define MIPI_STATUS_READY BIT(0)
-#define MIPI_STATUS_ERROR BIT(1)
-// Add these defines
-#define T31_CPM_BASE       0x10000000
-#define T31_CPM_MIPI_CTRL  0x0c   // MIPI control in CPM
-#define T31_CPM_CLKGATE    0x20   // Clock gate register
-#define T31_CPM_MIPI_CLK   BIT(4) // MIPI clock bit
-#define T31_CPM_CLKGATE    0x20
-#define T31_CPM_CLKGATE1   0x28        // Clock gate 1 register offset
-#define T31_CPM_CLKGR_ISP  BIT(23)     // ISP clock gate bit
-#define T31_CPM_CLKGR1_CGU BIT(2)      // CGU ISP clock gate bit
-// Clock control registers
-#define T31_CPM_ISPCDR     0x88        // ISP clock divider register
-#define T31_CPM_LCR        0x04        // Low power control register
-#define T31_CPM_OPCR       0x24        // Operating parameter control
-
-#define T31_CPM_MIPI_CTRL  0x0c
-#define T31_CPM_SRBC       0x14   // Soft reset and bus control
-#define T31_CPM_OPCR       0x24   // Operating parameter control
-
-
-#define T31_MIPI_DIV_MASK  0x3F
-#define T31_MIPI_STOP      BIT(28)
-#define T31_MIPI_EN        BIT(27)
-#define T31_MIPI_RST       BIT(26)
-
-// Add these defines
-#define CPM_MIPI_CTRL_EN   BIT(31)
-#define CPM_MIPI_RST_MASK  BIT(30)
-#define CPM_MIPI_CLK_EN    BIT(29)
-#define CPM_MIPI_CLK_SEL   BIT(28)
 
 static int validate_mipi_config(struct IMPISPDev *dev) {
     void __iomem *regs = dev->regs;
@@ -5157,66 +5285,6 @@ static int validate_mipi_config(struct IMPISPDev *dev) {
 
     return 0;
 }
-
-// Add to your existing CPM defines
-#define T31_CPM_SRBC       0x14    // Soft reset and bus control
-#define T31_CPM_MIPI_CTRL  0x0c    // MIPI control register
-
-// MIPI reset and control bits
-#define T31_MIPI_RST      BIT(26)  // MIPI reset bit
-#define T31_MIPI_EN       BIT(27)  // MIPI clock enable
-#define T31_MIPI_STOP     BIT(28)  // MIPI clock stop
-#define T31_MIPI_DIV_MASK 0x3F     // MIPI clock divider mask
-
-// Extended MIPI status bits
-/* MIPI register map */
-// Add to your register definitions
-#define ISP_MIPI_BASE        0x7800  // MIPI register block offset
-#define ISP_MIPI_CTRL        0x00    // Control register
-#define ISP_MIPI_STATUS      0x04    // Status register
-#define ISP_MIPI_TIMING      0x08    // Timing register
-#define ISP_MIPI_FORMAT      0x0C    // Data format register
-#define ISP_MIPI_VCID        0x10    // Virtual channel ID
-
-// MIPI control bits
-#define MIPI_CTRL_ENABLE     BIT(31) // Global enable
-#define MIPI_CTRL_CLK_EN     BIT(12) // Clock lane enable
-#define MIPI_CTRL_DPHY_EN    BIT(16) // DPHY enable
-#define MIPI_CTRL_LANES      0x3     // Two data lanes
-
-// MIPI status bits
-#define MIPI_STATUS_READY    BIT(0)  // Interface ready
-#define MIPI_STATUS_STOP     BIT(1)  // Lanes in stop state
-#define MIPI_STATUS_ERR      BIT(2)  // Error detected
-#define MIPI_STATUS_SYNC     BIT(3)  // Lanes synchronized
-
-// T31 CPM bits for MIPI
-#define T31_CPM_BASE         0x10000000
-#define T31_CPM_CLKGR        0x20    // Clock gate register
-#define T31_CPM_MIPI_CLK     BIT(4)  // MIPI clock bit
-#define T31_CPM_MIPI_CTRL    0x0c    // MIPI control register
-
-// Add to register definitions
-#define VIC_BASE            0x1e0    // VIC register base offset
-#define VIC_CTRL            0x100    // VIC control register
-#define VIC_STATUS          0x004    // VIC status register
-#define VIC_INT_MASK        0x1e8    // VIC interrupt mask
-#define VIC_INT_ENABLE      0x1e0    // VIC interrupt enable
-#define VIC_INT_CLEAR       0x008    // VIC interrupt clear
-#define VIC_DMA_ADDR        0x200    // VIC DMA buffer address
-#define VIC_DMA_SIZE        0x204    // VIC DMA buffer size
-#define VIC_LINE_STRIDE     0x208    // VIC line stride
-#define VIC_CH_ENABLE       0x3a8    // VIC channel enable
-
-// VIC status bits
-#define VIC_STATUS_READY    BIT(0)   // VIC ready
-#define VIC_STATUS_BUSY     BIT(1)   // VIC busy
-#define VIC_STATUS_ERROR    BIT(2)   // VIC error
-
-#define MIPI_STATUS_READY    BIT(0)  // Ready bit
-#define ISP_MIPI_CTRL        0x00    // Control register offset
-#define ISP_MIPI_STATUS      0x04    // Status register offset
-#define ISP_MIPI_BASE        0x7800  // Base offset from ISP
 
 static int configure_mipi_csi(struct IMPISPDev *dev)
 {
@@ -5896,8 +5964,22 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
 		case VIDIOC_STREAMON: { // 0x80045612
 		    // Configure VIC first
 		    void __iomem *vic_regs = ourISPdev->regs + 0x1e0;
+		    void __iomem *mipi_base = ourISPdev->regs + ISP_MIPI_BASE;
 
-		    pr_info("Configuring VIC for streaming...\n");
+		    pr_info("Configuring VIC & MIPI for streaming...\n");
+
+		    // Configure MIPI lanes first
+		    u32 mipi_ctrl = BIT(31) |           // Global enable
+		                    (0x3 << 8) |         // 2 data lanes
+		                    BIT(12) |            // Clock lane enable
+		                    (0x8 << 16);         // FIFO threshold
+		    writel(mipi_ctrl, mipi_base + ISP_MIPI_CTRL);
+		    wmb();
+		    msleep(10);
+
+		    // Verify MIPI lanes
+		    u32 mipi_status = readl(mipi_base + ISP_MIPI_STATUS);
+		    pr_info("Initial MIPI status: 0x%08x\n", mipi_status);
 
 		    // Clear VIC interrupts
 		    writel(0xFFFFFFFF, vic_regs + 0x8);
@@ -5908,8 +5990,8 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
 		    writel(0x1, vic_regs + 0x1e0);  // Enable frame interrupt only
 		    wmb();
 
-		    // Set VIC input format to RAW10
-		    writel(0x2A0, vic_regs + 0x24);
+		    // Set VIC input format to NV12
+		    writel(0x2c0, vic_regs + 0x24);
 		    wmb();
 
 		    return 0;
@@ -6527,6 +6609,18 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	    void __iomem *vic_regs = ourISPdev->regs + 0x1e0;
 	    void __iomem *mipi_base = ourISPdev->regs + ISP_MIPI_BASE;
 
+	    // Enable global ISP interrupts
+	    writel(0x1, ourISPdev->regs + ISP_CTRL_REG); // Enable ISP core
+	    writel(0x0, ourISPdev->regs + ISP_INT_MASK_REG); // Clear mask
+	    writel(0x1, ourISPdev->regs + ISP_INT_CLEAR_REG); // Clear pending
+	    wmb();
+
+	    // Read back and verify
+	    u32 ctrl = readl(ourISPdev->regs + ISP_CTRL_REG);
+	    u32 mask = readl(ourISPdev->regs + ISP_INT_MASK_REG);
+	    pr_info("ISP global interrupts - ctrl: 0x%08x mask: 0x%08x\n",
+	            ctrl, mask);
+
 	    // 1. Configure sensor first
 	    if (ourISPdev->sensor_i2c_client) {
 	        struct i2c_client *client = ourISPdev->sensor_i2c_client;
@@ -6535,46 +6629,58 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	        isp_sensor_write_reg(client, 0x0100, 0x00);
 	        msleep(20);
 
-	        // Configure SC2336 for YUV
-	        isp_sensor_write_reg(client, 0x3031, 0x0c); // YUV mode
+	        // Configure SC2336 for MIPI/YUV output
 	        isp_sensor_write_reg(client, 0x3018, 0x72); // 2 lanes
+	        isp_sensor_write_reg(client, 0x3019, 0x00); // MIPI timing
 	        isp_sensor_write_reg(client, 0x301a, 0xf0); // Enable PHY
+	        isp_sensor_write_reg(client, 0x301c, 0x30); // Clock mode
+	        isp_sensor_write_reg(client, 0x3031, 0x0c); // YUV/MIPI mode
 	        isp_sensor_write_reg(client, 0x3106, 0x05); // Output control
+
+	        // Additional timing registers
+	        isp_sensor_write_reg(client, 0x3032, 0xa0); // Digital control
+	        isp_sensor_write_reg(client, 0x3600, 0x00); // Analog control
+	        isp_sensor_write_reg(client, 0x3601, 0x55); // Analog control
 	        msleep(10);
+
+	        // Verify registers
+	        u8 val;
+	        isp_sensor_read_reg(client, 0x3018, &val);
+	        pr_info("Sensor MIPI config: 0x%02x\n", val);
+	        isp_sensor_read_reg(client, 0x3031, &val);
+	        pr_info("Sensor YUV mode: 0x%02x\n", val);
 	    }
 
-	    // 2. Configure VIC input settings
-	    writel(0x2c0, vic_regs + 0x24);  // YUV format code
+	    // 2. Configure tuning parameters
+	    void __iomem *tuning_base = ourISPdev->regs + 0x1000;
+	    writel(0x40, tuning_base + 0x100);  // Contrast
+	    writel(0x40, tuning_base + 0x104);  // Sharpness
+	    writel(0x40, tuning_base + 0x108);  // Saturation
+	    writel(0x40, tuning_base + 0x10c);  // Brightness
 	    wmb();
-	    msleep(5);
 
-	    // 3. Configure MIPI
-	    u32 mipi_ctrl = BIT(31) |           // Global enable
-	                    (0x3 << 8) |         // 2 data lanes
-	                    BIT(12) |            // Clock lane enable
-	                    (0x8 << 16);         // FIFO threshold
-	    writel(mipi_ctrl, mipi_base + ISP_MIPI_CTRL);
-	    wmb();
-	    msleep(10);
-
-	    // 4. Configure DMA for NV12
+	    // 3. Configure DMA for NV12
 	    u32 y_size = fs->width * fs->height;
 	    u32 uv_size = y_size / 2;
-	    u32 line_stride = ALIGN(fs->width, 32); // Align to 32 bytes
+	    u32 line_stride = ALIGN(fs->width, 32);
 
 	    // Y plane
 	    writel(fs->dma_addr, vic_regs + 0x200);
 	    writel(y_size, vic_regs + 0x204);
 	    writel(line_stride, vic_regs + 0x208);
 
-	    // UV plane at offset
+	    // UV plane
 	    writel(fs->dma_addr + y_size, vic_regs + 0x210);
 	    writel(uv_size, vic_regs + 0x214);
 	    writel(line_stride, vic_regs + 0x218);
 	    wmb();
 	    msleep(5);
 
-	    // 5. Enable VIC with proper mode
+	    // 4. Verify MIPI
+	    u32 mipi_status = readl(mipi_base + ISP_MIPI_STATUS);
+	    pr_info("MIPI Status before VIC enable: 0x%08x\n", mipi_status);
+
+	    // 5. Enable VIC
 	    writel(0x1, vic_regs + 0x100); // Enable VIC
 	    writel(0x1, vic_regs + 0x3a8); // Enable channel
 	    wmb();
@@ -6586,11 +6692,14 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	        msleep(20);
 	    }
 
+	    // Final status checks
+	    mipi_status = readl(mipi_base + ISP_MIPI_STATUS);
+	    u32 vic_status = readl(vic_regs + 0x4);
+	    pr_info("Final Status - MIPI: 0x%08x VIC: 0x%08x\n",
+	            mipi_status, vic_status);
+
 	    // Update stream count
 	    ourISPdev->stream_count += 2;
-
-	    pr_info("Stream enabled: format=NV12 %dx%d y_size=%d uv_size=%d stride=%d\n",
-	            fs->width, fs->height, y_size, uv_size, line_stride);
 
 	    return 0;
 	}
@@ -7412,18 +7521,16 @@ static void __iomem *map_isp_registers(struct platform_device *pdev)
 }
 
 
-// And add buffer setup in open
-static int framechan_open(struct inode *inode, struct file *file) {
+static int framechan_open(struct inode *inode, struct file *file)
+{
     struct isp_framesource_state *fs;
     int minor = iminor(inode);
-    uint32_t base_offset = 0x1094d4;  // From decompiled code
+    uint32_t base_offset = 0x1094d4;
 
-    // Initialize the channel's private data
     fs = &ourISPdev->frame_sources[minor];
     if (!fs->is_open) {
         struct frame_source_channel *fc;
 
-        // Allocate channel data
         fc = kzalloc(sizeof(*fc), GFP_KERNEL);
         if (!fc)
             return -ENOMEM;
@@ -7431,21 +7538,29 @@ static int framechan_open(struct inode *inode, struct file *file) {
         fs->width = 1920;
         fs->height = 1080;
         fs->buf_cnt = 4;
-        fs->buf_size = fs->width * fs->height * 2;
 
-        // Map memory with proper offsets
-        fs->buf_base = ourISPdev->dma_buf + base_offset +
+        // Calculate proper NV12 buffer size
+        uint32_t y_size = fs->width * fs->height;
+        uint32_t uv_size = y_size / 2;
+        fs->buf_size = y_size + uv_size;
+
+        // Map memory with alignment
+        fs->buf_base = ourISPdev->dma_buf + ALIGN(base_offset, 32) +
                       (minor * fs->buf_size * fs->buf_cnt);
-        fs->dma_addr = ourISPdev->dma_addr + base_offset +
+        fs->dma_addr = ourISPdev->dma_addr + ALIGN(base_offset, 32) +
                       (minor * fs->buf_size * fs->buf_cnt);
+
+        pr_info("Frame channel buffer setup:\n");
+        pr_info("  base=%p dma=0x%08x\n", fs->buf_base, (u32)fs->dma_addr);
+        pr_info("  size=%u count=%d align=%d\n",
+                fs->buf_size, fs->buf_cnt, 32);
 
         // Initialize channel data
         fc->buf_base = fs->buf_base;
         fc->dma_addr = fs->dma_addr;
         fc->buf_size = fs->buf_size;
         fc->buf_cnt = fs->buf_cnt;
-        fc->state = 1;  // Ready state
-        fc->channel_offset = minor * (fs->buf_size * fs->buf_cnt);
+        fc->state = 1;
 
         mutex_init(&fc->lock);
         spin_lock_init(&fc->queue_lock);
@@ -7456,12 +7571,11 @@ static int framechan_open(struct inode *inode, struct file *file) {
         fs->is_open = 1;
     }
 
-    // Important: Save fs pointer
     file->private_data = fs;
-
-    pr_info("Opened framechan%d: fs=%p base=%p\n",
-            minor, fs, fs->buf_base);
-
+    pr_info("Frame channel %d ready for IRQs:\n"
+            "  ISP irq: %d ctrl: 0x%08x\n",
+            minor,
+            ourISPdev->irq_m0, readl(ourISPdev->regs + ISP_CTRL_REG));
     return 0;
 }
 
@@ -8167,18 +8281,20 @@ static int tisp_probe(struct platform_device *pdev)
         goto err_unmap_regs;
     }
 
-    // Configure main ISP IRQ
+    // Configure IRQs
     ourISPdev->irq_m0 = ISP_M0_IRQ;  // IRQ 37 for isp-m0
+    pr_info("Requesting ISP M0 IRQ %d\n", ourISPdev->irq_m0);
     ret = request_threaded_irq(ourISPdev->irq_m0,
-                              isp_irq_handler,
-                              isp_irq_thread_handler,
-                              IRQF_SHARED,
-                              "isp-m0",
-                              ourISPdev);
+                             isp_irq_handler,
+                             isp_irq_thread_handler,
+                             IRQF_SHARED,
+                             "isp-m0",
+                             ourISPdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to request ISP M0 IRQ: %d\n", ret);
-        goto err_free_irqs;
+        goto err_unmap_regs;
     }
+    pr_info("ISP M0 IRQ registered successfully\n");
 
     // Configure W02 IRQ
     ourISPdev->irq_w02 = ISP_W02_IRQ;  // IRQ 38 for isp-w02
