@@ -3602,6 +3602,29 @@ unlock:
 }
 
 
+// VIC state machine states
+#define VIC_STATE_IDLE    1
+#define VIC_STATE_READY   2
+#define VIC_STATE_STOP    3
+#define VIC_STATE_STREAM  4
+
+
+#define VIC_CTRL_REG        0x100   // VIC Control register
+#define VIC_STATE_REG       0x128   // VIC State register
+#define VIC_IRQ_REG         0x13c   // VIC IRQ enable register
+#define VIC_MODE_REG        0x104   // VIC Mode register
+
+// Also add VIC control bits
+#define VIC_CTRL_ENABLE     BIT(0)  // Enable VIC
+#define VIC_CTRL_IRQ_EN     BIT(1)  // Enable VIC IRQs
+#define VIC_CTRL_MODE       BIT(2)  // Set operating mode
+
+#define VIC_MODE_NORMAL     0x0     // Normal mode
+#define VIC_MODE_BYPASS     0x1     // Bypass mode
+#define VIC_BASE_OFFSET  0x1e0  // VIC base offset from ISP
+#define VIC_CHAN_CFG    0x300  // Channel config register
+#define VIC_DMA_CTRL    0x304  // DMA control register
+#define VIC_CHAN_ENABLE 0x20   // Channel enable bit
 
 // Add these defines at the top with other defines
 #define ISP_STREAM_MAGIC    0x80007000  // Magic value from logs
@@ -3610,83 +3633,36 @@ unlock:
 
 static int enable_stream(struct IMPISPDev *dev, int channel, bool enable)
 {
-    void __iomem *regs = dev->regs;
-    struct isp_framesource_state *fs;
-    struct frame_source_channel *fc;
-    unsigned long flags;
-    int ret;
+    void __iomem *vic_base = dev->regs + VIC_BASE_OFFSET;
+    struct isp_framesource_state *fs = &dev->frame_sources[channel];
+    uint32_t ctrl, val;
 
-    if (!regs)
-        return -EINVAL;
-
-    fs = &dev->frame_sources[channel];
-    fc = fs->private;
-
-    if (!fs || !fc) {
-        pr_err("Invalid frame source state\n");
-        return -EINVAL;
-    }
-
-    spin_lock_irqsave(&fc->queue_lock, flags);
+    spin_lock_irq(&dev->lock);
 
     if (enable) {
-        // Initialize frame lists
-        INIT_LIST_HEAD(&fc->ready_list);
-        INIT_LIST_HEAD(&fc->done_list);
-
-        // Reset counters
-        fs->frame_cnt = 0;
-        fs->buf_index = 0;
-
-        // Program initial buffer
-        if (fc->buffer_nodes) {
-            struct frame_node *node = &fc->buffer_nodes[0];
-            if (node->magic == FRAME_MAGIC) {
-                writel(node->dma_addr, regs + ISP_BUF0_OFFSET);
-                writel(node->frame_size, regs + ISP_BUF0_OFFSET + 0x4);
-                wmb();
-
-                // Add to ready list
-                list_add_tail(&node->list, &fc->ready_list);
-            }
-        }
-
-        // Enable frame interrupts
-        writel(ISP_INT_FRAME_DONE, regs + ISP_INT_MASK);
-        writel(0xFFFFFFFF, regs + ISP_INT_CLEAR);
+        // Match decompiled at 0x2304
+        ctrl = readl(vic_base + 0x300);
+        // Only update channel-specific bits
+        ctrl &= ~(0xF << (channel * 4));
+        ctrl |= (1 << (channel * 4));  // Enable this channel
+        writel(ctrl, vic_base + 0x300);
         wmb();
 
-        // Start streaming
-        writel(0x80007000, regs + ISP_STREAM_CTRL);
-        wmb();
-        udelay(100);
-
-        writel(0x777111, regs + ISP_STREAM_START);
+        // Enable channel interrupt
+        writel(0x3f9, dev->regs + ISP_INT_MASK + (channel * 0x100));
         wmb();
 
-        fs->state = 2;
-        fs->flags |= 0x2;
-
+        fs->state = 2;  // Streaming
     } else {
-        // Disable interrupts first
-        writel(0, regs + ISP_INT_MASK);
+        ctrl = readl(vic_base + 0x300);
+        ctrl &= ~(0xF << (channel * 4));  // Disable channel
+        writel(ctrl, vic_base + 0x300);
         wmb();
 
-        // Stop streaming
-        writel(0, regs + ISP_STREAM_START);
-        writel(0, regs + ISP_STREAM_CTRL);
-        wmb();
-
-        fs->state = 1;
-        fs->flags &= ~0x2;
-
-        // Clear lists
-        INIT_LIST_HEAD(&fc->ready_list);
-        INIT_LIST_HEAD(&fc->done_list);
+        fs->state = 1;  // Ready
     }
 
-    spin_unlock_irqrestore(&fc->queue_lock, flags);
-
+    spin_unlock_irq(&dev->lock);
     return 0;
 }
 
@@ -3807,88 +3783,212 @@ static void init_frame_buffer(struct frame_buffer *buf, int index,
 
 
 
-
 static int init_frame_source(struct IMPISPDev *dev, int channel) {
     struct isp_framesource_state *fs = &dev->frame_sources[channel];
     struct frame_source_channel *fc;
+	int ret = 0;
 
     pr_info("Initializing frame source channel %d\n", channel);
+
+    if (!dev || !dev->dma_buf || !dev->dma_addr) {
+        pr_err("ISP device memory not initialized\n");
+        return -EINVAL;
+    }
 
     // Zero everything first
     memset(fs, 0, sizeof(*fs));
 
-    // Basic state
+    // Allocate channel data first
+    fc = kzalloc(sizeof(*fc), GFP_KERNEL);
+    if (!fc) {
+        pr_err("Failed to allocate channel data\n");
+        return -ENOMEM;
+    }
+
+    // Initialize synchronization primitives before anything else
+    spin_lock_init(&fc->queue_lock);
+    mutex_init(&fc->lock);
+    sema_init(&fc->sem, 1);
+    init_waitqueue_head(&fc->wait);
+
+    // Initialize lists - CRITICAL: Do this before any list operations
+    INIT_LIST_HEAD(&fc->ready_list);
+    INIT_LIST_HEAD(&fc->done_list);
+
+    // Basic state initialization
     fs->magic = 0x336ac;
     fs->flags = 0;
     fs->chn_num = channel;
     fs->state = 1;  // Ready state
+    fs->private = fc;
 
-    // Init synchronization
-    spin_lock_init(&fs->lock);
-    sema_init(&fs->sem, 1);
+    // Channel specific configuration
+    if (channel == 0) {
+        // Primary channel - 1080p
+        fs->width = 1920;
+        fs->height = 1080;
+        fs->fmt = ISP_FMT_NV12;
+        fs->buf_cnt = 4;
+
+        // Calculate NV12 buffer size with alignment
+        uint32_t width_aligned = ALIGN(fs->width, 32);
+        uint32_t y_size = width_aligned * fs->height;
+        uint32_t uv_size = y_size / 2;
+        fs->buf_size = ALIGN(y_size + uv_size, 4096);
+
+        // Calculate channel offset - after ISP params
+        uint32_t ch0_offset = 0x2000;
+        fc->channel_offset = ch0_offset;
+
+        // Validate memory region
+        if (ch0_offset + (fs->buf_size * fs->buf_cnt) > dev->dma_size) {
+            pr_err("Not enough memory for channel buffers\n");
+            ret = -ENOMEM;
+            goto err_free_fc;
+        }
+
+        // Set up buffer addresses
+        fs->buf_base = dev->dma_buf + ch0_offset;
+        fs->dma_addr = dev->dma_addr + ch0_offset;
+
+        // Channel buffer info
+        fc->buf_base = fs->buf_base;
+        fc->dma_addr = fs->dma_addr;
+        fc->buf_size = fs->buf_size;
+        fc->buf_cnt = fs->buf_cnt;
+
+        // Initialize buffer tracking
+        fc->write_idx = 0;
+        atomic_set(&fc->frame_count, 0);
+        atomic_set(&fc->frames_completed, 0);
+
+        // Allocate buffer nodes
+        fc->buffer_nodes = kzalloc(sizeof(struct frame_node) * fc->buf_cnt, GFP_KERNEL);
+        if (!fc->buffer_nodes) {
+            pr_err("Failed to allocate buffer nodes\n");
+            ret = -ENOMEM;
+            goto err_free_fc;
+        }
+
+        // Initialize each buffer node
+        for (int i = 0; i < fc->buf_cnt; i++) {
+            struct frame_node *node = &fc->buffer_nodes[i];
+            node->magic = FRAME_MAGIC;
+            node->index = i;
+            node->frame_size = fc->buf_size;
+            node->dma_addr = fc->dma_addr + (i * fc->buf_size);
+            node->virt_addr = fc->buf_base + (i * fc->buf_size);
+            node->data = node->virt_addr;
+
+            // Critical: Initialize list head before adding to queue
+            INIT_LIST_HEAD(&node->list);
+            list_add_tail(&node->list, &fc->ready_list);
+        }
+
+        pr_info("Channel %d initialized:\n"
+                "  Resolution: %dx%d format=%d\n"
+                "  Base DMA: 0x%08x\n"
+                "  Base Virtual: %p\n"
+                "  Buffer Size: %u bytes\n"
+                "  Total Size: %u bytes (%d buffers)\n"
+                "  Channel offset: 0x%x\n",
+                channel, fs->width, fs->height, fs->fmt,
+                (unsigned int)fs->dma_addr, fs->buf_base,
+                fs->buf_size, fs->buf_size * fs->buf_cnt,
+                fs->buf_cnt, fc->channel_offset);
+    }
+
+    // Final state setup
     init_waitqueue_head(&fs->wait);
-    INIT_LIST_HEAD(&fs->ready_queue);
-    INIT_LIST_HEAD(&fs->done_queue);
-
-    // Init work queue
     INIT_WORK(&fs->work, isp_frame_work);
     fs->wq = create_singlethread_workqueue(kasprintf(GFP_KERNEL, "isp-fs-%d", channel));
     if (!fs->wq) {
         pr_err("Failed to create workqueue\n");
-        return -ENOMEM;
+        ret = -ENOMEM;
+        goto err_free_nodes;
     }
 
-    // Channel data
-    fc = kzalloc(sizeof(*fc), GFP_KERNEL);
-    if (!fc) {
-        destroy_workqueue(fs->wq);
-        return -ENOMEM;
-    }
-    fs->private = fc;
     fs->is_open = 1;
-
-    // Use pre-allocated memory from init_isp_memory()
-    fs->buf_base = dev->dma_buf;
-    fs->dma_addr = dev->dma_addr;
-    fs->buf_size = dev->dma_size;
-
-    if (!fs->buf_base || !fs->dma_addr) {
-        pr_err("Reserved memory not set up correctly\n");
-        kfree(fc);
-        return -ENOMEM;
-    }
-
-    pr_info("Frame source channel %d initialized with pre-allocated memory: virt=0x%p, phys=0x%x, size=%u\n",
-            channel, fs->buf_base, (unsigned int)fs->dma_addr, fs->buf_size);
-
     return 0;
+
+err_free_nodes:
+    if (fc->buffer_nodes) {
+        kfree(fc->buffer_nodes);
+    }
+err_free_fc:
+    kfree(fc);
+    return ret;
 }
 
-// VIC state machine states
-#define VIC_STATE_IDLE    1
-#define VIC_STATE_READY   2
-#define VIC_STATE_STOP    3
-#define VIC_STATE_STREAM  4
 
 static int init_vic(struct IMPISPDev *dev)
 {
     struct vic_control *vic;
-    unsigned long flags;
+    void __iomem *vic_base;
+    u32 val;
+    int ret;
 
+    if (!dev || !dev->regs) {
+        pr_err("Invalid device for VIC init\n");
+        return -EINVAL;
+    }
+
+    vic_base = dev->regs + VIC_BASE_OFFSET;
+
+    // Matches decompiled binary's sequence at 0xcf90
+    // First disable all
+    writel(0x0, vic_base + VIC_CTRL_REG);        // 0x100
+    writel(0x0, vic_base + VIC_INT_MASK);        // 0x1e8
+    writel(0x0, vic_base + VIC_INT_ENABLE);      // 0x1e0
+    writel(0xFFFFFFFF, vic_base + VIC_INT_CLEAR);// 0x008
+    wmb();
+    msleep(10);
+
+    // Step 1: Init Buffer Control Registers (0x340-0x350)
+    // These offsets match the decompiled vic_mdma_ch0_set_buff_index locations
+    for (int i = 0; i < 4; i++) {
+        writel(0x351b300 + (i * 348160), vic_base + 0x340 + (i * 4));
+    }
+
+    // Step 2: Setup DMA control - from decompile offset 0x300
+    val = 0x80000020;  // Magic value seen in decompiled code
+    writel(val, vic_base + 0x300);
+    wmb();
+
+    // Step 3: Init state machine (0x128 register)
+    writel(VIC_STATE_READY, vic_base + VIC_STATE_REG);
+    wmb();
+
+    // Step 4: Enable core and interrupts
+    val = readl(vic_base + VIC_CTRL_REG);
+    val |= VIC_CTRL_ENABLE | VIC_CTRL_IRQ_EN;
+    writel(val, vic_base + VIC_CTRL_REG);
+    wmb();
+
+    // Store control structure
     vic = kzalloc(sizeof(*vic), GFP_KERNEL);
     if (!vic)
         return -ENOMEM;
 
     spin_lock_init(&vic->lock);
-    vic->state = VIC_STATE_IDLE;
-    vic->irq_enabled = 0;
+    vic->state = VIC_STATE_READY;
+    vic->irq_enabled = 1;
     vic->priv = dev;
-
     dev->vic = vic;
 
-    pr_info("VIC initialized: state=%d\n", vic->state);
+    pr_info("VIC initialized with buffer config:\n"
+            "  Control: 0x%08x\n"
+            "  State: 0x%08x\n"
+            "  DMA Control: 0x%08x\n"
+            "  Base Buffer: 0x%08x\n",
+            readl(vic_base + VIC_CTRL_REG),
+            readl(vic_base + VIC_STATE_REG),
+            readl(vic_base + 0x300),
+            readl(vic_base + 0x340));
+
     return 0;
 }
+
 
 
 static atomic_t isp_instance_counter = ATOMIC_INIT(0);
@@ -3905,13 +4005,6 @@ static int tisp_open(struct file *file)
         pr_err("ISP device not initialized\n");
         return -ENODEV;
     }
-
-    // Add VIC/MIPI initialization here
-    //ret = init_vic_and_mipi(ourISPdev);
-    //if (ret) {
-    //    pr_err("Failed to initialize VIC/MIPI: %d\n", ret);
-    //    return ret;
-    //}
 
     // Reset stream count on open
     ourISPdev->stream_count = 0;
@@ -4361,90 +4454,127 @@ static void tx_vic_disable_irq(void)
 }
 
 
-#define VIC_CTRL_REG        0x100   // VIC Control register
-#define VIC_STATE_REG       0x128   // VIC State register
-#define VIC_IRQ_REG         0x13c   // VIC IRQ enable register
-#define VIC_MODE_REG        0x104   // VIC Mode register
 
-// Also add VIC control bits
-#define VIC_CTRL_ENABLE     BIT(0)  // Enable VIC
-#define VIC_CTRL_IRQ_EN     BIT(1)  // Enable VIC IRQs
-#define VIC_CTRL_MODE       BIT(2)  // Set operating mode
+static int tx_isp_vic_start(struct IMPISPDev *dev)
+{
+    void __iomem *regs = dev->regs;
+    void __iomem *vic_base = regs + VIC_BASE_OFFSET;
 
-#define VIC_MODE_NORMAL     0x0     // Normal mode
-#define VIC_MODE_BYPASS     0x1     // Bypass mode
+    // Reset VIC first
+    writel(0x0, vic_base + VIC_CTRL_REG);
+    writel(0x0, vic_base + 0x13c);  // Disable IRQ
+    wmb();
+    udelay(100);
+
+    // Configure VIC format (like your decompiled code shows)
+    writel(0x2c0, vic_base + 0x24);  // Set NV12 format
+    wmb();
+    udelay(100);
+
+    // Enable VIC core
+    writel(0x1, vic_base + VIC_CTRL_REG);
+    wmb();
+    udelay(100);
+
+    // Configure VIC channel
+    writel(0x1, vic_base + VIC_CH_ENABLE);
+    wmb();
+
+    pr_info("VIC start: ctrl=0x%x format=0x%x ch_enable=0x%x\n",
+            readl(vic_base + VIC_CTRL_REG),
+            readl(vic_base + 0x24),
+            readl(vic_base + VIC_CH_ENABLE));
+
+    return 0;
+}
+
+static int vic_pipo_mdma_enable(struct IMPISPDev *dev)
+{
+    void __iomem *vic_base = dev->regs + VIC_BASE_OFFSET;
+    u32 width, height, value;
+
+    // Get current frame dimensions
+    width = dev->frame_sources[0].width;
+    height = dev->frame_sources[0].height;
+
+    // 1. Setup frame control (matches decompiled 0x304/0x308)
+    writel((width << 16) | height, vic_base + 0x304);
+    writel(1, vic_base + 0x308);
+
+    // 2. Calculate and set line stride
+    u32 stride = ALIGN(width * 2, 32);  // YUV422 stride aligned to 32
+    writel(stride, vic_base + 0x310);
+    writel(stride, vic_base + 0x314);
+
+    return 0;
+}
 
 static int vic_core_init(struct IMPISPDev *dev, int enable)
 {
     struct vic_control *vic = dev->vic;
     unsigned long flags;
     void __iomem *regs = dev->regs;
-    int ret = 0;
+    u32 curr_state;
+    int ret;
 
-    if (!vic) {
-        pr_err("VIC not initialized\n");
+    if (!vic)
         return -EINVAL;
-    }
 
-    pr_info("VIC init: initial state: ctrl=0x%x state=0x%x irq=0x%x mode=0x%x\n",
-            readl(regs + VIC_CTRL_REG),
-            readl(regs + VIC_STATE_REG),
-            readl(regs + VIC_IRQ_REG),
-            readl(regs + VIC_MODE_REG));
+    void __iomem *vic_base = regs + VIC_BASE_OFFSET;
+    curr_state = readl(vic_base + 0x128);
 
-    spin_lock_irqsave(&vic->lock, flags);
+    pr_info("VIC init: initial state=0x%x base=%p\n", curr_state, vic_base);
 
     if (enable) {
-        // First disable everything
-        writel(0, regs + VIC_CTRL_REG);
-        writel(0, regs + VIC_IRQ_REG);
-        wmb();
-        udelay(100);
+        if (curr_state != 4) {
+            // Disable IRQ first
+            writel(0, vic_base + 0x13c);
+            wmb();
+            udelay(100);
 
-        // Set mode first
-        writel(VIC_MODE_NORMAL, regs + VIC_MODE_REG);
-        wmb();
-        udelay(100);
+            // Enable DMA first
+            ret = vic_pipo_mdma_enable(vic);
+            if (ret)
+                return ret;
 
-        // Enable VIC core with IRQs
-        writel(VIC_CTRL_ENABLE | VIC_CTRL_IRQ_EN, regs + VIC_CTRL_REG);
-        wmb();
-        udelay(100);
+            // Start VIC core and format config
+            ret = tx_isp_vic_start(dev);
+            if (ret)
+                return ret;
 
-        // Set stream state
-        writel(VIC_STATE_STREAM, regs + VIC_STATE_REG);
-        wmb();
-        udelay(100);
+            // Set stream state
+            writel(4, vic_base + 0x128);
+            wmb();
+            udelay(100);
 
-        // Finally enable IRQ
-        writel(1, regs + VIC_IRQ_REG);
-        wmb();
+            // Configure channel with proper shift
+            writel((1 << 16) | 0x80000020, vic_base + VIC_CHAN_CFG);
+            wmb();
+            udelay(100);
 
-        vic->state = VIC_STATE_STREAM;
-        vic->irq_enabled = 1;
+            // Enable IRQ last
+            writel(1, vic_base + 0x13c);
+            wmb();
+
+            vic->state = 4;
+        }
     } else {
-        // Disable everything
-        writel(0, regs + VIC_IRQ_REG);
-        writel(0, regs + VIC_CTRL_REG);
-        writel(VIC_STATE_READY, regs + VIC_STATE_REG);
-        wmb();
-
-        vic->state = VIC_STATE_READY;
-        vic->irq_enabled = 0;
+        if (curr_state == 4) {
+            writel(0, vic_base + VIC_CHAN_CFG);
+            writel(0, vic_base + 0x128);
+            writel(0, vic_base + 0x13c);
+            wmb();
+        }
     }
 
-    spin_unlock_irqrestore(&vic->lock, flags);
+    pr_info("VIC config complete: base=%p state=0x%x chan=0x%x ctrl=0x%x\n",
+            vic_base,
+            readl(vic_base + 0x128),
+            readl(vic_base + VIC_CHAN_CFG),
+            readl(vic_base + VIC_CTRL_REG));
 
-    pr_info("VIC state change: state=%d enabled=%d hwstate=0x%x ctrl=0x%x irq=0x%x mode=0x%x\n",
-            vic->state, vic->irq_enabled,
-            readl(regs + VIC_STATE_REG),
-            readl(regs + VIC_CTRL_REG),
-            readl(regs + VIC_IRQ_REG),
-            readl(regs + VIC_MODE_REG));
-
-    return ret;
+    return 0;
 }
-
 
 static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, bool enable) {
     struct isp_framesource_state *fs;
@@ -7190,18 +7320,81 @@ static void __iomem *map_isp_registers(struct platform_device *pdev)
     return base;
 }
 
+static int setup_frame_channel(struct isp_framesource_state *fs)
+{
+    void __iomem *vic_base = ourISPdev->regs + VIC_BASE_OFFSET;
+    struct frame_source_channel *fc = fs->private;
+    uint32_t ctrl;
+    int ret;
+
+    // Check VIC is ready first
+    ctrl = readl(vic_base + VIC_CTRL_REG);
+    if (!(ctrl & VIC_CTRL_ENABLE)) {
+        pr_err("VIC not enabled for channel setup\n");
+        return -EINVAL;
+    }
+
+    // Calculate channel-specific buffer config
+    u32 base_addr = 0x351b300 + (fs->chn_num * fs->buf_size);
+
+    // Critical - Setup initial channel state (from decompiled 0x2328)
+    spin_lock_irq(&ourISPdev->lock);
+
+    // Configure channel buffer registers
+    writel(base_addr, ourISPdev->regs + ISP_BUF_OFFSET +
+           (fs->chn_num * ISP_BUF_SIZE_STEP));
+    writel(fs->buf_size, ourISPdev->regs + ISP_BUF_OFFSET +
+           (fs->chn_num * ISP_BUF_SIZE_STEP) + 0x4);
+
+    // Configure channel control - match decompiled exactly
+    ctrl = readl(vic_base + 0x300);
+    ctrl &= ~0xfff0ffff;  // Clear frame bits
+    ctrl |= fs->buf_cnt << 16;   // Set frame count
+    ctrl |= 0x80000020;   // Set control bits
+    writel(ctrl, vic_base + 0x300);
+    wmb();
+
+    spin_unlock_irq(&ourISPdev->lock);
+
+    // Initialize channel state
+    fs->state = 1;  // Ready state
+    fs->flags |= 0x1; // Set enabled flag
+
+    pr_info("Channel %d initialized with buffer config:\n"
+            "  Base Address: 0x%08x\n"
+            "  Buffer Size: %u\n"
+            "  Frame Count: %d\n"
+            "  Control: 0x%08x\n",
+            fs->chn_num, base_addr, fs->buf_size, fs->buf_cnt,
+            readl(vic_base + 0x300));
+
+    return 0;
+}
+
+
 static int framechan_open(struct inode *inode, struct file *file)
 {
     struct isp_framesource_state *fs;
     int minor = iminor(inode);
     struct frame_source_channel *fc;
+    void __iomem *vic_base;
     uint32_t channel_offset;
     uint32_t total_size;
-    int i;
+    u32 ctrl;
+    int i, ret;
 
     if (!ourISPdev || !ourISPdev->dma_buf || !ourISPdev->dma_addr) {
         pr_err("ISP memory not initialized\n");
         return -ENOMEM;
+    }
+
+    vic_base = ourISPdev->regs + VIC_BASE_OFFSET;
+
+    // Verify VIC is ready before allowing channel open
+    ctrl = readl(vic_base + VIC_CTRL_REG);
+    if (!(ctrl & VIC_CTRL_ENABLE)) {
+        pr_err("VIC not enabled for channel %d\n", minor);
+        return -EINVAL;
     }
 
     fs = &ourISPdev->frame_sources[minor];
@@ -7223,48 +7416,44 @@ static int framechan_open(struct inode *inode, struct file *file)
     INIT_LIST_HEAD(&fc->done_list);
     init_waitqueue_head(&fc->wait);
 
-    // Set default format - adjust based on channel
+    // Set format based on channel (matches decompiled expected sizes)
     if (minor == 0) {
         fs->width = 1920;
         fs->height = 1080;
+        fs->fmt = ISP_FMT_NV12;
     } else {
         fs->width = 640;
         fs->height = 360;
+        fs->fmt = ISP_FMT_NV12;
     }
     fs->buf_cnt = 4;  // Fixed number of buffers
 
-    // Calculate NV12 buffer size
-    uint32_t width_aligned = ALIGN(fs->width, 32);
+    // Calculate NV12 buffer size with proper alignment
+    uint32_t width_aligned = ALIGN(fs->width, 32);  // 32-byte align for DMA
     uint32_t y_size = width_aligned * fs->height;
     uint32_t uv_size = y_size / 2;  // NV12 format
-    fs->buf_size = ALIGN(y_size + uv_size, ISP_BUF_ALIGN);
+    fs->buf_size = ALIGN(y_size + uv_size, 4096);  // Page align
 
-    // Calculate total size needed for this channel
+    // Buffer region calculation (match decompiled layout)
     total_size = fs->buf_size * fs->buf_cnt;
 
-    // Calculate the offset for each channel from the base of our memory region
-    // Reserve first 1MB for ISP parameters/registers
-    const uint32_t param_reserve = 0x100000;  // 1MB for params
     if (minor == 0) {
-        // Main channel - starts after params
-        channel_offset = param_reserve;
+        channel_offset = 0x2000;  // Primary channel offset
     } else {
-        // Secondary channel - starts after main channel
-        uint32_t main_channel_size = ALIGN(1920 * 1080 * 3/2, ISP_BUF_ALIGN) * 4;
-        channel_offset = param_reserve + main_channel_size;
+        // Secondary channels start after primary
+        channel_offset = 0x2000 + (minor * total_size);
     }
 
     // Validate memory region
     if (channel_offset + total_size > ourISPdev->dma_size) {
-        pr_err("Not enough memory for channel %d buffers (need %u bytes at offset 0x%x)\n",
-               minor, total_size, channel_offset);
+        pr_err("Not enough memory for channel %d\n", minor);
         kfree(fc);
         return -ENOMEM;
     }
 
     // Set up channel memory
     fc->buf_base = ourISPdev->dma_buf + channel_offset;
-    fc->dma_addr = ourISPdev->dma_addr + channel_offset;
+    fc->dma_addr = 0x351b300 + (minor * fs->buf_size); // Match streamer's expected address
     fc->buf_size = fs->buf_size;
     fc->buf_cnt = fs->buf_cnt;
     fc->channel_offset = channel_offset;
@@ -7276,14 +7465,16 @@ static int framechan_open(struct inode *inode, struct file *file)
         return -ENOMEM;
     }
 
-    // Initialize each buffer node
+    // Initialize each buffer node with correct addresses
     for (i = 0; i < fc->buf_cnt; i++) {
         struct frame_node *node = &fc->buffer_nodes[i];
         node->magic = FRAME_MAGIC;
         node->index = i;
         node->frame_size = fc->buf_size;
-        node->dma_addr = fc->dma_addr + (i * fc->buf_size);
+        node->dma_addr = fc->dma_addr + (i * fc->buf_size);  // Offset from base
         node->virt_addr = fc->buf_base + (i * fc->buf_size);
+        node->data = node->virt_addr;
+
         INIT_LIST_HEAD(&node->list);
         list_add_tail(&node->list, &fc->ready_list);
     }
@@ -7295,23 +7486,35 @@ static int framechan_open(struct inode *inode, struct file *file)
     fs->is_open = 1;
     fs->state = 1;  // Ready state
 
+    // Configure VIC for this channel (matches decompiled 0x2328)
+    spin_lock_irq(&ourISPdev->lock);
+
+    // Set channel buffer base
+    writel(fc->dma_addr, ourISPdev->regs + ISP_BUF_OFFSET +
+           (minor * ISP_BUF_SIZE_STEP));
+    writel(fs->buf_size, ourISPdev->regs + ISP_BUF_OFFSET +
+           (minor * ISP_BUF_SIZE_STEP) + 0x4);
+
+    // Configure channel control
+    ctrl = readl(vic_base + 0x300);
+    ctrl &= ~0xfff0ffff;  // Clear frame bits
+    ctrl |= (fs->buf_cnt << 16) | 0x80000020;  // Set frame count & control
+    writel(ctrl, vic_base + 0x300);
+    wmb();
+
+    spin_unlock_irq(&ourISPdev->lock);
+
     file->private_data = fs;
 
-    pr_info("Frame channel %d open with buffer setup:\n"
-            "  Resolution: %dx%d\n"
-            "  Base DMA: 0x%08x\n"
-            "  Base Virtual: %p\n"
-            "  Buffer Size: %u bytes\n"
-            "  Total Size: %u bytes (%d buffers)\n"
-            "  Channel offset: 0x%x\n",
-            minor,
-            fs->width, fs->height,
-            (unsigned int)fs->dma_addr,
-            fs->buf_base,
-            fs->buf_size,
-            total_size,
-            fs->buf_cnt,
-            fc->channel_offset);
+    pr_info("Channel %d initialized:\n"
+            "  Resolution: %dx%d format=0x%x\n"
+            "  Buffers: count=%d size=%u\n"
+            "  DMA addr: 0x%08x offset=0x%x\n"
+            "  VIC ctrl: 0x%08x\n",
+            minor, fs->width, fs->height, fs->fmt,
+            fs->buf_cnt, fs->buf_size,
+            (u32)fc->dma_addr, channel_offset,
+            readl(vic_base + 0x300));
 
     return 0;
 }
@@ -7647,61 +7850,200 @@ static bool write_reg_verify(void __iomem *reg, u32 value, const char *name)
     return true;
 }
 
+static int setup_frame_buffers(struct isp_framesource_state *fs)
+{
+    struct frame_source_channel *fc = fs->private;
+    uint32_t buffer_base = 0x351b300;  // Match libimp's expected base
+    int i;
+
+    if (!fc || !fc->buffer_nodes) {
+        pr_err("Invalid channel state\n");
+        return -EINVAL;
+    }
+
+    // Set up buffer nodes to match libimp's expectations
+    for (i = 0; i < fc->buf_cnt; i++) {
+        struct frame_node *node = &fc->buffer_nodes[i];
+
+        // Use libimp's physical addresses
+        node->dma_addr = buffer_base + (i * fc->buf_size);
+
+        // But map to our actual memory
+        node->virt_addr = fc->buf_base + (i * fc->buf_size);
+        node->data = node->virt_addr;
+        node->frame_size = fc->buf_size;
+
+        pr_info("Buffer %d: phys=0x%x virt=%p size=%u\n",
+                i, (unsigned int)node->dma_addr,
+                node->virt_addr, node->frame_size);
+    }
+
+    return 0;
+}
+
+static int init_vic_registers(struct IMPISPDev *dev)
+{
+    void __iomem *vic_base = dev->regs + VIC_BASE_OFFSET;
+    u32 val;
+
+    // Reset everything first
+    writel(0, vic_base + VIC_CTRL_REG);  // 0x100
+    writel(0, vic_base + VIC_STATE_REG); // 0x128
+    writel(0xFFFFFFFF, vic_base + VIC_INT_CLEAR); // 0x008
+    wmb();
+    msleep(10);
+
+    // Configure format (from decompiled 0x1808)
+    writel(0x2c0, vic_base + 0x24);
+    wmb();
+
+    // Configure buffer indices (from decompiled "vic_mdma_ch0_set_buff_index = 4")
+    writel(4, vic_base + 0x340);
+    writel(4, vic_base + 0x344);
+    wmb();
+
+    // Set up channel config (matches 0x186c in decompiled)
+    val = (1920 << 16) | 1080;  // Width/height
+    writel(val, vic_base + 0x304);
+    writel(1, vic_base + 0x308);  // Enable bit
+
+    // Buffer stride - matches decompiled 0x1874
+    writel(1920 * 2, vic_base + 0x310);  // Width * 2 for YUV
+    writel(1920 * 2, vic_base + 0x314);
+    wmb();
+
+    // DMA control register init (0x1964)
+    writel(0x80000020, vic_base + 0x300);
+    wmb();
+
+    // State register setup (0x22cc)
+    writel(2, vic_base + 0x128); // VIC_STATE_READY
+    wmb();
+
+    // Enable core with IRQ
+    writel(VIC_CTRL_ENABLE | VIC_CTRL_IRQ_EN, vic_base + VIC_CTRL_REG);
+    wmb();
+    msleep(1);
+
+    return 0;
+}
+
+static bool check_vic_status(struct IMPISPDev *dev)
+{
+    void __iomem *vic_base = dev->regs + VIC_BASE_OFFSET;
+
+    // Match decompiled status checks at 0x2930
+    u32 ctrl = readl(vic_base + VIC_CTRL_REG);
+    u32 state = readl(vic_base + VIC_STATE_REG);
+    u32 dma = readl(vic_base + 0x300);
+
+    if ((ctrl & VIC_CTRL_ENABLE) &&
+        (state == 2) &&         // Ready state
+        (dma & 0x80000020)) {   // DMA enabled with correct mode
+        return true;
+    }
+
+    pr_err("VIC not ready: ctrl=0x%x state=0x%x dma=0x%x\n",
+           ctrl, state, dma);
+    return false;
+}
+
+static int init_vic_global(struct IMPISPDev *dev)
+{
+    void __iomem *vic_base = dev->regs + VIC_BASE_OFFSET;
+    struct vic_control *vic;
+    u32 val;
+
+    // Allocate control structure first
+    vic = kzalloc(sizeof(*vic), GFP_KERNEL);
+    if (!vic)
+        return -ENOMEM;
+
+    // Initialize vic_start_ok flag seen in decompiled
+    writel(0, vic_base + VIC_CTRL_REG);
+    writel(0, vic_base + 0x128);  // State register
+    writel(0xFFFFFFFF, vic_base + VIC_INT_CLEAR);
+    wmb();
+    msleep(10);
+
+    // Base config (from 0x1808)
+    writel(0x2c0, vic_base + 0x24);  // Format
+    writel(4, vic_base + 0x340);     // Buffer indices
+    writel(4, vic_base + 0x344);
+    wmb();
+
+    // Default frame size (1920x1080)
+    writel((1920 << 16) | 1080, vic_base + 0x304);
+    writel(1, vic_base + 0x308);
+    writel(1920 * 2, vic_base + 0x310);  // Default stride
+    writel(1920 * 2, vic_base + 0x314);
+    wmb();
+
+    // Global control registers
+    writel(0x80000020, vic_base + 0x300);  // DMA control
+    writel(2, vic_base + 0x128);           // VIC_STATE_READY
+    writel(VIC_CTRL_ENABLE | VIC_CTRL_IRQ_EN, vic_base + VIC_CTRL_REG);
+    wmb();
+
+    // Store control structure
+    spin_lock_init(&vic->lock);
+    vic->state = VIC_STATE_READY;
+    vic->irq_enabled = 1;
+    vic->priv = dev;
+    dev->vic = vic;
+
+    pr_info("VIC global init complete\n");
+    return 0;
+}
+
+
+// Update stream handling to match ispvic_frame_channel_s_stream at 0x226c
 static int handle_stream_on(struct isp_framesource_state *fs)
 {
     struct frame_source_channel *fc = fs->private;
     void __iomem *regs = ourISPdev->regs;
+    void __iomem *vic_base = regs + VIC_BASE_OFFSET;
+    u32 ctrl, val;
     int ret;
 
     pr_info("Stream ON request for channel %d\n", fs->chn_num);
 
-    // First reset everything
-    writel(0, regs + ISP_CTRL_REG);
-    writel(0, regs + ISP_INT_MASK);
-    writel(0, regs + VIC_IRQ_REG);
-    writel(0, regs + VIC_CTRL_REG);
-    writel(0xFFFFFFFF, regs + ISP_INT_CLEAR);
-    writel(0xFFFFFFFF, regs + W02_REG_BASE + W02_INT_CLEAR);
-    wmb();
-    udelay(100);
-
-    // Enable ISP core first
-    writel(ISP_CTRL_ENABLE | ISP_CTRL_CAPTURE, regs + ISP_CTRL_REG);
-    wmb();
-    udelay(100);
-
-    ret = vic_core_init(ourISPdev, 1);
-    if (ret) {
-        pr_err("Failed to initialize VIC\n");
-        return ret;
+    // Critical: Get global VIC state first
+    ctrl = readl(vic_base + VIC_CTRL_REG);
+    if (!(ctrl & VIC_CTRL_ENABLE)) {
+        pr_err("VIC not enabled\n");
+        return -EINVAL;
     }
 
-    // Finally enable interrupts
-    writel(0x3f9, regs + ISP_INT_MASK);
+    // Lock access (matches decompiled)
+    spin_lock_irq(&ourISPdev->lock);
+
+    // Channel buffer setup
+    u32 base_addr = 0x351b300 + (fs->chn_num * fs->buf_size);
+    writel(base_addr, regs + ISP_BUF_OFFSET + (fs->chn_num * ISP_BUF_SIZE_STEP));
+    writel(fs->buf_size, regs + ISP_BUF_OFFSET + (fs->chn_num * ISP_BUF_SIZE_STEP) + 0x4);
+    wmb();
+
+    // Configure channel control (from 0x2328)
+    ctrl = readl(vic_base + 0x300);
+    ctrl &= ~0xfff0ffff;  // Clear frame bits
+    ctrl |= fs->buf_cnt << 16 | 0x80000020;
+    writel(ctrl, vic_base + 0x300);
+    wmb();
+
+    // Enable streaming for this channel
+    fs->state = 2;
+
+    // Channel-specific interrupts
+    if (fs->chn_num == 0) {
+        writel(0x3f9, regs + ISP_INT_MASK);
+    }
     writel(0x3f9, regs + W02_REG_BASE + W02_INT_MASK);
     wmb();
 
-    // Add register write verification
-    u32 ctrl = readl(regs + ISP_CTRL_REG);
-    if (!(ctrl & ISP_CTRL_ENABLE)) {
-        pr_err("Failed to enable ISP core: ctrl=0x%x\n", ctrl);
-        return -EIO;
-    }
+    spin_unlock_irq(&ourISPdev->lock);
 
-    // Verify final state
-    pr_info("Channel %d: IRQs enabled:\n"
-            "  ISP Control: 0x%x\n"
-            "  ISP mask: 0x%x\n"
-            "  VIC ctrl: 0x%x\n"
-            "  W02 mask: 0x%x\n"
-            "  VIC state: 0x%x\n",
-            fs->chn_num,
-            readl(regs + ISP_CTRL_REG),
-            readl(regs + ISP_INT_MASK),
-            readl(regs + VIC_IRQ_REG),
-            readl(regs + W02_REG_BASE + W02_INT_MASK),
-            readl(regs + VIC_STATE_REG));
-
+    pr_info("Channel %d streaming enabled\n", fs->chn_num);
     return 0;
 }
 
@@ -8015,7 +8357,6 @@ struct isp_irq_context {
     struct irq_handler_data *m0_handler;
     struct irq_handler_data *w02_handler;
 };
-
 static int tisp_probe(struct platform_device *pdev)
 {
     struct resource *res;
@@ -8048,55 +8389,25 @@ static int tisp_probe(struct platform_device *pdev)
         goto err_release_mem;
     }
 
-    // Initialize ISP memory
-    ret = init_isp_memory(ourISPdev);
-    if (ret) {
-        pr_err("Failed to initialize ISP memory\n");
-        return ret;
-    }
-
-    // Store mapped registers and device
+    // Store mapped registers and device first
     ourISPdev->regs = base;
     ourISPdev->dev = &pdev->dev;
 
-    // Verify mapping with test read
-    uint32_t test_val = readl(base);
-    dev_info(&pdev->dev, "ISP register mapping: base=%p test_read=0x%x\n",
-             base, test_val);
-
-    // Initialize device structures
+    // Initialize device spin locks
     spin_lock_init(&ourISPdev->lock);
 
-    // Initialize frame sources array
-    for (int i = 0; i < MAX_FRAME_SOURCES; i++) {
-        ourISPdev->frame_sources[i].chn_num = i;
-        ourISPdev->frame_sources[i].state = 0;
-        ourISPdev->frame_sources[i].is_open = 0;
-        ourISPdev->frame_sources[i].private = NULL;
-        init_waitqueue_head(&ourISPdev->frame_sources[i].wait);
-    }
-
-    // Allocate and initialize graph data
-    graph_data = kzalloc(sizeof(*graph_data), GFP_KERNEL);
-    if (!graph_data) {
-        dev_err(&pdev->dev, "Failed to allocate graph data\n");
-        ret = -ENOMEM;
+    // Initialize memory before VIC setup
+    ret = init_isp_memory(ourISPdev);
+    if (ret) {
+        pr_err("Failed to initialize ISP memory\n");
         goto err_unmap;
     }
 
-    // Initialize graph data
-    graph_data->dev = ourISPdev;
-    graph_data->dev_status.sensor_enabled = 0;
-    memset(&graph_data->dev_status.fs_status, 0,
-           sizeof(struct isp_framesource_status));
-
-    global_graph_data = graph_data;
-
-    // Initialize IRQ data first
+    // Setup initial IRQ handlers before VIC
     ourISPdev->irq_data = kzalloc(sizeof(struct isp_irq_data), GFP_KERNEL);
     if (!ourISPdev->irq_data) {
         ret = -ENOMEM;
-        goto err_free_graph;
+        goto err_cleanup_memory;
     }
 
     // Store IRQ numbers
@@ -8111,121 +8422,68 @@ static int tisp_probe(struct platform_device *pdev)
         goto err_free_irq_data;
     }
 
-    ourISPdev->irq_context = kzalloc(sizeof(struct isp_irq_context), GFP_KERNEL);
-    if (!ourISPdev->irq_context) {
-        ret = -ENOMEM;
-        goto err_free_irq_data;
-    }
-
-    // Allocate and initialize IRQ handlers
-    struct irq_handler_data *base_handler = kzalloc(sizeof(*base_handler), GFP_KERNEL);
-    struct irq_handler_data *m0_handler = kzalloc(sizeof(*m0_handler), GFP_KERNEL);
-    struct irq_handler_data *w02_handler = kzalloc(sizeof(*w02_handler), GFP_KERNEL);
-
-    if (!base_handler || !m0_handler || !w02_handler) {
-        ret = -ENOMEM;
-        goto err_free_handlers;
-    }
-
- // Initialize handler structures
-    base_handler->task_list = NULL;
-    base_handler->task_count = 0;
-    base_handler->irq_number = 0;
-    base_handler->handler_function = NULL;
-    base_handler->disable_function = NULL;
-    spin_lock_init(&base_handler->lock);
-
-    m0_handler->task_list = NULL;
-    m0_handler->task_count = 0;
-    m0_handler->irq_number = 0;
-    m0_handler->handler_function = NULL;
-    m0_handler->disable_function = NULL;
-    spin_lock_init(&m0_handler->lock);
-
-    w02_handler->task_list = NULL;
-    w02_handler->task_count = 0;
-    w02_handler->irq_number = 0;
-    w02_handler->handler_function = NULL;
-    w02_handler->disable_function = NULL;
-    spin_lock_init(&w02_handler->lock);
-//
-//    // Request IRQs
-//    ret = tx_isp_request_irq(&pdev->dev, ISP_BASE_IRQ, base_handler, "isp-base");
-//    if (ret) {
-//        dev_err(&pdev->dev, "Failed to request base IRQ\n");
-//        goto err_free_handlers;
-//    }
-//
-//    ret = tx_isp_request_irq(&pdev->dev, ISP_M0_IRQ, m0_handler, "isp-m0");
-//    if (ret) {
-//        dev_err(&pdev->dev, "Failed to request M0 IRQ\n");
-//        goto err_free_base_irq;
-//    }
-//
-//    ret = tx_isp_request_irq(&pdev->dev, ISP_W02_IRQ, w02_handler, "isp-w02");
-//    if (ret) {
-//        dev_err(&pdev->dev, "Failed to request W02 IRQ\n");
-//        goto err_free_m0_irq;
-//    }
-
-    // Store handlers in context
-    ourISPdev->irq_context->base_handler = base_handler;
-    ourISPdev->irq_context->m0_handler = m0_handler;
-    ourISPdev->irq_context->w02_handler = w02_handler;
-
-    pdev->dev.platform_data = &isp_pdata;
-
-    // Configure clocks
+    // Configure clocks before VIC init
     ret = configure_isp_clocks(ourISPdev);
     if (ret) {
-        dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
-        goto err_free_handlers;
+        dev_err(&pdev->dev, "Failed to configure ISP clocks\n");
+        goto err_free_irq;
     }
 
-    // Reset VIC and ISP after clock config
-    writel(0, ourISPdev->regs + ISP_CTRL_REG);
-    writel(0, ourISPdev->regs + VIC_CTRL_REG);
-    wmb();
-    udelay(100);
-
-    // Now initialize VIC once IRQs are setup
-    ret = init_vic(ourISPdev);
+    // Critical: Initialize VIC globally here, after clocks and IRQs are ready
+    ret = init_vic_global(ourISPdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to initialize VIC\n");
-        goto err_free_irq_data;
+        goto err_cleanup_clocks;
     }
 
-    platform_set_drvdata(pdev, ourISPdev);
+    // Initialize frame channels after VIC is ready
+    for (int i = 0; i < MAX_FRAME_SOURCES; i++) {
+        ourISPdev->frame_sources[i].chn_num = i;
+        ourISPdev->frame_sources[i].state = 0;
+        ourISPdev->frame_sources[i].is_open = 0;
+        ourISPdev->frame_sources[i].private = NULL;
+        init_waitqueue_head(&ourISPdev->frame_sources[i].wait);
+    }
 
-    // Initialize reserved memory
+    // Initialize reserved memory and regions
     ret = init_isp_reserved_memory(pdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to initialize reserved memory\n");
-        goto err_cleanup_clocks;
+        goto err_cleanup_vic;
     }
 
     ret = setup_isp_memory_regions(ourISPdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to setup memory regions\n");
-        goto err_cleanup_memory;
+        goto err_cleanup_reserved;
     }
 
+    // Setup sensor after memory is ready
     ret = setup_i2c_sensor(ourISPdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to setup I2C sensor\n");
-        goto err_cleanup_memory;
+        goto err_cleanup_regions;
     }
 
+    // Create graph data after all hardware is initialized
+    graph_data = kzalloc(sizeof(*graph_data), GFP_KERNEL);
+    if (!graph_data) {
+        dev_err(&pdev->dev, "Failed to allocate graph data\n");
+        ret = -ENOMEM;
+        goto err_cleanup_sensor;
+    }
+
+    // Initialize graph data
+    graph_data->dev = ourISPdev;
+    graph_data->dev_status.sensor_enabled = 0;
+    memset(&graph_data->dev_status.fs_status, 0, sizeof(struct isp_framesource_status));
+    global_graph_data = graph_data;
+
+    // Create device nodes and interfaces
     ret = create_isp_proc_entries(graph_data);
     if (ret) {
-        dev_err(&pdev->dev, "Failed to create proc entries: %d\n", ret);
-        goto err_cleanup_memory;
-    }
-
-    ret = tisp_init(&pdev->dev);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to initialize ISP subsystem\n");
-        goto err_cleanup_proc;
+        dev_err(&pdev->dev, "Failed to create proc entries\n");
+        goto err_free_graph;
     }
 
     ret = setup_isp_subdevs(ourISPdev);
@@ -8237,41 +8495,47 @@ static int tisp_probe(struct platform_device *pdev)
     ret = create_framechan_devices(&pdev->dev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to create frame channels\n");
-        goto err_cleanup_proc;
+        goto err_cleanup_subdevs;
     }
 
     ret = misc_register(&isp_m0_miscdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to register isp-m0 device\n");
-        goto err_cleanup_proc;
+        goto err_cleanup_frame;
     }
+
+    platform_set_drvdata(pdev, ourISPdev);
 
     dev_info(&pdev->dev, "TISP device probed successfully\n");
     return 0;
 
+err_cleanup_frame:
+    remove_framechan_devices();
+err_cleanup_subdevs:
+    // Clean up subdevices
 err_cleanup_proc:
     remove_isp_proc_entries();
-err_cleanup_memory:
-    cleanup_isp_memory(ourISPdev);
+err_free_graph:
+    kfree(graph_data);
+    global_graph_data = NULL;
+err_cleanup_sensor:
+    // Clean up sensor
+err_cleanup_regions:
+    // Clean up memory regions
+err_cleanup_reserved:
+    // Clean up reserved memory
+err_cleanup_vic:
+    // Clean up VIC
 err_cleanup_clocks:
     cleanup_isp_clocks(ourISPdev);
-err_free_handlers:
-    kfree(w02_handler);
-    kfree(m0_handler);
-    kfree(base_handler);
-    if (ourISPdev->irq_context)
-        kfree(ourISPdev->irq_context);
+err_free_irq:
+    tx_isp_free_irq(ourISPdev->irq_data);
 err_free_irq_data:
-    if (ourISPdev->irq_data)
-        kfree(ourISPdev->irq_data);
-err_free_graph:
-    if (graph_data) {
-        kfree(graph_data);
-        global_graph_data = NULL;
-    }
+    kfree(ourISPdev->irq_data);
+err_cleanup_memory:
+    cleanup_isp_memory(ourISPdev);
 err_unmap:
-    if (base)
-        iounmap(base);
+    iounmap(base);
 err_release_mem:
     release_mem_region(res->start, resource_size(res));
     return ret;
