@@ -1245,7 +1245,32 @@ struct isp_device {
 #define ISP_IPC_STATUS_REG   0x204    // IPC status register
 #define ISP_IPC_CLEAR_REG    0x208    // IPC clear register
 
+// Base ISP interrupt bits
+#define ISP_BASE_FRAME_DONE  BIT(0)    // Frame processing complete
+#define ISP_BASE_ERROR       BIT(1)    // Error occurred
 
+// VIC interrupt bits
+#define VIC_STATUS_READY    BIT(0)    // VIC ready
+#define VIC_STATUS_BUSY     BIT(1)    // VIC busy
+#define VIC_STATUS_ERROR    BIT(2)    // VIC error
+#define VIC_STATUS_FRAME    BIT(3)    // Frame complete
+
+#define VIC_INT_FRAME       BIT(0)    // Frame interrupt enable
+#define VIC_INT_ERROR       BIT(1)    // Error interrupt enable
+#define VIC_INT_OVERFLOW    BIT(2)    // Buffer overflow
+
+// M0 interrupt bits
+#define ISP_INT_FRAME_DONE  BIT(0)    // Frame complete
+#define ISP_INT_ERROR       BIT(1)    // Error occurred
+#define ISP_INT_OVERFLOW    BIT(2)    // Buffer overflow
+#define ISP_INT_MIPI_ERROR  BIT(3)    // MIPI interface error
+
+// W02 interrupt bits
+#define W02_INT_FRAME_DONE  BIT(0)    // Frame processing complete
+#define W02_INT_ERROR       BIT(1)    // Processing error
+#define W02_INT_OVERFLOW    BIT(2)    // Buffer overflow
+#define W02_INT_AE_DONE     BIT(3)    // Auto exposure complete
+#define W02_INT_AWB_DONE    BIT(4)    // Auto white balance complete
 
 static DECLARE_WAIT_QUEUE_HEAD(ae_wait);
 static DECLARE_WAIT_QUEUE_HEAD(awb_wait);
@@ -1336,38 +1361,6 @@ struct frame_buffer {
     uint8_t padding[0x308 - sizeof(struct frame_entry*)]; // Match expected size
 };
 
-static void handle_frame_complete(struct isp_framesource_state *fs)
-{
-    struct frame_buffer *fb = fs->private;
-    struct frame_entry *entry;
-    unsigned long flags;
-    struct timespec ts;
-
-    spin_lock_irqsave(&fs->lock, flags);
-
-    // Get next entry
-    entry = &fb->entries[fb->write_idx % fb->num_entries];
-
-    // Fill frame info
-    entry->flags = 0x1;  // Mark as filled
-    ktime_get_ts(&ts);  // Use 3.10 time API
-    entry->timestamp = timespec_to_ns(&ts);
-    entry->frame_size = fs->buf_size;
-    entry->frame_type = 1; // I-frame
-    entry->frame_num = fs->frame_cnt;
-    entry->frame_rate = 30; // From sensor config
-    entry->num_slices = 1;
-    entry->slice_data = fs->buf_base + (fs->buf_index * fs->buf_size);
-
-    // Update indices
-    fb->write_idx++;
-    fs->frame_cnt++;
-
-    spin_unlock_irqrestore(&fs->lock, flags);
-
-    // Signal new frame
-    up(&fb->frame_sem);
-}
 
 static struct isp_framesource_state *get_fs_from_fd(int fd)
 {
@@ -1487,110 +1480,82 @@ struct isp_irq_data {
     u32 task_status;           // Task status at +0x24
 };
 
-static irqreturn_t isp_irq_thread_handler(int irq, void *dev_id)
+
+
+static void handle_frame_complete(struct isp_framesource_state *fs)
 {
-    struct IMPISPDev *dev = dev_id;
-    struct isp_framesource_state *fs = &dev->frame_sources[0];
-    void __iomem *mipi_base = dev->regs + ISP_MIPI_BASE;
-    static u32 frame_count = 0;
-    u32 mipi_status, vic_status;
-    u32 ctrl, mask;
-    void __iomem *regs = dev->regs;
-
-    // Read control and mask registers
-    ctrl = readl(regs + ISP_CTRL_REG);
-    mask = readl(regs + ISP_INT_MASK_REG);
-
-    pr_info("ISP Thread Handler: ctrl=0x%08x mask=0x%08x\n",
-            ctrl, mask);
-
-    // Check MIPI status first
-    mipi_status = readl(mipi_base + ISP_MIPI_STATUS);
-    vic_status = readl(dev->regs + 0x1e0 + 0x4);  // VIC status
-
-    // Debug on errors
-    if (!(mipi_status & MIPI_STATUS_READY) || (vic_status & VIC_STATUS_ERROR)) {
-        pr_err("MIPI/VIC Error - MIPI: 0x%08x VIC: 0x%08x\n",
-               mipi_status, vic_status);
-        return IRQ_HANDLED;
-    }
-
-    // Keep existing buffer handling
-    void *buf = fs->buf_base + (fs->buf_index * fs->buf_size);
-    pr_info("Frame %d received: buf=%p size=%u index=%d\n",
-            frame_count++, buf, fs->buf_size, fs->buf_index);
-
-    if (frame_count < 3) {
-        pr_info("Frame data sample (first 16 bytes):\n");
-        print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET,
-                      16, 1, buf, 16, true);
-    }
-
-    // Update buffer index with validation
-    if (fs->buf_index >= fs->buf_cnt) {
-        pr_err("Invalid buffer index %d\n", fs->buf_index);
-        return IRQ_HANDLED;
-    }
-    fs->buf_index = (fs->buf_index + 1) % fs->buf_cnt;
-
-    // Update DMA with memory barrier
-    writel(fs->dma_addr + (fs->buf_index * fs->buf_size),
-           dev->regs + ISP_BUF0_OFFSET);
-    wmb();
-
-    return IRQ_HANDLED;
-}
-
-
-static irqreturn_t isp_irq_handler(int irq, void *dev_id)
-{
-    struct IMPISPDev *dev = dev_id;
-    struct isp_framesource_state *fs;
-    struct frame_source_channel *fc;
-    struct frame_node *node;
+    struct frame_source_channel *fc = fs->private;
     unsigned long flags;
-    struct timespec ts;
-    u32 status;
-
-    if (!dev || !dev->regs)
-        return IRQ_NONE;
-
-    status = readl(dev->regs + ISP_STATUS_REG);
-    if (!(status & ISP_INT_FRAME_DONE))
-        return IRQ_NONE;
-
-    fs = &dev->frame_sources[0];
-    fc = fs->private;
-    if (!fs || !fc)
-        return IRQ_HANDLED;
+    struct frame_node *node;
 
     spin_lock_irqsave(&fc->queue_lock, flags);
 
-    // Get next ready node
+    // Get next node from ready queue
     if (!list_empty(&fc->ready_list)) {
         node = list_first_entry(&fc->ready_list, struct frame_node, list);
 
-        // Fill frame info
-        node->index = fc->write_idx;
-        ktime_get_ts(&ts);
-        node->timestamp = timespec_to_ns(&ts);
+        // Mark buffer complete
+        mark_buffer_filled(fc, fs->buf_index);
 
         // Move to done queue
         list_move_tail(&node->list, &fc->done_list);
 
         // Update indices
         fc->write_idx = (fc->write_idx + 1) % fc->buf_cnt;
+        fs->buf_index = (fs->buf_index + 1) % fs->buf_cnt;
 
-        // Wake up waiters
+        // Wake waiters
         wake_up(&fc->wait);
     }
 
     spin_unlock_irqrestore(&fc->queue_lock, flags);
+}
 
-    // Clear interrupt
+static irqreturn_t isp_irq_thread_handler(int irq, void *dev_id) {
+    struct IMPISPDev *dev = dev_id;
+    struct isp_framesource_state *fs;
+    u32 status, vic_status;
+
+    // Re-read status
+    status = readl(dev->regs + ISP_STATUS_REG);
+    vic_status = readl(dev->regs + 0x1e0 + 0x4);
+
+    pr_debug("ISP Thread: status=0x%x vic=0x%x\n",
+             status, vic_status);
+
+    // Handle frame completion
+    fs = &dev->frame_sources[0]; // Start with channel 0
+    if (fs->state == 2) { // Only if streaming
+        handle_frame_complete(fs);
+    }
+
+    // Clear interrupt status
     writel(ISP_INT_FRAME_DONE, dev->regs + ISP_INT_CLEAR_REG);
+    writel(VIC_STATUS_FRAME, dev->regs + 0x1e0 + 0x8); // VIC clear at 0x1e8
+    wmb();
 
     return IRQ_HANDLED;
+}
+
+
+static irqreturn_t isp_irq_handler(int irq, void *dev_id) {
+    struct IMPISPDev *dev = dev_id;
+    u32 status;
+
+    if (!dev || !dev->regs)
+        return IRQ_NONE;
+
+    // Read ISP and VIC status
+    status = readl(dev->regs + ISP_STATUS_REG);
+    u32 vic_status = readl(dev->regs + 0x1e0 + 0x4); // VIC status at offset 0x1e4
+
+    pr_info("ISP IRQ: status=0x%x vic=0x%x\n", status, vic_status);
+
+    if (!(status & ISP_INT_FRAME_DONE) && !(vic_status & VIC_STATUS_FRAME))
+        return IRQ_NONE;
+
+    // Schedule threaded handler
+    return IRQ_WAKE_THREAD;
 }
 
 
@@ -2013,18 +1978,18 @@ static int tx_isp_create_graph_and_nodes(struct isp_graph_data *graph_data)
         void *drvdata;
 
         if (!pdev) {
-            pr_debug("Skipping NULL device at index %d\n", i);
+            pr_info("Skipping NULL device at index %d\n", i);
             continue;
         }
 
         drvdata = platform_get_drvdata(pdev);
         if (!drvdata) {
-            pr_debug("No driver data for device %d\n", i);
+            pr_info("No driver data for device %d\n", i);
             continue;
         }
 
         // Setup device node
-        pr_debug("Processing device %d: %s\n", i, pdev->name);
+        pr_info("Processing device %d: %s\n", i, pdev->name);
 
         // If the device needs a misc device registration
         if (drvdata) {
@@ -2756,7 +2721,7 @@ static void imp_log_fun(int level, int option, int arg2,
             pr_info("%s: %s", func, buf);
             break;
         case IMP_LOG_DEBUG:
-            pr_debug("%s: %s", func, buf);
+            pr_info("%s: %s", func, buf);
             break;
         default:
             pr_info("%s: %s", func, buf);
@@ -2910,33 +2875,37 @@ static int isp_device_pipeline_setup(struct isp_device *dev)
     return 0;
 }
 
+// Fix IRQ initialization by adding proper handler setup
 static int isp_device_interrupts_setup(struct IMPISPDev *dev)
 {
-    if (!dev) {
-        pr_err("ISP device is NULL\n");
-        return -EINVAL;
+    // Request Main ISP and M0 IRQs
+    dev->irq_m0 = ISP_M0_IRQ;  // 37 - Main ISP/VIC interrupt
+    dev->irq_w02 = ISP_W02_IRQ; // 38 - ISP module interrupt
+
+    int ret;
+
+    // Set up threaded IRQ handler for M0
+    ret = request_threaded_irq(dev->irq_m0, isp_irq_handler,
+                             isp_irq_thread_handler,
+                             IRQF_SHARED, "isp-m0", dev);
+    if (ret) {
+        pr_err("Failed to request M0 IRQ\n");
+        return ret;
     }
 
-    // Check if interrupts are supported by the hardware (check the irq field in IMPISPDev)
-    if (!dev->irq) {
-        pr_info("ISP device does not support interrupts\n");
-        return 0;  // No interrupts supported
+    // Set up W02 IRQ
+    ret = request_threaded_irq(dev->irq_w02, isp_irq_handler,
+                             isp_irq_thread_handler,
+                             IRQF_SHARED, "isp-w02", dev);
+    if (ret) {
+        free_irq(dev->irq_m0, dev);
+        return ret;
     }
 
-    // Request the interrupt line
-    // Assuming you will uncomment the request_irq code when it's ready for use
-    if (request_irq(dev->irq, isp_irq_handler, IRQF_SHARED, "isp_device", dev)) {
-        pr_err("Failed to request IRQ\n");
-        return -EBUSY;
-    }
-
-    // TODO: Enable interrupts in the hardware
-    // Enable interrupts in the hardware (you will need to modify this line
-    // to use the correct register or function for your hardware)
-    // For example, write to a specific register to enable interrupts:
-    // write_register(dev->regs, ISP_INT_ENABLE_REG, ISP_INT_FRAME_DONE);
-
-    pr_info("ISP interrupts set up successfully\n");
+    // Enable IRQs in hardware
+    writel(ISP_INT_FRAME_DONE, dev->regs + ISP_INT_MASK);
+    writel(0xFFFFFFFF, dev->regs + ISP_INT_CLEAR); // Clear pending
+    wmb();
 
     return 0;
 }
@@ -3195,49 +3164,45 @@ static int setup_frame_source(struct IMPISPDev *dev, int channel) {
         return -ENOMEM;
 
     pr_info("Frame source setup: dev=%p channel=%d\n", dev, channel);
-    pr_info("dev offset 0x20=0x%x\n",
-            *((unsigned int*)((char*)dev + 0x20)));
 
-
-    // Set up entry counts matching LIBIMP
-    fc->buf_cnt = 4;
-    fc->state = 1;  // Ready state
-    fc->channel_offset = channel * 0x2e8;  // From decompiled offset calc
+    // Initialize channel and buffer configuration
+    fc->buf_cnt = 4;  // LIBIMP always uses 4 buffers
+    fc->state = 1;    // Ready state
+    fc->channel_offset = channel * 0x2e8;  // Fixed channel offset from LIBIMP
     fc->write_idx = 0;
 
-    // Calculate buffer layout
-    pr_info("Setting up frame source format: NV12\n");
-    // Force proper line size calculation for NV12
-    uint32_t y_line_size = ALIGN(fs->width, 32);  // Align to 32 bytes
-    uint32_t uv_line_size = ALIGN(fs->width/2, 32); // UV is half width
-
-    // Y plane size + UV plane size
-    fs->buf_size = (y_line_size * fs->height) +
-                   (uv_line_size * fs->height/2);
-
-    pr_info("Buffer config: y_line=%d uv_line=%d total=%d\n",
-            y_line_size, uv_line_size, fs->buf_size);
-    // Use NV12 format
-    fs->fmt = V4L2_PIX_FMT_NV12;
-
-    if (!dev->sensor_window_size) {
-        pr_err("No sensor window size information\n");
-        return -EINVAL;
+    // Set dimensions - either from sensor or defaults
+    if (dev->sensor_window_size) {
+        fs->width = dev->sensor_window_size->width;
+        fs->height = dev->sensor_window_size->height;
+    } else {
+        // Default to 1080p if no sensor info
+        fs->width = 1920;
+        fs->height = 1080;
     }
 
-    // Use window size info
-    fs->width = dev->sensor_window_size->width;
-    fs->height = dev->sensor_window_size->height;
-    fs->fmt = V4L2_PIX_FMT_NV12;  // Output format still NV12
+    // NV12 buffer calculations - critical for proper DMA
+    uint32_t y_stride = ALIGN(fs->width, 32);      // Y stride must be 32-byte aligned
+    uint32_t uv_stride = ALIGN(fs->width/2, 32);   // UV stride is half width, also 32-byte aligned
 
-    // Calculate buffer size...
-    uint32_t y_stride = ALIGN(fs->width, 32);
-    uint32_t y_size = y_stride * fs->height;
-    uint32_t uv_size = y_size / 2;
+    uint32_t y_size = y_stride * fs->height;       // Y plane size
+    uint32_t uv_size = uv_stride * (fs->height/2); // UV plane size (half height)
+
+    // Total buffer size includes both planes
     fs->buf_size = y_size + uv_size;
+    fc->buf_size = fs->buf_size;
 
-    pr_info("Frame source setup from window size: %dx%d fmt=0x%x\n",
-            fs->width, fs->height, fs->fmt);
+    // Critical: Use exact LIBIMP frame buffer offset
+    uint32_t base_offset = 0x1094d4;  // Fixed offset from LIBIMP
+
+    // Calculate buffer addresses for this channel
+    fc->buf_base = dev->dma_buf + base_offset +
+                   (channel * ALIGN(fs->buf_size * fc->buf_cnt, 32));
+    fc->dma_addr = dev->dma_addr + base_offset +
+                   (channel * ALIGN(fs->buf_size * fc->buf_cnt, 32));
+
+    // Set format to NV12 (matches LIBIMP's 0x3231564e)
+    fs->fmt = V4L2_PIX_FMT_NV12;
 
     // Initialize synchronization primitives
     spin_lock_init(&fc->state_lock);
@@ -3245,24 +3210,28 @@ static int setup_frame_source(struct IMPISPDev *dev, int channel) {
     atomic_set(&fc->buffer_index, 0);
     fc->buffer_states = 0;
 
-    // Calculate buffer addresses with proper base offset
-    uint32_t base_offset = 0x1094d4;  // Offset from decompiled code
-    fc->buf_base = dev->dma_buf + base_offset + (channel * fc->buf_size * fc->buf_cnt);
-    fc->dma_addr = dev->dma_addr + base_offset + (channel * fc->buf_size * fc->buf_cnt);
-
-    sema_init(&fc->sem, 0);  // Start with no frames
+    sema_init(&fc->sem, 0);
     mutex_init(&fc->lock);
 
-    // Initialize frame source state
+    // Initialize frame queue
+    INIT_LIST_HEAD(&fc->ready_list);
+    INIT_LIST_HEAD(&fc->done_list);
+    init_waitqueue_head(&fc->wait);
+    atomic_set(&fc->frame_count, 0);
+
+    // Store in frame source state
     fs->frame_cnt = 0;
     fs->buf_index = 0;
-    fs->state = 1;  // Ready state
+    fs->state = 1;    // Ready state
     fs->private = fc;
 
     pr_info("Frame source channel %d initialized:\n", channel);
-    pr_info("  buffer_base: %p\n", fc->buf_base);
-    pr_info("  dma_addr: 0x%x\n", (uint32_t)fc->dma_addr);
-    pr_info("  buf_size: %u x %d buffers\n", fc->buf_size, fc->buf_cnt);
+    pr_info("  Resolution: %dx%d format: NV12\n", fs->width, fs->height);
+    pr_info("  Y stride: %d UV stride: %d\n", y_stride, uv_stride);
+    pr_info("  Buffer size: %u (Y: %u UV: %u)\n", fs->buf_size, y_size, uv_size);
+    pr_info("  DMA base: 0x%08x offset: 0x%x\n",
+            (uint32_t)fc->dma_addr, base_offset);
+    pr_info("  Channel offset: 0x%x\n", fc->channel_offset);
 
     return 0;
 }
@@ -3280,71 +3249,25 @@ struct isp_frame_state {
 static int isp_frame_thread(void *data)
 {
     struct isp_framesource_state *fs = data;
-    struct frame_source_channel *fc;
-    struct isp_buffer_info *curr_buf;
-    int ret;
-
-    if (!fs || !fs->private) {
-        pr_err("Invalid frame source state\n");
-        return -EINVAL;
-    }
-
-    fc = fs->private;
+    struct frame_source_channel *fc = fs->private;
 
     while (!kthread_should_stop()) {
-        // Wait for frame with timeout
-        ret = wait_event_interruptible_timeout(
-            fs->wait,
-            fs->frame_cnt > fc->write_idx || kthread_should_stop(),
-            msecs_to_jiffies(100));
+        // Wait for interrupt completion
+        wait_event_interruptible(fs->wait,
+            atomic_read(&fc->frames_completed) > fc->write_idx ||
+            kthread_should_stop());
 
-        if (ret == 0)  // Timeout
-            continue;
-        if (ret == -ERESTARTSYS)
+        if (kthread_should_stop())
             break;
 
-        // Lock access
-        if (down_interruptible(&fc->sem))
-            continue;
-
-        mutex_lock(&fc->lock);
-
-        // Get current buffer
-        curr_buf = &fs->bufs[fs->buf_index];
-        if (!curr_buf || !curr_buf->virt_addr) {
-            mutex_unlock(&fc->lock);
-            up(&fc->sem);
-            continue;
+        // Process frame
+        spin_lock_irq(&fc->state_lock);
+        if (is_buffer_filled(fc, fs->buf_index)) {
+            // Handle filled buffer...
+            mark_buffer_empty(fc, fs->buf_index);
+            fs->buf_index = (fs->buf_index + 1) % fs->buf_cnt;
         }
-
-        // Update buffer state
-        curr_buf->frame_count = fs->frame_cnt;
-        curr_buf->is_buffer_full = 1;
-
-        // Calculate addresses for current buffer
-        void *src = fc->buf_base + (fs->buf_index * fc->buf_size);
-        void *dst = (void *)curr_buf->virt_addr;
-
-	    // Copy frame data based on format
-	    if (fs->fmt == ISP_FMT_NV12) {
-	        // NV12: Copy Y plane then UV plane
-	        uint32_t y_size = fs->width * fs->height;
-	        uint32_t uv_size = y_size / 2;
-
-	        // Copy Y plane
-	        memcpy(dst, src, y_size);
-	        // Copy UV plane
-	        memcpy(dst + y_size, src + y_size, uv_size);
-	    } else if (fs->fmt == ISP_FMT_YUV422) {
-	        // Keep YUV422 handling for backward compatibility
-	        memcpy(dst, src, fc->buf_size);
-	    }
-
-        mutex_unlock(&fc->lock);
-        up(&fc->sem);
-
-        // Signal frame completion
-        wake_up(&fs->wait);
+        spin_unlock_irq(&fc->state_lock);
     }
 
     return 0;
@@ -3630,76 +3553,33 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
 }
 
 
-static int init_vic_and_mipi(struct IMPISPDev *dev)
-{
+static int init_vic_and_mipi(struct IMPISPDev *dev) {
     void __iomem *vic_regs = dev->regs + 0x1e0;
-    void __iomem *mipi_base = dev->regs + ISP_MIPI_BASE;
-    void __iomem *cpm_base;
-    u32 val;
+    void __iomem *mipi_regs = dev->regs + ISP_MIPI_BASE;
 
-    pr_info("Initializing VIC and MIPI...\n");
-
-    // 1. Enable MIPI clocks first
-    cpm_base = ioremap(T31_CPM_BASE, 0x100);
-    if (!cpm_base) {
-        pr_err("Failed to map CPM\n");
-        return -ENOMEM;
-    }
-
-    // Enable MIPI clock in CPM
-    val = readl(cpm_base + T31_CPM_CLKGATE);
-    val &= ~T31_CPM_MIPI_CLK;
-    writel(val, cpm_base + T31_CPM_CLKGATE);
-    wmb();
-    msleep(5);
-
-    // 2. Reset VIC and MIPI
-    writel(0x0, mipi_base + ISP_MIPI_CTRL);
-    writel(0x0, vic_regs + 0x100);
+    // Reset VIC first
+    writel(0x0, vic_regs + VIC_CTRL);
     wmb();
     msleep(10);
 
-    // 3. Configure MIPI
-    val = BIT(31) |           // Global enable
-          (0x3 << 8) |        // 2 data lanes
-          BIT(12) |           // Clock lane enable
-          (0x8 << 16);        // FIFO threshold
-    writel(val, mipi_base + ISP_MIPI_CTRL);
-    wmb();
-    msleep(10);
+    // Configure format
+    writel(0x2c0, vic_regs + 0x24); // Set NV12 format
 
-    // Read back MIPI status
-    val = readl(mipi_base + ISP_MIPI_STATUS);
-    pr_info("MIPI Status after init: 0x%08x\n", val);
-
-    // 4. Configure VIC
-    // Enable VIC interrupts
-    writel(0xFFFFFFFF, vic_regs + 0x8);  // Clear pending
-    writel(0x0, vic_regs + 0x1e8);       // Clear mask
-    writel(0x1, vic_regs + 0x1e0);       // Enable frame interrupt
-    wmb();
-
-    // Set format
-    writel(0x2c0, vic_regs + 0x24);  // NV12 format
+    // Enable interrupts
+    writel(VIC_INT_FRAME, vic_regs + 0x1e8); // Enable frame interrupt
+    writel(0xFFFFFFFF, vic_regs + 0x8); // Clear pending
     wmb();
 
     // Enable VIC
-    writel(0x1, vic_regs + 0x100);
-    writel(0x1, vic_regs + 0x3a8);
+    writel(0x1, vic_regs + VIC_CTRL);
+    writel(0x1, vic_regs + VIC_CH_ENABLE);
     wmb();
 
-    val = readl(vic_regs + 0x4);
-    pr_info("VIC Status after init: 0x%08x\n", val);
+    // Configure MIPI
+    writel(MIPI_CTRL_ENABLE | MIPI_CTRL_CLK_EN | MIPI_CTRL_LANES,
+           mipi_regs + ISP_MIPI_CTRL);
+    wmb();
 
-
-
-    // Verify interrupt setup
-    val = readl(vic_regs + 0x1e8);
-    pr_info("VIC interrupt mask: 0x%08x\n", val);
-    val = readl(vic_regs + 0x1e0);
-    pr_info("VIC interrupt enable: 0x%08x\n", val);
-
-    iounmap(cpm_base);
     return 0;
 }
 
@@ -4100,9 +3980,9 @@ static int enable_stream(struct IMPISPDev *dev, int channel, bool enable) {
     struct isp_framesource_state *fs;
     struct frame_source_channel *fc;
     void __iomem *regs;
+    void __iomem *vic_regs;
     unsigned long flags;
     int ret = 0;
-    int i;
 
     pr_info("Enable stream request: channel=%d enable=%d\n", channel, enable);
 
@@ -4124,9 +4004,7 @@ static int enable_stream(struct IMPISPDev *dev, int channel, bool enable) {
     }
 
     regs = dev->regs;
-
-    pr_info("Queue state before lock: ready=%d done=%d\n",
-            !list_empty(&fc->ready_list), !list_empty(&fc->done_list));
+    vic_regs = regs + 0x1e0; // VIC offset from decompiled
 
     spin_lock_irqsave(&fc->queue_lock, flags);
 
@@ -4137,104 +4015,97 @@ static int enable_stream(struct IMPISPDev *dev, int channel, bool enable) {
             goto unlock;
         }
 
-        // Special handling for channel 0
-        if (channel == 0) {
-            // Channel 0 specific initialization
-            fs->state = 1;  // Set ready state first
+        // First set channel to ready state
+        fs->state = 1;
 
-            // Configure DMA buffer
-            writel(fc->dma_addr, regs + ISP_BUF0_OFFSET);
-            writel(fc->buf_size, regs + ISP_BUF0_OFFSET + 0x4);
-            wmb();
-
-            // Start channel 0 streaming
-            writel(0x1, regs + ISP_STREAM_CTRL);
-            wmb();
-            udelay(100);
-            writel(0x1, regs + ISP_STREAM_START);
-            wmb();
-
-            fs->state = 2;
-            fs->flags |= 0x2;
-
+        // 1. Setup VIC configuration from decompiled
+        if (dev->sensor_i2c_client && dev->sensor_i2c_client->dev.platform_data) {
+            // SONY MIPI type
+            writel(0x20000, vic_regs + 0x10);
+            writel(0x100010, vic_regs + 0x1a4);
         } else {
-            // Non-zero channels need extra validation
-            if (!fs->fifo_initialized || !fs->frame_depth) {
-                pr_err("Channel %d not properly initialized\n", channel);
-                ret = -EINVAL;
-                goto unlock;
-            }
-
-            // Configure channel buffers
-            if (!fs->bufs) {
-                fs->bufs = kzalloc(sizeof(struct isp_buffer_info) * fs->frame_depth,
-                                 GFP_KERNEL);
-                if (!fs->bufs) {
-                    ret = -ENOMEM;
-                    goto unlock;
-                }
-            }
-
-            // Initialize each buffer in the pool
-            for (int i = 0; i < fs->frame_depth; i++) {
-                fs->bufs[i].method = ISP_ALLOC_KMALLOC;  // Match method seen in decompiled
-                fs->bufs[i].buffer_start = fs->dma_addr + (i * fs->buf_size);
-                fs->bufs[i].virt_addr = (unsigned long)(fs->buf_base +
-                                                      (i * fs->buf_size));
-                fs->bufs[i].buffer_size = fs->buf_size;
-                fs->bufs[i].flags = 1;
-            }
-
-            // Set channel ready
-            fs->state = 1;
-
-            // Configure DMA registers
-            writel(fc->dma_addr, regs + ISP_BUF0_OFFSET +
-                   (channel * ISP_BUF_SIZE_STEP));
-            writel(fc->buf_size, regs + ISP_BUF0_OFFSET +
-                   (channel * ISP_BUF_SIZE_STEP) + 0x4);
-            wmb();
-
-            // Start streaming for this channel
-            writel(0x1, regs + ISP_STREAM_CTRL + (channel * 0x100));
-            wmb();
-            udelay(100);
-            writel(0x1, regs + ISP_STREAM_START + (channel * 0x100));
-            wmb();
-
-            fs->state = 2;
-            fs->flags |= 0x2;
+            // OTHER MIPI type
+            writel(0xa000a, vic_regs + 0x1a4);
         }
 
-        atomic_inc(&fc->frame_count);
-        pr_info("Channel %d streaming enabled\n", channel);
+        // Calculate line width and configure VIC stride
+        uint32_t line_width = ((fs->width + 0x1f) >> 5) + 7;
+        writel(line_width, vic_regs + 0x100);
+
+        // 2. Configure VIC control - match decompiled sequence
+        writel(2, vic_regs); // Reset VIC
+        wmb();
+        writel(4, vic_regs); // Set operation mode
+        wmb();
+
+        // 3. Configure channel buffers
+        uint32_t ctrl_offset = ISP_STREAM_CTRL + (channel * 0x100);
+        uint32_t start_offset = ISP_STREAM_START + (channel * 0x100);
+        uint32_t buf_offset = ISP_BUF0_OFFSET + (channel * ISP_BUF_SIZE_STEP);
+
+        // Setup all buffers
+        for (int i = 0; i < fc->buf_cnt; i++) {
+            uint32_t buf_addr = fc->dma_addr + (i * fc->buf_size);
+            writel(buf_addr, regs + buf_offset + (i * ISP_BUF_SIZE_STEP));
+            writel(fc->buf_size, regs + buf_offset + (i * ISP_BUF_SIZE_STEP) + 0x4);
+        }
+        wmb();
+
+        // Reset frame counters
+        fs->frame_cnt = 0;
+        fs->buf_index = 0;
+        fc->write_idx = 0;
+        atomic_set(&fc->frames_completed, 0);
+
+        // 4. Start streaming sequence
+        // First enable VIC
+        writel(1, vic_regs); // Enable VIC
+        wmb();
+
+        // Then stream control
+        writel(0x1, regs + ctrl_offset);
+        wmb();
+        udelay(100);  // Required delay
+
+        // Finally stream start
+        writel(0x1, regs + start_offset);
+        writel(0x1, vic_regs + VIC_CH_ENABLE); // Enable VIC channel
+        wmb();
+
+        // Mark as streaming
+        fs->state = 2;
+        fs->flags |= 0x2;
+
+        pr_info("Channel %d streaming enabled:\n", channel);
+        pr_info("  VIC ctrl=0x%08x\n", readl(vic_regs));
+        pr_info("  Stream ctrl=0x%08x start=0x%08x\n",
+                readl(regs + ctrl_offset), readl(regs + start_offset));
+        pr_info("  buf0=0x%08x size=0x%08x\n",
+                readl(regs + buf_offset), readl(regs + buf_offset + 0x4));
 
     } else {
-        // Disable streaming
-        writel(0x0, regs + ISP_STREAM_START + (channel * 0x100));
+        // Stop streaming in reverse order
+        uint32_t ctrl_offset = ISP_STREAM_CTRL + (channel * 0x100);
+        uint32_t start_offset = ISP_STREAM_START + (channel * 0x100);
+
+        writel(0x0, regs + start_offset);
+        writel(0x0, vic_regs + VIC_CH_ENABLE);
         wmb();
         udelay(100);
-        writel(0x0, regs + ISP_STREAM_CTRL + (channel * 0x100));
+        writel(0x0, regs + ctrl_offset);
+        writel(0x0, vic_regs);
         wmb();
 
         fs->state = 1;
         fs->flags &= ~0x2;
+        fs->frame_cnt = 0;
+        fs->buf_index = 0;
+        atomic_set(&fc->frames_completed, 0);
 
         pr_info("Channel %d streaming disabled\n", channel);
     }
 
 unlock:
-    spin_unlock_irqrestore(&fc->queue_lock, flags);
-    return ret;
-
-cleanup:
-    if (ret < 0) {
-        struct frame_node *node, *tmp;
-        list_for_each_entry_safe(node, tmp, &fc->ready_list, list) {
-            free_frame_node(node);
-        }
-        atomic_set(&fc->frame_count, 0);
-    }
     spin_unlock_irqrestore(&fc->queue_lock, flags);
     return ret;
 }
@@ -4347,13 +4218,13 @@ static int tisp_release(struct inode *inode, struct file *file)
 // Update tisp_read function
 static ssize_t tisp_read(struct file *file, char __user *buf, size_t count, loff_t *offset)
 {
-    pr_debug("Read operation\n");
+    pr_info("Read operation\n");
     return 0;  // Remove incorrect error path
 }
 
 static ssize_t tisp_write(struct file *file, const char __user *buf, size_t count, loff_t *offset)
 {
-    pr_debug("Write operation\n");
+    pr_info("Write operation\n");
     return count;
 }
 
@@ -7175,7 +7046,7 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
             // Flags should reflect current state
             info.flags = fs->flags;
 
-            pr_debug("Buffer info for channel %d: size=%u count=%u state=%d flags=0x%x\n",
+            pr_info("Buffer info for channel %d: size=%u count=%u state=%d flags=0x%x\n",
                      info.channel, info.buffer_size, info.count, info.status, info.flags);
 
             if (copy_to_user((void __user *)arg, &info, sizeof(info))) {
@@ -7438,8 +7309,60 @@ static int tisp_probe(struct platform_device *pdev)
     pr_info("ISP register mapping: base=%p test_read=0x%x\n",
             base, test_val);
 
-    // Set the IRQ value to 36
-    ourISPdev->irq = 36;
+// Set up all IRQs
+    ourISPdev->irq = ISP_BASE_IRQ;     // 36 - Base ISP interrupt
+    ourISPdev->irq_m0 = ISP_M0_IRQ;    // 37 - Main ISP/VIC interrupt
+    ourISPdev->irq_w02 = ISP_W02_IRQ;  // 38 - ISP module interrupt
+
+    // Request base ISP IRQ
+    ret = request_threaded_irq(ourISPdev->irq, isp_irq_handler,
+                              isp_irq_thread_handler,
+                              IRQF_SHARED, "isp-base", ourISPdev);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to request base IRQ: %d\n", ret);
+        goto err_unmap_regs;
+    }
+
+    // Request M0 IRQ
+    ret = request_threaded_irq(ourISPdev->irq_m0, isp_irq_handler,
+                              isp_irq_thread_handler,
+                              IRQF_SHARED, "isp-m0", ourISPdev);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to request M0 IRQ: %d\n", ret);
+        free_irq(ourISPdev->irq, ourISPdev);
+        goto err_unmap_regs;
+    }
+
+    // Request W02 IRQ
+    ret = request_threaded_irq(ourISPdev->irq_w02, isp_irq_handler,
+                              isp_irq_thread_handler,
+                              IRQF_SHARED, "isp-w02", ourISPdev);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to request W02 IRQ: %d\n", ret);
+        free_irq(ourISPdev->irq_m0, ourISPdev);
+        free_irq(ourISPdev->irq, ourISPdev);
+        goto err_unmap_regs;
+    }
+
+    // Enable all interrupts in hardware
+    // Base ISP interrupts
+    writel(ISP_BASE_FRAME_DONE, ourISPdev->regs + ISP_BASE_STATUS_REG);
+    writel(0xFFFFFFFF, ourISPdev->regs + ISP_BASE_CLEAR_REG);
+
+    // M0 interrupts
+    writel(ISP_INT_FRAME_DONE, ourISPdev->regs + ISP_INT_MASK);
+    writel(0xFFFFFFFF, ourISPdev->regs + ISP_INT_CLEAR);
+
+    // W02 interrupts
+    writel(W02_INT_FRAME_DONE, ourISPdev->regs + W02_REG_BASE + W02_INT_MASK);
+    writel(0xFFFFFFFF, ourISPdev->regs + W02_REG_BASE + W02_INT_CLEAR);
+    wmb();
+
+    pr_info("ISP IRQs initialized: Base=%d M0=%d W02=%d\n",
+            ourISPdev->irq, ourISPdev->irq_m0, ourISPdev->irq_w02);
+
+    // Remove the old single IRQ setup
+    // ourISPdev->irq = 36; // Remove this
     pdev->dev.platform_data = &isp_pdata;
 
     // Now configure clocks with proper error handling
@@ -7535,10 +7458,26 @@ static int tisp_remove(struct platform_device *pdev) {
     pr_info("ISP device remove called\n");
 
     if (dev) {
-     	// Unregister /dev/isp-m0 device
-       	misc_deregister(&isp_m0_miscdev);
+        // First disable interrupts
+        if (dev->regs) {
+            writel(0, dev->regs + ISP_BASE_STATUS_REG);
+            writel(0, dev->regs + ISP_INT_MASK);
+            writel(0, dev->regs + W02_REG_BASE + W02_INT_MASK);
+            wmb();
+        }
 
-        // Remove frame channel devices first
+        // Free IRQs in reverse order of setup
+        if (dev->irq_w02)
+            free_irq(dev->irq_w02, dev);
+        if (dev->irq_m0)
+            free_irq(dev->irq_m0, dev);
+        if (dev->irq)
+            free_irq(dev->irq, dev);
+
+        // Unregister /dev/isp-m0 device
+        misc_deregister(&isp_m0_miscdev);
+
+        // Remove frame channel devices
         remove_framechan_devices();
 
         // Remove proc entries before cleaning up their data source
@@ -7551,7 +7490,6 @@ static int tisp_remove(struct platform_device *pdev) {
         }
 
         // Clean up device subdevices
-        // This should be done before memory cleanup
         if (dev->subdevs) {
             int i;
             for (i = 0; dev->subdevs[i]; i++) {
