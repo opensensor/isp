@@ -4269,64 +4269,32 @@ static int setup_video_link(struct IMPISPDev *dev, int link_num)
 {
     struct isp_subdev_state *sd;
     struct isp_pad_desc *src_pad, *sink_pad;
+    void __iomem *vic_base = dev->regs + VIC_BASE_OFFSET;
+    u32 ctrl;
     int ret = 0;
 
     pr_info("Setting up video link %d\n", link_num);
 
-    if (!dev || !dev->subdevs || !dev->subdevs[0]) {
-        pr_err("No subdevs initialized\n");
-        return -EINVAL;
-    }
+    // Save VIC state
+    ctrl = readl(vic_base + VIC_CTRL_REG);
 
-    sd = (struct isp_subdev_state *)dev->subdevs[0];
-    src_pad = sd->src_pads;
-    sink_pad = sd->sink_pads;
-
-    if (!src_pad || !sink_pad) {
-        pr_err("Invalid pad configuration\n");
-        return -EINVAL;
-    }
-
-    pr_info("Configuring link:\n");
-    pr_info("  sd=%p src=%p sink=%p\n", sd, src_pad, sink_pad);
-    pr_info("  src flags=0x%x sink flags=0x%x\n",
-            src_pad->flags, sink_pad->flags);
-
-    mutex_lock(&sd->lock);
-
-    // Reset existing links
-    src_pad->link_state = LINK_STATE_INACTIVE;
-    sink_pad->link_state = LINK_STATE_INACTIVE;
-    src_pad->source = NULL;
-    src_pad->sink = NULL;
-    sink_pad->source = NULL;
-    sink_pad->sink = NULL;
-
-    // Setup new link
+    // Setup links...
     if (link_num == 0) {
-        src_pad->sink = sink_pad;
-        sink_pad->source = src_pad;
-        src_pad->link_state = LINK_STATE_SOURCE;
-        sink_pad->link_state = LINK_STATE_SOURCE;
-
-        // Configure hardware path
+        // Direct path config
         writel(1, dev->regs + 0x140);  // Direct path
         writel(0, dev->regs + 0x144);  // Disable bypass
     } else {
-        src_pad->sink = NULL;
-        sink_pad->source = NULL;
-
-        // Configure bypass path
+        // Bypass path config
         writel(0, dev->regs + 0x140);  // Disable direct
         writel(1, dev->regs + 0x144);  // Enable bypass
     }
     wmb();
 
+    // Critical: Restore VIC control state
+    writel(ctrl, vic_base + VIC_CTRL_REG);
+    wmb();
+
     dev->current_link = link_num;
-
-    mutex_unlock(&sd->lock);
-
-    pr_info("Video link %d configured successfully\n", link_num);
     return 0;
 }
 
@@ -6346,6 +6314,148 @@ cleanup_buffers:
     return ret;
 }
 
+
+static int init_sensor_registers(struct i2c_client *client)
+{
+    int ret;
+
+    // Reset sensor first
+    ret = isp_sensor_write_reg(client, 0x0103, 0x01);
+    if (ret)
+        return ret;
+    msleep(20); // Important delay after reset
+
+    // From decompiled - SC2336 specific initialization
+    const struct {
+        u16 reg;
+        u8 val;
+    } init_regs[] = {
+        {0x0103, 0x01}, // Soft reset
+        {0x0100, 0x00}, // Standby
+        {0x3018, 0x72}, // Control register
+        {0x3031, 0x0a}, // Output drive strength
+        {0x3037, 0x40}, // PLL settings
+        {0x3038, 0x22}, // PLL settings
+        {0x3106, 0x81}, // Clock config
+        {0x3304, 0x40}, // Gain settings
+        {0x3306, 0x40}, // Gain settings
+        {0x3308, 0x00}, // Gain settings
+        {0x3309, 0x00}, // Gain settings
+        {0x330b, 0xc0}, // Gain settings
+        {0x330d, 0x10}, // Gain settings
+        {0x3314, 0x14}, // Timing control
+        {0x331e, 0x41}, // Timing control
+        {0x331f, 0x51}, // Timing control
+        {0x3320, 0x09}, // Timing control
+        {0x3333, 0x00}, // Fine integration time
+        {0x3334, 0x40}, // Analog settings
+        {0x335e, 0x06}, // Analog settings
+        {0x335f, 0x0a}, // Analog settings
+        {0x3364, 0x1f}, // Analog settings
+        {0x337c, 0x02}, // Timing control
+        {0x337d, 0x0a}, // Timing control
+        {0x3390, 0x01}, // Global timing
+        {0x3391, 0x0b}, // Global timing
+        {0x3392, 0x0f}, // Global timing
+        {0x3393, 0x0c}, // Global timing
+        {0x3394, 0x0d}, // Global timing
+        {0x3395, 0x60}, // Global timing
+        {0x33ad, 0x30}, // Crosstalk
+        {0x33b3, 0x40}, // Crosstalk
+        {0x33f9, 0x50}, // Digital gain
+        {0x33fb, 0x80}, // Digital gain
+        {0x33fc, 0x0f}, // Digital gain
+        {0x33fd, 0x1f}, // Digital gain
+        {0x349f, 0x03}, // AE control
+        {0x34a6, 0x0f}, // AE control
+        {0x34a7, 0x1f}, // AE control
+        {0x34a8, 0x42}, // AE control
+        {0x34a9, 0x04}, // AE control
+        {0x34ab, 0xe8}, // AE control
+        {0x34ac, 0x01}, // AE control
+        {0x34ad, 0x00}, // AE control
+        {0x3622, 0x06}, // Analog settings
+        {0x3630, 0x82}, // Analog settings
+        {0x3631, 0x88}, // Analog settings
+        {0x3632, 0x18}, // Analog settings
+        {0x3633, 0x23}, // Analog settings
+        {0x3635, 0x01}, // Analog settings
+        {0x3636, 0x22}, // Analog settings
+        {0x3637, 0x64}, // Analog settings
+        {0x3650, 0x44}, // Analog settings
+        {0x366e, 0x0c}, // Dark current
+        {0x366f, 0x2f}, // Dark current
+        {0x3670, 0x03}, // Dark current
+        {0x3671, 0x05}, // Dark current
+        {0x3672, 0x02}, // Dark current
+        {0x3673, 0x02}, // Dark current
+        {0x3674, 0x02}, // Dark current
+        {0x3675, 0x02}, // Dark current
+        {0x3676, 0x05}, // Dark current
+        {0x367c, 0x0b}, // Dark current
+        {0x367d, 0x0b}, // Dark current
+        {0x3690, 0x43}, // MIPI settings
+        {0x3691, 0x43}, // MIPI settings
+        {0x3692, 0x44}, // MIPI settings
+        {0x369c, 0x08}, // MIPI settings
+        {0x369d, 0x08}, // MIPI settings
+        {0x36ec, 0x0c}, // Timing control
+        {0x3909, 0x00}, // Timing control
+        {0x390a, 0x00}, // Timing control
+        {0x390b, 0x00}, // Timing control
+        {0x390c, 0x00}, // Timing control
+        {0x390d, 0x00}, // Timing control
+        {0x390e, 0x00}, // Timing control
+        {0x390f, 0x00}, // Timing control
+        {0x3910, 0x00}, // Timing control
+        {0x5000, 0x06}, // ISP control
+        {0x5780, 0x7f}, // DPC control
+        {0x5781, 0x06}, // DPC control
+        {0x5782, 0x04}, // DPC control
+        {0x5783, 0x00}, // DPC control
+        {0x5784, 0x00}, // DPC control
+        {0x5785, 0x16}, // DPC control
+        {0x5786, 0x12}, // DPC control
+        {0x5787, 0x08}, // DPC control
+        {0x5788, 0x02}, // DPC control
+        {0x578b, 0x07}, // DPC control
+        {0x57a0, 0x00}, // DPC control
+        {0x57a1, 0x72}, // DPC control
+        {0x57a2, 0x01}, // DPC control
+        {0x57a3, 0xf2}, // DPC control
+        {0x57a4, 0xf0}, // DPC control
+        {0x57d9, 0x00}, // DPC control
+        {0x59e0, 0x60}, // Power control
+        {0x59e1, 0x08}, // Power control
+        {0x59e2, 0x3f}, // Power control
+        {0x59e3, 0x18}, // Power control
+        {0x59e4, 0x18}, // Power control
+        {0x59e5, 0x3f}, // Power control
+        {0x59e7, 0x02}, // Power control
+        {0x59e8, 0x38}, // Power control
+        {0x59e9, 0x20}, // Power control
+        {0x59ea, 0x15}, // Power control
+        {0x59ec, 0x08}, // Power control
+        {0x0100, 0x01}, // Start streaming
+    };
+
+    pr_info("Initializing SC2336 sensor registers\n");
+
+    for (int i = 0; i < ARRAY_SIZE(init_regs); i++) {
+        ret = isp_sensor_write_reg(client, init_regs[i].reg, init_regs[i].val);
+        if (ret) {
+            pr_err("Failed to write reg 0x%04x = 0x%02x\n",
+                   init_regs[i].reg, init_regs[i].val);
+            return ret;
+        }
+        udelay(10); // Small delay between writes
+    }
+
+    pr_info("SC2336 sensor registers initialized\n");
+    return 0;
+}
+
+
 /**
  * isp_driver_ioctl - IOCTL handler for ISP driver
  * @file: File structure
@@ -6357,12 +6467,15 @@ cleanup_buffers:
 static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     void __user *argp = (void __user *)arg;
+    void __iomem *vic_base = ourISPdev->regs + VIC_BASE_OFFSET;
+    struct isp_subdev_state *sd;
     struct sensor_list_info sensor_list[MAX_SENSORS];
     int fd = (int)(unsigned long)file->private_data;
     struct isp_framesource_state *fs = NULL;
     struct isp_instance *instance;
     int ret = 0;
     int channel = 0;
+    u32 ctrl;
 
     pr_info("ISP IOCTL called: cmd=0x%x\n", cmd);  // Add this debug line
     pr_info("\n=== IOCTL Debug ===\n");
@@ -6375,6 +6488,19 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         pr_err("ISP device not initialized or not open\n");
         return -EINVAL;
     }
+
+    if (!ourISPdev || !ourISPdev->subdevs || !ourISPdev->subdevs[0]) {
+        pr_err("No subdevs initialized\n");
+        return -EINVAL;
+    }
+
+    // Get subdev state
+    sd = (struct isp_subdev_state *)ourISPdev->subdevs[0];
+
+    // Save VIC state before link operations
+    ctrl = readl(vic_base + VIC_CTRL_REG);
+
+    // mutex_lock(&ourISPdev->lock);
 
     switch (cmd) {
 	case VIDIOC_REGISTER_SENSOR: { // cmd=0x805056c1
@@ -6616,49 +6742,46 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         wmb();
         return 0;
     }
-   	case VIDIOC_VIDEO_LINK_SETUP: {  // 0x800456d0
-		    int __user *enable = (int __user *)arg;
-		    int enable_val;
+	case VIDIOC_VIDEO_LINK_SETUP:
+	    {
+	        int enable;
+	        if (get_user(enable, (int __user *)arg)) {
+	            ret = -EFAULT;
+	            return ret;
+	        }
 
-		    if (get_user(enable_val, enable)) {
-		        pr_err("Failed to get link enable value\n");
-		        return -EFAULT;
-		    }
+	        pr_info("Creating ISP links with enable=%d\n", enable);
 
-		    pr_info("Creating ISP links with enable=%d\n", enable_val);
+	        // Reset existing link state
+	        if (sd->src_pads && sd->sink_pads) {
+	            sd->src_pads->link_state = LINK_STATE_INACTIVE;
+	            sd->sink_pads->link_state = LINK_STATE_INACTIVE;
+	            sd->src_pads->source = NULL;
+	            sd->src_pads->sink = NULL;
+	            sd->sink_pads->source = NULL;
+	            sd->sink_pads->sink = NULL;
+	        }
 
-		    struct isp_subdev_state *sd = (struct isp_subdev_state *)ourISPdev->subdevs[0];
-		    if (sd) {
-		        mutex_lock(&sd->lock);
+	        if (enable) {
+	            // Setup direct path
+	            if (sd->src_pads && sd->sink_pads) {
+	                sd->src_pads->sink = sd->sink_pads;
+	                sd->sink_pads->source = sd->src_pads;
+	                sd->src_pads->link_state = LINK_STATE_SOURCE;
+	                sd->sink_pads->link_state = LINK_STATE_SOURCE;
+	            }
+	            writel(1, ourISPdev->regs + 0x140);  // Direct path
+	            writel(0, ourISPdev->regs + 0x144);  // Disable bypass
+	        } else {
+	            // Setup bypass path
+	            writel(0, ourISPdev->regs + 0x140);  // Disable direct
+	            writel(1, ourISPdev->regs + 0x144);  // Enable bypass
+	        }
+	        wmb();
 
-            // Setup link based on bypass mode
-            if (sd->bypass_mode) {
-                // Bypass mode - direct link between source and sink
-                if (sd->src_pads && sd->sink_pads) {
-                    sd->src_pads->sink = sd->sink_pads;
-                    sd->sink_pads->source = sd->src_pads;
-                    sd->src_pads->link_state = enable_val ? LINK_STATE_ENABLED : LINK_STATE_INACTIVE;
-                    sd->sink_pads->link_state = enable_val ? LINK_STATE_ENABLED : LINK_STATE_INACTIVE;
-                }
-            } else {
-                // Normal mode - process through ISP
-                if (sd->src_pads && sd->sink_pads) {
-                    sd->src_pads->sink = sd->sink_pads;
-                    sd->sink_pads->source = sd->src_pads;
-                    sd->src_pads->link_state = enable_val ? LINK_STATE_SOURCE : LINK_STATE_INACTIVE;
-                    sd->sink_pads->link_state = enable_val ? LINK_STATE_SOURCE : LINK_STATE_INACTIVE;
-                }
-            }
-
-		        mutex_unlock(&sd->lock);
-		    }
-
-		    // Write back success
-		    if (put_user(enable_val, enable))
-		        return -EFAULT;
-
-		    return 0;
-		}
+	        ourISPdev->current_link = enable;
+	    }
+	    break;
     case TX_ISP_SET_AE_ALGO_OPEN: {
       	pr_info("TX_ISP_SET_AE_ALGO_OPEN\n");
         struct isp_ae_algo ae;
@@ -6721,47 +6844,25 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         }
         break;
     }
-    case 0x800456d3: {  // Disable links
-        pr_info("Disabling ISP links\n");
+	case 0x800456d1:  // Destroy links
+	    pr_info("Destroying ISP links\n");
 
-        // Disable all active links
-        struct isp_subdev_state *sd = (struct isp_subdev_state *)ourISPdev->subdevs[0];
-        if (sd) {
-            mutex_lock(&sd->lock);
-            if (sd->src_pads)
-                sd->src_pads->link_state = LINK_STATE_INACTIVE;
-            if (sd->sink_pads)
-                sd->sink_pads->link_state = LINK_STATE_INACTIVE;
-            mutex_unlock(&sd->lock);
-        }
+	    // Full cleanup of link state
+	    if (sd->src_pads && sd->sink_pads) {
+	        sd->src_pads->link_state = LINK_STATE_INACTIVE;
+	        sd->sink_pads->link_state = LINK_STATE_INACTIVE;
+	        sd->src_pads->source = NULL;
+	        sd->src_pads->sink = NULL;
+	        sd->sink_pads->source = NULL;
+	        sd->sink_pads->sink = NULL;
+	    }
 
-        return 0;
-    }
-    case 0x800456d1: {  // Destroy links
-        pr_info("Destroying ISP links\n");
-        int __user *result = (int __user *)arg;
-
-        struct isp_subdev_state *sd = (struct isp_subdev_state *)ourISPdev->subdevs[0];
-        if (sd) {
-            mutex_lock(&sd->lock);
-            // Clear link state
-            if (sd->src_pads) {
-                sd->src_pads->source = NULL;
-                sd->src_pads->sink = NULL;
-            }
-            if (sd->sink_pads) {
-                sd->sink_pads->source = NULL;
-                sd->sink_pads->sink = NULL;
-            }
-            mutex_unlock(&sd->lock);
-        }
-
-        // Write back -1 as expected
-        if (put_user(-1, result))
-            return -EFAULT;
-
-        return 0;
-    }
+	    // Write back -1 as expected by streamer
+	    if (put_user(-1, (int __user *)arg)) {
+	        ret = -EFAULT;
+	        return ret;
+	    }
+	    break;
     case TX_ISP_SET_AE_ALGO_CLOSE: {
         pr_info("TX_ISP_SET_AE_ALGO_CLOSE\n");
         // TODO
