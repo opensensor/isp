@@ -4965,59 +4965,81 @@ struct sensor_reg_data {
 static int configure_sensor_streaming(struct IMPISPDev *dev)
 {
     struct i2c_client *client = dev->sensor_i2c_client;
+    u8 val;
     int ret;
 
-    pr_info("Configuring SC2336 sensor...\n");
+    pr_info("SC2336: Full sensor initialization sequence...\n");
 
-    // Reset sequence
+    // Software reset
     ret = isp_sensor_write_reg(client, 0x0103, 0x01);
-    msleep(20);
+    msleep(20);  // Important delay after reset
 
-    // From the SC2336 driver - proper initialization sequence
-    ret |= isp_sensor_write_reg(client, 0x36e9, 0x80);
-    ret |= isp_sensor_write_reg(client, 0x37f9, 0x80);
-    ret |= isp_sensor_write_reg(client, 0x301f, 0x02); // Data format
-    ret |= isp_sensor_write_reg(client, 0x3106, 0x05);
+    // Core initialization sequence for SC2336
+    const struct {
+        u16 reg;
+        u8 val;
+    } init_regs[] = {
+        // Timing control & PLL settings
+        {0x301f, 0x01},  // Framing mode
+        {0x3038, 0x44},  // SC2336 specific timing
+        {0x3253, 0x0c},  // Control register
+        {0x3301, 0x04},  // AEC settings
+        {0x3304, 0x60},  // Manual gain control
+        {0x3306, 0x70},  // Analog control
+        {0x330b, 0xc0},  // Exposure control
+        {0x3333, 0x10},  // Fine integration time
+        {0x3364, 0x56},  // Analog control
 
-    // Timing control
-    ret |= isp_sensor_write_reg(client, 0x320c, 0x08);
-    ret |= isp_sensor_write_reg(client, 0x320d, 0xca);
-    ret |= isp_sensor_write_reg(client, 0x320e, 0x05);
-    ret |= isp_sensor_write_reg(client, 0x320f, 0xa0);
+        // Format & Resolution (1920x1080)
+        {0x3200, 0x07},  // Output width high byte
+        {0x3201, 0x80},  // Output width low byte (1920)
+        {0x3202, 0x04},  // Output height high byte
+        {0x3203, 0x38},  // Output height low byte (1080)
 
-    // Analog settings
-    ret |= isp_sensor_write_reg(client, 0x3301, 0x09);
-    ret |= isp_sensor_write_reg(client, 0x3306, 0x60);
-    ret |= isp_sensor_write_reg(client, 0x3633, 0x22);
-    ret |= isp_sensor_write_reg(client, 0x3639, 0xf4);
+        // Data format - RAW10
+        {0x3031, 0x0a},  // RAW10 format
+        {0x3018, 0x72},  // MIPI configuration
 
-    // Initial AE settings
-    ret |= isp_sensor_write_reg(client, 0x3e01, 0x4a);
-    ret |= isp_sensor_write_reg(client, 0x3e02, 0xb0);
-    ret |= isp_sensor_write_reg(client, 0x3e08, 0x1f);
-    ret |= isp_sensor_write_reg(client, 0x3e09, 0x20);
+        // Frame timing
+        {0x320c, 0x08},  // HTS high byte
+        {0x320d, 0xca},  // HTS low byte
+        {0x320e, 0x05},  // VTS high byte
+        {0x320f, 0xa0},  // VTS low byte
 
-    if (ret) {
-        pr_err("Failed to configure sensor registers\n");
-        return ret;
+        // Initial exposure & gain
+        {0x3e01, 0x8c},  // Exposure high byte
+        {0x3e02, 0x60},  // Exposure low byte
+        {0x3e08, 0x03},  // Gain high byte
+        {0x3e09, 0x10},  // Gain low byte
+    };
+
+    // Apply initialization sequence
+    for (int i = 0; i < ARRAY_SIZE(init_regs); i++) {
+        ret = isp_sensor_write_reg(client, init_regs[i].reg, init_regs[i].val);
+        if (ret) {
+            pr_err("Failed to write reg 0x%04x: %d\n", init_regs[i].reg, ret);
+            return ret;
+        }
+        // Add small delay between writes
+        udelay(10);
     }
 
-    // Verify some key registers
-    u8 val;
+    // Verify key registers
+    isp_sensor_read_reg(client, 0x3031, &val);
+    pr_info("Format control: 0x%02x\n", val);
+
     isp_sensor_read_reg(client, 0x320e, &val);
-    pr_info("Frame timing H: 0x%02x\n", val);
-    isp_sensor_read_reg(client, 0x320f, &val);
-    pr_info("Frame timing L: 0x%02x\n", val);
+    pr_info("VTS high: 0x%02x\n", val);
+
     isp_sensor_read_reg(client, 0x3e08, &val);
-    pr_info("Gain H: 0x%02x\n", val);
-    isp_sensor_read_reg(client, 0x3e09, &val);
-    pr_info("Gain L: 0x%02x\n", val);
+    pr_info("Gain high: 0x%02x\n", val);
 
     // Finally enable streaming
+    msleep(10);  // Delay before stream on
     ret = isp_sensor_write_reg(client, 0x0100, 0x01);
     msleep(20);  // Let sensor start up
 
-    pr_info("Sensor streaming enabled\n");
+    pr_info("SC2336: Sensor initialization complete\n");
     return ret;
 }
 
@@ -5026,143 +5048,279 @@ static int configure_sensor_streaming(struct IMPISPDev *dev)
 #define ISP_MIPI_STATUS   0x34
 #define ISP_MIPI_TIMING   0x38
 
-static int configure_mipi_csi(struct IMPISPDev *dev)
-{
+// Add these defines at the top
+#define ISP_MIPI_BASE     0x7800  // Base offset for MIPI registers
+#define ISP_MIPI_CTRL     0x30    // Control register offset
+#define ISP_MIPI_STATUS   0x34    // Status register offset
+#define ISP_MIPI_TIMING   0x38    // Timing register offset
+#define ISP_MIPI_RESET    0x3C    // Reset register offset
+
+// MIPI control bits
+#define MIPI_CTRL_ENABLE  BIT(31)
+#define MIPI_CTRL_CLK_EN  BIT(8)
+#define MIPI_CTRL_LANES   0x3     // 2 data lanes
+
+// MIPI status bits
+#define MIPI_STATUS_READY BIT(0)
+#define MIPI_STATUS_ERROR BIT(1)
+// Add these defines
+#define T31_CPM_BASE       0x10000000
+#define T31_CPM_MIPI_CTRL  0x0c   // MIPI control in CPM
+#define T31_CPM_CLKGATE    0x20   // Clock gate register
+#define T31_CPM_MIPI_CLK   BIT(4) // MIPI clock bit
+
+// Add these defines
+#define T31_CPM_BASE       0x10000000
+#define T31_CPM_CLKGATE    0x20
+#define T31_CPM_MIPI_CTRL  0x0c
+#define T31_CPM_SRBC       0x14   // Soft reset and bus control
+#define T31_CPM_OPCR       0x24   // Operating parameter control
+
+#define T31_MIPI_DIV_MASK  0x3F
+#define T31_MIPI_STOP      BIT(28)
+#define T31_MIPI_EN        BIT(27)
+#define T31_MIPI_RST       BIT(26)
+
+// Add these defines
+#define CPM_MIPI_CTRL_EN   BIT(31)
+#define CPM_MIPI_RST_MASK  BIT(30)
+#define CPM_MIPI_CLK_EN    BIT(29)
+#define CPM_MIPI_CLK_SEL   BIT(28)
+
+static int configure_mipi_csi(struct IMPISPDev *dev) {
     void __iomem *regs = dev->regs;
+    void __iomem *cpm_base;
+    u32 val;
+    int timeout = 100;
+    int ret = 0;
 
-    if (!regs) {
-        pr_err("Invalid register mapping for MIPI config\n");
-        return -EINVAL;
-    }
+    pr_info("Starting MIPI CSI configuration...\n");
 
-    // Reset MIPI
+    // 1. First disable MIPI
     writel(0x0, regs + ISP_MIPI_CTRL);
     wmb();
     msleep(10);
 
-    // Configure MIPI timing
-    writel(0x05001808, regs + ISP_MIPI_TIMING);
+    // 2. Map and configure CPM
+    cpm_base = ioremap(T31_CPM_BASE, 0x100);
+    if (!cpm_base) {
+        pr_err("Failed to map CPM registers\n");
+        return -ENOMEM;
+    }
+
+    // Read initial state
+    pr_info("Initial CPM state:\n"
+            "  CLKGATE: 0x%08x\n"
+            "  MIPI_CTRL: 0x%08x\n",
+            readl(cpm_base + T31_CPM_CLKGATE),
+            readl(cpm_base + T31_CPM_MIPI_CTRL));
+
+    // Enable MIPI clocks
+    val = readl(cpm_base + T31_CPM_MIPI_CTRL);
+    val |= CPM_MIPI_CTRL_EN | CPM_MIPI_CLK_EN | CPM_MIPI_CLK_SEL;
+    writel(val, cpm_base + T31_CPM_MIPI_CTRL);
     wmb();
+    msleep(10);
 
-    // Enable MIPI with 2 lanes
-    writel(0x3, regs + ISP_MIPI_CTRL);
+    // 3. Configure MIPI timing first
+    val = (0x8 << 24) |   // HS settle
+          (0x10 << 16) |  // CLK settle
+          (0x8 << 8) |    // LP settle
+          0x3;            // 2 lanes
+
+    writel(val, regs + ISP_MIPI_TIMING);
     wmb();
+    msleep(5);
 
-    pr_info("MIPI CSI Config:\n");
-    pr_info("CTRL=0x%x STATUS=0x%x\n",
-            readl(regs + ISP_MIPI_CTRL),
-            readl(regs + ISP_MIPI_STATUS));
+    // Verify timing write
+    val = readl(regs + ISP_MIPI_TIMING);
+    pr_info("MIPI timing readback: 0x%08x\n", val);
 
-    return 0;
+    // 4. Configure DMA
+    uint32_t line_size = ((1920 + 7) >> 3) << 3;  // Original alignment
+    uint32_t second_buf_offset = line_size * 1080;
+
+    // Configure base registers
+    writel(dev->dma_addr, regs + 0x7820);
+    writel(line_size, regs + 0x7824);
+    writel(dev->dma_addr + second_buf_offset, regs + 0x7828);
+    writel(line_size >> 1, regs + 0x782c);
+    wmb();
+    msleep(5);
+
+    pr_info("DMA config:\n"
+            "  Base: 0x%08x stride: %u\n"
+            "  Second buffer: 0x%08x stride: %u\n",
+            readl(regs + 0x7820), readl(regs + 0x7824),
+            readl(regs + 0x7828), readl(regs + 0x782c));
+
+    // 5. Enable MIPI with minimal configuration
+    val = (1 << 31) |    // Global enable
+          (1 << 8) |     // Clock lane
+          0x3;           // 2 data lanes
+
+    writel(val, regs + ISP_MIPI_CTRL);
+    wmb();
+    msleep(5);
+
+    // Test register reads/writes
+    pr_info("Testing register access:\n");
+    for (int i = 0; i < 5; i++) {
+        val = readl(regs + ISP_MIPI_CTRL);
+        pr_info("  Read %d: MIPI_CTRL=0x%08x\n", i, val);
+        msleep(1);
+    }
+
+    // 6. Stream control - one step at a time
+    pr_info("Enabling stream...\n");
+    writel(0x0, regs + 0x7838);  // Clear first
+    wmb();
+    msleep(5);
+
+    writel(0x1, regs + 0x783c);  // Then enable
+    wmb();
+    msleep(5);
+
+    // 7. Wait for ready with better debug
+    pr_info("Waiting for MIPI ready...\n");
+    while (timeout--) {
+        val = readl(regs + ISP_MIPI_STATUS);
+        u32 stream_stat = readl(regs + 0x7838);
+        u32 cpm_stat = readl(cpm_base + T31_CPM_MIPI_CTRL);
+
+        if (val & BIT(0)) {
+            pr_info("MIPI ready: status=0x%x stream=0x%x cpm=0x%x\n",
+                    val, stream_stat, cpm_stat);
+            ret = 0;
+            goto cleanup;
+        }
+
+        if ((timeout % 10) == 0) {
+            pr_info("Waiting... status=0x%x ctrl=0x%x stream=0x%x cpm=0x%x\n",
+                    val,
+                    readl(regs + ISP_MIPI_CTRL),
+                    stream_stat,
+                    cpm_stat);
+        }
+        msleep(1);
+    }
+
+    ret = -ETIMEDOUT;
+    pr_err("Final state:\n"
+           "  MIPI status: 0x%08x\n"
+           "  MIPI ctrl: 0x%08x\n"
+           "  MIPI timing: 0x%08x\n"
+           "  Stream status: 0x%08x\n"
+           "  CPM ctrl: 0x%08x\n",
+           readl(regs + ISP_MIPI_STATUS),
+           readl(regs + ISP_MIPI_CTRL),
+           readl(regs + ISP_MIPI_TIMING),
+           readl(regs + 0x7838),
+           readl(cpm_base + T31_CPM_MIPI_CTRL));
+
+cleanup:
+    iounmap(cpm_base);
+    return ret;
 }
+
+// Update base address - it should be physical
+#define ISP_PHYS_BASE     0x13300000
+#define ISP_REG_SIZE      0x10000
 
 static int configure_streaming_hardware(struct IMPISPDev *dev)
 {
     void __iomem *regs;
-    int ret;
+    u32 val;
+    int ret = 0;
 
-    if (!dev) {
-        pr_err("Invalid device pointer\n");
+    pr_info("Configuring streaming hardware...\n");
+
+    // Validate our register mapping
+    if (!dev || !dev->regs) {
+        pr_err("Invalid device state\n");
         return -EINVAL;
     }
 
     regs = dev->regs;
-    if (!regs) {
-        pr_err("Invalid register mapping\n");
-        return -EINVAL;
-    }
 
-    pr_info("Configuring ISP hardware and sensor (regs=%p)...\n", regs);
+    // Verify register access first
+    val = readl(regs + ISP_CTRL_REG);
+    pr_info("Initial control register: 0x%08x\n", val);
 
-    // Remove the invalid range check and just verify the mapping is valid
-    ret = readl(regs + ISP_CTRL_REG);
-    if (ret == ~0U) {
-        pr_err("Invalid register read - bad mapping\n");
+    // Test write/read
+    writel(0x0, regs + ISP_CTRL_REG);
+    wmb();
+    val = readl(regs + ISP_CTRL_REG);
+    if (val != 0x0) {
+        pr_err("Register write verification failed\n");
         return -EIO;
     }
 
-    // 1. First reset everything
-    writel(0x0, regs + ISP_CTRL_REG);
-    writel(0x0, regs + ISP_STREAM_CTRL);
-    writel(0x0, regs + ISP_STREAM_START);
-    wmb();
+    // 1. Configure basic registers with validation
+    pr_info("Setting up basic registers...\n");
+
+    // Use safe register offsets
+    #define SAFE_WRITE(reg, val) do { \
+        if ((reg) > ISP_REG_SIZE) { \
+            pr_err("Invalid register offset 0x%x\n", reg); \
+            return -EINVAL; \
+        } \
+        writel((val), regs + (reg)); \
+        wmb(); \
+    } while(0)
+
+    SAFE_WRITE(ISP_CTRL_REG, 0x0);     // Disable control
+    SAFE_WRITE(ISP_STREAM_CTRL, 0x0);  // Disable stream
+    SAFE_WRITE(ISP_STREAM_START, 0x0); // Disable start
     msleep(10);
 
-    // 2. Configure MIPI CSI
-    ret = configure_mipi_csi(dev);
-    if (ret) {
-        pr_err("Failed to configure MIPI CSI\n");
-        return ret;
+    // 2. Configure DMA
+    uint32_t line_size = ALIGN(1920, 32);
+    uint32_t y_size = line_size * 1080;
+    uint32_t uv_size = y_size / 2;
+    uint32_t frame_size = y_size + uv_size;
+
+    // Validate buffer addresses
+    if (!dev->dma_addr || !dev->dma_buf) {
+        pr_err("Invalid DMA configuration\n");
+        return -EINVAL;
     }
-    msleep(10);
 
-    // 3. Configure sensor
-    ret = configure_sensor_streaming(dev);
-    if (ret) {
-        pr_err("Failed to configure sensor\n");
-        return ret;
+    pr_info("Setting up DMA buffers:\n"
+            "  Base: 0x%08x\n"
+            "  Size: Y=%u UV=%u Total=%u\n",
+            (unsigned int)dev->dma_addr,
+            y_size, uv_size, frame_size);
+
+    // Configure buffers with validation
+    SAFE_WRITE(ISP_BUF0_OFFSET, dev->dma_addr);
+    SAFE_WRITE(ISP_BUF0_OFFSET + 0x4, line_size);
+
+    SAFE_WRITE(ISP_BUF0_OFFSET + ISP_BUF_SIZE_STEP,
+               dev->dma_addr + y_size);
+    SAFE_WRITE(ISP_BUF0_OFFSET + ISP_BUF_SIZE_STEP + 0x4,
+               line_size / 2);
+
+    // Verify writes
+    val = readl(regs + ISP_BUF0_OFFSET);
+    if (val != dev->dma_addr) {
+        pr_err("Buffer write verification failed\n");
+        return -EIO;
     }
-    msleep(10);
 
-    // 4. Now configure ISP format/buffers
-    writel(0x3231564e, regs + ISP_INPUT_FORMAT_REG);
-    writel(0x3231564e, regs + ISP_OUTPUT_FORMAT_REG);
-    wmb();
+    pr_info("Buffer verification:\n"
+            "  BUF0: wrote=0x%08x read=0x%08x\n"
+            "  Size: wrote=0x%08x read=0x%08x\n",
+            (unsigned int)dev->dma_addr,
+            readl(regs + ISP_BUF0_OFFSET),
+            line_size,
+            readl(regs + ISP_BUF0_OFFSET + 0x4));
 
-    // Buffer setup
-    uint32_t buffer_size = dev->dma_size / 4;
-    writel(dev->dma_addr, regs + ISP_BUF0_REG);
-    writel(buffer_size, regs + ISP_BUF0_SIZE_REG);
-    writel(dev->dma_addr + buffer_size, regs + ISP_BUF1_REG);
-    writel(buffer_size, regs + ISP_BUF1_SIZE_REG);
-    wmb();
+    // 3. Basic control setup
+    val = ISP_CTRL_ENABLE;  // Just basic enable
+    SAFE_WRITE(ISP_CTRL_REG, val);
 
-    // 5. Configure image processing parameters
-    writel(128, regs + 0x1100); // Brightness
-    writel(128, regs + 0x1104); // Contrast
-    writel(128, regs + 0x1108); // Saturation
-    writel(128, regs + 0x110c); // Sharpness
-    wmb();
-
-    // 6. Set up interrupts
-    writel(0x1, regs + ISP_INT_MASK_REG);    // Enable frame done
-    writel(0xffffffff, regs + ISP_INT_CLEAR_REG); // Clear pending
-    wmb();
-
-    // 7. Critical: Enable sequence
-    pr_info("Starting streaming pipeline...\n");
-
-    writel(0x1, regs + ISP_CTRL_REG);        // Enable ISP core
-    wmb();
-    msleep(1);
-
-    writel(0x1, regs + ISP_STREAM_CTRL);     // Enable streaming
-    wmb();
-    msleep(1);
-
-    writel(0x1, regs + ISP_STREAM_START);    // Start capture
-    wmb();
-    msleep(10);  // Give time for first frame
-
-    // 8. Verify final state
-    pr_info("ISP Pipeline State:\n");
-    pr_info("CTRL=0x%x STREAM_CTRL=0x%x STREAM_START=0x%x\n",
-            readl(regs + ISP_CTRL_REG),
-            readl(regs + ISP_STREAM_CTRL),
-            readl(regs + ISP_STREAM_START));
-    pr_info("FORMAT: in=0x%x out=0x%x\n",
-            readl(regs + ISP_INPUT_FORMAT_REG),
-            readl(regs + ISP_OUTPUT_FORMAT_REG));
-    pr_info("MIPI: ctrl=0x%x status=0x%x\n",
-            readl(regs + ISP_MIPI_CTRL),
-            readl(regs + ISP_MIPI_STATUS));
-    pr_info("BUF0: addr=0x%x size=0x%x\n",
-            readl(regs + ISP_BUF0_REG),
-            readl(regs + ISP_BUF0_SIZE_REG));
-    pr_info("INT: mask=0x%x status=0x%x\n",
-            readl(regs + ISP_INT_MASK_REG),
-            readl(regs + ISP_STATUS_REG));
-
+    pr_info("Hardware configuration complete\n");
     return 0;
 }
 
@@ -5211,19 +5369,24 @@ static int handle_stream_enable(struct IMPISPDev *dev, bool enable)
     return 0;
 }
 
-static int prepare_streaming(struct IMPISPDev *dev)
-{
+static int prepare_streaming(struct IMPISPDev *dev) {
     int ret;
 
-    // Configure buffer locations
-    ret = setup_isp_buffers(dev);
-    if (ret)
-        return ret;
+    pr_info("Preparing streaming configuration...\n");
 
-    // Configure streaming hardware
+    // Configure initial buffer locations
+    ret = setup_isp_buffers(dev);
+    if (ret) {
+        pr_err("Failed to setup ISP buffers\n");
+        return ret;
+    }
+
+    // Configure basic hardware - but don't enable streaming yet
     ret = configure_streaming_hardware(dev);
-    if (ret)
+    if (ret) {
+        pr_err("Failed to configure streaming hardware\n");
         goto cleanup_buffers;
+    }
 
     return 0;
 
@@ -5231,6 +5394,7 @@ cleanup_buffers:
     cleanup_frame_buffers(&dev->frame_sources[0]);
     return ret;
 }
+
 
 
 /* Handle sensor-specific IOCTL commands */
@@ -6449,18 +6613,16 @@ struct isp_platform_data {
     unsigned long clock_rate;
 };
 
-// Update defines to match correct frequencies
 #define T31_ISP_FREQ     250000000   // 250MHz ISP core clock (matches AHB)
 #define T31_CGU_ISP_FREQ 125000000   // 125MHz CGU_ISP clock (matches APB)
-
-static struct isp_platform_data isp_pdata = {
-    .clock_rate = T31_ISP_FREQ,
-};
-
 
 // Add CGU ISP bit positions
 #define ISP_CLKGR_BIT    (1 << 23)   // ISP clock gate bit in CLKGR
 #define CGU_ISP_BIT      (1 << 2)    // CGU_ISP clock gate bit in CLKGR1
+
+static struct isp_platform_data isp_pdata = {
+    .clock_rate = T31_ISP_FREQ,
+};
 
 static int configure_isp_clocks(struct IMPISPDev *dev)
 {
@@ -6468,7 +6630,7 @@ static int configure_isp_clocks(struct IMPISPDev *dev)
 
     pr_info("Configuring ISP clocks using standard API\n");
 
-   	// CSI clock must be enabled at 125MHz for ISP functionality
+    // Step 1: Get CSI clock
     dev->csi_clk = clk_get(dev->dev, "csi");
     if (!IS_ERR(dev->csi_clk)) {
         ret = clk_prepare_enable(dev->csi_clk);
@@ -6478,15 +6640,14 @@ static int configure_isp_clocks(struct IMPISPDev *dev)
         }
     }
 
-
-    // Get IPU clock first
+    // Step 2: Get IPU clock
     dev->ipu_clk = clk_get(dev->dev, "ipu");
     if (IS_ERR(dev->ipu_clk)) {
         pr_warn("IPU clock not available\n");
         dev->ipu_clk = NULL;
     }
 
-    // Get ISP core clock
+    // Step 3: Get ISP core clock
     dev->isp_clk = clk_get(dev->dev, "isp");
     if (IS_ERR(dev->isp_clk)) {
         ret = PTR_ERR(dev->isp_clk);
@@ -6495,7 +6656,7 @@ static int configure_isp_clocks(struct IMPISPDev *dev)
         return ret;
     }
 
-    // Get CGU ISP clock
+    // Step 4: Get CGU ISP clock
     dev->cgu_isp_clk = clk_get(dev->dev, "cgu_isp");
     if (IS_ERR(dev->cgu_isp_clk)) {
         ret = PTR_ERR(dev->cgu_isp_clk);
@@ -6504,35 +6665,34 @@ static int configure_isp_clocks(struct IMPISPDev *dev)
         goto err_put_isp;
     }
 
-    // Enable IPU clock
-    if (dev->ipu_clk) {
-        ret = clk_prepare_enable(dev->ipu_clk);
-        if (ret)
-            pr_warn("Failed to enable IPU clock\n");
-    }
-
-    // Set CGU ISP clock rate to 125MHz
-    ret = clk_set_rate(dev->cgu_isp_clk, 125000000);
+    // Step 5: Enable CGU ISP clock first
+    ret = clk_set_rate(dev->cgu_isp_clk, T31_CGU_ISP_FREQ);
     if (ret) {
         pr_err("Failed to set CGU ISP clock rate: %d\n", ret);
         goto err_put_cgu;
     }
-
-    // Enable ISP core clock
-    ret = clk_prepare_enable(dev->isp_clk);
-    if (ret) {
-        pr_err("Failed to enable ISP clock: %d\n", ret);
-        goto err_put_cgu;
-    }
-
-    // Enable CGU ISP clock
     ret = clk_prepare_enable(dev->cgu_isp_clk);
     if (ret) {
         pr_err("Failed to enable CGU ISP clock: %d\n", ret);
-        goto err_disable_isp;
+        goto err_put_cgu;
     }
 
-    // Enable all required peripheral clocks
+    // Step 6: Enable ISP core clock
+    ret = clk_prepare_enable(dev->isp_clk);
+    if (ret) {
+        pr_err("Failed to enable ISP clock: %d\n", ret);
+        goto err_disable_cgu;
+    }
+
+    // Step 7: Enable IPU clock if available
+    if (dev->ipu_clk) {
+        ret = clk_prepare_enable(dev->ipu_clk);
+        if (ret) {
+            pr_warn("Failed to enable IPU clock\n");
+        }
+    }
+
+    // Step 8: Enable additional peripheral clocks (e.g., LCD, AES)
     struct clk *lcd_clk = clk_get(dev->dev, "lcd");
     if (!IS_ERR(lcd_clk)) {
         clk_prepare_enable(lcd_clk);
@@ -6545,29 +6705,29 @@ static int configure_isp_clocks(struct IMPISPDev *dev)
         clk_set_rate(aes_clk, 250000000);
     }
 
-    // Verify rates
-    // Verify rates including IPU
+    // Step 9: Verify clock rates
     pr_info("Clock rates after configuration:\n");
+    pr_info("  CSI: %lu Hz\n", dev->csi_clk ? clk_get_rate(dev->csi_clk) : 0);
     pr_info("  ISP Core: %lu Hz\n", clk_get_rate(dev->isp_clk));
     pr_info("  CGU ISP: %lu Hz\n", clk_get_rate(dev->cgu_isp_clk));
-    pr_info("  IPU: %lu Hz\n", clk_get_rate(dev->ipu_clk));
+    pr_info("  IPU: %lu Hz\n", dev->ipu_clk ? clk_get_rate(dev->ipu_clk) : 0);
 
     return 0;
 
-err_disable_isp:
-    clk_disable_unprepare(dev->isp_clk);
-err_disable_csi:
-    if (dev->csi_clk)
-        clk_disable_unprepare(dev->csi_clk);
-err_put_csi:
-    if (dev->csi_clk)
-        clk_put(dev->csi_clk);
+err_disable_cgu:
+    clk_disable_unprepare(dev->cgu_isp_clk);
 err_put_cgu:
     clk_put(dev->cgu_isp_clk);
     dev->cgu_isp_clk = NULL;
 err_put_isp:
     clk_put(dev->isp_clk);
     dev->isp_clk = NULL;
+err_put_csi:
+    if (dev->csi_clk) {
+        clk_disable_unprepare(dev->csi_clk);
+        clk_put(dev->csi_clk);
+        dev->csi_clk = NULL;
+    }
     return ret;
 }
 
@@ -7292,7 +7452,9 @@ static int setup_i2c_sensor(struct IMPISPDev *dev)
 {
     struct i2c_client *client;
     struct i2c_adapter *adapter;
-    struct tx_isp_sensor_win_setting *win_size;  // Changed from wsize
+    struct tx_isp_sensor_win_setting *win_size;
+
+    pr_info("Setting up I2C infrastructure for SC2336...\n");
 
     // Allocate window size structure
     win_size = kzalloc(sizeof(*win_size), GFP_KERNEL);
@@ -7309,7 +7471,7 @@ static int setup_i2c_sensor(struct IMPISPDev *dev)
     win_size->colorspace = V4L2_COLORSPACE_SRGB;
 
     // Get I2C adapter
-    adapter = i2c_get_adapter(0);
+    adapter = i2c_get_adapter(0);  // Make sure this matches your hardware
     if (!adapter) {
         pr_err("Failed to get I2C adapter\n");
         kfree(win_size);
@@ -7318,8 +7480,8 @@ static int setup_i2c_sensor(struct IMPISPDev *dev)
 
     struct i2c_board_info board_info = {
         .type = "sc2336",
-        .addr = 0x30,
-        .platform_data = win_size,  // Use win_size here
+        .addr = 0x30,  // SC2336 I2C address
+        .platform_data = win_size,
     };
 
     client = i2c_new_device(adapter, &board_info);
@@ -7330,13 +7492,12 @@ static int setup_i2c_sensor(struct IMPISPDev *dev)
         return -ENODEV;
     }
 
-    // Store both client and window size
+    // Store client and window size in device structure
     dev->sensor_i2c_client = client;
-    dev->sensor_window_size = win_size;  // Use win_size here
+    dev->sensor_window_size = win_size;
 
-    pr_info("Sensor I2C setup complete: %dx%d@%d fps\n",
-            win_size->width, win_size->height, win_size->fps >> 16);
-
+    pr_info("I2C infrastructure ready for SC2336 sensor at address 0x%02x\n",
+            client->addr);
     return 0;
 }
 
@@ -7347,7 +7508,7 @@ static int tisp_probe(struct platform_device *pdev)
     struct isp_graph_data *graph_data;
     int ret;
 
-    pr_info("Probing TISP device...\n");
+    pr_info("Starting ISP probe...\n");
 
     // Validate ourISPdev
     if (!ourISPdev) {
@@ -7379,36 +7540,32 @@ static int tisp_probe(struct platform_device *pdev)
         goto err_free_graph;
     }
 
-    // Map registers with proper range
-    base = ioremap(ISP_BASE_ADDR, ISP_MAP_SIZE);
+    // Map registers with proper error checking
+    base = ioremap(ISP_PHYS_BASE, ISP_REG_SIZE);
     if (!base) {
-        dev_err(&pdev->dev, "Failed to map ISP registers at 0x%08x\n",
-                ISP_BASE_ADDR);
+        dev_err(&pdev->dev, "Failed to map ISP registers\n");
         ret = -ENOMEM;
         goto err_free_graph;
     }
 
-    // Store in device structure
+    // Store mapped registers
     ourISPdev->regs = base;
 
-    // Verify mapping with test read
-    uint32_t test_val = readl(base);
-    pr_info("ISP register mapping: base=%p test_read=0x%x\n",
-            base, test_val);
+    // Test register access
+    pr_info("Testing register access at base %p\n", base);
+    u32 test_val = readl(base + ISP_CTRL_OFFSET);
+    pr_info("Initial control register: 0x%08x\n", test_val);
 
     // Set the IRQ value to 36
     ourISPdev->irq = 36;
     pdev->dev.platform_data = &isp_pdata;
 
-    // Now configure clocks with proper error handling
+    // Configure clocks
     ret = configure_isp_clocks(ourISPdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
         goto err_unmap_regs;
     }
-
-    ourISPdev->dev = &pdev->dev;
-    platform_set_drvdata(pdev, ourISPdev);
 
     // Initialize reserved memory
     ret = init_isp_reserved_memory(pdev);
@@ -7417,7 +7574,7 @@ static int tisp_probe(struct platform_device *pdev)
         goto err_cleanup_clocks;
     }
 
-    // Add this call here after memory initialization
+    // Set up memory regions
     ret = setup_isp_memory_regions(ourISPdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to setup memory regions\n");
@@ -7431,7 +7588,7 @@ static int tisp_probe(struct platform_device *pdev)
         goto err_cleanup_memory;
     }
 
-    // Create proc entries
+    // Create proc entries - using graph_data
     ret = create_isp_proc_entries(graph_data);
     if (ret) {
         dev_err(&pdev->dev, "Failed to create proc entries: %d\n", ret);
@@ -7464,9 +7621,9 @@ static int tisp_probe(struct platform_device *pdev)
         goto err_cleanup_proc;
     }
 
-    dev_info(&pdev->dev, "TISP device probed successfully\n");
+    platform_set_drvdata(pdev, ourISPdev);
 
-    // Return success
+    pr_info("ISP probe completed successfully\n");
     return 0;
 
 err_cleanup_proc:
@@ -7618,30 +7775,33 @@ static int __init isp_driver_init(void)
 
     pr_info("Loading ISP driver...\n");
 
-    // Create the tx-isp device first
+    // 1. Create the tx-isp character device first
     ret = alloc_chrdev_region(&tisp_dev_number, 0, 1, "tx-isp");
     if (ret < 0) {
         pr_err("Failed to allocate device number\n");
         return ret;
     }
 
+    // 2. Create device class
     tisp_class = class_create(THIS_MODULE, "tx-isp");
     if (IS_ERR(tisp_class)) {
         unregister_chrdev_region(tisp_dev_number, 1);
         return PTR_ERR(tisp_class);
     }
 
-    // Set class permissions to be readable/writable by all
+    // Set class permissions
     tisp_class->dev_uevent = isp_dev_uevent;
 
+    // 3. Allocate device structure
     ourISPdev = kzalloc(sizeof(struct IMPISPDev), GFP_KERNEL);
     if (!ourISPdev) {
         class_destroy(tisp_class);
         unregister_chrdev_region(tisp_dev_number, 1);
         return -ENOMEM;
     }
-    pr_info("ourISPdev allocated at %p\n", ourISPdev);  // Add this debug print
+    pr_info("ourISPdev allocated at %p\n", ourISPdev);
 
+    // 4. Initialize character device
     cdev_init(&ourISPdev->cdev, &isp_fops);
     ourISPdev->cdev.owner = THIS_MODULE;
 
@@ -7653,6 +7813,7 @@ static int __init isp_driver_init(void)
         return ret;
     }
 
+    // 5. Create device node
     tisp_device = device_create(tisp_class, NULL, tisp_dev_number, NULL, "tx-isp");
     if (IS_ERR(tisp_device)) {
         pr_err("Failed to create tx-isp device\n");
@@ -7663,14 +7824,14 @@ static int __init isp_driver_init(void)
         return PTR_ERR(tisp_device);
     }
 
+    // 6. Create device attributes
     if (tisp_device) {
-        // Create status attribute
         if (device_create_file(tisp_device, &dev_attr_status) < 0) {
             pr_err("Failed to create device attributes\n");
         }
     }
 
-    /* Register the platform driver */
+    // 7. Register platform driver
     pr_info("Registering platform driver\n");
     ret = platform_driver_register(&tisp_platform_driver);
     if (ret) {
@@ -7679,7 +7840,7 @@ static int __init isp_driver_init(void)
     }
     pr_info("Platform driver registered successfully\n");
 
-    /* Create and register the platform device */
+    // 8. Create and register platform device
     pr_info("Registering platform device with name 'tisp-driver'\n");
     pdev = platform_device_register_simple("tisp-driver", -1, res, ARRAY_SIZE(res));
     if (IS_ERR(pdev)) {
