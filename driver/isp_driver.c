@@ -255,6 +255,16 @@ struct buffer_info {
     uint32_t status;       // Buffer status
 } __attribute__((aligned(4)));
 
+
+// Internal structure for our buffer tracking
+struct isp_buffer_node {
+    uint32_t index;
+    uint32_t flags;
+    struct list_head list;
+    bool in_use;
+};
+
+
 // Define the channel attribute structure (112 bytes / 0x70 bytes)
 struct channel_attr {
     uint32_t enable;          // 0x00: Channel enable
@@ -837,16 +847,16 @@ static int num_registered_sensors = 0;
 
 // Add these structures to match libimp's buffer management
 struct frame_node {
-    uint32_t magic;         // 0x336ac
+    uint32_t magic;         // Must be 0x336ac
     uint32_t index;         // Buffer index
     uint32_t frame_size;    // Frame data size
     uint32_t timestamp;     // Frame timestamp
     void *data;            // Frame data pointer
     struct frame_buffer_info buf_info;
-    dma_addr_t dma_addr;       // DMA address of this buffer
-    void *virt_addr;           // Virtual address
-    struct list_head list;     // List management
-};
+    dma_addr_t dma_addr;   // DMA address
+    void *virt_addr;       // Virtual address
+    struct list_head list;  // Queue management
+} __attribute__((aligned(4)));
 
 struct frame_queue {
     spinlock_t lock;                // Protect queue access
@@ -1385,14 +1395,24 @@ struct frame_entry {
     uint8_t reserved[0x308 - 0x20]; // Pad to full size
 } __attribute__((aligned(8)));
 
+
+#define MAX_FRAME_BUFFERS 4
+#define FRAME_MAGIC 0x336ac
+
+#define BUFFER_STATE_FREE     0
+#define BUFFER_STATE_QUEUED   1
+#define BUFFER_STATE_BUSY     2
+#define BUFFER_STATE_DONE     3
+
 struct frame_buffer {
-    struct frame_entry *entries;    // At 0x1094d4
-    uint32_t num_entries;          // At 0x1094c0
-    uint32_t write_idx;            // At 0x1094d8
-    struct semaphore frame_sem;     // At 0x109418
-    struct mutex lock;              // At 0x109438
-    uint32_t channel_offset;       // Add channel base offset
-    uint8_t padding[0x308 - sizeof(struct frame_entry*)]; // Match expected size
+    uint32_t magic;         // Should be FRAME_MAGIC
+    uint32_t index;         // Buffer index
+    uint32_t state;         // Buffer state
+    dma_addr_t dma_addr;    // Physical address
+    void *virt_addr;        // Virtual address
+    size_t size;            // Buffer size
+    uint64_t timestamp;     // Frame timestamp
+    struct list_head list;  // Queue management
 };
 
 
@@ -1450,8 +1470,8 @@ struct frame_source_channel {
     atomic_t frames_completed;
     atomic_t buffer_index;
     spinlock_t state_lock;
-    unsigned long buffer_states; 		// Bitmap of buffer states
-    struct frame_node *buffer_nodes;  	// Array of buffer nodes
+    unsigned long buffer_states;       // Bitmap of buffer states
+    struct frame_buffer_info *buffer_nodes;  // Array of buffer nodes
 
     // Pad the rest exactly to 0x2e8
     uint8_t padding[0x2e8 - 0x1c - sizeof(uint32_t) -
@@ -3375,13 +3395,47 @@ static int setup_isp_buffers(struct IMPISPDev *dev)
     return 0;
 }
 
+// Add this helper function to allocate frame nodes
+static int allocate_frame_nodes(struct frame_source_channel *fc)
+{
+    int i;
+
+    if (!fc->buffer_nodes) {
+        fc->buffer_nodes = kzalloc(sizeof(struct frame_node) * fc->buf_cnt,
+                                 GFP_KERNEL);
+        if (!fc->buffer_nodes)
+            return -ENOMEM;
+    }
+
+    for (i = 0; i < fc->buf_cnt; i++) {
+        struct frame_node *node = &((struct frame_node *)fc->buffer_nodes)[i];
+        node->magic = 0x336ac;
+        node->index = i;
+        node->frame_size = fc->buf_size;
+        node->data = fc->buf_base + (i * fc->buf_size);
+        node->dma_addr = fc->dma_addr + (i * fc->buf_size);
+        node->virt_addr = node->data;
+
+        // Initialize buf_info
+        node->buf_info.index = i;
+        node->buf_info.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        node->buf_info.memory = V4L2_MEMORY_MMAP;
+        node->buf_info.length = fc->buf_size;
+
+        INIT_LIST_HEAD(&node->list);
+    }
+
+    return 0;
+}
 
 static int start_frame_source(struct IMPISPDev *dev, int channel) {
     struct isp_framesource_state *fs = &dev->frame_sources[channel];
     struct frame_source_channel *fc = fs->private;
     void __iomem *regs = dev->regs;
     void __iomem *vic_regs = dev->regs + VIC_BASE;
-    int ret;
+    struct frame_node *node;
+    unsigned long flags;
+    int i, ret = 0;
 
     pr_info("Starting frame source on channel %d\n", channel);
 
@@ -3405,20 +3459,44 @@ static int start_frame_source(struct IMPISPDev *dev, int channel) {
     writel(0x1, vic_regs + VIC_CH_ENABLE);
     wmb();
 
-    // Configure channel-specific buffer
-    uint32_t buf_offset = ISP_BUF0_OFFSET + (channel * ISP_BUF_SIZE_STEP);
-
-    // Set up buffers for NV12 - Y plane followed by UV plane
-    for (int i = 0; i < fc->buf_cnt; i++) {
-        uint32_t buf_addr = fc->dma_addr + (i * fc->buf_size);
-        writel(buf_addr, regs + buf_offset + (i * ISP_BUF_SIZE_STEP));
-        writel(fc->buf_size, regs + buf_offset + (i * ISP_BUF_SIZE_STEP) + 0x4);
-        wmb();
-
-        pr_info("Buffer %d: addr=0x%08x size=%u\n",
-                i, buf_addr, fc->buf_size);
+    // Ensure frame nodes are allocated
+    ret = allocate_frame_nodes(fc);
+    if (ret) {
+        pr_err("Failed to allocate frame nodes\n");
+        return ret;
     }
 
+    spin_lock_irqsave(&fc->queue_lock, flags);
+
+    // Reset lists and state
+    INIT_LIST_HEAD(&fc->ready_list);
+    INIT_LIST_HEAD(&fc->done_list);
+    bitmap_zero((unsigned long *)&fc->buffer_states, fc->buf_cnt);
+    atomic_set(&fc->frame_count, 0);
+
+    // Configure buffers
+    for (i = 0; i < fc->buf_cnt; i++) {
+        node = &((struct frame_node *)fc->buffer_nodes)[i];
+        if (node->magic != 0x336ac) {
+            pr_err("Invalid node magic for buffer %d\n", i);
+            ret = -EINVAL;
+            goto unlock;
+        }
+
+        // Program hardware registers
+        writel(node->dma_addr, regs + ISP_BUF0_OFFSET + (i * ISP_BUF_SIZE_STEP));
+        writel(node->frame_size, regs + ISP_BUF0_OFFSET + (i * ISP_BUF_SIZE_STEP) + 0x4);
+        wmb();
+
+        // Add to ready queue
+        list_add_tail(&node->list, &fc->ready_list);
+        pr_debug("Buffer %d set: dma=0x%08x size=%u\n",
+                i, (unsigned int)node->dma_addr, node->frame_size);
+    }
+
+    spin_unlock_irqrestore(&fc->queue_lock, flags);
+
+    // Rest of the function remains the same...
     // Channel-specific stream control
     if (channel == 0) {
         // Main channel gets special control values
@@ -3445,6 +3523,12 @@ static int start_frame_source(struct IMPISPDev *dev, int channel) {
     fs->flags |= 0x2;
     fs->frame_cnt = 0;
     fs->buf_index = 0;
+    atomic_set(&fc->frames_completed, 0);
+
+    // Sync DMA memory
+    dma_sync_single_for_device(dev->dev, fc->dma_addr,
+                              fc->buf_size * fc->buf_cnt,
+                              DMA_FROM_DEVICE);
 
     pr_info("Frame source %d streaming started:\n", channel);
     pr_info("  VIC: ctrl=0x%08x status=0x%08x\n",
@@ -3458,6 +3542,9 @@ static int start_frame_source(struct IMPISPDev *dev, int channel) {
             readl(regs + W02_REG_BASE + W02_INT_MASK));
 
     return 0;
+unlock:
+    spin_unlock_irqrestore(&fc->queue_lock, flags);
+    return ret;
 }
 
 static void cleanup_frame_source(struct IMPISPDev *dev, int channel)
@@ -3543,6 +3630,54 @@ static void isp_frame_work(struct work_struct *work)
 
     // Wake up any waiting processes
     wake_up_interruptible(&fs->wait);
+}
+
+static void init_frame_buffer(struct frame_buffer *buf, int index,
+                            dma_addr_t dma_addr, void *virt_addr,
+                            size_t size)
+{
+    buf->magic = FRAME_MAGIC;
+    buf->index = index;
+    buf->state = BUFFER_STATE_FREE;
+    buf->dma_addr = dma_addr;
+    buf->virt_addr = virt_addr;
+    buf->size = size;
+    buf->timestamp = 0;
+    INIT_LIST_HEAD(&buf->list);
+}
+
+static int handle_set_fifo_attr(struct frame_source_channel *fc,
+                              const struct buffer_info *buf)
+{
+    unsigned long flags;
+    int ret = 0;
+
+    if (!fc || !buf) {
+        return -EINVAL;
+    }
+
+    spin_lock_irqsave(&fc->queue_lock, flags);
+
+    if (fc->buffer_nodes && buf->channel < fc->buf_cnt) {
+        struct isp_buffer_node *node = &fc->buffer_nodes[buf->channel];
+
+        // Mark buffer as available
+        clear_bit(buf->channel, &fc->buffer_states);
+
+        // Update node state
+        node->index = buf->channel;
+        node->flags = buf->flags;
+        node->in_use = false;
+
+        // Add to ready queue if not already there
+        if (list_empty(&node->list))
+            list_add_tail(&node->list, &fc->ready_list);
+
+        atomic_inc(&fc->frame_count);
+    }
+
+    spin_unlock_irqrestore(&fc->queue_lock, flags);
+    return ret;
 }
 
 static int init_frame_source(struct IMPISPDev *dev, int channel) {
@@ -7210,35 +7345,19 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
         }
         // Add to framechan_ioctl:
         case VIDIOC_SET_FIFO_ATTR: {
-		    struct frame_buffer_info buf;
-		    struct frame_source_channel *fc = fs->private;
-		    struct frame_node *node;
-		    unsigned long flags;
+		    struct buffer_info buf;
+		    int ret;
 
-		    if (copy_from_user(&buf, (void __user *)arg, sizeof(buf)))
+		    if (copy_from_user(&buf, (void __user *)arg, sizeof(buf))) {
+		        pr_err("Failed to copy buffer info from user\n");
 		        return -EFAULT;
-
-		    if (buf.index >= fc->buf_cnt) {
-		        pr_err("Invalid buffer index %d\n", buf.index);
-		        return -EINVAL;
 		    }
 
-		    node = get_buffer_node(fc, buf.index);
-		    if (!node)
-		        return -EINVAL;
-
-		    spin_lock_irqsave(&fc->queue_lock, flags);
-
-		    // Mark buffer as ready for filling
-		    clear_bit(buf.index, &fc->buffer_states);
-
-		    // Add to ready queue if not already there
-		    if (list_empty(&node->list))
-		        list_add_tail(&node->list, &fc->ready_list);
-
-		    atomic_inc(&fc->frame_count);
-
-		    spin_unlock_irqrestore(&fc->queue_lock, flags);
+		    ret = handle_set_fifo_attr(fs->private, &buf);
+		    if (ret) {
+		        pr_err("Failed to set FIFO attributes: %d\n", ret);
+		        return ret;
+		    }
 
 		    return 0;
         }
