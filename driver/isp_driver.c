@@ -403,69 +403,45 @@ static inline bool is_buffer_filled(struct frame_source_channel *fc, int index) 
     return test_bit(index, &fc->buffer_states);
 }
 
-
 static irqreturn_t isp_irq_handler(int irq, void *dev_id)
 {
     struct IMPISPDev *dev = dev_id;
-    struct isp_framesource_state *fs;
-    struct frame_source_channel *fc;
-    unsigned long flags;
+    void __iomem *regs = dev->regs;
     u32 status;
-    static u32 frame_count = 0;
 
-    status = readl(dev->regs + ISP_STATUS_REG);
-    if (!(status & ISP_INT_FRAME_DONE))
+    status = readl(regs + ISP_STATUS_REG);
+
+    pr_debug("ISP IRQ: status=0x%x ctrl=0x%x mask=0x%x\n",
+             status,
+             readl(regs + ISP_CTRL_REG),
+             readl(regs + ISP_INT_MASK_REG));
+
+    // Clear interrupt immediately
+    writel(status, regs + ISP_INT_CLEAR_REG);
+    wmb();
+
+    if (!(status & 0x1))  // FRAME_DONE bit
         return IRQ_NONE;
 
-    fs = &dev->frame_sources[0];
-    fc = fs->private;
+    // Process frame completion
+    struct isp_framesource_state *fs = &dev->frame_sources[0];
+    struct frame_source_channel *fc = fs->private;
 
     if (!fc || !fc->buf_base)
         return IRQ_HANDLED;
 
-    // Debug every 32nd frame (using power of 2 to avoid division)
-    if (!(frame_count & 0x1F)) {
-        pr_info("ISP: frame=%u status=0x%x idx=%d\n",
-                frame_count,
-                status,
-                atomic_read(&fc->buffer_index));
-
-        // Sample first 16 bytes of both Y and UV planes
-        u8 *y_buf = fc->buf_base + (atomic_read(&fc->buffer_index) * fc->buf_size);
-        u8 *uv_buf = y_buf + (fc->buf_size * 2/3);  // UV starts at 2/3 point for NV12
-
-        pr_info("Y data: %02x %02x %02x %02x %02x %02x %02x %02x\n",
-                y_buf[0], y_buf[1], y_buf[2], y_buf[3],
-                y_buf[4], y_buf[5], y_buf[6], y_buf[7]);
-
-        pr_info("UV data: %02x %02x %02x %02x %02x %02x %02x %02x\n",
-                uv_buf[0], uv_buf[1], uv_buf[2], uv_buf[3],
-                uv_buf[4], uv_buf[5], uv_buf[6], uv_buf[7]);
+    // Sample frame data for debug
+    static int frame_count = 0;
+    if (frame_count < 5) {
+        u8 *buf = fc->buf_base + (fc->write_idx * fc->buf_size);
+        pr_info("Frame %d data: %02x %02x %02x %02x\n",
+                frame_count, buf[0], buf[1], buf[2], buf[3]);
     }
-
-    spin_lock_irqsave(&fc->state_lock, flags);
-
-    // Handle buffer index
-    int buf_idx = atomic_read(&fc->buffer_index);
-    mark_buffer_filled(fc, buf_idx);
-
-    // Update for next frame
-    atomic_inc(&fc->buffer_index);
-    if (atomic_read(&fc->buffer_index) >= fc->buf_cnt)
-        atomic_set(&fc->buffer_index, 0);
-
-    // Configure next buffer address
-    buf_idx = atomic_read(&fc->buffer_index);
-    uint32_t next_buf = fc->dma_addr + (buf_idx * fc->buf_size);
-    writel(next_buf, dev->regs + ISP_BUF0_OFFSET);
-    writel(next_buf + (fc->buf_size * 2/3),
-           dev->regs + ISP_BUF0_OFFSET + ISP_BUF_SIZE_STEP);
-    wmb();
-
-    spin_unlock_irqrestore(&fc->state_lock, flags);
-
-    wake_up(&fc->wait);
     frame_count++;
+
+    // Update write index
+    fc->write_idx = (fc->write_idx + 1) % fc->buf_cnt;
+
     return IRQ_HANDLED;
 }
 
@@ -3983,32 +3959,6 @@ static int configure_sensor_streaming(struct IMPISPDev *dev)
     return ret;
 }
 
-static int configure_sensor_mipi(struct IMPISPDev *dev)
-{
-    struct i2c_client *client = dev->sensor_i2c_client;
-
-    // Reset sensor first
-    isp_sensor_write_reg(client, 0x0103, 0x01);
-    msleep(20);
-
-    // SC2336 MIPI setup from OEM
-    isp_sensor_write_reg(client, 0x3018, 0x72); // 2 lanes
-    isp_sensor_write_reg(client, 0x3019, 0x00); // Clock mode
-    isp_sensor_write_reg(client, 0x301a, 0xf0); // Clock control
-
-    // Important timing registers
-    isp_sensor_write_reg(client, 0x320c, 0x08);
-    isp_sensor_write_reg(client, 0x320d, 0xca);
-    isp_sensor_write_reg(client, 0x320e, 0x05);
-    isp_sensor_write_reg(client, 0x320f, 0xa0);
-
-    // Enable streaming
-    isp_sensor_write_reg(client, 0x0100, 0x01);
-    msleep(30);
-
-    return 0;
-}
-
 static void dump_csi_reg(struct IMPISPDev *dev)
 {
     void __iomem *csi_base = dev->regs + 0xb8;  // CSI register base from OEM offset
@@ -4032,50 +3982,15 @@ static void dump_csi_reg(struct IMPISPDev *dev)
 
 static int configure_mipi_csi(struct IMPISPDev *dev)
 {
-    void __iomem *regs = dev->regs;
-    void __iomem *csi_base = regs + 0xb8;
-    void __iomem *timing_base = regs + 0x13c;
-    u32 val;
+    void __iomem *csi_base = dev->regs + 0xb8;
 
-    pr_info("Configuring MIPI CSI for SC2336...\n");
-
-    // 1. Initial reset sequence
-    writel(0x0, csi_base + 0x8);   // PHY_SHUTDOWNZ = 0
-    writel(0x0, csi_base + 0xc);   // DPHY_RSTZ = 0
-    writel(0x0, csi_base + 0x10);  // CSI2_RESETN = 0
-    wmb();
-    msleep(1);
-
-    // 2. Configure 2 lanes (value should be lanes-1)
-    writel(0x1, csi_base + 0x4);   // N_LANES = 1 (for 2 lanes)
-    wmb();
-    msleep(1);
-
-    // 3. Critical timing setup matching OEM values
-    writel(0x7d, timing_base + 0x0);   // Base timing
-    writel(0x3f, timing_base + 0x128); // Additional timing
-    writel(0x1, timing_base + 0x2cc);  // Final timing enable
+    // Just basic CSI host setup
+    writel(0x1, csi_base + 0x4);   // 2 lanes
+    writel(0x1, csi_base + 0x8);   // Enable PHY
+    writel(0x1, csi_base + 0xc);   // Enable DPHY
+    writel(0x1, csi_base + 0x10);  // Enable CSI2
     wmb();
 
-    // 4. Enable sequence
-    writel(0x1, csi_base + 0xc);   // DPHY_RSTZ = 1
-    wmb();
-    msleep(1);
-
-    writel(0x1, csi_base + 0x10);  // CSI2_RESETN = 1
-    wmb();
-    msleep(10);  // Longer delay after final enable
-
-    // 5. Configure data IDs matching OEM
-    writel(0x0c, csi_base + 0x18);  // DATA_IDS_2 = 0xc
-
-    // Verify PHY is ready
-    if (!(readl(csi_base + 0x14) & 0x100)) {
-        pr_err("CSI PHY not ready\n");
-        return -ETIMEDOUT;
-    }
-
-    pr_info("CSI configured: lanes=2 timing=0x7d\n");
     return 0;
 }
 
@@ -4135,21 +4050,11 @@ static int csi_core_ops_init(struct IMPISPDev *dev, bool enable)
 
 static int configure_streaming_hardware(struct IMPISPDev *dev)
 {
-    void __iomem *regs;
-    void __iomem *csi_base;
-    struct isp_framesource_state *fs;
+    void __iomem *regs = dev->regs;
+    void __iomem *csi_base = regs + 0xb8;
+    struct isp_framesource_state *fs = &dev->frame_sources[0];
     struct frame_source_channel *fc;
     u32 val;
-    int ret = 0;
-
-    if (!dev || !dev->regs) {
-        pr_err("Invalid device state\n");
-        return -EINVAL;
-    }
-
-    regs = dev->regs;
-    csi_base = (void __iomem *)ALIGN((unsigned long)regs + 0xb8, 4);
-    fs = &dev->frame_sources[0];
 
     if (!fs || !fs->private) {
         pr_err("Invalid frame source state\n");
@@ -4157,63 +4062,70 @@ static int configure_streaming_hardware(struct IMPISPDev *dev)
     }
     fc = fs->private;
 
-    pr_info("Configuring ISP hardware...\n");
+    pr_info("Configuring ISP hardware and CSI host...\n");
 
-    // State transitions from OEM decompiled code
-    switch(fs->state) {
-    case 4:
-        // State 4: Initial CSI configuration
-        ret = csi_video_s_stream(dev, false);
-        if (ret)
-            return ret;
+    // 1. Reset and configure CSI host first
+    writel(0x0, csi_base + 0x0);  // Reset CSI
+    wmb();
+    msleep(1);
 
-        // Ensure DMA address alignment
-        writel(ALIGN(fc->dma_addr, 8), regs + ISP_BUF0_OFFSET);
-        writel(ALIGN(fs->width, 32), regs + ISP_BUF0_OFFSET + 0x4);
-        writel(ALIGN(fc->dma_addr + (ALIGN(fs->width, 32) * fs->height), 8),
-               regs + ISP_BUF0_OFFSET + 0x8);
-        writel(ALIGN(fs->width/2, 32), regs + ISP_BUF0_OFFSET + 0xC);
-        wmb();
-        break;
+    // Configure 2 lanes
+    writel(0x1, csi_base + 0x4);  // N_LANES = 1 (2 lanes)
+    wmb();
+    msleep(1);
 
-    case 3:
-        ret = csi_core_ops_init(dev, true);
-        if (ret)
-            return ret;
+    // Enable CSI in proper sequence
+    writel(0x1, csi_base + 0x8);  // PHY_SHUTDOWNZ
+    wmb();
+    msleep(1);
 
-        writel(ISP_FMT_NV12, regs + ISP_INPUT_FORMAT_REG);
-        writel(ISP_FMT_NV12, regs + ISP_OUTPUT_FORMAT_REG);
-        wmb();
-        break;
+    writel(0x1, csi_base + 0xc);  // DPHY_RSTZ
+    wmb();
+    msleep(1);
 
-    case 2:
-        if (dev->clocks) {
-            for (int i = dev->num_clocks - 1; i >= 0; i--) {
-                clk_disable(dev->clocks[i]);
-            }
-        }
+    writel(0x1, csi_base + 0x10); // CSI2_RESETN
+    wmb();
+    msleep(10);
 
-        // Ensure control register writes are aligned
-        val = ISP_CTRL_ENABLE | (1 << 1) | (1 << 2);
-        writel(val, regs + ALIGN(ISP_CTRL_REG, 4));
-        writel(ISP_INT_FRAME_DONE, regs + ALIGN(ISP_INT_MASK_REG, 4));
-        wmb();
+    // 2. Configure DMA for NV12
+    uint32_t y_stride = ALIGN(fs->width, 32);
+    uint32_t uv_stride = ALIGN(fs->width/2, 32);
 
-        fs->state = 1;
-        break;
+    writel(ALIGN(fc->dma_addr, 8), regs + ISP_BUF0_OFFSET);
+    writel(y_stride, regs + ISP_BUF0_OFFSET + 0x4);
+    writel(ALIGN(fc->dma_addr + (y_stride * fs->height), 8),
+           regs + ISP_BUF0_OFFSET + 0x8);
+    writel(uv_stride, regs + ISP_BUF0_OFFSET + 0xC);
+    wmb();
 
-    default:
-        pr_err("Invalid state: %d\n", fs->state);
-        return -EINVAL;
-    }
+    // 3. Set format
+    writel(ISP_FMT_NV12, regs + ISP_INPUT_FORMAT_REG);
+    writel(ISP_FMT_NV12, regs + ISP_OUTPUT_FORMAT_REG);
+    wmb();
 
-    if (!ret) {
-        pr_info("Hardware config complete - state=%d\n", fs->state);
-        pr_info("CSI Config:\n");
-        dump_csi_reg(dev);
-    }
+	// 4. Configure and enable interrupts
+	writel(0xFFFFFFFF, regs + ISP_INT_CLEAR_REG);  // Clear pending
+	writel(ISP_INT_FRAME_DONE, regs + ISP_INT_MASK_REG); // Enable frame interrupt
+	wmb();
 
-    return ret;
+	// 5. Enable ISP core last
+	val = ISP_CTRL_ENABLE | ISP_CTRL_START_STREAM | ISP_CTRL_IRQ_EN;
+	writel(val, regs + ISP_CTRL_REG);
+	wmb();
+
+	pr_info("Control register set to 0x%x\n", val);
+
+    // Debug all critical registers
+    pr_info("CSI Config:\n");
+    dump_csi_reg(dev);
+    pr_info("DMA: Y=0x%08x stride=%d UV=0x%08x stride=%d\n",
+            readl(regs + ISP_BUF0_OFFSET), y_stride,
+            readl(regs + ISP_BUF0_OFFSET + 0x8), uv_stride);
+    pr_info("IRQ: mask=0x%x ctrl=0x%x\n",
+            readl(regs + ISP_INT_MASK_REG),
+            readl(regs + ISP_CTRL_REG));
+
+    return 0;
 }
 
 static int handle_stream_enable(struct IMPISPDev *dev, bool enable)
@@ -4869,39 +4781,10 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         unsigned char val_h = 0, val_l = 0;
         int i;
 
-        // Add from sensor_init_regs_1920_1080_30fps_mipi[]
-        isp_sensor_write_reg(client, 0x0103, 0x01); // Reset
-        msleep(20);
-
-        isp_sensor_write_reg(client, 0x36e9, 0x80);
-        isp_sensor_write_reg(client, 0x37f9, 0x80);
-        isp_sensor_write_reg(client, 0x301f, 0x02);
-        isp_sensor_write_reg(client, 0x3106, 0x05);
-        isp_sensor_write_reg(client, 0x320c, 0x08);
-        isp_sensor_write_reg(client, 0x320d, 0xca);
-        isp_sensor_write_reg(client, 0x320e, 0x05);
-        isp_sensor_write_reg(client, 0x320f, 0xa0);
-
-        // Core sensor settings
-        isp_sensor_write_reg(client, 0x3301, 0x09);
-        isp_sensor_write_reg(client, 0x3306, 0x60);
-        isp_sensor_write_reg(client, 0x3633, 0x22);
-        isp_sensor_write_reg(client, 0x3639, 0xf4);
-
-        // AE/AG settings
-        isp_sensor_write_reg(client, 0x3e01, 0x4a);
-        isp_sensor_write_reg(client, 0x3e02, 0xb0);
-        isp_sensor_write_reg(client, 0x3e08, 0x1f);
-        isp_sensor_write_reg(client, 0x3e09, 0x20);
-
         // Read ID registers
         ret = isp_sensor_read_reg(client, 0x3107, &val_h);
         ret |= isp_sensor_read_reg(client, 0x3108, &val_l);
         pr_info("SC2336: ID = 0x%02x%02x\n", val_h, val_l);
-
-        // Enable output
-        isp_sensor_write_reg(client, 0x0100, 0x01);
-        msleep(20); // Let sensor stabilize
 
         return ret;
     }
@@ -6414,100 +6297,106 @@ static int tisp_probe(struct platform_device *pdev)
         goto err_free_graph;
     }
 
-    // Map registers with proper error checking
-    base = ioremap(ISP_PHYS_BASE, ISP_REG_SIZE);
-    if (!base) {
-        dev_err(&pdev->dev, "Failed to map ISP registers\n");
-        ret = -ENOMEM;
-        goto err_free_graph;
-    }
+	// Map registers with proper error checking
+	base = ioremap(ISP_PHYS_BASE, ISP_REG_SIZE);
+	if (!base) {
+	    dev_err(&pdev->dev, "Failed to map ISP registers\n");
+	    ret = -ENOMEM;
+	    goto err_free_graph;
+	}
 
-    // Store mapped registers
-    ourISPdev->regs = base;
+	// Store mapped registers
+	ourISPdev->regs = base;
 
-    // Set the IRQ value to 36
-    ourISPdev->irq = 36;
-    pdev->dev.platform_data = &isp_pdata;
-    pr_info("Setting up ISP interrupts...\n");
+	// Get IRQ from platform device
+	ourISPdev->irq = platform_get_irq(pdev, 0);
+	if (ourISPdev->irq < 0) {
+	    dev_err(&pdev->dev, "Failed to get platform IRQ\n");
+	    ret = -EINVAL;
+	    goto err_unmap_regs;
+	}
 
-    // Test register access
-    pr_info("Testing register access at base %p\n", base);
-    u32 test_val = readl(base + ISP_CTRL_OFFSET);
-    pr_info("Initial control register: 0x%08x\n", test_val);
+	pdev->dev.platform_data = &isp_pdata;
+	pr_info("Setting up ISP interrupts...\n");
 
-    // Set the IRQ value to 36
-    ourISPdev->irq = 36;
-    pdev->dev.platform_data = &isp_pdata;
+	// Test register access and disable interrupts first
+	pr_info("Testing register access at base %p\n", base);
+	writel(0, base + ISP_INT_MASK_REG); // Disable all interrupts
+	writel(0xFFFFFFFF, base + ISP_INT_CLEAR_REG); // Clear any pending
+	wmb();
 
-    pr_info("Setting up ISP interrupts... dev=%p\n", ourISPdev);
+	u32 test_val = readl(base + ISP_CTRL_OFFSET);
+	pr_info("Initial control register: 0x%08x\n", test_val);
 
-    // First allocate an IspDevice for IRQ handling
-    struct IspDevice *isp_dev = kzalloc(sizeof(*isp_dev), GFP_KERNEL);
-    if (!isp_dev) {
-        dev_err(&pdev->dev, "Failed to allocate ISP device\n");
-        ret = -ENOMEM;
-        goto err_unmap_regs;
-    }
+	// Allocate IRQ handling structures
+	struct IspDevice *isp_dev = kzalloc(sizeof(*isp_dev), GFP_KERNEL);
+	if (!isp_dev) {
+	    dev_err(&pdev->dev, "Failed to allocate ISP device\n");
+	    ret = -ENOMEM;
+	    goto err_unmap_regs;
+	}
 
-    // Initialize IspDevice carefully
-    memset(isp_dev, 0, sizeof(*isp_dev));
-    spin_lock_init(&isp_dev->lock);
-    isp_dev->irq_enabled = 0;
+	// Initialize IRQ control structure
+	spin_lock_init(&isp_dev->lock);
+	isp_dev->irq_enabled = 0;
+	isp_dev->regs = base;
+	ourISPdev->isp_dev = isp_dev;
 
-    // Store in ourISPdev
-    ourISPdev->isp_dev = isp_dev;
+	// Initialize IRQ handler data
+	struct irq_handler_data *irq_data = kzalloc(sizeof(*irq_data), GFP_KERNEL);
+	if (!irq_data) {
+	    dev_err(&pdev->dev, "Failed to allocate IRQ data\n");
+	    ret = -ENOMEM;
+	    kfree(isp_dev);
+	    goto err_unmap_regs;
+	}
 
-    // Allocate and initialize IRQ data
-    struct irq_handler_data *irq_data = kzalloc(sizeof(*irq_data), GFP_KERNEL);
-    if (!irq_data) {
-        dev_err(&pdev->dev, "Failed to allocate IRQ data\n");
-        ret = -ENOMEM;
-        kfree(isp_dev);
-        goto err_unmap_regs;
-    }
+	raw_spin_lock_init(&irq_data->rlock);
+	irq_data->irq_number = ourISPdev->irq;
+	irq_data->handler_function = tx_isp_enable_irq;
+	irq_data->disable_function = tx_isp_disable_irq;
 
-    // Zero initialize
-    memset(irq_data, 0, sizeof(*irq_data));
-    raw_spin_lock_init(&irq_data->rlock);
-    irq_data->irq_number = ourISPdev->irq;
+	pr_info("IRQ structures allocated and initialized: isp_dev=%p irq_data=%p\n",
+	        isp_dev, irq_data);
 
-    pr_info("IRQ structures allocated and initialized: isp_dev=%p irq_data=%p\n",
-            isp_dev, irq_data);
+	// Request IRQ - note we pass ourISPdev as the dev_id
+	ret = request_irq(ourISPdev->irq,
+	                 isp_irq_handler,
+	                 IRQF_SHARED,
+	                 "isp_driver",
+	                 ourISPdev);  // Pass ourISPdev instead of irq_data
+	if (ret) {
+	    pr_err("Failed to request IRQ: %d\n", ret);
+	    kfree(irq_data);
+	    kfree(isp_dev);
+	    goto err_unmap_regs;
+	}
 
-    // Set up minimal IRQ info
-    struct irq_info irq_info;
-    memset(&irq_info, 0, sizeof(irq_info));
-    irq_info.irq_type = IRQF_SHARED;
+	// Store IRQ data
+	ourISPdev->irq_data = irq_data;
 
-    pr_info("Requesting ISP IRQ with type=0x%x num=%d\n",
-            irq_info.irq_type, irq_data->irq_number);
+	// Configure initial interrupt state
+	writel(0x1, base + ISP_INT_MASK_REG);  // Enable frame done interrupt
+	writel(0x7, base + ISP_CTRL_REG);      // Enable core with IRQs
+	wmb();
 
-    // Handle IRQ setup directly instead of using tx_isp_request_irq for now
-    ret = request_irq(irq_data->irq_number,
-                     isp_irq_handler,  // Just use primary handler for now
-                     irq_info.irq_type,
-                     "isp_driver",
-                     irq_data);
-    if (ret) {
-        pr_err("Failed to request IRQ: %d\n", ret);
-        kfree(irq_data);
-        kfree(isp_dev);
-        goto err_unmap_regs;
-    }
+	pr_info("ISP IRQ setup complete: num=%d mask=0x%x ctrl=0x%x\n",
+	        ourISPdev->irq,
+	        readl(base + ISP_INT_MASK_REG),
+	        readl(base + ISP_CTRL_REG));
 
-    // Store IRQ data after successful setup
-    ourISPdev->irq_data = irq_data;
+	// Configure clocks
+	ret = configure_isp_clocks(ourISPdev);
+	if (ret) {
+	    dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
+	    free_irq(ourISPdev->irq, ourISPdev);
+	    kfree(irq_data);
+	    kfree(isp_dev);
+	    goto err_unmap_regs;
+	}
 
-    pr_info("ISP IRQ setup complete: num=%d\n", irq_data->irq_number);
-    // Configure clocks
-    ret = configure_isp_clocks(ourISPdev);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
-        goto err_unmap_regs;
-    }
-
-    // Initialize reserved memory
-    ret = init_isp_reserved_memory(pdev);
+	// Initialize reserved memory
+	ret = init_isp_reserved_memory(pdev);
     if (ret) {
         dev_err(&pdev->dev, "Failed to initialize reserved memory\n");
         goto err_cleanup_clocks;

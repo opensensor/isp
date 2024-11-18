@@ -307,6 +307,15 @@
 #define ISP_IPU_STATUS   0x184
 #define ISP_MIPI_TIMING  0x38
 
+/* ISP Control Register Bits */
+#define ISP_CTRL_ENABLE          (1 << 0)  // Enable ISP core
+#define ISP_CTRL_START_STREAM    (1 << 1)  // Start streaming
+#define ISP_CTRL_IRQ_EN         (1 << 2)  // Enable interrupts
+
+/* ISP Status/Interrupt bits */
+#define ISP_INT_FRAME_DONE      (1 << 0)  // Frame complete
+#define ISP_INT_ERR            (1 << 1)  // Error condition
+#define ISP_INT_OVERFLOW       (1 << 2)  // Buffer overflow
 struct tisp_param_info {
     uint32_t data[8];  // Array size can be adjusted based on needs
 };
