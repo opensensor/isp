@@ -2382,25 +2382,27 @@ static void cleanup_frame_source(struct IMPISPDev *dev, int channel)
     fs->is_open = 0;
 }
 
-
 static int init_frame_source(struct IMPISPDev *dev, int channel) {
     struct isp_framesource_state *fs = &dev->frame_sources[channel];
     struct frame_source_channel *fc;
-    uint32_t type_flags = 0;
 
     pr_info("Initializing frame source channel %d\n", channel);
 
-    // Clear structure
+    // Verify DMA setup first
+    if (!dev->dma_buf || !dev->dma_addr) {
+        pr_err("DMA not initialized: buf=%p addr=0x%x\n",
+               dev->dma_buf, dev->dma_addr);
+        return -EINVAL;
+    }
+
+    // Clear structure with proper size
     memset(fs, 0, sizeof(*fs));
 
-    // Start with magic number
-    fs->magic = 0x12345678;  // Use specific magic from OEM if known
-
-    // Start in state 4 as we saw in OEM
+    fs->magic = 0x12345678;
     fs->state = 4;
     fs->chn_num = channel;
 
-    // Set up dimensions matching libimp
+    // Set up dimensions
     if (channel == 0) {
         fs->width = 1920;
         fs->height = 1080;
@@ -2411,48 +2413,65 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
         fs->buf_cnt = 2;
     }
 
-    fs->fmt = ISP_FMT_NV12;  // Force NV12
-    fs->buf_size = (ALIGN(fs->width, 32) * fs->height * 3) / 2;  // NV12 size
+    fs->fmt = ISP_FMT_NV12;
 
-    // Calculate buffer offset exactly as OEM
-    uint32_t aligned_offset = ALIGN(ISP_FRAME_BUFFER_OFFSET +
-                                  (channel * fs->buf_size * fs->buf_cnt), 8);
+    // Calculate sizes carefully
+    uint32_t stride = ALIGN(fs->width, 32);
+    fs->buf_size = (stride * fs->height * 3) / 2;  // NV12
 
+    // Critical: Calculate proper buffer offset
+    uint32_t base_offset = 0x1094d4;  // Fixed offset from libimp
+    uint32_t channel_offset = channel * fs->buf_size * fs->buf_cnt;
+    uint32_t aligned_offset = ALIGN(base_offset + channel_offset, 8);
+
+    // Calculate full physical & virtual addresses
+    dma_addr_t dma_base = dev->dma_addr;  // Should be 0x2a80000
+    fs->dma_addr = dma_base + aligned_offset;
     fs->buf_base = dev->dma_buf + aligned_offset;
-    fs->dma_addr = dev->dma_addr + aligned_offset;
 
-    // Initialize fc
+    pr_info("Buffer address calculation:\n");
+    pr_info("  DMA base: 0x%x\n", dma_base);
+    pr_info("  Offset: 0x%x\n", aligned_offset);
+    pr_info("  Final DMA: 0x%x\n", fs->dma_addr);
+
+    // Allocate and initialize channel
     fc = kzalloc(sizeof(*fc), GFP_KERNEL | GFP_DMA);
     if (!fc) {
-        pr_err("Failed to allocate channel data\n");
         return -ENOMEM;
     }
 
+    // Copy addresses exactly
     fc->buf_base = fs->buf_base;
     fc->dma_addr = fs->dma_addr;
     fc->buf_size = fs->buf_size;
     fc->buf_cnt = fs->buf_cnt;
-    fc->state = 1;  // Ready state
+    fc->state = 1;
 
-    // Initialize synchronization primitives
+    // Initialize synch primitives
     mutex_init(&fc->lock);
     spin_lock_init(&fc->queue_lock);
     init_waitqueue_head(&fc->wait);
     atomic_set(&fc->frame_count, 0);
 
-    fc->vbm_table[channel] = fc;  // Self-reference for lookup
+    // Set up VBM table entry
+    fc->vbm_table[channel] = fc;
 
-    // Initialize encoder state
+    // Encoder state
     fc->enc_state_val = 1;
+    fc->enc_registered_val = 1;  // Pre-register for testing
     sema_init(&fc->enc_sem, 0);
 
     fs->private = fc;
     fs->is_open = 1;
 
-    pr_info("Frame source initialized: state=%d width=%d height=%d fmt=0x%x\n",
-            fs->state, fs->width, fs->height, fs->fmt);
-    pr_info("  Buffer config: size=%u count=%d addr=0x%x\n",
-            fs->buf_size, fs->buf_cnt, (unsigned int)fs->dma_addr);
+    pr_info("Frame source initialized: ch=%d state=%d fmt=0x%x\n",
+            channel, fs->state, fs->fmt);
+    pr_info("  Resolution: %dx%d stride=%d\n",
+            fs->width, fs->height, stride);
+    pr_info("  Buffer: size=%u count=%d\n",
+            fs->buf_size, fs->buf_cnt);
+    pr_info("  DMA: base=0x%x offset=0x%x addr=0x%x\n",
+            dma_base, aligned_offset, fs->dma_addr);
 
     return 0;
 }
@@ -6389,6 +6408,7 @@ static int setup_i2c_sensor(struct IMPISPDev *dev)
     return 0;
 }
 
+
 static int tisp_probe(struct platform_device *pdev)
 {
     struct resource *res;
@@ -6397,7 +6417,6 @@ static int tisp_probe(struct platform_device *pdev)
     int ret;
 
     pr_info("Starting ISP probe...\n");
-
     // Validate ourISPdev
     if (!ourISPdev) {
         dev_err(&pdev->dev, "Global ISP device structure not allocated\n");
@@ -6729,6 +6748,14 @@ static int isp_dev_uevent(struct device *dev, struct kobj_uevent_env *env)
     return 0;
 }
 
+static void dump_subsystem_state(void __iomem *base)
+{
+    pr_info("ISP Subsystem State:\n");
+    pr_info("Control: 0x%08x\n", readl(base + 0x00));
+    pr_info("Status:  0x%08x\n", readl(base + 0x04));
+    pr_info("Config:  0x%08x\n", readl(base + 0x08));
+}
+
 /* Module initialization function */
 static int __init isp_driver_init(void)
 {
@@ -6752,6 +6779,13 @@ static int __init isp_driver_init(void)
     };
 
     pr_info("Loading ISP driver...\n");
+
+    // Dump current subsystem state if we can
+    void __iomem *debug_base = ioremap(ISP_PHYS_BASE, ISP_REG_SIZE);
+    if (debug_base) {
+        dump_subsystem_state(debug_base);
+        iounmap(debug_base);
+    }
 
     // 1. Create the tx-isp character device first
     ret = alloc_chrdev_region(&tisp_dev_number, 0, 1, "tx-isp");

@@ -701,6 +701,8 @@ struct IMPISPDev {
     int is_open;
     char sensor_name[SENSOR_NAME_SIZE];
     struct isp_subdev **subdevs; // Subdevice list pointer
+    uint32_t cpu_id;
+    uint32_t soc_id;
 
     // Critical offsets - must match prudynt
     struct sensor_buffer_info *buf_info;  // 0xAC: Buffer info
