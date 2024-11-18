@@ -1,0 +1,3 @@
+[submodule "external/ingenic-sdk"]
+	path = external/ingenic-sdk
+	url = https://github.com/themactep/ingenic-sdk
