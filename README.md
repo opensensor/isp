@@ -25,7 +25,8 @@ The driver is designed to replace the proprietary driver provided by Ingenic, of
 1. **Clone the Repository**
 ```bash
 git clone https://github.com/your-repository/isp-driver.git
-cd isp-driver
+
+./setup_submodule_and_patch.sh
 ```
 
 2. **Build the Driver**
