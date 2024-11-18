@@ -600,6 +600,7 @@ struct IMPISPDev {
     struct sensor_control_info *wdr_buf_info; // 0xB4: WDR buffer info
     unsigned int current_link;            // Track link config
     char padding2[PADDING_SIZE_2];        // Additional required padding
+    struct list_head pad_list;
 
     // Device and hardware access - after aligned section
     struct device *dev;
@@ -1044,15 +1045,15 @@ struct isp_reg_block {
 
 /* Update pad descriptor structure to match libimp exactly */
 struct isp_pad_desc {
-    uint32_t flags;            // 0x00: Pad flags - binary checks this at +6
-    uint8_t type;             // 0x04: Pad type (1=source, 2=sink)
-    uint8_t index;            // 0x05: Pad index
-    uint8_t reserved[2];      // 0x06-0x07: Alignment padding
-    uint32_t link_state;      // 0x08: Link state
-    void *source;             // 0x0C: Source pad pointer
-    void *sink;               // 0x10: Sink pad pointer
-    void *entity;             // 0x14: Entity pointer
-} __attribute__((packed, aligned(4)));
+    uint8_t type;             // Pad type (1=source, 2=sink)
+    uint8_t index;            // Pad index
+    uint8_t flags;            // Pad flags
+    uint8_t link_state;       // Link state
+    struct list_head list;    // Add list member
+    void *source;            // Source pad pointer
+    void *sink;              // Sink pad pointer
+    void *entity;            // Entity pointer
+};
 
 /**
  * struct isp_subdev - ISP sub-device structure
@@ -4268,29 +4269,37 @@ static const struct isp_link_type link_types[] = {
 static int setup_video_link(struct IMPISPDev *dev, int link_num)
 {
     struct isp_subdev_state *sd;
-    struct isp_pad_desc *src_pad, *sink_pad;
     void __iomem *vic_base = dev->regs + VIC_BASE_OFFSET;
     u32 ctrl;
     int ret = 0;
 
     pr_info("Setting up video link %d\n", link_num);
 
-    // Save VIC state
+    // Save current VIC state
     ctrl = readl(vic_base + VIC_CTRL_REG);
 
-    // Setup links...
     if (link_num == 0) {
-        // Direct path config
+        // Disable links first
+        if (sd && sd->src_pads && sd->sink_pads) {
+            sd->src_pads->link_state = LINK_STATE_INACTIVE;
+            sd->sink_pads->link_state = LINK_STATE_INACTIVE;
+            sd->src_pads->source = NULL;
+            sd->src_pads->sink = NULL;
+            sd->sink_pads->source = NULL;
+            sd->sink_pads->sink = NULL;
+        }
+
+        // Then configure direct path
         writel(1, dev->regs + 0x140);  // Direct path
         writel(0, dev->regs + 0x144);  // Disable bypass
     } else {
-        // Bypass path config
+        // Set bypass path
         writel(0, dev->regs + 0x140);  // Disable direct
         writel(1, dev->regs + 0x144);  // Enable bypass
     }
     wmb();
 
-    // Critical: Restore VIC control state
+    // Restore VIC control state
     writel(ctrl, vic_base + VIC_CTRL_REG);
     wmb();
 
@@ -6258,41 +6267,6 @@ static int configure_streaming_hardware(struct IMPISPDev *dev)
 }
 
 
-static int handle_stream_enable(struct IMPISPDev *dev, bool enable)
-{
-    void __iomem *regs = dev->regs;
-
-    if (!regs)
-        return -EINVAL;
-
-    pr_info("Configuring stream enable=%d\n", enable);
-
-    // Proper sequence:
-    writel(0x1, regs + ISP_CTRL_REG);  // Enable core first
-    wmb();
-    udelay(100);
-
-    writel(0x1, regs + ISP_STREAM_CTRL);  // Enable stream control
-    wmb();
-    udelay(100);
-
-    writel(0x1, regs + ISP_STREAM_START);  // Start streaming
-    wmb();
-
-    // Enable sensor streaming
-    if (dev->sensor_i2c_client) {
-        int ret = isp_sensor_write_reg(dev->sensor_i2c_client,
-                                     SENSOR_REG_MODE, 0x01);
-        if (ret) {
-            pr_err("Failed to start sensor streaming\n");
-            return ret;
-        }
-    }
-
-    pr_info("Stream enabled successfully\n");
-    return 0;
-}
-
 static int prepare_streaming(struct IMPISPDev *dev)
 {
     int ret;
@@ -6455,6 +6429,156 @@ static int init_sensor_registers(struct i2c_client *client)
     return 0;
 }
 
+// Define link config tables to match offsets 0x6ad7c and 0x6ad80
+static const struct isp_pad_config {
+    uint32_t type;  // Source/sink type
+    uint32_t index; // Pad index
+    uint32_t flags; // Connection flags
+} pad_configs[] = {
+    [0] = { .type = 1, .index = 0, .flags = 0x3 },  // Direct path
+    [1] = { .type = 2, .index = 0, .flags = 0x3 }   // Bypass path
+};
+
+static const int pad_counts[] = {
+    [0] = 2,  // Direct path has 2 pads
+    [1] = 2   // Bypass path has 2 pads
+};
+
+
+static struct isp_pad_desc *find_pad_by_type(struct IMPISPDev *dev,
+                                            uint8_t type, uint8_t index)
+{
+    struct isp_pad_desc *pad;
+
+    list_for_each_entry(pad, &dev->pad_list, list) {
+        if (pad->type == type && pad->index == index)
+            return pad;
+    }
+    return NULL;
+}
+
+// Setup links by IOCTL
+// Match the exact layout from decompiled code
+#define PAD_CONFIG_BASE 0x6ad7c
+#define PAD_COUNT_BASE  0x6ad80
+
+static int handle_link_setup(struct file *file, unsigned long arg)
+{
+    int link_num;
+    void __iomem *regs = ourISPdev->regs;
+
+    // Get link number from user
+    if (copy_from_user(&link_num, (void __user *)arg, sizeof(link_num)))
+        return -EFAULT;
+
+    pr_info("Creating ISP links with enable=%d\n", link_num);
+
+    if (link_num > 1) {
+        pr_err("link(%d) is invalid!\n", link_num);
+        return -EINVAL;
+    }
+
+    // First disable both paths
+    writel(0, regs + 0x140); // Disable direct
+    writel(0, regs + 0x144); // Disable bypass
+    wmb();
+
+    // Then enable requested path
+    if (link_num == 0) {
+        writel(1, regs + 0x140); // Enable direct path
+    } else {
+        writel(1, regs + 0x144); // Enable bypass path
+    }
+    wmb();
+
+    // Store current link config
+    ourISPdev->current_link = link_num;
+
+    return 0;
+}
+
+static int handle_link_disable(struct file *file, unsigned long arg)
+{
+    int neg_one = -1;
+    void __iomem *regs = ourISPdev->regs;
+
+    // First disable both paths
+    writel(0, regs + 0x140);
+    writel(0, regs + 0x144);
+    wmb();
+
+    // Update internal state
+    ourISPdev->current_link = -1;
+
+    // Return -1 to userspace as expected
+    if (copy_to_user((void __user *)arg, &neg_one, sizeof(neg_one)))
+        return -EFAULT;
+
+    return 0;
+}
+
+static int handle_stream_control(struct file *file, unsigned long arg)
+{
+    int enable;
+    void __iomem *regs = ourISPdev->regs;
+    void __iomem *vic_base = regs + VIC_BASE_OFFSET;
+    u32 ctrl;
+
+    if (copy_from_user(&enable, (void __user *)arg, sizeof(enable)))
+        return -EFAULT;
+
+    pr_info("Configuring stream enable=%d\n", enable);
+
+    if (enable) {
+        // Check link is configured first
+        if (ourISPdev->current_link < 0) {
+            pr_err("Stream enable failed - no active link\n");
+            return -EINVAL;
+        }
+
+        // First enable VIC
+        ctrl = readl(vic_base + VIC_CTRL_REG);
+        ctrl |= VIC_CTRL_ENABLE;
+        writel(ctrl, vic_base + VIC_CTRL_REG);
+        wmb();
+
+        // Then configure ISP streaming based on current link
+        if (ourISPdev->current_link == 0) {
+            // Direct path streaming config
+            writel(0x80007000, regs + ISP_STREAM_CTRL);
+            wmb();
+            udelay(100);
+            writel(0x777111, regs + ISP_STREAM_START);
+            wmb();
+        } else {
+            // Bypass path streaming config
+            writel(0x1, regs + ISP_STREAM_CTRL);
+            wmb();
+            udelay(100);
+            writel(0x1, regs + ISP_STREAM_START);
+            wmb();
+        }
+
+        // Track stream status
+        ourISPdev->stream_count += 2;
+        pr_info("Stream enabled, count=%d\n", ourISPdev->stream_count);
+
+    } else {
+        // Disable streaming
+        writel(0, regs + ISP_STREAM_START);
+        writel(0, regs + ISP_STREAM_CTRL);
+
+        // Disable VIC after stream
+        ctrl = readl(vic_base + VIC_CTRL_REG);
+        ctrl &= ~VIC_CTRL_ENABLE;
+        writel(ctrl, vic_base + VIC_CTRL_REG);
+        wmb();
+
+        ourISPdev->stream_count = 0;
+    }
+
+    return 0;
+}
 
 /**
  * isp_driver_ioctl - IOCTL handler for ISP driver
@@ -6609,7 +6733,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         }
 
         // Don't try to copy param, just enable
-        ret = handle_stream_enable(ourISPdev, true);
+        ret = handle_stream_control(file, arg);
         if (ret == 0) {
             ourISPdev->stream_count += 2;
             pr_info("Stream enabled, count=%d\n", ourISPdev->stream_count);
@@ -6742,46 +6866,8 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         wmb();
         return 0;
     }
-	case VIDIOC_VIDEO_LINK_SETUP:
-	    {
-	        int enable;
-	        if (get_user(enable, (int __user *)arg)) {
-	            ret = -EFAULT;
-	            return ret;
-	        }
-
-	        pr_info("Creating ISP links with enable=%d\n", enable);
-
-	        // Reset existing link state
-	        if (sd->src_pads && sd->sink_pads) {
-	            sd->src_pads->link_state = LINK_STATE_INACTIVE;
-	            sd->sink_pads->link_state = LINK_STATE_INACTIVE;
-	            sd->src_pads->source = NULL;
-	            sd->src_pads->sink = NULL;
-	            sd->sink_pads->source = NULL;
-	            sd->sink_pads->sink = NULL;
-	        }
-
-	        if (enable) {
-	            // Setup direct path
-	            if (sd->src_pads && sd->sink_pads) {
-	                sd->src_pads->sink = sd->sink_pads;
-	                sd->sink_pads->source = sd->src_pads;
-	                sd->src_pads->link_state = LINK_STATE_SOURCE;
-	                sd->sink_pads->link_state = LINK_STATE_SOURCE;
-	            }
-	            writel(1, ourISPdev->regs + 0x140);  // Direct path
-	            writel(0, ourISPdev->regs + 0x144);  // Disable bypass
-	        } else {
-	            // Setup bypass path
-	            writel(0, ourISPdev->regs + 0x140);  // Disable direct
-	            writel(1, ourISPdev->regs + 0x144);  // Enable bypass
-	        }
-	        wmb();
-
-	        ourISPdev->current_link = enable;
-	    }
-	    break;
+	case VIDIOC_VIDEO_LINK_SETUP: // 0x800456d0
+    	return handle_link_setup(file, arg);
     case TX_ISP_SET_AE_ALGO_OPEN: {
       	pr_info("TX_ISP_SET_AE_ALGO_OPEN\n");
         struct isp_ae_algo ae;
@@ -6844,25 +6930,8 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
         }
         break;
     }
-	case 0x800456d1:  // Destroy links
-	    pr_info("Destroying ISP links\n");
-
-	    // Full cleanup of link state
-	    if (sd->src_pads && sd->sink_pads) {
-	        sd->src_pads->link_state = LINK_STATE_INACTIVE;
-	        sd->sink_pads->link_state = LINK_STATE_INACTIVE;
-	        sd->src_pads->source = NULL;
-	        sd->src_pads->sink = NULL;
-	        sd->sink_pads->source = NULL;
-	        sd->sink_pads->sink = NULL;
-	    }
-
-	    // Write back -1 as expected by streamer
-	    if (put_user(-1, (int __user *)arg)) {
-	        ret = -EFAULT;
-	        return ret;
-	    }
-	    break;
+case 0x800456d1: // Disable links
+    return handle_link_disable(file, arg);
     case TX_ISP_SET_AE_ALGO_CLOSE: {
         pr_info("TX_ISP_SET_AE_ALGO_CLOSE\n");
         // TODO
@@ -7203,9 +7272,6 @@ static int configure_isp_clocks(struct IMPISPDev *dev)
     // Get and enable CSI clock
     csi_clk = devm_clk_get(dev->dev, "csi");
     if (!IS_ERR(csi_clk)) {
-        ret = clk_set_rate(csi_clk, 125000000);
-        if (ret)
-            pr_warn("Failed to set CSI clock rate\n");
         ret = clk_prepare_enable(csi_clk);
         if (ret)
             pr_warn("Failed to enable CSI clock\n");
@@ -7429,11 +7495,11 @@ static int setup_frame_channel(struct isp_framesource_state *fs)
     int ret;
 
     // Check VIC is ready first
-    ctrl = readl(vic_base + VIC_CTRL_REG);
-    if (!(ctrl & VIC_CTRL_ENABLE)) {
-        pr_err("VIC not enabled for channel setup\n");
-        return -EINVAL;
-    }
+//    ctrl = readl(vic_base + VIC_CTRL_REG);
+//    if (!(ctrl & VIC_CTRL_ENABLE)) {
+//        pr_err("VIC not enabled for channel setup\n");
+//        return -EINVAL;
+//    }
 
     // Calculate channel-specific buffer config
     u32 base_addr = 0x351b300 + (fs->chn_num * fs->buf_size);
@@ -7492,11 +7558,11 @@ static int framechan_open(struct inode *inode, struct file *file)
     vic_base = ourISPdev->regs + VIC_BASE_OFFSET;
 
     // Verify VIC is ready before allowing channel open
-    ctrl = readl(vic_base + VIC_CTRL_REG);
-    if (!(ctrl & VIC_CTRL_ENABLE)) {
-        pr_err("VIC not enabled for channel %d\n", minor);
-        return -EINVAL;
-    }
+//    ctrl = readl(vic_base + VIC_CTRL_REG);
+//    if (!(ctrl & VIC_CTRL_ENABLE)) {
+//        pr_err("VIC not enabled for channel %d\n", minor);
+//        return -EINVAL;
+//    }
 
     fs = &ourISPdev->frame_sources[minor];
     if (fs->is_open) {
@@ -8039,8 +8105,8 @@ static bool check_vic_status(struct IMPISPDev *dev)
     u32 dma = readl(vic_base + 0x300);
 
     if ((ctrl & VIC_CTRL_ENABLE) &&
-        (state == 2) &&         // Ready state
-        (dma & 0x80000020)) {   // DMA enabled with correct mode
+        (state == 2) &&        // Ready state
+        (dma & 0x80000020)) {  // DMA enabled with correct mode
         return true;
     }
 
@@ -8048,52 +8114,50 @@ static bool check_vic_status(struct IMPISPDev *dev)
            ctrl, state, dma);
     return false;
 }
-
 static int init_vic_global(struct IMPISPDev *dev)
 {
     void __iomem *vic_base = dev->regs + VIC_BASE_OFFSET;
-    struct vic_control *vic;
     u32 val;
 
-    // Allocate control structure first
-    vic = kzalloc(sizeof(*vic), GFP_KERNEL);
-    if (!vic)
-        return -ENOMEM;
-
-    // Initialize vic_start_ok flag seen in decompiled
-    writel(0, vic_base + VIC_CTRL_REG);
-    writel(0, vic_base + 0x128);  // State register
-    writel(0xFFFFFFFF, vic_base + VIC_INT_CLEAR);
+    // First disable everything and reset
+    writel(0x0, vic_base + VIC_CTRL_REG);  // 0x100
+    writel(0x0, vic_base + VIC_STATE_REG); // 0x128
+    writel(0xFFFFFFFF, vic_base + VIC_INT_CLEAR); // 0x008
     wmb();
     msleep(10);
 
-    // Base config (from 0x1808)
-    writel(0x2c0, vic_base + 0x24);  // Format
-    writel(4, vic_base + 0x340);     // Buffer indices
+    // Configure format (matching 0x1808 in decompiled)
+    writel(0x2c0, vic_base + 0x24);  // NV12 format
+    wmb();
+
+    // Configure buffer indices (matching decompiled "vic_mdma_ch0_set_buff_index = 4")
+    writel(4, vic_base + 0x340);
     writel(4, vic_base + 0x344);
     wmb();
 
-    // Default frame size (1920x1080)
-    writel((1920 << 16) | 1080, vic_base + 0x304);
+    // Setup frame size (matching 0x186c)
+    val = (1920 << 16) | 1080;
+    writel(val, vic_base + 0x304);
     writel(1, vic_base + 0x308);
-    writel(1920 * 2, vic_base + 0x310);  // Default stride
+
+    // Buffer stride configuration (matching 0x1874)
+    writel(1920 * 2, vic_base + 0x310);  // Width * 2 for YUV
     writel(1920 * 2, vic_base + 0x314);
     wmb();
 
-    // Global control registers
-    writel(0x80000020, vic_base + 0x300);  // DMA control
-    writel(2, vic_base + 0x128);           // VIC_STATE_READY
+    // Critical - DMA control and state setup
+    writel(0x80000020, vic_base + 0x300); // DMA control matching 0x1964
+    writel(VIC_STATE_READY, vic_base + 0x128); // State matching 0x22cc
+    wmb();
+
+    // Enable core and IRQ
     writel(VIC_CTRL_ENABLE | VIC_CTRL_IRQ_EN, vic_base + VIC_CTRL_REG);
     wmb();
 
-    // Store control structure
-    spin_lock_init(&vic->lock);
-    vic->state = VIC_STATE_READY;
-    vic->irq_enabled = 1;
-    vic->priv = dev;
-    dev->vic = vic;
+    dev_info(dev->dev, "VIC initialized with state=0x%x ctrl=0x%x\n",
+             readl(vic_base + VIC_STATE_REG),
+             readl(vic_base + VIC_CTRL_REG));
 
-    pr_info("VIC global init complete\n");
     return 0;
 }
 
@@ -8276,10 +8340,11 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
     struct frame_source_channel *fc;
     int ret = 0;
 
-    if ((cmd != VIDIOC_GET_BUFFER_INFO) && (cmd != VIDIOC_SET_FRAME_MODE) &&
-        (cmd != VIDIOC_SET_FIFO_ATTR)) {
-    	pr_info("Frame channel IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
-    }
+    pr_info("Frame channel IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
+//    if ((cmd != VIDIOC_GET_BUFFER_INFO) && (cmd != VIDIOC_SET_FRAME_MODE) &&
+//        (cmd != VIDIOC_SET_FIFO_ATTR)) {
+//    	pr_info("Frame channel IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
+//    }
 
     if (!fs || !fs->is_open) {
         pr_err("Invalid frame source state\n");
@@ -8494,8 +8559,9 @@ static int tisp_probe(struct platform_device *pdev)
     ourISPdev->regs = base;
     ourISPdev->dev = &pdev->dev;
 
-    // Initialize device spin locks
+    // Initialize device spin locks and lists
     spin_lock_init(&ourISPdev->lock);
+    INIT_LIST_HEAD(&ourISPdev->pad_list);  // Initialize the pad list
 
     // Initialize memory before VIC setup
     ret = init_isp_memory(ourISPdev);
