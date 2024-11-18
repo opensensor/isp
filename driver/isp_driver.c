@@ -3987,190 +3987,273 @@ static int configure_sensor_streaming(struct IMPISPDev *dev)
     return ret;
 }
 
-static int configure_mipi_csi(struct IMPISPDev *dev) {
+static int configure_sensor_mipi(struct IMPISPDev *dev) {
+    struct i2c_client *client = dev->sensor_i2c_client;
+    int ret;
+
+    pr_info("Configuring SC2336 MIPI settings...\n");
+
+    // Reset sensor first
+    ret = isp_sensor_write_reg(client, 0x0103, 0x01);
+    if (ret) {
+        pr_err("Failed to reset sensor\n");
+        return ret;
+    }
+    msleep(20);  // Important delay after reset
+
+    // SC2336 MIPI configuration registers
+    const struct {
+        u16 reg;
+        u8 val;
+        const char *desc;
+    } mipi_regs[] = {
+        // MIPI timing control
+        {0x3018, 0x72, "MIPI timing control"},
+        {0x3019, 0x00, "MIPI control 2"},
+        {0x301a, 0xf0, "MIPI control 3"},
+
+        // Lane configuration - 2 lanes
+        {0x301c, 0x30, "MIPI lane control"},
+        {0x3031, 0x0a, "Output format control - RAW10"},
+
+        // MIPI clock configuration
+        {0x3034, 0x01, "MIPI clock mode"},
+        {0x3106, 0x01, "MIPI PHY control"},
+
+        // Specific SC2336 MIPI timing
+        {0x3620, 0x08, "MIPI timing 1"},
+        {0x3622, 0x02, "MIPI timing 2"},
+        {0x3624, 0x40, "MIPI timing 3"},
+        {0x3621, 0x28, "MIPI timing 4"},
+
+        // Enable MIPI interface
+        {0x0100, 0x01, "Mode select - Start streaming"}
+    };
+
+    // Apply MIPI configuration
+    for (int i = 0; i < ARRAY_SIZE(mipi_regs); i++) {
+        ret = isp_sensor_write_reg(client, mipi_regs[i].reg, mipi_regs[i].val);
+        if (ret) {
+            pr_err("Failed to set %s (0x%04x)\n",
+                   mipi_regs[i].desc, mipi_regs[i].reg);
+            return ret;
+        }
+        udelay(5);  // Short delay between registers
+    }
+
+    // Verify MIPI configuration
+    u8 val;
+    ret = isp_sensor_read_reg(client, 0x3018, &val);
+    pr_info("MIPI timing control: 0x%02x\n", val);
+
+    ret = isp_sensor_read_reg(client, 0x3031, &val);
+    pr_info("Output format: 0x%02x\n", val);
+
+    msleep(10);  // Let MIPI stabilize
+
+    pr_info("SC2336 MIPI configuration complete\n");
+    return 0;
+}
+
+static void dump_csi_reg(struct IMPISPDev *dev)
+{
+    void __iomem *csi_base = dev->regs + 0xb8;  // CSI register base from OEM offset
+
+    pr_info("****>>>>> dump csi reg <<<<<****\n");
+    pr_info("VERSION = %08x\n", readl(csi_base + 0x0));
+    pr_info("N_LANES = %08x\n", readl(csi_base + 0x4));
+    pr_info("PHY_SHUTDOWNZ = %08x\n", readl(csi_base + 0x8));
+    pr_info("DPHY_RSTZ = %08x\n", readl(csi_base + 0xc));
+    pr_info("CSI2_RESETN = %08x\n", readl(csi_base + 0x10));
+    pr_info("PHY_STATE = %08x\n", readl(csi_base + 0x14));
+    pr_info("DATA_IDS_1 = %08x\n", readl(csi_base + 0x18));
+    pr_info("DATA_IDS_2 = %08x\n", readl(csi_base + 0x1c));
+    pr_info("ERR1 = %08x\n", readl(csi_base + 0x20));
+    pr_info("ERR2 = %08x\n", readl(csi_base + 0x24));
+    pr_info("MASK1 = %08x\n", readl(csi_base + 0x28));
+    pr_info("MASK2 = %08x\n", readl(csi_base + 0x2c));
+    pr_info("PHY_TST_CTRL0 = %08x\n", readl(csi_base + 0x30));
+    pr_info("PHY_TST_CTRL1 = %08x\n", readl(csi_base + 0x34));
+}
+
+static int configure_mipi_csi(struct IMPISPDev *dev)
+{
     void __iomem *regs = dev->regs;
-    void __iomem *cpm_base;
+    void __iomem *csi_base = regs + 0xb8;  // Keep original base address
     u32 val;
-    int timeout = 100;
     int ret = 0;
 
     pr_info("Starting MIPI CSI configuration...\n");
 
-    // 1. First disable MIPI
-    writel(0x0, regs + ISP_MIPI_CTRL);
+    // Match exactly what we see in the logs
+    writel(0x0, csi_base + 0x0);   // VERSION = 0
+    writel(0x0, csi_base + 0x4);   // N_LANES = 0
+    writel(0x0, csi_base + 0x8);   // PHY_SHUTDOWNZ = 0
     wmb();
-    msleep(10);
+    msleep(1);
 
-    // 2. Map and configure CPM
-    cpm_base = ioremap(T31_CPM_BASE, 0x100);
-    if (!cpm_base) {
-        pr_err("Failed to map CPM registers\n");
-        return -ENOMEM;
+    // Set DPHY_RSTZ = 0x00040000 (matches logs)
+    writel(0x00040000, csi_base + 0xc);
+    wmb();
+    msleep(1);
+
+    // Set CSI2_RESETN = 0x00400040 (matches logs)
+    writel(0x00400040, csi_base + 0x10);
+    wmb();
+    msleep(1);
+
+    // PHY_STATE will be 0x00000100
+    // DATA_IDS_2 should be 0x0000000c
+    writel(0x0000000c, csi_base + 0x1c);
+    wmb();
+
+    // Set error registers exactly as seen
+    writel(0x00ffffff, csi_base + 0x20);  // ERR1 = 0x00ffffff
+    writel(0x0, csi_base + 0x24);         // ERR2 = 0
+    writel(0x00000100, csi_base + 0x28);  // MASK1 = 0x00000100
+    writel(0x00400040, csi_base + 0x2c);  // MASK2 = 0x00400040
+    wmb();
+
+    // Final check
+    if ((readl(csi_base + 0x14) & 0x100) != 0x100) {
+        pr_err("CSI PHY state not correct\n");
+        dump_csi_reg(dev);
+        return -ETIMEDOUT;
     }
 
-    // Read initial state
-    pr_info("Initial CPM state:\n"
-            "  CLKGATE: 0x%08x\n"
-            "  MIPI_CTRL: 0x%08x\n",
-            readl(cpm_base + T31_CPM_CLKGATE),
-            readl(cpm_base + T31_CPM_MIPI_CTRL));
-
-    // Enable MIPI clocks
-    val = readl(cpm_base + T31_CPM_MIPI_CTRL);
-    val |= CPM_MIPI_CTRL_EN | CPM_MIPI_CLK_EN | CPM_MIPI_CLK_SEL;
-    writel(val, cpm_base + T31_CPM_MIPI_CTRL);
-    wmb();
-    msleep(10);
-
-    // 3. Configure MIPI timing first
-    val = (0x8 << 24) |   // HS settle
-          (0x10 << 16) |  // CLK settle
-          (0x8 << 8) |    // LP settle
-          0x3;            // 2 lanes
-
-    writel(val, regs + ISP_MIPI_TIMING);
-    wmb();
-    msleep(5);
-
-    // 4. Configure DMA
-    uint32_t line_size = ((1920 + 7) >> 3) << 3;  // Original alignment
-    uint32_t second_buf_offset = line_size * 1080;
-
-    // Configure base registers
-    writel(dev->dma_addr, regs + 0x7820);
-    writel(line_size, regs + 0x7824);
-    writel(dev->dma_addr + second_buf_offset, regs + 0x7828);
-    writel(line_size >> 1, regs + 0x782c);
-    wmb();
-    msleep(5);
-
-    // 5. Enable MIPI with proper configuration
-    val = (1 << 31) |    // Global enable
-          (1 << 8) |     // Clock lane
-          0x3;           // 2 data lanes
-
-    writel(val, regs + ISP_MIPI_CTRL);
-    wmb();
-    msleep(5);
-
-    // 6. Enable stream
-    writel(0x1, regs + 0x783c);
-    wmb();
-
-    // 7. Wait for ready with better debug
-    while (timeout--) {
-        val = readl(regs + ISP_MIPI_STATUS);
-        if (val & BIT(0)) {
-            pr_info("MIPI ready: status=0x%x\n", val);
-            ret = 0;
-            goto cleanup;
-        }
-        if ((timeout % 10) == 0)
-            pr_info("Waiting... status=0x%x ctrl=0x%x\n",
-                   val, readl(regs + ISP_MIPI_CTRL));
-        msleep(1);
-    }
-
-    ret = -ETIMEDOUT;
-    pr_err("MIPI CSI timeout!\n");
-
-cleanup:
-    iounmap(cpm_base);
-    return ret;
+    pr_info("CSI Configuration complete matching OEM values\n");
+    return 0;
 }
 
+static int csi_video_s_stream(struct IMPISPDev *dev, bool enable)
+{
+    struct isp_framesource_state *fs = &dev->frame_sources[0];
+
+    // From decompiled: Check sensor type at 0x110+0x14 should be 1
+    // if (*(*(arg1 + 0x110) + 0x14) != 1)
+    //     return 0;
+
+    // Simple state transition based on decompiled:
+    // Sets state 4 if enable, 3 if disable
+    fs->state = enable ? 4 : 3;
+    return 0;
+}
+
+static int csi_core_ops_init(struct IMPISPDev *dev, bool enable)
+{
+    struct isp_framesource_state *fs = &dev->frame_sources[0];
+    void __iomem *csi_base = dev->regs + 0xb8;
+    int ret = 0;
+
+    // From decompiled: Only proceed if state >= 2
+    if (fs->state < 2) {
+        return -EINVAL;
+    }
+
+    if (!enable) {
+        // Shutdown sequence from decompiled:
+        pr_info("csi is close!\n");
+        writel(readl(csi_base + 0x8) & ~1, csi_base + 0x8);   // PHY_SHUTDOWNZ &= ~1
+        writel(readl(csi_base + 0xc) & ~1, csi_base + 0xc);   // DPHY_RSTZ &= ~1
+        writel(readl(csi_base + 0x10) & ~1, csi_base + 0x10); // CSI2_RESETN &= ~1
+        fs->state = 2;
+    } else {
+        // Configure based on sensor type 1 (MIPI)
+        writel(0x0, csi_base + 0xc);  // DPHY_RSTZ = 0
+        msleep(1);
+
+        writel(0x1, csi_base + 0xc);  // DPHY_RSTZ = 1
+        msleep(1);
+
+        // Write to 0x13c region from decompiled
+        writel(0x7d, dev->regs + 0x13c);         // Base register
+        writel(0x3f, dev->regs + 0x13c + 0x128); // Control register
+
+        writel(0x1, csi_base + 0x10);  // CSI2_RESETN = 1
+        msleep(10);
+
+        fs->state = 3;
+    }
+
+    return ret;
+}
 
 
 static int configure_streaming_hardware(struct IMPISPDev *dev)
 {
     void __iomem *regs = dev->regs;
+    void __iomem *csi_base = regs + 0xb8;
+    struct isp_framesource_state *fs = &dev->frame_sources[0];
+    struct frame_source_channel *fc;
     u32 val;
     int ret = 0;
 
     pr_info("Configuring ISP hardware...\n");
 
-    // Full reset sequence
-    writel(0x0, regs + ISP_CTRL_REG);
-    writel(0x0, regs + ISP_INT_MASK_REG);
-    writel(0xFFFFFFFF, regs + ISP_INT_CLEAR_REG);
-    wmb();
-    msleep(10);
-
-    // MIPI configuration first
-    writel(0x0, regs + ISP_MIPI_CTRL);
-    wmb();
-    msleep(10);
-
-    // MIPI timing
-    val = (0x8 << 24) |    // HS settle
-          (0x10 << 16) |   // CLK settle
-          (0x8 << 8);      // LP settle
-    writel(val, regs + ISP_MIPI_TIMING);
-    wmb();
-    msleep(10);
-
-    // Enable MIPI with 2 lanes
-    val = (1 << 31) |    // Global enable
-          (1 << 8) |     // Clock lane
-          0x3;           // 2 data lanes
-    writel(val, regs + ISP_MIPI_CTRL);
-    wmb();
-    msleep(10);
-
-    // Wait for MIPI ready
-    int timeout = 100;
-    while (timeout--) {
-        if (readl(regs + ISP_MIPI_STATUS) & 0x1)
-            break;
-        msleep(1);
+    if (!fs || !fs->private) {
+        pr_err("Invalid frame source state\n");
+        return -EINVAL;
     }
-    if (timeout <= 0) {
-        pr_err("MIPI interface failed to become ready\n");
-        return -ETIMEDOUT;
+    fc = fs->private;
+
+    // Lock at 0x12c offset as seen in OEM code
+    mutex_lock(&fs->lock);
+
+    // State transitions from OEM decompiled code
+    if (fs->state == 4) {
+        // State 4: Initial CSI configuration
+        ret = csi_video_s_stream(dev, false);  // Transition to state 3
+        if (ret)
+            goto unlock;
+
+        // Configure DMA with proper NV12 layout
+        uint32_t y_stride = ALIGN(fs->width, 32);
+        uint32_t uv_stride = ALIGN(fs->width/2, 32);
+        uint32_t y_size = y_stride * fs->height;
+
+        writel(fc->dma_addr, regs + ISP_BUF0_OFFSET);
+        writel(y_stride, regs + ISP_BUF0_OFFSET + 0x4);
+        writel(fc->dma_addr + y_size, regs + ISP_BUF0_OFFSET + 0x8);
+        writel(uv_stride, regs + ISP_BUF0_OFFSET + 0xC);
+        wmb();
     }
 
-    // Format configuration - be explicit about NV12
-    writel(0x3231564e, regs + ISP_INPUT_FORMAT_REG);   // NV12 in
-    writel(0x3231564e, regs + ISP_OUTPUT_FORMAT_REG);  // NV12 out
-    wmb();
-    msleep(10);
+    if (fs->state == 3) {
+        // State 3: Core initialization
+        ret = csi_core_ops_init(dev, true);  // Will transition to state 2
+        if (ret)
+            goto unlock;
 
-    // Configure IPU first if needed
-    val = readl(regs + ISP_IPU_CTRL);
-    val |= (1 << 0);     // Enable IPU
-    writel(val, regs + ISP_IPU_CTRL);
-    wmb();
-    msleep(10);
+        // Configure format
+        writel(ISP_FMT_NV12, regs + ISP_INPUT_FORMAT_REG);
+        writel(ISP_FMT_NV12, regs + ISP_OUTPUT_FORMAT_REG);
+        wmb();
+    }
 
-    // Enable core with interrupts
-    val = ISP_CTRL_ENABLE |       // Core enable
-          (1 << 1) |              // Frame processing
-          (1 << 2);               // Enable IPU path
-    writel(val, regs + ISP_CTRL_REG);
+    if (fs->state == 2) {
+        // State 2: Clock and interrupt setup
+        if (dev->clocks) {
+            for (int i = dev->num_clocks - 1; i >= 0; i--) {
+                clk_disable(dev->clocks[i]);
+            }
+        }
 
-    // Enable frame interrupts
-    writel(ISP_INT_FRAME_DONE, regs + ISP_INT_MASK_REG);
-    wmb();
-    msleep(10);
+        // Configure core and interrupts
+        val = ISP_CTRL_ENABLE | (1 << 1) | (1 << 2);
+        writel(val, regs + ISP_CTRL_REG);
+        writel(ISP_INT_FRAME_DONE, regs + ISP_INT_MASK_REG);
+        wmb();
 
-    // Verify state
-    pr_info("Hardware config:\n");
-    pr_info("MIPI: ctrl=0x%08x status=0x%08x timing=0x%08x\n",
-            readl(regs + ISP_MIPI_CTRL),
-            readl(regs + ISP_MIPI_STATUS),
-            readl(regs + ISP_MIPI_TIMING));
-    pr_info("Format: in=0x%08x out=0x%08x\n",
-            readl(regs + ISP_INPUT_FORMAT_REG),
-            readl(regs + ISP_OUTPUT_FORMAT_REG));
-    pr_info("IPU: ctrl=0x%08x status=0x%08x\n",
-            readl(regs + ISP_IPU_CTRL),
-            readl(regs + ISP_IPU_STATUS));
-    pr_info("Control: ctrl=0x%08x mask=0x%08x status=0x%08x\n",
-            readl(regs + ISP_CTRL_REG),
-            readl(regs + ISP_INT_MASK_REG),
-            readl(regs + ISP_STATUS_REG));
+        fs->state = 1;  // Final state
+    }
 
-    return 0;
+    pr_info("Hardware config complete - state=%d\n", fs->state);
+    pr_info("CSI Config:\n");
+    dump_csi_reg(dev);
+
+unlock:
+    mutex_unlock(&fs->lock);
+    return ret;
 }
 
 static int handle_stream_enable(struct IMPISPDev *dev, bool enable)

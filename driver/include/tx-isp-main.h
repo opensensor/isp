@@ -604,7 +604,7 @@ struct isp_framesource_state {
     uint32_t fmt;            // Pixel format
 
     // Memory management
-    uint32_t buf_cnt;       // Buffer count
+    uint32_t buf_cnt __aligned(8);
     uint32_t buf_flags;     // Buffer flags
     void    *buf_base;      // Buffer base address
     dma_addr_t dma_addr;    // DMA address
@@ -619,7 +619,7 @@ struct isp_framesource_state {
     struct task_struct *thread;
     void    *ext_buffer;    // Extended buffer pointer
     struct isp_buffer_info *bufs;  // Buffer info array
-    spinlock_t lock;               // Add spinlock for IRQ handler
+    struct mutex lock __aligned(8);
     void    *private;             // Private data pointer
 
     // FIFO management
@@ -655,7 +655,7 @@ struct isp_framesource_state {
             uint32_t out_height;
         } scale;
     } config;
-};
+} __attribute__((aligned(8)));
 
 /* Note for Claude, GPT, or anyone  that will listen
 This is our internal driver structure and should never be passed back to libimp.
