@@ -3983,71 +3983,29 @@ static int configure_sensor_streaming(struct IMPISPDev *dev)
     return ret;
 }
 
-static int configure_sensor_mipi(struct IMPISPDev *dev) {
+static int configure_sensor_mipi(struct IMPISPDev *dev)
+{
     struct i2c_client *client = dev->sensor_i2c_client;
-    int ret;
-
-    pr_info("Configuring SC2336 MIPI settings...\n");
 
     // Reset sensor first
-    ret = isp_sensor_write_reg(client, 0x0103, 0x01);
-    if (ret) {
-        pr_err("Failed to reset sensor\n");
-        return ret;
-    }
-    msleep(20);  // Important delay after reset
+    isp_sensor_write_reg(client, 0x0103, 0x01);
+    msleep(20);
 
-    // SC2336 MIPI configuration registers
-    const struct {
-        u16 reg;
-        u8 val;
-        const char *desc;
-    } mipi_regs[] = {
-        // MIPI timing control
-        {0x3018, 0x72, "MIPI timing control"},
-        {0x3019, 0x00, "MIPI control 2"},
-        {0x301a, 0xf0, "MIPI control 3"},
+    // SC2336 MIPI setup from OEM
+    isp_sensor_write_reg(client, 0x3018, 0x72); // 2 lanes
+    isp_sensor_write_reg(client, 0x3019, 0x00); // Clock mode
+    isp_sensor_write_reg(client, 0x301a, 0xf0); // Clock control
 
-        // Lane configuration - 2 lanes
-        {0x301c, 0x30, "MIPI lane control"},
-        {0x3031, 0x0a, "Output format control - RAW10"},
+    // Important timing registers
+    isp_sensor_write_reg(client, 0x320c, 0x08);
+    isp_sensor_write_reg(client, 0x320d, 0xca);
+    isp_sensor_write_reg(client, 0x320e, 0x05);
+    isp_sensor_write_reg(client, 0x320f, 0xa0);
 
-        // MIPI clock configuration
-        {0x3034, 0x01, "MIPI clock mode"},
-        {0x3106, 0x01, "MIPI PHY control"},
+    // Enable streaming
+    isp_sensor_write_reg(client, 0x0100, 0x01);
+    msleep(30);
 
-        // Specific SC2336 MIPI timing
-        {0x3620, 0x08, "MIPI timing 1"},
-        {0x3622, 0x02, "MIPI timing 2"},
-        {0x3624, 0x40, "MIPI timing 3"},
-        {0x3621, 0x28, "MIPI timing 4"},
-
-        // Enable MIPI interface
-        {0x0100, 0x01, "Mode select - Start streaming"}
-    };
-
-    // Apply MIPI configuration
-    for (int i = 0; i < ARRAY_SIZE(mipi_regs); i++) {
-        ret = isp_sensor_write_reg(client, mipi_regs[i].reg, mipi_regs[i].val);
-        if (ret) {
-            pr_err("Failed to set %s (0x%04x)\n",
-                   mipi_regs[i].desc, mipi_regs[i].reg);
-            return ret;
-        }
-        udelay(5);  // Short delay between registers
-    }
-
-    // Verify MIPI configuration
-    u8 val;
-    ret = isp_sensor_read_reg(client, 0x3018, &val);
-    pr_info("MIPI timing control: 0x%02x\n", val);
-
-    ret = isp_sensor_read_reg(client, 0x3031, &val);
-    pr_info("Output format: 0x%02x\n", val);
-
-    msleep(10);  // Let MIPI stabilize
-
-    pr_info("SC2336 MIPI configuration complete\n");
     return 0;
 }
 
@@ -4075,49 +4033,49 @@ static void dump_csi_reg(struct IMPISPDev *dev)
 static int configure_mipi_csi(struct IMPISPDev *dev)
 {
     void __iomem *regs = dev->regs;
-    void __iomem *csi_base = regs + 0xb8;  // Keep original base address
+    void __iomem *csi_base = regs + 0xb8;
+    void __iomem *timing_base = regs + 0x13c;
     u32 val;
-    int ret = 0;
 
-    pr_info("Starting MIPI CSI configuration...\n");
+    pr_info("Configuring MIPI CSI for SC2336...\n");
 
-    // Match exactly what we see in the logs
-    writel(0x0, csi_base + 0x0);   // VERSION = 0
-    writel(0x0, csi_base + 0x4);   // N_LANES = 0
+    // 1. Initial reset sequence
     writel(0x0, csi_base + 0x8);   // PHY_SHUTDOWNZ = 0
+    writel(0x0, csi_base + 0xc);   // DPHY_RSTZ = 0
+    writel(0x0, csi_base + 0x10);  // CSI2_RESETN = 0
     wmb();
     msleep(1);
 
-    // Set DPHY_RSTZ = 0x00040000 (matches logs)
-    writel(0x00040000, csi_base + 0xc);
+    // 2. Configure 2 lanes (value should be lanes-1)
+    writel(0x1, csi_base + 0x4);   // N_LANES = 1 (for 2 lanes)
     wmb();
     msleep(1);
 
-    // Set CSI2_RESETN = 0x00400040 (matches logs)
-    writel(0x00400040, csi_base + 0x10);
+    // 3. Critical timing setup matching OEM values
+    writel(0x7d, timing_base + 0x0);   // Base timing
+    writel(0x3f, timing_base + 0x128); // Additional timing
+    writel(0x1, timing_base + 0x2cc);  // Final timing enable
+    wmb();
+
+    // 4. Enable sequence
+    writel(0x1, csi_base + 0xc);   // DPHY_RSTZ = 1
     wmb();
     msleep(1);
 
-    // PHY_STATE will be 0x00000100
-    // DATA_IDS_2 should be 0x0000000c
-    writel(0x0000000c, csi_base + 0x1c);
+    writel(0x1, csi_base + 0x10);  // CSI2_RESETN = 1
     wmb();
+    msleep(10);  // Longer delay after final enable
 
-    // Set error registers exactly as seen
-    writel(0x00ffffff, csi_base + 0x20);  // ERR1 = 0x00ffffff
-    writel(0x0, csi_base + 0x24);         // ERR2 = 0
-    writel(0x00000100, csi_base + 0x28);  // MASK1 = 0x00000100
-    writel(0x00400040, csi_base + 0x2c);  // MASK2 = 0x00400040
-    wmb();
+    // 5. Configure data IDs matching OEM
+    writel(0x0c, csi_base + 0x18);  // DATA_IDS_2 = 0xc
 
-    // Final check
-    if ((readl(csi_base + 0x14) & 0x100) != 0x100) {
-        pr_err("CSI PHY state not correct\n");
-        dump_csi_reg(dev);
+    // Verify PHY is ready
+    if (!(readl(csi_base + 0x14) & 0x100)) {
+        pr_err("CSI PHY not ready\n");
         return -ETIMEDOUT;
     }
 
-    pr_info("CSI Configuration complete matching OEM values\n");
+    pr_info("CSI configured: lanes=2 timing=0x7d\n");
     return 0;
 }
 
