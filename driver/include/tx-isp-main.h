@@ -303,6 +303,10 @@
 #define ISP_PHYS_BASE     0x13300000
 #define ISP_REG_SIZE      0x10000
 
+#define ISP_IPU_CTRL     0x180
+#define ISP_IPU_STATUS   0x184
+#define ISP_MIPI_TIMING  0x38
+
 struct tisp_param_info {
     uint32_t data[8];  // Array size can be adjusted based on needs
 };
@@ -330,6 +334,17 @@ typedef int (*show_func_t)(struct seq_file *, void *);
 struct proc_data {
     show_func_t show_func;
     void *private_data;
+};
+
+
+// Add frame grabbing thread
+struct isp_frame_state {
+    uint32_t state;          // 0x318 offset - frame state
+    uint32_t format;         // 0x68 offset - frame format
+    void *buffer_addr;       // 0x31c offset - target buffer
+    uint32_t width;
+    uint32_t height;
+    uint8_t is_buffer_full;
 };
 
 struct isp_device_status {
@@ -673,7 +688,8 @@ struct IMPISPDev {
     void __iomem *ctrl_regs;             // Control registers
     int irq;
     struct i2c_client *sensor_i2c_client;
-
+    struct irq_handler_data *irq_data;
+    struct IspDevice *isp_dev;
     // Frame dimensions
     unsigned int width;
     unsigned int height;
