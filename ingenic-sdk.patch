@@ -1,0 +1,28 @@
+diff --git a/3.10/isp/t31/Kbuild b/3.10/isp/t31/Kbuild
+index 091606f..f15092d 100644
+--- a/3.10/isp/t31/Kbuild
++++ b/3.10/isp/t31/Kbuild
+@@ -1,9 +1,9 @@
+ SRCS := \
+    $(DIR)/tx-isp-debug.c \
+-    $(DIR)/tx-isp-module.c
++    $(DIR)/isp_driver.c
+
+ OBJS := $(SRCS:%.c=%.o) $(ASM_SRCS:%.S=%.o)
+-OBJS += $(KERNEL_VERSION)/sdk/lib$(SOC_FAMILY)-firmware.a
++#OBJS += $(KERNEL_VERSION)/sdk/lib$(SOC_FAMILY)-firmware.a
+
+ $(OUT)-objs := $(OBJS)
+
+diff --git a/3.10/isp/t31/include/tx-isp-common.h b/3.10/isp/t31/include/tx-isp-common.h
+index c234175..7779780 100644
+--- a/3.10/isp/t31/include/tx-isp-common.h
++++ b/3.10/isp/t31/include/tx-isp-common.h
+@@ -14,6 +14,7 @@
+ #include <media/v4l2-device.h>
+ #include <linux/clk.h>
+
++#include "isp_driver_common.h"
+ #include "txx-funcs.h"
+ #include "tx-isp-device.h"
+ #include "tx-isp-debug.h"
