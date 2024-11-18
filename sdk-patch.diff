@@ -5,7 +5,7 @@ index 091606f..f15092d 100644
 @@ -1,9 +1,9 @@
  SRCS := \
      $(DIR)/tx-isp-debug.c \
--       $(DIR)/tx-isp-module.c
+-	$(DIR)/tx-isp-module.c
 +    $(DIR)/isp_driver.c
  
  OBJS := $(SRCS:%.c=%.o) $(ASM_SRCS:%.S=%.o)
@@ -65,8 +65,8 @@ index f1b1a45..cb11fac 100644
  MODULE_PARM_DESC(isp_memopt, "isp memory optimize");
  
 @@ -123,3 +123,5 @@ __must_check int private_get_driver_interface(struct jz_driver_common_interfaces
-        }else
-                return 0;
+ 	}else
+ 		return 0;
  }
 +EXPORT_SYMBOL(private_get_driver_interface);
 +
@@ -100,11 +100,11 @@ index bde3d73..68484a0 100755
  
  # Check if KERNEL_DIR is empty
 @@ -29,7 +29,7 @@ case "$SOC_MODEL" in
-                ;;
-        t10 | t20 | t21 | t23 | t30 | t31 | t40 | t41)
-                export ISP_ENV_KERNEL_DIR="${KERNEL_DIR}"
--               export CROSS_COMPILE="mipsel-linux-"
-+               export CROSS_COMPILE="$HOME/matteius/output/cinnado_d1_t31l/host/bin/mipsel-linux-"
+ 		;;
+ 	t10 | t20 | t21 | t23 | t30 | t31 | t40 | t41)
+ 		export ISP_ENV_KERNEL_DIR="${KERNEL_DIR}"
+-		export CROSS_COMPILE="mipsel-linux-"
++		export CROSS_COMPILE="/home/matteius/output/cinnado_d1_t31l/host/bin/mipsel-linux-"
  
-                FAM="SOC_FAMILY=$SOC_MODEL CONFIG_SOC_${SOC_MODEL^^}=y KERNEL_VERSION=${KERNEL_VERSION}"
-                make \
+ 		FAM="SOC_FAMILY=$SOC_MODEL CONFIG_SOC_${SOC_MODEL^^}=y KERNEL_VERSION=${KERNEL_VERSION}"
+ 		make \
