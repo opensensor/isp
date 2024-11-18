@@ -604,23 +604,23 @@ struct isp_framesource_state {
     uint32_t fmt;            // Pixel format
 
     // Memory management
-    uint32_t buf_cnt __aligned(8);
-    uint32_t buf_flags;     // Buffer flags
-    void    *buf_base;      // Buffer base address
-    dma_addr_t dma_addr;    // DMA address
-    uint32_t buf_size;      // Buffer size per frame
+    uint32_t buf_cnt __aligned(8);   // Keep this alignment
+    uint32_t buf_flags;      // Buffer flags
+    void    *buf_base;       // Buffer base address
+    dma_addr_t dma_addr;     // DMA address
+    uint32_t buf_size;       // Buffer size per frame
 
     // Frame management
-    uint32_t frame_cnt;     // Frame counter
-    uint32_t buf_index;     // Current buffer index
-    uint32_t write_idx;		// Write index
-    struct file *fd;        // File pointer
+    uint32_t frame_cnt;      // Frame counter
+    uint32_t buf_index;      // Current buffer index
+    uint32_t write_idx;      // Write index
+    struct file *fd;         // File pointer
     struct video_device *vdev;
     struct task_struct *thread;
-    void    *ext_buffer;    // Extended buffer pointer
+    void    *ext_buffer;     // Extended buffer pointer
     struct isp_buffer_info *bufs;  // Buffer info array
-    struct mutex lock __aligned(8);
-    void    *private;             // Private data pointer
+    struct mutex lock __aligned(4);  // Keep this alignment
+    void    *private;        // Private data pointer
 
     // FIFO management
     struct list_head ready_queue;
@@ -632,29 +632,20 @@ struct isp_framesource_state {
     // Synchronization
     struct semaphore sem;
     wait_queue_head_t wait;
-    int is_open;           // 1 = initialized
-   	// Add scaling/cropping info to state flags rather than separate fields
-    /* Flag bits:
-     * 0x1 = Enabled
-     * 0x2 = Crop enabled
-     * 0x4 = Scale enabled
-     */
+    int is_open;            // 1 = initialized
 
-    // Store scaling/cropping in buffer info
-    struct {
-        struct {
-            uint32_t x;
-            uint32_t y;
-            uint32_t width;
-            uint32_t height;
-        } crop;
-        struct {
-            uint32_t in_width;
-            uint32_t in_height;
-            uint32_t out_width;
-            uint32_t out_height;
-        } scale;
-    } config;
+    // Scale/crop stored in flags:
+    // 0x1 = Enabled
+    // 0x2 = Crop enabled
+    // 0x4 = Scale enabled
+    uint32_t x_offset;       // Replace config struct with direct members
+    uint32_t y_offset;
+    uint32_t crop_width;
+    uint32_t crop_height;
+    uint32_t scale_in_width;
+    uint32_t scale_in_height;
+    uint32_t scale_out_width;
+    uint32_t scale_out_height;
 } __attribute__((aligned(8)));
 
 /* Note for Claude, GPT, or anyone  that will listen

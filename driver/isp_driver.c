@@ -2411,42 +2411,41 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
     // Clear structure
     memset(fs, 0, sizeof(*fs));
 
-    // Important: Set type flags at 0x58 offset
-    // For channel 0, this should be 0
-    // For other channels, set a flag
-    if (channel != 0) {
-        type_flags = 1;  // Non-zero for other channels
-    }
-    *(uint32_t *)((char *)dev + 0x58 + (channel * sizeof(uint32_t))) = type_flags;
+    // Start with magic number
+    fs->magic = 0x12345678;  // Use specific magic from OEM if known
 
-    // Allocate aligned channel data
-    fc = kzalloc(sizeof(*fc), GFP_KERNEL | GFP_DMA);
-    if (!fc) {
-        pr_err("Failed to allocate channel data\n");
-        return -ENOMEM;
-    }
-
+    // Start in state 4 as we saw in OEM
+    fs->state = 4;
     fs->chn_num = channel;
+
+    // Set up dimensions matching libimp
     if (channel == 0) {
         fs->width = 1920;
         fs->height = 1080;
+        fs->buf_cnt = 4;
     } else {
-        fs->width = 640;  // Default for non-zero channels
+        fs->width = 640;
         fs->height = 360;
+        fs->buf_cnt = 2;
     }
 
-    // Important: Different buffer setup for different channels
-    fs->buf_cnt = (channel == 0) ? 4 : 2;  // Fewer buffers for non-zero channels
-    fs->buf_size = fs->width * fs->height * 2;  // YUV422
+    fs->fmt = ISP_FMT_NV12;  // Force NV12
+    fs->buf_size = (ALIGN(fs->width, 32) * fs->height * 3) / 2;  // NV12 size
 
-    // Calculate proper offsets based on channel
+    // Calculate buffer offset exactly as OEM
     uint32_t aligned_offset = ALIGN(ISP_FRAME_BUFFER_OFFSET +
                                   (channel * fs->buf_size * fs->buf_cnt), 8);
 
     fs->buf_base = dev->dma_buf + aligned_offset;
     fs->dma_addr = dev->dma_addr + aligned_offset;
 
-    // Initialize channel data
+    // Initialize fc
+    fc = kzalloc(sizeof(*fc), GFP_KERNEL | GFP_DMA);
+    if (!fc) {
+        pr_err("Failed to allocate channel data\n");
+        return -ENOMEM;
+    }
+
     fc->buf_base = fs->buf_base;
     fc->dma_addr = fs->dma_addr;
     fc->buf_size = fs->buf_size;
@@ -2462,13 +2461,10 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
     fs->private = fc;
     fs->is_open = 1;
 
-    // Debug print to see our type flags
-    pr_info("Channel %d initialized: %dx%d, buffers=%d size=%d type_flags=0x%x\n",
-            channel, fs->width, fs->height, fs->buf_cnt, fs->buf_size, type_flags);
-
-    // Also dump the actual value at the offset
-    pr_info("Channel %d: value at 0x58 offset: 0x%x\n", channel,
-            *(uint32_t *)((char *)dev + 0x58 + (channel * sizeof(uint32_t))));
+    pr_info("Frame source initialized: state=%d width=%d height=%d fmt=0x%x\n",
+            fs->state, fs->width, fs->height, fs->fmt);
+    pr_info("  Buffer config: size=%u count=%d addr=0x%x\n",
+            fs->buf_size, fs->buf_cnt, (unsigned int)fs->dma_addr);
 
     return 0;
 }
@@ -4129,6 +4125,7 @@ static int csi_video_s_stream(struct IMPISPDev *dev, bool enable)
 {
     struct isp_framesource_state *fs = &dev->frame_sources[0];
 
+    pr_info("CSI stream config: enable=%d state=%d\n", enable, fs->state);
     // From decompiled: Check sensor type at 0x110+0x14 should be 1
     // if (*(*(arg1 + 0x110) + 0x14) != 1)
     //     return 0;
@@ -4178,17 +4175,23 @@ static int csi_core_ops_init(struct IMPISPDev *dev, bool enable)
     return ret;
 }
 
-
 static int configure_streaming_hardware(struct IMPISPDev *dev)
 {
-    void __iomem *regs = dev->regs;
-    void __iomem *csi_base = regs + 0xb8;
-    struct isp_framesource_state *fs = &dev->frame_sources[0];
+    void __iomem *regs;
+    void __iomem *csi_base;
+    struct isp_framesource_state *fs;
     struct frame_source_channel *fc;
     u32 val;
     int ret = 0;
 
-    pr_info("Configuring ISP hardware...\n");
+    if (!dev || !dev->regs) {
+        pr_err("Invalid device state\n");
+        return -EINVAL;
+    }
+
+    regs = dev->regs;
+    csi_base = (void __iomem *)ALIGN((unsigned long)regs + 0xb8, 4);
+    fs = &dev->frame_sources[0];
 
     if (!fs || !fs->private) {
         pr_err("Invalid frame source state\n");
@@ -4196,63 +4199,62 @@ static int configure_streaming_hardware(struct IMPISPDev *dev)
     }
     fc = fs->private;
 
-    // Lock at 0x12c offset as seen in OEM code
-    mutex_lock(&fs->lock);
+    pr_info("Configuring ISP hardware...\n");
 
     // State transitions from OEM decompiled code
-    if (fs->state == 4) {
+    switch(fs->state) {
+    case 4:
         // State 4: Initial CSI configuration
-        ret = csi_video_s_stream(dev, false);  // Transition to state 3
+        ret = csi_video_s_stream(dev, false);
         if (ret)
-            goto unlock;
+            return ret;
 
-        // Configure DMA with proper NV12 layout
-        uint32_t y_stride = ALIGN(fs->width, 32);
-        uint32_t uv_stride = ALIGN(fs->width/2, 32);
-        uint32_t y_size = y_stride * fs->height;
-
-        writel(fc->dma_addr, regs + ISP_BUF0_OFFSET);
-        writel(y_stride, regs + ISP_BUF0_OFFSET + 0x4);
-        writel(fc->dma_addr + y_size, regs + ISP_BUF0_OFFSET + 0x8);
-        writel(uv_stride, regs + ISP_BUF0_OFFSET + 0xC);
+        // Ensure DMA address alignment
+        writel(ALIGN(fc->dma_addr, 8), regs + ISP_BUF0_OFFSET);
+        writel(ALIGN(fs->width, 32), regs + ISP_BUF0_OFFSET + 0x4);
+        writel(ALIGN(fc->dma_addr + (ALIGN(fs->width, 32) * fs->height), 8),
+               regs + ISP_BUF0_OFFSET + 0x8);
+        writel(ALIGN(fs->width/2, 32), regs + ISP_BUF0_OFFSET + 0xC);
         wmb();
-    }
+        break;
 
-    if (fs->state == 3) {
-        // State 3: Core initialization
-        ret = csi_core_ops_init(dev, true);  // Will transition to state 2
+    case 3:
+        ret = csi_core_ops_init(dev, true);
         if (ret)
-            goto unlock;
+            return ret;
 
-        // Configure format
         writel(ISP_FMT_NV12, regs + ISP_INPUT_FORMAT_REG);
         writel(ISP_FMT_NV12, regs + ISP_OUTPUT_FORMAT_REG);
         wmb();
-    }
+        break;
 
-    if (fs->state == 2) {
-        // State 2: Clock and interrupt setup
+    case 2:
         if (dev->clocks) {
             for (int i = dev->num_clocks - 1; i >= 0; i--) {
                 clk_disable(dev->clocks[i]);
             }
         }
 
-        // Configure core and interrupts
+        // Ensure control register writes are aligned
         val = ISP_CTRL_ENABLE | (1 << 1) | (1 << 2);
-        writel(val, regs + ISP_CTRL_REG);
-        writel(ISP_INT_FRAME_DONE, regs + ISP_INT_MASK_REG);
+        writel(val, regs + ALIGN(ISP_CTRL_REG, 4));
+        writel(ISP_INT_FRAME_DONE, regs + ALIGN(ISP_INT_MASK_REG, 4));
         wmb();
 
-        fs->state = 1;  // Final state
+        fs->state = 1;
+        break;
+
+    default:
+        pr_err("Invalid state: %d\n", fs->state);
+        return -EINVAL;
     }
 
-    pr_info("Hardware config complete - state=%d\n", fs->state);
-    pr_info("CSI Config:\n");
-    dump_csi_reg(dev);
+    if (!ret) {
+        pr_info("Hardware config complete - state=%d\n", fs->state);
+        pr_info("CSI Config:\n");
+        dump_csi_reg(dev);
+    }
 
-unlock:
-    mutex_unlock(&fs->lock);
     return ret;
 }
 
