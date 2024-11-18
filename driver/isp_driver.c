@@ -408,39 +408,46 @@ static irqreturn_t isp_irq_handler(int irq, void *dev_id)
     struct IMPISPDev *dev = dev_id;
     void __iomem *regs = dev->regs;
     u32 status;
+    struct isp_framesource_state *fs;
+    struct frame_source_channel *fc;
+    int i, j;
 
     status = readl(regs + ISP_STATUS_REG);
 
-    pr_debug("ISP IRQ: status=0x%x ctrl=0x%x mask=0x%x\n",
-             status,
-             readl(regs + ISP_CTRL_REG),
-             readl(regs + ISP_INT_MASK_REG));
+    if (status & ISP_INT_FRAME_DONE) {
+        fs = &dev->frame_sources[0];
+        if (!fs || !fs->private) {
+            goto clear_irq;
+        }
+        fc = fs->private;
 
-    // Clear interrupt immediately
+        // Read AE stats from hardware
+        spin_lock(&fc->ae_lock);
+
+        // Base address for AE stats
+        void __iomem *ae_base = regs + ISP_STAT_BASE + 0x200;
+
+        // Read AE zone data - accessing struct members individually
+        for (i = 0; i < ISP_AE_GRID_SIZE; i++) {
+            for (j = 0; j < ISP_AE_GRID_SIZE; j++) {
+                uint32_t offset = (i * ISP_AE_GRID_SIZE + j) * 12; // Each zone takes 12 bytes
+
+                // Assign each field separately
+                fc->ae_stats.zones[i][j].mean = readl(ae_base + offset);
+                fc->ae_stats.zones[i][j].var = readl(ae_base + offset + 4);
+                fc->ae_stats.zones[i][j].weight = readl(ae_base + offset + 8);
+            }
+        }
+
+        fc->ae_stats.frame_count++;
+        fc->ae_valid = true;
+        spin_unlock(&fc->ae_lock);
+    }
+
+clear_irq:
+    // Clear interrupt
     writel(status, regs + ISP_INT_CLEAR_REG);
     wmb();
-
-    if (!(status & 0x1))  // FRAME_DONE bit
-        return IRQ_NONE;
-
-    // Process frame completion
-    struct isp_framesource_state *fs = &dev->frame_sources[0];
-    struct frame_source_channel *fc = fs->private;
-
-    if (!fc || !fc->buf_base)
-        return IRQ_HANDLED;
-
-    // Sample frame data for debug
-    static int frame_count = 0;
-    if (frame_count < 5) {
-        u8 *buf = fc->buf_base + (fc->write_idx * fc->buf_size);
-        pr_info("Frame %d data: %02x %02x %02x %02x\n",
-                frame_count, buf[0], buf[1], buf[2], buf[3]);
-    }
-    frame_count++;
-
-    // Update write index
-    fc->write_idx = (fc->write_idx + 1) % fc->buf_cnt;
 
     return IRQ_HANDLED;
 }
@@ -2214,13 +2221,13 @@ static int setup_isp_buffers(struct IMPISPDev *dev)
     // Use frame channel configuration
     uint32_t width = ALIGN(fs->width, 32);
     uint32_t height = fs->height;
-    uint32_t y_size = width * height;
     uint32_t y_stride = width;
+    uint32_t y_size = y_stride * fs->height;
+    uint32_t uv_addr = fc->dma_addr + y_size;
     uint32_t uv_stride = width / 2;
 
     // Calculate exact buffer addresses
     uint32_t y_addr = fc->dma_addr;
-    uint32_t uv_addr = y_addr + y_size;
 
     pr_info("Setting up ISP NV12 buffers ch%d:\n"
             "  Dimensions: %dx%d\n"
@@ -2230,14 +2237,13 @@ static int setup_isp_buffers(struct IMPISPDev *dev)
             y_addr, y_stride,
             uv_addr, uv_stride);
 
-    // Configure Y plane DMA
-    writel(y_addr, regs + ISP_BUF0_OFFSET);
+      // Y plane
+    writel(ALIGN(fc->dma_addr, 8), regs + ISP_BUF0_OFFSET);
     writel(y_stride, regs + ISP_BUF0_OFFSET + 0x4);
-    wmb();
 
-    // Configure UV plane DMA
-    writel(uv_addr, regs + ISP_BUF0_OFFSET + 0x8);
-    writel(uv_stride, regs + ISP_BUF0_OFFSET + 0xc);
+      // UV plane
+    writel(ALIGN(uv_addr, 8), regs + ISP_BUF0_OFFSET + 0x8);
+    writel(uv_stride, regs + ISP_BUF0_OFFSET + 0xC);
     wmb();
 
     return 0;
@@ -2433,6 +2439,12 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
     spin_lock_init(&fc->queue_lock);
     init_waitqueue_head(&fc->wait);
     atomic_set(&fc->frame_count, 0);
+
+    fc->vbm_table[channel] = fc;  // Self-reference for lookup
+
+    // Initialize encoder state
+    fc->enc_state_val = 1;
+    sema_init(&fc->enc_sem, 0);
 
     fs->private = fc;
     fs->is_open = 1;
@@ -2912,6 +2924,22 @@ static void debug_isp_registers(struct IMPISPDev *dev)
     pr_info("Output format: 0x%08x\n", readl(regs + ISP_OUTPUT_FORMAT_REG));
 }
 
+static void dump_encoder_state(struct IMPISPDev *dev)
+{
+    struct isp_framesource_state *fs = &dev->frame_sources[0];
+    struct frame_source_channel *fc;
+
+    if (!fs || !fs->private) {
+        pr_err("No frame source channel\n");
+        return;
+    }
+    fc = fs->private;
+
+    pr_info("Encoder State:\n");
+    pr_info("  Channel: %d\n", fs->chn_num);
+    pr_info("  Resolution: %dx%d\n", fs->width, fs->height);
+    pr_info("  Frame count: %d\n", fc->frame_count);
+}
 
 static void dump_frame_format_state(struct isp_framesource_state *fs)
 {
@@ -3991,6 +4019,11 @@ static int configure_mipi_csi(struct IMPISPDev *dev)
     writel(0x1, csi_base + 0x10);  // Enable CSI2
     wmb();
 
+
+   // Add MIPI timing configuration
+   writel(0x8 << 24 | 0x10 << 16 | 0x8 << 8 | 0x3,
+          csi_base + ISP_MIPI_TIMING);
+
     return 0;
 }
 
@@ -4051,7 +4084,7 @@ static int csi_core_ops_init(struct IMPISPDev *dev, bool enable)
 static int configure_streaming_hardware(struct IMPISPDev *dev)
 {
     void __iomem *regs = dev->regs;
-    void __iomem *csi_base = regs + 0xb8;
+    void __iomem *csi_base = regs + 0xb8;  // CSI register base from OEM offset
     struct isp_framesource_state *fs = &dev->frame_sources[0];
     struct frame_source_channel *fc;
     u32 val;
@@ -4062,68 +4095,84 @@ static int configure_streaming_hardware(struct IMPISPDev *dev)
     }
     fc = fs->private;
 
-    pr_info("Configuring ISP hardware and CSI host...\n");
+    pr_info("Configuring ISP streaming hardware...\n");
 
-    // 1. Reset and configure CSI host first
-    writel(0x0, csi_base + 0x0);  // Reset CSI
+    // 1. First disable everything and clear interrupts
+    writel(0x0, regs + ISP_CTRL_REG);  // Disable core
+    writel(0xFFFFFFFF, regs + ISP_INT_CLEAR_REG); // Clear IRQs
     wmb();
     msleep(1);
 
-    // Configure 2 lanes
-    writel(0x1, csi_base + 0x4);  // N_LANES = 1 (2 lanes)
+    // 2. Configure CSI with exact timing from decompiled code
+    writel(0x0, csi_base + 0x0);   // VERSION = 0
+    writel(0x1, csi_base + 0x4);   // N_LANES = 1 (2 lanes)
+    writel(0x0, csi_base + 0x8);   // PHY_SHUTDOWNZ = 0
+    writel(0x0, csi_base + 0xc);   // DPHY_RSTZ = 0
+    writel(0x0, csi_base + 0x10);  // CSI2_RESETN = 0
     wmb();
     msleep(1);
 
-    // Enable CSI in proper sequence
-    writel(0x1, csi_base + 0x8);  // PHY_SHUTDOWNZ
+    // Enable CSI in sequence from decompiled CSI core init
+    writel(0x1, csi_base + 0x8);   // PHY_SHUTDOWNZ = 1
     wmb();
     msleep(1);
 
-    writel(0x1, csi_base + 0xc);  // DPHY_RSTZ
+    writel(0x1, csi_base + 0xc);   // DPHY_RSTZ = 1
     wmb();
     msleep(1);
 
-    writel(0x1, csi_base + 0x10); // CSI2_RESETN
+    writel(0x1, csi_base + 0x10);  // CSI2_RESETN = 1
+    writel(0xc, csi_base + 0x1c);  // DATA_IDS_2 = 0xc
     wmb();
     msleep(10);
 
-    // 2. Configure DMA for NV12
+    // 3. Set up DMA buffers
     uint32_t y_stride = ALIGN(fs->width, 32);
     uint32_t uv_stride = ALIGN(fs->width/2, 32);
+    uint32_t y_size = y_stride * fs->height;
 
+    // Y plane
     writel(ALIGN(fc->dma_addr, 8), regs + ISP_BUF0_OFFSET);
     writel(y_stride, regs + ISP_BUF0_OFFSET + 0x4);
-    writel(ALIGN(fc->dma_addr + (y_stride * fs->height), 8),
-           regs + ISP_BUF0_OFFSET + 0x8);
+
+    // UV plane
+    writel(ALIGN(fc->dma_addr + y_size, 8), regs + ISP_BUF0_OFFSET + 0x8);
     writel(uv_stride, regs + ISP_BUF0_OFFSET + 0xC);
     wmb();
 
-    // 3. Set format
+    // 4. Set format registers - use NV12
     writel(ISP_FMT_NV12, regs + ISP_INPUT_FORMAT_REG);
     writel(ISP_FMT_NV12, regs + ISP_OUTPUT_FORMAT_REG);
     wmb();
 
-	// 4. Configure and enable interrupts
-	writel(0xFFFFFFFF, regs + ISP_INT_CLEAR_REG);  // Clear pending
-	writel(ISP_INT_FRAME_DONE, regs + ISP_INT_MASK_REG); // Enable frame interrupt
-	wmb();
+    // 5. Set up interrupts exactly as decompiled code shows
+    writel(0x1, regs + ISP_INT_MASK_REG);  // Only frame done IRQ
+    writel(0x100, regs + 0x28);  // MASK1 = 0x100
+    writel(0x400040, regs + 0x2c); // MASK2 = 0x400040
+    wmb();
 
-	// 5. Enable ISP core last
-	val = ISP_CTRL_ENABLE | ISP_CTRL_START_STREAM | ISP_CTRL_IRQ_EN;
-	writel(val, regs + ISP_CTRL_REG);
-	wmb();
+    // 6. Finally enable core with interrupts
+    val = 0x7;  // ENABLE | START | IRQ_EN from decompiled
+    writel(val, regs + ISP_CTRL_REG);
+    wmb();
 
-	pr_info("Control register set to 0x%x\n", val);
+    // Debug output
+    pr_info("ISP Streaming Config:\n");
+    pr_info("CSI: lanes=0x%x phy=0x%x dphy=0x%x csi2=0x%x\n",
+            readl(csi_base + 0x4),  // N_LANES
+            readl(csi_base + 0x8),  // PHY_SHUTDOWNZ
+            readl(csi_base + 0xc),  // DPHY_RSTZ
+            readl(csi_base + 0x10)); // CSI2_RESETN
 
-    // Debug all critical registers
-    pr_info("CSI Config:\n");
-    dump_csi_reg(dev);
     pr_info("DMA: Y=0x%08x stride=%d UV=0x%08x stride=%d\n",
             readl(regs + ISP_BUF0_OFFSET), y_stride,
             readl(regs + ISP_BUF0_OFFSET + 0x8), uv_stride);
-    pr_info("IRQ: mask=0x%x ctrl=0x%x\n",
-            readl(regs + ISP_INT_MASK_REG),
-            readl(regs + ISP_CTRL_REG));
+
+    pr_info("Control: 0x%x IRQ mask=0x%x\n",
+            readl(regs + ISP_CTRL_REG),
+            readl(regs + ISP_INT_MASK_REG));
+
+    dump_csi_reg(dev);  // Full CSI register dump
 
     return 0;
 }
@@ -4199,7 +4248,75 @@ cleanup_buffers:
     return ret;
 }
 
+static long handle_encoder_ioctls(struct IMPISPDev *dev, unsigned int cmd, void __user *arg)
+{
+    void __user *argp = (void __user *)arg;
+    int ret = 0;
 
+    pr_info("ISP IOCTL Debug:\n");
+    pr_info("  Command: 0x%x\n", cmd);
+    pr_info("  Type: %c\n", _IOC_TYPE(cmd));
+    pr_info("  Number: 0x%x\n", _IOC_NR(cmd));
+    pr_info("  Direction: 0x%x\n", _IOC_DIR(cmd));
+    pr_info("  Size: %d\n", _IOC_SIZE(cmd));
+
+    switch(cmd) {
+        // ... other cases ...
+
+        case VIDIOC_INIT_ENCODER: {
+ 		    int enable;
+		    if (copy_from_user(&enable, argp, sizeof(enable)))
+		        return -EFAULT;
+
+		    struct isp_framesource_state *fs = &dev->frame_sources[0];
+		    struct frame_source_channel *fc = fs->private;
+		    if (!fc)
+		        return -EINVAL;
+
+		    // Initialize encoder state - use direct field access
+		    fc->enc_state_val = 1;  // Initialize at 0x109290
+
+		    pr_info("Encoder initialized: enable=%d\n", enable);
+		    return 0;
+        }
+
+        case VIDIOC_CREATE_ENCODER_CHN: {
+		    struct encoder_chn_attr attr;
+		    if (copy_from_user(&attr, argp, sizeof(attr)))
+		        return -EFAULT;
+
+		    struct isp_framesource_state *fs = &dev->frame_sources[0];
+		    struct frame_source_channel *fc = fs->private;
+
+		    // Set registration flag and initialize semaphore
+		    fc->enc_registered_val = 1;  // Must be at 0x109398
+		    sema_init(&fc->enc_sem, 0); // Must be at 0x109428
+
+		    pr_info("Created encoder channel: %dx%d\n",
+		            attr.picWidth, attr.picHeight);
+		    return 0;
+        }
+
+        case VIDIOC_ENABLE_ENCODER_CHN: {
+		    int channel_id;
+		    if (copy_from_user(&channel_id, argp, sizeof(channel_id)))
+		        return -EFAULT;
+
+		    struct isp_framesource_state *fs = &dev->frame_sources[channel_id];
+		    struct frame_source_channel *fc = fs->private;
+		    if (!fc)
+		        return -EINVAL;
+
+		    // Enable the encoder channel
+		    fc->enc_state_val |= 0x2;  // Set enabled bit
+
+		    pr_info("Encoder channel %d enabled\n", channel_id);
+		    return 0;
+        }
+    }
+
+    return ret;
+}
 
 /* Handle sensor-specific IOCTL commands */
 static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __user *arg)
@@ -4776,6 +4893,16 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
     }
 
     switch (cmd) {
+    case VIDIOC_INIT_ENCODER:
+        pr_info("Initializing encoder subsystem\n");
+        {
+            int enable;
+            if (copy_from_user(&enable, (void __user *)arg, sizeof(enable)))
+                return -EFAULT;
+
+            pr_info("Encoder system initialized with enable=%d\n", enable);
+            return 0;
+        }
     case VIDIOC_REGISTER_SENSOR: {
         struct i2c_client *client = ourISPdev->sensor_i2c_client;
         unsigned char val_h = 0, val_l = 0;
@@ -5128,6 +5255,10 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
         return 0;
     }
+	case VIDIOC_CREATE_ENCODER_GROUP:
+	case VIDIOC_CREATE_ENCODER_CHN:
+	case VIDIOC_REGISTER_ENCODER_CHN:
+	    return handle_encoder_ioctls(ourISPdev, cmd, argp);
     case TX_ISP_SET_AE_ALGO_CLOSE: {
         pr_info("TX_ISP_SET_AE_ALGO_CLOSE\n");
         // TODO
@@ -6339,7 +6470,7 @@ static int tisp_probe(struct platform_device *pdev)
 	// Initialize IRQ control structure
 	spin_lock_init(&isp_dev->lock);
 	isp_dev->irq_enabled = 0;
-	isp_dev->regs = base;
+	isp_dev->irq_handler = isp_irq_handler;
 	ourISPdev->isp_dev = isp_dev;
 
 	// Initialize IRQ handler data
@@ -6603,12 +6734,20 @@ static int __init isp_driver_init(void)
 {
     int ret;
     struct platform_device *pdev;
-    struct resource res[] = {
-        {
+
+    // Define resources including IRQ
+    static struct resource res[] = {
+        [0] = {
             .start  = ISP_BASE_ADDR,
             .end    = ISP_BASE_ADDR + ISP_MAP_SIZE - 1,
             .flags  = IORESOURCE_MEM,
             .name   = "tisp-regs",
+        },
+        [1] = {
+            .start  = 36,  // ISP IRQ number
+            .end    = 36,
+            .flags  = IORESOURCE_IRQ,
+            .name   = "isp-irq",
         }
     };
 
@@ -6670,25 +6809,23 @@ static int __init isp_driver_init(void)
         }
     }
 
-    // 7. Register platform driver
-    pr_info("Registering platform driver\n");
-    ret = platform_driver_register(&tisp_platform_driver);
-    if (ret) {
-        pr_err("Failed to register platform driver: %d\n", ret);
-        goto err_destroy_device;
-    }
-    pr_info("Platform driver registered successfully\n");
-
-    // 8. Create and register platform device
-    pr_info("Registering platform device with name 'tisp-driver'\n");
+    // 7. Create and register platform device first
+    pr_info("Registering platform device with resources\n");
     pdev = platform_device_register_simple("tisp-driver", -1, res, ARRAY_SIZE(res));
     if (IS_ERR(pdev)) {
         ret = PTR_ERR(pdev);
         pr_err("Failed to register platform device: %d\n", ret);
-        platform_driver_unregister(&tisp_platform_driver);
         goto err_destroy_device;
     }
-    pr_info("Platform device registered successfully\n");
+
+    // 8. Then register platform driver
+    pr_info("Registering platform driver\n");
+    ret = platform_driver_register(&tisp_platform_driver);
+    if (ret) {
+        pr_err("Failed to register platform driver: %d\n", ret);
+        platform_device_unregister(pdev);
+        goto err_destroy_device;
+    }
 
     pr_info("ISP driver loaded successfully\n");
     return 0;

@@ -316,6 +316,22 @@
 #define ISP_INT_FRAME_DONE      (1 << 0)  // Frame complete
 #define ISP_INT_ERR            (1 << 1)  // Error condition
 #define ISP_INT_OVERFLOW       (1 << 2)  // Buffer overflow
+
+
+#define VIDIOC_CREATE_ENCODER_GROUP 0x400456e0
+#define VIDIOC_CREATE_ENCODER_CHN   0x400456e1
+#define VIDIOC_REGISTER_ENCODER_CHN 0x400456e2
+
+
+#define ISP_AE_STATS_OFFSET   0x1200  // Verify this offset matches your hardware
+#define ISP_STAT_BASE         0x1000  // Base offset for statistics
+#define ISP_AE_GRID_SIZE     15      // 15x15 zone grid
+
+
+#define VIDIOC_INIT_ENCODER        0x40045690
+#define VIDIOC_CREATE_ENCODER_CHN  0x40045691
+#define VIDIOC_ENABLE_ENCODER_CHN  0x40045692
+
 struct tisp_param_info {
     uint32_t data[8];  // Array size can be adjusted based on needs
 };
@@ -657,6 +673,17 @@ struct isp_framesource_state {
     uint32_t scale_out_height;
 } __attribute__((aligned(8)));
 
+
+struct ae_zone {
+    uint32_t mean;       // Mean luminance
+    uint32_t var;        // Variance
+    uint32_t weight;     // Zone weight
+};
+struct ae_zone_stats {
+    struct ae_zone zones[ISP_AE_GRID_SIZE][ISP_AE_GRID_SIZE];
+    uint32_t frame_count;
+};
+
 /* Note for Claude, GPT, or anyone  that will listen
 This is our internal driver structure and should never be passed back to libimp.
 Instead, we need to return specific structures that libimp expects outside of this.
@@ -721,7 +748,12 @@ struct IMPISPDev {
     struct clk *ipu_clk;       // IPU clock
     struct isp_framesource_state frame_sources[MAX_CHANNELS];
     struct tx_isp_sensor_win_setting *sensor_window_size;
-
+    // Encoder state
+    uint8_t encoder_registered;   // Match 0x109398 offset from decompiled
+    struct semaphore frame_sem;   // Match 0x109428 offset from decompiled
+    struct ae_zone_stats ae_stats;
+    spinlock_t ae_lock;
+    bool ae_valid;
 } __attribute__((packed, aligned(4)));
 
 
@@ -864,6 +896,27 @@ struct frame_queue {
     uint32_t max_frames;            // Maximum frames in queue
 };
 
+struct encoder_chn_attr {
+    uint32_t picWidth;          // Picture width
+    uint32_t picHeight;         // Picture height
+    uint32_t encType;           // Encoding type (H.264/H.265)
+    uint32_t profile;           // Encoding profile
+    uint32_t bufSize;           // Intermediate buffer size
+    uint32_t frameRate;         // Frame rate numerator
+    uint32_t rcMode;            // Rate control mode
+    uint32_t maxGop;            // Maximum GOP size
+    uint32_t maxQp;             // Maximum QP value
+    uint32_t minQp;             // Minimum QP value
+};
+
+
+
+struct encoder_state {
+    uint32_t channel_id;   // Channel ID (0-8)
+    uint32_t state;        // Must match offset 0x109290
+    uint32_t registered;   // Must be at 0x109398
+    struct semaphore sem;  // Must be at 0x109428
+};
 
 /* Update frame_source_channel struct */
 struct frame_source_channel {
@@ -900,18 +953,25 @@ struct frame_source_channel {
     spinlock_t state_lock;
     unsigned long buffer_states;
 
-    // Pad the rest exactly to 0x2e8
-    uint8_t padding[0x2e8 - 0x1c - sizeof(uint32_t) -
-                   sizeof(void*) - sizeof(dma_addr_t) -
-                   sizeof(uint32_t) * 4 -
-                   sizeof(struct semaphore) - sizeof(struct mutex) -
-                   sizeof(uint32_t) - sizeof(spinlock_t) -
-                   sizeof(struct list_head) * 2 -
-                   sizeof(wait_queue_head_t) - sizeof(atomic_t) -
-                   sizeof(uint32_t) * 3 -
-                   sizeof(atomic_t) * 2 - sizeof(spinlock_t) -
-                   sizeof(unsigned long)];
-} __attribute__((packed, aligned(4)));
+    // Add padding to reach VBM table offset
+    uint8_t vbm_padding[0x109080 - 0x200];  // Adjust size based on previous members
+
+    // VBM table at exact offset
+    void *vbm_table[16];
+
+    // Encoder state with fixed offsets as individual fields
+    uint8_t enc_padding[0x109290 - (0x109080 + (16 * sizeof(void*)))];
+    uint32_t enc_state_val;          // 0x109290 - was enc_state.state
+    uint8_t enc_pad[0x108];          // Padding to 0x109398
+    uint32_t enc_registered_val;      // 0x109398 - was enc_state.registered
+    uint8_t sem_pad[0x30];           // Padding to 0x109428
+    struct semaphore enc_sem;         // 0x109428 - was enc_state.sem
+
+    // AE stats at the end
+    struct ae_zone_stats ae_stats;
+    spinlock_t ae_lock;
+    bool ae_valid;
+} __attribute__((packed));
 
 
 // Define a structure that might match the expectations of libimp.so
@@ -926,5 +986,58 @@ struct sensor_reg_data {
     uint16_t reg;
     uint8_t val;
 };
+
+struct encoder_group_param {
+    uint32_t max_group_num;       // Maximum number of groups
+    uint32_t max_chn_num;         // Maximum channels per group
+    uint32_t pic_width;           // Picture width
+    uint32_t pic_height;          // Picture height
+    uint32_t stream_type;         // Stream type (0 = mainstream, 1 = substream)
+};
+
+// In your streaming setup:
+struct encoder_group_param group_param = {
+    .max_group_num = 1,
+    .max_chn_num = 2,            // For both mainstream and substream
+    .pic_width = 1920,           // Main stream width
+    .pic_height = 1080,          // Main stream height
+    .stream_type = 0,            // Main stream
+};
+
+struct encoder_chn_param {
+    uint32_t chn_id;             // Channel ID
+    uint32_t chn_type;           // Channel type (H.264/H.265)
+    uint32_t pic_width;          // Picture width
+    uint32_t pic_height;         // Picture height
+    uint32_t buf_size;           // Buffer size
+    uint32_t frame_rate;         // Frame rate
+    uint32_t bit_rate;           // Bit rate
+    uint32_t gop;                // GOP size
+};
+
+struct encoder_chn_param chn_param = {
+    .chn_id = 0,                // First channel
+    .chn_type = 2,              // H.264
+    .pic_width = 1920,
+    .pic_height = 1080,
+    .buf_size = 1920 * 1080 * 3 / 2,  // NV12 size
+    .frame_rate = 25,
+    .bit_rate = 2000000,        // 2 Mbps
+    .gop = 25,                  // 1 second GOP at 25fps
+};
+
+struct encoder_reg_param {
+    uint32_t chn_id;            // Channel ID to register
+    uint32_t group_id;          // Group ID this channel belongs to
+    uint32_t enable;            // 1 to enable
+};
+
+struct encoder_reg_param reg_param = {
+    .chn_id = 0,
+    .group_id = 0,
+    .enable = 1,
+};
+
+
 
 #endif
