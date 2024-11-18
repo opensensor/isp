@@ -4,16 +4,16 @@ index 091606f..f15092d 100644
 +++ b/3.10/isp/t31/Kbuild
 @@ -1,9 +1,9 @@
  SRCS := \
-    $(DIR)/tx-isp-debug.c \
--    $(DIR)/tx-isp-module.c
+     $(DIR)/tx-isp-debug.c \
+-       $(DIR)/tx-isp-module.c
 +    $(DIR)/isp_driver.c
-
+ 
  OBJS := $(SRCS:%.c=%.o) $(ASM_SRCS:%.S=%.o)
 -OBJS += $(KERNEL_VERSION)/sdk/lib$(SOC_FAMILY)-firmware.a
 +#OBJS += $(KERNEL_VERSION)/sdk/lib$(SOC_FAMILY)-firmware.a
-
+ 
  $(OUT)-objs := $(OBJS)
-
+ 
 diff --git a/3.10/isp/t31/include/tx-isp-common.h b/3.10/isp/t31/include/tx-isp-common.h
 index c234175..7779780 100644
 --- a/3.10/isp/t31/include/tx-isp-common.h
@@ -21,8 +21,90 @@ index c234175..7779780 100644
 @@ -14,6 +14,7 @@
  #include <media/v4l2-device.h>
  #include <linux/clk.h>
-
+ 
 +#include "isp_driver_common.h"
  #include "txx-funcs.h"
  #include "tx-isp-device.h"
  #include "tx-isp-debug.h"
+diff --git a/3.10/isp/t31/tx-isp-debug.c b/3.10/isp/t31/tx-isp-debug.c
+index f1b1a45..cb11fac 100644
+--- a/3.10/isp/t31/tx-isp-debug.c
++++ b/3.10/isp/t31/tx-isp-debug.c
+@@ -12,27 +12,27 @@ static int isp_clk = 100000000;
+ module_param(isp_clk, int, S_IRUGO);
+ MODULE_PARM_DESC(isp_clk, "isp clock freq");
+ 
+-extern int isp_ch0_pre_dequeue_time;
++int isp_ch0_pre_dequeue_time;
+ module_param(isp_ch0_pre_dequeue_time, int, S_IRUGO);
+ MODULE_PARM_DESC(isp_ch0_pre_dequeue_time, "isp pre dequeue time, unit ms");
+ 
+-extern int isp_ch0_pre_dequeue_interrupt_process;
++int isp_ch0_pre_dequeue_interrupt_process;
+ module_param(isp_ch0_pre_dequeue_interrupt_process, int, S_IRUGO);
+ MODULE_PARM_DESC(isp_ch0_pre_dequeue_interrupt_process, "isp pre dequeue interrupt process");
+ 
+-extern int isp_ch0_pre_dequeue_valid_lines;
++int isp_ch0_pre_dequeue_valid_lines;
+ module_param(isp_ch0_pre_dequeue_valid_lines, int, S_IRUGO);
+ MODULE_PARM_DESC(isp_ch0_pre_dequeue_valid_lines, "isp pre dequeue valid lines");
+ 
+-extern int isp_ch1_dequeue_delay_time;
++int isp_ch1_dequeue_delay_time;
+ module_param(isp_ch1_dequeue_delay_time, int, S_IRUGO);
+ MODULE_PARM_DESC(isp_ch1_dequeue_delay_time, "isp pre dequeue time, unit ms");
+ 
+-extern int isp_day_night_switch_drop_frame_num;
++int isp_day_night_switch_drop_frame_num;
+ module_param(isp_day_night_switch_drop_frame_num, int, S_IRUGO);
+ MODULE_PARM_DESC(isp_day_night_switch_drop_frame_num, "isp day night switch drop frame number");
+ 
+-extern int isp_memopt;
++int isp_memopt;
+ module_param(isp_memopt, int, S_IRUGO);
+ MODULE_PARM_DESC(isp_memopt, "isp memory optimize");
+ 
+@@ -123,3 +123,5 @@ __must_check int private_get_driver_interface(struct jz_driver_common_interfaces
+        }else
+                return 0;
+ }
++EXPORT_SYMBOL(private_get_driver_interface);
++
+diff --git a/3.10/isp/t31/tx-isp-module.c b/3.10/isp/t31/tx-isp-module.c
+index f77c40f..e174cbf 100644
+--- a/3.10/isp/t31/tx-isp-module.c
++++ b/3.10/isp/t31/tx-isp-module.c
+@@ -11,8 +11,8 @@
+ #include <linux/kernel.h>
+ #include <linux/version.h>
+ 
+-extern int tx_isp_init(void);
+-extern void tx_isp_exit(void);
++// extern int tx_isp_init(void);
++// extern void tx_isp_exit(void);
+ 
+ static int __init tx_isp_module_init(void)
+ {
+diff --git a/build.sh b/build.sh
+index bde3d73..68484a0 100755
+--- a/build.sh
++++ b/build.sh
+@@ -1,7 +1,7 @@
+ #!/bin/bash
+ 
+-KERNEL_DIR=""
+-CROSS_COMPILE=mipsel-linux-
++KERNEL_DIR="$HOME/output/cinnado_d1_t31l/build/linux-22b9213568c866c0126a7ed3e0b0c30621339c64"
++CROSS_COMPILE="$HOME/output/cinnado_d1_t31l/host/bin/mipsel-linux-"
+ DEFAULT_KERNEL_VERSION="3.10"
+ 
+ # Check if KERNEL_DIR is empty
+@@ -29,7 +29,7 @@ case "$SOC_MODEL" in
+                ;;
+        t10 | t20 | t21 | t23 | t30 | t31 | t40 | t41)
+                export ISP_ENV_KERNEL_DIR="${KERNEL_DIR}"
+-               export CROSS_COMPILE="mipsel-linux-"
++               export CROSS_COMPILE="$HOME/matteius/output/cinnado_d1_t31l/host/bin/mipsel-linux-"
+ 
+                FAM="SOC_FAMILY=$SOC_MODEL CONFIG_SOC_${SOC_MODEL^^}=y KERNEL_VERSION=${KERNEL_VERSION}"
+                make \
