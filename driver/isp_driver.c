@@ -3669,63 +3669,87 @@ static int configure_mipi_csi(struct IMPISPDev *dev)
 {
     void __iomem *csi_base = dev->regs + 0xb8;
     u32 val;
+    int ret;
 
-    pr_info("****>>>>> dump csi reg <<<<<****\n");
+    pr_info("Configuring CSI Host Interface...\n");
 
-    // Disable everything first
+    // 1. Initial state check
+    val = readl(csi_base + 0x04);  // N_LANES register
+    pr_info("Initial N_LANES state: 0x%x\n", val);
+
+    // 2. Reset with everything disabled
     writel(0x0, csi_base + 0x10);  // CSI2_RESETN
     writel(0x0, csi_base + 0x0c);  // DPHY_RSTZ
     writel(0x0, csi_base + 0x08);  // PHY_SHUTDOWNZ
     wmb();
-    msleep(1);
+    msleep(10);  // Longer reset delay
 
-    // Clear any existing errors
+    // 3. Clear all errors
     writel(0xffffffff, csi_base + 0x20);  // Clear ERR1
     writel(0xffffffff, csi_base + 0x24);  // Clear ERR2
     wmb();
+    msleep(1);
 
-    // Set up 2 lanes
-    csi_set_lanes(dev, 2);  // Use our helper that matches libimp
+    // 4. Write lane configuration directly - avoid read-modify-write
+    writel(0x1, csi_base + 0x04);  // Set 2 lanes directly
     wmb();
+    msleep(1);
 
-    // Configure data IDs for RAW10 - match libimp values
+    // 5. Verify lane configuration
+    val = readl(csi_base + 0x04);
+    if ((val & 0x3) != 0x1) {
+        pr_err("Lane configuration write failed. Wrote: 0x1, Read: 0x%x\n", val);
+        return -EIO;
+    }
+
+    // 6. Configure for RAW10 data format
     writel(0x2B, csi_base + 0x18);  // DATA_IDS_1 = RAW10
     writel(0x0, csi_base + 0x1c);   // DATA_IDS_2
     wmb();
+    msleep(1);
 
-    // Configure masks - match libimp values
-    writel(0x100, csi_base + 0x28);       // MASK1
-    writel(0x400040, csi_base + 0x2c);    // MASK2
-    wmb();
-
-    // Power up sequence
-    writel(0x1, csi_base + 0x08);  // PHY_SHUTDOWNZ
+    // 7. Configure error detection
+    writel(0x0, csi_base + 0x28);  // MASK1 - enable all error detection
+    writel(0x0, csi_base + 0x2c);  // MASK2 - enable all error detection
     wmb();
     msleep(1);
 
-    writel(0x1, csi_base + 0x0c);  // DPHY_RSTZ
+    // 8. Power up sequence - careful ordering
+    writel(0x1, csi_base + 0x08);   // PHY_SHUTDOWNZ first
     wmb();
-    msleep(1);
+    msleep(5);
 
-    writel(0x1, csi_base + 0x10);  // CSI2_RESETN
+    writel(0x1, csi_base + 0x0c);   // DPHY_RSTZ next
     wmb();
-    msleep(1);
+    msleep(5);
 
-    // Debug dump all registers
-    pr_info("VERSION = %08x\n", readl(csi_base + 0x00));
-    pr_info("N_LANES = %08x\n", readl(csi_base + 0x04));
-    pr_info("PHY_SHUTDOWNZ = %08x\n", readl(csi_base + 0x08));
-    pr_info("DPHY_RSTZ = %08x\n", readl(csi_base + 0x0c));
-    pr_info("CSI2_RESETN = %08x\n", readl(csi_base + 0x10));
-    pr_info("PHY_STATE = %08x\n", readl(csi_base + 0x14));
-    pr_info("DATA_IDS_1 = %08x\n", readl(csi_base + 0x18));
-    pr_info("DATA_IDS_2 = %08x\n", readl(csi_base + 0x1c));
-    pr_info("ERR1 = %08x\n", readl(csi_base + 0x20));
-    pr_info("ERR2 = %08x\n", readl(csi_base + 0x24));
-    pr_info("MASK1 = %08x\n", readl(csi_base + 0x28));
-    pr_info("MASK2 = %08x\n", readl(csi_base + 0x2c));
-    pr_info("PHY_TST_CTRL0 = %08x\n", readl(csi_base + 0x30));
-    pr_info("PHY_TST_CTRL1 = %08x\n", readl(csi_base + 0x34));
+    writel(0x1, csi_base + 0x10);   // CSI2_RESETN last
+    wmb();
+    msleep(10);
+
+    // 9. Final verification
+    val = readl(csi_base + 0x14);  // PHY_STATE
+    if (!(val & 0x100)) {
+        pr_err("PHY not ready after power-up: 0x%x\n", val);
+        return -EIO;
+    }
+
+    val = readl(csi_base + 0x04);  // Check lanes one final time
+    if ((val & 0x3) != 0x1) {
+        pr_err("Lane configuration lost after power-up. Read: 0x%x\n", val);
+        return -EIO;
+    }
+
+    // 10. Debug output
+    pr_info("CSI Configuration Complete:\n");
+    pr_info("  N_LANES = %08x\n", readl(csi_base + 0x04));
+    pr_info("  PHY_STATE = %08x\n", readl(csi_base + 0x14));
+    pr_info("  DATA_IDS = %08x,%08x\n",
+            readl(csi_base + 0x18),
+            readl(csi_base + 0x1c));
+    pr_info("  MASK1/2 = %08x,%08x\n",
+            readl(csi_base + 0x28),
+            readl(csi_base + 0x2c));
 
     return 0;
 }
@@ -7202,61 +7226,61 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 
 		    regs = ourISPdev->regs;
 
-		    // State checks - moved VIC init before state check
-		    if (fs->state != 2) {  // Only enable VIC if not already streaming
-		        // Set initial state first
-		        fs->state = 1;  // Ready state
-
-		        // Configure buffer sequence
-		        uint32_t buf_offset = ISP_BUF0_OFFSET + (fs->chn_num * ISP_BUF_SIZE_STEP);
-
-		        // Set up main buffer - important offset calculation
-		        writel(fc->dma_addr + (fc->channel_offset), regs + buf_offset);
-		        writel(fc->buf_size, regs + buf_offset + 0x4);
-		        wmb();
-
-		        // Additional buffer setup if needed
-		        if (fc->buf_cnt > 1) {
-		            for (int i = 1; i < fc->buf_cnt; i++) {
-		                uint32_t offset = buf_offset + (i * ISP_BUF_SIZE_STEP);
-		                writel(fc->dma_addr + (fc->channel_offset) + (i * fc->buf_size),
-		                       regs + offset);
-		                writel(fc->buf_size, regs + offset + 0x4);
-		            }
-		            wmb();
-		        }
-
-		        // Reset counters
-		        fs->frame_cnt = 0;
-		        fs->write_idx = 0;
-
-		        // Important: Channel-specific control registers
-		        uint32_t ctrl_offset = ISP_STREAM_CTRL + (fs->chn_num * 0x100);
-		        uint32_t start_offset = ISP_STREAM_START + (fs->chn_num * 0x100);
-
-		        // Enable frame processing - sequence matters
-		        writel(0x1, regs + ctrl_offset);
-		        wmb();
-		        udelay(100);  // Required delay between control writes
-		        writel(0x1, regs + start_offset);
-		        wmb();
-
-		        // Set final streaming state
-		        fs->state = 2;  // Streaming state
-		        fs->flags |= 0x2;  // Set streaming flag
-
-		        pr_info("Channel %d streaming started:\n"
-		                "  base=0x%x offset=0x%x\n"
-		                "  buf_size=%u count=%d\n"
-		                "  ctrl=0x%x start=0x%x\n",
-		                fs->chn_num,
-		                (unsigned int)fc->dma_addr, fc->channel_offset,
-		                fc->buf_size, fc->buf_cnt,
-		                readl(regs + ctrl_offset),
-		                readl(regs + start_offset));
-		    } else {
+		    if (fs->state == 2) {
 		        pr_info("Channel %d already streaming\n", fs->chn_num);
+		        return 0;
 		    }
+
+		    // Configure CSI first
+		    ret = configure_mipi_csi(ourISPdev);
+		    if (ret) {
+		        pr_err("Failed to configure MIPI CSI: %d\n", ret);
+		        fs->state = 1;  // Back to ready state
+		        return ret;
+		    }
+
+		    // Configure buffer sequence
+		    uint32_t buf_offset = ISP_BUF0_OFFSET + (fs->chn_num * ISP_BUF_SIZE_STEP);
+
+		    // Set up main buffer
+		    writel(fc->dma_addr + (fc->channel_offset), regs + buf_offset);
+		    writel(fc->buf_size, regs + buf_offset + 0x4);
+		    wmb();
+
+		    if (fc->buf_cnt > 1) {
+		        for (int i = 1; i < fc->buf_cnt; i++) {
+		            uint32_t offset = buf_offset + (i * ISP_BUF_SIZE_STEP);
+		            writel(fc->dma_addr + (fc->channel_offset) + (i * fc->buf_size),
+		                   regs + offset);
+		            writel(fc->buf_size, regs + offset + 0x4);
+		        }
+		        wmb();
+		    }
+
+		    // Clear any pending interrupts before enabling
+		    writel(0xffffffff, regs + ISP_INT_CLEAR_REG);
+		    wmb();
+
+		    // Enable processing
+		    uint32_t ctrl_offset = ISP_STREAM_CTRL + (fs->chn_num * 0x100);
+		    uint32_t start_offset = ISP_STREAM_START + (fs->chn_num * 0x100);
+
+		    writel(0x1, regs + ctrl_offset);
+		    wmb();
+		    msleep(1);
+		    writel(0x1, regs + start_offset);
+		    wmb();
+
+		    // Set state only after everything is configured
+		    fs->state = 2;
+		    fs->flags |= 0x2;
+		    fs->frame_cnt = 0;
+		    fs->write_idx = 0;
+
+		    pr_info("Channel %d stream enabled: ctrl=0x%x start=0x%x\n",
+		            fs->chn_num,
+		            readl(regs + ctrl_offset),
+		            readl(regs + start_offset));
 
 		    return 0;
 		}
