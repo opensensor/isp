@@ -382,6 +382,7 @@
 #define V4L2_CID_ISP_BRIGHTNESS  (V4L2_CID_PRIVATE_BASE + 3)
 #define V4L2_CID_ISP_HFLIP      (V4L2_CID_PRIVATE_BASE + 4)
 #define V4L2_CID_ISP_VFLIP      (V4L2_CID_PRIVATE_BASE + 5)
+#define VIDIOC_SET_STREAM_FMT   0xc07056c3
 
 /* ISP Image Control Register Offsets */
 #define ISP_BRIGHT_OFFSET     0x1100  // Brightness control
@@ -467,6 +468,11 @@
 
 #define ISP_FRAME_WIDTH     0x100   // Frame width register
 #define ISP_FRAME_HEIGHT    0x104   // Frame height register
+
+#define V4L2_BUF_TYPE_VIDEO_CAPTURE      1
+#define V4L2_MEMORY_MMAP                 1
+#define V4L2_FIELD_NONE                  0
+#define V4L2_BUF_FLAG_DONE               0x00000001
 
 /* ISP Pipeline Register Structure */
 struct isp_pipeline_regs {
@@ -1278,7 +1284,7 @@ struct frame_source_channel {
     u64 last_frame_time;
     u32 min_frame_interval;
     u32 max_frame_interval;
-} __attribute__((packed));
+} __attribute__((aligned(32)));  // 32-byte alignment for MIPS
 
 
 // Define a structure that might match the expectations of libimp.so

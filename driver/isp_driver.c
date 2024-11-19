@@ -7087,34 +7087,34 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
     }
 
     switch(cmd) {
-		case VIDIOC_SET_CHANNEL_ATTR: {
-			struct channel_fmt fmt;
+		case VIDIOC_SET_STREAM_FMT: {  // 0xc07056c3
+		    struct channel_attr attr;
 
-			if (copy_from_user(&fmt, (void __user *)arg, sizeof(fmt)))
-			    return -EFAULT;
+		    if (copy_from_user(&attr, (void __user *)arg, sizeof(attr)))
+		        return -EFAULT;
 
-			pr_info("Channel attr request: enable=%d format=0x%x size=%dx%d\n",
-			        fmt.enable, fmt.format, fmt.width, fmt.height);
+		    pr_info("Channel attr request: enable=%d format=0x%x size=%dx%d\n",
+		            attr.enable, attr.format, attr.width, attr.height);
 
-			if (!fs || !fs->is_open) {
-			    pr_err("Frame source not initialized\n");
-			    return -EINVAL;
-			}
+		    if (!fs || !fs->is_open) {
+		        pr_err("Frame source not initialized\n");
+		        return -EINVAL;
+		    }
 
-			fc = fs->private;
-			if (!fc) {
-			    pr_err("No channel data\n");
-			    return -EINVAL;
-			}
+		    fc = fs->private;
+		    if (!fc) {
+		        pr_err("No channel data\n");
+		        return -EINVAL;
+		    }
 
-			// Store format info - IMPORTANT: Set the type field
-			fs->width = fmt.width;
-			fs->height = fmt.height;
-			fs->fmt = V4L2_BUF_TYPE_VIDEO_CAPTURE;  // This was missing
+		    // Store format info
+		    fs->width = attr.width;
+		    fs->height = attr.height;
+		    fs->fmt = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
 		    if (attr.enable) {
 		        // Calculate aligned buffer size for NV12
-		        uint32_t aligned_width = ALIGN(attr.width, 32); // Match 32-byte alignment
+		        uint32_t aligned_width = ALIGN(attr.width, 32);
 		        fs->buf_size = (aligned_width * attr.height * 3) / 2;
 		        fc->buf_size = fs->buf_size;
 
@@ -7125,7 +7125,12 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 		            fc->state = 1;  // Channel ready
 		        }
 
-		        // Handle scaling if enabled
+		        // Apply crop/scale settings if enabled
+		        if (attr.crop_enable) {
+		            fs->width = attr.crop.width;
+		            fs->height = attr.crop.height;
+		        }
+
 		        if (attr.scaler_enable) {
 		            fs->width = attr.scaler_outwidth;
 		            fs->height = attr.scaler_outheight;
@@ -7416,19 +7421,19 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 		    if (copy_from_user(&buf, (void __user *)arg, sizeof(buf)))
 		        return -EFAULT;
 
-		    // Check type
-		    if (buf.type != fs->fmt) {
-		        pr_err("Invalid buffer type\n");
+		    if (buf.type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+		        pr_err("Invalid buffer type: got %d expected %d\n",
+		               buf.type, V4L2_BUF_TYPE_VIDEO_CAPTURE);
 		        return -EINVAL;
 		    }
 
+		    // First check with spinlock if frame ready
 		    spin_lock_irqsave(&fc->state_lock, flags);
-
-		    // Check if any frames are ready
 		    if (fc->write_idx >= atomic_read(&fc->frames_completed)) {
+		        // No frame ready - release lock before waiting
 		        spin_unlock_irqrestore(&fc->state_lock, flags);
 
-		        // Wait for frame completion
+		        // Wait without holding spinlock
 		        ret = wait_event_interruptible_timeout(
 		            fc->wait,
 		            atomic_read(&fc->frames_completed) > fc->write_idx,
@@ -7439,34 +7444,35 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 		        if (ret == -ERESTARTSYS)
 		            return -EINTR;
 
+		        // Reacquire lock after wait
 		        spin_lock_irqsave(&fc->state_lock, flags);
 		    }
 
-		    // Get current timestamp
-		    do_gettimeofday(&tv);
-
-		    // Get current buffer info
+		    // Get current buffer info under lock
 		    buf.index = fc->write_idx % fc->buf_cnt;
 		    buf.bytesused = fs->buf_size;
 		    buf.flags = V4L2_BUF_FLAG_DONE;
 		    buf.field = V4L2_FIELD_NONE;
-		    buf.timestamp = tv;  // Assign timeval struct directly
 		    buf.sequence = atomic_read(&fc->frames_completed);
 		    buf.memory = V4L2_MEMORY_MMAP;
 		    buf.m.offset = buf.index * fs->buf_size;
 		    buf.length = fs->buf_size;
 
-		    // Mark buffer as in use
-		    set_bit(buf.index, &fc->buffer_states);
+		    // Get current time under lock
+		    do_gettimeofday(&tv);
+		    buf.timestamp = tv;
 
-		    // Increment write index
+		    // Update state
 		    fc->write_idx++;
+		    set_bit(buf.index, &fc->buffer_states);
 
 		    spin_unlock_irqrestore(&fc->state_lock, flags);
 
+		    // Copy back to user outside of lock
 		    if (copy_to_user((void __user *)arg, &buf, sizeof(buf)))
 		        return -EFAULT;
 
+		    pr_debug("Dequeued buffer %d, seq=%d\n", buf.index, buf.sequence);
 		    return 0;
 		}
 		case VIDIOC_CANCEL_READY_BUF: { // 0x400456bf
