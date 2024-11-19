@@ -85,8 +85,6 @@
 // Control registers
 #define ISP_CTRL_REG       0x100
 #define ISP_STATUS_REG     0x104
-#define ISP_INT_MASK_REG   0x108
-#define ISP_INT_CLEAR_REG  0x10C
 
 // Add these register definitions at the top with other registers
 #define ISP_BYPASS_BASE   0x140    // Base offset for bypass control
@@ -217,11 +215,13 @@
 #define ISP_BUF2_SIZE_REG  (ISP_BASE + 0x1014)
 
 // Control registers
-#define ISP_CTRL_REG       (ISP_BASE + 0x1100)
-#define ISP_START_REG      (ISP_BASE + 0x1104)
-#define SENSOR_NAME_SIZE 80
-#define PADDING_SIZE_1 0x24
-#define PADDING_SIZE_2 0x24
+#define ISP_CTRL_REG       0x100
+#define ISP_STATUS_REG     0x104
+#define ISP_INT_MASK_REG   0x108
+#define ISP_INT_CLEAR_REG  0x10C
+#define ISP_BUF0_OFFSET    0x1000
+#define ISP_STREAM_CTRL    0x7838
+#define ISP_STREAM_START   0x783c
 
 
 // Add these defines
@@ -331,6 +331,102 @@
 #define VIDIOC_INIT_ENCODER        0x40045690
 #define VIDIOC_CREATE_ENCODER_CHN  0x40045691
 #define VIDIOC_ENABLE_ENCODER_CHN  0x40045692
+
+/* Add these state definitions */
+// Core states (offset 0xe8)
+#define ISP_STATE_INIT      1  // Initial state
+#define ISP_STATE_READY     2  // Ready but not streaming
+#define ISP_STATE_ENABLED   3  // Enabled
+#define ISP_STATE_STREAMING 4  // Actively streaming
+
+// VIC states (offset 0x128)
+#define VIC_STATE_INIT      2  // Initial VIC state
+#define VIC_STATE_ENABLED   3  // VIC enabled
+#define VIC_STATE_STREAMING 4  // VIC streaming
+
+#define SENSOR_NAME_SIZE 80
+#define PADDING_SIZE_1 0x24
+#define PADDING_SIZE_2 0x24
+
+#define ISP_STATE_INVALID    0  // Initial invalid state
+#define ISP_STATE_INIT      1  // After basic init
+#define ISP_STATE_READY     2  // After resource setup
+#define ISP_STATE_ENABLED   3  // After full initialization
+#define ISP_STATE_STREAMING 4  // Actively streaming
+
+// VIC states - match decompiled offsets
+#define VIC_STATE_INVALID   0
+#define VIC_STATE_INIT      2  // After VIC init
+#define VIC_STATE_ENABLED   3  // VIC ready
+#define VIC_STATE_STREAMING 4  // VIC streaming
+
+// First add these to the header:
+#define ISP_FW_STATE_INIT     0
+#define ISP_FW_STATE_RUNNING  1
+#define ISP_FW_STATE_STOPPED  2
+
+#define ISP_PHYS_BASE       0x13300000
+#define ISP_REG_SIZE        0x10000
+
+#define ISP_CTRL_OFFSET     0x100
+#define ISP_STATUS_OFFSET   0x104
+#define ISP_INT_MASK        0x108
+#define ISP_INT_CLEAR      0x10C
+
+#define ISP_CSI_OFFSET     0xb8
+#define ISP_CSI_SIZE       0x100
+#define V4L2_CID_ISP_CONTRAST    (V4L2_CID_PRIVATE_BASE + 0)
+#define V4L2_CID_ISP_SHARPNESS   (V4L2_CID_PRIVATE_BASE + 1)
+#define V4L2_CID_ISP_SATURATION  (V4L2_CID_PRIVATE_BASE + 2)
+#define V4L2_CID_ISP_BRIGHTNESS  (V4L2_CID_PRIVATE_BASE + 3)
+#define V4L2_CID_ISP_HFLIP      (V4L2_CID_PRIVATE_BASE + 4)
+#define V4L2_CID_ISP_VFLIP      (V4L2_CID_PRIVATE_BASE + 5)
+
+/* ISP Image Control Register Offsets */
+#define ISP_BRIGHT_OFFSET     0x1100  // Brightness control
+#define ISP_CONTRAST_OFFSET   0x1104  // Contrast control
+#define ISP_SAT_OFFSET       0x1108  // Saturation control
+#define ISP_SHARP_OFFSET     0x110C  // Sharpness control
+#define ISP_HFLIP_OFFSET     0x1110  // Horizontal flip
+#define ISP_VFLIP_OFFSET     0x1114  // Vertical flip
+#define ISP_TUNING_CONTRAST    0x980901
+#define ISP_TUNING_SATURATION  0x980902
+#define ISP_TUNING_SHARPNESS   0x98091b
+// Register offsets based on T31 ISP
+#define ISP_BASE_TUNING     0x1100   // Base offset for tuning registers
+
+// Control register offsets from base
+#define ISP_REG_CONTRAST    (ISP_BASE_TUNING + 0x00)
+#define ISP_REG_SATURATION  (ISP_BASE_TUNING + 0x04)
+#define ISP_REG_SHARPNESS   (ISP_BASE_TUNING + 0x08)
+
+#define ISP_TUNING_BYPASS       0x980010
+#define ISP_TUNING_RUNNING_MODE 0x980011
+#define ISP_TUNING_AE_COMP     0x980020
+#define ISP_TUNING_MAX_AGAIN   0x980021
+#define ISP_TUNING_MAX_DGAIN   0x980022
+#define ISP_TUNING_DPC         0x980030
+#define ISP_TUNING_DRC         0x980031
+#define ISP_TUNING_DEFOG       0x980032
+
+#define ISP_STATS_AE  (1 << 0)
+#define ISP_STATS_AWB (1 << 1)
+
+#define CH_STATE_INIT      0
+#define CH_STATE_READY     1
+#define CH_STATE_STREAMING 2
+
+/* ISP Pipeline Register Structure */
+struct isp_pipeline_regs {
+    u32 bypass_ctrl;     // 0x1140
+    u32 running_mode;    // 0x1144
+    u32 ae_comp;         // 0x1148
+    u32 max_again;       // 0x114C
+    u32 max_dgain;       // 0x1150
+    u32 dpc_strength;    // 0x1154
+    u32 drc_strength;    // 0x1158
+    u32 defog_strength;  // 0x115C
+} __attribute__((packed, aligned(4)));
 
 struct tisp_param_info {
     uint32_t data[8];  // Array size can be adjusted based on needs
@@ -631,9 +727,9 @@ struct isp_framesource_state {
     // Memory management
     uint32_t buf_cnt __aligned(8);   // Keep this alignment
     uint32_t buf_flags;      // Buffer flags
-    void    *buf_base;       // Buffer base address
-    dma_addr_t dma_addr;     // DMA address
-    uint32_t buf_size;       // Buffer size per frame
+    dma_addr_t dma_addr __aligned(4);
+    void *buf_base __aligned(4);
+    uint32_t buf_size __aligned(4);
 
     // Frame management
     uint32_t frame_cnt;      // Frame counter
@@ -684,6 +780,59 @@ struct ae_zone_stats {
     uint32_t frame_count;
 };
 
+#define MAX_EVENTS 16
+
+// AE (Auto Exposure) info structure
+struct ae_info {
+    uint32_t gain;
+    uint32_t exposure;
+    uint32_t flags;
+    // Add other AE parameters as needed
+};
+
+// AWB (Auto White Balance) info structure
+struct awb_info {
+    uint32_t gain;
+    uint32_t exposure;
+    uint32_t color_temp;
+    // Add other AWB parameters as needed
+};
+
+// Event handling structure
+struct isp_events {
+    void (*handlers[MAX_EVENTS])(void);
+    spinlock_t lock;
+};
+
+struct isp_event_callback {
+    void (*callback)(void *);  // Offset 0x1c for frame callbacks
+    void (*stats_cb)(void *);  // Offset 0x8 for stats callbacks
+    void *priv;
+    struct list_head list;
+};
+
+struct isp_event_handle {
+    struct list_head callbacks;  // At offset 0xc4 in device structure
+    spinlock_t lock;
+    atomic_t enabled;
+};
+
+
+
+struct our_tx_isp_subdev_padding {
+    unsigned int flags;        // Pad flags
+    struct list_head list;     // List for managing pads
+    void *priv;               // Private data
+    struct isp_event_handle events;  // Event handling for this pad
+};
+
+
+struct isp_stats_work {
+    struct work_struct work;
+    u32 stats_mask;  // Indicates which stats to collect
+};
+
+
 /* Note for Claude, GPT, or anyone  that will listen
 This is our internal driver structure and should never be passed back to libimp.
 Instead, we need to return specific structures that libimp expects outside of this.
@@ -713,9 +862,10 @@ struct IMPISPDev {
 
     // Device and hardware access - after aligned section
     struct device *dev;
-    void __iomem *regs;                  // Register base
-    void __iomem *ctrl_regs;             // Control registers
+    void __iomem *regs __aligned(4);
+    void __iomem *ctrl_regs __aligned(4);             // Control registers
     int irq;
+    void (*irq_handlers[16])(void);  // Array of IRQ handlers
     struct i2c_client *sensor_i2c_client;
     struct irq_handler_data *irq_data;
     struct IspDevice *isp_dev;
@@ -723,10 +873,17 @@ struct IMPISPDev {
     unsigned int width;
     unsigned int height;
 
+    // Algorithm info
+    struct ae_info ae_info;
+    struct awb_info awb_info;
+
+    // Event system
+    struct isp_events events;
+
     // DMA info
-    dma_addr_t dma_addr;
+    dma_addr_t dma_addr __aligned(4);
+    size_t dma_size __aligned(4);
     void *dma_buf;
-    size_t dma_size;
 
     // Runtime state
     struct clk **clocks;
@@ -734,6 +891,37 @@ struct IMPISPDev {
     bool memory_initialized;
     struct isp_framesource_state *fs_info;  // Add this field
     uint32_t format;                        // Add this field
+
+    // Critical state tracking - match decompiled offsets
+    spinlock_t state_lock;      // At 0xdc
+    atomic_t core_state;        // At 0xe8 - core state
+    atomic_t vic_state;         // At 0x128 - VIC state
+
+    // Counters at exact offsets
+    u32 frame_count;            // At 0x160
+    u32 error_count;            // At 0x164
+    u32 overflow_count;         // At 0x168
+    u32 dropped_frames;         // At 0x170
+    bool irq_enabled;           // Track IRQ state
+
+    // Firmware thread control
+    struct task_struct *fw_thread;    // Thread pointer
+    atomic_t fw_state;                // Thread state
+    wait_queue_head_t fw_wq;          // Wait queue
+    spinlock_t fw_lock;               // Thread lock
+
+    /* VIC support */
+    void __iomem *vic_regs;     // VIC register base
+    spinlock_t vic_lock;        // VIC register lock
+
+    // VIC/Core state
+    bool vic_started;
+    bool core_started;
+
+    /* device list */
+    void *deviceListPtr;  // Points to device list
+    wait_queue_head_t stats_wait;  // Wait queue for stats
+    struct our_tx_isp_subdev_padding pads[2];  // Add as fixed array - matches 0x38 offset access
 
     /* Tuning support */
     void *tuning_data;         // Buffer for tuning data (0x1c bytes)
@@ -756,6 +944,12 @@ struct IMPISPDev {
     struct ae_zone_stats ae_stats;
     spinlock_t ae_lock;
     bool ae_valid;
+
+    struct isp_event_handle event_handle;
+    struct isp_stats_work stats_work;
+    struct workqueue_struct *stats_wq;
+    spinlock_t stats_lock;
+    bool stats_pending;
 } __attribute__((packed, aligned(4)));
 
 
@@ -771,8 +965,24 @@ struct isp_reg_block {
     u32 reserved[50];   /* Padding for other registers */
     u32 af_stats[16];   /* AF statistics registers */
     u32 ae_stats[16];   /* AE statistics registers */
-};
+} __attribute__((packed, aligned(4)));
 
+
+struct isp_reg_block_aligned {
+    u32 ctrl;          // 0x100
+    u32 status;        // 0x104
+    u32 int_mask;      // 0x108
+    u32 int_clear;     // 0x10C
+    u32 reserved[4];   // Padding to 0x120
+    u32 config[4];     // 0x120-0x130
+} __attribute__((packed, aligned(4)));
+
+struct isp_buffer_block {
+    u32 base_addr;     // Base address
+    u32 size;          // Size
+    u32 stride;        // Stride
+    u32 reserved;      // Keep alignment
+} __attribute__((packed, aligned(4)));
 
 
 typedef struct {
@@ -805,13 +1015,16 @@ struct irq_task {
     void* task_data;
 };
 
+
+#define MAX_TASKS 7  // Match the loop count from decompiled code
+
 struct irq_handler_data {
-    struct irq_task *task_list;
+    spinlock_t lock;  // Change from rlock to lock
+    uint32_t irq_number;
+    struct irq_task task_list[MAX_TASKS];
+    void (*handler_function)(struct irq_handler_data *);
+    void (*disable_function)(struct irq_handler_data *);
     int task_count;
-    int32_t irq_number;  // IRQ number
-    void* handler_function;  // Pointer to the interrupt handler function
-    void* disable_function;  // Pointer to the function to disable the IRQ
-    raw_spinlock_t rlock;    // Add the raw spinlock here
 };
 
 // Struct for passing IRQ-related information to functions
@@ -889,13 +1102,15 @@ struct frame_node {
     struct list_head list;  // For queue management
 };
 
+// Must match OEM layout exactly
 struct frame_queue {
-    spinlock_t lock;                // Protect queue access
-    struct list_head ready_list;    // Ready frames
-    struct list_head done_list;     // Completed frames
-    wait_queue_head_t wait;         // Wait queue for frames
-    atomic_t frame_count;           // Number of frames in queue
-    uint32_t max_frames;            // Maximum frames in queue
+    struct frame_entry *entries;    // At 0x1094d4
+    uint32_t num_entries;          // At 0x1094c0
+    uint32_t write_idx;            // At 0x1094d8
+    struct semaphore frame_sem;     // At 0x109418
+    struct mutex lock;              // At 0x109438
+    uint32_t channel_offset;       // Add channel base offset
+    uint8_t padding[0x308 - sizeof(struct frame_entry*)]; // Match expected size
 };
 
 struct encoder_chn_attr {
@@ -943,6 +1158,7 @@ struct frame_source_channel {
     wait_queue_head_t wait;
     atomic_t frame_count;
     uint32_t max_frames;
+    struct frame_queue frame_queue;
 
     // FIFO configuration
     uint32_t fifo_depth;
@@ -1040,6 +1256,41 @@ struct encoder_reg_param reg_param = {
     .enable = 1,
 };
 
+
+struct isp_stream_param {
+    uint32_t enable;     // Stream enable/disable
+    uint32_t channel;    // Channel number
+    uint32_t flags;      // Stream flags
+};
+
+
+// External structures for libimp interface
+struct sensor_stream_info {
+    uint32_t state;          // 0 = disabled, 1 = enabled
+    uint32_t format;         // Frame format
+    uint32_t width;
+    uint32_t height;
+    uint32_t flags;
+};
+
+struct sensor_enable_param {
+    uint32_t channel;       // Channel number
+    uint32_t enable;        // 0 = disable, 1 = enable
+    uint32_t flags;         // Reserved flags
+};
+
+
+struct frame_entry { // Must match OEM offsets exactly
+    uint32_t flags;          // +0x00
+    uint32_t timestamp;      // +0x04
+    uint32_t frame_size;     // +0x08
+    uint32_t frame_type;     // +0x0C
+    uint32_t frame_num;      // +0x10
+    uint32_t frame_rate;     // +0x14
+    uint32_t num_slices;     // +0x18
+    void *slice_data;        // +0x1C
+    uint8_t reserved[0x308 - 0x20];  // Pad to full size
+} __attribute__((aligned(8)));
 
 
 #endif
