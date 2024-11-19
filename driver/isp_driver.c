@@ -872,6 +872,8 @@ static int init_stats_work(struct IMPISPDev *dev)
 
 int32_t tx_isp_request_irq(struct irq_info* irqInfo, struct irq_handler_data* irqHandlerData)
 {
+    pr_info("Requesting IRQ: info=%p data=%p\n", irqInfo, irqHandlerData);
+
     // Check if either struct pointer is NULL
     if (irqInfo == NULL || irqHandlerData == NULL)
     {
@@ -4689,6 +4691,31 @@ static int handle_stream_enable(struct IMPISPDev *dev, bool enable)
     return 0;
 }
 
+
+static int vic_core_ops_init(struct IMPISPDev *dev, int enable)
+{
+    unsigned long flags;
+    int ret = 0;
+
+    if (!dev)
+        return -EINVAL;
+
+    spin_lock_irqsave(&dev->state_lock, flags);
+
+    if (enable) {
+        // Move to enabled state
+        tx_vic_enable_irq(dev);
+        atomic_set(&dev->vic_state, VIC_STATE_ENABLED);
+    } else {
+        // Disable VIC
+        tx_vic_disable_irq(dev);
+        atomic_set(&dev->vic_state, VIC_STATE_INIT);
+    }
+
+    spin_unlock_irqrestore(&dev->state_lock, flags);
+    return ret;
+}
+
 static int prepare_streaming(struct IMPISPDev *dev) {
     int ret;
 
@@ -5187,32 +5214,6 @@ static int ispcore_core_ops_init(struct IMPISPDev *dev, int enable)
 }
 
 
-
-static int vic_core_ops_init(struct IMPISPDev *dev, int enable)
-{
-    unsigned long flags;
-    int ret = 0;
-
-    if (!dev)
-        return -EINVAL;
-
-    spin_lock_irqsave(&dev->state_lock, flags);
-
-    if (enable) {
-        // Move to enabled state
-        tx_vic_enable_irq(dev);
-        atomic_set(&dev->vic_state, VIC_STATE_ENABLED);
-    } else {
-        // Disable VIC
-        tx_vic_disable_irq(dev);
-        atomic_set(&dev->vic_state, VIC_STATE_INIT);
-    }
-
-    spin_unlock_irqrestore(&dev->state_lock, flags);
-    return ret;
-}
-
-
 /* Handle sensor-specific IOCTL commands */
 static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __user *arg)
 {
@@ -5278,6 +5279,7 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
         case SENSOR_CMD_STREAM_OFF: {
             ret = isp_sensor_write_reg(client, 0x0100, 0x00); // Stream off
             pr_info("Sensor streaming stopped\n");
+            vic_core_ops_init(ourISPdev, 0);
             break;
         }
 
@@ -7028,9 +7030,16 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
             writel(0x1, regs + start_offset);
             wmb();
 
+            if (fs->state != 2) {
+                pr_info("Channel %d stream ON request vic enable\n", fs->chn_num);
+                vic_core_ops_init(dev, 1);
+            }
+
             // Set final streaming state
             fs->state = 2;  // Streaming state
             fs->flags |= 0x2;  // Set streaming flag
+
+            pr_info("Stream ON request for channel %d\n", fs->chn_num);
 
             pr_info("Channel %d streaming started:\n"
                     "  base=0x%x offset=0x%x\n"
