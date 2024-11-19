@@ -919,6 +919,10 @@ struct IMPISPDev {
     wait_queue_head_t fw_wq;          // Wait queue
     spinlock_t fw_lock;               // Thread lock
 
+    void __iomem *csi_base;  // Separate CSI register base
+    struct clk **subdev_clks;  // field_bc in IspSubdev
+    int num_clks;              // field_c0 in IspSubdev
+
     /* VIC support */
     void __iomem *vic_regs;     // VIC register base
     spinlock_t vic_lock;        // VIC register lock
@@ -1318,5 +1322,16 @@ struct frame_entry { // Must match OEM offsets exactly
     uint8_t reserved[0x308 - 0x20];  // Pad to full size
 } __attribute__((aligned(8)));
 
+struct clock_config {
+    const char *name;
+};
+
+static const struct clock_config csi_clocks[] = {
+    { "csi" },  // Only get the main CSI clock
+    { "cgu_isp" },
+    { "vpu" },
+    { "csi_phy" },
+    { NULL }    // Terminator
+};
 
 #endif
