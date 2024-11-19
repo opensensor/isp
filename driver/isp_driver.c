@@ -557,9 +557,17 @@ int tx_isp_register_event_cb(struct IMPISPDev *dev, struct isp_event_callback *c
     return 0;
 }
 
+struct libimp_isp_dev {
+    char dev_path[32];     // 0x00: Device path ("/dev/tx-isp")
+    char padding[0x20-32]; // Padding to 0x20
+    int fd;               // 0x20: File descriptor
+    int is_open;         // 0x24: Open flag
+    u32 reserved1;       // 0x28
+    u32 callback_offset; // 0x2c
+    void *callback_data; // 0x30
+    char more_data[0xe0-0x34]; // Rest of the structure
+};
 
-
-// From decompiled code at 0xba0c:
 static int _send_our_event_internal(struct IMPISPDev *dev, uint32_t notificationType, void* data)
 {
     if (!dev) {
@@ -567,55 +575,55 @@ static int _send_our_event_internal(struct IMPISPDev *dev, uint32_t notification
         return -EINVAL;
     }
 
-    // Explicitly verify the pointer math
-    pr_info("Event handler debug: dev=%p offset_start=%p\n",
-            dev, (char*)dev + 0x38);
+    // Get device list pointer and verify
+    uint32_t deviceListPointer = (uint32_t)dev;
+    struct libimp_isp_dev *libimp_dev = NULL;
+    int32_t* devicePtr = (int32_t*)((char*)deviceListPointer + 0x38);
 
-    // Use dev directly instead of casting to uint32_t
-    int32_t* devicePtr = (int32_t*)((char*)dev + 0x38);
-    void* device = NULL;
-
-    // Safety check the pointer before dereferencing
+    // Safety check before dereferencing
     if (!devicePtr || ((unsigned long)devicePtr < 0x1000)) {
         pr_err("Invalid device pointer: %p\n", devicePtr);
         return -EINVAL;
     }
 
-    device = (void*)*devicePtr;
-    if (!device) {
-        pr_err("No valid device at devicePtr %p\n", devicePtr);
+    // Get initial device and validate
+    libimp_dev = (struct libimp_isp_dev *)*devicePtr;
+
+    pr_debug("Event handler: type=0x%x dev=%p ptr=%p libimp=%p\n",
+             notificationType, dev, devicePtr, libimp_dev);
+
+    // Validate libimp device
+    if (!libimp_dev || !libimp_dev->is_open) {
+        pr_err("Device not open or invalid\n");
         return -EINVAL;
     }
 
-    while (true) {
-        if (!device) {
-            devicePtr++;
-        } else {
-            void* callbackData;
+    // Store our debug info
+    pr_debug("LIBIMP device: fd=%d open=%d\n",
+             libimp_dev->fd, libimp_dev->is_open);
 
-            if ((notificationType & 0xff000000) == 0x1000000) {
-                callbackData = *(void**)((char*)device + 0xc4);
-                if (callbackData) {
-                    int32_t (*callback)(void) = *(void**)((char*)callbackData + 0x1c);
-                    if (callback)
-                        return callback();
-                }
+    void* callbackData = NULL;
+    int32_t (*callback)(void) = NULL;
+
+    if ((notificationType & 0xff000000) == 0x1000000) {
+        // Frame callback at 0x1c
+        if (libimp_dev->callback_data) {
+            callback = *(void**)(libimp_dev->callback_data + 0x1c);
+            if (callback) {
+                pr_debug("Executing frame callback\n");
+                return callback();
             }
-            else if ((notificationType & 0xff000000) == 0x2000000) {
-                callbackData = *(void**)((char*)device + 0xc4);
-                if (callbackData) {
-                    int32_t (*callback)(void) = *(void**)((char*)callbackData + 0x8);
-                    if (callback)
-                        return callback();
-                }
-            }
-            devicePtr++;
         }
-
-        if ((char*)deviceListPointer + 0x78 == (char*)devicePtr)
-            break;
-
-        device = *(void**)devicePtr;
+    }
+    else if ((notificationType & 0xff000000) == 0x2000000) {
+        // Stats callback at 0x8
+        if (libimp_dev->callback_data) {
+            callback = *(void**)(libimp_dev->callback_data + 0x8);
+            if (callback) {
+                pr_debug("Executing stats callback\n");
+                return callback();
+            }
+        }
     }
 
     return 0;
@@ -5963,7 +5971,7 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
 	        wmb();  // Ensure writes complete
 
-	        pr_debug("Pipeline state: bypass=%d mode=%d ae_comp=%d\n",
+	        pr_info("Pipeline state: bypass=%d mode=%d ae_comp=%d\n",
 	                readl(&pregs->bypass_ctrl),
 	                readl(&pregs->running_mode),
 	                readl(&pregs->ae_comp));
@@ -7272,44 +7280,268 @@ static int setup_i2c_sensor(struct IMPISPDev *dev)
 }
 
 
+static int init_event_system(struct IMPISPDev *dev)
+{
+    if (!dev) {
+        pr_err("NULL device in init_event_system\n");
+        return -EINVAL;
+    }
+
+    // Initialize pad array first
+    for (int i = 0; i < 2; i++) {
+        spin_lock_init(&dev->pads[i].events.lock);
+        INIT_LIST_HEAD(&dev->pads[i].events.callbacks);
+        atomic_set(&dev->pads[i].events.enabled, 1);
+        INIT_LIST_HEAD(&dev->pads[i].list);
+        dev->pads[i].priv = NULL;
+    }
+
+    // Setup device list pointer
+    dev->deviceListPtr = (char*)dev + 0x38;
+    if (!dev->deviceListPtr) {
+        pr_err("Failed to allocate device list pointer\n");
+        return -EINVAL;
+    }
+
+    // Clear and initialize device list
+    memset(dev->deviceListPtr, 0, 0x40);
+
+    // Setup initial LIBIMP device entry
+    struct libimp_isp_dev *libimp_dev = kzalloc(sizeof(*libimp_dev), GFP_KERNEL);
+    if (!libimp_dev) {
+        pr_err("Failed to allocate LIBIMP device\n");
+        return -ENOMEM;
+    }
+
+    // Initialize LIBIMP device
+    strncpy(libimp_dev->dev_path, "/dev/tx-isp", sizeof(libimp_dev->dev_path)-1);
+    libimp_dev->fd = -1; // Will be set when opened
+    libimp_dev->is_open = 0; // Start closed
+    libimp_dev->callback_data = NULL;
+
+    // Store in device list
+    *(struct libimp_isp_dev **)dev->deviceListPtr = libimp_dev;
+
+    pr_info("Event system initialized: dev=%p devlist=%p libimp=%p\n",
+            dev, dev->deviceListPtr, libimp_dev);
+
+    return 0;
+}
+
+
+static int init_irq_system(struct IMPISPDev *dev)
+{
+    struct IspDevice *isp_dev;
+    struct irq_handler_data *irq_data;
+
+    if (!dev) {
+        pr_err("NULL device in init_irq_system\n");
+        return -EINVAL;
+    }
+
+    // Allocate ISP device structure
+    isp_dev = kzalloc(sizeof(*isp_dev), GFP_KERNEL);
+    if (!isp_dev) {
+        pr_err("Failed to allocate IspDevice\n");
+        return -ENOMEM;
+    }
+
+    // Initialize ISP device
+    spin_lock_init(&isp_dev->lock);
+    isp_dev->irq_enabled = 0;
+    isp_dev->irq_handler = isp_irq_handler;
+    dev->isp_dev = isp_dev;
+
+    // Allocate handler data
+    irq_data = kzalloc(ALIGN(sizeof(*irq_data), 8), GFP_KERNEL | GFP_DMA);
+    if (!irq_data) {
+        pr_err("Failed to allocate IRQ data\n");
+        kfree(isp_dev);
+        return -ENOMEM;
+    }
+
+    // Initialize handler data
+    spin_lock_init(&irq_data->lock);
+    memset(irq_data->task_list, 0, sizeof(struct irq_task) * MAX_TASKS);
+    irq_data->irq_number = dev->irq;
+    irq_data->handler_function = tx_isp_enable_irq;
+    irq_data->disable_function = tx_isp_disable_irq;
+
+    dev->irq_data = irq_data;
+
+    pr_info("IRQ system initialized: irq=%d isp_dev=%p data=%p\n",
+            dev->irq, isp_dev, irq_data);
+    return 0;
+}
+
+static int init_stats_system(struct IMPISPDev *dev)
+{
+    if (!dev) {
+        pr_err("NULL device in init_stats_system\n");
+        return -EINVAL;
+    }
+
+    // Create workqueue
+    dev->stats_wq = create_singlethread_workqueue("isp-stats");
+    if (!dev->stats_wq) {
+        pr_err("Failed to create stats workqueue\n");
+        return -ENOMEM;
+    }
+
+    // Initialize work structure
+    INIT_WORK(&dev->stats_work.work, isp_collect_stats_work);
+
+    // Initialize locks and state
+    spin_lock_init(&dev->stats_lock);
+    dev->stats_pending = false;
+
+    // Initialize wait queue
+    init_waitqueue_head(&dev->stats_wait);
+
+    pr_info("Stats system initialized: wq=%p\n", dev->stats_wq);
+    return 0;
+}
+
+
+static int init_frame_callbacks(struct IMPISPDev *dev)
+{
+    struct isp_event_callback *frame_cb;
+
+    if (!dev) {
+        pr_err("NULL device in init_frame_callbacks\n");
+        return -EINVAL;
+    }
+
+    frame_cb = kzalloc(sizeof(*frame_cb), GFP_KERNEL);
+    if (!frame_cb) {
+        pr_err("Failed to allocate frame callback\n");
+        return -ENOMEM;
+    }
+
+    // Initialize callbacks
+    frame_cb->callback = handle_frame_complete;
+    frame_cb->stats_cb = handle_stats_ready;
+    frame_cb->priv = dev;
+
+    // Register with event system
+    int ret = tx_isp_register_event_cb(dev, frame_cb);
+    if (ret) {
+        pr_err("Failed to register frame callback\n");
+        kfree(frame_cb);
+        return ret;
+    }
+
+    pr_info("Frame callbacks initialized\n");
+    return 0;
+}
+
+static int init_core_state(struct IMPISPDev *dev)
+{
+    atomic_t zero = ATOMIC_INIT(0);
+    atomic_t init = ATOMIC_INIT(ISP_STATE_INIT);
+
+    if (!dev) {
+        pr_err("NULL device in init_core_state\n");
+        return -EINVAL;
+    }
+
+    // Initialize atomic states
+    memcpy(&dev->core_state, &init, sizeof(atomic_t));
+    memcpy(&dev->vic_state, &init, sizeof(atomic_t));
+    memcpy(&dev->fw_state, &zero, sizeof(atomic_t));
+
+    // Initialize locks
+    spin_lock_init(&dev->state_lock);
+    spin_lock_init(&dev->vic_lock);
+    spin_lock_init(&dev->fw_lock);
+
+    // Initialize wait queue
+    init_waitqueue_head(&dev->fw_wq);
+    dev->fw_thread = NULL;
+
+    pr_info("Core state initialized\n");
+    return 0;
+}
+
+
+static int init_final_state(struct IMPISPDev *dev)
+{
+    if (!dev) {
+        pr_err("NULL device in init_final_state\n");
+        return -EINVAL;
+    }
+
+    // Clear statistics
+    dev->frame_count = 0;
+    dev->error_count = 0;
+    dev->overflow_count = 0;
+    dev->dropped_frames = 0;
+
+    // Set initial state flags
+    dev->vic_started = false;
+    dev->core_started = false;
+    dev->memory_initialized = true;
+
+    // Enable interrupts
+    writel(0x1, dev->regs + ISP_INT_MASK_REG);
+    writel(0x7, dev->regs + ISP_CTRL_REG);
+    wmb();
+
+    pr_info("Final state initialized\n");
+    return 0;
+}
+
+static void cleanup_event_system(struct IMPISPDev *dev)
+{
+    if (dev && dev->deviceListPtr) {
+        struct libimp_isp_dev *libimp_dev =
+            *(struct libimp_isp_dev **)dev->deviceListPtr;
+        if (libimp_dev) {
+            kfree(libimp_dev);
+        }
+    }
+}
+
+
 static int tisp_probe(struct platform_device *pdev)
 {
     struct resource *res;
     void __iomem *base;
     struct isp_graph_data *graph_data;
-    int ret;
+    int ret, i;
 
     pr_info("Starting ISP probe...\n");
-    // Validate ourISPdev
     if (!ourISPdev) {
         dev_err(&pdev->dev, "Global ISP device structure not allocated\n");
         return -ENOMEM;
     }
 
-    // Initialize thread control
+    // 1. Initialize core state - do this first for proper state tracking
     atomic_t zero = ATOMIC_INIT(0);
     atomic_t init = ATOMIC_INIT(ISP_STATE_INIT);
-
     memcpy(&ourISPdev->core_state, &init, sizeof(atomic_t));
     memcpy(&ourISPdev->vic_state, &init, sizeof(atomic_t));
     memcpy(&ourISPdev->fw_state, &zero, sizeof(atomic_t));
 
-    // Initialize locks
+    // 2. Initialize all basic locks/queues
     spin_lock_init(&ourISPdev->state_lock);
     spin_lock_init(&ourISPdev->vic_lock);
     spin_lock_init(&ourISPdev->fw_lock);
-
-    // Initialize wait queue
     init_waitqueue_head(&ourISPdev->fw_wq);
-
-    // Clear thread pointer
     ourISPdev->fw_thread = NULL;
 
-    // Allocate and initialize graph data
+    // 3. Setup device/graph data
+    ourISPdev->dev = &pdev->dev;
+    if (!ourISPdev->dev) {
+        ret = -EINVAL;
+        goto err_free_dev;
+    }
+
     graph_data = kzalloc(sizeof(*graph_data), GFP_KERNEL);
     if (!graph_data) {
         dev_err(&pdev->dev, "Failed to allocate graph data\n");
-        return -ENOMEM;
+        ret = -ENOMEM;
+        goto err_free_dev;
     }
 
     // Initialize graph data
@@ -7317,106 +7549,103 @@ static int tisp_probe(struct platform_device *pdev)
     graph_data->dev_status.sensor_enabled = 0;
     memset(&graph_data->dev_status.fs_status, 0,
            sizeof(struct isp_framesource_status));
-
-    // Store globally for proc entries to use
     global_graph_data = graph_data;
 
-    // Initialize device structure properly
-    ourISPdev->dev = &pdev->dev;
-    if (!ourISPdev->dev) {
-        dev_err(&pdev->dev, "Failed to set device pointer\n");
-        ret = -EINVAL;
+    // 4. Map hardware registers
+    base = ioremap(ISP_PHYS_BASE, ISP_REG_SIZE);
+    if (!base) {
+        dev_err(&pdev->dev, "Failed to map ISP registers\n");
+        ret = -ENOMEM;
         goto err_free_graph;
     }
+    ourISPdev->regs = base;
 
-	// Map registers with proper error checking
-	base = ioremap(ISP_PHYS_BASE, ISP_REG_SIZE);
-	if (!base) {
-	    dev_err(&pdev->dev, "Failed to map ISP registers\n");
-	    ret = -ENOMEM;
-	    goto err_free_graph;
-	}
+    // Test register access
+    writel(0, base + ISP_INT_MASK_REG);
+    writel(0xFFFFFFFF, base + ISP_INT_CLEAR_REG);
+    wmb();
+    pr_info("Initial control register: 0x%08x\n",
+            readl(base + ISP_CTRL_OFFSET));
 
-	// Store mapped registers
-	ourISPdev->regs = base;
-
-	// Get IRQ from platform device
-	ourISPdev->irq = platform_get_irq(pdev, 0);
-	if (ourISPdev->irq < 0) {
-	    dev_err(&pdev->dev, "Failed to get platform IRQ\n");
-	    ret = -EINVAL;
-	    goto err_unmap_regs;
-	}
-
-	pdev->dev.platform_data = &isp_pdata;
-	pr_info("Setting up ISP interrupts...\n");
-
-	// Test register access and disable interrupts first
-	pr_info("Testing register access at base %p\n", base);
-	writel(0, base + ISP_INT_MASK_REG); // Disable all interrupts
-	writel(0xFFFFFFFF, base + ISP_INT_CLEAR_REG); // Clear any pending
-	wmb();
-
-	u32 test_val = readl(base + ISP_CTRL_OFFSET);
-	pr_info("Initial control register: 0x%08x\n", test_val);
-
-	// Allocate IRQ handling structures
-	struct IspDevice *isp_dev = kzalloc(sizeof(*isp_dev), GFP_KERNEL);
-	if (!isp_dev) {
-	    dev_err(&pdev->dev, "Failed to allocate ISP device\n");
-	    ret = -ENOMEM;
-	    goto err_unmap_regs;
-	}
-
-	// Initialize IRQ control structure
-	spin_lock_init(&isp_dev->lock);
-	isp_dev->irq_enabled = 0;
-	isp_dev->irq_handler = isp_irq_handler;
-	ourISPdev->isp_dev = isp_dev;
-
-	// Initialize IRQ handler data
-	struct irq_handler_data *irq_data = kzalloc(ALIGN(sizeof(*irq_data), 8),
-	                                       GFP_KERNEL | GFP_DMA);
-	if (!irq_data) {
-	    dev_err(&pdev->dev, "Failed to allocate IRQ data\n");
-	    ret = -ENOMEM;
-	    kfree(isp_dev);
-	    goto err_unmap_regs;
-	}
-
-	// Initialize spin lock
-	spin_lock_init(&irq_data->lock);  // Changed from rlock to lock
-
-	// Zero initialize all task slots
-	memset(irq_data->task_list, 0, sizeof(struct irq_task) * MAX_TASKS);
-
-	// Initialize base IRQ info
-	irq_data->irq_number = ourISPdev->irq;
-	irq_data->handler_function = tx_isp_enable_irq;
-	irq_data->disable_function = tx_isp_disable_irq;
-
-	// Initialize each task with NULL function
-	for (int i = 0; i < MAX_TASKS; i++) {
-	    irq_data->task_list[i].task_function = NULL;
-	    irq_data->task_list[i].status = 0;
-	    irq_data->task_list[i].task_data = NULL;
-	}
-
-	pr_info("IRQ structures allocated and initialized: isp_dev=%p irq_data=%p\n",
-	        isp_dev, irq_data);
-
-    // Initialize stats and events before IRQ
-    ret = init_stats_and_events(ourISPdev);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to init stats and events\n");
-        goto err_free_dev;
+    // 5. Initialize event system and pads first - this is critical
+    // Initialize pad array first
+    for (i = 0; i < 2; i++) {
+        spin_lock_init(&ourISPdev->pads[i].events.lock);
+        INIT_LIST_HEAD(&ourISPdev->pads[i].events.callbacks);
+        atomic_set(&ourISPdev->pads[i].events.enabled, 1);
+        INIT_LIST_HEAD(&ourISPdev->pads[i].list);
+        ourISPdev->pads[i].priv = NULL;
     }
+
+    // Now setup device list pointer with proper initialization
+    ourISPdev->deviceListPtr = (char*)ourISPdev + 0x38;
+    if (!ourISPdev->deviceListPtr ||
+        ((unsigned long)ourISPdev->deviceListPtr < 0x1000)) {
+        dev_err(&pdev->dev, "Invalid device list pointer\n");
+        ret = -EINVAL;
+        goto err_unmap_regs;
+    }
+	memset(ourISPdev->deviceListPtr, 0, 0x40);  // Clear list first
+
+	// Setup initial device entry that matches LIBIMP's structure
+	struct libimp_isp_dev *libimp_dev = (struct libimp_isp_dev *)ourISPdev->deviceListPtr;
+	strncpy(libimp_dev->dev_path, "/dev/tx-isp", sizeof(libimp_dev->dev_path)-1);
+	libimp_dev->is_open = 1;  // Mark as open since we're ready
+
+    // Initialize main event handle
+    INIT_LIST_HEAD(&ourISPdev->event_handle.callbacks);
+    spin_lock_init(&ourISPdev->event_handle.lock);
+    atomic_set(&ourISPdev->event_handle.enabled, 1);
+
+    // 6. Initialize IRQ and handler
+    ourISPdev->irq = platform_get_irq(pdev, 0);
+    if (ourISPdev->irq < 0) {
+        ret = -EINVAL;
+        goto err_unmap_regs;
+    }
+
+    struct IspDevice *isp_dev = kzalloc(sizeof(*isp_dev), GFP_KERNEL);
+    if (!isp_dev) {
+        ret = -ENOMEM;
+        goto err_unmap_regs;
+    }
+    spin_lock_init(&isp_dev->lock);
+    isp_dev->irq_enabled = 0;
+    isp_dev->irq_handler = isp_irq_handler;
+    ourISPdev->isp_dev = isp_dev;
+
+    // IRQ handler data setup
+    struct irq_handler_data *irq_data = kzalloc(ALIGN(sizeof(*irq_data), 8),
+                                               GFP_KERNEL | GFP_DMA);
+    if (!irq_data) {
+        ret = -ENOMEM;
+        kfree(isp_dev);
+        goto err_unmap_regs;
+    }
+
+    spin_lock_init(&irq_data->lock);
+    memset(irq_data->task_list, 0, sizeof(struct irq_task) * MAX_TASKS);
+    irq_data->irq_number = ourISPdev->irq;
+    irq_data->handler_function = tx_isp_enable_irq;
+    irq_data->disable_function = tx_isp_disable_irq;
+
+    // 7. Initialize stats & workqueue
+    ourISPdev->stats_wq = create_singlethread_workqueue("isp-stats");
+    if (!ourISPdev->stats_wq) {
+        ret = -ENOMEM;
+        goto err_free_irq_data;
+    }
+
+    INIT_WORK(&ourISPdev->stats_work.work, isp_collect_stats_work);
+    spin_lock_init(&ourISPdev->stats_lock);
+    ourISPdev->stats_pending = false;
+    init_waitqueue_head(&ourISPdev->stats_wait);
 
     // Register initial frame callback
     struct isp_event_callback *frame_cb = kzalloc(sizeof(*frame_cb), GFP_KERNEL);
     if (!frame_cb) {
         ret = -ENOMEM;
-        goto err_cleanup_stats;
+        goto err_destroy_workqueue;
     }
 
     frame_cb->callback = handle_frame_complete;
@@ -7426,181 +7655,97 @@ static int tisp_probe(struct platform_device *pdev)
     ret = tx_isp_register_event_cb(ourISPdev, frame_cb);
     if (ret) {
         kfree(frame_cb);
-        goto err_cleanup_stats;
+        goto err_destroy_workqueue;
     }
 
-    // First stats work init
-    ret = init_stats_work(ourISPdev);
+    // 8. Request IRQ - do this after event setup
+    ret = request_irq(ourISPdev->irq, isp_irq_handler,
+                     IRQF_SHARED, "isp_driver", ourISPdev);
     if (ret) {
-        dev_err(&pdev->dev, "Failed to init stats\n");
-        goto err_free_dev;
+        goto err_free_cb;
     }
+    ourISPdev->irq_data = irq_data;
 
-    // Then device list setup for events
-    ourISPdev->deviceListPtr = (char*)ourISPdev + 0x38;
-    memset(ourISPdev->deviceListPtr, 0, 0x40); // Clear device list
-
-	// Request IRQ - note we pass ourISPdev as the dev_id
-	ret = request_irq(ourISPdev->irq,
-	                 isp_irq_handler,
-	                 IRQF_SHARED,
-	                 "isp_driver",
-	                 ourISPdev);  // Pass ourISPdev instead of irq_data
-	if (ret) {
-	    pr_err("Failed to request IRQ: %d\n", ret);
-	    kfree(irq_data);
-	    kfree(isp_dev);
-	    goto err_unmap_regs;
-	}
-
-	// Store IRQ data
-	ourISPdev->irq_data = irq_data;
-
-	pr_info("ISP IRQ setup complete: num=%d mask=0x%x ctrl=0x%x\n",
-	        ourISPdev->irq,
-	        readl(base + ISP_INT_MASK_REG),
-	        readl(base + ISP_CTRL_REG));
-
-	// Configure clocks
-	ret = configure_isp_clocks(ourISPdev);
-	if (ret) {
-	    dev_err(&pdev->dev, "Failed to configure ISP clocks: %d\n", ret);
-	    free_irq(ourISPdev->irq, ourISPdev);
-	    kfree(irq_data);
-	    kfree(isp_dev);
-	    goto err_unmap_regs;
-	}
-
-    // After device init but before memory/register mapping
-    ourISPdev->deviceListPtr = (void*)((char*)ourISPdev + 0x38);
-    memset(ourISPdev->deviceListPtr, 0, 0x40);
-
-    // Initialize stats system
-    INIT_LIST_HEAD(&ourISPdev->event_handle.callbacks);
-    spin_lock_init(&ourISPdev->event_handle.lock);
-    atomic_set(&ourISPdev->event_handle.enabled, 1);
-
-    // Initialize work queue
-    ourISPdev->stats_wq = create_singlethread_workqueue("isp-stats");
-    if (!ourISPdev->stats_wq) {
-        ret = -ENOMEM;
-        goto err_free_dev;
-    }
-
-    INIT_WORK(&ourISPdev->stats_work.work, isp_collect_stats_work);
-    spin_lock_init(&ourISPdev->stats_lock);
-    ourISPdev->stats_pending = false;
-
-    // Initialize stats wait queue
-    init_waitqueue_head(&ourISPdev->stats_wait);
-
-	// Initialize reserved memory
-	ret = init_isp_reserved_memory(pdev);
+    // 9. Configure clocks
+    ret = configure_isp_clocks(ourISPdev);
     if (ret) {
-        dev_err(&pdev->dev, "Failed to initialize reserved memory\n");
+        goto err_free_irq;
+    }
+
+    // 10. Initialize memory systems
+    ret = init_isp_reserved_memory(pdev);
+    if (ret) {
         goto err_cleanup_clocks;
     }
+    ourISPdev->memory_initialized = true;
 
-    // Set memory initialized flag
-    ourISPdev->memory_initialized = true;  // ADD THIS
-
-    // Set up memory regions
     ret = setup_isp_memory_regions(ourISPdev);
     if (ret) {
-        dev_err(&pdev->dev, "Failed to setup memory regions\n");
         goto err_cleanup_memory;
     }
 
-    // Setup I2C sensor
+    // 11. Setup devices and subsystems
     ret = setup_i2c_sensor(ourISPdev);
     if (ret) {
-        dev_err(&pdev->dev, "Failed to setup I2C sensor\n");
         goto err_cleanup_memory;
     }
 
-    // Create proc entries - using graph_data
     ret = create_isp_proc_entries(graph_data);
     if (ret) {
-        dev_err(&pdev->dev, "Failed to create proc entries: %d\n", ret);
         goto err_cleanup_memory;
     }
 
-    // Initialize ISP
-    ret = tisp_driver_init(&pdev->dev);  // This loads params
+    ret = tisp_driver_init(&pdev->dev);
     if (ret) {
-        dev_err(&pdev->dev, "Failed to initialize ISP subsystem\n");
         goto err_cleanup_proc;
     }
 
-    // Initialize subsystems before thread
     ret = init_isp_subsystems(ourISPdev);
     if (ret) {
-        dev_err(&pdev->dev, "Failed to initialize ISP subsystems\n");
         goto err_cleanup_proc;
     }
 
-    ret = setup_isp_subdevs(ourISPdev);;
+    ret = setup_isp_subdevs(ourISPdev);
     if (ret) {
-        dev_err(&pdev->dev, "Failed to setup subdevices\n");
         goto err_cleanup_proc;
     }
 
-    // Keep links enabled
-    if (ourISPdev->subdevs && ourISPdev->subdevs[0]) {
-        struct isp_subdev_state *sd = ourISPdev->subdevs[0];
-        if (sd->src_pads && sd->sink_pads) {
-            sd->src_pads->link_state = LINK_STATE_ENABLED;
-            sd->sink_pads->link_state = LINK_STATE_ENABLED;
-        }
-    }
-
-    // Create frame channel devices
+    // 12. Create devices
     ret = create_framechan_devices(&pdev->dev);
     if (ret) {
-        dev_err(&pdev->dev, "Failed to create frame channels\n");
         goto err_cleanup_proc;
     }
 
-    pr_info("About to register isp-m0 device\n");
-    // Register /dev/isp-m0 device
     ret = misc_register(&isp_m0_miscdev);
     if (ret) {
-        dev_err(&pdev->dev, "Failed to register isp-m0 device\n");
         goto err_cleanup_proc;
     }
 
-    pr_info("About to initialize core\n");
-    // Initialize core - fw_state was already set at start of probe
+    // 13. Final initialization
     ret = ispcore_core_ops_init(ourISPdev, 1);
     if (ret) {
-        dev_err(&pdev->dev, "Failed to initialize ISP core\n");
         goto err_cleanup_misc;
     }
 
-    pr_info("About to start frame thread\n");
-    // Configure initial interrupt state
-	writel(0x1, base + ISP_INT_MASK_REG);  // Enable frame done interrupt
-	writel(0x7, base + ISP_CTRL_REG);      // Enable core with IRQs
-	wmb();
+    // 14. Enable interrupts and core
+    writel(0x1, base + ISP_INT_MASK_REG);
+    writel(0x7, base + ISP_CTRL_REG);
+    wmb();
 
-    pr_info("About to set drvdata\n");
+    // 15. Final setup
     platform_set_drvdata(pdev, ourISPdev);
 
-    // We can still clear statistics
+    // Clear statistics
     ourISPdev->frame_count = 0;
     ourISPdev->error_count = 0;
     ourISPdev->overflow_count = 0;
     ourISPdev->dropped_frames = 0;
-
-    // Initialize state flags
     ourISPdev->vic_started = false;
     ourISPdev->core_started = false;
 
     pr_info("ISP probe completed successfully\n");
     return 0;
 
-err_cleanup_core:
-    ispcore_core_ops_init(ourISPdev, 0);  // Deinit core
 err_cleanup_misc:
     misc_deregister(&isp_m0_miscdev);
 err_cleanup_proc:
@@ -7609,26 +7754,24 @@ err_cleanup_memory:
     cleanup_isp_memory(ourISPdev);
 err_cleanup_clocks:
     cleanup_isp_clocks(ourISPdev);
+err_free_irq:
+    free_irq(ourISPdev->irq, ourISPdev);
 err_free_cb:
     kfree(frame_cb);
-err_cleanup_stats:
+err_destroy_workqueue:
     destroy_workqueue(ourISPdev->stats_wq);
 err_free_irq_data:
-    tx_isp_free_irq(ourISPdev->irq_data);
+    kfree(irq_data);
+    cleanup_event_system(ourISPdev);  // Clean up events before unmapping
 err_unmap_regs:
     if (ourISPdev->regs)
         iounmap(ourISPdev->regs);
 err_free_graph:
-    if (graph_data) {
-        kfree(graph_data);
-        global_graph_data = NULL;
-    }
-    return ret;
+    kfree(graph_data);
+    global_graph_data = NULL;
 err_free_dev:
-    kfree(ourISPdev);
     return ret;
 }
-
 
 static int tisp_remove(struct platform_device *pdev) {
     struct IMPISPDev *dev = platform_get_drvdata(pdev);
@@ -7637,17 +7780,21 @@ static int tisp_remove(struct platform_device *pdev) {
     pr_info("ISP device remove called\n");
 
     if (dev) {
-          // Stop all frame sources first
+        // Stop all frame sources first
         for (i = 0; i < MAX_FRAMESOURCE_CHANNELS; i++) {
             cleanup_frame_source(dev, i);
         }
+
+        // Add cleanup_event_system here - do this before other cleanups
+        cleanup_event_system(dev);
 
         if (dev->sensor_window_size) {
             kfree(dev->sensor_window_size);
             dev->sensor_window_size = NULL;
         }
-     	// Unregister /dev/isp-m0 device
-       	misc_deregister(&isp_m0_miscdev);
+
+        // Unregister /dev/isp-m0 device
+        misc_deregister(&isp_m0_miscdev);
 
         // Remove frame channel devices first
         remove_framechan_devices();
