@@ -1198,6 +1198,13 @@ struct frame_source_channel {
     struct ae_zone_stats ae_stats;
     spinlock_t ae_lock;
     bool ae_valid;
+    // Debug statistics
+    atomic_t frames_received;
+    atomic_t frames_dropped;
+    atomic_t buffer_overruns;
+    u64 last_frame_time;
+    u32 min_frame_interval;
+    u32 max_frame_interval;
 } __attribute__((packed));
 
 

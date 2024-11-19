@@ -571,38 +571,76 @@ struct libimp_isp_dev {
 static int _send_our_event_internal(struct IMPISPDev *dev, uint32_t notificationType, void* data)
 {
     if (!dev) {
-        pr_err("NULL device in event handler\n");
+        pr_err("Event: NULL device\n");
         return -EINVAL;
     }
 
     struct device_list_entry *entry;
     void *callback_data;
-    int i;
+    int i, ret = 0;
+
+    pr_debug("Event processing: type=0x%x dev=%p data=%p\n",
+             notificationType, dev, data);
+
+    // Validate notification type
+    switch (notificationType & 0xff000000) {
+    case 0x1000000:  // Frame
+    case 0x2000000:  // Stats
+        break;
+    default:
+        pr_warn("Unknown event type: 0x%x\n", notificationType);
+        return -EINVAL;
+    }
 
     for (i = 0; i < 16; i++) {
         entry = &dev->devices[i];
-        if (!entry->device)
+
+        if (!entry->device) {
             continue;
+        }
+
+        // Validate device entry
+        if (entry->device != dev) {
+            pr_warn("Event: Invalid device entry at %d: %p\n", i, entry->device);
+            continue;
+        }
 
         callback_data = entry->callback_data;
-        if (!callback_data)
+        if (!callback_data) {
+            pr_warn("Event: No callback data at entry %d\n", i);
             continue;
+        }
 
+        // Process based on type
         if ((notificationType & 0xff000000) == 0x1000000) {
-            // Frame callback at 0x1c offset
             int32_t (*callback)(void) = *(void**)(callback_data + 0x1c);
-            if (callback)
-                return callback();
+            if (!callback) {
+                pr_warn("Event: NULL frame callback at entry %d\n", i);
+                continue;
+            }
+            pr_debug("Calling frame callback: entry=%d cb=%p\n", i, callback);
+            ret = callback();
+            if (ret) {
+                pr_err("Frame callback failed: %d\n", ret);
+                return ret;
+            }
         }
         else if ((notificationType & 0xff000000) == 0x2000000) {
-            // Stats callback at 0x8 offset
             int32_t (*callback)(void) = *(void**)(callback_data + 0x8);
-            if (callback)
-                return callback();
+            if (!callback) {
+                pr_warn("Event: NULL stats callback at entry %d\n", i);
+                continue;
+            }
+            pr_debug("Calling stats callback: entry=%d cb=%p\n", i, callback);
+            ret = callback();
+            if (ret) {
+                pr_err("Stats callback failed: %d\n", ret);
+                return ret;
+            }
         }
     }
 
-    return 0;
+    return ret;
 }
 
 // Update both the function name and parameter type
@@ -739,6 +777,9 @@ static irqreturn_t isp_irq_handler(int irq, void *dev_id)
     struct isp_framesource_state *fs;
     struct frame_source_channel *fc;
     struct frame_entry entry;
+    u64 curr_time;
+    u32 interval;
+
 
     if (status & ISP_INT_FRAME_DONE) {
         fs = &dev->frame_sources[0];
@@ -749,12 +790,24 @@ static irqreturn_t isp_irq_handler(int irq, void *dev_id)
 
         // Check channel state before processing
         if (fc->state != CH_STATE_STREAMING) {
+            atomic_inc(&fc->frames_dropped);
             goto clear_irq;
         }
 
+        // Calculate frame timing
+        curr_time = ktime_get_real_ns();
+        if (fc->last_frame_time) {
+            interval = curr_time - fc->last_frame_time;
+            if (interval < fc->min_frame_interval)
+                fc->min_frame_interval = interval;
+            if (interval > fc->max_frame_interval)
+                fc->max_frame_interval = interval;
+        }
+        fc->last_frame_time = curr_time;
+
         // Setup frame entry
         entry.flags = 0x1;  // Mark as filled
-        entry.timestamp = ktime_get_real_ns();
+        entry.timestamp = curr_time;
         entry.frame_size = fs->buf_size;
         entry.frame_type = 1;  // I-frame
         entry.frame_num = fs->frame_cnt++;
@@ -762,8 +815,23 @@ static irqreturn_t isp_irq_handler(int irq, void *dev_id)
         entry.num_slices = 1;
         entry.slice_data = fs->buf_base + (fs->buf_index * fs->buf_size);
 
-        // Enqueue the frame
-        enqueue_frame(fc, &entry);
+        // Track buffer use
+        if (atomic_read(&fc->frames_completed) >= fc->buf_cnt) {
+            atomic_inc(&fc->buffer_overruns);
+            pr_warn("Buffer overrun: completed=%d count=%d\n",
+                   atomic_read(&fc->frames_completed), fc->buf_cnt);
+        }
+
+        // Enqueue with debug
+        pr_debug("Frame ready: num=%d size=%u ts=%llu\n",
+                entry.frame_num, entry.frame_size, entry.timestamp);
+        if (enqueue_frame(fc, &entry)) {
+            atomic_inc(&fc->frames_dropped);
+            pr_warn("Frame drop: queue full\n");
+            goto clear_irq;
+        }
+
+        atomic_inc(&fc->frames_received);
 
         // Queue stats work
         if (!dev->stats_pending) {
