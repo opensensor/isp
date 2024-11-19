@@ -474,6 +474,42 @@
 #define V4L2_FIELD_NONE                  0
 #define V4L2_BUF_FLAG_DONE               0x00000001
 
+
+#define ISP_CTRL_REG         0x00
+#define ISP_STATUS_REG       0x04
+#define ISP_INT_MASK_REG     0x08
+#define ISP_INT_CLEAR_REG    0x0C
+#define ISP_STREAM_CTRL      0x10
+#define ISP_STREAM_START     0x14
+#define ISP_DMA_STATUS       0x18
+
+#define ISP_INT_FRAME_DONE   (1 << 0)
+#define ISP_INT_ERR         (1 << 1)
+#define ISP_INT_DMA_DONE    (1 << 2)
+
+#define ISP_DMA_BUSY        (1 << 0)
+#define ISP_DMA_CTRL         0x128
+
+#define ISP_BUF0_OFFSET     0x100  // Input buffer registers
+#define ISP_BUF1_OFFSET     0x110  // Y buffer registers
+#define ISP_BUF2_OFFSET     0x120  // UV buffer registers
+#define ISP_DMA_CTRL        0x128  // DMA control register
+#define ISP_CTRL_PATH_REG   0x140  // Path control
+#define ISP_BYPASS_REG      0x144  // Bypass control
+#define ISP_FRAME_WIDTH     0x148  // Frame width
+#define ISP_FRAME_HEIGHT    0x14C  // Frame height
+#define ISP_INPUT_FMT_REG   0x150  // Input format
+#define ISP_OUTPUT_FMT_REG  0x154  // Output format
+
+#define ISP_FMT_RAW10       0x2B   // RAW10 format code
+#define ISP_FMT_NV12        0x3231564E  // NV12 format code
+
+#define ISP_INT_FRAME_DONE   (1 << 0)
+#define ISP_INT_ERR         (1 << 1)
+#define ISP_INT_DROP        (1 << 2)
+#define ISP_INT_OVERFLOW    (1 << 3)
+#define ISP_INT_AE_DONE     (1 << 4)
+
 /* ISP Pipeline Register Structure */
 struct isp_pipeline_regs {
     u32 bypass_ctrl;     // 0x1140
@@ -1182,23 +1218,26 @@ struct isp_link_config {
 
 // Add these structures to match libimp's buffer management
 struct frame_node {
-    uint32_t magic;         // 0x336ac
-    uint32_t index;         // Buffer index
-    uint32_t frame_size;    // Frame data size
-    uint32_t timestamp;     // Frame timestamp
-    void *data;            // Frame data pointer
-    struct list_head list;  // For queue management
+    uint32_t magic;             // 0x0: Magic number identifier
+    void *data;                 // 0x4: Buffer data pointer
+    uint32_t frame_size;        // 0x8: Frame data size
+    uint32_t seq;              // 0xc: Frame sequence number
+    struct list_head list;      // 0x10: List management
+    uint32_t flags;            // 0x20: Frame flags
+    uint8_t state;             // 0x24: Frame state
 };
 
 // Must match OEM layout exactly
 struct frame_queue {
-    struct frame_entry *entries;    // At 0x1094d4
-    uint32_t num_entries;          // At 0x1094c0
-    uint32_t write_idx;            // At 0x1094d8
-    struct semaphore frame_sem;     // At 0x109418
-    struct mutex lock;              // At 0x109438
-    uint32_t channel_offset;       // Add channel base offset
-    uint8_t padding[0x308 - sizeof(struct frame_entry*)]; // Match expected size
+    struct frame_node *frames;      // Array of frame nodes
+    spinlock_t lock;                // Queue lock
+    struct list_head ready_list;    // List of ready frames
+    struct list_head done_list;     // List of completed frames
+    wait_queue_head_t wait;         // Wait queue
+    atomic_t frame_count;           // Count of frames
+    uint32_t max_frames;            // Maximum frames
+    uint32_t write_idx;             // Current write index
+    uint32_t read_idx;              // Current read index
 };
 
 struct encoder_chn_attr {
@@ -1284,6 +1323,19 @@ struct frame_source_channel {
     u64 last_frame_time;
     u32 min_frame_interval;
     u32 max_frame_interval;
+
+    // Frame queue
+    struct {
+        struct frame_node *frames;
+        spinlock_t lock;
+        struct list_head ready_list;
+        struct list_head done_list;
+        wait_queue_head_t wait;
+        atomic_t frame_count;
+        uint32_t max_frames;
+        uint32_t write_idx;
+        uint32_t read_idx;
+    } queue;
 } __attribute__((aligned(32)));  // 32-byte alignment for MIPS
 
 

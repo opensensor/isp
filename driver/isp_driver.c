@@ -748,24 +748,43 @@ static void handle_stats_ready(void *priv)
 
 
 // Match OEM enqueue/dequeue
-static int enqueue_frame(struct frame_source_channel *fc, struct frame_entry *entry)
+static int enqueue_frame(struct frame_queue *queue, struct frame_node *entry)
 {
-    struct frame_queue *queue = &fc->frame_queue;
+    struct frame_node *node;
+    unsigned long flags;
 
-    mutex_lock(&queue->lock);
+    if (!queue || !entry)
+        return -EINVAL;
 
-    if ((queue->write_idx - queue->num_entries) >= queue->num_entries) {
-        mutex_unlock(&queue->lock);
+    spin_lock_irqsave(&queue->lock, flags);
+
+    // Check if we have room based on max_frames
+    if ((queue->write_idx - atomic_read(&queue->frame_count)) >= queue->max_frames) {
+        spin_unlock_irqrestore(&queue->lock, flags);
         return -ENOSPC;
     }
 
-    // Copy entry to queue with OEM's alignment and offset requirements
-    memcpy(&queue->entries[queue->write_idx % queue->num_entries],
-           entry, sizeof(*entry));
-    queue->write_idx++;
+    // Get next available node
+    node = &queue->frames[queue->write_idx % queue->max_frames];
 
-    mutex_unlock(&queue->lock);
-    up(&queue->frame_sem); // Signal new frame
+    // Copy entry data to node
+    node->data = entry->data;
+    node->frame_size = entry->frame_size;
+    node->seq = queue->write_idx;
+    node->flags = entry->flags;
+    node->state = 1;  // Mark as active
+
+    // Add to ready list
+    list_add_tail(&node->list, &queue->ready_list);
+
+    // Increment counters
+    queue->write_idx++;
+    atomic_inc(&queue->frame_count);
+
+    spin_unlock_irqrestore(&queue->lock, flags);
+
+    // Wake up any waiters
+    wake_up_interruptible(&queue->wait);
 
     return 0;
 }
@@ -806,6 +825,22 @@ static irqreturn_t isp_irq_handler(int irq, void *dev_id)
 
     pr_debug("ISP IRQ: status=0x%x\n", isp_status);
 
+    if (isp_status & ISP_INT_DROP) {
+        pr_debug("Video frame dropped\n");
+        // Just clear the status and continue
+    }
+
+    if (isp_status & ISP_INT_ERR) {
+        pr_err("ISP error: status=0x%x\n", isp_status);
+        // Try to recover by resetting the stream
+        writel(0x0, regs + ISP_STREAM_CTRL);
+        wmb();
+        writel(0x1, regs + ISP_STREAM_CTRL);
+        writel(0x1, regs + ISP_STREAM_START);
+        wmb();
+        return IRQ_HANDLED;
+    }
+
     if (isp_status & ISP_INT_FRAME_DONE) {
         fs = &dev->frame_sources[0];
         if (!fs || !fs->is_open)
@@ -817,20 +852,32 @@ static irqreturn_t isp_irq_handler(int irq, void *dev_id)
 
         spin_lock_irqsave(&fc->state_lock, flags);
 
-        // Increment frame completion count
-        atomic_inc(&fc->frames_completed);
+        // Here's where we mark buffer state changes
 
-        // Update buffer state
-        set_bit(fc->write_idx % fc->buf_cnt, &fc->buffer_states);
+        // First check if we have room in ring buffer
+        if ((fc->write_idx - atomic_read(&fc->frames_completed)) < fc->buf_cnt) {
+            uint32_t buf_idx = fc->write_idx % fc->buf_cnt;
 
-        pr_debug("Frame complete: buf=%d count=%d\n",
-                fc->write_idx % fc->buf_cnt,
-                atomic_read(&fc->frames_completed));
+            // Update buffer states
+            set_bit(buf_idx, &fc->buffer_states);
+            atomic_inc(&fc->frames_completed);
+
+            pr_debug("Frame done: buf=%d count=%d states=0x%lx\n",
+                    buf_idx, atomic_read(&fc->frames_completed),
+                    fc->buffer_states);
+
+            // Only advance write_idx if we succeeded
+            fc->write_idx++;
+
+            // Wake up any waiters
+            wake_up_interruptible(&fc->wait);
+        } else {
+            // Buffer overflow condition
+            pr_warn("Buffer overflow: write=%d complete=%d\n",
+                   fc->write_idx, atomic_read(&fc->frames_completed));
+        }
 
         spin_unlock_irqrestore(&fc->state_lock, flags);
-
-        // Wake up any waiters
-        wake_up_interruptible(&fc->wait);
     }
 
     return IRQ_HANDLED;
@@ -2839,7 +2886,9 @@ static void cleanup_frame_source(struct IMPISPDev *dev, int channel)
 static int init_frame_source(struct IMPISPDev *dev, int channel) {
     struct isp_framesource_state *fs = &dev->frame_sources[channel];
     struct frame_source_channel *fc;
-    uint32_t base_offset = ALIGN(0x1094d4, 32);  // Align the base offset itself
+    uint32_t base_offset = ALIGN(0x1094d4, 32);
+    int i;
+    int ret;
 
     // Set dimensions FIRST
     if (channel == 0) {
@@ -2898,13 +2947,12 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
     // Initialize buffer tracking
     fc->buffer_states = 0;
     fc->write_idx = 0;
+    atomic_set(&fc->frames_completed, 0);  // Add this
 
-    // Initialize synchronization
+    // Initialize synchronization - use only one lock
     mutex_init(&fc->lock);
-    spin_lock_init(&fc->queue_lock);
-   // Initialize wait queue
+    spin_lock_init(&fc->state_lock);  // Keep this one for IRQ
     init_waitqueue_head(&fc->wait);
-    spin_lock_init(&fc->state_lock);
     sema_init(&fc->enc_sem, 0);
 
     // Important: Set proper type
@@ -2917,12 +2965,40 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
     fc->enc_state_val = 1;
     fc->enc_registered_val = 1;
 
+    // Make sure frame_queue is properly defined in frame_source_channel struct
+    fc->queue.frames = kzalloc(sizeof(struct frame_node) * fc->buf_cnt, GFP_KERNEL);
+    if (!fc->queue.frames) {
+        int ret = -ENOMEM;
+        goto err_free_fc;
+    }
+
+    // Initialize queue
+    spin_lock_init(&fc->queue.lock);
+    INIT_LIST_HEAD(&fc->queue.ready_list);
+    INIT_LIST_HEAD(&fc->queue.done_list);
+    init_waitqueue_head(&fc->queue.wait);
+    atomic_set(&fc->queue.frame_count, 0);
+    fc->queue.max_frames = fc->buf_cnt;
+    fc->queue.write_idx = 0;
+    fc->queue.read_idx = 0;
+
+    // Initialize frame nodes
+    for (i = 0; i < fc->buf_cnt; i++) {
+        struct frame_node *node = &fc->queue.frames[i];
+        node->magic = 0x336ac;  // Magic from libimp
+        node->data = fc->buf_base + (i * fc->buf_size);
+        node->frame_size = fc->buf_size;
+        node->seq = 0;
+        node->flags = 0;
+        node->state = 0;
+        INIT_LIST_HEAD(&node->list);
+    }
+
     fs->private = fc;
     fs->is_open = 1;
 
-    pr_info("Frame source initialized: fs=%p fc=%p fmt=%d\n",
-            fs, fc, fs->fmt);
-
+    pr_info("Frame queue initialized: frames=%p cnt=%d\n",
+            fc->queue.frames, fc->buf_cnt);
     pr_info("Final addresses (alignment check):\n");
     pr_info("  DMA addr: 0x%08x (mask: 0x%x)\n",
             (uint32_t)fs->dma_addr, (uint32_t)fs->dma_addr & 0x1F);
@@ -2932,6 +3008,9 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
             stride, fs->buf_size, fs->buf_cnt);
 
     return 0;
+err_free_fc:
+    kfree(fc);
+    return ret;
 }
 
 static atomic_t isp_instance_counter = ATOMIC_INIT(0);
@@ -3572,47 +3651,39 @@ static int init_isp_registers(struct IMPISPDev *dev)
 
 static int start_streaming(struct IMPISPDev *dev)
 {
-    struct isp_reg_block_aligned *regs = dev->regs;
-    struct isp_buffer_block *bufs;
+    void __iomem *regs = dev->regs;
+    u32 val;
     int ret;
 
-    if (!regs)
-        return -EINVAL;
+    pr_info("Starting streaming on device %p\n", dev);
 
-    pr_info("Starting streaming sequence...\n");
-    pr_info("  Sensor configured and streaming\n");
-    pr_info("  CSI interface configured\n");
-    pr_info("  ISP buffers configured\n");
-    pr_info("  IRQs enabled\n");
-
-    // Use aligned register access
-    isp_reg_write(dev->regs, ISP_CTRL_OFFSET, 0);  // Reset
-    isp_reg_write(dev->regs, ISP_INT_CLEAR, 0xFFFFFFFF); // Clear ints
+    // Reset and clear interrupts
+    writel(0, regs + ISP_CTRL_REG);
+    writel(0xFFFFFFFF, regs + ISP_INT_CLEAR_REG);
     wmb();
 
-    // Test read
-    u32 ctrl = isp_reg_read(dev->regs, ISP_CTRL_OFFSET);
-    pr_info("Initial ctrl: 0x%08x\n", ctrl);
-
-    // Configure buffers using aligned structure
-    bufs = (struct isp_buffer_block *)(dev->regs + ISP_BUF_BASE);
-
-    // Y buffer
-    bufs[0].base_addr = dev->frame_sources[0].dma_addr;
-    bufs[0].size = dev->frame_sources[0].buf_size / 2;  // Y size
-    bufs[0].stride = ALIGN(dev->frame_sources[0].width, 32);
+    // Enable ISP core first
+    val = readl(regs + ISP_CTRL_REG);
+    val |= 0x1;  // Enable core
+    writel(val, regs + ISP_CTRL_REG);
     wmb();
 
-    // UV buffer
-    bufs[1].base_addr = dev->frame_sources[0].dma_addr +
-                        (dev->frame_sources[0].buf_size / 2);
-    bufs[1].size = dev->frame_sources[0].buf_size / 4;   // UV size
-    bufs[1].stride = ALIGN(dev->frame_sources[0].width/2, 32);
+    // Enable frame generation
+    val = readl(regs + ISP_STREAM_CTRL);
+    val |= 0x1;  // Enable streaming
+    writel(val, regs + ISP_STREAM_CTRL);
+    writel(0x1, regs + ISP_STREAM_START);  // Start capturing
     wmb();
 
-    // Enable streaming
-    isp_reg_write(dev->regs, ISP_CTRL_OFFSET, 0x1);
+    // Enable frame done interrupt
+    val = ISP_INT_FRAME_DONE | ISP_INT_ERR;
+    writel(val, regs + ISP_INT_MASK_REG);
     wmb();
+
+    pr_info("ISP streaming started: ctrl=0x%x stream=0x%x mask=0x%x\n",
+            readl(regs + ISP_CTRL_REG),
+            readl(regs + ISP_STREAM_CTRL),
+            readl(regs + ISP_INT_MASK_REG));
 
     return 0;
 }
@@ -3828,6 +3899,7 @@ static int configure_isp_buffers(struct IMPISPDev *dev)
     struct frame_source_channel *fc;
     void __iomem *regs = dev->regs;
     uint32_t buffer_start, buffer_size, raw10_size;
+    uint32_t buf_addr;
 
     if (!dev || !fs) {
         pr_err("Invalid device state\n");
@@ -3868,49 +3940,53 @@ static int configure_isp_buffers(struct IMPISPDev *dev)
     pr_info("  Buffer: start=0x%x total=%d\n", buffer_start, buffer_size);
 
     // 1. Configure RAW10 input buffer
-    writel(buffer_start, regs + ISP_BUF0_OFFSET);           // Input buffer address
-    writel(raw10_stride, regs + ISP_BUF0_OFFSET + 0x4);    // Input stride
-    writel(raw10_size, regs + ISP_BUF0_OFFSET + 0x8);      // Input size
+    buf_addr = ALIGN(buffer_start, 32);  // Ensure 32-byte alignment
+    writel(buf_addr, regs + ISP_BUF0_OFFSET);
+    writel(raw10_stride, regs + ISP_BUF0_OFFSET + 0x4);
+    writel(raw10_size, regs + ISP_BUF0_OFFSET + 0x8);
     wmb();
 
     // 2. Configure Y output buffer
-    writel(buffer_start + raw10_size, regs + ISP_BUF1_OFFSET);       // Y buffer address
-    writel(y_stride, regs + ISP_BUF1_OFFSET + 0x4);                  // Y stride
-    writel(y_size, regs + ISP_BUF1_OFFSET + 0x8);                   // Y size
+    buf_addr = ALIGN(buffer_start + raw10_size, 32);
+    writel(buf_addr, regs + ISP_BUF1_OFFSET);
+    writel(y_stride, regs + ISP_BUF1_OFFSET + 0x4);
+    writel(y_size, regs + ISP_BUF1_OFFSET + 0x8);
     wmb();
 
     // 3. Configure UV output buffer
-    writel(buffer_start + raw10_size + y_size, regs + ISP_BUF2_OFFSET);  // UV buffer address
-    writel(uv_stride, regs + ISP_BUF2_OFFSET + 0x4);                     // UV stride
-    writel(uv_size, regs + ISP_BUF2_OFFSET + 0x8);                      // UV size
+    buf_addr = ALIGN(buffer_start + raw10_size + y_size, 32);
+    writel(buf_addr, regs + ISP_BUF2_OFFSET);
+    writel(uv_stride, regs + ISP_BUF2_OFFSET + 0x4);
+    writel(uv_size, regs + ISP_BUF2_OFFSET + 0x8);
     wmb();
 
     // 4. Configure data path
-    writel(0x1, regs + ISP_CTRL_PATH_REG);         // Enable direct path
-    writel(0x0, regs + ISP_BYPASS_REG);            // Disable bypass
+    writel(0x1, regs + ISP_CTRL_PATH_REG);
+    writel(0x0, regs + ISP_BYPASS_REG);
     wmb();
 
-    // 5. Configure formats
-    writel(ISP_FMT_RAW10, regs + ISP_INPUT_FMT_REG);  // RAW10 input
-    writel(ISP_FMT_NV12, regs + ISP_OUTPUT_FMT_REG);  // NV12 output
+    // 5. Configure formats and dimensions
+    writel(ISP_FMT_RAW10, regs + ISP_INPUT_FMT_REG);
+    writel(ISP_FMT_NV12, regs + ISP_OUTPUT_FMT_REG);
+    writel(width, regs + ISP_FRAME_WIDTH);
+    writel(height, regs + ISP_FRAME_HEIGHT);
     wmb();
 
-    // 6. Configure frame dimensions
-    writel(width, regs + ISP_FRAME_WIDTH);    // Frame width
-    writel(height, regs + ISP_FRAME_HEIGHT);  // Frame height
-    wmb();
-
-    // Store buffer info in frame channel
+    // Store buffer info
     fc->dma_addr = buffer_start;
     fc->buf_size = buffer_size;
     fc->write_idx = 0;
 
-    // Additional registers based on OEM driver
+    // Enable pipeline and buffers
     writel(0x1, regs + 0x120);  // Enable buffer
     writel(0x1, regs + 0x124);  // Enable pipeline
+
+    // Enable DMA last
+    writel(0x1, regs + ISP_DMA_CTRL);
     wmb();
 
-    pr_info("ISP buffers and paths configured successfully\n");
+    pr_info("ISP buffers and DMA configured: start=0x%x size=%u\n",
+            buffer_start, buffer_size);
     return 0;
 }
 
@@ -7386,78 +7462,65 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 
             return 0;
         }
-		case VIDIOC_DQBUF: { // 0xc0445611
+		case VIDIOC_DQBUF: {
 		    struct v4l2_buffer buf;
 		    struct frame_source_channel *fc = fs->private;
+		    struct frame_node *node;
 		    unsigned long flags;
-		    struct timeval tv;
-		    int ret, buf_idx;
-
-		    if (!fc) {
-		        pr_err("No channel data\n");
-		        return -EINVAL;
-		    }
+            struct timeval tv;
+		    int ret;
 
 		    if (copy_from_user(&buf, (void __user *)arg, sizeof(buf)))
 		        return -EFAULT;
 
-		    if (buf.type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
-		        pr_err("Invalid buffer type: got %d expected %d\n",
-		               buf.type, V4L2_BUF_TYPE_VIDEO_CAPTURE);
-		        return -EINVAL;
-		    }
+		    spin_lock_irqsave(&fc->queue.lock, flags);
 
-		    pr_debug("DQBUF: fs=%p fc=%p idx=%d cnt=%d\n",
-		             fs, fc, fc->write_idx,
-		             atomic_read(&fc->frames_completed));
+		    // Check if frames available
+		    if (list_empty(&fc->queue.ready_list)) {
+		        spin_unlock_irqrestore(&fc->queue.lock, flags);
 
-		    spin_lock_irqsave(&fc->state_lock, flags);
-		    buf_idx = fc->write_idx % fc->buf_cnt;
-
-		    // Check if this buffer is ready
-		    if (!test_bit(buf_idx, &fc->buffer_states)) {
-		        spin_unlock_irqrestore(&fc->state_lock, flags);
-
-		        // Wait for frame completion
+		        // Wait for frame
 		        ret = wait_event_interruptible_timeout(
-		            fc->wait,
-		            test_bit(buf_idx, &fc->buffer_states),
+		            fc->queue.wait,
+		            !list_empty(&fc->queue.ready_list),
 		            msecs_to_jiffies(1000));
 
 		        if (ret == 0) {
-		            pr_err("Buffer wait timeout: idx=%d\n", buf_idx);
+		            pr_err("Buffer wait timeout\n");
 		            return -EAGAIN;
 		        }
 		        if (ret == -ERESTARTSYS)
 		            return -EINTR;
 
-		        spin_lock_irqsave(&fc->state_lock, flags);
+		        spin_lock_irqsave(&fc->queue.lock, flags);
 		    }
 
-		    // Get current buffer info
-		    buf.index = buf_idx;
-		    buf.bytesused = fs->buf_size;
+		    // Get first ready frame
+		    node = list_first_entry(&fc->queue.ready_list,
+		                           struct frame_node, list);
+
+		    // Move to done list
+		    list_move_tail(&node->list, &fc->queue.done_list);
+
+            // Get current timestamp
+            do_gettimeofday(&tv);
+
+		    // Fill buffer info
+		    buf.index = (node->data - fc->buf_base) / fc->buf_size;
+		    buf.bytesused = node->frame_size;
 		    buf.flags = V4L2_BUF_FLAG_DONE;
 		    buf.field = V4L2_FIELD_NONE;
-		    buf.sequence = atomic_read(&fc->frames_completed);
-		    buf.memory = V4L2_MEMORY_MMAP;
-		    buf.m.offset = buf.index * fs->buf_size;
-		    buf.length = fs->buf_size;
-
-		    do_gettimeofday(&tv);
 		    buf.timestamp = tv;
+		    buf.sequence = node->seq;
+		    buf.memory = V4L2_MEMORY_MMAP;
+		    buf.m.offset = buf.index * fc->buf_size;
+		    buf.length = fc->buf_size;
 
-		    // Clear buffer state and advance
-		    clear_bit(buf_idx, &fc->buffer_states);
-		    fc->write_idx++;
-
-		    spin_unlock_irqrestore(&fc->state_lock, flags);
+		    spin_unlock_irqrestore(&fc->queue.lock, flags);
 
 		    if (copy_to_user((void __user *)arg, &buf, sizeof(buf)))
 		        return -EFAULT;
 
-		    pr_debug("Dequeued buffer %d seq=%d\n",
-		             buf.index, buf.sequence);
 		    return 0;
 		}
 		case VIDIOC_CANCEL_READY_BUF: { // 0x400456bf
