@@ -796,74 +796,43 @@ static irqreturn_t isp_irq_handler(int irq, void *dev_id)
     struct isp_framesource_state *fs;
     struct frame_source_channel *fc;
     void __iomem *regs = dev->regs;
-    void __iomem *csi_base = regs + 0xb8;
-    u32 isp_status, csi_status;
-    u32 frame_addr;
+    u32 isp_status;
     unsigned long flags;
 
-    // 1. Read and clear ISP status
+    // Read and clear ISP status
     isp_status = readl(regs + ISP_STATUS_REG);
     writel(isp_status, regs + ISP_INT_CLEAR_REG);
     wmb();
 
-    // 2. Check CSI errors
-    csi_status = readl(csi_base + 0x20); // ERR1 register
-    if (csi_status) {
-        pr_debug("CSI ERR1: 0x%08x\n", csi_status);
-        writel(csi_status, csi_base + 0x20);
-        wmb();
-        dev->error_count++;
-    }
+    pr_debug("ISP IRQ: status=0x%x\n", isp_status);
 
-    // 3. Handle frame completion
     if (isp_status & ISP_INT_FRAME_DONE) {
         fs = &dev->frame_sources[0];
         if (!fs || !fs->is_open)
-            goto out;
+            return IRQ_HANDLED;
 
         fc = fs->private;
         if (!fc)
-            goto out;
+            return IRQ_HANDLED;
 
         spin_lock_irqsave(&fc->state_lock, flags);
 
-        // Get current buffer address
-        frame_addr = readl(regs + ISP_BUF0_OFFSET +
-                          (fs->buf_index * ISP_BUF_SIZE_STEP));
+        // Increment frame completion count
+        atomic_inc(&fc->frames_completed);
 
         // Update buffer state
-        mark_buffer_filled(fc, fs->buf_index);
+        set_bit(fc->write_idx % fc->buf_cnt, &fc->buffer_states);
 
-        // Move to next buffer
-        fs->buf_index = (fs->buf_index + 1) % fs->buf_cnt;
-
-        // Setup next buffer
-        writel(fc->dma_addr + (fs->buf_index * fc->buf_size),
-               regs + ISP_BUF0_OFFSET);
-        writel(fc->buf_size, regs + ISP_BUF0_OFFSET + 0x4);
-        wmb();
-
-        // Update frame info
-        fs->frame_cnt++;
-        fc->last_frame_time = ktime_get_real_ns();
+        pr_debug("Frame complete: buf=%d count=%d\n",
+                fc->write_idx % fc->buf_cnt,
+                atomic_read(&fc->frames_completed));
 
         spin_unlock_irqrestore(&fc->state_lock, flags);
 
-        // Signal frame completion
-        up(&fc->sem);
-
-        // Trigger stats collection if needed
-        if (!dev->stats_pending) {
-            dev->stats_pending = true;
-            dev->stats_work.stats_mask = ISP_STATS_AE | ISP_STATS_AWB;
-            queue_work(dev->stats_wq, &dev->stats_work.work);
-        }
-
-        // Notify event system
-        tx_isp_send_our_event_to_remote(&dev->pads[0], 0x1000000, NULL);
+        // Wake up any waiters
+        wake_up_interruptible(&fc->wait);
     }
 
-out:
     return IRQ_HANDLED;
 }
 
@@ -2926,12 +2895,20 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
     fc->state = 1;
     fc->channel_offset = frame_offset;
 
+    // Initialize buffer tracking
+    fc->buffer_states = 0;
+    fc->write_idx = 0;
+
     // Initialize synchronization
     mutex_init(&fc->lock);
     spin_lock_init(&fc->queue_lock);
+   // Initialize wait queue
     init_waitqueue_head(&fc->wait);
-    atomic_set(&fc->frame_count, 0);
+    spin_lock_init(&fc->state_lock);
     sema_init(&fc->enc_sem, 0);
+
+    // Important: Set proper type
+    fs->fmt = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
     // VBM table entry
     fc->vbm_table[channel] = fc;
@@ -2942,6 +2919,9 @@ static int init_frame_source(struct IMPISPDev *dev, int channel) {
 
     fs->private = fc;
     fs->is_open = 1;
+
+    pr_info("Frame source initialized: fs=%p fc=%p fmt=%d\n",
+            fs, fc, fs->fmt);
 
     pr_info("Final addresses (alignment check):\n");
     pr_info("  DMA addr: 0x%08x (mask: 0x%x)\n",
@@ -7411,7 +7391,7 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 		    struct frame_source_channel *fc = fs->private;
 		    unsigned long flags;
 		    struct timeval tv;
-		    int ret;
+		    int ret, buf_idx;
 
 		    if (!fc) {
 		        pr_err("No channel data\n");
@@ -7427,29 +7407,35 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 		        return -EINVAL;
 		    }
 
-		    // First check with spinlock if frame ready
+		    pr_debug("DQBUF: fs=%p fc=%p idx=%d cnt=%d\n",
+		             fs, fc, fc->write_idx,
+		             atomic_read(&fc->frames_completed));
+
 		    spin_lock_irqsave(&fc->state_lock, flags);
-		    if (fc->write_idx >= atomic_read(&fc->frames_completed)) {
-		        // No frame ready - release lock before waiting
+		    buf_idx = fc->write_idx % fc->buf_cnt;
+
+		    // Check if this buffer is ready
+		    if (!test_bit(buf_idx, &fc->buffer_states)) {
 		        spin_unlock_irqrestore(&fc->state_lock, flags);
 
-		        // Wait without holding spinlock
+		        // Wait for frame completion
 		        ret = wait_event_interruptible_timeout(
 		            fc->wait,
-		            atomic_read(&fc->frames_completed) > fc->write_idx,
+		            test_bit(buf_idx, &fc->buffer_states),
 		            msecs_to_jiffies(1000));
 
-		        if (ret == 0)
+		        if (ret == 0) {
+		            pr_err("Buffer wait timeout: idx=%d\n", buf_idx);
 		            return -EAGAIN;
+		        }
 		        if (ret == -ERESTARTSYS)
 		            return -EINTR;
 
-		        // Reacquire lock after wait
 		        spin_lock_irqsave(&fc->state_lock, flags);
 		    }
 
-		    // Get current buffer info under lock
-		    buf.index = fc->write_idx % fc->buf_cnt;
+		    // Get current buffer info
+		    buf.index = buf_idx;
 		    buf.bytesused = fs->buf_size;
 		    buf.flags = V4L2_BUF_FLAG_DONE;
 		    buf.field = V4L2_FIELD_NONE;
@@ -7458,21 +7444,20 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 		    buf.m.offset = buf.index * fs->buf_size;
 		    buf.length = fs->buf_size;
 
-		    // Get current time under lock
 		    do_gettimeofday(&tv);
 		    buf.timestamp = tv;
 
-		    // Update state
+		    // Clear buffer state and advance
+		    clear_bit(buf_idx, &fc->buffer_states);
 		    fc->write_idx++;
-		    set_bit(buf.index, &fc->buffer_states);
 
 		    spin_unlock_irqrestore(&fc->state_lock, flags);
 
-		    // Copy back to user outside of lock
 		    if (copy_to_user((void __user *)arg, &buf, sizeof(buf)))
 		        return -EFAULT;
 
-		    pr_debug("Dequeued buffer %d, seq=%d\n", buf.index, buf.sequence);
+		    pr_debug("Dequeued buffer %d seq=%d\n",
+		             buf.index, buf.sequence);
 		    return 0;
 		}
 		case VIDIOC_CANCEL_READY_BUF: { // 0x400456bf
