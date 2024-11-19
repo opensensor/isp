@@ -156,7 +156,8 @@
 #define VIDIOC_STREAM_ON  0x80045612
 #define VIDIOC_GET_BUFFER_INFO 0x400456bf
 #define VIDIOC_SET_FRAME_MODE 0xc0445611
-
+#define VIDIOC_DQBUF _IOWR('V', 0x11, struct v4l2_buffer)
+#define VIDIOC_CANCEL_READY_BUF _IOW('V', 0x6bf, int)
 
 #define ISP_INT_FRAME_DONE  BIT(0)    // Frame complete
 #define ISP_INT_DMA_ERR    BIT(1)    // DMA error
@@ -433,6 +434,39 @@
 #define ISP_FORMAT_REG      0x10C  // Format control register
 #define ISP_FMT_RAW10      0x2B    // RAW10 format value
 #define ISP_FMT_NV12       0x3231564e // NV12 format value
+
+#define ISP_CSI_PHY_READY   0x4
+#define ISP_CSI_DATA_READY  0x100
+
+// Register offsets
+#define CSI_VERSION_REG     0x00
+#define CSI_N_LANES_REG     0x04
+#define CSI_CTRL0_REG       0x08
+#define CSI_CTRL1_REG       0x0C
+#define CSI_CTRL2_REG       0x10
+#define CSI_DPHY_CTRL       0x14
+#define CSI_DATA_IDS0       0x18
+#define CSI_DATA_IDS1       0x1C
+#define CSI_ERR1            0x20
+#define CSI_ERR2            0x24
+#define CSI_MASK1           0x28
+#define CSI_MASK2           0x2C
+
+// Add these defines at the top
+#define ISP_BUF0_OFFSET     0x200   // RAW10 input buffer
+#define ISP_BUF1_OFFSET     0x220   // Y buffer
+#define ISP_BUF2_OFFSET     0x240   // UV buffer
+#define ISP_BUF_SIZE_STEP   0x20    // Buffer register block size
+
+#define ISP_FORMAT_REG      0x10C   // Format control register
+#define ISP_INPUT_FMT_REG   0x110   // Input format register
+#define ISP_OUTPUT_FMT_REG  0x114   // Output format register
+
+#define ISP_CTRL_PATH_REG   0x140   // Path control register
+#define ISP_BYPASS_REG      0x144   // Bypass control register
+
+#define ISP_FRAME_WIDTH     0x100   // Frame width register
+#define ISP_FRAME_HEIGHT    0x104   // Frame height register
 
 /* ISP Pipeline Register Structure */
 struct isp_pipeline_regs {

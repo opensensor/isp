@@ -3727,46 +3727,50 @@ static int configure_mipi_csi(struct IMPISPDev *dev)
 
     pr_info("Configuring MIPI CSI interface...\n");
 
-    // 1. Full CSI reset sequence
+    // Full reset but shorter delays for 3.10
     writel(0x0, csi + 0x10);  // CSI2_RESETN = 0
     writel(0x0, csi + 0x0c);  // DPHY_RSTZ = 0
     writel(0x0, csi + 0x08);  // PHY_SHUTDOWNZ = 0
     wmb();
-    msleep(10);
+    msleep(1);  // Shorter delay
 
-    // 2. Configure CSI parameters
-    writel(0x1, csi + 0x04);  // N_LANES = 1 (for 2 lanes)
+    // Configure for 2 data lanes (value of 1)
+    writel(0x1, csi + 0x04);  // N_LANES = 1
     wmb();
-    msleep(1);
 
-    // 3. CSI Data format for RAW10
-    writel(0x2B, csi + 0x18);  // DATA_IDS_1 = RAW10 (0x2B)
-    writel(0x0, csi + 0x1c);   // DATA_IDS_2 = 0 for RAW10
+    // Configure for RAW10
+    writel(0x2B, csi + 0x18);  // DATA_IDS_1 = RAW10
+    writel(0x0, csi + 0x1c);   // DATA_IDS_2
     wmb();
-    msleep(1);
 
-    // 4. Power up sequence - critical order
+    // Power up sequence - match OEM timing
     writel(0x1, csi + 0x08);  // PHY_SHUTDOWNZ = 1
     wmb();
-    msleep(1);
+    udelay(100);  // Short delay between steps
 
     writel(0x1, csi + 0x0c);  // DPHY_RSTZ = 1
     wmb();
-    msleep(1);
+    udelay(100);
 
     writel(0x1, csi + 0x10);  // CSI2_RESETN = 1
     wmb();
-    msleep(20);  // Extra delay for PHY
+    udelay(100);
 
-    // 5. Configure error masks - from OEM
+    // Error masks - match OEM
     writel(0xF1FF0000, csi + 0x28); // MASK1
     writel(0xF1FF0000, csi + 0x2c); // MASK2
+    wmb();
 
-    // Debug output
+    // Clear any pending errors
+    writel(0xFFFFFFFF, csi + 0x20); // Clear ERR1
+    writel(0xFFFFFFFF, csi + 0x24); // Clear ERR2
+    wmb();
+
+    // Check state but don't fail
     val = readl(csi + 0x14);  // PHY_STATE
-    pr_info("CSI configured: phy_state=0x%x\n", val);
+    pr_info("CSI PHY state: 0x%x\n", val);
 
-    return 0;
+    return 0;  // Continue even if PHY state isn't what we expect
 }
 
 static int configure_sensor_streaming(struct IMPISPDev *dev)
@@ -3843,7 +3847,7 @@ static int configure_isp_buffers(struct IMPISPDev *dev)
     struct isp_framesource_state *fs = &dev->frame_sources[0];
     struct frame_source_channel *fc;
     void __iomem *regs = dev->regs;
-    uint32_t buffer_start, buffer_size;
+    uint32_t buffer_start, buffer_size, raw10_size;
 
     if (!dev || !fs) {
         pr_err("Invalid device state\n");
@@ -3856,49 +3860,77 @@ static int configure_isp_buffers(struct IMPISPDev *dev)
         return -EINVAL;
     }
 
-    // Calculate buffer layout for RAW10
+    // Calculate aligned dimensions
     uint32_t width = ALIGN(fs->width, 32);
     uint32_t height = fs->height;
-    uint32_t raw10_stride = ALIGN(width * 10 / 8, 32);  // 10 bits per pixel
-    uint32_t y_stride = ALIGN(width, 32);               // NV12 output stride
-    uint32_t uv_stride = ALIGN(width/2, 32);           // NV12 UV stride
 
-    // Calculate sizes
-    uint32_t y_size = y_stride * height;
-    uint32_t uv_size = uv_stride * height / 2;  // For NV12 output
-    buffer_size = y_size + uv_size;
+    // Calculate strides
+    uint32_t raw10_stride = ALIGN(width * 10 / 8, 32);  // RAW10: 10 bits per pixel
+    uint32_t y_stride = ALIGN(width, 32);               // NV12 Y stride
+    uint32_t uv_stride = ALIGN(width/2, 32);           // NV12 UV stride (half width)
 
-    // Align buffer start with 32 bytes
-    buffer_start = ALIGN(dev->dma_addr + 0x1094d4, 32);  // From OEM offset
+    // Calculate buffer sizes
+    raw10_size = raw10_stride * height;                // RAW10 input size
+    uint32_t y_size = y_stride * height;               // Y plane size
+    uint32_t uv_size = uv_stride * height / 2;         // UV plane size (half height)
+
+    // Total buffer size needed
+    buffer_size = raw10_size + y_size + uv_size;
+
+    // Align buffer start with 32 bytes from OEM offset
+    buffer_start = ALIGN(dev->dma_addr + 0x1094d4, 32);
 
     pr_info("Configuring ISP buffers:\n");
     pr_info("  Resolution: %dx%d\n", width, height);
-    pr_info("  RAW10 stride: %d\n", raw10_stride);
-    pr_info("  Buffer: start=0x%x size=%d\n", buffer_start, buffer_size);
+    pr_info("  RAW10: stride=%d size=%d\n", raw10_stride, raw10_size);
+    pr_info("  Y: stride=%d size=%d\n", y_stride, y_size);
+    pr_info("  UV: stride=%d size=%d\n", uv_stride, uv_size);
+    pr_info("  Buffer: start=0x%x total=%d\n", buffer_start, buffer_size);
 
-    // Configure Y buffer
-    writel(buffer_start, regs + ISP_BUF0_OFFSET);
-    writel(y_stride, regs + ISP_BUF0_OFFSET + 0x4);
-    writel(y_size, regs + ISP_BUF0_OFFSET + 0x8);
+    // 1. Configure RAW10 input buffer
+    writel(buffer_start, regs + ISP_BUF0_OFFSET);           // Input buffer address
+    writel(raw10_stride, regs + ISP_BUF0_OFFSET + 0x4);    // Input stride
+    writel(raw10_size, regs + ISP_BUF0_OFFSET + 0x8);      // Input size
     wmb();
 
-    // Configure UV buffer
-    writel(buffer_start + y_size, regs + ISP_BUF0_OFFSET + 0xC);
-    writel(uv_stride, regs + ISP_BUF0_OFFSET + 0x10);
-    writel(uv_size, regs + ISP_BUF0_OFFSET + 0x14);
+    // 2. Configure Y output buffer
+    writel(buffer_start + raw10_size, regs + ISP_BUF1_OFFSET);       // Y buffer address
+    writel(y_stride, regs + ISP_BUF1_OFFSET + 0x4);                  // Y stride
+    writel(y_size, regs + ISP_BUF1_OFFSET + 0x8);                   // Y size
     wmb();
 
-    // Store buffer info
+    // 3. Configure UV output buffer
+    writel(buffer_start + raw10_size + y_size, regs + ISP_BUF2_OFFSET);  // UV buffer address
+    writel(uv_stride, regs + ISP_BUF2_OFFSET + 0x4);                     // UV stride
+    writel(uv_size, regs + ISP_BUF2_OFFSET + 0x8);                      // UV size
+    wmb();
+
+    // 4. Configure data path
+    writel(0x1, regs + ISP_CTRL_PATH_REG);         // Enable direct path
+    writel(0x0, regs + ISP_BYPASS_REG);            // Disable bypass
+    wmb();
+
+    // 5. Configure formats
+    writel(ISP_FMT_RAW10, regs + ISP_INPUT_FMT_REG);  // RAW10 input
+    writel(ISP_FMT_NV12, regs + ISP_OUTPUT_FMT_REG);  // NV12 output
+    wmb();
+
+    // 6. Configure frame dimensions
+    writel(width, regs + ISP_FRAME_WIDTH);    // Frame width
+    writel(height, regs + ISP_FRAME_HEIGHT);  // Frame height
+    wmb();
+
+    // Store buffer info in frame channel
     fc->dma_addr = buffer_start;
     fc->buf_size = buffer_size;
     fc->write_idx = 0;
 
-    // Configure frame size
-    writel(width, regs + 0x100);   // Frame width
-    writel(height, regs + 0x104);  // Frame height
+    // Additional registers based on OEM driver
+    writel(0x1, regs + 0x120);  // Enable buffer
+    writel(0x1, regs + 0x124);  // Enable pipeline
     wmb();
 
-    pr_info("ISP buffers configured successfully\n");
+    pr_info("ISP buffers and paths configured successfully\n");
     return 0;
 }
 
@@ -3937,6 +3969,8 @@ static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int ch
         // 4. Enable video link processing
         writel(0x1, dev->regs + 0x140);  // Enable direct path
         writel(0x0, dev->regs + 0x144);  // Disable bypass
+        writel(ISP_FMT_RAW10, dev->regs + ISP_INPUT_FORMAT_REG);  // RAW10 input
+        writel(ISP_FMT_NV12, dev->regs + ISP_OUTPUT_FORMAT_REG);  // NV12 output
         wmb();
 
         // 5. Enable ISP streaming
@@ -7039,17 +7073,7 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
     struct frame_source_channel *fc;
     u32 buf_index;
     int ret = 0;
-
-    if ((cmd != VIDIOC_GET_BUFFER_INFO) && (cmd != VIDIOC_SET_FRAME_MODE) && (cmd != VIDIOC_SET_FIFO_ATTR)) {
     	pr_info("Frame channel IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
-//	    pr_info("Memory state:\n"
-//	            "  fs=%p private=%p\n"
-//	            "  buf_base=%p dma_addr=0x%x\n"
-//	            "  dev buf_info=%p\n",
-//	            fs, fs->private,
-//	            fs->buf_base, (unsigned int)fs->dma_addr,
-//	            ourISPdev ? ourISPdev->buf_info : NULL);
-    }
 
     if (!fs || !fs->is_open) {
         pr_err("Invalid frame source state\n");
@@ -7064,30 +7088,29 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 
     switch(cmd) {
 		case VIDIOC_SET_CHANNEL_ATTR: {
-		    struct channel_attr attr;
-		    if (copy_from_user(&attr, (void __user *)arg, sizeof(attr))) {
-		        pr_err("Failed to copy channel attributes\n");
-		        return -EFAULT;
-		    }
+			struct channel_fmt fmt;
 
-		    pr_info("Channel attr request: enable=%d format=0x%x size=%dx%d\n",
-		            attr.enable, attr.format, attr.width, attr.height);
+			if (copy_from_user(&fmt, (void __user *)arg, sizeof(fmt)))
+			    return -EFAULT;
 
-		    if (!fs || !fs->is_open) {
-		        pr_err("Frame source not initialized\n");
-		        return -EINVAL;
-		    }
+			pr_info("Channel attr request: enable=%d format=0x%x size=%dx%d\n",
+			        fmt.enable, fmt.format, fmt.width, fmt.height);
 
-		    fc = fs->private;
-		    if (!fc) {
-		        pr_err("No channel data\n");
-		        return -EINVAL;
-		    }
+			if (!fs || !fs->is_open) {
+			    pr_err("Frame source not initialized\n");
+			    return -EINVAL;
+			}
 
-		    // Store format info
-		    fs->width = attr.width;
-		    fs->height = attr.height;
-		    fs->fmt = ISP_FMT_NV12;  // Force NV12 format
+			fc = fs->private;
+			if (!fc) {
+			    pr_err("No channel data\n");
+			    return -EINVAL;
+			}
+
+			// Store format info - IMPORTANT: Set the type field
+			fs->width = fmt.width;
+			fs->height = fmt.height;
+			fs->fmt = V4L2_BUF_TYPE_VIDEO_CAPTURE;  // This was missing
 
 		    if (attr.enable) {
 		        // Calculate aligned buffer size for NV12
@@ -7378,65 +7401,113 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 
             return 0;
         }
-        case VIDIOC_SET_FRAME_MODE: {
-            struct frame_mode mode;
-            struct frame_source_channel *fc = fs->private;
+		case VIDIOC_DQBUF: { // 0xc0445611
+		    struct v4l2_buffer buf;
+		    struct frame_source_channel *fc = fs->private;
+		    unsigned long flags;
+		    struct timeval tv;
+		    int ret;
 
-            if (!fc) {
-                pr_err("No channel data for frame mode\n");
-                return -EINVAL;
-            }
+		    if (!fc) {
+		        pr_err("No channel data\n");
+		        return -EINVAL;
+		    }
 
-            if (copy_from_user(&mode, (void __user *)arg, sizeof(mode))) {
-                pr_err("Failed to copy frame mode\n");
-                return -EFAULT;
-            }
+		    if (copy_from_user(&buf, (void __user *)arg, sizeof(buf)))
+		        return -EFAULT;
 
-//            pr_info("Set frame mode: ch=%d mode=%d size=%dx%d format=0x%x flags=0x%x\n",
-//                    mode.channel, mode.mode, mode.width, mode.height,
-//                    mode.format, mode.flags);
+		    // Check type
+		    if (buf.type != fs->fmt) {
+		        pr_err("Invalid buffer type\n");
+		        return -EINVAL;
+		    }
 
-            // If width/height are 0, keep existing values
-            if (mode.width == 0 || mode.height == 0) {
-                mode.width = fs->width;
-                mode.height = fs->height;
-                // pr_info("Using existing dimensions: %dx%d\n", mode.width, mode.height);
-            }
+		    spin_lock_irqsave(&fc->state_lock, flags);
 
-            // If format is 0, keep existing format
-            if (mode.format == 0) {
-                mode.format = fs->fmt ? fs->fmt : 0x3231564e; // Default to YUV422
-                // pr_info("Using format: 0x%x\n", mode.format);
-            }
+		    // Check if any frames are ready
+		    if (fc->write_idx >= atomic_read(&fc->frames_completed)) {
+		        spin_unlock_irqrestore(&fc->state_lock, flags);
 
-            // Update frame source configuration
-            fs->width = mode.width;
-            fs->height = mode.height;
-            fs->fmt = mode.format;
+		        // Wait for frame completion
+		        ret = wait_event_interruptible_timeout(
+		            fc->wait,
+		            atomic_read(&fc->frames_completed) > fc->write_idx,
+		            msecs_to_jiffies(1000));
 
-            // Calculate buffer size if not provided
-            if (mode.buf_size == 0) {
-                mode.buf_size = mode.width * mode.height * 2; // YUV422
-                //pr_info("Calculated buffer size: %d\n", mode.buf_size);
-            }
+		        if (ret == 0)
+		            return -EAGAIN;
+		        if (ret == -ERESTARTSYS)
+		            return -EINTR;
 
-            // Update buffer size
-            if (mode.buf_size != fc->buf_size) {
-                fc->buf_size = mode.buf_size;
-                fs->buf_size = mode.buf_size;
+		        spin_lock_irqsave(&fc->state_lock, flags);
+		    }
 
-                //pr_info("Updated buffer size: %d bytes\n", mode.buf_size);
+		    // Get current timestamp
+		    do_gettimeofday(&tv);
 
-                // Reconfigure DMA if streaming
-                if (fs->state == 2) {
-                    writel(fc->dma_addr, ourISPdev->regs + ISP_BUF0_OFFSET);
-                    writel(fc->buf_size, ourISPdev->regs + ISP_BUF0_OFFSET + 0x4);
-                    wmb();
-                }
-            }
+		    // Get current buffer info
+		    buf.index = fc->write_idx % fc->buf_cnt;
+		    buf.bytesused = fs->buf_size;
+		    buf.flags = V4L2_BUF_FLAG_DONE;
+		    buf.field = V4L2_FIELD_NONE;
+		    buf.timestamp = tv;  // Assign timeval struct directly
+		    buf.sequence = atomic_read(&fc->frames_completed);
+		    buf.memory = V4L2_MEMORY_MMAP;
+		    buf.m.offset = buf.index * fs->buf_size;
+		    buf.length = fs->buf_size;
 
-            return 0;
-        }
+		    // Mark buffer as in use
+		    set_bit(buf.index, &fc->buffer_states);
+
+		    // Increment write index
+		    fc->write_idx++;
+
+		    spin_unlock_irqrestore(&fc->state_lock, flags);
+
+		    if (copy_to_user((void __user *)arg, &buf, sizeof(buf)))
+		        return -EFAULT;
+
+		    return 0;
+		}
+		case VIDIOC_CANCEL_READY_BUF: { // 0x400456bf
+		    int __user *ready_count = (int __user *)arg;
+		    int count;
+		    unsigned long flags;
+
+		    if (!fc) {
+		        pr_err("No channel data\n");
+		        return -EINVAL;
+		    }
+
+		    spin_lock_irqsave(&fc->state_lock, flags);
+
+		    // Get current frame count before reset
+		    count = atomic_read(&fc->frames_completed);
+
+		    // Reset buffer state
+		    atomic_set(&fc->frames_completed, 0);
+		    fc->write_idx = 0;
+		    fc->buffer_states = 0;
+		    atomic_set(&fc->frames_received, 0);
+
+		    spin_unlock_irqrestore(&fc->state_lock, flags);
+
+		    // Signal any waiters
+		    wake_up_interruptible(&fc->wait);
+
+		    // Signal semaphore
+		    if (fc->sem.count <= 0) {
+		        up(&fc->sem);
+		    }
+
+		    // Return completion count to userspace
+		    if (copy_to_user(ready_count, &count, sizeof(count))) {
+		        return -EFAULT;
+		    }
+
+		    pr_debug("Cancelled %d ready buffers\n", count);
+		    return 0;
+		}
         default:
             return -ENOTTY;
     }
