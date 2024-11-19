@@ -416,6 +416,24 @@
 #define CH_STATE_READY     1
 #define CH_STATE_STREAMING 2
 
+#define ISP_BUF1_OFFSET      0x40  // Output buffer registers
+#define ISP_CTRL_ENABLE      0x1
+#define ISP_CTRL_START       0x2
+#define ISP_CTRL_IRQ_ENABLE  0x4
+#define ISP_INT_FRAME_DONE   0x1
+#define ISP_INT_ERR         0x2
+#define ISP_INT_OVERFLOW    0x4
+#define ISP_FMT_RAW10       0x2B
+#define ISP_FMT_NV12        0x3231564e
+
+#define ISP_BUF0_OFFSET     0x200  // First buffer registers
+#define ISP_BUF1_OFFSET     0x220  // Second buffer registers
+#define ISP_BUF_SIZE_STEP   0x20   // Size of each buffer register block
+
+#define ISP_FORMAT_REG      0x10C  // Format control register
+#define ISP_FMT_RAW10      0x2B    // RAW10 format value
+#define ISP_FMT_NV12       0x3231564e // NV12 format value
+
 /* ISP Pipeline Register Structure */
 struct isp_pipeline_regs {
     u32 bypass_ctrl;     // 0x1140
@@ -941,6 +959,13 @@ struct IMPISPDev {
     void __iomem *tuning_regs; // Tuning registers mapping
     int tuning_state;          // Tuning state (matches offset 0xa8)
     bool tuning_enabled;       // Tuning enabled flag
+
+    /* GPIO control */
+    int reset_gpio;                   // Reset GPIO number
+    int pwdn_gpio;                    // Power down GPIO number (optional)
+    bool reset_active_low;            // Reset GPIO polarity
+    struct gpio_desc *reset_gpio_desc; // GPIO descriptor for reset
+    struct gpio_desc *pwdn_gpio_desc;  // GPIO descriptor for power down
 
     // Parameter regions
     void __iomem *isp_params;

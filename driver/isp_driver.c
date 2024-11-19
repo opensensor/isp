@@ -1081,29 +1081,88 @@ struct i2c_client *isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
     return client;
 }
 
-
-/* Helper function to configure sensor via I2C */
-int isp_sensor_write_reg(struct i2c_client *client, u16 reg, u8 val)
+static int sc2336_hw_reset(struct IMPISPDev *dev)
 {
-    struct i2c_msg msg;
+    if (!dev || dev->reset_gpio < 0)
+        return -EINVAL;
+
+    pr_info("Resetting sensor via GPIO %d\n", dev->reset_gpio);
+
+    // Reset sequence
+    gpio_direction_output(dev->reset_gpio, 0);
+    msleep(20);
+    gpio_direction_output(dev->reset_gpio, 1);
+    msleep(20);
+
+    return 0;
+}
+/* Helper function to configure sensor via I2C */
+static int isp_sensor_write_reg(struct i2c_client *client, u16 reg, u8 val)
+{
     u8 buf[3];
+    struct i2c_msg msg;
     int ret;
 
-    buf[0] = reg >> 8;    // Register address high byte
-    buf[1] = reg & 0xFF;  // Register address low byte
-    buf[2] = val;         // Value to write
-
-    msg.addr = client->addr;
-    msg.flags = 0;
-    msg.len = 3;
-    msg.buf = buf;
-
-    ret = i2c_transfer(client->adapter, &msg, 1);
-    if (ret != 1) {
-        pr_err("Failed to write sensor register 0x%04x\n", reg);
-        return -EIO;
+    if (!client || !client->adapter) {
+        pr_err("Invalid I2C client\n");
+        return -EINVAL;
     }
 
+    // Construct i2c message
+    buf[0] = (reg >> 8) & 0xFF;  // MSB
+    buf[1] = reg & 0xFF;         // LSB
+    buf[2] = val;                // Value
+
+    msg.addr = client->addr;
+    msg.flags = 0;               // Write
+    msg.buf = buf;
+    msg.len = 3;                 // 16-bit reg + 8-bit val
+
+    // Try with retry
+    ret = i2c_transfer(client->adapter, &msg, 1);
+    if (ret < 0) {
+        pr_err("i2c write failed reg=0x%04x val=0x%02x ret=%d\n",
+               reg, val, ret);
+        return ret;
+    }
+
+    pr_debug("write reg 0x%04x = 0x%02x\n", reg, val);
+    return 0;
+}
+
+static int isp_sensor_read_reg(struct i2c_client *client, u16 reg, u8 *val)
+{
+    struct i2c_msg msgs[2];
+    u8 buf[2];
+    int ret;
+
+    if (!client || !client->adapter || !val) {
+        pr_err("Invalid parameters\n");
+        return -EINVAL;
+    }
+
+    buf[0] = (reg >> 8) & 0xFF;
+    buf[1] = reg & 0xFF;
+
+    // Write register address
+    msgs[0].addr = client->addr;
+    msgs[0].flags = 0;
+    msgs[0].buf = buf;
+    msgs[0].len = 2;
+
+    // Read value
+    msgs[1].addr = client->addr;
+    msgs[1].flags = I2C_M_RD;
+    msgs[1].buf = val;
+    msgs[1].len = 1;
+
+    ret = i2c_transfer(client->adapter, msgs, 2);
+    if (ret < 0) {
+        pr_err("i2c read failed reg=0x%04x ret=%d\n", reg, ret);
+        return ret;
+    }
+
+    pr_debug("read reg 0x%04x = 0x%02x\n", reg, *val);
     return 0;
 }
 
@@ -2659,43 +2718,17 @@ static int setup_isp_buffers(struct IMPISPDev *dev)
     struct sensor_win_size *wsize = dev->sensor_window_size;
     struct isp_framesource_state *fs = &dev->frame_sources[0];
     struct frame_source_channel *fc;
-    void __iomem *regs = dev->regs;
 
-    if (!regs || !wsize || !fs) {
-        pr_err("Invalid state for buffer setup\n");
-        return -EINVAL;
-    }
-
-    fc = fs->private;
-    if (!fc) {
-        pr_err("No frame channel\n");
-        return -EINVAL;
-    }
-
-    // OEM alignment calculation
-    uint32_t width = (fs->width + 7) >> 3 << 3;  // 8-byte align
+    // Calculate proper RAW10 stride
+    uint32_t width = ALIGN(fs->width * 10 / 8, 32);  // RAW10 needs 10 bits/pixel
     uint32_t height = fs->height;
     uint32_t y_stride = width;
     uint32_t y_size = y_stride * height;
-    uint32_t uv_addr = fc->dma_addr + y_size;
-    uint32_t uv_stride = width / 2;
 
-    // Calculate exact buffer addresses
-    uint32_t y_addr = fc->dma_addr;
-
-    pr_info("Setting up ISP NV12 buffers ch%d:\n"
-            "  Dimensions: %dx%d\n"
-            "  Y: addr=0x%x stride=%d\n"
-            "  UV: addr=0x%x stride=%d\n",
-            fs->chn_num, width, height,
-            y_addr, y_stride,
-            uv_addr, uv_stride);
-
-    // Configure exact registers matching OEM sequence
-    writel(ALIGN(y_addr, 8), regs + ISP_BASE_OFFSET);
-    writel(y_stride, regs + ISP_STRIDE_REG);
-    writel(ALIGN(uv_addr, 8), regs + ISP_HEIGHT_REG);
-    writel(uv_stride, regs + ISP_FORMAT_REG);
+    // Configure DMA buffers
+    writel(ALIGN(fc->dma_addr, 32), dev->regs + ISP_BUF0_OFFSET);
+    writel(y_stride, dev->regs + ISP_BUF0_OFFSET + 0x4);
+    writel(y_size, dev->regs + ISP_BUF0_OFFSET + 0x8);
     wmb();
 
     return 0;
@@ -3324,42 +3357,6 @@ static void free_frame_node(struct frame_node *node)
     }
 }
 
-
-int isp_sensor_read_reg(struct i2c_client *client, u16 reg, u8 *val)
-{
-    struct i2c_msg msgs[2];
-    u8 buf[2];
-    int ret;
-
-    if (!client || !val) {
-        pr_err("Invalid client or value pointer\n");
-        return -EINVAL;
-    }
-
-    buf[0] = reg >> 8;
-    buf[1] = reg & 0xFF;
-
-    msgs[0].addr = client->addr;
-    msgs[0].flags = 0;
-    msgs[0].len = 2;
-    msgs[0].buf = buf;
-
-    msgs[1].addr = client->addr;
-    msgs[1].flags = I2C_M_RD;
-    msgs[1].len = 1;
-    msgs[1].buf = val;
-
-    ret = i2c_transfer(client->adapter, msgs, 2);
-    if (ret != 2) {
-        pr_err("Failed to read sensor reg 0x%04x (ret=%d)\n", reg, ret);
-        return -EIO;
-    }
-
-    pr_debug("Read reg 0x%04x = 0x%02x\n", reg, *val);
-    return 0;
-}
-
-
 static int debug_sensor_registers(struct IMPISPDev *dev)
 {
     struct i2c_client *client = dev->sensor_i2c_client;
@@ -3728,9 +3725,7 @@ static int configure_mipi_csi(struct IMPISPDev *dev)
     void __iomem *csi = dev->csi_base;
     u32 val;
 
-    pr_info("Configuring CSI (base: %p)...\n", csi);
-
-    // 1. Reset sequence first
+    // 1. Full reset sequence first
     writel(0x0, csi + 0x10);  // CSI2_RESETN = 0
     writel(0x0, csi + 0x0c);  // DPHY_RSTZ = 0
     writel(0x0, csi + 0x08);  // PHY_SHUTDOWNZ = 0
@@ -3738,15 +3733,15 @@ static int configure_mipi_csi(struct IMPISPDev *dev)
     msleep(10);
 
     // 2. Configure before power up
-    writel(0x1, csi + 0x04);  // N_LANES = 1 (for 2 data lanes)
+    writel(0x1, csi + 0x04);  // N_LANES = 1 (2 data lanes)
 
-    // Set data format for RAW10 mode per SC2336 spec
+    // 3. Configure data format for RAW10
     writel(0x2B, csi + 0x18);  // DATA_IDS_1 = RAW10
-    writel(0x0c, csi + 0x1c);  // DATA_IDS_2
+    writel(0x0, csi + 0x1c);   // DATA_IDS_2 clear
     wmb();
     msleep(1);
 
-    // 3. Power up sequence
+    // 4. Power up sequence - critical order
     writel(0x1, csi + 0x08);  // PHY_SHUTDOWNZ = 1
     wmb();
     msleep(1);
@@ -3757,48 +3752,14 @@ static int configure_mipi_csi(struct IMPISPDev *dev)
 
     writel(0x1, csi + 0x10);  // CSI2_RESETN = 1
     wmb();
-    msleep(10);
+    msleep(20); // Longer delay for PHY
 
-    // Configure error masks - match OEM MASK1/MASK2 values
-    writel(0x100, csi + 0x28);     // MASK1 = 0x100
-    writel(0x400040, csi + 0x2c);  // MASK2 = 0x400040
-
-    // Read back and verify configuration
-    val = readl(csi + 0x14);  // PHY_STATE
-    pr_info("CSI PHY state after config: 0x%x\n", val);
-
-    // Read back all registers for debug
-    pr_info("****>>>>> dump csi reg <<<<<****\n");
-    pr_info("VERSION = %08x\n", readl(csi + 0x0));
-    pr_info("N_LANES = %08x\n", readl(csi + 0x4));
-    pr_info("PHY_SHUTDOWNZ = %08x\n", readl(csi + 0x08));
-    pr_info("DPHY_RSTZ = %08x\n", readl(csi + 0x0c));
-    pr_info("CSI2_RESETN = %08x\n", readl(csi + 0x10));
-    pr_info("PHY_STATE = %08x\n", readl(csi + 0x14));
-    pr_info("DATA_IDS_1 = %08x\n", readl(csi + 0x18));
-    pr_info("DATA_IDS_2 = %08x\n", readl(csi + 0x1c));
-    pr_info("ERR1 = %08x\n", readl(csi + 0x20));
-    pr_info("ERR2 = %08x\n", readl(csi + 0x24));
-    pr_info("MASK1 = %08x\n", readl(csi + 0x28));
-    pr_info("MASK2 = %08x\n", readl(csi + 0x2c));
-
-    // Add error checking
-    val = readl(csi + 0x20);  // ERR1
-    if (val) {
-        pr_warn("CSI ERR1 register shows errors: 0x%08x\n", val);
-        // Clear errors
-        writel(val, csi + 0x20);
-        wmb();
-    }
-
-    // Add stability delay
-    msleep(20);
+    // 5. Configure error masks
+    writel(0xF1FF0000, csi + 0x28); // MASK1 - Match OEM
+    writel(0xF1FF0000, csi + 0x2c); // MASK2 - Match OEM
 
     return 0;
 }
-
-
-
 
 static int configure_sensor_streaming(struct IMPISPDev *dev)
 {
@@ -3806,91 +3767,56 @@ static int configure_sensor_streaming(struct IMPISPDev *dev)
     u8 val;
     int ret;
 
-    pr_info("SC2336: Full sensor initialization sequence...\n");
+    pr_info("Configuring SC2336 sensor...\n");
 
-    // Software reset
+    // 1. Software reset
     ret = isp_sensor_write_reg(client, 0x0103, 0x01);
-    msleep(20);  // Important delay after reset
+    if (ret)
+        return ret;
+    msleep(20);
 
-    // Core initialization sequence for SC2336
-    const struct {
-        u16 reg;
-        u8 val;
-    } init_regs[] = {
-        // Timing control & PLL settings - match OEM values
-        {0x301f, 0x01},  // Framing mode
-        {0x3038, 0x44},  // SC2336 specific timing
-        {0x3253, 0x0c},  // Control register
-        {0x3301, 0x04},  // AEC settings
-        {0x3304, 0x60},  // Manual gain control
-        {0x3306, 0x70},  // Analog control
-        {0x330b, 0xc0},  // Exposure control
-        {0x3333, 0x10},  // Fine integration time
-        {0x3364, 0x56},  // Analog control
+    // 2. Set up format/resolution first
+    ret = isp_sensor_write_reg(client, 0x3200, 0x07); // Width high
+    ret |= isp_sensor_write_reg(client, 0x3201, 0x80); // Width low (1920)
+    ret |= isp_sensor_write_reg(client, 0x3202, 0x04); // Height high
+    ret |= isp_sensor_write_reg(client, 0x3203, 0x38); // Height low (1080)
+    if (ret)
+        return ret;
 
-        // Format & Resolution (1920x1080)
-        {0x3200, 0x07},  // Output width high byte
-        {0x3201, 0x80},  // Output width low byte (1920)
-        {0x3202, 0x04},  // Output height high byte
-        {0x3203, 0x38},  // Output height low byte (1080)
+    // 3. Format control - RAW10 MIPI
+    ret = isp_sensor_write_reg(client, 0x3031, 0x0a); // RAW10 format
+    ret |= isp_sensor_write_reg(client, 0x3018, 0x72); // MIPI 2 lanes
+    if (ret)
+        return ret;
 
-        // Data format - RAW10
-        {0x3031, 0x0a},  // RAW10 format
-        {0x3018, 0x72},  // MIPI configuration - 2 lanes
+    // 4. Timing configuration
+    ret = isp_sensor_write_reg(client, 0x320c, 0x08); // HTS high
+    ret |= isp_sensor_write_reg(client, 0x320d, 0xca); // HTS low
+    ret |= isp_sensor_write_reg(client, 0x320e, 0x05); // VTS high
+    ret |= isp_sensor_write_reg(client, 0x320f, 0xa0); // VTS low
+    if (ret)
+        return ret;
 
-        // Frame timing
-        {0x320c, 0x08},  // HTS high byte
-        {0x320d, 0xca},  // HTS low byte
-        {0x320e, 0x05},  // VTS high byte
-        {0x320f, 0xa0},  // VTS low byte
-
-        // Initial exposure & gain
-        {0x3e01, 0x8c},  // Exposure high byte
-        {0x3e02, 0x60},  // Exposure low byte
-        {0x3e08, 0x03},  // Gain high byte
-        {0x3e09, 0x10},  // Gain low byte
-    };
-
-    // Apply initialization sequence
-    for (int i = 0; i < ARRAY_SIZE(init_regs); i++) {
-        ret = isp_sensor_write_reg(client, init_regs[i].reg, init_regs[i].val);
-        if (ret) {
-            pr_err("Failed to write reg 0x%04x: %d\n", init_regs[i].reg, ret);
-            return ret;
-        }
-        // Add small delay between writes
-        udelay(10);
-    }
-
-    // Verify key registers
-    isp_sensor_read_reg(client, 0x3031, &val);
-    pr_info("Format control: 0x%02x\n", val);
-
-    isp_sensor_read_reg(client, 0x320e, &val);
-    pr_info("VTS high: 0x%02x\n", val);
-
-    isp_sensor_read_reg(client, 0x3e08, &val);
-    pr_info("Gain high: 0x%02x\n", val);
-
-    // Finally enable streaming
-    msleep(10);  // Delay before stream on
+    // 5. Enable streaming
     ret = isp_sensor_write_reg(client, 0x0100, 0x01);
-    msleep(20);  // Let sensor start up
+    if (ret)
+        return ret;
 
-    pr_info("SC2336: Sensor initialization complete\n");
-    return ret;
+    msleep(20);  // Allow sensor to stabilize
+
+    pr_info("SC2336 sensor configured\n");
+    return 0;
 }
 
-
-// Per-channel streaming control
-static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, bool enable)
+static int configure_isp_buffers(struct IMPISPDev *dev)
 {
-    struct isp_framesource_state *fs = &dev->frame_sources[channel];
+    struct isp_framesource_state *fs = &dev->frame_sources[0];
     struct frame_source_channel *fc;
-    int ret;
+    void __iomem *regs = dev->regs;
+    uint32_t buffer_start, buffer_size;
 
-    if (!fs || !fs->is_open) {
-        pr_err("No frame source initialized\n");
+    if (!dev || !fs) {
+        pr_err("Invalid device state\n");
         return -EINVAL;
     }
 
@@ -3900,73 +3826,106 @@ static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int ch
         return -EINVAL;
     }
 
+    // Calculate buffer layout for RAW10
+    uint32_t width = ALIGN(fs->width, 32);
+    uint32_t height = fs->height;
+    uint32_t stride = width * 10 / 8;  // RAW10 needs 10 bits per pixel
+    stride = ALIGN(stride, 32);        // 32-byte align stride
+
+    // Calculate sizes
+    uint32_t y_size = stride * height;
+    uint32_t uv_size = stride * height / 2;  // For NV12 output
+    buffer_size = y_size + uv_size;
+
+    // Align buffer start with 32 bytes
+    buffer_start = ALIGN(dev->dma_addr + 0x1094d4, 32);  // From OEM offset
+
+    pr_info("Configuring ISP buffers:\n");
+    pr_info("  Resolution: %dx%d\n", width, height);
+    pr_info("  RAW10 stride: %d\n", stride);
+    pr_info("  Buffer: start=0x%x size=%d\n", buffer_start, buffer_size);
+
+    // Configure Y buffer
+    writel(buffer_start, regs + ISP_BUF0_OFFSET);
+    writel(stride, regs + ISP_BUF0_OFFSET + 0x4);
+    writel(y_size, regs + ISP_BUF0_OFFSET + 0x8);
+    wmb();
+
+    // Configure UV buffer
+    writel(buffer_start + y_size, regs + ISP_BUF0_OFFSET + 0xC);
+    writel(stride/2, regs + ISP_BUF0_OFFSET + 0x10);
+    writel(uv_size, regs + ISP_BUF0_OFFSET + 0x14);
+    wmb();
+
+    // Store buffer info
+    fc->dma_addr = buffer_start;
+    fc->buf_size = buffer_size;
+    fc->write_idx = 0;
+
+    // Configure frame size
+    writel(width, regs + 0x100);   // Frame width
+    writel(height, regs + 0x104);  // Frame height
+    wmb();
+
+    pr_info("ISP buffers configured successfully\n");
+    return 0;
+}
+
+// Per-channel streaming control
+static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, bool enable)
+{
+    int ret;
+
+    if (!dev || !dev->sensor_i2c_client) {
+        pr_err("Invalid device state\n");
+        return -EINVAL;
+    }
+
     if (enable) {
-        // 1. Initialize sensor first
-        ret = configure_sensor_streaming(dev);
+        // 1. Configure ISP for streaming
+        ret = configure_isp_buffers(dev);
         if (ret) {
-            pr_err("Failed to configure sensor: %d\n", ret);
+            pr_err("Failed to configure ISP buffers: %d\n", ret);
             return ret;
         }
 
-        // 2. Configure CSI with proper sequence
+        // 2. Configure MIPI CSI
         ret = configure_mipi_csi(dev);
         if (ret) {
             pr_err("Failed to configure MIPI CSI: %d\n", ret);
             return ret;
         }
 
-        // 3. Must be in ENABLED state to start streaming
-        ret = isp_set_state(dev, ISP_STATE_STREAMING);
-        if (ret)
-            return ret;
-
-        // 4. Configure buffer sequence
-        ret = setup_isp_buffers(dev);
+        // 3. Configure sensor
+        ret = configure_sensor_streaming(dev);
         if (ret) {
-            pr_err("Failed to setup ISP buffers: %d\n", ret);
-            goto err_revert_state;
+            pr_err("Failed to configure sensor: %d\n", ret);
+            return ret;
         }
 
-        // 5. Enable IRQs after buffers are ready
-        ret = tx_isp_enable_irq(dev);
-        if (ret)
-            goto err_disable_irq;
+        // 4. Enable video link processing
+        writel(0x1, dev->regs + 0x140);  // Enable direct path
+        writel(0x0, dev->regs + 0x144);  // Disable bypass
+        wmb();
 
-        // 6. Start actual streaming
-        ret = start_streaming(dev);
-        if (ret)
-            goto err_disable_irq;
+        // 5. Enable ISP streaming
+        writel(0x7, dev->regs + ISP_CTRL_REG);  // Enable ISP core
+        wmb();
 
-        // Update frame source state
-        fs->state = 2;  // Move to streaming
-        fc->state = 2;
+        dev->stream_count += 2;
+        pr_info("Stream enabled, count=%d\n", dev->stream_count);
 
     } else {
-        // Stop CSI monitoring first
-        if (dev->csi_check_wq) {
-            atomic_set(&dev->csi_monitor_enabled, 0);
-            cancel_work_sync(&dev->csi_check_work);
-        }
-
         // Stop streaming
-        stop_streaming(dev);
+        writel(0x0, dev->regs + ISP_CTRL_REG);
+        writel(0x0, dev->regs + ISP_INT_MASK_REG);
+        wmb();
+        msleep(50);  // Allow pending frames to complete
 
-        // Disable IRQs
-        tx_isp_disable_irq(dev);
-
-        // Return to ready state
-        fs->state = 1;
-        fc->state = 1;
-        isp_set_state(dev, ISP_STATE_ENABLED);
+        dev->stream_count = 0;
     }
 
     return 0;
-
-err_disable_irq:
-    tx_isp_disable_irq(dev);
-err_revert_state:
-    isp_set_state(dev, ISP_STATE_ENABLED);
-    return ret;
 }
 
 static int tisp_release(struct inode *inode, struct file *file)
@@ -4729,7 +4688,6 @@ static int csi_core_ops_init(struct IMPISPDev *dev, bool enable)
 
     return ret;
 }
-
 static int configure_streaming_hardware(struct IMPISPDev *dev)
 {
     void __iomem *regs = dev->regs;
@@ -4750,70 +4708,85 @@ static int configure_streaming_hardware(struct IMPISPDev *dev)
     msleep(1);
 
     // 2. CSI Configuration - CRITICAL UPDATE
-    writel(0x0, csi_base + 0x0);   // VERSION = 0
+    // First reset CSI
+    writel(0x0, csi_base + 0x10);  // CSI2_RESETN = 0
+    writel(0x0, csi_base + 0x0c);  // DPHY_RSTZ = 0
+    writel(0x0, csi_base + 0x08);  // PHY_SHUTDOWNZ = 0
+    wmb();
+    msleep(10);  // Longer delay after reset
 
-    // Set 2 data lanes (-1) = 1
-    writel(0x1, csi_base + 0x4);   // N_LANES = 1
+    // Configure CSI before enabling
+    writel(0x1, csi_base + 0x04);  // N_LANES = 1 (for 2 data lanes)
 
-    // Power up sequence
-    writel(0x0, csi_base + 0x8);   // Disable PHY first
-    writel(0x0, csi_base + 0xc);   // Reset DPHY
-    writel(0x0, csi_base + 0x10);  // Reset CSI2
+    // Set up data format for RAW10 mode
+    writel(0x2B, csi_base + 0x18);  // DATA_IDS_1 = RAW10 (0x2B)
+    writel(0x00, csi_base + 0x1c);  // DATA_IDS_2 = 0 for RAW10
     wmb();
     msleep(1);
 
-    // Now enable in sequence
-    writel(0x1, csi_base + 0x8);   // Enable PHY
+    // Power up sequence - important order
+    writel(0x1, csi_base + 0x08);  // PHY_SHUTDOWNZ = 1 first
     wmb();
     msleep(1);
 
-    writel(0x1, csi_base + 0xc);   // Enable DPHY
+    writel(0x1, csi_base + 0x0c);  // DPHY_RSTZ = 1 second
     wmb();
     msleep(1);
 
-    writel(0x1, csi_base + 0x10);  // Enable CSI2
+    writel(0x1, csi_base + 0x10);  // CSI2_RESETN = 1 last
     wmb();
-    msleep(1);
+    msleep(20);  // Extra delay after enabling
 
-    // Set up data IDs for RAW10 mode
-    writel(0x2B, csi_base + 0x18);  // DATA_IDS_1 = RAW10
-    writel(0x0c, csi_base + 0x1c);  // DATA_IDS_2
+    // Configure error masks - match OEM values
+    writel(0xF1FF0000, csi_base + 0x28); // MASK1
+    writel(0xF1FF0000, csi_base + 0x2c); // MASK2
 
-    // Configure masks
-    writel(0x100, csi_base + 0x28); // MASK1
-    writel(0x400040, csi_base + 0x2c); // MASK2
-
-    // 3. Set up DMA buffers for NV12
-    uint32_t y_stride = ALIGN(fs->width, 32);
-    uint32_t uv_stride = ALIGN(fs->width/2, 32);
+    // 3. Set up DMA buffers - handle RAW10 input and NV12 output
+    uint32_t raw10_stride = ALIGN(fs->width * 10 / 8, 32);  // RAW10 needs 10 bits/pixel
+    uint32_t y_stride = ALIGN(fs->width, 32);               // NV12 Y stride
+    uint32_t uv_stride = ALIGN(fs->width/2, 32);           // NV12 UV stride
     uint32_t y_size = y_stride * fs->height;
+    uint32_t raw_size = raw10_stride * fs->height;
 
-    // Y plane
-    writel(ALIGN(fc->dma_addr, 8), regs + ISP_BUF0_OFFSET);
-    writel(y_stride, regs + ISP_BUF0_OFFSET + 0x4);
+    // Input RAW10 buffer
+    writel(ALIGN(fc->dma_addr, 32), regs + ISP_BUF0_OFFSET);
+    writel(raw10_stride, regs + ISP_BUF0_OFFSET + 0x4);
+    writel(raw_size, regs + ISP_BUF0_OFFSET + 0x8);
 
-    // UV plane
-    writel(ALIGN(fc->dma_addr + y_size, 8), regs + ISP_BUF0_OFFSET + 0x8);
-    writel(uv_stride, regs + ISP_BUF0_OFFSET + 0xC);
+    // Output NV12 buffers
+    writel(ALIGN(fc->dma_addr + raw_size, 32), regs + ISP_BUF1_OFFSET);
+    writel(y_stride, regs + ISP_BUF1_OFFSET + 0x4);
+    writel(ALIGN(fc->dma_addr + raw_size + y_size, 32), regs + ISP_BUF1_OFFSET + 0x8);
+    writel(uv_stride, regs + ISP_BUF1_OFFSET + 0xC);
     wmb();
 
-    // 4. Set format registers - use NV12
-    writel(ISP_FMT_NV12, regs + ISP_INPUT_FORMAT_REG);
-    writel(ISP_FMT_NV12, regs + ISP_OUTPUT_FORMAT_REG);
+    // 4. Set format registers - RAW10 input to NV12 output
+    writel(ISP_FMT_RAW10, regs + ISP_INPUT_FORMAT_REG);  // RAW10 input
+    writel(ISP_FMT_NV12, regs + ISP_OUTPUT_FORMAT_REG);  // NV12 output
     wmb();
 
-    // 5. Set up interrupts
-    writel(0x1, regs + ISP_INT_MASK_REG);  // Only frame done IRQ
-    writel(0x100, regs + 0x28);  // MASK1 = 0x100
-    writel(0x400040, regs + 0x2c); // MASK2 = 0x400040
+    // 5. Configure processing path
+    writel(0x1, regs + 0x140);  // Enable direct path
+    writel(0x0, regs + 0x144);  // Disable bypass
     wmb();
 
-    // 6. Finally enable core with interrupts
-    val = 0x7;  // ENABLE | START | IRQ_EN
+    // 6. Set up interrupts
+    writel(ISP_INT_FRAME_DONE | ISP_INT_ERR | ISP_INT_OVERFLOW,
+           regs + ISP_INT_MASK_REG);
+    wmb();
+
+    // 7. Finally enable core
+    val = ISP_CTRL_ENABLE | ISP_CTRL_START | ISP_CTRL_IRQ_ENABLE;
     writel(val, regs + ISP_CTRL_REG);
     wmb();
 
     // Debug output
+    pr_info("ISP Configuration:\n");
+    pr_info("  RAW10 stride: %d size: %d\n", raw10_stride, raw_size);
+    pr_info("  NV12 Y stride: %d UV stride: %d\n", y_stride, uv_stride);
+    pr_info("  Control: 0x%x Status: 0x%x\n",
+            readl(regs + ISP_CTRL_REG),
+            readl(regs + ISP_STATUS_REG));
     dump_csi_reg(dev);
 
     return 0;
@@ -7559,54 +7532,33 @@ static void remove_framechan_devices(void)
 
 static int setup_i2c_sensor(struct IMPISPDev *dev)
 {
-    struct i2c_client *client;
-    struct i2c_adapter *adapter;
-    struct tx_isp_sensor_win_setting *win_size;
-
-    pr_info("Setting up I2C infrastructure for SC2336...\n");
-
-    // Allocate window size structure
-    win_size = kzalloc(sizeof(*win_size), GFP_KERNEL);
-    if (!win_size) {
-        pr_err("Failed to allocate window size info\n");
-        return -ENOMEM;
-    }
-
-    // Fill in window settings from driver
-    win_size->width = 1920;
-    win_size->height = 1080;
-    win_size->fps = 25 << 16 | 1;  // Match driver fps format
-    win_size->mbus_code = V4L2_MBUS_FMT_SBGGR10_1X10;
-    win_size->colorspace = V4L2_COLORSPACE_SRGB;
-
-    // Get I2C adapter
-    adapter = i2c_get_adapter(0);  // Make sure this matches your hardware
-    if (!adapter) {
-        pr_err("Failed to get I2C adapter\n");
-        kfree(win_size);
-        return -ENODEV;
-    }
-
     struct i2c_board_info board_info = {
         .type = "sc2336",
         .addr = 0x30,  // SC2336 I2C address
-        .platform_data = win_size,
     };
+    struct i2c_adapter *adapter;
+    int ret;
 
-    client = i2c_new_device(adapter, &board_info);
-    if (!client) {
-        pr_err("Failed to create I2C device\n");
-        i2c_put_adapter(adapter);
-        kfree(win_size);
+    pr_info("Setting up I2C infrastructure for SC2336...\n");
+
+    adapter = i2c_get_adapter(0);
+    if (!adapter) {
+        pr_err("Failed to get I2C adapter\n");
         return -ENODEV;
     }
 
-    // Store client and window size in device structure
-    dev->sensor_i2c_client = client;
-    dev->sensor_window_size = win_size;
+    // Create new I2C device
+    dev->sensor_i2c_client = i2c_new_device(adapter, &board_info);
+    if (!dev->sensor_i2c_client) {
+        pr_err("Failed to create I2C device\n");
+        i2c_put_adapter(adapter);
+        return -ENODEV;
+    }
 
-    pr_info("I2C infrastructure ready for SC2336 sensor at address 0x%02x\n",
-            client->addr);
+    i2c_put_adapter(adapter);
+    pr_info("I2C sensor initialized: addr=0x%02x adapter=%p\n",
+            dev->sensor_i2c_client->addr, dev->sensor_i2c_client->adapter);
+
     return 0;
 }
 
@@ -7836,6 +7788,28 @@ static int tisp_probe(struct platform_device *pdev)
     memcpy(&ourISPdev->core_state, &init, sizeof(atomic_t));
     memcpy(&ourISPdev->vic_state, &init, sizeof(atomic_t));
     memcpy(&ourISPdev->fw_state, &zero, sizeof(atomic_t));
+
+    // GPIO setup - use direct GPIO request for JZ/T31
+    ourISPdev->reset_gpio = GPIO_PA(18);  // Default GPIO from OEM
+    ret = gpio_request(ourISPdev->reset_gpio, "sc2336_reset");
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to request reset GPIO %d: %d\n",
+                ourISPdev->reset_gpio, ret);
+        goto err_free_dev;
+    }
+
+    // Set initial output state
+    ret = gpio_direction_output(ourISPdev->reset_gpio, 1);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to set reset GPIO direction: %d\n", ret);
+        goto err_free_gpio;
+    }
+
+    // Optional power down GPIO
+    ourISPdev->pwdn_gpio = -1;  // No power down by default
+
+    pr_info("GPIO setup: reset=%d pwdn=%d\n",
+            ourISPdev->reset_gpio, ourISPdev->pwdn_gpio);
 
     // 2. Initialize all basic locks/queues
     spin_lock_init(&ourISPdev->state_lock);
@@ -8149,7 +8123,10 @@ err_release_csi:
 err_unmap_isp:
     if (ourISPdev->regs)
         iounmap(ourISPdev->regs);
+err_free_gpio:
+    gpio_free(ourISPdev->reset_gpio);
 err_free_dev:
+    kfree(ourISPdev);
     return ret;
 }
 
