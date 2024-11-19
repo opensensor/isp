@@ -3722,22 +3722,26 @@ static int probe_csi_registers(struct IMPISPDev *dev)
 
 static int configure_mipi_csi(struct IMPISPDev *dev)
 {
-    void __iomem *csi = dev->csi_base;
+    void __iomem *csi = dev->regs + 0xb8;  // CSI register base
     u32 val;
 
-    // 1. Full reset sequence first
+    pr_info("Configuring MIPI CSI interface...\n");
+
+    // 1. Full CSI reset sequence
     writel(0x0, csi + 0x10);  // CSI2_RESETN = 0
     writel(0x0, csi + 0x0c);  // DPHY_RSTZ = 0
     writel(0x0, csi + 0x08);  // PHY_SHUTDOWNZ = 0
     wmb();
     msleep(10);
 
-    // 2. Configure before power up
-    writel(0x1, csi + 0x04);  // N_LANES = 1 (2 data lanes)
+    // 2. Configure CSI parameters
+    writel(0x1, csi + 0x04);  // N_LANES = 1 (for 2 lanes)
+    wmb();
+    msleep(1);
 
-    // 3. Configure data format for RAW10
-    writel(0x2B, csi + 0x18);  // DATA_IDS_1 = RAW10
-    writel(0x0, csi + 0x1c);   // DATA_IDS_2 clear
+    // 3. CSI Data format for RAW10
+    writel(0x2B, csi + 0x18);  // DATA_IDS_1 = RAW10 (0x2B)
+    writel(0x0, csi + 0x1c);   // DATA_IDS_2 = 0 for RAW10
     wmb();
     msleep(1);
 
@@ -3752,11 +3756,15 @@ static int configure_mipi_csi(struct IMPISPDev *dev)
 
     writel(0x1, csi + 0x10);  // CSI2_RESETN = 1
     wmb();
-    msleep(20); // Longer delay for PHY
+    msleep(20);  // Extra delay for PHY
 
-    // 5. Configure error masks
-    writel(0xF1FF0000, csi + 0x28); // MASK1 - Match OEM
-    writel(0xF1FF0000, csi + 0x2c); // MASK2 - Match OEM
+    // 5. Configure error masks - from OEM
+    writel(0xF1FF0000, csi + 0x28); // MASK1
+    writel(0xF1FF0000, csi + 0x2c); // MASK2
+
+    // Debug output
+    val = readl(csi + 0x14);  // PHY_STATE
+    pr_info("CSI configured: phy_state=0x%x\n", val);
 
     return 0;
 }
@@ -3764,47 +3772,69 @@ static int configure_mipi_csi(struct IMPISPDev *dev)
 static int configure_sensor_streaming(struct IMPISPDev *dev)
 {
     struct i2c_client *client = dev->sensor_i2c_client;
-    u8 val;
     int ret;
 
     pr_info("Configuring SC2336 sensor...\n");
 
-    // 1. Software reset
+    // Reset sequence
     ret = isp_sensor_write_reg(client, 0x0103, 0x01);
     if (ret)
         return ret;
     msleep(20);
 
-    // 2. Set up format/resolution first
-    ret = isp_sensor_write_reg(client, 0x3200, 0x07); // Width high
-    ret |= isp_sensor_write_reg(client, 0x3201, 0x80); // Width low (1920)
-    ret |= isp_sensor_write_reg(client, 0x3202, 0x04); // Height high
-    ret |= isp_sensor_write_reg(client, 0x3203, 0x38); // Height low (1080)
-    if (ret)
-        return ret;
+    // SC2336 initialization for RAW10 output
+    const struct {
+        u16 reg;
+        u8 val;
+    } init_regs[] = {
+        // System control
+        {0x0103, 0x01}, // Reset
+        {0x0100, 0x00}, // Stream off initially
 
-    // 3. Format control - RAW10 MIPI
-    ret = isp_sensor_write_reg(client, 0x3031, 0x0a); // RAW10 format
-    ret |= isp_sensor_write_reg(client, 0x3018, 0x72); // MIPI 2 lanes
-    if (ret)
-        return ret;
+        // Drive capability
+        {0x36e9, 0x80}, // Drive current
+        {0x37f9, 0x80}, // Drive strength
+        {0x301f, 0x02}, // Drive mode
 
-    // 4. Timing configuration
-    ret = isp_sensor_write_reg(client, 0x320c, 0x08); // HTS high
-    ret |= isp_sensor_write_reg(client, 0x320d, 0xca); // HTS low
-    ret |= isp_sensor_write_reg(client, 0x320e, 0x05); // VTS high
-    ret |= isp_sensor_write_reg(client, 0x320f, 0xa0); // VTS low
-    if (ret)
-        return ret;
+        // RAW10 format
+        {0x3018, 0x72}, // MIPI PHY 2 lanes
+        {0x3031, 0x0a}, // RAW10 output format
+        {0x3019, 0x00}, // MIPI Signal mode = continuous
 
-    // 5. Enable streaming
-    ret = isp_sensor_write_reg(client, 0x0100, 0x01);
-    if (ret)
-        return ret;
+        // Window setup
+        {0x3200, 0x07}, // Window horizontal start MSB
+        {0x3201, 0x80}, // Window horizontal start LSB
+        {0x3202, 0x04}, // Window vertical start MSB
+        {0x3203, 0x38}, // Window vertical start LSB
 
-    msleep(20);  // Allow sensor to stabilize
+        // Timing control
+        {0x320c, 0x08}, // Line length MSB
+        {0x320d, 0xca}, // Line length LSB
+        {0x320e, 0x05}, // Frame length MSB
+        {0x320f, 0xa0}, // Frame length LSB
 
-    pr_info("SC2336 sensor configured\n");
+        // Initial exposure & gain
+        {0x3e01, 0x8c}, // Exposure MSB
+        {0x3e02, 0x60}, // Exposure LSB
+        {0x3e08, 0x03}, // Long gain MSB
+        {0x3e09, 0x10}, // Long gain LSB
+
+        // Finally enable streaming
+        {0x0100, 0x01}, // Start streaming
+    };
+
+    for (int i = 0; i < ARRAY_SIZE(init_regs); i++) {
+        ret = isp_sensor_write_reg(client, init_regs[i].reg, init_regs[i].val);
+        if (ret) {
+            pr_err("Failed to write reg 0x%04x: %d\n", init_regs[i].reg, ret);
+            return ret;
+        }
+        udelay(10);
+    }
+
+    msleep(20); // Allow sensor to stabilize
+
+    pr_info("SC2336 sensor configured for RAW10\n");
     return 0;
 }
 
@@ -3829,12 +3859,13 @@ static int configure_isp_buffers(struct IMPISPDev *dev)
     // Calculate buffer layout for RAW10
     uint32_t width = ALIGN(fs->width, 32);
     uint32_t height = fs->height;
-    uint32_t stride = width * 10 / 8;  // RAW10 needs 10 bits per pixel
-    stride = ALIGN(stride, 32);        // 32-byte align stride
+    uint32_t raw10_stride = ALIGN(width * 10 / 8, 32);  // 10 bits per pixel
+    uint32_t y_stride = ALIGN(width, 32);               // NV12 output stride
+    uint32_t uv_stride = ALIGN(width/2, 32);           // NV12 UV stride
 
     // Calculate sizes
-    uint32_t y_size = stride * height;
-    uint32_t uv_size = stride * height / 2;  // For NV12 output
+    uint32_t y_size = y_stride * height;
+    uint32_t uv_size = uv_stride * height / 2;  // For NV12 output
     buffer_size = y_size + uv_size;
 
     // Align buffer start with 32 bytes
@@ -3842,18 +3873,18 @@ static int configure_isp_buffers(struct IMPISPDev *dev)
 
     pr_info("Configuring ISP buffers:\n");
     pr_info("  Resolution: %dx%d\n", width, height);
-    pr_info("  RAW10 stride: %d\n", stride);
+    pr_info("  RAW10 stride: %d\n", raw10_stride);
     pr_info("  Buffer: start=0x%x size=%d\n", buffer_start, buffer_size);
 
     // Configure Y buffer
     writel(buffer_start, regs + ISP_BUF0_OFFSET);
-    writel(stride, regs + ISP_BUF0_OFFSET + 0x4);
+    writel(y_stride, regs + ISP_BUF0_OFFSET + 0x4);
     writel(y_size, regs + ISP_BUF0_OFFSET + 0x8);
     wmb();
 
     // Configure UV buffer
     writel(buffer_start + y_size, regs + ISP_BUF0_OFFSET + 0xC);
-    writel(stride/2, regs + ISP_BUF0_OFFSET + 0x10);
+    writel(uv_stride, regs + ISP_BUF0_OFFSET + 0x10);
     writel(uv_size, regs + ISP_BUF0_OFFSET + 0x14);
     wmb();
 
