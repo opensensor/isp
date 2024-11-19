@@ -770,87 +770,140 @@ static int enqueue_frame(struct frame_source_channel *fc, struct frame_entry *en
     return 0;
 }
 
+
+// Add error checking function matching check_csi_error
+static void check_csi_errors(struct IMPISPDev *dev)
+{
+    void __iomem *csi_base = dev->regs + 0xb8;
+    u32 err1, err2;
+
+    err1 = readl(csi_base + 0x20);
+    err2 = readl(csi_base + 0x24);
+
+    if (err1) {
+        atomic_inc(&dev->csi_error_cnt);
+        pr_info("error-------- 1:0x%08x\n", err1);
+    }
+    if (err2) {
+        atomic_inc(&dev->csi_error_cnt);
+        pr_info("error-------- 2:0x%08x\n", err2);
+    }
+}
+
 static irqreturn_t isp_irq_handler(int irq, void *dev_id)
 {
     struct IMPISPDev *dev = dev_id;
-    u32 status = readl(dev->regs + ISP_STATUS_REG);
     struct isp_framesource_state *fs;
     struct frame_source_channel *fc;
-    struct frame_entry entry;
-    u64 curr_time;
-    u32 interval;
+    void __iomem *regs = dev->regs;
+    void __iomem *csi_base = regs + 0xb8;
+    u32 isp_status, csi_status;
+    u32 frame_addr;
+    unsigned long flags;
 
+    // 1. Read and clear ISP status
+    isp_status = readl(regs + ISP_STATUS_REG);
+    writel(isp_status, regs + ISP_INT_CLEAR_REG);
+    wmb();
 
-    if (status & ISP_INT_FRAME_DONE) {
+    // 2. Check CSI errors
+    csi_status = readl(csi_base + 0x20); // ERR1 register
+    if (csi_status) {
+        pr_debug("CSI ERR1: 0x%08x\n", csi_status);
+        writel(csi_status, csi_base + 0x20);
+        wmb();
+        dev->error_count++;
+    }
+
+    // 3. Handle frame completion
+    if (isp_status & ISP_INT_FRAME_DONE) {
         fs = &dev->frame_sources[0];
-        if (!fs || !fs->private) {
-            goto clear_irq;
-        }
+        if (!fs || !fs->is_open)
+            goto out;
+
         fc = fs->private;
+        if (!fc)
+            goto out;
 
-        // Check channel state before processing
-        if (fc->state != CH_STATE_STREAMING) {
-            atomic_inc(&fc->frames_dropped);
-            goto clear_irq;
-        }
+        spin_lock_irqsave(&fc->state_lock, flags);
 
-        // Calculate frame timing
-        curr_time = ktime_get_real_ns();
-        if (fc->last_frame_time) {
-            interval = curr_time - fc->last_frame_time;
-            if (interval < fc->min_frame_interval)
-                fc->min_frame_interval = interval;
-            if (interval > fc->max_frame_interval)
-                fc->max_frame_interval = interval;
-        }
-        fc->last_frame_time = curr_time;
+        // Get current buffer address
+        frame_addr = readl(regs + ISP_BUF0_OFFSET +
+                          (fs->buf_index * ISP_BUF_SIZE_STEP));
 
-        // Setup frame entry
-        entry.flags = 0x1;  // Mark as filled
-        entry.timestamp = curr_time;
-        entry.frame_size = fs->buf_size;
-        entry.frame_type = 1;  // I-frame
-        entry.frame_num = fs->frame_cnt++;
-        entry.frame_rate = 30; // From sensor config
-        entry.num_slices = 1;
-        entry.slice_data = fs->buf_base + (fs->buf_index * fs->buf_size);
+        // Update buffer state
+        mark_buffer_filled(fc, fs->buf_index);
 
-        // Track buffer use
-        if (atomic_read(&fc->frames_completed) >= fc->buf_cnt) {
-            atomic_inc(&fc->buffer_overruns);
-            pr_warn("Buffer overrun: completed=%d count=%d\n",
-                   atomic_read(&fc->frames_completed), fc->buf_cnt);
-        }
+        // Move to next buffer
+        fs->buf_index = (fs->buf_index + 1) % fs->buf_cnt;
 
-        // Enqueue with debug
-        pr_debug("Frame ready: num=%d size=%u ts=%llu\n",
-                entry.frame_num, entry.frame_size, entry.timestamp);
-        if (enqueue_frame(fc, &entry)) {
-            atomic_inc(&fc->frames_dropped);
-            pr_warn("Frame drop: queue full\n");
-            goto clear_irq;
-        }
+        // Setup next buffer
+        writel(fc->dma_addr + (fs->buf_index * fc->buf_size),
+               regs + ISP_BUF0_OFFSET);
+        writel(fc->buf_size, regs + ISP_BUF0_OFFSET + 0x4);
+        wmb();
 
-        atomic_inc(&fc->frames_received);
+        // Update frame info
+        fs->frame_cnt++;
+        fc->last_frame_time = ktime_get_real_ns();
 
-        // Queue stats work
+        spin_unlock_irqrestore(&fc->state_lock, flags);
+
+        // Signal frame completion
+        up(&fc->sem);
+
+        // Trigger stats collection if needed
         if (!dev->stats_pending) {
             dev->stats_pending = true;
             dev->stats_work.stats_mask = ISP_STATS_AE | ISP_STATS_AWB;
             queue_work(dev->stats_wq, &dev->stats_work.work);
         }
 
-        // Fix: Pass the correct pad pointer
+        // Notify event system
         tx_isp_send_our_event_to_remote(&dev->pads[0], 0x1000000, NULL);
     }
 
-clear_irq:
-    writel(status, dev->regs + ISP_INT_CLEAR_REG);
-    wmb();
-
+out:
     return IRQ_HANDLED;
 }
 
+// CSI monitoring work function
+static void csi_error_check_work(struct work_struct *work)
+{
+    struct IMPISPDev *dev = container_of(work, struct IMPISPDev, csi_check_work);
+
+    while (atomic_read(&dev->csi_monitor_enabled)) {
+        check_csi_errors(dev);
+        msleep(100);  // Check every 100ms
+    }
+}
+
+// Initialize monitoring in probe
+static int init_csi_monitoring(struct IMPISPDev *dev)
+{
+    dev->csi_check_wq = create_singlethread_workqueue("isp-csi-check");
+    if (!dev->csi_check_wq)
+        return -ENOMEM;
+
+    INIT_WORK(&dev->csi_check_work, csi_error_check_work);
+    atomic_set(&dev->csi_monitor_enabled, 0);
+    return 0;
+}
+
+// Start monitoring when streaming starts
+static int start_csi_monitoring(struct IMPISPDev *dev)
+{
+    atomic_set(&dev->csi_monitor_enabled, 1);
+    queue_work(dev->csi_check_wq, &dev->csi_check_work);
+    return 0;
+}
+
+// Stop monitoring in stream off path
+static void stop_csi_monitoring(struct IMPISPDev *dev)
+{
+    atomic_set(&dev->csi_monitor_enabled, 0);
+    cancel_work_sync(&dev->csi_check_work);
+}
 
 // Initialize stats work queue in probe
 static int init_stats_work(struct IMPISPDev *dev)
@@ -3403,67 +3456,88 @@ static void dump_frame_format_state(struct isp_framesource_state *fs)
 static int sensor_setup_streaming(struct IMPISPDev *dev)
 {
     struct i2c_client *client = dev->sensor_i2c_client;
-    u8 val;
-    int ret = 0;
+    int ret;
 
-    pr_info("SC2336: Setting up sensor streaming...\n");
+    pr_info("Configuring SC2336 sensor...\n");
 
-    if (!client) {
-        pr_err("No sensor I2C client\n");
-        return -ENODEV;
-    }
+    // 1. Software reset
+    ret = isp_sensor_write_reg(client, 0x0103, 0x01);
+    if (ret)
+        return ret;
+    msleep(20);  // Required delay after reset
 
-    // Read sensor ID again to verify communication
-    ret = isp_sensor_read_reg(client, 0x3107, &val);
-    pr_info("SC2336: ID high byte: 0x%02x\n", val);
-    ret |= isp_sensor_read_reg(client, 0x3108, &val);
-    pr_info("SC2336: ID low byte: 0x%02x\n", val);
-
-    // Add detailed sensor register setup with verification
+    // 2. Initial configuration - registers from SC2336 datasheet
     const struct {
         u16 reg;
         u8 val;
-        const char *desc;
-    } sensor_init_regs[] = {
-        {0x0103, 0x01, "Software reset"},
-        {0x0100, 0x00, "Stream off for init"},
-        {0x3018, 0x72, "Timing control"},
-        {0x3019, 0x00, "Frame length control"},
-        {0x301a, 0xf0, "Line length control"},
-        {0x301c, 0x30, "Clock settings"},
-        {0x3032, 0xa0, "Digital control"},
-        {0x3106, 0x05, "Output control"},
-        {0x3600, 0x00, "Analog control"},
-        {0x3601, 0x55, "Analog control"},
-        // Add format control registers
-        {0x3031, 0x0a, "Output format control - RAW10"},
-        {0x3820, 0x00, "Sensor timing"},
-        {0x3821, 0x00, "Sensor timing"},
-        // Add more registers based on datasheet
+    } init_regs[] = {
+        // PLL configuration
+        {0x3001, 0xfe},  // Enable PLL
+        {0x3002, 0xa1},  // PLL multiplier
+        {0x3005, 0xf0},  // PLL pre-divider
+        {0x3007, 0x00},  // PLL root divider
+
+        // Enable MIPI
+        {0x3018, 0x72},  // MIPI 2 lanes
+        {0x301c, 0x24},  // MIPI control
+
+        // Timing control
+        {0x320c, 0x08},  // HTS high
+        {0x320d, 0x40},  // HTS low (2112)
+        {0x320e, 0x04},  // VTS high
+        {0x320f, 0x65},  // VTS low (1125)
+
+        // Format control
+        {0x3031, 0x0a},  // RAW10 format
+        {0x3032, 0xa0},  // Output control
+        {0x3106, 0x05},  // MIPI configuration
+
+        // Sensor timing
+        {0x3820, 0x00},  // Flip control
+        {0x3821, 0x00},  // Mirror control
+
+        // Exposure/Gain
+        {0x3e01, 0x8c},  // Exposure high
+        {0x3e02, 0x60},  // Exposure low
+        {0x3e08, 0x03},  // Gain high
+        {0x3e09, 0x10},  // Gain low
     };
 
-    for (int i = 0; i < ARRAY_SIZE(sensor_init_regs); i++) {
-        ret = isp_sensor_write_reg(client, sensor_init_regs[i].reg,
-                                 sensor_init_regs[i].val);
+    // Apply register configuration
+    for (int i = 0; i < ARRAY_SIZE(init_regs); i++) {
+        ret = isp_sensor_write_reg(client, init_regs[i].reg,
+                                 init_regs[i].val);
         if (ret) {
-            pr_err("Failed to set %s (0x%04x)\n",
-                   sensor_init_regs[i].desc, sensor_init_regs[i].reg);
+            pr_err("Failed to write reg 0x%04x: %d\n",
+                   init_regs[i].reg, ret);
             return ret;
         }
-
-        // Verify write
-        ret = isp_sensor_read_reg(client, sensor_init_regs[i].reg, &val);
-        if (ret || val != sensor_init_regs[i].val) {
-            pr_err("Register verify failed: %s (0x%04x) expected 0x%02x got 0x%02x\n",
-                   sensor_init_regs[i].desc, sensor_init_regs[i].reg,
-                   sensor_init_regs[i].val, val);
-            return -EIO;
-        }
+        udelay(10);  // Short delay between writes
     }
 
-    return ret;
-}
+    // 3. Verify critical registers
+    u8 val;
+    ret = isp_sensor_read_reg(client, 0x3018, &val);
+    if (ret || val != 0x72) {
+        pr_err("Invalid MIPI configuration: 0x%02x\n", val);
+        return -EINVAL;
+    }
 
+    ret = isp_sensor_read_reg(client, 0x3031, &val);
+    if (ret || val != 0x0a) {
+        pr_err("Invalid format configuration: 0x%02x\n", val);
+        return -EINVAL;
+    }
+
+    // 4. Enable streaming
+    msleep(10);  // Delay before stream on
+    ret = isp_sensor_write_reg(client, 0x0100, 0x01);
+    if (ret)
+        return ret;
+
+    pr_info("SC2336 sensor configured successfully\n");
+    return 0;
+}
 
 static int init_isp_registers(struct IMPISPDev *dev)
 {
@@ -3554,6 +3628,109 @@ static int start_streaming(struct IMPISPDev *dev)
     return 0;
 }
 
+
+static int readl_poll_until_timeout(void __iomem *addr, u32 mask, u32 expected,
+                                  unsigned int timeout_us)
+{
+    u32 val;
+    unsigned long timeout = jiffies + usecs_to_jiffies(timeout_us);
+
+    while (time_before(jiffies, timeout)) {
+        val = readl(addr);
+        if ((val & mask) == expected)
+            return 0;
+        cpu_relax();
+        udelay(10);
+    }
+
+    return -ETIMEDOUT;
+}
+
+
+// Function to set number of lanes matching csi_set_on_lanes
+static int csi_set_lanes(struct IMPISPDev *dev, u8 lanes)
+{
+    void __iomem *csi_base = dev->regs + 0xb8;
+    u32 val;
+
+    pr_info("CSI setting lanes: %d\n", lanes);
+
+    // Match exactly: ((lanes - 1) & 3) | (current_val & 0xfffffffc)
+    val = readl(csi_base + 4);
+    val = ((lanes - 1) & 3) | (val & 0xfffffffc);
+    writel(val, csi_base + 4);
+    wmb();
+
+    return 0;
+}
+
+// Main CSI configuration
+static int configure_mipi_csi(struct IMPISPDev *dev)
+{
+    void __iomem *csi_base = dev->regs + 0xb8;
+    u32 val;
+
+    pr_info("****>>>>> dump csi reg <<<<<****\n");
+
+    // Disable everything first
+    writel(0x0, csi_base + 0x10);  // CSI2_RESETN
+    writel(0x0, csi_base + 0x0c);  // DPHY_RSTZ
+    writel(0x0, csi_base + 0x08);  // PHY_SHUTDOWNZ
+    wmb();
+    msleep(1);
+
+    // Clear any existing errors
+    writel(0xffffffff, csi_base + 0x20);  // Clear ERR1
+    writel(0xffffffff, csi_base + 0x24);  // Clear ERR2
+    wmb();
+
+    // Set up 2 lanes
+    csi_set_lanes(dev, 2);  // Use our helper that matches libimp
+    wmb();
+
+    // Configure data IDs for RAW10 - match libimp values
+    writel(0x2B, csi_base + 0x18);  // DATA_IDS_1 = RAW10
+    writel(0x0, csi_base + 0x1c);   // DATA_IDS_2
+    wmb();
+
+    // Configure masks - match libimp values
+    writel(0x100, csi_base + 0x28);       // MASK1
+    writel(0x400040, csi_base + 0x2c);    // MASK2
+    wmb();
+
+    // Power up sequence
+    writel(0x1, csi_base + 0x08);  // PHY_SHUTDOWNZ
+    wmb();
+    msleep(1);
+
+    writel(0x1, csi_base + 0x0c);  // DPHY_RSTZ
+    wmb();
+    msleep(1);
+
+    writel(0x1, csi_base + 0x10);  // CSI2_RESETN
+    wmb();
+    msleep(1);
+
+    // Debug dump all registers
+    pr_info("VERSION = %08x\n", readl(csi_base + 0x00));
+    pr_info("N_LANES = %08x\n", readl(csi_base + 0x04));
+    pr_info("PHY_SHUTDOWNZ = %08x\n", readl(csi_base + 0x08));
+    pr_info("DPHY_RSTZ = %08x\n", readl(csi_base + 0x0c));
+    pr_info("CSI2_RESETN = %08x\n", readl(csi_base + 0x10));
+    pr_info("PHY_STATE = %08x\n", readl(csi_base + 0x14));
+    pr_info("DATA_IDS_1 = %08x\n", readl(csi_base + 0x18));
+    pr_info("DATA_IDS_2 = %08x\n", readl(csi_base + 0x1c));
+    pr_info("ERR1 = %08x\n", readl(csi_base + 0x20));
+    pr_info("ERR2 = %08x\n", readl(csi_base + 0x24));
+    pr_info("MASK1 = %08x\n", readl(csi_base + 0x28));
+    pr_info("MASK2 = %08x\n", readl(csi_base + 0x2c));
+    pr_info("PHY_TST_CTRL0 = %08x\n", readl(csi_base + 0x30));
+    pr_info("PHY_TST_CTRL1 = %08x\n", readl(csi_base + 0x34));
+
+    return 0;
+}
+
+
 // Per-channel streaming control
 static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, bool enable)
 {
@@ -3578,17 +3755,21 @@ static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int ch
         if (ret)
             return ret;
 
-        // Configure and start VIC (commented out for now)
-        /*
-        ret = vic_set_state(dev, VIC_STATE_STREAMING);
-        if (ret)
-            goto err_stop_streaming;
-        */
+        // Configure CSI with proper sequence
+        ret = configure_mipi_csi(dev);
+        if (ret) {
+            pr_err("Failed to configure MIPI CSI\n");
+            goto err_revert_state;
+        }
+
+        // Start CSI monitoring
+        atomic_set(&dev->csi_monitor_enabled, 1);
+        queue_work(dev->csi_check_wq, &dev->csi_check_work);
 
         // Enable IRQs
         ret = tx_isp_enable_irq(dev);
         if (ret)
-            goto err_disable_irq;
+            goto err_stop_monitor;
 
         // Start actual streaming
         ret = start_streaming(dev);
@@ -3600,6 +3781,10 @@ static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int ch
         fc->state = 2;
 
     } else {
+        // Stop CSI monitoring first
+        atomic_set(&dev->csi_monitor_enabled, 0);
+        cancel_work_sync(&dev->csi_check_work);
+
         // Stop streaming first
         stop_streaming(dev);
 
@@ -3616,6 +3801,10 @@ static int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int ch
 
 err_disable_irq:
     tx_isp_disable_irq(dev);
+err_stop_monitor:
+    atomic_set(&dev->csi_monitor_enabled, 0);
+    cancel_work_sync(&dev->csi_check_work);
+err_revert_state:
     isp_set_state(dev, ISP_STATE_ENABLED);
     return ret;
 }
@@ -3634,12 +3823,19 @@ static int tisp_release(struct inode *inode, struct file *file)
             enable_isp_streaming(ourISPdev, file, 0, false);
         }
 
-        // Remove from global list
+        // Add CSI cleanup here - before frame source cleanup
+        if (ourISPdev && ourISPdev->csi_check_wq) {
+            cancel_work_sync(&ourISPdev->csi_check_work);
+            if (ourISPdev->error_count > 0) {
+                pr_info("Final CSI errors: %u\n", ourISPdev->error_count);
+            }
+        }
+
+        // Rest of your existing release code
         spin_lock(&instances_lock);
         list_del(&instance->list);
         spin_unlock(&instances_lock);
 
-        // Clean up fd
         if (instance->fd >= 0) {
             put_unused_fd(instance->fd);
         }
@@ -3657,8 +3853,6 @@ static int tisp_release(struct inode *inode, struct file *file)
     file->private_data = NULL;
     return 0;
 }
-
-
 
 // Update tisp_read function
 static ssize_t tisp_read(struct file *file, char __user *buf, size_t count, loff_t *offset)
@@ -4365,21 +4559,41 @@ static void dump_csi_reg(struct IMPISPDev *dev)
     pr_info("PHY_TST_CTRL1 = %08x\n", readl(csi_base + 0x34));
 }
 
-static int configure_mipi_csi(struct IMPISPDev *dev)
+
+static int isp_core_tuning_open(struct IMPISPDev *dev)
 {
-    void __iomem *csi_base = dev->regs + 0xb8;
+    // Match offsets from decompiled code
+    void __iomem *regs = dev->tuning_regs + 0x40c4;
 
-    // Just basic CSI host setup
-    writel(0x1, csi_base + 0x4);   // 2 lanes
-    writel(0x1, csi_base + 0x8);   // Enable PHY
-    writel(0x1, csi_base + 0xc);   // Enable DPHY
-    writel(0x1, csi_base + 0x10);  // Enable CSI2
-    wmb();
+    if (readl(regs) != 2)
+        return -EINVAL;
 
+    // Reset atomic frame count
+    atomic_set(&dev->frame_cnt, 0);
 
-   // Add MIPI timing configuration
-   writel(0x8 << 24 | 0x10 << 16 | 0x8 << 8 | 0x3,
-          csi_base + ISP_MIPI_TIMING);
+    // Set state to 3 like libimp
+    writel(3, regs);
+    writel(0, regs - 0x18);  // 0x40ac offset
+
+    return 0;
+}
+
+static int isp_core_tuning_release(struct IMPISPDev *dev)
+{
+    void __iomem *regs = dev->tuning_regs + 0x40c4;
+    u32 buffer;
+
+    pr_info("##### %s %d #####\n", __func__, __LINE__);
+
+    if (readl(regs) != 2) {
+        buffer = readl(regs - 0x18);  // 0x40ac offset
+        if (buffer == 0)
+            writel(2, regs);
+        else {
+            // isp_free_buffer(buffer); TODO: implement this
+            writel(2, regs);
+        }
+    }
 
     return 0;
 }
@@ -4697,18 +4911,32 @@ static int vic_core_ops_init(struct IMPISPDev *dev, int enable)
     unsigned long flags;
     int ret = 0;
 
-    if (!dev)
+    if (!dev || !dev->regs)
         return -EINVAL;
 
     spin_lock_irqsave(&dev->state_lock, flags);
 
+    // Important: Check current state first
+    int current_state = atomic_read(&dev->vic_state);
+    if (enable && current_state >= VIC_STATE_ENABLED) {
+        spin_unlock_irqrestore(&dev->state_lock, flags);
+        return 0;  // Already enabled
+    }
+
     if (enable) {
-        // Move to enabled state
-        tx_vic_enable_irq(dev);
+        // Configure VIC registers
+        writel(0x0, dev->regs + 0x140);  // Reset VIC control
+        wmb();
+        udelay(100);
+
+        writel(0x1, dev->regs + 0x140);  // Enable VIC
+        wmb();
+
+        // Important: Don't change state until registers are configured
         atomic_set(&dev->vic_state, VIC_STATE_ENABLED);
     } else {
-        // Disable VIC
-        tx_vic_disable_irq(dev);
+        writel(0x0, dev->regs + 0x140);  // Disable VIC
+        wmb();
         atomic_set(&dev->vic_state, VIC_STATE_INIT);
     }
 
@@ -5854,35 +6082,22 @@ static long isp_driver_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
         return ret;
     }
-    case ISP_TUNING_ENABLE: {
+    case ISP_TUNING_ENABLE: {  // 0xc00c56c6
         int enable;
-        if (copy_from_user(&enable, (void __user *)arg, sizeof(enable))) {
-            pr_err("Failed to copy tuning enable\n");
+        if (copy_from_user(&enable, (void __user *)arg, sizeof(enable)))
             return -EFAULT;
-        }
 
         pr_info("ISP tuning %s requested\n", enable ? "enable" : "disable");
 
-        // Store tuning state
-        ourISPdev->tuning_enabled = enable;
-
-        // Set up tuning registers
         if (enable) {
-            // Map correct ISP tuning regions
-            // Base at 0x13380000
-            void __iomem *tuning_base = ioremap(0x13380000, 0x1b000);
-            if (!tuning_base) {
-                pr_err("Failed to map tuning registers\n");
-                return -ENOMEM;
-            }
-            ourISPdev->tuning_regs = tuning_base;
-
-            // Initialize tuning parameters
-            writel(0x1, tuning_base + 0x100); // Enable tuning
-            wmb();
+            ret = isp_core_tuning_open(ourISPdev);
+        } else {
+            ret = isp_core_tuning_release(ourISPdev);
         }
 
-        return 0;
+        // Store tuning state
+        ourISPdev->tuning_enabled = enable;
+        return ret;
     }
     case TX_ISP_SET_BUF: {  // 0x800856d5
         struct imp_buffer_info *buf_info = (struct imp_buffer_info *)arg;
@@ -6966,93 +7181,85 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
 
             return 0;
         }
-        case VIDIOC_STREAM_ON: {
-            struct frame_source_channel *fc;
-            void __iomem *regs;
-            int ret;
+		case VIDIOC_STREAM_ON: {
+		    struct frame_source_channel *fc;
+		    void __iomem *regs;
+		    int ret;
 
-            pr_info("Stream ON request for channel %d\n", fs->chn_num);
+		    pr_info("Stream ON request for channel %d\n", fs->chn_num);
 
-            // Basic validation
-            if (!fs || !ourISPdev || !ourISPdev->regs) {
-                pr_err("Invalid device state\n");
-                return -EINVAL;
-            }
+		    // Basic validation
+		    if (!fs || !ourISPdev || !ourISPdev->regs) {
+		        pr_err("Invalid device state\n");
+		        return -EINVAL;
+		    }
 
-            fc = fs->private;
-            if (!fc || !fs->buf_base) {
-                pr_err("Invalid channel state\n");
-                return -EINVAL;
-            }
+		    fc = fs->private;
+		    if (!fc || !fs->buf_base) {
+		        pr_err("Invalid channel state\n");
+		        return -EINVAL;
+		    }
 
-            regs = ourISPdev->regs;
+		    regs = ourISPdev->regs;
 
-            // State checks
-            if (fs->state == 2) {
-                pr_info("Channel %d already streaming\n", fs->chn_num);
-                return 0;
-            }
+		    // State checks - moved VIC init before state check
+		    if (fs->state != 2) {  // Only enable VIC if not already streaming
+		        // Set initial state first
+		        fs->state = 1;  // Ready state
 
-            // Set initial state
-            fs->state = 1;  // Ready state first
+		        // Configure buffer sequence
+		        uint32_t buf_offset = ISP_BUF0_OFFSET + (fs->chn_num * ISP_BUF_SIZE_STEP);
 
-            // Configure buffer sequence
-            uint32_t buf_offset = ISP_BUF0_OFFSET + (fs->chn_num * ISP_BUF_SIZE_STEP);
+		        // Set up main buffer - important offset calculation
+		        writel(fc->dma_addr + (fc->channel_offset), regs + buf_offset);
+		        writel(fc->buf_size, regs + buf_offset + 0x4);
+		        wmb();
 
-            // Set up main buffer - important offset calculation
-            writel(fc->dma_addr + (fc->channel_offset), regs + buf_offset);
-            writel(fc->buf_size, regs + buf_offset + 0x4);
-            wmb();
+		        // Additional buffer setup if needed
+		        if (fc->buf_cnt > 1) {
+		            for (int i = 1; i < fc->buf_cnt; i++) {
+		                uint32_t offset = buf_offset + (i * ISP_BUF_SIZE_STEP);
+		                writel(fc->dma_addr + (fc->channel_offset) + (i * fc->buf_size),
+		                       regs + offset);
+		                writel(fc->buf_size, regs + offset + 0x4);
+		            }
+		            wmb();
+		        }
 
-            // Additional buffer setup if needed
-            if (fc->buf_cnt > 1) {
-                for (int i = 1; i < fc->buf_cnt; i++) {
-                    uint32_t offset = buf_offset + (i * ISP_BUF_SIZE_STEP);
-                    writel(fc->dma_addr + (fc->channel_offset) + (i * fc->buf_size),
-                           regs + offset);
-                    writel(fc->buf_size, regs + offset + 0x4);
-                }
-                wmb();
-            }
+		        // Reset counters
+		        fs->frame_cnt = 0;
+		        fs->write_idx = 0;
 
-            // Reset counters
-            fs->frame_cnt = 0;
-            fs->write_idx = 0;
+		        // Important: Channel-specific control registers
+		        uint32_t ctrl_offset = ISP_STREAM_CTRL + (fs->chn_num * 0x100);
+		        uint32_t start_offset = ISP_STREAM_START + (fs->chn_num * 0x100);
 
-            // Important: Channel-specific control registers
-            uint32_t ctrl_offset = ISP_STREAM_CTRL + (fs->chn_num * 0x100);
-            uint32_t start_offset = ISP_STREAM_START + (fs->chn_num * 0x100);
+		        // Enable frame processing - sequence matters
+		        writel(0x1, regs + ctrl_offset);
+		        wmb();
+		        udelay(100);  // Required delay between control writes
+		        writel(0x1, regs + start_offset);
+		        wmb();
 
-            // Enable frame processing - sequence matters
-            writel(0x1, regs + ctrl_offset);
-            wmb();
-            udelay(100);  // Required delay between control writes
-            writel(0x1, regs + start_offset);
-            wmb();
+		        // Set final streaming state
+		        fs->state = 2;  // Streaming state
+		        fs->flags |= 0x2;  // Set streaming flag
 
-            if (fs->state != 2) {
-                pr_info("Channel %d stream ON request vic enable\n", fs->chn_num);
-                vic_core_ops_init(dev, 1);
-            }
+		        pr_info("Channel %d streaming started:\n"
+		                "  base=0x%x offset=0x%x\n"
+		                "  buf_size=%u count=%d\n"
+		                "  ctrl=0x%x start=0x%x\n",
+		                fs->chn_num,
+		                (unsigned int)fc->dma_addr, fc->channel_offset,
+		                fc->buf_size, fc->buf_cnt,
+		                readl(regs + ctrl_offset),
+		                readl(regs + start_offset));
+		    } else {
+		        pr_info("Channel %d already streaming\n", fs->chn_num);
+		    }
 
-            // Set final streaming state
-            fs->state = 2;  // Streaming state
-            fs->flags |= 0x2;  // Set streaming flag
-
-            pr_info("Stream ON request for channel %d\n", fs->chn_num);
-
-            pr_info("Channel %d streaming started:\n"
-                    "  base=0x%x offset=0x%x\n"
-                    "  buf_size=%u count=%d\n"
-                    "  ctrl=0x%x start=0x%x\n",
-                    fs->chn_num,
-                    (unsigned int)fc->dma_addr, fc->channel_offset,
-                    fc->buf_size, fc->buf_cnt,
-                    readl(regs + ctrl_offset),
-                    readl(regs + start_offset));
-
-            return 0;
-        }
+		    return 0;
+		}
         case VIDIOC_GET_BUFFER_INFO: {
             struct buffer_info info;
             struct frame_source_channel *fc = fs->private;
@@ -7709,10 +7916,24 @@ static int tisp_probe(struct platform_device *pdev)
     }
     ourISPdev->irq_data = irq_data;
 
-    // 9. Configure clocks
+    // Initialize CSI monitoring
+    spin_lock_init(&ourISPdev->csi_lock);
+    ourISPdev->error_count = 0;
+    ourISPdev->overflow_count = 0;
+
+    // Add CSI work queue setup
+    ourISPdev->csi_check_wq = create_singlethread_workqueue("isp-csi-check");
+    if (!ourISPdev->csi_check_wq) {
+        ret = -ENOMEM;
+        goto err_free_irq_data;
+    }
+
+    INIT_WORK(&ourISPdev->csi_check_work, csi_error_check_work);
+
+    // Continue with your existing clock configuration
     ret = configure_isp_clocks(ourISPdev);
     if (ret) {
-        goto err_free_irq;
+        goto err_destroy_csi_wq;  // Add new error label
     }
 
     // 10. Initialize memory systems
@@ -7803,6 +8024,11 @@ err_free_cb:
     kfree(frame_cb);
 err_destroy_workqueue:
     destroy_workqueue(ourISPdev->stats_wq);
+err_destroy_csi_wq:
+    if (ourISPdev->csi_check_wq) {
+        destroy_workqueue(ourISPdev->csi_check_wq);
+        ourISPdev->csi_check_wq = NULL;
+    }
 err_free_irq_data:
     kfree(irq_data);
     cleanup_event_system(ourISPdev);  // Clean up events before unmapping
@@ -7823,6 +8049,12 @@ static int tisp_remove(struct platform_device *pdev) {
     pr_info("ISP device remove called\n");
 
     if (dev) {
+
+        stop_csi_monitoring(dev);
+        if (dev->csi_check_wq) {
+            destroy_workqueue(dev->csi_check_wq);
+            dev->csi_check_wq = NULL;
+        }
         // Stop all frame sources first
         for (i = 0; i < MAX_FRAMESOURCE_CHANNELS; i++) {
             cleanup_frame_source(dev, i);

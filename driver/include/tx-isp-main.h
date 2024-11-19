@@ -959,6 +959,16 @@ struct IMPISPDev {
     struct workqueue_struct *stats_wq;
     spinlock_t stats_lock;
     bool stats_pending;
+
+    atomic_t frame_cnt;       // Replace u32 frame_count with atomic_t
+    atomic_t csi_error_cnt;   // Use atomic for error counting too
+
+    /* CSI monitoring support */
+    struct workqueue_struct *csi_check_wq;
+    struct work_struct csi_check_work;
+    atomic_t csi_monitor_enabled;
+    spinlock_t csi_lock;
+    u32 csi_error_count;
 } __attribute__((packed, aligned(4)));
 
 
