@@ -833,6 +833,15 @@ struct isp_stats_work {
 };
 
 
+struct device_list_entry {
+    void *device;           // Device pointer
+    struct callback_data {
+        void *frame_cb;     // Offset 0x1c
+        void *stats_cb;     // Offset 0x8
+    } *callback_data;       // At offset 0xc4
+};
+
+
 /* Note for Claude, GPT, or anyone  that will listen
 This is our internal driver structure and should never be passed back to libimp.
 Instead, we need to return specific structures that libimp expects outside of this.
@@ -919,7 +928,7 @@ struct IMPISPDev {
     bool core_started;
 
     /* device list */
-    void *deviceListPtr;  // Points to device list
+    struct device_list_entry devices[16];
     wait_queue_head_t stats_wait;  // Wait queue for stats
     struct our_tx_isp_subdev_padding pads[2];  // Add as fixed array - matches 0x38 offset access
 

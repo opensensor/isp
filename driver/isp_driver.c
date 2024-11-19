@@ -575,54 +575,30 @@ static int _send_our_event_internal(struct IMPISPDev *dev, uint32_t notification
         return -EINVAL;
     }
 
-    // Get device list pointer and verify
-    uint32_t deviceListPointer = (uint32_t)dev;
-    struct libimp_isp_dev *libimp_dev = NULL;
-    int32_t* devicePtr = (int32_t*)((char*)deviceListPointer + 0x38);
+    struct device_list_entry *entry;
+    void *callback_data;
+    int i;
 
-    // Safety check before dereferencing
-    if (!devicePtr || ((unsigned long)devicePtr < 0x1000)) {
-        pr_err("Invalid device pointer: %p\n", devicePtr);
-        return -EINVAL;
-    }
+    for (i = 0; i < 16; i++) {
+        entry = &dev->devices[i];
+        if (!entry->device)
+            continue;
 
-    // Get initial device and validate
-    libimp_dev = (struct libimp_isp_dev *)*devicePtr;
+        callback_data = entry->callback_data;
+        if (!callback_data)
+            continue;
 
-    pr_debug("Event handler: type=0x%x dev=%p ptr=%p libimp=%p\n",
-             notificationType, dev, devicePtr, libimp_dev);
-
-    // Validate libimp device
-    if (!libimp_dev || !libimp_dev->is_open) {
-        pr_err("Device not open or invalid\n");
-        return -EINVAL;
-    }
-
-    // Store our debug info
-    pr_debug("LIBIMP device: fd=%d open=%d\n",
-             libimp_dev->fd, libimp_dev->is_open);
-
-    void* callbackData = NULL;
-    int32_t (*callback)(void) = NULL;
-
-    if ((notificationType & 0xff000000) == 0x1000000) {
-        // Frame callback at 0x1c
-        if (libimp_dev->callback_data) {
-            callback = *(void**)(libimp_dev->callback_data + 0x1c);
-            if (callback) {
-                pr_debug("Executing frame callback\n");
+        if ((notificationType & 0xff000000) == 0x1000000) {
+            // Frame callback at 0x1c offset
+            int32_t (*callback)(void) = *(void**)(callback_data + 0x1c);
+            if (callback)
                 return callback();
-            }
         }
-    }
-    else if ((notificationType & 0xff000000) == 0x2000000) {
-        // Stats callback at 0x8
-        if (libimp_dev->callback_data) {
-            callback = *(void**)(libimp_dev->callback_data + 0x8);
-            if (callback) {
-                pr_debug("Executing stats callback\n");
+        else if ((notificationType & 0xff000000) == 0x2000000) {
+            // Stats callback at 0x8 offset
+            int32_t (*callback)(void) = *(void**)(callback_data + 0x8);
+            if (callback)
                 return callback();
-            }
         }
     }
 
@@ -7282,48 +7258,31 @@ static int setup_i2c_sensor(struct IMPISPDev *dev)
 
 static int init_event_system(struct IMPISPDev *dev)
 {
+    struct device_list_entry *devices;
+    struct callback_data *cb_data;
+
     if (!dev) {
         pr_err("NULL device in init_event_system\n");
         return -EINVAL;
     }
 
-    // Initialize pad array first
-    for (int i = 0; i < 2; i++) {
-        spin_lock_init(&dev->pads[i].events.lock);
-        INIT_LIST_HEAD(&dev->pads[i].events.callbacks);
-        atomic_set(&dev->pads[i].events.enabled, 1);
-        INIT_LIST_HEAD(&dev->pads[i].list);
-        dev->pads[i].priv = NULL;
-    }
+    // Get device list at correct offset
+    devices = (struct device_list_entry *)((char*)dev + 0x38);
 
-    // Setup device list pointer
-    dev->deviceListPtr = (char*)dev + 0x38;
-    if (!dev->deviceListPtr) {
-        pr_err("Failed to allocate device list pointer\n");
-        return -EINVAL;
-    }
+    // Clear device list
+    memset(devices, 0, sizeof(struct device_list_entry) * 16);
 
-    // Clear and initialize device list
-    memset(dev->deviceListPtr, 0, 0x40);
-
-    // Setup initial LIBIMP device entry
-    struct libimp_isp_dev *libimp_dev = kzalloc(sizeof(*libimp_dev), GFP_KERNEL);
-    if (!libimp_dev) {
-        pr_err("Failed to allocate LIBIMP device\n");
+    // Allocate callback data
+    cb_data = kzalloc(sizeof(*cb_data), GFP_KERNEL);
+    if (!cb_data)
         return -ENOMEM;
-    }
 
-    // Initialize LIBIMP device
-    strncpy(libimp_dev->dev_path, "/dev/tx-isp", sizeof(libimp_dev->dev_path)-1);
-    libimp_dev->fd = -1; // Will be set when opened
-    libimp_dev->is_open = 0; // Start closed
-    libimp_dev->callback_data = NULL;
+    // Set up first device entry
+    devices[0].device = dev;  // Self reference
+    devices[0].callback_data = cb_data;
 
-    // Store in device list
-    *(struct libimp_isp_dev **)dev->deviceListPtr = libimp_dev;
-
-    pr_info("Event system initialized: dev=%p devlist=%p libimp=%p\n",
-            dev, dev->deviceListPtr, libimp_dev);
+    pr_info("Event system initialized: dev=%p devices=%p cb=%p\n",
+            dev, devices, cb_data);
 
     return 0;
 }
@@ -7493,11 +7452,11 @@ static int init_final_state(struct IMPISPDev *dev)
 
 static void cleanup_event_system(struct IMPISPDev *dev)
 {
-    if (dev && dev->deviceListPtr) {
-        struct libimp_isp_dev *libimp_dev =
-            *(struct libimp_isp_dev **)dev->deviceListPtr;
-        if (libimp_dev) {
-            kfree(libimp_dev);
+    if (dev) {
+        // Cleanup first device entry's callback data
+        if (dev->devices[0].callback_data) {
+            kfree(dev->devices[0].callback_data);
+            dev->devices[0].callback_data = NULL;
         }
     }
 }
@@ -7577,20 +7536,27 @@ static int tisp_probe(struct platform_device *pdev)
         ourISPdev->pads[i].priv = NULL;
     }
 
-    // Now setup device list pointer with proper initialization
-    ourISPdev->deviceListPtr = (char*)ourISPdev + 0x38;
-    if (!ourISPdev->deviceListPtr ||
-        ((unsigned long)ourISPdev->deviceListPtr < 0x1000)) {
-        dev_err(&pdev->dev, "Invalid device list pointer\n");
+    // Initialize device list at offset 0x38
+    memset(&ourISPdev->devices, 0, sizeof(ourISPdev->devices));
+
+    // Setup first device entry
+    ourISPdev->devices[0].device = ourISPdev;  // Self reference
+
+    // Allocate callback data
+    struct callback_data *cb_data = kzalloc(sizeof(*cb_data), GFP_KERNEL);
+    if (!cb_data) {
         ret = -EINVAL;
         goto err_unmap_regs;
     }
-	memset(ourISPdev->deviceListPtr, 0, 0x40);  // Clear list first
 
-	// Setup initial device entry that matches LIBIMP's structure
-	struct libimp_isp_dev *libimp_dev = (struct libimp_isp_dev *)ourISPdev->deviceListPtr;
-	strncpy(libimp_dev->dev_path, "/dev/tx-isp", sizeof(libimp_dev->dev_path)-1);
-	libimp_dev->is_open = 1;  // Mark as open since we're ready
+    // Store callback data at offset 0xc4
+    ourISPdev->devices[0].callback_data = cb_data;
+
+    pr_info("Device list initialized: base=%p entry0=%p cb=%p\n",
+            ourISPdev->devices,
+            &ourISPdev->devices[0],
+            cb_data);
+	ourISPdev->is_open = 1;  // Mark as open since we're ready
 
     // Initialize main event handle
     INIT_LIST_HEAD(&ourISPdev->event_handle.callbacks);
