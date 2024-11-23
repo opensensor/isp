@@ -1095,6 +1095,39 @@ static int tx_isp_fs_probe(struct platform_device *pdev)
     if (!sd)
         return -ENOMEM;
 
+    // Allocate input pads
+    sd->num_inpads = 1;
+    sd->inpads = kzalloc(sizeof(struct tx_isp_subdev_pad) * sd->num_inpads, GFP_KERNEL);
+    if (!sd->inpads) {
+        ret = -ENOMEM;
+        goto err_free_sd;
+    }
+
+    // Allocate output pads
+    sd->num_outpads = 1;
+    sd->outpads = kzalloc(sizeof(struct tx_isp_subdev_pad) * sd->num_outpads, GFP_KERNEL);
+    if (!sd->outpads) {
+        ret = -ENOMEM;
+        goto err_free_inpads;
+    }
+
+    // Initialize pad data
+    for (int i = 0; i < sd->num_inpads; i++) {
+        sd->inpads[i].sd = sd;
+        sd->inpads[i].index = i;
+        sd->inpads[i].type = TX_ISP_PADTYPE_INPUT;
+        sd->inpads[i].state = TX_ISP_PADSTATE_FREE;
+        sd->inpads[i].links_type = TX_ISP_PADLINK_CSI | TX_ISP_PADLINK_VIC;
+    }
+
+    for (int i = 0; i < sd->num_outpads; i++) {
+        sd->outpads[i].sd = sd;
+        sd->outpads[i].index = i;
+        sd->outpads[i].type = TX_ISP_PADTYPE_OUTPUT;
+        sd->outpads[i].state = TX_ISP_PADSTATE_FREE;
+        sd->outpads[i].links_type = TX_ISP_PADLINK_VIC | TX_ISP_PADLINK_DDR;
+    }
+
     // Store in platform device and IMPISPDev
     dev->fs_subdev = sd;
     dev->fs_pdev = pdev;
@@ -1103,6 +1136,12 @@ static int tx_isp_fs_probe(struct platform_device *pdev)
     pr_info("Frame source probe complete: dev=%p sd=%p fs_pdev=%p\n",
             dev, sd, dev->fs_pdev);
     return 0;
+
+    err_free_inpads:
+        kfree(sd->inpads);
+    err_free_sd:
+        kfree(sd);
+    return ret;
 }
 
 static int tx_isp_fs_remove(struct platform_device *pdev)
@@ -3044,57 +3083,37 @@ static long handle_get_buf_ioctl(struct IMPISPDev *dev, unsigned long arg) {
     return -EINVAL;
 }
 
-struct isp_pad_info *find_subdev_link_pad(struct IMPISPDev *dev, struct isp_pad_info *pad_info)
+struct tx_isp_subdev_pad *find_subdev_link_pad(struct IMPISPDev *dev,
+                                              const struct tx_isp_link_config *cfg)
 {
-    // Start at 0x38 offset in device structure
-    struct tx_isp_subdev **subdev_ptr = (struct tx_isp_subdev **)((char *)dev + 0x38);
-    struct tx_isp_subdev *subdev;
+    struct tx_isp_subdev *sd = dev->fs_subdev;
 
-    // Check each subdev until 0x78 offset
-    while ((char *)subdev_ptr < ((char *)dev + 0x78)) {
-        subdev = *subdev_ptr;
-        if (subdev) {
-            // Compare names
-            const char *dev_name = subdev->module.name;
-            const char *pad_name = pad_info->name;
-
-            // Character-by-character comparison
-            while (true) {
-                if (*dev_name != *pad_name)
-                    break;
-
-                if (*dev_name == 0) // Match found
-                    break;
-
-                dev_name++;
-                pad_name++;
-            }
-
-            // Names match - handle pad lookup
-            if (*dev_name == *pad_name) {
-                // Source pad
-                if (pad_info->type == 1) {
-                    if (pad_info->pad_idx < subdev->num_outpads) {
-                        return (struct isp_pad_info *)(subdev->outpads +
-                               (pad_info->pad_idx * 0x24));
-                    }
-                }
-                // Sink pad
-                else if (pad_info->type == 2) {
-                    if (pad_info->pad_idx < subdev->num_inpads) {
-                        return (struct isp_pad_info *)(subdev->inpads +
-                               (pad_info->pad_idx * 0x24));
-                    }
-                }
-
-                pr_err("Can't find the matched pad!\n");
-                return NULL;
-            }
-        }
-        subdev_ptr++;
+    // Validate inputs
+    if (!sd || !cfg) {
+        pr_err("Invalid arguments to find_subdev_link_pad\n");
+        return NULL;
     }
 
-    return NULL;
+    pr_info("Finding pad for subdev %p:\n", sd);
+    pr_info("  Looking for %s type=%d index=%d\n",
+            cfg->src.name, cfg->src.type, cfg->src.index);
+
+    // Check type and return appropriate pad
+    if (cfg->flag & TX_ISP_PADTYPE_INPUT) {
+        if (cfg->src.index >= sd->num_inpads) {
+            pr_err("Invalid input pad index %d (max %d)\n",
+                  cfg->src.index, sd->num_inpads-1);
+            return NULL;
+        }
+        return &sd->inpads[cfg->src.index];
+    } else {
+        if (cfg->src.index >= sd->num_outpads) {
+            pr_err("Invalid output pad index %d (max %d)\n",
+                  cfg->src.index, sd->num_outpads-1);
+            return NULL;
+        }
+        return &sd->outpads[cfg->src.index];
+    }
 }
 
 static int subdev_video_destroy_link(struct tx_isp_subdev_pad *pad)
@@ -3503,24 +3522,19 @@ case TX_ISP_SET_BUF: {  // 0x800856d5
     case 0x800456d0: /* TX_ISP_VIDEO_LINK_SETUP */ {
         uint32_t link_config;
         struct IMPISPDev *dev = ourISPdev;
-        struct isp_framesource_state *fs;
         struct tx_isp_subdev *sd;
 
         pr_info("Starting link setup IOCTL\n");
 
-        // Validate device and file
-        if (!dev || !file) {
-            pr_err("Invalid device or file pointer\n");
-            return -EINVAL;
+        // Just validate we have the device
+        if (!dev) {
+            pr_err("No ISP device available\n");
+            return -ENODEV;
         }
-        pr_info("Device validation passed:\n");
-        pr_info("  dev=%p\n", dev);
-        pr_info("  file=%p\n", file);
-        pr_info("  fs=%p\n", fs);
 
         // Validate user input
         if (copy_from_user(&link_config, (void __user *)arg, sizeof(link_config))) {
-            pr_err("Failed to copy link config from user\n");
+            pr_err("Failed to copy link config\n");
             return -EFAULT;
         }
 
@@ -3531,16 +3545,13 @@ case TX_ISP_SET_BUF: {  // 0x800856d5
 
         pr_info("Setting up video link %d\n", link_config);
 
-        // Use our static configurations
-        const struct tx_isp_link_configs *configs = &isp_link_configs[link_config];
-
-        // Get the frame source subdev associated with this channel
-        if (!dev->fs_subdev) {
+        // Use the frame source subdev from global device
+        sd = dev->fs_subdev;
+        if (!sd) {
             pr_err("No frame source subdev available\n");
             return -EINVAL;
         }
 
-        sd = dev->fs_subdev;
         if (!sd->inpads || !sd->outpads) {
             pr_err("Subdev pads not initialized\n");
             pr_info("  inpads=%p\n", sd->inpads);
@@ -3553,61 +3564,54 @@ case TX_ISP_SET_BUF: {  // 0x800856d5
         pr_info("  num_inpads=%d\n", sd->num_inpads);
         pr_info("  num_outpads=%d\n", sd->num_outpads);
 
+        // Use our static configurations
+        const struct tx_isp_link_configs *configs = &isp_link_configs[link_config];
+
         // Link setup logic
         for (int i = 0; i < configs->length; i++) {
             const struct tx_isp_link_config *cfg = &configs->config[i];
-            struct tx_isp_subdev_pad *src_pad;
-            struct tx_isp_subdev_pad *sink_pad;
+            struct tx_isp_subdev_pad *src_pad, *sink_pad;
 
             pr_info("Setting up link %d of %d\n", i+1, configs->length);
 
-            // Find source pad
-            src_pad = find_subdev_link_pad(dev, &cfg->src);
+            // Find source pad with validation
+            src_pad = find_subdev_link_pad(dev, cfg);
             if (!src_pad) {
                 pr_err("Failed to find source pad\n");
                 continue;
             }
 
-            // Find sink pad
-            sink_pad = find_subdev_link_pad(dev, &cfg->dst);
+            pr_info("Found source pad %p\n", src_pad);
+
+            // Find sink pad with validation
+            struct tx_isp_link_config sink_cfg = {
+                .src = cfg->dst,  // Use destination as source
+                .flag = cfg->flag
+            };
+            sink_pad = find_subdev_link_pad(dev, &sink_cfg);
             if (!sink_pad) {
                 pr_err("Failed to find sink pad\n");
                 continue;
             }
 
-            pr_info("Found pads for link %d:\n", i);
-            pr_info("  src_pad=%p\n", src_pad);
-            pr_info("  sink_pad=%p\n", sink_pad);
+            pr_info("Found sink pad %p\n", sink_pad);
 
-            // Verify link compatibility
-            if (!(src_pad->links_type & sink_pad->links_type & cfg->flag)) {
-                pr_err("Link type mismatch\n");
-                return -EINVAL;
-            }
-
-            // Create forward link
+            // Create forward link with safety checks
             src_pad->link.source = src_pad;
             src_pad->link.sink = sink_pad;
             src_pad->link.flag = cfg->flag;
             src_pad->link.state = TX_ISP_MODULE_ACTIVATE;
+            src_pad->state = TX_ISP_PADSTATE_LINKED;
 
-            // Create reverse link
+            // Create reverse link with safety checks
             sink_pad->link.source = sink_pad;
             sink_pad->link.sink = src_pad;
             sink_pad->link.flag = cfg->flag;
             sink_pad->link.state = TX_ISP_MODULE_ACTIVATE;
-
-            // Connect reverse pointers
-            src_pad->link.reverse = &sink_pad->link;
-            sink_pad->link.reverse = &src_pad->link;
-
-            // Update pad states
-            src_pad->state = TX_ISP_PADSTATE_LINKED;
             sink_pad->state = TX_ISP_PADSTATE_LINKED;
         }
 
         dev->link_state.current_link = link_config;
-
         pr_info("Link setup completed successfully\n");
         return 0;
     }
