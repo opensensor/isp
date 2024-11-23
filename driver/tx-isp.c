@@ -4098,27 +4098,25 @@ static uint32_t calculate_buffer_size(uint32_t width, uint32_t height, uint32_t 
 
 static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
 {
-    struct v4l2_buffer v4l2_buf;
-    unsigned long flags;
-    int ret = 0;
+    struct {
+        u32 index;          // Buffer index
+        u32 type;
+        u32 bytesused;
+        u32 flags;
+        u32 field;
+        struct timeval timestamp;
+        u32 sequence;
+    } req;
 
-    if (copy_from_user(&v4l2_buf, (void __user *)arg, sizeof(v4l2_buf))) {
-        dev_err(fc->dev, "Failed to copy from user\n");
+    if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
         return -EFAULT;
+
+    // Just acknowledge the buffer
+    if (fc->channel_id == 1) {
+        // For channel 1, we need to update state
+        atomic_inc(&fc->queued_bufs);
     }
 
-//    /* Validate buffer type */
-//    if (v4l2_buf.type != fc->buf_type) {
-//        dev_err(fc->dev, "qbuf: invalid buffer type\n");
-//        return -EINVAL;
-//    }
-//
-//    /* Validate buffer index */
-//    if (v4l2_buf.index >= fc->queue.buffer_count) {
-//        dev_err(fc->dev, "qbuf: buffer index out of range\n");
-//        return -EINVAL;
-//    }
-    //  TODO Finish this
     return 0;
 }
 
@@ -4218,11 +4216,12 @@ static int framechan_reqbufs(struct frame_source_channel *fc, unsigned long arg)
         uint32_t memory;
         uint32_t flags;
     } req;
+    size_t buf_size;
 
     pr_info("Handling reqbufs: fc=%p arg=0x%lx\n", fc, arg);
 
-    if (!fc) {
-        pr_err("No frame channel\n");
+    if (!fc || !ourISPdev || !ourISPdev->dma_buf) {
+        pr_err("Invalid device state\n");
         return -EINVAL;
     }
 
@@ -4235,8 +4234,7 @@ static int framechan_reqbufs(struct frame_source_channel *fc, unsigned long arg)
     if (req.type != 1 || req.memory != 2)
         return -EINVAL;
 
-    // Calculate buffer size
-    size_t buf_size;
+    // Calculate basic buffer size
     if (fc->format == 0x22) { // YUV422
         buf_size = fc->width * fc->height * 2;
     } else if (fc->format == 0x23) { // NV12
@@ -4245,20 +4243,60 @@ static int framechan_reqbufs(struct frame_source_channel *fc, unsigned long arg)
         return -EINVAL;
     }
 
-    // Allocate buffer if not already allocated
+    // Map the channel into our DMA buffer
     if (!fc->buf_base) {
-        fc->buf_base = kmalloc(buf_size * req.count, GFP_KERNEL);
-        if (!fc->buf_base)
+        if (fc->channel_id == 0) {
+            fc->channel_offset = 0xfd2000;  // Match libimp's offset
+        } else if (fc->channel_id == 1) {
+            fc->channel_offset = 0x12c4000;  // After channel 0
+        } else {
+            return -EINVAL;
+        }
+
+        // Validate against DMA buffer size
+        if (fc->channel_offset + (buf_size * req.count) > ourISPdev->dma_size) {
+            pr_err("Buffer too large: need %zu at offset 0x%x\n",
+                   buf_size * req.count, fc->channel_offset);
             return -ENOMEM;
-        fc->channel_offset = 0;
+        }
+
+        fc->buf_base = ourISPdev->dma_buf + fc->channel_offset;
+        fc->dma_addr = ourISPdev->dma_addr + fc->channel_offset;
+    }
+
+    // Allocate buffer descriptors
+    fc->buffers = kzalloc(sizeof(struct frame_buffer) * req.count, GFP_KERNEL);
+    if (!fc->buffers)
+        return -ENOMEM;
+
+    if (!fc->buf_base) {
+        fc->channel_offset = (fc->channel_id == 0) ? 0xfd2000 : 0x12c4000;
+        fc->buf_base = ourISPdev->dma_buf + fc->channel_offset;
+        fc->dma_addr = ourISPdev->dma_addr + fc->channel_offset;
+
+        // Initialize each buffer descriptor
+        for (int i = 0; i < req.count; i++) {
+            struct frame_buffer *buf = &fc->buffers[i];
+            buf->index = i;
+            buf->type = req.type;
+            buf->memory = req.memory;
+            buf->flags = 0; // Available
+            buf->width = fc->width;
+            buf->height = fc->height;
+            buf->format = fc->format;
+            buf->memory_offset = i * buf_size;
+            buf->length = buf_size;
+            buf->fps_num = 30;
+            buf->fps_den = 1;
+            buf->state = 0;  // Initial state
+            buf->flags2 = 0;
+        }
     }
 
     fc->buf_size = buf_size;
     fc->buf_count = req.count;
-    fc->state |= BIT(0);  // Mark as having buffers
-
-    pr_info("Buffer setup complete: size=%zu count=%d\n",
-            buf_size, req.count);
+    fc->sequence = 0;
+    fc->state |= BIT(0);
 
     return 0;
 }
@@ -4286,12 +4324,11 @@ static int framechan_streamon(struct frame_source_channel *fc, unsigned long arg
 static int framechan_streamoff(struct frame_source_channel *fc, unsigned long arg)
 {
     unsigned long flags;
-    struct frame_buffer *buf, *tmp;
-    u32 val;
 
  	pr_info("TODO: framechan_streamoff\n");
     return 0;
 }
+
 
 static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
 {
@@ -4302,107 +4339,99 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
         u32 flags;
         u32 params[4];
     } req;
-
-    // Video buffer frame info
-    struct {
-        u32 index;
-        u32 type;
-        u32 bytesused;
-        u32 flags;
-        u32 field;
-        u32 timestamp_s;
-        u32 timestamp_us;
-        u32 timecode;
-        u32 sequence;
-        u32 memory;
-        u32 offset;
-        u32 length;
-        u32 reserved[4];
-        u32 width;
-        u32 height;
-        u32 fps_num;
-        u32 fps_den;
-        u32 format;
-    } __attribute__((packed)) resp;
-
-    // Pattern generation variables
+    struct dqbuf_resp resp;
+    struct timeval tv;
     u8 *dst;
     int y_size;
-    u8 y_val = 0;
-    int color = 0;
-    struct timeval tv;
+    u8 y_val;
+    int color;
 
     if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
         return -EFAULT;
 
     pr_info("DQBUF handler\n");
-    pr_info("DQBUF call: cmd=0x%x seq=%d flags=0x%x streaming=%d\n",
-            req.cmd, req.seq, req.flags, (fc->state & BIT(1)));
 
     if (req.cmd == 0xffffffff) {
-        do_gettimeofday(&tv);
-
-        // Initialize response
         memset(&resp, 0, sizeof(resp));
+
+        do_gettimeofday(&tv);
+        resp.timestamp_sec = tv.tv_sec;
+        resp.timestamp_usec = tv.tv_usec;
+
+        // Channel specific settings
+        if (fc->channel_id == 1) {
+            resp.width = 640;
+            resp.height = 360;
+            resp.bytesused = (640 * 360 * 3) / 2;
+        } else {
+            resp.width = fc->width;
+            resp.height = fc->height;
+            resp.bytesused = fc->buf_size;
+        }
+
         resp.index = fc->sequence % fc->buf_count;
-        resp.type = 1;  // Video capture
-        resp.bytesused = fc->buf_size;
+        resp.channel_num = fc->channel_id;
         resp.flags = 0x3;
-        resp.timestamp_s = tv.tv_sec;
-        resp.timestamp_us = tv.tv_usec;
-        resp.sequence = fc->sequence;
-        resp.memory = 1;  // Memory mapped
-        resp.offset = fc->channel_offset;
-        resp.length = fc->buf_size;
-        resp.width = fc->width;
-        resp.height = fc->height;
         resp.fps_num = 30;
         resp.fps_den = 1;
+        resp.ref_count = 1;
         resp.format = fc->format;
+        resp.flags2 = 0x3;
+        resp.sequence = fc->sequence;
+        resp.field = 1;
 
-        // Generate pattern
-        if (fc->buf_base && fc->buf_size) {
-            dst = fc->buf_base + fc->channel_offset;
-            y_size = fc->width * fc->height;
+        pr_info("DQBUF response structure:\n");
+        pr_info("  index=%d channel=%d size=%d\n",
+                resp.index, resp.channel_num, resp.bytesused);
+        pr_info("  res=%dx%d format=0x%x\n",
+                resp.width, resp.height, resp.format);
+        pr_info("  fps=%d/%d\n",
+                resp.fps_num, resp.fps_den);
+
+        // Generate test pattern into buffer
+        if (fc->buf_base && resp.bytesused) {
+            dst = fc->buf_base + (resp.index * fc->buf_size);
+            y_size = resp.width * resp.height;
 
             // Y plane
             y_val = (fc->sequence % 2) ? 235 : 16;
             memset(dst, y_val, y_size);
 
-            // UV plane
-            if (fc->format == 0x23) { // NV12
+            // UV plane for NV12
+            if (fc->format == 0x23) {
                 u8 *uv = dst + y_size;
                 color = fc->sequence % 4;
+                int uv_size = y_size / 2;
 
                 switch (color) {
                     case 0: // Red
-                        memset(uv, 0x80, y_size/2);
-                        memset(uv+1, 0xF0, y_size/2);
+                        memset(uv, 0x80, uv_size);
+                        memset(uv+1, 0xF0, uv_size);
                         break;
                     case 1: // Green
-                        memset(uv, 0, y_size);
+                        memset(uv, 0, uv_size * 2);
                         break;
                     case 2: // Blue
-                        memset(uv, 0xF0, y_size/2);
-                        memset(uv+1, 0x80, y_size/2);
+                        memset(uv, 0xF0, uv_size);
+                        memset(uv+1, 0x80, uv_size);
                         break;
                     case 3: // Yellow
-                        memset(uv, 0, y_size/2);
-                        memset(uv+1, 0xF0, y_size/2);
+                        memset(uv, 0, uv_size);
+                        memset(uv+1, 0xF0, uv_size);
                         break;
                 }
             }
             wmb();
+
+            pr_info("Generated frame of size %d (Y=%d UV=%d)\n",
+                    resp.bytesused, y_size, y_size/2);
         }
+
+        fc->sequence++;
 
         if (copy_to_user((void __user *)arg, &resp, sizeof(resp)))
             return -EFAULT;
 
-        pr_info("Generated frame %d: color=%d y=%d size=%d fps=%d/%d\n",
-                fc->sequence, color, y_val,
-                resp.bytesused, resp.fps_num, resp.fps_den);
-
-        fc->sequence++;
         return 0;
     }
 

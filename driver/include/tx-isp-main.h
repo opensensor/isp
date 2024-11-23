@@ -1741,6 +1741,7 @@ struct frame_source_channel {
 
     /* Queue management */
     struct frame_queue queue;         // Frame queue structure
+    atomic_t queued_bufs;             // Track available buffers
     struct mutex lock;               // Channel lock
 
     /* Format info */
@@ -1757,6 +1758,7 @@ struct frame_source_channel {
     struct ae_statistics ae_stats;
     spinlock_t ae_lock;
     bool ae_valid;
+
 };
 
 /* State definitions */

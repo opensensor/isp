@@ -44,54 +44,61 @@ struct encoder_chn_attr {
     uint32_t maxQp;             // Maximum QP value
     uint32_t minQp;             // Minimum QP value
 };
-
 struct frame_buffer {
-    // Offset 0x00: Buffer management
+    // 0x00: Basic buffer info
     u32 index;          // Index in array
     u32 type;           // Buffer type
     u32 memory;         // Memory type (mmap)
-    u32 flags;          // Status flags
+    u32 flags;          // Status flags - track available/owned here
 
-    // Offset 0x10: Image format
+    // 0x10: Image format
     u32 width;
     u32 height;
     u32 format;
     u32 field;
 
-    // Offset 0x20: Timing
+    // 0x20: Timing
     struct timeval timestamp;
-    u32 sequence;
-    u32 memory_offset;
+    u32 sequence;       // Track sequence here
+    u32 memory_offset;  // Offset into DMA buffer
 
-    // Offset 0x30: Buffer info
-    u32 length;         // Total length
-    u32 bytesused;      // Bytes used
+    // 0x30: Buffer info
+    u32 length;         // Total buffer length
+    u32 bytesused;      // Actual bytes used
     u32 input;          // Input number
     u32 reserved;
 
-    // Offset 0x40: Critical status
+    // 0x40: Status
     u32 state;          // Internal state
-    u32 flags2;         // More flags
+    u32 flags2;         // Additional flags
 
-    // Offset 0x48: Additional
+    // 0x48: Frame rate
     u32 fps_num;        // Must be at 0x48
     u32 fps_den;        // Must be at 0x4C
 } __attribute__((packed));
 
-struct frame_response {
-    u32 buf_index;      // Offset 0x00: Buffer index
-    u32 padding[7];     // Offset 0x04-0x1C: Padding
-    u32 timestamp_l;    // Offset 0x20: Timestamp low
-    u32 timestamp_h;    // Offset 0x24: Timestamp high
-    u32 fps_num;        // Offset 0x28: FPS numerator
-    u32 fps_den;        // Offset 0x2C: FPS denominator
-    u32 padding2[172];  // Padding to offset 0x3E0
-    u32 ref_count;      // Offset 0x3E0: Reference count
-    u32 format;         // Offset 0x3E4: Format
-    u8  padding3[2];    // Small padding
-    u16 flags;          // Flags
-    u32 size;           // Frame size
-    u32 priv[4];       // Private data
-} __attribute__((packed));
+
+struct dqbuf_resp {
+    u32 index;           // 0x00
+    u32 channel_num;     // 0x04
+    u32 bytesused;       // 0x08
+    u32 flags;           // 0x0c
+    u32 field;           // 0x10
+    u32 width;           // 0x14
+    u32 height;          // 0x18
+    u32 pad1;            // 0x1C
+    u32 timestamp_sec;   // 0x20
+    u32 timestamp_usec;  // 0x24
+    u32 fps_num;         // 0x28
+    u32 fps_den;         // 0x2c
+    u32 pad2[172];       // Padding to 0x3e0
+    u32 ref_count;       // 0x3e0
+    u32 format;          // 0x3e4
+    u32 flags2;          // 0x3e8
+    u32 sequence;        // 0x3ec
+    u32 pad3[4];         // Additional padding to ensure proper alignment
+};
+
+
 
 #endif //TX_LIBIMP_H
