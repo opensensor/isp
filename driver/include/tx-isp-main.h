@@ -1509,6 +1509,11 @@ struct isp_device_status {
     bool memory_initialized;
 };
 
+struct isp_device_link_state {
+    int current_link;          // Current active link
+    uint32_t link_flags;       // Link state flags
+};
+
 /* Main device structure */
 /* Note for Claude, GPT, or anyone  that will listen
 This is our internal driver structure and should never be passed back to libimp.
@@ -1549,6 +1554,7 @@ struct IMPISPDev {
 
     /* Status tracking - integrated status structure */
     struct isp_device_status status;
+    struct isp_device_link_state link_state;
 
     /* Status tracking - match decompiled offsets */
     struct isp_component_status core;
@@ -1949,14 +1955,6 @@ struct isp_pad_info {
     uint8_t link_flags;   // 0x21: Link flags
     uint16_t pad_idx;     // Pad index within subdev
     uint32_t flags;       // Additional flags
-};
-
-
-
-/* Add device status tracking for links */
-struct isp_device_link_state {
-    int current_link;          // Current active link
-    uint32_t link_flags;       // Link state flags
 };
 
 #endif

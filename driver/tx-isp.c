@@ -1690,7 +1690,7 @@ static int tx_isp_open(struct file *file)
 
     instance->file = file;
     instance->fs = fs;
-    file->private_data = instance;
+    file->private_data = instance; // Set the instance as private data
 
     // Mark device and frame source as open
     ourISPdev->is_open = 1;
@@ -1701,7 +1701,6 @@ static int tx_isp_open(struct file *file)
 
     return 0;
 }
-
 
 // Update cleanup function to just free info structures:
 static void cleanup_buffer_info(struct IMPISPDev *dev)
@@ -3503,18 +3502,30 @@ case TX_ISP_SET_BUF: {  // 0x800856d5
 	}
     case 0x800456d0: /* TX_ISP_VIDEO_LINK_SETUP */ {
         uint32_t link_config;
-        struct tx_isp_device *isp_dev = container_of(file->private_data,
-                                                    struct tx_isp_device,
-                                                    module);
+        struct IMPISPDev *dev = ourISPdev;
+        struct isp_framesource_state *fs;
+        struct tx_isp_subdev *sd;
 
+        pr_info("Starting link setup IOCTL\n");
+
+        // Validate device and file
+        if (!dev || !file) {
+            pr_err("Invalid device or file pointer\n");
+            return -EINVAL;
+        }
+        pr_info("Device validation passed:\n");
+        pr_info("  dev=%p\n", dev);
+        pr_info("  file=%p\n", file);
+        pr_info("  fs=%p\n", fs);
+
+        // Validate user input
         if (copy_from_user(&link_config, (void __user *)arg, sizeof(link_config))) {
-            pr_err("[%s][%d] copy from user error\n",
-                   "tx_isp_video_link_setup", 264);
+            pr_err("Failed to copy link config from user\n");
             return -EFAULT;
         }
 
         if (link_config >= 2) {
-            pr_err("link(%d) is invalid!\n", link_config);
+            pr_err("Invalid link configuration: %d\n", link_config);
             return -EINVAL;
         }
 
@@ -3522,54 +3533,56 @@ case TX_ISP_SET_BUF: {  // 0x800856d5
 
         // Use our static configurations
         const struct tx_isp_link_configs *configs = &isp_link_configs[link_config];
-        struct tx_isp_subdev *sd = container_of(file->private_data,
-                                              struct tx_isp_subdev,
-                                              module);
 
-        // Validate
-        if (!sd || !isp_dev) {
-            pr_err("Invalid device state\n");
+        // Get the frame source subdev associated with this channel
+        if (!dev->fs_subdev) {
+            pr_err("No frame source subdev available\n");
             return -EINVAL;
         }
 
-        pr_info("Found devices: isp=%p sd=%p\n", isp_dev, sd);
+        sd = dev->fs_subdev;
+        if (!sd->inpads || !sd->outpads) {
+            pr_err("Subdev pads not initialized\n");
+            pr_info("  inpads=%p\n", sd->inpads);
+            pr_info("  outpads=%p\n", sd->outpads);
+            return -EINVAL;
+        }
 
-        // Continue with rest of link setup...
+        pr_info("Found devices and pads:\n");
+        pr_info("  subdev=%p\n", sd);
+        pr_info("  num_inpads=%d\n", sd->num_inpads);
+        pr_info("  num_outpads=%d\n", sd->num_outpads);
+
+        // Link setup logic
         for (int i = 0; i < configs->length; i++) {
             const struct tx_isp_link_config *cfg = &configs->config[i];
+            struct tx_isp_subdev_pad *src_pad;
+            struct tx_isp_subdev_pad *sink_pad;
+
+            pr_info("Setting up link %d of %d\n", i+1, configs->length);
 
             // Find source pad
-            struct tx_isp_subdev_pad *src_pad = find_subdev_link_pad(sd,
-                                                                    &cfg->src);
-            // Find sink pad
-            struct tx_isp_subdev_pad *sink_pad = find_subdev_link_pad(sd,
-                                                                     &cfg->dst);
-
-            if (!src_pad || !sink_pad)
+            src_pad = find_subdev_link_pad(dev, &cfg->src);
+            if (!src_pad) {
+                pr_err("Failed to find source pad\n");
                 continue;
+            }
+
+            // Find sink pad
+            sink_pad = find_subdev_link_pad(dev, &cfg->dst);
+            if (!sink_pad) {
+                pr_err("Failed to find sink pad\n");
+                continue;
+            }
+
+            pr_info("Found pads for link %d:\n", i);
+            pr_info("  src_pad=%p\n", src_pad);
+            pr_info("  sink_pad=%p\n", sink_pad);
 
             // Verify link compatibility
             if (!(src_pad->links_type & sink_pad->links_type & cfg->flag)) {
-                pr_err("The link type is mismatch!\n");
+                pr_err("Link type mismatch\n");
                 return -EINVAL;
-            }
-
-            // Check pad states
-            if (src_pad->state == TX_ISP_PADSTATE_ACTIVE ||
-                sink_pad->state == TX_ISP_PADSTATE_ACTIVE) {
-                pr_err("Please stop active links firstly\n");
-                return -EINVAL;
-            }
-
-            // Handle existing links
-            if (src_pad->state == TX_ISP_PADSTATE_LINKED &&
-                sink_pad != src_pad->link.sink) {
-                subdev_video_destroy_link(src_pad);
-            }
-
-            if (sink_pad->state == TX_ISP_PADSTATE_LINKED &&
-                src_pad != sink_pad->link.source) {
-                subdev_video_destroy_link(sink_pad);
             }
 
             // Create forward link
@@ -3593,7 +3606,9 @@ case TX_ISP_SET_BUF: {  // 0x800856d5
             sink_pad->state = TX_ISP_PADSTATE_LINKED;
         }
 
-        isp_dev->active_link = link_config;
+        dev->link_state.current_link = link_config;
+
+        pr_info("Link setup completed successfully\n");
         return 0;
     }
     case TX_ISP_SET_AE_ALGO_OPEN: {
@@ -4105,19 +4120,31 @@ static int setup_channel_attrs(struct isp_framesource_state *fs, struct channel_
 // And add buffer setup in open
 int framechan_open(struct inode *inode, struct file *file) {
     struct isp_framesource_state *fs;
+    struct frame_source_channel *fc;
     int minor = iminor(inode);
     uint32_t base_offset = 0x1094d4;  // From decompiled code
+
+    if (!ourISPdev) {
+        pr_err("No ISP device available\n");
+        return -ENODEV;
+    }
+
+    pr_info("Opening framechan%d\n", minor);
 
     // Initialize the channel's private data
     fs = &ourISPdev->frame_sources[minor];
     if (!fs->is_open) {
-        struct frame_source_channel *fc;
-
         // Allocate channel data
         fc = kzalloc(sizeof(*fc), GFP_KERNEL);
-        if (!fc)
+        if (!fc) {
+            pr_err("Failed to allocate frame channel\n");
             return -ENOMEM;
+        }
 
+        // Initialize mutex first
+        mutex_init(&fc->lock);
+
+        // Initialize channel dimensions
         fs->width = 1920;
         fs->height = 1080;
         fs->buf_cnt = 4;
@@ -4130,21 +4157,48 @@ int framechan_open(struct inode *inode, struct file *file) {
                       (minor * fs->buf_size * fs->buf_cnt);
 
         // Initialize channel data
+        fc->dev = &ourISPdev->dev;  // Store device reference
+        fc->channel_id = minor;
         fc->buf_base = fs->buf_base;
         fc->dma_addr = fs->dma_addr;
         fc->buf_size = fs->buf_size;
         fc->state = 1;  // Ready state
         fc->channel_offset = minor * (fs->buf_size * fs->buf_cnt);
 
+        // Initialize format info
+        fc->width = fs->width;
+        fc->height = fs->height;
+        fc->format = 0;  // Default format
+
+        // Initialize queue
+        spin_lock_init(&fc->queue.lock);
+        INIT_LIST_HEAD(&fc->queue.ready_list);
+        INIT_LIST_HEAD(&fc->queue.done_list);
+        init_waitqueue_head(&fc->queue.wait);
+        atomic_set(&fc->queue.frames_ready, 0);
+        atomic_set(&fc->queue.frames_queued, 0);
+        atomic_set(&fc->queue.frames_completed, 0);
+
         fs->fc = fc;
         fs->is_open = 1;
+    } else {
+        fc = fs->fc;
+        if (!fc) {
+            pr_err("Invalid channel state\n");
+            return -EINVAL;
+        }
     }
 
-    // Important: Save fs pointer
-    file->private_data = fs;
+    // Store both channel and fs pointers
+    file->private_data = fs;  // Store frame channel as private data instead
+    fs->fc = fc;
 
-    pr_info("Opened framechan%d: fs=%p base=%p\n",
-            minor, fs, fs->buf_base);
+    pr_info("Framechan%d opened successfully:\n", minor);
+    pr_info("  fs=%p\n", fs);
+    pr_info("  fc=%p\n", fc);
+    pr_info("  base=%p\n", fs->buf_base);
+    pr_info("  state=%d\n", fc->state);
+    pr_info("  lock=%p\n", &fc->lock);
 
     return 0;
 }
@@ -4287,7 +4341,8 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
 **/
 static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-    struct frame_source_channel *fc = file->private_data;
+    struct isp_framesource_state *fs = file->private_data;
+    struct frame_source_channel *fc;
     int ret = 0;
     pr_info("Frame channel IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
 
@@ -5407,67 +5462,21 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     memset(sd, 0, sizeof(*sd));
     sd->ops = ops;
 
-    // Initialize each input pad
-    for (int i = 0; i < sd->num_inpads; i++) {
-        sd->inpads[i].sd = sd;
-        sd->inpads[i].index = i;
-        sd->inpads[i].type = TX_ISP_PADTYPE_INPUT;
-        sd->inpads[i].state = TX_ISP_PADSTATE_FREE;
-
-        // Set appropriate link types based on device
-        if (!strcmp(pdev->name, "tx-isp-vic"))
-            sd->inpads[i].links_type = TX_ISP_PADLINK_VIC;
-        else if (!strcmp(pdev->name, "tx-isp-csi"))
-            sd->inpads[i].links_type = TX_ISP_PADLINK_CSI;
-        else
-            sd->inpads[i].links_type = TX_ISP_PADLINK_ISP | TX_ISP_PADLINK_VIC;
+    // Determine pad counts first based on device type
+    if (!strcmp(pdev->name, "tx-isp-vic")) {
+        sd->num_inpads = 1;
+        sd->num_outpads = 2;
+    }
+    else if (!strcmp(pdev->name, "tx-isp-csi")) {
+        sd->num_inpads = 1;
+        sd->num_outpads = 1;
+    }
+    else {
+        sd->num_inpads = 1;
+        sd->num_outpads = 1;
     }
 
-    // Initialize each output pad
-    for (int i = 0; i < sd->num_outpads; i++) {
-        sd->outpads[i].sd = sd;
-        sd->outpads[i].index = i;
-        sd->outpads[i].type = TX_ISP_PADTYPE_OUTPUT;
-        sd->outpads[i].state = TX_ISP_PADSTATE_FREE;
-
-        // Set appropriate link types based on device
-        if (!strcmp(pdev->name, "tx-isp-vic"))
-            sd->outpads[i].links_type = TX_ISP_PADLINK_DDR | TX_ISP_PADLINK_VIC;
-        else if (!strcmp(pdev->name, "tx-isp-csi"))
-            sd->outpads[i].links_type = TX_ISP_PADLINK_CSI;
-        else
-            sd->outpads[i].links_type = TX_ISP_PADLINK_ISP | TX_ISP_PADLINK_VIC;
-    }
-
-    // Map to appropriate register space
-    if (dev->reg_base) {
-        if (!strcmp(pdev->name, "tx-isp-vic")) {
-            sd->base = dev->reg_base + VIC_BASE;
-            // VIC typically has 1 input pad and 2 output pads
-            sd->num_inpads = 1;
-            sd->num_outpads = 2;
-        }
-        else if (!strcmp(pdev->name, "tx-isp-csi")) {
-            if (!dev->csi_dev || !dev->csi_dev->csi_regs) {
-                pr_err("CSI registers not ready\n");
-                return -EINVAL;
-            }
-            sd->base = dev->csi_dev->csi_regs;
-            // CSI typically has 1 input pad and 1 output pad
-            sd->num_inpads = 1;
-            sd->num_outpads = 1;
-        }
-        else {
-            // Frame source or other platform devices
-            sd->base = dev->reg_base;
-            // Default to 1 input and 1 output pad
-            sd->num_inpads = 1;
-            sd->num_outpads = 1;
-        }
-        pr_info("Using register base: %p\n", sd->base);
-    }
-
-    // Allocate and initialize input pads
+    // Allocate input pads
     if (sd->num_inpads) {
         sd->inpads = kzalloc(sizeof(struct tx_isp_subdev_pad) * sd->num_inpads, GFP_KERNEL);
         if (!sd->inpads) {
@@ -5492,7 +5501,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         }
     }
 
-    // Allocate and initialize output pads
+    // Allocate output pads
     if (sd->num_outpads) {
         sd->outpads = kzalloc(sizeof(struct tx_isp_subdev_pad) * sd->num_outpads, GFP_KERNEL);
         if (!sd->outpads) {
@@ -5517,10 +5526,29 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         }
     }
 
+    // Map to appropriate register space
+    if (dev->reg_base) {
+        if (!strcmp(pdev->name, "tx-isp-vic")) {
+            sd->base = dev->reg_base + VIC_BASE;
+        }
+        else if (!strcmp(pdev->name, "tx-isp-csi")) {
+            if (!dev->csi_dev || !dev->csi_dev->csi_regs) {
+                pr_err("CSI registers not ready\n");
+                ret = -EINVAL;
+                goto err_free_out;
+            }
+            sd->base = dev->csi_dev->csi_regs;
+        }
+        else {
+            sd->base = dev->reg_base;
+        }
+        pr_info("Using register base: %p\n", sd->base);
+    }
+
     // Initialize the module
     ret = tx_isp_module_init(pdev, sd);
     if (ret) {
-        pr_err("Failed to init module: %d\n");
+        pr_err("Failed to init module: %d\n", ret);
         goto err_free_out;
     }
 
