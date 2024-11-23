@@ -4126,17 +4126,24 @@ int framechan_open(struct inode *inode, struct file *file) {
     struct isp_framesource_state *fs;
     struct frame_source_channel *fc;
     int minor = iminor(inode);
-    uint32_t base_offset = 0x1094d4;  // From decompiled code
+    uint32_t base_offset = 0x1094d4;
+
+    pr_info("Opening framechan%d\n", minor);
 
     if (!ourISPdev) {
         pr_err("No ISP device available\n");
         return -ENODEV;
     }
 
-    pr_info("Opening framechan%d\n", minor);
-
     // Initialize the channel's private data
     fs = &ourISPdev->frame_sources[minor];
+    if (!fs) {
+        pr_err("Failed to get frame source state\n");
+        return -EINVAL;
+    }
+
+    pr_info("Got frame source: %p state=%d\n", fs, fs->state);
+
     if (!fs->is_open) {
         // Allocate channel data
         fc = kzalloc(sizeof(*fc), GFP_KERNEL);
@@ -4161,18 +4168,14 @@ int framechan_open(struct inode *inode, struct file *file) {
                       (minor * fs->buf_size * fs->buf_cnt);
 
         // Initialize channel data
-        fc->dev = &ourISPdev->dev;  // Store device reference
         fc->channel_id = minor;
         fc->buf_base = fs->buf_base;
         fc->dma_addr = fs->dma_addr;
         fc->buf_size = fs->buf_size;
         fc->state = 1;  // Ready state
         fc->channel_offset = minor * (fs->buf_size * fs->buf_cnt);
-
-        // Initialize format info
         fc->width = fs->width;
         fc->height = fs->height;
-        fc->format = 0;  // Default format
 
         // Initialize queue
         spin_lock_init(&fc->queue.lock);
@@ -4185,24 +4188,39 @@ int framechan_open(struct inode *inode, struct file *file) {
 
         fs->fc = fc;
         fs->is_open = 1;
+
+        pr_info("Initialized frame channel:\n");
+        pr_info("  fc=%p\n", fc);
+        pr_info("  buf_base=%p\n", fc->buf_base);
+        pr_info("  dma_addr=0x%x\n", (unsigned int)fc->dma_addr);
+        pr_info("  state=%d\n", fc->state);
     } else {
-        fc = fs->fc;
-        if (!fc) {
-            pr_err("Invalid channel state\n");
-            return -EINVAL;
+        if (!fs->fc) {
+            // Need to initialize fc even for existing channel
+            fc = kzalloc(sizeof(*fc), GFP_KERNEL);
+            if (!fc) {
+                pr_err("Failed to allocate frame channel\n");
+                return -ENOMEM;
+            }
+
+            mutex_init(&fc->lock);
+
+            // Initialize minimal channel data
+            fc->channel_id = minor;
+            fc->state = 1;
+            fc->width = fs->width;
+            fc->height = fs->height;
+
+            fs->fc = fc;
         }
+        fc = fs->fc;
     }
 
-    // Store both channel and fs pointers
-    file->private_data = fs;  // Store frame channel as private data instead
-    fs->fc = fc;
+    // Store frame source pointer
+    file->private_data = fs;
 
-    pr_info("Framechan%d opened successfully:\n", minor);
-    pr_info("  fs=%p\n", fs);
-    pr_info("  fc=%p\n", fc);
-    pr_info("  base=%p\n", fs->buf_base);
-    pr_info("  state=%d\n", fc->state);
-    pr_info("  lock=%p\n", &fc->lock);
+    pr_info("Framechan%d opened successfully: fs=%p fc=%p\n",
+            minor, fs, fs->fc);
 
     return 0;
 }
@@ -4332,7 +4350,46 @@ static int framechan_streamoff(struct frame_source_channel *fc, unsigned long ar
 
 static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
 {
+    pr_info("TODO framechan_dqbuf\n");
     return -1;
+}
+
+static int frame_channel_vidioc_set_fmt(struct isp_framesource_state *fs, void __user *arg)
+{
+    struct v4l2_format fmt;
+    struct frame_source_channel *fc = fs->fc;
+
+    if (!fc) {
+        pr_err("No frame channel data\n");
+        return -EINVAL;
+    }
+
+    if (copy_from_user(&fmt, arg, sizeof(fmt))) {
+        pr_err("Failed to copy format from user\n");
+        return -EFAULT;
+    }
+
+    pr_info("Setting format: %dx%d format=0x%x\n",
+            fmt.fmt.pix.width, fmt.fmt.pix.height, fmt.fmt.pix.pixelformat);
+
+    // Store format info
+    fc->width = fmt.fmt.pix.width;
+    fc->height = fmt.fmt.pix.height;
+    fc->format = fmt.fmt.pix.pixelformat;
+
+    // Update frame source format too
+    fs->width = fc->width;
+    fs->height = fc->height;
+    fs->fmt = fc->format;
+
+    // Calculate buffer sizes
+    fs->buf_size = (fc->width * fc->height * 2); // YUV422 size
+    fc->buf_size = fs->buf_size;
+
+    pr_info("Format set: %dx%d format=0x%x buf_size=%d\n",
+            fc->width, fc->height, fc->format, fc->buf_size);
+
+    return 0;
 }
 
 /***
@@ -4368,7 +4425,9 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
     case VIDIOC_STREAMOFF:
         ret = framechan_streamoff(fc, arg);
         break;
-    // ... other commands ...
+    case 0xc07056c3: // VIDIOC_S_FMT
+        ret = frame_channel_vidioc_set_fmt(fs, (void __user *)arg);
+        break;
     default:
         dev_dbg(fc->dev, "Unhandled ioctl cmd: 0x%x\n", cmd);
         ret = -ENOTTY;
@@ -4436,6 +4495,28 @@ static int create_framechan_devices(struct device *dev)
         pr_err("Failed to create framechan class\n");
         ret = PTR_ERR(framechan_class);
         goto err_unregister_region;
+    }
+
+    // Initialize frame sources first
+    for (i = 0; i < MAX_CHANNELS; i++) {
+        struct isp_framesource_state *fs = &ourISPdev->frame_sources[i];
+
+        // Clear state
+        memset(fs, 0, sizeof(*fs));
+
+        // Initialize basic state
+        fs->chn_num = i;
+        fs->is_open = 0;
+        fs->state = 0;  // Initial state
+        fs->width = 1920;  // Default resolution
+        fs->height = 1080;
+        fs->buf_cnt = 4;
+        fs->buf_size = fs->width * fs->height * 2;  // YUV422 size
+
+        pr_info("Initialized frame source %d:\n", i);
+        pr_info("  fs=%p\n", fs);
+        pr_info("  width=%d height=%d\n", fs->width, fs->height);
+        pr_info("  buf_size=%d buf_cnt=%d\n", fs->buf_size, fs->buf_cnt);
     }
 
     // Create each device node
