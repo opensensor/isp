@@ -32,6 +32,9 @@
 #define VIC_DMA_CTRL        0x0010
 #define VIC_FRAME_CTRL      0x0014
 
+int tx_isp_enable_irq(struct IMPISPDev *dev);
+void tx_isp_disable_irq(struct IMPISPDev *dev);
+
 int init_hw_resources(struct IMPISPDev *dev);
 int tx_isp_init_memory(struct IMPISPDev *dev);
 void tx_isp_cleanup_memory(struct IMPISPDev *dev);

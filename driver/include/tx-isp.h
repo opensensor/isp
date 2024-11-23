@@ -13,6 +13,7 @@
 
 
 #include "tx-isp-main.h"
+#include "tx-isp-hw.h"
 #include "tx-libimp.h"
 
 
@@ -63,6 +64,9 @@ int configure_csi_streaming(struct IMPISPDev *dev);
 // CSI interrupt handling
 irqreturn_t tx_csi_irq_handler(int irq, void *dev_id);
 
+// Video functions
+int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, bool enable);
+int tx_isp_video_s_stream(struct IMPISPDev *dev, int enable);
 
 
 #endif /* _TX_ISP_H_ */

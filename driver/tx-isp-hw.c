@@ -10,6 +10,27 @@
 #include "tx-isp-main.h"
 #include "tx-isp-hw.h"
 
+
+int tx_isp_enable_irq(struct IMPISPDev *dev)
+{
+    unsigned long flags;
+    void __iomem *regs = dev->reg_base;
+
+    pr_info("TODO: Enabling ISP IRQ\n");
+
+
+    return 0;
+}
+
+void tx_isp_disable_irq(struct IMPISPDev *dev)
+{
+    unsigned long flags;
+    void __iomem *vic_regs = dev->reg_base + VIC_BASE;
+
+    pr_info("TODO IRQ disable\n");
+
+}
+
 /* Hardware initialization and management */
 int configure_isp_clocks(struct IMPISPDev *dev)
 {
