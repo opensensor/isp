@@ -1,5 +1,0 @@
-#ifndef ISP_DRIVER_COMMON_H
-#define ISP_DRIVER_COMMON_H
-
-
-#endif /* ISP_DRIVER_COMMON_H */

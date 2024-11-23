@@ -10,6 +10,7 @@
 #include <media/v4l2-device.h>
 #include <media/videobuf2-core.h>
 #include <media/v4l2-subdev.h>
+#include <tx-isp-device.h>
 
 
 // Add at the top of the file with other definitions
@@ -1030,8 +1031,118 @@ struct fifo_attr {
     } frame_info;
     uint32_t reserved[8];  // Padding to 0x44 bytes
 } __attribute__((aligned(4))); // Important: Add alignment
-
-
+//
+//struct sensor_platform_data {
+//    const char *name;           // Name of the sensor
+//    int i2c_addr;              // I2C address of the sensor
+//    int rst_gpio;              // Reset GPIO pin number
+//    int pwdn_gpio;             // Power down GPIO pin number
+//    int power_gpio;            // Power GPIO pin number (if used)
+//    int mclk;                  // Master clock frequency
+//    unsigned int mclk_source;  // Clock source for master clock
+//    unsigned int flags;        // Platform specific flags
+//    unsigned int sensor_num;   // Sensor instance number
+//    void *priv;               // Private platform data
+//};
+//
+//// Status tracking
+//struct our_tx_isp_status {
+//    uint32_t link_state;
+//    // Add other status fields as needed
+//};
+//
+//// Module structure needed by subdev
+//struct our_tx_isp_module {
+//    struct our_tx_isp_status status;
+//    // Other module fields as needed
+//};
+//
+//// Core operations
+//struct tx_isp_subdev_core_ops {
+//    int (*init)(struct tx_isp_subdev *sd);
+//    // Add other core ops as needed
+//};
+//
+//
+//struct tx_isp_subdev_video_ops {
+//    int (*s_stream)(struct tx_isp_subdev *sd, int enable);
+//    int (*link_stream)(struct tx_isp_subdev *sd, int enable);
+//    int (*link_setup)(const struct tx_isp_subdev_pad *local,
+//              const struct tx_isp_subdev_pad *remote, u32 flags);
+//};
+//
+//struct tx_isp_subdev_sensor_ops {
+//    int (*release_all_sensor)(struct tx_isp_subdev *sd);
+//    int (*sync_sensor_attr)(struct tx_isp_subdev *sd, void *arg);
+//    int (*ioctl)(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+//};
+//
+//struct tx_isp_subdev_pad_ops {
+//    int (*g_fmt)(struct tx_isp_subdev *sd, struct v4l2_format *f);
+//    int (*s_fmt)(struct tx_isp_subdev *sd, struct v4l2_format *f);
+//    int (*streamon)(struct tx_isp_subdev *sd, void *data);
+//    int (*streamoff)(struct tx_isp_subdev *sd, void *data);
+//};
+//
+//// Main operations structure that combines all operation types
+//struct tx_isp_subdev_ops {
+//    const struct tx_isp_subdev_core_ops *core;
+//    const struct tx_isp_subdev_sensor_ops *sensor;
+//    const struct tx_isp_subdev_video_ops *video;
+//    const struct tx_isp_subdev_pad_ops *pad;
+//};
+//
+//struct tx_isp_subdev_link {
+//    struct tx_isp_subdev_pad *source;      /* Source pad */
+//    struct tx_isp_subdev_pad *sink;        /* Sink pad */
+//    struct tx_isp_subdev_link *reverse;    /* Link in reverse direction */
+//    unsigned int flag;                         /* Link flags (TX_ISP_LINKTYPE_*) */
+//    unsigned int state;                        /* Link state (TX_ISP_MODULE_*) */
+//};
+//
+//struct tx_isp_subdev_pad {
+//    struct tx_isp_subdev *sd;       /* Subdev this pad belongs to */
+//    unsigned char index;                /* Pad index in entity pads array */
+//    unsigned char type;                 /* Pad type (TX_ISP_PADTYPE_*) */
+//    unsigned char links_type;           /* Pad link type (TX_ISP_PADLINK_*) */
+//    unsigned char state;                /* Pad state (TX_ISP_PADSTATE_*) */
+//    struct tx_isp_subdev_link link; /* The active link */
+//    int (*event)(struct tx_isp_subdev_pad *, unsigned int event, void *data);
+//    void *priv;
+//};
+//
+//
+//// Our version of tx_isp_subdev
+//struct tx_isp_subdev {
+//    struct our_tx_isp_module module;
+//    struct tx_isp_irq_device irqdev;  // Keep original if needed
+//    struct tx_isp_chip_ident chip;    // Keep original if needed
+//
+//    // Basic members (from original)
+//    struct resource *res;
+//    void __iomem *base;
+//    struct clk **clks;
+//    unsigned int clk_num;
+//    struct tx_isp_subdev_ops *ops;
+//
+//    // Pad management (our updated version)
+//    unsigned short num_outpads;
+//    unsigned short num_inpads;
+//    struct tx_isp_subdev_pad *outpads;
+//    struct tx_isp_subdev_pad *inpads;
+//
+//    // Additional fields we saw in decompiled code
+//    char name[32];                    // Name storage
+//    char *name_ptr;                   // Pointer to name
+//    struct mutex lock;                // Synchronization
+//    unsigned int index;               // Device index
+//    void *dev_priv;                  // Private data (keep from original)
+//    void *host_priv;                 // Host private data (keep from original)
+//
+//    // Link state tracking
+//    struct tx_isp_subdev *remote_subdev;
+//    unsigned int pad_state;
+//};
 
 /* Update pad descriptor structure to match libimp exactly */
 struct isp_pad_desc {
@@ -1045,24 +1156,6 @@ struct isp_pad_desc {
     void *entity;             // 0x14: Entity pointer
 } __attribute__((packed, aligned(4)));
 
-/**
- * struct isp_subdev - ISP sub-device structure
- * Referenced in decompiled at multiple offsets
- */
-struct isp_subdev {
-    char name[32];             // 0x00: Device name
-    char *name_ptr;            // 0x08: Pointer to name
-    struct v4l2_subdev sd;
-    struct mutex lock;
-    u32 index;
-    void *priv;
-    void __iomem *regs;
-    struct tx_isp_subdev_ops *ops;
-    uint16_t num_sink_pads;    // 0xc8: Number of sink pads
-    uint16_t num_src_pads;     // 0xca: Number of source pads
-    uint32_t sink_pads;        // 0xcc: Base address of sink pads array
-    uint32_t src_pads;         // 0xd0: Base address of source pads array
-} __attribute__((packed, aligned(4)));
 
 struct isp_pipeline {
     unsigned int input_format;
@@ -1093,7 +1186,7 @@ struct isp_device {
     struct vb2_queue vb2_queue;      /* Video buffer queue */
 
     /* Sub-devices - array seen at 0x2c with multiple entries */
-    struct isp_subdev *subdevs[16];  /* Array of subdevices */
+    struct tx_isp_subdev *subdevs[16];  /* Array of subdevices */
     int num_subdevs;
 
     /* Link configuration */
@@ -1597,11 +1690,6 @@ struct IspSubdev
 
 #define MAX_SENSORS 1
 
-struct sensor_info {
-    char name[32];
-    bool registered;
-};
-
 struct encoder_state {
     uint32_t channel_id;   // Channel ID (0-8)
     uint32_t state;        // Must match offset 0x109290
@@ -1851,6 +1939,24 @@ struct sensor_win_size {
 // Add this structure if not already present
 struct isp_platform_data {
     unsigned long clock_rate;
+};
+
+
+/* Pad descriptor matching offsets in decompiled */
+struct isp_pad_info {
+    char name[32];        // 0x00: Name string
+    uint8_t type;         // 0x20: 1=source, 2=sink
+    uint8_t link_flags;   // 0x21: Link flags
+    uint16_t pad_idx;     // Pad index within subdev
+    uint32_t flags;       // Additional flags
+};
+
+
+
+/* Add device status tracking for links */
+struct isp_device_link_state {
+    int current_link;          // Current active link
+    uint32_t link_flags;       // Link state flags
 };
 
 #endif

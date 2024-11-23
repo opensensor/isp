@@ -22,7 +22,6 @@ int debug_sensor_registers(struct IMPISPDev *dev);
 
 // Sensor setup and configuration
 int sc2336_hw_reset(struct IMPISPDev *dev);
-int configure_sensor_streaming(struct IMPISPDev *dev);
 
 // I2C initialization
 int setup_i2c_adapter(struct IMPISPDev *dev);

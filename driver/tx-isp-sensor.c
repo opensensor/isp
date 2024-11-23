@@ -4,6 +4,8 @@
 #include <linux/gpio.h>
 #include <linux/i2c.h>
 
+#include <sensor-info.h>
+
 #include "tx-isp.h"
 #include "tx-isp-main.h"
 #include "tx-isp-sensor.h"

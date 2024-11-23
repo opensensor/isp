@@ -32,6 +32,101 @@
 #define VIC_DMA_CTRL        0x0010
 #define VIC_FRAME_CTRL      0x0014
 
+
+// Our internal pad descriptor structure
+struct isp_pad_config {
+    uint32_t subdev_id;  // ID to identify which subdev this pad belongs to
+    uint32_t pad_id;     // Which pad within the subdev
+    uint32_t flags;      // Pad flags/capabilities
+    uint32_t reserved;   // Padding/alignment
+    uint32_t link_flags; // The flags that determine link compatibility
+};
+
+// Our internal state enums
+#define ISP_PAD_STATE_FREE     0
+#define ISP_PAD_STATE_LINKED   3
+#define ISP_PAD_STATE_ACTIVE   4
+
+#define ISP_LINK_STATE_INACTIVE 0
+#define ISP_LINK_STATE_ACTIVE   1
+
+#define MAX_LINKS 8
+
+// Likely flags/types used in configurations
+#define ISP_PAD_LINK_TYPE_VIDEO   0x01
+#define ISP_PAD_LINK_TYPE_META    0x02
+#define ISP_PAD_LINK_TYPE_MEMORY  0x04
+
+// Number of links in each configuration
+static const uint32_t pad_link_counts[2] = {
+    [0] = 3,  // Basic configuration with 3 links
+    [1] = 4,  // Extended configuration with 4 links
+};
+
+// Detailed pad configurations
+static const struct isp_pad_config pad_link_configs[2][MAX_LINKS] = {
+    [0] = {  // Basic configuration
+        // Link 1: Sensor -> ISP Input
+        {
+            .subdev_id = 0,    // Sensor subdev ID
+            .pad_id = 0,       // Output pad ID
+            .flags = ISP_PAD_LINK_TYPE_VIDEO,
+            .reserved = 0,
+            .link_flags = ISP_PAD_LINK_TYPE_VIDEO
+        },
+        // Link 2: ISP Core Processing
+        {
+            .subdev_id = 1,    // ISP core subdev ID
+            .pad_id = 0,       // Input pad ID
+            .flags = ISP_PAD_LINK_TYPE_VIDEO,
+            .reserved = 0,
+            .link_flags = ISP_PAD_LINK_TYPE_VIDEO
+        },
+        // Link 3: Memory Output
+        {
+            .subdev_id = 2,    // Memory interface subdev ID
+            .pad_id = 0,       // Output pad ID
+            .flags = ISP_PAD_LINK_TYPE_MEMORY,
+            .reserved = 0,
+            .link_flags = ISP_PAD_LINK_TYPE_MEMORY
+        },
+    },
+    [1] = {  // Extended configuration (e.g., with metadata)
+        // Link 1: Sensor -> ISP Input
+        {
+            .subdev_id = 0,
+            .pad_id = 0,
+            .flags = ISP_PAD_LINK_TYPE_VIDEO,
+            .reserved = 0,
+            .link_flags = ISP_PAD_LINK_TYPE_VIDEO
+        },
+        // Link 2: ISP Core Processing
+        {
+            .subdev_id = 1,
+            .pad_id = 0,
+            .flags = ISP_PAD_LINK_TYPE_VIDEO,
+            .reserved = 0,
+            .link_flags = ISP_PAD_LINK_TYPE_VIDEO
+        },
+        // Link 3: Memory Output
+        {
+            .subdev_id = 2,
+            .pad_id = 0,
+            .flags = ISP_PAD_LINK_TYPE_MEMORY,
+            .reserved = 0,
+            .link_flags = ISP_PAD_LINK_TYPE_MEMORY
+        },
+        // Link 4: Metadata Path
+        {
+            .subdev_id = 3,
+            .pad_id = 0,
+            .flags = ISP_PAD_LINK_TYPE_META,
+            .reserved = 0,
+            .link_flags = ISP_PAD_LINK_TYPE_META
+        },
+    }
+};
+
 int tx_isp_enable_irq(struct IMPISPDev *dev);
 void tx_isp_disable_irq(struct IMPISPDev *dev);
 

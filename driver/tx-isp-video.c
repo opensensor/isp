@@ -69,7 +69,7 @@ int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, 
         lanes_val = ((2 - 1) & 3) | (lanes_val & 0xfffffffc);
         writel(lanes_val, csi_regs + 0x04);  // N_LANES setup
         writel(0x2B, csi_regs + 0x18);       // DATA_IDS_1 = RAW10
-        writel(0x3, csi_regs + 0x38);        // Enable both lanes
+        writel(0x3, csi_regs + 0x04);        // Enable both lanes
         wmb();
         udelay(100);
 
@@ -111,7 +111,6 @@ int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, 
         pr_info("  IRQ Enable: 0x%08x\n", readl(vic_regs + VIC_IRQ_EN));
         pr_info("  IRQ Mask: 0x%08x\n", readl(vic_regs + VIC_MASK));
         pr_info("  Frame Control: 0x%08x\n", readl(vic_regs + VIC_FRAME_CTRL));
-        spin_lock_irqsave(&dev->vic_lock, flags);
 
         // Clear any pending interrupts
         writel(0xFFFFFFFF, vic_regs + VIC_STATUS);
@@ -135,7 +134,6 @@ int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, 
 
             if (timeout-- <= 0) {
                 pr_err("VIC status timeout: 0x%08x\n", status);
-                spin_unlock_irqrestore(&dev->vic_lock, flags);
                 return -ETIMEDOUT;
             }
             udelay(1);
@@ -147,12 +145,6 @@ int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, 
             wmb();
             udelay(100);
         }
-
-        writel(1, vic_regs + 0x4);           // Control back to 1
-		writel(0x33fb, vic_regs + 0xc);      // IRQ Enable with magic value
-		writel(0x33fb, vic_regs + 0x8);      // Full mask
-		writel(0x3, vic_regs + 0x10);        // Both route bits
-		wmb();
 
         // Configure VIC with magic values
         writel(0x100010, vic_regs + 0x1a4);
@@ -267,6 +259,9 @@ int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, 
         writel(0x0, isp_regs + ISP_STREAM_CTRL);
         writel(0x0, isp_regs + ISP_STREAM_START);
         wmb();
+
+        spin_lock_irqsave(&dev->vic_lock, flags);
+        // tx_vic_disable_irq(dev);  // Disable IRQs last // TODO
     }
 
     return ret;
