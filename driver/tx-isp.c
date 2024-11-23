@@ -4347,6 +4347,11 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
 
     pr_info("DQBUF handler\n");
 
+    // Wait for buffer availability
+    if (atomic_read(&fc->queued_bufs) <= 0)
+        return -EAGAIN;
+
+
     if (req.cmd == 0xffffffff) {
         memset(&buf, 0, sizeof(buf));
 
@@ -4418,6 +4423,9 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
                         break;
                 }
             }
+
+            // Decrement available buffers
+            atomic_dec(&fc->queued_bufs);
             wmb();
 
             pr_info("Generated frame of size %d (Y=%d UV=%d)\n",
@@ -4487,8 +4495,7 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
         ret = frame_channel_vidioc_set_fmt(fs, (void __user *)arg);
         break;
     case 0x400456bf: {  // DQBUF handler
-        pr_info("DQBUF handler\n");
-        ret = framechan_dqbuf(fc, arg);
+        // TODO
         break;
     }
     default:
