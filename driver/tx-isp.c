@@ -4339,12 +4339,8 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
         u32 flags;
         u32 params[4];
     } req;
-    struct dqbuf_resp resp;
+    struct frame_buffer buf;
     struct timeval tv;
-    u8 *dst;
-    int y_size;
-    u8 y_val;
-    int color;
 
     if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
         return -EFAULT;
@@ -4352,55 +4348,56 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
     pr_info("DQBUF handler\n");
 
     if (req.cmd == 0xffffffff) {
-        memset(&resp, 0, sizeof(resp));
+        memset(&buf, 0, sizeof(buf));
 
         do_gettimeofday(&tv);
-        resp.timestamp_sec = tv.tv_sec;
-        resp.timestamp_usec = tv.tv_usec;
+
+        // Fill frame_buffer structure
+        buf.index = fc->sequence % fc->buf_count;
+        buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        buf.memory = V4L2_MEMORY_MMAP;
+        buf.flags = 0x3;  // Keep original flags
+        buf.sequence = fc->sequence;
+        buf.timestamp = tv;
 
         // Channel specific settings
         if (fc->channel_id == 1) {
-            resp.width = 640;
-            resp.height = 360;
-            resp.bytesused = (640 * 360 * 3) / 2;
+            buf.width = 640;
+            buf.height = 360;
+            buf.bytesused = (640 * 360 * 3) / 2;
         } else {
-            resp.width = fc->width;
-            resp.height = fc->height;
-            resp.bytesused = fc->buf_size;
+            buf.width = fc->width;
+            buf.height = fc->height;
+            buf.bytesused = fc->buf_size;
         }
 
-        resp.index = fc->sequence % fc->buf_count;
-        resp.channel_num = fc->channel_id;
-        resp.flags = 0x3;
-        resp.fps_num = 30;
-        resp.fps_den = 1;
-        resp.ref_count = 1;
-        resp.format = fc->format;
-        resp.flags2 = 0x3;
-        resp.sequence = fc->sequence;
-        resp.field = 1;
+        buf.format = fc->format;
+        buf.field = 1;
+        buf.flags2 = 0x3;  // Keep original flags2 value
+        buf.fps_num = 30;  // At offset 0x48
+        buf.fps_den = 1;   // At offset 0x4C
 
         pr_info("DQBUF response structure:\n");
         pr_info("  index=%d channel=%d size=%d\n",
-                resp.index, resp.channel_num, resp.bytesused);
+                buf.index, fc->channel_id, buf.bytesused);
         pr_info("  res=%dx%d format=0x%x\n",
-                resp.width, resp.height, resp.format);
+                buf.width, buf.height, buf.format);
         pr_info("  fps=%d/%d\n",
-                resp.fps_num, resp.fps_den);
+                buf.fps_num, buf.fps_den);
 
-        // Generate test pattern into buffer
-        if (fc->buf_base && resp.bytesused) {
-            dst = fc->buf_base + (resp.index * fc->buf_size);
-            y_size = resp.width * resp.height;
+        // Generate test pattern
+        if (fc->buf_base && buf.bytesused) {
+            u8 *dst = fc->buf_base + (buf.index * fc->buf_size);
+            int y_size = buf.width * buf.height;
 
             // Y plane
-            y_val = (fc->sequence % 2) ? 235 : 16;
+            u8 y_val = (fc->sequence % 2) ? 235 : 16;
             memset(dst, y_val, y_size);
 
             // UV plane for NV12
             if (fc->format == 0x23) {
                 u8 *uv = dst + y_size;
-                color = fc->sequence % 4;
+                int color = fc->sequence % 4;
                 int uv_size = y_size / 2;
 
                 switch (color) {
@@ -4424,12 +4421,12 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
             wmb();
 
             pr_info("Generated frame of size %d (Y=%d UV=%d)\n",
-                    resp.bytesused, y_size, y_size/2);
+                    buf.bytesused, y_size, y_size/2);
         }
 
         fc->sequence++;
 
-        if (copy_to_user((void __user *)arg, &resp, sizeof(resp)))
+        if (copy_to_user((void __user *)arg, &buf, sizeof(buf)))
             return -EFAULT;
 
         return 0;

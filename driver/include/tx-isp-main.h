@@ -1738,6 +1738,7 @@ struct frame_source_channel {
     dma_addr_t dma_addr;             // DMA base address
     uint32_t buf_size;               // Size per buffer
     uint32_t channel_offset;         // Channel memory offset
+    struct frame_buffer *buffers;
 
     /* Queue management */
     struct frame_queue queue;         // Frame queue structure
@@ -1758,7 +1759,6 @@ struct frame_source_channel {
     struct ae_statistics ae_stats;
     spinlock_t ae_lock;
     bool ae_valid;
-
 };
 
 /* State definitions */
