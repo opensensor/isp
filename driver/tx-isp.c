@@ -3744,123 +3744,6 @@ case 0x40145609: {  // QBUF handler
 
     return 0;
 }
-case 0x400456bf: {  // DQBUF handler
-    struct {
-        u32 cmd;
-        u32 pad;
-        u32 seq;
-        u32 flags;
-        u32 params[4];
-    } req;
-
-    if (!arg || copy_from_user(&req, (void __user *)arg, sizeof(req))) {
-        pr_err("DQBUF: Failed to copy from user\n");
-        return -EFAULT;
-    }
-
-    struct frame_source_channel *fc = fs->fc;
-
-    pr_info("DQBUF call: cmd=0x%x seq=%d flags=0x%x streaming=%d\n",
-            req.cmd, req.seq, req.flags, (fc->state & BIT(0)));
-
-    if (req.cmd == 0xffffffff) {
-        if ((fc->state & BIT(0)) == 0) {
-            pr_err("DQBUF: Not streaming\n");
-            return -EINVAL;
-        }
-
-        if (!fc->buf_base || !fc->buf_size) {
-            pr_err("DQBUF: Invalid buffer state\n");
-            return -EINVAL;
-        }
-
-        void *buffer = fc->buf_base + fc->channel_offset;
-        size_t frame_size;
-
-        pr_info("Generating frame %d at %p offset=0x%x\n",
-                fc->sequence, buffer, fc->channel_offset);
-
-        // Generate pattern
-        int width = fs->width;
-        int height = fs->height;
-        int y_size = width * height;
-        u8 *dst = buffer;
-
-        // Super obvious pattern - full frame color alternation
-        u8 y_val = (fc->sequence % 2) ? 235 : 16;  // Alternate black/white
-        memset(dst, y_val, y_size);
-
-        // UV plane - alternate between strong colors
-        u8 *uv = dst + y_size;
-        switch(fc->sequence % 4) {
-            case 0:  // Red
-                for (int i = 0; i < y_size/2; i += 2) {
-                }
-                break;
-            case 1:  // Blue
-                for (int i = 0; i < y_size/2; i += 2) {
-                    uv[i] = 240;     // U = blue
-                    uv[i + 1] = 128; // V = neutral
-                }
-                break;
-            case 2:  // Green
-                for (int i = 0; i < y_size/2; i += 2) {
-                    uv[i] = 0;       // U = green
-                    uv[i + 1] = 0;   // V = green
-                }
-                break;
-            case 3:  // Yellow
-                for (int i = 0; i < y_size/2; i += 2) {
-                    uv[i] = 0;       // U = yellow
-                    uv[i + 1] = 240; // V = yellow
-                }
-                break;
-        }
-
-        wmb();
-        frame_size = y_size + (y_size/2);
-
-        pr_info("Generated frame %d: color=%d y=%d size=%d\n",
-                fc->sequence, fc->sequence % 4, y_val, frame_size);
-
-        struct {
-            u32 status;
-            u32 size;
-            u32 timestamp;
-            u32 flags;
-            u32 sequence;
-            u32 offset;
-            u32 buf_size;
-            u32 pad;
-            u32 width;
-            u32 height;
-            u32 format;
-            u32 reserved[5];
-        } resp = {
-            .status = 0,
-            .size = frame_size,
-            .timestamp = jiffies_to_msecs(jiffies),
-            .flags = 3,
-            .sequence = fc->sequence++,
-            .offset = fc->channel_offset,
-            .buf_size = fc->buf_size,
-            .width = fs->width,
-            .height = fs->height,
-            .format = fs->fmt
-        };
-
-        pr_info("DQBUF response: seq=%d size=%d offset=0x%x buf=%p\n",
-                resp.sequence, resp.size, resp.offset, buffer);
-
-        if (copy_to_user((void __user *)arg, &resp, sizeof(resp))) {
-            pr_err("DQBUF: Failed to copy to user\n");
-            return -EFAULT;
-        }
-
-        return 0;
-    }
-    return 0;
-}
 	case VIDIOC_S_CROP: {
 	    struct v4l2_crop crop;
 	    if (copy_from_user(&crop, argp, sizeof(crop)))
@@ -4110,13 +3993,36 @@ static int setup_channel_attrs(struct isp_framesource_state *fs, struct channel_
 
     // For channel 1, ensure proper scaling setup
     if (fs->chn_num == 1) {
-        fs->attr.crop.enable = 0;
+        fs->attr.crop_enable = 0;
         fs->attr.crop.width = 1920;
         fs->attr.crop.height = 1080;
-        fs->attr.scaler.enable = 1;
-        fs->attr.scaler.outwidth = 640;
-        fs->attr.scaler.outheight = 360;
+        fs->attr.crop.x = 0;
+        fs->attr.crop.y = 0;
+
+        fs->attr.scaler_enable = 1;
+        fs->attr.scaler_outwidth = 640;
+        fs->attr.scaler_outheight = 360;
+
+        // Set picture dimensions to match output
+        fs->attr.picwidth = 640;
+        fs->attr.picheight = 360;
+    } else {
+        // For other channels, set picture dimensions to match input
+        fs->attr.picwidth = fs->attr.width;
+        fs->attr.picheight = fs->attr.height;
     }
+
+    pr_info("Channel %d attributes:\n", fs->chn_num);
+    pr_info("  Resolution: %dx%d\n", fs->attr.width, fs->attr.height);
+    pr_info("  Crop: enable=%d %dx%d at (%d,%d)\n",
+            fs->attr.crop_enable,
+            fs->attr.crop.width, fs->attr.crop.height,
+            fs->attr.crop.x, fs->attr.crop.y);
+    pr_info("  Scale: enable=%d %dx%d\n",
+            fs->attr.scaler_enable,
+            fs->attr.scaler_outwidth, fs->attr.scaler_outheight);
+    pr_info("  Picture: %dx%d\n",
+            fs->attr.picwidth, fs->attr.picheight);
 
     return 0;
 }
@@ -4266,74 +4172,162 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
 }
 
 
+static int frame_channel_vidioc_set_fmt(struct isp_framesource_state *fs, void __user *arg)
+{
+    pr_info("Format set entry: fs=%p arg=%p\n", fs, arg);
+
+    if (!fs || !fs->fc) {
+        pr_err("Invalid fs or fc\n");
+        return -EINVAL;
+    }
+
+    // First dump the raw bytes to verify what we're getting
+    unsigned char bytes[32];
+    if (copy_from_user(bytes, arg, sizeof(bytes))) {
+        pr_err("Failed to copy raw bytes\n");
+        return -EFAULT;
+    }
+
+    pr_info("Raw format bytes: ");
+    for (int i = 0; i < 16; i++) {
+        pr_cont("%02x ", bytes[i]);
+    }
+    pr_cont("\n");
+
+    struct {
+        u32 type;
+        u32 width;
+        u32 height;
+        union {
+            u32 pixelformat;    // As a 32-bit value
+            char pix_str[4];    // As a 4-char string
+        };
+        u32 rest[4];           // Remaining fields
+    } fmt;
+
+    if (copy_from_user(&fmt, arg, sizeof(fmt))) {
+        pr_err("Failed to copy format struct\n");
+        return -EFAULT;
+    }
+
+    pr_info("Format request:\n");
+    pr_info("  type=%d width=%d height=%d\n", fmt.type, fmt.width, fmt.height);
+    pr_info("  pixelformat=0x%x ('%c%c%c%c')\n",
+            fmt.pixelformat,
+            fmt.pix_str[0], fmt.pix_str[1],
+            fmt.pix_str[2], fmt.pix_str[3]);
+
+    // Convert pixel format code to our internal format
+    u32 internal_format;
+    if (fmt.pix_str[0] == 'N' && fmt.pix_str[1] == 'V' &&
+        fmt.pix_str[2] == '1' && fmt.pix_str[3] == '2') {
+        internal_format = 0x23;  // NV12
+    } else if (fmt.pix_str[0] == 'Y' && fmt.pix_str[1] == 'U' &&
+               fmt.pix_str[2] == '1' && fmt.pix_str[3] == '2') {
+        internal_format = 0x22;  // YUV422
+    } else {
+        pr_err("Unsupported pixel format: %c%c%c%c\n",
+               fmt.pix_str[0], fmt.pix_str[1],
+               fmt.pix_str[2], fmt.pix_str[3]);
+        return -EINVAL;
+    }
+
+    // Update channel format info
+    fs->width = fmt.width;
+    fs->height = fmt.height;
+    fs->fmt = internal_format;
+
+    fs->fc->width = fmt.width;
+    fs->fc->height = fmt.height;
+    fs->fc->format = internal_format;
+
+    // Calculate buffer size
+    size_t buf_size;
+    if (internal_format == 0x22) { // YUV422
+        buf_size = fmt.width * fmt.height * 2;
+    } else { // NV12
+        buf_size = (fmt.width * fmt.height * 3) / 2;
+    }
+    fs->buf_size = buf_size;
+    fs->fc->buf_size = buf_size;
+
+    pr_info("Format set: %dx%d format=%s (internal=0x%x)\n",
+            fs->width, fs->height,
+            internal_format == 0x23 ? "NV12" : "YUV422",
+            internal_format);
+
+    return 0;
+}
+
 static int framechan_reqbufs(struct frame_source_channel *fc, unsigned long arg)
 {
-    struct v4l2_requestbuffers req;
-    int i;
+    struct {
+        uint32_t count;
+        uint32_t type;
+        uint32_t memory;
+        uint32_t flags;
+    } req;
+
+    pr_info("Handling reqbufs: fc=%p arg=0x%lx\n", fc, arg);
+
+    if (!fc) {
+        pr_err("No frame channel\n");
+        return -EINVAL;
+    }
 
     if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
         return -EFAULT;
 
-    pr_info("TODO: framechan_reqbufs\n");
+    pr_info("Buffer request: count=%d type=%d memory=%d flags=0x%x\n",
+            req.count, req.type, req.memory, req.flags);
+
+    if (req.type != 1 || req.memory != 2)
+        return -EINVAL;
+
+    // Calculate buffer size
+    size_t buf_size;
+    if (fc->format == 0x22) { // YUV422
+        buf_size = fc->width * fc->height * 2;
+    } else if (fc->format == 0x23) { // NV12
+        buf_size = (fc->width * fc->height * 3) / 2;
+    } else {
+        return -EINVAL;
+    }
+
+    // Allocate buffer if not already allocated
+    if (!fc->buf_base) {
+        fc->buf_base = kmalloc(buf_size * req.count, GFP_KERNEL);
+        if (!fc->buf_base)
+            return -ENOMEM;
+        fc->channel_offset = 0;
+    }
+
+    fc->buf_size = buf_size;
+    fc->buf_count = req.count;
+    fc->state |= BIT(0);  // Mark as having buffers
+
+    pr_info("Buffer setup complete: size=%zu count=%d\n",
+            buf_size, req.count);
+
     return 0;
 }
 
 static int framechan_streamon(struct frame_source_channel *fc, unsigned long arg)
 {
-    int ret;
-    u32 val;
+    u32 streaming;
 
-   	pr_info("TODO: framechan_streamon\n");
-	// TODO
-    /* Configure CSI interface */
-//    ret = configure_mipi_csi(fc->isp);
-//    if (ret) {
-//        dev_err(fc->dev, "Failed to configure MIPI CSI: %d\n", ret);
-//        fc->state = FC_STATE_ERROR;
-//        return ret;
-//    }
+    if (copy_from_user(&streaming, (void __user *)arg, sizeof(streaming)))
+        return -EFAULT;
 
-    // TODO
-    /* Clear any pending interrupts */
-//    writel(0xffffffff, fc->regs + ISP_INT_CLEAR_REG);
-//    wmb();
-//
-//    /* Get first buffer in queue */
-//    struct frame_buffer *buf = list_first_entry(&fc->queue.active_queue,
-//                                              struct frame_buffer, list);
-//
-//    /* Setup DMA with first buffer */
-//    writel(buf->dma_addr, fc->regs + ISP_BUF0_OFFSET);
-//    writel(buf->size, fc->regs + ISP_BUF0_OFFSET + 0x4);
-//    wmb();
+    pr_info("Starting stream on channel %d\n", fc->channel_id);
 
-    // TODO
-    /* Calculate register offsets based on channel */
-//    u32 ctrl_offset = ISP_STREAM_CTRL + (fc->channel_id * 0x100);
-//    u32 start_offset = ISP_STREAM_START + (fc->channel_id * 0x100);
-//
-//    /* Enable stream processing */
-//    writel(0x1, fc->regs + ctrl_offset);
-//    wmb();
-//    msleep(1); /* Required delay between ctrl and start */
-//    writel(0x1, fc->regs + start_offset);
-//    wmb();
-//
-//    /* Update channel state */
-//    fc->state = FC_STATE_STREAMING;
-//    fc->queue.streaming = 1;
-//    fc->frame_count = 0;
-//    fc->sequence = 0;
-//
-//    /* Enable interrupts */
-//    val = readl(fc->regs + ISP_INT_MASK_REG);
-//    val |= ISP_INT_FRAME_MASK(fc->channel_id);
-//    writel(val, fc->regs + ISP_INT_MASK_REG);
-//    wmb();
-//
-//    dev_info(fc->dev, "Channel %d streaming enabled: ctrl=0x%x start=0x%x\n",
-//             fc->channel_id, readl(fc->regs + ctrl_offset),
-//             readl(fc->regs + start_offset));
+    if (!fc->buf_base || !fc->buf_size) {
+        pr_err("No buffers allocated for streaming\n");
+        return -EINVAL;
+    }
+
+    fc->state |= BIT(1);  // Set streaming bit
+    fc->sequence = 0;     // Reset frame counter
 
     return 0;
 }
@@ -4350,46 +4344,113 @@ static int framechan_streamoff(struct frame_source_channel *fc, unsigned long ar
 
 static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
 {
-    pr_info("TODO framechan_dqbuf\n");
-    return -1;
-}
+    struct {
+        u32 cmd;
+        u32 pad;
+        u32 seq;
+        u32 flags;
+        u32 params[4];
+    } req;
 
-static int frame_channel_vidioc_set_fmt(struct isp_framesource_state *fs, void __user *arg)
-{
-    struct v4l2_format fmt;
-    struct frame_source_channel *fc = fs->fc;
-
-    if (!fc) {
-        pr_err("No frame channel data\n");
-        return -EINVAL;
-    }
-
-    if (copy_from_user(&fmt, arg, sizeof(fmt))) {
-        pr_err("Failed to copy format from user\n");
+    if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
         return -EFAULT;
+
+    pr_info("DQBUF call: cmd=0x%x seq=%d flags=0x%x streaming=%d\n",
+            req.cmd, req.seq, req.flags, (fc->state & BIT(1)));
+
+    if (req.cmd == 0xffffffff) {
+        if ((fc->state & BIT(1)) == 0) {
+            pr_err("DQBUF: Not streaming\n");
+            return -EINVAL;
+        }
+
+        if (!fc->buf_base || !fc->buf_size) {
+            pr_err("DQBUF: Invalid buffer state\n");
+            return -EINVAL;
+        }
+
+        void *buffer = fc->buf_base + fc->channel_offset;
+        size_t frame_size = fc->buf_size;
+
+        pr_info("Generating frame %d at %p offset=0x%x\n",
+                fc->sequence, buffer, fc->channel_offset);
+
+        // Generate test pattern
+        u8 *dst = buffer;
+        int y_size = fc->width * fc->height;
+
+        // Y plane
+        u8 y_val = (fc->sequence % 2) ? 235 : 16;
+        memset(dst, y_val, y_size);
+
+        // UV plane for NV12
+        if (fc->format == 0x23) {
+            u8 *uv = dst + y_size;
+            switch (fc->sequence % 4) {
+                case 0: // Red
+                    for (int i = 0; i < y_size/2; i += 2) {
+                        uv[i] = 128;    // U = neutral
+                        uv[i+1] = 240;  // V = red
+                    }
+                    break;
+                case 1: // Blue
+                    for (int i = 0; i < y_size/2; i += 2) {
+                        uv[i] = 240;    // U = blue
+                        uv[i+1] = 128;  // V = neutral
+                    }
+                    break;
+                case 2: // Green
+                    for (int i = 0; i < y_size/2; i += 2) {
+                        uv[i] = 0;      // U
+                        uv[i+1] = 0;    // V
+                    }
+                    break;
+                case 3: // Yellow
+                    for (int i = 0; i < y_size/2; i += 2) {
+                        uv[i] = 0;      // U
+                        uv[i+1] = 240;  // V
+                    }
+                    break;
+            }
+        }
+
+        wmb();
+
+        pr_info("Generated frame %d: color=%d y=%d size=%d\n",
+                fc->sequence, fc->sequence % 4, y_val, frame_size);
+
+        struct {
+            u32 status;
+            u32 size;
+            u32 timestamp;
+            u32 flags;
+            u32 sequence;
+            u32 offset;
+            u32 buf_size;
+            u32 width;
+            u32 height;
+            u32 format;
+            u32 reserved[5];
+        } resp = {
+            .status = 0,
+            .size = frame_size,
+            .timestamp = jiffies_to_msecs(jiffies),
+            .flags = 3,
+            .sequence = fc->sequence++,
+            .offset = fc->channel_offset,
+            .buf_size = fc->buf_size,
+            .width = fc->width,
+            .height = fc->height,
+            .format = fc->format
+        };
+
+        if (copy_to_user((void __user *)arg, &resp, sizeof(resp)))
+            return -EFAULT;
+
+        return 0;
     }
 
-    pr_info("Setting format: %dx%d format=0x%x\n",
-            fmt.fmt.pix.width, fmt.fmt.pix.height, fmt.fmt.pix.pixelformat);
-
-    // Store format info
-    fc->width = fmt.fmt.pix.width;
-    fc->height = fmt.fmt.pix.height;
-    fc->format = fmt.fmt.pix.pixelformat;
-
-    // Update frame source format too
-    fs->width = fc->width;
-    fs->height = fc->height;
-    fs->fmt = fc->format;
-
-    // Calculate buffer sizes
-    fs->buf_size = (fc->width * fc->height * 2); // YUV422 size
-    fc->buf_size = fs->buf_size;
-
-    pr_info("Format set: %dx%d format=0x%x buf_size=%d\n",
-            fc->width, fc->height, fc->format, fc->buf_size);
-
-    return 0;
+    return -EINVAL;
 }
 
 /***
@@ -4405,7 +4466,21 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
     struct isp_framesource_state *fs = file->private_data;
     struct frame_source_channel *fc;
     int ret = 0;
+
     pr_info("Frame channel IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
+
+    if (!fs) {
+        pr_err("No framesource state in IOCTL\n");
+        return -EINVAL;
+    }
+
+    fc = fs->fc;
+    if (!fc) {
+        pr_err("No frame channel in IOCTL\n");
+        return -EINVAL;
+    }
+
+    pr_info("  fs=%p fc=%p\n", fs, fc);
 
     mutex_lock(&fc->lock);
 
@@ -4426,8 +4501,14 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
         ret = framechan_streamoff(fc, arg);
         break;
     case 0xc07056c3: // VIDIOC_S_FMT
+        pr_info("Set format\n");
         ret = frame_channel_vidioc_set_fmt(fs, (void __user *)arg);
         break;
+    case 0x400456bf: {  // DQBUF handler
+        pr_info("DQBUF handler\n");
+        ret = framechan_dqbuf(fc, arg);
+        break;
+    }
     default:
         dev_dbg(fc->dev, "Unhandled ioctl cmd: 0x%x\n", cmd);
         ret = -ENOTTY;

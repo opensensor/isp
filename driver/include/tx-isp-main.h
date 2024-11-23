@@ -11,6 +11,7 @@
 #include <media/videobuf2-core.h>
 #include <media/v4l2-subdev.h>
 #include <tx-isp-device.h>
+#include <tx-libimp.h>
 
 
 // Add at the top of the file with other definitions
@@ -990,27 +991,6 @@ struct buffer_info {
     uint32_t status;       // Buffer status
 } __attribute__((aligned(4)));
 
-// Define the channel attribute structure (112 bytes / 0x70 bytes)
-struct channel_attr {
-    uint32_t enable;          // 0x00: Channel enable
-    uint32_t width;           // 0x04: Frame width
-    uint32_t height;          // 0x08: Frame height
-    uint32_t format;          // 0x0c: Pixel format
-    uint32_t crop_enable;     // 0x10: Crop enable
-    struct {
-        uint32_t x;           // 0x14: Crop x
-        uint32_t y;           // 0x18: Crop y
-        uint32_t width;       // 0x1c: Crop width
-        uint32_t height;      // 0x20: Crop height
-    } crop;
-    uint32_t scaler_enable;   // 0x24: Scaler enable
-    uint32_t scaler_outwidth; // 0x28: Output width
-    uint32_t scaler_outheight;// 0x2c: Output height
-    uint32_t picwidth;        // 0x30: Picture width
-    uint32_t picheight;       // 0x34: Picture height
-    char pad[0x38];          // Padding to 0x70 bytes
-} __attribute__((packed));
-
 struct frame_depth_config {
     uint32_t channel;        // Channel number
     uint32_t depth;          // Frame buffer depth
@@ -1317,40 +1297,33 @@ struct isp_framesource_state {
     wait_queue_head_t wait;
     int is_open;            // 1 = initialized
 
-    // Channel attributes
-    struct {
-        uint32_t enable;     // Channel enable flag
-
-        // Crop configuration
+    // Channel attributes - MUST match libimp exactly
+    // Need to accept format exactly as libimp expects:
+    struct channel_attr {
+        uint32_t enable;          // 0x00: Must be 1
+        uint32_t width;           // 0x04: Frame width from libimp
+        uint32_t height;          // 0x08: Frame height from libimp
+        uint32_t format;          // 0x0c: Format code (0x22 for YUV422)
+        uint32_t crop_enable;     // 0x10
         struct {
-            uint32_t enable;  // Crop enable flag
-            uint32_t top;     // Top position
-            uint32_t left;    // Left position
-            uint32_t width;   // Crop width
-            uint32_t height;  // Crop height
-        } __packed crop;     // Use packed to maintain alignment
+            uint32_t x;           // 0x14
+            uint32_t y;           // 0x18
+            uint32_t width;       // 0x1c
+            uint32_t height;      // 0x20
+        } crop;
+        uint32_t scaler_enable;   // 0x24
+        uint32_t scaler_outwidth; // 0x28
+        uint32_t scaler_outheight;// 0x2c
+        uint32_t picwidth;        // 0x30
+        uint32_t picheight;       // 0x34
+        char pad[0x38];          // Padding to 0x70 bytes
+    }__aligned(4) attr;
 
-        // Frame crop configuration
-        struct {
-            uint32_t enable;  // Frame crop enable
-            uint32_t top;     // Top position
-            uint32_t left;    // Left position
-            uint32_t width;   // Frame crop width
-            uint32_t height;  // Frame crop height
-        } __packed fcrop;
-
-        // Scaler configuration
-        struct {
-            uint32_t enable;     // Scale enable flag
-            uint32_t outwidth;   // Output width
-            uint32_t outheight;  // Output height
-        } __packed scaler;
-    } __aligned(4) attr;     // Keep 4-byte alignment
-
-        // Pre-dequeue support
+    // Pre-dequeue support
     int pre_dequeue_count;
     bool pre_dequeue_interrupt_process;
 } __attribute__((aligned(8)));
+
 
 // Add this structure to track open instances
 struct isp_instance {
@@ -1758,6 +1731,7 @@ struct frame_source_channel {
     struct device *dev;               // Parent device
     int channel_id;                   // Channel number
     uint32_t state;                   // Channel state
+    uint32_t buf_count;               // Number of buffers
 
     /* Memory management */
     void *buf_base;                   // Virtual base address
