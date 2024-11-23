@@ -4027,106 +4027,57 @@ static int setup_channel_attrs(struct isp_framesource_state *fs, struct channel_
     return 0;
 }
 
-// And add buffer setup in open
-int framechan_open(struct inode *inode, struct file *file) {
-    struct isp_framesource_state *fs;
+static int framechan_open(struct inode *inode, struct file *file)
+{
+    int channel = iminor(inode);
+    struct isp_framesource_state *fs = &ourISPdev->frame_sources[channel];
     struct frame_source_channel *fc;
-    int minor = iminor(inode);
-    uint32_t base_offset = 0x1094d4;
 
-    pr_info("Opening framechan%d\n", minor);
+    pr_info("Opening framechan%d\n", channel);
 
-    if (!ourISPdev) {
-        pr_err("No ISP device available\n");
-        return -ENODEV;
-    }
-
-    // Initialize the channel's private data
-    fs = &ourISPdev->frame_sources[minor];
-    if (!fs) {
-        pr_err("Failed to get frame source state\n");
-        return -EINVAL;
-    }
-
-    pr_info("Got frame source: %p state=%d\n", fs, fs->state);
-
-    if (!fs->is_open) {
-        // Allocate channel data
+    if (!fs->fc) {
+        // Allocate channel state
         fc = kzalloc(sizeof(*fc), GFP_KERNEL);
         if (!fc) {
-            pr_err("Failed to allocate frame channel\n");
+            pr_err("Failed to allocate channel state\n");
             return -ENOMEM;
         }
 
-        // Initialize mutex first
+        // Initialize channel
+        fc->channel_id = channel;
+        fc->dev = ourISPdev->dev;
         mutex_init(&fc->lock);
 
-        // Initialize channel dimensions
-        fs->width = 1920;
-        fs->height = 1080;
-        fs->buf_cnt = 4;
-        fs->buf_size = fs->width * fs->height * 2;
-
-        // Map memory with proper offsets
-        fs->buf_base = ourISPdev->dma_buf + base_offset +
-                      (minor * fs->buf_size * fs->buf_cnt);
-        fs->dma_addr = ourISPdev->dma_addr + base_offset +
-                      (minor * fs->buf_size * fs->buf_cnt);
-
-        // Initialize channel data
-        fc->channel_id = minor;
-        fc->buf_base = fs->buf_base;
-        fc->dma_addr = fs->dma_addr;
-        fc->buf_size = fs->buf_size;
-        fc->state = 1;  // Ready state
-        fc->channel_offset = minor * (fs->buf_size * fs->buf_cnt);
+        // Copy format info from frame source
         fc->width = fs->width;
         fc->height = fs->height;
+        fc->format = 0x23;  // Default to NV12
+        fc->buf_size = (fc->width * fc->height * 3) / 2;  // NV12 size
+        fc->buf_count = fs->buf_cnt;
+        fc->sequence = 0;
 
-        // Initialize queue
-        spin_lock_init(&fc->queue.lock);
-        INIT_LIST_HEAD(&fc->queue.ready_list);
-        INIT_LIST_HEAD(&fc->queue.done_list);
-        init_waitqueue_head(&fc->queue.wait);
-        atomic_set(&fc->queue.frames_ready, 0);
-        atomic_set(&fc->queue.frames_queued, 0);
-        atomic_set(&fc->queue.frames_completed, 0);
+        // Use our DMA buffer for channel 1
+        if (channel == 1) {
+            fc->buf_base = ourISPdev->dma_buf;
+            fc->channel_offset = 0xfd2000;
+            fc->state = 1;
+
+            pr_info("Initialized frame channel:\n");
+            pr_info("  fc=%p\n", fc);
+            pr_info("  buf_base=%p\n", fc->buf_base);
+            pr_info("  dma_addr=0x%llx\n", (u64)ourISPdev->dma_addr);
+            pr_info("  dma_size=%zu\n", ourISPdev->dma_size);
+            pr_info("  state=%d\n", fc->state);
+        }
 
         fs->fc = fc;
-        fs->is_open = 1;
-
-        pr_info("Initialized frame channel:\n");
-        pr_info("  fc=%p\n", fc);
-        pr_info("  buf_base=%p\n", fc->buf_base);
-        pr_info("  dma_addr=0x%x\n", (unsigned int)fc->dma_addr);
-        pr_info("  state=%d\n", fc->state);
-    } else {
-        if (!fs->fc) {
-            // Need to initialize fc even for existing channel
-            fc = kzalloc(sizeof(*fc), GFP_KERNEL);
-            if (!fc) {
-                pr_err("Failed to allocate frame channel\n");
-                return -ENOMEM;
-            }
-
-            mutex_init(&fc->lock);
-
-            // Initialize minimal channel data
-            fc->channel_id = minor;
-            fc->state = 1;
-            fc->width = fs->width;
-            fc->height = fs->height;
-
-            fs->fc = fc;
-        }
-        fc = fs->fc;
     }
 
-    // Store frame source pointer
+    fs->is_open++;
     file->private_data = fs;
 
     pr_info("Framechan%d opened successfully: fs=%p fc=%p\n",
-            minor, fs, fs->fc);
+            channel, fs, fs->fc);
 
     return 0;
 }
@@ -4352,101 +4303,106 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
         u32 params[4];
     } req;
 
+    // Video buffer frame info
+    struct {
+        u32 index;
+        u32 type;
+        u32 bytesused;
+        u32 flags;
+        u32 field;
+        u32 timestamp_s;
+        u32 timestamp_us;
+        u32 timecode;
+        u32 sequence;
+        u32 memory;
+        u32 offset;
+        u32 length;
+        u32 reserved[4];
+        u32 width;
+        u32 height;
+        u32 fps_num;
+        u32 fps_den;
+        u32 format;
+    } __attribute__((packed)) resp;
+
+    // Pattern generation variables
+    u8 *dst;
+    int y_size;
+    u8 y_val = 0;
+    int color = 0;
+    struct timeval tv;
+
     if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
         return -EFAULT;
 
+    pr_info("DQBUF handler\n");
     pr_info("DQBUF call: cmd=0x%x seq=%d flags=0x%x streaming=%d\n",
             req.cmd, req.seq, req.flags, (fc->state & BIT(1)));
 
     if (req.cmd == 0xffffffff) {
-        if ((fc->state & BIT(1)) == 0) {
-            pr_err("DQBUF: Not streaming\n");
-            return -EINVAL;
-        }
+        do_gettimeofday(&tv);
 
-        if (!fc->buf_base || !fc->buf_size) {
-            pr_err("DQBUF: Invalid buffer state\n");
-            return -EINVAL;
-        }
+        // Initialize response
+        memset(&resp, 0, sizeof(resp));
+        resp.index = fc->sequence % fc->buf_count;
+        resp.type = 1;  // Video capture
+        resp.bytesused = fc->buf_size;
+        resp.flags = 0x3;
+        resp.timestamp_s = tv.tv_sec;
+        resp.timestamp_us = tv.tv_usec;
+        resp.sequence = fc->sequence;
+        resp.memory = 1;  // Memory mapped
+        resp.offset = fc->channel_offset;
+        resp.length = fc->buf_size;
+        resp.width = fc->width;
+        resp.height = fc->height;
+        resp.fps_num = 30;
+        resp.fps_den = 1;
+        resp.format = fc->format;
 
-        void *buffer = fc->buf_base + fc->channel_offset;
-        size_t frame_size = fc->buf_size;
+        // Generate pattern
+        if (fc->buf_base && fc->buf_size) {
+            dst = fc->buf_base + fc->channel_offset;
+            y_size = fc->width * fc->height;
 
-        pr_info("Generating frame %d at %p offset=0x%x\n",
-                fc->sequence, buffer, fc->channel_offset);
+            // Y plane
+            y_val = (fc->sequence % 2) ? 235 : 16;
+            memset(dst, y_val, y_size);
 
-        // Generate test pattern
-        u8 *dst = buffer;
-        int y_size = fc->width * fc->height;
+            // UV plane
+            if (fc->format == 0x23) { // NV12
+                u8 *uv = dst + y_size;
+                color = fc->sequence % 4;
 
-        // Y plane
-        u8 y_val = (fc->sequence % 2) ? 235 : 16;
-        memset(dst, y_val, y_size);
-
-        // UV plane for NV12
-        if (fc->format == 0x23) {
-            u8 *uv = dst + y_size;
-            switch (fc->sequence % 4) {
-                case 0: // Red
-                    for (int i = 0; i < y_size/2; i += 2) {
-                        uv[i] = 128;    // U = neutral
-                        uv[i+1] = 240;  // V = red
-                    }
-                    break;
-                case 1: // Blue
-                    for (int i = 0; i < y_size/2; i += 2) {
-                        uv[i] = 240;    // U = blue
-                        uv[i+1] = 128;  // V = neutral
-                    }
-                    break;
-                case 2: // Green
-                    for (int i = 0; i < y_size/2; i += 2) {
-                        uv[i] = 0;      // U
-                        uv[i+1] = 0;    // V
-                    }
-                    break;
-                case 3: // Yellow
-                    for (int i = 0; i < y_size/2; i += 2) {
-                        uv[i] = 0;      // U
-                        uv[i+1] = 240;  // V
-                    }
-                    break;
+                switch (color) {
+                    case 0: // Red
+                        memset(uv, 0x80, y_size/2);
+                        memset(uv+1, 0xF0, y_size/2);
+                        break;
+                    case 1: // Green
+                        memset(uv, 0, y_size);
+                        break;
+                    case 2: // Blue
+                        memset(uv, 0xF0, y_size/2);
+                        memset(uv+1, 0x80, y_size/2);
+                        break;
+                    case 3: // Yellow
+                        memset(uv, 0, y_size/2);
+                        memset(uv+1, 0xF0, y_size/2);
+                        break;
+                }
             }
+            wmb();
         }
-
-        wmb();
-
-        pr_info("Generated frame %d: color=%d y=%d size=%d\n",
-                fc->sequence, fc->sequence % 4, y_val, frame_size);
-
-        struct {
-            u32 status;
-            u32 size;
-            u32 timestamp;
-            u32 flags;
-            u32 sequence;
-            u32 offset;
-            u32 buf_size;
-            u32 width;
-            u32 height;
-            u32 format;
-            u32 reserved[5];
-        } resp = {
-            .status = 0,
-            .size = frame_size,
-            .timestamp = jiffies_to_msecs(jiffies),
-            .flags = 3,
-            .sequence = fc->sequence++,
-            .offset = fc->channel_offset,
-            .buf_size = fc->buf_size,
-            .width = fc->width,
-            .height = fc->height,
-            .format = fc->format
-        };
 
         if (copy_to_user((void __user *)arg, &resp, sizeof(resp)))
             return -EFAULT;
 
+        pr_info("Generated frame %d: color=%d y=%d size=%d fps=%d/%d\n",
+                fc->sequence, color, y_val,
+                resp.bytesused, resp.fps_num, resp.fps_den);
+
+        fc->sequence++;
         return 0;
     }
 
@@ -4524,24 +4480,20 @@ static int framechan_release(struct inode *inode, struct file *file)
     struct frame_source_channel *fc;
 
     if (!fs)
-        return 0;
+        return -EINVAL;
 
     fc = fs->fc;
-    if (fc) {
-        // Clean up channel data
-        if (fs->state == 2) {
-            // Disable streaming first
-            writel(0, ourISPdev->reg_base + ISP_STREAM_START);
-            writel(0, ourISPdev->reg_base + ISP_STREAM_CTRL);
-            wmb();
-            fs->state = 1;
-        }
+    if (!fc)
+        return -EINVAL;
 
+    fs->is_open--;
+
+    if (fs->is_open == 0) {
+        // Don't free buf_base as it's our reserved memory
         kfree(fc);
         fs->fc = NULL;
     }
 
-    fs->is_open = 0;
     return 0;
 }
 
