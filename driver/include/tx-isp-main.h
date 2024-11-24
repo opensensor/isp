@@ -1263,6 +1263,7 @@ struct isp_framesource_state {
         uint32_t picheight;       // 0x34
         char pad[0x38];          // Padding to 0x70 bytes
     }__aligned(4) attr;
+    bool attr_set;
 
     // Pre-dequeue support
     int pre_dequeue_count;

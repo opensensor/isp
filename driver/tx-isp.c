@@ -870,6 +870,52 @@ static int isp_core_tuning_release(struct IMPISPDev *dev)
     return 0;
 }
 
+static int framechan_get_attr(struct isp_framesource_state *fs, struct imp_channel_attr *attr)
+{
+    if (!fs || !attr) {
+        pr_err("Invalid parameters in get attributes\n");
+        return -EINVAL;
+    }
+
+    // Check if attributes have been set
+    if (!fs->attr_set) {
+        pr_err("IMP_FrameSource_GetChnAttr(): chnAttr was not set yet\n");
+        return -EINVAL;
+    }
+
+    // Copy the full attribute structure
+    memcpy(attr, &fs->attr, sizeof(*attr));
+
+    return 0;
+}
+
+// Add IOCTL handler for getting attributes
+static long frame_channel_vidioc_get_fmt(struct isp_framesource_state *fs, void __user *arg)
+{
+    struct imp_channel_attr attr;
+    int ret;
+
+    pr_debug("Get format entry: fs=%p arg=%p\n", fs, arg);
+
+    if (!fs || !fs->fc) {
+        pr_err("Invalid fs or fc\n");
+        return -EINVAL;
+    }
+
+    ret = framechan_get_attr(fs, &attr);
+    if (ret) {
+        return ret;
+    }
+
+    // Copy to user space
+    if (copy_to_user(arg, &attr, sizeof(attr))) {
+        pr_err("Failed to copy format struct to user\n");
+        return -EFAULT;
+    }
+
+    return 0;
+}
+
 
 /*
  * ISP-M0 IOCTL handler
@@ -3898,27 +3944,27 @@ pr_info("VIC state after link op 0x%x:\n"
 		pr_info("VIDIOC_STREAMOFF\n");
         return enable_isp_streaming(ourISPdev, file, channel, false);
 	    break;
-// Add to your framechan_ioctl switch:
-case 0x40145609: {  // QBUF handler
-    struct {
-        u32 index;
-        u32 size;
-        u32 timestamp;
-        u32 flags;
-    } req;
+    // Add to your framechan_ioctl switch:
+    case 0x40145609: {  // QBUF handler
+        struct {
+            u32 index;
+            u32 size;
+            u32 timestamp;
+            u32 flags;
+        } req;
 
-    if (copy_from_user(&req, (void __user *)arg, sizeof(req))) {
-        pr_err("QBUF: Failed to copy from user\n");
-        return -EFAULT;
+        if (copy_from_user(&req, (void __user *)arg, sizeof(req))) {
+            pr_err("QBUF: Failed to copy from user\n");
+            return -EFAULT;
+        }
+
+        pr_info("QBUF: index=%d size=%d flags=0x%x\n",
+                req.index, req.size, req.flags);
+
+	    // TODO
+
+        return 0;
     }
-
-    pr_info("QBUF: index=%d size=%d flags=0x%x\n",
-            req.index, req.size, req.flags);
-
-	// TODO
-
-    return 0;
-}
 	case VIDIOC_S_CROP: {
 	    struct v4l2_crop crop;
 	    if (copy_from_user(&crop, argp, sizeof(crop)))
@@ -4161,7 +4207,7 @@ cleanup:
     return ret;
 }
 
-static int setup_channel_attrs(struct isp_framesource_state *fs, struct channel_attr *attr)
+static int setup_channel_attrs(struct isp_framesource_state *fs, struct imp_channel_attr *attr)
 {
     // Store new attributes
     memcpy(&fs->attr, attr, sizeof(*attr));
@@ -4351,89 +4397,106 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
 
 
 
-static int frame_channel_vidioc_set_fmt(struct isp_framesource_state *fs, void __user *arg)
+static int frame_channel_vidioc_fmt(struct isp_framesource_state *fs, void __user *arg, bool is_get)
 {
-    pr_info("Format set entry: fs=%p arg=%p\n", fs, arg);
+    pr_info("%s format\n", is_get ? "Get" : "Set");
+    pr_info("Format %s entry: fs=%p arg=%p\n", is_get ? "get" : "set", fs, arg);
 
     if (!fs || !fs->fc) {
         pr_err("Invalid fs or fc\n");
         return -EINVAL;
     }
 
-    // First dump the raw bytes to verify what we're getting
-    unsigned char bytes[32];
-    if (copy_from_user(bytes, arg, sizeof(bytes))) {
-        pr_err("Failed to copy raw bytes\n");
-        return -EFAULT;
-    }
+    if (is_get) {
+        // Handle get format
+        if (!fs->attr_set) {
+            pr_err("IMP_FrameSource_GetChnAttr(): chnAttr was not set yet\n");
+            return -EINVAL;
+        }
 
-    pr_info("Raw format bytes: ");
-    for (int i = 0; i < 16; i++) {
-        pr_cont("%02x ", bytes[i]);
-    }
-    pr_cont("\n");
-
-    struct {
-        u32 type;
-        u32 width;
-        u32 height;
-        union {
-            u32 pixelformat;    // As a 32-bit value
-            char pix_str[4];    // As a 4-char string
-        };
-        u32 rest[4];           // Remaining fields
-    } fmt;
-
-    if (copy_from_user(&fmt, arg, sizeof(fmt))) {
-        pr_err("Failed to copy format struct\n");
-        return -EFAULT;
-    }
-
-    pr_info("Format request:\n");
-    pr_info("  type=%d width=%d height=%d\n", fmt.type, fmt.width, fmt.height);
-    pr_info("  pixelformat=0x%x ('%c%c%c%c')\n",
-            fmt.pixelformat,
-            fmt.pix_str[0], fmt.pix_str[1],
-            fmt.pix_str[2], fmt.pix_str[3]);
-
-    // Convert pixel format code to our internal format
-    u32 internal_format;
-    if (fmt.pix_str[0] == 'N' && fmt.pix_str[1] == 'V' &&
-        fmt.pix_str[2] == '1' && fmt.pix_str[3] == '2') {
-        internal_format = 0x23;  // NV12
-    } else if (fmt.pix_str[0] == 'Y' && fmt.pix_str[1] == 'U' &&
-               fmt.pix_str[2] == '1' && fmt.pix_str[3] == '2') {
-        internal_format = 0x22;  // YUV422
+        // Copy current format back to user
+        if (copy_to_user(arg, &fs->attr, sizeof(fs->attr))) {
+            pr_err("Failed to copy format struct to user\n");
+            return -EFAULT;
+        }
     } else {
-        pr_err("Unsupported pixel format: %c%c%c%c\n",
-               fmt.pix_str[0], fmt.pix_str[1],
-               fmt.pix_str[2], fmt.pix_str[3]);
-        return -EINVAL;
+        // First dump the raw bytes to verify what we're getting
+        unsigned char bytes[32];
+        if (copy_from_user(bytes, arg, sizeof(bytes))) {
+            pr_err("Failed to copy raw bytes\n");
+            return -EFAULT;
+        }
+
+        pr_info("Raw format bytes: ");
+        for (int i = 0; i < 16; i++) {
+            pr_cont("%02x ", bytes[i]);
+        }
+        pr_cont("\n");
+
+        // Handle set format
+        struct {
+            u32 type;
+            u32 width;
+            u32 height;
+            union {
+                u32 pixelformat;    // As a 32-bit value
+                char pix_str[4];    // As a 4-char string
+            };
+            u32 rest[4];           // Remaining fields
+        } fmt;
+
+        if (copy_from_user(&fmt, arg, sizeof(fmt))) {
+            pr_err("Failed to copy format struct\n");
+            return -EFAULT;
+        }
+
+        pr_info("Format request:\n");
+        pr_info("  type=%d width=%d height=%d\n", fmt.type, fmt.width, fmt.height);
+        pr_info("  pixelformat=0x%x ('%c%c%c%c')\n",
+                fmt.pixelformat,
+                fmt.pix_str[0], fmt.pix_str[1],
+                fmt.pix_str[2], fmt.pix_str[3]);
+
+        // Convert pixel format code to our internal format
+        u32 internal_format;
+        if (fmt.pix_str[0] == 'N' && fmt.pix_str[1] == 'V' &&
+            fmt.pix_str[2] == '1' && fmt.pix_str[3] == '2') {
+            internal_format = 0x23;  // NV12
+        } else if (fmt.pix_str[0] == 'Y' && fmt.pix_str[1] == 'U' &&
+                  fmt.pix_str[2] == '1' && fmt.pix_str[3] == '2') {
+            internal_format = 0x22;  // YUV422
+        } else {
+            pr_err("Unsupported pixel format: %c%c%c%c\n",
+                   fmt.pix_str[0], fmt.pix_str[1],
+                   fmt.pix_str[2], fmt.pix_str[3]);
+            return -EINVAL;
+        }
+
+        // Update channel format info
+        fs->width = fmt.width;
+        fs->height = fmt.height;
+        fs->fmt = internal_format;
+
+        fs->fc->width = fmt.width;
+        fs->fc->height = fmt.height;
+        fs->fc->format = internal_format;
+
+        // Calculate buffer size
+        size_t buf_size;
+        if (internal_format == 0x22) { // YUV422
+            buf_size = fmt.width * fmt.height * 2;
+        } else { // NV12
+            buf_size = (fmt.width * fmt.height * 3) / 2;
+        }
+        fs->buf_size = buf_size;
+        fs->fc->buf_size = buf_size;
+        fs->attr_set = true;
+
+        pr_info("Format set: %dx%d format=%s (internal=0x%x)\n",
+                fs->width, fs->height,
+                internal_format == 0x23 ? "NV12" : "YUV422",
+                internal_format);
     }
-
-    // Update channel format info
-    fs->width = fmt.width;
-    fs->height = fmt.height;
-    fs->fmt = internal_format;
-
-    fs->fc->width = fmt.width;
-    fs->fc->height = fmt.height;
-    fs->fc->format = internal_format;
-
-    // Calculate buffer size
-    size_t buf_size;
-    if (internal_format == 0x22) { // YUV422
-        buf_size = fmt.width * fmt.height * 2;
-    } else { // NV12
-        buf_size = (fmt.width * fmt.height * 3) / 2;
-    }
-    fs->buf_size = buf_size;
-    fs->fc->buf_size = buf_size;
-
-    pr_info("Format set: %dx%d format=%s (internal=0x%x)\n",
-            fs->width, fs->height,
-            internal_format == 0x23 ? "NV12" : "YUV422",
-            internal_format);
 
     return 0;
 }
@@ -4766,8 +4829,13 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
         ret = framechan_streamoff(fc, arg);
         break;
     case 0xc07056c3: // VIDIOC_S_FMT
-        pr_info("Set format\n");
-        ret = frame_channel_vidioc_set_fmt(fs, (void __user *)arg);
+        unsigned int type;
+        if (get_user(type, (unsigned int __user *)arg)) {
+            ret = -EFAULT;
+            break;
+        }
+        // If type has high bit set, it's a GET operation
+        ret = frame_channel_vidioc_fmt(fs, (void __user *)arg, (type & 0x80000000));
         break;
     case 0x400456bf: {  // DQBUF handler
         ret = framechan_get_frame_status(fc, arg);

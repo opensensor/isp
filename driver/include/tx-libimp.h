@@ -209,7 +209,7 @@ struct tisp_param {
 
 // From the decompiled code, we see a struct of 4-word entries being copied in a loop
 // up to offset 0x70 (112 bytes), suggesting this structure size
-struct channel_attr {
+struct imp_channel_attr {
     __u32 attr[28];  // 28 words = 112 bytes (0x70)
 };
 
