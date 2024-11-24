@@ -1296,18 +1296,32 @@ struct ae_statistics {
 
 // AE (Auto Exposure) info structure
 struct ae_info {
-    uint32_t gain;
-    uint32_t exposure;
-    uint32_t flags;
-    // Add other AE parameters as needed
+    u32 gain;                // Basic gain value
+    u32 exposure;            // Basic exposure value
+    u32 gain_factor;         // Gain multiplication factor
+    u32 exposure_factor;     // Exposure multiplication factor
+    u32 wdr_gain;           // WDR-specific gain
+    u32 wdr_exposure;        // WDR-specific exposure
+    u32 default_gain;        // Default gain value
+    u32 default_exposure;    // Default exposure value
+    u32 min_gain;           // Minimum allowed gain
+    u32 max_gain;           // Maximum allowed gain
+    u32 min_exposure;       // Minimum allowed exposure
+    u32 max_exposure;       // Maximum allowed exposure
+    u32 target_luminance;   // Target luminance level
+    // Add any other fields needed by tiziano_ae_init
 };
 
-// AWB (Auto White Balance) info structure
+// AWB info structure - complete definition based on usage
 struct awb_info {
-    uint32_t gain;
-    uint32_t exposure;
-    uint32_t color_temp;
-    // Add other AWB parameters as needed
+    u32 r_gain;             // Red gain
+    u32 g_gain;             // Green gain
+    u32 b_gain;             // Blue gain
+    u32 temperature;        // Color temperature
+    u32 default_gains[3];   // Default RGB gains
+    u32 current_gains[3];   // Current RGB gains
+    u32 target_gains[3];    // Target RGB gains
+    // Add any other fields needed by tiziano_awb_init
 };
 
 struct isp_event_callback {
@@ -1524,7 +1538,9 @@ struct IMPISPDev {
     struct isp_tuning_state *tuning_state;
     int tuning_enabled;  // 0 = disabled, 2 = enabled
     u32 instance;  // For passing to tuning state
-
+    struct ae_info *ae_info;
+    struct awb_info *awb_info;
+    uint32_t wdr_mode;
 
     /* Buffer management */
     struct {

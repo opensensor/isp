@@ -159,7 +159,6 @@ static const struct tx_isp_link_configs isp_link_configs[] = {
 
 /* Global state variables seen in decompiled */
 static void *ae_info_mine;
-static void *ae_statis_mine;
 static void *awb_info_mine;
 static int ae_algo_comp;
 static int awb_algo_comp;
@@ -191,6 +190,19 @@ static inline u32 system_reg_read(u32 reg)
 
     return val;
 }
+
+
+static inline void system_reg_write(u32 reg, u32 val)
+{
+    void __iomem *addr = ioremap(reg, 4);
+
+    if (!addr)
+        return;
+
+    writel(val, addr);
+    iounmap(addr);
+}
+
 
 /****
 * The following methods are made available to libimp.so
@@ -714,6 +726,9 @@ static int isp_m0_chardev_open(struct inode *inode, struct file *file)
         return -ENODEV;
     }
 
+    // Store device reference
+    file->private_data = ourISPdev;
+
     // Allocate tuning data if not already allocated
     if (!ourISPdev->tuning_data) {
         tuning = kzalloc(sizeof(struct isp_tuning_data), GFP_KERNEL);
@@ -739,6 +754,25 @@ static int isp_m0_chardev_open(struct inode *inode, struct file *file)
     file->private_data = ourISPdev;
 
     pr_info("ISP M0 device opened, tuning_data=%p\n", ourISPdev->tuning_data);
+    return 0;
+}
+
+
+static int isp_core_tuning_release(struct IMPISPDev *dev)
+{
+    pr_info("##### %s %d #####\n", __func__, __LINE__);
+
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    // Free tuning state if allocated
+    if (dev->tuning_state) {
+        mutex_destroy(&dev->tuning_state->mlock);
+        kfree(dev->tuning_state);
+        dev->tuning_state = NULL;
+    }
+
     return 0;
 }
 
@@ -826,24 +860,6 @@ static int isp_core_tuning_open(struct IMPISPDev *dev)
     tuning->params[TUNING_OFF_GAMMA] = 128;
 
     dev->tuning_data = tuning;
-
-    return 0;
-}
-
-static int isp_core_tuning_release(struct IMPISPDev *dev)
-{
-    pr_info("##### %s %d #####\n", __func__, __LINE__);
-
-    if (!dev) {
-        return -EINVAL;
-    }
-
-    // Free tuning state if allocated
-    if (dev->tuning_state) {
-        mutex_destroy(&dev->tuning_state->mlock);
-        kfree(dev->tuning_state);
-        dev->tuning_state = NULL;
-    }
 
     return 0;
 }
@@ -1226,7 +1242,7 @@ static int handle_isp_get_ctrl(struct isp_core_ctrl *ctrl)
 // Handle set control operations
 static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl)
 {
-    struct isp_tuning_state *tuning;
+    struct isp_tuning_state *tuning = ourISPdev->tuning_data;
     int ret = 0;
     u32 flip_val;
 
@@ -1235,8 +1251,6 @@ static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl)
     if (!ourISPdev || !ourISPdev->tuning_data) {
         return -EINVAL;
     }
-
-    struct isp_tuning_state *tuning = ourISPdev->tuning_data;
 
     // Lock tuning state
     mutex_lock(&tuning->mlock);
@@ -1270,9 +1284,9 @@ static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl)
             // Update hardware register
             flip_val = system_reg_read(ISP_FLIP_CTRL_REG);
             if (ctrl->value)
-                flip_val |= ISP_FLIP_HFLIP;
+                flip_val |= ISP_CTRL_HFLIP;
             else
-                flip_val &= ~ISP_FLIP_HFLIP;
+                flip_val &= ~ISP_CTRL_HFLIP;
             system_reg_write(ISP_FLIP_CTRL_REG, flip_val);
 
             // Signal frame wait
@@ -1288,9 +1302,9 @@ static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl)
             // Update hardware register
             flip_val = system_reg_read(ISP_FLIP_CTRL_REG);
             if (ctrl->value)
-                flip_val |= ISP_FLIP_VFLIP;
+                flip_val |= ISP_CTRL_VFLIP;
             else
-                flip_val &= ~ISP_FLIP_VFLIP;
+                flip_val &= ~ISP_CTRL_VFLIP;
             system_reg_write(ISP_FLIP_CTRL_REG, flip_val);
 
             // Signal frame wait
@@ -2176,35 +2190,6 @@ struct isp_ae_algo {
 };
 
 /**
- * struct isp_ae_info - AE information structure
- * Based on decompiled access patterns
- */
-struct isp_ae_info {
-    /* Current settings */
-    u32 gain;
-    u32 exposure;
-    u32 gain_factor;
-    u32 exposure_factor;    /* Fixed 0x400 from decompiled */
-
-    /* WDR specific settings */
-    u32 wdr_gain;
-    u32 wdr_exposure;
-
-    /* Algorithm state */
-    u32 frame_cnt;
-    u32 stable_cnt;
-    u32 converge_cnt;
-
-    /* Statistics */
-    u32 current_lum;
-    u32 target_lum;
-    u32 avg_lum;
-
-    /* Reserved for future use */
-    u32 reserved[16];
-};
-
-/**
  * struct isp_ae_stats - AE statistics structure
  * Based on decompiled memory allocation size
  */
@@ -2395,17 +2380,6 @@ static int isp_hw_init(struct IMPISPDev *dev)
    	return 0;
 }
 
-
-static inline void system_reg_write(u32 reg, u32 val)
-{
-    void __iomem *addr = ioremap(reg, 4);
-
-    if (!addr)
-        return;
-
-    writel(val, addr);
-    iounmap(addr);
-}
 
 
 static int tx_isp_open(struct file *file)
@@ -2888,7 +2862,7 @@ static void isp_disable_wdr(struct IMPISPDev *dev)
  */
 int init_ae_algo(struct IMPISPDev *dev, struct isp_ae_algo *ae)
 {
-    struct isp_ae_info *ae_info;
+    struct ae_info *ae_info;
     struct isp_reg_t *regs;
 
     /* Validate magic number - check at 0xef64 */
@@ -2902,18 +2876,10 @@ int init_ae_algo(struct IMPISPDev *dev, struct isp_ae_algo *ae)
     tisp_ae_algo_init(1, ae);
 
     /* Allocate statistics buffer - matches 0xf048/0xf068 */
-    ae_info = kmalloc(sizeof(*ae_info), GFP_KERNEL);
-    if (!ae_info)
-        return -ENOMEM;
-
-    ae_statis_mine = kmalloc(sizeof(struct isp_ae_stats), GFP_KERNEL);
-    if (!ae_statis_mine) {
-        kfree(ae_info);
+    ae_info = dev->ae_info;
+    if (!ae_info) {
         return -ENOMEM;
     }
-
-    /* Store globally - matches 0xf060 */
-    ae_info_mine = ae_info;
 
     /* Get register base */
     regs = (struct isp_reg_t *)dev->reg_base;  // Cast the void* regs to proper type
@@ -2956,9 +2922,10 @@ int init_awb_algo(struct IMPISPDev *dev, struct isp_awb_algo *awb)
     tisp_awb_algo_init(1);
 
     /* Allocate info structure - matches 0xf290 */
-    awb_info = kmalloc(sizeof(*awb_info), GFP_KERNEL);
-    if (!awb_info)
+    awb_info = dev->awb_info;
+    if (!awb_info) {
         return -ENOMEM;
+    }
 
     /* Store globally - matches assignment at 0xf290 */
     awb_info_mine = awb_info;
@@ -3336,8 +3303,8 @@ static int tiziano_awb_init(uint32_t gain, uint32_t exposure)
     void __iomem *regs = ourISPdev->reg_base;
 
     // Store initial values
-    //ourISPdev->awb_info.gain = gain;
-    //ourISPdev->awb_info.exposure = exposure;
+    //ourISPdev->awb_info->gain = gain;
+    //ourISPdev->awb_info->exposure = exposure;
 
     // Set initial color gains
     writel(0x100, regs + 0x1100); // R gain
@@ -3422,76 +3389,74 @@ static int init_isp_subsystems(struct IMPISPDev *dev)
         return -EINVAL;
     }
 
-    // Initialize AE/AWB info with safe defaults  // TODO
-//    dev->ae_info.gain = 0x100;     // Default gain
-//    dev->ae_info.exposure = 0x100;  // Default exposure
+    // Create an ae_info structure
+    dev->ae_info = kzalloc(sizeof(struct ae_info), GFP_KERNEL);
+    if (!dev->ae_info) {
+        pr_err("Failed to allocate ae_info structure\n");
+        return -ENOMEM;
+    }
 
-//    dev->awb_info.gain = 0x100;
-//    dev->awb_info.exposure = 0x100;
+    // Initialize AE/AWB info with safe defaults
+    dev->ae_info->gain = 0x100;     // Default gain
+    dev->ae_info->exposure = 0x100;  // Default exposure
+
+    dev->awb_info = kzalloc(sizeof(struct awb_info), GFP_KERNEL);
+    if (!dev->awb_info) {
+        pr_err("Failed to allocate awb_info structure\n");
+        return -ENOMEM;
+    }
+
+    dev->awb_info->gain = 0x100;
+    dev->awb_info->exposure = 0x100;
 
     pr_info("Initializing AE/AWB subsystems\n");
-//    ret = tiziano_ae_init(dev->ae_info.gain, dev->ae_info.exposure);
-//    if (ret) {
-//        pr_err("Failed to initialize AE\n");
-//        return ret;
-//    }
+    ret = tiziano_ae_init(dev->ae_info->gain, dev->ae_info->exposure);
+    if (ret) {
+        pr_err("Failed to initialize AE\n");
+        return ret;
+    }
 
-    // ret = tiziano_awb_init(dev->awb_info.gain, dev->awb_info.exposure);
+    ret = tiziano_awb_init(dev->awb_info->gain, dev->awb_info->exposure);
     if (ret) {
         pr_err("Failed to initialize AWB\n");
         return ret;
     }
 
     pr_info("TODO Initializing image processing subsystems\n");
-//
-//    // Initialize each subsystem with error checking
-//    if ((ret = tiziano_gamma_init()) ||
-//        (ret = tiziano_gib_init()) ||
-//        (ret = tiziano_lsc_init()) ||
-//        (ret = tiziano_ccm_init()) ||
-//        (ret = tiziano_dmsc_init()) ||
-//        (ret = tiziano_sharpen_init()) ||
-//        (ret = tiziano_sdns_init()) ||
-//        (ret = tiziano_mdns_init()) ||
-//        (ret = tiziano_clm_init()) ||
-//        (ret = tiziano_dpc_init()) ||
-//        (ret = tiziano_hldc_init()) ||
-//        (ret = tiziano_defog_init()) ||
-//        (ret = tiziano_adr_init()) ||
-//        (ret = tiziano_af_init()) ||
-//        (ret = tiziano_bcsh_init()) ||
-//        (ret = tiziano_ydns_init()) ||
-//        (ret = tiziano_rdns_init())) {
-//
-//        pr_err("Failed to initialize subsystem, ret = %d\n", ret);
-//        return ret;
-//    }
-//
-//    // WDR mode initialization
-//    if (dev->wdr_mode == 1) {
-//        pr_info("Initializing WDR mode\n");
-//        if ((ret = tiziano_wdr_init()) ||
-//            (ret = tisp_gb_init()) ||
-//            (ret = tisp_dpc_wdr_en(1))) {
-//            pr_err("Failed to initialize WDR mode\n");
-//            return ret;
-//        }
-//    }
-//
-//    // Event system initialization
-//    pr_info("Initializing event system\n");
-//    ret = tisp_event_init();
-//    if (ret) {
-//        pr_err("Failed to initialize event system\n");
-//        return ret;
-//    }
-//
-//    // Setup callbacks
-//    tisp_event_set_cb(4, tisp_tgain_update);
-//    tisp_event_set_cb(5, tisp_again_update);
-//    tisp_event_set_cb(7, tisp_ev_update);
-//    tisp_event_set_cb(9, tisp_ct_update);
-//    tisp_event_set_cb(8, tisp_ae_ir_update);
+
+    // Initialize each subsystem with error checking
+    if ((ret = tiziano_gamma_init()) ||
+        (ret = tiziano_gib_init()) ||
+        (ret = tiziano_lsc_init()) ||
+        (ret = tiziano_ccm_init()) ||
+        (ret = tiziano_dmsc_init()) ||
+        (ret = tiziano_sharpen_init()) ||
+        (ret = tiziano_sdns_init()) ||
+        (ret = tiziano_mdns_init()) ||
+        (ret = tiziano_clm_init()) ||
+        (ret = tiziano_dpc_init()) ||
+        (ret = tiziano_hldc_init()) ||
+        (ret = tiziano_defog_init()) ||
+        (ret = tiziano_adr_init()) ||
+        (ret = tiziano_af_init()) ||
+        (ret = tiziano_bcsh_init()) ||
+        (ret = tiziano_ydns_init()) ||
+        (ret = tiziano_rdns_init())) {
+
+        pr_err("Failed to initialize subsystem, ret = %d\n", ret);
+        return ret;
+    }
+
+    // WDR mode initialization
+    if (dev->wdr_mode == 1) {
+        pr_info("Initializing WDR mode\n");
+        if ((ret = tiziano_wdr_init()) ||
+            (ret = tisp_gb_init()) ||
+            (ret = tisp_dpc_wdr_en(1))) {
+            pr_err("Failed to initialize WDR mode\n");
+            return ret;
+        }
+    }
 
     pr_info("ISP subsystem initialization complete\n");
     return 0;
@@ -4269,8 +4234,6 @@ pr_info("VIC state after link op 0x%x:\n"
         // Cleanup AE algorithm - matches case 0x800456de
         // tisp_ae_algo_deinit();
         // tisp_ae_algo_init(0, NULL);
-        kfree(ae_info_mine);
-        kfree(ae_statis_mine);
         break;
     }
 
@@ -4280,7 +4243,6 @@ pr_info("VIC state after link op 0x%x:\n"
         // Cleanup AWB algorithm - matches case 0x800456e4
         //tisp_awb_algo_deinit();
         //tisp_awb_algo_init(0);
-        kfree(awb_info_mine);
         break;
     }
 

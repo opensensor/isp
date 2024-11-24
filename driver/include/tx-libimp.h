@@ -90,6 +90,12 @@
 #define ISP_CTRL_DPC        0x98091f
 #define ISP_CTRL_GAMMA      0x9a091a
 
+#define ISP_CTRL_REG         (ISP_REG_BASE + 0x00)
+#define ISP_FLIP_CTRL_REG    (ISP_REG_BASE + 0x28)   // Adjust this offset based on hardware
+#define ISP_WDR_REG_BASE     (ISP_REG_BASE + 0x1000)
+#define ISP_AE_REG_BASE      (ISP_REG_BASE + 0x100)
+#define ISP_AWB_REG_BASE     (ISP_REG_BASE + 0x200)
+
 // Parameter offsets in tuning state
 #define TUNING_OFF_BRIGHTNESS  0x1023  // From decompiled code
 #define TUNING_OFF_CONTRAST    0x1024
