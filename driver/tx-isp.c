@@ -818,9 +818,6 @@ static void set_framesource_changewait_cnt(void)
 }
 
 
-
-
-
 static int isp_core_tuning_open(struct IMPISPDev *dev)
 {
     struct isp_tuning_state *tuning;
@@ -4804,26 +4801,28 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     // Use frame from pre-allocated array instead of allocating
     struct frame_node *node = &fc->queue.frames[req.index];
 
-    // Initialize node exactly like OEM
-    node->magic = FRAME_MAGIC;        // 0x100100 at offset 0x0
-    node->magic_tail = 0x200200;      // 0x200200 at offset 0x4
+    // Reset node state completely
+    memset(node, 0, sizeof(*node));
+
+    node->magic = FRAME_MAGIC;
+    node->magic_tail = 0x200200;
     node->data = fc->buf_base + (req.index * fc->buf_size);
     node->frame_size = fc->buf_size;
-    node->seq = fc->sequence++;
+    node->seq = fc->sequence;         // Don't increment yet
     node->index = req.index;
     node->virt_addr = fc->buf_base + (req.index * fc->buf_size);
     node->phys_addr = fc->dma_addr + (req.index * fc->buf_size);
-    node->state = 2;                  // Initial state = 2
+    node->state = 2;
 
     spin_lock_irqsave(&fc->queue.lock, flags);
 
-    // Add to done list maintaining exact OEM pointer layout
+    // Add to done list
     list_add_tail(&node->list, &fc->queue.done_list);
     atomic_inc(&fc->queue.frames_completed);
 
     spin_unlock_irqrestore(&fc->queue.lock, flags);
 
-    // Update buffer tracking
+    // Update buffer info
     struct frame_buffer *buf = &fc->buffers[req.index];
     buf->index = req.index;
     buf->type = req.type;
@@ -4833,14 +4832,17 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     buf->timestamp.tv_sec = ts.tv_sec;
     buf->timestamp.tv_usec = ts.tv_nsec / 1000;
     buf->memory = req.memory;
-    buf->length = req.length ? req.length : fc->buf_size;
-    buf->state = 2;  // Match OEM initial state
+    buf->length = fc->buf_size;
+    buf->state = node->state;  // Match node state
+
+    // Increment sequence after queue is complete
+    fc->sequence++;
 
     wake_up(&fc->queue.wait);
 
-    pr_info("QBUF: channel=%d index=%u seq=%u size=%u state=%d\n",
+    pr_info("QBUF: channel=%d index=%u seq=%u size=%u state=%d flags=0x%x\n",
             fc->channel_id, req.index, node->seq, buf->bytesused,
-            node->state);
+            node->state, buf->flags);
 
     return 0;
 }
@@ -4883,21 +4885,25 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
     while (1) {
         spin_lock_irqsave(&fc->queue.lock, flags);
 
-        pr_info("DQBUF: Checking lists - done_empty=%d completed=%d\n",
+        pr_info("DQBUF: ch=%d Checking lists - done_empty=%d completed=%d seq=%u\n",
+                fc->channel_id,
                 list_empty(&fc->queue.done_list),
-                atomic_read(&fc->queue.frames_completed));
+                atomic_read(&fc->queue.frames_completed),
+                fc->sequence);
 
         if (!list_empty(&fc->queue.done_list)) {
-            struct frame_node *node = list_entry(fc->queue.done_list.next,
-                                               struct frame_node, list);
+            struct frame_node *node = list_first_entry(&fc->queue.done_list,
+                                                     struct frame_node, list);
 
-            // Just remove from list but keep node in frames array
             list_del(&node->list);
             atomic_dec(&fc->queue.frames_completed);
 
             // Get corresponding buffer
             buf = &fc->buffers[node->index];
-            buf->state = 0;  // Mark as dequeued
+
+            // Clear node but preserve magic numbers for validation
+            node->state = 0;
+            buf->state = 0;
 
             spin_unlock_irqrestore(&fc->queue.lock, flags);
             break;
@@ -4916,15 +4922,15 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
         }
     }
 
-    // Fill in buffer info
+    // Update request with state
     req.index = buf->index;
-    req.bytesused = fc->buf_size;
-    req.flags |= V4L2_BUF_FLAG_DONE;
-    req.field = V4L2_FIELD_NONE;
-    do_gettimeofday(&req.timestamp);
-    req.sequence = fc->sequence++;
-    req.memory = V4L2_MEMORY_MMAP;
-    req.length = fc->buf_size;
+    req.bytesused = buf->bytesused;
+    req.flags = buf->flags | V4L2_BUF_FLAG_DONE;
+    req.field = buf->field;
+    req.timestamp = buf->timestamp;
+    req.memory = buf->memory;
+    req.length = buf->length;
+    req.sequence = fc->sequence - 1;  // Use last completed sequence
 
     // Keep node for reuse - don't free it
     if (node) {
