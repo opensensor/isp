@@ -4674,6 +4674,32 @@ static int framechan_open(struct inode *inode, struct file *file)
             return -ENOMEM;
         }
 
+        // Initialize channel attributes (this is what was missing)
+        memset(&fs->attr, 0, sizeof(fs->attr));
+        fs->attr.enable = 1;
+
+        // Set default channel attributes based on channel number
+        if (channel == 0) {
+            fs->attr.width = 1920;
+            fs->attr.height = 1080;
+            fs->attr.format = 0x23; // NV12
+            fs->attr.crop_enable = 0;
+            fs->attr.picwidth = 1920;
+            fs->attr.picheight = 1080;
+            fs->attr.fps_num = 30;
+            fs->attr.fps_den = 1;
+        } else {
+            fs->attr.width = 640;
+            fs->attr.height = 360;
+            fs->attr.format = 0x23; // NV12
+            fs->attr.crop_enable = 0;
+            fs->attr.picwidth = 640;
+            fs->attr.picheight = 360;
+            fs->attr.fps_num = 30;
+            fs->attr.fps_den = 1;
+        }
+        fs->attr_set = true; // Mark attributes as initialized
+
         // Initialize frame queue
         spin_lock_init(&fc->queue.lock);
         INIT_LIST_HEAD(&fc->queue.ready_list);
@@ -4703,8 +4729,9 @@ static int framechan_open(struct inode *inode, struct file *file)
         // Copy format info from frame source
         fc->width = fs->width;
         fc->height = fs->height;
-        fc->format = 0x23;  // Default to NV12
-        fc->buf_size = (fc->width * fc->height * 3) / 2;  // NV12 size
+        fc->format = 0x23;  // NV12
+        // Set initial buffer size based on format
+        fc->buf_size = (fc->width * fc->height * 3) / 2; // NV12 size
         fc->buf_count = fs->buf_cnt;
         fc->sequence = 0;
 
