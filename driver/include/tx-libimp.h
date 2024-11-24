@@ -7,6 +7,48 @@
 #include <linux/platform_device.h>
 
 
+
+// Control codes from libimp
+
+#define ISP_CTRL_SATURATION     0x980902
+#define ISP_CTRL_SHARPNESS      0x98091b
+#define ISP_CTRL_HFLIP         0x980914
+#define ISP_CTRL_VFLIP         0x980915
+#define ISP_CTRL_BYPASS        0x8000164
+#define ISP_CTRL_PROCESS       0x8000164
+#define ISP_CTRL_SHADING       0x8000166
+
+// IOCTL commands from libimp
+#define ISP_CORE_S_CTRL      0xc008561c  // Set control command
+#define ISP_CORE_G_CTRL      0xc008561b  // Get control command
+#define ISP_TUNING_ENABLE    0xc00c56c6  // Enable tuning command
+
+// ISP Control codes from libimp
+#define ISP_CTRL_SATURATION   0x980902  // From IMP_ISP_Tuning_SetSaturation
+#define ISP_CTRL_SHARPNESS    0x98091b  // From IMP_ISP_Tuning_SetSharpness
+#define ISP_CTRL_HFLIP        0x980914  // From IMP_ISP_Tuning_SetISPHflip
+#define ISP_CTRL_VFLIP        0x980915  // From IMP_ISP_Tuning_SetISPVflip
+#define ISP_CTRL_BYPASS       0x8000164 // From IMP_ISP_Tuning_SetISPBypass
+#define ISP_CTRL_SHADING      0x8000166 // From IMP_ISP_Tuning_SetShading
+#define ISP_CTRL_PROCESS      0x8000164 // Same as bypass, used for process control
+
+#define VIDIOC_GET_SENSOR_INFO   0x40045626
+#define VIDIOC_SET_BUF_INFO      0x800856d4
+#define VIDIOC_GET_BUF_INFO      0x800856d5
+#define ISP_ENABLE_LINKS         0x800456d0
+#define ISP_DESTROY_LINKS        0x800456d1
+#define ISP_ENABLE_ROUTE         0x800456d2
+#define ISP_DISABLE_LINKS        0x800456d3
+#define SENSOR_STREAMON          0x80045612
+#define SENSOR_SET_INFO          0xc0045627
+#define ISP_READ_SENSOR_ID       0x805056c1
+#define ISP_SET_SENSOR_INFO      0xc050561a
+
+// Core tuning IOCTLs
+#define ISP_CORE_G_CTRL         0xc008561b
+#define ISP_CORE_S_CTRL         0xc008561c
+#define ISP_TUNING_ENABLE       0xc00c56c6
+
 /* ISP Pipeline Register Structure */
 // Strucure for LIBIMP
 struct isp_pipeline_regs {
@@ -77,6 +119,26 @@ struct frame_buffer {
     u32 fps_den;        // Must be at 0x4C
 } __attribute__((packed));
 
+struct frame_qbuf_request {
+    __u32 index;          // Buffer index
+    __u32 type;           // Buffer type
+    __u32 bytesused;      // Bytes used in buffer
+    __u32 flags;          // Buffer flags
+    __u32 field;          // Field order
+    struct timeval timestamp;  // Buffer timestamp
+    __u32 sequence;       // Frame sequence number
+    __u32 memory;         // Memory type
+    __u32 m;              // Union for memory pointer/offset
+    __u32 length;         // Buffer length
+    __u32 input;          // Input source
+    __u32 reserved;       // Reserved for future use
+    __u32 fps_num;        // Framerate numerator
+    __u32 fps_den;        // Framerate denominator
+    __u32 format;         // Pixel format
+    __u32 width;          // Frame width
+    __u32 height;         // Frame height
+};
+
 
 struct dqbuf_resp {
     u32 index;           // 0x00
@@ -99,6 +161,56 @@ struct dqbuf_resp {
     u32 pad3[4];         // Additional padding to ensure proper alignment
 };
 
+struct isp_core_ctrl {
+    u32 cmd;     // Control command
+    u32 value;   // Control value/result
+    u32 flag;    // Additional flags/data
+};
 
+struct isp_tuning_data {
+    u8 reserved1;           // 0x00
+    u8 contrast;           // 0x01
+    u8 brightness;         // 0x02
+    u8 reserved2;          // 0x03
+    u8 exposure;           // 0x04
+    u8 reserved3;          // 0x05
+    u8 color_temp;         // 0x06
+    u8 auto_wb;            // 0x07
+    u8 shading;            // 0x08
+    u8 gamma;              // 0x09
+    u8 saturation;         // 0x0a
+    u8 sharpness;          // 0x0b
+    u8 hist_eq;            // 0x0c
+    u8 ae_enable;          // 0x0d
+    u8 hflip;              // 0x0e
+    u8 vflip;              // 0x0f
+    u8 test_pattern;       // 0x10
+    u8 reserved4[3];       // 0x11-0x13
+    u32 isp_process;       // 0x14-0x17
+    u8 reserved5[4];       // 0x18-0x1b
+};
+
+
+// Tuning state structure based on decompiled code
+struct isp_tuning_state {
+    u32 instance;               // First word is instance/arg1
+    u8 params[0x4000];         // Parameter space
+    spinlock_t lock;           // Spin lock at 0x102e
+    struct mutex mlock;        // Mutex also at 0x102e
+    u32 state;                 // State at 0x1031 (1 = init, 2 = enabled)
+    u32 event_handler;         // Event handler at 0x1033
+    u32 param_size;            // Size field at end (0x736b0 seen in init)
+};
+
+// Top level parameter structure
+struct tisp_param {
+    u8 data[0x500c];          // Based on kmalloc size in tuning_open
+};
+
+// From the decompiled code, we see a struct of 4-word entries being copied in a loop
+// up to offset 0x70 (112 bytes), suggesting this structure size
+struct channel_attr {
+    __u32 attr[28];  // 28 words = 112 bytes (0x70)
+};
 
 #endif //TX_LIBIMP_H

@@ -7,9 +7,12 @@
 #include <linux/platform_device.h>
 #include <linux/i2c.h>
 #include <linux/videodev2.h>
+#include <linux/wait.h>
+#include <linux/sched.h>
 #include <media/v4l2-device.h>
 #include <media/videobuf2-core.h>
 #include <media/v4l2-subdev.h>
+
 #include <tx-isp-device.h>
 #include <tx-libimp.h>
 
@@ -18,6 +21,8 @@
 #define RMEM_START  0x2A80000          // Starting address of the reserved memory region
 #define DRIVER_RESERVED_SIZE (4 * 1024 * 1024) // Size reserved for our driver: 4MB
 
+#define MAX_FRAME_BUFFERS 32  // Typical max buffer count
+#define FRAME_TIMING_SIZE 16  // Size of timing data per buffer
 
 // Log level definitions
 #define IMP_LOG_ERROR   6
@@ -1147,66 +1152,6 @@ struct isp_pipeline {
     unsigned int output_height;
 };
 
-/**
- * struct isp_device - Main ISP device structure
- * Based on decompiled code access patterns
- */
-struct isp_device {
-    /* Device infrastructure */
-    struct device *dev;  // Parent device
-    struct cdev cdev;               /* 0x04: Character device */
-    struct v4l2_device v4l2_dev;    /* 0x08: V4L2 device */
-
-    /* Hardware interface */
-    void __iomem *base;             /* Base address for register access */
-    struct isp_reg_block __iomem *regs;  /* 0x2c: Register block - heavily accessed */
-
-    /* Video device handling */
-    struct video_device *video_dev;  /* Video device structure */
-    struct vb2_queue vb2_queue;      /* Video buffer queue */
-
-    /* Sub-devices - array seen at 0x2c with multiple entries */
-    struct tx_isp_subdev *subdevs[16];  /* Array of subdevices */
-    int num_subdevs;
-
-    /* Link configuration */
-    unsigned int current_link;       /* 0x10c: Current link configuration */
-    struct mutex link_lock;          /* Protect link configuration */
-
-    /* Buffer management */
-    struct list_head buffer_queue;    /* Queue of buffers */
-    spinlock_t buffer_lock;          /* Protect buffer queue */
-
-    /* Algorithm state */
-    struct {
-        bool ae_enabled;
-        bool awb_enabled;
-        bool af_enabled;
-        bool wdr_enabled;            /* WDR mode state */
-    } algo_state;
-
-    /* IRQ handling */
-    int irq;                         /* IRQ number */
-    spinlock_t irq_lock;            /* Protect IRQ handling */
-
-    /* DMA handling */
-    struct {
-        dma_addr_t addr;            /* DMA address */
-        size_t size;                /* DMA buffer size */
-    } dma_buf;
-
-    /* Memory optimization */
-    bool memopt_enabled;            /* Memory optimization enabled flag */
-
-    /* Pad configuration - based on decompiled pad handling */
-    struct isp_pad_desc *pads;      /* Array of pad descriptors */
-    int num_pads;                   /* Number of configured pads */
-    struct isp_pipeline pipeline;  /* Pipeline configuration */
-    /* Private data */
-    void *priv;                     /* Driver private data */
-};
-
-
 /* Structure definitions for IOCTL parameters */
 struct isp_rotation_params {
     int angle;          // Rotation angle (0, 90, 180, 270)
@@ -1573,6 +1518,14 @@ struct IMPISPDev {
     uint32_t height;
     uint32_t format;
 
+    /* Tuning attributes */
+    struct isp_tuning_data *tuning_data;
+    struct isp_tuning_state *tuning_state;
+    int tuning_enabled;  // 0 = disabled, 2 = enabled
+    struct tisp_param *tuning_params;
+    u32 instance;  // For passing to tuning state
+
+
     /* Buffer management */
     struct {
         dma_addr_t addr;
@@ -1724,6 +1677,11 @@ struct frame_queue {
     uint32_t buffer_states;            // Buffer state bitmap
 };
 
+struct frame_timing {
+    u64 timestamp;
+    u32 frame_count;
+    u32 reserved[2];
+};
 
 /* Main channel structure */
 struct frame_source_channel {
@@ -1741,9 +1699,13 @@ struct frame_source_channel {
     struct frame_buffer *buffers;
 
     /* Queue management */
+    wait_queue_head_t wait_queue;
     struct frame_queue queue;         // Frame queue structure
     atomic_t queued_bufs;             // Track available buffers
     struct mutex lock;               // Channel lock
+    struct frame_timing *timing_data;
+    struct timespec last_qbuf_time;
+    u32 frame_count;
 
     /* Format info */
     uint32_t width;                  // Frame width
