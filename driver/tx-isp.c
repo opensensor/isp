@@ -4681,13 +4681,20 @@ static int framechan_open(struct inode *inode, struct file *file)
             return -ENOMEM;
         }
 
-        // Allocate timing data
-        fc->timing_data = kzalloc(sizeof(struct frame_timing) * MAX_FRAME_BUFFERS, GFP_KERNEL);
-        if (!fc->timing_data) {
-            kfree(fc);
-            return -ENOMEM;
-        }
-
+        // Initialize frame queue
+        spin_lock_init(&fc->queue.lock);
+        INIT_LIST_HEAD(&fc->queue.ready_list);
+        INIT_LIST_HEAD(&fc->queue.done_list);
+        atomic_set(&fc->queue.frames_ready, 0);
+        atomic_set(&fc->queue.frames_queued, 0);
+        atomic_set(&fc->queue.frames_completed, 0);
+        init_waitqueue_head(&fc->queue.wait);
+        fc->queue.max_frames = MAX_FRAME_BUFFERS;
+        fc->queue.write_idx = 0;
+        fc->queue.read_idx = 0;
+        fc->queue.fifo_depth = 0;
+        fc->queue.fifo_thresh = 0;
+        fc->queue.buffer_states = 0;
 
         // Initialize channel
         fc->channel_id = channel;
@@ -4707,20 +4714,6 @@ static int framechan_open(struct inode *inode, struct file *file)
         fc->buf_size = (fc->width * fc->height * 3) / 2;  // NV12 size
         fc->buf_count = fs->buf_cnt;
         fc->sequence = 0;
-
-        // Use our DMA buffer for channel 1
-        if (channel == 1) {
-            fc->buf_base = ourISPdev->dma_buf;
-            fc->channel_offset = 0xfd2000;
-            fc->state = 1;
-
-            pr_info("Initialized frame channel:\n");
-            pr_info("  fc=%p\n", fc);
-            pr_info("  buf_base=%p\n", fc->buf_base);
-            pr_info("  dma_addr=0x%llx\n", (u64)ourISPdev->dma_addr);
-            pr_info("  dma_size=%zu\n", ourISPdev->dma_size);
-            pr_info("  state=%d\n", fc->state);
-        }
 
         fs->fc = fc;
     }
@@ -4801,6 +4794,11 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     if (req.index >= fc->buf_count) {
         pr_err("Invalid buffer index %u (max %u)\n",
                req.index, fc->buf_count - 1);
+        return -EINVAL;
+    }
+
+    if (!fc->queue.frames) {
+        pr_err("Queue not initialized\n");
         return -EINVAL;
     }
 
@@ -5095,6 +5093,22 @@ static int framechan_reqbufs(struct frame_source_channel *fc, unsigned long arg)
 
     if (req.type != 1 || req.memory != 2)
         return -EINVAL;
+
+    // Allocate frame nodes array
+    fc->queue.frames = kzalloc(sizeof(struct frame_node) * req.count, GFP_KERNEL);
+    if (!fc->queue.frames) {
+        pr_err("Failed to allocate frame nodes\n");
+        return -ENOMEM;
+    }
+
+    // Initialize each frame node
+    for (int i = 0; i < req.count; i++) {
+        struct frame_node *node = &fc->queue.frames[i];
+        node->magic = FRAME_MAGIC;
+        node->magic_tail = 0x200200;
+        node->index = i;
+        INIT_LIST_HEAD(&node->list);
+    }
 
     // Calculate basic buffer size
     if (fc->format == 0x22) { // YUV422
