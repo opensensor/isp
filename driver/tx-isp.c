@@ -1275,7 +1275,7 @@ static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl, void __user *arg)
 
             // Update device state
             ourISPdev->bypass_enabled = !!ctrl->value;
-            pr_debug("Set bypass mode to %d\n", ctrl->value);
+            pr_info("Set bypass mode to %d\n", ctrl->value);
             break;
         }
 
@@ -1304,7 +1304,7 @@ static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl, void __user *arg)
                 return -EFAULT;
             }
 
-            pr_debug("Set antiflicker mode to %d\n", ctrl->value);
+            pr_info("Set antiflicker mode to %d\n", ctrl->value);
             break;
         }
 
@@ -4693,15 +4693,21 @@ static int framechan_open(struct inode *inode, struct file *file)
 
 // Helper function to calculate proper buffer sizes with alignment
 static uint32_t calculate_buffer_size(uint32_t width, uint32_t height, uint32_t format) {
-    // Base size for NV12 format
-    uint32_t y_stride = ALIGN(width, 64);  // Align stride to 64 bytes
-    uint32_t y_size = y_stride * ALIGN(height, 2);  // Align height to 2
-    uint32_t uv_stride = y_stride;
-    uint32_t uv_size = uv_stride * (ALIGN(height, 2) / 2);
+    // For NV12 format
+    if (format == V4L2_PIX_FMT_NV12 || format == 0x23) {
+        // Base size calculation
+        uint32_t y_stride = ALIGN(width, 16);  // Align to 16 bytes instead of 64
+        uint32_t y_size = y_stride * ALIGN(height, 2);
+        uint32_t uv_stride = y_stride;
+        uint32_t uv_size = uv_stride * (ALIGN(height, 2) / 2);
 
-    // Total size with alignment
-    uint32_t total_size = y_size + uv_size;
-    return ALIGN(total_size, 4096);  // Page align the total buffer size
+        // Total size without excessive padding
+        uint32_t total_size = y_size + uv_size;
+        return ALIGN(total_size, 4096);  // Page align the final size
+    }
+
+    // Default fallback
+    return width * height * 2;
 }
 
 static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
@@ -4770,13 +4776,7 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
 
 static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
 {
-    struct {
-        u32 cmd;
-        u32 pad;
-        u32 seq;
-        u32 flags;
-        u32 params[4];
-    } req;
+    struct frame_qbuf_request req;
     struct frame_buffer buf;
     struct timeval tv;
     int ret = 0;
@@ -4789,8 +4789,7 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
     if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
         return -EFAULT;
 
-    pr_info("DQBUF handler: cmd=0x%x seq=%u flags=0x%x\n",
-             req.cmd, req.seq, req.flags);
+    pr_debug("DQBUF handler: seq=%u flags=0x%x\n", req.sequence, req.flags);
 
     // Validate buffer state
     if (!(fc->state & BIT(1))) {
@@ -4798,112 +4797,72 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
         return -EINVAL;
     }
 
+    // Add memory barrier before checking queue state
+    smp_rmb();
+
     // Wait for buffer availability with timeout
     ret = wait_event_interruptible_timeout(fc->wait_queue,
         atomic_read(&fc->queued_bufs) > 0,
-        msecs_to_jiffies(1000));
+        msecs_to_jiffies(2000));
 
-    if (ret == 0)
+    if (ret == 0) {
+        pr_err("DQBUF timeout after 2000ms\n");
         return -ETIMEDOUT;
-    if (ret == -ERESTARTSYS)
+    }
+    if (ret == -ERESTARTSYS) {
+        pr_err("DQBUF interrupted\n");
         return -EINTR;
-
-    if (req.cmd == 0xffffffff) {
-        memset(&buf, 0, sizeof(buf));
-        do_gettimeofday(&tv);
-
-        // Calculate safe buffer index
-        unsigned int buf_index = fc->sequence % fc->buf_count;
-
-        // Fill frame_buffer structure
-        buf.index = buf_index;
-        buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        buf.memory = V4L2_MEMORY_MMAP;
-        buf.flags = V4L2_BUF_FLAG_MAPPED | V4L2_BUF_FLAG_QUEUED;
-        buf.sequence = fc->sequence;
-        buf.timestamp = tv;
-
-        // Channel specific settings with bounds checking
-        if (fc->channel_id == 1) {
-            buf.width = min_t(u32, 640, fc->width);
-            buf.height = min_t(u32, 360, fc->height);
-            buf.bytesused = (buf.width * buf.height * 3) / 2;
-        } else {
-            buf.width = fc->width;
-            buf.height = fc->height;
-            buf.bytesused = fc->buf_size;
-        }
-
-        // Validate buffer size
-        if (buf.bytesused > fc->buf_size) {
-            pr_err("Buffer size mismatch: %u > %zu\n",
-                   buf.bytesused, fc->buf_size);
-            return -EINVAL;
-        }
-
-        buf.format = fc->format;
-        buf.field = V4L2_FIELD_NONE;
-        buf.fps_num = 30;
-        buf.fps_den = 1;
-
-        // Calculate buffer offset with bounds checking
-        size_t buf_offset = buf_index * fc->buf_size;
-        if (buf_offset + buf.bytesused > fc->buf_count * fc->buf_size) {
-            pr_err("Buffer overflow detected\n");
-            return -EINVAL;
-        }
-
-        // Generate test pattern with proper bounds checking
-        u8 *dst = fc->buf_base + buf_offset;
-        int y_size = buf.width * buf.height;
-
-        if (y_size > 0) {
-            // Y plane
-            u8 y_val = (fc->sequence % 2) ? 235 : 16;
-            memset(dst, y_val, y_size);
-
-            // UV plane for NV12
-            if (fc->format == 0x23 && buf.bytesused >= y_size + (y_size/2)) {
-                u8 *uv = dst + y_size;
-                int color = fc->sequence % 4;
-
-                switch (color) {
-                    case 0: // Red
-                        memset(uv, 0x80, y_size/2);
-                        memset(uv+1, 0xF0, y_size/2);
-                        break;
-                    case 1: // Green
-                        memset(uv, 0, y_size);
-                        break;
-                    case 2: // Blue
-                        memset(uv, 0xF0, y_size/2);
-                        memset(uv+1, 0x80, y_size/2);
-                        break;
-                    case 3: // Yellow
-                        memset(uv, 0, y_size/2);
-                        memset(uv+1, 0xF0, y_size/2);
-                        break;
-                }
-            }
-
-            // Ensure memory writes are complete before decrementing counter
-            wmb();
-            atomic_dec(&fc->queued_bufs);
-
-            pr_info("Frame %u generated: %ux%u (%u bytes)\n",
-                    buf.sequence, buf.width, buf.height, buf.bytesused);
-        }
-
-        fc->sequence++;
-
-        if (copy_to_user((void __user *)arg, &buf, sizeof(buf)))
-            return -EFAULT;
-
-        return 0;
     }
 
-    return -EINVAL;
+    // Initialize buffer structure
+    memset(&buf, 0, sizeof(buf));
+    do_gettimeofday(&tv);
+
+    // Calculate safe buffer index with wraparound protection
+    unsigned int buf_index = fc->sequence % fc->buf_count;
+
+    // Fill frame_buffer structure
+    buf.index = buf_index;
+    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buf.memory = V4L2_MEMORY_MMAP;
+    buf.flags = V4L2_BUF_FLAG_MAPPED;
+    buf.sequence = fc->sequence;
+    buf.timestamp = tv;
+
+    // Use the actual allocated size instead of calculating
+    buf.bytesused = fc->buf_size;
+
+    buf.format = fc->format;
+    buf.width = fc->width;
+    buf.height = fc->height;
+    buf.field = V4L2_FIELD_NONE;
+    buf.fps_num = 30;
+    buf.fps_den = 1;
+
+    // Calculate buffer offset
+    size_t buf_offset = buf_index * fc->buf_size;
+    if (buf_offset + buf.bytesused > fc->buf_count * fc->buf_size) {
+        pr_err("Buffer overflow detected: offset=%zu size=%u total=%zu\n",
+               buf_offset, buf.bytesused, fc->buf_count * fc->buf_size);
+        return -EINVAL;
+    }
+
+    // Ensure memory writes are complete before decrementing counter
+    smp_mb();
+    atomic_dec(&fc->queued_bufs);
+
+    // Update sequence after successful dequeue
+    fc->sequence++;
+
+    pr_debug("DQBUF success: index=%u seq=%u size=%u\n",
+             buf.index, buf.sequence, buf.bytesused);
+
+    if (copy_to_user((void __user *)arg, &buf, sizeof(buf)))
+        return -EFAULT;
+
+    return 0;
 }
+
 
 static int frame_channel_vidioc_fmt(struct isp_framesource_state *fs, void __user *arg, bool is_get)
 {
