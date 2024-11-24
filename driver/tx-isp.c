@@ -4784,6 +4784,7 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
 {
     struct frame_qbuf_request req;
     struct timespec ts;
+    unsigned long flags;  // Add spinlock flags
     int ret = 0;
 
     if (!fc || !fc->buf_base) {
@@ -4803,23 +4804,44 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
         return -EINVAL;
     }
 
-    // Fill buffer with test pattern
-    fill_test_pattern(fc->buf_base + (req.index * fc->buf_size),
-                     fc->width, fc->height, fc->format);
-
     // Get current time for timestamp
     ktime_get_real_ts(&ts);
+
+    // Increment sequence once
+    uint32_t seq = fc->sequence++;
+
+    // Allocate and initialize frame node
+    struct frame_node *node = kzalloc(sizeof(*node), GFP_KERNEL);
+    if (!node)
+        return -ENOMEM;
+
+    node->magic = FRAME_MAGIC;        // 0x100100
+    node->magic_tail = 0x200200;      // Magic tail from decompiled
+    node->data = fc->buf_base + (req.index * fc->buf_size);
+    node->frame_size = fc->buf_size;
+    node->seq = seq;                  // Use same sequence number
+    node->index = req.index;          // Store buffer index
+    node->virt_addr = fc->buf_base + (req.index * fc->buf_size);
+    node->phys_addr = fc->dma_addr + (req.index * fc->buf_size);
+    node->state = 2;                  // State 2 = queued (from decompiled)
+
+    // Fill the buffer with test pattern
+    fill_test_pattern(node->data, fc->width, fc->height, fc->format);
+
+    spin_lock_irqsave(&fc->queue.lock, flags);
+    list_add_tail(&node->list, &fc->queue.ready_list);
+    atomic_inc(&fc->queue.frames_ready);
+    spin_unlock_irqrestore(&fc->queue.lock, flags);
 
     // Update buffer state
     struct frame_buffer *buf = &fc->buffers[req.index];
     buf->index = req.index;
     buf->type = req.type;
-    buf->bytesused = fc->buf_size; // Update with actual size
+    buf->bytesused = fc->buf_size;
     buf->flags = req.flags | V4L2_BUF_FLAG_QUEUED;
     buf->field = req.field;
     buf->timestamp.tv_sec = ts.tv_sec;
     buf->timestamp.tv_usec = ts.tv_nsec / 1000;
-    buf->sequence = fc->sequence++;
     buf->memory = req.memory;
     buf->length = req.length ? req.length : fc->buf_size;
     buf->format = fc->format;
@@ -4841,7 +4863,7 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     wake_up_interruptible(&fc->wait_queue);
 
     pr_info("QBUF: channel=%d index=%u seq=%u size=%u\n",
-            fc->channel_id, req.index, buf->sequence, buf->bytesused);
+            fc->channel_id, req.index, seq, buf->bytesused);
 
     return ret;
 }
@@ -4849,75 +4871,96 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
 static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
 {
     struct frame_qbuf_request req;
-    struct frame_buffer buf;
-    struct timeval tv;
+    struct frame_buffer *buf = NULL;
+    unsigned long flags;
     int ret = 0;
-    unsigned int timeout = 100; // 100ms timeout
 
     if (!fc || !fc->buf_base) {
         pr_err("Invalid channel state in DQBUF\n");
         return -EINVAL;
     }
 
-    // Validate streaming state
-    if (!(fc->state & BIT(1))) {
-        pr_err("Channel not streaming\n");
+    // Copy request struct from user
+    if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
+        return -EFAULT;
+
+    // Validate buffer type
+    if (req.type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+        pr_err("dqbuf: invalid buffer type\n");
         return -EINVAL;
     }
 
-    // Wait for buffer with timeout
-    ret = wait_event_interruptible_timeout(
-        fc->wait_queue,
-        atomic_read(&fc->queued_bufs) > 0,
-        msecs_to_jiffies(timeout));
-
-    if (ret == 0) {
-        pr_err("DQBUF timeout waiting for buffer\n");
-        return -ETIMEDOUT;
-    }
-    if (ret == -ERESTARTSYS) {
-        return -EINTR;
+    // Check streaming state
+    if (!(fc->state & BIT(0))) {
+        pr_err("Streaming off, will not wait for buffers\n");
+        return -EINVAL;
     }
 
-    // Get buffer ready for dequeue
-    do_gettimeofday(&tv);
+    while (1) {
+        spin_lock_irqsave(&fc->queue.lock, flags);
 
-    // Calculate buffer index based on sequence
-    unsigned int buf_index = fc->sequence % fc->buf_count;
+        // Look for completed buffer
+        if (!list_empty(&fc->queue.done_list)) {
+            struct frame_node *node = list_first_entry(
+                &fc->queue.done_list, struct frame_node, list);
 
-    // Fill buffer info to return
-    memset(&buf, 0, sizeof(buf));
-    buf.index = buf_index;
-    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    buf.memory = V4L2_MEMORY_MMAP;
-    buf.flags = V4L2_BUF_FLAG_MAPPED | V4L2_BUF_FLAG_DONE;
-    buf.sequence = fc->sequence;
-    buf.timestamp = tv;
-    buf.format = fc->format;
-    buf.width = fc->width;
-    buf.height = fc->height;
-    buf.bytesused = fc->buf_size;
-    buf.field = V4L2_FIELD_NONE;
-    buf.fps_num = 30;
-    buf.fps_den = 1;
+            // Validate magic numbers
+            if (node->magic != FRAME_MAGIC || node->magic_tail != 0x200200) {
+                pr_err("Invalid frame node magic numbers\n");
+                spin_unlock_irqrestore(&fc->queue.lock, flags);
+                return -EINVAL;
+            }
 
-    // Update timing info
-    if (fc->timing_data) {
-        fc->timing_data[buf_index].timestamp = ktime_get_real_ns();
-        fc->timing_data[buf_index].frame_count = fc->frame_count++;
+            list_del(&node->list);
+            buf = &fc->buffers[node->index];  // Now index is properly defined
+            atomic_dec(&fc->queue.frames_completed);
+        }
+
+        spin_unlock_irqrestore(&fc->queue.lock, flags);
+
+        if (buf)
+            break;
+
+        // Nothing ready - need to wait
+        ret = wait_event_interruptible_timeout(
+            fc->queue.wait,
+            !list_empty(&fc->queue.done_list),
+            msecs_to_jiffies(1000));
+
+        if (ret == 0) {
+            pr_err("DQBUF timeout waiting for buffer\n");
+            return -ETIMEDOUT;
+        }
+        if (ret == -ERESTARTSYS) {
+            pr_info("DQBUF interrupted\n");
+            return -EINTR;
+        }
+
+        // Recheck streaming state
+        if (!(fc->state & BIT(0))) {
+            pr_err("Streaming off while waiting\n");
+            return -EINVAL;
+        }
     }
 
-    // Decrement queued buffer count
-    atomic_dec(&fc->queued_bufs);
+    // Fill in buffer info
+    req.index = buf->index;
+    req.bytesused = fc->buf_size;
+    req.flags |= V4L2_BUF_FLAG_DONE;
+    req.field = V4L2_FIELD_NONE;
+    do_gettimeofday(&req.timestamp);
+    req.sequence = fc->sequence++;
+    req.memory = V4L2_MEMORY_MMAP;
+    req.length = fc->buf_size;
 
-    if (copy_to_user((void __user *)arg, &buf, sizeof(buf))) {
-        pr_err("Failed to copy buffer info to user\n");
+    // Copy back to userspace
+    if (copy_to_user((void __user *)arg, &req, sizeof(req))) {
+        pr_err("Failed to copy to user\n");
         return -EFAULT;
     }
 
-    pr_debug("DQBUF success: ch=%d index=%u seq=%u size=%u queued=%d\n",
-             fc->channel_id, buf.index, buf.sequence, buf.bytesused,
-             atomic_read(&fc->queued_bufs));
+    pr_debug("DQBUF complete: ch=%d idx=%d seq=%u\n",
+             fc->channel_id, req.index, req.sequence);
 
     return 0;
 }

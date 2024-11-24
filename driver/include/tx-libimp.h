@@ -145,13 +145,18 @@ struct isp_pipeline_regs {
 
 // Add these structures to match libimp's buffer management
 struct frame_node {
-    uint32_t magic;             // 0x0: Magic number identifier
-    void *data;                 // 0x4: Buffer data pointer
-    uint32_t frame_size;        // 0x8: Frame data size
-    uint32_t seq;              // 0xc: Frame sequence number
+    uint32_t magic;             // 0x00: Magic number (0x100100)
+    void *data;                 // 0x04: Buffer data pointer
+    uint32_t frame_size;        // 0x08: Frame data size
+    uint32_t seq;              // 0x0C: Frame sequence number
     struct list_head list;      // 0x10: List management
     uint32_t flags;            // 0x20: Frame flags
     uint8_t state;             // 0x24: Frame state
+    uint32_t index;            // 0x28: Buffer index in array
+    // Additional fields seen in decompiled:
+    uint32_t magic_tail;       // 0x2C: Magic tail number (0x200200)
+    void *virt_addr;           // 0x30: Virtual address
+    dma_addr_t phys_addr;      // 0x34: Physical address
 };
 
 struct encoder_chn_attr {
@@ -181,7 +186,6 @@ struct frame_buffer {
 
     // 0x20: Timing
     struct timeval timestamp;
-    u32 sequence;       // Track sequence here
     u32 memory_offset;  // Offset into DMA buffer
 
     // 0x30: Buffer info
