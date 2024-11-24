@@ -4800,10 +4800,13 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
 
     // Use frame from pre-allocated array instead of allocating
     struct frame_node *node = &fc->queue.frames[req.index];
+    if (node->state != 0) {
+        pr_err("qbuf: buffer already in use (state=%d)\n", node->state);
+        return -EINVAL;
+    }
 
-    // Reset node state completely
+    // Reset buffer state first
     memset(node, 0, sizeof(*node));
-
     node->magic = FRAME_MAGIC;
     node->magic_tail = 0x200200;
     node->data = fc->buf_base + (req.index * fc->buf_size);
@@ -4812,37 +4815,46 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     node->index = req.index;
     node->virt_addr = fc->buf_base + (req.index * fc->buf_size);
     node->phys_addr = fc->dma_addr + (req.index * fc->buf_size);
-    node->state = 2;
+    node->state = 2;                  // Initial state
+
+    // Get current time for timestamp
+    ktime_get_real_ts(&ts);
 
     spin_lock_irqsave(&fc->queue.lock, flags);
 
-    // Add to done list
-    list_add_tail(&node->list, &fc->queue.done_list);
+    // First add to ready list
+    list_add_tail(&node->list, &fc->queue.ready_list);
+    atomic_inc(&fc->queue.frames_ready);
+
+    // Then move to done list for testing
+    list_move_tail(&node->list, &fc->queue.done_list);
+    atomic_dec(&fc->queue.frames_ready);
     atomic_inc(&fc->queue.frames_completed);
 
     spin_unlock_irqrestore(&fc->queue.lock, flags);
 
-    // Update buffer info
+    // Now configure the buffer
     struct frame_buffer *buf = &fc->buffers[req.index];
     buf->index = req.index;
     buf->type = req.type;
     buf->bytesused = fc->buf_size;
-    buf->flags = req.flags | V4L2_BUF_FLAG_QUEUED;
+    buf->flags = V4L2_BUF_FLAG_QUEUED;  // Just queued flag
     buf->field = req.field;
     buf->timestamp.tv_sec = ts.tv_sec;
     buf->timestamp.tv_usec = ts.tv_nsec / 1000;
     buf->memory = req.memory;
     buf->length = fc->buf_size;
-    buf->state = node->state;  // Match node state
+    buf->state = node->state;
 
-    // Increment sequence after queue is complete
+    // Only increment sequence at end
     fc->sequence++;
 
     wake_up(&fc->queue.wait);
 
-    pr_info("QBUF: channel=%d index=%u seq=%u size=%u state=%d flags=0x%x\n",
-            fc->channel_id, req.index, node->seq, buf->bytesused,
-            node->state, buf->flags);
+    pr_info("QBUF: channel=%d index=%u seq=%u size=%u state=%d flags=0x%x ready=%d completed=%d\n",
+            fc->channel_id, req.index, node->seq, buf->bytesused, node->state,
+            buf->flags, atomic_read(&fc->queue.frames_ready),
+            atomic_read(&fc->queue.frames_completed));
 
     return 0;
 }
@@ -5067,6 +5079,7 @@ static int framechan_reqbufs(struct frame_source_channel *fc, unsigned long arg)
         uint32_t flags;
     } req;
     size_t buf_size;
+    int i;
 
     pr_info("Handling reqbufs: fc=%p arg=0x%lx\n", fc, arg);
 
@@ -5081,89 +5094,73 @@ static int framechan_reqbufs(struct frame_source_channel *fc, unsigned long arg)
     pr_info("Buffer request: count=%d type=%d memory=%d flags=0x%x\n",
             req.count, req.type, req.memory, req.flags);
 
-    if (req.type != 1 || req.memory != 2)
+    if (req.type != V4L2_BUF_TYPE_VIDEO_CAPTURE || req.memory != V4L2_MEMORY_MMAP)
         return -EINVAL;
 
     // Allocate frame nodes array
     fc->queue.frames = kzalloc(sizeof(struct frame_node) * req.count, GFP_KERNEL);
-    if (!fc->queue.frames) {
-        pr_err("Failed to allocate frame nodes\n");
+    if (!fc->queue.frames)
         return -ENOMEM;
-    }
 
-    // Initialize each frame node
-    for (int i = 0; i < req.count; i++) {
-        struct frame_node *node = &fc->queue.frames[i];
-        node->magic = FRAME_MAGIC;
-        node->magic_tail = 0x200200;
-        node->index = i;
-        INIT_LIST_HEAD(&node->list);
-    }
-
-    // Calculate basic buffer size
-    if (fc->format == 0x22) { // YUV422
-        buf_size = fc->width * fc->height * 2;
-    } else if (fc->format == 0x23) { // NV12
-        buf_size = (fc->width * fc->height * 3) / 2;
+    // Calculate buffer size with proper alignment
+    if (fc->channel_id == 0) {
+        // Main channel - full resolution NV12
+        buf_size = ALIGN((fc->width * fc->height * 3) / 2, 4096);
     } else {
-        return -EINVAL;
+        // Auxiliary channels - quarter size
+        buf_size = ALIGN((fc->width * fc->height * 3) / 8, 4096);
     }
 
-    // Map the channel into our DMA buffer
-    if (!fc->buf_base) {
-        if (fc->channel_id == 0) {
-            fc->channel_offset = 0xfd2000;  // Match libimp's offset
-        } else if (fc->channel_id == 1) {
-            fc->channel_offset = 0x12c4000;  // After channel 0
-        } else {
-            return -EINVAL;
-        }
+    // Set up channel offset based on OEM pattern
+    fc->channel_offset = (fc->channel_id == 0) ? 0xfd2000 : 0x12c4000;
 
-        // Validate against DMA buffer size
-        if (fc->channel_offset + (buf_size * req.count) > ourISPdev->dma_size) {
-            pr_err("Buffer too large: need %zu at offset 0x%x\n",
-                   buf_size * req.count, fc->channel_offset);
-            return -ENOMEM;
-        }
-
-        fc->buf_base = ourISPdev->dma_buf + fc->channel_offset;
-        fc->dma_addr = ourISPdev->dma_addr + fc->channel_offset;
-    }
-
-    // Allocate buffer descriptors
-    fc->buffers = kzalloc(sizeof(struct frame_buffer) * req.count, GFP_KERNEL);
-    if (!fc->buffers)
+    // Validate total size
+    if (fc->channel_offset + (buf_size * req.count) > ourISPdev->dma_size) {
+        pr_err("Buffer allocation too large\n");
+        kfree(fc->queue.frames);
         return -ENOMEM;
+    }
 
-    if (!fc->buf_base) {
-        fc->channel_offset = (fc->channel_id == 0) ? 0xfd2000 : 0x12c4000;
-        fc->buf_base = ourISPdev->dma_buf + fc->channel_offset;
-        fc->dma_addr = ourISPdev->dma_addr + fc->channel_offset;
+    // Map into DMA buffer
+    fc->buf_base = ourISPdev->dma_buf + fc->channel_offset;
+    fc->dma_addr = ourISPdev->dma_addr + fc->channel_offset;
 
-        // Initialize each buffer descriptor
-        for (int i = 0; i < req.count; i++) {
-            struct frame_buffer *buf = &fc->buffers[i];
-            buf->index = i;
-            buf->type = req.type;
-            buf->memory = req.memory;
-            buf->flags = 0; // Available
-            buf->width = fc->width;
-            buf->height = fc->height;
-            buf->format = fc->format;
-            buf->memory_offset = i * buf_size;
-            buf->length = buf_size;
-            buf->fps_num = 30;
-            buf->fps_den = 1;
-            buf->state = 0;  // Initial state
-            buf->flags2 = 0;
+    // Initialize frame nodes with proper magic numbers and alignment
+    for (i = 0; i < req.count; i++) {
+        struct frame_node *node = &fc->queue.frames[i];
+        node->magic = FRAME_MAGIC;        // 0x494D5046 "IMPF"
+        node->magic_tail = 0x200200;      // Magic tail from OEM
+        node->index = i;
+        node->data = fc->buf_base + (i * buf_size);
+        node->frame_size = buf_size;
+        node->virt_addr = fc->buf_base + (i * buf_size);
+        node->phys_addr = fc->dma_addr + (i * buf_size);
+        node->state = 0;                  // Initial state
+        INIT_LIST_HEAD(&node->list);
+
+        // Special handling for channel 0 - add marker
+        if (fc->channel_id == 0) {
+            uint32_t *marker = node->data;
+            *marker = 0x12345678;         // Magic marker seen in OEM
         }
     }
 
+    // Initialize queue state
+    spin_lock_init(&fc->queue.lock);
+    INIT_LIST_HEAD(&fc->queue.ready_list);
+    INIT_LIST_HEAD(&fc->queue.done_list);
+    atomic_set(&fc->queue.frames_ready, 0);
+    atomic_set(&fc->queue.frames_queued, 0);
+    atomic_set(&fc->queue.frames_completed, 0);
+    init_waitqueue_head(&fc->queue.wait);
+
+    // Store configuration
     fc->buf_size = buf_size;
     fc->buf_count = req.count;
     fc->sequence = 0;
-    fc->state |= BIT(0);
+    fc->state |= BIT(0);  // Mark as initialized
 
+    pr_info("Buffer setup complete: size=%zu count=%d\n", buf_size, req.count);
     return 0;
 }
 
