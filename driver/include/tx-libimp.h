@@ -99,6 +99,14 @@
 #define ISP_ROUTE_REG         0x08
 #define ISP_BYPASS_REG        0x0C
 
+#define ISP_NOTIFY_AE      0x1000000   // AE callback notification
+#define ISP_NOTIFY_STATS   0x2000000   // Stats callback notification
+#define ISP_ERR_CALLBACK   0xfffffdfd  // Error status for callback failure
+
+/* AE state tracking */
+#define AE_STATE_DISABLED  0
+#define AE_STATE_ENABLED   1
+#define AE_STATE_RUNNING   2
 
 // Parameter offsets in tuning state
 #define TUNING_OFF_CONTRAST    0x01
@@ -110,6 +118,7 @@
 #define TUNING_OFF_VFLIP       0x0f
 #define TUNING_OFF_DPC         0x11
 
+#define ISP_TUNING_SET_FPS     0x80000e0  // FPS control command code
 #define ISP_CTRL_BYPASS    0x8000164
 #define ISP_CTRL_ANTIFLICKER 0x980918
 #define ISP_LINK_CTRL         0x0000  // Base + offset for link control
@@ -337,6 +346,25 @@ struct isp_flip_ioctl {
 struct isp_ctrl_msg {
     u32 cmd;      // Command code
     u32 value;    // Value to set
+};
+
+// Structure for FPS control
+struct isp_fps_param {
+    uint32_t enable;     // 1 = set, 0 = get
+    uint32_t cmd;        // Command (0x80000e0)
+    uint32_t value;      // Packed FPS value (num << 16 | den)
+};
+
+struct ae_callback_data {
+    void (*frame_cb)(void *);    // Frame callback at offset 0x1c
+    void (*stats_cb)(void *);    // Stats callback at offset 0x8
+    void *priv;                  // Private data
+};
+
+struct isp_callback_info {
+    void *callback_data;      // At offset 0xc4
+    int32_t (*ae_cb)(void);  // AE callback at offset 0x1c
+    int32_t (*stats_cb)(void); // Stats callback at offset 0x8
 };
 
 #endif //TX_LIBIMP_H

@@ -1261,6 +1261,8 @@ struct isp_framesource_state {
         uint32_t scaler_outheight;// 0x2c
         uint32_t picwidth;        // 0x30
         uint32_t picheight;       // 0x34
+        uint32_t fps_num;     // Frame rate numerator (offset +4)
+        uint32_t fps_den;     // Frame rate denominator (offset +8)
         char pad[0x38];          // Padding to 0x70 bytes
     }__aligned(4) attr;
     bool attr_set;
@@ -1309,7 +1311,13 @@ struct ae_info {
     u32 min_exposure;       // Minimum allowed exposure
     u32 max_exposure;       // Maximum allowed exposure
     u32 target_luminance;   // Target luminance level
-    // Add any other fields needed by tiziano_ae_init
+    uint32_t enabled;            // AE enabled flag
+    uint32_t state;             // Current AE state
+    struct ae_callback_data cb;  // Callback structure
+    spinlock_t lock;            // Protect callback access
+    uint32_t frame_cnt;         // Frame counter
+    uint32_t target_fps_num;    // Target FPS numerator
+    uint32_t target_fps_den;    // Target FPS denominator
 };
 
 // AWB info structure - complete definition based on usage

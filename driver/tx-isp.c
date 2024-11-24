@@ -503,89 +503,106 @@ static int pwdn_gpio = -1;  // Default power down GPIO disabled
 
 
 
-// Function definition based on the assembly
-int32_t tx_isp_notify(int32_t arg1, int32_t notificationType)
+int32_t tx_isp_notify(int32_t arg1, int32_t notify_type)
 {
-    uint32_t globe_ispdev_1 = globe_ispdev;
-    int32_t* deviceListPointer = (int32_t*)((char*)globe_ispdev_1 + 0x38); // Casting to correct pointer type
-    int32_t resultStatus = 0;
-    int32_t operationResult = 0;
-    int32_t notificationFlag = (notificationType & 0xff000000);
-    void* devicePointer = (void*)*((uint32_t*)deviceListPointer);
+    struct IMPISPDev *dev = ourISPdev;
+    struct isp_callback_info **cb_list;
+    int32_t result = 0;
+    uint32_t notify_flag;
 
-    while (true)
-    {
-        if (devicePointer == 0)
-        {
-            deviceListPointer = &deviceListPointer[1];
-        }
-        else
-        {
-            int32_t (*callbackFunction)(void); // Function pointer declaration with a prototype
+    if (!dev)
+        return -EINVAL;
 
-            if (notificationFlag == 0x1000000)
-            {
-                void* callbackData = *(void**)((char*)devicePointer + 0xc4);
+    // Get callback list starting at offset 0x38
+    cb_list = (struct isp_callback_info **)((char *)dev + 0x38);
+    if (!cb_list)
+        return -EINVAL;
 
-                if (callbackData != 0)
-                {
-                    callbackFunction = (int32_t (*)(void))*(uint32_t*)((char*)callbackData + 0x1c);
+    // Extract notification type from upper byte
+    notify_flag = notify_type & 0xff000000;
 
-                    if (callbackFunction == 0)
-                    {
-                        resultStatus = 0xfffffdfd;
+    // Iterate through callback list until offset 0x78
+    while (cb_list < (struct isp_callback_info **)((char *)dev + 0x78)) {
+        struct isp_callback_info *cb_info = *cb_list;
+
+        if (cb_info) {
+            switch (notify_flag) {
+            case ISP_NOTIFY_AE:
+                if (cb_info->callback_data) {
+                    int32_t (*ae_func)(void) =
+                        (int32_t (*)(void))((char *)cb_info->callback_data + 0x1c);
+
+                    if (ae_func) {
+                        int32_t cb_result = ae_func();
+                        if (cb_result) {
+                            result = (cb_result != ISP_ERR_CALLBACK) ?
+                                     cb_result : ISP_ERR_CALLBACK;
+                            goto out;
+                        }
+                    } else {
+                        result = ISP_ERR_CALLBACK;
                     }
-                    else
-                    {
-                        resultStatus = 0;
+                } else {
+                    result = ISP_ERR_CALLBACK;
+                }
+                break;
 
-                        if (operationResult != 0)
-                        {
-                            resultStatus = 0xfffffdfd;
+            case ISP_NOTIFY_STATS:
+                if (cb_info->callback_data) {
+                    void *stats_data = *(void **)((char *)cb_info->callback_data + 0xc);
+                    if (stats_data) {
+                        int32_t (*stats_func)(void) =
+                            (int32_t (*)(void))((char *)stats_data + 0x8);
 
-                            if (operationResult != 0xfffffdfd)
-                                return operationResult;
+                        if (stats_func) {
+                            int32_t cb_result = stats_func();
+                            result = cb_result ? ISP_ERR_CALLBACK : 0;
+                        } else {
+                            result = ISP_ERR_CALLBACK;
                         }
                     }
                 }
-                else
-                {
-                    resultStatus = 0xfffffdfd;
-                }
-            }
-            else if (notificationFlag == 0x2000000)
-            {
-                void* secondaryCallbackData = (void*)*(uint32_t*)(*(uint32_t*)((char*)devicePointer + 0xc4) + 0xc);
-                resultStatus = 0xfffffdfd;
+                break;
 
-                if (secondaryCallbackData != 0)
-                {
-                    callbackFunction = (int32_t (*)(void))*(uint32_t*)((char*)secondaryCallbackData + 8);
-                    if (callbackFunction != 0)
-                    {
-                        operationResult = callbackFunction();
-                        resultStatus = (operationResult == 0) ? 0 : 0xfffffdfd;
-                    }
-                }
+            default:
+                result = 0;
+                break;
             }
-            else
-            {
-                resultStatus = 0;
-            }
-
-            deviceListPointer = &deviceListPointer[1];
         }
 
-        if ((char*)globe_ispdev_1 + 0x78 == (char*)deviceListPointer)
-            break;
-
-        devicePointer = *(void**)deviceListPointer;
+        cb_list++;
     }
 
-    if (resultStatus == 0xfffffdfd)
-        return 0;
+out:
+    return (result == ISP_ERR_CALLBACK) ? 0 : result;
+}
 
-    return resultStatus;
+// Add registration helper
+int register_isp_callback(struct IMPISPDev *dev,
+                         int type,
+                         void *callback_data,
+                         int32_t (*func)(void))
+{
+    struct isp_callback_info *cb_info;
+
+    if (!dev || !callback_data || !func)
+        return -EINVAL;
+
+    cb_info = kzalloc(sizeof(*cb_info), GFP_KERNEL);
+    if (!cb_info)
+        return -ENOMEM;
+
+    cb_info->callback_data = callback_data;
+
+    if (type == ISP_NOTIFY_AE)
+        cb_info->ae_cb = func;
+    else if (type == ISP_NOTIFY_STATS)
+        cb_info->stats_cb = func;
+
+    // Store in device callback list at appropriate offset
+    *(struct isp_callback_info **)((char *)dev + 0x38) = cb_info;
+
+    return 0;
 }
 
 /*
@@ -1361,6 +1378,23 @@ static int handle_isp_get_ctrl(struct isp_core_ctrl *ctrl)
     return 0;
 }
 
+int set_framesource_fps(int32_t num, int32_t den)
+{
+    struct IMPISPDev *dev = ourISPdev;
+    struct isp_framesource_state *fs;
+
+    if (!dev)
+        return -EINVAL;
+
+    // Update main frame source
+    fs = &dev->frame_sources[0];
+    if (fs->is_open) {
+        fs->attr.fps_num = num;
+        fs->attr.fps_den = den;
+    }
+
+    return 0;
+}
 
 /*
  * ISP-M0 IOCTL handler
@@ -1448,7 +1482,20 @@ static long isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, unsigned l
                         pr_err("%s(%d),ioctl IMAGE_TUNING_CID_AE_HIST_ORIGIN error\n",
                                __func__, __LINE__);
                     break;
+                case ISP_TUNING_SET_FPS: {
+                    uint32_t fps_num = ctrl.value >> 16;
+                    uint32_t fps_den = ctrl.value & 0xFFFF;
 
+                    pr_info("Setting sensor FPS: %d/%d\n", fps_num, fps_den);
+
+                    ret = set_framesource_fps(fps_num, fps_den);
+
+                    // If AE is enabled, notify through event system
+                    if (ret == 0 && dev->ae_info && dev->ae_info->enabled) {
+                        tx_isp_notify(0x1000000, 0);
+                    }
+                    break;
+                }
                 default:
                     pr_warn("Unknown tuning control command: 0x%x\n", ctrl.cmd);
                     ret = -EINVAL;
@@ -1500,7 +1547,6 @@ static long isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, unsigned l
             }
             break;
         }
-
         default:
             pr_info("Unknown ISP-M0 IOCTL: 0x%x\n", cmd);
             ret = -ENOTTY;
@@ -2859,6 +2905,24 @@ uint32_t private_math_exp2(uint32_t val, const unsigned char shift_in,
 }
 
 
+int register_ae_callback(struct IMPISPDev *dev, void (*frame_cb)(void *),
+                        void (*stats_cb)(void *), void *priv)
+{
+    unsigned long flags;
+
+    if (!dev || !dev->ae_info)
+        return -EINVAL;
+
+    spin_lock_irqsave(&dev->ae_info->lock, flags);
+
+    dev->ae_info->cb.frame_cb = frame_cb;
+    dev->ae_info->cb.stats_cb = stats_cb;
+    dev->ae_info->cb.priv = priv;
+
+    spin_unlock_irqrestore(&dev->ae_info->lock, flags);
+
+    return 0;
+}
 
 /**
  * tisp_ae_algo_init implementation with correct return type
@@ -4408,31 +4472,11 @@ static const struct v4l2_file_operations isp_v4l2_fops = {
 
 
 /* Configure DEIR control registers */
-static void configure_deir_control(void)
+static void configure_deir_control(void) // TODO
 {
     /* Add your DEIR control register configurations here */
     /* Use readl/writel for register access */
-}
-
-// Add validation for parameter loading
-static int validate_parameter_load(void __iomem *dest, size_t offset)
-{
-    uint32_t test_val;
-
-    // Try writing a test pattern
-    writel(0xdeadbeef, dest);
-    wmb();
-    test_val = readl(dest);
-
-    if (test_val != 0xdeadbeef) {
-        pr_err("Parameter write test failed: wrote 0xdeadbeef read 0x%08x\n", test_val);
-        return -EIO;
-    }
-
-    // Reset test location
-    writel(0, dest);
-    wmb();
-    return 0;
+    pr_info("TODO Configuring DEIR control registers\n");
 }
 
 static int tiziano_load_parameters(const char *filename, void __iomem *dest, size_t offset)
@@ -4710,6 +4754,32 @@ static uint32_t calculate_buffer_size(uint32_t width, uint32_t height, uint32_t 
     return width * height * 2;
 }
 
+
+static void fill_test_pattern(void *buf, int width, int height, uint32_t format) {
+    uint8_t *ptr = buf;
+    int x, y;
+
+    // For NV12 format
+    if (format == ISP_FMT_NV12) {
+        // Fill Y plane with gradient pattern
+        for (y = 0; y < height; y++) {
+            for (x = 0; x < width; x++) {
+                // Create a diagonal gradient pattern
+                ptr[y * width + x] = (x + y) & 0xFF;
+            }
+        }
+
+        // Fill UV plane with alternating pattern
+        ptr += width * height; // Move to UV plane
+        for (y = 0; y < height/2; y++) {
+            for (x = 0; x < width; x += 2) {
+                ptr[y * width + x] = 128; // U value
+                ptr[y * width + x + 1] = 128; // V value
+            }
+        }
+    }
+}
+
 static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
 {
     struct frame_qbuf_request req;
@@ -4728,9 +4798,14 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
 
     // Validate buffer index
     if (req.index >= fc->buf_count) {
-        pr_err("Invalid buffer index %u (max %u)\n", req.index, fc->buf_count - 1);
+        pr_err("Invalid buffer index %u (max %u)\n",
+               req.index, fc->buf_count - 1);
         return -EINVAL;
     }
+
+    // Fill buffer with test pattern
+    fill_test_pattern(fc->buf_base + (req.index * fc->buf_size),
+                     fc->width, fc->height, fc->format);
 
     // Get current time for timestamp
     ktime_get_real_ts(&ts);
@@ -4739,7 +4814,7 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     struct frame_buffer *buf = &fc->buffers[req.index];
     buf->index = req.index;
     buf->type = req.type;
-    buf->bytesused = req.bytesused;
+    buf->bytesused = fc->buf_size; // Update with actual size
     buf->flags = req.flags | V4L2_BUF_FLAG_QUEUED;
     buf->field = req.field;
     buf->timestamp.tv_sec = ts.tv_sec;
@@ -4750,29 +4825,26 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     buf->format = fc->format;
     buf->width = fc->width;
     buf->height = fc->height;
-    buf->fps_num = 30;  // Default to 30fps
+    buf->fps_num = 30;
     buf->fps_den = 1;
-    buf->state = 1;  // Mark as queued
+    buf->state = 1; // Mark as queued
 
-    // Store timing information that libimp expects
+    // Store timing info
     if (fc->timing_data) {
         fc->timing_data[req.index].timestamp = ktime_get_real_ns();
-        fc->timing_data[req.index].frame_count = fc->sequence;
+        fc->timing_data[req.index].frame_count = fc->frame_count++;
     }
 
-    // Update channel state
+    // Update counters and wake waiters
     atomic_inc(&fc->queued_bufs);
     fc->last_qbuf_time = ts;
-
-    // Wake up any waiting DQBUF operations
     wake_up_interruptible(&fc->wait_queue);
 
     pr_info("QBUF: channel=%d index=%u seq=%u size=%u\n",
-             fc->channel_id, req.index, buf->sequence, buf->bytesused);
+            fc->channel_id, req.index, buf->sequence, buf->bytesused);
 
     return ret;
 }
-
 
 static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
 {
@@ -4780,18 +4852,12 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
     struct frame_buffer buf;
     struct timeval tv;
     int ret = 0;
+    unsigned int timeout = 100; // 100ms timeout
 
     if (!fc || !fc->buf_base) {
         pr_err("Invalid channel state in DQBUF\n");
         return -EINVAL;
     }
-
-    // Copy request struct from user space
-    if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
-        return -EFAULT;
-
-    pr_debug("DQBUF handler: seq=%u flags=0x%x\n",
-             req.sequence, req.flags);
 
     // Validate streaming state
     if (!(fc->state & BIT(1))) {
@@ -4799,105 +4865,59 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
         return -EINVAL;
     }
 
-    // Add memory barrier before checking queue state
-    smp_rmb();
+    // Wait for buffer with timeout
+    ret = wait_event_interruptible_timeout(
+        fc->wait_queue,
+        atomic_read(&fc->queued_bufs) > 0,
+        msecs_to_jiffies(timeout));
 
-    int queued = atomic_read(&fc->queued_bufs);
-    if (queued <= 0) {
-        pr_debug("No buffers queued, attempting recovery\n");
-        // Try to recover by requeueing if we have timing data
-        if (fc->timing_data && fc->last_qbuf_time.tv_sec != 0) {
-            struct timespec now;
-            ktime_get_real_ts(&now);
-            // Calculate time since last queue
-            long delta_ms = (now.tv_sec - fc->last_qbuf_time.tv_sec) * 1000 +
-                          (now.tv_nsec - fc->last_qbuf_time.tv_nsec) / 1000000;
-            if (delta_ms > 100) { // More than 100ms since last queue
-                pr_debug("Buffer starvation detected, attempting requeue\n");
-                // Reset queue state
-                atomic_set(&fc->queued_bufs, 1);
-                queued = 1;
-            }
-        }
-    }
-
-    // Wait for buffer with adaptive timeout
-    unsigned long timeout = msecs_to_jiffies(100); // Start with shorter timeout
-    int retry_count = 0;
-    const int MAX_RETRIES = 3;
-
-    while (retry_count < MAX_RETRIES) {
-        ret = wait_event_interruptible_timeout(fc->wait_queue,
-            atomic_read(&fc->queued_bufs) > 0, timeout);
-
-        if (ret > 0) break; // Got a buffer
-        if (ret == -ERESTARTSYS) {
-            pr_debug("DQBUF interrupted\n");
-            return -EINTR;
-        }
-
-        // Timeout occurred
-        retry_count++;
-        if (retry_count < MAX_RETRIES) {
-            // Increase timeout exponentially
-            timeout *= 2;
-            pr_debug("DQBUF retry %d with timeout %dms\n",
-                    retry_count, jiffies_to_msecs(timeout));
-            continue;
-        }
-        pr_err("DQBUF timeout after %d retries\n", retry_count);
+    if (ret == 0) {
+        pr_err("DQBUF timeout waiting for buffer\n");
         return -ETIMEDOUT;
     }
+    if (ret == -ERESTARTSYS) {
+        return -EINTR;
+    }
 
-    // Initialize buffer structure
-    memset(&buf, 0, sizeof(buf));
+    // Get buffer ready for dequeue
     do_gettimeofday(&tv);
 
-    // Calculate safe buffer index
+    // Calculate buffer index based on sequence
     unsigned int buf_index = fc->sequence % fc->buf_count;
 
-    // Fill frame_buffer structure
+    // Fill buffer info to return
+    memset(&buf, 0, sizeof(buf));
     buf.index = buf_index;
     buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     buf.memory = V4L2_MEMORY_MMAP;
-    buf.flags = V4L2_BUF_FLAG_MAPPED;
+    buf.flags = V4L2_BUF_FLAG_MAPPED | V4L2_BUF_FLAG_DONE;
     buf.sequence = fc->sequence;
     buf.timestamp = tv;
     buf.format = fc->format;
     buf.width = fc->width;
     buf.height = fc->height;
+    buf.bytesused = fc->buf_size;
     buf.field = V4L2_FIELD_NONE;
     buf.fps_num = 30;
     buf.fps_den = 1;
 
-    // Calculate buffer size and validate
-    size_t buf_offset = buf_index * fc->buf_size;
-    if (buf_offset + fc->buf_size > fc->buf_count * fc->buf_size) {
-        pr_err("Buffer overflow: offset=%zu size=%u total=%zu\n",
-               buf_offset, fc->buf_size, fc->buf_count * fc->buf_size);
-        return -EINVAL;
-    }
-    buf.bytesused = fc->buf_size;
-
-    // Update frame timing information
+    // Update timing info
     if (fc->timing_data) {
         fc->timing_data[buf_index].timestamp = ktime_get_real_ns();
         fc->timing_data[buf_index].frame_count = fc->frame_count++;
     }
 
-    // Increment sequence before decrementing queue count
-    fc->sequence++;
-
-    // Ensure all writes complete before decrementing counter
-    smp_mb();
+    // Decrement queued buffer count
     atomic_dec(&fc->queued_bufs);
+
+    if (copy_to_user((void __user *)arg, &buf, sizeof(buf))) {
+        pr_err("Failed to copy buffer info to user\n");
+        return -EFAULT;
+    }
 
     pr_debug("DQBUF success: ch=%d index=%u seq=%u size=%u queued=%d\n",
              fc->channel_id, buf.index, buf.sequence, buf.bytesused,
              atomic_read(&fc->queued_bufs));
-
-    if (copy_to_user((void __user *)arg, &buf, sizeof(buf)))
-        return -EFAULT;
 
     return 0;
 }
