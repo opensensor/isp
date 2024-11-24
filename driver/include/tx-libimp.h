@@ -44,10 +44,30 @@
 #define ISP_READ_SENSOR_ID       0x805056c1
 #define ISP_SET_SENSOR_INFO      0xc050561a
 
+#define ISP_AE_HIST_BASE   0x7000  // Base address for AE histogram data
+#define ISP_AE_STATE_BASE  0x7100  // Base address for AE state registers
+
 // Core tuning IOCTLs
 #define ISP_CORE_G_CTRL         0xc008561b
 #define ISP_CORE_S_CTRL         0xc008561c
 #define ISP_TUNING_ENABLE       0xc00c56c6
+
+#define ISP_TUNING_CID_AE_ZONE    0x8000030  // From GetAeZone
+#define ISP_TUNING_CID_AE_STATE   0x8000036  // From GetAeState
+#define ISP_TUNING_CID_AF_ZONE    0x8000046  // From GetAfZone
+#define ISP_TUNING_CID_AE_HIST_ORIGIN 0x8000031
+
+// Size definitions from decompiled AF zone function (0x384 = 900 bytes)
+#define MAX_AF_ZONES     225    // Typical 15x15 zone grid = 225 * 4 bytes = 900 bytes
+
+// Histogram/AE definitions from earlier decompiled code
+#define MAX_AE_ZONES     225    // Same 15x15 grid as AF
+#define MAX_HIST_BINS    256    // Standard histogram size
+#define ISP_AF_ZONE_BASE    0x7000  // Base address for AF zone registers
+#define ISP_AF_ZONE_SIZE    (MAX_AF_ZONES * 4)  // 900 bytes of zone data
+
+#define AE_HIST_SIZE     0x400   // 1024 bytes of histogram data
+#define AE_HIST_BUF_SIZE 0x42c   // Full buffer size including extra data
 
 /* ISP Pipeline Register Structure */
 // Strucure for LIBIMP
@@ -211,6 +231,53 @@ struct tisp_param {
 // up to offset 0x70 (112 bytes), suggesting this structure size
 struct imp_channel_attr {
     __u32 attr[28];  // 28 words = 112 bytes (0x70)
+};
+
+struct isp_zone_ctrl {
+    __u32 enable;     // var_18 = 1
+    __u32 cmd;        // var_14 = control code
+    __u32 value;      // var_10 = arg1 (output buffer)
+};
+
+// AE State structure based on tisp_get_ae_state
+struct ae_state_info {
+    u32 values[3];  // 0xc bytes copied to user
+};
+
+// AE Zone data structure (from apical_isp_ae_zone_g_ctrl.isra.84)
+struct ae_zone_info {
+    u8 zones[MAX_AE_ZONES];    // Zone data
+    u16 metrics[4];           // Various metrics
+    u16 hist_data[MAX_HIST_BINS];
+    u8 additional[4];         // Additional data seen in tisp_g_ae_hist
+};
+
+// AF Zone data structure (from apical_isp_af_zone_g_ctrl.isra.85)
+struct af_zone_data {
+    u32 zone_metrics[MAX_AF_ZONES];  // 900 bytes (0x384) copied to user
+};
+
+struct isp_tuning_ctrl {
+    __u32 cmd;     // Command ID
+    __u32 value;   // Value/pointer
+};
+
+// ISP register definitions
+#define ISP_AE_HIST_BASE   0x7000  // Base address for AE histogram data
+#define ISP_AE_STATE_BASE  0x7100  // Base address for AE state registers
+
+// AE histogram and state structures
+struct ae_hist_data {
+    // From decompiled code where we see 0x42c bytes allocated
+    u32 histogram[256];    // 0x400 bytes of histogram data
+    u8 stats[0x14];       // Additional statistics data
+    u8 status[0x18];      // Status bytes including those at 0x414, 0x418, etc
+};
+
+struct ae_state_info {
+    u32 exposure;         // Current exposure value
+    u32 gain;            // Current gain value
+    u32 status;          // AE status/flags
 };
 
 #endif //TX_LIBIMP_H

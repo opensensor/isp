@@ -65,7 +65,7 @@ uint32_t globe_ispdev = 0x0;
 static struct device *tisp_device;
 static dev_t tx_sp_dev_number;
 static struct class *tisp_class;
-
+static struct af_zone_data af_zone_data;
 
 
 // Now update the configurations
@@ -157,12 +157,39 @@ static const struct tx_isp_link_configs isp_link_configs[] = {
     },
 };
 
+/* Global state variables seen in decompiled */
+static void *ae_info_mine;
+static void *ae_statis_mine;
+static void *awb_info_mine;
+static int ae_algo_comp;
+static int awb_algo_comp;
+
+/* Wait queues seen in decompiled code */
+static DECLARE_WAIT_QUEUE_HEAD(ae_wait);
+static DECLARE_WAIT_QUEUE_HEAD(awb_wait);
+
 
 static inline u64 ktime_get_real_ns(void)
 {
     struct timespec ts;
     ktime_get_real_ts(&ts);
     return timespec_to_ns(&ts);
+}
+
+
+/* System register access functions */
+static inline u32 system_reg_read(u32 reg)
+{
+    void __iomem *addr = ioremap(reg, 4);
+    u32 val;
+
+    if (!addr)
+        return 0;
+
+    val = readl(addr);
+    iounmap(addr);
+
+    return val;
 }
 
 /****
@@ -870,6 +897,37 @@ static int isp_core_tuning_release(struct IMPISPDev *dev)
     return 0;
 }
 
+
+// Implement required functions
+static int tisp_g_ae_hist(void *buf)
+{
+    // TODO: Implement actual hardware access
+    memset(buf, 0, AE_HIST_BUF_SIZE);  // Temporary implementation
+    return 0;
+}
+
+static int tisp_get_ae_state(struct ae_state_info *state)
+{
+    // TODO: Implement actual hardware access
+    memset(state, 0, sizeof(*state));  // Temporary implementation
+    return 0;
+}
+
+static int isp_get_ae_state(struct isp_device *isp, u32 user_ptr)
+{
+    struct ae_state_info state;
+
+    // Get AE state from hardware
+    tisp_get_ae_state(&state);
+
+    // Copy 0xc bytes of state data to user
+    if (copy_to_user((void __user *)user_ptr, &state, sizeof(state))) {
+        return -EFAULT;
+    }
+
+    return 0;
+}
+
 static int framechan_get_attr(struct isp_framesource_state *fs, struct imp_channel_attr *attr)
 {
     if (!fs || !attr) {
@@ -916,6 +974,173 @@ static long frame_channel_vidioc_get_fmt(struct isp_framesource_state *fs, void 
     return 0;
 }
 
+static int isp_get_ae_zone(struct isp_device *isp, u32 user_ptr)
+{
+    struct ae_zone_info info;
+    void *hist_buf;
+    int ret = 0;
+
+    // Allocate temporary buffer for histogram data
+    hist_buf = kzalloc(0x42c, GFP_KERNEL);
+    if (!hist_buf) {
+        pr_err("Failed to private_kmalloc ae_hist buffer\n");
+        return -ENOMEM;
+    }
+
+    // Get AE histogram data
+    tisp_g_ae_hist(hist_buf);
+
+    // Copy data from histogram buffer to info structure
+    info.additional[0] = *((u8 *)(hist_buf + 0x414));
+    info.additional[1] = *((u8 *)(hist_buf + 0x418));
+    info.additional[2] = *((u8 *)(hist_buf + 0x41c));
+    info.additional[3] = *((u8 *)(hist_buf + 0x420));
+
+    info.metrics[0] = *((u16 *)(hist_buf + 0x400));
+    info.metrics[1] = *((u16 *)(hist_buf + 0x404));
+    info.metrics[2] = *((u16 *)(hist_buf + 0x408));
+    info.metrics[3] = *((u16 *)(hist_buf + 0x40c));
+
+    // Copy zone data
+    if (copy_to_user((void __user *)user_ptr, &info, sizeof(info))) {
+        ret = -EFAULT;
+    }
+
+    kfree(hist_buf);
+    return ret;
+}
+
+
+// Read zone data from hardware registers
+static int tisp_af_get_zone(void)
+{
+    int i;
+    u32 reg_val;
+
+    // Read zone metrics from hardware registers
+    for (i = 0; i < MAX_AF_ZONES; i++) {
+        reg_val = system_reg_read(ISP_AF_ZONE_BASE + (i * 4));
+        af_zone_data.zone_metrics[i] = reg_val;
+    }
+
+    return 0;
+}
+
+// Wrapper function called by tuning interface
+static int tisp_g_af_zone(void)
+{
+    return tisp_af_get_zone();
+}
+
+// AF zone get control function
+static int apical_isp_af_zone_g_ctrl(u32 user_ptr)
+{
+    int ret;
+
+    // Get latest zone data from hardware
+    ret = tisp_g_af_zone();
+    if (ret) {
+        pr_err("Failed to get AF zone data\n");
+        return ret;
+    }
+
+    // Copy zone data to user
+    if (copy_to_user((void __user *)user_ptr, &af_zone_data, sizeof(af_zone_data))) {
+        pr_err("Failed to copy AF zone data to user\n");
+        return -EFAULT;
+    }
+
+    return 0;
+}
+
+static int apical_isp_ae_hist_origin_g_attr(u32 user_ptr)
+{
+    void *hist_buf;
+    void *hist_data;
+    int ret = 0;
+
+    // Allocate temporary buffer (0x42c bytes as seen in decompiled code)
+    hist_buf = kzalloc(AE_HIST_BUF_SIZE, GFP_KERNEL);
+    if (!hist_buf) {
+        pr_err("Failed to private_kmalloc ae_hist buffer\n");
+        return -ENOMEM;
+    }
+
+    // Get histogram data
+    tisp_g_ae_hist(hist_buf);
+
+    // Allocate space for the 0x400 bytes we'll copy to user
+    hist_data = kzalloc(AE_HIST_SIZE, GFP_KERNEL);
+    if (!hist_data) {
+        pr_err("Failed to allocate histogram data buffer\n");
+        kfree(hist_buf);
+        return -ENOMEM;
+    }
+
+    // Copy first 0x400 bytes to our temporary buffer
+    memcpy(hist_data, hist_buf, AE_HIST_SIZE);
+
+    // Copy to user space
+    if (copy_to_user((void __user *)user_ptr, hist_data, AE_HIST_SIZE)) {
+        ret = -EFAULT;
+    }
+
+    // Clean up
+    kfree(hist_data);
+    kfree(hist_buf);
+    return ret;
+}
+
+static int isp_get_af_zone(struct IMPISPDev *dev, u32 user_ptr)
+{
+    int ret;
+
+    ret = tisp_af_get_zone();
+    if (ret) {
+        return ret;
+    }
+
+    // Copy zone data to user
+    if (copy_to_user((void __user *)user_ptr, &af_zone_data, sizeof(af_zone_data))) {
+        return -EFAULT;
+    }
+
+    return 0;
+}
+
+
+
+// Main get control function that handles all tuning gets
+static long isp_tuning_get_ctrl(struct IMPISPDev *dev, void __user *arg)
+{
+    struct {
+        u32 cmd;
+        u32 value;  // Pointer to user buffer
+    } ctrl;
+    int ret = 0;
+
+    if (copy_from_user(&ctrl, arg, sizeof(ctrl))) {
+        return -EFAULT;
+    }
+
+    // Check tuning state
+    if (dev->tuning_state != 2) {
+        pr_err("ISP tuning not in correct state (state=%d)\n", dev->tuning_state);
+        return -EINVAL;
+    }
+
+    switch (ctrl.cmd) {
+        ret = isp_tuning_get_ctrl(dev, arg);
+    }
+
+    if (ret) {
+        pr_err("%s(%d),ioctl IMAGE_TUNING_CID_AE_ZONE error\n",
+               __func__, __LINE__);
+    }
+
+    return ret;
+}
+
 
 /*
  * ISP-M0 IOCTL handler
@@ -930,7 +1155,7 @@ static long isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, unsigned l
 
     pr_debug("ISP-M0 IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
 
-    if (!ourISPdev || !dev->tuning_state) {
+    if (!dev || !dev->tuning_state) {
         pr_err("No ISP device or tuning data\n");
         return -EINVAL;
     }
@@ -980,24 +1205,63 @@ static long isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, unsigned l
             break;
         }
 
-        case 0xc00c56c6: { // ISP_TUNING_ENABLE
-            int enable;
-            if (copy_from_user(&enable, (void __user *)arg, sizeof(enable)))
-                return -EFAULT;
+        case 0xc00c56c6: {  // Shared IOCTL for tuning enable and zone controls
+            // First try to read as tuning control structure
+            struct isp_tuning_ctrl ctrl;
+            if (copy_from_user(&ctrl, (void __user *)arg, sizeof(ctrl))) {
+                // If that fails, try as simple enable flag
+                int enable;
+                if (copy_from_user(&enable, (void __user *)arg, sizeof(enable))) {
+                    return -EFAULT;
+                }
 
-            pr_info("ISP tuning %s requested\n", enable ? "enable" : "disable");
+                // Handle enable/disable
+                pr_info("ISP tuning %s requested\n", enable ? "enable" : "disable");
 
-            if (enable) {
-                ret = isp_core_tuning_open(dev);
-            } else {
-                ret = isp_core_tuning_release(dev);
+                if (enable) {
+                    ret = isp_core_tuning_open(ourISPdev);
+                    if (ret == 0) {
+                        ourISPdev->tuning_enabled = 2;  // Set enabled state
+                    }
+                } else {
+                    ret = isp_core_tuning_release(ourISPdev);
+                    if (ret == 0) {
+                        ourISPdev->tuning_enabled = 0;  // Set disabled state
+                    }
+                }
+                return ret;
             }
 
-            // Store tuning state
-            dev->tuning_enabled = enable;
-            return ret;
-        }
+            // Handle zone/state controls
+            if (ourISPdev->tuning_state != 2) {
+                pr_err("ISP tuning not in correct state (state=%d)\n",
+                       ourISPdev->tuning_state);
+                return -EINVAL;
+            }
 
+            switch(ctrl.cmd) {
+                case ISP_TUNING_CID_AE_ZONE:
+                    ret = isp_get_ae_zone(ourISPdev, ctrl.value);
+                    break;
+
+                case ISP_TUNING_CID_AE_STATE:
+                    ret = isp_get_ae_state(ourISPdev, ctrl.value);
+                    break;
+
+                case ISP_TUNING_CID_AF_ZONE:
+                    ret = isp_get_af_zone(ourISPdev, ctrl.value);
+                    break;
+
+                case ISP_TUNING_CID_AE_HIST_ORIGIN:
+                    ret = apical_isp_ae_hist_origin_g_attr(ctrl.value);
+                    break;
+
+                default:
+                    pr_warn("Unknown tuning control command: 0x%x\n", ctrl.cmd);
+                    ret = -EINVAL;
+            }
+            break;
+        }
         default:
             pr_debug("Unknown ISP-M0 IOCTL: 0x%x\n", cmd);
             ret = -ENOTTY;
@@ -2357,6 +2621,8 @@ static int tx_isp_release(struct inode *inode, struct file *file)
     return 0;
 }
 
+
+
 /**
  * struct isp_wdr_buf_size - WDR buffer size information
  * Used for TW_ISP_WDR_GET_BUF ioctl
@@ -2369,31 +2635,6 @@ struct isp_wdr_buf_size {
 
 /* Magic number from decompiled code at 0xef64 */
 
-/* Global state variables seen in decompiled */
-static void *ae_info_mine;
-static void *ae_statis_mine;
-static void *awb_info_mine;
-static int ae_algo_comp;
-static int awb_algo_comp;
-
-/* Wait queues seen in decompiled code */
-static DECLARE_WAIT_QUEUE_HEAD(ae_wait);
-static DECLARE_WAIT_QUEUE_HEAD(awb_wait);
-
-/* System register access functions */
-static inline u32 system_reg_read(u32 reg)
-{
-    void __iomem *addr = ioremap(reg, 4);
-    u32 val;
-
-    if (!addr)
-        return 0;
-
-    val = readl(addr);
-    iounmap(addr);
-
-    return val;
-}
 
 /**
  * private_math_exp2 - Exponential calculation helper
@@ -2564,74 +2805,6 @@ struct isp_wdr_buf_info {
     unsigned long addr;
     unsigned int size;
 };
-
-
-
-// TODO
-/**
- * setup_wdr_buffers - Configure WDR buffer memory regions
- * @isp: ISP device structure
- * @buf_info: WDR Buffer information from userspace
- *
- * Based on decompiled code at case 0x800856d6
- */
-//int setup_wdr_buffers(struct isp_device *isp, struct isp_wdr_buf_info *buf_info)
-//{
-//    uint32_t required_size;
-//    uint32_t line_width;
-//    uint32_t height;
-//    struct isp_reg_t *regs = isp->regs;  // Use main register block
-//
-//    /* Debug print matching decompiled code */
-//    dev_dbg(isp->dev, "%s:%d::tsize is %d, buf info size: %d\n",
-//            __func__, __LINE__, required_size, buf_info->size);
-//
-//    /* Get WDR mode from registers */
-//    uint32_t wdr_mode = isp_reg_read(regs, ISP_WDR_MODE_OFFSET);
-//
-//    /* Calculate required buffer size based on WDR mode */
-//    switch (wdr_mode) {
-//    case WDR_MODE_LINE:
-//        /* Line-interleaved WDR mode */
-//        line_width = isp_reg_read(regs, ISP_WDR_WIDTH_OFFSET) << 1;
-//        height = isp_reg_read(regs, ISP_WDR_HEIGHT_OFFSET);
-//        required_size = line_width * height;
-//        break;
-//
-//    case WDR_MODE_FRAME:
-//        /* Frame-based WDR mode */
-//        required_size = isp_reg_read(regs, ISP_WDR_FRAME_OFFSET);
-//        line_width = isp_reg_read(regs, ISP_WDR_WIDTH_OFFSET) << 1;
-//        height = required_size / line_width;
-//        break;
-//
-//    default:
-//        /* Not in WDR mode */
-//        dev_err(isp->dev, "Not in WDR mode, buffer setup not needed\n");
-//        return -EINVAL;
-//    }
-//
-//    /* Verify buffer size is sufficient */
-//    if (buf_info->size < required_size) {
-//        dev_err(isp->dev, "%s,%d: buf size too small\n", __func__, __LINE__);
-//
-//        /* Clear WDR mode and disable WDR */
-//        isp_reg_write(regs, ISP_WDR_MODE_OFFSET, WDR_MODE_NONE);
-//        isp_disable_wdr(isp);
-//
-//        return -EINVAL;
-//    }
-//
-//    /* Program WDR buffer registers */
-//    system_reg_write(WDR_REG_BUF, buf_info->addr);
-//    system_reg_write(WDR_REG_LINE, line_width);
-//    system_reg_write(WDR_REG_HEIGHT, height);
-//
-//    dev_dbg(isp->dev, "WDR buffer setup complete: addr=0x%08x, line=%d, height=%d\n",
-//            buf_info->addr, line_width, height);
-//
-//    return 0;
-//}
 
 /**
  * tisp_s_wdr_en - Enable/disable WDR mode and configure related modules
