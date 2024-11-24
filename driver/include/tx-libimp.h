@@ -97,14 +97,14 @@
 #define ISP_AWB_REG_BASE     (ISP_REG_BASE + 0x200)
 
 // Parameter offsets in tuning state
-#define TUNING_OFF_BRIGHTNESS  0x1023  // From decompiled code
-#define TUNING_OFF_CONTRAST    0x1024
-#define TUNING_OFF_SATURATION  0x1024  // Verify this offset
-#define TUNING_OFF_SHARPNESS   0x0fdb
-#define TUNING_OFF_HFLIP       0x03ad
-#define TUNING_OFF_VFLIP       0x03ac
-#define TUNING_OFF_DPC         0x1027
-#define TUNING_OFF_GAMMA       0x1026
+#define TUNING_OFF_CONTRAST    0x01
+#define TUNING_OFF_BRIGHTNESS  0x02
+#define TUNING_OFF_SATURATION  0x0a
+#define TUNING_OFF_SHARPNESS   0x0b
+#define TUNING_OFF_GAMMA       0x09
+#define TUNING_OFF_HFLIP       0x0e
+#define TUNING_OFF_VFLIP       0x0f
+#define TUNING_OFF_DPC         0x11
 
 /* ISP Pipeline Register Structure */
 // Strucure for LIBIMP
@@ -242,7 +242,8 @@ struct isp_tuning_data {
     u8 hflip;              // 0x0e
     u8 vflip;              // 0x0f
     u8 test_pattern;       // 0x10
-    u8 reserved4[3];       // 0x11-0x13
+    u8 dpc;               // 0x11 - Using first byte of reserved4
+    u8 reserved4[2];       // 0x12-0x13
     u32 isp_process;       // 0x14-0x17
     u8 reserved5[4];       // 0x18-0x1b
 };
@@ -302,6 +303,16 @@ struct ae_state_info {
     u32 exposure;         // Current exposure value
     u32 gain;            // Current gain value
     u32 status;          // AE status/flags
+};
+
+// Hardware register structure
+struct isp_ae_regs {
+    u32 gain;
+    u32 exposure;
+    u32 gain_factor;
+    u32 exposure_factor;
+    u32 stats[64];  // AE statistics
+    // ... other registers
 };
 
 #endif //TX_LIBIMP_H

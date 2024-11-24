@@ -729,27 +729,6 @@ static int isp_m0_chardev_open(struct inode *inode, struct file *file)
     // Store device reference
     file->private_data = ourISPdev;
 
-    // Allocate tuning data if not already allocated
-    if (!ourISPdev->tuning_data) {
-        tuning = kzalloc(sizeof(struct isp_tuning_data), GFP_KERNEL);
-        if (!tuning) {
-            pr_err("Failed to allocate tuning data\n");
-            return -ENOMEM;
-        }
-
-        // Initialize with default values
-        tuning->contrast = 50;
-        tuning->brightness = 50;
-        tuning->saturation = 50;
-        tuning->sharpness = 50;
-        tuning->gamma = 50;
-        tuning->auto_wb = 1;
-        tuning->ae_enable = 1;
-        tuning->isp_process = 1;
-
-        ourISPdev->tuning_data = tuning;
-    }
-
     ourISPdev->tuning_enabled = 0;  // Start in disabled state
     file->private_data = ourISPdev;
 
@@ -797,7 +776,7 @@ static int isp_m0_chardev_release(struct inode *inode, struct file *file)
     // Note: Don't free tuning_data here as it might be used by other opens
     // It will be freed when the driver is unloaded
 
-    pr_debug("ISP M0 device released\n");
+    pr_info("ISP M0 device released\n");
     return 0;
 }
 
@@ -832,14 +811,21 @@ static int isp_core_tuning_open(struct IMPISPDev *dev)
     }
 
     // Don't reallocate if already initialized
-    if (dev->tuning_data) {
-        pr_info("Tuning data already initialized\n");
-        return 0;
+    if (!dev->tuning_data) {
+        pr_info("Allocating tuning state\n");
+        tuning = kzalloc(sizeof(*tuning), GFP_KERNEL);
+        if (!tuning) {
+            pr_err("Failed to allocate tuning state\n");
+            return -ENOMEM;
+        }
+        dev->tuning_data = tuning;
+    } else {
+        tuning = dev->tuning_data;
     }
 
-    tuning = kzalloc(sizeof(*tuning), GFP_KERNEL);
+    tuning = kzalloc(sizeof(struct isp_tuning_data), GFP_KERNEL);
     if (!tuning) {
-        pr_err("Failed to allocate tuning state\n");
+        pr_err("Failed to allocate tuning data\n");
         return -ENOMEM;
     }
 
@@ -858,8 +844,6 @@ static int isp_core_tuning_open(struct IMPISPDev *dev)
     tuning->params[TUNING_OFF_VFLIP] = 0;
     tuning->params[TUNING_OFF_DPC] = 128;
     tuning->params[TUNING_OFF_GAMMA] = 128;
-
-    dev->tuning_data = tuning;
 
     return 0;
 }
@@ -1189,138 +1173,104 @@ static long isp_tuning_get_ctrl(struct IMPISPDev *dev, void __user *arg)
     return ret;
 }
 
-static int handle_isp_get_ctrl(struct isp_core_ctrl *ctrl)
+static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl)
 {
-    struct isp_tuning_state *tuning;
-    int ret = 0;
+    struct isp_tuning_data *tuning;
+    u8 value = ctrl->value & 0xFF;  // Extract 8-bit value
 
-    pr_debug("ISP Core Get Control: cmd=0x%x\n", ctrl->cmd);
+    pr_info("ISP set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
 
     if (!ourISPdev || !ourISPdev->tuning_data) {
+        pr_err("No ISP device or tuning data\n");
         return -EINVAL;
     }
 
     tuning = ourISPdev->tuning_data;
 
-    mutex_lock(&tuning->mlock);
-    rmb();  // Ensure we see latest parameter values
-
     switch (ctrl->cmd) {
-        case ISP_CTRL_BRIGHTNESS:
-            ctrl->value = tuning->params[TUNING_OFF_BRIGHTNESS];
-        break;
-
-        case ISP_CTRL_CONTRAST:
-            ctrl->value = tuning->params[TUNING_OFF_CONTRAST];
-        break;
-
-        case ISP_CTRL_SATURATION:
-            ctrl->value = tuning->params[TUNING_OFF_SATURATION];
-        break;
-
-        case ISP_CTRL_SHARPNESS:
-            ctrl->value = tuning->params[TUNING_OFF_SHARPNESS];
-        break;
-
-        case ISP_CTRL_HFLIP:
-            ctrl->value = tuning->params[TUNING_OFF_HFLIP];
-        break;
-
-        case ISP_CTRL_VFLIP:
-            ctrl->value = tuning->params[TUNING_OFF_VFLIP];
-        break;
-
-        default:
-            pr_debug("Unknown ISP control command: 0x%x\n", ctrl->cmd);
-        ret = -EINVAL;
-    }
-
-    mutex_unlock(&tuning->mlock);
-    return ret;
-}
-
-// Handle set control operations
-static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl)
-{
-    struct isp_tuning_state *tuning = ourISPdev->tuning_data;
-    int ret = 0;
-    u32 flip_val;
-
-    pr_info("ISP set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
-
-    if (!ourISPdev || !ourISPdev->tuning_data) {
-        return -EINVAL;
-    }
-
-    // Lock tuning state
-    mutex_lock(&tuning->mlock);
-
-    // Based on decompiled code validation and setting patterns
-    switch (ctrl->cmd) {
-        case ISP_CTRL_BRIGHTNESS:
-            tuning->params[TUNING_OFF_BRIGHTNESS] = ctrl->value;
-        pr_info("Set brightness to %d\n", ctrl->value);
-        break;
-
-        case ISP_CTRL_CONTRAST:
-            tuning->params[TUNING_OFF_CONTRAST] = ctrl->value;
-        pr_info("Set contrast to %d\n", ctrl->value);
-        break;
-
-        case ISP_CTRL_SATURATION:
-            tuning->params[TUNING_OFF_SATURATION] = ctrl->value;
-        pr_info("Set saturation to %d\n", ctrl->value);
-        break;
-
-        case ISP_CTRL_SHARPNESS:
-            tuning->params[TUNING_OFF_SHARPNESS] = ctrl->value;
-        pr_info("Set sharpness to %d\n", ctrl->value);
-        break;
-
-        case ISP_CTRL_HFLIP: {
-            // Update tuning params
-            tuning->params[TUNING_OFF_HFLIP] = !!ctrl->value;
-
-            // Update hardware register
-            flip_val = system_reg_read(ISP_FLIP_CTRL_REG);
-            if (ctrl->value)
-                flip_val |= ISP_CTRL_HFLIP;
-            else
-                flip_val &= ~ISP_CTRL_HFLIP;
-            system_reg_write(ISP_FLIP_CTRL_REG, flip_val);
-
-            // Signal frame wait
-            set_framesource_changewait_cnt();
-            pr_debug("Set horizontal flip to %d (reg=0x%x)\n", ctrl->value, flip_val);
+        case 0x980900:  // Brightness
+            tuning->brightness = value;
+            pr_info("Set brightness to %d\n", value);
             break;
-        }
 
-        case ISP_CTRL_VFLIP: {
-            // Update tuning params
-            tuning->params[TUNING_OFF_VFLIP] = !!ctrl->value;
-
-            // Update hardware register
-            flip_val = system_reg_read(ISP_FLIP_CTRL_REG);
-            if (ctrl->value)
-                flip_val |= ISP_CTRL_VFLIP;
-            else
-                flip_val &= ~ISP_CTRL_VFLIP;
-            system_reg_write(ISP_FLIP_CTRL_REG, flip_val);
-
-            // Signal frame wait
-            set_framesource_changewait_cnt();
-            pr_debug("Set vertical flip to %d (reg=0x%x)\n", ctrl->value, flip_val);
+        case 0x980901:  // Contrast
+            tuning->contrast = value;
+            pr_info("Set contrast to %d\n", value);
             break;
-        }
+
+        case 0x980902:  // Saturation
+            tuning->saturation = value;
+            pr_info("Set saturation to %d\n", value);
+            break;
+
+        case 0x98091b:  // Sharpness
+            tuning->sharpness = value;
+            pr_info("Set sharpness to %d\n", value);
+            break;
+
+        case 0x980914:  // HFLIP
+            tuning->hflip = value ? 1 : 0;
+            set_framesource_changewait_cnt();
+            pr_info("Set horizontal flip to %d\n", value);
+            break;
+
+        case 0x980915:  // VFLIP
+            tuning->vflip = value ? 1 : 0;
+            set_framesource_changewait_cnt();
+            pr_info("Set vertical flip to %d\n", value);
+            break;
 
         default:
             pr_info("Unknown ISP control command: 0x%x\n", ctrl->cmd);
-        ret = -EINVAL;
+            return -EINVAL;
     }
 
-    unlock:
-        mutex_unlock(&tuning->mlock);
-    return ret;
+    return 0;
+}
+
+static int handle_isp_get_ctrl(struct isp_core_ctrl *ctrl)
+{
+    struct isp_tuning_data *tuning;
+
+    if (!ourISPdev || !ourISPdev->tuning_data) {
+        pr_err("No ISP device or tuning data\n");
+        return -EINVAL;
+    }
+
+    tuning = ourISPdev->tuning_data;
+
+    switch (ctrl->cmd) {
+        case 0x980900:  // Brightness
+            ctrl->value = tuning->brightness;
+            break;
+
+        case 0x980901:  // Contrast
+            ctrl->value = tuning->contrast;
+            break;
+
+        case 0x980902:  // Saturation
+            ctrl->value = tuning->saturation;
+            break;
+
+        case 0x98091b:  // Sharpness
+            ctrl->value = tuning->sharpness;
+            break;
+
+        case 0x980914:  // HFLIP
+            ctrl->value = tuning->hflip;
+            break;
+
+        case 0x980915:  // VFLIP
+            ctrl->value = tuning->vflip;
+            break;
+
+        default:
+            pr_info("Unknown ISP control command: 0x%x\n", ctrl->cmd);
+            return -EINVAL;
+    }
+
+    pr_info("Get control 0x%x = %d\n", ctrl->cmd, ctrl->value);
+    return 0;
 }
 
 
@@ -2863,46 +2813,47 @@ static void isp_disable_wdr(struct IMPISPDev *dev)
 int init_ae_algo(struct IMPISPDev *dev, struct isp_ae_algo *ae)
 {
     struct ae_info *ae_info;
-    struct isp_reg_t *regs;
+    struct isp_ae_regs __iomem *regs;
 
-    /* Validate magic number - check at 0xef64 */
-    if (ae->magic != AE_ALGO_MAGIC) {
-        dev_err(dev->dev, "[ %s:%d ] Ae Algo Function registration failed\n",
-                __func__, __LINE__);
+    if (!dev || !dev->ae_info || !ae) {
         return -EINVAL;
     }
 
-    /* Initialize algorithm - matches tisp_ae_algo_init(1, ae) at 0xefa4 */
-    tisp_ae_algo_init(1, ae);
-
-    /* Allocate statistics buffer - matches 0xf048/0xf068 */
     ae_info = dev->ae_info;
-    if (!ae_info) {
-        return -ENOMEM;
-    }
+    regs = (struct isp_ae_regs __iomem *)(dev->reg_base + ISP_AE_REG_BASE);
 
-    /* Get register base */
-    regs = (struct isp_reg_t *)dev->reg_base;  // Cast the void* regs to proper type
-
-    /* Setup initial parameters - matches logic from 0xefb4 to 0xf040 */
+    // Initialize hardware values
     ae_info->gain = readl(&regs->gain);
     ae_info->exposure = readl(&regs->exposure);
     ae_info->gain_factor = private_math_exp2(readl(&regs->gain_factor), 0x10, 0xa);
-    ae_info->exposure_factor = 0x400; // Fixed value from 0xefdc
+    ae_info->exposure_factor = 0x400;  // Fixed value
 
-    /* Setup WDR-specific parameters if enabled */
-    if (readl(&regs->wdr_enable)) {
-        ae_info->wdr_gain = system_reg_read(0x1000);
-        ae_info->wdr_exposure = system_reg_read(0x100c);
-    } else {
-        ae_info->wdr_gain = system_reg_read(0x1030);
+    // Copy user space parameters with validation
+    if (ae->min_gain < 0x100 || ae->max_gain > 0xFFFF) {
+        pr_err("Invalid gain range: min=0x%x max=0x%x\n",
+               ae->min_gain, ae->max_gain);
+        return -EINVAL;
     }
+    ae_info->min_gain = ae->min_gain;
+    ae_info->max_gain = ae->max_gain;
 
-    /* Initialize completion tracking - matches 0xf070 */
-    ae_algo_comp = 0;
+    if (ae->min_exposure < 0x100 || ae->max_exposure > 0xFFFF) {
+        pr_err("Invalid exposure range: min=0x%x max=0x%x\n",
+               ae->min_exposure, ae->max_exposure);
+        return -EINVAL;
+    }
+    ae_info->min_exposure = ae->min_exposure;
+    ae_info->max_exposure = ae->max_exposure;
 
-    /* Initialize wait queue - matches 0xf090 */
-    init_waitqueue_head(&ae_wait);
+    ae_info->target_luminance = ae->target_luminance;
+
+    // Initialize WDR-specific values if needed
+    if (dev->wdr_mode) {
+        ae_info->wdr_gain = readl(dev->reg_base + ISP_WDR_REG_BASE + 0x00);
+        ae_info->wdr_exposure = readl(dev->reg_base + ISP_WDR_REG_BASE + 0x0C);
+    } else {
+        ae_info->wdr_gain = readl(dev->reg_base + ISP_WDR_REG_BASE + 0x30);
+    }
 
     return 0;
 }
@@ -3400,15 +3351,6 @@ static int init_isp_subsystems(struct IMPISPDev *dev)
     dev->ae_info->gain = 0x100;     // Default gain
     dev->ae_info->exposure = 0x100;  // Default exposure
 
-    dev->awb_info = kzalloc(sizeof(struct awb_info), GFP_KERNEL);
-    if (!dev->awb_info) {
-        pr_err("Failed to allocate awb_info structure\n");
-        return -ENOMEM;
-    }
-
-    dev->awb_info->gain = 0x100;
-    dev->awb_info->exposure = 0x100;
-
     pr_info("Initializing AE/AWB subsystems\n");
     ret = tiziano_ae_init(dev->ae_info->gain, dev->ae_info->exposure);
     if (ret) {
@@ -3416,10 +3358,23 @@ static int init_isp_subsystems(struct IMPISPDev *dev)
         return ret;
     }
 
-    ret = tiziano_awb_init(dev->awb_info->gain, dev->awb_info->exposure);
+    dev->awb_info = kzalloc(sizeof(struct awb_info), GFP_KERNEL);
+    if (!dev->awb_info) {
+        pr_err("Failed to allocate awb_info structure\n");
+        return -ENOMEM;
+    }
+
+    // Initialize default AWB values
+    dev->awb_info->r_gain = 0x100;     // Default red gain
+    dev->awb_info->g_gain = 0x100;     // Default green gain
+    dev->awb_info->b_gain = 0x100;     // Default blue gain
+    dev->awb_info->temperature = 6500;  // Default color temp (K)
+
+    // Initialize AWB algorithm
+    ret = tiziano_awb_init(dev->awb_info->r_gain, dev->awb_info->g_gain);
     if (ret) {
-        pr_err("Failed to initialize AWB\n");
-        return ret;
+        pr_err("Failed to initialize Tiziano AWB\n");
+        goto err_free;
     }
 
     pr_info("TODO Initializing image processing subsystems\n");
@@ -3460,6 +3415,13 @@ static int init_isp_subsystems(struct IMPISPDev *dev)
 
     pr_info("ISP subsystem initialization complete\n");
     return 0;
+
+err_free:
+    kfree(dev->awb_info);
+    dev->awb_info = NULL;
+    kfree(dev->ae_info);
+    dev->ae_info = NULL;
+    return ret;
 }
 
 
