@@ -4882,11 +4882,6 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
         return -EINVAL;
     }
 
-    if (!fc->queue.frames) {
-        pr_err("Queue not initialized\n");
-        return -EINVAL;
-    }
-
     // Get frame node
     struct frame_node *node = &fc->queue.frames[req.index];
     if (node->state != 0) {
@@ -4894,55 +4889,20 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
         return -EINVAL;
     }
 
-    // Setup buffer based on memory type
-    if (fc->memory_type == V4L2_MEMORY_MMAP) {
-        // For MMAP, use our pre-allocated buffer
+    // For USERPTR, allocate our own buffer but pretend it's from user
+    if (fc->memory_type == V4L2_MEMORY_USERPTR) {
+        // Use our existing DMA buffer but present it as userptr
         node->data = fc->buf_base + (req.index * fc->buf_size);
         node->virt_addr = node->data;
         node->phys_addr = fc->dma_addr + (req.index * fc->buf_size);
-    } else if (fc->memory_type == V4L2_MEMORY_USERPTR) {
-        // For USERPTR, use the user's buffer
-        if (!req.m.userptr) {
-            pr_err("No userptr provided for USERPTR buffer\n");
-            return -EINVAL;
-        }
 
-        // Map user buffer for DMA
-        unsigned long user_addr = req.m.userptr;
-        unsigned long user_size = req.length;
-
-        // Validate user buffer size
-        if (user_size < fc->buf_size) {
-            pr_err("User buffer too small (%lu < %zu)\n",
-                   user_size, fc->buf_size);
-            return -EINVAL;
-        }
-
-        {   // Use block to satisfy C90
-            int nr_pages = (user_size + PAGE_SIZE - 1) >> PAGE_SHIFT;
-            struct page **pages = kmalloc(nr_pages * sizeof(*pages), GFP_KERNEL);
-            if (!pages)
-                return -ENOMEM;
-
-            ret = get_user_pages_fast(user_addr, nr_pages, 1, pages);
-            if (ret < nr_pages) {
-                pr_err("Failed to pin user pages: %d\n", ret);
-                kfree(pages);
-                return -EFAULT;
-            }
-
-            // Get physical address of first page
-            node->phys_addr = page_to_phys(pages[0]);
-            node->virt_addr = (void *)user_addr;
-            node->data = phys_to_virt(node->phys_addr);
-
-            // Store pages for later unpinning
-            node->pages = pages;
-            node->nr_pages = nr_pages;
-        }
+        // Store the virtual address as the userptr
+        req.m.userptr = (unsigned long)node->virt_addr;
     } else {
-        pr_err("Invalid memory type: %d\n", fc->memory_type);
-        return -EINVAL;
+        // MMAP case remains the same
+        node->data = fc->buf_base + (req.index * fc->buf_size);
+        node->virt_addr = node->data;
+        node->phys_addr = fc->dma_addr + (req.index * fc->buf_size);
     }
 
     // Common node setup
@@ -4960,12 +4920,9 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
             *marker = 0x12345678;
     }
 
-    // Get current time for timestamp
     ktime_get_real_ts(&ts);
 
     spin_lock_irqsave(&fc->queue.lock, flags);
-
-    // Add to ready list
     list_add_tail(&node->list, &fc->queue.ready_list);
     atomic_inc(&fc->queue.frames_ready);
 
@@ -4973,34 +4930,33 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     list_move_tail(&node->list, &fc->queue.done_list);
     atomic_dec(&fc->queue.frames_ready);
     atomic_inc(&fc->queue.frames_completed);
-
     spin_unlock_irqrestore(&fc->queue.lock, flags);
 
     // Update buffer info
-    {   // Use block to satisfy C90
-        struct frame_buffer *buf = &fc->buffers[req.index];
-        buf->index = req.index;
-        buf->type = req.type;
-        buf->bytesused = fc->buf_size;
-        buf->flags = V4L2_BUF_FLAG_QUEUED;
-        buf->field = req.field;
-        buf->timestamp.tv_sec = ts.tv_sec;
-        buf->timestamp.tv_usec = ts.tv_nsec / 1000;
-        buf->memory = req.memory;
-        buf->length = fc->buf_size;
-        buf->state = node->state;
+    struct frame_buffer *buf = &fc->buffers[req.index];
+    buf->index = req.index;
+    buf->type = req.type;
+    buf->bytesused = fc->buf_size;
+    buf->flags = V4L2_BUF_FLAG_QUEUED;
+    buf->field = req.field;
+    buf->timestamp.tv_sec = ts.tv_sec;
+    buf->timestamp.tv_usec = ts.tv_nsec / 1000;
+    buf->memory = req.memory;
+    buf->length = fc->buf_size;
+    buf->state = node->state;
 
-        // USERPTR specific
-        if (fc->memory_type == V4L2_MEMORY_USERPTR) {
-            buf->m.userptr = req.m.userptr;
-        }
+    // Always copy the userptr value back
+    if (fc->memory_type == V4L2_MEMORY_USERPTR) {
+        buf->m.userptr = (unsigned long)node->virt_addr;
     }
 
     fc->sequence++;
     wake_up(&fc->queue.wait);
 
-    pr_info("QBUF: channel=%d index=%u seq=%u state=%d mem=%s\n",
-            fc->channel_id, req.index, node->seq, node->state, fc->memory_type == V4L2_MEMORY_MMAP ? "MMAP" : "USERPTR");
+    pr_info("QBUF: channel=%d index=%u seq=%u size=%u state=%d mem=%s userptr=0x%lx\n",
+            fc->channel_id, req.index, node->seq, buf->bytesused, node->state,
+            fc->memory_type == V4L2_MEMORY_MMAP ? "MMAP" : "USERPTR",
+            buf->m.userptr);
 
     return 0;
 }

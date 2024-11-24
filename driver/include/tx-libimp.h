@@ -175,27 +175,20 @@ struct encoder_chn_attr {
     uint32_t minQp;             // Minimum QP value
 };
 
-struct frame_qbuf_request {
-    __u32 index;          // Buffer index
-    __u32 type;           // Buffer type
-    __u32 bytesused;      // Bytes used in buffer
-    __u32 flags;          // Buffer flags
+struct __attribute__((packed, aligned(4))) frame_qbuf_request {
+    __u32 index;
+    __u32 type;
+    __u32 memory;
+    __u32 flags;
     union {
         __u32 offset;
         unsigned long userptr;
+        __u32 reserved[8];  // Add padding to match expected size
     } m;
-    __u32 length;         // Buffer length
-    __u32 field;          // Field order
-    struct timeval timestamp;  // Buffer timestamp
-    __u32 sequence;       // Frame sequence number
-    __u32 memory;         // Memory type
-    __u32 input;          // Input source
-    __u32 reserved;       // Reserved for future use
-    __u32 fps_num;        // Framerate numerator
-    __u32 fps_den;        // Framerate denominator
-    __u32 format;         // Pixel format
-    __u32 width;          // Frame width
-    __u32 height;         // Frame height
+    __u32 length;
+    __u32 field;
+    struct timeval timestamp;
+    __u32 sequence;
 };
 
 struct frame_buffer {
