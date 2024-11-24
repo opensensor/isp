@@ -4890,26 +4890,21 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     // Zero initialize
     memset(&req, 0, sizeof(req));
 
-    // Copy full request struct from user (0x44 bytes)
-    if (copy_from_user(&req, (void __user *)arg, sizeof(req))) {
-        pr_err("Failed to copy QBUF request\n");
+    if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
         return -EFAULT;
-    }
 
-    pr_info("QBUF type check: req.type=%d fc->type=%d\n",
-        req.type, fc->type);
+    pr_info("QBUF request for ch%d: type=%d memory=%d index=%d\n",
+            fc->channel_id, req.type, req.memory, req.index);
 
-    // Validate type matches channel config
+    // Validate type first
     if (req.type != fc->type) {
-        pr_err("qbuf: invalid buffer type %d (expected %d)\n",
-               req.type, fc->type);
+        pr_err("qbuf: invalid buffer type\n");
         return -EINVAL;
     }
 
-    // Check index in range
+    // Index range check
     if (req.index >= fc->buf_count) {
-        pr_err("qbuf: buffer index %d out of range (max %d)\n",
-               req.index, fc->buf_count-1);
+        pr_err("qbuf: buffer index(%d) out of range\n", req.index);
         return -EINVAL;
     }
 
@@ -4920,79 +4915,57 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
         return -EINVAL;
     }
 
-    // Check buffer not already in use
-    if (node->state != 0) {
-        pr_err("qbuf: buffer already in use (state=%d)\n", node->state);
-        return -EINVAL;
+    // Libimp does this weird thing where it requests USERPTR in reqbufs
+    // but then tries using MMAP in qbuf.
+    if (req.memory == V4L2_MEMORY_MMAP) {
+        // Update our memory type to match
+        fc->memory_type = V4L2_MEMORY_MMAP;
     }
 
-    pr_info("QBUF memory check: req.memory=%d fc->memory_type=%d\n",
-            req.memory, fc->memory_type);
-
-    // We previously set memory_type in REQBUF, should match here
+    // Memory type check (this needs to match what REQBUF set)
     if (req.memory != fc->memory_type) {
-        pr_err("qbuf: invalid memory type %d (expected %d)\n",
+        pr_err("qbuf: invalid memory type %d (should be %d)\n",
                req.memory, fc->memory_type);
         return -EINVAL;
     }
 
-    // Validate buffer size matches our configuration
+    // Buffer size check
     if (req.length != fc->buf_size) {
-        pr_err("qbuf: invalid buffer size %u (expected %zu)\n",
-               req.length, fc->buf_size);
+        pr_err("qbuf: invalid memory size\n");
         return -EINVAL;
     }
 
-    // Set up the node with our DMA buffer
+    // Check if buffer is already in use
+    if (node->state != 0) {
+        pr_err("qbuf: buffer already in use\n");
+        return -EINVAL;
+    }
+
+    // Set up the buffer (use our DMA buffer regardless of memory type)
     node->data = fc->buf_base + (req.index * fc->buf_size);
     node->virt_addr = node->data;
     node->phys_addr = fc->dma_addr + (req.index * fc->buf_size);
-    node->magic = FRAME_MAGIC;
-    node->magic_tail = 0x200200;
-    node->frame_size = fc->buf_size;
-    node->seq = fc->sequence;
-    node->index = req.index;
-    node->state = 2; // Match OEM driver state
 
-    // Set special marker for channel 0
+    // Match OEM driver state transitions
+    node->state = 2;                  // Match 0x48 offset state
+    node->flags = 2;                  // Match 0x4c offset flags
+
+    // Set marker for main channel
     if (fc->channel_id == 0) {
         uint32_t *marker = node->data;
         *marker = 0x12345678;
     }
 
-    // Queue management
+    // Enqueue the buffer (similar to OEM driver)
     spin_lock_irqsave(&fc->queue.lock, flags);
     list_add_tail(&node->list, &fc->queue.ready_list);
     atomic_inc(&fc->queue.frames_ready);
-
-    // For testing move to done list immediately
-    list_move_tail(&node->list, &fc->queue.done_list);
-    atomic_dec(&fc->queue.frames_ready);
-    atomic_inc(&fc->queue.frames_completed);
+    atomic_inc(&fc->queue.frames_queued);  // Track queued count for status
     spin_unlock_irqrestore(&fc->queue.lock, flags);
 
-    // Update the buffer info
-    struct frame_buffer *buf = &fc->buffers[req.index];
-    buf->index = req.index;
-    buf->type = req.type;
-    buf->memory = fc->memory_type;
-    buf->length = fc->buf_size;
-    buf->bytesused = fc->buf_size;
-    buf->flags = V4L2_BUF_FLAG_QUEUED;
-    buf->field = req.field;
-    buf->m.userptr = (unsigned long)node->virt_addr;
-    buf->state = node->state;
-
-    // Get timestamp
-    ktime_get_real_ts(&ts);
-    buf->timestamp.tv_sec = ts.tv_sec;
-    buf->timestamp.tv_usec = ts.tv_nsec / 1000;
-
-    fc->sequence++;
-    wake_up(&fc->queue.wait);
-
-    pr_info("QBUF: ch=%d idx=%u seq=%u size=%u state=%d\n",
-            fc->channel_id, req.index, node->seq, buf->bytesused, node->state);
+    pr_info("QBUF complete: ch=%d idx=%u state=%d queued=%d\n",
+            fc->channel_id, req.index, node->state,
+            atomic_read(&fc->queue.frames_queued));
 
     return 0;
 }
@@ -5213,30 +5186,40 @@ static int frame_channel_vidioc_fmt(struct isp_framesource_state *fs, void __use
     return 0;
 }
 
+struct reqbuf_request {
+    __u32 count;
+    __u32 type;
+    __u32 memory;
+    __u32 capabilities;
+    __u32 reserved[1];
+} __attribute__((packed));  // Make sure no padding
+
 // Then framechan_reqbufs becomes our buffer setup
 static int framechan_reqbufs(struct frame_source_channel *fc, unsigned long arg)
 {
     size_t buf_size;
-    struct {
-        uint32_t count;
-        uint32_t type;
-        uint32_t memory;
-        uint32_t flags;
-    } req;
+    struct reqbuf_request req;
+    memset(&req, 0, sizeof(req));
 
     if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
         return -EFAULT;
 
-    // Get pool ID from global array
-    int pool_id = g_pools[fc->channel_id];
-    if (pool_id == -1) {
-        pr_err("No pool bound for channel %d\n", fc->channel_id);
+    pr_info("REQBUF constants: MMAP=%d USERPTR=%d\n",
+            V4L2_MEMORY_MMAP, V4L2_MEMORY_USERPTR);
+
+    // Validate memory type
+    if (req.memory != V4L2_MEMORY_MMAP &&
+        req.memory != V4L2_MEMORY_USERPTR) {
+        pr_err("Invalid memory type: %d\n", req.memory);
         return -EINVAL;
-    }
+        }
 
-    pr_info("Buffer request: count=%d type=%d memory=%d flags=0x%x\n",
-            req.count, req.type, req.memory, req.flags);
+    pr_info("Buffer request: count=%d type=%d memory=%d (%s)\n",
+            req.count, req.type, req.memory,
+            req.memory == V4L2_MEMORY_MMAP ? "MMAP" : "USERPTR");
 
+    fc->type = req.type;
+    fc->memory_type = req.memory;
     // Support both MMAP and USERPTR as seen in the decompiled code
     if (req.type != V4L2_BUF_TYPE_VIDEO_CAPTURE ||
         (req.memory != V4L2_MEMORY_MMAP &&
@@ -5315,7 +5298,6 @@ static int framechan_reqbufs(struct frame_source_channel *fc, unsigned long arg)
     fc->buf_size = buf_size;
     fc->buf_count = req.count;
     fc->sequence = 0;
-    fc->memory_type = req.memory;  // Save memory type for later use
     fc->state |= BIT(0);  // Mark as initialized
     fc->type = req.type;
     fc->memory_type = req.memory;  // Save the memory type
