@@ -157,6 +157,9 @@ struct frame_node {
     uint32_t magic_tail;       // 0x2C: Magic tail number (0x200200)
     void *virt_addr;           // 0x30: Virtual address
     dma_addr_t phys_addr;      // 0x34: Physical address
+    // For USERPTR memory management
+    struct page **pages;
+    int nr_pages;
 };
 
 struct encoder_chn_attr {
@@ -171,6 +174,22 @@ struct encoder_chn_attr {
     uint32_t maxQp;             // Maximum QP value
     uint32_t minQp;             // Minimum QP value
 };
+
+struct frame_qbuf_request {
+    __u32 index;
+    __u32 type;
+    __u32 memory;    // V4L2_MEMORY_MMAP or V4L2_MEMORY_USERPTR
+    __u32 flags;
+    union {
+        __u32 offset;
+        unsigned long userptr;
+    } m;
+    __u32 length;
+    __u32 field;
+    struct timeval timestamp;
+    __u32 sequence;
+};
+
 struct frame_buffer {
     // 0x00: Basic buffer info
     u32 index;          // Index in array
@@ -201,6 +220,10 @@ struct frame_buffer {
     // 0x48: Frame rate
     u32 fps_num;        // Must be at 0x48
     u32 fps_den;        // Must be at 0x4C
+    union {
+        __u32 offset;
+        unsigned long userptr;
+    } m;
 } __attribute__((packed));
 
 struct frame_qbuf_request {

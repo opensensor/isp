@@ -254,7 +254,7 @@
 #define ISP_CONF_OFFSET    0x0130
 #define ISP_INIT_OFFSET    0x0118
 
-#define MAX_CHANNELS 3  // Define the maximum number of frame channels
+#define MAX_CHANNELS 33  // Define the maximum number of frame channels
 #define MAX_COMPONENTS 8 // Define the maximum number of components
 
 
@@ -1723,6 +1723,7 @@ struct frame_source_channel {
     uint32_t buf_size;               // Size per buffer
     uint32_t channel_offset;         // Channel memory offset
     struct frame_buffer *buffers;
+    uint32_t memory_type;
 
     /* Queue management */
     wait_queue_head_t wait_queue;

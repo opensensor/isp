@@ -66,6 +66,7 @@ static struct device *tisp_device;
 static dev_t tx_sp_dev_number;
 static struct class *tisp_class;
 static struct af_zone_data af_zone_data;
+static uint32_t *g_pools;
 
 
 // Now update the configurations
@@ -4657,28 +4658,81 @@ static int setup_channel_attrs(struct isp_framesource_state *fs, struct imp_chan
     return 0;
 }
 
+static int create_channel_pool(struct frame_source_channel *fc)
+{
+    // Validate channel number like libimp does
+    if (fc->channel_id >= MAX_CHANNELS) {
+        pr_err("Channel ID %d exceeds maximum of %d\n",
+               fc->channel_id, MAX_CHANNELS-1);
+        return -EINVAL;
+    }
+
+    // Create a pool ID for this channel
+    int pool_id = fc->channel_id;
+    struct vbm_pool pool = {
+        .width = fc->width,
+        .height = fc->height,
+        .format = fc->format,  // NV12
+        .num_buffers = fc->buf_count,
+        // Need to align size correctly
+        .size_image = (fc->channel_id == 0) ?
+            ALIGN(fc->width * fc->height * 3/2, 4096) :  // Main channel
+            ALIGN(fc->width * fc->height * 3/8, 4096),   // Scaled channel
+        .flags = VBM_ALLOC_METHOD // 0x3 from decompiled
+    };
+
+    pr_info("Creating pool for channel %d: %dx%d fmt=0x%x size=%d\n",
+            fc->channel_id, pool.width, pool.height,
+            pool.format, pool.size_image);
+
+    // Lazy allocation of g_pools with proper initialization
+    if (!g_pools) {
+        g_pools = kzalloc(MAX_CHANNELS * sizeof(uint32_t), GFP_KERNEL);
+        if (!g_pools)
+            return -ENOMEM;
+
+        // Initialize all entries to -1 like libimp does
+        memset(g_pools, 0xFF, MAX_CHANNELS * sizeof(uint32_t));
+    }
+
+    // Check if channel already has a pool (matches libimp's behavior)
+    if (g_pools[fc->channel_id] != -1) {
+        pr_err("Channel %d already has pool %d\n",
+               fc->channel_id, g_pools[fc->channel_id]);
+        return -EEXIST;
+    }
+
+    g_pools[fc->channel_id] = pool_id;
+
+    return 0;
+}
+
+static void cleanup_pools(void)
+{
+    kfree(g_pools);
+    g_pools = NULL;
+}
+
 static int framechan_open(struct inode *inode, struct file *file)
 {
     int channel = iminor(inode);
     struct isp_framesource_state *fs = &ourISPdev->frame_sources[channel];
     struct frame_source_channel *fc;
     struct timespec ts;
+    int ret;
 
     pr_info("Opening framechan%d\n", channel);
 
     if (!fs->fc) {
-        // Allocate channel state
+        // Allocate channel
         fc = kzalloc(sizeof(*fc), GFP_KERNEL);
-        if (!fc) {
-            pr_err("Failed to allocate channel state\n");
+        if (!fc)
             return -ENOMEM;
-        }
 
-        // Initialize channel attributes (this is what was missing)
+        // Initialize channel attributes first
         memset(&fs->attr, 0, sizeof(fs->attr));
         fs->attr.enable = 1;
 
-        // Set default channel attributes based on channel number
         if (channel == 0) {
             fs->attr.width = 1920;
             fs->attr.height = 1080;
@@ -4686,8 +4740,6 @@ static int framechan_open(struct inode *inode, struct file *file)
             fs->attr.crop_enable = 0;
             fs->attr.picwidth = 1920;
             fs->attr.picheight = 1080;
-            fs->attr.fps_num = 30;
-            fs->attr.fps_den = 1;
         } else {
             fs->attr.width = 640;
             fs->attr.height = 360;
@@ -4695,10 +4747,23 @@ static int framechan_open(struct inode *inode, struct file *file)
             fs->attr.crop_enable = 0;
             fs->attr.picwidth = 640;
             fs->attr.picheight = 360;
-            fs->attr.fps_num = 30;
-            fs->attr.fps_den = 1;
         }
-        fs->attr_set = true; // Mark attributes as initialized
+        fs->attr_set = true;
+
+        // Set up channel
+        fc->channel_id = channel;
+        fc->width = fs->attr.width;
+        fc->height = fs->attr.height;
+        fc->format = fs->attr.format;
+        fc->buf_count = 3; // Match LIBIMP defaults
+
+        // Create and bind pool first
+        ret = create_channel_pool(fc);
+        if (ret) {
+            pr_err("Failed to create pool: %d\n", ret);
+            kfree(fc);
+            return ret;
+        }
 
         // Initialize frame queue
         spin_lock_init(&fc->queue.lock);
@@ -4800,7 +4865,7 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     unsigned long flags;
     int ret = 0;
 
-    if (!fc || !fc->buf_base) {
+    if (!fc) {
         pr_err("Invalid channel state in QBUF\n");
         return -EINVAL;
     }
@@ -4822,50 +4887,102 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
         return -EINVAL;
     }
 
-    // Get current time for timestamp
-    ktime_get_real_ts(&ts);
-
-    // Use frame from pre-allocated array instead of allocating
+    // Get frame node
     struct frame_node *node = &fc->queue.frames[req.index];
     if (node->state != 0) {
         pr_err("qbuf: buffer already in use (state=%d)\n", node->state);
         return -EINVAL;
     }
 
-    // Reset buffer state first
-    memset(node, 0, sizeof(*node));
+    // Setup buffer based on memory type
+    if (fc->memory_type == V4L2_MEMORY_MMAP) {
+        // For MMAP, use our pre-allocated buffer
+        node->data = fc->buf_base + (req.index * fc->buf_size);
+        node->virt_addr = node->data;
+        node->phys_addr = fc->dma_addr + (req.index * fc->buf_size);
+    } else if (fc->memory_type == V4L2_MEMORY_USERPTR) {
+        // For USERPTR, use the user's buffer
+        if (!req.m.userptr) {
+            pr_err("No userptr provided for USERPTR buffer\n");
+            return -EINVAL;
+        }
+
+        // Map user buffer for DMA
+        unsigned long user_addr = req.m.userptr;
+        size_t user_size = req.length;
+
+        // Validate user buffer size
+        if (user_size < fc->buf_size) {
+            pr_err("User buffer too small (%zu < %zu)\n",
+                   user_size, fc->buf_size);
+            return -EINVAL;
+        }
+
+        // Pin user pages and get physical address
+        struct page **pages;
+        int nr_pages = (user_size + PAGE_SIZE - 1) >> PAGE_SHIFT;
+
+        pages = kmalloc(nr_pages * sizeof(*pages), GFP_KERNEL);
+        if (!pages)
+            return -ENOMEM;
+
+        ret = get_user_pages_fast(user_addr, nr_pages, 1, pages);
+        if (ret < nr_pages) {
+            pr_err("Failed to pin user pages: %d\n", ret);
+            kfree(pages);
+            return -EFAULT;
+        }
+
+        // Get physical address of first page
+        node->phys_addr = page_to_phys(pages[0]);
+        node->virt_addr = (void *)user_addr;
+        node->data = phys_to_virt(node->phys_addr);
+
+        // Store pages for later unpinning
+        node->pages = pages;
+        node->nr_pages = nr_pages;
+    } else {
+        pr_err("Invalid memory type: %d\n", fc->memory_type);
+        return -EINVAL;
+    }
+
+    // Common node setup
     node->magic = FRAME_MAGIC;
     node->magic_tail = 0x200200;
-    node->data = fc->buf_base + (req.index * fc->buf_size);
     node->frame_size = fc->buf_size;
-    node->seq = fc->sequence;         // Don't increment yet
+    node->seq = fc->sequence;
     node->index = req.index;
-    node->virt_addr = fc->buf_base + (req.index * fc->buf_size);
-    node->phys_addr = fc->dma_addr + (req.index * fc->buf_size);
-    node->state = 2;                  // Initial state
+    node->state = 2;  // Initial state
+
+    // Special marker for main channel
+    if (fc->channel_id == 0) {
+        uint32_t *marker = node->data;
+        if (marker)
+            *marker = 0x12345678;
+    }
 
     // Get current time for timestamp
     ktime_get_real_ts(&ts);
 
     spin_lock_irqsave(&fc->queue.lock, flags);
 
-    // First add to ready list
+    // Add to ready list
     list_add_tail(&node->list, &fc->queue.ready_list);
     atomic_inc(&fc->queue.frames_ready);
 
-    // Then move to done list for testing
+    // For testing - move to done list immediately
     list_move_tail(&node->list, &fc->queue.done_list);
     atomic_dec(&fc->queue.frames_ready);
     atomic_inc(&fc->queue.frames_completed);
 
     spin_unlock_irqrestore(&fc->queue.lock, flags);
 
-    // Now configure the buffer
+    // Update buffer info
     struct frame_buffer *buf = &fc->buffers[req.index];
     buf->index = req.index;
     buf->type = req.type;
     buf->bytesused = fc->buf_size;
-    buf->flags = V4L2_BUF_FLAG_QUEUED;  // Just queued flag
+    buf->flags = V4L2_BUF_FLAG_QUEUED;
     buf->field = req.field;
     buf->timestamp.tv_sec = ts.tv_sec;
     buf->timestamp.tv_usec = ts.tv_nsec / 1000;
@@ -4873,15 +4990,17 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     buf->length = fc->buf_size;
     buf->state = node->state;
 
-    // Only increment sequence at end
-    fc->sequence++;
+    // USERPTR specific
+    if (fc->memory_type == V4L2_MEMORY_USERPTR) {
+        buf->m.userptr = req.m.userptr;
+    }
 
+    fc->sequence++;
     wake_up(&fc->queue.wait);
 
-    pr_info("QBUF: channel=%d index=%u seq=%u size=%u state=%d flags=0x%x ready=%d completed=%d\n",
+    pr_info("QBUF: channel=%d index=%u seq=%u size=%u state=%d flags=0x%x mem=%s\n",
             fc->channel_id, req.index, node->seq, buf->bytesused, node->state,
-            buf->flags, atomic_read(&fc->queue.frames_ready),
-            atomic_read(&fc->queue.frames_completed));
+            buf->flags, fc->memory_type == V4L2_MEMORY_MMAP ? "MMAP" : "USERPTR");
 
     return 0;
 }
@@ -4939,6 +5058,21 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
 
             // Get corresponding buffer
             buf = &fc->buffers[node->index];
+
+            // Cleanup USERPTR memory if needed
+            if (fc->memory_type == V4L2_MEMORY_USERPTR && node->pages) {
+                int i;
+                for (i = 0; i < node->nr_pages; i++)
+                    put_page(node->pages[i]);
+                kfree(node->pages);
+                node->pages = NULL;
+                node->nr_pages = 0;
+
+                // Clear the mappings
+                node->data = NULL;
+                node->virt_addr = NULL;
+                node->phys_addr = 0;
+            }
 
             // Clear node but preserve magic numbers for validation
             node->state = 0;
@@ -5097,97 +5231,113 @@ static int frame_channel_vidioc_fmt(struct isp_framesource_state *fs, void __use
     return 0;
 }
 
+// Then framechan_reqbufs becomes our buffer setup
 static int framechan_reqbufs(struct frame_source_channel *fc, unsigned long arg)
 {
+    size_t buf_size;
     struct {
         uint32_t count;
         uint32_t type;
         uint32_t memory;
         uint32_t flags;
     } req;
-    size_t buf_size;
-    int i;
-
-    pr_info("Handling reqbufs: fc=%p arg=0x%lx\n", fc, arg);
-
-    if (!fc || !ourISPdev || !ourISPdev->dma_buf) {
-        pr_err("Invalid device state\n");
-        return -EINVAL;
-    }
 
     if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
         return -EFAULT;
 
+    // Get pool ID from global array
+    int pool_id = g_pools[fc->channel_id];
+    if (pool_id == -1) {
+        pr_err("No pool bound for channel %d\n", fc->channel_id);
+        return -EINVAL;
+    }
+
     pr_info("Buffer request: count=%d type=%d memory=%d flags=0x%x\n",
             req.count, req.type, req.memory, req.flags);
 
-    if (req.type != V4L2_BUF_TYPE_VIDEO_CAPTURE || req.memory != V4L2_MEMORY_MMAP)
+    // Support both MMAP and USERPTR as seen in the decompiled code
+    if (req.type != V4L2_BUF_TYPE_VIDEO_CAPTURE ||
+        (req.memory != V4L2_MEMORY_MMAP &&
+         req.memory != V4L2_MEMORY_USERPTR)) {
+        pr_err("Invalid buffer type or memory\n");
         return -EINVAL;
+    }
 
-    // Allocate frame nodes array
+    // Calculate buffer sizes as in libimp
+    if (fc->channel_id == 0) {
+        // Main channel - uses full size
+        buf_size = ALIGN(fc->width * fc->height * 3/2, 4096);
+        fc->channel_offset = 0xfd2000;
+    } else {
+        // Secondary channels - reduced size
+        buf_size = ALIGN(fc->width * fc->height * 3/2, 4096) / 4;
+        fc->channel_offset = 0x12c4000;
+    }
+
+    // Free existing queue if any
+    if (fc->queue.frames) {
+        kfree(fc->queue.frames);
+        fc->queue.frames = NULL;
+    }
+
+    // Allocate new frame queue
     fc->queue.frames = kzalloc(sizeof(struct frame_node) * req.count, GFP_KERNEL);
     if (!fc->queue.frames)
         return -ENOMEM;
 
-    // Calculate buffer size with proper alignment
-    if (fc->channel_id == 0) {
-        // Main channel - full resolution NV12
-        buf_size = ALIGN((fc->width * fc->height * 3) / 2, 4096);
-    } else {
-        // Auxiliary channels - quarter size
-        buf_size = ALIGN((fc->width * fc->height * 3) / 8, 4096);
-    }
-
-    // Set up channel offset based on OEM pattern
-    fc->channel_offset = (fc->channel_id == 0) ? 0xfd2000 : 0x12c4000;
-
-    // Validate total size
-    if (fc->channel_offset + (buf_size * req.count) > ourISPdev->dma_size) {
-        pr_err("Buffer allocation too large\n");
-        kfree(fc->queue.frames);
-        return -ENOMEM;
-    }
-
-    // Map into DMA buffer
-    fc->buf_base = ourISPdev->dma_buf + fc->channel_offset;
-    fc->dma_addr = ourISPdev->dma_addr + fc->channel_offset;
-
-    // Initialize frame nodes with proper magic numbers and alignment
-    for (i = 0; i < req.count; i++) {
-        struct frame_node *node = &fc->queue.frames[i];
-        node->magic = FRAME_MAGIC;        // 0x494D5046 "IMPF"
-        node->magic_tail = 0x200200;      // Magic tail from OEM
-        node->index = i;
-        node->data = fc->buf_base + (i * buf_size);
-        node->frame_size = buf_size;
-        node->virt_addr = fc->buf_base + (i * buf_size);
-        node->phys_addr = fc->dma_addr + (i * buf_size);
-        node->state = 0;                  // Initial state
-        INIT_LIST_HEAD(&node->list);
-
-        // Special handling for channel 0 - add marker
-        if (fc->channel_id == 0) {
-            uint32_t *marker = node->data;
-            *marker = 0x12345678;         // Magic marker seen in OEM
-        }
-    }
-
-    // Initialize queue state
+    // Initialize queue structures
     spin_lock_init(&fc->queue.lock);
     INIT_LIST_HEAD(&fc->queue.ready_list);
     INIT_LIST_HEAD(&fc->queue.done_list);
     atomic_set(&fc->queue.frames_ready, 0);
     atomic_set(&fc->queue.frames_queued, 0);
     atomic_set(&fc->queue.frames_completed, 0);
+    fc->queue.max_frames = req.count;
+    fc->queue.fifo_depth = 0;
     init_waitqueue_head(&fc->queue.wait);
 
-    // Store configuration
+    // Setup DMA mapping
+    fc->buf_base = ourISPdev->dma_buf + fc->channel_offset;
+    fc->dma_addr = ourISPdev->dma_addr + fc->channel_offset;
+
+    // Initialize frame nodes
+    for (int i = 0; i < req.count; i++) {
+        struct frame_node *node = &fc->queue.frames[i];
+        node->magic = FRAME_MAGIC;
+        node->magic_tail = 0x200200;
+        node->index = i;
+        node->frame_size = buf_size;
+
+        // For MMAP memory
+        if (req.memory == V4L2_MEMORY_MMAP) {
+            node->data = fc->buf_base + (i * buf_size);
+            node->virt_addr = node->data;
+            node->phys_addr = fc->dma_addr + (i * buf_size);
+        } else {
+            // For USERPTR memory - will be set later in QBUF
+            node->data = NULL;
+            node->virt_addr = NULL;
+            node->phys_addr = 0;
+        }
+
+        node->state = 0;
+        INIT_LIST_HEAD(&node->list);
+
+        // Special marker for main channel
+        if (fc->channel_id == 0 && node->data) {
+            uint32_t *marker = node->data;
+            *marker = 0x12345678;
+        }
+    }
+
     fc->buf_size = buf_size;
     fc->buf_count = req.count;
     fc->sequence = 0;
+    fc->memory_type = req.memory;  // Save memory type for later use
     fc->state |= BIT(0);  // Mark as initialized
 
-    pr_info("Buffer setup complete: size=%zu count=%d\n", buf_size, req.count);
+    pr_info("Channel %d buffer setup complete: size=%zu count=%d mem_type=%d\n",
+            fc->channel_id, buf_size, req.count, req.memory);
     return 0;
 }
 
@@ -5313,6 +5463,7 @@ static int framechan_release(struct inode *inode, struct file *file)
 {
     struct isp_framesource_state *fs = file->private_data;
     struct frame_source_channel *fc;
+    int i;
 
     if (!fs)
         return -EINVAL;
@@ -5320,6 +5471,25 @@ static int framechan_release(struct inode *inode, struct file *file)
     fc = fs->fc;
     if (!fc)
         return -EINVAL;
+
+    // Clean up any remaining buffers
+    if (fc->queue.frames) {
+        for (i = 0; i < fc->buf_count; i++) {
+            struct frame_node *node = &fc->queue.frames[i];
+
+            // Clean up USERPTR memory if still mapped
+            if (fc->memory_type == V4L2_MEMORY_USERPTR && node->pages) {
+                int j;
+                for (j = 0; j < node->nr_pages; j++)
+                    put_page(node->pages[j]);
+                kfree(node->pages);
+                node->pages = NULL;
+                node->nr_pages = 0;
+            }
+        }
+        kfree(fc->queue.frames);
+        fc->queue.frames = NULL;
+    }
 
     fs->is_open--;
 
