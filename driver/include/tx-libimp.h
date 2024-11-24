@@ -176,18 +176,26 @@ struct encoder_chn_attr {
 };
 
 struct frame_qbuf_request {
-    __u32 index;
-    __u32 type;
-    __u32 memory;    // V4L2_MEMORY_MMAP or V4L2_MEMORY_USERPTR
-    __u32 flags;
+    __u32 index;          // Buffer index
+    __u32 type;           // Buffer type
+    __u32 bytesused;      // Bytes used in buffer
+    __u32 flags;          // Buffer flags
     union {
         __u32 offset;
         unsigned long userptr;
     } m;
-    __u32 length;
-    __u32 field;
-    struct timeval timestamp;
-    __u32 sequence;
+    __u32 length;         // Buffer length
+    __u32 field;          // Field order
+    struct timeval timestamp;  // Buffer timestamp
+    __u32 sequence;       // Frame sequence number
+    __u32 memory;         // Memory type
+    __u32 input;          // Input source
+    __u32 reserved;       // Reserved for future use
+    __u32 fps_num;        // Framerate numerator
+    __u32 fps_den;        // Framerate denominator
+    __u32 format;         // Pixel format
+    __u32 width;          // Frame width
+    __u32 height;         // Frame height
 };
 
 struct frame_buffer {
@@ -226,25 +234,6 @@ struct frame_buffer {
     } m;
 } __attribute__((packed));
 
-struct frame_qbuf_request {
-    __u32 index;          // Buffer index
-    __u32 type;           // Buffer type
-    __u32 bytesused;      // Bytes used in buffer
-    __u32 flags;          // Buffer flags
-    __u32 field;          // Field order
-    struct timeval timestamp;  // Buffer timestamp
-    __u32 sequence;       // Frame sequence number
-    __u32 memory;         // Memory type
-    __u32 m;              // Union for memory pointer/offset
-    __u32 length;         // Buffer length
-    __u32 input;          // Input source
-    __u32 reserved;       // Reserved for future use
-    __u32 fps_num;        // Framerate numerator
-    __u32 fps_den;        // Framerate denominator
-    __u32 format;         // Pixel format
-    __u32 width;          // Frame width
-    __u32 height;         // Frame height
-};
 
 
 struct dqbuf_resp {

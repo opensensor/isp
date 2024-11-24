@@ -4909,38 +4909,37 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
 
         // Map user buffer for DMA
         unsigned long user_addr = req.m.userptr;
-        size_t user_size = req.length;
+        unsigned long user_size = req.length;
 
         // Validate user buffer size
         if (user_size < fc->buf_size) {
-            pr_err("User buffer too small (%zu < %zu)\n",
+            pr_err("User buffer too small (%lu < %zu)\n",
                    user_size, fc->buf_size);
             return -EINVAL;
         }
 
-        // Pin user pages and get physical address
-        struct page **pages;
-        int nr_pages = (user_size + PAGE_SIZE - 1) >> PAGE_SHIFT;
+        {   // Use block to satisfy C90
+            int nr_pages = (user_size + PAGE_SIZE - 1) >> PAGE_SHIFT;
+            struct page **pages = kmalloc(nr_pages * sizeof(*pages), GFP_KERNEL);
+            if (!pages)
+                return -ENOMEM;
 
-        pages = kmalloc(nr_pages * sizeof(*pages), GFP_KERNEL);
-        if (!pages)
-            return -ENOMEM;
+            ret = get_user_pages_fast(user_addr, nr_pages, 1, pages);
+            if (ret < nr_pages) {
+                pr_err("Failed to pin user pages: %d\n", ret);
+                kfree(pages);
+                return -EFAULT;
+            }
 
-        ret = get_user_pages_fast(user_addr, nr_pages, 1, pages);
-        if (ret < nr_pages) {
-            pr_err("Failed to pin user pages: %d\n", ret);
-            kfree(pages);
-            return -EFAULT;
+            // Get physical address of first page
+            node->phys_addr = page_to_phys(pages[0]);
+            node->virt_addr = (void *)user_addr;
+            node->data = phys_to_virt(node->phys_addr);
+
+            // Store pages for later unpinning
+            node->pages = pages;
+            node->nr_pages = nr_pages;
         }
-
-        // Get physical address of first page
-        node->phys_addr = page_to_phys(pages[0]);
-        node->virt_addr = (void *)user_addr;
-        node->data = phys_to_virt(node->phys_addr);
-
-        // Store pages for later unpinning
-        node->pages = pages;
-        node->nr_pages = nr_pages;
     } else {
         pr_err("Invalid memory type: %d\n", fc->memory_type);
         return -EINVAL;
@@ -4978,29 +4977,30 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     spin_unlock_irqrestore(&fc->queue.lock, flags);
 
     // Update buffer info
-    struct frame_buffer *buf = &fc->buffers[req.index];
-    buf->index = req.index;
-    buf->type = req.type;
-    buf->bytesused = fc->buf_size;
-    buf->flags = V4L2_BUF_FLAG_QUEUED;
-    buf->field = req.field;
-    buf->timestamp.tv_sec = ts.tv_sec;
-    buf->timestamp.tv_usec = ts.tv_nsec / 1000;
-    buf->memory = req.memory;
-    buf->length = fc->buf_size;
-    buf->state = node->state;
+    {   // Use block to satisfy C90
+        struct frame_buffer *buf = &fc->buffers[req.index];
+        buf->index = req.index;
+        buf->type = req.type;
+        buf->bytesused = fc->buf_size;
+        buf->flags = V4L2_BUF_FLAG_QUEUED;
+        buf->field = req.field;
+        buf->timestamp.tv_sec = ts.tv_sec;
+        buf->timestamp.tv_usec = ts.tv_nsec / 1000;
+        buf->memory = req.memory;
+        buf->length = fc->buf_size;
+        buf->state = node->state;
 
-    // USERPTR specific
-    if (fc->memory_type == V4L2_MEMORY_USERPTR) {
-        buf->m.userptr = req.m.userptr;
+        // USERPTR specific
+        if (fc->memory_type == V4L2_MEMORY_USERPTR) {
+            buf->m.userptr = req.m.userptr;
+        }
     }
 
     fc->sequence++;
     wake_up(&fc->queue.wait);
 
-    pr_info("QBUF: channel=%d index=%u seq=%u size=%u state=%d flags=0x%x mem=%s\n",
-            fc->channel_id, req.index, node->seq, buf->bytesused, node->state,
-            buf->flags, fc->memory_type == V4L2_MEMORY_MMAP ? "MMAP" : "USERPTR");
+    pr_info("QBUF: channel=%d index=%u seq=%u state=%d mem=%s\n",
+            fc->channel_id, req.index, node->seq, node->state, fc->memory_type == V4L2_MEMORY_MMAP ? "MMAP" : "USERPTR");
 
     return 0;
 }
