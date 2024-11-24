@@ -4786,12 +4786,14 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
         return -EINVAL;
     }
 
+    // Copy request struct from user space
     if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
         return -EFAULT;
 
-    pr_debug("DQBUF handler: seq=%u flags=0x%x\n", req.sequence, req.flags);
+    pr_debug("DQBUF handler: seq=%u flags=0x%x\n",
+             req.sequence, req.flags);
 
-    // Validate buffer state
+    // Check streaming state
     if (!(fc->state & BIT(1))) {
         pr_err("Channel not streaming\n");
         return -EINVAL;
@@ -4800,17 +4802,17 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
     // Add memory barrier before checking queue state
     smp_rmb();
 
-    // Wait for buffer availability with timeout
+    // Wait for buffer with shorter timeout
     ret = wait_event_interruptible_timeout(fc->wait_queue,
         atomic_read(&fc->queued_bufs) > 0,
-        msecs_to_jiffies(2000));
+        msecs_to_jiffies(500));
 
     if (ret == 0) {
-        pr_err("DQBUF timeout after 2000ms\n");
+        pr_err("DQBUF timeout waiting for buffer\n");
         return -ETIMEDOUT;
     }
     if (ret == -ERESTARTSYS) {
-        pr_err("DQBUF interrupted\n");
+        pr_debug("DQBUF interrupted\n");
         return -EINTR;
     }
 
@@ -4818,20 +4820,23 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
     memset(&buf, 0, sizeof(buf));
     do_gettimeofday(&tv);
 
-    // Calculate safe buffer index with wraparound protection
+    // Calculate safe buffer index
     unsigned int buf_index = fc->sequence % fc->buf_count;
 
-    // Fill frame_buffer structure
+    // Validate buffer index against total buffers
+    if (buf_index >= (fc->buf_count + fc->channel_offset)) {
+        pr_err("Buffer index %u exceeds total buffers %u\n",
+               buf_index, fc->buf_count + fc->channel_offset);
+        return -EINVAL;
+    }
+
+    // Fill frame_buffer structure to match user space expectations
     buf.index = buf_index;
     buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     buf.memory = V4L2_MEMORY_MMAP;
     buf.flags = V4L2_BUF_FLAG_MAPPED;
     buf.sequence = fc->sequence;
     buf.timestamp = tv;
-
-    // Use the actual allocated size instead of calculating
-    buf.bytesused = fc->buf_size;
-
     buf.format = fc->format;
     buf.width = fc->width;
     buf.height = fc->height;
@@ -4839,23 +4844,33 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
     buf.fps_num = 30;
     buf.fps_den = 1;
 
+    // Use actual allocated buffer size
+    buf.bytesused = fc->buf_size;
+
     // Calculate buffer offset
     size_t buf_offset = buf_index * fc->buf_size;
     if (buf_offset + buf.bytesused > fc->buf_count * fc->buf_size) {
-        pr_err("Buffer overflow detected: offset=%zu size=%u total=%zu\n",
+        pr_err("Buffer overflow: offset=%zu size=%u total=%zu\n",
                buf_offset, buf.bytesused, fc->buf_count * fc->buf_size);
         return -EINVAL;
     }
 
-    // Ensure memory writes are complete before decrementing counter
+    // Increment frame sequence before decrementing queue count
+    fc->sequence++;
+
+    // Ensure all writes complete before decrementing counter
     smp_mb();
     atomic_dec(&fc->queued_bufs);
 
-    // Update sequence after successful dequeue
-    fc->sequence++;
+    // Update frame timing information
+    if (fc->timing_data) {
+        fc->timing_data[buf_index].timestamp = ktime_get_real_ns();
+        fc->timing_data[buf_index].frame_count = fc->frame_count++;
+    }
 
-    pr_debug("DQBUF success: index=%u seq=%u size=%u\n",
-             buf.index, buf.sequence, buf.bytesused);
+    pr_debug("DQBUF success: index=%u seq=%u size=%u queued=%d\n",
+             buf.index, buf.sequence, buf.bytesused,
+             atomic_read(&fc->queued_bufs));
 
     if (copy_to_user((void __user *)arg, &buf, sizeof(buf)))
         return -EFAULT;
