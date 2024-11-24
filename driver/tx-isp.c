@@ -800,6 +800,10 @@ static void set_framesource_changewait_cnt(void)
     }
 }
 
+
+
+
+
 static int isp_core_tuning_open(struct IMPISPDev *dev)
 {
     struct isp_tuning_state *tuning;
@@ -1173,10 +1177,13 @@ static long isp_tuning_get_ctrl(struct IMPISPDev *dev, void __user *arg)
     return ret;
 }
 
-static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl)
+static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl, void __user *arg)
 {
     struct isp_tuning_data *tuning;
+    struct isp_flip_ioctl flip_data;
+    struct isp_ctrl_msg msg;
     u8 value = ctrl->value & 0xFF;  // Extract 8-bit value
+    int ret = 0;
 
     pr_info("ISP set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
 
@@ -1209,16 +1216,97 @@ static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl)
             break;
 
         case 0x980914:  // HFLIP
-            tuning->hflip = value ? 1 : 0;
+        case 0x980915:  // VFLIP
+            // Set flip value in tuning data
+            if (ctrl->cmd == 0x980914) {
+                tuning->hflip = ctrl->value ? 1 : 0;
+            } else {
+                tuning->vflip = ctrl->value ? 1 : 0;
+            }
             set_framesource_changewait_cnt();
-            pr_info("Set horizontal flip to %d\n", value);
+
+            // Copy back to user
+            if (copy_to_user(arg, &msg, sizeof(msg))) {
+                pr_err("Failed to copy flip control to user\n");
+                return -EFAULT;
+            }
             break;
 
-        case 0x980915:  // VFLIP
-            tuning->vflip = value ? 1 : 0;
-            set_framesource_changewait_cnt();
-            pr_info("Set vertical flip to %d\n", value);
+        case ISP_CTRL_BYPASS: {  // 0x8000164
+            struct {
+                u32 cmd;
+                u32 value;
+            } bypass_ctrl;
+            u32 reg_val;
+
+            // Disable links by clearing link enable register
+            writel(0, ourISPdev->reg_base + ISP_LINK_ENABLE_REG);
+            wmb();  // Ensure write completes
+
+            // Set control structure
+            bypass_ctrl.cmd = ISP_CTRL_BYPASS;
+            bypass_ctrl.value = ctrl->value;
+
+            // Copy back to user
+            if (copy_to_user(arg, &bypass_ctrl, sizeof(bypass_ctrl))) {
+                pr_err("Failed to copy bypass control to user\n");
+                return -EFAULT;
+            }
+
+            // Set bypass mode in hardware
+            reg_val = readl(ourISPdev->reg_base + ISP_BYPASS_REG);
+            if (ctrl->value) {
+                reg_val |= BIT(0);  // Enable bypass
+                reg_val &= ~BIT(1); // Disable processing
+            } else {
+                reg_val &= ~BIT(0); // Disable bypass
+                reg_val |= BIT(1);  // Enable processing
+            }
+            writel(reg_val, ourISPdev->reg_base + ISP_BYPASS_REG);
+            wmb();  // Ensure write completes
+
+            // Re-enable links
+            writel(1, ourISPdev->reg_base + ISP_LINK_ENABLE_REG);
+            wmb();  // Ensure write completes
+
+            // Enable routing
+            writel(1, ourISPdev->reg_base + ISP_ROUTE_REG);
+            wmb();  // Ensure write completes
+
+            // Update device state
+            ourISPdev->bypass_enabled = !!ctrl->value;
+            pr_debug("Set bypass mode to %d\n", ctrl->value);
             break;
+        }
+
+        case ISP_CTRL_ANTIFLICKER: {  // 0x980918
+            struct {
+                u32 cmd;      // 0x980918
+                u32 value;    // Antiflicker value
+            } antiflick_ctrl;
+
+            // Validate value
+            if (ctrl->value > 2) {
+                pr_err("Invalid antiflicker value: %d\n", ctrl->value);
+                return -EINVAL;
+            }
+
+            // Update tuning data
+            tuning->antiflicker = ctrl->value;
+
+            // Set control structure
+            antiflick_ctrl.cmd = ISP_CTRL_ANTIFLICKER;
+            antiflick_ctrl.value = ctrl->value;
+
+            // Copy back to user
+            if (copy_to_user(arg, &antiflick_ctrl, sizeof(antiflick_ctrl))) {
+                pr_err("Failed to copy antiflicker control to user\n");
+                return -EFAULT;
+            }
+
+            pr_debug("Set antiflicker mode to %d\n", ctrl->value);
+            break;
+        }
 
         default:
             pr_info("Unknown ISP control command: 0x%x\n", ctrl->cmd);
@@ -1369,17 +1457,28 @@ static long isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, unsigned l
         }
 
         case 0xc008561c: { // ISP_CORE_S_CTRL
+            struct isp_core_ctrl ctrl;
+
+            if (!dev || !dev->tuning_data) {
+                pr_err("No ISP device or tuning data\n");
+                return -EINVAL;
+            }
+
             if (dev->tuning_enabled != 2) {
                 pr_err("ISP tuning not in correct state (state=%d)\n",
                        dev->tuning_enabled);
                 return -EINVAL;
             }
 
-            struct isp_core_ctrl ctrl;
             if (copy_from_user(&ctrl, (void __user *)arg, sizeof(ctrl))) {
+                pr_err("Failed to copy control from user\n");
                 return -EFAULT;
             }
-            ret = handle_isp_set_ctrl(&ctrl);
+
+            ret = handle_isp_set_ctrl(&ctrl, (void __user *)arg);
+            if (ret) {
+                pr_err("Failed to set control 0x%x: %d\n", ctrl.cmd, ret);
+            }
             break;
         }
 
@@ -4669,6 +4768,142 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
 }
 
 
+static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
+{
+    struct {
+        u32 cmd;
+        u32 pad;
+        u32 seq;
+        u32 flags;
+        u32 params[4];
+    } req;
+    struct frame_buffer buf;
+    struct timeval tv;
+    int ret = 0;
+
+    if (!fc || !fc->buf_base) {
+        pr_err("Invalid channel state in DQBUF\n");
+        return -EINVAL;
+    }
+
+    if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
+        return -EFAULT;
+
+    pr_info("DQBUF handler: cmd=0x%x seq=%u flags=0x%x\n",
+             req.cmd, req.seq, req.flags);
+
+    // Validate buffer state
+    if (!(fc->state & BIT(1))) {
+        pr_err("Channel not streaming\n");
+        return -EINVAL;
+    }
+
+    // Wait for buffer availability with timeout
+    ret = wait_event_interruptible_timeout(fc->wait_queue,
+        atomic_read(&fc->queued_bufs) > 0,
+        msecs_to_jiffies(1000));
+
+    if (ret == 0)
+        return -ETIMEDOUT;
+    if (ret == -ERESTARTSYS)
+        return -EINTR;
+
+    if (req.cmd == 0xffffffff) {
+        memset(&buf, 0, sizeof(buf));
+        do_gettimeofday(&tv);
+
+        // Calculate safe buffer index
+        unsigned int buf_index = fc->sequence % fc->buf_count;
+
+        // Fill frame_buffer structure
+        buf.index = buf_index;
+        buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        buf.memory = V4L2_MEMORY_MMAP;
+        buf.flags = V4L2_BUF_FLAG_MAPPED | V4L2_BUF_FLAG_QUEUED;
+        buf.sequence = fc->sequence;
+        buf.timestamp = tv;
+
+        // Channel specific settings with bounds checking
+        if (fc->channel_id == 1) {
+            buf.width = min_t(u32, 640, fc->width);
+            buf.height = min_t(u32, 360, fc->height);
+            buf.bytesused = (buf.width * buf.height * 3) / 2;
+        } else {
+            buf.width = fc->width;
+            buf.height = fc->height;
+            buf.bytesused = fc->buf_size;
+        }
+
+        // Validate buffer size
+        if (buf.bytesused > fc->buf_size) {
+            pr_err("Buffer size mismatch: %u > %zu\n",
+                   buf.bytesused, fc->buf_size);
+            return -EINVAL;
+        }
+
+        buf.format = fc->format;
+        buf.field = V4L2_FIELD_NONE;
+        buf.fps_num = 30;
+        buf.fps_den = 1;
+
+        // Calculate buffer offset with bounds checking
+        size_t buf_offset = buf_index * fc->buf_size;
+        if (buf_offset + buf.bytesused > fc->buf_count * fc->buf_size) {
+            pr_err("Buffer overflow detected\n");
+            return -EINVAL;
+        }
+
+        // Generate test pattern with proper bounds checking
+        u8 *dst = fc->buf_base + buf_offset;
+        int y_size = buf.width * buf.height;
+
+        if (y_size > 0) {
+            // Y plane
+            u8 y_val = (fc->sequence % 2) ? 235 : 16;
+            memset(dst, y_val, y_size);
+
+            // UV plane for NV12
+            if (fc->format == 0x23 && buf.bytesused >= y_size + (y_size/2)) {
+                u8 *uv = dst + y_size;
+                int color = fc->sequence % 4;
+
+                switch (color) {
+                    case 0: // Red
+                        memset(uv, 0x80, y_size/2);
+                        memset(uv+1, 0xF0, y_size/2);
+                        break;
+                    case 1: // Green
+                        memset(uv, 0, y_size);
+                        break;
+                    case 2: // Blue
+                        memset(uv, 0xF0, y_size/2);
+                        memset(uv+1, 0x80, y_size/2);
+                        break;
+                    case 3: // Yellow
+                        memset(uv, 0, y_size/2);
+                        memset(uv+1, 0xF0, y_size/2);
+                        break;
+                }
+            }
+
+            // Ensure memory writes are complete before decrementing counter
+            wmb();
+            atomic_dec(&fc->queued_bufs);
+
+            pr_info("Frame %u generated: %ux%u (%u bytes)\n",
+                    buf.sequence, buf.width, buf.height, buf.bytesused);
+        }
+
+        fc->sequence++;
+
+        if (copy_to_user((void __user *)arg, &buf, sizeof(buf)))
+            return -EFAULT;
+
+        return 0;
+    }
+
+    return -EINVAL;
+}
 
 static int frame_channel_vidioc_fmt(struct isp_framesource_state *fs, void __user *arg, bool is_get)
 {
@@ -4913,144 +5148,6 @@ static int framechan_get_frame_status(struct frame_source_channel *fc, unsigned 
         return -EFAULT;
 
     return 0;
-}
-
-
-static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
-{
-    struct {
-        u32 cmd;
-        u32 pad;
-        u32 seq;
-        u32 flags;
-        u32 params[4];
-    } req;
-    struct frame_buffer buf;
-    struct timeval tv;
-    int ret = 0;
-
-    if (!fc || !fc->buf_base) {
-        pr_err("Invalid channel state in DQBUF\n");
-        return -EINVAL;
-    }
-
-    if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
-        return -EFAULT;
-
-    pr_info("DQBUF handler: cmd=0x%x seq=%u flags=0x%x\n",
-             req.cmd, req.seq, req.flags);
-
-    // Validate buffer state
-    if (!(fc->state & BIT(1))) {
-        pr_err("Channel not streaming\n");
-        return -EINVAL;
-    }
-
-    // Wait for buffer availability with timeout
-    ret = wait_event_interruptible_timeout(fc->wait_queue,
-        atomic_read(&fc->queued_bufs) > 0,
-        msecs_to_jiffies(1000));
-
-    if (ret == 0)
-        return -ETIMEDOUT;
-    if (ret == -ERESTARTSYS)
-        return -EINTR;
-
-    if (req.cmd == 0xffffffff) {
-        memset(&buf, 0, sizeof(buf));
-        do_gettimeofday(&tv);
-
-        // Calculate safe buffer index
-        unsigned int buf_index = fc->sequence % fc->buf_count;
-
-        // Fill frame_buffer structure
-        buf.index = buf_index;
-        buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        buf.memory = V4L2_MEMORY_MMAP;
-        buf.flags = V4L2_BUF_FLAG_MAPPED | V4L2_BUF_FLAG_QUEUED;
-        buf.sequence = fc->sequence;
-        buf.timestamp = tv;
-
-        // Channel specific settings with bounds checking
-        if (fc->channel_id == 1) {
-            buf.width = min_t(u32, 640, fc->width);
-            buf.height = min_t(u32, 360, fc->height);
-            buf.bytesused = (buf.width * buf.height * 3) / 2;
-        } else {
-            buf.width = fc->width;
-            buf.height = fc->height;
-            buf.bytesused = fc->buf_size;
-        }
-
-        // Validate buffer size
-        if (buf.bytesused > fc->buf_size) {
-            pr_err("Buffer size mismatch: %u > %zu\n",
-                   buf.bytesused, fc->buf_size);
-            return -EINVAL;
-        }
-
-        buf.format = fc->format;
-        buf.field = V4L2_FIELD_NONE;
-        buf.fps_num = 30;
-        buf.fps_den = 1;
-
-        // Calculate buffer offset with bounds checking
-        size_t buf_offset = buf_index * fc->buf_size;
-        if (buf_offset + buf.bytesused > fc->buf_count * fc->buf_size) {
-            pr_err("Buffer overflow detected\n");
-            return -EINVAL;
-        }
-
-        // Generate test pattern with proper bounds checking
-        u8 *dst = fc->buf_base + buf_offset;
-        int y_size = buf.width * buf.height;
-
-        if (y_size > 0) {
-            // Y plane
-            u8 y_val = (fc->sequence % 2) ? 235 : 16;
-            memset(dst, y_val, y_size);
-
-            // UV plane for NV12
-            if (fc->format == 0x23 && buf.bytesused >= y_size + (y_size/2)) {
-                u8 *uv = dst + y_size;
-                int color = fc->sequence % 4;
-
-                switch (color) {
-                    case 0: // Red
-                        memset(uv, 0x80, y_size/2);
-                        memset(uv+1, 0xF0, y_size/2);
-                        break;
-                    case 1: // Green
-                        memset(uv, 0, y_size);
-                        break;
-                    case 2: // Blue
-                        memset(uv, 0xF0, y_size/2);
-                        memset(uv+1, 0x80, y_size/2);
-                        break;
-                    case 3: // Yellow
-                        memset(uv, 0, y_size/2);
-                        memset(uv+1, 0xF0, y_size/2);
-                        break;
-                }
-            }
-
-            // Ensure memory writes are complete before decrementing counter
-            wmb();
-            atomic_dec(&fc->queued_bufs);
-
-            pr_info("Frame %u generated: %ux%u (%u bytes)\n",
-                    buf.sequence, buf.width, buf.height, buf.bytesused);
-        }
-
-        fc->sequence++;
-
-        if (copy_to_user((void __user *)arg, &buf, sizeof(buf)))
-            return -EFAULT;
-
-        return 0;
-    }
-
-    return -EINVAL;
 }
 
 

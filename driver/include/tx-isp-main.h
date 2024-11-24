@@ -1537,6 +1537,8 @@ struct IMPISPDev {
     struct isp_tuning_data *tuning_data;
     struct isp_tuning_state *tuning_state;
     int tuning_enabled;  // 0 = disabled, 2 = enabled
+    bool bypass_enabled;
+    bool links_enabled;
     u32 instance;  // For passing to tuning state
     struct ae_info *ae_info;
     struct awb_info *awb_info;

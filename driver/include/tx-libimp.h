@@ -95,6 +95,10 @@
 #define ISP_WDR_REG_BASE     (ISP_REG_BASE + 0x1000)
 #define ISP_AE_REG_BASE      (ISP_REG_BASE + 0x100)
 #define ISP_AWB_REG_BASE     (ISP_REG_BASE + 0x200)
+#define ISP_LINK_ENABLE_REG   0x04
+#define ISP_ROUTE_REG         0x08
+#define ISP_BYPASS_REG        0x0C
+
 
 // Parameter offsets in tuning state
 #define TUNING_OFF_CONTRAST    0x01
@@ -106,6 +110,16 @@
 #define TUNING_OFF_VFLIP       0x0f
 #define TUNING_OFF_DPC         0x11
 
+#define ISP_CTRL_BYPASS    0x8000164
+#define ISP_CTRL_ANTIFLICKER 0x980918
+#define ISP_LINK_CTRL         0x0000  // Base + offset for link control
+#define ISP_BYPASS_CTRL       0x0004  // Base + offset for bypass control
+#define ISP_ANTIFLICKER_CTRL  0x0008  // Base + offset for antiflicker
+
+#define ISP_CTRL_REG          0x00
+#define ISP_LINK_ENABLE_REG   0x04
+#define ISP_ROUTE_REG         0x08
+#define ISP_BYPASS_REG        0x0C
 /* ISP Pipeline Register Structure */
 // Strucure for LIBIMP
 struct isp_pipeline_regs {
@@ -243,9 +257,7 @@ struct isp_tuning_data {
     u8 vflip;              // 0x0f
     u8 test_pattern;       // 0x10
     u8 dpc;               // 0x11 - Using first byte of reserved4
-    u8 reserved4[2];       // 0x12-0x13
-    u32 isp_process;       // 0x14-0x17
-    u8 reserved5[4];       // 0x18-0x1b
+    u8 antiflicker;      // 0x1c
 };
 
 
@@ -313,6 +325,18 @@ struct isp_ae_regs {
     u32 exposure_factor;
     u32 stats[64];  // AE statistics
     // ... other registers
+};
+
+struct isp_flip_ioctl {
+    int32_t enable;  // Enable value
+    int32_t cmd;  // Command code (0x980914 or 0x980915)
+    int32_t value;  // Value to set
+};
+
+// Structure for ISP controls with control value
+struct isp_ctrl_msg {
+    u32 cmd;      // Command code
+    u32 value;    // Value to set
 };
 
 #endif //TX_LIBIMP_H
