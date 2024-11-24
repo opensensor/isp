@@ -175,57 +175,46 @@ struct encoder_chn_attr {
     uint32_t minQp;             // Minimum QP value
 };
 
+// Common struct for both QBUF and DQBUF operations
 struct __attribute__((packed, aligned(4))) frame_qbuf_request {
     __u32 index;
     __u32 type;
-    __u32 memory;
+    __u32 bytesused;
     __u32 flags;
-    union {
-        __u32 offset;
-        unsigned long userptr;
-        __u32 reserved[8];  // Add padding to match expected size
-    } m;
-    __u32 length;
     __u32 field;
     struct timeval timestamp;
     __u32 sequence;
-};
-
-struct frame_buffer {
-    // 0x00: Basic buffer info
-    u32 index;          // Index in array
-    u32 type;           // Buffer type
-    u32 memory;         // Memory type (mmap)
-    u32 flags;          // Status flags - track available/owned here
-
-    // 0x10: Image format
-    u32 width;
-    u32 height;
-    u32 format;
-    u32 field;
-
-    // 0x20: Timing
-    struct timeval timestamp;
-    u32 memory_offset;  // Offset into DMA buffer
-
-    // 0x30: Buffer info
-    u32 length;         // Total buffer length
-    u32 bytesused;      // Actual bytes used
-    u32 input;          // Input number
-    u32 reserved;
-
-    // 0x40: Status
-    u32 state;          // Internal state
-    u32 flags2;         // Additional flags
-
-    // 0x48: Frame rate
-    u32 fps_num;        // Must be at 0x48
-    u32 fps_den;        // Must be at 0x4C
+    __u32 memory;
     union {
         __u32 offset;
         unsigned long userptr;
+        __u32 reserved[8];
     } m;
-} __attribute__((packed));
+    __u32 length;
+    __u32 reserved2[4];
+};
+
+struct __attribute__((packed, aligned(4))) frame_buffer {
+    // Match V4L2 ordering
+    __u32 index;
+    __u32 type;
+    __u32 bytesused;
+    __u32 flags;
+    __u32 field;
+    struct timeval timestamp;
+    __u32 sequence;
+    __u32 memory;
+    union {
+        __u32 offset;
+        unsigned long userptr;
+        __u32 reserved[8];  // Extra padding for alignment
+    } m;
+    __u32 length;
+
+    // Our additional fields
+    __u32 state;          // Internal state tracking
+    __u32 reserved2[4];   // Padding to ensure size alignment
+};
 
 
 

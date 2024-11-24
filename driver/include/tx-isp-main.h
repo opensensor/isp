@@ -1735,6 +1735,7 @@ struct frame_source_channel {
     u32 frame_count;
 
     /* Format info */
+    __u32 type;
     uint32_t width;                  // Frame width
     uint32_t height;                 // Frame height
     uint32_t format;                 // Pixel format
