@@ -1480,7 +1480,6 @@ struct IMPISPDev {
     struct isp_component_status vic;
     struct isp_component_status vin;
 
-
     /* Platform devices */
     struct platform_device *pdev;
     struct platform_device *vic_pdev;
@@ -1518,12 +1517,12 @@ struct IMPISPDev {
     uint32_t width;
     uint32_t height;
     uint32_t format;
+    uint32_t frame_wait_cnt;
 
     /* Tuning attributes */
     struct isp_tuning_data *tuning_data;
     struct isp_tuning_state *tuning_state;
     int tuning_enabled;  // 0 = disabled, 2 = enabled
-    struct tisp_param *tuning_params;
     u32 instance;  // For passing to tuning state
 
 

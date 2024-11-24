@@ -80,13 +80,25 @@
 #define AE_HIST_SIZE     0x400   // 1024 bytes of histogram data
 #define AE_HIST_BUF_SIZE 0x42c   // Full buffer size including extra data
 
-#define TUNING_OFF_BRIGHTNESS  0x1023  // 0x4094 in params array
-#define TUNING_OFF_CONTRAST    0x1024  // Saturation
-#define TUNING_OFF_SHARPNESS   0x0fdb  // Sharpness control
-#define TUNING_OFF_HFLIP       0x03ad  // Horizontal flip
-#define TUNING_OFF_VFLIP       0x03ac  // Vertical flip
-#define TUNING_OFF_DPC         0x1027  // DPC control
-#define TUNING_OFF_GAMMA       0x1026  // Gamma control
+#define ISP_VALUE_MAX 255
+#define ISP_CTRL_BRIGHTNESS  0x980900
+#define ISP_CTRL_CONTRAST    0x980901
+#define ISP_CTRL_SATURATION  0x980902  // Add missing saturation control
+#define ISP_CTRL_HFLIP      0x980914
+#define ISP_CTRL_VFLIP      0x980915
+#define ISP_CTRL_SHARPNESS  0x98091b
+#define ISP_CTRL_DPC        0x98091f
+#define ISP_CTRL_GAMMA      0x9a091a
+
+// Parameter offsets in tuning state
+#define TUNING_OFF_BRIGHTNESS  0x1023  // From decompiled code
+#define TUNING_OFF_CONTRAST    0x1024
+#define TUNING_OFF_SATURATION  0x1024  // Verify this offset
+#define TUNING_OFF_SHARPNESS   0x0fdb
+#define TUNING_OFF_HFLIP       0x03ad
+#define TUNING_OFF_VFLIP       0x03ac
+#define TUNING_OFF_DPC         0x1027
+#define TUNING_OFF_GAMMA       0x1026
 
 /* ISP Pipeline Register Structure */
 // Strucure for LIBIMP
@@ -239,11 +251,6 @@ struct isp_tuning_state {
     u32 state;                 // State at 0x1031 (1 = init, 2 = enabled)
     u32 event_handler;         // Event handler at 0x1033
     u32 param_size;            // Size field at end (0x736b0 seen in init)
-};
-
-// Top level parameter structure
-struct tisp_param {
-    u8 data[0x500c];          // Based on kmalloc size in tuning_open
 };
 
 // From the decompiled code, we see a struct of 4-word entries being copied in a loop

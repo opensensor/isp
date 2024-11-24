@@ -744,18 +744,46 @@ static int isp_m0_chardev_open(struct inode *inode, struct file *file)
 
 static int isp_m0_chardev_release(struct inode *inode, struct file *file)
 {
-    // Free tuning data TODO
+    struct IMPISPDev *dev = file->private_data;
+
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    // First disable tuning if it's enabled
+    if (dev->tuning_enabled == 2) {
+        pr_info("Disabling tuning on release\n");
+        isp_core_tuning_release(dev);
+        dev->tuning_enabled = 0;
+    }
+
+    // Clear private_data
+    file->private_data = NULL;
+
+    // Note: Don't free tuning_data here as it might be used by other opens
+    // It will be freed when the driver is unloaded
+
+    pr_debug("ISP M0 device released\n");
     return 0;
 }
 
-// Handle individual control settings
+static bool is_frame_wait_needed(void)
+{
+    if (ourISPdev && ourISPdev->frame_wait_cnt > 0) {
+        ourISPdev->frame_wait_cnt--;
+        wmb();
+        return true;
+    }
+    return false;
+}
+
 
 // Helper for frame wait after flip operations
 static void set_framesource_changewait_cnt(void)
 {
     if (ourISPdev) {
-        // TODO
-        //ourISPdev->frame_wait_cnt = 3; // Wait for 3 frames after flip
+        ourISPdev->frame_wait_cnt = 3;  // Wait 3 frames for flip to take effect
+        wmb();  // Ensure count update is visible
     }
 }
 
@@ -769,43 +797,35 @@ static int isp_core_tuning_open(struct IMPISPDev *dev)
         return -EINVAL;
     }
 
-    // Allocate tuning state if not already allocated
-    if (!dev->tuning_state) {
-        tuning = kzalloc(sizeof(*tuning), GFP_KERNEL);
-        if (!tuning) {
-            pr_err("Failed to allocate tuning state\n");
-            return -ENOMEM;
-        }
-
-        // Initialize tuning state
-        spin_lock_init(&tuning->lock);
-        mutex_init(&tuning->mlock);
-        tuning->state = 1;  // Initial state from decompiled code
-        tuning->param_size = 0x736b0;  // Size from decompiled code
-        tuning->instance = dev->instance;
-
-        // Set default values in params array
-        tuning->params[TUNING_OFF_BRIGHTNESS] = 50;
-        tuning->params[TUNING_OFF_CONTRAST] = 50;
-        tuning->params[TUNING_OFF_SHARPNESS] = 50;
-        tuning->params[TUNING_OFF_HFLIP] = 0;
-        tuning->params[TUNING_OFF_VFLIP] = 0;
-        tuning->params[TUNING_OFF_DPC] = 50;
-        tuning->params[TUNING_OFF_GAMMA] = 50;
-
-        dev->tuning_data = tuning;
+    // Don't reallocate if already initialized
+    if (dev->tuning_data) {
+        pr_info("Tuning data already initialized\n");
+        return 0;
     }
 
-    // Allocate parameter space if not already allocated
-    if (!dev->tuning_params) {
-        dev->tuning_params = kzalloc(sizeof(struct tisp_param), GFP_KERNEL);
-        if (!dev->tuning_params) {
-            pr_err("Failed to allocate tuning parameters\n");
-            kfree(dev->tuning_state);
-            dev->tuning_state = NULL;
-            return -ENOMEM;
-        }
+    tuning = kzalloc(sizeof(*tuning), GFP_KERNEL);
+    if (!tuning) {
+        pr_err("Failed to allocate tuning state\n");
+        return -ENOMEM;
     }
+
+    // Initialize tuning state
+    spin_lock_init(&tuning->lock);
+    mutex_init(&tuning->mlock);
+    tuning->state = 1;
+    tuning->param_size = 0x736b0;
+    tuning->instance = dev->instance;
+
+    // Set default values in params array - use full 8-bit range
+    tuning->params[TUNING_OFF_BRIGHTNESS] = 128;  // Mid-range
+    tuning->params[TUNING_OFF_CONTRAST] = 128;
+    tuning->params[TUNING_OFF_SHARPNESS] = 128;
+    tuning->params[TUNING_OFF_HFLIP] = 0;
+    tuning->params[TUNING_OFF_VFLIP] = 0;
+    tuning->params[TUNING_OFF_DPC] = 128;
+    tuning->params[TUNING_OFF_GAMMA] = 128;
+
+    dev->tuning_data = tuning;
 
     return 0;
 }
@@ -816,12 +836,6 @@ static int isp_core_tuning_release(struct IMPISPDev *dev)
 
     if (!dev) {
         return -EINVAL;
-    }
-
-    // Free tuning parameters if allocated
-    if (dev->tuning_params) {
-        kfree(dev->tuning_params);
-        dev->tuning_params = NULL;
     }
 
     // Free tuning state if allocated
@@ -1161,15 +1175,20 @@ static long isp_tuning_get_ctrl(struct IMPISPDev *dev, void __user *arg)
 
 static int handle_isp_get_ctrl(struct isp_core_ctrl *ctrl)
 {
+    struct isp_tuning_state *tuning;
+    int ret = 0;
+
     pr_debug("ISP Core Get Control: cmd=0x%x\n", ctrl->cmd);
 
     if (!ourISPdev || !ourISPdev->tuning_data) {
         return -EINVAL;
     }
 
-    struct isp_tuning_state *tuning = ourISPdev->tuning_data;
+    tuning = ourISPdev->tuning_data;
 
-    // Based on decompiled code path for each control
+    mutex_lock(&tuning->mlock);
+    rmb();  // Ensure we see latest parameter values
+
     switch (ctrl->cmd) {
         case ISP_CTRL_BRIGHTNESS:
             ctrl->value = tuning->params[TUNING_OFF_BRIGHTNESS];
@@ -1177,6 +1196,10 @@ static int handle_isp_get_ctrl(struct isp_core_ctrl *ctrl)
 
         case ISP_CTRL_CONTRAST:
             ctrl->value = tuning->params[TUNING_OFF_CONTRAST];
+        break;
+
+        case ISP_CTRL_SATURATION:
+            ctrl->value = tuning->params[TUNING_OFF_SATURATION];
         break;
 
         case ISP_CTRL_SHARPNESS:
@@ -1191,26 +1214,23 @@ static int handle_isp_get_ctrl(struct isp_core_ctrl *ctrl)
             ctrl->value = tuning->params[TUNING_OFF_VFLIP];
         break;
 
-        case ISP_CTRL_DPC:
-            ctrl->value = tuning->params[TUNING_OFF_DPC];
-        break;
-
-        case ISP_CTRL_GAMMA:
-            ctrl->value = tuning->params[TUNING_OFF_GAMMA];
-        break;
-
         default:
-            pr_warn("Unknown ISP control command: 0x%x\n", ctrl->cmd);
-        return -EINVAL;
+            pr_debug("Unknown ISP control command: 0x%x\n", ctrl->cmd);
+        ret = -EINVAL;
     }
 
-    return 0;
+    mutex_unlock(&tuning->mlock);
+    return ret;
 }
 
 // Handle set control operations
 static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl)
 {
-    pr_debug("ISP set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
+    struct isp_tuning_state *tuning;
+    int ret = 0;
+    u32 flip_val;
+
+    pr_info("ISP set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
 
     if (!ourISPdev || !ourISPdev->tuning_data) {
         return -EINVAL;
@@ -1218,78 +1238,75 @@ static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl)
 
     struct isp_tuning_state *tuning = ourISPdev->tuning_data;
 
+    // Lock tuning state
+    mutex_lock(&tuning->mlock);
+
     // Based on decompiled code validation and setting patterns
     switch (ctrl->cmd) {
-        case ISP_CTRL_BRIGHTNESS: {
-            if (ctrl->value > 100) {
-                pr_err("Invalid brightness value: %d\n", ctrl->value);
-                return -EINVAL;
-            }
+        case ISP_CTRL_BRIGHTNESS:
             tuning->params[TUNING_OFF_BRIGHTNESS] = ctrl->value;
-            pr_debug("Set brightness to %d\n", ctrl->value);
-            break;
-        }
+        pr_info("Set brightness to %d\n", ctrl->value);
+        break;
 
-        case ISP_CTRL_CONTRAST: {
-            if (ctrl->value > 100) {
-                pr_err("Invalid contrast value: %d\n", ctrl->value);
-                return -EINVAL;
-            }
+        case ISP_CTRL_CONTRAST:
             tuning->params[TUNING_OFF_CONTRAST] = ctrl->value;
-            pr_debug("Set contrast to %d\n", ctrl->value);
-            break;
-        }
+        pr_info("Set contrast to %d\n", ctrl->value);
+        break;
 
-        case ISP_CTRL_SHARPNESS: {
-            if (ctrl->value > 100) {
-                pr_err("Invalid sharpness value: %d\n", ctrl->value);
-                return -EINVAL;
-            }
+        case ISP_CTRL_SATURATION:
+            tuning->params[TUNING_OFF_SATURATION] = ctrl->value;
+        pr_info("Set saturation to %d\n", ctrl->value);
+        break;
+
+        case ISP_CTRL_SHARPNESS:
             tuning->params[TUNING_OFF_SHARPNESS] = ctrl->value;
-            pr_debug("Set sharpness to %d\n", ctrl->value);
-            break;
-        }
+        pr_info("Set sharpness to %d\n", ctrl->value);
+        break;
 
         case ISP_CTRL_HFLIP: {
+            // Update tuning params
             tuning->params[TUNING_OFF_HFLIP] = !!ctrl->value;
-            pr_debug("Set horizontal flip to %d\n", ctrl->value);
+
+            // Update hardware register
+            flip_val = system_reg_read(ISP_FLIP_CTRL_REG);
+            if (ctrl->value)
+                flip_val |= ISP_FLIP_HFLIP;
+            else
+                flip_val &= ~ISP_FLIP_HFLIP;
+            system_reg_write(ISP_FLIP_CTRL_REG, flip_val);
+
+            // Signal frame wait
             set_framesource_changewait_cnt();
+            pr_debug("Set horizontal flip to %d (reg=0x%x)\n", ctrl->value, flip_val);
             break;
         }
 
         case ISP_CTRL_VFLIP: {
+            // Update tuning params
             tuning->params[TUNING_OFF_VFLIP] = !!ctrl->value;
-            pr_debug("Set vertical flip to %d\n", ctrl->value);
+
+            // Update hardware register
+            flip_val = system_reg_read(ISP_FLIP_CTRL_REG);
+            if (ctrl->value)
+                flip_val |= ISP_FLIP_VFLIP;
+            else
+                flip_val &= ~ISP_FLIP_VFLIP;
+            system_reg_write(ISP_FLIP_CTRL_REG, flip_val);
+
+            // Signal frame wait
             set_framesource_changewait_cnt();
-            break;
-        }
-
-        case ISP_CTRL_DPC: {
-            if (ctrl->value > 100) {
-                pr_err("Invalid DPC value: %d\n", ctrl->value);
-                return -EINVAL;
-            }
-            tuning->params[TUNING_OFF_DPC] = ctrl->value;
-            pr_debug("Set DPC to %d\n", ctrl->value);
-            break;
-        }
-
-        case ISP_CTRL_GAMMA: {
-            if (ctrl->value > 100) {
-                pr_err("Invalid gamma value: %d\n", ctrl->value);
-                return -EINVAL;
-            }
-            tuning->params[TUNING_OFF_GAMMA] = ctrl->value;
-            pr_debug("Set gamma to %d\n", ctrl->value);
+            pr_debug("Set vertical flip to %d (reg=0x%x)\n", ctrl->value, flip_val);
             break;
         }
 
         default:
-            pr_warn("Unknown ISP control command: 0x%x\n", ctrl->cmd);
-            return -EINVAL;
+            pr_info("Unknown ISP control command: 0x%x\n", ctrl->cmd);
+        ret = -EINVAL;
     }
 
-    return 0;
+    unlock:
+        mutex_unlock(&tuning->mlock);
+    return ret;
 }
 
 
