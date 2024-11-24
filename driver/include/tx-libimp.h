@@ -44,8 +44,19 @@
 #define ISP_READ_SENSOR_ID       0x805056c1
 #define ISP_SET_SENSOR_INFO      0xc050561a
 
+
+// ISP register definitions
 #define ISP_AE_HIST_BASE   0x7000  // Base address for AE histogram data
 #define ISP_AE_STATE_BASE  0x7100  // Base address for AE state registers
+
+#define ISP_CTRL_BRIGHTNESS  0x980900
+#define ISP_CTRL_CONTRAST    0x980901
+#define ISP_CTRL_SATURATION  0x980902
+#define ISP_CTRL_HFLIP      0x980914
+#define ISP_CTRL_VFLIP      0x980915
+#define ISP_CTRL_SHARPNESS  0x98091b
+#define ISP_CTRL_DPC        0x98091f  // DPC control
+#define ISP_CTRL_GAMMA      0x9a091a  // Gamma control
 
 // Core tuning IOCTLs
 #define ISP_CORE_G_CTRL         0xc008561b
@@ -68,6 +79,14 @@
 
 #define AE_HIST_SIZE     0x400   // 1024 bytes of histogram data
 #define AE_HIST_BUF_SIZE 0x42c   // Full buffer size including extra data
+
+#define TUNING_OFF_BRIGHTNESS  0x1023  // 0x4094 in params array
+#define TUNING_OFF_CONTRAST    0x1024  // Saturation
+#define TUNING_OFF_SHARPNESS   0x0fdb  // Sharpness control
+#define TUNING_OFF_HFLIP       0x03ad  // Horizontal flip
+#define TUNING_OFF_VFLIP       0x03ac  // Vertical flip
+#define TUNING_OFF_DPC         0x1027  // DPC control
+#define TUNING_OFF_GAMMA       0x1026  // Gamma control
 
 /* ISP Pipeline Register Structure */
 // Strucure for LIBIMP
@@ -239,11 +258,6 @@ struct isp_zone_ctrl {
     __u32 value;      // var_10 = arg1 (output buffer)
 };
 
-// AE State structure based on tisp_get_ae_state
-struct ae_state_info {
-    u32 values[3];  // 0xc bytes copied to user
-};
-
 // AE Zone data structure (from apical_isp_ae_zone_g_ctrl.isra.84)
 struct ae_zone_info {
     u8 zones[MAX_AE_ZONES];    // Zone data
@@ -262,9 +276,6 @@ struct isp_tuning_ctrl {
     __u32 value;   // Value/pointer
 };
 
-// ISP register definitions
-#define ISP_AE_HIST_BASE   0x7000  // Base address for AE histogram data
-#define ISP_AE_STATE_BASE  0x7100  // Base address for AE state registers
 
 // AE histogram and state structures
 struct ae_hist_data {

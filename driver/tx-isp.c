@@ -338,11 +338,6 @@ void tx_isp_free_irq(int32_t* irq_pointer)
     }
 }
 
-
-
-
-
-
 static irqreturn_t tx_vic_irq(int irq, void *dev_id)
 {
     struct IMPISPDev *dev = dev_id;
@@ -365,7 +360,6 @@ static irqreturn_t tx_vic_irq(int irq, void *dev_id)
 
     return IRQ_HANDLED;
 }
-
 
 static int check_csi_errors(struct IMPISPDev *dev)
 {
@@ -744,7 +738,7 @@ static int isp_m0_chardev_open(struct inode *inode, struct file *file)
     ourISPdev->tuning_enabled = 0;  // Start in disabled state
     file->private_data = ourISPdev;
 
-    pr_debug("ISP M0 device opened, tuning_data=%p\n", ourISPdev->tuning_data);
+    pr_info("ISP M0 device opened, tuning_data=%p\n", ourISPdev->tuning_data);
     return 0;
 }
 
@@ -764,72 +758,6 @@ static void set_framesource_changewait_cnt(void)
         //ourISPdev->frame_wait_cnt = 3; // Wait for 3 frames after flip
     }
 }
-
-static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl)
-{
-    pr_debug("ISP set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
-
-    switch (ctrl->cmd) {
-        case ISP_CTRL_SATURATION: {
-            if (ctrl->value > 100) {
-                pr_err("Invalid saturation value: %d\n", ctrl->value);
-                return -EINVAL;
-            }
-            ourISPdev->tuning_data->saturation = ctrl->value;
-            pr_debug("Set saturation to %d\n", ctrl->value);
-            break;
-        }
-
-        case ISP_CTRL_SHARPNESS: {
-            if (ctrl->value > 100) {
-                pr_err("Invalid sharpness value: %d\n", ctrl->value);
-                return -EINVAL;
-            }
-            ourISPdev->tuning_data->sharpness = ctrl->value;
-            pr_debug("Set sharpness to %d\n", ctrl->value);
-            break;
-        }
-
-        case ISP_CTRL_HFLIP: {
-            ourISPdev->tuning_data->hflip = !!ctrl->value;
-            set_framesource_changewait_cnt();
-            pr_debug("Set horizontal flip to %d\n", ctrl->value);
-            break;
-        }
-
-        case ISP_CTRL_VFLIP: {
-            ourISPdev->tuning_data->vflip = !!ctrl->value;
-            set_framesource_changewait_cnt();
-            pr_debug("Set vertical flip to %d\n", ctrl->value);
-            break;
-        }
-
-        case ISP_CTRL_BYPASS: {
-            if (ctrl->value > 1) {
-                return -EINVAL;
-            }
-            ourISPdev->tuning_data->isp_process = !ctrl->value; // Invert for bypass
-            pr_debug("Set ISP %s\n", ctrl->value ? "bypass" : "process");
-            break;
-        }
-
-        case ISP_CTRL_SHADING: {
-            if (ctrl->value > 1) {
-                return -EINVAL;
-            }
-            ourISPdev->tuning_data->shading = ctrl->value;
-            pr_debug("Set lens shading correction to %d\n", ctrl->value);
-            break;
-        }
-
-        default:
-            pr_warn("Unknown ISP control command: 0x%x\n", ctrl->cmd);
-            return -EINVAL;
-    }
-
-    return 0;
-}
-
 
 static int isp_core_tuning_open(struct IMPISPDev *dev)
 {
@@ -856,7 +784,16 @@ static int isp_core_tuning_open(struct IMPISPDev *dev)
         tuning->param_size = 0x736b0;  // Size from decompiled code
         tuning->instance = dev->instance;
 
-        dev->tuning_state = tuning;
+        // Set default values in params array
+        tuning->params[TUNING_OFF_BRIGHTNESS] = 50;
+        tuning->params[TUNING_OFF_CONTRAST] = 50;
+        tuning->params[TUNING_OFF_SHARPNESS] = 50;
+        tuning->params[TUNING_OFF_HFLIP] = 0;
+        tuning->params[TUNING_OFF_VFLIP] = 0;
+        tuning->params[TUNING_OFF_DPC] = 50;
+        tuning->params[TUNING_OFF_GAMMA] = 50;
+
+        dev->tuning_data = tuning;
     }
 
     // Allocate parameter space if not already allocated
@@ -898,19 +835,100 @@ static int isp_core_tuning_release(struct IMPISPDev *dev)
 }
 
 
-// Implement required functions
+// Read AE histogram data from hardware
 static int tisp_g_ae_hist(void *buf)
 {
-    // TODO: Implement actual hardware access
-    memset(buf, 0, AE_HIST_BUF_SIZE);  // Temporary implementation
+    struct ae_hist_data *hist = (struct ae_hist_data *)buf;
+    int i;
+    u32 reg_val;
+
+    if (!hist) {
+        pr_err("Invalid histogram buffer\n");
+        return -EINVAL;
+    }
+
+    // Read histogram data
+    for (i = 0; i < 256; i++) {
+        reg_val = system_reg_read(ISP_AE_HIST_BASE + (i * 4));
+        hist->histogram[i] = reg_val;
+    }
+
+    // Read additional statistics
+    for (i = 0; i < 5; i++) {
+        reg_val = system_reg_read(ISP_AE_HIST_BASE + 0x400 + (i * 4));
+        hist->stats[i * 4] = reg_val & 0xFF;
+        hist->stats[i * 4 + 1] = (reg_val >> 8) & 0xFF;
+        hist->stats[i * 4 + 2] = (reg_val >> 16) & 0xFF;
+        hist->stats[i * 4 + 3] = (reg_val >> 24) & 0xFF;
+    }
+
+    // Read status bytes at specific offsets (0x414, 0x418, etc)
+    hist->status[0] = system_reg_read(ISP_AE_HIST_BASE + 0x414) & 0xFF;
+    hist->status[1] = system_reg_read(ISP_AE_HIST_BASE + 0x418) & 0xFF;
+    hist->status[2] = system_reg_read(ISP_AE_HIST_BASE + 0x41c) & 0xFF;
+    hist->status[3] = system_reg_read(ISP_AE_HIST_BASE + 0x420) & 0xFF;
+    hist->status[4] = system_reg_read(ISP_AE_HIST_BASE + 0x424) & 0xFF;
+    hist->status[5] = system_reg_read(ISP_AE_HIST_BASE + 0x428) & 0xFF;
+
     return 0;
 }
 
+// Read AE state from hardware
 static int tisp_get_ae_state(struct ae_state_info *state)
 {
-    // TODO: Implement actual hardware access
-    memset(state, 0, sizeof(*state));  // Temporary implementation
+    if (!state) {
+        pr_err("Invalid AE state buffer\n");
+        return -EINVAL;
+    }
+
+    // Read current exposure value
+    state->exposure = system_reg_read(ISP_AE_STATE_BASE + 0x00);
+
+    // Read current gain value
+    state->gain = system_reg_read(ISP_AE_STATE_BASE + 0x04);
+
+    // Read status flags
+    state->status = system_reg_read(ISP_AE_STATE_BASE + 0x08);
+
     return 0;
+}
+
+// Debug helper functions
+static void dump_ae_hist(struct ae_hist_data *hist)
+{
+    int i;
+
+    pr_info("AE Histogram dump:\n");
+    for (i = 0; i < 256; i += 8) {
+        pr_info("[%3d] %08x %08x %08x %08x %08x %08x %08x %08x\n",
+                i,
+                hist->histogram[i],
+                hist->histogram[i+1],
+                hist->histogram[i+2],
+                hist->histogram[i+3],
+                hist->histogram[i+4],
+                hist->histogram[i+5],
+                hist->histogram[i+6],
+                hist->histogram[i+7]);
+    }
+
+    pr_info("AE Stats: ");
+    for (i = 0; i < 0x14; i++) {
+        pr_info("%02x ", hist->stats[i]);
+    }
+    pr_info("\nAE Status: ");
+    for (i = 0; i < 0x18; i++) {
+        pr_info("%02x ", hist->status[i]);
+    }
+    pr_info("\n");
+}
+
+static void dump_ae_state(struct ae_state_info *state)
+{
+    pr_info("AE State:\n");
+    pr_info("  Exposure: %u\n", state->exposure);
+    pr_info("  Gain: %u\n", state->gain);
+    pr_info("  Status: 0x%08x\n", state->status);
 }
 
 static int isp_get_ae_state(struct isp_device *isp, u32 user_ptr)
@@ -953,7 +971,7 @@ static long frame_channel_vidioc_get_fmt(struct isp_framesource_state *fs, void 
     struct imp_channel_attr attr;
     int ret;
 
-    pr_debug("Get format entry: fs=%p arg=%p\n", fs, arg);
+    pr_info("Get format entry: fs=%p arg=%p\n", fs, arg);
 
     if (!fs || !fs->fc) {
         pr_err("Invalid fs or fc\n");
@@ -1124,8 +1142,8 @@ static long isp_tuning_get_ctrl(struct IMPISPDev *dev, void __user *arg)
     }
 
     // Check tuning state
-    if (dev->tuning_state != 2) {
-        pr_err("ISP tuning not in correct state (state=%d)\n", dev->tuning_state);
+    if (dev->tuning_enabled != 2) {
+        pr_err("ISP tuning not in correct state (state=%d)\n", dev->tuning_enabled);
         return -EINVAL;
     }
 
@@ -1141,6 +1159,139 @@ static long isp_tuning_get_ctrl(struct IMPISPDev *dev, void __user *arg)
     return ret;
 }
 
+static int handle_isp_get_ctrl(struct isp_core_ctrl *ctrl)
+{
+    pr_debug("ISP Core Get Control: cmd=0x%x\n", ctrl->cmd);
+
+    if (!ourISPdev || !ourISPdev->tuning_data) {
+        return -EINVAL;
+    }
+
+    struct isp_tuning_state *tuning = ourISPdev->tuning_data;
+
+    // Based on decompiled code path for each control
+    switch (ctrl->cmd) {
+        case ISP_CTRL_BRIGHTNESS:
+            ctrl->value = tuning->params[TUNING_OFF_BRIGHTNESS];
+        break;
+
+        case ISP_CTRL_CONTRAST:
+            ctrl->value = tuning->params[TUNING_OFF_CONTRAST];
+        break;
+
+        case ISP_CTRL_SHARPNESS:
+            ctrl->value = tuning->params[TUNING_OFF_SHARPNESS];
+        break;
+
+        case ISP_CTRL_HFLIP:
+            ctrl->value = tuning->params[TUNING_OFF_HFLIP];
+        break;
+
+        case ISP_CTRL_VFLIP:
+            ctrl->value = tuning->params[TUNING_OFF_VFLIP];
+        break;
+
+        case ISP_CTRL_DPC:
+            ctrl->value = tuning->params[TUNING_OFF_DPC];
+        break;
+
+        case ISP_CTRL_GAMMA:
+            ctrl->value = tuning->params[TUNING_OFF_GAMMA];
+        break;
+
+        default:
+            pr_warn("Unknown ISP control command: 0x%x\n", ctrl->cmd);
+        return -EINVAL;
+    }
+
+    return 0;
+}
+
+// Handle set control operations
+static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl)
+{
+    pr_debug("ISP set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
+
+    if (!ourISPdev || !ourISPdev->tuning_data) {
+        return -EINVAL;
+    }
+
+    struct isp_tuning_state *tuning = ourISPdev->tuning_data;
+
+    // Based on decompiled code validation and setting patterns
+    switch (ctrl->cmd) {
+        case ISP_CTRL_BRIGHTNESS: {
+            if (ctrl->value > 100) {
+                pr_err("Invalid brightness value: %d\n", ctrl->value);
+                return -EINVAL;
+            }
+            tuning->params[TUNING_OFF_BRIGHTNESS] = ctrl->value;
+            pr_debug("Set brightness to %d\n", ctrl->value);
+            break;
+        }
+
+        case ISP_CTRL_CONTRAST: {
+            if (ctrl->value > 100) {
+                pr_err("Invalid contrast value: %d\n", ctrl->value);
+                return -EINVAL;
+            }
+            tuning->params[TUNING_OFF_CONTRAST] = ctrl->value;
+            pr_debug("Set contrast to %d\n", ctrl->value);
+            break;
+        }
+
+        case ISP_CTRL_SHARPNESS: {
+            if (ctrl->value > 100) {
+                pr_err("Invalid sharpness value: %d\n", ctrl->value);
+                return -EINVAL;
+            }
+            tuning->params[TUNING_OFF_SHARPNESS] = ctrl->value;
+            pr_debug("Set sharpness to %d\n", ctrl->value);
+            break;
+        }
+
+        case ISP_CTRL_HFLIP: {
+            tuning->params[TUNING_OFF_HFLIP] = !!ctrl->value;
+            pr_debug("Set horizontal flip to %d\n", ctrl->value);
+            set_framesource_changewait_cnt();
+            break;
+        }
+
+        case ISP_CTRL_VFLIP: {
+            tuning->params[TUNING_OFF_VFLIP] = !!ctrl->value;
+            pr_debug("Set vertical flip to %d\n", ctrl->value);
+            set_framesource_changewait_cnt();
+            break;
+        }
+
+        case ISP_CTRL_DPC: {
+            if (ctrl->value > 100) {
+                pr_err("Invalid DPC value: %d\n", ctrl->value);
+                return -EINVAL;
+            }
+            tuning->params[TUNING_OFF_DPC] = ctrl->value;
+            pr_debug("Set DPC to %d\n", ctrl->value);
+            break;
+        }
+
+        case ISP_CTRL_GAMMA: {
+            if (ctrl->value > 100) {
+                pr_err("Invalid gamma value: %d\n", ctrl->value);
+                return -EINVAL;
+            }
+            tuning->params[TUNING_OFF_GAMMA] = ctrl->value;
+            pr_debug("Set gamma to %d\n", ctrl->value);
+            break;
+        }
+
+        default:
+            pr_warn("Unknown ISP control command: 0x%x\n", ctrl->cmd);
+            return -EINVAL;
+    }
+
+    return 0;
+}
+
 
 /*
  * ISP-M0 IOCTL handler
@@ -1153,107 +1304,80 @@ static long isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, unsigned l
     struct IMPISPDev *dev = ourISPdev;
     int ret = 0;
 
-    pr_debug("ISP-M0 IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
+    pr_info("ISP-M0 IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
 
-    if (!dev || !dev->tuning_state) {
-        pr_err("No ISP device or tuning data\n");
-        return -EINVAL;
-    }
-
-    // Verify tuning state is 2 (enabled) for control operations
-    if (cmd == ISP_CORE_S_CTRL && dev->tuning_enabled != 2) {
-        pr_err("ISP tuning not in correct state (state=%d)\n",
-               dev->tuning_enabled);
+    if (!dev) {
+        pr_err("No ISP device\n");
         return -EINVAL;
     }
 
     switch(cmd) {
-        case 0xc008561c: {  // ISP_CORE_S_CTRL
-            struct isp_core_ctrl ctrl;
-
-            if (copy_from_user(&ctrl, (void __user *)arg, sizeof(ctrl))) {
-                return -EFAULT;
-            }
-
-            ret = handle_isp_set_ctrl(&ctrl);
-            break;
-        }
-
-        case 0xc008561b: { // ISP_CORE_G_CTRL
-            struct isp_core_ctrl ctrl;
-
-            // Copy control structure from user
-            if (copy_from_user(&ctrl, (void __user *)arg, sizeof(ctrl)))
-                return -EFAULT;
-
-            pr_debug("ISP Core Get Control: cmd=0x%x\n", ctrl.cmd);
-
-            // Handle the control get operation
-            switch(ctrl.cmd) {
-                case 0: // Add specific control commands
-                    // TODO: Fill in control value
-                    ctrl.value = 0;
-                    break;
-
-                default:
-                    return -EINVAL;
-            }
-
-            // Copy result back to user
-            if (copy_to_user((void __user *)arg, &ctrl, sizeof(ctrl)))
-                return -EFAULT;
-            break;
-        }
-
         case 0xc00c56c6: {  // Shared IOCTL for tuning enable and zone controls
-            // First try to read as tuning control structure
-            struct isp_tuning_ctrl ctrl;
-            if (copy_from_user(&ctrl, (void __user *)arg, sizeof(ctrl))) {
-                // If that fails, try as simple enable flag
-                int enable;
-                if (copy_from_user(&enable, (void __user *)arg, sizeof(enable))) {
-                    return -EFAULT;
-                }
-
-                // Handle enable/disable
+            // Try as simple enable flag first
+            int enable;
+            if (!copy_from_user(&enable, (void __user *)arg, sizeof(enable))) {
                 pr_info("ISP tuning %s requested\n", enable ? "enable" : "disable");
 
                 if (enable) {
-                    ret = isp_core_tuning_open(ourISPdev);
-                    if (ret == 0) {
-                        ourISPdev->tuning_enabled = 2;  // Set enabled state
+                    // Only enable if not already enabled
+                    if (dev->tuning_enabled != 2) {
+                        ret = isp_core_tuning_open(dev);
+                        if (ret == 0) {
+                            dev->tuning_enabled = 2;
+                        }
                     }
                 } else {
-                    ret = isp_core_tuning_release(ourISPdev);
-                    if (ret == 0) {
-                        ourISPdev->tuning_enabled = 0;  // Set disabled state
+                    // Only disable if currently enabled
+                    if (dev->tuning_enabled == 2) {
+                        ret = isp_core_tuning_release(dev);
+                        if (ret == 0) {
+                            dev->tuning_enabled = 0;
+                        }
                     }
                 }
                 return ret;
             }
 
-            // Handle zone/state controls
-            if (ourISPdev->tuning_state != 2) {
+            // If enable/disable copy failed, try as tuning control
+            struct isp_tuning_ctrl ctrl;
+            if (copy_from_user(&ctrl, (void __user *)arg, sizeof(ctrl))) {
+                return -EFAULT;
+            }
+
+            // Check tuning is enabled
+            if (dev->tuning_enabled != 2) {
                 pr_err("ISP tuning not in correct state (state=%d)\n",
-                       ourISPdev->tuning_state);
+                       dev->tuning_enabled);
                 return -EINVAL;
             }
 
             switch(ctrl.cmd) {
                 case ISP_TUNING_CID_AE_ZONE:
-                    ret = isp_get_ae_zone(ourISPdev, ctrl.value);
+                    ret = isp_get_ae_zone(dev, ctrl.value);
+                    if (ret)
+                        pr_err("%s(%d),ioctl IMAGE_TUNING_CID_AE_ZONE error\n",
+                               __func__, __LINE__);
                     break;
 
                 case ISP_TUNING_CID_AE_STATE:
-                    ret = isp_get_ae_state(ourISPdev, ctrl.value);
+                    ret = isp_get_ae_state(dev, ctrl.value);
+                    if (ret)
+                        pr_err("%s(%d),ioctl IMAGE_TUNING_CID_AE_STATE error\n",
+                               __func__, __LINE__);
                     break;
 
                 case ISP_TUNING_CID_AF_ZONE:
-                    ret = isp_get_af_zone(ourISPdev, ctrl.value);
+                    ret = isp_get_af_zone(dev, ctrl.value);
+                    if (ret)
+                        pr_err("%s(%d),ioctl IMAGE_TUNING_CID_AF_ZONE error\n",
+                               __func__, __LINE__);
                     break;
 
                 case ISP_TUNING_CID_AE_HIST_ORIGIN:
                     ret = apical_isp_ae_hist_origin_g_attr(ctrl.value);
+                    if (ret)
+                        pr_err("%s(%d),ioctl IMAGE_TUNING_CID_AE_HIST_ORIGIN error\n",
+                               __func__, __LINE__);
                     break;
 
                 default:
@@ -1262,8 +1386,43 @@ static long isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, unsigned l
             }
             break;
         }
+
+        case 0xc008561c: { // ISP_CORE_S_CTRL
+            if (dev->tuning_enabled != 2) {
+                pr_err("ISP tuning not in correct state (state=%d)\n",
+                       dev->tuning_enabled);
+                return -EINVAL;
+            }
+
+            struct isp_core_ctrl ctrl;
+            if (copy_from_user(&ctrl, (void __user *)arg, sizeof(ctrl))) {
+                return -EFAULT;
+            }
+            ret = handle_isp_set_ctrl(&ctrl);
+            break;
+        }
+
+        case 0xc008561b: { // ISP_CORE_G_CTRL
+            if (dev->tuning_enabled != 2) {
+                pr_err("ISP tuning not in correct state (state=%d)\n",
+                       dev->tuning_enabled);
+                return -EINVAL;
+            }
+
+            struct isp_core_ctrl ctrl;
+            if (copy_from_user(&ctrl, (void __user *)arg, sizeof(ctrl))) {
+                return -EFAULT;
+            }
+
+            ret = handle_isp_get_ctrl(&ctrl);
+            if (ret == 0 && copy_to_user((void __user *)arg, &ctrl, sizeof(ctrl))) {
+                ret = -EFAULT;
+            }
+            break;
+        }
+
         default:
-            pr_debug("Unknown ISP-M0 IOCTL: 0x%x\n", cmd);
+            pr_info("Unknown ISP-M0 IOCTL: 0x%x\n", cmd);
             ret = -ENOTTY;
     }
 
@@ -4562,7 +4721,7 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     // Wake up any waiting DQBUF operations
     wake_up_interruptible(&fc->wait_queue);
 
-    pr_debug("QBUF: channel=%d index=%u seq=%u size=%u\n",
+    pr_info("QBUF: channel=%d index=%u seq=%u size=%u\n",
              fc->channel_id, req.index, buf->sequence, buf->bytesused);
 
     return ret;
@@ -4837,7 +4996,7 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
     if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
         return -EFAULT;
 
-    pr_debug("DQBUF handler: cmd=0x%x seq=%u flags=0x%x\n",
+    pr_info("DQBUF handler: cmd=0x%x seq=%u flags=0x%x\n",
              req.cmd, req.seq, req.flags);
 
     // Validate buffer state
@@ -4938,7 +5097,7 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
             wmb();
             atomic_dec(&fc->queued_bufs);
 
-            pr_debug("Frame %u generated: %ux%u (%u bytes)\n",
+            pr_info("Frame %u generated: %ux%u (%u bytes)\n",
                     buf.sequence, buf.width, buf.height, buf.bytesused);
         }
 
