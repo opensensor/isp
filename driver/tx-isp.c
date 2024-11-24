@@ -831,40 +831,36 @@ static int isp_core_tuning_open(struct IMPISPDev *dev)
         return -EINVAL;
     }
 
-    // Don't reallocate if already initialized
+    // Only allocate if not already initialized
     if (!dev->tuning_data) {
         pr_info("Allocating tuning state\n");
-        tuning = kzalloc(sizeof(*tuning), GFP_KERNEL);
+        tuning = kzalloc(sizeof(struct isp_tuning_state), GFP_KERNEL);
         if (!tuning) {
             pr_err("Failed to allocate tuning state\n");
             return -ENOMEM;
         }
+
+        // Initialize tuning state
+        spin_lock_init(&tuning->lock);
+        mutex_init(&tuning->mlock);
+        tuning->state = 1;
+        tuning->param_size = 0x736b0;
+        tuning->instance = dev->instance;
+
+        // Set default values in params array
+        tuning->params[TUNING_OFF_BRIGHTNESS] = 128;  // Mid-range
+        tuning->params[TUNING_OFF_CONTRAST] = 128;
+        tuning->params[TUNING_OFF_SHARPNESS] = 128;
+        tuning->params[TUNING_OFF_HFLIP] = 0;
+        tuning->params[TUNING_OFF_VFLIP] = 0;
+        tuning->params[TUNING_OFF_DPC] = 128;
+        tuning->params[TUNING_OFF_GAMMA] = 128;
+
+        // Store in device
         dev->tuning_data = tuning;
     } else {
-        tuning = dev->tuning_data;
+        pr_info("Tuning state already initialized\n");
     }
-
-    tuning = kzalloc(sizeof(struct isp_tuning_data), GFP_KERNEL);
-    if (!tuning) {
-        pr_err("Failed to allocate tuning data\n");
-        return -ENOMEM;
-    }
-
-    // Initialize tuning state
-    spin_lock_init(&tuning->lock);
-    mutex_init(&tuning->mlock);
-    tuning->state = 1;
-    tuning->param_size = 0x736b0;
-    tuning->instance = dev->instance;
-
-    // Set default values in params array - use full 8-bit range
-    tuning->params[TUNING_OFF_BRIGHTNESS] = 128;  // Mid-range
-    tuning->params[TUNING_OFF_CONTRAST] = 128;
-    tuning->params[TUNING_OFF_SHARPNESS] = 128;
-    tuning->params[TUNING_OFF_HFLIP] = 0;
-    tuning->params[TUNING_OFF_VFLIP] = 0;
-    tuning->params[TUNING_OFF_DPC] = 128;
-    tuning->params[TUNING_OFF_GAMMA] = 128;
 
     return 0;
 }
@@ -4777,7 +4773,7 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
 {
     struct frame_qbuf_request req;
     struct timespec ts;
-    unsigned long flags;  // Add spinlock flags
+    unsigned long flags;
     int ret = 0;
 
     if (!fc || !fc->buf_base) {
@@ -4805,33 +4801,29 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     // Get current time for timestamp
     ktime_get_real_ts(&ts);
 
-    // Increment sequence once
-    uint32_t seq = fc->sequence++;
+    // Use frame from pre-allocated array instead of allocating
+    struct frame_node *node = &fc->queue.frames[req.index];
 
-    // Allocate and initialize frame node
-    struct frame_node *node = kzalloc(sizeof(*node), GFP_KERNEL);
-    if (!node)
-        return -ENOMEM;
-
-    node->magic = FRAME_MAGIC;        // 0x100100
-    node->magic_tail = 0x200200;      // Magic tail from decompiled
+    // Initialize node exactly like OEM
+    node->magic = FRAME_MAGIC;        // 0x100100 at offset 0x0
+    node->magic_tail = 0x200200;      // 0x200200 at offset 0x4
     node->data = fc->buf_base + (req.index * fc->buf_size);
     node->frame_size = fc->buf_size;
-    node->seq = seq;                  // Use same sequence number
-    node->index = req.index;          // Store buffer index
+    node->seq = fc->sequence++;
+    node->index = req.index;
     node->virt_addr = fc->buf_base + (req.index * fc->buf_size);
     node->phys_addr = fc->dma_addr + (req.index * fc->buf_size);
-    node->state = 2;                  // State 2 = queued (from decompiled)
-
-    // Fill the buffer with test pattern
-    fill_test_pattern(node->data, fc->width, fc->height, fc->format);
+    node->state = 2;                  // Initial state = 2
 
     spin_lock_irqsave(&fc->queue.lock, flags);
-    list_add_tail(&node->list, &fc->queue.ready_list);
-    atomic_inc(&fc->queue.frames_ready);
+
+    // Add to done list maintaining exact OEM pointer layout
+    list_add_tail(&node->list, &fc->queue.done_list);
+    atomic_inc(&fc->queue.frames_completed);
+
     spin_unlock_irqrestore(&fc->queue.lock, flags);
 
-    // Update buffer state
+    // Update buffer tracking
     struct frame_buffer *buf = &fc->buffers[req.index];
     buf->index = req.index;
     buf->type = req.type;
@@ -4842,34 +4834,22 @@ static int framechan_qbuf(struct frame_source_channel *fc, unsigned long arg)
     buf->timestamp.tv_usec = ts.tv_nsec / 1000;
     buf->memory = req.memory;
     buf->length = req.length ? req.length : fc->buf_size;
-    buf->format = fc->format;
-    buf->width = fc->width;
-    buf->height = fc->height;
-    buf->fps_num = 30;
-    buf->fps_den = 1;
-    buf->state = 1; // Mark as queued
+    buf->state = 2;  // Match OEM initial state
 
-    // Store timing info
-    if (fc->timing_data) {
-        fc->timing_data[req.index].timestamp = ktime_get_real_ns();
-        fc->timing_data[req.index].frame_count = fc->frame_count++;
-    }
+    wake_up(&fc->queue.wait);
 
-    // Update counters and wake waiters
-    atomic_inc(&fc->queued_bufs);
-    fc->last_qbuf_time = ts;
-    wake_up_interruptible(&fc->wait_queue);
+    pr_info("QBUF: channel=%d index=%u seq=%u size=%u state=%d\n",
+            fc->channel_id, req.index, node->seq, buf->bytesused,
+            node->state);
 
-    pr_info("QBUF: channel=%d index=%u seq=%u size=%u\n",
-            fc->channel_id, req.index, seq, buf->bytesused);
-
-    return ret;
+    return 0;
 }
 
 static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
 {
     struct frame_qbuf_request req;
     struct frame_buffer *buf = NULL;
+    struct frame_node *node = NULL;
     unsigned long flags;
     int ret = 0;
 
@@ -4894,50 +4874,45 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
         return -EINVAL;
     }
 
+    // Check streaming state first
+    if (!(fc->state & BIT(0))) {
+        pr_err("Streaming off, will not wait for buffers\n");
+        return -EINVAL;
+    }
+
     while (1) {
         spin_lock_irqsave(&fc->queue.lock, flags);
 
-        // Look for completed buffer
+        pr_info("DQBUF: Checking lists - done_empty=%d completed=%d\n",
+                list_empty(&fc->queue.done_list),
+                atomic_read(&fc->queue.frames_completed));
+
         if (!list_empty(&fc->queue.done_list)) {
-            struct frame_node *node = list_first_entry(
-                &fc->queue.done_list, struct frame_node, list);
+            struct frame_node *node = list_entry(fc->queue.done_list.next,
+                                               struct frame_node, list);
 
-            // Validate magic numbers
-            if (node->magic != FRAME_MAGIC || node->magic_tail != 0x200200) {
-                pr_err("Invalid frame node magic numbers\n");
-                spin_unlock_irqrestore(&fc->queue.lock, flags);
-                return -EINVAL;
-            }
-
+            // Just remove from list but keep node in frames array
             list_del(&node->list);
-            buf = &fc->buffers[node->index];  // Now index is properly defined
             atomic_dec(&fc->queue.frames_completed);
+
+            // Get corresponding buffer
+            buf = &fc->buffers[node->index];
+            buf->state = 0;  // Mark as dequeued
+
+            spin_unlock_irqrestore(&fc->queue.lock, flags);
+            break;
         }
 
         spin_unlock_irqrestore(&fc->queue.lock, flags);
 
-        if (buf)
-            break;
-
-        // Nothing ready - need to wait
-        ret = wait_event_interruptible_timeout(
-            fc->queue.wait,
-            !list_empty(&fc->queue.done_list),
-            msecs_to_jiffies(1000));
+        // Wait for completion
+        ret = wait_event_timeout(fc->queue.wait,
+                               atomic_read(&fc->queue.frames_completed) > 0,
+                               msecs_to_jiffies(1000));
 
         if (ret == 0) {
             pr_err("DQBUF timeout waiting for buffer\n");
             return -ETIMEDOUT;
-        }
-        if (ret == -ERESTARTSYS) {
-            pr_info("DQBUF interrupted\n");
-            return -EINTR;
-        }
-
-        // Recheck streaming state
-        if (!(fc->state & BIT(0))) {
-            pr_err("Streaming off while waiting\n");
-            return -EINVAL;
         }
     }
 
@@ -4950,6 +4925,15 @@ static int framechan_dqbuf(struct frame_source_channel *fc, unsigned long arg)
     req.sequence = fc->sequence++;
     req.memory = V4L2_MEMORY_MMAP;
     req.length = fc->buf_size;
+
+    // Keep node for reuse - don't free it
+    if (node) {
+        // Put node in ready list for reuse
+        spin_lock_irqsave(&fc->queue.lock, flags);
+        list_add_tail(&node->list, &fc->queue.ready_list);
+        atomic_inc(&fc->queue.frames_ready);
+        spin_unlock_irqrestore(&fc->queue.lock, flags);
+    }
 
     // Copy back to userspace
     if (copy_to_user((void __user *)arg, &req, sizeof(req))) {
