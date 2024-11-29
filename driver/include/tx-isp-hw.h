@@ -23,15 +23,6 @@
 #define ISP_DMA_CTRL        0x0040
 #define ISP_FRAME_CTRL      0x0044
 
-/* VIC Register offsets */
-#define VIC_BASE            0x0300
-#define VIC_CTRL            0x0000
-#define VIC_STATUS          0x0004
-#define VIC_IRQ_EN          0x0008
-#define VIC_MASK            0x000C
-#define VIC_DMA_CTRL        0x0010
-#define VIC_FRAME_CTRL      0x0014
-
 
 // Our internal pad descriptor structure
 struct isp_pad_config {
@@ -127,19 +118,19 @@ static const struct isp_pad_config pad_link_configs[2][MAX_LINKS] = {
     }
 };
 
-int tx_isp_enable_irq(struct IMPISPDev *dev);
-void tx_isp_disable_irq(struct IMPISPDev *dev);
+//int tx_isp_enable_irq(struct IMPISPDev *dev);
+//void tx_isp_disable_irq(struct IMPISPDev *dev);
 
 int init_hw_resources(struct IMPISPDev *dev);
 int tx_isp_init_memory(struct IMPISPDev *dev);
 void tx_isp_cleanup_memory(struct IMPISPDev *dev);
 
 int configure_isp_clocks(struct IMPISPDev *dev);
+int configure_vic_for_streaming(struct IMPISPDev *dev);
 int init_vic_control(struct IMPISPDev *dev);
 
 int configure_streaming_hardware(struct IMPISPDev *dev);
 int configure_isp_buffers(struct IMPISPDev *dev);
-int init_vic_control(struct IMPISPDev *dev);
 void verify_isp_state(struct IMPISPDev *dev);
 int isp_power_on(struct IMPISPDev *dev);
 int isp_reset_hw(struct IMPISPDev *dev);

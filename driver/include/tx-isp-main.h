@@ -9,19 +9,21 @@
 #include <linux/videodev2.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
-#include <media/v4l2-device.h>
 #include <media/videobuf2-core.h>
+#include <media/v4l2-dev.h>
+#include <media/v4l2-device.h>
 #include <media/v4l2-subdev.h>
 
 #include <tx-isp-device.h>
 #include <tx-libimp.h>
 
 
+
 // Add at the top of the file with other definitions
 #define RMEM_START  0x2A80000          // Starting address of the reserved memory region
 #define DRIVER_RESERVED_SIZE (4 * 1024 * 1024) // Size reserved for our driver: 4MB
 
-#define MAX_FRAME_BUFFERS 32  // Typical max buffer count
+#define MAX_VIDEO_BUFFERS 32  // Typical max buffer count
 #define FRAME_TIMING_SIZE 16  // Size of timing data per buffer
 
 // Log level definitions
@@ -254,7 +256,7 @@
 #define ISP_CONF_OFFSET    0x0130
 #define ISP_INIT_OFFSET    0x0118
 
-#define MAX_CHANNELS 33  // Define the maximum number of frame channels
+#define MAX_CHANNELS 6  // Define the maximum number of frame channels
 #define MAX_COMPONENTS 8 // Define the maximum number of components
 
 
@@ -269,13 +271,7 @@
 #define SENSOR_CMD_STREAM_OFF    0x2000008  // Stop streaming
 
 
-// Add these registers
-#define ISP_MIPI_CTRL     0x30
-#define ISP_MIPI_STATUS   0x34
-#define ISP_MIPI_TIMING   0x38
-
 // Add these defines at the top
-#define ISP_MIPI_BASE     0x7800  // Base offset for MIPI registers
 #define ISP_MIPI_CTRL     0x30    // Control register offset
 #define ISP_MIPI_STATUS   0x34    // Status register offset
 #define ISP_MIPI_TIMING   0x38    // Timing register offset
@@ -614,15 +610,6 @@
 #define ISP_STATUS_REG         0x04  // Status register offset
 #define ISP_STATUS_FRAME_DONE  ISP_INT_FRAME_DONE  // Use same bit position
 
-// Add these register defines
-#define ISP_VIC_CTRL         0x140  // VIC control register
-#define ISP_VIC_IRQ_EN       0x13c  // VIC IRQ enable
-#define ISP_VIC_STATUS       0x1e0  // VIC status register
-#define ISP_VIC_MASK         0x1e8  // VIC interrupt mask
-#define ISP_VIC_CLEAR        0x1f0  // VIC interrupt clear
-#define ISP_VIC_FRAME_CTRL   0x308  // VIC frame control
-#define ISP_VIC_DMA_CTRL     0x300  // VIC DMA control
-
 // Base register offsets from regs
 #define ISP_BASE            0x0000   // ISP core registers base
 #define CSI_BASE            0x00B8   // CSI registers base
@@ -638,41 +625,6 @@
 // Base register offsets from regs
 #define VIC_BASE            0x7800   // VIC registers base
 #define CSI_BASE            0x00B8   // CSI registers base
-
-// VIC register offsets (from VIC_BASE)
-//#define VIC_DMA_CTRL        0x0020   // DMA control
-//#define VIC_FRAME_SIZE      0x0024   // Frame size
-//#define VIC_FRAME_STRIDE    0x0028   // Frame stride
-//#define VIC_FRAME_CTRL      0x002C   // Frame control
-/* VIC Register offsets relative to ISP base */
-#define VIC_BASE_OFFSET    0x300  // VIC starts at 0x300 from ISP base
-#define VIC_DMA_CTRL      0x000   // DMA control
-#define VIC_FRAME_SIZE    0x004   // Frame dimensions
-#define VIC_FRAME_CTRL    0x008   // Frame control
-#define VIC_FRAME_STRIDE  0x010   // Frame stride
-#define VIC_IRQ_ENABLE    0x13c   // IRQ enable
-#define VIC_CORE_ENABLE   0x140   // Core enable
-#define VIC_INT_MASK      0x1e8   // Interrupt mask
-#define VIC_INT_CLEAR     0x1e4   // Interrupt clear
-/* VIC Register offsets from VIC base (ISP base + 0x300) */
-#define VIC_DMA_CTRL    0x000   // DMA control register
-#define VIC_FRAME_SIZE  0x004   // Frame size (width<<16|height)
-#define VIC_FRAME_CTRL  0x008   // Frame control register
-#define VIC_FRAME_STRIDE 0x010  // Frame stride
-
-// VIC interrupt control registers
-#define VIC_IRQ_EN      0x13C   // From OEM: *(*(arg1 + 0xb8) + 0x13c) for IRQ enable
-#define VIC_CTRL        0x140   // From OEM: *(*(arg1 + 0xb8) + 0x140) for core enable
-#define VIC_STATUS      0x1E0   // VIC status register
-#define VIC_CLEAR       0x1E4   // Interrupt clear register
-#define VIC_MASK        0x1E8   // Interrupt mask register
-
-/* VIC Register bit definitions */
-#define VIC_DMA_RESET   BIT(2)  // Reset bit in DMA control
-#define VIC_CORE_EN     BIT(0)  // Enable bit in VIC_CTRL
-#define VIC_IRQ_EN_BIT  BIT(0)  // Enable bit in VIC_IRQ_EN
-#define VIC_FRAME_DONE  BIT(0)  // Frame done interrupt bit
-#define VIC_ERR_MASK    0xDE00  // Error bits in status/mask
 
 #define CSI_IOCTL_INIT    0x200000c  // Initializes CSI
 #define CSI_IOCTL_STATE3  0x200000e  // Sets state to 3
@@ -751,46 +703,12 @@
 #define CSI_REG_SIZE     0x1000      // 4KB for CSI/MIPI
 #define PHY_REG_SIZE     0x1000      // 4KB for PHY
 
-#define VIC_INT_FRAME_DONE    (1 << 0)    // 0x1
-#define VIC_INT_ERROR         (1 << 1)    // 0x2
-#define VIC_INT_FRAME_BREAK   (1 << 8)    // 0x100
-#define VIC_INT_OVERFLOW      (1 << 9)    // 0x200
-#define VIC_INT_STATS_DONE    (1 << 12)   // 0x1000
-#define VIC_INT_IP_DONE       (1 << 13)   // 0x2000
-#define VIC_INT_ERROR_MASK    (0x3F8)     // Original error mask
-// Full interrupt mask from decompiled code
-#define VIC_INT_ALL_MASK     (VIC_INT_FRAME_DONE | VIC_INT_ERROR | \
-                             VIC_INT_FRAME_BREAK | VIC_INT_OVERFLOW | \
-                             VIC_INT_STATS_DONE | VIC_INT_IP_DONE | \
-                             VIC_INT_ERROR_MASK)
 // Add these register definitions
 #define ISP_INT_FRAME_DONE    BIT(0)
 #define ISP_INT_ERR           BIT(1)
 #define ISP_INT_OVERFLOW      BIT(2)
 #define ISP_INT_MASK_ALL     (ISP_INT_FRAME_DONE | ISP_INT_ERR | ISP_INT_OVERFLOW)
 
-/* VIC Register offsets - from decompiled code */
-#define VIC_STATUS_REG       0xb4     // Status register at 0xb4
-#define VIC_ENABLE_REG       0xb8     // Enable register at 0xb8
-#define VIC_IRQSTATUS_REG    0x1e0    // IRQ status at 0x1e0
-#define VIC_IRQENABLE_REG    0x1e8    // IRQ enable at 0x1e8
-#define VIC_MASK_REG         0x1e8    // Mask register
-#define VIC_FRAME_DONE_BIT   0x1      // Frame done bit
-
-/* VIC Interrupt bits */
-#define VIC_INT_FRAME_DONE   (1 << 0)    // 0x1
-#define VIC_INT_ERROR        (1 << 1)    // 0x2
-#define VIC_INT_FRAME_BREAK  (1 << 8)    // 0x100
-#define VIC_INT_OVERFLOW     (1 << 9)    // 0x200
-#define VIC_INT_STATS_DONE   (1 << 12)   // 0x1000
-#define VIC_INT_IP_DONE      (1 << 13)   // 0x2000
-
-/* VIC Interrupt masks from OEM */
-#define VIC_INT_OEM_MASK     0x33fb      // OEM mask value
-#define VIC_INT_ERROR_MASK   0x3F8       // Error interrupt bits
-
-#define VIC_ENABLE      0xb8   // Enable register (OEM offset)
-#define VIC_IRQ_STATUS  0x1e0  // IRQ status register
 
 /* WDR register offsets within main register block */
 #define ISP_WDR_WIDTH_OFFSET    0x124  /* From decompiled code */
@@ -798,11 +716,6 @@
 #define ISP_WDR_MODE_OFFSET     0x90
 #define ISP_WDR_FRAME_OFFSET    0xe8
 #define AE_ALGO_MAGIC   0x336ac
-
-// Add register definitions
-#define ISP_VIC_FRAME_DONE_EN   0x308  // Enable frame done interrupt
-#define ISP_VIC_FRAME_SIZE      0x304  // Frame dimensions
-#define ISP_VIC_FRAME_STRIDE    0x310  // Frame stride
 
 #define MIPI_PHY_ADDR   0x10022000
 #define ISP_W01_ADDR    0x10023000  // Should be our CSI controller
@@ -933,14 +846,7 @@
 
 #define VBM_POOL_SIZE 0x99888
 #define VBM_ALLOC_METHOD 0x3  // Seen in decompiled code
-// Define state values if not already defined
-#define FRAME_MAGIC 0x494D5046  // "IMPF"
-#define FRAME_STATE_IDLE    0
-#define FRAME_STATE_READY   1
-#define FRAME_STATE_DONE    2
 
-// Add at top of file
-#define FRAME_MAGIC 0x494D5046  // "IMPF"
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define DBG_PATTERN 1  // Set to 1 to enable pattern debug prints
 
@@ -949,6 +855,83 @@
 #define V4L2_MEMORY_USERPTR         2
 #define V4L2_MEMORY_OVERLAY         3
 #define V4L2_MEMORY_DMABUF          4
+
+/* T31 with 32MB RAM */
+#define TASK_SIZE      0x02000000UL    /* 32MB total memory */
+#define TASK_SIZE_MAX  0x01000000UL    /* 16MB max task size */
+
+// Add register definitions
+#define ISP_VIC_FRAME_DONE_EN   0x308  // Enable frame done interrupt
+#define ISP_VIC_FRAME_SIZE      0x304  // Frame dimensions
+#define ISP_VIC_FRAME_STRIDE    0x310  // Frame stride
+
+#define VIC_DMA_CTRL    0x000
+#define VIC_IRQ_EN      0x13C   // From OEM: *(*(arg1 + 0xb8) + 0x13c) for IRQ enable
+//#define VIC_CTRL        0x140   // From OEM: *(*(arg1 + 0xb8) + 0x140) for core enable
+//#define VIC_STATUS      0x1E0   // VIC status register
+#define VIC_CLEAR       0x1E4   // Interrupt clear register
+#define VIC_MASK        0x1E8   // Interrupt mask register
+
+/* VIC Register offsets from VIC base (ISP base + 0x300) */
+#define VIC_CTRL         0x140    // Control register
+#define VIC_FRAME_SIZE   0x04    // Frame size (width<<16|height)
+#define VIC_IRQ_STATUS   0x08    // IRQ status
+#define VIC_MODE         0x0C    // Mode register
+#define VIC_ROUTE        0x10    // Route register
+#define VIC_FRAME_STRIDE 0x18    // Frame stride register
+#define VIC_STATUS       0xB4    // Status register
+#define VIC_IRQ_EN       0x13C   // IRQ enable register
+#define VIC_DMA_ADDR     0x1A0   // DMA address register
+#define VIC_MAGIC_CFG    0x1A4   // Magic config register
+#define VIC_MAGIC_CFG1   0x1AC   // Second magic register
+#define VIC_MAGIC_CFG2   0x1B0   // Third magic register
+#define VIC_MAGIC_CFG3   0x1B4   // Fourth magic register
+#define VIC_IRQ_MASK     0x1E8   // IRQ mask register
+
+/* Interrupt bits */
+#define VIC_INT_FRAME_DONE    BIT(0)     // Frame complete
+#define VIC_INT_ERROR         BIT(1)     // General error
+#define VIC_INT_FRAME_BREAK   BIT(8)     // Frame break error
+#define VIC_INT_OVERFLOW      BIT(9)     // Buffer overflow
+#define VIC_INT_STATS_DONE    BIT(12)    // Statistics ready
+#define VIC_INT_IP_DONE      BIT(13)    // IP operation done
+
+#define VIC_INT_ERROR_MASK    0x3F8      // Error status bits
+
+// Full interrupt mask combining all interrupt sources
+#define VIC_INT_ALL_MASK     (VIC_INT_FRAME_DONE | VIC_INT_ERROR | \
+VIC_INT_FRAME_BREAK | VIC_INT_OVERFLOW | \
+VIC_INT_STATS_DONE | VIC_INT_IP_DONE | \
+VIC_INT_ERROR_MASK)
+
+/* VIC Register offsets - from decompiled code */
+#define VIC_STATUS_REG       0xb4     // Status register at 0xb4
+#define VIC_ENABLE_REG       0xb8     // Enable register at 0xb8
+#define VIC_IRQSTATUS_REG    0x1e0    // IRQ status at 0x1e0
+#define VIC_IRQENABLE_REG    0x1e8    // IRQ enable at 0x1e8
+#define VIC_MASK_REG         0x1e8    // Mask register
+#define VIC_FRAME_DONE_BIT   0x1      // Frame done bit
+
+/* VIC Interrupt bits */
+#define VIC_INT_FRAME_DONE   (1 << 0)    // 0x1
+#define VIC_INT_ERROR        (1 << 1)    // 0x2
+#define VIC_INT_FRAME_BREAK  (1 << 8)    // 0x100
+#define VIC_INT_OVERFLOW     (1 << 9)    // 0x200
+#define VIC_INT_STATS_DONE   (1 << 12)   // 0x1000
+#define VIC_INT_IP_DONE      (1 << 13)   // 0x2000
+
+/* VIC Interrupt masks from OEM */
+#define VIC_INT_OEM_MASK     0x33fb      // OEM mask value
+#define VIC_INT_ERROR_MASK   0x3F8       // Error interrupt bits
+
+#define VIC_ENABLE      0xb8   // Enable register (OEM offset)
+#define VIC_IRQ_STATUS  0x1e0  // IRQ status register
+#define VIC_FRAME_CTRL  0x008   // Frame control register
+
+
+#define SENSOR_DVP_TIMING_BT601   0
+#define SENSOR_DVP_TIMING_BT656   1
+#define SENSOR_DVP_TIMING_BT1120  2
 
 struct tisp_param_info {
     uint32_t data[8];  // Array size can be adjusted based on needs
@@ -961,14 +944,6 @@ typedef int (*show_func_t)(struct seq_file *, void *);
 struct proc_data {
     show_func_t show_func;
     void *private_data;
-};
-
-
-struct isp_mem_region {
-    dma_addr_t phys_addr;
-    void __iomem *virt_addr;
-    size_t size;
-    uint32_t flags;
 };
 
 // Add frame grabbing thread
@@ -1095,84 +1070,35 @@ struct sensor_control_info {
 } __attribute__((packed, aligned(4)));
 
 
-struct isp_framesource_state {
-    uint32_t magic;          // Magic identifier
-    uint32_t flags;          // State flags
-    uint32_t chn_num;        // Channel number
-    uint32_t state;          // State (1=ready, 2=streaming)
-    uint32_t width;          // Frame width
-    uint32_t height;         // Frame height
-    uint32_t fmt;            // Pixel format
+// The firmware expects attributes at offset 0x20 from channel base
+// and copies 0x50 bytes (0x70 - 0x20) of attribute data
 
-    // Memory management
-    uint32_t buf_cnt __aligned(8);   // Keep this alignment
-    uint32_t buf_flags;      // Buffer flags
-    dma_addr_t dma_addr __aligned(4);
-    void *buf_base __aligned(4);
-    uint32_t buf_size __aligned(4);
-
-    // Frame management
-    uint32_t frame_cnt;      // Frame counter
-    uint32_t buf_index;      // Current buffer index
-    uint32_t write_idx;      // Write index
-    struct file *fd;         // File pointer
-    struct video_device *vdev;
-    struct task_struct *thread;
-    void    *ext_buffer;     // Extended buffer pointer
-    struct isp_buffer_info *bufs;  // Buffer info array
-    struct mutex lock __aligned(4);  // Keep this alignment
-    struct frame_source_channel *fc;
-
-    // FIFO management
-    struct list_head ready_queue;
-    struct list_head done_queue;
-    int fifo_depth;
-    int frame_depth;
-    bool fifo_initialized;
-
-    // Synchronization
-    struct semaphore sem;
-    wait_queue_head_t wait;
-    int is_open;            // 1 = initialized
-
-    // Channel attributes - MUST match libimp exactly
-    // Need to accept format exactly as libimp expects:
-    struct channel_attr {
-        uint32_t enable;          // 0x00: Must be 1
-        uint32_t width;           // 0x04: Frame width from libimp
-        uint32_t height;          // 0x08: Frame height from libimp
-        uint32_t format;          // 0x0c: Format code (0x22 for YUV422)
-        uint32_t crop_enable;     // 0x10
-        struct {
-            uint32_t x;           // 0x14
-            uint32_t y;           // 0x18
-            uint32_t width;       // 0x1c
-            uint32_t height;      // 0x20
-        } crop;
-        uint32_t scaler_enable;   // 0x24
-        uint32_t scaler_outwidth; // 0x28
-        uint32_t scaler_outheight;// 0x2c
-        uint32_t picwidth;        // 0x30
-        uint32_t picheight;       // 0x34
-        uint32_t fps_num;     // Frame rate numerator (offset +4)
-        uint32_t fps_den;     // Frame rate denominator (offset +8)
-        char pad[0x38];          // Padding to 0x70 bytes
-    }__aligned(4) attr;
-    bool attr_set;
-
-    // Pre-dequeue support
-    int pre_dequeue_count;
-    bool pre_dequeue_interrupt_process;
-} __attribute__((aligned(8)));
+// Corrected structure to match firmware layout
+struct imp_channel_attr {
+    uint32_t enable;          // 0x00
+    uint32_t width;           // 0x04
+    uint32_t height;          // 0x08
+    uint32_t format;          // 0x0c
+    uint32_t crop_enable;     // 0x10
+    struct {
+        uint32_t x;           // 0x14
+        uint32_t y;           // 0x18
+        uint32_t width;       // 0x1c
+        uint32_t height;      // 0x20
+    } crop;
+    uint32_t scaler_enable;   // 0x24
+    uint32_t scaler_outwidth; // 0x28
+    uint32_t scaler_outheight;// 0x2c
+    uint32_t picwidth;        // 0x30
+    uint32_t picheight;       // 0x34
+    uint32_t fps_num;         // 0x38
+    uint32_t fps_den;         // 0x3c
+    // Total size must be 0x50 bytes to match firmware copy size
+    uint32_t reserved[4];     // Pad to 0x50 bytes
+} __attribute__((aligned(4)));
 
 
-// Add this structure to track open instances
-struct isp_instance {
-    int fd;
-    struct file *file;
-    struct isp_framesource_state *fs;
-    struct list_head list;
-};
+
 struct ae_zone {
     uint32_t mean;       // Mean luminance
     uint32_t var;        // Variance
@@ -1348,6 +1274,90 @@ struct isp_device_link_state {
     uint32_t link_flags;       // Link state flags
 };
 
+
+// Frame thread data structure
+struct frame_thread_data {
+    struct isp_channel *chn;    // Channel being processed
+    atomic_t should_stop;       // Stop flag
+    atomic_t thread_running;    // Running state
+    struct task_struct *task;   // Thread task structure
+};
+
+struct isp_channel {
+    int fd;
+    /* Core identification */
+    uint32_t magic;                    // Magic identifier
+    int channel_id;                    // Channel number
+    uint32_t state;                    // Channel state flags
+    uint32_t type;                     // Channel type
+    struct device *dev;                // Parent device
+    uint32_t flags;                    // Channel flags
+    uint32_t is_open;                  // Open count
+    bool streaming;                    // Streaming state
+    struct vm_area_struct *vma;
+
+    /* Channel attributes */
+    struct imp_channel_attr attr;      // Channel attributes (maintains firmware layout)
+    struct thread_data *thread_data;    // Thread data
+
+    /* Format and frame info */
+    uint32_t width;                    // Frame width
+    uint32_t height;                   // Frame height
+    uint32_t fmt;                      // Pixel format
+    uint32_t sequence;                 // Frame sequence number
+
+    /* Memory management */
+    void *buf_base;                    // Virtual base address
+    dma_addr_t dma_addr;               // DMA base address
+    uint32_t buf_size;                 // Size per buffer
+    uint32_t buf_count;                 // Size per buffer
+    uint32_t channel_offset;           // Channel memory offset
+    uint32_t memory_type;              // Memory allocation type
+    uint32_t required_size;            // Required buffer size
+    void **vbm_table;                  // VBM entries array
+    u32 vbm_count;                     // Number of VBM entries
+    uint32_t data_offset;              // Frame data offset
+    uint32_t metadata_offset;          // Metadata offset
+    dma_addr_t *meta_dma;         // Array of metadata DMA addresses
+
+    /* Queue and buffer management */
+    struct frame_queue *queue;          // Frame queue structure
+    atomic_t queued_bufs;              // Available buffer count
+    wait_queue_head_t wait_queue;      // Wait queue for frame completion
+    struct frame_group *group;         // Frame grouping info
+    struct group_data *group_data;         // Group data
+    unsigned long group_phys_mem;  // Physical memory pages
+    void __iomem *group_mapped_addr;  // Mapped memory address
+    struct frame_node *last_frame;     // Last processed frame
+
+    /* Thread management */
+    struct task_struct *frame_thread;  // Frame processing thread
+    atomic_t thread_running;           // Thread state
+    atomic_t thread_should_stop;       // Thread stop flag
+
+    /* Synchronization */
+    spinlock_t vbm_lock;              // VBM access protection
+    spinlock_t state_lock;            // State protection
+    //struct mutex lock;                 // Channel lock
+    struct completion frame_complete;  // Frame completion tracking
+
+    /* Statistics */
+    struct ae_statistics ae_stats;     // AE statistics
+    spinlock_t ae_lock;               // AE lock
+    bool ae_valid;                    // AE validity flag
+    uint32_t last_irq;                // Last IRQ status
+    uint32_t error_count;             // Error counter
+
+    /* Pool management */
+    struct {
+        uint32_t pool_id;
+        bool bound;
+    } pool;
+
+    /* Pad to match firmware size if needed */
+    uint8_t padding[0x2e8 - sizeof(struct imp_channel_attr)];
+} __attribute__((aligned(8)));
+
 /* Main device structure */
 /* Note for Claude, GPT, or anyone  that will listen
 This is our internal driver structure and should never be passed back to libimp.
@@ -1358,7 +1368,6 @@ struct IMPISPDev {
     struct device *dev;
     struct cdev cdev;
     void __iomem *reg_base;
-    int irq;
     spinlock_t lock;
     struct tx_isp_resources resources;
     struct proc_context *proc_context;
@@ -1367,18 +1376,24 @@ struct IMPISPDev {
     int major;
     int minor;
     char sensor_name[32];
+    u32 sensor_type;
+    u32 sensor_mode;
+    u32 sensor_interface_type;
+    u32 vic_status;
     bool is_open;
 
     /* Memory management */
-    dma_addr_t dma_addr;
+    dma_addr_t rmem_addr; // Reserved memory address
+    size_t rmem_size;
+    dma_addr_t dma_sensor_addr;
+    dma_addr_t dma_buffer_addr;
     void *dma_buf;
-    size_t dma_size;
     dma_addr_t param_addr;
     void *param_virt;
     uint32_t frame_buf_offset;
 
     /* Frame sources */
-    struct isp_framesource_state frame_sources[MAX_CHANNELS];
+    struct isp_channel  channels[MAX_CHANNELS];
     struct tx_isp_sensor_win_setting *sensor_window_size;
 
     /* Hardware subsystems */
@@ -1418,6 +1433,12 @@ struct IMPISPDev {
     struct i2c_client *sensor_i2c_client;
     struct i2c_adapter *i2c_adapter;
 
+    /* IRQs */
+    int irq;
+    bool irq_enabled;
+    irq_handler_t irq_handler;
+    struct irq_handler_data *irq_data;
+
     /* Statistics */
     struct ae_statistics ae_stats;
     spinlock_t ae_lock;
@@ -1438,20 +1459,13 @@ struct IMPISPDev {
     struct isp_tuning_data *tuning_data;
     struct isp_tuning_state *tuning_state;
     int tuning_enabled;  // 0 = disabled, 2 = enabled
+    bool tuning_initialized;
     bool bypass_enabled;
     bool links_enabled;
     u32 instance;  // For passing to tuning state
     struct ae_info *ae_info;
     struct awb_info *awb_info;
     uint32_t wdr_mode;
-
-    /* Buffer management */
-    struct {
-        dma_addr_t addr;
-        void *virt;
-        size_t size;
-        uint32_t count;
-    } buffer_info;
 } __attribute__((aligned(4)));
 
 /* Proc file system data structure */
@@ -1576,25 +1590,6 @@ struct vbm_pool {
 };
 
 
-// THE NEXT SEVERAL STRUCTURES WE ARE REWORKING TO BE MORE LOGICAL
-/* Must match OEM layout exactly */
-struct frame_queue {
-    struct frame_node *frames;         // Array of frame nodes
-    spinlock_t lock;                   // Queue lock
-    struct list_head ready_list;       // Ready for processing
-    struct list_head done_list;        // Completed frames
-    atomic_t frames_ready;             // Count of ready frames
-    atomic_t frames_queued;            // Count of queued frames
-    atomic_t frames_completed;         // Count of completed frames
-    wait_queue_head_t wait;            // Wait queue for frames
-    uint32_t max_frames;               // Maximum frame count
-    uint32_t write_idx;                // Current write index
-    uint32_t read_idx;                 // Current read index
-    uint32_t fifo_depth;               // FIFO depth setting
-    uint32_t fifo_thresh;              // FIFO threshold
-    uint32_t fifo_flags;               // FIFO flags/state
-    uint32_t buffer_states;            // Buffer state bitmap
-};
 
 struct frame_timing {
     u64 timestamp;
@@ -1602,47 +1597,36 @@ struct frame_timing {
     u32 reserved[2];
 };
 
-/* Main channel structure */
-struct frame_source_channel {
-    /* Core channel info */
-    struct device *dev;               // Parent device
-    int channel_id;                   // Channel number
-    uint32_t state;                   // Channel state
-    uint32_t buf_count;               // Number of buffers
 
-    /* Memory management */
-    void *buf_base;                   // Virtual base address
-    dma_addr_t dma_addr;             // DMA base address
-    uint32_t buf_size;               // Size per buffer
-    uint32_t channel_offset;         // Channel memory offset
-    struct frame_buffer *buffers;
-    uint32_t memory_type;
-
-    /* Queue management */
-    wait_queue_head_t wait_queue;
-    struct frame_queue queue;         // Frame queue structure
-    atomic_t queued_bufs;             // Track available buffers
-    struct mutex lock;               // Channel lock
-    struct frame_timing *timing_data;
-    struct timespec last_qbuf_time;
-    u32 frame_count;
-
-    /* Format info */
-    __u32 type;
-    uint32_t width;                  // Frame width
-    uint32_t height;                 // Frame height
-    uint32_t format;                 // Pixel format
-
-    /* State tracking */
-    uint32_t sequence;               // Frame sequence
-    uint32_t last_irq;              // Last IRQ status
-    uint32_t error_count;           // Error counter
-
-    /* Statistics */
-    struct ae_statistics ae_stats;
-    spinlock_t ae_lock;
-    bool ae_valid;
+struct group_data {
+    void *base;              // arg1[0]: Base pointer that needs +0x20 access
+    char base_block[0x30];   // Space for base pointer access
+    void *update_ptr;        // arg1[1]: Update ptr that needs +0x3c access
+    char update_block[0x40]; // Space for update ptr access
+    uint32_t channel;        // Channel number
+    uint32_t state;          // State flags
+    uint32_t flags;          // Additional flags
+    uint32_t handler;        // 0x9a654
 };
+
+
+struct frame_group {
+    char name[0x14];               // 0x00-0x13: Name string
+    uint32_t reserved1[0x3];       // 0x14-0x1F: Reserved
+    void *handler_fn;              // 0x20: Handler function
+    uint32_t reserved2[0x6];       // 0x24-0x3B: Reserved
+    void *update_fn;               // 0x3C: Update function
+    uint32_t reserved3[0x4];       // 0x40-0x4F: Reserved
+    void *group_update;            // 0x50: Group update function
+    uint32_t reserved4[0x36];      // 0x54-0x12B: Reserved
+    void *self;                    // 0x12C: Self pointer
+    uint32_t channel;              // 0x130: Channel ID
+    uint32_t state;                // 0x134: State flags
+    uint32_t reserved5[0x3];       // 0x138-0x143: Reserved
+    uint32_t handler;              // 0x144: Handler value (0x9a654)
+    char update_block[512];        // Rest of structure
+} __attribute__((packed, aligned(4)));
+
 
 /* State definitions */
 enum frame_channel_state {
@@ -1653,7 +1637,7 @@ enum frame_channel_state {
 };
 
 /* Buffer states */
-enum buffer_state {
+enum buffer_states {
     BUFFER_STATE_IDLE = 0,
     BUFFER_STATE_QUEUED = 1,
     BUFFER_STATE_ACTIVE = 2,

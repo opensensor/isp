@@ -129,6 +129,35 @@
 #define ISP_LINK_ENABLE_REG   0x04
 #define ISP_ROUTE_REG         0x08
 #define ISP_BYPASS_REG        0x0C
+
+
+/* ISP AF Zone register definitions */
+#define ISP_AF_ZONE_BASE      0x13380000   // Base address for AF zone registers
+#define ISP_AF_ZONE_METRICS   0x00         // Offset to zone metrics
+#define ISP_AF_ZONE_STATUS    0x40         // Offset to zone status
+#define ISP_AF_ZONE_CONFIG    0x44         // Offset to zone configuration
+
+/* AF Zone structures */
+#define MAX_AF_ZONES      16  // Common size for AF windows/regions
+
+struct af_zone_info {
+    uint32_t zone_metrics[MAX_AF_ZONES];  // Zone metrics like contrast values
+    uint32_t zone_status;                 // Overall AF status
+    uint32_t flags;                       // Zone configuration flags
+    struct {
+        uint16_t x;                       // Zone X position
+        uint16_t y;                       // Zone Y position
+        uint16_t width;                   // Zone width
+        uint16_t height;                  // Zone height
+    } windows[MAX_AF_ZONES];              // AF windows configuration
+};
+
+// Global AF zone data as seen in original code
+static struct af_zone_data {
+    uint32_t zone_metrics[MAX_AF_ZONES];  // Current zone metrics
+    uint32_t status;                      // Current AF status
+} af_zone_data;
+
 /* ISP Pipeline Register Structure */
 // Strucure for LIBIMP
 struct isp_pipeline_regs {
@@ -145,21 +174,40 @@ struct isp_pipeline_regs {
 
 // Add these structures to match libimp's buffer management
 struct frame_node {
+    /* Core frame data - matches OEM layout */
     uint32_t magic;             // 0x00: Magic number (0x100100)
-    void *data;                 // 0x04: Buffer data pointer
+    uint32_t index;            // 0x04: Buffer index in array
     uint32_t frame_size;        // 0x08: Frame data size
-    uint32_t seq;              // 0x0C: Frame sequence number
+    uint32_t bytesused;         // 0x0C: Actual bytes used in frame
     struct list_head list;      // 0x10: List management
-    uint32_t flags;            // 0x20: Frame flags
-    uint8_t state;             // 0x24: Frame state
-    uint32_t index;            // 0x28: Buffer index in array
-    // Additional fields seen in decompiled:
+    uint32_t length;           // 0x1C: Total buffer length
+    uint32_t flags;            // 0x20: Frame flags (V4L2_BUF_FLAG_*)
+    uint32_t state;            // 0x24: Frame state (matches OEM states)
+    void *data;                 // 0x28: Buffer data pointer
     uint32_t magic_tail;       // 0x2C: Magic tail number (0x200200)
-    void *virt_addr;           // 0x30: Virtual address
-    dma_addr_t phys_addr;      // 0x34: Physical address
-    // For USERPTR memory management
-    struct page **pages;
-    int nr_pages;
+
+    /* Memory management */
+    void *virt_addr;           // 0x30: Our DMA buffer virtual address
+    dma_addr_t phys_addr;      // 0x34: Physical/DMA address
+    void *metadata;            // 0x38: Metadata area pointer
+    uint32_t metadata_offset;   // 0x3C: Offset to metadata
+
+    /* Buffer management */
+    uint32_t sequence;         // 0x40: Frame sequence number
+    uint32_t total_size;       // 0x44: Total size including metadata
+    struct timespec timestamp; // 0x48: Frame timestamp
+
+    /* USERPTR management */
+    unsigned long userptr;   // 0x50: Userspace buffer pointer
+    bool is_mapped;           // 0x54: Whether userptr is mapped
+
+    /* Memory mapping support */
+    struct page **pages;       // For USERPTR/MMAP support
+    int nr_pages;             // Number of pages mapped
+
+    /* Reserved space to match OEM structure size */
+    uint32_t queued_count;  // Track number of times queued
+    bool is_queued;         // Flag to prevent double queueing
 };
 
 struct encoder_chn_attr {
@@ -246,7 +294,9 @@ struct isp_core_ctrl {
 };
 
 struct isp_tuning_data {
-    u8 reserved1;           // 0x00
+    void __iomem *regs;     // ISP register mapping
+    uint32_t state;         // Tuning state
+    uint32_t offset_1c;     // Matches 0x1c allocation (libimp's userspace lock)
     u8 contrast;           // 0x01
     u8 brightness;         // 0x02
     u8 reserved2;          // 0x03
@@ -270,19 +320,14 @@ struct isp_tuning_data {
 
 // Tuning state structure based on decompiled code
 struct isp_tuning_state {
-    u32 instance;               // First word is instance/arg1
-    u8 params[0x4000];         // Parameter space
-    spinlock_t lock;           // Spin lock at 0x102e
-    struct mutex mlock;        // Mutex also at 0x102e
-    u32 state;                 // State at 0x1031 (1 = init, 2 = enabled)
-    u32 event_handler;         // Event handler at 0x1033
-    u32 param_size;            // Size field at end (0x736b0 seen in init)
-};
-
-// From the decompiled code, we see a struct of 4-word entries being copied in a loop
-// up to offset 0x70 (112 bytes), suggesting this structure size
-struct imp_channel_attr {
-    __u32 attr[28];  // 28 words = 112 bytes (0x70)
+    bool enabled;          // Tuning enabled flag
+    bool initialized;      // Tuning initialized
+    void __iomem *regs;   // Tuning registers mapping
+    struct mutex lock;     // Protection
+    uint32_t contrast;     // 0x09 offset in userspace struct
+    uint32_t brightness;   // For tuning params
+    uint32_t saturation;
+    uint32_t sharpness;
 };
 
 struct isp_zone_ctrl {
@@ -297,16 +342,6 @@ struct ae_zone_info {
     u16 metrics[4];           // Various metrics
     u16 hist_data[MAX_HIST_BINS];
     u8 additional[4];         // Additional data seen in tisp_g_ae_hist
-};
-
-// AF Zone data structure (from apical_isp_af_zone_g_ctrl.isra.85)
-struct af_zone_data {
-    u32 zone_metrics[MAX_AF_ZONES];  // 900 bytes (0x384) copied to user
-};
-
-struct isp_tuning_ctrl {
-    __u32 cmd;     // Command ID
-    __u32 value;   // Value/pointer
 };
 
 
@@ -364,5 +399,182 @@ struct isp_callback_info {
     int32_t (*ae_cb)(void);  // AE callback at offset 0x1c
     int32_t (*stats_cb)(void); // Stats callback at offset 0x8
 };
+
+struct buffer_state {
+    uint32_t flags;          // 0x4c
+    uint32_t state;          // 0x48
+    uint32_t buffer_addr;    // 0x34
+    uint32_t buffer_size;    // 0x38
+    uint32_t metadata_flags; // 0x0c
+} __attribute__((packed));
+
+
+#define ISP_TUNING_GET_TOTAL_GAIN 0x8000027
+#define ISP_TOTAL_GAIN_REG    0x1084
+
+struct isp_gain_info {
+    uint32_t total_gain;   // Current total gain value
+    uint32_t flags;        // Optional flags/status
+};
+
+struct isp_tuning_ctrl {
+    uint32_t value;
+    uint32_t cmd;
+    void __user *data;  // Optional data pointer
+};
+
+struct frame_fmt {
+    __u32 type;           // 0x00: type=1
+    __u32 width;          // 0x04: e.g. 0x780 (1920)
+    __u32 height;         // 0x08: e.g. 0x438 (1080)
+    union {               // 0x0C
+        __u32 pixelformat;
+        char pix_str[4];      // "NV12"
+    };
+    __u32 field;          // 0x10
+    __u32 bytesperline;   // 0x14
+    __u32 sizeimage;      // 0x18
+    __u32 colorspace;     // 0x1C: Must be 8 (SRGB)
+    __u32 priv;           // 0x20
+    __u32 flags;          // 0x24
+    __u32 reserved[26];   // Pad to 0x70 bytes
+} __attribute__((packed));
+
+struct frame_chan_attr {
+    u32 width;          // 0x00
+    u32 height;         // 0x04
+    u32 format;         // 0x08
+    u32 picWidth;       // 0x0C
+    u32 picHeight;      // 0x10
+    u32 buf_type;       // 0x14 - Matches offset 0x24
+    u32 mem_type;       // 0x18 - Matches offset 0x3c
+    u32 buf_count;      // 0x1C - Matches offset 0x20c
+    u32 state;          // 0x20 - Matches offset 0x2d0
+    u32 streaming;      // 0x24 - Matches offset 0x230
+    u32 reserved[10];   // Pad to match 80 byte copy
+} __packed;
+
+struct group_metadata {
+    uint32_t magic;         // 0x00: Magic header
+    void *group;            // 0x04: Pointer to frame group
+    uint32_t frame_num;     // 0x08: Frame number in sequence
+    uint32_t ref_count;     // 0x0c: Reference count (1)
+    uint32_t state;         // 0x10: Frame state
+    uint32_t flags;         // 0x14: Frame flags (0)
+    uint32_t size;          // 0x18: Frame size
+    uint32_t type;          // 0x1c: Frame type
+    void *handler;          // 0x20: Must match group handler (0x9a654)
+    uint32_t channel;       // 0x24: Channel ID
+    uint32_t sequence;      // 0x28: Frame sequence number
+    uint32_t timestamp;     // 0x2c: Timestamp
+    uint32_t padding[3];    // 0x30-0x38: Reserved
+    uint32_t done_flag;     // 0x3c: Frame done flag
+} __attribute__((packed));
+
+struct frame_metadata {
+    uint32_t magic;         // 0x00: Magic (0x100100)
+    void *group_ptr;        // 0x04: Critical for group_update
+    uint32_t frame_num;     // 0x08: Buffer index
+    uint32_t ref_count;     // 0x0c: Reference count (start at 1)
+    uint32_t state;         // 0x10: Frame state
+    uint32_t flags;         // 0x14: Frame flags
+    uint32_t size;          // 0x18: Frame size
+    uint32_t type;          // 0x1c: Frame type (format)
+    void *handler;          // 0x20: Must be 0x9a654
+    uint32_t channel;       // 0x24: Channel ID
+    uint32_t sequence;      // 0x28: Frame sequence number
+    uint32_t timestamp;     // 0x2c: Timestamp
+    uint32_t padding[3];    // 0x30-0x38: Reserved padding
+    uint32_t done_flag;     // 0x3c: Frame done flag
+} __attribute__((packed, aligned(4)));
+
+
+/* Control structure matching userspace */
+struct isp_flip_ctrl {
+    u32 cmd;    /* 0x980914 or 0x980915 */
+    u32 value;  /* Flip value */
+};
+
+
+/* Must match libimp video element layout - 0x14 bytes */
+struct video_elem {
+    struct video_elem *next;  // 0x00: Next pointer in queue
+    struct video_elem *prev;  // 0x04: Previous pointer in queue
+    void *data;              // 0x08: Buffer data pointer
+    uint32_t size;           // 0x0c: Buffer size
+    uint32_t flags;          // 0x10: Status flags
+} __attribute__((packed));
+
+/* Must match libimp container layout - 0x68 bytes */
+struct video_container {
+    struct mutex lock;       // 0x00: Main container lock
+    struct video_elem *free_head;  // 0x18: Head of free queue
+    struct video_elem *free_tail;  // 0x1c: Tail of free queue
+    struct mutex buf_lock;   // 0x20: Buffer queue lock
+    struct video_elem *ready_head; // 0x38: Head of ready queue
+    struct video_elem *ready_tail; // 0x3c: Tail of ready queue
+    struct mutex done_lock;  // 0x40: Done queue lock
+    struct video_elem *done_head;  // 0x58: Head of done queue
+    struct video_elem *done_tail;  // 0x5c: Tail of done queue
+    struct video_elem *buffers;    // 0x60: Array of video elements
+    uint32_t count;         // 0x64: Number of buffers
+} __attribute__((packed));
+
+// Buffer structure - total size 0xd0 bytes
+struct video_buffer {
+    uint32_t index;        // 0x00: Buffer index
+    uint32_t type;         // 0x04: Buffer type
+    uint8_t pad1[0x30];    // 0x08-0x37: Padding
+    uint32_t memory;       // 0x38: Memory type
+    uint8_t pad2[0xc];     // 0x3c-0x47: Padding
+    uint32_t flags;        // 0x48: Buffer state (1=queued, 2=done)
+    uint32_t status;       // 0x4c: Buffer status
+    uint8_t pad3[0x8];     // 0x50-0x57: Padding
+    struct list_head list; // 0x58: List head for queues
+    void *queue;           // 0x60: Points back to frame_queue
+    uint8_t pad4[0xc];     // 0x64-0x6f: Padding
+    void *data;            // 0x70: Buffer data pointer
+    struct frame_metadata *meta;  // 0x74: Metadata pointer
+    uint8_t pad5[0x54];    // 0x78-0xcf: Remaining padding
+} __attribute__((packed));
+
+// Frame queue structure - maintains exact offsets
+struct frame_queue {
+    struct mutex lock;           // 0x00: Queue lock
+    struct video_buffer **bufs;  // 0x24: Array of buffer pointers
+    uint32_t memory_type;        // 0x3c: Memory type (V4L2_MEMORY_*)
+    uint8_t pad1[0x1d0];        // 0x40-0x20f: Padding to maintain offsets
+    uint32_t buf_count;         // 0x210: Number of buffers
+    struct list_head ready_list; // 0x214: Ready list head
+    struct list_head done_list;  // 0x21c: Done list head
+    spinlock_t queue_lock;       // 0x224: Queue spinlock
+    wait_queue_head_t wait;      // 0x228: Wait queue
+    uint32_t stream_state;       // 0x230: Stream state
+} __attribute__((packed));
+
+struct vbm_frame_info {
+    uint32_t pool_id;       // Pool ID
+    uint32_t state;         // Frame state (2 = done)
+    uint32_t ref_count;     // Reference count
+    struct mutex lock;      // Frame lock
+    void *frame_data;       // Frame data pointer
+};
+
+// This needs to match exactly what libimp expects
+struct group_module {
+    char pad1[0x50];
+    void *update_fn;         // Offset 0x50: points to our update wrapper
+    char pad2[0xdc];        // Padding to 0x12c
+    void *self;             // Offset 0x12c: points to self
+    uint32_t channel;       // Offset 0x130: channel number
+    char pad3[0x10];        // Padding to 0x144
+    uint32_t handler;       // Offset 0x144: handler value (0x9a654)
+    char update_block[512];  // Update data block
+} __attribute__((packed, aligned(4)));
+
+/* Add memory type if not defined */
+#ifndef V4L2_MEMORY_KMALLOC
+#define V4L2_MEMORY_KMALLOC  0x8000
+#endif
 
 #endif //TX_LIBIMP_H

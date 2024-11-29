@@ -96,6 +96,136 @@ static int enable_csi_clocks(struct IMPISPDev *dev)
     return 0;
 }
 
+
+
+#define MIPI_PHY_ADDR   0x10022000
+#define ISP_W01_ADDR    0x10023000  // Should be our CSI controller
+
+int init_csi_early(struct IMPISPDev *dev) {
+    struct csi_device *csi_dev;
+    void __iomem *phy_base;
+    void __iomem *csi_base;
+    void __iomem *cpm_base;
+    void __iomem **csi_regs_ptr;
+    u32 val;
+
+    pr_info("Mapping I/O regions:\n");
+    pr_info("  MIPI PHY: 0x%08x\n", MIPI_PHY_ADDR);
+    pr_info("  ISP W01: 0x%08x\n", ISP_W01_ADDR);
+
+    // Try using request_mem_region first
+    struct resource *phy_res, *csi_res;
+
+    phy_res = request_mem_region(MIPI_PHY_ADDR, 0x1000, "mipi-phy");
+    if (!phy_res) {
+        pr_info("MIPI PHY region already claimed\n");
+    }
+
+    csi_res = request_mem_region(ISP_W01_ADDR, 0x1000, "isp-w01");
+    if (!csi_res) {
+        pr_info("ISP W01 region already claimed\n");
+    }
+
+    // Map CPM first for clock setup
+    cpm_base = ioremap(CPM_BASE, 0x1000);
+    if (!cpm_base) {
+        return -ENOMEM;
+    }
+
+    pr_info("Initial CPM state:\n");
+    pr_info("  CLKGR: 0x%08x\n", readl(cpm_base + CPM_CLKGR));
+    pr_info("  CLKGR1: 0x%08x\n", readl(cpm_base + CPM_CLKGR1));
+
+    // Setup clocks and power
+    val = readl(cpm_base + CPM_CLKGR);
+    val &= ~CPM_CSI_CLK_MASK;  // Enable CSI clock
+    writel(val, cpm_base + CPM_CLKGR);
+    wmb();
+
+    val = readl(cpm_base + CPM_CLKGR1);
+    val &= ~CPM_CSI_PWR_MASK;  // Enable CSI power
+    writel(val, cpm_base + CPM_CLKGR1);
+    wmb();
+
+    // Configure CSI clock
+    writel(0x1, cpm_base + CPM_CSICDR);
+    wmb();
+    msleep(10);
+
+    // Map MIPI PHY
+    phy_base = ioremap(MIPI_PHY_ADDR, 0x1000);
+    if (!phy_base) {
+        iounmap(cpm_base);
+        return -ENOMEM;
+    }
+
+    // Map CSI (W01)
+    csi_base = ioremap(ISP_W01_ADDR, 0x1000);
+    if (!csi_base) {
+        iounmap(phy_base);
+        iounmap(cpm_base);
+        return -ENOMEM;
+    }
+
+    // Setup device structure
+    csi_dev = kzalloc(sizeof(*csi_dev), GFP_KERNEL);
+    if (!csi_dev) {
+        iounmap(csi_base);
+        iounmap(phy_base);
+        iounmap(cpm_base);
+        return -ENOMEM;
+    }
+
+    // Initialize mutex
+    mutex_init(&csi_dev->mutex);
+
+    // Setup registers
+    //csi_dev->base = csi_base;
+    csi_dev->phy_regs = phy_base;
+    dev->csi_dev = csi_dev;
+
+    pr_info("Initial register readings:\n");
+    pr_info("  W01 0x00: 0x%08x\n", readl(csi_base + 0x00));
+    pr_info("  W01 0x04: 0x%08x\n", readl(csi_base + 0x04));
+    pr_info("  W01 0x08: 0x%08x\n", readl(csi_base + 0x08));
+    pr_info("  PHY 0x00: 0x%08x\n", readl(phy_base + 0x00));
+    pr_info("  PHY 0x04: 0x%08x\n", readl(phy_base + 0x04));
+
+    // First read then try to write test pattern
+    writel(0xaaaa5555, csi_base + 0x04);
+    writel(0x5555aaaa, phy_base + 0x04);
+    wmb();
+
+    pr_info("After test write:\n");
+    pr_info("  W01 0x04: 0x%08x\n", readl(csi_base + 0x04));
+    pr_info("  PHY 0x04: 0x%08x\n", readl(phy_base + 0x04));
+
+    pr_info("After test write:\n");
+    pr_info("  W01 0x04: 0x%08x\n", readl(csi_base + 0x04));
+    pr_info("  PHY 0x04: 0x%08x\n", readl(phy_base + 0x04));
+
+    // Store CSI base in device structure
+    csi_dev->csi_regs = csi_base;
+
+    // Now we can configure CSI with proper registers
+    int ret = configure_mipi_csi(dev);
+    if (ret) {
+        pr_err("Failed to configure MIPI CSI: %d\n", ret);
+        iounmap(csi_base);
+        iounmap(phy_base);
+        iounmap(cpm_base);
+        kfree(csi_dev);
+        return ret;
+    }
+
+    // Verify configuration
+    //dump_csi_reg(dev);
+
+    iounmap(cpm_base);
+    return 0;
+}
+
+
 /* CSI initialization */
 int tx_isp_csi_probe(struct platform_device *pdev)
 {
@@ -132,13 +262,7 @@ int tx_isp_csi_probe(struct platform_device *pdev)
 
     // Store CSI device in main ISP device
     dev->csi_dev = csi_dev;
-
-    // Enable CSI clocks
-    ret = enable_csi_clocks(dev);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to enable CSI clocks\n");
-        goto err_unmap_csi;
-    }
+    dev->csi_dev->state = 1;
 
     // Map PHY registers
     phy_base = ioremap(0x10022000, 0x1000);
@@ -304,7 +428,7 @@ int init_csi_phy(struct IMPISPDev *dev) {
     }
 
     // Verify configuration
-    //dump_csi_reg(dev);
+    dump_csi_reg(dev);
 
     iounmap(cpm_base);
     return 0;
@@ -315,51 +439,84 @@ int configure_mipi_csi(struct IMPISPDev *dev)
     void __iomem *regs = dev->reg_base;
     void __iomem *csi_base = dev->csi_dev->csi_regs;
     u32 val;
+    int retry = 5;
 
-    pr_info("TX-ISP CSI: Configuring...\n");
+    pr_info("T31 CSI: Configuring for SC2336...\n");
 
-    /* First disable everything */
-    writel(0x0, csi_base + 0x08);  /* PHY_SHUTDOWNZ = 0 */
-    writel(0x0, csi_base + 0x0c);  /* DPHY_RSTZ = 0 */
-    writel(0x0, csi_base + 0x10);  /* CSI2_RESETN = 0 */
+    // First clear any stale errors
+    writel(0xffffffff, csi_base + 0x20);  // Clear ERR1
+    writel(0xffffffff, csi_base + 0x24);  // Clear ERR2
     wmb();
     msleep(1);
 
-    /* Basic configuration */
-    writel(0x1, csi_base + 0x04);  /* N_LANES = 1 (2 lanes) */
+    // Configure lanes first
+    writel(0x1, csi_base + 0x04);  // N_LANES = 1 for 2 lanes
+    wmb();
+
+    // Full reset sequence first
+    writel(0x0, regs + ISP_CSI_CTRL);
+    writel(0x0, csi_base + 0x10);  // CSI2_RESETN
+    writel(0x0, csi_base + 0x0c);  // DPHY_RSTZ
+    writel(0x0, csi_base + 0x08);  // PHY_SHUTDOWNZ
+    wmb();
+    msleep(20);  // Longer reset for T31
+
+    // Check error state after reset
+    val = readl(csi_base + 0x20);
+    if (val != 0) {
+        pr_info("CSI ERR1 after reset: 0x%08x\n", val);
+        writel(0xffffffff, csi_base + 0x20);
+        wmb();
+    }
+
+    // Configure DPHY timing - T31 specific
+    writel(0x00000004, regs + ISP_CSI_DPHY_CTRL);  // DPHY clock mode
+    writel(0x00000003, regs + ISP_CSI_LANE_CTRL);  // 2 data lanes
+    writel(0x0a170201, regs + ISP_CSI_TIMING);     // T31 timing value
+    wmb();
+
+    // Configure PHY test registers (T31 specific)
+    writel(0x0, csi_base + CSI_PHY_TST_CTRL0);
+    writel(0x1, csi_base + CSI_PHY_TST_CTRL1);
+    writel(0x0, csi_base + CSI_PHY_TST_CTRL0);
     wmb();
     msleep(1);
 
-    /* Power up sequence with 1ms delays between each */
-    writel(0x1, csi_base + 0x08);  /* PHY_SHUTDOWNZ = 1 */
+    // Set lane configuration for SC2336
+    writel(0x1, csi_base + 0x04);     // N_LANES = 1 (2 lanes)
+    writel(0x2B, csi_base + 0x18);    // RAW10 format
     wmb();
     msleep(1);
 
-    writel(0x1, csi_base + 0x0c);  /* DPHY_RSTZ = 1 */
+    // Power up sequence with proper timing
+    writel(0x1, csi_base + 0x08);  // PHY_SHUTDOWNZ
+    wmb();
+    usleep_range(100, 150);
+    writel(0x1, csi_base + 0x0c);  // DPHY_RSTZ
+    wmb();
+    usleep_range(100, 150);
+    writel(0x1, csi_base + 0x10);  // CSI2_RESETN
+    wmb();
+    usleep_range(100, 150);
+
+    // Set masks AFTER power up
+    writel(0x000f0000, csi_base + 0x28);  // MASK1
+    writel(0x01ff0000, csi_base + 0x2c);  // MASK2
+    wmb();
+
+    // Clear any errors one more time
+    writel(0xffffffff, csi_base + 0x20);  // Clear ERR1
+    writel(0xffffffff, csi_base + 0x24);  // Clear ERR2
     wmb();
     msleep(1);
 
-    writel(0x1, csi_base + 0x10);  /* CSI2_RESETN = 1 */
-    wmb();
-    msleep(1);
-
-    /* Configure data format */
-    writel(0x2b, csi_base + 0x18);  /* DATA_IDS_1 = 0x2b (RAW10) */
+    // Finally enable CSI in ISP
+    writel(0x1, regs + ISP_CSI_CTRL);
     wmb();
 
-    /* Configure error masks */
-    writel(0x000f0000, csi_base + 0x28);  /* MASK1 */
-    writel(0x00ff0000, csi_base + 0x2c);  /* MASK2 */
-    wmb();
-
-    /* Clear any errors */
-    writel(0xffffffff, csi_base + 0x20);  /* Clear ERR1 */
-    writel(0xffffffff, csi_base + 0x24);  /* Clear ERR2 */
-    wmb();
-
-    /* Verify PHY state */
-    val = readl(csi_base + 0x14);  /* PHY_STATE */
-    pr_info("CSI configured:\n"
+    // Check final state
+    val = readl(csi_base + 0x14);
+    pr_info("T31 CSI configured:\n"
             "  PHY state: 0x%08x\n"
             "  ERR1: 0x%08x\n"
             "  ERR2: 0x%08x\n",
@@ -369,6 +526,7 @@ int configure_mipi_csi(struct IMPISPDev *dev)
 
     return 0;
 }
+
 
 int verify_csi_signals(struct IMPISPDev *dev)
 {
@@ -691,131 +849,6 @@ int probe_csi_registers(struct IMPISPDev *dev)
     return 0;
 }
 
-int init_csi_early(struct IMPISPDev *dev) {
-    struct csi_device *csi_dev;
-    void __iomem *phy_base;
-    void __iomem *csi_base;
-    void __iomem *cpm_base;
-    void __iomem **csi_regs_ptr;
-    u32 val;
-
-    pr_info("Mapping I/O regions:\n");
-    pr_info("  MIPI PHY: 0x%08x\n", MIPI_PHY_ADDR);
-    pr_info("  ISP W01: 0x%08x\n", ISP_W01_ADDR);
-
-    // Try using request_mem_region first
-    struct resource *phy_res, *csi_res;
-
-    phy_res = request_mem_region(MIPI_PHY_ADDR, 0x1000, "mipi-phy");
-    if (!phy_res) {
-        pr_info("MIPI PHY region already claimed\n");
-    }
-
-    csi_res = request_mem_region(ISP_W01_ADDR, 0x1000, "isp-w01");
-    if (!csi_res) {
-        pr_info("ISP W01 region already claimed\n");
-    }
-
-    // Map CPM first for clock setup
-    cpm_base = ioremap(CPM_BASE, 0x1000);
-    if (!cpm_base) {
-        return -ENOMEM;
-    }
-
-    pr_info("Initial CPM state:\n");
-    pr_info("  CLKGR: 0x%08x\n", readl(cpm_base + CPM_CLKGR));
-    pr_info("  CLKGR1: 0x%08x\n", readl(cpm_base + CPM_CLKGR1));
-
-    // Setup clocks and power
-    val = readl(cpm_base + CPM_CLKGR);
-    val &= ~CPM_CSI_CLK_MASK;  // Enable CSI clock
-    writel(val, cpm_base + CPM_CLKGR);
-    wmb();
-
-    val = readl(cpm_base + CPM_CLKGR1);
-    val &= ~CPM_CSI_PWR_MASK;  // Enable CSI power
-    writel(val, cpm_base + CPM_CLKGR1);
-    wmb();
-
-    // Configure CSI clock
-    writel(0x1, cpm_base + CPM_CSICDR);
-    wmb();
-    msleep(10);
-
-    // Map MIPI PHY
-    phy_base = ioremap(MIPI_PHY_ADDR, 0x1000);
-    if (!phy_base) {
-        iounmap(cpm_base);
-        return -ENOMEM;
-    }
-
-    // Map CSI (W01)
-    csi_base = ioremap(ISP_W01_ADDR, 0x1000);
-    if (!csi_base) {
-        iounmap(phy_base);
-        iounmap(cpm_base);
-        return -ENOMEM;
-    }
-
-    // Setup device structure
-    csi_dev = kzalloc(sizeof(*csi_dev), GFP_KERNEL);
-    if (!csi_dev) {
-        iounmap(csi_base);
-        iounmap(phy_base);
-        iounmap(cpm_base);
-        return -ENOMEM;
-    }
-
-    // Initialize mutex
-    mutex_init(&csi_dev->mutex);
-
-    // Setup registers
-    //csi_dev->base = csi_base;
-    csi_dev->phy_regs = phy_base;
-    dev->csi_dev = csi_dev;
-
-    pr_info("Initial register readings:\n");
-    pr_info("  W01 0x00: 0x%08x\n", readl(csi_base + 0x00));
-    pr_info("  W01 0x04: 0x%08x\n", readl(csi_base + 0x04));
-    pr_info("  W01 0x08: 0x%08x\n", readl(csi_base + 0x08));
-    pr_info("  PHY 0x00: 0x%08x\n", readl(phy_base + 0x00));
-    pr_info("  PHY 0x04: 0x%08x\n", readl(phy_base + 0x04));
-
-    // First read then try to write test pattern
-    writel(0xaaaa5555, csi_base + 0x04);
-    writel(0x5555aaaa, phy_base + 0x04);
-    wmb();
-
-    pr_info("After test write:\n");
-    pr_info("  W01 0x04: 0x%08x\n", readl(csi_base + 0x04));
-    pr_info("  PHY 0x04: 0x%08x\n", readl(phy_base + 0x04));
-
-    pr_info("After test write:\n");
-    pr_info("  W01 0x04: 0x%08x\n", readl(csi_base + 0x04));
-    pr_info("  PHY 0x04: 0x%08x\n", readl(phy_base + 0x04));
-
-    // Store CSI base in device structure
-    csi_dev->csi_regs = csi_base;
-
-    // Now we can configure CSI with proper registers
-    int ret = configure_mipi_csi(dev);
-    if (ret) {
-        pr_err("Failed to configure MIPI CSI: %d\n", ret);
-        iounmap(csi_base);
-        iounmap(phy_base);
-        iounmap(cpm_base);
-        kfree(csi_dev);
-        return ret;
-    }
-
-    // Verify configuration
-    //dump_csi_reg(dev);
-
-    iounmap(cpm_base);
-    return 0;
-}
-
-
 // Add PHY setup to separate function that gets called during subdev init
 int setup_csi_phy(struct IMPISPDev *dev) {
     void __iomem *phy_base;
@@ -855,18 +888,18 @@ int configure_csi_streaming(struct IMPISPDev *dev)
     uint32_t phy_state;
     int ret;
 
-    if (dev->csi_dev->state < 1 || dev->csi_dev->state > 2) {
-        pr_err("Invalid CSI state for stream start: %d\n", dev->csi_dev->state);
-        return -EINVAL;
-    }
-
-    if (dev->csi_dev->state == 1) {
-        ret = tx_isp_csi_activate_subdev(dev);
-        if (ret) {
-            pr_err("Failed to activate CSI: %d\n", ret);
-            return ret;
-        }
-    }
+//    if (dev->csi_dev->state < 1 || dev->csi_dev->state > 2) {
+//        pr_err("Invalid CSI state for stream start: %d\n", dev->csi_dev->state);
+//        return -EINVAL;
+//    }
+//
+//    if (dev->csi_dev->state == 1) {
+//        ret = tx_isp_csi_activate_subdev(dev);
+//        if (ret) {
+//            pr_err("Failed to activate CSI: %d\n", ret);
+//            return ret;
+//        }
+//    }
 
     mutex_lock(&dev->csi_dev->mutex);
 

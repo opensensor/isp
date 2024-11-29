@@ -6,29 +6,103 @@
 #include <linux/io.h>
 #include <linux/delay.h>   // For msleep
 
+#include <tx-isp-common.h>
+
 #include "tx-isp.h"
 #include "tx-isp-main.h"
 #include "tx-isp-hw.h"
 
 
-int tx_isp_enable_irq(struct IMPISPDev *dev)
+// Global state variable
+static struct vic_dev *dump_vsd;
+
+struct vic_dev {
+    /* ... other fields ... */
+    spinlock_t lock;                /* offset 0x130 */
+    volatile u32 irq_enabled;       /* offset 0x13c */
+    void (*irq_handler)(void *);    /* offset 0x84 */
+    void (*irq_disable)(void *);    /* offset 0x88 */
+    void *irq_priv;                 /* offset 0x80 */
+};
+
+/**
+ * Enable VIC IRQ handling
+ */
+void tx_vic_enable_irq(void)
 {
+    struct vic_dev *dev;
     unsigned long flags;
-    void __iomem *regs = dev->reg_base;
 
-    pr_info("TODO: Enabling ISP IRQ\n");
+    /* Validate global device pointer */
+    if (!dump_vsd || (unsigned long)dump_vsd >= 0xfffff001)
+        return;
 
+    dev = dump_vsd;
 
-    return 0;
+    /* Lock IRQ state changes */
+    spin_lock_irqsave(&dev->lock, flags);
+
+    /* Only enable if not already enabled */
+    if (!dev->irq_enabled) {
+        dev->irq_enabled = 1;
+
+        /* Call handler if registered */
+        if (dev->irq_handler)
+            dev->irq_handler(dev->irq_priv);
+    }
+
+    spin_unlock_irqrestore(&dev->lock, flags);
 }
 
-void tx_isp_disable_irq(struct IMPISPDev *dev)
+/**
+ * Disable VIC IRQ handling
+ */
+//void tx_vic_disable_irq(void)
+//{
+//    struct vic_dev *dev;
+//    unsigned long flags;
+//    int force = 0;  /* matches var_14 in decompiled code */
+//
+//    /* Validate global device pointer */
+//    if (!dump_vsd || (unsigned long)dump_vsd >= 0xfffff001)
+//        return;
+//
+//    dev = dump_vsd;
+//
+//    /* Lock IRQ state changes */
+//    spin_lock_irqsave(&dev->lock, flags);
+//
+//    if (!force) {
+//        /* Only disable if currently enabled */
+//        if (dev->irq_enabled) {
+//            dev->irq_enabled = 0;
+//
+//            /* Call disable handler if registered */
+//            if (dev->irq_disable)
+//                dev->irq_disable(dev->irq_priv);
+//        }
+//    }
+//
+//    spin_unlock_irqrestore(&dev->lock, flags);
+//}
+
+/* Helper to initialize VIC IRQ handling */
+int tx_vic_irq_init(struct vic_dev *dev,
+                    void (*handler)(void *),
+                    void (*disable)(void *),
+                    void *priv)
 {
-    unsigned long flags;
-    void __iomem *vic_regs = dev->reg_base + VIC_BASE;
+    if (!dev)
+        return -EINVAL;
 
-    pr_info("TODO IRQ disable\n");
+    spin_lock_init(&dev->lock);
+    dev->irq_enabled = 0;
+    dev->irq_handler = handler;
+    dev->irq_disable = disable;
+    dev->irq_priv = priv;
 
+    dump_vsd = dev;
+    return 0;
 }
 
 /* Hardware initialization and management */
@@ -190,87 +264,6 @@ void isp_reg_write(void __iomem *base, u32 offset, u32 value)
     writel(value, base + offset);
 }
 
-/* VIC control functions */
-int init_vic_control(struct IMPISPDev *dev)
-{
-    void __iomem *vic_regs = dev->reg_base + VIC_BASE_OFFSET;
-    int ret;
-
-    pr_info("Initializing VIC control...\n");
-
-    // 1. Full reset/disable sequence
-    writel(0, vic_regs + VIC_DMA_CTRL);
-    writel(0, vic_regs + VIC_CTRL);
-    wmb();
-    udelay(100);
-
-    // 2. Reset VIC
-    writel(0x4, vic_regs + VIC_DMA_CTRL);  // Reset command
-    wmb();
-    udelay(100);
-    while(readl(vic_regs + VIC_DMA_CTRL) & 0x4) {
-        udelay(10);
-    }
-
-    // 3. Initial mode setup - match streaming enable sequence
-    writel(2, vic_regs + 0xc);  // Mode = 2
-    writel(0x800c0000, vic_regs + 0x10);  // Magic control
-    wmb();
-
-    // 4. Poll until VIC status is 0
-    uint32_t status;
-    do {
-        status = readl(vic_regs + VIC_STATUS);
-    } while (status != 0);
-
-    // 5. Configure VIC with correct magic values
-    writel(0x100010, vic_regs + 0x1a4);
-    writel(0x4210, vic_regs + 0x1ac);
-    writel(0x10, vic_regs + 0x1b0);
-    writel(0, vic_regs + 0x1b4);
-    wmb();
-
-    // 6. Control sequence - THIS IS KEY
-    writel(2, vic_regs + VIC_CTRL);
-    wmb();
-    writel(1, vic_regs + VIC_CTRL);  // Back to 1 as per OEM
-    wmb();
-
-    // Replace direct register_vic_irq call with tx_isp_request_irq
-    // Request both IRQs
-//    ret = tx_isp_request_irq(36, dev->irq_data); // VIC IRQ
-//    if (ret) {
-//        pr_err("Failed to setup VIC IRQ: %d\n", ret);
-//        return ret;
-//    }
-//
-//    ret = tx_isp_request_irq(37, dev->irq_data); // ISP IRQ
-//    if (ret) {
-//        pr_err("Failed to setup ISP IRQ: %d\n", ret);
-//        free_irq(36, dev->irq_data);
-//        return ret;
-//    }
-
-
-    // 8. Now enable interrupts
-    writel(0x1, vic_regs + VIC_CTRL);       // Enable VIC
-    writel(0x1, vic_regs + VIC_FRAME_CTRL); // Enable frame control
-    writel(0x3, vic_regs + VIC_IRQ_EN);     // Enable both IRQs
-    writel(~0x33fb, vic_regs + VIC_MASK);   // Unmask interrupts - inverted!
-    wmb();
-
-    // Debug full state
-    pr_info("VIC Configuration:\n");
-    pr_info("  Control:     0x%08x\n", readl(vic_regs + VIC_CTRL));
-    pr_info("  IRQ Enable:  0x%08x\n", readl(vic_regs + VIC_IRQ_EN));
-    pr_info("  Frame Ctrl:  0x%08x\n", readl(vic_regs + VIC_FRAME_CTRL));
-    pr_info("  Int Mask:    0x%08x\n", readl(vic_regs + VIC_MASK));
-    pr_info("  IRQ Status:  0x%08x\n", readl(vic_regs + 0x1e0));
-    pr_info("  Status:      0x%08x\n", readl(vic_regs + VIC_STATUS));
-
-    return 0;
-}
-
 int reset_vic(struct IMPISPDev *dev)
 {
     void __iomem *vic_regs = dev->reg_base + VIC_BASE;
@@ -292,18 +285,6 @@ int reset_vic(struct IMPISPDev *dev)
     pr_info("VIC status after clear: 0x%08x\n", status);
 
     return 0;
-}
-
-void dump_vic_state(struct IMPISPDev *dev)
-{
-    void __iomem *vic_regs = dev->vic_regs + 0x300;
-
-    pr_info("VIC State:\n");
-    pr_info("  Control: 0x%08x\n", readl(vic_regs + 0x140));
-    pr_info("  DMA ctrl: 0x%08x\n", readl(vic_regs + 0x300));
-    pr_info("  Frame ctrl: 0x%08x\n", readl(vic_regs + 0x308));
-    pr_info("  IRQ status: 0x%08x\n", readl(vic_regs + 0x1e0));
-    pr_info("  IRQ mask: 0x%08x\n", readl(vic_regs + 0x1e8));
 }
 
 int vic_core_ops_init(struct IMPISPDev *dev, int enable)
@@ -344,22 +325,19 @@ int vic_core_ops_init(struct IMPISPDev *dev, int enable)
 /* Buffer and DMA management */
 int configure_isp_buffers(struct IMPISPDev *dev)
 {
-    struct isp_framesource_state *fs = &dev->frame_sources[0];
-    struct frame_source_channel *fc;
+    struct isp_channel *chn = &dev->channels[0];
     void __iomem *regs = dev->reg_base;
     uint32_t buffer_start, buffer_size;
     uint32_t input_offset, y_offset, uv_offset;
 
-    if (!dev || !fs || !fs->fc) {
+    if (!dev || !chn) {
         pr_err("Invalid device state\n");
         return -EINVAL;
     }
 
-    fc = fs->fc;
-
     // Calculate aligned dimensions - match OEM alignment
-    uint32_t width = ALIGN(fs->width, 32);
-    uint32_t height = ALIGN(fs->height, 32);
+    uint32_t width = ALIGN(chn->width, 32);
+    uint32_t height = ALIGN(chn->height, 32);
 
     // RAW10 input calculations (match OEM stride calculation)
     uint32_t raw10_stride = ALIGN((width * 10) / 8, 32); // 10-bit packed
@@ -372,7 +350,7 @@ int configure_isp_buffers(struct IMPISPDev *dev)
     uint32_t uv_size = ALIGN(uv_stride * height / 2, 4096);
 
     // Match OEM buffer layout starting at their offset
-    buffer_start = ALIGN(dev->dma_addr + 0x1094d4, 32);
+    buffer_start = ALIGN(dev->dma_sensor_addr + 0x1094d4, 32);
     input_offset = 0;
     y_offset = raw10_size; // Start Y after RAW10
     uv_offset = y_offset + y_size; // Start UV after Y
@@ -417,8 +395,8 @@ int configure_isp_buffers(struct IMPISPDev *dev)
     wmb();
 
     // Store in frame channel
-    fc->dma_addr = buffer_start;
-    fc->buf_size = buffer_size;
+    chn->dma_addr = buffer_start;
+    chn->buf_size = buffer_size;
     //fc->write_idx = 0;
 
     // Initialize completion mechanism
@@ -440,7 +418,7 @@ int configure_isp_buffers(struct IMPISPDev *dev)
     return 0;
 }
 
-int configure_streaming_hardware(struct IMPISPDev *dev)
+int configure_csi_for_streaming(struct IMPISPDev *dev)
 {
     void __iomem *regs = dev->reg_base;
     void __iomem *csi_base = regs + 0xb8;  // CSI register base from OEM offset
@@ -484,11 +462,11 @@ int configure_streaming_hardware(struct IMPISPDev *dev)
 //    uint32_t y_size = y_stride * fs->height;
 //
 //    // Y plane
-//    writel(ALIGN(fc->dma_addr, 8), regs + ISP_BUF0_OFFSET);
+//    writel(ALIGN(dma_addr, 8), regs + ISP_BUF0_OFFSET);
 //    writel(y_stride, regs + ISP_BUF0_OFFSET + 0x4);
 //
 //    // UV plane
-//    writel(ALIGN(fc->dma_addr + y_size, 8), regs + ISP_BUF0_OFFSET + 0x8);
+//    writel(ALIGN(dma_addr + y_size, 8), regs + ISP_BUF0_OFFSET + 0x8);
 //    writel(uv_stride, regs + ISP_BUF0_OFFSET + 0xC);
 //    wmb();
 
@@ -515,7 +493,7 @@ int configure_streaming_hardware(struct IMPISPDev *dev)
             readl(csi_base + 0x8),  // PHY_SHUTDOWNZ
             readl(csi_base + 0xc),  // DPHY_RSTZ
             readl(csi_base + 0x10)); // CSI2_RESETN
-//
+
 //    pr_info("DMA: Y=0x%08x stride=%d UV=0x%08x stride=%d\n",
 //            readl(regs + ISP_BUF0_OFFSET), y_stride,
 //            readl(regs + ISP_BUF0_OFFSET + 0x8), uv_stride);
@@ -529,6 +507,7 @@ int configure_streaming_hardware(struct IMPISPDev *dev)
     return 0;
 }
 
+
 void verify_isp_state(struct IMPISPDev *dev)
 {
     void __iomem *isp_regs = dev->reg_base + ISP_BASE;
@@ -538,12 +517,275 @@ void verify_isp_state(struct IMPISPDev *dev)
     pr_info("  Control: 0x%08x\n", readl(isp_regs + ISP_CTRL_OFFSET));
     pr_info("  Status: 0x%08x\n", readl(isp_regs + ISP_STATUS_OFFSET));
     pr_info("  Int mask: 0x%08x\n", readl(isp_regs + ISP_INT_MASK_OFFSET));
-    pr_info("  VIC ctrl: 0x%08x\n", readl(vic_regs + VIC_CTRL));
-    pr_info("  VIC IRQ: 0x%08x\n", readl(vic_regs + VIC_IRQ_EN));
-    pr_info("  VIC status: 0x%08x\n", readl(vic_regs + VIC_STATUS));
-    pr_info("  VIC frame: 0x%08x\n", readl(vic_regs + VIC_FRAME_CTRL));
-    pr_info("  VIC DMA: 0x%08x\n", readl(vic_regs + VIC_DMA_CTRL));
+
+    pr_info("VIC State:\n");
+    pr_info("  Control: 0x%08x\n", readl(vic_regs + VIC_CTRL));
+    pr_info("  Mode: 0x%08x\n", readl(vic_regs + VIC_MODE));
+    pr_info("  Route: 0x%08x\n", readl(vic_regs + VIC_ROUTE));
+    pr_info("  Status: 0x%08x\n", readl(vic_regs + VIC_STATUS));
+    pr_info("  IRQ Enable: 0x%08x\n", readl(vic_regs + VIC_IRQ_EN));
+    pr_info("  IRQ Mask: 0x%08x\n", readl(vic_regs + VIC_IRQ_MASK));
+    pr_info("  Frame Size: 0x%08x\n", readl(vic_regs + VIC_FRAME_SIZE));
+    pr_info("  Frame Stride: 0x%08x\n", readl(vic_regs + VIC_FRAME_STRIDE));
+    pr_info("  DMA Addr: 0x%08x\n", readl(vic_regs + VIC_DMA_ADDR));
 }
+
+// Helper function to dump VIC state for debugging
+static void dump_vic_state(struct IMPISPDev *dev)
+{
+    void __iomem *vic_regs = dev->reg_base + VIC_BASE;
+
+    pr_info("VIC State:\n");
+    pr_info("  Control: 0x%08x\n", readl(vic_regs + 0x0));
+    pr_info("  Mode: 0x%08x\n", readl(vic_regs + 0x4));
+    pr_info("  Route: 0x%08x\n", readl(vic_regs + 0x10));
+    pr_info("  Status: 0x%08x\n", readl(vic_regs + 0xb4));
+    pr_info("  IRQ Enable: 0x%08x\n", readl(vic_regs + 0x13c));
+    pr_info("  IRQ Mask: 0x%08x\n", readl(vic_regs + 0x140));
+    pr_info("  Frame Size: 0x%08x\n", readl(vic_regs + 0x100));
+    pr_info("  Frame Stride: 0x%08x\n", readl(vic_regs + 0x104));
+    pr_info("  DMA Addr: 0x%08x\n", readl(vic_regs + 0x1a0));
+}
+
+// Add to our ISP driver
+static int detect_sensor_type(struct IMPISPDev *dev)
+{
+    struct tx_isp_sensor *sensor;
+    u32 sensor_type = 0;
+
+    // Get sensor directly from I2C client
+    if (!dev->sensor_i2c_client) {
+        pr_err("No sensor I2C client available\n");
+        return -EINVAL;
+    }
+
+    sensor = i2c_get_clientdata(dev->sensor_i2c_client);
+    if (!sensor) {
+        pr_err("No sensor data available\n");
+        return -EINVAL;
+    }
+
+    // Check interface type first
+    if (sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {
+        sensor_type = 1; // MIPI type (generic)
+    } else if (sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_DVP) {
+        // DVP sensors - check timing mode
+        switch(sensor->video.attr->dvp.mode) {
+            case SENSOR_DVP_TIMING_BT601:
+                sensor_type = 3; // BT601
+            break;
+
+            case SENSOR_DVP_TIMING_BT656:
+                sensor_type = 4; // BT656
+            break;
+
+            case SENSOR_DVP_TIMING_BT1120:
+                sensor_type = 5; // BT1120
+            break;
+
+            default:
+                pr_err("Unknown DVP timing mode %d\n",
+                       sensor->video.attr->dvp.mode);
+            return -EINVAL;
+        }
+    }
+
+    pr_info("Detected sensor type %d based on interface %d mode %d\n",
+            sensor_type,
+            sensor->video.attr->dbus_type,
+            sensor->video.attr->dvp.mode);
+
+    // Store the type in hardware register and our dev structure
+    writel(sensor_type, dev->reg_base + 0x110 + 0x14);
+    wmb();
+    dev->sensor_type = sensor_type;
+    dev->sensor_mode = sensor->video.attr->dvp.mode;
+    dev->sensor_interface_type = sensor->video.attr->dbus_type;
+
+    return 0;
+}
+
+
+
+int configure_vic_for_streaming(struct IMPISPDev *dev)
+{
+    void __iomem *vic_regs = dev->reg_base + VIC_BASE;
+    void __iomem *isp_regs = dev->reg_base;
+    void __iomem *sensor_info = dev->reg_base + 0x110;
+    u32 status, route_config;
+    int ret = 0;
+    int timeout;
+
+    // Reset control first
+    writel(2, vic_regs + 0x0);  // OEM starts with reset state
+    wmb();
+    udelay(100);
+
+    // Detect sensor type first
+    detect_sensor_type(dev);
+    u32 sensor_type = dev->sensor_type;
+    u32 interface_type = dev->sensor_interface_type;
+    u32 mode = dev->sensor_mode;
+
+    pr_info("Detected sensor type %d based on interface %d mode %d (0x%x)\n",
+            sensor_type, interface_type, mode, mode);
+
+    // Configure based on sensor type
+    switch (sensor_type) {
+    case 1: // MIPI
+        {
+            if (mode == 0x195) {
+                pr_info("Configuring for SC2336 MIPI mode\n");
+
+                // Basic route config for non-Sony MIPI
+                writel(0xa000a, vic_regs + 0x10);
+                wmb();
+                udelay(10);
+
+                // Magic config matches route for SC2336
+                writel(0xa000a, vic_regs + 0x1a4);
+                wmb();
+                udelay(10);
+
+                // Frame configuration - SC2336 specific
+                u32 frame_param = readl(sensor_info + 0x7c) & 0xff;
+                u32 base_size = readl(sensor_info + 0x2c);
+                u32 frame_mul = 8; // Default for SC2336
+
+                // SC2336 frame handling
+                u32 frame_size = frame_mul * base_size;
+                u32 frame_value = (frame_size >> 5) + ((frame_size & 0x1f) ? 1 : 0);
+
+                // Set frame parameters
+                writel(frame_value, vic_regs + 0x100);
+                writel(frame_size, vic_regs + 0x104);
+                wmb();
+                udelay(10);
+
+                // DMA Setup
+                u32 dma_addr = ALIGN(dev->dma_sensor_addr, 32);
+                writel(dma_addr, vic_regs + 0x1a0);
+                writel(0x4440, vic_regs + 0x1ac);
+                wmb();
+                udelay(10);
+
+                // Clear status before state transitions
+                writel(0xffffffff, vic_regs + 0xb4);
+                wmb();
+                udelay(10);
+
+                // State transition sequence for SC2336
+                writel(4, vic_regs + 0x0);  // Enable state
+                wmb();
+                udelay(100);
+
+                timeout = 1000;
+                while (readl(vic_regs + 0x0) != 0) {
+                    if (timeout-- <= 0) {
+                        pr_err("Timeout waiting for VIC ready\n");
+                        dump_vic_state(dev);
+                        ret = -ETIMEDOUT;
+                        goto out;
+                    }
+                    udelay(1);
+                }
+
+                // Normal operation mode
+                writel(1, vic_regs + 0x0);
+                wmb();
+                udelay(100);
+            } else {
+                pr_err("Unexpected MIPI mode: 0x%x\n", mode);
+                ret = -EINVAL;
+                goto out;
+            }
+        }
+        break;
+
+    case 3: // BT601
+        {
+            pr_info("sensor type is BT601!\n");
+
+            u32 gpio_mode = readl(sensor_info + 0x18);
+            if (gpio_mode > 1) {
+                pr_err("not support the gpio mode!\n");
+                ret = -EINVAL;
+                goto out;
+            }
+
+            route_config = gpio_mode ? 0x88060820 : 0x800c8000;
+            writel(gpio_mode ? gpio_mode : 1, vic_regs + 0xc);
+
+            // BT601 register configuration
+            u32 reg_dc = readl(dev->reg_base + 0xdc);
+            u32 reg_e0 = readl(dev->reg_base + 0xe0);
+
+            writel((reg_dc << 16) | reg_e0, vic_regs + 4);
+            writel(route_config, vic_regs + 0x10);
+            writel((reg_dc << 1) | 0x100000, vic_regs + 0x18);
+            writel(0x30, vic_regs + 0x3c);
+            writel(0x1b8, vic_regs + 0x1c);
+            writel(0x1402d0, vic_regs + 0x30);
+            writel(0x50014, vic_regs + 0x34);
+            writel(0x2d00014, vic_regs + 0x38);
+            writel(0, vic_regs + 0x1a0);
+            writel(0x100010, vic_regs + 0x1a4);
+            writel(0x4440, vic_regs + 0x1ac);
+        }
+        break;
+
+    case 4: // BT656
+    case 5: // BT1120
+        {
+            pr_info("sensor type is %s!\n", sensor_type == 4 ? "BT656" : "BT1120");
+
+            writel(sensor_type == 4 ? 0 : 4, vic_regs + 0xc);
+
+            if (readl(sensor_info + 0x18) != 0) {
+                pr_err("not support the gpio mode!\n");
+                ret = -EINVAL;
+                goto out;
+            }
+
+            u32 reg_dc = readl(dev->reg_base + 0xdc);
+            u32 reg_e0 = readl(dev->reg_base + 0xe0);
+
+            writel((reg_dc << 16) | reg_e0, vic_regs + 4);
+            writel(0x800c0000, vic_regs + 0x10);
+            writel(reg_dc << 1, vic_regs + 0x18);
+            writel(0x100010, vic_regs + 0x1a4);
+            writel(0x4440, vic_regs + 0x1ac);
+
+            if (sensor_type == 4) {
+                writel(0x200, vic_regs + 0x1d0);
+                writel(0x200, vic_regs + 0x1d4);
+            }
+        }
+        break;
+
+    default:
+        pr_err("Unsupported sensor type: %d\n", sensor_type);
+        ret = -EINVAL;
+        goto out;
+    }
+
+    // Enable ISP streaming
+    writel(0x1, isp_regs + ISP_STREAM_START);
+    wmb();
+    writel(0x1, isp_regs + ISP_STREAM_CTRL);
+    wmb();
+
+    pr_info("Final VIC State:\n");
+    dump_vic_state(dev);
+
+out:
+    // Update status flag as seen in OEM code before enabling IRQs
+    if (ret == 0) {
+        dev->vic_status = 4;  // Matches OEM status update
+    }
+    return ret;
+}
+
 
 /* Power management */
 int isp_power_on(struct IMPISPDev *dev)
@@ -629,8 +871,10 @@ int tx_isp_init_memory(struct IMPISPDev *dev)
     }
 
     /* Store DMA info */
-    dev->dma_addr = aligned_base;
-    dev->dma_size = aligned_size;
+    dev->rmem_addr = aligned_base;
+    dev->rmem_size = aligned_size;
+    dev->dma_sensor_addr = aligned_base;
+    dev->dma_buffer_addr = aligned_base + DMA_BUFFER_OFFSET;
 
     /* Setup parameter region (0x1000 offset) */
     mem_offset = ALIGN(0x1000, 32);
@@ -655,9 +899,9 @@ int tx_isp_init_memory(struct IMPISPDev *dev)
              "  Virtual: %p\n"
              "  Size: %zu bytes\n"
              "  Params: %p\n",
-             (uint32_t)dev->dma_addr,
+             (uint32_t)dev->rmem_addr,
              dev->dma_buf,
-             dev->dma_size,
+             dev->rmem_size,
              dev->param_virt);
 
     return 0;
@@ -680,15 +924,15 @@ void tx_isp_cleanup_memory(struct IMPISPDev *dev)
     }
 
     /* Release memory regions */
-    if (dev->dma_addr) {
-        devm_release_mem_region(dev->dev, dev->dma_addr, dev->dma_size);
-        dev->dma_addr = 0;
+    if (dev->rmem_addr) {
+        devm_release_mem_region(dev->dev, dev->rmem_addr, dev->rmem_size);
+        dev->rmem_addr = 0;
     }
 
     /* Clear memory info */
     dev->param_virt = NULL;
     dev->frame_buf_offset = 0;
-    dev->dma_size = 0;
+    dev->rmem_size = 0;
 }
 
 /* Hardware debug helpers */
