@@ -97,211 +97,525 @@ Current progress:
 
 ```angular2html
 Loading ISP driver...
-ISP Subsystem State:
-Control: 0x00000000
-Status:  0x00000000
-Config:  0x00000000
-ourISPdev allocated at 81fd3000
-Registering platform device with resources
-Registering platform driver
-Starting ISP probe...
-Initial control register: 0x00000000
-Device list initialized: base=81fd3210 entry0=81fd3210 cb=80cb5300
-Configuring ISP clocks using standard API
-Clock rates after configuration:
-  CSI: 125000000 Hz
-  ISP Core: 250000000 Hz
-  CGU ISP: 125000000 Hz
-  IPU: 250000000 Hz
-tx_isp: Reserved memory initialized:
-  Physical address: 0x02a80000 (aligned)
-  Virtual address: a2a80000
-  Size: 22544384 bytes
-  Alignment check: base=0x0 buf=0x0
-Memory regions:
-  Params: a2a81000
-  WDR: a2a82000
-Setting up I2C infrastructure for SC2336...
-I2C infrastructure ready for SC2336 sensor at address 0x30
-Starting tisp_driver_init...
-tisp-driver tisp-driver: tparams_day and tparams_night buffers allocated successfully
-Loading parameters from file: /etc/sensor/sc2336-t31.bin
-Copying 159736 bytes to destination
-Copy successful
-tisp-driver tisp-driver: Parameters loaded successfully from /etc/sensor/sc2336-t31.bin
-tisp-driver tisp-driver: Applying isp_memopt settings
-tisp-driver tisp-driver: tparams_day written to register successfully
+ourISPdev allocated at 80b30000
+ISP probe called
+tx-isp tx-isp: Reserved memory initialized:
+Physical address: 0x02a80000 (aligned from 0x02a80000)
+Virtual address: a2a80000
+Size: 22544384 bytes (0x01580000)
+Alignment check: base=0x0 buf=0x0
+Starting GPIO config init
+tx-isp tx-isp: GPIO setup: reset=18 pwdn=-1
+Starting hw resources init
+Starting IRQ handler init
+IRQ initialized: number=36 handler=c02ac89c
+Starting memory init
+tx-isp tx-isp: Memory initialized:
+Physical: 0x02a80000
+Virtual: a2a80000
+Size: 22544384 bytes
+Params: a2a81000
+Starting clocks init
+Configuring ISP system clocks
+Clock configuration completed. Rates:
+ISP Core: 250000000 Hz
+CGU ISP: 125000000 Hz
+CSI: 125000000 Hz
+IPU: 250000000 Hz
+Starting proc entries init
+Starting subsystems init
 Starting ISP subsystem initialization
 Initializing AE/AWB subsystems
-Initializing image processing subsystems
-Initializing event system
+TODO Initializing image processing subsystems
 ISP subsystem initialization complete
-Setting up ISP subdevices start
-Allocated subdev state: 80c97300
-Allocated source pad: 80c97d00
-Allocated sink pad: 80c97d80
-Subdev setup complete:
-  sd=80c97300 src_pad=80c97d00 sink_pad=80c97d80
 Creating frame channel devices...
+Initialized frame source 0:
+width=1920 height=1080
+Initialized frame source 1:
+width=1920 height=1080
+Initialized frame source 2:
+width=1920 height=1080
+Initialized frame source 3:
+width=1920 height=1080
+Initialized frame source 4:
+width=1920 height=1080
+Initialized frame source 5:
+width=1920 height=1080
 Created device framechan0: major=251, minor=0
 Created device framechan1: major=251, minor=1
 Created device framechan2: major=251, minor=2
+Created device framechan3: major=251, minor=3
+Created device framechan4: major=251, minor=4
+Created device framechan5: major=251, minor=5
 Frame channel devices created successfully
-ISP probe completed successfully
-ISP firmware process started
-ISP driver loaded successfully
-ISP device open called from pid 2408
-Buffer calculations:
-  RMEM base: 0x02a80000
-  Base offset: 0x001094e0 (aligned from 0x1094d4)
-  Width: 1920, Height: 1080
-  Stride: 1920, Buffer size: 3110400
-Final addresses (alignment check):
-  DMA addr: 0x02b894e0 (mask: 0x0)
-  Virtual: a2b894e0 (mask: 0x0)
-  Buffer: stride=1920 size=3110400 count=4
-ISP opened: file=80c1c7d0 fs=81fd32f5 instance=80bd5a00 fd=6
+Mapping I/O regions:
+MIPI PHY: 0x10022000
+ISP W01: 0x10023000
+Initial CPM state:
+CLKGR: 0x094f5f80
+CLKGR1: 0x000033a2
+Initial register readings:
+W01 0x00: 0x3130322a
+W01 0x04: 0x00000001
+W01 0x08: 0x00000000
+PHY 0x00: 0x00000000
+PHY 0x04: 0x00000000
+After test write:
+W01 0x04: 0x00000001
+PHY 0x04: 0x00000000
+After test write:
+W01 0x04: 0x00000001
+PHY 0x04: 0x00000000
+T31 CSI: Configuring for SC2336...
+T31 CSI configured:
+PHY state: 0x00000630
+ERR1: 0x00000000
+ERR2: 0x00000000
+Starting I2C init
+Setting up I2C infrastructure for SC2336...
+I2C sensor initialized: addr=0x30 adapter=8223ac10
+Initial sensor reset...
+Resetting sensor via GPIO 18
+Initializing VIC control...
+Disabling VIC IRQs
+VIC IRQ 36 registered with handler c02ac73c
+VIC Configuration:
+Control:     0x00000001
+IRQ Enable:  0x00000000
+Frame Ctrl:  0x00000000
+Int Mask:    0x00000000
+IRQ Status:  0x00000000
+Status:      0x00000000
+Starting sub device init
+Creating ISP subdevices...
+tx-isp tx-isp: ISP subdevices registered successfully
+tx-isp tx-isp: TX-ISP probe completed successfully
+CSI probe starting
+Mapping I/O regions:
+MIPI PHY: 0x10022000
+ISP W01: 0x10023000
+MIPI PHY region already claimed
+ISP W01 region already claimed
+Initial CPM state:
+CLKGR: 0x094f5f80
+CLKGR1: 0x000033a2
+Initial register readings:
+W01 0x00: 0x3130322a
+W01 0x04: 0x00000001
+W01 0x08: 0x00000001
+PHY 0x00: 0x00000001
+PHY 0x04: 0x000000e3
+After test write:
+W01 0x04: 0x00000001
+PHY 0x04: 0x000000aa
+After test write:
+W01 0x04: 0x00000001
+PHY 0x04: 0x000000aa
+T31 CSI: Configuring for SC2336...
+T31 CSI configured:
+PHY state: 0x00000630
+ERR1: 0x00000000
+ERR2: 0x00000000
+****>>>>> dump csi reg <<<<<****
+VERSION = 3130322a
+N_LANES = 00000001
+PHY_SHUTDOWNZ = 00000001
+DPHY_RSTZ = 00000001
+CSI2_RESETN = 00000001
+PHY_STATE = 00000630
+DATA_IDS_1 = 0000002b
+DATA_IDS_2 = 00000000
+ERR1 = 00000000
+ERR2 = 00000000
+MASK1 = 000f0000
+MASK2 = 00ff0000
+PHY_TST_CTRL0 = 00000000
+PHY_TST_CTRL1 = 00000001
+CSI probe completed successfully
+VIC probe called for device 80b30000
+VIC probe complete: regs=b3307800
+VIN probe called for device 80b30000
+VIN probe complete
+Core probe called
+Initial ctrl reg value: 0x54560031
+Read back value after enable: 0x54560031
+Core probe complete: dev=80b30000 reg_base=b3300000
+Frame source probe called
+Initialized input pad 0: 80b3e900
+Initialized input pad 1: 80b3e924
+Initialized input pad 2: 80b3e948
+Initialized input pad 3: 80b3e96c
+Initialized input pad 4: 80b3e990
+Initialized input pad 5: 80b3e9b4
+Initialized output pad 0: 80b3ea00
+Initialized output pad 1: 80b3ea24
+Initialized output pad 2: 80b3ea48
+Initialized output pad 3: 80b3ea6c
+Initialized output pad 4: 80b3ea90
+Initialized output pad 5: 80b3eab4
+Frame source probe complete: dev=80b30000 sd=80b3e800 fs_pdev=80b3e500
+Initialized with 6 input pads and 6 output pads
+ISP Subsystem State:
+Control: 0x54560031
+Status:  0x00000000
+Config:  0x00000001
+ISP driver and submodules loaded successfully
+Starting subdev init for sc2336
+No additional clocks needed for subdev sc2336
+Created channel data for input pad 0
+Created channel 0 for pad 0
+Using register base: b3300000
+Module initialized: sc2336 (in:1 out:1)
+Subdev initialized successfully
+ISP device open called from pid 2132
+ISP opened: file=818cd918 fd=0
 ISP IOCTL called: cmd=0x805056c1
 
 === IOCTL Debug ===
-cmd=0x805056c1 arg=0x77160c80
-file=808cab40 flags=0x2002 
-SC2336: ID = 0xcb3a
+cmd=0x805056c1 arg=0x77b95ce0
+file=820a05a0 flags=0x2002
 ISP IOCTL called: cmd=0xc050561a
 
 === IOCTL Debug ===
-cmd=0xc050561a arg=0x7f979b28
-file=808cab40 flags=0x2002 
+cmd=0xc050561a arg=0x7fa38ca8
+file=820a05a0 flags=0x2002
 Provided sensor info for index 0: sc2336
 ISP IOCTL called: cmd=0xc050561a
 
 === IOCTL Debug ===
-cmd=0xc050561a arg=0x7f979b28
-file=808cab40 flags=0x2002 
+cmd=0xc050561a arg=0x7fa38ca8
+file=820a05a0 flags=0x2002
 ISP IOCTL called: cmd=0xc0045627
 
 === IOCTL Debug ===
-cmd=0xc0045627 arg=0x7f979b80
-file=808cab40 flags=0x2002 
+cmd=0xc0045627 arg=0x7fa38d00
+file=820a05a0 flags=0x2002
+Sensor command: 0xc0045627
 Sensor command: 0xc0045627
 Stored sensor name: sc2336
 ISP IOCTL called: cmd=0x800856d5
 
 === IOCTL Debug ===
-cmd=0x800856d5 arg=0x7f979b78
-file=808cab40 flags=0x2002 
-tx_isp: SET_BUF request: method=0x203a726f phys=0x33326373 size=0xfbc488f3
-tx_isp: SET_BUF request: method=0x203a726f phys=0x33326373 size=0xfbc488f3
-tx_isp: Magic allocation setup: phys=0x2a80000 virt=a2a80000 size=0x1580000
+cmd=0x800856d5 arg=0x7fa38cf8
+file=820a05a0 flags=0x2002
 ISP IOCTL called: cmd=0x800856d4
 
 === IOCTL Debug ===
-cmd=0x800856d4 arg=0x7f979b78
-file=808cab40 flags=0x2002 
+cmd=0x800856d4 arg=0x7fa38cf8
+file=820a05a0 flags=0x2002
 tx_isp: Handling ioctl VIDIOC_SET_BUF_INFO
 Buffer info before update: method=0x33326373 phys=0x3633 size=0
 Buffer info after update:
-  method=0x1
-  phys=0x2a80000
-  virt=a2a80000
-  size=22544384
-  flags=0x1
+method=0x0
+phys=0x2e80000
+virt=a2e80000
+size=18350080
+flags=0x1
 tx_isp: Buffer setup completed successfully
 ISP IOCTL called: cmd=0x40045626
 
 === IOCTL Debug ===
-cmd=0x40045626 arg=0x7f979b90
-file=808cab40 flags=0x2002 
+cmd=0x40045626 arg=0x7fa38d10
+file=820a05a0 flags=0x2002
 ISP IOCTL called: cmd=VIDIOC_GET_SENSOR_INFO
 Sensor info request: returning success (1)
 ISP IOCTL called: cmd=0x80045612
 
 === IOCTL Debug ===
 cmd=0x80045612 arg=0x0
-file=808cab40 flags=0x2002 
+file=820a05a0 flags=0x2002
+Sensor command: 0x80045612
+Sensor command: 0x80045612
 Sensor command: 0x80045612
 Sensor streamon
-Preparing streaming configuration...
-Setting up ISP NV12 buffers ch0:
-  Dimensions: 1920x1080
-  Y: addr=0x2b894e0 stride=1920
-  UV: addr=0x2d838e0 stride=960
-****>>>>> dump csi reg <<<<<****
-VERSION = 00000000
-N_LANES = 00000000
-PHY_SHUTDOWNZ = 00000001
-DPHY_RSTZ = 00000001
-CSI2_RESETN = 00000001
-PHY_STATE = 00000100
-DATA_IDS_1 = 00000001
-DATA_IDS_2 = 0000000c
-ERR1 = 00ffffff
-ERR2 = 00000000
-MASK1 = 00000100
-MASK2 = 00400040
-PHY_TST_CTRL0 = 00000000
-PHY_TST_CTRL1 = 00000000
+Lane Enable write: wrote 0x3, readback: 0x00000000
+CSI Final State:
+PHY state: 0x00000630
+N_LANES: 0x00000001
+Lane Enable: 0x00000000
+Data Format: 0x0000002b
+ERR1: 0x00000000
+ERR2: 0x00000000
+Resetting sensor via GPIO 18
 ISP IOCTL called: cmd=0x800456d0
 
 === IOCTL Debug ===
-cmd=0x800456d0 arg=0x7f979b90
-file=808cab40 flags=0x2002 
-Creating ISP links with enable=0
+cmd=0x800456d0 arg=0x7fa38d10
+file=820a05a0 flags=0x2002
+Starting link setup IOCTL
+Setting up video link 0 (subdev=80b3e800)
+num_inpads=6 num_outpads=6
+Setting up link 1 of 2
+Looking up source pad for tx-isp-csi (type=1 index=0)
+Looking up pad: subdev=80b3e800 cfg=c02b9964
+Pad lookup for tx-isp-csi:
+type=1 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Found pad but no channel data, reinitializing...
+Created missing channel data for pad 0
+Looking up sink pad for tx-isp-vic (type=0 index=0)
+Looking up pad: subdev=80b3e800 cfg=80b69d38
+Pad lookup for tx-isp-vic:
+type=0 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Link established: src=80b3ea00 sink=80b3ea00
+Setting up link 2 of 2
+Looking up source pad for tx-isp-vic (type=1 index=0)
+Looking up pad: subdev=80b3e800 cfg=c02b9978
+Pad lookup for tx-isp-vic:
+type=1 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Looking up sink pad for tx-isp-ddr (type=0 index=0)
+Looking up pad: subdev=80b3e800 cfg=80b69d38
+Pad lookup for tx-isp-ddr:
+type=0 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Link established: src=80b3ea00 sink=80b3ea00
+Video link setup completed successfully
 ISP IOCTL called: cmd=0x800456d2
 
 === IOCTL Debug ===
 cmd=0x800456d2 arg=0x0
-file=808cab40 flags=0x2002 
-ISP state transition: 3 -> 4
-Initial ctrl: 0x00000000
-Stream enabled, count=2
+file=820a05a0 flags=0x2002
+Enabling stream
+VIC state after link op 0x800456d2:
+Route: 0x00000000
+Enable: 0x20151120
+Mask: 0x00000000
+ISP M0 device opened, tuning_data=822d4e00
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+GET operation
+Get control: cmd=0x80000e0 value=-9
+Get FPS
+ISP m0 IOCTL called: cmd=0xc008561b
+Direct GET/SET operation
+ISP m0 IOCTL called: cmd=0xc008561b
+Direct GET/SET operation
+ISP m0 IOCTL called: cmd=0xc008561c
+Direct GET/SET operation
+SET operation
+ISP m0 IOCTL called: cmd=0xc008561c
+Direct GET/SET operation
+SET operation
+ISP m0 IOCTL called: cmd=0xc008561c
+Direct GET/SET operation
+SET operation
+ISP m0 IOCTL called: cmd=0xc008561c
+Direct GET/SET operation
+SET operation
+ISP m0 IOCTL called: cmd=0xc008561c
+Direct GET/SET operation
+SET operation
+ISP m0 IOCTL called: cmd=0xc008561c
+Direct GET/SET operation
+SET operation
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+GET operation
+ISP m0 IOCTL called: cmd=0xc008561c
+Direct GET/SET operation
+SET operation
+ISP m0 IOCTL called: cmd=0xc008561c
+Direct GET/SET operation
+SET operation
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+SET operation
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+SET operation
+ISP m0 IOCTL called: cmd=0xc008561c
+Direct GET/SET operation
+SET operation
+ISP m0 IOCTL called: cmd=0xc008561c
+Direct GET/SET operation
+SET operation
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+SET operation
 ISP IOCTL called: cmd=0x800456d3
 
 === IOCTL Debug ===
 cmd=0x800456d3 arg=0x0
-file=808cab40 flags=0x2002 
-Disabling ISP links
+file=820a05a0 flags=0x2002
+Processing link disable IOCTL
+Looking up pad: subdev=80b3e800 cfg=c02b9964
+Pad lookup for tx-isp-csi:
+type=1 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Looking up pad: subdev=80b3e800 cfg=c02b9978
+Pad lookup for tx-isp-vic:
+type=1 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
 ISP IOCTL called: cmd=0x800456d1
 
 === IOCTL Debug ===
-cmd=0x800456d1 arg=0x7f979b90
-file=808cab40 flags=0x2002 
-Destroying ISP links
-Opened framechan0: fs=81fd32f5 base=a2b894e0
-Frame channel IOCTL: cmd=0xc07056c3 arg=0x75279828
-Channel attr request: enable=1 format=0x3231564e size=1920x1080
-Channel 0 enabled: 1920x1080 fmt=0x3231564e size=3110400 state=2
-Frame channel IOCTL: cmd=0xc0145608 arg=0x752798f8
-Set frame depth: channel=1 depth=1
-Frame depth set: channel=1 depth=1 buf_size=3110400
-Channel 0 configured: 1920x1080 fmt=0x3231564e size=3110400 state=2
-DMA config: addr=0x02b894e0 base=a2b894e0 size=3110400 flags=0x0
-Frame channel IOCTL: cmd=0x80045612 arg=0x75279914
-Stream ON request for channel 0
-Channel 0 already streaming
-Opened framechan1: fs=81fd33ad base=a3b5b4d4
-Frame channel IOCTL: cmd=0xc07056c3 arg=0x7511a828
-Channel attr request: enable=1 format=0x3231564e size=640x360
-Channel 0 enabled: 640x360 fmt=0x3231564e size=345600 state=1
-Frame channel IOCTL: cmd=0xc0145608 arg=0x7511a8f8
-Set frame depth: channel=1 depth=1
-Frame depth set: channel=1 depth=1 buf_size=345600
-Channel 0 configured: 640x360 fmt=0x3231564e size=345600 state=1
-DMA config: addr=0x03b5b4d4 base=a3b5b4d4 size=345600 flags=0x1
-Frame channel IOCTL: cmd=0x80045612 arg=0x7511a914
-Stream ON request for channel 0
-Channel 0 streaming started:
-  base=0x3b5b4d4 offset=0xfd2000
-  buf_size=345600 count=4
-  ctrl=0x1 start=0x1
-cgu_set_rate, parent = 1008000000, rate = 4096000, n = 7875, reg val = 0x22001ec3
-codec_codec_ctl: set sample rate...
-codec_codec_ctl: set device...
-codec_set_device: set device: MIC...
-
-=== ISP Release Debug ===
-file=808cab40 flags=0x2002 fd=-1
-codec_codec_ctl: set CODEC_TURN_OFF...
+cmd=0x800456d1 arg=0x7fa38d10
+file=820a05a0 flags=0x2002
+Link destroy entry: arg=7fa38d10 dev=80b30000 state=0
+Destroying link configuration 0 with 2 links
+Looking up pad: subdev=80b3e800 cfg=c02b9964
+Pad lookup for tx-isp-csi:
+type=1 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Looking up pad: subdev=80b3e800 cfg=80b69d38
+Pad lookup for tx-isp-vic:
+type=0 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Looking up pad: subdev=80b3e800 cfg=c02b9978
+Pad lookup for tx-isp-vic:
+type=1 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Looking up pad: subdev=80b3e800 cfg=80b69d38
+Pad lookup for tx-isp-ddr:
+type=0 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Link configuration destroyed successfully
+Link destroy result: ret=0 new_state=-1
+ISP m0 IOCTL called: cmd=0xc008561c
+Direct GET/SET operation
+SET operation
+ISP m0 IOCTL called: cmd=0xc008561c
+Direct GET/SET operation
+SET operation
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+SET operation
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+SET operation
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+SET operation
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+SET operation
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+SET operation
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+SET operation
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+SET operation
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+SET operation
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+SET operation
+Channel 0 buffers initialized:
+Virtual base: a2a80000
+Physical base: 0x02a80000
+Buffer size: 3112960 bytes
+Stride: 1920 bytes
+Total size: 12451840 bytes
+Number of buffers: 4
+Looking up pad: subdev=80b3e800 cfg=c02b9964
+Pad lookup for tx-isp-csi:
+type=1 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Looking up pad: subdev=80b3e800 cfg=81635ce0
+Pad lookup for tx-isp-vic:
+type=0 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Linking pads for channel 0: src=80b3ea00 sink=80b3ea00
+Found CSI->VIC link for channel 0
+Looking up pad: subdev=80b3e800 cfg=c02b9978
+Pad lookup for tx-isp-vic:
+type=1 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Looking up pad: subdev=80b3e800 cfg=81635ce0
+Pad lookup for tx-isp-ddr:
+type=0 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Linking pads for channel 0: src=80b3ea00 sink=80b3ea00
+Channel 0 opened and configured successfully
+VIDIOC_S_FMT: arg=0x75cae828
+Format entry
+Size calculation for channel 0: base=3110400 metadata=23040 total=3133440
+Updated format for channel 0:
+Width: 1920 (aligned: 1920)
+Height: 1080
+Final size: 3133440
+Stride: 1920
+Allocated 1 buffers for channel 0
+Framechan Streamon command: 0x80045612
+Streaming enabled for channel 0 (res: 1920x1080 state=4)
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+GET operation
+Channel 1 buffers initialized:
+Virtual base: a2bd4000
+Physical base: 0x02bd4000
+Buffer size: 348160 bytes
+Stride: 640 bytes
+Total size: 1392640 bytes
+Number of buffers: 4
+Looking up pad: subdev=80b3e800 cfg=c02b9928
+Pad lookup for tx-isp-csi:
+type=1 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Looking up pad: subdev=80b3e800 cfg=81697ce0
+Pad lookup for tx-isp-vic:
+type=0 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Linking pads for channel 1: src=80b3ea00 sink=80b3ea00
+Found CSI->VIC link for channel 1
+Looking up pad: subdev=80b3e800 cfg=c02b993c
+Pad lookup for tx-isp-vic:
+type=1 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Looking up pad: subdev=80b3e800 cfg=81697ce0
+Pad lookup for tx-isp-ddr:
+type=0 index=0
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Linking pads for channel 1: src=80b3ea00 sink=80b3ea00
+Looking up pad: subdev=80b3e800 cfg=c02b9950
+Pad lookup for tx-isp-vic:
+type=1 index=1
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Found pad but no channel data, reinitializing...
+Created missing channel data for pad 1
+Looking up pad: subdev=80b3e800 cfg=81697ce0
+Pad lookup for tx-isp-ddr:
+type=0 index=1
+inpads=80b3e900 (count=6)
+outpads=80b3ea00 (count=6)
+Linking pads for channel 1: src=80b3ea24 sink=80b3ea24
+Channel 1 opened and configured successfully
+VIDIOC_S_FMT: arg=0x75b9d828
+Format entry
+Size calculation for channel 1: base=345600 metadata=7680 total=353280
+Updated format for channel 1:
+Width: 640 (aligned: 640)
+Height: 360
+Final size: 353280
+Stride: 640
+Allocated 1 buffers for channel 1
+Framechan Streamon command: 0x80045612
+Streaming enabled for channel 1 (res: 640x360 state=4)
 ```
 
 And on the streamer side:
