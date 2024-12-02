@@ -105,116 +105,164 @@ int tx_vic_irq_init(struct vic_dev *dev,
     return 0;
 }
 
+static void tx_isp_store_periph_clock(struct IMPISPDev *dev, struct clk *clk)
+{
+    struct periph_clock *periph;
+    unsigned long flags;
+
+    periph = kzalloc(sizeof(*periph), GFP_KERNEL);
+    if (!periph) {
+        pr_err("Failed to allocate peripheral clock storage\n");
+        return;
+    }
+
+    periph->clk = clk;
+    INIT_LIST_HEAD(&periph->list);
+
+    spin_lock_irqsave(&dev->clock_lock, flags);
+    list_add_tail(&periph->list, &dev->periph_clocks);
+    spin_unlock_irqrestore(&dev->clock_lock, flags);
+}
+
+/* Add this cleanup function to your driver cleanup path */
+static void tx_isp_cleanup_periph_clocks(struct IMPISPDev *dev)
+{
+    struct periph_clock *periph, *tmp;
+    unsigned long flags;
+
+    spin_lock_irqsave(&dev->clock_lock, flags);
+    list_for_each_entry_safe(periph, tmp, &dev->periph_clocks, list) {
+        clk_disable_unprepare(periph->clk);
+        clk_put(periph->clk);
+        list_del(&periph->list);
+        kfree(periph);
+    }
+    spin_unlock_irqrestore(&dev->clock_lock, flags);
+}
+
+/* Hardware initialization and management */
 /* Hardware initialization and management */
 int configure_isp_clocks(struct IMPISPDev *dev)
 {
+    struct device *device = dev->dev;
+    struct device_node *np = device->of_node;
     int ret;
 
-    pr_info("Configuring ISP clocks using standard API\n");
+    pr_info("Configuring ISP system clocks\n");
 
-    // Step 1: Get CSI clock
-    dev->csi_clk = clk_get(dev->dev, "csi");
-    if (!IS_ERR(dev->csi_clk)) {
-        ret = clk_prepare_enable(dev->csi_clk);
-        if (ret) {
-            pr_err("Failed to enable CSI clock\n");
-            goto err_put_csi;
-        }
-    }
-
-    // Step 2: Get IPU clock
-    dev->ipu_clk = clk_get(dev->dev, "ipu");
-    if (IS_ERR(dev->ipu_clk)) {
-        pr_warn("IPU clock not available\n");
-        dev->ipu_clk = NULL;
-    }
-
-    // Step 3: Get ISP core clock
-    dev->isp_clk = clk_get(dev->dev, "isp");
+    /* Core clocks - Critical for ISP operation */
+    dev->isp_clk = devm_clk_get(device, "isp");
     if (IS_ERR(dev->isp_clk)) {
         ret = PTR_ERR(dev->isp_clk);
-        pr_err("Failed to get ISP clock: %d\n", ret);
-        dev->isp_clk = NULL;
+        pr_err("Failed to get ISP core clock: %d\n", ret);
         return ret;
     }
 
-    // Step 4: Get CGU ISP clock
-    dev->cgu_isp = clk_get(dev->dev, "cgu_isp");
+    dev->cgu_isp = devm_clk_get(device, "cgu_isp");
     if (IS_ERR(dev->cgu_isp)) {
         ret = PTR_ERR(dev->cgu_isp);
         pr_err("Failed to get CGU ISP clock: %d\n", ret);
-        dev->cgu_isp = NULL;
-        goto err_put_isp;
+        return ret;
     }
 
-    // Step 5: Enable CGU ISP clock first
+    /* Set and enable CGU ISP clock first */
     ret = clk_set_rate(dev->cgu_isp, T31_CGU_ISP_FREQ);
     if (ret) {
         pr_err("Failed to set CGU ISP clock rate: %d\n", ret);
-        goto err_put_cgu;
+        return ret;
     }
+
     ret = clk_prepare_enable(dev->cgu_isp);
     if (ret) {
         pr_err("Failed to enable CGU ISP clock: %d\n", ret);
-        goto err_put_cgu;
+        return ret;
     }
 
-    // Step 6: Enable ISP core clock
+    /* Enable ISP core clock */
     ret = clk_prepare_enable(dev->isp_clk);
     if (ret) {
-        pr_err("Failed to enable ISP clock: %d\n", ret);
+        pr_err("Failed to enable ISP core clock: %d\n", ret);
         goto err_disable_cgu;
     }
 
-    // Step 7: Enable IPU clock if available
-    if (dev->ipu_clk) {
+    /* Optional system clocks */
+    dev->csi_clk = devm_clk_get(device, "csi");
+    if (!IS_ERR(dev->csi_clk)) {
+        ret = clk_prepare_enable(dev->csi_clk);
+        if (ret) {
+            pr_warn("Failed to enable CSI clock: %d\n", ret);
+            dev->csi_clk = NULL;
+        }
+    } else {
+        dev->csi_clk = NULL;
+    }
+
+    dev->ipu_clk = devm_clk_get(device, "ipu");
+    if (!IS_ERR(dev->ipu_clk)) {
         ret = clk_prepare_enable(dev->ipu_clk);
         if (ret) {
-            pr_warn("Failed to enable IPU clock\n");
+            pr_warn("Failed to enable IPU clock: %d\n", ret);
+            dev->ipu_clk = NULL;
         }
+    } else {
+        dev->ipu_clk = NULL;
     }
 
-    // Step 8: Enable additional peripheral clocks (e.g., LCD, AES)
-    struct clk *lcd_clk = clk_get(dev->dev, "lcd");
-    if (!IS_ERR(lcd_clk)) {
-        clk_prepare_enable(lcd_clk);
-        clk_set_rate(lcd_clk, 250000000);
+    /* Optional peripheral clocks from device tree */
+    struct device_node *clk_node;
+    const char *clk_name;
+    u32 clk_rate;
+
+    for_each_child_of_node(np, clk_node) {
+        if (of_property_read_string(clk_node, "clock-name", &clk_name))
+            continue;
+
+        struct clk *periph_clk = devm_clk_get(device, clk_name);
+        if (IS_ERR(periph_clk)) {
+            pr_warn("Optional clock %s not available\n", clk_name);
+            continue;
+        }
+
+        if (!of_property_read_u32(clk_node, "clock-rate", &clk_rate)) {
+            ret = clk_set_rate(periph_clk, clk_rate);
+            if (ret) {
+                pr_warn("Failed to set %s clock rate: %d\n", clk_name, ret);
+                continue;
+            }
+        }
+
+        ret = clk_prepare_enable(periph_clk);
+        if (ret) {
+            pr_warn("Failed to enable %s clock: %d\n", clk_name, ret);
+            continue;
+        }
+
+        // Store enabled peripheral clocks in a list if needed for cleanup
+        tx_isp_store_periph_clock(dev, periph_clk);
     }
 
-    struct clk *aes_clk = clk_get(dev->dev, "aes");
-    if (!IS_ERR(aes_clk)) {
-        clk_prepare_enable(aes_clk);
-        clk_set_rate(aes_clk, 250000000);
-    }
-
-    // Step 9: Verify clock rates
-    pr_info("Clock rates after configuration:\n");
-    pr_info("  CSI: %lu Hz\n", dev->csi_clk ? clk_get_rate(dev->csi_clk) : 0);
+    /* Log configured clock rates */
+    pr_info("Clock configuration completed. Rates:\n");
     pr_info("  ISP Core: %lu Hz\n", clk_get_rate(dev->isp_clk));
     pr_info("  CGU ISP: %lu Hz\n", clk_get_rate(dev->cgu_isp));
-    pr_info("  IPU: %lu Hz\n", dev->ipu_clk ? clk_get_rate(dev->ipu_clk) : 0);
+    if (dev->csi_clk)
+        pr_info("  CSI: %lu Hz\n", clk_get_rate(dev->csi_clk));
+    if (dev->ipu_clk)
+        pr_info("  IPU: %lu Hz\n", clk_get_rate(dev->ipu_clk));
 
     return 0;
 
 err_disable_cgu:
     clk_disable_unprepare(dev->cgu_isp);
-err_put_cgu:
-    clk_put(dev->cgu_isp);
-    dev->cgu_isp = NULL;
-err_put_isp:
-    clk_put(dev->isp_clk);
-    dev->isp_clk = NULL;
-err_put_csi:
-    if (dev->csi_clk) {
-        clk_disable_unprepare(dev->csi_clk);
-        clk_put(dev->csi_clk);
-        dev->csi_clk = NULL;
-    }
     return ret;
 }
 
 void cleanup_isp_clocks(struct IMPISPDev *dev)
 {
+    /* First cleanup peripheral clocks */
+    tx_isp_cleanup_periph_clocks(dev);
+
+    /* Then cleanup core clocks */
     if (dev->cgu_isp) {
         clk_disable_unprepare(dev->cgu_isp);
         clk_put(dev->cgu_isp);
@@ -225,6 +273,19 @@ void cleanup_isp_clocks(struct IMPISPDev *dev)
         clk_disable_unprepare(dev->isp_clk);
         clk_put(dev->isp_clk);
         dev->isp_clk = NULL;
+    }
+
+    /* Cleanup any system clocks if present */
+    if (dev->csi_clk) {
+        clk_disable_unprepare(dev->csi_clk);
+        clk_put(dev->csi_clk);
+        dev->csi_clk = NULL;
+    }
+
+    if (dev->ipu_clk) {
+        clk_disable_unprepare(dev->ipu_clk);
+        clk_put(dev->ipu_clk);
+        dev->ipu_clk = NULL;
     }
 }
 

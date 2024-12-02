@@ -172,12 +172,4 @@ void tx_isp_subdev_deinit(struct tx_isp_subdev *sd);
 #define TX_ISP_PADSTATE_LINKED   1
 #define TX_ISP_PADSTATE_ACTIVE   2
 
-
-enum frame_state {
-    FRAME_STATE_FREE = 0,        // Initial state
-    FRAME_STATE_QUEUED = 1,      // Buffer queued by user
-    FRAME_STATE_DONE = 2,        // Processing complete
-    FRAME_STATE_DEQUEUED = 3,    // Buffer returned to user
-};
-
 #endif /* _TX_ISP_H_ */

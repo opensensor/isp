@@ -71,8 +71,8 @@ static struct device *tisp_device;
 static dev_t tx_sp_dev_number;
 static struct class *tisp_class;
 static struct af_zone_data af_zone_data;
-static uint32_t *g_pools;
-
+static atomic_t frame_done_cnt = ATOMIC_INIT(0);
+static DECLARE_WAIT_QUEUE_HEAD(frame_done_wait);
 
 // Now update the configurations
 static struct tx_isp_link_config config0[] = {
@@ -183,6 +183,11 @@ static inline u64 ktime_get_real_ns(void)
     struct timespec ts;
     ktime_get_real_ts(&ts);
     return timespec_to_ns(&ts);
+}
+
+static inline void get_timestamp(struct timeval *tv)
+{
+    do_gettimeofday(tv);
 }
 
 
@@ -322,77 +327,131 @@ EXPORT_SYMBOL(private_clk_set_rate);
 
 
 // Helper function to calculate proper buffer sizes with alignment
+// Update calculate_buffer_size to enforce proper alignment
 static uint32_t calculate_buffer_size(uint32_t width, uint32_t height, uint32_t format) {
     // For NV12 format
-    if (format == V4L2_PIX_FMT_NV12 || format == 0x23) {
-        // Base size calculation
-        uint32_t y_stride = ALIGN(width, 16);  // Align to 16 bytes instead of 64
-        uint32_t y_size = y_stride * ALIGN(height, 2);
-        uint32_t uv_stride = y_stride;
-        uint32_t uv_size = uv_stride * (ALIGN(height, 2) / 2);
+    if (format == V4L2_PIX_FMT_NV12) {
+        // Align width to 64 bytes for hardware requirements
+        uint32_t aligned_width = ALIGN(width, 64);
+        uint32_t y_size = aligned_width * ALIGN(height, 2);
+        uint32_t uv_size = aligned_width * (ALIGN(height, 2) / 2);
 
-        // Total size without excessive padding
-        uint32_t total_size = y_size + uv_size;
-        return ALIGN(total_size, 4096);  // Page align the final size
+        // Page align the final size
+        return ALIGN(y_size + uv_size, PAGE_SIZE);
+    }
+    return ALIGN(width * height * 2, PAGE_SIZE);
+}
+
+static size_t calculate_buffer_stride(uint32_t width, uint32_t format)
+{
+    size_t stride;
+
+    // For NV12, stride is based on Y plane width
+    if (format == V4L2_PIX_FMT_NV12) {
+        // Align Y plane stride to 16 bytes
+        stride = ALIGN(width, 16);
+    } else {
+        // Default to width alignment for other formats
+        stride = ALIGN(width, 16);
     }
 
-    // Default fallback
-    return width * height * 2;
+    return stride;
 }
 
 static int setup_dma_buffer(struct isp_channel *chn)
 {
     size_t size_per_buffer;
+    unsigned long offset;
+    size_t total_channel_size;
+    void *vaddr;
 
-    if (!chn->dev || !ourISPdev) {
-        pr_err("No device for DMA setup\n");
+    if (!chn || !ourISPdev) {
+        pr_err("No device for buffer setup\n");
         return -EINVAL;
     }
 
-    // Calculate size needed per buffer
-    size_per_buffer = calculate_buffer_size(chn->width, chn->height, chn->fmt);
-    chn->required_size = size_per_buffer;
+    // Calculate size needed for NV12
+    size_per_buffer = (chn->width * chn->height) +       // Y plane
+                     (chn->width * chn->height / 2);     // UV plane
 
-    pr_info("Setting up DMA buffer from rmem: ch=%d size=%zu\n",
-            chn->channel_id, size_per_buffer);
+    // Align each buffer size to page boundary
+    size_per_buffer = ALIGN(size_per_buffer, PAGE_SIZE);
 
-    // Verify we have enough rmem space
-    if (size_per_buffer > ourISPdev->rmem_size) {
-        pr_err("Required buffer size %zu exceeds rmem size %zu\n",
-               size_per_buffer, ourISPdev->rmem_size);
+    // Calculate total size needed for all buffers
+    total_channel_size = size_per_buffer * MAX_BUFFERS;
+
+    // Calculate offset from start of rmem
+    offset = chn->channel_id * ALIGN(total_channel_size, PAGE_SIZE);
+
+    if (offset + total_channel_size > ourISPdev->rmem_size) {
+        pr_err("Channel %d buffers exceed RMEM!\n", chn->channel_id);
+        return -EINVAL;
+    }
+
+    // Map the virtual address for this channel's buffers
+    vaddr = ioremap(ourISPdev->rmem_addr + offset, total_channel_size);
+    if (!vaddr) {
+        pr_err("Failed to map channel %d buffers\n", chn->channel_id);
         return -ENOMEM;
     }
 
-    // Use the pre-allocated rmem
-    chn->dma_addr = ourISPdev->rmem_addr;
-    chn->buf_base = ourISPdev->dma_buf;
+    chn->required_size = size_per_buffer;
+    chn->buf_size = size_per_buffer;
+    chn->buffer_stride = ALIGN(chn->width, 16);  // 16-byte align stride
+    chn->channel_offset = offset;
 
-    pr_info("DMA buffer mapped from rmem:\n"
-            "  Virtual: %p\n"
-            "  Physical: %pad\n"
-            "  Size: %zu\n",
-            chn->buf_base, &chn->dma_addr, size_per_buffer);
+    // Store both physical and virtual addresses
+    chn->dma_addr = ourISPdev->rmem_addr + offset;
+    chn->buf_base = vaddr;
+
+    // Clear all buffers
+    memset(chn->buf_base, 0, total_channel_size);
+
+    pr_info("Channel %d buffers initialized:\n"
+            "  Virtual base: %p\n"
+            "  Physical base: 0x%08x\n"
+            "  Buffer size: %u bytes\n"
+            "  Stride: %u bytes\n"
+            "  Total size: %zu bytes\n"
+            "  Number of buffers: %d\n",
+            chn->channel_id,
+            chn->buf_base,
+            (uint32_t)chn->dma_addr,
+            chn->buf_size,
+            chn->buffer_stride,
+            total_channel_size,
+            MAX_BUFFERS);
 
     return 0;
 }
 
+// Helper to get physical address for a specific buffer
+static dma_addr_t get_buffer_phys(struct isp_channel *chn, int index)
+{
+    if (!chn || index < 0 || index >= MAX_BUFFERS)
+        return 0;
+
+    // Use aligned stride to calculate offset
+    return chn->dma_addr + (index * chn->buffer_stride);
+}
+
+// Helper to get virtual address for a specific buffer
+static void* get_buffer_virt(struct isp_channel *chn, int index)
+{
+    if (!chn || index < 0 || index >= MAX_BUFFERS)
+        return NULL;
+
+    // Use aligned stride to calculate offset
+    return chn->buf_base + (index * chn->buffer_stride);
+}
+
 static int cleanup_buffer(struct isp_channel *chn)
 {
-    struct video_buffer *buf;
+    struct vbm_frame *buf;
     int i;
 
     if (!chn->queue || !chn->meta_dma)
         return 0;
-
-    // Free buffer metadata
-    for (i = 0; i < chn->queue->buf_count; i++) {
-        buf = chn->queue->bufs[i];
-        if (buf && buf->meta) {
-            dma_free_coherent(chn->dev, sizeof(struct frame_metadata),
-                            buf->meta, chn->meta_dma[i]);
-            buf->meta = NULL;
-        }
-    }
 
     kfree(chn->meta_dma);
     chn->meta_dma = NULL;
@@ -638,34 +697,6 @@ out:
     return (result == ISP_ERR_CALLBACK) ? 0 : result;
 }
 
-// Add registration helper
-int register_isp_callback(struct IMPISPDev *dev,
-                         int type,
-                         void *callback_data,
-                         int32_t (*func)(void))
-{
-    struct isp_callback_info *cb_info;
-
-    if (!dev || !callback_data || !func)
-        return -EINVAL;
-
-    cb_info = kzalloc(sizeof(*cb_info), GFP_KERNEL);
-    if (!cb_info)
-        return -ENOMEM;
-
-    cb_info->callback_data = callback_data;
-
-    if (type == ISP_NOTIFY_AE)
-        cb_info->ae_cb = func;
-    else if (type == ISP_NOTIFY_STATS)
-        cb_info->stats_cb = func;
-
-    // Store in device callback list at appropriate offset
-    *(struct isp_callback_info **)((char *)dev + 0x38) = cb_info;
-
-    return 0;
-}
-
 /*
  * Initialize an ISP module
  * @pdev: Platform device containing module info
@@ -771,35 +802,26 @@ static int tx_isp_csi_ioctl(struct IMPISPDev *dev, int cmd)
 }
 
 // Add proc handler for isp-w02 frame count
-static int isp_w02_show(struct seq_file *m, void *v)
+static int isp_w02_show(struct seq_file *seq, void *v)
 {
-    struct isp_channel *chn = m->private;
-    struct video_buffer *buf;
-    u32 frame_count = 0;
-    unsigned long flags;
+    struct isp_proc_data *data = seq->private;
+    struct IMPISPDev *dev = data->dev;
+    void *node;
+    uint32_t count;
 
-    if (!chn) {
-        seq_puts(m, "Error: ISP device not initialized\n");
-        return 0;
-    }
+    // Get node from offset 0x70 and then 0x3c like the decompiled code
+    node = *(void **)(dev + 0x70);
+    if (!node || (unsigned long)node >= 0xfffff001)
+        return seq_printf(seq, "Can't ops the node!\n");
 
-    // Lock queue for consistent count
-    mutex_lock(&chn->queue->lock);
-    spin_lock_irqsave(&chn->queue->queue_lock, flags);
+    node = *(void **)(node + 0x3c);
+    if (!node || (unsigned long)node >= 0xfffff001)
+        return seq_printf(seq, "Can't ops the node!\n");
 
-    // Count frames in ready list
-    if (!list_empty(&chn->queue->ready_list)) {
-        list_for_each_entry(buf, &chn->queue->ready_list, list) {
-            if (!(buf->flags & V4L2_BUF_FLAG_DONE)) {
-                frame_count++;
-            }
-        }
-    }
+    // This appears to be reading some kind of frame/vic count
+    count = readl(node + 0xd4);
+    seq_printf(seq, "%d\n", count);
 
-    spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
-    mutex_unlock(&chn->queue->lock);
-
-    seq_printf(m, "%u\n", frame_count);
     return 0;
 }
 
@@ -893,7 +915,6 @@ static int handle_tuning_state_change(struct IMPISPDev *dev, bool enable)
 
     return 0;
 }
-
 static int isp_core_tuning_open(struct IMPISPDev *dev)
 {
     struct isp_tuning_data *tuning = dev->tuning_data;
@@ -902,7 +923,7 @@ static int isp_core_tuning_open(struct IMPISPDev *dev)
     pr_info("##### %s %d #####\n", __func__, __LINE__);
 
     // Make sure we have tuning data allocated
-    if (!tuning)
+    if (!tuning || !dev->reg_base)
         return -EINVAL;
 
     // Don't touch userspace mutex here - it's managed by IMP_ISP_EnableTuning()
@@ -910,13 +931,11 @@ static int isp_core_tuning_open(struct IMPISPDev *dev)
     // Just set state to match userspace
     tuning->state = 2;  // Enabled state
 
-    // Map registers if needed
+    // Use offset from main register mapping instead of separate ioremap
+    tuning->regs = dev->reg_base + 0x80000;  // Maps to 0x13380000
     if (!tuning->regs) {
-        tuning->regs = ioremap(0x13380000, 0x1b000);
-        if (!tuning->regs) {
-            pr_err("Failed to map tuning registers\n");
-            return -ENOMEM;
-        }
+        pr_err("Failed to access tuning registers\n");
+        return -ENOMEM;
     }
 
     // Set default tuning values
@@ -925,7 +944,8 @@ static int isp_core_tuning_open(struct IMPISPDev *dev)
     tuning->saturation = 128;
     tuning->sharpness = 128;
 
-    pr_info("ISP tuning initialized: %p\n", dev->tuning_data);
+    pr_info("ISP tuning initialized: %p reg_base=%p tuning_regs=%p\n",
+            dev->tuning_data, dev->reg_base, tuning->regs);
     return ret;
 }
 
@@ -1165,49 +1185,49 @@ static long frame_channel_vidioc_get_fmt(struct isp_channel *chn, void __user *a
     return 0;
 }
 
-static int isp_get_ae_zone(struct IMPISPDev *dev, struct isp_tuning_ctrl *ctrl)
-{
-    struct ae_zone_info info;
-    void *hist_buf;
-    int ret = 0;
-
-    if (!ctrl->data) {
-        pr_err("No data pointer for AE zone\n");
-        return -EINVAL;
-    }
-
-    // Allocate temporary buffer for histogram data
-    hist_buf = kzalloc(0x42c, GFP_KERNEL);
-    if (!hist_buf) {
-        pr_err("Failed to allocate ae_hist buffer\n");
-        return -ENOMEM;
-    }
-
-    // Get AE histogram data
-    tisp_g_ae_hist(hist_buf);
-
-    // Copy data from histogram buffer to info structure
-    info.additional[0] = *((u8 *)(hist_buf + 0x414));
-    info.additional[1] = *((u8 *)(hist_buf + 0x418));
-    info.additional[2] = *((u8 *)(hist_buf + 0x41c));
-    info.additional[3] = *((u8 *)(hist_buf + 0x420));
-
-    info.metrics[0] = *((u16 *)(hist_buf + 0x400));
-    info.metrics[1] = *((u16 *)(hist_buf + 0x404));
-    info.metrics[2] = *((u16 *)(hist_buf + 0x408));
-    info.metrics[3] = *((u16 *)(hist_buf + 0x40c));
-
-    // Copy zone data to user-provided buffer
-    if (copy_to_user((void __user *)(unsigned long)ctrl->data,
-                     &info, sizeof(info))) {
-        ret = -EFAULT;
-                     } else {
-                         ctrl->value = 1;  // Success
-                     }
-
-    kfree(hist_buf);
-    return ret;
-}
+//static int isp_get_ae_zone(struct IMPISPDev *dev, struct isp_tuning_ctrl *ctrl)
+//{
+//    struct ae_zone_info info;
+//    void *hist_buf;
+//    int ret = 0;
+//
+//    if (!ctrl->data) {
+//        pr_err("No data pointer for AE zone\n");
+//        return -EINVAL;
+//    }
+//
+//    // Allocate temporary buffer for histogram data
+//    hist_buf = kzalloc(0x42c, GFP_KERNEL);
+//    if (!hist_buf) {
+//        pr_err("Failed to allocate ae_hist buffer\n");
+//        return -ENOMEM;
+//    }
+//
+//    // Get AE histogram data
+//    tisp_g_ae_hist(hist_buf);
+//
+//    // Copy data from histogram buffer to info structure
+//    info.additional[0] = *((u8 *)(hist_buf + 0x414));
+//    info.additional[1] = *((u8 *)(hist_buf + 0x418));
+//    info.additional[2] = *((u8 *)(hist_buf + 0x41c));
+//    info.additional[3] = *((u8 *)(hist_buf + 0x420));
+//
+//    info.metrics[0] = *((u16 *)(hist_buf + 0x400));
+//    info.metrics[1] = *((u16 *)(hist_buf + 0x404));
+//    info.metrics[2] = *((u16 *)(hist_buf + 0x408));
+//    info.metrics[3] = *((u16 *)(hist_buf + 0x40c));
+//
+//    // Copy zone data to user-provided buffer
+//    if (copy_to_user((void __user *)(unsigned long)ctrl->data,
+//                     &info, sizeof(info))) {
+//        ret = -EFAULT;
+//                     } else {
+//                         ctrl->value = 1;  // Success
+//                     }
+//
+//    kfree(hist_buf);
+//    return ret;
+//}
 
 
 // Update AF zone function to fill complete info
@@ -1376,8 +1396,92 @@ static long isp_tuning_get_ctrl(struct IMPISPDev *dev, void __user *arg)
     return ret;
 }
 
+
+static int tiziano_bcsh_update(struct isp_tuning_data *tuning)
+{
+    struct IMPISPDev *dev = ourISPdev;
+    uint32_t ev_shifted = tuning->bcsh_ev >> 10;
+    uint32_t interp_values[8];
+    int i;
+
+    // Check if EV is below min threshold
+    if (tuning->bcsh_au32EvList_now[0] > ev_shifted) {
+        // Use minimum values
+        tuning->bcsh_saturation_value = tuning->bcsh_au32SminListS_now[0];
+        tuning->bcsh_saturation_max = tuning->bcsh_au32SmaxListS_now[0];
+        tuning->bcsh_saturation_min = tuning->bcsh_au32SminListM_now[0];
+        tuning->bcsh_saturation_mult = tuning->bcsh_au32SmaxListM_now[0];
+        return 0;
+    }
+
+    // Check if EV is above max threshold
+    if (ev_shifted >= tuning->bcsh_au32EvList_now[8]) {
+        // Use maximum values
+        tuning->bcsh_saturation_value  = tuning->bcsh_au32SminListS_now[8];
+        tuning->bcsh_saturation_max = tuning->bcsh_au32SmaxListS_now[8];
+        tuning->bcsh_saturation_min = tuning->bcsh_au32SminListM_now[8];
+        tuning->bcsh_saturation_mult = tuning->bcsh_au32SmaxListM_now[8];
+        // Set other max values...
+        return 0;
+    }
+
+    // Find interpolation interval
+    for (i = 0; i < 8; i++) {
+        uint32_t ev_low = tuning->bcsh_au32EvList_now[i];
+        uint32_t ev_high = tuning->bcsh_au32EvList_now[i + 1];
+
+        if (ev_shifted >= ev_low && ev_shifted < ev_high) {
+            // Linear interpolation between points
+            uint32_t range = ev_high - ev_low;
+            uint32_t dist = ev_shifted - ev_low;
+            uint32_t weight = (dist << 8) / range;  // Fixed point 8.8
+
+            // Interpolate SminListS
+            uint32_t v1 = tuning->bcsh_au32SminListS_now[i];
+            uint32_t v2 = tuning->bcsh_au32SminListS_now[i + 1];
+            tuning->bcsh_saturation_value = v1 + (((v2 - v1) * weight) >> 8);
+
+            // Interpolate SmaxListS
+            v1 = tuning->bcsh_au32SmaxListS_now[i];
+            v2 = tuning->bcsh_au32SmaxListS_now[i + 1];
+            tuning->bcsh_saturation_max = v1 + (((v2 - v1) * weight) >> 8);
+
+            // Interpolate SminListM
+            v1 = tuning->bcsh_au32SminListM_now[i];
+            v2 = tuning->bcsh_au32SminListM_now[i + 1];
+            tuning->bcsh_saturation_min = v1 + (((v2 - v1) * weight) >> 8);
+
+            // Interpolate SmaxListM
+            v1 = tuning->bcsh_au32SmaxListM_now[i];
+            v2 = tuning->bcsh_au32SmaxListM_now[i + 1];
+            tuning->bcsh_saturation_mult = v1 + (((v2 - v1) * weight) >> 8);
+
+            break;
+        }
+    }
+
+    // Update hardware registers
+    writel(tuning->bcsh_saturation_value, dev->reg_base + BCSH_SVALUE_REG);
+    writel(tuning->bcsh_saturation_max, dev->reg_base + BCSH_SMAX_REG);
+    writel(tuning->bcsh_saturation_min, dev->reg_base + BCSH_SMIN_REG);
+    writel(tuning->bcsh_saturation_mult, dev->reg_base + BCSH_SMAX_M_REG);
+
+    return 0;
+}
+
+
+int tisp_bcsh_saturation(struct isp_tuning_data *tuning, uint8_t value)
+{
+    if (!tuning)
+        return -EINVAL;
+
+    tuning->saturation = value;
+    return tiziano_bcsh_update(tuning);
+}
+
 static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl, void __user *arg)
 {
+    struct IMPISPDev *dev = ourISPdev;
     struct isp_tuning_data *tuning;
     struct isp_flip_ioctl flip_ctrl;
     struct isp_ctrl_msg msg;
@@ -1394,6 +1498,14 @@ static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl, void __user *arg)
     tuning = ourISPdev->tuning_data;
 
     switch (ctrl->cmd) {
+        case 0x80: {  // Gain/contrast control - daemon managed
+            // Just store the value for the daemon to pick up
+            if (copy_to_user(arg, ctrl, sizeof(*ctrl))) {
+                pr_err("Failed to copy gain control to user\n");
+                return -EFAULT;
+            }
+            return 0;
+        }
         case 0x980900:  // Brightness
             tuning->brightness = value;
             pr_info("Set brightness to %d\n", value);
@@ -1405,14 +1517,29 @@ static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl, void __user *arg)
             break;
 
         case 0x980902:  // Saturation
+            if (!tuning)
+                return -EINVAL;
+
+            // Just SET it - we already know this is a SET operation by the IOCTL code
             tuning->saturation = value;
-            pr_info("Set saturation to %d\n", value);
+            ret = tisp_bcsh_saturation(tuning, value);
+            if (ret)
+                return ret;
             break;
 
         case 0x98091b:  // Sharpness
             tuning->sharpness = value;
             pr_info("Set sharpness to %d\n", value);
-            break;
+
+            // Use isp_ctrl_msg structure for copy back
+            msg.cmd = ctrl->cmd;
+            msg.value = value;
+
+            if (copy_to_user(arg, &msg, sizeof(msg))) {
+                pr_err("Failed to copy sharpness control to user\n");
+                return -EFAULT;
+            }
+            return 0;  // Important: return here to skip default copy
 
         case 0x980914:  // HFLIP
         case 0x980915:  // VFLIP
@@ -1431,44 +1558,46 @@ static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl, void __user *arg)
             }
             return 0;
 
-        case ISP_CTRL_BYPASS: {  // 0x8000164
+        case 0x8000164:  { // ISP_CTRL_BYPASS: {
             struct {
                 u32 cmd;
                 u32 value;
             } bypass_ctrl;
             u32 reg_val;
 
-            // Disable links by clearing link enable register
-            writel(0, ourISPdev->reg_base + ISP_LINK_ENABLE_REG);
-            wmb();  // Ensure write completes
+            pr_info("Set bypass mode to %d\n", value);
+
+//            // Disable links by clearing link enable register
+//            writel(0, ourISPdev->reg_base + ISP_LINK_ENABLE_REG);
+//            wmb();  // Ensure write completes
 
             // Set control structure
-//            bypass_ctrl.cmd = ISP_CTRL_BYPASS;
-//            bypass_ctrl.value = ctrl->value;
+            bypass_ctrl.cmd = ISP_CTRL_BYPASS;
+            bypass_ctrl.value = value;
 
-            // Set bypass mode in hardware
-            reg_val = readl(ourISPdev->reg_base + ISP_BYPASS_REG);
-            if (ctrl->value) {
-                reg_val |= BIT(0);  // Enable bypass
-                reg_val &= ~BIT(1); // Disable processing
-            } else {
-                reg_val &= ~BIT(0); // Disable bypass
-                reg_val |= BIT(1);  // Enable processing
-            }
-            writel(reg_val, ourISPdev->reg_base + ISP_BYPASS_REG);
-            wmb();  // Ensure write completes
-
-            // Re-enable links
-            writel(1, ourISPdev->reg_base + ISP_LINK_ENABLE_REG);
-            wmb();  // Ensure write completes
-
-            // Enable routing
-            writel(1, ourISPdev->reg_base + ISP_ROUTE_REG);
-            wmb();  // Ensure write completes
+//            // Set bypass mode in hardware
+//            reg_val = readl(ourISPdev->reg_base + ISP_BYPASS_REG);
+//            if (ctrl->value) {
+//                reg_val |= BIT(0);  // Enable bypass
+//                reg_val &= ~BIT(1); // Disable processing
+//            } else {
+//                reg_val &= ~BIT(0); // Disable bypass
+//                reg_val |= BIT(1);  // Enable processing
+//            }
+//            writel(reg_val, ourISPdev->reg_base + ISP_BYPASS_REG);
+//            wmb();  // Ensure write completes
+//
+//            // Re-enable links
+//            writel(1, ourISPdev->reg_base + ISP_LINK_ENABLE_REG);
+//            wmb();  // Ensure write completes
+//
+//            // Enable routing
+//            writel(1, ourISPdev->reg_base + ISP_ROUTE_REG);
+//            wmb();  // Ensure write completes
 
             // Update device state
-            ourISPdev->bypass_enabled = !!ctrl->value;
-            pr_info("Set bypass mode to %d\n", ctrl->value);
+            ourISPdev->bypass_enabled = !!value;
+            pr_info("Set bypass mode to %d\n", ourISPdev->bypass_enabled);
 
             // Copy back to user
             if (copy_to_user(arg, &bypass_ctrl, sizeof(bypass_ctrl))) {
@@ -1506,10 +1635,58 @@ static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl, void __user *arg)
             pr_info("Set antiflicker mode to %d\n", ctrl->value);
             break;
         }
+        case 0x8000166: { // ISP_CTRL_SHADING
+            struct {
+                uint32_t cmd;      // Command: 0x8000166
+                uint32_t value;    // Shading value
+            } shading_ctrl;
 
+            // Validate device and tuning data early
+            if (!dev) {
+                pr_err("No ISP device for shading control\n");
+                return -EINVAL;
+            }
+
+            if (!dev->tuning_data) {
+                pr_err("No tuning data for shading control\n");
+                return -EINVAL;
+            }
+
+//            if (!dev->tuning_data->regs) {
+//                pr_err("No tuning registers mapped for shading control\n");
+//                return -EINVAL;
+//            }
+
+            // Set control values
+            shading_ctrl.cmd = ctrl->cmd;
+            shading_ctrl.value = ctrl->value;
+
+            pr_info("Setting shading control: value=%d\n", ctrl->value);
+
+            // Store in tuning data and write to hardware
+            dev->tuning_data->shading = ctrl->value;
+
+//            // Write to hardware register (assuming offset 0x500)
+//            writel(ctrl->value, dev->tuning_data->regs + 0x500);
+//            wmb();  // Ensure write completes
+
+            // Copy back to user
+            if (copy_to_user(arg, &shading_ctrl, sizeof(shading_ctrl))) {
+                pr_err("Failed to copy shading control to user\n");
+                return -EFAULT;
+            }
+
+            return 0;  // Skip default copy
+        }
         default:
             pr_info("Unknown ISP control command: 0x%x\n", ctrl->cmd);
-            return -EINVAL;
+            // TODO
+            // return -EINVAL;
+    }
+
+    if (copy_to_user((void __user *)arg, &ctrl, sizeof(ctrl))) {
+        pr_err("Failed to copy control back to user\n");
+        return -EFAULT;
     }
 
     return 0;
@@ -1517,22 +1694,43 @@ static int handle_isp_set_ctrl(struct isp_core_ctrl *ctrl, void __user *arg)
 
 static int handle_isp_get_ctrl(struct isp_core_ctrl *ctrl, void __user *arg)
 {
-    struct isp_tuning_data *tuning;
+    struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+
     pr_info("Get control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
 
-    if (!ourISPdev || !ourISPdev->tuning_data) {
-        pr_err("No ISP device or tuning data\n");
+    // Early validation
+    if (!tuning) {
+        pr_err("No tuning data for get control\n");
         return -EINVAL;
     }
 
-    tuning = ourISPdev->tuning_data;
+    // Handle each control
+    switch (ctrl->cmd) {
+        case 0x980900:  // Brightness
+            ctrl->value = tuning->brightness;
+        pr_info("Get control 0x%x = %d\n", ctrl->cmd, ctrl->value);
+        break;
 
-    if (copy_to_user(arg, &tuning, sizeof(tuning)))
-        return -EFAULT;
+        case 0x980901:  // Contrast
+            ctrl->value = tuning->contrast;
+        pr_info("Get control 0x%x = %d\n", ctrl->cmd, ctrl->value);
+        break;
 
-    return 0;
+        case 0x980902:  // Saturation
+            ctrl->value = tuning->saturation;
+        pr_info("Get control 0x%x = %d\n", ctrl->cmd, ctrl->value);
+        break;
 
-    pr_info("Get control 0x%x = %d\n", ctrl->cmd, ctrl->value);
+        case 0x98091b:  // Sharpness
+            ctrl->value = tuning->sharpness;
+        pr_info("Get control 0x%x = %d\n", ctrl->cmd, ctrl->value);
+        break;
+
+        default:
+            pr_warn("Unknown get control command: 0x%x\n", ctrl->cmd);
+        return -EINVAL;
+    }
+
     return 0;
 }
 
@@ -1563,167 +1761,1425 @@ static int get_isp_total_gain(uint32_t *gain)
     *gain = readl(ourISPdev->reg_base + ISP_TOTAL_GAIN_REG);
     return 0;
 }
+//
+//static int handle_wb_stats(struct isp_tuning_request *req, void __user *arg)
+//{
+//    struct IMPISPDev *dev = ourISPdev;
+//    struct isp_tuning_data *tuning = dev->tuning_data;
+//    uint32_t value;
+//
+//    if (!tuning || tuning->state != 2) {
+//        pr_err("Tuning not in correct state\n");
+//        return -EINVAL;
+//    }
+//
+//    if (!tuning->regs) {
+//        pr_err("No tuning registers mapped\n");
+//        return -EINVAL;
+//    }
+//
+//    mutex_lock(&tuning_mutex);
+//
+//    // Read raw stats value from registers
+//    value = readl(tuning->regs + (req->cmd == ISP_TUNING_STATE_WB_STATS ? 0x800 : 0x900));
+//
+//    // Store in request for copy back to user
+//    req->result = value;
+//
+//    mutex_unlock(&tuning_mutex);
+//
+//    // Split into high/low components and copy to user buffer
+//    if (arg) {
+//        uint16_t high = value >> 16;
+//        uint16_t low = value & 0xFFFF;
+//
+//        if (put_user(high, (uint16_t __user *)((char *)arg + 4)) ||
+//            put_user(low, (uint16_t __user *)((char *)arg + 6))) {
+//            return -EFAULT;
+//        }
+//    }
+//
+//    return 0;
+//}
 
-static int isp_tuning_enable(struct IMPISPDev *dev, void __user *arg)
+// Handler for sensor FPS query
+//static int handle_sensor_fps(struct isp_tuning_request *req, void __user *arg)
+//{
+//    struct IMPISPDev *dev = ourISPdev;
+//    struct isp_tuning_data *tuning = dev->tuning_data;
+//    uint32_t fps_value;
+//
+//    if (!tuning || !tuning->regs)
+//        return -EINVAL;
+//
+//    mutex_lock(&tuning_mutex);
+//
+//    // Read FPS value
+//    fps_value = readl(tuning->regs + 0x200);
+//    req->result = fps_value;
+//
+//    // Store locally for other functions
+//    tuning->fps_num = fps_value >> 16;
+//    tuning->fps_den = fps_value & 0xFFFF;
+//
+//    // Update frame source
+//    set_framesource_fps(tuning->fps_num, tuning->fps_den);
+//
+//    // Copy to user arguments if provided
+//    if (arg) {
+//        uint32_t __user *fps_args = arg;
+//        if (put_user(tuning->fps_num, &fps_args[0]) ||
+//            put_user(tuning->fps_den, &fps_args[1])) {
+//            mutex_unlock(&tuning_mutex);
+//            return -EFAULT;
+//        }
+//    }
+//
+//    mutex_unlock(&tuning_mutex);
+//    return 0;
+//}
+
+// Handler for sensor attribute query
+//static int handle_sensor_attr(struct isp_tuning_request *req, void __user *arg)
+//{
+//    struct IMPISPDev *dev = ourISPdev;
+//    struct isp_tuning_data *tuning = dev->tuning_data;
+//
+//    if (!tuning || tuning->state != 2)
+//        return -EINVAL;
+//
+//    mutex_lock(&tuning_mutex);
+//
+//    // Read sensor attributes
+//    req->result = readl(tuning->regs + 0x300);
+//
+//    mutex_unlock(&tuning_mutex);
+//
+//    // Copy full value to user buffer if provided
+//    if (arg && copy_to_user(arg, &req->result, sizeof(req->result)))
+//        return -EFAULT;
+//
+//    return 0;
+//}
+
+
+
+static void hex_dump_memory(const char *desc, const void *ptr, size_t len)
 {
-    struct {
-        uint32_t enable;
-        uint32_t state;
-    } __packed req = {0};  // Zero initialize
-    int ret = 0;
+    const unsigned char *buf = ptr;
+    size_t i;
 
-    if (!dev) {
-        pr_err("No ISP device\n");
+    pr_info("=== %s at %p ===\n", desc, ptr);
+
+    for (i = 0; i < len; i += 16) {
+        size_t chunk = min(len - i, (size_t)16);
+
+        // Print hex values
+        pr_info("%04zx: ", i);
+        for (size_t j = 0; j < 16; j++) {
+            if (j < chunk)
+                pr_cont("%02x ", buf[i + j]);
+            else
+                pr_cont("   ");
+        }
+
+        // Print ASCII representation
+        pr_cont(" |");
+        for (size_t j = 0; j < chunk; j++) {
+            unsigned char c = buf[i + j];
+            // Simple printable check - between space and tilde
+            pr_cont("%c", (c >= 32 && c <= 126) ? c : '.');
+        }
+        pr_cont("|\n");
+    }
+}
+
+
+static int isp_get_ae_zone(struct IMPISPDev *dev, struct isp_tuning_ctrl *ctrl)
+{
+    struct ae_zone_info info;
+    void *hist_buf;
+    int ret = 0;
+    int i;
+
+    if (!ctrl->data) {
+        pr_err("No data pointer for AE zone\n");
         return -EINVAL;
     }
 
-    // Read just enable flag first
-    if (copy_from_user(&req.enable, arg, sizeof(req.enable)))
-        return -EFAULT;
-
-    pr_info("Tuning enable: %d\n", req.enable ? 1 : 0);
-
-    mutex_lock(&tuning_mutex);
-
-    // Get current state, don't modify if already in requested state
-    req.state = dev->tuning_data->state;
-
-    if (req.enable) {
-        if (req.state != 2) { // Only if not already enabled
-            if (!dev->tuning_data->regs) {
-                dev->tuning_data->regs = ioremap(0x13380000, 0x1b000);
-                if (!dev->tuning_data->regs) {
-                    ret = -ENOMEM;
-                    goto out_unlock;
-                }
-            }
-            dev->tuning_data->state = 2;
-            req.state = 2;
-        }
-    } else {
-        if (req.state == 2) { // Only if currently enabled
-            if (dev->tuning_data->regs) {
-                iounmap(dev->tuning_data->regs);
-                dev->tuning_data->regs = NULL;
-            }
-            dev->tuning_data->state = 0;
-            req.state = 0;
-        }
+    // Allocate temporary buffer for histogram data
+    hist_buf = kzalloc(0x42c, GFP_KERNEL);
+    if (!hist_buf) {
+        pr_err("Failed to allocate ae_hist buffer\n");
+        return -ENOMEM;
     }
 
-    // Always copy back the current state
-    if (copy_to_user(arg, &req, sizeof(req)))
-        ret = -EFAULT;
+    // Get AE histogram data
+    tisp_g_ae_hist(hist_buf);
 
-    out_unlock:
-        mutex_unlock(&tuning_mutex);
+    // Copy zone data
+    memcpy(info.zones, hist_buf, MAX_AE_ZONES);
+
+    // Copy histogram data
+    for (i = 0; i < MAX_HIST_BINS; i++) {
+        info.hist_data[i] = readl(dev->reg_base + ISP_AE_HIST_BASE + (i * 4));
+    }
+
+    // Copy metrics at specific offsets
+    info.metrics[0] = readl(dev->reg_base + ISP_AE_HIST_BASE + 0x400);
+    info.metrics[1] = readl(dev->reg_base + ISP_AE_HIST_BASE + 0x404);
+    info.metrics[2] = readl(dev->reg_base + ISP_AE_HIST_BASE + 0x408);
+    info.metrics[3] = readl(dev->reg_base + ISP_AE_HIST_BASE + 0x40c);
+
+    // Copy additional status bytes
+    info.additional[0] = readl(dev->reg_base + ISP_AE_HIST_BASE + 0x414) & 0xFF;
+    info.additional[1] = readl(dev->reg_base + ISP_AE_HIST_BASE + 0x418) & 0xFF;
+    info.additional[2] = readl(dev->reg_base + ISP_AE_HIST_BASE + 0x41c) & 0xFF;
+    info.additional[3] = readl(dev->reg_base + ISP_AE_HIST_BASE + 0x420) & 0xFF;
+
+    // Copy zone data to user-provided buffer
+    if (copy_to_user((void __user *)(unsigned long)ctrl->data,
+                     &info, sizeof(info))) {
+        ret = -EFAULT;
+                     } else {
+                         ctrl->value = 1;  // Success
+                     }
+
+    kfree(hist_buf);
     return ret;
 }
 
-/*
- * ISP-M0 IOCTL handler
-* ISP_CORE_S_CTRL: Set control 0xc008561c
-* ISP_CORE_G_CTRL: Get control 0xc008561b
-* ISP_TUNING_ENABLE: Enable tuning 0xc00c56c6
- */
-static int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+
+static int32_t tisp_log2_int_to_fixed(uint32_t value, char precision_bits, char shift_amt)
+{
+    uint32_t precision = precision_bits;
+    uint32_t shift = shift_amt;
+
+    if (value == 0)
+        return 0;
+
+    // Find highest set bit position using binary search
+    uint32_t curr_val, bit_pos = 0;
+    if (value < 0x10000) {
+        curr_val = value;
+    } else {
+        curr_val = value >> 16;
+        bit_pos = 16;
+    }
+
+    if (curr_val >= 0x100) {
+        curr_val >>= 8;
+        bit_pos = bit_pos + 8;
+    }
+
+    if (curr_val >= 0x10) {
+        curr_val >>= 4;
+        bit_pos = bit_pos + 4;
+    }
+
+    if (curr_val >= 4) {
+        curr_val >>= 2;
+        bit_pos = bit_pos + 2;
+    }
+
+    if (curr_val != 1) {
+        bit_pos = bit_pos + 1;
+    }
+
+    // Normalize value for fixed-point calculation
+    uint32_t normalized;
+    if (bit_pos >= 16) {
+        normalized = value >> ((bit_pos - 15) & 0x1f);
+    } else {
+        normalized = value << ((15 - bit_pos) & 0x1f);
+    }
+
+    // Iterative fixed-point calculation
+    int32_t result = 0;
+    for (int32_t i = 0; i < precision; i++) {
+        int32_t square = normalized * normalized;
+        result <<= 1;
+
+        if (square >= 0) {
+            normalized = square >> 15;
+        } else {
+            result += 1;
+            normalized = square >> 16;
+        }
+    }
+
+    // Combine results with scaling
+    return ((bit_pos << (precision & 0x1f)) + result) << (shift & 0x1f) |
+           (normalized & 0x7fff) >> ((15 - shift) & 0x1f);
+}
+
+static int32_t tisp_log2_fixed_to_fixed(uint32_t input_val, int32_t in_precision, char out_precision)
+{
+    // Call helper directly with original param signature
+    return tisp_log2_int_to_fixed(input_val, out_precision, 0);
+}
+
+
+
+// Reimplemented to avoid 64-bit division on MIPS32
+static int32_t fix_point_div_64(int32_t shift_bits, int32_t scale,
+                               int32_t num_low, int32_t num_high,
+                               int32_t denom_low, int32_t denom_high)
+{
+    // Initial result tracking
+    int32_t quotient = 0;
+    int32_t remainder = num_low;
+    int32_t temp_high = num_high;
+
+    // Iterative long division
+    for (int i = 0; i < 32; i++) {
+        int32_t carry = remainder & 0x80000000;
+
+        // Shift left by 1
+        remainder = (remainder << 1) | ((temp_high >> 31) & 1);
+        temp_high = temp_high << 1;
+        quotient = quotient << 1;
+
+        // See if we can subtract denominator
+        if (carry || remainder >= denom_low) {
+            remainder = remainder - denom_low;
+            if (carry && remainder >= 0) {
+                temp_high--;
+            }
+            quotient |= 1;
+        }
+    }
+
+    return quotient;
+}
+
+static int32_t fix_point_mult2_32(int32_t shift_bits, int32_t multiplier, int32_t multiplicand)
+{
+    uint32_t mask = 0xffffffff >> (-shift_bits & 0x1f);
+    uint32_t high_mult = multiplier >> (shift_bits & 0x1f);
+    uint32_t high_cand = multiplicand >> (shift_bits & 0x1f);
+    int32_t low_mult = mask & multiplier;
+    int32_t low_cand = mask & multiplicand;
+
+    uint64_t cross_prod1 = (uint64_t)low_mult * high_cand;
+    uint64_t cross_prod2 = (uint64_t)high_mult * low_cand;
+
+    return (cross_prod1 & 0xffffffff) + cross_prod2 +
+           ((uint64_t)high_mult * high_cand << (shift_bits & 0x1f)) +
+           ((uint64_t)low_mult * low_cand >> (shift_bits & 0x1f));
+}
+
+static int tisp_g_ev_attr(uint32_t *ev_buffer, struct isp_tuning_data *tuning)
+{
+    // Fill total gain and exposure values
+    ev_buffer[0] = tuning->total_gain;                // Total sensor gain
+    ev_buffer[1] = tuning->exposure >> 10;            // Normalized exposure value
+
+    // Convert exposure to fixed point representation
+    int32_t exp_fixed = tisp_log2_fixed_to_fixed(tuning->exposure, 10, 16);
+    ev_buffer[3] = exp_fixed;
+
+    // Calculate exposure vs frame rate compensation
+    uint64_t exposure_us = (uint64_t)ev_buffer[0] * 1000000; // Convert to microseconds
+    uint32_t exp_comp = fix_point_div_64(0, exp_fixed,
+                                      exposure_us & 0xffffffff,
+                                      exposure_us >> 32,
+                                      (tuning->fps_den >> 16) * (tuning->fps_num & 0xffff),
+                                      0);
+    ev_buffer[2] = exp_comp;
+
+    // Convert gain values to fixed point
+    ev_buffer[4] = tisp_log2_fixed_to_fixed(tuning->max_again, 10, 5);    // Analog gain
+    ev_buffer[5] = tisp_log2_fixed_to_fixed(tuning->max_dgain, 10, 5);    // Digital gain
+    ev_buffer[6] = tuning->exposure & 0xffff;                             // Integration time
+
+    // Calculate combined gain
+    uint32_t total = fix_point_mult2_32(10, tuning->max_again, tuning->max_dgain);
+    ev_buffer[7] = total >> 2;
+
+    // Additional gain conversions for min/max values
+    ev_buffer[8] = tisp_log2_fixed_to_fixed(tuning->max_again + 4, 10, 5);   // Max analog gain
+    ev_buffer[9] = tisp_log2_fixed_to_fixed(tuning->max_dgain + 4, 10, 5);   // Max digital gain
+    ev_buffer[10] = tisp_log2_fixed_to_fixed(tuning->max_again >> 1, 10, 5); // Min analog gain (half of max)
+    ev_buffer[11] = tisp_log2_fixed_to_fixed(tuning->max_dgain >> 1, 10, 5); // Min digital gain (half of max)
+
+    // FPS and timing related values
+    ev_buffer[0x1b] = tuning->fps_num;    // Current FPS numerator
+    *(uint16_t*)(&ev_buffer[0x37]) = tuning->fps_den;  // Current FPS denominator
+
+    // Calculate actual frame rate
+    uint32_t actual_fps = ((tuning->fps_den & 0xffff) * 1000000) /
+                         (tuning->fps_den >> 16) / tuning->fps_num;
+    ev_buffer[0x1f] = actual_fps;
+
+    // Store operating mode
+    ev_buffer[12] = tuning->running_mode;
+
+    return 0;
+}
+
+// Day/Night mode parameters
+static struct tiziano_dn_params {
+    uint32_t day_params[0x20];   // Day mode params (0x84b50 in OEM)
+    uint32_t night_params[0x20]; // Night mode params
+} dn_params;
+
+static int tisp_day_or_night_s_ctrl(uint32_t mode)
+{
+    void __iomem *regs = ourISPdev->reg_base;
+    uint32_t bypass_val, top_ctrl;
+
+    if (mode > 1) {
+        pr_err("%s: Unsupported mode %d\n", __func__, mode);
+        return -EINVAL;
+    }
+
+    // Copy appropriate parameter set // TODO
+//    if (mode == 0) {
+//        memcpy(&dn_params.day_params, day_mode_defaults, sizeof(dn_params.day_params));
+//        ourISPdev->day_night = 0;
+//    } else {
+//        memcpy(&dn_params.night_params, night_mode_defaults, sizeof(dn_params.night_params));
+//        ourISPdev->day_night = 1;
+//    }
+
+    // Read current top control register
+    bypass_val = readl(regs + 0xC);
+
+    // Apply parameters to hardware
+    for (int i = 0; i < 0x20; i++) {
+        uint32_t *params = mode ? dn_params.night_params : dn_params.day_params;
+        uint32_t val = ~(1 << i) & bypass_val;
+        val |= params[i] << i;
+        bypass_val = val;
+    }
+
+    // Set appropriate bypass bits based on chip variant
+//    if (ourISPdev->chip_id == 0xa2ea4) { // TODO
+//        bypass_val &= 0xb577fffd;
+//        top_ctrl = 0x34000009;
+//    } else {
+        bypass_val &= 0xa1fffff6;
+        top_ctrl = 0x880002;
+    //}
+
+    bypass_val |= top_ctrl;
+
+    pr_debug("%s: Setting top bypass to 0x%x\n", __func__, bypass_val);
+    writel(bypass_val, regs + 0xC);
+
+    // Refresh all pipeline stages for mode change
+//    tiziano_defog_refresh();
+//    tiziano_ae_refresh();
+//    tiziano_awb_refresh();
+//    tiziano_dmsc_refresh();
+//    tiziano_sharpen_refresh();
+//    tiziano_mdns_refresh();
+//    tiziano_sdns_refresh();
+//    tiziano_gib_refresh();
+//    tiziano_lsc_refresh();
+//    tiziano_ccm_refresh();
+//    tiziano_clm_refresh();
+//    tiziano_gamma_refresh();
+//    tiziano_adr_refresh();
+//    tiziano_dpc_refresh();
+//    tiziano_af_refresh();
+//    tiziano_bcsh_refresh();
+//    tiziano_rdns_refresh();
+//    tiziano_ydns_refresh();
+
+    // Reset custom mode and update poll state
+    ourISPdev->custom_mode = 0;
+    ourISPdev->poll_state = ((mode & 0xFF) << 16) | 1;
+
+    // Wake up any waiters
+    wake_up_interruptible(&ourISPdev->poll_wait);
+
+    return 0;
+}
+
+static int isp_core_tuning_event(struct IMPISPDev *dev, uint32_t event)
+{
+      pr_info("isp_core_tuning_event: event=0x%x\n", event);
+    if (!dev)
+        return -EINVAL;
+
+    switch (event) {
+        case ISP_TUNING_EVENT_MODE0:
+            writel(2, dev->reg_base + 0x40c4);
+        break;
+
+        case ISP_TUNING_EVENT_MODE1:
+            writel(1, dev->reg_base + 0x40c4);
+        break;
+
+        case ISP_TUNING_EVENT_FRAME:
+          pr_info("ISP_TUNING_EVENT_FRAME\n");
+            //isp_frame_done_wakeup();
+        break;
+
+        case ISP_TUNING_EVENT_DN:
+        {
+            uint32_t dn_mode = readl(dev->reg_base + 0x40a4);
+            tisp_day_or_night_s_ctrl(dn_mode); // We'll need this function too
+            writel(dn_mode, dev->reg_base + 0x40a4);
+        }
+        break;
+
+        default:
+            return -EINVAL;
+    }
+
+    return 0;
+}
+
+
+
+
+// Helper to set up pad event handling
+static void init_pad_event_handling(struct tx_isp_subdev_pad *pad,
+                                  int (*event_handler)(struct tx_isp_subdev_pad *, unsigned int, void *))
+{
+    if (pad) {
+        pad->event = event_handler;
+    }
+}
+
+
+// Handle buffer request from hardware
+//static int handle_buffer_request(struct isp_channel *chn, void *data)
+//{
+//    struct vbm_frame *buf;
+//    unsigned long flags;
+//
+//    spin_lock_irqsave(&chn->queue->queue_lock, flags);
+//
+//    // Get next available buffer from ready list
+//    if (!list_empty(&chn->queue->ready_list)) {
+//        buf = list_first_entry(&chn->queue->ready_list,
+//                             struct vbm_frame, list);
+//
+//        // Update buffer state
+//        buf->state = FRAME_STATE_ACTIVE;
+//
+//        // Move to active list
+//        list_move_tail(&buf->list, &chn->queue->done_list);
+//
+//        pr_info("Provided buffer %d for request\n", buf->index);
+//    }
+//
+//    spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+//
+//    // Call stats callback if provided
+//    if (chn->event && chn->event->cb.stats_cb)
+//        chn->event->cb.stats_cb(chn->event->cb.priv);
+//
+//    return 0;
+//}
+
+//
+//static int handle_buffer_enqueue(struct isp_channel *chn, void *data)
+//{
+//    struct vbm_frame *buf = NULL;
+//    unsigned long flags;
+//    int ret = 0;
+//
+//    if (!chn || !chn->queue) {
+//        pr_err("Invalid channel state\n");
+//        return -EINVAL;
+//    }
+//
+//    pr_info("Handle buffer enqueue for ch%d\n", chn->channel_id);
+//
+//    spin_lock_irqsave(&chn->queue->queue_lock, flags);
+//
+//    // Just get first buffer from ready list
+//    if (!list_empty(&chn->queue->ready_list)) {
+//        buf = list_first_entry(&chn->queue->ready_list,
+//                             struct vbm_frame, list);
+//
+//        if (!buf) {
+//            pr_err("Invalid buffer from ready list\n");
+//            ret = -EINVAL;
+//            goto unlock;
+//        }
+//
+//        //pr_info("Processing buffer %d from ready list\n", buf->index);
+//
+//        buf->state = FRAME_STATE_ACTIVE;
+//
+//        //pr_info("Buffer %d enqueued to hardware\n", buf->index);
+//
+//        // TESTING: Immediately complete the frame
+//        buf->state = FRAME_STATE_DONE;
+//        atomic_inc(&chn->sequence);
+//        buf->sequence = atomic_read(&chn->sequence);
+//        //do_gettimeofday(&buf->meta->timestamp);
+//
+//        list_move_tail(&buf->list, &chn->queue->done_list);
+//
+//        //pr_info("TEST: Immediately completing frame %d\n", buf->index);
+//        wake_up_interruptible(&chn->queue->wait);
+//
+//        ret = 0;
+//
+//    } else {
+//        pr_err("No buffers in ready list\n");
+//        ret = -EINVAL;
+//    }
+//
+//    unlock:
+//        spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+//    return ret;
+//}
+
+
+// Handle frame/buffer completion
+static int handle_frame_done(struct isp_channel *chn, void *data)
+{
+    struct vbm_frame *buf;
+    unsigned long flags;
+    bool found = false;
+    uint32_t frame_num = *(uint32_t *)data; // Assuming frame number passed in
+
+    pr_info("Frame done: ch%d frame=%d\n", chn->channel_id, frame_num);
+
+    spin_lock_irqsave(&chn->queue->queue_lock, flags);
+
+    // Create a temporary list_head that overlays the buffer's list
+    struct list_head *ready_head = &chn->queue->ready_list;
+    struct list_head *temp_entry = ready_head->next;
+
+    // Iterate through the list safely
+    while (temp_entry != ready_head) {
+        // Get the containing vbm_frame structure
+        buf = container_of(temp_entry, struct vbm_frame, list);
+
+        if (buf->index == frame_num) {
+            // Update buffer state
+            buf->state = FRAME_STATE_DONE;
+            buf->state_flags |= V4L2_BUF_FLAG_DONE;
+            atomic_inc(&chn->sequence);
+            buf->q_count = atomic_read(&chn->sequence);
+
+            // Get current timestamp
+            struct timeval tv;
+            do_gettimeofday(&tv);
+            buf->state1 = tv.tv_sec;
+            buf->state2 = tv.tv_usec;
+
+            // Move to done list - we need to handle the list_head overlay carefully
+            struct list_head *old_next = temp_entry->next;
+            list_move_tail(&buf->list, &chn->queue->done_list);
+            temp_entry = old_next;
+            found = true;
+
+            pr_info("Frame %d completed, moved to done list\n", frame_num);
+            break;
+        }
+        temp_entry = temp_entry->next;
+    }
+
+    spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+
+    if (found) {
+        pr_info("Frame %d completed\n", frame_num);
+        wake_up_interruptible(&chn->queue->wait);
+    } else {
+        pr_warn("No matching buffer for completed frame %d\n", frame_num);
+    }
+
+    return 0;
+}
+
+// Handle stats ready event
+static int handle_stats_ready(struct isp_channel *chn, void *data)
+{
+    // Call stats callback if registered
+    if (chn->event && chn->event->cb.stats_cb)
+        chn->event->cb.stats_cb(chn->event->cb.priv);
+    return 0;
+}
+
+// Handle stream start command
+static int handle_stream_start(struct isp_channel *chn, void *data)
+{
+    pr_info("Channel %d: Stream start handler\n", chn->channel_id);
+
+    // Don't double-enable streaming
+    if (chn->queue->stream_state & 1) {
+        pr_info("Channel %d already streaming\n", chn->channel_id);
+        return -EBUSY;
+    }
+
+    chn->queue->stream_state |= 1;
+    pr_info("Streaming started on channel %d\n", chn->channel_id);
+    return 0;
+}
+
+
+// Handle stream cancel command
+static int handle_stream_cancel(struct isp_channel *chn, void *data)
+{
+    unsigned long flags;
+
+    spin_lock_irqsave(&chn->queue->queue_lock, flags);
+
+    // Clear streaming state
+    chn->queue->stream_state &= ~1;
+    chn->state = 3; // Ready state
+
+    // Return all buffers to ready list
+    INIT_LIST_HEAD(&chn->queue->ready_list);
+    INIT_LIST_HEAD(&chn->queue->done_list);
+
+    spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+
+    pr_info("Streaming cancelled on channel %d\n", chn->channel_id);
+    return 0;
+}
+
+// Handle queue free command
+static int handle_queue_free(struct isp_channel *chn, void *data)
+{
+    unsigned long flags;
+
+    spin_lock_irqsave(&chn->queue->queue_lock, flags);
+
+    // Clear all queues
+    INIT_LIST_HEAD(&chn->queue->ready_list);
+    INIT_LIST_HEAD(&chn->queue->done_list);
+
+    spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+
+    pr_info("Queue freed on channel %d\n", chn->channel_id);
+    return 0;
+}
+
+
+struct isp_channel *get_channel_from_pad(struct tx_isp_subdev_pad *pad)
 {
     struct IMPISPDev *dev = ourISPdev;
-    struct isp_tuning_data *tuning = dev->tuning_data;
-    struct isp_core_ctrl ctrl;
-    struct isp_flip_ioctl flip_ctrl;
+    int i;
+
+    if (!pad || !pad->sd)
+        return NULL;
+
+    // Find channel by matching subdev pointer
+    for (i = 0; i < MAX_CHANNELS; i++) {
+        if (&dev->channels[i].subdev == pad->sd)
+            return &dev->channels[i];
+    }
+
+    return NULL;
+}
+
+
+// Event handler for frame source pads
+static int tx_isp_subdev_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd, void *args)
+{
+    struct isp_channel *chn;
     int ret = 0;
-    uint32_t value;
 
-    pr_info("ISP m0 IOCTL called: cmd=0x%x\n", cmd);
-    if (!dev) {
-        pr_err("No ISP device\n");
-        return -EINVAL;
-    }
-    if (!dev->tuning_data) {
-        pr_err("No ISP tuning data\n");
+    if (!pad) {
+        pr_err("No pad in event handler\n");
         return -EINVAL;
     }
 
-    switch(cmd) {
-        case 0xc00c56c6: {  // Tuning IOCTL
-            ret = isp_tuning_enable(dev, (void __user *)arg);
-            if (ret) {
-                pr_err("Failed to enable/disable tuning\n");
-                return ret;
+    // Get channel from pad private data
+    chn = pad->priv;
+    if (!chn) {
+        pr_err("No channel data for pad %p\n", pad);
+        return -EINVAL;
+    }
+
+    pr_info("Pad event handler: ch%d cmd=0x%x\n", chn->channel_id, cmd);
+
+
+    switch (cmd) {
+        case ISP_EVENT_BUFFER_REQUEST:
+            pr_info("TODO Channel %d: Buffer request\n", chn->channel_id);
+            //ret = handle_buffer_request(chn, args);
+        break;
+
+        case ISP_EVENT_BUFFER_ENQUEUE:
+            pr_info("TODO Channel %d: Buffer enqueue\n", chn->channel_id);
+            //ret = handle_buffer_enqueue(chn, args);
+        break;
+
+        case ISP_EVENT_BUFFER_DONE:
+        case ISP_EVENT_FRAME_DONE:
+            pr_info("Channel %d: Frame complete\n", chn->channel_id);
+            ret = handle_frame_done(chn, args);
+        break;
+
+        case ISP_EVENT_STATS_READY:
+            pr_info("Channel %d: Stats ready\n", chn->channel_id);
+            ret = handle_stats_ready(chn, args);
+        break;
+
+        case ISP_EVENT_STREAM_START:
+            pr_info("Channel %d: Stream start\n", chn->channel_id);
+            ret = handle_stream_start(chn, args);
+        break;
+
+        case ISP_EVENT_STREAM_CANCEL:
+            pr_info("Channel %d: Stream cancel\n", chn->channel_id);
+            ret = handle_stream_cancel(chn, args);
+        break;
+
+        case ISP_EVENT_QUEUE_FREE:
+            pr_info("Channel %d: Queue free\n", chn->channel_id);
+            ret = handle_queue_free(chn, args);
+        break;
+        case ISP_EVENT_TUNING_UPDATE: {
+            struct tuning_event_data *data = args;
+            struct IMPISPDev *dev = ourISPdev;
+            if (!dev || !dev->tuning_data) return -EINVAL;
+
+            pr_info("Processing tuning update: cmd=0x%x value=0x%x\n",
+                    data->cmd, data->value);
+
+            // Extract gain and contrast
+            uint32_t contrast = data->value & 0xFF;
+            uint32_t gain = (data->value >> 8) & 0xFF;
+
+            // Store in tuning data
+            dev->tuning_data->contrast = contrast;
+            dev->tuning_data->total_gain = gain;
+
+            // Handle tuning state
+            if (data->enable) {
+                dev->tuning_data->state = 2;  // Active state
             }
-            return ret;
-        }
-        // TODO OEM driver has a lot of implementations under this one tuning cmd
-        case 0xc008561c: { // ISP_CORE_S_CTRL
-            if (!dev || !dev->tuning_data) {
-                pr_err("No ISP device or tuning data\n");
-                return -EINVAL;
+
+            // Do hardware update if needed
+            if (dev->tuning_data->regs) {
+                // Update hardware registers
+                writel(contrast, dev->tuning_data->regs + ISP_TUNING_CONTRAST_OFFSET);
+                writel(gain, dev->tuning_data->regs + ISP_TUNING_GAIN_OFFSET);
+                wmb();
             }
-
-            // First just read the command
-            if (copy_from_user(&cmd, (void __user *)arg, sizeof(cmd))) {
-                pr_err("Failed to copy command from user\n");
-                return -EFAULT;
-            }
-
-            pr_info("SET cmd=0x%x\n", cmd);
-
-            uint32_t ctrl_id = (cmd >> 16) & 0xFF;
-            uint32_t ctrl_cmd = cmd & 0xFFFF;
-
-            if (ctrl_id == 0x98 && (ctrl_cmd == 0x980914 || ctrl_cmd == 0x980915)) {
-                // It's a flip command, read just one more uint32_t for the value
-                if (copy_from_user(&value, (void __user *)arg + sizeof(cmd), sizeof(value))) {
-                    return -EFAULT;
-                }
-
-                pr_info("FLIP: cmd=0x%x value=%d\n", cmd, value);
-
-                // Handle flip
-                if (ctrl_cmd == 0x0914) {  // HFLIP
-                    writel(value ? 1 : 0, dev->tuning_data->regs + 0x3ad * 4);
-                } else {  // VFLIP
-                    writel(value ? 1 : 0, dev->tuning_data->regs + 0x3ac * 4);
-                }
-                set_framesource_changewait_cnt();
-                return 0;
-            }
-
-            // Not a flip command, read the rest of the control structure
-            struct isp_core_ctrl ctrl;
-            ctrl.cmd = cmd;  // Use command we already read
-            if (copy_from_user(&ctrl.value, (void __user *)arg + sizeof(cmd),
-                              sizeof(ctrl) - sizeof(cmd))) {
-                pr_err("Failed to copy rest of control from user\n");
-                return -EFAULT;
-            }
-            ret = handle_isp_set_ctrl(&ctrl, (void __user *)arg);
-            if (ret) {
-                pr_err("Failed to handle ISP set control\n");
-                return ret;
-            }
-
-            if (copy_to_user((void __user *)arg, &ctrl, sizeof(ctrl))) {
-                pr_err("Failed to copy control back to user\n");
-                return -EFAULT;
-            }
-
+            pr_info("Tuning update complete\n");
             return 0;
         }
-
-        case 0xc008561b: { // ISP_CORE_G_CTRL
-              pr_info("ISP_CORE_G_CTRL GET cmd=0x%x\n", cmd);
-            return frame_channel_vidioc_get_fmt(&dev->channels[0], (void __user *)arg);
-        }
         default:
-            pr_info("Unknown ISP-M0 IOCTL: 0x%x\n", cmd);
-            ret = -ENOTTY;
+            pr_info("Channel %d: Unhandled event 0x%x\n", chn->channel_id, cmd);
+            ret = -ENOIOCTLCMD;
+        break;
     }
 
     return ret;
 }
 
+
+static struct tx_isp_subdev_pad *find_subdev_link_pad(struct IMPISPDev *dev,
+                                                   const struct tx_isp_link_config *cfg)
+{
+    struct tx_isp_subdev *sd = dev->fs_subdev;
+    struct tx_isp_subdev_pad *pad = NULL;
+
+    pr_info("Looking up pad: subdev=%p cfg=%p\n", sd, cfg);
+    if (!sd || !cfg) {
+        pr_err("Invalid arguments to get_subdev_link_pad\n");
+        return NULL;
+    }
+
+    pr_info("Pad lookup for %s:\n"
+            "  type=%d index=%d\n"
+            "  inpads=%p (count=%d)\n"
+            "  outpads=%p (count=%d)\n",
+            cfg->src.name,
+            cfg->src.type,
+            cfg->src.index,
+            sd->inpads, sd->num_inpads,
+            sd->outpads, sd->num_outpads);
+
+    if (cfg->flag & TX_ISP_PADTYPE_INPUT) {
+        if (cfg->src.index >= sd->num_inpads) {
+            pr_err("Invalid input pad index %d\n", cfg->src.index);
+            return NULL;
+        }
+        pad = &sd->inpads[cfg->src.index];
+    } else {
+        if (cfg->src.index >= sd->num_outpads) {
+            pr_err("Invalid output pad index %d\n", cfg->src.index);
+            return NULL;
+        }
+        pad = &sd->outpads[cfg->src.index];
+    }
+
+    // Verify channel data
+    if (pad && !pad->priv) {
+        pr_warn("Found pad but no channel data, reinitializing...\n");
+        struct isp_channel *chn = kzalloc(sizeof(*chn), GFP_KERNEL);
+        if (chn) {
+            chn->channel_id = pad->index;
+            chn->state = 0;
+            chn->dev = dev->dev;
+            memcpy(&chn->pad, pad, sizeof(struct tx_isp_subdev_pad));
+            pad->priv = chn;
+            pr_info("Created missing channel data for pad %d\n", pad->index);
+        }
+    }
+
+    return pad;
+}
+
+static int apical_isp_ae_g_roi(struct IMPISPDev *dev, struct isp_core_ctrl *ctrl)
+{
+    // Directly returns error - not implemented
+    return -EINVAL;
+}
+
+static int apical_isp_expr_g_ctrl(struct IMPISPDev *dev, struct isp_core_ctrl *ctrl)
+{
+    uint32_t ev_buffer[32];
+    struct {
+        int16_t val1;
+        int16_t val2;
+        int16_t val3;
+        int16_t val4;
+        int32_t enabled;
+    } expr_data;
+
+    int ret = tisp_g_ev_attr(ev_buffer, dev->tuning_data);
+    if (ret)
+        return ret;
+
+    // Fill expression data from ev buffer values
+    expr_data.val1 = ev_buffer[0];
+    expr_data.val2 = ev_buffer[1];
+    expr_data.val3 = ev_buffer[2];
+    expr_data.val4 = ev_buffer[3];
+    expr_data.enabled = (ev_buffer[4] > 0) ? 1 : 0;
+
+    if (copy_to_user((void __user *)ctrl->value, &expr_data, sizeof(expr_data)))
+        return -EFAULT;
+
+    return 0;
+}
+
+static int apical_isp_ev_g_attr(struct IMPISPDev *dev, struct isp_core_ctrl *ctrl)
+{
+    uint32_t ev_buffer[32]; // Size matches what's used in tisp_g_ev_attr
+    struct {
+        int32_t val[6];  // Based on how many values are copied in decompiled
+    } ev_data;
+
+    int ret = tisp_g_ev_attr(ev_buffer, dev->tuning_data);
+    if (ret)
+        return ret;
+
+    // Copy values from ev buffer to response structure
+    memcpy(ev_data.val, &ev_buffer[1], sizeof(ev_data));  // Skip first value
+
+    if (copy_to_user((void __user *)ctrl->value, &ev_data, sizeof(ev_data)))
+        return -EFAULT;
+
+    return 0;
+}
+
+
+static int apical_isp_core_ops_g_ctrl(struct IMPISPDev *dev, struct isp_core_ctrl *ctrl)
+{
+    int ret = 0;
+    struct isp_tuning_data *tuning = dev->tuning_data;
+
+    if (!dev || !tuning)
+        return -EINVAL;
+
+    mutex_lock(&tuning->lock);
+
+    pr_info("Get control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
+
+    // Special case routing for 0x8000024-0x8000027
+    if (ctrl->cmd >= 0x8000024) {
+        switch(ctrl->cmd) {
+            pr_info("Special case routing for 0x8000024-0x8000027\n");
+            pr_info("cmd=0x%x\n", ctrl->cmd);
+            case 0x8000023:  // AE Compensation
+                ctrl->value = tuning->ae_comp;
+            break;
+            case 0x8000024:  // AE ROI
+                ret = apical_isp_ae_g_roi(dev, ctrl);
+            break;
+
+            case 0x8000025:  // Expression
+                ret = apical_isp_expr_g_ctrl(dev, ctrl);
+            break;
+
+            case 0x8000026:  // EV
+                ret = apical_isp_ev_g_attr(dev, ctrl);
+            break;
+
+            case 0x8000027:  // Total Gain
+                // Special case that uses tisp_g_ev_attr
+                    uint32_t ev_buffer[32]; // Size from tisp_g_ev_attr
+            ret = tisp_g_ev_attr(ev_buffer, tuning);
+            if (ret == 0) {
+                // Note: Based on decompiled, only copying second word back
+                if (copy_to_user((void __user *)ctrl->value, &ev_buffer[1],
+                               sizeof(uint32_t))) {
+                    ret = -EFAULT;
+                               }
+            }
+            break;
+
+            case 0x8000028:  // Maximum Analog Gain
+                ctrl->value = tuning->max_again;
+                break;
+
+            case 0x8000029:  // Maximum Digital Gain
+                ctrl->value = tuning->max_dgain;
+                break;
+            case 0x800002c:  // Move state
+                ctrl->value = tuning->move_state;
+                break;
+            case 0x8000039:  // Defog Strength
+                ctrl->value = tuning->defog_strength;
+                break;
+
+            case 0x8000062:  // DPC Strength
+                ctrl->value = tuning->dpc_strength;
+                break;
+
+            case 0x80000a2:  // DRC Strength
+                ctrl->value = tuning->drc_strength;
+                break;
+
+            case 0x8000085:  // Temper Strength
+                ctrl->value = tuning->temper_strength;
+                break;
+
+            case 0x8000086:  // Sinter Strength
+                ctrl->value = tuning->sinter_strength;
+                break;
+
+            case 0x800002d:  // AE Statistics
+                ret = isp_get_ae_state(dev, ctrl);
+                if (ret)
+                    goto out;
+                break;
+
+            case 0x8000030:  // AE Zone Info
+                ret = isp_get_ae_zone(dev, ctrl);
+                if (ret)
+                    goto out;
+                break;
+
+            case 0x8000031:  // AF Zone Info
+                ret = isp_get_af_zone(dev, ctrl);
+                if (ret)
+                    goto out;
+                break;
+            // Special case handlers
+            case 0x8000004: {  // White Balance
+                struct {
+                    uint32_t r_gain;
+                    uint32_t g_gain;
+                    uint32_t b_gain;
+                    uint32_t color_temp;
+                } wb_data;
+
+                wb_data.r_gain = tuning->wb_gains.r;
+                wb_data.g_gain = tuning->wb_gains.g;
+                wb_data.b_gain = tuning->wb_gains.b;
+                wb_data.color_temp = tuning->wb_temp;
+
+                if (copy_to_user((void __user *)ctrl->value, &wb_data, sizeof(wb_data))) {
+                    ret = -EFAULT;
+                    goto out;
+                }
+                break;
+            }
+
+            case 0x8000101: {  // BCSH Hue
+                struct {
+                    uint8_t hue;
+                    uint8_t brightness;
+                    uint8_t contrast;
+                    uint8_t saturation;
+                } bcsh_data;
+
+                bcsh_data.hue = tuning->bcsh_hue;
+                bcsh_data.brightness = tuning->bcsh_brightness;
+                bcsh_data.contrast = tuning->bcsh_contrast;
+                bcsh_data.saturation = tuning->bcsh_saturation;
+
+                if (copy_to_user((void __user *)ctrl->value, &bcsh_data, sizeof(bcsh_data))) {
+                    ret = -EFAULT;
+                    goto out;
+                }
+                break;
+            }
+            case 0x80000e0: { // GET FPS
+                struct fps_ctrl {
+                    int32_t mode;      // 1 for GET operation
+                    uint32_t cmd;      // 0x80000e0 for FPS command
+                    uint32_t frame_rate;  // fps_num result
+                    uint32_t frame_div;   // fps_den result
+                };
+
+                struct fps_ctrl fps_data;
+
+                pr_info("Get FPS\n");
+                fps_data.mode = 1;  // GET mode
+                fps_data.cmd = 0x80000e0;
+                fps_data.frame_rate = 25;
+                fps_data.frame_div = 1;
+
+                // Copy back to user - note full structure needs to be copied
+                if (copy_to_user((void __user *)ctrl->value, &fps_data, sizeof(fps_data)))
+                    return -EFAULT;
+
+                break;
+            }
+            default:
+                pr_warn("Unknown m0 control get command: 0x%x\n", ctrl->cmd);
+                ret = -EINVAL;
+            break;
+            }
+        goto out;
+    }
+
+    switch (ctrl->cmd) {
+        pr_info("Get control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
+        case 0x980900:  // Brightness
+            ctrl->value = tuning->brightness;
+            break;
+
+        case 0x980901:  // Contrast
+            ctrl->value = tuning->contrast;
+            break;
+
+        case 0x980902:  // Saturation
+            ctrl->value = tuning->saturation;
+            break;
+
+        case 0x98091b:  // Sharpness
+            ctrl->value = tuning->sharpness;
+            break;
+
+        case 0x980914:  // HFLIP
+            ctrl->value = tuning->hflip;
+            break;
+
+        case 0x980915:  // VFLIP
+            ctrl->value = tuning->vflip;
+            break;
+
+        case 0x8000164:  // ISP_CTRL_BYPASS
+            ctrl->value = dev->bypass_enabled;
+            break;
+
+        case 0x980918:  // ISP_CTRL_ANTIFLICKER
+            ctrl->value = tuning->antiflicker;
+            break;
+
+        case 0x8000166:  // ISP_CTRL_SHADING
+            ctrl->value = tuning->shading;
+            break;
+
+        default:
+            pr_warn("Unknown m0 control get command: 0x%x\n", ctrl->cmd);
+            ret = -EINVAL;
+            break;
+    }
+
+out:
+    pr_info("Mutex unlock\n");
+    mutex_unlock(&tuning->lock);
+    return ret;
+}
+
+static int apical_isp_core_ops_s_ctrl(struct IMPISPDev *dev, struct isp_core_ctrl *ctrl)
+{
+    int ret = 0;
+    struct isp_tuning_data *tuning = dev->tuning_data;
+
+    if (!dev || !tuning)
+        pr_err("No ISP device or tuning data\n");
+        return -EINVAL;
+
+    mutex_lock(&tuning->lock);
+
+    pr_info("Set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
+
+    switch (ctrl->cmd) {
+        pr_info("Set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
+        case 0x980900:  // Brightness
+            tuning->brightness = ctrl->value;
+            break;
+
+        case 0x980901:  // Contrast
+            tuning->contrast = ctrl->value;
+            break;
+
+        case 0x980902:  // Saturation
+            ret = tisp_bcsh_saturation(tuning, ctrl->value);
+            if (ret)
+                goto out;
+            break;
+
+        case 0x98091b:  // Sharpness
+            tuning->sharpness = ctrl->value;
+            break;
+
+        case 0x980914:  // HFLIP
+            if (!tuning->regs) {
+                ret = -EINVAL;
+                goto out;
+            }
+            writel(ctrl->value ? 1 : 0, tuning->regs + 0x3ad * 4);
+            tuning->hflip = ctrl->value ? 1 : 0;
+            set_framesource_changewait_cnt();
+            break;
+
+        case 0x980915:  // VFLIP
+            if (!tuning->regs) {
+                ret = -EINVAL;
+                goto out;
+            }
+            writel(ctrl->value ? 1 : 0, tuning->regs + 0x3ac * 4);
+            tuning->vflip = ctrl->value ? 1 : 0;
+            set_framesource_changewait_cnt();
+            break;
+
+        case 0x8000164:  // ISP_CTRL_BYPASS
+            dev->bypass_enabled = !!ctrl->value;
+            break;
+
+        case 0x980918:  // ISP_CTRL_ANTIFLICKER
+            if (ctrl->value > 2) {
+                ret = -EINVAL;
+                goto out;
+            }
+            tuning->antiflicker = ctrl->value;
+            break;
+
+        case 0x8000166:  // ISP_CTRL_SHADING
+            tuning->shading = ctrl->value;
+            break;
+
+        case 0x800002c:  // Move state
+            tuning->move_state = ctrl->value;
+            break;
+
+        case 0x8000023:  // AE Compensation
+            tuning->ae_comp = ctrl->value;
+            break;
+
+        case 0x8000028:  // Maximum Analog Gain
+            tuning->max_again = ctrl->value;
+            break;
+
+        case 0x8000029:  // Maximum Digital Gain
+            tuning->max_dgain = ctrl->value;
+            break;
+
+        case 0x8000039:  // Defog Strength
+            tuning->defog_strength = ctrl->value;
+            break;
+
+        case 0x8000062:  // DPC Strength
+            tuning->dpc_strength = ctrl->value;
+            break;
+
+        case 0x80000a2:  // DRC Strength
+            tuning->drc_strength = ctrl->value;
+            break;
+
+        case 0x8000085:  // Temper Strength
+            tuning->temper_strength = ctrl->value;
+            if (tuning->state == 2 && tuning->regs) {
+                writel(ctrl->value, tuning->regs + ISP_TEMPER_STRENGTH);
+                wmb();
+            }
+            break;
+
+        case 0x8000086:  // Sinter Strength
+            tuning->sinter_strength = ctrl->value;
+            if (tuning->state == 2 && tuning->regs) {
+                writel(ctrl->value, tuning->regs + ISP_SINTER_STRENGTH);
+                wmb();
+            }
+            break;
+        // Special case handlers:
+        case 0x8000004: {  // White Balance
+            struct {
+                uint32_t r_gain;
+                uint32_t g_gain;
+                uint32_t b_gain;
+                uint32_t color_temp;  // From the decompiled WB references
+            } wb_data;
+
+            if (copy_from_user(&wb_data, (void __user *)ctrl->value, sizeof(wb_data))) {
+                ret = -EFAULT;
+                goto out;
+            }
+
+            tuning->wb_gains.r = wb_data.r_gain;
+            tuning->wb_gains.g = wb_data.g_gain;
+            tuning->wb_gains.b = wb_data.b_gain;
+            tuning->wb_temp = wb_data.color_temp;
+
+            // Update hardware if tuning is active
+            if (tuning->state == 2 && tuning->regs) {
+                writel(wb_data.r_gain, tuning->regs + ISP_WB_R_GAIN);
+                writel(wb_data.g_gain, tuning->regs + ISP_WB_G_GAIN);
+                writel(wb_data.b_gain, tuning->regs + ISP_WB_B_GAIN);
+                wmb();
+            }
+            break;
+        }
+
+        case 0x8000101: {  // BCSH Hue
+            struct {
+                uint8_t hue;
+                uint8_t brightness;
+                uint8_t contrast;
+                uint8_t saturation;
+            } bcsh_data;
+
+            if (copy_from_user(&bcsh_data, (void __user *)ctrl->value, sizeof(bcsh_data))) {
+                ret = -EFAULT;
+                goto out;
+            }
+
+            tuning->bcsh_hue = bcsh_data.hue;
+            tuning->bcsh_brightness = bcsh_data.brightness;
+            tuning->bcsh_contrast = bcsh_data.contrast;
+            tuning->bcsh_saturation = bcsh_data.saturation;
+
+            if (tuning->state == 2 && tuning->regs) {
+                writel(bcsh_data.hue, tuning->regs + ISP_BCSH_HUE);
+                writel(bcsh_data.brightness, tuning->regs + ISP_BCSH_BRIGHTNESS);
+                writel(bcsh_data.contrast, tuning->regs + ISP_BCSH_CONTRAST);
+                writel(bcsh_data.saturation, tuning->regs + ISP_BCSH_SATURATION);
+                wmb();
+            }
+            break;
+        }
+        case 0x80000e0: { // SET FPS
+            struct {
+                uint32_t frame_rate;  // fps_num
+                uint32_t frame_div;   // fps_den
+            } fps_data;
+
+            if (copy_from_user(&fps_data, (void __user *)ctrl->value, sizeof(fps_data)))
+                return -EFAULT;
+
+            // Store in tuning data
+            dev->tuning_data->fps_num = fps_data.frame_rate;
+            dev->tuning_data->fps_den = fps_data.frame_div;
+
+            // Update in framesource
+            ret = set_framesource_fps(fps_data.frame_rate, fps_data.frame_div);
+
+            // Handle AE algorithm if enabled
+            if (ret == 0 && dev->ae_algo_enabled) {
+                if (dev->ae_algo_cb)
+                    dev->ae_algo_cb(dev->ae_priv_data, 0, 0);
+            }
+
+            break;
+        }
+        default:
+            pr_warn("Unknown ISP control command: 0x%x\n", ctrl->cmd);
+            ret = -EINVAL;
+            break;
+    }
+
+out:
+    pr_info("Mutex unlock\n");
+    mutex_unlock(&tuning->lock);
+    return ret;
+}
+
+static int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
+{
+    struct IMPISPDev *dev = ourISPdev;
+    struct isp_core_ctrl ctrl;
+    int ret = 0;
+
+    pr_info("ISP m0 IOCTL called: cmd=0x%x\n", cmd);
+
+    // Basic validation {
+    if (!dev || !dev->tuning_data) {
+        pr_err("No ISP device or tuning data\n");
+        return -EINVAL;
+    }
+
+//    // Verify tuning state is 3
+//    if (dev->tuning_data->state != 3) {
+//        pr_err("ISP tuning not in correct state (state=%d)\n",
+//               dev->tuning_data ? dev->tuning_data->state : -1);
+//        return -EINVAL;
+//    }
+
+    if (cmd == 0xc00c56c6) {
+        pr_info("Tuning IOCTL\n");
+        // Extract the actual command from the tuning request
+        struct {
+            int32_t mode;  // enable flag
+            uint32_t cmd;  // The actual command we want
+        } req;
+
+        if (copy_from_user(&req, arg, sizeof(req)))
+            return -EFAULT;
+
+        // Set up the ctrl structure for the core functions
+        ctrl.cmd = req.cmd;
+        if (req.mode) {
+            // GET operation
+            pr_info("GET operation\n");
+            ret = apical_isp_core_ops_g_ctrl(dev, &ctrl);
+            if (ret == 0 || ret == 0xfffffdfd) {
+                pr_info("Copying control back to user\n");
+                if (copy_to_user(arg, &ctrl, 8))  { // Write result back
+                    pr_err("Failed to copy control back to user\n");
+                    return -EFAULT;
+                }
+            }
+        } else {
+            // SET operation
+            pr_info("SET operation\n");
+            ret = apical_isp_core_ops_s_ctrl(dev, &ctrl);
+        }
+    } else {
+        pr_info("Direct GET/SET operation\n");
+        // Direct GET/SET operations
+        switch(cmd) {
+            case 0xc008561b: { // GET
+                if (copy_from_user(&ctrl, arg, 8))
+                    pr_err("Failed to copy control from user\n");
+                    return -EFAULT;
+                ret = apical_isp_core_ops_g_ctrl(dev, &ctrl);
+                if (ret == 0 || ret == 0xfffffdfd) {
+                    pr_info("Copying control back to user\n");
+                    if (copy_to_user(arg, &ctrl, 8))
+                        return -EFAULT;
+                }
+                break;
+            }
+            case 0xc008561c: { // SET
+                if (copy_from_user(&ctrl, arg, 8)) {
+                    pr_err("Failed to copy control from user\n");
+                    return -EFAULT;
+                }
+                pr_info("SET operation\n");
+                ret = apical_isp_core_ops_s_ctrl(dev, &ctrl);
+                break;
+            }
+            default:
+                pr_err("Unknown ISP control command: 0x%x\n", cmd);
+                return -EINVAL;
+        }
+    }
+
+    return ret;
+}
 
 // Add new char device ops for libimp
 static const struct file_operations isp_m0_chardev_fops = {
@@ -2211,16 +3667,16 @@ static int tx_isp_fs_probe(struct platform_device *pdev)
     if (!sd)
         return -ENOMEM;
 
-    // Allocate input pads
-    sd->num_inpads = 1;
+    // Allocate input pads - one for each channel
+    sd->num_inpads = MAX_CHANNELS;  // Should be 2 based on your setup
     sd->inpads = kzalloc(sizeof(struct tx_isp_subdev_pad) * sd->num_inpads, GFP_KERNEL);
     if (!sd->inpads) {
         ret = -ENOMEM;
         goto err_free_sd;
     }
 
-    // Allocate output pads
-    sd->num_outpads = 1;
+    // Allocate output pads - one for each channel
+    sd->num_outpads = MAX_CHANNELS;
     sd->outpads = kzalloc(sizeof(struct tx_isp_subdev_pad) * sd->num_outpads, GFP_KERNEL);
     if (!sd->outpads) {
         ret = -ENOMEM;
@@ -2234,6 +3690,7 @@ static int tx_isp_fs_probe(struct platform_device *pdev)
         sd->inpads[i].type = TX_ISP_PADTYPE_INPUT;
         sd->inpads[i].state = TX_ISP_PADSTATE_FREE;
         sd->inpads[i].links_type = TX_ISP_PADLINK_CSI | TX_ISP_PADLINK_VIC;
+        pr_info("Initialized input pad %d: %p\n", i, &sd->inpads[i]);
     }
 
     for (int i = 0; i < sd->num_outpads; i++) {
@@ -2242,6 +3699,7 @@ static int tx_isp_fs_probe(struct platform_device *pdev)
         sd->outpads[i].type = TX_ISP_PADTYPE_OUTPUT;
         sd->outpads[i].state = TX_ISP_PADSTATE_FREE;
         sd->outpads[i].links_type = TX_ISP_PADLINK_VIC | TX_ISP_PADLINK_DDR;
+        pr_info("Initialized output pad %d: %p\n", i, &sd->outpads[i]);
     }
 
     // Store in platform device and IMPISPDev
@@ -2251,6 +3709,9 @@ static int tx_isp_fs_probe(struct platform_device *pdev)
 
     pr_info("Frame source probe complete: dev=%p sd=%p fs_pdev=%p\n",
             dev, sd, dev->fs_pdev);
+    pr_info("Initialized with %d input pads and %d output pads\n",
+            sd->num_inpads, sd->num_outpads);
+
     return 0;
 
     err_free_inpads:
@@ -2862,29 +4323,78 @@ static void dump_frame_format_state(struct isp_channel *chn)
     pr_info("  State: %d Flags: 0x%x\n", chn->state, chn->flags);
 }
 
-static void frame_done_callback(struct isp_channel *chn, struct video_buffer *vbuf)
+// Helper to set frame group done flag
+static void set_group_done(struct frame_group *group)
+{
+    if (!group || (unsigned long)group < PAGE_OFFSET) {
+        pr_err("Invalid group pointer in set_group_done\n");
+        return;
+    }
+
+    // Validate state contains magic (0x336ac) before accessing
+    if ((group->state & 0xFFFFF000) != 0x336000) {
+        pr_err("Invalid group state: 0x%x\n", group->state);
+        return;
+    }
+
+    // The done flag is at offset 0x3c in the update_block
+    uint32_t *done_flag = (uint32_t *)((char *)group->update_block + 0x3c);
+    *done_flag = 1;
+}
+
+static int handle_frame_update(struct isp_channel *chn, struct frame_node *node)
 {
     unsigned long flags;
 
-    if (!chn || !vbuf)
-        return;
-
     spin_lock_irqsave(&chn->queue->queue_lock, flags);
 
-    // Remove from ready list if there
-    if (!list_empty(&vbuf->list)) {
-        list_del_init(&vbuf->list);
+    // Only handle if streaming
+    if (!(chn->queue->stream_state & 1)) {
+        spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+        return 0;
     }
 
-    // Mark as done and add to done list
-    vbuf->flags &= ~V4L2_BUF_FLAG_QUEUED;
-    vbuf->flags |= V4L2_BUF_FLAG_DONE;
-    list_add_tail(&vbuf->list, &chn->queue->done_list);
+    // Mark buffer as complete
+    node->metadata->state = FRAME_STATE_DONE;
+    node->flags |= V4L2_BUF_FLAG_DONE;
+
+    // Move to done list
+    list_move_tail(&node->list, &chn->queue->done_list);
 
     spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
 
-    // Wake up any waiting dqbuf
     wake_up_interruptible(&chn->queue->wait);
+    return 0;
+}
+
+static int group_update(void *group, void *frame_buf)
+{
+    pr_info("Group update called with group=%p frame=%p\n", group, frame_buf);
+
+    // The group pointer passed in is actually our group_module
+    struct group_module *mod = (struct group_module *)group;
+    struct vbm_frame *buf = (struct vbm_frame *)frame_buf;
+
+    if (!mod || !buf) {
+        pr_err("Invalid group update args\n");
+        return -EINVAL;
+    }
+
+    pr_info("Processing group update: channel=%d fps=%d/%d\n",
+             mod->channel, mod->source_fps_num, mod->source_fps_num);
+
+    // Set thread name to match libimp expectations
+    strncpy(current->comm, "group_update", sizeof(current->comm));
+
+    if (mod->channel >= MAX_CHANNELS)
+        return -EINVAL;
+
+    // Mark buffer as complete
+    buf->state = FRAME_STATE_DONE;
+
+    pr_info("Group update complete for buffer index %d\n", buf->index);
+
+    return 0;
 }
 
 static int start_streaming(struct IMPISPDev *dev)
@@ -2944,288 +4454,381 @@ static int readl_poll_until_timeout(void __iomem *addr, u32 mask, u32 expected,
     return -ETIMEDOUT;
 }
 
-static void generate_test_pattern(void *buf, int width, int height, uint32_t format)
-{
-    uint8_t *ptr = buf;
-    int x, y;
-    int stride;
-
-    // Calculate stride with alignment
-    stride = ALIGN(width, 32);  // 32-byte alignment
-
-    // For NV12 format
-    if (format == ISP_FMT_NV12) {
-        // Fill Y plane
-        for (y = 0; y < height; y++) {
-            for (x = 0; x < width; x++) {
-                // Create gradient pattern
-                int color = ((x + y) % 256);
-                ptr[y * stride + x] = color;
-            }
-            // Clear padding
-            if (stride > width) {
-                memset(&ptr[y * stride + width], 0, stride - width);
-            }
-        }
-
-        // Fill UV plane
-        ptr += (stride * height);
-        for (y = 0; y < height/2; y++) {
-            for (x = 0; x < width; x += 2) {
-                // Alternate U/V values for color bars
-                ptr[y * stride + x] = 128;     // U
-                ptr[y * stride + x + 1] = 128; // V
-            }
-            // Clear padding
-            if (stride > width) {
-                memset(&ptr[y * stride + width], 128, stride - width);
-            }
-        }
-    }
-    // Add support for other formats as needed
-    else if (format == ISP_FMT_YUV422) {
-        // Similar pattern for YUV422
-        // TODO
-    }
-}
+//static void generate_test_pattern(void *buf, int width, int height, uint32_t format)
+//{
+//    uint8_t *ptr = buf;
+//    int x, y;
+//    int stride;
+//
+//    // Calculate stride with alignment
+//    stride = ALIGN(width, 32);  // 32-byte alignment
+//
+//    // For NV12 format
+//    if (format == ISP_FMT_NV12) {
+//        // Fill Y plane
+//        for (y = 0; y < height; y++) {
+//            for (x = 0; x < width; x++) {
+//                // Create gradient pattern
+//                int color = ((x + y) % 256);
+//                ptr[y * stride + x] = color;
+//            }
+//            // Clear padding
+//            if (stride > width) {
+//                memset(&ptr[y * stride + width], 0, stride - width);
+//            }
+//        }
+//
+//        // Fill UV plane
+//        ptr += (stride * height);
+//        for (y = 0; y < height/2; y++) {
+//            for (x = 0; x < width; x += 2) {
+//                // Alternate U/V values for color bars
+//                ptr[y * stride + x] = 128;     // U
+//                ptr[y * stride + x + 1] = 128; // V
+//            }
+//            // Clear padding
+//            if (stride > width) {
+//                memset(&ptr[y * stride + width], 128, stride - width);
+//            }
+//        }
+//    }
+//    // Add support for other formats as needed
+//    else if (format == ISP_FMT_YUV422) {
+//        // Similar pattern for YUV422
+//        // TODO
+//    }
+//}
 
 // Get next frame from ready queue
-static struct video_buffer* dequeue_ready_frame(struct frame_queue *q)
+//static struct vbm_frame* dequeue_ready_frame(struct frame_queue *q)
+//{
+//    struct vbm_frame *buf = NULL;
+//    unsigned long flags;
+//
+//    spin_lock_irqsave(&q->queue_lock, flags);
+//
+//    if (!list_empty(&q->ready_list)) {
+//        buf = list_first_entry(&q->ready_list, struct vbm_frame, list);
+//        list_del_init(&buf->list);
+//    }
+//
+//    spin_unlock_irqrestore(&q->queue_lock, flags);
+//
+//    if (buf)
+//        pr_info("Dequeued frame from ready: index=%d\n",
+//                buf->index);
+//
+//    return buf;
+//}
+
+
+static void write_test_pattern(struct isp_channel *chn, void *frame_addr, int frame_count)
 {
-    struct video_buffer *buf = NULL;
-    unsigned long flags;
-
-    spin_lock_irqsave(&q->queue_lock, flags);
-
-    if (!list_empty(&q->ready_list)) {
-        buf = list_first_entry(&q->ready_list, struct video_buffer, list);
-        list_del_init(&buf->list);
-        buf->flags &= ~V4L2_BUF_FLAG_QUEUED;
-    }
-
-    spin_unlock_irqrestore(&q->queue_lock, flags);
-
-    if (buf)
-        pr_info("Dequeued frame from ready: index=%d flags=0x%x\n",
-                buf->index, buf->flags);
-
-    return buf;
-}
-
-static void queue_done_frame(struct frame_queue *q, struct video_buffer *buf)
-{
-    unsigned long flags;
-
-    if (!q || !buf)
-        return;
-
-    spin_lock_irqsave(&q->queue_lock, flags);
-
-    // Update buffer flags
-    buf->flags |= V4L2_BUF_FLAG_DONE;
-
-    // Add to done list
-    list_add_tail(&buf->list, &q->done_list);
-
-    spin_unlock_irqrestore(&q->queue_lock, flags);
-
-    pr_info("Frame queued to done list: index=%d flags=0x%x state=%d\n",
-            buf->index, buf->flags, buf->meta ? buf->meta->state : -1);
-
-    wake_up_interruptible(&q->wait);
-}
-
-static void process_frame_buffer(struct isp_channel *chn, struct video_buffer *buf)
-{
-    if (!chn || !buf || !buf->data) {
-        pr_err("Invalid buffer parameters\n");
-        return;
-    }
-
-    // Fill with test pattern if needed
-    if (chn->attr.enable) {
-        generate_test_pattern(buf->data, chn->width, chn->height, chn->fmt);
-    }
-
-    // Update buffer metadata
-    buf->flags |= V4L2_BUF_FLAG_DONE;
-    buf->status = 0;  // No errors
-
-    pr_debug("Processed buffer %d:\n"
-             "  Size: %dx%d fmt=%d\n"
-             "  Data: %p\n",
-             buf->index,
-             chn->width, chn->height, chn->fmt,
-             buf->data);
-}
-
-
-
-
-static void fill_test_pattern(void *buf, int width, int height, uint32_t format)
-{
-    // Check for atomic context
-    if (in_atomic()) {
-        // Just clear memory instead of pattern in atomic context
-        memset(buf, 0, width * height * 3/2);
-        return;
-    }
-
-    // Regular pattern fill
-    uint8_t *ptr = buf;
+    uint8_t *y_plane = frame_addr;
+    uint8_t *uv_plane = y_plane + (chn->width * chn->height);
     int x, y;
 
-    // For NV12 format
-    if (format == ISP_FMT_NV12) {
-        // Fill Y plane with gradient pattern
-        for (y = 0; y < height; y++) {
-            for (x = 0; x < width; x++) {
-                ptr[y * width + x] = (x + y) & 0xFF;
+    // Generate pattern based on channel and frame count
+    if (chn->channel_id == 0) {  // 1080p
+        // Y plane - moving diagonal pattern
+        for (y = 0; y < chn->height; y++) {
+            for (x = 0; x < chn->width; x++) {
+                int val = ((x + y + frame_count) % 256);
+                // Ensure we stay within luma range for YUV
+                val = 16 + ((val * 219) / 255);  // Scale to 16-235
+                y_plane[y * chn->width + x] = val;
             }
         }
 
-        // Fill UV plane
-        ptr += width * height;
-        memset(ptr, 128, width * height / 2);
-    }
-}
-
-
-static int frame_thread(void *arg)
-{
-    struct frame_thread_data *thread_data = arg;
-    struct isp_channel *chn = thread_data->chn;
-    struct video_buffer *buf;
-    unsigned long flags;
-
-    pr_info("Frame thread starting for channel %d\n", chn->channel_id);
-
-    atomic_set(&thread_data->thread_running, 1);
-    wake_up_interruptible(&chn->queue->wait);
-
-    while (!kthread_should_stop() && !atomic_read(&thread_data->should_stop)) {
-        // Get buffer from ready list
-        spin_lock_irqsave(&chn->queue->queue_lock, flags);
-        if (!list_empty(&chn->queue->ready_list)) {
-            buf = list_first_entry(&chn->queue->ready_list,
-                                 struct video_buffer, list);
-            list_del_init(&buf->list);
-            pr_info("Dequeued buffer %d from ready list\n", buf->index);
-        } else {
-            buf = NULL;
+        // UV plane - color bars
+        for (y = 0; y < chn->height/2; y++) {
+            for (x = 0; x < chn->width; x += 2) {
+                int bar = (x / (chn->width/8)) % 8;
+                switch(bar) {
+                    case 0: // White
+                        uv_plane[y * chn->width + x] = 128;
+                        uv_plane[y * chn->width + x + 1] = 128;
+                        break;
+                    case 1: // Yellow
+                        uv_plane[y * chn->width + x] = 16;
+                        uv_plane[y * chn->width + x + 1] = 146;
+                        break;
+                    case 2: // Cyan
+                        uv_plane[y * chn->width + x] = 166;
+                        uv_plane[y * chn->width + x + 1] = 16;
+                        break;
+                    case 3: // Green
+                        uv_plane[y * chn->width + x] = 54;
+                        uv_plane[y * chn->width + x + 1] = 34;
+                        break;
+                    default: // Gray
+                        uv_plane[y * chn->width + x] = 128;
+                        uv_plane[y * chn->width + x + 1] = 128;
+                        break;
+                }
+            }
         }
-        spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
-
-        if (!buf) {
-            msleep(10);
-            continue;
+    } else {  // 360p
+        // Y plane - checkerboard pattern
+        int block_size = 32;
+        for (y = 0; y < chn->height; y++) {
+            for (x = 0; x < chn->width; x++) {
+                int block = ((x/block_size + y/block_size + frame_count/30) % 2);
+                y_plane[y * chn->width + x] = block ? 235 : 16;
+            }
         }
 
-        // Sync metadata for CPU access
-        dma_sync_single_for_cpu(chn->dev, chn->meta_dma[buf->index],
-                               sizeof(struct frame_metadata),
-                               DMA_FROM_DEVICE);
-
-        // Update metadata state
-        buf->meta->state = FRAME_STATE_DONE;
-        buf->meta->done_flag = 1;
-
-        // Sync back for device
-        dma_sync_single_for_device(chn->dev, chn->meta_dma[buf->index],
-                                  sizeof(struct frame_metadata),
-                                  DMA_TO_DEVICE);
-
-        // Process buffer and queue to done list
-        spin_lock_irqsave(&chn->queue->queue_lock, flags);
-        buf->flags |= V4L2_BUF_FLAG_DONE;
-        list_add_tail(&buf->list, &chn->queue->done_list);
-        pr_info("Queued buffer %d to done list\n", buf->index);
-        spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
-
-        wake_up_interruptible(&chn->queue->wait);
-
-        msleep(33); // ~30fps
+        // UV plane - simple color pattern
+        for (y = 0; y < chn->height/2; y++) {
+            for (x = 0; x < chn->width; x += 2) {
+                uv_plane[y * chn->width + x] = 128 + (frame_count % 128);      // U varies with time
+                uv_plane[y * chn->width + x + 1] = 128 - (frame_count % 128);  // V opposite of U
+            }
+        }
     }
 
-    pr_info("Frame thread exiting\n");
-    atomic_set(&thread_data->thread_running, 0);
-    wake_up_interruptible(&chn->queue->wait);
-    return 0;
+    // Ensure writes complete
+    wmb();
 }
 
-static int init_frame_thread(struct isp_channel *chn)
+
+static void generate_test_pattern(u8 *buffer, int width, int height)
 {
-    struct frame_thread_data *thread_data;
+    int x, y;
+    u8 *y_plane = buffer;
+    u8 *uv_plane = buffer + (width * height);
 
-    if (!chn || !chn->buf_base) {
-        pr_err("Invalid channel state for thread init\n");
-        return -EINVAL;
+    // Generate Y plane pattern
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++) {
+            // Create various regions:
+
+            // Top left: Black and white checkerboard
+            if (y < height/2 && x < width/2) {
+                y_plane[y * width + x] = ((x/32 + y/32) % 2) ? 235 : 16;  // White/Black
+            }
+            // Top right: Vertical bars
+            else if (y < height/2) {
+                y_plane[y * width + x] = (x % 128) < 64 ? 16 : 235;  // Black/White bars
+            }
+            // Bottom left: Horizontal bars
+            else if (x < width/2) {
+                y_plane[y * width + x] = (y % 128) < 64 ? 16 : 235;  // Black/White bars
+            }
+            // Bottom right: Gray gradient
+            else {
+                y_plane[y * width + x] = 16 + ((x + y) % 220);  // Gradient pattern
+            }
+        }
     }
 
-    // Check if thread already exists
-    if (chn->thread_data) {
-        pr_warn("Frame thread already exists\n");
-        return -EEXIST;
+    // Generate UV plane pattern (NV12 format - interleaved U and V)
+    for (y = 0; y < height/2; y++) {
+        for (x = 0; x < width/2; x++) {
+            int uv_index = y * width + x * 2;
+
+            // Top left: Grayscale (neutral UV)
+            if (y < height/4 && x < width/4) {
+                uv_plane[uv_index] = 128;     // U = 128 (neutral)
+                uv_plane[uv_index + 1] = 128; // V = 128 (neutral)
+            }
+            // Top right: Blue tint
+            else if (y < height/4) {
+                uv_plane[uv_index] = 255;     // U = 255 (blue)
+                uv_plane[uv_index + 1] = 128; // V = 128 (neutral)
+            }
+            // Bottom left: Red tint
+            else if (x < width/4) {
+                uv_plane[uv_index] = 128;     // U = 128 (neutral)
+                uv_plane[uv_index + 1] = 255; // V = 255 (red)
+            }
+            // Bottom right: Green tint
+            else {
+                uv_plane[uv_index] = 0;       // U = 0 (reduce blue)
+                uv_plane[uv_index + 1] = 0;   // V = 0 (reduce red)
+            }
+        }
     }
-
-    thread_data = kzalloc(sizeof(*thread_data), GFP_KERNEL);
-    if (!thread_data)
-        return -ENOMEM;
-
-    thread_data->chn = chn;
-    atomic_set(&thread_data->should_stop, 0);
-    atomic_set(&thread_data->thread_running, 0);
-
-    init_waitqueue_head(&chn->queue->wait);
-
-    thread_data->task = kthread_run(frame_thread, thread_data,
-                                  "frame-thread-%d", chn->channel_id);
-    if (IS_ERR(thread_data->task)) {
-        int ret = PTR_ERR(thread_data->task);
-        pr_err("Failed to start frame thread: %d\n", ret);
-        kfree(thread_data);
-        return ret;
-    }
-
-    // Store thread data in channel
-    chn->thread_data = thread_data;
-
-    // Wait for thread to signal it's running
-    wait_event_timeout(chn->queue->wait,
-                      atomic_read(&thread_data->thread_running),
-                      msecs_to_jiffies(1000));
-
-    pr_info("Frame thread initialized for channel %d\n", chn->channel_id);
-    return 0;
 }
 
-static int stop_frame_thread(struct isp_channel *chn)
+
+// Helper function to generate Y plane test pattern
+static void generate_y_pattern(u8 *buffer, int width, int height, int y_offset)
 {
-    struct frame_thread_data *thread_data = chn->thread_data;
-
-    if (!thread_data)
-        return 0;
-
-    // Signal thread to stop
-    atomic_set(&thread_data->should_stop, 1);
-    wake_up_interruptible(&chn->queue->wait);
-
-    // Wait for thread to finish
-    wait_event_timeout(chn->queue->wait,
-                      !atomic_read(&thread_data->thread_running),
-                      msecs_to_jiffies(1000));
-
-    // Now safe to stop thread
-    if (thread_data->task) {
-        kthread_stop(thread_data->task);
-        thread_data->task = NULL;
+    int x, y;
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++) {
+            // Create some kind of visible pattern
+            // This creates diagonal stripes
+            buffer[y * width + x] = ((x + y + y_offset) / 32) % 2 ? 235 : 16;
+        }
     }
-
-    kfree(thread_data);
-    chn->thread_data = NULL;
-
-    return 0;
 }
+
+// Helper function to generate UV plane test pattern
+static void generate_uv_pattern(u8 *buffer, int width, int height, int y_offset)
+{
+    int x, y;
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x += 2) {
+            // Alternate between a few colors for UV values
+            buffer[y * width + x] = 128;     // U value
+            buffer[y * width + x + 1] = 128; // V value
+        }
+    }
+}
+
+//
+//static int frame_thread(void *arg)
+//{
+//    struct frame_thread_data *thread_data = arg;
+//    struct isp_channel *chn = thread_data->chn;
+//    int frame_count = 0;
+//    unsigned long flags;
+//
+//    pr_info("Frame thread starting for channel %d\n", chn->channel_id);
+//    atomic_set(&chn->thread_running, 1);
+//
+//    while (!kthread_should_stop() && !atomic_read(&thread_data->should_stop)) {
+//        if ((chn->queue->stream_state & 0x3) != 0x3) {
+//            msleep(10);
+//            continue;
+//        }
+//
+//        spin_lock_irqsave(&chn->queue->queue_lock, flags);
+//
+//        if (!list_empty(&chn->queue->ready_list)) {
+//            struct vbm_frame *buf = list_first_entry(&chn->queue->ready_list,
+//                                                   struct vbm_frame, list);
+//            list_del_init(&buf->list);
+//
+//            spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+//
+//            // Generate frame data
+//            if (buf->virt_addr)
+//                write_test_pattern(chn, buf->virt_addr, frame_count);
+//
+//            spin_lock_irqsave(&chn->queue->queue_lock, flags);
+//
+//            // Just move to done list
+//            list_add_tail(&buf->list, &chn->queue->done_list);
+//            frame_count++;
+//        }
+//
+//        spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+//        msleep(10);
+//    }
+//
+//    atomic_set(&chn->thread_running, 0);
+//    wake_up_interruptible(&chn->queue->wait);
+//    return 0;
+//}
+
+static void hex_dump_user_memory(const char *desc, void __user *ptr, size_t len)
+{
+    unsigned char buf[16];
+    size_t i;
+
+    pr_info("=== %s at %p ===\n", desc, ptr);
+
+    for (i = 0; i < len; i += 16) {
+        size_t chunk = min(len - i, (size_t)16);
+        memset(buf, 0, sizeof(buf));
+
+        if (copy_from_user(buf, ptr + i, chunk) != 0) {
+            pr_err("Failed to read memory at offset 0x%zx\n", i);
+            return;
+        }
+
+        // Print hex values
+        pr_info("%04zx: ", i);
+        for (size_t j = 0; j < 16; j++) {
+            if (j < chunk)
+                pr_cont("%02x ", buf[j]);
+            else
+                pr_cont("   ");
+        }
+
+        // Print ASCII representation
+        pr_cont(" |");
+        for (size_t j = 0; j < chunk; j++) {
+            unsigned char c = buf[j];
+            // Simple printable check - between space and tilde
+            pr_cont("%c", (c >= 32 && c <= 126) ? c : '.');
+        }
+        pr_cont("|\n");
+    }
+}
+
+//
+//static int init_frame_thread(struct isp_channel *chn)
+//{
+//    struct frame_thread_data *thread_data;
+//
+//    if (!chn) {
+//        pr_err("Invalid channel state for thread init\n");
+//        return -EINVAL;
+//    }
+//
+//
+//    thread_data = kzalloc(sizeof(*thread_data), GFP_KERNEL);
+//    if (!thread_data) {
+//        return -ENOMEM;
+//    }
+//
+//    thread_data->chn = chn;
+//    atomic_set(&thread_data->should_stop, 0);
+//    atomic_set(&thread_data->thread_running, 0);
+//
+//    init_waitqueue_head(&chn->queue->wait);
+//
+//    // Start the thread
+//    thread_data->task = kthread_run(frame_thread, thread_data,
+//                                  "frame-thread-%d", chn->channel_id);
+//    if (IS_ERR(thread_data->task)) {
+//        int ret = PTR_ERR(thread_data->task);
+//        kfree(thread_data);
+//        return ret;
+//    }
+//
+//    chn->thread_data = thread_data;
+//
+//    // Wait for thread startup
+//    wait_event_timeout(chn->queue->wait,
+//                      atomic_read(&thread_data->thread_running),
+//                      msecs_to_jiffies(1000));
+//
+//    pr_info("Frame thread initialized for channel %d \n", chn->channel_id);
+//    return 0;
+//}
+//
+//static int stop_frame_thread(struct isp_channel *chn)
+//{
+//    struct frame_thread_data *thread_data = chn->thread_data;
+//
+//    if (!thread_data)
+//        return 0;
+//
+//    // Signal thread to stop
+//    atomic_set(&thread_data->should_stop, 1);
+//    wake_up_interruptible(&chn->queue->wait);
+//
+//    // Wait for thread to finish
+//    wait_event_timeout(chn->queue->wait,
+//                      !atomic_read(&thread_data->thread_running),
+//                      msecs_to_jiffies(1000));
+//
+//    // Now safe to stop thread
+//    if (thread_data->task) {
+//        kthread_stop(thread_data->task);
+//        thread_data->task = NULL;
+//    }
+//
+//    kfree(thread_data);
+//    chn->thread_data = NULL;
+//
+//    return 0;
+//}
 
 int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, bool enable)
 {
@@ -3407,8 +5010,6 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
     switch (cmd) {
 		case SENSOR_CMD_READ_ID: {
 		    uint8_t val_h = 0, val_l = 0;
-		    struct i2c_client *client = ourISPdev->sensor_i2c_client;
-
 		    // Try reading ID registers
 		    ret = isp_sensor_read_reg(client, 0x3307, &val_h);
 		    if (ret) {
@@ -3444,74 +5045,33 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
             break;
         }
         case 0x80045612: // VIDIOC_STREAMON
-        {
-            pr_info("Sensor command: 0x%x\n", cmd);
-            pr_info("Sensor streamon\n");
+		{
+		    pr_info("Sensor command: 0x%x\n", cmd);
+		    pr_info("Sensor streamon\n");
 
-            // First configure CSI - this can sleep
-            ret = configure_csi_streaming(dev);
-            if (ret) {
-                pr_err("Failed to configure CSI: %d\n", ret);
-                return ret;
-            }
+		    // First configure CSI - this can sleep
+		    ret = configure_csi_streaming(dev);
+		    if (ret) {
+		        pr_err("Failed to configure CSI: %d\n", ret);
+		        return ret;
+		    }
 
-            // sensor reset sequence here
-            if (reset_gpio != -1) {
-                ret = gpio_request(reset_gpio, "sensor_reset");
-                if (!ret) {
-                    gpio_direction_output(reset_gpio, 0);
-                    msleep(20);
-                    gpio_direction_output(reset_gpio, 1);
-                    msleep(20);
-                }
-            }
+		    // sensor reset sequence here
+		    if (reset_gpio != -1) {
+		        pr_info("Resetting sensor via GPIO %d\n", reset_gpio);
+		        ret = gpio_request(reset_gpio, "sensor_reset");
+		        if (!ret) {
+                    pr_info("Resetting sensor via GPIO failed %d\n", reset_gpio);
+		            gpio_direction_output(reset_gpio, 0);
+		            msleep(20);
+		            gpio_direction_output(reset_gpio, 1);
+		            msleep(20);
+		        }
+		    }
 
-            if (file->private_data) {
-                struct isp_channel *chn = file->private_data;
-                if (chn && chn->queue) {
-                    mutex_lock(&chn->queue->lock);
-
-                    // Check state must be 3
-                    if (chn->state != 3) {
-                        pr_err("Invalid channel state %d for streaming\n", chn->state);
-                        mutex_unlock(&chn->queue->lock);
-                        return -EINVAL;
-                    }
-
-                    // Check not already streaming
-                    if (chn->queue->stream_state & 1) {
-                        pr_err("streamon: already streaming\n");
-                        mutex_unlock(&chn->queue->lock);
-                        return -EAGAIN;  // -16
-                    }
-
-                    // Enable stream
-                    chn->queue->stream_state |= 1;
-                    chn->state = 4;
-
-                    // Start frame processing thread
-                    ret = init_frame_thread(chn);
-                    if (ret) {
-                        pr_err("Failed to start frame thread: %d\n", ret);
-                        chn->queue->stream_state &= ~1;
-                        chn->state = 3;
-                        mutex_unlock(&chn->queue->lock);
-                        return ret;
-                    }
-
-                    pr_info("Enabled streaming on channel %d\n", chn->channel_id);
-
-                    mutex_unlock(&chn->queue->lock);
-                }
-            }
-
-            // Then enable stream - atomic part only
-            ret = enable_isp_streaming(dev, file, 0, true);
-            if (ret == 0) {
-                pr_info("Stream enabled!\n");
-            }
-            return ret;
-        }
+		    // Just return success - no need to copy anything back
+		    return 0;
+		}
         case VIDIOC_STREAMOFF:
             pr_info("TODO Stream OFF requested\n");
             //return enable_isp_streaming(ourISPdev, file, 0, false);
@@ -3590,7 +5150,7 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
 static int tx_isp_release(struct inode *inode, struct file *file)
 {
     struct IMPISPDev *dev = file->private_data;
-    struct video_buffer *buf;
+    struct vbm_frame *buf;
     int i;
     unsigned long flags;
 
@@ -3627,12 +5187,6 @@ static int tx_isp_release(struct inode *inode, struct file *file)
                 if (buf) {
                     // Clear lists first
                     list_del_init(&buf->list);
-
-                    // Free buffer data if we allocated it
-                    if (buf->data && chn->queue->memory_type == V4L2_MEMORY_KMALLOC) {
-                        kfree(buf->data);
-                        buf->data = NULL;
-                    }
 
                     // Free the buffer structure
                     kfree(buf);
@@ -4445,21 +5999,32 @@ static struct isp_memory_region isp_memory = {
 };
 
 
-
 static int init_isp_reserved_memory(struct platform_device *pdev) {
     dma_addr_t aligned_base = ALIGN(RMEM_BASE, 32);
     size_t aligned_size = ALIGN(RMEM_SIZE, 32);
 
-    // Missing error checking for ourISPdev
     if (!ourISPdev) {
         dev_err(&pdev->dev, "ISP device not initialized\n");
+        return -EINVAL;
+    }
+
+    // Validate base address
+    if (aligned_base < 0x02000000 || aligned_base > 0x04000000) {
+        dev_err(&pdev->dev, "Invalid RMEM base address: 0x%08x\n", 
+                (uint32_t)aligned_base);
+        return -EINVAL;
+    }
+
+    // Validate size
+    if (aligned_size > 0x02000000) { // Max 32MB
+        dev_err(&pdev->dev, "RMEM size too large: 0x%08zx\n", aligned_size);
         return -EINVAL;
     }
 
     ourISPdev->rmem_addr = aligned_base;
     ourISPdev->rmem_size = aligned_size;
 
-    // Should use devm_ioremap for managed memory
+    // Map memory region
     ourISPdev->dma_buf = devm_ioremap(&pdev->dev, aligned_base, aligned_size);
     if (!ourISPdev->dma_buf) {
         dev_err(&pdev->dev, "Failed to map DMA buffer\n");
@@ -4467,15 +6032,17 @@ static int init_isp_reserved_memory(struct platform_device *pdev) {
     }
 
     dev_info(&pdev->dev, "Reserved memory initialized:\n"
-             "  Physical address: 0x%08x (aligned)\n"
+             "  Physical address: 0x%08x (aligned from 0x%08x)\n"
              "  Virtual address: %p\n"
-             "  Size: %zu bytes\n"
-             "  Alignment check: base=0x%x buf=0x%x\n",
+             "  Size: %zu bytes (0x%08zx)\n"
+             "  Alignment check: base=0x%x buf=0x%lx\n",
              (uint32_t)aligned_base,
+             RMEM_BASE,
              ourISPdev->dma_buf,
              aligned_size,
+             aligned_size,
              (uint32_t)aligned_base & 0x1F,
-             (uintptr_t)ourISPdev->dma_buf & 0x1F);
+             (unsigned long)ourISPdev->dma_buf & 0x1F);
 
     return 0;
 }
@@ -4488,39 +6055,6 @@ struct isp_mem_request {
     uint32_t size;          // 0x8C: Buffer size
     uint32_t flags;         // 0x90: Flags/attributes
 };
-
-struct tx_isp_subdev_pad *find_subdev_link_pad(struct IMPISPDev *dev,
-                                              const struct tx_isp_link_config *cfg)
-{
-    struct tx_isp_subdev *sd = dev->fs_subdev;
-
-    // Validate inputs
-    if (!sd || !cfg) {
-        pr_err("Invalid arguments to find_subdev_link_pad\n");
-        return NULL;
-    }
-
-    pr_info("Finding pad for subdev %p:\n", sd);
-    pr_info("  Looking for %s type=%d index=%d\n",
-            cfg->src.name, cfg->src.type, cfg->src.index);
-
-    // Check type and return appropriate pad
-    if (cfg->flag & TX_ISP_PADTYPE_INPUT) {
-        if (cfg->src.index >= sd->num_inpads) {
-            pr_err("Invalid input pad index %d (max %d)\n",
-                  cfg->src.index, sd->num_inpads-1);
-            return NULL;
-        }
-        return &sd->inpads[cfg->src.index];
-    } else {
-        if (cfg->src.index >= sd->num_outpads) {
-            pr_err("Invalid output pad index %d (max %d)\n",
-                  cfg->src.index, sd->num_outpads-1);
-            return NULL;
-        }
-        return &sd->outpads[cfg->src.index];
-    }
-}
 
 static int subdev_video_destroy_link(struct tx_isp_subdev_pad *pad)
 {
@@ -4541,6 +6075,165 @@ static int subdev_video_destroy_link(struct tx_isp_subdev_pad *pad)
     }
 
     return 0;
+}
+
+static void init_tuning_event_handling(struct IMPISPDev *dev)
+{
+    struct tx_isp_subdev *sd = dev->fs_subdev;
+    if (!sd) return;
+
+    // Register tuning handlers on the main input pad
+    if (sd->num_inpads > 0) {
+        init_pad_event_handling(&sd->inpads[0], tx_isp_subdev_pad_event_handler);
+    }
+}
+
+
+
+static int destroy_pad_link(struct tx_isp_subdev_pad *src_pad, struct tx_isp_subdev_pad *sink_pad) {
+    if (!src_pad || !sink_pad) {
+        return -EINVAL;
+    }
+
+    // Clear source pad link info
+    if (src_pad->link.state) {
+        src_pad->link.source = NULL;
+        src_pad->link.sink = NULL;
+        src_pad->link.flag = 0;
+        src_pad->link.state = 0;
+        src_pad->state = TX_ISP_PADSTATE_FREE;  // Using correct enum value
+    }
+
+    // Clear sink pad link info
+    if (sink_pad->link.state) {
+        sink_pad->link.source = NULL;
+        sink_pad->link.sink = NULL;
+        sink_pad->link.flag = 0;
+        sink_pad->link.state = 0;
+        sink_pad->state = TX_ISP_PADSTATE_FREE;  // Using correct enum value
+    }
+
+    return 0;
+}
+
+// Main IOCTL handler for destroying links
+static int handle_link_destroy(struct IMPISPDev *dev) {
+    int ret = 0;
+    int link_idx;
+    const struct tx_isp_link_configs *configs;
+    struct tx_isp_link_config sink_cfg;  // Moved declaration to top
+    struct tx_isp_subdev_pad *src_pad, *sink_pad;
+    int i;
+
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    // Get current link configuration
+    link_idx = dev->link_state.current_link;
+    if (link_idx < 0) {
+        pr_info("No active link configuration to destroy\n");
+        return 0;
+    }
+
+    configs = &isp_link_configs[link_idx];
+    pr_info("Destroying link configuration %d with %d links\n",
+            link_idx, configs->length);
+
+    // Process each link in the current configuration
+    for (i = 0; i < configs->length; i++) {
+        const struct tx_isp_link_config *cfg = &configs->config[i];
+
+        // Find the source pad
+        src_pad = find_subdev_link_pad(dev, cfg);
+        if (!src_pad) {
+            pr_warn("Source pad not found for link %d\n", i);
+            continue;
+        }
+
+        // Find the sink pad
+        sink_cfg.src = cfg->dst;
+        sink_cfg.flag = cfg->flag;
+
+        sink_pad = find_subdev_link_pad(dev, &sink_cfg);
+        if (!sink_pad) {
+            pr_warn("Sink pad not found for link %d\n", i);
+            continue;
+        }
+
+        // Destroy the link
+        ret = destroy_pad_link(src_pad, sink_pad);
+        if (ret) {
+            pr_err("Failed to destroy link %d: %d\n", i, ret);
+            if (ret != -EFAULT) {
+                continue;
+            }
+            return ret;
+        }
+
+        // Call video ops stream off if available
+        if (src_pad->sd && src_pad->sd->ops &&
+            src_pad->sd->ops->video &&
+            src_pad->sd->ops->video->s_stream) {
+            ret = src_pad->sd->ops->video->s_stream(src_pad->sd, 0);
+            if (ret && ret != -EFAULT) {
+                pr_warn("Video stream off failed: %d\n", ret);
+            }
+        }
+    }
+
+    // Clear current link configuration
+    dev->link_state.current_link = -1;
+    pr_info("Link configuration destroyed successfully\n");
+    return 0;
+}
+
+static int read_proc_value(const char *path, char *buf, size_t size)
+{
+    struct file *f;
+    mm_segment_t old_fs;
+    loff_t pos = 0;
+    ssize_t n;
+
+    f = filp_open(path, O_RDONLY, 0);
+    if (IS_ERR(f))
+        return PTR_ERR(f);
+
+    old_fs = get_fs();
+    set_fs(get_ds());
+
+    n = vfs_read(f, buf, size - 1, &pos);
+
+    set_fs(old_fs);
+    filp_close(f, NULL);
+
+    if (n > 0)
+        buf[n] = '\0';
+
+    return n;
+}
+
+static int handle_isp_read_sensor_id(struct tx_isp_device *dev, void __user *arg)
+{
+    struct isp_sensor_id_info id_info = {0};
+    char buf[32];
+    int ret;
+
+    ret = read_proc_value("/proc/jz/sensor/chip_id", buf, sizeof(buf));
+    if (ret < 0) {
+        pr_err("Failed to read sensor chip_id: %d\n", ret);
+        id_info.status = ret;
+    }
+
+    // Parse the chip ID from the proc value (format should be "0x%x\n")
+    if (sscanf(buf, "0x%x", &id_info.id) != 1) {
+        pr_err("Invalid chip ID format from proc\n");
+        id_info.status = -EINVAL;
+    }
+
+    id_info.status = 0;  // Success
+
+    return id_info.status;
 }
 
 /**
@@ -4580,7 +6273,7 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
     }
 
     switch (cmd) {
-    case VIDIOC_INIT_ENCODER:
+    case VIDIOC_INIT_ENCODER: {
         pr_info("Initializing encoder subsystem\n");
         {
             int enable;
@@ -4590,33 +6283,12 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             pr_info("Encoder system initialized with enable=%d\n", enable);
             return 0;
         }
-	case VIDIOC_REGISTER_SENSOR: {
-		struct i2c_client *client = dev->sensor_i2c_client;
-		unsigned char val_h = 0, val_l = 0;
-
-		if (!client || !client->adapter) {
-			pr_err("No I2C client or adapter available\n");
-			return -ENODEV;
-		}
-
-		pr_info("Reading sensor ID registers (addr=0x%02x)\n", client->addr);
-
-		// Read ID registers with better error handling
-		ret = isp_sensor_read_reg(client, 0x3107, &val_h);
-		if (ret) {
-			pr_err("Failed to read ID high byte: %d\n", ret);
-			return ret;
-		}
-
-		ret = isp_sensor_read_reg(client, 0x3108, &val_l);
-		if (ret) {
-			pr_err("Failed to read ID low byte: %d\n", ret);
-			return ret;
-		}
-
-		pr_info("SC2336: ID = 0x%02x%02x\n", val_h, val_l);
-		return 0;
-	}
+    }
+    case ISP_READ_SENSOR_ID:
+    case VIDIOC_REGISTER_SENSOR: { // Handle both IOCTL codes the same way
+        ret = handle_isp_read_sensor_id(dev, (void __user *)arg);
+        break;
+    }
 	case VIDIOC_GET_SENSOR_ENUMERATION: {
 		struct sensor_list_req {
 	        int idx;    // Input index
@@ -4816,7 +6488,7 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         pr_err("Invalid buffer setup sequence\n");
         return -EINVAL;
     }
-    case VIDIOC_SET_BUF_INFO: {
+    case 0x800856d4: {  // 0x800856d4 VIDIOC_SET_BUF_INFO
         struct sensor_buffer_info buf_info = {0};
         void __user *argp = (void __user *)arg;
 
@@ -4926,18 +6598,13 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	    return 0;
 	}
     case 0x800456d0: /* TX_ISP_VIDEO_LINK_SETUP */ {
-        void __iomem *vic_regs = ourISPdev->vic_regs;
-        void __iomem *isp_regs = ourISPdev->reg_base;
-        uint32_t link_config;
         struct IMPISPDev *dev = ourISPdev;
         struct tx_isp_subdev *sd;
-        unsigned long flags;
-        u32 status;
-        int timeout;
+        uint32_t link_config;
+        int ret;
 
         pr_info("Starting link setup IOCTL\n");
 
-        // Just validate we have the device
         if (!dev) {
             pr_err("No ISP device available\n");
             return -ENODEV;
@@ -4954,76 +6621,76 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             return -EINVAL;
         }
 
-        pr_info("Setting up video link %d\n", link_config);
-
-        // Use the frame source subdev from global device
+        // Get frame source subdev
         sd = dev->fs_subdev;
-        if (!sd) {
-            pr_err("No frame source subdev available\n");
+        if (!sd || !sd->inpads || !sd->outpads) {
+            pr_err("Frame source subdev not properly initialized\n");
             return -EINVAL;
         }
 
-        if (!sd->inpads || !sd->outpads) {
-            pr_err("Subdev pads not initialized\n");
-            pr_info("  inpads=%p\n", sd->inpads);
-            pr_info("  outpads=%p\n", sd->outpads);
-            return -EINVAL;
-        }
+        pr_info("Setting up video link %d (subdev=%p)\n", link_config, sd);
+        pr_info("  num_inpads=%d num_outpads=%d\n", sd->num_inpads, sd->num_outpads);
 
-        pr_info("Found devices and pads:\n");
-        pr_info("  subdev=%p\n", sd);
-        pr_info("  num_inpads=%d\n", sd->num_inpads);
-        pr_info("  num_outpads=%d\n", sd->num_outpads);
-
-        // Use our static configurations
+        // Process link configuration
         const struct tx_isp_link_configs *configs = &isp_link_configs[link_config];
-
-        // Link setup logic
         for (int i = 0; i < configs->length; i++) {
             const struct tx_isp_link_config *cfg = &configs->config[i];
             struct tx_isp_subdev_pad *src_pad, *sink_pad;
 
             pr_info("Setting up link %d of %d\n", i+1, configs->length);
 
-            // Find source pad with validation
+            // Find source pad
+            pr_info("Looking up source pad for %s (type=%d index=%d)\n",
+                    cfg->src.name, cfg->src.type, cfg->src.index);
             src_pad = find_subdev_link_pad(dev, cfg);
             if (!src_pad) {
                 pr_err("Failed to find source pad\n");
                 continue;
             }
 
-            pr_info("Found source pad %p\n", src_pad);
-
-            // Find sink pad with validation
+            // Find sink pad
             struct tx_isp_link_config sink_cfg = {
                 .src = cfg->dst,  // Use destination as source
                 .flag = cfg->flag
             };
+            pr_info("Looking up sink pad for %s (type=%d index=%d)\n",
+                    sink_cfg.src.name, sink_cfg.src.type, sink_cfg.src.index);
             sink_pad = find_subdev_link_pad(dev, &sink_cfg);
             if (!sink_pad) {
                 pr_err("Failed to find sink pad\n");
                 continue;
             }
 
-            pr_info("Found sink pad %p\n", sink_pad);
-
-            // Create forward link with safety checks
+            // Configure bidirectional link
             src_pad->link.source = src_pad;
             src_pad->link.sink = sink_pad;
             src_pad->link.flag = cfg->flag;
             src_pad->link.state = TX_ISP_MODULE_ACTIVATE;
             src_pad->state = TX_ISP_PADSTATE_LINKED;
 
-            // Create reverse link with safety checks
             sink_pad->link.source = sink_pad;
             sink_pad->link.sink = src_pad;
             sink_pad->link.flag = cfg->flag;
             sink_pad->link.state = TX_ISP_MODULE_ACTIVATE;
             sink_pad->state = TX_ISP_PADSTATE_LINKED;
+
+            // Initialize pad event handlers
+            init_pad_event_handling(src_pad, tx_isp_subdev_pad_event_handler);
+            init_pad_event_handling(sink_pad, tx_isp_subdev_pad_event_handler);
+
+            pr_info("Link established: src=%p sink=%p\n", src_pad, sink_pad);
+
+            // Call video ops link setup if available
+            if (sd->ops && sd->ops->video && sd->ops->video->link_setup) {
+                ret = sd->ops->video->link_setup(src_pad, sink_pad, cfg->flag);
+                if (ret) {
+                    pr_warn("Video link setup callback failed: %d\n", ret);
+                }
+            }
         }
 
         dev->link_state.current_link = link_config;
-        pr_info("Link setup completed successfully\n");
+        pr_info("Video link setup completed successfully\n");
         return 0;
     }
     case TX_ISP_SET_AE_ALGO_OPEN: {
@@ -5088,17 +6755,54 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         }
         break;
     }
-    case 0x800456d3: {  // Disable links
-        pr_info("TODO Disabling ISP links\n");
-		// TODO
-        return 0;
-    }
     case 0x800456d1: {  // Destroy links
-        pr_info("TODO Destroying ISP links\n");
-        int __user *result = (int __user *)arg;
-        int ret = 0;
-		// TODO
+        struct IMPISPDev *dev = ourISPdev;
+        int ret;
+
+        pr_info("Link destroy entry: arg=%p dev=%p state=%d\n",
+                (void *)arg, dev, dev ? dev->link_state.current_link : -1);
+
+        if (!dev) {
+            pr_err("No ISP device\n");
+            return -EINVAL;
+        }
+
+        ret = handle_link_destroy(dev);
+        pr_info("Link destroy result: ret=%d new_state=%d\n",
+                ret, dev->link_state.current_link);
+
+        if (ret) {
+            pr_err("Link destroy failed: %d\n", ret);
+        }
+
+        dev->link_state.current_link = -1;
         return ret;
+    }
+    case 0x800456d3: {  // Disable links
+        struct IMPISPDev *dev = ourISPdev;
+        int link_idx = dev->link_state.current_link;
+        const struct tx_isp_link_configs *configs;
+        struct tx_isp_subdev_pad *pad;
+        int i;
+
+        pr_info("Processing link disable IOCTL\n");
+
+        if (link_idx < 0) {
+            pr_info("No active link configuration to disable\n");
+            return 0;
+        }
+
+        // Set all links to inactive state without destroying
+        configs = &isp_link_configs[link_idx];
+        for (i = 0; i < configs->length; i++) {
+            const struct tx_isp_link_config *cfg = &configs->config[i];
+            pad = find_subdev_link_pad(dev, cfg);
+            if (pad && pad->link.state) {
+                pad->link.state = TX_ISP_MODULE_INIT;  // Using available enum value
+            }
+        }
+
+        return 0;
     }
 	case VIDIOC_CREATE_ENCODER_GROUP:
 	case VIDIOC_CREATE_ENCODER_CHN:
@@ -5162,16 +6866,34 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	    // TODO: Configure ISP cropping
 	    break;
 	}
+    case VIDIOC_STREAMON: {
+        pr_info("Main ISP device: stream ON requested\n");
+
+        // Configure CSI first
+        ret = configure_csi_streaming(dev);
+        if (ret) {
+            pr_err("Failed to configure CSI: %d\n", ret);
+            return ret;
+        }
+
+        // Enable the main ISP hardware path
+        ret = enable_isp_streaming(dev, file, 0, true);
+        if (ret) {
+            pr_err("Failed to enable ISP streaming: %d\n", ret);
+            return ret;
+        }
+
+        pr_info("Main ISP streaming enabled\n");
+        return 0;
+    }
+    case 0x80045612:
     case 0x800856d7:
     case 0xc0045627:
     case SENSOR_CMD_READ_ID:
-	case SENSOR_CMD_WRITE_REG:
-	case SENSOR_CMD_READ_REG:
-	case SENSOR_CMD_SET_GAIN:
-	case SENSOR_CMD_SET_EXP:
-	case SENSOR_CMD_STREAM_ON:
-	case SENSOR_CMD_STREAM_OFF:
-    case VIDIOC_STREAMON: // 0x80045612
+    case SENSOR_CMD_WRITE_REG:
+    case SENSOR_CMD_READ_REG:
+    case SENSOR_CMD_SET_GAIN:
+    case SENSOR_CMD_SET_EXP:
         pr_info("Sensor command: 0x%x\n", cmd);
         ret = handle_sensor_ioctl(ourISPdev, cmd, argp, file);
         break;
@@ -5409,176 +7131,45 @@ static int setup_channel_attrs(struct isp_channel *chn, struct imp_channel_attr 
 
 
 
-
-static int handle_frame_update(struct isp_channel *chn, struct frame_node *node)
+int tx_isp_send_event_to_remote(struct tx_isp_subdev_pad *pad, unsigned int cmd, void *data)
 {
-    struct group_metadata *meta;
-    unsigned long flags;
-    struct timespec ts;
-
-    pr_info("Handle Frame update: node=%p\n", node);
-
-    if (!chn || !node)
-        pr_err("Invalid frame source or node\n");
-        return -EINVAL;
-
-    meta = node->metadata;
-    if (!meta)
-        pr_err("Invalid metadata\n");
-        return -EINVAL;
-
-
-    // Update metadata state
-    meta->state = FRAME_STATE_DONE;
-    meta->done_flag = 1;
-    meta->flags |= V4L2_BUF_FLAG_DONE;
-
-    // Get timestamp
-    ktime_get_ts(&ts);
-    node->timestamp = ts;
-    meta->timestamp = timespec_to_ns(&ts);
-
-    // Wake up any waiters
-    wake_up_interruptible(&chn->queue->wait);
-
-    return 0;
-}
-
-// Update wrapper function to match libimp expectations
-static int group_update_wrapper(void *group, void *frame)
-{
-    struct isp_channel chn;
-    struct frame_node *node;
-    uint32_t channel;
-    int ret;
-
-    if (!group || !frame) {
-        pr_err("Invalid group update args\n");
+    if (!pad) {
+        pr_err("No pad provided\n");
         return -EINVAL;
     }
 
-    // Set thread name to match libimp
-    strncpy(current->comm, "group_update", sizeof(current->comm));
+    pr_info("Sending remote event:\n");
+    pr_info("  Pad: %p\n", pad);
+    pr_info("  Pad state: %d\n", pad->state);
+    pr_info("  Pad type: %d\n", pad->type);
+    pr_info("  Event handler: %p\n", pad->event);
 
-    channel = ((struct frame_group *)group)->channel;
-    if (channel >= MAX_CHANNELS)
-        return -EINVAL;
+    if (pad->link.sink) {
+        pr_info("  Sink pad: %p\n", pad->link.sink);
+        pr_info("  Sink state: %d\n", pad->link.sink->state);
+        pr_info("  Sink event handler: %p\n", pad->link.sink->event);
+    } else {
+        pr_info("  No sink pad linked\n");
+    }
 
-    chn = ourISPdev->channels[channel];
-    node = container_of(frame, struct frame_node, metadata);
+    // Check if we have a linked sink pad with an event handler
+    if (pad && pad->link.sink && pad->link.sink->event) {
+        return pad->link.sink->event(pad->link.sink, cmd, data);
+    }
 
-    // Handle frame - let userspace handle VBM frame release
-    ret = handle_frame_update(&chn, node);
-
-    return ret;
+    pr_info("No event handler for pad %p cmd 0x%x (sink=%p)\n",
+            pad, cmd, pad ? pad->link.sink : NULL);
+    return -ENOIOCTLCMD;
 }
 
-// Helper function to generate Y plane test pattern
-static void generate_y_pattern(u8 *buffer, int width, int height, int y_offset)
-{
-    int x, y;
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x++) {
-            // Create some kind of visible pattern
-            // This creates diagonal stripes
-            buffer[y * width + x] = ((x + y + y_offset) / 32) % 2 ? 235 : 16;
-        }
-    }
-}
-
-// Helper function to generate UV plane test pattern
-static void generate_uv_pattern(u8 *buffer, int width, int height, int y_offset)
-{
-    int x, y;
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x += 2) {
-            // Alternate between a few colors for UV values
-            buffer[y * width + x] = 128;     // U value
-            buffer[y * width + x + 1] = 128; // V value
-        }
-    }
-}
-
-
-static int init_frame_group(struct isp_channel *chn)
-{
-    struct frame_group *group;
-    struct group_data *data;
-    void __iomem *mapped_addr;
-    unsigned long phys_mem;
-    unsigned long imp_group_update = 0x12f70;
-    int order = get_order(PAGE_ALIGN(sizeof(*data)));
-
-    // Try to allocate at a higher address first
-    phys_mem = __get_free_pages(GFP_KERNEL | GFP_DMA | __GFP_HIGHMEM, order);
-    if (!phys_mem) {
-        // Fallback to normal allocation
-        phys_mem = __get_free_pages(GFP_KERNEL | GFP_DMA, order);
-        if (!phys_mem) {
-            pr_err("Failed to allocate physical memory\n");
-            return -ENOMEM;
-        }
-    }
-
-    // Rest of function same but add more debug
-    mapped_addr = ioremap(virt_to_phys((void *)phys_mem), PAGE_ALIGN(sizeof(*data)));
-    if (!mapped_addr) {
-        pr_err("Failed to map memory\n");
-        free_pages(phys_mem, order);
-        return -ENOMEM;
-    }
-
-    // Use this mapped memory for our data structure
-    data = (struct group_data *)mapped_addr;
-    memset(data, 0, sizeof(*data));
-
-    group = kzalloc(sizeof(*group), GFP_KERNEL | GFP_DMA);
-    if (!group) {
-        pr_err("Failed to allocate frame group\n");
-        iounmap(mapped_addr);
-        free_pages(phys_mem, order);
-        return -ENOMEM;
-    }
-
-    // Set up structures
-    data->base = group;
-    data->update_ptr = group;
-    data->channel = chn->channel_id;
-    data->state = 0;
-    data->flags = 0;
-    data->handler = 0x9a654;
-
-    // Initialize frame group
-    snprintf(group->name, sizeof(group->name), "group-%d", chn->channel_id);
-    group->handler_fn = data;
-    group->update_fn = data;
-    group->group_update = (void*)imp_group_update;
-    group->self = (void*)virt_to_phys((void *)phys_mem);
-    group->channel = chn->channel_id;
-    group->state = 0;
-    group->handler = 0x9a654;
-
-    // Add debug about key offsets
-    pr_info("Frame group structure details:\n"
-            "  Group kernel: %p\n"
-            "  Data kernel: %p\n"
-            "  Physical mem: 0x%lx\n"
-            "  Mapped addr: %p\n"
-            "  Data->base offset: 0x%lx\n"
-            "  Data->update_ptr offset: 0x%lx\n"
-            "  Expected write at: 0x%lx\n",
-            group, data, phys_mem, mapped_addr,
-            offsetof(struct group_data, base),
-            offsetof(struct group_data, update_ptr),
-            phys_mem + 0x11b4);
-
-    chn->group = group;
-    chn->group_data = data;
-    chn->group_phys_mem = phys_mem;
-    chn->group_mapped_addr = mapped_addr;
-
-    return 0;
-}
+// Add this at the module level to track event handlers
+static struct isp_event_context {
+    isp_event_cb handler;
+    spinlock_t lock;
+} event_ctx = {
+    .handler = NULL,
+    .lock = __SPIN_LOCK_UNLOCKED(event_ctx.lock),
+};
 
 
 static int framechan_open(struct inode *inode, struct file *file)
@@ -5586,6 +7177,8 @@ static int framechan_open(struct inode *inode, struct file *file)
     int channel = iminor(inode);
     struct IMPISPDev *dev = ourISPdev;
     struct isp_channel *chn = &dev->channels[channel];
+    struct tx_isp_subdev *fs_sd;
+    const struct tx_isp_link_configs *configs;
     int ret;
 
     // Validate channel number
@@ -5594,56 +7187,137 @@ static int framechan_open(struct inode *inode, struct file *file)
         return -EINVAL;
     }
 
-    // Allocate queue if not already done
+    // Use the frame source subdev from global device
+    fs_sd = dev->fs_subdev;
+    if (!fs_sd || !fs_sd->inpads || !fs_sd->outpads) {
+        pr_err("Frame source subdev not properly initialized\n");
+        return -EINVAL;
+    }
+
+    // Basic channel initialization
     if (!chn->queue) {
         chn->queue = kzalloc(sizeof(struct frame_queue), GFP_KERNEL);
-        if (!chn->queue) {
-            pr_err("Failed to allocate queue for channel %d\n", channel);
+        if (!chn->queue)
             return -ENOMEM;
-        }
     }
 
-    // Initialize frame group first since other init may depend on it
-    ret = init_frame_group(chn);
-    if (ret) {
-        pr_err("Failed to initialize frame group: %d\n", ret);
-        kfree(chn->queue);
-        chn->queue = NULL;
-        return ret;
-    }
-
-    // Initialize basic state
     mutex_init(&chn->queue->lock);
     init_waitqueue_head(&chn->queue->wait);
 
-    // Initialize atomic variables
     atomic_set(&chn->thread_running, 0);
     atomic_set(&chn->thread_should_stop, 0);
 
-    // Initialize channel properties with defaults
     chn->channel_id = channel;
     chn->width = (channel == 0) ? 1920 : 640;
     chn->height = (channel == 0) ? 1080 : 360;
     chn->fmt = ISP_FMT_NV12;
     chn->is_open = 1;
-
-    // Set the device pointer for DMA operations
     chn->dev = dev->dev;
 
-    // Initialize lists in queue
+    // Initialize pool state
+    chn->pool.pool_id = -1;  // No pool allocated yet
+    chn->pool.bound = false;
+    memset(&chn->pool.config, 0, sizeof(chn->pool.config));
+
     INIT_LIST_HEAD(&chn->queue->ready_list);
     INIT_LIST_HEAD(&chn->queue->done_list);
     spin_lock_init(&chn->queue->queue_lock);
 
-    // Start in state 3 (ready for streaming)
-    chn->state = 3;
+    chn->state = 3;  // Ready for streaming
     chn->queue->stream_state = 0;
 
+    // Set up DMA buffer
+    ret = setup_dma_buffer(chn);
+    if (ret) {
+        pr_err("Failed to setup DMA buffer for channel %d: %d\n", channel, ret);
+        goto err_free_queue;
+    }
+
+    // Get link configuration based on channel
+    configs = &isp_link_configs[channel];
+    if (!configs || !configs->config) {
+        pr_err("No link configuration for channel %d\n", channel);
+        ret = -EINVAL;
+        goto err_free_dma;
+    }
+
+    // Initialize our channel pad
+    chn->pad.sd = fs_sd;
+    chn->pad.type = TX_ISP_PADTYPE_OUTPUT;
+    chn->pad.index = channel;
+    chn->pad.state = TX_ISP_PADSTATE_FREE;
+    chn->pad.priv = chn;  // Important: Set channel as private data
+    init_pad_event_handling(&chn->pad, tx_isp_subdev_pad_event_handler);
+
+    // Get link configuration for this channel
+    configs = &isp_link_configs[channel];
+    if (!configs || !configs->config) {
+        pr_err("No link configuration for channel %d\n", channel);
+        ret = -EINVAL;
+        goto err_free_dma;
+    }
+
+    // Set up appropriate links according to configuration
+    for (int i = 0; i < configs->length; i++) {
+        const struct tx_isp_link_config *cfg = &configs->config[i];
+        struct tx_isp_subdev_pad *src_pad = NULL, *sink_pad = NULL;
+
+        // Find source and sink pads
+        src_pad = find_subdev_link_pad(dev, cfg);
+        if (src_pad) {
+            struct tx_isp_link_config sink_cfg = {
+                .src = cfg->dst,
+                .flag = cfg->flag
+            };
+            sink_pad = find_subdev_link_pad(dev, &sink_cfg);
+        }
+
+        if (!src_pad || !sink_pad) {
+            pr_err("Failed to find pads for link %d\n", i);
+            continue;
+        }
+
+        pr_info("Linking pads for channel %d: src=%p sink=%p\n",
+                channel, src_pad, sink_pad);
+
+        // Set up forward link
+        src_pad->link.source = src_pad;
+        src_pad->link.sink = sink_pad;
+        src_pad->link.flag = cfg->flag;
+        src_pad->link.state = TX_ISP_MODULE_ACTIVATE;
+        src_pad->state = TX_ISP_PADSTATE_LINKED;
+        src_pad->priv = chn;  // Store channel reference
+
+        // Set up reverse link
+        sink_pad->link.source = sink_pad;
+        sink_pad->link.sink = src_pad;
+        sink_pad->link.flag = cfg->flag;
+        sink_pad->link.state = TX_ISP_MODULE_ACTIVATE;
+        sink_pad->state = TX_ISP_PADSTATE_LINKED;
+        sink_pad->priv = chn;  // Store channel reference
+
+        // Special handling for CSI->VIC link
+        if (!strcmp(cfg->src.name, "tx-isp-csi") &&
+            !strcmp(cfg->dst.name, "tx-isp-vic")) {
+            pr_info("Found CSI->VIC link for channel %d\n", channel);
+            chn->pad.link = src_pad->link;  // Simple assignment
+            chn->pad.state = TX_ISP_PADSTATE_LINKED;
+            }
+
+        // Set up event handlers
+        init_pad_event_handling(src_pad, tx_isp_subdev_pad_event_handler);
+        init_pad_event_handling(sink_pad, tx_isp_subdev_pad_event_handler);
+    }
+
     file->private_data = chn;
-
-    pr_info("Framechan%d opened successfully\n", channel);
-
+    pr_info("Channel %d opened and configured successfully\n", channel);
     return 0;
+
+err_free_dma:
+    // Add DMA cleanup
+err_free_queue:
+    kfree(chn->queue);
+    return ret;
 }
 
 static int framechan_check_status(struct isp_channel *chn, unsigned long arg)
@@ -5660,10 +7334,191 @@ static int framechan_check_status(struct isp_channel *chn, unsigned long arg)
     return 0;
 }
 
+
+static int process_buffer_state(struct isp_channel *chn, struct vbm_frame *buf)
+{
+    unsigned long flags;
+    int ret = 0;
+    struct timeval tv;
+    bool state_changed = false;
+
+    if (!chn || !buf) {
+        pr_err("Invalid channel or buffer state\n");
+        return -EINVAL;
+    }
+
+    if (!buf->group) {
+        pr_err("Buffer %d has no group module!\n", buf->index);
+        return -EINVAL;
+    }
+
+    if (atomic_inc_return(&chn->processing_count) > 1) {
+        atomic_dec(&chn->processing_count);
+        return 0;
+    }
+
+    spin_lock_irqsave(&chn->queue->queue_lock, flags);
+
+    if (!chn->dev || !chn->is_open) {
+        pr_info("Channel %d: Device released during processing\n",
+                chn->channel_id);
+        spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+        atomic_dec(&chn->processing_count);
+        return -ENODEV;
+    }
+
+    switch (buf->state) {
+        case FRAME_STATE_QUEUED:
+//            pr_info("Ch%d: Processing buffer %d to seq %d\n",
+//                   chn->channel_id, buf->index,
+//                   atomic_read(&chn->sequence));
+
+            spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+
+            buf->state = FRAME_STATE_ACTIVE;
+
+            if (!chn->dev) {
+                pr_err("Device released before frame processing\n");
+                ret = -ENODEV;
+            } else {
+                struct group_module *group = buf->group;
+                if (group) {
+//                    pr_info("Ch%d: Using group module %p for buffer %d (fps=%d/%d)\n",
+//                            chn->channel_id, group, buf->index,
+//                            group->fps_num, group->fps_den);
+
+                    // Verify FPS values haven't been corrupted
+                    if (group->source_fps_num == 0 || group->source_fps_den == 0) {
+                        pr_err("Ch%d: Invalid FPS values in group %p\n",
+                                chn->channel_id, group);
+                        dump_stack();
+                    }
+                } else {
+                    pr_err("No group pointer in metadata\n");
+                    ret = -EINVAL;
+                }
+            }
+
+            spin_lock_irqsave(&chn->queue->queue_lock, flags);
+
+            if (ret == 0 && chn->is_open) {
+                //do_gettimeofday(&buf->meta->timestamp);
+                //buf->sequence = atomic_read(&chn->sequence);
+                buf->state = FRAME_STATE_DONE;
+                // buf->done_flag = 1;
+
+                list_move_tail(&buf->list, &chn->queue->done_list);
+
+                atomic_inc(&chn->sequence);
+                state_changed = true;
+            } else {
+                buf->state = FRAME_STATE_FREE;
+                list_move_tail(&buf->list, &chn->queue->ready_list);
+                if (!ret) ret = -ENODEV;
+            }
+            break;
+
+        default:
+            pr_warn("Ch%d: Buffer %d in unexpected state: %d\n",
+                   chn->channel_id, buf->index, buf->state);
+            break;
+    }
+
+    spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+    atomic_dec(&chn->processing_count);
+
+    if (state_changed) {
+        wake_up_interruptible(&chn->queue->wait);
+    }
+
+    return ret;
+}
+
+// Initialize channel state tracking
+static void init_channel_state(struct isp_channel *chn)
+{
+    atomic_set(&chn->processing_count, 0);
+    atomic_set(&chn->sequence, 0);
+    atomic_set(&chn->error_count, 0);
+    chn->last_process = 0;
+    spin_lock_init(&chn->state_lock);
+
+    chn->processed_frames = 0;
+    chn->dropped_frames = 0;
+    chn->error_frames = 0;
+}
+
+// Check channel health
+static bool is_channel_healthy(struct isp_channel *chn)
+{
+    unsigned long process_time;
+
+    if (!chn)
+        return false;
+
+    // Check if processing has stalled
+    if (atomic_read(&chn->processing_count) > 0 &&
+        chn->last_process > 0) {
+
+        process_time = jiffies - chn->last_process;
+
+        // Consider stalled after 1 second
+        if (time_after(process_time, HZ)) {
+            return false;
+        }
+    }
+
+    // Check error rate
+    if (chn->processed_frames > 100 &&
+        chn->error_frames > (chn->processed_frames / 10)) {
+        return false;
+    }
+
+    return true;
+}
+
+// Recovery function for unhealthy channel
+static void recover_channel(struct isp_channel *chn)
+{
+    unsigned long flags;
+    struct vbm_frame *buf, *tmp;
+
+    if (!chn || !chn->queue)
+        return;
+
+    spin_lock_irqsave(&chn->queue->queue_lock, flags);
+
+    pr_warn("Recovering channel %d\n", chn->channel_id);
+
+    // Reset processing count
+    atomic_set(&chn->processing_count, 0);
+
+    // Reset all buffers to FREE state
+    list_for_each_entry_safe(buf, tmp, &chn->queue->ready_list, list) {
+        buf->state = FRAME_STATE_FREE;
+    }
+    list_for_each_entry_safe(buf, tmp, &chn->queue->done_list, list) {
+        buf->state = FRAME_STATE_FREE;
+        list_move_tail(&buf->list, &chn->queue->ready_list);
+    }
+
+    spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+
+    wake_up_interruptible(&chn->queue->wait);
+}
+
+// Add these helper functions for state checking
+static bool is_buffer_in_valid_state(struct vbm_frame *buf, int expected_state)
+{
+    if (!buf)
+        return false;
+    return buf->state == expected_state;
+}
+
 static int framechan_qbuf(struct isp_channel *chn, unsigned long arg)
 {
     struct v4l2_buffer v4l2_buf;
-    struct video_buffer *vbuf;
+    struct vbm_frame *vbuf;
     unsigned long flags;
     int ret = 0;
 
@@ -5672,21 +7527,30 @@ static int framechan_qbuf(struct isp_channel *chn, unsigned long arg)
         return -EINVAL;
     }
 
-    // Copy buffer info from userspace
-    if (copy_from_user(&v4l2_buf, (void __user *)arg, sizeof(v4l2_buf))) {
-        pr_err("Failed to copy buffer from user\n");
-        return -EFAULT;
+    // Early check for channel state
+    if (!chn->is_open) {
+        return -ENODEV;
     }
 
-    pr_info("Queue buffer request: index=%d type=%d memory=%d count=%d\n",
-            v4l2_buf.index, v4l2_buf.type, v4l2_buf.memory, chn->queue->buf_count);
+    // Copy buffer info from user
+    if (copy_from_user(&v4l2_buf, (void __user *)arg, sizeof(v4l2_buf))) {
+        pr_err("Failed to copy from user\n");
+        return -EFAULT;
+    }
 
     mutex_lock(&chn->queue->lock);
     spin_lock_irqsave(&chn->queue->queue_lock, flags);
 
+    // Check again after acquiring locks
+    if (!chn->is_open) {
+        ret = -ENODEV;
+        goto unlock;
+    }
+
     // Validate buffer index
     if (v4l2_buf.index >= chn->queue->buf_count) {
-        pr_err("Invalid buffer index %d\n", v4l2_buf.index);
+        pr_err("Invalid buffer index %d >= %d\n",
+               v4l2_buf.index, chn->queue->buf_count);
         ret = -EINVAL;
         goto unlock;
     }
@@ -5694,114 +7558,204 @@ static int framechan_qbuf(struct isp_channel *chn, unsigned long arg)
     // Get buffer
     vbuf = chn->queue->bufs[v4l2_buf.index];
     if (!vbuf) {
-        pr_err("No buffer at index %d\n", v4l2_buf.index);
+        pr_err("Invalid buffer\n");
         ret = -EINVAL;
         goto unlock;
     }
 
-    // Check buffer type and memory
-    if (vbuf->type != v4l2_buf.type) {
-        pr_err("Invalid buffer type\n");
+    // Check buffer state - can only queue free or done buffers
+    if (vbuf->state != FRAME_STATE_FREE &&
+        vbuf->state != FRAME_STATE_DONE) {
+        pr_err("Buffer %d in wrong state: %d\n",
+               vbuf->index, vbuf->state);
         ret = -EINVAL;
         goto unlock;
     }
 
-    // Remove from lists if present
-    if (!list_empty(&vbuf->list)) {
-        list_del_init(&vbuf->list);
+    if (vbuf->virt_addr) {
+        bool is_streaming = (chn->queue->stream_state & 1);
+
+        // Update buffer state
+        vbuf->state = FRAME_STATE_QUEUED;
+        vbuf->q_count = atomic_read(&chn->sequence);
+        vbuf->state_flags &= ~V4L2_BUF_FLAG_DONE;
+
+//        pr_info("QBUF: buffer %d queued: seq=%d state=%d\n",
+//                vbuf->index, vbuf->meta->sequence, vbuf->meta->state);
+
+        // Move to ready list for processing
+        list_move_tail(&vbuf->list, &chn->queue->ready_list);
+
+        // Process immediately if streaming
+        if (is_streaming && chn->is_open) {
+            spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+            ret = process_buffer_state(chn, vbuf);
+            spin_lock_irqsave(&chn->queue->queue_lock, flags);
+        }
+    } else {
+        pr_err("QBUF: No virtual address for buffer!\n");
+        ret = -EINVAL;
     }
-
-    // Make buffer available for DMA
-    dma_sync_single_for_device(chn->dev,
-                              chn->dma_addr + (vbuf->index * chn->required_size),
-                              chn->required_size,
-                              DMA_FROM_DEVICE);
-
-    // Clear flags and add to ready list
-    vbuf->flags &= ~V4L2_BUF_FLAG_DONE;
-    vbuf->flags |= V4L2_BUF_FLAG_QUEUED;
-    vbuf->status = 0;
-    list_add_tail(&vbuf->list, &chn->queue->ready_list);
-
-    pr_info("Buffer queued: index=%d flags=0x%x\n", vbuf->index, vbuf->flags);
 
 unlock:
     spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
     mutex_unlock(&chn->queue->lock);
+
     return ret;
 }
 
 static int framechan_dqbuf(struct isp_channel *chn, unsigned long arg)
 {
     struct v4l2_buffer v4l2_buf;
-    struct video_buffer *vbuf = NULL;
+    struct vbm_frame *vbuf = NULL;
     unsigned long flags;
-    int ret;
+    int ret = 0;
 
-    pr_info("DQBUF processing start for channel %d\n", chn->channel_id);
+//    pr_info("DQBUF ch%d: waiting for next frame (state=%d streaming=%d)\n",
+//            chn->channel_id, chn->state, chn->queue->stream_state);
 
-    // Get buffer request from userspace
-    if (copy_from_user(&v4l2_buf, (void __user *)arg, sizeof(v4l2_buf))) {
-        pr_err("Failed to copy from user\n");
-        return -EFAULT;
+    if (!chn || !chn->queue) {
+        return -EINVAL;
     }
 
-    // Wait for buffer with timeout and better error handling
-    ret = wait_event_interruptible_timeout(chn->queue->wait,
-            !list_empty(&chn->queue->done_list) ||
-            !(chn->queue->stream_state & 1),
-            msecs_to_jiffies(1000));
+    // Early check for channel state
+    if (!chn->is_open) {
+        return -ENODEV;
+    }
+
+    // Wait with timeout for buffer completion
+    ret = wait_event_interruptible_timeout(
+        chn->queue->wait,
+        (!list_empty(&chn->queue->done_list) && chn->is_open) || !chn->is_open,
+        msecs_to_jiffies(1000)  // 1 second timeout
+    );
 
     if (ret == 0) {
-        pr_err("DQBUF timeout waiting for buffer\n");
+        // Timeout
         return -ETIMEDOUT;
-    }
-    if (ret == -ERESTARTSYS) {
-        pr_err("DQBUF wait interrupted\n");
+    } else if (ret < 0) {
+        // Interrupted
         return ret;
     }
 
-    // Get buffer with proper locking
-    mutex_lock(&chn->queue->lock);
+    // Check if channel was closed while waiting
+    if (!chn->is_open) {
+        return -ENODEV;
+    }
+
     spin_lock_irqsave(&chn->queue->queue_lock, flags);
 
     if (!list_empty(&chn->queue->done_list)) {
         vbuf = list_first_entry(&chn->queue->done_list,
-                               struct video_buffer, list);
-        list_del_init(&vbuf->list);
+                               struct vbm_frame, list);
 
-        pr_info("DQBUF dequeued buffer %d with flags 0x%x\n",
-                vbuf->index, vbuf->flags);
+        if (vbuf && vbuf->state == FRAME_STATE_DONE) {
+//            pr_info("DQBUF ch%d: processing buffer %d seq %d\n",
+//                    chn->channel_id, vbuf->index, vbuf->sequence);
+
+            // Fill buffer info
+            v4l2_buf.index = vbuf->index;
+            v4l2_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            v4l2_buf.bytesused = chn->required_size;
+            v4l2_buf.field = V4L2_FIELD_NONE;
+//            v4l2_buf.sequence = vbuf->sequence;
+//            v4l2_buf.timestamp = vbuf->timestamp;
+            v4l2_buf.memory = chn->queue->memory_type;
+            v4l2_buf.length = chn->required_size;
+
+            // Reset state and move back to ready list
+            vbuf->state = FRAME_STATE_FREE;
+            list_move_tail(&vbuf->list, &chn->queue->ready_list);
+
+//            pr_info("DQBUF ch%d: completed buffer %d seq %d - recycled to ready list\n",
+//                    chn->channel_id, vbuf->index, vbuf->sequence);
+            ret = 0;
+        } else {
+            pr_err("DQBUF ch%d: Buffer in done list but wrong state: %d\n",
+                   chn->channel_id, vbuf ? vbuf->state : -1);
+            ret = -EAGAIN;
+        }
     } else {
-        spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
-        mutex_unlock(&chn->queue->lock);
-        return -EAGAIN;
+        pr_err("DQBUF ch%d: No buffers in done list!\n", chn->channel_id);
+        ret = -EAGAIN;
     }
-
-    // Fill v4l2_buffer info
-    v4l2_buf.index = vbuf->index;
-    v4l2_buf.type = vbuf->type;
-    v4l2_buf.memory = vbuf->memory;
-    v4l2_buf.flags = vbuf->flags;
-    v4l2_buf.field = V4L2_FIELD_NONE;
-    v4l2_buf.sequence = vbuf->status & 0xFF000000;
-    v4l2_buf.m.offset = vbuf->index * chn->required_size;
-    v4l2_buf.length = chn->required_size;
-    v4l2_buf.bytesused = chn->required_size; // Add this
-
-    // Reset buffer state
-    vbuf->flags &= ~(V4L2_BUF_FLAG_QUEUED | V4L2_BUF_FLAG_DONE);
 
     spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
-    mutex_unlock(&chn->queue->lock);
 
-    if (copy_to_user((void __user *)arg, &v4l2_buf, sizeof(v4l2_buf))) {
-        pr_err("Failed to copy to user\n");
-        return -EFAULT;
+    if (ret == 0) {
+        if (copy_to_user((void __user *)arg, &v4l2_buf, sizeof(v4l2_buf))) {
+            pr_err("Failed to copy to user\n");
+            return -EFAULT;
+        }
     }
 
-    pr_info("DQBUF complete: buffer %d\n", vbuf->index);
+    return ret;
+}
+
+// Helper function for pool binding
+static int bind_channel_pool(struct isp_channel *chn) {
+    struct isp_pool_config *config = &chn->pool.config;
+
+    // Setup pool config
+    config->format = chn->fmt;
+    config->width = chn->width;
+    config->height = chn->height;
+    config->buffer_stride = chn->buffer_stride;
+    config->buffer_size = chn->required_size;
+    config->num_buffers = chn->queue->buf_count;
+
+    pr_info("Binding pool for channel %d:\n"
+            "  Format: %d\n"
+            "  Size: %dx%d\n"
+            "  Stride: %d\n"
+            "  Buffer size: %d\n"
+            "  Num buffers: %d\n",
+            chn->channel_id,
+            config->format,
+            config->width, config->height,
+            config->buffer_stride,
+            config->buffer_size,
+            config->num_buffers);
+
     return 0;
+}
+
+
+static int unbind_channel_pool(struct isp_channel *chn)
+{
+    if (!chn || !chn->pool.bound)
+        return -EINVAL;
+
+    pr_info("Unbinding pool %d from channel %d\n",
+            chn->pool.pool_id, chn->channel_id);
+
+    chn->pool.pool_id = -1;
+    chn->pool.bound = false;
+
+    return 0;
+}
+
+static int handle_frame_streaming(struct isp_channel *chn, bool enable) {
+    unsigned long flags;
+    int ret = 0;
+
+    spin_lock_irqsave(&chn->queue->queue_lock, flags);
+
+    if (enable) {
+        if (!(chn->queue->stream_state & 1)) {  // Only if not already streaming
+            chn->queue->stream_state |= 1;
+            chn->state = 4;  // Streaming state
+            pr_info("Streaming enabled for channel %d (res: %dx%d state=%d)\n",
+                    chn->channel_id, chn->attr.width, chn->attr.height, chn->state);
+        }
+    } else {
+        chn->queue->stream_state &= ~1;
+        chn->state = 3;  // Ready state
+    }
+
+    spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+
+    return ret;
 }
 
 static int frame_channel_vidioc_fmt(struct isp_channel *chn, void __user *arg)
@@ -5965,188 +7919,280 @@ static void init_channel_attributes(struct isp_channel *chn)
     chn->flags |= FS_ATTR_SET;
 }
 
-struct reqbuf_request {
-    __u32 count;
-    __u32 type;
-    __u32 memory;
-    __u32 capabilities;
-    __u32 reserved[1];
-} __attribute__((packed));  // Make sure no padding
+
+static void dump_frame_group(struct frame_group *group) {
+    pr_info("Frame Group Details:\n"
+            "  Name: %.20s\n"
+            "  Handler fn: %p\n"
+            "  Update fn: %p\n"
+            "  Group update fn: %p\n"
+            "  Self ptr: %p\n"
+            "  Channel: %d\n"
+            "  State: 0x%x\n"
+            "  Handler value: 0x%x\n",
+            group->name,
+            group->handler_fn,
+            group->update_fn,
+            group->group_update,
+            group->self,
+            group->channel,
+            group->state,
+            group->handler);
+}
+static bool validate_kernel_pointer(void *ptr, const char *name) {
+    // Check for NULL
+    if (!ptr) {
+        pr_err("%s is NULL\n", name);
+        return false;
+    }
+
+    // Check if in kernel space (typically 0x7xxxxxxx range)
+    unsigned long addr = (unsigned long)ptr;
+    if ((addr & 0x70000000) != 0x70000000) {
+        pr_err("%s address 0x%lx not in kernel range\n", name, addr);
+        return false;
+    }
+
+    // Check pointer alignment
+    if (addr & (sizeof(void *) - 1)) {
+        pr_err("%s address 0x%lx not properly aligned\n", name, addr);
+        return false;
+    }
+
+    return true;
+}
+
+static int dump_mem(const char *desc, void *addr, size_t len) {
+    unsigned char *data = (unsigned char *)addr;
+
+    pr_info("%s at %p:\n", desc, addr);
+    for (size_t i = 0; i < len; i += 16) {
+        pr_info("  %03zx: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+            i,
+            data[i+0], data[i+1], data[i+2], data[i+3],
+            data[i+4], data[i+5], data[i+6], data[i+7],
+            data[i+8], data[i+9], data[i+10], data[i+11],
+            data[i+12], data[i+13], data[i+14], data[i+15]);
+    }
+    return 0;
+}
+
+int register_channel_callbacks(struct isp_channel_event *evt,
+                             void (*frame_cb)(void *),
+                             void (*stats_cb)(void *),
+                             void *priv)
+{
+    unsigned long flags;
+
+    if (!evt)
+        return -EINVAL;
+
+    spin_lock_irqsave(&evt->lock, flags);
+
+    evt->cb.frame_cb = frame_cb;
+    evt->cb.stats_cb = stats_cb;
+    evt->cb.priv = priv;
+
+    spin_unlock_irqrestore(&evt->lock, flags);
+
+    return 0;
+}
+
+void unregister_channel_callbacks(struct isp_channel_event *evt)
+{
+    unsigned long flags;
+
+    if (!evt)
+        return;
+
+    spin_lock_irqsave(&evt->lock, flags);
+    memset(&evt->cb, 0, sizeof(evt->cb));
+    spin_unlock_irqrestore(&evt->lock, flags);
+}
+
+static int alloc_group_module(struct vbm_frame *buf, int channel_id)
+{
+    struct group_module *group;
+
+    // Allocate exactly one group_module structure
+    group = kzalloc(sizeof(struct group_module), GFP_KERNEL);
+    if (!group) {
+        return -ENOMEM;
+    }
+
+    // Initialize base structure
+    strncpy(group->name, "group_module", sizeof(group->name) - 1);
+
+    // Set function pointers
+    group->func_40 = 0x1a920;
+    group->func_44 = 0x1a890;
+    group->func_48 = 0x1aa54;
+    group->func_4c = 0x1a9ac;
+    // group->field_50 = 0x12f70; // Update function
+
+    // Initialize list pointers
+    group->list_head = (uint32_t)&group->buffer[0];
+    group->list_ptr = (uint32_t)&group->buffer[0];
+
+    // Initialize semaphores and mutex
+    sema_init((struct semaphore *)&group->sem1, 0);
+    sema_init((struct semaphore *)&group->sem2, 0x10);
+    mutex_init((struct mutex *)&group->mutex);
+
+    // Set FPS values and channel
+    group->source_fps_num = 25;
+    group->field_14 = 25;
+    group->field_18 = 25;
+    group->field_1c = 25;
+    group->field_20 = 25;
+    group->field_24 = 25;
+    group->field_28 = 25;
+    group->field_2c = 25;
+    group->field_30 = 25;
+    group->field_34 = 25;
+    group->field_38 = 25;
+    group->source_fps_den = 1;
+    group->channel = channel_id;
+
+    // Link frame and group
+    group->frame_ptr = buf;
+    buf->group = group;
+
+    // Set frame magic
+    buf->magic = 0x100100;
+
+    hex_dump_memory("Group module", group, sizeof(struct group_module));
+
+    pr_info("Ch%d: Allocated group module %p fps=%d/%d phys=0x%lx\n",
+            channel_id, group, group->source_fps_num, group->source_fps_den,
+            virt_to_phys(group));
+
+    return 0;
+}
 
 static int framechan_reqbufs(struct isp_channel *chn, unsigned long arg)
 {
     struct reqbuf_request req;
     struct frame_queue *queue;
-    struct video_buffer **new_bufs;
-    size_t buf_size, meta_size;
+    struct vbm_frame **new_bufs = NULL;
     int ret = 0, i;
     unsigned long flags;
 
-    pr_info("Request buffers for channel %d\n", chn->channel_id);
-
-    if (!chn || !ourISPdev) {
-        pr_err("Invalid channel or ISP device\n");
+    if (!chn || !chn->queue) {
+        pr_err("Invalid channel state\n");
         return -EINVAL;
     }
 
+    queue = chn->queue;
+
+    // Copy request struct from user
     if (copy_from_user(&req, (void __user *)arg, sizeof(req))) {
         pr_err("Failed to copy request from user\n");
         return -EFAULT;
     }
 
-    // Validate request parameters - accept both MMAP and USERPTR
-    if (req.count > 0 &&
-        req.memory != V4L2_MEMORY_MMAP &&
-        req.memory != V4L2_MEMORY_USERPTR) {
-        pr_err("Unsupported memory type: %d\n", req.memory);
-        return -EINVAL;
-    }
-
-    queue = chn->queue;
-    if (!queue) {
-        pr_err("Channel queue not initialized\n");
-        return -EINVAL;
-    }
-
-    // Buffer size from channel - page aligned
-    // Calculate sizes
-    buf_size = calculate_buffer_size(chn->width, chn->height, chn->fmt);
-    meta_size = sizeof(struct frame_metadata);  // Add this struct definition
-    chn->required_size = buf_size;
-
-    // Setup DMA buffer if not already done
-    if (!chn->dma_addr) {
-        ret = setup_dma_buffer(chn);
-        if (ret) {
-            pr_err("Failed to setup DMA buffer: %d\n", ret);
-            return ret;
-        }
-    }
-
     mutex_lock(&queue->lock);
     spin_lock_irqsave(&queue->queue_lock, flags);
 
-    // Free existing buffers
-    if (queue->bufs) {
-        for (i = 0; i < queue->buf_count; i++) {
-            if (queue->bufs[i]) {
-                if (!list_empty(&queue->bufs[i]->list))
-                    list_del(&queue->bufs[i]->list);
-                kfree(queue->bufs[i]);
+    // Free all existing buffers first
+    struct vbm_frame **old_bufs = queue->bufs;
+    int old_count = queue->buf_count;
+
+    queue->bufs = NULL;
+    queue->buf_count = 0;
+
+    spin_unlock_irqrestore(&queue->queue_lock, flags);
+
+    // Free buffers without holding spin lock
+    if (old_bufs) {
+        for (i = 0; i < old_count; i++) {
+            if (old_bufs[i]) {
+                if (old_bufs[i]->group) {
+                    pr_info("Ch%d: Freeing group module %p for buffer %d\n",
+                            chn->channel_id, old_bufs[i]->group, i);
+                    kfree(old_bufs[i]->group);
+                }
+                kfree(old_bufs[i]);
             }
         }
-        kfree(queue->bufs);
-        queue->bufs = NULL;
-        queue->buf_count = 0;
+        kfree(old_bufs);
     }
 
-    // If count is 0, just cleanup and return
+    spin_lock_irqsave(&queue->queue_lock, flags);
+
+    // Handle deallocation request
     if (req.count == 0) {
-        queue->memory_type = 0;
         spin_unlock_irqrestore(&queue->queue_lock, flags);
         mutex_unlock(&queue->lock);
         return 0;
     }
 
-    // Allocate buffer array first
-    new_bufs = kzalloc(sizeof(struct video_buffer *) * req.count, GFP_ATOMIC);
+    // Limit max buffers to 40 as per OEM
+    if (req.count > 40) {
+        pr_warn("Limiting buffer count from %d to 40\n", req.count);
+        req.count = 40;
+    }
+
+    // Allocate buffer array
+    new_bufs = kzalloc(sizeof(struct vbm_frame *) * req.count, GFP_KERNEL);
     if (!new_bufs) {
         ret = -ENOMEM;
         goto out_unlock;
     }
 
-    // Setup DMA buffer if not already done
-    if (!chn->dma_addr) {
-        chn->required_size = buf_size + meta_size; // Include metadata size
-        ret = setup_dma_buffer(chn);
-        if (ret) {
-            pr_err("Failed to setup DMA buffer: %d\n", ret);
-            return ret;
-        }
-    }
-
-    // Allocate metadata DMA address array
-    chn->meta_dma = kzalloc(sizeof(dma_addr_t) * req.count, GFP_ATOMIC);
-    if (!chn->meta_dma) {
-        ret = -ENOMEM;
-        kfree(new_bufs);  // Don't forget to free new_bufs before returning
-        goto out_unlock;
-    }
-
+    // Allocate and initialize each buffer
     for (i = 0; i < req.count; i++) {
-        struct video_buffer *buf = kzalloc(sizeof(*buf), GFP_ATOMIC);
+        struct vbm_frame *buf = kzalloc(sizeof(*buf), GFP_KERNEL);
         if (!buf) {
             ret = -ENOMEM;
             goto err_free_bufs;
         }
+        // Initialize metadata
+        buf->magic = 0x100100;
+        buf->state = FRAME_STATE_FREE;
+        buf->size = chn->required_size;
 
-        // Setup buffer info
-        buf->index = i;
-        buf->type = req.type;
-        buf->memory = req.memory;
-        buf->flags = 0;
-        buf->queue = queue;
-        INIT_LIST_HEAD(&buf->list);
-        buf->data = chn->buf_base + (i * buf_size);
-
-        // Allocate metadata with GFP_ATOMIC
-        buf->meta = dma_alloc_coherent(chn->dev, sizeof(struct frame_metadata),
-                                     &chn->meta_dma[i], GFP_ATOMIC);
-        if (!buf->meta) {
+        // Allocate and initialize group module
+        ret = alloc_group_module(buf, chn->channel_id);
+        if (ret) {
+            pr_err("Failed to allocate group module for buffer %d\n", i);
             kfree(buf);
-            ret = -ENOMEM;
             goto err_free_bufs;
         }
 
-        // Initialize metadata
-        buf->meta->magic = 0x100100;
-        buf->meta->group_ptr = chn->group;
-        buf->meta->frame_num = buf->index;
-        buf->meta->ref_count = 1;
-        buf->meta->state = FRAME_STATE_FREE;
-        buf->meta->flags = 0;
-        buf->meta->size = buf_size;
-        buf->meta->type = chn->fmt;
-        buf->meta->handler = (void *)0x9a654;
-        buf->meta->channel = chn->channel_id;
-        buf->meta->sequence = 0;
-        buf->meta->timestamp = ktime_get_real_ns();
-        memset(buf->meta->padding, 0, sizeof(buf->meta->padding));
-        buf->meta->done_flag = 0;
+        pr_info("Ch%d: Allocated group module for buffer %d at %p\n",
+                 chn->channel_id, i, buf->group);
+
+        // Initialize remaining buffer fields
+        buf->index = i;
+
+        // Setup buffer access
+        buf->virt_addr = chn->buf_base + (i * chn->buf_size);
+        buf->phys_addr = (void *)(chn->dma_addr + (i * chn->buf_size));
+        INIT_LIST_HEAD(&buf->list);
 
         // Store in array
         new_bufs[i] = buf;
-        list_add_tail(&buf->list, &queue->ready_list);
-
-        pr_info("Buffer %d setup:\n"
-                "  Buffer addr: %p\n"
-                "  Virtual: %p\n"
-                "  Physical: 0x%x\n"
-                "  Meta addr: %p\n"
-                "  Meta DMA: %pad\n",
-                i, buf, buf->data,
-                chn->dma_addr + (i * buf_size),
-                buf->meta, &chn->meta_dma[i]);
     }
 
+    // Update queue state
     queue->bufs = new_bufs;
     queue->buf_count = req.count;
     queue->memory_type = req.memory;
-
-    pr_info("Request buffers complete:\n"
-            "  Count: %d\n"
-            "  Base addr: %p\n"
-            "  Memory type: %d\n",
-            queue->buf_count, chn->buf_base, queue->memory_type);
+    INIT_LIST_HEAD(&queue->ready_list);
+    INIT_LIST_HEAD(&queue->done_list);
 
     spin_unlock_irqrestore(&queue->queue_lock, flags);
     mutex_unlock(&queue->lock);
+
+    pr_info("Allocated %d buffers for channel %d\n", req.count, chn->channel_id);
     return 0;
 
 err_free_bufs:
     while (--i >= 0) {
         if (new_bufs[i]) {
-            list_del(&new_bufs[i]->list);
+            if (new_bufs[i]->group)
+                kfree(new_bufs[i]->group);
             kfree(new_bufs[i]);
         }
     }
@@ -6158,91 +8204,46 @@ out_unlock:
     return ret;
 }
 
-static int framechan_streamoff(struct isp_channel *chn, unsigned long arg)
-{
-    struct video_buffer *buf;
-    uint32_t type;
-    int i;
-    unsigned long flags;
-
-    if (!chn || !chn->queue) {
-        pr_err("Invalid channel state\n");
-        return -EINVAL;
-    }
-
-    if (copy_from_user(&type, (void __user *)arg, sizeof(type)))
-        return -EFAULT;
-
-    if (type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
-        pr_err("Invalid buffer type\n");
-        return -EINVAL;
-    }
-
-    mutex_lock(&chn->queue->lock);
-    spin_lock_irqsave(&chn->queue->queue_lock, flags);
-
-    // Clear streaming state first
-    chn->queue->stream_state = 0;
-
-    // Move all buffers from ready and done lists back to array
-    list_for_each_entry(buf, &chn->queue->ready_list, list) {
-        buf->flags = 0;
-        buf->status = 0;
-    }
-    INIT_LIST_HEAD(&chn->queue->ready_list);
-
-    list_for_each_entry(buf, &chn->queue->done_list, list) {
-        buf->flags = 0;
-        buf->status = 0;
-    }
-    INIT_LIST_HEAD(&chn->queue->done_list);
-
-    spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
-    mutex_unlock(&chn->queue->lock);
-
-    pr_info("Stream disabled for channel %d\n", chn->channel_id);
-    return 0;
-}
-
 static int framechan_get_frame_status(struct isp_channel *chn, unsigned long arg)
 {
-    uint32_t frame_status = 0;
-    int ready_count = 0, done_count = 0;
-    struct video_buffer *buf;
+    int32_t count = 0;
     unsigned long flags;
+    struct vbm_frame *buf = NULL;
+    bool buffer_done = false;
+    int ret = 0;
 
-    if (!chn || !chn->queue) {
-        pr_err("Invalid channel state\n");
-        return -EINVAL;
-    }
-
-    mutex_lock(&chn->queue->lock);
     spin_lock_irqsave(&chn->queue->queue_lock, flags);
 
-    // Check streaming state
-    if (chn->queue->stream_state & 1) {
-        frame_status |= BIT(31); // Set streaming bit
+    // Only process if streaming and have ready buffer
+    if ((chn->queue->stream_state & 1) && !list_empty(&chn->queue->ready_list)) {
+        buf = list_first_entry(&chn->queue->ready_list,
+                              struct vbm_frame, list);
 
-        // Count ready buffers
-        list_for_each_entry(buf, &chn->queue->ready_list, list) {
-            ready_count++;
+        // Only process if buffer isn't already being handled
+        if (buf && buf->state == FRAME_STATE_QUEUED) {
+            spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
+
+            ret = process_buffer_state(chn, buf);
+            if (ret == 0) {
+                buffer_done = true;
+                // Use q_count for sequence tracking
+                count = buf->q_count;
+            }
+
+            spin_lock_irqsave(&chn->queue->queue_lock, flags);
         }
-
-        // Count done buffers
-        list_for_each_entry(buf, &chn->queue->done_list, list) {
-            done_count++;
-        }
-
-        frame_status |= (ready_count & 0xFFFF);    // Ready count in low bits
-        if (done_count > 0)
-            frame_status |= BIT(16);  // Frame done bit
     }
 
     spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
-    mutex_unlock(&chn->queue->lock);
 
-    if (copy_to_user((void __user *)arg, &frame_status, sizeof(frame_status)))
+    if (buffer_done) {
+        wake_up_interruptible(&chn->queue->wait);
+    }
+
+    if (copy_to_user((void __user *)arg, &count, sizeof(count))) {
+        pr_err("Failed to copy count to user\n");
         return -EFAULT;
+    }
 
     return 0;
 }
@@ -6261,7 +8262,7 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
     struct IMPISPDev *dev = ourISPdev;
     int ret = 0;
 
-    pr_info("Frame channel IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
+    // pr_info("Frame channel IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
 
     if (!chn) {
         pr_err("No framesource state in IOCTL\n");
@@ -6280,18 +8281,6 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
     case 0xc0445611: // VIDIOC_DQBUF
         ret = framechan_dqbuf(chn, arg);
         break;
-    case VIDIOC_STREAMOFF:
-        pr_info("TODO Stream OFF requested\n");
-        for (int i = 0; i < MAX_CHANNELS; i++) {
-            struct isp_channel *chn = &dev->channels[i];
-            if (!chn)
-                continue;
-
-            if (chn->state & BIT(1)) {
-                chn->state &= ~BIT(1);
-            }
-        }
-        return enable_isp_streaming(dev, file, 0, false);
     case 0x400456bf: {  // frame status handler
         ret = framechan_get_frame_status(chn, arg);
         break;
@@ -6315,37 +8304,6 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
             pr_err("Invalid format type\n");
             return -EINVAL;
         }
-        // TODO this was wrong
-//        // Get the correct destination
-//        dst = fs + 0x20;
-//
-//        // Ensure first 32-bit value is non-zero to mark attributes as set
-//        if (attr.width == 0)
-//            attr.width = 1920;  // Default if not set
-//
-//        // Copy exactly 0x50 bytes
-//        memcpy(dst, &attr, 0x50);
-//
-//        // Mark attributes as set
-//        chn->flags |= FS_ATTR_SET;
-//
-//        // Setup format structure based on attributes
-//        memset(&fmt, 0, sizeof(fmt));
-//        fmt.type = 1;
-//        fmt.width = attr.width;
-//        fmt.height = attr.height;
-//        if (attr.format == 0x22) {
-//            memcpy(fmt.pix_str, "YU12", 4);
-//        } else {
-//            memcpy(fmt.pix_str, "NV12", 4);
-//        }
-//        fmt.field = 0;
-//        fmt.colorspace = 8;
-//
-//        // Update format settings
-//        ret = frame_channel_vidioc_fmt(cnh, &fmt, false);
-//        if (ret)
-//            return ret;
 
         // Copy back to userspace
         if (copy_to_user((void __user *)arg, &attr, sizeof(attr)))
@@ -6356,10 +8314,14 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
     }
     case 0x80045612 : // VIDIOC_STREAMON
         pr_info("Framechan Streamon command: 0x%x\n", cmd);
-        ret = handle_sensor_ioctl(ourISPdev, cmd, (void __user *)arg, file);
+        ret = handle_frame_streaming(chn, true);
+        break;
+    case VIDIOC_STREAMOFF: // TODO hex value
+        pr_info("Framechan Streamoff command: 0x%x\n", cmd);
+        ret = handle_frame_streaming(chn, false);
         break;
     default:
-        pr_info("Unhandled ioctl cmd: 0x%x\n", cmd);
+        pr_info("Unhandled framechan ioctl cmd: 0x%x\n", cmd);
         ret = -ENOTTY;
     }
 
@@ -6420,80 +8382,111 @@ static void cleanup_frame_group(struct isp_channel *chn)
 static int framechan_release(struct inode *inode, struct file *file)
 {
     struct isp_channel *chn = file->private_data;
-    struct video_buffer *buf, *tmp;
+    struct vbm_frame *buf;
+    int i;
     unsigned long flags;
 
-    if (!chn)
+    if (!chn) {
         return 0;
+    }
 
     pr_info("Starting channel %d cleanup\n", chn->channel_id);
 
-    // First mark channel as not streaming
+    // Stop thread first if running
+    if (chn->thread_data) {
+        atomic_set(&chn->thread_data->should_stop, 1);
+        wake_up_interruptible(&chn->queue->wait);
+        msleep(100); // Give thread time to stop
+    }
+
     if (chn->queue) {
         spin_lock_irqsave(&chn->queue->queue_lock, flags);
-        chn->queue->stream_state = 0;
+
+        // Reset lists and buffer count
+        INIT_LIST_HEAD(&chn->queue->ready_list);
+        INIT_LIST_HEAD(&chn->queue->done_list);
+        atomic_set(&chn->queued_bufs, 0);
+
+        // Free buffers if allocated
+        if (chn->queue->bufs) {
+            for (i = 0; i < chn->queue->buf_count; i++) {
+                buf = chn->queue->bufs[i];
+                if (buf) {
+                    kfree(buf);
+                }
+            }
+            kfree(chn->queue->bufs);
+            chn->queue->bufs = NULL;
+        }
+
         spin_unlock_irqrestore(&chn->queue->queue_lock, flags);
     }
 
-    // Clean up frame group first since it may reference other structures
-    cleanup_frame_group(chn);
+    // Free thread data
+    if (chn->thread_data) {
+        kfree(chn->thread_data);
+        chn->thread_data = NULL;
+    }
 
-    // Clean up remaining resources...
-    cleanup_buffer(chn);
+    // Free queue
+    if (chn->queue) {
+        kfree(chn->queue);
+        chn->queue = NULL;
+    }
 
-    // Clear channel state
-    chn->is_open = 0;
     file->private_data = NULL;
+    chn->is_open = 0;
 
     pr_info("Channel %d cleanup complete\n", chn->channel_id);
     return 0;
 }
 
-
 // Add mmap handler to map this memory to userspace
 static int framechan_mmap(struct file *file, struct vm_area_struct *vma)
 {
     struct isp_channel *chn = file->private_data;
-    unsigned long size = vma->vm_end - vma->vm_start;
-    unsigned long pfn;
+    size_t size = vma->vm_end - vma->vm_start;
 
-    // Check if this is a frame group mapping request
-    if (vma->vm_pgoff == (virt_to_phys(chn->group) >> PAGE_SHIFT)) {
-        // Map frame group
-        if (size > sizeof(struct frame_group))
-            return -EINVAL;
-
-        pfn = virt_to_phys(chn->group) >> PAGE_SHIFT;
-        return remap_pfn_range(vma, vma->vm_start, pfn,
-                             size, vma->vm_page_prot);
+    if (!chn || !chn->buf_base) {
+        pr_err("No channel or buffer base in mmap\n");
+        return -EINVAL;
     }
 
-    // Calculate start PFN from DMA physical address
-    pfn = chn->dma_addr >> PAGE_SHIFT;
+    // Don't allow mapping beyond buffer
+    if (size > chn->required_size) {
+        pr_err("mmap size too large: %zu > %u\n", size, chn->required_size);
+        return -EINVAL;
+    }
 
-    // Set memory type for DMA
-    vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+    // Set memory type for proper caching
+    vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 
-    // Map DMA memory to userspace
-    if (io_remap_pfn_range(vma, vma->vm_start,
-                          pfn,
-                          size,
-                          vma->vm_page_prot)) {
-        pr_err("Failed to map memory to userspace\n");
+    // Map the physical memory to userspace
+    if (remap_pfn_range(vma,
+                        vma->vm_start,
+                        chn->dma_addr >> PAGE_SHIFT,
+                        size,
+                        vma->vm_page_prot)) {
+        pr_err("Failed to map buffer to userspace\n");
         return -EAGAIN;
-                          }
+                        }
 
-    pr_info("Mapped DMA memory to userspace:\n"
+    // Store vma for cleanup
+    chn->vma = vma;
+
+    pr_info("Mapped buffer to userspace:\n"
             "  User VA: 0x%lx - 0x%lx\n"
-            "  Phys: 0x%x\n"
-            "  Size: %lu\n",
+            "  Physical: 0x%08x\n"
+            "  Size: %zu\n",
             vma->vm_start, vma->vm_end,
-            chn->dma_addr, size);
+            (uint32_t)chn->dma_addr,
+            size);
 
     return 0;
 }
 
-static struct file_operations framechan_fops = {
+// Update file operations to include mmap
+static const struct file_operations framechan_fops = {
     .owner = THIS_MODULE,
     .open = framechan_open,
     .release = framechan_release,
@@ -7138,6 +9131,11 @@ static int tx_isp_probe(struct platform_device *pdev)
     dev->tuning_data->brightness = 128;
     dev->tuning_data->saturation = 128;
     dev->tuning_data->sharpness = 128;
+    dev->tuning_data->sinter_strength = 128;  // Default mid-range value
+    dev->tuning_data->temper_strength = 128;  // Default mid-range value
+    // Initialize tuning subsystem
+    atomic_set(&dev->tuning_data->initialized, 0);
+    mutex_init(&dev->tuning_data->lock);
 
     // Get memory resource from platform device
     res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -7523,6 +9521,7 @@ static int __init tx_isp_init(void)
 {
     int ret;
     struct platform_device *pdev;
+    struct IMPISPDev *dev;
 
     pr_info("Loading ISP driver...\n");
 
@@ -7532,18 +9531,33 @@ static int __init tx_isp_init(void)
         ret = -ENOMEM;
         goto err_unreg_device;
     }
+    dev = ourISPdev;
     pr_info("ourISPdev allocated at %p\n", ourISPdev);
 
     // 0.b Allocate tuning data
-    ourISPdev->tuning_data = kzalloc(sizeof(struct isp_tuning_data), GFP_KERNEL);
-    if (!ourISPdev->tuning_data) {
+    dev->tuning_data = kzalloc(sizeof(struct isp_tuning_data), GFP_KERNEL);
+    if (!dev->tuning_data) {
         ret = -ENOMEM;
-        goto err_unreg_device;
+        goto err_free_device;
     }
 
-    spin_lock_init(&ourISPdev->lock);
-    ourISPdev->irq_enabled = 0;
-    ourISPdev->irq_handler = NULL;  // Don't set this yet
+    // Set defaults
+    dev->tuning_data->total_gain = 0;
+    dev->tuning_data->running_mode = 0;
+    dev->tuning_data->temper_strength = 0;
+    dev->tuning_data->sinter_strength = 0;
+
+    spin_lock_init(&dev->lock);
+    dev->irq_enabled = 0;
+    dev->irq_handler = NULL;  // Don't set this yet
+
+    // Allocate state buffer that will be shared with userspace
+    // In init after device allocation:
+    dev->state_mem = kzalloc(sizeof(struct isp_state_mem), GFP_KERNEL);
+    if (!dev->state_mem) {
+        ret = -ENOMEM;
+        goto err_free_tuning;
+    }
 
     // 1. Create the tx-isp character device first
     ret = alloc_chrdev_region(&tx_sp_dev_number, 0, 1, "tx-isp");
@@ -7603,10 +9617,10 @@ static int __init tx_isp_init(void)
     }
 
     spin_lock_init(&irq_data->lock);
-    irq_data->irq_number = ourISPdev->irq;
+    irq_data->irq_number = dev->irq;
     irq_data->handler_function = NULL;  // Will be set in init_isp_interrupts
     irq_data->disable_function = NULL;  // Will be set in init_isp_interrupts
-    ourISPdev->irq_data = irq_data;
+    dev->irq_data = irq_data;
 
     // Request IRQ directly from platform device
     int irq = platform_get_irq(pdev, 0);
@@ -7618,21 +9632,21 @@ static int __init tx_isp_init(void)
     }
 
     // Store IRQ data
-    ourISPdev->irq_data = irq_data;
-    // ourISPdev->irq = irq;
+    dev->irq_data = irq_data;
+    // dev->irq = irq;
     // Get IRQ number from platform device
-    ourISPdev->irq = platform_get_irq(pdev, 0);
-    if (ourISPdev->irq < 0) {
+    dev->irq = platform_get_irq(pdev, 0);
+    if (dev->irq < 0) {
         dev_err(&pdev->dev, "Failed to get IRQ\n");
-        ret = ourISPdev->irq;
+        ret = dev->irq;
         goto err_unreg_device;
     }
 
     // Initialize character device
-    cdev_init(&ourISPdev->cdev, &tx_isp_fops);
-    ourISPdev->cdev.owner = THIS_MODULE;
+    cdev_init(&dev->cdev, &tx_isp_fops);
+    dev->cdev.owner = THIS_MODULE;
 
-    ret = cdev_add(&ourISPdev->cdev, tx_sp_dev_number, 1);
+    ret = cdev_add(&dev->cdev, tx_sp_dev_number, 1);
     if (ret)
         goto err_free_dev;
 
@@ -7644,7 +9658,7 @@ static int __init tx_isp_init(void)
     }
 
     // Store platform device pointer
-    ourISPdev->pdev = pdev;
+    dev->pdev = pdev;
 
     // Register subdevice drivers
     ret = platform_driver_register(&tx_isp_csi_driver);
@@ -7698,9 +9712,9 @@ err_unreg_vic:
 err_destroy_device:
     device_destroy(tisp_class, tx_sp_dev_number);
 err_del_cdev:
-    cdev_del(&ourISPdev->cdev);
+    cdev_del(&dev->cdev);
 err_free_dev:
-    kfree(ourISPdev);
+    kfree(dev);
 err_unreg_device:
     platform_device_unregister(pdev);
 err_put_device:
@@ -7709,6 +9723,10 @@ err_unreg_driver:
     platform_driver_unregister(&tx_isp_platform_driver);
 err_destroy_class:
     class_destroy(tisp_class);
+err_free_tuning:
+    kfree(dev->tuning_data);
+err_free_device:
+    kfree(dev);
 err_unreg_chrdev:
     unregister_chrdev_region(tx_sp_dev_number, 1);
     return ret;
@@ -7785,6 +9803,136 @@ int tx_isp_module_init(struct platform_device *pdev, struct tx_isp_subdev *sd)
     return 0;
 }
 
+int tx_isp_subdev_init_clks(struct tx_isp_subdev *sd, struct platform_device *pdev)
+{
+    struct device_node *np = pdev->dev.of_node;
+    struct property *prop;
+    const char *clock_name;
+    int clock_count = 0;
+    int ret = 0;
+    int i;
+
+    /* First count the number of clocks in device tree */
+    of_property_for_each_string(np, "clock-names", prop, clock_name) {
+        clock_count++;
+    }
+
+    if (!clock_count) {
+        pr_info("No additional clocks needed for subdev %s\n", pdev->name);
+        sd->clks = NULL;
+        sd->clk_num = 0;
+        return 0;
+    }
+
+    /* Allocate clock array */
+    sd->clks = kzalloc(clock_count * sizeof(struct clk *), GFP_KERNEL);
+    if (!sd->clks) {
+        pr_err("Failed to allocate clock array for subdev %s\n", pdev->name);
+        return -ENOMEM;
+    }
+    sd->clk_num = clock_count;
+
+    /* Get each clock and set its rate if specified */
+    i = 0;
+    of_property_for_each_string(np, "clock-names", prop, clock_name) {
+        unsigned long clock_rate;
+
+        sd->clks[i] = clk_get(&pdev->dev, clock_name);
+        if (IS_ERR(sd->clks[i])) {
+            ret = PTR_ERR(sd->clks[i]);
+            pr_err("Failed to get clock %s for subdev %s: %d\n",
+                   clock_name, pdev->name, ret);
+            goto err_put_clks;
+        }
+
+        /* Check if there's a specified rate for this clock */
+        if (!of_property_read_u32_index(np, "clock-rates", i,
+                                      (u32 *)&clock_rate) && clock_rate) {
+            ret = clk_set_rate(sd->clks[i], clock_rate);
+            if (ret) {
+                pr_err("Failed to set %s clock rate to %lu for subdev %s\n",
+                       clock_name, clock_rate, pdev->name);
+                goto err_put_clks;
+            }
+        }
+
+        /* Enable the clock */
+        ret = clk_prepare_enable(sd->clks[i]);
+        if (ret) {
+            pr_err("Failed to enable clock %s for subdev %s\n",
+                   clock_name, pdev->name);
+            goto err_put_clks;
+        }
+
+        i++;
+    }
+
+    return 0;
+
+err_put_clks:
+    while (--i >= 0) {
+        clk_disable_unprepare(sd->clks[i]);
+        clk_put(sd->clks[i]);
+    }
+    kfree(sd->clks);
+    sd->clks = NULL;
+    sd->clk_num = 0;
+    return ret;
+}
+
+void tx_isp_subdev_release_clks(struct tx_isp_subdev *sd)
+{
+    int i;
+
+    if (!sd->clks || !sd->clk_num)
+        return;
+
+    for (i = 0; i < sd->clk_num; i++) {
+        if (!IS_ERR_OR_NULL(sd->clks[i])) {
+            clk_disable_unprepare(sd->clks[i]);
+            clk_put(sd->clks[i]);
+        }
+    }
+    kfree(sd->clks);
+    sd->clks = NULL;
+    sd->clk_num = 0;
+}
+
+// Add pad channel setup helper
+static int setup_pad_channel(struct tx_isp_subdev_pad *pad, struct IMPISPDev *dev)
+{
+    struct isp_channel *chn;
+
+    // Allocate channel if not exists
+    if (!pad->priv) {
+        chn = kzalloc(sizeof(*chn), GFP_KERNEL);
+        if (!chn) {
+            pr_err("Failed to allocate channel\n");
+            return -ENOMEM;
+        }
+
+        // Basic channel setup
+        chn->channel_id = pad->index;
+        chn->dev = dev;
+        // Copy the pad structure rather than storing pointer
+        memcpy(&chn->pad, pad, sizeof(struct tx_isp_subdev_pad));
+
+        // Store channel in pad private data
+        pad->priv = chn;
+        pr_info("Created channel %d for pad %d\n", chn->channel_id, pad->index);
+    }
+
+    return 0;
+}
+
+static void cleanup_pad_channel(struct tx_isp_subdev_pad *pad)
+{
+    struct isp_channel *chn = pad->priv;
+    if (chn) {
+        kfree(chn);
+        pad->priv = NULL;
+    }
+}
 
 int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
                       struct tx_isp_subdev_ops *ops)
@@ -7795,57 +9943,75 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     pr_info("Starting subdev init for %s\n",
             pdev ? pdev->name : "unknown");
 
-    if (!sd || !ops) {
+    if (!sd || !ops || !pdev) {
         pr_err("Invalid parameters\n");
         return -EINVAL;
     }
-
-    pr_info("Platform device init: pdev=%p dev=%p\n", pdev, dev);
 
     if (!dev) {
         pr_err("No ISP device data found\n");
         return -EINVAL;
     }
 
-    if (!pdev) {
-        pr_err("No platform device specified\n");
-        return -EINVAL;
-    }
-
-    // Initialize subdev structure
+    /* Initialize subdev structure */
     memset(sd, 0, sizeof(*sd));
     sd->ops = ops;
 
-    // Determine pad counts first based on device type
+    /* Initialize clocks if needed */
+    ret = tx_isp_subdev_init_clks(sd, pdev);
+    if (ret) {
+        pr_err("Failed to initialize clocks\n");
+        return ret;
+    }
+
+    /* Set pad counts based on device type */
     if (!strcmp(pdev->name, "tx-isp-vic")) {
         sd->num_inpads = 1;
         sd->num_outpads = 2;
-    }
-    else if (!strcmp(pdev->name, "tx-isp-csi")) {
+    } else if (!strcmp(pdev->name, "tx-isp-csi")) {
         sd->num_inpads = 1;
         sd->num_outpads = 1;
-    }
-    else {
+    } else {
         sd->num_inpads = 1;
         sd->num_outpads = 1;
     }
 
-    // Allocate input pads
+    /* Allocate input pads */
     if (sd->num_inpads) {
         sd->inpads = kzalloc(sizeof(struct tx_isp_subdev_pad) * sd->num_inpads, GFP_KERNEL);
         if (!sd->inpads) {
             pr_err("Failed to allocate input pads\n");
             ret = -ENOMEM;
-            goto err_free;
+            goto err_free_clks;
         }
 
-        // Initialize each input pad
         for (int i = 0; i < sd->num_inpads; i++) {
             sd->inpads[i].sd = sd;
             sd->inpads[i].index = i;
             sd->inpads[i].type = TX_ISP_PADTYPE_INPUT;
             sd->inpads[i].state = TX_ISP_PADSTATE_FREE;
-            // Set appropriate link types based on device
+            sd->inpads[i].link.flag = TX_ISP_LINKFLAG_DYNAMIC;
+
+            // Create channel data for each pad
+            struct isp_channel *chn = kzalloc(sizeof(*chn), GFP_KERNEL);
+            if (!chn) {
+                pr_err("Failed to allocate channel for pad %d\n", i);
+                ret = -ENOMEM;
+                goto err_free_out_channels;
+            }
+
+            // Initialize channel
+            chn->channel_id = i;
+            chn->state = 0;
+            chn->dev = dev->dev;
+            memcpy(&chn->pad, &sd->inpads[i], sizeof(struct tx_isp_subdev_pad));
+
+            // Store channel as pad's private data
+            sd->inpads[i].priv = chn;
+            pr_info("Created channel data for input pad %d\n", i);
+
+            init_pad_event_handling(&sd->inpads[i], tx_isp_subdev_pad_event_handler);
+
             if (!strcmp(pdev->name, "tx-isp-vic"))
                 sd->inpads[i].links_type = TX_ISP_PADLINK_VIC;
             else if (!strcmp(pdev->name, "tx-isp-csi"))
@@ -7855,24 +10021,34 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         }
     }
 
-    // Allocate output pads
+    /* Allocate output pads */
     if (sd->num_outpads) {
         sd->outpads = kzalloc(sizeof(struct tx_isp_subdev_pad) * sd->num_outpads, GFP_KERNEL);
         if (!sd->outpads) {
             pr_err("Failed to allocate output pads\n");
             ret = -ENOMEM;
-            goto err_free_in;
+            goto err_free_in_channels;
         }
 
-        // Initialize each output pad
+        /* Initialize each output pad */
         for (int i = 0; i < sd->num_outpads; i++) {
             sd->outpads[i].sd = sd;
             sd->outpads[i].index = i;
             sd->outpads[i].type = TX_ISP_PADTYPE_OUTPUT;
             sd->outpads[i].state = TX_ISP_PADSTATE_FREE;
-            // Set appropriate link types based on device
+            sd->outpads[i].link.flag = TX_ISP_LINKFLAG_DYNAMIC;
+
+            // Setup channel and event handling for output pads too
+            ret = setup_pad_channel(&sd->outpads[i], dev);
+            if (ret) {
+                pr_err("Failed to setup channel for output pad %d\n", i);
+                goto err_free_out_channels;
+            }
+
+            init_pad_event_handling(&sd->outpads[i], tx_isp_subdev_pad_event_handler);
+
             if (!strcmp(pdev->name, "tx-isp-vic"))
-                sd->outpads[i].links_type = TX_ISP_PADLINK_DDR| TX_ISP_PADLINK_VIC;
+                sd->outpads[i].links_type = TX_ISP_PADLINK_DDR | TX_ISP_PADLINK_VIC;
             else if (!strcmp(pdev->name, "tx-isp-csi"))
                 sd->outpads[i].links_type = TX_ISP_PADLINK_VIC;
             else
@@ -7880,50 +10056,58 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         }
     }
 
-    // Map to appropriate register space
+    /* Map to appropriate register space */
     if (dev->reg_base) {
         if (!strcmp(pdev->name, "tx-isp-vic")) {
             sd->base = dev->reg_base + 0x7800;
-        }
-        else if (!strcmp(pdev->name, "tx-isp-csi")) {
+        } else if (!strcmp(pdev->name, "tx-isp-csi")) {
             if (!dev->csi_dev || !dev->csi_dev->csi_regs) {
                 pr_err("CSI registers not ready\n");
                 ret = -EINVAL;
-                goto err_free_out;
+                goto err_free_out_channels;
             }
             sd->base = dev->csi_dev->csi_regs;
-        }
-        else {
+        } else {
             sd->base = dev->reg_base;
         }
         pr_info("Using register base: %p\n", sd->base);
     }
 
-    // Initialize the module
+    /* Initialize the module */
     ret = tx_isp_module_init(pdev, sd);
     if (ret) {
         pr_err("Failed to init module: %d\n", ret);
-        goto err_free_out;
+        goto err_free_out_channels;
     }
 
-    // Store ISP device reference
-    sd->host_priv = dev;
+    /* Store ISP device reference */
+    tx_isp_set_subdev_hostdata(sd, dev);
 
     pr_info("Subdev initialized successfully\n");
     return 0;
 
-err_free_out:
-    if (sd->outpads)
+/* Error handlers */
+err_free_out_channels:
+    if (sd->outpads) {
+        for (int i = 0; i < sd->num_outpads; i++) {
+            cleanup_pad_channel(&sd->outpads[i]);
+        }
         kfree(sd->outpads);
-err_free_in:
-    if (sd->inpads)
+    }
+
+err_free_in_channels:
+    if (sd->inpads) {
+        for (int i = 0; i < sd->num_inpads; i++) {
+            cleanup_pad_channel(&sd->inpads[i]);
+        }
         kfree(sd->inpads);
-err_free:
+    }
+err_free_clks:
+    tx_isp_subdev_release_clks(sd);
     memset(sd, 0, sizeof(*sd));
     return ret;
 }
 EXPORT_SYMBOL(tx_isp_subdev_init);
-
 
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd)
 {

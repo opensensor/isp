@@ -69,7 +69,7 @@
 
 
 // Custom IOCTL commands matching the decompiled code
-#define TX_ISP_SET_BUF           _IOW('V', 0x56d5, struct isp_buf_info)
+#define TX_ISP_SET_BUF           0x800856d5
 #define TX_ISP_VIDEO_LINK_SETUP  _IOW('V', 0x56d0, unsigned int)
 #define TX_ISP_SET_AE_ALGO_OPEN  _IOW('V', 0x56dd, struct isp_ae_algo)
 #define TX_ISP_SET_AWB_ALGO_OPEN _IOW('V', 0x56e2, struct isp_awb_algo)
@@ -719,10 +719,6 @@
 
 #define MIPI_PHY_ADDR   0x10022000
 #define ISP_W01_ADDR    0x10023000  // Should be our CSI controller
-
-// Add these defines at the top
-#define RMEM_BASE     0x2A80000   // Reserved memory base - matches binary
-
 #define ISP_DEFAULT_SIZE   (44 * 1024 * 1024)  // 44MB - matches libimp expectation
 #define ISP_INIT_MAGIC    0x00000001
 #define ISP_ALLOC_METHOD  0x203a726f
@@ -734,8 +730,8 @@
 #define ISP_ALLOC_MAGIC1   0x203a726f
 #define ISP_ALLOC_MAGIC2   0x33326373
 
-#define RMEM_BASE     0x2A80000   // Reserved memory base address
-#define RMEM_SIZE     0x1580000   // Size from logs
+#define RMEM_BASE     0x02A80000   // Reserved memory base address (add leading 0)
+#define RMEM_SIZE     0x01580000   // Size from logs (add leading 0 for clarity)
 #define ISP_BUFFER_ALIGN 32       // Required alignment
 
 // Add these at the top of the file with other defines
@@ -1283,6 +1279,21 @@ struct frame_thread_data {
     struct task_struct *task;   // Thread task structure
 };
 
+struct isp_pool_config {
+    uint32_t format;         // Format type (e.g. NV12)
+    uint32_t width;          // Frame width
+    uint32_t height;         // Frame height
+    uint32_t buffer_stride;  // Buffer stride
+    uint32_t buffer_size;    // Total buffer size
+    uint32_t num_buffers;    // Number of buffers in pool
+};
+
+struct isp_pool {
+    struct isp_pool_config config;   // Pool configuration
+    bool bound;               // Whether pool is bound to channel
+    int pool_id;             // Pool ID (-1 if not allocated)
+};
+
 struct isp_channel {
     int fd;
     /* Core identification */
@@ -1291,6 +1302,8 @@ struct isp_channel {
     uint32_t state;                    // Channel state flags
     uint32_t type;                     // Channel type
     struct device *dev;                // Parent device
+    struct tx_isp_subdev subdev;  // Add this
+    struct tx_isp_subdev_pad pad; // And this
     uint32_t flags;                    // Channel flags
     uint32_t is_open;                  // Open count
     bool streaming;                    // Streaming state
@@ -1298,65 +1311,109 @@ struct isp_channel {
 
     /* Channel attributes */
     struct imp_channel_attr attr;      // Channel attributes (maintains firmware layout)
-    struct thread_data *thread_data;    // Thread data
+    struct frame_thread_data *thread_data;    // Thread data
 
     /* Format and frame info */
     uint32_t width;                    // Frame width
     uint32_t height;                   // Frame height
     uint32_t fmt;                      // Pixel format
-    uint32_t sequence;                 // Frame sequence number
+
+//    /* VBM Pool Management */
+//    struct {
+//        uint32_t pool_id;
+//        uint32_t pool_flags;  // Add pool flags from reqbuf
+//        bool bound;
+//        void *pool_ptr;      // VBM pool pointer
+//        void *ctrl_ptr;      // VBM control pointer
+//    } pool;                  // Consolidate pool-related fields
+
+    /* Event Management */
+    void *remote_dev;             // 0x2bc: Remote device handlers
+    struct isp_event_handler *event_hdlr;  // Event handler structure
+    spinlock_t event_lock;        // 0x2c4: Event lock
+    struct completion done;       // 0x2d4: Completion
+    struct isp_channel_event *event;
+    isp_event_cb event_cb;
+    void *event_priv;
+
+    /* State tracking */
+    atomic_t processing_count;      // Number of buffers being processed
+    atomic_t sequence;              // Current sequence number
+    atomic_t error_count;           // Track processing errors
+    unsigned long last_process;     // jiffies timestamp of last process
+
+    /* Stats for monitoring */
+    unsigned int processed_frames;
+    unsigned int dropped_frames;
+    unsigned int error_frames;
 
     /* Memory management */
-    void *buf_base;                    // Virtual base address
-    dma_addr_t dma_addr;               // DMA base address
+    uint32_t group_offset;             // Group offset
     uint32_t buf_size;                 // Size per buffer
-    uint32_t buf_count;                 // Size per buffer
     uint32_t channel_offset;           // Channel memory offset
     uint32_t memory_type;              // Memory allocation type
     uint32_t required_size;            // Required buffer size
     void **vbm_table;                  // VBM entries array
-    u32 vbm_count;                     // Number of VBM entries
+    atomic_t frame_count;                     // Number of frames (for framechan stats ioctl)
     uint32_t data_offset;              // Frame data offset
     uint32_t metadata_offset;          // Metadata offset
-    dma_addr_t *meta_dma;         // Array of metadata DMA addresses
+    dma_addr_t *meta_dma;              // Array of metadata DMA addresses
+    uint32_t phys_size;                // Physical memory size per buffer
+    uint32_t virt_size;                // Virtual memory size per buffer
+    struct vbm_pool *vbm_ptr;          // Pointer to VBM pool structure
+    struct vbm_ctrl *ctrl_ptr;
+    void __iomem *mapped_vbm;  // Mapped VBM pool memory
+    uint32_t stride;                   // Line stride in bytes for frame data
+    uint32_t buffer_stride;            // Total stride between buffers including metadata
+    bool pre_dequeue_enabled;          // Whether pre-dequeue is enabled for ch0
+    /* VBM pool mapping info */
+    struct page **pool_pages;  // Array of mapped pages
+    int num_pool_pages;        // Number of pages mapped
+    struct isp_pool pool;    // Pool binding state
+
+    /* Memory management */
+    void *buf_base;                    // Virtual base address
+    dma_addr_t dma_addr;               // DMA base address
+    dma_addr_t *buffer_dma_addrs;      // DMA addresses of each video_buffer
+    struct vbm_frame *buffers;         // Add this line to hold buffer array
+    uint32_t buf_count;                // Number of buffers
 
     /* Queue and buffer management */
-    struct frame_queue *queue;          // Frame queue structure
+    struct frame_queue *queue;
     atomic_t queued_bufs;              // Available buffer count
-    wait_queue_head_t wait_queue;      // Wait queue for frame completion
-    struct frame_group *group;         // Frame grouping info
-    struct group_data *group_data;         // Group data
-    unsigned long group_phys_mem;  // Physical memory pages
-    void __iomem *group_mapped_addr;  // Mapped memory address
-    struct frame_node *last_frame;     // Last processed frame
+    struct frame_group *group;          // Frame grouping info
+    struct group_data *group_data;      // Group data
+    unsigned long group_phys_mem;       // Physical memory pages
+    void __iomem *group_mapped_addr;    // Mapped memory address
+    struct frame_node *last_frame;      // Last processed frame
+    atomic_t ready_count;             // Number of ready buffers
+    atomic_t done_count;              // Number of done buffers
 
     /* Thread management */
-    struct task_struct *frame_thread;  // Frame processing thread
-    atomic_t thread_running;           // Thread state
-    atomic_t thread_should_stop;       // Thread stop flag
+    struct task_struct *frame_thread;   // Frame processing thread
+    atomic_t thread_running;            // Thread state
+    atomic_t thread_should_stop;        // Thread stop flag
 
     /* Synchronization */
-    spinlock_t vbm_lock;              // VBM access protection
-    spinlock_t state_lock;            // State protection
-    //struct mutex lock;                 // Channel lock
-    struct completion frame_complete;  // Frame completion tracking
+    spinlock_t vbm_lock;               // VBM access protection
+    spinlock_t state_lock;             // State protection
+    struct completion frame_complete;   // Frame completion tracking
 
     /* Statistics */
-    struct ae_statistics ae_stats;     // AE statistics
-    spinlock_t ae_lock;               // AE lock
-    bool ae_valid;                    // AE validity flag
-    uint32_t last_irq;                // Last IRQ status
-    uint32_t error_count;             // Error counter
-
-    /* Pool management */
-    struct {
-        uint32_t pool_id;
-        bool bound;
-    } pool;
-
-    /* Pad to match firmware size if needed */
-    uint8_t padding[0x2e8 - sizeof(struct imp_channel_attr)];
+    struct ae_statistics ae_stats;      // AE statistics
+    spinlock_t ae_lock;                // AE lock
+    bool ae_valid;                     // AE validity flag
+    uint32_t last_irq;                 // Last IRQ status
 } __attribute__((aligned(8)));
+
+struct periph_clock {
+    struct clk *clk;
+    struct list_head list;
+};
+
+struct isp_state_mem {
+    uint32_t registers[0x1100];  // Make room for full 0x1029 offset plus extra
+};
 
 /* Main device structure */
 /* Note for Claude, GPT, or anyone  that will listen
@@ -1371,6 +1428,8 @@ struct IMPISPDev {
     spinlock_t lock;
     struct tx_isp_resources resources;
     struct proc_context *proc_context;
+    struct list_head periph_clocks;  /* List of peripheral clocks */
+    spinlock_t clock_lock;           /* Protect clock list operations */
 
     /* Device identifiers */
     int major;
@@ -1395,6 +1454,14 @@ struct IMPISPDev {
     /* Frame sources */
     struct isp_channel  channels[MAX_CHANNELS];
     struct tx_isp_sensor_win_setting *sensor_window_size;
+    uint32_t frame_rate;    // Current sensor frame rate
+    uint32_t frame_div;     // Frame rate divisor
+    uint32_t running_mode;
+    struct isp_state_mem *state_mem;  // Pointer to state memory
+    uint32_t day_night;
+    uint32_t custom_mode;
+    uint32_t poll_state;
+    wait_queue_head_t poll_wait;
 
     /* Hardware subsystems */
     struct csi_device *csi_dev;
@@ -1455,11 +1522,18 @@ struct IMPISPDev {
     uint32_t format;
     uint32_t frame_wait_cnt;
 
+    // AE Algorithm state
+    int ae_algo_enabled;                          // Matches ae_algo_en check
+    void (*ae_algo_cb)(void *priv, int, int);    // Callback function pointer at offset 0xc8
+    void *ae_priv_data;                          // Private data passed to callback
     /* Tuning attributes */
+    struct mutex tuning_mutex;
+    bool tuning_initialized;
+    uint32_t g_isp_deamon_info;
     struct isp_tuning_data *tuning_data;
     struct isp_tuning_state *tuning_state;
     int tuning_enabled;  // 0 = disabled, 2 = enabled
-    bool tuning_initialized;
+    int running_state;
     bool bypass_enabled;
     bool links_enabled;
     u32 instance;  // For passing to tuning state
@@ -1571,26 +1645,6 @@ struct frame_fifo_entry {
 };
 
 
-
-struct vbm_pool {
-    uint32_t width;
-    uint32_t height;
-    uint32_t format;           // Format code
-    uint32_t num_buffers;      // Number of buffers
-    void *frames;              // Array of frame_info structures
-    void *virt_addr;           // Base virtual address
-    dma_addr_t phys_addr;      // Base physical address
-    size_t size_image;         // Image size
-    size_t size;              // Buffer size - needed by existing code
-    uint32_t flags;           // Pool flags
-    uint32_t state;           // Pool state
-    bool initialized;
-    struct list_head buffers;    /* Queue of buffers */
-
-};
-
-
-
 struct frame_timing {
     u64 timestamp;
     u32 frame_count;
@@ -1634,15 +1688,6 @@ enum frame_channel_state {
     FC_STATE_READY = 1,
     FC_STATE_STREAMING = 2,
     FC_STATE_ERROR = 3
-};
-
-/* Buffer states */
-enum buffer_states {
-    BUFFER_STATE_IDLE = 0,
-    BUFFER_STATE_QUEUED = 1,
-    BUFFER_STATE_ACTIVE = 2,
-    BUFFER_STATE_DONE = 3,
-    BUFFER_STATE_ERROR = 4
 };
 
 
@@ -1799,5 +1844,7 @@ struct isp_pad_info {
     uint16_t pad_idx;     // Pad index within subdev
     uint32_t flags;       // Additional flags
 };
+
+#define MAX_BUFFERS 4
 
 #endif

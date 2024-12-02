@@ -887,20 +887,6 @@ int configure_csi_streaming(struct IMPISPDev *dev)
     void __iomem *csi_base = dev->csi_dev->csi_regs;
     uint32_t phy_state;
     int ret;
-
-//    if (dev->csi_dev->state < 1 || dev->csi_dev->state > 2) {
-//        pr_err("Invalid CSI state for stream start: %d\n", dev->csi_dev->state);
-//        return -EINVAL;
-//    }
-//
-//    if (dev->csi_dev->state == 1) {
-//        ret = tx_isp_csi_activate_subdev(dev);
-//        if (ret) {
-//            pr_err("Failed to activate CSI: %d\n", ret);
-//            return ret;
-//        }
-//    }
-
     mutex_lock(&dev->csi_dev->mutex);
 
     // Full reset first
