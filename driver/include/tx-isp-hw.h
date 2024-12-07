@@ -118,23 +118,154 @@ static const struct isp_pad_config pad_link_configs[2][MAX_LINKS] = {
     }
 };
 
+#define MAX_TASKS 8  // Adjust based on OEM code
+#define ISP_PAD_SINK    0
+#define ISP_PAD_SOURCE  1
+
+
+
+struct tx_isp_pad {
+    struct list_head list;
+    u32 type;           // 0=sink, 1=source
+    u32 index;
+    struct tx_isp_channel *channel;
+};
+
+struct tx_isp_channel {
+    u32 width;
+    u32 height;
+    u32 stride;
+    u32 size;
+    u32 meta_size;
+    void *meta_addr;
+};
+
+
+struct irq_task {
+    void (*task_function)(void);  // Task callback function
+    int status;                   // Task status/enable flag
+};
+
+struct irq_handler_data {
+    spinlock_t lock;
+    int irq_number;
+    void (*handler_function)(void *);    // Enable function
+    void (*disable_function)(void *);    // Disable function
+    void *irq_priv;
+    struct irq_task task_list[MAX_TASKS];  // Array of task handlers
+    int task_count;                        // Number of registered tasks
+};
+
+
+// Link module types
+enum imp_isp_mod_type {
+    IMP_ISP_MOD_CSI = 0,
+    IMP_ISP_MOD_VIC,
+    IMP_ISP_MOD_VIN,
+    IMP_ISP_MOD_CORE,
+    IMP_ISP_MOD_FS,
+    IMP_ISP_MOD_DDR
+};
+
+// Link pad definition
+struct imp_isp_pad {
+    uint32_t type;      // 0 = sink/input, 1 = source/output
+    uint32_t mod;       // Module type (CSI/VIC/DDR)
+    uint32_t pad_id;    // Pad index
+};
+
+// Full link structure
+struct imp_isp_link {
+    struct imp_isp_pad src;  // Source pad
+    struct imp_isp_pad dst;  // Destination pad
+};
+
+
+struct frame_source_device {
+    struct tx_isp_subdev *sd;
+    void *priv;
+    struct mutex lock;
+    int state;
+};
+
+struct vic_device {
+    void __iomem *regs;         // Base registers
+    struct tx_isp_subdev *sd;
+    spinlock_t lock;            // IRQ lock
+    int irq_enabled;            // IRQ enable state
+    void (*irq_handler)(void *);  // IRQ handler function
+    void (*irq_disable)(void *);  // IRQ disable function
+    void *irq_priv;             // Private data for IRQ
+
+    // Buffer management
+    u32 mdma_en;               // DMA enable flag
+    u32 ch0_buf_idx;           // Channel 0 buffer index
+    u32 ch0_sub_get_num;       // Channel 0 buffer count
+    struct completion frame_complete;  // Frame completion
+
+    // Additional state
+    u32 width;                 // Frame width
+    u32 height;                // Frame height
+    u32 stride;                // Frame stride
+};
+
+struct vin_device {
+    struct tx_isp_subdev *sd;
+    struct mutex lock;            // Keep mutex
+    struct list_head sensors;     // List of sensors
+    struct tx_isp_sensor *active; // Currently active sensor
+    int refcnt;                  // Reference count
+    int state;                   // State flag
+};
+
 //int tx_isp_enable_irq(struct IMPISPDev *dev);
 //void tx_isp_disable_irq(struct IMPISPDev *dev);
 
 int init_hw_resources(struct IMPISPDev *dev);
-int tx_isp_init_memory(struct IMPISPDev *dev);
 void tx_isp_cleanup_memory(struct IMPISPDev *dev);
-
+void dump_isp_regs(void);
 int configure_isp_clocks(struct IMPISPDev *dev);
 int configure_vic_for_streaming(struct IMPISPDev *dev);
 int init_vic_control(struct IMPISPDev *dev);
-
+int detect_sensor_type(struct IMPISPDev *dev);
+int tx_vic_irq_init(struct irq_dev *dev,
+                    void (*handler)(void *),
+                    void (*disable)(void *),
+                    void *priv);
+int tx_isp_irq_init(struct irq_dev *dev,
+                    void (*handler)(void *),
+                    void (*disable)(void *),
+                    void *priv);
 int configure_streaming_hardware(struct IMPISPDev *dev);
 int configure_isp_buffers(struct IMPISPDev *dev);
 void verify_isp_state(struct IMPISPDev *dev);
 int isp_power_on(struct IMPISPDev *dev);
 int isp_reset_hw(struct IMPISPDev *dev);
 int reset_vic(struct IMPISPDev *dev);
+void dump_vic_state(struct IMPISPDev *dev);
+
+struct tx_isp_subdev_pad *find_pad(struct IMPISPDev *dev,
+                                         enum imp_isp_mod_type mod,
+                                         u32 type,  // 0=sink, 1=source
+                                         u32 pad_id);
+
+
+// Forward declarations for VIC functions
+int vic_s_stream(struct tx_isp_subdev *sd, int enable);
+int vic_link_stream(struct tx_isp_subdev *sd, int enable);
+int vic_link_setup(const struct tx_isp_subdev_pad *local,
+                         const struct tx_isp_subdev_pad *remote, u32 flags);
+int vic_init(struct tx_isp_subdev *sd, int on);
+int vic_reset(struct tx_isp_subdev *sd, int on);
+irqreturn_t vic_isr(struct tx_isp_subdev *sd, u32 status, bool *handled);
+irqreturn_t vic_isr_thread(struct tx_isp_subdev *sd, void *data);
+
+// Forward declarations for CSI functions
+int csi_s_stream(struct tx_isp_subdev *sd, int enable);
+int csi_link_stream(struct tx_isp_subdev *sd, int enable);
+int csi_init(struct tx_isp_subdev *sd, int on);
+int csi_reset(struct tx_isp_subdev *sd, int on);
+
 
 u32 isp_reg_read(void __iomem *base, u32 offset);
 void isp_reg_write(void __iomem *base, u32 offset, u32 value);

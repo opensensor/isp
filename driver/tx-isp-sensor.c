@@ -103,7 +103,7 @@ int debug_sensor_registers(struct IMPISPDev *dev)
     u8 val;
     int ret;
 
-    pr_info("SC2336 Register Dump:\n");
+    pr_info("Sensor Register Dump:\n");
 
     // Read critical registers
     ret = isp_sensor_read_reg(client, 0x0100, &val);
@@ -129,9 +129,108 @@ int debug_sensor_registers(struct IMPISPDev *dev)
     return ret;
 }
 
+static int read_proc_value(const char *path, char *buf, size_t size)
+{
+    struct file *f;
+    mm_segment_t old_fs;
+    int ret;
+
+    f = filp_open(path, O_RDONLY, 0);
+    if (IS_ERR(f))
+        return PTR_ERR(f);
+
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+
+    ret = vfs_read(f, (char __user *)buf, size - 1, &f->f_pos);
+
+    set_fs(old_fs);
+    filp_close(f, NULL);
+
+    if (ret > 0) {
+        buf[ret] = '\0';
+        // Remove trailing newline if present
+        if (ret > 0 && buf[ret-1] == '\n')
+            buf[ret-1] = '\0';
+    }
+
+    return ret;
+}
+
+static int read_proc_uint(const char *path, unsigned int *value)
+{
+    char buf[32];
+    int ret;
+
+    ret = read_proc_value(path, buf, sizeof(buf));
+    if (ret < 0)
+        return ret;
+
+    return kstrtouint(buf, 0, value);
+}
+
+int detect_sensor_type(struct IMPISPDev *dev)
+{
+    char sensor_name[32];
+    unsigned int chip_id = 0;
+    unsigned int width = 0;
+    unsigned int height = 0;
+    int ret;
+
+    // Wait briefly for sensor driver to initialize proc entries
+    msleep(100);
+
+    // Read sensor info from proc
+    ret = read_proc_value("/proc/jz/sensor/name", sensor_name, sizeof(sensor_name));
+    if (ret < 0) {
+        pr_err("Failed to read sensor name from proc: %d\n", ret);
+        return ret;
+    }
+
+    ret = read_proc_uint("/proc/jz/sensor/chip_id", &chip_id);
+    if (ret < 0) {
+        pr_err("Failed to read sensor chip ID from proc: %d\n", ret);
+        return ret;
+    }
+
+    ret = read_proc_uint("/proc/jz/sensor/width", &width);
+    ret |= read_proc_uint("/proc/jz/sensor/height", &height);
+    if (ret < 0) {
+        pr_err("Failed to read sensor resolution from proc: %d\n", ret);
+        return ret;
+    }
+
+    pr_info("Detected sensor: %s (ID: 0x%x) %dx%d\n",
+            sensor_name, chip_id, width, height);
+
+    // For now assume MIPI - we could add interface type to proc later
+    dev->sensor_type = 1;  // MIPI
+
+    // Set mode based on sensor name
+    if (strncmp(sensor_name, "sc2336", 6) == 0) {
+        dev->sensor_mode = 0x195;
+    } else if (strncmp(sensor_name, "sc3336", 6) == 0) {
+        dev->sensor_mode = 0x196;
+    } else {
+        pr_warn("Unknown sensor %s - using default mode\n", sensor_name);
+        dev->sensor_mode = 0x195;
+    }
+
+    // Store info in device
+    dev->sensor_width = width;
+    dev->sensor_height = height;
+    strlcpy(dev->sensor_name, sensor_name, sizeof(dev->sensor_name));
+
+    // Write to hardware register
+    writel(dev->sensor_type, dev->reg_base + 0x110 + 0x14);
+    wmb();
+
+    return 0;
+}
+
 
 // Sensor setup and configuration
-int sc2336_hw_reset(struct IMPISPDev *dev)
+int sensor_hw_reset(struct IMPISPDev *dev)
 {
     if (!dev || dev->reset_gpio < 0)
         return -EINVAL;
@@ -288,7 +387,7 @@ int init_gpio_config(struct IMPISPDev *dev)
 
     dev->reset_gpio = GPIO_PA(18);
     ret = devm_gpio_request_one(dev->dev, dev->reset_gpio,
-                               GPIOF_OUT_INIT_HIGH, "sc2336_reset");
+                               GPIOF_OUT_INIT_HIGH, "sensor_reset");
     if (ret) {
         dev_err(dev->dev, "Failed to request reset GPIO: %d\n", ret);
         return ret;

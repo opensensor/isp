@@ -21,7 +21,7 @@ int isp_sensor_read_reg(struct i2c_client *client, u16 reg, u8 *val);
 int debug_sensor_registers(struct IMPISPDev *dev);
 
 // Sensor setup and configuration
-int sc2336_hw_reset(struct IMPISPDev *dev);
+int sensor_hw_reset(struct IMPISPDev *dev);
 
 // I2C initialization
 int setup_i2c_adapter(struct IMPISPDev *dev);

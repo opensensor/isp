@@ -178,41 +178,17 @@ struct isp_pipeline_regs {
 } __attribute__((packed, aligned(4)));
 
 
-struct group_metadata {
-    uint32_t magic;         // 0x00: Magic header
-    void *group;            // 0x04: Pointer to frame group
-    uint32_t frame_num;     // 0x08: Frame number in sequence
-    uint32_t ref_count;     // 0x0c: Reference count (1)
-    uint32_t state;         // 0x10: Frame state
-    uint32_t flags;         // 0x14: Frame flags (0)
-    uint32_t size;          // 0x18: Frame size
-    uint32_t type;          // 0x1c: Frame type
-    void *handler;          // 0x20: Must match group handler (0x9a654)
-    uint32_t channel;       // 0x24: Channel ID
-    uint32_t sequence;      // 0x28: Frame sequence number
-    uint32_t timestamp;     // 0x2c: Timestamp
-    uint32_t padding[3];    // 0x30-0x38: Reserved
-    uint32_t done_flag;     // 0x3c: Frame done flag
-} __attribute__((packed));
-
-struct frame_metadata {
-    uint32_t magic;         // 0x00: Magic (0x100100)
-    void *group_ptr;        // 0x04: Critical for group_update
-    uint32_t frame_num;     // 0x08: Buffer index
-    uint32_t ref_count;     // 0x0c: Reference count (start at 1)
-    uint32_t state;         // 0x10: Frame state
-    uint32_t flags;         // 0x14: Frame flags
-    uint32_t size;          // 0x18: Frame size
-    uint32_t type;          // 0x1c: Frame type (format)
-    void *handler;          // 0x20: Must be 0x9a654
-    uint32_t channel;       // 0x24: Channel ID
-    uint32_t sequence;      // 0x28: Frame sequence number
-    struct timeval timestamp;     // 0x2c: Timestamp
-    uint32_t padding[3];    // 0x30-0x38: Reserved padding
-    uint32_t done_flag;     // 0x3c: Frame done flag
-} __attribute__((packed, aligned(4)));
-
 // Add these structures to match libimp's buffer management
+struct imp_frame_node {
+    uint32_t magic;             // 0x0: Magic number identifier
+    void *data;                 // 0x4: Buffer data pointer
+    uint32_t frame_size;        // 0x8: Frame data size
+    uint32_t seq;              // 0xc: Frame sequence number
+    struct list_head list;      // 0x10: List management
+    uint32_t flags;            // 0x20: Frame flags
+    uint8_t state;             // 0x24: Frame state
+};
+
 struct frame_node {
     /* Core frame data - matches OEM layout */
     uint32_t magic;             // 0x00: Magic number (0x100100)
@@ -229,7 +205,7 @@ struct frame_node {
     /* Memory management */
     void *virt_addr;           // 0x30: Our DMA buffer virtual address
     dma_addr_t phys_addr;      // 0x34: Physical/DMA address
-    struct frame_metadata *metadata;            // 0x38: Metadata area pointer
+    void *metadata;            // 0x38: Metadata area pointer
     uint32_t metadata_offset;   // 0x3C: Offset to metadata
 
     /* Buffer management */
@@ -263,17 +239,23 @@ struct encoder_chn_attr {
     uint32_t minQp;             // Minimum QP value
 };
 
-struct isp_buffer_request {
-    uint32_t index;          // At offset 0x00
-    uint32_t type;           // Buffer type check at var_74
-    uint32_t memory;         // Memory type at offset 0x3c
-    uint32_t length;         // Size field
-    uint32_t addr;           // Buffer address
-    uint32_t flags;          // At offset 0x0c (masked with 0xffff1bb8)
-    uint32_t field1;         // 0x10 offset from decompiled
-    uint32_t field2;         // 0x14 offset from decompiled
-    uint32_t field3;         // 0x18 offset from decompiled
-    uint8_t  padding[0x20];  // Pad to 0x44 size
+// Common struct for both QBUF and DQBUF operations
+struct __attribute__((packed, aligned(4))) frame_qbuf_request {
+    __u32 index;
+    __u32 type;
+    __u32 bytesused;
+    __u32 flags;
+    __u32 field;
+    struct timeval timestamp;
+    __u32 sequence;
+    __u32 memory;
+    union {
+        __u32 offset;
+        unsigned long userptr;
+        __u32 reserved[8];
+    } m;
+    __u32 length;
+    __u32 reserved2[4];
 };
 
 struct __attribute__((packed, aligned(4))) frame_buffer {
@@ -324,15 +306,13 @@ struct dqbuf_resp {
 struct isp_core_ctrl {
     u32 cmd;     // Control command
     u32 value;   // Control value/result
+    u32 flag;    // Additional flags/data
 };
-
 
 struct isp_tuning_data {
     void __iomem *regs;     // ISP register mapping
     uint32_t state;         // Tuning state
     uint32_t offset_1c;     // Matches 0x1c allocation (libimp's userspace lock)
-
-    // Basic image controls
     u8 contrast;           // 0x01
     u8 brightness;         // 0x02
     u8 reserved2;          // 0x03
@@ -342,7 +322,7 @@ struct isp_tuning_data {
     u8 auto_wb;            // 0x07
     u8 shading;            // 0x08
     u8 gamma;              // 0x09
-    // u8 saturation;         // 0x0a
+    u8 saturation;         // 0x0a
     u8 sharpness;          // 0x0b
     u8 hist_eq;            // 0x0c
     u8 ae_enable;          // 0x0d
@@ -376,7 +356,6 @@ struct isp_tuning_data {
     u32 temper_strength;  // Temporal noise reduction strength
     uint32_t running_mode;
     /* BCSH Parameters */
-    uint8_t saturation;
     uint32_t bcsh_ev;    // Exposure value
 
     /* BCSH state variables */
@@ -437,15 +416,14 @@ struct isp_ae_hist_cfg {
 
 // Tuning state structure based on decompiled code
 struct isp_tuning_state {
-    uint8_t enabled;       // Offset 0x00
-    uint8_t initialized;   // Offset 0x01
-    uint8_t padding[2];    // Match alignment
-    uint32_t reg_base;     // Offset 0x04
-    uint32_t lock;         // Offset 0x08 - just a 32-bit value, not a mutex
-    uint32_t contrast;     // Offset 0x0c
-    uint32_t brightness;   // Offset 0x10
-    uint32_t saturation;   // Offset 0x14
-    uint32_t sharpness;    // Offset 0x18
+    bool enabled;          // Tuning enabled flag
+    bool initialized;      // Tuning initialized
+    void __iomem *regs;   // Tuning registers mapping
+    struct mutex lock;     // Protection
+    uint32_t contrast;     // 0x09 offset in userspace struct
+    uint32_t brightness;   // For tuning params
+    uint32_t saturation;
+    uint32_t sharpness;
 };
 
 struct isp_zone_ctrl {
@@ -572,6 +550,39 @@ struct frame_chan_attr {
     u32 reserved[10];   // Pad to match 80 byte copy
 } __packed;
 
+struct group_metadata {
+    uint32_t magic;         // 0x00: Magic header
+    void *group;            // 0x04: Pointer to frame group
+    uint32_t frame_num;     // 0x08: Frame number in sequence
+    uint32_t ref_count;     // 0x0c: Reference count (1)
+    uint32_t state;         // 0x10: Frame state
+    uint32_t flags;         // 0x14: Frame flags (0)
+    uint32_t size;          // 0x18: Frame size
+    uint32_t type;          // 0x1c: Frame type
+    void *handler;          // 0x20: Must match group handler (0x9a654)
+    uint32_t channel;       // 0x24: Channel ID
+    uint32_t sequence;      // 0x28: Frame sequence number
+    uint32_t timestamp;     // 0x2c: Timestamp
+    uint32_t padding[3];    // 0x30-0x38: Reserved
+    uint32_t done_flag;     // 0x3c: Frame done flag
+} __attribute__((packed));
+
+struct frame_metadata {
+    uint32_t magic;         // 0x00: Magic (0x100100)
+    void *group_ptr;        // 0x04: Critical for group_update
+    uint32_t frame_num;     // 0x08: Buffer index
+    uint32_t ref_count;     // 0x0c: Reference count (start at 1)
+    uint32_t state;         // 0x10: Frame state
+    uint32_t flags;         // 0x14: Frame flags
+    uint32_t size;          // 0x18: Frame size
+    uint32_t type;          // 0x1c: Frame type (format)
+    void *handler;          // 0x20: Must be 0x9a654
+    uint32_t channel;       // 0x24: Channel ID
+    uint32_t sequence;      // 0x28: Frame sequence number
+    uint32_t timestamp;     // 0x2c: Timestamp
+    uint32_t padding[3];    // 0x30-0x38: Reserved padding
+    uint32_t done_flag;     // 0x3c: Frame done flag
+} __attribute__((packed, aligned(4)));
 
 
 /* Control structure matching userspace */
@@ -605,39 +616,38 @@ struct video_container {
     uint32_t count;         // 0x64: Number of buffers
 } __attribute__((packed));
 
-//struct vbm_frame {
-//    uint32_t pool_id;           // 0x00: Pool identifier
-//    uint32_t frame_id;          // 0x04: Frame identifier
-//    uint32_t state;             // 0x08: Frame state
-//    uint32_t ready;             // 0x0c: Frame ready flag
-//    uint32_t flags;             // 0x10: Frame flags/attributes
-//    uint32_t offset_14;         // 0x14: Appears to be padding/reserved
-//    uint64_t sequence;          // 0x18: Frame sequence number
-//    uint64_t timestamp;         // 0x20: Frame timestamp
-//    dma_addr_t phys_addr;            // 0x28: Physical buffer address
-//    void *virt_addr;            // 0x30: Virtual buffer address
-//    uint32_t size;              // 0x38: Buffer size
-//    uint32_t ret_val;           // 0x3c: Return value field
-//    uint32_t chn_id;            // 0x40: Channel ID
-//    uint32_t width;             // 0x44: Frame width
-//    uint32_t height;            // 0x48: Frame height
-//    uint32_t format;            // 0x4c: Frame format
-//    uint32_t index;             // 0x50: Buffer index
-//    uint32_t type;              // 0x54: Buffer type
-//    uint32_t memory;            // 0x58: Memory type
-//    uint32_t buf_flags;         // 0x5c: Buffer flags
-//    uint32_t status;            // 0x60: Buffer status
-//    struct list_head list;      // 0x64: List head for queues
-//    void *queue;                // 0x6c: Points back to frame_queue
-//    void *data;                 // 0x70: Buffer data pointer
-//    struct frame_metadata *meta;  // 0x74: Metadata pointer
-//    uint8_t  padding[0x54];     // 0x78-0xcc: Remaining padding to match video_buffer size
-//} __attribute__((packed));       // Total size: 0xd0
+//// Buffer structure - total size 0xd0 bytes
+//struct video_buffer {
+//    uint32_t magic;             // 0x0: Magic number identifier
+//    void *data;                 // 0x4: Buffer data pointer
+//    uint32_t frame_size;        // 0x8: Frame data size
+//    uint32_t seq;              // 0xc: Frame sequence number
+//    struct list_head list;      // 0x10: List management
+//    uint32_t flags;            // 0x20: Frame flags
+//    uint8_t state;             // 0x24: Frame state
+//};
+
+struct video_buffer {
+    uint32_t index;        // 0x00: Buffer index
+    uint32_t type;         // 0x04: Buffer type
+    uint8_t pad1[0x30];    // 0x08-0x37: Padding
+    uint32_t memory;       // 0x38: Memory type
+    uint8_t pad2[0xc];     // 0x3c-0x47: Padding
+    uint32_t flags;        // 0x48: Buffer state (1=queued, 2=done)
+    uint32_t status;       // 0x4c: Buffer status
+    uint8_t pad3[0x8];     // 0x50-0x57: Padding
+    struct list_head list; // 0x58: List head for queues
+    void *queue;           // 0x60: Points back to frame_queue
+    uint8_t pad4[0xc];     // 0x64-0x6f: Padding
+    void *data;            // 0x70: Buffer data pointer
+    struct frame_metadata *meta;  // 0x74: Metadata pointer
+    uint8_t pad5[0x54];    // 0x78-0xcf: Remaining padding
+} __attribute__((packed));
 
 // Frame queue structure - maintains exact offsets
 struct frame_queue {
     struct mutex lock;           // 0x00: Queue lock
-    struct vbm_frame **bufs;  // 0x24: Array of buffer pointers
+    struct video_buffer **bufs;  // 0x24: Array of buffer pointers
     uint32_t memory_type;        // 0x3c: Memory type (V4L2_MEMORY_*)
     uint8_t pad1[0x1d0];        // 0x40-0x20f: Padding to maintain offsets
     uint32_t buf_count;         // 0x210: Number of buffers
@@ -648,90 +658,50 @@ struct frame_queue {
     uint32_t stream_state;       // 0x230: Stream state
 } __attribute__((packed));
 
-struct vbm_frame {
-    uint32_t magic;             // 0x00: Magic number (0x100100)
-    uint32_t index;             // 0x04: Buffer index/pool_id
-    uint32_t width;             // 0x08: Frame width
-    uint32_t height;            // 0x0C: Frame height
-    struct list_head list;       // 0x10-0x1B: Space for list_head
-    uint32_t format;            // 0x1c: Format
-    uint32_t size;              // 0x20
-    uint32_t state;             // 0x24: Frame state
-    void *virt_addr;            // 0x28: Virtual address
-    void *phys_addr;            // 0x2c: Physical address
-    uint32_t frame_data1;       // 0x30
-    uint32_t frame_data2;       // 0x34
-    struct group_module *group; // 0x38: Points to group module + 0x128 offset
-    uint32_t reserved1[0xD];    // 0x3c-0x57
-    uint32_t zone_info;         // 0x58: Zone info
-    uint32_t reserved2[0xE7];   // 0x5c-0x3db
-    uint32_t q_count;           // 0x3dc: Queue count
-    uint32_t dq_count;          // 0x3e0: Dequeue count
-    uint16_t reserved3;         // 0x3e4-0x3e5
-    uint16_t state_flags;       // 0x3e6
-    uint32_t state1;            // 0x3e8
-    uint32_t state2;            // 0x3ec
-    uint32_t state3;            // 0x3f0
-    uint32_t reserved4[0xE];    // 0x3f4-0x428
-} __attribute__((packed, aligned(4)));
+struct vbm_frame_info {
+    uint32_t pool_id;       // Pool ID
+    uint32_t state;         // Frame state (2 = done)
+    uint32_t ref_count;     // Reference count
+    struct mutex lock;      // Frame lock
+    void *frame_data;       // Frame data pointer
+};
 
 // This needs to match exactly what libimp expects
 struct group_module {
-    char name[0x14];           // 0x00-0x13: Module name
-    uint32_t field_14;         // 0x14
-    uint32_t field_18;         // 0x18
-    uint32_t field_1c;         // 0x1c
-    uint32_t field_20;         // 0x20
-    uint32_t field_24;         // 0x24
-    uint32_t field_28;         // 0x28
-    uint32_t field_2c;         // 0x2c
-    uint32_t field_30;         // 0x30
-    uint32_t field_34;         // 0x34
-    uint32_t field_38;         // 0x38
-    uint8_t pad1[2];          // 0x3c
-    uint16_t source_fps_den;         // 0x3d-0x3e: First fps value libimp reads
-    uint32_t ref_count;       // 0x3f
-    uint32_t func_40;         // 0x40
-    uint32_t func_44;         // 0x44
-    uint32_t func_48;         // 0x48
-    uint32_t func_4c;         // 0x4c
-    uint16_t source_fps_num;         // 0x50-0x51: Second fps value libimp reads
-    uint16_t pad2;            // 0x52-0x53
-    uint32_t list_head;       // 0x54
-    uint32_t list_ptr;        // 0x58
-    char buffer[0x80];        // 0x5c-0xdc: List buffer
-    uint32_t field_e0;        // 0xe0
-    char sem1[0x10];          // 0xe4-0xf3: First semaphore
-    char sem2[0x10];          // 0xf4-0x103: Second semaphore
-    uint32_t thread;          // 0x104: Thread pointer
-    uint32_t mutex[0x24];     // 0x108-0x12b: Mutex
-    void *frame_ptr;          // 0x12c: Points back to frame
-    uint32_t channel;         // 0x130: Channel ID
+    char pad1[0x50];
+    void *update_fn;         // Offset 0x50: points to our update wrapper
+    char pad2[0xdc];        // Padding to 0x12c
+    void *self;             // Offset 0x12c: points to self
+    uint32_t channel;       // Offset 0x130: channel number
+    char pad3[0x10];        // Padding to 0x144
+    uint32_t handler;       // Offset 0x144: handler value (0x9a654)
+    char update_block[512]; // Start update block right after handler
 } __attribute__((packed, aligned(4)));
 
-//struct vbm_frame {
-//    __u32 index;          // 0x000
-//    __u32 pool_id;        // 0x004
-//    __u32 width;          // 0x008
-//    __u32 height;         // 0x00c
-//    __u32 format;         // 0x010
-//    __u32 size;           // 0x014
-//    __u32 virt_addr;      // 0x018
-//    __u32 phys_addr;      // 0x01c
-//    __u32 frame_data1;    // 0x020
-//    __u32 frame_data2;    // 0x024
-//    __u32 reserved1[0xD]; // 0x028-0x057 (52 bytes)
-//    __u32 zone_info;      // 0x058
-//    __u32 reserved2[0xE7];// 0x05c-0x3db (0x380 bytes)
-//    __u32 q_count;        // 0x3dc
-//    __u32 dq_count;       // 0x3e0
-//    __u16 reserved3;      // 0x3e4-0x3e5
-//    __u16 state_flags;    // 0x3e6
-//    __u32 state1;         // 0x3e8
-//    __u32 state2;         // 0x3ec
-//    __u32 state3;         // 0x3f0
-//    __u32 reserved4[0xE]; // 0x3f4-0x428 (56 bytes)
-//} __attribute__((packed));
+
+struct vbm_frame {
+    __u32 index;          // 0x000
+    __u32 pool_id;        // 0x004
+    __u32 width;          // 0x008
+    __u32 height;         // 0x00c
+    __u32 format;         // 0x010
+    __u32 size;           // 0x014
+    __u32 virt_addr;      // 0x018
+    __u32 phys_addr;      // 0x01c
+    __u32 frame_data1;    // 0x020
+    __u32 frame_data2;    // 0x024
+    __u32 reserved1[0xD]; // 0x028-0x057 (52 bytes)
+    __u32 zone_info;      // 0x058
+    __u32 reserved2[0xE7];// 0x05c-0x3db (0x380 bytes)
+    __u32 q_count;        // 0x3dc
+    __u32 dq_count;       // 0x3e0
+    __u16 reserved3;      // 0x3e4-0x3e5
+    __u16 state_flags;    // 0x3e6
+    __u32 state1;         // 0x3e8
+    __u32 state2;         // 0x3ec
+    __u32 state3;         // 0x3f0
+    __u32 reserved4[0xE]; // 0x3f4-0x428 (56 bytes)
+} __attribute__((packed));
 
 struct vbm_pool {
     __u32 pool_id;        // 0x000
@@ -771,31 +741,33 @@ struct vbm_frame_entry {
 
 
 struct reqbuf_request {
-    // Core V4L2 Section (0x00-0x0F)
-    __u32 count;          // 0x00: 01 00 00 00 (1)
-    __u32 type;          // 0x04: 01 00 00 00 (1)
-    __u32 memory;        // 0x08: 02 00 00 00 (2)
-    __u32 reserved[1];   // 0x0C: 00 00 00 00
+    // Standard V4L2 fields (0x00-0x13)
+    __u32 count;           // 0x00: Number of buffers requested
+    __u32 type;           // 0x04: Buffer type (capture/output)
+    __u32 memory;         // 0x08: Memory type (mmap/userptr)
+    __u32 capabilities;   // 0x0C: Capabilities flags
+    __u32 reserved[1];    // 0x10: Reserved
 
-    // VBM Section (0x10-0x1F)
-    __u32 flags;     // 0x10: 00 00 00 00
-    void *pool_ptr;      // 0x14: 30 5f eb 76 (0x76eb5f30)
-    void *ctrl_ptr;      // 0x18: 74 5c eb 76
-    __u32 pool_flags;    // 0x1C: 6e 7d 94 93
+    // VBM info section (0x14-0x23)
+    void *pool_ptr;       // 0x14: VBM pool pointer
+    void *ctrl_ptr;       // 0x18: VBM control pointer
+    __u32 pool_flags;     // 0x1C: VBM pool flags
+    __u32 padding[1];     // 0x20: Padding
 
-    // Frame Dimensions (0x20-0x3F)
-    __u32 reserved3;     // 0x20: 00 00 00 00
-    __u32 width;         // 0x30: 80 07 00 00 (1920)
-    __u32 height;        // 0x34: 38 04 00 00 (1080)
-    __u32 frame_count;   // 0x38: 00 00 00 00
+    // Frame config (0x24-0x4C)
+    __u32 width;          // 0x24: Frame width
+    __u32 height;         // 0x28: Frame height
+    __u32 frame_count;    // 0x2C: Number of frames
+    __u32 phys_size;      // 0x30: Physical memory size
+    __u32 virt_size;      // 0x34: Virtual memory size
+    __u32 padding2;       // 0x38: More padding
 
-    // Physical Memory Section (0x40-0x4F)
-    __u32 phys_width;    // 0x40: 80 07 00 00 (1920)
-    __u32 phys_height;   // 0x44: 38 04 00 00 (1080)
-    __u32 reserved4[2];  // 0x48-0x4F
+    // Reserved section (0x3C-0x6B)
+    __u32 reserved2[12];  // 0x3C-0x6B: Reserved
 
-    // Rest appears to be padding/additional structures
-} __attribute__((packed));
+    // Metadata section (0x6C-0x70)
+    __u32 meta_size;      // 0x6C: Size of metadata region
+} __attribute__((packed, aligned(4))); // Total size: 0x70 (112) bytes // Total size: 0x70 (112) bytes
 
 
 struct isp_event_handler {
@@ -870,6 +842,13 @@ struct isp_event_msg {
     };
 };
 
+struct irq_dev {
+    spinlock_t lock;               // 0x130 offset
+    volatile u32 irq_enabled;      // 0x13c offset
+    void (*irq_handler)(void *);   // 0x84 offset
+    void (*irq_disable)(void *);   // 0x88 offset
+    void *irq_priv;               // 0x80 offset
+};
 
 // Event callback type
 typedef int (*isp_event_cb)(void *priv, u32 event, void *data);
@@ -908,22 +887,6 @@ struct isp_channel_event {
 #define ISP_EVENT_BUFFER_DONE     0x3000006  // Buffer completed by hardware
 #define ISP_EVENT_QUEUE_FREE      0x3000007  // Free/cleanup queue
 #define ISP_EVENT_BUFFER_REQUEST  0x3000008  // Request buffer allocation
-
-/* Event definitions based on OEM code */
-#define ISP_EVENT_BUFFER_DONE     0x3000006  // Frame complete
-#define ISP_EVENT_BUFFER_READY    0x3000007  // Buffer ready
-#define ISP_EVENT_BUFFER_REQUEST  0x3000008  // Request buffer
-#define ISP_EVENT_BUFFER_ENQUEUE  0x3000005  // Queue buffer
-#define ISP_EVENT_STREAM_START    0x3000003  // Start streaming
-#define ISP_EVENT_STREAM_STOP     0x3000004  // Stop streaming
-#define ISP_EVENT_STREAM_CANCEL   0x3000010  // Cancel stream
-#define ISP_EVENT_QUEUE_FREE      0x3000011  // Free queue
-
-/* Frame states */
-#define FRAME_STATE_FREE      0
-#define FRAME_STATE_QUEUED    1
-#define FRAME_STATE_ACTIVE    2
-#define FRAME_STATE_DONE      3
 
 #define ISP_NETLINK_PROTO    23       // 0x17 from decompilation
 #define ISP_NETLINK_GROUP    0xca624  // From OEM driver
@@ -972,34 +935,6 @@ typedef int (*isp_event_cb)(void *priv, u32 event, void *data);
 #define QUEUE_STATE_STREAMING BIT(0)  // Streaming active
 #define QUEUE_STATE_ERROR     BIT(1)  // Error occurred
 
-#define FRAME_CHAN_MAGIC 0x100100
-
-
-// Add these flags to match libimp's expectations
-#define VBM_STATE_INIT     0  // Initial state
-#define VBM_STATE_QUEUED   1  // Frame queued for processing
-#define VBM_STATE_LOCKED   2  // Frame locked for writing
-#define VBM_STATE_DONE     3  // Frame ready for dequeue
-
-
-// Tuning Request Structure
-struct isp_tuning_request {
-    uint32_t mode;     // Enable/mode value
-    uint32_t cmd;      // Command type
-    //uint32_t result;    // Additional parameter
-} __attribute__((packed));
-
-struct isp_tuning_enable_request {
-    int32_t mode;      // Enable/mode flag
-    int32_t cmd;       // Command code
-} __attribute__((packed));
-
-struct isp_ae_tuning_req {
-    uint32_t enable;        // Enable/disable flag
-    uint32_t state;         // Request state/command
-    void __user *data;      // User data pointer
-    uint32_t result;        // Result value
-} __attribute__((packed, aligned(4)));
 
 
 // Structure expected by libimp
@@ -1007,97 +942,4 @@ struct isp_sensor_id_info {
     __u32 id;          /* Sensor ID value */
     __u32 status;      /* Status of read operation */
 };
-
-struct isp_gain_ctrl {
-    uint32_t value;    // Combined gain/contrast value
-};
-
-// Structure for gain/contrast updates
-struct isp_tuning_event_data {
-    uint32_t cmd;     // Original command (0x80)
-    uint32_t gain;    // Extracted gain value
-    uint32_t contrast; // Extracted contrast value
-};
-
-#define ISP_EVENT_TUNING_UPDATE  0x80000027
-
-// 4-word structure for core control operations
-struct isp_core_set_ctrl {
-    uint32_t cmd;      // Command being handled
-    uint32_t value;    // Value/data
-    uint32_t status;   // Status field
-};
-
-// Structure to match what userspace expects
-struct tuning_event_data {
-    uint32_t enable;
-    uint32_t cmd;
-    uint32_t value;
-};
-
-// Tuning Command States (from decompiled code analysis)
-#define ISP_TUNING_STATE_WB_GET         0x8000004  // GetWB - expect enable=1
-#define ISP_TUNING_STATE_WB_STATS       0x8000005  // GetWB_Statis - enable=1, copies high/low 16 bits to arg+4/6
-#define ISP_TUNING_STATE_WB_GOL_STATS   0x8000009  // GetWB_GOL_Statis - enable=1, same copy pattern
-#define ISP_TUNING_STATE_SENSOR_FPS     0x80000e0  // GetSensorFPS - enable=1, splits return into two 16-bit values
-#define ISP_TUNING_STATE_SENSOR_ATTR    0x8000045  // GetSensorAttr - enable=1
-#define ISP_SINTER_STRENGTH  0x1800    // Spatial noise reduction strength register
-#define ISP_TEMPER_STRENGTH  0x1900    // Temporal noise reduction strength register
-#define ISP_TUNING_FPS_REG          0x200  // Need to verify actual offset
-#define ISP_TUNING_WB_REG           0x300  // Need to verify
-#define ISP_TUNING_EXPOSURE_REG     0x400  // Need to verify
-#define ISP_TUNING_EVENT_BASE     0x4000000
-#define ISP_TUNING_EVENT_MODE0    0x4000000  // Sets 0x40c4 to 2
-#define ISP_TUNING_EVENT_MODE1    0x4000001  // Sets 0x40c4 to 1
-#define ISP_TUNING_EVENT_FRAME    0x4000002  // Triggers frame done wakeup
-#define ISP_TUNING_EVENT_DN       0x4000003  // Day/Night mode control
-
-// Add tuning-specific event types
-#define ISP_EVENT_GAIN_UPDATE      0x80000001
-#define ISP_EVENT_CONTRAST_UPDATE  0x80000002
-
-#define ISP_AE_HIST_BASE        0x1000  // Example offset, need to confirm actual
-#define ISP_AE_HIST_CFG0        (ISP_AE_HIST_BASE + 0x00)
-#define ISP_AE_HIST_CFG1        (ISP_AE_HIST_BASE + 0x04)
-#define ISP_AE_HIST_CFG2        (ISP_AE_HIST_BASE + 0x08)
-#define ISP_AE_HIST_CFG3        (ISP_AE_HIST_BASE + 0x0C)
-#define ISP_AE_HIST_WINDOW_X    (ISP_AE_HIST_BASE + 0x10)
-#define ISP_AE_HIST_WINDOW_Y    (ISP_AE_HIST_BASE + 0x14)
-#define ISP_AE_HIST_WINDOW_W    (ISP_AE_HIST_BASE + 0x18)
-#define ISP_AE_HIST_WINDOW_H    (ISP_AE_HIST_BASE + 0x1C)
-#define ISP_AE_HIST_NUM_BINS    (ISP_AE_HIST_BASE + 0x20)
-#define ISP_AE_HIST_DATA        (ISP_AE_HIST_BASE + 0x40)
-
-/* Direction bits */
-#define _IOC_NONE   0U
-#define _IOC_WRITE  1U  /* userspace writing to kernel, aka "IN" */
-#define _IOC_READ   2U  /* userspace reading from kernel, aka "OUT" */
-
-/* Check the direction */
-#define IOC_IN      (_IOC_WRITE << _IOC_DIRSHIFT)
-#define IOC_OUT     (_IOC_READ << _IOC_DIRSHIFT)
-#define IOC_INOUT   (((_IOC_WRITE|_IOC_READ) << _IOC_DIRSHIFT))
-
-#define BCSH_SVALUE_REG     0x100  // Update with actual register offset
-#define BCSH_SMAX_REG       0x104
-#define BCSH_SMIN_REG       0x108
-#define BCSH_SMAX_M_REG     0x10C  // Keep original register name
-
-#define ISP_TUNING_CONTRAST_OFFSET  0x1024  // For contrast register
-#define ISP_TUNING_GAIN_OFFSET     0x1028  // For gain register
-
-/* Add these register definitions */
-// White Balance registers
-#define ISP_WB_BASE          0x1100  // Base offset for WB controls
-#define ISP_WB_R_GAIN        (ISP_WB_BASE + 0x00)
-#define ISP_WB_G_GAIN        (ISP_WB_BASE + 0x04)
-#define ISP_WB_B_GAIN        (ISP_WB_BASE + 0x08)
-
-// BCSH registers
-#define ISP_BCSH_BASE        0x2000  // Base offset for BCSH controls
-#define ISP_BCSH_BRIGHTNESS  (ISP_BCSH_BASE + 0x00)
-#define ISP_BCSH_CONTRAST    (ISP_BCSH_BASE + 0x04)
-#define ISP_BCSH_SATURATION  (ISP_BCSH_BASE + 0x08)
-#define ISP_BCSH_HUE         (ISP_BCSH_BASE + 0x0C)
-
 #endif //TX_LIBIMP_H
