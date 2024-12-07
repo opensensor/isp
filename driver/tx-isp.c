@@ -1576,9 +1576,9 @@ static int get_isp_total_gain(uint32_t *gain)
 static int isp_tuning_enable(struct IMPISPDev *dev, void __user *arg)
 {
     struct {
-        uint32_t enable;
-        uint32_t state;
-    } __packed req = {0};  // Zero initialize
+        uint32_t enable;  // From user
+        uint32_t state;   // Current state
+    } __packed req = {0};  // Initialize to zero
     int ret = 0;
 
     if (!dev) {
@@ -1586,7 +1586,12 @@ static int isp_tuning_enable(struct IMPISPDev *dev, void __user *arg)
         return -EINVAL;
     }
 
-    // Read just enable flag first
+    if (!dev->tuning_data) {
+        pr_err("No tuning data structure\n");
+        return -EINVAL;
+    }
+
+    // Read just enable flag first to avoid partial copy
     if (copy_from_user(&req.enable, arg, sizeof(req.enable)))
         return -EFAULT;
 
@@ -3423,11 +3428,18 @@ int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, 
     if (enable) {
         spin_lock_irqsave(&dev->lock, flags);
 
-        // Enable IRQs using stored handler functions
-        if (dev->irq_data && dev->irq_data->handler_function)
-            dev->irq_data->handler_function(dev->irq_data);
-        if (dev->vic_irq_data && dev->vic_irq_data->handler_function)
-            dev->vic_irq_data->handler_function(dev->vic_irq_data);
+        // Verify IRQ handlers are registered
+        if (!dev->isp_irq_data || !dev->vic_irq_data) {
+            pr_err("IRQs are not properly initialized\n");
+            ret = -EINVAL;
+            goto unlock;
+        }
+
+
+        // Enable interrupts using known working registers
+        writel(0xffffffff, isp_regs + 0xb0);  // IRQ Enable
+        writel(0xffffffff, isp_regs + 0xb4);  // Clear any pending
+        wmb();
 
         // Enable streaming
         writel(0x1, isp_regs + ISP_STREAM_START);
@@ -3435,7 +3447,10 @@ int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, 
         writel(0x1, isp_regs + ISP_STREAM_CTRL);
         wmb();
 
-        spin_unlock_irqrestore(&dev->lock, flags);
+        dev->irq_enabled = 1;  // Mark as enabled
+
+        unlock:
+                spin_unlock_irqrestore(&dev->lock, flags);
     } else {
         spin_lock_irqsave(&dev->lock, flags);
 
@@ -5178,6 +5193,9 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         writel(0x1, isp_regs + 0x120);        // Enable buffer
         writel(0x1, isp_regs + ISP_DMA_CTRL); // Enable DMA
         wmb();
+
+        // reset sensor
+        sensor_hw_reset(ourISPdev);
 
         dump_vic_state(dev);
         dump_vic_irq_state(dev);
@@ -7849,23 +7867,24 @@ static irqreturn_t tx_vic_irq_handler(int irq, void *dev_id)
 {
     struct IMPISPDev *dev = dev_id;
     void __iomem *vic_regs = dev->reg_base + VIC_BASE;
-    u32 status, irq_en, irq_mask;
+    u32 status, irq_en;
 
-    status = readl(vic_regs + 0xb4);
-    irq_en = readl(vic_regs + 0x93c);
-    irq_mask = readl(vic_regs + 0x9e8);
+    pr_info("VIC IRQ: status=0x%08x\n", status);
 
-    pr_info("VIC IRQ Debug: status=0x%x en=0x%x mask=0x%x control=0x%x\n",
-            status, irq_en, irq_mask, readl(vic_regs + 0x0));
+    status = readl(vic_regs + 0xb4);  // Get status
+    if (!status)
+        return IRQ_NONE;
 
-    if (status) {
-        // Clear handled interrupts
-        writel(status & 0x33fb, vic_regs + 0xb4);
-        wmb();
-        return IRQ_HANDLED;
-    }
+    pr_info("VIC IRQ: status=0x%x enable=0x%x mask=0x%x\n",
+            status,
+            readl(vic_regs + 0x93c),
+            readl(vic_regs + 0x9e8));
 
-    return IRQ_NONE;
+    // Clear only handled interrupts using OEM's mask
+    writel(status & 0x33fb, vic_regs + 0xb4);
+    wmb();
+
+    return IRQ_HANDLED;
 }
 
 static void tx_vic_irq_cleanup(struct IMPISPDev *dev)
@@ -7877,6 +7896,30 @@ static void tx_vic_irq_cleanup(struct IMPISPDev *dev)
         dev->vic_dev->irq_priv = NULL;
     }
 }
+
+
+/* Helper to initialize VIC IRQ handling */
+int tx_vic_irq_init(struct irq_dev *dev,
+                    void (*handler)(void *),
+                    void (*disable)(void *),
+                    void *priv)
+{
+    if (!dev)
+        return -EINVAL;
+
+    spin_lock_init(&dev->lock);
+    dev->irq_enabled = 0;
+    dev->irq_handler = handler;
+    dev->irq_disable = disable;
+    dev->irq_priv = priv;
+
+    ourISPdev->vic_irq_data = kzalloc(sizeof(struct irq_handler_data), GFP_KERNEL);
+    ourISPdev->vic_irq_data->handler_function = handler;
+    ourISPdev->vic_irq_data->disable_function = disable;
+
+    return 0;
+}
+
 
 int tx_isp_vic_probe(struct platform_device *pdev)
 {
@@ -7936,7 +7979,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         ret = vic_irq;
         goto err_cleanup_irq;
     }
-    dev->vic_irq = vic_irq;
+    dev->vic_irq = vic_irq;  // Store the IRQ number in the device structure
 
     system_irq_func_set(VIC_IRQ_INDEX, tx_vic_irq_handler);
 
@@ -8902,40 +8945,20 @@ static int __init tx_isp_init(void)
         goto err_put_device;
     }
 
-//
-//    // Initialize IRQ handler data
-//    struct irq_handler_data *irq_data = kzalloc(sizeof(*irq_data), GFP_KERNEL);
-//    if (!irq_data) {
-//        dev_err(&pdev->dev, "Failed to allocate IRQ data\n");
-//        ret = -ENOMEM;
-//        goto err_unreg_device;
-//    }
-//
-//    spin_lock_init(&irq_data->lock);
-//    irq_data->irq_number = ourISPdev->isp_irq;
-//    irq_data->handler_function = NULL;  // Will be set in init_isp_interrupts
-//    irq_data->disable_function = NULL;  // Will be set in init_isp_interrupts
-//    ourISPdev->isp_irq_data = irq_data;
-//
-//    // Request IRQ directly from platform device
-//    int irq = platform_get_irq(pdev, 0);
-//    if (irq < 0) {
-//        dev_err(&pdev->dev, "Failed to get IRQ\n");
-//        ret = irq;
-//        kfree(irq_data);
-//        goto err_unreg_device;
-//    }
-//
-//    // Store IRQ data
-//    ourISPdev->irq_data = irq_data;
-//    // ourISPdev->isp_irq= irq;
-//    // Get IRQ number from platform device
-//    ourISPdev->isp_irq= platform_get_irq(pdev, 0);
-//    if (ourISPdev->isp_irq< 0) {
-//        dev_err(&pdev->dev, "Failed to get IRQ\n");
-//        ret = ourISPdev->irq;
-//        goto err_unreg_device;
-//    }
+
+    // Initialize IRQ handler data
+    struct irq_handler_data *irq_data = kzalloc(sizeof(*irq_data), GFP_KERNEL);
+    if (!irq_data) {
+        dev_err(&pdev->dev, "Failed to allocate IRQ data\n");
+        ret = -ENOMEM;
+        goto err_unreg_device;
+    }
+
+    spin_lock_init(&irq_data->lock);
+    irq_data->irq_number = ourISPdev->isp_irq;
+    irq_data->handler_function = tx_isp_irq_handler;
+    irq_data->disable_function = tx_isp_disable_irq;
+    ourISPdev->isp_irq_data = irq_data;
 
     // Initialize character device
     cdev_init(&ourISPdev->cdev, &tx_isp_fops);

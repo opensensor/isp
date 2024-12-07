@@ -1502,7 +1502,7 @@ struct IMPISPDev {
 
     /* IRQs */
     int isp_irq;
-    struct irq_handler_data *irq_data;
+    struct irq_handler_data *isp_irq_data;
     // IRQ handling
     void (*irq_handler)(void *);      // IRQ handler callback
     void (*irq_disable)(void *);      // IRQ disable callback
