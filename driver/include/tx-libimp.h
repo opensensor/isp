@@ -309,10 +309,13 @@ struct isp_core_ctrl {
     u32 flag;    // Additional flags/data
 };
 
+
 struct isp_tuning_data {
     void __iomem *regs;     // ISP register mapping
     uint32_t state;         // Tuning state
     uint32_t offset_1c;     // Matches 0x1c allocation (libimp's userspace lock)
+
+    // Basic image controls
     u8 contrast;           // 0x01
     u8 brightness;         // 0x02
     u8 reserved2;          // 0x03
@@ -322,7 +325,7 @@ struct isp_tuning_data {
     u8 auto_wb;            // 0x07
     u8 shading;            // 0x08
     u8 gamma;              // 0x09
-    u8 saturation;         // 0x0a
+    // u8 saturation;         // 0x0a
     u8 sharpness;          // 0x0b
     u8 hist_eq;            // 0x0c
     u8 ae_enable;          // 0x0d
@@ -356,6 +359,7 @@ struct isp_tuning_data {
     u32 temper_strength;  // Temporal noise reduction strength
     uint32_t running_mode;
     /* BCSH Parameters */
+    uint8_t saturation;
     uint32_t bcsh_ev;    // Exposure value
 
     /* BCSH state variables */
@@ -396,6 +400,7 @@ struct isp_tuning_data {
 
     uint32_t move_state;
     atomic_t initialized;
+    uint32_t g_isp_deamon_info;
     struct mutex lock;
 };
 
@@ -942,4 +947,117 @@ struct isp_sensor_id_info {
     __u32 id;          /* Sensor ID value */
     __u32 status;      /* Status of read operation */
 };
+
+// Tuning Request Structure
+struct isp_tuning_request {
+    uint32_t mode;     // Enable/mode value
+    uint32_t cmd;      // Command type
+    //uint32_t result;    // Additional parameter
+} __attribute__((packed));
+
+struct isp_tuning_enable_request {
+    int32_t mode;      // Enable/mode flag
+    int32_t cmd;       // Command code
+} __attribute__((packed));
+
+struct isp_ae_tuning_req {
+    uint32_t enable;        // Enable/disable flag
+    uint32_t state;         // Request state/command
+    void __user *data;      // User data pointer
+    uint32_t result;        // Result value
+} __attribute__((packed, aligned(4)));
+
+struct isp_gain_ctrl {
+    uint32_t value;    // Combined gain/contrast value
+};
+
+// Structure for gain/contrast updates
+struct isp_tuning_event_data {
+    uint32_t cmd;     // Original command (0x80)
+    uint32_t gain;    // Extracted gain value
+    uint32_t contrast; // Extracted contrast value
+};
+
+#define ISP_EVENT_TUNING_UPDATE  0x80000027
+
+// 4-word structure for core control operations
+struct isp_core_set_ctrl {
+    uint32_t cmd;      // Command being handled
+    uint32_t value;    // Value/data
+    uint32_t status;   // Status field
+};
+
+// Structure to match what userspace expects
+struct tuning_event_data {
+    uint32_t enable;
+    uint32_t cmd;
+    uint32_t value;
+};
+
+// Tuning Command States (from decompiled code analysis)
+#define ISP_TUNING_STATE_WB_GET         0x8000004  // GetWB - expect enable=1
+#define ISP_TUNING_STATE_WB_STATS       0x8000005  // GetWB_Statis - enable=1, copies high/low 16 bits to arg+4/6
+#define ISP_TUNING_STATE_WB_GOL_STATS   0x8000009  // GetWB_GOL_Statis - enable=1, same copy pattern
+#define ISP_TUNING_STATE_SENSOR_FPS     0x80000e0  // GetSensorFPS - enable=1, splits return into two 16-bit values
+#define ISP_TUNING_STATE_SENSOR_ATTR    0x8000045  // GetSensorAttr - enable=1
+#define ISP_SINTER_STRENGTH  0x1800    // Spatial noise reduction strength register
+#define ISP_TEMPER_STRENGTH  0x1900    // Temporal noise reduction strength register
+#define ISP_TUNING_FPS_REG          0x200  // Need to verify actual offset
+#define ISP_TUNING_WB_REG           0x300  // Need to verify
+#define ISP_TUNING_EXPOSURE_REG     0x400  // Need to verify
+#define ISP_TUNING_EVENT_BASE     0x4000000
+#define ISP_TUNING_EVENT_MODE0    0x4000000  // Sets 0x40c4 to 2
+#define ISP_TUNING_EVENT_MODE1    0x4000001  // Sets 0x40c4 to 1
+#define ISP_TUNING_EVENT_FRAME    0x4000002  // Triggers frame done wakeup
+#define ISP_TUNING_EVENT_DN       0x4000003  // Day/Night mode control
+
+// Add tuning-specific event types
+#define ISP_EVENT_GAIN_UPDATE      0x80000001
+#define ISP_EVENT_CONTRAST_UPDATE  0x80000002
+
+#define ISP_AE_HIST_BASE        0x1000  // Example offset, need to confirm actual
+#define ISP_AE_HIST_CFG0        (ISP_AE_HIST_BASE + 0x00)
+#define ISP_AE_HIST_CFG1        (ISP_AE_HIST_BASE + 0x04)
+#define ISP_AE_HIST_CFG2        (ISP_AE_HIST_BASE + 0x08)
+#define ISP_AE_HIST_CFG3        (ISP_AE_HIST_BASE + 0x0C)
+#define ISP_AE_HIST_WINDOW_X    (ISP_AE_HIST_BASE + 0x10)
+#define ISP_AE_HIST_WINDOW_Y    (ISP_AE_HIST_BASE + 0x14)
+#define ISP_AE_HIST_WINDOW_W    (ISP_AE_HIST_BASE + 0x18)
+#define ISP_AE_HIST_WINDOW_H    (ISP_AE_HIST_BASE + 0x1C)
+#define ISP_AE_HIST_NUM_BINS    (ISP_AE_HIST_BASE + 0x20)
+#define ISP_AE_HIST_DATA        (ISP_AE_HIST_BASE + 0x40)
+
+/* Direction bits */
+#define _IOC_NONE   0U
+#define _IOC_WRITE  1U  /* userspace writing to kernel, aka "IN" */
+#define _IOC_READ   2U  /* userspace reading from kernel, aka "OUT" */
+
+/* Check the direction */
+#define IOC_IN      (_IOC_WRITE << _IOC_DIRSHIFT)
+#define IOC_OUT     (_IOC_READ << _IOC_DIRSHIFT)
+#define IOC_INOUT   (((_IOC_WRITE|_IOC_READ) << _IOC_DIRSHIFT))
+
+#define BCSH_SVALUE_REG     0x100  // Update with actual register offset
+#define BCSH_SMAX_REG       0x104
+#define BCSH_SMIN_REG       0x108
+#define BCSH_SMAX_M_REG     0x10C  // Keep original register name
+
+#define ISP_TUNING_CONTRAST_OFFSET  0x1024  // For contrast register
+#define ISP_TUNING_GAIN_OFFSET     0x1028  // For gain register
+
+/* Add these register definitions */
+// White Balance registers
+#define ISP_WB_BASE          0x1100  // Base offset for WB controls
+#define ISP_WB_R_GAIN        (ISP_WB_BASE + 0x00)
+#define ISP_WB_G_GAIN        (ISP_WB_BASE + 0x04)
+#define ISP_WB_B_GAIN        (ISP_WB_BASE + 0x08)
+
+// BCSH registers
+#define ISP_BCSH_BASE        0x2000  // Base offset for BCSH controls
+#define ISP_BCSH_BRIGHTNESS  (ISP_BCSH_BASE + 0x00)
+#define ISP_BCSH_CONTRAST    (ISP_BCSH_BASE + 0x04)
+#define ISP_BCSH_SATURATION  (ISP_BCSH_BASE + 0x08)
+#define ISP_BCSH_HUE         (ISP_BCSH_BASE + 0x0C)
+
+
 #endif //TX_LIBIMP_H

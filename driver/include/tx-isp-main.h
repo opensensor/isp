@@ -1540,17 +1540,26 @@ struct IMPISPDev {
     uint32_t format;
     uint32_t frame_wait_cnt;
 
+    // AE Algorithm state
+    int ae_algo_enabled;                          // Matches ae_algo_en check
+    void (*ae_algo_cb)(void *priv, int, int);    // Callback function pointer at offset 0xc8
+    void *ae_priv_data;                          // Private data passed to callback
     /* Tuning attributes */
+    uint32_t g_isp_deamon_info;
     struct isp_tuning_data *tuning_data;
     struct isp_tuning_state *tuning_state;
     int tuning_enabled;  // 0 = disabled, 2 = enabled
-    bool tuning_initialized;
+    bool streaming_enabled;
     bool bypass_enabled;
     bool links_enabled;
     u32 instance;  // For passing to tuning state
     struct ae_info *ae_info;
     struct awb_info *awb_info;
     uint32_t wdr_mode;
+    uint32_t day_night;
+    uint32_t custom_mode;
+    uint32_t poll_state;
+    wait_queue_head_t poll_wait;
 } __attribute__((aligned(4)));
 
 /* Proc file system data structure */

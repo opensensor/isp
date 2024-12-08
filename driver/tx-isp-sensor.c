@@ -380,24 +380,54 @@ struct i2c_client *isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
     return client;
 }
 
-// GPIO handling
 int init_gpio_config(struct IMPISPDev *dev)
 {
+    void __iomem *pa_base, *pz_base;
     int ret;
 
+    // First set up electrical characteristics
+    pa_base = ioremap(0x10010000, 0x1000);
+    pz_base = ioremap(0x10017000, 0x1000);
+    if (!pa_base || !pz_base) {
+        dev_err(dev->dev, "Failed to map GPIO registers\n");
+        ret = -ENOMEM;
+        goto err_ioremap;
+    }
+
+    // Configure PA18 characteristics via shadow registers
+    writel(0, pz_base + 0x14);              // PZINTS - no interrupt
+    writel(0, pz_base + 0x24);              // PZMSKS - no mask
+    writel(0, pz_base + 0x34);              // PZPAT1S - function output
+    writel(BIT(18), pz_base + 0x44);        // PZPAT0S - set high
+
+    // Set electrical characteristics
+    writel(readl(pa_base + 0x110) & ~BIT(18), pa_base + 0x110);  // Disable pull-up
+    writel(readl(pa_base + 0x120) & ~BIT(18), pa_base + 0x120);  // Disable pull-down
+    writel(readl(pa_base + 0x130) & ~BIT(18), pa_base + 0x130);  // Drive strength low
+    writel(readl(pa_base + 0x140) & ~BIT(18), pa_base + 0x140);  // Drive strength high
+
+    // Apply settings atomically
+    writel(0, pz_base + 0xF0);              // Load to Port A
+
+    // Then request GPIO through Linux GPIO framework
     dev->reset_gpio = GPIO_PA(18);
     ret = devm_gpio_request_one(dev->dev, dev->reset_gpio,
                                GPIOF_OUT_INIT_HIGH, "sensor_reset");
     if (ret) {
         dev_err(dev->dev, "Failed to request reset GPIO: %d\n", ret);
-        return ret;
+        goto err_gpio;
     }
 
     dev->pwdn_gpio = -1;  // No power down by default
-    dev_info(dev->dev, "GPIO setup: reset=%d pwdn=%d\n",
+
+    dev_info(dev->dev, "GPIO setup complete: reset=%d pwdn=%d\n",
              dev->reset_gpio, dev->pwdn_gpio);
 
-    return 0;
+    err_gpio:
+        iounmap(pa_base);
+    iounmap(pz_base);
+    err_ioremap:
+        return ret;
 }
 
 
