@@ -97,10 +97,11 @@ Current progress:
 
 ```angular2html
 Loading ISP driver...
-ourISPdev allocated at 80b10000
+ourISPdev allocated at 80cc0000
 ISP probe called
+ISP M0 device opened, tuning_data=81f60a00
 Starting GPIO config init
-tx-isp tx-isp: GPIO setup: reset=18 pwdn=-1
+tx-isp tx-isp: GPIO setup complete: reset=18 pwdn=-1
 tx-isp tx-isp: ISP Memory Initialization Complete:
 ISP Registers: phys=0x13300000 virt=b3300000
 CSI Registers: phys=0x10022000 virt=b0022000
@@ -143,7 +144,7 @@ Mapping I/O regions:
 MIPI PHY: 0x10022000
 ISP W01: 0x10023000
 Initial CPM state:
-CLKGR: 0x094f5f80
+CLKGR: 0x094f5780
 CLKGR1: 0x000033a2
 Initial register readings:
 W01 0x00: 0x3130322a
@@ -165,681 +166,18 @@ ERR2: 0x00000000
 Starting I2C init
 Setting up I2C infrastructure for SC2336...
 I2C sensor initialized: addr=0x30 adapter=8223ac10
-Initializing VIC control
-Initial VIC register state:
-0x000: 0x00060000
-0x004: 0x00020000
-0x008: 0x00c80000
-0x00c: 0x1eff0000
-0x010: 0x0000c83f
-0x014: 0x00001e0a
-0x018: 0x080f003f
-0x01c: 0x141f0000
-0x020: 0x003fff08
-0x024: 0x00133200
-0x028: 0x00010610
-0x02c: 0xff00ff00
-0x030: 0x0003ff00
-0x034: 0x00000000
-0x038: 0x00000000
-0x03c: 0x00000000
-0x040: 0x00000000
-0x044: 0x00000000
-0x048: 0x20202020
-0x04c: 0x20202020
-0x050: 0x20202020
-0x054: 0x20202020
-0x058: 0x20202020
-0x05c: 0x20202020
-0x060: 0x20202020
-0x064: 0x20202020
-0x068: 0x00380038
-0x06c: 0x00380038
-0x070: 0x00380038
-0x074: 0x00380038
-0x078: 0x00000000
-0x07c: 0x00000000
-0x080: 0x01000000
-0x084: 0x00000000
-0x088: 0x00080000
-0x08c: 0x00010001
-0x090: 0x00000000
-0x094: 0x00000000
-0x098: 0x00000000
-0x09c: 0x00000000
-0x0a0: 0x00000000
-0x0a4: 0x00000000
-0x0a8: 0x00000000
-0x0ac: 0x00000000
-0x0b0: 0x00000000
-0x0b4: 0x00000000
-0x0b8: 0x00000000
-0x0bc: 0x00000000
-0x0c0: 0x00000000
-0x0c4: 0x00000000
-0x0c8: 0x00000000
-0x0cc: 0x00000000
-0x0d0: 0x00000000
-0x0d4: 0x00000000
-0x0d8: 0x00000000
-0x0dc: 0x00000000
-0x0e0: 0x00000000
-0x0e4: 0x00000000
-0x0e8: 0x00000000
-0x0ec: 0x00000000
-0x0f0: 0x00000000
-0x0f4: 0x00000000
-0x0f8: 0x00000000
-0x0fc: 0x00000000
-0x100: 0x00000000
-0x104: 0x00000000
-0x108: 0x00000000
-0x10c: 0x00000000
-0x110: 0x00000000
-0x114: 0x00000000
-0x118: 0x00000000
-0x11c: 0x00000000
-0x120: 0x00000000
-0x124: 0x00000000
-0x128: 0x00000000
-0x12c: 0x00000000
-0x130: 0x00000000
-0x134: 0x00000000
-0x138: 0x00000000
-0x13c: 0x00000000
-0x140: 0x00000000
-0x144: 0x00000000
-0x148: 0x00000000
-0x14c: 0x00000000
-0x150: 0x00000000
-0x154: 0x00000000
-0x158: 0x00000000
-0x15c: 0x00000000
-0x160: 0x00000000
-0x164: 0x00000000
-0x168: 0x00000000
-0x16c: 0x00000000
-0x170: 0x00000000
-0x174: 0x00000000
-0x178: 0x00000000
-0x17c: 0x00000000
-0x180: 0x00000000
-0x184: 0x00000000
-0x188: 0x00000000
-0x18c: 0x00000000
-0x190: 0x00000000
-0x194: 0x00000000
-0x198: 0x00000000
-0x19c: 0x00000000
-0x1a0: 0x00000000
-0x1a4: 0x00000000
-0x1a8: 0x00000000
-0x1ac: 0x00000000
-0x1b0: 0x00000000
-0x1b4: 0x00000000
-0x1b8: 0x00000000
-0x1bc: 0x00000000
-0x1c0: 0x00000000
-0x1c4: 0x00000000
-0x1c8: 0x00000000
-0x1cc: 0x00000000
-0x1d0: 0x00000000
-0x1d4: 0x00000000
-0x1d8: 0x00000000
-0x1dc: 0x00000000
-0x1e0: 0x00000000
-0x1e4: 0x00000000
-0x1e8: 0x00000000
-0x1ec: 0x00000000
-0x1f0: 0x00000000
-0x1f4: 0x00000000
-0x1f8: 0x00000000
-0x1fc: 0x00000000
-0x200: 0x00000000
-0x204: 0x00000000
-0x208: 0x00000000
-0x20c: 0x00000000
-0x210: 0x00000000
-0x214: 0x00000000
-0x218: 0x00000000
-0x21c: 0x00000000
-0x220: 0x00000000
-0x224: 0x00000000
-0x228: 0x00000000
-0x22c: 0x00000000
-0x230: 0x00000000
-0x234: 0x00000000
-0x238: 0x00000000
-0x23c: 0x00000000
-0x240: 0x00000000
-0x244: 0x00000000
-0x248: 0x00000000
-0x24c: 0x00000000
-0x250: 0x00000000
-0x254: 0x00000000
-0x258: 0x00000000
-0x25c: 0x00000000
-0x260: 0x00000000
-0x264: 0x00000000
-0x268: 0x00000000
-0x26c: 0x00000000
-0x270: 0x00000000
-0x274: 0x00000000
-0x278: 0x00000000
-0x27c: 0x00000000
-0x280: 0x00000000
-0x284: 0x00000000
-0x288: 0x00000000
-0x28c: 0x00000000
-0x290: 0x00000000
-0x294: 0x00000000
-0x298: 0x00000000
-0x29c: 0x00000000
-0x2a0: 0x00000000
-0x2a4: 0x00000000
-0x2a8: 0x00000000
-0x2ac: 0x00000000
-0x2b0: 0x00000000
-0x2b4: 0x00000000
-0x2b8: 0x00000000
-0x2bc: 0x00000000
-0x2c0: 0x00000000
-0x2c4: 0x00000000
-0x2c8: 0x00000000
-0x2cc: 0x00000000
-0x2d0: 0x00000000
-0x2d4: 0x00000000
-0x2d8: 0x00000000
-0x2dc: 0x00000000
-0x2e0: 0x00000000
-0x2e4: 0x00000000
-0x2e8: 0x00000000
-0x2ec: 0x00000000
-0x2f0: 0x00000000
-0x2f4: 0x00000000
-0x2f8: 0x00000000
-0x2fc: 0x00000000
-0x300: 0x00000000
-0x304: 0x00000000
-0x308: 0x00000000
-0x30c: 0x00000000
-0x310: 0x00000000
-0x314: 0x00000000
-0x318: 0x00000000
-0x31c: 0x00000000
-0x320: 0x00000000
-0x324: 0x00000000
-0x328: 0x00000000
-0x32c: 0x00000000
-0x330: 0x00000000
-0x334: 0x00000000
-0x338: 0x00000000
-0x33c: 0x00000000
-0x340: 0x00000000
-0x344: 0x00000000
-0x348: 0x00000000
-0x34c: 0x00000000
-0x350: 0x00000000
-0x354: 0x00000000
-0x358: 0x00000000
-0x35c: 0x00000000
-0x360: 0x00000000
-0x364: 0x00000000
-0x368: 0x00000000
-0x36c: 0x00000000
-0x370: 0x00000000
-0x374: 0x00000000
-0x378: 0x00000000
-0x37c: 0x00000000
-0x380: 0x00000000
-0x384: 0x00000000
-0x388: 0x00000000
-0x38c: 0x00000000
-0x390: 0x00000000
-0x394: 0x00000000
-0x398: 0x00000000
-0x39c: 0x00000000
-0x3a0: 0x00000000
-0x3a4: 0x00000000
-0x3a8: 0x00000000
-0x3ac: 0x00000000
-0x3b0: 0x00000000
-0x3b4: 0x00000000
-0x3b8: 0x00000000
-0x3bc: 0x00000000
-0x3c0: 0x00000000
-0x3c4: 0x00000000
-0x3c8: 0x00000000
-0x3cc: 0x00000000
-0x3d0: 0x00000000
-0x3d4: 0x00000000
-0x3d8: 0x00000000
-0x3dc: 0x00000000
-0x3e0: 0x00000000
-0x3e4: 0x00000000
-0x3e8: 0x00000000
-0x3ec: 0x00000000
-0x3f0: 0x00000000
-0x3f4: 0x00000000
-0x3f8: 0x00000000
-0x3fc: 0x00000000
-0x400: 0x00000000
-0x404: 0x00000000
-0x408: 0x00000000
-0x40c: 0x00000000
-0x410: 0x00000000
-0x414: 0x00000000
-0x418: 0x00000000
-0x41c: 0x00000000
-0x420: 0x00000000
-0x424: 0x00000000
-0x428: 0x00000000
-0x42c: 0x00000000
-0x430: 0x00000000
-0x434: 0x00000000
-0x438: 0x00000000
-0x43c: 0x00000000
-0x440: 0x00000000
-0x444: 0x00000000
-0x448: 0x00000000
-0x44c: 0x00000000
-0x450: 0x00000000
-0x454: 0x00000000
-0x458: 0x00000000
-0x45c: 0x00000000
-0x460: 0x00000000
-0x464: 0x00000000
-0x468: 0x00000000
-0x46c: 0x00000000
-0x470: 0x00000000
-0x474: 0x00000000
-0x478: 0x00000000
-0x47c: 0x00000000
-0x480: 0x00000000
-0x484: 0x00000000
-0x488: 0x00000000
-0x48c: 0x00000000
-0x490: 0x00000000
-0x494: 0x00000000
-0x498: 0x00000000
-0x49c: 0x00000000
-0x4a0: 0x00000000
-0x4a4: 0x00000000
-0x4a8: 0x00000000
-0x4ac: 0x00000000
-0x4b0: 0x00000000
-0x4b4: 0x00000000
-0x4b8: 0x00000000
-0x4bc: 0x00000000
-0x4c0: 0x00000000
-0x4c4: 0x00000000
-0x4c8: 0x00000000
-0x4cc: 0x00000000
-0x4d0: 0x00000000
-0x4d4: 0x00000000
-0x4d8: 0x00000000
-0x4dc: 0x00000000
-0x4e0: 0x00000000
-0x4e4: 0x00000000
-0x4e8: 0x00000000
-0x4ec: 0x00000000
-0x4f0: 0x00000000
-0x4f4: 0x00000000
-0x4f8: 0x00000000
-0x4fc: 0x00000000
-0x500: 0x00000000
-0x504: 0x00000000
-0x508: 0x00000000
-0x50c: 0x00000000
-0x510: 0x00000000
-0x514: 0x00000000
-0x518: 0x00000000
-0x51c: 0x00000000
-0x520: 0x00000000
-0x524: 0x00000000
-0x528: 0x00000000
-0x52c: 0x00000000
-0x530: 0x00000000
-0x534: 0x00000000
-0x538: 0x00000000
-0x53c: 0x00000000
-0x540: 0x00000000
-0x544: 0x00000000
-0x548: 0x00000000
-0x54c: 0x00000000
-0x550: 0x00000000
-0x554: 0x00000000
-0x558: 0x00000000
-0x55c: 0x00000000
-0x560: 0x00000000
-0x564: 0x00000000
-0x568: 0x00000000
-0x56c: 0x00000000
-0x570: 0x00000000
-0x574: 0x00000000
-0x578: 0x00000000
-0x57c: 0x00000000
-0x580: 0x00000000
-0x584: 0x00000000
-0x588: 0x00000000
-0x58c: 0x00000000
-0x590: 0x00000000
-0x594: 0x00000000
-0x598: 0x00000000
-0x59c: 0x00000000
-0x5a0: 0x00000000
-0x5a4: 0x00000000
-0x5a8: 0x00000000
-0x5ac: 0x00000000
-0x5b0: 0x00000000
-0x5b4: 0x00000000
-0x5b8: 0x00000000
-0x5bc: 0x00000000
-0x5c0: 0x00000000
-0x5c4: 0x00000000
-0x5c8: 0x00000000
-0x5cc: 0x00000000
-0x5d0: 0x00000000
-0x5d4: 0x00000000
-0x5d8: 0x00000000
-0x5dc: 0x00000000
-0x5e0: 0x00000000
-0x5e4: 0x00000000
-0x5e8: 0x00000000
-0x5ec: 0x00000000
-0x5f0: 0x00000000
-0x5f4: 0x00000000
-0x5f8: 0x00000000
-0x5fc: 0x00000000
-0x600: 0x00000000
-0x604: 0x00000000
-0x608: 0x00000000
-0x60c: 0x00000000
-0x610: 0x00000000
-0x614: 0x00000000
-0x618: 0x00000000
-0x61c: 0x00000000
-0x620: 0x00000000
-0x624: 0x00000000
-0x628: 0x00000000
-0x62c: 0x00000000
-0x630: 0x00000000
-0x634: 0x00000000
-0x638: 0x00000000
-0x63c: 0x00000000
-0x640: 0x00000000
-0x644: 0x00000000
-0x648: 0x00000000
-0x64c: 0x00000000
-0x650: 0x00000000
-0x654: 0x00000000
-0x658: 0x00000000
-0x65c: 0x00000000
-0x660: 0x00000000
-0x664: 0x00000000
-0x668: 0x00000000
-0x66c: 0x00000000
-0x670: 0x00000000
-0x674: 0x00000000
-0x678: 0x00000000
-0x67c: 0x00000000
-0x680: 0x00000000
-0x684: 0x00000000
-0x688: 0x00000000
-0x68c: 0x00000000
-0x690: 0x00000000
-0x694: 0x00000000
-0x698: 0x00000000
-0x69c: 0x00000000
-0x6a0: 0x00000000
-0x6a4: 0x00000000
-0x6a8: 0x00000000
-0x6ac: 0x00000000
-0x6b0: 0x00000000
-0x6b4: 0x00000000
-0x6b8: 0x00000000
-0x6bc: 0x00000000
-0x6c0: 0x00000000
-0x6c4: 0x00000000
-0x6c8: 0x00000000
-0x6cc: 0x00000000
-0x6d0: 0x00000000
-0x6d4: 0x00000000
-0x6d8: 0x00000000
-0x6dc: 0x00000000
-0x6e0: 0x00000000
-0x6e4: 0x00000000
-0x6e8: 0x00000000
-0x6ec: 0x00000000
-0x6f0: 0x00000000
-0x6f4: 0x00000000
-0x6f8: 0x00000000
-0x6fc: 0x00000000
-0x700: 0x00000000
-0x704: 0x00000000
-0x708: 0x00000000
-0x70c: 0x00000000
-0x710: 0x00000000
-0x714: 0x00000000
-0x718: 0x00000000
-0x71c: 0x00000000
-0x720: 0x00000000
-0x724: 0x00000000
-0x728: 0x00000000
-0x72c: 0x00000000
-0x730: 0x00000000
-0x734: 0x00000000
-0x738: 0x00000000
-0x73c: 0x00000000
-0x740: 0x00000000
-0x744: 0x00000000
-0x748: 0x00000000
-0x74c: 0x00000000
-0x750: 0x00000000
-0x754: 0x00000000
-0x758: 0x00000000
-0x75c: 0x00000000
-0x760: 0x00000000
-0x764: 0x00000000
-0x768: 0x00000000
-0x76c: 0x00000000
-0x770: 0x00000000
-0x774: 0x00000000
-0x778: 0x00000000
-0x77c: 0x00000000
-0x780: 0x00000000
-0x784: 0x00000000
-0x788: 0x00000000
-0x78c: 0x00000000
-0x790: 0x00000000
-0x794: 0x00000000
-0x798: 0x00000000
-0x79c: 0x00000000
-0x7a0: 0x00000000
-0x7a4: 0x00000000
-0x7a8: 0x00000000
-0x7ac: 0x00000000
-0x7b0: 0x00000000
-0x7b4: 0x00000000
-0x7b8: 0x00000000
-0x7bc: 0x00000000
-0x7c0: 0x00000000
-0x7c4: 0x00000000
-0x7c8: 0x00000000
-0x7cc: 0x00000000
-0x7d0: 0x00000000
-0x7d4: 0x00000000
-0x7d8: 0x00000000
-0x7dc: 0x00000000
-0x7e0: 0x00000000
-0x7e4: 0x00000000
-0x7e8: 0x00000000
-0x7ec: 0x00000000
-0x7f0: 0x00000000
-0x7f4: 0x00000000
-0x7f8: 0x00000000
-0x7fc: 0x00000000
-0x804: 0x00000000
-0x808: 0x00000000
-0x810: 0x00010001
-0x814: 0x00000000
-0x818: 0x00000000
-0x820: 0x00000000
-0x824: 0x00000000
-0x828: 0x00000000
-0x82c: 0x00000000
-0x830: 0x00000000
-0x834: 0x00000000
-0x838: 0x00000000
-0x83c: 0x00000000
-0x840: 0x00000000
-0x844: 0x00000000
-0x848: 0x00000000
-0x84c: 0x00000000
-0x850: 0x00000000
-0x854: 0x00000000
-0x858: 0x00000000
-0x85c: 0x00000000
-0x860: 0x00000000
-0x864: 0x00000000
-0x868: 0x00000000
-0x86c: 0x00000000
-0x870: 0x00000000
-0x874: 0x00000000
-0x878: 0x00000000
-0x87c: 0x00000000
-0x880: 0x00000000
-0x884: 0x00000000
-0x888: 0x00000000
-0x88c: 0x00000000
-0x890: 0x00000000
-0x894: 0x00000000
-0x898: 0x00000000
-0x89c: 0x00000000
-0x8a0: 0x00000000
-0x8a4: 0x00000000
-0x8a8: 0x00000000
-0x8ac: 0x00000000
-0x8b0: 0x00000000
-0x8b4: 0x00000000
-0x8b8: 0x00000000
-0x8bc: 0x00000000
-0x8c0: 0x00000000
-0x8c4: 0x00000000
-0x8c8: 0x00000000
-0x8cc: 0x00000000
-0x8d0: 0x00000000
-0x8d4: 0x00000000
-0x8d8: 0x00000000
-0x8dc: 0x00000000
-0x8e0: 0x00000000
-0x8e4: 0x00000000
-0x8e8: 0x00000000
-0x8ec: 0x00000000
-0x8f0: 0x00000000
-0x8f4: 0x00000000
-0x8f8: 0x00000000
-0x8fc: 0x00000000
-0x900: 0x00000000
-0x904: 0x00000000
-0x908: 0x00000000
-0x90c: 0x00000000
-0x910: 0x00000000
-0x914: 0x00000000
-0x918: 0x00000000
-0x91c: 0x00000000
-0x920: 0x00000000
-0x924: 0x00000000
-0x928: 0x00000000
-0x92c: 0x00000000
-0x930: 0x00000000
-0x934: 0x00000000
-0x938: 0x00000000
-0x93c: 0x00000000
-0x940: 0x00000000
-0x944: 0x00000000
-0x948: 0x00000000
-0x94c: 0x00000000
-0x950: 0x00000000
-0x954: 0x00000000
-0x958: 0x00000000
-0x95c: 0x00000000
-0x960: 0x00000000
-0x964: 0x00000000
-0x968: 0x00000000
-0x96c: 0x00000000
-0x970: 0x00000000
-0x974: 0x00000000
-0x978: 0x00000000
-0x97c: 0x00000000
-0x980: 0x00000000
-0x984: 0x00000000
-0x988: 0x00000000
-0x98c: 0x00000000
-0x990: 0x00000000
-0x994: 0x00000000
-0x998: 0x00000000
-0x99c: 0x00000000
-0x9a0: 0x00000000
-0x9a4: 0x00000000
-0x9a8: 0x00000000
-0x9ac: 0x00000000
-0x9b0: 0x00000000
-0x9b4: 0x00000000
-0x9b8: 0x00000000
-0x9bc: 0x00000000
-0x9c0: 0x00000000
-0x9c4: 0x00000000
-0x9c8: 0x00000000
-0x9cc: 0x00000000
-0x9d0: 0x00000000
-0x9d4: 0x00000000
-0x9d8: 0x00000000
-0x9dc: 0x00000000
-0x9e0: 0x00000000
-0x9e4: 0x00000000
-0x9e8: 0x00000000
-VIC State:
-0x7000: 0x00000000
-0x7004: 0x00020000
-0x7008: 0x00c80000
-0x700c: 0x1eff0000
-0x7010: 0x0000c83f
-0x7014: 0x00001e0a
-0x7018: 0x080f003f
-0x701c: 0x141f0000
-0x7020: 0x003fff08
-0x7024: 0x00133200
-0x7028: 0x00010610
-0x702c: 0xff00ff00
-0x7030: 0x0003ff00
-0x7048: 0x20202020
-0x704c: 0x20202020
-0x7050: 0x20202020
-0x7054: 0x20202020
-0x7058: 0x20202020
-0x705c: 0x20202020
-0x7060: 0x20202020
-0x7064: 0x20202020
-0x7068: 0x00380038
-0x706c: 0x00380038
-0x7070: 0x00380038
-0x7074: 0x00380038
-0x7080: 0x01000000
-0x7088: 0x00080000
-0x708c: 0x00010001
-0x7810: 0x00010001
-0x793c: 0x000033fb
-0x79e8: 0xffffffff
-0x7b00: 0x04000010
 Starting sub device init
 Creating ISP subdevices...
 tx-isp tx-isp: ISP subdevices registered successfully
 Starting ISP IRQ init
+tx-isp tx-isp: Got ISP IRQ: 37
 tx-isp tx-isp: TX-ISP probe completed successfully
 CSI probe starting
 Starting subdev init for tx-isp-csi
-No additional clocks needed for subdev tx-isp-csi
+Initializing clocks for tx-isp-csi
+CSI clock initialized: rate=125000000 Hz
+Checking clocks for tx-isp-csi:
+No clocks configured or invalid clock count: 0
 Created channel data for input pad 0
 Created channel 0 for pad 0
 Using register base: b0022000
@@ -848,14 +186,25 @@ Subdev tx-isp-csi initialized successfully
 CSI probe completed successfully
 VIC probe called
 Starting subdev init for tx-isp-vic
-No additional clocks needed for subdev tx-isp-vic
+Initializing clocks for tx-isp-vic
+Trying clock avpu for VIC
+Successfully got clock avpu with rate 250000000 Hz
+Checking clocks for tx-isp-vic:
+No clocks configured or invalid clock count: 0
+Created channel data for input pad 0
+Created channel 0 for pad 0
+Created channel 1 for pad 1
 Using register base: b3307000
-Module initialized: tx-isp-vic (in:0 out:0)
+Module initialized: tx-isp-vic (in:1 out:2)
 Subdev tx-isp-vic initialized successfully
+tx-isp-vic tx-isp-vic.0: VIC IRQ 38 registered successfully
 VIC probe completed successfully
 VIN probe called
 Starting subdev init for tx-isp-vin
-No additional clocks needed for subdev tx-isp-vin
+Initializing clocks for tx-isp-vin
+Checking clocks for tx-isp-vin:
+Number of clocks: 1
+Clock 0: valid, rate=250000000 Hz
 Created channel data for input pad 0
 Created channel 0 for pad 0
 Using register base: b3300000
@@ -864,7 +213,10 @@ Subdev tx-isp-vin initialized successfully
 VIN probe completed successfully
 Core probe called
 Starting subdev init for tx-isp-core
-No additional clocks needed for subdev tx-isp-core
+Initializing clocks for tx-isp-core
+Checking clocks for tx-isp-core:
+Number of clocks: 1
+Clock 0: valid, rate=250000000 Hz
 Created channel data for input pad 0
 Created channel 0 for pad 0
 Using register base: b3300000
@@ -872,10 +224,13 @@ Module initialized: tx-isp-core (in:1 out:1)
 Subdev tx-isp-core initialized successfully
 Initial ctrl reg value: 0x54560031
 Read back value after enable: 0x54560031
-Core probe complete: dev=80b10000 reg_base=b3300000
+Core probe complete: dev=80cc0000 reg_base=b3300000
 Frame source probe called
 Starting subdev init for tx-isp-fs
-No additional clocks needed for subdev tx-isp-fs
+Initializing clocks for tx-isp-fs
+Checking clocks for tx-isp-fs:
+Number of clocks: 1
+Clock 0: valid, rate=250000000 Hz
 Created channel data for input pad 0
 Created channel 0 for pad 0
 Using register base: b3300000
@@ -888,499 +243,220 @@ Status:  0x00000000
 Config:  0x00000001
 ISP driver and submodules loaded successfully
 Starting subdev init for sc2336
-No additional clocks needed for subdev sc2336
+Initializing clocks for sc2336
+Sensor clock initialized: rate=24000000 Hz
+Checking clocks for sc2336:
+Number of clocks: 1
+Clock 0: valid, rate=24000000 Hz
 Created channel data for input pad 0
 Created channel 0 for pad 0
 Using register base: b3300000
 Unknown subdev name: sc2336
 Module initialized: sc2336 (in:1 out:1)
 Subdev sc2336 initialized successfully
-ISP device open called from pid 1958
-ISP opened: file=81feacf0 fd=0
+ISP device open called from pid 2162
+ISP opened: file=80cfe020 fd=0
 ISP IOCTL called: cmd=0x805056c1
 
 === IOCTL Debug ===
-cmd=0x805056c1 arg=0x77197ce0
-file=80a67820 flags=0x2002
-Initial sensor reset...
+cmd=0x805056c1 arg=0x778c4ce0
+file=80cb6e60 flags=0x2002
 Detected sensor: sc2336 (ID: 0xcb3a) 1920x1080
 Sensor registered: sc2336
 ISP IOCTL called: cmd=0xc050561a
 
 === IOCTL Debug ===
-cmd=0xc050561a arg=0x7f933d78
-file=80a67820 flags=0x2002
+cmd=0xc050561a arg=0x7fcc0c38
+file=80cb6e60 flags=0x2002
 Provided sensor info for index 0: sc2336
 ISP IOCTL called: cmd=0xc050561a
 
 === IOCTL Debug ===
-cmd=0xc050561a arg=0x7f933d78
-file=80a67820 flags=0x2002
+cmd=0xc050561a arg=0x7fcc0c38
+file=80cb6e60 flags=0x2002
 ISP IOCTL called: cmd=0xc0045627
 
 === IOCTL Debug ===
-cmd=0xc0045627 arg=0x7f933dd0
-file=80a67820 flags=0x2002
+cmd=0xc0045627 arg=0x7fcc0c90
+file=80cb6e60 flags=0x2002
 Sensor command: 0xc0045627
 Sensor command: 0xc0045627
 Stored sensor name: sc2336
 ISP IOCTL called: cmd=0x800856d5
 
 === IOCTL Debug ===
-cmd=0x800856d5 arg=0x7f933dc8
-file=80a67820 flags=0x2002
+cmd=0x800856d5 arg=0x7fcc0c88
+file=80cb6e60 flags=0x2002
+Handling TX_ISP_SET_BUF
+Copying buffer info from user address 7fcc0c88
+Buffer info: method=0x203a726f phys=0x348fbaa533326373 size=32
 ISP IOCTL called: cmd=0x800856d4
 
 === IOCTL Debug ===
-cmd=0x800856d4 arg=0x7f933dc8
-file=80a67820 flags=0x2002
-tx_isp: Handling ioctl VIDIOC_SET_BUF_INFO
-Buffer info before update: method=0x33326373 phys=0x3633 size=0
-Buffer info after update:
-method=0x0
-phys=0x2a80000
-virt=a2e80000
-size=8257536
-flags=0x1
-tx_isp: Buffer setup completed successfully
+cmd=0x800856d4 arg=0x7fcc0c88
+file=80cb6e60 flags=0x2002
+Handling tx_isp_set_buf additional setup (0x800856d4)
+ISP DMA registers configured
 ISP IOCTL called: cmd=0x40045626
 
 === IOCTL Debug ===
-cmd=0x40045626 arg=0x7f933de0
-file=80a67820 flags=0x2002
+cmd=0x40045626 arg=0x7fcc0ca0
+file=80cb6e60 flags=0x2002
 ISP IOCTL called: cmd=VIDIOC_GET_SENSOR_INFO
 Sensor info request: returning success (1)
 ISP IOCTL called: cmd=0x80045612
 
 === IOCTL Debug ===
 cmd=0x80045612 arg=0x0
-file=80a67820 flags=0x2002
+file=80cb6e60 flags=0x2002
 Sensor command: 0x80045612
 Sensor command: 0x80045612
 Sensor command: 0x80045612
 Sensor streamon
-ISP State:
-Control: 0x54560031
-Status: 0x00000000
-Int mask: 0x00000000
-VIC State:
-0x7000: 0x00000000
-0x7004: 0x00020000
-0x7008: 0x00c80000
-0x700c: 0x1eff0000
-0x7010: 0x0000c83f
-0x7014: 0x00001e0a
-0x7018: 0x080f003f
-0x701c: 0x141f0000
-0x7020: 0x003fff08
-0x7024: 0x00133200
-0x7028: 0x00010610
-0x702c: 0xff00ff00
-0x7030: 0x0003ff00
-0x7048: 0x20202020
-0x704c: 0x20202020
-0x7050: 0x20202020
-0x7054: 0x20202020
-0x7058: 0x20202020
-0x705c: 0x20202020
-0x7060: 0x20202020
-0x7064: 0x20202020
-0x7068: 0x00380038
-0x706c: 0x00380038
-0x7070: 0x00380038
-0x7074: 0x00380038
-0x7080: 0x01000000
-0x7088: 0x00080000
-0x708c: 0x00010001
-0x7810: 0x00010001
-0x793c: 0x000033fb
-0x79e8: 0xffffffff
-0x7b00: 0x04000010
-Stream enabled!
 ISP IOCTL called: cmd=0x800456d0
 
 === IOCTL Debug ===
-cmd=0x800456d0 arg=0x7f933de0
-file=80a67820 flags=0x2002
+cmd=0x800456d0 arg=0x7fcc0ca0
+file=80cb6e60 flags=0x2002
 Starting link setup IOCTL
 Setting up video link 0
 Found devices and pads:
-subdev=80b22b10
+subdev=80cbeb10
 num_inpads=1
 num_outpads=1
 Setting up link 1 of 2
-Looking up pad: subdev=80b22b10 cfg=c02bad28
+Looking up pad: subdev=80cbeb10 cfg=c02eb168
 Pad lookup for tx-isp-csi:
 type=1 index=0
-inpads=80b1ee80 (count=1)
-outpads=80b1ef00 (count=1)
-Found source pad 80b1ef00
-Looking up pad: subdev=80b22b10 cfg=80a6bd48
+inpads=80ce8400 (count=1)
+outpads=80ce8480 (count=1)
+Found source pad 80ce8480
+Looking up pad: subdev=80cbeb10 cfg=80cfbd48
 Pad lookup for tx-isp-vic:
 type=0 index=0
-inpads=80b1ee80 (count=1)
-outpads=80b1ef00 (count=1)
-Found sink pad 80b1ef00
+inpads=80ce8400 (count=1)
+outpads=80ce8480 (count=1)
+Found sink pad 80ce8480
 Setting up link 2 of 2
-Looking up pad: subdev=80b22b10 cfg=c02bad3c
+Looking up pad: subdev=80cbeb10 cfg=c02eb17c
 Pad lookup for tx-isp-vic:
 type=1 index=0
-inpads=80b1ee80 (count=1)
-outpads=80b1ef00 (count=1)
-Found source pad 80b1ef00
-Looking up pad: subdev=80b22b10 cfg=80a6bd48
+inpads=80ce8400 (count=1)
+outpads=80ce8480 (count=1)
+Found source pad 80ce8480
+Looking up pad: subdev=80cbeb10 cfg=80cfbd48
 Pad lookup for tx-isp-ddr:
 type=0 index=0
-inpads=80b1ee80 (count=1)
-outpads=80b1ef00 (count=1)
-Found sink pad 80b1ef00
+inpads=80ce8400 (count=1)
+outpads=80ce8480 (count=1)
+Found sink pad 80ce8480
 Link setup completed successfully
 ISP IOCTL called: cmd=0x800456d2
 
 === IOCTL Debug ===
 cmd=0x800456d2 arg=0x0
-file=80a67820 flags=0x2002
-Enabling stream ...
-Configuring VIC for streaming...
-VIC State:
-0x7000: 0x00000000
-0x7004: 0x00020000
-0x7008: 0x00c80000
-0x700c: 0x1eff0000
-0x7010: 0x0000c83f
-0x7014: 0x00001e0a
-0x7018: 0x080f003f
-0x701c: 0x141f0000
-0x7020: 0x003fff08
-0x7024: 0x00133200
-0x7028: 0x00010610
-0x702c: 0xff00ff00
-0x7030: 0x0003ff00
-0x7048: 0x20202020
-0x704c: 0x20202020
-0x7050: 0x20202020
-0x7054: 0x20202020
-0x7058: 0x20202020
-0x705c: 0x20202020
-0x7060: 0x20202020
-0x7064: 0x20202020
-0x7068: 0x00380038
-0x706c: 0x00380038
-0x7070: 0x00380038
-0x7074: 0x00380038
-0x7080: 0x01000000
-0x7088: 0x00080000
-0x708c: 0x00010001
-0x7810: 0x00010001
-0x7840: 0x00000002
-0x793c: 0x000033fb
-0x7b00: 0x04000010
-VIC IRQ State:
-Enable (0x93c): 0x000033fb
-Mask (0x9e8): 0x00000000
-Status (0xb4): 0x00000000
-Status2 (0xb8): 0x00000000
-ISP Register Space Dump:
-Core ISP Registers:
-Base+0x00: 0x54560031 (ID/Version)
-Base+0x0c: 0x80700019 (Control)
-Base+0xb0: 0xffffffff (IRQ Enable)
-Base+0xb4: 0x00000000 (IRQ Status)
-
-VIC Control/Status:
-Base+0x110: 0x80007000 (VIC Control)
-Base+0x114: 0x00777111 (VIC Status)
-Base+0x840: 0x00010001 (VIC Config)
-
-Complete Register Dump (non-zero values):
-0x13300000: 0x54560031
-0x13300004: 0x00000001
-0x13300008: 0x00000001
-0x1330000c: 0x80700019
-0x13300010: 0x00000001
-0x13300014: 0x00000001
-0x13300028: 0x00000001
-0x1330002c: 0x00400040
-0x13300030: 0x00000001
-0x13300090: 0x00000001
-0x13300094: 0x00000001
-0x13300098: 0x00030000
-0x133000a8: 0x58050000
-0x133000ac: 0x58050000
-0x133000b0: 0xffffffff
-0x133000c4: 0x00040000
-0x133000c8: 0x00400040
-0x133000cc: 0x00000100
-0x133000d4: 0x0000000c
-0x133000d8: 0x00ffffff
-0x133000e0: 0x00000100
-0x133000e4: 0x00400040
-0x133000f0: 0xff808000
-0x13300110: 0x80007000
-0x13300114: 0x00777111
-0x13300840: 0x00010001
-ISP M0 device opened, tuning_data=81ee7e00
+file=80cb6e60 flags=0x2002
+Handling ISP stream enable request
+ISP M0 device opened, tuning_data=81f60a00
 ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 1
+Tuning IOCTL
+GET operation
+Get control: cmd=0x80000e0 value=2006024192
+Get FPS
 ISP m0 IOCTL called: cmd=0xc008561b
-ISP_CORE_G_CTRL GET cmd=0xc008561b
-Get format entry: arg=7f933d38
-Channel attributes not initialized
+Direct GET/SET operation
 ISP m0 IOCTL called: cmd=0xc008561b
-ISP_CORE_G_CTRL GET cmd=0xc008561b
-Get format entry: arg=7f933d38
-Channel attributes not initialized
+Direct GET/SET operation
 ISP m0 IOCTL called: cmd=0xc008561c
-SET cmd=0x980901
-ISP set control: cmd=0x980901 value=128
-Set contrast to 128
+Direct GET/SET operation
+SET operation
 ISP m0 IOCTL called: cmd=0xc008561c
-SET cmd=0x98091b
-ISP set control: cmd=0x98091b value=128
-Set sharpness to 128
+Direct GET/SET operation
+SET operation
 ISP m0 IOCTL called: cmd=0xc008561c
-SET cmd=0x980902
-ISP set control: cmd=0x980902 value=128
-Set saturation to 128
+Direct GET/SET operation
+SET operation
 ISP m0 IOCTL called: cmd=0xc008561c
-SET cmd=0x980900
-ISP set control: cmd=0x980900 value=128
-Set brightness to 128
+Direct GET/SET operation
+SET operation
 ISP m0 IOCTL called: cmd=0xc008561c
-SET cmd=0x980901
-ISP set control: cmd=0x980901 value=128
-Set contrast to 128
+Direct GET/SET operation
+SET operation
 ISP m0 IOCTL called: cmd=0xc008561c
-SET cmd=0x98091b
-ISP set control: cmd=0x98091b value=128
-Set sharpness to 128
+Direct GET/SET operation
+SET operation
 ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 1
+Tuning IOCTL
+GET operation
 ISP m0 IOCTL called: cmd=0xc008561c
-SET cmd=0x980902
-ISP set control: cmd=0x980902 value=128
-Set saturation to 128
-CPU 0 Unable to handle kernel paging request at virtual address 00000008, epc == c02a8b2c, ra == 800d96d4
+Direct GET/SET operation
+SET operation
 ISP m0 IOCTL called: cmd=0xc008561c
-SET cmd=0x980900
-ISP set control: cmd=0x980900 value=128
-Set brightness to 128
+Direct GET/SET operation
+SET operation
 ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 0
+Tuning IOCTL
+SET operation
 ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 0
+Tuning IOCTL
+SET operation
 ISP m0 IOCTL called: cmd=0xc008561c
-SET cmd=0x980914
-ISP set control: cmd=0x980914 value=0
+Direct GET/SET operation
+SET operation
 ISP m0 IOCTL called: cmd=0xc008561c
-SET cmd=0x980915
-ISP set control: cmd=0x980915 value=0
+Direct GET/SET operation
+SET operation
 ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 0
+Tuning IOCTL
+SET operation
 ISP IOCTL called: cmd=0x800456d3
 
 === IOCTL Debug ===
 cmd=0x800456d3 arg=0x0
-file=80a67820 flags=0x2002
+file=80cb6e60 flags=0x2002
 TODO Disabling ISP links
 ISP IOCTL called: cmd=0x800456d1
 
 === IOCTL Debug ===
-cmd=0x800456d1 arg=0x7f933de0
-file=80a67820 flags=0x2002
+cmd=0x800456d1 arg=0x7fcc0ca0
+file=80cb6e60 flags=0x2002
 TODO Destroying ISP links
 ISP m0 IOCTL called: cmd=0xc008561c
-SET cmd=0x8000164
-ISP set control: cmd=0x8000164 value=1
-Set bypass mode to 1
-ISP IOCTL called: cmd=0x800456d0
-
-=== IOCTL Debug ===
-cmd=0x800456d0 arg=0x7f933de0
-file=80a67820 flags=0x2002
-Starting link setup IOCTL
-Setting up video link 0
-Found devices and pads:
-subdev=80b22b10
-num_inpads=1
-num_outpads=1
-Setting up link 1 of 2
-Looking up pad: subdev=80b22b10 cfg=c02bad28
-Pad lookup for tx-isp-csi:
-type=1 index=0
-inpads=80b1ee80 (count=1)
-outpads=80b1ef00 (count=1)
-Found source pad 80b1ef00
-Looking up pad: subdev=80b22b10 cfg=80a6bd48
-Pad lookup for tx-isp-vic:
-type=0 index=0
-inpads=80b1ee80 (count=1)
-outpads=80b1ef00 (count=1)
-Found sink pad 80b1ef00
-Setting up link 2 of 2
-Looking up pad: subdev=80b22b10 cfg=c02bad3c
-Pad lookup for tx-isp-vic:
-type=1 index=0
-inpads=80b1ee80 (count=1)
-outpads=80b1ef00 (count=1)
-Found source pad 80b1ef00
-Looking up pad: subdev=80b22b10 cfg=80a6bd48
-Pad lookup for tx-isp-ddr:
-type=0 index=0
-inpads=80b1ee80 (count=1)
-outpads=80b1ef00 (count=1)
-Found sink pad 80b1ef00
-Link setup completed successfully
-ISP IOCTL called: cmd=0x800456d2
-
-=== IOCTL Debug ===
-cmd=0x800456d2 arg=0x0
-file=80a67820 flags=0x2002
-Enabling stream ...
-Configuring VIC for streaming...
-VIC State:
-0x7000: 0x00000000
-0x7004: 0x00020000
-0x7008: 0x00c80000
-0x700c: 0x1eff0000
-0x7010: 0x0000c83f
-0x7014: 0x00001e0a
-0x7018: 0x080f003f
-0x701c: 0x141f0000
-0x7020: 0x003fff08
-0x7024: 0x00133200
-0x7028: 0x00010610
-0x702c: 0xff00ff00
-0x7030: 0x0003ff00
-0x7048: 0x20202020
-0x704c: 0x20202020
-0x7050: 0x20202020
-0x7054: 0x20202020
-0x7058: 0x20202020
-0x705c: 0x20202020
-0x7060: 0x20202020
-0x7064: 0x20202020
-0x7068: 0x00380038
-0x706c: 0x00380038
-0x7070: 0x00380038
-0x7074: 0x00380038
-0x7080: 0x01000000
-0x7088: 0x00080000
-0x708c: 0x00010001
-0x7810: 0x00010001
-0x7840: 0x00000002
-0x793c: 0x000033fb
-0x7b00: 0x04000010
-VIC IRQ State:
-Enable (0x93c): 0x000033fb
-Mask (0x9e8): 0x00000000
-Status (0xb4): 0x00000000
-Status2 (0xb8): 0x00000000
-ISP Register Space Dump:
-Core ISP Registers:
-Base+0x00: 0x54560031 (ID/Version)
-Base+0x0c: 0x80700019 (Control)
-Base+0xb0: 0xffffffff (IRQ Enable)
-Base+0xb4: 0x00000000 (IRQ Status)
-
-VIC Control/Status:
-Base+0x110: 0x80007000 (VIC Control)
-Base+0x114: 0x00777111 (VIC Status)
-Base+0x840: 0x00010001 (VIC Config)
-
-Complete Register Dump (non-zero values):
-0x13300000: 0x54560031
-0x13300004: 0x00000001
-0x13300008: 0x00000001
-0x1330000c: 0x80700019
-0x13300010: 0x00000001
-0x13300014: 0x00000001
-0x13300028: 0x00000001
-0x1330002c: 0x00400040
-0x13300030: 0x00000001
-0x13300090: 0x00000001
-0x13300094: 0x00000001
-0x13300098: 0x00030000
-0x133000a8: 0x58050000
-0x133000ac: 0x58050000
-0x133000b0: 0xffffffff
-0x133000c4: 0x00040000
-0x133000c8: 0x00400040
-0x133000cc: 0x00000100
-0x133000d4: 0x0000000c
-0x133000d8: 0x00ffffff
-0x133000e0: 0x00000100
-0x133000e4: 0x00400040
-0x133000f0: 0xff808000
-0x13300110: 0x80007000
-0x13300114: 0x00777111
-0x13300840: 0x00010001
+Direct GET/SET operation
+SET operation
 ISP m0 IOCTL called: cmd=0xc008561c
-SET cmd=0x980918
-ISP set control: cmd=0x980918 value=2
-Set antiflicker mode to 2
+Direct GET/SET operation
+SET operation
 ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 0
+Tuning IOCTL
+SET operation
 ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 0
+Tuning IOCTL
+SET operation
 ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 0
+Tuning IOCTL
+SET operation
 ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 0
+Tuning IOCTL
+SET operation
 ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 0
+Tuning IOCTL
+SET operation
 ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 0
+Tuning IOCTL
+SET operation
 ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 0
+Tuning IOCTL
+SET operation
 ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 0
+Tuning IOCTL
+SET operation
 ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 0
-ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 0
-Oops[#1]:
-CPU: 0 PID: 1962 Comm: isp_tuning_deam Tainted: G           O 3.10.14__isvp_swan_1.0__ #1
-task: 82167620 ti: 815b0000 task.ti: 815b0000
-$ 0   : 00000000 10001c00 c02a8b24 00000000
-$ 4   : 80be7080 00280000 00000000 815b1f10
-$ 8   : 00000001 80000008 800b86e8 fffffff8
-$12   : 00000008 00008000 00010000 826dc7f0
-$16   : 80be7080 80a79600 00000000 815b1f10
-$20   : 815b1f10 7693a648 80a676e0 80be70a8
-$24   : 826dc78c 77126b70
-$28   : 815b0000 815b1e60 00000400 800d96d4
-Hi    : 00000000
-Lo    : 65656565
-epc   : c02a8b2c 0xc02a8b2c
-Tainted: G           O
-ra    : 800d96d4 0x800d96d4
-Status: 10001c03	KERNEL EXL IE
-Cause : 40808008
-BadVA : 00000008
-PrId  : 00d00100 (Ingenic Xburst)
-Modules linked in: sensor_sc2336_t31(O) tx_isp_t31(O) atbm6031(O) gpio_userkeys(O) avpu(O) exfat(O) motor(O) jzmmc_v12
-Process isp_tuning_deam (pid: 1962, threadinfo=815b0000, task=82167620, tls=75320dd8)
-Stack : 00000001 00000002 00000000 00000000 00000041 00000000 00000000 00000000
-00000001 00000007 fffffffb 80a79600 00000001 7693a648 815b1f10 00000000
-00000000 00000000 7693a5b0 801062c0 82002c80 800b16a4 00000010 80a673c0
-80a676e0 00000400 80a676e0 800b8008 0000000b 80b58000 80a676e0 800d372c
-80a676e8 800b73dc 80a676e0 fffffff7 7693a648 00000400 00000001 800b8748
-...
-Call Trace:[<801062c0>] 0x801062c0
-[<800b16a4>] 0x800b16a4
-[<800b8008>] 0x800b8008
-[<800d372c>] 0x800d372c
-[<800b73dc>] 0x800b73dc
-[<800b8748>] 0x800b8748
-[<80050000>] 0x80050000
-[<8002257c>] 0x8002257c
-
-
-Code: 00000000  8c83003c  3c050028 <8c630008> 3c19800e  00651821  8c634380  00801025  10600004
+Tuning IOCTL
+SET operation
 Setting up control block at ISP base + 0x9888 = 13309888
 Framechan0 opened successfully
-VIDIOC_S_FMT: arg=0x752b0828
+VIDIOC_S_FMT: arg=0x759dd828
 Format entry
 Size calculation for channel 0: base=3110400 metadata=23040 total=3133440
 Updated format for channel 0:
@@ -1388,30 +464,22 @@ Width: 1920 (aligned: 1920)
 Height: 1080
 Final size: 3133440
 Stride: 1920
-Allocated buffer 0 meta=80be7800 group=80ac0800
+Allocated buffer 0 meta=80cbfc80 group=81e99400
 Registered event handler for channel 0
-No event handler for pad 80b101d4 cmd 0x1000
+No event handler for pad 80cc01d4 cmd 0x1000
 Ch0 QBUF: buffer 0 queued (total=1)
 Framechan Streamon command: 0x80045612
 Sensor command: 0x80045612
 Sensor command: 0x80045612
-Ch0 DQBUF start: ready=1 done=0 queued=1
 Sensor streamon
 Frame thread starting for channel 0
----[ end trace bdc6abdb09deb812 ]---
-Ch0 DQBUF: returned buffer 0 seq=0
-ISP m0 IOCTL called: cmd=0xc00c56c6
-Tuning enable: 1
-Ch0 QBUF: buffer 0 queued (total=0)
-Ch0 DQBUF start: ready=1 done=0 queued=0
-Frame thread initialized for channel 0 with VBM pool 77051f30 (mapped c02e0f30)
-Enabled streaming on channel 0
+Frame thread initialized for channel 0 with VBM pool 7777ef30 (mapped c0300f30)
 ISP State:
 Control: 0x54560031
-Status: 0x00000001
+Status: 0x00000000
 Int mask: 0xffffffff
 VIC State:
-0x7000: 0x00000000
+0x7000: 0x00060003
 0x7004: 0x00020000
 0x7008: 0x00c80000
 0x700c: 0x1eff0000
@@ -1440,13 +508,22 @@ VIC State:
 0x7088: 0x00080000
 0x708c: 0x00010001
 0x7810: 0x00010001
-0x7840: 0x00000002
+0x7820: 0x00000001
+0x7828: 0x00000001
+0x7830: 0x00000001
+0x7834: 0x00000020
+0x783c: 0x00000001
 0x793c: 0x000033fb
 0x7b00: 0x04000010
-Stream enabled!
+Enabled streaming on channel 0
+Ch0 DQBUF start: ready=0 done=1 queued=0
+Ch0 DQBUF: returned buffer 0 seq=0
+ISP m0 IOCTL called: cmd=0xc00c56c6
+Tuning IOCTL
+GET operation
 Setting up control block at ISP base + 0x9888 = 13309888
 Framechan1 opened successfully
-VIDIOC_S_FMT: arg=0x7519e828
+VIDIOC_S_FMT: arg=0x758cc828
 Format entry
 Size calculation for channel 1: base=345600 metadata=7680 total=353280
 Updated format for channel 1:
@@ -1454,17 +531,102 @@ Width: 640 (aligned: 640)
 Height: 360
 Final size: 353280
 Stride: 640
-Allocated buffer 0 meta=80ed1b00 group=80ac1800
+Allocated buffer 0 meta=80db0400 group=81e98800
 Registered event handler for channel 1
-No event handler for pad 80b10ed4 cmd 0x1000
+No event handler for pad 80cc0ed4 cmd 0x1000
 Ch1 QBUF: buffer 0 queued (total=1)
 Framechan Streamon command: 0x80045612
 Sensor command: 0x80045612
 Sensor command: 0x80045612
-Ch1 DQBUF start: ready=1 done=0 queued=1
 Sensor streamon
 Frame thread starting for channel 1
+Frame thread initialized for channel 1 with VBM pool 7777ef30 (mapped c0320f30)
+Enabled streaming on channel 1
+Ch1 DQBUF start: ready=0 done=1 queued=0
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 DQBUF start: ready=0 done=0 queued=-1
+Ch1 QBUF: buffer 0 queued (total=0)
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 DQBUF start: ready=0 done=0 queued=-2
+Ch1 QBUF: buffer 0 queued (total=-1)
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 DQBUF start: ready=0 done=0 queued=-3
+Ch1 QBUF: buffer 0 queued (total=-2)
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 DQBUF start: ready=0 done=0 queued=-4
+Ch1 QBUF: buffer 0 queued (total=-3)
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 DQBUF start: ready=0 done=0 queued=-5
+Ch1 QBUF: buffer 0 queued (total=-4)
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 DQBUF start: ready=0 done=0 queued=-6
+Ch1 QBUF: buffer 0 queued (total=-5)
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 DQBUF start: ready=0 done=0 queued=-7
+Ch1 QBUF: buffer 0 queued (total=-6)
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 DQBUF start: ready=0 done=0 queued=-8
+Ch1 QBUF: buffer 0 queued (total=-7)
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 DQBUF start: ready=0 done=0 queued=-9
+Ch1 QBUF: buffer 0 queued (total=-8)
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 DQBUF start: ready=0 done=0 queued=-10
+Ch1 QBUF: buffer 0 queued (total=-9)
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 DQBUF start: ready=0 done=0 queued=-11
+Ch1 QBUF: buffer 0 queued (total=-10)
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-11)
+Ch1 DQBUF start: ready=1 done=0 queued=-11
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-12)
+Ch1 DQBUF start: ready=1 done=0 queued=-12
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-13)
+Ch1 DQBUF start: ready=1 done=0 queued=-13
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-14)
+Ch1 DQBUF start: ready=1 done=0 queued=-14
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-15)
+Ch1 DQBUF start: ready=1 done=0 queued=-15
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-16)
+Ch1 DQBUF start: ready=1 done=0 queued=-16
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-17)
+Ch1 DQBUF start: ready=1 done=0 queued=-17
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-18)
+Ch1 DQBUF start: ready=1 done=0 queued=-18
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-19)
+Ch1 DQBUF start: ready=1 done=0 queued=-19
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-20)
+Ch1 DQBUF start: ready=1 done=0 queued=-20
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-21)
+Ch1 DQBUF start: ready=1 done=0 queued=-21
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-22)
+Ch1 DQBUF start: ready=1 done=0 queued=-22
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-23)
+Ch1 DQBUF start: ready=1 done=0 queued=-23
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-24)
+Ch1 DQBUF start: ready=1 done=0 queued=-24
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-25)
+Ch1 DQBUF start: ready=1 done=0 queued=-25
+Ch1 DQBUF: returned buffer 0 seq=0
+Ch1 QBUF: buffer 0 queued (total=-26)
+Ch1 DQBUF start: ready=1 done=0 queued=-26
+Ch1 DQBUF: returned buffer 0 seq=0
 ...
+Note: latest build chn0 is getting stuck now
 ```
 
 And on the streamer side:
