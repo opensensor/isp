@@ -437,7 +437,7 @@ static int cleanup_buffer(struct isp_channel *chn)
         return 0;
 
     // Free buffer metadata
-    for (i = 0; i < chn->queue->buf_count; i++) {
+    for (i = 0; i < chn->queue->buffer_count; i++) {
         buf = chn->queue->bufs[i];
         if (buf && buf->meta) {
             dma_free_coherent(chn->dev, sizeof(struct frame_metadata),
@@ -579,21 +579,32 @@ static void handle_isp_interrupt(struct IMPISPDev *dev, u32 status)
 
 }
 
-static irqreturn_t tx_isp_irq_handler(int irq, void *data)
+static irqreturn_t tx_isp_irq_handler(int irq, void *dev_id)
 {
-    struct IMPISPDev *dev = data;
-    void __iomem *regs = dev->reg_base + ISP_BASE;
-    u32 status;
+    struct IMPISPDev *dev = dev_id;
+    u32 status, csi_err1, csi_err2;
 
-    status = readl(regs + 0xb4);
-    writel(status, regs + 0xb8);
-    wmb();
+    status = readl(dev->reg_base + ISP_INT_STATUS);
 
-    if (!(status & 0x3f8)) {
-        return IRQ_NONE;
+    // Check CSI errors if CSI interrupt is set
+    if (status & ISP_INT_CSI) {
+        csi_err1 = readl(dev->csi_dev->csi_regs + 0x30);  // CSI ERR1
+        csi_err2 = readl(dev->csi_dev->csi_regs + 0x34);  // CSI ERR2
+
+        if (csi_err1 || csi_err2) {
+            dev_warn(dev->dev, "CSI Errors - ERR1: 0x%08x ERR2: 0x%08x\n",
+                    csi_err1, csi_err2);
+
+            // Clear CSI errors
+            writel(csi_err1, dev->csi_dev->csi_regs + 0x30);
+            writel(csi_err2, dev->csi_dev->csi_regs + 0x34);
+        }
     }
 
-    return IRQ_WAKE_THREAD;
+    // Clear ISP interrupts
+    writel(status, dev->reg_base + ISP_INT_CLEAR);
+
+    return IRQ_HANDLED;
 }
 
 static irqreturn_t tx_isp_threaded_irq_handler(int irq, void *data)
@@ -632,22 +643,22 @@ static irqreturn_t tx_isp_threaded_irq_handler(int irq, void *data)
 static int reset_gpio = GPIO_PA(18);  // Default reset GPIO
 static int pwdn_gpio = -1;  // Default power down GPIO disabled
 
-void tx_vic_disable_irq(struct IMPISPDev *dev)
-{
-    unsigned long flags;
-
-    spin_lock_irqsave(&dev->lock, flags);
-
-    if (dev->irq_enabled) {
-        writel(0, dev->reg_base + VIC_BASE + 0x93c); // Disable IRQs
-        wmb();
-        dev->irq_enabled = 0;
-        if (dev->irq_disable)
-            dev->irq_disable(dev->irq_priv);
-    }
-
-    spin_unlock_irqrestore(&dev->lock, flags);
-}
+//static inline void tx_vic_disable_irq(struct IMPISPDev *dev)
+//{
+//    unsigned long flags;
+//    void __iomem *vic_regs = dev->reg_base + VIC_BASE;
+//
+//    spin_lock_irqsave(&dev->vic_dev->lock, flags);
+//
+//    if (dev->vic_irq_enabled) {
+//        dev->vic_irq_enabled = 0;
+//        writel(0, vic_regs + 0x93c);  // Disable all VIC interrupts
+//        writel(0xffffffff, vic_regs + 0x9e8); // Mask all VIC interrupts
+//        wmb();
+//    }
+//
+//    spin_unlock_irqrestore(&dev->vic_dev->lock, flags);
+//}
 
 
 int32_t tx_isp_notify(int32_t arg1, int32_t notify_type)
@@ -1004,7 +1015,6 @@ static void set_framesource_changewait_cnt(void)
 {
     if (ourISPdev) {
         ourISPdev->frame_wait_cnt = 3;  // Wait 3 frames for flip to take effect
-        wmb();  // Ensure count update is visible
     }
 }
 
@@ -1910,7 +1920,7 @@ static int tisp_day_or_night_s_ctrl(uint32_t mode)
 
     bypass_val |= top_ctrl;
 
-    pr_debug("%s: Setting top bypass to 0x%x\n", __func__, bypass_val);
+    pr_info("%s: Setting top bypass to 0x%x\n", __func__, bypass_val);
     writel(bypass_val, regs + 0xC);
 
     // Refresh all pipeline stages for mode change
@@ -2127,7 +2137,7 @@ static int apical_isp_core_ops_g_ctrl(struct IMPISPDev *dev, struct isp_core_ctr
     if (!dev || !tuning)
         return -EINVAL;
 
-    mutex_lock(&tuning->lock);
+    //mutex_lock(&tuning->lock);
 
     pr_info("Get control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
 
@@ -2201,9 +2211,9 @@ static int apical_isp_core_ops_g_ctrl(struct IMPISPDev *dev, struct isp_core_ctr
                 break;
 
             case 0x8000030:  // AE Zone Info
-                ret = isp_get_ae_zone(dev, ctrl);
-                if (ret)
-                    goto out;
+//                ret = isp_get_ae_zone(dev, ctrl);
+//                if (ret)
+//                    goto out;
                 break;
 
             case 0x8000031:  // AF Zone Info
@@ -2225,10 +2235,10 @@ static int apical_isp_core_ops_g_ctrl(struct IMPISPDev *dev, struct isp_core_ctr
                 wb_data.b_gain = tuning->wb_gains.b;
                 wb_data.color_temp = tuning->wb_temp;
 
-                if (copy_to_user((void __user *)ctrl->value, &wb_data, sizeof(wb_data))) {
-                    ret = -EFAULT;
-                    goto out;
-                }
+//                if (copy_to_user((void __user *)ctrl->value, &wb_data, sizeof(wb_data))) {
+//                    ret = -EFAULT;
+//                    goto out;
+//                }
                 break;
             }
 
@@ -2245,10 +2255,10 @@ static int apical_isp_core_ops_g_ctrl(struct IMPISPDev *dev, struct isp_core_ctr
                 bcsh_data.contrast = tuning->bcsh_contrast;
                 bcsh_data.saturation = tuning->bcsh_saturation;
 
-                if (copy_to_user((void __user *)ctrl->value, &bcsh_data, sizeof(bcsh_data))) {
-                    ret = -EFAULT;
-                    goto out;
-                }
+//                if (copy_to_user((void __user *)ctrl->value, &bcsh_data, sizeof(bcsh_data))) {
+//                    ret = -EFAULT;
+//                    goto out;
+//                }
                 break;
             }
             case 0x80000e0: { // GET FPS
@@ -2268,8 +2278,8 @@ static int apical_isp_core_ops_g_ctrl(struct IMPISPDev *dev, struct isp_core_ctr
                 fps_data.frame_div = 1;
 
                 // Copy back to user - note full structure needs to be copied
-                if (copy_to_user((void __user *)ctrl->value, &fps_data, sizeof(fps_data)))
-                    return -EFAULT;
+//                if (copy_to_user((void __user *)ctrl->value, &fps_data, sizeof(fps_data)))
+//                    return -EFAULT;
 
                 break;
             }
@@ -2318,7 +2328,12 @@ static int apical_isp_core_ops_g_ctrl(struct IMPISPDev *dev, struct isp_core_ctr
         case 0x8000166:  // ISP_CTRL_SHADING
             ctrl->value = tuning->shading;
             break;
-
+        case 0x80000e1:  // ISP Running Mode
+            ctrl->value = tuning->running_mode;
+            break;
+        case 0x80000e7:  // ISP Custom Mode
+            ctrl->value = tuning->custom_mode;
+            break;
         default:
             pr_warn("Unknown m0 control get command: 0x%x\n", ctrl->cmd);
             ret = -EINVAL;
@@ -2326,8 +2341,8 @@ static int apical_isp_core_ops_g_ctrl(struct IMPISPDev *dev, struct isp_core_ctr
     }
 
 out:
-    pr_info("Mutex unlock\n");
-    mutex_unlock(&tuning->lock);
+    // pr_info("Mutex unlock\n");
+    //mutex_unlock(&tuning->lock);
     return ret;
 }
 
@@ -2336,12 +2351,10 @@ static int apical_isp_core_ops_s_ctrl(struct IMPISPDev *dev, struct isp_core_ctr
     int ret = 0;
     struct isp_tuning_data *tuning = dev->tuning_data;
 
-    if (!dev || !tuning)
+    if (!dev || !tuning) {
         pr_err("No ISP device or tuning data\n");
         return -EINVAL;
-
-    mutex_lock(&tuning->lock);
-
+    }
     pr_info("Set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
 
     switch (ctrl->cmd) {
@@ -2430,18 +2443,14 @@ static int apical_isp_core_ops_s_ctrl(struct IMPISPDev *dev, struct isp_core_ctr
 
         case 0x8000085:  // Temper Strength
             tuning->temper_strength = ctrl->value;
-            if (tuning->state == 2 && tuning->regs) {
-                writel(ctrl->value, tuning->regs + ISP_TEMPER_STRENGTH);
-                wmb();
-            }
+//            writel(ctrl->value, tuning->regs + ISP_TEMPER_STRENGTH);
+//            wmb();
             break;
 
         case 0x8000086:  // Sinter Strength
             tuning->sinter_strength = ctrl->value;
-            if (tuning->state == 2 && tuning->regs) {
-                writel(ctrl->value, tuning->regs + ISP_SINTER_STRENGTH);
-                wmb();
-            }
+//            writel(ctrl->value, tuning->regs + ISP_SINTER_STRENGTH);
+//            wmb();
             break;
         // Special case handlers:
         case 0x8000004: {  // White Balance
@@ -2452,23 +2461,21 @@ static int apical_isp_core_ops_s_ctrl(struct IMPISPDev *dev, struct isp_core_ctr
                 uint32_t color_temp;  // From the decompiled WB references
             } wb_data;
 
-            if (copy_from_user(&wb_data, (void __user *)ctrl->value, sizeof(wb_data))) {
-                ret = -EFAULT;
-                goto out;
-            }
-
-            tuning->wb_gains.r = wb_data.r_gain;
-            tuning->wb_gains.g = wb_data.g_gain;
-            tuning->wb_gains.b = wb_data.b_gain;
-            tuning->wb_temp = wb_data.color_temp;
+//            if (copy_from_user(&wb_data, (void __user *)ctrl->value, sizeof(wb_data))) {
+//                ret = -EFAULT;
+//                goto out;
+////            }
+//
+//            tuning->wb_gains.r = wb_data.r_gain;
+//            tuning->wb_gains.g = wb_data.g_gain;
+//            tuning->wb_gains.b = wb_data.b_gain;
+//            tuning->wb_temp = wb_data.color_temp;
 
             // Update hardware if tuning is active
-            if (tuning->state == 2 && tuning->regs) {
-                writel(wb_data.r_gain, tuning->regs + ISP_WB_R_GAIN);
-                writel(wb_data.g_gain, tuning->regs + ISP_WB_G_GAIN);
-                writel(wb_data.b_gain, tuning->regs + ISP_WB_B_GAIN);
-                wmb();
-            }
+//            writel(wb_data.r_gain, tuning->regs + ISP_WB_R_GAIN);
+//            writel(wb_data.g_gain, tuning->regs + ISP_WB_G_GAIN);
+//            writel(wb_data.b_gain, tuning->regs + ISP_WB_B_GAIN);
+//            wmb();
             break;
         }
 
@@ -2480,49 +2487,62 @@ static int apical_isp_core_ops_s_ctrl(struct IMPISPDev *dev, struct isp_core_ctr
                 uint8_t saturation;
             } bcsh_data;
 
-            if (copy_from_user(&bcsh_data, (void __user *)ctrl->value, sizeof(bcsh_data))) {
-                ret = -EFAULT;
-                goto out;
-            }
+//            if (copy_from_user(&bcsh_data, (void __user *)ctrl->value, sizeof(bcsh_data))) {
+//                ret = -EFAULT;
+//                goto out;
+//            }
+//
+//            tuning->bcsh_hue = bcsh_data.hue;
+//            tuning->bcsh_brightness = bcsh_data.brightness;
+//            tuning->bcsh_contrast = bcsh_data.contrast;
+//            tuning->bcsh_saturation = bcsh_data.saturation;
 
-            tuning->bcsh_hue = bcsh_data.hue;
-            tuning->bcsh_brightness = bcsh_data.brightness;
-            tuning->bcsh_contrast = bcsh_data.contrast;
-            tuning->bcsh_saturation = bcsh_data.saturation;
-
-            if (tuning->state == 2 && tuning->regs) {
-                writel(bcsh_data.hue, tuning->regs + ISP_BCSH_HUE);
-                writel(bcsh_data.brightness, tuning->regs + ISP_BCSH_BRIGHTNESS);
-                writel(bcsh_data.contrast, tuning->regs + ISP_BCSH_CONTRAST);
-                writel(bcsh_data.saturation, tuning->regs + ISP_BCSH_SATURATION);
-                wmb();
-            }
+//            writel(bcsh_data.hue, tuning->regs + ISP_BCSH_HUE);
+//            writel(bcsh_data.brightness, tuning->regs + ISP_BCSH_BRIGHTNESS);
+//            writel(bcsh_data.contrast, tuning->regs + ISP_BCSH_CONTRAST);
+//            writel(bcsh_data.saturation, tuning->regs + ISP_BCSH_SATURATION);
+//            wmb();
             break;
         }
         case 0x80000e0: { // SET FPS
-            struct {
-                uint32_t frame_rate;  // fps_num
-                uint32_t frame_div;   // fps_den
-            } fps_data;
-
-            if (copy_from_user(&fps_data, (void __user *)ctrl->value, sizeof(fps_data)))
-                return -EFAULT;
+//            struct {
+//                uint32_t frame_rate;  // fps_num
+//                uint32_t frame_div;   // fps_den
+//            } fps_data;
+//
+//            if (copy_from_user(&fps_data, (void __user *)ctrl->value, sizeof(fps_data))) {
+//                pr_err("Failed to copy FPS data from user\n");
+//                return -EFAULT;
+//            }
 
             // Store in tuning data
-            dev->tuning_data->fps_num = fps_data.frame_rate;
-            dev->tuning_data->fps_den = fps_data.frame_div;
+//            dev->tuning_data->fps_num = fps_data.frame_rate;
+//            dev->tuning_data->fps_den = fps_data.frame_div;
+              dev->tuning_data->fps_num = 25;
+              dev->tuning_data->fps_den = 1;
 
             // Update in framesource
-            ret = set_framesource_fps(fps_data.frame_rate, fps_data.frame_div);
-
-            // Handle AE algorithm if enabled
-            if (ret == 0 && dev->ae_algo_enabled) {
-                if (dev->ae_algo_cb)
-                    dev->ae_algo_cb(dev->ae_priv_data, 0, 0);
-            }
+//            ret = set_framesource_fps(fps_data.frame_rate, fps_data.frame_div);
+//
+//            // Handle AE algorithm if enabled
+//            if (ret == 0 && dev->ae_algo_enabled) {
+//                if (dev->ae_algo_cb)
+//                    dev->ae_algo_cb(dev->ae_priv_data, 0, 0);
+//            }
 
             break;
         }
+        case 0x80000e1: { // ISP Running Mode
+            tuning->running_mode = ctrl->value;
+            // From decompiled: This affects day/night mode
+            // is_isp_day = (ctrl->value < 1) ? 1 : 0;
+            set_framesource_changewait_cnt();
+            break;
+        }
+        case 0x80000e7:  // ISP Custom Mode
+            tuning->custom_mode = ctrl->value;
+            set_framesource_changewait_cnt();
+            break;
         default:
             pr_warn("Unknown ISP control command: 0x%x\n", ctrl->cmd);
             ret = -EINVAL;
@@ -2530,8 +2550,6 @@ static int apical_isp_core_ops_s_ctrl(struct IMPISPDev *dev, struct isp_core_ctr
     }
 
 out:
-    pr_info("Mutex unlock\n");
-    mutex_unlock(&tuning->lock);
     return ret;
 }
 
@@ -2573,8 +2591,10 @@ static int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user
             uint32_t cmd;  // The actual command we want
         } req;
 
-        if (copy_from_user(&req, arg, sizeof(req)))
+        if (copy_from_user(&req, arg, sizeof(req))) {
+            pr_err("Failed to copy tuning request from user\n");
             return -EFAULT;
+        }
 
         // Set up the ctrl structure for the core functions
         ctrl.cmd = req.cmd;
@@ -2593,6 +2613,15 @@ static int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user
             // SET operation
             pr_info("SET operation\n");
             ret = apical_isp_core_ops_s_ctrl(dev, &ctrl);
+            if (ret == 0 || ret == 0xfffffdfd) {
+                pr_info("Copying control back to user\n");
+                if (copy_to_user(arg, &ctrl, 8))  { // Write result back
+                    pr_err("Failed to copy control back to user\n");
+                    return -EFAULT;
+                }
+            } else {
+                pr_err("Failed to set control: %d\n", ret);
+            }
         }
     } else {
         pr_info("Direct GET/SET operation\n");
@@ -2717,26 +2746,6 @@ static irqreturn_t isp_irq_handler(int irq, void *dev_id)
     }
 
     return handled ? IRQ_HANDLED : IRQ_NONE;
-}
-
-void tx_isp_disable_irq(struct IMPISPDev *dev)
-{
-    unsigned long flags;
-    void __iomem *vic_regs = dev->reg_base + 0x7000;
-    pr_info("Disabling ISP IRQs\n");
-
-//    spin_lock_irqsave(&dev->irq_data->lock, flags);
-//
-//    if (dev->irq_enabled) {
-//        // Disable VIC interrupts
-//        writel(0, vic_regs + 0x93c);      // IRQ enable bit 0x93c
-//        writel(0, vic_regs + 0xc);        // VIC Mode 0x0c
-//        writel(0, vic_regs + 0x9e8);    // IRQ Mask 0x9e8
-//        wmb();
-//        dev->irq_enabled = 0;
-//    }
-//
-//    spin_unlock_irqrestore(&dev->irq_data->lock, flags);
 }
 
 
@@ -3060,7 +3069,7 @@ static struct tx_isp_subdev_video_ops csi_video_ops = {
 };
 
 static struct tx_isp_subdev_core_ops csi_core_ops = {
-    .init = csi_init,
+    .init = tx_isp_csi_init,
     .reset = csi_reset,
 };
 
@@ -3181,81 +3190,6 @@ static int tx_isp_fs_remove(struct platform_device *pdev)
     return 0;
 }
 
-
-static int enable_csi_clocks(struct IMPISPDev *dev)
-{
-    void __iomem *cpm_base;
-    u32 val;
-    int ret;
-
-    pr_info("Setting up CSI clocks and power\n");
-
-    // Map CPM registers
-    cpm_base = ioremap(CPM_BASE, 0x100);
-    if (!cpm_base) {
-        pr_err("Failed to map CPM registers\n");
-        return -ENOMEM;
-    }
-
-    // Step 1: Assert CSI reset first
-    val = readl(cpm_base + CPM_SRSR);
-    val |= CPM_CSI_RST_MASK;  // Set reset bit
-    writel(val, cpm_base + CPM_SRSR);
-    wmb();
-    msleep(10);
-
-    // Step 2: Enable power domain
-    val = readl(cpm_base + CPM_CLKGR1);
-    val &= ~CPM_CSI_PWR_MASK;  // Clear power gate bit
-    writel(val, cpm_base + CPM_CLKGR1);
-    wmb();
-    msleep(10);
-
-    // Step 3: Configure CSI clock via clock divider
-    // Set CSI clock to 125MHz (AHB/2)
-    writel(0x1, cpm_base + CPM_CSICDR);
-    wmb();
-    msleep(1);
-
-    // Step 4: Enable CSI clock gate
-    val = readl(cpm_base + CPM_CLKGR);
-    val &= ~CPM_CSI_CLK_MASK;  // Clear clock gate bit
-    writel(val, cpm_base + CPM_CLKGR);
-    wmb();
-    msleep(10);
-
-    // Step 5: De-assert CSI reset
-    val = readl(cpm_base + CPM_SRSR);
-    val &= ~CPM_CSI_RST_MASK;  // Clear reset bit
-    writel(val, cpm_base + CPM_SRSR);
-    wmb();
-    msleep(10);
-
-    // Debug output
-    pr_info("Clock state after setup:\n");
-    pr_info("  CLKGR: 0x%08x\n", readl(cpm_base + CPM_CLKGR));
-    pr_info("  CLKGR1: 0x%08x\n", readl(cpm_base + CPM_CLKGR1));
-    pr_info("  SRSR: 0x%08x\n", readl(cpm_base + CPM_SRSR));
-    pr_info("  CSICDR: 0x%08x\n", readl(cpm_base + CPM_CSICDR));
-    pr_info("  PCSR: 0x%08x\n", readl(cpm_base + CPM_PCSR));
-
-    iounmap(cpm_base);
-
-    // Step 6: Enable CSI clock through standard API
-    if (dev->csi_clk) {
-        ret = clk_prepare_enable(dev->csi_clk);
-        if (ret) {
-            pr_err("Failed to enable CSI clock: %d\n", ret);
-            return ret;
-        }
-    }
-
-    msleep(20); // Allow clocks to stabilize
-
-    pr_info("CSI clocks and power enabled\n");
-    return 0;
-}
-
 struct IspDeviceConfig {
     // Core configuration
     uint32_t version;          // 0x00: Device version
@@ -3277,55 +3211,131 @@ struct IspDeviceConfig {
 };
 
 
-int tx_isp_csi_init(struct platform_device *pdev, struct IspDeviceConfig *cfg,
-                   int param_value)
+static int configure_phy_timing(struct csi_device *csi)
 {
-    struct resource *res;
-    void __iomem *mapped_regs;
+    void __iomem *base = csi->phy_regs;
+
+    // Basic PHY timing params from OEM code
+    writel(0x7d, base + 0x00);         // Main timing param
+    writel(0x3f, base + 0x128);        // Additional timing
+
+    // Power sequence with timing configuration
+    writel(0x0, base + 0x08);          // PHY_SHUTDOWNZ
+    writel(0x0, base + 0x0c);          // DPHY_RSTZ
+    writel(0x0, base + 0x10);          // CSI2_RESETN
+    wmb();
+    msleep(10);
+
+    writel(0x1, base + 0x08);          // PHY_SHUTDOWNZ
+    wmb();
+    msleep(10);
+
+    writel(0x1, base + 0x0c);          // DPHY_RSTZ
+    wmb();
+    msleep(10);
+
+    writel(0x1, base + 0x10);          // CSI2_RESETN
+    wmb();
+    msleep(10);
+
+    return 0;
+}
+
+
+static void check_csi_interrupts(struct csi_device *csi, const char *where)
+{
+    u32 mask1 = readl(csi->csi_regs + 0x28);
+    u32 mask2 = readl(csi->csi_regs + 0x2c);
+    pr_info("CSI interrupt masks at %s:\n"
+            "  MASK1: 0x%08x\n"
+            "  MASK2: 0x%08x\n",
+            where, mask1, mask2);
+}
+
+int tx_isp_csi_init(struct platform_device *pdev)
+{
+    struct IMPISPDev *dev = ourISPdev;
+    struct csi_device *csi_dev;
+    struct resource *phy_res, *csi_res;
+    struct tx_isp_subdev *sd = NULL;
+    void __iomem *cpm_base;
+    void __iomem *phy_base;
+    void __iomem *csi_base;
     int ret;
 
-    if (!pdev || !cfg) {
-        pr_err("%s: invalid parameters\n", __func__);
+    if (!pdev)
         return -EINVAL;
+
+    csi_dev = devm_kzalloc(&pdev->dev, sizeof(*csi_dev), GFP_KERNEL);
+    if (!csi_dev)
+        return -ENOMEM;
+
+    // 2. Allocate subdev
+    sd = devm_kzalloc(&pdev->dev, sizeof(*sd), GFP_KERNEL);
+    if (!sd) {
+        dev_err(&pdev->dev, "Failed to allocate subdev\n");
+        ret = -ENOMEM;
+        goto err_free_dev;
+    }
+    csi_dev->sd = sd;
+
+    phy_res = request_mem_region(MIPI_PHY_ADDR, 0x1000, "mipi-phy");
+    if (!phy_res) {
+        pr_info("MIPI PHY region already claimed\n");
     }
 
-    // Zero init entire structure
-    memset(cfg, 0, sizeof(*cfg));
+    csi_res = request_mem_region(ISP_W01_ADDR, 0x1000, "isp-w01");
+    if (!csi_res) {
+        pr_info("ISP W01 region already claimed\n");
+    }
 
-
-    void __iomem *csi_base;
-    struct csi_device *csi_dev;
-
-    // Allocate CSI device structure
-    csi_dev = devm_kzalloc(&pdev->dev, sizeof(*csi_dev), GFP_KERNEL);
-    if (!csi_dev) {
-        dev_err(&pdev->dev, "Failed to allocate CSI device\n");
+    // Map CPM first for clock setup
+    cpm_base = ioremap(CPM_BASE, 0x1000);
+    if (!cpm_base) {
         return -ENOMEM;
     }
 
-    // Initialize configuration
-    cfg->notify_callback = tx_isp_notify;
-    cfg->regs = ourISPdev->resources.csi_regs;  // Use existing mapping
-    cfg->config_flags = 0x735e4;
-
-    // Setup clocks first
-    pr_info("Setting up CSI clocks and power\n");
-    ret = enable_csi_clocks(ourISPdev);
-    if (ret) {
-        pr_err("Failed to enable CSI clocks\n");
-        return ret;
+    // Map MIPI PHY
+    phy_base = ioremap(MIPI_PHY_ADDR, 0x1000);
+    if (!phy_base) {
+        iounmap(cpm_base);
+        return -ENOMEM;
     }
 
-    cfg->phy_res = res;
-    ourISPdev->csi_dev = csi_dev;
+    // Map CSI (W01)
+    csi_base = ioremap(ISP_W01_ADDR, 0x1000);
+    if (!csi_base) {
+        iounmap(phy_base);
+        iounmap(cpm_base);
+        return -ENOMEM;
+    }
 
-    pr_info("CSI initialized: regs=%p phy_res=%p\n",
-            cfg->regs, cfg->phy_res);
+    // 2. Set up device state and registers
+    csi_dev->dev = &pdev->dev;
+    csi_dev->cpm_regs = cpm_base;
+    csi_dev->phy_regs = phy_base;
+    csi_dev->csi_regs = csi_base;
+    dev->csi_dev = csi_dev;
+
+    // Initialize locking structures
+    mutex_init(&csi_dev->mutex);
+    spin_lock_init(&csi_dev->lock);
+
+    // Get the clock and store reference
+    csi_dev->clk = devm_clk_get(&pdev->dev, "csi");
+    if (IS_ERR(csi_dev->clk)) {
+        dev_err(&pdev->dev, "Failed to get CSI clock\n");
+        return PTR_ERR(csi_dev->clk);
+    }
 
     return 0;
-
-err_disable_clocks:
-    // TODO Add clock cleanup
+	err_free_dev:
+        kfree(csi_dev);
+    err_disable_clk:
+        clk_disable_unprepare(csi_dev->clk);
+    err_unmap:
+        iounmap(csi_dev->csi_regs);
+    iounmap(csi_dev->phy_regs);
     return ret;
 }
 
@@ -4091,6 +4101,27 @@ static void check_csi_status(struct IMPISPDev *dev)
             state, err1, err2, data_id);
 }
 
+
+#define I2C_INTST       (0x2C)  // Interrupt status
+#define I2C_STA         (0x70)  // Status register
+#define I2C_TXFLR       (0x74)  // Transmit FIFO level
+#define I2C_RXFLR       (0x78)  // Receive FIFO level
+#define I2C_TXABRT      (0x80)  // Transmit abort source
+
+void check_i2c_status(void)
+{
+    // Add these reads to your setup function or wherever you want to monitor:
+    void __iomem *i2c_base = ioremap(0x10050000, 0x1000);  // I2C0 base address
+    if (i2c_base) {
+        pr_info("I2C Status: 0x%08x\n", readl(i2c_base + I2C_STA));
+        pr_info("I2C Interrupts: 0x%08x\n", readl(i2c_base + I2C_INTST));
+        pr_info("I2C TX FIFO: %d\n", readl(i2c_base + I2C_TXFLR));
+        pr_info("I2C RX FIFO: %d\n", readl(i2c_base + I2C_RXFLR));
+        pr_info("I2C Abort Source: 0x%08x\n", readl(i2c_base + I2C_TXABRT));
+        iounmap(i2c_base);
+    }
+}
+
 static int frame_thread(void *arg)
 {
     struct frame_thread_data *thread_data = arg;
@@ -4237,22 +4268,6 @@ static int stop_frame_thread(struct isp_channel *chn)
 }
 
 
-void tx_vic_enable_irq(struct IMPISPDev *dev)
-{
-    unsigned long flags;
-
-    spin_lock_irqsave(&dev->vic_lock, flags);
-
-    if (!dev->vic_irq_enabled) {
-        dev->vic_irq_enabled = 1;
-        writel(0x33fb, dev->vic_regs + 0x93c);
-        wmb();
-        if (dev->vic_irq_handler)
-            dev->vic_irq_handler(dev->vic_irq_priv);
-    }
-
-    spin_unlock_irqrestore(&dev->vic_lock, flags);
-}
 
 static void check_subdev_clocks(struct tx_isp_subdev *sd, const char *name)
 {
@@ -4284,6 +4299,170 @@ static void check_subdev_clocks(struct tx_isp_subdev *sd, const char *name)
     }
 }
 
+int tx_isp_init_chain(struct IMPISPDev *dev) {
+    int ret;
+
+    // Initialize in order from sensor to DDR
+    if (dev->sensor_sd && dev->sensor_sd->ops && dev->sensor_sd->ops->core) {
+        ret = dev->sensor_sd->ops->core->init(dev->sensor_sd, 1);
+        if (ret && ret != 0xfffffdfd)
+            return ret;
+    }
+
+    if (dev->csi_dev && dev->csi_dev->sd && dev->csi_dev->sd->ops->core) {
+        ret = dev->csi_dev->sd->ops->core->init(dev->csi_dev->sd, 1);
+        if (ret && ret != 0xfffffdfd)
+            return ret;
+    }
+
+    if (dev->vic_dev && dev->vic_dev->sd && dev->vic_dev->sd->ops->core) {
+        ret = dev->vic_dev->sd->ops->core->init(dev->vic_dev->sd, 1);
+        if (ret && ret != 0xfffffdfd)
+            return ret;
+    }
+
+    return 0;
+}
+
+int tx_isp_stream_chain(struct IMPISPDev *dev, int enable)
+{
+    int ret;
+
+    // Enable all stream handlers in order
+    if (dev->sensor_sd && dev->sensor_sd->ops && dev->sensor_sd->ops->video) {
+        ret = dev->sensor_sd->ops->video->s_stream(dev->sensor_sd, enable);
+        if (ret && ret != 0xfffffdfd)
+            return ret;
+    }
+
+    if (dev->csi_dev && dev->csi_dev->sd && dev->csi_dev->sd->ops->video) {
+        ret = dev->csi_dev->sd->ops->video->s_stream(dev->csi_dev->sd, enable);
+        if (ret && ret != 0xfffffdfd)
+            return ret;
+    }
+
+    if (dev->vic_dev && dev->vic_dev->sd && dev->vic_dev->sd->ops->video) {
+        ret = dev->vic_dev->sd->ops->video->s_stream(dev->vic_dev->sd, enable);
+        if (ret && ret != 0xfffffdfd)
+            return ret;
+    }
+
+    return 0;
+}
+
+
+int tx_isp_video_s_stream(struct IMPISPDev *dev)
+{
+    int ret;
+
+    pr_info("Setting up video link stream\n");
+
+    if (dev->sensor_sd) {
+        pr_info("sensor_sd exists\n");
+        if (dev->sensor_sd->ops) {
+            pr_info("sensor_sd->ops exists\n");
+            if (dev->sensor_sd->ops->video) {
+                pr_info("sensor_sd->ops->video exists\n");
+            } else {
+                pr_err("sensor_sd->ops->video is NULL\n");
+            }
+        } else {
+            pr_err("sensor_sd->ops is NULL\n");
+        }
+    } else {
+        pr_err("sensor_sd is NULL\n");
+    }
+
+    // Phase 1: Core initialization
+    pr_info("Phase 1: Core initialization\n");
+
+    if (dev->sensor_sd && dev->sensor_sd->ops && dev->sensor_sd->ops->core) {
+        pr_info("Initializing sensor core\n");
+        ret = dev->sensor_sd->ops->core->init(dev->sensor_sd, 1);
+        if (ret && ret != 0xfffffdfd) {
+            pr_err("Failed to initialize sensor core: %d\n", ret);
+            return ret;
+        }
+    }
+
+//    if (dev->csi_dev && dev->csi_dev->sd && dev->csi_dev->sd->ops->core) {
+//        pr_info("Initializing CSI core\n");
+//        ret = dev->csi_dev->sd->ops->core->init(dev->csi_dev->sd, 1);
+//        if (ret && ret != 0xfffffdfd)
+//            return ret;
+//    }
+//
+//    if (dev->vic_dev && dev->vic_dev->sd && dev->vic_dev->sd->ops->core) {
+//        pr_info("Initializing VIC core\n");
+//        ret = dev->vic_dev->sd->ops->core->init(dev->vic_dev->sd, 1);
+//        if (ret && ret != 0xfffffdfd)
+//            return ret;
+//    }
+//
+//    if (dev->vin_dev && dev->vin_dev->sd && dev->vin_dev->sd->ops->core) {
+//        pr_info("Initializing VIN core\n");
+//        ret = dev->vin_dev->sd->ops->core->init(dev->vin_dev->sd, 1);
+//        if (ret && ret != 0xfffffdfd)
+//            return ret;
+//    }
+
+    // Phase 2: Stream enabling
+
+    pr_info("Phase 2: Enabling video streams\n");
+
+    if (dev->sensor_sd) {
+        pr_info("sensor_sd exists\n");
+        if (dev->sensor_sd->ops) {
+            pr_info("sensor_sd->ops exists\n");
+            if (dev->sensor_sd->ops->video) {
+                pr_info("sensor_sd->ops->video exists\n");
+            } else {
+                pr_err("sensor_sd->ops->video is NULL\n");
+            }
+        } else {
+            pr_err("sensor_sd->ops is NULL\n");
+        }
+    } else {
+        pr_err("sensor_sd is NULL\n");
+    }
+
+    if (dev->sensor_sd && dev->sensor_sd->ops && dev->sensor_sd->ops->video) {
+        pr_info("Initializing sensor stream on\n");
+        ret = dev->sensor_sd->ops->video->s_stream(dev->sensor_sd, 1);
+        if (ret && ret != 0xfffffdfd) {
+            pr_err("Failed to initialize sensor stream on: %d\n", ret);
+            return ret;
+        }
+    }
+//
+//    if (dev->csi_dev && dev->csi_dev->sd && dev->csi_dev->sd->ops->video) {
+//        pr_info("Starting CSI stream\n");
+//        ret = dev->csi_dev->sd->ops->video->s_stream(dev->csi_dev->sd, 1);
+//        if (ret && ret != 0xfffffdfd)
+//            return ret;
+//    }
+//
+//    if (dev->vic_dev && dev->vic_dev->sd && dev->vic_dev->sd->ops->video) {
+//        pr_info("Starting VIC stream\n");
+//        ret = dev->vic_dev->sd->ops->video->s_stream(dev->vic_dev->sd, 1);
+//        if (ret && ret != 0xfffffdfd)
+//            return ret;
+//    }
+//
+//    if (dev->vin_dev && dev->vin_dev->sd && dev->vin_dev->sd->ops->video) {
+//        pr_info("Starting VIN stream\n");
+//        ret = dev->vin_dev->sd->ops->video->s_stream(dev->vin_dev->sd, 1);
+//        if (ret && ret != 0xfffffdfd)
+//            return ret;
+//    }
+
+
+
+//    dump_vic_irq_state(dev);
+
+    return 0;
+}
+
 int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, bool enable)
 {
     void __iomem *vic_regs = dev->reg_base + VIC_BASE;
@@ -4292,7 +4471,7 @@ int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, 
     int ret = 0;
 
     if (enable) {
-        spin_lock_irqsave(&dev->lock, flags);
+        spin_lock_irqsave(&dev->vic_dev->lock, flags);
 
         // Enable interrupts using known working registers
         writel(0xffffffff, isp_regs + 0xb0);  // IRQ Enable
@@ -4308,9 +4487,9 @@ int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, 
         dev->irq_enabled = 1;  // Mark as enabled
 
         unlock:
-                spin_unlock_irqrestore(&dev->lock, flags);
+                spin_unlock_irqrestore(&dev->vic_dev->lock, flags);
     } else {
-        spin_lock_irqsave(&dev->lock, flags);
+        spin_lock_irqsave(&dev->vic_dev->lock, flags);
 
 //        // Disable streaming first
 //        writel(0x0, isp_regs + ISP_STREAM_CTRL);
@@ -4321,7 +4500,7 @@ int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, 
 //        tx_vic_disable_irq(dev);  // Disable VIC IRQs
 //        tx_isp_disable_irq(dev);  // Disable ISP IRQs
 
-        spin_unlock_irqrestore(&dev->lock, flags);
+        spin_unlock_irqrestore(&dev->vic_dev->lock, flags);
     }
 
     verify_isp_state(dev);  // Add state verification after changes
@@ -4329,9 +4508,137 @@ int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, 
 }
 
 
+
+int tx_isp_setup_default_links(struct IMPISPDev *dev) {
+    int ret;
+
+    pr_info("Setting up default links\n");
+
+    // Link sensor output -> CSI input
+    if (dev->sensor_sd && dev->csi_dev && dev->csi_dev->sd) {
+        if (!dev->sensor_sd->ops || !dev->sensor_sd->ops->video ||
+            !dev->sensor_sd->ops->video->link_setup) {
+            pr_err("Sensor subdev missing required ops\n");
+            return -EINVAL;
+        }
+
+        pr_info("Setting up sensor -> CSI link\n");
+        ret = dev->sensor_sd->ops->video->link_setup(
+            &dev->sensor_sd->outpads[0],
+            &dev->csi_dev->sd->inpads[0],
+            TX_ISP_LINKFLAG_ENABLED
+        );
+        if (ret && ret != -ENOIOCTLCMD) {
+            pr_err("Failed to setup sensor->CSI link: %d\n", ret);
+            return ret;
+        }
+    }
+
+    // Link CSI output -> VIC input
+    if (dev->csi_dev && dev->csi_dev->sd && dev->vic_dev && dev->vic_dev->sd) {
+        if (!dev->csi_dev->sd->ops || !dev->csi_dev->sd->ops->video ||
+            !dev->csi_dev->sd->ops->video->link_setup) {
+            pr_err("CSI subdev missing required ops\n");
+            return -EINVAL;
+        }
+
+        pr_info("Setting up CSI -> VIC link\n");
+        ret = dev->csi_dev->sd->ops->video->link_setup(
+            &dev->csi_dev->sd->outpads[0],
+            &dev->vic_dev->sd->inpads[0],
+            TX_ISP_LINKFLAG_ENABLED
+        );
+        if (ret && ret != -ENOIOCTLCMD) {
+            pr_err("Failed to setup CSI->VIC link: %d\n", ret);
+            return ret;
+        }
+    }
+
+    // Link VIC outputs to DDR device if present
+    if (dev->vic_dev && dev->vic_dev->sd && dev->ddr_dev && dev->ddr_dev->sd) {
+        if (!dev->vic_dev->sd->ops || !dev->vic_dev->sd->ops->video ||
+            !dev->vic_dev->sd->ops->video->link_setup) {
+            pr_err("VIC subdev missing required ops\n");
+            return -EINVAL;
+        }
+
+        pr_info("Setting up VIC -> DDR link\n");
+        ret = dev->vic_dev->sd->ops->video->link_setup(
+            &dev->vic_dev->sd->outpads[0],
+            &dev->ddr_dev->sd->inpads[0],
+            TX_ISP_LINKFLAG_ENABLED
+        );
+        if (ret && ret != -ENOIOCTLCMD) {
+            pr_err("Failed to setup VIC->DDR link 0: %d\n", ret);
+            return ret;
+        }
+
+        // Link second VIC output if present
+        if (dev->vic_dev->sd->num_outpads > 1) {
+            pr_info("Setting up second VIC -> DDR link\n");
+            ret = dev->vic_dev->sd->ops->video->link_setup(
+                &dev->vic_dev->sd->outpads[1],
+                &dev->ddr_dev->sd->inpads[0],
+                TX_ISP_LINKFLAG_ENABLED
+            );
+            if (ret && ret != -ENOIOCTLCMD) {
+                pr_err("Failed to setup VIC->DDR link 1: %d\n", ret);
+                return ret;
+            }
+        }
+    }
+
+    pr_info("All default links set up successfully\n");
+    return 0;
+}
+//
+//void tx_vic_disable_irq(struct IMPISPDev *dev)
+//{
+//    void __iomem *vic_base = dev->reg_base + VIC_BASE;
+//
+//    // Disable VIC interrupts
+//    writel(0, vic_base + 0x93c);
+//    wmb();
+//}
+//
+//static void tx_vic_enable_irq(struct IMPISPDev *dev)
+//{
+//    void __iomem *vic_base = dev->reg_base + VIC_BASE;
+//    void __iomem *intc_base = ioremap(0x10001000, 0x1000);
+//
+//    if (!intc_base) {
+//        pr_err("Failed to map INTC\n");
+//        return;
+//    }
+//
+//    // Enable VIC interrupts
+//    writel(0x000033fb, vic_base + 0x93c);
+//    wmb();
+//
+//    // Configure INTC for VIC
+//    writel((1 << 30), intc_base + 0x0C); // Clear VIC mask bit
+//    wmb();
+//
+//    iounmap(intc_base);
+//}
+
+int tx_isp_video_link_stream(struct IMPISPDev *dev)
+{
+    void __iomem *csi_regs = dev->csi_dev->csi_regs;
+
+    pr_info("Setting up video link datapath\n");
+
+    // Report CSI status
+    u32 phy_state = readl(csi_regs + 0x14);
+    pr_info("CSI PHY state in link: 0x%08x\n", phy_state);
+
+    dev->csi_dev->state = TX_ISP_MODULE_RUNNING;
+    return 0;
+}
+
 static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __user *arg, struct file *file)
 {
-    struct i2c_client *client = dev->sensor_i2c_client; // Add this field to IMPISPDev
+    struct i2c_client *client = dev->sensor_i2c_client;
     struct sensor_reg_data reg_data;
     int ret = 0;
     uint8_t val = 0;
@@ -4348,7 +4655,6 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
         uint8_t val_h = 0, val_l = 0;
         struct i2c_client *client = ourISPdev->sensor_i2c_client;
 
-        // Try reading ID registers
         ret = isp_sensor_read_reg(client, 0x3307, &val_h);
         if (ret) {
             pr_err("Failed to read ID high byte\n");
@@ -4364,143 +4670,182 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
         pr_info("Sensor ID: 0x%02x%02x\n", val_h, val_l);
         return 0;
     }
+    case 0x8038564f:  // T23 sensor register write
+    case SENSOR_CMD_WRITE_REG: {
+        if (copy_from_user(&reg_data, arg, sizeof(reg_data)))
+            return -EFAULT;
+        ret = isp_sensor_write_reg(client, reg_data.reg, reg_data.val);
+        break;
+    }
+    case 0xc0385650:  // T23 sensor register read
+    case SENSOR_CMD_READ_REG: {
+        if (copy_from_user(&reg_data, arg, sizeof(reg_data)))
+            return -EFAULT;
+        ret = isp_sensor_read_reg(client, reg_data.reg, &val);
+        if (ret < 0)
+            return ret;
+        reg_data.val = val;
+        ret = copy_to_user(arg, &reg_data, sizeof(reg_data));
+        break;
+    }
 
-        case SENSOR_CMD_WRITE_REG: {
-            if (copy_from_user(&reg_data, arg, sizeof(reg_data)))
-                return -EFAULT;
-            ret = isp_sensor_write_reg(client, reg_data.reg, reg_data.val);
-            break;
-        }
+    case SENSOR_CMD_SET_GAIN: {
+        uint16_t gain;
+        if (get_user(gain, (uint16_t __user *)arg))
+            return -EFAULT;
+        ret = isp_sensor_write_reg(client, 0x3508, (gain >> 8) & 0xFF);
+        if (ret == 0)
+            ret = isp_sensor_write_reg(client, 0x3509, gain & 0xFF);
+        break;
+    }
 
-        case SENSOR_CMD_READ_REG: {
-            if (copy_from_user(&reg_data, arg, sizeof(reg_data)))
-                return -EFAULT;
-            ret = isp_sensor_read_reg(client, reg_data.reg, &val);
-            if (ret < 0)
-                return ret;
-            reg_data.val = val;
-            ret = copy_to_user(arg, &reg_data, sizeof(reg_data));
-            break;
-        }
-        case 0x80045612: // VIDIOC_STREAMON
-        {
-            pr_info("Sensor command: 0x%x\n", cmd);
-            pr_info("Sensor streamon\n");
+    case SENSOR_CMD_SET_EXP: {
+        uint32_t exp;
+        if (get_user(exp, (uint32_t __user *)arg))
+            return -EFAULT;
+        ret = isp_sensor_write_reg(client, 0x3500, (exp >> 12) & 0xFF);
+        if (ret == 0)
+            ret = isp_sensor_write_reg(client, 0x3501, (exp >> 4) & 0xFF);
+        if (ret == 0)
+            ret = isp_sensor_write_reg(client, 0x3502, (exp & 0x0F) << 4);
+        break;
+    }
 
-            if (file->private_data) {
-                struct isp_channel *chn = file->private_data;
-                if (chn && chn->queue) {
-                    mutex_lock(&chn->queue->lock);
-
-                    // Check state must be 3
-                    if (chn->state != 3) {
-                        pr_err("Invalid channel state %d for streaming\n", chn->state);
-                        mutex_unlock(&chn->queue->lock);
-                        return -EINVAL;
-                    }
-
-                    // Check not already streaming
-                    if (chn->queue->stream_state & 1) {
-                        pr_err("streamon: already streaming\n");
-                        mutex_unlock(&chn->queue->lock);
-                        return -EAGAIN;  // -16
-                    }
-
-                    // Start frame thread first
-                    ret = init_frame_thread(chn);
-                    if (ret) {
-                        mutex_unlock(&chn->queue->lock);
-                        return ret;
-                    }
-
-                    // If this is the first channel starting, enable ISP streaming
-                    if (atomic_inc_return(&streaming_channels) == 1) {
-                        ret = enable_isp_streaming(dev, file, 0, true);
-                        if (ret) {
-                            atomic_dec(&streaming_channels);
-                            mutex_unlock(&chn->queue->lock);
-                            return ret;
-                        }
-                    }
-
-                    chn->queue->stream_state |= 1;
-                    chn->state = 4;
-
-                    pr_info("Enabled streaming on channel %d\n", chn->channel_id);
-                    mutex_unlock(&chn->queue->lock);
-                }
-            }
-            return 0;
-        }
-        case VIDIOC_STREAMOFF:
-            pr_info("TODO Stream OFF requested\n");
-            return enable_isp_streaming(ourISPdev, file, 0, false);
-        case SENSOR_CMD_SET_GAIN: {
-            uint16_t gain;
-            if (get_user(gain, (uint16_t __user *)arg))
-                return -EFAULT;
-            // Convert gain to sensor specific register values
-            // This is sensor specific - adjust for SC2336
-            ret = isp_sensor_write_reg(client, 0x3508, (gain >> 8) & 0xFF);
-            if (ret == 0)
-                ret = isp_sensor_write_reg(client, 0x3509, gain & 0xFF);
-            break;
-        }
-
-        case SENSOR_CMD_SET_EXP: {
-            uint32_t exp;
-            if (get_user(exp, (uint32_t __user *)arg))
-                return -EFAULT;
-            // Convert exposure to sensor specific register values
-            // This is sensor specific - adjust for SC2336
-            ret = isp_sensor_write_reg(client, 0x3500, (exp >> 12) & 0xFF);
-            if (ret == 0)
-                ret = isp_sensor_write_reg(client, 0x3501, (exp >> 4) & 0xFF);
-            if (ret == 0)
-                ret = isp_sensor_write_reg(client, 0x3502, (exp & 0x0F) << 4);
-            break;
-        }
     case 0xc0045627: {
         int result_val;
-            // TODO
-        const char *sensor_name = "sc2336";  // This matches libimp's expectations
+        const char *sensor_name = "sc2336";
 
-        // Get the -1 value passed in
         if (copy_from_user(&result_val, (void __user *)arg, sizeof(result_val))) {
             pr_err("Failed to get result value\n");
             return -EFAULT;
         }
 
-        // Store the sensor name in our structure
         strlcpy(ourISPdev->sensor_name, sensor_name, SENSOR_NAME_SIZE);
-
         pr_info("Stored sensor name: %s\n", ourISPdev->sensor_name);
         return 0;
     }
+    case 0x800c56d6:  // T23 WDR buffer
     case 0x800856d7: {
         struct {
-            uint32_t buffer_data;  // User-provided buffer data
-            uint32_t size;         // Calculated size
+            uint32_t buffer_data;
+            uint32_t size;
         } wdr_params = {0};
 
-        // Ensure our global device structure is initialized
         if (!ourISPdev) {
             pr_err("ISP device not initialized\n");
             return -ENODEV;
         }
 
-        // Copy initial parameters from user
         if (copy_from_user(&wdr_params, (void __user *)arg, sizeof(wdr_params))) {
             pr_err("Failed to copy WDR parameters from user\n");
             return -EFAULT;
         }
 
-            pr_info("WDR buffer data: 0x%x\n", wdr_params.buffer_data);
+        pr_info("WDR buffer data: 0x%x\n", wdr_params.buffer_data);
+        break;
     }
+    case 0x80045612: { // VIDIOC_STREAMON for sensor
+        struct tx_isp_subdev *csi_sd = &dev->csi_dev->sd;
+        pr_info("Starting video stream on sensor\n");
 
-        default:
-            pr_err("Unknown sensor command: 0x%x\n", cmd);
-            return -EINVAL;
+        // 1. Setup I2C GPIO for sensor control
+        ret = configure_i2c_gpio(dev);
+        if (ret) {
+            pr_err("Failed to configure I2C GPIO: %d\n", ret);
+            return ret;
+        }
+
+        // 2. Initialize VIC hardware
+        ret = init_vic_control(dev);
+        if (ret) {
+            pr_err("Failed to initialize VIC: %d\n", ret);
+            goto err_disable_gpio;
+        }
+
+        // 3. Configure VIC streaming settings
+        ret = configure_vic_for_streaming(dev);
+        if (ret) {
+            pr_err("Failed to configure VIC: %d\n", ret);
+            goto err_disable_vic;
+        }
+
+        // 5. Then start sensor streaming
+        ret = tx_isp_video_s_stream(dev);
+        if (ret && ret != 0xfffffdfd) {
+            pr_err("Failed to start video stream: %d\n", ret);
+            goto err_disable_csi;
+        }
+
+        // 4. Enable CSI stream first
+        ret = tx_isp_csi_s_stream(dev->csi_dev, 1);
+        if (ret) {
+            pr_err("Failed to start CSI streaming: %d\n", ret);
+            goto err_disable_vic;
+        }
+
+        // Small delay to let CSI stabilize
+        msleep(5);
+
+        // 6. Setup datapath links
+        ret = tx_isp_video_link_stream(dev);
+        if (ret) {
+            pr_err("Failed to setup video links: %d\n", ret);
+            goto err_disable_sensor;
+        }
+
+
+        dump_irq_info();
+
+        // 7. Finally enable interrupts
+        // tx_vic_enable_irq(dev);
+
+        dump_csi_registers(dev->csi_dev);
+
+        pr_info("Video streaming started successfully\n");
+        return 0;
+
+        err_disable_vic:
+            // cleanup_vic(dev);
+        err_disable_csi:
+            tx_isp_csi_s_stream(dev->csi_dev, 0);
+        err_disable_sensor:
+            //sensor_s_stream(dev->sensor, 0); // TODO
+        err_disable_gpio:
+            // cleanup_i2c_gpio(dev);
+        return ret;
+    }
+    case 0x80045613: { // VIDIOC_STREAMOFF for sensor
+        struct tx_isp_subdev *csi_sd = &dev->csi_dev->sd;
+        pr_info("Stopping video stream\n");
+
+        // Disable interrupts first
+        //tx_isp_disable_interrupts(dev);
+
+        // Stop CSI streaming
+        ret = csi_s_stream(csi_sd, 0);
+        if (ret) {
+            pr_err("Failed to stop CSI streaming: %d\n", ret);
+            return ret;
+        }
+
+        // Disable datapath links
+        ret = tx_isp_video_link_stream(dev);
+        if (ret) {
+            pr_err("Failed to disable video links: %d\n", ret);
+        }
+
+        // Disable VIC streaming
+        //ret = disable_vic_streaming(dev);
+//        if (ret) {
+//            pr_err("Failed to disable VIC streaming: %d\n", ret);
+//        }
+
+        pr_info("Video streaming stopped successfully\n");
+        return 0;
+    }
+    default:
+        pr_err("Unknown sensor command: 0x%x\n", cmd);
+        return -EINVAL;
     }
 
     return ret;
@@ -4542,7 +4887,7 @@ static int tx_isp_release(struct inode *inode, struct file *file)
 
         // Free buffer memory
         if (chn->queue->bufs) {
-            for (int j = 0; j < chn->queue->buf_count; j++) {
+            for (int j = 0; j < chn->queue->buffer_count; j++) {
                 buf = chn->queue->bufs[j];
                 if (buf) {
                     // Clear lists first
@@ -4566,7 +4911,7 @@ static int tx_isp_release(struct inode *inode, struct file *file)
         }
 
         // Reset queue state
-        chn->queue->buf_count = 0;
+        chn->queue->buffer_count = 0;
         chn->queue->memory_type = 0;
         chn->queue->stream_state = 0;
         INIT_LIST_HEAD(&chn->queue->ready_list);
@@ -4579,7 +4924,7 @@ static int tx_isp_release(struct inode *inode, struct file *file)
                 "  Buffers freed: %d\n"
                 "  Memory type: %d\n",
                 chn->channel_id,
-                chn->queue->buf_count,
+                chn->queue->buffer_count,
                 chn->queue->memory_type);
     }
 
@@ -5912,6 +6257,342 @@ static int tx_isp_vin_probe(struct platform_device *pdev)
     return ret;
 }
 
+void system_irq_func_set(int irq_num, irq_handler_t handler)
+{
+    if (irq_num < 32)
+        irq_func_cb[irq_num] = handler;
+}
+
+static void dump_intc_state(void)
+{
+    void __iomem *intc = ioremap(0x10001000, 0x100);
+    if (!intc)
+        return;
+
+    pr_info("INTC State:\n");
+    pr_info("  Mask: 0x%08x\n", readl(intc + 0x04));  // INTC mask
+    pr_info("  Pending: 0x%08x\n", readl(intc + 0x10));  // Pending
+
+    iounmap(intc);
+}
+
+
+// Matching the OEM handler structure
+static irqreturn_t tx_vic_irq_handler(int irq, void *dev_id)
+{
+    struct IMPISPDev *dev = dev_id;
+    void __iomem *vic_regs = dev->reg_base + VIC_BASE;
+    u32 status = readl(vic_regs + 0xb4);
+    u32 dma_status = readl(vic_regs + 0x84);
+
+    pr_info("VIC IRQ: status=0x%08x dma=0x%08x\n",
+            status, dma_status);
+
+    // Clear status
+    if (status)
+        writel(status, vic_regs + 0xb4);
+    if (dma_status)
+        writel(dma_status, vic_regs + 0x84);
+    wmb();
+
+    return IRQ_HANDLED;
+}
+
+// Add threaded handler
+static irqreturn_t tx_isp_thread_handler(int irq, void *dev_id)
+{
+    struct IMPISPDev *dev = dev_id;
+    // Handle processing that can sleep
+    return IRQ_HANDLED;
+}
+
+
+static void tx_vic_process_frame(struct IMPISPDev *dev)
+{
+    pr_info("VIC frame processing\n");
+    // Read VIC status registers
+    void __iomem *vic_regs = dev->reg_base + VIC_BASE;
+    u32 status = readl(vic_regs + 0x1e0);
+    u32 status2 = readl(vic_regs + 0x1e4);
+
+    // Clear status
+    writel(status, vic_regs + 0x1f0);
+    writel(status2, vic_regs + 0x1f4);
+
+    // Process frame data based on status
+    if (status & BIT(0)) {  // Frame done
+        dev->frame_count++;
+        // Handle frame completion
+    }
+}
+
+
+// For Linux 3.10 completion handling
+static inline void reinit_completion(struct completion *x)
+{
+    init_completion(x);
+}
+
+
+// ISP processing thread similar to OEM's isp_fw_process
+static int tx_isp_fw_process(void *data)
+{
+    struct IMPISPDev *dev = data;
+
+    while (!kthread_should_stop()) {
+        // Wait for interrupt events
+        wait_for_completion_interruptible(&dev->frame_complete);
+
+        // Process received frames
+        if (dev->vic_processing) {
+            // Handle VIC frame data
+            tx_vic_process_frame(dev);
+        }
+
+        // Reset completion for next frame
+        reinit_completion(&dev->frame_complete);
+    }
+
+    return 0;
+}
+
+struct tx_isp_irq_handler {
+    int irq_number;
+    void (*enable)(struct tx_isp_irq_handler *);
+    void (*disable)(struct tx_isp_irq_handler *);
+    spinlock_t lock;
+    void *dev_id;
+};
+
+static void tx_isp_enable_irq(struct tx_isp_irq_handler *handler)
+{
+    if (handler->irq_number)
+        enable_irq(handler->irq_number);
+}
+
+static void tx_isp_disable_irq(struct tx_isp_irq_handler *handler)
+{
+    if (handler->irq_number)
+        disable_irq(handler->irq_number);
+}
+
+int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_handler *handler)
+{
+    int ret;
+    int irq = 37;
+
+    if (!pdev || !handler) {
+        pr_err("%s: invalid parameters\n", __func__);
+        return -EINVAL;
+    }
+
+    spin_lock_init(&handler->lock);
+
+    ret = request_threaded_irq(irq,
+                             tx_isp_irq_handler,  // ISP specific handler
+                             tx_isp_threaded_irq_handler,
+                             IRQF_SHARED,
+                             "isp-m0",  // ISP specific name
+                             handler->dev_id);
+
+    if (ret) {
+        pr_err("Failed to request ISP IRQ %d: %d\n", irq, ret);
+        handler->irq_number = 0;
+        return ret;
+    }
+
+    handler->enable = tx_isp_enable_irq;
+    handler->disable = tx_isp_disable_irq;
+    handler->irq_number = irq;
+
+    handler->disable(handler);
+    return 0;
+}
+
+
+
+static irqreturn_t tx_vic_threaded_irq_handler(int irq, void *data)
+{
+    struct IMPISPDev *dev = data;
+    struct vic_device *vic_dev = dev->vic_dev;
+    int ch = 0;
+
+    u32 buf_size = dev->sensor_width * dev->sensor_height;
+    buf_size <<= 1;
+
+    if (vic_dev->mdma_en == 0) {
+        if (ch == 0 && vic_mdma_ch0_sub_get_num > 0) {
+            u32 next_idx = (vic_mdma_ch0_set_buff_index + 1) % 5;
+            u32 dma_addr = readl(vic_dev->regs + VIC_DMA_ADDR +
+                               (vic_mdma_ch0_set_buff_index << 2));
+
+            vic_mdma_ch0_set_buff_index = next_idx;
+            writel(dma_addr + buf_size, vic_dev->regs + VIC_DMA_ADDR +
+                  (next_idx << 2));
+
+            vic_mdma_ch0_sub_get_num--;
+        }
+
+        if (vic_mdma_ch0_sub_get_num == 0) {
+            complete(&vic_dev->frame_complete);
+        }
+    }
+
+    return IRQ_HANDLED;
+}
+
+
+int tx_vic_request_irq(struct platform_device *pdev, struct tx_isp_irq_handler *handler)
+{
+    int ret;
+    int irq = 38;
+    void __iomem *intc_base;
+    void __iomem *vic_regs = ourISPdev->reg_base + VIC_BASE;
+    u32 mask;
+
+    if (!pdev || !handler) {
+        pr_err("%s: invalid parameters\n", __func__);
+        return -EINVAL;
+    }
+
+    if (!handler->dev_id) {
+        pr_err("Handler dev_id is NULL\n");
+        return -EINVAL;
+    }
+
+    // Setup INTC first
+    intc_base = ioremap(0x10001000, 0x1000);
+    if (!intc_base) {
+        pr_err("Failed to map INTC\n");
+        return -ENOMEM;
+    }
+
+    // Read initial state
+    mask = readl(intc_base + 0x04);
+    pr_info("Initial INTC IMR: %08x\n", mask);
+
+    // Clear mask bit for VIC (bit 30)
+    mask &= ~BIT(30);
+    writel(mask, intc_base + 0x04);
+    wmb();
+
+    pr_info("INTC IMR after unmasking: %08x\n", readl(intc_base + 0x04));
+    pr_info("INTC ISR: %08x\n", readl(intc_base + 0x00));
+
+    iounmap(intc_base);
+
+    spin_lock_init(&handler->lock);
+
+    pr_info("Requesting VIC IRQ %d with dev_id=%p\n", irq, handler->dev_id);
+
+    ret = request_threaded_irq(irq, tx_vic_irq_handler, NULL,
+                             IRQF_SHARED,
+                             "isp-w02",
+                             handler->dev_id);
+    // In probe after IRQ request
+    if (ret == 0) {
+        // Enable test interrupt bit
+        writel(0x1, vic_regs + 0x93c);  // Enable bit 0
+        wmb();
+
+        // Set the corresponding status bit
+        writel(0x1, vic_regs + 0xb4);   // Set bit 0
+        wmb();
+
+        msleep(100);
+
+        pr_info("Interrupt test - status: 0x%08x irqen: 0x%08x\n",
+                readl(vic_regs + 0xb4),
+                readl(vic_regs + 0x93c));
+    }
+
+    pr_info("VIC IRQ %d registered successfully with handler=%p\n",
+            irq, handler);
+
+    handler->enable = tx_isp_enable_irq;
+    handler->disable = tx_isp_disable_irq;
+    handler->irq_number = irq;
+
+    handler->enable(handler);
+
+    return 0;
+}
+
+
+
+int vic_s_stream(struct tx_isp_subdev *sd, int enable)
+{
+    struct vic_device *vic = tx_isp_get_subdevdata(sd);
+    struct IMPISPDev *dev = ourISPdev;
+    int ret;
+
+    pr_info("VIC stream %s\n", enable ? "on" : "off");
+
+    if (enable) {
+        // Enable VIC IRQ handling before starting stream
+        if (!vic->irq_enabled) {
+            // Clear any pending
+            writel(0xFFFFFFFF, vic->regs + 0xb4);
+            wmb();
+
+            // Enable VIC interrupts
+            writel(0x000033fb, vic->regs + 0x93c);
+            wmb();
+
+            vic->irq_enabled = 1;
+            // Call parent's interrupt enable if needed
+            if (vic->irq_handler)
+                vic->irq_handler(vic->irq_priv);
+        }
+
+        // Continue stream enable
+        ret = tx_isp_video_link_stream(dev);
+        if (ret)
+            return ret;
+
+    } else {
+        if (vic->irq_enabled) {
+            // Disable interrupts
+            writel(0, vic->regs + 0x93c);
+            wmb();
+
+            vic->irq_enabled = 0;
+            if (vic->irq_disable)
+                vic->irq_disable(vic->irq_priv);
+        }
+    }
+
+    return 0;
+}
+
+
+static void tx_isp_disable_interrupts(struct IMPISPDev *dev)
+{
+    void __iomem * intc = ioremap(T31_INTC_BASE, 0x100);
+    void __iomem * vic_base = ioremap(VIC_BASE, 0x1000);
+    void __iomem * isp_base = ioremap(ISP_BASE, 0x1000);
+
+    // 1. Mask interrupts at INTC first
+    writel(BIT(5) | BIT(6), intc + INTC_IMSR2);
+
+    // 2. Disable peripheral interrupts
+    writel(0, vic_base + VIC_IRQ_ENABLE);
+    writel(0, isp_base + ISP_INT_MASK);
+
+    // 3. Clear any pending interrupts
+    u32 val = readl(vic_base + VIC_IRQ_STATUS);
+    if (val)
+        writel(val, vic_base + VIC_IRQ_CLEAR);
+
+    val = readl(isp_base + ISP_INT_STATUS);
+    if (val)
+        writel(val, isp_base + ISP_INT_CLEAR);
+
+    // 4. Unmap registers
+    iounmap(intc);
+    iounmap(vic_base);
+    iounmap(isp_base);
+}
 
 /**
  * tx_isp_ioctl - IOCTL handler for ISP driver
@@ -5949,6 +6630,45 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         return -EINVAL;
     }
 
+
+    void __iomem *csi_base;
+    csi_base = dev->csi_dev->csi_regs;
+
+    if (dev->csi_dev && dev->csi_dev->csi_regs) {
+        csi_base = dev->csi_dev->csi_regs;
+        u32 mask1 = readl(csi_base + 0x28);
+        u32 mask2 = readl(csi_base + 0x2c);
+        u32 err1 = readl(csi_base + 0x20);
+        u32 err2 = readl(csi_base + 0x24);
+
+        pr_info("CSI interrupt state now:\n"
+                "  MASK1: 0x%08x\n"
+                "  MASK2: 0x%08x\n"
+                "  ERR1: 0x%08x\n"
+                "  ERR2: 0x%08x\n",
+                mask1, mask2, err1, err2);
+
+        if (err1) {
+            pr_info("CSI ERR1 bits set:\n");
+            if (err1 & BIT(0)) pr_info("  - SOT sync error\n");
+            if (err1 & BIT(1)) pr_info("  - SOT error\n");
+            if (err1 & BIT(2)) pr_info("  - Frame sync error\n");
+            if (err1 & BIT(3)) pr_info("  - Frame format error\n");
+            if (err1 & BIT(4)) pr_info("  - CRC error\n");
+            if (err1 & BIT(5)) pr_info("  - Header ECC error\n");
+            if (err1 & BIT(6)) pr_info("  - Line sync error\n");
+        }
+
+        if (err2) {
+            pr_info("CSI ERR2 bits set:\n");
+            if (err2 & BIT(0)) pr_info("  - PHY sync error\n");
+            if (err2 & BIT(1)) pr_info("  - Overflow error\n");
+            if (err2 & BIT(2)) pr_info("  - Reserved error\n");
+        }
+    }
+
+
+
     switch (cmd) {
     case VIDIOC_INIT_ENCODER:
         pr_info("Initializing encoder subsystem\n");
@@ -5971,7 +6691,7 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
         // Do sensor reset sequence
         pr_info("Initial sensor reset...\n");
-        //sensor_hw_reset(ourISPdev);
+        sensor_hw_reset(ourISPdev);
 
         ret = detect_sensor_type(ourISPdev);
         if (ret) {
@@ -5982,7 +6702,7 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
     pr_info("Sensor registered: %s\n", ourISPdev->sensor_name);
     return 0;
   }
-  case VIDIOC_GET_SENSOR_ENUMERATION: {
+  case VIDIOC_GET_SENSOR_ENUMERATION: {  // 0xc050561a
     struct sensor_list_req {
           int idx;    // Input index
           char name[32];  // Output name
@@ -6023,6 +6743,13 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             return -ENODEV;
         }
 
+        if (dev->sensor_sd && dev->sensor_sd->ops && dev->sensor_sd->ops->core) {
+            pr_info("Initializing sensor core\n");
+            ret = dev->sensor_sd->ops->core->g_chip_ident(dev->sensor_sd, dev->chip);
+            if (ret && ret != 0xfffffdfd)
+                return ret;
+        }
+
         // Write back 1 (not -1) to indicate sensor is present
         if (put_user(1, result)) {
             pr_err("Failed to update sensor result\n");
@@ -6032,15 +6759,137 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         pr_info("Sensor info request: returning success (1)\n");
         return 0;
     }
-    case VIDIOC_ENABLE_STREAM: { // 0x800456d2
-        pr_info("Handling ISP stream enable request\n");
+    case 0x800456d2: { // VIDIOC_ENABLE_STREAM
+        int ret;
+        pr_info("Enabling video link stream\n");
 
-        // Maybe set a flag indicating streaming is allowed
-        ourISPdev->streaming_enabled = true;
+        ret = tx_isp_video_link_stream(dev);
+        if (ret) {
+            pr_err("Failed to enable link stream\n");
+            return ret;
+        }
 
+        pr_info("Video link stream enabled\n");
         return 0;
     }
-    case 0x800856d5: { //// TX_ISP_SET_BUF 0x800856d5
+//    case 0x800c56d5: { // TX_ISP_SET_BUF 0x800856d5
+//        struct imp_buffer_info local_buf_info;
+//        struct isp_channel *chn;
+//        size_t frame_size;
+//        u8 *vbm_entry;
+//
+//        pr_info("Handling TX_ISP_SET_BUF\n");
+//
+//        if (!ourISPdev) {
+//            pr_err("ISP device not initialized\n");
+//            return -EINVAL;
+//        }
+//
+//        pr_info("Copying buffer info from user address %lx\n", arg);
+////
+////        if (!arg || (unsigned long)arg >= 0xfffff001) {
+////            pr_err("Invalid user pointer\n");
+////            return -EFAULT;
+////        }
+////
+////        if (copy_from_user(&local_buf_info, (void __user *)arg, sizeof(local_buf_info))) {
+////            pr_err("Failed to copy from user\n");
+////            return -EFAULT;
+////        }
+////
+////        pr_info("Buffer info: method=0x%x phys=0x%llx size=%zu\n",
+////                local_buf_info.method, local_buf_info.phys_addr,
+////                local_buf_info.size);
+////
+////        // Magic number handshake - maintain compatibility
+////        if (local_buf_info.method == 0x0) {
+////            // Initial phase - tell userspace we support DMA
+////            local_buf_info.method = ISP_ALLOC_DMA;
+////            local_buf_info.phys_addr = 0x1;
+////            local_buf_info.size = 0x1;
+////            local_buf_info.virt_addr = (unsigned long)ourISPdev->dma_buf;
+////            local_buf_info.flags = 0;
+////
+////            if (copy_to_user((void __user *)arg, &local_buf_info, sizeof(local_buf_info)))
+////                return -EFAULT;
+////            return 0;
+////        }
+////
+////        // Second phase - actual buffer setup
+////        if (local_buf_info.phys_addr == 0x1) {
+////            chn = &ourISPdev->channels[0];
+////
+////
+////            if (!chn) {
+////                pr_err("No frame channel initialized\n");
+////                return -EINVAL;
+////            }
+////
+////            // Calculate frame size
+////            frame_size = ALIGN((chn->width * chn->height * 3) / 2, 4096);
+////
+////            // Setup DMA buffer if not already done
+////            if (!chn->dma_addr) {
+////                int ret = setup_dma_buffer(chn);
+////                if (ret)
+////                    return ret;
+////            }
+////
+////            // Create VBM entry for compatibility
+////            vbm_entry = kzalloc(0x80, GFP_KERNEL);
+////            if (!vbm_entry)
+////                return -ENOMEM;
+////
+////            // Setup VBM entry to point to our DMA buffer
+////            struct vbm_entry_flags {
+////                u32 state;
+////                u32 ready;
+////                u64 sequence;
+////                u64 phys_addr;
+////                void *virt;
+////                u32 size;
+////            } __packed;
+////
+////            struct vbm_entry_flags *flags = (void *)(vbm_entry + 0x48);
+////            flags->state = 0;
+////            flags->ready = 1;
+////            flags->sequence = 0;
+////            flags->phys_addr = chn->dma_addr;  // Use our DMA address
+////            flags->virt = chn->buf_base;       // Use our DMA virtual address
+////            flags->size = frame_size;
+////
+////            // Store entry
+////            if (!chn->vbm_table) {
+////                chn->vbm_table = kzalloc(sizeof(void *), GFP_KERNEL);
+////                if (!chn->vbm_table) {
+////                    kfree(vbm_entry);
+////                    return -ENOMEM;
+////                }
+////            }
+////            chn->vbm_table[0] = vbm_entry;
+////            chn->state |= BIT(0);
+////
+////            // Return info about our DMA buffer
+////            local_buf_info.method = ISP_ALLOC_DMA;
+////            local_buf_info.phys_addr = chn->dma_addr;
+////            local_buf_info.size = frame_size;
+////            local_buf_info.virt_addr = (unsigned long)chn->buf_base;
+////            local_buf_info.flags = 0;
+////
+////            if (copy_to_user((void __user *)arg, &local_buf_info, sizeof(local_buf_info))) {
+////                kfree(vbm_entry);
+////                return -EFAULT;
+////            }
+////
+////            pr_info("DMA buffer setup: phys=%pad virt=%p size=%zu\n",
+////                    &chn->dma_addr, chn->buf_base, frame_size);
+//
+//            return 0;
+//
+////        pr_err("Invalid buffer setup sequence\n");
+////        return -EINVAL;
+//    }
+    case 0x800856d5: { // TX_ISP_SET_BUF 0x800856d5
         struct imp_buffer_info local_buf_info;
         struct isp_channel *chn;
         size_t frame_size;
@@ -6171,19 +7020,19 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             return -EFAULT;
         }
 
-        // Calculate stride - aligned to 8 bytes ((width + 7) >> 3) << 3
-        stride = ALIGN(ourISPdev->width, 8);
-        size = stride * ourISPdev->height;
-
-        // Setup DMA registers
-        writel(local_buf_info.phys_addr, isp_regs + 0x7820);  // Base address
-        writel(stride, isp_regs + 0x7824);                    // Stride
-        writel(size + local_buf_info.phys_addr, isp_regs + 0x7828); // Next buffer
-        writel(stride, isp_regs + 0x782c);                    // Next stride
-
-        // Setup secondary buffers
-        writel(size + local_buf_info.phys_addr, isp_regs + 0x7830);
-        writel(((ALIGN(ourISPdev->width + 0x1f, 32) + 7) >> 3) << 3, isp_regs + 0x7834);
+//        // Calculate stride - aligned to 8 bytes ((width + 7) >> 3) << 3
+//        stride = ALIGN(ourISPdev->width, 8);
+//        size = stride * ourISPdev->height;
+//
+//        // Setup DMA registers
+//        writel(local_buf_info.phys_addr, isp_regs + 0x7820);  // Base address
+//        writel(stride, isp_regs + 0x7824);                    // Stride
+//        writel(size + local_buf_info.phys_addr, isp_regs + 0x7828); // Next buffer
+//        writel(stride, isp_regs + 0x782c);                    // Next stride
+//
+//        // Setup secondary buffers
+//        writel(size + local_buf_info.phys_addr, isp_regs + 0x7830);
+//        writel(((ALIGN(ourISPdev->width + 0x1f, 32) + 7) >> 3) << 3, isp_regs + 0x7834);
 
 //        // Configure additional buffer regions
 //        if (isp_memopt) {
@@ -6211,11 +7060,11 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 //            writel(extra_stride, isp_regs + 0x7854);
 //        }
 
-        // Final configuration
-        writel(0, isp_regs + 0x7838);
-        writel(1, isp_regs + 0x783c);
+//        // Final configuration
+//        writel(0, isp_regs + 0x7838);
+//        writel(1, isp_regs + 0x783c);
 
-        pr_info("ISP DMA registers configured\n");
+        pr_info("TODO ISP DMA registers configured\n");
         return 0;
     }
     case VIDIOC_SET_BUF_INFO: {
@@ -6425,6 +7274,7 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         }
 
         dev->link_state.current_link = link_config;
+
         pr_info("Link setup completed successfully\n");
         return 0;
     }
@@ -6491,9 +7341,8 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         break;
     }
     case 0x800456d3: {  // Disable links
-        pr_info("TODO Disabling ISP links\n");
-        //dump_csi_reg(dev);
-    // TODO
+        pr_info("Disabling ISP links\n");
+        tx_isp_disable_interrupts(ourISPdev);
         return 0;
     }
     case 0x800456d1: {  // Destroy links
@@ -6566,8 +7415,11 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
       // TODO: Configure ISP cropping
       break;
   }
+    case 0x800c56d6:  // T23 WDR buffer
     case 0x800856d7:
     case 0xc0045627:
+    case 0x8038564f:  // T23 sensor register write
+    case 0xc0385650:  // T23 sensor register read
     case SENSOR_CMD_READ_ID:
     case SENSOR_CMD_WRITE_REG:
     case SENSOR_CMD_READ_REG:
@@ -6579,6 +7431,7 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         pr_info("Sensor command: 0x%x\n", cmd);
         ret = handle_sensor_ioctl(ourISPdev, cmd, argp, file);
         break;
+    case 0x805456c1:   // T23 sensor register
     case 0x805056c1: { // tx_isp_sensor_register_sensor
         struct sensor_list_req {
             char name[0x50];  // Based on the 0x50 size buffer in OEM code
@@ -6643,13 +7496,13 @@ static int tx_isp_mmap(struct file *filp, struct vm_area_struct *vma) {
     return 0;
 }
 
-//static const struct v4l2_file_operations isp_v4l2_fops = {
-//    .owner          = THIS_MODULE,
-//    .open           = tx_isp_open,
-//    .release        = tx_isp_release,
-//    .unlocked_ioctl = tx_isp_ioctl,
-//    .mmap = tx_isp_mmap,
-//};
+static const struct v4l2_file_operations isp_v4l2_fops = {
+    .owner          = THIS_MODULE,
+    .open           = tx_isp_open,
+    .release        = tx_isp_release,
+    .unlocked_ioctl = tx_isp_ioctl,
+    .mmap = tx_isp_mmap,
+};
 
 
 /* Configure DEIR control registers */
@@ -7027,7 +7880,7 @@ static int framechan_open(struct inode *inode, struct file *file)
     chn->pad.index = channel;
     init_pad_event_handling(&chn->pad, fs_pad_event_handler);
 
-    uint32_t frame_offset = ALIGN(channel * chn->buf_size * chn->buf_count, 32);
+    uint32_t frame_offset = ALIGN(channel * chn->buf_size * chn->buffer_count, 32);
     dma_addr_t buffer_start = ALIGN(dev->dma_addr + base_offset, 32);
 
     chn->buf_base = (void *)dev->dma_addr + base_offset + frame_offset;
@@ -7067,7 +7920,7 @@ static int framechan_qbuf(struct isp_channel *chn, unsigned long arg)
     if (copy_from_user(&v4l2_buf, (void __user *)arg, sizeof(v4l2_buf)))
         return -EFAULT;
 
-    if (v4l2_buf.index >= chn->queue->buf_count) {
+    if (v4l2_buf.index >= chn->queue->buffer_count) {
         pr_err("Invalid buffer index %d\n", v4l2_buf.index);
         return -EINVAL;
     }
@@ -7543,6 +8396,27 @@ void test_active_regs(void) {
     iounmap(isp_base);
 }
 
+void dump_interrupt_status(struct IMPISPDev *dev) {
+    void __iomem *intc_base = ioremap(T31_INTC_BASE, 0x100);
+    void __iomem *vic_regs = dev->reg_base + VIC_BASE;
+
+    // INTC status
+    pr_info("INTC Status:\n");
+    pr_info("  ISR: 0x%08x\n", readl(intc_base + ISRn));
+    pr_info("  IMR: 0x%08x\n", readl(intc_base + ICMRn));
+    pr_info("  IPR: 0x%08x\n", readl(intc_base + IPMRn));  // Changed IPRn to IPMRn
+
+    // VIC status
+    pr_info("VIC Status:\n");
+    pr_info("  Control: 0x%08x\n", readl(vic_regs + 0x0));
+    pr_info("  Status: 0x%08x\n", readl(vic_regs + 0xb4));
+    pr_info("  Status2: 0x%08x\n", readl(vic_regs + 0xb8));
+    pr_info("  DMA Status: 0x%08x\n", readl(vic_regs + 0x84));
+    pr_info("  IRQ Status: 0x%08x\n", readl(vic_regs + 0x93c));
+
+    iounmap(intc_base);
+}
+
 static int framechan_dqbuf(struct isp_channel *chn, unsigned long arg)
 {
     struct v4l2_buffer v4l2_buf;
@@ -7605,6 +8479,8 @@ static int framechan_dqbuf(struct isp_channel *chn, unsigned long arg)
         //dump_csi_reg(ourISPdev);
         pr_info("Ch%d DQBUF: returned buffer %d seq=%d\n",
                 chn->channel_id, vbuf->index, v4l2_buf.sequence);
+
+        dump_interrupt_status(ourISPdev);
 
         ret = 0;
     } else {
@@ -7910,7 +8786,7 @@ static int framechan_reqbufs(struct isp_channel *chn, unsigned long arg)
 
     // Clean up existing buffers if any
     if (queue->bufs) {
-        for (i = 0; i < queue->buf_count; i++) {
+        for (i = 0; i < queue->buffer_count; i++) {
             if (queue->bufs[i]) {
                 // Remove from any lists it might be on
                 if (!list_empty(&queue->bufs[i]->list))
@@ -7927,7 +8803,7 @@ static int framechan_reqbufs(struct isp_channel *chn, unsigned long arg)
         }
         kfree(queue->bufs);
         queue->bufs = NULL;
-        queue->buf_count = 0;
+        queue->buffer_count = 0;
     }
 
     // Store VBM info from request
@@ -8016,7 +8892,7 @@ static int framechan_reqbufs(struct isp_channel *chn, unsigned long arg)
 
     // Update queue with new buffers
     queue->bufs = new_bufs;
-    queue->buf_count = req.count;
+    queue->buffer_count = req.count;
     queue->memory_type = req.memory;
 
     // Initialize lists
@@ -8166,6 +9042,89 @@ static int framechan_get_frame_status(struct isp_channel *chn, unsigned long arg
     return 0;
 }
 
+static int handle_framechan_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __user *arg, struct file *file)
+{
+    int ret = 0;
+    struct isp_channel *chn;
+
+    if (!file || !file->private_data) {
+        pr_err("No channel data in file\n");
+        return -EINVAL;
+    }
+
+    chn = file->private_data;
+
+    switch (cmd) {
+    case 0x80045612: // VIDIOC_STREAMON  0x80045612
+        pr_info("Framechan Streamon command: 0x%x\n", cmd);
+
+        mutex_lock(&chn->queue->lock);
+
+        // Check state must be 3
+        if (chn->state != 3) {
+            pr_err("Invalid channel state %d for streaming\n", chn->state);
+            mutex_unlock(&chn->queue->lock);
+            return -EINVAL;
+        }
+
+        // Check not already streaming
+        if (chn->queue->stream_state & 1) {
+            pr_err("streamon: already streaming\n");
+            mutex_unlock(&chn->queue->lock);
+            return -EAGAIN;
+        }
+
+        // Enable frame queue
+        chn->queue->stream_state |= 1;
+        chn->state = 4;
+
+        // Start frame processing thread
+        ret = init_frame_thread(chn);
+        if (ret) {
+            pr_err("Failed to start frame thread: %d\n", ret);
+            chn->queue->stream_state &= ~1;
+            chn->state = 3;
+            mutex_unlock(&chn->queue->lock);
+            return ret;
+        }
+
+        pr_info("Enabled streaming on channel %d\n", chn->channel_id);
+        mutex_unlock(&chn->queue->lock);
+        return 0;
+
+    case VIDIOC_STREAMOFF:
+        pr_info("Frame channel streamoff requested\n");
+        mutex_lock(&chn->queue->lock);
+
+        if (!(chn->queue->stream_state & 1)) {
+            pr_info("Stream already off\n");
+            mutex_unlock(&chn->queue->lock);
+            return 0;
+        }
+
+        // Stop streaming
+        chn->queue->stream_state &= ~1;
+        chn->state = 3;
+
+        // Stop frame thread
+        if (chn->frame_thread) {
+            kthread_stop(chn->frame_thread);
+            chn->frame_thread = NULL;
+        }
+
+        mutex_unlock(&chn->queue->lock);
+        return 0;
+
+    // Handle other frame channel specific commands...
+
+    default:
+        pr_err("Unknown frame channel command: 0x%x\n", cmd);
+        return -EINVAL;
+    }
+
+    return ret;
+}
+
 /***
 0xc07056c3 - VIDIOC_S_FMT - Set format
 0xc0145608 - VIDIOC_REQBUFS - Request buffers
@@ -8275,7 +9234,7 @@ static long framechan_ioctl(struct file *file, unsigned int cmd, unsigned long a
     }
     case 0x80045612 : // VIDIOC_STREAMON
         pr_info("Framechan Streamon command: 0x%x\n", cmd);
-        ret = handle_sensor_ioctl(ourISPdev, cmd, (void __user *)arg, file);
+        ret = handle_framechan_ioctl(ourISPdev, cmd, (void __user *)arg, file);
         break;
     default:
         pr_info("Unhandled ioctl cmd: 0x%x\n", cmd);
@@ -8364,7 +9323,7 @@ static int framechan_release(struct inode *inode, struct file *file)
 
     // Free buffers
     if (chn->queue && chn->queue->bufs) {
-        for (i = 0; i < chn->queue->buf_count; i++) {
+        for (i = 0; i < chn->queue->buffer_count; i++) {
             buf = chn->queue->bufs[i];
             if (buf) {
                 if (buf->meta) {
@@ -8376,7 +9335,7 @@ static int framechan_release(struct inode *inode, struct file *file)
         }
         kfree(chn->queue->bufs);
         chn->queue->bufs = NULL;
-        chn->queue->buf_count = 0;
+        chn->queue->buffer_count = 0;
     }
 
     // Clear VMA reference
@@ -8700,6 +9659,13 @@ static int register_isp_subdevices(struct IMPISPDev *dev) {
         goto err_unregister_core;
     }
 
+    // Finally set up default links
+    ret = tx_isp_setup_default_links(dev);
+    if (ret) {
+        pr_err("Failed to setup default links: %d\n", ret);
+        return ret;
+    }
+
     dev_info(dev->dev, "ISP subdevices registered successfully\n");
     return 0;
 
@@ -8715,36 +9681,6 @@ err_unregister_vic:
 }
 
 
-static irqreturn_t tx_vic_threaded_irq_handler(int irq, void *data)
-{
-    struct IMPISPDev *dev = data;
-    struct vic_device *vic_dev = dev->vic_dev;
-    int ch = 0;
-
-    u32 buf_size = dev->sensor_width * dev->sensor_height;
-    buf_size <<= 1;
-
-    if (vic_dev->mdma_en == 0) {
-        if (ch == 0 && vic_mdma_ch0_sub_get_num > 0) {
-            u32 next_idx = (vic_mdma_ch0_set_buff_index + 1) % 5;
-            u32 dma_addr = readl(vic_dev->regs + VIC_DMA_ADDR +
-                               (vic_mdma_ch0_set_buff_index << 2));
-
-            vic_mdma_ch0_set_buff_index = next_idx;
-            writel(dma_addr + buf_size, vic_dev->regs + VIC_DMA_ADDR +
-                  (next_idx << 2));
-
-            vic_mdma_ch0_sub_get_num--;
-        }
-
-        if (vic_mdma_ch0_sub_get_num == 0) {
-            complete(&vic_dev->frame_complete);
-        }
-    }
-
-    return IRQ_HANDLED;
-}
-
 int vic_queue_buffer(struct IMPISPDev *dev, dma_addr_t addr)
 {
     // Update global counters
@@ -8759,12 +9695,6 @@ int vic_queue_buffer(struct IMPISPDev *dev, dma_addr_t addr)
     vic_mdma_ch0_sub_get_num++;
 
     return 0;
-}
-
-void system_irq_func_set(int irq_num, irq_handler_t handler)
-{
-    if (irq_num < 32)
-        irq_func_cb[irq_num] = handler;
 }
 
 // In implementation
@@ -8793,30 +9723,6 @@ struct vic_irq_status {
     uint32_t irq_status2_out; // At 0x1f4 - final masked status 2
 };
 
-// Matching the OEM handler structure
-static irqreturn_t tx_vic_irq_handler(int irq, void *dev_id)
-{
-    struct IMPISPDev *dev = dev_id;
-    void __iomem *vic_regs = dev->reg_base + VIC_BASE;
-    u32 status, irq_en;
-
-    pr_info("VIC IRQ: status=0x%08x\n", status);
-
-    status = readl(vic_regs + 0xb4);  // Get status
-    if (!status)
-        return IRQ_NONE;
-
-    pr_info("VIC IRQ: status=0x%x enable=0x%x mask=0x%x\n",
-            status,
-            readl(vic_regs + 0x93c),
-            readl(vic_regs + 0x9e8));
-
-    // Clear only handled interrupts using OEM's mask
-    writel(status & 0x33fb, vic_regs + 0xb4);
-    wmb();
-
-    return IRQ_HANDLED;
-}
 
 static void tx_vic_irq_cleanup(struct IMPISPDev *dev)
 {
@@ -8830,60 +9736,93 @@ static void tx_vic_irq_cleanup(struct IMPISPDev *dev)
 
 
 /* Helper to initialize VIC IRQ handling */
-int tx_vic_irq_init(struct irq_dev *dev,
+int tx_vic_irq_init(struct vic_device *vic_dev,
                     void (*handler)(void *),
                     void (*disable)(void *),
                     void *priv)
 {
-    if (!dev)
+    void __iomem *vic_regs;
+
+    if (!vic_dev || !ourISPdev || !ourISPdev->reg_base)
         return -EINVAL;
 
-    spin_lock_init(&dev->lock);
-    dev->irq_enabled = 0;
-    dev->irq_handler = handler;
-    dev->irq_disable = disable;
-    dev->irq_priv = priv;
+    vic_regs = ourISPdev->reg_base + VIC_BASE;
 
-    ourISPdev->vic_irq_data = kzalloc(sizeof(struct irq_handler_data), GFP_KERNEL);
-    ourISPdev->vic_irq_data->handler_function = handler;
-    ourISPdev->vic_irq_data->disable_function = disable;
+    // Initialize handler data
+    spin_lock_init(&vic_dev->lock);
+    vic_dev->irq_enabled = 0;
+    vic_dev->irq_handler = handler;
+    vic_dev->irq_disable = disable;
+    vic_dev->irq_priv = priv;
+
+    // Clear any pending interrupts
+    writel(0xFFFFFFFF, vic_regs + 0xb4);
+    wmb();
+
+    // Enable VIC interrupts
+    writel(0x000033fb, vic_regs + 0x93c);
+
+    // Unmask VIC interrupts
+    writel(0x0, vic_regs + 0x9e8);  // Clear mask to enable all
+
+    // Clear any pending
+    writel(0xFFFFFFFF, vic_regs + 0xb4);
+    wmb();
+
+
+    // Register handler in system array
+    system_irq_func_set(VIC_IRQ_INDEX, tx_vic_irq_handler);
+
+    pr_info("VIC IRQ initialized: enable=0x%08x\n", readl(vic_regs + 0x93c));
+
+    dump_intc_state();
 
     return 0;
 }
-
 
 int tx_isp_vic_probe(struct platform_device *pdev)
 {
     struct IMPISPDev *dev = ourISPdev;
     struct vic_device *vic_dev;
+    struct tx_isp_irq_handler *irq_handler;
     struct tx_isp_subdev *sd = NULL;
     int ret;
-    int vic_irq;
-
-    pr_info("VIC probe called\n");
+    void __iomem *vic_base;
 
     if (!dev || !dev->reg_base) {
         pr_err("Invalid device state in VIC probe\n");
         return -EINVAL;
     }
 
-    // Allocate VIC device
     vic_dev = devm_kzalloc(&pdev->dev, sizeof(*vic_dev), GFP_KERNEL);
-    if (!vic_dev) {
-        dev_err(&pdev->dev, "Failed to allocate VIC device\n");
+    if (!vic_dev)
         return -ENOMEM;
-    }
 
-    // Set initial VIC device state
-    vic_dev->regs = dev->reg_base + 0x7000;
+    vic_dev->state = TX_ISP_MODULE_INIT;
+    vic_dev->started = false;
+    vic_dev->processing = false;
+    mutex_init(&vic_dev->state_lock);
+    vic_dev->regs = dev->reg_base + VIC_BASE;
     spin_lock_init(&vic_dev->lock);
     init_completion(&vic_dev->frame_complete);
     dev->vic_dev = vic_dev;
 
-    // Initialize the subdev structure
-    sd = &vic_dev->sd;
+    // Initialize VIC hardware base state
+    vic_base = dev->reg_base + VIC_BASE;
 
-    // Initialize VIC subdev
+    // Disable all interrupts first
+    writel(0, vic_base + 0x93c);
+    writel(0xffffffff, vic_base + 0xb4);  // Clear status
+    writel(0xffffffff, vic_base + 0xb8);  // Clear status2
+    wmb();
+
+    // Set initial configuration state
+    writel(0x00060003, vic_base + 0x0);   // Enable core
+    writel(0x00020000, vic_base + 0x4);   // Base config
+    writel(0x00c80000, vic_base + 0x8);   // Extended config
+    wmb();
+
+    sd = &vic_dev->sd;
     ret = tx_isp_subdev_init(pdev, sd, &vic_ops);
     if (ret) {
         dev_err(&pdev->dev, "Failed to init VIC subdev\n");
@@ -8892,37 +9831,20 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 
     tx_isp_set_subdevdata(sd, vic_dev);
 
-    // Initialize global buffer state
-    vic_mdma_ch0_sub_get_num = 0;
-    vic_mdma_ch0_set_buff_index = 0;
+    irq_handler = devm_kzalloc(&pdev->dev, sizeof(*irq_handler), GFP_KERNEL);
+    if (!irq_handler)
+        return -ENOMEM;
 
-    // Get VIC IRQ number from platform device
-    vic_irq = platform_get_irq(pdev, 0);
-    if (vic_irq < 0) {
-        dev_err(&pdev->dev, "Failed to get VIC IRQ: %d\n", vic_irq);
-        ret = vic_irq;
-        goto err_free_subdev;
-    }
-    dev->vic_irq = vic_irq;
+    irq_handler->dev_id = vic_dev;
+    ret = tx_vic_request_irq(pdev, irq_handler);
+    if (ret)
+        return ret;
 
-    // Request and set up the IRQ handler - this is all we need
-    ret = devm_request_threaded_irq(&pdev->dev, vic_irq,
-                                   tx_vic_irq_handler,
-                                   tx_vic_threaded_irq_handler,
-                                   IRQF_SHARED | IRQF_TRIGGER_HIGH,
-                                   "isp-w02", dev);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to request VIC IRQ %d: %d\n",
-                vic_irq, ret);
-        goto err_free_subdev;
-    }
+    vic_dev->irq_handler = irq_handler;
 
-    dev_info(&pdev->dev, "VIC IRQ %d registered successfully\n", vic_irq);
     pr_info("VIC probe completed successfully\n");
     return 0;
 
-err_free_subdev:
-    // Add proper subdev cleanup here
 err_free_dev:
     devm_kfree(&pdev->dev, vic_dev);
     dev->vic_dev = NULL;
@@ -8956,6 +9878,70 @@ static int tx_isp_vin_remove(struct platform_device *pdev)
 
     return 0;
 }
+
+
+
+
+static long tisp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    void __user *argp = (void __user *)arg;
+    int ret = 0;
+
+    pr_info("TISP IOCTL called: cmd=0x%x\n", cmd);
+
+    switch (cmd) {
+//        case 0x2000000: // Register sensor
+//            ret = subdev_sensor_ops_register_sensor(file, argp);
+//        break;
+//
+//        case 0x2000001: // Release sensor
+//            ret = subdev_sensor_ops_release_sensor(file, argp);
+//        break;
+//
+//        case 0x2000002: // Enum input
+//            ret = subdev_sensor_ops_enum_input(file, argp);
+//        break;
+//
+//        case 0x2000003: // Get input
+//            // TODO
+//                break;
+//
+//        case 0x2000004: // Set input
+//            ret = subdev_sensor_ops_set_input(file, argp);
+//        break;
+
+        // TODO: Add other sensor ops (0x2000005-0x2000012)
+
+        default:
+            pr_info("Unhandled TISP ioctl cmd: 0x%x\n", cmd);
+        return -EINVAL;
+    }
+
+    return ret;
+}
+
+static int tisp_open(struct file *file)
+{
+    pr_info("TISP device opened\n");
+    return 0;
+}
+
+static int tisp_release(struct file *file)
+{
+    pr_info("TISP device closed\n");
+    return 0;
+}
+
+
+/* Character device operations for /dev/tisp */
+static const struct file_operations tisp_fops = {
+    .owner = THIS_MODULE,
+    .unlocked_ioctl = tisp_ioctl,
+    .open = tisp_open,
+    .release = tisp_release,
+};
+
+
 static int tx_isp_core_probe(struct platform_device *pdev)
 {
     struct IMPISPDev *dev = ourISPdev;
@@ -9013,10 +9999,43 @@ static int tx_isp_core_probe(struct platform_device *pdev)
 
     ddr_dev->state = TX_ISP_MODULE_SLAKE;
 
+    // Initialize /dev/tisp character device
+    dev_t tisp_dev_number;
+    ret = alloc_chrdev_region(&tisp_dev_number, 0, 1, "tisp");
+    if (ret)
+        goto err_free_dev;
+
+    cdev_init(&ourISPdev->tisp_cdev, &tisp_fops);
+    ourISPdev->tisp_cdev.owner = THIS_MODULE;
+
+    ret = cdev_add(&ourISPdev->tisp_cdev, tisp_dev_number, 1);
+    if (ret)
+        goto err_unregister_tisp;
+
+    // Create tisp device node
+    ourISPdev->tisp_device = device_create(tisp_class, NULL, tisp_dev_number, NULL, "tisp");
+    if (IS_ERR(ourISPdev->tisp_device)) {
+        ret = PTR_ERR(ourISPdev->tisp_device);
+        goto err_del_tisp_cdev;
+    }
+
+    struct tx_isp_chip_ident *chip = kzalloc(sizeof(*chip), GFP_KERNEL);
+    if (!chip) {
+        pr_err("Failed to allocate chip ident\n");
+        return -ENOMEM;
+    }
+    ourISPdev->chip = chip;
+
     pr_info("Core probe complete: dev=%p reg_base=%p\n",
             dev, dev->reg_base);
     return 0;
 
+    err_del_tisp_cdev:
+        cdev_del(&ourISPdev->tisp_cdev);
+    err_unregister_tisp:
+        unregister_chrdev_region(tisp_dev_number, 1);
+    err_free_dev:
+        devm_kfree(&pdev->dev, ourISPdev);
     err_cleanup_subdev:
         // Add subdev cleanup
         tx_isp_subdev_deinit(sd);
@@ -9087,6 +10106,7 @@ static int tx_isp_init_memory(struct IMPISPDev *dev, struct platform_device *pde
     dev->rmem_addr = aligned_base;
     dev->rmem_size = aligned_size;
     dev->dma_addr = aligned_base;
+    dev->dma_size = aligned_size;  // Added this line to store DMA buffer size
 
     dev->dma_buf = devm_ioremap(&pdev->dev, aligned_base, aligned_size);
     if (!dev->dma_buf) {
@@ -9162,15 +10182,63 @@ static void cleanup_tuning_data(struct IMPISPDev *dev)
     }
 }
 
+
+static int verify_isp_clocks(struct IMPISPDev *dev) {
+    void __iomem *cpm_base = ioremap(0x10000000, 0x1000);
+    u32 clkgr, clkgr1;
+
+    if (!cpm_base)
+        return -ENOMEM;
+
+    clkgr = readl(cpm_base + 0x20);  // CLKGR offset
+    clkgr1 = readl(cpm_base + 0x28); // CLKGR1 offset
+
+    pr_info("Clock Gate Registers:\n");
+    pr_info("CLKGR: 0x%08x\n", clkgr);
+    pr_info("CLKGR1: 0x%08x\n", clkgr1);
+
+    // Clear IPU/ISP/VIC gate bits if set
+    if (clkgr & BIT(14)) {
+        pr_info("Enabling IPU clock\n");
+        clkgr &= ~BIT(14);
+        writel(clkgr, cpm_base + 0x20);
+    }
+
+    if (clkgr & BIT(37)) {
+        pr_info("Enabling ISP clock\n");
+        clkgr &= ~BIT(37);
+        writel(clkgr, cpm_base + 0x20);
+    }
+
+    if (clkgr & BIT(38)) {
+        pr_info("Enabling VIC clock\n");
+        clkgr &= ~BIT(38);
+        writel(clkgr, cpm_base + 0x20);
+    }
+
+    // Verify clocks are enabled
+    clkgr = readl(cpm_base + 0x20);
+    pr_info("CLKGR after enable: 0x%08x\n", clkgr);
+
+    iounmap(cpm_base);
+    return 0;
+}
+
+
 static int tx_isp_probe(struct platform_device *pdev)
 {
     struct IMPISPDev *dev = ourISPdev;
     int ret, isp_irq;
+    struct tx_isp_irq_handler *irq_handler;
     struct resource *res;
 
     pr_info("ISP probe called\n");
 
     dev->dev = &pdev->dev;
+    dev->pdev = pdev;
+    dev->width = 1920;
+    dev->height = 1080;
+    dev->buffer_count = ISP_BUF_COUNT;
     // Initialize tuning state
     init_tuning_data(dev);
 
@@ -9180,12 +10248,6 @@ static int tx_isp_probe(struct platform_device *pdev)
         dev_err(&pdev->dev, "No memory resource\n");
         return -ENODEV;
     }
-
-    /* Setup GPIO configuration */
-    pr_info("Starting GPIO config init\n");
-    ret = init_gpio_config(dev);
-    if (ret)
-        goto err_cleanup_state;
 
     // Single memory initialization call that handles everything
     ret = tx_isp_init_memory(dev, pdev);
@@ -9213,6 +10275,7 @@ static int tx_isp_probe(struct platform_device *pdev)
     ret = configure_isp_clocks(dev);
     if (ret)
         goto err_cleanup_memory;
+    verify_isp_clocks(dev);
 
 
     /* Initialize proc entries */
@@ -9233,23 +10296,12 @@ static int tx_isp_probe(struct platform_device *pdev)
     if (ret)
         goto err_cleanup_subsys;
 
-    // Initialize CSI - do this early
-    ret = init_csi_early(dev);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to initialize CSI: %d\n", ret);
-        goto err_free_dev;
-    }
-
     /* Setup I2C and sensor */
     pr_info("Starting I2C init\n");
     ret = setup_i2c_adapter(dev);
     if (ret)
         goto err_cleanup_memory;
 
-    ret = init_vic_control(ourISPdev);
-    if (ret) {
-        goto err_cleanup_proc;
-    }
     for (int i = 0; i < MAX_CHANNELS; i++) {
         struct isp_channel *chn = &dev->channels[i];
         if (!chn)
@@ -9278,26 +10330,15 @@ static int tx_isp_probe(struct platform_device *pdev)
         return ret;
     }
 
-    // Get ISP's IRQ from platform device
-    isp_irq = platform_get_irq(pdev, 0);
-    if (isp_irq < 0) {
-        dev_err(&pdev->dev, "Failed to get ISP IRQ: %d\n", isp_irq);
-        return isp_irq;
-    }
-    dev->isp_irq = isp_irq;
+    irq_handler = devm_kzalloc(&pdev->dev, sizeof(*irq_handler), GFP_KERNEL);
+    if (!irq_handler)
+        return -ENOMEM;
 
-    // Then register with Linux
-    ret = devm_request_threaded_irq(&pdev->dev, isp_irq,
-                                   tx_isp_irq_handler,
-                                   tx_isp_threaded_irq_handler,
-                                   IRQF_SHARED | IRQF_TRIGGER_HIGH,
-                                   "isp-m0", dev);
-    dev_info(&pdev->dev, "Got ISP IRQ: %d\n", isp_irq);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to request ISP IRQ %d: %d\n",
-                isp_irq, ret);
+    irq_handler->dev_id = pdev; // Pass vic_dev as context
+
+    ret = tx_isp_request_irq(pdev, irq_handler);
+    if (ret)
         return ret;
-    }
 
     dev_info(&pdev->dev, "TX-ISP probe completed successfully\n");
     return 0;
@@ -9318,7 +10359,7 @@ err_remove_csi:
 err_unmap_regs:
     devm_iounmap(&pdev->dev, dev->reg_base);
 err_free_gpio:
-    devm_gpio_free(&pdev->dev, dev->reset_gpio);
+//    devm_gpio_free(&pdev->dev, dev->reset_gpio);
 err_cleanup_state:
     // State cleanup if needed
 err_free_dev:
@@ -9464,7 +10505,7 @@ struct tx_isp_subdev_pad *find_pad(struct IMPISPDev *dev,
 {
     struct tx_isp_subdev *sd;
 
-    pr_debug("find_pad: looking for mod=%d type=%d pad=%d\n", mod, type, pad_id);
+    pr_info("find_pad: looking for mod=%d type=%d pad=%d\n", mod, type, pad_id);
 
     // Get appropriate subdev based on module type
     switch (mod) {
@@ -9534,7 +10575,7 @@ struct tx_isp_subdev_pad *find_pad(struct IMPISPDev *dev,
         return NULL;
     }
 
-    pr_debug("find_pad: Found subdev with %d in/%d out pads\n",
+    pr_info("find_pad: Found subdev with %d in/%d out pads\n",
              sd->num_inpads, sd->num_outpads);
 
     // Get appropriate pad array and check index
@@ -9548,7 +10589,7 @@ struct tx_isp_subdev_pad *find_pad(struct IMPISPDev *dev,
                   pad_id, sd->num_inpads - 1);
             return NULL;
         }
-        pr_debug("find_pad: Returning input pad %d\n", pad_id);
+        pr_info("find_pad: Returning input pad %d\n", pad_id);
         return &sd->inpads[pad_id];
     } else {
         if (!sd->outpads) {
@@ -9560,7 +10601,7 @@ struct tx_isp_subdev_pad *find_pad(struct IMPISPDev *dev,
                   pad_id, sd->num_outpads - 1);
             return NULL;
         }
-        pr_debug("find_pad: Returning output pad %d\n", pad_id);
+        pr_info("find_pad: Returning output pad %d\n", pad_id);
         return &sd->outpads[pad_id];
     }
 }
@@ -9662,7 +10703,6 @@ int tx_isp_csi_probe(struct platform_device *pdev)
 {
     struct IMPISPDev *dev = ourISPdev;
     struct csi_device *csi_dev;
-    struct tx_isp_subdev *sd = NULL;
     int ret;
 
     pr_info("CSI probe starting\n");
@@ -9672,43 +10712,57 @@ int tx_isp_csi_probe(struct platform_device *pdev)
         return -EINVAL;
     }
 
-    // 1. Allocate CSI device
-    csi_dev = devm_kzalloc(&pdev->dev, sizeof(*csi_dev), GFP_KERNEL);
-    if (!csi_dev) {
-        dev_err(&pdev->dev, "Failed to allocate CSI device\n");
-        return -ENOMEM;
+    // 1. Allocate CSI device Full early initialization
+    pr_info("Allocating CSI device\n");
+    ret = tx_isp_csi_init(pdev);
+    if (ret) {
+        pr_err("Failed to initialize CSI: %d\n", ret);
+        return ret;
     }
 
-    // 2. Set up device state and registers
-    csi_dev->dev = &pdev->dev;
-    csi_dev->csi_regs = dev->resources.csi_regs;
-    csi_dev->phy_regs = dev->resources.csi_regs;
-    mutex_init(&csi_dev->mutex);
+    csi_dev = dev->csi_dev;
 
-    // 3. Store in global BEFORE subdev init
-    dev->csi_dev = csi_dev;
-
-    // 4. Get subdev and initialize
-    sd = &csi_dev->sd;
-    ret = tx_isp_subdev_init(pdev, sd, &csi_ops);
+    // Get subdev and initialize
+    pr_info("Initializing CSI subdev\n");
+    ret = tx_isp_subdev_init(pdev, csi_dev->sd, &csi_ops);
     if (ret) {
         dev_err(&pdev->dev, "Failed to init CSI subdev\n");
         goto err_free_dev;
     }
 
-    // 5. Finish initialization
-    tx_isp_set_subdevdata(sd, csi_dev);
+    // Enable clock
+    pr_info("Enabling CSI clock\n");
+    ret = clk_prepare_enable(csi_dev->clk);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to enable CSI clock\n");
+        goto err_disable_clk;
+    }
+
+    // Initialize CSI and PHY - add this block
+    pr_info("Initializing CSI PHY\n");
+    ret = init_csi_phy(csi_dev);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to initialize CSI PHY: %d\n", ret);
+        goto err_disable_clk;
+    }
+
+    // finish initialization
+    tx_isp_set_subdevdata(csi_dev->sd, csi_dev);
+    tx_isp_set_subdev_debugops(csi_dev->sd, &isp_csi_fops);
+    platform_set_drvdata(pdev, &csi_dev->sd->module);
+
     csi_dev->state = TX_ISP_MODULE_SLAKE;
     atomic_set(&dev->csi_configured, 0);
 
-    tx_isp_set_subdev_debugops(sd, &isp_csi_fops);
-    platform_set_drvdata(pdev, &sd->module);
+    dump_csi_registers(csi_dev);
 
     pr_info("CSI probe completed successfully\n");
     return 0;
 
-    err_free_dev:
-        dev->csi_dev = NULL;
+err_disable_clk:
+    clk_disable_unprepare(csi_dev->clk);
+err_free_dev:
+    dev->csi_dev = NULL;
     devm_kfree(&pdev->dev, csi_dev);
     return ret;
 }
@@ -9717,19 +10771,18 @@ int tx_isp_csi_probe(struct platform_device *pdev)
 /* CSI cleanup */
 int tx_isp_csi_remove(struct platform_device *pdev)
 {
-    struct IMPISPDev *dev = ourISPdev;  // Use global instead
-    struct csi_device *csi_dev;
+    struct module_info *module = platform_get_drvdata(pdev);
+    struct tx_isp_subdev *sd = module_to_subdev(module);
+    struct csi_device *csi = tx_isp_get_subdevdata(sd);
 
-    if (!dev)
-        return 0;
+    /* Stop streaming if active */
+    if (csi->state == TX_ISP_MODULE_RUNNING)
+        csi_s_stream(sd, 0);
 
-    csi_dev = dev->csi_dev;
-    if (csi_dev) {
-        if (csi_dev->csi_regs)
-            iounmap(csi_dev->csi_regs);
-        devm_kfree(&pdev->dev, csi_dev);
-    }
-    dev->csi_dev = NULL;
+    /* Disable clock */
+    clk_disable_unprepare(csi->clk);
+
+    tx_isp_subdev_deinit(sd);
 
     return 0;
 }
@@ -9863,10 +10916,6 @@ static int __init tx_isp_init(void)
         ret = -ENOMEM;
         goto err_unreg_device;
     }
-
-    spin_lock_init(&ourISPdev->lock);
-    ourISPdev->irq_enabled = 0;
-    ourISPdev->irq_handler = NULL;  // Don't set this yet
 
     // 1. Create the tx-isp character device first
     ret = alloc_chrdev_region(&tx_sp_dev_number, 0, 1, "tx-isp");
@@ -10109,39 +11158,26 @@ int tx_isp_subdev_init_clks(struct tx_isp_subdev *sd, struct platform_device *pd
             pr_err("Failed to get CSI clock: %d\n", ret);
             goto err_free_clks;
         }
-
+        sd->clk_num = 1;
         pr_info("CSI clock initialized: rate=%lu Hz\n", clk_get_rate(sd->clks[0]));
     }
     /* For VIC subdev */
     else if (strcmp(pdev->name, "tx-isp-vic") == 0) {
-        /* Let's try getting all available clocks until we find the right one */
-        const char *clock_names[] = {"avpu", "cgu_isp", "isp", "cgu_vpu", "vpll"};
-        int num_clocks = ARRAY_SIZE(clock_names);
-
         sd->clk_num = 1;
         sd->clks = kzalloc(sd->clk_num * sizeof(struct clk *), GFP_KERNEL);
         if (!sd->clks)
             return -ENOMEM;
 
-        /* Try each clock until we find one that works */
-        for (int i = 0; i < num_clocks; i++) {
-            pr_info("Trying clock %s for VIC\n", clock_names[i]);
-            sd->clks[0] = clk_get(NULL, clock_names[i]);
-            if (!IS_ERR(sd->clks[0])) {
-                unsigned long rate = clk_get_rate(sd->clks[0]);
-                pr_info("Successfully got clock %s with rate %lu Hz\n",
-                       clock_names[i], rate);
-                break;
-            }
-            pr_info("Failed to get clock %s: %ld\n",
-                   clock_names[i], PTR_ERR(sd->clks[0]));
-        }
-
+        // Get the ISP clock directly
+        sd->clks[0] = clk_get(NULL, "isp");
         if (IS_ERR(sd->clks[0])) {
             ret = PTR_ERR(sd->clks[0]);
-            pr_err("Failed to get any clock for VIC\n");
+            pr_err("Failed to get ISP clock for VIC: %d\n", ret);
             goto err_free_clks;
         }
+        sd->clk_num = 1;
+        pr_info("VIC clock initialized with ISP clock: rate=%lu Hz\n",
+                clk_get_rate(sd->clks[0]));
     }
     /* For sc2336 sensor */
     else if (strcmp(pdev->name, "sc2336") == 0) {
@@ -10177,6 +11213,9 @@ int tx_isp_subdev_init_clks(struct tx_isp_subdev *sd, struct platform_device *pd
             pr_err("Failed to get ISP clock for %s\n", pdev->name);
             goto err_free_clks;
         }
+
+        sd->clk_num = 1;
+        pr_info("ISP clock initialized: rate=%lu Hz\n", clk_get_rate(sd->clks[0]));
     }
 
     return 0;
@@ -10248,8 +11287,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     struct IMPISPDev *dev = ourISPdev;
     int ret;
 
-    pr_info("Starting subdev init for %s\n",
-            pdev ? pdev->name : "unknown");
+    pr_info("Starting subdev init");
 
     if (!sd || !ops || !pdev) {
         pr_err("Invalid parameters\n");
@@ -10262,10 +11300,12 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     }
 
     /* Initialize subdev structure */
+    pr_info("Initializing subdev structure\n");
     memset(sd, 0, sizeof(*sd));
     sd->ops = ops;
 
     /* Initialize clocks if needed */
+    pr_info("Initializing clocks if needed\n");
     ret = tx_isp_subdev_init_clks(sd, pdev);
     if (ret) {
         pr_err("Failed to initialize clocks\n");
@@ -10286,6 +11326,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     }
 
     // Allocate input pads
+    pr_info("Allocating input pads\n");
     if (sd->num_inpads) {
         sd->inpads = kzalloc(sizeof(struct tx_isp_subdev_pad) * sd->num_inpads, GFP_KERNEL);
         if (!sd->inpads) {
@@ -10331,6 +11372,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     }
 
     /* Allocate output pads */
+    pr_info("Allocating output pads\n");
     if (sd->num_outpads) {
         sd->outpads = kzalloc(sizeof(struct tx_isp_subdev_pad) * sd->num_outpads, GFP_KERNEL);
         if (!sd->outpads) {
@@ -10366,6 +11408,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     }
 
     /* Map to appropriate register space */
+    pr_info("Mapping to register space\n");
     if (dev->reg_base) {
         if (!strcmp(pdev->name, "tx-isp-vic")) {
             sd->base = dev->reg_base + 0x7000;
@@ -10378,7 +11421,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     }
 
     /* Store the subdev in the appropriate device structure */
-    /* Store the subdev in the appropriate device structure */
+    pr_info("Storing subdev in device\n");
     if (!strcmp(pdev->name, "tx-isp-vic")) {
         if (!dev->vic_dev) {
             pr_err("VIC device not initialized\n");
@@ -10421,6 +11464,9 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             goto err_free_out_channels;
         }
         dev->fs_dev->sd = sd;
+    } else if (!strcmp(pdev->name, "sc2336")) {  // Add sensor case
+        pr_info("Storing sensor subdev\n");
+        dev->sensor_sd = sd;
     } else {
         pr_warn("Unknown subdev name: %s\n", pdev->name);
     }

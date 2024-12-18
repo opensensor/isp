@@ -48,6 +48,9 @@ struct isp_pad_config {
 #define ISP_PAD_LINK_TYPE_META    0x02
 #define ISP_PAD_LINK_TYPE_MEMORY  0x04
 
+
+#define VIC_IRQ_INDEX 0xd
+
 // Number of links in each configuration
 static const uint32_t pad_link_counts[2] = {
     [0] = 3,  // Basic configuration with 3 links
@@ -122,7 +125,151 @@ static const struct isp_pad_config pad_link_configs[2][MAX_LINKS] = {
 #define ISP_PAD_SINK    0
 #define ISP_PAD_SOURCE  1
 
+// VIC register offsets
+#define VIC_IRQ_ENABLE     0x93c   // IRQ Enable register - set to 0x000033fb in OEM code
+#define VIC_IRQ_MASK       0x9e8   // IRQ Mask register - set to 0 to allow interrupts
+#define VIC_IRQ_STATUS     0xb4    // IRQ Status register - read-only
+#define VIC_IRQ_STATUS2    0xb8    // IRQ Status register 2 - read-only
 
+// VIC IRQ enable bits from OEM - 0x000033fb value breakdown
+#define VIC_IRQ_FRAME_START   BIT(0)  // Frame start
+#define VIC_IRQ_FRAME_DONE    BIT(1)  // Frame complete
+#define VIC_IRQ_DMA_Y_DONE    BIT(3)  // Y plane DMA complete
+#define VIC_IRQ_DMA_UV_DONE   BIT(4)  // UV plane DMA complete
+#define VIC_IRQ_BUF_FULL      BIT(5)  // Buffer full
+#define VIC_IRQ_FIFO_FULL     BIT(8)  // FIFO full
+#define VIC_IRQ_FRAME_DROP    BIT(9)  // Frame dropped
+#define VIC_IRQ_DATA_TIMEOUT  BIT(10) // Data timeout
+
+
+#define T31_INTC_BASE     0x10001000
+#define INTC_ISR          0x00   // Interrupt Status
+#define INTC_IMR          0x04   // Interrupt Mask
+#define INTC_IMSR         0x08   // Interrupt Mask Set
+#define INTC_IMCR         0x0c   // Interrupt Mask Clear
+#define INTC_IPR          0x10   // Interrupt Pending
+
+// Interrupt numbers from your logs
+#define T31_IRQ_I2C0      68    // I2C interrupt number
+#define T31_IRQ_ISP       37    // ISP interrupt
+#define T31_IRQ_VIC       38    // VIC interrupt
+
+// Combined IRQ mask used by OEM
+#define VIC_IRQ_ENABLE_MASK   0x000033fb
+
+/* ISP Register Offsets */
+#define ISP_BASE            0x13300000
+#define ISP_INT_STATUS      0xb4    // Interrupt Status Register
+#define ISP_INT_MASK       0xb0    // Interrupt Mask Register
+#define ISP_INT_CLEAR      0xb8    // Interrupt Clear Register
+
+/* Interrupt Mask Bits */
+#define ISP_INT_I2C        BIT(8)  // I2C interrupt bit
+#define ISP_INT_VIC        BIT(9)  // VIC interrupt bit
+#define ISP_INT_FRAME_DONE BIT(0)  // Frame completion interrupt
+
+/* T31 INTC Register definitions */
+#define T31_INTC_BASE     0x10001000
+#define INTC_ISR_OFF      0x00
+#define INTC_IMR_OFF      0x04
+#define INTC_IMCR_OFF     0x0c
+
+/* ISP Register offsets */
+#define ISP_CTRL_OFF      0x00
+#define ISP_INT_STAT_OFF  0xb4
+#define ISP_INT_MASK_OFF  0xb0
+#define ISP_INT_CLR_OFF   0xb8
+
+// Additional register definitions for second interrupt bank
+#define INTC_ISR2         0x20   // Second bank Status Register
+#define INTC_IMR2         0x24   // Second bank Mask Register
+#define INTC_IMSR2        0x28   // Second bank Mask Set Register
+#define INTC_IMCR2        0x2c   // Second bank Mask Clear Register
+#define INTC_IPR2         0x30   // Second bank Pending Register
+
+// Helper macros to determine register bank and bit position
+#define IRQ_BANK(irq)     ((irq) / 32)
+#define IRQ_BIT(irq)      ((irq) % 32)
+#define IRQ_MASK(irq)     BIT(IRQ_BIT(irq))
+
+// VIC Register definitions
+#define VIC_IRQ_ENABLE     0x93c    // VIC interrupt enable register
+#define VIC_IRQ_STATUS     0xb4     // VIC interrupt status register
+#define VIC_IRQ_STATUS2    0xb8     // VIC interrupt status register 2
+
+// ISP Register definitions
+#define ISP_INT_MASK       0xb0     // ISP interrupt mask register
+#define ISP_INT_STATUS     0xb4     // ISP interrupt status register
+#define ISP_INT_CLEAR      0xb8     // ISP interrupt clear register
+
+// Interrupt bits
+#define ISP_INT_FRAME_DONE BIT(0)   // Frame completion bit
+#define VIC_INT_FRAME_DONE BIT(1)   // VIC frame completion bit
+
+#define VIC_IRQ_CLEAR     0x940    // VIC interrupt clear register
+#define VIC_FRAME_DONE    BIT(1)   // VIC frame completion bit
+
+#define PZ_BASE       0x10017000
+#define PZINTS        (PZ_BASE + 0x14)
+#define PZINTC        (PZ_BASE + 0x18)
+#define PZMSKS        (PZ_BASE + 0x24)
+#define PZMSKC        (PZ_BASE + 0x28)
+#define PZPAT1S       (PZ_BASE + 0x34)
+#define PZPAT1C       (PZ_BASE + 0x38)
+#define PZPAT0S       (PZ_BASE + 0x44)
+#define PZPAT0C       (PZ_BASE + 0x48)
+#define PZGID2LD      (PZ_BASE + 0xF0)
+
+/* GPIO Z Shadow Register Offsets */
+#define PZINTS    0x14  // Interrupt Set
+#define PZINTC    0x18  // Interrupt Clear
+#define PZMSKS    0x24  // Mask Set
+#define PZMSKC    0x28  // Mask Clear
+#define PZPAT1S   0x34  // Pattern 1 Set
+#define PZPAT1C   0x38  // Pattern 1 Clear
+#define PZPAT0S   0x44  // Pattern 0 Set
+#define PZPAT0C   0x48  // Pattern 0 Clear
+#define PZFLGC    0x58  // Flag Clear
+#define PZGID2LD  0xF0  // Group ID to Load
+
+/* T31 Interrupt Controller Register Offsets */
+#define ICMRn     0x04  // Interrupt Controller Mask Register
+#define ICMSRn    0x08  // Interrupt Controller Mask Set Register
+#define ICMCRn    0x0C  // Interrupt Controller Mode Configuration Register
+#define IPMRn     0x10  // Interrupt Pending Mask Register
+#define ISRn      0x14  // Interrupt Source Register
+
+// ISP interrupt configuration
+#define VIC_INT   (1 << 30)  // VIC interrupt bit positioned correctly for BE
+#define ISP_INT   (1 << 31)  // ISP interrupt bit (assuming it's adjacent to VIC)
+
+/* Add these constants at top */
+#define VIC_INT_ENABLE   BIT(31)  // DMA frame completion IRQ enable
+#define VIC_ROUTE_IRQ    BIT(1)   // Route interrupts to INTC
+
+#define GPIO_PORT_A   0x10010000
+#define GPIO_PORT_B   0x10011000
+#define GPIO_PORT_C   0x10012000
+#define GPIO_PORT_Z   0x10017000  // Shadow group
+
+#define ISP_INT_CSI      BIT(3)    // CSI interrupt bit in ISP interrupt status register
+
+// States observed in the OEM code:
+#define TX_ISP_MODULE_INIT      1  // After initialization
+#define TX_ISP_MODULE_READY     2  // Device ready but not streaming
+#define TX_ISP_MODULE_STOPPING  3  // Stream stop requested
+#define TX_ISP_MODULE_STREAMING 4  // Actively streaming
+
+#define TX_ISP_MODULE_INIT      1  // After initialization
+#define TX_ISP_MODULE_READY     2  // Device ready but not streaming
+#define TX_ISP_MODULE_STOPPING  3  // Stream stop requested
+#define TX_ISP_MODULE_STREAMING 4  // Actively streaming
+
+#define VIC_INT_BIT     (1 << 30)   // VIC interrupt is bit 30
+#define ISP_M0_INT_BIT  (1 << 37)   // ISP M0 interr
+
+#define VIC_INT_BIT (1 << 30)  // VIC is bit 30 in INTC
+#define ISP_M0_BIT  (1 << 37)  // ISP M0 is bit 37
 
 struct tx_isp_pad {
     struct list_head list;
@@ -192,22 +339,33 @@ struct vic_device {
     void __iomem *regs;         // Base registers
     struct tx_isp_subdev *sd;
     spinlock_t lock;            // IRQ lock
-    int irq_enabled;            // IRQ enable state
-    void (*irq_handler)(void *);  // IRQ handler function
-    void (*irq_disable)(void *);  // IRQ disable function
-    void *irq_priv;             // Private data for IRQ
 
-    // Buffer management
-    u32 mdma_en;               // DMA enable flag
-    u32 ch0_buf_idx;           // Channel 0 buffer index
-    u32 ch0_sub_get_num;       // Channel 0 buffer count
-    struct completion frame_complete;  // Frame completion
+    // Ensure alignment for MIPS32
+    u32 padding;                // Add padding to ensure alignment
+    struct mutex state_lock;    // Now should be 32-bit aligned
 
-    // Additional state
-    u32 width;                 // Frame width
-    u32 height;                // Frame height
-    u32 stride;                // Frame stride
-};
+    // State tracking
+    int state;                  // Track states: 1=INIT, 2=READY, etc
+    u32 mdma_en;               // Group 32-bit values together
+    u32 ch0_buf_idx;
+    u32 ch0_sub_get_num;
+    struct completion frame_complete;
+
+    // Status flags (keep these together)
+    bool started;
+    bool processing;
+    u16 pad2;              // Pad to ensure 32-bit alignment
+
+    // Rest unchanged...
+    u32 width;
+    u32 height;
+    u32 stride;
+
+    void (*irq_handler)(void *);
+    void (*irq_disable)(void *);
+    void *irq_priv;
+    int irq_enabled;
+} __attribute__((aligned(4)));  // Force overall structure alignment
 
 struct vin_device {
     struct tx_isp_subdev *sd;
@@ -220,6 +378,7 @@ struct vin_device {
 
 //int tx_isp_enable_irq(struct IMPISPDev *dev);
 //void tx_isp_disable_irq(struct IMPISPDev *dev);
+int tx_isp_csi_init(struct platform_device *pdev);
 
 int init_hw_resources(struct IMPISPDev *dev);
 void tx_isp_cleanup_memory(struct IMPISPDev *dev);
@@ -228,11 +387,11 @@ int configure_isp_clocks(struct IMPISPDev *dev);
 int configure_vic_for_streaming(struct IMPISPDev *dev);
 int init_vic_control(struct IMPISPDev *dev);
 int detect_sensor_type(struct IMPISPDev *dev);
-int tx_vic_irq_init(struct irq_dev *dev,
-                    void (*handler)(void *),
-                    void (*disable)(void *),
-                    void *priv);
-int tx_isp_irq_init(struct irq_dev *dev,
+//int tx_vic_irq_init(struct irq_dev *dev,
+//                    void (*handler)(void *),
+//                    void (*disable)(void *),
+//                    void *priv);
+int tx_isp_irq_init(struct IMPISPDev *dev,
                     void (*handler)(void *),
                     void (*disable)(void *),
                     void *priv);
@@ -259,15 +418,25 @@ int vic_init(struct tx_isp_subdev *sd, int on);
 int vic_reset(struct tx_isp_subdev *sd, int on);
 irqreturn_t vic_isr(struct tx_isp_subdev *sd, u32 status, bool *handled);
 irqreturn_t vic_isr_thread(struct tx_isp_subdev *sd, void *data);
+void tx_vic_disable_irq(void __iomem *intc_base);
+void tx_vic_enable_irq(void __iomem *intc_base);
+void dump_irq_info(void);
 
 // Forward declarations for CSI functions
 int csi_s_stream(struct tx_isp_subdev *sd, int enable);
 int csi_link_stream(struct tx_isp_subdev *sd, int enable);
-int csi_init(struct tx_isp_subdev *sd, int on);
-int csi_reset(struct tx_isp_subdev *sd, int on);
-
+int csi_init(struct tx_isp_subdev *sd);
+int csi_reset(struct tx_isp_subdev *sd);
+// int complete_csi_init(struct IMPISPDev *dev);
+// int setup_csi_power_domain(struct IMPISPDev *dev);
+int csi_hw_init(struct csi_device *csi);
+int csi_power_on(struct csi_device *csi);
+int init_csi_phy(struct csi_device *csi_dev);
+int tx_isp_csi_s_stream(struct csi_device *csi_dev, int enable);
 
 u32 isp_reg_read(void __iomem *base, u32 offset);
 void isp_reg_write(void __iomem *base, u32 offset, u32 value);
+
+int configure_i2c_gpio(struct IMPISPDev *dev);
 
 #endif /* _TX_ISP_HW_H_ */

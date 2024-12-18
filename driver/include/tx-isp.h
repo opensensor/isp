@@ -123,11 +123,10 @@ void tx_isp_hw_remove(struct IMPISPDev *dev);
 
 // tx-isp-csi.c
 // Core CSI functions
-int init_csi_phy(struct IMPISPDev *dev);
 int probe_csi_registers(struct IMPISPDev *dev);
 int configure_mipi_csi(struct IMPISPDev *dev);
 int verify_csi_signals(struct IMPISPDev *dev);
-void dump_csi_reg(struct IMPISPDev *dev);
+void dump_csi_registers(struct csi_device *csi_dev);
 
 // CSI initialization sequence
 int init_csi_early(struct IMPISPDev *dev);
@@ -146,7 +145,7 @@ irqreturn_t tx_csi_irq_handler(int irq, void *dev_id);
 
 // Video functions
 int enable_isp_streaming(struct IMPISPDev *dev, struct file *file, int channel, bool enable);
-int tx_isp_video_s_stream(struct IMPISPDev *dev, int enable);
+int tx_isp_video_s_stream(struct IMPISPDev *dev);
 
 void tx_isp_module_deinit(struct tx_isp_subdev *tisp_dev);
 int32_t isp_subdev_release_clks(struct IspSubdev* isp_subdev);

@@ -248,16 +248,70 @@ int sensor_hw_reset(struct IMPISPDev *dev)
 
 // I2C initialization
 
+static irqreturn_t i2c_debug_irq(int irq, void *dev_id) {
+    struct IMPISPDev *dev = dev_id;
+    pr_info("I2C IRQ triggered: irq=%d\n", irq);
+    return IRQ_HANDLED;
+}
+
+
+int configure_i2c_gpio(struct IMPISPDev *dev)
+{
+    void __iomem *gpio = ioremap(0x10010000, 0x1000);
+    void __iomem *intc = ioremap(0x10001000, 0x1000);  // INTC base
+    u32 val;
+
+    // Enable interrupts for I2C0 pins
+    val = readl(gpio + 0x60);  // INT
+    val |= BIT(10) | BIT(11);  // SDA and SCL pins
+    writel(val, gpio + 0x60);
+
+    // Unmask I2C0 pins
+    val = readl(gpio + 0x20);  // MASK
+    val &= ~(BIT(10) | BIT(11));
+    writel(val, gpio + 0x20);
+
+    // Enable I2C0 interrupt in INTC
+    // Read current mask
+    val = readl(intc + 0x04);  // ICMRn - mask register
+    val |= BIT(4);  // I2C0 is bit 4 in INTC
+    writel(val, intc + 0x04);
+
+    // Set to level triggered
+    val = readl(intc + 0x0C);  // ICMCRn - trigger type
+    val &= ~BIT(4);  // Clear for level
+    writel(val, intc + 0x0C);
+
+    pr_info("I2C0 interrupts configured:\n");
+    pr_info("  GPIO INT: 0x%08x\n", readl(gpio + 0x60));
+    pr_info("  GPIO MASK: 0x%08x\n", readl(gpio + 0x20));
+    pr_info("  INTC MASK: 0x%08x\n", readl(intc + 0x04));
+    pr_info("  INTC TYPE: 0x%08x\n", readl(intc + 0x0C));
+
+    iounmap(gpio);
+    iounmap(intc);
+    return 0;
+}
+
 int setup_i2c_adapter(struct IMPISPDev *dev)
 {
     struct i2c_board_info board_info = {
-        .type = "sc2336", // TODO
-        .addr = 0x30,  // SC2336 I2C address
+        .type = "sc2336",
+        .addr = 0x30,
+        .irq = 68,  // From /proc/interrupts - i2c.0
+        .platform_data = dev,  // Pass our device as platform data
+        .flags = I2C_CLIENT_TEN,  // Try standard flags first
     };
     struct i2c_adapter *adapter;
+    struct i2c_client *client;
     int ret;
 
     pr_info("Setting up I2C infrastructure for SC2336...\n");
+
+    // Request the i2c-dev module first
+    ret = request_module("i2c-dev");
+    if (ret)
+        pr_warn("Could not load i2c-dev module: %d\n", ret);
 
     adapter = i2c_get_adapter(0);
     if (!adapter) {
@@ -266,17 +320,27 @@ int setup_i2c_adapter(struct IMPISPDev *dev)
     }
 
     // Create new I2C device
-    dev->sensor_i2c_client = i2c_new_device(adapter, &board_info);
-    if (!dev->sensor_i2c_client) {
+    client = i2c_new_device(adapter, &board_info);
+    if (!client) {
         pr_err("Failed to create I2C device\n");
         i2c_put_adapter(adapter);
         return -ENODEV;
     }
 
-    i2c_put_adapter(adapter);
-    pr_info("I2C sensor initialized: addr=0x%02x adapter=%p\n",
-            dev->sensor_i2c_client->addr, dev->sensor_i2c_client->adapter);
+    // Try to get module reference
+    if (client->dev.driver && !try_module_get(client->dev.driver->owner)) {
+        pr_err("Could not get module reference\n");
+        i2c_unregister_device(client);
+        i2c_put_adapter(adapter);
+        return -ENODEV;
+    }
 
+    dev->sensor_i2c_client = client;
+
+    pr_info("I2C sensor initialized: addr=0x%02x adapter=%p irq=%d\n",
+            client->addr, client->adapter, client->irq);
+
+    i2c_put_adapter(adapter);
     return 0;
 }
 

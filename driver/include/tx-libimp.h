@@ -358,6 +358,7 @@ struct isp_tuning_data {
     u32 sinter_strength;  // Spatial noise reduction strength
     u32 temper_strength;  // Temporal noise reduction strength
     uint32_t running_mode;
+    uint32_t custom_mode;
     /* BCSH Parameters */
     uint8_t saturation;
     uint32_t bcsh_ev;    // Exposure value
@@ -549,7 +550,7 @@ struct frame_chan_attr {
     u32 picHeight;      // 0x10
     u32 buf_type;       // 0x14 - Matches offset 0x24
     u32 mem_type;       // 0x18 - Matches offset 0x3c
-    u32 buf_count;      // 0x1C - Matches offset 0x20c
+    u32 buffer_count;      // 0x1C - Matches offset 0x20c
     u32 state;          // 0x20 - Matches offset 0x2d0
     u32 streaming;      // 0x24 - Matches offset 0x230
     u32 reserved[10];   // Pad to match 80 byte copy
@@ -655,7 +656,7 @@ struct frame_queue {
     struct video_buffer **bufs;  // 0x24: Array of buffer pointers
     uint32_t memory_type;        // 0x3c: Memory type (V4L2_MEMORY_*)
     uint8_t pad1[0x1d0];        // 0x40-0x20f: Padding to maintain offsets
-    uint32_t buf_count;         // 0x210: Number of buffers
+    uint32_t buffer_count;         // 0x210: Number of buffers
     struct list_head ready_list; // 0x214: Ready list head
     struct list_head done_list;  // 0x21c: Done list head
     spinlock_t queue_lock;       // 0x224: Queue spinlock

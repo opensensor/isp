@@ -146,7 +146,7 @@
 
 
 #define ISP_BASE_ADDR        0x13300000
-#define ISP_MAP_SIZE         0x1000
+#define ISP_MAP_SIZE         0x10000
 #define ISP_OFFSET_PARAMS    0x1000
 #define REG_CONTROL          0x100
 // Update defines
@@ -1220,11 +1220,13 @@ struct csi_device {
     struct tx_isp_subdev *sd;
 
     // CSI register access - changed to single pointer like VIC
-    void __iomem *csi_regs;   // Single pointer like VIC uses
+    void __iomem *cpm_regs;   // CPM registers
     void __iomem *phy_regs;   // MIPI PHY registers
+    void __iomem *csi_regs;   // Single pointer to mapped csi regs
     struct resource *phy_res;  // PHY memory resource
 
     // State management
+    struct clk *clk;
     struct mutex mutex;       // Synchronization
     int state;               // CSI state (1=init, 2=enabled)
     spinlock_t lock;         // Protect register access
@@ -1357,7 +1359,7 @@ struct isp_channel {
     dma_addr_t *buffer_dma_addrs;      // DMA addresses of each video_buffer
     uint32_t group_offset;             // Group offset
     uint32_t buf_size;                 // Size per buffer
-    uint32_t buf_count;                // Number of buffers
+    uint32_t buffer_count;                // Number of buffers
     uint32_t channel_offset;           // Channel memory offset
     uint32_t memory_type;              // Memory allocation type
     uint32_t required_size;            // Required buffer size
@@ -1424,8 +1426,11 @@ Instead, we need to return specific structures that libimp expects outside of th
 struct IMPISPDev {
     /* Core device info */
     struct device *dev;
+    struct device *tisp_device;
     struct cdev cdev;
+    struct cdev tisp_cdev;
     void __iomem *reg_base;
+    void __iomem *intc_base;
     spinlock_t lock;
     struct tx_isp_resources resources;
     struct proc_context *proc_context;
@@ -1443,6 +1448,7 @@ struct IMPISPDev {
     u32 sensor_interface_type;
     u32 vic_status;
     bool is_open;
+    struct tx_isp_chip_ident *chip;
 
     /* VIC specific */
     uint32_t vic_started;
@@ -1499,22 +1505,25 @@ struct IMPISPDev {
     /* I2C */
     struct i2c_client *sensor_i2c_client;
     struct i2c_adapter *i2c_adapter;
+    struct tx_isp_subdev *sensor_sd;
 
-    /* IRQs */
-    int isp_irq;
-    struct irq_handler_data *isp_irq_data;
-    // IRQ handling
+    /* IRQs - keep these fields together and properly aligned */
+    int isp_irq;                      // IRQ number
+    spinlock_t irq_lock;              // Protect IRQ state
+    volatile u32 irq_enabled;         // IRQ enabled flag
     void (*irq_handler)(void *);      // IRQ handler callback
     void (*irq_disable)(void *);      // IRQ disable callback
-    void *irq_priv;                   // Private data for IRQ callbacks
-    volatile u32 irq_enabled;         // IRQ enabled state
+    void *irq_priv;                   // Private data for callbacks
+    struct irq_handler_data *isp_irq_data;
+    struct completion frame_complete;
+    struct task_struct *fw_thread;
+    uint32_t frame_count;
 
     // VIC specific
     int vic_irq;
     void (*vic_irq_handler)(void *);
     void (*vic_irq_disable)(void *);
     void *vic_irq_priv;
-    spinlock_t vic_lock;
     volatile u32 vic_irq_enabled;
     struct irq_handler_data *vic_irq_data;
     void __iomem *vic_regs;
@@ -1539,6 +1548,7 @@ struct IMPISPDev {
     uint32_t height;
     uint32_t format;
     uint32_t frame_wait_cnt;
+    uint32_t buffer_count;
 
     // AE Algorithm state
     int ae_algo_enabled;                          // Matches ae_algo_en check
