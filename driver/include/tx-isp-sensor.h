@@ -34,6 +34,7 @@ static struct i2c_client *isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
 
 // GPIO handling
 int init_gpio_config(struct IMPISPDev *dev);
+static int tisp_sensor_init(struct device *dev);
 
 
 #endif //TX_ISP_SENSOR_H

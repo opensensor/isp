@@ -51,6 +51,12 @@ struct isp_pad_config {
 
 #define VIC_IRQ_INDEX 0xd
 
+
+#define VIC_STATE_IDLE       1
+#define VIC_STATE_CONFIGURED 2
+#define VIC_STATE_INITIALIZED 3
+#define VIC_STATE_STREAMING  4
+
 // Number of links in each configuration
 static const uint32_t pad_link_counts[2] = {
     [0] = 3,  // Basic configuration with 3 links

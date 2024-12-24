@@ -207,9 +207,9 @@ int detect_sensor_type(struct IMPISPDev *dev)
     dev->sensor_type = 1;  // MIPI
 
     // Set mode based on sensor name
-    if (strncmp(sensor_name, "sc2336", 6) == 0) {
+    if (strncmp(sensor_name, dev->sensor_name, 6) == 0) {
         dev->sensor_mode = 0x195;
-    } else if (strncmp(sensor_name, "sc3336", 6) == 0) {
+    } else if (strncmp(sensor_name, dev->sensor_name, 6) == 0) {
         dev->sensor_mode = 0x196;
     } else {
         pr_warn("Unknown sensor %s - using default mode\n", sensor_name);
@@ -295,18 +295,37 @@ int configure_i2c_gpio(struct IMPISPDev *dev)
 
 int setup_i2c_adapter(struct IMPISPDev *dev)
 {
-    struct i2c_board_info board_info = {
-        .type = "sc2336",
-        .addr = 0x30,
-        .irq = 68,  // From /proc/interrupts - i2c.0
-        .platform_data = dev,  // Pass our device as platform data
-        .flags = I2C_CLIENT_TEN,  // Try standard flags first
-    };
+    struct i2c_board_info board_info = {0};  // Initialize to zero
     struct i2c_adapter *adapter;
     struct i2c_client *client;
+    char buf[32];
     int ret;
 
-    pr_info("Setting up I2C infrastructure for SC2336...\n");
+    pr_info("Setting up I2C infrastructure for Image Sensor...\n");
+
+    // Read sensor name
+    ret = read_proc_value("/proc/jz/sensor/name", buf, sizeof(buf));
+    if (ret < 0) {
+        pr_err("Failed to read sensor name: %d\n", ret);
+        return ret;
+    }
+    strncpy(board_info.type, buf, I2C_NAME_SIZE - 1);
+    board_info.type[I2C_NAME_SIZE - 1] = '\0';
+
+    // Read I2C address
+    ret = read_proc_value("/proc/jz/sensor/i2c_addr", buf, sizeof(buf));
+    if (ret < 0) {
+        pr_err("Failed to read sensor i2c_addr: %d\n", ret);
+        return ret;
+    }
+    if (sscanf(buf, "0x%x", &board_info.addr) != 1) {
+        pr_err("Invalid i2c_addr format\n");
+        return -EINVAL;
+    }
+
+    board_info.irq = 68;  // From /proc/interrupts - i2c.0
+    board_info.platform_data = dev;
+    board_info.flags = I2C_CLIENT_TEN;
 
     // Request the i2c-dev module first
     ret = request_module("i2c-dev");
@@ -337,8 +356,8 @@ int setup_i2c_adapter(struct IMPISPDev *dev)
 
     dev->sensor_i2c_client = client;
 
-    pr_info("I2C sensor initialized: addr=0x%02x adapter=%p irq=%d\n",
-            client->addr, client->adapter, client->irq);
+    pr_info("I2C sensor initialized: type=%s addr=0x%02x adapter=%p irq=%d\n",
+            client->name, client->addr, client->adapter, client->irq);
 
     i2c_put_adapter(adapter);
     return 0;

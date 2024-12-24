@@ -192,7 +192,7 @@ int configure_mipi_csi(struct IMPISPDev *dev)
     u32 val;
     int retry = 5;
 
-    pr_info("T31 CSI: Configuring for SC2336...\n");
+    pr_info("T31 CSI: Configuring Sensor...\n");
 
     // Step 1: Initial error state check
     pr_info("CSI pre-config state:\n");

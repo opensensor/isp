@@ -465,6 +465,26 @@ void verify_isp_state(struct IMPISPDev *dev)
     dump_vic_state(dev);
 }
 
+
+static void configure_vic_mipi_mode(struct IMPISPDev *dev)
+{
+    void __iomem *vic_regs = dev->reg_base + VIC_BASE;
+    uint32_t mipi_mode;
+
+    // MIPI basic setup matches registers from working state
+    writel(0x01004632, vic_regs + 0x010);  // MIPI timing
+    writel(0x00000a02, vic_regs + 0x014);  // Sensor type
+    writel(0x0a08003f, vic_regs + 0x018);  // Mode configuration
+
+    // Mode B configuration
+    mipi_mode = 0x100010;
+    writel(mipi_mode, vic_regs + 0x1a4);
+    writel(0x4210, vic_regs + 0x1ac);
+    writel(0x10, vic_regs + 0x1b0);
+    writel(0x0, vic_regs + 0x1b4);
+    wmb();
+}
+
 int init_vic_control(struct IMPISPDev *dev)
 {
     void __iomem *vic_regs;
@@ -489,6 +509,10 @@ int init_vic_control(struct IMPISPDev *dev)
 
     // First enable VIC core
     writel(0x00060003, vic_regs + 0x0);
+    wmb();
+
+    // Configure MIPI mode
+    configure_vic_mipi_mode(dev);
     wmb();
 
     // Then setup IRQs
@@ -833,6 +857,100 @@ void probe_vic_registers(struct IMPISPDev *dev) {
     }
 }
 
+void dump_vic_registers_detailed(void)
+{
+    void __iomem *vic_regs = ioremap(0x13300000 + 0x7000, 0x2000);  // ISP_BASE + VIC_BASE
+    if (!vic_regs) {
+        pr_err("Failed to map VIC registers for debug dump\n");
+        return;
+    }
+
+    // Core registers (0x000-0x0FF)
+    pr_info("=== VIC Core Registers ===\n");
+    pr_info("0x000 (Control):     %08x\n", readl(vic_regs + 0x000));
+    pr_info("0x004 (Config):      %08x\n", readl(vic_regs + 0x004));
+    pr_info("0x010 (MIPI):        %08x\n", readl(vic_regs + 0x010));
+    pr_info("0x014 (SensorType):  %08x\n", readl(vic_regs + 0x014));
+    pr_info("0x018 (SensorMode):  %08x\n", readl(vic_regs + 0x018));
+
+    // Same format as before but keep going with more ranges...
+    pr_info("\n=== Extended Register Ranges ===\n");
+    for (int i = 0x0; i <= 0x1000; i += 16) {
+        pr_info("%03x: %08x %08x %08x %08x\n",
+            i,
+            readl(vic_regs + i),
+            readl(vic_regs + i + 4),
+            readl(vic_regs + i + 8),
+            readl(vic_regs + i + 12)
+        );
+    }
+
+    iounmap(vic_regs);
+}
+
+
+#define VIC_STATE_IDLE       1
+#define VIC_STATE_CONFIGURED 2
+#define VIC_STATE_INITIALIZED 3
+#define VIC_STATE_STREAMING  4
+
+struct vic_dev {
+    struct mutex state_lock;
+    int state;
+    void __iomem *reg_base;
+    struct device *dev;
+    /* existing fields... */
+};
+
+// Core state management functions
+static int vic_core_set_state(struct vic_dev *vic, int new_state)
+{
+    int ret = 0;
+    mutex_lock(&vic->state_lock);
+
+    switch(new_state) {
+        case VIC_STATE_IDLE:
+            if (vic->state != VIC_STATE_CONFIGURED) {
+                ret = -EINVAL;
+                goto out;
+            }
+        break;
+
+        case VIC_STATE_CONFIGURED:
+            if (vic->state != VIC_STATE_IDLE && vic->state != VIC_STATE_INITIALIZED) {
+                ret = -EINVAL;
+                goto out;
+            }
+        tx_vic_disable_irq(vic->reg_base);
+        break;
+
+        case VIC_STATE_INITIALIZED:
+            if (vic->state != VIC_STATE_CONFIGURED) {
+                ret = -EINVAL;
+                goto out;
+            }
+        tx_vic_enable_irq(vic->reg_base);
+        break;
+
+        case VIC_STATE_STREAMING:
+            if (vic->state != VIC_STATE_INITIALIZED) {
+                ret = -EINVAL;
+                goto out;
+            }
+        break;
+
+        default:
+            ret = -EINVAL;
+        goto out;
+    }
+
+    vic->state = new_state;
+
+    out:
+        mutex_unlock(&vic->state_lock);
+    return ret;
+}
+
 
 void dump_irq_info(void) {
     void __iomem *intc_base = ioremap(0x10001000, 0x1000);
@@ -840,6 +958,7 @@ void dump_irq_info(void) {
     pr_info("IMR: 0x%08x\n", readl(intc_base + 0x04));
     pr_info("IPR: 0x%08x\n", readl(intc_base + 0x10));
 }
+
 void tx_vic_disable_irq(void __iomem *intc_base) {
     u32 mask = readl(intc_base + ICMRn);
     // Mask VIC and ISP (bits 30 and 31)
@@ -872,99 +991,122 @@ struct vic_frame_metadata {
     uint32_t height;         // Frame height
 } __attribute__((packed));
 
-void configure_vic_buffer_chain(struct IMPISPDev *dev)
+
+void configure_vic_interrupts(struct IMPISPDev *dev)
 {
     void __iomem *vic_regs = dev->reg_base + VIC_BASE;
-    const uint32_t METADATA_SIZE = sizeof(struct vic_frame_metadata);
-    const uint32_t CONTROL_BLOCK_SIZE = 32;
 
-    // Calculate frame component sizes with proper alignment
-    uint32_t width = ALIGN(dev->width, 32);  // Align width to 32 bytes
-    uint32_t height = ALIGN(dev->height, 16); // Align height to 16 lines
+    // First clear any pending interrupts
+    writel(0xffffffff, vic_regs + 0xb4);
+    writel(0xffffffff, vic_regs + 0xb8);
+    wmb();
 
-    uint32_t y_size = width * height;
-    uint32_t uv_size = width * height / 2;  // NV12 format
+    // Core interrupt setup
 
-    // Total size per frame including metadata
-    uint32_t frame_metadata_size = CONTROL_BLOCK_SIZE + METADATA_SIZE;
-    uint32_t frame_data_size = y_size + uv_size;
-    uint32_t total_frame_size = frame_metadata_size + frame_data_size;
+    // Write and verify each core interrupt register
+    writel(0x01000000, vic_regs + 0x080);
+    u32 val = readl(vic_regs + 0x080);
+    dev_info(dev->dev, "0x080 wrote 0x01000000, read 0x%08x\n", val);
 
-    // Calculate buffer addresses for 4 frames
-    uint32_t frame1_meta = dev->dma_addr;
-    uint32_t frame1_y = frame1_meta + frame_metadata_size;
-    uint32_t frame1_uv = frame1_y + y_size;
+    writel(0x00000000, vic_regs + 0x084);
+    val = readl(vic_regs + 0x084);
+    dev_info(dev->dev, "0x084 wrote 0x00000000, read 0x%08x\n", val);
 
-    uint32_t frame2_meta = frame1_meta + total_frame_size;
-    uint32_t frame2_y = frame2_meta + frame_metadata_size;
-    uint32_t frame2_uv = frame2_y + y_size;
+    writel(0x00080000, vic_regs + 0x088);
+    writel(0x00010001, vic_regs + 0x08c);
+    wmb();
 
-    uint32_t frame3_meta = frame2_meta + total_frame_size;
-    uint32_t frame3_y = frame3_meta + frame_metadata_size;
-    uint32_t frame3_uv = frame3_y + y_size;
+    // Status registers
+    writel(0x00010001, vic_regs + 0x810);
+    writel(0x00000000, vic_regs + 0x814);
+    writel(0x00000000, vic_regs + 0x818);
+    writel(0x20151120, vic_regs + 0x81c);
+    wmb();
 
-    uint32_t frame4_meta = frame3_meta + total_frame_size;
-    uint32_t frame4_y = frame4_meta + frame_metadata_size;
-    uint32_t frame4_uv = frame4_y + y_size;
+    // Frame routing registers from working state
+    writel(0x02a80042, vic_regs + 0x840);
+    writel(0x00000040, vic_regs + 0x844);
+    writel(0x02c7a482, vic_regs + 0x848);
+    writel(0x00000040, vic_regs + 0x84c);
+    wmb();
 
-    // Initialize metadata blocks for each frame
-    struct vic_frame_metadata *meta;
-    int i;
-    uint32_t frame_starts[] = {frame1_meta, frame2_meta, frame3_meta, frame4_meta};
+    // DMA and control
+    writel(0x808080a0, vic_regs + 0x900);
+    writel(0x00000140, vic_regs + 0x920);
+    writel(0x00000001, vic_regs + 0x92c);
+    wmb();
 
-    for (i = 0; i < 4; i++) {
-        meta = (struct vic_frame_metadata *)phys_to_virt(frame_starts[i] + CONTROL_BLOCK_SIZE);
-        meta->magic = 0x80;
-        meta->validation1 = 0xe1;
-        meta->width_check = width / 2;
-        meta->validation2 = 0x147;
-        meta->fps_num = 25; // TODO
-        meta->fps_den = 1;  // TODO
-        meta->width = width;
-        meta->height = height;
-    }
-
-    // Configure DMA registers for buffer chain
-    writel(total_frame_size, vic_regs + 0x908);  // Frame size including metadata
-    writel(width, vic_regs + 0x90c);            // Y stride
-    writel(width, vic_regs + 0x918);            // UV stride
-
-    // Y plane buffer chain - offsets from base
-    writel(frame1_y, vic_regs + 0x920);        // First Y start
-    writel(y_size, vic_regs + 0x924);          // Y size
-    writel(frame2_y, vic_regs + 0x928);        // Second Y start
-    writel(frame3_y, vic_regs + 0x92c);        // Third Y start
-    writel(frame4_y, vic_regs + 0x930);        // Fourth Y start
-
-    // UV plane chain - absolute addresses
-    writel(frame1_uv, vic_regs + 0x934);       // First UV
-    writel(frame2_uv, vic_regs + 0x938);       // Second UV
-    writel(frame3_uv, vic_regs + 0x93c);       // Third UV
-    writel(frame4_uv, vic_regs + 0x940);       // Fourth UV
-    writel(frame4_uv + uv_size, vic_regs + 0x944); // End marker
-
-    // Frame offset chain - start of each complete frame including metadata
-    writel(frame1_meta, vic_regs + 0x948);     // Frame 1 start
-    writel(frame2_meta, vic_regs + 0x94c);     // Frame 2 start
-    writel(frame3_meta, vic_regs + 0x950);     // Frame 3 start
-    writel(frame4_meta, vic_regs + 0x954);     // Frame 4 start
-    writel(frame4_meta + total_frame_size, vic_regs + 0x958); // End of last frame
-
-    // Configure DMA control with 4 buffers and NV12 format
-    uint32_t dma_control = (4 << 16) | 0x80000020 | 7;  // 4 buffers, enabled, NV12
-    writel(dma_control, vic_regs + 0x900);
-
-    wmb();  // Ensure all register writes complete
-
-    dev_dbg(dev->dev, "VIC buffer chain configured:\n"
-            "  Frame size: %u (meta: %u + data: %u)\n"
-            "  Y size: %u, UV size: %u\n"
-            "  Frame addresses: %08x %08x %08x %08x\n",
-            total_frame_size, frame_metadata_size, frame_data_size,
-            y_size, uv_size,
-            frame1_meta, frame2_meta, frame3_meta, frame4_meta);
+    dev_info(dev->dev, "VIC interrupt configuration complete\n");
 }
 
+void configure_vic_buffer_chain(struct IMPISPDev *dev, uint32_t mipi_mode)
+{
+    void __iomem *vic_regs = dev->reg_base + VIC_BASE;
+    uint32_t sensor_mode = readl(vic_regs + 0x018);
+
+    // Fixed metadata requirements
+    const uint32_t META_SIZE = 0x40;
+    const uint32_t META_OFFSET = 0x42;
+
+    // Use Mode B stride when sensor mode is 0x0a08003f
+    uint32_t FRAME_STRIDE = (sensor_mode == 0x0a08003f) ? 0x780 : 0xf00;
+    uint32_t frame_size = FRAME_STRIDE * dev->height;
+    uint32_t base_addr = ALIGN(dev->dma_addr, 32);
+
+    // Standard init sequence (common to both modes)
+    writel(0x20151120, vic_regs + 0x800);
+    writel(0x00000110, vic_regs + 0x804);
+    writel(0x00000000, vic_regs + 0x808);
+    writel(0x20151120, vic_regs + 0x80c);
+    writel(0x00010001, vic_regs + 0x810);
+    writel(0x00000000, vic_regs + 0x814);
+    writel(0x00000000, vic_regs + 0x818);
+    writel(0x20151120, vic_regs + 0x81c);
+
+    // Frame buffer chain setup
+    writel(base_addr, vic_regs + 0x820);
+    writel(FRAME_STRIDE, vic_regs + 0x824);
+    writel(FRAME_STRIDE, vic_regs + 0x828);
+    writel(FRAME_STRIDE, vic_regs + 0x82c);
+    writel(frame_size, vic_regs + 0x830);
+    writel(META_SIZE, vic_regs + 0x834);
+    writel(0x0, vic_regs + 0x838);
+    writel(0x1, vic_regs + 0x83c);
+
+    // Frame buffer pointers
+    uint32_t frame1_addr = base_addr + META_OFFSET;
+    uint32_t frame2_addr = frame1_addr + frame_size + META_SIZE;
+    uint32_t frame3_addr = frame2_addr + frame_size + META_SIZE;
+
+    writel(frame1_addr, vic_regs + 0x840);
+    writel(META_SIZE, vic_regs + 0x844);
+    writel(frame2_addr, vic_regs + 0x848);
+    writel(META_SIZE, vic_regs + 0x84c);
+    writel(frame3_addr, vic_regs + 0x850);
+    writel(META_SIZE, vic_regs + 0x854);
+    writel(frame_size, vic_regs + 0x858);
+    writel(0x3c0, vic_regs + 0x85c);
+
+    // DMA Control - Common for both modes
+    writel(0x808080a0, vic_regs + 0x900);
+    writel(0x80808080, vic_regs + 0x904);
+    writel(0x80808080, vic_regs + 0x908);
+    writel(0x80808080, vic_regs + 0x90c);
+
+    // Control sequence - Common for both modes
+    writel(0x00000140, vic_regs + 0x920);
+    writel(0x00000000, vic_regs + 0x924);
+    writel(0x00000000, vic_regs + 0x928);
+    writel(0x00000001, vic_regs + 0x92c);
+    wmb();
+
+    dev_info(dev->dev, "VIC buffer chain configured for MIPI mode 0x%x:\n"
+            "  Base addr: %08x\n"
+            "  Frame size: %08x (stride: %08x)\n"
+            "  Frames: %08x %08x %08x\n",
+            mipi_mode, base_addr, frame_size, FRAME_STRIDE,
+            frame1_addr, frame2_addr, frame3_addr);
+}
 
 void configure_isp_processing_regs(struct IMPISPDev *dev) {
     void __iomem *isp_regs = dev->reg_base;
@@ -1016,50 +1158,119 @@ int configure_vic_for_streaming(struct IMPISPDev *dev)
         goto err_unmap;
     }
 
-    dev_dbg(dev->dev, "Configuring VIC for streaming...\n");
+    dev_info(dev->dev, "Configuring VIC for streaming...\n");
 
-    // 1. Configure GPIO/INTC for VIC interrupts
-    writel(VIC_INT, gpioz_base + PZINTS);    // Enable VIC interrupt
-    writel(0x00000000, gpioz_base + PZMSKS); // Unmask interrupt
-    writel(VIC_INT, gpioz_base + PZPAT1S);   // Edge triggered
-    writel(0x00000000, gpioz_base + PZPAT0S);// Falling edge
-    writel(0x1, gpioz_base + PZGID2LD);      // Load to Port B
+    dev_info(dev->dev, "sensor type is OTHER_MIPI!\n");
+    u32 shadow_val = 0xa000a;
+
+    // 1. Configure GPIO/INTC first as before
+    writel(VIC_INT, gpioz_base + PZINTS);
+    writel(0x00000000, gpioz_base + PZMSKS);
+    writel(VIC_INT, gpioz_base + PZPAT1S);
+    writel(0x00000000, gpioz_base + PZPAT0S);
+    writel(0x1, gpioz_base + PZGID2LD);
 
     tx_vic_enable_irq(intc_base);
 
-    // 2. Basic VIC Configuration
-    writel(0x030000, vic_regs + 0x000); // Control
-    writel(0x070000, vic_regs + 0x004); // Config
-    writel(0x01004632, vic_regs + 0x010); // MIPI config
-    writel(0x00000a02, vic_regs + 0x014); // Sensor type
-    writel(0x0a08003f, vic_regs + 0x018); // Sensor mode
+    u32 mode_val = readl(vic_regs + 0x7c);
+    dev_info(dev->dev, "Mode value at 0x7c: 0x%08x\n", mode_val);
+    int mode_reg = 8;  // Default
+    if (mode_val != 0)
+        mode_reg = 0xa;
+    if (mode_val != 1)
+        mode_reg = 0xc;
+    if (mode_val != 2)
+        mode_reg = 0x10;
+    if (mode_val != 7)
+        mode_reg = 0;
 
-    // 3. Setup IRQs early
-    writel(0xffffffff, vic_regs + 0xb4);  // Clear status
-    writel(0xffffffff, vic_regs + 0xb8);  // Clear status 2
-    writel(0x000033fb, vic_regs + 0x93c); // Enable VIC IRQs
+    // 2. OEM sequence for shadow/control registers
+    dev_info(dev->dev, "sensor type is OTHER_MIPI!\n");
+    uint32_t mipi_mode = 0xa000a;  // Mode we're setting
+    writel(mipi_mode, vic_regs + 0x1a4);
+    wmb();
 
-    // 4. Configure timing parameters
-    writel(0x080f003f, vic_regs + 0x18);  // Sync params
-    writel(0x141f0000, vic_regs + 0x1c);
-    writel(0x003fff08, vic_regs + 0x20);
-    writel(0x00133200, vic_regs + 0x24);
-    writel(0x00010610, vic_regs + 0x28);
-    writel(0xff00ff00, vic_regs + 0x2c);
-    writel(0x0003ff00, vic_regs + 0x30);
+    // 1. Set initial control state
+    writel(2, vic_control + 0xc);
+    wmb();
 
-    // 5. Configure buffer chain with metadata
-    configure_vic_buffer_chain(dev);
+    // 2. Core register base config
+    writel(0x030000, vic_regs + 0x000);
+    writel(0x070000, vic_regs + 0x004);
+    writel(0x010a0000, vic_regs + 0x008);
+    writel(0x0aff0700, vic_regs + 0x00c);
+    writel(0x01004632, vic_regs + 0x010);
+    wmb();
 
-    // 6. Frame interrupt setup
-    writel(0x01000000, vic_regs + 0x80);
-    writel(0x00080000, vic_regs + 0x88);
-    writel(0x00010001, vic_regs + 0x8c);
-    writel(0x00010001, vic_regs + 0x810);
+    // 4. Additional shadow register setup from frame mode
+    writel(0x4440, vic_regs + 0x1ac);
+    writel(0x10, vic_regs + 0x1b0);
+    writel(0x0, vic_regs + 0x1b4);
 
-    // 7. Enable interrupts and routing
+    dump_vic_registers_detailed();
+
+    // 5. Enter config state
+    writel(2, vic_control);
+    wmb();
+    udelay(1);
+
+    // 6. Configure ISP core and processing
+    configure_isp_processing_regs(dev);
+
+    // 7. Configure VIC interrupts
+    configure_vic_interrupts(dev);
+
+    // 8. Timing parameters
+    writel(0x20202020, vic_regs + 0x060);
+    writel(0x20202020, vic_regs + 0x064);
+    writel(0x001e001e, vic_regs + 0x068);
+    writel(0x001e001e, vic_regs + 0x06c);
+    writel(0x001e001e, vic_regs + 0x070);
+    writel(0x001e001e, vic_regs + 0x074);
+    writel(0x00010103, vic_regs + 0x078);
+    writel(0x00010103, vic_regs + 0x07c);
+    wmb();
+
+    writel(0x003f003f, vic_regs + 0x034);
+    writel(0x0a140000, vic_regs + 0x01c);
+    wmb();
+
+    // 9. Configure buffer chain
+    configure_vic_buffer_chain(dev, mipi_mode);
+
+    // Keep the basic setup the same, but modify these values:
+
+    // Before writes
+    dev_info(dev->dev, "Before interrupt block - 0x080: 0x%08x\n", readl(vic_regs + 0x080));
+
+    // Frame/interrupt control block to match OEM exactly
+    writel(0x012975c5, vic_regs + 0x080);
+    wmb();
+    writel(0x0052a5c1, vic_regs + 0x084);
+    wmb();
+    writel(0x00060003, vic_regs + 0x088);
+    wmb();
+    writel(0x00000010, vic_regs + 0x08c);
+    wmb();
+
+    // After writes
+    dev_info(dev->dev, "After interrupt block - 0x080: 0x%08x\n", readl(vic_regs + 0x080));
+
+    // Set sensor type directly
+    writel(0x00000a02, vic_regs + 0x014);
+    wmb();
+
+    // Set mode directly
+    writel(0x0a08003f, vic_regs + 0x018);
+    wmb();
+
+    dev_info(dev->dev, "After both direct writes - type: 0x%08x mode: 0x%08x\n",
+             readl(vic_regs + 0x014),
+             readl(vic_regs + 0x018));
+
+    // 11. Enable DMA interrupts and routing
     val = readl(vic_regs + 0x900);
-    val |= 0x80000020;                     // Enable DMA interrupts
+    val |= 0x80000020;
     writel(val, vic_regs + 0x900);
 
     val = readl(vic_regs + 0x840);
@@ -1067,65 +1278,49 @@ int configure_vic_for_streaming(struct IMPISPDev *dev)
 
     wmb();
 
-    // 8. State Machine Transitions
-    dev_dbg(dev->dev, "Starting VIC state machine transitions...\n");
-
-    // Config -> Ready
-    writel(2, vic_regs);
-    wmb();
-    udelay(1);
-
-    // Ready -> Operational
-    writel(4, vic_regs);
+    // 12. State transitions (OEM sequence)
+    writel(4, vic_control); // -> Operational
     wmb();
 
-    // Wait for ready state
+    // 13. Wait for ready state
     timeout = 1000;
-    while ((readl(vic_regs) & 0x7) != 0 && timeout--) {
+    while ((readl(vic_control) & 0x7) != 0 && timeout--) {
         if (timeout % 100 == 0)
-            dev_dbg(dev->dev, "Waiting for ready... state=0x%08x\n", readl(vic_regs));
+            dev_info(dev->dev, "Waiting for ready... state=0x%08x\n", readl(vic_control));
         udelay(1);
     }
+
     if (timeout <= 0) {
         dev_err(dev->dev, "Timeout waiting for ready state\n");
         ret = -ETIMEDOUT;
         goto err_unmap;
     }
-    pr_info("VIC reached ready state\n");
 
-    // Operational -> Running
-    writel(1, vic_regs);
+    // 14. Enter running state
+    writel(1, vic_control);
     wmb();
 
-    // Verify running state
-    timeout = 1000;
-    while ((readl(vic_regs) & 0x7) != 1 && timeout--) {
-        udelay(1);
-    }
-    if (timeout <= 0) {
-        dev_err(dev->dev, "Timeout waiting for running state\n");
-        ret = -ETIMEDOUT;
-        goto err_unmap;
-    }
+    dev_info(dev->dev, "VIC configuration complete and running\n");
 
-    dev_dbg(dev->dev, "VIC configuration complete and running\n");
-
-    // Debug register dumps if needed
+    // 15. Debug register dumps
     dev_info(dev->dev, "VIC Final Config:\n");
     dev_info(dev->dev, "  Control: 0x%08x\n", readl(vic_regs + 0x000));
     dev_info(dev->dev, "  Status: 0x%08x\n", readl(vic_regs + 0xb4));
     dev_info(dev->dev, "  DMA Control: 0x%08x\n", readl(vic_regs + 0x900));
     dev_info(dev->dev, "  IRQ Enable: 0x%08x\n", readl(vic_regs + 0x93c));
 
+    dump_vic_registers_detailed();
+
+    // 16. Final state update and cleanup
     mutex_lock(&dev->vic_dev->state_lock);
     dev->vic_dev->state = VIC_STATE_STREAMING;
     mutex_unlock(&dev->vic_dev->state_lock);
 
     ret = 0;
 
-err_unmap:
-    if (intc_base)
-        iounmap(intc_base);
+    err_unmap:
+       if (intc_base)
+           iounmap(intc_base);
     if (gpioz_base)
         iounmap(gpioz_base);
 
@@ -1347,60 +1542,68 @@ int tx_isp_vic_start(struct IMPISPDev *dev)
     return 0;
 }
 
-int vic_core_s_stream(struct IMPISPDev *dev, int enable)
+int vic_core_s_stream(struct vic_dev *vic, int enable)
 {
-    struct vic_device *vic_dev = dev->vic_dev;
     int ret = 0;
 
-    if (enable) {
-        if (vic_dev->state == TX_ISP_MODULE_STREAMING)
-            return 0;
+    if (!vic)
+        return -EINVAL;
 
-        // Disable interrupts during transition
-        tx_vic_disable_irq(dev);  // Pass dev
-
-        // Full VIC setup
-        ret = tx_isp_vic_start(dev);
-        if (ret) {
-            pr_err("Failed to start VIC: %d\n", ret);
-            return ret;
+    if (!enable) {
+        if (vic->state == VIC_STATE_STREAMING) {
+            ret = vic_core_set_state(vic, VIC_STATE_INITIALIZED);
         }
-
-        tx_vic_enable_irq(dev);  // Pass dev
-
-        // Transit to streaming state
-        vic_dev->state = TX_ISP_MODULE_STREAMING;
-
-        // Re-enable interrupts
-        tx_vic_enable_irq(dev);  // Pass dev
-
-    } else {
-        if (vic_dev->state == TX_ISP_MODULE_STREAMING) {
-            // Transit to stopping state
-            vic_dev->state = TX_ISP_MODULE_STOPPING;
-        }
+        return ret;
     }
 
+    if (vic->state == VIC_STATE_STREAMING)
+        return 0;
+
+    // Disable interrupts during configuration
+    tx_vic_disable_irq(vic->reg_base);
+
+    // Start the VIC hardware
+    ret = configure_vic_for_streaming(vic);
+    if (ret)
+        goto err_restore_irq;
+
+    ret = vic_core_set_state(vic, VIC_STATE_STREAMING);
+    if (ret)
+        goto err_restore_irq;
+
+    tx_vic_enable_irq(vic->reg_base);
     return 0;
+
+    err_restore_irq:
+        tx_vic_enable_irq(vic->reg_base);
+    return ret;
 }
 
-int vic_core_ops_init(struct IMPISPDev *dev, int enable)
+int vic_core_ops_init(struct vic_dev *vic, int enable)
 {
-    struct vic_device *vic_dev = dev->vic_dev;
+    int ret;
 
-    if (enable) {
-        if (vic_dev->state != TX_ISP_MODULE_READY) {
-            tx_vic_enable_irq(dev);  // Pass dev
-            vic_dev->state = TX_ISP_MODULE_READY;
-        }
+    if (!vic)
+        return -EINVAL;
+
+    if (!enable) {
+        // Shutdown sequence
+        if (vic->state != VIC_STATE_INITIALIZED)
+            return 0;
+
+        tx_vic_disable_irq(vic->reg_base);
+        ret = vic_core_set_state(vic, VIC_STATE_CONFIGURED);
+
     } else {
-        if (vic_dev->state != TX_ISP_MODULE_INIT) {
-            tx_vic_disable_irq(dev);  // Pass dev
-            vic_dev->state = TX_ISP_MODULE_INIT;
-        }
+        // Initialization sequence
+        if (vic->state != VIC_STATE_CONFIGURED)
+            return 0;
+
+        tx_vic_enable_irq(vic->reg_base);
+        ret = vic_core_set_state(vic, VIC_STATE_INITIALIZED);
     }
 
-    return 0;
+    return ret;
 }
 
 int tx_isp_vic_slake_subdev(struct IMPISPDev *dev)

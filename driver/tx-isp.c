@@ -4713,7 +4713,7 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
 
     case 0xc0045627: {
         int result_val;
-        const char *sensor_name = "sc2336";
+        const char *sensor_name = dev->sensor_name;
 
         if (copy_from_user(&result_val, (void __user *)arg, sizeof(result_val))) {
             pr_err("Failed to get result value\n");
@@ -4769,18 +4769,19 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
             goto err_disable_vic;
         }
 
-        // 5. Then start sensor streaming
-        ret = tx_isp_video_s_stream(dev);
-        if (ret && ret != 0xfffffdfd) {
-            pr_err("Failed to start video stream: %d\n", ret);
-            goto err_disable_csi;
-        }
-
         // 4. Enable CSI stream first
         ret = tx_isp_csi_s_stream(dev->csi_dev, 1);
         if (ret) {
             pr_err("Failed to start CSI streaming: %d\n", ret);
             goto err_disable_vic;
+        }
+
+
+        // 5. Then start sensor streaming
+        ret = tx_isp_video_s_stream(dev);
+        if (ret && ret != 0xfffffdfd) {
+            pr_err("Failed to start video stream: %d\n", ret);
+            goto err_disable_csi;
         }
 
         // Small delay to let CSI stabilize
@@ -6722,7 +6723,7 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
       }
 
       // Fill in the name for this index
-      snprintf(req.name, sizeof(req.name), "sc2336");
+      snprintf(req.name, sizeof(req.name), dev->sensor_name);
 
       // Copy the result back to userspace
       if (copy_to_user((void __user *)arg, &req, sizeof(req))) {
@@ -6919,8 +6920,7 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
                 local_buf_info.size);
 
         // Magic number handshake - maintain compatibility
-        if (local_buf_info.method == 0x203a726f &&
-            local_buf_info.phys_addr == 0x33326373) {
+        if (local_buf_info.method) {
             // Initial phase - tell userspace we support DMA
             local_buf_info.method = ISP_ALLOC_DMA;  // Changed to indicate DMA mode
             local_buf_info.phys_addr = 0x1;
@@ -7443,6 +7443,14 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             return -EFAULT;
         }
 
+        /* Setup I2C and sensor */
+    	pr_info("Starting I2C init\n");
+    	ret = setup_i2c_adapter(dev);
+    	if (ret) {
+            pr_err("Failed to setup I2C adapter: %d\n", ret);
+            return ret;
+        }
+
         // This maps to the same functionality as VIDIOC_REGISTER_SENSOR
         struct i2c_client *client = dev->sensor_i2c_client;
         if (!client || !client->adapter) {
@@ -7457,6 +7465,9 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         }
 
         pr_info("Sensor registered: %s\n", ourISPdev->sensor_name);
+		pr_info("Starting sensor init\n");
+        tisp_sensor_init(dev->dev);
+
         return 0;
     }
     default:
@@ -7580,22 +7591,23 @@ static struct isp_platform_data isp_pdata = {
 
 
 
-
-
-
-static int tisp_driver_init(struct device *dev)
+static int tisp_sensor_init(struct device *dev)
 {
     int ret;
-    const char *param_file = "/etc/sensor/sc2336-t31.bin";
+    char param_file[64]; // Buffer for constructing parameter file path
     uint32_t reg_val;
 
-    pr_info("Starting tisp_driver_init...\n");
+    pr_info("Starting tisp_sensor_init...\n");
 
     // Verify registers are mapped using global ourISPdev
     if (!ourISPdev || !ourISPdev->reg_base) {
         dev_err(dev, "ISP registers not mapped!\n");
         return -EFAULT;
     }
+
+    // Construct parameter file path using sensor name
+    snprintf(param_file, sizeof(param_file), "/etc/sensor/%s-t31.bin",
+             ourISPdev->sensor_name);
 
     // Step 1: Allocate memory using vmalloc
     tparams_day = vmalloc(ISP_OFFSET_PARAMS);
@@ -7618,7 +7630,7 @@ static int tisp_driver_init(struct device *dev)
     // Step 2: Load parameters from the file
     ret = tiziano_load_parameters(param_file, tparams_day, ISP_OFFSET_PARAMS);
     if (ret) {
-        dev_err(dev, "Failed to load parameters from file\n");
+        dev_err(dev, "Failed to load parameters from %s\n", param_file);
         goto cleanup;
     }
     dev_info(dev, "Parameters loaded successfully from %s\n", param_file);
@@ -10296,12 +10308,6 @@ static int tx_isp_probe(struct platform_device *pdev)
     if (ret)
         goto err_cleanup_subsys;
 
-    /* Setup I2C and sensor */
-    pr_info("Starting I2C init\n");
-    ret = setup_i2c_adapter(dev);
-    if (ret)
-        goto err_cleanup_memory;
-
     for (int i = 0; i < MAX_CHANNELS; i++) {
         struct isp_channel *chn = &dev->channels[i];
         if (!chn)
@@ -11179,8 +11185,8 @@ int tx_isp_subdev_init_clks(struct tx_isp_subdev *sd, struct platform_device *pd
         pr_info("VIC clock initialized with ISP clock: rate=%lu Hz\n",
                 clk_get_rate(sd->clks[0]));
     }
-    /* For sc2336 sensor */
-    else if (strcmp(pdev->name, "sc2336") == 0) {
+    /* For sensor */
+    else if (strcmp(pdev->name, ourISPdev->sensor_name) == 0) {
         tmp_clk = clk_get(NULL, "cgu_cim");  // Try camera interface module clock
         if (IS_ERR(tmp_clk)) {
             ret = PTR_ERR(tmp_clk);
@@ -11464,11 +11470,9 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             goto err_free_out_channels;
         }
         dev->fs_dev->sd = sd;
-    } else if (!strcmp(pdev->name, "sc2336")) {  // Add sensor case
+    } else {  // Add sensor case
         pr_info("Storing sensor subdev\n");
         dev->sensor_sd = sd;
-    } else {
-        pr_warn("Unknown subdev name: %s\n", pdev->name);
     }
 
     /* Initialize the module */
@@ -11506,6 +11510,12 @@ err_free_clks:
     return ret;
 }
 EXPORT_SYMBOL(tx_isp_subdev_init);
+
+int private_jzgpio_set_func(enum gpio_port port, enum gpio_function func,unsigned long pins) {
+	int ret = jzgpio_set_func(port, func, pins);
+	return ret;
+}
+EXPORT_SYMBOL(private_jzgpio_set_func);
 
 
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd)
