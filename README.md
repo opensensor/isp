@@ -1,4 +1,4 @@
-# Open-Source ISP Driver for Ingenic T31 (SC2336)
+# Open-Source ISP Driver for Ingenic T31
 
 ![Ingenic ISP Logo](./ingenic_isp.webp)
 
