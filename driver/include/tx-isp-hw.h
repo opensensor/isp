@@ -271,6 +271,11 @@ static const struct isp_pad_config pad_link_configs[2][MAX_LINKS] = {
 #define TX_ISP_MODULE_STOPPING  3  // Stream stop requested
 #define TX_ISP_MODULE_STREAMING 4  // Actively streaming
 
+#define SENSOR_TYPE_MIPI_OTHER  0x1
+#define SENSOR_TYPE_MIPI_SONY   0x2
+#define SENSOR_TYPE_BT656       0x3
+#define SENSOR_TYPE_BT601       0x4
+
 #define VIC_INT_BIT     (1 << 30)   // VIC interrupt is bit 30
 #define ISP_M0_INT_BIT  (1 << 37)   // ISP M0 interr
 
@@ -345,9 +350,6 @@ struct vic_device {
     void __iomem *regs;         // Base registers
     struct tx_isp_subdev *sd;
     spinlock_t lock;            // IRQ lock
-
-    // Ensure alignment for MIPS32
-    u32 padding;                // Add padding to ensure alignment
     struct mutex state_lock;    // Now should be 32-bit aligned
 
     // State tracking
@@ -408,6 +410,7 @@ int isp_power_on(struct IMPISPDev *dev);
 int isp_reset_hw(struct IMPISPDev *dev);
 int reset_vic(struct IMPISPDev *dev);
 void dump_vic_state(struct IMPISPDev *dev);
+int vic_core_s_stream(struct IMPISPDev *isp, int enable);
 
 struct tx_isp_subdev_pad *find_pad(struct IMPISPDev *dev,
                                          enum imp_isp_mod_type mod,
@@ -424,8 +427,8 @@ int vic_init(struct tx_isp_subdev *sd, int on);
 int vic_reset(struct tx_isp_subdev *sd, int on);
 irqreturn_t vic_isr(struct tx_isp_subdev *sd, u32 status, bool *handled);
 irqreturn_t vic_isr_thread(struct tx_isp_subdev *sd, void *data);
-void tx_vic_disable_irq(void __iomem *intc_base);
-void tx_vic_enable_irq(void __iomem *intc_base);
+void tx_vic_disable_irq(struct IMPISPDev *dev);
+void tx_vic_enable_irq(struct IMPISPDev *dev);
 void dump_irq_info(void);
 
 // Forward declarations for CSI functions

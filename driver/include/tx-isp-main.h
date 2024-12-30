@@ -619,7 +619,7 @@
 #define ISP_STREAM_START    0x0014   // Stream start
 
 // Base register offsets from regs
-#define VIC_BASE            0x7000   // VIC registers base
+#define VIC_BASE            0xb8    // VIC registers base
 
 #define CSI_IOCTL_INIT    0x200000c  // Initializes CSI
 #define CSI_IOCTL_STATE3  0x200000e  // Sets state to 3

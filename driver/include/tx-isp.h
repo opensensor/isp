@@ -126,7 +126,7 @@ void tx_isp_hw_remove(struct IMPISPDev *dev);
 int probe_csi_registers(struct IMPISPDev *dev);
 int configure_mipi_csi(struct IMPISPDev *dev);
 int verify_csi_signals(struct IMPISPDev *dev);
-void dump_csi_registers(struct csi_device *csi_dev);
+void dump_csi_registers_detailed();
 
 // CSI initialization sequence
 int init_csi_early(struct IMPISPDev *dev);

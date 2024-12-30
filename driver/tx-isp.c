@@ -4591,36 +4591,6 @@ int tx_isp_setup_default_links(struct IMPISPDev *dev) {
     pr_info("All default links set up successfully\n");
     return 0;
 }
-//
-//void tx_vic_disable_irq(struct IMPISPDev *dev)
-//{
-//    void __iomem *vic_base = dev->reg_base + VIC_BASE;
-//
-//    // Disable VIC interrupts
-//    writel(0, vic_base + 0x93c);
-//    wmb();
-//}
-//
-//static void tx_vic_enable_irq(struct IMPISPDev *dev)
-//{
-//    void __iomem *vic_base = dev->reg_base + VIC_BASE;
-//    void __iomem *intc_base = ioremap(0x10001000, 0x1000);
-//
-//    if (!intc_base) {
-//        pr_err("Failed to map INTC\n");
-//        return;
-//    }
-//
-//    // Enable VIC interrupts
-//    writel(0x000033fb, vic_base + 0x93c);
-//    wmb();
-//
-//    // Configure INTC for VIC
-//    writel((1 << 30), intc_base + 0x0C); // Clear VIC mask bit
-//    wmb();
-//
-//    iounmap(intc_base);
-//}
 
 int tx_isp_video_link_stream(struct IMPISPDev *dev)
 {
@@ -4745,8 +4715,8 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
         break;
     }
     case 0x80045612: { // VIDIOC_STREAMON for sensor
-        struct tx_isp_subdev *csi_sd = &dev->csi_dev->sd;
         pr_info("Starting video stream on sensor\n");
+        pr_info("VIC device state: %d\n", dev->vic_dev->state);
 
         // 1. Setup I2C GPIO for sensor control
         ret = configure_i2c_gpio(dev);
@@ -4755,18 +4725,11 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
             return ret;
         }
 
-        // 2. Initialize VIC hardware
-        ret = init_vic_control(dev);
-        if (ret) {
-            pr_err("Failed to initialize VIC: %d\n", ret);
-            goto err_disable_gpio;
-        }
-
-        // 3. Configure VIC streaming settings
-        ret = configure_vic_for_streaming(dev);
-        if (ret) {
-            pr_err("Failed to configure VIC: %d\n", ret);
-            goto err_disable_vic;
+        // 5. Then start sensor streaming
+        ret = tx_isp_video_s_stream(dev);
+        if (ret && ret != 0xfffffdfd) {
+            pr_err("Failed to start video stream: %d\n", ret);
+            goto err_disable_csi;
         }
 
         // 4. Enable CSI stream first
@@ -4776,16 +4739,15 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
             goto err_disable_vic;
         }
 
-
-        // 5. Then start sensor streaming
-        ret = tx_isp_video_s_stream(dev);
-        if (ret && ret != 0xfffffdfd) {
-            pr_err("Failed to start video stream: %d\n", ret);
-            goto err_disable_csi;
-        }
-
         // Small delay to let CSI stabilize
         msleep(5);
+
+        // 3. Configure VIC streaming settings
+        ret = vic_core_s_stream(dev, 1);
+        if (ret) {
+            pr_err("Failed to configure VIC: %d\n", ret);
+            goto err_disable_vic;
+        }
 
         // 6. Setup datapath links
         ret = tx_isp_video_link_stream(dev);
@@ -4800,7 +4762,7 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
         // 7. Finally enable interrupts
         // tx_vic_enable_irq(dev);
 
-        dump_csi_registers(dev->csi_dev);
+        dump_csi_registers_detailed(dev->csi_dev);
 
         pr_info("Video streaming started successfully\n");
         return 0;
@@ -6264,18 +6226,6 @@ void system_irq_func_set(int irq_num, irq_handler_t handler)
         irq_func_cb[irq_num] = handler;
 }
 
-static void dump_intc_state(void)
-{
-    void __iomem *intc = ioremap(0x10001000, 0x100);
-    if (!intc)
-        return;
-
-    pr_info("INTC State:\n");
-    pr_info("  Mask: 0x%08x\n", readl(intc + 0x04));  // INTC mask
-    pr_info("  Pending: 0x%08x\n", readl(intc + 0x10));  // Pending
-
-    iounmap(intc);
-}
 
 
 // Matching the OEM handler structure
@@ -6377,6 +6327,25 @@ static void tx_isp_disable_irq(struct tx_isp_irq_handler *handler)
         disable_irq(handler->irq_number);
 }
 
+
+void dump_intc_state(void)
+{
+    void __iomem *intc_base = ioremap(0x10001000, 0x1000);
+    if (!intc_base) {
+        pr_err("Failed to map INTC for debug dump\n");
+        return;
+    }
+
+    printk("INTC State:\n");
+    printk("  ISR: 0x%08x\n", readl(intc_base + 0x00));
+    printk("  IMR: 0x%08x\n", readl(intc_base + 0x04));
+    printk("  IMSR: 0x%08x\n", readl(intc_base + 0x08));
+    printk("  IMCR: 0x%08x\n", readl(intc_base + 0x0c));
+    printk("  IPR: 0x%08x\n", readl(intc_base + 0x10));
+
+    iounmap(intc_base);
+}
+
 int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_handler *handler)
 {
     int ret;
@@ -6386,6 +6355,8 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_handler *
         pr_err("%s: invalid parameters\n", __func__);
         return -EINVAL;
     }
+
+    dump_intc_state();
 
     spin_lock_init(&handler->lock);
 
@@ -6406,7 +6377,9 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_handler *
     handler->disable = tx_isp_disable_irq;
     handler->irq_number = irq;
 
-    handler->disable(handler);
+    handler->enable(handler);
+
+    dump_intc_state();
     return 0;
 }
 
@@ -6461,6 +6434,8 @@ int tx_vic_request_irq(struct platform_device *pdev, struct tx_isp_irq_handler *
         return -EINVAL;
     }
 
+    dump_intc_state();
+
     // Setup INTC first
     intc_base = ioremap(0x10001000, 0x1000);
     if (!intc_base) {
@@ -6490,22 +6465,6 @@ int tx_vic_request_irq(struct platform_device *pdev, struct tx_isp_irq_handler *
                              IRQF_SHARED,
                              "isp-w02",
                              handler->dev_id);
-    // In probe after IRQ request
-    if (ret == 0) {
-        // Enable test interrupt bit
-        writel(0x1, vic_regs + 0x93c);  // Enable bit 0
-        wmb();
-
-        // Set the corresponding status bit
-        writel(0x1, vic_regs + 0xb4);   // Set bit 0
-        wmb();
-
-        msleep(100);
-
-        pr_info("Interrupt test - status: 0x%08x irqen: 0x%08x\n",
-                readl(vic_regs + 0xb4),
-                readl(vic_regs + 0x93c));
-    }
 
     pr_info("VIC IRQ %d registered successfully with handler=%p\n",
             irq, handler);
@@ -6515,6 +6474,8 @@ int tx_vic_request_irq(struct platform_device *pdev, struct tx_isp_irq_handler *
     handler->irq_number = irq;
 
     handler->enable(handler);
+
+    dump_intc_state();
 
     return 0;
 }
@@ -6732,6 +6693,7 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
       }
 
       pr_info("Provided sensor info for index %d: %s\n", req.idx, req.name);
+      pr_info("VIC device state: %d\n", dev->vic_dev->state);
       return 0;
   }
     case VIDIOC_GET_SENSOR_INFO: {
@@ -7342,7 +7304,7 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
     }
     case 0x800456d3: {  // Disable links
         pr_info("Disabling ISP links\n");
-        tx_isp_disable_interrupts(ourISPdev);
+        // tx_isp_disable_interrupts(ourISPdev);
         return 0;
     }
     case 0x800456d1: {  // Destroy links
@@ -7442,6 +7404,8 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             pr_err("Failed to copy sensor register request from user\n");
             return -EFAULT;
         }
+
+        pr_info("VIC device state: %d\n", dev->vic_dev->state);
 
         /* Setup I2C and sensor */
     	pr_info("Starting I2C init\n");
@@ -9572,8 +9536,8 @@ static void unregister_subdev(struct platform_device *pdev)
 
 static struct resource tx_isp_vic_resources[] = {
     [0] = {
-        .start  = ISP_BASE_ADDR + 0x7000,
-        .end    = ISP_BASE_ADDR + 0x7000 + 0x1000 - 1,
+        .start  = ISP_DEVICE_ADDR,  // 0x10023000
+        .end    = ISP_DEVICE_ADDR + 0x1000 - 1,
         .flags  = IORESOURCE_MEM,
         .name   = "tx-isp-vic-regs",
     },
@@ -9721,77 +9685,6 @@ static void vic_dma_irq_function(struct IMPISPDev *dev, int channel)
     pr_info("VIC DMA done interrupt\n");
     // Handle DMA completion for given channel
 }
-
-// Add to our header file
-#define VIC_IRQ_INDEX 0xd
-
-// Define our vic interrupt handling structure to match OEM
-struct vic_irq_status {
-    uint32_t irq_status;     // At 0x1e0 - raw status
-    uint32_t irq_mask;       // At 0x1e4 - mask
-    uint32_t irq_status2;    // At 0x1e8 - status after mask
-    uint32_t irq_mask2;      // At 0x1ec - mask for second group
-    uint32_t irq_status_out; // At 0x1f0 - final masked status
-    uint32_t irq_status2_out; // At 0x1f4 - final masked status 2
-};
-
-
-static void tx_vic_irq_cleanup(struct IMPISPDev *dev)
-{
-    if (dev->vic_dev) {
-        dev->vic_dev->irq_enabled = 0;
-        dev->vic_dev->irq_handler = NULL;
-        dev->vic_dev->irq_disable = NULL;
-        dev->vic_dev->irq_priv = NULL;
-    }
-}
-
-
-/* Helper to initialize VIC IRQ handling */
-int tx_vic_irq_init(struct vic_device *vic_dev,
-                    void (*handler)(void *),
-                    void (*disable)(void *),
-                    void *priv)
-{
-    void __iomem *vic_regs;
-
-    if (!vic_dev || !ourISPdev || !ourISPdev->reg_base)
-        return -EINVAL;
-
-    vic_regs = ourISPdev->reg_base + VIC_BASE;
-
-    // Initialize handler data
-    spin_lock_init(&vic_dev->lock);
-    vic_dev->irq_enabled = 0;
-    vic_dev->irq_handler = handler;
-    vic_dev->irq_disable = disable;
-    vic_dev->irq_priv = priv;
-
-    // Clear any pending interrupts
-    writel(0xFFFFFFFF, vic_regs + 0xb4);
-    wmb();
-
-    // Enable VIC interrupts
-    writel(0x000033fb, vic_regs + 0x93c);
-
-    // Unmask VIC interrupts
-    writel(0x0, vic_regs + 0x9e8);  // Clear mask to enable all
-
-    // Clear any pending
-    writel(0xFFFFFFFF, vic_regs + 0xb4);
-    wmb();
-
-
-    // Register handler in system array
-    system_irq_func_set(VIC_IRQ_INDEX, tx_vic_irq_handler);
-
-    pr_info("VIC IRQ initialized: enable=0x%08x\n", readl(vic_regs + 0x93c));
-
-    dump_intc_state();
-
-    return 0;
-}
-
 int tx_isp_vic_probe(struct platform_device *pdev)
 {
     struct IMPISPDev *dev = ourISPdev;
@@ -9810,53 +9703,68 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     if (!vic_dev)
         return -ENOMEM;
 
-    vic_dev->state = TX_ISP_MODULE_INIT;
-    vic_dev->started = false;
-    vic_dev->processing = false;
+    sd = devm_kzalloc(&pdev->dev, sizeof(*sd), GFP_KERNEL);
+    if (!sd) {
+        ret = -ENOMEM;
+        goto err_free_dev;
+    }
+    vic_dev->sd = sd;
+
+    // Basic initialization
+    vic_dev->state = VIC_STATE_INIT;  // Match OEM state
     mutex_init(&vic_dev->state_lock);
     vic_dev->regs = dev->reg_base + VIC_BASE;
     spin_lock_init(&vic_dev->lock);
     init_completion(&vic_dev->frame_complete);
     dev->vic_dev = vic_dev;
 
-    // Initialize VIC hardware base state
-    vic_base = dev->reg_base + VIC_BASE;
+    // Initialize VIC hardware
+    vic_base = ioremap(0x10023000, 0x1000);  // Direct map VIC
+    vic_dev->regs = vic_base;
 
-    // Disable all interrupts first
-    writel(0, vic_base + 0x93c);
-    writel(0xffffffff, vic_base + 0xb4);  // Clear status
-    writel(0xffffffff, vic_base + 0xb8);  // Clear status2
+    // Clear any pending interrupts first
+    writel(0, vic_base + 0x00);  // Clear ISR
+    writel(0, vic_base + 0x20);  // Clear ISR1
     wmb();
 
-    // Set initial configuration state
-    writel(0x00060003, vic_base + 0x0);   // Enable core
-    writel(0x00020000, vic_base + 0x4);   // Base config
-    writel(0x00c80000, vic_base + 0x8);   // Extended config
+    // Set up interrupt masks to match OEM
+    writel(0x00000001, vic_base + 0x04);  // IMR
+    wmb();
+    writel(0x00000000, vic_base + 0x24);  // IMR1
     wmb();
 
-    sd = &vic_dev->sd;
+    // Configure ISP control interrupts
+    writel(0x07800438, vic_base + 0x04);  // IMR
+    wmb();
+    writel(0xb5742249, vic_base + 0x0c);  // IMCR
+    wmb();
+
     ret = tx_isp_subdev_init(pdev, sd, &vic_ops);
     if (ret) {
-        dev_err(&pdev->dev, "Failed to init VIC subdev\n");
-        goto err_free_dev;
+        goto err_free_sd;
     }
 
     tx_isp_set_subdevdata(sd, vic_dev);
 
     irq_handler = devm_kzalloc(&pdev->dev, sizeof(*irq_handler), GFP_KERNEL);
-    if (!irq_handler)
-        return -ENOMEM;
+    if (!irq_handler) {
+        ret = -ENOMEM;
+        goto err_free_sd;
+    }
 
     irq_handler->dev_id = vic_dev;
     ret = tx_vic_request_irq(pdev, irq_handler);
-    if (ret)
-        return ret;
+    if (ret) {
+        goto err_free_irq;
+    }
 
     vic_dev->irq_handler = irq_handler;
-
-    pr_info("VIC probe completed successfully\n");
     return 0;
 
+err_free_irq:
+    devm_kfree(&pdev->dev, irq_handler);
+err_free_sd:
+    devm_kfree(&pdev->dev, sd);
 err_free_dev:
     devm_kfree(&pdev->dev, vic_dev);
     dev->vic_dev = NULL;
@@ -10760,7 +10668,7 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     csi_dev->state = TX_ISP_MODULE_SLAKE;
     atomic_set(&dev->csi_configured, 0);
 
-    dump_csi_registers(csi_dev);
+    dump_csi_registers_detailed(csi_dev);
 
     pr_info("CSI probe completed successfully\n");
     return 0;
@@ -11428,14 +11336,15 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
 
     /* Store the subdev in the appropriate device structure */
     pr_info("Storing subdev in device\n");
-    if (!strcmp(pdev->name, "tx-isp-vic")) {
-        if (!dev->vic_dev) {
-            pr_err("VIC device not initialized\n");
-            ret = -EINVAL;
-            goto err_free_out_channels;
-        }
-        dev->vic_dev->sd = sd;
-    } else if (!strcmp(pdev->name, "tx-isp-csi")) {
+//    if (!strcmp(pdev->name, "tx-isp-vic")) {
+//        if (!dev->vic_dev) {
+//            pr_err("VIC device not initialized\n");
+//            ret = -EINVAL;
+//            goto err_free_out_channels;
+//        }
+//        dev->vic_dev->sd = sd;
+//    } else
+    if (!strcmp(pdev->name, "tx-isp-csi")) {
         if (!dev->csi_dev) {
             pr_err("CSI device not initialized\n");
             ret = -EINVAL;

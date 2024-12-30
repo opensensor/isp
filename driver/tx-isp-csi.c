@@ -433,37 +433,48 @@ int verify_csi_signals(struct IMPISPDev *dev)
 //    pr_info("PHY_TST_CTRL1 = %08x\n", readl(csi_base + 0x34));
 //}
 
-void dump_csi_registers(struct csi_device *csi_dev)
+void dump_csi_registers_detailed()
 {
-    u32 phy_state = readl(csi_dev->csi_regs + 0x14);
+    u32 phy_state;
+    void __iomem *csi_base;
 
-    dev_info(csi_dev->dev, "****>>>>> dump csi reg <<<<<****");
-    dev_info(csi_dev->dev, "VERSION:       0x%08x", readl(csi_dev->csi_regs + 0x00));
-    dev_info(csi_dev->dev, "N_LANES:       0x%08x (%d lanes)",
-             readl(csi_dev->csi_regs + 0x04),
-             (readl(csi_dev->csi_regs + 0x04) & 0x3) + 1);
-    dev_info(csi_dev->dev, "PHY_SHUTDOWNZ: 0x%08x (%s)",
-             readl(csi_dev->csi_regs + 0x08),
-             readl(csi_dev->csi_regs + 0x08) ? "enabled" : "shutdown");
-    dev_info(csi_dev->dev, "DPHY_RSTZ:     0x%08x (%s)",
-             readl(csi_dev->csi_regs + 0x0c),
-             readl(csi_dev->csi_regs + 0x0c) ? "running" : "reset");
-    dev_info(csi_dev->dev, "CSI2_RESETN:   0x%08x (%s)",
-             readl(csi_dev->csi_regs + 0x10),
-             readl(csi_dev->csi_regs + 0x10) ? "running" : "reset");
-    dev_info(csi_dev->dev, "PHY_STATE:     0x%08x (status:%s%s%s)",
-             phy_state,
-             phy_state & BIT(10) ? " rxclkactivehs" : "",
-             phy_state & BIT(5) ? " rxulpsclknot" : "",
-             phy_state & BIT(4) ? " stopstate" : "");
-    dev_info(csi_dev->dev, "DATA_IDS_1:    0x%08x", readl(csi_dev->csi_regs + 0x18));
-    dev_info(csi_dev->dev, "DATA_IDS_2:    0x%08x", readl(csi_dev->csi_regs + 0x1c));
-    dev_info(csi_dev->dev, "ERR1:          0x%08x", readl(csi_dev->csi_regs + 0x20));
-    dev_info(csi_dev->dev, "ERR2:          0x%08x", readl(csi_dev->csi_regs + 0x24));
-    dev_info(csi_dev->dev, "MASK1:         0x%08x", readl(csi_dev->csi_regs + 0x28));
-    dev_info(csi_dev->dev, "MASK2:         0x%08x", readl(csi_dev->csi_regs + 0x2c));
-    dev_info(csi_dev->dev, "PHY_TST_CTRL0: 0x%08x", readl(csi_dev->csi_regs + 0x30));
-    dev_info(csi_dev->dev, "PHY_TST_CTRL1: 0x%08x", readl(csi_dev->csi_regs + 0x34));
+    csi_base = ioremap(0x10023000, 0x1000);
+    if (!csi_base) {
+        pr_err("Failed to map CSI registers\n");
+        return;
+    }
+
+    phy_state = readl(csi_base + 0x14);
+
+    pr_info("****>>>>> dump csi reg <<<<<****\n");
+    pr_info("VERSION:       0x%08x\n", readl(csi_base + 0x00));
+    pr_info("N_LANES:       0x%08x (%d lanes)\n",
+            readl(csi_base + 0x04),
+            (readl(csi_base + 0x04) & 0x3) + 1);
+    pr_info("PHY_SHUTDOWNZ: 0x%08x (%s)\n",
+            readl(csi_base + 0x08),
+            readl(csi_base + 0x08) ? "enabled" : "shutdown");
+    pr_info("DPHY_RSTZ:     0x%08x (%s)\n",
+            readl(csi_base + 0x0c),
+            readl(csi_base + 0x0c) ? "running" : "reset");
+    pr_info("CSI2_RESETN:   0x%08x (%s)\n",
+            readl(csi_base + 0x10),
+            readl(csi_base + 0x10) ? "running" : "reset");
+    pr_info("PHY_STATE:     0x%08x (status:%s%s%s)\n",
+            phy_state,
+            phy_state & BIT(10) ? " rxclkactivehs" : "",
+            phy_state & BIT(5) ? " rxulpsclknot" : "",
+            phy_state & BIT(4) ? " stopstate" : "");
+    pr_info("DATA_IDS_1:    0x%08x\n", readl(csi_base + 0x18));
+    pr_info("DATA_IDS_2:    0x%08x\n", readl(csi_base + 0x1c));
+    pr_info("ERR1:          0x%08x\n", readl(csi_base + 0x20));
+    pr_info("ERR2:          0x%08x\n", readl(csi_base + 0x24));
+    pr_info("MASK1:         0x%08x\n", readl(csi_base + 0x28));
+    pr_info("MASK2:         0x%08x\n", readl(csi_base + 0x2c));
+    pr_info("PHY_TST_CTRL0: 0x%08x\n", readl(csi_base + 0x30));
+    pr_info("PHY_TST_CTRL1: 0x%08x\n", readl(csi_base + 0x34));
+
+    iounmap(csi_base);
 }
 
 int csi_core_ops_init(struct IMPISPDev *dev, int enable)
@@ -1011,7 +1022,7 @@ int csi_start_stream(struct csi_device *csi)
     writel((csi->module_info->offset_2 - 1) & 3, csi->csi_regs + 0x04);  /* N_LANES */
 
     /* Enable sequence: PHY -> DPHY -> CSI2 */
-    writel(0x1, csi->csi_regs + 0x08);  /* PHY_SHUTDOWNZ */
+    writel(0x0, csi->csi_regs + 0x08);  /* PHY_SHUTDOWNZ */
     usleep_range(1000, 1500);
 
     writel(0x1, csi->csi_regs + 0x0C);  /* DPHY_RSTZ */
@@ -1407,11 +1418,6 @@ int tx_isp_csi_s_stream(struct csi_device *csi_dev, int enable)
         writel(1, csi_regs + 0x10);  // CSI2_RESETN
         wmb();
         msleep(10);
-
-        // 5. Configure interrupts
-        writel(mask1 | 0x1ffffff3, csi_regs + 0x28);  // MASK1
-        writel(mask2 | 0x00ffff33, csi_regs + 0x2c);  // MASK2
-        wmb();
 
         // Log detailed configuration
         pr_info("CSI configuration after stream enable:\n");
