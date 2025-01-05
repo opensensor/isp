@@ -441,7 +441,7 @@ int csi_reset(struct tx_isp_subdev *sd);
 int csi_hw_init(struct csi_device *csi);
 int csi_power_on(struct csi_device *csi);
 int init_csi_phy(struct csi_device *csi_dev);
-int tx_isp_csi_s_stream(struct csi_device *csi_dev, int enable);
+int tx_isp_csi_s_stream(int enable);
 
 u32 isp_reg_read(void __iomem *base, u32 offset);
 void isp_reg_write(void __iomem *base, u32 offset, u32 value);

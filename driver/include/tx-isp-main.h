@@ -1357,6 +1357,10 @@ struct isp_channel {
     void *buf_base;                    // Virtual base address
     dma_addr_t dma_addr;               // DMA base address
     dma_addr_t *buffer_dma_addrs;      // DMA addresses of each video_buffer
+    void *dma_y_virt;
+    dma_addr_t dma_y_phys;
+    void *dma_uv_virt;
+    dma_addr_t dma_uv_phys;
     uint32_t group_offset;             // Group offset
     uint32_t buf_size;                 // Size per buffer
     uint32_t buffer_count;                // Number of buffers
@@ -1466,6 +1470,11 @@ struct IMPISPDev {
     dma_addr_t param_addr;
     void *param_virt;
     uint32_t frame_buf_offset;
+    // DMA buffer management
+    void *y_virt;
+    dma_addr_t y_phys;
+    void *uv_virt;
+    dma_addr_t uv_phys;
 
     /* Frame sources */
     struct isp_channel  channels[MAX_CHANNELS];

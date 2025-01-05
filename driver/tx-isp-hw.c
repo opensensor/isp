@@ -1008,9 +1008,10 @@ int vic_mdma_enable(struct IMPISPDev *isp)
     return 0;
 }
 
-void configure_vic_buffer_chain(struct IMPISPDev *isp, uint32_t mode)
+void configure_vic_buffer_chain(struct IMPISPDev *isp)
 {
-    void __iomem *vic_regs = isp->reg_base + VIC_BASE;
+    void __iomem *isp_regs = ioremap(0x13309880, 0x1000);
+    void __iomem *vic_regs = ioremap(0x10023000, 0x1000);
     struct isp_channel *chn = &isp->channels[0];
     uint32_t buffer_start = ALIGN(isp->dma_addr + 0x1094d4, 32);
 
@@ -1223,12 +1224,15 @@ void configure_vic_buffer_chain(struct IMPISPDev *isp, uint32_t mode)
     writel(0x00000000, vic_regs + 0xaf8);
     writel(0x00001410, vic_regs + 0xafc);
     wmb();
+
+    iounmap(isp_regs);
+    iounmap(vic_regs);
 }
 
-void configure_vic_buffer_chain2(struct IMPISPDev *dev, uint32_t mipi_mode)
+void configure_vic_buffer_chain2(struct IMPISPDev *dev)
 {
-    void __iomem *vic_regs = dev->reg_base + VIC_BASE;
-
+    void __iomem *isp_regs = ioremap(0x13309880, 0x1000);
+    void __iomem *vic_regs = ioremap(0x10023000, 0x1000);
     // Initial status/IRQ config
     writel(0x11111111, vic_regs + 0x810);
     writel(0x00f11101, vic_regs + 0x814);
@@ -1332,6 +1336,10 @@ void configure_vic_buffer_chain2(struct IMPISPDev *dev, uint32_t mipi_mode)
         writel(0xc8b4a000, vic_regs + 0x958 + i*0x10);
         writel(0xfafaf0dc, vic_regs + 0x95c + i*0x10);
     }
+
+
+    iounmap(isp_regs);
+    iounmap(vic_regs);
 }
 
 void configure_isp_processing_regs(struct IMPISPDev *dev) {
@@ -1833,95 +1841,170 @@ void tx_vic_disable_irq(struct IMPISPDev *dev)
 
 static int tx_isp_vic_start(struct IMPISPDev *dev)
 {
-    void __iomem *vic_base = ioremap(0x10023000, 0x1000);    // Interrupt controller
-    void __iomem *vic_control = dev->reg_base + 0xb8;        // VIC control registers
-    void __iomem *isp_ctrl = ioremap(0x13300000, 0x10000);
-    void __iomem *tuning = ioremap(0x133e0000, 0x10000);
-    int ret = 0;
+   void __iomem *vic_base = ioremap(0x10023000, 0x1000);
+   void __iomem *vic_control = dev->reg_base + 0xb8;
+   void __iomem *isp_ctrl = ioremap(0x13300000, 0x10000);
+   void __iomem *tuning = ioremap(0x133e0000, 0x10000);
+   void *y_virt = NULL, *uv_virt = NULL;
+   dma_addr_t y_phys = 0, uv_phys = 0;
+   int ret = 0;
 
-    if (!vic_base || !isp_ctrl || !tuning) {
-        dev_err(dev->dev, "Failed to map registers\n");
-        ret = -ENOMEM;
-        goto cleanup;
-    }
+   size_t y_size = dev->sensor_width * dev->sensor_height;
+   size_t uv_size = y_size / 2;
 
-    // First clear old interrupt states
-    writel(0, vic_base + 0x20);  // Clear ISR1
-    writel(0, vic_base + 0x24);  // Clear IMR1
-    wmb();
+   pr_info("VIC: Allocating DMA buffers: Y=%zux%zu UV=%zu\n",
+           dev->sensor_width, dev->sensor_height, uv_size);
 
-    // Check status before proceeding
-    if (readl(dev->reg_base + 0x110) != 0 &&
-        readl(dev->reg_base + 0x110 + 0x18) != 0) {
-        dev_info(dev->dev, "Status not ready for VIC config\n");
-        ret = -EAGAIN;
-        goto cleanup;
-    }
+   if (!vic_base || !isp_ctrl || !tuning) {
+       dev_err(dev->dev, "Failed to map registers\n");
+       ret = -ENOMEM;
+       goto cleanup;
+   }
 
-    // First make sure all interrupts are masked
-    writel(0xFFFFFFFF, vic_base + 0x08);  // IMSR - Set all mask bits
-    wmb();
+   // First clear old interrupt states
+   writel(0, vic_base + 0x20);  // Clear ISR1
+   writel(0, vic_base + 0x24);  // Clear IMR1
+   wmb();
 
-    // Clear all but bit 0
-    writel(0xFFFFFFFE, vic_base + 0x0c);  // IMCR - Clear all mask bits except bit 0
-    wmb();
+   // Check status before proceeding
+   if (readl(dev->reg_base + 0x110) != 0 &&
+       readl(dev->reg_base + 0x110 + 0x18) != 0) {
+       dev_info(dev->dev, "Status not ready for VIC config\n");
+       ret = -EAGAIN;
+       goto cleanup;
+   }
 
-    // Configure ISP Control
-    writel(0x07800438, isp_ctrl + 0x04);  // IMR
-    writel(0xb5742249, isp_ctrl + 0x0c);  // IMCR
-    wmb();
+   // First make sure all interrupts are masked
+   writel(0xFFFFFFFF, vic_base + 0x08);  // IMSR - Set all mask bits
+   wmb();
 
-    // Basic config
-    writel(0xa000a, isp_ctrl + 0x1a4);
-    wmb();
+   // Clear all but bit 0
+   writel(0xFFFFFFFE, vic_base + 0x0c);  // IMCR - Clear all mask bits except bit 0
+   wmb();
 
-    // Frame buffer setup
-    uint32_t mult = 8;
-    uint32_t frame_size = mult * (dev->sensor_width * dev->sensor_height * 3/2);
-    writel((frame_size >> 5) + ((frame_size & 0x1f) ? 1 : 0), isp_ctrl + 0x100);
-    wmb();
+   // DMA buffer allocation
+   y_virt = dma_alloc_coherent(dev->dev, y_size, &y_phys, GFP_KERNEL);
+   if (!y_virt) {
+       dev_err(dev->dev, "Failed to allocate Y plane DMA buffer\n");
+       ret = -ENOMEM;
+       goto cleanup;
+   }
+   pr_info("VIC: Allocated Y plane DMA buffer: virt=%p phys=0x%llx\n",
+           y_virt, (unsigned long long)y_phys);
 
-    // Mode transitions using vic_control
-    writel(2, vic_control + 0x00);
-    wmb();
+   uv_virt = dma_alloc_coherent(dev->dev, uv_size, &uv_phys, GFP_KERNEL);
+   if (!uv_virt) {
+       dev_err(dev->dev, "Failed to allocate UV plane DMA buffer\n");
+       ret = -ENOMEM;
+       goto cleanup;
+   }
+   pr_info("VIC: Allocated UV plane DMA buffer: virt=%p phys=0x%llx\n",
+           uv_virt, (unsigned long long)uv_phys);
 
-    // Wait for mode transition
-    int timeout = 1000;
-    while (readl(vic_control + 0x10) & 1) {
-        if (timeout-- == 0) {
-            dev_err(dev->dev, "Timeout waiting for mode 2\n");
-            ret = -ETIMEDOUT;
-            goto cleanup;
-        }
-        cpu_relax();
-    }
+   // Configure ISP Control
+   writel(0x07800438, isp_ctrl + 0x04);  // IMR
+   writel(0xb5742249, isp_ctrl + 0x0c);  // IMCR
+   wmb();
 
-    writel(4, vic_control + 0x00);
-    wmb();
+   // Basic ISP config
+   writel(0xa000a, isp_ctrl + 0x1a4);
+   wmb();
 
-    timeout = 1000;
-    while (readl(vic_control + 0x00) != 0 && timeout--) {
-        cpu_relax();
-    }
+   // Frame buffer setup for NV12
+   uint32_t mult = 8;  // Multiplier for buffer size
+   uint32_t frame_size = mult * (dev->sensor_width * dev->sensor_height * 3/2);
+   uint32_t header_size = (frame_size >> 5) + ((frame_size & 0x1f) ? 1 : 0);
+   writel(header_size, isp_ctrl + 0x100);
+   wmb();
 
-    if (timeout <= 0) {
-        dev_err(dev->dev, "Timeout waiting for mode transition\n");
-        ret = -ETIMEDOUT;
-        goto cleanup;
-    }
+   // Clear all registers first
+   for (int i = 0; i <= 0x3c; i += 4) {
+       writel(0, isp_ctrl + i);
+   }
+   wmb();
 
-    writel(1, vic_control + 0x00);
-    wmb();
+   // Set control register first with magic value
+   writel(0x54560031, isp_ctrl + 0x000);
+   wmb();
+
+   // Write addresses before config
+   writel(y_phys & 0xFFFFFFF8, isp_ctrl + 0x008);  // Y address
+   writel(uv_phys & 0xFFFFFFF8, isp_ctrl + 0x00c); // UV address
+   wmb();
+
+   // Configure DMA patterns
+   writel(0x01010001, isp_ctrl + 0x010);
+   writel(0x01010001, isp_ctrl + 0x01c);
+   writel(0x01010001, isp_ctrl + 0x028);
+   wmb();
+
+   pr_info("VIC: DMA setup sequence - Writing addresses and patterns\n");
+   pr_info("VIC: Initial Y addr=0x%x UV addr=0x%x\n",
+           readl(isp_ctrl + 0x008), readl(isp_ctrl + 0x00c));
+
+   // Try writing addresses again after pattern setup
+   writel(y_phys & 0xFFFFFFF8, isp_ctrl + 0x008);
+   wmb();
+   writel(uv_phys & 0xFFFFFFF8, isp_ctrl + 0x00c);
+   wmb();
+
+   pr_info("VIC: Final Y addr=0x%x UV addr=0x%x\n",
+           readl(isp_ctrl + 0x008), readl(isp_ctrl + 0x00c));
+
+   // Mode transitions using vic_control
+   writel(2, vic_control + 0x00);
+   wmb();
+
+   // Wait for mode transition
+   int timeout = 1000;
+   while (readl(vic_control + 0x10) & 1) {
+       if (timeout-- == 0) {
+           dev_err(dev->dev, "Timeout waiting for mode 2\n");
+           ret = -ETIMEDOUT;
+           goto cleanup;
+       }
+       cpu_relax();
+   }
+
+   writel(4, vic_control + 0x00);
+   wmb();
+
+   timeout = 1000;
+   while (readl(vic_control + 0x00) != 0 && timeout--) {
+       cpu_relax();
+   }
+
+   if (timeout <= 0) {
+       dev_err(dev->dev, "Timeout waiting for mode transition\n");
+       ret = -ETIMEDOUT;
+       goto cleanup;
+   }
+
+   writel(1, vic_control + 0x00);
+   wmb();
+
+   // Store successful allocations in device structure
+   dev->y_virt = y_virt;
+   dev->y_phys = y_phys;
+   dev->uv_virt = uv_virt;
+   dev->uv_phys = uv_phys;
 
 cleanup:
-    if (vic_base)
-        iounmap(vic_base);
-    if (isp_ctrl)
-        iounmap(isp_ctrl);
-    if (tuning)
-        iounmap(tuning);
+   if (ret < 0) {
+       if (y_virt)
+           dma_free_coherent(dev->dev, y_size, y_virt, y_phys);
+       if (uv_virt)
+           dma_free_coherent(dev->dev, uv_size, uv_virt, uv_phys);
+   }
 
-    return ret;
+   if (vic_base)
+       iounmap(vic_base);
+   if (isp_ctrl)
+       iounmap(isp_ctrl);
+   if (tuning)
+       iounmap(tuning);
+
+   return ret;
 }
 
 int vic_core_ops_init(struct IMPISPDev *dev, int enable)

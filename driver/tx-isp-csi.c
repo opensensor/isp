@@ -1380,46 +1380,40 @@ static int configure_phy_rate(struct csi_device *csi_dev, unsigned long clock_ra
 
 #define CSI_MASK1_IPU   0x000FF113  // Keep IPU bits in higher part
 #define CSI_MASK2_IPU   0x0000FF33  // Keep format related bits
-int tx_isp_csi_s_stream(struct csi_device *csi_dev, int enable)
+int tx_isp_csi_s_stream(int enable)
 {
-    void __iomem *csi_regs = csi_dev->csi_regs;
-    void __iomem *phy_regs = csi_dev->phy_regs;
-    u32 mask1, mask2;
+    void __iomem *csi_regs = ioremap(0x10022000, 0x1000);  // CSI base
+    int ret = 0;
+
+    if (!csi_regs) {
+        pr_err("Failed to map CSI registers\n");
+        return -ENOMEM;
+    }
 
     pr_info("CSI stream %s\n", enable ? "on" : "off");
 
     if (enable) {
-        // Save current interrupt masks
-        mask1 = readl(csi_regs + 0x28);
-        mask2 = readl(csi_regs + 0x2c);
-
         // 1. Enable CSI clock
         writel(0x0100, csi_regs + 0x40);
         wmb();
         msleep(1);
 
-        // 2. Configure PHY
-        writel(0x7d, phy_regs + 0x000);   // PHY control
-        writel(0x3f, phy_regs + 0x128);   // PHY config
+        // 2. Configure PHY control registers to match OEM
+        writel(0xa0, csi_regs + 0x08);  // PHY_SHUTDOWNZ
+        writel(0x83, csi_regs + 0x0C);  // DPHY_RSTZ
+        writel(0xfa, csi_regs + 0x10);  // CSI2_RESETN
         wmb();
         msleep(1);
 
-        // 3. Configure data format - matching sensor settings
-        writel(0x2A, csi_regs + 0x18);  // DATA_IDS_1 - RAW10 format
-        writel(0x00, csi_regs + 0x1C);  // DATA_IDS_2
-        wmb();
-        msleep(1);
-
-        // 4. Bring up DPHY and CSI
-        writel(1, csi_regs + 0x0C);  // DPHY_RSTZ
-        wmb();
-        msleep(1);
-
-        writel(1, csi_regs + 0x10);  // CSI2_RESETN
+        // 3. Configure data format and masks
+        writel(0x00, csi_regs + 0x18);   // DATA_IDS_1
+        writel(0x88, csi_regs + 0x1C);   // DATA_IDS_2
+        writel(0x84, csi_regs + 0x28);   // MASK1
+        writel(0x5e, csi_regs + 0x2c);   // MASK2
         wmb();
         msleep(10);
 
-        // Log detailed configuration
+        // Debug output
         pr_info("CSI configuration after stream enable:\n");
         pr_info("  MASK1: 0x%08x\n", readl(csi_regs + 0x28));
         pr_info("  MASK2: 0x%08x\n", readl(csi_regs + 0x2c));
@@ -1429,8 +1423,8 @@ int tx_isp_csi_s_stream(struct csi_device *csi_dev, int enable)
 
     } else {
         // Save masks before disable
-        mask1 = readl(csi_regs + 0x28);
-        mask2 = readl(csi_regs + 0x2c);
+        u32 mask1 = readl(csi_regs + 0x28);
+        u32 mask2 = readl(csi_regs + 0x2c);
 
         // Disable CSI
         writel(0, csi_regs + 0x10);  // CSI2_RESETN
@@ -1450,5 +1444,6 @@ int tx_isp_csi_s_stream(struct csi_device *csi_dev, int enable)
         wmb();
     }
 
-    return 0;
+    iounmap(csi_regs);
+    return ret;
 }
