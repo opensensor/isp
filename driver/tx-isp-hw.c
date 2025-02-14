@@ -1852,6 +1852,19 @@ static int tx_isp_vic_start(struct IMPISPDev *dev)
    size_t y_size = dev->sensor_width * dev->sensor_height;
    size_t uv_size = y_size / 2;
 
+   // Save original states before we do anything
+   u32 original_phy_state = 0;
+   u32 original_isr = 0;
+   u32 original_imr = 0;
+   if (dev->csi_dev && dev->csi_dev->csi_regs) {
+       original_phy_state = readl(dev->csi_dev->csi_regs + 0x14);
+       pr_info("Preserving initial PHY state: 0x%08x\n", original_phy_state);
+   }
+   if (isp_ctrl) {
+       original_isr = readl(isp_ctrl + 0x000);
+       original_imr = readl(isp_ctrl + 0x04);
+   }
+
    pr_info("VIC: Allocating DMA buffers: Y=%zux%zu UV=%zu\n",
            dev->sensor_width, dev->sensor_height, uv_size);
 
@@ -1861,25 +1874,9 @@ static int tx_isp_vic_start(struct IMPISPDev *dev)
        goto cleanup;
    }
 
-   // First clear old interrupt states
-   writel(0, vic_base + 0x20);  // Clear ISR1
-   writel(0, vic_base + 0x24);  // Clear IMR1
-   wmb();
-
-   // Check status before proceeding
-   if (readl(dev->reg_base + 0x110) != 0 &&
-       readl(dev->reg_base + 0x110 + 0x18) != 0) {
-       dev_info(dev->dev, "Status not ready for VIC config\n");
-       ret = -EAGAIN;
-       goto cleanup;
-   }
-
-   // First make sure all interrupts are masked
-   writel(0xFFFFFFFF, vic_base + 0x08);  // IMSR - Set all mask bits
-   wmb();
-
-   // Clear all but bit 0
-   writel(0xFFFFFFFE, vic_base + 0x0c);  // IMCR - Clear all mask bits except bit 0
+   // Configure VIC interrupts (keeping existing bits)
+   writel(readl(vic_base + 0x04) | 0x00000001, vic_base + 0x04);  // IMR
+   writel(readl(vic_base + 0x0c) | 0x00000001, vic_base + 0x0c);  // IMCR
    wmb();
 
    // DMA buffer allocation
@@ -1901,61 +1898,59 @@ static int tx_isp_vic_start(struct IMPISPDev *dev)
    pr_info("VIC: Allocated UV plane DMA buffer: virt=%p phys=0x%llx\n",
            uv_virt, (unsigned long long)uv_phys);
 
-   // Configure ISP Control
-   writel(0x07800438, isp_ctrl + 0x04);  // IMR
-   writel(0xb5742249, isp_ctrl + 0x0c);  // IMCR
+   // Set ISP Control registers while preserving PHY-related bits
+   writel((original_isr & 0xFF000000) | 0x54560031, isp_ctrl + 0x000);  // Keep high bits
+   wmb();
+   writel(original_imr | 0x07800438, isp_ctrl + 0x04);   // Only set needed bits
+   writel(0xb5742249, isp_ctrl + 0x0c);   // IMCR
+   writel(0x00400040, isp_ctrl + 0x2c);   // IMCR1
    wmb();
 
-   // Basic ISP config
-   writel(0xa000a, isp_ctrl + 0x1a4);
+   // Basic ISP config - be careful with register that might affect PHY
+   writel(readl(isp_ctrl + 0x1a4) | 0xa000a, isp_ctrl + 0x1a4);
    wmb();
 
    // Frame buffer setup for NV12
    uint32_t mult = 8;  // Multiplier for buffer size
    uint32_t frame_size = mult * (dev->sensor_width * dev->sensor_height * 3/2);
    uint32_t header_size = (frame_size >> 5) + ((frame_size & 0x1f) ? 1 : 0);
-   writel(header_size, isp_ctrl + 0x100);
+   writel(header_size, isp_ctrl + 0x100);  // Set header size
    wmb();
 
-   // Clear all registers first
-   for (int i = 0; i <= 0x3c; i += 4) {
-       writel(0, isp_ctrl + i);
-   }
+   // Set frame header registers
+   writel(0x072d7001, isp_ctrl + 0x104);
+   writel(0x00041300, isp_ctrl + 0x108);
    wmb();
 
-   // Set control register first with magic value
-   writel(0x54560031, isp_ctrl + 0x000);
+   // Configure DMA control and pattern registers
+   writel(readl(isp_ctrl + 0x004) | 0x00000004, isp_ctrl + 0x004);  // Set bits without clearing
    wmb();
 
-   // Write addresses before config
-   writel(y_phys & 0xFFFFFFF8, isp_ctrl + 0x008);  // Y address
-   writel(uv_phys & 0xFFFFFFF8, isp_ctrl + 0x00c); // UV address
+   // Write DMA addresses
+   writel(y_phys & 0xFFFFFFF8, isp_ctrl + 0x008);    // Y address
+   writel(uv_phys & 0xFFFFFFF8, isp_ctrl + 0x00c);   // UV address
    wmb();
 
-   // Configure DMA patterns
-   writel(0x01010001, isp_ctrl + 0x010);
-   writel(0x01010001, isp_ctrl + 0x01c);
-   writel(0x01010001, isp_ctrl + 0x028);
+   // Set DMA pattern registers
+   writel(0x01000008, isp_ctrl + 0x010);  // DMA pattern 1
+   writel(0x01010001, isp_ctrl + 0x01c);  // DMA pattern 2
+   writel(0x01010001, isp_ctrl + 0x028);  // DMA pattern 3
    wmb();
 
    pr_info("VIC: DMA setup sequence - Writing addresses and patterns\n");
    pr_info("VIC: Initial Y addr=0x%x UV addr=0x%x\n",
            readl(isp_ctrl + 0x008), readl(isp_ctrl + 0x00c));
 
-   // Try writing addresses again after pattern setup
+   // Double-check the addresses are set
    writel(y_phys & 0xFFFFFFF8, isp_ctrl + 0x008);
    wmb();
    writel(uv_phys & 0xFFFFFFF8, isp_ctrl + 0x00c);
    wmb();
 
-   pr_info("VIC: Final Y addr=0x%x UV addr=0x%x\n",
-           readl(isp_ctrl + 0x008), readl(isp_ctrl + 0x00c));
-
-   // Mode transitions using vic_control
+   // Mode transitions - be careful with these
    writel(2, vic_control + 0x00);
    wmb();
 
-   // Wait for mode transition
    int timeout = 1000;
    while (readl(vic_control + 0x10) & 1) {
        if (timeout-- == 0) {
@@ -1983,7 +1978,14 @@ static int tx_isp_vic_start(struct IMPISPDev *dev)
    writel(1, vic_control + 0x00);
    wmb();
 
-   // Store successful allocations in device structure
+   // Verify PHY state is preserved
+   if (dev->csi_dev && dev->csi_dev->csi_regs) {
+       u32 final_phy_state = readl(dev->csi_dev->csi_regs + 0x14);
+       pr_info("Final PHY state: 0x%08x (original: 0x%08x)\n",
+               final_phy_state, original_phy_state);
+   }
+
+   // Store allocations in device structure
    dev->y_virt = y_virt;
    dev->y_phys = y_phys;
    dev->uv_virt = uv_virt;
@@ -2038,12 +2040,10 @@ int vic_core_s_stream(struct IMPISPDev *dev, int enable)
         }
     } else {
         if (vic->state != VIC_STATE_RUNNING) {
-            tx_vic_disable_irq(dev);
             ret = tx_isp_vic_start(dev);
             if (ret == 0) {
                 vic->state = VIC_STATE_RUNNING;
             }
-            tx_vic_enable_irq(dev);
         }
     }
 

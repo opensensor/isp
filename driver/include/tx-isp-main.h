@@ -712,7 +712,6 @@
 #define AE_ALGO_MAGIC   0x336ac
 
 #define MIPI_PHY_ADDR   0x10022000
-#define ISP_W01_ADDR    0x10023000  // Should be our CSI controller
 
 // Add these defines at the top
 #define RMEM_BASE     0x2A80000   // Reserved memory base - matches binary

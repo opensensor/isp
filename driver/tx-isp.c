@@ -3256,11 +3256,7 @@ int tx_isp_csi_init(struct platform_device *pdev)
 {
     struct IMPISPDev *dev = ourISPdev;
     struct csi_device *csi_dev;
-    struct resource *phy_res, *csi_res;
     struct tx_isp_subdev *sd = NULL;
-    void __iomem *cpm_base;
-    void __iomem *phy_base;
-    void __iomem *csi_base;
     int ret;
 
     if (!pdev)
@@ -3270,72 +3266,39 @@ int tx_isp_csi_init(struct platform_device *pdev)
     if (!csi_dev)
         return -ENOMEM;
 
-    // 2. Allocate subdev
+    // Allocate subdev first
     sd = devm_kzalloc(&pdev->dev, sizeof(*sd), GFP_KERNEL);
     if (!sd) {
         dev_err(&pdev->dev, "Failed to allocate subdev\n");
         ret = -ENOMEM;
         goto err_free_dev;
     }
-    csi_dev->sd = sd;
+    csi_dev->sd = sd;  // Store it in csi_dev
 
-    phy_res = request_mem_region(MIPI_PHY_ADDR, 0x1000, "mipi-phy");
+    // Rest of your existing initialization
+    struct resource *phy_res = request_mem_region(0x10022000, 0x1000, "mipi-phy");
     if (!phy_res) {
         pr_info("MIPI PHY region already claimed\n");
     }
 
-    csi_res = request_mem_region(ISP_W01_ADDR, 0x1000, "isp-w01");
-    if (!csi_res) {
-        pr_info("ISP W01 region already claimed\n");
+    csi_dev->phy_regs = ioremap(0x10022000, 0x1000);
+    if (!csi_dev->phy_regs) {
+        ret = -ENOMEM;
+        goto err_free_sd;
     }
 
-    // Map CPM first for clock setup
-    cpm_base = ioremap(CPM_BASE, 0x1000);
-    if (!cpm_base) {
-        return -ENOMEM;
-    }
-
-    // Map MIPI PHY
-    phy_base = ioremap(MIPI_PHY_ADDR, 0x1000);
-    if (!phy_base) {
-        iounmap(cpm_base);
-        return -ENOMEM;
-    }
-
-    // Map CSI (W01)
-    csi_base = ioremap(ISP_W01_ADDR, 0x1000);
-    if (!csi_base) {
-        iounmap(phy_base);
-        iounmap(cpm_base);
-        return -ENOMEM;
-    }
-
-    // 2. Set up device state and registers
+    // Basic init
     csi_dev->dev = &pdev->dev;
-    csi_dev->cpm_regs = cpm_base;
-    csi_dev->phy_regs = phy_base;
-    csi_dev->csi_regs = csi_base;
     dev->csi_dev = csi_dev;
-
-    // Initialize locking structures
     mutex_init(&csi_dev->mutex);
-    spin_lock_init(&csi_dev->lock);
-
-    // Get the clock and store reference
-    csi_dev->clk = devm_clk_get(&pdev->dev, "csi");
-    if (IS_ERR(csi_dev->clk)) {
-        dev_err(&pdev->dev, "Failed to get CSI clock\n");
-        return PTR_ERR(csi_dev->clk);
-    }
+    csi_dev->state = 1;  // Initial state
 
     return 0;
-	err_free_dev:
-        kfree(csi_dev);
-    err_disable_clk:
-        clk_disable_unprepare(csi_dev->clk);
-    err_unmap:
-        iounmap(csi_dev->csi_regs);
-    iounmap(csi_dev->phy_regs);
+
+    err_free_sd:
+        devm_kfree(&pdev->dev, sd);
+    err_free_dev:
+        devm_kfree(&pdev->dev, csi_dev);
     return ret;
 }
 
@@ -4650,12 +4613,28 @@ cleanup:
 int tx_isp_video_link_stream(struct IMPISPDev *dev)
 {
     void __iomem *csi_regs = dev->csi_dev->csi_regs;
+    u32 original_shutdownz, original_rstz, original_resetn;
 
     pr_info("Setting up video link datapath\n");
 
-    // Report CSI status
+    // Save original values
+    original_shutdownz = readl(csi_regs + 0x08);  // PHY_SHUTDOWNZ
+    original_rstz = readl(csi_regs + 0x0C);       // DPHY_RSTZ
+    original_resetn = readl(csi_regs + 0x10);     // CSI2_RESETN
+
+    // Report CSI status before any changes
     u32 phy_state = readl(csi_regs + 0x14);
-    pr_info("CSI PHY state in link: 0x%08x\n", phy_state);
+    pr_info("CSI PHY state before link setup: 0x%08x\n", phy_state);
+
+    // Only set bits we absolutely need to without disturbing PHY state
+    writel(original_shutdownz, csi_regs + 0x08);
+    writel(original_rstz, csi_regs + 0x0C);
+    writel(original_resetn, csi_regs + 0x10);
+    wmb();
+
+    // Verify final state
+    phy_state = readl(csi_regs + 0x14);
+    pr_info("CSI PHY state after link setup: 0x%08x\n", phy_state);
 
     dev->csi_dev->state = TX_ISP_MODULE_RUNNING;
     return 0;
@@ -4740,6 +4719,279 @@ int tx_isp_pipo_init(void)
     iounmap(base);
     return ret;
 }
+
+int tx_isp_pipeline_init(struct IMPISPDev *dev)
+{
+    void __iomem *isp_base = ioremap(0x13300000, 0x10000);
+    void __iomem *vic_base = ioremap(0x10023000, 0x1000);
+    int ret = 0;
+
+    if (!isp_base || !vic_base) {
+        pr_err("Failed to map registers\n");
+        ret = -ENOMEM;
+        goto cleanup;
+    }
+
+    // 1. Save original states for safe modification
+    u32 orig_isr = readl(isp_base + 0x000);
+    u32 orig_imr = readl(isp_base + 0x04);
+
+    // 2. Initial VIC setup from trace
+    writel(0x0, vic_base + 0x04);
+    writel(0x0, vic_base + 0x08);
+    writel(0x0, vic_base + 0x0c);
+    wmb();
+    writel(0x00000001, vic_base + 0x04);
+    writel(0x00000001, vic_base + 0x0c);
+    wmb();
+
+    // 3. ISP Control configuration preserving PHY bits
+    writel((orig_isr & 0xFF000000) | 0x54560031, isp_base + 0x000);
+    wmb();
+    writel(orig_imr | 0x07800438, isp_base + 0x04);
+    writel(0xb5742249, isp_base + 0x0c);
+    writel(0x00400040, isp_base + 0x2c);
+    wmb();
+
+    // 4. Core control registers from trace
+    writel(0xf001f001, isp_base + 0xb004);
+    writel(0x40404040, isp_base + 0xb008);
+    writel(0x40404040, isp_base + 0xb00c);
+    wmb();
+
+    // 5. Additional color processing setup from trace
+    writel(readl(isp_base + 0x9804) | 0x3f00, isp_base + 0x9804);
+    writel(0x7800438, isp_base + 0x9864);
+    writel(0xd0060034, isp_base + 0x987c);
+    wmb();
+
+    // 6. Wait for pipeline ready with proper timeout
+    int timeout = 100;
+    while (timeout--) {
+        if (readl(isp_base + 0x00) & 0x1)
+            break;
+        msleep(1);
+    }
+
+    if (timeout <= 0) {
+        pr_err("Timeout waiting for ISP pipeline ready\n");
+        ret = -ETIMEDOUT;
+        goto cleanup;
+    }
+
+cleanup:
+    if (vic_base)
+        iounmap(vic_base);
+    if (isp_base)
+        iounmap(isp_base);
+    return ret;
+}
+
+bool is_sensor_active(void)
+{
+   void __iomem *csi_base = ioremap(0x10022000, 0x1000);
+   if (!csi_base) {
+       pr_err("Failed to map CSI registers\n");
+       return false;
+   }
+
+   u32 data_ids_2 = readl(csi_base + 0x1c);
+   u32 err1 = readl(csi_base + 0x20);
+   u32 err2 = readl(csi_base + 0x24);
+
+   pr_info("Sensor Status Check:\n");
+   pr_info("  DATA_IDS_2: 0x%08x (expect: 0x88)\n", data_ids_2);
+   pr_info("  ERR1: 0x%08x (expect: ~0x4e)\n", err1);
+   pr_info("  ERR2: 0x%08x (expect: ~0xdd)\n", err2);
+
+   bool is_active = (data_ids_2 & 0xff) == 0x88 &&
+                   (err1 & 0xff) == 0x4e &&
+                   (err2 & 0xff) == 0xdd;
+
+   iounmap(csi_base);
+   return is_active;
+}
+
+#define CSI_ERR1_REG       0x10040020  // Error Register 1
+#define CSI_ERR2_REG       0x10040024  // Error Register 2
+#define CSI_PKT_COUNT_REG  0x10040028  // Packet Counter
+
+void debug_csi_packet_status(void)
+{
+    void __iomem *csi_base = ioremap(CSI_BASE_ADDR, 0x1000);
+    if (!csi_base) {
+        pr_err("Failed to map CSI registers\n");
+        return;
+    }
+
+    u32 err1 = readl(csi_base + (CSI_ERR1_REG - CSI_BASE_ADDR));
+    u32 err2 = readl(csi_base + (CSI_ERR2_REG - CSI_BASE_ADDR));
+    u32 pkt_count = readl(csi_base + (CSI_PKT_COUNT_REG - CSI_BASE_ADDR));
+
+    pr_info("CSI Packet Status:\n");
+    pr_info("  Error Register 1: 0x%08x\n", err1);
+    pr_info("  Error Register 2: 0x%08x\n", err2);
+    pr_info("  Packet Count:     0x%08x\n", pkt_count);
+
+    if (pkt_count == 0)
+        pr_warn("WARNING: No packets received. Check sensor output.\n");
+
+    if (err1 || err2)
+        pr_err("CSI Errors detected! ERR1: 0x%08x, ERR2: 0x%08x\n", err1, err2);
+
+    iounmap(csi_base);
+}
+
+#define ISP_CTRL_BASE      0x13300000  // VIC / ISP Base Address
+#define ISP_Y_ADDR_REG     0x13300008  // Y-buffer DMA Address
+#define ISP_UV_ADDR_REG    0x1330000C  // UV-buffer DMA Address
+#define DMA_BUFFER_SIZE    0x1000      // 4KB mapping
+
+void verify_dma_setup(void)
+{
+    void __iomem *isp_ctrl = ioremap(0x13300000, 0x10000);
+    if (!isp_ctrl) {
+        pr_err("Failed to map ISP control registers\n");
+        return;
+    }
+
+    dma_addr_t y_phys = readl(isp_ctrl + 0x008);
+    dma_addr_t uv_phys = readl(isp_ctrl + 0x00C);
+
+    pr_info("ISP DMA Buffer Addresses:\n");
+    pr_info("  Y-Buffer Addr: 0x%08x\n", y_phys);
+    pr_info("  UV-Buffer Addr: 0x%08x\n", uv_phys);
+
+    if (y_phys == 0 || uv_phys == 0) {
+        pr_err("ERROR: DMA buffer address is not set correctly!\n");
+    }
+
+    iounmap(isp_ctrl);
+}
+
+
+void debug_dma_buffer(void)
+{
+    void __iomem *isp_ctrl = ioremap(ISP_CTRL_BASE, 0x10000);
+    if (!isp_ctrl) {
+        pr_err("Failed to map ISP control registers\n");
+        return;
+    }
+
+    // Read physical addresses from ISP registers
+    dma_addr_t y_phys = readl(isp_ctrl + (ISP_Y_ADDR_REG - ISP_CTRL_BASE));
+    dma_addr_t uv_phys = readl(isp_ctrl + (ISP_UV_ADDR_REG - ISP_CTRL_BASE));
+
+    pr_info("Detected DMA Y-Buffer Addr: 0x%08x\n", y_phys);
+    pr_info("Detected DMA UV-Buffer Addr: 0x%08x\n", uv_phys);
+
+    iounmap(isp_ctrl);
+
+    // Now map the Y-plane buffer and dump data
+    void __iomem *y_virt = ioremap(y_phys, DMA_BUFFER_SIZE);
+    if (!y_virt) {
+        pr_err("Failed to map Y-plane DMA buffer\n");
+        return;
+    }
+
+    pr_info("First 16 bytes of Y-plane DMA buffer:\n");
+    for (int i = 0; i < 16; i++)
+        pr_cont("%02x ", readb(y_virt + i));
+    pr_cont("\n");
+
+    iounmap(y_virt);
+}
+
+
+void fix_csi_lanes(void)
+{
+    void __iomem *csi_base = ioremap(0x10022000, 0x1000);
+    if (!csi_base) {
+        pr_err("Failed to map CSI registers\n");
+        return;
+    }
+
+    u32 reg = readl(csi_base + 0x04);
+    pr_info("Current N_LANES: 0x%08x\n", reg);
+
+    // Set to 2 lanes if incorrectly set
+    writel((reg & ~0xFF) | 0x02, csi_base + 0x04);
+    wmb();
+    pr_info("Updated N_LANES to 0x02\n");
+
+    iounmap(csi_base);
+}
+
+
+void fix_csi_lanes_after_stream(void)
+{
+    void __iomem *csi_base = ioremap(0x10022000, 0x1000);
+    if (!csi_base) {
+        pr_err("Failed to map CSI registers\n");
+        return;
+    }
+    writel(0x02, csi_base + 0x04);
+    pr_info("Re-updated N_LANES to 0x02\n");
+    iounmap(csi_base);
+}
+
+
+
+#define SENSOR_I2C_ADDR 0x37
+
+int check_sensor_mipi_format(struct i2c_client *client)
+{
+    u8 reg = 0x12;  // Example: Read the MIPI format register (may differ per sensor)
+    u8 value;
+    int ret = i2c_smbus_read_byte_data(client, reg);
+    if (ret < 0) {
+        pr_err("Failed to read sensor MIPI format\n");
+        return ret;
+    }
+    value = ret;
+
+    pr_info("Sensor MIPI format register (0x12) = 0x%02x\n", value);
+    return 0;
+}
+
+
+void fix_dma_buffer_address(void)
+{
+    void __iomem *isp_ctrl = ioremap(0x13300000, 0x10000);
+    if (!isp_ctrl) {
+        pr_err("Failed to map ISP control registers\n");
+        return;
+    }
+
+    writel(0x2000000, isp_ctrl + 0x008);  // Set correct Y buffer address
+    writel(0x500000, isp_ctrl + 0x00C);   // Set correct UV buffer address
+    wmb();
+
+    pr_info("Manually set ISP DMA Buffer Addresses:\n");
+    pr_info("  Y-Buffer Addr: 0x%08x\n", readl(isp_ctrl + 0x008));
+    pr_info("  UV-Buffer Addr: 0x%08x\n", readl(isp_ctrl + 0x00C));
+
+    iounmap(isp_ctrl);
+}
+
+
+int set_sensor_test_pattern(struct i2c_client *client)
+{
+    u8 reg = 0x40;  // Example: Register to enable test pattern (depends on GC2053)
+    u8 value = 0x02;  // Enable test pattern output
+    int ret = i2c_smbus_write_byte_data(client, reg, value);
+
+    if (ret < 0) {
+        pr_err("Failed to enable test pattern on sensor\n");
+        return ret;
+    }
+
+    pr_info("Test pattern enabled on sensor\n");
+    return 0;
+}
+
+
+
 
 static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __user *arg, struct file *file)
 {
@@ -4850,70 +5102,64 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
         break;
     }
     case 0x80045612: { // VIDIOC_STREAMON for sensor
+        void __iomem *vic_base = ioremap(0x10023000, 0x1000);  // VIC base from docs
+        int ret;
+        is_sensor_active();
+
         pr_info("Starting video stream on sensor\n");
         pr_info("VIC device state: %d\n", dev->vic_dev->state);
 
-
-        // 1. Setup I2C GPIO for sensor control
-        ret = configure_i2c_gpio(dev);
-        if (ret) {
-            pr_err("Failed to configure I2C GPIO: %d\n", ret);
-            return ret;
+        if (!vic_base) {
+            pr_err("Failed to map VIC registers\n");
+            return -ENOMEM;
         }
 
-
-        // 2. Configure VIC streaming settings
+        // 1. Configure VIC/DMA
         ret = vic_core_s_stream(dev, 1);
         if (ret) {
             pr_err("Failed to configure VIC: %d\n", ret);
-            goto err_disable_vic;
+            iounmap(vic_base);
+            goto err_cleanup;
         }
 
-        // 3. Enable CSI stream first
-        ret = tx_isp_csi_s_stream(1);
-        if (ret) {
-            pr_err("Failed to start CSI streaming: %d\n", ret);
-            goto err_disable_vic;
-        }
+        // 2. Configure interrupts
+        tx_vic_enable_irq(dev);
+        pr_info("VIC interrupts configured:\n");
+        pr_info("  GPIO INT: 0x%08x\n", readl(vic_base + 0x00));
+        pr_info("  GPIO MASK: 0x%08x\n", readl(vic_base + 0x04));
+        pr_info("  INTC MASK: 0x%08x\n", readl(vic_base + 0x08));
+        pr_info("  INTC TYPE: 0x%08x\n", readl(vic_base + 0x0c));
 
-        // 4. Small delay to let CSI stabilize
-        msleep(5);
+        debug_csi_packet_status();
 
-        // 5. Then start sensor streaming
+        // 3. Enable sensor test pattern and start streaming
+        set_sensor_test_pattern(dev->sensor_i2c_client);
         ret = tx_isp_video_s_stream(dev);
         if (ret && ret != 0xfffffdfd) {
             pr_err("Failed to start video stream: %d\n", ret);
-            goto err_disable_csi;
+            iounmap(vic_base);
+            goto err_disable_vic;
         }
 
-
-        // 6. Setup datapath links
-        ret = tx_isp_video_link_stream(dev);
-        if (ret) {
-            pr_err("Failed to setup video links: %d\n", ret);
-            goto err_disable_sensor;
-        }
-
-		dump_csi_state("After streaming start");
+        // Debug output
+        dump_csi_state("After streaming start");
+        check_sensor_mipi_format(dev->sensor_i2c_client);
+        debug_csi_packet_status();
         dump_irq_info();
         dump_vic_dma_regs("After streaming start");
+        debug_dma_buffer();
+        verify_dma_setup();
 
-        // 7. Finally enable interrupts
-        // tx_vic_enable_irq(dev);
-
-        // dump_csi_registers_detailed(dev->csi_dev);
-
+        iounmap(vic_base);
+        is_sensor_active();
         pr_info("Video streaming started successfully\n");
         return 0;
 
         err_disable_vic:
-            // cleanup_vic(dev);
-        err_disable_csi:
-            tx_isp_csi_s_stream(0);
-        err_disable_sensor:
-            //sensor_s_stream(dev->sensor, 0); // TODO
-        err_disable_gpio:
-            // cleanup_i2c_gpio(dev);
+            vic_core_s_stream(dev, 0);
+        tx_vic_disable_irq(dev);
+        err_cleanup:
+            iounmap(vic_base);
         return ret;
     }
     case 0x80045613: { // VIDIOC_STREAMOFF for sensor
@@ -4930,11 +5176,11 @@ static int handle_sensor_ioctl(struct IMPISPDev *dev, unsigned int cmd, void __u
             return ret;
         }
 
-        // Disable datapath links
-        ret = tx_isp_video_link_stream(dev);
-        if (ret) {
-            pr_err("Failed to disable video links: %d\n", ret);
-        }
+//        // Disable datapath links
+//        ret = tx_isp_video_link_stream(dev);
+//        if (ret) {
+//            pr_err("Failed to disable video links: %d\n", ret);
+//        }
 
         // Disable VIC streaming
         //ret = disable_vic_streaming(dev);
@@ -6647,9 +6893,9 @@ int vic_s_stream(struct tx_isp_subdev *sd, int enable)
         }
 
         // Continue stream enable
-        ret = tx_isp_video_link_stream(dev);
-        if (ret)
-            return ret;
+//        ret = tx_isp_video_link_stream(dev);
+//        if (ret)
+//            return ret;
 
     } else {
         if (vic->irq_enabled) {
@@ -6865,11 +7111,11 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         int ret;
         pr_info("Enabling video link stream\n");
 
-        ret = tx_isp_video_link_stream(dev);
-        if (ret) {
-            pr_err("Failed to enable link stream\n");
-            return ret;
-        }
+//        ret = tx_isp_video_link_stream(dev);
+//        if (ret) {
+//            pr_err("Failed to enable link stream\n");
+//            return ret;
+//        }
 
         pr_info("Video link stream enabled\n");
         return 0;
@@ -7538,23 +7784,57 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             char name[0x50];  // Based on the 0x50 size buffer in OEM code
         } __attribute__((packed));
         struct sensor_list_req req;
+        int ret, timeout;
+        u32 phy_state;
 
         if (copy_from_user(&req, (void __user *)arg, sizeof(req))) {
             pr_err("Failed to copy sensor register request from user\n");
             return -EFAULT;
         }
+        is_sensor_active();
 
         pr_info("VIC device state: %d\n", dev->vic_dev->state);
 
-        /* Setup I2C and sensor */
-    	pr_info("Starting I2C init\n");
-    	ret = setup_i2c_adapter(dev);
-    	if (ret) {
+        // Initialize CSI PHY first
+        ret = tx_isp_pipeline_init(dev);
+        if (ret) {
+            pr_err("Failed to initialize ISP pipeline: %d\n", ret);
+            return ret;
+        }
+
+        // Enable CSI - this should bring PHY out of shutdown
+        ret = tx_isp_csi_s_stream(1);
+        if (ret) {
+            pr_err("Failed to start CSI streaming: %d\n", ret);
+            return ret;
+        }
+
+        // Wait for PHY to come out of shutdown
+        if (dev->csi_dev && dev->csi_dev->csi_regs) {
+            timeout = 100;
+            while (timeout--) {
+                phy_state = readl(dev->csi_dev->csi_regs + 0x00); // PHY_SHUTDOWNZ
+                if (phy_state & BIT(0)) {
+                    pr_info("CSI PHY out of shutdown, state: 0x%08x\n", phy_state);
+                    break;
+                }
+                usleep_range(1000, 1100);
+            }
+            if (timeout <= 0) {
+                pr_err("Timeout waiting for PHY shutdown exit\n");
+                tx_isp_csi_s_stream(0);
+                return -ETIMEDOUT;
+            }
+        }
+
+        /* Now setup I2C and sensor */
+        pr_info("Starting I2C init\n");
+        ret = setup_i2c_adapter(dev);
+        if (ret) {
             pr_err("Failed to setup I2C adapter: %d\n", ret);
             return ret;
         }
 
-        // This maps to the same functionality as VIDIOC_REGISTER_SENSOR
         struct i2c_client *client = dev->sensor_i2c_client;
         if (!client || !client->adapter) {
             pr_err("No I2C client or adapter available\n");
@@ -7568,11 +7848,38 @@ static long tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         }
 
         pr_info("Sensor registered: %s\n", ourISPdev->sensor_name);
-		pr_info("Starting sensor init\n");
-        tisp_sensor_init(dev->dev);
+
+        // Initialize sensor with clock and parameters
+        pr_info("Starting sensor init\n");
+        ret = tisp_sensor_init(dev->dev);
+        if (ret) {
+            pr_err("Failed to initialize sensor: %d\n", ret);
+            tx_isp_csi_s_stream(0);
+            return ret;
+        }
+
+        // Wait for clock detection
+        if (dev->csi_dev && dev->csi_dev->csi_regs) {
+            timeout = 100;
+            while (timeout--) {
+                phy_state = readl(dev->csi_dev->csi_regs + 0x14); // PHY_STATE
+                if (phy_state & BIT(4)) {  // Check rxclkactivehs
+                    pr_info("CSI PHY clock detected, state: 0x%08x\n", phy_state);
+                    break;
+                }
+                usleep_range(1000, 1100);
+            }
+            if (timeout <= 0) {
+                pr_err("Timeout waiting for PHY clock detection\n");
+                tx_isp_csi_s_stream(0);
+                return -ETIMEDOUT;
+            }
+        }
+        is_sensor_active();
 
         return 0;
     }
+
     default:
         pr_info("Unhandled ioctl cmd: 0x%x\n", cmd);
         return -ENOTTY;
@@ -7693,20 +8000,49 @@ static struct isp_platform_data isp_pdata = {
 };
 
 
-
 static int tisp_sensor_init(struct device *dev)
 {
     int ret;
-    char param_file[64]; // Buffer for constructing parameter file path
+    char param_file[64];
     uint32_t reg_val;
+    struct clk *cgu_cim;
 
     pr_info("Starting tisp_sensor_init...\n");
+    pr_info("Our reg_base mapped to: %p\n", ourISPdev->reg_base);
 
     // Verify registers are mapped using global ourISPdev
     if (!ourISPdev || !ourISPdev->reg_base) {
         dev_err(dev, "ISP registers not mapped!\n");
         return -EFAULT;
     }
+
+    // Initialize sensor clock
+    cgu_cim = clk_get(NULL, "cgu_cim");
+    if (IS_ERR(cgu_cim)) {
+        dev_err(dev, "Failed to get cgu_cim clock\n");
+        return PTR_ERR(cgu_cim);
+    }
+
+    ret = clk_prepare_enable(cgu_cim);
+    if (ret) {
+        dev_err(dev, "Failed to enable cgu_cim clock\n");
+        clk_put(cgu_cim);
+        return ret;
+    }
+
+    // Store clock in sensor subdev if it exists
+    if (ourISPdev->sensor_sd) {
+        ourISPdev->sensor_sd->clk_num = 1;
+        ourISPdev->sensor_sd->clks = kzalloc(sizeof(struct clk *), GFP_KERNEL);
+        if (!ourISPdev->sensor_sd->clks) {
+            clk_disable_unprepare(cgu_cim);
+            clk_put(cgu_cim);
+            return -ENOMEM;
+        }
+        ourISPdev->sensor_sd->clks[0] = cgu_cim;
+    }
+
+    dev_info(dev, "Sensor clock enabled: rate=%lu Hz\n", clk_get_rate(cgu_cim));
 
     // Construct parameter file path using sensor name
     snprintf(param_file, sizeof(param_file), "/etc/sensor/%s-t31.bin",
@@ -7716,15 +8052,16 @@ static int tisp_sensor_init(struct device *dev)
     tparams_day = vmalloc(ISP_OFFSET_PARAMS);
     if (!tparams_day) {
         dev_err(dev, "Failed to allocate tparams_day\n");
-        return -ENOMEM;
+        ret = -ENOMEM;
+        goto err_clock;
     }
     memset(tparams_day, 0, ISP_OFFSET_PARAMS);
 
     tparams_night = vmalloc(ISP_OFFSET_PARAMS);
     if (!tparams_night) {
         dev_err(dev, "Failed to allocate tparams_night\n");
-        vfree(tparams_day);
-        return -ENOMEM;
+        ret = -ENOMEM;
+        goto err_free_day;
     }
     memset(tparams_night, 0, ISP_OFFSET_PARAMS);
 
@@ -7734,7 +8071,7 @@ static int tisp_sensor_init(struct device *dev)
     ret = tiziano_load_parameters(param_file, tparams_day, ISP_OFFSET_PARAMS);
     if (ret) {
         dev_err(dev, "Failed to load parameters from %s\n", param_file);
-        goto cleanup;
+        goto err_free_night;
     }
     dev_info(dev, "Parameters loaded successfully from %s\n", param_file);
 
@@ -7752,19 +8089,82 @@ static int tisp_sensor_init(struct device *dev)
         writel(0, tparams_night + 0x274);
     }
 
-    // Step 4: Write the parameters to hardware registers using global ourISPdev->reg_base
+    // Initialize ISP Core registers in proper sequence
+    writel(0x54560031, ourISPdev->reg_base + 0x0000);  // ISR
+    wmb();
+    writel(0x07800438, ourISPdev->reg_base + 0x0004);  // IMR
+    writel(0x00000001, ourISPdev->reg_base + 0x0008);  // Control Enable
+    writel(0xb5742249, ourISPdev->reg_base + 0x000c);  // IMCR
+    wmb();
+
+    // Core Enable Block
+    writel(0x00000001, ourISPdev->reg_base + 0x0028);
+    writel(0x00400040, ourISPdev->reg_base + 0x002c);
+    wmb();
+
+    // Core Configuration Block
+    writel(0x00000001, ourISPdev->reg_base + 0x0090);
+    writel(0x00000001, ourISPdev->reg_base + 0x0094);
+    writel(0x00030000, ourISPdev->reg_base + 0x0098);
+    wmb();
+
+    // Mode Configuration
+    writel(0x58050000, ourISPdev->reg_base + 0x00a8);
+    writel(0x58050000, ourISPdev->reg_base + 0x00ac);
+    wmb();
+
+    // Parameters and Status Configuration
+    writel(0x00040000, ourISPdev->reg_base + 0x00c4);
+    writel(0x00400040, ourISPdev->reg_base + 0x00c8);
+    writel(0x00000100, ourISPdev->reg_base + 0x00cc);
+    writel(0x0000000c, ourISPdev->reg_base + 0x00d4);
+    writel(0x00ffffff, ourISPdev->reg_base + 0x00d8);
+    writel(0x00000100, ourISPdev->reg_base + 0x00e0);
+    writel(0x00400040, ourISPdev->reg_base + 0x00e4);
+    writel(0xff808000, ourISPdev->reg_base + 0x00f0);
+    wmb();
+
+    // Brief delay before DMA setup
+    msleep(10);
+
+    // DMA and Buffer Configuration
+    writel(0x3bf80000, ourISPdev->reg_base + 0x0100);
+    writel(0x00000346, ourISPdev->reg_base + 0x0104);
+    wmb();
+
+    // Write tuning parameters location
     writel((unsigned long)tparams_day, ourISPdev->reg_base + 0x84b50);
     dev_info(dev, "tparams_day written to register successfully\n");
 
+    // Final DMA Control Setup
+    writel(0x92217523, ourISPdev->reg_base + 0x0110);
+    writel(0x00777111, ourISPdev->reg_base + 0x0114);
+    wmb();
+
+    // Enable processing blocks
+    writel(0x034a0635, ourISPdev->reg_base + 0x0818);
+    writel(0x034b0000, ourISPdev->reg_base + 0x081c);
+    writel(0x00040010, ourISPdev->reg_base + 0x0840);
+    wmb();
+
+    dev_info(dev, "ISP initialization complete\n");
     return 0;
 
-cleanup:
-    if (tparams_night)
-        vfree(tparams_night);
-    if (tparams_day)
-        vfree(tparams_day);
+err_free_night:
+    vfree(tparams_night);
+err_free_day:
+    vfree(tparams_day);
+err_clock:
+    if (ourISPdev->sensor_sd && ourISPdev->sensor_sd->clks) {
+        clk_disable_unprepare(cgu_cim);
+        clk_put(cgu_cim);
+        kfree(ourISPdev->sensor_sd->clks);
+        ourISPdev->sensor_sd->clks = NULL;
+        ourISPdev->sensor_sd->clk_num = 0;
+    }
     return ret;
 }
+
 
 static int setup_channel_attrs(struct isp_channel *chn, struct imp_channel_attr *attr)
 {
@@ -10174,17 +10574,8 @@ static int tx_isp_init_memory(struct IMPISPDev *dev, struct platform_device *pde
         return -ENODEV;
     }
 
-    dev->resources.mmio_phys = res->start;
-    dev->resources.mmio_res = devm_request_mem_region(&pdev->dev,
-                                                     res->start,
-                                                     resource_size(res),
-                                                     "tx-isp-regs");
-    if (!dev->resources.mmio_res) {
-        dev_err(&pdev->dev, "Failed to request ISP memory region\n");
-        return -EBUSY;
-    }
-
-    dev->reg_base = devm_ioremap(&pdev->dev, res->start, resource_size(res));
+    dev->resources.mmio_phys = ISP_PHYS_BASE;
+    dev->reg_base = ioremap(ISP_PHYS_BASE, ISP_MAP_SIZE);
     if (!dev->reg_base) {
         dev_err(&pdev->dev, "Failed to map ISP registers\n");
         return -ENOMEM;
@@ -10197,10 +10588,11 @@ static int tx_isp_init_memory(struct IMPISPDev *dev, struct platform_device *pde
         return -ENODEV;
     }
 
-    dev->resources.csi_phys = res->start;
-    dev->resources.csi_regs = devm_ioremap(&pdev->dev, res->start, resource_size(res));
+    dev->resources.csi_phys = CSI_PHYS_BASE;
+    dev->resources.csi_regs = ioremap(CSI_PHYS_BASE, CSI_REG_SIZE);
     if (!dev->resources.csi_regs) {
         dev_err(&pdev->dev, "Failed to map CSI registers\n");
+        iounmap(dev->reg_base);
         return -ENOMEM;
     }
 
@@ -10212,8 +10604,9 @@ static int tx_isp_init_memory(struct IMPISPDev *dev, struct platform_device *pde
     dev->rmem_addr = aligned_base;
     dev->rmem_size = aligned_size;
     dev->dma_addr = aligned_base;
-    dev->dma_size = aligned_size;  // Added this line to store DMA buffer size
+    dev->dma_size = aligned_size;
 
+    // DMA buffer does need mapping since it's not register space
     dev->dma_buf = devm_ioremap(&pdev->dev, aligned_base, aligned_size);
     if (!dev->dma_buf) {
         dev_err(&pdev->dev, "Failed to map DMA buffer\n");
@@ -10223,13 +10616,12 @@ static int tx_isp_init_memory(struct IMPISPDev *dev, struct platform_device *pde
     /* Clear the frame buffer area */
     memset(dev->dma_buf, 0, aligned_size);
 
-    /* Log all memory mappings */
     dev_info(&pdev->dev, "ISP Memory Initialization Complete:\n"
-             "  ISP Registers: phys=0x%08x virt=%p\n"
-             "  CSI Registers: phys=0x%08x virt=%p\n"
+             "  ISP Registers: phys=0x%08x\n"  // No virtual address needed
+             "  CSI Registers: phys=0x%08x\n"  // No virtual address needed
              "  DMA Buffer: phys=0x%08x virt=%p size=%zu (for %zu frames)\n",
-             dev->resources.mmio_phys, dev->reg_base,
-             dev->resources.csi_phys, dev->resources.csi_regs,
+             dev->resources.mmio_phys,
+             dev->resources.csi_phys,
              (uint32_t)dev->rmem_addr, dev->dma_buf,
              dev->rmem_size, aligned_size / frame_size);
 
@@ -10803,13 +11195,24 @@ int tx_isp_csi_probe(struct platform_device *pdev)
 {
     struct IMPISPDev *dev = ourISPdev;
     struct csi_device *csi_dev;
+    struct clk *csi_clk;
     int ret;
 
     pr_info("CSI probe starting\n");
 
-    if (!dev || !dev->reg_base) {
-        dev_err(&pdev->dev, "No ISP device data\n");
-        return -EINVAL;
+    // Get CSI clock first
+    csi_clk = clk_get(NULL, "csi");
+    if (IS_ERR(csi_clk)) {
+        pr_err("Failed to get CSI clock\n");
+        return PTR_ERR(csi_clk);
+    }
+
+    // Enable CSI clock
+    ret = clk_enable(csi_clk);
+    if (ret) {
+        pr_err("Failed to enable CSI clock\n");
+        clk_put(csi_clk);
+        return ret;
     }
 
     // 1. Allocate CSI device Full early initialization
@@ -10817,10 +11220,11 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     ret = tx_isp_csi_init(pdev);
     if (ret) {
         pr_err("Failed to initialize CSI: %d\n", ret);
-        return ret;
+        goto err_disable_clk;
     }
 
     csi_dev = dev->csi_dev;
+    csi_dev->clk = csi_clk;  // Save clock handle
 
     // Get subdev and initialize
     pr_info("Initializing CSI subdev\n");
@@ -10830,59 +11234,40 @@ int tx_isp_csi_probe(struct platform_device *pdev)
         goto err_free_dev;
     }
 
-    // Enable clock
-    pr_info("Enabling CSI clock\n");
-    ret = clk_prepare_enable(csi_dev->clk);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to enable CSI clock\n");
-        goto err_disable_clk;
-    }
-
-    // Initialize CSI and PHY - add this block
-    pr_info("Initializing CSI PHY\n");
-    ret = init_csi_phy(csi_dev);
-    if (ret) {
-        dev_err(&pdev->dev, "Failed to initialize CSI PHY: %d\n", ret);
-        goto err_disable_clk;
-    }
-
-    // finish initialization
+    // Store subdev data
     tx_isp_set_subdevdata(csi_dev->sd, csi_dev);
     tx_isp_set_subdev_debugops(csi_dev->sd, &isp_csi_fops);
-    platform_set_drvdata(pdev, &csi_dev->sd->module);
 
-    csi_dev->state = TX_ISP_MODULE_SLAKE;
+    csi_dev->state = 1;
     atomic_set(&dev->csi_configured, 0);
-
-    dump_csi_registers_detailed(csi_dev);
 
     pr_info("CSI probe completed successfully\n");
     return 0;
 
-err_disable_clk:
-    clk_disable_unprepare(csi_dev->clk);
-err_free_dev:
-    dev->csi_dev = NULL;
+    err_free_dev:
+        dev->csi_dev = NULL;
     devm_kfree(&pdev->dev, csi_dev);
+    err_disable_clk:
+        clk_disable(csi_clk);
+    clk_put(csi_clk);
     return ret;
 }
 
 
-/* CSI cleanup */
+// Simple remove function
 int tx_isp_csi_remove(struct platform_device *pdev)
 {
-    struct module_info *module = platform_get_drvdata(pdev);
-    struct tx_isp_subdev *sd = module_to_subdev(module);
-    struct csi_device *csi = tx_isp_get_subdevdata(sd);
+    struct csi_device *csi_dev = platform_get_drvdata(pdev);
 
-    /* Stop streaming if active */
-    if (csi->state == TX_ISP_MODULE_RUNNING)
-        csi_s_stream(sd, 0);
+    if (!csi_dev)
+        return -EINVAL;
 
-    /* Disable clock */
-    clk_disable_unprepare(csi->clk);
+    if (csi_dev->phy_regs)
+        iounmap(csi_dev->phy_regs);
 
-    tx_isp_subdev_deinit(sd);
+    release_mem_region(0x10022000, 0x1000);
+    tx_isp_subdev_deinit(csi_dev->sd);
+    platform_set_drvdata(pdev, NULL);
 
     return 0;
 }
@@ -11237,93 +11622,163 @@ int tx_isp_module_init(struct platform_device *pdev, struct tx_isp_subdev *sd)
     return 0;
 }
 
-int tx_isp_subdev_init_clks(struct tx_isp_subdev *sd, struct platform_device *pdev)
+static int tx_isp_subdev_init_clks(struct tx_isp_subdev *sd, struct platform_device *pdev)
 {
-    struct IMPISPDev *isp_dev = platform_get_drvdata(pdev);
-    struct clk *tmp_clk = NULL;
     int ret = 0;
 
-    pr_info("Initializing clocks for %s\n", pdev->name);
+    if (!sd || !pdev) {
+        pr_err("Invalid arguments\n");
+        return -EINVAL;
+    }
 
-    /* For CSI subdev */
-    if (strcmp(pdev->name, "tx-isp-csi") == 0) {
+    pr_info("Initializing clocks for %s\n", pdev->name ? pdev->name : "unknown");
+
+    if (!strcmp(pdev->name, "tx-isp-csi")) {
         sd->clk_num = 1;
-        sd->clks = kzalloc(sd->clk_num * sizeof(struct clk *), GFP_KERNEL);
+        sd->clks = devm_kzalloc(&pdev->dev, sizeof(struct clk *), GFP_KERNEL);
         if (!sd->clks)
             return -ENOMEM;
 
         sd->clks[0] = clk_get(NULL, "csi");
         if (IS_ERR(sd->clks[0])) {
+            pr_err("Failed to get csi clock\n");
             ret = PTR_ERR(sd->clks[0]);
-            pr_err("Failed to get CSI clock: %d\n", ret);
             goto err_free_clks;
         }
-        sd->clk_num = 1;
+
+        ret = clk_prepare_enable(sd->clks[0]);
+        if (ret) {
+            pr_err("Failed to enable csi clock\n");
+            goto err_put_clks;
+        }
+
         pr_info("CSI clock initialized: rate=%lu Hz\n", clk_get_rate(sd->clks[0]));
     }
-    /* For VIC subdev */
-    else if (strcmp(pdev->name, "tx-isp-vic") == 0) {
-        sd->clk_num = 1;
-        sd->clks = kzalloc(sd->clk_num * sizeof(struct clk *), GFP_KERNEL);
+    else if (pdev->name && !strcmp(pdev->name, "tx-isp-vic")) {
+        sd->clk_num = 2;
+        sd->clks = devm_kzalloc(&pdev->dev, 2 * sizeof(struct clk *), GFP_KERNEL);
         if (!sd->clks)
             return -ENOMEM;
 
-        // Get the ISP clock directly
         sd->clks[0] = clk_get(NULL, "isp");
         if (IS_ERR(sd->clks[0])) {
+            pr_err("Failed to get isp clock\n");
             ret = PTR_ERR(sd->clks[0]);
-            pr_err("Failed to get ISP clock for VIC: %d\n", ret);
             goto err_free_clks;
         }
-        sd->clk_num = 1;
-        pr_info("VIC clock initialized with ISP clock: rate=%lu Hz\n",
-                clk_get_rate(sd->clks[0]));
-    }
-    /* For sensor */
-    else if (strcmp(pdev->name, ourISPdev->sensor_name) == 0) {
-        tmp_clk = clk_get(NULL, "cgu_cim");  // Try camera interface module clock
-        if (IS_ERR(tmp_clk)) {
-            ret = PTR_ERR(tmp_clk);
-            pr_err("Failed to get CIM clock for sensor: %d\n", ret);
-            return ret;
+
+        sd->clks[1] = clk_get(NULL, "cgu_isp");
+        if (IS_ERR(sd->clks[1])) {
+            pr_err("Failed to get cgu_isp clock\n");
+            ret = PTR_ERR(sd->clks[1]);
+            goto err_put_clk0;
         }
 
-        sd->clks = kzalloc(sizeof(struct clk *), GFP_KERNEL);
-        if (!sd->clks) {
-            clk_put(tmp_clk);
-            return -ENOMEM;
+        ret = clk_prepare_enable(sd->clks[0]);
+        if (ret) {
+            pr_err("Failed to enable isp clock\n");
+            goto err_put_clks;
         }
 
-        sd->clks[0] = tmp_clk;
-        sd->clk_num = 1;
-        pr_info("Sensor clock initialized: rate=%lu Hz\n", clk_get_rate(sd->clks[0]));
+        ret = clk_prepare_enable(sd->clks[1]);
+        if (ret) {
+            pr_err("Failed to enable cgu_isp clock\n");
+            goto err_disable_clk0;
+        }
+
+        pr_info("VIC clocks initialized\n");
     }
-    /* For other subdevs - keep working code */
-    else if (strcmp(pdev->name, "tx-isp-vin") == 0 ||
-             strcmp(pdev->name, "tx-isp-core") == 0 ||
-             strcmp(pdev->name, "tx-isp-fs") == 0) {
+    else if (pdev->name &&
+             (!strcmp(pdev->name, "tx-isp-vin") ||
+              !strcmp(pdev->name, "tx-isp-core") ||
+              !strcmp(pdev->name, "tx-isp-fs"))) {
+
         sd->clk_num = 1;
-        sd->clks = kzalloc(sd->clk_num * sizeof(struct clk *), GFP_KERNEL);
+        sd->clks = devm_kzalloc(&pdev->dev, sizeof(struct clk *), GFP_KERNEL);
         if (!sd->clks)
             return -ENOMEM;
 
-        sd->clks[0] = clk_get(&pdev->dev, "isp");
+        sd->clks[0] = clk_get(NULL, "isp");
         if (IS_ERR(sd->clks[0])) {
+            pr_err("Failed to get isp clock for %s\n", pdev->name);
             ret = PTR_ERR(sd->clks[0]);
-            pr_err("Failed to get ISP clock for %s\n", pdev->name);
             goto err_free_clks;
         }
 
-        sd->clk_num = 1;
-        pr_info("ISP clock initialized: rate=%lu Hz\n", clk_get_rate(sd->clks[0]));
+        ret = clk_prepare_enable(sd->clks[0]);
+        if (ret) {
+            pr_err("Failed to enable isp clock for %s\n", pdev->name);
+            goto err_put_clks;
+        }
+
+        pr_info("%s clock initialized\n", pdev->name);
     }
+else if (pdev->name && strstr(pdev->name, "gc2053")) {
+    pr_info("Initializing clocks for GC2053 sensor\n");
+
+    // Initialize clock count first
+    sd->clk_num = 1;
+
+    // Allocate using regular kmalloc since this is 3.10
+    sd->clks = kmalloc(sizeof(struct clk *), GFP_KERNEL);
+    if (!sd->clks) {
+        pr_err("Failed to allocate clock memory\n");
+        return -ENOMEM;
+    }
+
+    // Initialize pointer to NULL
+    sd->clks[0] = NULL;
+
+    // Get the clock - note on 3.10 error handling is different
+    sd->clks[0] = clk_get(NULL, "cgu_cim");
+    if (IS_ERR_OR_NULL(sd->clks[0])) {
+        pr_err("Failed to get cgu_cim clock\n");
+        ret = -EINVAL;
+        goto err_free_clks;
+    }
+
+    // Set rate before enabling
+    ret = clk_set_rate(sd->clks[0], 24000000);
+    if (ret < 0) {
+        pr_err("Failed to set clock rate: %d\n", ret);
+        goto err_put_clks;
+    }
+
+    // Enable clock - on 3.10 we use clk_enable directly
+    ret = clk_enable(sd->clks[0]);
+    if (ret) {
+        pr_err("Failed to enable clock: %d\n", ret);
+        goto err_put_clks;
+    }
+
+    pr_info("GC2053 clock initialized at rate=%lu Hz\n",
+            clk_get_rate(sd->clks[0]));
+}
 
     return 0;
 
-err_free_clks:
-    kfree(sd->clks);
-    sd->clks = NULL;
-    sd->clk_num = 0;
+    err_put_clks:
+        if (sd->clks) {
+            int i;
+            for (i = 0; i < sd->clk_num; i++) {
+                if (sd->clks[i] && !IS_ERR(sd->clks[i])) {
+                    clk_put(sd->clks[i]);
+                }
+            }
+        }
+    err_free_clks:
+        if (sd->clks) {
+            devm_kfree(&pdev->dev, sd->clks);
+            sd->clks = NULL;
+        }
+    err_disable_clk0:
+        if (sd->clks && sd->clks[0] && !IS_ERR(sd->clks[0])) {
+            clk_disable_unprepare(sd->clks[0]);
+        }
+    err_put_clk0:
+        if (sd->clks && sd->clks[0] && !IS_ERR(sd->clks[0])) {
+            clk_put(sd->clks[0]);
+        }
     return ret;
 }
 
@@ -11514,6 +11969,22 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             sd->base = dev->reg_base + 0x7000;
         } else if (!strcmp(pdev->name, "tx-isp-csi")) {
             sd->base = dev->resources.csi_regs;  // Use the already mapped CSI regs
+
+            // Add basic CSI PHY initialization here
+            void __iomem *csi_base = sd->base;
+            if (csi_base) {
+                // Enable CSI clock first
+                writel(1, csi_base + 0x40);
+                wmb();
+                udelay(100);
+
+                // Basic CSI config (don't enable streaming yet)
+                writel(0x1, csi_base + 0x04);  // 2 lanes
+                wmb();
+                udelay(100);
+
+                pr_info("CSI PHY initialized in probe\n");
+            }
         } else {
             sd->base = dev->reg_base;
         }

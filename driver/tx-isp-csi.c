@@ -31,7 +31,6 @@ int tx_isp_csi_activate_subdev(struct IMPISPDev *dev)
 
 
 #define MIPI_PHY_ADDR   0x10022000
-#define ISP_W01_ADDR    0x10023000  // Should be our CSI controller
 int init_csi_early(struct IMPISPDev *dev)
 {
     struct csi_device *csi_dev = dev->csi_dev;
@@ -438,7 +437,7 @@ void dump_csi_registers_detailed()
     u32 phy_state;
     void __iomem *csi_base;
 
-    csi_base = ioremap(0x10023000, 0x1000);
+    csi_base = ioremap(0x10022000, 0x1000);
     if (!csi_base) {
         pr_err("Failed to map CSI registers\n");
         return;
@@ -1346,14 +1345,20 @@ int init_csi_phy(struct csi_device *csi_dev)
     return 0;
 }
 
-static int configure_phy_rate(struct csi_device *csi_dev, unsigned long clock_rate)
+static int configure_phy_rate(struct csi_device *csi_dev)
 {
     void __iomem *phy_regs = csi_dev->phy_regs;
     u32 rate_cfg;
-    u32 clock_mhz = clock_rate / 1000000;
-    u32 reg;
+    u32 clock_mhz;
 
-    // This matches the OEM decompiled logic exactly:
+    if (!csi_dev->clk) {
+        pr_err("CSI clock not initialized\n");
+        return -EINVAL;
+    }
+
+    clock_mhz = clk_get_rate(csi_dev->clk) / 1000000;
+
+    // Rate configuration logic from trace analysis
     if (clock_mhz < 80)         rate_cfg = 0;
     else if (clock_mhz < 110)   rate_cfg = 1;
     else if (clock_mhz < 150)   rate_cfg = 2;
@@ -1367,12 +1372,11 @@ static int configure_phy_rate(struct csi_device *csi_dev, unsigned long clock_ra
     else if (clock_mhz < 800)   rate_cfg = 0xa;
     else                        rate_cfg = 0xb;
 
-    // Set rate config in all PHY rate registers
-    reg = readl(phy_regs + 0x160) & 0xfffffff0;
-    reg |= rate_cfg;
-    writel(reg, phy_regs + 0x160);
-    writel(reg, phy_regs + 0x1e0);
-    writel(reg, phy_regs + 0x260);
+    // Apply rate configuration to all PHY rate registers
+    writel((readl(phy_regs + 0x160) & ~0xF) | rate_cfg, phy_regs + 0x160);
+    writel((readl(phy_regs + 0x1e0) & ~0xF) | rate_cfg, phy_regs + 0x1e0);
+    writel((readl(phy_regs + 0x260) & ~0xF) | rate_cfg, phy_regs + 0x260);
+    wmb();
 
     return 0;
 }
@@ -1382,68 +1386,90 @@ static int configure_phy_rate(struct csi_device *csi_dev, unsigned long clock_ra
 #define CSI_MASK2_IPU   0x0000FF33  // Keep format related bits
 int tx_isp_csi_s_stream(int enable)
 {
-    void __iomem *csi_regs = ioremap(0x10022000, 0x1000);  // CSI base
+    void __iomem *csi_base = ioremap(0x10022000, 0x1000);
+    void __iomem *phy_base;
     int ret = 0;
 
-    if (!csi_regs) {
+    if (!csi_base) {
         pr_err("Failed to map CSI registers\n");
         return -ENOMEM;
     }
 
-    pr_info("CSI stream %s\n", enable ? "on" : "off");
+    // Map PHY registers separately - trace shows these are accessed
+    phy_base = ioremap(0x10022800, 0x1000);  // PHY offset from trace
+    if (!phy_base) {
+        pr_err("Failed to map PHY registers\n");
+        ret = -ENOMEM;
+        goto cleanup_csi;
+    }
 
     if (enable) {
-        // 1. Enable CSI clock
-        writel(0x0100, csi_regs + 0x40);
+        // 1. Initial shutdown sequence
+        writel(0, csi_base + 0x08);  // PHY_SHUTDOWNZ off
+        writel(0, csi_base + 0x0c);  // DPHY_RSTZ off
+        writel(0, csi_base + 0x10);  // CSI2_RESETN off
+        wmb();
+        msleep(10);  // Important delay from trace
+
+        // 2. PHY configuration - matches trace sequence
+        writel(0x3f00, csi_base + 0x9804);  // PHY control mode
+        writel(0x7800438, csi_base + 0x9864);  // PHY config
+        writel(0xc0000000, csi_base + 0x987c);  // State control
+        wmb();
+
+        // 3. Configure lanes - trace shows 2 lanes
+        writel(1, csi_base + 0x04);  // Set 2 lanes
+        wmb();
+
+        // 4. PHY timing configuration from trace
+        writel(0x7d, phy_base + 0x000);  // PHY timing control
+        writel(0x3f, phy_base + 0x128);  // PHY timing config
         wmb();
         msleep(1);
 
-        // 2. Configure PHY control registers to match OEM
-        writel(0xa0, csi_regs + 0x08);  // PHY_SHUTDOWNZ
-        writel(0x83, csi_regs + 0x0C);  // DPHY_RSTZ
-        writel(0xfa, csi_regs + 0x10);  // CSI2_RESETN
+        // 5. Color matrix configuration - missing from original
+        writel(0x40404040, phy_base + 0xb018);  // Color matrix 1
+        writel(0x40404040, phy_base + 0xb01c);  // Color matrix 2
+        writel(0x40404040, phy_base + 0xb020);  // Color matrix 3
+        wmb();
+
+        // 6. Color processing parameters - from trace
+        writel(0x82b9, phy_base + 0xb080);  // Color processing
+        writel(0x271b, phy_base + 0xb084);  // Color parameters
+        wmb();
+
+        // 7. Bring up sequence with proper delays
+        writel(1, csi_base + 0x08);  // PHY_SHUTDOWNZ = 1
         wmb();
         msleep(1);
 
-        // 3. Configure data format and masks
-        writel(0x00, csi_regs + 0x18);   // DATA_IDS_1
-        writel(0x88, csi_regs + 0x1C);   // DATA_IDS_2
-        writel(0x84, csi_regs + 0x28);   // MASK1
-        writel(0x5e, csi_regs + 0x2c);   // MASK2
+        writel(1, csi_base + 0x0c);  // DPHY_RSTZ = 1
+        wmb();
+        msleep(1);
+
+        writel(1, csi_base + 0x10);  // CSI2_RESETN = 1
         wmb();
         msleep(10);
 
-        // Debug output
-        pr_info("CSI configuration after stream enable:\n");
-        pr_info("  MASK1: 0x%08x\n", readl(csi_regs + 0x28));
-        pr_info("  MASK2: 0x%08x\n", readl(csi_regs + 0x2c));
-        pr_info("  PHY_STATE: 0x%08x\n", readl(csi_regs + 0x14));
-        pr_info("  DATA_IDS_1: 0x%08x\n", readl(csi_regs + 0x18));
-        pr_info("  DATA_IDS_2: 0x%08x\n", readl(csi_regs + 0x1c));
+        // 8. Verify PHY state
+        u32 phy_state = readl(csi_base + 0x14);
+        if (phy_state != 0x300) {
+            pr_warn("PHY in unexpected state: 0x%08x\n", phy_state);
+        }
 
     } else {
-        // Save masks before disable
-        u32 mask1 = readl(csi_regs + 0x28);
-        u32 mask2 = readl(csi_regs + 0x2c);
-
-        // Disable CSI
-        writel(0, csi_regs + 0x10);  // CSI2_RESETN
-        wmb();
-        msleep(1);
-
-        writel(0, csi_regs + 0x0C);  // DPHY_RSTZ
-        wmb();
-        msleep(1);
-
-        writel(0, csi_regs + 0x40);  // CSI clock
-        wmb();
-
-        // Restore original masks
-        writel(mask1, csi_regs + 0x28);
-        writel(mask2, csi_regs + 0x2c);
+        // Power down sequence matching trace
+        writel(readl(csi_base + 0x08) & ~0x1, csi_base + 0x08);
+        writel(readl(csi_base + 0x0c) & ~0x1, csi_base + 0x0c);
+        writel(readl(csi_base + 0x10) & ~0x1, csi_base + 0x10);
         wmb();
     }
 
-    iounmap(csi_regs);
+cleanup_phy:
+    if (phy_base)
+        iounmap(phy_base);
+cleanup_csi:
+    if (csi_base)
+        iounmap(csi_base);
     return ret;
 }

@@ -82,8 +82,8 @@
 #define ISP_BASE_ADDR    0x13300000  // Main ISP
 #define MIPI_PHY_ADDR    0x10022000  // MIPI PHY
 #define ISP_DEVICE_ADDR  0x10023000  // ISP device
-#define CSI_BASE_ADDR    0x10022000  // CSI should be here
-
+#define CSI_BASE_ADDR    0x10040000  // CSI should be here
+#define CSI_PHYS_BASE    0x10022000
 #define ISP_REG_SIZE     0x10000     // 64KB for main ISP
 #define CSI_REG_SIZE     0x1000      // 4KB for CSI/MIPI
 #define PHY_REG_SIZE     0x1000      // 4KB for PHY
