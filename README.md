@@ -3,97 +3,106 @@
 ![Ingenic ISP Logo](./ingenic_isp.webp)
 
 ## Overview
-This project provides an open-source driver for the Ingenic T31 System on Chip (SoC) with support for the SC2336 image sensor. The primary goal of this driver is to interface with Ingenic's `libimp` library, enabling users to capture and process images through the Image Signal Processor (ISP) on Ingenic devices.
+This project provides an open-source driver for the Ingenic T31 System on Chip (SoC) that supports any T31 device equipped with a compatible image sensor (excluding the Zeratul series). Designed as a generic solution, the driver leverages Ingenic’s `libimp` library and the sensor source code from the [ingenic-sdk](https://github.com/themactep/ingenic-sdk) to enable image capture and processing through the ISP. By replacing the proprietary driver, this project empowers developers to customize, extend, and optimize the camera subsystem on a wide range of Ingenic T31 devices.
 
-The driver is designed to replace the proprietary driver provided by Ingenic, offering a fully open-source solution that can be maintained and extended by the community. It supports key functionality such as sensor initialization, ISP control, and video device handling.
+**Use rewrite branch for latest development focus!**
 
 ## Features
-- Support for Ingenic T31 SoC with SC2336 sensor.
-- Integration with the `libimp` library to enable camera functionalities.
-- Handles low-level hardware control, including I2C communication, DMA, and interrupts.
-- Provides `/proc` entries for runtime status and configuration.
-    - Modular and extensible design, allowing developers to add support for additional sensors and functionalities.
+- **Generic Sensor Support:** Works with any T31 device sensor (non-Zeratul) by utilizing a modular sensor interface.
+- **Integration with libimp:** Seamlessly integrates with Ingenic’s `libimp` library for advanced ISP functionalities.
+- **Low-Level Hardware Control:** Manages I2C communication, DMA, interrupts, and other hardware-level operations.
+- **Runtime Status and Configuration:** Exposes `/proc` entries for monitoring ISP status and sensor parameters.
+- **Extensibility:** Designed to easily incorporate support for additional sensors and features by adapting the sensor source provided by `ingenic-sdk`.
 
 ## Requirements
-- **Linux Kernel**: 4.x (Tested on 4.9)
-- **Target SoC**: Ingenic T31
-- **Sensor**: SC2336
-- **libimp**: The driver interfaces with Ingenic's `libimp` for ISP functionalities.
+- **Linux Kernel:** 3.10 (Some minimal testing on 4.4 but focus is 3.10 for now)
+- **Target SoC:** Ingenic T31
+- **Sensor:** Any supported sensor (non-Zeratul) whose source is provided by [ingenic-sdk](https://github.com/themactep/ingenic-sdk)
+- **libimp:** The driver interfaces with Ingenic’s `libimp` for ISP functionalities
 
 ## Building the Driver
 
 1. **Clone the Repository**
-```bash
-git clone https://github.com/your-repository/isp-driver.git
+    ```bash
+    git clone https://github.com/your-repository/isp-driver.git
+    cd isp-driver
+    ./setup_submodule_and_patch.sh
+    ```
 
-./setup_submodule_and_patch.sh
-```
+2. **Prepare Sensor Source**
+  - Clone the [ingenic-sdk](https://github.com/themactep/ingenic-sdk) repository if it is not included as a submodule.
+  - Make any minimal modifications needed to adapt the sensor source for your specific sensor. The modular design allows for adjustments to support different sensors without significant changes to the core driver.
 
-2. **Build the Driver**
+3. **Build the Driver**
+  - Follow your standard kernel module compilation process. Ensure that paths to the `ingenic-sdk` components are correctly set in your build configuration.
+  - Example:
+    ```bash
+    make -C /lib/modules/$(uname -r)/build M=$(pwd) modules
+    ```
 
-These steps needs to be documented but involve cloning `ingenic-sdk` repository and making some minimal modifications.
-
-3. **Install the Driver**
-```bash
-insmod isp_driver.ko
-```
+4. **Install the Driver**
+    ```bash
+    sudo insmod isp_driver.ko
+    ```
 
 ## Usage
-Once the driver is loaded, the `/proc/jz/isp` directory will be available with the following entries:
+Once the driver is loaded, the `/proc/jz/isp` directory will be available with several entries:
 
-- `/proc/jz/isp/status` - Displays the current status of the ISP.
-- `/proc/jz/isp/sensor` - Provides information about the connected sensor.
-- `/proc/jz/isp/control` - Allows users to adjust ISP settings.
+- **`/proc/jz/isp/status`** – Displays the current status of the ISP.
+- **`/proc/jz/isp/sensor`** – Provides details about the connected sensor.
+- **`/proc/jz/isp/control`** – Allows users to adjust ISP settings dynamically.
 
-## Integration with `libimp`
-The driver is designed to work seamlessly with Ingenic's `libimp`. Ensure that `libimp` is properly installed on your device and modify your application code to interact with the ISP driver through the provided ioctl interfaces.
+Applications can interact with the driver via standard ioctl interfaces to configure the ISP and capture video streams.
+
+## Integration with libimp
+The driver is built to work in tandem with Ingenic’s `libimp` library. Make sure that `libimp` is correctly installed on your device. Update your application code to use the provided ioctl interfaces for controlling sensor parameters, initiating streaming, and processing captured images.
 
 ## Troubleshooting
-- **Issue**: `/proc/jz/isp` not appearing.
-- Ensure the driver is loaded correctly using:
-```bash
-dmesg | grep isp
-```
-- Check if the `libimp` library is properly installed.
+- **Missing `/proc/jz/isp` Directory**
+  - Verify the driver is loaded:
+    ```bash
+    dmesg | grep isp
+    ```
+  - Confirm that the `libimp` library and sensor source are properly integrated.
 
-- **Issue**: Unable to communicate with the sensor.
-- Confirm I2C bus and addresses in the Device Tree are correctly configured.
-- Verify that the SC2336 sensor is properly connected.
+- **Sensor Communication Issues**
+  - Check that the I2C bus and sensor addresses in the Device Tree or board configuration are correct.
+  - Ensure that the sensor wiring is properly connected and that any required power sequences are followed.
 
 ## Contributing
-Contributions are welcome! Please follow the guidelines below:
-
+Contributions to enhance sensor support, improve stability, or add new features are welcome. To contribute:
 1. Fork the repository.
 2. Create a new branch:
-```bash
-git checkout -b feature-branch
-```
+    ```bash
+    git checkout -b feature-branch
+    ```
 3. Commit your changes:
-```bash
-git commit -am 'Add new feature'
-```
-4. Push to the branch:
-```bash
-git push origin feature-branch
-```
-5. Open a pull request.
+    ```bash
+    git commit -am 'Add new feature or fix'
+    ```
+4. Push your branch:
+    ```bash
+    git push origin feature-branch
+    ```
+5. Open a pull request describing your changes.
 
 ## License
 This project is licensed under the GNU General Public License (GPLv3).
 
 ## Acknowledgments
-Special thanks to the open-source community and contributors who made this project possible.
-Specifically: `thingino-firmware`  https://github.com/themactep/thingino-firmware
-and `ingenic-sdk` https://github.com/themactep/ingenic-sdk
+Special thanks to the open-source community and the contributors of:
+- [thingino-firmware](https://github.com/themactep/thingino-firmware)
+- [ingenic-sdk](https://github.com/themactep/ingenic-sdk)
 
-Without these projects, there would be no point to trying to reverse engineer the ISP driver.
+Their work has been instrumental in reverse-engineering and developing this open-source ISP driver.
 
-## Limitations
-This driver is incomplete but works to a certain degree and enables the streamer, but we only get green frames.
+## Limitations and Current Progress
+- **Image Output:** The driver currently enables streaming; however, the output displays only green frames.
+- **Stability Issues:** A crash occurs after the first stream when an ioctl command is issued. Debugging is in progress.
+- **Future Work:** Ongoing efforts are focused on stabilizing the driver and extending sensor compatibility further.
 
-There is a crash after the first stream on ioctl cmd, that we are currently debugging.
-
-Current progress:
+---
+*This driver is a work in progress. Community feedback and contributions are essential to improve functionality and stability.*
 
 ```angular2html
 Loading ISP driver...
