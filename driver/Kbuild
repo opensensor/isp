@@ -1,0 +1,20 @@
+ccflags-y += -I$(src)/include
+
+# Main ISP module objects - note changed name to tx-isp-t31 (ensure tx-isp-module.o is first)
+tx-isp-t31-objs :=  $(DIR)/tx-isp-module.o \
+                $(DIR)/tx_isp_core.o \
+               $(DIR)/tx_isp_subdev.o \
+               $(DIR)/tx_isp_proc.o \
+               $(DIR)/tx_isp_sysfs.o \
+               $(DIR)/tx_isp_vic.o \
+               $(DIR)/tx_isp_csi.o \
+               $(DIR)/tx_isp_tuning.o \
+               $(DIR)/tx_isp_vin.o
+
+
+
+# ISP trace module objects
+tx-isp-trace-objs := $(DIR)/tx-isp-trace.o
+
+# Build both modules - changed tx-isp.o to tx-isp-t31.o
+obj-m := tx-isp-t31.o tx-isp-trace.o

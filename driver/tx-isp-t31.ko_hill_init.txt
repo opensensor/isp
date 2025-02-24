@@ -1,0 +1,281 @@
+static int tx_isp_vic_probe(struct platform_device *pdev)
+{
+    struct tx_isp_subdev_t *sd = NULL;
+    int32_t i = 0;
+    int32_t ret = 0;
+    sd = private_kmalloc(sizeof(tx_isp_subdev_t), GFP_KERNEL);
+    if (sd == NULL) {
+        isp_printf("alloc tx_isp_subdev_t failed!\n");
+        ret = -ENOMEM;
+        goto _vic_alloc_err;
+    }
+
+    ret = tx_isp_subdev_init(sd, pdev);
+    if (ret < 0) {
+        isp_printf("tx_isp_subdev_init failed!\n");
+        ret = -EINVAL;
+        goto _vic_init_err;
+    }
+
+    private_platform_set_drvdata(pdev, sd);
+    private_spin_lock_init(&sd->vic_lock);
+    private_raw_mutex_init(&sd->vic_frame_end_lock);
+    for (i = 0; i < VIC_MAX_CHAN; i++) {
+        private_init_completion(&sd->vic_frame_end_completion[i]);
+    }
+
+    return 0;
+
+_vic_init_err:
+    private_kfree(sd);
+_vic_alloc_err:
+    return ret;
+}
+
+static int tx_isp_vin_probe(struct platform_device *pdev)
+{
+    struct tx_isp_subdev_t *sd = NULL;
+    int32_t ret = 0;
+    sd = private_kmalloc(sizeof(tx_isp_subdev_t), GFP_KERNEL);
+    if (sd == NULL) {
+        isp_printf("alloc tx_isp_subdev_t failed!\n");
+        ret = -ENOMEM;
+        goto _vin_alloc_err;
+    }
+
+    memset(sd, 0, sizeof(tx_isp_subdev_t));
+    private_raw_mutex_init(&sd->vin_lbc_lock);
+    ret = tx_isp_subdev_init(sd, pdev);
+    if (ret < 0) {
+        isp_printf("tx_isp_subdev_init failed!\n");
+        ret = -EINVAL;
+        goto _vin_init_err;
+    }
+
+    private_platform_set_drvdata(pdev, sd);
+    return 0;
+
+_vin_init_err:
+    private_kfree(sd);
+_vin_alloc_err:
+    return ret;
+}
+
+static int tx_isp_csi_probe(struct platform_device *pdev)
+{
+    struct tx_isp_subdev_t *sd = NULL;
+    struct resource *res = NULL;
+    int32_t ret = 0;
+    sd = private_kmalloc(sizeof(tx_isp_subdev_t), GFP_KERNEL);
+    if (sd == NULL) {
+        isp_printf("alloc tx_isp_subdev_t failed!\n");
+        ret = -ENOMEM;
+        goto _csi_alloc_err;
+    }
+
+    memset(sd, 0, sizeof(tx_isp_subdev_t));
+    ret = tx_isp_subdev_init(sd, pdev);
+    if (ret < 0) {
+        isp_printf("tx_isp_subdev_init failed!\n");
+        ret = -EINVAL;
+        goto _csi_init_err;
+    }
+
+    res = private_request_mem_region(&pdev->resource);
+    if (res == NULL) {
+        isp_printf("request mem region failed!\n");
+        ret = -ENOMEM;
+        goto _csi_req_mem_err;
+    }
+
+    sd->csi_base = private_ioremap(res->start, resource_size(res));
+    if (sd->csi_base == NULL) {
+        isp_printf("ioremap failed!\n");
+        ret = -ENOMEM;
+        goto _csi_ioremap_err;
+    }
+
+    private_raw_mutex_init(&sd->csi_lock);
+    private_platform_set_drvdata(pdev, sd);
+    return 0;
+
+_csi_ioremap_err:
+    private_release_mem_region(res);
+_csi_req_mem_err:
+    tx_isp_subdev_deinit(sd);
+_csi_init_err:
+    private_kfree(sd);
+_csi_alloc_err:
+    return ret;
+}
+
+static int tx_isp_fs_probe(struct platform_device *pdev)
+{
+    struct tx_isp_subdev_t *sd = NULL;
+    struct clk *isp_clk = NULL;
+    int32_t ret = 0;
+    sd = private_kmalloc(sizeof(tx_isp_subdev_t), GFP_KERNEL);
+    if (sd == NULL) {
+        isp_printf("alloc tx_isp_subdev_t failed!\n");
+        ret = -ENOMEM;
+        goto _fs_alloc_err;
+    }
+
+    memset(sd, 0, sizeof(tx_isp_subdev_t));
+    ret = tx_isp_subdev_init(sd, pdev);
+    if (ret < 0) {
+        isp_printf("tx_isp_subdev_init failed!\n");
+        ret = -EINVAL;
+        goto _fs_init_err;
+    }
+
+    sd->fs_wdr_shadow = private_kmalloc(WDR_SHADOW_SIZE, GFP_KERNEL);
+    if (sd->fs_wdr_shadow == NULL) {
+        isp_printf("alloc fs_wdr_shadow failed!\n");
+        ret = -ENOMEM;
+        goto _fs_shadow_err;
+    }
+
+    memset(sd->fs_wdr_shadow, 0, WDR_SHADOW_SIZE);
+    isp_clk = private_clk_get(&pdev->dev, "isp");
+    if (IS_ERR(isp_clk)) {
+        isp_printf("get isp clk failed!\n");
+        ret = -EINVAL;
+        goto _fs_clk_get_err;
+    }
+
+    ret = private_clk_set_rate(isp_clk, ISP_CLK_RATE);
+    if (ret!= 0) {
+        isp_printf("set isp clk rate failed!\n");
+        ret = -EINVAL;
+        goto _fs_clk_set_err;
+    }
+
+    clk_enable(isp_clk);
+    private_platform_set_drvdata(pdev, sd);
+    return 0;
+
+_fs_clk_set_err:
+    private_clk_put(isp_clk);
+_fs_clk_get_err:
+    private_kfree(sd->fs_wdr_shadow);
+_fs_shadow_err:
+    tx_isp_subdev_deinit(sd);
+_fs_init_err:
+    private_kfree(sd);
+_fs_alloc_err:
+    return ret;
+}
+
+static int tx_isp_vic_remove(struct platform_device *pdev)
+{
+    struct tx_isp_subdev_t *sd = private_platform_get_drvdata(pdev);
+    private_kfree(sd);
+    return 0;
+}
+
+static int tx_isp_vin_remove(struct platform_device *pdev)
+{
+    struct tx_isp_subdev_t *sd = private_platform_get_drvdata(pdev);
+    private_kfree(sd);
+    return 0;
+}
+
+static int tx_isp_csi_remove(struct platform_device *pdev)
+{
+    struct tx_isp_subdev_t *sd = private_platform_get_drvdata(pdev);
+    struct resource *res = NULL;
+    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+    private_iounmap(sd->csi_base);
+    private_release_mem_region(res);
+    tx_isp_subdev_deinit(sd);
+    private_kfree(sd);
+    return 0;
+}
+
+static int tx_isp_fs_remove(struct platform_device *pdev)
+{
+    struct tx_isp_subdev_t *sd = private_platform_get_drvdata(pdev);
+    private_kfree(sd->fs_wdr_shadow);
+    tx_isp_subdev_deinit(sd);
+    private_kfree(sd);
+    return 0;
+}
+
+static int tx_isp_core_probe(struct platform_device *pdev)
+{
+    struct tx_isp_core_t *core = NULL;
+    struct resource *res = NULL;
+    int32_t ret = 0;
+    int32_t i = 0;
+    core = private_kmalloc(sizeof(tx_isp_core_t), GFP_KERNEL);
+    if (core == NULL) {
+        isp_printf("alloc tx_isp_core_t failed!\n");
+        ret = -ENOMEM;
+        goto _core_alloc_err;
+    }
+
+    memset(core, 0, sizeof(tx_isp_core_t));
+    res = private_request_mem_region(&pdev->resource);
+    if (res == NULL) {
+        isp_printf("request mem region failed!\n");
+        ret = -ENOMEM;
+        goto _core_req_mem_err;
+    }
+
+    core->base = private_ioremap(res->start, resource_size(res));
+    if (core->base == NULL) {
+        isp_printf("ioremap failed!\n");
+        ret = -ENOMEM;
+        goto _core_ioremap_err;
+    }
+
+    private_platform_set_drvdata(pdev, core);
+    private_spin_lock_init(&core->lock);
+    private_raw_mutex_init(&core->irq_mask_lock);
+    for (i = 0; i < ISP_MAX_CHAN; i++) {
+        tx_isp_frame_chan_init(&core->frame_chan[i]);
+    }
+
+    ret = tx_isp_proc_init(core);
+    if (ret < 0) {
+        isp_printf("tx_isp_proc_init failed!\n");
+        ret = -EINVAL;
+        goto _core_proc_init_err;
+    }
+
+    ret = tx_isp_sysfs_init(core);
+    if (ret < 0) {
+        isp_printf("tx_isp_sysfs_init failed!\n");
+        ret = -EINVAL;
+        goto _core_sysfs_init_err;
+    }
+
+    ret = private_request_irq(pdev->dev.irq, tx_isp_core_irq_handler, IRQF_SHARED,
+        "isp_irq", core);
+    if (ret < 0) {
+        isp_printf("request irq failed!\n");
+        ret = -EINVAL;
+        goto _core_req_irq_err;
+    }
+
+    return 0;
+
+_core_req_irq_err:
+    tx_isp_sysfs_exit(core);
+_core_sysfs_init_err:
+    tx_isp_proc_exit(core);
+_core_proc_init_err:
+    for (i = 0; i < ISP_MAX_CHAN; i++) {
+        tx_isp_frame_chan_deinit(&core->frame_chan[i]);
+    }
+
+    private_iounmap(core->base);
+_core_ioremap_err:
+    private_release_mem_region(res);
+_core_req_mem_err:
+    private_kfree(core);
+_core_alloc_err:
+    return ret;
+}
+
