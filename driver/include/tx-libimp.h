@@ -16,6 +16,11 @@
 
 // Control codes from libimp
 
+
+#define MAX_CHANNELS 6  // Define the maximum number of frame channels
+#define MAX_COMPONENTS 8 // Define the maximum number of components
+
+
 #define ISP_CTRL_SATURATION     0x980902
 #define ISP_CTRL_SHARPNESS      0x98091b
 #define ISP_CTRL_HFLIP         0x980914
@@ -994,6 +999,129 @@ struct tuning_event_data {
     uint32_t cmd;
     uint32_t value;
 };
+
+// Structure to match libimp's expectation
+struct imp_buffer_info {
+    uint32_t method;
+    uint32_t phys_addr;
+    uint32_t virt_addr;
+    uint32_t size;
+    uint32_t flags;
+};
+
+
+
+struct encoder_state {
+    uint32_t channel_id;   // Channel ID (0-8)
+    uint32_t state;        // Must match offset 0x109290
+    uint32_t registered;   // Must be at 0x109398
+    struct semaphore sem;  // Must be at 0x109428
+};
+
+struct frame_fifo_entry {
+    struct frame_fifo_entry *next;  // Next buffer in chain
+    struct frame_fifo_entry *prev;  // Previous buffer in chain
+    uint32_t magic_head;           // 0x100100
+    uint32_t magic_tail;           // 0x200200
+    void *data;                    // Buffer data pointer
+};
+
+
+struct frame_timing {
+    u64 timestamp;
+    u32 frame_count;
+    u32 reserved[2];
+};
+
+
+struct group_data {
+    void *base;              // arg1[0]: Base pointer that needs +0x20 access
+    char base_block[0x30];   // Space for base pointer access
+    void *update_ptr;        // arg1[1]: Update ptr that needs +0x3c access
+    char update_block[0x40]; // Space for update ptr access
+    uint32_t channel;        // Channel number
+    uint32_t state;          // State flags
+    uint32_t flags;          // Additional flags
+    uint32_t handler;        // 0x9a654
+};
+
+
+struct frame_group {
+    char name[0x14];               // 0x00-0x13: Name string
+    uint32_t reserved1[0x3];       // 0x14-0x1F: Reserved
+    void *handler_fn;              // 0x20: Handler function
+    uint32_t reserved2[0x6];       // 0x24-0x3B: Reserved
+    void *update_fn;               // 0x3C: Update function
+    uint32_t reserved3[0x4];       // 0x40-0x4F: Reserved
+    void *group_update;            // 0x50: Group update function
+    uint32_t reserved4[0x36];      // 0x54-0x12B: Reserved
+    void *self;                    // 0x12C: Self pointer
+    uint32_t channel;              // 0x130: Channel ID
+    uint32_t state;                // 0x134: State flags
+    uint32_t reserved5[0x3];       // 0x138-0x143: Reserved
+    uint32_t handler;              // 0x144: Handler value (0x9a654)
+    char update_block[512];        // Rest of structure
+} __attribute__((packed, aligned(4)));
+
+
+/* State definitions */
+enum frame_channel_state {
+    FC_STATE_IDLE = 0,
+    FC_STATE_READY = 1,
+    FC_STATE_STREAMING = 2,
+    FC_STATE_ERROR = 3
+};
+
+
+// Define a structure that might match the expectations of libimp.so
+struct sensor_frame_channel {
+    void *channel_ptr;      // Pointer to frame channel
+    void *control_data_ptr; // Pointer to control data
+    int status;             // Status code
+    char reserved[8];       // Reserved/padding for alignment
+};
+
+struct sensor_reg_data {
+    uint16_t reg;
+    uint8_t val;
+};
+
+
+struct isp_stream_param {
+    uint32_t enable;     // Stream enable/disable
+    uint32_t channel;    // Channel number
+    uint32_t flags;      // Stream flags
+};
+
+
+// External structures for libimp interface
+struct sensor_stream_info {
+    uint32_t state;          // 0 = disabled, 1 = enabled
+    uint32_t format;         // Frame format
+    uint32_t width;
+    uint32_t height;
+    uint32_t flags;
+};
+
+struct sensor_enable_param {
+    uint32_t channel;       // Channel number
+    uint32_t enable;        // 0 = disable, 1 = enable
+    uint32_t flags;         // Reserved flags
+};
+
+
+struct frame_entry { // Must match OEM offsets exactly
+    uint32_t flags;          // +0x00
+    uint32_t timestamp;      // +0x04
+    uint32_t frame_size;     // +0x08
+    uint32_t frame_type;     // +0x0C
+    uint32_t frame_num;      // +0x10
+    uint32_t frame_rate;     // +0x14
+    uint32_t num_slices;     // +0x18
+    void *slice_data;        // +0x1C
+    uint8_t reserved[0x308 - 0x20];  // Pad to full size
+} __attribute__((aligned(8)));
+
 
 // Tuning Command States (from decompiled code analysis)
 #define ISP_TUNING_STATE_WB_GET         0x8000004  // GetWB - expect enable=1

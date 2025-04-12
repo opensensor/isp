@@ -4,7 +4,7 @@
 #include <linux/vmalloc.h>
 
 /* -------------------debugfs interface------------------- */
-static int print_level = ISP_WARNING_LEVEL;
+static int print_level = ISP_WARN_LEVEL;
 module_param(print_level, int, S_IRUGO);
 MODULE_PARM_DESC(print_level, "isp print level");
 
@@ -111,17 +111,4 @@ void private_dma_sync_single_for_device(struct device *dev,
 }
 
 
-/* Must be check the return value */
-__must_check int private_get_driver_interface(struct jz_driver_common_interfaces **pfaces)
-{
-	if(pfaces == NULL)
-		return -1;
-	*pfaces = get_driver_common_interfaces();
-	if(*pfaces && ((*pfaces)->flags_0 != (unsigned int)printk || (*pfaces)->flags_0 !=(*pfaces)->flags_1)){
-		ISP_ERROR("flags = 0x%08x, jzflags = %p,0x%08x", (*pfaces)->flags_0, printk, (*pfaces)->flags_1);
-		return -1;
-	}else
-		return 0;
-}
-EXPORT_SYMBOL(private_get_driver_interface);
 
