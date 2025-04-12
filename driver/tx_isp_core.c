@@ -84,6 +84,132 @@ void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan)
     }
 }
 
+/* Configure ISP system clocks */
+static int tx_isp_configure_clocks(struct tx_isp_dev *isp)
+{
+    struct clk *cgu_isp;
+    struct clk *isp_clk;
+    struct clk *ipu_clk;
+    struct clk *csi_clk;
+    int ret;
+
+    pr_info("Configuring ISP system clocks\n");
+
+    /* Get the CGU ISP clock */
+    cgu_isp = clk_get(isp->dev, "cgu_isp");
+    if (IS_ERR(cgu_isp)) {
+        pr_err("Failed to get CGU ISP clock\n");
+        return PTR_ERR(cgu_isp);
+    }
+
+    /* Get the ISP core clock */
+    isp_clk = clk_get(isp->dev, "isp");
+    if (IS_ERR(isp_clk)) {
+        pr_err("Failed to get ISP clock\n");
+        ret = PTR_ERR(isp_clk);
+        goto err_put_cgu_isp;
+    }
+
+    /* Get the IPU clock */
+    ipu_clk = clk_get(isp->dev, "ipu");
+    if (IS_ERR(ipu_clk)) {
+        pr_err("Failed to get IPU clock\n");
+        ret = PTR_ERR(ipu_clk);
+        goto err_put_isp_clk;
+    }
+
+    /* Get the CSI clock */
+    csi_clk = clk_get(isp->dev, "csi");
+    if (IS_ERR(csi_clk)) {
+        pr_err("Failed to get CSI clock\n");
+        ret = PTR_ERR(csi_clk);
+        goto err_put_ipu_clk;
+    }
+
+    /* Set clock rates */
+    ret = clk_set_rate(cgu_isp, 120000000);
+    if (ret) {
+        pr_err("Failed to set CGU ISP clock rate\n");
+        goto err_put_csi_clk;
+    }
+
+    ret = clk_set_rate(isp_clk, 200000000);
+    if (ret) {
+        pr_err("Failed to set ISP clock rate\n");
+        goto err_put_csi_clk;
+    }
+
+    ret = clk_set_rate(ipu_clk, 200000000);
+    if (ret) {
+        pr_err("Failed to set IPU clock rate\n");
+        goto err_put_csi_clk;
+    }
+
+    /* Initialize CSI clock to 100MHz */
+    ret = clk_set_rate(csi_clk, 100000000);
+    if (ret) {
+        pr_err("Failed to set CSI clock rate\n");
+        goto err_put_csi_clk;
+    }
+    pr_info("CSI clock initialized: rate=%lu Hz\n", clk_get_rate(csi_clk));
+
+    /* Enable clocks */
+    ret = clk_prepare_enable(cgu_isp);
+    if (ret) {
+        pr_err("Failed to enable CGU ISP clock\n");
+        goto err_put_csi_clk;
+    }
+
+    ret = clk_prepare_enable(isp_clk);
+    if (ret) {
+        pr_err("Failed to enable ISP clock\n");
+        goto err_disable_cgu_isp;
+    }
+
+    ret = clk_prepare_enable(ipu_clk);
+    if (ret) {
+        pr_err("Failed to enable IPU clock\n");
+        goto err_disable_isp_clk;
+    }
+
+    ret = clk_prepare_enable(csi_clk);
+    if (ret) {
+        pr_err("Failed to enable CSI clock\n");
+        goto err_disable_ipu_clk;
+    }
+
+    /* Store clocks in ISP device structure */
+    isp->cgu_isp = cgu_isp;
+    isp->isp_clk = isp_clk;
+    isp->ipu_clk = ipu_clk;
+    isp->csi_clk = csi_clk;
+
+    pr_info("Clock configuration completed. Rates:\n");
+    pr_info("  CSI Core: %lu Hz\n", clk_get_rate(isp->csi_clk));
+    pr_info("  ISP Core: %lu Hz\n", clk_get_rate(isp->isp_clk));
+    pr_info("  CGU ISP: %lu Hz\n", clk_get_rate(isp->cgu_isp));
+    pr_info("  CSI: %lu Hz\n", clk_get_rate(isp->csi_clk));
+    pr_info("  IPU: %lu Hz\n", clk_get_rate(isp->ipu_clk));
+
+    return 0;
+
+err_disable_ipu_clk:
+    clk_disable_unprepare(ipu_clk);
+err_disable_isp_clk:
+    clk_disable_unprepare(isp_clk);
+err_disable_cgu_isp:
+    clk_disable_unprepare(cgu_isp);
+err_put_csi_clk:
+    clk_put(csi_clk);
+err_put_ipu_clk:
+    clk_put(ipu_clk);
+err_put_isp_clk:
+    clk_put(isp_clk);
+err_put_cgu_isp:
+    clk_put(cgu_isp);
+    return ret;
+}
+
 /* Core probe function from decompiled code */
 int tx_isp_core_probe(struct platform_device *pdev)
 {
@@ -146,10 +272,46 @@ int tx_isp_core_probe(struct platform_device *pdev)
     isp->dev = &pdev->dev;
     isp->pdev = pdev;
 
+    /* Configure system clocks */
+    ret = tx_isp_configure_clocks(isp);
+    if (ret < 0) {
+        ISP_ERROR("Failed to configure system clocks: %d\n", ret);
+        goto _core_clk_err;
+    }
+
+    /* Create ISP graph and nodes */
+    pr_info("Creating ISP graph and nodes\n");
+    ret = tx_isp_create_graph_and_nodes(isp);
+    if (ret < 0) {
+        ISP_ERROR("Failed to create ISP graph and nodes: %d\n", ret);
+        goto _core_graph_err;
+    }
+    pr_info("ISP graph and nodes created successfully\n");
+
     // level first
     isp_printf(ISP_INFO_LEVEL, "TX ISP core driver probed successfully\n");
     return 0;
 
+_core_graph_err:
+    /* Disable and release clocks */
+    if (isp->csi_clk) {
+        clk_disable_unprepare(isp->csi_clk);
+        clk_put(isp->csi_clk);
+    }
+    if (isp->ipu_clk) {
+        clk_disable_unprepare(isp->ipu_clk);
+        clk_put(isp->ipu_clk);
+    }
+    if (isp->isp_clk) {
+        clk_disable_unprepare(isp->isp_clk);
+        clk_put(isp->isp_clk);
+    }
+    if (isp->cgu_isp) {
+        clk_disable_unprepare(isp->cgu_isp);
+        clk_put(isp->cgu_isp);
+    }
+_core_clk_err:
+    free_irq(isp->isp_irq, isp);
 _core_req_irq_err:
     tx_isp_sysfs_exit(isp);
 _core_sysfs_init_err:
