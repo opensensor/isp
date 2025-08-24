@@ -102,6 +102,13 @@ struct frame_channel_device {
 static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
 static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 
+/* VIC continuous frame generation work queue */
+static struct delayed_work vic_frame_work;
+static void vic_frame_work_function(struct work_struct *work);
+
+/* Timer callback to simulate periodic frame generation for testing */
+static struct timer_list frame_sim_timer;
+
 // ISP Tuning IOCTLs from reference (0x20007400 series)
 #define ISP_TUNING_GET_PARAM    0x20007400
 #define ISP_TUNING_SET_PARAM    0x20007401
@@ -2535,9 +2542,6 @@ static void simulate_frame_completion(void)
     }
 }
 
-/* VIC continuous frame generation work queue */
-static struct delayed_work vic_frame_work;
-
 /* VIC frame generation work function */
 static void vic_frame_work_function(struct work_struct *work)
 {
@@ -2569,9 +2573,6 @@ static void vic_frame_work_function(struct work_struct *work)
     }
 }
 
-/* Timer callback to simulate periodic frame generation for testing */
-static struct timer_list frame_sim_timer;
-
 static void frame_sim_timer_callback(unsigned long data)
 {
     /* Simulate 30 FPS frame generation */
@@ -2601,7 +2602,7 @@ static void stop_frame_simulation(void)
 {
     del_timer_sync(&frame_sim_timer);
     cancel_delayed_work_sync(&vic_frame_work);
-    pr_info("Frame simulation timer stopped\n");
+    pr_info("Frame simulation timer and VIC work queue stopped\n");
 }
 
 module_init(tx_isp_init);
