@@ -430,10 +430,8 @@ static int tx_isp_csi_detect_frame_rate_and_configure_phy(void __iomem *csi_base
     u32 phy_timing_value = 1; /* Default PHY timing */
     u32 current_val, new_val;
     
-    /* Try to detect frame rate from sensor attributes */
-    if (attr && attr->fps > 0) {
-        frame_rate = attr->fps;
-    } else if (ourISPdev && ourISPdev->sensor_width > 0 && ourISPdev->sensor_height > 0) {
+    /* Estimate frame rate based on resolution since sensor attribute fields vary */
+    if (ourISPdev && ourISPdev->sensor_width > 0 && ourISPdev->sensor_height > 0) {
         /* Estimate frame rate based on resolution */
         u32 pixel_count = ourISPdev->sensor_width * ourISPdev->sensor_height;
         if (pixel_count <= (640 * 480)) {
@@ -445,6 +443,12 @@ static int tx_isp_csi_detect_frame_rate_and_configure_phy(void __iomem *csi_base
         } else {
             frame_rate = 15;
         }
+        pr_info("Estimated frame rate %d fps based on resolution %dx%d\n",
+                frame_rate, ourISPdev->sensor_width, ourISPdev->sensor_height);
+    } else {
+        /* Use conservative default for unknown sensor configurations */
+        frame_rate = 30;
+        pr_info("Using default frame rate %d fps (unknown sensor configuration)\n", frame_rate);
     }
     
     pr_info("Detected frame rate: %d fps\n", frame_rate);
