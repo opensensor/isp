@@ -1017,13 +1017,12 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         }
         
         // Check if real sensor is connected and active
-        if (ourISPdev && ourISPdev->subdevs[3]) {
-            sensor_subdev = ourISPdev->subdevs[3];
-            if (sensor_subdev && sensor_subdev->module.name &&
-                sensor_subdev->module.state == TX_ISP_MODULE_RUNNING) {
+        if (ourISPdev && ourISPdev->sensor) {
+            struct tx_isp_sensor *sensor = ourISPdev->sensor;
+            if (sensor && sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
                 sensor_active = true;
                 pr_debug("Channel %d: Real sensor %s active, waiting for hardware frame\n",
-                        channel, sensor_subdev->module.name);
+                        channel, sensor->info.name);
             }
         }
         
@@ -1065,7 +1064,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         
         if (sensor_active) {
             buffer.flags |= 0x8; // Custom flag indicating real sensor data
-            pr_info("Channel %d: Frame from REAL sensor %s\n", channel, sensor_subdev->module.name);
+            pr_info("Channel %d: Frame from REAL sensor %s\n", channel, sensor->info.name);
         } else {
             pr_info("Channel %d: Frame from simulation (no sensor active)\n", channel);
         }
@@ -1377,26 +1376,13 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -ENOMEM;
         }
         
-        // Initialize sensor subdev with real hardware info
-        sensor_subdev->module.name = kstrdup(reg_info.name, GFP_KERNEL);
-        sensor_subdev->module.type = TX_ISP_SENSOR_TYPE;
-        sensor_subdev->module.state = TX_ISP_MODULE_RUNNING;
-        // sensor_subdev->chip_id = reg_info.chip_id;
+        // Set sensor state to running (using vin_state from tx_isp_subdev)
+        sensor_subdev->vin_state = TX_ISP_MODULE_RUNNING;
         
-        // Add to subdev infrastructure (sensor at index 3, or next available)
-        if (!isp_dev->subdevs[3]) {
-            isp_dev->subdevs[3] = sensor_subdev;
-            pr_info("Registered %s as primary sensor subdev[3]\n", reg_info.name);
-        } else {
-            // Find next available slot for multiple sensors
-            int i;
-            for (i = 4; i < 16; i++) {
-                if (!isp_dev->subdevs[i]) {
-                    isp_dev->subdevs[i] = sensor_subdev;
-                    pr_info("Registered %s as sensor subdev[%d]\n", reg_info.name, i);
-                    break;
-                }
-            }
+        // Register with ISP device as primary sensor
+        if (!isp_dev->sensor) {
+            isp_dev->sensor = container_of(sensor_subdev, struct tx_isp_sensor, sd);
+            pr_info("Registered %s as primary sensor\n", reg_info.name);
         }
         
         // Add to registered sensor list for IOCTL compatibility
@@ -1422,14 +1408,13 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_warn("Failed to activate pipeline for %s: %d\n", reg_info.name, ret);
         }
         
-        // Sync sensor attributes to ISP core
+        // Sync sensor attributes to ISP core using correct field names
         struct tx_isp_sensor_attribute sensor_attr = {0};
         sensor_attr.name = reg_info.name;
         sensor_attr.chip_id = reg_info.chip_id;
-        sensor_attr.width = reg_info.width;
-        sensor_attr.height = reg_info.height;
-        sensor_attr.fps = reg_info.fps;
-        sensor_attr.data_interface = reg_info.interface_type;
+        sensor_attr.total_width = reg_info.width;
+        sensor_attr.total_height = reg_info.height;
+        sensor_attr.dbus_type = reg_info.interface_type;
         
         ret = tx_isp_sync_sensor_attr(isp_dev, &sensor_attr);
         if (ret) {
@@ -2068,9 +2053,9 @@ static void tx_isp_exit(void)
         stop_frame_simulation();
         
         /* Free hardware interrupts if initialized */
-        if (ourISPdev->irq > 0) {
-            free_irq(ourISPdev->irq, ourISPdev);
-            pr_info("Hardware interrupt %d freed\n", ourISPdev->irq);
+        if (ourISPdev->isp_irq > 0) {
+            free_irq(ourISPdev->isp_irq, ourISPdev);
+            pr_info("Hardware interrupt %d freed\n", ourISPdev->isp_irq);
         }
         
         /* Clean up sensor subdevs */
@@ -2149,23 +2134,6 @@ static int tx_isp_send_event_to_remote_internal(void *subdev, int event_type, vo
     return -0x203; // 0xfffffdfd
 }
 
-/* Real hardware frame completion detection - replaces timer simulation */
-static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel)
-{
-    if (!isp_dev || channel < 0 || channel >= num_channels) {
-        return;
-    }
-    
-    pr_debug("Hardware frame completion detected on channel %d\n", channel);
-    
-    /* Wake up frame waiters with real hardware completion */
-    frame_channel_wakeup_waiters(&frame_channels[channel]);
-    
-    /* Notify any registered callbacks */
-    if (isp_dev->frame_done_callback) {
-        isp_dev->frame_done_callback(isp_dev, channel);
-    }
-}
 
 /* VIC event handler - manages buffer flow between frame channels and VIC */
 static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
