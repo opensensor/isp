@@ -2388,6 +2388,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
     if (copy_from_user(&reg_info, argp, sizeof(reg_info)))
         return -EFAULT;
     
+    pr_info("=== USERSPACE SENSOR REGISTRATION REQUEST ===\n");
     pr_info("Sensor registration: %s (ID=0x%x, %dx%d@%dfps)\n",
             reg_info.name, reg_info.chip_id, reg_info.width, reg_info.height, reg_info.fps);
     
@@ -2406,6 +2407,9 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
     mutex_lock(&sensor_register_mutex);
     kernel_subdev = registered_sensor_subdev;
     mutex_unlock(&sensor_register_mutex);
+    
+    pr_info("Kernel-registered sensor available: %s\n",
+            kernel_subdev ? "YES" : "NO");
     
     /* Determine if we need to create a sensor or use kernel-registered one */
     if (kernel_subdev) {
