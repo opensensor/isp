@@ -136,6 +136,33 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Sensor enumeration: index=%d name=%s\n", input.index, input.name);
         return 0;
     }
+    case 0xc0045627: { // TX_ISP_SENSOR_SET_INPUT - Set active sensor input
+        int input_index;
+        
+        if (copy_from_user(&input_index, argp, sizeof(input_index)))
+            return -EFAULT;
+            
+        // Validate sensor exists
+        mutex_lock(&sensor_list_mutex);
+        struct registered_sensor *sensor;
+        int found = 0;
+        
+        list_for_each_entry(sensor, &sensor_list, list) {
+            if (sensor->index == input_index) {
+                found = 1;
+                break;
+            }
+        }
+        mutex_unlock(&sensor_list_mutex);
+        
+        if (!found) {
+            pr_err("No sensor at index %d for set input\n", input_index);
+            return -EINVAL;
+        }
+        
+        pr_info("Sensor input set to index %d (%s)\n", input_index, sensor->name);
+        return 0;
+    }
     default:
         pr_info("Unhandled ioctl cmd: 0x%x\n", cmd);
         return -ENOTTY;
