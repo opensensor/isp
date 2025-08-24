@@ -31,6 +31,7 @@
 struct registered_sensor {
     char name[32];
     int index;
+    struct tx_isp_subdev *subdev;  // Store actual sensor subdev pointer
     struct list_head list;
 };
 
@@ -40,6 +41,10 @@ static LIST_HEAD(sensor_list);
 static DEFINE_MUTEX(sensor_list_mutex);
 static int sensor_count = 0;
 static int isp_memopt = 0; // Memory optimization flag like reference
+
+/* Kernel symbol export for sensor drivers to register */
+static struct tx_isp_subdev *registered_sensor_subdev = NULL;
+static DEFINE_MUTEX(sensor_register_mutex);
 
 /* Event system constants from reference driver */
 #define TX_ISP_EVENT_FRAME_QBUF         0x3000008
