@@ -1212,7 +1212,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         if (copy_from_user(&buffer, argp, sizeof(buffer)))
             return -EFAULT;
             
-        pr_info("Channel %d: Dequeue buffer request (waiting for REAL sensor data)\n", channel);
+        pr_debug("Channel %d: DQBUF - waiting for frame\n", channel);
         
         // Validate buffer type matches channel configuration
         if (buffer.type != 1) { // V4L2_BUF_TYPE_VIDEO_CAPTURE
@@ -1240,10 +1240,10 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             pr_warn("Channel %d: No active sensor detected, using fallback simulation\n", channel);
         }
         
-        // Wait for frame completion from real hardware OR simulation
+        // Wait for frame with shorter timeout for debugging
         ret = wait_event_interruptible_timeout(state->frame_wait,
-                                             (state->frame_ready && state->streaming),
-                                             msecs_to_jiffies(1000)); // 1 second timeout
+                                             state->frame_ready || !state->streaming,
+                                             msecs_to_jiffies(100)); // 100ms timeout
         
         if (ret == 0) {
             pr_warn("Channel %d: Frame wait timeout - no data from %s\n",
@@ -1274,9 +1274,9 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         
         if (sensor_active && active_sensor) {
             buffer.flags |= 0x8; // Custom flag indicating real sensor data
-            pr_info("Channel %d: Frame from REAL sensor %s\n", channel, active_sensor->info.name);
+            pr_debug("Channel %d: Frame from sensor %s\n", channel, active_sensor->info.name);
         } else {
-            pr_info("Channel %d: Frame from simulation (no sensor active)\n", channel);
+            pr_debug("Channel %d: Frame from simulation\n", channel);
         }
         
         buffer.sequence = state->sequence++;
@@ -1289,9 +1289,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         state->frame_ready = false;
         spin_unlock_irqrestore(&state->buffer_lock, flags);
         
-        pr_info("Channel %d: Returning %s frame buffer (index=%d, size=%d, seq=%d)\n",
-                channel, sensor_active ? "SENSOR" : "SIMULATED",
-                buffer.index, buffer.bytesused, buffer.sequence);
+        pr_debug("Channel %d: DQBUF complete (seq=%d)\n", channel, buffer.sequence);
         
         if (copy_to_user(argp, &buffer, sizeof(buffer)))
             return -EFAULT;
@@ -1338,9 +1336,12 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                 pr_info("Channel %d: VIC activated\n", channel);
             }
             
-            // For now, skip hardware register writes that might cause hang
+            // Start frame generation
             vic_dev->streaming = 1;
-            pr_info("Channel %d: Streaming flag set\n", channel);
+            pr_info("Channel %d: Starting frame generation\n", channel);
+            
+            // Trigger frame generation through work queue
+            schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(10));
             
             // Set channel streaming state
             state->streaming = true;
@@ -2527,8 +2528,11 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
             pr_info("VIC: Pipeline activated\n");
         }
         
-        // Skip triggering frame processing for now to avoid recursion
-        pr_info("VIC: Stream ON event completed\n");
+        // Start frame generation
+        pr_info("VIC: Starting frame generation\n");
+        
+        // Use work queue to generate frames at 30 FPS
+        schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(10));
         
         return 0;
     }
@@ -2584,22 +2588,28 @@ static void vic_frame_work_function(struct work_struct *work)
     
     vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
     
-    // Only continue if VIC is active and channels are streaming
-    if (vic_dev->state == 2) {
+    // Generate frames if VIC is active
+    if (vic_dev && vic_dev->state == 2) {
         int i;
         bool any_streaming = false;
         
-        // Check if any channels are still streaming
+        // Check if any channels are streaming
         for (i = 0; i < num_channels; i++) {
             if (frame_channels[i].state.streaming) {
                 any_streaming = true;
-                break;
+                // Mark frame ready for this channel
+                unsigned long flags;
+                spin_lock_irqsave(&frame_channels[i].state.buffer_lock, flags);
+                frame_channels[i].state.frame_ready = true;
+                spin_unlock_irqrestore(&frame_channels[i].state.buffer_lock, flags);
+                wake_up_interruptible(&frame_channels[i].state.frame_wait);
             }
         }
         
         if (any_streaming) {
-            pr_debug("VIC: Generating continuous frame\n");
-            vic_framedone_irq_function(vic_dev);
+            pr_debug("VIC: Frame generated, scheduling next\n");
+            // Schedule next frame (30 FPS = 33ms interval)
+            schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(33));
         }
     }
 }
