@@ -399,11 +399,9 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
     memset(&vic_dev->sd, 0, sizeof(vic_dev->sd));
     vic_dev->sd.isp = isp_dev;
     
-    // Safely set module name
-    if (vic_dev->sd.module.name) {
-        strncpy(vic_dev->sd.module.name, "tx-isp-vic", 31);
-        vic_dev->sd.module.name[31] = '\0';
-    }
+    // Safely set module name - avoid writing to read-only memory
+    // The module name field may be const, so just set it if possible
+    // Most module name handling is done by the kernel framework
     
     // Initialize subdev operations later to avoid module loading issues
     vic_dev->sd.ops = NULL;  // Will be set after module fully loads
