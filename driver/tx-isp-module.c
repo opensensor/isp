@@ -30,11 +30,23 @@ struct registered_sensor {
     struct list_head list;
 };
 
+// ISP configuration structure for buffer calculations
+struct tx_isp_config {
+    uint32_t width;      // Frame width at offset 0xec
+    uint32_t height;     // Frame height at offset 0xf0
+    uint32_t mode;       // ISP mode
+    // Add padding to match reference offsets
+    uint8_t reserved[0xec - 0x0c];
+    uint32_t frame_width;   // At offset 0xec
+    uint32_t frame_height;  // At offset 0xf0
+};
+
 // Simple global device instance
 struct tx_isp_dev *ourISPdev = NULL;
 static LIST_HEAD(sensor_list);
 static DEFINE_MUTEX(sensor_list_mutex);
 static int sensor_count = 0;
+static int isp_memopt = 0; // Memory optimization flag like reference
 
 // Basic IOCTL handler matching reference behavior
 static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
@@ -161,6 +173,56 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
         
         pr_info("Sensor input set to index %d (%s)\n", input_index, sensor->name);
+        return 0;
+    }
+    case 0x800856d5: { // TX_ISP_GET_BUF - Calculate required buffer size
+        struct isp_buf_result {
+            uint32_t addr;   // Physical address (usually 0)
+            uint32_t size;   // Calculated buffer size
+        } buf_result;
+        
+        // Initialize with default ISP configuration
+        // In real implementation, this would come from actual ISP config
+        uint32_t width = 1920;   // Default HD width
+        uint32_t height = 1080;  // Default HD height
+        
+        pr_info("ISP buffer calculation: width=%d height=%d memopt=%d\n",
+                width, height, isp_memopt);
+        
+        // Reference buffer size calculation logic
+        // Based on the decompiled code from reference driver
+        
+        uint32_t stride_factor = height << 3; // $t0_3 = $a2_9 << 3
+        
+        // Main buffer calculation: (($v0_83 + 7) u>> 3) * $t0_3
+        uint32_t main_buf = ((width + 7) >> 3) * stride_factor;
+        
+        // Additional buffer: ($a0_29 u>> 1) + $a0_29
+        uint32_t total_main = (main_buf >> 1) + main_buf;
+        
+        // YUV buffer calculation: (((($v0_83 + 0x1f) u>> 5) + 7) u>> 3) * (((($a2_9 + 0xf) u>> 4) + 1) << 3)
+        uint32_t yuv_stride = ((((width + 0x1f) >> 5) + 7) >> 3) * ((((height + 0xf) >> 4) + 1) << 3);
+        
+        uint32_t total_size = total_main + yuv_stride;
+        
+        // Memory optimization affects calculation
+        if (isp_memopt == 0) {
+            // Additional buffers when memopt disabled
+            uint32_t extra_buf = (((width >> 1) + 7) >> 3) * stride_factor;
+            uint32_t misc_buf = ((((width >> 5) + 7) >> 3) * stride_factor) >> 5;
+            
+            total_size = (yuv_stride << 2) + misc_buf + (extra_buf >> 1) + total_main + extra_buf;
+        }
+        
+        pr_info("ISP calculated buffer size: %d bytes (0x%x)\n", total_size, total_size);
+        
+        // Set result: address=0, size=calculated
+        buf_result.addr = 0;
+        buf_result.size = total_size;
+        
+        if (copy_to_user(argp, &buf_result, sizeof(buf_result)))
+            return -EFAULT;
+            
         return 0;
     }
     default:
