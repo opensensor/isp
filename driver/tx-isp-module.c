@@ -189,49 +189,50 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
 }
 
 // VIC subdev structure based on reference driver analysis (0x21c bytes)
-// VIC device structure matching exact offsets from reference driver
-// IMPORTANT: Reference driver has a BUG at tx_isp_vic_probe - it initializes
-// spinlock at 0x130 then immediately overwrites with mutex. We follow the mutex.
+// VIC device structure - corrected based on actual runtime offsets
+// Total size: 0x21c bytes as per reference driver
 struct tx_isp_vic_device {
-    struct tx_isp_subdev sd;           // Base subdev structure (size 0xb8)
+    // The tx_isp_subdev is embedded at the start
+    // But we need to account for actual size differences
+    char base_padding[0xb8];           // Base structure/padding
     
-    // Offset 0xb8: VIC registers pointer
-    void __iomem *vic_regs;            // VIC register base at offset 0xb8
+    // VIC registers pointer - actual offset 0xb8
+    void __iomem *vic_regs;
     
-    // Padding to reach offset 0xd4 for self-pointer
-    char padding1[0x18];               // 0xc0 to 0xd4 (24 bytes)
+    // Padding to self-pointer at 0xd4
+    char padding1[0x18];
     struct tx_isp_vic_device *self;    // Self-pointer at offset 0xd4
     
-    // Padding to reach offset 0x128 for state
-    char padding2[0x50];               // 0xd8 to 0x128 (80 bytes)
+    // Padding to state at 0x128
+    char padding2[0x50];
     int state;                         // State at offset 0x128 (1=init, 2=active)
     
-    // Padding to reach offset 0x130 for mlock (NOTE: mutex, not spinlock!)
-    char padding3[0x4];                // 0x12c to 0x130 (4 bytes)
+    // Padding to mlock at 0x130
+    char padding3[0x4];
     struct mutex mlock;                // Mutex at offset 0x130
     
-    // Padding to reach offset 0x148 for frame_done
-    char padding4[0x18];               // After mutex to 0x148
+    // Padding to frame_done at 0x148
+    char padding4[0x18];
     struct completion frame_done;      // Completion at offset 0x148
     
-    // Padding to reach offset 0x154 for snap_mlock
-    char padding5[0xC];                // After completion to 0x154
+    // Padding to snap_mlock at 0x154
+    char padding5[0xC];
     struct mutex snap_mlock;           // Snap mutex at offset 0x154
     
-    // Padding to reach offset 0x1f4 for buffer_lock
-    char padding6[0xA0];               // 0x154 + mutex size to 0x1f4
+    // Padding to buffer_lock at 0x1f4
+    char padding6[0xA0];
     spinlock_t buffer_lock;            // Spinlock at offset 0x1f4
     
-    // Buffer management lists immediately after spinlock
-    struct list_head queue_head;       // Buffer queue head at 0x1f8
-    struct list_head free_head;        // Free buffer head at 0x200
-    struct list_head done_head;        // Done buffer head at 0x208
+    // Buffer lists immediately after spinlock
+    struct list_head queue_head;       // offset 0x1f8
+    struct list_head free_head;        // offset 0x200
+    struct list_head done_head;        // offset 0x208
     
     // Streaming state at offset 0x210
-    int streaming;                     // Streaming state at offset 0x210
+    int streaming;
     
-    // Padding to reach offset 0x218 for frame_count
-    char padding7[0x4];                // 0x214 to 0x218
+    // Padding to frame_count at 0x218
+    char padding7[0x4];
     uint32_t frame_count;              // Frame counter at offset 0x218
 };
 
