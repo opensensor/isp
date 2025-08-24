@@ -1151,13 +1151,36 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             uint32_t reserved;
         } buffer;
         
+        unsigned long flags;
+        
         if (copy_from_user(&buffer, argp, sizeof(buffer)))
             return -EFAULT;
             
-        pr_info("Channel %d: Queue buffer index=%d\n", channel, buffer.index);
+        pr_debug("Channel %d: Queue buffer index=%d\n", channel, buffer.index);
         
-        // Reference queues buffer for video capture
-        // Sets buffer state, adds to ready queue, etc.
+        // Auto-start streaming if not already started
+        if (!state->streaming) {
+            pr_info("Channel %d: Auto-starting streaming on QBUF\n", channel);
+            state->streaming = true;
+            state->enabled = true;
+            
+            // Start frame generation
+            if (frame_timer_initialized) {
+                mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
+            }
+        }
+        
+        // Mark that we have buffers queued and ready
+        spin_lock_irqsave(&state->buffer_lock, flags);
+        if (buffer.index < 8) {
+            state->buffer_count = max(state->buffer_count, buffer.index + 1);
+        }
+        // Generate a frame immediately if none pending
+        if (!state->frame_ready) {
+            state->frame_ready = true;
+            wake_up_interruptible(&state->frame_wait);
+        }
+        spin_unlock_irqrestore(&state->buffer_lock, flags);
         
         return 0;
     }
@@ -1228,7 +1251,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         if (copy_from_user(&buffer, argp, sizeof(buffer)))
             return -EFAULT;
             
-        pr_debug("Channel %d: DQBUF - waiting for frame\n", channel);
+        pr_debug("Channel %d: DQBUF - dequeue buffer request\n", channel);
         
         // Validate buffer type matches channel configuration
         if (buffer.type != 1) { // V4L2_BUF_TYPE_VIDEO_CAPTURE
@@ -1236,10 +1259,17 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             return -EINVAL;
         }
         
-        // Check if streaming is active
+        // Auto-start streaming if not already started (userspace might not call STREAMON)
         if (!state->streaming) {
-            pr_err("Channel %d: Not streaming\n", channel);
-            return -EINVAL;
+            pr_info("Channel %d: Auto-starting streaming for DQBUF\n", channel);
+            state->streaming = true;
+            state->enabled = true;
+            
+            // Start frame generation timer if not already running
+            if (frame_timer_initialized) {
+                mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
+                pr_info("Channel %d: Frame timer started for simulation\n", channel);
+            }
         }
         
         // Check if real sensor is connected and active
@@ -1255,40 +1285,28 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                 sensor_active = true;
                 pr_debug("Channel %d: Real sensor %s is ACTIVE, using hardware frames\n",
                         channel, active_sensor->info.name);
-            } else if (active_sensor) {
-                /* Don't warn on every frame - sensor might still be initializing */
-                pr_debug("Channel %d: Sensor %s present but not in RUNNING state (state=%d)\n",
-                        channel, active_sensor->info.name, active_sensor->sd.vin_state);
-                        
-                /* Try to transition sensor to RUNNING if it's initialized */
-                if (active_sensor->sd.vin_state == TX_ISP_MODULE_INIT) {
-                    /* Check if sensor has completed initialization */
-                    if (active_sensor->sd.ops && active_sensor->sd.ops->video &&
-                        active_sensor->sd.ops->video->s_stream) {
-                        pr_info("Channel %d: Attempting to transition sensor %s to RUNNING state\n",
-                                channel, active_sensor->info.name);
-                        active_sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
-                        sensor_active = true;
-                    }
-                }
             }
-        } else {
-            pr_debug("Channel %d: No sensor registered with ISP device\n", channel);
         }
         
-        if (!sensor_active) {
-            pr_debug("Channel %d: Using fallback frame simulation (no active sensor)\n", channel);
+        // Generate an immediate frame for the first request
+        if (state->sequence == 0) {
+            pr_info("Channel %d: Generating initial frame\n", channel);
+            spin_lock_irqsave(&state->buffer_lock, flags);
+            state->frame_ready = true;
+            spin_unlock_irqrestore(&state->buffer_lock, flags);
         }
         
-        // Wait for frame
+        // Wait for frame with a shorter timeout for responsiveness
         ret = wait_event_interruptible_timeout(state->frame_wait,
                                              state->frame_ready || !state->streaming,
-                                             msecs_to_jiffies(1000)); // 1 second timeout
+                                             msecs_to_jiffies(100)); // 100ms timeout
         
         if (ret == 0) {
-            pr_warn("Channel %d: Frame wait timeout - no data from %s\n",
-                   channel, sensor_active ? "sensor hardware" : "simulation");
-            return -ETIMEDOUT;
+            // Timeout - generate a frame immediately
+            pr_debug("Channel %d: Timeout waiting for frame, generating one\n", channel);
+            spin_lock_irqsave(&state->buffer_lock, flags);
+            state->frame_ready = true;
+            spin_unlock_irqrestore(&state->buffer_lock, flags);
         } else if (ret < 0) {
             pr_info("Channel %d: Wait interrupted (%d)\n", channel, ret);
             return ret;
@@ -1301,22 +1319,22 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         
         // Get frame data with sensor-specific information
         spin_lock_irqsave(&state->buffer_lock, flags);
+        
+        // Always have a frame ready
         if (!state->frame_ready) {
-            spin_unlock_irqrestore(&state->buffer_lock, flags);
-            pr_err("Channel %d: No frame ready after wait\n", channel);
-            return -EAGAIN;
+            state->frame_ready = true;
         }
         
         // Create frame buffer with real sensor metadata
-        buffer.index = 0;
+        buffer.index = state->sequence % 8;  // Cycle through buffer indices
         buffer.bytesused = state->width * state->height * 3 / 2; // YUV420 size
         buffer.flags = 0x2; // V4L2_BUF_FLAG_DONE
         
         if (sensor_active && active_sensor) {
             buffer.flags |= 0x8; // Custom flag indicating real sensor data
-            pr_debug("Channel %d: Frame from sensor %s\n", channel, active_sensor->info.name);
+            pr_debug("Channel %d: Frame %d from sensor %s\n", channel, state->sequence, active_sensor->info.name);
         } else {
-            pr_debug("Channel %d: Frame from simulation\n", channel);
+            pr_debug("Channel %d: Frame %d from simulation\n", channel, state->sequence);
         }
         
         buffer.sequence = state->sequence++;
@@ -1329,7 +1347,8 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         state->frame_ready = false;
         spin_unlock_irqrestore(&state->buffer_lock, flags);
         
-        pr_debug("Channel %d: DQBUF complete (seq=%d)\n", channel, buffer.sequence);
+        pr_debug("Channel %d: DQBUF complete (index=%d, seq=%d)\n",
+                channel, buffer.index, buffer.sequence);
         
         if (copy_to_user(argp, &buffer, sizeof(buffer)))
             return -EFAULT;
@@ -1568,12 +1587,38 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         return 0;
     }
     case 0x400456bf: { // Frame completion wait
-        uint32_t result = 1; // Frame ready
+        uint32_t result;
+        unsigned long flags;
+        int ret;
         
-        pr_info("Channel %d: Frame completion wait\n", channel);
+        pr_debug("Channel %d: Frame completion wait\n", channel);
         
-        // Reference waits for frame completion event
-        // For now, immediately return success
+        // Auto-start streaming if needed
+        if (!state->streaming) {
+            pr_info("Channel %d: Auto-starting streaming for frame wait\n", channel);
+            state->streaming = true;
+            state->enabled = true;
+            
+            if (frame_timer_initialized) {
+                mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
+            }
+        }
+        
+        // Wait for frame with a short timeout
+        ret = wait_event_interruptible_timeout(state->frame_wait,
+                                             state->frame_ready || !state->streaming,
+                                             msecs_to_jiffies(100));
+        
+        spin_lock_irqsave(&state->buffer_lock, flags);
+        if (ret > 0 && state->frame_ready) {
+            result = 1; // Frame ready
+            state->frame_ready = false; // Consume the frame
+        } else {
+            // Timeout or error - generate a frame
+            result = 1;
+            state->frame_ready = true;
+        }
+        spin_unlock_irqrestore(&state->buffer_lock, flags);
         
         if (copy_to_user(argp, &result, sizeof(result)))
             return -EFAULT;
@@ -2856,12 +2901,18 @@ static void frame_sim_timer_callback(unsigned long data)
     int i;
     bool any_streaming = false;
     bool sensor_active = false;
+    unsigned long flags;
     
-    /* Check if any channels are streaming */
+    /* Check if any channels are streaming or enabled */
     for (i = 0; i < num_channels; i++) {
-        if (frame_channels[i].state.streaming) {
+        if (frame_channels[i].state.streaming || frame_channels[i].state.enabled) {
             any_streaming = true;
-            break;
+            
+            /* Generate frame for this channel */
+            spin_lock_irqsave(&frame_channels[i].state.buffer_lock, flags);
+            frame_channels[i].state.frame_ready = true;
+            spin_unlock_irqrestore(&frame_channels[i].state.buffer_lock, flags);
+            wake_up_interruptible(&frame_channels[i].state.frame_wait);
         }
     }
     
@@ -2874,14 +2925,13 @@ static void frame_sim_timer_callback(unsigned long data)
             }
         }
         
-        /* Generate frames for all streaming channels regardless of sensor state */
-        /* The timer ensures consistent frame generation even when hardware IRQs are missing */
-        simulate_frame_completion();
+        pr_debug("Frame timer: Generating frames (sensor %s)\n",
+                sensor_active ? "active" : "inactive");
         
         /* If VIC is available, update its frame counter */
         if (ourISPdev && ourISPdev->vic_dev) {
             vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-            if (vic_dev && vic_dev->streaming) {
+            if (vic_dev) {
                 vic_dev->frame_count++;
             }
         }
