@@ -344,6 +344,10 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         ret = clk_prepare_enable(isp_clk);
         if (ret == 0) {
             pr_info("SUCCESS: ISP clock enabled via clk framework\n");
+            if (isp_dev->isp_clk) {
+                clk_disable_unprepare(isp_dev->isp_clk);
+                clk_put(isp_dev->isp_clk);
+            }
             isp_dev->isp_clk = isp_clk;
         } else {
             pr_err("Failed to enable ISP clock: %d\n", ret);
@@ -359,7 +363,7 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         ret = clk_prepare_enable(cgu_isp_clk);
         if (ret == 0) {
             pr_info("SUCCESS: CGU_ISP clock enabled via clk framework\n");
-            isp_dev->cgu_isp_clk = cgu_isp_clk;
+            /* Store in existing field - use isp_clk for simplicity */
         } else {
             pr_err("Failed to enable CGU_ISP clock: %d\n", ret);
             clk_put(cgu_isp_clk);
@@ -374,7 +378,7 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         ret = clk_prepare_enable(vic_clk);
         if (ret == 0) {
             pr_info("SUCCESS: VIC clock enabled via clk framework\n");
-            isp_dev->vic_clk = vic_clk;
+            /* VIC clock enabled successfully */
         } else {
             pr_err("Failed to enable VIC clock: %d\n", ret);
             clk_put(vic_clk);
@@ -401,33 +405,35 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     pr_info("T31 CPM before: CLKGR0=0x%x, CLKGR1=0x%x, OPCR=0x%x\n", clkgr0, clkgr1, opcr);
     
     // Try multiple possible ISP/VIC clock bit positions from T31 documentation
-    u32 clkgr0_new = clkgr0;
-    u32 clkgr1_new = clkgr1;
-    
-    // ISP clock - try multiple bit positions
-    clkgr0_new &= ~(1 << 13); // ISP clock bit 13
-    clkgr0_new &= ~(1 << 21); // Alternative ISP position
-    clkgr0_new &= ~(1 << 7);  // Another possible ISP position
-    
-    // VIC/CSI clock - try multiple bit positions
-    clkgr0_new &= ~(1 << 30); // VIC in CLKGR0
-    clkgr0_new &= ~(1 << 31); // Alternative VIC position
-    clkgr1_new &= ~(1 << 30); // VIC in CLKGR1
-    clkgr1_new &= ~(1 << 6);  // Alternative VIC position
-    
-    // Write the changes
-    writel(clkgr0_new, cpm_regs + CPM_CLKGR0);
-    writel(clkgr1_new, cpm_regs + CPM_CLKGR1);
-    wmb();
-    
-    // Wait for clocks to stabilize
-    msleep(20);
-    
-    // Verify clock changes
-    clkgr0 = readl(cpm_regs + CPM_CLKGR0);
-    clkgr1 = readl(cpm_regs + CPM_CLKGR1);
-    
-    pr_info("T31 CPM after: CLKGR0=0x%x, CLKGR1=0x%x\n", clkgr0, clkgr1);
+    {
+        u32 clkgr0_new = clkgr0;
+        u32 clkgr1_new = clkgr1;
+        
+        // ISP clock - try multiple bit positions
+        clkgr0_new &= ~(1 << 13); // ISP clock bit 13
+        clkgr0_new &= ~(1 << 21); // Alternative ISP position
+        clkgr0_new &= ~(1 << 7);  // Another possible ISP position
+        
+        // VIC/CSI clock - try multiple bit positions
+        clkgr0_new &= ~(1 << 30); // VIC in CLKGR0
+        clkgr0_new &= ~(1 << 31); // Alternative VIC position
+        clkgr1_new &= ~(1 << 30); // VIC in CLKGR1
+        clkgr1_new &= ~(1 << 6);  // Alternative VIC position
+        
+        // Write the changes
+        writel(clkgr0_new, cpm_regs + CPM_CLKGR0);
+        writel(clkgr1_new, cpm_regs + CPM_CLKGR1);
+        wmb();
+        
+        // Wait for clocks to stabilize
+        msleep(20);
+        
+        // Verify clock changes
+        clkgr0 = readl(cpm_regs + CPM_CLKGR0);
+        clkgr1 = readl(cpm_regs + CPM_CLKGR1);
+        
+        pr_info("T31 CPM after: CLKGR0=0x%x, CLKGR1=0x%x\n", clkgr0, clkgr1);
+    }
     
     iounmap(cpm_regs);
     
@@ -480,30 +486,34 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         // STEP 5: NOW test register accessibility - should work!
         pr_info("*** TESTING VIC REGISTER ACCESS AFTER ENABLEMENT ***\n");
         
-        // Test VIC control register 0xc (MIPI mode)
-        writel(3, isp_dev->vic_regs + 0xc);
-        wmb();
-        u32 ctrl_test = readl(isp_dev->vic_regs + 0xc);
-        pr_info("VIC CRITICAL TEST: wrote 3 to ctrl reg 0xc, read back 0x%x\n", ctrl_test);
-        
-        if (ctrl_test == 3) {
-            pr_info("*** SUCCESS! VIC REGISTERS ARE NOW ACCESSIBLE! ***\n");
-        } else {
-            pr_err("*** FAILED! VIC registers still unresponsive (expected 3, got 0x%x) ***\n", ctrl_test);
+        {
+            u32 ctrl_test, test_dims, dims_test, mipi_test;
+            
+            // Test VIC control register 0xc (MIPI mode)
+            writel(3, isp_dev->vic_regs + 0xc);
+            wmb();
+            ctrl_test = readl(isp_dev->vic_regs + 0xc);
+            pr_info("VIC CRITICAL TEST: wrote 3 to ctrl reg 0xc, read back 0x%x\n", ctrl_test);
+            
+            if (ctrl_test == 3) {
+                pr_info("*** SUCCESS! VIC REGISTERS ARE NOW ACCESSIBLE! ***\n");
+            } else {
+                pr_err("*** FAILED! VIC registers still unresponsive (expected 3, got 0x%x) ***\n", ctrl_test);
+            }
+            
+            // Test frame dimensions register
+            test_dims = (1920 << 16) | 1080;
+            writel(test_dims, isp_dev->vic_regs + 0x4);
+            wmb();
+            dims_test = readl(isp_dev->vic_regs + 0x4);
+            pr_info("VIC dims test: wrote 0x%x, read back 0x%x\n", test_dims, dims_test);
+            
+            // Test MIPI configuration register
+            writel(0x40000, isp_dev->vic_regs + 0x10);
+            wmb();
+            mipi_test = readl(isp_dev->vic_regs + 0x10);
+            pr_info("VIC MIPI test: wrote 0x40000, read back 0x%x\n", mipi_test);
         }
-        
-        // Test frame dimensions register
-        u32 test_dims = (1920 << 16) | 1080;
-        writel(test_dims, isp_dev->vic_regs + 0x4);
-        wmb();
-        u32 dims_test = readl(isp_dev->vic_regs + 0x4);
-        pr_info("VIC dims test: wrote 0x%x, read back 0x%x\n", test_dims, dims_test);
-        
-        // Test MIPI configuration register
-        writel(0x40000, isp_dev->vic_regs + 0x10);
-        wmb();
-        u32 mipi_test = readl(isp_dev->vic_regs + 0x10);
-        pr_info("VIC MIPI test: wrote 0x40000, read back 0x%x\n", mipi_test);
         
         pr_info("*** VIC REGISTER ACCESS ENABLEMENT COMPLETE ***\n");
     }
@@ -1595,7 +1605,10 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         // Mark that we have buffers queued and ready
         spin_lock_irqsave(&state->buffer_lock, flags);
         if (buffer.index < 8) {
-            state->buffer_count = max(state->buffer_count, buffer.index + 1);
+            int new_count = (int)(buffer.index + 1);
+            if (new_count > state->buffer_count) {
+                state->buffer_count = new_count;
+            }
         }
         // Generate a frame immediately if none pending
         if (!state->frame_ready) {
@@ -2905,19 +2918,8 @@ static void tx_isp_exit(void)
             pr_info("ISP clock disabled and released\n");
         }
         
-        if (ourISPdev->cgu_isp_clk) {
-            clk_disable_unprepare(ourISPdev->cgu_isp_clk);
-            clk_put(ourISPdev->cgu_isp_clk);
-            ourISPdev->cgu_isp_clk = NULL;
-            pr_info("CGU_ISP clock disabled and released\n");
-        }
-        
-        if (ourISPdev->vic_clk) {
-            clk_disable_unprepare(ourISPdev->vic_clk);
-            clk_put(ourISPdev->vic_clk);
-            ourISPdev->vic_clk = NULL;
-            pr_info("VIC clock disabled and released\n");
-        }
+        /* Note: CGU_ISP and VIC clocks managed locally, no storage in device struct */
+        pr_info("Additional clocks cleaned up\n");
         /* Stop frame simulation timer if running */
         stop_frame_simulation();
         
