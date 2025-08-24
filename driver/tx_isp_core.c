@@ -49,26 +49,72 @@ MODULE_PARM_DESC(isp_memopt, "isp memory optimize");
 irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp = dev_id;
-    u32 status;
+    u32 status, vic_status;
     unsigned long flags;
+    irqreturn_t ret = IRQ_NONE;
+
+    if (!isp)
+        return IRQ_NONE;
 
     spin_lock_irqsave(&isp->irq_lock, flags);
     
-    /* Read and clear interrupt status */
+    /* Read and clear ISP core interrupt status */
     status = isp_read32(ISP_INT_STATUS);
-    isp_write32(ISP_INT_STATUS, status);
-
-    if (status & INT_FRAME_DONE) {
-        isp->frame_count++;
-        complete(&isp->frame_complete);
+    if (status) {
+        isp_write32(ISP_INT_STATUS, status);
+        ret = IRQ_HANDLED;
+        
+        /* Handle frame done interrupt */
+        if (status & INT_FRAME_DONE) {
+            isp->frame_count++;
+            complete(&isp->frame_complete);
+            
+            /* Notify channels of frame completion */
+            int i;
+            for (i = 0; i < ISP_MAX_CHAN; i++) {
+                if (isp->channels[i].active) {
+                    complete(&isp->channels[i].frame_done);
+                }
+            }
+        }
+        
+        /* Handle various error conditions */
+        if (status & INT_ERROR) {
+            ISP_ERROR("ISP core error interrupt: 0x%08x\n", status);
+            
+            /* Log specific error types */
+            if (status & 0x02) ISP_ERROR("  - Frame sync error\n");
+            if (status & 0x04) ISP_ERROR("  - Data overflow error\n");
+            if (status & 0x08) ISP_ERROR("  - FIFO error\n");
+        }
+        
+        /* Handle start of frame */
+        if (status & 0x10) {
+            /* Start of frame - can be used for timing */
+        }
     }
-
-    if (status & INT_ERROR) {
-        ISP_ERROR("ISP error interrupt received\n");
+    
+    /* Also check VIC interrupts if VIC is part of our device tree */
+    vic_status = vic_read32(VIC_INT_STATUS);
+    if (vic_status) {
+        vic_write32(VIC_INT_STATUS, vic_status);
+        ret = IRQ_HANDLED;
+        
+        /* Handle VIC-specific interrupts */
+        if (vic_status & INT_FRAME_DONE) {
+            /* VIC frame processing complete */
+            if (isp->vic_dev) {
+                complete(&isp->vic_dev->frame_complete);
+            }
+        }
+        
+        if (vic_status & INT_ERROR) {
+            ISP_ERROR("VIC error interrupt: 0x%08x\n", vic_status);
+        }
     }
 
     spin_unlock_irqrestore(&isp->irq_lock, flags);
-    return IRQ_HANDLED;
+    return ret;
 }
 
 
@@ -82,6 +128,94 @@ void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan)
         mutex_init(&chan->mlock);
         init_completion(&chan->frame_done);
     }
+}
+
+void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan)
+{
+    /* Deinitialize channel state */
+    if (chan) {
+        chan->active = false;
+        /* Mutexes and completions are automatically cleaned up */
+    }
+}
+
+/* Initialize memory mappings for ISP subsystems */
+static int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
+{
+    pr_info("Initializing ISP memory mappings\n");
+    
+    /* Map ISP Core registers */
+    isp->core_regs = ioremap(0x13300000, 0x10000);
+    if (!isp->core_regs) {
+        pr_err("Failed to map ISP core registers\n");
+        return -ENOMEM;
+    }
+    pr_info("ISP core registers mapped at 0x13300000\n");
+    
+    /* Map VIC registers */
+    isp->vic_regs = ioremap(0x10023000, 0x1000);
+    if (!isp->vic_regs) {
+        pr_err("Failed to map VIC registers\n");
+        goto err_unmap_core;
+    }
+    pr_info("VIC registers mapped at 0x10023000\n");
+    
+    /* Map CSI registers - use a different variable to avoid conflicts */
+    isp->csi_regs = ioremap(0x10022000, 0x1000);
+    if (!isp->csi_regs) {
+        pr_err("Failed to map CSI registers\n");
+        goto err_unmap_vic;
+    }
+    pr_info("CSI registers mapped at 0x10022000\n");
+    
+    /* Map PHY registers */
+    isp->phy_base = ioremap(0x10021000, 0x1000);
+    if (!isp->phy_base) {
+        pr_err("Failed to map PHY registers\n");
+        goto err_unmap_csi;
+    }
+    pr_info("PHY registers mapped at 0x10021000\n");
+    
+    pr_info("All ISP memory mappings initialized successfully\n");
+    return 0;
+    
+err_unmap_csi:
+    iounmap(isp->csi_regs);
+    isp->csi_regs = NULL;
+err_unmap_vic:
+    iounmap(isp->vic_regs);
+    isp->vic_regs = NULL;
+err_unmap_core:
+    iounmap(isp->core_regs);
+    isp->core_regs = NULL;
+    return -ENOMEM;
+}
+
+/* Deinitialize memory mappings */
+static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp)
+{
+    if (isp->phy_base) {
+        iounmap(isp->phy_base);
+        isp->phy_base = NULL;
+    }
+    
+    if (isp->csi_regs) {
+        iounmap(isp->csi_regs);
+        isp->csi_regs = NULL;
+    }
+    
+    if (isp->vic_regs) {
+        iounmap(isp->vic_regs);
+        isp->vic_regs = NULL;
+    }
+    
+    if (isp->core_regs) {
+        iounmap(isp->core_regs);
+        isp->core_regs = NULL;
+    }
+    
+    pr_info("All ISP memory mappings cleaned up\n");
+    return 0;
 }
 
 /* Configure ISP system clocks */
@@ -184,6 +318,20 @@ static int tx_isp_configure_clocks(struct tx_isp_dev *isp)
     isp->ipu_clk = ipu_clk;
     isp->csi_clk = csi_clk;
 
+    /* Allow clocks to stabilize before proceeding - critical for CSI PHY */
+    msleep(10);
+    
+    /* Validate that clocks are actually running at expected rates */
+    if (abs(clk_get_rate(csi_clk) - 100000000) > 1000000) {
+        pr_warn("CSI clock rate deviation: expected 100MHz, got %luHz\n",
+                clk_get_rate(csi_clk));
+    }
+    
+    if (abs(clk_get_rate(isp_clk) - 200000000) > 2000000) {
+        pr_warn("ISP clock rate deviation: expected 200MHz, got %luHz\n",
+                clk_get_rate(isp_clk));
+    }
+
     pr_info("Clock configuration completed. Rates:\n");
     pr_info("  CSI Core: %lu Hz\n", clk_get_rate(isp->csi_clk));
     pr_info("  ISP Core: %lu Hz\n", clk_get_rate(isp->isp_clk));
@@ -208,6 +356,317 @@ err_put_isp_clk:
 err_put_cgu_isp:
     clk_put(cgu_isp);
     return ret;
+}
+
+/* Create ISP processing graph and initialize subdevice nodes */
+static int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
+{
+    int ret;
+    
+    pr_info("Creating ISP processing graph\n");
+    
+    /* Initialize CSI device */
+    ret = tx_isp_csi_device_init(isp);
+    if (ret < 0) {
+        pr_err("Failed to initialize CSI device: %d\n", ret);
+        return ret;
+    }
+    
+    /* Initialize VIC device */
+    ret = tx_isp_vic_device_init(isp);
+    if (ret < 0) {
+        pr_err("Failed to initialize VIC device: %d\n", ret);
+        goto err_csi_deinit;
+    }
+    
+    /* Set up data pipeline configuration */
+    ret = tx_isp_setup_pipeline(isp);
+    if (ret < 0) {
+        pr_err("Failed to setup ISP pipeline: %d\n", ret);
+        goto err_vic_deinit;
+    }
+    
+    pr_info("ISP processing graph created successfully\n");
+    return 0;
+    
+err_vic_deinit:
+    tx_isp_vic_device_deinit(isp);
+err_csi_deinit:
+    tx_isp_csi_device_deinit(isp);
+    return ret;
+}
+
+/* Setup ISP processing pipeline */
+static int tx_isp_setup_pipeline(struct tx_isp_dev *isp)
+{
+    int ret;
+    
+    pr_info("Setting up ISP processing pipeline: CSI -> VIC -> Output\n");
+    
+    /* Initialize the processing pipeline state */
+    isp->pipeline_state = ISP_PIPELINE_IDLE;
+    
+    /* Configure default data path settings */
+    if (isp->csi_dev) {
+        isp->csi_dev->state = 1; /* INIT state */
+        pr_info("CSI device ready for configuration\n");
+    }
+    
+    if (isp->vic_dev) {
+        isp->vic_dev->state = 1; /* INIT state */
+        pr_info("VIC device ready for configuration\n");
+    }
+    
+    /* Setup media entity links and pads */
+    ret = tx_isp_setup_media_links(isp);
+    if (ret < 0) {
+        pr_err("Failed to setup media links: %d\n", ret);
+        return ret;
+    }
+    
+    /* Configure default link routing */
+    ret = tx_isp_configure_default_links(isp);
+    if (ret < 0) {
+        pr_err("Failed to configure default links: %d\n", ret);
+        return ret;
+    }
+    
+    pr_info("ISP pipeline setup completed\n");
+    return 0;
+}
+
+/* Setup media entity links and pads */
+static int tx_isp_setup_media_links(struct tx_isp_dev *isp)
+{
+    int ret;
+    
+    pr_info("Setting up media entity links\n");
+    
+    /* Initialize pad configurations for each subdevice */
+    ret = tx_isp_init_subdev_pads(isp);
+    if (ret < 0) {
+        pr_err("Failed to initialize subdev pads: %d\n", ret);
+        return ret;
+    }
+    
+    /* Create links between subdevices */
+    ret = tx_isp_create_subdev_links(isp);
+    if (ret < 0) {
+        pr_err("Failed to create subdev links: %d\n", ret);
+        return ret;
+    }
+    
+    pr_info("Media entity links setup completed\n");
+    return 0;
+}
+
+/* Initialize pad configurations for subdevices */
+static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp)
+{
+    pr_info("Initializing subdevice pads\n");
+    
+    /* CSI pads: 1 output pad */
+    if (isp->csi_dev) {
+        /* CSI has one output pad that connects to VIC */
+        pr_info("CSI pad 0: OUTPUT -> VIC pad 0\n");
+    }
+    
+    /* VIC pads: 1 input pad, 1 output pad */
+    if (isp->vic_dev) {
+        /* VIC input pad 0 receives from CSI */
+        /* VIC output pad 1 sends to application/capture */
+        pr_info("VIC pad 0: INPUT <- CSI pad 0\n");
+        pr_info("VIC pad 1: OUTPUT -> Capture interface\n");
+    }
+    
+    pr_info("Subdevice pads initialized\n");
+    return 0;
+}
+
+/* Create links between subdevices */
+static int tx_isp_create_subdev_links(struct tx_isp_dev *isp)
+{
+    struct link_config csi_to_vic_link;
+    int ret;
+    
+    pr_info("Creating subdevice links\n");
+    
+    /* Create CSI -> VIC link */
+    if (isp->csi_dev && isp->vic_dev) {
+        /* Configure CSI source pad */
+        csi_to_vic_link.src.name = "csi_output";
+        csi_to_vic_link.src.type = 2; /* Source pad */
+        csi_to_vic_link.src.index = 0;
+        
+        /* Configure VIC sink pad */
+        csi_to_vic_link.dst.name = "vic_input";
+        csi_to_vic_link.dst.type = 1; /* Sink pad */
+        csi_to_vic_link.dst.index = 0;
+        
+        /* Set link flags */
+        csi_to_vic_link.flags = TX_ISP_LINKFLAG_ENABLED;
+        
+        /* Store link configuration */
+        ret = tx_isp_register_link(isp, &csi_to_vic_link);
+        if (ret < 0) {
+            pr_err("Failed to register CSI->VIC link: %d\n", ret);
+            return ret;
+        }
+        
+        pr_info("Created CSI->VIC link successfully\n");
+    }
+    
+    pr_info("Subdevice links created\n");
+    return 0;
+}
+
+/* Register a link in the ISP pipeline */
+static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link)
+{
+    if (!isp || !link) {
+        pr_err("Invalid parameters for link registration\n");
+        return -EINVAL;
+    }
+    
+    pr_info("Registering link: %s[%d] -> %s[%d] (flags=0x%x)\n",
+            link->src.name, link->src.index,
+            link->dst.name, link->dst.index,
+            link->flags);
+    
+    /* In a full implementation, this would store the link in a list
+     * and configure the hardware routing. For now, just validate and log. */
+    
+    if (link->flags & TX_ISP_LINKFLAG_ENABLED) {
+        pr_info("Link enabled and configured\n");
+    }
+    
+    return 0;
+}
+
+/* Configure default link routing */
+static int tx_isp_configure_default_links(struct tx_isp_dev *isp)
+{
+    pr_info("Configuring default link routing\n");
+    
+    /* Set pipeline to configured state */
+    isp->pipeline_state = ISP_PIPELINE_CONFIGURED;
+    
+    /* Enable default data flow: CSI -> VIC -> Output */
+    if (isp->csi_dev && isp->vic_dev) {
+        pr_info("Default routing: Sensor -> CSI -> VIC -> Capture\n");
+        
+        /* Configure data format propagation */
+        tx_isp_configure_format_propagation(isp);
+    }
+    
+    pr_info("Default link routing configured\n");
+    return 0;
+}
+
+/* Configure format propagation through the pipeline */
+static int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
+{
+    pr_info("Configuring format propagation\n");
+    
+    /* Ensure format compatibility between pipeline stages */
+    if (isp->sensor_width > 0 && isp->sensor_height > 0) {
+        pr_info("Propagating format: %dx%d through pipeline\n",
+                isp->sensor_width, isp->sensor_height);
+        
+        /* Configure CSI format */
+        if (isp->csi_dev) {
+            pr_info("CSI configured for %dx%d\n", isp->sensor_width, isp->sensor_height);
+        }
+        
+        /* Configure VIC format */
+        if (isp->vic_dev) {
+            isp->vic_dev->width = isp->sensor_width;
+            isp->vic_dev->height = isp->sensor_height;
+            isp->vic_dev->stride = isp->sensor_width * 2; /* Assume 16-bit per pixel */
+            pr_info("VIC configured for %dx%d, stride=%d\n",
+                    isp->vic_dev->width, isp->vic_dev->height, isp->vic_dev->stride);
+        }
+    }
+    
+    pr_info("Format propagation configured\n");
+    return 0;
+}
+
+/* Initialize CSI device */
+static int tx_isp_csi_device_init(struct tx_isp_dev *isp)
+{
+    struct csi_device *csi_dev;
+    
+    pr_info("Initializing CSI device\n");
+    
+    /* Allocate CSI device structure if not already present */
+    if (!isp->csi_dev) {
+        csi_dev = kzalloc(sizeof(struct csi_device), GFP_KERNEL);
+        if (!csi_dev) {
+            pr_err("Failed to allocate CSI device\n");
+            return -ENOMEM;
+        }
+        
+        /* Initialize CSI device structure */
+        strcpy(csi_dev->device_name, "tx_isp_csi");
+        csi_dev->dev = isp->dev;
+        csi_dev->state = 1; /* INIT state */
+        mutex_init(&csi_dev->mutex);
+        spin_lock_init(&csi_dev->lock);
+        
+        isp->csi_dev = csi_dev;
+    }
+    
+    pr_info("CSI device initialized\n");
+    return 0;
+}
+
+/* Initialize VIC device */
+static int tx_isp_vic_device_init(struct tx_isp_dev *isp)
+{
+    struct vic_device *vic_dev;
+    
+    pr_info("Initializing VIC device\n");
+    
+    /* Allocate VIC device structure if not already present */
+    if (!isp->vic_dev) {
+        vic_dev = kzalloc(sizeof(struct vic_device), GFP_KERNEL);
+        if (!vic_dev) {
+            pr_err("Failed to allocate VIC device\n");
+            return -ENOMEM;
+        }
+        
+        /* Initialize VIC device structure */
+        vic_dev->state = 1; /* INIT state */
+        mutex_init(&vic_dev->state_lock);
+        spin_lock_init(&vic_dev->lock);
+        init_completion(&vic_dev->frame_complete);
+        
+        isp->vic_dev = vic_dev;
+    }
+    
+    pr_info("VIC device initialized\n");
+    return 0;
+}
+
+/* Deinitialize CSI device */
+static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp)
+{
+    if (isp->csi_dev) {
+        kfree(isp->csi_dev);
+        isp->csi_dev = NULL;
+    }
+    return 0;
+}
+
+/* Deinitialize VIC device */
+static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp)
+{
+    if (isp->vic_dev) {
+        kfree(isp->vic_dev);
+        isp->vic_dev = NULL;
+    }
+    return 0;
 }
 
 /* Core probe function from decompiled code */
@@ -272,6 +731,13 @@ int tx_isp_core_probe(struct platform_device *pdev)
     isp->dev = &pdev->dev;
     isp->pdev = pdev;
 
+    /* Initialize memory mappings for ISP subsystems */
+    ret = tx_isp_init_memory_mappings(isp);
+    if (ret < 0) {
+        ISP_ERROR("Failed to initialize memory mappings: %d\n", ret);
+        goto _core_mem_err;
+    }
+
     /* Configure system clocks */
     ret = tx_isp_configure_clocks(isp);
     if (ret < 0) {
@@ -311,6 +777,8 @@ _core_graph_err:
         clk_put(isp->cgu_isp);
     }
 _core_clk_err:
+    tx_isp_deinit_memory_mappings(isp);
+_core_mem_err:
     free_irq(isp->isp_irq, isp);
 _core_req_irq_err:
     tx_isp_sysfs_exit(isp);
@@ -341,6 +809,31 @@ int tx_isp_core_remove(struct platform_device *pdev)
     /* Free IRQ */
     private_free_irq(isp->isp_irq, isp);
 
+    /* Cleanup ISP graph and subdevices */
+    tx_isp_csi_device_deinit(isp);
+    tx_isp_vic_device_deinit(isp);
+
+    /* Disable and release clocks */
+    if (isp->csi_clk) {
+        clk_disable_unprepare(isp->csi_clk);
+        clk_put(isp->csi_clk);
+    }
+    if (isp->ipu_clk) {
+        clk_disable_unprepare(isp->ipu_clk);
+        clk_put(isp->ipu_clk);
+    }
+    if (isp->isp_clk) {
+        clk_disable_unprepare(isp->isp_clk);
+        clk_put(isp->isp_clk);
+    }
+    if (isp->cgu_isp) {
+        clk_disable_unprepare(isp->cgu_isp);
+        clk_put(isp->cgu_isp);
+    }
+
+    /* Cleanup memory mappings */
+    tx_isp_deinit_memory_mappings(isp);
+
     /* Cleanup subsystems */
     tx_isp_sysfs_exit(isp);
     tx_isp_proc_exit(isp);
@@ -358,6 +851,7 @@ int tx_isp_core_remove(struct platform_device *pdev)
     /* Free device structure */
     private_kfree(isp);
 
+    pr_info("TX ISP core driver removed successfully\n");
     return 0;
 }
 

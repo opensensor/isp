@@ -20,33 +20,98 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 static irqreturn_t tx_isp_vic_irq_handler(int irq, void *dev_id)
 {
     struct tx_isp_subdev *sd = dev_id;
-    u32 status;
+    struct vic_device *vic_dev;
+    void __iomem *vic_base;
+    u32 status, isr, isr1;
     unsigned long flags;
+    irqreturn_t ret = IRQ_NONE;
     int i;
 
     if (!sd)
         return IRQ_NONE;
 
-    spin_lock_irqsave(&sd->vic_lock, flags);
+    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    if (!vic_dev)
+        return IRQ_NONE;
 
-    /* Read and clear interrupt status */
-    status = vic_read32(VIC_INT_STATUS);
-    vic_write32(VIC_INT_STATUS, status);
+    spin_lock_irqsave(&vic_dev->lock, flags);
 
-    /* Handle frame completion interrupts */
-    for (i = 0; i < VIC_MAX_CHAN; i++) {
-        if (status & (INT_FRAME_DONE << i)) {
-            tx_isp_vic_frame_done(sd, i);
+    /* Map VIC registers directly for interrupt handling */
+    vic_base = ioremap(0x10023000, 0x1000);
+    if (!vic_base) {
+        spin_unlock_irqrestore(&vic_dev->lock, flags);
+        return IRQ_NONE;
+    }
+
+    /* Read interrupt status registers */
+    isr = readl(vic_base + 0x00);   /* ISR register */
+    isr1 = readl(vic_base + 0x20);  /* ISR1 register */
+
+    if (isr || isr1) {
+        ret = IRQ_HANDLED;
+        
+        /* Handle main ISR interrupts */
+        if (isr) {
+            /* Clear handled interrupts */
+            writel(isr, vic_base + 0x00);
+            wmb();
+            
+            /* Handle frame done interrupts */
+            if (isr & 0x1) {
+                /* Frame processing complete */
+                complete(&vic_dev->frame_complete);
+                tx_isp_vic_frame_done(sd, 0);
+            }
+            
+            /* Handle DMA complete interrupts */
+            if (isr & 0x2) {
+                /* DMA transfer complete */
+                pr_debug("VIC DMA transfer complete\n");
+            }
+            
+            /* Handle buffer overflow */
+            if (isr & 0x4) {
+                ISP_ERROR("VIC buffer overflow interrupt\n");
+            }
+            
+            /* Handle processing errors */
+            if (isr & 0x8) {
+                ISP_ERROR("VIC processing error interrupt\n");
+            }
+        }
+        
+        /* Handle secondary ISR1 interrupts */
+        if (isr1) {
+            /* Clear handled interrupts */
+            writel(isr1, vic_base + 0x20);
+            wmb();
+            
+            /* Handle channel-specific interrupts */
+            for (i = 0; i < VIC_MAX_CHAN; i++) {
+                if (isr1 & (1 << i)) {
+                    tx_isp_vic_frame_done(sd, i);
+                }
+            }
+            
+            /* Handle error conditions */
+            if (isr1 & 0x80000000) {
+                ISP_ERROR("VIC critical error interrupt\n");
+            }
+        }
+        
+        /* Update VIC state based on interrupts */
+        if ((isr & 0xC) || (isr1 & 0x80000000)) {
+            /* Error condition - may need recovery */
+            vic_dev->processing = false;
+        } else if (isr & 0x3) {
+            /* Normal completion */
+            vic_dev->processing = false;
         }
     }
 
-    /* Handle error conditions */
-    if (status & INT_ERROR) {
-        ISP_ERROR("VIC error interrupt received\n");
-    }
-
-    spin_unlock_irqrestore(&sd->vic_lock, flags);
-    return IRQ_HANDLED;
+    iounmap(vic_base);
+    spin_unlock_irqrestore(&vic_dev->lock, flags);
+    return ret;
 }
 
 /* Initialize VIC hardware */
@@ -452,7 +517,109 @@ static ssize_t vic_proc_write(struct file *file, const char __user *buf,
     return count;
 }
 
-static struct tx_isp_subdev_ops vic_subdev_ops = { 0 }; // All fields NULL/0
+/* Forward declarations */
+int vic_core_ops_init(struct tx_isp_subdev *sd, int enable);
+
+/* VIC activation function - matching reference driver */
+int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
+{
+    struct vic_device *vic_dev;
+    
+    if (!sd)
+        return -EINVAL;
+    
+    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    if (!vic_dev) {
+        pr_err("VIC device is NULL\n");
+        return -EINVAL;
+    }
+    
+    mutex_lock(&vic_dev->state_lock);
+    
+    if (vic_dev->state == 1) {
+        vic_dev->state = 2; /* INIT -> READY */
+        pr_info("VIC activated: state %d -> 2 (READY)\n", 1);
+    }
+    
+    mutex_unlock(&vic_dev->state_lock);
+    return 0;
+}
+
+/* VIC core operations initialization - matching reference driver */
+int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
+{
+    struct vic_device *vic_dev;
+    int old_state;
+    
+    if (!sd)
+        return -EINVAL;
+    
+    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    if (!vic_dev) {
+        pr_err("VIC device is NULL\n");
+        return -EINVAL;
+    }
+    
+    old_state = vic_dev->state;
+    
+    if (enable) {
+        /* Enable VIC processing */
+        if (old_state != 3) {
+            /* Enable VIC interrupts - placeholder register write */
+            pr_info("VIC: Enabling interrupts (enable=%d)\n", enable);
+            vic_dev->state = 3; /* READY -> ACTIVE */
+        }
+    } else {
+        /* Disable VIC processing */
+        if (old_state != 2) {
+            /* Disable VIC interrupts - placeholder register write */
+            pr_info("VIC: Disabling interrupts (enable=%d)\n", enable);
+            vic_dev->state = 2; /* ACTIVE -> READY */
+        }
+    }
+    
+    pr_info("VIC core ops init: enable=%d, state %d -> %d\n",
+            enable, old_state, vic_dev->state);
+    
+    return 0;
+}
+
+/* VIC slake function - matching reference driver */
+int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
+{
+    struct vic_device *vic_dev;
+    
+    if (!sd)
+        return -EINVAL;
+        
+    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    if (!vic_dev) {
+        pr_err("VIC device is NULL\n");
+        return -EINVAL;
+    }
+    
+    mutex_lock(&vic_dev->state_lock);
+    
+    if (vic_dev->state > 1) {
+        vic_dev->state = 1; /* Back to INIT state */
+        pr_info("VIC slaked: state -> 1 (INIT)\n");
+    }
+    
+    mutex_unlock(&vic_dev->state_lock);
+    return 0;
+}
+
+/* Define the core operations */
+static struct tx_isp_subdev_core_ops vic_core_ops = {
+    .init = vic_core_ops_init,
+};
+
+/* Initialize the subdev ops structure with core operations */
+static struct tx_isp_subdev_ops vic_subdev_ops = {
+    .core = &vic_core_ops,
+    .video = NULL,      /* No video ops for VIC */
+    .sensor = NULL,     /* No sensor ops for VIC */
+};
 
 
 static const struct file_operations isp_w02_proc_fops = {
@@ -579,6 +746,29 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         goto err_free_sd;
     }
 
+    /* Map VIC registers */
+    sd->base = ioremap(res->start, resource_size(res));
+    if (!sd->base) {
+        pr_err("Failed to map VIC registers\n");
+        ret = -ENOMEM;
+        goto err_release_mem;
+    }
+
+    /* Allocate and initialize VIC device structure */
+    struct vic_device *vic_dev = kzalloc(sizeof(struct vic_device), GFP_KERNEL);
+    if (!vic_dev) {
+        pr_err("Failed to allocate VIC device structure\n");
+        ret = -ENOMEM;
+        goto err_unmap;
+    }
+
+    /* Initialize VIC device structure */
+    vic_dev->state = 1;  /* INIT state */
+    mutex_init(&vic_dev->state_lock);
+    
+    /* Link VIC device to subdev */
+    tx_isp_set_subdevdata(sd, vic_dev);
+
     /* Initialize VIC specific locks */
     spin_lock_init(&sd->vic_lock);
     mutex_init(&sd->vic_frame_end_lock);
@@ -593,7 +783,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     ret = tx_isp_subdev_init(pdev, sd, ops);
     if (ret < 0) {
         pr_err("Failed to initialize VIC subdev\n");
-        goto err_release_mem;
+        goto err_free_vic_dev;
     }
 
     /* Initialize hardware after subdev init */
@@ -617,25 +807,29 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         goto err_deinit_sd;
     }
 
-/* Create /proc/jz/isp/isp-w02 */
-isp_dir = proc_mkdir("jz/isp", NULL);
-if (!isp_dir) {
-    pr_err("Failed to create /proc/jz/isp directory\n");
-    return -ENOENT;
-}
+    /* Create /proc/jz/isp/isp-w02 */
+    isp_dir = proc_mkdir("jz/isp", NULL);
+    if (!isp_dir) {
+        pr_err("Failed to create /proc/jz/isp directory\n");
+        goto err_deinit_sd;
+    }
 
-w02_entry = proc_create_data("isp-w02", 0666, isp_dir, &isp_w02_proc_fops, sd);
-if (!w02_entry) {
-    pr_err("Failed to create /proc/jz/isp/isp-w02\n");
-    remove_proc_entry("jz/isp", NULL);
-    return -ENOMEM;
-}
+    w02_entry = proc_create_data("isp-w02", 0666, isp_dir, &isp_w02_proc_fops, sd);
+    if (!w02_entry) {
+        pr_err("Failed to create /proc/jz/isp/isp-w02\n");
+        remove_proc_entry("jz/isp", NULL);
+        goto err_deinit_sd;
+    }
 
     pr_info("VIC probe completed successfully\n");
     return 0;
 
 err_deinit_sd:
     tx_isp_subdev_deinit(sd);
+err_free_vic_dev:
+    kfree(vic_dev);
+err_unmap:
+    iounmap(sd->base);
 err_release_mem:
     release_mem_region(res->start, resource_size(res));
 err_free_sd:

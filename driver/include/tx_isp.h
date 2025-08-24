@@ -25,6 +25,16 @@
 
 #define TX_ISP_LINKFLAG_ENABLED		(0x1)
 
+/* ISP subdevice types */
+#define TX_ISP_SUBDEV_CSI        1
+#define TX_ISP_SUBDEV_VIC        2
+#define TX_ISP_SUBDEV_SENSOR     3
+
+/* ISP pipeline states */
+#define ISP_PIPELINE_IDLE        0
+#define ISP_PIPELINE_CONFIGURED  1
+#define ISP_PIPELINE_STREAMING   2
+
 /* Forward declarations */
 struct tx_isp_subdev;
 struct tx_isp_core;
@@ -176,6 +186,12 @@ struct tx_isp_dev {
     struct clk *isp_clk;
     struct clk *ipu_clk;
     struct clk *csi_clk;
+    
+    /* Centralized register mappings */
+    void __iomem *core_regs;     /* ISP core registers */
+    void __iomem *csi_regs;      /* CSI registers */
+    /* vic_regs is already declared above at line 209 */
+    /* phy_base is already declared above at line 214 */
 
     /* GPIO control */
     int reset_gpio;
@@ -251,6 +267,9 @@ struct tx_isp_dev {
     uint32_t custom_mode;
     uint32_t poll_state;
     wait_queue_head_t poll_wait;
+    
+    /* Pipeline state management */
+    int pipeline_state;
 } __attribute__((aligned(4)));
 
 

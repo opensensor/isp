@@ -96,20 +96,78 @@ void csi_write32(u32 reg, u32 val)
 static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
 {
     struct tx_isp_subdev *sd = dev_id;
-    u32 status;
+    struct csi_device *csi_dev;
+    void __iomem *csi_base;
+    u32 status, err1, err2, phy_state;
+    irqreturn_t ret = IRQ_NONE;
+    unsigned long flags;
 
     if (!sd)
         return IRQ_NONE;
 
-    /* Read and clear interrupt status */
-    status = csi_read32(CSI_INT_STATUS);
-    csi_write32(CSI_INT_STATUS, status);
+    csi_dev = (struct csi_device *)tx_isp_get_subdevdata(sd);
+    if (!csi_dev)
+        return IRQ_NONE;
 
-    if (status & INT_ERROR) {
-        ISP_ERROR("CSI error interrupt received\n");
+    csi_base = *(void **)(((char *)csi_dev) + 0x13c);
+    if (!csi_base)
+        return IRQ_NONE;
+
+    spin_lock_irqsave(&csi_dev->lock, flags);
+
+    /* Read interrupt status registers */
+    err1 = readl(csi_base + 0x20);  /* ERR1 register */
+    err2 = readl(csi_base + 0x24);  /* ERR2 register */
+    phy_state = readl(csi_base + 0x14);  /* PHY_STATE register */
+
+    if (err1 || err2) {
+        ret = IRQ_HANDLED;
+        
+        /* Handle protocol errors (ERR1) */
+        if (err1) {
+            ISP_ERROR("CSI Protocol errors (ERR1): 0x%08x\n", err1);
+            
+            if (err1 & 0x1) ISP_ERROR("  - SOT Sync Error\n");
+            if (err1 & 0x2) ISP_ERROR("  - SOTHS Sync Error\n");
+            if (err1 & 0x4) ISP_ERROR("  - ECC Single-bit Error (corrected)\n");
+            if (err1 & 0x8) ISP_ERROR("  - ECC Multi-bit Error (uncorrectable)\n");
+            if (err1 & 0x10) ISP_ERROR("  - CRC Error\n");
+            if (err1 & 0x20) ISP_ERROR("  - Packet Size Error\n");
+            if (err1 & 0x40) ISP_ERROR("  - EoTp Error\n");
+            
+            /* Clear errors by writing back the status */
+            writel(err1, csi_base + 0x20);
+            wmb();
+        }
+        
+        /* Handle application errors (ERR2) */
+        if (err2) {
+            ISP_ERROR("CSI Application errors (ERR2): 0x%08x\n", err2);
+            
+            if (err2 & 0x1) ISP_ERROR("  - Data ID Error\n");
+            if (err2 & 0x2) ISP_ERROR("  - Frame Sync Error\n");
+            if (err2 & 0x4) ISP_ERROR("  - Frame Data Error\n");
+            if (err2 & 0x8) ISP_ERROR("  - Frame Sequence Error\n");
+            
+            /* Clear errors by writing back the status */
+            writel(err2, csi_base + 0x24);
+            wmb();
+        }
+        
+        /* Update error state */
+        if ((err1 & 0x38) || (err2 & 0xE)) { /* Serious errors */
+            pr_err("CSI: Serious errors detected, may need recovery\n");
+        }
+    }
+    
+    /* Check for PHY state changes */
+    if (phy_state & 0x111) { /* Clock lane or data lanes in stop state */
+        /* This is normal during idle periods, only log if debugging */
+        pr_debug("CSI PHY lanes in stop state: 0x%08x\n", phy_state);
     }
 
-    return IRQ_HANDLED;
+    spin_unlock_irqrestore(&csi_dev->lock, flags);
+    return ret;
 }
 
 /* Initialize CSI hardware */
@@ -364,7 +422,82 @@ int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
     return 0;
 }
 
-/* CSI core operations initialization - closely matching OEM implementation */
+/* Frame rate detection and PHY timing configuration - Critical for proper CSI operation */
+static int tx_isp_csi_detect_frame_rate_and_configure_phy(void __iomem *csi_base,
+                                                         struct tx_isp_sensor_attribute *attr)
+{
+    int frame_rate = 30; /* Default frame rate */
+    u32 phy_timing_value = 1; /* Default PHY timing */
+    u32 current_val, new_val;
+    
+    /* Try to detect frame rate from sensor attributes */
+    if (attr && attr->max_fps > 0) {
+        frame_rate = attr->max_fps;
+    } else if (ourISPdev && ourISPdev->sensor_width > 0 && ourISPdev->sensor_height > 0) {
+        /* Estimate frame rate based on resolution */
+        u32 pixel_count = ourISPdev->sensor_width * ourISPdev->sensor_height;
+        if (pixel_count <= (640 * 480)) {
+            frame_rate = 60;
+        } else if (pixel_count <= (1280 * 720)) {
+            frame_rate = 45;
+        } else if (pixel_count <= (1920 * 1080)) {
+            frame_rate = 30;
+        } else {
+            frame_rate = 15;
+        }
+    }
+    
+    pr_info("Detected frame rate: %d fps\n", frame_rate);
+    
+    /* PHY timing configuration based on frame rate - matches reference driver logic */
+    if (frame_rate >= 80 && frame_rate < 110) {
+        phy_timing_value = 1;
+    } else if (frame_rate >= 110 && frame_rate < 150) {
+        phy_timing_value = 2;
+    } else if (frame_rate >= 150 && frame_rate < 200) {
+        phy_timing_value = 3;
+    } else if (frame_rate >= 200 && frame_rate < 250) {
+        phy_timing_value = 4;
+    } else if (frame_rate >= 250 && frame_rate < 300) {
+        phy_timing_value = 5;
+    } else if (frame_rate >= 300 && frame_rate < 400) {
+        phy_timing_value = 6;
+    } else if (frame_rate >= 400 && frame_rate < 500) {
+        phy_timing_value = 7;
+    } else if (frame_rate >= 500 && frame_rate < 600) {
+        phy_timing_value = 8;
+    } else if (frame_rate >= 600 && frame_rate < 700) {
+        phy_timing_value = 9;
+    } else if (frame_rate >= 700 && frame_rate < 800) {
+        phy_timing_value = 10;
+    } else if (frame_rate >= 800 && frame_rate < 1000) {
+        phy_timing_value = 11;
+    } else {
+        /* Default value for other ranges */
+        phy_timing_value = 1;
+    }
+    
+    pr_info("Using PHY timing value: %d for frame rate %d\n", phy_timing_value, frame_rate);
+    
+    /* Configure the critical PHY timing registers - this is what was missing! */
+    current_val = readl(csi_base + 0x160);
+    new_val = (current_val & 0xfffffff0) | (phy_timing_value & 0xf);
+    writel(new_val, csi_base + 0x160);
+    wmb();
+    
+    /* Mirror the value to other PHY timing registers as per reference driver */
+    writel(new_val, csi_base + 0x1e0);
+    wmb();
+    writel(new_val, csi_base + 0x260);
+    wmb();
+    
+    pr_info("PHY timing configured: 0x160=0x%08x, 0x1e0=0x%08x, 0x260=0x%08x\n",
+            readl(csi_base + 0x160), readl(csi_base + 0x1e0), readl(csi_base + 0x260));
+    
+    return 0;
+}
+
+/* CSI core operations initialization - matching reference driver implementation */
 int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
     void __iomem *csi_base;
@@ -384,7 +517,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
     /* Check if state is valid - match binary implementation */
     if (*(int *)(((char *)csi_dev) + 0x128) < 2) {
-        pr_info("CSI device state is %d, setting to 2 (READY)\n", 
+        pr_info("CSI device state is %d, setting to 2 (READY)\n",
                 *(int *)(((char *)csi_dev) + 0x128));
         *(int *)(((char *)csi_dev) + 0x128) = 2;
     }
@@ -406,61 +539,71 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    pr_info("CSI core ops init: enable=%d, dbus_type=%d\n", 
+    pr_info("CSI core ops init: enable=%d, dbus_type=%d\n",
             enable, attr->dbus_type);
 
     if (enable) {
         /* Initialize CSI for streaming */
         if (attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {
-            pr_info("Initializing CSI for MIPI sensor with %d lanes\n", 
+            pr_info("Initializing CSI for MIPI sensor with %d lanes\n",
                     attr->mipi.lans);
             
-            /* Configure lane count first */
-            writel((readl(csi_base + 0x04) & 0xfffffffc) | ((attr->mipi.lans - 1) & 0x3), 
+            /* STEP 1: Configure lane count first */
+            writel((readl(csi_base + 0x04) & 0xfffffffc) | ((attr->mipi.lans - 1) & 0x3),
                    csi_base + 0x04);
             wmb();
-            udelay(10);
+            private_msleep(1);
 
-            /* Reset PHY - Proper sequence is critical */
+            /* STEP 2: Reset PHY - Proper sequence is critical */
             /* PHY_SHUTDOWNZ = 0 */
             writel(0, csi_base + 0x08);
             wmb();
-            udelay(10);
+            private_msleep(1);
             
             /* DPHY_RSTZ = 0 */
             writel(0, csi_base + 0x0C);
             wmb();
-            udelay(10);
+            private_msleep(1);
             
             /* CSI2_RESETN = 0 */
             writel(0, csi_base + 0x10);
             wmb();
-            udelay(10);
+            private_msleep(1);
 
-            /* Configure PHY timing parameters - match OEM implementation */
-            writel(0x7d, csi_base + 0x00);  /* VERSION register */
+            /* STEP 3: CRITICAL - Frame rate detection and PHY timing configuration */
+            /* This is the missing piece that causes green stream! */
+            ret = tx_isp_csi_detect_frame_rate_and_configure_phy(csi_base, attr);
+            if (ret) {
+                pr_err("Failed to configure PHY timing\n");
+                return ret;
+            }
+
+            /* STEP 4: Configure base PHY timing parameters */
+            writel(0x7d, csi_base + 0x00);  /* VERSION/BASE register */
+            wmb();
             writel(0x3f, csi_base + 0x128); /* PHY timing parameter */
+            wmb();
             
-            /* Enable PHY - Correct power-up sequence */
+            /* STEP 5: Enable PHY - Correct power-up sequence */
             /* DPHY_RSTZ = 1 first */
             writel(1, csi_base + 0x0C);
             wmb();
-            udelay(10);
+            private_msleep(10);
             
             /* PHY_SHUTDOWNZ = 1 next */
             writel(1, csi_base + 0x08);
             wmb();
-            udelay(10);
+            private_msleep(10);
             
             /* CSI2_RESETN = 1 last */
             writel(1, csi_base + 0x10);
             wmb();
-            udelay(10);
+            private_msleep(10);
             
-            /* Additional debug info */
-            pr_info("CSI PHY initialized: PHY_STATE=%08x\n", readl(csi_base + 0x14));
+            /* STEP 6: Check PHY status */
+            pr_info("CSI PHY initialized: PHY_STATE=0x%08x\n", readl(csi_base + 0x14));
             
-            /* Configure data format based on sensor format */
+            /* STEP 7: Configure data format based on sensor format */
             u32 data_type;
             u32 format_value = 0;
             
@@ -493,120 +636,74 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         pr_info("Using YUV422 format (0x1E)\n");
                         break;
                     default:
-                        /* Log the unknown format for debugging */
-                        pr_info("Unknown sensor format: %d, trying all formats\n", 
-                                attr->mipi.mipi_sc.sensor_csi_fmt);
-                        
-                        /* Try all possible formats one by one */
-                        pr_info("Trying RAW8 format (0x2A)\n");
-                        writel(0x2A, csi_base + 0x18);  /* DATA_IDS_1 register - RAW8 */
-                        writel(0x2A, csi_base + 0x1C);  /* DATA_IDS_2 register - RAW8 */
-                        wmb();
-                        msleep(10);
-                        
-                        pr_info("Trying RAW10 format (0x2B)\n");
-                        writel(0x2B, csi_base + 0x18);  /* DATA_IDS_1 register - RAW10 */
-                        writel(0x2B, csi_base + 0x1C);  /* DATA_IDS_2 register - RAW10 */
-                        wmb();
-                        msleep(10);
-                        
-                        pr_info("Trying RAW12 format (0x2C)\n");
-                        writel(0x2C, csi_base + 0x18);  /* DATA_IDS_1 register - RAW12 */
-                        writel(0x2C, csi_base + 0x1C);  /* DATA_IDS_2 register - RAW12 */
-                        wmb();
-                        msleep(10);
-                        
-                        pr_info("Trying YUV422 format (0x1E)\n");
-                        writel(0x1E, csi_base + 0x18);  /* DATA_IDS_1 register - YUV422 */
-                        writel(0x1E, csi_base + 0x1C);  /* DATA_IDS_2 register - YUV422 */
-                        wmb();
-                        msleep(10);
-                        
                         /* Default to RAW10 if format is unknown */
                         data_type = 0x2B;  /* RAW10 format */
                         format_value = 1;
-                        pr_info("Defaulting to RAW10 (0x2B)\n");
+                        pr_info("Unknown sensor format: %d, defaulting to RAW10 (0x2B)\n",
+                                attr->mipi.mipi_sc.sensor_csi_fmt);
                         break;
                 }
             }
             
-            /* Configure data format */
+            /* Configure data format registers */
             writel(data_type, csi_base + 0x18);  /* DATA_IDS_1 register */
             wmb();
-            
-            /* Also set the second data ID register for completeness */
             writel(data_type, csi_base + 0x1C);  /* DATA_IDS_2 register */
             wmb();
             
             /* Store format value in ISP device for VIC to use */
             if (ourISPdev) {
-                /* Store the format value in the ISP device */
                 ourISPdev->sensor_format = format_value;
                 pr_info("Stored sensor format %d for VIC to use\n", format_value);
             }
             
-            /* Configure error masks */
-            writel(0, csi_base + 0x28);     /* MASK1 register - Enable all error interrupts */
-            writel(0, csi_base + 0x2C);     /* MASK2 register - Enable all error interrupts */
+            /* STEP 8: Configure error detection and interrupt masks */
+            writel(0, csi_base + 0x28);     /* MASK1 register - Enable error interrupts */
+            writel(0, csi_base + 0x2C);     /* MASK2 register - Enable error interrupts */
             wmb();
             
-            /* Enable CSI controller */
+            /* STEP 9: Final CSI controller enable */
             writel(0x1, csi_base + 0x40);   /* CSI_CTRL register - Enable CSI */
             wmb();
-            udelay(10);
+            private_msleep(10);
 
-            /* Set state to 3 (streaming) */
+            /* STEP 10: Set state to 3 (active/streaming) */
             *(int *)(((char *)csi_dev) + 0x128) = 3;
             
-            /* Dump registers for debugging */
+            /* STEP 11: Dump registers and check for errors */
             dump_csi_reg(sd);
-            
-            /* Check for CSI errors */
             check_csi_error(sd);
             
             pr_info("CSI initialized successfully for MIPI sensor\n");
             
-            /* Add a delay to allow the CSI to stabilize */
-            msleep(10);
-            
-            /* Check for CSI errors again after delay */
+            /* Allow CSI to stabilize before checking errors */
+            private_msleep(10);
             check_csi_error(sd);
         } else if (attr->dbus_type == TX_SENSOR_DATA_INTERFACE_DVP) {
             pr_info("Initializing CSI for DVP sensor\n");
             
-            /* Reset PHY */
-            writel(0, csi_base + 0x0C);
+            /* DVP mode initialization - different from MIPI */
+            writel(0, csi_base + 0x0C);    /* Reset PHY */
             wmb();
-            udelay(10);
+            private_msleep(1);
             
-            writel(1, csi_base + 0x0C);
+            writel(1, csi_base + 0x0C);    /* Release PHY reset */
             wmb();
-            udelay(10);
+            private_msleep(1);
             
-            /* Configure DVP-specific registers */
+            /* Configure DVP-specific registers - match reference driver */
             writel(0x7d, csi_base + 0x00);  /* VERSION register */
-            writel(0x3e, csi_base + 0x80);  /* PHY timing parameter */
-            writel(1, csi_base + 0x2cc);    /* PHY control */
+            wmb();
+            writel(0x3e, csi_base + 0x80);  /* DVP PHY timing parameter */
+            wmb();
+            writel(1, csi_base + 0x2cc);    /* DVP PHY control */
+            wmb();
             
             *(int *)(((char *)csi_dev) + 0x128) = 3;
             pr_info("CSI initialized for DVP sensor\n");
         } else {
-            pr_info("Initializing CSI for other sensor type: %d\n", attr->dbus_type);
-            
-            /* Reset PHY */
-            writel(0, csi_base + 0x0C);
-            wmb();
-            udelay(10);
-            
-            writel(1, csi_base + 0x0C);
-            wmb();
-            udelay(10);
-            
-            writel(0x7d, csi_base + 0x00);  /* VERSION register */
-            writel(0x3e, csi_base + 0x80);  /* PHY timing parameter */
-            writel(1, csi_base + 0x2cc);    /* PHY control */
-            
-            *(int *)(((char *)csi_dev) + 0x128) = 3;
+            pr_warn("Unsupported sensor interface type: %d\n", attr->dbus_type);
+            return -EINVAL;
         }
     } else {
         /* Disable CSI */
@@ -745,7 +842,182 @@ int tx_isp_csi_remove(struct platform_device *pdev)
     private_release_mem_region(res->start, resource_size(res));
     tx_isp_subdev_deinit(sd);
     private_kfree(sd);
+return 0;
+}
 
+/* CSI register dump function for debugging */
+void dump_csi_reg(struct tx_isp_subdev *sd)
+{
+struct csi_device *csi_dev;
+void __iomem *csi_base;
+
+if (!sd) {
+    pr_err("dump_csi_reg: sd is NULL\n");
+    return;
+}
+
+csi_dev = (struct csi_device *)tx_isp_get_subdevdata(sd);
+if (!csi_dev) {
+    pr_err("dump_csi_reg: csi_dev is NULL\n");
+    return;
+}
+
+csi_base = *(void **)(((char *)csi_dev) + 0x13c);
+if (!csi_base) {
+    pr_err("dump_csi_reg: csi_base is NULL\n");
+    return;
+}
+
+pr_info("=== CSI Register Dump ===\n");
+pr_info("VERSION (0x00): 0x%08x\n", readl(csi_base + 0x00));
+pr_info("N_LANES (0x04): 0x%08x\n", readl(csi_base + 0x04));
+pr_info("PHY_SHUTDOWNZ (0x08): 0x%08x\n", readl(csi_base + 0x08));
+pr_info("DPHY_RSTZ (0x0C): 0x%08x\n", readl(csi_base + 0x0C));
+pr_info("CSI2_RESETN (0x10): 0x%08x\n", readl(csi_base + 0x10));
+pr_info("PHY_STATE (0x14): 0x%08x\n", readl(csi_base + 0x14));
+pr_info("DATA_IDS_1 (0x18): 0x%08x\n", readl(csi_base + 0x18));
+pr_info("DATA_IDS_2 (0x1C): 0x%08x\n", readl(csi_base + 0x1C));
+pr_info("ERR1 (0x20): 0x%08x\n", readl(csi_base + 0x20));
+pr_info("ERR2 (0x24): 0x%08x\n", readl(csi_base + 0x24));
+pr_info("MASK1 (0x28): 0x%08x\n", readl(csi_base + 0x28));
+pr_info("MASK2 (0x2C): 0x%08x\n", readl(csi_base + 0x2C));
+pr_info("CSI_CTRL (0x40): 0x%08x\n", readl(csi_base + 0x40));
+pr_info("PHY_TST_CTRL0 (0x50): 0x%08x\n", readl(csi_base + 0x50));
+pr_info("PHY_TST_CTRL1 (0x54): 0x%08x\n", readl(csi_base + 0x54));
+pr_info("PHY_TIMING (0x128): 0x%08x\n", readl(csi_base + 0x128));
+pr_info("PHY_TIMING_0x160: 0x%08x\n", readl(csi_base + 0x160));
+pr_info("PHY_TIMING_0x1e0: 0x%08x\n", readl(csi_base + 0x1e0));
+pr_info("PHY_TIMING_0x260: 0x%08x\n", readl(csi_base + 0x260));
+pr_info("========================\n");
+}
+
+/* CSI error checking function */
+void check_csi_error(struct tx_isp_subdev *sd)
+{
+struct csi_device *csi_dev;
+void __iomem *csi_base;
+u32 err1, err2, phy_state;
+
+if (!sd) {
+    pr_err("check_csi_error: sd is NULL\n");
+    return;
+}
+
+csi_dev = (struct csi_device *)tx_isp_get_subdevdata(sd);
+if (!csi_dev) {
+    pr_err("check_csi_error: csi_dev is NULL\n");
+    return;
+}
+
+csi_base = *(void **)(((char *)csi_dev) + 0x13c);
+if (!csi_base) {
+    pr_err("check_csi_error: csi_base is NULL\n");
+    return;
+}
+
+/* Read error registers */
+err1 = readl(csi_base + 0x20);
+err2 = readl(csi_base + 0x24);
+phy_state = readl(csi_base + 0x14);
+
+/* Check for PHY errors */
+if (phy_state & 0x1) {
+    pr_info("CSI PHY: Clock lane in Stop State\n");
+}
+if (phy_state & 0x10) {
+    pr_info("CSI PHY: Data lane 0 in Stop State\n");
+}
+if (phy_state & 0x100) {
+    pr_info("CSI PHY: Data lane 1 in Stop State\n");
+}
+
+/* Check for protocol errors */
+if (err1) {
+    pr_warn("CSI ERR1 (Protocol errors): 0x%08x\n", err1);
+    if (err1 & 0x1) pr_warn("  - SOT Error\n");
+    if (err1 & 0x2) pr_warn("  - SOTHS Error\n");
+    if (err1 & 0x4) pr_warn("  - ECC Single-bit Error\n");
+    if (err1 & 0x8) pr_warn("  - ECC Multi-bit Error\n");
+    if (err1 & 0x10) pr_warn("  - CRC Error\n");
+    if (err1 & 0x20) pr_warn("  - Packet Size Error\n");
+    if (err1 & 0x40) pr_warn("  - ECC Corrected Error\n");
+    
+    /* Clear errors by writing back */
+    writel(err1, csi_base + 0x20);
+}
+
+if (err2) {
+    pr_warn("CSI ERR2 (Application errors): 0x%08x\n", err2);
+    if (err2 & 0x1) pr_warn("  - Data ID Error\n");
+    if (err2 & 0x2) pr_warn("  - Frame Sync Error\n");
+    if (err2 & 0x4) pr_warn("  - Frame Data Error\n");
+    
+    /* Clear errors by writing back */
+    writel(err2, csi_base + 0x24);
+}
+
+if (!err1 && !err2) {
+    pr_info("CSI: No errors detected\n");
+}
+}
+
+/* CSI activation function - matching reference driver */
+int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
+{
+    struct csi_device *csi_dev;
+    
+    if (!sd)
+        return -EINVAL;
+    
+    csi_dev = (struct csi_device *)tx_isp_get_subdevdata(sd);
+    if (!csi_dev) {
+        pr_err("CSI device is NULL\n");
+        return -EINVAL;
+    }
+    
+    mutex_lock(&csi_dev->mutex);
+    
+    if (csi_dev->state == 1) {
+        csi_dev->state = 2; /* INIT -> READY */
+        pr_info("CSI activated: state %d -> 2 (READY)\n", 1);
+    }
+    
+    mutex_unlock(&csi_dev->mutex);
     return 0;
 }
+
+/* CSI slake function - matching reference driver */
+int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
+{
+    struct csi_device *csi_dev;
+    
+    if (!sd)
+        return -EINVAL;
+        
+    csi_dev = (struct csi_device *)tx_isp_get_subdevdata(sd);
+    if (!csi_dev) {
+        pr_err("CSI device is NULL\n");
+        return -EINVAL;
+    }
+    
+    mutex_lock(&csi_dev->mutex);
+    
+    if (csi_dev->state > 1) {
+        csi_dev->state = 1; /* Back to INIT state */
+        pr_info("CSI slaked: state -> 1 (INIT)\n");
+    }
+    
+    mutex_unlock(&csi_dev->mutex);
+    return 0;
+}
+
+/* Export symbols for use by other parts of the driver */
+EXPORT_SYMBOL(tx_isp_csi_start);
+EXPORT_SYMBOL(tx_isp_csi_stop);
+EXPORT_SYMBOL(tx_isp_csi_set_format);
+EXPORT_SYMBOL(dump_csi_reg);
+EXPORT_SYMBOL(check_csi_error);
+EXPORT_SYMBOL(tx_isp_csi_activate_subdev);
+EXPORT_SYMBOL(tx_isp_csi_slake_subdev);
+
 
