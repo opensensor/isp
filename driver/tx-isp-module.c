@@ -2784,7 +2784,8 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
     mutex_lock(&sensor_register_mutex);
     
     pr_info("=== KERNEL SENSOR REGISTRATION ===\n");
-    pr_info("Sensor: %s (subdev=%p)\n", sensor->info.name, sd);
+    pr_info("Sensor: %s (subdev=%p)\n",
+            (sensor && sensor->info.name[0]) ? sensor->info.name : "(unnamed)", sd);
     if (sd->ops) {
         pr_info("  ops=%p\n", sd->ops);
         if (sd->ops->video) {
@@ -2801,7 +2802,8 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
     /* Also directly register if ISP is ready */
     if (ourISPdev && !ourISPdev->sensor) {
         ourISPdev->sensor = sensor;
-        pr_info("Direct kernel registration of %s as primary sensor\n", sensor->info.name);
+        pr_info("Direct kernel registration of %s as primary sensor\n",
+                (sensor && sensor->info.name[0]) ? sensor->info.name : "(unnamed)");
         
         /* Add to list */
         reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
