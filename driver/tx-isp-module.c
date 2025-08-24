@@ -663,6 +663,50 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             
         return 0;
     }
+    case 0xc0445611: { // VIDIOC_DQBUF - Dequeue buffer (blocking variant from reference)
+        struct v4l2_buffer {
+            uint32_t index;
+            uint32_t type;
+            uint32_t bytesused;
+            uint32_t flags;
+            uint32_t field;
+            struct timeval timestamp;
+            struct v4l2_timecode timecode;
+            uint32_t sequence;
+            uint32_t memory;
+            union {
+                uint32_t offset;
+                unsigned long userptr;
+                void *planes;
+            } m;
+            uint32_t length;
+            uint32_t reserved2;
+            uint32_t reserved;
+        } buffer;
+        
+        if (copy_from_user(&buffer, argp, sizeof(buffer)))
+            return -EFAULT;
+            
+        pr_info("Channel %d: Dequeue buffer request (blocking)\n", channel);
+        
+        // Validate buffer type matches channel configuration
+        if (buffer.type != 1) { // V4L2_BUF_TYPE_VIDEO_CAPTURE
+            pr_err("Channel %d: Invalid buffer type %d\n", channel, buffer.type);
+            return -EINVAL;
+        }
+        
+        // Check if streaming is active - reference implementation requirement
+        if (!state->streaming) {
+            pr_info("Channel %d: Not streaming, returning EAGAIN\n", channel);
+            return -EAGAIN;
+        }
+        
+        // Reference implementation waits for frame completion
+        // Since we don't have real frame capture yet, return EAGAIN to indicate
+        // no frame is ready rather than returning invalid data that causes segfaults
+        pr_info("Channel %d: No frame ready, returning EAGAIN\n", channel);
+        return -EAGAIN;
+    }
     case 0x80045612: { // VIDIOC_STREAMON - Start streaming
         uint32_t type;
         
@@ -671,9 +715,23 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             
         pr_info("Channel %d: Stream ON, type=%d\n", channel, type);
         
+        // Validate buffer type
+        if (type != 1) { // V4L2_BUF_TYPE_VIDEO_CAPTURE
+            pr_err("Channel %d: Invalid stream type %d\n", channel, type);
+            return -EINVAL;
+        }
+        
+        // Check if channel is enabled (from 0x800456c5 IOCTL)
+        if (!state->enabled) {
+            pr_err("Channel %d: Channel not enabled, cannot start streaming\n", channel);
+            return -EINVAL;
+        }
+        
         // Reference enables video streaming for this channel
         // Sets streaming state, starts DMA, etc.
+        state->streaming = true;
         
+        pr_info("Channel %d: Streaming started\n", channel);
         return 0;
     }
     case 0x80045613: { // VIDIOC_STREAMOFF - Stop streaming
@@ -684,9 +742,17 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             
         pr_info("Channel %d: Stream OFF, type=%d\n", channel, type);
         
+        // Validate buffer type
+        if (type != 1) { // V4L2_BUF_TYPE_VIDEO_CAPTURE
+            pr_err("Channel %d: Invalid stream type %d\n", channel, type);
+            return -EINVAL;
+        }
+        
         // Reference disables video streaming for this channel
         // Stops DMA, clears buffers, etc.
+        state->streaming = false;
         
+        pr_info("Channel %d: Streaming stopped\n", channel);
         return 0;
     }
     case 0x407056c4: { // VIDIOC_G_FMT - Get format
