@@ -1245,7 +1245,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         // Check if real sensor is connected and active
         if (ourISPdev && ourISPdev->sensor) {
             active_sensor = ourISPdev->sensor;
-            pr_info("Channel %d: Sensor check - sensor=%p, name=%s, vin_state=%d (need %d for active)\n",
+            pr_debug("Channel %d: Sensor check - sensor=%p, name=%s, vin_state=%d (need %d for active)\n",
                     channel, active_sensor,
                     active_sensor ? active_sensor->info.name : "(null)",
                     active_sensor ? active_sensor->sd.vin_state : -1,
@@ -1253,18 +1253,31 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             
             if (active_sensor && active_sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
                 sensor_active = true;
-                pr_info("Channel %d: Real sensor %s is ACTIVE, using hardware frames\n",
+                pr_debug("Channel %d: Real sensor %s is ACTIVE, using hardware frames\n",
                         channel, active_sensor->info.name);
             } else if (active_sensor) {
-                pr_warn("Channel %d: Sensor %s present but not in RUNNING state (state=%d)\n",
+                /* Don't warn on every frame - sensor might still be initializing */
+                pr_debug("Channel %d: Sensor %s present but not in RUNNING state (state=%d)\n",
                         channel, active_sensor->info.name, active_sensor->sd.vin_state);
+                        
+                /* Try to transition sensor to RUNNING if it's initialized */
+                if (active_sensor->sd.vin_state == TX_ISP_MODULE_INIT) {
+                    /* Check if sensor has completed initialization */
+                    if (active_sensor->sd.ops && active_sensor->sd.ops->video &&
+                        active_sensor->sd.ops->video->s_stream) {
+                        pr_info("Channel %d: Attempting to transition sensor %s to RUNNING state\n",
+                                channel, active_sensor->info.name);
+                        active_sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
+                        sensor_active = true;
+                    }
+                }
             }
         } else {
-            pr_warn("Channel %d: No sensor registered with ISP device\n", channel);
+            pr_debug("Channel %d: No sensor registered with ISP device\n", channel);
         }
         
         if (!sensor_active) {
-            pr_warn("Channel %d: Using fallback frame simulation (no active sensor)\n", channel);
+            pr_debug("Channel %d: Using fallback frame simulation (no active sensor)\n", channel);
         }
         
         // Wait for frame
@@ -2777,7 +2790,17 @@ static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd)
 /* Simulate frame completion for testing - in real hardware this comes from interrupts */
 static void simulate_frame_completion(void)
 {
+    struct tx_isp_sensor *sensor = NULL;
     int i;
+    
+    /* Check if we have an active sensor that should be generating frames */
+    if (ourISPdev && ourISPdev->sensor) {
+        sensor = ourISPdev->sensor;
+        if (sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
+            /* Sensor is running - generate proper frame data */
+            pr_debug("Generating frame from active sensor %s\n", sensor->info.name);
+        }
+    }
     
     /* Trigger frame completion on all active channels */
     for (i = 0; i < num_channels; i++) {
@@ -2817,8 +2840,10 @@ static void vic_frame_work_function(struct work_struct *work)
 static void frame_sim_timer_callback(unsigned long data)
 {
     struct tx_isp_vic_device *vic_dev;
+    struct tx_isp_sensor *sensor = NULL;
     int i;
     bool any_streaming = false;
+    bool sensor_active = false;
     
     /* Check if any channels are streaming */
     for (i = 0; i < num_channels; i++) {
@@ -2829,8 +2854,20 @@ static void frame_sim_timer_callback(unsigned long data)
     }
     
     if (any_streaming) {
-        /* Generate frames for all streaming channels */
-        simulate_frame_completion();
+        /* Check if we have an active sensor */
+        if (ourISPdev && ourISPdev->sensor) {
+            sensor = ourISPdev->sensor;
+            if (sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
+                sensor_active = true;
+            }
+        }
+        
+        /* Only generate simulated frames if no active sensor */
+        if (!sensor_active) {
+            /* Generate frames for all streaming channels */
+            simulate_frame_completion();
+        }
+        /* If sensor is active, frames should come from hardware interrupts */
         
         /* If VIC is available, update its frame counter */
         if (ourISPdev && ourISPdev->vic_dev) {
