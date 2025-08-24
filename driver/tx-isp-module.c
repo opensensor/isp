@@ -190,6 +190,8 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
 
 // VIC subdev structure based on reference driver analysis (0x21c bytes)
 // VIC device structure matching exact offsets from reference driver
+// IMPORTANT: Reference driver has a BUG at tx_isp_vic_probe - it initializes
+// spinlock at 0x130 then immediately overwrites with mutex. We follow the mutex.
 struct tx_isp_vic_device {
     struct tx_isp_subdev sd;           // Base subdev structure (size 0xb8)
     
@@ -204,7 +206,7 @@ struct tx_isp_vic_device {
     char padding2[0x50];               // 0xd8 to 0x128 (80 bytes)
     int state;                         // State at offset 0x128 (1=init, 2=active)
     
-    // Padding to reach offset 0x130 for mlock
+    // Padding to reach offset 0x130 for mlock (NOTE: mutex, not spinlock!)
     char padding3[0x4];                // 0x12c to 0x130 (4 bytes)
     struct mutex mlock;                // Mutex at offset 0x130
     
@@ -299,27 +301,55 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
     
     pr_info("Creating VIC device...\n");
     
-    // Initialize VIC device structure with correct offsets
+    // Initialize VIC device structure with correct offsets (0x21c bytes total)
     memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
     
-    // Initialize locks and completion at correct offsets
-    spin_lock_init(&vic_dev->buffer_lock);        // offset 0x1f4
-    mutex_init(&vic_dev->mlock);                  // offset 0x130
-    mutex_init(&vic_dev->snap_mlock);            // offset 0x154
-    init_completion(&vic_dev->frame_done);       // offset 0x148
-    
-    // Initialize buffer queues
-    INIT_LIST_HEAD(&vic_dev->queue_head);        // offset 0x1f8
-    INIT_LIST_HEAD(&vic_dev->free_head);         // offset 0x1fc
-    INIT_LIST_HEAD(&vic_dev->done_head);         // offset 0x204
-    
-    // Set initial state
-    vic_dev->streaming = 0;                      // offset 0x210
-    vic_dev->state = 1;                          // 1 = ready, 2 = active
-    vic_dev->frame_count = 0;                    // offset 0x218
-    
-    // Connect VIC registers
+    // Connect VIC registers first (at offset 0xb8)
     vic_dev->vic_regs = isp_dev->vic_regs;
+    
+    // Set self-pointer at offset 0xd4 (critical for reference driver compatibility)
+    vic_dev->self = vic_dev;
+    
+    // Set initial state at offset 0x128 (1 = initialized)
+    vic_dev->state = 1;
+    
+    // Initialize mutex at offset 0x130 (NOT a spinlock - reference driver bug!)
+    mutex_init(&vic_dev->mlock);
+    
+    // Initialize completion at offset 0x148
+    init_completion(&vic_dev->frame_done);
+    
+    // Initialize snap mutex at offset 0x154
+    mutex_init(&vic_dev->snap_mlock);
+    
+    // Initialize spinlock at offset 0x1f4 for buffer management
+    spin_lock_init(&vic_dev->buffer_lock);
+    
+    // Initialize buffer queues (offsets 0x1f8, 0x200, 0x208)
+    INIT_LIST_HEAD(&vic_dev->queue_head);
+    INIT_LIST_HEAD(&vic_dev->free_head);
+    INIT_LIST_HEAD(&vic_dev->done_head);
+    
+    // Set streaming state at offset 0x210
+    vic_dev->streaming = 0;
+    
+    // Initialize frame counter at offset 0x218
+    vic_dev->frame_count = 0;
+    
+    // Debug: Verify critical offsets
+    pr_info("VIC structure offsets verification:\n");
+    pr_info("  vic_regs at %p (offset 0x%lx, expected 0xb8)\n",
+            &vic_dev->vic_regs, (unsigned long)((char*)&vic_dev->vic_regs - (char*)vic_dev));
+    pr_info("  self at %p (offset 0x%lx, expected 0xd4)\n",
+            &vic_dev->self, (unsigned long)((char*)&vic_dev->self - (char*)vic_dev));
+    pr_info("  state at %p (offset 0x%lx, expected 0x128)\n",
+            &vic_dev->state, (unsigned long)((char*)&vic_dev->state - (char*)vic_dev));
+    pr_info("  mlock at %p (offset 0x%lx, expected 0x130)\n",
+            &vic_dev->mlock, (unsigned long)((char*)&vic_dev->mlock - (char*)vic_dev));
+    pr_info("  buffer_lock at %p (offset 0x%lx, expected 0x1f4)\n",
+            &vic_dev->buffer_lock, (unsigned long)((char*)&vic_dev->buffer_lock - (char*)vic_dev));
+    pr_info("  streaming at %p (offset 0x%lx, expected 0x210)\n",
+            &vic_dev->streaming, (unsigned long)((char*)&vic_dev->streaming - (char*)vic_dev));
     
     // Connect to ISP device directly - no complex platform device registration
     isp_dev->vic_dev = vic_dev;
@@ -1303,11 +1333,12 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
     }
     case 0x80045612: { // VIDIOC_STREAMON - Start streaming
         uint32_t type;
+        struct tx_isp_vic_device *vic_dev = NULL;
         
         if (copy_from_user(&type, argp, sizeof(type)))
             return -EFAULT;
             
-        pr_info("Channel %d: Stream ON, type=%d\n", channel, type);
+        pr_info("Channel %d: VIDIOC_STREAMON request, type=%d\n", channel, type);
         
         // Validate buffer type
         if (type != 1) { // V4L2_BUF_TYPE_VIDEO_CAPTURE
@@ -1315,28 +1346,70 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             return -EINVAL;
         }
         
-        // Check if channel is enabled (from 0x800456c5 IOCTL)
-        // For now, allow streaming without requiring explicit enable to match reference behavior
+        // Check if already streaming
+        if (state->streaming) {
+            pr_info("Channel %d: Already streaming, returning success\n", channel);
+            return 0;
+        }
+        
+        // Check if channel is enabled
         if (!state->enabled) {
-            pr_info("Channel %d: Channel not explicitly enabled, enabling automatically\n", channel);
+            pr_info("Channel %d: Enabling channel for streaming\n", channel);
             state->enabled = true;
         }
         
-        // Reference enables video streaming for this channel
-        // Sets streaming state, starts DMA, etc.
-        state->streaming = true;
-        
-        // Send stream ON event to VIC for pipeline activation
+        // Get VIC device and perform streaming setup
         if (ourISPdev && ourISPdev->vic_dev) {
-            // Activate VIC subdev first
-            tx_isp_activate_vic_subdev(ourISPdev);
+            vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
             
-            tx_isp_vic_handle_event(ourISPdev->vic_dev, TX_ISP_EVENT_FRAME_STREAMON, &channel);
+            pr_info("Channel %d: Activating VIC subdev for streaming\n", channel);
+            
+            // Activate VIC subdev (changes state from 1 to 2)
+            if (vic_dev->state == 1) {
+                pr_info("Channel %d: Acquiring VIC mlock for activation\n", channel);
+                mutex_lock(&vic_dev->mlock);
+                vic_dev->state = 2; // Activate
+                mutex_unlock(&vic_dev->mlock);
+                pr_info("Channel %d: VIC state changed to active (2)\n", channel);
+            }
+            
+            // Now handle streaming with spinlock (like ispvic_frame_channel_s_stream)
+            if (vic_dev->streaming != 1) {
+                unsigned long flags;
+                
+                pr_info("Channel %d: Configuring VIC hardware for streaming\n", channel);
+                spin_lock_irqsave(&vic_dev->buffer_lock, flags);
+                
+                // Enable VIC hardware if available
+                if (vic_dev->vic_regs) {
+                    uint32_t ctrl_val = 0x80000020 | (vic_dev->frame_count << 16);
+                    pr_info("Channel %d: Writing VIC control register 0x%08x to %p+0x300\n",
+                            channel, ctrl_val, vic_dev->vic_regs);
+                    iowrite32(ctrl_val, vic_dev->vic_regs + 0x300);
+                    wmb(); // Memory barrier
+                } else {
+                    pr_info("Channel %d: No VIC hardware registers - simulation mode\n", channel);
+                }
+                
+                vic_dev->streaming = 1;
+                pr_info("Channel %d: VIC streaming flag set\n", channel);
+                
+                spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
+            }
+            
+            // Set channel streaming state
+            state->streaming = true;
+            
+            // Trigger initial frame generation
+            pr_info("Channel %d: Sending STREAMON event to VIC\n", channel);
+            tx_isp_vic_handle_event(vic_dev, TX_ISP_EVENT_FRAME_STREAMON, &channel);
+            
         } else {
-            pr_warn("Channel %d: No VIC subdev available for stream activation\n", channel);
+            pr_warn("Channel %d: No VIC device available, enabling channel streaming only\n", channel);
+            state->streaming = true;
         }
         
-        pr_info("Channel %d: Streaming started\n", channel);
+        pr_info("Channel %d: Streaming started successfully\n", channel);
         return 0;
     }
     case 0x80045613: { // VIDIOC_STREAMOFF - Stop streaming
