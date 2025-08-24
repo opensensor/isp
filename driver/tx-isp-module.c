@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/interrupt.h>
 #include <linux/i2c.h>
+#include <linux/clk.h>
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_core.h"
 #include "../include/tx-isp-debug.h"
@@ -332,8 +333,56 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     
     pr_info("Mapping ISP/VIC registers...\n");
     
-    // CRITICAL: Enable T31 VIC hardware at system level FIRST
-    pr_info("Enabling T31 VIC hardware at system level...\n");
+    // CRITICAL: Enable VIC clocks using Linux Clock Framework (like reference driver)
+    pr_info("*** ENABLING VIC CLOCKS USING LINUX CLOCK FRAMEWORK ***\n");
+    
+    // Try to get and enable ISP clock
+    struct clk *isp_clk = clk_get(NULL, "isp");
+    if (!IS_ERR(isp_clk)) {
+        int ret = clk_prepare_enable(isp_clk);
+        if (ret == 0) {
+            pr_info("SUCCESS: ISP clock enabled via clk framework\n");
+            isp_dev->isp_clk = isp_clk;
+        } else {
+            pr_err("Failed to enable ISP clock: %d\n", ret);
+            clk_put(isp_clk);
+        }
+    } else {
+        pr_warn("ISP clock not found: %ld\n", PTR_ERR(isp_clk));
+    }
+    
+    // Try to get and enable CGU_ISP clock (T31 specific)
+    struct clk *cgu_isp_clk = clk_get(NULL, "cgu_isp");
+    if (!IS_ERR(cgu_isp_clk)) {
+        int ret = clk_prepare_enable(cgu_isp_clk);
+        if (ret == 0) {
+            pr_info("SUCCESS: CGU_ISP clock enabled via clk framework\n");
+            isp_dev->cgu_isp_clk = cgu_isp_clk;
+        } else {
+            pr_err("Failed to enable CGU_ISP clock: %d\n", ret);
+            clk_put(cgu_isp_clk);
+        }
+    } else {
+        pr_warn("CGU_ISP clock not found: %ld\n", PTR_ERR(cgu_isp_clk));
+    }
+    
+    // Try VIC-specific clock if it exists
+    struct clk *vic_clk = clk_get(NULL, "vic");
+    if (!IS_ERR(vic_clk)) {
+        int ret = clk_prepare_enable(vic_clk);
+        if (ret == 0) {
+            pr_info("SUCCESS: VIC clock enabled via clk framework\n");
+            isp_dev->vic_clk = vic_clk;
+        } else {
+            pr_err("Failed to enable VIC clock: %d\n", ret);
+            clk_put(vic_clk);
+        }
+    } else {
+        pr_warn("VIC clock not found: %ld\n", PTR_ERR(vic_clk));
+    }
+    
+    // FALLBACK: Try direct CPM manipulation if clock framework fails
+    pr_info("FALLBACK: Attempting direct CPM clock manipulation...\n");
     
     // Map Clock/Power Management registers
     cpm_regs = ioremap(T31_CPM_BASE, T31_CPM_SIZE);
@@ -349,31 +398,34 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     
     pr_info("T31 CPM before: CLKGR0=0x%x, CLKGR1=0x%x, OPCR=0x%x\n", clkgr0, clkgr1, opcr);
     
-    // Enable ISP/VIC clocks (clear gate bits)
-    // Bit positions from T31 manual - ISP typically bit 13, VIC bit 30
-    clkgr0 &= ~(1 << 13); // Enable ISP clock
-    clkgr1 &= ~(1 << 30); // Enable VIC clock (if in CLKGR1)
-    clkgr0 &= ~(1 << 30); // Try VIC in CLKGR0 too
+    // Try multiple possible ISP/VIC clock bit positions from T31 documentation
+    u32 clkgr0_new = clkgr0;
+    u32 clkgr1_new = clkgr1;
     
-    // Enable ISP/VIC power domains
-    opcr |= (1 << 2);  // Enable ISP power domain
-    opcr |= (1 << 3);  // Enable VIC power domain (if separate)
+    // ISP clock - try multiple bit positions
+    clkgr0_new &= ~(1 << 13); // ISP clock bit 13
+    clkgr0_new &= ~(1 << 21); // Alternative ISP position
+    clkgr0_new &= ~(1 << 7);  // Another possible ISP position
     
-    // Write back the modified values
-    writel(clkgr0, cpm_regs + CPM_CLKGR0);
-    writel(clkgr1, cpm_regs + CPM_CLKGR1);
-    writel(opcr, cpm_regs + CPM_OPCR);
+    // VIC/CSI clock - try multiple bit positions
+    clkgr0_new &= ~(1 << 30); // VIC in CLKGR0
+    clkgr0_new &= ~(1 << 31); // Alternative VIC position
+    clkgr1_new &= ~(1 << 30); // VIC in CLKGR1
+    clkgr1_new &= ~(1 << 6);  // Alternative VIC position
+    
+    // Write the changes
+    writel(clkgr0_new, cpm_regs + CPM_CLKGR0);
+    writel(clkgr1_new, cpm_regs + CPM_CLKGR1);
     wmb();
     
     // Wait for clocks to stabilize
-    msleep(10);
+    msleep(20);
     
-    // Verify clock enables
+    // Verify clock changes
     clkgr0 = readl(cpm_regs + CPM_CLKGR0);
     clkgr1 = readl(cpm_regs + CPM_CLKGR1);
-    opcr = readl(cpm_regs + CPM_OPCR);
     
-    pr_info("T31 CPM after: CLKGR0=0x%x, CLKGR1=0x%x, OPCR=0x%x\n", clkgr0, clkgr1, opcr);
+    pr_info("T31 CPM after: CLKGR0=0x%x, CLKGR1=0x%x\n", clkgr0, clkgr1);
     
     iounmap(cpm_regs);
     
