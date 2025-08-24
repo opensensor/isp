@@ -2639,6 +2639,14 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
     if (kernel_subdev) {
         tx_sensor = container_of(kernel_subdev, struct tx_isp_sensor, sd);
         pr_info("Using kernel-registered sensor %s (subdev=%p)\n", reg_info.name, kernel_subdev);
+        pr_info("DEBUG: kernel_subdev=%p, tx_sensor=%p\n", kernel_subdev, tx_sensor);
+        if (tx_sensor) {
+            pr_info("DEBUG: tx_sensor->info.name=%s\n", tx_sensor->info.name);
+        } else {
+            pr_err("DEBUG: tx_sensor is NULL after container_of!\n");
+        }
+    } else {
+        pr_err("DEBUG: kernel_subdev is NULL!\n");
     }
     
     /* Create I2C device if interface type is I2C (matches reference) */
@@ -2670,6 +2678,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                 i2c_client->name, i2c_client->addr, adapter->name);
         
         /* CRITICAL: FORCE I2C client association with sensor subdev */
+        pr_info("DEBUG: About to check kernel_subdev=%p, tx_sensor=%p\n", kernel_subdev, tx_sensor);
         if (kernel_subdev && tx_sensor) {
             pr_info("*** FORCING I2C CLIENT ASSOCIATION ***\n");
             
@@ -2696,10 +2705,35 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                     kernel_subdev->vin_state = TX_ISP_MODULE_RUNNING;
                 }
             } else {
-                pr_warn("No sensor init operation available\n");
+                pr_warn("DEBUG: No sensor init operation - ops=%p\n", kernel_subdev ? kernel_subdev->ops : NULL);
+                if (kernel_subdev && kernel_subdev->ops) {
+                    pr_warn("DEBUG: ops->core=%p\n", kernel_subdev->ops->core);
+                    if (kernel_subdev->ops->core) {
+                        pr_warn("DEBUG: ops->core->init=%p\n", kernel_subdev->ops->core->init);
+                    }
+                }
             }
         } else {
-            pr_warn("I2C client data mismatch - subdev association failed\n");
+            pr_err("DEBUG: I2C client data mismatch - kernel_subdev=%p, tx_sensor=%p\n", kernel_subdev, tx_sensor);
+            
+            /* Try to force initialization anyway if we have kernel_subdev */
+            if (kernel_subdev) {
+                pr_info("*** ATTEMPTING FORCE INIT WITH KERNEL_SUBDEV ONLY ***\n");
+                i2c_set_clientdata(i2c_client, kernel_subdev);
+                isp_dev->sensor_i2c_client = i2c_client;
+                isp_dev->i2c_adapter = adapter;
+                
+                if (kernel_subdev->ops && kernel_subdev->ops->core &&
+                    kernel_subdev->ops->core->init) {
+                    pr_info("*** CALLING SENSOR INIT WITH KERNEL_SUBDEV ONLY ***\n");
+                    ret = kernel_subdev->ops->core->init(kernel_subdev, 1);
+                    pr_info("Force sensor init returned: %d\n", ret);
+                    if (ret == 0 || ret == 0xfffffdfd) {
+                        kernel_subdev->vin_state = TX_ISP_MODULE_RUNNING;
+                        pr_info("*** FORCE SENSOR INITIALIZATION COMPLETE ***\n");
+                    }
+                }
+            }
         }
         
     } else if (reg_info.interface_type == 2) {
