@@ -44,6 +44,10 @@ static dev_t isp_tuning_devno;
 static int isp_tuning_major = 0;
 static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 
+// Frame channel devices - create video channel devices like reference
+static struct miscdevice frame_channel_devices[4]; /* Support up to 4 video channels */
+static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
+
 // ISP Tuning IOCTLs from reference (0x20007400 series)
 #define ISP_TUNING_GET_PARAM    0x20007400
 #define ISP_TUNING_SET_PARAM    0x20007401
@@ -53,6 +57,11 @@ static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 #define ISP_TUNING_SET_AWB_INFO 0x20007407
 #define ISP_TUNING_GET_STATS    0x20007408
 #define ISP_TUNING_GET_STATS2   0x20007409
+
+// Forward declarations for frame channel devices
+static int frame_channel_open(struct inode *inode, struct file *file);
+static int frame_channel_release(struct inode *inode, struct file *file);
+static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
 // Helper functions matching reference driver patterns
 static void* find_subdev_link_pad(struct tx_isp_dev *isp_dev, char *name)
@@ -338,6 +347,15 @@ static const struct file_operations isp_tuning_fops = {
     .release = isp_tuning_release,
 };
 
+/* Frame channel device file operations */
+static const struct file_operations frame_channel_fops = {
+    .owner = THIS_MODULE,
+    .open = frame_channel_open,
+    .release = frame_channel_release,
+    .unlocked_ioctl = frame_channel_unlocked_ioctl,
+    .compat_ioctl = frame_channel_unlocked_ioctl,
+};
+
 // Create ISP tuning device node (reference: tisp_code_create_tuning_node)
 static int create_isp_tuning_device(void)
 {
@@ -403,6 +421,332 @@ static void destroy_isp_tuning_device(void)
         unregister_chrdev_region(isp_tuning_devno, 1);
         isp_tuning_class = NULL;
         pr_info("ISP tuning device destroyed\n");
+    }
+}
+
+// Frame channel device implementations - based on reference tx_isp_fs_probe
+static int frame_channel_open(struct inode *inode, struct file *file)
+{
+    int channel = iminor(inode);
+    pr_info("Frame channel %d opened\n", channel);
+    
+    // Reference implementation checks channel state and initializes buffers
+    // In frame_channel_open: checks if channel state < 2, sets to 3
+    // Initializes completion, clears buffers, etc.
+    
+    return 0;
+}
+
+static int frame_channel_release(struct inode *inode, struct file *file)
+{
+    int channel = iminor(inode);
+    pr_info("Frame channel %d released\n", channel);
+    
+    // Reference implementation cleans up channel resources
+    // Frees buffers, resets state, etc.
+    
+    return 0;
+}
+
+static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    void __user *argp = (void __user *)arg;
+    int channel = iminor(file_inode(file));
+    
+    pr_info("Frame channel %d IOCTL: cmd=0x%x\n", channel, cmd);
+    
+    // Reference implementation handles many IOCTLs:
+    // 0xc044560f - VIDIOC_QBUF (queue buffer)
+    // 0xc0445609 - VIDIOC_DQBUF (dequeue buffer)
+    // 0xc0145608 - VIDIOC_REQBUFS (request buffers)
+    // 0x80045612 - VIDIOC_STREAMON (start streaming)
+    // 0x80045613 - VIDIOC_STREAMOFF (stop streaming)
+    // 0x407056c4 - VIDIOC_G_FMT (get format)
+    // 0xc07056c3 - VIDIOC_S_FMT (set format)
+    // 0x400456bf - Wait for completion
+    // 0x800456c5 - Frame done event
+    
+    switch (cmd) {
+    case 0xc0145608: { // VIDIOC_REQBUFS - Request buffers
+        struct v4l2_requestbuffers {
+            uint32_t count;
+            uint32_t type;
+            uint32_t memory;
+            uint32_t capabilities;
+            uint32_t reserved[1];
+        } reqbuf;
+        
+        if (copy_from_user(&reqbuf, argp, sizeof(reqbuf)))
+            return -EFAULT;
+            
+        pr_info("Channel %d: Request %d buffers, type=%d memory=%d\n",
+                channel, reqbuf.count, reqbuf.type, reqbuf.memory);
+                
+        // Reference allocates video buffers based on count
+        // For now, acknowledge the request
+        reqbuf.count = min(reqbuf.count, 8U); // Limit to 8 buffers
+        
+        if (copy_to_user(argp, &reqbuf, sizeof(reqbuf)))
+            return -EFAULT;
+            
+        return 0;
+    }
+    case 0xc044560f: { // VIDIOC_QBUF - Queue buffer
+        struct v4l2_buffer {
+            uint32_t index;
+            uint32_t type;
+            uint32_t bytesused;
+            uint32_t flags;
+            uint32_t field;
+            struct timeval timestamp;
+            struct v4l2_timecode timecode;
+            uint32_t sequence;
+            uint32_t memory;
+            union {
+                uint32_t offset;
+                unsigned long userptr;
+                void *planes;
+            } m;
+            uint32_t length;
+            uint32_t reserved2;
+            uint32_t reserved;
+        } buffer;
+        
+        if (copy_from_user(&buffer, argp, sizeof(buffer)))
+            return -EFAULT;
+            
+        pr_info("Channel %d: Queue buffer index=%d\n", channel, buffer.index);
+        
+        // Reference queues buffer for video capture
+        // Sets buffer state, adds to ready queue, etc.
+        
+        return 0;
+    }
+    case 0xc0445609: { // VIDIOC_DQBUF - Dequeue buffer
+        struct v4l2_buffer {
+            uint32_t index;
+            uint32_t type;
+            uint32_t bytesused;
+            uint32_t flags;
+            uint32_t field;
+            struct timeval timestamp;
+            struct v4l2_timecode timecode;
+            uint32_t sequence;
+            uint32_t memory;
+            union {
+                uint32_t offset;
+                unsigned long userptr;
+                void *planes;
+            } m;
+            uint32_t length;
+            uint32_t reserved2;
+            uint32_t reserved;
+        } buffer;
+        
+        if (copy_from_user(&buffer, argp, sizeof(buffer)))
+            return -EFAULT;
+            
+        pr_info("Channel %d: Dequeue buffer request\n", channel);
+        
+        // Reference waits for completed buffer and returns it
+        // For now, return dummy buffer data
+        buffer.index = 0;
+        buffer.bytesused = 1920 * 1080 * 3 / 2; // YUV420 size
+        buffer.flags = 0x1; // V4L2_BUF_FLAG_MAPPED
+        buffer.sequence = 0;
+        
+        if (copy_to_user(argp, &buffer, sizeof(buffer)))
+            return -EFAULT;
+            
+        return 0;
+    }
+    case 0x80045612: { // VIDIOC_STREAMON - Start streaming
+        uint32_t type;
+        
+        if (copy_from_user(&type, argp, sizeof(type)))
+            return -EFAULT;
+            
+        pr_info("Channel %d: Stream ON, type=%d\n", channel, type);
+        
+        // Reference enables video streaming for this channel
+        // Sets streaming state, starts DMA, etc.
+        
+        return 0;
+    }
+    case 0x80045613: { // VIDIOC_STREAMOFF - Stop streaming
+        uint32_t type;
+        
+        if (copy_from_user(&type, argp, sizeof(type)))
+            return -EFAULT;
+            
+        pr_info("Channel %d: Stream OFF, type=%d\n", channel, type);
+        
+        // Reference disables video streaming for this channel
+        // Stops DMA, clears buffers, etc.
+        
+        return 0;
+    }
+    case 0x407056c4: { // VIDIOC_G_FMT - Get format
+        struct v4l2_format {
+            uint32_t type;
+            union {
+                struct {
+                    uint32_t width;
+                    uint32_t height;
+                    uint32_t pixelformat;
+                    uint32_t field;
+                    uint32_t bytesperline;
+                    uint32_t sizeimage;
+                    uint32_t colorspace;
+                    uint32_t priv;
+                } pix;
+                uint8_t raw_data[200];
+            } fmt;
+        } format;
+        
+        if (copy_from_user(&format, argp, sizeof(format)))
+            return -EFAULT;
+            
+        pr_info("Channel %d: Get format, type=%d\n", channel, format.type);
+        
+        // Set default HD format
+        format.fmt.pix.width = 1920;
+        format.fmt.pix.height = 1080;
+        format.fmt.pix.pixelformat = 0x3231564e; // NV12 format
+        format.fmt.pix.field = 1; // V4L2_FIELD_NONE
+        format.fmt.pix.bytesperline = 1920;
+        format.fmt.pix.sizeimage = 1920 * 1080 * 3 / 2;
+        format.fmt.pix.colorspace = 8; // V4L2_COLORSPACE_REC709
+        
+        if (copy_to_user(argp, &format, sizeof(format)))
+            return -EFAULT;
+            
+        return 0;
+    }
+    case 0xc07056c3: { // VIDIOC_S_FMT - Set format
+        struct v4l2_format {
+            uint32_t type;
+            union {
+                struct {
+                    uint32_t width;
+                    uint32_t height;
+                    uint32_t pixelformat;
+                    uint32_t field;
+                    uint32_t bytesperline;
+                    uint32_t sizeimage;
+                    uint32_t colorspace;
+                    uint32_t priv;
+                } pix;
+                uint8_t raw_data[200];
+            } fmt;
+        } format;
+        
+        if (copy_from_user(&format, argp, sizeof(format)))
+            return -EFAULT;
+            
+        pr_info("Channel %d: Set format %dx%d pixfmt=0x%x\n",
+                channel, format.fmt.pix.width, format.fmt.pix.height, format.fmt.pix.pixelformat);
+        
+        // Reference validates and configures the format
+        // For now, acknowledge the format set
+        
+        return 0;
+    }
+    case 0x400456bf: { // Frame completion wait
+        uint32_t result = 1; // Frame ready
+        
+        pr_info("Channel %d: Frame completion wait\n", channel);
+        
+        // Reference waits for frame completion event
+        // For now, immediately return success
+        
+        if (copy_to_user(argp, &result, sizeof(result)))
+            return -EFAULT;
+            
+        return 0;
+    }
+    case 0x800456c5: { // Frame done event
+        uint32_t event_data;
+        
+        if (copy_from_user(&event_data, argp, sizeof(event_data)))
+            return -EFAULT;
+            
+        pr_info("Channel %d: Frame done event, data=0x%x\n", channel, event_data);
+        
+        // Reference processes frame completion event
+        // Signals waiting threads, updates statistics, etc.
+        
+        return 0;
+    }
+    default:
+        pr_info("Channel %d: Unhandled IOCTL 0x%x\n", channel, cmd);
+        return -ENOTTY;
+    }
+    
+    return 0;
+}
+
+// Create frame channel devices - based on reference tx_isp_fs_probe
+static int create_frame_channel_devices(void)
+{
+    int ret, i;
+    char device_name[16];
+    
+    pr_info("Creating %d frame channel devices...\n", num_channels);
+    
+    for (i = 0; i < num_channels; i++) {
+        // Reference creates devices like "video0", "video1" etc.
+        // But some systems expect "video%d" devices to be created by V4L2
+        // For TX-ISP, reference uses names that match framesource expectations
+        snprintf(device_name, sizeof(device_name), "video%d", i);
+        
+        frame_channel_devices[i].minor = MISC_DYNAMIC_MINOR;
+        frame_channel_devices[i].name = kstrdup(device_name, GFP_KERNEL);
+        frame_channel_devices[i].fops = &frame_channel_fops;
+        
+        if (!frame_channel_devices[i].name) {
+            pr_err("Failed to allocate name for channel %d\n", i);
+            ret = -ENOMEM;
+            goto cleanup;
+        }
+        
+        ret = misc_register(&frame_channel_devices[i]);
+        if (ret < 0) {
+            pr_err("Failed to register frame channel %d: %d\n", i, ret);
+            kfree(frame_channel_devices[i].name);
+            frame_channel_devices[i].name = NULL;
+            goto cleanup;
+        }
+        
+        pr_info("Frame channel device created: /dev/%s\n", device_name);
+    }
+    
+    return 0;
+    
+cleanup:
+    // Clean up already created devices
+    for (i = i - 1; i >= 0; i--) {
+        if (frame_channel_devices[i].name) {
+            misc_deregister(&frame_channel_devices[i]);
+            kfree(frame_channel_devices[i].name);
+            frame_channel_devices[i].name = NULL;
+        }
+    }
+    return ret;
+}
+
+// Destroy frame channel devices
+static void destroy_frame_channel_devices(void)
+{
+    int i;
+    
+    for (i = 0; i < num_channels; i++) {
+        if (frame_channel_devices[i].name) {
+            misc_deregister(&frame_channel_devices[i]);
+            kfree(frame_channel_devices[i].name);
+            frame_channel_devices[i].name = NULL;
+            pr_info("Frame channel device %d destroyed\n", i);
+        }
     }
 }
 
@@ -1027,10 +1371,25 @@ static int tx_isp_init(void)
         goto err_free_dev;
     }
 
+    /* Create frame channel devices - required for video streaming */
+    ret = create_frame_channel_devices();
+    if (ret) {
+        pr_err("Failed to create frame channel devices: %d\n", ret);
+        destroy_isp_tuning_device();
+        tx_isp_proc_exit(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+
     pr_info("TX ISP driver initialized successfully\n");
     pr_info("Device nodes created:\n");
     pr_info("  /dev/tx-isp (major=10, minor=dynamic)\n");
     pr_info("  /dev/isp-m0 (major=%d, minor=0) - ISP tuning interface\n", isp_tuning_major);
+    for (ret = 0; ret < num_channels; ret++) {
+        pr_info("  /dev/video%d - Frame channel %d\n", ret, ret);
+    }
     pr_info("  /proc/jz/isp/isp-w02\n");
     
     return 0;
@@ -1057,6 +1416,9 @@ static void tx_isp_exit(void)
     mutex_unlock(&sensor_list_mutex);
 
     if (ourISPdev) {
+        /* Destroy frame channel devices */
+        destroy_frame_channel_devices();
+        
         /* Destroy ISP tuning device */
         destroy_isp_tuning_device();
         
