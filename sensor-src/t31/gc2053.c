@@ -1250,9 +1250,27 @@ int sensor_read(struct tx_isp_subdev *sd, unsigned char reg, unsigned char *valu
 		}
 	};
 	int ret;
+	
+	if (!client) {
+		ISP_ERROR("sensor_read: I2C client is NULL!\n");
+		return -ENODEV;
+	}
+	
+	if (!client->adapter) {
+		ISP_ERROR("sensor_read: I2C adapter is NULL!\n");
+		return -ENODEV;
+	}
+	
+	ISP_WARNING("sensor_read: reg=0x%02x, client=%p, adapter=%s, addr=0x%02x\n",
+	            reg, client, client->adapter->name, client->addr);
+	
 	ret = private_i2c_transfer(client->adapter, msg, 2);
-	if (ret > 0)
+	if (ret > 0) {
 		ret = 0;
+		ISP_WARNING("sensor_read: reg=0x%02x value=0x%02x SUCCESS\n", reg, *value);
+	} else {
+		ISP_ERROR("sensor_read: reg=0x%02x FAILED ret=%d\n", reg, ret);
+	}
 
 	return ret;
 }
@@ -1267,9 +1285,27 @@ int sensor_write(struct tx_isp_subdev *sd, unsigned char reg, unsigned char valu
 		.buf = buf,
 	};
 	int ret;
+	
+	if (!client) {
+		ISP_ERROR("sensor_write: I2C client is NULL!\n");
+		return -ENODEV;
+	}
+	
+	if (!client->adapter) {
+		ISP_ERROR("sensor_write: I2C adapter is NULL!\n");
+		return -ENODEV;
+	}
+	
+	ISP_WARNING("sensor_write: reg=0x%02x val=0x%02x, client=%p, adapter=%s, addr=0x%02x\n",
+	            reg, value, client, client->adapter->name, client->addr);
+	
 	ret = private_i2c_transfer(client->adapter, &msg, 1);
-	if (ret > 0)
+	if (ret > 0) {
 		ret = 0;
+		ISP_WARNING("sensor_write: reg=0x%02x val=0x%02x SUCCESS\n", reg, value);
+	} else {
+		ISP_ERROR("sensor_write: reg=0x%02x val=0x%02x FAILED ret=%d\n", reg, value, ret);
+	}
 
 	return ret;
 }
@@ -1294,17 +1330,38 @@ static int sensor_read_array(struct tx_isp_subdev *sd, struct regval_list *vals)
 
 static int sensor_write_array(struct tx_isp_subdev *sd, struct regval_list *vals) {
 	int ret;
+	int reg_count = 0;
+	int error_count = 0;
+	
+	ISP_WARNING("sensor_write_array: Starting register configuration\n");
+	
 	while (vals->reg_num != SENSOR_REG_END) {
 		if (vals->reg_num == SENSOR_REG_DELAY) {
+			ISP_WARNING("sensor_write_array: Delay %dms\n", vals->value);
 			private_msleep(vals->value);
 		} else {
 			ret = sensor_write(sd, vals->reg_num, vals->value);
-			if (ret < 0)
-				return ret;
+			reg_count++;
+			if (ret < 0) {
+				error_count++;
+				ISP_ERROR("sensor_write_array: Failed to write reg 0x%02x=0x%02x (error %d)\n",
+				          vals->reg_num, vals->value, ret);
+				if (error_count > 10) {
+					ISP_ERROR("sensor_write_array: Too many errors, stopping\n");
+					return ret;
+				}
+			} else if (reg_count <= 10 || (reg_count % 50) == 0) {
+				/* Log first 10 registers and every 50th register to avoid spam */
+				ISP_WARNING("sensor_write_array: reg[%d] 0x%02x=0x%02x OK\n",
+				            reg_count, vals->reg_num, vals->value);
+			}
 		}
 		vals++;
 	}
-	return 0;
+	
+	ISP_WARNING("sensor_write_array: Complete - wrote %d registers, %d errors\n",
+	            reg_count, error_count);
+	return error_count > 0 ? -EIO : 0;
 }
 
 static int sensor_reset(struct tx_isp_subdev *sd, int val) {
@@ -1312,25 +1369,48 @@ static int sensor_reset(struct tx_isp_subdev *sd, int val) {
 }
 
 static int sensor_detect(struct tx_isp_subdev *sd, unsigned int *ident) {
+	struct i2c_client *client = tx_isp_get_subdevdata(sd);
 	unsigned char v;
 	int ret;
+	
+	ISP_WARNING("=== SENSOR DETECT START ===\n");
+	ISP_WARNING("sensor_detect: sd=%p, client=%p\n", sd, client);
+	if (client) {
+		ISP_WARNING("sensor_detect: client->addr=0x%02x, adapter=%p (%s)\n",
+		            client->addr, client->adapter,
+		            client->adapter ? client->adapter->name : "NULL");
+	}
+	
 	ret = sensor_read(sd, 0xf0, &v);
-	ISP_WARNING("-----%s: %d ret = %d, v = 0x%02x\n", __func__, __LINE__, ret, v);
-	if (ret < 0)
+	ISP_WARNING("-----%s: %d ret = %d, v = 0x%02x (expected 0x%02x)\n",
+	            __func__, __LINE__, ret, v, SENSOR_CHIP_ID_H);
+	if (ret < 0) {
+		ISP_ERROR("sensor_detect: Failed to read chip ID high byte\n");
 		return ret;
+	}
 
-	if (v != SENSOR_CHIP_ID_H)
+	if (v != SENSOR_CHIP_ID_H) {
+		ISP_ERROR("sensor_detect: Wrong chip ID high: got 0x%02x, expected 0x%02x\n",
+		          v, SENSOR_CHIP_ID_H);
 		return -ENODEV;
+	}
 
 	ret = sensor_read(sd, 0xf1, &v);
-	ISP_WARNING("-----%s: %d ret = %d, v = 0x%02x\n", __func__, __LINE__, ret, v);
-	if (ret < 0)
+	ISP_WARNING("-----%s: %d ret = %d, v = 0x%02x (expected 0x%02x)\n",
+	            __func__, __LINE__, ret, v, SENSOR_CHIP_ID_L);
+	if (ret < 0) {
+		ISP_ERROR("sensor_detect: Failed to read chip ID low byte\n");
 		return ret;
+	}
 
-	if (v != SENSOR_CHIP_ID_L)
+	if (v != SENSOR_CHIP_ID_L) {
+		ISP_ERROR("sensor_detect: Wrong chip ID low: got 0x%02x, expected 0x%02x\n",
+		          v, SENSOR_CHIP_ID_L);
 		return -ENODEV;
+	}
 
 	*ident = (*ident << 8) | v;
+	ISP_WARNING("sensor_detect: SUCCESS - chip ID = 0x%04x\n", *ident);
 	return 0;
 }
 
@@ -1433,30 +1513,42 @@ static int sensor_s_stream(struct tx_isp_subdev *sd, int enable) {
 	int ret = 0;
 	
 	ISP_WARNING("%s: s_stream called with enable=%d\n", SENSOR_NAME, enable);
+	ISP_WARNING("%s: data_interface=%d (1=DVP, 2=MIPI)\n", SENSOR_NAME, data_interface);
 	
 	if (enable) {
 		/* Start sensor hardware streaming */
-		ISP_WARNING("%s: Starting sensor hardware streaming\n", SENSOR_NAME);
+		ISP_WARNING("%s: *** STARTING SENSOR HARDWARE STREAMING ***\n", SENSOR_NAME);
+		ISP_WARNING("%s: About to write streaming registers\n", SENSOR_NAME);
 		
 		/* Write streaming registers based on interface */
 		if (data_interface == TX_SENSOR_DATA_INTERFACE_DVP) {
+			ISP_WARNING("%s: Writing DVP stream ON registers\n", SENSOR_NAME);
 			ret = sensor_write_array(sd, sensor_stream_on_dvp);
 		} else if (data_interface == TX_SENSOR_DATA_INTERFACE_MIPI) {
+			ISP_WARNING("%s: *** WRITING MIPI STREAM ON REGISTERS - INCLUDING 0x3e=0x91 ***\n", SENSOR_NAME);
 			ret = sensor_write_array(sd, sensor_stream_on_mipi);
+			ISP_WARNING("%s: *** MIPI STREAM ON REGISTER WRITE COMPLETE, ret=%d ***\n", SENSOR_NAME, ret);
+		} else {
+			ISP_ERROR("%s: *** UNKNOWN DATA INTERFACE %d - CANNOT START STREAMING! ***\n", SENSOR_NAME, data_interface);
+			return -EINVAL;
 		}
 		
 		if (ret) {
-			ISP_ERROR("%s: Failed to start streaming: %d\n", SENSOR_NAME, ret);
+			ISP_ERROR("%s: *** FAILED TO WRITE STREAMING REGISTERS: %d ***\n", SENSOR_NAME, ret);
+			ISP_ERROR("%s: CRITICAL: 0x3e=0x91 was NOT written! Sensor will not output data!\n", SENSOR_NAME);
 		} else {
-			ISP_WARNING("%s: Sensor hardware streaming started successfully\n", SENSOR_NAME);
+			ISP_WARNING("%s: *** STREAMING REGISTERS WRITTEN SUCCESSFULLY ***\n", SENSOR_NAME);
+			ISP_WARNING("%s: CRITICAL: 0x3e=0x91 should now be written - sensor outputting MIPI data\n", SENSOR_NAME);
 		}
 	} else {
 		/* Stop sensor hardware streaming */
-		ISP_WARNING("%s: Stopping sensor hardware streaming\n", SENSOR_NAME);
+		ISP_WARNING("%s: *** STOPPING SENSOR HARDWARE STREAMING ***\n", SENSOR_NAME);
 		
 		if (data_interface == TX_SENSOR_DATA_INTERFACE_DVP) {
+			ISP_WARNING("%s: Writing DVP stream OFF registers\n", SENSOR_NAME);
 			ret = sensor_write_array(sd, sensor_stream_off_dvp);
 		} else if (data_interface == TX_SENSOR_DATA_INTERFACE_MIPI) {
+			ISP_WARNING("%s: Writing MIPI stream OFF registers (0x3e=0x00)\n", SENSOR_NAME);
 			ret = sensor_write_array(sd, sensor_stream_off_mipi);
 		}
 		
@@ -1754,6 +1846,13 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	struct tx_isp_video_in *video;
 	struct tx_isp_sensor *sensor;
 	int ret;
+	
+	ISP_WARNING("=== GC2053 SENSOR PROBE START ===\n");
+	ISP_WARNING("sensor_probe: client=%p, addr=0x%02x, adapter=%p (%s)\n",
+	            client, client ? client->addr : 0,
+	            client ? client->adapter : NULL,
+	            (client && client->adapter) ? client->adapter->name : "NULL");
+	
 	sensor = (struct tx_isp_sensor *) kzalloc(sizeof(*sensor), GFP_KERNEL);
 	if (!sensor) {
 		ISP_ERROR("Failed to allocate sensor subdev.\n");
@@ -1769,6 +1868,9 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	sensor->info.cbus_type = TX_SENSOR_CONTROL_INTERFACE_I2C;
 	sensor->info.i2c.i2c_adapter_id = 0;
 	sensor->info.i2c.addr = SENSOR_I2C_ADDRESS;
+	
+	ISP_WARNING("sensor_probe: Initialized sensor info - name=%s, i2c_addr=0x%02x\n",
+	            sensor->info.name, sensor->info.i2c.addr);
 	
 	sensor->mclk = clk_get(NULL, "cgu_cim");
 	if (IS_ERR(sensor->mclk)) {
@@ -1891,9 +1993,24 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	sensor->video.mbus.colorspace = wsize->colorspace;
 	sensor->video.fps = wsize->fps;
 	tx_isp_subdev_init(&sensor_platform_device, sd, &sensor_ops);
+	
+	/* CRITICAL: Associate I2C client with subdev */
 	tx_isp_set_subdevdata(sd, client);
 	tx_isp_set_subdev_hostdata(sd, sensor);
 	private_i2c_set_clientdata(client, sd);
+	
+	ISP_WARNING("sensor_probe: I2C client association complete\n");
+	ISP_WARNING("  sd=%p, client=%p, addr=0x%02x, adapter=%s\n",
+	            sd, client, client->addr, client->adapter->name);
+	
+	/* Test I2C communication immediately */
+	ISP_WARNING("sensor_probe: Testing I2C communication...\n");
+	{
+		unsigned char test_val;
+		int test_ret = sensor_read(sd, 0xf0, &test_val);
+		ISP_WARNING("sensor_probe: I2C test read result: ret=%d, val=0x%02x\n",
+		            test_ret, test_val);
+	}
 	
 	/* Register sensor with ISP framework to link operations */
 	ISP_WARNING("Registering %s with ISP framework (sd=%p, sensor=%p)\n",
