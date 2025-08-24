@@ -53,8 +53,10 @@ static int isp_memopt = 0; // Memory optimization flag like reference
 
 /* Forward declarations */
 struct frame_channel_device; /* Forward declare struct */
+struct tx_isp_vic_device; /* Forward declare VIC device */
 static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
 static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data);
+static void vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static void init_frame_simulation(void);
 static void stop_frame_simulation(void);
 static int tx_isp_send_event_to_remote_internal(void *subdev, int event_type, void *data);
@@ -208,23 +210,13 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     
     pr_info("Mapping ISP/VIC registers...\n");
     
-    // Map ISP registers
-    isp_dev->isp_regs = ioremap(T31_ISP_BASE_ADDR, T31_ISP_REG_SIZE);
-    if (!isp_dev->isp_regs) {
-        pr_warn("Failed to map ISP registers at 0x%x\n", T31_ISP_BASE_ADDR);
-    } else {
-        pr_info("ISP registers mapped at %p (phys: 0x%x)\n",
-                isp_dev->isp_regs, T31_ISP_BASE_ADDR);
-    }
+    // Note: Using VIC registers for ISP functionality - ISP regs not in SDK structure
+    pr_info("Using VIC registers for ISP/VIC functionality\n");
     
     // Map VIC registers
     isp_dev->vic_regs = ioremap(T31_VIC_BASE_ADDR, T31_VIC_REG_SIZE);
     if (!isp_dev->vic_regs) {
         pr_warn("Failed to map VIC registers at 0x%x\n", T31_VIC_BASE_ADDR);
-        if (isp_dev->isp_regs) {
-            iounmap(isp_dev->isp_regs);
-            isp_dev->isp_regs = NULL;
-        }
         return -ENOMEM;
     } else {
         pr_info("VIC registers mapped at %p (phys: 0x%x)\n",
@@ -264,10 +256,6 @@ static int tx_isp_init_vic_subdev(struct tx_isp_dev *isp_dev)
         if (isp_dev->vic_regs) {
             iounmap(isp_dev->vic_regs);
             isp_dev->vic_regs = NULL;
-        }
-        if (isp_dev->isp_regs) {
-            iounmap(isp_dev->isp_regs);
-            isp_dev->isp_regs = NULL;
         }
         return -ENOMEM;
     }
@@ -2288,12 +2276,6 @@ static void tx_isp_exit(void)
             pr_info("VIC registers unmapped\n");
         }
         
-        if (ourISPdev->isp_regs) {
-            iounmap(ourISPdev->isp_regs);
-            ourISPdev->isp_regs = NULL;
-            pr_info("ISP registers unmapped\n");
-        }
-        
         /* Clean up sensor if present */
         if (ourISPdev->sensor) {
             struct tx_isp_sensor *sensor = ourISPdev->sensor;
@@ -2461,10 +2443,12 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
         /* Queue buffer for VIC processing */
         if (data) {
             int channel = *(int*)data;
+            struct list_head *buffer_entry;
+            
             pr_debug("VIC: Queue buffer event for channel %d\n", channel);
             
             // Create a dummy buffer entry for the queue
-            struct list_head *buffer_entry = kmalloc(sizeof(struct list_head), GFP_ATOMIC);
+            buffer_entry = kmalloc(sizeof(struct list_head), GFP_ATOMIC);
             if (buffer_entry) {
                 INIT_LIST_HEAD(buffer_entry);
                 ispvic_frame_channel_qbuf(vic_dev, buffer_entry);
@@ -2505,11 +2489,8 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
         // Start continuous frame generation for active channels
         vic_framedone_irq_function(vic_dev);
         
-        // Also ensure the fallback frame generation is active
-        // This provides continuous frames even if hardware interrupts aren't working
-        if (!timer_pending(&frame_sim_timer)) {
-            mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
-        }
+        // Continuous frame generation is handled by work queue above
+        pr_debug("VIC: Continuous frame generation activated\n");
         
         return 0;
     }
