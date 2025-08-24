@@ -323,6 +323,7 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     #define CPM_CLKGR0          0x20
     #define CPM_CLKGR1          0x28
     #define CPM_OPCR            0x24
+    #define CPM_RESET_REG       0xc4    // Reset control register
     
     void __iomem *cpm_regs = NULL;
     u32 clkgr0, clkgr1, opcr;
@@ -433,6 +434,50 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         clkgr1 = readl(cpm_regs + CPM_CLKGR1);
         
         pr_info("T31 CPM after: CLKGR0=0x%x, CLKGR1=0x%x\n", clkgr0, clkgr1);
+    }
+    
+    // CRITICAL: Reset TX-ISP module before VIC access (discovered from private_reset_tx_isp_module)
+    pr_info("*** RESETTING TX-ISP MODULE FOR VIC ACCESS ***\n");
+    {
+        u32 reset_reg;
+        int timeout = 500; // 1000ms timeout like reference
+        
+        // Read current reset register
+        reset_reg = readl(cpm_regs + CPM_RESET_REG);
+        pr_info("CPM reset register before: 0x%x\n", reset_reg);
+        
+        // STEP 1: Set reset bit 0x200000 (bit 21) to start reset
+        reset_reg |= 0x200000;
+        writel(reset_reg, cpm_regs + CPM_RESET_REG);
+        wmb();
+        pr_info("TX-ISP reset initiated (set bit 21)\n");
+        
+        // STEP 2: Wait for ready bit 0x100000 (bit 20) to indicate reset completion
+        while (timeout-- > 0) {
+            reset_reg = readl(cpm_regs + CPM_RESET_REG);
+            if ((reset_reg & 0x100000) != 0) {
+                pr_info("TX-ISP reset ready detected (bit 20 set)\n");
+                break;
+            }
+            msleep(2); // 2ms delay like reference
+        }
+        
+        if (timeout <= 0) {
+            pr_err("TX-ISP reset timeout! Register=0x%x\n", reset_reg);
+        } else {
+            // STEP 3: Release reset - set bit 22 (0x400000) and clear bit 21 (0x200000)
+            reset_reg = (reset_reg & 0xffdfffff) | 0x400000; // Clear bit 21, set bit 22
+            writel(reset_reg, cpm_regs + CPM_RESET_REG);
+            wmb();
+            
+            // STEP 4: Clear release bit 22 (0x400000)
+            reset_reg &= 0xffbfffff;
+            writel(reset_reg, cpm_regs + CPM_RESET_REG);
+            wmb();
+            
+            pr_info("TX-ISP reset sequence complete (cleared all reset bits)\n");
+            pr_info("CPM reset register after: 0x%x\n", readl(cpm_regs + CPM_RESET_REG));
+        }
     }
     
     iounmap(cpm_regs);
