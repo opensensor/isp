@@ -2333,7 +2333,7 @@ static int tx_isp_init(void)
     pr_info("TX ISP driver initializing...\n");
 
     /* Step 1: Check driver interface (matches reference) */
-    gpio_mode_check = private_driver_get_interface();
+    gpio_mode_check = 0;  // Always return success for standard kernel
     if (gpio_mode_check != 0) {
         pr_err("VIC_CTRL : %08x\n", gpio_mode_check);
         return gpio_mode_check;
@@ -2674,8 +2674,8 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
     if (!reg_sensor) {
         mutex_unlock(&sensor_list_mutex);
         if (i2c_client) {
-            private_i2c_unregister_device(i2c_client);
-            private_i2c_put_adapter(adapter);
+            i2c_unregister_device(i2c_client);
+            i2c_put_adapter(adapter);
         }
         return -ENOMEM;
     }
