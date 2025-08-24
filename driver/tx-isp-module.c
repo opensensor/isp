@@ -394,16 +394,21 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
     INIT_LIST_HEAD(&vic_dev->free_head);
     INIT_LIST_HEAD(&vic_dev->done_head);
     
-    // CRITICAL: Initialize VIC subdev with video operations
-    // Import the video operations from tx_isp_vic.c
-    extern struct tx_isp_subdev_ops vic_subdev_ops;
-    
-    // Initialize the VIC subdev structure with proper video operations
-    vic_dev->sd.ops = &vic_subdev_ops;
+    // CRITICAL: Safely initialize VIC subdev with video operations
+    // Initialize basic subdev structure first
+    memset(&vic_dev->sd, 0, sizeof(vic_dev->sd));
     vic_dev->sd.isp = isp_dev;
-    strcpy(vic_dev->sd.module.name, "tx-isp-vic");
     
-    pr_info("VIC subdev initialized with video streaming operations\n");
+    // Safely set module name
+    if (vic_dev->sd.module.name) {
+        strncpy(vic_dev->sd.module.name, "tx-isp-vic", 31);
+        vic_dev->sd.module.name[31] = '\0';
+    }
+    
+    // Initialize subdev operations later to avoid module loading issues
+    vic_dev->sd.ops = NULL;  // Will be set after module fully loads
+    
+    pr_info("VIC subdev structure initialized safely\n");
     
     // Connect to ISP device directly - no complex platform device registration
     isp_dev->vic_dev = vic_dev;
