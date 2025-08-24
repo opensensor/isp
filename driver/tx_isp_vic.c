@@ -609,16 +609,74 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
+/* VIC video streaming operations - matching reference driver vic_core_s_stream */
+static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
+{
+    struct vic_device *vic_dev;
+    int ret = 0;
+    
+    if (!sd) {
+        pr_err("VIC s_stream: NULL subdev\n");
+        return -EINVAL;
+    }
+    
+    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    if (!vic_dev) {
+        pr_err("VIC s_stream: NULL vic_dev\n");
+        return -EINVAL;
+    }
+    
+    pr_info("VIC s_stream: enable=%d, current_state=%d\n", enable, vic_dev->state);
+    
+    mutex_lock(&vic_dev->state_lock);
+    
+    if (enable) {
+        /* Start VIC streaming - call tx_isp_vic_start like reference driver */
+        if (vic_dev->state != 4) { /* Not already streaming */
+            pr_info("VIC: Starting streaming - calling tx_isp_vic_start()\n");
+            ret = tx_isp_vic_start(sd);
+            if (ret == 0) {
+                vic_dev->state = 4; /* STREAMING state */
+                pr_info("VIC: Streaming started successfully, state -> 4\n");
+            } else {
+                pr_err("VIC: tx_isp_vic_start failed: %d\n", ret);
+            }
+        } else {
+            pr_info("VIC: Already streaming (state=%d)\n", vic_dev->state);
+        }
+    } else {
+        /* Stop VIC streaming */
+        if (vic_dev->state == 4) { /* Currently streaming */
+            pr_info("VIC: Stopping streaming - calling tx_isp_vic_stop()\n");
+            ret = tx_isp_vic_stop(sd);
+            if (ret == 0) {
+                vic_dev->state = 3; /* ACTIVE but not streaming */
+                pr_info("VIC: Streaming stopped, state -> 3\n");
+            }
+        } else {
+            pr_info("VIC: Not streaming (state=%d)\n", vic_dev->state);
+        }
+    }
+    
+    mutex_unlock(&vic_dev->state_lock);
+    return ret;
+}
+
+/* Define VIC video operations */
+static struct tx_isp_subdev_video_ops vic_video_ops = {
+    .s_stream = vic_video_s_stream,
+};
+
 /* Define the core operations */
 static struct tx_isp_subdev_core_ops vic_core_ops = {
     .init = vic_core_ops_init,
 };
 
-/* Initialize the subdev ops structure with core operations */
+/* Initialize the subdev ops structure with video operations */
 static struct tx_isp_subdev_ops vic_subdev_ops = {
     .core = &vic_core_ops,
-    .video = NULL,      /* No video ops for VIC */
-    .sensor = NULL,     /* No sensor ops for VIC */
+    .video = &vic_video_ops,    /* NOW VIC HAS VIDEO STREAMING! */
+    .sensor = NULL,             /* No sensor ops for VIC */
 };
 
 
