@@ -45,7 +45,13 @@ static int isp_tuning_major = 0;
 static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 
 // Frame channel devices - create video channel devices like reference
-static struct miscdevice frame_channel_devices[4]; /* Support up to 4 video channels */
+struct frame_channel_device {
+    struct miscdevice miscdev;
+    int channel_num;
+    struct tx_isp_channel_state state;
+};
+
+static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
 static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 
 /* Frame channel state management */
@@ -57,8 +63,6 @@ struct tx_isp_channel_state {
     int height;
     int buffer_count;
 };
-
-static struct tx_isp_channel_state channel_states[4];
 
 // ISP Tuning IOCTLs from reference (0x20007400 series)
 #define ISP_TUNING_GET_PARAM    0x20007400
@@ -439,32 +443,59 @@ static void destroy_isp_tuning_device(void)
 // Frame channel device implementations - based on reference tx_isp_fs_probe
 static int frame_channel_open(struct inode *inode, struct file *file)
 {
-    int channel = iminor(inode);
+    struct frame_channel_device *fcd = NULL;
+    int i;
     
-    if (channel >= num_channels) {
-        pr_err("Invalid frame channel %d\n", channel);
+    // Find which frame channel device this is by comparing the miscdevice
+    for (i = 0; i < num_channels; i++) {
+        if (file->f_op == frame_channels[i].miscdev.fops) {
+            // Check if the minor number matches (more reliable method)
+            if (iminor(inode) == frame_channels[i].miscdev.minor) {
+                fcd = &frame_channels[i];
+                break;
+            }
+        }
+    }
+    
+    if (!fcd) {
+        // Fallback: find by iterating and checking misc device
+        for (i = 0; i < num_channels; i++) {
+            if (&frame_channels[i].miscdev == file->private_data) {
+                fcd = &frame_channels[i];
+                break;
+            }
+        }
+    }
+    
+    if (!fcd) {
+        pr_err("Could not find frame channel device for minor %d\n", iminor(inode));
         return -EINVAL;
     }
     
-    pr_info("Frame channel %d opened\n", channel);
+    pr_info("Frame channel %d opened\n", fcd->channel_num);
     
     // Initialize channel state - reference sets state to 3 (ready)
-    channel_states[channel].enabled = false;
-    channel_states[channel].streaming = false;
-    channel_states[channel].format = 0x3231564e; // NV12 default
-    channel_states[channel].width = 1920;
-    channel_states[channel].height = 1080;
-    channel_states[channel].buffer_count = 0;
+    fcd->state.enabled = false;
+    fcd->state.streaming = false;
+    fcd->state.format = 0x3231564e; // NV12 default
+    fcd->state.width = 1920;
+    fcd->state.height = 1080;
+    fcd->state.buffer_count = 0;
     
-    file->private_data = &channel_states[channel];
+    file->private_data = fcd;
     
     return 0;
 }
 
 static int frame_channel_release(struct inode *inode, struct file *file)
 {
-    int channel = iminor(inode);
-    pr_info("Frame channel %d released\n", channel);
+    struct frame_channel_device *fcd = file->private_data;
+    
+    if (!fcd) {
+        return 0;
+    }
+    
+    pr_info("Frame channel %d released\n", fcd->channel_num);
     
     // Reference implementation cleans up channel resources
     // Frees buffers, resets state, etc.
@@ -475,13 +506,17 @@ static int frame_channel_release(struct inode *inode, struct file *file)
 static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     void __user *argp = (void __user *)arg;
-    int channel = iminor(file_inode(file));
-    struct tx_isp_channel_state *state = file->private_data;
+    struct frame_channel_device *fcd = file->private_data;
+    struct tx_isp_channel_state *state;
+    int channel;
     
-    if (channel >= num_channels || !state) {
-        pr_err("Invalid frame channel %d or state\n", channel);
+    if (!fcd) {
+        pr_err("Invalid frame channel device\n");
         return -EINVAL;
     }
+    
+    channel = fcd->channel_num;
+    state = &fcd->state;
     
     pr_info("Frame channel %d IOCTL: cmd=0x%x\n", channel, cmd);
     
@@ -775,34 +810,38 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
 static int create_frame_channel_devices(void)
 {
     int ret, i;
-    char device_name[16];
+    char *device_name;
     
     pr_info("Creating %d frame channel devices...\n", num_channels);
     
     for (i = 0; i < num_channels; i++) {
         // Reference creates devices like "num0", "num1" etc. based on framesource error
         // IMP_FrameSource_EnableChn looks for /dev/framechan%d devices (from decompiled code)
-        snprintf(device_name, sizeof(device_name), "framechan%d", i);
-        
-        frame_channel_devices[i].minor = MISC_DYNAMIC_MINOR;
-        frame_channel_devices[i].name = kstrdup(device_name, GFP_KERNEL);
-        frame_channel_devices[i].fops = &frame_channel_fops;
-        
-        if (!frame_channel_devices[i].name) {
+        device_name = kasprintf(GFP_KERNEL, "framechan%d", i);
+        if (!device_name) {
             pr_err("Failed to allocate name for channel %d\n", i);
             ret = -ENOMEM;
             goto cleanup;
         }
         
-        ret = misc_register(&frame_channel_devices[i]);
+        // Initialize frame channel structure
+        frame_channels[i].channel_num = i;
+        frame_channels[i].miscdev.minor = MISC_DYNAMIC_MINOR;
+        frame_channels[i].miscdev.name = device_name;
+        frame_channels[i].miscdev.fops = &frame_channel_fops;
+        
+        // Initialize channel state
+        memset(&frame_channels[i].state, 0, sizeof(frame_channels[i].state));
+        
+        ret = misc_register(&frame_channels[i].miscdev);
         if (ret < 0) {
             pr_err("Failed to register frame channel %d: %d\n", i, ret);
-            kfree(frame_channel_devices[i].name);
-            frame_channel_devices[i].name = NULL;
+            kfree(device_name);
             goto cleanup;
         }
         
-        pr_info("Frame channel device created: /dev/%s\n", device_name);
+        pr_info("Frame channel device created: /dev/%s (minor=%d)\n",
+                device_name, frame_channels[i].miscdev.minor);
     }
     
     return 0;
@@ -810,10 +849,10 @@ static int create_frame_channel_devices(void)
 cleanup:
     // Clean up already created devices
     for (i = i - 1; i >= 0; i--) {
-        if (frame_channel_devices[i].name) {
-            misc_deregister(&frame_channel_devices[i]);
-            kfree(frame_channel_devices[i].name);
-            frame_channel_devices[i].name = NULL;
+        if (frame_channels[i].miscdev.name) {
+            misc_deregister(&frame_channels[i].miscdev);
+            kfree(frame_channels[i].miscdev.name);
+            frame_channels[i].miscdev.name = NULL;
         }
     }
     return ret;
@@ -825,10 +864,10 @@ static void destroy_frame_channel_devices(void)
     int i;
     
     for (i = 0; i < num_channels; i++) {
-        if (frame_channel_devices[i].name) {
-            misc_deregister(&frame_channel_devices[i]);
-            kfree(frame_channel_devices[i].name);
-            frame_channel_devices[i].name = NULL;
+        if (frame_channels[i].miscdev.name) {
+            misc_deregister(&frame_channels[i].miscdev);
+            kfree(frame_channels[i].miscdev.name);
+            frame_channels[i].miscdev.name = NULL;
             pr_info("Frame channel device %d destroyed\n", i);
         }
     }
