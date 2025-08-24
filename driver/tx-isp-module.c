@@ -389,19 +389,67 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
                 isp_dev->vic_regs, T31_VIC_BASE_ADDR);
     }
     
-    // Test register access after system enable
+    // CRITICAL: Enable VIC register access using reference driver sequence
     if (isp_dev->vic_regs) {
-        u32 test_val = readl(isp_dev->vic_regs);
-        pr_info("VIC register test read after system enable: 0x%x\n", test_val);
+        pr_info("*** ENABLING VIC REGISTER ACCESS (REFERENCE SEQUENCE) ***\n");
         
-        // Try a test write to see if hardware responds
-        writel(0x5A5A5A5A, isp_dev->vic_regs + 0x4);
+        // STEP 1: Enable VIC register access mode (write 2 to register 0x0)
+        writel(2, isp_dev->vic_regs + 0x0);
         wmb();
-        u32 test_write = readl(isp_dev->vic_regs + 0x4);
-        pr_info("VIC register test write: wrote 0x5A5A5A5A, read back 0x%x\n", test_write);
+        pr_info("VIC: Enabled register access mode (wrote 2 to 0x0)\n");
         
-        // Clear test value
-        writel(0, isp_dev->vic_regs + 0x4);
+        // STEP 2: Set VIC configuration mode (write 4 to register 0x0)
+        writel(4, isp_dev->vic_regs + 0x0);
+        wmb();
+        pr_info("VIC: Set configuration mode (wrote 4 to 0x0)\n");
+        
+        // STEP 3: Wait for VIC ready state (register 0x0 becomes 0)
+        int timeout = 1000;
+        u32 vic_status;
+        while ((vic_status = readl(isp_dev->vic_regs + 0x0)) != 0 && timeout--) {
+            cpu_relax();
+        }
+        
+        if (timeout <= 0) {
+            pr_err("VIC ready timeout! Status=0x%x\n", vic_status);
+            return -ETIMEDOUT;
+        }
+        pr_info("VIC: Ready state achieved (register 0x0 = 0x%x)\n", vic_status);
+        
+        // STEP 4: Start VIC processing (write 1 to register 0x0)
+        writel(1, isp_dev->vic_regs + 0x0);
+        wmb();
+        pr_info("VIC: Started processing (wrote 1 to 0x0)\n");
+        
+        // STEP 5: NOW test register accessibility - should work!
+        pr_info("*** TESTING VIC REGISTER ACCESS AFTER ENABLEMENT ***\n");
+        
+        // Test VIC control register 0xc (MIPI mode)
+        writel(3, isp_dev->vic_regs + 0xc);
+        wmb();
+        u32 ctrl_test = readl(isp_dev->vic_regs + 0xc);
+        pr_info("VIC CRITICAL TEST: wrote 3 to ctrl reg 0xc, read back 0x%x\n", ctrl_test);
+        
+        if (ctrl_test == 3) {
+            pr_info("*** SUCCESS! VIC REGISTERS ARE NOW ACCESSIBLE! ***\n");
+        } else {
+            pr_err("*** FAILED! VIC registers still unresponsive (expected 3, got 0x%x) ***\n", ctrl_test);
+        }
+        
+        // Test frame dimensions register
+        u32 test_dims = (1920 << 16) | 1080;
+        writel(test_dims, isp_dev->vic_regs + 0x4);
+        wmb();
+        u32 dims_test = readl(isp_dev->vic_regs + 0x4);
+        pr_info("VIC dims test: wrote 0x%x, read back 0x%x\n", test_dims, dims_test);
+        
+        // Test MIPI configuration register
+        writel(0x40000, isp_dev->vic_regs + 0x10);
+        wmb();
+        u32 mipi_test = readl(isp_dev->vic_regs + 0x10);
+        pr_info("VIC MIPI test: wrote 0x40000, read back 0x%x\n", mipi_test);
+        
+        pr_info("*** VIC REGISTER ACCESS ENABLEMENT COMPLETE ***\n");
     }
     
     return 0;
@@ -1381,37 +1429,45 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                         }
                         
                         if (vic_regs) {
-                            pr_info("*** Channel %d: CONFIGURING VIC FOR MIPI DATA RECEPTION ***\n", channel);
+                            pr_info("*** Channel %d: VIC REFERENCE ENABLEMENT SEQUENCE ***\n", channel);
                             
-                            // CRITICAL: VIC hardware initialization sequence before register writes
-                            pr_info("Channel %d: Initializing VIC hardware for register access\n", channel);
-                            
-                            // Step 1: Reset VIC hardware (clear any previous state)
-                            iowrite32(0, vic_regs + 0x0);
-                            iowrite32(0, vic_regs + 0x4);
-                            iowrite32(0, vic_regs + 0xc);
+                            // STEP 1: Enable VIC register access mode (write 2 to register 0x0)
+                            iowrite32(2, vic_regs + 0x0);
                             wmb();
+                            pr_info("Channel %d: VIC enabled register access (wrote 2)\n", channel);
                             
-                            // Step 2: Enable VIC hardware clocking/power (T31 specific)
-                            // This may be required for register writes to take effect
-                            iowrite32(1, vic_regs + 0x8);  // VIC enable register
+                            // STEP 2: Set VIC configuration mode (write 4 to register 0x0)
+                            iowrite32(4, vic_regs + 0x0);
                             wmb();
+                            pr_info("Channel %d: VIC set config mode (wrote 4)\n", channel);
                             
-                            // Step 3: Wait for VIC to be ready for configuration
-                            msleep(1);
+                            // STEP 3: Wait for VIC ready state
+                            int timeout = 1000;
+                            u32 vic_status;
+                            while ((vic_status = ioread32(vic_regs + 0x0)) != 0 && timeout--) {
+                                cpu_relax();
+                            }
+                            pr_info("Channel %d: VIC ready wait complete (status=0x%x, timeout=%d)\n",
+                                   channel, vic_status, timeout);
                             
-                            pr_info("Channel %d: VIC hardware initialization complete, starting MIPI config\n", channel);
+                            // STEP 4: Start VIC processing (write 1 to register 0x0)
+                            iowrite32(1, vic_regs + 0x0);
+                            wmb();
+                            pr_info("Channel %d: VIC processing started (wrote 1)\n", channel);
                             
+                            pr_info("*** Channel %d: NOW CONFIGURING VIC REGISTERS (SHOULD WORK!) ***\n", channel);
+                            
+                            // NOW configure VIC registers - they should be accessible!
                             // MIPI interface configuration (reference: interface type 1)
-                            // Set VIC control register 0xc = 3 for MIPI mode
                             iowrite32(3, vic_regs + 0xc);
                             wmb();
                             u32 ctrl_verify = ioread32(vic_regs + 0xc);
                             pr_info("Channel %d: VIC ctrl reg 0xc = 3 (MIPI mode), verify=0x%x\n", channel, ctrl_verify);
                             
-                            if (ctrl_verify != 3) {
-                                pr_err("Channel %d: CRITICAL - VIC ctrl register write failed! Expected 3, got 0x%x\n", channel, ctrl_verify);
-                                pr_err("Channel %d: VIC hardware may not be properly enabled\n", channel);
+                            if (ctrl_verify == 3) {
+                                pr_info("*** Channel %d: SUCCESS! VIC REGISTERS RESPONDING! ***\n", channel);
+                            } else {
+                                pr_err("*** Channel %d: STILL FAILED - VIC registers unresponsive (got 0x%x) ***\n", channel, ctrl_verify);
                             }
                             
                             // Frame dimensions register 0x4: (width << 16) | height
