@@ -526,38 +526,47 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         	if (ctrl_test != 0xfb33ec && config_test != 0xfb33ec) {
         		pr_info("*** SUCCESS! VIC REGISTERS ARE NOW ACCESSIBLE VIA ISP CORE! ***\n");
         		
-        		/* *** IMPLEMENT PROPER VIC REGISTER PROGRAMMING FROM BINARY NINJA ANALYSIS *** */
+        		/* *** IMPLEMENT EXACT BINARY NINJA SEQUENCE: ispvic_frame_channel_s_stream *** */
         		pr_info("*** PROGRAMMING VIC REGISTERS TO MATCH OEM BEHAVIOR ***\n");
         		
-        		/* Step 1: Reset VIC to clean state (Based on ispvic_frame_channel_s_stream off) */
-        		writel(0x0, isp_dev->vic_regs + 0x0);     /* VIC control */
-        		writel(0x0, isp_dev->vic_regs + 0x4);     /* VIC config */
-        		writel(0x0, isp_dev->vic_regs + 0x300);   /* Stream control (off) */
-        		writel(0x0, isp_dev->vic_regs + 0x304);   /* MDMA dimensions */
-        		writel(0x0, isp_dev->vic_regs + 0x308);   /* MDMA enable (off) */
-        		writel(0x0, isp_dev->vic_regs + 0x310);   /* MDMA width config */
-        		writel(0x0, isp_dev->vic_regs + 0x314);   /* MDMA width config */
+        		/* Step 1: Only reset stream control (ispvic_frame_channel_s_stream off sequence) */
+        		writel(0x0, isp_dev->vic_regs + 0x300);   /* Stream control OFF */
         		wmb();
-        		pr_info("VIC registers reset to clean state\n");
-       
-        		/* Step 2: Configure VIC MDMA for GC2053 (Based on vic_pipo_mdma_enable) */
-        		/* Frame dimensions: width=1920, height=1080 */
-        		writel(1, isp_dev->vic_regs + 0x308);                    /* Enable MDMA */
-        		writel((1920 << 16) | 1080, isp_dev->vic_regs + 0x304); /* Dimensions: width<<16 | height */
-        		writel(1920 << 1, isp_dev->vic_regs + 0x310);           /* Width * 2 */
-        		writel(1920 << 1, isp_dev->vic_regs + 0x314);           /* Width * 2 */
-        		wmb();
-        		pr_info("VIC MDMA configured for 1920x1080 (GC2053)\n");
-       
-        		/* Step 3: Set VIC control registers to expected values (NOT writing target values directly) */
-        		/* Let VIC hardware initialize to correct state after reset and MDMA config */
-        		msleep(10); /* Allow hardware to settle */
+        		pr_info("VIC stream control reset to OFF state\n");
+        
+        		/* Step 2: Configure VIC MDMA (exact vic_pipo_mdma_enable sequence) */
+        		/* Frame dimensions from device: width=1920 (0xdc), height=1080 (0xe0) */
+        		{
+        			u32 frame_width = 1920;
+        			u32 frame_height = 1080;
+        			u32 width_x2 = frame_width << 1;  /* width * 2 = 0xf00 */
+        			
+        			/* vic_pipo_mdma_enable exact register sequence */
+        			writel(1, isp_dev->vic_regs + 0x308);                              /* MDMA enable */
+        			writel((frame_width << 16) | frame_height, isp_dev->vic_regs + 0x304); /* Dimensions */
+        			writel(width_x2, isp_dev->vic_regs + 0x310);                      /* Width * 2 */
+        			writel(width_x2, isp_dev->vic_regs + 0x314);                      /* Width * 2 */
+        			wmb();
+        			
+        			pr_info("VIC MDMA configured: dims=0x%x, width_x2=0x%x\n",
+        				(frame_width << 16) | frame_height, width_x2);
+        		}
+        
+        		/* Step 3: Enable VIC streaming (ispvic_frame_channel_s_stream on sequence) */
+        		/* frame_count from offset 0x218, streaming flag at 0x210 */
+        		{
+        			u32 frame_count = 0;  /* Initial frame count */
+        			u32 stream_value = (frame_count << 16) | 0x80000020;
+        			
+        			writel(stream_value, isp_dev->vic_regs + 0x300);
+        			wmb();
+        			pr_info("VIC streaming enabled with frame_count=%d, stream_reg=0x%x\n",
+        				frame_count, stream_value);
+        		}
         		
-        		/* Step 4: Enable VIC streaming mode (Based on ispvic_frame_channel_s_stream on) */
-        		/* This should make the VIC registers show correct values */
-        		writel((0 << 16) | 0x80000020, isp_dev->vic_regs + 0x300); /* Stream enable with frame_count=0 */
-        		wmb();
-        		pr_info("VIC streaming mode enabled\n");
+        		/* Step 4: Allow VIC hardware to initialize properly */
+        		msleep(10); /* Hardware needs time to process the configuration */
+        		pr_info("VIC hardware initialization sequence complete\n");
        
         		/* *** VERIFY VIC PROGRAMMING RESULTS *** */
         		pr_info("*** VERIFYING VIC PROGRAMMING RESULTS ***\n");
