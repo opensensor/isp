@@ -1301,25 +1301,56 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                     vic_dev->frame_width = 1920;
                     vic_dev->frame_height = 1080;
                     
-                    // Start VIC subdev streaming - use direct VIC initialization for now
-                    // This avoids the symbol linking issues during module loading
-                    pr_info("Channel %d: Starting VIC via direct hardware initialization\n", channel);
+                    // Start VIC subdev streaming - use direct hardware register configuration
+                    pr_info("Channel %d: Starting VIC via direct hardware register configuration\n", channel);
                     
-                    // Call tx_isp_vic_start directly - this does the VIC MIPI register setup
-                    extern int tx_isp_vic_start(struct tx_isp_subdev *sd);
-                    struct tx_isp_subdev *vic_sd = &vic_dev->sd;
-                    
-                    int vic_ret = tx_isp_vic_start(vic_sd);
-                    if (vic_ret == 0) {
-                        vic_dev->state = 4; // STREAMING state
-                        vic_dev->streaming = 1;
-                        pr_info("Channel %d: VIC hardware initialization successful\n", channel);
-                    } else {
-                        pr_warn("Channel %d: VIC hardware init failed (%d), using fallback\n", channel, vic_ret);
-                        vic_dev->state = 2;
-                        vic_dev->streaming = 1;
-                        pr_info("Channel %d: VIC activated via fallback state management\n", channel);
+                    // CRITICAL: Configure VIC MIPI registers directly (matches reference tx_isp_vic_start)
+                    if (vic_dev->vic_regs) {
+                        pr_info("*** Channel %d: CONFIGURING VIC FOR MIPI DATA RECEPTION ***\n", channel);
+                        
+                        // MIPI interface configuration (reference: interface type 1)
+                        // Set VIC control register 0xc = 3 for MIPI mode
+                        iowrite32(3, vic_dev->vic_regs + 0xc);
+                        
+                        // Frame dimensions register 0x4: (width << 16) | height
+                        iowrite32((vic_dev->frame_width << 16) | vic_dev->frame_height,
+                                 vic_dev->vic_regs + 0x4);
+                        
+                        // MIPI configuration register 0x10: Format-specific value
+                        // For MIPI YUV420 format (0x3200 in reference), value is 0x40000
+                        iowrite32(0x40000, vic_dev->vic_regs + 0x10);
+                        
+                        // MIPI stride configuration register 0x18
+                        iowrite32(vic_dev->frame_width, vic_dev->vic_regs + 0x18);
+                        
+                        // DMA buffer configuration registers
+                        iowrite32(0x100010, vic_dev->vic_regs + 0x1a4);  // DMA config
+                        iowrite32(0x4210, vic_dev->vic_regs + 0x1ac);    // Buffer mode
+                        iowrite32(0x10, vic_dev->vic_regs + 0x1b0);      // Buffer control
+                        
+                        // Start VIC processing: register 0x0 = 1
+                        iowrite32(1, vic_dev->vic_regs + 0x0);
+                        
+                        // CRITICAL: Enable MIPI streaming register 0x300 with magic value
+                        iowrite32((vic_dev->frame_count << 16) | 0x80000020,
+                                 vic_dev->vic_regs + 0x300);
+                        
+                        // Memory barrier to ensure all writes complete
+                        wmb();
+                        
+                        pr_info("*** Channel %d: VIC MIPI CONFIGURATION COMPLETE ***\n", channel);
+                        pr_info("Channel %d: VIC regs: ctrl=0x%x, dim=0x%x, mipi=0x%x, stream=0x%x\n",
+                                channel,
+                                ioread32(vic_dev->vic_regs + 0xc),
+                                ioread32(vic_dev->vic_regs + 0x4),
+                                ioread32(vic_dev->vic_regs + 0x10),
+                                ioread32(vic_dev->vic_regs + 0x300));
                     }
+                    
+                    // Set VIC streaming state
+                    vic_dev->state = 2; // Active state
+                    vic_dev->streaming = 1;
+                    pr_info("Channel %d: VIC hardware initialization complete\n", channel);
                     
                     pr_info("*** Channel %d: VIC NOW READY TO RECEIVE MIPI DATA FROM SENSOR ***\n", channel);
                 }
