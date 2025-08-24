@@ -1754,8 +1754,13 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	memset(sensor, 0, sizeof(*sensor));
 	
-	/* Initialize sensor info FIRST so name is available during registration */
-	memcpy(&sensor->info, &sensor_info, sizeof(sensor_info));
+	/* Initialize sensor info FIRST so name is available during registration
+	 * The info field is tx_isp_sensor_register_info, not sensor_info */
+	strncpy(sensor->info.name, SENSOR_NAME, sizeof(sensor->info.name) - 1);
+	sensor->info.name[sizeof(sensor->info.name) - 1] = '\0';
+	sensor->info.cbus_type = TX_SENSOR_CONTROL_INTERFACE_I2C;
+	sensor->info.i2c.i2c_adapter_id = 0;
+	sensor->info.i2c.addr = SENSOR_I2C_ADDRESS;
 	
 	sensor->mclk = clk_get(NULL, "cgu_cim");
 	if (IS_ERR(sensor->mclk)) {
@@ -1884,13 +1889,14 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	
 	/* Register sensor with ISP framework to link operations */
 	ISP_WARNING("Registering %s with ISP framework (sd=%p, sensor=%p)\n",
-	            sensor->info.name, sd, sensor);
+	            sensor->info.name[0] ? sensor->info.name : SENSOR_NAME, sd, sensor);
 	ret = tx_isp_register_sensor_subdev(sd, sensor);
 	if (ret) {
 		ISP_WARNING("Failed to register sensor with ISP framework: %d\n", ret);
 		/* Continue anyway - ISP might not be loaded yet */
 	} else {
-		ISP_WARNING("%s registered with ISP framework successfully\n", sensor->info.name);
+		ISP_WARNING("%s registered with ISP framework successfully\n",
+		            sensor->info.name[0] ? sensor->info.name : SENSOR_NAME);
 	}
 	
 	pr_debug("probe ok ------->%s\n", SENSOR_NAME);
