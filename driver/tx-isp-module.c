@@ -2682,26 +2682,26 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
             isp_dev->sensor_i2c_client = i2c_client;
             isp_dev->i2c_adapter = adapter;
                 
-                /* CRITICAL: Initialize sensor RIGHT NOW while I2C client is fresh */
-                if (kernel_subdev->ops && kernel_subdev->ops->core &&
-                    kernel_subdev->ops->core->init) {
-                    pr_info("*** CALLING SENSOR INIT WITH FRESH I2C CLIENT ***\n");
-                    pr_info("This should write the GC2053 register configuration array\n");
-                    ret = kernel_subdev->ops->core->init(kernel_subdev, 1);
-                    pr_info("Sensor init returned: %d (0=success, 0xfffffdfd=already_init)\n", ret);
-                    if (ret && ret != 0xfffffdfd) {  // 0xfffffdfd = already initialized
-                        pr_err("Failed to initialize sensor %s: %d\n", reg_info.name, ret);
-                    } else {
-                        pr_info("*** SENSOR HARDWARE INITIALIZATION COMPLETE ***\n");
-                        kernel_subdev->vin_state = TX_ISP_MODULE_RUNNING;
-                    }
+            /* CRITICAL: Initialize sensor RIGHT NOW while I2C client is fresh */
+            if (kernel_subdev->ops && kernel_subdev->ops->core &&
+                kernel_subdev->ops->core->init) {
+                pr_info("*** CALLING SENSOR INIT WITH FRESH I2C CLIENT ***\n");
+                pr_info("This should write the GC2053 register configuration array\n");
+                ret = kernel_subdev->ops->core->init(kernel_subdev, 1);
+                pr_info("Sensor init returned: %d (0=success, 0xfffffdfd=already_init)\n", ret);
+                if (ret && ret != 0xfffffdfd) {  // 0xfffffdfd = already initialized
+                    pr_err("Failed to initialize sensor %s: %d\n", reg_info.name, ret);
                 } else {
-                    pr_warn("No sensor init operation available\n");
+                    pr_info("*** SENSOR HARDWARE INITIALIZATION COMPLETE ***\n");
+                    kernel_subdev->vin_state = TX_ISP_MODULE_RUNNING;
                 }
             } else {
-                pr_warn("I2C client data mismatch - subdev association failed\n");
+                pr_warn("No sensor init operation available\n");
             }
+        } else {
+            pr_warn("I2C client data mismatch - subdev association failed\n");
         }
+        
     } else if (reg_info.interface_type == 2) {
         pr_info("SPI interface not implemented yet for %s\n", reg_info.name);
         /* SPI interface would be handled here */
