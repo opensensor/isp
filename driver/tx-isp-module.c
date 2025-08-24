@@ -1491,24 +1491,14 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         if (channel == 0 && ourISPdev && ourISPdev->sensor) {
             sensor = ourISPdev->sensor;
             
-            // Initialize sensor hardware FIRST (loads all register settings)
-            if (sensor && sensor->sd.ops && sensor->sd.ops->core &&
-                sensor->sd.ops->core->init) {
-                pr_info("Channel %d: *** CALLING SENSOR INIT FOR %s ***\n",
-                        channel, sensor ? sensor->info.name : "(unnamed)");
-                pr_info("Channel %d: This should trigger I2C register writes to configure the sensor\n", channel);
-                ret = sensor->sd.ops->core->init(&sensor->sd, 1);
-                pr_info("Channel %d: Sensor init returned: %d (0=success, 0xfffffdfd=already_init)\n", channel, ret);
-                if (ret && ret != 0xfffffdfd) {  // 0xfffffdfd is "already initialized"
-                    pr_err("Channel %d: Failed to initialize sensor: %d\n", channel, ret);
-                    state->streaming = false;
-                    return ret;
-                }
-                pr_info("Channel %d: *** SENSOR REGISTER CONFIGURATION COMPLETE ***\n", channel);
-                
-                /* Ensure sensor state transitions to RUNNING after init */
+            // Sensor should already be initialized during registration
+            pr_info("Channel %d: Sensor %s should already be initialized from registration\n",
+                    channel, sensor ? sensor->info.name : "(unnamed)");
+            
+            // Just ensure sensor state is RUNNING
+            if (sensor) {
                 sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
-                pr_info("Channel %d: Sensor state set to RUNNING after init\n", channel);
+                pr_info("Channel %d: Sensor state confirmed as RUNNING\n", channel);
             }
             
             // Now start streaming
