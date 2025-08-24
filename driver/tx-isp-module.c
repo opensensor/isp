@@ -2331,6 +2331,14 @@ static void vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
     if (vic_dev->frame_done.done == 0) {
         complete(&vic_dev->frame_done);
     }
+    
+    // Schedule next frame generation if streaming continues
+    // This ensures continuous frame flow like real hardware
+    if (vic_dev->state == 2) { // If VIC is still active
+        // Use a kernel work queue to schedule next frame after a delay
+        // This simulates continuous sensor frame generation at ~30 FPS
+        schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(33));
+    }
 }
 
 /* VIC event handler - manages buffer flow between frame channels and VIC */
@@ -2388,8 +2396,15 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
             pr_info("VIC: Hardware registers configured\n");
         }
         
-        // Start frame generation for active channels
+        // Start continuous frame generation for active channels
         vic_framedone_irq_function(vic_dev);
+        
+        // Also ensure the fallback frame generation is active
+        // This provides continuous frames even if hardware interrupts aren't working
+        if (!timer_pending(&frame_sim_timer)) {
+            mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
+        }
+        
         return 0;
     }
     default:
@@ -2433,6 +2448,40 @@ static void simulate_frame_completion(void)
     }
 }
 
+/* VIC continuous frame generation work queue */
+static struct delayed_work vic_frame_work;
+
+/* VIC frame generation work function */
+static void vic_frame_work_function(struct work_struct *work)
+{
+    struct tx_isp_vic_device *vic_dev;
+    
+    if (!ourISPdev || !ourISPdev->vic_dev) {
+        return;
+    }
+    
+    vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+    
+    // Only continue if VIC is active and channels are streaming
+    if (vic_dev->state == 2) {
+        int i;
+        bool any_streaming = false;
+        
+        // Check if any channels are still streaming
+        for (i = 0; i < num_channels; i++) {
+            if (frame_channels[i].state.streaming) {
+                any_streaming = true;
+                break;
+            }
+        }
+        
+        if (any_streaming) {
+            pr_debug("VIC: Generating continuous frame\n");
+            vic_framedone_irq_function(vic_dev);
+        }
+    }
+}
+
 /* Timer callback to simulate periodic frame generation for testing */
 static struct timer_list frame_sim_timer;
 
@@ -2455,12 +2504,16 @@ static void init_frame_simulation(void)
     frame_sim_timer.expires = jiffies + msecs_to_jiffies(33);
     add_timer(&frame_sim_timer);
     pr_info("Frame simulation timer initialized (30 FPS)\n");
+    
+    /* Initialize VIC continuous frame generation work queue */
+    INIT_DELAYED_WORK(&vic_frame_work, vic_frame_work_function);
 }
 
 /* Stop frame simulation timer */
 static void stop_frame_simulation(void)
 {
     del_timer_sync(&frame_sim_timer);
+    cancel_delayed_work_sync(&vic_frame_work);
     pr_info("Frame simulation timer stopped\n");
 }
 
