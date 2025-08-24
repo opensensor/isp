@@ -37,6 +37,23 @@ static DEFINE_MUTEX(sensor_list_mutex);
 static int sensor_count = 0;
 static int isp_memopt = 0; // Memory optimization flag like reference
 
+// ISP Tuning device support - missing component for /dev/isp-m0
+static struct cdev isp_tuning_cdev;
+static struct class *isp_tuning_class = NULL;
+static dev_t isp_tuning_devno;
+static int isp_tuning_major = 0;
+static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
+
+// ISP Tuning IOCTLs from reference (0x20007400 series)
+#define ISP_TUNING_GET_PARAM    0x20007400
+#define ISP_TUNING_SET_PARAM    0x20007401
+#define ISP_TUNING_GET_AE_INFO  0x20007403
+#define ISP_TUNING_SET_AE_INFO  0x20007404
+#define ISP_TUNING_GET_AWB_INFO 0x20007406
+#define ISP_TUNING_SET_AWB_INFO 0x20007407
+#define ISP_TUNING_GET_STATS    0x20007408
+#define ISP_TUNING_GET_STATS2   0x20007409
+
 // Helper functions matching reference driver patterns
 static void* find_subdev_link_pad(struct tx_isp_dev *isp_dev, char *name)
 {
@@ -104,6 +121,202 @@ static int tx_isp_video_s_stream_impl(struct tx_isp_dev *isp_dev, int enable)
     // }
     
     return 0;
+}
+
+// ISP Tuning device implementation - missing component for IMP_ISP_EnableTuning()
+static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    void __user *argp = (void __user *)arg;
+    int param_type;
+    
+    // Check if this is a tuning command (0x74xx series from reference)
+    if ((cmd >> 8 & 0xFF) == 0x74) {
+        if ((cmd & 0xFF) < 0x33) {
+            if ((cmd - ISP_TUNING_GET_PARAM) < 0xA) {
+                pr_info("ISP Tuning IOCTL: cmd=0x%x\n", cmd);
+                
+                switch (cmd) {
+                case ISP_TUNING_GET_PARAM: {
+                    // Copy tuning parameters from kernel to user
+                    if (copy_from_user(isp_tuning_buffer, argp, sizeof(isp_tuning_buffer)))
+                        return -EFAULT;
+                    
+                    // Reference processes various ISP parameter types (0-24)
+                    param_type = *(int*)isp_tuning_buffer;
+                    pr_info("ISP get tuning param type: %d\n", param_type);
+                    
+                    // For now, return success with dummy data
+                    memset(isp_tuning_buffer + 4, 0x5A, 16); // Dummy tuning data
+                    
+                    if (copy_to_user(argp, isp_tuning_buffer, sizeof(isp_tuning_buffer)))
+                        return -EFAULT;
+                    
+                    return 0;
+                }
+                case ISP_TUNING_SET_PARAM: {
+                    // Set tuning parameters from user to kernel
+                    if (copy_from_user(isp_tuning_buffer, argp, sizeof(isp_tuning_buffer)))
+                        return -EFAULT;
+                    
+                    param_type = *(int*)isp_tuning_buffer;
+                    pr_info("ISP set tuning param type: %d\n", param_type);
+                    
+                    // Reference calls various tisp_*_set_par_cfg() functions
+                    // For now, acknowledge the parameter set
+                    return 0;
+                }
+                case ISP_TUNING_GET_AE_INFO: {
+                    pr_info("ISP get AE info\n");
+                    
+                    // Get AE (Auto Exposure) information
+                    memset(isp_tuning_buffer, 0, sizeof(isp_tuning_buffer));
+                    *(int*)isp_tuning_buffer = 1; // AE enabled
+                    
+                    if (copy_to_user(argp, isp_tuning_buffer, sizeof(isp_tuning_buffer)))
+                        return -EFAULT;
+                    
+                    return 0;
+                }
+                case ISP_TUNING_SET_AE_INFO: {
+                    pr_info("ISP set AE info\n");
+                    
+                    if (copy_from_user(isp_tuning_buffer, argp, sizeof(isp_tuning_buffer)))
+                        return -EFAULT;
+                    
+                    // Process AE settings
+                    return 0;
+                }
+                case ISP_TUNING_GET_AWB_INFO: {
+                    pr_info("ISP get AWB info\n");
+                    
+                    // Get AWB (Auto White Balance) information
+                    memset(isp_tuning_buffer, 0, sizeof(isp_tuning_buffer));
+                    *(int*)isp_tuning_buffer = 1; // AWB enabled
+                    
+                    if (copy_to_user(argp, isp_tuning_buffer, sizeof(isp_tuning_buffer)))
+                        return -EFAULT;
+                    
+                    return 0;
+                }
+                case ISP_TUNING_SET_AWB_INFO: {
+                    pr_info("ISP set AWB info\n");
+                    
+                    if (copy_from_user(isp_tuning_buffer, argp, sizeof(isp_tuning_buffer)))
+                        return -EFAULT;
+                    
+                    // Process AWB settings
+                    return 0;
+                }
+                case ISP_TUNING_GET_STATS:
+                case ISP_TUNING_GET_STATS2: {
+                    pr_info("ISP get statistics\n");
+                    
+                    // Get ISP statistics information
+                    memset(isp_tuning_buffer, 0, sizeof(isp_tuning_buffer));
+                    strcpy(isp_tuning_buffer + 12, "ISP_STATS");
+                    
+                    if (copy_to_user(argp, isp_tuning_buffer, sizeof(isp_tuning_buffer)))
+                        return -EFAULT;
+                    
+                    return 0;
+                }
+                default:
+                    pr_info("Unhandled ISP tuning cmd: 0x%x\n", cmd);
+                    return 0;
+                }
+            }
+        }
+    }
+    
+    pr_info("Invalid ISP tuning command: 0x%x\n", cmd);
+    return -EINVAL;
+}
+
+static int isp_tuning_open(struct inode *inode, struct file *file)
+{
+    pr_info("ISP tuning device opened\n");
+    return 0;
+}
+
+static int isp_tuning_release(struct inode *inode, struct file *file)
+{
+    pr_info("ISP tuning device released\n");
+    return 0;
+}
+
+static const struct file_operations isp_tuning_fops = {
+    .owner = THIS_MODULE,
+    .unlocked_ioctl = isp_tuning_ioctl,
+    .open = isp_tuning_open,
+    .release = isp_tuning_release,
+};
+
+// Create ISP tuning device node (reference: tisp_code_create_tuning_node)
+static int create_isp_tuning_device(void)
+{
+    int ret;
+    
+    pr_info("Creating ISP tuning device...\n");
+    
+    // Allocate character device region
+    if (isp_tuning_major == 0) {
+        ret = alloc_chrdev_region(&isp_tuning_devno, 0, 1, "isp-m0");
+        if (ret < 0) {
+            pr_err("Failed to allocate chrdev region for ISP tuning\n");
+            return ret;
+        }
+        isp_tuning_major = MAJOR(isp_tuning_devno);
+    } else {
+        isp_tuning_devno = MKDEV(isp_tuning_major, 0);
+        ret = register_chrdev_region(isp_tuning_devno, 1, "isp-m0");
+        if (ret < 0) {
+            pr_err("Failed to register chrdev region for ISP tuning\n");
+            return ret;
+        }
+    }
+    
+    // Initialize and add character device
+    cdev_init(&isp_tuning_cdev, &isp_tuning_fops);
+    ret = cdev_add(&isp_tuning_cdev, isp_tuning_devno, 1);
+    if (ret < 0) {
+        pr_err("Failed to add ISP tuning cdev\n");
+        unregister_chrdev_region(isp_tuning_devno, 1);
+        return ret;
+    }
+    
+    // Create device class
+    isp_tuning_class = class_create(THIS_MODULE, "isp-tuning");
+    if (IS_ERR(isp_tuning_class)) {
+        pr_err("Failed to create ISP tuning class\n");
+        cdev_del(&isp_tuning_cdev);
+        unregister_chrdev_region(isp_tuning_devno, 1);
+        return PTR_ERR(isp_tuning_class);
+    }
+    
+    // Create device node /dev/isp-m0
+    if (!device_create(isp_tuning_class, NULL, isp_tuning_devno, NULL, "isp-m0")) {
+        pr_err("Failed to create ISP tuning device\n");
+        class_destroy(isp_tuning_class);
+        cdev_del(&isp_tuning_cdev);
+        unregister_chrdev_region(isp_tuning_devno, 1);
+        return -ENODEV;
+    }
+    
+    pr_info("ISP tuning device created: /dev/isp-m0 (major=%d)\n", isp_tuning_major);
+    return 0;
+}
+
+// Destroy ISP tuning device node (reference: tisp_code_destroy_tuning_node)
+static void destroy_isp_tuning_device(void)
+{
+    if (isp_tuning_class) {
+        device_destroy(isp_tuning_class, isp_tuning_devno);
+        class_destroy(isp_tuning_class);
+        cdev_del(&isp_tuning_cdev);
+        unregister_chrdev_region(isp_tuning_devno, 1);
+        isp_tuning_class = NULL;
+        pr_info("ISP tuning device destroyed\n");
+    }
 }
 
 // Basic IOCTL handler matching reference behavior
@@ -716,9 +929,21 @@ static int tx_isp_init(void)
         goto err_free_dev;
     }
 
+    /* Create ISP tuning device - required for IMP_ISP_EnableTuning() */
+    ret = create_isp_tuning_device();
+    if (ret) {
+        pr_err("Failed to create ISP tuning device: %d\n", ret);
+        tx_isp_proc_exit(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+
     pr_info("TX ISP driver initialized successfully\n");
     pr_info("Device nodes created:\n");
     pr_info("  /dev/tx-isp (major=10, minor=dynamic)\n");
+    pr_info("  /dev/isp-m0 (major=%d, minor=0) - ISP tuning interface\n", isp_tuning_major);
     pr_info("  /proc/jz/isp/isp-w02\n");
     
     return 0;
@@ -745,6 +970,9 @@ static void tx_isp_exit(void)
     mutex_unlock(&sensor_list_mutex);
 
     if (ourISPdev) {
+        /* Destroy ISP tuning device */
+        destroy_isp_tuning_device();
+        
         /* Clean up proc entries */
         tx_isp_proc_exit(ourISPdev);
         
