@@ -193,6 +193,53 @@ struct tx_isp_vic_device {
     void __iomem *vic_regs;            // VIC register base
 };
 
+// Initialize VIC register mapping for hardware access
+static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
+{
+    // T31 ISP/VIC register base addresses from reference
+    #define T31_ISP_BASE_ADDR   0x13300000
+    #define T31_VIC_BASE_ADDR   0x13320000
+    #define T31_ISP_REG_SIZE    0x10000
+    #define T31_VIC_REG_SIZE    0x10000
+    
+    if (!isp_dev) {
+        return -EINVAL;
+    }
+    
+    pr_info("Mapping ISP/VIC registers...\n");
+    
+    // Map ISP registers
+    isp_dev->isp_regs = ioremap(T31_ISP_BASE_ADDR, T31_ISP_REG_SIZE);
+    if (!isp_dev->isp_regs) {
+        pr_warn("Failed to map ISP registers at 0x%x\n", T31_ISP_BASE_ADDR);
+    } else {
+        pr_info("ISP registers mapped at %p (phys: 0x%x)\n",
+                isp_dev->isp_regs, T31_ISP_BASE_ADDR);
+    }
+    
+    // Map VIC registers
+    isp_dev->vic_regs = ioremap(T31_VIC_BASE_ADDR, T31_VIC_REG_SIZE);
+    if (!isp_dev->vic_regs) {
+        pr_warn("Failed to map VIC registers at 0x%x\n", T31_VIC_BASE_ADDR);
+        if (isp_dev->isp_regs) {
+            iounmap(isp_dev->isp_regs);
+            isp_dev->isp_regs = NULL;
+        }
+        return -ENOMEM;
+    } else {
+        pr_info("VIC registers mapped at %p (phys: 0x%x)\n",
+                isp_dev->vic_regs, T31_VIC_BASE_ADDR);
+    }
+    
+    // Test register access
+    if (isp_dev->vic_regs) {
+        u32 test_val = readl(isp_dev->vic_regs);
+        pr_info("VIC register test read: 0x%x\n", test_val);
+    }
+    
+    return 0;
+}
+
 // Initialize VIC subdev based on reference tx_isp_vic_probe
 static int tx_isp_init_vic_subdev(struct tx_isp_dev *isp_dev)
 {
@@ -203,10 +250,25 @@ static int tx_isp_init_vic_subdev(struct tx_isp_dev *isp_dev)
         return -EINVAL;
     }
     
+    // Initialize VIC register mapping first
+    ret = tx_isp_init_vic_registers(isp_dev);
+    if (ret) {
+        pr_warn("VIC register mapping failed: %d\n", ret);
+        // Continue without hardware registers (simulation mode)
+    }
+    
     // Allocate VIC device (0x21c bytes like reference)
     vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
     if (!vic_dev) {
         pr_err("Failed to allocate VIC device\n");
+        if (isp_dev->vic_regs) {
+            iounmap(isp_dev->vic_regs);
+            isp_dev->vic_regs = NULL;
+        }
+        if (isp_dev->isp_regs) {
+            iounmap(isp_dev->isp_regs);
+            isp_dev->isp_regs = NULL;
+        }
         return -ENOMEM;
     }
     
@@ -230,10 +292,12 @@ static int tx_isp_init_vic_subdev(struct tx_isp_dev *isp_dev)
     vic_dev->state = 1;
     vic_dev->frame_count = 0;
     
-    // Map VIC registers if available
-    if (isp_dev->vic_regs) {
-        vic_dev->vic_regs = isp_dev->vic_regs;
-        pr_info("VIC registers mapped at %p\n", vic_dev->vic_regs);
+    // Connect VIC registers to VIC device
+    vic_dev->vic_regs = isp_dev->vic_regs;
+    if (vic_dev->vic_regs) {
+        pr_info("VIC hardware registers available for real frame processing\n");
+    } else {
+        pr_info("VIC hardware registers not available - using simulation mode\n");
     }
     
     // Connect VIC device to ISP device structure
@@ -426,6 +490,7 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
 static irqreturn_t tx_isp_hardware_interrupt_handler(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+    struct tx_isp_vic_device *vic_dev;
     u32 irq_status;
     int handled = 0;
     int i;
@@ -434,41 +499,69 @@ static irqreturn_t tx_isp_hardware_interrupt_handler(int irq, void *dev_id)
         return IRQ_NONE;
     }
     
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    
     // Read interrupt status register if VIC registers available
     if (isp_dev->vic_regs) {
+        // T31 VIC interrupt status register offset from reference
         irq_status = readl(isp_dev->vic_regs + 0x78c0);
         if (!irq_status) {
             return IRQ_NONE;
         }
         
-        // Handle frame completion interrupt
+        pr_debug("Hardware ISP interrupt: status=0x%x\n", irq_status);
+        
+        // Handle frame completion interrupt - trigger VIC frame processing
         if (irq_status & TX_ISP_HW_IRQ_FRAME_DONE) {
             pr_debug("Hardware frame completion interrupt\n");
             
-            // Wake up all active frame channels
-            for (i = 0; i < num_channels; i++) {
-                if (frame_channels[i].state.streaming) {
-                    tx_isp_hardware_frame_done_handler(isp_dev, i);
+            // Process VIC frame completion if VIC is available
+            if (vic_dev && vic_dev->state == 2) {
+                vic_framedone_irq_function(vic_dev);
+                handled = 1;
+            } else {
+                // Fallback to direct frame channel wake up
+                for (i = 0; i < num_channels; i++) {
+                    if (frame_channels[i].state.streaming) {
+                        tx_isp_hardware_frame_done_handler(isp_dev, i);
+                    }
                 }
+                handled = 1;
+            }
+        }
+        
+        // Handle VIC processing completion interrupt
+        if (irq_status & TX_ISP_HW_IRQ_VIC_DONE) {
+            pr_debug("VIC processing completion interrupt\n");
+            if (vic_dev) {
+                vic_framedone_irq_function(vic_dev);
             }
             handled = 1;
         }
         
-        // Handle VIC completion interrupt
-        if (irq_status & TX_ISP_HW_IRQ_VIC_DONE) {
-            pr_debug("VIC processing completion interrupt\n");
+        // Handle CSI errors
+        if (irq_status & TX_ISP_HW_IRQ_CSI_ERROR) {
+            pr_warn("CSI error interrupt: status=0x%x\n", irq_status);
             handled = 1;
         }
         
-        // Clear interrupt status
+        // Clear interrupt status (write-clear register)
         writel(irq_status, isp_dev->vic_regs + 0x78c0);
-        wmb();
+        wmb(); // Memory barrier to ensure write completion
+        
     } else {
         // Generic ISP interrupt handling if VIC regs not available
-        pr_debug("Generic ISP interrupt\n");
-        for (i = 0; i < num_channels; i++) {
-            if (frame_channels[i].state.streaming) {
-                tx_isp_hardware_frame_done_handler(isp_dev, i);
+        pr_debug("Generic ISP interrupt (no hardware registers)\n");
+        
+        // Trigger VIC frame processing if available
+        if (vic_dev && vic_dev->state == 2) {
+            vic_framedone_irq_function(vic_dev);
+        } else {
+            // Fallback to direct wake up
+            for (i = 0; i < num_channels; i++) {
+                if (frame_channels[i].state.streaming) {
+                    tx_isp_hardware_frame_done_handler(isp_dev, i);
+                }
             }
         }
         handled = 1;
@@ -2186,6 +2279,19 @@ static void tx_isp_exit(void)
             
             kfree(vic_dev);
             ourISPdev->vic_dev = NULL;
+        }
+        
+        /* Unmap hardware registers */
+        if (ourISPdev->vic_regs) {
+            iounmap(ourISPdev->vic_regs);
+            ourISPdev->vic_regs = NULL;
+            pr_info("VIC registers unmapped\n");
+        }
+        
+        if (ourISPdev->isp_regs) {
+            iounmap(ourISPdev->isp_regs);
+            ourISPdev->isp_regs = NULL;
+            pr_info("ISP registers unmapped\n");
         }
         
         /* Clean up sensor if present */
