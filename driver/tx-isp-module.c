@@ -444,35 +444,23 @@ static void destroy_isp_tuning_device(void)
 static int frame_channel_open(struct inode *inode, struct file *file)
 {
     struct frame_channel_device *fcd = NULL;
+    int minor = iminor(inode);
     int i;
     
-    // Find which frame channel device this is by comparing the miscdevice
+    // Find which frame channel device this is by matching minor number
     for (i = 0; i < num_channels; i++) {
-        if (file->f_op == frame_channels[i].miscdev.fops) {
-            // Check if the minor number matches (more reliable method)
-            if (iminor(inode) == frame_channels[i].miscdev.minor) {
-                fcd = &frame_channels[i];
-                break;
-            }
+        if (frame_channels[i].miscdev.minor == minor) {
+            fcd = &frame_channels[i];
+            break;
         }
     }
     
     if (!fcd) {
-        // Fallback: find by iterating and checking misc device
-        for (i = 0; i < num_channels; i++) {
-            if (&frame_channels[i].miscdev == file->private_data) {
-                fcd = &frame_channels[i];
-                break;
-            }
-        }
-    }
-    
-    if (!fcd) {
-        pr_err("Could not find frame channel device for minor %d\n", iminor(inode));
+        pr_err("Could not find frame channel device for minor %d\n", minor);
         return -EINVAL;
     }
     
-    pr_info("Frame channel %d opened\n", fcd->channel_num);
+    pr_info("Frame channel %d opened (minor=%d)\n", fcd->channel_num, minor);
     
     // Initialize channel state - reference sets state to 3 (ready)
     fcd->state.enabled = false;
