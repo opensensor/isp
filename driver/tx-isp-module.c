@@ -1723,6 +1723,18 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             isp_dev->sensor = tx_sensor;
             pr_info("Registered %s as primary sensor %s\n", reg_info.name,
                     kernel_subdev ? "with kernel ops" : "(placeholder)");
+            
+            /* Initialize the sensor hardware if we have proper ops */
+            if (kernel_subdev && kernel_subdev->ops && kernel_subdev->ops->core &&
+                kernel_subdev->ops->core->init) {
+                pr_info("Initializing sensor %s hardware...\n", reg_info.name);
+                ret = kernel_subdev->ops->core->init(kernel_subdev, 1);
+                if (ret) {
+                    pr_err("Failed to initialize sensor %s: %d\n", reg_info.name, ret);
+                } else {
+                    pr_info("Sensor %s initialized successfully\n", reg_info.name);
+                }
+            }
         }
         
         // Add to registered sensor list
