@@ -23,8 +23,18 @@
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
 
+// Simple sensor registration structure
+struct registered_sensor {
+    char name[32];
+    int index;
+    struct list_head list;
+};
+
 // Simple global device instance
 struct tx_isp_dev *ourISPdev = NULL;
+static LIST_HEAD(sensor_list);
+static DEFINE_MUTEX(sensor_list_mutex);
+static int sensor_count = 0;
 
 // Basic IOCTL handler matching reference behavior
 static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
@@ -48,6 +58,82 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EFAULT;
         }
         pr_info("Sensor info request: returning success (1)\n");
+        return 0;
+    }
+    case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - Register sensor
+        struct tx_isp_sensor_register_info {
+            char name[32];
+            // Other fields would be here in real struct
+        } reg_info;
+        
+        if (copy_from_user(&reg_info, argp, sizeof(reg_info)))
+            return -EFAULT;
+            
+        mutex_lock(&sensor_list_mutex);
+        
+        // Check if sensor already registered
+        struct registered_sensor *sensor, *tmp;
+        list_for_each_entry_safe(sensor, tmp, &sensor_list, list) {
+            if (strncmp(sensor->name, reg_info.name, sizeof(sensor->name)) == 0) {
+                mutex_unlock(&sensor_list_mutex);
+                pr_info("Sensor %s already registered\n", reg_info.name);
+                return 0;
+            }
+        }
+        
+        // Add new sensor to list
+        sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
+        if (!sensor) {
+            mutex_unlock(&sensor_list_mutex);
+            return -ENOMEM;
+        }
+        
+        strncpy(sensor->name, reg_info.name, sizeof(sensor->name) - 1);
+        sensor->name[sizeof(sensor->name) - 1] = '\0';
+        sensor->index = sensor_count++;
+        INIT_LIST_HEAD(&sensor->list);
+        list_add_tail(&sensor->list, &sensor_list);
+        
+        mutex_unlock(&sensor_list_mutex);
+        
+        pr_info("Sensor registered: %s (index %d)\n", sensor->name, sensor->index);
+        return 0;
+    }
+    case 0xc050561a: { // TX_ISP_SENSOR_ENUM_INPUT - Enumerate sensor inputs
+        struct sensor_enum_input {
+            int index;
+            char name[32];
+        } input;
+        
+        if (copy_from_user(&input, argp, sizeof(input)))
+            return -EFAULT;
+            
+        mutex_lock(&sensor_list_mutex);
+        
+        // Find sensor at requested index
+        struct registered_sensor *sensor;
+        int found = 0;
+        
+        list_for_each_entry(sensor, &sensor_list, list) {
+            if (sensor->index == input.index) {
+                strncpy(input.name, sensor->name, sizeof(input.name) - 1);
+                input.name[sizeof(input.name) - 1] = '\0';
+                found = 1;
+                break;
+            }
+        }
+        
+        mutex_unlock(&sensor_list_mutex);
+        
+        if (!found) {
+            pr_info("No sensor at index %d\n", input.index);
+            return -EINVAL;
+        }
+        
+        if (copy_to_user(argp, &input, sizeof(input)))
+            return -EFAULT;
+            
+        pr_info("Sensor enumeration: index=%d name=%s\n", input.index, input.name);
         return 0;
     }
     default:
@@ -225,7 +311,18 @@ err_free_dev:
 
 static void tx_isp_exit(void)
 {
+    struct registered_sensor *sensor, *tmp;
+    
     pr_info("TX ISP driver exiting...\n");
+
+    /* Clean up sensor list */
+    mutex_lock(&sensor_list_mutex);
+    list_for_each_entry_safe(sensor, tmp, &sensor_list, list) {
+        list_del(&sensor->list);
+        kfree(sensor);
+    }
+    sensor_count = 0;
+    mutex_unlock(&sensor_list_mutex);
 
     if (ourISPdev) {
         /* Clean up proc entries */
