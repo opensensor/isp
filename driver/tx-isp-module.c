@@ -995,8 +995,8 @@ static int frame_channel_open(struct inode *inode, struct file *file)
     fcd->state.enabled = false;
     fcd->state.streaming = false;
     fcd->state.format = 0x3231564e; // NV12 default
-    fcd->state.width = 1920;
-    fcd->state.height = 1080;
+    fcd->state.width = (fcd->channel_num == 0) ? 1920 : 640;
+    fcd->state.height = (fcd->channel_num == 0) ? 1080 : 360;
     fcd->state.buffer_count = 0;
     
     /* Initialize simplified frame buffer management */
@@ -1007,6 +1007,12 @@ static int frame_channel_open(struct inode *inode, struct file *file)
     memset(&fcd->state.current_buffer, 0, sizeof(fcd->state.current_buffer));
     
     file->private_data = fcd;
+    
+    /* Start frame generation timer if first channel */
+    if (frame_timer_initialized && !timer_pending(&frame_sim_timer)) {
+        pr_info("Starting frame generation timer on channel open\n");
+        mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
+    }
     
     return 0;
 }
