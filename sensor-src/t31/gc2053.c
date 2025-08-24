@@ -1935,8 +1935,17 @@ static struct i2c_driver sensor_driver = {
 	.id_table = sensor_id,
 };
 
+static struct i2c_board_info sensor_board_info = {
+	I2C_BOARD_INFO(SENSOR_NAME, SENSOR_I2C_ADDRESS),
+};
+
+static struct i2c_client *sensor_i2c_client = NULL;
+
 static __init int init_sensor(void) {
 	int ret = 0;
+	struct i2c_adapter *adapter;
+	
+	ISP_WARNING("=== %s SENSOR MODULE INIT ===\n", SENSOR_NAME);
         sensor_common_init(&sensor_info);
 
 	ret = private_driver_get_interface();
@@ -1944,10 +1953,40 @@ static __init int init_sensor(void) {
 		ISP_ERROR("Failed to init %s driver.\n", SENSOR_NAME);
 		return -1;
 	}
-	return private_i2c_add_driver(&sensor_driver);
+	
+	/* Register the I2C driver first */
+	ret = private_i2c_add_driver(&sensor_driver);
+	if (ret) {
+		ISP_ERROR("Failed to add I2C driver for %s\n", SENSOR_NAME);
+		return ret;
+	}
+	
+	/* Now instantiate the I2C device to trigger probe */
+	adapter = i2c_get_adapter(0); /* Typically I2C bus 0 for camera sensors */
+	if (adapter) {
+		ISP_WARNING("Creating I2C device for %s at address 0x%x\n",
+		            SENSOR_NAME, SENSOR_I2C_ADDRESS);
+		sensor_i2c_client = i2c_new_device(adapter, &sensor_board_info);
+		if (!sensor_i2c_client) {
+			ISP_ERROR("Failed to create I2C device for %s\n", SENSOR_NAME);
+		} else {
+			ISP_WARNING("I2C device created successfully for %s\n", SENSOR_NAME);
+		}
+		i2c_put_adapter(adapter);
+	} else {
+		ISP_ERROR("Failed to get I2C adapter for %s\n", SENSOR_NAME);
+	}
+	
+	return 0;
 }
 
 static __exit void exit_sensor(void) {
+	/* Unregister the I2C device if it was created */
+	if (sensor_i2c_client) {
+		i2c_unregister_device(sensor_i2c_client);
+		sensor_i2c_client = NULL;
+	}
+	
 	private_i2c_del_driver(&sensor_driver);
 	sensor_common_exit();
 }
