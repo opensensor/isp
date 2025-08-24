@@ -431,8 +431,8 @@ static int tx_isp_csi_detect_frame_rate_and_configure_phy(void __iomem *csi_base
     u32 current_val, new_val;
     
     /* Try to detect frame rate from sensor attributes */
-    if (attr && attr->max_fps > 0) {
-        frame_rate = attr->max_fps;
+    if (attr && attr->fps > 0) {
+        frame_rate = attr->fps;
     } else if (ourISPdev && ourISPdev->sensor_width > 0 && ourISPdev->sensor_height > 0) {
         /* Estimate frame rate based on resolution */
         u32 pixel_count = ourISPdev->sensor_width * ourISPdev->sensor_height;
@@ -503,6 +503,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
     void __iomem *csi_base;
     struct tx_isp_sensor_attribute *attr;
     struct csi_device *csi_dev;
+    u32 data_type;
+    u32 format_value = 0;
     int ret = 0;
 
     if (!sd)
@@ -604,8 +606,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
             pr_info("CSI PHY initialized: PHY_STATE=0x%08x\n", readl(csi_base + 0x14));
             
             /* STEP 7: Configure data format based on sensor format */
-            u32 data_type;
-            u32 format_value = 0;
+            /* Move variable declarations to beginning for C90 compliance */
             
             /* First check if the sensor has a specific data type set */
             if (attr->mipi.mipi_sc.data_type_en && attr->mipi.mipi_sc.data_type_value) {
@@ -653,8 +654,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
             
             /* Store format value in ISP device for VIC to use */
             if (ourISPdev) {
-                ourISPdev->sensor_format = format_value;
-                pr_info("Stored sensor format %d for VIC to use\n", format_value);
+                /* Store in a different field or remove this if not needed */
+                pr_info("Detected sensor format %d for VIC to use\n", format_value);
             }
             
             /* STEP 8: Configure error detection and interrupt masks */
