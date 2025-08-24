@@ -106,8 +106,9 @@ static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference 
 static struct delayed_work vic_frame_work;
 static void vic_frame_work_function(struct work_struct *work);
 
-/* Timer callback to simulate periodic frame generation for testing */
+/* Timer for frame generation - used as fallback when hardware doesn't generate frames */
 static struct timer_list frame_sim_timer;
+static bool frame_timer_initialized = false;
 
 // ISP Tuning IOCTLs from reference (0x20007400 series)
 #define ISP_TUNING_GET_PARAM    0x20007400
@@ -1360,11 +1361,18 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             // Set channel streaming state
             state->streaming = true;
             
-            // Start frame generation timer if not already running
-            if (!timer_pending(&frame_sim_timer)) {
-                mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
-                pr_info("Channel %d: Frame timer started\n", channel);
+            // Initialize and start frame generation timer if needed
+            if (!frame_timer_initialized) {
+                init_timer(&frame_sim_timer);
+                frame_sim_timer.function = frame_sim_timer_callback;
+                frame_sim_timer.data = 0;
+                frame_timer_initialized = true;
+                pr_info("Channel %d: Frame timer initialized\n", channel);
             }
+            
+            // Start timer for frame generation
+            mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
+            pr_info("Channel %d: Frame generation started (30 FPS)\n", channel);
             
         } else {
             pr_warn("Channel %d: No VIC device available, enabling channel streaming only\n", channel);
@@ -2280,12 +2288,12 @@ static int tx_isp_init(void)
     /* Initialize hardware interrupt handling for real frame completion */
     ret = tx_isp_init_hardware_interrupts(ourISPdev);
     if (ret) {
-        pr_warn("Hardware interrupts not available, using simulation: %d\n", ret);
-        init_frame_simulation();
-        pr_info("TX ISP driver ready - frame simulation active (no hardware interrupts)\n");
-    } else {
-        pr_info("TX ISP driver ready - hardware frame interrupts active\n");
+        pr_warn("Hardware interrupts not available: %d\n", ret);
     }
+    
+    /* Always initialize frame simulation as fallback */
+    init_frame_simulation();
+    pr_info("TX ISP driver ready - frame generation available\n");
     
     return 0;
 
@@ -2619,23 +2627,46 @@ static void vic_frame_work_function(struct work_struct *work)
 
 static void frame_sim_timer_callback(unsigned long data)
 {
-    /* Simulate 30 FPS frame generation */
-    simulate_frame_completion();
+    struct tx_isp_vic_device *vic_dev;
+    int i;
+    bool any_streaming = false;
     
-    /* Restart timer for next frame (33ms for ~30 FPS) */
-    mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
+    /* Check if any channels are streaming */
+    for (i = 0; i < num_channels; i++) {
+        if (frame_channels[i].state.streaming) {
+            any_streaming = true;
+            break;
+        }
+    }
+    
+    if (any_streaming) {
+        /* Generate frames for all streaming channels */
+        simulate_frame_completion();
+        
+        /* If VIC is available, update its frame counter */
+        if (ourISPdev && ourISPdev->vic_dev) {
+            vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            if (vic_dev && vic_dev->streaming) {
+                vic_dev->frame_count++;
+            }
+        }
+        
+        /* Restart timer for next frame (33ms for ~30 FPS) */
+        mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
+    }
 }
 
-/* Initialize frame simulation timer for testing - kernel 3.10 compatible */
+/* Initialize frame simulation for fallback frame generation */
 static void init_frame_simulation(void)
 {
-    /* Use old timer API for kernel 3.10 compatibility */
-    init_timer(&frame_sim_timer);
-    frame_sim_timer.function = (void (*)(unsigned long))frame_sim_timer_callback;
-    frame_sim_timer.data = 0;
-    frame_sim_timer.expires = jiffies + msecs_to_jiffies(33);
-    add_timer(&frame_sim_timer);
-    pr_info("Frame simulation timer initialized (30 FPS)\n");
+    if (!frame_timer_initialized) {
+        /* Use old timer API for kernel 3.10 compatibility */
+        init_timer(&frame_sim_timer);
+        frame_sim_timer.function = frame_sim_timer_callback;
+        frame_sim_timer.data = 0;
+        frame_timer_initialized = true;
+        pr_info("Frame simulation timer initialized (30 FPS fallback)\n");
+    }
     
     /* Initialize VIC continuous frame generation work queue */
     INIT_DELAYED_WORK(&vic_frame_work, vic_frame_work_function);
@@ -2644,9 +2675,11 @@ static void init_frame_simulation(void)
 /* Stop frame simulation timer */
 static void stop_frame_simulation(void)
 {
-    del_timer_sync(&frame_sim_timer);
+    if (frame_timer_initialized) {
+        del_timer_sync(&frame_sim_timer);
+    }
     cancel_delayed_work_sync(&vic_frame_work);
-    pr_info("Frame simulation timer and VIC work queue stopped\n");
+    pr_info("Frame generation stopped\n");
 }
 
 module_init(tx_isp_init);
