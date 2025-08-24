@@ -2677,6 +2677,27 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         pr_info("I2C subdev created: %s at 0x%02x on adapter %s\n",
                 i2c_client->name, i2c_client->addr, adapter->name);
         
+        /* CRITICAL: Check for kernel subdev AGAIN after I2C device creation */
+        /* The I2C device creation triggers sensor module initialization */
+        if (!kernel_subdev) {
+            pr_info("*** RECHECKING FOR KERNEL SUBDEV AFTER I2C DEVICE CREATION ***\n");
+            mutex_lock(&sensor_register_mutex);
+            kernel_subdev = registered_sensor_subdev;
+            mutex_unlock(&sensor_register_mutex);
+            
+            if (kernel_subdev) {
+                tx_sensor = container_of(kernel_subdev, struct tx_isp_sensor, sd);
+                pr_info("*** FOUND KERNEL SUBDEV AFTER I2C CREATION! ***\n");
+                pr_info("Using late-registered sensor %s (subdev=%p)\n", reg_info.name, kernel_subdev);
+                pr_info("DEBUG: kernel_subdev=%p, tx_sensor=%p\n", kernel_subdev, tx_sensor);
+                if (tx_sensor) {
+                    pr_info("DEBUG: tx_sensor->info.name=%s\n", tx_sensor->info.name);
+                }
+            } else {
+                pr_warn("Kernel subdev still NULL after I2C device creation\n");
+            }
+        }
+        
         /* CRITICAL: FORCE I2C client association with sensor subdev */
         pr_info("DEBUG: About to check kernel_subdev=%p, tx_sensor=%p\n", kernel_subdev, tx_sensor);
         if (kernel_subdev && tx_sensor) {
