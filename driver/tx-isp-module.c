@@ -1018,11 +1018,11 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         
         // Check if real sensor is connected and active
         if (ourISPdev && ourISPdev->sensor) {
-            struct tx_isp_sensor *sensor = ourISPdev->sensor;
-            if (sensor && sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
+            struct tx_isp_sensor *active_sensor = ourISPdev->sensor;
+            if (active_sensor && active_sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
                 sensor_active = true;
                 pr_debug("Channel %d: Real sensor %s active, waiting for hardware frame\n",
-                        channel, sensor->info.name);
+                        channel, active_sensor->info.name);
             }
         }
         
@@ -1064,7 +1064,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         
         if (sensor_active) {
             buffer.flags |= 0x8; // Custom flag indicating real sensor data
-            pr_info("Channel %d: Frame from REAL sensor %s\n", channel, sensor->info.name);
+            pr_info("Channel %d: Frame from REAL sensor %s\n", channel, active_sensor->info.name);
         } else {
             pr_info("Channel %d: Frame from simulation (no sensor active)\n", channel);
         }
@@ -1349,6 +1349,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         } reg_info;
         struct registered_sensor *sensor, *tmp;
         struct tx_isp_subdev *sensor_subdev;
+        struct tx_isp_sensor_attribute sensor_attr = {0};
         int ret;
         
         if (copy_from_user(&reg_info, argp, sizeof(reg_info)))
@@ -1409,7 +1410,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
         
         // Sync sensor attributes to ISP core using correct field names
-        struct tx_isp_sensor_attribute sensor_attr = {0};
         sensor_attr.name = reg_info.name;
         sensor_attr.chip_id = reg_info.chip_id;
         sensor_attr.total_width = reg_info.width;
@@ -2058,16 +2058,13 @@ static void tx_isp_exit(void)
             pr_info("Hardware interrupt %d freed\n", ourISPdev->isp_irq);
         }
         
-        /* Clean up sensor subdevs */
-        for (i = 0; i < 16; i++) {
-            if (ourISPdev->subdevs[i]) {
-                struct tx_isp_subdev *subdev = ourISPdev->subdevs[i];
-                if (subdev->module.name) {
-                    kfree(subdev->module.name);
-                }
-                kfree(subdev);
-                ourISPdev->subdevs[i] = NULL;
+        /* Clean up sensor if present */
+        if (ourISPdev->sensor) {
+            struct tx_isp_sensor *sensor = ourISPdev->sensor;
+            if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->reset) {
+                sensor->sd.ops->core->reset(&sensor->sd, 1);
             }
+            ourISPdev->sensor = NULL;
         }
         
         /* Destroy frame channel devices */
