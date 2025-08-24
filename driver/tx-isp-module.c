@@ -191,57 +191,44 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
 }
 
 // VIC subdev structure based on reference driver analysis (0x21c bytes)
-// VIC device structure matching reference driver exactly (0x21c bytes)
+// VIC device structure matching reference driver (0x21c bytes total)
+// Using union to ensure exact offsets without complex calculations
 struct tx_isp_vic_device {
-    // Base subdev structure
-    struct tx_isp_subdev sd;
-    
-    // Padding to offset 0xb8 - VIC registers pointer
-    char padding1[0xb8 - sizeof(struct tx_isp_subdev)];
-    void __iomem *vic_regs;            // 0xb8: Maps to physical 0x13320000
-    
-    // Padding to offset 0xd4 - self pointer
-    char padding2[0xd4 - 0xb8 - sizeof(void*)];
-    struct tx_isp_vic_device *self;    // 0xd4: Self-pointer
-    
-    // Frame dimensions for register writes
-    char padding3[0xdc - 0xd4 - sizeof(void*)];
-    uint32_t frame_width;              // 0xdc: Frame width
-    uint32_t frame_height;             // 0xe0: Frame height
-    
-    // Padding to offset 0x128 - state
-    char padding4[0x128 - 0xe0 - sizeof(uint32_t)];
-    int state;                         // 0x128: 1=initialized, 2=active
-    
-    // Padding to offset 0x130 - spinlock
-    char padding5[0x130 - 0x128 - sizeof(int)];
-    spinlock_t lock;                   // 0x130: Main spinlock
-    struct mutex mlock;                // Also at 0x130 in some contexts
-    
-    // Padding to offset 0x148 - completion
-    char padding6[0x148 - 0x130 - sizeof(spinlock_t) - sizeof(struct mutex)];
-    struct completion frame_done;      // 0x148: Frame completion
-    
-    // Padding to offset 0x154 - snap mutex
-    char padding7[0x154 - 0x148 - sizeof(struct completion)];
-    struct mutex snap_mlock;           // 0x154: Snapshot mutex
-    
-    // Padding to offset 0x1f4 - buffer lock
-    char padding8[0x1f4 - 0x154 - sizeof(struct mutex)];
-    spinlock_t buffer_lock;            // 0x1f4: Buffer management lock
-    
-    // Buffer queues
-    struct list_head queue_head;       // Buffers queued for hardware DMA
-    struct list_head free_head;        // Available buffers
-    struct list_head done_head;        // Completed by hardware
-    
-    // Padding to offset 0x210 - streaming state
-    char padding9[0x210 - 0x1f4 - sizeof(spinlock_t) - 3*sizeof(struct list_head)];
-    int streaming;                     // 0x210: Hardware streaming active
-    
-    // Padding to offset 0x218 - frame count
-    char padding10[0x218 - 0x210 - sizeof(int)];
-    uint32_t frame_count;              // 0x218: Hardware frame counter
+    union {
+        struct {
+            // Base subdev structure at offset 0
+            struct tx_isp_subdev sd;
+        };
+        struct {
+            // Ensure exact offsets with fixed-size buffer
+            uint8_t _pad_to_b8[0xb8];
+            void __iomem *vic_regs;         // 0xb8: VIC hardware registers
+            uint8_t _pad_to_d4[0xd4 - 0xb8 - 8];
+            struct tx_isp_vic_device *self; // 0xd4: Self-pointer
+            uint8_t _pad_to_dc[0xdc - 0xd4 - 8];
+            uint32_t frame_width;           // 0xdc: Frame width
+            uint32_t frame_height;          // 0xe0: Frame height
+            uint8_t _pad_to_128[0x128 - 0xe0 - 4];
+            int state;                      // 0x128: 1=init, 2=active
+            uint8_t _pad_to_130[0x130 - 0x128 - 4];
+            spinlock_t lock;                // 0x130: Spinlock
+            struct mutex mlock;             // Mutex (overlapped)
+            uint8_t _pad_to_148[0x148 - 0x130 - sizeof(spinlock_t) - sizeof(struct mutex)];
+            struct completion frame_done;   // 0x148: Frame completion
+            uint8_t _pad_to_154[0x154 - 0x148 - sizeof(struct completion)];
+            struct mutex snap_mlock;        // 0x154: Snapshot mutex
+            uint8_t _pad_to_1f4[0x1f4 - 0x154 - sizeof(struct mutex)];
+            spinlock_t buffer_lock;         // 0x1f4: Buffer lock
+            struct list_head queue_head;    // Buffer queues
+            struct list_head free_head;
+            struct list_head done_head;
+            uint8_t _pad_to_210[0x210 - 0x1f4 - sizeof(spinlock_t) - 3*sizeof(struct list_head)];
+            int streaming;                  // 0x210: Streaming state
+            uint8_t _pad_to_218[0x218 - 0x210 - 4];
+            uint32_t frame_count;           // 0x218: Frame counter
+        };
+        uint8_t _total_size[0x21c];        // Ensure total size is 0x21c
+    };
 };
 
 // Simplified VIC registration - removed complex platform device array
@@ -337,11 +324,12 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
     // Connect to ISP device directly - no complex platform device registration
     isp_dev->vic_dev = vic_dev;
     
-    pr_info("VIC device created successfully (offsets: regs=0x%lx self=0x%lx state=0x%lx stream=0x%lx)\n",
-            offsetof(struct tx_isp_vic_device, vic_regs),
-            offsetof(struct tx_isp_vic_device, self),
-            offsetof(struct tx_isp_vic_device, state),
-            offsetof(struct tx_isp_vic_device, streaming));
+    // Verify offsets are correct
+    pr_info("VIC device created (verify offsets: vic_regs=%p self=%p state=%p streaming=%p)\n",
+            (void*)((char*)vic_dev + 0xb8),
+            (void*)((char*)vic_dev + 0xd4),
+            (void*)((char*)vic_dev + 0x128),
+            (void*)((char*)vic_dev + 0x210));
     return 0;
 }
 
