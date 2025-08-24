@@ -326,6 +326,8 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     
     void __iomem *cpm_regs = NULL;
     u32 clkgr0, clkgr1, opcr;
+    struct clk *isp_clk, *cgu_isp_clk, *vic_clk;
+    int ret;
     
     if (!isp_dev) {
         return -EINVAL;
@@ -337,9 +339,9 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     pr_info("*** ENABLING VIC CLOCKS USING LINUX CLOCK FRAMEWORK ***\n");
     
     // Try to get and enable ISP clock
-    struct clk *isp_clk = clk_get(NULL, "isp");
+    isp_clk = clk_get(NULL, "isp");
     if (!IS_ERR(isp_clk)) {
-        int ret = clk_prepare_enable(isp_clk);
+        ret = clk_prepare_enable(isp_clk);
         if (ret == 0) {
             pr_info("SUCCESS: ISP clock enabled via clk framework\n");
             isp_dev->isp_clk = isp_clk;
@@ -352,9 +354,9 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     }
     
     // Try to get and enable CGU_ISP clock (T31 specific)
-    struct clk *cgu_isp_clk = clk_get(NULL, "cgu_isp");
+    cgu_isp_clk = clk_get(NULL, "cgu_isp");
     if (!IS_ERR(cgu_isp_clk)) {
-        int ret = clk_prepare_enable(cgu_isp_clk);
+        ret = clk_prepare_enable(cgu_isp_clk);
         if (ret == 0) {
             pr_info("SUCCESS: CGU_ISP clock enabled via clk framework\n");
             isp_dev->cgu_isp_clk = cgu_isp_clk;
@@ -367,9 +369,9 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     }
     
     // Try VIC-specific clock if it exists
-    struct clk *vic_clk = clk_get(NULL, "vic");
+    vic_clk = clk_get(NULL, "vic");
     if (!IS_ERR(vic_clk)) {
-        int ret = clk_prepare_enable(vic_clk);
+        ret = clk_prepare_enable(vic_clk);
         if (ret == 0) {
             pr_info("SUCCESS: VIC clock enabled via clk framework\n");
             isp_dev->vic_clk = vic_clk;
@@ -456,17 +458,19 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         pr_info("VIC: Set configuration mode (wrote 4 to 0x0)\n");
         
         // STEP 3: Wait for VIC ready state (register 0x0 becomes 0)
-        int timeout = 1000;
-        u32 vic_status;
-        while ((vic_status = readl(isp_dev->vic_regs + 0x0)) != 0 && timeout--) {
+        {
+            int timeout = 1000;
+            u32 vic_status;
+            while ((vic_status = readl(isp_dev->vic_regs + 0x0)) != 0 && timeout--) {
             cpu_relax();
+            }
+            
+            if (timeout <= 0) {
+                pr_err("VIC ready timeout! Status=0x%x\n", vic_status);
+                return -ETIMEDOUT;
+            }
+            pr_info("VIC: Ready state achieved (register 0x0 = 0x%x)\n", vic_status);
         }
-        
-        if (timeout <= 0) {
-            pr_err("VIC ready timeout! Status=0x%x\n", vic_status);
-            return -ETIMEDOUT;
-        }
-        pr_info("VIC: Ready state achieved (register 0x0 = 0x%x)\n", vic_status);
         
         // STEP 4: Start VIC processing (write 1 to register 0x0)
         writel(1, isp_dev->vic_regs + 0x0);
@@ -1405,7 +1409,6 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             uint32_t reserved2;
             uint32_t reserved;
         } buffer;
-        
         unsigned long flags;
         
         if (copy_from_user(&buffer, argp, sizeof(buffer)))
@@ -1456,7 +1459,6 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                 struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
                 
                 if (vic_dev && !vic_dev->streaming) {
-                    unsigned long flags;
                     
                     pr_info("*** Channel %d: QBUF AUTO-START - STARTING VIC SUBDEV STREAMING ***\n", channel);
                     
@@ -1494,13 +1496,15 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                             pr_info("Channel %d: VIC set config mode (wrote 4)\n", channel);
                             
                             // STEP 3: Wait for VIC ready state
-                            int timeout = 1000;
-                            u32 vic_status;
-                            while ((vic_status = ioread32(vic_regs + 0x0)) != 0 && timeout--) {
+                            {
+                                int timeout = 1000;
+                                u32 vic_status;
+                                while ((vic_status = ioread32(vic_regs + 0x0)) != 0 && timeout--) {
                                 cpu_relax();
+                                }
+                                pr_info("Channel %d: VIC ready wait complete (status=0x%x, timeout=%d)\n",
+                                       channel, vic_status, timeout);
                             }
-                            pr_info("Channel %d: VIC ready wait complete (status=0x%x, timeout=%d)\n",
-                                   channel, vic_status, timeout);
                             
                             // STEP 4: Start VIC processing (write 1 to register 0x0)
                             iowrite32(1, vic_regs + 0x0);
@@ -1914,6 +1918,10 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                 spin_lock_irqsave(&vic_dev->buffer_lock, flags);
                 
                 if (vic_dev->vic_regs) {
+                    int timeout = 1000;
+                    u32 vic_status;
+                    u32 ctrl_verify;
+                    
                     pr_info("*** Channel %d: VIC REFERENCE ENABLEMENT SEQUENCE (STREAMON) ***\n", channel);
                     
                     // STEP 1: Enable VIC register access mode (write 2 to register 0x0)
@@ -1927,8 +1935,6 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                     pr_info("Channel %d: VIC set config mode (wrote 4)\n", channel);
                     
                     // STEP 3: Wait for VIC ready state
-                    int timeout = 1000;
-                    u32 vic_status;
                     while ((vic_status = ioread32(vic_dev->vic_regs + 0x0)) != 0 && timeout--) {
                         cpu_relax();
                     }
@@ -1946,7 +1952,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                     // CRITICAL: MIPI interface configuration (reference: interface type 1)
                     iowrite32(3, vic_dev->vic_regs + 0xc);
                     wmb();
-                    u32 ctrl_verify = ioread32(vic_dev->vic_regs + 0xc);
+                    ctrl_verify = ioread32(vic_dev->vic_regs + 0xc);
                     pr_info("Channel %d: VIC ctrl reg 0xc = 3 (MIPI mode), verify=0x%x\n", channel, ctrl_verify);
                     
                     if (ctrl_verify == 3) {
@@ -2891,6 +2897,27 @@ static void tx_isp_exit(void)
     pr_info("TX ISP driver exiting...\n");
 
     if (ourISPdev) {
+        /* Clean up clocks properly using Linux Clock Framework */
+        if (ourISPdev->isp_clk) {
+            clk_disable_unprepare(ourISPdev->isp_clk);
+            clk_put(ourISPdev->isp_clk);
+            ourISPdev->isp_clk = NULL;
+            pr_info("ISP clock disabled and released\n");
+        }
+        
+        if (ourISPdev->cgu_isp_clk) {
+            clk_disable_unprepare(ourISPdev->cgu_isp_clk);
+            clk_put(ourISPdev->cgu_isp_clk);
+            ourISPdev->cgu_isp_clk = NULL;
+            pr_info("CGU_ISP clock disabled and released\n");
+        }
+        
+        if (ourISPdev->vic_clk) {
+            clk_disable_unprepare(ourISPdev->vic_clk);
+            clk_put(ourISPdev->vic_clk);
+            ourISPdev->vic_clk = NULL;
+            pr_info("VIC clock disabled and released\n");
+        }
         /* Stop frame simulation timer if running */
         stop_frame_simulation();
         
@@ -3572,6 +3599,7 @@ static void stop_frame_simulation(void)
 int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor *sensor)
 {
     struct registered_sensor *reg_sensor;
+    int i;
     
     if (!sd || !sensor) {
         pr_err("Invalid sensor registration parameters\n");
@@ -3596,7 +3624,7 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
     /* Check if any channel is already streaming and set state accordingly */
     sd->vin_state = TX_ISP_MODULE_INIT;  // Default to INIT
     if (ourISPdev) {
-        for (int i = 0; i < num_channels; i++) {
+        for (i = 0; i < num_channels; i++) {
             if (frame_channels[i].state.streaming) {
                 sd->vin_state = TX_ISP_MODULE_RUNNING;
                 pr_info("Channel %d already streaming, setting sensor state to RUNNING\n", i);
