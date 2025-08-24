@@ -149,14 +149,6 @@ static struct miscdevice tx_isp_miscdev = {
     .fops = &tx_isp_fops,
 };
 
-// Stub for private_driver_get_interface - simulate reference behavior
-static int private_driver_get_interface(void)
-{
-    pr_info("private_driver_get_interface: checking GPIO mode\n");
-    // Return 0 to indicate success (GPIO mode supported)
-    return 0;
-}
-
 // Main initialization function following reference pattern exactly
 static int tx_isp_init(void)
 {
