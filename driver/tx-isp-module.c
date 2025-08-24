@@ -189,51 +189,31 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
 }
 
 // VIC subdev structure based on reference driver analysis (0x21c bytes)
-// VIC device structure - corrected based on actual runtime offsets
-// Total size: 0x21c bytes as per reference driver
+// VIC device structure - adjusted to match actual runtime offsets
+// The actual offsets show tx_isp_subdev is 0x154 bytes, not 0xb8
 struct tx_isp_vic_device {
-    // The tx_isp_subdev is embedded at the start
-    // But we need to account for actual size differences
-    char base_padding[0xb8];           // Base structure/padding
+    // Embed the actual tx_isp_subdev at the start
+    struct tx_isp_subdev sd;           // Actual size is 0x154 bytes on our system
     
-    // VIC registers pointer - actual offset 0xb8
+    // VIC registers pointer - at actual offset 0x154 (right after subdev)
     void __iomem *vic_regs;
     
-    // Padding to self-pointer at 0xd4
+    // Calculate padding based on actual offsets observed
+    // self is at 0x170, vic_regs is at 0x154, so padding is 0x170-0x154-sizeof(pointer) = 0x18
     char padding1[0x18];
-    struct tx_isp_vic_device *self;    // Self-pointer at offset 0xd4
+    struct tx_isp_vic_device *self;    // Self-pointer at actual offset 0x170
     
-    // Padding to state at 0x128
+    // state is at 0x1c4, self is at 0x170, so padding is 0x1c4-0x170-sizeof(pointer) = 0x50
     char padding2[0x50];
-    int state;                         // State at offset 0x128 (1=init, 2=active)
+    int state;                         // State at actual offset 0x1c4
     
-    // Padding to mlock at 0x130
+    // mlock is at 0x1cc, state is at 0x1c4, so padding is 0x1cc-0x1c4-sizeof(int) = 0x4
     char padding3[0x4];
-    struct mutex mlock;                // Mutex at offset 0x130
+    struct mutex mlock;                // Mutex at actual offset 0x1cc
     
-    // Padding to frame_done at 0x148
-    char padding4[0x18];
-    struct completion frame_done;      // Completion at offset 0x148
-    
-    // Padding to snap_mlock at 0x154
-    char padding5[0xC];
-    struct mutex snap_mlock;           // Snap mutex at offset 0x154
-    
-    // Padding to buffer_lock at 0x1f4
-    char padding6[0xA0];
-    spinlock_t buffer_lock;            // Spinlock at offset 0x1f4
-    
-    // Buffer lists immediately after spinlock
-    struct list_head queue_head;       // offset 0x1f8
-    struct list_head free_head;        // offset 0x200
-    struct list_head done_head;        // offset 0x208
-    
-    // Streaming state at offset 0x210
-    int streaming;
-    
-    // Padding to frame_count at 0x218
-    char padding7[0x4];
-    uint32_t frame_count;              // Frame counter at offset 0x218
+    // Calculate remaining padding to match total size
+    // Total should be 0x21c bytes
+    char padding_rest[0x50];           // Padding to complete structure
 };
 
 // Simplified VIC registration - removed complex platform device array
@@ -300,57 +280,41 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
         return -ENOMEM;
     }
     
-    pr_info("Creating VIC device...\n");
+    pr_info("Creating VIC device (0x21c bytes)...\n");
     
-    // Initialize VIC device structure with correct offsets (0x21c bytes total)
+    // Initialize VIC device structure
     memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
     
-    // Connect VIC registers first (at offset 0xb8)
+    // Initialize all critical fields
     vic_dev->vic_regs = isp_dev->vic_regs;
-    
-    // Set self-pointer at offset 0xd4 (critical for reference driver compatibility)
     vic_dev->self = vic_dev;
+    vic_dev->state = 1;  // 1 = initialized
+    vic_dev->streaming = 0;
+    vic_dev->frame_count = 0;
     
-    // Set initial state at offset 0x128 (1 = initialized)
-    vic_dev->state = 1;
-    
-    // Initialize mutex at offset 0x130 (NOT a spinlock - reference driver bug!)
+    // Initialize synchronization primitives
     mutex_init(&vic_dev->mlock);
-    
-    // Initialize completion at offset 0x148
-    init_completion(&vic_dev->frame_done);
-    
-    // Initialize snap mutex at offset 0x154
     mutex_init(&vic_dev->snap_mlock);
-    
-    // Initialize spinlock at offset 0x1f4 for buffer management
+    init_completion(&vic_dev->frame_done);
     spin_lock_init(&vic_dev->buffer_lock);
     
-    // Initialize buffer queues (offsets 0x1f8, 0x200, 0x208)
+    // Initialize buffer queues
     INIT_LIST_HEAD(&vic_dev->queue_head);
     INIT_LIST_HEAD(&vic_dev->free_head);
     INIT_LIST_HEAD(&vic_dev->done_head);
     
-    // Set streaming state at offset 0x210
-    vic_dev->streaming = 0;
-    
-    // Initialize frame counter at offset 0x218
-    vic_dev->frame_count = 0;
-    
-    // Debug: Verify critical offsets
-    pr_info("VIC structure offsets verification:\n");
-    pr_info("  vic_regs at %p (offset 0x%lx, expected 0xb8)\n",
-            &vic_dev->vic_regs, (unsigned long)((char*)&vic_dev->vic_regs - (char*)vic_dev));
-    pr_info("  self at %p (offset 0x%lx, expected 0xd4)\n",
-            &vic_dev->self, (unsigned long)((char*)&vic_dev->self - (char*)vic_dev));
-    pr_info("  state at %p (offset 0x%lx, expected 0x128)\n",
-            &vic_dev->state, (unsigned long)((char*)&vic_dev->state - (char*)vic_dev));
-    pr_info("  mlock at %p (offset 0x%lx, expected 0x130)\n",
-            &vic_dev->mlock, (unsigned long)((char*)&vic_dev->mlock - (char*)vic_dev));
-    pr_info("  buffer_lock at %p (offset 0x%lx, expected 0x1f4)\n",
-            &vic_dev->buffer_lock, (unsigned long)((char*)&vic_dev->buffer_lock - (char*)vic_dev));
-    pr_info("  streaming at %p (offset 0x%lx, expected 0x210)\n",
-            &vic_dev->streaming, (unsigned long)((char*)&vic_dev->streaming - (char*)vic_dev));
+    // Verify critical offsets match what reference driver expects
+    pr_info("VIC structure size: 0x%lx (expected 0x21c)\n",
+            (unsigned long)sizeof(struct tx_isp_vic_device));
+    pr_info("VIC offsets: vic_regs=0x%lx, self=0x%lx, state=0x%lx, mlock=0x%lx\n",
+            (unsigned long)((char*)&vic_dev->vic_regs - (char*)vic_dev),
+            (unsigned long)((char*)&vic_dev->self - (char*)vic_dev),
+            (unsigned long)((char*)&vic_dev->state - (char*)vic_dev),
+            (unsigned long)((char*)&vic_dev->mlock - (char*)vic_dev));
+    pr_info("VIC offsets: buffer_lock=0x%lx, streaming=0x%lx, frame_count=0x%lx\n",
+            (unsigned long)((char*)&vic_dev->buffer_lock - (char*)vic_dev),
+            (unsigned long)((char*)&vic_dev->streaming - (char*)vic_dev),
+            (unsigned long)((char*)&vic_dev->frame_count - (char*)vic_dev));
     
     // Connect to ISP device directly - no complex platform device registration
     isp_dev->vic_dev = vic_dev;
