@@ -81,6 +81,9 @@ static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 
 /* Use existing frame_buffer structure from tx-libimp.h */
 
+/* Forward declaration for sensor registration handler */
+static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp);
+
 /* Frame channel state management */
 struct tx_isp_channel_state {
     bool enabled;
@@ -1354,8 +1357,8 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
                 sensor->sd.ops->video->s_stream) {
                 pr_info("Channel %d: Starting sensor %s hardware streaming\n",
-                        channel, registered_sensor && registered_sensor->info.name[0] ?
-                        registered_sensor->info.name : "(unnamed)");
+                        channel, sensor && sensor->info.name[0] ?
+                        sensor->info.name : "(unnamed)");
                 ret = sensor->sd.ops->video->s_stream(&sensor->sd, 1);
                 if (ret) {
                     pr_err("Channel %d: Failed to start sensor streaming: %d\n",
@@ -2410,12 +2413,17 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         /* We have a kernel-registered sensor - use it */
         tx_sensor = container_of(kernel_subdev, struct tx_isp_sensor, sd);
         
-        /* Update sensor info with userspace data (name comes from userspace) */
-        strncpy(tx_sensor->info.name, reg_info.name, sizeof(tx_sensor->info.name) - 1);
-        tx_sensor->info.name[sizeof(tx_sensor->info.name) - 1] = '\0';
-        tx_sensor->info.chip_id = reg_info.chip_id;
-        tx_sensor->info.width = reg_info.width;
-        tx_sensor->info.height = reg_info.height;
+        /* Update sensor info with userspace data (name comes from userspace)
+         * Note: info.name is const char*, we can't modify it directly
+         * The sensor driver should have already set it */
+        if (tx_sensor->info.chip_id == 0) {
+            tx_sensor->info.chip_id = reg_info.chip_id;
+        }
+        /* Width and height are available in sensor_info */
+        if (tx_sensor->info.width == 0) {
+            tx_sensor->info.width = reg_info.width;
+            tx_sensor->info.height = reg_info.height;
+        }
         
         pr_info("Using kernel-registered sensor for %s (subdev=%p, ops=%p)\n",
                 reg_info.name, kernel_subdev, kernel_subdev->ops);
@@ -2439,9 +2447,9 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
             return -ENOMEM;
         }
         
-        /* Initialize sensor info from userspace */
-        strncpy(tx_sensor->info.name, reg_info.name, sizeof(tx_sensor->info.name) - 1);
-        tx_sensor->info.name[sizeof(tx_sensor->info.name) - 1] = '\0';
+        /* Initialize sensor info from userspace
+         * Note: info.name is const char*, we need to allocate */
+        tx_sensor->info.name = kstrdup(reg_info.name, GFP_KERNEL);
         tx_sensor->info.chip_id = reg_info.chip_id;
         tx_sensor->info.width = reg_info.width;
         tx_sensor->info.height = reg_info.height;
