@@ -1307,6 +1307,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
     case 0x80045612: { // VIDIOC_STREAMON - Start streaming
         uint32_t type;
         struct tx_isp_vic_device *vic_dev = NULL;
+        struct tx_isp_sensor *sensor = NULL;
         
         if (copy_from_user(&type, argp, sizeof(type)))
             return -EFAULT;
@@ -1340,6 +1341,26 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         // Enable channel
         state->enabled = true;
         state->streaming = true;
+        
+        // Start the actual sensor hardware streaming FIRST
+        if (channel == 0 && ourISPdev && ourISPdev->sensor) {
+            sensor = ourISPdev->sensor;
+            if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
+                sensor->sd.ops->video->s_stream) {
+                pr_info("Channel %d: Starting sensor %s hardware streaming\n",
+                        channel, sensor->info.name);
+                ret = sensor->sd.ops->video->s_stream(&sensor->sd, 1);
+                if (ret) {
+                    pr_err("Channel %d: Failed to start sensor streaming: %d\n",
+                           channel, ret);
+                    state->streaming = false;
+                    return ret;
+                }
+                pr_info("Channel %d: Sensor streaming started successfully\n", channel);
+            } else {
+                pr_warn("Channel %d: No sensor s_stream operation available\n", channel);
+            }
+        }
         
         // Get VIC device
         if (ourISPdev && ourISPdev->vic_dev) {
@@ -1394,6 +1415,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
     }
     case 0x80045613: { // VIDIOC_STREAMOFF - Stop streaming
         uint32_t type;
+        struct tx_isp_sensor *sensor = NULL;
         
         if (copy_from_user(&type, argp, sizeof(type)))
             return -EFAULT;
@@ -1406,9 +1428,18 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             return -EINVAL;
         }
         
-        // Reference disables video streaming for this channel
-        // Stops DMA, clears buffers, etc.
+        // Stop channel streaming
         state->streaming = false;
+        
+        // Stop the actual sensor hardware streaming
+        if (channel == 0 && ourISPdev && ourISPdev->sensor) {
+            sensor = ourISPdev->sensor;
+            if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
+                sensor->sd.ops->video->s_stream) {
+                pr_info("Channel %d: Stopping sensor hardware streaming\n", channel);
+                sensor->sd.ops->video->s_stream(&sensor->sd, 0);
+            }
+        }
         
         pr_info("Channel %d: Streaming stopped\n", channel);
         return 0;
@@ -1617,10 +1648,11 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             u32 height;
             u32 fps;
             u32 interface_type; // CSI, DVP, etc.
-            // Other fields would be here in real struct
+            void *sensor_ops;    // Pointer to sensor operations
+            void *sensor_data;   // Sensor private data
         } reg_info;
         struct registered_sensor *sensor, *tmp;
-        struct tx_isp_subdev *sensor_subdev;
+        struct tx_isp_sensor *tx_sensor;
         struct tx_isp_sensor_attribute sensor_attr = {0};
         int ret;
         
@@ -1641,28 +1673,44 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
         
-        // Create real subdev entry for this sensor
-        sensor_subdev = kzalloc(sizeof(struct tx_isp_subdev), GFP_KERNEL);
-        if (!sensor_subdev) {
+        // Create real sensor structure
+        tx_sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
+        if (!tx_sensor) {
             mutex_unlock(&sensor_list_mutex);
-            pr_err("Failed to allocate sensor subdev for %s\n", reg_info.name);
+            pr_err("Failed to allocate sensor for %s\n", reg_info.name);
             return -ENOMEM;
         }
         
-        // Set sensor state to running (using vin_state from tx_isp_subdev)
-        sensor_subdev->vin_state = TX_ISP_MODULE_RUNNING;
+        // Initialize sensor info
+        strncpy(tx_sensor->info.name, reg_info.name, sizeof(tx_sensor->info.name) - 1);
+        tx_sensor->info.chip_id = reg_info.chip_id;
+        tx_sensor->info.width = reg_info.width;
+        tx_sensor->info.height = reg_info.height;
+        
+        // Set sensor state to running
+        tx_sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
+        
+        // If sensor provides operations, use them
+        if (reg_info.sensor_ops) {
+            tx_sensor->sd.ops = (struct tx_isp_subdev_ops *)reg_info.sensor_ops;
+            pr_info("Using sensor-provided operations for %s\n", reg_info.name);
+        }
+        
+        // Store sensor private data if provided
+        if (reg_info.sensor_data) {
+            tx_sensor->sd.host_priv = reg_info.sensor_data;
+        }
         
         // Register with ISP device as primary sensor
         if (!isp_dev->sensor) {
-            isp_dev->sensor = container_of(sensor_subdev, struct tx_isp_sensor, sd);
-            pr_info("Registered %s as primary sensor\n", reg_info.name);
+            isp_dev->sensor = tx_sensor;
+            pr_info("Registered %s as primary sensor with operations\n", reg_info.name);
         }
         
         // Add to registered sensor list for IOCTL compatibility
         sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
         if (!sensor) {
-            kfree(sensor_subdev->module.name);
-            kfree(sensor_subdev);
+            kfree(tx_sensor);
             mutex_unlock(&sensor_list_mutex);
             return -ENOMEM;
         }
