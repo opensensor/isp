@@ -2746,16 +2746,21 @@ static void vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
     
     spin_lock_irqsave(&vic_dev->buffer_lock, flags);
     
-    // Increment frame counter like reference
+    // Increment VIC frame counter
     vic_dev->frame_count++;
+    
+    // CRITICAL: Also increment ISP frame counter for video drop detection
+    if (ourISPdev) {
+        ourISPdev->frame_count++;
+        pr_debug("VIC: frame_count=%u (ISP=%u)\n",
+                vic_dev->frame_count, ourISPdev->frame_count);
+    }
     
     // Move completed buffers from queue to done list
     if (!list_empty(&vic_dev->queue_head)) {
         struct list_head *buffer = vic_dev->queue_head.next;
         list_del(buffer);
         list_add_tail(buffer, &vic_dev->done_head);
-        
-        pr_debug("VIC: Frame %d completed\n", vic_dev->frame_count);
     }
     
     spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
@@ -2887,6 +2892,12 @@ static void simulate_frame_completion(void)
         }
     }
     
+    /* CRITICAL: Increment ISP frame counter for video drop detection */
+    if (ourISPdev) {
+        ourISPdev->frame_count++;
+        pr_debug("Simulated frame: frame_count=%u\n", ourISPdev->frame_count);
+    }
+    
     /* Trigger frame completion on all active channels */
     for (i = 0; i < num_channels; i++) {
         if (frame_channels[i].state.streaming) {
@@ -2953,8 +2964,13 @@ static void frame_sim_timer_callback(unsigned long data)
             }
         }
         
-        pr_debug("Frame timer: Generating frames (sensor %s)\n",
-                sensor_active ? "active" : "inactive");
+        /* CRITICAL: Increment ISP frame counter for video drop detection */
+        if (ourISPdev) {
+            ourISPdev->frame_count++;
+            pr_debug("Frame timer: frame_count=%u (sensor %s)\n",
+                    ourISPdev->frame_count,
+                    sensor_active ? "active" : "inactive");
+        }
         
         /* If VIC is available, update its frame counter */
         if (ourISPdev && ourISPdev->vic_dev) {

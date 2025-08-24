@@ -21,18 +21,16 @@ static int tx_isp_proc_w02_show(struct seq_file *m, void *v)
     struct tx_isp_dev *isp = m->private;
 
     if (!isp) {
-        /* Output numeric format that fscanf can parse */
-        seq_printf(m, "0 0 0 0\n");
+        /* Output single frame counter value for libimp's fscanf */
+        seq_printf(m, "0\n");
         return 0;
     }
 
-    /* Output numeric format that userspace library expects for fscanf */
-    /* Based on common ISP proc formats, likely status values */
-    seq_printf(m, "%d %u %d %d\n",
-               isp->is_open ? 1 : 0,           /* ISP active status */
-               isp->frame_count,               /* Frame count */
-               isp->streaming_enabled ? 1 : 0, /* Streaming status */
-               isp->wdr_mode);                 /* WDR mode */
+    /* CRITICAL: libimp reads this with fscanf(stream, "%d", &var)
+     * and expects a single incrementing frame counter value.
+     * If this value doesn't change for 2+ reads, it logs "err:video drop"
+     */
+    seq_printf(m, "%u\n", isp->frame_count);
     
     return 0;
 }
