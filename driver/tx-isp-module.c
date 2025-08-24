@@ -43,9 +43,9 @@ static int isp_memopt = 0; // Memory optimization flag like reference
 #define TX_ISP_EVENT_FRAME_STREAMON     0x3000003
 
 /* Forward declarations */
-static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);
-static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data);
 static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
+static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data);
+static void init_frame_simulation(void);
 
 // ISP Tuning device support - missing component for /dev/isp-m0
 static struct cdev isp_tuning_cdev;
@@ -54,19 +54,7 @@ static dev_t isp_tuning_devno;
 static int isp_tuning_major = 0;
 static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 
-/* Frame buffer structure matching reference driver pattern */
-struct frame_buffer {
-    void *virt_addr;              /* Virtual address */
-    dma_addr_t phys_addr;         /* Physical/DMA address */
-    size_t size;                  /* Buffer size */
-    int index;                    /* Buffer index */
-    int state;                    /* Buffer state (0=free, 1=queued, 2=ready) */
-    uint32_t bytesused;          /* Bytes used in buffer */
-    uint32_t flags;              /* V4L2 buffer flags */
-    uint32_t sequence;           /* Frame sequence number */
-    struct timeval timestamp;     /* Frame timestamp */
-    struct list_head list;        /* List node for queue management */
-};
+/* Use existing frame_buffer structure from tx-libimp.h */
 
 /* Frame channel state management */
 struct tx_isp_channel_state {
@@ -79,7 +67,7 @@ struct tx_isp_channel_state {
     uint32_t sequence;           /* Frame sequence counter */
     
     /* Simplified buffer management for now */
-    struct frame_buffer *current_buffer;    /* Current active buffer */
+    struct frame_buffer current_buffer;     /* Current active buffer */
     spinlock_t buffer_lock;                /* Protect buffer access */
     wait_queue_head_t frame_wait;          /* Wait queue for frame completion */
     bool frame_ready;                      /* Simple frame ready flag */
@@ -506,7 +494,7 @@ static int frame_channel_open(struct inode *inode, struct file *file)
     init_waitqueue_head(&fcd->state.frame_wait);
     fcd->state.sequence = 0;
     fcd->state.frame_ready = false;
-    fcd->state.current_buffer = NULL;
+    memset(&fcd->state.current_buffer, 0, sizeof(fcd->state.current_buffer));
     
     file->private_data = fcd;
     
@@ -722,7 +710,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             uint32_t reserved;
         } buffer;
         
-        struct frame_buffer *frame_buf = NULL;
+        struct frame_buffer frame_buf;
         unsigned long flags;
         int ret = 0;
         
@@ -813,8 +801,8 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         state->streaming = true;
         
         // Send stream ON event to VIC for pipeline activation
-        tx_isp_send_event_to_remote(ourISPdev ? ourISPdev->vic_dev : NULL,
-                                   TX_ISP_EVENT_FRAME_STREAMON, &channel);
+        tx_isp_send_event_to_remote_internal(ourISPdev ? ourISPdev->vic_dev : NULL,
+                                           TX_ISP_EVENT_FRAME_STREAMON, &channel);
         
         pr_info("Channel %d: Streaming started\n", channel);
         return 0;
@@ -1708,7 +1696,7 @@ static void tx_isp_exit(void)
 }
 
 /* Event system implementation matching reference driver */
-static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
+static int tx_isp_send_event_to_remote_internal(void *subdev, int event_type, void *data)
 {
     struct tx_isp_subdev *sd = (struct tx_isp_subdev *)subdev;
     
@@ -1823,7 +1811,7 @@ static void simulate_frame_completion(void)
 /* Timer callback to simulate periodic frame generation for testing */
 static struct timer_list frame_sim_timer;
 
-static void frame_sim_timer_callback(struct timer_list *t)
+static void frame_sim_timer_callback(unsigned long data)
 {
     /* Simulate 30 FPS frame generation */
     simulate_frame_completion();
@@ -1832,11 +1820,15 @@ static void frame_sim_timer_callback(struct timer_list *t)
     mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
 }
 
-/* Initialize frame simulation timer for testing */
+/* Initialize frame simulation timer for testing - kernel 3.10 compatible */
 static void init_frame_simulation(void)
 {
-    timer_setup(&frame_sim_timer, frame_sim_timer_callback, 0);
-    mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
+    /* Use old timer API for kernel 3.10 compatibility */
+    init_timer(&frame_sim_timer);
+    frame_sim_timer.function = (void (*)(unsigned long))frame_sim_timer_callback;
+    frame_sim_timer.data = 0;
+    frame_sim_timer.expires = jiffies + msecs_to_jiffies(33);
+    add_timer(&frame_sim_timer);
     pr_info("Frame simulation timer initialized (30 FPS)\n");
 }
 
