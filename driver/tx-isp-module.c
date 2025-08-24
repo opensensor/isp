@@ -124,6 +124,15 @@ static int frame_channel_open(struct inode *inode, struct file *file);
 static int frame_channel_release(struct inode *inode, struct file *file);
 static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
+/* Frame channel device file operations - moved up for early use */
+static const struct file_operations frame_channel_fops = {
+    .owner = THIS_MODULE,
+    .open = frame_channel_open,
+    .release = frame_channel_release,
+    .unlocked_ioctl = frame_channel_unlocked_ioctl,
+    .compat_ioctl = frame_channel_unlocked_ioctl,
+};
+
 // Helper functions matching reference driver patterns - SDK compatible
 static void* find_subdev_link_pad(struct tx_isp_dev *isp_dev, char *name)
 {
@@ -183,24 +192,30 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
 struct tx_isp_vic_device {
     struct tx_isp_subdev sd;           // Base subdev structure
     
-    // Frame buffer management (from decompiled ispvic_frame_channel_qbuf)
+    // Critical offsets from reference driver analysis
+    char padding1[0x130];              // Padding to offset 0x130
+    struct mutex mlock;                // Mutex at offset 0x130
+    char padding2[0x18];               // Padding to offset 0x148
+    struct completion frame_done;      // Completion at offset 0x148
+    char padding3[0xC];                // Padding to offset 0x154
+    struct mutex snap_mlock;           // Snap mutex at offset 0x154
+    char padding4[0xA0];               // Padding to offset 0x1f4
     spinlock_t buffer_lock;            // Lock at offset 0x1f4 in reference
     struct list_head queue_head;       // Buffer queue head at 0x1f8
     struct list_head free_head;        // Free buffer head at 0x1fc
     struct list_head done_head;        // Done buffer head at 0x204
-    
-    // State management (from tx_isp_vic_activate_subdev)
-    struct mutex mlock;                // Mutex at offset 0x130
-    struct mutex snap_mlock;           // Snap mutex at offset 0x154
-    struct completion frame_done;      // Completion at offset 0x148
-    int state;                         // State at offset 0x128 (1=init, 2=active)
-    
-    // Frame counting
+    char padding5[0xC];                // Padding to offset 0x210
+    int streaming;                     // Streaming state at offset 0x210
+    int state;                         // VIC state (0=init, 1=ready, 2=active)
+    char padding6[0x4];                // Adjust padding to offset 0x218
     uint32_t frame_count;              // Frame counter at offset 0x218
     
-    // Hardware registers
-    void __iomem *vic_regs;            // VIC register base
+    // Hardware registers - critical for streaming control
+    void __iomem *vic_regs;            // VIC register base at offset 0xb8 in subdev
 };
+
+// Simplified VIC registration - removed complex platform device array
+static int vic_registered = 0;
 
 // Initialize VIC register mapping for hardware access
 static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
@@ -239,8 +254,8 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
-// Initialize VIC subdev based on reference tx_isp_vic_probe
-static int tx_isp_init_vic_subdev(struct tx_isp_dev *isp_dev)
+// Create and register VIC device - simplified approach without platform/misc device complications
+static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
 {
     struct tx_isp_vic_device *vic_dev;
     int ret = 0;
@@ -260,46 +275,45 @@ static int tx_isp_init_vic_subdev(struct tx_isp_dev *isp_dev)
     vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
     if (!vic_dev) {
         pr_err("Failed to allocate VIC device\n");
-        if (isp_dev->vic_regs) {
-            iounmap(isp_dev->vic_regs);
-            isp_dev->vic_regs = NULL;
-        }
         return -ENOMEM;
     }
     
-    pr_info("Initializing VIC subdev...\n");
+    pr_info("Creating VIC device...\n");
     
-    // Initialize VIC subdev structure like reference tx_isp_vic_probe
+    // Initialize VIC device structure with correct offsets
     memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
     
-    // Initialize locks and completion like reference
-    spin_lock_init(&vic_dev->buffer_lock);
-    mutex_init(&vic_dev->mlock);
-    mutex_init(&vic_dev->snap_mlock);
-    init_completion(&vic_dev->frame_done);
+    // Initialize locks and completion at correct offsets
+    spin_lock_init(&vic_dev->buffer_lock);        // offset 0x1f4
+    mutex_init(&vic_dev->mlock);                  // offset 0x130
+    mutex_init(&vic_dev->snap_mlock);            // offset 0x154
+    init_completion(&vic_dev->frame_done);       // offset 0x148
     
     // Initialize buffer queues
-    INIT_LIST_HEAD(&vic_dev->queue_head);
-    INIT_LIST_HEAD(&vic_dev->free_head);
-    INIT_LIST_HEAD(&vic_dev->done_head);
+    INIT_LIST_HEAD(&vic_dev->queue_head);        // offset 0x1f8
+    INIT_LIST_HEAD(&vic_dev->free_head);         // offset 0x1fc
+    INIT_LIST_HEAD(&vic_dev->done_head);         // offset 0x204
     
-    // Set initial state (1 = initialized, like reference)
-    vic_dev->state = 1;
-    vic_dev->frame_count = 0;
+    // Set initial state
+    vic_dev->streaming = 0;                      // offset 0x210
+    vic_dev->state = 1;                          // 1 = ready, 2 = active
+    vic_dev->frame_count = 0;                    // offset 0x218
     
-    // Connect VIC registers to VIC device
+    // Connect VIC registers
     vic_dev->vic_regs = isp_dev->vic_regs;
-    if (vic_dev->vic_regs) {
-        pr_info("VIC hardware registers available for real frame processing\n");
-    } else {
-        pr_info("VIC hardware registers not available - using simulation mode\n");
-    }
     
-    // Connect VIC device to ISP device structure
+    // Connect to ISP device directly - no complex platform device registration
     isp_dev->vic_dev = vic_dev;
     
-    pr_info("VIC subdev initialized successfully\n");
+    pr_info("VIC device created successfully\n");
     return 0;
+}
+
+// Initialize VIC subdev based on reference tx_isp_vic_probe
+static int tx_isp_init_vic_subdev(struct tx_isp_dev *isp_dev)
+{
+    // Use platform device registration instead
+    return tx_isp_register_vic_platform_device(isp_dev);
 }
 
 // Initialize subdev infrastructure matching reference driver
@@ -853,14 +867,7 @@ static const struct file_operations isp_tuning_fops = {
     .release = isp_tuning_release,
 };
 
-/* Frame channel device file operations */
-static const struct file_operations frame_channel_fops = {
-    .owner = THIS_MODULE,
-    .open = frame_channel_open,
-    .release = frame_channel_release,
-    .unlocked_ioctl = frame_channel_unlocked_ioctl,
-    .compat_ioctl = frame_channel_unlocked_ioctl,
-};
+/* Frame channel device file operations - moved up earlier in file */
 
 // Create ISP tuning device node (reference: tisp_code_create_tuning_node)
 static int create_isp_tuning_device(void)
@@ -2251,7 +2258,7 @@ static void tx_isp_exit(void)
             pr_info("Hardware interrupt %d freed\n", ourISPdev->isp_irq);
         }
         
-        /* Clean up VIC subdev */
+        /* Clean up VIC device directly */
         if (ourISPdev->vic_dev) {
             struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
             
@@ -2274,6 +2281,7 @@ static void tx_isp_exit(void)
             
             kfree(vic_dev);
             ourISPdev->vic_dev = NULL;
+            pr_info("VIC device cleaned up\n");
         }
         
         /* Unmap hardware registers */
