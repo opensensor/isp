@@ -1494,15 +1494,17 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             // Initialize sensor hardware FIRST (loads all register settings)
             if (sensor && sensor->sd.ops && sensor->sd.ops->core &&
                 sensor->sd.ops->core->init) {
-                pr_info("Channel %d: Initializing sensor %s hardware...\n",
+                pr_info("Channel %d: *** CALLING SENSOR INIT FOR %s ***\n",
                         channel, sensor ? sensor->info.name : "(unnamed)");
+                pr_info("Channel %d: This should trigger I2C register writes to configure the sensor\n", channel);
                 ret = sensor->sd.ops->core->init(&sensor->sd, 1);
+                pr_info("Channel %d: Sensor init returned: %d (0=success, 0xfffffdfd=already_init)\n", channel, ret);
                 if (ret && ret != 0xfffffdfd) {  // 0xfffffdfd is "already initialized"
                     pr_err("Channel %d: Failed to initialize sensor: %d\n", channel, ret);
                     state->streaming = false;
                     return ret;
                 }
-                pr_info("Channel %d: Sensor initialized successfully\n", channel);
+                pr_info("Channel %d: *** SENSOR REGISTER CONFIGURATION COMPLETE ***\n", channel);
                 
                 /* Ensure sensor state transitions to RUNNING after init */
                 sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
@@ -2677,28 +2679,35 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         pr_info("I2C subdev created: %s at 0x%02x on adapter %s\n",
                 i2c_client->name, i2c_client->addr, adapter->name);
         
-        /* CRITICAL: Associate I2C client with sensor subdev if available */
+        /* CRITICAL: FORCE I2C client association with sensor subdev */
         if (kernel_subdev && tx_sensor) {
-            /* Get client data (subdev) from I2C device */
-            struct tx_isp_subdev *i2c_subdev = (struct tx_isp_subdev *)i2c_get_clientdata(i2c_client);
-            if (i2c_subdev && i2c_subdev == kernel_subdev) {
-                pr_info("I2C client successfully associated with sensor subdev\n");
+            pr_info("*** FORCING I2C CLIENT ASSOCIATION ***\n");
+            
+            /* FORCE association - don't check, just set it */
+            i2c_set_clientdata(i2c_client, kernel_subdev);
+            tx_sensor->i2c_client = i2c_client;
+            
+            pr_info("I2C client FORCED association with sensor subdev\n");
+            
+            /* Store I2C information in ISP device */
+            isp_dev->sensor_i2c_client = i2c_client;
+            isp_dev->i2c_adapter = adapter;
                 
-                /* Store I2C information in ISP device */
-                isp_dev->sensor_i2c_client = i2c_client;
-                isp_dev->i2c_adapter = adapter;
-                
-                /* Initialize sensor if we have initialization ops */
+                /* CRITICAL: Initialize sensor RIGHT NOW while I2C client is fresh */
                 if (kernel_subdev->ops && kernel_subdev->ops->core &&
                     kernel_subdev->ops->core->init) {
-                    pr_info("Initializing sensor %s hardware...\n", reg_info.name);
+                    pr_info("*** CALLING SENSOR INIT WITH FRESH I2C CLIENT ***\n");
+                    pr_info("This should write the GC2053 register configuration array\n");
                     ret = kernel_subdev->ops->core->init(kernel_subdev, 1);
+                    pr_info("Sensor init returned: %d (0=success, 0xfffffdfd=already_init)\n", ret);
                     if (ret && ret != 0xfffffdfd) {  // 0xfffffdfd = already initialized
                         pr_err("Failed to initialize sensor %s: %d\n", reg_info.name, ret);
                     } else {
-                        pr_info("Sensor %s initialized successfully\n", reg_info.name);
+                        pr_info("*** SENSOR HARDWARE INITIALIZATION COMPLETE ***\n");
                         kernel_subdev->vin_state = TX_ISP_MODULE_RUNNING;
                     }
+                } else {
+                    pr_warn("No sensor init operation available\n");
                 }
             } else {
                 pr_warn("I2C client data mismatch - subdev association failed\n");
