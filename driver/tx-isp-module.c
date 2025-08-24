@@ -1354,7 +1354,8 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
                 sensor->sd.ops->video->s_stream) {
                 pr_info("Channel %d: Starting sensor %s hardware streaming\n",
-                        channel, sensor->info.name);
+                        channel, registered_sensor && registered_sensor->info.name[0] ?
+                        registered_sensor->info.name : "(unnamed)");
                 ret = sensor->sd.ops->video->s_stream(&sensor->sd, 1);
                 if (ret) {
                     pr_err("Channel %d: Failed to start sensor streaming: %d\n",
@@ -1646,135 +1647,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Sensor info request: returning success (1)\n");
         return 0;
     }
-    case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - Check for kernel-registered sensor
-        struct tx_isp_sensor_register_info {
-            char name[32];
-            u32 chip_id;
-            u32 width;
-            u32 height;
-            u32 fps;
-            u32 interface_type;
-            void *sensor_ops;
-            void *sensor_data;
-        } reg_info;
-        struct registered_sensor *sensor, *tmp;
-        struct tx_isp_sensor *tx_sensor = NULL;
-        struct tx_isp_subdev *kernel_subdev = NULL;
-        struct tx_isp_sensor_attribute sensor_attr = {0};
-        int ret;
-        
-        if (copy_from_user(&reg_info, argp, sizeof(reg_info)))
-            return -EFAULT;
-            
-        pr_info("Sensor registration IOCTL: %s (ID=0x%x, %dx%d@%dfps)\n",
-                reg_info.name, reg_info.chip_id, reg_info.width, reg_info.height, reg_info.fps);
-        
-        /* Check if we have a kernel-registered sensor waiting */
-        mutex_lock(&sensor_register_mutex);
-        kernel_subdev = registered_sensor_subdev;
-        /* Don't clear - keep it available for repeated registration attempts */
-        /* The sensor driver will call unregister when module is unloaded */
-        mutex_unlock(&sensor_register_mutex);
-        
-        mutex_lock(&sensor_list_mutex);
-        
-        // Check if sensor already registered
-        list_for_each_entry_safe(sensor, tmp, &sensor_list, list) {
-            if (strncmp(sensor->name, reg_info.name, sizeof(sensor->name)) == 0) {
-                mutex_unlock(&sensor_list_mutex);
-                pr_info("Sensor %s already registered\n", reg_info.name);
-                return 0;
-            }
-        }
-        
-        /* Use kernel-registered sensor if available */
-        if (kernel_subdev) {
-            pr_info("Using kernel-registered sensor subdev for %s (ops=%p)\n",
-                    reg_info.name, kernel_subdev->ops);
-            
-            /* Get the sensor from the subdev */
-            tx_sensor = container_of(kernel_subdev, struct tx_isp_sensor, sd);
-            
-            /* Verify we have the video ops for streaming */
-            if (kernel_subdev->ops && kernel_subdev->ops->video) {
-                pr_info("Sensor %s has video ops (s_stream=%p)\n",
-                        reg_info.name, kernel_subdev->ops->video->s_stream);
-            } else {
-                pr_warn("Sensor %s missing video ops!\n", reg_info.name);
-            }
-        } else {
-            /* Fallback: create new sensor if no kernel registration */
-            pr_warn("No kernel-registered sensor for %s, creating placeholder\n", reg_info.name);
-            
-            tx_sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
-            if (!tx_sensor) {
-                mutex_unlock(&sensor_list_mutex);
-                pr_err("Failed to allocate sensor for %s\n", reg_info.name);
-                return -ENOMEM;
-            }
-            
-            memset(&tx_sensor->info, 0, sizeof(tx_sensor->info));
-            strncpy(tx_sensor->info.name, reg_info.name, sizeof(tx_sensor->info.name) - 1);
-            tx_sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
-        }
-        
-        // Register with ISP device as primary sensor
-        if (!isp_dev->sensor) {
-            isp_dev->sensor = tx_sensor;
-            pr_info("Registered %s as primary sensor %s\n", reg_info.name,
-                    kernel_subdev ? "with kernel ops" : "(placeholder)");
-            
-            /* Initialize the sensor hardware if we have proper ops */
-            if (kernel_subdev && kernel_subdev->ops && kernel_subdev->ops->core &&
-                kernel_subdev->ops->core->init) {
-                pr_info("Initializing sensor %s hardware...\n", reg_info.name);
-                ret = kernel_subdev->ops->core->init(kernel_subdev, 1);
-                if (ret) {
-                    pr_err("Failed to initialize sensor %s: %d\n", reg_info.name, ret);
-                } else {
-                    pr_info("Sensor %s initialized successfully\n", reg_info.name);
-                }
-            }
-        }
-        
-        // Add to registered sensor list
-        sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
-        if (!sensor) {
-            if (!kernel_subdev) kfree(tx_sensor);
-            mutex_unlock(&sensor_list_mutex);
-            return -ENOMEM;
-        }
-        
-        strncpy(sensor->name, reg_info.name, sizeof(sensor->name) - 1);
-        sensor->name[sizeof(sensor->name) - 1] = '\0';
-        sensor->index = sensor_count++;
-        sensor->subdev = kernel_subdev;
-        INIT_LIST_HEAD(&sensor->list);
-        list_add_tail(&sensor->list, &sensor_list);
-        
-        mutex_unlock(&sensor_list_mutex);
-        
-        // Activate sensor pipeline
-        ret = tx_isp_activate_sensor_pipeline(isp_dev, reg_info.name);
-        if (ret) {
-            pr_warn("Failed to activate pipeline for %s: %d\n", reg_info.name, ret);
-        }
-        
-        // Sync sensor attributes
-        sensor_attr.name = reg_info.name;
-        sensor_attr.chip_id = reg_info.chip_id;
-        sensor_attr.total_width = reg_info.width;
-        sensor_attr.total_height = reg_info.height;
-        sensor_attr.dbus_type = reg_info.interface_type;
-        
-        ret = tx_isp_sync_sensor_attr(isp_dev, &sensor_attr);
-        if (ret) {
-            pr_warn("Failed to sync %s attributes: %d\n", reg_info.name, ret);
-        }
-        
-        pr_info("Sensor registration complete: %s (index %d)\n",
-                sensor->name, sensor->index);
-        return 0;
+    case 0x805056c1: { // TX_ISP_SENSOR_REGISTER
+        return handle_sensor_register(isp_dev, argp);
     }
     case 0xc050561a: { // TX_ISP_SENSOR_ENUM_INPUT - Enumerate sensor inputs
         struct sensor_enum_input {
@@ -2482,6 +2356,159 @@ static void tx_isp_exit(void)
     mutex_unlock(&sensor_list_mutex);
 
     pr_info("TX ISP driver removed\n");
+}
+
+/* Handle sensor registration from userspace IOCTL */
+static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
+{
+    struct tx_isp_sensor_register_info {
+        char name[32];
+        u32 chip_id;
+        u32 width;
+        u32 height;
+        u32 fps;
+        u32 interface_type;
+        void *sensor_ops;
+        void *sensor_data;
+    } reg_info;
+    struct registered_sensor *reg_sensor, *tmp;
+    struct tx_isp_sensor *tx_sensor = NULL;
+    struct tx_isp_subdev *kernel_subdev = NULL;
+    struct tx_isp_sensor_attribute sensor_attr = {0};
+    bool need_new_sensor = false;
+    int ret;
+    
+    if (!isp_dev) {
+        pr_err("ISP device not initialized\n");
+        return -ENODEV;
+    }
+    
+    if (copy_from_user(&reg_info, argp, sizeof(reg_info)))
+        return -EFAULT;
+    
+    pr_info("Sensor registration: %s (ID=0x%x, %dx%d@%dfps)\n",
+            reg_info.name, reg_info.chip_id, reg_info.width, reg_info.height, reg_info.fps);
+    
+    /* Check if sensor already registered */
+    mutex_lock(&sensor_list_mutex);
+    list_for_each_entry_safe(reg_sensor, tmp, &sensor_list, list) {
+        if (strncmp(reg_sensor->name, reg_info.name, sizeof(reg_sensor->name)) == 0) {
+            mutex_unlock(&sensor_list_mutex);
+            pr_info("Sensor %s already registered\n", reg_info.name);
+            return 0;
+        }
+    }
+    mutex_unlock(&sensor_list_mutex);
+    
+    /* Check for kernel-registered sensor subdev */
+    mutex_lock(&sensor_register_mutex);
+    kernel_subdev = registered_sensor_subdev;
+    mutex_unlock(&sensor_register_mutex);
+    
+    /* Determine if we need to create a sensor or use kernel-registered one */
+    if (kernel_subdev) {
+        /* We have a kernel-registered sensor - use it */
+        tx_sensor = container_of(kernel_subdev, struct tx_isp_sensor, sd);
+        
+        /* Update sensor info with userspace data (name comes from userspace) */
+        strncpy(tx_sensor->info.name, reg_info.name, sizeof(tx_sensor->info.name) - 1);
+        tx_sensor->info.name[sizeof(tx_sensor->info.name) - 1] = '\0';
+        tx_sensor->info.chip_id = reg_info.chip_id;
+        tx_sensor->info.width = reg_info.width;
+        tx_sensor->info.height = reg_info.height;
+        
+        pr_info("Using kernel-registered sensor for %s (subdev=%p, ops=%p)\n",
+                reg_info.name, kernel_subdev, kernel_subdev->ops);
+        
+        /* Verify we have the video ops for streaming */
+        if (kernel_subdev->ops && kernel_subdev->ops->video) {
+            pr_info("  video ops=%p (s_stream=%p)\n",
+                    kernel_subdev->ops->video,
+                    kernel_subdev->ops->video ? kernel_subdev->ops->video->s_stream : NULL);
+        } else {
+            pr_warn("Sensor %s missing video ops!\n", reg_info.name);
+        }
+    } else {
+        /* No kernel sensor - create placeholder */
+        pr_warn("No kernel-registered sensor, creating placeholder for %s\n", reg_info.name);
+        need_new_sensor = true;
+        
+        tx_sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
+        if (!tx_sensor) {
+            pr_err("Failed to allocate sensor for %s\n", reg_info.name);
+            return -ENOMEM;
+        }
+        
+        /* Initialize sensor info from userspace */
+        strncpy(tx_sensor->info.name, reg_info.name, sizeof(tx_sensor->info.name) - 1);
+        tx_sensor->info.name[sizeof(tx_sensor->info.name) - 1] = '\0';
+        tx_sensor->info.chip_id = reg_info.chip_id;
+        tx_sensor->info.width = reg_info.width;
+        tx_sensor->info.height = reg_info.height;
+        tx_sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
+    }
+    
+    /* Register with ISP device as primary sensor */
+    if (!isp_dev->sensor) {
+        isp_dev->sensor = tx_sensor;
+        pr_info("Registered %s as primary ISP sensor %s\n",
+                reg_info.name,
+                kernel_subdev ? "(with kernel ops)" : "(placeholder)");
+        
+        /* Initialize the sensor hardware if we have proper ops */
+        if (kernel_subdev && kernel_subdev->ops && kernel_subdev->ops->core &&
+            kernel_subdev->ops->core->init) {
+            pr_info("Initializing sensor %s hardware...\n", reg_info.name);
+            ret = kernel_subdev->ops->core->init(kernel_subdev, 1);
+            if (ret) {
+                pr_err("Failed to initialize sensor %s: %d\n", reg_info.name, ret);
+            } else {
+                pr_info("Sensor %s initialized successfully (subdev=%p)\n",
+                        reg_info.name, kernel_subdev);
+            }
+        }
+    }
+    
+    /* Add to registered sensor list */
+    mutex_lock(&sensor_list_mutex);
+    
+    reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
+    if (!reg_sensor) {
+        mutex_unlock(&sensor_list_mutex);
+        if (need_new_sensor) kfree(tx_sensor);
+        return -ENOMEM;
+    }
+    
+    strncpy(reg_sensor->name, reg_info.name, sizeof(reg_sensor->name) - 1);
+    reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
+    reg_sensor->index = sensor_count++;
+    reg_sensor->subdev = kernel_subdev;
+    INIT_LIST_HEAD(&reg_sensor->list);
+    list_add_tail(&reg_sensor->list, &sensor_list);
+    
+    mutex_unlock(&sensor_list_mutex);
+    
+    /* Activate sensor pipeline */
+    ret = tx_isp_activate_sensor_pipeline(isp_dev, reg_info.name);
+    if (ret) {
+        pr_warn("Failed to activate pipeline for %s: %d\n", reg_info.name, ret);
+    }
+    
+    /* Sync sensor attributes */
+    sensor_attr.name = reg_info.name;
+    sensor_attr.chip_id = reg_info.chip_id;
+    sensor_attr.total_width = reg_info.width;
+    sensor_attr.total_height = reg_info.height;
+    sensor_attr.dbus_type = reg_info.interface_type;
+    
+    ret = tx_isp_sync_sensor_attr(isp_dev, &sensor_attr);
+    if (ret) {
+        pr_warn("Failed to sync %s attributes: %d\n", reg_info.name, ret);
+    }
+    
+    pr_info("Sensor registration complete: %s (index %d)\n",
+            reg_sensor->name, reg_sensor->index);
+    return 0;
 }
 
 /* Event system implementation matching reference driver */
