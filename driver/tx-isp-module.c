@@ -2427,7 +2427,7 @@ static int tx_isp_init(void)
     ret = tx_isp_init_subdevs(ourISPdev);
     if (ret) {
         pr_err("Failed to initialize subdev infrastructure: %d\n", ret);
-        cleanup_i2c_adapter(ourISPdev);
+        cleanup_i2c_infrastructure(ourISPdev);
         destroy_frame_channel_devices();
         destroy_isp_tuning_device();
         tx_isp_proc_exit(ourISPdev);
