@@ -1124,12 +1124,19 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         if (copy_from_user(&reqbuf, argp, sizeof(reqbuf)))
             return -EFAULT;
             
-        pr_info("Channel %d: Request %d buffers, type=%d memory=%d\n",
+        pr_debug("Channel %d: Request %d buffers, type=%d memory=%d\n",
                 channel, reqbuf.count, reqbuf.type, reqbuf.memory);
                 
-        // Reference allocates video buffers based on count
-        reqbuf.count = min(reqbuf.count, 8U); // Limit to 8 buffers
-        state->buffer_count = reqbuf.count;
+        // Store the actual number of buffers requested
+        // Channel 0 typically requests 4, channel 1 requests 2
+        if (reqbuf.count > 0) {
+            reqbuf.count = min(reqbuf.count, 8U); // Limit to 8 buffers
+            state->buffer_count = reqbuf.count;
+            pr_info("Channel %d: Allocated %d buffers\n", channel, state->buffer_count);
+        } else {
+            pr_err("Channel %d: Invalid buffer count %d\n", channel, reqbuf.count);
+            return -EINVAL;
+        }
         
         if (copy_to_user(argp, &reqbuf, sizeof(reqbuf)))
             return -EFAULT;
@@ -1253,6 +1260,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         unsigned long flags;
         int ret = 0;
         bool sensor_active = false;
+        uint32_t buf_index;
         
         if (copy_from_user(&buffer, argp, sizeof(buffer)))
             return -EFAULT;
@@ -1296,7 +1304,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         
         // Generate an immediate frame for the first request
         if (state->sequence == 0) {
-            pr_info("Channel %d: Generating initial frame\n", channel);
+            pr_debug("Channel %d: Generating initial frame\n", channel);
             spin_lock_irqsave(&state->buffer_lock, flags);
             state->frame_ready = true;
             spin_unlock_irqrestore(&state->buffer_lock, flags);
@@ -1331,30 +1339,44 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             state->frame_ready = true;
         }
         
+        // Calculate buffer index based on the number of buffers requested
+        // Channel 0 requested 4 buffers, channel 1 requested 2 buffers
+        if (state->buffer_count > 0) {
+            buf_index = state->sequence % state->buffer_count;
+        } else {
+            // Default to cycling through 4 buffers if count not set
+            buf_index = state->sequence % 4;
+        }
+        
         // Create frame buffer with real sensor metadata
-        buffer.index = state->sequence % 8;  // Cycle through buffer indices
+        buffer.index = buf_index;
         buffer.bytesused = state->width * state->height * 3 / 2; // YUV420 size
         buffer.flags = 0x2; // V4L2_BUF_FLAG_DONE
         
         if (sensor_active && active_sensor) {
             buffer.flags |= 0x8; // Custom flag indicating real sensor data
-            pr_debug("Channel %d: Frame %d from sensor %s\n", channel, state->sequence, active_sensor->info.name);
+            pr_debug("Channel %d: Frame %d from sensor %s (buf_idx=%d)\n",
+                    channel, state->sequence, active_sensor->info.name, buf_index);
         } else {
-            pr_debug("Channel %d: Frame %d from simulation\n", channel, state->sequence);
+            pr_debug("Channel %d: Frame %d from simulation (buf_idx=%d)\n",
+                    channel, state->sequence, buf_index);
         }
         
         buffer.sequence = state->sequence++;
         buffer.field = 1; // V4L2_FIELD_NONE
         do_gettimeofday(&buffer.timestamp);
         buffer.length = buffer.bytesused;
-        buffer.m.offset = 0; // Would be physical address in real implementation
+        
+        // Set a fake physical address offset based on buffer index
+        // This helps userspace identify which buffer is being returned
+        buffer.m.offset = buf_index * buffer.bytesused;
         
         // Mark frame as consumed
         state->frame_ready = false;
         spin_unlock_irqrestore(&state->buffer_lock, flags);
         
-        pr_debug("Channel %d: DQBUF complete (index=%d, seq=%d)\n",
-                channel, buffer.index, buffer.sequence);
+        pr_debug("Channel %d: DQBUF complete (index=%d, seq=%d, offset=0x%x)\n",
+                channel, buffer.index, buffer.sequence - 1, buffer.m.offset);
         
         if (copy_to_user(argp, &buffer, sizeof(buffer)))
             return -EFAULT;
