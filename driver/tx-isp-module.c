@@ -695,10 +695,9 @@ static int create_frame_channel_devices(void)
     pr_info("Creating %d frame channel devices...\n", num_channels);
     
     for (i = 0; i < num_channels; i++) {
-        // Reference creates devices like "video0", "video1" etc.
-        // But some systems expect "video%d" devices to be created by V4L2
-        // For TX-ISP, reference uses names that match framesource expectations
-        snprintf(device_name, sizeof(device_name), "video%d", i);
+        // Reference creates devices like "num0", "num1" etc. based on framesource error
+        // The framesource library expects "channel num0", "channel num1" device names
+        snprintf(device_name, sizeof(device_name), "num%d", i);
         
         frame_channel_devices[i].minor = MISC_DYNAMIC_MINOR;
         frame_channel_devices[i].name = kstrdup(device_name, GFP_KERNEL);
@@ -1388,7 +1387,7 @@ static int tx_isp_init(void)
     pr_info("  /dev/tx-isp (major=10, minor=dynamic)\n");
     pr_info("  /dev/isp-m0 (major=%d, minor=0) - ISP tuning interface\n", isp_tuning_major);
     for (ret = 0; ret < num_channels; ret++) {
-        pr_info("  /dev/video%d - Frame channel %d\n", ret, ret);
+        pr_info("  /dev/num%d - Frame channel %d\n", ret, ret);
     }
     pr_info("  /proc/jz/isp/isp-w02\n");
     
