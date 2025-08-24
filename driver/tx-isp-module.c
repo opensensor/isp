@@ -2591,6 +2591,54 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
             reg_info.name, reg_info.chip_id, reg_info.width, reg_info.height,
             reg_info.fps, reg_info.interface_type, reg_info.i2c_addr, reg_info.i2c_adapter_id);
     
+    /* CRITICAL: Validate sensor registration parameters */
+    if (reg_info.interface_type == 0) {
+        pr_err("INVALID SENSOR REGISTRATION: interface_type=0 (should be 1 for I2C)\n");
+        pr_err("This will prevent I2C device creation and sensor communication!\n");
+    }
+    
+    if (reg_info.interface_type == 1 && reg_info.i2c_addr == 0) {
+        pr_err("INVALID SENSOR REGISTRATION: I2C interface but i2c_addr=0x00\n");
+        pr_err("GC2053 should have i2c_addr=0x37\n");
+    }
+    
+    if (reg_info.width > 10000 || reg_info.height > 10000) {
+        pr_err("INVALID SENSOR REGISTRATION: Garbage dimensions %dx%d\n",
+               reg_info.width, reg_info.height);
+        pr_err("GC2053 should be 1920x1080\n");
+    }
+    
+    /* CRITICAL: Fix common GC2053 parameters if they're wrong */
+    if (strncmp(reg_info.name, "gc2053", 6) == 0) {
+        pr_info("Detected GC2053 sensor - validating parameters...\n");
+        
+        if (reg_info.interface_type == 0) {
+            pr_warn("Fixing interface_type from 0 to 1 (I2C) for GC2053\n");
+            reg_info.interface_type = 1;
+        }
+        
+        if (reg_info.i2c_addr == 0) {
+            pr_warn("Fixing i2c_addr from 0x00 to 0x37 for GC2053\n");
+            reg_info.i2c_addr = 0x37;
+        }
+        
+        if (reg_info.width > 10000 || reg_info.height > 10000) {
+            pr_warn("Fixing dimensions from %dx%d to 1920x1080 for GC2053\n",
+                    reg_info.width, reg_info.height);
+            reg_info.width = 1920;
+            reg_info.height = 1080;
+        }
+        
+        if (reg_info.chip_id != 0x2053) {
+            pr_warn("Setting chip_id to 0x2053 for GC2053\n");
+            reg_info.chip_id = 0x2053;
+        }
+        
+        pr_info("GC2053 corrected parameters: interface=%d, i2c_addr=0x%02x, %dx%d, chip_id=0x%04x\n",
+                reg_info.interface_type, reg_info.i2c_addr,
+                reg_info.width, reg_info.height, reg_info.chip_id);
+    }
+    
     /* Check for kernel-registered sensor subdev first */
     mutex_lock(&sensor_register_mutex);
     kernel_subdev = registered_sensor_subdev;
