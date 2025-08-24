@@ -1245,15 +1245,26 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         // Check if real sensor is connected and active
         if (ourISPdev && ourISPdev->sensor) {
             active_sensor = ourISPdev->sensor;
+            pr_info("Channel %d: Sensor check - sensor=%p, name=%s, vin_state=%d (need %d for active)\n",
+                    channel, active_sensor,
+                    active_sensor ? active_sensor->info.name : "(null)",
+                    active_sensor ? active_sensor->sd.vin_state : -1,
+                    TX_ISP_MODULE_RUNNING);
+            
             if (active_sensor && active_sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
                 sensor_active = true;
-                pr_debug("Channel %d: Real sensor %s active, waiting for hardware frame\n",
+                pr_info("Channel %d: Real sensor %s is ACTIVE, using hardware frames\n",
                         channel, active_sensor->info.name);
+            } else if (active_sensor) {
+                pr_warn("Channel %d: Sensor %s present but not in RUNNING state (state=%d)\n",
+                        channel, active_sensor->info.name, active_sensor->sd.vin_state);
             }
+        } else {
+            pr_warn("Channel %d: No sensor registered with ISP device\n", channel);
         }
         
         if (!sensor_active) {
-            pr_warn("Channel %d: No active sensor detected, using fallback simulation\n", channel);
+            pr_warn("Channel %d: Using fallback frame simulation (no active sensor)\n", channel);
         }
         
         // Wait for frame
@@ -1365,7 +1376,9 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                     state->streaming = false;
                     return ret;
                 }
-                pr_info("Channel %d: Sensor streaming started successfully\n", channel);
+                // CRITICAL: Set sensor state to RUNNING after successful streaming start
+                sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
+                pr_info("Channel %d: Sensor streaming started, state set to RUNNING\n", channel);
             } else {
                 pr_warn("Channel %d: No sensor s_stream operation available\n", channel);
             }
@@ -1447,6 +1460,8 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                 sensor->sd.ops->video->s_stream) {
                 pr_info("Channel %d: Stopping sensor hardware streaming\n", channel);
                 sensor->sd.ops->video->s_stream(&sensor->sd, 0);
+                // Clear sensor running state
+                sensor->sd.vin_state = TX_ISP_MODULE_INIT;
             }
         }
         
@@ -2453,7 +2468,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         tx_sensor->attr.chip_id = reg_info.chip_id;
         tx_sensor->video.vi_max_width = reg_info.width;
         tx_sensor->video.vi_max_height = reg_info.height;
-        tx_sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
+        tx_sensor->sd.vin_state = TX_ISP_MODULE_INIT;  // Start in INIT state, set to RUNNING on stream start
     }
     
     /* Register with ISP device as primary sensor */
