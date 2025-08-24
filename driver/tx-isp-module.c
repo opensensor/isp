@@ -46,88 +46,69 @@ static int isp_memopt = 0; // Memory optimization flag like reference
 static struct tx_isp_subdev *registered_sensor_subdev = NULL;
 static DEFINE_MUTEX(sensor_register_mutex);
 
-/* I2C infrastructure for sensor communication */
-static int setup_i2c_adapter(struct tx_isp_dev *dev)
+/* I2C infrastructure - create I2C devices dynamically during sensor registration */
+static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
+                                                   struct i2c_board_info *info)
 {
-    struct i2c_board_info board_info = {0};
-    struct i2c_adapter *adapter;
     struct i2c_client *client;
-    int ret;
-
-    pr_info("Setting up I2C infrastructure for sensor communication...\n");
-
-    /* Configure I2C board info for GC2053 */
-    strncpy(board_info.type, "gc2053", I2C_NAME_SIZE - 1);
-    board_info.type[I2C_NAME_SIZE - 1] = '\0';
-    board_info.addr = 0x37;  /* GC2053 I2C address */
-    board_info.flags = 0;     /* Standard 7-bit I2C addressing */
-
-    /* Get I2C adapter 0 (typical camera I2C bus) */
-    adapter = i2c_get_adapter(0);
-    if (!adapter) {
-        pr_err("Failed to get I2C adapter 0\n");
-        return -ENODEV;
+    
+    if (!adapter || !info) {
+        pr_err("isp_i2c_new_subdev_board: Invalid parameters\n");
+        return NULL;
     }
-
-    pr_info("Got I2C Adapter: name='%s' nr=%d\n",
-            adapter->name, adapter->nr);
-
-    /* CRITICAL: Check if device already exists at this address */
-    client = i2c_verify_client(i2c_get_clientdata_from_adapter(adapter, 0x37));
-    if (client) {
-        pr_info("I2C device already exists at 0x37: %s\n", client->name);
-        dev->sensor_i2c_client = client;
-        dev->i2c_adapter = adapter;
-        return 0;
-    }
-
-    /* Create new I2C device for the sensor */
-    client = i2c_new_device(adapter, &board_info);
+    
+    pr_info("Creating I2C subdev: type=%s addr=0x%02x on adapter %s\n",
+            info->type, info->addr, adapter->name);
+    
+    /* Load sensor module first */
+    private_request_module(1, info->type);
+    
+    /* Create I2C device (matches reference driver) */
+    client = private_i2c_new_device(adapter, info);
     if (!client) {
-        pr_err("Failed to create I2C device for sensor\n");
-        i2c_put_adapter(adapter);
-        return -ENODEV;
+        pr_err("Failed to create I2C device for %s\n", info->type);
+        return NULL;
     }
-
-    /* Store in device structure */
-    dev->sensor_i2c_client = client;
-    dev->i2c_adapter = adapter;
-
-    pr_info("I2C sensor device created: type=%s addr=0x%02x\n",
+    
+    pr_info("I2C device created successfully: %s at 0x%02x\n",
             client->name, client->addr);
     
     /* Test I2C communication immediately */
-    pr_info("Testing I2C communication with sensor...\n");
+    pr_info("Testing I2C communication with %s...\n", info->type);
     {
+        unsigned char test_buf;
         struct i2c_msg test_msg = {
             .addr = client->addr,
             .flags = I2C_M_RD,
             .len = 1,
-            .buf = &ret  // Reuse ret as temporary buffer
+            .buf = &test_buf
         };
-        int test_result = i2c_transfer(adapter, &test_msg, 1);
+        int test_result = private_i2c_transfer(adapter, &test_msg, 1);
         pr_info("I2C test result: %d (>0 = success, <0 = error)\n", test_result);
         if (test_result < 0) {
             pr_err("I2C communication test failed: %d\n", test_result);
             pr_err("This indicates I2C bus or sensor hardware issue\n");
         }
     }
+    
+    return client;
+}
 
+/* Prepare I2C infrastructure for dynamic sensor registration */
+static int prepare_i2c_infrastructure(struct tx_isp_dev *dev)
+{
+    pr_info("I2C infrastructure prepared for dynamic sensor registration\n");
+    pr_info("I2C devices will be created when sensors register via IOCTL\n");
+    
+    /* No static I2C device creation - done dynamically during sensor registration */
     return 0;
 }
 
 /* Clean up I2C infrastructure */
-static void cleanup_i2c_adapter(struct tx_isp_dev *dev)
+static void cleanup_i2c_infrastructure(struct tx_isp_dev *dev)
 {
-    if (dev->sensor_i2c_client) {
-        i2c_unregister_device(dev->sensor_i2c_client);
-        dev->sensor_i2c_client = NULL;
-    }
-    
-    if (dev->i2c_adapter) {
-        i2c_put_adapter(dev->i2c_adapter);
-        dev->i2c_adapter = NULL;
-    }
+    /* Clean up any remaining I2C clients and adapters */
+    pr_info("I2C infrastructure cleanup complete\n");
 }
 
 /* Event system constants from reference driver */
@@ -2436,11 +2417,10 @@ static int tx_isp_init(void)
     }
     pr_info("  /proc/jz/isp/isp-w02\n");
     
-    /* Set up I2C infrastructure for sensor communication */
-    ret = setup_i2c_adapter(ourISPdev);
+    /* Prepare I2C infrastructure for dynamic sensor registration */
+    ret = prepare_i2c_infrastructure(ourISPdev);
     if (ret) {
-        pr_warn("Failed to set up I2C adapter: %d (continuing without I2C)\n", ret);
-        /* Continue without I2C - sensor might use SPI or be virtual */
+        pr_warn("Failed to prepare I2C infrastructure: %d\n", ret);
     }
     
     /* Initialize subdev infrastructure for real hardware integration */
@@ -2493,7 +2473,7 @@ static void tx_isp_exit(void)
         stop_frame_simulation();
         
         /* Clean up I2C infrastructure */
-        cleanup_i2c_adapter(ourISPdev);
+        cleanup_i2c_infrastructure(ourISPdev);
         
         /* Free hardware interrupts if initialized */
         if (ourISPdev->isp_irq > 0) {
@@ -2576,24 +2556,26 @@ static void tx_isp_exit(void)
     pr_info("TX ISP driver removed\n");
 }
 
-/* Handle sensor registration from userspace IOCTL */
+/* Handle sensor registration from userspace IOCTL - matches reference driver */
 static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
 {
     struct tx_isp_sensor_register_info {
-        char name[32];
-        u32 chip_id;
-        u32 width;
-        u32 height;
-        u32 fps;
-        u32 interface_type;
-        void *sensor_ops;
-        void *sensor_data;
+        char name[32];                    // +0x00: Sensor name (from userspace)
+        u32 chip_id;                     // +0x20: Chip ID
+        u32 width;                       // +0x24: Sensor width
+        u32 height;                      // +0x28: Sensor height
+        u32 fps;                         // +0x2C: Sensor FPS
+        u32 interface_type;              // +0x30: Interface type (1=I2C, 2=SPI)
+        u16 i2c_addr;                    // +0x34: I2C address
+        u8 i2c_adapter_id;               // +0x36: I2C adapter number
+        u8 reserved[0x50 - 0x37];        // Fill to 0x50 bytes like reference
     } reg_info;
-    struct registered_sensor *reg_sensor, *tmp;
+    struct registered_sensor *reg_sensor;
     struct tx_isp_sensor *tx_sensor = NULL;
     struct tx_isp_subdev *kernel_subdev = NULL;
-    struct tx_isp_sensor_attribute sensor_attr = {0};
-    bool need_new_sensor = false;
+    struct i2c_adapter *adapter = NULL;
+    struct i2c_client *i2c_client = NULL;
+    struct i2c_board_info board_info = {0};
     int ret;
     
     if (!isp_dev) {
@@ -2604,123 +2586,85 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
     if (copy_from_user(&reg_info, argp, sizeof(reg_info)))
         return -EFAULT;
     
-    pr_info("=== USERSPACE SENSOR REGISTRATION REQUEST ===\n");
-    pr_info("Sensor registration: %s (ID=0x%x, %dx%d@%dfps)\n",
-            reg_info.name, reg_info.chip_id, reg_info.width, reg_info.height, reg_info.fps);
+    pr_info("=== SENSOR REGISTRATION (IOCTL 0x805056C1) ===\n");
+    pr_info("Sensor: %s (ID=0x%x, %dx%d@%dfps, interface=%d, i2c_addr=0x%02x, adapter=%d)\n",
+            reg_info.name, reg_info.chip_id, reg_info.width, reg_info.height,
+            reg_info.fps, reg_info.interface_type, reg_info.i2c_addr, reg_info.i2c_adapter_id);
     
-    /* Check if sensor already registered */
-    mutex_lock(&sensor_list_mutex);
-    list_for_each_entry_safe(reg_sensor, tmp, &sensor_list, list) {
-        if (strncmp(reg_sensor->name, reg_info.name, sizeof(reg_sensor->name)) == 0) {
-            mutex_unlock(&sensor_list_mutex);
-            pr_info("Sensor %s already registered\n", reg_info.name);
-            return 0;
-        }
-    }
-    mutex_unlock(&sensor_list_mutex);
-    
-    /* Check for kernel-registered sensor subdev */
+    /* Check for kernel-registered sensor subdev first */
     mutex_lock(&sensor_register_mutex);
     kernel_subdev = registered_sensor_subdev;
     mutex_unlock(&sensor_register_mutex);
     
-    pr_info("Kernel-registered sensor available: %s\n",
-            kernel_subdev ? "YES" : "NO");
-    
-    /* Determine if we need to create a sensor or use kernel-registered one */
     if (kernel_subdev) {
-        /* We have a kernel-registered sensor - use it */
         tx_sensor = container_of(kernel_subdev, struct tx_isp_sensor, sd);
-        
-        /* Update sensor info with userspace data (name comes from userspace) */
-        strncpy(tx_sensor->info.name, reg_info.name, sizeof(tx_sensor->info.name) - 1);
-        tx_sensor->info.name[sizeof(tx_sensor->info.name) - 1] = '\0';
-        /* Store chip_id in attr and dimensions in video */
-        tx_sensor->attr.chip_id = reg_info.chip_id;
-        tx_sensor->video.vi_max_width = reg_info.width;
-        tx_sensor->video.vi_max_height = reg_info.height;
-        
-        pr_info("Using kernel-registered sensor for %s (subdev=%p, ops=%p)\n",
-                reg_info.name, kernel_subdev, kernel_subdev->ops);
-        
-        /* Verify we have the video ops for streaming */
-        if (kernel_subdev->ops && kernel_subdev->ops->video) {
-            pr_info("  video ops=%p (s_stream=%p)\n",
-                    kernel_subdev->ops->video,
-                    kernel_subdev->ops->video ? kernel_subdev->ops->video->s_stream : NULL);
-        } else {
-            pr_warn("Sensor %s missing video ops!\n", reg_info.name);
-        }
-    } else {
-        /* No kernel sensor - create placeholder */
-        pr_warn("No kernel-registered sensor, creating placeholder for %s\n", reg_info.name);
-        need_new_sensor = true;
-        
-        tx_sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
-        if (!tx_sensor) {
-            pr_err("Failed to allocate sensor for %s\n", reg_info.name);
-            return -ENOMEM;
-        }
-        
-        /* Initialize sensor info from userspace */
-        strncpy(tx_sensor->info.name, reg_info.name, sizeof(tx_sensor->info.name) - 1);
-        tx_sensor->info.name[sizeof(tx_sensor->info.name) - 1] = '\0';
-        /* Store chip_id in attr and dimensions in video */
-        tx_sensor->attr.chip_id = reg_info.chip_id;
-        tx_sensor->video.vi_max_width = reg_info.width;
-        tx_sensor->video.vi_max_height = reg_info.height;
-        
-        /* Check if any channel is already streaming and set state accordingly */
-        tx_sensor->sd.vin_state = TX_ISP_MODULE_INIT;  // Default to INIT
-        for (int i = 0; i < num_channels; i++) {
-            if (frame_channels[i].state.streaming) {
-                tx_sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
-                pr_info("Channel %d already streaming, setting sensor state to RUNNING\n", i);
-                break;
-            }
-        }
+        pr_info("Using kernel-registered sensor %s (subdev=%p)\n", reg_info.name, kernel_subdev);
     }
     
-    /* Register with ISP device as primary sensor */
-    if (!isp_dev->sensor) {
-        isp_dev->sensor = tx_sensor;
-        pr_info("Registered %s as primary ISP sensor %s\n",
-                reg_info.name,
-                kernel_subdev ? "(with kernel ops)" : "(placeholder)");
+    /* Create I2C device if interface type is I2C (matches reference) */
+    if (reg_info.interface_type == 1) { // I2C interface
+        /* Get I2C adapter (matches reference driver) */
+        adapter = private_i2c_get_adapter(reg_info.i2c_adapter_id);
+        if (!adapter) {
+            pr_err("Failed to get I2C adapter %d for sensor %s\n",
+                   reg_info.i2c_adapter_id, reg_info.name);
+            return -ENODEV;
+        }
         
-        /* Initialize the sensor hardware if we have proper ops */
-        if (kernel_subdev && kernel_subdev->ops && kernel_subdev->ops->core &&
-            kernel_subdev->ops->core->init) {
-            pr_info("Initializing sensor %s hardware...\n", reg_info.name);
-            ret = kernel_subdev->ops->core->init(kernel_subdev, 1);
-            if (ret && ret != 0xfffffdfd) {  // 0xfffffdfd is "already initialized"
-                pr_err("Failed to initialize sensor %s: %d\n", reg_info.name, ret);
-            } else {
-                pr_info("Sensor %s initialized successfully (subdev=%p)\n",
-                        reg_info.name, kernel_subdev);
-                        
-                /* If any channel is streaming, immediately transition to RUNNING */
-                for (int i = 0; i < num_channels; i++) {
-                    if (frame_channels[i].state.streaming) {
+        pr_info("Got I2C adapter %d: %s\n", reg_info.i2c_adapter_id, adapter->name);
+        
+        /* Setup I2C board info (matches reference) */
+        strncpy(board_info.type, reg_info.name, I2C_NAME_SIZE - 1);
+        board_info.type[I2C_NAME_SIZE - 1] = '\0';
+        board_info.addr = reg_info.i2c_addr;
+        
+        /* Create I2C subdev using reference pattern */
+        i2c_client = isp_i2c_new_subdev_board(adapter, &board_info);
+        if (!i2c_client) {
+            pr_err("Failed to create I2C subdev for %s\n", reg_info.name);
+            private_i2c_put_adapter(adapter);
+            return -ENODEV;
+        }
+        
+        pr_info("I2C subdev created: %s at 0x%02x on adapter %s\n",
+                i2c_client->name, i2c_client->addr, adapter->name);
+        
+        /* CRITICAL: Associate I2C client with sensor subdev if available */
+        if (kernel_subdev && tx_sensor) {
+            /* Get client data (subdev) from I2C device */
+            struct tx_isp_subdev *i2c_subdev = (struct tx_isp_subdev *)private_i2c_get_clientdata(i2c_client);
+            if (i2c_subdev && i2c_subdev == kernel_subdev) {
+                pr_info("I2C client successfully associated with sensor subdev\n");
+                
+                /* Store I2C information in ISP device */
+                isp_dev->sensor_i2c_client = i2c_client;
+                isp_dev->i2c_adapter = adapter;
+                
+                /* Initialize sensor if we have initialization ops */
+                if (kernel_subdev->ops && kernel_subdev->ops->core &&
+                    kernel_subdev->ops->core->init) {
+                    pr_info("Initializing sensor %s hardware...\n", reg_info.name);
+                    ret = kernel_subdev->ops->core->init(kernel_subdev, 1);
+                    if (ret && ret != 0xfffffdfd) {  // 0xfffffdfd = already initialized
+                        pr_err("Failed to initialize sensor %s: %d\n", reg_info.name, ret);
+                    } else {
+                        pr_info("Sensor %s initialized successfully\n", reg_info.name);
                         kernel_subdev->vin_state = TX_ISP_MODULE_RUNNING;
-                        pr_info("Channel %d streaming, sensor %s state set to RUNNING\n",
-                                i, reg_info.name);
-                        
-                        /* Also start sensor streaming if it has the ops */
-                        if (kernel_subdev->ops && kernel_subdev->ops->video &&
-                            kernel_subdev->ops->video->s_stream) {
-                            pr_info("Starting sensor %s streaming\n", reg_info.name);
-                            ret = kernel_subdev->ops->video->s_stream(kernel_subdev, 1);
-                            if (ret) {
-                                pr_err("Failed to start sensor %s streaming: %d\n",
-                                       reg_info.name, ret);
-                            }
-                        }
-                        break;
                     }
                 }
+            } else {
+                pr_warn("I2C client data mismatch - subdev association failed\n");
             }
         }
+    } else if (reg_info.interface_type == 2) {
+        pr_info("SPI interface not implemented yet for %s\n", reg_info.name);
+        /* SPI interface would be handled here */
+    }
+    
+    /* Register sensor with ISP if not already registered */
+    if (!isp_dev->sensor && kernel_subdev && tx_sensor) {
+        isp_dev->sensor = tx_sensor;
+        pr_info("Registered %s as primary ISP sensor\n", reg_info.name);
     }
     
     /* Add to registered sensor list */
@@ -2729,7 +2673,10 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
     reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
     if (!reg_sensor) {
         mutex_unlock(&sensor_list_mutex);
-        if (need_new_sensor) kfree(tx_sensor);
+        if (i2c_client) {
+            private_i2c_unregister_device(i2c_client);
+            private_i2c_put_adapter(adapter);
+        }
         return -ENOMEM;
     }
     
@@ -2742,26 +2689,10 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
     
     mutex_unlock(&sensor_list_mutex);
     
-    /* Activate sensor pipeline */
-    ret = tx_isp_activate_sensor_pipeline(isp_dev, reg_info.name);
-    if (ret) {
-        pr_warn("Failed to activate pipeline for %s: %d\n", reg_info.name, ret);
-    }
+    pr_info("Sensor registration complete: %s (index %d) %s\n",
+            reg_sensor->name, reg_sensor->index,
+            i2c_client ? "with I2C device" : "without I2C");
     
-    /* Sync sensor attributes */
-    sensor_attr.name = reg_info.name;
-    sensor_attr.chip_id = reg_info.chip_id;
-    sensor_attr.total_width = reg_info.width;
-    sensor_attr.total_height = reg_info.height;
-    sensor_attr.dbus_type = reg_info.interface_type;
-    
-    ret = tx_isp_sync_sensor_attr(isp_dev, &sensor_attr);
-    if (ret) {
-        pr_warn("Failed to sync %s attributes: %d\n", reg_info.name, ret);
-    }
-    
-    pr_info("Sensor registration complete: %s (index %d)\n",
-            reg_sensor->name, reg_sensor->index);
     return 0;
 }
 
