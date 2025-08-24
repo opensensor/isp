@@ -1274,6 +1274,81 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                 }
             }
             
+            // *** CRITICAL: CONFIGURE VIC FOR MIPI DATA RECEPTION FROM QBUF AUTO-START ***
+            if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
+                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                
+                if (vic_dev && !vic_dev->streaming) {
+                    unsigned long flags;
+                    
+                    pr_info("*** Channel %d: QBUF AUTO-START - CONFIGURING VIC FOR MIPI ***\n", channel);
+                    
+                    // Set VIC frame dimensions for this channel
+                    vic_dev->frame_width = 1920;
+                    vic_dev->frame_height = 1080;
+                    
+                    spin_lock_irqsave(&vic_dev->buffer_lock, flags);
+                    
+                    if (vic_dev->vic_regs) {
+                        pr_info("*** Channel %d: WRITING VIC MIPI REGISTERS ***\n", channel);
+                        
+                        // CRITICAL: MIPI interface configuration (reference: interface type 1)
+                        // Set VIC control register 0xc = 3 for MIPI mode
+                        iowrite32(3, vic_dev->vic_regs + 0xc);
+                        
+                        // Frame dimensions register 0x4: (width << 16) | height
+                        iowrite32((vic_dev->frame_width << 16) | vic_dev->frame_height,
+                                 vic_dev->vic_regs + 0x4);
+                        
+                        // MIPI configuration register 0x10: Format-specific value
+                        // For MIPI YUV420 format (0x3200 in reference), value is 0x40000
+                        iowrite32(0x40000, vic_dev->vic_regs + 0x10);
+                        
+                        // MIPI stride configuration register 0x18
+                        iowrite32(vic_dev->frame_width, vic_dev->vic_regs + 0x18);
+                        
+                        // DMA buffer configuration registers (reference 0x1a4, 0x1ac, 0x1b0)
+                        iowrite32(0x100010, vic_dev->vic_regs + 0x1a4);  // DMA config
+                        iowrite32(0x4210, vic_dev->vic_regs + 0x1ac);    // Buffer mode
+                        iowrite32(0x10, vic_dev->vic_regs + 0x1b0);      // Buffer control
+                        iowrite32(0, vic_dev->vic_regs + 0x1b4);         // Clear buffer state
+                        
+                        // Wait for VIC to be ready (reference pattern)
+                        int timeout = 1000;
+                        while ((ioread32(vic_dev->vic_regs + 0x0) != 0) && timeout--) {
+                            cpu_relax();
+                        }
+                        if (timeout <= 0) {
+                            pr_warn("Channel %d: VIC timeout waiting for ready state\n", channel);
+                        }
+                        
+                        // Start VIC processing: register 0x0 = 1 (reference: **(arg1 + 0xb8) = 1)
+                        iowrite32(1, vic_dev->vic_regs + 0x0);
+                        
+                        // CRITICAL: Enable MIPI streaming register 0x300 with magic value
+                        // This is the key missing register write from reference ispvic_frame_channel_s_stream
+                        iowrite32((vic_dev->frame_count << 16) | 0x80000020,
+                                 vic_dev->vic_regs + 0x300);
+                        
+                        pr_info("*** Channel %d: VIC MIPI CONFIGURATION COMPLETE FROM QBUF ***\n", channel);
+                        pr_info("Channel %d: VIC regs: ctrl=0x%x, dim=0x%x, mipi=0x%x, stream=0x%x\n",
+                                channel,
+                                ioread32(vic_dev->vic_regs + 0xc),
+                                ioread32(vic_dev->vic_regs + 0x4),
+                                ioread32(vic_dev->vic_regs + 0x10),
+                                ioread32(vic_dev->vic_regs + 0x300));
+                    }
+                    
+                    // Activate VIC
+                    vic_dev->state = 2;
+                    vic_dev->streaming = 1;
+                    
+                    spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
+                    
+                    pr_info("*** Channel %d: VIC NOW READY TO RECEIVE MIPI DATA FROM SENSOR ***\n", channel);
+                }
+            }
+            
             // Start frame generation
             if (frame_timer_initialized) {
                 mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
