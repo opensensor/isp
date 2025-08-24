@@ -1315,72 +1315,46 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         
         // Check if already streaming
         if (state->streaming) {
-            pr_info("Channel %d: Already streaming, returning success\n", channel);
+            pr_info("Channel %d: Already streaming\n", channel);
             return 0;
         }
         
-        // Check if channel is enabled
-        if (!state->enabled) {
-            pr_info("Channel %d: Enabling channel for streaming\n", channel);
-            state->enabled = true;
-        }
+        // Enable channel
+        state->enabled = true;
+        state->streaming = true;
         
-        // Get VIC device and perform streaming setup
+        // Get VIC device
         if (ourISPdev && ourISPdev->vic_dev) {
             vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
             
-            pr_info("Channel %d: Activating VIC subdev for streaming\n", channel);
-            
-            // Activate VIC - avoid mutex deadlock
-            if (vic_dev->state == 1) {
-                pr_info("Channel %d: Activating VIC\n", channel);
+            // Activate VIC if needed
+            if (vic_dev->state != 2) {
                 vic_dev->state = 2;
                 pr_info("Channel %d: VIC activated\n", channel);
             }
             
-            // Enable VIC streaming like reference driver
-            if (vic_dev->streaming != 1) {
-                unsigned long flags;
-                
-                spin_lock_irqsave(&vic_dev->buffer_lock, flags);
-                
-                if (vic_dev->vic_regs) {
-                    // vic_pipo_mdma_enable equivalent
-                    iowrite32(1, vic_dev->vic_regs + 0x308);
-                    // Write control register like reference
-                    iowrite32(0x80000020 | (vic_dev->frame_count << 16),
-                             vic_dev->vic_regs + 0x300);
-                }
-                
+            // Enable VIC streaming
+            if (!vic_dev->streaming) {
                 vic_dev->streaming = 1;
+                vic_dev->frame_count = 0;
                 
-                spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
-                
-                pr_info("Channel %d: VIC streaming enabled\n", channel);
+                // Write VIC registers if available
+                if (vic_dev->vic_regs) {
+                    // vic_pipo_mdma_enable equivalent from reference
+                    iowrite32(1, vic_dev->vic_regs + 0x308);
+                    iowrite32(0x80000020, vic_dev->vic_regs + 0x300);
+                    pr_info("Channel %d: VIC hardware registers configured\n", channel);
+                }
             }
-            
-            // Set channel streaming state
-            state->streaming = true;
-            
-            // Initialize and start frame generation timer if needed
-            if (!frame_timer_initialized) {
-                init_timer(&frame_sim_timer);
-                frame_sim_timer.function = frame_sim_timer_callback;
-                frame_sim_timer.data = 0;
-                frame_timer_initialized = true;
-                pr_info("Channel %d: Frame timer initialized\n", channel);
-            }
-            
-            // Start timer for frame generation
-            mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
-            pr_info("Channel %d: Frame generation started (30 FPS)\n", channel);
-            
-        } else {
-            pr_warn("Channel %d: No VIC device available, enabling channel streaming only\n", channel);
-            state->streaming = true;
         }
         
-        pr_info("Channel %d: Streaming started successfully\n", channel);
+        // Start frame timer (already initialized in init)
+        if (frame_timer_initialized) {
+            mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
+            pr_info("Channel %d: Frame generation started\n", channel);
+        }
+        
+        pr_info("Channel %d: Streaming enabled\n", channel);
         return 0;
     }
     case 0x80045613: { // VIDIOC_STREAMOFF - Stop streaming
