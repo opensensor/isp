@@ -2604,7 +2604,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
     /* Create I2C device if interface type is I2C (matches reference) */
     if (reg_info.interface_type == 1) { // I2C interface
         /* Get I2C adapter (matches reference driver) */
-        adapter = private_i2c_get_adapter(reg_info.i2c_adapter_id);
+        adapter = i2c_get_adapter(reg_info.i2c_adapter_id);
         if (!adapter) {
             pr_err("Failed to get I2C adapter %d for sensor %s\n",
                    reg_info.i2c_adapter_id, reg_info.name);
@@ -2622,7 +2622,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         i2c_client = isp_i2c_new_subdev_board(adapter, &board_info);
         if (!i2c_client) {
             pr_err("Failed to create I2C subdev for %s\n", reg_info.name);
-            private_i2c_put_adapter(adapter);
+            i2c_put_adapter(adapter);
             return -ENODEV;
         }
         
@@ -2632,7 +2632,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         /* CRITICAL: Associate I2C client with sensor subdev if available */
         if (kernel_subdev && tx_sensor) {
             /* Get client data (subdev) from I2C device */
-            struct tx_isp_subdev *i2c_subdev = (struct tx_isp_subdev *)private_i2c_get_clientdata(i2c_client);
+            struct tx_isp_subdev *i2c_subdev = (struct tx_isp_subdev *)i2c_get_clientdata(i2c_client);
             if (i2c_subdev && i2c_subdev == kernel_subdev) {
                 pr_info("I2C client successfully associated with sensor subdev\n");
                 
