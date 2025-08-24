@@ -49,7 +49,7 @@ static struct miscdevice frame_channel_devices[4]; /* Support up to 4 video chan
 static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 
 /* Frame channel state management */
-struct frame_channel_state {
+struct tx_isp_channel_state {
     bool enabled;
     bool streaming;
     int format;
@@ -58,7 +58,7 @@ struct frame_channel_state {
     int buffer_count;
 };
 
-static struct frame_channel_state channel_states[4];
+static struct tx_isp_channel_state channel_states[4];
 
 // ISP Tuning IOCTLs from reference (0x20007400 series)
 #define ISP_TUNING_GET_PARAM    0x20007400
@@ -476,7 +476,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
 {
     void __user *argp = (void __user *)arg;
     int channel = iminor(file_inode(file));
-    struct frame_channel_state *state = file->private_data;
+    struct tx_isp_channel_state *state = file->private_data;
     
     if (channel >= num_channels || !state) {
         pr_err("Invalid frame channel %d or state\n", channel);
