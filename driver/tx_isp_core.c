@@ -145,14 +145,6 @@ void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan)
     }
 }
 
-void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan)
-{
-    /* Deinitialize channel state */
-    if (chan) {
-        chan->active = false;
-        /* Mutexes and completions are automatically cleaned up */
-    }
-}
 
 /* Initialize memory mappings for ISP subsystems */
 static int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
