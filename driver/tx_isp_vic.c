@@ -673,11 +673,12 @@ static struct tx_isp_subdev_core_ops vic_core_ops = {
 };
 
 /* Initialize the subdev ops structure with video operations */
-static struct tx_isp_subdev_ops vic_subdev_ops = {
+struct tx_isp_subdev_ops vic_subdev_ops = {
     .core = &vic_core_ops,
     .video = &vic_video_ops,    /* NOW VIC HAS VIDEO STREAMING! */
     .sensor = NULL,             /* No sensor ops for VIC */
 };
+EXPORT_SYMBOL(vic_subdev_ops);
 
 
 static const struct file_operations isp_w02_proc_fops = {
