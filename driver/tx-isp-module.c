@@ -72,6 +72,15 @@ static int setup_i2c_adapter(struct tx_isp_dev *dev)
     pr_info("Got I2C Adapter: name='%s' nr=%d\n",
             adapter->name, adapter->nr);
 
+    /* CRITICAL: Check if device already exists at this address */
+    client = i2c_verify_client(i2c_get_clientdata_from_adapter(adapter, 0x37));
+    if (client) {
+        pr_info("I2C device already exists at 0x37: %s\n", client->name);
+        dev->sensor_i2c_client = client;
+        dev->i2c_adapter = adapter;
+        return 0;
+    }
+
     /* Create new I2C device for the sensor */
     client = i2c_new_device(adapter, &board_info);
     if (!client) {
@@ -86,6 +95,23 @@ static int setup_i2c_adapter(struct tx_isp_dev *dev)
 
     pr_info("I2C sensor device created: type=%s addr=0x%02x\n",
             client->name, client->addr);
+    
+    /* Test I2C communication immediately */
+    pr_info("Testing I2C communication with sensor...\n");
+    {
+        struct i2c_msg test_msg = {
+            .addr = client->addr,
+            .flags = I2C_M_RD,
+            .len = 1,
+            .buf = &ret  // Reuse ret as temporary buffer
+        };
+        int test_result = i2c_transfer(adapter, &test_msg, 1);
+        pr_info("I2C test result: %d (>0 = success, <0 = error)\n", test_result);
+        if (test_result < 0) {
+            pr_err("I2C communication test failed: %d\n", test_result);
+            pr_err("This indicates I2C bus or sensor hardware issue\n");
+        }
+    }
 
     return 0;
 }
