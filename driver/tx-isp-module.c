@@ -44,16 +44,6 @@ static dev_t isp_tuning_devno;
 static int isp_tuning_major = 0;
 static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 
-// Frame channel devices - create video channel devices like reference
-struct frame_channel_device {
-    struct miscdevice miscdev;
-    int channel_num;
-    struct tx_isp_channel_state state;
-};
-
-static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
-static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
-
 /* Frame channel state management */
 struct tx_isp_channel_state {
     bool enabled;
@@ -63,6 +53,16 @@ struct tx_isp_channel_state {
     int height;
     int buffer_count;
 };
+
+// Frame channel devices - create video channel devices like reference
+struct frame_channel_device {
+    struct miscdevice miscdev;
+    int channel_num;
+    struct tx_isp_channel_state state;
+};
+
+static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
+static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 
 // ISP Tuning IOCTLs from reference (0x20007400 series)
 #define ISP_TUNING_GET_PARAM    0x20007400
