@@ -526,47 +526,109 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         	if (ctrl_test != 0xfb33ec && config_test != 0xfb33ec) {
         		pr_info("*** SUCCESS! VIC REGISTERS ARE NOW ACCESSIBLE VIA ISP CORE! ***\n");
         		
-        		/* *** IMPLEMENT EXACT BINARY NINJA SEQUENCE: ispvic_frame_channel_s_stream *** */
+        		/* *** IMPLEMENT VIC HARDWARE ENABLE SEQUENCE FIRST *** */
         		pr_info("*** PROGRAMMING VIC REGISTERS TO MATCH OEM BEHAVIOR ***\n");
         		
-        		/* Step 1: Only reset stream control (ispvic_frame_channel_s_stream off sequence) */
+        		/* Step 1: Enable VIC hardware core (registers not writable until VIC is enabled) */
+        		{
+        			u32 vic_enable_val = 0x1;  /* Enable VIC core */
+        			
+        			/* Try VIC enable register (offset 0x0 is often an enable register) */
+        			writel(vic_enable_val, isp_dev->vic_regs + 0x0);
+        			wmb();
+        			msleep(5); /* Allow VIC core to come online */
+        			
+        			u32 verify = readl(isp_dev->vic_regs + 0x0);
+        			pr_info("VIC core enable: wrote 0x%x, read 0x%x\n", vic_enable_val, verify);
+        		}
+        		
+        		/* Step 2: Try alternative VIC unlock sequence (some VIC cores need magic values) */
+        		{
+        			/* Test if VIC needs specific unlock values to accept register writes */
+        			writel(0x12345678, isp_dev->vic_regs + 0x308); /* Test write */
+        			wmb();
+        			u32 test_read = readl(isp_dev->vic_regs + 0x308);
+        			
+        			if (test_read == 0x12345678) {
+        				pr_info("VIC registers are writable (test passed)\n");
+        			} else {
+        				pr_info("VIC registers protected - trying unlock sequence\n");
+        				
+        				/* Try common unlock patterns */
+        				writel(0x5A5A5A5A, isp_dev->vic_regs + 0x0);   /* Unlock pattern 1 */
+        				wmb();
+        				writel(0xA5A5A5A5, isp_dev->vic_regs + 0x4);   /* Unlock pattern 2 */
+        				wmb();
+        				writel(0x00000001, isp_dev->vic_regs + 0x0);   /* Enable after unlock */
+        				wmb();
+        				msleep(5);
+        				
+        				/* Test again */
+        				writel(0x87654321, isp_dev->vic_regs + 0x308);
+        				wmb();
+        				test_read = readl(isp_dev->vic_regs + 0x308);
+        				pr_info("VIC unlock test: wrote 0x87654321, read 0x%x\n", test_read);
+        			}
+        		}
+        		
+        		/* Step 3: Reset stream control only (ispvic_frame_channel_s_stream off) */
         		writel(0x0, isp_dev->vic_regs + 0x300);   /* Stream control OFF */
         		wmb();
         		pr_info("VIC stream control reset to OFF state\n");
         
-        		/* Step 2: Configure VIC MDMA (exact vic_pipo_mdma_enable sequence) */
-        		/* Frame dimensions from device: width=1920 (0xdc), height=1080 (0xe0) */
+        		/* Step 4: Configure VIC MDMA (exact vic_pipo_mdma_enable sequence) */
         		{
         			u32 frame_width = 1920;
         			u32 frame_height = 1080;
         			u32 width_x2 = frame_width << 1;  /* width * 2 = 0xf00 */
         			
+        			pr_info("Attempting VIC MDMA configuration...\n");
+        			
         			/* vic_pipo_mdma_enable exact register sequence */
         			writel(1, isp_dev->vic_regs + 0x308);                              /* MDMA enable */
+        			wmb();
         			writel((frame_width << 16) | frame_height, isp_dev->vic_regs + 0x304); /* Dimensions */
+        			wmb();
         			writel(width_x2, isp_dev->vic_regs + 0x310);                      /* Width * 2 */
+        			wmb();
         			writel(width_x2, isp_dev->vic_regs + 0x314);                      /* Width * 2 */
         			wmb();
         			
-        			pr_info("VIC MDMA configured: dims=0x%x, width_x2=0x%x\n",
-        				(frame_width << 16) | frame_height, width_x2);
+        			/* Verify writes stuck */
+        			{
+        				u32 verify_308 = readl(isp_dev->vic_regs + 0x308);
+        				u32 verify_304 = readl(isp_dev->vic_regs + 0x304);
+        				u32 verify_310 = readl(isp_dev->vic_regs + 0x310);
+        				u32 verify_314 = readl(isp_dev->vic_regs + 0x314);
+        				
+        				pr_info("VIC MDMA verification: 0x308=0x%x, 0x304=0x%x, 0x310=0x%x, 0x314=0x%x\n",
+        					verify_308, verify_304, verify_310, verify_314);
+        					
+        				if (verify_308 == 1 && verify_310 == width_x2 && verify_314 == width_x2) {
+        					pr_info("*** VIC MDMA WRITE SUCCESS! ***\n");
+        				} else {
+        					pr_info("*** VIC MDMA WRITES STILL FAILING - HARDWARE PROTECTION ACTIVE ***\n");
+        				}
+        			}
         		}
         
-        		/* Step 3: Enable VIC streaming (ispvic_frame_channel_s_stream on sequence) */
-        		/* frame_count from offset 0x218, streaming flag at 0x210 */
+        		/* Step 5: Enable VIC streaming (ispvic_frame_channel_s_stream on sequence) */
         		{
         			u32 frame_count = 0;  /* Initial frame count */
         			u32 stream_value = (frame_count << 16) | 0x80000020;
         			
         			writel(stream_value, isp_dev->vic_regs + 0x300);
         			wmb();
-        			pr_info("VIC streaming enabled with frame_count=%d, stream_reg=0x%x\n",
-        				frame_count, stream_value);
+        			pr_info("VIC streaming enabled with stream_reg=0x%x\n", stream_value);
+        			
+        			/* Verify stream register */
+        			u32 stream_verify = readl(isp_dev->vic_regs + 0x300);
+        			pr_info("VIC stream verification: wrote 0x%x, read 0x%x\n", stream_value, stream_verify);
         		}
         		
-        		/* Step 4: Allow VIC hardware to initialize properly */
-        		msleep(10); /* Hardware needs time to process the configuration */
-        		pr_info("VIC hardware initialization sequence complete\n");
+        		/* Step 6: Allow VIC hardware to settle and initialize */
+        		msleep(10);
+        		pr_info("VIC hardware enable and configuration sequence complete\n");
        
         		/* *** VERIFY VIC PROGRAMMING RESULTS *** */
         		pr_info("*** VERIFYING VIC PROGRAMMING RESULTS ***\n");
