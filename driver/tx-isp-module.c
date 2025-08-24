@@ -994,7 +994,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             uint32_t reserved;
         } buffer;
         
-        struct tx_isp_subdev *sensor_subdev;
+        struct tx_isp_sensor *active_sensor = NULL;
         unsigned long flags;
         int ret = 0;
         bool sensor_active = false;
@@ -1018,7 +1018,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         
         // Check if real sensor is connected and active
         if (ourISPdev && ourISPdev->sensor) {
-            struct tx_isp_sensor *active_sensor = ourISPdev->sensor;
+            active_sensor = ourISPdev->sensor;
             if (active_sensor && active_sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
                 sensor_active = true;
                 pr_debug("Channel %d: Real sensor %s active, waiting for hardware frame\n",
@@ -1062,7 +1062,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         buffer.bytesused = state->width * state->height * 3 / 2; // YUV420 size
         buffer.flags = 0x2; // V4L2_BUF_FLAG_DONE
         
-        if (sensor_active) {
+        if (sensor_active && active_sensor) {
             buffer.flags |= 0x8; // Custom flag indicating real sensor data
             pr_info("Channel %d: Frame from REAL sensor %s\n", channel, active_sensor->info.name);
         } else {
