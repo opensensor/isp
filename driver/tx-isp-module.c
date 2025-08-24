@@ -61,10 +61,10 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
             info->type, info->addr, adapter->name);
     
     /* Load sensor module first */
-    private_request_module(1, info->type);
+    request_module(info->type);
     
     /* Create I2C device (matches reference driver) */
-    client = private_i2c_new_device(adapter, info);
+    client = i2c_new_device(adapter, info);
     if (!client) {
         pr_err("Failed to create I2C device for %s\n", info->type);
         return NULL;
@@ -83,7 +83,7 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
             .len = 1,
             .buf = &test_buf
         };
-        int test_result = private_i2c_transfer(adapter, &test_msg, 1);
+        int test_result = i2c_transfer(adapter, &test_msg, 1);
         pr_info("I2C test result: %d (>0 = success, <0 = error)\n", test_result);
         if (test_result < 0) {
             pr_err("I2C communication test failed: %d\n", test_result);
