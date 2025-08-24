@@ -1753,6 +1753,10 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	}
 
 	memset(sensor, 0, sizeof(*sensor));
+	
+	/* Initialize sensor info FIRST so name is available during registration */
+	memcpy(&sensor->info, &sensor_info, sizeof(sensor_info));
+	
 	sensor->mclk = clk_get(NULL, "cgu_cim");
 	if (IS_ERR(sensor->mclk)) {
 		ISP_ERROR("Cannot get sensor input clock cgu_cim\n");
@@ -1879,16 +1883,15 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	private_i2c_set_clientdata(client, sd);
 	
 	/* Register sensor with ISP framework to link operations */
+	ISP_WARNING("Registering %s with ISP framework (sd=%p, sensor=%p)\n",
+	            sensor->info.name, sd, sensor);
 	ret = tx_isp_register_sensor_subdev(sd, sensor);
 	if (ret) {
 		ISP_WARNING("Failed to register sensor with ISP framework: %d\n", ret);
 		/* Continue anyway - ISP might not be loaded yet */
 	} else {
-		ISP_WARNING("%s registered with ISP framework successfully\n", SENSOR_NAME);
+		ISP_WARNING("%s registered with ISP framework successfully\n", sensor->info.name);
 	}
-	
-	/* Initialize sensor info for proper registration */
-	memcpy(&sensor->info, &sensor_info, sizeof(sensor_info));
 	
 	pr_debug("probe ok ------->%s\n", SENSOR_NAME);
 	return 0;
