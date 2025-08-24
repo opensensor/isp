@@ -2701,10 +2701,22 @@ static void vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
     
     // Schedule next frame generation if streaming continues
     // This ensures continuous frame flow like real hardware
-    if (vic_dev->state == 2) { // If VIC is still active
-        // Use a kernel work queue to schedule next frame after a delay
-        // This simulates continuous sensor frame generation at ~30 FPS
-        schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(33));
+    if (vic_dev->state == 2 && vic_dev->streaming) { // If VIC is still active and streaming
+        struct tx_isp_sensor *sensor = NULL;
+        
+        /* Check if we have an active sensor */
+        if (ourISPdev && ourISPdev->sensor &&
+            ourISPdev->sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
+            sensor = ourISPdev->sensor;
+        }
+        
+        /* Only schedule work queue if no active sensor (simulation mode) */
+        if (!sensor) {
+            // Use a kernel work queue to schedule next frame after a delay
+            // This simulates continuous sensor frame generation at ~30 FPS
+            schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(33));
+        }
+        /* If sensor is active, frames will come from hardware interrupts */
     }
 }
 
