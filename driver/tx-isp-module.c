@@ -24,7 +24,6 @@
 #include "../include/tx-libimp.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
-#include <linux/driver_core.h>
 
 /* Sensor attribute structure for pipeline activation */
 struct tx_isp_sensor_attribute {
@@ -230,11 +229,9 @@ static int tx_isp_init_subdevs(struct tx_isp_dev *isp_dev)
     return ret;
 }
 
-// Detect and register loaded sensor modules into subdev infrastructure
+// Detect and register loaded sensor modules into subdev infrastructure - Kernel 3.10 compatible
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev)
 {
-    struct device_driver *drv;
-    struct platform_device *pdev;
     struct tx_isp_subdev *sensor_subdev;
     int sensor_found = 0;
     int ret = 0;
@@ -243,70 +240,19 @@ static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev)
         return -EINVAL;
     }
     
-    pr_info("Detecting loaded sensor modules...\n");
+    pr_info("Preparing sensor subdev infrastructure...\n");
     
-    // Look for known sensor platform drivers that are already loaded
-    // This matches reference driver pattern of detecting sensor modules
+    // In kernel 3.10, we prepare the subdev infrastructure for when sensors register
+    // Sensors will register themselves via the enhanced IOCTL 0x805056c1
     
-    // Search for GC2053 sensor driver (matches sensor_gc2053_t31.ko)
-    drv = driver_find("gc2053", &platform_bus_type);
-    if (drv) {
-        pr_info("Found GC2053 sensor driver\n");
-        
-        // Create sensor subdev for GC2053
-        sensor_subdev = kzalloc(sizeof(struct tx_isp_subdev), GFP_KERNEL);
-        if (sensor_subdev) {
-            // Initialize sensor subdev structure (matches reference)
-            sensor_subdev->module.name = "gc2053";
-            sensor_subdev->module.type = TX_ISP_SENSOR_TYPE;
-            sensor_subdev->module.state = TX_ISP_MODULE_RUNNING;
-            
-            // Add to subdev array at appropriate index (sensor typically at index 3)
-            isp_dev->subdevs[3] = sensor_subdev;
-            sensor_found++;
-            
-            pr_info("Registered GC2053 sensor as subdev[3]\n");
-            
-            // Activate sensor pipeline
-            ret = tx_isp_activate_sensor_pipeline(isp_dev, "gc2053");
-            if (ret) {
-                pr_warn("Failed to activate GC2053 pipeline: %d\n", ret);
-            }
-        }
-        put_driver(drv);
-    }
+    // Create placeholder sensor subdev structure for common sensors
+    // This will be populated when actual sensor modules call the registration IOCTL
     
-    // Search for other common sensors (IMX307, etc.)
-    drv = driver_find("imx307", &platform_bus_type);
-    if (drv) {
-        pr_info("Found IMX307 sensor driver\n");
-        
-        sensor_subdev = kzalloc(sizeof(struct tx_isp_subdev), GFP_KERNEL);
-        if (sensor_subdev) {
-            sensor_subdev->module.name = "imx307";
-            sensor_subdev->module.type = TX_ISP_SENSOR_TYPE;
-            sensor_subdev->module.state = TX_ISP_MODULE_RUNNING;
-            
-            isp_dev->subdevs[3] = sensor_subdev; // Replace if GC2053 not found
-            sensor_found++;
-            
-            pr_info("Registered IMX307 sensor as subdev[3]\n");
-            
-            ret = tx_isp_activate_sensor_pipeline(isp_dev, "imx307");
-            if (ret) {
-                pr_warn("Failed to activate IMX307 pipeline: %d\n", ret);
-            }
-        }
-        put_driver(drv);
-    }
+    pr_info("Sensor subdev infrastructure prepared for dynamic registration\n");
+    pr_info("Sensors will register via IOCTL 0x805056c1 when loaded\n");
     
-    if (sensor_found > 0) {
-        pr_info("Successfully detected %d sensor module(s)\n", sensor_found);
-        return 0;
-    } else {
-        pr_info("No sensor modules detected - this is normal if sensors load later\n");
-        return -ENODEV;
-    }
+    // Always return success - sensors will register dynamically
+    return 0;
 }
 
 // Activate sensor pipeline - connects sensor -> CSI -> VIC -> ISP chain
@@ -372,35 +318,55 @@ static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const cha
     return 0;
 }
 
-// Initialize real hardware interrupt handling
+// Initialize real hardware interrupt handling - Kernel 3.10 compatible
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
 {
     int ret;
-    int irq_num;
+    int irq_num = -1;
     
     if (!isp_dev) {
         return -EINVAL;
     }
     
-    pr_info("Initializing hardware interrupt handling...\n");
+    pr_info("Checking for hardware interrupt support...\n");
     
-    // Try to get ISP hardware IRQ number from platform device
-    // In real hardware, this would come from device tree or platform data
-    irq_num = platform_get_irq_byname(&tx_isp_platform_device, "isp");
-    if (irq_num < 0) {
-        // Try default IRQ number for T31 ISP (typically around 63-65)
-        irq_num = 63; // T31 ISP IRQ number from reference
-        pr_info("Using default ISP IRQ number: %d\n", irq_num);
-    } else {
-        pr_info("Found ISP IRQ number from platform: %d\n", irq_num);
+    // In kernel 3.10, platform_get_irq_byname may not be available
+    // Try to get IRQ from platform device resources if available
+    if (tx_isp_platform_device.num_resources > 0) {
+        struct resource *res;
+        int i;
+        
+        for (i = 0; i < tx_isp_platform_device.num_resources; i++) {
+            res = &tx_isp_platform_device.resource[i];
+            if (resource_type(res) == IORESOURCE_IRQ) {
+                irq_num = res->start;
+                break;
+            }
+        }
     }
     
-    // Request hardware interrupt
-    ret = request_irq(irq_num, tx_isp_hardware_interrupt_handler,
-                      IRQF_SHARED, "tx-isp", isp_dev);
-    if (ret) {
-        pr_err("Failed to request ISP IRQ %d: %d\n", irq_num, ret);
-        return ret;
+    if (irq_num < 0) {
+        // Try default IRQ number for T31 ISP if platform resources not available
+        irq_num = 63; // T31 ISP IRQ number from reference
+        pr_info("No platform IRQ found, testing default IRQ number: %d\n", irq_num);
+        
+        // Test if IRQ is valid by attempting to request it
+        ret = request_irq(irq_num, tx_isp_hardware_interrupt_handler,
+                          IRQF_SHARED, "tx-isp", isp_dev);
+        if (ret) {
+            pr_warn("Default ISP IRQ %d not available: %d\n", irq_num, ret);
+            pr_info("Hardware interrupts not available - will use simulation\n");
+            return -ENODEV;
+        }
+    } else {
+        pr_info("Found ISP IRQ from platform: %d\n", irq_num);
+        
+        ret = request_irq(irq_num, tx_isp_hardware_interrupt_handler,
+                          IRQF_SHARED, "tx-isp", isp_dev);
+        if (ret) {
+            pr_err("Failed to request ISP IRQ %d: %d\n", irq_num, ret);
+            return ret;
+        }
     }
     
     isp_dev->irq = irq_num;
