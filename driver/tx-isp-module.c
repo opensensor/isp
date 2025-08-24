@@ -2874,12 +2874,9 @@ static void frame_sim_timer_callback(unsigned long data)
             }
         }
         
-        /* Only generate simulated frames if no active sensor */
-        if (!sensor_active) {
-            /* Generate frames for all streaming channels */
-            simulate_frame_completion();
-        }
-        /* If sensor is active, frames should come from hardware interrupts */
+        /* Generate frames for all streaming channels regardless of sensor state */
+        /* The timer ensures consistent frame generation even when hardware IRQs are missing */
+        simulate_frame_completion();
         
         /* If VIC is available, update its frame counter */
         if (ourISPdev && ourISPdev->vic_dev) {
