@@ -1303,19 +1303,21 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                     vic_dev->frame_width = 1920;
                     vic_dev->frame_height = 1080;
                     
-                    // Start VIC subdev streaming (proper way like reference driver)
+                    // Start VIC subdev streaming - use direct VIC initialization for now
+                    // This avoids the symbol linking issues during module loading
+                    pr_info("Channel %d: Starting VIC via direct hardware initialization\n", channel);
+                    
+                    // Call tx_isp_vic_start directly - this does the VIC MIPI register setup
+                    extern int tx_isp_vic_start(struct tx_isp_subdev *sd);
                     struct tx_isp_subdev *vic_sd = &vic_dev->sd;
-                    if (vic_sd && vic_sd->ops && vic_sd->ops->video && vic_sd->ops->video->s_stream) {
-                        pr_info("Channel %d: Starting VIC subdev streaming via s_stream(1)\n", channel);
-                        int vic_ret = vic_sd->ops->video->s_stream(vic_sd, 1);
-                        if (vic_ret == 0) {
-                            pr_info("Channel %d: VIC subdev streaming started successfully\n", channel);
-                        } else {
-                            pr_err("Channel %d: VIC subdev streaming failed: %d\n", channel, vic_ret);
-                        }
+                    
+                    int vic_ret = tx_isp_vic_start(vic_sd);
+                    if (vic_ret == 0) {
+                        vic_dev->state = 4; // STREAMING state
+                        vic_dev->streaming = 1;
+                        pr_info("Channel %d: VIC hardware initialization successful\n", channel);
                     } else {
-                        pr_err("Channel %d: VIC subdev not found or has no video ops\n", channel);
-                        // Fallback to direct state management
+                        pr_warn("Channel %d: VIC hardware init failed (%d), using fallback\n", channel, vic_ret);
                         vic_dev->state = 2;
                         vic_dev->streaming = 1;
                         pr_info("Channel %d: VIC activated via fallback state management\n", channel);
