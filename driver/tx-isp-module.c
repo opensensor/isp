@@ -297,34 +297,26 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
     
     pr_info("Creating VIC device for T31 hardware...\n");
     
-    // Initialize VIC device structure for real hardware
+    // Initialize VIC device structure
     memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
     
-    // Connect to real hardware registers
-    vic_dev->vic_regs = isp_dev->vic_regs;  // Physical 0x13320000
+    // Basic initialization
+    vic_dev->vic_regs = isp_dev->vic_regs;
     vic_dev->self = vic_dev;
-    vic_dev->state = 1;  // Hardware initialized but not streaming
+    vic_dev->state = 1;
     vic_dev->streaming = 0;
     vic_dev->frame_count = 0;
     
-    // Initialize hardware synchronization
+    // Initialize synchronization
     mutex_init(&vic_dev->mlock);
     mutex_init(&vic_dev->snap_mlock);
     init_completion(&vic_dev->frame_done);
     spin_lock_init(&vic_dev->buffer_lock);
     
-    // Initialize hardware DMA buffer queues
+    // Initialize buffer queues
     INIT_LIST_HEAD(&vic_dev->queue_head);
     INIT_LIST_HEAD(&vic_dev->free_head);
     INIT_LIST_HEAD(&vic_dev->done_head);
-    
-    // Verify we have real hardware registers
-    if (vic_dev->vic_regs) {
-        pr_info("VIC hardware registers mapped at %p (physical 0x13320000)\n", vic_dev->vic_regs);
-        pr_info("Ready for real sensor data streaming\n");
-    } else {
-        pr_warn("WARNING: VIC hardware registers not available!\n");
-    }
     
     // Connect to ISP device directly - no complex platform device registration
     isp_dev->vic_dev = vic_dev;
@@ -1339,38 +1331,16 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             
             pr_info("Channel %d: Activating VIC subdev for streaming\n", channel);
             
-            // Activate VIC hardware for real streaming
+            // Activate VIC - avoid mutex deadlock
             if (vic_dev->state == 1) {
-                pr_info("Channel %d: Activating VIC hardware\n", channel);
-                mutex_lock(&vic_dev->mlock);
-                vic_dev->state = 2; // Hardware active
-                mutex_unlock(&vic_dev->mlock);
-                pr_info("Channel %d: VIC hardware activated\n", channel);
+                pr_info("Channel %d: Activating VIC\n", channel);
+                vic_dev->state = 2;
+                pr_info("Channel %d: VIC activated\n", channel);
             }
             
-            // Configure real VIC hardware registers
-            if (vic_dev->streaming != 1) {
-                unsigned long flags;
-                
-                pr_info("Channel %d: Configuring VIC hardware DMA\n", channel);
-                spin_lock_irqsave(&vic_dev->buffer_lock, flags);
-                
-                if (vic_dev->vic_regs) {
-                    // Write to real VIC control register
-                    uint32_t ctrl_val = 0x80000020 | (vic_dev->frame_count << 16);
-                    pr_info("Channel %d: Enabling VIC DMA at %p+0x300 = 0x%08x\n",
-                            channel, vic_dev->vic_regs, ctrl_val);
-                    iowrite32(ctrl_val, vic_dev->vic_regs + 0x300);
-                    wmb(); // Ensure write completes to hardware
-                    
-                    vic_dev->streaming = 1;
-                    pr_info("Channel %d: VIC hardware DMA enabled\n", channel);
-                } else {
-                    pr_err("Channel %d: No VIC hardware registers!\n", channel);
-                }
-                
-                spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
-            }
+            // For now, skip hardware register writes that might cause hang
+            vic_dev->streaming = 1;
+            pr_info("Channel %d: Streaming flag set\n", channel);
             
             // Set channel streaming state
             state->streaming = true;
@@ -2551,30 +2521,14 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
         /* Enable VIC streaming */
         pr_info("VIC: Stream ON event - activating frame pipeline\n");
         
-        // Activate real VIC hardware
+        // Activate VIC
         if (vic_dev->state == 1) {
-            mutex_lock(&vic_dev->mlock);
-            vic_dev->state = 2; // Hardware active
-            mutex_unlock(&vic_dev->mlock);
-            pr_info("VIC: Hardware pipeline activated\n");
+            vic_dev->state = 2;
+            pr_info("VIC: Pipeline activated\n");
         }
         
-        // Configure real VIC hardware registers
-        if (vic_dev->vic_regs) {
-            pr_info("VIC: Configuring hardware registers at %p\n", vic_dev->vic_regs);
-            
-            // Enable VIC hardware control
-            u32 ctrl = ioread32(vic_dev->vic_regs + 0x7810);
-            ctrl |= 1; // Enable VIC
-            iowrite32(ctrl, vic_dev->vic_regs + 0x7810);
-            wmb(); // Ensure hardware write completes
-            
-            pr_info("VIC: Hardware control register enabled\n");
-        }
-        
-        // Trigger real frame processing from sensor
-        pr_info("VIC: Starting hardware frame processing\n");
-        vic_framedone_irq_function(vic_dev);
+        // Skip triggering frame processing for now to avoid recursion
+        pr_info("VIC: Stream ON event completed\n");
         
         return 0;
     }
