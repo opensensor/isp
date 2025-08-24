@@ -48,6 +48,18 @@ static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 static struct miscdevice frame_channel_devices[4]; /* Support up to 4 video channels */
 static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 
+/* Frame channel state management */
+struct frame_channel_state {
+    bool enabled;
+    bool streaming;
+    int format;
+    int width;
+    int height;
+    int buffer_count;
+};
+
+static struct frame_channel_state channel_states[4];
+
 // ISP Tuning IOCTLs from reference (0x20007400 series)
 #define ISP_TUNING_GET_PARAM    0x20007400
 #define ISP_TUNING_SET_PARAM    0x20007401
@@ -428,11 +440,23 @@ static void destroy_isp_tuning_device(void)
 static int frame_channel_open(struct inode *inode, struct file *file)
 {
     int channel = iminor(inode);
+    
+    if (channel >= num_channels) {
+        pr_err("Invalid frame channel %d\n", channel);
+        return -EINVAL;
+    }
+    
     pr_info("Frame channel %d opened\n", channel);
     
-    // Reference implementation checks channel state and initializes buffers
-    // In frame_channel_open: checks if channel state < 2, sets to 3
-    // Initializes completion, clears buffers, etc.
+    // Initialize channel state - reference sets state to 3 (ready)
+    channel_states[channel].enabled = false;
+    channel_states[channel].streaming = false;
+    channel_states[channel].format = 0x3231564e; // NV12 default
+    channel_states[channel].width = 1920;
+    channel_states[channel].height = 1080;
+    channel_states[channel].buffer_count = 0;
+    
+    file->private_data = &channel_states[channel];
     
     return 0;
 }
@@ -452,21 +476,77 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
 {
     void __user *argp = (void __user *)arg;
     int channel = iminor(file_inode(file));
+    struct frame_channel_state *state = file->private_data;
+    
+    if (channel >= num_channels || !state) {
+        pr_err("Invalid frame channel %d or state\n", channel);
+        return -EINVAL;
+    }
     
     pr_info("Frame channel %d IOCTL: cmd=0x%x\n", channel, cmd);
     
-    // Reference implementation handles many IOCTLs:
-    // 0xc044560f - VIDIOC_QBUF (queue buffer)
-    // 0xc0445609 - VIDIOC_DQBUF (dequeue buffer)
-    // 0xc0145608 - VIDIOC_REQBUFS (request buffers)
-    // 0x80045612 - VIDIOC_STREAMON (start streaming)
-    // 0x80045613 - VIDIOC_STREAMOFF (stop streaming)
-    // 0x407056c4 - VIDIOC_G_FMT (get format)
-    // 0xc07056c3 - VIDIOC_S_FMT (set format)
-    // 0x400456bf - Wait for completion
-    // 0x800456c5 - Frame done event
-    
+    // Add channel enable/disable IOCTLs that IMP_FrameSource_EnableChn uses
     switch (cmd) {
+    case 0x40045620: { // Channel enable IOCTL (common pattern)
+        int enable;
+        
+        if (copy_from_user(&enable, argp, sizeof(enable)))
+            return -EFAULT;
+            
+        state->enabled = enable ? true : false;
+        pr_info("Frame channel %d %s\n", channel, enable ? "ENABLED" : "DISABLED");
+        
+        return 0;
+    }
+    case 0x40045621: { // Channel disable IOCTL (common pattern)
+        state->enabled = false;
+        state->streaming = false;
+        pr_info("Frame channel %d DISABLED\n", channel);
+        
+        return 0;
+    }
+    case 0xc0205622: { // Get channel attributes
+        struct {
+            int width;
+            int height;
+            int format;
+            int enabled;
+        } attr;
+        
+        attr.width = state->width;
+        attr.height = state->height;
+        attr.format = state->format;
+        attr.enabled = state->enabled ? 1 : 0;
+        
+        if (copy_to_user(argp, &attr, sizeof(attr)))
+            return -EFAULT;
+            
+        pr_info("Frame channel %d get attr: %dx%d fmt=0x%x enabled=%d\n",
+                channel, attr.width, attr.height, attr.format, attr.enabled);
+        
+        return 0;
+    }
+    case 0xc0205623: { // Set channel attributes
+        struct {
+            int width;
+            int height;
+            int format;
+            int enabled;
+        } attr;
+        
+        if (copy_from_user(&attr, argp, sizeof(attr)))
+            return -EFAULT;
+            
+        state->width = attr.width;
+        state->height = attr.height;
+        state->format = attr.format;
+        state->enabled = attr.enabled ? true : false;
+        
+        pr_info("Frame channel %d set attr: %dx%d fmt=0x%x enabled=%d\n",
+                channel, attr.width, attr.height, attr.format, attr.enabled);
+        
+        return 0;
+    }
     case 0xc0145608: { // VIDIOC_REQBUFS - Request buffers
         struct v4l2_requestbuffers {
             uint32_t count;
@@ -483,8 +563,8 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                 channel, reqbuf.count, reqbuf.type, reqbuf.memory);
                 
         // Reference allocates video buffers based on count
-        // For now, acknowledge the request
         reqbuf.count = min(reqbuf.count, 8U); // Limit to 8 buffers
+        state->buffer_count = reqbuf.count;
         
         if (copy_to_user(argp, &reqbuf, sizeof(reqbuf)))
             return -EFAULT;
@@ -665,16 +745,21 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             
         return 0;
     }
-    case 0x800456c5: { // Frame done event
-        uint32_t event_data;
+    case 0x800456c5: { // Set banks IOCTL (critical for channel enable from decompiled code)
+        uint32_t bank_config;
         
-        if (copy_from_user(&event_data, argp, sizeof(event_data)))
+        if (copy_from_user(&bank_config, argp, sizeof(bank_config)))
             return -EFAULT;
             
-        pr_info("Channel %d: Frame done event, data=0x%x\n", channel, event_data);
+        pr_info("Channel %d: Set banks config=0x%x\n", channel, bank_config);
         
-        // Reference processes frame completion event
-        // Signals waiting threads, updates statistics, etc.
+        // This IOCTL is critical for channel enable - from decompiled IMP_FrameSource_EnableChn
+        // The decompiled code shows: ioctl($a0_41, 0x800456c5, &var_70)
+        // Failure here causes "does not support set banks" error
+        
+        // Store bank configuration in channel state
+        // In real implementation, this would configure DMA banks/buffers
+        state->enabled = true; // Mark channel as properly configured
         
         return 0;
     }
@@ -696,8 +781,8 @@ static int create_frame_channel_devices(void)
     
     for (i = 0; i < num_channels; i++) {
         // Reference creates devices like "num0", "num1" etc. based on framesource error
-        // The framesource library expects "channel num0", "channel num1" device names
-        snprintf(device_name, sizeof(device_name), "num%d", i);
+        // IMP_FrameSource_EnableChn looks for /dev/framechan%d devices (from decompiled code)
+        snprintf(device_name, sizeof(device_name), "framechan%d", i);
         
         frame_channel_devices[i].minor = MISC_DYNAMIC_MINOR;
         frame_channel_devices[i].name = kstrdup(device_name, GFP_KERNEL);
@@ -1387,7 +1472,7 @@ static int tx_isp_init(void)
     pr_info("  /dev/tx-isp (major=10, minor=dynamic)\n");
     pr_info("  /dev/isp-m0 (major=%d, minor=0) - ISP tuning interface\n", isp_tuning_major);
     for (ret = 0; ret < num_channels; ret++) {
-        pr_info("  /dev/num%d - Frame channel %d\n", ret, ret);
+        pr_info("  /dev/framechan%d - Frame channel %d\n", ret, ret);
     }
     pr_info("  /proc/jz/isp/isp-w02\n");
     

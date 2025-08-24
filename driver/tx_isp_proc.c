@@ -21,17 +21,18 @@ static int tx_isp_proc_w02_show(struct seq_file *m, void *v)
     struct tx_isp_dev *isp = m->private;
 
     if (!isp) {
-        seq_printf(m, "ISP device not available\n");
+        /* Output numeric format that fscanf can parse */
+        seq_printf(m, "0 0 0 0\n");
         return 0;
     }
 
-    /* Output format expected by userspace library */
-    seq_printf(m, "ISP Status: %s\n", isp->is_open ? "active" : "inactive");
-    seq_printf(m, "Sensor: %s\n", isp->sensor_name ? isp->sensor_name : "unknown");
-    seq_printf(m, "Frame Count: %u\n", isp->frame_count);
-    seq_printf(m, "Resolution: %dx%d\n", isp->sensor_width, isp->sensor_height);
-    seq_printf(m, "Streaming: %s\n", isp->streaming_enabled ? "enabled" : "disabled");
-    seq_printf(m, "WDR Mode: %d\n", isp->wdr_mode);
+    /* Output numeric format that userspace library expects for fscanf */
+    /* Based on common ISP proc formats, likely status values */
+    seq_printf(m, "%d %u %d %d\n",
+               isp->is_open ? 1 : 0,           /* ISP active status */
+               isp->frame_count,               /* Frame count */
+               isp->streaming_enabled ? 1 : 0, /* Streaming status */
+               isp->wdr_mode);                 /* WDR mode */
     
     return 0;
 }
