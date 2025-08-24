@@ -2846,6 +2846,10 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
         }
     }
     
+    /* Initialize sensor state to INIT (will be set to RUNNING on stream start) */
+    sd->vin_state = TX_ISP_MODULE_INIT;
+    pr_info("Sensor subdev state initialized to INIT (will become RUNNING on stream start)\n");
+    
     /* Store for next IOCTL to pick up */
     registered_sensor_subdev = sd;
     
