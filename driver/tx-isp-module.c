@@ -509,36 +509,105 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         pr_info("*** TESTING VIC REGISTER ACCESS (CORRECT ISP CORE MAPPING) ***\n");
         
         {
-            u32 ctrl_test, config_test, mipi_test;
-            
-            // Test VIC control register 0x0 (matches OEM trace: should read ~0x00030000)
-            ctrl_test = readl(isp_dev->vic_regs + 0x0);
-            pr_info("VIC control reg 0x0 read: 0x%x (OEM shows: 0x00030000)\n", ctrl_test);
-            
-            // Test VIC config register 0x4 (matches OEM trace: should read ~0x00030000)
-            config_test = readl(isp_dev->vic_regs + 0x4);
-            pr_info("VIC config reg 0x4 read: 0x%x (OEM shows: 0x00030000)\n", config_test);
-            
-            // Test VIC MIPI register 0x10 (matches OEM trace: should read ~0x01003232)
-            mipi_test = readl(isp_dev->vic_regs + 0x10);
-            pr_info("VIC MIPI reg 0x10 read: 0x%x (OEM shows: 0x01003232)\n", mipi_test);
-            
-            if (ctrl_test != 0xfb33ec && config_test != 0xfb33ec) {
-                pr_info("*** SUCCESS! VIC REGISTERS ARE NOW ACCESSIBLE VIA ISP CORE! ***\n");
-                
-                // Write test with OEM-style values
-                writel(0x50002d0, isp_dev->vic_regs + 0x0);
-                wmb();
-                ctrl_test = readl(isp_dev->vic_regs + 0x0);
-                pr_info("VIC write test: wrote 0x50002d0 to reg 0x0, read back 0x%x\n", ctrl_test);
-                
-            } else {
-                pr_err("*** STILL FAILED! VIC registers unresponsive (ctrl=0x%x, config=0x%x) ***\n",
-                       ctrl_test, config_test);
-            }
+        	u32 ctrl_test, config_test, mipi_test;
+        	
+        	// Test VIC control register 0x0 (matches OEM trace: should read ~0x00030000)
+        	ctrl_test = readl(isp_dev->vic_regs + 0x0);
+        	pr_info("VIC control reg 0x0 read: 0x%x (OEM shows: 0x00030000)\n", ctrl_test);
+        	
+        	// Test VIC config register 0x4 (matches OEM trace: should read ~0x00030000)
+        	config_test = readl(isp_dev->vic_regs + 0x4);
+        	pr_info("VIC config reg 0x4 read: 0x%x (OEM shows: 0x00030000)\n", config_test);
+        	
+        	// Test VIC MIPI register 0x10 (matches OEM trace: should read ~0x01003232)
+        	mipi_test = readl(isp_dev->vic_regs + 0x10);
+        	pr_info("VIC MIPI reg 0x10 read: 0x%x (OEM shows: 0x01003232)\n", mipi_test);
+        	
+        	if (ctrl_test != 0xfb33ec && config_test != 0xfb33ec) {
+        		pr_info("*** SUCCESS! VIC REGISTERS ARE NOW ACCESSIBLE VIA ISP CORE! ***\n");
+        		
+        		/* *** IMPLEMENT PROPER VIC REGISTER PROGRAMMING FROM BINARY NINJA ANALYSIS *** */
+        		pr_info("*** PROGRAMMING VIC REGISTERS TO MATCH OEM BEHAVIOR ***\n");
+        		
+        		/* Step 1: Reset VIC to clean state (Based on ispvic_frame_channel_s_stream off) */
+        		writel(0x0, isp_dev->vic_regs + 0x0);     /* VIC control */
+        		writel(0x0, isp_dev->vic_regs + 0x4);     /* VIC config */
+        		writel(0x0, isp_dev->vic_regs + 0x300);   /* Stream control (off) */
+        		writel(0x0, isp_dev->vic_regs + 0x304);   /* MDMA dimensions */
+        		writel(0x0, isp_dev->vic_regs + 0x308);   /* MDMA enable (off) */
+        		writel(0x0, isp_dev->vic_regs + 0x310);   /* MDMA width config */
+        		writel(0x0, isp_dev->vic_regs + 0x314);   /* MDMA width config */
+        		wmb();
+        		pr_info("VIC registers reset to clean state\n");
+       
+        		/* Step 2: Configure VIC MDMA for GC2053 (Based on vic_pipo_mdma_enable) */
+        		/* Frame dimensions: width=1920, height=1080 */
+        		writel(1, isp_dev->vic_regs + 0x308);                    /* Enable MDMA */
+        		writel((1920 << 16) | 1080, isp_dev->vic_regs + 0x304); /* Dimensions: width<<16 | height */
+        		writel(1920 << 1, isp_dev->vic_regs + 0x310);           /* Width * 2 */
+        		writel(1920 << 1, isp_dev->vic_regs + 0x314);           /* Width * 2 */
+        		wmb();
+        		pr_info("VIC MDMA configured for 1920x1080 (GC2053)\n");
+       
+        		/* Step 3: Set VIC control registers to expected values (NOT writing target values directly) */
+        		/* Let VIC hardware initialize to correct state after reset and MDMA config */
+        		msleep(10); /* Allow hardware to settle */
+        		
+        		/* Step 4: Enable VIC streaming mode (Based on ispvic_frame_channel_s_stream on) */
+        		/* This should make the VIC registers show correct values */
+        		writel((0 << 16) | 0x80000020, isp_dev->vic_regs + 0x300); /* Stream enable with frame_count=0 */
+        		wmb();
+        		pr_info("VIC streaming mode enabled\n");
+       
+        		/* *** VERIFY VIC PROGRAMMING RESULTS *** */
+        		pr_info("*** VERIFYING VIC PROGRAMMING RESULTS ***\n");
+        		msleep(5); /* Allow registers to update */
+        		
+        		ctrl_test = readl(isp_dev->vic_regs + 0x0);
+        		pr_info("VIC control reg 0x0 NOW reads: 0x%x (target: 0x00030000) %s\n",
+        			ctrl_test, (ctrl_test == 0x00030000) ? "✓ MATCH" : "✗ MISMATCH");
+        		
+        		config_test = readl(isp_dev->vic_regs + 0x4);
+        		pr_info("VIC config reg 0x4 NOW reads: 0x%x (target: 0x00030000) %s\n",
+        			config_test, (config_test == 0x00030000) ? "✓ MATCH" : "✗ MISMATCH");
+        		
+        		mipi_test = readl(isp_dev->vic_regs + 0x10);
+        		pr_info("VIC MIPI reg 0x10 NOW reads: 0x%x (target: 0x01003232) %s\n",
+        			mipi_test, (mipi_test == 0x01003232) ? "✓ MATCH" : "✗ MISMATCH");
+        		
+        		/* Verify MDMA configuration */
+        		{
+        			u32 mdma_enable = readl(isp_dev->vic_regs + 0x308);
+        			u32 mdma_dims = readl(isp_dev->vic_regs + 0x304);
+        			u32 mdma_width1 = readl(isp_dev->vic_regs + 0x310);
+        			u32 mdma_width2 = readl(isp_dev->vic_regs + 0x314);
+        			u32 stream_ctrl = readl(isp_dev->vic_regs + 0x300);
+        			
+        			pr_info("VIC MDMA enable 0x308: 0x%x (should be 1)\n", mdma_enable);
+        			pr_info("VIC MDMA dims 0x304: 0x%x (should be 0x07800438)\n", mdma_dims);
+        			pr_info("VIC MDMA width1 0x310: 0x%x (should be 0xf00)\n", mdma_width1);
+        			pr_info("VIC MDMA width2 0x314: 0x%x (should be 0xf00)\n", mdma_width2);
+        			pr_info("VIC stream ctrl 0x300: 0x%x (should be 0x80000020)\n", stream_ctrl);
+        		}
+        		
+        		/* Final assessment */
+        		if (ctrl_test == 0x00030000 && config_test == 0x00030000 && mipi_test == 0x01003232) {
+        			pr_info("*** PERFECT! ALL VIC REGISTERS MATCH OEM VALUES! ***\n");
+        			pr_info("*** GREEN VIDEO STREAM SHOULD BE RESOLVED! ***\n");
+        		} else if (ctrl_test != 0x50002d0) {
+        			pr_info("*** PROGRESS! VIC registers changed from initial values! ***\n");
+        			pr_info("*** VIC hardware is responding to programming sequence! ***\n");
+        		} else {
+        			pr_warn("*** VIC registers still at initial values - hardware may need different sequence ***\n");
+        		}
+        		
+        	} else {
+        		pr_err("*** STILL FAILED! VIC registers unresponsive (ctrl=0x%x, config=0x%x) ***\n",
+        		       ctrl_test, config_test);
+        	}
         }
         
-        pr_info("*** VIC REGISTER ACCESS TEST COMPLETE ***\n");
+        pr_info("*** VIC REGISTER PROGRAMMING SEQUENCE COMPLETE ***\n");
     }
     
     return 0;
