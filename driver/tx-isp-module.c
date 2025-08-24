@@ -1378,6 +1378,10 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                     return ret;
                 }
                 pr_info("Channel %d: Sensor initialized successfully\n", channel);
+                
+                /* Ensure sensor state transitions to RUNNING after init */
+                sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
+                pr_info("Channel %d: Sensor state set to RUNNING after init\n", channel);
             }
             
             // Now start streaming
@@ -2484,7 +2488,16 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         tx_sensor->attr.chip_id = reg_info.chip_id;
         tx_sensor->video.vi_max_width = reg_info.width;
         tx_sensor->video.vi_max_height = reg_info.height;
-        tx_sensor->sd.vin_state = TX_ISP_MODULE_INIT;  // Start in INIT state, set to RUNNING on stream start
+        
+        /* Check if any channel is already streaming and set state accordingly */
+        tx_sensor->sd.vin_state = TX_ISP_MODULE_INIT;  // Default to INIT
+        for (int i = 0; i < num_channels; i++) {
+            if (frame_channels[i].state.streaming) {
+                tx_sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
+                pr_info("Channel %d already streaming, setting sensor state to RUNNING\n", i);
+                break;
+            }
+        }
     }
     
     /* Register with ISP device as primary sensor */
@@ -2499,11 +2512,32 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
             kernel_subdev->ops->core->init) {
             pr_info("Initializing sensor %s hardware...\n", reg_info.name);
             ret = kernel_subdev->ops->core->init(kernel_subdev, 1);
-            if (ret) {
+            if (ret && ret != 0xfffffdfd) {  // 0xfffffdfd is "already initialized"
                 pr_err("Failed to initialize sensor %s: %d\n", reg_info.name, ret);
             } else {
                 pr_info("Sensor %s initialized successfully (subdev=%p)\n",
                         reg_info.name, kernel_subdev);
+                        
+                /* If any channel is streaming, immediately transition to RUNNING */
+                for (int i = 0; i < num_channels; i++) {
+                    if (frame_channels[i].state.streaming) {
+                        kernel_subdev->vin_state = TX_ISP_MODULE_RUNNING;
+                        pr_info("Channel %d streaming, sensor %s state set to RUNNING\n",
+                                i, reg_info.name);
+                        
+                        /* Also start sensor streaming if it has the ops */
+                        if (kernel_subdev->ops && kernel_subdev->ops->video &&
+                            kernel_subdev->ops->video->s_stream) {
+                            pr_info("Starting sensor %s streaming\n", reg_info.name);
+                            ret = kernel_subdev->ops->video->s_stream(kernel_subdev, 1);
+                            if (ret) {
+                                pr_err("Failed to start sensor %s streaming: %d\n",
+                                       reg_info.name, ret);
+                            }
+                        }
+                        break;
+                    }
+                }
             }
         }
     }
@@ -2862,9 +2896,19 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
         }
     }
     
-    /* Initialize sensor state to INIT (will be set to RUNNING on stream start) */
-    sd->vin_state = TX_ISP_MODULE_INIT;
-    pr_info("Sensor subdev state initialized to INIT (will become RUNNING on stream start)\n");
+    /* Check if any channel is already streaming and set state accordingly */
+    sd->vin_state = TX_ISP_MODULE_INIT;  // Default to INIT
+    if (ourISPdev) {
+        for (int i = 0; i < num_channels; i++) {
+            if (frame_channels[i].state.streaming) {
+                sd->vin_state = TX_ISP_MODULE_RUNNING;
+                pr_info("Channel %d already streaming, setting sensor state to RUNNING\n", i);
+                break;
+            }
+        }
+    }
+    pr_info("Sensor subdev state initialized to %s\n",
+            sd->vin_state == TX_ISP_MODULE_RUNNING ? "RUNNING" : "INIT");
     
     /* Store for next IOCTL to pick up */
     registered_sensor_subdev = sd;
