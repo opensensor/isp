@@ -193,7 +193,7 @@ struct tx_isp_sensor_attribute sensor_attr = {
 	.cbus_type = SENSOR_BUS_TYPE,
 	.cbus_mask = V4L2_SBUS_MASK_SAMPLE_8BITS | V4L2_SBUS_MASK_ADDR_8BITS,
 	.cbus_device = SENSOR_I2C_ADDRESS,
-	.dbus_type = TX_SENSOR_DATA_INTERFACE_DVP,
+	.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI,
 	.dvp = {
 		.mode = SENSOR_DVP_HREF_MODE,
 		.blanking = {
@@ -1510,26 +1510,36 @@ static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 }
 
 static int sensor_s_stream(struct tx_isp_subdev *sd, int enable) {
+	struct tx_isp_sensor *sensor = sd_to_sensor_device(sd);
 	int ret = 0;
+	int actual_interface = sensor->video.attr->dbus_type;
 	
 	ISP_WARNING("%s: s_stream called with enable=%d\n", SENSOR_NAME, enable);
-	ISP_WARNING("%s: data_interface=%d (1=DVP, 2=MIPI)\n", SENSOR_NAME, data_interface);
+	ISP_WARNING("%s: module data_interface=%d, sensor data_interface=%d (1=DVP, 2=MIPI)\n",
+	            SENSOR_NAME, data_interface, actual_interface);
+	
+	/* Runtime correction: force MIPI if sensor interface type is wrong */
+	if (actual_interface == TX_SENSOR_DATA_INTERFACE_DVP && data_interface == TX_SENSOR_DATA_INTERFACE_MIPI) {
+		ISP_WARNING("%s: *** CORRECTING SENSOR INTERFACE FROM DVP TO MIPI ***\n", SENSOR_NAME);
+		sensor->video.attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
+		actual_interface = TX_SENSOR_DATA_INTERFACE_MIPI;
+	}
 	
 	if (enable) {
 		/* Start sensor hardware streaming */
 		ISP_WARNING("%s: *** STARTING SENSOR HARDWARE STREAMING ***\n", SENSOR_NAME);
-		ISP_WARNING("%s: About to write streaming registers\n", SENSOR_NAME);
+		ISP_WARNING("%s: About to write streaming registers for interface %d\n", SENSOR_NAME, actual_interface);
 		
-		/* Write streaming registers based on interface */
-		if (data_interface == TX_SENSOR_DATA_INTERFACE_DVP) {
+		/* Write streaming registers based on actual interface */
+		if (actual_interface == TX_SENSOR_DATA_INTERFACE_DVP) {
 			ISP_WARNING("%s: Writing DVP stream ON registers\n", SENSOR_NAME);
 			ret = sensor_write_array(sd, sensor_stream_on_dvp);
-		} else if (data_interface == TX_SENSOR_DATA_INTERFACE_MIPI) {
+		} else if (actual_interface == TX_SENSOR_DATA_INTERFACE_MIPI) {
 			ISP_WARNING("%s: *** WRITING MIPI STREAM ON REGISTERS - INCLUDING 0x3e=0x91 ***\n", SENSOR_NAME);
 			ret = sensor_write_array(sd, sensor_stream_on_mipi);
 			ISP_WARNING("%s: *** MIPI STREAM ON REGISTER WRITE COMPLETE, ret=%d ***\n", SENSOR_NAME, ret);
 		} else {
-			ISP_ERROR("%s: *** UNKNOWN DATA INTERFACE %d - CANNOT START STREAMING! ***\n", SENSOR_NAME, data_interface);
+			ISP_ERROR("%s: *** UNKNOWN DATA INTERFACE %d - CANNOT START STREAMING! ***\n", SENSOR_NAME, actual_interface);
 			return -EINVAL;
 		}
 		
@@ -1544,10 +1554,10 @@ static int sensor_s_stream(struct tx_isp_subdev *sd, int enable) {
 		/* Stop sensor hardware streaming */
 		ISP_WARNING("%s: *** STOPPING SENSOR HARDWARE STREAMING ***\n", SENSOR_NAME);
 		
-		if (data_interface == TX_SENSOR_DATA_INTERFACE_DVP) {
+		if (actual_interface == TX_SENSOR_DATA_INTERFACE_DVP) {
 			ISP_WARNING("%s: Writing DVP stream OFF registers\n", SENSOR_NAME);
 			ret = sensor_write_array(sd, sensor_stream_off_dvp);
-		} else if (data_interface == TX_SENSOR_DATA_INTERFACE_MIPI) {
+		} else if (actual_interface == TX_SENSOR_DATA_INTERFACE_MIPI) {
 			ISP_WARNING("%s: Writing MIPI stream OFF registers (0x3e=0x00)\n", SENSOR_NAME);
 			ret = sensor_write_array(sd, sensor_stream_off_mipi);
 		}
