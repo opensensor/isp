@@ -30,23 +30,81 @@ struct registered_sensor {
     struct list_head list;
 };
 
-// ISP configuration structure for buffer calculations
-struct tx_isp_config {
-    uint32_t width;      // Frame width at offset 0xec
-    uint32_t height;     // Frame height at offset 0xf0
-    uint32_t mode;       // ISP mode
-    // Add padding to match reference offsets
-    uint8_t reserved[0xec - 0x0c];
-    uint32_t frame_width;   // At offset 0xec
-    uint32_t frame_height;  // At offset 0xf0
-};
-
 // Simple global device instance
 struct tx_isp_dev *ourISPdev = NULL;
 static LIST_HEAD(sensor_list);
 static DEFINE_MUTEX(sensor_list_mutex);
 static int sensor_count = 0;
 static int isp_memopt = 0; // Memory optimization flag like reference
+
+// Helper functions matching reference driver patterns
+static void* find_subdev_link_pad(struct tx_isp_dev *isp_dev, char *name)
+{
+    int i;
+    
+    // Reference implementation searches through 16 subdevices at offset 0x38
+    // For now, return NULL since we don't have full subdev infrastructure
+    pr_debug("find_subdev_link_pad: searching for %s\n", name);
+    
+    // In full implementation, this would:
+    // 1. Iterate through isp_dev->subdevs[16] array
+    // 2. Compare subdev names
+    // 3. Return pad structure based on pad type
+    
+    return NULL;
+}
+
+static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
+{
+    // Reference: tx_isp_video_link_destroy.isra.5
+    // Gets link_config from offset 0x118, destroys links, sets to -1
+    
+    pr_info("Video link destroy: cleaning up pipeline connections\n");
+    
+    // In full implementation:
+    // 1. Get link_config from isp_dev->link_config (offset 0x118)
+    // 2. Iterate through configs array
+    // 3. Call find_subdev_link_pad() and subdev_video_destroy_link()
+    // 4. Set link_config to -1
+    
+    return 0;
+}
+
+static int tx_isp_video_link_stream_impl(struct tx_isp_dev *isp_dev, int enable)
+{
+    int i;
+    
+    // Reference: tx_isp_video_link_stream
+    // Iterates through 16 subdevices, calls video ops stream function
+    
+    pr_info("Video link stream: %s\n", enable ? "enable" : "disable");
+    
+    // In full implementation:
+    // for (i = 0; i < 16; i++) {
+    //     if (isp_dev->subdevs[i] && isp_dev->subdevs[i]->ops->video->stream)
+    //         result = isp_dev->subdevs[i]->ops->video->stream(isp_dev->subdevs[i], enable);
+    // }
+    
+    return 0;
+}
+
+static int tx_isp_video_s_stream_impl(struct tx_isp_dev *isp_dev, int enable)
+{
+    int i;
+    
+    // Reference: tx_isp_video_s_stream
+    // Similar to link stream but different ops function
+    
+    pr_info("Video s_stream: %s\n", enable ? "start" : "stop");
+    
+    // In full implementation:
+    // for (i = 0; i < 16; i++) {
+    //     if (isp_dev->subdevs[i] && isp_dev->subdevs[i]->ops->video->s_stream)
+    //         result = isp_dev->subdevs[i]->ops->video->s_stream(isp_dev->subdevs[i], enable);
+    // }
+    
+    return 0;
+}
 
 // Basic IOCTL handler matching reference behavior
 static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
@@ -77,6 +135,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             char name[32];
             // Other fields would be here in real struct
         } reg_info;
+        struct registered_sensor *sensor, *tmp;
         
         if (copy_from_user(&reg_info, argp, sizeof(reg_info)))
             return -EFAULT;
@@ -84,7 +143,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         mutex_lock(&sensor_list_mutex);
         
         // Check if sensor already registered
-        struct registered_sensor *sensor, *tmp;
         list_for_each_entry_safe(sensor, tmp, &sensor_list, list) {
             if (strncmp(sensor->name, reg_info.name, sizeof(sensor->name)) == 0) {
                 mutex_unlock(&sensor_list_mutex);
@@ -116,6 +174,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             int index;
             char name[32];
         } input;
+        struct registered_sensor *sensor;
+        int found = 0;
         
         if (copy_from_user(&input, argp, sizeof(input)))
             return -EFAULT;
@@ -123,8 +183,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         mutex_lock(&sensor_list_mutex);
         
         // Find sensor at requested index
-        struct registered_sensor *sensor;
-        int found = 0;
         
         list_for_each_entry(sensor, &sensor_list, list) {
             if (sensor->index == input.index) {
@@ -150,14 +208,14 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     }
     case 0xc0045627: { // TX_ISP_SENSOR_SET_INPUT - Set active sensor input
         int input_index;
+        struct registered_sensor *sensor;
+        int found = 0;
         
         if (copy_from_user(&input_index, argp, sizeof(input_index)))
             return -EFAULT;
             
         // Validate sensor exists
         mutex_lock(&sensor_list_mutex);
-        struct registered_sensor *sensor;
-        int found = 0;
         
         list_for_each_entry(sensor, &sensor_list, list) {
             if (sensor->index == input_index) {
@@ -180,6 +238,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             char name[32];
             // Other fields would be here in real struct
         } unreg_info;
+        struct registered_sensor *sensor, *tmp;
+        int found = 0;
         
         if (copy_from_user(&unreg_info, argp, sizeof(unreg_info)))
             return -EFAULT;
@@ -187,8 +247,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         mutex_lock(&sensor_list_mutex);
         
         // Find and remove sensor from list
-        struct registered_sensor *sensor, *tmp;
-        int found = 0;
         
         list_for_each_entry_safe(sensor, tmp, &sensor_list, list) {
             if (strncmp(sensor->name, unreg_info.name, sizeof(sensor->name)) == 0) {
@@ -261,11 +319,13 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t addr;   // Physical address (usually 0)
             uint32_t size;   // Calculated buffer size
         } buf_result;
-        
-        // Initialize with default ISP configuration
-        // In real implementation, this would come from actual ISP config
         uint32_t width = 1920;   // Default HD width
         uint32_t height = 1080;  // Default HD height
+        uint32_t stride_factor;
+        uint32_t main_buf;
+        uint32_t total_main;
+        uint32_t yuv_stride;
+        uint32_t total_size;
         
         pr_info("ISP buffer calculation: width=%d height=%d memopt=%d\n",
                 width, height, isp_memopt);
@@ -273,22 +333,21 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Reference buffer size calculation logic
         // Based on the decompiled code from reference driver
         
-        uint32_t stride_factor = height << 3; // $t0_3 = $a2_9 << 3
+        stride_factor = height << 3; // $t0_3 = $a2_9 << 3
         
         // Main buffer calculation: (($v0_83 + 7) u>> 3) * $t0_3
-        uint32_t main_buf = ((width + 7) >> 3) * stride_factor;
+        main_buf = ((width + 7) >> 3) * stride_factor;
         
         // Additional buffer: ($a0_29 u>> 1) + $a0_29
-        uint32_t total_main = (main_buf >> 1) + main_buf;
+        total_main = (main_buf >> 1) + main_buf;
         
         // YUV buffer calculation: (((($v0_83 + 0x1f) u>> 5) + 7) u>> 3) * (((($a2_9 + 0xf) u>> 4) + 1) << 3)
-        uint32_t yuv_stride = ((((width + 0x1f) >> 5) + 7) >> 3) * ((((height + 0xf) >> 4) + 1) << 3);
+        yuv_stride = ((((width + 0x1f) >> 5) + 7) >> 3) * ((((height + 0xf) >> 4) + 1) << 3);
         
-        uint32_t total_size = total_main + yuv_stride;
+        total_size = total_main + yuv_stride;
         
         // Memory optimization affects calculation
         if (isp_memopt == 0) {
-            // Additional buffers when memopt disabled
             uint32_t extra_buf = (((width >> 1) + 7) >> 3) * stride_factor;
             uint32_t misc_buf = ((((width >> 5) + 7) >> 3) * stride_factor) >> 5;
             
@@ -311,19 +370,22 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t addr;   // Physical buffer address
             uint32_t size;   // Buffer size
         } buf_setup;
+        uint32_t width = 1920;
+        uint32_t height = 1080;
+        uint32_t stride;
+        uint32_t frame_size;
+        uint32_t uv_offset;
+        uint32_t yuv_stride;
+        uint32_t yuv_size;
         
         if (copy_from_user(&buf_setup, argp, sizeof(buf_setup)))
             return -EFAULT;
         
-        // Default ISP configuration (in real implementation from device config)
-        uint32_t width = 1920;
-        uint32_t height = 1080;
-        
         pr_info("ISP set buffer: addr=0x%x size=%d\n", buf_setup.addr, buf_setup.size);
         
         // Calculate stride and buffer offsets like reference
-        uint32_t stride = ((width + 7) >> 3) << 3;  // Aligned stride
-        uint32_t frame_size = stride * height;
+        stride = ((width + 7) >> 3) << 3;  // Aligned stride
+        frame_size = stride * height;
         
         // Validate buffer size
         if (buf_setup.size < frame_size) {
@@ -336,14 +398,14 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Configuring main frame buffer: 0x%x stride=%d\n", buf_setup.addr, stride);
         
         // UV buffer offset calculation
-        uint32_t uv_offset = frame_size + (frame_size >> 1);
+        uv_offset = frame_size + (frame_size >> 1);
         if (buf_setup.size >= uv_offset) {
             pr_info("Configuring UV buffer: 0x%x\n", buf_setup.addr + frame_size);
         }
         
         // YUV420 additional buffer configuration
-        uint32_t yuv_stride = ((((width + 0x1f) >> 5) + 7) >> 3) << 3;
-        uint32_t yuv_size = yuv_stride * ((((height + 0xf) >> 4) + 1) << 3);
+        yuv_stride = ((((width + 0x1f) >> 5) + 7) >> 3) << 3;
+        yuv_size = yuv_stride * ((((height + 0xf) >> 4) + 1) << 3);
         
         if (!isp_memopt) {
             // Full buffer mode - configure all planes
@@ -360,19 +422,16 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t addr;   // WDR buffer address
             uint32_t size;   // WDR buffer size
         } wdr_setup;
+        uint32_t wdr_width = 1920;
+        uint32_t wdr_height = 1080;
+        uint32_t wdr_mode = 1; // Linear mode by default
+        uint32_t required_size;
+        uint32_t stride_lines;
         
         if (copy_from_user(&wdr_setup, argp, sizeof(wdr_setup)))
             return -EFAULT;
         
         pr_info("WDR buffer setup: addr=0x%x size=%d\n", wdr_setup.addr, wdr_setup.size);
-        
-        // Default WDR configuration
-        uint32_t wdr_width = 1920;
-        uint32_t wdr_height = 1080;
-        uint32_t wdr_mode = 1; // Linear mode by default
-        
-        uint32_t required_size;
-        uint32_t stride_lines;
         
         if (wdr_mode == 1) {
             // Linear mode calculation
@@ -406,16 +465,13 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t addr;   // WDR buffer address (usually 0)
             uint32_t size;   // Calculated WDR buffer size
         } wdr_result;
-        
-        // Default WDR configuration
         uint32_t wdr_width = 1920;
         uint32_t wdr_height = 1080;
         uint32_t wdr_mode = 1; // Linear mode
+        uint32_t wdr_size;
         
         pr_info("WDR buffer calculation: width=%d height=%d mode=%d\n",
                 wdr_width, wdr_height, wdr_mode);
-        
-        uint32_t wdr_size;
         
         if (wdr_mode == 1) {
             // Linear mode: ($s1_13 * *($s2_23 + 0x124)) << 1
@@ -445,41 +501,38 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EFAULT;
         
         if (link_config >= 2) {
-            pr_err("Invalid link config: %d (must be 0 or 1)\n", link_config);
+            pr_err("Invalid video link config: %d (valid: 0-1)\n", link_config);
             return -EINVAL;
         }
         
         pr_info("Video link setup: config=%d\n", link_config);
         
-        // Configure video link (in real implementation would setup subdev connections)
-        // This matches the reference driver's link configuration logic
+        // Reference implementation configures subdev links and pads
+        // In full implementation, this would:
+        // 1. Find subdev pads using find_subdev_link_pad()
+        // 2. Setup media pipeline connections
+        // 3. Configure link properties based on config value
+        // 4. Store config in device structure at offset 0x10c
+        
+        // For now, acknowledge the link setup
+        // isp_dev->link_config = link_config; // Would store at offset 0x10c
         
         return 0;
     }
     case 0x800456d1: { // TX_ISP_VIDEO_LINK_DESTROY - Destroy video links
-        pr_info("Video link destroy\n");
-        // Cleanup video pipeline connections
-        return 0;
+        return tx_isp_video_link_destroy_impl(isp_dev);
     }
     case 0x800456d2: { // TX_ISP_VIDEO_LINK_STREAM_ON - Enable video link streaming
-        pr_info("Video link stream ON\n");
-        // Enable video pipeline streaming
-        return 0;
+        return tx_isp_video_link_stream_impl(isp_dev, 1);
     }
     case 0x800456d3: { // TX_ISP_VIDEO_LINK_STREAM_OFF - Disable video link streaming
-        pr_info("Video link stream OFF\n");
-        // Disable video pipeline streaming
-        return 0;
+        return tx_isp_video_link_stream_impl(isp_dev, 0);
     }
     case 0x80045612: { // VIDIOC_STREAMON - Start video streaming
-        pr_info("Video stream START\n");
-        // Start ISP video streaming
-        return 0;
+        return tx_isp_video_s_stream_impl(isp_dev, 1);
     }
     case 0x80045613: { // VIDIOC_STREAMOFF - Stop video streaming
-        pr_info("Video stream STOP\n");
-        // Stop ISP video streaming
-        return 0;
+        return tx_isp_video_s_stream_impl(isp_dev, 0);
     }
     case 0x800456d8: { // TX_ISP_WDR_ENABLE - Enable WDR mode
         int wdr_enable = 1;
