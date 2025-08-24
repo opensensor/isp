@@ -1365,6 +1365,22 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         // Start the actual sensor hardware streaming FIRST
         if (channel == 0 && ourISPdev && ourISPdev->sensor) {
             sensor = ourISPdev->sensor;
+            
+            // Initialize sensor hardware FIRST (loads all register settings)
+            if (sensor && sensor->sd.ops && sensor->sd.ops->core &&
+                sensor->sd.ops->core->init) {
+                pr_info("Channel %d: Initializing sensor %s hardware...\n",
+                        channel, sensor ? sensor->info.name : "(unnamed)");
+                ret = sensor->sd.ops->core->init(&sensor->sd, 1);
+                if (ret && ret != 0xfffffdfd) {  // 0xfffffdfd is "already initialized"
+                    pr_err("Channel %d: Failed to initialize sensor: %d\n", channel, ret);
+                    state->streaming = false;
+                    return ret;
+                }
+                pr_info("Channel %d: Sensor initialized successfully\n", channel);
+            }
+            
+            // Now start streaming
             if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
                 sensor->sd.ops->video->s_stream) {
                 pr_info("Channel %d: Starting sensor %s hardware streaming\n",
