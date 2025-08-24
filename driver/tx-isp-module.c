@@ -1320,10 +1320,36 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                         if (vic_regs) {
                             pr_info("*** Channel %d: CONFIGURING VIC FOR MIPI DATA RECEPTION ***\n", channel);
                             
+                            // CRITICAL: VIC hardware initialization sequence before register writes
+                            pr_info("Channel %d: Initializing VIC hardware for register access\n", channel);
+                            
+                            // Step 1: Reset VIC hardware (clear any previous state)
+                            iowrite32(0, vic_regs + 0x0);
+                            iowrite32(0, vic_regs + 0x4);
+                            iowrite32(0, vic_regs + 0xc);
+                            wmb();
+                            
+                            // Step 2: Enable VIC hardware clocking/power (T31 specific)
+                            // This may be required for register writes to take effect
+                            iowrite32(1, vic_regs + 0x8);  // VIC enable register
+                            wmb();
+                            
+                            // Step 3: Wait for VIC to be ready for configuration
+                            msleep(1);
+                            
+                            pr_info("Channel %d: VIC hardware initialization complete, starting MIPI config\n", channel);
+                            
                             // MIPI interface configuration (reference: interface type 1)
                             // Set VIC control register 0xc = 3 for MIPI mode
                             iowrite32(3, vic_regs + 0xc);
-                            pr_info("Channel %d: VIC ctrl reg 0xc = 3 (MIPI mode)\n", channel);
+                            wmb();
+                            u32 ctrl_verify = ioread32(vic_regs + 0xc);
+                            pr_info("Channel %d: VIC ctrl reg 0xc = 3 (MIPI mode), verify=0x%x\n", channel, ctrl_verify);
+                            
+                            if (ctrl_verify != 3) {
+                                pr_err("Channel %d: CRITICAL - VIC ctrl register write failed! Expected 3, got 0x%x\n", channel, ctrl_verify);
+                                pr_err("Channel %d: VIC hardware may not be properly enabled\n", channel);
+                            }
                             
                             // Frame dimensions register 0x4: (width << 16) | height
                             iowrite32((vic_dev->frame_width << 16) | vic_dev->frame_height, vic_regs + 0x4);
