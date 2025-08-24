@@ -1308,6 +1308,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         uint32_t type;
         struct tx_isp_vic_device *vic_dev = NULL;
         struct tx_isp_sensor *sensor = NULL;
+        int ret = 0;
         
         if (copy_from_user(&type, argp, sizeof(type)))
             return -EFAULT;
@@ -1681,11 +1682,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -ENOMEM;
         }
         
-        // Initialize sensor info
+        // Initialize sensor info - using the SDK sensor_info structure
+        memset(&tx_sensor->info, 0, sizeof(tx_sensor->info));
         strncpy(tx_sensor->info.name, reg_info.name, sizeof(tx_sensor->info.name) - 1);
-        tx_sensor->info.chip_id = reg_info.chip_id;
-        tx_sensor->info.width = reg_info.width;
-        tx_sensor->info.height = reg_info.height;
         
         // Set sensor state to running
         tx_sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
