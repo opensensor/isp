@@ -485,22 +485,24 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     pr_info("Using VIC registers for ISP/VIC functionality\n");
     
     // Map ISP registers (VIC is accessed through ISP core, not separate region)
-    isp_dev->isp_regs = ioremap(T31_ISP_BASE_ADDR, T31_ISP_REG_SIZE);
-    if (!isp_dev->isp_regs) {
-        pr_warn("Failed to map ISP registers at 0x%x\n", T31_ISP_BASE_ADDR);
-        return -ENOMEM;
-    } else {
-        pr_info("ISP registers mapped at %p (phys: 0x%x)\n",
-                isp_dev->isp_regs, T31_ISP_BASE_ADDR);
+    {
+        void __iomem *isp_regs = ioremap(T31_ISP_BASE_ADDR, T31_ISP_REG_SIZE);
+        if (!isp_regs) {
+            pr_warn("Failed to map ISP registers at 0x%x\n", T31_ISP_BASE_ADDR);
+            return -ENOMEM;
+        } else {
+            pr_info("ISP registers mapped at %p (phys: 0x%x)\n",
+                    isp_regs, T31_ISP_BASE_ADDR);
+        }
+        
+        // VIC registers are accessed through ISP core at offset 0x9a00
+        isp_dev->vic_regs = isp_regs + VIC_REG_OFFSET;
+        pr_info("VIC registers accessible at %p (ISP+0x%x)\n",
+                isp_dev->vic_regs, VIC_REG_OFFSET);
     }
     
-    // VIC registers are accessed through ISP core at offset 0x9a00
-    isp_dev->vic_regs = isp_dev->isp_regs + VIC_REG_OFFSET;
-    pr_info("VIC registers accessible at %p (ISP+0x%x)\n",
-            isp_dev->vic_regs, VIC_REG_OFFSET);
-    
     // CRITICAL: Test VIC register access using correct ISP core mapping
-    if (isp_dev->vic_regs && isp_dev->isp_regs) {
+    if (isp_dev->vic_regs) {
         u32 frame_width = 1920;
         u32 frame_height = 1080;
         
