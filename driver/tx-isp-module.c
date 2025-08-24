@@ -191,46 +191,57 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
 }
 
 // VIC subdev structure based on reference driver analysis (0x21c bytes)
-// VIC device structure for REAL T31 hardware
-// This interfaces with actual VIC hardware registers at 0x13320000
+// VIC device structure matching reference driver exactly (0x21c bytes)
 struct tx_isp_vic_device {
     // Base subdev structure
     struct tx_isp_subdev sd;
     
-    // Hardware registers for VIC control
-    void __iomem *vic_regs;            // Maps to physical 0x13320000
+    // Padding to offset 0xb8 - VIC registers pointer
+    char padding1[0xb8 - sizeof(struct tx_isp_subdev)];
+    void __iomem *vic_regs;            // 0xb8: Maps to physical 0x13320000
     
-    // Self-pointer for driver compatibility
-    char padding1[0x18];
-    struct tx_isp_vic_device *self;
+    // Padding to offset 0xd4 - self pointer
+    char padding2[0xd4 - 0xb8 - sizeof(void*)];
+    struct tx_isp_vic_device *self;    // 0xd4: Self-pointer
     
-    // State management for hardware control
-    char padding2[0x50];
-    int state;                         // 1=initialized, 2=active (hardware streaming)
+    // Frame dimensions for register writes
+    char padding3[0xdc - 0xd4 - sizeof(void*)];
+    uint32_t frame_width;              // 0xdc: Frame width
+    uint32_t frame_height;             // 0xe0: Frame height
     
-    // Synchronization for hardware access
-    char padding3[0x4];
-    struct mutex mlock;                // Protects state transitions
+    // Padding to offset 0x128 - state
+    char padding4[0x128 - 0xe0 - sizeof(uint32_t)];
+    int state;                         // 0x128: 1=initialized, 2=active
     
-    // Frame completion from hardware
-    char padding4[0x18];
-    struct completion frame_done;      // Signaled by hardware interrupt
+    // Padding to offset 0x130 - spinlock
+    char padding5[0x130 - 0x128 - sizeof(int)];
+    spinlock_t lock;                   // 0x130: Main spinlock
+    struct mutex mlock;                // Also at 0x130 in some contexts
     
-    // Snapshot mode mutex
-    char padding5[0xC];
-    struct mutex snap_mlock;
+    // Padding to offset 0x148 - completion
+    char padding6[0x148 - 0x130 - sizeof(spinlock_t) - sizeof(struct mutex)];
+    struct completion frame_done;      // 0x148: Frame completion
     
-    // DMA buffer management for hardware
-    char padding6[0xA0];
-    spinlock_t buffer_lock;            // Protects hardware DMA queues
+    // Padding to offset 0x154 - snap mutex
+    char padding7[0x154 - 0x148 - sizeof(struct completion)];
+    struct mutex snap_mlock;           // 0x154: Snapshot mutex
+    
+    // Padding to offset 0x1f4 - buffer lock
+    char padding8[0x1f4 - 0x154 - sizeof(struct mutex)];
+    spinlock_t buffer_lock;            // 0x1f4: Buffer management lock
+    
+    // Buffer queues
     struct list_head queue_head;       // Buffers queued for hardware DMA
     struct list_head free_head;        // Available buffers
     struct list_head done_head;        // Completed by hardware
     
-    // Hardware streaming state
-    int streaming;                     // Hardware DMA active flag
-    char padding7[0x4];
-    uint32_t frame_count;              // Hardware frame counter
+    // Padding to offset 0x210 - streaming state
+    char padding9[0x210 - 0x1f4 - sizeof(spinlock_t) - 3*sizeof(struct list_head)];
+    int streaming;                     // 0x210: Hardware streaming active
+    
+    // Padding to offset 0x218 - frame count
+    char padding10[0x218 - 0x210 - sizeof(int)];
+    uint32_t frame_count;              // 0x218: Hardware frame counter
 };
 
 // Simplified VIC registration - removed complex platform device array
@@ -290,30 +301,33 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
         // Continue without hardware registers (simulation mode)
     }
     
-    // Allocate VIC device (0x21c bytes like reference)
-    vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
+    // Allocate VIC device (0x21c bytes exactly like reference)
+    vic_dev = kzalloc(0x21c, GFP_KERNEL);
     if (!vic_dev) {
         pr_err("Failed to allocate VIC device\n");
         return -ENOMEM;
     }
     
-    pr_info("Creating VIC device for T31 hardware...\n");
+    pr_info("Creating VIC device for T31 hardware (size=0x21c)...\n");
     
-    // Initialize VIC device structure
-    memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
+    // Initialize VIC device structure matching reference exactly
+    memset(vic_dev, 0, 0x21c);
     
-    // Basic initialization
-    vic_dev->vic_regs = isp_dev->vic_regs;
-    vic_dev->self = vic_dev;
-    vic_dev->state = 1;
-    vic_dev->streaming = 0;
-    vic_dev->frame_count = 0;
+    // Set critical offsets matching reference driver
+    vic_dev->vic_regs = isp_dev->vic_regs;     // 0xb8: Hardware registers
+    vic_dev->self = vic_dev;                   // 0xd4: Self-pointer
+    vic_dev->frame_width = 1920;               // 0xdc: Default width
+    vic_dev->frame_height = 1080;              // 0xe0: Default height
+    vic_dev->state = 1;                        // 0x128: Initial state
+    vic_dev->streaming = 0;                    // 0x210: Not streaming
+    vic_dev->frame_count = 0;                  // 0x218: Frame counter
     
-    // Initialize synchronization
-    mutex_init(&vic_dev->mlock);
-    mutex_init(&vic_dev->snap_mlock);
-    init_completion(&vic_dev->frame_done);
-    spin_lock_init(&vic_dev->buffer_lock);
+    // Initialize synchronization primitives at correct offsets
+    spin_lock_init(&vic_dev->lock);            // 0x130
+    mutex_init(&vic_dev->mlock);               // Also 0x130 (overlapped)
+    init_completion(&vic_dev->frame_done);     // 0x148
+    mutex_init(&vic_dev->snap_mlock);          // 0x154
+    spin_lock_init(&vic_dev->buffer_lock);     // 0x1f4
     
     // Initialize buffer queues
     INIT_LIST_HEAD(&vic_dev->queue_head);
@@ -323,7 +337,11 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
     // Connect to ISP device directly - no complex platform device registration
     isp_dev->vic_dev = vic_dev;
     
-    pr_info("VIC device created successfully\n");
+    pr_info("VIC device created successfully (offsets: regs=0x%lx self=0x%lx state=0x%lx stream=0x%lx)\n",
+            offsetof(struct tx_isp_vic_device, vic_regs),
+            offsetof(struct tx_isp_vic_device, self),
+            offsetof(struct tx_isp_vic_device, state),
+            offsetof(struct tx_isp_vic_device, streaming));
     return 0;
 }
 
@@ -1319,6 +1337,18 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             return 0;
         }
         
+        // Update VIC frame dimensions based on channel
+        if (ourISPdev && ourISPdev->vic_dev) {
+            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            if (channel == 0) {
+                vic->frame_width = 1920;
+                vic->frame_height = 1080;
+            } else {
+                vic->frame_width = 640;
+                vic->frame_height = 360;
+            }
+        }
+        
         // Enable channel
         state->enabled = true;
         state->streaming = true;
@@ -1333,18 +1363,35 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                 pr_info("Channel %d: VIC activated\n", channel);
             }
             
-            // Enable VIC streaming
+            // Enable VIC streaming with complete register writes
             if (!vic_dev->streaming) {
-                vic_dev->streaming = 1;
-                vic_dev->frame_count = 0;
+                unsigned long flags;
                 
-                // Write VIC registers if available
+                spin_lock_irqsave(&vic_dev->buffer_lock, flags);
+                
                 if (vic_dev->vic_regs) {
-                    // vic_pipo_mdma_enable equivalent from reference
+                    // vic_pipo_mdma_enable equivalent - ALL register writes
                     iowrite32(1, vic_dev->vic_regs + 0x308);
-                    iowrite32(0x80000020, vic_dev->vic_regs + 0x300);
-                    pr_info("Channel %d: VIC hardware registers configured\n", channel);
+                    
+                    // Write frame dimensions
+                    iowrite32((vic_dev->frame_width << 16) | vic_dev->frame_height,
+                             vic_dev->vic_regs + 0x304);
+                    
+                    // Write stride registers
+                    iowrite32(vic_dev->frame_width << 1, vic_dev->vic_regs + 0x310);
+                    iowrite32(vic_dev->frame_width << 1, vic_dev->vic_regs + 0x314);
+                    
+                    // Enable streaming with frame count
+                    iowrite32((vic_dev->frame_count << 16) | 0x80000020,
+                             vic_dev->vic_regs + 0x300);
+                    
+                    pr_info("Channel %d: VIC hardware fully configured (w=%d h=%d)\n",
+                            channel, vic_dev->frame_width, vic_dev->frame_height);
                 }
+                
+                vic_dev->streaming = 1;
+                
+                spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
             }
         }
         
