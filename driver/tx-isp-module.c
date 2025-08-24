@@ -1672,7 +1672,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Check if we have a kernel-registered sensor waiting */
         mutex_lock(&sensor_register_mutex);
         kernel_subdev = registered_sensor_subdev;
-        registered_sensor_subdev = NULL;  // Clear after use
+        /* Don't clear - keep it available for repeated registration attempts */
+        /* The sensor driver will call unregister when module is unloaded */
         mutex_unlock(&sensor_register_mutex);
         
         mutex_lock(&sensor_list_mutex);
