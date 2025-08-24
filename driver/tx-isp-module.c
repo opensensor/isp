@@ -313,9 +313,9 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
 {
     // T31 ISP/VIC register base addresses from reference
     #define T31_ISP_BASE_ADDR   0x13300000
-    #define T31_VIC_BASE_ADDR   0x13320000
-    #define T31_ISP_REG_SIZE    0x10000
-    #define T31_VIC_REG_SIZE    0x10000
+    #define T31_ISP_REG_SIZE    0x100000
+    // VIC registers are accessed through ISP core, not separate region
+    #define VIC_REG_OFFSET      0x9a00     // VIC registers start at ISP+0x9a00
     
     // T31 System Clock/Power Management
     #define T31_CPM_BASE        0x10000000
@@ -484,73 +484,59 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     
     pr_info("Using VIC registers for ISP/VIC functionality\n");
     
-    // Map VIC registers
-    isp_dev->vic_regs = ioremap(T31_VIC_BASE_ADDR, T31_VIC_REG_SIZE);
-    if (!isp_dev->vic_regs) {
-        pr_warn("Failed to map VIC registers at 0x%x\n", T31_VIC_BASE_ADDR);
+    // Map ISP registers (VIC is accessed through ISP core, not separate region)
+    isp_dev->isp_regs = ioremap(T31_ISP_BASE_ADDR, T31_ISP_REG_SIZE);
+    if (!isp_dev->isp_regs) {
+        pr_warn("Failed to map ISP registers at 0x%x\n", T31_ISP_BASE_ADDR);
         return -ENOMEM;
     } else {
-        pr_info("VIC registers mapped at %p (phys: 0x%x)\n",
-                isp_dev->vic_regs, T31_VIC_BASE_ADDR);
+        pr_info("ISP registers mapped at %p (phys: 0x%x)\n",
+                isp_dev->isp_regs, T31_ISP_BASE_ADDR);
     }
     
-    // CRITICAL: Enable VIC MDMA block first (discovered from vic_pipo_mdma_enable)
-    if (isp_dev->vic_regs) {
+    // VIC registers are accessed through ISP core at offset 0x9a00
+    isp_dev->vic_regs = isp_dev->isp_regs + VIC_REG_OFFSET;
+    pr_info("VIC registers accessible at %p (ISP+0x%x)\n",
+            isp_dev->vic_regs, VIC_REG_OFFSET);
+    
+    // CRITICAL: Test VIC register access using correct ISP core mapping
+    if (isp_dev->vic_regs && isp_dev->isp_regs) {
         u32 frame_width = 1920;
         u32 frame_height = 1080;
-        u32 stride = frame_width << 1;
         
-        pr_info("*** ENABLING VIC MDMA BLOCK (CRITICAL FOR REGISTER ACCESS) ***\n");
-        
-        // STEP 1: Enable VIC MDMA (register 0x308 = 1)
-        writel(1, isp_dev->vic_regs + 0x308);
-        wmb();
-        pr_info("VIC: Enabled MDMA block (wrote 1 to 0x308)\n");
-        
-        // STEP 2: Configure frame dimensions (register 0x304 = width << 16 | height)
-        writel((frame_width << 16) | frame_height, isp_dev->vic_regs + 0x304);
-        wmb();
-        pr_info("VIC: Set frame dimensions (wrote 0x%x to 0x304)\n", (frame_width << 16) | frame_height);
-        
-        // STEP 3: Configure stride registers (0x310 and 0x314 = width << 1)
-        writel(stride, isp_dev->vic_regs + 0x310);
-        writel(stride, isp_dev->vic_regs + 0x314);
-        wmb();
-        pr_info("VIC: Set stride registers (wrote %d to 0x310 and 0x314)\n", stride);
-        
-        // STEP 4: Now test register accessibility - should work!
-        pr_info("*** TESTING VIC REGISTER ACCESS AFTER MDMA ENABLEMENT ***\n");
+        pr_info("*** TESTING VIC REGISTER ACCESS (CORRECT ISP CORE MAPPING) ***\n");
         
         {
-            u32 ctrl_test, test_dims, dims_test, mipi_test;
+            u32 ctrl_test, config_test, mipi_test;
             
-            // Test VIC control register 0xc (MIPI mode)
-            writel(3, isp_dev->vic_regs + 0xc);
-            wmb();
-            ctrl_test = readl(isp_dev->vic_regs + 0xc);
-            pr_info("VIC CRITICAL TEST: wrote 3 to ctrl reg 0xc, read back 0x%x\n", ctrl_test);
+            // Test VIC control register 0x0 (matches OEM trace: should read ~0x00030000)
+            ctrl_test = readl(isp_dev->vic_regs + 0x0);
+            pr_info("VIC control reg 0x0 read: 0x%x (OEM shows: 0x00030000)\n", ctrl_test);
             
-            if (ctrl_test == 3) {
-                pr_info("*** SUCCESS! VIC REGISTERS ARE NOW ACCESSIBLE! ***\n");
-            } else {
-                pr_err("*** FAILED! VIC registers still unresponsive (expected 3, got 0x%x) ***\n", ctrl_test);
-            }
+            // Test VIC config register 0x4 (matches OEM trace: should read ~0x00030000)
+            config_test = readl(isp_dev->vic_regs + 0x4);
+            pr_info("VIC config reg 0x4 read: 0x%x (OEM shows: 0x00030000)\n", config_test);
             
-            // Test frame dimensions register
-            test_dims = (1920 << 16) | 1080;
-            writel(test_dims, isp_dev->vic_regs + 0x4);
-            wmb();
-            dims_test = readl(isp_dev->vic_regs + 0x4);
-            pr_info("VIC dims test: wrote 0x%x, read back 0x%x\n", test_dims, dims_test);
-            
-            // Test MIPI configuration register
-            writel(0x40000, isp_dev->vic_regs + 0x10);
-            wmb();
+            // Test VIC MIPI register 0x10 (matches OEM trace: should read ~0x01003232)
             mipi_test = readl(isp_dev->vic_regs + 0x10);
-            pr_info("VIC MIPI test: wrote 0x40000, read back 0x%x\n", mipi_test);
+            pr_info("VIC MIPI reg 0x10 read: 0x%x (OEM shows: 0x01003232)\n", mipi_test);
+            
+            if (ctrl_test != 0xfb33ec && config_test != 0xfb33ec) {
+                pr_info("*** SUCCESS! VIC REGISTERS ARE NOW ACCESSIBLE VIA ISP CORE! ***\n");
+                
+                // Write test with OEM-style values
+                writel(0x50002d0, isp_dev->vic_regs + 0x0);
+                wmb();
+                ctrl_test = readl(isp_dev->vic_regs + 0x0);
+                pr_info("VIC write test: wrote 0x50002d0 to reg 0x0, read back 0x%x\n", ctrl_test);
+                
+            } else {
+                pr_err("*** STILL FAILED! VIC registers unresponsive (ctrl=0x%x, config=0x%x) ***\n",
+                       ctrl_test, config_test);
+            }
         }
         
-        pr_info("*** VIC MDMA ENABLEMENT COMPLETE ***\n");
+        pr_info("*** VIC REGISTER ACCESS TEST COMPLETE ***\n");
     }
     
     return 0;
