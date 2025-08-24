@@ -449,42 +449,32 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
                 isp_dev->vic_regs, T31_VIC_BASE_ADDR);
     }
     
-    // CRITICAL: Enable VIC register access using reference driver sequence
+    // CRITICAL: Enable VIC MDMA block first (discovered from vic_pipo_mdma_enable)
     if (isp_dev->vic_regs) {
-        pr_info("*** ENABLING VIC REGISTER ACCESS (REFERENCE SEQUENCE) ***\n");
+        u32 frame_width = 1920;
+        u32 frame_height = 1080;
+        u32 stride = frame_width << 1;
         
-        // STEP 1: Enable VIC register access mode (write 2 to register 0x0)
-        writel(2, isp_dev->vic_regs + 0x0);
+        pr_info("*** ENABLING VIC MDMA BLOCK (CRITICAL FOR REGISTER ACCESS) ***\n");
+        
+        // STEP 1: Enable VIC MDMA (register 0x308 = 1)
+        writel(1, isp_dev->vic_regs + 0x308);
         wmb();
-        pr_info("VIC: Enabled register access mode (wrote 2 to 0x0)\n");
+        pr_info("VIC: Enabled MDMA block (wrote 1 to 0x308)\n");
         
-        // STEP 2: Set VIC configuration mode (write 4 to register 0x0)
-        writel(4, isp_dev->vic_regs + 0x0);
+        // STEP 2: Configure frame dimensions (register 0x304 = width << 16 | height)
+        writel((frame_width << 16) | frame_height, isp_dev->vic_regs + 0x304);
         wmb();
-        pr_info("VIC: Set configuration mode (wrote 4 to 0x0)\n");
+        pr_info("VIC: Set frame dimensions (wrote 0x%x to 0x304)\n", (frame_width << 16) | frame_height);
         
-        // STEP 3: Wait for VIC ready state (register 0x0 becomes 0)
-        {
-            int timeout = 1000;
-            u32 vic_status;
-            while ((vic_status = readl(isp_dev->vic_regs + 0x0)) != 0 && timeout--) {
-            cpu_relax();
-            }
-            
-            if (timeout <= 0) {
-                pr_err("VIC ready timeout! Status=0x%x\n", vic_status);
-                return -ETIMEDOUT;
-            }
-            pr_info("VIC: Ready state achieved (register 0x0 = 0x%x)\n", vic_status);
-        }
-        
-        // STEP 4: Start VIC processing (write 1 to register 0x0)
-        writel(1, isp_dev->vic_regs + 0x0);
+        // STEP 3: Configure stride registers (0x310 and 0x314 = width << 1)
+        writel(stride, isp_dev->vic_regs + 0x310);
+        writel(stride, isp_dev->vic_regs + 0x314);
         wmb();
-        pr_info("VIC: Started processing (wrote 1 to 0x0)\n");
+        pr_info("VIC: Set stride registers (wrote %d to 0x310 and 0x314)\n", stride);
         
-        // STEP 5: NOW test register accessibility - should work!
-        pr_info("*** TESTING VIC REGISTER ACCESS AFTER ENABLEMENT ***\n");
+        // STEP 4: Now test register accessibility - should work!
+        pr_info("*** TESTING VIC REGISTER ACCESS AFTER MDMA ENABLEMENT ***\n");
         
         {
             u32 ctrl_test, test_dims, dims_test, mipi_test;
@@ -515,7 +505,7 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
             pr_info("VIC MIPI test: wrote 0x40000, read back 0x%x\n", mipi_test);
         }
         
-        pr_info("*** VIC REGISTER ACCESS ENABLEMENT COMPLETE ***\n");
+        pr_info("*** VIC MDMA ENABLEMENT COMPLETE ***\n");
     }
     
     return 0;
