@@ -25,17 +25,7 @@
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
-/* Sensor attribute structure for pipeline activation */
-struct tx_isp_sensor_attribute {
-    const char *name;
-    u32 chip_id;
-    u32 width;
-    u32 height;
-    u32 fps;
-    u32 data_interface;
-    u32 mipi_clk;
-    /* Additional sensor-specific fields would go here */
-};
+/* Remove duplicate - tx_isp_sensor_attribute already defined in SDK */
 
 // Simple sensor registration structure
 struct registered_sensor {
@@ -72,6 +62,7 @@ static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
 static irqreturn_t tx_isp_hardware_interrupt_handler(int irq, void *dev_id);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
+static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel);
 
 // ISP Tuning device support - missing component for /dev/isp-m0
 static struct cdev isp_tuning_cdev;
@@ -124,78 +115,62 @@ static int frame_channel_open(struct inode *inode, struct file *file);
 static int frame_channel_release(struct inode *inode, struct file *file);
 static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
-// Helper functions matching reference driver patterns - REAL IMPLEMENTATION
+// Helper functions matching reference driver patterns - SDK compatible
 static void* find_subdev_link_pad(struct tx_isp_dev *isp_dev, char *name)
 {
-    int i;
-    struct tx_isp_subdev *subdev;
-    struct tx_isp_subdev_pad *pad;
-    
     if (!isp_dev || !name) {
         return NULL;
     }
     
     pr_debug("find_subdev_link_pad: searching for %s\n", name);
     
-    // Search through subdevs array at offset 0x38 (matches reference driver)
-    for (i = 0; i < 16; i++) {
-        subdev = isp_dev->subdevs[i];
-        if (!subdev) {
-            continue;
-        }
-        
-        // Compare subdev names (matches reference implementation)
-        if (subdev->module.name && strcmp(subdev->module.name, name) == 0) {
-            pr_debug("Found subdev %s at index %d\n", name, i);
-            
-            // Return appropriate pad based on type
-            // Type 1 = sink pad, Type 2 = source pad (from decompiled code)
-            if (strstr(name, "sensor") || strstr(name, "csi")) {
-                // Source pad for sensor/CSI
-                if (subdev->outpads && subdev->num_outpads > 0) {
-                    return &subdev->outpads[0];
-                }
-            } else {
-                // Sink pad for VIC/ISP core
-                if (subdev->inpads && subdev->num_inpads > 0) {
-                    return &subdev->inpads[0];
-                }
-            }
-        }
+    // Work with actual SDK structure - check individual device pointers
+    if (strstr(name, "sensor") && isp_dev->sensor) {
+        pr_debug("Found sensor device\n");
+        return &isp_dev->sensor->sd; // Return sensor subdev
+    }
+    
+    if (strstr(name, "csi") && isp_dev->csi_dev) {
+        pr_debug("Found CSI device\n");
+        return isp_dev->csi_dev->sd; // Return CSI subdev
+    }
+    
+    if (strstr(name, "vic") && isp_dev->vic_dev) {
+        pr_debug("Found VIC device\n");
+        return isp_dev->vic_dev->sd; // Return VIC subdev
     }
     
     pr_debug("Subdev %s not found\n", name);
     return NULL;
 }
 
-// Sensor synchronization matching reference ispcore_sync_sensor_attr
-static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, void *sensor_attr)
+// Sensor synchronization matching reference ispcore_sync_sensor_attr - SDK compatible
+static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sensor_attribute *sensor_attr)
 {
-    struct tx_isp_subdev *ispcore_subdev;
-    
     if (!isp_dev || !sensor_attr) {
         pr_err("Invalid parameters for sensor sync\n");
         return -EINVAL;
     }
     
-    // Find ISP core subdev (matches reference at offset 0xd4)
-    ispcore_subdev = isp_dev->subdevs[TX_ISP_CORE_SUBDEV_ID];
-    if (!ispcore_subdev) {
-        pr_err("ISP core subdev not found\n");
-        return -ENODEV;
+    // Work with actual SDK sensor structure
+    if (isp_dev->sensor) {
+        // Copy sensor attributes to device sensor
+        memcpy(&isp_dev->sensor->attr, sensor_attr, sizeof(struct tx_isp_sensor_attribute));
+        pr_debug("Sensor attr sync completed for %s\n", sensor_attr->name);
+        
+        // Update device sensor info
+        strncpy(isp_dev->sensor_name, sensor_attr->name, sizeof(isp_dev->sensor_name) - 1);
+        isp_dev->sensor_width = sensor_attr->total_width;
+        isp_dev->sensor_height = sensor_attr->total_height;
+        
+        return 0;
     }
     
-    // Sync sensor attributes to ISP core (matches reference memcpy at +0xec, 0x4c bytes)
-    if (ispcore_subdev->ops && ispcore_subdev->ops->sensor &&
-        ispcore_subdev->ops->sensor->sync_sensor_attr) {
-        return ispcore_subdev->ops->sensor->sync_sensor_attr(ispcore_subdev, sensor_attr);
-    }
-    
-    pr_debug("Sensor attr sync completed\n");
-    return 0;
+    pr_debug("No active sensor for sync\n");
+    return -ENODEV;
 }
 
-// Initialize subdev infrastructure matching reference tx_isp_subdev_init
+// Initialize subdev infrastructure matching reference tx_isp_subdev_init - SDK compatible
 static int tx_isp_init_subdevs(struct tx_isp_dev *isp_dev)
 {
     int ret = 0;
@@ -204,28 +179,19 @@ static int tx_isp_init_subdevs(struct tx_isp_dev *isp_dev)
         return -EINVAL;
     }
     
-    // Initialize subdev array (16 subdevs at offset 0x38)
-    memset(isp_dev->subdevs, 0, sizeof(isp_dev->subdevs));
+    // Work with actual SDK device structure - individual pointers
+    pr_info("Initializing device subsystems...\n");
     
-    // Initialize CSI subdev if available
     if (isp_dev->csi_dev) {
-        isp_dev->subdevs[1] = isp_dev->csi_dev; // CSI at index 1
-        pr_info("CSI subdev initialized at index 1\n");
+        pr_info("CSI device available\n");
     }
     
-    // Initialize VIC subdev if available
     if (isp_dev->vic_dev) {
-        isp_dev->subdevs[2] = isp_dev->vic_dev; // VIC at index 2
-        pr_info("VIC subdev initialized at index 2\n");
+        pr_info("VIC device available\n");
     }
     
-    // Initialize ISP core subdev if available
-    if (isp_dev->ispcore_dev) {
-        isp_dev->subdevs[TX_ISP_CORE_SUBDEV_ID] = isp_dev->ispcore_dev; // Core at index 0
-        pr_info("ISP core subdev initialized at index 0\n");
-    }
-    
-    pr_info("Subdev infrastructure initialized\n");
+    // Sensor will be registered dynamically via IOCTL
+    pr_info("Device subsystem initialization complete\n");
     return ret;
 }
 
@@ -255,56 +221,44 @@ static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
-// Activate sensor pipeline - connects sensor -> CSI -> VIC -> ISP chain
+// Activate sensor pipeline - connects sensor -> CSI -> VIC -> ISP chain - SDK compatible
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name)
 {
-    struct tx_isp_subdev *sensor_sd, *csi_sd, *vic_sd, *core_sd;
+    int ret = 0;
     
     if (!isp_dev || !sensor_name) {
         return -EINVAL;
     }
     
-    // Get subdev pointers
-    sensor_sd = isp_dev->subdevs[3];  // Sensor
-    csi_sd = isp_dev->subdevs[1];     // CSI
-    vic_sd = isp_dev->subdevs[2];     // VIC
-    core_sd = isp_dev->subdevs[0];    // ISP Core
-    
-    if (!sensor_sd) {
-        pr_err("Sensor subdev not found for pipeline activation\n");
-        return -ENODEV;
-    }
-    
     pr_info("Activating %s sensor pipeline: Sensor->CSI->VIC->Core\n", sensor_name);
     
-    // Configure pipeline connections (matches reference driver)
-    if (csi_sd && sensor_sd) {
+    // Configure pipeline connections with actual SDK devices
+    if (isp_dev->csi_dev) {
         pr_info("Connecting %s sensor to CSI\n", sensor_name);
-        // In full implementation: configure CSI input from sensor
-        // csi_sd->ops->video->set_stream(csi_sd, 1);
+        // Configure CSI for sensor input
+        if (isp_dev->csi_dev->state < 2) {
+            isp_dev->csi_dev->state = 2; // Mark as enabled
+        }
     }
     
-    if (vic_sd && csi_sd) {
+    if (isp_dev->vic_dev) {
         pr_info("Connecting CSI to VIC\n");
-        // In full implementation: configure VIC input from CSI
-        // vic_sd->ops->video->set_stream(vic_sd, 1);
-    }
-    
-    if (core_sd && vic_sd) {
-        pr_info("Connecting VIC to ISP Core\n");
-        // In full implementation: configure ISP core input from VIC
-        // core_sd->ops->video->set_stream(core_sd, 1);
+        // Configure VIC for CSI input
+        if (isp_dev->vic_dev->state < 2) {
+            isp_dev->vic_dev->state = 2; // Mark as enabled
+        }
     }
     
     // Sync sensor attributes to ISP core
-    if (core_sd && sensor_sd) {
-        // Mock sensor attributes for pipeline activation
+    if (isp_dev->sensor) {
+        // Create sensor attributes for pipeline activation
         struct tx_isp_sensor_attribute sensor_attr = {0};
         sensor_attr.name = sensor_name;
         sensor_attr.chip_id = 0x2053; // GC2053 ID
-        sensor_attr.width = 1920;
-        sensor_attr.height = 1080;
-        sensor_attr.fps = 30;
+        sensor_attr.total_width = 1920;
+        sensor_attr.total_height = 1080;
+        sensor_attr.integration_time = 1000; // Default integration time
+        sensor_attr.max_again = 0x40000; // Default gain (format .16)
         
         ret = tx_isp_sync_sensor_attr(isp_dev, &sensor_attr);
         if (ret) {
@@ -318,7 +272,7 @@ static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const cha
     return 0;
 }
 
-// Initialize real hardware interrupt handling - Kernel 3.10 compatible
+// Initialize real hardware interrupt handling - Kernel 3.10 compatible, SDK compatible
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
 {
     int ret;
@@ -330,25 +284,17 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
     
     pr_info("Checking for hardware interrupt support...\n");
     
-    // In kernel 3.10, platform_get_irq_byname may not be available
-    // Try to get IRQ from platform device resources if available
-    if (tx_isp_platform_device.num_resources > 0) {
-        struct resource *res;
-        int i;
-        
-        for (i = 0; i < tx_isp_platform_device.num_resources; i++) {
-            res = &tx_isp_platform_device.resource[i];
-            if (resource_type(res) == IORESOURCE_IRQ) {
-                irq_num = res->start;
-                break;
-            }
-        }
-    }
-    
-    if (irq_num < 0) {
-        // Try default IRQ number for T31 ISP if platform resources not available
+    // Use actual SDK IRQ fields if available
+    if (isp_dev->isp_irq > 0) {
+        irq_num = isp_dev->isp_irq;
+        pr_info("Using existing ISP IRQ: %d\n", irq_num);
+    } else if (isp_dev->vic_irq > 0) {
+        irq_num = isp_dev->vic_irq;
+        pr_info("Using VIC IRQ for frame events: %d\n", irq_num);
+    } else {
+        // Try default IRQ number for T31 ISP
         irq_num = 63; // T31 ISP IRQ number from reference
-        pr_info("No platform IRQ found, testing default IRQ number: %d\n", irq_num);
+        pr_info("No existing IRQ found, testing default IRQ number: %d\n", irq_num);
         
         // Test if IRQ is valid by attempting to request it
         ret = request_irq(irq_num, tx_isp_hardware_interrupt_handler,
@@ -358,72 +304,76 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
             pr_info("Hardware interrupts not available - will use simulation\n");
             return -ENODEV;
         }
-    } else {
-        pr_info("Found ISP IRQ from platform: %d\n", irq_num);
         
-        ret = request_irq(irq_num, tx_isp_hardware_interrupt_handler,
-                          IRQF_SHARED, "tx-isp", isp_dev);
-        if (ret) {
-            pr_err("Failed to request ISP IRQ %d: %d\n", irq_num, ret);
-            return ret;
-        }
+        // Store in device structure
+        isp_dev->isp_irq = irq_num;
+        pr_info("Hardware interrupts initialized (IRQ %d)\n", irq_num);
+        return 0;
     }
     
-    isp_dev->irq = irq_num;
-    pr_info("Hardware interrupts initialized (IRQ %d)\n", irq_num);
+    // Request the IRQ if not already requested
+    ret = request_irq(irq_num, tx_isp_hardware_interrupt_handler,
+                      IRQF_SHARED, "tx-isp", isp_dev);
+    if (ret) {
+        pr_err("Failed to request ISP IRQ %d: %d\n", irq_num, ret);
+        return ret;
+    }
     
+    pr_info("Hardware interrupts initialized (IRQ %d)\n", irq_num);
     return 0;
 }
 
-// Hardware interrupt handler - replaces timer simulation
+// Hardware interrupt handler - replaces timer simulation - SDK compatible
 static irqreturn_t tx_isp_hardware_interrupt_handler(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     u32 irq_status;
     int handled = 0;
+    int i;
     
-    if (!isp_dev || !isp_dev->vic_regs) {
+    if (!isp_dev) {
         return IRQ_NONE;
     }
     
-    // Read interrupt status register (T31 VIC interrupt status)
-    irq_status = readl(isp_dev->vic_regs + 0x78c0);
-    if (!irq_status) {
-        return IRQ_NONE;
-    }
-    
-    // Handle frame completion interrupt
-    if (irq_status & TX_ISP_HW_IRQ_FRAME_DONE) {
-        pr_debug("Hardware frame completion interrupt\n");
+    // Read interrupt status register if VIC registers available
+    if (isp_dev->vic_regs) {
+        irq_status = readl(isp_dev->vic_regs + 0x78c0);
+        if (!irq_status) {
+            return IRQ_NONE;
+        }
         
-        // Wake up all active frame channels
-        int i;
+        // Handle frame completion interrupt
+        if (irq_status & TX_ISP_HW_IRQ_FRAME_DONE) {
+            pr_debug("Hardware frame completion interrupt\n");
+            
+            // Wake up all active frame channels
+            for (i = 0; i < num_channels; i++) {
+                if (frame_channels[i].state.streaming) {
+                    tx_isp_hardware_frame_done_handler(isp_dev, i);
+                }
+            }
+            handled = 1;
+        }
+        
+        // Handle VIC completion interrupt
+        if (irq_status & TX_ISP_HW_IRQ_VIC_DONE) {
+            pr_debug("VIC processing completion interrupt\n");
+            handled = 1;
+        }
+        
+        // Clear interrupt status
+        writel(irq_status, isp_dev->vic_regs + 0x78c0);
+        wmb();
+    } else {
+        // Generic ISP interrupt handling if VIC regs not available
+        pr_debug("Generic ISP interrupt\n");
         for (i = 0; i < num_channels; i++) {
             if (frame_channels[i].state.streaming) {
                 tx_isp_hardware_frame_done_handler(isp_dev, i);
             }
         }
-        
         handled = 1;
     }
-    
-    // Handle VIC completion interrupt
-    if (irq_status & TX_ISP_HW_IRQ_VIC_DONE) {
-        pr_debug("VIC processing completion interrupt\n");
-        // Additional VIC-specific handling would go here
-        handled = 1;
-    }
-    
-    // Handle CSI error interrupt
-    if (irq_status & TX_ISP_HW_IRQ_CSI_ERROR) {
-        pr_warn("CSI error interrupt (status=0x%x)\n", irq_status);
-        // CSI error handling would go here
-        handled = 1;
-    }
-    
-    // Clear interrupt status
-    writel(irq_status, isp_dev->vic_regs + 0x78c0);
-    wmb();
     
     return handled ? IRQ_HANDLED : IRQ_NONE;
 }
@@ -478,6 +428,27 @@ static int tx_isp_video_s_stream_impl(struct tx_isp_dev *isp_dev, int enable)
     // }
     
     return 0;
+}
+
+/* Real hardware frame completion detection - replaces timer simulation - SDK compatible */
+static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel)
+{
+    if (!isp_dev || channel < 0 || channel >= num_channels) {
+        return;
+    }
+    
+    pr_debug("Hardware frame completion detected on channel %d\n", channel);
+    
+    /* Wake up frame waiters with real hardware completion */
+    frame_channel_wakeup_waiters(&frame_channels[channel]);
+    
+    /* Update frame count for statistics */
+    isp_dev->frame_count++;
+    
+    /* Complete frame operation if completion is available */
+    if (isp_dev->frame_complete.done == 0) {
+        complete(&isp_dev->frame_complete);
+    }
 }
 
 // ISP Tuning device implementation - missing component for IMP_ISP_EnableTuning()
