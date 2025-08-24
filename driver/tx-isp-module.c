@@ -129,11 +129,98 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
     void __user *argp = (void __user *)arg;
     int param_type;
     
+    pr_info("ISP Tuning IOCTL: cmd=0x%x\n", cmd);
+    
+    // Handle V4L2 control IOCTLs (VIDIOC_S_CTRL, VIDIOC_G_CTRL)
+    if (cmd == 0xc008561c || cmd == 0xc008561b) { // VIDIOC_S_CTRL / VIDIOC_G_CTRL
+        struct v4l2_control {
+            uint32_t id;
+            int32_t value;
+        } ctrl;
+        
+        if (copy_from_user(&ctrl, argp, sizeof(ctrl)))
+            return -EFAULT;
+        
+        pr_info("V4L2 Control: id=0x%x value=%d\n", ctrl.id, ctrl.value);
+        
+        // Handle common ISP controls based on reference implementation
+        switch (ctrl.id) {
+        case 0x980900: // V4L2_CID_BRIGHTNESS
+            pr_info("ISP Brightness: %d\n", ctrl.value);
+            break;
+        case 0x980901: // V4L2_CID_CONTRAST
+            pr_info("ISP Contrast: %d\n", ctrl.value);
+            break;
+        case 0x980902: // V4L2_CID_SATURATION
+            pr_info("ISP Saturation: %d\n", ctrl.value);
+            break;
+        case 0x98091b: // V4L2_CID_SHARPNESS
+            pr_info("ISP Sharpness: %d\n", ctrl.value);
+            break;
+        case 0x980914: // V4L2_CID_VFLIP
+            pr_info("ISP VFlip: %d\n", ctrl.value);
+            break;
+        case 0x980915: // V4L2_CID_HFLIP
+            pr_info("ISP HFlip: %d\n", ctrl.value);
+            break;
+        case 0x980918: // Anti-flicker
+            pr_info("ISP Anti-flicker: %d\n", ctrl.value);
+            break;
+        case 0x8000086: // 2DNS ratio
+            pr_info("ISP 2DNS ratio: %d\n", ctrl.value);
+            break;
+        case 0x8000085: // 3DNS ratio
+            pr_info("ISP 3DNS ratio: %d\n", ctrl.value);
+            break;
+        case 0x8000028: // Max analog gain
+            pr_info("ISP Max analog gain: %d\n", ctrl.value);
+            break;
+        case 0x8000029: // Max digital gain
+            pr_info("ISP Max digital gain: %d\n", ctrl.value);
+            break;
+        case 0x8000023: // AE compensation
+            pr_info("ISP AE compensation: %d\n", ctrl.value);
+            break;
+        case 0x80000e0: // Sensor FPS
+            pr_info("ISP Sensor FPS: %d\n", ctrl.value);
+            break;
+        case 0x8000062: // DPC strength
+            pr_info("ISP DPC strength: %d\n", ctrl.value);
+            break;
+        case 0x80000a2: // DRC strength
+            pr_info("ISP DRC strength: %d\n", ctrl.value);
+            break;
+        case 0x8000039: // Defog strength
+            pr_info("ISP Defog strength: %d\n", ctrl.value);
+            break;
+        case 0x8000101: // BCSH Hue
+            pr_info("ISP BCSH Hue: %d\n", ctrl.value);
+            break;
+        default:
+            pr_info("Unknown V4L2 control: id=0x%x value=%d\n", ctrl.id, ctrl.value);
+            break;
+        }
+        
+        // For VIDIOC_G_CTRL, copy back the (possibly modified) value
+        if (cmd == 0xc008561b) {
+            if (copy_to_user(argp, &ctrl, sizeof(ctrl)))
+                return -EFAULT;
+        }
+        
+        return 0;
+    }
+    
+    // Handle extended control IOCTL
+    if (cmd == 0xc00c56c6) { // VIDIOC_S_EXT_CTRLS or similar
+        pr_info("Extended V4L2 control operation\n");
+        // For now, just acknowledge - would need more analysis for full implementation
+        return 0;
+    }
+    
     // Check if this is a tuning command (0x74xx series from reference)
     if ((cmd >> 8 & 0xFF) == 0x74) {
         if ((cmd & 0xFF) < 0x33) {
             if ((cmd - ISP_TUNING_GET_PARAM) < 0xA) {
-                pr_info("ISP Tuning IOCTL: cmd=0x%x\n", cmd);
                 
                 switch (cmd) {
                 case ISP_TUNING_GET_PARAM: {
