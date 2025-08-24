@@ -316,13 +316,67 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     #define T31_ISP_REG_SIZE    0x10000
     #define T31_VIC_REG_SIZE    0x10000
     
+    // T31 System Clock/Power Management
+    #define T31_CPM_BASE        0x10000000
+    #define T31_CPM_SIZE        0x1000
+    #define CPM_CLKGR0          0x20
+    #define CPM_CLKGR1          0x28
+    #define CPM_OPCR            0x24
+    
+    void __iomem *cpm_regs = NULL;
+    u32 clkgr0, clkgr1, opcr;
+    
     if (!isp_dev) {
         return -EINVAL;
     }
     
     pr_info("Mapping ISP/VIC registers...\n");
     
-    // Note: Using VIC registers for ISP functionality - ISP regs not in SDK structure
+    // CRITICAL: Enable T31 VIC hardware at system level FIRST
+    pr_info("Enabling T31 VIC hardware at system level...\n");
+    
+    // Map Clock/Power Management registers
+    cpm_regs = ioremap(T31_CPM_BASE, T31_CPM_SIZE);
+    if (!cpm_regs) {
+        pr_err("Failed to map T31 CPM registers\n");
+        return -ENOMEM;
+    }
+    
+    // Read current clock gate registers
+    clkgr0 = readl(cpm_regs + CPM_CLKGR0);
+    clkgr1 = readl(cpm_regs + CPM_CLKGR1);
+    opcr = readl(cpm_regs + CPM_OPCR);
+    
+    pr_info("T31 CPM before: CLKGR0=0x%x, CLKGR1=0x%x, OPCR=0x%x\n", clkgr0, clkgr1, opcr);
+    
+    // Enable ISP/VIC clocks (clear gate bits)
+    // Bit positions from T31 manual - ISP typically bit 13, VIC bit 30
+    clkgr0 &= ~(1 << 13); // Enable ISP clock
+    clkgr1 &= ~(1 << 30); // Enable VIC clock (if in CLKGR1)
+    clkgr0 &= ~(1 << 30); // Try VIC in CLKGR0 too
+    
+    // Enable ISP/VIC power domains
+    opcr |= (1 << 2);  // Enable ISP power domain
+    opcr |= (1 << 3);  // Enable VIC power domain (if separate)
+    
+    // Write back the modified values
+    writel(clkgr0, cpm_regs + CPM_CLKGR0);
+    writel(clkgr1, cpm_regs + CPM_CLKGR1);
+    writel(opcr, cpm_regs + CPM_OPCR);
+    wmb();
+    
+    // Wait for clocks to stabilize
+    msleep(10);
+    
+    // Verify clock enables
+    clkgr0 = readl(cpm_regs + CPM_CLKGR0);
+    clkgr1 = readl(cpm_regs + CPM_CLKGR1);
+    opcr = readl(cpm_regs + CPM_OPCR);
+    
+    pr_info("T31 CPM after: CLKGR0=0x%x, CLKGR1=0x%x, OPCR=0x%x\n", clkgr0, clkgr1, opcr);
+    
+    iounmap(cpm_regs);
+    
     pr_info("Using VIC registers for ISP/VIC functionality\n");
     
     // Map VIC registers
@@ -335,10 +389,19 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
                 isp_dev->vic_regs, T31_VIC_BASE_ADDR);
     }
     
-    // Test register access
+    // Test register access after system enable
     if (isp_dev->vic_regs) {
         u32 test_val = readl(isp_dev->vic_regs);
-        pr_info("VIC register test read: 0x%x\n", test_val);
+        pr_info("VIC register test read after system enable: 0x%x\n", test_val);
+        
+        // Try a test write to see if hardware responds
+        writel(0x5A5A5A5A, isp_dev->vic_regs + 0x4);
+        wmb();
+        u32 test_write = readl(isp_dev->vic_regs + 0x4);
+        pr_info("VIC register test write: wrote 0x5A5A5A5A, read back 0x%x\n", test_write);
+        
+        // Clear test value
+        writel(0, isp_dev->vic_regs + 0x4);
     }
     
     return 0;
