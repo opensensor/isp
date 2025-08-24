@@ -2771,8 +2771,17 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
     
     mutex_lock(&sensor_register_mutex);
     
-    pr_info("Kernel sensor registration: %s (subdev=%p, ops=%p)\n",
-            sensor->info.name, sd, sd->ops);
+    pr_info("=== KERNEL SENSOR REGISTRATION ===\n");
+    pr_info("Sensor: %s (subdev=%p)\n", sensor->info.name, sd);
+    if (sd->ops) {
+        pr_info("  ops=%p\n", sd->ops);
+        if (sd->ops->video) {
+            pr_info("  video ops=%p\n", sd->ops->video);
+            if (sd->ops->video->s_stream) {
+                pr_info("  s_stream=%p (STREAMING AVAILABLE)\n", sd->ops->video->s_stream);
+            }
+        }
+    }
     
     /* Store for next IOCTL to pick up */
     registered_sensor_subdev = sd;
