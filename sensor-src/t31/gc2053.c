@@ -1210,18 +1210,26 @@ static struct tx_isp_sensor_win_setting sensor_win_sizes[] = {
 struct tx_isp_sensor_win_setting *wsize = &sensor_win_sizes[5];
 
 static struct regval_list sensor_stream_on_dvp[] = {
+	{0xfe, 0x00},  /* Page 0 */
+	{0x3e, 0x40},  /* Enable DVP output (bit 6 = DVP enable) */
 	{SENSOR_REG_END, 0x00},
 };
 
 static struct regval_list sensor_stream_off_dvp[] = {
+	{0xfe, 0x00},  /* Page 0 */
+	{0x3e, 0x00},  /* Disable DVP output */
 	{SENSOR_REG_END, 0x00},
 };
 
 static struct regval_list sensor_stream_on_mipi[] = {
+	{0xfe, 0x00},  /* Page 0 */
+	{0x3e, 0x91},  /* Enable MIPI output (0x91 = MIPI enable + continuous mode) */
 	{SENSOR_REG_END, 0x00},
 };
 
 static struct regval_list sensor_stream_off_mipi[] = {
+	{0xfe, 0x00},  /* Page 0 */
+	{0x3e, 0x00},  /* Disable MIPI output */
 	{SENSOR_REG_END, 0x00},
 };
 
