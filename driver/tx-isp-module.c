@@ -2675,7 +2675,6 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
             
             /* FORCE association - don't check, just set it */
             i2c_set_clientdata(i2c_client, kernel_subdev);
-            tx_sensor->i2c_client = i2c_client;
             
             pr_info("I2C client FORCED association with sensor subdev\n");
             
