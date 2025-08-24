@@ -59,6 +59,7 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
 static void vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static void init_frame_simulation(void);
 static void stop_frame_simulation(void);
+static void frame_sim_timer_callback(unsigned long data);
 static int tx_isp_send_event_to_remote_internal(void *subdev, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
