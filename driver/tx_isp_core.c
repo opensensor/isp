@@ -745,12 +745,8 @@ int tx_isp_core_probe(struct platform_device *pdev)
         goto _core_mem_err;
     }
 
-    /* Configure system clocks */
-    ret = tx_isp_configure_clocks(isp);
-    if (ret < 0) {
-        ISP_ERROR("Failed to configure system clocks: %d\n", ret);
-        goto _core_clk_err;
-    }
+    /* Clock configuration is handled by the platform/VIC subsystem */
+    pr_info("Core probe skipping clock configuration - handled elsewhere\n");
 
     /* Create ISP graph and nodes */
     pr_info("Creating ISP graph and nodes\n");
@@ -766,24 +762,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
     return 0;
 
 _core_graph_err:
-    /* Disable and release clocks */
-    if (isp->csi_clk) {
-        clk_disable_unprepare(isp->csi_clk);
-        clk_put(isp->csi_clk);
-    }
-    if (isp->ipu_clk) {
-        clk_disable_unprepare(isp->ipu_clk);
-        clk_put(isp->ipu_clk);
-    }
-    if (isp->isp_clk) {
-        clk_disable_unprepare(isp->isp_clk);
-        clk_put(isp->isp_clk);
-    }
-    if (isp->cgu_isp) {
-        clk_disable_unprepare(isp->cgu_isp);
-        clk_put(isp->cgu_isp);
-    }
-_core_clk_err:
     tx_isp_deinit_memory_mappings(isp);
 _core_mem_err:
     free_irq(isp->isp_irq, isp);
