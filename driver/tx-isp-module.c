@@ -46,6 +46,64 @@ static int isp_memopt = 0; // Memory optimization flag like reference
 static struct tx_isp_subdev *registered_sensor_subdev = NULL;
 static DEFINE_MUTEX(sensor_register_mutex);
 
+/* I2C infrastructure for sensor communication */
+static int setup_i2c_adapter(struct tx_isp_dev *dev)
+{
+    struct i2c_board_info board_info = {0};
+    struct i2c_adapter *adapter;
+    struct i2c_client *client;
+    int ret;
+
+    pr_info("Setting up I2C infrastructure for sensor communication...\n");
+
+    /* Configure I2C board info for GC2053 */
+    strncpy(board_info.type, "gc2053", I2C_NAME_SIZE - 1);
+    board_info.type[I2C_NAME_SIZE - 1] = '\0';
+    board_info.addr = 0x37;  /* GC2053 I2C address */
+    board_info.flags = 0;     /* Standard 7-bit I2C addressing */
+
+    /* Get I2C adapter 0 (typical camera I2C bus) */
+    adapter = i2c_get_adapter(0);
+    if (!adapter) {
+        pr_err("Failed to get I2C adapter 0\n");
+        return -ENODEV;
+    }
+
+    pr_info("Got I2C Adapter: name='%s' nr=%d\n",
+            adapter->name, adapter->nr);
+
+    /* Create new I2C device for the sensor */
+    client = i2c_new_device(adapter, &board_info);
+    if (!client) {
+        pr_err("Failed to create I2C device for sensor\n");
+        i2c_put_adapter(adapter);
+        return -ENODEV;
+    }
+
+    /* Store in device structure */
+    dev->sensor_i2c_client = client;
+    dev->i2c_adapter = adapter;
+
+    pr_info("I2C sensor device created: type=%s addr=0x%02x\n",
+            client->name, client->addr);
+
+    return 0;
+}
+
+/* Clean up I2C infrastructure */
+static void cleanup_i2c_adapter(struct tx_isp_dev *dev)
+{
+    if (dev->sensor_i2c_client) {
+        i2c_unregister_device(dev->sensor_i2c_client);
+        dev->sensor_i2c_client = NULL;
+    }
+    
+    if (dev->i2c_adapter) {
+        i2c_put_adapter(dev->i2c_adapter);
+        dev->i2c_adapter = NULL;
+    }
+}
+
 /* Event system constants from reference driver */
 #define TX_ISP_EVENT_FRAME_QBUF         0x3000008
 #define TX_ISP_EVENT_FRAME_DQBUF        0x3000006
@@ -2352,10 +2410,18 @@ static int tx_isp_init(void)
     }
     pr_info("  /proc/jz/isp/isp-w02\n");
     
+    /* Set up I2C infrastructure for sensor communication */
+    ret = setup_i2c_adapter(ourISPdev);
+    if (ret) {
+        pr_warn("Failed to set up I2C adapter: %d (continuing without I2C)\n", ret);
+        /* Continue without I2C - sensor might use SPI or be virtual */
+    }
+    
     /* Initialize subdev infrastructure for real hardware integration */
     ret = tx_isp_init_subdevs(ourISPdev);
     if (ret) {
         pr_err("Failed to initialize subdev infrastructure: %d\n", ret);
+        cleanup_i2c_adapter(ourISPdev);
         destroy_frame_channel_devices();
         destroy_isp_tuning_device();
         tx_isp_proc_exit(ourISPdev);
@@ -2399,6 +2465,9 @@ static void tx_isp_exit(void)
     if (ourISPdev) {
         /* Stop frame simulation timer if running */
         stop_frame_simulation();
+        
+        /* Clean up I2C infrastructure */
+        cleanup_i2c_adapter(ourISPdev);
         
         /* Free hardware interrupts if initialized */
         if (ourISPdev->isp_irq > 0) {
