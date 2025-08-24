@@ -1357,8 +1357,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
                 sensor->sd.ops->video->s_stream) {
                 pr_info("Channel %d: Starting sensor %s hardware streaming\n",
-                        channel, sensor && sensor->info.name[0] ?
-                        sensor->info.name : "(unnamed)");
+                        channel, sensor ? sensor->info.name : "(unnamed)");
                 ret = sensor->sd.ops->video->s_stream(&sensor->sd, 1);
                 if (ret) {
                     pr_err("Channel %d: Failed to start sensor streaming: %d\n",
@@ -2416,9 +2415,10 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         /* Update sensor info with userspace data (name comes from userspace) */
         strncpy(tx_sensor->info.name, reg_info.name, sizeof(tx_sensor->info.name) - 1);
         tx_sensor->info.name[sizeof(tx_sensor->info.name) - 1] = '\0';
-        tx_sensor->info.chip_id = reg_info.chip_id;
-        tx_sensor->info.width = reg_info.width;
-        tx_sensor->info.height = reg_info.height;
+        /* Store chip_id in attr and dimensions in video */
+        tx_sensor->attr.chip_id = reg_info.chip_id;
+        tx_sensor->video.vi_max_width = reg_info.width;
+        tx_sensor->video.vi_max_height = reg_info.height;
         
         pr_info("Using kernel-registered sensor for %s (subdev=%p, ops=%p)\n",
                 reg_info.name, kernel_subdev, kernel_subdev->ops);
@@ -2445,9 +2445,10 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         /* Initialize sensor info from userspace */
         strncpy(tx_sensor->info.name, reg_info.name, sizeof(tx_sensor->info.name) - 1);
         tx_sensor->info.name[sizeof(tx_sensor->info.name) - 1] = '\0';
-        tx_sensor->info.chip_id = reg_info.chip_id;
-        tx_sensor->info.width = reg_info.width;
-        tx_sensor->info.height = reg_info.height;
+        /* Store chip_id in attr and dimensions in video */
+        tx_sensor->attr.chip_id = reg_info.chip_id;
+        tx_sensor->video.vi_max_width = reg_info.width;
+        tx_sensor->video.vi_max_height = reg_info.height;
         tx_sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
     }
     
