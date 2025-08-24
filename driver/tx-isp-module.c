@@ -1238,9 +1238,41 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         
         // Auto-start streaming if not already started
         if (!state->streaming) {
-            pr_info("Channel %d: Auto-starting streaming on QBUF\n", channel);
+            pr_info("*** Channel %d: Auto-starting streaming on QBUF - STARTING SENSOR! ***\n", channel);
             state->streaming = true;
             state->enabled = true;
+            
+            // *** CRITICAL: START SENSOR STREAMING HERE DURING QBUF AUTO-START ***
+            if (channel == 0 && ourISPdev && ourISPdev->sensor) {
+                struct tx_isp_sensor *sensor = ourISPdev->sensor;
+                int ret = 0;
+                
+                pr_info("*** Channel %d: QBUF AUTO-START - CALLING SENSOR s_stream(1) ***\n", channel);
+                pr_info("Channel %d: Found sensor %s for QBUF auto-start streaming\n",
+                        channel, sensor ? sensor->info.name : "(unnamed)");
+                
+                // Start streaming with detailed error checking
+                if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
+                    sensor->sd.ops->video->s_stream) {
+                    pr_info("*** Channel %d: CALLING SENSOR s_stream(1) FROM QBUF - WRITING 0x3e=0x91 ***\n", channel);
+                    
+                    ret = sensor->sd.ops->video->s_stream(&sensor->sd, 1);
+                    
+                    pr_info("*** Channel %d: SENSOR s_stream(1) FROM QBUF RETURNED %d ***\n", channel, ret);
+                    if (ret) {
+                        pr_err("Channel %d: FAILED to start sensor streaming from QBUF: %d\n", channel, ret);
+                        pr_err("Channel %d: Register 0x3e=0x91 was NOT written!\n", channel);
+                    } else {
+                        pr_info("*** Channel %d: SENSOR STREAMING SUCCESS FROM QBUF - 0x3e=0x91 WRITTEN! ***\n", channel);
+                        // CRITICAL: Set sensor state to RUNNING after successful streaming start
+                        sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
+                        pr_info("Channel %d: Sensor state set to RUNNING from QBUF\n", channel);
+                    }
+                } else {
+                    pr_err("*** Channel %d: CRITICAL ERROR - NO SENSOR s_stream FROM QBUF! ***\n", channel);
+                    pr_err("Channel %d: VIDEO WILL BE GREEN WITHOUT SENSOR STREAMING!\n", channel);
+                }
+            }
             
             // Start frame generation
             if (frame_timer_initialized) {
