@@ -46,6 +46,7 @@ static int isp_memopt = 0; // Memory optimization flag like reference
 static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
 static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data);
 static void init_frame_simulation(void);
+static int tx_isp_send_event_to_remote_internal(void *subdev, int event_type, void *data);
 
 // ISP Tuning device support - missing component for /dev/isp-m0
 static struct cdev isp_tuning_cdev;
