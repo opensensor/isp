@@ -526,20 +526,72 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         	if (ctrl_test != 0xfb33ec && config_test != 0xfb33ec) {
         		pr_info("*** SUCCESS! VIC REGISTERS ARE NOW ACCESSIBLE VIA ISP CORE! ***\n");
         		
-        		/* *** IMPLEMENT VIC HARDWARE ENABLE SEQUENCE FIRST *** */
-        		pr_info("*** PROGRAMMING VIC REGISTERS TO MATCH OEM BEHAVIOR ***\n");
+        		/* *** CRITICAL: ENABLE ISP CORE FIRST (FROM tisp_init ANALYSIS) *** */
+        		pr_info("*** ENABLING ISP CORE BEFORE VIC INITIALIZATION ***\n");
         		
-        		/* Step 1: Enable VIC hardware core (registers not writable until VIC is enabled) */
+        		/* Step 1: CRITICAL ISP Core initialization from tisp_init Binary Ninja analysis */
         		{
-        			u32 vic_enable_val = 0x1;  /* Enable VIC core */
+        			void __iomem *isp_regs = isp_dev->vic_regs - VIC_REG_OFFSET; /* Get ISP base */
+        			u32 frame_width = 1920;
+        			u32 frame_height = 1080;
         			
-        			/* Try VIC enable register (offset 0x0 is often an enable register) */
-        			writel(vic_enable_val, isp_dev->vic_regs + 0x0);
+        			pr_info("ISP CORE INIT: ISP base=%p, VIC offset=%p\n", isp_regs, isp_dev->vic_regs);
+        			
+        			/* Set frame dimensions (tisp_init: system_reg_write(4, dimensions)) */
+        			writel((frame_width << 16) | frame_height, isp_regs + 0x4);
         			wmb();
-        			msleep(5); /* Allow VIC core to come online */
+        			pr_info("ISP reg 0x4 = 0x%x (frame dimensions)\n", (frame_width << 16) | frame_height);
         			
-        			u32 verify = readl(isp_dev->vic_regs + 0x0);
-        			pr_info("VIC core enable: wrote 0x%x, read 0x%x\n", vic_enable_val, verify);
+        			/* Set interface configuration (tisp_init: system_reg_write(8, interface)) */
+        			writel(0x2, isp_regs + 0x8); /* 2 = MIPI interface */
+        			wmb();
+        			pr_info("ISP reg 0x8 = 0x2 (MIPI interface)\n");
+        			
+        			/* Set control register (tisp_init: system_reg_write(0x1c, control)) */
+        			writel(0x3f00, isp_regs + 0x1c); /* Basic control value */
+        			wmb();
+        			pr_info("ISP reg 0x1c = 0x3f00 (control)\n");
+        			
+        			/* Set main control register (tisp_init: system_reg_write(0xc, main_ctrl)) */
+        			writel(0x34000009, isp_regs + 0xc); /* Main control from tisp_init */
+        			wmb();
+        			pr_info("ISP reg 0xc = 0x34000009 (main control)\n");
+        			
+        			/* Set interrupt mask (tisp_init: system_reg_write(0x30, 0xffffffff)) */
+        			writel(0xffffffff, isp_regs + 0x30);
+        			wmb();
+        			pr_info("ISP reg 0x30 = 0xffffffff (interrupt mask)\n");
+        			
+        			/* Set additional control (tisp_init: system_reg_write(0x10, control2)) */
+        			writel(0x133, isp_regs + 0x10); /* Control value from tisp_init */
+        			wmb();
+        			pr_info("ISP reg 0x10 = 0x133 (control2)\n");
+        			
+        			/* CRITICAL: Final ISP core enable sequence from tisp_init */
+        			writel(0x1c, isp_regs + 0x804); /* Set final control */
+        			wmb();
+        			writel(0x8, isp_regs + 0x1c);   /* Update control register */
+        			wmb();
+        			
+        			/* *** THE CRITICAL ENABLE - THIS POWERS UP THE ENTIRE ISP CORE *** */
+        			writel(0x1, isp_regs + 0x800);   /* ENABLE ISP CORE */
+        			wmb();
+        			msleep(10); /* Allow ISP core to fully initialize */
+        			
+        			pr_info("*** ISP CORE ENABLED! Register 0x800 = 1 ***\n");
+        			
+        			/* Verify ISP core is enabled */
+        			u32 isp_status = readl(isp_regs + 0x800);
+        			pr_info("ISP core status: 0x%x (should be 1)\n", isp_status);
+        		}
+        		
+        		/* Step 2: NOW VIC should be able to initialize properly */
+        		pr_info("*** NOW INITIALIZING VIC (ISP CORE IS ENABLED) ***\n");
+        		
+        		/* Test VIC register access now that ISP core is enabled */
+        		{
+        			u32 vic_test_read = readl(isp_dev->vic_regs + 0x0);
+        			pr_info("VIC status after ISP enable: 0x%x\n", vic_test_read);
         		}
         		
         		/* Step 2: Try alternative VIC unlock sequence (some VIC cores need magic values) */
