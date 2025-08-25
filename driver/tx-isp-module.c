@@ -3652,14 +3652,90 @@ static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_s
     if (interface_type == 1) {
         pr_info("*** COMPLETE MIPI INTERFACE CONFIGURATION FROM BINARY NINJA ***\n");
         
-        /* *** STEP 1: COMPLETE REGISTER SETUP FROM tx_isp_vic_start *** */
-        pr_info("*** STEP 1: COMPLETE REGISTER SETUP FROM tx_isp_vic_start ***\n");
+        /* *** STEP 1: UNLOCK VIC REGISTERS FIRST (BEFORE PROGRAMMING) *** */
+        pr_info("*** STEP 1: VIC REGISTER UNLOCK SEQUENCE (MUST BE FIRST) ***\n");
         
-        /* From Binary Ninja: Configure all the preparatory registers */
-        /* First, ensure VIC is in clean state */
+        /* From Binary Ninja: The VIC enable sequence must happen BEFORE register programming */
+        /* This unlocks the VIC register space for configuration */
+        
+        /* Reset VIC to clean state */
         writel(0, vic_regs + 0x0);
         wmb();
-        udelay(10); /* Allow VIC to reset */
+        udelay(10);
+        
+        /* Step 1: Write 2 to VIC control register 0x0 (unlock mode) */
+        writel(2, vic_regs + 0x0);
+        wmb();
+        pr_info("VIC Step 1: Write 2 to reg 0x0 (unlock mode)\n");
+        
+        /* Step 2: Write 4 to VIC control register 0x0 (config mode) */
+        writel(4, vic_regs + 0x0);
+        wmb();
+        pr_info("VIC Step 2: Write 4 to reg 0x0 (config mode)\n");
+        
+        /* *** CRITICAL: REGISTER 0x1a0 WRITE IMMEDIATELY AFTER WRITE 4 *** */
+        {
+            u32 frame_mode_attr = 1;  /* GC2053 frame mode (progressive) */
+            u32 additional_attr = 0x2; /* GC2053 MIPI additional config */
+            u32 reg_1a0_value = (frame_mode_attr << 4) | additional_attr;
+            
+            writel(reg_1a0_value, vic_regs + 0x1a0);
+            wmb();
+            pr_info("VIC CRITICAL reg 0x1a0 = 0x%x (unlock key)\n", reg_1a0_value);
+        }
+        
+        /* *** CRITICAL: ADD MISSING REGISTER WRITES BEFORE WAIT *** */
+        pr_info("*** STEP 1.5: ADDITIONAL UNLOCK REGISTERS ***\n");
+        writel(0x1, vic_regs + 0x1a4);    /* Enable register */
+        writel(0x0, vic_regs + 0x1a8);    /* Clear pending state */
+        writel(0x4140, vic_regs + 0x1ac); /* Frame mode */
+        writel(0x10, vic_regs + 0x1b0);   /* Buffer control */
+        wmb();
+        
+        /* Step 3: Wait for VIC to transition from 0x4 → 0x0 (ready for config) */
+        {
+            int unlock_timeout = 50000;
+            u32 status;
+            
+            pr_info("*** STEP 2: WAITING FOR VIC UNLOCK (0x4 → 0x0) ***\n");
+            
+            while (unlock_timeout-- > 0) {
+                status = readl(vic_regs + 0x0);
+                if (status == 0) {
+                    break;
+                }
+                if (unlock_timeout % 5000 == 0) {
+                    pr_info("VIC unlock wait: status=0x%x, remaining=%d\n", status, unlock_timeout);
+                    msleep(1);
+                } else if (unlock_timeout % 1000 == 0) {
+                    udelay(50);
+                } else if (unlock_timeout % 100 == 0) {
+                    udelay(5);
+                }
+                cpu_relax();
+            }
+            
+            if (unlock_timeout <= 0) {
+                pr_err("VIC unlock timeout: status=0x%x (expected 0)\n", status);
+                return -ETIMEDOUT;
+            } else {
+                pr_info("*** VIC UNLOCK SUCCESS: status=0x%x, registers should be writable now ***\n", status);
+            }
+        }
+        
+        /* Step 4: Write 1 to VIC control register 0x0 (enable register access) */
+        writel(1, vic_regs + 0x0);
+        wmb();
+        pr_info("VIC Step 4: Write 1 to reg 0x0 (enable register access)\n");
+        
+        /* Verify VIC is now unlocked for register programming */
+        {
+            u32 test_reg = readl(vic_regs + 0x0);
+            pr_info("VIC unlock verification: reg 0x0 = 0x%x\n", test_reg);
+        }
+        
+        /* *** STEP 2: NOW PROGRAM VIC REGISTERS (AFTER UNLOCK) *** */
+        pr_info("*** STEP 2: VIC REGISTER PROGRAMMING (AFTER UNLOCK) ***\n");
         
         /* *** CRITICAL: FIXED REGISTER 0x100 CALCULATION FROM BINARY NINJA *** */
         /* From Binary Ninja: Calculate register 0x100 based on pixel format and width */
