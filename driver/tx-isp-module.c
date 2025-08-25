@@ -137,6 +137,7 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
 static irqreturn_t tx_isp_hardware_interrupt_handler(int irq, void *dev_id);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
 static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel);
+static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 
 // ISP Tuning device support - missing component for /dev/isp-m0
 static struct cdev isp_tuning_cdev;
