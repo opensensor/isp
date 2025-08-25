@@ -3763,41 +3763,47 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         pr_info("*** WRITING SENSOR CONFIGURATION STRUCTURE TO ISP REGISTERS ***\n");
                         
                         /* Build sensor configuration structure from GC2053 attributes */
+                        /* Define struct outside to ensure proper scope */
+                        struct tisp_sensor_config_structure {
+                            /* Core sensor parameters */
+                            u32 sensor_clock;          /* 0x124: Sensor clock (78MHz for GC2053) */
+                            u32 frame_rate;           /* 0x128: Frame rate (30fps << 16 | 1) */
+                            
+                            /* Frame dimensions */
+                            u32 width;                /* 0x140: Active width (1920) */
+                            u32 height;               /* 0x142: Active height (1080) */
+                            u32 total_width;          /* Total width including blanking (2188) */
+                            u32 total_height;         /* Total height including blanking (1125) */
+                            
+                            /* Timing parameters */
+                            u32 line_time_us;         /* 0x94: Line time in microseconds (11us) */
+                            u32 integration_time;     /* 0x98: Integration time */
+                            u32 max_integration_time; /* 0x9c: Max integration time */
+                            u32 min_integration_time; /* 0xa0: Min integration time */
+                            
+                            /* MIPI interface configuration */
+                            u32 mipi_lanes;           /* Number of MIPI lanes (2) */
+                            u32 mipi_clk_mhz;         /* MIPI clock frequency (600MHz) */
+                            u32 pixel_format;         /* Pixel format (RAW10) */
+                            
+                            /* Gain settings */
+                            u32 max_analog_gain;      /* Maximum analog gain */
+                            u32 max_digital_gain;     /* Maximum digital gain */
+                            
+                            /* Additional sensor-specific parameters */
+                            u32 chip_id;              /* Sensor chip ID (0x2053) */
+                            u32 interface_type;       /* Interface type (1=MIPI) */
+                            
+                            /* Reserved/padding to match reference structure size */
+                            u32 reserved[16];
+                        };
+                        
+                        /* Declare config pointer at function scope level */
+                        struct tisp_sensor_config_structure *config = NULL;
+                        u8 sensor_config_buffer[512]; /* Buffer for sensor config structure */
+                        
                         {
-                            u8 sensor_config_buffer[512]; /* Buffer for sensor config structure */
-                            struct tisp_sensor_config_structure {
-                                /* Core sensor parameters */
-                                u32 sensor_clock;          /* 0x124: Sensor clock (78MHz for GC2053) */
-                                u32 frame_rate;           /* 0x128: Frame rate (30fps << 16 | 1) */
-                                
-                                /* Frame dimensions */
-                                u32 width;                /* 0x140: Active width (1920) */
-                                u32 height;               /* 0x142: Active height (1080) */
-                                u32 total_width;          /* Total width including blanking (2188) */
-                                u32 total_height;         /* Total height including blanking (1125) */
-                                
-                                /* Timing parameters */
-                                u32 line_time_us;         /* 0x94: Line time in microseconds (11us) */
-                                u32 integration_time;     /* 0x98: Integration time */
-                                u32 max_integration_time; /* 0x9c: Max integration time */
-                                u32 min_integration_time; /* 0xa0: Min integration time */
-                                
-                                /* MIPI interface configuration */
-                                u32 mipi_lanes;           /* Number of MIPI lanes (2) */
-                                u32 mipi_clk_mhz;         /* MIPI clock frequency (600MHz) */
-                                u32 pixel_format;         /* Pixel format (RAW10) */
-                                
-                                /* Gain settings */
-                                u32 max_analog_gain;      /* Maximum analog gain */
-                                u32 max_digital_gain;     /* Maximum digital gain */
-                                
-                                /* Additional sensor-specific parameters */
-                                u32 chip_id;              /* Sensor chip ID (0x2053) */
-                                u32 interface_type;       /* Interface type (1=MIPI) */
-                                
-                                /* Reserved/padding to match reference structure size */
-                                u32 reserved[16];
-                            } *config = (struct tisp_sensor_config_structure *)sensor_config_buffer;
+                            config = (struct tisp_sensor_config_structure *)sensor_config_buffer;
                             
                             if (tx_sensor) {
                                 ret = build_sensor_config_structure(tx_sensor, config);
