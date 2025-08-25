@@ -671,22 +671,9 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         				}
         			}
         			
-        			/* CRITICAL: Final ISP core enable sequence from tisp_init */
-        			writel(0x1c, isp_regs + 0x804); /* Set final control */
-        			wmb();
-        			writel(0x8, isp_regs + 0x1c);   /* Update control register */
-        			wmb();
-        			
-        			/* *** THE CRITICAL ENABLE - THIS POWERS UP THE ENTIRE ISP CORE *** */
-        			writel(0x1, isp_regs + 0x800);   /* ENABLE ISP CORE */
-        			wmb();
-        			msleep(10); /* Allow ISP core to fully initialize */
-        			
-        			pr_info("*** ISP CORE ENABLED! Register 0x800 = 1 ***\n");
-        			
-        			/* Verify ISP core is enabled */
-        			u32 isp_status = readl(isp_regs + 0x800);
-        			pr_info("ISP core status: 0x%x (should be 1 if buffers allocated)\n", isp_status);
+        			/* *** CRITICAL: DO NOT ENABLE ISP CORE YET - SENSOR MUST BE READY FIRST *** */
+        			pr_info("*** ISP MEMORY BUFFERS CONFIGURED - WAITING FOR SENSOR INIT ***\n");
+        			pr_info("ISP core will be enabled AFTER sensor initialization (tisp_init dependency)\n");
         		}
         		
         		/* Step 2: NOW VIC should be able to initialize properly */
@@ -3599,6 +3586,49 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                 } else {
                     pr_info("*** SENSOR HARDWARE INITIALIZATION COMPLETE ***\n");
                     kernel_subdev->vin_state = TX_ISP_MODULE_RUNNING;
+                    
+                    /* *** CRITICAL: NOW ENABLE ISP CORE WITH SENSOR READY *** */
+                    pr_info("*** ENABLING ISP CORE NOW THAT SENSOR IS READY ***\n");
+                    if (isp_dev->vic_regs) {
+                        void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00; /* Get ISP base */
+                        
+                        /* Final ISP core enable sequence from tisp_init - WITH SENSOR READY */
+                        writel(0x1c, isp_regs + 0x804); /* Set final control */
+                        wmb();
+                        writel(0x8, isp_regs + 0x1c);   /* Update control register */
+                        wmb();
+                        
+                        /* *** THE CRITICAL ENABLE - WITH SENSOR READY *** */
+                        writel(0x1, isp_regs + 0x800);   /* ENABLE ISP CORE */
+                        wmb();
+                        msleep(10); /* Allow ISP core to fully initialize with sensor */
+                        
+                        /* Verify ISP core enabled with sensor */
+                        {
+                            u32 isp_status = readl(isp_regs + 0x800);
+                            pr_info("*** ISP CORE ENABLED WITH SENSOR: status=0x%x (should be 1) ***\n", isp_status);
+                            
+                            if (isp_status == 1) {
+                                /* Test VIC status now that ISP is enabled */
+                                u32 vic_status = readl(isp_dev->vic_regs + 0x0);
+                                pr_info("*** VIC STATUS AFTER ISP ENABLE: 0x%x (should be 0x0 if ready) ***\n", vic_status);
+                                
+                                /* Test VIC register writes now */
+                                writel(0x12345678, isp_dev->vic_regs + 0x308);
+                                wmb();
+                                u32 vic_test = readl(isp_dev->vic_regs + 0x308);
+                                if (vic_test == 0x12345678) {
+                                    pr_info("*** SUCCESS! VIC REGISTERS NOW WRITABLE WITH ISP+SENSOR! ***\n");
+                                } else {
+                                    pr_info("*** VIC still protected: wrote 0x12345678, read 0x%x ***\n", vic_test);
+                                }
+                                writel(0x0, isp_dev->vic_regs + 0x308); /* Clear test */
+                                wmb();
+                            } else {
+                                pr_err("*** ISP CORE STILL FAILED TO ENABLE EVEN WITH SENSOR! ***\n");
+                            }
+                        }
+                    }
                 }
             } else {
                 pr_warn("DEBUG: No sensor init operation - ops=%p\n", kernel_subdev ? kernel_subdev->ops : NULL);
@@ -3627,6 +3657,40 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                     if (ret == 0 || ret == 0xfffffdfd) {
                         kernel_subdev->vin_state = TX_ISP_MODULE_RUNNING;
                         pr_info("*** FORCE SENSOR INITIALIZATION COMPLETE ***\n");
+                        
+                        /* *** ENABLE ISP CORE WITH FORCE SENSOR READY *** */
+                        pr_info("*** ENABLING ISP CORE WITH FORCE SENSOR ***\n");
+                        if (isp_dev->vic_regs) {
+                            void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
+                            
+                            writel(0x1c, isp_regs + 0x804);
+                            wmb();
+                            writel(0x8, isp_regs + 0x1c);
+                            wmb();
+                            writel(0x1, isp_regs + 0x800);
+                            wmb();
+                            msleep(10);
+                            
+                            u32 isp_status = readl(isp_regs + 0x800);
+                            pr_info("*** ISP CORE ENABLED WITH FORCE SENSOR: status=0x%x ***\n", isp_status);
+                            
+                            if (isp_status == 1) {
+                                u32 vic_status = readl(isp_dev->vic_regs + 0x0);
+                                pr_info("*** VIC STATUS AFTER FORCE ISP ENABLE: 0x%x ***\n", vic_status);
+                                
+                                /* Test VIC register writes */
+                                writel(0x87654321, isp_dev->vic_regs + 0x308);
+                                wmb();
+                                u32 vic_test = readl(isp_dev->vic_regs + 0x308);
+                                if (vic_test == 0x87654321) {
+                                    pr_info("*** SUCCESS! VIC REGISTERS WRITABLE WITH FORCE SENSOR+ISP! ***\n");
+                                } else {
+                                    pr_info("*** VIC still protected: wrote 0x87654321, read 0x%x ***\n", vic_test);
+                                }
+                                writel(0x0, isp_dev->vic_regs + 0x308);
+                                wmb();
+                            }
+                        }
                     }
                 }
             }
