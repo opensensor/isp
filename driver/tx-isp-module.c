@@ -567,6 +567,110 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         			wmb();
         			pr_info("ISP reg 0x10 = 0x133 (control2)\n");
         			
+        			/* *** CRITICAL: ALLOCATE ISP INTERNAL MEMORY BUFFERS FIRST *** */
+        			pr_info("*** ALLOCATING ISP INTERNAL MEMORY BUFFERS (FROM tisp_init) ***\n");
+        			
+        			/* Buffer allocation sequence from tisp_init Binary Ninja analysis */
+        			{
+        				void *buffer1 = kmalloc(0x6000, GFP_KERNEL); /* First buffer (0x6000 bytes) */
+        				void *buffer2 = kmalloc(0x6000, GFP_KERNEL); /* Second buffer (0x6000 bytes) */
+        				void *buffer3 = kmalloc(0x4000, GFP_KERNEL); /* Third buffer (0x4000 bytes) */
+        				void *buffer4 = kmalloc(0x4000, GFP_KERNEL); /* Fourth buffer (0x4000 bytes) */
+        				void *buffer5 = kmalloc(0x4000, GFP_KERNEL); /* Fifth buffer (0x4000 bytes) */
+        				void *buffer6 = kmalloc(0x4000, GFP_KERNEL); /* Sixth buffer (0x4000 bytes) */
+        				void *buffer7 = kmalloc(0x8000, GFP_KERNEL); /* Seventh buffer (0x8000 bytes) */
+        				
+        				if (buffer1 && buffer2 && buffer3 && buffer4 && buffer5 && buffer6 && buffer7) {
+        					u32 phys1 = virt_to_phys(buffer1);
+        					u32 phys2 = virt_to_phys(buffer2);
+        					u32 phys3 = virt_to_phys(buffer3);
+        					u32 phys4 = virt_to_phys(buffer4);
+        					u32 phys5 = virt_to_phys(buffer5);
+        					u32 phys6 = virt_to_phys(buffer6);
+        					u32 phys7 = virt_to_phys(buffer7);
+        					
+        					pr_info("ISP buffers allocated: buf1=%p buf2=%p buf3=%p buf4=%p buf5=%p buf6=%p buf7=%p\n",
+        						buffer1, buffer2, buffer3, buffer4, buffer5, buffer6, buffer7);
+        					
+        					/* Configure buffer addresses in ISP registers (from tisp_init sequence) */
+        					/* Buffer set 1 (registers 0xa02c-0xa04c) */
+        					writel(phys1, isp_regs + 0xa02c);
+        					writel(phys1 + 0x1000, isp_regs + 0xa030);
+        					writel(phys1 + 0x2000, isp_regs + 0xa034);
+        					writel(phys1 + 0x3000, isp_regs + 0xa038);
+        					writel(phys1 + 0x4000, isp_regs + 0xa03c);
+        					writel(phys1 + 0x4800, isp_regs + 0xa040);
+        					writel(phys1 + 0x5000, isp_regs + 0xa044);
+        					writel(phys1 + 0x5800, isp_regs + 0xa048);
+        					writel(0x33, isp_regs + 0xa04c);
+        					wmb();
+        					
+        					/* Buffer set 2 (registers 0xa82c-0xa84c) */
+        					writel(phys2, isp_regs + 0xa82c);
+        					writel(phys2 + 0x1000, isp_regs + 0xa830);
+        					writel(phys2 + 0x2000, isp_regs + 0xa834);
+        					writel(phys2 + 0x3000, isp_regs + 0xa838);
+        					writel(phys2 + 0x4000, isp_regs + 0xa83c);
+        					writel(phys2 + 0x4800, isp_regs + 0xa840);
+        					writel(phys2 + 0x5000, isp_regs + 0xa844);
+        					writel(phys2 + 0x5800, isp_regs + 0xa848);
+        					writel(0x33, isp_regs + 0xa84c);
+        					wmb();
+        					
+        					/* Buffer set 3 (registers 0xb03c-0xb04c) */
+        					writel(phys3, isp_regs + 0xb03c);
+        					writel(phys3 + 0x1000, isp_regs + 0xb040);
+        					writel(phys3 + 0x2000, isp_regs + 0xb044);
+        					writel(phys3 + 0x3000, isp_regs + 0xb048);
+        					writel(0x3, isp_regs + 0xb04c);
+        					wmb();
+        					
+        					/* Buffer set 4 (registers 0x4494-0x4490) */
+        					writel(phys4, isp_regs + 0x4494);
+        					writel(phys4 + 0x1000, isp_regs + 0x4498);
+        					writel(phys4 + 0x2000, isp_regs + 0x449c);
+        					writel(phys4 + 0x3000, isp_regs + 0x44a0);
+        					writel(0x3, isp_regs + 0x4490);
+        					wmb();
+        					
+        					/* Buffer set 5 (registers 0x5b84-0x5b80) */
+        					writel(phys5, isp_regs + 0x5b84);
+        					writel(phys5 + 0x1000, isp_regs + 0x5b88);
+        					writel(phys5 + 0x2000, isp_regs + 0x5b8c);
+        					writel(phys5 + 0x3000, isp_regs + 0x5b90);
+        					writel(0x3, isp_regs + 0x5b80);
+        					wmb();
+        					
+        					/* Buffer set 6 (registers 0xb8a8-0xb8b8) */
+        					writel(phys6, isp_regs + 0xb8a8);
+        					writel(phys6 + 0x1000, isp_regs + 0xb8ac);
+        					writel(phys6 + 0x2000, isp_regs + 0xb8b0);
+        					writel(phys6 + 0x3000, isp_regs + 0xb8b4);
+        					writel(0x3, isp_regs + 0xb8b8);
+        					wmb();
+        					
+        					/* Buffer set 7 (registers 0x2010-0x2024) */
+        					writel(phys7, isp_regs + 0x2010);
+        					writel(phys7 + 0x2000, isp_regs + 0x2014);
+        					writel(phys7 + 0x4000, isp_regs + 0x2018);
+        					writel(phys7 + 0x6000, isp_regs + 0x201c);
+        					writel(0x400, isp_regs + 0x2020);
+        					writel(0x3, isp_regs + 0x2024);
+        					wmb();
+        					
+        					pr_info("*** ISP INTERNAL MEMORY BUFFERS CONFIGURED ***\n");
+        				} else {
+        					pr_err("*** FAILED TO ALLOCATE ISP INTERNAL BUFFERS - ISP CANNOT ENABLE ***\n");
+        					if (buffer1) kfree(buffer1);
+        					if (buffer2) kfree(buffer2);
+        					if (buffer3) kfree(buffer3);
+        					if (buffer4) kfree(buffer4);
+        					if (buffer5) kfree(buffer5);
+        					if (buffer6) kfree(buffer6);
+        					if (buffer7) kfree(buffer7);
+        				}
+        			}
+        			
         			/* CRITICAL: Final ISP core enable sequence from tisp_init */
         			writel(0x1c, isp_regs + 0x804); /* Set final control */
         			wmb();
@@ -582,7 +686,7 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         			
         			/* Verify ISP core is enabled */
         			u32 isp_status = readl(isp_regs + 0x800);
-        			pr_info("ISP core status: 0x%x (should be 1)\n", isp_status);
+        			pr_info("ISP core status: 0x%x (should be 1 if buffers allocated)\n", isp_status);
         		}
         		
         		/* Step 2: NOW VIC should be able to initialize properly */
