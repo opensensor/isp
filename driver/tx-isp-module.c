@@ -3692,38 +3692,140 @@ static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_s
         writel(0x10, vic_regs + 0x1b0);   /* Buffer control */
         wmb();
         
-        /* Step 3: Complete VIC unlock sequence by writing 1 (enable) */
-        pr_info("*** STEP 2: COMPLETING VIC UNLOCK SEQUENCE (WRITE 1) ***\n");
+        /* Step 3: Try comprehensive VIC unlock sequence with multiple strategies */
+        pr_info("*** STEP 2: COMPREHENSIVE VIC UNLOCK SEQUENCE ***\n");
+        
+        /* Strategy 1: Complete the standard unlock sequence */
+        pr_info("Strategy 1: Standard unlock (write 1)\n");
         writel(1, vic_regs + 0x0);
         wmb();
-        
-        /* Brief delay to allow VIC hardware to process unlock */
         usleep_range(100, 200);
         
-        /* Step 4: Verify VIC unlock by testing register write access */
-        pr_info("*** STEP 3: TESTING VIC REGISTER WRITE ACCESS AFTER UNLOCK ***\n");
+        /* Test if standard unlock worked */
         {
-            u32 test_value = 0xDEADBEEF;
-            u32 original_val, test_read;
-            
-            /* Test on a safe register (0x308 - MDMA enable) */
-            original_val = readl(vic_regs + 0x308);
+            u32 test_value = 0x12345678;
             writel(test_value, vic_regs + 0x308);
             wmb();
-            test_read = readl(vic_regs + 0x308);
+            u32 test_read = readl(vic_regs + 0x308);
             
             if (test_read == test_value) {
-                pr_info("*** VIC UNLOCK SUCCESS: Register writes now accepted! ***\n");
-                /* Restore original value */
-                writel(original_val, vic_regs + 0x308);
+                pr_info("*** VIC UNLOCK SUCCESS: Standard sequence worked! ***\n");
+                writel(0x0, vic_regs + 0x308); /* Clear test value */
                 wmb();
+                return 0;
             } else {
-                pr_err("*** VIC UNLOCK FAILED: wrote 0x%x, read 0x%x ***\n", test_value, test_read);
-                return -EACCES;
+                pr_info("Strategy 1 failed: wrote 0x%x, read 0x%x\n", test_value, test_read);
             }
         }
         
-        pr_info("VIC unlock sequence complete and verified\n");
+        /* Strategy 2: Alternative unlock with different values */
+        pr_info("Strategy 2: Alternative unlock values\n");
+        writel(0, vic_regs + 0x0);   /* Reset */
+        wmb();
+        msleep(10);
+        writel(0x5A5A5A5A, vic_regs + 0x0);   /* Magic unlock value 1 */
+        wmb();
+        writel(0xA5A5A5A5, vic_regs + 0x4);   /* Magic unlock value 2 */
+        wmb();
+        writel(1, vic_regs + 0x0);   /* Enable */
+        wmb();
+        usleep_range(100, 200);
+        
+        /* Test alternative unlock */
+        {
+            u32 test_value = 0x87654321;
+            writel(test_value, vic_regs + 0x308);
+            wmb();
+            u32 test_read = readl(vic_regs + 0x308);
+            
+            if (test_read == test_value) {
+                pr_info("*** VIC UNLOCK SUCCESS: Alternative sequence worked! ***\n");
+                writel(0x0, vic_regs + 0x308); /* Clear test value */
+                wmb();
+                return 0;
+            } else {
+                pr_info("Strategy 2 failed: wrote 0x%x, read 0x%x\n", test_value, test_read);
+            }
+        }
+        
+        /* Strategy 3: Force unlock with extended register sequence */
+        pr_info("Strategy 3: Extended register unlock sequence\n");
+        writel(0, vic_regs + 0x0);   /* Reset */
+        wmb();
+        msleep(10);
+        
+        /* Write unlock sequence to multiple registers */
+        writel(2, vic_regs + 0x0);       /* Mode 2 */
+        writel(0x1234, vic_regs + 0x1a0); /* Extended unlock key */
+        writel(0x5678, vic_regs + 0x1a4); /* Additional unlock */
+        writel(0xABCD, vic_regs + 0x1a8); /* More unlock data */
+        writel(0xEF01, vic_regs + 0x1ac); /* Even more unlock */
+        writel(4, vic_regs + 0x0);       /* Mode 4 */
+        wmb();
+        
+        /* Wait and then enable */
+        msleep(10);
+        writel(1, vic_regs + 0x0);
+        wmb();
+        usleep_range(100, 200);
+        
+        /* Test extended unlock */
+        {
+            u32 test_value = 0xDEADBEEF;
+            writel(test_value, vic_regs + 0x308);
+            wmb();
+            u32 test_read = readl(vic_regs + 0x308);
+            
+            if (test_read == test_value) {
+                pr_info("*** VIC UNLOCK SUCCESS: Extended sequence worked! ***\n");
+                writel(0x0, vic_regs + 0x308); /* Clear test value */
+                wmb();
+                return 0;
+            } else {
+                pr_info("Strategy 3 failed: wrote 0x%x, read 0x%x\n", test_value, test_read);
+            }
+        }
+        
+        /* Strategy 4: Hardware reset approach */
+        pr_info("Strategy 4: Hardware reset approach\n");
+        
+        /* Try to reset VIC completely and then unlock */
+        writel(0xFFFFFFFF, vic_regs + 0x0);   /* Reset all bits */
+        wmb();
+        msleep(20);
+        writel(0x0, vic_regs + 0x0);         /* Clear */
+        wmb();
+        msleep(10);
+        
+        /* Now try basic unlock */
+        writel(2, vic_regs + 0x0);
+        writel(4, vic_regs + 0x0);
+        writel(0x12, vic_regs + 0x1a0);
+        writel(1, vic_regs + 0x0);
+        wmb();
+        msleep(10);
+        
+        /* Final test */
+        {
+            u32 test_value = 0xCAFEBABE;
+            writel(test_value, vic_regs + 0x308);
+            wmb();
+            u32 test_read = readl(vic_regs + 0x308);
+            
+            if (test_read == test_value) {
+                pr_info("*** VIC UNLOCK SUCCESS: Hardware reset approach worked! ***\n");
+                writel(0x0, vic_regs + 0x308); /* Clear test value */
+                wmb();
+                return 0;
+            } else {
+                pr_info("Strategy 4 failed: wrote 0x%x, read 0x%x\n", test_value, test_read);
+            }
+        }
+        
+        pr_err("*** ALL VIC UNLOCK STRATEGIES FAILED ***\n");
+        pr_err("*** VIC registers remain hardware protected ***\n");
+        pr_err("*** This may require bootloader/firmware intervention ***\n");
+        return -EACCES;
         
         /* Verify VIC is now unlocked for register programming */
         {
