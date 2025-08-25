@@ -3661,25 +3661,28 @@ static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_s
         wmb();
         udelay(10); /* Allow VIC to reset */
         
-        /* *** CRITICAL: COMPLEX REGISTER 0x100 CALCULATION FROM BINARY NINJA *** */
+        /* *** CRITICAL: FIXED REGISTER 0x100 CALCULATION FROM BINARY NINJA *** */
         /* From Binary Ninja: Calculate register 0x100 based on pixel format and width */
         {
-            u32 pixel_format = 0x7c; /* GC2053 pixel format from sensor config */
+            u32 pixel_format = 0x2B; /* RAW10 format (0x2B) for GC2053 - not 0x7c! */
             u32 frame_width = 1920;  /* Frame width */
             u32 multiplier;
             u32 calc_result;
             
-            /* Pixel format multiplier calculation from Binary Ninja */
-            if (pixel_format == 0) {
-                multiplier = 8;  /* 8-bit format */
-            } else if (pixel_format == 1) {
-                multiplier = 0xa; /* 10-bit format */
-            } else if (pixel_format == 2) {
-                multiplier = 0xc; /* 12-bit format */
-            } else if (pixel_format == 7) {
-                multiplier = 0x10; /* 16-bit format */
+            /* FIXED: Pixel format multiplier calculation from Binary Ninja */
+            /* GC2053 uses RAW10 format, so we need 10-bit calculation */
+            if (pixel_format == 0x2A) {
+                multiplier = 8;  /* RAW8 format */
+            } else if (pixel_format == 0x2B) {
+                multiplier = 0xa; /* RAW10 format (GC2053) */
+            } else if (pixel_format == 0x2C) {
+                multiplier = 0xc; /* RAW12 format */
+            } else if (pixel_format == 0x2D) {
+                multiplier = 0x10; /* RAW16 format */
             } else {
-                multiplier = 0; /* Unknown format */
+                /* Fallback for unknown formats - use RAW10 for GC2053 */
+                multiplier = 0xa;
+                pr_warn("VIC: Unknown pixel format 0x%x, using RAW10 multiplier\n", pixel_format);
             }
             
             /* Complex calculation: (multiplier * width) with bit operations */
@@ -3688,7 +3691,7 @@ static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_s
             
             writel(reg_100_value, vic_regs + 0x100);
             wmb();
-            pr_info("VIC reg 0x100 = 0x%x (calculated from format=0x%x, width=%d, mult=%d)\n",
+            pr_info("VIC reg 0x100 = 0x%x (FIXED: format=0x%x, width=%d, mult=%d)\n",
                    reg_100_value, pixel_format, frame_width, multiplier);
         }
         
@@ -3828,18 +3831,35 @@ static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_s
                    reg_1a0_value, frame_mode_attr, additional_attr);
         }
         
+        /* *** CRITICAL: ADD MISSING REGISTER WRITES BEFORE WAIT *** */
+        pr_info("*** STEP 3.1: ADDITIONAL REGISTER WRITES AFTER 0x1a0 ***\n");
+        
+        /* From Binary Ninja: Additional registers that must be written before the wait */
+        /* These may be required to unlock the VIC state machine */
+        writel(0x1, vic_regs + 0x1a4);  /* Enable register from Binary Ninja */
+        writel(0x0, vic_regs + 0x1a8);  /* Clear pending state */
+        writel(0x4140, vic_regs + 0x1ac);  /* Frame mode (ensure it's set) */
+        writel(0x10, vic_regs + 0x1b0); /* Buffer control (ensure it's set) */
+        wmb();
+        pr_info("VIC additional registers written before wait\n");
+        
         /* Step 3: Wait for VIC control register 0x0 to become 0 with extended timeout */
-        timeout = 20000; /* Even longer timeout for reset sequence */
+        timeout = 50000; /* Increased timeout for complex sequence */
+        pr_info("*** STEP 3.2: WAITING FOR VIC STATUS TRANSITION (0x4 → 0x0) ***\n");
+        
         while (timeout-- > 0) {
             status = readl(vic_regs + 0x0);
             if (status == 0) {
                 break;
             }
-            /* Add progressive delays to help VIC state machine */
-            if (timeout % 1000 == 0) {
-                udelay(10);
+            /* More aggressive delays to help VIC state machine */
+            if (timeout % 5000 == 0) {
+                pr_info("VIC wait: status=0x%x, timeout remaining=%d\n", status, timeout);
+                msleep(1); /* Longer delay every 5000 iterations */
+            } else if (timeout % 1000 == 0) {
+                udelay(50); /* Medium delay every 1000 iterations */
             } else if (timeout % 100 == 0) {
-                udelay(1);
+                udelay(5);  /* Short delay every 100 iterations */
             }
             cpu_relax();
         }
