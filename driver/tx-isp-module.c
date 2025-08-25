@@ -3492,14 +3492,16 @@ static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_s
         pr_info("VIC Step 2: Write 4 to reg 0x0 (config mode)\n");
         
         /* *** CRITICAL: REGISTER 0x1a0 WRITE IMMEDIATELY AFTER WRITE 4 *** */
+        /* This is the missing VIC unlock key from Binary Ninja analysis! */
         {
-            u32 frame_mode_attr = 1;  /* GC2053 frame mode (progressive) */
-            u32 additional_attr = 0x2; /* GC2053 MIPI additional config */
-            u32 reg_1a0_value = (frame_mode_attr << 4) | additional_attr;
+            u32 frame_mode_attr = 1;  /* GC2053 frame mode (progressive) = sensor_attr_0x74 */
+            u32 additional_attr = 0x2; /* GC2053 MIPI additional config = sensor_attr_0x78 */
+            u32 reg_1a0_value = (frame_mode_attr << 4) | additional_attr; /* = 0x12 for GC2053 */
             
             writel(reg_1a0_value, vic_regs + 0x1a0);
             wmb();
-            pr_info("VIC CRITICAL reg 0x1a0 = 0x%x (unlock key)\n", reg_1a0_value);
+            pr_info("VIC CRITICAL reg 0x1a0 = 0x%x (unlock key from Binary Ninja)\n", reg_1a0_value);
+            pr_info("*** THIS IS THE MISSING VIC UNLOCK STEP! ***\n");
         }
         
         /* *** CRITICAL: ADD MISSING REGISTER WRITES BEFORE WAIT *** */
@@ -3510,16 +3512,31 @@ static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_s
         writel(0x10, vic_regs + 0x1b0);   /* Buffer control */
         wmb();
         
-        /* Step 3: Try comprehensive VIC unlock sequence with multiple strategies */
-        pr_info("*** STEP 2: COMPREHENSIVE VIC UNLOCK SEQUENCE ***\n");
+        /* *** STEP 2: EXACT BINARY NINJA VIC UNLOCK SEQUENCE *** */
+        pr_info("*** STEP 2: IMPLEMENTING EXACT BINARY NINJA VIC UNLOCK SEQUENCE ***\n");
         
-        /* Strategy 1: Complete the standard unlock sequence */
-        pr_info("Strategy 1: Standard unlock (write 1)\n");
+        /* Wait for VIC control register to be ready (Binary Ninja: while (*$v1_30 != 0)) */
+        {
+            int timeout = 1000;
+            u32 vic_status;
+            pr_info("*** STEP 2.1: WAIT FOR VIC READY (Binary Ninja while loop) ***\n");
+            while ((vic_status = readl(vic_regs + 0x0)) != 0 && timeout--) {
+                cpu_relax();
+            }
+            pr_info("VIC ready wait complete: status=0x%x, timeout_remaining=%d\n", vic_status, timeout);
+        }
+        
+        /* *** STEP 2.2: FINAL VIC ENABLE (Binary Ninja: *$v0_121 = 1) *** */
+        pr_info("*** STEP 2.2: FINAL VIC ENABLE (Binary Ninja *$v0_121 = 1) ***\n");
         writel(1, vic_regs + 0x0);
         wmb();
-        usleep_range(100, 200);
+        pr_info("VIC final enable: wrote 1 to control register 0x0\n");
         
-        /* Test if standard unlock worked */
+        /* *** STEP 2.3: TEST VIC REGISTER UNLOCK *** */
+        pr_info("*** STEP 2.3: TESTING VIC REGISTER UNLOCK ***\n");
+        usleep_range(100, 200); /* Allow hardware to process unlock */
+        
+        /* Test if VIC unlock worked with exact Binary Ninja sequence */
         {
             u32 test_value = 0x12345678;
             writel(test_value, vic_regs + 0x308);
@@ -3527,122 +3544,18 @@ static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_s
             u32 test_read = readl(vic_regs + 0x308);
             
             if (test_read == test_value) {
-                pr_info("*** VIC UNLOCK SUCCESS: Standard sequence worked! ***\n");
+                pr_info("*** VIC UNLOCK SUCCESS: Binary Ninja sequence worked! ***\n");
                 writel(0x0, vic_regs + 0x308); /* Clear test value */
                 wmb();
                 return 0;
             } else {
-                pr_info("Strategy 1 failed: wrote 0x%x, read 0x%x\n", test_value, test_read);
+                pr_info("*** VIC still protected after Binary Ninja sequence: wrote 0x%x, read 0x%x ***\n", test_value, test_read);
             }
         }
         
-        /* Strategy 2: Alternative unlock with different values */
-        pr_info("Strategy 2: Alternative unlock values\n");
-        writel(0, vic_regs + 0x0);   /* Reset */
-        wmb();
-        msleep(10);
-        writel(0x5A5A5A5A, vic_regs + 0x0);   /* Magic unlock value 1 */
-        wmb();
-        writel(0xA5A5A5A5, vic_regs + 0x4);   /* Magic unlock value 2 */
-        wmb();
-        writel(1, vic_regs + 0x0);   /* Enable */
-        wmb();
-        usleep_range(100, 200);
-        
-        /* Test alternative unlock */
-        {
-            u32 test_value = 0x87654321;
-            writel(test_value, vic_regs + 0x308);
-            wmb();
-            u32 test_read = readl(vic_regs + 0x308);
-            
-            if (test_read == test_value) {
-                pr_info("*** VIC UNLOCK SUCCESS: Alternative sequence worked! ***\n");
-                writel(0x0, vic_regs + 0x308); /* Clear test value */
-                wmb();
-                return 0;
-            } else {
-                pr_info("Strategy 2 failed: wrote 0x%x, read 0x%x\n", test_value, test_read);
-            }
-        }
-        
-        /* Strategy 3: Force unlock with extended register sequence */
-        pr_info("Strategy 3: Extended register unlock sequence\n");
-        writel(0, vic_regs + 0x0);   /* Reset */
-        wmb();
-        msleep(10);
-        
-        /* Write unlock sequence to multiple registers */
-        writel(2, vic_regs + 0x0);       /* Mode 2 */
-        writel(0x1234, vic_regs + 0x1a0); /* Extended unlock key */
-        writel(0x5678, vic_regs + 0x1a4); /* Additional unlock */
-        writel(0xABCD, vic_regs + 0x1a8); /* More unlock data */
-        writel(0xEF01, vic_regs + 0x1ac); /* Even more unlock */
-        writel(4, vic_regs + 0x0);       /* Mode 4 */
-        wmb();
-        
-        /* Wait and then enable */
-        msleep(10);
-        writel(1, vic_regs + 0x0);
-        wmb();
-        usleep_range(100, 200);
-        
-        /* Test extended unlock */
-        {
-            u32 test_value = 0xDEADBEEF;
-            writel(test_value, vic_regs + 0x308);
-            wmb();
-            u32 test_read = readl(vic_regs + 0x308);
-            
-            if (test_read == test_value) {
-                pr_info("*** VIC UNLOCK SUCCESS: Extended sequence worked! ***\n");
-                writel(0x0, vic_regs + 0x308); /* Clear test value */
-                wmb();
-                return 0;
-            } else {
-                pr_info("Strategy 3 failed: wrote 0x%x, read 0x%x\n", test_value, test_read);
-            }
-        }
-        
-        /* Strategy 4: Hardware reset approach */
-        pr_info("Strategy 4: Hardware reset approach\n");
-        
-        /* Try to reset VIC completely and then unlock */
-        writel(0xFFFFFFFF, vic_regs + 0x0);   /* Reset all bits */
-        wmb();
-        msleep(20);
-        writel(0x0, vic_regs + 0x0);         /* Clear */
-        wmb();
-        msleep(10);
-        
-        /* Now try basic unlock */
-        writel(2, vic_regs + 0x0);
-        writel(4, vic_regs + 0x0);
-        writel(0x12, vic_regs + 0x1a0);
-        writel(1, vic_regs + 0x0);
-        wmb();
-        msleep(10);
-        
-        /* Final test */
-        {
-            u32 test_value = 0xCAFEBABE;
-            writel(test_value, vic_regs + 0x308);
-            wmb();
-            u32 test_read = readl(vic_regs + 0x308);
-            
-            if (test_read == test_value) {
-                pr_info("*** VIC UNLOCK SUCCESS: Hardware reset approach worked! ***\n");
-                writel(0x0, vic_regs + 0x308); /* Clear test value */
-                wmb();
-                return 0;
-            } else {
-                pr_info("Strategy 4 failed: wrote 0x%x, read 0x%x\n", test_value, test_read);
-            }
-        }
-        
-        pr_err("*** ALL VIC UNLOCK STRATEGIES FAILED ***\n");
-        pr_err("*** VIC registers remain hardware protected ***\n");
-        pr_err("*** This may require bootloader/firmware intervention ***\n");
+        /* If Binary Ninja sequence failed, return error */
+        pr_err("*** VIC START SEQUENCE FAILED: -13 ***\n");
+        pr_err("*** VIC registers remain protected ***\n");
         return -EACCES;
         
         /* Verify VIC is now unlocked for register programming */
