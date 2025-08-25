@@ -3440,6 +3440,129 @@ static void tx_isp_exit(void)
     pr_info("TX ISP driver removed\n");
 }
 
+/* Build sensor configuration structure from GC2053 attributes for tisp_init */
+static int build_sensor_config_structure(struct tx_isp_sensor *sensor, void *config_buffer)
+{
+    /* Sensor configuration structure matching Binary Ninja var_78 analysis */
+    struct sensor_config_structure {
+        /* Core sensor parameters */
+        u32 sensor_clock;          /* 0x124: Sensor clock (78MHz for GC2053) */
+        u32 frame_rate;           /* 0x128: Frame rate (30fps << 16 | 1) */
+        
+        /* Frame dimensions */
+        u32 width;                /* 0x140: Active width (1920) */
+        u32 height;               /* 0x142: Active height (1080) */
+        u32 total_width;          /* Total width including blanking (2188) */
+        u32 total_height;         /* Total height including blanking (1125) */
+        
+        /* Timing parameters */
+        u32 line_time_us;         /* 0x94: Line time in microseconds (11us) */
+        u32 integration_time;     /* 0x98: Integration time */
+        u32 max_integration_time; /* 0x9c: Max integration time */
+        u32 min_integration_time; /* 0xa0: Min integration time */
+        
+        /* MIPI interface configuration */
+        u32 mipi_lanes;           /* Number of MIPI lanes (2) */
+        u32 mipi_clk_mhz;         /* MIPI clock frequency (600MHz) */
+        u32 pixel_format;         /* Pixel format (RAW10) */
+        
+        /* Gain settings */
+        u32 max_analog_gain;      /* Maximum analog gain */
+        u32 max_digital_gain;     /* Maximum digital gain */
+        
+        /* Additional sensor-specific parameters */
+        u32 chip_id;              /* Sensor chip ID (0x2053) */
+        u32 interface_type;       /* Interface type (1=MIPI) */
+        
+        /* Reserved/padding to match reference structure size */
+        u32 reserved[32];
+    } *config = (struct sensor_config_structure *)config_buffer;
+    
+    if (!sensor || !config) {
+        pr_err("Invalid parameters for sensor config build\n");
+        return -EINVAL;
+    }
+    
+    pr_info("*** BUILDING SENSOR CONFIGURATION STRUCTURE FOR tisp_init ***\n");
+    pr_info("Sensor: %s (building complete config from attributes)\n",
+            sensor->info.name);
+    
+    /* Clear the structure */
+    memset(config, 0, sizeof(struct sensor_config_structure));
+    
+    /* Build configuration from GC2053 sensor attributes */
+    if (strncmp(sensor->info.name, "gc2053", 6) == 0) {
+        pr_info("Building GC2053-specific sensor configuration\n");
+        
+        /* Core parameters from GC2053 datasheet and SDK */
+        config->sensor_clock = 78000000;      /* 78MHz sensor clock */
+        config->frame_rate = (30 << 16) | 1;  /* 30fps, format from Binary Ninja */
+        
+        /* Frame dimensions from GC2053 1080p mode */
+        config->width = 1920;                 /* Active width */
+        config->height = 1080;                /* Active height */
+        config->total_width = 2200;           /* Total with blanking (from sensor_attr) */
+        config->total_height = 1125;          /* Total with blanking (from sensor_attr) */
+        
+        /* Timing parameters from GC2053 sensor attributes */
+        config->line_time_us = 11;            /* 11us line time for 40fps mode */
+        config->integration_time = 1000;      /* Default integration time */
+        config->max_integration_time = 1125 - 8; /* total_height - 8 */
+        config->min_integration_time = 2;     /* Minimum exposure time */
+        
+        /* MIPI interface configuration */
+        config->mipi_lanes = 2;               /* 2-lane MIPI */
+        config->mipi_clk_mhz = 600;           /* 600MHz MIPI clock */
+        config->pixel_format = 0x2B;          /* RAW10 format */
+        
+        /* Gain settings from sensor attributes */
+        config->max_analog_gain = 0x40000;    /* Max analog gain (16x in .16 format) */
+        config->max_digital_gain = 0x10000;   /* Max digital gain (1x in .16 format) */
+        
+        /* Sensor identification */
+        config->chip_id = 0x2053;             /* GC2053 chip ID */
+        config->interface_type = 1;           /* MIPI interface */
+        
+        pr_info("GC2053 config: clock=%dHz, frame_rate=0x%x, %dx%d (total %dx%d)\n",
+                config->sensor_clock, config->frame_rate,
+                config->width, config->height,
+                config->total_width, config->total_height);
+        pr_info("GC2053 timing: line_time=%dus, integration=%d-%d-%d\n",
+                config->line_time_us, config->min_integration_time,
+                config->integration_time, config->max_integration_time);
+        pr_info("GC2053 MIPI: lanes=%d, clock=%dMHz, format=0x%x\n",
+                config->mipi_lanes, config->mipi_clk_mhz, config->pixel_format);
+        
+    } else {
+        pr_warn("Unknown sensor %s, using default configuration\n", sensor->info.name);
+        
+        /* Default configuration for unknown sensors */
+        config->sensor_clock = 27000000;      /* 27MHz default */
+        config->frame_rate = (30 << 16) | 1;
+        config->width = 1920;
+        config->height = 1080;
+        config->total_width = 2200;
+        config->total_height = 1125;
+        config->line_time_us = 33;            /* Default line time */
+        config->integration_time = 1000;
+        config->max_integration_time = 1117;
+        config->min_integration_time = 2;
+        config->mipi_lanes = 2;
+        config->mipi_clk_mhz = 400;
+        config->pixel_format = 0x2B;
+        config->max_analog_gain = 0x20000;
+        config->max_digital_gain = 0x10000;
+        config->chip_id = 0x0000;
+        config->interface_type = 1;
+    }
+    
+    pr_info("*** SENSOR CONFIGURATION STRUCTURE BUILD COMPLETE ***\n");
+    pr_info("Structure size: %zu bytes (ready for tisp_init)\n",
+            sizeof(struct sensor_config_structure));
+    
+    return 0;
+}
+
 /* Handle sensor registration from userspace IOCTL - matches reference driver */
 static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
 {
@@ -3636,9 +3759,87 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         pr_info("ISP reg 0x1c = 0x8 (tisp_init control setting)\n");
                         
                         /* Step 3: ENABLE ISP CORE (from Binary Ninja: system_reg_write(0x800, 1)) */
+                        /* *** CRITICAL: WRITE SENSOR CONFIGURATION TO ISP REGISTERS FIRST *** */
+                        pr_info("*** WRITING SENSOR CONFIGURATION STRUCTURE TO ISP REGISTERS ***\n");
+                        
+                        /* Build sensor configuration structure from GC2053 attributes */
+                        {
+                            u8 sensor_config_buffer[512]; /* Buffer for sensor config structure */
+                            struct sensor_config_structure {
+                                u32 sensor_clock;          /* 0x124: Sensor clock (78MHz for GC2053) */
+                                u32 frame_rate;           /* 0x128: Frame rate (30fps << 16 | 1) */
+                                u32 width;                /* 0x140: Active width (1920) */
+                                u32 height;               /* 0x142: Active height (1080) */
+                                u32 total_width;          /* Total width including blanking (2188) */
+                                u32 total_height;         /* Total height including blanking (1125) */
+                                u32 line_time_us;         /* 0x94: Line time in microseconds (11us) */
+                                u32 integration_time;     /* 0x98: Integration time */
+                                u32 max_integration_time; /* 0x9c: Max integration time */
+                                u32 min_integration_time; /* 0xa0: Min integration time */
+                                u32 reserved[32];
+                            } *config = (struct sensor_config_structure *)sensor_config_buffer;
+                            
+                            if (tx_sensor) {
+                                ret = build_sensor_config_structure(tx_sensor, config);
+                                if (ret == 0) {
+                                    pr_info("*** SENSOR CONFIG STRUCTURE BUILT - WRITING TO ISP REGISTERS ***\n");
+                                    
+                                    /* Write sensor configuration parameters to ISP registers before core enable */
+                                    /* Based on Binary Ninja tisp_init analysis - these registers must be set */
+                                    
+                                    /* Write sensor clock to ISP register 0x124 */
+                                    writel(config->sensor_clock, isp_regs + 0x124);
+                                    wmb();
+                                    pr_info("ISP reg 0x124 = %d Hz (sensor clock)\n", config->sensor_clock);
+                                    
+                                    /* Write frame rate to ISP register 0x128 */
+                                    writel(config->frame_rate, isp_regs + 0x128);
+                                    wmb();
+                                    pr_info("ISP reg 0x128 = 0x%x (frame rate)\n", config->frame_rate);
+                                    
+                                    /* Write frame dimensions to ISP registers 0x140, 0x142 */
+                                    writel(config->width, isp_regs + 0x140);
+                                    writel(config->height, isp_regs + 0x142);
+                                    wmb();
+                                    pr_info("ISP reg 0x140-0x142 = %dx%d (dimensions)\n", config->width, config->height);
+                                    
+                                    /* Write timing parameters to ISP registers 0x94-0xa0 */
+                                    writel(config->line_time_us, isp_regs + 0x94);
+                                    writel(config->integration_time, isp_regs + 0x98);
+                                    writel(config->max_integration_time, isp_regs + 0x9c);
+                                    writel(config->min_integration_time, isp_regs + 0xa0);
+                                    wmb();
+                                    pr_info("ISP timing regs: line_time=%dus, integration=%d-%d-%d\n",
+                                           config->line_time_us, config->min_integration_time,
+                                           config->integration_time, config->max_integration_time);
+                                    
+                                    pr_info("*** ALL SENSOR PARAMETERS WRITTEN TO ISP REGISTERS ***\n");
+                                } else {
+                                    pr_err("*** FAILED TO BUILD SENSOR CONFIG STRUCTURE: %d ***\n", ret);
+                                    pr_err("Proceeding with ISP core enable anyway\n");
+                                }
+                            } else {
+                                pr_warn("*** NO TX_SENSOR - USING DEFAULT SENSOR CONFIG ***\n");
+                                /* Write default sensor configuration */
+                                writel(78000000, isp_regs + 0x124); /* 78MHz default */
+                                writel((30 << 16) | 1, isp_regs + 0x128); /* 30fps */
+                                writel(1920, isp_regs + 0x140); /* Width */
+                                writel(1080, isp_regs + 0x142); /* Height */
+                                writel(11, isp_regs + 0x94); /* 11us line time */
+                                writel(1000, isp_regs + 0x98); /* Integration time */
+                                writel(1117, isp_regs + 0x9c); /* Max integration */
+                                writel(2, isp_regs + 0xa0); /* Min integration */
+                                wmb();
+                                pr_info("Default sensor configuration written to ISP registers\n");
+                            }
+                        }
+                        
+                        /* *** NOW ENABLE ISP CORE WITH SENSOR CONFIGURATION READY *** */
+                        pr_info("*** ENABLING ISP CORE WITH COMPLETE SENSOR CONFIG ***\n");
+                        
                         writel(0x1, isp_regs + 0x800);
                         wmb();
-                        pr_info("ISP reg 0x800 = 0x1 (ENABLE ISP CORE)\n");
+                        pr_info("ISP reg 0x800 = 0x1 (ENABLE ISP CORE WITH SENSOR CONFIG)\n");
                         
                         /* *** CRITICAL: ISP EVENT SYSTEM INITIALIZATION (FROM tisp_init) *** */
                         pr_info("*** INITIALIZING ISP EVENT SYSTEM (REQUIRED FOR CORE ENABLE) ***\n");
