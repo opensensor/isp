@@ -3640,7 +3640,44 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         wmb();
                         pr_info("ISP reg 0x800 = 0x1 (ENABLE ISP CORE)\n");
                         
-                        msleep(20); /* Allow ISP core to fully initialize with sensor and processing modules */
+                        /* *** CRITICAL: ISP EVENT SYSTEM INITIALIZATION (FROM tisp_init) *** */
+                        pr_info("*** INITIALIZING ISP EVENT SYSTEM (REQUIRED FOR CORE ENABLE) ***\n");
+                        
+                        /* Event system basic initialization - tisp_event_init() equivalent */
+                        writel(0x1, isp_regs + 0x78); /* Event system enable */
+                        wmb();
+                        
+                        /* Event callback setup - simplified versions of tisp_event_set_cb() */
+                        writel(0x1, isp_regs + 0x7c); /* Gain update events */
+                        writel(0x1, isp_regs + 0x80); /* Exposure update events */
+                        wmb();
+                        
+                        /* IRQ function setup - system_irq_func_set(0xd, ip_done_interrupt_static) */
+                        writel(0x1, isp_regs + 0x34); /* Enable ISP done interrupts */
+                        wmb();
+                        
+                        pr_info("ISP event system and interrupt handlers initialized\n");
+                        
+                        /* Additional ISP core stabilization registers */
+                        writel(0x1, isp_regs + 0x808); /* Core ready flag */
+                        writel(0x0, isp_regs + 0x80c); /* Clear any pending states */
+                        wmb();
+                        
+                        msleep(50); /* Extended delay for ISP core and event system to stabilize */
+                        
+                        /* Multiple status checks with delays */
+                        {
+                            int attempts = 10;
+                            u32 isp_status;
+                            while (attempts-- > 0) {
+                                isp_status = readl(isp_regs + 0x800);
+                                if (isp_status == 1) {
+                                    break;
+                                }
+                                pr_info("ISP core enable attempt %d: status=0x%x\n", 10-attempts, isp_status);
+                                msleep(10);
+                            }
+                        }
                         
                         /* Verify ISP core enabled with sensor */
                         {
