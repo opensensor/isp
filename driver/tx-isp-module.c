@@ -3692,41 +3692,38 @@ static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_s
         writel(0x10, vic_regs + 0x1b0);   /* Buffer control */
         wmb();
         
-        /* Step 3: Wait for VIC to transition from 0x4 → 0x0 (ready for config) */
+        /* Step 3: Complete VIC unlock sequence by writing 1 (enable) */
+        pr_info("*** STEP 2: COMPLETING VIC UNLOCK SEQUENCE (WRITE 1) ***\n");
+        writel(1, vic_regs + 0x0);
+        wmb();
+        
+        /* Brief delay to allow VIC hardware to process unlock */
+        usleep_range(100, 200);
+        
+        /* Step 4: Verify VIC unlock by testing register write access */
+        pr_info("*** STEP 3: TESTING VIC REGISTER WRITE ACCESS AFTER UNLOCK ***\n");
         {
-            int unlock_timeout = 50000;
-            u32 status;
+            u32 test_value = 0xDEADBEEF;
+            u32 original_val, test_read;
             
-            pr_info("*** STEP 2: WAITING FOR VIC UNLOCK (0x4 → 0x0) ***\n");
+            /* Test on a safe register (0x308 - MDMA enable) */
+            original_val = readl(vic_regs + 0x308);
+            writel(test_value, vic_regs + 0x308);
+            wmb();
+            test_read = readl(vic_regs + 0x308);
             
-            while (unlock_timeout-- > 0) {
-                status = readl(vic_regs + 0x0);
-                if (status == 0) {
-                    break;
-                }
-                if (unlock_timeout % 5000 == 0) {
-                    pr_info("VIC unlock wait: status=0x%x, remaining=%d\n", status, unlock_timeout);
-                    msleep(1);
-                } else if (unlock_timeout % 1000 == 0) {
-                    udelay(50);
-                } else if (unlock_timeout % 100 == 0) {
-                    udelay(5);
-                }
-                cpu_relax();
-            }
-            
-            if (unlock_timeout <= 0) {
-                pr_err("VIC unlock timeout: status=0x%x (expected 0)\n", status);
-                return -ETIMEDOUT;
+            if (test_read == test_value) {
+                pr_info("*** VIC UNLOCK SUCCESS: Register writes now accepted! ***\n");
+                /* Restore original value */
+                writel(original_val, vic_regs + 0x308);
+                wmb();
             } else {
-                pr_info("*** VIC UNLOCK SUCCESS: status=0x%x, registers should be writable now ***\n", status);
+                pr_err("*** VIC UNLOCK FAILED: wrote 0x%x, read 0x%x ***\n", test_value, test_read);
+                return -EACCES;
             }
         }
         
-        /* Step 4: Write 1 to VIC control register 0x0 (enable register access) */
-        writel(1, vic_regs + 0x0);
-        wmb();
-        pr_info("VIC Step 4: Write 1 to reg 0x0 (enable register access)\n");
+        pr_info("VIC unlock sequence complete and verified\n");
         
         /* Verify VIC is now unlocked for register programming */
         {
