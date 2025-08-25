@@ -3812,6 +3812,19 @@ static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_s
         wmb();
         pr_info("VIC Step 2: Write 4 to reg 0x0\n");
         
+        /* *** CRITICAL: REGISTER 0x1a0 WRITE IMMEDIATELY AFTER WRITE 4 *** */
+        /* From Binary Ninja: *(*(arg1 + 0xb8) + 0x1a0) = *($v1_27 + 0x74) << 4 | *($v1_27 + 0x78) */
+        /* This write happens in the MIPI section after write 4 but before the wait loop */
+        {
+            u32 frame_mode_attr = 0;  /* Sensor attribute at offset 0x74 */
+            u32 additional_attr = 0;  /* Sensor attribute at offset 0x78 */
+            u32 reg_1a0_value = (frame_mode_attr << 4) | additional_attr;
+            
+            writel(reg_1a0_value, vic_regs + 0x1a0);
+            wmb();
+            pr_info("VIC CRITICAL reg 0x1a0 = 0x%x (immediately after write 4)\n", reg_1a0_value);
+        }
+        
         /* Step 3: Wait for VIC control register 0x0 to become 0 with extended timeout */
         timeout = 20000; /* Even longer timeout for reset sequence */
         while (timeout-- > 0) {
