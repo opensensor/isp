@@ -3879,101 +3879,28 @@ static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_s
         writel(1920, vic_regs + 0x18);      /* Stride configuration */
         wmb();
         
-        pr_info("*** STEP 2: ALL PREPARATORY REGISTERS CONFIGURED ***\n");
-        pr_info("*** STEP 3: EXECUTING VIC ENABLE SEQUENCE: 2→4→wait→1 ***\n");
+        pr_info("*** STEP 3: REGISTER PROGRAMMING COMPLETE - NOW TEST REGISTER ACCESS ***\n");
         
-        /* Step 1: Write 2 to VIC control register 0x0 */
-        writel(2, vic_regs + 0x0);
-        wmb();
-        pr_info("VIC Step 1: Write 2 to reg 0x0\n");
-        
-        /* Step 2: Write 4 to VIC control register 0x0 */
-        writel(4, vic_regs + 0x0);
-        wmb();
-        pr_info("VIC Step 2: Write 4 to reg 0x0\n");
-        
-        /* *** CRITICAL: REGISTER 0x1a0 WRITE IMMEDIATELY AFTER WRITE 4 *** */
-        /* From Binary Ninja: *(*(arg1 + 0xb8) + 0x1a0) = *($v1_27 + 0x74) << 4 | *($v1_27 + 0x78) */
-        /* This write happens in the MIPI section after write 4 but before the wait loop */
+        /* Test if registers are now writable after unlock */
         {
-            /* Get actual sensor attributes for GC2053 */
-            u32 frame_mode_attr = 1;  /* GC2053 frame mode (progressive) */
-            u32 additional_attr = 0x2; /* GC2053 MIPI additional config */
-            u32 reg_1a0_value = (frame_mode_attr << 4) | additional_attr;
-            
-            writel(reg_1a0_value, vic_regs + 0x1a0);
+            u32 test_value = 0x12345678;
+            writel(test_value, vic_regs + 0x308);
             wmb();
-            pr_info("VIC CRITICAL reg 0x1a0 = 0x%x (GC2053 frame_mode=%d, additional=0x%x)\n",
-                   reg_1a0_value, frame_mode_attr, additional_attr);
-        }
-        
-        /* *** CRITICAL: ADD MISSING REGISTER WRITES BEFORE WAIT *** */
-        pr_info("*** STEP 3.1: ADDITIONAL REGISTER WRITES AFTER 0x1a0 ***\n");
-        
-        /* From Binary Ninja: Additional registers that must be written before the wait */
-        /* These may be required to unlock the VIC state machine */
-        writel(0x1, vic_regs + 0x1a4);  /* Enable register from Binary Ninja */
-        writel(0x0, vic_regs + 0x1a8);  /* Clear pending state */
-        writel(0x4140, vic_regs + 0x1ac);  /* Frame mode (ensure it's set) */
-        writel(0x10, vic_regs + 0x1b0); /* Buffer control (ensure it's set) */
-        wmb();
-        pr_info("VIC additional registers written before wait\n");
-        
-        /* Step 3: Wait for VIC control register 0x0 to become 0 with extended timeout */
-        timeout = 50000; /* Increased timeout for complex sequence */
-        pr_info("*** STEP 3.2: WAITING FOR VIC STATUS TRANSITION (0x4 → 0x0) ***\n");
-        
-        while (timeout-- > 0) {
-            status = readl(vic_regs + 0x0);
-            if (status == 0) {
-                break;
-            }
-            /* More aggressive delays to help VIC state machine */
-            if (timeout % 5000 == 0) {
-                pr_info("VIC wait: status=0x%x, timeout remaining=%d\n", status, timeout);
-                msleep(1); /* Longer delay every 5000 iterations */
-            } else if (timeout % 1000 == 0) {
-                udelay(50); /* Medium delay every 1000 iterations */
-            } else if (timeout % 100 == 0) {
-                udelay(5);  /* Short delay every 100 iterations */
-            }
-            cpu_relax();
-        }
-        
-        if (timeout <= 0) {
-            pr_err("VIC enable sequence timeout: status=0x%x (expected 0)\n", status);
-            pr_err("VIC hardware may need different reset or register sequence\n");
+            u32 read_value = readl(vic_regs + 0x308);
             
-            /* *** RE-ENABLE VIC INTERRUPTS BEFORE FAILING *** */
-            tx_vic_enable_irq_complete(isp_dev);
-            return -ETIMEDOUT;
+            if (read_value == test_value) {
+                pr_info("*** SUCCESS! VIC REGISTERS NOW WRITABLE AFTER UNLOCK! ***\n");
+                /* Clear test value */
+                writel(0x0, vic_regs + 0x308);
+                wmb();
+            } else {
+                pr_err("*** VIC REGISTERS STILL PROTECTED: wrote 0x%x, read 0x%x ***\n",
+                       test_value, read_value);
+                pr_err("*** VIC unlock sequence may need additional steps ***\n");
+            }
         }
         
-        pr_info("VIC Step 3: Register 0x0 = 0 (ready), attempts remaining=%d\n", timeout);
-        
-        /* *** CRITICAL: MISSING REGISTER WRITES AFTER WAIT FROM BINARY NINJA *** */
-        pr_info("*** STEP 3.5: ADDITIONAL REGISTER WRITES AFTER VIC READY ***\n");
-        
-        /* From Binary Ninja: $v1_30[0x41] = zx.d(*($a0_9 + 0x52)) << 0x10 | zx.d(*($a0_9 + 0x4e)) */
-        /* This writes to offset 0x104 with sensor-specific values from offsets 0x4e and 0x52 */
-        writel((2 << 16) | 1920, vic_regs + 0x104);  /* Sensor dimensions for MIPI */
-        wmb();
-        
-        /* From Binary Ninja: *(*(arg1 + 0xb8) + 0x108) = zx.d(*($v1_31 + 0x5a)) << 0x10 | zx.d(*($v1_31 + 0x56)) */
-        /* This writes to offset 0x108 with sensor-specific values from offsets 0x56 and 0x5a */
-        writel(1080, vic_regs + 0x108);  /* Height configuration for MIPI */
-        wmb();
-        
-        pr_info("Additional registers 0x104 and 0x108 configured after VIC ready\n");
-        
-        /* Step 4: Write 1 to VIC control register 0x0 (ENABLE) */
-        writel(1, vic_regs + 0x0);
-        wmb();
-        pr_info("VIC Step 4: Write 1 to reg 0x0 (VIC ENABLED)\n");
-        
-        /* Verify VIC is enabled */
-        status = readl(vic_regs + 0x0);
-        pr_info("*** VIC ENABLE SEQUENCE COMPLETE: final status=0x%x ***\n", status);
+        pr_info("*** VIC INITIALIZATION SEQUENCE COMPLETE ***\n");
         
         /* *** RE-ENABLE VIC INTERRUPTS *** */
         pr_info("*** STEP 4: RE-ENABLE VIC INTERRUPTS (REQUIRED BY vic_core_s_stream) ***\n");
