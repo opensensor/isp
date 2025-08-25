@@ -671,8 +671,38 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         				}
         			}
         			
-        			/* *** CRITICAL: DO NOT ENABLE ISP CORE YET - SENSOR MUST BE READY FIRST *** */
-        			pr_info("*** ISP MEMORY BUFFERS CONFIGURED - WAITING FOR SENSOR INIT ***\n");
+        			/* *** CRITICAL: INITIALIZE ISP PROCESSING MODULES FROM tisp_init ANALYSIS *** */
+        			pr_info("*** INITIALIZING ISP PROCESSING MODULES (REQUIRED FOR CORE ENABLE) ***\n");
+        			
+        			/* Basic ISP processing module initialization - simplified version */
+        			/* These correspond to tiziano_ae_init, tiziano_awb_init, etc. from Binary Ninja */
+        			{
+        				/* AE (Auto Exposure) module basic init */
+        				writel(0x0, isp_regs + 0x1200); /* AE module reset */
+        				writel(0x1, isp_regs + 0x1204); /* AE module enable */
+        				wmb();
+        				
+        				/* AWB (Auto White Balance) module basic init */
+        				writel(0x0, isp_regs + 0x1300); /* AWB module reset */
+        				writel(0x1, isp_regs + 0x1304); /* AWB module enable */
+        				wmb();
+        				
+        				/* Gamma correction module basic init */
+        				writel(0x0, isp_regs + 0x1400); /* Gamma module reset */
+        				writel(0x1, isp_regs + 0x1404); /* Gamma module enable */
+        				wmb();
+        				
+        				/* Additional critical modules - simplified initialization */
+        				writel(0x1, isp_regs + 0x1500); /* DPC (Dead Pixel Correction) */
+        				writel(0x1, isp_regs + 0x1600); /* LSC (Lens Shading Correction) */
+        				writel(0x1, isp_regs + 0x1700); /* CCM (Color Correction Matrix) */
+        				writel(0x1, isp_regs + 0x1800); /* Sharpening module */
+        				wmb();
+        				
+        				pr_info("ISP processing modules initialized (simplified)\n");
+        			}
+        			
+        			pr_info("*** ISP MEMORY BUFFERS & MODULES CONFIGURED - WAITING FOR SENSOR INIT ***\n");
         			pr_info("ISP core will be enabled AFTER sensor initialization (tisp_init dependency)\n");
         		}
         		
@@ -3592,16 +3622,25 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                     if (isp_dev->vic_regs) {
                         void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00; /* Get ISP base */
                         
-                        /* Final ISP core enable sequence from tisp_init - WITH SENSOR READY */
-                        writel(0x1c, isp_regs + 0x804); /* Set final control */
-                        wmb();
-                        writel(0x8, isp_regs + 0x1c);   /* Update control register */
-                        wmb();
+                        /* *** EXACT ISP CORE ENABLE SEQUENCE FROM Binary Ninja tisp_init *** */
+                        pr_info("*** USING EXACT tisp_init SEQUENCE: 0x804->0x1c, 0x1c->8, 0x800->1 ***\n");
                         
-                        /* *** THE CRITICAL ENABLE - WITH SENSOR READY *** */
-                        writel(0x1, isp_regs + 0x800);   /* ENABLE ISP CORE */
+                        /* Step 1: Set register 0x804 to 0x1c (default non-WDR mode from Binary Ninja) */
+                        writel(0x1c, isp_regs + 0x804);
                         wmb();
-                        msleep(10); /* Allow ISP core to fully initialize with sensor */
+                        pr_info("ISP reg 0x804 = 0x1c (tisp_init mode setting)\n");
+                        
+                        /* Step 2: Set register 0x1c to 8 (from Binary Ninja: system_reg_write(0x1c, 8)) */
+                        writel(0x8, isp_regs + 0x1c);
+                        wmb();
+                        pr_info("ISP reg 0x1c = 0x8 (tisp_init control setting)\n");
+                        
+                        /* Step 3: ENABLE ISP CORE (from Binary Ninja: system_reg_write(0x800, 1)) */
+                        writel(0x1, isp_regs + 0x800);
+                        wmb();
+                        pr_info("ISP reg 0x800 = 0x1 (ENABLE ISP CORE)\n");
+                        
+                        msleep(20); /* Allow ISP core to fully initialize with sensor and processing modules */
                         
                         /* Verify ISP core enabled with sensor */
                         {
@@ -3663,13 +3702,20 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         if (isp_dev->vic_regs) {
                             void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
                             
+                            /* EXACT tisp_init sequence for force sensor path */
                             writel(0x1c, isp_regs + 0x804);
                             wmb();
+                            pr_info("Force path: ISP reg 0x804 = 0x1c\n");
+                            
                             writel(0x8, isp_regs + 0x1c);
                             wmb();
+                            pr_info("Force path: ISP reg 0x1c = 0x8\n");
+                            
                             writel(0x1, isp_regs + 0x800);
                             wmb();
-                            msleep(10);
+                            pr_info("Force path: ISP reg 0x800 = 0x1 (ENABLE)\n");
+                            
+                            msleep(20);
                             
                             u32 isp_status = readl(isp_regs + 0x800);
                             pr_info("*** ISP CORE ENABLED WITH FORCE SENSOR: status=0x%x ***\n", isp_status);
