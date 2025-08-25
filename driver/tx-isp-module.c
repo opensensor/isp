@@ -3701,19 +3701,22 @@ static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_s
         writel(1080, vic_regs + 0x108);               /* Additional height config */
         wmb();
         
+        /* *** CRITICAL: MISSING REGISTER 0x1a0 FROM BINARY NINJA *** */
+        /* From Binary Ninja: *(*(arg1 + 0xb8) + 0x1a0) = *($v1_27 + 0x74) << 4 | *($v1_27 + 0x78) */
+        /* This is built from sensor attributes +0x74 and +0x78 */
+        u32 reg_1a0_value = (0 << 4) | 0;  /* Default for GC2053 - may need sensor-specific values */
+        writel(reg_1a0_value, vic_regs + 0x1a0);
+        wmb();
+        
+        /* Configure additional dimension registers (from Binary Ninja analysis) */
+        writel((2 << 16) | 1920, vic_regs + 0x104);  /* Additional width config */
+        writel(1080, vic_regs + 0x108);               /* Additional height config */
+        wmb();
+        
         /* Configure MIPI-specific timing and control registers */
         writel(0x40000, vic_regs + 0x10);   /* MIPI control value from Binary Ninja */
         writel(1920, vic_regs + 0x18);      /* Stride configuration */
         wmb();
-        
-        /* *** CRITICAL: VIC RESET SEQUENCE BEFORE ENABLE *** */
-        pr_info("*** STEP 1.5: VIC RESET SEQUENCE FOR CLEAN STATE ***\n");
-        writel(0x80000000, vic_regs + 0x0);  /* VIC reset bit */
-        wmb();
-        udelay(100); /* Allow reset to complete */
-        writel(0x0, vic_regs + 0x0);         /* Clear reset */
-        wmb();
-        udelay(10);  /* Allow VIC to stabilize */
         
         pr_info("*** STEP 2: ALL PREPARATORY REGISTERS CONFIGURED ***\n");
         pr_info("*** STEP 3: EXECUTING VIC ENABLE SEQUENCE: 2→4→wait→1 ***\n");
@@ -3754,6 +3757,21 @@ static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_s
         }
         
         pr_info("VIC Step 3: Register 0x0 = 0 (ready), attempts remaining=%d\n", timeout);
+        
+        /* *** CRITICAL: MISSING REGISTER WRITES AFTER WAIT FROM BINARY NINJA *** */
+        pr_info("*** STEP 3.5: ADDITIONAL REGISTER WRITES AFTER VIC READY ***\n");
+        
+        /* From Binary Ninja: $v1_30[0x41] = zx.d(*($a0_9 + 0x52)) << 0x10 | zx.d(*($a0_9 + 0x4e)) */
+        /* This writes to offset 0x104 with sensor-specific values from offsets 0x4e and 0x52 */
+        writel((2 << 16) | 1920, vic_regs + 0x104);  /* Sensor dimensions for MIPI */
+        wmb();
+        
+        /* From Binary Ninja: *(*(arg1 + 0xb8) + 0x108) = zx.d(*($v1_31 + 0x5a)) << 0x10 | zx.d(*($v1_31 + 0x56)) */
+        /* This writes to offset 0x108 with sensor-specific values from offsets 0x56 and 0x5a */
+        writel(1080, vic_regs + 0x108);  /* Height configuration for MIPI */
+        wmb();
+        
+        pr_info("Additional registers 0x104 and 0x108 configured after VIC ready\n");
         
         /* Step 4: Write 1 to VIC control register 0x0 (ENABLE) */
         writel(1, vic_regs + 0x0);
