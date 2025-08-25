@@ -576,15 +576,46 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         		wmb();
         		pr_info("VIC stream control reset to OFF state\n");
         
-        		/* Step 4: Configure VIC MDMA (exact vic_pipo_mdma_enable sequence) */
+        		/* Step 4: Configure VIC MDMA (COMPLETE vic_mdma_enable sequence from Binary Ninja) */
         		{
-        			u32 frame_width = 1920;
-        			u32 frame_height = 1080;
-        			u32 width_x2 = frame_width << 1;  /* width * 2 = 0xf00 */
+        			u32 frame_width = 1920;   /* arg1->frame_width (0xdc) */
+        			u32 frame_height = 1080;  /* arg1->frame_height (0xe0) */
+        			u32 width_x2 = frame_width << 1;  /* $a1 = width * 2 = 0xf00 */
+        			u32 frame_size = width_x2 * frame_height; /* $v1_2 = stride * height */
+        			u32 format = 0;  /* arg6 - format (0=YUV420, 7=RAW) */
+        			u32 buffer_count = 4; /* arg4 - number of buffers */
+        			u32 buffer_base = 0x6300000; /* arg5 - base buffer address from ISP setup */
         			
-        			pr_info("Attempting VIC MDMA configuration...\n");
+        			pr_info("*** IMPLEMENTING COMPLETE VIC_MDMA_ENABLE SEQUENCE ***\n");
+        			pr_info("VIC params: %dx%d, stride=%d, frame_size=%d, buffers=%d, base=0x%x\n",
+        				frame_width, frame_height, width_x2, frame_size, buffer_count, buffer_base);
         			
-        			/* vic_pipo_mdma_enable exact register sequence */
+        			/* CRITICAL: Setup VIC MDMA buffer addresses FIRST (this unlocks register writes) */
+        			{
+        				u32 buf_addr = buffer_base;
+        				u32 buf_offset = frame_size;
+        				
+        				/* Channel 0 buffer addresses (0x318-0x328) */
+        				writel(buf_addr, isp_dev->vic_regs + 0x318); buf_addr += buf_offset;
+        				writel(buf_addr, isp_dev->vic_regs + 0x31c); buf_addr += buf_offset;
+        				writel(buf_addr, isp_dev->vic_regs + 0x320); buf_addr += buf_offset;
+        				writel(buf_addr, isp_dev->vic_regs + 0x324); buf_addr += buf_offset;
+        				writel(buf_addr, isp_dev->vic_regs + 0x328);
+        				wmb();
+        				
+        				/* Channel 1 buffer addresses (0x340-0x350) */
+        				buf_addr = buffer_base + frame_size; /* Offset for channel 1 */
+        				writel(buf_addr, isp_dev->vic_regs + 0x340); buf_addr += (width_x2 * frame_height * 2);
+        				writel(buf_addr, isp_dev->vic_regs + 0x344); buf_addr += (width_x2 * frame_height * 2);
+        				writel(buf_addr, isp_dev->vic_regs + 0x348); buf_addr += (width_x2 * frame_height * 2);
+        				writel(buf_addr, isp_dev->vic_regs + 0x34c); buf_addr += (width_x2 * frame_height * 2);
+        				writel(buf_addr, isp_dev->vic_regs + 0x350);
+        				wmb();
+        				
+        				pr_info("VIC buffer addresses configured\n");
+        			}
+        			
+        			/* NOW configure MDMA registers (should work after buffer setup) */
         			writel(1, isp_dev->vic_regs + 0x308);                              /* MDMA enable */
         			wmb();
         			writel((frame_width << 16) | frame_height, isp_dev->vic_regs + 0x304); /* Dimensions */
@@ -594,7 +625,7 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         			writel(width_x2, isp_dev->vic_regs + 0x314);                      /* Width * 2 */
         			wmb();
         			
-        			/* Verify writes stuck */
+        			/* Verify MDMA configuration now works */
         			{
         				u32 verify_308 = readl(isp_dev->vic_regs + 0x308);
         				u32 verify_304 = readl(isp_dev->vic_regs + 0x304);
@@ -605,9 +636,9 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         					verify_308, verify_304, verify_310, verify_314);
         					
         				if (verify_308 == 1 && verify_310 == width_x2 && verify_314 == width_x2) {
-        					pr_info("*** VIC MDMA WRITE SUCCESS! ***\n");
+        					pr_info("*** VIC MDMA WRITE SUCCESS! REGISTERS UNLOCKED! ***\n");
         				} else {
-        					pr_info("*** VIC MDMA WRITES STILL FAILING - HARDWARE PROTECTION ACTIVE ***\n");
+        					pr_info("*** VIC MDMA WRITES STILL FAILING - CHECK BUFFER SETUP ***\n");
         				}
         			}
         		}
