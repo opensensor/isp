@@ -529,113 +529,48 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
     // Initialize VIC device structure matching reference exactly
     memset(vic_dev, 0, 0x21c);
     
-    // CRITICAL: Proper VIC subdev initialization like tx_isp_subdev_init
-    pr_info("*** INITIALIZING VIC AS PROPER SUBDEV FOR REGISTER ACCESS ***\n");
-    
-    // Initialize basic subdev structure first (matches tx_isp_subdev_init)
+    // Initialize VIC subdev structure
     memset(&vic_dev->sd, 0, sizeof(vic_dev->sd));
     vic_dev->sd.isp = isp_dev;
-    vic_dev->sd.ops = NULL;  // Will be set later
+    vic_dev->sd.ops = NULL;
+    vic_dev->vic_regs = isp_dev->vic_regs;
+    vic_dev->sd.vin_state = TX_ISP_MODULE_INIT;
     
-    // CRITICAL: Set VIC hardware register base (from tx_isp_subdev_init analysis)
-    // This is what enables register write access - offset 0xb8 in subdev
-    vic_dev->vic_regs = isp_dev->vic_regs;     // Map hardware registers to subdev
-    
-    // CRITICAL: Initialize VIC subdev state like tx_isp_subdev_init
-    // This step is crucial for unlocking MDMA register writes
-    vic_dev->sd.vin_state = TX_ISP_MODULE_INIT;  // Start in INIT state
-    
-    // CRITICAL: Simulate memory region mapping like tx_isp_subdev_init
-    // The reference driver calls private_request_mem_region + private_ioremap
-    // We already have the memory mapping, so just validate it's accessible
     if (vic_dev->vic_regs) {
         pr_info("VIC memory region validated: registers at %p\n", vic_dev->vic_regs);
     } else {
-        pr_err("CRITICAL: VIC registers not mapped - register writes will fail!\n");
+        pr_err("VIC registers not mapped\n");
     }
     
-    // CRITICAL: Initialize VIC clocks like tx_isp_subdev_init calls isp_subdev_init_clks
-    {
-        struct clk *vic_isp_clk = NULL;
-        int ret;
-        
-        pr_info("*** INITIALIZING VIC CLOCKS FOR REGISTER ACCESS ***\n");
-        
-        // Get VIC-specific ISP clock
-        vic_isp_clk = clk_get(NULL, "isp");
-        if (!IS_ERR(vic_isp_clk)) {
-            ret = clk_prepare_enable(vic_isp_clk);
-            if (ret == 0) {
-                pr_info("VIC ISP clock enabled successfully\n");
-            } else {
-                pr_err("Failed to enable VIC ISP clock: %d\n", ret);
-                clk_put(vic_isp_clk);
-                vic_isp_clk = NULL;
-            }
-        } else {
-            pr_warn("VIC ISP clock not available: %ld\n", PTR_ERR(vic_isp_clk));
-        }
-        
-        // Store clock reference for cleanup
-        // We'll use a local variable for now since we don't have space in vic_dev
-        // In real implementation, this would be stored in vic_dev structure
-    }
+    // Initialize VIC device structure
+    vic_dev->self = vic_dev;
+    vic_dev->frame_width = 1920;
+    vic_dev->frame_height = 1080;
+    vic_dev->state = 1;
+    vic_dev->streaming = 0;
+    vic_dev->frame_count = 0;
     
-    // Set critical offsets matching reference driver
-    vic_dev->self = vic_dev;                   // 0xd4: Self-pointer
-    vic_dev->frame_width = 1920;               // 0xdc: Default width
-    vic_dev->frame_height = 1080;              // 0xe0: Default height
-    vic_dev->state = 1;                        // 0x128: Initial state
-    vic_dev->streaming = 0;                    // 0x210: Not streaming
-    vic_dev->frame_count = 0;                  // 0x218: Frame counter
-    
-    // Initialize synchronization primitives at correct offsets
-    spin_lock_init(&vic_dev->lock);            // 0x130
-    mutex_init(&vic_dev->mlock);               // Also 0x130 (overlapped)
-    init_completion(&vic_dev->frame_done);     // 0x148
-    mutex_init(&vic_dev->snap_mlock);          // 0x154
-    spin_lock_init(&vic_dev->buffer_lock);     // 0x1f4
+    // Initialize synchronization primitives
+    spin_lock_init(&vic_dev->lock);
+    mutex_init(&vic_dev->mlock);
+    init_completion(&vic_dev->frame_done);
+    mutex_init(&vic_dev->snap_mlock);
+    spin_lock_init(&vic_dev->buffer_lock);
     
     // Initialize buffer queues
     INIT_LIST_HEAD(&vic_dev->queue_head);
     INIT_LIST_HEAD(&vic_dev->free_head);
     INIT_LIST_HEAD(&vic_dev->done_head);
     
-    // CRITICAL: Enable VIC subdev for register access (final step from tx_isp_subdev_init)
-    pr_info("*** ENABLING VIC SUBDEV REGISTER ACCESS ***\n");
-    
-    // Set VIC as properly initialized subdev - this should unlock register protection
-    vic_dev->sd.vin_state = TX_ISP_MODULE_RUNNING;  // Set to RUNNING for register access
-    
-    pr_info("VIC subdev initialized with register access enabled\n");
+    vic_dev->sd.vin_state = TX_ISP_MODULE_RUNNING;
     
     // Connect to ISP device
     isp_dev->vic_dev = vic_dev;
     
-    // CRITICAL: IMPLEMENT COMPLETE ispcore_activate_module SEQUENCE FROM BINARY NINJA
-    pr_info("*** IMPLEMENTING COMPLETE ispcore_activate_module SEQUENCE ***\n");
+    // Simple VIC initialization - minimal like reference driver
     ret = tx_isp_ispcore_activate_module_complete(isp_dev);
-    if (ret == 0) {
-        pr_info("*** ispcore_activate_module SEQUENCE SUCCESS - VIC SHOULD BE UNLOCKED! ***\n");
-        
-        // Test VIC register access after complete activation
-        if (vic_dev->vic_regs) {
-            pr_info("*** TESTING VIC REGISTER ACCESS AFTER COMPLETE ACTIVATION ***\n");
-            
-            writel(0xDEADBEEF, vic_dev->vic_regs + 0x308);
-            wmb();
-            u32 test_read = readl(vic_dev->vic_regs + 0x308);
-            
-            if (test_read == 0xDEADBEEF) {
-                pr_info("*** SUCCESS! VIC REGISTERS UNLOCKED BY ispcore_activate_module! ***\n");
-                writel(0x0, vic_dev->vic_regs + 0x308); // Clear test value
-                wmb();
-            } else {
-                pr_info("*** VIC registers still protected: wrote 0xDEADBEEF, read 0x%x ***\n", test_read);
-            }
-        }
-    } else {
-        pr_err("*** ispcore_activate_module SEQUENCE FAILED: %d ***\n", ret);
+    if (ret) {
+        pr_err("Failed to activate VIC module: %d\n", ret);
     }
     
     // Verify offsets are correct
