@@ -3300,67 +3300,63 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
         }
     }
     
-    /* STEP 2: THE CRITICAL MAGIC FUNCTION CALL WITH 0x4000000 */
-    pr_info("*** STEP 2: CRITICAL MAGIC UNLOCK SEQUENCE (0x4000000) ***\n");
-    
-    /* From Binary Ninja:
-     * void* $a0_3 = *($s0_1 + 0x1bc);
-     * (*($a0_3 + 0x40cc))($a0_3, 0x4000000, 0, $a3_1);
-     * This is the critical unlock sequence that enables VIC register access
-     */
+    /* STEP 2: EXACT BINARY NINJA VIC UNLOCK SEQUENCE */
+    pr_info("*** STEP 2: EXACT BINARY NINJA VIC UNLOCK SEQUENCE ***\n");
     
     if (vic_dev->vic_regs) {
-        pr_info("ispcore_activate_module: Executing CRITICAL magic unlock sequence...\n");
-        pr_info("Magic value: 0x4000000 (from Binary Ninja analysis)\n");
+        void __iomem *vic_regs = vic_dev->vic_regs;
+        u32 timeout = 1000;
+        u32 status;
         
-        /* The magic sequence - this is what unlocks VIC register access */
-        /* From Binary Ninja, this appears to be a call to a function pointer at offset +0x40cc */
-        /* Since we don't have the exact function, we simulate the critical register writes */
+        pr_info("ispcore_activate_module: Executing EXACT Binary Ninja VIC unlock sequence...\n");
         
-        /* CRITICAL: Write the magic unlock value directly to VIC hardware */
-        /* This is the equivalent of (*($a0_3 + 0x40cc))($a0_3, 0x4000000, 0, $a3_1) */
-        
-        void __iomem *isp_regs = vic_dev->vic_regs - 0x9a00; /* Get ISP base */
-        
-        pr_info("ispcore_activate_module: Writing magic unlock value 0x4000000...\n");
-        
-        /* Try multiple possible unlock register locations based on Binary Ninja hints */
-        writel(0x4000000, isp_regs + 0x1bc);    /* Function pointer location hint */
+        /* Step 1: Write 2 to VIC control register (config mode) */
+        pr_info("VIC Step 1: Write 2 to reg 0x0 (config mode)\n");
+        writel(2, vic_regs + 0x0);
         wmb();
-        writel(0x4000000, isp_regs + 0x40cc);   /* Function offset hint */
+
+        /* Step 2: Write 4 to VIC control register (unlock mode) */  
+        pr_info("VIC Step 2: Write 4 to reg 0x0 (unlock mode)\n");
+        writel(4, vic_regs + 0x0);
         wmb();
-        writel(0x4000000, vic_dev->vic_regs + 0x0);  /* VIC control register */
+
+        /* Step 3: CRITICAL - Write unlock key 0x12 to register 0x1a0 */
+        pr_info("VIC CRITICAL reg 0x1a0 = 0x12 (unlock key from Binary Ninja)\n");
+        writel(0x12, vic_regs + 0x1a0);
         wmb();
-        writel(0x4000000, vic_dev->vic_regs + 0x4);  /* VIC config register */
-        wmb();
-        
-        /* Additional magic sequence attempts */
-        writel(0x4000000, vic_dev->vic_regs + 0x1bc); /* Direct VIC offset */
-        wmb();
-        writel(0x4000000, vic_dev->vic_regs + 0x1a0); /* VIC unlock register */
-        wmb();
-        
-        pr_info("ispcore_activate_module: Magic unlock sequence written to multiple registers\n");
-        
-        /* Wait for unlock to take effect */
-        msleep(10);
-        
-        /* Test if the magic unlock worked */
-        {
-            u32 test_value = 0x12345678;
-            writel(test_value, vic_dev->vic_regs + 0x308);
+
+        /* Step 4: Wait for VIC register to become 0 (ready state) */
+        pr_info("VIC Step 4: Wait for ready (register 0x0 becomes 0)\n");
+        while (timeout > 0) {
+            status = readl(vic_regs + 0x0);
+            if (status == 0) {
+                pr_info("VIC ready after %d iterations\n", 1000 - timeout);
+                break;
+            }
+            udelay(10);
+            timeout--;
+        }
+
+        if (timeout == 0) {
+            pr_err("*** VIC TIMEOUT WAITING FOR READY STATE ***\n");
+            ret = -ETIMEDOUT;
+        } else {
+            /* Step 5: Write 1 to enable VIC */
+            pr_info("VIC Step 5: Write 1 to reg 0x0 (enable VIC)\n");
+            writel(1, vic_regs + 0x0);
             wmb();
-            u32 test_read = readl(vic_dev->vic_regs + 0x308);
-            
-            if (test_read == test_value) {
-                pr_info("*** MAGIC UNLOCK SUCCESS! VIC registers now writable! ***\n");
-                writel(0x0, vic_dev->vic_regs + 0x308); /* Clear test */
-                wmb();
+
+            /* Step 6: Test VIC register accessibility */
+            pr_info("*** TESTING VIC REGISTER ACCESS AFTER EXACT SEQUENCE ***\n");
+            writel(0x12345678, vic_regs + 0x4);  /* Test write to register */
+            wmb();
+            u32 test_val = readl(vic_regs + 0x4);
+            if (test_val == 0x12345678) {
+                pr_info("*** SUCCESS: VIC REGISTERS UNLOCKED! wrote 0x12345678, read 0x%x ***\n", test_val);
                 ret = 0;
             } else {
-                pr_info("Magic unlock partial - wrote 0x%x, read 0x%x\n", test_value, test_read);
-                /* Continue with subdev initialization anyway */
-                ret = 0;
+                pr_err("*** FAILED: VIC registers still protected: wrote 0x12345678, read 0x%x ***\n", test_val);
+                ret = -EACCES;
             }
         }
     } else {

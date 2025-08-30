@@ -160,20 +160,86 @@ static int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 /* Start VIC processing */
 int tx_isp_vic_start(struct tx_isp_subdev *sd)
 {
-    u32 ctrl;
+    struct vic_device *vic_dev;
+    void __iomem *vic_base;
+    u32 timeout = 1000;
+    int ret = 0;
 
     if (!sd || !sd->isp)
         return -EINVAL;
 
+    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    if (!vic_dev) {
+        pr_err("VIC device is NULL in tx_isp_vic_start\n");
+        return -EINVAL;
+    }
+
     mutex_lock(&sd->vic_frame_end_lock);
 
-    /* Enable VIC and start processing */
-    ctrl = vic_read32(VIC_CTRL);
-    ctrl |= (VIC_CTRL_EN | VIC_CTRL_START);
-    vic_write32(VIC_CTRL, ctrl);
+    /* Map VIC registers directly for critical unlock sequence */
+    vic_base = ioremap(0x10023000, 0x1000);
+    if (!vic_base) {
+        pr_err("Failed to map VIC registers for unlock\n");
+        mutex_unlock(&sd->vic_frame_end_lock);
+        return -ENOMEM;
+    }
 
+    pr_info("*** IMPLEMENTING EXACT BINARY NINJA VIC UNLOCK SEQUENCE ***\n");
+    
+    /* Step 1: Write 2 to VIC control register (config mode) */
+    pr_info("VIC Step 1: Write 2 to reg 0x0 (config mode)\n");
+    writel(2, vic_base + 0x0);
+    wmb();
+
+    /* Step 2: Write 4 to VIC control register (unlock mode) */  
+    pr_info("VIC Step 2: Write 4 to reg 0x0 (unlock mode)\n");
+    writel(4, vic_base + 0x0);
+    wmb();
+
+    /* Step 3: CRITICAL - Write unlock key 0x12 to register 0x1a0 */
+    pr_info("VIC CRITICAL reg 0x1a0 = 0x12 (unlock key from Binary Ninja)\n");
+    writel(0x12, vic_base + 0x1a0);
+    wmb();
+
+    /* Step 4: Wait for VIC register to become 0 (ready state) */
+    pr_info("VIC Step 3: Wait for ready (register 0x0 becomes 0)\n");
+    while (timeout > 0) {
+        u32 status = readl(vic_base + 0x0);
+        if (status == 0) {
+            pr_info("VIC ready after %d iterations\n", 1000 - timeout);
+            break;
+        }
+        udelay(10);
+        timeout--;
+    }
+
+    if (timeout == 0) {
+        pr_err("*** VIC TIMEOUT WAITING FOR READY STATE ***\n");
+        iounmap(vic_base);
+        mutex_unlock(&sd->vic_frame_end_lock);
+        return -ETIMEDOUT;
+    }
+
+    /* Step 5: Write 1 to enable VIC */
+    pr_info("VIC Step 4: Write 1 to reg 0x0 (enable VIC)\n");
+    writel(1, vic_base + 0x0);
+    wmb();
+
+    /* Step 6: Test VIC register accessibility */
+    pr_info("*** TESTING VIC REGISTER ACCESS AFTER UNLOCK ***\n");
+    writel(0x12345678, vic_base + 0x4);  /* Test write to register */
+    wmb();
+    u32 test_val = readl(vic_base + 0x4);
+    if (test_val == 0x12345678) {
+        pr_info("*** SUCCESS: VIC REGISTERS UNLOCKED! wrote 0x12345678, read 0x%x ***\n", test_val);
+    } else {
+        pr_err("*** FAILED: VIC registers still protected: wrote 0x12345678, read 0x%x ***\n", test_val);
+        ret = -EACCES;
+    }
+
+    iounmap(vic_base);
     mutex_unlock(&sd->vic_frame_end_lock);
-    return 0;
+    return ret;
 }
 
 /* Stop VIC processing */
