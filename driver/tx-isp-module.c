@@ -3178,119 +3178,31 @@ static void tx_vic_enable_irq_complete(struct tx_isp_dev *isp_dev)
     pr_info("*** tx_vic_enable_irq COMPLETE - VIC INTERRUPTS ENABLED ***\n");
 }
 
-/* COMPLETE ispcore_activate_module FUNCTION - FROM BINARY NINJA ANALYSIS */
+/* Simple VIC activation - minimal like reference driver */
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
 {
     struct tx_isp_vic_device *vic_dev;
-    int i;
     int ret = 0;
     
     if (!isp_dev) {
-        pr_err("Invalid ISP device for ispcore_activate_module\n");
         return -EINVAL;
     }
-    
-    pr_info("*** IMPLEMENTING COMPLETE ispcore_activate_module FROM BINARY NINJA ***\n");
     
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     if (!vic_dev || vic_dev->state != 1) {
-        pr_err("VIC device not in correct state for activation\n");
         return -EINVAL;
     }
     
-    pr_info("ispcore_activate_module: VIC device state validated (state=%d)\n", vic_dev->state);
-    
-    /* STEP 1: ENABLE ALL ISP CLOCKS (FROM BINARY NINJA) */
-    pr_info("*** STEP 1: ENABLING ALL ISP CLOCKS (CRITICAL FOR VIC UNLOCK) ***\n");
-    
-    /* From Binary Ninja: Enable clocks in array at offset +0xbc with count at +0xc0 */
-    /* We simulate this with our actual ISP clock management */
+    /* Enable ISP clocks */
     if (isp_dev->isp_clk) {
-        ret = clk_prepare_enable(isp_dev->isp_clk);
-        if (ret == 0) {
-            pr_info("ispcore_activate_module: ISP master clock enabled successfully\n");
-        } else {
-            pr_err("ispcore_activate_module: Failed to enable ISP clock: %d\n", ret);
-        }
+        clk_prepare_enable(isp_dev->isp_clk);
     }
     
-    /* Try to enable additional ISP-related clocks that might be required */
-    {
-        struct clk *cgu_isp_clk = clk_get(NULL, "cgu_isp");
-        if (!IS_ERR(cgu_isp_clk)) {
-            ret = clk_prepare_enable(cgu_isp_clk);
-            if (ret == 0) {
-                pr_info("ispcore_activate_module: CGU_ISP clock enabled\n");
-            }
-            /* Don't put the clock - keep it enabled */
-        }
-        
-        struct clk *vic_clk = clk_get(NULL, "vic");
-        if (!IS_ERR(vic_clk)) {
-            ret = clk_prepare_enable(vic_clk);
-            if (ret == 0) {
-                pr_info("ispcore_activate_module: VIC clock enabled\n");
-            }
-            /* Don't put the clock - keep it enabled */
-        }
-    }
-    
-    /* STEP 2: DEFER VIC UNLOCK UNTIL SENSOR REGISTRATION */
-    pr_info("*** STEP 2: DEFERRING VIC UNLOCK UNTIL SENSOR ATTRIBUTES AVAILABLE ***\n");
-    pr_info("VIC unlock requires sensor attributes at offsets 0x74 and 0x78\n");
-    pr_info("Will unlock VIC during sensor registration with proper calculated key\n");
-    
-    if (vic_dev->vic_regs) {
-        /* Just mark VIC as ready for unlock later */
-        pr_info("VIC registers mapped and ready for unlock during sensor registration\n");
-        ret = 0;
-    } else {
-        pr_warn("ispcore_activate_module: No VIC registers - skipping magic unlock\n");
-        ret = 0;
-    }
-    
-    /* STEP 3: INITIALIZE ALL SUBDEVICES (FROM BINARY NINJA LOOP) */
-    pr_info("*** STEP 3: INITIALIZING ALL SUBDEVICES (CRITICAL FOR VIC ACCESS) ***\n");
-    
-    /* From Binary Ninja: Loop through subdevices at offset +0x150 with count at +0x154 */
-    /* We simulate this by initializing all available subdevices */
-    
-    /* Initialize VIC subdev state transition */
+    /* Activate VIC subdev */
     if (vic_dev->state == 1) {
-        vic_dev->state = 2; /* Transition from INIT to ACTIVATED */
-        pr_info("ispcore_activate_module: VIC subdev state transition 1->2 (ACTIVATED)\n");
+        vic_dev->state = 2;
     }
     
-    /* Initialize any sensor subdevices if available */
-    if (isp_dev->sensor) {
-        struct tx_isp_subdev *sensor_sd = &isp_dev->sensor->sd;
-        
-        pr_info("ispcore_activate_module: Initializing sensor subdev %s\n",
-                isp_dev->sensor->info.name);
-        
-        /* From Binary Ninja: Check subdev state at offset +0x74 and call init if needed */
-        if (sensor_sd->ops && sensor_sd->ops->core && sensor_sd->ops->core->init) {
-            ret = sensor_sd->ops->core->init(sensor_sd, 1);
-            pr_info("ispcore_activate_module: Sensor subdev init returned %d\n", ret);
-            
-            if (ret == 0 || ret == 0xfffffdfd) { /* 0xfffffdfd = already initialized */
-                sensor_sd->vin_state = TX_ISP_MODULE_RUNNING;
-                pr_info("ispcore_activate_module: Sensor subdev state set to RUNNING\n");
-            }
-        }
-    }
-    
-    /* Initialize CSI subdev if available */
-    if (isp_dev->csi_dev && isp_dev->csi_dev->state < 2) {
-        isp_dev->csi_dev->state = 2;
-        pr_info("ispcore_activate_module: CSI subdev activated\n");
-    }
-    
-    /* VIC unlock will happen during sensor registration with MDMA enable */
-    pr_info("*** STEP 4: VIC UNLOCK DEFERRED TO SENSOR REGISTRATION ***\n");
-    ret = 0;
-    
-    pr_info("*** ispcore_activate_module SEQUENCE COMPLETE (ret=%d) ***\n", ret);
     return ret;
 }
 
