@@ -3351,51 +3351,19 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
         pr_info("ispcore_activate_module: CSI subdev activated\n");
     }
     
-    /* STEP 4: FINAL VIC REGISTER ACCESS TEST AFTER COMPLETE SEQUENCE */
-    pr_info("*** STEP 4: FINAL VIC REGISTER ACCESS TEST ***\n");
-    
-    if (vic_dev->vic_regs) {
-        /* Comprehensive register access test */
-        u32 test_values[] = {0xDEADBEEF, 0x12345678, 0xA5A5A5A5, 0x5A5A5A5A};
-        int test_passed = 0;
-        
-        for (i = 0; i < 4; i++) {
-            writel(test_values[i], vic_dev->vic_regs + 0x308);
-            wmb();
-            u32 test_read = readl(vic_dev->vic_regs + 0x308);
-            
-            if (test_read == test_values[i]) {
-                test_passed++;
-                pr_info("VIC register test %d: SUCCESS (0x%x)\n", i+1, test_values[i]);
-            } else {
-                pr_info("VIC register test %d: wrote 0x%x, read 0x%x\n", i+1, test_values[i], test_read);
-            }
-            
-            writel(0x0, vic_dev->vic_regs + 0x308); /* Clear */
-            wmb();
-        }
-        
-        if (test_passed > 0) {
-            pr_info("*** ispcore_activate_module SUCCESS: %d/4 VIC register tests passed! ***\n", test_passed);
-            ret = 0;
-        } else {
-            pr_warn("*** ispcore_activate_module: VIC registers still protected ***\n");
-            /* Don't fail completely - the sequence was executed */
-            ret = 0;
-        }
-    }
+    /* VIC unlock will happen during sensor registration with MDMA enable */
+    pr_info("*** STEP 4: VIC UNLOCK DEFERRED TO SENSOR REGISTRATION ***\n");
+    ret = 0;
     
     pr_info("*** ispcore_activate_module SEQUENCE COMPLETE (ret=%d) ***\n", ret);
     return ret;
 }
 
-/* COMPLETE VIC START FUNCTION - EXACT EQUIVALENT OF tx_isp_vic_start FROM BINARY NINJA */
+/* VIC start function - simplified to match reference driver behavior */
 static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_sensor *sensor)
 {
     void __iomem *vic_regs;
-    u32 interface_type;
-    int timeout;
-    u32 status;
+    struct tx_isp_vic_device *vic_dev;
     
     if (!isp_dev || !isp_dev->vic_regs || !sensor) {
         pr_err("Invalid parameters for VIC start\n");
@@ -3403,310 +3371,29 @@ static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_s
     }
     
     vic_regs = isp_dev->vic_regs;
-    interface_type = 1; /* MIPI interface for GC2053 */
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     
-    pr_info("*** COMPLETE tx_isp_vic_start SEQUENCE FROM BINARY NINJA ***\n");
-    pr_info("VIC start: interface_type=%d, sensor=%s\n", interface_type, sensor->info.name);
+    pr_info("*** CALLING COMPLETE tx_isp_vic_start SEQUENCE ***\n");
+    pr_info("VIC start: interface_type=1, sensor=%s\n", sensor->info.name);
     
-    /* *** CRITICAL: PROPER VIC INTERRUPT DISABLE FROM vic_core_s_stream *** */
-    pr_info("*** STEP 0: DISABLE VIC INTERRUPTS (REQUIRED BY vic_core_s_stream) ***\n");
-    tx_vic_disable_irq_complete(isp_dev);
-    
-    /* MIPI interface configuration (interface_type == 1) */
-    if (interface_type == 1) {
-        pr_info("*** COMPLETE MIPI INTERFACE CONFIGURATION FROM BINARY NINJA ***\n");
+    /* VIC should already be unlocked by MDMA enable - just configure it */
+    if (vic_dev && vic_dev->state == 2) {
+        pr_info("*** VIC ALREADY UNLOCKED - CONFIGURING FOR MIPI STREAMING ***\n");
         
-        /* *** STEP 1: UNLOCK VIC REGISTERS FIRST (BEFORE PROGRAMMING) *** */
-        pr_info("*** STEP 1: VIC REGISTER UNLOCK SEQUENCE (MUST BE FIRST) ***\n");
-        
-        /* From Binary Ninja: The VIC enable sequence must happen BEFORE register programming */
-        /* This unlocks the VIC register space for configuration */
-        
-        /* Reset VIC to clean state */
-        writel(0, vic_regs + 0x0);
-        wmb();
-        udelay(10);
-        
-        /* Step 1: Write 2 to VIC control register 0x0 (unlock mode) */
-        writel(2, vic_regs + 0x0);
-        wmb();
-        pr_info("VIC Step 1: Write 2 to reg 0x0 (unlock mode)\n");
-        
-        /* Step 2: Write 4 to VIC control register 0x0 (config mode) */
-        writel(4, vic_regs + 0x0);
-        wmb();
-        pr_info("VIC Step 2: Write 4 to reg 0x0 (config mode)\n");
-        
-        /* *** CRITICAL: REGISTER 0x1a0 WRITE IMMEDIATELY AFTER WRITE 4 *** */
-        /* This is the missing VIC unlock key from Binary Ninja analysis! */
-        {
-            u32 frame_mode_attr = 1;  /* GC2053 frame mode (progressive) = sensor_attr_0x74 */
-            u32 additional_attr = 0x2; /* GC2053 MIPI additional config = sensor_attr_0x78 */
-            u32 reg_1a0_value = (frame_mode_attr << 4) | additional_attr; /* = 0x12 for GC2053 */
-            
-            writel(reg_1a0_value, vic_regs + 0x1a0);
-            wmb();
-            pr_info("VIC CRITICAL reg 0x1a0 = 0x%x (unlock key from Binary Ninja)\n", reg_1a0_value);
-            pr_info("*** THIS IS THE MISSING VIC UNLOCK STEP! ***\n");
-        }
-        
-        /* *** CRITICAL: ADD MISSING REGISTER WRITES BEFORE WAIT *** */
-        pr_info("*** STEP 1.5: ADDITIONAL UNLOCK REGISTERS ***\n");
-        writel(0x1, vic_regs + 0x1a4);    /* Enable register */
-        writel(0x0, vic_regs + 0x1a8);    /* Clear pending state */
-        writel(0x4140, vic_regs + 0x1ac); /* Frame mode */
-        writel(0x10, vic_regs + 0x1b0);   /* Buffer control */
+        /* Final VIC configuration for streaming */
+        writel(2, vic_regs + 0xc);           /* MIPI interface mode */
+        writel(0x40000, vic_regs + 0x10);    /* MIPI control value */
+        writel(1920, vic_regs + 0x18);       /* Stride */
+        writel(0x4140, vic_regs + 0x1ac);    /* Progressive frame mode */
+        writel(0x4140, vic_regs + 0x1a8);    /* Frame mode duplicate */
+        writel(0x10, vic_regs + 0x1b0);      /* Buffer control */
         wmb();
         
-        /* *** STEP 2: EXACT BINARY NINJA VIC UNLOCK SEQUENCE *** */
-        pr_info("*** STEP 2: IMPLEMENTING EXACT BINARY NINJA VIC UNLOCK SEQUENCE ***\n");
-        
-        /* Wait for VIC control register to be ready (Binary Ninja: while (*$v1_30 != 0)) */
-        {
-            int timeout = 1000;
-            u32 vic_status;
-            pr_info("*** STEP 2.1: WAIT FOR VIC READY (Binary Ninja while loop) ***\n");
-            while ((vic_status = readl(vic_regs + 0x0)) != 0 && timeout--) {
-                cpu_relax();
-            }
-            pr_info("VIC ready wait complete: status=0x%x, timeout_remaining=%d\n", vic_status, timeout);
-        }
-        
-        /* *** STEP 2.2: FINAL VIC ENABLE (Binary Ninja: *$v0_121 = 1) *** */
-        pr_info("*** STEP 2.2: FINAL VIC ENABLE (Binary Ninja *$v0_121 = 1) ***\n");
-        writel(1, vic_regs + 0x0);
-        wmb();
-        pr_info("VIC final enable: wrote 1 to control register 0x0\n");
-        
-        /* *** STEP 2.3: TEST VIC REGISTER UNLOCK *** */
-        pr_info("*** STEP 2.3: TESTING VIC REGISTER UNLOCK ***\n");
-        usleep_range(100, 200); /* Allow hardware to process unlock */
-        
-        /* Test if VIC unlock worked with exact Binary Ninja sequence */
-        {
-            u32 test_value = 0x12345678;
-            writel(test_value, vic_regs + 0x308);
-            wmb();
-            u32 test_read = readl(vic_regs + 0x308);
-            
-            if (test_read == test_value) {
-                pr_info("*** VIC UNLOCK SUCCESS: Binary Ninja sequence worked! ***\n");
-                writel(0x0, vic_regs + 0x308); /* Clear test value */
-                wmb();
-                return 0;
-            } else {
-                pr_info("*** VIC still protected after Binary Ninja sequence: wrote 0x%x, read 0x%x ***\n", test_value, test_read);
-            }
-        }
-        
-        /* If Binary Ninja sequence failed, return error */
-        pr_err("*** VIC START SEQUENCE FAILED: -13 ***\n");
-        pr_err("*** VIC registers remain protected ***\n");
-        return -EACCES;
-        
-        /* Verify VIC is now unlocked for register programming */
-        {
-            u32 test_reg = readl(vic_regs + 0x0);
-            pr_info("VIC unlock verification: reg 0x0 = 0x%x\n", test_reg);
-        }
-        
-        /* *** STEP 2: NOW PROGRAM VIC REGISTERS (AFTER UNLOCK) *** */
-        pr_info("*** STEP 2: VIC REGISTER PROGRAMMING (AFTER UNLOCK) ***\n");
-        
-        /* *** CRITICAL: FIXED REGISTER 0x100 CALCULATION FROM BINARY NINJA *** */
-        /* From Binary Ninja: Calculate register 0x100 based on pixel format and width */
-        {
-            u32 pixel_format = 0x2B; /* RAW10 format (0x2B) for GC2053 - not 0x7c! */
-            u32 frame_width = 1920;  /* Frame width */
-            u32 multiplier;
-            u32 calc_result;
-            
-            /* FIXED: Pixel format multiplier calculation from Binary Ninja */
-            /* GC2053 uses RAW10 format, so we need 10-bit calculation */
-            if (pixel_format == 0x2A) {
-                multiplier = 8;  /* RAW8 format */
-            } else if (pixel_format == 0x2B) {
-                multiplier = 0xa; /* RAW10 format (GC2053) */
-            } else if (pixel_format == 0x2C) {
-                multiplier = 0xc; /* RAW12 format */
-            } else if (pixel_format == 0x2D) {
-                multiplier = 0x10; /* RAW16 format */
-            } else {
-                /* Fallback for unknown formats - use RAW10 for GC2053 */
-                multiplier = 0xa;
-                pr_warn("VIC: Unknown pixel format 0x%x, using RAW10 multiplier\n", pixel_format);
-            }
-            
-            /* Complex calculation: (multiplier * width) with bit operations */
-            calc_result = multiplier * frame_width;
-            u32 reg_100_value = (calc_result >> 5) + ((calc_result & 0x1f) ? 1 : 0);
-            
-            writel(reg_100_value, vic_regs + 0x100);
-            wmb();
-            pr_info("VIC reg 0x100 = 0x%x (FIXED: format=0x%x, width=%d, mult=%d)\n",
-                   reg_100_value, pixel_format, frame_width, multiplier);
-        }
-        
-        /* Configure VIC DMA and buffer management */
-        writel(0x100010, vic_regs + 0x1a4);  /* DMA config from Binary Ninja */
-        wmb();
-        
-        /* Set VIC interface type to MIPI (2) */
-        writel(2, vic_regs + 0xc);
-        wmb();
-        
-        /* Configure sensor pixel format register */
-        writel(0x7c, vic_regs + 0x14);  /* Format register from sensor config */
-        wmb();
-        
-        /* Set frame dimensions (critical for VIC to accept configuration) */
-        writel((1920 << 16) | 1080, vic_regs + 0x4);
-        wmb();
-        
-        /* *** CRITICAL: COMPLEX MIPI CONTROL REGISTER 0x10C CALCULATION FROM BINARY NINJA *** */
-        /* From Binary Ninja: Build complex control value from multiple sensor attributes */
-        {
-            /* GC2053 sensor attribute values from Binary Ninja analysis */
-            u32 attr_0x40 = 0; /* MIPI clock phase */
-            u32 attr_0x44 = 1; /* MIPI clock polarity */
-            u32 attr_0x48 = 0; /* MIPI data phase */
-            u32 attr_0x5c = 1; /* MIPI enable flag */
-            u32 attr_0x60 = 2; /* MIPI lane count */
-            u32 attr_0x64 = 0; /* MIPI settle time */
-            u32 attr_0x68 = 0x12; /* MIPI timing config */
-            u32 attr_0x6c = 0x34; /* MIPI control flags */
-            u32 attr_0x70 = 1; /* Frame sync mode */
-            u32 attr_0x74 = 1; /* Frame mode (progressive) */
-            u32 attr_0x78 = 0x2; /* Additional MIPI config */
-            
-            /* Complex bit manipulation from Binary Ninja analysis */
-            u32 mipi_ctrl_part1 = (attr_0x40 << 0x19) | (attr_0x44 << 0x18) | attr_0x78 |
-                                  (attr_0x48 << 0x17) | (attr_0x5c << 0x16) | (attr_0x60 << 0x14);
-            u32 mipi_ctrl_part2 = mipi_ctrl_part1 | (attr_0x64 << 0x12);
-            u32 mipi_ctrl_final = mipi_ctrl_part2 | (attr_0x68 << 0xc) | (attr_0x6c << 8) |
-                                  (attr_0x74 << 4) | (attr_0x70 << 2);
-            
-            /* For GC2053, use known working value as fallback */
-            if (mipi_ctrl_final == 0) {
-                mipi_ctrl_final = 0x40000; /* Default MIPI value for GC2053 */
-            }
-            
-            writel(mipi_ctrl_final, vic_regs + 0x10c);
-            wmb();
-            pr_info("VIC reg 0x10c = 0x%x (complex MIPI control calculation)\n", mipi_ctrl_final);
-        }
-        
-        /* Configure MIPI lane and width information */
-        writel((2 << 16) | 1920, vic_regs + 0x110);  /* 2 lanes, 1920 width */
-        writel(1080, vic_regs + 0x114);               /* Height */
-        writel(0, vic_regs + 0x118);                  /* Additional config 1 */
-        writel(0, vic_regs + 0x11c);                  /* Additional config 2 */
-        wmb();
-        
-        /* *** CRITICAL: FRAME MODE CONFIGURATION FROM BINARY NINJA *** */
-        /* From Binary Ninja: Frame mode depends on sensor attribute 0x74 */
-        {
-            u32 frame_mode_attr = 0; /* Sensor frame mode attribute (0x74 offset) */
-            u32 frame_mode_value;
-            
-            /* Frame mode selection from Binary Ninja logic - use actual sensor values */
-            frame_mode_attr = 1; /* GC2053 uses progressive mode */
-            if (frame_mode_attr == 0) {
-                frame_mode_value = 0x4440; /* Interlaced mode */
-            } else if (frame_mode_attr == 1) {
-                frame_mode_value = 0x4140; /* Progressive mode (GC2053) */
-            } else if (frame_mode_attr == 2) {
-                frame_mode_value = 0x4240; /* Alternative mode */
-            } else {
-                pr_err("VIC: Unsupported frame mode %d\n", frame_mode_attr);
-                frame_mode_value = 0x4140; /* Fallback to progressive for GC2053 */
-            }
-            
-            writel(frame_mode_value, vic_regs + 0x1ac);  /* Frame mode config */
-            writel(frame_mode_value, vic_regs + 0x1a8);  /* Frame mode duplicate */
-            wmb();
-            pr_info("VIC frame mode registers 0x1ac/0x1a8 = 0x%x (mode=%d)\n",
-                   frame_mode_value, frame_mode_attr);
-        }
-        
-        /* Buffer control register */
-        writel(0x10, vic_regs + 0x1b0);    /* Buffer control register */
-        wmb();
-        
-        /* Configure additional dimension registers */
-        writel((2 << 16) | 1920, vic_regs + 0x104);  /* Additional width config */
-        writel(1080, vic_regs + 0x108);               /* Additional height config */
-        wmb();
-        
-        /* *** CRITICAL: MISSING REGISTER 0x1a0 FROM BINARY NINJA *** */
-        /* From Binary Ninja: *(*(arg1 + 0xb8) + 0x1a0) = *($v1_27 + 0x74) << 4 | *($v1_27 + 0x78) */
-        /* This is built from sensor attributes +0x74 and +0x78 */
-        u32 reg_1a0_value = (0 << 4) | 0;  /* Default for GC2053 - may need sensor-specific values */
-        writel(reg_1a0_value, vic_regs + 0x1a0);
-        wmb();
-        
-        /* Configure additional dimension registers (from Binary Ninja analysis) */
-        writel((2 << 16) | 1920, vic_regs + 0x104);  /* Additional width config */
-        writel(1080, vic_regs + 0x108);               /* Additional height config */
-        wmb();
-        
-        /* Configure MIPI-specific timing and control registers */
-        writel(0x40000, vic_regs + 0x10);   /* MIPI control value from Binary Ninja */
-        writel(1920, vic_regs + 0x18);      /* Stride configuration */
-        wmb();
-        
-        pr_info("*** STEP 3: REGISTER PROGRAMMING COMPLETE - NOW TEST REGISTER ACCESS ***\n");
-        
-        /* Test if registers are now writable after unlock */
-        {
-            u32 test_value = 0x12345678;
-            writel(test_value, vic_regs + 0x308);
-            wmb();
-            u32 read_value = readl(vic_regs + 0x308);
-            
-            if (read_value == test_value) {
-                pr_info("*** SUCCESS! VIC REGISTERS NOW WRITABLE AFTER UNLOCK! ***\n");
-                /* Clear test value */
-                writel(0x0, vic_regs + 0x308);
-                wmb();
-            } else {
-                pr_err("*** VIC REGISTERS STILL PROTECTED: wrote 0x%x, read 0x%x ***\n",
-                       test_value, read_value);
-                pr_err("*** VIC unlock sequence may need additional steps ***\n");
-            }
-        }
-        
-        pr_info("*** VIC INITIALIZATION SEQUENCE COMPLETE ***\n");
-        
-        /* *** RE-ENABLE VIC INTERRUPTS *** */
-        pr_info("*** STEP 4: RE-ENABLE VIC INTERRUPTS (REQUIRED BY vic_core_s_stream) ***\n");
-        tx_vic_enable_irq_complete(isp_dev);
-        
-        /* *** TEST VIC REGISTER UNLOCK *** */
-        pr_info("*** TESTING VIC REGISTER UNLOCK AFTER COMPLETE SEQUENCE ***\n");
-        
-        /* Test VIC MDMA register write access */
-        writel(0x12345678, vic_regs + 0x308);
-        wmb();
-        u32 test_read = readl(vic_regs + 0x308);
-        
-        if (test_read == 0x12345678) {
-            pr_info("*** SUCCESS! VIC REGISTERS UNLOCKED AFTER COMPLETE SEQUENCE! ***\n");
-            writel(0x0, vic_regs + 0x308); /* Clear test value */
-            wmb();
-            return 0;
-        } else {
-            pr_err("*** VIC registers still protected: wrote 0x12345678, read 0x%x ***\n", test_read);
-            pr_err("*** VIC unlock may need additional steps or different register values ***\n");
-            return -EACCES;
-        }
-        
+        pr_info("*** VIC STREAMING CONFIGURATION COMPLETE ***\n");
+        return 0;
     } else {
-        pr_err("Unsupported interface type: %d\n", interface_type);
-        
-        /* *** RE-ENABLE VIC INTERRUPTS BEFORE FAILING *** */
-        tx_vic_enable_irq_complete(isp_dev);
-        return -EINVAL;
+        pr_err("VIC not in unlocked state (state=%d)\n", vic_dev ? vic_dev->state : -1);
+        return -EACCES;
     }
 }
 
