@@ -3906,87 +3906,44 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         pr_info("VIC unlock key calculation: (0x%x << 4) | 0x%x = 0x%x\n",
                                sensor_attr_0x74, sensor_attr_0x78, unlock_key);
                         
-                        /* Execute complete VIC unlock sequence with calculated key */
-                        pr_info("*** EXECUTING COMPLETE VIC UNLOCK SEQUENCE ***\n");
+                        /* Execute VIC MDMA enable sequence from Binary Ninja - THIS UNLOCKS VIC! */
+                        pr_info("*** EXECUTING VIC MDMA ENABLE SEQUENCE FROM BINARY NINJA ***\n");
                         
-                        /* Step 1: Write 2 to VIC control register (config mode) */
-                        writel(2, vic_regs + 0x0);
+                        /* Step 1: CRITICAL - Enable VIC MDMA (this unlocks register access!) */
+                        writel(1, vic_regs + 0x308);
                         wmb();
-                        pr_info("VIC Step 1: Write 2 to reg 0x0 (config mode)\n");
+                        pr_info("VIC Step 1: Write 1 to reg 0x308 (MDMA enable - CRITICAL!)\n");
                         
-                        /* Step 2: Write 4 to VIC control register (unlock mode) */
-                        writel(4, vic_regs + 0x0);
+                        /* Step 2: Configure frame dimensions */
+                        u32 frame_dims = (1920 << 16) | 1080;
+                        writel(frame_dims, vic_regs + 0x304);
                         wmb();
-                        pr_info("VIC Step 2: Write 4 to reg 0x0 (unlock mode)\n");
+                        pr_info("VIC Step 2: Write 0x%x to reg 0x304 (frame dimensions)\n", frame_dims);
                         
-                        /* Step 3: CRITICAL - Write calculated unlock key to register 0x1a0 */
-                        writel(unlock_key, vic_regs + 0x1a0);
+                        /* Step 3: Configure stride (width * 2 for YUV format) */
+                        u32 stride = 1920 << 1;
+                        writel(stride, vic_regs + 0x310);
+                        writel(stride, vic_regs + 0x314);
                         wmb();
-                        pr_info("VIC Step 3: Write 0x%x to reg 0x1a0 (calculated unlock key)\n", unlock_key);
+                        pr_info("VIC Step 3: Write %d to regs 0x310/0x314 (stride)\n", stride);
                         
-                        /* Step 4: Wait for VIC register to become 0 (ready state) */
-                        {
-                            u32 timeout = 1000;
-                            u32 vic_status;
-                            pr_info("VIC Step 4: Wait for ready (register 0x0 becomes 0)\n");
-                            while (timeout > 0) {
-                                vic_status = readl(vic_regs + 0x0);
-                                if (vic_status == 0) {
-                                    pr_info("VIC ready after %d iterations\n", 1000 - timeout);
-                                    break;
-                                }
-                                udelay(10);
-                                timeout--;
-                            }
-                            
-                            if (timeout == 0) {
-                                pr_err("*** VIC TIMEOUT WITH CALCULATED KEY 0x%x ***\n", unlock_key);
-                                /* Try alternative unlock values for GC2053 */
-                                u32 alt_keys[] = {0x10, 0x02, 0x12, 0x16, 0x1a, 0x22};
-                                int alt_found = 0;
-                                
-                                for (int k = 0; k < sizeof(alt_keys)/sizeof(alt_keys[0]); k++) {
-                                    pr_info("VIC: Trying alternative unlock key 0x%x\n", alt_keys[k]);
-                                    
-                                    /* Reset and try alternative key */
-                                    writel(0, vic_regs + 0x0);
-                                    wmb();
-                                    udelay(10);
-                                    
-                                    writel(2, vic_regs + 0x0);
-                                    wmb();
-                                    writel(4, vic_regs + 0x0);
-                                    wmb();
-                                    writel(alt_keys[k], vic_regs + 0x1a0);
-                                    wmb();
-                                    
-                                    timeout = 1000;
-                                    while (timeout > 0) {
-                                        vic_status = readl(vic_regs + 0x0);
-                                        if (vic_status == 0) {
-                                            pr_info("*** VIC UNLOCK SUCCESS WITH KEY 0x%x! ***\n", alt_keys[k]);
-                                            alt_found = 1;
-                                            break;
-                                        }
-                                        udelay(10);
-                                        timeout--;
-                                    }
-                                    
-                                    if (alt_found) break;
-                                }
-                                
-                                if (!alt_found) {
-                                    pr_err("*** ALL VIC UNLOCK KEYS FAILED - REGISTERS REMAIN PROTECTED ***\n");
-                                }
-                            }
-                        }
-                        
-                        /* Step 5: Write 1 to enable VIC */
-                        writel(1, vic_regs + 0x0);
+                        /* Step 4: Configure buffer addresses */
+                        u32 frame_size = stride * 1080;
+                        u32 buffer_base = 0x6300000; /* From logs */
+                        writel(buffer_base, vic_regs + 0x318);
+                        writel(buffer_base + frame_size, vic_regs + 0x31c);
+                        writel(buffer_base + (frame_size * 2), vic_regs + 0x320);
+                        writel(buffer_base + (frame_size * 3), vic_regs + 0x324);
                         wmb();
-                        pr_info("VIC Step 5: Write 1 to reg 0x0 (enable VIC)\n");
+                        pr_info("VIC Step 4: Configured buffer addresses (base=0x%x, size=%d)\n", buffer_base, frame_size);
                         
-                        /* Step 6: Test VIC register accessibility */
+                        /* Step 5: Configure stream control register */
+                        u32 stream_ctrl = 0x80000020; /* From Binary Ninja */
+                        writel(stream_ctrl, vic_regs + 0x300);
+                        wmb();
+                        pr_info("VIC Step 5: Write 0x%x to reg 0x300 (stream control)\n", stream_ctrl);
+                        
+                        /* Step 6: Test VIC register accessibility after MDMA enable */
                         {
                             u32 test_val = 0x12345678;
                             writel(test_val, vic_regs + 0x4);
@@ -3994,7 +3951,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                             u32 read_val = readl(vic_regs + 0x4);
                             
                             if (read_val == test_val) {
-                                pr_info("*** SUCCESS: VIC REGISTERS UNLOCKED! ***\n");
+                                pr_info("*** SUCCESS: VIC REGISTERS UNLOCKED BY MDMA ENABLE! ***\n");
                                 /* Clear test value */
                                 writel(0x0, vic_regs + 0x4);
                                 wmb();
@@ -4005,7 +3962,33 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                                     pr_info("VIC device state set to UNLOCKED (2)\n");
                                 }
                             } else {
-                                pr_err("*** VIC registers still protected: wrote 0x%x, read 0x%x ***\n", test_val, read_val);
+                                pr_err("*** VIC registers still protected after MDMA enable: wrote 0x%x, read 0x%x ***\n", test_val, read_val);
+                                
+                                /* Try the traditional unlock sequence as fallback */
+                                pr_info("*** FALLBACK: Trying traditional unlock sequence ***\n");
+                                writel(2, vic_regs + 0x0);
+                                wmb();
+                                writel(4, vic_regs + 0x0);
+                                wmb();
+                                writel(unlock_key, vic_regs + 0x1a0);
+                                wmb();
+                                
+                                u32 timeout = 1000;
+                                u32 vic_status;
+                                while (timeout > 0) {
+                                    vic_status = readl(vic_regs + 0x0);
+                                    if (vic_status == 0) break;
+                                    udelay(10);
+                                    timeout--;
+                                }
+                                
+                                if (timeout > 0) {
+                                    writel(1, vic_regs + 0x0);
+                                    wmb();
+                                    pr_info("Fallback unlock sequence completed\n");
+                                } else {
+                                    pr_err("Fallback unlock sequence also failed\n");
+                                }
                             }
                         }
                         
