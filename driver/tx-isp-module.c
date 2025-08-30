@@ -3876,62 +3876,8 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                                     if (ret == 0) {
                                         pr_info("*** VIC START SEQUENCE SUCCESS - VIC REGISTERS UNLOCKED! ***\n");
                                         
-                                        /* Now test VIC MDMA configuration with unlocked registers */
-                                        pr_info("*** TESTING VIC MDMA CONFIGURATION WITH UNLOCKED REGISTERS ***\n");
-                                        
-                                        /* Configure VIC MDMA using vic_mdma_enable equivalent */
-                                        u32 frame_width = 1920;
-                                        u32 frame_height = 1080;
-                                        u32 stride = frame_width << 1; /* Width * 2 for YUV */
-                                        u32 frame_size = stride * frame_height;
-                                        u32 buffer_base = 0x6300000; /* Buffer address from ISP setup */
-                                        
-                                        /* VIC MDMA enable sequence from Binary Ninja vic_mdma_enable */
-                                        writel(1, isp_dev->vic_regs + 0x308); /* MDMA enable */
-                                        wmb();
-                                        writel((frame_width << 16) | frame_height, isp_dev->vic_regs + 0x304); /* Dimensions */
-                                        wmb();
-                                        writel(stride, isp_dev->vic_regs + 0x310); /* Stride */
-                                        wmb();
-                                        writel(stride, isp_dev->vic_regs + 0x314); /* Stride duplicate */
-                                        wmb();
-                                        
-                                        /* Configure buffer addresses (simplified version) */
-                                        writel(buffer_base, isp_dev->vic_regs + 0x318);
-                                        writel(buffer_base + frame_size, isp_dev->vic_regs + 0x31c);
-                                        writel(buffer_base + (frame_size * 2), isp_dev->vic_regs + 0x320);
-                                        writel(buffer_base + (frame_size * 3), isp_dev->vic_regs + 0x324);
-                                        wmb();
-                                        
-                                        /* Configure stream control register */
-                                        writel(0x80000020, isp_dev->vic_regs + 0x300); /* Stream enable */
-                                        wmb();
-                                        
-                                        /* Verify MDMA configuration */
-                                        {
-                                            u32 verify_308 = readl(isp_dev->vic_regs + 0x308);
-                                            u32 verify_304 = readl(isp_dev->vic_regs + 0x304);
-                                            u32 verify_310 = readl(isp_dev->vic_regs + 0x310);
-                                            u32 verify_300 = readl(isp_dev->vic_regs + 0x300);
-                                            
-                                            pr_info("*** VIC MDMA FINAL VERIFICATION ***\n");
-                                            pr_info("VIC MDMA enable 0x308: 0x%x (should be 1) %s\n",
-                                                   verify_308, (verify_308 == 1) ? "✓" : "✗");
-                                            pr_info("VIC MDMA dims 0x304: 0x%x (should be 0x%x) %s\n",
-                                                   verify_304, (frame_width << 16) | frame_height,
-                                                   (verify_304 == ((frame_width << 16) | frame_height)) ? "✓" : "✗");
-                                            pr_info("VIC MDMA stride 0x310: 0x%x (should be 0x%x) %s\n",
-                                                   verify_310, stride, (verify_310 == stride) ? "✓" : "✗");
-                                            pr_info("VIC stream ctrl 0x300: 0x%x (should be 0x80000020) %s\n",
-                                                   verify_300, (verify_300 == 0x80000020) ? "✓" : "✗");
-                                            
-                                            if (verify_308 == 1 && verify_310 == stride &&
-                                                verify_304 == ((frame_width << 16) | frame_height)) {
-                                                pr_info("*** PERFECT! VIC MDMA FULLY CONFIGURED! GREEN VIDEO SHOULD BE FIXED! ***\n");
-                                            } else {
-                                                pr_info("*** VIC MDMA PARTIALLY CONFIGURED - PROGRESS MADE! ***\n");
-                                            }
-                                        }
+                                        /* VIC MDMA configuration is complete - don't overwrite it */
+                                        pr_info("*** VIC MDMA CONFIGURATION PRESERVED ***\n");
                                         
                                     } else {
                                         pr_err("*** VIC START SEQUENCE FAILED: %d ***\n", ret);
