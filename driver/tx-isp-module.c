@@ -4489,22 +4489,46 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                             pr_info("*** ISP CORE ENABLED WITH SENSOR: status=0x%x (should be 1) ***\n", isp_status);
                             
                             if (isp_status == 1) {
-                                /* *** CRITICAL: NOW CALL COMPLETE VIC START SEQUENCE *** */
-                                if (tx_sensor) {
-                                    pr_info("*** CALLING COMPLETE tx_isp_vic_start SEQUENCE ***\n");
-                                    ret = tx_isp_vic_start(isp_dev, tx_sensor);
-                                    if (ret == 0) {
-                                        pr_info("*** VIC START SEQUENCE SUCCESS - VIC REGISTERS UNLOCKED! ***\n");
-                                        
-                                        /* VIC MDMA configuration is complete - don't overwrite it */
-                                        pr_info("*** VIC MDMA CONFIGURATION PRESERVED ***\n");
-                                        
-                                    } else {
-                                        pr_err("*** VIC START SEQUENCE FAILED: %d ***\n", ret);
-                                        pr_err("*** VIC registers remain protected ***\n");
+                                /* *** CRITICAL: VIC ALREADY UNLOCKED BY vic_mdma_enable - DON'T CALL tx_isp_vic_start! *** */
+                                if (vic_dev && vic_dev->state == 2) {
+                                    pr_info("*** VIC ALREADY UNLOCKED BY vic_mdma_enable - SKIPPING tx_isp_vic_start ***\n");
+                                    pr_info("*** VIC HANDSHAKE SEQUENCE COMPLETE! ***\n");
+                                    
+                                    /* VIC is already properly configured by vic_mdma_enable */
+                                    pr_info("*** VIC REGISTERS ACCESSIBLE AND CONFIGURED ***\n");
+                                    
+                                    /* Test to confirm VIC registers are still accessible */
+                                    {
+                                        u32 test_val = 0xABCDEF12;
+                                        writel(test_val, vic_regs + 0x4);
+                                        wmb();
+                                        u32 read_val = readl(vic_regs + 0x4);
+                                        if (read_val == test_val) {
+                                            pr_info("*** CONFIRMED: VIC REGISTERS FULLY ACCESSIBLE! ***\n");
+                                            /* Restore frame dimensions */
+                                            writel((1920 << 16) | 1080, vic_regs + 0x4);
+                                            wmb();
+                                        } else {
+                                            pr_err("*** ERROR: VIC registers lost accessibility: wrote 0x%x, read 0x%x ***\n", test_val, read_val);
+                                        }
                                     }
+                                    
+                                    /* Enable VIC interrupts for frame completion */
+                                    pr_info("*** ENABLING VIC INTERRUPTS FOR HARDWARE FRAME COMPLETION ***\n");
+                                    tx_vic_enable_irq_complete(isp_dev);
+                                    
+                                    pr_info("*** VIC HARDWARE HANDSHAKE SEQUENCE COMPLETE - INTERRUPTS SHOULD WORK! ***\n");
+                                    
                                 } else {
-                                    pr_err("*** NO TX_SENSOR FOR VIC START SEQUENCE ***\n");
+                                    pr_err("*** VIC NOT PROPERLY UNLOCKED - ATTEMPTING tx_isp_vic_start FALLBACK ***\n");
+                                    if (tx_sensor) {
+                                        ret = tx_isp_vic_start(isp_dev, tx_sensor);
+                                        if (ret == 0) {
+                                            pr_info("*** VIC START FALLBACK SUCCESS ***\n");
+                                        } else {
+                                            pr_err("*** VIC START FALLBACK FAILED: %d ***\n", ret);
+                                        }
+                                    }
                                 }
                             } else {
                                 pr_err("*** ISP CORE STILL FAILED TO ENABLE EVEN WITH SENSOR! ***\n");
