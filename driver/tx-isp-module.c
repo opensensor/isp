@@ -4161,8 +4161,17 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                 void __iomem *vic_regs = isp_dev->vic_regs;
                 struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
                 
-                /* *** STEP 1: CALL PROPER vic_pipo_mdma_enable FUNCTION *** */
-                pr_info("*** CALLING vic_pipo_mdma_enable FUNCTION ***\n");
+                /* *** STEP 1: CALL tisp_init FIRST TO ENABLE ISP CORE *** */
+                pr_info("*** CALLING tisp_init FUNCTION FIRST ***\n");
+                int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
+                if (tisp_result == 0) {
+                    pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED! ***\n");
+                } else {
+                    pr_err("*** tisp_init FAILED: %d ***\n", tisp_result);
+                }
+                
+                /* *** STEP 2: NOW CALL vic_pipo_mdma_enable AFTER ISP IS ENABLED *** */
+                pr_info("*** CALLING vic_pipo_mdma_enable FUNCTION AFTER ISP CORE ENABLED ***\n");
                 void *mdma_result = vic_pipo_mdma_enable(vic_dev);
                 if (mdma_result) {
                     pr_info("*** vic_pipo_mdma_enable SUCCESS - VIC UNLOCKED! ***\n");
@@ -4170,15 +4179,6 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                     vic_dev->state = 2;
                 } else {
                     pr_err("*** vic_pipo_mdma_enable FAILED ***\n");
-                }
-                
-                /* *** STEP 2: CALL PROPER tisp_init FUNCTION *** */
-                pr_info("*** CALLING tisp_init FUNCTION ***\n");
-                int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
-                if (tisp_result == 0) {
-                    pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED! ***\n");
-                } else {
-                    pr_err("*** tisp_init FAILED: %d ***\n", tisp_result);
                 }
                 
                 /* Verify ISP core enabled with sensor */
