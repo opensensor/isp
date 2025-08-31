@@ -10,20 +10,6 @@
 /* VIC Constants */
 #define VIC_MAX_CHAN        2
 
-/* VIC Device Structure - matches Binary Ninja reference */
-struct vic_device {
-    int state;                      /* VIC state machine */
-    struct mutex state_lock;        /* State protection */
-    void __iomem *vic_regs;        /* VIC register base */
-    u32 width;                     /* Frame width */
-    u32 height;                    /* Frame height */
-    u32 buffer_count;              /* Number of buffers */
-    int streaming;                 /* Streaming state flag */
-    spinlock_t lock;               /* Register access protection */
-    bool processing;               /* Processing state */
-    struct completion frame_complete; /* Frame completion */
-};
-
 /* VIC Functions */
 int tx_isp_vic_probe(struct platform_device *pdev);
 int tx_isp_vic_remove(struct platform_device *pdev);

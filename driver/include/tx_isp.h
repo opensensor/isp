@@ -56,13 +56,16 @@ struct frame_source_device;
 
 
 struct vic_device {
-    void __iomem *regs;         // Base registers
+    void __iomem *regs;         // Base registers  
+    void __iomem *vic_regs;     // VIC register base (for Binary Ninja compatibility)
     struct tx_isp_subdev *sd;
     spinlock_t lock;            // IRQ lock
     struct mutex state_lock;    // Now should be 32-bit aligned
 
     // State tracking
     int state;                  // Track states: 1=INIT, 2=READY, etc
+    int streaming;              // Streaming state flag (for Binary Ninja compatibility)
+    u32 buffer_count;           // Number of buffers (for Binary Ninja compatibility)
     u32 mdma_en;               // Group 32-bit values together
     u32 ch0_buf_idx;
     u32 ch0_sub_get_num;
