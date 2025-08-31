@@ -4490,51 +4490,77 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                             } else {
                                 pr_err("*** ERROR: VIC registers lost accessibility: wrote 0x%x, read 0x%x ***\n", test_val, read_val);
                                 
-                                /* CRITICAL: Re-unlock VIC registers after ISP enable */
-                                pr_info("*** ATTEMPTING VIC RE-UNLOCK AFTER ISP ENABLE ***\n");
+                                /* CRITICAL: Re-unlock VIC registers using private_reset_tx_isp_module */
+                                pr_info("*** ATTEMPTING VIC RE-UNLOCK USING PRIVATE_RESET_TX_ISP_MODULE ***\n");
                                 
-                                /* Binary Ninja VIC unlock sequence - MUST be done after ISP enable */
-                                writel(2, vic_regs + 0x0);
-                                wmb();
-                                msleep(5);
-                                
-                                writel(4, vic_regs + 0x0);
-                                wmb();
-                                msleep(5);
-                                
-                                /* Wait for unlock completion */
-                                int timeout = 1000;
-                                while (timeout > 0) {
-                                    u32 status = readl(vic_regs + 0x0);
-                                    if (status == 0) {
-                                        pr_info("VIC re-unlock completed after %d iterations\n", 1000 - timeout);
-                                        break;
-                                    }
-                                    udelay(10);
-                                    timeout--;
-                                }
-                                
-                                if (timeout > 0) {
-                                    /* Enable VIC processing after unlock */
-                                    writel(1, vic_regs + 0x0);
-                                    wmb();
-                                    msleep(5);
+                                /* Call Binary Ninja private_reset_tx_isp_module to reset and re-unlock VIC */
+                                int reset_result = private_reset_tx_isp_module(0);
+                                if (reset_result == 0) {
+                                    pr_info("*** TX-ISP MODULE RESET SUCCESS - VIC SHOULD BE UNLOCKED ***\n");
                                     
-                                    /* Test accessibility again */
+                                    /* Wait for reset to complete */
+                                    msleep(20);
+                                    
+                                    /* Test VIC accessibility after reset */
                                     writel(test_val, vic_regs + 0x4);
                                     wmb();
                                     read_val = readl(vic_regs + 0x4);
                                     if (read_val == test_val) {
-                                        pr_info("*** SUCCESS: VIC REGISTERS RE-UNLOCKED AFTER ISP ENABLE! ***\n");
+                                        pr_info("*** SUCCESS: VIC REGISTERS ACCESSIBLE AFTER MODULE RESET! ***\n");
                                         /* Restore frame dimensions */
                                         writel((1920 << 16) | 1080, vic_regs + 0x4);
                                         wmb();
+                                        
+                                        /* Re-enable VIC processing */
+                                        writel(1, vic_regs + 0x0);
+                                        wmb();
+                                        pr_info("VIC processing re-enabled after reset\n");
+                                        
                                     } else {
-                                        pr_err("*** FAILED: VIC registers still protected: wrote 0x%x, read 0x%x ***\n", test_val, read_val);
-                                        pr_err("*** VIC UNLOCK SEQUENCE FAILED - WILL USE SOFTWARE SIMULATION ***\n");
+                                        pr_err("*** VIC still protected after reset: wrote 0x%x, read 0x%x ***\n", test_val, read_val);
+                                        
+                                        /* Try manual VIC unlock sequence one more time */
+                                        pr_info("*** TRYING MANUAL VIC UNLOCK AFTER RESET ***\n");
+                                        writel(2, vic_regs + 0x0);
+                                        wmb();
+                                        msleep(10);
+                                        writel(4, vic_regs + 0x0);  
+                                        wmb();
+                                        msleep(10);
+                                        
+                                        /* Wait for unlock */
+                                        int timeout = 2000;
+                                        while (timeout > 0) {
+                                            u32 status = readl(vic_regs + 0x0);
+                                            if (status == 0) {
+                                                pr_info("VIC manual unlock after reset completed\n");
+                                                break;
+                                            }
+                                            udelay(50);
+                                            timeout--;
+                                        }
+                                        
+                                        if (timeout > 0) {
+                                            writel(1, vic_regs + 0x0);
+                                            wmb();
+                                            msleep(5);
+                                            
+                                            /* Final test */
+                                            writel(test_val, vic_regs + 0x4);
+                                            wmb();
+                                            read_val = readl(vic_regs + 0x4);
+                                            if (read_val == test_val) {
+                                                pr_info("*** FINAL SUCCESS: VIC ACCESSIBLE AFTER MANUAL UNLOCK! ***\n");
+                                                writel((1920 << 16) | 1080, vic_regs + 0x4);
+                                                wmb();
+                                            } else {
+                                                pr_err("*** FINAL FAILURE: VIC permanently protected ***\n");
+                                            }
+                                        }
                                     }
                                 } else {
-                                    pr_err("*** VIC RE-UNLOCK TIMEOUT - REGISTERS PERMANENTLY PROTECTED ***\n");
+                                    pr_err("*** TX-ISP MODULE RESET FAILED: %d ***\n", reset_result);
+                                    pr_err("*** VIC REGISTERS WILL REMAIN PROTECTED ***\n");
                                 }
                             }
                         }
