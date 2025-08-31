@@ -4101,6 +4101,42 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                             pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED! ***\n");
                         } else {
                             pr_err("*** tisp_init FAILED: %d ***\n", tisp_result);
+                            
+                            /* Try forcing ISP enable with extended config as in logs */
+                            pr_info("*** ATTEMPTING EXTENDED ISP CORE ENABLE SEQUENCE ***\n");
+                            
+                            /* Reset ISP core completely */
+                            writel(0x0, isp_regs + 0x800);
+                            wmb();
+                            msleep(50);
+                            
+                            /* Configure extended ISP parameters */
+                            writel(0x3c, isp_regs + 0x804); /* Extended mode from logs */
+                            writel(0x10, isp_regs + 0x1c);  /* Extended control from logs */
+                            wmb();
+                            msleep(20);
+                            
+                            /* Enable with extended verification */
+                            writel(0x1, isp_regs + 0x800);
+                            wmb();
+                            
+                            /* Extended wait like in logs */
+                            {
+                                int wait_attempts = 100;
+                                u32 status;
+                                while (wait_attempts-- > 0) {
+                                    msleep(1);
+                                    status = readl(isp_regs + 0x800);
+                                    if (status == 1) {
+                                        pr_info("*** EXTENDED ISP ENABLE SUCCESS: status=0x%x ***\n", status);
+                                        tisp_result = 0;
+                                        break;
+                                    }
+                                }
+                                if (tisp_result != 0) {
+                                    pr_err("*** EXTENDED ISP ENABLE FAILED: final status=0x%x ***\n", status);
+                                }
+                            }
                         }
                         
                         /* Step 3: ENABLE ISP CORE (from Binary Ninja: system_reg_write(0x800, 1)) */
