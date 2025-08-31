@@ -4131,479 +4131,89 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
             pr_info("*** SKIPPING EARLY SENSOR INIT - tisp_init will handle it ***\n");
             kernel_subdev->vin_state = TX_ISP_MODULE_INIT;  /* Keep in INIT state for tisp_init */
             
-            /* Just ensure the sensor is ready for tisp_init */
-            if (1) {  /* Always proceed to tisp_init setup */
-                pr_info("*** SENSOR READY FOR tisp_init INITIALIZATION ***\n");
-                    
-                    /* *** CRITICAL: COPY SENSOR ATTRIBUTES TO ISP DEVICE *** */
-                    if (tx_sensor && tx_sensor->video.attr) {
-                        pr_info("*** COPYING SENSOR ATTRIBUTES TO ISP DEVICE ***\n");
-                        pr_info("Sensor attr: dbus_type=%d, data_type=%d, chip_id=0x%x\n",
-                                tx_sensor->video.attr->dbus_type, tx_sensor->video.attr->data_type, tx_sensor->video.attr->chip_id);
-                        pr_info("Sensor attr: total_width=%d, total_height=%d\n",
-                                tx_sensor->video.attr->total_width, tx_sensor->video.attr->total_height);
-                        
-                        /* Copy sensor attributes to ISP sensor structure */
-                        memcpy(&tx_sensor->attr, tx_sensor->video.attr, sizeof(struct tx_isp_sensor_attribute));
-                        
-                        /* Update ISP device sensor info */
-                        isp_dev->sensor_width = tx_sensor->video.attr->total_width;
-                        isp_dev->sensor_height = tx_sensor->video.attr->total_height;
-                        
-                        pr_info("*** SENSOR ATTRIBUTES COPIED TO ISP DEVICE ***\n");
-                        pr_info("ISP device sensor: %dx%d, interface_type=%d\n",
-                                isp_dev->sensor_width, isp_dev->sensor_height, tx_sensor->attr.dbus_type);
-                    } else {
-                        pr_err("*** FAILED TO COPY SENSOR ATTRIBUTES - tx_sensor=%p, attr=%p ***\n",
-                               tx_sensor, tx_sensor ? tx_sensor->video.attr : NULL);
-                    }
-                    
-                    /* *** ENABLE ISP CORE NOW THAT SENSOR IS READY *** */
-                    pr_info("*** UNLOCKING VIC WITH SENSOR ATTRIBUTES THEN ENABLING ISP CORE ***\n");
-                    if (isp_dev->vic_regs) {
-                        void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00; /* Get ISP base */
-                        void __iomem *vic_regs = isp_dev->vic_regs;
-                        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-                        
-                        /* *** STEP 1: CALL PROPER vic_pipo_mdma_enable FUNCTION *** */
-                        pr_info("*** CALLING vic_pipo_mdma_enable FUNCTION ***\n");
-                        void *mdma_result = vic_pipo_mdma_enable(vic_dev);
-                        if (mdma_result) {
-                            pr_info("*** vic_pipo_mdma_enable SUCCESS - VIC UNLOCKED! ***\n");
-                            /* Mark VIC as unlocked */
-                            vic_dev->state = 2;
-                        } else {
-                            pr_err("*** vic_pipo_mdma_enable FAILED ***\n");
-                        }
-                        
-                        /* *** STEP 2: CALL PROPER tisp_init FUNCTION *** */
-                        pr_info("*** CALLING tisp_init FUNCTION ***\n");
-                        int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
-                        if (tisp_result == 0) {
-                            pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED! ***\n");
-                        } else {
-                            pr_err("*** tisp_init FAILED: %d ***\n", tisp_result);
-                            
-                            /* Try forcing ISP enable with extended config as in logs */
-                            pr_info("*** ATTEMPTING EXTENDED ISP CORE ENABLE SEQUENCE ***\n");
-                            
-                            /* Reset ISP core completely */
-                            writel(0x0, isp_regs + 0x800);
-                            wmb();
-                            msleep(50);
-                            
-                            /* Configure extended ISP parameters */
-                            writel(0x3c, isp_regs + 0x804); /* Extended mode from logs */
-                            writel(0x10, isp_regs + 0x1c);  /* Extended control from logs */
-                            wmb();
-                            msleep(20);
-                            
-                            /* Enable with extended verification */
-                            writel(0x1, isp_regs + 0x800);
-                            wmb();
-                            
-                            /* Extended wait like in logs */
-                            {
-                                int wait_attempts = 100;
-                                u32 status;
-                                while (wait_attempts-- > 0) {
-                                    msleep(1);
-                                    status = readl(isp_regs + 0x800);
-                                    if (status == 1) {
-                                        pr_info("*** EXTENDED ISP ENABLE SUCCESS: status=0x%x ***\n", status);
-                                        tisp_result = 0;
-                                        break;
-                                    }
-                                }
-                                if (tisp_result != 0) {
-                                    pr_err("*** EXTENDED ISP ENABLE FAILED: final status=0x%x ***\n", status);
-                                }
-                            }
-                        }
-                        
-                        /* Step 3: ENABLE ISP CORE (from Binary Ninja: system_reg_write(0x800, 1)) */
-                        /* *** CRITICAL: WRITE SENSOR CONFIGURATION TO ISP REGISTERS FIRST *** */
-                        pr_info("*** WRITING SENSOR CONFIGURATION STRUCTURE TO ISP REGISTERS ***\n");
-                        
-                        /* Build sensor configuration structure from GC2053 attributes */
-                        /* Define struct outside to ensure proper scope */
-                        struct tisp_sensor_config_structure {
-                            /* Core sensor parameters */
-                            u32 sensor_clock;          /* 0x124: Sensor clock (78MHz for GC2053) */
-                            u32 frame_rate;           /* 0x128: Frame rate (30fps << 16 | 1) */
-                            
-                            /* Frame dimensions */
-                            u32 width;                /* 0x140: Active width (1920) */
-                            u32 height;               /* 0x142: Active height (1080) */
-                            u32 total_width;          /* Total width including blanking (2188) */
-                            u32 total_height;         /* Total height including blanking (1125) */
-                            
-                            /* Timing parameters */
-                            u32 line_time_us;         /* 0x94: Line time in microseconds (11us) */
-                            u32 integration_time;     /* 0x98: Integration time */
-                            u32 max_integration_time; /* 0x9c: Max integration time */
-                            u32 min_integration_time; /* 0xa0: Min integration time */
-                            
-                            /* MIPI interface configuration */
-                            u32 mipi_lanes;           /* Number of MIPI lanes (2) */
-                            u32 mipi_clk_mhz;         /* MIPI clock frequency (600MHz) */
-                            u32 pixel_format;         /* Pixel format (RAW10) */
-                            
-                            /* Gain settings */
-                            u32 max_analog_gain;      /* Maximum analog gain */
-                            u32 max_digital_gain;     /* Maximum digital gain */
-                            
-                            /* Additional sensor-specific parameters */
-                            u32 chip_id;              /* Sensor chip ID (0x2053) */
-                            u32 interface_type;       /* Interface type (1=MIPI) */
-                            
-                            /* Reserved/padding to match reference structure size */
-                            u32 reserved[16];
-                        };
-                        
-                        /* Declare config pointer at function scope level */
-                        struct tisp_sensor_config_structure *config = NULL;
-                        u8 sensor_config_buffer[512]; /* Buffer for sensor config structure */
-                        
-                        {
-                            config = (struct tisp_sensor_config_structure *)sensor_config_buffer;
-                            
-                            if (tx_sensor) {
-                                ret = build_sensor_config_structure(tx_sensor, config);
-                                if (ret == 0) {
-                                    pr_info("*** SENSOR CONFIG STRUCTURE BUILT - WRITING TO ISP REGISTERS ***\n");
-                                    
-                                    /* Write sensor configuration parameters to ISP registers before core enable */
-                                    /* Based on Binary Ninja tisp_init analysis - these registers must be set */
-                                    
-                                    /* Write sensor clock to ISP register 0x124 */
-                                    writel(config->sensor_clock, isp_regs + 0x124);
-                                    wmb();
-                                    pr_info("ISP reg 0x124 = %d Hz (sensor clock)\n", config->sensor_clock);
-                                    
-                                    /* Write frame rate to ISP register 0x128 */
-                                    writel(config->frame_rate, isp_regs + 0x128);
-                                    wmb();
-                                    pr_info("ISP reg 0x128 = 0x%x (frame rate)\n", config->frame_rate);
-                                    
-                                    /* Write frame dimensions to ISP registers 0x140, 0x142 */
-                                    writel(config->width, isp_regs + 0x140);
-                                    writel(config->height, isp_regs + 0x142);
-                                    wmb();
-                                    pr_info("ISP reg 0x140-0x142 = %dx%d (dimensions)\n", config->width, config->height);
-                                    
-                                    /* Write timing parameters to ISP registers 0x94-0xa0 */
-                                    writel(config->line_time_us, isp_regs + 0x94);
-                                    writel(config->integration_time, isp_regs + 0x98);
-                                    writel(config->max_integration_time, isp_regs + 0x9c);
-                                    writel(config->min_integration_time, isp_regs + 0xa0);
-                                    wmb();
-                                    pr_info("ISP timing regs: line_time=%dus, integration=%d-%d-%d\n",
-                                           config->line_time_us, config->min_integration_time,
-                                           config->integration_time, config->max_integration_time);
-                                    
-                                    pr_info("*** ALL SENSOR PARAMETERS WRITTEN TO ISP REGISTERS ***\n");
-                                    
-                                    /* *** CRITICAL: COMPLETE tisp_init PROCESSING LOGIC *** */
-                                    pr_info("*** IMPLEMENTING COMPLETE tisp_init PROCESSING FROM BINARY NINJA ***\n");
-                                    
-                                    /* Additional ISP configuration based on sensor config structure */
-                                    /* From Binary Ninja: tisp_init processes multiple subsystems */
-                                    
-                                    /* Configure ISP core based on sensor MIPI parameters */
-                                    {
-                                        u32 mipi_config = (config->mipi_lanes << 16) | (config->pixel_format & 0xffff);
-                                        writel(mipi_config, isp_regs + 0x12c); /* MIPI config register */
-                                        wmb();
-                                        pr_info("ISP reg 0x12c = 0x%x (MIPI: %d lanes, format 0x%x)\n",
-                                               mipi_config, config->mipi_lanes, config->pixel_format);
-                                    }
-                                    
-                                    /* Configure ISP timing controller with complete sensor timing */
-                                    {
-                                        writel(config->total_width, isp_regs + 0x144);
-                                        writel(config->total_height, isp_regs + 0x148);
-                                        wmb();
-                                        pr_info("ISP total dimensions: %dx%d (with blanking)\n",
-                                               config->total_width, config->total_height);
-                                    }
-                                    
-                                    /* Critical: Set ISP mode register based on sensor interface */
-                                    writel(0x1, isp_regs + 0x14c); /* MIPI mode */
-                                    wmb();
-                                    pr_info("ISP interface mode set to MIPI (0x1)\n");
-                                    
-                                    /* Configure ISP clock domain with sensor clock */
-                                    {
-                                        u32 clk_div = config->sensor_clock / 1000000; /* Convert to MHz */
-                                        writel(clk_div, isp_regs + 0x150);
-                                        wmb();
-                                        pr_info("ISP clock divider = %d (from %dHz sensor clock)\n",
-                                               clk_div, config->sensor_clock);
-                                    }
-                                    
-                                    /* CRITICAL: ISP core enable preparation sequence */
-                                    pr_info("*** ISP CORE ENABLE PREPARATION WITH COMPLETE SENSOR CONFIG ***\n");
-                                    
-                                    /* Step 1: Reset ISP core to clean state */
-                                    writel(0x0, isp_regs + 0x800);
-                                    wmb();
-                                    msleep(10);
-                                    pr_info("ISP core reset to clean state\n");
-                                    
-                                    /* Step 2: Configure ISP core control with sensor-specific values */
-                                    writel(0x10, isp_regs + 0x1c); /* Enhanced control setting */
-                                    wmb();
-                                    pr_info("ISP reg 0x1c = 0x10 (enhanced control with sensor)\n");
-                                    
-                                    /* Step 3: Set ISP mode register with sensor configuration */
-                                    writel(0x3c, isp_regs + 0x804); /* Enhanced mode with sensor config */
-                                    wmb();
-                                    pr_info("ISP reg 0x804 = 0x3c (enhanced mode with sensor config)\n");
-                                    
-                                } else {
-                                    pr_err("*** FAILED TO BUILD SENSOR CONFIG STRUCTURE: %d ***\n", ret);
-                                    pr_err("Proceeding with ISP core enable anyway\n");
-                                }
-                            } else {
-                                pr_warn("*** NO TX_SENSOR - USING DEFAULT SENSOR CONFIG ***\n");
-                                /* Write default sensor configuration */
-                                writel(78000000, isp_regs + 0x124); /* 78MHz default */
-                                writel((30 << 16) | 1, isp_regs + 0x128); /* 30fps */
-                                writel(1920, isp_regs + 0x140); /* Width */
-                                writel(1080, isp_regs + 0x142); /* Height */
-                                writel(11, isp_regs + 0x94); /* 11us line time */
-                                writel(1000, isp_regs + 0x98); /* Integration time */
-                                writel(1117, isp_regs + 0x9c); /* Max integration */
-                                writel(2, isp_regs + 0xa0); /* Min integration */
-                                
-                                /* Default additional configuration */
-                                writel((2 << 16) | 0x2b, isp_regs + 0x12c); /* Default MIPI config */
-                                writel(2200, isp_regs + 0x144); /* Default total width */
-                                writel(1125, isp_regs + 0x148); /* Default total height */
-                                writel(0x1, isp_regs + 0x14c); /* MIPI mode */
-                                writel(78, isp_regs + 0x150); /* 78MHz clock divider */
-                                wmb();
-                                pr_info("Default sensor configuration written to ISP registers\n");
-                                
-                                /* Default ISP core preparation */
-                                writel(0x0, isp_regs + 0x800);
-                                wmb();
-                                msleep(10);
-                                writel(0x10, isp_regs + 0x1c);
-                                writel(0x3c, isp_regs + 0x804);
-                                wmb();
-                            }
-                        }
-                        
-                        /* *** NOW CALL COMPLETE tisp_init FUNCTION EQUIVALENT WITH PROPER CONFIG *** */
-                        pr_info("*** CALLING COMPLETE tisp_init FUNCTION EQUIVALENT ***\n");
-                        
-                        /* Implement complete tisp_init(&sensor_config, isp_device) function call */
-                        if (config) {
-                            int tisp_init_result = 0;
-                            
-                            pr_info("tisp_init: Processing sensor configuration structure (%zu bytes)\n",
-                                   sizeof(struct tisp_sensor_config_structure));
-                            
-                            /* tisp_init Step 1: Validate sensor configuration structure */
-                            if (config->sensor_clock == 0 || config->width == 0 || config->height == 0) {
-                                pr_err("tisp_init: Invalid sensor configuration - aborting\n");
-                                tisp_init_result = -EINVAL;
-                            } else {
-                                pr_info("tisp_init: Sensor config valid - clock=%dHz, %dx%d\n",
-                                       config->sensor_clock, config->width, config->height);
-                                
-                                /* tisp_init Step 2: Configure ISP subsystems based on sensor config */
-                                pr_info("tisp_init: Configuring ISP subsystems...\n");
-                                
-                                /* Configure ISP timing controller */
-                                writel(config->total_width - 1, isp_regs + 0x14); /* H_SIZE */
-                                writel(config->total_height - 1, isp_regs + 0x18); /* V_SIZE */
-                                wmb();
-                                
-                                /* Configure ISP format controller */
-                                writel(config->pixel_format, isp_regs + 0x20); /* Pixel format */
-                                wmb();
-                                
-                                /* Configure ISP clock controller */
-                                writel(config->sensor_clock / 1000000, isp_regs + 0x24); /* Clock divider */
-                                wmb();
-                                
-                                /* tisp_init Step 3: Initialize ISP core control registers */
-                                pr_info("tisp_init: Initializing ISP core control...\n");
-                                
-                                /* Critical: Set ISP core mode based on sensor interface */
-                                if (config->mipi_lanes == 2) {
-                                    writel(0x2c, isp_regs + 0x804); /* 2-lane MIPI mode */
-                                } else {
-                                    writel(0x1c, isp_regs + 0x804); /* Default mode */
-                                }
-                                wmb();
-                                
-                                /* Set ISP control register with sensor-specific timing */
-                                writel(0x18, isp_regs + 0x1c); /* Enhanced timing control */
-                                wmb();
-                                
-                                /* tisp_init Step 4: Enable ISP core with complete configuration */
-                                pr_info("tisp_init: Enabling ISP core with complete sensor configuration...\n");
-                                
-                                /* Final ISP core enable */
-                                writel(0x1, isp_regs + 0x800);
-                                wmb();
-                                
-                                /* Extended verification with multiple attempts */
-                                {
-                                    int verify_attempts = 20;
-                                    u32 core_status;
-                                    bool core_enabled = false;
-                                    
-                                    while (verify_attempts-- > 0) {
-                                        core_status = readl(isp_regs + 0x800);
-                                        if (core_status == 1) {
-                                            core_enabled = true;
-                                            break;
-                                        }
-                                        msleep(10);
-                                    }
-                                    
-                                    if (core_enabled) {
-                                        pr_info("*** tisp_init SUCCESS: ISP CORE ENABLED (status=0x%x) ***\n", core_status);
-                                        tisp_init_result = 0;
-                                    } else {
-                                        pr_err("*** tisp_init FAILED: ISP CORE WON'T ENABLE (status=0x%x) ***\n", core_status);
-                                        tisp_init_result = -EIO;
-                                        
-                                        /* Debug: Try alternative enable sequence */
-                                        pr_info("tisp_init: Attempting alternative enable sequence...\n");
-                                        
-                                        /* Reset and try different register sequence */
-                                        writel(0x0, isp_regs + 0x800);
-                                        wmb();
-                                        msleep(20);
-                                        
-                                        /* Try different mode values from Binary Ninja analysis */
-                                        writel(0x3c, isp_regs + 0x804); /* Alternative mode */
-                                        writel(0x10, isp_regs + 0x1c);  /* Alternative control */
-                                        wmb();
-                                        msleep(10);
-                                        
-                                        writel(0x1, isp_regs + 0x800);
-                                        wmb();
-                                        msleep(50);
-                                        
-                                        core_status = readl(isp_regs + 0x800);
-                                        if (core_status == 1) {
-                                            pr_info("*** tisp_init ALT SUCCESS: ISP CORE ENABLED (status=0x%x) ***\n", core_status);
-                                            tisp_init_result = 0;
-                                        } else {
-                                            pr_err("*** tisp_init ALT FAILED: ISP STILL WON'T ENABLE (status=0x%x) ***\n", core_status);
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            pr_info("*** tisp_init FUNCTION COMPLETE: result=%d ***\n", tisp_init_result);
-                        }
-                        
-                        /* *** CRITICAL: ISP EVENT SYSTEM INITIALIZATION (FROM tisp_init) *** */
-                        pr_info("*** INITIALIZING ISP EVENT SYSTEM (REQUIRED FOR CORE ENABLE) ***\n");
-                        
-                        /* Event system basic initialization - tisp_event_init() equivalent */
-                        writel(0x1, isp_regs + 0x78); /* Event system enable */
-                        wmb();
-                        
-                        /* Event callback setup - simplified versions of tisp_event_set_cb() */
-                        writel(0x1, isp_regs + 0x7c); /* Gain update events */
-                        writel(0x1, isp_regs + 0x80); /* Exposure update events */
-                        wmb();
-                        
-                        /* IRQ function setup - system_irq_func_set(0xd, ip_done_interrupt_static) */
-                        writel(0x1, isp_regs + 0x34); /* Enable ISP done interrupts */
-                        wmb();
-                        
-                        pr_info("ISP event system and interrupt handlers initialized\n");
-                        
-                        /* Additional ISP core stabilization registers */
-                        writel(0x1, isp_regs + 0x808); /* Core ready flag */
-                        writel(0x0, isp_regs + 0x80c); /* Clear any pending states */
-                        wmb();
-                        
-                        msleep(50); /* Extended delay for ISP core and event system to stabilize */
-                        
-                        /* Multiple status checks with delays */
-                        {
-                            int attempts = 10;
-                            u32 isp_status;
-                            while (attempts-- > 0) {
-                                isp_status = readl(isp_regs + 0x800);
-                                if (isp_status == 1) {
-                                    break;
-                                }
-                                pr_info("ISP core enable attempt %d: status=0x%x\n", 10-attempts, isp_status);
-                                msleep(10);
-                            }
-                        }
-                        
-                        /* Verify ISP core enabled with sensor */
-                        {
-                            u32 isp_status = readl(isp_regs + 0x800);
-                            pr_info("*** ISP CORE ENABLED WITH SENSOR: status=0x%x (should be 1) ***\n", isp_status);
-                            
-                            if (isp_status == 1) {
-                                /* *** CRITICAL: VIC ALREADY UNLOCKED BY vic_mdma_enable - DON'T CALL tx_isp_vic_start! *** */
-                                if (vic_dev && vic_dev->state == 2) {
-                                    pr_info("*** VIC ALREADY UNLOCKED BY vic_mdma_enable - SKIPPING tx_isp_vic_start ***\n");
-                                    pr_info("*** VIC HANDSHAKE SEQUENCE COMPLETE! ***\n");
-                                    
-                                    /* VIC is already properly configured by vic_mdma_enable */
-                                    pr_info("*** VIC REGISTERS ACCESSIBLE AND CONFIGURED ***\n");
-                                    
-                                    /* Test to confirm VIC registers are still accessible */
-                                    {
-                                        u32 test_val = 0xABCDEF12;
-                                        writel(test_val, vic_regs + 0x4);
-                                        wmb();
-                                        u32 read_val = readl(vic_regs + 0x4);
-                                        if (read_val == test_val) {
-                                            pr_info("*** CONFIRMED: VIC REGISTERS FULLY ACCESSIBLE! ***\n");
-                                            /* Restore frame dimensions */
-                                            writel((1920 << 16) | 1080, vic_regs + 0x4);
-                                            wmb();
-                                        } else {
-                                            pr_err("*** ERROR: VIC registers lost accessibility: wrote 0x%x, read 0x%x ***\n", test_val, read_val);
-                                        }
-                                    }
-                                    
-                                    /* Enable VIC interrupts for frame completion */
-                                    pr_info("*** ENABLING VIC INTERRUPTS FOR HARDWARE FRAME COMPLETION ***\n");
-                                    tx_vic_enable_irq_complete(isp_dev);
-                                    
-                                    pr_info("*** VIC HARDWARE HANDSHAKE SEQUENCE COMPLETE - INTERRUPTS SHOULD WORK! ***\n");
-                                    
-                                } else {
-                                    pr_err("*** VIC NOT PROPERLY UNLOCKED - ATTEMPTING tx_isp_vic_start FALLBACK ***\n");
-                                    if (tx_sensor) {
-                                        ret = tx_isp_vic_start(vic_dev, &tx_sensor->attr);
-                                        if (ret == 0) {
-                                            pr_info("*** VIC START FALLBACK SUCCESS ***\n");
-                                        } else {
-                                            pr_err("*** VIC START FALLBACK FAILED: %d ***\n", ret);
-                                        }
-                                    }
-                                }
-                            } else {
-                                pr_err("*** ISP CORE STILL FAILED TO ENABLE EVEN WITH SENSOR! ***\n");
-                            }
-                        }
-                    }
-                }
+            /* *** CRITICAL: COPY SENSOR ATTRIBUTES TO ISP DEVICE *** */
+            if (tx_sensor && tx_sensor->video.attr) {
+                pr_info("*** COPYING SENSOR ATTRIBUTES TO ISP DEVICE ***\n");
+                pr_info("Sensor attr: dbus_type=%d, data_type=%d, chip_id=0x%x\n",
+                        tx_sensor->video.attr->dbus_type, tx_sensor->video.attr->data_type, tx_sensor->video.attr->chip_id);
+                pr_info("Sensor attr: total_width=%d, total_height=%d\n",
+                        tx_sensor->video.attr->total_width, tx_sensor->video.attr->total_height);
+                
+                /* Copy sensor attributes to ISP sensor structure */
+                memcpy(&tx_sensor->attr, tx_sensor->video.attr, sizeof(struct tx_isp_sensor_attribute));
+                
+                /* Update ISP device sensor info */
+                isp_dev->sensor_width = tx_sensor->video.attr->total_width;
+                isp_dev->sensor_height = tx_sensor->video.attr->total_height;
+                
+                pr_info("*** SENSOR ATTRIBUTES COPIED TO ISP DEVICE ***\n");
+                pr_info("ISP device sensor: %dx%d, interface_type=%d\n",
+                        isp_dev->sensor_width, isp_dev->sensor_height, tx_sensor->attr.dbus_type);
             } else {
-                pr_warn("DEBUG: No sensor init operation - ops=%p\n", kernel_subdev ? kernel_subdev->ops : NULL);
-                if (kernel_subdev && kernel_subdev->ops) {
-                    pr_warn("DEBUG: ops->core=%p\n", kernel_subdev->ops->core);
-                    if (kernel_subdev->ops->core) {
-                        pr_warn("DEBUG: ops->core->init=%p\n", kernel_subdev->ops->core->init);
+                pr_err("*** FAILED TO COPY SENSOR ATTRIBUTES - tx_sensor=%p, attr=%p ***\n",
+                       tx_sensor, tx_sensor ? tx_sensor->video.attr : NULL);
+            }
+            
+            /* *** ENABLE ISP CORE NOW THAT SENSOR IS READY *** */
+            pr_info("*** UNLOCKING VIC WITH SENSOR ATTRIBUTES THEN ENABLING ISP CORE ***\n");
+            if (isp_dev->vic_regs) {
+                void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00; /* Get ISP base */
+                void __iomem *vic_regs = isp_dev->vic_regs;
+                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+                
+                /* *** STEP 1: CALL PROPER vic_pipo_mdma_enable FUNCTION *** */
+                pr_info("*** CALLING vic_pipo_mdma_enable FUNCTION ***\n");
+                void *mdma_result = vic_pipo_mdma_enable(vic_dev);
+                if (mdma_result) {
+                    pr_info("*** vic_pipo_mdma_enable SUCCESS - VIC UNLOCKED! ***\n");
+                    /* Mark VIC as unlocked */
+                    vic_dev->state = 2;
+                } else {
+                    pr_err("*** vic_pipo_mdma_enable FAILED ***\n");
+                }
+                
+                /* *** STEP 2: CALL PROPER tisp_init FUNCTION *** */
+                pr_info("*** CALLING tisp_init FUNCTION ***\n");
+                int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
+                if (tisp_result == 0) {
+                    pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED! ***\n");
+                } else {
+                    pr_err("*** tisp_init FAILED: %d ***\n", tisp_result);
+                }
+                
+                /* Verify ISP core enabled with sensor */
+                {
+                    u32 isp_status = readl(isp_regs + 0x800);
+                    pr_info("*** ISP CORE ENABLED WITH SENSOR: status=0x%x (should be 1) ***\n", isp_status);
+                    
+                    if (isp_status == 1) {
+                        /* VIC is already properly configured by vic_mdma_enable and tisp_init */
+                        pr_info("*** VIC ALREADY UNLOCKED BY vic_mdma_enable - SKIPPING tx_isp_vic_start ***\n");
+                        pr_info("*** VIC HANDSHAKE SEQUENCE COMPLETE! ***\n");
+                        
+                        /* Test to confirm VIC registers are still accessible */
+                        {
+                            u32 test_val = 0xABCDEF12;
+                            writel(test_val, vic_regs + 0x4);
+                            wmb();
+                            u32 read_val = readl(vic_regs + 0x4);
+                            if (read_val == test_val) {
+                                pr_info("*** CONFIRMED: VIC REGISTERS FULLY ACCESSIBLE! ***\n");
+                                /* Restore frame dimensions */
+                                writel((1920 << 16) | 1080, vic_regs + 0x4);
+                                wmb();
+                            } else {
+                                pr_err("*** ERROR: VIC registers lost accessibility: wrote 0x%x, read 0x%x ***\n", test_val, read_val);
+                            }
+                        }
+                        
+                        /* Enable VIC interrupts for frame completion */
+                        pr_info("*** ENABLING VIC INTERRUPTS FOR HARDWARE FRAME COMPLETION ***\n");
+                        tx_vic_enable_irq_complete(isp_dev);
+                        
+                        pr_info("*** VIC HARDWARE HANDSHAKE SEQUENCE COMPLETE - INTERRUPTS SHOULD WORK! ***\n");
+                    } else {
+                        pr_err("*** ISP CORE STILL FAILED TO ENABLE EVEN WITH SENSOR! ***\n");
                     }
                 }
             }
