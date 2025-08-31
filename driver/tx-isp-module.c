@@ -1573,6 +1573,26 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                     wmb();
                     pr_info("ISP output pipeline enabled\n");
                     
+                    /* CRITICAL: Initialize and call tisp_wdr_process for proper ISP processing */
+                    extern int tisp_wdr_init(void);
+                    extern int tisp_wdr_process(void);
+                    
+                    pr_info("*** INITIALIZING WDR PROCESSING PIPELINE ***\n");
+                    int wdr_init_ret = tisp_wdr_init();
+                    if (wdr_init_ret == 0) {
+                        pr_info("WDR initialization successful\n");
+                        
+                        pr_info("*** CALLING ACTUAL tisp_wdr_process - CRITICAL FOR GREEN STREAM FIX ***\n");
+                        int wdr_proc_ret = tisp_wdr_process();
+                        if (wdr_proc_ret == 0) {
+                            pr_info("*** WDR PROCESSING PIPELINE ACTIVATED - GREEN STREAM SHOULD BE FIXED! ***\n");
+                        } else {
+                            pr_err("WDR processing failed: %d\n", wdr_proc_ret);
+                        }
+                    } else {
+                        pr_err("WDR initialization failed: %d\n", wdr_init_ret);
+                    }
+                    
                     pr_info("*** ISP PROCESSING FULLY ACTIVATED - SHOULD ELIMINATE GREEN STREAM ***\n");
                 }
             } else {
