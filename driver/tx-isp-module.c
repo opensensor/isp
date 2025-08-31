@@ -5857,8 +5857,8 @@ static int init_isp_interrupt_system(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
-/* tx_isp_send_event_to_remote - EXACT Binary Ninja implementation */
-static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
+/* tx_isp_send_event_to_remote_bn - EXACT Binary Ninja implementation (renamed to avoid header conflict) */
+static int tx_isp_send_event_to_remote_bn(void *subdev, int event_type, void *data)
 {
     struct tx_isp_subdev *sd = (struct tx_isp_subdev *)subdev;
     void *callback_struct;
@@ -5876,7 +5876,7 @@ static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
             
             /* Binary Ninja: if ($t9_1 != 0) jump($t9_1) */
             if (event_callback != NULL) {
-                pr_debug("tx_isp_send_event_to_remote: Calling event callback for event 0x%x\n", event_type);
+                pr_debug("tx_isp_send_event_to_remote_bn: Calling event callback for event 0x%x\n", event_type);
                 return event_callback(sd, event_type, data);
             }
         }
@@ -5885,13 +5885,6 @@ static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
     /* Binary Ninja: return 0xfffffdfd */
     return 0xfffffdfd;
 }
-
-/* VIC event callback structure for Binary Ninja tx_isp_send_event_to_remote */
-struct vic_event_callback {
-    void *context;                           /* +0x00: Context pointer */
-    void *reserved[7];                      /* +0x04-0x1c: Reserved space */
-    int (*event_handler)(void*, int, void*); /* +0x1c: Event handler function */
-};
 
 /* VIC event handler function - handles events from frame channels */
 static int vic_event_handler(void *subdev, int event_type, void *data)
