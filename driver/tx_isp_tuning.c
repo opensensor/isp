@@ -141,17 +141,17 @@ static uint32_t data_d9524 = 0;
 static uint32_t data_d9528 = 0;
 
 /* Forward declarations for tiziano functions */
-static int tisp_wdr_expTime_updata(void);
-static int tisp_wdr_ev_calculate(void);
-static int tiziano_wdr_fusion1_curve_block_mean1(void);
-static int Tiziano_wdr_fpga(void *struct_me, void *dev_para, void *ratio_para, void *x_thr);
-static int tiziano_wdr_soft_para_out(void);
+int tisp_wdr_expTime_updata(void);
+int tisp_wdr_ev_calculate(void);
+int tiziano_wdr_fusion1_curve_block_mean1(void);
+int Tiziano_wdr_fpga(void *struct_me, void *dev_para, void *ratio_para, void *x_thr);
+int tiziano_wdr_soft_para_out(void);
 
 /* Forward declarations for event and IRQ functions */
-static int tisp_event_set_cb(int event_id, void *callback);
-static int system_irq_func_set(int irq_id, void *handler);
-static int tisp_adr_process(void);
-static void tiziano_adr_interrupt_static(void);
+int tisp_event_set_cb(int event_id, void *callback);
+int system_irq_func_set(int irq_id, void *handler);
+int tisp_adr_process(void);
+void tiziano_adr_interrupt_static(void);
 
 
 
@@ -1369,7 +1369,7 @@ EXPORT_SYMBOL(isp_m0_chardev_release);
 /* ===== TIZIANO WDR PROCESSING IMPLEMENTATION - Binary Ninja Reference ===== */
 
 /* tisp_wdr_expTime_updata - Binary Ninja implementation */
-static int tisp_wdr_expTime_updata(void)
+int tisp_wdr_expTime_updata(void)
 {
     /* Update exposure time based on WDR algorithm */
     /* This function updates the WDR exposure timing parameters */
@@ -1382,7 +1382,7 @@ static int tisp_wdr_expTime_updata(void)
 }
 
 /* tisp_wdr_ev_calculate - Binary Ninja implementation */
-static int tisp_wdr_ev_calculate(void)
+int tisp_wdr_ev_calculate(void)
 {
     /* Calculate exposure value for WDR processing */
     pr_debug("tisp_wdr_ev_calculate: Calculating WDR exposure values\n");
@@ -1394,7 +1394,7 @@ static int tisp_wdr_ev_calculate(void)
 }
 
 /* Tiziano_wdr_fpga - Binary Ninja implementation */
-static int Tiziano_wdr_fpga(void *struct_me, void *dev_para, void *ratio_para, void *x_thr)
+int Tiziano_wdr_fpga(void *struct_me, void *dev_para, void *ratio_para, void *x_thr)
 {
     /* FPGA-based WDR processing implementation */
     pr_debug("Tiziano_wdr_fpga: Processing WDR parameters via FPGA\n");
@@ -1406,7 +1406,7 @@ static int Tiziano_wdr_fpga(void *struct_me, void *dev_para, void *ratio_para, v
 }
 
 /* tiziano_wdr_fusion1_curve_block_mean1 - Binary Ninja implementation */
-static int tiziano_wdr_fusion1_curve_block_mean1(void)
+int tiziano_wdr_fusion1_curve_block_mean1(void)
 {
     /* WDR fusion curve processing for block mean calculations */
     pr_debug("tiziano_wdr_fusion1_curve_block_mean1: Processing WDR fusion curves\n");
@@ -1418,7 +1418,7 @@ static int tiziano_wdr_fusion1_curve_block_mean1(void)
 }
 
 /* tiziano_wdr_soft_para_out - Binary Ninja implementation */
-static int tiziano_wdr_soft_para_out(void)
+int tiziano_wdr_soft_para_out(void)
 {
     /* Output WDR software parameters */
     pr_debug("tiziano_wdr_soft_para_out: Outputting WDR software parameters\n");
@@ -1829,7 +1829,7 @@ EXPORT_SYMBOL(tisp_wdr_init);
 /* ===== MISSING TIZIANO ISP PIPELINE COMPONENTS - Binary Ninja Reference ===== */
 
 /* tiziano_ae_init - Auto Exposure initialization */
-static int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
+int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
 {
     pr_info("tiziano_ae_init: Initializing Auto Exposure (%dx%d@%d)\n", width, height, fps);
     
@@ -1843,7 +1843,7 @@ static int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
 }
 
 /* tiziano_awb_init - Auto White Balance initialization */
-static int tiziano_awb_init(uint32_t height, uint32_t width)
+int tiziano_awb_init(uint32_t height, uint32_t width)
 {
     pr_info("tiziano_awb_init: Initializing Auto White Balance (%dx%d)\n", width, height);
     
@@ -1908,7 +1908,7 @@ static int tiziano_gamma_lut_parameter(void)
 }
 
 /* tiziano_gamma_init - Binary Ninja EXACT implementation */
-static int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps)
+int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps)
 {
     pr_info("tiziano_gamma_init: Initializing Gamma correction (%dx%d@%d)\n", width, height, fps);
     
@@ -1944,7 +1944,7 @@ static int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps)
 }
 
 /* tiziano_gib_init - GIB initialization */
-static int tiziano_gib_init(void)
+int tiziano_gib_init(void)
 {
     pr_info("tiziano_gib_init: Initializing GIB processing\n");
     return 0;
@@ -2156,7 +2156,7 @@ static int tisp_lsc_write_lut_datas(void)
 }
 
 /* tiziano_lsc_init - Binary Ninja EXACT implementation */
-static int tiziano_lsc_init(void)
+int tiziano_lsc_init(void)
 {
     pr_info("tiziano_lsc_init: Initializing Lens Shading Correction\n");
     
@@ -2451,7 +2451,7 @@ static int jz_isp_ccm(void)
 }
 
 /* tiziano_ccm_init - Binary Ninja EXACT implementation */
-static int tiziano_ccm_init(void)
+int tiziano_ccm_init(void)
 {
     pr_info("tiziano_ccm_init: Initializing Color Correction Matrix\n");
     
@@ -2500,7 +2500,7 @@ static int tiziano_ccm_init(void)
 }
 
 /* tiziano_dmsc_init - DMSC initialization */
-static int tiziano_dmsc_init(void)
+int tiziano_dmsc_init(void)
 {
     pr_info("tiziano_dmsc_init: Initializing DMSC processing\n");
     return 0;
@@ -2617,7 +2617,7 @@ static int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int e
 }
 
 /* tiziano_sharpen_init - Binary Ninja EXACT implementation */
-static int tiziano_sharpen_init(void)
+int tiziano_sharpen_init(void)
 {
     pr_info("tiziano_sharpen_init: Initializing Sharpening\n");
     
@@ -2806,7 +2806,7 @@ static int tisp_sdns_par_refresh(uint32_t ev_value, uint32_t threshold, int enab
 }
 
 /* tiziano_sdns_init - Binary Ninja EXACT implementation */
-static int tiziano_sdns_init(void)
+int tiziano_sdns_init(void)
 {
     pr_info("tiziano_sdns_init: Initializing SDNS processing\n");
     
@@ -2876,7 +2876,7 @@ static uint32_t mdns_c_false_edg_thres1_wdr[16] = {0x4, 0x6, 0x8, 0xa, 0xc, 0xe,
 static int mdns_wdr_en = 0;
 
 /* tiziano_mdns_init - MDNS initialization */
-static int tiziano_mdns_init(uint32_t width, uint32_t height)
+int tiziano_mdns_init(uint32_t width, uint32_t height)
 {
     void __iomem *base_reg = ioremap(0x13309000, 0x1000); /* MDNS register base */
     
@@ -2917,7 +2917,7 @@ static int tiziano_mdns_init(uint32_t width, uint32_t height)
 }
 
 /* tiziano_clm_init - CLM initialization */
-static int tiziano_clm_init(void)
+int tiziano_clm_init(void)
 {
     pr_info("tiziano_clm_init: Initializing CLM processing\n");
     return 0;
@@ -3010,7 +3010,7 @@ static int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enabl
 }
 
 /* tiziano_dpc_init - Binary Ninja EXACT implementation */
-static int tiziano_dpc_init(void)
+int tiziano_dpc_init(void)
 {
     pr_info("tiziano_dpc_init: Initializing DPC processing\n");
     
@@ -3045,14 +3045,14 @@ static int tiziano_dpc_init(void)
 }
 
 /* tiziano_hldc_init - HLDC initialization */
-static int tiziano_hldc_init(void)
+int tiziano_hldc_init(void)
 {
     pr_info("tiziano_hldc_init: Initializing HLDC processing\n");
     return 0;
 }
 
 /* tiziano_defog_init - Defog initialization */
-static int tiziano_defog_init(uint32_t width, uint32_t height)
+int tiziano_defog_init(uint32_t width, uint32_t height)
 {
     pr_info("tiziano_defog_init: Initializing Defog processing (%dx%d)\n", width, height);
     return 0;
@@ -3136,20 +3136,20 @@ static void tiziano_adr_params_init(void)
 }
 
 /* tisp_adr_process - ADR processing callback */
-static int tisp_adr_process(void)
+int tisp_adr_process(void)
 {
     pr_debug("tisp_adr_process: Processing ADR tone mapping\n");
     return 0;
 }
 
 /* tiziano_adr_interrupt_static - ADR interrupt handler */
-static void tiziano_adr_interrupt_static(void)
+void tiziano_adr_interrupt_static(void)
 {
     pr_debug("tiziano_adr_interrupt_static: ADR interrupt received\n");
 }
 
 /* tiziano_adr_init - Binary Ninja SIMPLIFIED implementation */
-static int tiziano_adr_init(uint32_t width, uint32_t height)
+int tiziano_adr_init(uint32_t width, uint32_t height)
 {
     pr_info("tiziano_adr_init: Initializing ADR processing (%dx%d)\n", width, height);
     
@@ -3217,114 +3217,114 @@ static int tiziano_adr_init(uint32_t width, uint32_t height)
 }
 
 /* tiziano_af_init - Auto Focus initialization */
-static int tiziano_af_init(uint32_t height, uint32_t width)
+int tiziano_af_init(uint32_t height, uint32_t width)
 {
     pr_info("tiziano_af_init: Initializing Auto Focus (%dx%d)\n", width, height);
     return 0;
 }
 
 /* tiziano_bcsh_init - BCSH initialization */
-static int tiziano_bcsh_init(void)
+int tiziano_bcsh_init(void)
 {
     pr_info("tiziano_bcsh_init: Initializing BCSH processing\n");
     return 0;
 }
 
 /* tiziano_ydns_init - YDNS initialization */
-static int tiziano_ydns_init(void)
+int tiziano_ydns_init(void)
 {
     pr_info("tiziano_ydns_init: Initializing YDNS processing\n");
     return 0;
 }
 
 /* tiziano_rdns_init - RDNS initialization */
-static int tiziano_rdns_init(void)
+int tiziano_rdns_init(void)
 {
     pr_info("tiziano_rdns_init: Initializing RDNS processing\n");
     return 0;
 }
 
 /* WDR-specific initialization functions */
-static int tisp_gb_init(void)
+int tisp_gb_init(void)
 {
     pr_info("tisp_gb_init: Initializing GB processing for WDR\n");
     return 0;
 }
 
 /* WDR enable functions for each component */
-static int tisp_dpc_wdr_en(int enable)
+int tisp_dpc_wdr_en(int enable)
 {
     pr_info("tisp_dpc_wdr_en: %s DPC WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
-static int tisp_lsc_wdr_en(int enable)
+int tisp_lsc_wdr_en(int enable)
 {
     pr_info("tisp_lsc_wdr_en: %s LSC WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
-static int tisp_gamma_wdr_en(int enable)
+int tisp_gamma_wdr_en(int enable)
 {
     pr_info("tisp_gamma_wdr_en: %s Gamma WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
-static int tisp_sharpen_wdr_en(int enable)
+int tisp_sharpen_wdr_en(int enable)
 {
     pr_info("tisp_sharpen_wdr_en: %s Sharpen WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
-static int tisp_ccm_wdr_en(int enable)
+int tisp_ccm_wdr_en(int enable)
 {
     pr_info("tisp_ccm_wdr_en: %s CCM WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
-static int tisp_bcsh_wdr_en(int enable)
+int tisp_bcsh_wdr_en(int enable)
 {
     pr_info("tisp_bcsh_wdr_en: %s BCSH WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
-static int tisp_rdns_wdr_en(int enable)
+int tisp_rdns_wdr_en(int enable)
 {
     pr_info("tisp_rdns_wdr_en: %s RDNS WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
-static int tisp_adr_wdr_en(int enable)
+int tisp_adr_wdr_en(int enable)
 {
     pr_info("tisp_adr_wdr_en: %s ADR WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
-static int tisp_defog_wdr_en(int enable)
+int tisp_defog_wdr_en(int enable)
 {
     pr_info("tisp_defog_wdr_en: %s Defog WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
-static int tisp_mdns_wdr_en(int enable)
+int tisp_mdns_wdr_en(int enable)
 {
     pr_info("tisp_mdns_wdr_en: %s MDNS WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
-static int tisp_dmsc_wdr_en(int enable)
+int tisp_dmsc_wdr_en(int enable)
 {
     pr_info("tisp_dmsc_wdr_en: %s DMSC WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
-static int tisp_ae_wdr_en(int enable)
+int tisp_ae_wdr_en(int enable)
 {
     pr_info("tisp_ae_wdr_en: %s AE WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
-static int tisp_sdns_wdr_en(int enable)
+int tisp_sdns_wdr_en(int enable)
 {
     pr_info("tisp_sdns_wdr_en: %s SDNS WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
@@ -3343,7 +3343,7 @@ static spinlock_t isp_irq_lock;
 static bool isp_irq_initialized = false;
 
 /* system_irq_func_set - Binary Ninja EXACT implementation */
-static int system_irq_func_set(int irq_id, void *handler)
+int system_irq_func_set(int irq_id, void *handler)
 {
     unsigned long flags;
     
@@ -3371,7 +3371,7 @@ static int system_irq_func_set(int irq_id, void *handler)
 }
 
 /* tisp_event_set_cb - Binary Ninja EXACT implementation */
-static int tisp_event_set_cb(int event_id, void *callback)
+int tisp_event_set_cb(int event_id, void *callback)
 {
     pr_info("tisp_event_set_cb: Setting callback for event %d\n", event_id);
     
@@ -3447,7 +3447,7 @@ static int isp_event_dispatcher(int event_id)
 }
 
 /* tisp_event_init - Event system initialization */
-static int tisp_event_init(void)
+int tisp_event_init(void)
 {
     pr_info("tisp_event_init: Initializing ISP event system\n");
     
@@ -3549,44 +3549,44 @@ void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
 }
 EXPORT_SYMBOL(isp_cleanup_irq_handling);
 
-static int tisp_param_operate_init(void)
+int tisp_param_operate_init(void)
 {
     pr_info("tisp_param_operate_init: Initializing parameter operations\n");
     return 0;
 }
 
-static int tisp_set_csc_version(int version)
+int tisp_set_csc_version(int version)
 {
     pr_info("tisp_set_csc_version: Setting CSC version %d\n", version);
     return 0;
 }
 
 /* Update functions for event callbacks */
-static int tisp_tgain_update(void)
+int tisp_tgain_update(void)
 {
     pr_debug("tisp_tgain_update: Updating total gain\n");
     return 0;
 }
 
-static int tisp_again_update(void)
+int tisp_again_update(void)
 {
     pr_debug("tisp_again_update: Updating analog gain\n");
     return 0;
 }
 
-static int tisp_ev_update(void)
+int tisp_ev_update(void)
 {
     pr_debug("tisp_ev_update: Updating exposure value\n");
     return 0;
 }
 
-static int tisp_ct_update(void)
+int tisp_ct_update(void)
 {
     pr_debug("tisp_ct_update: Updating color temperature\n");
     return 0;
 }
 
-static int tisp_ae_ir_update(void)
+int tisp_ae_ir_update(void)
 {
     pr_debug("tisp_ae_ir_update: Updating AE IR parameters\n");
     return 0;
@@ -3659,3 +3659,55 @@ int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32
     return 0;
 }
 EXPORT_SYMBOL(tiziano_init_all_pipeline_components);
+
+/* Export all the tiziano pipeline functions */
+EXPORT_SYMBOL(tiziano_ccm_init);
+EXPORT_SYMBOL(tisp_gb_init);
+EXPORT_SYMBOL(tiziano_sdns_init);
+EXPORT_SYMBOL(tisp_dmsc_wdr_en);
+EXPORT_SYMBOL(tisp_ae_ir_update);
+EXPORT_SYMBOL(tisp_event_init);
+EXPORT_SYMBOL(tisp_mdns_wdr_en);
+EXPORT_SYMBOL(tiziano_adr_init);
+EXPORT_SYMBOL(tiziano_ae_init);
+EXPORT_SYMBOL(tisp_adr_wdr_en);
+EXPORT_SYMBOL(tiziano_af_init);
+EXPORT_SYMBOL(tiziano_rdns_init);
+EXPORT_SYMBOL(tiziano_defog_init);
+EXPORT_SYMBOL(tisp_ccm_wdr_en);
+EXPORT_SYMBOL(tisp_ae_wdr_en);
+EXPORT_SYMBOL(tisp_wdr_init);
+EXPORT_SYMBOL(tiziano_clm_init);
+EXPORT_SYMBOL(tiziano_gib_init);
+EXPORT_SYMBOL(tisp_lsc_wdr_en);
+EXPORT_SYMBOL(tisp_dpc_wdr_en);
+EXPORT_SYMBOL(tisp_rdns_wdr_en);
+EXPORT_SYMBOL(tisp_tgain_update);
+EXPORT_SYMBOL(tiziano_dmsc_init);
+EXPORT_SYMBOL(tiziano_sharpen_init);
+EXPORT_SYMBOL(tiziano_ydns_init);
+EXPORT_SYMBOL(tiziano_awb_init);
+EXPORT_SYMBOL(tisp_param_operate_init);
+EXPORT_SYMBOL(tisp_ev_update);
+EXPORT_SYMBOL(tiziano_lsc_init);
+EXPORT_SYMBOL(tisp_gamma_wdr_en);
+EXPORT_SYMBOL(tiziano_mdns_init);
+EXPORT_SYMBOL(tiziano_gamma_init);
+EXPORT_SYMBOL(tiziano_hldc_init);
+EXPORT_SYMBOL(tisp_ct_update);
+EXPORT_SYMBOL(tisp_sdns_wdr_en);
+EXPORT_SYMBOL(tisp_bcsh_wdr_en);
+EXPORT_SYMBOL(tisp_defog_wdr_en);
+EXPORT_SYMBOL(tisp_sharpen_wdr_en);
+EXPORT_SYMBOL(tisp_event_set_cb);
+EXPORT_SYMBOL(tiziano_dpc_init);
+EXPORT_SYMBOL(tisp_again_update);
+EXPORT_SYMBOL(tiziano_bcsh_init);
+EXPORT_SYMBOL(system_irq_func_set);
+EXPORT_SYMBOL(tisp_adr_process);
+EXPORT_SYMBOL(tiziano_adr_interrupt_static);
+EXPORT_SYMBOL(tisp_wdr_expTime_updata);
+EXPORT_SYMBOL(tisp_wdr_ev_calculate);
+EXPORT_SYMBOL(tiziano_wdr_fusion1_curve_block_mean1);
+EXPORT_SYMBOL(Tiziano_wdr_fpga);
+EXPORT_SYMBOL(tiziano_wdr_soft_para_out);
