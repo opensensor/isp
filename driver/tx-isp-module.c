@@ -590,6 +590,150 @@ static int tx_isp_init_vic_subdev(struct tx_isp_dev *isp_dev)
     return tx_isp_register_vic_platform_device(isp_dev);
 }
 
+// CSI device structure for MIPI interface (based on Binary Ninja analysis)
+struct tx_isp_csi_device {
+    struct tx_isp_subdev sd;        // Base subdev at offset 0
+    void __iomem *csi_regs;         // CSI hardware registers  
+    struct clk *csi_clk;           // CSI clock
+    int state;                     // 1=init, 2=active, 3=streaming_off, 4=streaming_on
+    struct mutex mlock;            // Mutex for state changes
+    int interface_type;            // 1=MIPI interface
+    int lanes;                     // Number of MIPI lanes
+};
+
+// Initialize CSI subdev for MIPI interface (missing component!)
+static int tx_isp_init_csi_subdev(struct tx_isp_dev *isp_dev)
+{
+    struct tx_isp_csi_device *csi_dev;
+    int ret = 0;
+    
+    if (!isp_dev) {
+        return -EINVAL;
+    }
+    
+    pr_info("*** INITIALIZING CSI AS PROPER SUBDEV FOR MIPI INTERFACE ***\n");
+    
+    // Allocate CSI device
+    csi_dev = kzalloc(sizeof(struct tx_isp_csi_device), GFP_KERNEL);
+    if (!csi_dev) {
+        pr_err("Failed to allocate CSI device\n");
+        return -ENOMEM;
+    }
+    
+    // Initialize CSI subdev structure
+    memset(&csi_dev->sd, 0, sizeof(csi_dev->sd));
+    csi_dev->sd.isp = isp_dev;
+    csi_dev->sd.ops = NULL;
+    csi_dev->sd.vin_state = TX_ISP_MODULE_INIT;
+    
+    // CSI registers are at ISP+0x8000 offset from reference
+    if (isp_dev->vic_regs) {
+        csi_dev->csi_regs = isp_dev->vic_regs - 0x9a00 + 0x8000; // ISP+0x8000
+        pr_info("CSI memory region mapped: registers at %p\n", csi_dev->csi_regs);
+    }
+    
+    // Initialize CSI device
+    csi_dev->state = 1;                // Initial state
+    csi_dev->interface_type = 1;       // MIPI interface
+    csi_dev->lanes = 2;               // 2-lane MIPI for GC2053
+    mutex_init(&csi_dev->mlock);
+    
+    // Connect to ISP device
+    isp_dev->csi_dev = (struct tx_isp_subdev *)csi_dev;
+    
+    pr_info("CSI subdev initialized for MIPI interface (2 lanes)\n");
+    return 0;
+}
+
+// Activate CSI subdev (based on Binary Ninja tx_isp_csi_activate_subdev)
+static int tx_isp_activate_csi_subdev(struct tx_isp_dev *isp_dev)
+{
+    struct tx_isp_csi_device *csi_dev;
+    int ret = 0;
+    
+    if (!isp_dev || !isp_dev->csi_dev) {
+        return -EINVAL;
+    }
+    
+    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
+    
+    pr_info("*** ACTIVATING CSI SUBDEV FOR MIPI RECEPTION ***\n");
+    
+    mutex_lock(&csi_dev->mlock);
+    
+    // Activate CSI if in initialized state (from Binary Ninja: state 1->2)
+    if (csi_dev->state == 1) {
+        csi_dev->state = 2; // 2 = activated
+        pr_info("CSI subdev state transition 1->2 (ACTIVATED)\n");
+        
+        // Enable CSI clocks (from Binary Ninja analysis)
+        if (csi_dev->csi_clk) {
+            clk_enable(csi_dev->csi_clk);
+            pr_info("CSI clock enabled\n");
+        }
+        
+        // Configure CSI for MIPI interface
+        if (csi_dev->csi_regs) {
+            // CSI MIPI configuration registers (T31 specific)
+            writel(0x1, csi_dev->csi_regs + 0x0);    // Enable CSI
+            writel(0x2, csi_dev->csi_regs + 0x4);    // MIPI mode
+            writel(0x2, csi_dev->csi_regs + 0x8);    // 2-lane MIPI
+            writel(0x0, csi_dev->csi_regs + 0xc);    // Clear errors
+            wmb();
+            pr_info("CSI configured for 2-lane MIPI interface\n");
+        }
+    }
+    
+    mutex_unlock(&csi_dev->mlock);
+    return ret;
+}
+
+// CSI video streaming control (based on Binary Ninja csi_video_s_stream)
+static int tx_isp_csi_s_stream(struct tx_isp_dev *isp_dev, int enable)
+{
+    struct tx_isp_csi_device *csi_dev;
+    
+    if (!isp_dev || !isp_dev->csi_dev) {
+        pr_err("CSI s_stream: No CSI device\n");
+        return -EINVAL;
+    }
+    
+    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
+    
+    pr_info("*** CSI STREAMING %s ***\n", enable ? "ENABLE" : "DISABLE");
+    
+    // From Binary Ninja: state transitions based on enable parameter
+    mutex_lock(&csi_dev->mlock);
+    
+    if (enable) {
+        // Enable streaming: state = 4 (streaming_on)
+        csi_dev->state = 4;
+        pr_info("CSI state transition to 4 (STREAMING_ON)\n");
+        
+        // Configure CSI registers for active streaming
+        if (csi_dev->csi_regs) {
+            writel(0x1, csi_dev->csi_regs + 0x10);   // Start CSI capture
+            writel(0x0, csi_dev->csi_regs + 0x14);   // Clear status
+            wmb();
+            pr_info("CSI hardware streaming enabled\n");
+        }
+    } else {
+        // Disable streaming: state = 3 (streaming_off)  
+        csi_dev->state = 3;
+        pr_info("CSI state transition to 3 (STREAMING_OFF)\n");
+        
+        // Stop CSI capture
+        if (csi_dev->csi_regs) {
+            writel(0x0, csi_dev->csi_regs + 0x10);   // Stop CSI capture
+            wmb();
+            pr_info("CSI hardware streaming disabled\n");
+        }
+    }
+    
+    mutex_unlock(&csi_dev->mlock);
+    return 0;
+}
+
 // Initialize subdev infrastructure matching reference driver
 static int tx_isp_init_subdevs(struct tx_isp_dev *isp_dev)
 {
@@ -601,6 +745,13 @@ static int tx_isp_init_subdevs(struct tx_isp_dev *isp_dev)
     
     pr_info("Initializing device subsystems...\n");
     
+    // Initialize CSI subdev (critical for MIPI data reception!)
+    ret = tx_isp_init_csi_subdev(isp_dev);
+    if (ret) {
+        pr_err("Failed to initialize CSI subdev: %d\n", ret);
+        return ret;
+    }
+    
     // Initialize VIC subdev (critical for frame data flow)
     ret = tx_isp_init_vic_subdev(isp_dev);
     if (ret) {
@@ -608,11 +759,13 @@ static int tx_isp_init_subdevs(struct tx_isp_dev *isp_dev)
         return ret;
     }
     
-    if (isp_dev->csi_dev) {
-        pr_info("CSI device available\n");
+    // Activate CSI subdev for MIPI reception
+    ret = tx_isp_activate_csi_subdev(isp_dev);
+    if (ret) {
+        pr_err("Failed to activate CSI subdev: %d\n", ret);
+        return ret;
     }
     
-    // Sensor will be registered dynamically via IOCTL
     pr_info("Device subsystem initialization complete\n");
     return 0;
 }
@@ -1447,6 +1600,17 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                 } else {
                     pr_err("*** Channel %d: CRITICAL ERROR - NO SENSOR s_stream FROM QBUF! ***\n", channel);
                     pr_err("Channel %d: VIDEO WILL BE GREEN WITHOUT SENSOR STREAMING!\n", channel);
+                }
+            }
+            
+            // *** CRITICAL: START CSI FOR MIPI DATA RECEPTION FROM SENSOR ***
+            if (channel == 0 && ourISPdev && ourISPdev->csi_dev) {
+                pr_info("*** Channel %d: QBUF AUTO-START - STARTING CSI FOR MIPI RECEPTION ***\n", channel);
+                ret = tx_isp_csi_s_stream(ourISPdev, 1);
+                if (ret) {
+                    pr_err("Channel %d: FAILED to start CSI streaming: %d\n", channel, ret);
+                } else {
+                    pr_info("*** Channel %d: CSI STREAMING SUCCESS - READY FOR MIPI DATA ***\n", channel);
                 }
             }
             
