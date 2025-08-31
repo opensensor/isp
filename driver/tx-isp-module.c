@@ -4266,12 +4266,8 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         tx_sensor->video.attr->total_height = 1125;
                     }
                     
-                    if (tx_sensor->video.attr->width != 1920 || tx_sensor->video.attr->height != 1080) {
-                        pr_warn("Correcting sensor active dimensions: %dx%d -> 1920x1080\n",
-                                tx_sensor->video.attr->width, tx_sensor->video.attr->height);
-                        tx_sensor->video.attr->width = 1920;
-                        tx_sensor->video.attr->height = 1080;
-                    }
+                    /* Note: Active dimensions are derived from total dimensions, not separate fields */
+                    pr_info("Sensor active dimensions will be derived from total dimensions\n");
                     
                     /* Ensure MIPI interface type */
                     if (tx_sensor->video.attr->dbus_type != 2) {
