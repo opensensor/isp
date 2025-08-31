@@ -1486,11 +1486,10 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     writel(v1_10, vic_regs + 0x1f4);
     wmb();
     
-    /* CRITICAL: Binary Ninja VIC interrupt enable flag check at +0x13c */
-    /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) - the REAL interrupt enable flag */
-    uint32_t *vic_irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
-    if (*vic_irq_enable_flag != 0) {
-        pr_debug("VIC interrupt: irq_flag=1, processing interrupts (v1_7=0x%x, v1_10=0x%x)\n", v1_7, v1_10);
+    /* CRITICAL: Binary Ninja global vic_start_ok flag check */
+    /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
+    if (vic_start_ok != 0) {
+        pr_debug("VIC interrupt: vic_start_ok=1, processing interrupts (v1_7=0x%x, v1_10=0x%x)\n", v1_7, v1_10);
         
         /* Binary Ninja: if (($v1_7 & 1) != 0) */
         if ((v1_7 & 1) != 0) {
@@ -1659,7 +1658,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         }
         
     } else {
-        pr_debug("VIC interrupt: irq_flag=0, ignoring interrupt (v1_7=0x%x, v1_10=0x%x)\n", v1_7, v1_10);
+        pr_debug("VIC interrupt: vic_start_ok=0, ignoring interrupt (v1_7=0x%x, v1_10=0x%x)\n", v1_7, v1_10);
     }
     
     /* Binary Ninja: return 1 */
@@ -4209,6 +4208,9 @@ static uint32_t data_b2e74 = 0;  /* WDR mode flag */
 static uint32_t data_b2f34 = 0;  /* Frame height */
 static uint32_t deir_en = 0;     /* DEIR enable flag */
 
+/* CRITICAL: VIC interrupt control flag - Binary Ninja reference */
+static uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag */
+
 /* tisp_init - COMPLETE Binary Ninja reference implementation */
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
 {
@@ -4859,6 +4861,10 @@ static void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         *irq_enable_flag = 1;
         pr_info("*** tx_vic_enable_irq: SET INTERRUPT FLAG at +0x13c = 1 ***\n");
+        
+        /* CRITICAL: Set global vic_start_ok flag for interrupt processing */
+        vic_start_ok = 1;
+        pr_info("*** tx_vic_enable_irq: SET GLOBAL vic_start_ok = 1 ***\n");
         
         /* Binary Ninja: int32_t $v0_1 = *(dump_vsd_5 + 0x84) */
         callback_func = *(void(**)(void*))((char*)vic_dev + 0x84);
