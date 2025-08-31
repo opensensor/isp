@@ -5187,9 +5187,10 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         if (tisp_result == 0) {
                             pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED FOR MIPI ***\n");
                             
-                            /* CRITICAL: Set vic_start_ok flag for interrupt enable */
-                            vic_start_ok = 1;
-                            pr_info("*** vic_start_ok flag set to 1 - hardware interrupts now enabled ***\n");
+                            /* CRITICAL: Call Binary Ninja tx_vic_enable_irq to set interrupt flag at +0x13c */
+                            pr_info("*** CALLING BINARY NINJA tx_vic_enable_irq FOR PROPER INTERRUPT ENABLE ***\n");
+                            tx_vic_enable_irq(vic_dev);
+                            pr_info("*** tx_vic_enable_irq COMPLETE - VIC interrupt flag +0x13c set ***\n");
                         } else {
                             pr_info("*** tisp_init FAILED: %d - continuing ***\n", tisp_result);
                         }
