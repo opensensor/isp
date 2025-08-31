@@ -1615,181 +1615,73 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                 }
             }
             
-            // *** CRITICAL: CONFIGURE VIC FOR MIPI DATA RECEPTION FROM QBUF AUTO-START ***
+            // *** CRITICAL: USE BINARY NINJA VIC STREAMING IMPLEMENTATION ***
             if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
-                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                struct vic_device *vic_dev = (struct vic_device *)ourISPdev->vic_dev;
                 
                 if (vic_dev && !vic_dev->streaming) {
-                    
                     pr_info("*** Channel %d: QBUF AUTO-START - STARTING VIC SUBDEV STREAMING ***\n", channel);
                     
                     // Set VIC frame dimensions for this channel
-                    vic_dev->frame_width = 1920;
-                    vic_dev->frame_height = 1080;
+                    vic_dev->width = 1920;
+                    vic_dev->height = 1080;
+                    vic_dev->buffer_count = 4;
+                    vic_dev->vic_regs = ourISPdev->vic_regs;
                     
-                    // Start VIC subdev streaming - use direct hardware register configuration
-                    pr_info("Channel %d: Starting VIC via direct hardware register configuration\n", channel);
-                    pr_info("Channel %d: VIC debug - vic_dev=%p, vic_dev->vic_regs=%p\n", channel, vic_dev, vic_dev ? vic_dev->vic_regs : NULL);
+                    // Call Binary Ninja exact VIC streaming implementation
+                    pr_info("Channel %d: Calling Binary Ninja VIC streaming implementation\n", channel);
                     
-                    // CRITICAL: Configure VIC MIPI registers directly (matches reference tx_isp_vic_start)
-                    // Force VIC register configuration regardless of vic_regs status
-                    if (vic_dev) {
-                        pr_info("*** Channel %d: FORCING VIC MIPI CONFIGURATION ***\n", channel);
+                    /* CRITICAL: Call ispvic_frame_channel_s_stream(1) - Binary Ninja implementation */
+                    if (vic_dev->vic_regs) {
+                        unsigned long flags;
+                        u32 stream_ctrl;
                         
-                        // Get VIC registers from ISP device if not available in vic_dev
-                        void __iomem *vic_regs = vic_dev->vic_regs;
-                        if (!vic_regs && ourISPdev && ourISPdev->vic_regs) {
-                            vic_regs = ourISPdev->vic_regs;
-                            pr_info("Channel %d: Using ISP device vic_regs: %p\n", channel, vic_regs);
+                        pr_info("*** Channel %d: CALLING BINARY NINJA ispvic_frame_channel_s_stream(1) ***\n", channel);
+                        
+                        spin_lock_irqsave(&vic_dev->lock, flags);
+                        
+                        if (vic_dev->streaming == 0) {
+                            /* Stream ON - Binary Ninja: vic_pipo_mdma_enable($s0) FIRST */
+                            pr_info("*** Channel %d: STREAM ON: Calling vic_pipo_mdma_enable() FIRST ***\n", channel);
+                            
+                            /* vic_pipo_mdma_enable - Binary Ninja exact sequence */
+                            pr_info("*** Channel %d: VIC PIPO MDMA ENABLE - Binary Ninja exact sequence ***\n", channel);
+                            pr_info("Channel %d: vic_pipo_mdma_enable: width=%d, height=%d, stride=%d\n", 
+                                   channel, vic_dev->width, vic_dev->height, vic_dev->width << 1);
+                            
+                            /* Step 1: Enable MDMA - reg 0x308 = 1 */
+                            writel(1, vic_dev->vic_regs + 0x308);
+                            wmb();
+                            pr_info("Channel %d: vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n", channel);
+                            
+                            /* Step 2: Set dimensions - reg 0x304 = (width << 16) | height */
+                            writel((vic_dev->width << 16) | vic_dev->height, vic_dev->vic_regs + 0x304);
+                            wmb();
+                            pr_info("Channel %d: vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
+                                   channel, (vic_dev->width << 16) | vic_dev->height, vic_dev->width, vic_dev->height);
+                            
+                            /* Step 3: Set stride - reg 0x310/0x314 = stride */
+                            u32 stride = vic_dev->width << 1;
+                            writel(stride, vic_dev->vic_regs + 0x310);
+                            writel(stride, vic_dev->vic_regs + 0x314);
+                            wmb();
+                            pr_info("Channel %d: vic_pipo_mdma_enable: reg 0x310/314 = %d (stride)\n", channel, stride);
+                            
+                            /* Then set stream control register - Binary Ninja: 
+                             * *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+                            stream_ctrl = (vic_dev->buffer_count << 16) | 0x80000020;
+                            pr_info("*** Channel %d: STREAM ON: Setting reg 0x300 = 0x%x ***\n", channel, stream_ctrl);
+                            writel(stream_ctrl, vic_dev->vic_regs + 0x300);
+                            wmb();
+                            vic_dev->streaming = 1;
                         }
                         
-                        if (vic_regs) {
-                            /* C90 compliance: declare all variables at block start */
-                            u32 frame_dims;
-                            u32 stride;
-                            u32 frame_size;
-                            u32 buffer_base;
-                            u32 stream_ctrl;
-                            u32 mdma_verify, dims_verify, stride_verify, stream_verify;
-                            int timeout;
-                            u32 vic_status;
-                            
-                            pr_info("*** Channel %d: VIC STREAMING UNLOCK AND CONFIGURATION ***\n", channel);
-                            
-                            /* *** COMPLETE VIC UNLOCK SEQUENCE AT STREAMING TIME *** */
-                            pr_info("*** Channel %d: EXECUTING COMPLETE VIC MDMA UNLOCK SEQUENCE ***\n", channel);
-                            
-                            /* Initialize variables */
-                            frame_dims = (1920 << 16) | 1080;
-                            stride = 1920 << 1;
-                            frame_size = stride * 1080;
-                            buffer_base = 0x6300000; /* From logs */
-                            stream_ctrl = 0x80000020; /* From Binary Ninja */
-                            
-                            /* Step 1: CRITICAL - Enable VIC MDMA (this unlocks register access!) */
-                            iowrite32(1, vic_regs + 0x308);
-                            wmb();
-                            pr_info("Channel %d: VIC Step 1: Write 1 to reg 0x308 (MDMA enable - CRITICAL!)\n", channel);
-                            
-                            /* Step 2: Configure frame dimensions */
-                            iowrite32(frame_dims, vic_regs + 0x304);
-                            wmb();
-                            pr_info("Channel %d: VIC Step 2: Write 0x%x to reg 0x304 (frame dimensions)\n", channel, frame_dims);
-                            
-                            /* Step 3: Configure stride (width * 2 for YUV format) */
-                            iowrite32(stride, vic_regs + 0x310);
-                            iowrite32(stride, vic_regs + 0x314);
-                            wmb();
-                            pr_info("Channel %d: VIC Step 3: Write %d to regs 0x310/0x314 (stride)\n", channel, stride);
-                            
-                            /* Step 4: Configure buffer addresses */
-                            iowrite32(buffer_base, vic_regs + 0x318);
-                            iowrite32(buffer_base + frame_size, vic_regs + 0x31c);
-                            iowrite32(buffer_base + (frame_size * 2), vic_regs + 0x320);
-                            iowrite32(buffer_base + (frame_size * 3), vic_regs + 0x324);
-                            wmb();
-                            pr_info("Channel %d: VIC Step 4: Configured buffer addresses (base=0x%x, size=%d)\n", channel, buffer_base, frame_size);
-                            
-                            /* Step 5: Configure stream control register */
-                            iowrite32(stream_ctrl, vic_regs + 0x300);
-                            wmb();
-                            pr_info("Channel %d: VIC Step 5: Write 0x%x to reg 0x300 (stream control)\n", channel, stream_ctrl);
-                            
-                            /* Step 6: VERIFY VIC REGISTER WRITES ACTUALLY PERSISTED */
-                            mdma_verify = ioread32(vic_regs + 0x308);
-                            dims_verify = ioread32(vic_regs + 0x304);
-                            stride_verify = ioread32(vic_regs + 0x310);
-                            stream_verify = ioread32(vic_regs + 0x300);
-                            
-                            pr_info("*** Channel %d: VIC STREAMING CONFIGURATION VERIFICATION ***\n", channel);
-                            pr_info("Channel %d: VIC MDMA enable 0x308: 0x%x (should be 1) %s\n", 
-                                   channel, mdma_verify, (mdma_verify == 1) ? "✓" : "✗");
-                            pr_info("Channel %d: VIC MDMA dims 0x304: 0x%x (should be 0x%x) %s\n", 
-                                   channel, dims_verify, frame_dims, (dims_verify == frame_dims) ? "✓" : "✗");
-                            pr_info("Channel %d: VIC MDMA stride 0x310: 0x%x (should be 0x%x) %s\n", 
-                                   channel, stride_verify, stride, (stride_verify == stride) ? "✓" : "✗");
-                            pr_info("Channel %d: VIC stream ctrl 0x300: 0x%x (should be 0x%x) %s\n", 
-                                   channel, stream_verify, stream_ctrl, (stream_verify == stream_ctrl) ? "✓" : "✗");
-                            
-                            if (mdma_verify == 1 && dims_verify == frame_dims && 
-                                stride_verify == stride && stream_verify == stream_ctrl) {
-                                pr_info("*** Channel %d: VIC FULLY CONFIGURED AND UNLOCKED! ***\n", channel);
-                            } else {
-                                pr_warn("*** Channel %d: VIC PARTIAL CONFIGURATION - SOME REGISTERS NOT PERSISTING ***\n", channel);
-                                
-                                /* CRITICAL: TRY ALTERNATIVE VIC UNLOCK SEQUENCE FOR STREAMING */
-                                pr_info("*** Channel %d: TRYING ALTERNATIVE VIC UNLOCK FOR STREAMING ***\n", channel);
-                                
-                                /* Method 1: Traditional unlock sequence first */
-                                iowrite32(2, vic_regs + 0x0);    /* Enable register access */
-                                wmb();
-                                iowrite32(4, vic_regs + 0x0);    /* Set config mode */
-                                wmb();
-                                iowrite32(0x12, vic_regs + 0x1a0); /* Unlock key */
-                                wmb();
-                                
-                                /* Wait for VIC ready */
-                                timeout = 1000;
-                                while (timeout > 0) {
-                                    vic_status = ioread32(vic_regs + 0x0);
-                                    if (vic_status == 0) break;
-                                    udelay(10);
-                                    timeout--;
-                                }
-                                
-                                if (timeout > 0) {
-                                    iowrite32(1, vic_regs + 0x0);    /* Start VIC processing */
-                                    wmb();
-                                    pr_info("Channel %d: Traditional unlock completed, now re-configuring...\n", channel);
-                                    
-                                    /* Re-apply MDMA configuration after traditional unlock */
-                                    iowrite32(1, vic_regs + 0x308);
-                                    iowrite32(frame_dims, vic_regs + 0x304);
-                                    iowrite32(stride, vic_regs + 0x310);
-                                    iowrite32(stride, vic_regs + 0x314);
-                                    iowrite32(buffer_base, vic_regs + 0x318);
-                                    iowrite32(buffer_base + frame_size, vic_regs + 0x31c);
-                                    iowrite32(buffer_base + (frame_size * 2), vic_regs + 0x320);
-                                    iowrite32(buffer_base + (frame_size * 3), vic_regs + 0x324);
-                                    iowrite32(stream_ctrl, vic_regs + 0x300);
-                                    wmb();
-                                    
-                                    /* Verify again */
-                                    mdma_verify = ioread32(vic_regs + 0x308);
-                                    dims_verify = ioread32(vic_regs + 0x304);
-                                    stride_verify = ioread32(vic_regs + 0x310);
-                                    stream_verify = ioread32(vic_regs + 0x300);
-                                    
-                                    pr_info("*** Channel %d: POST-TRADITIONAL-UNLOCK VERIFICATION ***\n", channel);
-                                    pr_info("Channel %d: VIC MDMA enable 0x308: 0x%x %s\n", 
-                                           channel, mdma_verify, (mdma_verify == 1) ? "✓" : "✗");
-                                    pr_info("Channel %d: VIC MDMA dims 0x304: 0x%x %s\n", 
-                                           channel, dims_verify, (dims_verify == frame_dims) ? "✓" : "✗");
-                                    pr_info("Channel %d: VIC MDMA stride 0x310: 0x%x %s\n", 
-                                           channel, stride_verify, (stride_verify == stride) ? "✓" : "✗");
-                                    pr_info("Channel %d: VIC stream ctrl 0x300: 0x%x %s\n", 
-                                           channel, stream_verify, (stream_verify == stream_ctrl) ? "✓" : "✗");
-                                } else {
-                                    pr_err("Channel %d: Traditional unlock sequence timeout\n", channel);
-                                }
-                            }
-                            
-                            pr_info("*** Channel %d: VIC MIPI CONFIGURATION COMPLETE ***\n", channel);
-                        } else {
-                            pr_err("*** Channel %d: CRITICAL ERROR - NO VIC REGISTERS AVAILABLE! ***\n", channel);
-                            pr_err("Channel %d: vic_dev->vic_regs=%p, ourISPdev->vic_regs=%p\n",
-                                  channel, vic_dev->vic_regs, ourISPdev ? ourISPdev->vic_regs : NULL);
-                        }
+                        spin_unlock_irqrestore(&vic_dev->lock, flags);
+                        
+                        pr_info("*** Channel %d: BINARY NINJA VIC STREAMING ENABLED ***\n", channel);
                     } else {
-                        pr_err("*** Channel %d: CRITICAL ERROR - NO VIC DEVICE! ***\n", channel);
+                        pr_err("*** Channel %d: CRITICAL ERROR - NO VIC REGISTERS AVAILABLE! ***\n", channel);
                     }
-                    
-                    // Set VIC streaming state
-                    if (vic_dev) {
-                        vic_dev->state = 2; // Active state
-                        vic_dev->streaming = 1;
-                    }
-                    pr_info("Channel %d: VIC hardware initialization complete\n", channel);
                     
                     pr_info("*** Channel %d: VIC NOW READY TO RECEIVE MIPI DATA FROM SENSOR ***\n", channel);
                 }
