@@ -5815,35 +5815,97 @@ static int init_isp_interrupt_system(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
-/* Event system implementation matching reference driver */
-static int tx_isp_send_event_to_remote_internal(void *subdev, int event_type, void *data)
+/* tx_isp_send_event_to_remote - EXACT Binary Ninja implementation */
+static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
 {
     struct tx_isp_subdev *sd = (struct tx_isp_subdev *)subdev;
+    void *callback_struct;
+    int (*event_callback)(void*, int, void*);
     
-    if (!sd) {
-        pr_err("tx_isp_send_event_to_remote: subdev is NULL\n");
-        return -0x203; // 0xfffffdfd - special return code from reference
-    }
-    
-    /* In reference driver, this calls function pointer at offset +0x1c in ops structure */
-    if (sd->ops && sd->ops->core) {
-        switch (event_type) {
-        case TX_ISP_EVENT_FRAME_QBUF:
-            pr_debug("Event: Frame QBUF to subdev %s\n", sd->module.name ?: "unknown");
-            return tx_isp_vic_handle_event(sd, event_type, data);
-        case TX_ISP_EVENT_FRAME_DQBUF:
-            pr_debug("Event: Frame DQBUF to subdev %s\n", sd->module.name ?: "unknown");
-            return tx_isp_vic_handle_event(sd, event_type, data);
-        case TX_ISP_EVENT_FRAME_STREAMON:
-            pr_debug("Event: Frame Stream ON to subdev %s\n", sd->module.name ?: "unknown");
-            return tx_isp_vic_handle_event(sd, event_type, data);
-        default:
-            pr_debug("Unknown event type: 0x%x to subdev %s\n", event_type, sd->module.name ?: "unknown");
-            break;
+    /* Binary Ninja: if (arg1 != 0) */
+    if (sd != NULL) {
+        /* Binary Ninja: void* $a0 = *(arg1 + 0xc) */
+        callback_struct = *((void**)((char*)sd + 0xc));
+        
+        /* Binary Ninja: if ($a0 != 0) */
+        if (callback_struct != NULL) {
+            /* Binary Ninja: int32_t $t9_1 = *($a0 + 0x1c) */
+            event_callback = *((int(**)(void*, int, void*))((char*)callback_struct + 0x1c));
+            
+            /* Binary Ninja: if ($t9_1 != 0) jump($t9_1) */
+            if (event_callback != NULL) {
+                pr_debug("tx_isp_send_event_to_remote: Calling event callback for event 0x%x\n", event_type);
+                return event_callback(sd, event_type, data);
+            }
         }
     }
     
-    return -0x203; // 0xfffffdfd
+    /* Binary Ninja: return 0xfffffdfd */
+    return 0xfffffdfd;
+}
+
+/* VIC event callback structure for Binary Ninja tx_isp_send_event_to_remote */
+struct vic_event_callback {
+    void *context;                           /* +0x00: Context pointer */
+    void *reserved[7];                      /* +0x04-0x1c: Reserved space */
+    int (*event_handler)(void*, int, void*); /* +0x1c: Event handler function */
+};
+
+/* VIC event handler function - handles events from frame channels */
+static int vic_event_handler(void *subdev, int event_type, void *data)
+{
+    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)subdev;
+    
+    if (!vic_dev) {
+        pr_err("vic_event_handler: Invalid VIC device\n");
+        return 0xfffffdfd;
+    }
+    
+    pr_debug("vic_event_handler: Processing event 0x%x\n", event_type);
+    
+    switch (event_type) {
+    case 0x3000008: { /* TX_ISP_EVENT_FRAME_QBUF - Critical buffer programming! */
+        pr_info("*** VIC EVENT: QBUF (0x3000008) - PROGRAMMING BUFFER TO VIC HARDWARE ***\n");
+        
+        /* Call Binary Ninja ispvic_frame_channel_qbuf implementation */
+        if (data) {
+            return ispvic_frame_channel_qbuf(vic_dev, data);
+        }
+        return 0;
+    }
+    case 0x3000003: { /* TX_ISP_EVENT_FRAME_STREAMON - Start VIC streaming */
+        pr_info("*** VIC EVENT: STREAM_START (0x3000003) - ACTIVATING VIC HARDWARE ***\n");
+        
+        /* Call Binary Ninja ispvic_frame_channel_s_stream implementation */
+        return ispvic_frame_channel_s_stream(vic_dev, 1);
+    }
+    case 0x3000005: { /* Buffer enqueue event from __enqueue_in_driver */
+        pr_info("*** VIC EVENT: BUFFER_ENQUEUE (0x3000005) - HARDWARE BUFFER SETUP ***\n");
+        
+        /* Process buffer enqueue to VIC hardware */
+        if (data && vic_dev->vic_regs) {
+            /* Extract buffer information and program to VIC */
+            struct v4l2_buffer *buffer_data = (struct v4l2_buffer *)data;
+            if (buffer_data && buffer_data->index < 8) {
+                u32 buffer_phys_addr = 0x6300000 + (buffer_data->index * (1920 * 1080 * 2));
+                u32 buffer_reg_offset = (buffer_data->index + 0xc6) << 2;
+                
+                pr_info("VIC EVENT: Programming buffer[%d] addr=0x%x to VIC reg 0x%x\n",
+                       buffer_data->index, buffer_phys_addr, buffer_reg_offset);
+                
+                writel(buffer_phys_addr, vic_dev->vic_regs + buffer_reg_offset);
+                wmb();
+                
+                /* Increment frame count like Binary Ninja */
+                vic_dev->frame_count++;
+            }
+        }
+        return 0;
+    }
+    default:
+        pr_debug("vic_event_handler: Unknown event 0x%x\n", event_type);
+        return 0xfffffdfd;
+    }
 }
 
 
