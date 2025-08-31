@@ -3644,33 +3644,37 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         /* *** STEP 1: CALL COMPLETE vic_mdma_enable FUNCTION FROM BINARY NINJA *** */
                         pr_info("*** PERFORMING COMPLETE vic_mdma_enable FROM BINARY NINJA ***\n");
                         
-                        /* vic_mdma_enable parameters from Binary Ninja analysis:
-                         * arg1 = VIC device (vic_dev)
-                         * arg2 = ? (unknown, set to 0) 
-                         * arg3 = buffer mode (0 = sequential buffers)
-                         * arg4 = number of buffers (4)
-                         * arg5 = buffer base address (0x6300000)
-                         * arg6 = pixel format (0x2b for RAW10, but use 0 for standard YUV)
-                         */
+                        /* C90 compliance: declare all variables at block start */
                         {
-                            /* Extract VIC device dimensions from offset 0xdc, 0xe0 (from Binary Ninja) */
+                            /* vic_mdma_enable parameters from Binary Ninja analysis */
                             u32 width = 1920;   /* vic_dev + 0xdc */
                             u32 height = 1080;  /* vic_dev + 0xe0 */
                             u32 pixel_format = 0; /* arg6 - use 0 for standard YUV mode */
                             u32 num_buffers = 4;  /* arg4 */
                             u32 buffer_base = 0x6300000; /* arg5 */
                             u32 buffer_mode = 0;  /* arg3 - 0 = sequential buffers */
+                            u32 stride;
+                            u32 frame_size;
+                            u32 double_frame_size;
+                            u32 frame_dims;
+                            u32 buf0_addr, buf1_addr, buf2_addr, buf3_addr, buf4_addr;
+                            u32 stream_ctrl_base;
+                            u32 stream_ctrl;
+                            u32 test_val = 0x12345678;
+                            u32 read_val;
+                            u32 unlock_key = 0x12; /* GC2053 unlock key */
+                            u32 timeout;
+                            u32 vic_status;
                             
                             /* Calculate stride like vic_mdma_enable does */
-                            u32 stride;
                             if (pixel_format != 7) {
                                 stride = width << 1; /* width * 2 for YUV format */
                             } else {
                                 stride = width; /* RAW format */
                             }
                             
-                            u32 frame_size = stride * height;
-                            u32 double_frame_size = frame_size << 1;
+                            frame_size = stride * height;
+                            double_frame_size = frame_size << 1;
                             
                             pr_info("vic_mdma_enable: width=%d, height=%d, stride=%d, frame_size=%d\n",
                                    width, height, stride, frame_size);
@@ -3683,7 +3687,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                             pr_info("vic_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
                             
                             /* Step 2: Frame dimensions - *(*(arg1 + 0xb8) + 0x304) = width << 16 | height */
-                            u32 frame_dims = (width << 16) | height;
+                            frame_dims = (width << 16) | height;
                             writel(frame_dims, vic_regs + 0x304);
                             wmb();
                             pr_info("vic_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
@@ -3696,8 +3700,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                             pr_info("vic_mdma_enable: reg 0x310/314 = %d (stride)\n", stride);
                             
                             /* Step 4: Buffer addresses calculation from Binary Ninja */
-                            u32 buf0_addr = buffer_base;
-                            u32 buf1_addr, buf2_addr, buf3_addr, buf4_addr;
+                            buf0_addr = buffer_base;
                             
                             if (buffer_mode == 0) {
                                 /* Sequential buffer mode from Binary Ninja */
