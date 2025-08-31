@@ -170,7 +170,6 @@ static void frame_sim_timer_callback(unsigned long data);
 static int tx_isp_send_event_to_remote_internal(void *subdev, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
-static irqreturn_t tx_isp_hardware_interrupt_handler(int irq, void *dev_id);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
 static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel);
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
@@ -1300,7 +1299,7 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
         pr_info("No existing IRQ found, testing default IRQ number: %d\n", irq_num);
         
         // Test if IRQ is valid by attempting to request it
-        ret = request_irq(irq_num, tx_isp_hardware_interrupt_handler,
+        ret = request_irq(irq_num, isp_vic_interrupt_service_routine,
                           IRQF_SHARED, "tx-isp", isp_dev);
         if (ret) {
             pr_warn("Default ISP IRQ %d not available: %d\n", irq_num, ret);
@@ -1315,7 +1314,7 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
     }
     
     // Request the IRQ if not already requested
-    ret = request_irq(irq_num, tx_isp_hardware_interrupt_handler,
+    ret = request_irq(irq_num, isp_vic_interrupt_service_routine,
                       IRQF_SHARED, "tx-isp", isp_dev);
     if (ret) {
         pr_err("Failed to request ISP IRQ %d: %d\n", irq_num, ret);
