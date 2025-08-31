@@ -815,8 +815,8 @@ static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag)
                     wmb();
                     
                     /* Binary Ninja: **($s0_1 + 0x13c) = 0x7d */
-                    if (sd->isp->vic_regs) {
-                        void __iomem *isp_csi_regs = sd->isp->vic_regs + 0x200;
+                    if (isp_dev->vic_regs) {
+                        void __iomem *isp_csi_regs = isp_dev->vic_regs + 0x200;
                         writel(0x7d, isp_csi_regs + 0x0);
                         /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x80) = 0x3e */
                         writel(0x3e, isp_csi_regs + 0x80);
