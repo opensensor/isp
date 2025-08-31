@@ -1673,149 +1673,24 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
     
     pr_info("ISP Tuning IOCTL: cmd=0x%x\n", cmd);
     
-    // Handle V4L2 control IOCTLs (VIDIOC_S_CTRL, VIDIOC_G_CTRL)
+    // Handle V4L2 control IOCTLs (VIDIOC_S_CTRL, VIDIOC_G_CTRL) - ROUTE TO tx_isp_tuning.c
     if (cmd == 0xc008561c || cmd == 0xc008561b) { // VIDIOC_S_CTRL / VIDIOC_G_CTRL
-        struct v4l2_control {
-            uint32_t id;
-            int32_t value;
-        } ctrl;
+        extern int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg);
         
-        if (copy_from_user(&ctrl, argp, sizeof(ctrl)))
-            return -EFAULT;
+        pr_info("V4L2 Control: Routing to tx_isp_tuning.c implementation\n");
         
-        pr_info("V4L2 Control: id=0x%x value=%d\n", ctrl.id, ctrl.value);
-        
-        // Handle common ISP controls based on reference implementation
-        switch (ctrl.id) {
-        case 0x980900: // V4L2_CID_BRIGHTNESS
-            pr_info("ISP Brightness: %d\n", ctrl.value);
-            break;
-        case 0x980901: // V4L2_CID_CONTRAST
-            pr_info("ISP Contrast: %d\n", ctrl.value);
-            break;
-        case 0x980902: // V4L2_CID_SATURATION
-            pr_info("ISP Saturation: %d\n", ctrl.value);
-            break;
-        case 0x98091b: // V4L2_CID_SHARPNESS
-            pr_info("ISP Sharpness: %d\n", ctrl.value);
-            break;
-        case 0x980914: // V4L2_CID_VFLIP
-            pr_info("ISP VFlip: %d\n", ctrl.value);
-            break;
-        case 0x980915: // V4L2_CID_HFLIP
-            pr_info("ISP HFlip: %d\n", ctrl.value);
-            break;
-        case 0x980918: // Anti-flicker
-            pr_info("ISP Anti-flicker: %d\n", ctrl.value);
-            break;
-        case 0x8000086: // 2DNS ratio
-            pr_info("ISP 2DNS ratio: %d\n", ctrl.value);
-            break;
-        case 0x8000085: // 3DNS ratio
-            pr_info("ISP 3DNS ratio: %d\n", ctrl.value);
-            break;
-        case 0x8000028: // Max analog gain
-            pr_info("ISP Max analog gain: %d\n", ctrl.value);
-            break;
-        case 0x8000029: // Max digital gain
-            pr_info("ISP Max digital gain: %d\n", ctrl.value);
-            break;
-        case 0x8000023: // AE compensation
-            pr_info("ISP AE compensation: %d\n", ctrl.value);
-            break;
-        case 0x80000e0: // Sensor FPS
-            pr_info("ISP Sensor FPS: %d\n", ctrl.value);
-            break;
-        case 0x8000062: // DPC strength
-            pr_info("ISP DPC strength: %d\n", ctrl.value);
-            break;
-        case 0x80000a2: // DRC strength
-            pr_info("ISP DRC strength: %d\n", ctrl.value);
-            break;
-        case 0x8000039: // Defog strength
-            pr_info("ISP Defog strength: %d\n", ctrl.value);
-            break;
-        case 0x8000101: // BCSH Hue
-            pr_info("ISP BCSH Hue: %d\n", ctrl.value);
-            break;
-        case 0x8000164: // CRITICAL: ISP Processing Enable - Binary Ninja apical_isp_core_ops_s_ctrl
-            pr_info("*** ISP PROCESSING ENABLE: value=%d ***\n", ctrl.value);
-            
-            if (ctrl.value == 1) {
-                /* Binary Ninja: *($v1_26 + 0x15c) = 0 (enable processing) */
-                pr_info("*** ENABLING ISP PROCESSING MODE - CALLING tisp_wdr_process ***\n");
-                
-                /* This is the missing activation step that enables ISP to process sensor data! */
-                if (ourISPdev && ourISPdev->vic_regs) {
-                    void __iomem *isp_regs = ourISPdev->vic_regs - 0x9a00;
-                    
-                    /* Enable ISP processing mode like Binary Ninja reference */
-                    writel(0x0, isp_regs + 0x15c);  /* Binary Ninja: *($v1_26 + 0x15c) = 0 */
-                    wmb();
-                    pr_info("ISP processing mode enabled (reg 0x15c = 0)\n");
-                    
-                    /* Additional ISP activation registers for WDR processing */
-                    writel(0x1, isp_regs + 0x2000);  /* WDR processing enable */
-                    writel(0x1, isp_regs + 0x2004);  /* WDR mode configuration */
-                    wmb();
-                    pr_info("WDR processing activated\n");
-                    
-                    /* CRITICAL: Enable ISP output pipeline */
-                    writel(0x1, isp_regs + 0x3000);  /* ISP output enable */
-                    wmb();
-                    pr_info("ISP output pipeline enabled\n");
-                    
-                    /* CRITICAL: Initialize and call tisp_wdr_process for proper ISP processing */
-                    extern int tisp_wdr_init(void);
-                    extern int tisp_wdr_process(void);
-                    
-                    pr_info("*** INITIALIZING WDR PROCESSING PIPELINE ***\n");
-                    int wdr_init_ret = tisp_wdr_init();
-                    if (wdr_init_ret == 0) {
-                        pr_info("WDR initialization successful\n");
-                        
-                        pr_info("*** CALLING ACTUAL tisp_wdr_process - CRITICAL FOR GREEN STREAM FIX ***\n");
-                        int wdr_proc_ret = tisp_wdr_process();
-                        if (wdr_proc_ret == 0) {
-                            pr_info("*** WDR PROCESSING PIPELINE ACTIVATED - GREEN STREAM SHOULD BE FIXED! ***\n");
-                        } else {
-                            pr_err("WDR processing failed: %d\n", wdr_proc_ret);
-                        }
-                    } else {
-                        pr_err("WDR initialization failed: %d\n", wdr_init_ret);
-                    }
-                    
-                    pr_info("*** ISP PROCESSING FULLY ACTIVATED - SHOULD ELIMINATE GREEN STREAM ***\n");
-                }
-            } else {
-                pr_info("*** DISABLING ISP PROCESSING MODE ***\n");
-                /* Binary Ninja: *($v1_26 + 0x15c) = 1 (disable processing) */
-                if (ourISPdev && ourISPdev->vic_regs) {
-                    void __iomem *isp_regs = ourISPdev->vic_regs - 0x9a00;
-                    writel(0x1, isp_regs + 0x15c);  /* Disable processing */
-                    wmb();
-                }
-            }
-            break;
-        default:
-            pr_info("Unknown V4L2 control: id=0x%x value=%d\n", ctrl.id, ctrl.value);
-            break;
-        }
-        
-        // For VIDIOC_G_CTRL, copy back the (possibly modified) value
-        if (cmd == 0xc008561b) {
-            if (copy_to_user(argp, &ctrl, sizeof(ctrl)))
-                return -EFAULT;
-        }
-        
-        return 0;
+        /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
+        return isp_m0_chardev_ioctl(file, cmd, argp);
     }
     
-    // Handle extended control IOCTL
+    // Handle extended control IOCTL - ROUTE TO tx_isp_tuning.c  
     if (cmd == 0xc00c56c6) { // VIDIOC_S_EXT_CTRLS or similar
-        pr_info("Extended V4L2 control operation\n");
-        // For now, just acknowledge - would need more analysis for full implementation
-        return 0;
+        extern int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg);
+        
+        pr_info("Extended V4L2 control: Routing to tx_isp_tuning.c implementation\n");
+        
+        /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
+        return isp_m0_chardev_ioctl(file, cmd, argp);
     }
     
     // Check if this is a tuning command (0x74xx series from reference)
