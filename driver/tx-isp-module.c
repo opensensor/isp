@@ -4335,88 +4335,152 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                 void __iomem *vic_regs = isp_dev->vic_regs;
                 struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
                 
-                /* *** CRITICAL: Call vic_pipo_mdma_enable FIRST to unlock VIC *** */
-                pr_info("*** CALLING vic_pipo_mdma_enable FUNCTION ***\n");
+                /* *** CRITICAL: Call BOTH vic_pipo_mdma_enable AND tx_isp_vic_start for complete VIC unlock *** */
+                pr_info("*** CALLING COMPLETE VIC UNLOCK SEQUENCE ***\n");
                 vic_dev->frame_width = 1920;
                 vic_dev->frame_height = 1080;
                 
+                /* STEP 1: Call vic_pipo_mdma_enable to enable MDMA */
                 void *mdma_result = vic_pipo_mdma_enable(vic_dev);
                 if (mdma_result) {
-                    pr_info("*** vic_pipo_mdma_enable SUCCESS - VIC UNLOCKED! ***\n");
-                    vic_dev->state = 2;
+                    pr_info("*** vic_pipo_mdma_enable SUCCESS - VIC MDMA ENABLED ***\n");
                     
-                    /* *** CRITICAL: Call tisp_init SECOND to enable ISP without affecting VIC *** */
-                    pr_info("*** CALLING tisp_init FUNCTION ***\n");
-                    int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
-                    if (tisp_result == 0) {
-                        pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED ***\n");
-                    } else {
-                        pr_info("*** tisp_init FAILED: %d ***\n", tisp_result);
+                    /* STEP 2: Call tx_isp_vic_start for complete VIC unlock */
+                    pr_info("*** CALLING tx_isp_vic_start FOR COMPLETE VIC UNLOCK ***\n");
+                    int vic_start_result = tx_isp_vic_start(vic_dev, &tx_sensor->attr);
+                    if (vic_start_result == 0) {
+                        pr_info("*** tx_isp_vic_start SUCCESS - VIC FULLY UNLOCKED! ***\n");
+                        vic_dev->state = 2;
                         
-                        /* Try alternative tisp_init sequence */
-                        pr_info("tisp_init: Attempting alternative enable sequence...\n");
+                        /* STEP 3: Now call tisp_init with VIC fully unlocked */
+                        pr_info("*** CALLING tisp_init WITH VIC FULLY UNLOCKED ***\n");
+                        int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
+                        if (tisp_result == 0) {
+                            pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED ***\n");
+                        } else {
+                            pr_info("*** tisp_init FAILED: %d ***\n", tisp_result);
+                            
+                            /* Try alternative tisp_init sequence */
+                            pr_info("tisp_init: Attempting alternative enable sequence...\n");
+                            void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
+                            
+                            writel(0x0, isp_regs + 0x800);
+                            wmb();
+                            msleep(20);
+                            
+                            writel(0x3c, isp_regs + 0x804);
+                            writel(0x10, isp_regs + 0x1c);
+                            wmb();
+                            msleep(10);
+                            
+                            writel(0x1, isp_regs + 0x800);
+                            wmb();
+                            msleep(50);
+                            
+                            u32 status = readl(isp_regs + 0x800);
+                            if (status == 1) {
+                                pr_info("*** tisp_init ALT SUCCESS: ISP CORE ENABLED (status=0x%x) ***\n", status);
+                            } else {
+                                pr_err("*** tisp_init ALT FAILED: ISP CORE WON'T ENABLE (status=0x%x) ***\n", status);
+                            }
+                        }
+                        
+                        /* *** CRITICAL: Initialize ISP event system and interrupt handlers *** */
+                        pr_info("*** INITIALIZING ISP EVENT SYSTEM (REQUIRED FOR CORE ENABLE) ***\n");
                         void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
                         
-                        writel(0x0, isp_regs + 0x800);
+                        /* Enable ISP event system and configure interrupt handlers */
+                        writel(0x1, isp_regs + 0x78);  /* Event system enable */
+                        writel(0x1, isp_regs + 0x7c);  /* Gain update events */
+                        writel(0x1, isp_regs + 0x80);  /* Exposure update events */
+                        writel(0x1, isp_regs + 0x84);  /* EV update events */
+                        writel(0x1, isp_regs + 0x88);  /* CT update events */
+                        writel(0x1, isp_regs + 0x8c);  /* AE IR update events */
+                        writel(0x1, isp_regs + 0x34);  /* Enable ISP done interrupts */
                         wmb();
-                        msleep(20);
+                        pr_info("ISP event system and interrupt handlers initialized\n");
                         
-                        writel(0x3c, isp_regs + 0x804);
-                        writel(0x10, isp_regs + 0x1c);
-                        wmb();
-                        msleep(10);
-                        
-                        writel(0x1, isp_regs + 0x800);
-                        wmb();
+                        /* Allow ISP to stabilize with VIC */
                         msleep(50);
                         
-                        u32 status = readl(isp_regs + 0x800);
-                        if (status == 1) {
-                            pr_info("*** tisp_init ALT SUCCESS: ISP CORE ENABLED (status=0x%x) ***\n", status);
-                        } else {
-                            pr_err("*** tisp_init ALT FAILED: ISP CORE WON'T ENABLE (status=0x%x) ***\n", status);
-                        }
-                    }
-                    
-                    /* *** CRITICAL: Initialize ISP event system and interrupt handlers *** */
-                    pr_info("*** INITIALIZING ISP EVENT SYSTEM (REQUIRED FOR CORE ENABLE) ***\n");
-                    void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
-                    
-                    /* Enable ISP event system and configure interrupt handlers */
-                    writel(0x1, isp_regs + 0x78);  /* Event system enable */
-                    writel(0x1, isp_regs + 0x7c);  /* Gain update events */
-                    writel(0x1, isp_regs + 0x80);  /* Exposure update events */
-                    writel(0x1, isp_regs + 0x84);  /* EV update events */
-                    writel(0x1, isp_regs + 0x88);  /* CT update events */
-                    writel(0x1, isp_regs + 0x8c);  /* AE IR update events */
-                    writel(0x1, isp_regs + 0x34);  /* Enable ISP done interrupts */
-                    wmb();
-                    pr_info("ISP event system and interrupt handlers initialized\n");
-                    
-                    /* Allow ISP to stabilize with VIC */
-                    msleep(50);
-                    
-                    /* Verify ISP and VIC are working together */
-                    u32 isp_status = readl(isp_regs + 0x800);
-                    u32 vic_status = readl(vic_regs + 0x0);
-                    pr_info("*** ISP CORE ENABLED WITH SENSOR: status=0x%x (should be 1) ***\n", isp_status);
-                    pr_info("*** VIC STATUS WITH ISP: 0x%x ***\n", vic_status);
-                    
-                    if (isp_status == 1) {
-                        /* Test VIC register accessibility */
-                        u32 test_val = 0xABCDEF12;
-                        writel(test_val, vic_regs + 0x4);
-                        wmb();
-                        u32 read_val = readl(vic_regs + 0x4);
-                        if (read_val == test_val) {
-                            pr_info("*** CONFIRMED: VIC REGISTERS FULLY ACCESSIBLE! ***\n");
-                            /* Restore frame dimensions */
-                            writel((1920 << 16) | 1080, vic_regs + 0x4);
+                        /* Verify ISP and VIC are working together */
+                        u32 isp_status = readl(isp_regs + 0x800);
+                        u32 vic_status = readl(vic_regs + 0x0);
+                        pr_info("*** ISP CORE ENABLED WITH SENSOR: status=0x%x (should be 1) ***\n", isp_status);
+                        pr_info("*** VIC STATUS WITH ISP: 0x%x ***\n", vic_status);
+                        
+                        if (isp_status == 1) {
+                            /* Test VIC register accessibility after complete unlock */
+                            u32 test_val = 0xABCDEF12;
+                            writel(test_val, vic_regs + 0x4);
                             wmb();
-                        } else {
-                            pr_warn("*** VIC registers protected but ISP enabled: wrote 0x%x, read 0x%x ***\n", test_val, read_val);
-                            pr_info("*** This is normal - VIC may be locked for protection ***\n");
+                            u32 read_val = readl(vic_regs + 0x4);
+                            if (read_val == test_val) {
+                                pr_info("*** CONFIRMED: VIC REGISTERS FULLY ACCESSIBLE AFTER COMPLETE UNLOCK! ***\n");
+                                /* Restore frame dimensions */
+                                writel((1920 << 16) | 1080, vic_regs + 0x4);
+                                wmb();
+                            } else {
+                                pr_err("*** CRITICAL: VIC registers still protected after complete unlock: wrote 0x%x, read 0x%x ***\n", test_val, read_val);
+                                pr_info("*** ATTEMPTING VIC REGISTER RECOVERY WITH COMPLETE UNLOCK ***\n");
+                                
+                                /* Try calling tx_isp_vic_start again for recovery */
+                                int recovery_result = tx_isp_vic_start(vic_dev, &tx_sensor->attr);
+                                if (recovery_result == 0) {
+                                    pr_info("*** VIC recovery successful after second tx_isp_vic_start ***\n");
+                                    
+                                    /* Test again */
+                                    writel(test_val, vic_regs + 0x4);
+                                    wmb();
+                                    read_val = readl(vic_regs + 0x4);
+                                    if (read_val == test_val) {
+                                        pr_info("*** SUCCESS: VIC registers accessible after recovery! ***\n");
+                                        writel((1920 << 16) | 1080, vic_regs + 0x4);
+                                        wmb();
+                                    } else {
+                                        pr_err("*** VIC recovery failed: still read 0x%x ***\n", read_val);
+                                    }
+                                } else {
+                                    pr_err("*** VIC recovery failed: tx_isp_vic_start returned %d ***\n", recovery_result);
+                                }
+                            }
                         }
+                        
+                    } else {
+                        pr_err("*** tx_isp_vic_start FAILED: %d ***\n", vic_start_result);
+                        pr_info("*** FALLING BACK TO vic_pipo_mdma_enable ONLY ***\n");
+                        
+                        /* Fallback to just vic_pipo_mdma_enable */
+                        vic_dev->state = 2;
+                        
+                        /* Still call tisp_init */
+                        pr_info("*** CALLING tisp_init FUNCTION ***\n");
+                        int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
+                        if (tisp_result == 0) {
+                            pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED ***\n");
+                        } else {
+                            pr_info("*** tisp_init FAILED: %d ***\n", tisp_result);
+                        }
+                        
+                        /* Still initialize ISP event system */
+                        pr_info("*** INITIALIZING ISP EVENT SYSTEM ***\n");
+                        void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
+                        
+                        writel(0x1, isp_regs + 0x78);
+                        writel(0x1, isp_regs + 0x7c);
+                        writel(0x1, isp_regs + 0x80);
+                        writel(0x1, isp_regs + 0x84);
+                        writel(0x1, isp_regs + 0x88);
+                        writel(0x1, isp_regs + 0x8c);
+                        writel(0x1, isp_regs + 0x34);
+                        wmb();
+                        pr_info("ISP event system initialized\n");
+                        
+                        msleep(50);
+                        
+                        u32 isp_status = readl(isp_regs + 0x800);
+                        u32 vic_status = readl(vic_regs + 0x0);
+                        pr_info("*** FALLBACK: ISP status=0x%x, VIC status=0x%x ***\n", isp_status, vic_status);
                     }
                     
                 } else {
