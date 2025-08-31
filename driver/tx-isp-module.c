@@ -177,7 +177,7 @@ static int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *
 static void init_frame_simulation(void);
 static void stop_frame_simulation(void);
 static void frame_sim_timer_callback(unsigned long data);
-static int tx_isp_send_event_to_remote_bn(void *subdev, int event_type, void *data);
+static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
@@ -2447,7 +2447,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                  * tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000008, &var_78) 
                  * This is the CRITICAL missing trigger that programs buffer addresses to VIC! */
                 
-                int event_result = tx_isp_send_event_to_remote_bn(&vic_dev_buf->sd, 0x3000008, &buffer);
+                int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &buffer);
                 
                 if (event_result == 0) {
                     pr_info("*** Channel %d: QBUF EVENT SUCCESS - VIC BUFFER ADDRESS PROGRAMMED! ***\n", channel);
@@ -5857,8 +5857,8 @@ static int init_isp_interrupt_system(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
-/* tx_isp_send_event_to_remote_bn - EXACT Binary Ninja implementation (renamed to avoid header conflict) */
-static int tx_isp_send_event_to_remote_bn(void *subdev, int event_type, void *data)
+/* tx_isp_send_event_to_remote - EXACT Binary Ninja implementation (renamed to avoid header conflict) */
+static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
 {
     struct tx_isp_subdev *sd = (struct tx_isp_subdev *)subdev;
     void *callback_struct;
@@ -5876,7 +5876,7 @@ static int tx_isp_send_event_to_remote_bn(void *subdev, int event_type, void *da
             
             /* Binary Ninja: if ($t9_1 != 0) jump($t9_1) */
             if (event_callback != NULL) {
-                pr_debug("tx_isp_send_event_to_remote_bn: Calling event callback for event 0x%x\n", event_type);
+                pr_debug("tx_isp_send_event_to_remote: Calling event callback for event 0x%x\n", event_type);
                 return event_callback(sd, event_type, data);
             }
         }
