@@ -122,7 +122,7 @@ static void cleanup_i2c_infrastructure(struct tx_isp_dev *dev)
 #define TX_ISP_HW_IRQ_VIC_DONE          0x2
 #define TX_ISP_HW_IRQ_CSI_ERROR         0x4
 
-/* Forward declarations */
+/* Forward declarations - Using actual function names from reference driver */
 struct frame_channel_device; /* Forward declare struct */
 struct tx_isp_vic_device; /* Forward declare VIC device */
 static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
@@ -138,6 +138,17 @@ static irqreturn_t tx_isp_hardware_interrupt_handler(int irq, void *dev_id);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
 static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel);
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
+
+/* Reference driver function declarations - Binary Ninja exact names */
+static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev);
+static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sensor_attribute *sensor_attr);
+static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
+static void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev);
+static void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
+static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *buffer);
+static int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
+static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
+static int private_reset_tx_isp_module(int arg);
 
 // ISP Tuning device support - missing component for /dev/isp-m0
 static struct cdev isp_tuning_cdev;
