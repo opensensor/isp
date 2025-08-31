@@ -1742,11 +1742,14 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                             /* Binary Ninja interrupt service routine shows these registers:
                              * Status: 0x1e0, 0x1e8  Mask: 0x1e4, 0x1ec  Clear: 0x1f0, 0x1f4 */
                             
-                            /* Enable frame completion interrupt (bit 1) in VIC interrupt mask */
-                            writel(0x1, vic_dev->vic_regs + 0x1e4);   /* Enable frame done interrupt */
-                            writel(0x1, vic_dev->vic_regs + 0x1ec);   /* Enable DMA completion interrupt */
+                            /* CRITICAL: VIC interrupt mask logic - Binary Ninja shows inverted masks */
+                            /* Binary Ninja: not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
+                            /* This means mask register bits are INVERTED: 0=enabled, 1=masked */
+                            
+                            writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);   /* Mask all except bit 0 (frame done) */
+                            writel(0xFFFFFFFC, vic_dev->vic_regs + 0x1ec);   /* Mask all except bits 0,1 (DMA completion) */
                             wmb();
-                            pr_info("Channel %d: VIC interrupt masks enabled (0x1e4=0x1, 0x1ec=0x1)\n", channel);
+                            pr_info("Channel %d: VIC interrupt masks configured (inverted logic - 0=enabled)\n", channel);
                             
                             /* Clear any pending interrupts before enabling */
                             writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear status register 1 */
