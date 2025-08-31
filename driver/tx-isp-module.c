@@ -5948,24 +5948,43 @@ static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
     void *callback_struct;
     int (*event_callback)(void*, int, void*);
     
+    pr_info("*** tx_isp_send_event_to_remote: subdev=%p, event=0x%x ***\n", subdev, event_type);
+    
     /* Binary Ninja: if (arg1 != 0) */
     if (sd != NULL) {
+        pr_info("*** EVENT: subdev=%p, checking callback at offset +0xc ***\n", sd);
+        
         /* Binary Ninja: void* $a0 = *(arg1 + 0xc) */
         callback_struct = *((void**)((char*)sd + 0xc));
         
+        pr_info("*** EVENT: callback_struct=%p (from subdev+0xc) ***\n", callback_struct);
+        
         /* Binary Ninja: if ($a0 != 0) */
         if (callback_struct != NULL) {
+            pr_info("*** EVENT: callback found, checking handler at offset +0x1c ***\n");
+            
             /* Binary Ninja: int32_t $t9_1 = *($a0 + 0x1c) */
             event_callback = *((int(**)(void*, int, void*))((char*)callback_struct + 0x1c));
             
+            pr_info("*** EVENT: event_callback=%p (from callback+0x1c) ***\n", event_callback);
+            
             /* Binary Ninja: if ($t9_1 != 0) jump($t9_1) */
             if (event_callback != NULL) {
-                pr_debug("tx_isp_send_event_to_remote: Calling event callback for event 0x%x\n", event_type);
-                return event_callback(sd, event_type, data);
+                pr_info("*** EVENT: Calling event callback %p for event 0x%x ***\n", event_callback, event_type);
+                int result = event_callback(sd, event_type, data);
+                pr_info("*** EVENT: Callback returned %d (0x%x) ***\n", result, result);
+                return result;
+            } else {
+                pr_err("*** EVENT: event_callback is NULL at callback+0x1c ***\n");
             }
+        } else {
+            pr_err("*** EVENT: No callback_struct found at subdev+0xc ***\n");
         }
+    } else {
+        pr_err("*** EVENT: subdev is NULL ***\n");
     }
     
+    pr_info("*** EVENT: Returning 0xfffffdfd (no callback) ***\n");
     /* Binary Ninja: return 0xfffffdfd */
     return 0xfffffdfd;
 }
