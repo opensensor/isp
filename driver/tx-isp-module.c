@@ -4667,6 +4667,39 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     writel(1, isp_regs + 0x800);
     wmb();
     
+    /* CRITICAL: Verify ISP core enabled and set vic_start_ok flag */
+    msleep(10); /* Allow ISP to stabilize */
+    u32 verify_isp_status = readl(isp_regs + 0x800);
+    pr_info("tisp_init: ISP core enable verification: status=0x%x\n", verify_isp_status);
+    
+    if (verify_isp_status == 1) {
+        /* Set global flag vic_start_ok = 1 for interrupt enable */
+        vic_start_ok = 1;
+        pr_info("*** tisp_init: vic_start_ok flag set to 1 - interrupts enabled ***\n");
+    } else {
+        pr_err("*** tisp_init: ISP core failed to enable! status=0x%x ***\n", verify_isp_status);
+        
+        /* Try alternative ISP enable sequence */
+        pr_info("*** tisp_init: Trying alternative ISP enable sequence ***\n");
+        writel(0, isp_regs + 0x800);
+        wmb();
+        msleep(5);
+        writel(1, isp_regs + 0x800);
+        wmb();
+        msleep(10);
+        
+        verify_isp_status = readl(isp_regs + 0x800);
+        pr_info("*** tisp_init: Alternative enable result: status=0x%x ***\n", verify_isp_status);
+        
+        if (verify_isp_status == 1) {
+            vic_start_ok = 1;
+            pr_info("*** tisp_init: ISP enabled with alternative sequence! ***\n");
+        } else {
+            pr_warn("*** tisp_init: ISP core still not responding - forcing vic_start_ok anyway ***\n");
+            vic_start_ok = 1; /* Force interrupts on even if ISP status is wrong */
+        }
+    }
+    
     /* Binary Ninja: tisp_event_init() */
     extern int tisp_event_init(void);
     tisp_event_init();
@@ -5110,6 +5143,10 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
                         if (tisp_result == 0) {
                             pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED FOR MIPI ***\n");
+                            
+                            /* CRITICAL: Set vic_start_ok flag for interrupt enable */
+                            vic_start_ok = 1;
+                            pr_info("*** vic_start_ok flag set to 1 - hardware interrupts now enabled ***\n");
                         } else {
                             pr_info("*** tisp_init FAILED: %d - continuing ***\n", tisp_result);
                         }
