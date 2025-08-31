@@ -4385,7 +4385,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                 }
                 
                 /* Verify final ISP status */
-                void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
+                isp_regs = isp_dev->vic_regs - 0x9a00;
                 u32 final_isp_status = readl(isp_regs + 0x800);
                 u32 final_vic_status = readl(vic_regs + 0x0);
                 pr_info("*** FINAL STATUS: ISP=0x%x, VIC=0x%x ***\n", final_isp_status, final_vic_status);
