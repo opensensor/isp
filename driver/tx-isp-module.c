@@ -151,6 +151,9 @@ static struct list_head vic_buffer_fifo;
 static uint32_t gpio_switch_state = 0;
 static uint32_t gpio_info[10] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
+/* CRITICAL: vic_start_ok flag - Binary Ninja shows interrupts only work when this is 1 */
+static uint32_t vic_start_ok = 0;
+
 /* Forward declarations - Using actual function names from reference driver */
 struct frame_channel_device; /* Forward declare struct */
 struct tx_isp_vic_device; /* Forward declare VIC device */
@@ -1323,117 +1326,222 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
-// Hardware interrupt handler - Binary Ninja exact implementation
-static irqreturn_t tx_isp_hardware_interrupt_handler(int irq, void *dev_id)
+/* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
+static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     struct tx_isp_vic_device *vic_dev;
-    u32 status1, status2, masked1, masked2;
-    int handled = 0;
+    void __iomem *vic_regs;
+    u32 v1_7, v1_10;
     int i;
     
-    if (!isp_dev || !isp_dev->vic_regs) {
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
+    if (!isp_dev || (uintptr_t)isp_dev >= 0xfffff001) {
         return IRQ_NONE;
     }
     
+    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-    if (!vic_dev || vic_dev->state != 2) {
+    
+    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
+    if (!vic_dev || (uintptr_t)vic_dev >= 0xfffff001) {
         return IRQ_NONE;
     }
     
-    /* Binary Ninja interrupt service routine implementation:
-     * int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0)
-     * int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
-    
-    // Read VIC interrupt status registers like Binary Ninja
-    status1 = readl(isp_dev->vic_regs + 0x1e0);  /* Status register 1 */
-    status2 = readl(isp_dev->vic_regs + 0x1e4);  /* Status register 2 */ 
-    
-    // Mask with enabled interrupts (Binary Ninja: not.d(mask) & status)
-    u32 mask1 = readl(isp_dev->vic_regs + 0x1e8);  /* Mask register 1 */
-    u32 mask2 = readl(isp_dev->vic_regs + 0x1ec);  /* Mask register 2 */
-    
-    masked1 = (~mask1) & status1;  /* Binary Ninja: not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
-    masked2 = (~mask2) & status2;  /* Binary Ninja: not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
-    
-    if (!masked1 && !masked2) {
+    /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
+    vic_regs = vic_dev->vic_regs;
+    if (!vic_regs) {
         return IRQ_NONE;
     }
     
-    pr_debug("VIC interrupt: status1=0x%x masked1=0x%x status2=0x%x masked2=0x%x\n",
-             status1, masked1, status2, masked2);
+    /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
+    /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
+    v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
+    v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
     
-    /* Clear interrupt status like Binary Ninja:
-     * *($v0_4 + 0x1f0) = $v1_7
-     * *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
-    writel(masked1, isp_dev->vic_regs + 0x1f0);  /* Clear status register 1 */
-    writel(masked2, isp_dev->vic_regs + 0x1f4);  /* Clear status register 2 */
+    /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
+    writel(v1_7, vic_regs + 0x1f0);
+    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
+    writel(v1_10, vic_regs + 0x1f4);
     wmb();
     
-    /* Binary Ninja frame completion handling:
-     * if (($v1_7 & 1) != 0)
-     *     *($s0 + 0x160) += 1
-     *     entry_$a2 = vic_framedone_irq_function($s0) */
-    if (masked1 & 0x1) {
-        pr_debug("VIC frame completion interrupt (bit 1)\n");
+    /* CRITICAL: Binary Ninja vic_start_ok check - interrupts only processed when this is 1 */
+    /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
+    if (vic_start_ok != 0) {
+        pr_debug("VIC interrupt: vic_start_ok=1, processing interrupts (v1_7=0x%x, v1_10=0x%x)\n", v1_7, v1_10);
         
-        // Increment frame counter like Binary Ninja: *($s0 + 0x160) += 1
-        if (vic_dev) {
+        /* Binary Ninja: if (($v1_7 & 1) != 0) */
+        if ((v1_7 & 1) != 0) {
+            /* Binary Ninja: *($s0 + 0x160) += 1 */
             vic_dev->frame_count++;
+            pr_info("VIC hardware interrupt: Frame completion detected (count=%u)\n", vic_dev->frame_count);
+            
+            /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
+            vic_framedone_irq_function(vic_dev);
         }
         
-        // Call vic_framedone_irq_function like Binary Ninja
-        vic_framedone_irq_function(vic_dev);
-        handled = 1;
-    }
-    
-    /* Binary Ninja DMA completion handling:
-     * if (($v1_10 & 1) != 0)
-     *     entry_$a2 = vic_mdma_irq_function($s0, 0) */
-    if (masked2 & 0x1) {
-        pr_debug("VIC DMA completion interrupt (channel 0)\n");
+        /* Binary Ninja: Error handling for frame asfifo overflow */
+        if ((v1_7 & 0x200) != 0) {
+            pr_err("Err [VIC_INT] : frame asfifo ovf!!!!!\n");
+        }
         
-        // Wake up frame channels for DMA completion
+        /* Binary Ninja: Error handling for horizontal errors */
+        if ((v1_7 & 0x400) != 0) {
+            u32 reg_3a8 = readl(vic_regs + 0x3a8);
+            pr_err("Err [VIC_INT] : hor err ch0 !!!!! 0x3a8 = 0x%08x\n", reg_3a8);
+        }
+        
+        if ((v1_7 & 0x800) != 0) {
+            pr_err("Err [VIC_INT] : hor err ch1 !!!!!\n");
+        }
+        
+        if ((v1_7 & 0x1000) != 0) {
+            pr_err("Err [VIC_INT] : hor err ch2 !!!!!\n");
+        }
+        
+        if ((v1_7 & 0x2000) != 0) {
+            pr_err("Err [VIC_INT] : hor err ch3 !!!!!\n");
+        }
+        
+        /* Binary Ninja: Error handling for vertical errors */
+        if ((v1_7 & 0x4000) != 0) {
+            pr_err("Err [VIC_INT] : ver err ch0 !!!!!\n");
+        }
+        
+        if ((v1_7 & 0x8000) != 0) {
+            pr_err("Err [VIC_INT] : ver err ch1 !!!!!\n");
+        }
+        
+        if ((v1_7 & 0x10000) != 0) {
+            pr_err("Err [VIC_INT] : ver err ch2 !!!!!\n");
+        }
+        
+        if ((v1_7 & 0x20000) != 0) {
+            pr_err("Err [VIC_INT] : ver err ch3 !!!!!\n");
+        }
+        
+        /* Binary Ninja: Additional error handling */
+        if ((v1_7 & 0x40000) != 0) {
+            pr_err("Err [VIC_INT] : hvf err !!!!!\n");
+        }
+        
+        if ((v1_7 & 0x80000) != 0) {
+            pr_err("Err [VIC_INT] : dvp hcomp err!!!!\n");
+        }
+        
+        if ((v1_7 & 0x100000) != 0) {
+            pr_err("Err [VIC_INT] : dma syfifo ovf!!!\n");
+        }
+        
+        if ((v1_7 & 0x200000) != 0) {
+            pr_err("Err [VIC_INT] : control limit err!!!\n");
+        }
+        
+        if ((v1_7 & 0x400000) != 0) {
+            pr_err("Err [VIC_INT] : image syfifo ovf !!!\n");
+        }
+        
+        if ((v1_7 & 0x800000) != 0) {
+            pr_err("Err [VIC_INT] : mipi fid asfifo ovf!!!\n");
+        }
+        
+        if ((v1_7 & 0x1000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
+        }
+        
+        if ((v1_7 & 0x2000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
+        }
+        
+        if ((v1_7 & 0x4000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch2 hcomp err !!!\n");
+        }
+        
+        if ((v1_7 & 0x8000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch3 hcomp err !!!\n");
+        }
+        
+        if ((v1_7 & 0x10000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch0 vcomp err !!!\n");
+        }
+        
+        if ((v1_7 & 0x20000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch1 vcomp err !!!\n");
+        }
+        
+        if ((v1_7 & 0x40000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch2 vcomp err !!!\n");
+        }
+        
+        if ((v1_7 & 0x80000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch3 vcomp err !!!\n");
+        }
+        
+        /* Binary Ninja: if (($v1_10 & 1) != 0) */
+        if ((v1_10 & 1) != 0) {
+            /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 0) */
+            vic_mdma_irq_function(vic_dev, 0);
+        }
+        
+        /* Binary Ninja: if (($v1_10 & 2) != 0) */
+        if ((v1_10 & 2) != 0) {
+            /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 1) */
+            vic_mdma_irq_function(vic_dev, 1);
+        }
+        
+        if ((v1_10 & 4) != 0) {
+            pr_err("Err [VIC_INT] : dma arb trans done ovf!!!\n");
+        }
+        
+        if ((v1_10 & 8) != 0) {
+            pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
+        }
+        
+        /* Binary Ninja: Error recovery sequence */
+        if ((v1_7 & 0xde00) != 0 && vic_start_ok == 1) {
+            pr_err("error handler!!!\n");
+            
+            /* Binary Ninja: **($s0 + 0xb8) = 4 */
+            writel(4, vic_regs + 0x0);
+            wmb();
+            
+            /* Binary Ninja: while (*$v0_70 != 0) */
+            u32 addr_ctl;
+            int timeout = 1000;
+            while (timeout-- > 0) {
+                addr_ctl = readl(vic_regs + 0x0);
+                if (addr_ctl == 0) {
+                    break;
+                }
+                pr_info("addr ctl is 0x%x\n", addr_ctl);
+                udelay(1);
+            }
+            
+            /* Binary Ninja: Final recovery steps */
+            u32 reg_val = readl(vic_regs + 0x104);
+            writel(reg_val, vic_regs + 0x104);  /* Self-write like Binary Ninja */
+            
+            reg_val = readl(vic_regs + 0x108);
+            writel(reg_val, vic_regs + 0x108);  /* Self-write like Binary Ninja */
+            
+            /* Binary Ninja: **($s0 + 0xb8) = 1 */
+            writel(1, vic_regs + 0x0);
+            wmb();
+        }
+        
+        /* Wake up frame channels for all interrupt types */
         for (i = 0; i < num_channels; i++) {
             if (frame_channels[i].state.streaming) {
                 frame_channel_wakeup_waiters(&frame_channels[i]);
             }
         }
-        handled = 1;
-    }
-    
-    /* Binary Ninja DMA completion handling for channel 1:
-     * if (($v1_10 & 2) != 0)
-     *     entry_$a2 = vic_mdma_irq_function($s0, 1) */
-    if (masked2 & 0x2) {
-        pr_debug("VIC DMA completion interrupt (channel 1)\n");
         
-        // Wake up channel 1 specifically
-        if (frame_channels[1].state.streaming) {
-            frame_channel_wakeup_waiters(&frame_channels[1]);
-        }
-        handled = 1;
+    } else {
+        pr_debug("VIC interrupt: vic_start_ok=0, ignoring interrupt (v1_7=0x%x, v1_10=0x%x)\n", v1_7, v1_10);
     }
     
-    /* Binary Ninja error handling for various VIC error conditions */
-    if (masked1 & 0x200) {
-        pr_warn("VIC frame asfifo overflow error\n");
-        handled = 1;
-    }
-    
-    if (masked1 & 0x400) {
-        pr_warn("VIC horizontal error ch0\n");
-        handled = 1;
-    }
-    
-    if (masked1 & 0x800) {
-        pr_warn("VIC horizontal error ch1\n");
-        handled = 1;
-    }
-    
-    pr_debug("VIC interrupt handled: masked1=0x%x masked2=0x%x\n", masked1, masked2);
-    
-    return handled ? IRQ_HANDLED : IRQ_NONE;
+    /* Binary Ninja: return 1 */
+    return IRQ_HANDLED;
 }
 
 static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
@@ -5012,6 +5120,11 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                                 }
                             }
                         }
+                        
+                        /* CRITICAL: SET vic_start_ok FLAG - Binary Ninja shows interrupts only work when this is 1 */
+                        pr_info("*** SETTING vic_start_ok = 1 FOR INTERRUPT ENABLE ***\n");
+                        vic_start_ok = 1;
+                        pr_info("*** vic_start_ok flag set to 1 - hardware interrupts now enabled ***\n");
                         
                         /* Enable VIC interrupts for frame completion */
                         pr_info("*** ENABLING VIC INTERRUPTS FOR HARDWARE FRAME COMPLETION ***\n");
