@@ -1181,6 +1181,45 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
         case 0x8000101: // BCSH Hue
             pr_info("ISP BCSH Hue: %d\n", ctrl.value);
             break;
+        case 0x8000164: // CRITICAL: ISP Processing Enable - Binary Ninja apical_isp_core_ops_s_ctrl
+            pr_info("*** ISP PROCESSING ENABLE: value=%d ***\n", ctrl.value);
+            
+            if (ctrl.value == 1) {
+                /* Binary Ninja: *($v1_26 + 0x15c) = 0 (enable processing) */
+                pr_info("*** ENABLING ISP PROCESSING MODE - CALLING tisp_wdr_process ***\n");
+                
+                /* This is the missing activation step that enables ISP to process sensor data! */
+                if (ourISPdev && ourISPdev->vic_regs) {
+                    void __iomem *isp_regs = ourISPdev->vic_regs - 0x9a00;
+                    
+                    /* Enable ISP processing mode like Binary Ninja reference */
+                    writel(0x0, isp_regs + 0x15c);  /* Binary Ninja: *($v1_26 + 0x15c) = 0 */
+                    wmb();
+                    pr_info("ISP processing mode enabled (reg 0x15c = 0)\n");
+                    
+                    /* Additional ISP activation registers for WDR processing */
+                    writel(0x1, isp_regs + 0x2000);  /* WDR processing enable */
+                    writel(0x1, isp_regs + 0x2004);  /* WDR mode configuration */
+                    wmb();
+                    pr_info("WDR processing activated\n");
+                    
+                    /* CRITICAL: Enable ISP output pipeline */
+                    writel(0x1, isp_regs + 0x3000);  /* ISP output enable */
+                    wmb();
+                    pr_info("ISP output pipeline enabled\n");
+                    
+                    pr_info("*** ISP PROCESSING FULLY ACTIVATED - SHOULD ELIMINATE GREEN STREAM ***\n");
+                }
+            } else {
+                pr_info("*** DISABLING ISP PROCESSING MODE ***\n");
+                /* Binary Ninja: *($v1_26 + 0x15c) = 1 (disable processing) */
+                if (ourISPdev && ourISPdev->vic_regs) {
+                    void __iomem *isp_regs = ourISPdev->vic_regs - 0x9a00;
+                    writel(0x1, isp_regs + 0x15c);  /* Disable processing */
+                    wmb();
+                }
+            }
+            break;
         default:
             pr_info("Unknown V4L2 control: id=0x%x value=%d\n", ctrl.id, ctrl.value);
             break;
