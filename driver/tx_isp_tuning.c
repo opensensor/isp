@@ -3339,13 +3339,13 @@ static irqreturn_t isp_irq_dispatcher(int irq, void *dev_id)
     unsigned long flags;
     int handled = 0;
     
-    if (!dev || !dev->reg_base) {
+    if (!dev || !dev->core_regs) {
         pr_err("isp_irq_dispatcher: Invalid device or register base\n");
         return IRQ_NONE;
     }
     
     /* Read ISP interrupt status */
-    irq_status = readl(dev->reg_base + 0x40);
+    irq_status = readl(dev->core_regs + 0x40);
     
     if (!irq_status) {
         return IRQ_NONE; /* Not our interrupt */
@@ -3367,7 +3367,7 @@ static irqreturn_t isp_irq_dispatcher(int irq, void *dev_id)
     spin_unlock_irqrestore(&isp_irq_lock, flags);
     
     /* Clear handled interrupts */
-    writel(irq_status, dev->reg_base + 0x40);
+    writel(irq_status, dev->core_regs + 0x40);
     
     return handled ? IRQ_HANDLED : IRQ_NONE;
 }
@@ -3436,21 +3436,21 @@ int isp_setup_irq_handling(struct tx_isp_dev *dev)
     }
     
     /* Request ISP interrupt */
-    if (dev->irq > 0) {
-        ret = request_irq(dev->irq, isp_irq_dispatcher, IRQF_SHARED, 
+    if (dev->isp_irq > 0) {
+        ret = request_irq(dev->isp_irq, isp_irq_dispatcher, IRQF_SHARED, 
                          "tx-isp", dev);
         if (ret) {
             pr_err("isp_setup_irq_handling: Failed to request IRQ %d: %d\n", 
-                   dev->irq, ret);
+                   dev->isp_irq, ret);
             return ret;
         }
         
-        pr_info("isp_setup_irq_handling: IRQ %d registered successfully\n", dev->irq);
+        pr_info("isp_setup_irq_handling: IRQ %d registered successfully\n", dev->isp_irq);
     }
     
     /* Enable basic ISP interrupts */
-    if (dev->reg_base) {
-        writel(0xFFFFFFFF, dev->reg_base + 0x44); /* Enable all ISP interrupts */
+    if (dev->core_regs) {
+        writel(0xFFFFFFFF, dev->core_regs + 0x44); /* Enable all ISP interrupts */
         pr_info("isp_setup_irq_handling: ISP interrupts enabled\n");
     }
     
@@ -3471,14 +3471,14 @@ void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
     }
     
     /* Disable ISP interrupts */
-    if (dev->reg_base) {
-        writel(0, dev->reg_base + 0x44); /* Disable all ISP interrupts */
+    if (dev->core_regs) {
+        writel(0, dev->core_regs + 0x44); /* Disable all ISP interrupts */
     }
     
     /* Free interrupt */
-    if (dev->irq > 0) {
-        free_irq(dev->irq, dev);
-        pr_info("isp_cleanup_irq_handling: IRQ %d freed\n", dev->irq);
+    if (dev->isp_irq > 0) {
+        free_irq(dev->isp_irq, dev);
+        pr_info("isp_cleanup_irq_handling: IRQ %d freed\n", dev->isp_irq);
     }
     
     /* Clear callback arrays */
