@@ -13,6 +13,7 @@
 #include <linux/interrupt.h>
 #include <linux/i2c.h>
 #include <linux/clk.h>
+#include <linux/vmalloc.h>
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_core.h"
 #include "../include/tx-isp-debug.h"
