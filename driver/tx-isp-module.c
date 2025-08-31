@@ -151,6 +151,12 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
 static int private_reset_tx_isp_module(int arg);
 static int sensor_init(struct tx_isp_dev *isp_dev);
 
+/* CSI function forward declarations */
+static int csi_device_probe(struct tx_isp_dev *isp_dev);
+static int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
+static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag);
+static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *sensor_attr);
+
 // ISP Tuning device support - missing component for /dev/isp-m0
 static struct cdev isp_tuning_cdev;
 static struct class *isp_tuning_class = NULL;
@@ -721,14 +727,25 @@ static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag)
                 
                 csi_regs = csi_dev->csi_regs;
                 if (csi_regs) {
+                    u32 csi_reg_val;
                     /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
                     lanes = sensor_attr->total_width - 1; /* DVP uses width for lane config */
                     writel(lanes, csi_regs + 0x4);
                     
                     /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
-                    u32 reg_val = readl(csi_regs + 0x8);
-                    reg_val &= 0xfffffffe;
-                    writel(reg_val, csi_regs + 0x8);
+                    csi_reg_val = readl(csi_regs + 0x8);
+                    csi_reg_val &= 0xfffffffe;
+                    writel(csi_reg_val, csi_regs + 0x8);
+                    
+                    /* Binary Ninja: *($a0_22 + 0xc) &= 0xfffffffe */
+                    csi_reg_val = readl(csi_regs + 0xc);
+                    csi_reg_val &= 0xfffffffe;
+                    writel(csi_reg_val, csi_regs + 0xc);
+                    
+                    /* Binary Ninja: *($a0_23 + 0x10) &= 0xfffffffe */
+                    csi_reg_val = readl(csi_regs + 0x10);
+                    csi_reg_val &= 0xfffffffe;
+                    writel(csi_reg_val, csi_regs + 0x10);
                     
                     /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = 0 */
                     writel(0, csi_regs + 0xc);
@@ -736,9 +753,9 @@ static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag)
                     msleep(1);
                     
                     /* Binary Ninja: *($v1_9 + 0x10) &= 0xfffffffe */
-                    reg_val = readl(csi_regs + 0x10);
-                    reg_val &= 0xfffffffe;
-                    writel(reg_val, csi_regs + 0x10);
+                    csi_reg_val = readl(csi_regs + 0x10);
+                    csi_reg_val &= 0xfffffffe;
+                    writel(csi_reg_val, csi_regs + 0x10);
                     wmb();
                     msleep(1);
                     
@@ -2066,15 +2083,15 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             
             // *** CRITICAL: USE BINARY NINJA VIC STREAMING IMPLEMENTATION ***
             if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
-                struct vic_device *vic_dev = (struct vic_device *)ourISPdev->vic_dev;
+                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
                 
                 if (vic_dev && !vic_dev->streaming) {
                     pr_info("*** Channel %d: QBUF AUTO-START - STARTING VIC SUBDEV STREAMING ***\n", channel);
                     
                     // Set VIC frame dimensions for this channel
-                    vic_dev->width = 1920;
-                    vic_dev->height = 1080;
-                    vic_dev->buffer_count = 4;
+                    vic_dev->frame_width = 1920;
+                    vic_dev->frame_height = 1080;
+                    vic_dev->frame_count = 4;
                     vic_dev->vic_regs = ourISPdev->vic_regs;
                     
                     // Call Binary Ninja exact VIC streaming implementation
@@ -2110,7 +2127,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                                    channel, (vic_dev->width << 16) | vic_dev->height, vic_dev->width, vic_dev->height);
                             
                             /* Step 3: Set stride - reg 0x310/0x314 = stride */
-                            u32 stride = vic_dev->width << 1;
+                            u32 stride = vic_dev->frame_width << 1;
                             writel(stride, vic_dev->vic_regs + 0x310);
                             writel(stride, vic_dev->vic_regs + 0x314);
                             wmb();
