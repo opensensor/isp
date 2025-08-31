@@ -3546,27 +3546,6 @@ static const struct file_operations tx_isp_fops = {
     .release = tx_isp_release,
 };
 
-// T31 ISP platform device with proper IRQ resource - Binary Ninja compatible
-static struct resource tx_isp_resources[] = {
-    [0] = {
-        .start = 0x13300000,           /* T31 ISP base address */
-        .end   = 0x133FFFFF,           /* T31 ISP end address */
-        .flags = IORESOURCE_MEM,
-    },
-    [1] = {
-        .start = 63,                   /* T31 ISP IRQ number */
-        .end   = 63,
-        .flags = IORESOURCE_IRQ,
-    },
-};
-
-static struct platform_device tx_isp_platform_device = {
-    .name = "tx-isp",
-    .id = -1,
-    .num_resources = ARRAY_SIZE(tx_isp_resources),
-    .resource = tx_isp_resources,
-};
-
 // Simple platform driver - minimal implementation
 static int tx_isp_platform_probe(struct platform_device *pdev)
 {
