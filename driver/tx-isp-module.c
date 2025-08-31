@@ -4301,37 +4301,76 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                 void __iomem *vic_regs = isp_dev->vic_regs;
                 struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
                 
-                /* *** STEP 1: CALL tisp_init FIRST TO ENABLE ISP CORE AND SUBSYSTEMS *** */
-                pr_info("*** CALLING tisp_init FUNCTION FIRST ***\n");
+                /* *** CRITICAL FIX: CALL vic_pipo_mdma_enable BEFORE tisp_init *** */
+            pr_info("*** CALLING vic_pipo_mdma_enable FUNCTION ***\n");
+            vic_dev->frame_width = 1920;
+            vic_dev->frame_height = 1080;
+            
+            void *mdma_result = vic_pipo_mdma_enable(vic_dev);
+            if (mdma_result) {
+                pr_info("*** vic_pipo_mdma_enable SUCCESS - VIC UNLOCKED! ***\n");
+                vic_dev->state = 2;
+                
+                /* *** NOW CALL tisp_init AFTER VIC IS UNLOCKED *** */
+                pr_info("*** CALLING tisp_init FUNCTION ***\n");
                 int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
                 if (tisp_result == 0) {
-                    pr_info("*** tisp_init SUCCESS - ISP CORE AND SUBSYSTEMS ENABLED! ***\n");
-                    
-                    /* *** STEP 2: NOW CALL vic_pipo_mdma_enable AFTER FULL ISP INITIALIZATION *** */
-                    pr_info("*** CALLING vic_pipo_mdma_enable AFTER COMPLETE ISP SUBSYSTEM INIT ***\n");
-                    
-                    /* Wait for ISP subsystems to fully stabilize */
-                    msleep(100);
-                    
-                    void *mdma_result = vic_pipo_mdma_enable(vic_dev);
-                    if (mdma_result) {
-                        pr_info("*** vic_pipo_mdma_enable SUCCESS - VIC UNLOCKED AFTER ISP INIT! ***\n");
-                        /* Mark VIC as unlocked */
-                        vic_dev->state = 2;
-                    } else {
-                        pr_err("*** vic_pipo_mdma_enable FAILED AFTER ISP INIT ***\n");
-                    }
+                    pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED ***\n");
                 } else {
-                    pr_err("*** tisp_init FAILED: %d ***\n", tisp_result);
+                    pr_info("*** tisp_init FAILED: %d ***\n", tisp_result);
                     
-                    /* Try fallback: call vic_pipo_mdma_enable anyway */
-                    pr_info("*** FALLBACK: Calling vic_pipo_mdma_enable despite tisp_init failure ***\n");
-                    void *mdma_result = vic_pipo_mdma_enable(vic_dev);
-                    if (mdma_result) {
-                        pr_info("*** FALLBACK vic_pipo_mdma_enable SUCCESS ***\n");
-                        vic_dev->state = 2;
+                    /* Try alternative tisp_init sequence */
+                    pr_info("tisp_init: Attempting alternative enable sequence...\n");
+                    void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
+                    
+                    writel(0x0, isp_regs + 0x800);
+                    wmb();
+                    msleep(20);
+                    
+                    writel(0x3c, isp_regs + 0x804);
+                    writel(0x10, isp_regs + 0x1c);
+                    wmb();
+                    msleep(10);
+                    
+                    writel(0x1, isp_regs + 0x800);
+                    wmb();
+                    msleep(50);
+                    
+                    u32 status = readl(isp_regs + 0x800);
+                    if (status == 1) {
+                        pr_info("*** tisp_init ALT SUCCESS: ISP CORE ENABLED (status=0x%x) ***\n", status);
+                    } else {
+                        pr_err("*** tisp_init ALT FAILED: ISP CORE WON'T ENABLE (status=0x%x) ***\n", status);
                     }
                 }
+                
+                /* *** CRITICAL: Verify VIC registers still accessible after tisp_init *** */
+                u32 test_val = 0xabcdef12;
+                writel(test_val, vic_regs + 0x308);
+                wmb();
+                u32 read_val = readl(vic_regs + 0x308);
+                if (read_val == test_val) {
+                    pr_info("*** SUCCESS: VIC registers still accessible after tisp_init ***\n");
+                    /* Restore proper MDMA enable value */
+                    writel(1, vic_regs + 0x308);
+                    wmb();
+                } else {
+                    pr_err("*** ERROR: VIC registers lost accessibility: wrote 0x%x, read 0x%x ***\n", test_val, read_val);
+                    
+                    /* Try to restore VIC access by re-calling vic_pipo_mdma_enable */
+                    pr_info("*** Attempting VIC register recovery ***\n");
+                    mdma_result = vic_pipo_mdma_enable(vic_dev);
+                    if (mdma_result) {
+                        pr_info("*** VIC register recovery successful ***\n");
+                    } else {
+                        pr_err("*** VIC register recovery failed ***\n");
+                    }
+                }
+                
+            } else {
+                pr_err("*** vic_pipo_mdma_enable FAILED ***\n");
+                return -EIO;
+            }
                 
                 /* Verify ISP core enabled with sensor */
                 {
