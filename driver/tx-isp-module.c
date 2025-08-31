@@ -2430,27 +2430,36 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         }
         spin_unlock_irqrestore(&state->buffer_lock, flags);
         
-        /* TEMPORARY: Manually trigger VIC frame completion since hardware interrupts aren't firing */
+        /* TEMPORARY: Manually trigger frame completion since hardware interrupts aren't firing */
         if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            pr_info("*** TEMPORARY: Manually generating frame completion (bypassing hardware) ***\n");
             
-            pr_info("*** TEMPORARY: Manually triggering VIC frame completion (IRQ 63 not firing) ***\n");
-            if (vic_start_ok != 0 && vic_dev) {
-                /* Directly call frame completion functions since hardware isn't generating status */
-                pr_info("*** TEMPORARY: Directly calling vic_framedone_irq_function ***\n");
-                vic_framedone_irq_function(vic_dev);
-                
-                /* Wake up all streaming channels */
-                int i;
-                for (i = 0; i < num_channels; i++) {
-                    if (frame_channels[i].state.streaming) {
-                        frame_channel_wakeup_waiters(&frame_channels[i]);
-                        pr_info("*** TEMPORARY: Woke up channel %d ***\n", i);
-                    }
+            /* SIMPLIFIED: Just wake up the frame channels directly */
+            int i;
+            for (i = 0; i < num_channels; i++) {
+                if (frame_channels[i].state.streaming) {
+                    unsigned long flags;
+                    struct frame_channel_device *fcd = &frame_channels[i];
+                    
+                    /* Mark frame as ready and wake up waiters */
+                    spin_lock_irqsave(&fcd->state.buffer_lock, flags);
+                    fcd->state.frame_ready = true;
+                    spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
+                    
+                    /* Wake up any threads waiting for frame completion */
+                    wake_up_interruptible(&fcd->state.frame_wait);
+                    
+                    pr_info("*** TEMPORARY: Generated frame completion for channel %d ***\n", i);
                 }
-                
-                pr_info("*** TEMPORARY: Manual frame completion trigger complete ***\n");
             }
+            
+            /* Increment frame counter */
+            if (ourISPdev) {
+                ourISPdev->frame_count++;
+                pr_info("*** TEMPORARY: Frame count incremented to %u ***\n", ourISPdev->frame_count);
+            }
+            
+            pr_info("*** TEMPORARY: Manual frame generation complete ***\n");
         }
         
         return 0;
