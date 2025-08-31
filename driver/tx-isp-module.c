@@ -620,6 +620,45 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
     
     vic_dev->sd.vin_state = TX_ISP_MODULE_RUNNING;
     
+    /* *** CRITICAL: REGISTER VIC EVENT CALLBACK FOR BINARY NINJA tx_isp_send_event_to_remote *** */
+    {
+        struct vic_event_callback *vic_callback;
+        
+        pr_info("*** REGISTERING VIC EVENT CALLBACK FOR BINARY NINJA EVENTS ***\n");
+        
+        /* Allocate event callback structure */
+        vic_callback = kzalloc(sizeof(struct vic_event_callback), GFP_KERNEL);
+        if (vic_callback) {
+            /* Set up callback structure like Binary Ninja reference */
+            vic_callback->context = vic_dev;                    /* Context pointer */
+            vic_callback->event_handler = vic_event_handler;    /* Event handler at +0x1c */
+            
+            /* CRITICAL: Register callback structure at subdev offset +0xc */
+            /* Binary Ninja: *(arg1 + 0xc) = callback_struct */
+            *((void**)((char*)&vic_dev->sd + 0xc)) = vic_callback;
+            
+            pr_info("*** VIC EVENT CALLBACK REGISTERED: callback=%p, handler=%p ***\n",
+                   vic_callback, vic_event_handler);
+            pr_info("*** VIC SUBDEV NOW READY FOR tx_isp_send_event_to_remote EVENTS ***\n");
+            
+            /* Initialize some buffer entries for VIC buffer management */
+            for (int buf_idx = 0; buf_idx < 8; buf_idx++) {
+                struct vic_buffer_entry *buf_entry = kzalloc(sizeof(struct vic_buffer_entry), GFP_KERNEL);
+                if (buf_entry) {
+                    buf_entry->buffer_index = buf_idx;
+                    buf_entry->channel = 0;  /* Channel 0 */
+                    buf_entry->buffer_addr = 0;  /* Will be set when used */
+                    INIT_LIST_HEAD(&buf_entry->list);
+                    push_buffer_fifo(&vic_dev->free_head, buf_entry);
+                }
+            }
+            pr_info("VIC buffer management initialized (8 buffer entries)\n");
+            
+        } else {
+            pr_err("*** FAILED TO ALLOCATE VIC EVENT CALLBACK STRUCTURE ***\n");
+        }
+    }
+    
     // Connect to ISP device
     isp_dev->vic_dev = vic_dev;
     
