@@ -4216,6 +4216,9 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         pr_info("*** ENABLING ISP CORE WITH FORCE SENSOR ***\n");
                         if (isp_dev->vic_regs) {
                             void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
+                            u32 isp_status;
+                            u32 vic_status;
+                            u32 vic_test;
                             
                             /* EXACT tisp_init sequence for force sensor path */
                             writel(0x1c, isp_regs + 0x804);
@@ -4232,17 +4235,17 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                             
                             msleep(20);
                             
-                            u32 isp_status = readl(isp_regs + 0x800);
+                            isp_status = readl(isp_regs + 0x800);
                             pr_info("*** ISP CORE ENABLED WITH FORCE SENSOR: status=0x%x ***\n", isp_status);
                             
                             if (isp_status == 1) {
-                                u32 vic_status = readl(isp_dev->vic_regs + 0x0);
+                                vic_status = readl(isp_dev->vic_regs + 0x0);
                                 pr_info("*** VIC STATUS AFTER FORCE ISP ENABLE: 0x%x ***\n", vic_status);
                                 
                                 /* Test VIC register writes */
                                 writel(0x87654321, isp_dev->vic_regs + 0x308);
                                 wmb();
-                                u32 vic_test = readl(isp_dev->vic_regs + 0x308);
+                                vic_test = readl(isp_dev->vic_regs + 0x308);
                                 if (vic_test == 0x87654321) {
                                     pr_info("*** SUCCESS! VIC REGISTERS WRITABLE WITH FORCE SENSOR+ISP! ***\n");
                                 } else {
