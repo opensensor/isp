@@ -44,6 +44,9 @@ static DEFINE_MUTEX(sensor_list_mutex);
 static int sensor_count = 0;
 static int isp_memopt = 0; // Memory optimization flag like reference
 
+/* CRITICAL: VIC interrupt control flag - Binary Ninja reference */
+static uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag */
+
 /* Kernel symbol export for sensor drivers to register */
 static struct tx_isp_subdev *registered_sensor_subdev = NULL;
 static DEFINE_MUTEX(sensor_register_mutex);
@@ -4187,8 +4190,6 @@ static uint32_t data_b2e74 = 0;  /* WDR mode flag */
 static uint32_t data_b2f34 = 0;  /* Frame height */
 static uint32_t deir_en = 0;     /* DEIR enable flag */
 
-/* CRITICAL: VIC interrupt control flag - Binary Ninja reference */
-static uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag */
 
 /* tisp_init - COMPLETE Binary Ninja reference implementation */
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
