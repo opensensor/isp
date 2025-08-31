@@ -1493,9 +1493,10 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     writel(v1_10, vic_regs + 0x1f4);
     wmb();
     
-    /* CRITICAL: Binary Ninja vic_start_ok check - interrupts only processed when this is 1 */
-    /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
-    if (vic_start_ok != 0) {
+    /* CRITICAL: Binary Ninja VIC interrupt enable flag check at +0x13c */
+    /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) - the REAL interrupt enable flag */
+    uint32_t *vic_irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
+    if (*vic_irq_enable_flag != 0) {
         pr_debug("VIC interrupt: vic_start_ok=1, processing interrupts (v1_7=0x%x, v1_10=0x%x)\n", v1_7, v1_10);
         
         /* Binary Ninja: if (($v1_7 & 1) != 0) */
