@@ -2430,6 +2430,18 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         }
         spin_unlock_irqrestore(&state->buffer_lock, flags);
         
+        /* TEMPORARY: Manually trigger VIC frame completion since hardware interrupts aren't firing */
+        if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
+            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            
+            pr_info("*** TEMPORARY: Manually triggering VIC frame completion (IRQ 63 not firing) ***\n");
+            if (vic_start_ok != 0 && vic_dev) {
+                /* Manually call the VIC interrupt service routine */
+                isp_vic_interrupt_service_routine(63, ourISPdev);
+                pr_info("*** TEMPORARY: Manual VIC ISR trigger complete ***\n");
+            }
+        }
+        
         return 0;
     }
     case 0xc0445609: { // VIDIOC_DQBUF - Dequeue buffer
