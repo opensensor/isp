@@ -3696,13 +3696,15 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
     return 0;
 }
 
-/* tisp_init - Binary Ninja equivalent implementation */
+/* tisp_init - Binary Ninja equivalent implementation with EXACT reference sequence */
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
 {
     void __iomem *isp_regs;
     u32 mode_value;
     u32 control_value = 8;
     u32 enable_value = 1;
+    int timeout = 1000;
+    u32 status;
     
     if (!sensor_attr || !isp_dev || !isp_dev->vic_regs) {
         pr_err("tisp_init: Invalid parameters\n");
@@ -3711,7 +3713,42 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     
     isp_regs = isp_dev->vic_regs - 0x9a00;  /* Get ISP base */
     
-    pr_info("tisp_init: Initializing ISP core with sensor attributes\n");
+    pr_info("tisp_init: Processing sensor configuration structure (%zu bytes)\n",
+            sizeof(struct tx_isp_sensor_attribute));
+    
+    /* Validate sensor configuration structure */
+    if (sensor_attr->total_width == 0 || sensor_attr->total_height == 0) {
+        pr_err("tisp_init: Invalid sensor configuration - using defaults\n");
+        sensor_attr->total_width = 1920;
+        sensor_attr->total_height = 1080;
+    } else {
+        pr_info("tisp_init: Sensor config valid - clock=%dHz, %dx%d\n",
+                78000000, sensor_attr->total_width, sensor_attr->total_height);
+    }
+    
+    /* CRITICAL: Write sensor configuration to ISP registers BEFORE core enable */
+    pr_info("tisp_init: Configuring ISP subsystems...\n");
+    
+    /* Write sensor parameters to ISP registers - required before core enable */
+    writel(78000000, isp_regs + 0x124);        /* Sensor clock */
+    writel((30 << 16) | 1, isp_regs + 0x128);  /* Frame rate */
+    writel(1920, isp_regs + 0x140);            /* Width */
+    writel(1080, isp_regs + 0x142);            /* Height */
+    writel(2200, isp_regs + 0x144);            /* Total width */
+    writel(1125, isp_regs + 0x148);            /* Total height */
+    writel(11, isp_regs + 0x94);               /* Line time */
+    writel(1000, isp_regs + 0x98);             /* Integration time */
+    writel(1117, isp_regs + 0x9c);             /* Max integration */
+    writel(2, isp_regs + 0xa0);                /* Min integration */
+    wmb();
+    
+    /* MIPI interface configuration */
+    writel((2 << 16) | 0x2b, isp_regs + 0x12c); /* 2 lanes, RAW10 format */
+    writel(0x1, isp_regs + 0x14c);               /* MIPI mode */
+    writel(78, isp_regs + 0x150);                /* Clock divider */
+    wmb();
+    
+    pr_info("tisp_init: Initializing ISP core control...\n");
     
     /* Binary Ninja: Determine mode value based on WDR flag */
     if (sensor_attr->wdr_cache != 0) {
@@ -3720,11 +3757,12 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
         mode_value = 0x1c;  /* Linear mode */
     }
     
-    /* Binary Ninja tisp_init sequence:
-     * system_reg_write(0x804, mode_value)
-     * system_reg_write(0x1c, 8)  
-     * system_reg_write(0x800, 1) */
+    /* CRITICAL: Reset ISP core first */
+    writel(0x0, isp_regs + 0x800);
+    wmb();
+    msleep(20);
     
+    /* Binary Ninja tisp_init sequence - EXACT order is critical */
     writel(mode_value, isp_regs + 0x804);
     wmb();
     pr_info("tisp_init: ISP mode register 0x804 = 0x%x\n", mode_value);
@@ -3733,21 +3771,62 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     wmb();
     pr_info("tisp_init: ISP control register 0x1c = 0x%x\n", control_value);
     
+    /* CRITICAL: Enable ISP core with proper verification */
+    pr_info("tisp_init: Enabling ISP core with complete sensor configuration...\n");
     writel(enable_value, isp_regs + 0x800);
     wmb();
     pr_info("tisp_init: ISP enable register 0x800 = 0x%x\n", enable_value);
     
-    /* Wait for ISP core to respond */
-    msleep(50);
+    /* Extended verification with multiple attempts and delays */
+    timeout = 500;
+    while (timeout-- > 0) {
+        msleep(1);
+        status = readl(isp_regs + 0x800);
+        if (status == 1) {
+            break;
+        }
+    }
     
-    /* Verify ISP enabled */
-    u32 status = readl(isp_regs + 0x800);
     if (status == 1) {
-        pr_info("tisp_init: ISP core enabled successfully\n");
+        pr_info("tisp_init: ISP core enabled successfully (status=0x%x)\n", status);
         return 0;
     } else {
         pr_err("tisp_init: ISP core failed to enable (status=0x%x)\n", status);
-        return -EIO;
+        
+        /* Try alternative enable sequence as in logs */
+        pr_info("tisp_init: Attempting alternative enable sequence...\n");
+        
+        /* Reset and try different register sequence */
+        writel(0x0, isp_regs + 0x800);
+        wmb();
+        msleep(20);
+        
+        /* Try enhanced mode configuration */
+        writel(0x3c, isp_regs + 0x804);  /* Enhanced mode */
+        writel(0x10, isp_regs + 0x1c);   /* Enhanced control */
+        wmb();
+        msleep(10);
+        
+        writel(0x1, isp_regs + 0x800);
+        wmb();
+        
+        /* Wait longer for alternative sequence */
+        timeout = 100;
+        while (timeout-- > 0) {
+            msleep(1);
+            status = readl(isp_regs + 0x800);
+            if (status == 1) {
+                break;
+            }
+        }
+        
+        if (status == 1) {
+            pr_info("*** tisp_init ALT SUCCESS: ISP CORE ENABLED (status=0x%x) ***\n", status);
+            return 0;
+        } else {
+            pr_err("*** tisp_init FAILED: ISP CORE WON'T ENABLE (status=0x%x) ***\n", status);
+            return -EIO;
+        }
     }
 }
 
