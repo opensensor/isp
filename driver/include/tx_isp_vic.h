@@ -15,7 +15,6 @@ int tx_isp_vic_probe(struct platform_device *pdev);
 int tx_isp_vic_remove(struct platform_device *pdev);
 
 /* VIC Operations */
-int tx_isp_vic_start(struct tx_isp_subdev *sd);
 int tx_isp_vic_stop(struct tx_isp_subdev *sd);
 int tx_isp_vic_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config);
 
