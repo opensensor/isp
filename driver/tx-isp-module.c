@@ -3713,18 +3713,14 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     pr_info("tisp_init: Control register 0x1c = 0x%x\n", control_value);
     
     /* CRITICAL: Binary Ninja calls sensor_init(&sensor_ctrl) - this is missing! */
-    pr_info("tisp_init: CRITICAL - calling sensor_init() equivalent\n");
+    pr_info("tisp_init: CRITICAL - calling reference driver sensor_init() function\n");
     
-    /* Sensor initialization equivalent - configure sensor-specific registers */
-    if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
-        isp_dev->sensor->sd.ops->core && isp_dev->sensor->sd.ops->core->init) {
-        pr_info("tisp_init: Calling sensor hardware initialization\n");
-        ret = isp_dev->sensor->sd.ops->core->init(&isp_dev->sensor->sd, 1);
-        if (ret && ret != 0xfffffdfd) {
-            pr_err("tisp_init: Sensor init failed: %d\n", ret);
-        } else {
-            pr_info("tisp_init: Sensor hardware initialized successfully\n");
-        }
+    /* Call actual reference driver sensor_init function */
+    ret = sensor_init(isp_dev);
+    if (ret && ret != 0xfffffdfd) {
+        pr_err("tisp_init: Reference sensor_init failed: %d\n", ret);
+    } else {
+        pr_info("tisp_init: Reference sensor_init completed successfully\n");
     }
     
     /* Binary Ninja: tisp_set_csc_version(0) - Color space conversion setup */
