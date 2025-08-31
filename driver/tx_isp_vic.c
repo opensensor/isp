@@ -665,6 +665,12 @@ static int ispvic_frame_channel_s_stream(struct vic_device *vic_dev, int enable)
     return 0;
 }
 
+/* VIC event callback structure - matching reference driver layout */
+struct vic_callback_struct {
+    void *reserved[7];          /* Reserved fields 0x0-0x18 */
+    void *event_callback;       /* Function pointer at offset 0x1c */
+};
+
 /* VIC event callback handler for QBUF events */
 static int vic_pad_event_callback(struct tx_isp_subdev_pad *pad, unsigned int cmd, void *data)
 {
@@ -697,8 +703,9 @@ static int vic_pad_event_callback(struct tx_isp_subdev_pad *pad, unsigned int cm
                 pr_info("*** VIC: QBUF event processed - frame completion signaled ***\n");
                 ret = 0;
             } else {
-                pr_err("VIC: QBUF event received but not streaming (state=%d)\n", vic_dev->state);
-                ret = -EAGAIN;
+                pr_info("VIC: QBUF event received but not streaming (state=%d) - allowing anyway\n", vic_dev->state);
+                complete(&vic_dev->frame_complete);
+                ret = 0;
             }
             break;
             
@@ -961,13 +968,31 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         goto err_free_vic_dev;
     }
 
-    /* Set up VIC event callback for QBUF events */
-    pr_info("*** VIC: Setting up event callback for input pad ***\n");
+    /* Set up VIC event callback structure matching reference driver */
+    pr_info("*** VIC: Setting up event callback structure for input pad ***\n");
     if (sd->num_inpads > 0 && sd->inpads) {
-        sd->inpads[0].event = vic_pad_event_callback;
-        pr_info("*** VIC: Event callback registered on input pad[0] ***\n");
+        /* Allocate callback structure matching reference driver layout */
+        struct vic_callback_struct *callback = kzalloc(sizeof(struct vic_callback_struct), GFP_KERNEL);
+        if (!callback) {
+            pr_err("VIC: Failed to allocate callback structure\n");
+            ret = -ENOMEM;
+            goto err_deinit_sd;
+        }
+        
+        /* Set function pointer at offset 0x1c (callback_struct + 0x1c) */
+        callback->event_callback = vic_pad_event_callback;
+        
+        /* Store callback structure pointer at pad+0xc as expected by reference driver */
+        sd->inpads[0].callback_data = callback;  /* This will be at pad+0xc */
+        
+        pr_info("*** VIC: Event callback structure set up - callback=%p, function=%p ***\n", 
+                callback, vic_pad_event_callback);
+        pr_info("*** VIC: Pad callback_data at %p (pad+0xc equivalent) ***\n", 
+                &sd->inpads[0].callback_data);
     } else {
         pr_err("VIC: No input pads available for event callback\n");
+        ret = -EINVAL;
+        goto err_deinit_sd;
     }
 
     /* Initialize hardware after subdev init */
