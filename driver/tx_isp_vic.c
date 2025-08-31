@@ -672,7 +672,7 @@ struct vic_callback_struct {
 };
 
 /* VIC event callback handler for QBUF events */
-static int vic_pad_event_callback(struct tx_isp_subdev_pad *pad, unsigned int cmd, void *data)
+static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd, void *data)
 {
     struct tx_isp_subdev *sd;
     struct vic_device *vic_dev;
@@ -980,15 +980,18 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         }
         
         /* Set function pointer at offset 0x1c (callback_struct + 0x1c) */
-        callback->event_callback = vic_pad_event_callback;
+        callback->event_callback = vic_pad_event_handler;
         
-        /* Store callback structure pointer at pad+0xc as expected by reference driver */
-        sd->inpads[0].callback_data = callback;  /* This will be at pad+0xc */
+        /* Store callback structure pointer in priv field as expected by reference driver */
+        sd->inpads[0].priv = callback;  /* This will be at pad+0xc (priv field offset) */
+        
+        /* Also set the event handler directly on the pad */
+        sd->inpads[0].event = vic_pad_event_handler;
         
         pr_info("*** VIC: Event callback structure set up - callback=%p, function=%p ***\n", 
-                callback, vic_pad_event_callback);
-        pr_info("*** VIC: Pad callback_data at %p (pad+0xc equivalent) ***\n", 
-                &sd->inpads[0].callback_data);
+                callback, vic_pad_event_handler);
+        pr_info("*** VIC: Pad priv pointer at %p stores callback structure ***\n", 
+                &sd->inpads[0].priv);
     } else {
         pr_err("VIC: No input pads available for event callback\n");
         ret = -EINVAL;
