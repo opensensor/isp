@@ -27,11 +27,18 @@
 - Preserve reference commenting style and add MCP-specific comments only where needed
 - Keep helper methods separate if reference has them separate
 
+## Binary Ninja MCP Usage Rules
+- Use Binary Ninja MCP ONLY for querying/decompiling reference driver methods
+- MANDATORY: Before implementing any method, use Binary Ninja MCP to get the reference method's decompiled code
+- Query format: Use MCP to decompile the specific method you're about to implement
+- Do NOT use Binary Ninja MCP for any other purpose (logging, debugging, etc.)
+- Always compare your implementation against the Binary Ninja decompiled reference before finalizing
+
 ## When Confused or Stuck
-- STOP and ask to see the specific reference method you're implementing
-- Don't guess at method boundaries or logic flow
+- STOP and use Binary Ninja MCP to decompile the specific reference method you're implementing
+- Don't guess at method boundaries or logic flow - query the reference with Binary Ninja MCP first
 - Ask for clarification on which reference methods should be called vs inlined
-- Request reference driver snippets for any unclear sections
+- Always get Binary Ninja decompilation before writing any method implementation
 
 ## Quality Checks Before Submitting
 - Verify each method maps to exactly one reference method
