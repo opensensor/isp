@@ -3515,7 +3515,18 @@ static int tx_isp_vic_start(struct tx_isp_dev *isp_dev, struct tx_isp_sensor *se
     pr_info("VIC: Detected interface type = %d, sensor format = 0x%x\n", interface_type, sensor_format);
     
     switch (interface_type) {
-    case 1: /* MIPI interface - Binary Ninja: $v0 == 1 */
+    case 1: /* DVP interface - TX_SENSOR_DATA_INTERFACE_DVP = 1 */
+        pr_info("VIC: Configuring for DVP interface\n");
+        vic_ctrl_config = 3;
+        vic_reg_0x1a4_config = 0x100010;
+        vic_frame_mode = 0x4210;
+        
+        /* DVP format-specific configuration */
+        vic_reg_0x10_config = 0x20000;  /* Default DVP config */
+        unlock_key = 0;  /* DVP doesn't need special unlock key */
+        break;
+        
+    case 2: /* MIPI interface - TX_SENSOR_DATA_INTERFACE_MIPI = 2 */
         pr_info("VIC: Configuring for MIPI interface\n");
         
         /* Binary Ninja MIPI configuration logic */
@@ -3539,17 +3550,6 @@ static int tx_isp_vic_start(struct tx_isp_dev *isp_dev, struct tx_isp_sensor *se
         vic_frame_mode = 0x4440;  /* Progressive mode for GC2053 */
         
         vic_ctrl_config = 2;  /* MIPI control mode */
-        break;
-        
-    case 3: /* DVP interface - Binary Ninja: $v0 == 3 */
-        pr_info("VIC: Configuring for DVP interface\n");
-        vic_ctrl_config = 3;
-        vic_reg_0x1a4_config = 0x100010;
-        vic_frame_mode = 0x4210;
-        
-        /* DVP format-specific configuration */
-        vic_reg_0x10_config = 0x20000;  /* Default DVP config */
-        unlock_key = 0;  /* DVP doesn't need special unlock key */
         break;
         
     case 4: /* BT656 interface - Binary Ninja: $v0 == 4 */
