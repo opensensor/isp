@@ -3274,24 +3274,224 @@ static int tisp_sdns_wdr_en(int enable)
     return 0;
 }
 
-/* Event system initialization functions */
-static int tisp_event_init(void)
+/* ISP IRQ and Event System - Binary Ninja EXACT implementation */
+
+/* IRQ callback function array - Binary Ninja reference */
+static void (*irq_func_cb[32])(void) = {NULL};
+
+/* Event callback function array - Binary Ninja reference */
+static int (*cb[32])(void) = {NULL};
+
+/* ISP interrupt state */
+static spinlock_t isp_irq_lock;
+static bool isp_irq_initialized = false;
+
+/* system_irq_func_set - Binary Ninja EXACT implementation */
+static int system_irq_func_set(int irq_id, void *handler)
 {
-    pr_info("tisp_event_init: Initializing ISP event system\n");
+    unsigned long flags;
+    
+    pr_info("system_irq_func_set: Setting IRQ handler for IRQ %d\n", irq_id);
+    
+    if (irq_id < 0 || irq_id >= 32) {
+        pr_err("system_irq_func_set: Invalid IRQ ID %d\n", irq_id);
+        return -EINVAL;
+    }
+    
+    if (!isp_irq_initialized) {
+        spin_lock_init(&isp_irq_lock);
+        isp_irq_initialized = true;
+    }
+    
+    spin_lock_irqsave(&isp_irq_lock, flags);
+    
+    /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
+    irq_func_cb[irq_id] = (void (*)(void))handler;
+    
+    spin_unlock_irqrestore(&isp_irq_lock, flags);
+    
+    pr_info("system_irq_func_set: IRQ %d handler set to %p\n", irq_id, handler);
     return 0;
 }
 
+/* tisp_event_set_cb - Binary Ninja EXACT implementation */
 static int tisp_event_set_cb(int event_id, void *callback)
 {
     pr_info("tisp_event_set_cb: Setting callback for event %d\n", event_id);
+    
+    if (event_id < 0 || event_id >= 32) {
+        pr_err("tisp_event_set_cb: Invalid event ID %d\n", event_id);
+        return -EINVAL;
+    }
+    
+    /* Binary Ninja: *((arg1 << 2) + &cb) = arg2 */
+    cb[event_id] = (int (*)(void))callback;
+    
+    pr_info("tisp_event_set_cb: Event %d callback set to %p\n", event_id, callback);
     return 0;
 }
 
-static int system_irq_func_set(int irq_id, void *handler)
+/* ISP interrupt dispatcher - calls registered IRQ handlers */
+static irqreturn_t isp_irq_dispatcher(int irq, void *dev_id)
 {
-    pr_info("system_irq_func_set: Setting IRQ handler for IRQ %d\n", irq_id);
+    struct tx_isp_dev *dev = (struct tx_isp_dev *)dev_id;
+    uint32_t irq_status;
+    unsigned long flags;
+    int handled = 0;
+    
+    if (!dev || !dev->reg_base) {
+        pr_err("isp_irq_dispatcher: Invalid device or register base\n");
+        return IRQ_NONE;
+    }
+    
+    /* Read ISP interrupt status */
+    irq_status = readl(dev->reg_base + 0x40);
+    
+    if (!irq_status) {
+        return IRQ_NONE; /* Not our interrupt */
+    }
+    
+    pr_debug("isp_irq_dispatcher: IRQ status 0x%x\n", irq_status);
+    
+    spin_lock_irqsave(&isp_irq_lock, flags);
+    
+    /* Process each set interrupt bit */
+    for (int i = 0; i < 32; i++) {
+        if ((irq_status & (1 << i)) && irq_func_cb[i]) {
+            pr_debug("isp_irq_dispatcher: Calling IRQ handler %d\n", i);
+            irq_func_cb[i]();
+            handled = 1;
+        }
+    }
+    
+    spin_unlock_irqrestore(&isp_irq_lock, flags);
+    
+    /* Clear handled interrupts */
+    writel(irq_status, dev->reg_base + 0x40);
+    
+    return handled ? IRQ_HANDLED : IRQ_NONE;
+}
+
+/* ISP event dispatcher - calls registered event callbacks */
+static int isp_event_dispatcher(int event_id)
+{
+    pr_debug("isp_event_dispatcher: Processing event %d\n", event_id);
+    
+    if (event_id < 0 || event_id >= 32) {
+        pr_err("isp_event_dispatcher: Invalid event ID %d\n", event_id);
+        return -EINVAL;
+    }
+    
+    if (cb[event_id]) {
+        pr_debug("isp_event_dispatcher: Calling event callback %d\n", event_id);
+        return cb[event_id]();
+    }
+    
     return 0;
 }
+
+/* tisp_event_init - Event system initialization */
+static int tisp_event_init(void)
+{
+    pr_info("tisp_event_init: Initializing ISP event system\n");
+    
+    /* Clear all callback arrays */
+    memset(irq_func_cb, 0, sizeof(irq_func_cb));
+    memset(cb, 0, sizeof(cb));
+    
+    if (!isp_irq_initialized) {
+        spin_lock_init(&isp_irq_lock);
+        isp_irq_initialized = true;
+    }
+    
+    pr_info("tisp_event_init: Event system initialized\n");
+    return 0;
+}
+
+/* ISP event processing for frame events */
+int isp_trigger_event(int event_id)
+{
+    pr_debug("isp_trigger_event: Triggering event %d\n", event_id);
+    return isp_event_dispatcher(event_id);
+}
+EXPORT_SYMBOL(isp_trigger_event);
+
+/* Setup ISP interrupt handling */
+int isp_setup_irq_handling(struct tx_isp_dev *dev)
+{
+    int ret;
+    
+    pr_info("isp_setup_irq_handling: Setting up ISP interrupt handling\n");
+    
+    if (!dev) {
+        pr_err("isp_setup_irq_handling: Invalid device\n");
+        return -EINVAL;
+    }
+    
+    /* Initialize event system first */
+    ret = tisp_event_init();
+    if (ret) {
+        pr_err("isp_setup_irq_handling: Failed to initialize event system: %d\n", ret);
+        return ret;
+    }
+    
+    /* Request ISP interrupt */
+    if (dev->irq > 0) {
+        ret = request_irq(dev->irq, isp_irq_dispatcher, IRQF_SHARED, 
+                         "tx-isp", dev);
+        if (ret) {
+            pr_err("isp_setup_irq_handling: Failed to request IRQ %d: %d\n", 
+                   dev->irq, ret);
+            return ret;
+        }
+        
+        pr_info("isp_setup_irq_handling: IRQ %d registered successfully\n", dev->irq);
+    }
+    
+    /* Enable basic ISP interrupts */
+    if (dev->reg_base) {
+        writel(0xFFFFFFFF, dev->reg_base + 0x44); /* Enable all ISP interrupts */
+        pr_info("isp_setup_irq_handling: ISP interrupts enabled\n");
+    }
+    
+    pr_info("isp_setup_irq_handling: ISP interrupt handling setup complete\n");
+    return 0;
+}
+EXPORT_SYMBOL(isp_setup_irq_handling);
+
+/* Cleanup ISP interrupt handling */
+void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
+{
+    unsigned long flags;
+    
+    pr_info("isp_cleanup_irq_handling: Cleaning up ISP interrupt handling\n");
+    
+    if (!dev) {
+        return;
+    }
+    
+    /* Disable ISP interrupts */
+    if (dev->reg_base) {
+        writel(0, dev->reg_base + 0x44); /* Disable all ISP interrupts */
+    }
+    
+    /* Free interrupt */
+    if (dev->irq > 0) {
+        free_irq(dev->irq, dev);
+        pr_info("isp_cleanup_irq_handling: IRQ %d freed\n", dev->irq);
+    }
+    
+    /* Clear callback arrays */
+    if (isp_irq_initialized) {
+        spin_lock_irqsave(&isp_irq_lock, flags);
+        memset(irq_func_cb, 0, sizeof(irq_func_cb));
+        memset(cb, 0, sizeof(cb));
+        spin_unlock_irqrestore(&isp_irq_lock, flags);
+    }
+    
+    pr_info("isp_cleanup_irq_handling: Cleanup complete\n");
+}
+EXPORT_SYMBOL(isp_cleanup_irq_handling);
 
 static int tisp_param_operate_init(void)
 {
