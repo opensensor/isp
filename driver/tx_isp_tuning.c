@@ -147,6 +147,12 @@ static int tiziano_wdr_fusion1_curve_block_mean1(void);
 static int Tiziano_wdr_fpga(void *struct_me, void *dev_para, void *ratio_para, void *x_thr);
 static int tiziano_wdr_soft_para_out(void);
 
+/* Forward declarations for event and IRQ functions */
+static int tisp_event_set_cb(int event_id, void *callback);
+static int system_irq_func_set(int irq_id, void *handler);
+static int tisp_adr_process(void);
+static void tiziano_adr_interrupt_static(void);
+
 
 
 static inline u64 ktime_get_real_ns(void)
