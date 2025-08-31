@@ -5291,6 +5291,12 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                                     /* Wait for reset to complete */
                                     msleep(20);
                                     
+                                    /* CRITICAL: Module reset cleared ALL ISP registers - restore interrupt enables! */
+                                    pr_info("*** RESTORING ISP INTERRUPT ENABLES AFTER MODULE RESET ***\n");
+                                    writel(0xffffffff, isp_regs + 0x30);  /* Restore ALL interrupt enables */
+                                    wmb();
+                                    pr_info("ISP interrupt enables restored: 0x30=0x%x\n", readl(isp_regs + 0x30));
+                                    
                                     /* Test VIC accessibility after reset */
                                     writel(test_val, vic_regs + 0x4);
                                     wmb();
