@@ -1098,10 +1098,12 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     csi_dev->sd.ops = NULL;
     csi_dev->sd.vin_state = TX_ISP_MODULE_INIT;
     
-    /* Map CSI registers */
+    /* Map CSI registers - Binary Ninja shows different register region at offset +0x13c */
     if (isp_dev->vic_regs) {
-        csi_dev->csi_regs = isp_dev->vic_regs - 0x9a00 + 0x8000; /* ISP+0x8000 */
-        pr_info("csi_device_probe: CSI registers mapped at %p\n", csi_dev->csi_regs);
+        /* Binary Ninja: *($s0_1 + 0x13c) points to a different CSI register region */
+        /* For T31, this appears to be the MIPI CSI registers at ISP + different offset */
+        csi_dev->csi_regs = isp_dev->vic_regs + 0x200; /* ISP+0x9a00+0x200 = ISP+0x9c00 */
+        pr_info("csi_device_probe: CSI registers mapped at %p (Binary Ninja +0x13c region)\n", csi_dev->csi_regs);
     }
     
     /* Initialize CSI device state */
