@@ -3868,6 +3868,29 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                     pr_info("*** SENSOR HARDWARE INITIALIZATION COMPLETE ***\n");
                     kernel_subdev->vin_state = TX_ISP_MODULE_RUNNING;
                     
+                    /* *** CRITICAL: COPY SENSOR ATTRIBUTES TO ISP DEVICE *** */
+                    if (tx_sensor && tx_sensor->video.attr) {
+                        pr_info("*** COPYING SENSOR ATTRIBUTES TO ISP DEVICE ***\n");
+                        pr_info("Sensor attr: dbus_type=%d, data_type=%d, chip_id=0x%x\n",
+                                tx_sensor->video.attr->dbus_type, tx_sensor->video.attr->data_type, tx_sensor->video.attr->chip_id);
+                        pr_info("Sensor attr: total_width=%d, total_height=%d\n",
+                                tx_sensor->video.attr->total_width, tx_sensor->video.attr->total_height);
+                        
+                        /* Copy sensor attributes to ISP sensor structure */
+                        memcpy(&tx_sensor->attr, tx_sensor->video.attr, sizeof(struct tx_isp_sensor_attribute));
+                        
+                        /* Update ISP device sensor info */
+                        isp_dev->sensor_width = tx_sensor->video.attr->total_width;
+                        isp_dev->sensor_height = tx_sensor->video.attr->total_height;
+                        
+                        pr_info("*** SENSOR ATTRIBUTES COPIED TO ISP DEVICE ***\n");
+                        pr_info("ISP device sensor: %dx%d, interface_type=%d\n",
+                                isp_dev->sensor_width, isp_dev->sensor_height, tx_sensor->attr.dbus_type);
+                    } else {
+                        pr_err("*** FAILED TO COPY SENSOR ATTRIBUTES - tx_sensor=%p, attr=%p ***\n",
+                               tx_sensor, tx_sensor ? tx_sensor->video.attr : NULL);
+                    }
+                    
                     /* *** ENABLE ISP CORE NOW THAT SENSOR IS READY *** */
                     pr_info("*** UNLOCKING VIC WITH SENSOR ATTRIBUTES THEN ENABLING ISP CORE ***\n");
                     if (isp_dev->vic_regs) {
