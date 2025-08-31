@@ -4335,57 +4335,65 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                 void __iomem *vic_regs = isp_dev->vic_regs;
                 struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
                 
-                /* *** CRITICAL: Call reference driver functions in proper sequence *** */
-                pr_info("*** CALLING REFERENCE DRIVER FUNCTIONS ***\n");
+                /* *** CRITICAL: MIPI sensors use CSI, not VIC! *** */
+                pr_info("*** MIPI SENSOR DETECTED - USING CSI PATH, NOT VIC ***\n");
                 vic_dev->frame_width = 1920;
                 vic_dev->frame_height = 1080;
                 
-                /* STEP 1: Call tx_isp_vic_start FIRST (this includes the unlock sequence) */
-                pr_info("*** CALLING tx_isp_vic_start FUNCTION ***\n");
-                int vic_start_result = tx_isp_vic_start(vic_dev, &tx_sensor->attr);
-                if (vic_start_result == 0) {
-                    pr_info("*** tx_isp_vic_start SUCCESS - VIC UNLOCKED! ***\n");
-                    vic_dev->state = 2;
+                if (tx_sensor->attr.dbus_type == 2) {
+                    pr_info("*** SENSOR IS MIPI (dbus_type=2) - SKIPPING tx_isp_vic_start ***\n");
+                    pr_info("*** MIPI sensors use CSI, tx_isp_vic_start is for DVP sensors only ***\n");
                     
-                    /* STEP 2: Call tisp_init AFTER VIC is unlocked */
-                    pr_info("*** CALLING tisp_init FUNCTION ***\n");
-                    int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
-                    if (tisp_result == 0) {
-                        pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED ***\n");
-                    } else {
-                        pr_info("*** tisp_init FAILED: %d - continuing ***\n", tisp_result);
-                    }
-                    
-                    /* STEP 3: Call vic_pipo_mdma_enable to finalize VIC MDMA */
-                    pr_info("*** CALLING vic_pipo_mdma_enable FUNCTION ***\n");
+                    /* For MIPI sensors: Call vic_pipo_mdma_enable FIRST, then tisp_init */
+                    pr_info("*** CALLING vic_pipo_mdma_enable FOR MIPI SENSOR ***\n");
                     void *mdma_result = vic_pipo_mdma_enable(vic_dev);
                     if (mdma_result) {
-                        pr_info("*** vic_pipo_mdma_enable SUCCESS - VIC MDMA CONFIGURED ***\n");
+                        pr_info("*** vic_pipo_mdma_enable SUCCESS - VIC MDMA CONFIGURED FOR MIPI ***\n");
+                        vic_dev->state = 2;
+                        
+                        /* Now call tisp_init for MIPI sensor */
+                        pr_info("*** CALLING tisp_init FOR MIPI SENSOR ***\n");
+                        int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
+                        if (tisp_result == 0) {
+                            pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED FOR MIPI ***\n");
+                        } else {
+                            pr_info("*** tisp_init FAILED: %d - continuing ***\n", tisp_result);
+                        }
+                        
                     } else {
-                        pr_warn("*** vic_pipo_mdma_enable FAILED - continuing ***\n");
+                        pr_err("*** vic_pipo_mdma_enable FAILED FOR MIPI ***\n");
                     }
                     
                 } else {
-                    pr_err("*** tx_isp_vic_start FAILED: %d ***\n", vic_start_result);
+                    pr_info("*** SENSOR IS DVP (dbus_type=%d) - CALLING tx_isp_vic_start ***\n", tx_sensor->attr.dbus_type);
                     
-                    /* Fallback: Call vic_pipo_mdma_enable and tisp_init anyway */
-                    pr_info("*** FALLBACK: Calling vic_pipo_mdma_enable and tisp_init ***\n");
-                    void *mdma_result = vic_pipo_mdma_enable(vic_dev);
-                    if (mdma_result) {
-                        pr_info("*** FALLBACK vic_pipo_mdma_enable SUCCESS ***\n");
+                    /* For DVP sensors: Call tx_isp_vic_start FIRST */
+                    int vic_start_result = tx_isp_vic_start(vic_dev, &tx_sensor->attr);
+                    if (vic_start_result == 0) {
+                        pr_info("*** tx_isp_vic_start SUCCESS - VIC UNLOCKED FOR DVP ***\n");
                         vic_dev->state = 2;
-                    }
-                    
-                    int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
-                    if (tisp_result == 0) {
-                        pr_info("*** FALLBACK tisp_init SUCCESS ***\n");
+                        
+                        /* Then call tisp_init */
+                        int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
+                        if (tisp_result == 0) {
+                            pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED FOR DVP ***\n");
+                        } else {
+                            pr_info("*** tisp_init FAILED: %d ***\n", tisp_result);
+                        }
+                        
+                        /* Then call vic_pipo_mdma_enable */
+                        void *mdma_result = vic_pipo_mdma_enable(vic_dev);
+                        if (mdma_result) {
+                            pr_info("*** vic_pipo_mdma_enable SUCCESS FOR DVP ***\n");
+                        }
+                        
                     } else {
-                        pr_warn("*** FALLBACK tisp_init FAILED: %d ***\n", tisp_result);
+                        pr_err("*** tx_isp_vic_start FAILED FOR DVP: %d ***\n", vic_start_result);
                     }
                 }
                 
                 /* Verify final ISP status */
-                isp_regs = isp_dev->vic_regs - 0x9a00;
+                void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
                 u32 final_isp_status = readl(isp_regs + 0x800);
                 u32 final_vic_status = readl(vic_regs + 0x0);
                 pr_info("*** FINAL STATUS: ISP=0x%x, VIC=0x%x ***\n", final_isp_status, final_vic_status);
