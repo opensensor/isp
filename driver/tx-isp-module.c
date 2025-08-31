@@ -3475,7 +3475,7 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
 }
 
 /* VIC start function - COMPLETE Binary Ninja implementation */
-static int tx_isp_vic_start_complete(struct tx_isp_dev *isp_dev, struct tx_isp_sensor *sensor)
+static int tx_isp_vic_start(struct tx_isp_dev *isp_dev, struct tx_isp_sensor *sensor)
 {
     void __iomem *vic_regs;
     struct tx_isp_vic_device *vic_dev;
@@ -4414,7 +4414,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                                 /* *** CRITICAL: NOW CALL COMPLETE VIC START SEQUENCE *** */
                                 if (tx_sensor) {
                                     pr_info("*** CALLING COMPLETE tx_isp_vic_start SEQUENCE ***\n");
-                                    ret = tx_isp_vic_start_complete(isp_dev, tx_sensor);
+                                    ret = tx_isp_vic_start(isp_dev, tx_sensor);
                                     if (ret == 0) {
                                         pr_info("*** VIC START SEQUENCE SUCCESS - VIC REGISTERS UNLOCKED! ***\n");
                                         
