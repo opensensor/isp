@@ -979,19 +979,23 @@ int tx_isp_vic_probe(struct platform_device *pdev)
             goto err_deinit_sd;
         }
         
-        /* Set function pointer at offset 0x1c (callback_struct + 0x1c) */
-        callback->event_callback = vic_pad_event_handler;
+        /* CRITICAL FIX: Set function pointer at offset 0x1c (callback_struct + 0x1c) */
+        callback->event_callback = (void *)vic_pad_event_handler;
         
         /* Store callback structure pointer in priv field as expected by reference driver */
         sd->inpads[0].priv = callback;  /* This will be at pad+0xc (priv field offset) */
         
-        /* Also set the event handler directly on the pad */
+        /* Also set the event handler directly on the pad for completeness */
         sd->inpads[0].event = vic_pad_event_handler;
         
-        pr_info("*** VIC: Event callback structure set up - callback=%p, function=%p ***\n", 
-                callback, vic_pad_event_handler);
-        pr_info("*** VIC: Pad priv pointer at %p stores callback structure ***\n", 
-                &sd->inpads[0].priv);
+        /* Verify callback structure setup */
+        pr_info("*** VIC CALLBACK VERIFICATION ***\n");
+        pr_info("*** VIC: callback structure allocated at %p ***\n", callback);
+        pr_info("*** VIC: callback->event_callback set to %p ***\n", callback->event_callback);
+        pr_info("*** VIC: vic_pad_event_handler function at %p ***\n", vic_pad_event_handler);
+        pr_info("*** VIC: sd->inpads[0].priv set to %p ***\n", sd->inpads[0].priv);
+        pr_info("*** VIC: sd->inpads[0].event set to %p ***\n", sd->inpads[0].event);
+        pr_info("*** VIC EVENT CALLBACK SETUP COMPLETE ***\n");
     } else {
         pr_err("VIC: No input pads available for event callback\n");
         ret = -EINVAL;
