@@ -161,6 +161,27 @@ struct vic_event_callback {
     int (*event_handler)(void*, int, void*); /* +0x1c: Event handler function */
 } __attribute__((packed));
 
+/* T31 ISP platform device with proper IRQ resource - Binary Ninja compatible */
+static struct resource tx_isp_resources[] = {
+    [0] = {
+        .start = 0x13300000,           /* T31 ISP base address */
+        .end   = 0x133FFFFF,           /* T31 ISP end address */
+        .flags = IORESOURCE_MEM,
+    },
+    [1] = {
+        .start = 63,                   /* T31 ISP IRQ number */
+        .end   = 63,
+        .flags = IORESOURCE_IRQ,
+    },
+};
+
+static struct platform_device tx_isp_platform_device = {
+    .name = "tx-isp",
+    .id = -1,
+    .num_resources = ARRAY_SIZE(tx_isp_resources),
+    .resource = tx_isp_resources,
+};
+
 /* Forward declaration for VIC event handler */
 static int vic_event_handler(void *subdev, int event_type, void *data);
 
