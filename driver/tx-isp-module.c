@@ -4383,193 +4383,22 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     pr_info("Resolution: %dx%d, FPS: %d, WDR mode: %d\n",
             sensor_attr->total_width, sensor_attr->total_height, 25, sensor_attr->wdr_cache);
     
-    extern int tiziano_ae_init(uint32_t width, uint32_t height, uint32_t fps);
-    extern int tiziano_awb_init(uint32_t width, uint32_t height);
-    extern int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps);
-    extern void tiziano_gib_init(void);
-    extern void tiziano_lsc_init(void);
-    extern void tiziano_ccm_init(void);
-    extern void tiziano_dmsc_init(void);
-    extern void tiziano_sharpen_init(void);
-    extern void tiziano_sdns_init(void);
-    extern void tiziano_mdns_init(uint32_t width, uint32_t height);
-    extern void tiziano_clm_init(void);
-    extern void tiziano_dpc_init(void);
-    extern void tiziano_hldc_init(void);
-    extern void tiziano_defog_init(uint32_t width, uint32_t height);
-    extern void tiziano_adr_init(uint32_t width, uint32_t height);
-    extern void tiziano_af_init(uint32_t width, uint32_t height);
-    extern void tiziano_bcsh_init(void);
-    extern void tiziano_ydns_init(void);
-    extern void tiziano_rdns_init(void);
-    extern void tiziano_wdr_init(uint32_t width, uint32_t height);
+    /* Call the existing complete pipeline initialization function from tx_isp_tuning.c */
+    extern int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32_t fps, int wdr_mode);
     
-    /* Binary Ninja exact sequence - must match reference driver exactly */
-    pr_info("tiziano_ae_init: Initializing Auto Exposure (%dx%d@%d)\n", sensor_attr->total_width, sensor_attr->total_height, 25);
-    pr_info("tiziano_ae_init: AE hardware blocks enabled\n");
+    int tiziano_ret = tiziano_init_all_pipeline_components(
+        sensor_attr->total_width, 
+        sensor_attr->total_height,
+        25, /* Default FPS */
+        sensor_attr->wdr_cache /* WDR mode from sensor */
+    );
     
-    pr_info("tiziano_awb_init: Initializing Auto White Balance (%dx%d)\n", sensor_attr->total_width, sensor_attr->total_height);
-    pr_info("tiziano_awb_init: AWB hardware blocks enabled\n");
-    
-    pr_info("tiziano_gamma_init: Initializing Gamma correction (%dx%d@%d)\n", sensor_attr->total_width, sensor_attr->total_height, 25);
-    pr_info("tiziano_gamma_init: Using linear gamma LUT\n");
-    extern void tiziano_gamma_lut_parameter(void);
-    pr_info("tiziano_gamma_lut_parameter: Writing gamma LUT to registers\n");
-    tiziano_gamma_lut_parameter();
-    pr_info("tiziano_gamma_lut_parameter: Gamma LUT written to hardware\n");
-    pr_info("tiziano_gamma_init: Gamma correction initialized successfully\n");
-    
-    pr_info("tiziano_gib_init: Initializing GIB processing\n");
-    
-    pr_info("tiziano_lsc_init: Initializing Lens Shading Correction\n");
-    pr_info("tiziano_lsc_init: Using linear LSC parameters\n");
-    pr_info("tiziano_lsc_init: LSC initialized successfully\n");
-    
-    pr_info("tiziano_ccm_init: Initializing Color Correction Matrix\n");
-    pr_info("tiziano_ccm_init: Using linear CCM parameters\n");
-    extern void tiziano_ccm_lut_parameter(void);
-    pr_info("tiziano_ccm_lut_parameter: Writing CCM matrix to registers\n");
-    tiziano_ccm_lut_parameter();
-    pr_info("tiziano_ccm_lut_parameter: CCM matrix written to hardware\n");
-    pr_info("tiziano_ccm_init: CCM initialized successfully\n");
-    
-    pr_info("tiziano_dmsc_init: Initializing DMSC processing\n");
-    
-    pr_info("tiziano_sharpen_init: Initializing Sharpening\n");
-    pr_info("tiziano_sharpen_init: Using linear sharpening parameters\n");
-    extern void tisp_sharpen_all_reg_refresh(void);
-    pr_info("tisp_sharpen_all_reg_refresh: Writing sharpening parameters to registers\n");
-    tisp_sharpen_all_reg_refresh();
-    pr_info("tisp_sharpen_all_reg_refresh: Sharpening registers written to hardware\n");
-    pr_info("tiziano_sharpen_init: Sharpening initialized successfully\n");
-    
-    pr_info("tiziano_sdns_init: Initializing SDNS processing\n");
-    pr_info("tiziano_sdns_init: Using linear SDNS parameters\n");
-    extern void tisp_sdns_all_reg_refresh(void);
-    pr_info("tisp_sdns_all_reg_refresh: Writing SDNS parameters to registers\n");
-    tisp_sdns_all_reg_refresh();
-    pr_info("tisp_sdns_all_reg_refresh: SDNS registers written to hardware\n");
-    pr_info("tiziano_sdns_init: SDNS processing initialized successfully\n");
-    
-    pr_info("tiziano_mdns_init: Initializing MDNS processing (%dx%d)\n", sensor_attr->total_width, sensor_attr->total_height);
-    pr_info("tiziano_mdns_init: Using linear MDNS parameters\n");
-    pr_info("tiziano_mdns_init: MDNS processing initialized successfully\n");
-    
-    pr_info("tiziano_clm_init: Initializing CLM processing\n");
-    
-    pr_info("tiziano_dpc_init: Initializing DPC processing\n");
-    pr_info("tiziano_dpc_init: Using linear DPC parameters\n");
-    extern void tisp_dpc_all_reg_refresh(void);
-    pr_info("tisp_dpc_all_reg_refresh: Writing DPC parameters to registers\n");
-    tisp_dpc_all_reg_refresh();
-    pr_info("tisp_dpc_all_reg_refresh: DPC registers written to hardware\n");
-    pr_info("tiziano_dpc_init: DPC processing initialized successfully\n");
-    
-    pr_info("tiziano_hldc_init: Initializing HLDC processing\n");
-    
-    pr_info("tiziano_defog_init: Initializing Defog processing (%dx%d)\n", sensor_attr->total_width, sensor_attr->total_height);
-    
-    pr_info("tiziano_adr_init: Initializing ADR processing (%dx%d)\n", sensor_attr->total_width, sensor_attr->total_height);
-    extern void tisp_adr_set_params(void);
-    pr_info("tisp_adr_set_params: Writing ADR parameters to registers\n");
-    tisp_adr_set_params();
-    pr_info("tisp_adr_set_params: ADR parameters written to hardware\n");
-    extern int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
-    extern irqreturn_t tiziano_adr_interrupt_handler(int irq, void *dev_id);
-    system_irq_func_set(18, tiziano_adr_interrupt_handler);
-    pr_info("system_irq_func_set: Setting IRQ handler for IRQ 18\n");
-    pr_info("system_irq_func_set: IRQ 18 handler set to %p\n", tiziano_adr_interrupt_handler);
-    extern void tisp_event_set_cb(int event_type, void *callback);
-    extern void tiziano_adr_event_callback(void *data);
-    tisp_event_set_cb(2, tiziano_adr_event_callback);
-    pr_info("tisp_event_set_cb: Setting callback for event 2\n");
-    pr_info("tisp_event_set_cb: Event 2 callback set to %p\n", tiziano_adr_event_callback);
-    pr_info("tiziano_adr_init: ADR processing initialized successfully\n");
-    
-    pr_info("tiziano_af_init: Initializing Auto Focus (%dx%d)\n", sensor_attr->total_width, sensor_attr->total_height);
-    
-    pr_info("tiziano_bcsh_init: Initializing BCSH processing\n");
-    
-    pr_info("tiziano_ydns_init: Initializing YDNS processing\n");
-    
-    pr_info("tiziano_rdns_init: Initializing RDNS processing\n");
-    
-    /* WDR initialization if needed - Binary Ninja shows WDR components */
-    if (sensor_attr->wdr_cache == 1) {
-        pr_info("tiziano_wdr_init: Initializing WDR processing (%dx%d)\n", sensor_attr->total_width, sensor_attr->total_height);
-        extern void tisp_gb_init(void);
-        extern void tisp_dpc_wdr_en(int enable);
-        extern void tisp_lsc_wdr_en(int enable);
-        extern void tisp_gamma_wdr_en(int enable);
-        extern void tisp_sharpen_wdr_en(int enable);
-        extern void tisp_ccm_wdr_en(int enable);
-        extern void tisp_bcsh_wdr_en(int enable);
-        extern void tisp_rdns_wdr_en(int enable);
-        extern void tisp_adr_wdr_en(int enable);
-        extern void tisp_defog_wdr_en(int enable);
-        extern void tisp_mdns_wdr_en(int enable);
-        extern void tisp_dmsc_wdr_en(int enable);
-        extern void tisp_ae_wdr_en(int enable);
-        extern void tisp_sdns_wdr_en(int enable);
-        
-        tisp_gb_init();
-        tisp_dpc_wdr_en(1);
-        tisp_lsc_wdr_en(1);
-        tisp_gamma_wdr_en(1);
-        tisp_sharpen_wdr_en(1);
-        tisp_ccm_wdr_en(1);
-        tisp_bcsh_wdr_en(1);
-        tisp_rdns_wdr_en(1);
-        tisp_adr_wdr_en(1);
-        tisp_defog_wdr_en(1);
-        tisp_mdns_wdr_en(1);
-        tisp_dmsc_wdr_en(1);
-        tisp_ae_wdr_en(1);
-        tisp_sdns_wdr_en(1);
-        pr_info("WDR processing components enabled\n");
+    if (tiziano_ret == 0) {
+        pr_info("*** TIZIANO PIPELINE COMPONENTS INITIALIZED SUCCESSFULLY ***\n");
+    } else {
+        pr_err("*** TIZIANO PIPELINE INITIALIZATION FAILED: %d ***\n", tiziano_ret);
+        return tiziano_ret;
     }
-    
-    /* Binary Ninja: Initialize ISP event system - CRITICAL for ISP operation */
-    pr_info("*** INITIALIZING ISP EVENT SYSTEM ***\n");
-    extern void tisp_event_init(void);
-    extern void tisp_tgain_update(void *data);
-    extern void tisp_again_update(void *data);  
-    extern void tisp_ev_update(void *data);
-    extern void tisp_ct_update(void *data);
-    extern void tisp_ae_ir_update(void *data);
-    
-    pr_info("tisp_event_init: Initializing ISP event system\n");
-    tisp_event_init();
-    pr_info("tisp_event_init: Event system initialized\n");
-    
-    pr_info("tisp_event_set_cb: Setting callback for event 4\n");
-    tisp_event_set_cb(4, tisp_tgain_update);
-    pr_info("tisp_event_set_cb: Event 4 callback set to %p\n", tisp_tgain_update);
-    
-    pr_info("tisp_event_set_cb: Setting callback for event 5\n");
-    tisp_event_set_cb(5, tisp_again_update);
-    pr_info("tisp_event_set_cb: Event 5 callback set to %p\n", tisp_again_update);
-    
-    pr_info("tisp_event_set_cb: Setting callback for event 7\n");
-    tisp_event_set_cb(7, tisp_ev_update);
-    pr_info("tisp_event_set_cb: Event 7 callback set to %p\n", tisp_ev_update);
-    
-    pr_info("tisp_event_set_cb: Setting callback for event 9\n");
-    tisp_event_set_cb(9, tisp_ct_update);
-    pr_info("tisp_event_set_cb: Event 9 callback set to %p\n", tisp_ct_update);
-    
-    pr_info("tisp_event_set_cb: Setting callback for event 8\n");
-    tisp_event_set_cb(8, tisp_ae_ir_update);
-    pr_info("tisp_event_set_cb: Event 8 callback set to %p\n", tisp_ae_ir_update);
-    
-    extern int tisp_param_operate_init(void);
-    pr_info("tisp_param_operate_init: Initializing parameter operations\n");
-    ret = tisp_param_operate_init();
-    if (ret != 0) {
-        pr_warn("tisp_param_operate_init failed: %d\n", ret);
-    }
-    
-    pr_info("*** ALL TIZIANO ISP PIPELINE COMPONENTS INITIALIZED SUCCESSFULLY ***\n");
     
     /* Binary Ninja: Complex register calculations - EXACT implementation */
     reg_val = 0x8077efff;  /* Base register value from Binary Ninja */
