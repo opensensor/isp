@@ -1367,18 +1367,66 @@ static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const cha
 }
 
 // Initialize real hardware interrupt handling - Kernel 3.10 compatible, SDK compatible
-/* tx_isp_request_irq - EXACT Binary Ninja implementation */
+/* tx_isp_enable_irq - Binary Ninja exact implementation */
+static void tx_isp_enable_irq(struct tx_isp_dev *isp_dev)
+{
+    if (!isp_dev) {
+        pr_err("tx_isp_enable_irq: Invalid parameters\n");
+        return;
+    }
+    
+    pr_info("*** tx_isp_enable_irq: EXACT Binary Ninja implementation ***\n");
+    
+    /* Binary Ninja shows this function enables ISP core interrupts */
+    /* Enable ISP interrupt generation at hardware level */
+    if (isp_dev->vic_regs) {
+        void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
+        
+        /* Enable ISP core interrupts - Binary Ninja pattern */
+        writel(0xffffffff, isp_regs + 0x30);  /* ISP interrupt enable */
+        writel(0xffffffff, isp_regs + 0x38);  /* Additional interrupt enables */
+        wmb();
+        
+        pr_info("*** tx_isp_enable_irq: ISP hardware interrupts enabled ***\n");
+    }
+}
+
+/* tx_isp_disable_irq - Binary Ninja exact implementation */
+static void tx_isp_disable_irq(struct tx_isp_dev *isp_dev)
+{
+    if (!isp_dev) {
+        pr_err("tx_isp_disable_irq: Invalid parameters\n");
+        return;
+    }
+    
+    pr_info("*** tx_isp_disable_irq: EXACT Binary Ninja implementation ***\n");
+    
+    /* Binary Ninja shows this function disables ISP core interrupts */
+    if (isp_dev->vic_regs) {
+        void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
+        
+        /* Disable ISP core interrupts - Binary Ninja pattern */
+        writel(0x0, isp_regs + 0x30);  /* ISP interrupt disable */
+        writel(0x0, isp_regs + 0x38);  /* Additional interrupt disables */
+        wmb();
+        
+        pr_info("*** tx_isp_disable_irq: ISP hardware interrupts disabled ***\n");
+    }
+}
+
+/* tx_isp_request_irq - EXACT Binary Ninja implementation with CORRECT handlers */
 static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *isp_dev)
 {
     int irq_num;
     int ret;
     
+    /* Binary Ninja: if (arg1 == 0 || arg2 == 0) */
     if (!pdev || !isp_dev) {
         pr_err("tx_isp_request_irq: Invalid parameters\n");
-        return -EINVAL;
+        return 0xffffffea;  /* Binary Ninja: return 0xffffffea */
     }
     
-    pr_info("*** IMPLEMENTING tx_isp_request_irq FROM BINARY NINJA ***\n");
+    pr_info("*** IMPLEMENTING tx_isp_request_irq FROM BINARY NINJA (CORRECTED) ***\n");
     
     /* Binary Ninja: int32_t $v0_1 = private_platform_get_irq(arg1, 0) */
     irq_num = platform_get_irq(pdev, 0);
@@ -1390,12 +1438,13 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
         /* Binary Ninja: private_spin_lock_init(arg2) */
         spin_lock_init(&isp_dev->lock);
         
+        /* CRITICAL FIX: Use CORRECT Binary Ninja handlers and flags */
         /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, 
          *               isp_irq_thread_handle, 0x2000, *arg1, arg2) */
         ret = request_threaded_irq(irq_num, 
-                                  isp_vic_interrupt_service_routine,  /* Use VIC ISR directly */
-                                  NULL,                    /* No threaded handler needed */
-                                  IRQF_SHARED,             /* Standard shared IRQ flags */
+                                  isp_irq_handle,          /* CORRECT: Binary Ninja primary handler */
+                                  isp_irq_thread_handle,   /* CORRECT: Binary Ninja threaded handler */
+                                  0x2000,                  /* CORRECT: Binary Ninja flags (IRQF_ONESHOT) */
                                   dev_name(&pdev->dev),    /* *arg1 - device name */
                                   isp_dev);                /* arg2 - dev_id */
         
@@ -1403,17 +1452,20 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
             /* Binary Ninja error handling */
             pr_err("*** tx_isp_request_irq: flags = 0x%08x, irq = %d, ret = 0x%08x ***\n",
                    0x2000, irq_num, ret);
+            /* Binary Ninja: *arg2 = 0 */
             isp_dev->isp_irq = 0;
-            return -ENODEV; /* Binary Ninja: return 0xfffffffc */
+            return 0xfffffffc; /* Binary Ninja: return 0xfffffffc */
         }
         
+        /* CRITICAL FIX: Set up interrupt function pointers like Binary Ninja */
         /* Binary Ninja: arg2[1] = tx_isp_enable_irq; *arg2 = $v0_1; arg2[2] = tx_isp_disable_irq */
-        /* Set up interrupt device structure like reference */
-        isp_dev->isp_irq = irq_num;
+        isp_dev->isp_irq = irq_num;                    /* *arg2 = $v0_1 */
+        isp_dev->irq_enable_func = tx_isp_enable_irq;  /* arg2[1] = tx_isp_enable_irq */
+        isp_dev->irq_disable_func = tx_isp_disable_irq; /* arg2[2] = tx_isp_disable_irq */
         
         /* Binary Ninja: tx_isp_disable_irq(arg2) - start with interrupts disabled */
-        /* Note: Reference disables interrupts initially, they're enabled later */
-        pr_info("*** tx_isp_request_irq: IRQ %d registered successfully with Binary Ninja handlers ***\n", irq_num);
+        tx_isp_disable_irq(isp_dev);
+        pr_info("*** tx_isp_request_irq: IRQ %d registered with CORRECT Binary Ninja handlers ***\n", irq_num);
         
     } else {
         /* Binary Ninja: *arg2 = 0 */

@@ -213,6 +213,10 @@ struct tx_isp_dev {
     void (*irq_handler)(void *);
     void (*irq_disable)(void *);
     void *irq_priv;
+    
+    /* Binary Ninja interrupt function pointers */
+    void (*irq_enable_func)(struct tx_isp_dev *);   /* arg2[1] = tx_isp_enable_irq */
+    void (*irq_disable_func)(struct tx_isp_dev *);  /* arg2[2] = tx_isp_disable_irq */
     struct irq_handler_data *isp_irq_data;
     struct completion frame_complete;
     struct task_struct *fw_thread;
