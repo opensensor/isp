@@ -640,7 +640,7 @@ static int tx_isp_activate_csi_subdev(struct tx_isp_dev *isp_dev)
     pr_info("*** ACTIVATING CSI SUBDEV FOR MIPI RECEPTION ***\n");
     
     /* Use Binary Ninja activation method */
-    return csi_activate_subdev_binary_ninja(&csi_dev->sd);
+    return tx_isp_csi_activate_subdev(&csi_dev->sd);
 }
 
 /* ===== CSI STANDALONE METHODS - Binary Ninja Reference Implementations ===== */
