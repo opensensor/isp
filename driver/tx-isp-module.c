@@ -3646,7 +3646,7 @@ static int tx_isp_vic_start(struct tx_isp_dev *isp_dev, struct tx_isp_sensor *se
     pr_info("VIC: reg 0x1b0 = 0x10 (buffer control)\n");
     
     /* STEP 3: VIC UNLOCK SEQUENCE - Binary Ninja exact sequence */
-    pr_info("VIC: Starting unlock sequence...\n");
+    pr_info("VIC: Starting unlock sequence for interface type %d...\n", interface_type);
     
     /* Binary Ninja: **(arg1 + 0xb8) = 2 */
     writel(2, vic_regs + 0x0);
@@ -3658,12 +3658,18 @@ static int tx_isp_vic_start(struct tx_isp_dev *isp_dev, struct tx_isp_sensor *se
     wmb();
     pr_info("VIC: reg 0x0 = 4 (unlock mode)\n");
     
-    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1a0) = unlock_key */
-    writel(unlock_key, vic_regs + 0x1a0);
-    wmb();
-    pr_info("VIC: reg 0x1a0 = 0x%x (unlock key)\n", unlock_key);
+    /* CRITICAL: For MIPI (interface_type 2), NO unlock key is written! */
+    if (interface_type == 1) {
+        /* DVP interface - Binary Ninja: *(*(arg1 + 0xb8) + 0x1a0) = unlock_key */
+        writel(unlock_key, vic_regs + 0x1a0);
+        wmb();
+        pr_info("VIC: reg 0x1a0 = 0x%x (DVP unlock key)\n", unlock_key);
+    } else {
+        /* MIPI interface - NO unlock key written in Binary Ninja! */
+        pr_info("VIC: MIPI interface - NO unlock key written (as per Binary Ninja)\n");
+    }
     
-    /* Binary Ninja: while (*$v1_30 != 0) - wait for ready */
+    /* Binary Ninja: while (*$v0_121 != 0) - wait for ready */
     pr_info("VIC: Waiting for unlock completion...\n");
     while (timeout > 0) {
         u32 status = readl(vic_regs + 0x0);
