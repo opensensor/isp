@@ -4198,6 +4198,23 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     writel(0x0, isp_regs + 0x1000);  /* CSC version register */
     wmb();
     
+    /* *** CRITICAL: INITIALIZE ALL TIZIANO ISP PIPELINE COMPONENTS *** */
+    pr_info("*** CALLING COMPLETE TIZIANO PIPELINE INITIALIZATION ***\n");
+    extern int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32_t fps, int wdr_mode);
+    
+    int tiziano_ret = tiziano_init_all_pipeline_components(
+        sensor_attr->total_width, 
+        sensor_attr->total_height,
+        25, /* Default FPS */
+        sensor_attr->wdr_cache /* WDR mode from sensor */
+    );
+    
+    if (tiziano_ret == 0) {
+        pr_info("*** TIZIANO PIPELINE COMPONENTS INITIALIZED SUCCESSFULLY ***\n");
+    } else {
+        pr_err("*** TIZIANO PIPELINE INITIALIZATION FAILED: %d ***\n", tiziano_ret);
+    }
+    
     /* Binary Ninja: Complex register calculations - EXACT implementation */
     u32 reg_val = 0x8077efff;  /* Base register value from Binary Ninja */
     
