@@ -675,6 +675,81 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
+/* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
+static void vic_pipo_mdma_enable(struct vic_device *vic_dev)
+{
+    void __iomem *vic_base = vic_dev->vic_regs;
+    u32 width = vic_dev->width;
+    u32 height = vic_dev->height;
+    u32 stride = width << 1;  /* width * 2 for stride */
+    
+    pr_info("*** VIC PIPO MDMA ENABLE - Binary Ninja exact sequence ***\n");
+    pr_info("vic_pipo_mdma_enable: width=%d, height=%d, stride=%d\n", width, height, stride);
+    
+    /* Step 1: Enable MDMA - reg 0x308 = 1 */
+    writel(1, vic_base + 0x308);
+    wmb();
+    pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
+    
+    /* Step 2: Set dimensions - reg 0x304 = (width << 16) | height */
+    writel((width << 16) | height, vic_base + 0x304);
+    wmb();
+    pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
+            (width << 16) | height, width, height);
+    
+    /* Step 3: Set stride - reg 0x310 = stride */
+    writel(stride, vic_base + 0x310);
+    wmb();
+    pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
+    
+    /* Step 4: Set stride again - reg 0x314 = stride */
+    writel(stride, vic_base + 0x314);
+    wmb();
+    pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
+    
+    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE ***\n");
+}
+
+/* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja implementation */
+static int ispvic_frame_channel_s_stream(struct vic_device *vic_dev, int enable)
+{
+    void __iomem *vic_base = vic_dev->vic_regs;
+    unsigned long flags;
+    u32 stream_ctrl;
+    
+    pr_info("ispvic_frame_channel_s_stream: enable=%d\n", enable);
+    
+    if (enable == vic_dev->streaming) {
+        pr_info("ispvic_frame_channel_s_stream: already in state %d\n", enable);
+        return 0;
+    }
+    
+    spin_lock_irqsave(&vic_dev->lock, flags);
+    
+    if (enable == 0) {
+        /* Stream OFF - Binary Ninja: *(*($s0 + 0xb8) + 0x300) = 0 */
+        pr_info("*** STREAM OFF: Setting reg 0x300 = 0 ***\n");
+        writel(0, vic_base + 0x300);
+        wmb();
+        vic_dev->streaming = 0;
+    } else {
+        /* Stream ON - Binary Ninja: vic_pipo_mdma_enable($s0) FIRST */
+        pr_info("*** STREAM ON: Calling vic_pipo_mdma_enable() FIRST ***\n");
+        vic_pipo_mdma_enable(vic_dev);
+        
+        /* Then set stream control register - Binary Ninja: 
+         * *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+        stream_ctrl = (vic_dev->buffer_count << 16) | 0x80000020;
+        pr_info("*** STREAM ON: Setting reg 0x300 = 0x%x ***\n", stream_ctrl);
+        writel(stream_ctrl, vic_base + 0x300);
+        wmb();
+        vic_dev->streaming = 1;
+    }
+    
+    spin_unlock_irqrestore(&vic_dev->lock, flags);
+    return 0;
+}
+
 /* VIC video streaming operations - matching reference driver vic_core_s_stream */
 static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
@@ -697,15 +772,15 @@ static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
     mutex_lock(&vic_dev->state_lock);
     
     if (enable) {
-        /* Start VIC streaming - call tx_isp_vic_start like reference driver */
+        /* Start VIC streaming - Call Binary Ninja exact sequence */
         if (vic_dev->state != 4) { /* Not already streaming */
-            pr_info("VIC: Starting streaming - calling tx_isp_vic_start()\n");
-            ret = tx_isp_vic_start(sd);
+            pr_info("VIC: Starting streaming - calling ispvic_frame_channel_s_stream(1)\n");
+            ret = ispvic_frame_channel_s_stream(vic_dev, 1);
             if (ret == 0) {
                 vic_dev->state = 4; /* STREAMING state */
                 pr_info("VIC: Streaming started successfully, state -> 4\n");
             } else {
-                pr_err("VIC: tx_isp_vic_start failed: %d\n", ret);
+                pr_err("VIC: ispvic_frame_channel_s_stream failed: %d\n", ret);
             }
         } else {
             pr_info("VIC: Already streaming (state=%d)\n", vic_dev->state);
@@ -713,8 +788,8 @@ static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
     } else {
         /* Stop VIC streaming */
         if (vic_dev->state == 4) { /* Currently streaming */
-            pr_info("VIC: Stopping streaming - calling tx_isp_vic_stop()\n");
-            ret = tx_isp_vic_stop(sd);
+            pr_info("VIC: Stopping streaming - calling ispvic_frame_channel_s_stream(0)\n");
+            ret = ispvic_frame_channel_s_stream(vic_dev, 0);
             if (ret == 0) {
                 vic_dev->state = 3; /* ACTIVE but not streaming */
                 pr_info("VIC: Streaming stopped, state -> 3\n");
@@ -887,9 +962,22 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         goto err_unmap;
     }
 
-    /* Initialize VIC device structure */
-    vic_dev->state = 1;  /* INIT state */
+    /* Initialize VIC device structure - Binary Ninja compatible */
+    vic_dev->state = 1;              /* INIT state */
+    vic_dev->vic_regs = sd->base;    /* VIC register base address */
+    vic_dev->width = 1920;           /* Default width (will be updated by sensor config) */
+    vic_dev->height = 1080;          /* Default height (will be updated by sensor config) */
+    vic_dev->buffer_count = 4;       /* Number of frame buffers */
+    vic_dev->streaming = 0;          /* Not streaming initially */
+    vic_dev->processing = false;     /* Not processing initially */
+    
+    /* Initialize synchronization objects */
     mutex_init(&vic_dev->state_lock);
+    spin_lock_init(&vic_dev->lock);
+    init_completion(&vic_dev->frame_complete);
+    
+    pr_info("VIC device initialized: width=%d, height=%d, buffers=%d, regs=%p\n",
+            vic_dev->width, vic_dev->height, vic_dev->buffer_count, vic_dev->vic_regs);
     
     /* Link VIC device to subdev */
     tx_isp_set_subdevdata(sd, vic_dev);
