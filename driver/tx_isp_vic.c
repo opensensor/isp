@@ -665,11 +665,12 @@ static int ispvic_frame_channel_s_stream(struct vic_device *vic_dev, int enable)
     return 0;
 }
 
-/* VIC event callback structure - matching reference driver layout */
+/* VIC event callback structure - matching reference driver layout 
+ * CRITICAL: Must be exactly 32 bytes total with function pointer at offset 0x1c */
 struct vic_callback_struct {
-    void *reserved[7];          /* Reserved fields 0x0-0x18 */
+    char padding[28];           /* Exact 28 bytes padding to reach offset 0x1c */
     void *event_callback;       /* Function pointer at offset 0x1c */
-};
+} __attribute__((packed));
 
 /* VIC event callback handler for QBUF events */
 static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd, void *data)
@@ -979,40 +980,46 @@ int tx_isp_vic_probe(struct platform_device *pdev)
             goto err_deinit_sd;
         }
         
-        /* CRITICAL FIX: Set function pointer at offset 0x1c (callback_struct + 0x1c) */
+        /* CRITICAL: Zero the structure first */
+        memset(callback, 0, sizeof(struct vic_callback_struct));
+        
+        /* CRITICAL FIX: Set function pointer at EXACT offset 0x1c using direct memory access */
+        *((void **)(((char *)callback) + 0x1c)) = (void *)vic_pad_event_handler;
+        
+        /* VERIFY: Also set via struct field for completeness */
         callback->event_callback = (void *)vic_pad_event_handler;
         
         /* Store callback structure pointer in priv field as expected by reference driver */
         sd->inpads[0].priv = callback;  /* This will be at pad+0xc (priv field offset) */
         
-        /* Also set the event handler directly on the pad for completeness */
+        /* Also set the event handler directly on the pad */
         sd->inpads[0].event = vic_pad_event_handler;
         
-        /* DEEP VERIFICATION: Check struct layout and memory */
-        pr_info("*** VIC CALLBACK DEEP VERIFICATION ***\n");
-        pr_info("*** VIC: sizeof(vic_callback_struct) = %zu ***\n", sizeof(struct vic_callback_struct));
-        pr_info("*** VIC: callback structure allocated at %p ***\n", callback);
-        pr_info("*** VIC: &callback->event_callback = %p ***\n", &callback->event_callback);
-        pr_info("*** VIC: callback + 0x1c = %p ***\n", ((char *)callback) + 0x1c);
-        pr_info("*** VIC: vic_pad_event_handler function at %p ***\n", vic_pad_event_handler);
+        /* COMPREHENSIVE VERIFICATION */
+        pr_info("*** VIC CALLBACK FINAL VERIFICATION ***\n");
+        pr_info("*** sizeof(vic_callback_struct) = %zu (should be 32) ***\n", sizeof(struct vic_callback_struct));
+        pr_info("*** callback allocated at = %p ***\n", callback);
+        pr_info("*** callback + 0x1c = %p ***\n", ((char *)callback) + 0x1c);
+        pr_info("*** &callback->event_callback = %p ***\n", &callback->event_callback);
+        pr_info("*** vic_pad_event_handler = %p ***\n", vic_pad_event_handler);
+        pr_info("*** Direct memory read [callback+0x1c] = %p ***\n", *((void **)(((char *)callback) + 0x1c)));
+        pr_info("*** Struct field callback->event_callback = %p ***\n", callback->event_callback);
         
-        /* Set the function pointer using direct memory access to be absolutely sure */
-        *((void **)(((char *)callback) + 0x1c)) = (void *)vic_pad_event_handler;
+        /* MEMORY DUMP: Show first 36 bytes of callback structure */
+        pr_info("*** CALLBACK STRUCTURE MEMORY DUMP ***\n");
+        {
+            unsigned char *data = (unsigned char *)callback;
+            int i;
+            for (i = 0; i < 36; i += 4) {
+                pr_info("*** [%02x]: %02x %02x %02x %02x ***\n", i, 
+                       data[i], data[i+1], data[i+2], data[i+3]);
+            }
+        }
         
-        /* Verify the assignment worked */
-        pr_info("*** VIC: callback->event_callback after assignment = %p ***\n", callback->event_callback);
-        pr_info("*** VIC: Direct read from callback+0x1c = %p ***\n", *((void **)(((char *)callback) + 0x1c)));
-        
-        /* Final verification */
-        pr_info("*** VIC: sd->inpads[0].priv set to %p ***\n", sd->inpads[0].priv);
-        pr_info("*** VIC: sd->inpads[0].event set to %p ***\n", sd->inpads[0].event);
-        
-        /* Verify the callback can be retrieved correctly */
-        struct vic_callback_struct *test_callback = (struct vic_callback_struct *)sd->inpads[0].priv;
-        pr_info("*** VIC: Retrieved callback = %p ***\n", test_callback);
-        pr_info("*** VIC: Retrieved callback->event_callback = %p ***\n", test_callback ? test_callback->event_callback : NULL);
-        
-        pr_info("*** VIC EVENT CALLBACK SETUP COMPLETE - VERIFIED ***\n");
+        /* Final pad setup */
+        pr_info("*** sd->inpads[0].priv = %p ***\n", sd->inpads[0].priv);
+        pr_info("*** sd->inpads[0].event = %p ***\n", sd->inpads[0].event);
+        pr_info("*** VIC CALLBACK SETUP COMPLETE ***\n");
     } else {
         pr_err("VIC: No input pads available for event callback\n");
         ret = -EINVAL;
