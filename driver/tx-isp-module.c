@@ -648,6 +648,29 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
             /* Binary Ninja: *(arg1 + 0xc) = callback_struct */
             *((void**)((char*)&vic_dev->sd + 0xc)) = vic_callback;
             
+            /* CRITICAL: Also store callback pointer directly in VIC device for debugging */
+            vic_dev->sd.event_callback = vic_callback;
+            
+            /* CRITICAL: Verify callback registration immediately */
+            void *test_callback = *((void**)((char*)&vic_dev->sd + 0xc));
+            if (test_callback == vic_callback) {
+                pr_info("*** VIC CALLBACK REGISTRATION VERIFIED: stored=%p, retrieved=%p ***\n", 
+                       vic_callback, test_callback);
+                
+                /* Test the event handler pointer at offset +0x1c */
+                void *test_handler = *((void**)((char*)test_callback + 0x1c));
+                if (test_handler == vic_event_handler) {
+                    pr_info("*** VIC EVENT HANDLER VERIFIED: stored=%p, retrieved=%p ***\n", 
+                           vic_event_handler, test_handler);
+                } else {
+                    pr_err("*** VIC EVENT HANDLER MISMATCH: stored=%p, retrieved=%p ***\n", 
+                           vic_event_handler, test_handler);
+                }
+            } else {
+                pr_err("*** VIC CALLBACK REGISTRATION FAILED: stored=%p, retrieved=%p ***\n", 
+                       vic_callback, test_callback);
+            }
+            
             pr_info("*** VIC EVENT CALLBACK REGISTERED: callback=%p, handler=%p ***\n",
                    vic_callback, vic_event_handler);
             pr_info("*** VIC SUBDEV NOW READY FOR tx_isp_send_event_to_remote EVENTS ***\n");
