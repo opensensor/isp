@@ -2436,9 +2436,20 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             
             pr_info("*** TEMPORARY: Manually triggering VIC frame completion (IRQ 63 not firing) ***\n");
             if (vic_start_ok != 0 && vic_dev) {
-                /* Manually call the VIC interrupt service routine */
-                isp_vic_interrupt_service_routine(63, ourISPdev);
-                pr_info("*** TEMPORARY: Manual VIC ISR trigger complete ***\n");
+                /* Directly call frame completion functions since hardware isn't generating status */
+                pr_info("*** TEMPORARY: Directly calling vic_framedone_irq_function ***\n");
+                vic_framedone_irq_function(vic_dev);
+                
+                /* Wake up all streaming channels */
+                int i;
+                for (i = 0; i < num_channels; i++) {
+                    if (frame_channels[i].state.streaming) {
+                        frame_channel_wakeup_waiters(&frame_channels[i]);
+                        pr_info("*** TEMPORARY: Woke up channel %d ***\n", i);
+                    }
+                }
+                
+                pr_info("*** TEMPORARY: Manual frame completion trigger complete ***\n");
             }
         }
         
