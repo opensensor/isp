@@ -3788,6 +3788,10 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                                     pr_info("VIC device state set to UNLOCKED (2)\n");
                                 }
                             } else {
+                                u32 fallback_unlock_key = 0x12; /* GC2053 unlock key for fallback */
+                                u32 timeout = 1000;
+                                u32 vic_status;
+                                
                                 pr_err("*** VIC registers still protected after MDMA enable: wrote 0x%x, read 0x%x ***\n", test_val, read_val);
                                 
                                 /* Try the traditional unlock sequence as fallback */
@@ -3796,11 +3800,9 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                                 wmb();
                                 writel(4, vic_regs + 0x0);
                                 wmb();
-                                writel(unlock_key, vic_regs + 0x1a0);
+                                writel(fallback_unlock_key, vic_regs + 0x1a0);
                                 wmb();
                                 
-                                u32 timeout = 1000;
-                                u32 vic_status;
                                 while (timeout > 0) {
                                     vic_status = readl(vic_regs + 0x0);
                                     if (vic_status == 0) break;
