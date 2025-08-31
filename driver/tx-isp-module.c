@@ -4520,7 +4520,99 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
         writel(0x400, isp_regs + 0x2020);
         writel(3, isp_regs + 0x2024);
         wmb();
+        pr_info("tisp_init: WDR buffer allocated and configured (0x8000 bytes)\n");
     }
+    
+    /* Binary Ninja: All Tiziano pipeline component initialization - EXACT order from decompilation */
+    pr_info("*** INITIALIZING ALL TIZIANO ISP PIPELINE COMPONENTS (Binary Ninja order) ***\n");
+    
+    /* Binary Ninja: tiziano_ae_init(data_b2f34, tispinfo_1, zx.d(arg1[0xc].w)) */
+    extern int tiziano_ae_init(uint32_t width, uint32_t height, uint32_t fps);
+    tiziano_ae_init(sensor_attr->total_width, sensor_attr->total_height, 25);
+    
+    /* Binary Ninja: tiziano_awb_init(data_b2f34, tispinfo) */
+    extern int tiziano_awb_init(uint32_t width, uint32_t height);
+    tiziano_awb_init(sensor_attr->total_width, sensor_attr->total_height);
+    
+    /* Binary Ninja: All remaining tiziano component initializations in exact order */
+    extern int tiziano_gamma_init(void);
+    extern int tiziano_gib_init(void);
+    extern int tiziano_lsc_init(void);
+    extern int tiziano_ccm_init(void);
+    extern int tiziano_dmsc_init(void);
+    extern int tiziano_sharpen_init(void);
+    extern int tiziano_sdns_init(void);
+    extern int tiziano_mdns_init(uint32_t width, uint32_t height);
+    extern int tiziano_clm_init(void);
+    extern int tiziano_dpc_init(void);
+    extern int tiziano_hldc_init(void);
+    extern int tiziano_defog_init(uint32_t width, uint32_t height);
+    extern int tiziano_adr_init(uint32_t width, uint32_t height);
+    extern int tiziano_af_init(uint32_t width, uint32_t height);
+    extern int tiziano_bcsh_init(void);
+    extern int tiziano_ydns_init(void);
+    extern int tiziano_rdns_init(void);
+    
+    tiziano_gamma_init();
+    tiziano_gib_init();
+    tiziano_lsc_init();
+    tiziano_ccm_init();
+    tiziano_dmsc_init();
+    tiziano_sharpen_init();
+    tiziano_sdns_init();
+    tiziano_mdns_init(sensor_attr->total_width, sensor_attr->total_height);
+    tiziano_clm_init();
+    tiziano_dpc_init();
+    tiziano_hldc_init();
+    tiziano_defog_init(sensor_attr->total_width, sensor_attr->total_height);
+    tiziano_adr_init(sensor_attr->total_width, sensor_attr->total_height);
+    tiziano_af_init(sensor_attr->total_width, sensor_attr->total_height);
+    tiziano_bcsh_init();
+    tiziano_ydns_init();
+    tiziano_rdns_init();
+    
+    /* Binary Ninja: WDR-specific component initialization */
+    if (data_b2e74 == 1) {
+        /* Binary Ninja: WDR mode initialization sequence */
+        extern int tiziano_wdr_init(uint32_t width, uint32_t height);
+        extern int tisp_gb_init(void);
+        
+        tiziano_wdr_init(sensor_attr->total_width, sensor_attr->total_height);
+        tisp_gb_init();
+        
+        /* Binary Ninja: Enable WDR mode for all components */
+        extern int tisp_dpc_wdr_en(int enable);
+        extern int tisp_lsc_wdr_en(int enable);
+        extern int tisp_gamma_wdr_en(int enable);
+        extern int tisp_sharpen_wdr_en(int enable);
+        extern int tisp_ccm_wdr_en(int enable);
+        extern int tisp_bcsh_wdr_en(int enable);
+        extern int tisp_rdns_wdr_en(int enable);
+        extern int tisp_adr_wdr_en(int enable);
+        extern int tisp_defog_wdr_en(int enable);
+        extern int tisp_mdns_wdr_en(int enable);
+        extern int tisp_dmsc_wdr_en(int enable);
+        extern int tisp_ae_wdr_en(int enable);
+        extern int tisp_sdns_wdr_en(int enable);
+        
+        tisp_dpc_wdr_en(1);
+        tisp_lsc_wdr_en(1);
+        tisp_gamma_wdr_en(1);
+        tisp_sharpen_wdr_en(1);
+        tisp_ccm_wdr_en(1);
+        tisp_bcsh_wdr_en(1);
+        tisp_rdns_wdr_en(1);
+        tisp_adr_wdr_en(1);
+        tisp_defog_wdr_en(1);
+        tisp_mdns_wdr_en(1);
+        tisp_dmsc_wdr_en(1);
+        tisp_ae_wdr_en(1);
+        tisp_sdns_wdr_en(1);
+        
+        pr_info("*** WDR mode pipeline components enabled ***\n");
+    }
+    
+    pr_info("*** TIZIANO PIPELINE COMPONENTS INITIALIZED SUCCESSFULLY ***\n");
     
     /* Binary Ninja: Determine mode value - critical calculation */
     if (sensor_attr->wdr_cache != 0) {
@@ -4535,78 +4627,49 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
         }
     }
     
-    /* Binary Ninja EXACT enable sequence - THE CRITICAL FIX */
-    /* system_reg_write(0x804, mode_value) */
-    /* system_reg_write(0x1c, 8) */  
-    /* system_reg_write(0x800, 1) */
-    
+    /* Binary Ninja: system_reg_write(0x804, mode_value) */
     writel(mode_value, isp_regs + 0x804);
     wmb();
     
-    writel(8, isp_regs + 0x1c);  /* Binary Ninja hardcoded value 8 */
+    /* Binary Ninja: system_reg_write(0x1c, 8) */  
+    writel(8, isp_regs + 0x1c);
     wmb();
     
-    /* CRITICAL: ISP core enable MUST come AFTER all pipeline initialization */
-    pr_info("tisp_init: Initializing ISP subsystems (required for VIC access)\n");
-    
-    /* CRITICAL: Initialize and register ISP event system BEFORE core enable */
-    pr_info("*** INITIALIZING ISP EVENT SYSTEM (REQUIRED FOR CORE ENABLE) ***\n");
-    
-    /* Set up ISP interrupt handler like Binary Ninja */
-    if (ourISPdev && ourISPdev->isp_irq > 0) {
-        free_irq(ourISPdev->isp_irq, ourISPdev);
-        ret = request_irq(ourISPdev->isp_irq, ip_done_interrupt_handler, 
-                         IRQF_SHARED, "tx-isp-core", isp_dev);
-        if (ret == 0) {
-            pr_info("ISP core interrupt handler registered on IRQ %d\n", ourISPdev->isp_irq);
-        } else {
-            pr_warn("Failed to register ISP core interrupt: %d\n", ret);
-        }
-    }
-    
-    pr_info("ISP event system and interrupt handlers initialized\n");
-    
-    /* NOW enable ISP core - Binary Ninja: system_reg_write(0x800, 1) */
+    /* Binary Ninja: system_reg_write(0x800, 1) - ISP core enable */
     writel(1, isp_regs + 0x800);
     wmb();
     
-    /* Allow ISP to stabilize */
-    msleep(50);
+    /* Binary Ninja: tisp_event_init() */
+    extern int tisp_event_init(void);
+    tisp_event_init();
     
-    /* Verify ISP core is enabled */
-    u32 status = readl(isp_regs + 0x800);
+    /* Binary Ninja: tisp_event_set_cb(4, tisp_tgain_update) */
+    extern int tisp_event_set_cb(int event_id, void *callback);
+    extern void tisp_tgain_update(void);
+    extern void tisp_again_update(void);
+    extern void tisp_ev_update(void);
+    extern void tisp_ct_update(void);
+    extern void tisp_ae_ir_update(void);
     
-    if (status == 1) {
-        pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED FOR MIPI ***\n");
-        return 0;
-    } else {
-        pr_err("*** tisp_init FAILED: ISP CORE WON'T ENABLE (status=0x%x) ***\n", status);
-        
-        /* Try alternative enable sequence as shown in logs */
-        pr_info("tisp_init: Attempting alternative enable sequence...\n");
-        
-        writel(0x0, isp_regs + 0x800);
-        wmb();
-        msleep(20);
-        
-        writel(0x3c, isp_regs + 0x804);  /* Alternative mode */
-        writel(0x10, isp_regs + 0x1c);   /* Alternative control */
-        wmb();
-        msleep(10);
-        
-        writel(0x1, isp_regs + 0x800);
-        wmb();
-        msleep(50);
-        
-        status = readl(isp_regs + 0x800);
-        if (status == 1) {
-            pr_info("*** tisp_init ALT SUCCESS: ISP CORE ENABLED (status=0x%x) ***\n", status);
-            return 0;
-        } else {
-            pr_err("*** tisp_init FAILED: ISP CORE WON'T ENABLE (status=0x%x) ***\n", status);
-            return -EIO;
-        }
+    tisp_event_set_cb(4, tisp_tgain_update);
+    tisp_event_set_cb(5, tisp_again_update);
+    tisp_event_set_cb(7, tisp_ev_update);
+    tisp_event_set_cb(9, tisp_ct_update);
+    tisp_event_set_cb(8, tisp_ae_ir_update);
+    
+    /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) */
+    system_irq_func_set(0xd, ip_done_interrupt_handler);
+    
+    /* Binary Ninja: tisp_param_operate_init() */
+    extern int tisp_param_operate_init(void);
+    ret = tisp_param_operate_init();
+    if (ret != 0) {
+        pr_warn("tisp_param_operate_init failed: %d\n", ret);
     }
+    
+    /* Binary Ninja: return 0 */
+    pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED ***\n");
+    return 0;
 }
 
 /* COMPLETE VIC INTERRUPT DISABLE FUNCTION - FROM tx_vic_disable_irq BINARY NINJA */
