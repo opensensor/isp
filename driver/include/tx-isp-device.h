@@ -599,7 +599,6 @@ struct tx_isp_platform {
 #define tx_isp_sd_writel(sd, reg, value)	\
 	tx_isp_writel(((sd)->base), reg, value)
 
-int private_reset_tx_isp_module(enum tx_isp_subdev_id id);
 int tx_isp_reg_set(struct tx_isp_subdev *sd, unsigned int reg, int start, int end, int val);
 
 int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd, struct tx_isp_subdev_ops *ops);
