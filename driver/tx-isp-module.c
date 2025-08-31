@@ -922,86 +922,115 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
-// Hardware interrupt handler - replaces timer simulation - SDK compatible
+// Hardware interrupt handler - Binary Ninja exact implementation
 static irqreturn_t tx_isp_hardware_interrupt_handler(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     struct tx_isp_vic_device *vic_dev;
-    u32 irq_status;
+    u32 status1, status2, masked1, masked2;
     int handled = 0;
     int i;
     
-    if (!isp_dev) {
+    if (!isp_dev || !isp_dev->vic_regs) {
         return IRQ_NONE;
     }
     
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    if (!vic_dev || vic_dev->state != 2) {
+        return IRQ_NONE;
+    }
     
-    // Read interrupt status register if VIC registers available
-    if (isp_dev->vic_regs) {
-        // T31 VIC interrupt status register offset from reference
-        irq_status = readl(isp_dev->vic_regs + 0x78c0);
-        if (!irq_status) {
-            return IRQ_NONE;
+    /* Binary Ninja interrupt service routine implementation:
+     * int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0)
+     * int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
+    
+    // Read VIC interrupt status registers like Binary Ninja
+    status1 = readl(isp_dev->vic_regs + 0x1e0);  /* Status register 1 */
+    status2 = readl(isp_dev->vic_regs + 0x1e4);  /* Status register 2 */ 
+    
+    // Mask with enabled interrupts (Binary Ninja: not.d(mask) & status)
+    u32 mask1 = readl(isp_dev->vic_regs + 0x1e8);  /* Mask register 1 */
+    u32 mask2 = readl(isp_dev->vic_regs + 0x1ec);  /* Mask register 2 */
+    
+    masked1 = (~mask1) & status1;  /* Binary Ninja: not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
+    masked2 = (~mask2) & status2;  /* Binary Ninja: not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
+    
+    if (!masked1 && !masked2) {
+        return IRQ_NONE;
+    }
+    
+    pr_debug("VIC interrupt: status1=0x%x masked1=0x%x status2=0x%x masked2=0x%x\n",
+             status1, masked1, status2, masked2);
+    
+    /* Clear interrupt status like Binary Ninja:
+     * *($v0_4 + 0x1f0) = $v1_7
+     * *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
+    writel(masked1, isp_dev->vic_regs + 0x1f0);  /* Clear status register 1 */
+    writel(masked2, isp_dev->vic_regs + 0x1f4);  /* Clear status register 2 */
+    wmb();
+    
+    /* Binary Ninja frame completion handling:
+     * if (($v1_7 & 1) != 0)
+     *     *($s0 + 0x160) += 1
+     *     entry_$a2 = vic_framedone_irq_function($s0) */
+    if (masked1 & 0x1) {
+        pr_debug("VIC frame completion interrupt (bit 1)\n");
+        
+        // Increment frame counter like Binary Ninja: *($s0 + 0x160) += 1
+        if (vic_dev) {
+            vic_dev->frame_count++;
         }
         
-        pr_debug("Hardware ISP interrupt: status=0x%x\n", irq_status);
+        // Call vic_framedone_irq_function like Binary Ninja
+        vic_framedone_irq_function(vic_dev);
+        handled = 1;
+    }
+    
+    /* Binary Ninja DMA completion handling:
+     * if (($v1_10 & 1) != 0)
+     *     entry_$a2 = vic_mdma_irq_function($s0, 0) */
+    if (masked2 & 0x1) {
+        pr_debug("VIC DMA completion interrupt (channel 0)\n");
         
-        // Handle frame completion interrupt - trigger VIC frame processing
-        if (irq_status & TX_ISP_HW_IRQ_FRAME_DONE) {
-            pr_debug("Hardware frame completion interrupt\n");
-            
-            // Process VIC frame completion if VIC is available
-            if (vic_dev && vic_dev->state == 2) {
-                vic_framedone_irq_function(vic_dev);
-                handled = 1;
-            } else {
-                // Fallback to direct frame channel wake up
-                for (i = 0; i < num_channels; i++) {
-                    if (frame_channels[i].state.streaming) {
-                        tx_isp_hardware_frame_done_handler(isp_dev, i);
-                    }
-                }
-                handled = 1;
-            }
-        }
-        
-        // Handle VIC processing completion interrupt
-        if (irq_status & TX_ISP_HW_IRQ_VIC_DONE) {
-            pr_debug("VIC processing completion interrupt\n");
-            if (vic_dev) {
-                vic_framedone_irq_function(vic_dev);
-            }
-            handled = 1;
-        }
-        
-        // Handle CSI errors
-        if (irq_status & TX_ISP_HW_IRQ_CSI_ERROR) {
-            pr_warn("CSI error interrupt: status=0x%x\n", irq_status);
-            handled = 1;
-        }
-        
-        // Clear interrupt status (write-clear register)
-        writel(irq_status, isp_dev->vic_regs + 0x78c0);
-        wmb(); // Memory barrier to ensure write completion
-        
-    } else {
-        // Generic ISP interrupt handling if VIC regs not available
-        pr_debug("Generic ISP interrupt (no hardware registers)\n");
-        
-        // Trigger VIC frame processing if available
-        if (vic_dev && vic_dev->state == 2) {
-            vic_framedone_irq_function(vic_dev);
-        } else {
-            // Fallback to direct wake up
-            for (i = 0; i < num_channels; i++) {
-                if (frame_channels[i].state.streaming) {
-                    tx_isp_hardware_frame_done_handler(isp_dev, i);
-                }
+        // Wake up frame channels for DMA completion
+        for (i = 0; i < num_channels; i++) {
+            if (frame_channels[i].state.streaming) {
+                frame_channel_wakeup_waiters(&frame_channels[i]);
             }
         }
         handled = 1;
     }
+    
+    /* Binary Ninja DMA completion handling for channel 1:
+     * if (($v1_10 & 2) != 0)
+     *     entry_$a2 = vic_mdma_irq_function($s0, 1) */
+    if (masked2 & 0x2) {
+        pr_debug("VIC DMA completion interrupt (channel 1)\n");
+        
+        // Wake up channel 1 specifically
+        if (frame_channels[1].state.streaming) {
+            frame_channel_wakeup_waiters(&frame_channels[1]);
+        }
+        handled = 1;
+    }
+    
+    /* Binary Ninja error handling for various VIC error conditions */
+    if (masked1 & 0x200) {
+        pr_warn("VIC frame asfifo overflow error\n");
+        handled = 1;
+    }
+    
+    if (masked1 & 0x400) {
+        pr_warn("VIC horizontal error ch0\n");
+        handled = 1;
+    }
+    
+    if (masked1 & 0x800) {
+        pr_warn("VIC horizontal error ch1\n");
+        handled = 1;
+    }
+    
+    pr_debug("VIC interrupt handled: masked1=0x%x masked2=0x%x\n", masked1, masked2);
     
     return handled ? IRQ_HANDLED : IRQ_NONE;
 }
@@ -1706,6 +1735,25 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                             pr_info("*** Channel %d: STREAM ON: Setting reg 0x300 = 0x%x ***\n", channel, stream_ctrl);
                             writel(stream_ctrl, vic_dev->vic_regs + 0x300);
                             wmb();
+                            
+                            /* CRITICAL: ENABLE VIC INTERRUPTS - Missing from previous implementation */
+                            pr_info("*** Channel %d: ENABLING VIC INTERRUPTS FOR FRAME COMPLETION ***\n", channel);
+                            
+                            /* Binary Ninja interrupt service routine shows these registers:
+                             * Status: 0x1e0, 0x1e8  Mask: 0x1e4, 0x1ec  Clear: 0x1f0, 0x1f4 */
+                            
+                            /* Enable frame completion interrupt (bit 1) in VIC interrupt mask */
+                            writel(0x1, vic_dev->vic_regs + 0x1e4);   /* Enable frame done interrupt */
+                            writel(0x1, vic_dev->vic_regs + 0x1ec);   /* Enable DMA completion interrupt */
+                            wmb();
+                            pr_info("Channel %d: VIC interrupt masks enabled (0x1e4=0x1, 0x1ec=0x1)\n", channel);
+                            
+                            /* Clear any pending interrupts before enabling */
+                            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear status register 1 */
+                            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear status register 2 */
+                            wmb();
+                            pr_info("Channel %d: VIC interrupt status cleared before enabling\n", channel);
+                            
                             vic_dev->streaming = 1;
                         }
                         
