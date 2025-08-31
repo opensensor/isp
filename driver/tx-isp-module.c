@@ -3594,7 +3594,7 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
         pr_info("tx_isp_vic_start: MIPI interface configuration\n");
         
         /* Binary Ninja MIPI configuration logic */
-        if (sensor_attr->data_interface != interface_type) {
+        if (sensor_attr->dbus_type != interface_type) {
             pr_warn("tx_isp_vic_start: flags mismatch\n");
             writel(0xa000a, vic_regs + 0x1a4);
         } else {
