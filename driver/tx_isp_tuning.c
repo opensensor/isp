@@ -1155,18 +1155,18 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
 
     pr_info("ISP m0 IOCTL called: cmd=0x%x\n", cmd);
 
-    // Basic validation {
+    // Basic validation
     if (!dev || !dev->tuning_data) {
         pr_err("No ISP device or tuning data\n");
         return -EINVAL;
     }
 
-//    // Verify tuning state is 3
-//    if (dev->tuning_data->state != 3) {
-//        pr_err("ISP tuning not in correct state (state=%d)\n",
-//               dev->tuning_data ? dev->tuning_data->state : -1);
-//        return -EINVAL;
-//    }
+    // REFERENCE DRIVER CHECK: state must be 3 to process commands  
+    if (dev->tuning_data->state != 3) {
+        pr_err("ISP tuning not in correct state (state=%d, must be 3)\n",
+               dev->tuning_data ? dev->tuning_data->state : -1);
+        return -EINVAL;
+    }
 
     if (cmd == 0xc00c56c6) {
         pr_info("Tuning IOCTL\n");
