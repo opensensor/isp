@@ -656,14 +656,22 @@ static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag)
     int pixel_clock;
     int result = 0;
     u32 reg_val;
+    struct tx_isp_dev *isp_dev;
     
     if (!sd) {
         pr_err("csi_core_ops_init: Invalid subdev\n");
         return -EINVAL;
     }
     
+    /* Cast isp pointer properly */
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if (!isp_dev) {
+        pr_err("csi_core_ops_init: Invalid ISP device\n");
+        return -EINVAL;
+    }
+    
     /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
-    csi_dev = (struct tx_isp_csi_device *)sd->isp->csi_dev;
+    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
     if (!csi_dev) {
         pr_err("csi_core_ops_init: Invalid CSI device\n");
         return -EINVAL;
@@ -698,7 +706,7 @@ static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag)
         } else {
             /* Binary Ninja: Configure based on sensor attributes */
             /* void* $v1_5 = *($s0_1 + 0x110) */
-            sensor_attr = sd->isp->sensor ? sd->isp->sensor->video.attr : NULL;
+            sensor_attr = isp_dev->sensor ? isp_dev->sensor->video.attr : NULL;
             if (!sensor_attr) {
                 pr_err("csi_core_ops_init: No sensor attributes\n");
                 return -EINVAL;
@@ -769,8 +777,8 @@ static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag)
                         }
                         
                         /* Binary Ninja: Configure clock registers */
-                        if (sd->isp->vic_regs) {
-                            void __iomem *isp_csi_regs = sd->isp->vic_regs + 0x200; /* CSI regs in ISP */
+                        if (isp_dev->vic_regs) {
+                            void __iomem *isp_csi_regs = isp_dev->vic_regs + 0x200; /* CSI regs in ISP */
                             u32 clock_reg = (readl(isp_csi_regs + 0x160) & 0xfffffff0) | clock_config;
                             writel(clock_reg, isp_csi_regs + 0x160);
                             writel(clock_reg, isp_csi_regs + 0x1e0);
@@ -780,8 +788,8 @@ static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag)
                     }
                     
                     /* Binary Ninja: Final DVP configuration */
-                    if (sd->isp->vic_regs) {
-                        void __iomem *isp_csi_regs = sd->isp->vic_regs + 0x200;
+                    if (isp_dev->vic_regs) {
+                        void __iomem *isp_csi_regs = isp_dev->vic_regs + 0x200;
                         writel(0x7d, isp_csi_regs + 0x0);
                         writel(0x3f, isp_csi_regs + 0x128);
                         wmb();
