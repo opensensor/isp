@@ -4331,9 +4331,23 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
             isp_dev->sensor_i2c_client = i2c_client;
             isp_dev->i2c_adapter = adapter;
                 
-            /* DON'T initialize sensor here - let tisp_init do it properly */
-            pr_info("*** SKIPPING EARLY SENSOR INIT - tisp_init will handle it ***\n");
-            kernel_subdev->vin_state = TX_ISP_MODULE_INIT;  /* Keep in INIT state for tisp_init */
+            /* CRITICAL: Initialize sensor properly to generate I2C interrupts */
+            pr_info("*** INITIALIZING SENSOR FOR PROPER I2C COMMUNICATION ***\n");
+            if (kernel_subdev->ops && kernel_subdev->ops->core && kernel_subdev->ops->core->init) {
+                pr_info("*** CALLING SENSOR HARDWARE INIT FOR I2C SETUP ***\n");
+                ret = kernel_subdev->ops->core->init(kernel_subdev, 1);
+                pr_info("Sensor hardware init returned: %d\n", ret);
+                if (ret == 0 || ret == 0xfffffdfd) {
+                    pr_info("*** SENSOR HARDWARE INITIALIZATION COMPLETE ***\n");
+                    kernel_subdev->vin_state = TX_ISP_MODULE_INIT;  /* Keep in INIT state for tisp_init */
+                } else {
+                    pr_warn("Sensor hardware init failed: %d, continuing anyway\n", ret);
+                    kernel_subdev->vin_state = TX_ISP_MODULE_INIT;
+                }
+            } else {
+                pr_warn("*** NO SENSOR HARDWARE INIT AVAILABLE ***\n");
+                kernel_subdev->vin_state = TX_ISP_MODULE_INIT;
+            }
             
             /* *** CRITICAL: COPY SENSOR ATTRIBUTES TO ISP DEVICE *** */
             if (tx_sensor && tx_sensor->video.attr) {
@@ -4462,7 +4476,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         pr_info("*** VIC ALREADY UNLOCKED BY vic_mdma_enable - SKIPPING tx_isp_vic_start ***\n");
                         pr_info("*** VIC HANDSHAKE SEQUENCE COMPLETE! ***\n");
                         
-                        /* Test to confirm VIC registers are still accessible */
+                        /* CRITICAL: VIC registers become protected after ISP enable - need to re-unlock */
                         {
                             u32 test_val = 0xABCDEF12;
                             writel(test_val, vic_regs + 0x4);
@@ -4475,6 +4489,53 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                                 wmb();
                             } else {
                                 pr_err("*** ERROR: VIC registers lost accessibility: wrote 0x%x, read 0x%x ***\n", test_val, read_val);
+                                
+                                /* CRITICAL: Re-unlock VIC registers after ISP enable */
+                                pr_info("*** ATTEMPTING VIC RE-UNLOCK AFTER ISP ENABLE ***\n");
+                                
+                                /* Binary Ninja VIC unlock sequence - MUST be done after ISP enable */
+                                writel(2, vic_regs + 0x0);
+                                wmb();
+                                msleep(5);
+                                
+                                writel(4, vic_regs + 0x0);
+                                wmb();
+                                msleep(5);
+                                
+                                /* Wait for unlock completion */
+                                int timeout = 1000;
+                                while (timeout > 0) {
+                                    u32 status = readl(vic_regs + 0x0);
+                                    if (status == 0) {
+                                        pr_info("VIC re-unlock completed after %d iterations\n", 1000 - timeout);
+                                        break;
+                                    }
+                                    udelay(10);
+                                    timeout--;
+                                }
+                                
+                                if (timeout > 0) {
+                                    /* Enable VIC processing after unlock */
+                                    writel(1, vic_regs + 0x0);
+                                    wmb();
+                                    msleep(5);
+                                    
+                                    /* Test accessibility again */
+                                    writel(test_val, vic_regs + 0x4);
+                                    wmb();
+                                    read_val = readl(vic_regs + 0x4);
+                                    if (read_val == test_val) {
+                                        pr_info("*** SUCCESS: VIC REGISTERS RE-UNLOCKED AFTER ISP ENABLE! ***\n");
+                                        /* Restore frame dimensions */
+                                        writel((1920 << 16) | 1080, vic_regs + 0x4);
+                                        wmb();
+                                    } else {
+                                        pr_err("*** FAILED: VIC registers still protected: wrote 0x%x, read 0x%x ***\n", test_val, read_val);
+                                        pr_err("*** VIC UNLOCK SEQUENCE FAILED - WILL USE SOFTWARE SIMULATION ***\n");
+                                    }
+                                } else {
+                                    pr_err("*** VIC RE-UNLOCK TIMEOUT - REGISTERS PERMANENTLY PROTECTED ***\n");
+                                }
                             }
                         }
                         
