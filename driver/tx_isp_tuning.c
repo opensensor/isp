@@ -1250,22 +1250,56 @@ int isp_m0_chardev_open(struct inode *inode, struct file *file)
     struct tx_isp_dev *dev = ourISPdev;
 
     pr_info("ISP M0 device open called from pid %d\n", current->pid);
+    
+    if (!dev) {
+        pr_err("ISP M0 open: No ISP device available\n");
+        return -ENODEV;
+    }
+    
     file->private_data = dev;
-    pr_info("ISP M0 device opened, tuning_data=%p\n", dev->tuning_data);
+    pr_info("ISP M0 device opened, current tuning_data=%p\n", dev->tuning_data);
 
-    // Check if tuning data already exists
+    // CRITICAL: Always allocate/initialize tuning data
     if (!dev->tuning_data) {
         dev->tuning_data = kzalloc(sizeof(struct isp_tuning_data), GFP_KERNEL);
         if (!dev->tuning_data) {
             pr_err("Failed to allocate tuning data\n");
             return -ENOMEM;
         }
-        // Initialize initial state
-        dev->tuning_data->state = 3;
-        pr_info("ISP M0 tuning data initialized\n");
+        pr_info("ISP M0 tuning data allocated at %p\n", dev->tuning_data);
     }
-
-    pr_info("ISP M0 device opened\n");
+    
+    // CRITICAL: Initialize tuning data structure properly
+    memset(dev->tuning_data, 0, sizeof(struct isp_tuning_data));
+    
+    // Initialize default values
+    dev->tuning_data->state = 3;  // Active state
+    dev->tuning_data->brightness = 128;
+    dev->tuning_data->contrast = 128;
+    dev->tuning_data->saturation = 128;
+    dev->tuning_data->sharpness = 128;
+    dev->tuning_data->hflip = 0;
+    dev->tuning_data->vflip = 0;
+    dev->tuning_data->antiflicker = 0;
+    dev->tuning_data->fps_num = 25;
+    dev->tuning_data->fps_den = 1;
+    dev->tuning_data->running_mode = 0;
+    dev->tuning_data->custom_mode = 0;
+    dev->tuning_data->max_again = 160;
+    dev->tuning_data->max_dgain = 80;
+    dev->tuning_data->ae_comp = 128;
+    dev->tuning_data->defog_strength = 128;
+    dev->tuning_data->dpc_strength = 128;
+    dev->tuning_data->drc_strength = 128;
+    dev->tuning_data->temper_strength = 128;
+    dev->tuning_data->sinter_strength = 128;
+    
+    // Set ISP device as tuning enabled
+    dev->tuning_enabled = 2;  // Enable tuning mode
+    
+    pr_info("ISP M0 tuning data initialized: state=%d, tuning_enabled=%d\n", 
+            dev->tuning_data->state, dev->tuning_enabled);
+    pr_info("ISP M0 device opened successfully\n");
     return 0;
 }
 EXPORT_SYMBOL(isp_m0_chardev_open);

@@ -1797,14 +1797,22 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
 static int isp_tuning_open(struct inode *inode, struct file *file)
 {
-    pr_info("ISP tuning device opened\n");
-    return 0;
+    extern int isp_m0_chardev_open(struct inode *inode, struct file *file);
+    
+    pr_info("ISP tuning device opened - routing to tx_isp_tuning.c\n");
+    
+    /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
+    return isp_m0_chardev_open(inode, file);
 }
 
 static int isp_tuning_release(struct inode *inode, struct file *file)
 {
-    pr_info("ISP tuning device released\n");
-    return 0;
+    extern int isp_m0_chardev_release(struct inode *inode, struct file *file);
+    
+    pr_info("ISP tuning device released - routing to tx_isp_tuning.c\n");
+    
+    /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
+    return isp_m0_chardev_release(inode, file);
 }
 
 static const struct file_operations isp_tuning_fops = {
