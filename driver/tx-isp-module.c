@@ -173,6 +173,7 @@ static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int c
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer);
+static int init_isp_interrupt_system(struct tx_isp_dev *isp_dev);
 
 /* Reference driver function declarations - Binary Ninja exact names */
 static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev);
@@ -5764,71 +5765,6 @@ static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *bu
     return 0;
 }
 
-/* VIC frame done interrupt handler based on reference vic_framedone_irq_function */
-static void vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
-{
-    unsigned long flags;
-    int i;
-    
-    if (!vic_dev) {
-        return;
-    }
-    
-    pr_debug("VIC: Frame completion interrupt\n");
-    
-    spin_lock_irqsave(&vic_dev->buffer_lock, flags);
-    
-    // Increment VIC frame counter
-    vic_dev->frame_count++;
-    
-    // CRITICAL: Also increment ISP frame counter for video drop detection
-    if (ourISPdev) {
-        ourISPdev->frame_count++;
-        pr_debug("VIC: frame_count=%u (ISP=%u)\n",
-                vic_dev->frame_count, ourISPdev->frame_count);
-    }
-    
-    // Move completed buffers from queue to done list
-    if (!list_empty(&vic_dev->queue_head)) {
-        struct list_head *buffer = vic_dev->queue_head.next;
-        list_del(buffer);
-        list_add_tail(buffer, &vic_dev->done_head);
-    }
-    
-    spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
-    
-    // Wake up all frame channels like reference
-    for (i = 0; i < num_channels; i++) {
-        if (frame_channels[i].state.streaming) {
-            frame_channel_wakeup_waiters(&frame_channels[i]);
-        }
-    }
-    
-    // Complete frame operation
-    if (vic_dev->frame_done.done == 0) {
-        complete(&vic_dev->frame_done);
-    }
-    
-    // Schedule next frame generation if streaming continues
-    // This ensures continuous frame flow like real hardware
-    if (vic_dev->state == 2 && vic_dev->streaming) { // If VIC is still active and streaming
-        struct tx_isp_sensor *sensor = NULL;
-        
-        /* Check if we have an active sensor */
-        if (ourISPdev && ourISPdev->sensor &&
-            ourISPdev->sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
-            sensor = ourISPdev->sensor;
-        }
-        
-        /* Only schedule work queue if no active sensor (simulation mode) */
-        if (!sensor) {
-            // Use a kernel work queue to schedule next frame after a delay
-            // This simulates continuous sensor frame generation at ~30 FPS
-            schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(33));
-        }
-        /* If sensor is active, frames will come from hardware interrupts */
-    }
-}
 
 /* VIC event handler - manages buffer flow between frame channels and VIC */
 static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
