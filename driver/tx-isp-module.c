@@ -684,15 +684,20 @@ static int tx_isp_activate_csi_subdev(struct tx_isp_dev *isp_dev)
             pr_info("CSI clock enabled\n");
         }
         
-        // Configure CSI for MIPI interface
+        // Configure CSI for MIPI interface - Binary Ninja exact sequence
         if (csi_dev->csi_regs) {
-            // CSI MIPI configuration registers (T31 specific)
+            // CSI MIPI configuration registers (T31 specific) 
             writel(0x1, csi_dev->csi_regs + 0x0);    // Enable CSI
             writel(0x2, csi_dev->csi_regs + 0x4);    // MIPI mode
             writel(0x2, csi_dev->csi_regs + 0x8);    // 2-lane MIPI
             writel(0x0, csi_dev->csi_regs + 0xc);    // Clear errors
+            
+            /* CRITICAL: Configure CSI-to-ISP data path routing */
+            writel(0x1, csi_dev->csi_regs + 0x20);   // CSI to ISP data enable
+            writel(0x1, csi_dev->csi_regs + 0x24);   // CSI interrupt enable to ISP
+            writel(0x0, csi_dev->csi_regs + 0x28);   // Clear CSI status
             wmb();
-            pr_info("CSI configured for 2-lane MIPI interface\n");
+            pr_info("CSI configured for 2-lane MIPI interface with ISP routing\n");
         }
     }
     
