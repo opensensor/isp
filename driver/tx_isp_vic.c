@@ -665,6 +665,53 @@ static int ispvic_frame_channel_s_stream(struct vic_device *vic_dev, int enable)
     return 0;
 }
 
+/* VIC event callback handler for QBUF events */
+static int vic_pad_event_callback(struct tx_isp_subdev_pad *pad, unsigned int cmd, void *data)
+{
+    struct tx_isp_subdev *sd;
+    struct vic_device *vic_dev;
+    int ret = 0;
+    
+    if (!pad || !pad->sd) {
+        pr_err("VIC event callback: Invalid pad or subdev\n");
+        return -EINVAL;
+    }
+    
+    sd = pad->sd;
+    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    if (!vic_dev) {
+        pr_err("VIC event callback: No vic_dev\n");
+        return -EINVAL;
+    }
+    
+    pr_info("*** VIC EVENT CALLBACK: cmd=0x%x, data=%p ***\n", cmd, data);
+    
+    switch (cmd) {
+        case 0x3000008: /* QBUF event */
+            pr_info("*** VIC: Processing QBUF event 0x3000008 ***\n");
+            
+            /* Handle QBUF event - trigger frame processing */
+            if (vic_dev->state == 4) { /* Streaming state */
+                /* Signal frame completion to wake up waiting processes */
+                complete(&vic_dev->frame_complete);
+                pr_info("*** VIC: QBUF event processed - frame completion signaled ***\n");
+                ret = 0;
+            } else {
+                pr_err("VIC: QBUF event received but not streaming (state=%d)\n", vic_dev->state);
+                ret = -EAGAIN;
+            }
+            break;
+            
+        default:
+            pr_info("VIC: Unknown event cmd=0x%x\n", cmd);
+            ret = -ENOIOCTLCMD;
+            break;
+    }
+    
+    pr_info("*** VIC EVENT CALLBACK: returning %d ***\n", ret);
+    return ret;
+}
+
 /* VIC video streaming operations - matching reference driver vic_core_s_stream */
 static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
@@ -912,6 +959,15 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     if (ret < 0) {
         pr_err("Failed to initialize VIC subdev\n");
         goto err_free_vic_dev;
+    }
+
+    /* Set up VIC event callback for QBUF events */
+    pr_info("*** VIC: Setting up event callback for input pad ***\n");
+    if (sd->num_inpads > 0 && sd->inpads) {
+        sd->inpads[0].event = vic_pad_event_callback;
+        pr_info("*** VIC: Event callback registered on input pad[0] ***\n");
+    } else {
+        pr_err("VIC: No input pads available for event callback\n");
     }
 
     /* Initialize hardware after subdev init */
