@@ -1754,6 +1754,19 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                             wmb();
                             pr_info("Channel %d: VIC interrupt status cleared before enabling\n", channel);
                             
+                            /* CRITICAL: START VIC DMA PROCESSING - Missing trigger! */
+                            pr_info("*** Channel %d: STARTING VIC DMA PROCESSING ***\n", channel);
+                            
+                            /* VIC DMA start trigger - activate hardware processing */
+                            writel(0x1, vic_dev->vic_regs + 0x0);     /* VIC processing enable */
+                            wmb();
+                            pr_info("Channel %d: VIC DMA processing started (reg 0x0 = 0x1)\n", channel);
+                            
+                            /* Additional VIC activation registers from Binary Ninja analysis */
+                            writel(0x1, vic_dev->vic_regs + 0x104);   /* VIC active processing flag */
+                            writel(0x0, vic_dev->vic_regs + 0x108);   /* Clear VIC errors */
+                            wmb();
+                            
                             vic_dev->streaming = 1;
                         }
                         
