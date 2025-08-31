@@ -1429,7 +1429,10 @@ static int tiziano_wdr_algorithm(void)
                 int32_t t0_1 = *((uint32_t*)a0);
                 int32_t v0_5 = *((uint32_t*)v1);
                 
-                if (v0_5 >= t0_1) {
+                /* CRITICAL: Prevent division by zero */
+                if (a1 == 0) {
+                    v0_4 = t0_1; /* Default to input value */
+                } else if (v0_5 >= t0_1) {
                     v0_4 = ((v0_5 - t0_1) * t6) / a1 + t0_1;
                 } else {
                     v0_4 = t0_1 - ((t0_1 - v0_5) * t6) / a1;
