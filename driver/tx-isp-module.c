@@ -204,6 +204,7 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer);
 static int init_isp_interrupt_system(struct tx_isp_dev *isp_dev);
+static void vic_hardware_interrupt_enable(void *vic_device_context);
 
 /* Reference driver function declarations - Binary Ninja exact names */
 static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev);
@@ -665,7 +666,6 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
             pr_info("*** SETTING UP MISSING VIC INTERRUPT ENABLE CALLBACK AT +0x84 ***\n");
             
             /* Create the hardware interrupt enable function that tx_vic_enable_irq calls */
-            extern void vic_hardware_interrupt_enable(void *vic_device_context);
             *((void(**)(void*))((char*)vic_dev + 0x84)) = vic_hardware_interrupt_enable;
             
             pr_info("*** VIC INTERRUPT ENABLE CALLBACK SET AT +0x84: %p ***\n", vic_hardware_interrupt_enable);
