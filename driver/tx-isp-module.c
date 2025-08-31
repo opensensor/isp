@@ -1367,51 +1367,40 @@ static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const cha
 }
 
 // Initialize real hardware interrupt handling - Kernel 3.10 compatible, SDK compatible
-/* tx_isp_enable_irq - Binary Ninja exact implementation */
+/* tx_isp_enable_irq - CORRECTED Binary Ninja exact implementation */
 static void tx_isp_enable_irq(struct tx_isp_dev *isp_dev)
 {
-    if (!isp_dev) {
-        pr_err("tx_isp_enable_irq: Invalid parameters\n");
+    if (!isp_dev || isp_dev->isp_irq <= 0) {
+        pr_err("tx_isp_enable_irq: Invalid parameters (dev=%p, irq=%d)\n", 
+               isp_dev, isp_dev ? isp_dev->isp_irq : -1);
         return;
     }
     
-    pr_info("*** tx_isp_enable_irq: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** tx_isp_enable_irq: CORRECTED Binary Ninja implementation ***\n");
     
-    /* Binary Ninja shows this function enables ISP core interrupts */
-    /* Enable ISP interrupt generation at hardware level */
-    if (isp_dev->vic_regs) {
-        void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
-        
-        /* Enable ISP core interrupts - Binary Ninja pattern */
-        writel(0xffffffff, isp_regs + 0x30);  /* ISP interrupt enable */
-        writel(0xffffffff, isp_regs + 0x38);  /* Additional interrupt enables */
-        wmb();
-        
-        pr_info("*** tx_isp_enable_irq: ISP hardware interrupts enabled ***\n");
-    }
+    /* Binary Ninja: return private_enable_irq(*arg1) __tailcall
+     * This means: enable_irq(isp_dev->isp_irq) */
+    enable_irq(isp_dev->isp_irq);
+    
+    pr_info("*** tx_isp_enable_irq: Kernel IRQ %d ENABLED ***\n", isp_dev->isp_irq);
 }
 
-/* tx_isp_disable_irq - Binary Ninja exact implementation */
+/* tx_isp_disable_irq - CORRECTED Binary Ninja exact implementation */
 static void tx_isp_disable_irq(struct tx_isp_dev *isp_dev)
 {
-    if (!isp_dev) {
-        pr_err("tx_isp_disable_irq: Invalid parameters\n");
+    if (!isp_dev || isp_dev->isp_irq <= 0) {
+        pr_err("tx_isp_disable_irq: Invalid parameters (dev=%p, irq=%d)\n", 
+               isp_dev, isp_dev ? isp_dev->isp_irq : -1);
         return;
     }
     
-    pr_info("*** tx_isp_disable_irq: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** tx_isp_disable_irq: CORRECTED Binary Ninja implementation ***\n");
     
-    /* Binary Ninja shows this function disables ISP core interrupts */
-    if (isp_dev->vic_regs) {
-        void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
-        
-        /* Disable ISP core interrupts - Binary Ninja pattern */
-        writel(0x0, isp_regs + 0x30);  /* ISP interrupt disable */
-        writel(0x0, isp_regs + 0x38);  /* Additional interrupt disables */
-        wmb();
-        
-        pr_info("*** tx_isp_disable_irq: ISP hardware interrupts disabled ***\n");
-    }
+    /* Binary Ninja: return private_disable_irq(*arg1) __tailcall
+     * This means: disable_irq(isp_dev->isp_irq) */
+    disable_irq(isp_dev->isp_irq);
+    
+    pr_info("*** tx_isp_disable_irq: Kernel IRQ %d DISABLED ***\n", isp_dev->isp_irq);
 }
 
 /* tx_isp_request_irq - EXACT Binary Ninja implementation with CORRECT handlers */
@@ -5415,23 +5404,32 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                             u32 vic_status;
                             u32 vic_test;
                             
-                            /* EXACT tisp_init sequence for force sensor path */
-                            writel(0x1c, isp_regs + 0x804);
-                            wmb();
-                            pr_info("Force path: ISP reg 0x804 = 0x1c\n");
-                            
-                            writel(0x8, isp_regs + 0x1c);
-                            wmb();
-                            pr_info("Force path: ISP reg 0x1c = 0x8\n");
-                            
-                            writel(0x1, isp_regs + 0x800);
-                            wmb();
-                            pr_info("Force path: ISP reg 0x800 = 0x1 (ENABLE)\n");
-                            
-                            msleep(20);
-                            
-                            isp_status = readl(isp_regs + 0x800);
-                            pr_info("*** ISP CORE ENABLED WITH FORCE SENSOR: status=0x%x ***\n", isp_status);
+                /* CRITICAL: Call tx_isp_vic_start FIRST to set vic_start_ok flag! */
+                pr_info("*** CALLING tx_isp_vic_start FIRST TO SET vic_start_ok FLAG ***\n");
+                int vic_start_result = tx_isp_vic_start(vic_dev, &tx_sensor->attr);
+                if (vic_start_result == 0) {
+                    pr_info("*** tx_isp_vic_start SUCCESS - vic_start_ok=1 SET! ***\n");
+                } else {
+                    pr_err("*** tx_isp_vic_start FAILED: %d ***\n", vic_start_result);
+                }
+                
+                /* EXACT tisp_init sequence for force sensor path */
+                writel(0x1c, isp_regs + 0x804);
+                wmb();
+                pr_info("Force path: ISP reg 0x804 = 0x1c\n");
+                
+                writel(0x8, isp_regs + 0x1c);
+                wmb();
+                pr_info("Force path: ISP reg 0x1c = 0x8\n");
+                
+                writel(0x1, isp_regs + 0x800);
+                wmb();
+                pr_info("Force path: ISP reg 0x800 = 0x1 (ENABLE)\n");
+                
+                msleep(20);
+                
+                isp_status = readl(isp_regs + 0x800);
+                pr_info("*** ISP CORE ENABLED WITH FORCE SENSOR: status=0x%x ***\n", isp_status);
                             
                             if (isp_status == 1) {
                                 vic_status = readl(isp_dev->vic_regs + 0x0);
