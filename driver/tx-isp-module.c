@@ -622,8 +622,8 @@ static int tx_isp_init_csi_subdev(struct tx_isp_dev *isp_dev)
     
     pr_info("*** INITIALIZING CSI AS PROPER SUBDEV FOR MIPI INTERFACE ***\n");
     
-    /* Use Binary Ninja tx_isp_csi_probe method */
-    return tx_isp_csi_probe(isp_dev);
+    /* Use Binary Ninja csi_device_probe method */
+    return csi_device_probe(isp_dev);
 }
 
 // Activate CSI subdev - Use Binary Ninja tx_isp_csi_activate_subdev
@@ -639,7 +639,7 @@ static int tx_isp_activate_csi_subdev(struct tx_isp_dev *isp_dev)
     
     pr_info("*** ACTIVATING CSI SUBDEV FOR MIPI RECEPTION ***\n");
     
-    /* Use Binary Ninja activation method */
+    /* Call the Binary Ninja method directly */
     return tx_isp_csi_activate_subdev(&csi_dev->sd);
 }
 
@@ -911,23 +911,23 @@ static int check_csi_error(struct tx_isp_csi_device *csi_dev)
     return 0;
 }
 
-/* tx_isp_csi_probe - Binary Ninja implementation */
-static int tx_isp_csi_probe(struct tx_isp_dev *isp_dev)
+/* csi_device_probe - Binary Ninja implementation (renamed to avoid header conflict) */
+static int csi_device_probe(struct tx_isp_dev *isp_dev)
 {
     struct tx_isp_csi_device *csi_dev;
     int ret = 0;
     
     if (!isp_dev) {
-        pr_err("tx_isp_csi_probe: Invalid ISP device\n");
+        pr_err("csi_device_probe: Invalid ISP device\n");
         return -EINVAL;
     }
     
-    pr_info("tx_isp_csi_probe: Probing CSI device\n");
+    pr_info("csi_device_probe: Probing CSI device\n");
     
     /* Allocate CSI device */
     csi_dev = kzalloc(sizeof(struct tx_isp_csi_device), GFP_KERNEL);
     if (!csi_dev) {
-        pr_err("tx_isp_csi_probe: Failed to allocate CSI device\n");
+        pr_err("csi_device_probe: Failed to allocate CSI device\n");
         return -ENOMEM;
     }
     
@@ -940,7 +940,7 @@ static int tx_isp_csi_probe(struct tx_isp_dev *isp_dev)
     /* Map CSI registers */
     if (isp_dev->vic_regs) {
         csi_dev->csi_regs = isp_dev->vic_regs - 0x9a00 + 0x8000; /* ISP+0x8000 */
-        pr_info("tx_isp_csi_probe: CSI registers mapped at %p\n", csi_dev->csi_regs);
+        pr_info("csi_device_probe: CSI registers mapped at %p\n", csi_dev->csi_regs);
     }
     
     /* Initialize CSI device state */
@@ -952,7 +952,7 @@ static int tx_isp_csi_probe(struct tx_isp_dev *isp_dev)
     /* Connect to ISP device */
     isp_dev->csi_dev = (struct tx_isp_subdev *)csi_dev;
     
-    pr_info("tx_isp_csi_probe: CSI device probed successfully\n");
+    pr_info("csi_device_probe: CSI device probed successfully\n");
     return 0;
 }
 
