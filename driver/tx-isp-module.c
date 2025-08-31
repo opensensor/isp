@@ -5313,11 +5313,6 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                             }
                         }
                         
-                        /* CRITICAL: SET vic_start_ok FLAG - Binary Ninja shows interrupts only work when this is 1 */
-                        pr_info("*** SETTING vic_start_ok = 1 FOR INTERRUPT ENABLE ***\n");
-                        vic_start_ok = 1;
-                        pr_info("*** vic_start_ok flag set to 1 - hardware interrupts now enabled ***\n");
-                        
                         /* Enable VIC interrupts for frame completion */
                         pr_info("*** ENABLING VIC INTERRUPTS FOR HARDWARE FRAME COMPLETION ***\n");
                         tx_vic_enable_irq_complete(isp_dev);
