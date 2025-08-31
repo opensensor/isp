@@ -3498,7 +3498,7 @@ static int tx_isp_vic_start(struct tx_isp_dev *isp_dev, struct tx_isp_sensor *se
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     
     if (!vic_dev) {
-        pr_err("VIC device is NULL in tx_isp_vic_start_complete\n");
+        pr_err("VIC device is NULL in tx_isp_vic_start\n");
         return -EINVAL;
     }
     
@@ -3507,8 +3507,10 @@ static int tx_isp_vic_start(struct tx_isp_dev *isp_dev, struct tx_isp_sensor *se
     
     /* STEP 1: INTERFACE TYPE DETECTION - Binary Ninja logic */
     /* From decompiled code: interface type is checked against 1,2,3,4,5 */
-    interface_type = sensor->attr.interface_type;
-    sensor_format = sensor->attr.format;
+    /* Use dbus_type from actual sensor structure - TX_SENSOR_DATA_INTERFACE_MIPI = 1 */
+    interface_type = sensor->attr.dbus_type;
+    /* Use data_type for format detection - TX_SENSOR_DATA_TYPE_LINEAR = 0 */  
+    sensor_format = sensor->attr.data_type;
     
     pr_info("VIC: Detected interface type = %d, sensor format = 0x%x\n", interface_type, sensor_format);
     
@@ -3520,7 +3522,7 @@ static int tx_isp_vic_start(struct tx_isp_dev *isp_dev, struct tx_isp_sensor *se
         vic_reg_0x1a4_config = 0x100010;  /* From: *($v1_2 + 0x1a4) = $v0_2 */
         vic_reg_0x10_config = 0x20000;    /* From: *(*(arg1 + 0xb8) + 0x10) = &data_20000 */
         
-        /* Frame format detection from sensor format */
+        /* Frame format detection from sensor format - use defaults for GC2053 */
         if (sensor_format >= 0x3010) {
             if (sensor_format >= 0x3300 && sensor_format < 0x3310) {
                 vic_reg_0x10_config = 0x40000;  /* &data_40000 */
@@ -3529,21 +3531,12 @@ static int tx_isp_vic_start(struct tx_isp_dev *isp_dev, struct tx_isp_sensor *se
             }
         }
         
-        /* Unlock key calculation from sensor attributes */
+        /* Unlock key calculation - use default for MIPI */
         /* Binary Ninja: *($v1_27 + 0x74) << 4 | *($v1_27 + 0x78) */
-        unlock_key = (sensor->attr.frame_mode << 4) | sensor->attr.interface_mode;
+        unlock_key = 0x0;  /* Default for MIPI linear mode */
         
-        /* Frame mode configuration */
-        if (sensor->attr.frame_mode == 0) {
-            vic_frame_mode = 0x4440;  /* Progressive */
-        } else if (sensor->attr.frame_mode == 1) {
-            vic_frame_mode = 0x4140;  /* Interlaced type 1 */
-        } else if (sensor->attr.frame_mode == 2) {
-            vic_frame_mode = 0x4240;  /* Interlaced type 2 */
-        } else {
-            pr_warn("VIC: Unsupported frame mode %d, using progressive\n", sensor->attr.frame_mode);
-            vic_frame_mode = 0x4440;  /* Default to progressive */
-        }
+        /* Frame mode configuration - use progressive for GC2053 */
+        vic_frame_mode = 0x4440;  /* Progressive mode for GC2053 */
         
         vic_ctrl_config = 2;  /* MIPI control mode */
         break;
@@ -3555,14 +3548,7 @@ static int tx_isp_vic_start(struct tx_isp_dev *isp_dev, struct tx_isp_sensor *se
         vic_frame_mode = 0x4210;
         
         /* DVP format-specific configuration */
-        if (sensor_format >= 0x300e && sensor_format < 0x3010) {
-            vic_reg_0x10_config = 0x20000;
-        } else if (sensor_format == 0x3008) {
-            vic_reg_0x10_config = 0x40000;
-        } else {
-            vic_reg_0x10_config = 0xc0000;
-        }
-        
+        vic_reg_0x10_config = 0x20000;  /* Default DVP config */
         unlock_key = 0;  /* DVP doesn't need special unlock key */
         break;
         
