@@ -152,8 +152,7 @@ static struct list_head vic_buffer_fifo;
 static uint32_t gpio_switch_state = 0;
 static uint32_t gpio_info[10] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
-/* CRITICAL: vic_start_ok flag - Binary Ninja shows interrupts only work when this is 1 */
-static uint32_t vic_start_ok = 0;
+/* NOTE: Removed global vic_start_ok - using VIC device flag at offset +0x13c instead */
 
 /* VIC event callback structure for Binary Ninja event system */
 struct vic_event_callback {
@@ -1497,7 +1496,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) - the REAL interrupt enable flag */
     uint32_t *vic_irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
     if (*vic_irq_enable_flag != 0) {
-        pr_debug("VIC interrupt: vic_start_ok=1, processing interrupts (v1_7=0x%x, v1_10=0x%x)\n", v1_7, v1_10);
+        pr_debug("VIC interrupt: irq_flag=1, processing interrupts (v1_7=0x%x, v1_10=0x%x)\n", v1_7, v1_10);
         
         /* Binary Ninja: if (($v1_7 & 1) != 0) */
         if ((v1_7 & 1) != 0) {
@@ -1627,7 +1626,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         }
         
         /* Binary Ninja: Error recovery sequence */
-        if ((v1_7 & 0xde00) != 0 && vic_start_ok == 1) {
+        if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
             pr_err("error handler!!!\n");
             
             /* Binary Ninja: **($s0 + 0xb8) = 4 */
@@ -1666,7 +1665,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         }
         
     } else {
-        pr_debug("VIC interrupt: vic_start_ok=0, ignoring interrupt (v1_7=0x%x, v1_10=0x%x)\n", v1_7, v1_10);
+        pr_debug("VIC interrupt: irq_flag=0, ignoring interrupt (v1_7=0x%x, v1_10=0x%x)\n", v1_7, v1_10);
     }
     
     /* Binary Ninja: return 1 */
@@ -5282,9 +5281,10 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         }
                     }
                     
-                    /* FORCE vic_start_ok and interrupts regardless of ISP status */
-                    vic_start_ok = 1;
-                    pr_info("*** FORCING vic_start_ok=1 FOR INTERRUPTS ***\n");
+                    /* CRITICAL: Call Binary Ninja tx_vic_enable_irq to properly enable VIC interrupts */
+                    pr_info("*** CALLING tx_vic_enable_irq TO SET VIC DEVICE FLAG +0x13c ***\n");
+                    tx_vic_enable_irq(vic_dev);
+                    pr_info("*** VIC DEVICE INTERRUPT FLAG PROPERLY SET VIA BINARY NINJA METHOD ***\n");
                     
                     if (isp_status == 1) {
                         /* VIC is already properly configured by vic_mdma_enable and tisp_init */
