@@ -154,6 +154,16 @@ static uint32_t gpio_info[10] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 /* CRITICAL: vic_start_ok flag - Binary Ninja shows interrupts only work when this is 1 */
 static uint32_t vic_start_ok = 0;
 
+/* VIC event callback structure for Binary Ninja event system */
+struct vic_event_callback {
+    void *context;                           /* +0x00: Context pointer */
+    void *reserved[7];                       /* +0x04-0x1c: Reserved space */
+    int (*event_handler)(void*, int, void*); /* +0x1c: Event handler function */
+};
+
+/* Forward declaration for VIC event handler */
+static int vic_event_handler(void *subdev, int event_type, void *data);
+
 /* Forward declarations - Using actual function names from reference driver */
 struct frame_channel_device; /* Forward declare struct */
 struct tx_isp_vic_device; /* Forward declare VIC device */
@@ -167,7 +177,7 @@ static int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *
 static void init_frame_simulation(void);
 static void stop_frame_simulation(void);
 static void frame_sim_timer_callback(unsigned long data);
-static int tx_isp_send_event_to_remote_internal(void *subdev, int event_type, void *data);
+static int tx_isp_send_event_to_remote_bn(void *subdev, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
