@@ -152,8 +152,6 @@ static struct list_head vic_buffer_fifo;
 static uint32_t gpio_switch_state = 0;
 static uint32_t gpio_info[10] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
-/* NOTE: Removed global vic_start_ok - using VIC device flag at offset +0x13c instead */
-
 /* VIC event callback structure for Binary Ninja event system */
 struct vic_event_callback {
     void *reserved[7];                       /* +0x00-0x18: Reserved space (28 bytes) */
@@ -4154,8 +4152,8 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
     writel(0, vic_regs + 0x1b4);
     wmb();
     
-    /* Binary Ninja: Set global flag vic_start_ok = 1 */
-    pr_info("tx_isp_vic_start: VIC start complete - setting vic_start_ok flag\n");
+    /* Binary Ninja: VIC start complete - interrupts enabled via proper tx_vic_enable_irq */
+    pr_info("tx_isp_vic_start: VIC start complete - ready for interrupt enable\n");
     
     /* Binary Ninja: Log WDR mode */
     if (sensor_attr->wdr_cache != 0) {
@@ -4868,7 +4866,7 @@ static void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
     } else {
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         *irq_enable_flag = 1;
-        pr_info("*** tx_vic_enable_irq: SET INTERRUPT FLAG at +0x13c = 1 (THIS IS THE REAL vic_start_ok!) ***\n");
+        pr_info("*** tx_vic_enable_irq: SET INTERRUPT FLAG at +0x13c = 1 ***\n");
         
         /* Binary Ninja: int32_t $v0_1 = *(dump_vsd_5 + 0x84) */
         callback_func = *(void(**)(void*))((char*)vic_dev + 0x84);
@@ -5730,7 +5728,7 @@ label_123f4:
             
             /* In real implementation: gpio_direction_output(a0_2, gpio_state) */
             /* For simulation, just log the GPIO operation */
-            
+
             /* Binary Ninja: i += 1; $s1_1 += 2 */
         }
     }
@@ -6477,32 +6475,6 @@ static void frame_sim_timer_callback(unsigned long data)
         /* Restart timer for next frame (33ms for ~30 FPS) */
         mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
     }
-}
-
-/* Initialize frame simulation for fallback frame generation */
-static void init_frame_simulation(void)
-{
-    if (!frame_timer_initialized) {
-        /* Use old timer API for kernel 3.10 compatibility */
-        init_timer(&frame_sim_timer);
-        frame_sim_timer.function = frame_sim_timer_callback;
-        frame_sim_timer.data = 0;
-        frame_timer_initialized = true;
-        pr_info("Frame simulation timer initialized (30 FPS fallback)\n");
-    }
-    
-    /* Initialize VIC continuous frame generation work queue */
-    INIT_DELAYED_WORK(&vic_frame_work, vic_frame_work_function);
-}
-
-/* Stop frame simulation timer */
-static void stop_frame_simulation(void)
-{
-    if (frame_timer_initialized) {
-        del_timer_sync(&frame_sim_timer);
-    }
-    cancel_delayed_work_sync(&vic_frame_work);
-    pr_info("Frame generation stopped\n");
 }
 
 /* sensor_init - Binary Ninja exact implementation */
