@@ -2929,10 +2929,6 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             pr_info("Channel %d: Auto-starting streaming for frame wait\n", channel);
             state->streaming = true;
             state->enabled = true;
-            
-            if (frame_timer_initialized) {
-                mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
-            }
         }
         
         // Wait for frame with a short timeout
@@ -5300,11 +5296,8 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                     } else {
                         pr_info("*** ISP CORE STATUS ISSUE - CONTINUING WITH BUFFER MANAGEMENT ANYWAY ***\n");
                         
-                        /* CRITICAL: Initialize buffer recycling timer for green stream fix */
-                        pr_info("*** STARTING BUFFER RECYCLING TIMER FOR STREAM ***\n");
-                        if (frame_timer_initialized) {
-                            mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
-                        }
+                        /* Driver now relies purely on hardware interrupts - no simulation needed */
+                        pr_info("*** DRIVER RELIES ON HARDWARE INTERRUPTS ONLY ***\n");
                     }
                 }
             }
@@ -6404,57 +6397,6 @@ static void vic_frame_work_function(struct work_struct *work)
     }
 }
 
-static void frame_sim_timer_callback(unsigned long data)
-{
-    struct tx_isp_vic_device *vic_dev;
-    struct tx_isp_sensor *sensor = NULL;
-    int i;
-    bool any_streaming = false;
-    bool sensor_active = false;
-    unsigned long flags;
-    
-    /* Check if any channels are streaming or enabled */
-    for (i = 0; i < num_channels; i++) {
-        if (frame_channels[i].state.streaming || frame_channels[i].state.enabled) {
-            any_streaming = true;
-            
-            /* Generate frame for this channel */
-            spin_lock_irqsave(&frame_channels[i].state.buffer_lock, flags);
-            frame_channels[i].state.frame_ready = true;
-            spin_unlock_irqrestore(&frame_channels[i].state.buffer_lock, flags);
-            wake_up_interruptible(&frame_channels[i].state.frame_wait);
-        }
-    }
-    
-    if (any_streaming) {
-        /* Check if we have an active sensor */
-        if (ourISPdev && ourISPdev->sensor) {
-            sensor = ourISPdev->sensor;
-            if (sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
-                sensor_active = true;
-            }
-        }
-        
-        /* CRITICAL: Increment ISP frame counter for video drop detection */
-        if (ourISPdev) {
-            ourISPdev->frame_count++;
-            pr_debug("Frame timer: frame_count=%u (sensor %s)\n",
-                    ourISPdev->frame_count,
-                    sensor_active ? "active" : "inactive");
-        }
-        
-        /* If VIC is available, update its frame counter */
-        if (ourISPdev && ourISPdev->vic_dev) {
-            vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-            if (vic_dev) {
-                vic_dev->frame_count++;
-            }
-        }
-        
-        /* Restart timer for next frame (33ms for ~30 FPS) */
-        mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
-    }
-}
 
 /* sensor_init - Binary Ninja exact implementation */
 static int sensor_init(struct tx_isp_dev *isp_dev)
