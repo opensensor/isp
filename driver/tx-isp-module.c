@@ -192,7 +192,6 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
 static irqreturn_t isp_irq_handle(int irq, void *dev_id);
 static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 static int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
-static void frame_sim_timer_callback(unsigned long data);
 static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
@@ -263,10 +262,6 @@ static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference 
 /* VIC continuous frame generation work queue */
 static struct delayed_work vic_frame_work;
 static void vic_frame_work_function(struct work_struct *work);
-
-/* Timer for frame generation - used as fallback when hardware doesn't generate frames */
-static struct timer_list frame_sim_timer;
-static bool frame_timer_initialized = false;
 
 // ISP Tuning IOCTLs from reference (0x20007400 series)
 #define ISP_TUNING_GET_PARAM    0x20007400
@@ -2008,11 +2003,6 @@ static int frame_channel_open(struct inode *inode, struct file *file)
     
     file->private_data = fcd;
     
-    /* Start frame generation timer if first channel */
-    if (frame_timer_initialized && !timer_pending(&frame_sim_timer)) {
-        pr_info("Starting frame generation timer on channel open\n");
-        mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
-    }
     
     return 0;
 }
@@ -2395,10 +2385,6 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                 }
             }
             
-            // Start frame generation
-            if (frame_timer_initialized) {
-                mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
-            }
         }
         
         // *** CRITICAL: USE BINARY NINJA EVENT SYSTEM FOR QBUF - tx_isp_send_event_to_remote ***
@@ -2525,9 +2511,6 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             state->streaming = true;
             state->enabled = true;
             
-            if (frame_timer_initialized) {
-                mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
-            }
         }
         
         // Check if real sensor is connected and active
@@ -2831,11 +2814,6 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             }
         }
         
-        // Start frame timer (already initialized in init)
-        if (frame_timer_initialized) {
-            mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
-            pr_info("Channel %d: Frame generation started\n", channel);
-        }
         
         pr_info("Channel %d: Streaming enabled\n", channel);
         return 0;
@@ -3708,6 +3686,7 @@ static int tx_isp_init(void)
     if (ret) {
         pr_warn("Hardware interrupts not available: %d\n", ret);
     }
+
 
     pr_info("TX ISP driver ready\n");
     
