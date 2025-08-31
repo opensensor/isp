@@ -996,7 +996,6 @@ int tx_isp_vic_remove(struct platform_device *pdev)
     return 0;
 }
 /* Export symbols for use by other parts of the driver */
-EXPORT_SYMBOL(tx_isp_vic_start);
 EXPORT_SYMBOL(tx_isp_vic_stop);
 EXPORT_SYMBOL(tx_isp_vic_set_buffer);
 EXPORT_SYMBOL(tx_isp_vic_wait_frame_done);
