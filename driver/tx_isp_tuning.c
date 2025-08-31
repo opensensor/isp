@@ -1851,7 +1851,6 @@ int tisp_wdr_init(void)
     pr_info("tisp_wdr_init: WDR parameters initialized\n");
     return 0;
 }
-EXPORT_SYMBOL(tisp_wdr_init);
 EXPORT_SYMBOL(tiziano_wdr_init);
 
 /* ===== MISSING TIZIANO ISP PIPELINE COMPONENTS - Binary Ninja Reference ===== */
