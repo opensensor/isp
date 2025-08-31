@@ -988,14 +988,31 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         /* Also set the event handler directly on the pad for completeness */
         sd->inpads[0].event = vic_pad_event_handler;
         
-        /* Verify callback structure setup */
-        pr_info("*** VIC CALLBACK VERIFICATION ***\n");
+        /* DEEP VERIFICATION: Check struct layout and memory */
+        pr_info("*** VIC CALLBACK DEEP VERIFICATION ***\n");
+        pr_info("*** VIC: sizeof(vic_callback_struct) = %zu ***\n", sizeof(struct vic_callback_struct));
         pr_info("*** VIC: callback structure allocated at %p ***\n", callback);
-        pr_info("*** VIC: callback->event_callback set to %p ***\n", callback->event_callback);
+        pr_info("*** VIC: &callback->event_callback = %p ***\n", &callback->event_callback);
+        pr_info("*** VIC: callback + 0x1c = %p ***\n", ((char *)callback) + 0x1c);
         pr_info("*** VIC: vic_pad_event_handler function at %p ***\n", vic_pad_event_handler);
+        
+        /* Set the function pointer using direct memory access to be absolutely sure */
+        *((void **)(((char *)callback) + 0x1c)) = (void *)vic_pad_event_handler;
+        
+        /* Verify the assignment worked */
+        pr_info("*** VIC: callback->event_callback after assignment = %p ***\n", callback->event_callback);
+        pr_info("*** VIC: Direct read from callback+0x1c = %p ***\n", *((void **)(((char *)callback) + 0x1c)));
+        
+        /* Final verification */
         pr_info("*** VIC: sd->inpads[0].priv set to %p ***\n", sd->inpads[0].priv);
         pr_info("*** VIC: sd->inpads[0].event set to %p ***\n", sd->inpads[0].event);
-        pr_info("*** VIC EVENT CALLBACK SETUP COMPLETE ***\n");
+        
+        /* Verify the callback can be retrieved correctly */
+        struct vic_callback_struct *test_callback = (struct vic_callback_struct *)sd->inpads[0].priv;
+        pr_info("*** VIC: Retrieved callback = %p ***\n", test_callback);
+        pr_info("*** VIC: Retrieved callback->event_callback = %p ***\n", test_callback ? test_callback->event_callback : NULL);
+        
+        pr_info("*** VIC EVENT CALLBACK SETUP COMPLETE - VERIFIED ***\n");
     } else {
         pr_err("VIC: No input pads available for event callback\n");
         ret = -EINVAL;
