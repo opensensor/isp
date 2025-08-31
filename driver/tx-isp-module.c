@@ -1563,7 +1563,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         if (copy_from_user(&buffer, argp, sizeof(buffer)))
             return -EFAULT;
             
-        pr_debug("Channel %d: Queue buffer index=%d\n", channel, buffer.index);
+        pr_info("*** Channel %d: QBUF CALLED - Queue buffer index=%d ***\n", channel, buffer.index);
         
         // Auto-start streaming if not already started
         if (!state->streaming) {
