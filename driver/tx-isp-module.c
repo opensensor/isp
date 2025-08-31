@@ -5406,11 +5406,16 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                             
                 /* CRITICAL: Call tx_isp_vic_start FIRST to set vic_start_ok flag! */
                 pr_info("*** CALLING tx_isp_vic_start FIRST TO SET vic_start_ok FLAG ***\n");
-                int vic_start_result = tx_isp_vic_start(vic_dev, &tx_sensor->attr);
-                if (vic_start_result == 0) {
-                    pr_info("*** tx_isp_vic_start SUCCESS - vic_start_ok=1 SET! ***\n");
+                if (isp_dev->vic_dev) {
+                    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+                    int vic_start_result = tx_isp_vic_start(vic_dev, &tx_sensor->attr);
+                    if (vic_start_result == 0) {
+                        pr_info("*** tx_isp_vic_start SUCCESS - vic_start_ok=1 SET! ***\n");
+                    } else {
+                        pr_err("*** tx_isp_vic_start FAILED: %d ***\n", vic_start_result);
+                    }
                 } else {
-                    pr_err("*** tx_isp_vic_start FAILED: %d ***\n", vic_start_result);
+                    pr_err("*** NO VIC DEVICE FOR tx_isp_vic_start ***\n");
                 }
                 
                 /* EXACT tisp_init sequence for force sensor path */
