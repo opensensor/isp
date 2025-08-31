@@ -4142,6 +4142,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         
                         /* Verify ISP core enabled */
                         {
+                            int tisp_init_result = 0;
                             u32 core_status = readl(isp_regs + 0x800);
                             if (core_status == 1) {
                                 pr_info("*** tisp_init SUCCESS: ISP CORE ENABLED (status=0x%x) ***\n", core_status);
