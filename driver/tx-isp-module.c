@@ -1391,9 +1391,9 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
         /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, 
          *               isp_irq_thread_handle, 0x2000, *arg1, arg2) */
         ret = request_threaded_irq(irq_num, 
-                                  isp_irq_handle,          /* Primary handler from Binary Ninja */
-                                  isp_irq_thread_handle,   /* Threaded handler from Binary Ninja */
-                                  0x2000,                  /* Binary Ninja flags: IRQF_ONESHOT */
+                                  isp_vic_interrupt_service_routine,  /* Use VIC ISR directly */
+                                  NULL,                    /* No threaded handler needed */
+                                  IRQF_SHARED,             /* Standard shared IRQ flags */
                                   dev_name(&pdev->dev),    /* *arg1 - device name */
                                   isp_dev);                /* arg2 - dev_id */
         
