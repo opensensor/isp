@@ -1796,6 +1796,33 @@ int tisp_wdr_process(void)
 }
 EXPORT_SYMBOL(tisp_wdr_process);
 
+/* tiziano_wdr_init - WDR module initialization */
+int tiziano_wdr_init(uint32_t width, uint32_t height)
+{
+    pr_info("tiziano_wdr_init: Initializing WDR processing (%dx%d)\n", width, height);
+    
+    /* Initialize WDR-specific components and enable WDR mode */
+    tisp_gb_init();
+    
+    /* Enable WDR processing for all pipeline components */
+    tisp_dpc_wdr_en(1);
+    tisp_lsc_wdr_en(1);
+    tisp_gamma_wdr_en(1);
+    tisp_sharpen_wdr_en(1);
+    tisp_ccm_wdr_en(1);
+    tisp_bcsh_wdr_en(1);
+    tisp_rdns_wdr_en(1);
+    tisp_adr_wdr_en(1);
+    tisp_defog_wdr_en(1);
+    tisp_mdns_wdr_en(1);
+    tisp_dmsc_wdr_en(1);
+    tisp_ae_wdr_en(1);
+    tisp_sdns_wdr_en(1);
+    
+    pr_info("tiziano_wdr_init: WDR processing initialized successfully\n");
+    return 0;
+}
+
 /* Initialize WDR processing parameters */
 int tisp_wdr_init(void)
 {
@@ -1825,6 +1852,7 @@ int tisp_wdr_init(void)
     return 0;
 }
 EXPORT_SYMBOL(tisp_wdr_init);
+EXPORT_SYMBOL(tiziano_wdr_init);
 
 /* ===== MISSING TIZIANO ISP PIPELINE COMPONENTS - Binary Ninja Reference ===== */
 
