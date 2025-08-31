@@ -648,9 +648,6 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
             /* Binary Ninja: *(arg1 + 0xc) = callback_struct */
             *((void**)((char*)&vic_dev->sd + 0xc)) = vic_callback;
             
-            /* CRITICAL: Also store callback pointer directly in VIC device for debugging */
-            vic_dev->sd.event_callback = vic_callback;
-            
             /* CRITICAL: Verify callback registration immediately */
             void *test_callback = *((void**)((char*)&vic_dev->sd + 0xc));
             if (test_callback == vic_callback) {
