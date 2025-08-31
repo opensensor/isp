@@ -2425,34 +2425,27 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             }
         }
         
-        // *** CRITICAL: IMPLEMENT BINARY NINJA QBUF BUFFER ADDRESS UPDATES ***
+        // *** CRITICAL: USE BINARY NINJA EVENT SYSTEM FOR QBUF - tx_isp_send_event_to_remote ***
         if (channel == 0 && ourISPdev && ourISPdev->vic_dev && buffer.index < 8) {
             struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
             
-            if (vic_dev_buf && vic_dev_buf->vic_regs && vic_dev_buf->streaming) {
-                /* Binary Ninja ispvic_frame_channel_qbuf: 
-                 * *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2
-                 * This writes buffer physical address to VIC register for specific buffer index */
-                u32 buffer_phys_addr = 0x6300000 + (buffer.index * (1920 * 1080 * 2)); /* Calculate buffer address */
-                u32 buffer_reg_offset = (buffer.index + 0xc6) << 2; /* Binary Ninja register offset calculation */
+            if (vic_dev_buf) {
+                pr_info("*** Channel %d: QBUF - USING BINARY NINJA EVENT SYSTEM ***\n", channel);
+                pr_info("*** Channel %d: CALLING tx_isp_send_event_to_remote(VIC, 0x3000008, buffer_data) ***\n", channel);
                 
-                pr_info("*** Channel %d: QBUF Binary Ninja buffer address update ***\n", channel);
-                pr_info("Channel %d: Buffer[%d] phys_addr=0x%x -> VIC reg offset 0x%x\n", 
-                       channel, buffer.index, buffer_phys_addr, buffer_reg_offset);
+                /* Binary Ninja frame_channel_unlocked_ioctl shows QBUF calls:
+                 * tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000008, &var_78) 
+                 * This is the CRITICAL missing trigger that programs buffer addresses to VIC! */
                 
-                /* Write buffer address to VIC register - Binary Ninja exact implementation */
-                writel(buffer_phys_addr, vic_dev_buf->vic_regs + buffer_reg_offset);
-                wmb();
+                int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &buffer);
                 
-                pr_info("Channel %d: VIC buffer[%d] address 0x%x written to reg 0x%x\n",
-                       channel, buffer.index, buffer_phys_addr, buffer_reg_offset);
-                
-                /* Also update standard buffer registers for compatibility */
-                if (buffer.index < 5) {
-                    writel(buffer_phys_addr, vic_dev_buf->vic_regs + 0x318 + (buffer.index * 4));
-                    wmb();
-                    pr_info("Channel %d: Also updated VIC standard buffer reg 0x%x = 0x%x\n",
-                           channel, 0x318 + (buffer.index * 4), buffer_phys_addr);
+                if (event_result == 0) {
+                    pr_info("*** Channel %d: QBUF EVENT SUCCESS - VIC BUFFER ADDRESS PROGRAMMED! ***\n", channel);
+                } else if (event_result == 0xfffffdfd) {
+                    pr_info("*** Channel %d: QBUF EVENT - No VIC callback registered ***\n", channel);
+                } else {
+                    pr_err("*** Channel %d: QBUF EVENT FAILED: 0x%x ***\n", channel, event_result);
+                    pr_err("Channel %d: VIC_ADDR_DMA_CONTROL error: 0x%x\n", channel, event_result);
                 }
             }
         }
