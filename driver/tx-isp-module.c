@@ -1413,7 +1413,6 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
 {
-    struct platform_device *pdev = &tx_isp_platform_device;
     int ret;
     
     if (!isp_dev) {
@@ -1422,8 +1421,8 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
     
     pr_info("*** USING BINARY NINJA tx_isp_request_irq FOR HARDWARE INTERRUPTS ***\n");
     
-    /* Call Binary Ninja exact interrupt registration */
-    ret = tx_isp_request_irq(pdev, isp_dev);
+    /* Call Binary Ninja exact interrupt registration using global platform device */
+    ret = tx_isp_request_irq(&tx_isp_platform_device, isp_dev);
     if (ret == 0) {
         pr_info("*** Hardware interrupts initialized with Binary Ninja method (IRQ %d) ***\n", isp_dev->isp_irq);
     } else {
