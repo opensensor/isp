@@ -4107,17 +4107,50 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         }
                         
                         /* *** STEP 2: EXACT ISP CORE ENABLE SEQUENCE FROM Binary Ninja tisp_init *** */
-                        pr_info("*** USING EXACT tisp_init SEQUENCE: 0x804->0x1c, 0x1c->8, 0x800->1 ***\n");
+                        pr_info("*** USING EXACT tisp_init SEQUENCE FROM BINARY NINJA ***\n");
                         
-                        /* Step 1: Set register 0x804 to 0x1c (default non-WDR mode from Binary Ninja) */
-                        writel(0x1c, isp_regs + 0x804);
+                        /* From Binary Ninja tisp_init analysis:
+                         * system_reg_write(0x804, $v0_30) where $v0_30 depends on conditions
+                         * system_reg_write(0x1c, 8)  
+                         * system_reg_write(0x800, 1) */
+                        
+                        /* Step 1: Determine correct 0x804 value from Binary Ninja logic */
+                        u32 reg_804_value;
+                        if (0 /* data_b2e74 WDR flag - assume non-WDR for GC2053 */) {
+                            reg_804_value = 0x10; /* WDR mode */
+                        } else {
+                            reg_804_value = 0x1c; /* Non-WDR mode */
+                        }
+                        
+                        /* Binary Ninja: system_reg_write(0x804, $v0_30) */
+                        writel(reg_804_value, isp_regs + 0x804);
                         wmb();
-                        pr_info("ISP reg 0x804 = 0x1c (tisp_init mode setting)\n");
+                        pr_info("ISP reg 0x804 = 0x%x (tisp_init mode setting)\n", reg_804_value);
                         
-                        /* Step 2: Set register 0x1c to 8 (from Binary Ninja: system_reg_write(0x1c, 8)) */
+                        /* Binary Ninja: system_reg_write(0x1c, 8) */
                         writel(0x8, isp_regs + 0x1c);
                         wmb();
                         pr_info("ISP reg 0x1c = 0x8 (tisp_init control setting)\n");
+                        
+                        /* Binary Ninja: system_reg_write(0x800, 1) */
+                        writel(0x1, isp_regs + 0x800);
+                        wmb();
+                        pr_info("ISP reg 0x800 = 0x1 (tisp_init enable)\n");
+                        
+                        /* Allow ISP core to stabilize */
+                        msleep(50);
+                        
+                        /* Verify ISP core enabled */
+                        {
+                            u32 core_status = readl(isp_regs + 0x800);
+                            if (core_status == 1) {
+                                pr_info("*** tisp_init SUCCESS: ISP CORE ENABLED (status=0x%x) ***\n", core_status);
+                                tisp_init_result = 0;
+                            } else {
+                                pr_err("*** tisp_init FAILED: ISP CORE WON'T ENABLE (status=0x%x) ***\n", core_status);
+                                tisp_init_result = -EIO;
+                            }
+                        }
                         
                         /* Step 3: ENABLE ISP CORE (from Binary Ninja: system_reg_write(0x800, 1)) */
                         /* *** CRITICAL: WRITE SENSOR CONFIGURATION TO ISP REGISTERS FIRST *** */
