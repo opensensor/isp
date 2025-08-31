@@ -2113,7 +2113,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                             /* vic_pipo_mdma_enable - Binary Ninja exact sequence */
                             pr_info("*** Channel %d: VIC PIPO MDMA ENABLE - Binary Ninja exact sequence ***\n", channel);
                             pr_info("Channel %d: vic_pipo_mdma_enable: width=%d, height=%d, stride=%d\n", 
-                                   channel, vic_dev->width, vic_dev->height, vic_dev->width << 1);
+                                   channel, vic_dev->frame_width, vic_dev->frame_height, vic_dev->frame_width << 1);
                             
                             /* Step 1: Enable MDMA - reg 0x308 = 1 */
                             writel(1, vic_dev->vic_regs + 0x308);
@@ -2121,10 +2121,10 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                             pr_info("Channel %d: vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n", channel);
                             
                             /* Step 2: Set dimensions - reg 0x304 = (width << 16) | height */
-                            writel((vic_dev->width << 16) | vic_dev->height, vic_dev->vic_regs + 0x304);
+                            writel((vic_dev->frame_width << 16) | vic_dev->frame_height, vic_dev->vic_regs + 0x304);
                             wmb();
                             pr_info("Channel %d: vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
-                                   channel, (vic_dev->width << 16) | vic_dev->height, vic_dev->width, vic_dev->height);
+                                   channel, (vic_dev->frame_width << 16) | vic_dev->frame_height, vic_dev->frame_width, vic_dev->frame_height);
                             
                             /* Step 3: Set stride - reg 0x310/0x314 = stride */
                             u32 stride = vic_dev->frame_width << 1;
@@ -2135,7 +2135,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                             
                             /* Then set stream control register - Binary Ninja: 
                              * *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
-                            stream_ctrl = (vic_dev->buffer_count << 16) | 0x80000020;
+                            stream_ctrl = (vic_dev->frame_count << 16) | 0x80000020;
                             pr_info("*** Channel %d: STREAM ON: Setting reg 0x300 = 0x%x ***\n", channel, stream_ctrl);
                             writel(stream_ctrl, vic_dev->vic_regs + 0x300);
                             wmb();
@@ -2225,9 +2225,9 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         
         // *** CRITICAL: IMPLEMENT BINARY NINJA QBUF BUFFER ADDRESS UPDATES ***
         if (channel == 0 && ourISPdev && ourISPdev->vic_dev && buffer.index < 8) {
-            struct vic_device *vic_dev = (struct vic_device *)ourISPdev->vic_dev;
+            struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
             
-            if (vic_dev && vic_dev->vic_regs && vic_dev->streaming) {
+            if (vic_dev_buf && vic_dev_buf->vic_regs && vic_dev_buf->streaming) {
                 /* Binary Ninja ispvic_frame_channel_qbuf: 
                  * *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2
                  * This writes buffer physical address to VIC register for specific buffer index */
@@ -2239,7 +2239,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                        channel, buffer.index, buffer_phys_addr, buffer_reg_offset);
                 
                 /* Write buffer address to VIC register - Binary Ninja exact implementation */
-                writel(buffer_phys_addr, vic_dev->vic_regs + buffer_reg_offset);
+                writel(buffer_phys_addr, vic_dev_buf->vic_regs + buffer_reg_offset);
                 wmb();
                 
                 pr_info("Channel %d: VIC buffer[%d] address 0x%x written to reg 0x%x\n",
@@ -2247,7 +2247,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                 
                 /* Also update standard buffer registers for compatibility */
                 if (buffer.index < 5) {
-                    writel(buffer_phys_addr, vic_dev->vic_regs + 0x318 + (buffer.index * 4));
+                    writel(buffer_phys_addr, vic_dev_buf->vic_regs + 0x318 + (buffer.index * 4));
                     wmb();
                     pr_info("Channel %d: Also updated VIC standard buffer reg 0x%x = 0x%x\n",
                            channel, 0x318 + (buffer.index * 4), buffer_phys_addr);
