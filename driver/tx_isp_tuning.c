@@ -1401,6 +1401,17 @@ static int tiziano_wdr_algorithm(void)
     }
     
     /* Binary Ninja: Initialize output array pointer */
+    if (!data_d94f8) {
+        /* CRITICAL: Initialize data_d94f8 to prevent NULL pointer crash */
+        data_d94f8 = kmalloc(27 * sizeof(uint32_t), GFP_KERNEL);
+        if (!data_d94f8) {
+            pr_err("tiziano_wdr_algorithm: Failed to allocate output array\n");
+            return -ENOMEM;
+        }
+        memset(data_d94f8, 0, 27 * sizeof(uint32_t));
+        pr_info("tiziano_wdr_algorithm: Allocated WDR output array at %p\n", data_d94f8);
+    }
+    
     a2_1 = (uint32_t *)data_d94f8; /* Points to wdr output array */
     a3 = (wdr_ev_list_deghost_1 < wdr_ev_now_1) ? 1 : 0;
     i = 0;
@@ -1506,7 +1517,9 @@ static int tiziano_wdr_algorithm(void)
     }
     
     /* Binary Ninja: Calculate exposure ratio */
-    uint32_t lo_5 = (data_b1ee8 << 0xc) / (param_ratioPara_software_in_array[0] + 1);
+    uint32_t divisor = param_ratioPara_software_in_array[0] + 1;
+    if (divisor == 0) divisor = 1; /* Prevent division by zero */
+    uint32_t lo_5 = (data_b1ee8 << 0xc) / divisor;
     int32_t a2_5 = data_b15a8;
     wdr_exp_ratio_def = lo_5;
     data_b15a0 = lo_5;
