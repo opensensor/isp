@@ -639,8 +639,8 @@ static int tx_isp_activate_csi_subdev(struct tx_isp_dev *isp_dev)
     
     pr_info("*** ACTIVATING CSI SUBDEV FOR MIPI RECEPTION ***\n");
     
-    /* Use Binary Ninja tx_isp_csi_activate_subdev method */
-    return tx_isp_csi_activate_subdev(&csi_dev->sd);
+    /* Use Binary Ninja activation method */
+    return csi_activate_subdev_binary_ninja(&csi_dev->sd);
 }
 
 /* ===== CSI STANDALONE METHODS - Binary Ninja Reference Implementations ===== */
@@ -655,15 +655,16 @@ static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag)
     int lanes;
     int pixel_clock;
     int result = 0;
+    u32 reg_val;
     
-    if (!sd || sd >= (void*)0xfffff001) {
+    if (!sd) {
         pr_err("csi_core_ops_init: Invalid subdev\n");
         return -EINVAL;
     }
     
     /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
     csi_dev = (struct tx_isp_csi_device *)sd->isp->csi_dev;
-    if (!csi_dev || csi_dev >= (void*)0xfffff001) {
+    if (!csi_dev) {
         pr_err("csi_core_ops_init: Invalid CSI device\n");
         return -EINVAL;
     }
