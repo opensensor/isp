@@ -603,7 +603,6 @@ int tx_isp_reg_set(struct tx_isp_subdev *sd, unsigned int reg, int start, int en
 
 int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd, struct tx_isp_subdev_ops *ops);
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd);
-int tx_isp_send_event_to_remote(struct tx_isp_subdev_pad *pad, unsigned int cmd, void *data);
 
 static inline void tx_isp_set_module_nodeops(struct tx_isp_module *module, struct file_operations *ops)
 {
