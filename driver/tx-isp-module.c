@@ -5291,11 +5291,30 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                                     /* Wait for reset to complete */
                                     msleep(20);
                                     
-                                    /* CRITICAL: Module reset cleared ALL ISP registers - restore interrupt enables! */
-                                    pr_info("*** RESTORING ISP INTERRUPT ENABLES AFTER MODULE RESET ***\n");
-                                    writel(0xffffffff, isp_regs + 0x30);  /* Restore ALL interrupt enables */
+                                    /* CRITICAL: Module reset cleared ALL ISP registers - restore ALL tisp_init settings! */
+                                    pr_info("*** RESTORING ALL ISP SETTINGS AFTER MODULE RESET ***\n");
+                                    
+                                    /* Restore ALL interrupt and control registers from tisp_init */
+                                    writel(0xffffffff, isp_regs + 0x30);  /* All interrupt enables */
+                                    writel(0x133, isp_regs + 0x10);       /* Control register (linear mode) */
+                                    writel(0x8, isp_regs + 0x1c);         /* Interface control */
+                                    writel(0x1c, isp_regs + 0x804);       /* Mode value (linear) */
+                                    writel(0x1, isp_regs + 0x800);        /* ISP core enable */
                                     wmb();
-                                    pr_info("ISP interrupt enables restored: 0x30=0x%x\n", readl(isp_regs + 0x30));
+                                    
+                                    /* Verify all registers restored correctly */
+                                    u32 reg30 = readl(isp_regs + 0x30);
+                                    u32 reg800 = readl(isp_regs + 0x800);
+                                    pr_info("ISP ALL registers restored: 0x30=0x%x, 0x800=0x%x\n", reg30, reg800);
+                                    
+                                    if (reg30 != 0xffffffff) {
+                                        pr_err("*** CRITICAL: Register 0x30 not fully restored! Expected 0xffffffff, got 0x%x ***\n", reg30);
+                                        /* Force write again */
+                                        writel(0xffffffff, isp_regs + 0x30);
+                                        wmb();
+                                        reg30 = readl(isp_regs + 0x30);
+                                        pr_info("*** FORCE RETRY: Register 0x30 now = 0x%x ***\n", reg30);
+                                    }
                                     
                                     /* Test VIC accessibility after reset */
                                     writel(test_val, vic_regs + 0x4);
