@@ -3632,54 +3632,130 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         void __iomem *vic_regs = isp_dev->vic_regs;
                         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
                         
-                        /* *** STEP 1: PERFORM VIC UNLOCK WITH SENSOR ATTRIBUTES *** */
-                        pr_info("*** PERFORMING VIC UNLOCK WITH SENSOR ATTRIBUTES (GC2053) ***\n");
+                        /* *** STEP 1: CALL COMPLETE vic_mdma_enable FUNCTION FROM BINARY NINJA *** */
+                        pr_info("*** PERFORMING COMPLETE vic_mdma_enable FROM BINARY NINJA ***\n");
                         
-                        /* GC2053 sensor attributes from datasheet and SDK */
-                        u32 sensor_attr_0x74 = 1;   /* Frame mode: 1=progressive (GC2053) */
-                        u32 sensor_attr_0x78 = 0x2; /* Additional MIPI config for GC2053 */
-                        
-                        /* Calculate unlock key from sensor attributes (Binary Ninja formula) */
-                        u32 unlock_key = (sensor_attr_0x74 << 4) | sensor_attr_0x78;
-                        pr_info("VIC unlock key calculation: (0x%x << 4) | 0x%x = 0x%x\n",
-                               sensor_attr_0x74, sensor_attr_0x78, unlock_key);
-                        
-                        /* Execute VIC MDMA enable sequence from Binary Ninja - THIS UNLOCKS VIC! */
-                        pr_info("*** EXECUTING VIC MDMA ENABLE SEQUENCE FROM BINARY NINJA ***\n");
-                        
-                        /* Step 1: CRITICAL - Enable VIC MDMA (this unlocks register access!) */
-                        writel(1, vic_regs + 0x308);
-                        wmb();
-                        pr_info("VIC Step 1: Write 1 to reg 0x308 (MDMA enable - CRITICAL!)\n");
-                        
-                        /* Step 2: Configure frame dimensions */
-                        u32 frame_dims = (1920 << 16) | 1080;
-                        writel(frame_dims, vic_regs + 0x304);
-                        wmb();
-                        pr_info("VIC Step 2: Write 0x%x to reg 0x304 (frame dimensions)\n", frame_dims);
-                        
-                        /* Step 3: Configure stride (width * 2 for YUV format) */
-                        u32 stride = 1920 << 1;
-                        writel(stride, vic_regs + 0x310);
-                        writel(stride, vic_regs + 0x314);
-                        wmb();
-                        pr_info("VIC Step 3: Write %d to regs 0x310/0x314 (stride)\n", stride);
-                        
-                        /* Step 4: Configure buffer addresses */
-                        u32 frame_size = stride * 1080;
-                        u32 buffer_base = 0x6300000; /* From logs */
-                        writel(buffer_base, vic_regs + 0x318);
-                        writel(buffer_base + frame_size, vic_regs + 0x31c);
-                        writel(buffer_base + (frame_size * 2), vic_regs + 0x320);
-                        writel(buffer_base + (frame_size * 3), vic_regs + 0x324);
-                        wmb();
-                        pr_info("VIC Step 4: Configured buffer addresses (base=0x%x, size=%d)\n", buffer_base, frame_size);
-                        
-                        /* Step 5: Configure stream control register */
-                        u32 stream_ctrl = 0x80000020; /* From Binary Ninja */
-                        writel(stream_ctrl, vic_regs + 0x300);
-                        wmb();
-                        pr_info("VIC Step 5: Write 0x%x to reg 0x300 (stream control)\n", stream_ctrl);
+                        /* vic_mdma_enable parameters from Binary Ninja analysis:
+                         * arg1 = VIC device (vic_dev)
+                         * arg2 = ? (unknown, set to 0) 
+                         * arg3 = buffer mode (0 = sequential buffers)
+                         * arg4 = number of buffers (4)
+                         * arg5 = buffer base address (0x6300000)
+                         * arg6 = pixel format (0x2b for RAW10, but use 0 for standard YUV)
+                         */
+                        {
+                            /* Extract VIC device dimensions from offset 0xdc, 0xe0 (from Binary Ninja) */
+                            u32 width = 1920;   /* vic_dev + 0xdc */
+                            u32 height = 1080;  /* vic_dev + 0xe0 */
+                            u32 pixel_format = 0; /* arg6 - use 0 for standard YUV mode */
+                            u32 num_buffers = 4;  /* arg4 */
+                            u32 buffer_base = 0x6300000; /* arg5 */
+                            u32 buffer_mode = 0;  /* arg3 - 0 = sequential buffers */
+                            
+                            /* Calculate stride like vic_mdma_enable does */
+                            u32 stride;
+                            if (pixel_format != 7) {
+                                stride = width << 1; /* width * 2 for YUV format */
+                            } else {
+                                stride = width; /* RAW format */
+                            }
+                            
+                            u32 frame_size = stride * height;
+                            u32 double_frame_size = frame_size << 1;
+                            
+                            pr_info("vic_mdma_enable: width=%d, height=%d, stride=%d, frame_size=%d\n",
+                                   width, height, stride, frame_size);
+                            
+                            /* EXACT vic_mdma_enable register sequence from Binary Ninja */
+                            
+                            /* Step 1: Enable MDMA - *(*(arg1 + 0xb8) + 0x308) = 1 */
+                            writel(1, vic_regs + 0x308);
+                            wmb();
+                            pr_info("vic_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
+                            
+                            /* Step 2: Frame dimensions - *(*(arg1 + 0xb8) + 0x304) = width << 16 | height */
+                            u32 frame_dims = (width << 16) | height;
+                            writel(frame_dims, vic_regs + 0x304);
+                            wmb();
+                            pr_info("vic_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
+                                   frame_dims, width, height);
+                            
+                            /* Step 3: Stride registers - *(*(arg1 + 0xb8) + 0x310/314) = stride */
+                            writel(stride, vic_regs + 0x310);
+                            writel(stride, vic_regs + 0x314);
+                            wmb();
+                            pr_info("vic_mdma_enable: reg 0x310/314 = %d (stride)\n", stride);
+                            
+                            /* Step 4: Buffer addresses calculation from Binary Ninja */
+                            u32 buf0_addr = buffer_base;
+                            u32 buf1_addr, buf2_addr, buf3_addr, buf4_addr;
+                            
+                            if (buffer_mode == 0) {
+                                /* Sequential buffer mode from Binary Ninja */
+                                buf1_addr = frame_size + buffer_base;
+                                buf2_addr = frame_size + buf1_addr;  
+                                buf3_addr = frame_size + buf2_addr;
+                                buf4_addr = frame_size + buf3_addr;
+                            } else {
+                                /* Alternative buffer mode */
+                                buf1_addr = buffer_base + double_frame_size;
+                                buf2_addr = double_frame_size + buf1_addr;
+                                buf3_addr = double_frame_size + buf2_addr;
+                                buf4_addr = double_frame_size + buf3_addr;
+                            }
+                            
+                            /* Write buffer addresses like vic_mdma_enable */
+                            writel(buf0_addr, vic_regs + 0x318); /* Buffer 0 */
+                            writel(buf1_addr, vic_regs + 0x31c); /* Buffer 1 */
+                            writel(buf2_addr, vic_regs + 0x320); /* Buffer 2 */
+                            writel(buf3_addr, vic_regs + 0x324); /* Buffer 3 */
+                            writel(buf4_addr, vic_regs + 0x328); /* Buffer 4 */
+                            wmb();
+                            
+                            pr_info("vic_mdma_enable: buffers 0x%x, 0x%x, 0x%x, 0x%x, 0x%x\n",
+                                   buf0_addr, buf1_addr, buf2_addr, buf3_addr, buf4_addr);
+                            
+                            /* Additional buffer registers for format 7 (RAW mode) */
+                            if (pixel_format == 7) {
+                                u32 buf_alt1 = frame_size + buffer_base;
+                                u32 buf_alt2 = double_frame_size + buf_alt1;
+                                u32 buf_alt3 = double_frame_size + buf_alt2;
+                                u32 buf_alt4 = double_frame_size + buf_alt3;
+                                u32 buf_alt5 = double_frame_size + buf_alt4;
+                                
+                                writel(buf_alt1, vic_regs + 0x32c);
+                                writel(buf_alt2, vic_regs + 0x330); 
+                                writel(buf_alt3, vic_regs + 0x334);
+                                writel(buf_alt4, vic_regs + 0x338);
+                                writel(buf_alt5, vic_regs + 0x33c);
+                                wmb();
+                                
+                                pr_info("vic_mdma_enable: RAW mode additional buffers configured\n");
+                            }
+                            
+                            /* Secondary buffer set (from Binary Ninja analysis) */
+                            writel(buf1_addr, vic_regs + 0x340);
+                            writel(frame_size + buf1_addr, vic_regs + 0x344);
+                            writel(double_frame_size + buf1_addr, vic_regs + 0x348);
+                            writel(double_frame_size + (frame_size + buf1_addr), vic_regs + 0x34c);
+                            writel(double_frame_size + (double_frame_size + buf1_addr), vic_regs + 0x350);
+                            wmb();
+                            
+                            /* Step 5: Stream control register calculation from Binary Ninja */
+                            u32 stream_ctrl_base;
+                            if (num_buffers < 8) {
+                                stream_ctrl_base = (num_buffers << 16) | 0x80000020;
+                            } else {
+                                stream_ctrl_base = 0x80080020;
+                            }
+                            
+                            u32 stream_ctrl = stream_ctrl_base | pixel_format;
+                            writel(stream_ctrl, vic_regs + 0x300);
+                            wmb();
+                            
+                            pr_info("vic_mdma_enable: reg 0x300 = 0x%x (stream control, buffers=%d, fmt=%d)\n",
+                                   stream_ctrl, num_buffers, pixel_format);
+                        }
                         
                         /* Step 6: Test VIC register accessibility after MDMA enable */
                         {
