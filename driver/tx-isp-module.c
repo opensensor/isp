@@ -846,13 +846,21 @@ static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag)
 static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *sensor_attr)
 {
     struct tx_isp_csi_device *csi_dev;
+    struct tx_isp_dev *isp_dev;
     
     if (!sd || !sensor_attr) {
         pr_err("csi_sensor_ops_sync_sensor_attr: Invalid parameters\n");
         return -EINVAL;
     }
     
-    csi_dev = (struct tx_isp_csi_device *)sd->isp->csi_dev;
+    /* Cast isp pointer properly */
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if (!isp_dev) {
+        pr_err("csi_sensor_ops_sync_sensor_attr: Invalid ISP device\n");
+        return -EINVAL;
+    }
+    
+    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
     if (!csi_dev) {
         pr_err("csi_sensor_ops_sync_sensor_attr: No CSI device\n");
         return -EINVAL;
@@ -970,26 +978,35 @@ static int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     struct tx_isp_csi_device *csi_dev;
     struct tx_isp_sensor_attribute *sensor_attr;
     int interface_type;
+    int new_state;
+    struct tx_isp_dev *isp_dev;
     
-    if (!sd || sd >= (void*)0xfffff001) {
+    if (!sd) {
         pr_err("csi_video_s_stream: VIC failed to config DVP SONY mode!(10bits-sensor)\n");
         return -EINVAL;
     }
     
+    /* Cast isp pointer properly */
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if (!isp_dev) {
+        pr_err("csi_video_s_stream: Invalid ISP device\n");
+        return -EINVAL;
+    }
+    
     /* Binary Ninja: if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
-    sensor_attr = sd->isp->sensor ? sd->isp->sensor->video.attr : NULL;
+    sensor_attr = isp_dev->sensor ? isp_dev->sensor->video.attr : NULL;
     if (!sensor_attr || sensor_attr->dbus_type != 1) {
         pr_debug("csi_video_s_stream: Not DVP interface, skipping\n");
         return 0;
     }
     
-    csi_dev = (struct tx_isp_csi_device *)sd->isp->csi_dev;
+    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
     if (!csi_dev) {
         return -EINVAL;
     }
     
     /* Binary Ninja: int32_t $v0_4 = 4; if (arg2 == 0) $v0_4 = 3 */
-    int new_state = enable ? 4 : 3;
+    new_state = enable ? 4 : 3;
     
     /* Binary Ninja: *(arg1 + 0x128) = $v0_4 */
     csi_dev->state = new_state;
@@ -1004,15 +1021,21 @@ static int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 static int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_csi_device *csi_dev;
-    int i;
+    struct tx_isp_dev *isp_dev;
     
-    if (!sd || sd >= (void*)0xfffff001) {
+    if (!sd) {
+        return -EINVAL;
+    }
+    
+    /* Cast isp pointer properly */
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if (!isp_dev) {
         return -EINVAL;
     }
     
     /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
-    csi_dev = (struct tx_isp_csi_device *)sd->isp->csi_dev;
-    if (!csi_dev || csi_dev >= (void*)0xfffff001) {
+    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
+    if (!csi_dev) {
         return -EINVAL;
     }
     
