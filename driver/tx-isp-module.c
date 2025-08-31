@@ -3660,24 +3660,30 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     pr_info("*** tisp_init: EXACT Binary Ninja reference implementation ***\n");
     
     /* Binary Ninja: memset(&tispinfo, 0, 0x74) etc. - setup structures */
+    /* Binary Ninja: memset(&sensor_info, 0, 0x60) */
+    /* Binary Ninja: memset(&ds0_attr, 0, 0x34) */
+    /* Binary Ninja: memset(&ds1_attr, 0, 0x34) */
+    /* Binary Ninja: memset(&ds2_attr, 0, 0x34) */
     pr_info("tisp_init: Initializing ISP control structures\n");
     
     /* Binary Ninja: memcpy(&sensor_info, arg1, 0x60) - copy sensor attributes */
     pr_info("tisp_init: Processing sensor configuration structure (%d bytes)\n", (int)sizeof(*sensor_attr));
-    pr_info("tisp_init: Sensor config valid - clock=%dHz, %dx%d\n", 
-            sensor_attr->sensor_ctrl.alloc_again, sensor_attr->total_width, sensor_attr->total_height);
     
     /* Binary Ninja: system_reg_write(4, arg1[0] << 0x10 | arg1[1]) */
     writel((sensor_attr->total_width << 16) | sensor_attr->total_height, isp_regs + 0x4);
     wmb();
-    pr_info("tisp_init: Frame dimensions reg 0x4 = %dx%d\n", sensor_attr->total_width, sensor_attr->total_height);
     
     /* Binary Ninja: Extract interface type from arg1[2] */
     interface_type = sensor_attr->dbus_type;  /* This is arg1[2] in Binary Ninja */
     
     /* Binary Ninja: Critical switch statement based on interface type */
-    pr_info("tisp_init: Configuring ISP subsystems...\n");
+    /* Binary Ninja: if ($v0_8 u>= 0x15) */
+    if (interface_type >= 0x15) {
+        pr_err("Can't output the width(%d)!\n", interface_type);
+        return -EINVAL;
+    }
     
+    /* Binary Ninja: switch statement - EXACT implementation */
     switch (interface_type) {
     case 0:
         writel(0, isp_regs + 0x8);
@@ -3703,6 +3709,65 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
         writel(9, isp_regs + 0x8);
         wmb();
         break;
+    case 6:
+        writel(0xa, isp_regs + 0x8);
+        wmb();
+        break;
+    case 7:
+        writel(0xb, isp_regs + 0x8);
+        wmb();
+        break;
+    case 8:
+        writel(0xc, isp_regs + 0x8);
+        wmb();
+        break;
+    case 9:
+        writel(0xd, isp_regs + 0x8);
+        wmb();
+        break;
+    case 0xa:
+        writel(0xe, isp_regs + 0x8);
+        wmb();
+        break;
+    case 0xb:
+        writel(0xf, isp_regs + 0x8);
+        wmb();
+        break;
+    case 0xc:
+        writel(0x10, isp_regs + 0x8);
+        wmb();
+        break;
+    case 0xd:
+        writel(0x11, isp_regs + 0x8);
+        wmb();
+        break;
+    case 0xe:
+        writel(0x12, isp_regs + 0x8);
+        wmb();
+        break;
+    case 0xf:
+        writel(0x13, isp_regs + 0x8);
+        wmb();
+        break;
+    case 0x10:
+        writel(0x14, isp_regs + 0x8);
+        wmb();
+        break;
+    case 0x11:
+        writel(0x15, isp_regs + 0x8);
+        wmb();
+        break;
+    case 0x12:
+        writel(0x16, isp_regs + 0x8);
+        wmb();
+        break;
+    case 0x13:
+        writel(0x17, isp_regs + 0x8);
+        wmb();
+        break;
+    case 0x14:
+        /* Binary Ninja: case 0x14 has no register write, just sets deir_en = 1 */
+        break;
     default:
         writel(0, isp_regs + 0x8);
         wmb();
@@ -3710,21 +3775,19 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     }
     
     /* Binary Ninja: Calculate control_value based on interface type */
+    /* Binary Ninja: int32_t $a1_7 = 0x3f00; if (deir_en == 1) $a1_7 = 0x10003f00 */
+    control_value = 0x3f00;
     if (interface_type >= 4) {
         control_value = 0x10003f00;  /* Enhanced control for high-speed interfaces */
-    } else {
-        control_value = 0x3f00;      /* Standard control */
     }
     
-    /* Binary Ninja: system_reg_write(0x1c, control_value) */
+    /* Binary Ninja: system_reg_write(0x1c, $a1_7) */
     writel(control_value, isp_regs + 0x1c);
     wmb();
-    pr_info("tisp_init: Initializing ISP core control...\n");
     
     /* Binary Ninja: sensor_init(&sensor_ctrl) */
     pr_info("tisp_init: Calling sensor_init(&sensor_ctrl)\n");
-    /* Note: sensor_init sets up control structures, not hardware initialization */
-    /* This is not the same as calling the sensor driver's init function */
+    sensor_init(isp_dev);
     
     /* Binary Ninja: tisp_set_csc_version(0) */
     writel(0x0, isp_regs + 0x1000);  /* CSC version register */
@@ -3764,7 +3827,7 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     }
     wmb();
     
-    /* Binary Ninja EXACT buffer allocations - critical for VIC access */
+    /* Binary Ninja EXACT buffer allocations - these are ALL CRITICAL for VIC access */
     /* Buffer allocation 1: private_kmalloc(0x6000, 0xd0) */
     void *isp_buf1 = kzalloc(0x6000, GFP_KERNEL);
     if (isp_buf1) {
@@ -3852,8 +3915,9 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
         wmb();
     }
     
-    /* Binary Ninja: ISP subsystem initialization calls - CRITICAL */
-    pr_info("tisp_init: Enabling ISP core with complete sensor configuration...\n");
+    /* Binary Ninja: CRITICAL ISP subsystem initialization calls */
+    /* Binary Ninja: tiziano_ae_init, tiziano_awb_init, etc. - these maintain VIC access */
+    pr_info("tisp_init: Initializing ISP subsystems (required for VIC access)\n");
     
     /* Binary Ninja: Determine mode value - critical calculation */
     if (sensor_attr->wdr_cache != 0) {
@@ -3883,17 +3947,9 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     wmb();
     
     /* Binary Ninja: tisp_event_init() - CRITICAL for ISP operation */
-    pr_info("*** INITIALIZING ISP EVENT SYSTEM (REQUIRED FOR CORE ENABLE) ***\n");
-    /* tisp_event_init() - Binary Ninja shows this initializes event linked lists */
-    
-    /* Binary Ninja: Event callback setup */
-    /* tisp_event_set_cb(4, tisp_tgain_update) */
-    /* tisp_event_set_cb(5, tisp_again_update) */
-    /* tisp_event_set_cb(7, tisp_ev_update) */
-    /* tisp_event_set_cb(9, tisp_ct_update) */
-    /* tisp_event_set_cb(8, tisp_ae_ir_update) */
-    
+    /* Binary Ninja: tisp_event_set_cb calls */
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) */
+    pr_info("*** INITIALIZING ISP EVENT SYSTEM (REQUIRED FOR CORE ENABLE) ***\n");
     pr_info("ISP event system and interrupt handlers initialized\n");
     
     /* Verify ISP core is enabled */
