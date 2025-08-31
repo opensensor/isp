@@ -2363,11 +2363,17 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                                 if (ourISPdev->vic_regs) {
                                     void __iomem *isp_regs = ourISPdev->vic_regs - 0x9a00;
                                     
-                                    /* Enable ISP to VIC interrupt routing */
-                                    writel(0x1, isp_regs + 0x30);  /* ISP interrupt enable */
-                                    writel(0x1, isp_regs + 0x38);  /* VIC specific interrupt enable */
+                                    /* CRITICAL: Preserve existing interrupt enables from tisp_init (0xffffffff) */
+                                    /* Use bitwise OR to ADD VIC interrupts without disabling others */
+                                    u32 current_irq_enable = readl(isp_regs + 0x30);
+                                    writel(current_irq_enable | 0x1, isp_regs + 0x30);  /* Add VIC to existing enables */
+                                    
+                                    u32 current_vic_enable = readl(isp_regs + 0x38);  
+                                    writel(current_vic_enable | 0x1, isp_regs + 0x38);  /* Add VIC specific enables */
                                     wmb();
-                                    pr_info("Channel %d: ISP interrupt routing enabled for VIC\n", channel);
+                                    
+                                    pr_info("Channel %d: ISP interrupt preserved: 0x30=0x%x, 0x38=0x%x\n", 
+                                           channel, readl(isp_regs + 0x30), readl(isp_regs + 0x38));
                                     
                                     /* Enable VIC interrupt generation at the source */
                                     writel(0x1, vic_dev->vic_regs + 0x1e0);  /* Enable status generation */
