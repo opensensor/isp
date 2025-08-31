@@ -192,8 +192,6 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
 static irqreturn_t isp_irq_handle(int irq, void *dev_id);
 static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 static int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
-static void init_frame_simulation(void);
-static void stop_frame_simulation(void);
 static void frame_sim_timer_callback(unsigned long data);
 static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
@@ -598,7 +596,6 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
     ret = tx_isp_init_vic_registers(isp_dev);
     if (ret) {
         pr_warn("VIC register mapping failed: %d\n", ret);
-        // Continue without hardware registers (simulation mode)
     }
     
     // Allocate VIC device (0x21c bytes exactly like reference)
@@ -1445,7 +1442,6 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
         pr_info("*** Hardware interrupts initialized with Binary Ninja method (IRQ %d) ***\n", isp_dev->isp_irq);
     } else {
         pr_warn("*** Binary Ninja interrupt registration failed: %d ***\n", ret);
-        pr_info("*** Hardware interrupts not available - will use simulation ***\n");
     }
     
     return ret;
@@ -1722,7 +1718,7 @@ static int tx_isp_video_s_stream_impl(struct tx_isp_dev *isp_dev, int enable)
     return 0;
 }
 
-/* Real hardware frame completion detection - replaces timer simulation - SDK compatible */
+/* Real hardware frame completion detection - SDK compatible */
 static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel)
 {
     if (!isp_dev || channel < 0 || channel >= num_channels) {
@@ -3709,10 +3705,8 @@ static int tx_isp_init(void)
     if (ret) {
         pr_warn("Hardware interrupts not available: %d\n", ret);
     }
-    
-    /* Always initialize frame simulation as fallback */
-    init_frame_simulation();
-    pr_info("TX ISP driver ready - frame generation available\n");
+
+    pr_info("TX ISP driver ready\n");
     
     return 0;
 
@@ -3740,8 +3734,6 @@ static void tx_isp_exit(void)
         
         /* Note: CGU_ISP and VIC clocks managed locally, no storage in device struct */
         pr_info("Additional clocks cleaned up\n");
-        /* Stop frame simulation timer if running */
-        stop_frame_simulation();
         
         /* Clean up I2C infrastructure */
         cleanup_i2c_infrastructure(ourISPdev);
@@ -5727,8 +5719,6 @@ label_123f4:
             pr_debug("vic_framedone_irq_function: GPIO %d set to %d\n", a0_2, gpio_state);
             
             /* In real implementation: gpio_direction_output(a0_2, gpio_state) */
-            /* For simulation, just log the GPIO operation */
-
             /* Binary Ninja: i += 1; $s1_1 += 2 */
         }
     }
