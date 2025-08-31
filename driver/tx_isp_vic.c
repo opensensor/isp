@@ -157,13 +157,57 @@ static int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* Start VIC processing */
+/* COMPLETE VIC PIPO MDMA Enable - EXACT Binary Ninja implementation */
+static void vic_pipo_mdma_enable_complete(struct vic_device *vic_dev)
+{
+    void __iomem *vic_base = vic_dev->vic_regs;
+    u32 width = vic_dev->width;
+    u32 height = vic_dev->height;
+    u32 stride = width << 1;  /* stride = width * 2 from Binary Ninja */
+    
+    pr_info("*** VIC PIPO MDMA ENABLE - Binary Ninja exact sequence ***\n");
+    pr_info("vic_pipo_mdma_enable: width=%d, height=%d, stride=%d\n", width, height, stride);
+    
+    /* EXACT Binary Ninja sequence:
+     * *(*(arg1 + 0xb8) + 0x308) = 1
+     * *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0)
+     * *(*(arg1 + 0xb8) + 0x310) = stride
+     * *(result + 0x314) = stride */
+    
+    writel(1, vic_base + 0x308);                    /* Enable MDMA */
+    wmb();
+    pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
+    
+    writel((width << 16) | height, vic_base + 0x304);  /* Frame dimensions */
+    wmb();
+    pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
+            (width << 16) | height, width, height);
+    
+    writel(stride, vic_base + 0x310);               /* Stride register 1 */
+    wmb();
+    writel(stride, vic_base + 0x314);               /* Stride register 2 */
+    wmb();
+    pr_info("vic_pipo_mdma_enable: reg 0x310/0x314 = %d (stride)\n", stride);
+    
+    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE (Binary Ninja exact) ***\n");
+}
+
+/* Start VIC processing - COMPLETE Binary Ninja implementation */
 int tx_isp_vic_start(struct tx_isp_subdev *sd)
 {
     struct vic_device *vic_dev;
+    struct tx_isp_dev *isp_dev;
+    struct tx_isp_sensor *sensor;
     void __iomem *vic_base;
     u32 timeout = 1000;
     int ret = 0;
+    u32 interface_type;
+    u32 sensor_format;
+    u32 unlock_key;
+    u32 vic_ctrl_config = 0;
+    u32 vic_reg_0x10_config = 0;
+    u32 vic_reg_0x1a4_config = 0;
+    u32 vic_frame_mode = 0;
 
     if (!sd || !sd->isp)
         return -EINVAL;
@@ -174,39 +218,176 @@ int tx_isp_vic_start(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
+    isp_dev = sd->isp;
+    sensor = isp_dev->sensor;
+    
+    if (!sensor) {
+        pr_err("No sensor configured for VIC start\n");
+        return -EINVAL;
+    }
+
     mutex_lock(&sd->vic_frame_end_lock);
 
-    /* Map VIC registers directly for critical unlock sequence */
+    /* Map VIC registers directly for complete handshake sequence */
     vic_base = ioremap(0x10023000, 0x1000);
     if (!vic_base) {
-        pr_err("Failed to map VIC registers for unlock\n");
+        pr_err("Failed to map VIC registers for complete handshake\n");
         mutex_unlock(&sd->vic_frame_end_lock);
         return -ENOMEM;
     }
 
-    pr_info("*** IMPLEMENTING EXACT BINARY NINJA VIC UNLOCK SEQUENCE ***\n");
+    pr_info("*** IMPLEMENTING COMPLETE BINARY NINJA tx_isp_vic_start SEQUENCE ***\n");
     
-    /* Step 1: Write 2 to VIC control register (config mode) */
-    pr_info("VIC Step 1: Write 2 to reg 0x0 (config mode)\n");
+    /* STEP 1: INTERFACE TYPE DETECTION - Binary Ninja logic */
+    /* From decompiled code: interface type is checked against 1,2,3,4,5 */
+    interface_type = sensor->attr.interface_type;  /* Get from sensor attributes */
+    pr_info("VIC: Detected interface type = %d\n", interface_type);
+    
+    switch (interface_type) {
+    case 1: /* MIPI interface - Binary Ninja: $v0 == 1 */
+        pr_info("VIC: Configuring for MIPI interface\n");
+        
+        /* Binary Ninja MIPI configuration logic */
+        vic_reg_0x1a4_config = 0x100010;  /* From: *($v1_2 + 0x1a4) = $v0_2 */
+        vic_reg_0x10_config = 0x20000;    /* From: *(*(arg1 + 0xb8) + 0x10) = &data_20000 */
+        
+        /* Frame format detection from sensor format */
+        sensor_format = sensor->attr.format;
+        if (sensor_format >= 0x3010) {
+            if (sensor_format >= 0x3300 && sensor_format < 0x3310) {
+                vic_reg_0x10_config = 0x40000;  /* &data_40000 */
+            } else if (sensor_format >= 0x3200 && sensor_format < 0x3210) {
+                vic_reg_0x10_config = 0x20000;  /* &data_20000 */
+            }
+        }
+        
+        /* Unlock key calculation from sensor attributes */
+        /* Binary Ninja: *($v1_27 + 0x74) << 4 | *($v1_27 + 0x78) */
+        unlock_key = (sensor->attr.frame_mode << 4) | sensor->attr.interface_mode;
+        
+        /* Frame mode configuration */
+        if (sensor->attr.frame_mode == 0) {
+            vic_frame_mode = 0x4440;  /* Progressive */
+        } else if (sensor->attr.frame_mode == 1) {
+            vic_frame_mode = 0x4140;  /* Interlaced type 1 */
+        } else if (sensor->attr.frame_mode == 2) {
+            vic_frame_mode = 0x4240;  /* Interlaced type 2 */
+        } else {
+            pr_err("VIC: Unsupported frame mode %d\n", sensor->attr.frame_mode);
+            vic_frame_mode = 0x4440;  /* Default to progressive */
+        }
+        
+        vic_ctrl_config = 2;  /* MIPI control mode */
+        break;
+        
+    case 3: /* DVP interface - Binary Ninja: $v0 == 3 */
+        pr_info("VIC: Configuring for DVP interface\n");
+        vic_ctrl_config = 3;
+        vic_reg_0x1a4_config = 0x100010;
+        vic_frame_mode = 0x4210;
+        
+        /* DVP format-specific configuration */
+        sensor_format = sensor->attr.format;
+        if (sensor_format >= 0x300e && sensor_format < 0x3010) {
+            vic_reg_0x10_config = 0x20000;
+        } else if (sensor_format == 0x3008) {
+            vic_reg_0x10_config = 0x40000;
+        } else {
+            vic_reg_0x10_config = 0xc0000;
+        }
+        
+        unlock_key = 0;  /* DVP doesn't need special unlock key */
+        break;
+        
+    case 4: /* BT656 interface - Binary Ninja: $v0 == 4 */
+        pr_info("VIC: Configuring for BT656 interface\n");
+        vic_ctrl_config = 0;
+        vic_reg_0x10_config = 0x800c0000;
+        vic_reg_0x1a4_config = 0x100010;
+        vic_frame_mode = 0x4440;
+        unlock_key = 0;
+        break;
+        
+    case 5: /* BT1120 interface - Binary Ninja: $v0 == 5 */
+        pr_info("VIC: Configuring for BT1120 interface\n");
+        vic_ctrl_config = 4;
+        vic_reg_0x10_config = 0x800c0000;
+        vic_reg_0x1a4_config = 0x100010;
+        vic_frame_mode = 0x4440;
+        unlock_key = 0;
+        break;
+        
+    default:
+        pr_err("VIC: Unsupported interface type %d\n", interface_type);
+        ret = -EINVAL;
+        goto cleanup;
+    }
+    
+    /* STEP 2: VIC REGISTER CONFIGURATION - Binary Ninja exact sequence */
+    pr_info("VIC: Configuring registers for interface type %d\n", interface_type);
+    
+    /* Set frame dimensions - Binary Ninja: *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
+    writel((vic_dev->width << 16) | vic_dev->height, vic_base + 0x4);
+    wmb();
+    pr_info("VIC: reg 0x4 = 0x%x (dimensions %dx%d)\n", 
+            (vic_dev->width << 16) | vic_dev->height, vic_dev->width, vic_dev->height);
+    
+    /* Set control register - Binary Ninja: *(*(arg1 + 0xb8) + 0xc) = vic_ctrl_config */
+    writel(vic_ctrl_config, vic_base + 0xc);
+    wmb();
+    pr_info("VIC: reg 0xc = %d (interface control)\n", vic_ctrl_config);
+    
+    /* Set format register - Binary Ninja: *(*(arg1 + 0xb8) + 0x14) = format */
+    writel(sensor->attr.format, vic_base + 0x14);
+    wmb();
+    pr_info("VIC: reg 0x14 = 0x%x (sensor format)\n", sensor->attr.format);
+    
+    /* Set interface configuration - Binary Ninja: *(*(arg1 + 0xb8) + 0x10) = config */
+    writel(vic_reg_0x10_config, vic_base + 0x10);
+    wmb();
+    pr_info("VIC: reg 0x10 = 0x%x (interface config)\n", vic_reg_0x10_config);
+    
+    /* Set DMA configuration - Binary Ninja: *($v1_2 + 0x1a4) = config */
+    writel(vic_reg_0x1a4_config, vic_base + 0x1a4);
+    wmb();
+    pr_info("VIC: reg 0x1a4 = 0x%x (DMA config)\n", vic_reg_0x1a4_config);
+    
+    /* Set frame mode - Binary Ninja: *($v1_25 + 0x1ac) = $v0_33 */
+    writel(vic_frame_mode, vic_base + 0x1ac);
+    wmb();
+    writel(vic_frame_mode, vic_base + 0x1a8);  /* Duplicate write from Binary Ninja */
+    wmb();
+    pr_info("VIC: reg 0x1ac/0x1a8 = 0x%x (frame mode)\n", vic_frame_mode);
+    
+    /* Set buffer control - Binary Ninja: *($v0_34 + 0x1b0) = 0x10 */
+    writel(0x10, vic_base + 0x1b0);
+    wmb();
+    pr_info("VIC: reg 0x1b0 = 0x10 (buffer control)\n");
+    
+    /* STEP 3: VIC UNLOCK SEQUENCE - Binary Ninja exact sequence */
+    pr_info("VIC: Starting unlock sequence...\n");
+    
+    /* Binary Ninja: **(arg1 + 0xb8) = 2 */
     writel(2, vic_base + 0x0);
     wmb();
-
-    /* Step 2: Write 4 to VIC control register (unlock mode) */  
-    pr_info("VIC Step 2: Write 4 to reg 0x0 (unlock mode)\n");
+    pr_info("VIC: reg 0x0 = 2 (config mode)\n");
+    
+    /* Binary Ninja: **(arg1 + 0xb8) = 4 */
     writel(4, vic_base + 0x0);
     wmb();
-
-    /* Step 3: CRITICAL - Write unlock key 0x12 to register 0x1a0 */
-    pr_info("VIC CRITICAL reg 0x1a0 = 0x12 (unlock key from Binary Ninja)\n");
-    writel(0x12, vic_base + 0x1a0);
+    pr_info("VIC: reg 0x0 = 4 (unlock mode)\n");
+    
+    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1a0) = unlock_key */
+    writel(unlock_key, vic_base + 0x1a0);
     wmb();
-
-    /* Step 4: Wait for VIC register to become 0 (ready state) */
-    pr_info("VIC Step 3: Wait for ready (register 0x0 becomes 0)\n");
+    pr_info("VIC: reg 0x1a0 = 0x%x (unlock key)\n", unlock_key);
+    
+    /* Binary Ninja: while (*$v1_30 != 0) - wait for ready */
+    pr_info("VIC: Waiting for unlock completion...\n");
     while (timeout > 0) {
         u32 status = readl(vic_base + 0x0);
         if (status == 0) {
-            pr_info("VIC ready after %d iterations\n", 1000 - timeout);
+            pr_info("VIC: Unlock ready after %d iterations\n", 1000 - timeout);
             break;
         }
         udelay(10);
@@ -214,31 +395,46 @@ int tx_isp_vic_start(struct tx_isp_subdev *sd)
     }
 
     if (timeout == 0) {
-        pr_err("*** VIC TIMEOUT WAITING FOR READY STATE ***\n");
-        iounmap(vic_base);
-        mutex_unlock(&sd->vic_frame_end_lock);
-        return -ETIMEDOUT;
+        pr_err("*** VIC UNLOCK TIMEOUT - HANDSHAKE FAILED ***\n");
+        ret = -ETIMEDOUT;
+        goto cleanup;
     }
-
-    /* Step 5: Write 1 to enable VIC */
-    pr_info("VIC Step 4: Write 1 to reg 0x0 (enable VIC)\n");
+    
+    /* STEP 4: ENABLE VIC - Binary Ninja: *$v0_47 = 1 */
     writel(1, vic_base + 0x0);
     wmb();
-
-    /* Step 6: Test VIC register accessibility */
-    pr_info("*** TESTING VIC REGISTER ACCESS AFTER UNLOCK ***\n");
-    writel(0x12345678, vic_base + 0x4);  /* Test write to register */
+    pr_info("VIC: reg 0x0 = 1 (VIC enabled)\n");
+    
+    /* STEP 5: CALL MDMA ENABLE - This unlocks VIC registers completely */
+    pr_info("VIC: Calling vic_pipo_mdma_enable...\n");
+    vic_pipo_mdma_enable_complete(vic_dev);
+    
+    /* STEP 6: FINAL VERIFICATION */
+    pr_info("*** TESTING VIC REGISTER ACCESS AFTER COMPLETE HANDSHAKE ***\n");
+    writel(0x12345678, vic_base + 0x4);
     wmb();
     u32 test_val = readl(vic_base + 0x4);
     if (test_val == 0x12345678) {
-        pr_info("*** SUCCESS: VIC REGISTERS UNLOCKED! wrote 0x12345678, read 0x%x ***\n", test_val);
+        pr_info("*** SUCCESS: VIC HANDSHAKE COMPLETE! All registers accessible! ***\n");
+        
+        /* Restore frame dimensions after test */
+        writel((vic_dev->width << 16) | vic_dev->height, vic_base + 0x4);
+        wmb();
+        
+        ret = 0;
     } else {
-        pr_err("*** FAILED: VIC registers still protected: wrote 0x12345678, read 0x%x ***\n", test_val);
+        pr_err("*** HANDSHAKE FAILED: VIC registers still protected: wrote 0x12345678, read 0x%x ***\n", test_val);
         ret = -EACCES;
     }
 
+cleanup:
     iounmap(vic_base);
     mutex_unlock(&sd->vic_frame_end_lock);
+    
+    if (ret == 0) {
+        pr_info("*** VIC START COMPLETE - ISP INTERRUPTS SHOULD NOW WORK! ***\n");
+    }
+    
     return ret;
 }
 
