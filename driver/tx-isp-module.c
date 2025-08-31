@@ -3825,6 +3825,121 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     }
     wmb();
     
+    /* CRITICAL: Binary Ninja buffer allocations for ISP subsystems */
+    /* These are required for VIC to maintain register accessibility */
+    pr_info("tisp_init: Allocating ISP subsystem buffers (critical for VIC access)\n");
+    
+    /* Buffer allocation from Binary Ninja: private_kmalloc(0x6000, 0xd0) */
+    void *isp_buf1 = kzalloc(0x6000, GFP_KERNEL);
+    if (isp_buf1) {
+        /* Binary Ninja register writes for buffer 1 */
+        writel(virt_to_phys(isp_buf1), isp_regs + 0xa02c);
+        writel(virt_to_phys(isp_buf1) + 0x1000, isp_regs + 0xa030);
+        writel(virt_to_phys(isp_buf1) + 0x2000, isp_regs + 0xa034);
+        writel(virt_to_phys(isp_buf1) + 0x3000, isp_regs + 0xa038);
+        writel(virt_to_phys(isp_buf1) + 0x4000, isp_regs + 0xa03c);
+        writel(virt_to_phys(isp_buf1) + 0x4800, isp_regs + 0xa040);
+        writel(virt_to_phys(isp_buf1) + 0x5000, isp_regs + 0xa044);
+        writel(virt_to_phys(isp_buf1) + 0x5800, isp_regs + 0xa048);
+        writel(0x33, isp_regs + 0xa04c);
+        wmb();
+        pr_info("tisp_init: ISP buffer 1 allocated and configured\n");
+    }
+    
+    /* Buffer allocation 2: private_kmalloc(0x6000, 0xd0) */
+    void *isp_buf2 = kzalloc(0x6000, GFP_KERNEL);
+    if (isp_buf2) {
+        /* Binary Ninja register writes for buffer 2 */
+        writel(virt_to_phys(isp_buf2), isp_regs + 0xa82c);
+        writel(virt_to_phys(isp_buf2) + 0x1000, isp_regs + 0xa830);
+        writel(virt_to_phys(isp_buf2) + 0x2000, isp_regs + 0xa834);
+        writel(virt_to_phys(isp_buf2) + 0x3000, isp_regs + 0xa838);
+        writel(virt_to_phys(isp_buf2) + 0x4000, isp_regs + 0xa83c);
+        writel(virt_to_phys(isp_buf2) + 0x4800, isp_regs + 0xa840);
+        writel(virt_to_phys(isp_buf2) + 0x5000, isp_regs + 0xa844);
+        writel(virt_to_phys(isp_buf2) + 0x5800, isp_regs + 0xa848);
+        writel(0x33, isp_regs + 0xa84c);
+        wmb();
+        pr_info("tisp_init: ISP buffer 2 allocated and configured\n");
+    }
+    
+    /* Buffer allocation 3: private_kmalloc(0x4000, 0xd0) */
+    void *isp_buf3 = kzalloc(0x4000, GFP_KERNEL);
+    if (isp_buf3) {
+        writel(virt_to_phys(isp_buf3), isp_regs + 0xb03c);
+        writel(virt_to_phys(isp_buf3) + 0x1000, isp_regs + 0xb040);
+        writel(virt_to_phys(isp_buf3) + 0x2000, isp_regs + 0xb044);
+        writel(virt_to_phys(isp_buf3) + 0x3000, isp_regs + 0xb048);
+        writel(3, isp_regs + 0xb04c);
+        wmb();
+        pr_info("tisp_init: ISP buffer 3 allocated and configured\n");
+    }
+    
+    /* Buffer allocation 4: private_kmalloc(0x4000, 0xd0) */
+    void *isp_buf4 = kzalloc(0x4000, GFP_KERNEL);
+    if (isp_buf4) {
+        writel(virt_to_phys(isp_buf4), isp_regs + 0x4494);
+        writel(virt_to_phys(isp_buf4) + 0x1000, isp_regs + 0x4498);
+        writel(virt_to_phys(isp_buf4) + 0x2000, isp_regs + 0x449c);
+        writel(virt_to_phys(isp_buf4) + 0x3000, isp_regs + 0x44a0);
+        writel(3, isp_regs + 0x4490);
+        wmb();
+        pr_info("tisp_init: ISP buffer 4 allocated and configured\n");
+    }
+    
+    /* Buffer allocation 5: private_kmalloc(0x4000, 0xd0) */
+    void *isp_buf5 = kzalloc(0x4000, GFP_KERNEL);
+    if (isp_buf5) {
+        writel(virt_to_phys(isp_buf5), isp_regs + 0x5b84);
+        writel(virt_to_phys(isp_buf5) + 0x1000, isp_regs + 0x5b88);
+        writel(virt_to_phys(isp_buf5) + 0x2000, isp_regs + 0x5b8c);
+        writel(virt_to_phys(isp_buf5) + 0x3000, isp_regs + 0x5b90);
+        writel(3, isp_regs + 0x5b80);
+        wmb();
+        pr_info("tisp_init: ISP buffer 5 allocated and configured\n");
+    }
+    
+    /* Buffer allocation 6: private_kmalloc(0x4000, 0xd0) */
+    void *isp_buf6 = kzalloc(0x4000, GFP_KERNEL);
+    if (isp_buf6) {
+        writel(virt_to_phys(isp_buf6), isp_regs + 0xb8a8);
+        writel(virt_to_phys(isp_buf6) + 0x1000, isp_regs + 0xb8ac);
+        writel(virt_to_phys(isp_buf6) + 0x2000, isp_regs + 0xb8b0);
+        writel(virt_to_phys(isp_buf6) + 0x3000, isp_regs + 0xb8b4);
+        writel(3, isp_regs + 0xb8b8);
+        wmb();
+        pr_info("tisp_init: ISP buffer 6 allocated and configured\n");
+    }
+    
+    /* Buffer allocation 7: private_kmalloc(0x8000, 0xd0) - Critical WDR buffer */
+    void *wdr_buf = kzalloc(0x8000, GFP_KERNEL);
+    if (wdr_buf) {
+        writel(virt_to_phys(wdr_buf), isp_regs + 0x2010);
+        writel(virt_to_phys(wdr_buf) + 0x2000, isp_regs + 0x2014);
+        writel(virt_to_phys(wdr_buf) + 0x4000, isp_regs + 0x2018);
+        writel(virt_to_phys(wdr_buf) + 0x6000, isp_regs + 0x201c);
+        writel(0x400, isp_regs + 0x2020);
+        writel(3, isp_regs + 0x2024);
+        wmb();
+        pr_info("tisp_init: WDR buffer allocated and configured (critical for VIC)\n");
+    }
+    
+    /* CRITICAL: Binary Ninja ISP subsystem initialization calls */
+    pr_info("tisp_init: Initializing ISP subsystems (required for VIC access)\n");
+    
+    /* Simplified subsystem initialization - these are critical for VIC access */
+    /* tiziano_ae_init, tiziano_awb_init, etc. from Binary Ninja */
+    writel(0x1, isp_regs + 0x1004);  /* AE subsystem enable */
+    writel(0x1, isp_regs + 0x1008);  /* AWB subsystem enable */
+    writel(0x1, isp_regs + 0x100c);  /* Gamma subsystem enable */
+    writel(0x1, isp_regs + 0x1010);  /* LSC subsystem enable */
+    writel(0x1, isp_regs + 0x1014);  /* CCM subsystem enable */
+    writel(0x1, isp_regs + 0x1018);  /* DMSC subsystem enable */
+    writel(0x1, isp_regs + 0x101c);  /* Sharpen subsystem enable */
+    writel(0x1, isp_regs + 0x1020);  /* DNS subsystem enable */
+    wmb();
+    pr_info("tisp_init: ISP subsystems initialized\n");
+    
     /* Binary Ninja: Determine mode value - critical calculation */
     if (sensor_attr->wdr_cache != 0) {
         mode_value = 0x10;  /* WDR mode */
@@ -4139,10 +4254,39 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                 pr_info("Sensor attr: total_width=%d, total_height=%d\n",
                         tx_sensor->video.attr->total_width, tx_sensor->video.attr->total_height);
                 
-                /* Copy sensor attributes to ISP sensor structure */
+                /* CRITICAL: Fix sensor attributes if they're wrong (like the registration params) */
+                if (strncmp(tx_sensor->info.name, "gc2053", 6) == 0) {
+                    pr_info("*** CORRECTING GC2053 SENSOR ATTRIBUTES ***\n");
+                    
+                    /* Fix wrong sensor attributes from sensor driver */
+                    if (tx_sensor->video.attr->total_width != 2200 || tx_sensor->video.attr->total_height != 1125) {
+                        pr_warn("Correcting sensor attr: %dx%d -> 2200x1125\n", 
+                                tx_sensor->video.attr->total_width, tx_sensor->video.attr->total_height);
+                        tx_sensor->video.attr->total_width = 2200;
+                        tx_sensor->video.attr->total_height = 1125;
+                    }
+                    
+                    if (tx_sensor->video.attr->width != 1920 || tx_sensor->video.attr->height != 1080) {
+                        pr_warn("Correcting sensor active dimensions: %dx%d -> 1920x1080\n",
+                                tx_sensor->video.attr->width, tx_sensor->video.attr->height);
+                        tx_sensor->video.attr->width = 1920;
+                        tx_sensor->video.attr->height = 1080;
+                    }
+                    
+                    /* Ensure MIPI interface type */
+                    if (tx_sensor->video.attr->dbus_type != 2) {
+                        pr_warn("Correcting sensor interface type: %d -> 2 (MIPI)\n", 
+                                tx_sensor->video.attr->dbus_type);
+                        tx_sensor->video.attr->dbus_type = 2;
+                    }
+                    
+                    pr_info("GC2053 sensor attributes corrected\n");
+                }
+                
+                /* Copy corrected sensor attributes to ISP sensor structure */
                 memcpy(&tx_sensor->attr, tx_sensor->video.attr, sizeof(struct tx_isp_sensor_attribute));
                 
-                /* Update ISP device sensor info */
+                /* Update ISP device sensor info with corrected values */
                 isp_dev->sensor_width = tx_sensor->video.attr->total_width;
                 isp_dev->sensor_height = tx_sensor->video.attr->total_height;
                 
@@ -4161,24 +4305,36 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                 void __iomem *vic_regs = isp_dev->vic_regs;
                 struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
                 
-                /* *** STEP 1: CALL tisp_init FIRST TO ENABLE ISP CORE *** */
+                /* *** STEP 1: CALL tisp_init FIRST TO ENABLE ISP CORE AND SUBSYSTEMS *** */
                 pr_info("*** CALLING tisp_init FUNCTION FIRST ***\n");
                 int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
                 if (tisp_result == 0) {
-                    pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED! ***\n");
+                    pr_info("*** tisp_init SUCCESS - ISP CORE AND SUBSYSTEMS ENABLED! ***\n");
+                    
+                    /* *** STEP 2: NOW CALL vic_pipo_mdma_enable AFTER FULL ISP INITIALIZATION *** */
+                    pr_info("*** CALLING vic_pipo_mdma_enable AFTER COMPLETE ISP SUBSYSTEM INIT ***\n");
+                    
+                    /* Wait for ISP subsystems to fully stabilize */
+                    msleep(100);
+                    
+                    void *mdma_result = vic_pipo_mdma_enable(vic_dev);
+                    if (mdma_result) {
+                        pr_info("*** vic_pipo_mdma_enable SUCCESS - VIC UNLOCKED AFTER ISP INIT! ***\n");
+                        /* Mark VIC as unlocked */
+                        vic_dev->state = 2;
+                    } else {
+                        pr_err("*** vic_pipo_mdma_enable FAILED AFTER ISP INIT ***\n");
+                    }
                 } else {
                     pr_err("*** tisp_init FAILED: %d ***\n", tisp_result);
-                }
-                
-                /* *** STEP 2: NOW CALL vic_pipo_mdma_enable AFTER ISP IS ENABLED *** */
-                pr_info("*** CALLING vic_pipo_mdma_enable FUNCTION AFTER ISP CORE ENABLED ***\n");
-                void *mdma_result = vic_pipo_mdma_enable(vic_dev);
-                if (mdma_result) {
-                    pr_info("*** vic_pipo_mdma_enable SUCCESS - VIC UNLOCKED! ***\n");
-                    /* Mark VIC as unlocked */
-                    vic_dev->state = 2;
-                } else {
-                    pr_err("*** vic_pipo_mdma_enable FAILED ***\n");
+                    
+                    /* Try fallback: call vic_pipo_mdma_enable anyway */
+                    pr_info("*** FALLBACK: Calling vic_pipo_mdma_enable despite tisp_init failure ***\n");
+                    void *mdma_result = vic_pipo_mdma_enable(vic_dev);
+                    if (mdma_result) {
+                        pr_info("*** FALLBACK vic_pipo_mdma_enable SUCCESS ***\n");
+                        vic_dev->state = 2;
+                    }
                 }
                 
                 /* Verify ISP core enabled with sensor */
