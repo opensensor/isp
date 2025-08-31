@@ -1605,10 +1605,11 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
             
             // *** CRITICAL: START CSI FOR MIPI DATA RECEPTION FROM SENSOR ***
             if (channel == 0 && ourISPdev && ourISPdev->csi_dev) {
+                int csi_ret;
                 pr_info("*** Channel %d: QBUF AUTO-START - STARTING CSI FOR MIPI RECEPTION ***\n", channel);
-                ret = tx_isp_csi_s_stream(ourISPdev, 1);
-                if (ret) {
-                    pr_err("Channel %d: FAILED to start CSI streaming: %d\n", channel, ret);
+                csi_ret = tx_isp_csi_s_stream(ourISPdev, 1);
+                if (csi_ret) {
+                    pr_err("Channel %d: FAILED to start CSI streaming: %d\n", channel, csi_ret);
                 } else {
                     pr_info("*** Channel %d: CSI STREAMING SUCCESS - READY FOR MIPI DATA ***\n", channel);
                 }
