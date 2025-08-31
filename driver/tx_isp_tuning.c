@@ -166,22 +166,30 @@ static inline u64 ktime_get_real_ns(void)
 /* System register access functions */
 static inline uint32_t system_reg_read(u32 reg)
 {
-    // ioremap to the base isp address
-    void __iomem *base = ioremap(0x13300000, 0x10000);
-
-    return readl(base + reg );
+    extern struct tx_isp_dev *ourISPdev;
+    
+    if (!ourISPdev || !ourISPdev->vic_regs) {
+        return 0;
+    }
+    
+    void __iomem *isp_base = ourISPdev->vic_regs - 0x9a00; /* Get ISP base */
+    return readl(isp_base + reg);
 }
-
 
 static inline void system_reg_write(u32 reg, u32 val)
 {
-    void __iomem *addr = ioremap(reg, 4);
-
-    if (!addr)
+    extern struct tx_isp_dev *ourISPdev;
+    
+    if (!ourISPdev || !ourISPdev->vic_regs) {
+        pr_err("system_reg_write: ISP device or VIC registers not available\n");
         return;
-
-    writel(val, addr);
-    iounmap(addr);
+    }
+    
+    void __iomem *isp_base = ourISPdev->vic_regs - 0x9a00; /* Get ISP base */
+    writel(val, isp_base + reg);
+    wmb();
+    
+    pr_debug("system_reg_write: reg 0x%x = 0x%x\n", reg, val);
 }
 
 
