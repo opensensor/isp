@@ -1479,89 +1479,23 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                         }
                         
                         if (vic_regs) {
-                            pr_info("*** Channel %d: VIC REFERENCE ENABLEMENT SEQUENCE ***\n", channel);
+                            pr_info("*** Channel %d: VIC STREAMING UNLOCK AND CONFIGURATION ***\n", channel);
                             
-                            // STEP 1: Enable VIC register access mode (write 2 to register 0x0)
-                            iowrite32(2, vic_regs + 0x0);
+                            // Re-unlock VIC for streaming configuration
+                            iowrite32(1, vic_regs + 0x308);  // MDMA enable unlocks VIC
                             wmb();
-                            pr_info("Channel %d: VIC enabled register access (wrote 2)\n", channel);
                             
-                            // STEP 2: Set VIC configuration mode (write 4 to register 0x0)
-                            iowrite32(4, vic_regs + 0x0);
-                            wmb();
-                            pr_info("Channel %d: VIC set config mode (wrote 4)\n", channel);
-                            
-                            // STEP 3: Wait for VIC ready state
-                            {
-                                int timeout = 1000;
-                                u32 vic_status;
-                                while ((vic_status = ioread32(vic_regs + 0x0)) != 0 && timeout--) {
-                                cpu_relax();
-                                }
-                                pr_info("Channel %d: VIC ready wait complete (status=0x%x, timeout=%d)\n",
-                                       channel, vic_status, timeout);
-                            }
-                            
-                            // STEP 4: Start VIC processing (write 1 to register 0x0)
-                            iowrite32(1, vic_regs + 0x0);
-                            wmb();
-                            pr_info("Channel %d: VIC processing started (wrote 1)\n", channel);
-                            
-                            pr_info("*** Channel %d: NOW CONFIGURING VIC REGISTERS (SHOULD WORK!) ***\n", channel);
-                            
-                            // NOW configure VIC registers - they should be accessible!
-                            // MIPI interface configuration (reference: interface type 1)
-                            iowrite32(3, vic_regs + 0xc);
-                            wmb();
-                            u32 ctrl_verify = ioread32(vic_regs + 0xc);
-                            pr_info("Channel %d: VIC ctrl reg 0xc = 3 (MIPI mode), verify=0x%x\n", channel, ctrl_verify);
-                            
-                            if (ctrl_verify == 3) {
-                                pr_info("*** Channel %d: SUCCESS! VIC REGISTERS RESPONDING! ***\n", channel);
-                            } else {
-                                pr_err("*** Channel %d: STILL FAILED - VIC registers unresponsive (got 0x%x) ***\n", channel, ctrl_verify);
-                            }
-                            
-                            // Frame dimensions register 0x4: (width << 16) | height
-                            iowrite32((vic_dev->frame_width << 16) | vic_dev->frame_height, vic_regs + 0x4);
-                            pr_info("Channel %d: VIC dim reg 0x4 = 0x%x (%dx%d)\n", channel,
-                                   (vic_dev->frame_width << 16) | vic_dev->frame_height,
-                                   vic_dev->frame_width, vic_dev->frame_height);
-                            
-                            // MIPI configuration register 0x10: Format-specific value
-                            // For MIPI YUV420 format (0x3200 in reference), value is 0x40000
-                            iowrite32(0x40000, vic_regs + 0x10);
-                            pr_info("Channel %d: VIC MIPI reg 0x10 = 0x40000 (YUV420)\n", channel);
-                            
-                            // MIPI stride configuration register 0x18
-                            iowrite32(vic_dev->frame_width, vic_regs + 0x18);
-                            pr_info("Channel %d: VIC stride reg 0x18 = %d\n", channel, vic_dev->frame_width);
-                            
-                            // DMA buffer configuration registers
-                            iowrite32(0x100010, vic_regs + 0x1a4);  // DMA config
-                            iowrite32(0x4210, vic_regs + 0x1ac);    // Buffer mode
-                            iowrite32(0x10, vic_regs + 0x1b0);      // Buffer control
-                            pr_info("Channel %d: VIC DMA regs configured\n", channel);
-                            
-                            // Start VIC processing: register 0x0 = 1
-                            iowrite32(1, vic_regs + 0x0);
-                            pr_info("Channel %d: VIC start reg 0x0 = 1\n", channel);
-                            
-                            // CRITICAL: Enable MIPI streaming register 0x300 with magic value
-                            iowrite32((vic_dev->frame_count << 16) | 0x80000020, vic_regs + 0x300);
-                            pr_info("Channel %d: VIC CRITICAL stream reg 0x300 = 0x%x\n", channel,
-                                   (vic_dev->frame_count << 16) | 0x80000020);
-                            
-                            // Memory barrier to ensure all writes complete
+                            // Configure VIC for MIPI streaming
+                            iowrite32(2, vic_regs + 0xc);    // MIPI interface mode
+                            iowrite32(0x40000, vic_regs + 0x10);  // MIPI control 
+                            iowrite32(1920, vic_regs + 0x18);     // Stride
+                            iowrite32((1920 << 16) | 1080, vic_regs + 0x304);  // Dimensions
+                            iowrite32(3840, vic_regs + 0x310);    // MDMA stride
+                            iowrite32(3840, vic_regs + 0x314);    // MDMA stride duplicate
+                            iowrite32(0x80000020, vic_regs + 0x300);  // Stream control
                             wmb();
                             
                             pr_info("*** Channel %d: VIC MIPI CONFIGURATION COMPLETE ***\n", channel);
-                            pr_info("Channel %d: VIC regs verify: ctrl=0x%x, dim=0x%x, mipi=0x%x, stream=0x%x\n",
-                                    channel,
-                                    ioread32(vic_regs + 0xc),
-                                    ioread32(vic_regs + 0x4),
-                                    ioread32(vic_regs + 0x10),
-                                    ioread32(vic_regs + 0x300));
                         } else {
                             pr_err("*** Channel %d: CRITICAL ERROR - NO VIC REGISTERS AVAILABLE! ***\n", channel);
                             pr_err("Channel %d: vic_dev->vic_regs=%p, ourISPdev->vic_regs=%p\n",
