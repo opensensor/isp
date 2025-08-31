@@ -2447,7 +2447,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                  * tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000008, &var_78) 
                  * This is the CRITICAL missing trigger that programs buffer addresses to VIC! */
                 
-                int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &buffer);
+                int event_result = tx_isp_send_event_to_remote_bn(&vic_dev_buf->sd, 0x3000008, &buffer);
                 
                 if (event_result == 0) {
                     pr_info("*** Channel %d: QBUF EVENT SUCCESS - VIC BUFFER ADDRESS PROGRAMMED! ***\n", channel);
