@@ -157,10 +157,9 @@ static uint32_t vic_start_ok = 0;
 
 /* VIC event callback structure for Binary Ninja event system */
 struct vic_event_callback {
-    void *context;                           /* +0x00: Context pointer */
-    void *reserved[7];                       /* +0x04-0x1c: Reserved space */
+    void *reserved[7];                       /* +0x00-0x18: Reserved space (28 bytes) */
     int (*event_handler)(void*, int, void*); /* +0x1c: Event handler function */
-};
+} __attribute__((packed));
 
 /* Forward declaration for VIC event handler */
 static int vic_event_handler(void *subdev, int event_type, void *data);
@@ -640,9 +639,9 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
         /* Allocate event callback structure */
         vic_callback = kzalloc(sizeof(struct vic_event_callback), GFP_KERNEL);
         if (vic_callback) {
-            /* Set up callback structure like Binary Ninja reference */
-            vic_callback->context = vic_dev;                    /* Context pointer */
-            vic_callback->event_handler = vic_event_handler;    /* Event handler at +0x1c */
+        /* Set up callback structure like Binary Ninja reference */
+        memset(vic_callback, 0, sizeof(struct vic_event_callback));
+        vic_callback->event_handler = vic_event_handler;    /* Event handler at +0x1c */
             
             /* CRITICAL: Register callback structure at subdev offset +0xc */
             /* Binary Ninja: *(arg1 + 0xc) = callback_struct */
@@ -654,15 +653,23 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
                 pr_info("*** VIC CALLBACK REGISTRATION VERIFIED: stored=%p, retrieved=%p ***\n", 
                        vic_callback, test_callback);
                 
-                /* Test the event handler pointer at offset +0x1c */
-                void *test_handler = *((void**)((char*)test_callback + 0x1c));
-                if (test_handler == vic_event_handler) {
-                    pr_info("*** VIC EVENT HANDLER VERIFIED: stored=%p, retrieved=%p ***\n", 
-                           vic_event_handler, test_handler);
-                } else {
-                    pr_err("*** VIC EVENT HANDLER MISMATCH: stored=%p, retrieved=%p ***\n", 
-                           vic_event_handler, test_handler);
-                }
+            /* Test the event handler pointer at offset +0x1c */
+            void *test_handler = *((void**)((char*)test_callback + 0x1c));
+            if (test_handler == vic_event_handler) {
+                pr_info("*** VIC EVENT HANDLER VERIFIED: stored=%p, retrieved=%p ***\n", 
+                       vic_event_handler, test_handler);
+            } else {
+                pr_err("*** VIC EVENT HANDLER MISMATCH: stored=%p, retrieved=%p ***\n", 
+                       vic_event_handler, test_handler);
+                
+                /* CRITICAL FIX: Force set the function pointer at exact offset 0x1c */
+                *((void**)((char*)test_callback + 0x1c)) = (void*)vic_event_handler;
+                
+                /* Verify the fix worked */
+                void *fixed_handler = *((void**)((char*)test_callback + 0x1c));
+                pr_info("*** VIC HANDLER AFTER FORCE FIX: %p (should match %p) ***\n", 
+                       fixed_handler, vic_event_handler);
+            }
             } else {
                 pr_err("*** VIC CALLBACK REGISTRATION FAILED: stored=%p, retrieved=%p ***\n", 
                        vic_callback, test_callback);
