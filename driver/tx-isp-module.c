@@ -1352,54 +1352,86 @@ static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const cha
 }
 
 // Initialize real hardware interrupt handling - Kernel 3.10 compatible, SDK compatible
+/* tx_isp_request_irq - EXACT Binary Ninja implementation */
+static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *isp_dev)
+{
+    int irq_num;
+    int ret;
+    
+    if (!pdev || !isp_dev) {
+        pr_err("tx_isp_request_irq: Invalid parameters\n");
+        return -EINVAL;
+    }
+    
+    pr_info("*** IMPLEMENTING tx_isp_request_irq FROM BINARY NINJA ***\n");
+    
+    /* Binary Ninja: int32_t $v0_1 = private_platform_get_irq(arg1, 0) */
+    irq_num = platform_get_irq(pdev, 0);
+    
+    /* Binary Ninja: if ($v0_1 s>= 0) */
+    if (irq_num >= 0) {
+        pr_info("*** Platform IRQ found: %d (from platform device) ***\n", irq_num);
+        
+        /* Binary Ninja: private_spin_lock_init(arg2) */
+        spin_lock_init(&isp_dev->lock);
+        
+        /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, 
+         *               isp_irq_thread_handle, 0x2000, *arg1, arg2) */
+        ret = request_threaded_irq(irq_num, 
+                                  isp_irq_handle,          /* Primary handler from Binary Ninja */
+                                  isp_irq_thread_handle,   /* Threaded handler from Binary Ninja */
+                                  0x2000,                  /* Binary Ninja flags: IRQF_ONESHOT */
+                                  dev_name(&pdev->dev),    /* *arg1 - device name */
+                                  isp_dev);                /* arg2 - dev_id */
+        
+        if (ret != 0) {
+            /* Binary Ninja error handling */
+            pr_err("*** tx_isp_request_irq: flags = 0x%08x, irq = %d, ret = 0x%08x ***\n",
+                   0x2000, irq_num, ret);
+            isp_dev->isp_irq = 0;
+            return -ENODEV; /* Binary Ninja: return 0xfffffffc */
+        }
+        
+        /* Binary Ninja: arg2[1] = tx_isp_enable_irq; *arg2 = $v0_1; arg2[2] = tx_isp_disable_irq */
+        /* Set up interrupt device structure like reference */
+        isp_dev->isp_irq = irq_num;
+        
+        /* Binary Ninja: tx_isp_disable_irq(arg2) - start with interrupts disabled */
+        /* Note: Reference disables interrupts initially, they're enabled later */
+        pr_info("*** tx_isp_request_irq: IRQ %d registered successfully with Binary Ninja handlers ***\n", irq_num);
+        
+    } else {
+        /* Binary Ninja: *arg2 = 0 */
+        isp_dev->isp_irq = 0;
+        pr_err("*** tx_isp_request_irq: No platform IRQ available (ret=%d) ***\n", irq_num);
+        return -ENODEV;
+    }
+    
+    /* Binary Ninja: return 0 */
+    return 0;
+}
+
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
 {
+    struct platform_device *pdev = &tx_isp_platform_device;
     int ret;
-    int irq_num = -1;
     
     if (!isp_dev) {
         return -EINVAL;
     }
     
-    pr_info("Checking for hardware interrupt support...\n");
+    pr_info("*** USING BINARY NINJA tx_isp_request_irq FOR HARDWARE INTERRUPTS ***\n");
     
-    // Use actual SDK IRQ fields if available
-    if (isp_dev->isp_irq > 0) {
-        irq_num = isp_dev->isp_irq;
-        pr_info("Using existing ISP IRQ: %d\n", irq_num);
-    } else if (isp_dev->vic_irq > 0) {
-        irq_num = isp_dev->vic_irq;
-        pr_info("Using VIC IRQ for frame events: %d\n", irq_num);
+    /* Call Binary Ninja exact interrupt registration */
+    ret = tx_isp_request_irq(pdev, isp_dev);
+    if (ret == 0) {
+        pr_info("*** Hardware interrupts initialized with Binary Ninja method (IRQ %d) ***\n", isp_dev->isp_irq);
     } else {
-        // Try default IRQ number for T31 ISP
-        irq_num = 63; // T31 ISP IRQ number from reference
-        pr_info("No existing IRQ found, testing default IRQ number: %d\n", irq_num);
-        
-        // Test if IRQ is valid by attempting to request it
-        ret = request_irq(irq_num, isp_vic_interrupt_service_routine,
-                          IRQF_SHARED, "tx-isp", isp_dev);
-        if (ret) {
-            pr_warn("Default ISP IRQ %d not available: %d\n", irq_num, ret);
-            pr_info("Hardware interrupts not available - will use simulation\n");
-            return -ENODEV;
-        }
-        
-        // Store in device structure
-        isp_dev->isp_irq = irq_num;
-        pr_info("Hardware interrupts initialized (IRQ %d)\n", irq_num);
-        return 0;
+        pr_warn("*** Binary Ninja interrupt registration failed: %d ***\n", ret);
+        pr_info("*** Hardware interrupts not available - will use simulation ***\n");
     }
     
-    // Request the IRQ if not already requested
-    ret = request_irq(irq_num, isp_vic_interrupt_service_routine,
-                      IRQF_SHARED, "tx-isp", isp_dev);
-    if (ret) {
-        pr_err("Failed to request ISP IRQ %d: %d\n", irq_num, ret);
-        return ret;
-    }
-    
-    pr_info("Hardware interrupts initialized (IRQ %d)\n", irq_num);
-    return 0;
+    return ret;
 }
 
 /* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
