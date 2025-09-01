@@ -1159,22 +1159,85 @@ static void vic_pipo_mdma_enable(struct vic_device *vic_dev)
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE ***\n");
 }
 
+//  TODO -- Which is more right?
+///* ispvic_frame_channel_s_stream - EXACT Binary Ninja implementation */
+//static int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
+//{
+//    void *s0;
+//    int var_18 = 0;
+//    const char *stream_msg;
+//
+//    /* Binary Ninja: void* $s0 = nullptr; if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
+//    s0 = NULL;
+//    if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
+//        s0 = vic_dev->self;  /* *(arg1 + 0xd4) - self pointer */
+//    }
+//
+//    /* Binary Ninja: if (arg1 == 0) */
+//    if (!vic_dev) {
+//        pr_err("ispvic_frame_channel_s_stream: invalid parameter\n");
+//        return 0xffffffea;
+//    }
+//
+//    /* Binary Ninja: char const* const $v0_3; if (arg2 != 0) $v0_3 = "streamon" else $v0_3 = "streamoff" */
+//    stream_msg = enable ? "streamon" : "streamoff";
+//    pr_info("ispvic_frame_channel_s_stream: %s\n", stream_msg);
+//
+//    /* Binary Ninja: if (arg2 == *($s0 + 0x210)) return 0 */
+//    if (enable == vic_dev->streaming) {
+//        pr_debug("ispvic_frame_channel_s_stream: Already in requested state %d\n", enable);
+//        return 0;
+//    }
+//
+//    /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
+//    spin_lock_irqsave(&vic_dev->buffer_lock, var_18);
+//
+//    /* Binary Ninja: if (arg2 == 0) */
+//    if (enable == 0) {
+//        /* Stream OFF - Binary Ninja: *(*($s0 + 0xb8) + 0x300) = 0; *($s0 + 0x210) = 0 */
+//        pr_info("ispvic_frame_channel_s_stream: Stream OFF - disabling VIC\n");
+//        writel(0, vic_dev->vic_regs + 0x300);
+//        wmb();
+//        vic_dev->streaming = 0;
+//    } else {
+//        /* Stream ON - Binary Ninja: vic_pipo_mdma_enable($s0) */
+//        pr_info("ispvic_frame_channel_s_stream: Stream ON - enabling VIC\n");
+//        vic_pipo_mdma_enable(vic_dev);
+//
+//        /* Binary Ninja: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+//        u32 stream_ctrl = (vic_dev->frame_count << 16) | 0x80000020;
+//        writel(stream_ctrl, vic_dev->vic_regs + 0x300);
+//        wmb();
+//
+//        /* Binary Ninja: *($s0 + 0x210) = 1 */
+//        vic_dev->streaming = 1;
+//
+//        pr_info("ispvic_frame_channel_s_stream: VIC streaming enabled (reg 0x300 = 0x%x)\n", stream_ctrl);
+//    }
+//
+//    /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0x1f4, var_18) */
+//    spin_unlock_irqrestore(&vic_dev->buffer_lock, var_18);
+//
+//    /* Binary Ninja: return 0 */
+//    return 0;
+//}
+
 /* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja implementation */
 static int ispvic_frame_channel_s_stream(struct vic_device *vic_dev, int enable)
 {
     void __iomem *vic_base = vic_dev->vic_regs;
     unsigned long flags;
     u32 stream_ctrl;
-    
+
     pr_info("ispvic_frame_channel_s_stream: enable=%d\n", enable);
-    
+
     if (enable == vic_dev->streaming) {
         pr_info("ispvic_frame_channel_s_stream: already in state %d\n", enable);
         return 0;
     }
-    
+
     spin_lock_irqsave(&vic_dev->lock, flags);
-    
+
     if (enable == 0) {
         /* Stream OFF - Binary Ninja: *(*($s0 + 0xb8) + 0x300) = 0 */
         pr_info("*** STREAM OFF: Setting reg 0x300 = 0 ***\n");
@@ -1185,8 +1248,8 @@ static int ispvic_frame_channel_s_stream(struct vic_device *vic_dev, int enable)
         /* Stream ON - Binary Ninja: vic_pipo_mdma_enable($s0) FIRST */
         pr_info("*** STREAM ON: Calling vic_pipo_mdma_enable() FIRST ***\n");
         vic_pipo_mdma_enable(vic_dev);
-        
-        /* Then set stream control register - Binary Ninja: 
+
+        /* Then set stream control register - Binary Ninja:
          * *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         stream_ctrl = (vic_dev->buffer_count << 16) | 0x80000020;
         pr_info("*** STREAM ON: Setting reg 0x300 = 0x%x ***\n", stream_ctrl);
@@ -1194,7 +1257,7 @@ static int ispvic_frame_channel_s_stream(struct vic_device *vic_dev, int enable)
         wmb();
         vic_dev->streaming = 1;
     }
-    
+
     spin_unlock_irqrestore(&vic_dev->lock, flags);
     return 0;
 }
