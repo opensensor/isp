@@ -5062,7 +5062,7 @@ static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
     return 0xfffffdfd;
 }
 
-/* VIC event handler function - handles events from frame channels */
+/* VIC event handler function - handles ALL events including sensor registration */
 static int vic_event_handler(void *subdev, int event_type, void *data)
 {
     struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)subdev;
@@ -5072,9 +5072,21 @@ static int vic_event_handler(void *subdev, int event_type, void *data)
         return 0xfffffdfd;
     }
     
-    pr_debug("vic_event_handler: Processing event 0x%x\n", event_type);
+    pr_info("*** vic_event_handler: Processing event 0x%x ***\n", event_type);
     
     switch (event_type) {
+    case 0x200000c: { /* VIC sensor registration event - CRITICAL for tx_isp_vic_start! */
+        pr_info("*** VIC EVENT: SENSOR REGISTRATION (0x200000c) - CALLING vic_sensor_ops_ioctl ***\n");
+        
+        /* Route to Binary Ninja vic_sensor_ops_ioctl implementation */
+        return vic_sensor_ops_ioctl(&vic_dev->sd, event_type, data);
+    }
+    case 0x200000f: { /* VIC sensor registration event alternate */
+        pr_info("*** VIC EVENT: SENSOR REGISTRATION (0x200000f) - CALLING vic_sensor_ops_ioctl ***\n");
+        
+        /* Route to Binary Ninja vic_sensor_ops_ioctl implementation */
+        return vic_sensor_ops_ioctl(&vic_dev->sd, event_type, data);
+    }
     case 0x3000008: { /* TX_ISP_EVENT_FRAME_QBUF - Critical buffer programming! */
         pr_info("*** VIC EVENT: QBUF (0x3000008) - PROGRAMMING BUFFER TO VIC HARDWARE ***\n");
         
@@ -5114,7 +5126,7 @@ static int vic_event_handler(void *subdev, int event_type, void *data)
         return 0;
     }
     default:
-        pr_debug("vic_event_handler: Unknown event 0x%x\n", event_type);
+        pr_info("*** vic_event_handler: UNHANDLED EVENT 0x%x - returning 0xfffffdfd ***\n", event_type);
         return 0xfffffdfd;
     }
 }
