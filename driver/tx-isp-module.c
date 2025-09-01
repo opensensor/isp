@@ -3680,6 +3680,31 @@ static void tx_isp_exit(void)
         ourISPdev = NULL;
     }
 
+    /* *** CRITICAL: Unregister all sub-device platform drivers (reverse order) *** */
+    pr_info("*** UNREGISTERING SUB-DEVICE PLATFORM DRIVERS ***\n");
+    
+    /* Unregister VIC platform driver (last registered, first unregistered) */
+    platform_driver_unregister(&tx_isp_vic_driver);
+    pr_info("*** VIC platform driver unregistered ***\n");
+    
+    /* Unregister ISP Core platform driver */
+    platform_driver_unregister(&tx_isp_core_driver);
+    pr_info("*** ISP CORE platform driver unregistered ***\n");
+    
+    /* Unregister Frame Source platform driver */
+    platform_driver_unregister(&tx_isp_fs_driver);
+    pr_info("*** FS platform driver unregistered ***\n");
+    
+    /* Unregister VIN platform driver */
+    platform_driver_unregister(&tx_isp_vin_driver);
+    pr_info("*** VIN platform driver unregistered ***\n");
+    
+    /* Unregister CSI platform driver (first registered, last unregistered) */
+    platform_driver_unregister(&tx_isp_csi_driver);
+    pr_info("*** CSI platform driver unregistered ***\n");
+    
+    pr_info("*** ALL SUB-DEVICE PLATFORM DRIVERS UNREGISTERED SUCCESSFULLY ***\n");
+
     /* Clean up VIC platform driver */
     tx_isp_vic_platform_exit();
 
