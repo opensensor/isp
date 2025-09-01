@@ -66,6 +66,8 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
 static int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
 static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
 static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sensor_attr);
+irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id);
+
 
 /* Core ISP interrupt handler */
 irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id)
