@@ -977,7 +977,7 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 int isp_vic_frd_show(struct seq_file *seq, void *v)
 {
     struct tx_isp_subdev *sd;
-    struct vic_device *vic_dev;
+    struct tx_isp_vic_device *vic_dev;
     int i, total_errors = 0;
     int frame_count;
     
@@ -988,7 +988,7 @@ int isp_vic_frd_show(struct seq_file *seq, void *v)
         return 0;
     }
     
-    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
         pr_err("The parameter is invalid!\n");
         return 0;
@@ -1043,12 +1043,12 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
 /* VIC activation function - matching reference driver */
 int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
 {
-    struct vic_device *vic_dev;
+    struct tx_isp_vic_device *vic_dev;
     
     if (!sd)
         return -EINVAL;
     
-    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev) {
         pr_err("VIC device is NULL\n");
         return -EINVAL;
@@ -1068,13 +1068,13 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
 /* VIC core operations initialization - matching reference driver */
 int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
-    struct vic_device *vic_dev;
+    struct tx_isp_vic_device *vic_dev;
     int old_state;
     
     if (!sd)
         return -EINVAL;
     
-    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev) {
         pr_err("VIC device is NULL\n");
         return -EINVAL;
@@ -1107,12 +1107,12 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 /* VIC slake function - matching reference driver */
 int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 {
-    struct vic_device *vic_dev;
+    struct tx_isp_vic_device *vic_dev;
     
     if (!sd)
         return -EINVAL;
         
-    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev) {
         pr_err("VIC device is NULL\n");
         return -EINVAL;
