@@ -4477,7 +4477,7 @@ static uint32_t data_b2f34 = 0;  /* Frame height */
 static uint32_t deir_en = 0;     /* DEIR enable flag */
 
 
-/* tisp_init - COMPLETE Binary Ninja reference implementation */
+/* tisp_init - EXACT Binary Ninja reference implementation - NO hardware reset here */
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
 {
     void __iomem *isp_regs;
@@ -4498,16 +4498,8 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     
     pr_info("*** tisp_init: EXACT Binary Ninja reference implementation ***\n");
     
-    /* *** CRITICAL: CALL HARDWARE RESET FIRST (like Binary Ninja ispcore_core_ops_init) *** */
-    pr_info("*** tisp_init: CALLING HARDWARE RESET BEFORE INITIALIZATION ***\n");
-    ret = tx_isp_hardware_reset(0);  /* 0 = perform full reset */
-    if (ret < 0) {
-        pr_err("*** tisp_init: HARDWARE RESET FAILED: %d ***\n", ret);
-        vfree(tparams_day);
-        vfree(tparams_night);
-        return ret;
-    }
-    pr_info("*** tisp_init: HARDWARE RESET COMPLETED SUCCESSFULLY ***\n");
+    /* NOTE: Hardware reset is NOT called in tisp_init - it should be in ispcore_core_ops_init */
+    pr_info("*** tisp_init: Starting without hardware reset (done in ispcore_core_ops_init) ***\n");
     
     /* Binary Ninja: memset(&tispinfo, 0, 0x74) */
     memset(&tispinfo, 0, 0x74);
