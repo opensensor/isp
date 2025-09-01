@@ -182,16 +182,27 @@ int tx_isp_proc_init(struct tx_isp_dev *isp)
         goto err_remove_jz_dir;
     }
 
-    /* Create /proc/jz/isp/isp-w02 file - this is what userspace expects */
+    /* Create /proc/jz/isp/isp-w01 file - first expected proc entry */
+    proc->isp_w01_entry = proc_create_data(TX_ISP_PROC_ISP_W01_FILE, 0664, proc->isp_dir,
+                                          &tx_isp_proc_w01_fops, isp);
+    if (!proc->isp_w01_entry) {
+        pr_err("Failed to create /proc/jz/isp/isp-w01 entry\n");
+        goto err_remove_isp_dir;
+    }
+
+    /* Create /proc/jz/isp/isp-w02 file - second expected proc entry */
     proc->isp_w02_entry = proc_create_data(TX_ISP_PROC_ISP_W02_FILE, 0664, proc->isp_dir,
                                           &tx_isp_proc_w02_fops, isp);
     if (!proc->isp_w02_entry) {
         pr_err("Failed to create /proc/jz/isp/isp-w02 entry\n");
-        goto err_remove_isp_dir;
+        goto err_remove_w01_entry;
     }
 
-    pr_info("Created proc entry: /proc/jz/isp/isp-w02\n");
+    pr_info("Created proc entries: /proc/jz/isp/isp-w01 and /proc/jz/isp/isp-w02\n");
     return 0;
+
+err_remove_w01_entry:
+    remove_proc_entry(TX_ISP_PROC_ISP_W01_FILE, proc->isp_dir);
 
 err_remove_isp_dir:
     remove_proc_entry(TX_ISP_PROC_ISP_DIR, proc->jz_dir);
