@@ -55,8 +55,9 @@ struct vin_device;
 struct frame_source_device;
 
 
+/* VIC device struct from tx_isp.h - corrected version */
 struct vic_device {
-    void __iomem *regs;         // Base registers  
+    void __iomem *regs;         // Base registers
     void __iomem *vic_regs;     // VIC register base (for Binary Ninja compatibility)
     struct tx_isp_subdev *sd;
     spinlock_t lock;            // IRQ lock
@@ -85,6 +86,12 @@ struct vic_device {
     void (*irq_disable)(void *);
     void *irq_priv;
     int irq_enabled;
+
+    /* Missing members that caused compilation errors */
+    struct tx_isp_sensor_attribute sensor_attr;
+    uint32_t total_errors;
+    uint32_t vic_errors[13];  /* 13 error counters */
+    uint32_t frame_count;     /* Frame counter */
 } __attribute__((aligned(4)));  // Force overall structure alignment
 
 

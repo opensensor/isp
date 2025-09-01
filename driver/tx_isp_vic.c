@@ -835,7 +835,7 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         case 0x200000c:
         case 0x200000f:
             pr_info("vic_sensor_ops_ioctl: Starting VIC (cmd=0x%x)\n", cmd);
-            return tx_isp_vic_start(vic_dev);
+            return tx_isp_vic_start(vic_dev, &vic_dev->sensor_attr);
             
         case 0x200000d:
         case 0x2000010:

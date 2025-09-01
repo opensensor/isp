@@ -50,6 +50,9 @@ int tx_isp_vic_wait_frame_done(struct tx_isp_subdev *sd, int channel, int timeou
 int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd);
 int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd);
 
+/* Missing function declaration that caused implicit declaration error */
+int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg);
+
 /* VIC File Operations */
 int vic_chardev_open(struct inode *inode, struct file *file);
 int vic_chardev_release(struct inode *inode, struct file *file);
@@ -116,6 +119,5 @@ struct tx_isp_vic_device {
         uint8_t _total_size[0x21c];        // Ensure total size is 0x21c
     };
 };
-
 
 #endif /* __TX_ISP_VIC_H__ */
