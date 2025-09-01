@@ -1734,7 +1734,6 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 /* Forward declarations for callback functions referenced in pipo */
 static int ispvic_frame_channel_qbuf(void);
 static int ispvic_frame_channel_clearbuf(void);
-static int ispvic_frame_channel_s_stream(void);
 
 /* ISPVIC Frame Channel QBUF - placeholder matching Binary Ninja reference */
 static int ispvic_frame_channel_qbuf(void)
@@ -1747,13 +1746,6 @@ static int ispvic_frame_channel_qbuf(void)
 static int ispvic_frame_channel_clearbuf(void)
 {
     pr_info("ispvic_frame_channel_clearbuf called\n");
-    return 0;
-}
-
-/* ISPVIC Frame Channel S_Stream wrapper - placeholder matching Binary Ninja reference */
-static int ispvic_frame_channel_s_stream(void)
-{
-    pr_info("ispvic_frame_channel_s_stream called\n");
     return 0;
 }
 
