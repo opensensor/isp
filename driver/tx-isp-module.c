@@ -1393,11 +1393,11 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
         /* Binary Ninja: private_spin_lock_init(arg2) */
         spin_lock_init(&isp_dev->lock);
         
-        /* Binary Ninja: if (private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, IRQF_SHARED | IRQF_ONESHOT, *arg1, arg2) != 0) */
+        /* Binary Ninja: if (private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, IRQF_SHARED, *arg1, arg2) != 0) */
         ret = request_threaded_irq(irq_num, 
                                   isp_irq_handle,          /* Binary Ninja: isp_irq_handle */
                                   isp_irq_thread_handle,   /* Binary Ninja: isp_irq_thread_handle */
-                                  IRQF_SHARED | IRQF_ONESHOT, /* FIXED: Add IRQF_SHARED to allow IRQ sharing */
+                                  IRQF_SHARED,             /* FIXED: Use only IRQF_SHARED to match existing IRQ registration */
                                   dev_name(&pdev->dev),    /* Binary Ninja: *arg1 */
                                   isp_dev);                /* Binary Ninja: arg2 */
         
