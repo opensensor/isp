@@ -552,7 +552,7 @@ static int tx_isp_vic_start(struct vic_device *vic_dev)
         pr_info("tx_isp_vic_start: DVP interface configuration (type 1)\n");
 
         /* Binary Ninja: Check flags match */
-        if (sensor_attr->dbus_type != interface_type) {
+        if (vic_dev->sensor_attr.dbus_type != interface_type) {
             pr_warn("tx_isp_vic_start: DVP flags mismatch\n");
             writel(0xa000a, vic_regs + 0x1a4);
         } else {
