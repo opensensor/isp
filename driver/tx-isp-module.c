@@ -2364,11 +2364,11 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         if (ourISPdev && ourISPdev->vic_dev) {
             struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
             if (channel == 0) {
-                vic->frame_width = 1920;
-                vic->frame_height = 1080;
+                vic->width = 1920;
+                vic->height = 1080;
             } else {
-                vic->frame_width = 640;
-                vic->frame_height = 360;
+                vic->width = 640;
+                vic->height = 360;
             }
         }
         
@@ -2505,14 +2505,14 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                         
                         // Continue with full configuration since registers are working
                         // Frame dimensions register 0x4: (width << 16) | height
-                        iowrite32((vic_dev->frame_width << 16) | vic_dev->frame_height,
+                        iowrite32((vic_dev->width << 16) | vic_dev->height,
                                  vic_dev->vic_regs + 0x4);
                         
                         // MIPI configuration register 0x10: Format-specific value
                         iowrite32(0x40000, vic_dev->vic_regs + 0x10);
                         
                         // MIPI stride configuration register 0x18
-                        iowrite32(vic_dev->frame_width, vic_dev->vic_regs + 0x18);
+                        iowrite32(vic_dev->width, vic_dev->vic_regs + 0x18);
                         
                         // DMA buffer configuration registers (from reference)
                         iowrite32(0x100010, vic_dev->vic_regs + 0x1a4);  // DMA config
@@ -4090,7 +4090,7 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     }
     
     vic_regs = vic_dev->vic_regs;
-    width = vic_dev->frame_width;  /* *(arg1 + 0xdc) */
+    width = vic_dev->width;  /* *(arg1 + 0xdc) */
     stride = width << 1;           /* $v1_1 = $v1 << 1 */
     
     pr_info("vic_pipo_mdma_enable: width=%d, stride=%d\n", width, stride);
@@ -4106,7 +4106,7 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     wmb();
     
     /* Set frame dimensions */
-    writel((vic_dev->frame_width << 16) | vic_dev->frame_height, vic_regs + 0x304);
+    writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x304);
     wmb();
     
     /* Set stride registers */
@@ -4115,7 +4115,7 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     wmb();
     
     pr_info("vic_pipo_mdma_enable: MDMA enabled with %dx%d, stride=%d\n",
-            vic_dev->frame_width, vic_dev->frame_height, stride);
+            vic_dev->width, vic_dev->height, stride);
     
     return vic_regs;  /* Binary Ninja: return result */
 }
@@ -4824,7 +4824,7 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
     /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
     if (vic_dev->streaming == 0) {
         /* Binary Ninja: int32_t $s0_2 = *(arg1 + 0xdc) * *(arg1 + 0xe0) */
-        s0_2 = vic_dev->frame_width * vic_dev->frame_height;
+        s0_2 = vic_dev->width * vic_dev->height;
         
         pr_info("Info[VIC_MDAM_IRQ] : channel[%d] frame done\n", channel);
         
