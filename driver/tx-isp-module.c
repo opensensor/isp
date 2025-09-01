@@ -4002,14 +4002,13 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     return vic_regs;  /* Binary Ninja: return result */
 }
 
-/* tx_isp_vic_start - COMPLETE Binary Ninja exact implementation */
+/* tx_isp_vic_start - EXACT Binary Ninja implementation (CORRECTED for MIPI) */
 static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sensor_attribute *sensor_attr)
 {
     void __iomem *vic_regs;
     u32 interface_type;
     u32 sensor_format;
     u32 timeout = 10000;
-    int ret = 0;
     
     if (!vic_dev || !vic_dev->vic_regs || !sensor_attr) {
         pr_err("tx_isp_vic_start: Invalid parameters\n");
@@ -4022,156 +4021,143 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
     
     pr_info("tx_isp_vic_start: interface=%d, format=0x%x\n", interface_type, sensor_format);
     
-    /* Binary Ninja: Check interface type - critical switch statement */
-    if (interface_type == 2) {
-        /* MIPI interface - Binary Ninja exact sequence */
-        pr_info("tx_isp_vic_start: MIPI interface configuration (type 2)\n");
+    /* *** CRITICAL FIX: Binary Ninja shows interface 1=DVP, interface 2=MIPI *** */
+    
+    if (interface_type == 1) {
+        /* DVP interface - Binary Ninja: if ($v0 == 1) */
+        pr_info("tx_isp_vic_start: DVP interface configuration (type 1)\n");
         
-        /* Binary Ninja: Check flags match - *(*(arg1 + 0x110) + 0x18) != $v0 */
+        /* Binary Ninja: Check flags match */
         if (sensor_attr->dbus_type != interface_type) {
-            pr_warn("tx_isp_vic_start: flags mismatch\n");
+            pr_warn("tx_isp_vic_start: DVP flags mismatch\n");
             writel(0xa000a, vic_regs + 0x1a4);
         } else {
-            pr_info("tx_isp_vic_start: MIPI flags match, normal configuration\n");
+            pr_info("tx_isp_vic_start: DVP flags match, normal configuration\n");
             /* Binary Ninja: *(*(arg1 + 0xb8) + 0x10) = &data_20000 */
-            writel(0x20000, vic_regs + 0x10);   /* MIPI config register */
-            /* Binary Ninja: *($v1_2 + 0x1a4) = $v0_2 where $v0_2 = 0x100010 */
+            writel(0x20000, vic_regs + 0x10);   /* DVP config register */
             writel(0x100010, vic_regs + 0x1a4); /* DMA config */
         }
         
-        /* Binary Ninja: Calculate buffer stride - complex calculation */
-        /* $v0_4 = $v0_3 * *($a0 + 0x2c) */
-        /* From decompilation: this calculates buffer stride based on format */
-        u32 stride_multiplier = 8; /* Base multiplier for RAW format */
+        /* Binary Ninja: DVP buffer calculations and configuration */
+        u32 stride_multiplier = 8;
         if (sensor_format != 0) {
-            if (sensor_format == 1) {
-                stride_multiplier = 0xa;
-            } else if (sensor_format == 2) {
-                stride_multiplier = 0xc;
-            } else if (sensor_format == 7) {
-                stride_multiplier = 0x10;
-            }
+            if (sensor_format == 1) stride_multiplier = 0xa;
+            else if (sensor_format == 2) stride_multiplier = 0xc;
+            else if (sensor_format == 7) stride_multiplier = 0x10;
         }
         
-        /* Binary Ninja buffer calculation: ($v0_4 u>> 5) + (0 u< ($v0_4 & 0x1f) ? 1 : 0) */
         u32 buffer_calc = stride_multiplier * sensor_attr->integration_time;
         u32 buffer_size = (buffer_calc >> 5) + ((buffer_calc & 0x1f) ? 1 : 0);
-        
-        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x100) = buffer_size */
         writel(buffer_size, vic_regs + 0x100);
-        wmb();
-        pr_info("tx_isp_vic_start: MIPI buffer size calculation = 0x%x\n", buffer_size);
-        
-        /* Binary Ninja: *(*(arg1 + 0xb8) + 0xc) = 2 */
         writel(2, vic_regs + 0xc);
-        wmb();
-        pr_info("tx_isp_vic_start: MIPI control register 0xc = 2\n");
-        
-        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x14) = *(*(arg1 + 0x110) + 0x7c) */
         writel(sensor_format, vic_regs + 0x14);
-        wmb();
-        pr_info("tx_isp_vic_start: MIPI format register 0x14 = 0x%x\n", sensor_format);
-        
-        /* Binary Ninja: *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
         writel((vic_dev->frame_width << 16) | vic_dev->frame_height, vic_regs + 0x4);
         wmb();
-        pr_info("tx_isp_vic_start: MIPI frame dimensions reg 0x4 = %dx%d\n", 
-                vic_dev->frame_width, vic_dev->frame_height);
         
-        /* Binary Ninja: Complex format-dependent register calculation */
-        /* This configures MIPI-specific registers based on pixel format and sensor capabilities */
-        u32 format_config = 0;
-        
-        /* Binary Ninja format calculations based on sensor attributes */
-        format_config |= (sensor_attr->integration_time_apply_delay << 25);  /* Bit 25 */
-        format_config |= (sensor_attr->again_apply_delay << 24);             /* Bit 24 */
-        format_config |= (sensor_attr->wdr_cache);                           /* Base value */
-        format_config |= (sensor_attr->integration_time_apply_delay << 23);  /* Bit 23 */
-        format_config |= (sensor_attr->again_apply_delay << 22);             /* Bit 22 */
-        format_config |= (sensor_attr->integration_time << 18);              /* Bits 21:18 */
-        format_config |= (sensor_attr->max_integration_time << 12);          /* Bits 17:12 */
-        format_config |= (sensor_attr->min_integration_time << 8);           /* Bits 11:8 */
-        format_config |= (sensor_attr->integration_time_apply_delay << 4);   /* Bits 7:4 */
-        format_config |= (sensor_attr->again_apply_delay << 2);              /* Bits 3:2 */
-        
-        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x10c) = format_config */
-        writel(format_config, vic_regs + 0x10c);
-        wmb();
-        pr_info("tx_isp_vic_start: MIPI format config reg 0x10c = 0x%x\n", format_config);
-        
-        /* Binary Ninja: Configure MIPI timing registers */
-        /* *(*(arg1 + 0xb8) + 0x110) = *($v1_19 + 0x2c) << 0x10 | zx.d(*($v1_19 + 0x4c)) */
-        u32 timing_reg = (sensor_attr->integration_time << 16) | (sensor_attr->min_integration_time & 0xFFFF);
-        writel(timing_reg, vic_regs + 0x110);
-        wmb();
-        
-        /* Binary Ninja: Additional timing registers */
-        writel(sensor_attr->max_integration_time & 0xFFFF, vic_regs + 0x114);
-        writel(sensor_attr->integration_time_apply_delay & 0xFFFF, vic_regs + 0x118);
-        writel(sensor_attr->again_apply_delay & 0xFFFF, vic_regs + 0x11c);
-        wmb();
-        pr_info("tx_isp_vic_start: MIPI timing registers configured\n");
-        
-        /* Binary Ninja: WDR mode configuration */
-        u32 wdr_mode = sensor_attr->wdr_cache;  /* Binary Ninja: *(*(arg1 + 0x110) + 0x74) */
-        u32 frame_mode;
-        
-        if (wdr_mode == 0) {
-            frame_mode = 0x4440;  /* Linear mode */
-        } else if (wdr_mode == 1) {
-            frame_mode = 0x4140;  /* WDR mode 1 */
-        } else if (wdr_mode == 2) {
-            frame_mode = 0x4240;  /* WDR mode 2 */
-        } else {
-            pr_err("tx_isp_vic_start: Unsupported WDR mode %d\n", wdr_mode);
-            return -EINVAL;
-        }
-        
-        /* Binary Ninja: *($v1_25 + 0x1ac) = $v0_33 and *(*(arg1 + 0xb8) + 0x1a8) = $v0_33 */
+        /* Binary Ninja: DVP timing and WDR configuration */
+        u32 wdr_mode = sensor_attr->wdr_cache;
+        u32 frame_mode = (wdr_mode == 0) ? 0x4440 : (wdr_mode == 1) ? 0x4140 : 0x4240;
         writel(frame_mode, vic_regs + 0x1ac);
-        writel(frame_mode, vic_regs + 0x1a8);  /* Duplicate write */
-        wmb();
-        pr_info("tx_isp_vic_start: MIPI frame mode = 0x%x (WDR=%d)\n", frame_mode, wdr_mode);
-        
-        /* Binary Ninja: *($v0_34 + 0x1b0) = 0x10 */
+        writel(frame_mode, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
         wmb();
         
-        /* Binary Ninja MIPI unlock sequence: */
-        /* **(arg1 + 0xb8) = 2 */
-        /* **(arg1 + 0xb8) = 4 */
-        writel(2, vic_regs + 0x0);
-        wmb();
-        writel(4, vic_regs + 0x0);
-        wmb();
-        pr_info("tx_isp_vic_start: MIPI unlock sequence initiated (2 -> 4)\n");
-        
-        /* CRITICAL: For MIPI, NO unlock key is written to 0x1a0! */
-        /* Binary Ninja shows this is DVP-only */
-        
-    } else if (interface_type == 1) {
-        /* DVP interface - Binary Ninja shows different path */
-        pr_info("tx_isp_vic_start: DVP interface configuration\n");
-        
-        /* Binary Ninja DVP configuration */
-        writel(3, vic_regs + 0xc);
-        writel(0x100010, vic_regs + 0x1a4);
-        writel(0x4210, vic_regs + 0x1ac);
-        writel(0x4210, vic_regs + 0x1a8);
-        writel(0x10, vic_regs + 0x1b0);
-        wmb();
-        
-        /* DVP unlock sequence WITH key */
+        /* Binary Ninja: DVP unlock sequence WITH unlock key */
         writel(2, vic_regs + 0x0);
         wmb();
         writel(4, vic_regs + 0x0);
         wmb();
         
-        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1a0) = *($v1_27 + 0x74) << 4 | *($v1_27 + 0x78) */
+        /* *** CRITICAL: DVP unlock key - Binary Ninja exact *** */
         u32 unlock_key = (sensor_attr->integration_time_apply_delay << 4) | sensor_attr->again_apply_delay;
         writel(unlock_key, vic_regs + 0x1a0);
         wmb();
         pr_info("tx_isp_vic_start: DVP unlock key 0x1a0 = 0x%x\n", unlock_key);
+        
+    } else if (interface_type == 2) {
+        /* *** CRITICAL: MIPI interface - Binary Ninja shows DIFFERENT path *** */
+        pr_info("tx_isp_vic_start: MIPI interface configuration (type 2) - CORRECTED\n");
+        
+        /* Binary Ninja: *(*(arg1 + 0xb8) + 0xc) = 3 */
+        writel(3, vic_regs + 0xc);
+        wmb();
+        pr_info("tx_isp_vic_start: MIPI control register 0xc = 3\n");
+        
+        /* Binary Ninja: Complex MIPI format handling based on sensor_format */
+        u32 mipi_config = 0x20000; /* Base MIPI config */
+        
+        /* Binary Ninja shows complex format-dependent configuration for MIPI */
+        if (sensor_format >= 0x3010) {
+            if (sensor_format >= 0x3110) {
+                if (sensor_format >= 0x3200 && sensor_format < 0x3210) {
+                    mipi_config = 0x20000;
+                } else if ((sensor_format - 0x3300) < 0x10) {
+                    mipi_config = 0x40000;
+                }
+            } else {
+                if (sensor_format >= 0x3100) {
+                    mipi_config = 0x30000;
+                } else if ((sensor_format - 0x3013) < 2) {
+                    mipi_config = 0x20000;
+                }
+            }
+        } else {
+            if (sensor_format >= 0x300e) {
+                mipi_config = 0x20000;
+            } else if (sensor_format == 0x2011) {
+                mipi_config = 0xc0000;
+            } else {
+                mipi_config = 0x80000;
+            }
+        }
+        
+        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x10) = mipi_config */
+        writel(mipi_config, vic_regs + 0x10);
+        wmb();
+        pr_info("tx_isp_vic_start: MIPI config register 0x10 = 0x%x\n", mipi_config);
+        
+        /* Binary Ninja: *(*(arg1 + 0xb8) + 4) = frame dimensions */
+        writel((vic_dev->frame_width << 16) | vic_dev->frame_height, vic_regs + 0x4);
+        wmb();
+        
+        /* *** CRITICAL: MIPI unlock sequence WITHOUT unlock key *** */
+        /* Binary Ninja: **(arg1 + 0xb8) = 2; **(arg1 + 0xb8) = 4 */
+        writel(2, vic_regs + 0x0);
+        wmb();
+        writel(4, vic_regs + 0x0);
+        wmb();
+        pr_info("tx_isp_vic_start: MIPI unlock sequence (2->4, NO unlock key)\n");
+        
+        /* Binary Ninja: while (*$v0_121 != 0) nop */
+        timeout = 10000;
+        while (timeout > 0) {
+            u32 status = readl(vic_regs + 0x0);
+            if (status == 0) {
+                pr_info("tx_isp_vic_start: MIPI VIC unlocked after %d iterations\n", 10000 - timeout);
+                break;
+            }
+            udelay(1);
+            timeout--;
+        }
+        
+        if (timeout == 0) {
+            pr_err("tx_isp_vic_start: MIPI VIC unlock timeout!\n");
+            return -ETIMEDOUT;
+        }
+        
+        /* Binary Ninja: *$v0_121 = 1 */
+        writel(1, vic_regs + 0x0);
+        wmb();
+        pr_info("tx_isp_vic_start: MIPI VIC processing enabled\n");
+        
+        /* Binary Ninja: Final MIPI configuration */
+        writel(0x100010, vic_regs + 0x1a4);
+        writel(0x4210, vic_regs + 0x1ac);
+        writel(0x10, vic_regs + 0x1b0);
+        writel(0, vic_regs + 0x1b4);
+        wmb();
+        
+        pr_info("tx_isp_vic_start: MIPI configuration complete\n");
         
     } else if (interface_type == 4) {
         /* BT656 interface */
@@ -4199,7 +4185,6 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
     }
     
     /* Binary Ninja: Wait for VIC unlock completion */
-    /* int32_t* $v1_30 = *(arg1 + 0xb8); while (*$v1_30 != 0) nop; */
     pr_info("tx_isp_vic_start: Waiting for VIC unlock completion...\n");
     timeout = 10000;
     while (timeout > 0) {
@@ -4218,43 +4203,21 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
     }
     
     /* Binary Ninja: Enable VIC processing */
-    /* *$v1_30 = 1 */
     writel(1, vic_regs + 0x0);
     wmb();
     pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1)\n");
     
     /* Binary Ninja: Final configuration registers */
-    /* *(*(arg1 + 0xb8) + 0x1a4) = 0x100010 */
-    /* *(*(arg1 + 0xb8) + 0x1ac) = 0x4210 */
-    /* *(*(arg1 + 0xb8) + 0x1b0) = 0x10 */
-    /* *(*(arg1 + 0xb8) + 0x1b4) = 0 */
     writel(0x100010, vic_regs + 0x1a4);
     writel(0x4210, vic_regs + 0x1ac);
     writel(0x10, vic_regs + 0x1b0);
     writel(0, vic_regs + 0x1b4);
     wmb();
     
-    /* Binary Ninja: VIC start complete - interrupts enabled via proper tx_vic_enable_irq */
-    pr_info("tx_isp_vic_start: VIC start complete - ready for interrupt enable\n");
-    
     /* Binary Ninja: Log WDR mode */
-    if (sensor_attr->wdr_cache != 0) {
-        pr_info("tx_isp_vic_start: WDR mode enabled (mode=%d)\n", sensor_attr->wdr_cache);
-    } else {
-        pr_info("tx_isp_vic_start: Linear mode enabled\n");
-    }
-    
-    /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
-    vic_start_ok = 1;
-    pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
-    pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
-    
-    /* Binary Ninja: Log WDR mode */
-    if (sensor_attr->wdr_cache != 0) {
-        pr_info("tx_isp_vic_start: WDR mode enabled (mode=%d)\n", sensor_attr->wdr_cache);
-    } else {
-        pr_info("tx_isp_vic_start: Linear mode enabled\n");
-    }
+    const char *wdr_msg = (sensor_attr->wdr_cache != 0) ? 
+        "WDR mode enabled" : "Linear mode enabled";
+    pr_info("tx_isp_vic_start: %s\n", wdr_msg);
     
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     vic_start_ok = 1;
@@ -4263,6 +4226,7 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
     
     return 0;
 }
+
 
 
 /* ispcore_interrupt_service_routine - COMPLETE Binary Ninja exact implementation for MIPI */
