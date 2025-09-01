@@ -37,7 +37,7 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 static irqreturn_t tx_isp_vic_irq_handler(int irq, void *dev_id)
 {
     struct tx_isp_subdev *sd = dev_id;
-    struct vic_device *vic_dev;
+    struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_base;
     u32 status, isr, isr1;
     unsigned long flags;
@@ -47,7 +47,7 @@ static irqreturn_t tx_isp_vic_irq_handler(int irq, void *dev_id)
     if (!sd)
         return IRQ_NONE;
 
-    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev)
         return IRQ_NONE;
 
@@ -526,7 +526,7 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 
 
 /* tx_isp_vic_start - EXACT Binary Ninja implementation (CORRECTED for MIPI) */
-int tx_isp_vic_start(struct vic_device *vic_dev)
+int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
     u32 interface_type;
