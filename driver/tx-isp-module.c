@@ -3463,7 +3463,9 @@ static int tx_isp_init(void)
     }
 
     /* Initialize proc entries */
+    pr_info("*** CALLING tx_isp_proc_init(ourISPdev=%p) ***\n", ourISPdev);
     ret = tx_isp_proc_init(ourISPdev);
+    pr_info("*** tx_isp_proc_init() returned: %d ***\n", ret);
     if (ret) {
         pr_err("Failed to create proc entries: %d\n", ret);
         misc_deregister(&tx_isp_miscdev);
