@@ -5237,28 +5237,43 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         vic_dev->state = 2;
                         
                         /* CRITICAL: Initialize CSI with sensor attributes */
-                        pr_info("*** CALLING csi_core_ops_init FOR MIPI SENSOR ***\n");
+                        pr_info("*** CALLING csi_core_ops_init FOR MIPI SENSOR ***");
                         struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
                         if (csi_dev) {
                             int csi_init_result = csi_core_ops_init(&csi_dev->sd, 1);
                             if (csi_init_result == 0) {
-                                pr_info("*** csi_core_ops_init SUCCESS - CSI CONFIGURED FOR MIPI ***\n");
+                                pr_info("*** csi_core_ops_init SUCCESS - CSI CONFIGURED FOR MIPI ***");
                                 
                                 /* Sync sensor attributes to CSI */
                                 csi_sensor_ops_sync_sensor_attr(&csi_dev->sd, &tx_sensor->attr);
-                                pr_info("*** CSI SENSOR ATTRIBUTES SYNCED ***\n");
+                                pr_info("*** CSI SENSOR ATTRIBUTES SYNCED ***");
                             } else {
-                                pr_warn("*** csi_core_ops_init FAILED: %d ***\n", csi_init_result);
+                                pr_warn("*** csi_core_ops_init FAILED: %d ***", csi_init_result);
                             }
                         }
                         
-                        /* CRITICAL FIX: Start CSI streaming BEFORE tisp_init for MIPI sensors */
-                        pr_info("*** STARTING CSI STREAMING BEFORE tisp_init FOR MIPI ***\n");
+                        /* CRITICAL FIX: Start SENSOR streaming FIRST for MIPI data flow */
+                        pr_info("*** STARTING SENSOR STREAMING BEFORE CSI FOR MIPI DATA FLOW ***");
+                        if (kernel_subdev && kernel_subdev->ops && kernel_subdev->ops->video &&
+                            kernel_subdev->ops->video->s_stream) {
+                            pr_info("*** CALLING SENSOR s_stream(1) BEFORE CSI - THIS ENABLES SENSOR OUTPUT ***");
+                            int sensor_stream_ret = kernel_subdev->ops->video->s_stream(kernel_subdev, 1);
+                            if (sensor_stream_ret == 0) {
+                                pr_info("*** SENSOR STREAMING SUCCESS - REGISTER 0x3e=0x91 WRITTEN ***");
+                                kernel_subdev->vin_state = TX_ISP_MODULE_RUNNING;
+                                pr_info("*** SENSOR NOW OUTPUTTING DATA TO CSI ***");
+                            } else {
+                                pr_err("*** SENSOR STREAMING FAILED: %d ***", sensor_stream_ret);
+                            }
+                        }
+                        
+                        /* NOW start CSI streaming with sensor already outputting data */
+                        pr_info("*** STARTING CSI STREAMING WITH SENSOR DATA ACTIVE ***");
                         int csi_stream_result = tx_isp_csi_s_stream(isp_dev, 1);
                         if (csi_stream_result == 0) {
-                            pr_info("*** CSI STREAMING STARTED SUCCESSFULLY ***\n");
+                            pr_info("*** CSI STREAMING STARTED - RECEIVING SENSOR DATA ***");
                         } else {
-                            pr_warn("*** CSI streaming start failed: %d, continuing anyway ***\n", csi_stream_result);
+                            pr_warn("*** CSI streaming start failed: %d, continuing anyway ***", csi_stream_result);
                         }
                         
                         /* Now call tisp_init with CSI already streaming */
