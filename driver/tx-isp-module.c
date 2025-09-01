@@ -4265,7 +4265,7 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
 }
 
 
-/* ispcore_interrupt_service_routine - EXACT Binary Ninja implementation */
+/* ispcore_interrupt_service_routine - COMPLETE Binary Ninja exact implementation for MIPI */
 static irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
@@ -4290,12 +4290,18 @@ static irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     vic_regs = vic_dev->vic_regs;
     isp_regs = vic_regs - 0x9a00;  /* ISP base from VIC base */
     
+    /* *** CRITICAL: Read from ISP core interrupt status registers for MIPI *** */
     /* Binary Ninja: int32_t $s1 = *($v0 + 0xb4); *($v0 + 0xb8) = $s1 */
-    interrupt_status = readl(vic_regs + 0xb4);  /* Read interrupt status */
-    writel(interrupt_status, vic_regs + 0xb8);  /* Clear interrupt status */
+    interrupt_status = readl(isp_regs + 0xb4);  /* CORRECTED: Read from ISP base + 0xb4 */
+    writel(interrupt_status, isp_regs + 0xb8);  /* CORRECTED: Clear at ISP base + 0xb8 */
     wmb();
     
-    pr_debug("*** ISP CORE INTERRUPT: status=0x%x ***\n", interrupt_status);
+    if (interrupt_status != 0) {
+        pr_info("*** ISP CORE INTERRUPT: status=0x%x (MIPI DATA RECEIVED!) ***\n", interrupt_status);
+    } else {
+        pr_debug("*** ISP CORE INTERRUPT: status=0x%x ***\n", interrupt_status);
+        return IRQ_HANDLED; /* No interrupt to process */
+    }
     
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
     if ((interrupt_status & 0x3f8) == 0) {
