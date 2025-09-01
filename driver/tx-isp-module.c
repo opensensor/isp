@@ -4565,17 +4565,60 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         }
     }
     
-    /* *** CRITICAL: ADD SENSOR TO SENSOR LIST FOR ENUMERATION *** */
+    /* *** CRITICAL: CREATE ACTUAL SENSOR STRUCTURE AND CONNECT TO ISP DEVICE *** */
     if (s6_1 == 0) {  /* Only add to list if registration was successful */
         struct registered_sensor *reg_sensor;
+        struct tx_isp_sensor *new_sensor;
+        struct tx_isp_sensor_attribute *sensor_attr;
         
-        pr_info("*** ADDING SENSOR TO SENSOR LIST FOR ENUMERATION ***\n");
+        pr_info("*** CREATING ACTUAL SENSOR STRUCTURE FOR ISP CONNECTION ***\n");
         
+        /* Create the actual tx_isp_sensor structure like reference driver */
+        new_sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
+        if (!new_sensor) {
+            pr_err("Failed to allocate sensor structure\n");
+            return -ENOMEM;
+        }
+        
+        /* Create sensor attributes structure */
+        sensor_attr = kzalloc(sizeof(struct tx_isp_sensor_attribute), GFP_KERNEL);
+        if (!sensor_attr) {
+            pr_err("Failed to allocate sensor attributes\n");
+            kfree(new_sensor);
+            return -ENOMEM;
+        }
+        
+        /* Fill sensor attributes from IOCTL data */
+        strncpy(sensor_attr->name, var_98.name, sizeof(sensor_attr->name) - 1);
+        sensor_attr->chip_id = var_98.chip_id;
+        sensor_attr->total_width = var_98.width;
+        sensor_attr->total_height = var_98.height;
+        sensor_attr->integration_time = var_98.integration_time;
+        sensor_attr->max_again = var_98.again;
+        sensor_attr->dbus_type = var_98.interface_type;
+        sensor_attr->fps = var_98.fps;
+        
+        /* Initialize sensor structure */
+        strncpy(new_sensor->info.name, var_98.name, sizeof(new_sensor->info.name) - 1);
+        new_sensor->video.attr = sensor_attr;
+        new_sensor->sd.isp = isp_dev;
+        new_sensor->sd.vin_state = TX_ISP_MODULE_INIT;
+        
+        /* *** CRITICAL: Connect sensor to ISP device *** */
+        isp_dev->sensor = new_sensor;
+        
+        pr_info("*** SENSOR STRUCTURE CREATED AND CONNECTED TO ISP ***\n");
+        pr_info("*** SENSOR: %s (ID=0x%x, %dx%d@%dfps) ***\n",
+                sensor_attr->name, sensor_attr->chip_id, 
+                sensor_attr->total_width, sensor_attr->total_height, sensor_attr->fps);
+        
+        /* Add to enumeration list */
         reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
         if (reg_sensor) {
             /* Copy sensor information */
             strncpy(reg_sensor->name, var_98.name, sizeof(reg_sensor->name) - 1);
             reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
+            reg_sensor->subdev = &new_sensor->sd;
             
             mutex_lock(&sensor_list_mutex);
             reg_sensor->index = sensor_count++;  /* Assign next available index */
