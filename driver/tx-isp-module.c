@@ -4765,16 +4765,48 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) */
     system_irq_func_set(0xd, ip_done_interrupt_handler);
-    
+
     /* Binary Ninja: tisp_param_operate_init() */
     extern int tisp_param_operate_init(void);
     ret = tisp_param_operate_init();
     if (ret != 0) {
         pr_warn("tisp_param_operate_init failed: %d\n", ret);
     }
-    
+
+    /* CRITICAL MISSING PIECE: ISP Core State Transition to RUN for interrupt generation */
+    pr_info("*** TRANSITIONING ISP CORE TO RUN STATE FOR INTERRUPT GENERATION ***\n");
+
+    /* Clear interrupt sources first (from isp_core_video_streamon) */
+    extern void apical_isp_interrupts_interrupt_clear_write(uint16_t data);
+    apical_isp_interrupts_interrupt_clear_write(0);
+    apical_isp_interrupts_interrupt_clear_write(0xffff);
+    pr_info("ISP interrupt sources cleared\n");
+
+    /* Program interrupt events for frame completion (from ispcore_core_ops_init) */
+    extern void system_program_interrupt_event(uint8_t event, uint8_t id);
+    #define APICAL_IRQ_DS1_OUTPUT_END 13  /* From apical interrupt definitions */
+    system_program_interrupt_event(APICAL_IRQ_DS1_OUTPUT_END, 50);  /* Map DS1_OUTPUT_END to interrupt 50 */
+    pr_info("ISP interrupt events programmed (DS1_OUTPUT_END -> 50)\n");
+
+    /* CRITICAL: Transition ISP core to RUN state to enable interrupt generation */
+    extern uint8_t apical_command(uint8_t command_type, uint8_t command, uint32_t value, uint8_t direction, uint32_t *ret_value);
+    #define TSYSTEM 0
+    #define ISP_SYSTEM_STATE 0
+    #define COMMAND_SET 0
+    #define RUN 1
+    #define ISP_SUCCESS 0
+
+    uint32_t reason = 0;
+    uint8_t status = apical_command(TSYSTEM, ISP_SYSTEM_STATE, RUN, COMMAND_SET, &reason);
+    if (status == ISP_SUCCESS) {
+        pr_info("*** ISP CORE TRANSITIONED TO RUN STATE - INTERRUPTS ENABLED! ***\n");
+    } else {
+        pr_err("*** ISP CORE RUN STATE TRANSITION FAILED: status=%d, reason=%d ***\n", status, reason);
+        return -EPERM;
+    }
+
     /* Binary Ninja: return 0 */
-    pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED ***\n");
+    pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED WITH INTERRUPT GENERATION ***\n");
     return 0;
 }
 
