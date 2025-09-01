@@ -72,7 +72,7 @@ int tisp_ae_get_y_zone(void *arg1)
 EXPORT_SYMBOL(tisp_ae_get_y_zone);
 
 /* tisp_g_ae_zone - ISP tuning interface wrapper */
-int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_tuning_ctrl *ctrl)
+int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
     struct ae_zone_info zones;
     int ret;
@@ -85,7 +85,7 @@ int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_tuning_ctrl *ctrl)
         return -EINVAL;
     }
 
-    if (!ctrl->data) {
+    if (!ctrl->value) {
         pr_err("tisp_g_ae_zone: No data pointer for AE zone\n");
         mcp_log_info("tisp_g_ae_zone", "error - no data pointer", NULL);
         return -EINVAL;
@@ -106,15 +106,14 @@ int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_tuning_ctrl *ctrl)
     mcp_log_info("tisp_g_ae_zone", "got AE zone data successfully", &zones);
 
     /* Copy zone data to user-provided buffer */
-    if (copy_to_user((void __user *)(unsigned long)ctrl->data,
-                     &zones, sizeof(zones))) {
+    if (copy_to_user((void __user *)ctrl->value, &zones, sizeof(zones))) {
         pr_err("tisp_g_ae_zone: Failed to copy data to user\n");
         mcp_log_info("tisp_g_ae_zone", "error copying to user", NULL);
         return -EFAULT;
     }
 
-    /* Set success status */
-    ctrl->value = 1;
+    /* Set success status - data copied successfully */
+    ctrl->value = (unsigned long)&zones;
     mcp_log_info("tisp_g_ae_zone", "exit success", &ctrl->value);
     return 0;
 }
