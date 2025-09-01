@@ -1130,7 +1130,7 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 }
 
 /* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
-static void vic_pipo_mdma_enable(struct vic_device *vic_dev)
+static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base = vic_dev->vic_regs;
     u32 width = vic_dev->width;
@@ -1228,7 +1228,7 @@ static void vic_pipo_mdma_enable(struct vic_device *vic_dev)
 //}
 
 /* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja implementation */
-int ispvic_frame_channel_s_stream(struct vic_device *vic_dev, int enable)
+int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 {
     void __iomem *vic_base = vic_dev->vic_regs;
     unsigned long flags;
@@ -1278,7 +1278,7 @@ struct vic_callback_struct {
 static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd, void *data)
 {
     struct tx_isp_subdev *sd;
-    struct vic_device *vic_dev;
+    struct tx_isp_vic_device *vic_dev;
     int ret = 0;
     
     if (!pad || !pad->sd) {
@@ -1287,7 +1287,7 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     }
     
     sd = pad->sd;
-    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev) {
         pr_err("VIC event callback: No vic_dev\n");
         return -EINVAL;
@@ -1325,7 +1325,7 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
 /* VIC video streaming operations - matching reference driver vic_core_s_stream */
 static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
-    struct vic_device *vic_dev;
+    struct tx_isp_vic_device *vic_dev;
     int ret = 0;
     
     if (!sd) {
@@ -1333,7 +1333,7 @@ static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
     
-    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev) {
         pr_err("VIC s_stream: NULL vic_dev\n");
         return -EINVAL;
@@ -1544,7 +1544,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     }
 
     /* Allocate and initialize VIC device structure */
-    struct vic_device *vic_dev = kzalloc(sizeof(struct vic_device), GFP_KERNEL);
+    struct tx_isp_vic_device *vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
     if (!vic_dev) {
         pr_err("Failed to allocate VIC device structure\n");
         ret = -ENOMEM;
@@ -1579,7 +1579,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_dev->self = vic_dev;
     
     /* VERIFY: Check that we can retrieve it correctly */
-    struct vic_device *verification = (struct vic_device *)*((void **)((char *)sd + 0xd4));
+    struct tx_isp_vic_device *verification = (struct tx_isp_vic_device *)*((void **)((char *)sd + 0xd4));
     pr_info("*** VERIFICATION: vic_dev stored=%p, retrieved=%p ***\n", vic_dev, verification);
     
     if (verification != vic_dev) {
