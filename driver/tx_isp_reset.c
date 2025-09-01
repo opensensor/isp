@@ -28,77 +28,76 @@
  * @reset_mode: Reset mode (0 = full reset, non-zero = skip reset)
  * 
  * This function implements the exact hardware reset sequence from the
- * reference driver. It must be called before any ISP initialization
- * to ensure the hardware is in a clean state.
+ * reference driver as decompiled by Binary Ninja. It matches the
+ * reference implementation exactly.
  * 
- * Returns: 0 on success, -ETIMEDOUT on timeout
+ * Returns: 0 on success, -1 (0xffffffff) on timeout
  */
 int tx_isp_hardware_reset(int reset_mode)
 {
-    void __iomem *reset_reg;
+    volatile u32 *reset_reg_ptr;
     u32 reg_val;
-    int timeout_count;
+    int i;
     
-    pr_info("*** TX ISP HARDWARE RESET: Starting reset sequence (mode=%d) ***\n", reset_mode);
+    pr_info("*** TX ISP HARDWARE RESET: Starting (mode=%d) ***\n", reset_mode);
     
-    /* Early exit for non-reset mode (matches reference behavior) */
+    /* Early exit for non-reset mode (matches reference: if (arg1 != 0) return 0) */
     if (reset_mode != 0) {
         pr_info("*** TX ISP HARDWARE RESET: Skip mode, returning success ***\n");
         return 0;
     }
     
-    /* Map the reset control register */
-    reset_reg = ioremap(TX_ISP_RESET_REG, 4);
-    if (!reset_reg) {
+    /* Direct memory access to reset register (matches reference: *0xb00000c4) */
+    reset_reg_ptr = (volatile u32 *)ioremap(TX_ISP_RESET_REG, 4);
+    if (!reset_reg_ptr) {
         pr_err("*** TX ISP HARDWARE RESET: Failed to map reset register 0x%08x ***\n", 
                TX_ISP_RESET_REG);
         return -ENOMEM;
     }
     
-    /* Step 1: Trigger hardware reset by setting bit 21 */
-    reg_val = readl(reset_reg);
-    pr_info("*** TX ISP HARDWARE RESET: Initial register value: 0x%08x ***\n", reg_val);
-    reg_val |= TX_ISP_RESET_TRIGGER;
-    writel(reg_val, reset_reg);
-    pr_info("*** TX ISP HARDWARE RESET: Reset triggered, reg=0x%08x, waiting for ready ***\n", reg_val);
+    /* Read initial register state */
+    reg_val = *reset_reg_ptr;
+    pr_info("*** TX ISP HARDWARE RESET: Initial register: 0x%08x ***\n", reg_val);
     
-    /* Step 2: Wait for hardware ready signal (bit 20) with timeout */
-    for (timeout_count = TX_ISP_RESET_TIMEOUT; timeout_count > 0; timeout_count--) {
-        reg_val = readl(reset_reg);
+    /* Step 1: Set bit 21 (0x200000) - matches reference: *0xb00000c4 |= 0x200000 */
+    *reset_reg_ptr |= 0x200000;
+    reg_val = *reset_reg_ptr;
+    pr_info("*** TX ISP HARDWARE RESET: Trigger set, reg=0x%08x ***\n", reg_val);
+    
+    /* Step 2: Loop 0x1f4 (500) times checking for ready bit - matches reference loop */
+    for (i = 0x1f4; i != 0; i--) {
+        reg_val = *reset_reg_ptr;
         
-        /* Check if hardware signals ready */
-        if (reg_val & TX_ISP_RESET_READY) {
-            pr_info("*** TX ISP HARDWARE RESET: Hardware ready signal detected ***\n");
+        /* Check if bit 20 (0x100000) is set - matches reference: (*0xb00000c4 & 0x100000) != 0 */
+        if ((reg_val & 0x100000) != 0) {
+            pr_info("*** TX ISP HARDWARE RESET: Ready bit detected, reg=0x%08x ***\n", reg_val);
             
-            /* Step 3: Complete reset sequence */
-            /* Clear trigger bit (21) and set complete bit (22) */
-            reg_val = (reg_val & ~TX_ISP_RESET_TRIGGER) | TX_ISP_RESET_COMPLETE;
-            writel(reg_val, reset_reg);
-            pr_info("*** TX ISP HARDWARE RESET: Set complete bit, reg=0x%08x ***\n", reg_val);
+            /* Step 3: Clear bit 21 and set bit 22 - matches reference: (*0xb00000c4 & 0xffdfffff) | 0x400000 */
+            *reset_reg_ptr = (reg_val & 0xffdfffff) | 0x400000;
+            reg_val = *reset_reg_ptr;
+            pr_info("*** TX ISP HARDWARE RESET: Complete bit set, reg=0x%08x ***\n", reg_val);
             
-            /* Clear complete bit (22) to finish sequence */
-            reg_val &= ~TX_ISP_RESET_COMPLETE;
-            writel(reg_val, reset_reg);
-            pr_info("*** TX ISP HARDWARE RESET: Final register value: 0x%08x ***\n", reg_val);
+            /* Step 4: Clear bit 22 - matches reference: *0xb00000c4 &= 0xffbfffff */
+            *reset_reg_ptr &= 0xffbfffff;
+            reg_val = *reset_reg_ptr;
+            pr_info("*** TX ISP HARDWARE RESET: Final reg=0x%08x ***\n", reg_val);
             
-            iounmap(reset_reg);
-            
-            pr_info("*** TX ISP HARDWARE RESET COMPLETED SUCCESSFULLY ***\n");
+            iounmap((void __iomem *)reset_reg_ptr);
+            pr_info("*** TX ISP HARDWARE RESET: SUCCESS ***\n");
             return 0;
         }
         
-        /* Wait before next check */
-        msleep(TX_ISP_RESET_DELAY_MS);
+        /* Sleep 2ms before next check - matches reference: private_msleep(2) */
+        msleep(2);
     }
     
-    /* Timeout occurred */
-    reg_val = readl(reset_reg);
-    pr_err("*** TX ISP HARDWARE RESET TIMEOUT - Final reg: 0x%08x ***\n", reg_val);
-    iounmap(reset_reg);
+    /* Timeout - matches reference: return 0xffffffff */
+    reg_val = *reset_reg_ptr;
+    pr_err("*** TX ISP HARDWARE RESET: TIMEOUT - Final reg=0x%08x ***\n", reg_val);
+    iounmap((void __iomem *)reset_reg_ptr);
+    pr_err("*** TX ISP HARDWARE RESET: TIMEOUT ***\n");
     
-    pr_err("*** TX ISP HARDWARE RESET TIMEOUT - HARDWARE NOT RESPONDING ***\n");
-    
-    return -ETIMEDOUT;
+    return -1;
 }
 EXPORT_SYMBOL_GPL(tx_isp_hardware_reset);
 
