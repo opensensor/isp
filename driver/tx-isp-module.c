@@ -234,6 +234,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
 static int private_reset_tx_isp_module(int arg);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 int __init tx_isp_vic_platform_init(void);
+void __exit tx_isp_vic_platform_exit(void);
 
 /* CSI function forward declarations */
 static int csi_device_probe(struct tx_isp_dev *isp_dev);

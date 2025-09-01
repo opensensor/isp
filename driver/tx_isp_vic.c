@@ -1925,7 +1925,7 @@ int __init tx_isp_vic_platform_init(void)
     return 0;
 }
 
-static void __exit tx_isp_vic_platform_exit(void)
+void __exit tx_isp_vic_platform_exit(void)
 {
     pr_info("*** TX ISP VIC PLATFORM DRIVER UNREGISTRATION ***\n");
     platform_driver_unregister(&tx_isp_vic_platform_driver);
