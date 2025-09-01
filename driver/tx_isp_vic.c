@@ -913,7 +913,7 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     int result = -ENOTSUPP;  /* 0xffffffed */
     void *callback_ptr;
-    void (*callback_func)(void);
+    int (*callback_func)(void);  /* Changed to int return type */
     
     pr_info("vic_core_ops_ioctl: cmd=0x%x, arg=%p\n", cmd, arg);
     
@@ -925,10 +925,10 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 callback_ptr = sd->inpads[0].priv;
                 if (callback_ptr != NULL) {
                     /* Get function pointer at offset +4 in callback structure */
-                    callback_func = *((void (**)(void))((char *)callback_ptr + 4));
+                    callback_func = *((int (**)(void))((char *)callback_ptr + 4));
                     if (callback_func != NULL) {
                         pr_info("vic_core_ops_ioctl: Calling callback function for cmd 0x1000001\n");
-                        result = (int)(long)callback_func();  /* Call the function */
+                        result = callback_func();  /* Call the function without casting */
                     }
                 }
             }
@@ -944,10 +944,10 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 callback_ptr = sd->inpads[0].priv;
                 if (callback_ptr != NULL) {
                     /* Get function pointer at offset +4 in callback structure */
-                    callback_func = *((void (**)(void))((char *)callback_ptr + 4));
+                    callback_func = *((int (**)(void))((char *)callback_ptr + 4));
                     if (callback_func != NULL) {
                         pr_info("vic_core_ops_ioctl: Calling callback function for cmd 0x1000000\n");
-                        result = (int)(long)callback_func();  /* Call the function */
+                        result = callback_func();  /* Call the function without casting */
                     }
                 }
             }
