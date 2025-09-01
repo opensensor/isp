@@ -204,7 +204,6 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer);
 static int init_isp_interrupt_system(struct tx_isp_dev *isp_dev);
-static irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id);
 
 /* Reference driver function declarations - Binary Ninja exact names */
 static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev);
@@ -5840,7 +5839,7 @@ label_12898:
 }
 
 /* ip_done_interrupt_handler - Binary Ninja ISP processing complete interrupt */
-static irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)
+irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     
