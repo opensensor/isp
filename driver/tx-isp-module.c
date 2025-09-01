@@ -204,7 +204,6 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer);
 static int init_isp_interrupt_system(struct tx_isp_dev *isp_dev);
-static void vic_hardware_interrupt_enable(void *vic_device_context);
 
 /* Reference driver function declarations - Binary Ninja exact names */
 static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev);
@@ -661,14 +660,6 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
             /* Binary Ninja: *(arg1 + 0xc) = callback_struct */
             *((void**)((char*)&vic_dev->sd + 0xc)) = vic_callback;
             
-            /* CRITICAL: MISSING VIC INTERRUPT ENABLE CALLBACK AT +0x84! */
-            /* Binary Ninja tx_vic_enable_irq shows: $v0_1 = *(dump_vsd_5 + 0x84) */
-            pr_info("*** SETTING UP MISSING VIC INTERRUPT ENABLE CALLBACK AT +0x84 ***\n");
-            
-            /* Create the hardware interrupt enable function that tx_vic_enable_irq calls */
-            *((void(**)(void*))((char*)vic_dev + 0x84)) = vic_hardware_interrupt_enable;
-            
-            pr_info("*** VIC INTERRUPT ENABLE CALLBACK SET AT +0x84: %p ***\n", vic_hardware_interrupt_enable);
             
             /* CRITICAL: Verify callback registration immediately */
             void *test_callback = *((void**)((char*)&vic_dev->sd + 0xc));
@@ -698,14 +689,6 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
                        vic_callback, test_callback);
             }
             
-            /* Verify the interrupt enable callback was set correctly */
-            void *test_irq_callback = *((void**)((char*)vic_dev + 0x84));
-            if (test_irq_callback == vic_hardware_interrupt_enable) {
-                pr_info("*** VIC INTERRUPT ENABLE CALLBACK VERIFIED: %p ***\n", test_irq_callback);
-            } else {
-                pr_err("*** VIC INTERRUPT ENABLE CALLBACK FAILED: stored=%p, retrieved=%p ***\n", 
-                       vic_hardware_interrupt_enable, test_irq_callback);
-            }
             
             pr_info("*** VIC EVENT CALLBACK REGISTERED: callback=%p, handler=%p ***\n",
                    vic_callback, vic_event_handler);
