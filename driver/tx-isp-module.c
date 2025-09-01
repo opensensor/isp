@@ -181,6 +181,27 @@ static struct platform_device tx_isp_platform_device = {
     .resource = tx_isp_resources,
 };
 
+/* VIC platform device resources - CRITICAL MISSING PIECE */
+static struct resource tx_isp_vic_resources[] = {
+    [0] = {
+        .start = 0x10023000,           /* T31 VIC base address */
+        .end   = 0x10023FFF,           /* T31 VIC end address */
+        .flags = IORESOURCE_MEM,
+    },
+    [1] = {
+        .start = 63,                   /* T31 VIC IRQ number (shared with ISP) */
+        .end   = 63,
+        .flags = IORESOURCE_IRQ,
+    },
+};
+
+static struct platform_device tx_isp_vic_platform_device = {
+    .name = "tx-isp-vic",
+    .id = -1,
+    .num_resources = ARRAY_SIZE(tx_isp_vic_resources),
+    .resource = tx_isp_vic_resources,
+};
+
 /* Forward declaration for VIC event handler */
 static int vic_event_handler(void *subdev, int event_type, void *data);
 
@@ -3521,10 +3542,25 @@ static int tx_isp_init(void)
         pr_warn("Failed to prepare I2C infrastructure: %d\n", ret);
     }
     
+    /* Initialize VIC platform driver FIRST - CRITICAL for hardware access */
+    ret = tx_isp_vic_platform_init();
+    if (ret) {
+        pr_err("Failed to initialize VIC platform driver: %d\n", ret);
+        cleanup_i2c_infrastructure(ourISPdev);
+        destroy_frame_channel_devices();
+        destroy_isp_tuning_device();
+        tx_isp_proc_exit(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+    
     /* Initialize subdev infrastructure for real hardware integration */
     ret = tx_isp_init_subdevs(ourISPdev);
     if (ret) {
         pr_err("Failed to initialize subdev infrastructure: %d\n", ret);
+        tx_isp_vic_platform_exit();
         cleanup_i2c_infrastructure(ourISPdev);
         destroy_frame_channel_devices();
         destroy_isp_tuning_device();
@@ -3654,6 +3690,9 @@ static void tx_isp_exit(void)
         kfree(ourISPdev);
         ourISPdev = NULL;
     }
+
+    /* Clean up VIC platform driver */
+    tx_isp_vic_platform_exit();
 
     /* Clean up sensor list */
     mutex_lock(&sensor_list_mutex);
