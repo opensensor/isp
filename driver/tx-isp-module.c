@@ -3686,8 +3686,6 @@ static void tx_isp_exit(void)
     
     pr_info("*** ALL SUB-DEVICE PLATFORM DRIVERS UNREGISTERED SUCCESSFULLY ***\n");
 
-    /* Clean up VIC platform driver */
-    tx_isp_vic_platform_exit();
 
     /* Clean up sensor list */
     mutex_lock(&sensor_list_mutex);
