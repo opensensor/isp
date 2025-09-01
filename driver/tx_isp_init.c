@@ -63,7 +63,7 @@ int tiziano_isp_init(struct tx_isp_sensor_attribute *sensor_attr, char *param_na
     /* Store sensor information globally - matches reference */
     width = sensor_attr->max_integration_time;  /* Assuming this maps to width */
     height = sensor_attr->integration_time_limit; /* Assuming this maps to height */
-    sensor_type = sensor_attr->sensor_ctrl.alloc_again; /* Assuming this maps to sensor type */
+    sensor_type = 0; /* Default sensor type - will be set based on sensor detection */
     
     /* Store in global variables like reference driver */
     tispinfo = width;
