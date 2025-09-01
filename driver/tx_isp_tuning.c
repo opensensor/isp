@@ -848,9 +848,9 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
                 break;
 
             case 0x8000030:  // AE Zone Info
-//                ret = isp_get_ae_zone(dev, ctrl);
-//                if (ret)
-//                    goto out;
+                ret = tisp_g_ae_zone(dev, ctrl);
+                if (ret)
+                    goto out;
                 break;
 
             case 0x8000031:  // AF Zone Info
