@@ -4498,6 +4498,17 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     
     pr_info("*** tisp_init: EXACT Binary Ninja reference implementation ***\n");
     
+    /* *** CRITICAL: CALL HARDWARE RESET FIRST (like Binary Ninja ispcore_core_ops_init) *** */
+    pr_info("*** tisp_init: CALLING HARDWARE RESET BEFORE INITIALIZATION ***\n");
+    ret = tx_isp_hardware_reset(0);  /* 0 = perform full reset */
+    if (ret < 0) {
+        pr_err("*** tisp_init: HARDWARE RESET FAILED: %d ***\n", ret);
+        vfree(tparams_day);
+        vfree(tparams_night);
+        return ret;
+    }
+    pr_info("*** tisp_init: HARDWARE RESET COMPLETED SUCCESSFULLY ***\n");
+    
     /* Binary Ninja: memset(&tispinfo, 0, 0x74) */
     memset(&tispinfo, 0, 0x74);
     /* Binary Ninja: memset(&sensor_info, 0, 0x60) */
