@@ -2812,6 +2812,21 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Binary Ninja expects *(subdev + 0xd4) to point to the VIC device */
             *((void**)((char*)&vic_dev->sd + 0xd4)) = vic_dev;
             
+            /* CRITICAL: Also set up the event callback structure at subdev+0xc */
+            struct vic_event_callback *callback_struct = kzalloc(sizeof(struct vic_event_callback), GFP_KERNEL);
+            if (callback_struct) {
+                /* Set the event handler function pointer at offset +0x1c */
+                callback_struct->event_handler = vic_event_handler;
+                
+                /* Set the callback structure pointer at subdev+0xc */
+                *((void**)((char*)&vic_dev->sd + 0xc)) = callback_struct;
+                
+                pr_info("*** VIC EVENT CALLBACK: callback_struct=%p, handler=%p ***\n", 
+                       callback_struct, vic_event_handler);
+                pr_info("*** VIC EVENT CALLBACK: Set at subdev+0xc=%p ***\n", 
+                       *((void**)((char*)&vic_dev->sd + 0xc)));
+            }
+            
             pr_info("*** VIC subdev device pointer set: subdev=%p, device_ptr=%p ***\n", 
                    &vic_dev->sd, vic_dev);
             
