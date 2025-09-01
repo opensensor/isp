@@ -5488,99 +5488,80 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                 vic_dev->frame_height = 1080;
                 
                     if (tx_sensor->attr.dbus_type == 2) {
-                        /* CRITICAL INSIGHT FROM BINARY NINJA: MIPI sensors DON'T use CSI streaming! */
+                        /* CRITICAL: MIPI sensors DON'T use CSI streaming - Binary Ninja corrected! */
                         pr_info("*** MIPI SENSOR (dbus_type=2) - BINARY NINJA CORRECTED SEQUENCE ***\n");
-                        pr_info("*** Binary Ninja shows CSI streaming only for DVP, not MIPI ***\n");
+                        pr_info("*** Binary Ninja: MIPI data flows directly through ISP CSI, no CSI streaming! ***\n");
                         
-                        /* STEP 1: Initialize CSI hardware registers (but don't stream) */
+                        /* STEP 1: Initialize CSI registers for MIPI reception (NO streaming) */
                         struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
                         if (csi_dev) {
-                            pr_info("*** STEP 1: CSI register initialization for MIPI reception ***\n");
+                            pr_info("*** STEP 1: CSI register configuration for MIPI (no streaming) ***\n");
                             int csi_init_result = csi_core_ops_init(&csi_dev->sd, 1);
                             if (csi_init_result == 0) {
-                                pr_info("*** CSI registers configured for MIPI interface ***\n");
+                                pr_info("*** CSI MIPI registers configured - state=%d (no streaming) ***\n", csi_dev->state);
                                 csi_sensor_ops_sync_sensor_attr(&csi_dev->sd, &tx_sensor->attr);
                             } else {
-                                pr_warn("CSI init failed: %d, continuing anyway\n", csi_init_result);
+                                pr_warn("CSI MIPI init failed: %d, continuing anyway\n", csi_init_result);
+                            }
+                            
+                            /* Binary Ninja: MIPI CSI should be in state 3 (configured, not streaming) */
+                            if (csi_dev->state != 3) {
+                                pr_info("Setting MIPI CSI state to 3 (configured) as per Binary Ninja\n");
+                                csi_dev->state = 3;
                             }
                         }
                         
-                        /* STEP 2: Call tisp_init FIRST to initialize ISP core */
-                        pr_info("*** STEP 2: CALLING tisp_init FIRST for MIPI (Binary Ninja sequence) ***\n");
+                        /* STEP 2: Call tisp_init to initialize ISP core with MIPI support */
+                        pr_info("*** STEP 2: tisp_init for MIPI direct path ***\n");
                         int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
                         if (tisp_result == 0) {
-                            pr_info("*** tisp_init SUCCESS - ISP CORE INITIALIZED FOR MIPI ***\n");
+                            pr_info("*** tisp_init SUCCESS - ISP CORE READY FOR MIPI DATA ***\n");
                         } else {
                             pr_err("*** tisp_init FAILED: %d ***\n", tisp_result);
                             return -EIO;
                         }
                         
-                        /* STEP 3: Enable VIC MDMA after ISP core is ready */
-                        pr_info("*** STEP 3: Configuring VIC MDMA for MIPI frame data ***\n");
-                        void *mdma_result = vic_pipo_mdma_enable(vic_dev);
-                        if (mdma_result) {
-                            pr_info("*** VIC MDMA enabled for MIPI data reception ***\n");
-                            vic_dev->state = 2;
+                        /* STEP 3: Call tx_isp_vic_start to set vic_start_ok and unlock VIC */
+                        pr_info("*** STEP 3: tx_isp_vic_start for MIPI interface (sets vic_start_ok) ***\n");
+                        int vic_start_result = tx_isp_vic_start(vic_dev, &tx_sensor->attr);
+                        if (vic_start_result == 0) {
+                            pr_info("*** tx_isp_vic_start SUCCESS - vic_start_ok=1, VIC ready for MIPI ***\n");
                         } else {
-                            pr_err("*** VIC MDMA enable failed ***\n");
+                            pr_err("*** tx_isp_vic_start FAILED: %d ***\n", vic_start_result);
                         }
                         
-                        /* STEP 4: Start sensor streaming (generates MIPI data) */
-                        pr_info("*** STEP 4: Starting sensor MIPI data output ***\n");
+                        /* STEP 4: Enable VIC MDMA for frame processing */
+                        pr_info("*** STEP 4: VIC MDMA for MIPI frame processing ***\n");
+                        void *mdma_result = vic_pipo_mdma_enable(vic_dev);
+                        if (mdma_result) {
+                            pr_info("*** VIC MDMA enabled for MIPI frames ***\n");
+                            vic_dev->state = 2;
+                        }
+                        
+                        /* STEP 5: Start sensor MIPI output */
+                        pr_info("*** STEP 5: Starting sensor MIPI data transmission ***\n");
                         if (kernel_subdev && kernel_subdev->ops && kernel_subdev->ops->video &&
                             kernel_subdev->ops->video->s_stream) {
                             int sensor_stream_ret = kernel_subdev->ops->video->s_stream(kernel_subdev, 1);
                             if (sensor_stream_ret == 0) {
-                                pr_info("*** SENSOR STREAMING SUCCESS - MIPI DATA ACTIVE ***\n");
+                                pr_info("*** SENSOR MIPI STREAMING SUCCESS - DATA FLOWING TO ISP ***\n");
                                 kernel_subdev->vin_state = TX_ISP_MODULE_RUNNING;
                             } else {
-                                pr_err("*** SENSOR STREAMING FAILED: %d ***\n", sensor_stream_ret);
+                                pr_err("*** SENSOR MIPI STREAMING FAILED: %d ***\n", sensor_stream_ret);
                             }
                         }
                         
-                        /* STEP 5: Enable interrupts (Binary Ninja sequence) */
-                        pr_info("*** STEP 5: BINARY NINJA INTERRUPT ACTIVATION SEQUENCE ***\n");
-                        
-                        /* Set global vic_start_ok flag */
-                        vic_start_ok = 1;
-                        pr_info("*** vic_start_ok = 1 SET ***\n");
-                        
-                        /* Enable VIC device interrupt flag */
+                        /* STEP 6: Enable VIC interrupts (vic_start_ok should be 1 from tx_isp_vic_start) */
+                        pr_info("*** STEP 6: VIC interrupt enable (vic_start_ok should be 1) ***\n");
                         tx_vic_enable_irq(vic_dev);
                         
-                        /* Configure ISP interrupt routing */
-                        if (isp_dev->vic_regs) {
-                            void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
-                            
-                            /* ISP interrupt enables (from tisp_init) */
-                            writel(0xffffffff, isp_regs + 0x30);
-                            writel(0xffffffff, isp_regs + 0x38);
-                            wmb();
-                            
-                            /* VIC interrupt configuration for MIPI */
-                            writel(0x1, vic_dev->vic_regs + 0x1e0);
-                            writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);
-                            writel(0xFFFFFFFC, vic_dev->vic_regs + 0x1ec);
-                            wmb();
-                            
-                            pr_info("*** ISP and VIC interrupt registers configured ***\n");
-                        }
-                        
-                        /* Enable main IRQ */
+                        /* Enable main ISP IRQ for interrupt processing */
                         if (ourISPdev->isp_irq > 0) {
                             tx_isp_enable_irq(ourISPdev);
-                            pr_info("*** MAIN ISP IRQ %d ENABLED ***\n", ourISPdev->isp_irq);
+                            pr_info("*** MAIN ISP IRQ %d ENABLED FOR MIPI INTERRUPTS ***\n", ourISPdev->isp_irq);
                         }
                         
-                        /* Start VIC frame processing */
-                        if (vic_dev->vic_regs) {
-                            u32 vic_ctrl = 0x80000020;
-                            writel(vic_ctrl, vic_dev->vic_regs + 0x300);
-                            wmb();
-                            pr_info("*** VIC frame processing enabled (0x300=0x%x) ***\n", vic_ctrl);
-                        }
-                        
-                        pr_info("*** MIPI SENSOR INITIALIZATION COMPLETE - INTERRUPTS SHOULD FIRE! ***\n");
+                        pr_info("*** MIPI SENSOR INIT COMPLETE - DIRECT ISP PATH, NO CSI STREAMING! ***\n");
                         
                     } else {
                     pr_info("*** SENSOR IS DVP (dbus_type=%d) - CALLING tx_isp_vic_start ***\n", tx_sensor->attr.dbus_type);
