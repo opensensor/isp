@@ -73,4 +73,47 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 /* VIC Operation Structures - exported from implementation */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
 
+
+// VIC subdev structure based on reference driver analysis (0x21c bytes)
+// VIC device structure matching reference driver (0x21c bytes total)
+// Using union to ensure exact offsets without complex calculations
+struct tx_isp_vic_device {
+    union {
+        struct {
+            // Base subdev structure at offset 0
+            struct tx_isp_subdev sd;
+        };
+        struct {
+            // Ensure exact offsets with fixed-size buffer
+            uint8_t _pad_to_b8[0xb8];
+            void __iomem *vic_regs;         // 0xb8: VIC hardware registers
+            uint8_t _pad_to_d4[0xd4 - 0xb8 - 8];
+            struct tx_isp_vic_device *self; // 0xd4: Self-pointer
+            uint8_t _pad_to_dc[0xdc - 0xd4 - 8];
+            uint32_t frame_width;           // 0xdc: Frame width
+            uint32_t frame_height;          // 0xe0: Frame height
+            uint8_t _pad_to_128[0x128 - 0xe0 - 4];
+            int state;                      // 0x128: 1=init, 2=active
+            uint8_t _pad_to_130[0x130 - 0x128 - 4];
+            spinlock_t lock;                // 0x130: Spinlock
+            struct mutex mlock;             // Mutex (overlapped)
+            uint8_t _pad_to_148[0x148 - 0x130 - sizeof(spinlock_t) - sizeof(struct mutex)];
+            struct completion frame_done;   // 0x148: Frame completion
+            uint8_t _pad_to_154[0x154 - 0x148 - sizeof(struct completion)];
+            struct mutex snap_mlock;        // 0x154: Snapshot mutex
+            uint8_t _pad_to_1f4[0x1f4 - 0x154 - sizeof(struct mutex)];
+            spinlock_t buffer_lock;         // 0x1f4: Buffer lock
+            struct list_head queue_head;    // Buffer queues
+            struct list_head free_head;
+            struct list_head done_head;
+            uint8_t _pad_to_210[0x210 - 0x1f4 - sizeof(spinlock_t) - 3*sizeof(struct list_head)];
+            int streaming;                  // 0x210: Streaming state
+            uint8_t _pad_to_218[0x218 - 0x210 - 4];
+            uint32_t frame_count;           // 0x218: Frame counter
+        };
+        uint8_t _total_size[0x21c];        // Ensure total size is 0x21c
+    };
+};
+
+
 #endif /* __TX_ISP_VIC_H__ */
