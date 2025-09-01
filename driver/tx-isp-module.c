@@ -45,7 +45,6 @@ static int sensor_count = 0;
 static int isp_memopt = 0; // Memory optimization flag like reference
 
 /* CRITICAL: VIC interrupt control flag - Binary Ninja reference */
-static uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag */
 
 /* Kernel symbol export for sensor drivers to register */
 static struct tx_isp_subdev *registered_sensor_subdev = NULL;
