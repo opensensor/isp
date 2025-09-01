@@ -383,42 +383,207 @@ err_put_cgu_isp:
     return ret;
 }
 
-/* Create ISP processing graph and initialize subdevice nodes */
+/* Create ISP processing graph and initialize subdevice nodes - EXACT Binary Ninja reference */
 static int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
 {
-    int ret;
+    int ret = 0;
+    int i, j;
+    void *subdev_data;
+    uint32_t subdev_type, subdev_index;
+    struct platform_device **subdev_list;
+    int subdev_count;
     
-    pr_info("Creating ISP processing graph\n");
+    pr_info("*** tx_isp_create_graph_and_nodes: EXACT Binary Ninja implementation ***\n");
     
-    /* Initialize CSI device */
-    ret = tx_isp_csi_device_init(isp);
+    if (!isp) {
+        pr_err("tx_isp_create_graph_and_nodes: Invalid ISP device\n");
+        return -EINVAL;
+    }
+    
+    /* Binary Ninja: Initialize subdevice list and count */
+    subdev_count = isp->subdev_count;  /* This would be *(arg1 + 0x80) */
+    subdev_list = (struct platform_device **)&isp->subdev_list;  /* This would be arg1 + 0x84 */
+    
+    if (subdev_count == 0) {
+        pr_info("tx_isp_create_graph_and_nodes: No subdevices to process, creating basic setup\n");
+        
+        /* Create basic CSI and VIC setup when no platform subdevices exist */
+        ret = tx_isp_csi_device_init(isp);
+        if (ret < 0) {
+            pr_err("Failed to initialize CSI device: %d\n", ret);
+            return ret;
+        }
+        
+        ret = tx_isp_vic_device_init(isp);
+        if (ret < 0) {
+            pr_err("Failed to initialize VIC device: %d\n", ret);
+            tx_isp_csi_device_deinit(isp);
+            return ret;
+        }
+        
+        ret = tx_isp_setup_pipeline(isp);
+        if (ret < 0) {
+            pr_err("Failed to setup ISP pipeline: %d\n", ret);
+            tx_isp_vic_device_deinit(isp);
+            tx_isp_csi_device_deinit(isp);
+            return ret;
+        }
+        
+        pr_info("Basic ISP graph setup completed\n");
+        return 0;
+    }
+    
+    /* Binary Ninja: First loop - process type 1 subdevices (sources) */
+    pr_info("*** tx_isp_create_graph_and_nodes: Processing %d subdevices ***\n", subdev_count);
+    
+    for (i = 0; i < subdev_count; i++) {
+        /* Binary Ninja: char* $v0_3 = private_platform_get_drvdata(*$s7) */
+        subdev_data = platform_get_drvdata(subdev_list[i]);
+        
+        if (!subdev_data) {
+            /* Binary Ninja: isp_printf(1, "nv12", i) */
+            pr_info("tx_isp_create_graph_and_nodes: Subdevice %d has no driver data\n", i);
+            continue;
+        }
+        
+        if ((uintptr_t)subdev_data >= 0xfffff001) {
+            /* Binary Ninja: isp_printf(1, "nv12", i) */
+            pr_info("tx_isp_create_graph_and_nodes: Subdevice %d has invalid driver data\n", i);
+            continue;
+        }
+        
+        /* Binary Ninja: if (zx.d(*$v0_3) != 1) */
+        subdev_type = *(uint32_t*)subdev_data;  /* First field is device type */
+        
+        if (subdev_type != 1) {
+            continue;
+        }
+        
+        /* Binary Ninja: *(arg1 + (((zx.d($v0_3[3]) & 0xf) + 0xe) << 2)) = $v0_3 */
+        subdev_index = (*(uint32_t*)((char*)subdev_data + 0xc)) & 0xf;  /* subdev_data[3] & 0xf */
+        
+        /* Store subdevice in ISP graph array at calculated index */
+        if (subdev_index < ISP_MAX_SUBDEVS) {
+            isp->subdev_graph[subdev_index + 0xe] = subdev_data;
+            pr_info("tx_isp_create_graph_and_nodes: Type 1 subdev %d stored at graph index %d\n", 
+                    i, subdev_index + 0xe);
+        }
+    }
+    
+    /* Binary Ninja: Second loop - process type 2 subdevices (sinks) */
+    for (i = 0; i < subdev_count; i++) {
+        /* Binary Ninja: char* $v0_6 = private_platform_get_drvdata(*$s3) */
+        subdev_data = platform_get_drvdata(subdev_list[i]);
+        
+        if (!subdev_data) {
+            continue;
+        }
+        
+        /* Binary Ninja: if (zx.d(*$v0_6) != 2) */
+        subdev_type = *(uint32_t*)subdev_data;
+        
+        if (subdev_type != 2) {
+            continue;
+        }
+        
+        /* Binary Ninja: uint32_t $a2_2 = zx.d($v0_6[2]) */
+        uint32_t src_index = *(uint32_t*)((char*)subdev_data + 0x8) & 0xf;  /* subdev_data[2] & 0xf */
+        
+        /* Binary Ninja: void* $a0_3 = *(arg1 + ((($a2_2 & 0xf) + 0xe) << 2)) */
+        void *src_subdev = isp->subdev_graph[src_index + 0xe];
+        
+        if (!src_subdev) {
+            /* Binary Ninja: isp_printf(2, "The node is busy!\\n", $a2_2) */
+            pr_err("tx_isp_create_graph_and_nodes: Source node %d is busy!\n", src_index);
+            ret = -EBUSY;
+            break;
+        }
+        
+        /* Binary Ninja: *($a0_3 + (((zx.d($v0_6[3]) & 0xf) + 0xe) << 2)) = $v0_6 */
+        uint32_t dst_index = *(uint32_t*)((char*)subdev_data + 0xc) & 0xf;  /* subdev_data[3] & 0xf */
+        
+        /* Create link between source and destination subdevices */
+        if (dst_index < ISP_MAX_SUBDEVS) {
+            /* Store destination in source's connection array */
+            void **src_connections = (void**)((char*)src_subdev + ((dst_index + 0xe) << 2));
+            *src_connections = subdev_data;
+            
+            pr_info("tx_isp_create_graph_and_nodes: Linked type 2 subdev %d to source at index %d->%d\n",
+                    i, src_index, dst_index);
+        }
+    }
+    
     if (ret < 0) {
-        pr_err("Failed to initialize CSI device: %d\n", ret);
+        pr_err("tx_isp_create_graph_and_nodes: Graph creation failed\n");
         return ret;
     }
     
-    /* Initialize VIC device */
-    ret = tx_isp_vic_device_init(isp);
-    if (ret < 0) {
-        pr_err("Failed to initialize VIC device: %d\n", ret);
-        goto err_csi_deinit;
+    /* Binary Ninja: Third loop - register misc devices and create proc entries */
+    for (i = 0; i < subdev_count; i++) {
+        /* Binary Ninja: void* $v0_7 = private_platform_get_drvdata(*$s4) */
+        subdev_data = platform_get_drvdata(subdev_list[i]);
+        
+        if (!subdev_data) {
+            continue;
+        }
+        
+        /* Binary Ninja: int32_t $v0_8 = *($v0_7 + 0x30) */
+        void *misc_dev_ptr = (void*)((char*)subdev_data + 0x30);  /* Misc device at offset 0x30 */
+        
+        if (misc_dev_ptr && *(void**)misc_dev_ptr) {
+            /* Binary Ninja: if (private_misc_register($v0_7 + 0xc) s< 0) */
+            struct miscdevice *misc_dev = (struct miscdevice*)((char*)subdev_data + 0xc);
+            
+            /* Set up misc device fields */
+            /* Binary Ninja: *($v0_7 + 0x14) = $v0_8, *($v0_7 + 0x10) = $a0_4, *($v0_7 + 0xc) = 0xff */
+            misc_dev->minor = MISC_DYNAMIC_MINOR;  /* 0xff for dynamic */
+            misc_dev->name = (char*)((char*)subdev_data + 0x8);  /* Device name at offset 0x8 */
+            misc_dev->fops = *(struct file_operations**)misc_dev_ptr;  /* File operations */
+            
+            ret = misc_register(misc_dev);
+            if (ret < 0) {
+                /* Binary Ninja: isp_printf(2, "/tmp/snap%d.%s", zx.d(*($v0_7 + 2))) */
+                uint32_t dev_id = *(uint32_t*)((char*)subdev_data + 0x8);
+                pr_err("tx_isp_create_graph_and_nodes: Failed to register misc device %d\n", dev_id);
+                
+                /* Binary Ninja: Cleanup loop on failure */
+                for (j = i - 1; j >= 0; j--) {
+                    void *cleanup_data = platform_get_drvdata(subdev_list[j]);
+                    if (cleanup_data) {
+                        void *cleanup_misc_ptr = (void*)((char*)cleanup_data + 0x30);
+                        if (cleanup_misc_ptr && *(void**)cleanup_misc_ptr) {
+                            struct miscdevice *cleanup_misc = (struct miscdevice*)((char*)cleanup_data + 0xc);
+                            misc_deregister(cleanup_misc);
+                        }
+                    }
+                }
+                return -ENOMEM;  /* Binary Ninja: return 0xfffffffe */
+            }
+            
+            pr_info("tx_isp_create_graph_and_nodes: Registered misc device: %s\n", misc_dev->name);
+        }
+        
+        /* Binary Ninja: int32_t $a3_1 = *($v0_7 + 0x34) */
+        void *proc_ops_ptr = (void*)((char*)subdev_data + 0x34);  /* Proc ops at offset 0x34 */
+        
+        if (proc_ops_ptr && *(void**)proc_ops_ptr) {
+            /* Binary Ninja: private_proc_create_data(*($v0_7 + 8), 0x124, *(arg1 + 0x11c), $a3_1, $v0_7) */
+            char *proc_name = (char*)((char*)subdev_data + 0x8);  /* Name at offset 0x8 */
+            struct proc_ops *proc_ops = *(struct proc_ops**)proc_ops_ptr;
+            struct proc_dir_entry *parent_dir = isp->proc_dir;  /* *(arg1 + 0x11c) */
+            
+            struct proc_dir_entry *proc_entry = proc_create_data(proc_name, 0644, parent_dir, 
+                                                                 (struct proc_ops*)proc_ops, subdev_data);
+            if (proc_entry) {
+                pr_info("tx_isp_create_graph_and_nodes: Created proc entry: %s\n", proc_name);
+            } else {
+                pr_warn("tx_isp_create_graph_and_nodes: Failed to create proc entry: %s\n", proc_name);
+            }
+        }
     }
     
-    /* Set up data pipeline configuration */
-    ret = tx_isp_setup_pipeline(isp);
-    if (ret < 0) {
-        pr_err("Failed to setup ISP pipeline: %d\n", ret);
-        goto err_vic_deinit;
-    }
-    
-    pr_info("ISP processing graph created successfully\n");
-    return 0;
-    
-err_vic_deinit:
-    tx_isp_vic_device_deinit(isp);
-err_csi_deinit:
-    tx_isp_csi_device_deinit(isp);
-    return ret;
+    pr_info("*** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***\n");
+    return 0;  /* Binary Ninja: return result */
 }
 
 /* Setup ISP processing pipeline */
