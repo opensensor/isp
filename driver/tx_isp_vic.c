@@ -811,7 +811,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 /* VIC sensor operations ioctl - EXACT Binary Ninja implementation */
 int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
-    struct vic_device *vic_dev;
+    struct tx_isp_vic_device *vic_dev;
     int result = 0;
     
     pr_info("*** vic_sensor_ops_ioctl: cmd=0x%x, arg=%p ***\n", cmd, arg);
@@ -823,7 +823,7 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     }
     
     /* Binary Ninja: void* $a0 = *(arg1 + 0xd4) */
-    vic_dev = (struct vic_device *)*((void **)((char *)sd + 0xd4));
+    vic_dev = (struct tx_isp_vic_device *)*((void **)((char *)sd + 0xd4));
     pr_info("*** vic_sensor_ops_ioctl: Retrieved vic_dev from offset 0xd4: %p ***\n", vic_dev);
     
     /* Binary Ninja: if ($a0 != 0 && $a0 u< 0xfffff001) */
@@ -886,7 +886,7 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 /* VIC sensor operations sync_sensor_attr - EXACT Binary Ninja implementation */
 int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
 {
-    struct vic_device *vic_dev;
+    struct tx_isp_vic_device *vic_dev;
     
     pr_info("vic_sensor_ops_sync_sensor_attr: sd=%p, attr=%p\n", sd, attr);
     
@@ -895,7 +895,7 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
         return -EINVAL;
     }
     
-    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
         pr_err("The parameter is invalid!\n");
         return -EINVAL;
