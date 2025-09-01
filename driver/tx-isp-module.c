@@ -4964,19 +4964,19 @@ static void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
     pr_info("tx_vic_disable_irq: VIC interrupts disabled\n");
 }
 
-/* Handle sensor registration from userspace IOCTL - EXACT Binary Ninja 0x50 byte structure */
+/* Handle sensor registration from userspace IOCTL - FIX STRUCTURE LAYOUT */
 static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
 {
-    /* CRITICAL: Binary Ninja shows EXACT 0x50 byte structure layout */
+    /* CRITICAL: Match EXACT userspace structure layout from IMP library */
     struct tx_isp_sensor_register_info {
         char name[32];                    // +0x00: Sensor name (32 bytes)
         u32 chip_id;                     // +0x20: Chip ID  
-        u32 width;                       // +0x24: Total sensor width (including blanking) - FIXED FIELD NAME
-        u32 height;                      // +0x28: Total sensor height (including blanking) - FIXED FIELD NAME
-        u32 fps;                         // +0x2C: Sensor FPS
-        u32 interface_type;              // +0x30: Interface type (1=DVP, 2=MIPI) - FIXED FIELD NAME
-        u32 i2c_addr;                    // +0x34: I2C address
-        u32 i2c_adapter_id;              // +0x38: I2C adapter number
+        u32 interface_type;              // +0x24: Interface type (1=I2C, 2=MIPI) - MOVED UP
+        u32 i2c_addr;                    // +0x28: I2C address  
+        u32 i2c_adapter_id;              // +0x2C: I2C adapter number
+        u32 width;                       // +0x30: Total sensor width - MOVED DOWN
+        u32 height;                      // +0x34: Total sensor height - MOVED DOWN
+        u32 fps;                         // +0x38: Sensor FPS
         u32 integration_time;            // +0x3C: Integration time
         u32 again;                       // +0x40: Analog gain
         u32 data_type;                   // +0x44: Data type/format
