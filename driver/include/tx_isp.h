@@ -280,6 +280,16 @@ struct tx_isp_dev {
 } __attribute__((aligned(4)));
 
 
+/* Channel attribute structure for ISP channels */
+struct tx_isp_channel_attr {
+    uint32_t width;     /* Channel output width */
+    uint32_t height;    /* Channel output height */
+    uint32_t fps_num;   /* FPS numerator */
+    uint32_t fps_den;   /* FPS denominator */
+    uint32_t format;    /* Output format */
+    uint32_t stride;    /* Line stride */
+};
+
 struct link_pad_desc {
     char *name;              // Compared with string compare
     unsigned char type;      // Checked for 1 or 2
