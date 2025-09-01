@@ -5314,21 +5314,7 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
     spin_unlock_irqrestore(&irq_cb_lock, flags);
 }
 
-/* system_irq_func_set - Binary Ninja exact implementation */
-int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id))
-{
-    /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
-    if (index < 0 || index >= MAX_IRQ_HANDLERS) {
-        pr_err("system_irq_func_set: Invalid index %d\n", index);
-        return -EINVAL;
-    }
-    
-    irq_func_cb[index] = handler;
-    pr_info("system_irq_func_set: IRQ handler %d set to %p\n", index, handler);
-    
-    /* Binary Ninja: return 0 */
-    return 0;
-}
+/* system_irq_func_set is provided by the SDK in tx_isp_tuning.c - removed duplicate */
 
 /* isp_irq_handle - EXACT Binary Ninja implementation with CORRECT structure access */
 static irqreturn_t isp_irq_handle(int irq, void *dev_id)
