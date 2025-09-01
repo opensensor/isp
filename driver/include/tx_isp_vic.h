@@ -80,9 +80,8 @@ int ispvic_frame_channel_s_stream(struct vic_device *vic_dev, int enable);
 extern struct tx_isp_subdev_ops vic_subdev_ops;
 
 
-// VIC subdev structure based on reference driver analysis (0x21c bytes)
-// VIC device structure matching reference driver (0x21c bytes total)
-// Using union to ensure exact offsets without complex calculations
+// VIC device structure matching Binary Ninja reference (0x21c bytes total)
+// Based on decompiled tx_isp_vic_start function offsets
 struct tx_isp_vic_device {
     union {
         struct {
@@ -94,11 +93,14 @@ struct tx_isp_vic_device {
             uint8_t _pad_to_b8[0xb8];
             void __iomem *vic_regs;         // 0xb8: VIC hardware registers
             uint8_t _pad_to_d4[0xd4 - 0xb8 - 8];
-            struct tx_isp_vic_device *self; // 0xd4: Self-pointer
+            struct tx_isp_vic_device *self; // 0xd4: Self-pointer  
             uint8_t _pad_to_dc[0xdc - 0xd4 - 8];
             uint32_t frame_width;           // 0xdc: Frame width
             uint32_t frame_height;          // 0xe0: Frame height
-            uint8_t _pad_to_128[0x128 - 0xe0 - 4];
+            uint32_t pixel_format;          // 0xe4: Pixel format
+            uint8_t _pad_to_110[0x110 - 0xe4 - 4];
+            struct tx_isp_sensor_attribute *sensor_attr; // 0x110: Sensor attributes
+            uint8_t _pad_to_128[0x128 - 0x110 - 8];
             int state;                      // 0x128: 1=init, 2=active
             uint8_t _pad_to_130[0x130 - 0x128 - 4];
             spinlock_t lock;                // 0x130: Spinlock
