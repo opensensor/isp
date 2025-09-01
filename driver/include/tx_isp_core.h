@@ -15,11 +15,11 @@ int tiziano_isp_init(struct tx_isp_sensor_attribute *sensor_attr, char *param_na
 int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr);
 int tiziano_channel_start(int channel_id, struct tx_isp_channel_attr *attr);
 
-/* Internal Functions */
-static int tiziano_allocate_processing_buffers(struct tx_isp_dev *isp);
-static int tiziano_init_processing_pipeline(struct tx_isp_sensor_attribute *sensor_attr);
-static void tiziano_free_processing_buffers(struct tx_isp_dev *isp);
-static void tiziano_deinit_processing_pipeline(void);
+/* Internal Functions (declared in tx_isp_init.c) */
+int tiziano_allocate_processing_buffers(struct tx_isp_dev *isp);
+int tiziano_init_processing_pipeline(struct tx_isp_sensor_attribute *sensor_attr);
+void tiziano_free_processing_buffers(struct tx_isp_dev *isp);
+void tiziano_deinit_processing_pipeline(void);
 
 /* Core States */
 #define CORE_STATE_OFF       0
