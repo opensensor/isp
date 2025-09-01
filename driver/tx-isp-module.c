@@ -2766,24 +2766,81 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Sensor info request: returning success (1)\n");
         return 0;
     }
-    case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - Simple spec-compliant implementation
-        char sensor_name[0x50];
+    case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - EXACT Binary Ninja implementation
+        char sensor_data[0x50];
+        void **i_2;
+        void *module;
+        void *subdev;
+        void *ops;
+        int (*sensor_func)(void*, int, void*);
+        int result;
+        int final_result = 0;
         
-        pr_info("*** TX_ISP_SENSOR_REGISTER: Simple spec driver implementation ***\n");
+        pr_info("*** TX_ISP_SENSOR_REGISTER: EXACT Binary Ninja implementation ***\n");
         
-        /* Binary Ninja: Copy sensor name from user */
-        if (copy_from_user(sensor_name, argp, 0x50)) {
-            pr_err("tx_isp_sensor_register: Failed to copy sensor name\n");
+        /* Binary Ninja: private_copy_from_user(&var_98, arg3, 0x50) */
+        if (copy_from_user(sensor_data, argp, 0x50)) {
+            pr_err("TX_ISP_SENSOR_REGISTER: Failed to copy sensor data\n");
             return -EFAULT;
         }
         
-        pr_info("Sensor register request: %s\n", sensor_name);
+        pr_info("Sensor register: %.32s\n", sensor_data);
         
-        /* Reference driver likely just acknowledges the registration request */
-        /* Actual sensor setup happens through other mechanisms (kernel module loading, etc.) */
-        pr_info("*** SENSOR REGISTRATION ACKNOWLEDGED - No complex handling in spec driver ***\n");
+        pr_info("*** HANDLING SENSOR REGISTRATION 0x2000000 DIRECTLY ***\n");
         
-        return 0; /* Success - sensor registration acknowledged */
+        /* Binary Ninja: void* i_2 = $s7 + 0x2c */
+        i_2 = (void**)((char*)isp_dev + 0x2c); /* Start of module_graph array */
+        
+        /* Binary Ninja: Loop through module_graph array */
+        do {
+            /* Binary Ninja: void* $a0_10 = *i_2 */
+            module = *i_2;
+            
+            if (module != NULL) {
+                /* Binary Ninja: void* $v0_22 = *(*($a0_10 + 0xc4) + 0xc) */
+                void *subdev_ptr = *((void**)((char*)module + 0xc4)); /* Get subdev from module */
+                
+                if (subdev_ptr != NULL) {
+                    void *ops_ptr = *((void**)((char*)subdev_ptr + 0xc)); /* Get ops from subdev */
+                    
+                    if (ops_ptr != NULL) {
+                        /* Binary Ninja: int32_t $v0_23 = *($v0_22 + 8) */
+                        sensor_func = *((int(**)(void*, int, void*))((char*)ops_ptr + 8));
+                        
+                        if (sensor_func == NULL) {
+                            i_2 += 1; /* Move to next module */
+                        } else {
+                            /* Binary Ninja: int32_t $v0_25 = $v0_23($a0_10, 0x2000000, &var_98) */
+                            result = sensor_func(module, 0x2000000, sensor_data);
+                            final_result = result;
+                            
+                            if (result == 0) {
+                                i_2 += 1; /* Continue to next module */
+                            } else {
+                                i_2 += 1; /* Move to next regardless */
+                                
+                                /* Binary Ninja: if ($v0_25 != 0xfffffdfd) break */
+                                if (result != 0xfffffdfd) {
+                                    pr_info("Sensor registration processed by module, result=0x%x\n", result);
+                                    break; /* Exit loop on successful processing */
+                                }
+                            }
+                        }
+                    } else {
+                        i_2 += 1; /* No ops, move to next */
+                    }
+                } else {
+                    i_2 += 1; /* No subdev, move to next */
+                }
+            } else {
+                final_result = 0;
+                i_2 += 1; /* No module, move to next */
+            }
+            
+        } while ((char*)i_2 < (char*)isp_dev + 0x6c); /* Binary Ninja: while ($s7 + 0x6c != i_2) */
+        
+        pr_info("Sensor registration complete, final_result=0x%x\n", final_result);
+        return final_result;
     }
     case 0xc050561a: { // TX_ISP_SENSOR_ENUM_INPUT - Enumerate sensor inputs
         struct sensor_enum_input {
