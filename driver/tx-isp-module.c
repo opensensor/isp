@@ -4249,8 +4249,6 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
     pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
     pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
     
-    return 0;
-}
     /* Binary Ninja: Log WDR mode */
     if (sensor_attr->wdr_cache != 0) {
         pr_info("tx_isp_vic_start: WDR mode enabled (mode=%d)\n", sensor_attr->wdr_cache);
