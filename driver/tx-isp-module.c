@@ -3946,6 +3946,11 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
     
     /* Binary Ninja: Switch on IOCTL command */
     switch (cmd) {
+    case 0x2000000:  /* Binary Ninja: Sensor registration event - MAIN ENTRY POINT */
+        pr_info("*** vic_sensor_ops_ioctl: SENSOR REGISTRATION EVENT 0x2000000 - CALLING tx_isp_vic_start ***\n");
+        pr_info("*** This is the CORRECT entry point from handle_sensor_register! ***\n");
+        return tx_isp_vic_start(vic_dev, sensor_attr);
+        
     case 0x200000c:  /* Binary Ninja: VIC start command 1 */
         pr_info("*** vic_sensor_ops_ioctl: IOCTL 0x200000c - CALLING tx_isp_vic_start ***\n");
         return tx_isp_vic_start(vic_dev, sensor_attr);
