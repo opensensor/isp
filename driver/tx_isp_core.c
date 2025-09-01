@@ -1,15 +1,23 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/miscdevice.h>
 #include <linux/of.h>
 #include <linux/interrupt.h>
-#include "tx_isp.h"
-#include "tx-isp-device.h"
-#include "tx_isp_core.h"
-#include "tx-isp-debug.h"
-#include "tx_isp_sysfs.h"
-#include "tx_isp_vic.h"
-#include "tx_isp_csi.h"
-#include "tx_isp_vin.h"
+#include <linux/i2c.h>
+#include <linux/clk.h>
+#include <linux/vmalloc.h>
+#include "../include/tx_isp.h"
+#include "../include/tx_isp_core.h"
+#include "../include/tx-isp-debug.h"
+#include "../include/tx_isp_sysfs.h"
+#include "../include/tx_isp_vic.h"
+#include "../include/tx_isp_csi.h"
+#include "../include/tx_isp_vin.h"
+#include "../include/tx_isp_tuning.h"
+#include "../include/tx-isp-device.h"
+#include "../include/tx-libimp.h"
+#include <linux/platform_device.h>
+#include <linux/device.h>
 
 
 static int print_level = ISP_WARN_LEVEL;
