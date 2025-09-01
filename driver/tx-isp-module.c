@@ -5072,12 +5072,37 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
     
     /* Create I2C device if interface type is I2C (matches reference) */
     if (reg_info.interface_type == 1) { // I2C interface
+        /* FIX: Use valid I2C adapter for T31 platform (0-2) instead of garbage value */
+        int valid_adapter_id = reg_info.i2c_adapter_id;
+        if (valid_adapter_id > 2 || valid_adapter_id < 0) {
+            pr_warn("Invalid I2C adapter %d, trying adapter 1 for T31 platform\n", valid_adapter_id);
+            valid_adapter_id = 1; // T31 typically uses I2C adapter 1 for sensors
+        }
+        
         /* Get I2C adapter (matches reference driver) */
-        adapter = i2c_get_adapter(reg_info.i2c_adapter_id);
+        adapter = i2c_get_adapter(valid_adapter_id);
         if (!adapter) {
             pr_err("Failed to get I2C adapter %d for sensor %s\n",
-                   reg_info.i2c_adapter_id, reg_info.name);
-            return -ENODEV;
+                   valid_adapter_id, reg_info.name);
+            
+            /* Try other adapters as fallback */
+            int fallback_adapters[] = {0, 1, 2};
+            int j;
+            for (j = 0; j < 3; j++) {
+                if (fallback_adapters[j] != valid_adapter_id) {
+                    adapter = i2c_get_adapter(fallback_adapters[j]);
+                    if (adapter) {
+                        pr_info("Using fallback I2C adapter %d for sensor %s\n",
+                                fallback_adapters[j], reg_info.name);
+                        break;
+                    }
+                }
+            }
+            
+            if (!adapter) {
+                pr_err("No valid I2C adapter found for sensor %s\n", reg_info.name);
+                return -ENODEV;
+            }
         }
         
         pr_info("Got I2C adapter %d: %s\n", reg_info.i2c_adapter_id, adapter->name);
