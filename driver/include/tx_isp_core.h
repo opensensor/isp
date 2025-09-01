@@ -10,6 +10,17 @@ int tx_isp_core_start(struct tx_isp_subdev *sd);
 int tx_isp_core_stop(struct tx_isp_subdev *sd);
 int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config);
 
+/* Tiziano ISP Core Functions */
+int tiziano_isp_init(struct tx_isp_sensor_attribute *sensor_attr, char *param_name);
+int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr);
+int tiziano_channel_start(int channel_id, struct tx_isp_channel_attr *attr);
+
+/* Internal Functions */
+static int tiziano_allocate_processing_buffers(struct tx_isp_dev *isp);
+static int tiziano_init_processing_pipeline(struct tx_isp_sensor_attribute *sensor_attr);
+static void tiziano_free_processing_buffers(struct tx_isp_dev *isp);
+static void tiziano_deinit_processing_pipeline(void);
+
 /* Core States */
 #define CORE_STATE_OFF       0
 #define CORE_STATE_IDLE     1
