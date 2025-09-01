@@ -1898,7 +1898,45 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
 }
 EXPORT_SYMBOL(tx_isp_subdev_pipo);
 
+/* VIC platform driver structure - CRITICAL MISSING PIECE */
+static struct platform_driver tx_isp_vic_platform_driver = {
+    .probe = tx_isp_vic_probe,
+    .remove = tx_isp_vic_remove,
+    .driver = {
+        .name = "tx-isp-vic",
+        .owner = THIS_MODULE,
+    },
+};
+
+/* VIC platform device registration functions */
+static int __init tx_isp_vic_platform_init(void)
+{
+    int ret;
+    
+    pr_info("*** TX ISP VIC PLATFORM DRIVER REGISTRATION ***\n");
+    
+    ret = platform_driver_register(&tx_isp_vic_platform_driver);
+    if (ret) {
+        pr_err("Failed to register VIC platform driver: %d\n", ret);
+        return ret;
+    }
+    
+    pr_info("VIC platform driver registered successfully\n");
+    return 0;
+}
+
+static void __exit tx_isp_vic_platform_exit(void)
+{
+    pr_info("*** TX ISP VIC PLATFORM DRIVER UNREGISTRATION ***\n");
+    platform_driver_unregister(&tx_isp_vic_platform_driver);
+    pr_info("VIC platform driver unregistered\n");
+}
+
 /* Export symbols for use by other parts of the driver */
 EXPORT_SYMBOL(tx_isp_vic_stop);
 EXPORT_SYMBOL(tx_isp_vic_set_buffer);
 EXPORT_SYMBOL(tx_isp_vic_wait_frame_done);
+
+/* Export VIC platform init/exit for main module */
+EXPORT_SYMBOL(tx_isp_vic_platform_init);
+EXPORT_SYMBOL(tx_isp_vic_platform_exit);
