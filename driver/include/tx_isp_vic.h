@@ -42,7 +42,6 @@ int tx_isp_vic_probe(struct platform_device *pdev);
 int tx_isp_vic_remove(struct platform_device *pdev);
 
 /* VIC Operations - Use existing vic_device from tx_isp.h */
-int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sensor_attribute *sensor_attr);
 int tx_isp_vic_stop(struct tx_isp_subdev *sd);
 int tx_isp_vic_set_buffer(struct tx_isp_subdev *sd, dma_addr_t addr, u32 size);
 int tx_isp_vic_wait_frame_done(struct tx_isp_subdev *sd, int channel, int timeout_ms);
