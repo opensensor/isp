@@ -1366,7 +1366,7 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
         ret = request_threaded_irq(irq_num, 
                                   isp_irq_handle,          /* Binary Ninja: isp_irq_handle */
                                   isp_irq_thread_handle,   /* Binary Ninja: isp_irq_thread_handle */
-                                  0x2000,                  /* Binary Ninja: 0x2000 (IRQF_ONESHOT) */
+                                  IRQF_SHARED | IRQF_ONESHOT, /* FIXED: Add IRQF_SHARED to allow IRQ sharing */
                                   dev_name(&pdev->dev),    /* Binary Ninja: *arg1 */
                                   isp_dev);                /* Binary Ninja: arg2 */
         
