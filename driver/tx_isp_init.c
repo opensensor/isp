@@ -151,13 +151,27 @@ int tiziano_isp_init(struct tx_isp_sensor_attribute *sensor_attr, char *param_na
     isp_write32(0x10, reg_val);
     ISP_INFO("Pipeline mode register set to 0x%08x\n", reg_val);
     
-    /* Configure final pipeline registers - matches reference sequence */
-    isp_write32(0x804, 0x1c);  /* Pipeline control */
-    isp_write32(0x1c, 8);     /* Another control register */
+    /* Configure final pipeline registers - EXACT reference sequence from Binary Ninja */
+    /* Determine 0x804 register value based on sensor type and WDR mode */
+    uint32_t reg_804_val;
+    int wdr_mode = 0; /* Default to non-WDR for now */
     
-    /* THE CRITICAL ENABLE - this is what was missing! */
-    /* Reference: system_reg_write(0x800, 1) */
-    isp_write32(0x800, 1);
+    if (wdr_mode != 0) {
+        /* WDR mode */
+        reg_804_val = (sensor_type == 0x14) ? 0x12 : 0x10;
+    } else {
+        /* Non-WDR mode */
+        reg_804_val = (sensor_type == 0x14) ? 0x1e : 0x1c;
+    }
+    
+    /* CRITICAL ENABLE SEQUENCE FROM BINARY NINJA tisp_init */
+    isp_write32(0x804, reg_804_val);  /* Pipeline control - exact reference logic */
+    ISP_INFO("*** REG 0x804 = 0x%08x (sensor_type=%d, wdr=%d) ***\n", reg_804_val, sensor_type, wdr_mode);
+    
+    isp_write32(0x1c, 8);            /* Control register - exact reference value */
+    ISP_INFO("*** REG 0x1c = 8 ***\n");
+    
+    isp_write32(0x800, 1);           /* ISP CORE ENABLE - THE MISSING PIECE! */
     ISP_INFO("*** ISP CORE ENABLED - REG 0x800 = 1 ***\n");
     
     /* Verify ISP core is now enabled */
