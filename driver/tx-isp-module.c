@@ -4876,8 +4876,8 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         pr_info("*** CALLING SENSOR SUBDEV SENSOR OPS with event 0x2000000 ***\n");
         
         /* Check for sensor ops callback */
-        if (sensor->sd.ops && sensor->sd.ops->sensor && sensor->sd.ops->sensor->s_ioctl) {
-            v0_25 = sensor->sd.ops->sensor->s_ioctl(&sensor->sd, 0x2000000, &var_98);
+        if (sensor->sd.ops && sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
+            v0_25 = sensor->sd.ops->sensor->ioctl(&sensor->sd, 0x2000000, &var_98);
             s6_1 = v0_25;
             
             pr_info("*** SENSOR ops returned: %d (0x%x) ***\n", v0_25, v0_25);
