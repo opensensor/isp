@@ -68,22 +68,20 @@ int tx_isp_hardware_reset(int reset_mode)
         
         /* Check if hardware signals ready */
         if (reg_val & TX_ISP_RESET_READY) {
+            pr_info("*** TX ISP HARDWARE RESET: Hardware ready signal detected ***\n");
+            
             /* Step 3: Complete reset sequence */
             /* Clear trigger bit (21) and set complete bit (22) */
             reg_val = (reg_val & ~TX_ISP_RESET_TRIGGER) | TX_ISP_RESET_COMPLETE;
             writel(reg_val, reset_reg);
+            pr_info("*** TX ISP HARDWARE RESET: Set complete bit, reg=0x%08x ***\n", reg_val);
             
             /* Clear complete bit (22) to finish sequence */
             reg_val &= ~TX_ISP_RESET_COMPLETE;
             writel(reg_val, reset_reg);
+            pr_info("*** TX ISP HARDWARE RESET: Final register value: 0x%08x ***\n", reg_val);
             
             iounmap(reset_reg);
-            
-            mcp_log_info("tx_isp_hardware_reset: Hardware reset completed successfully", 
-                         (struct mcp_data_payload){
-                             .buffer_info = {.physical_addr = reg_val},
-                             .operation = "hardware_reset_success"
-                         });
             
             pr_info("*** TX ISP HARDWARE RESET COMPLETED SUCCESSFULLY ***\n");
             return 0;
@@ -94,14 +92,11 @@ int tx_isp_hardware_reset(int reset_mode)
     }
     
     /* Timeout occurred */
+    reg_val = readl(reset_reg);
+    pr_err("*** TX ISP HARDWARE RESET TIMEOUT - Final reg: 0x%08x ***\n", reg_val);
     iounmap(reset_reg);
     
     pr_err("*** TX ISP HARDWARE RESET TIMEOUT - HARDWARE NOT RESPONDING ***\n");
-    mcp_log_error("tx_isp_hardware_reset: Hardware reset timeout", 
-                  (struct mcp_data_payload){
-                      .error_info = "reset_timeout",
-                      .operation = "hardware_reset_timeout"
-                  });
     
     return -ETIMEDOUT;
 }
