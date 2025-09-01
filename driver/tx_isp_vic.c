@@ -21,6 +21,8 @@
 
 
 extern struct tx_isp_dev *ourISPdev;
+uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
+
 
 /* VIC frame completion handler */
 static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)

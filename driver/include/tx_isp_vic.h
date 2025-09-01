@@ -37,7 +37,7 @@ struct tx_isp_sensor_attribute;
 #define INT_FRAME_DONE      BIT(0)
 #define INT_ERROR           BIT(1)
 
-uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag */
+extern uint32_t vic_start_ok;  /* Global VIC interrupt enable flag declaration */
 
 /* VIC Functions */
 int tx_isp_vic_probe(struct platform_device *pdev);
