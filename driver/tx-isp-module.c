@@ -4891,10 +4891,11 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
     return ret;
 }
 
-/* tx_vic_enable_irq - EXACT Binary Ninja implementation */
+/* tx_vic_enable_irq - CORRECTED Binary Ninja exact implementation */
 static void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
+    void *dump_vsd_5;
     uint32_t *irq_enable_flag;
     void (*callback_func)(void*);
     
@@ -4903,7 +4904,19 @@ static void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         return;
     }
     
-    pr_info("*** tx_vic_enable_irq: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** tx_vic_enable_irq: CORRECTED Binary Ninja exact implementation ***\n");
+    
+    /* Binary Ninja validation: if (dump_vsd_2 u>= 0xfffff001) dump_vsd_4 = nullptr */
+    dump_vsd_5 = vic_dev;
+    if ((uintptr_t)vic_dev >= 0xfffff001) {
+        dump_vsd_5 = NULL;
+    }
+    
+    /* Binary Ninja: if (dump_vsd_5 == 0 || dump_vsd_5 u>= 0xfffff001) return */
+    if (dump_vsd_5 == NULL || (uintptr_t)dump_vsd_5 >= 0xfffff001) {
+        pr_err("tx_vic_enable_irq: Invalid VIC device pointer validation failed\n");
+        return;
+    }
     
     /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
     spin_lock_irqsave(&vic_dev->lock, flags);
@@ -4924,12 +4937,12 @@ static void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         pr_info("*** tx_vic_enable_irq: SET GLOBAL vic_start_ok = 1 ***\n");
         
         /* Binary Ninja: int32_t $v0_1 = *(dump_vsd_5 + 0x84) */
-        callback_func = *(void(**)(void*))((char*)vic_dev + 0x84);
+        callback_func = *(void(**)(void*))((char*)dump_vsd_5 + 0x84);
         
         /* Binary Ninja: if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
         if (callback_func != NULL) {
             pr_info("tx_vic_enable_irq: Calling VIC callback function at +0x84\n");
-            callback_func((char*)vic_dev + 0x80);
+            callback_func((char*)dump_vsd_5 + 0x80);
         } else {
             pr_debug("tx_vic_enable_irq: No callback function at +0x84\n");
         }
