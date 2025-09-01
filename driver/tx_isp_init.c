@@ -60,6 +60,15 @@ int tiziano_isp_init(struct tx_isp_sensor_attribute *sensor_attr, char *param_na
     
     ISP_INFO("*** TIZIANO ISP INITIALIZATION START ***\n");
     
+    /* CRITICAL: Perform hardware reset BEFORE any ISP operations */
+    /* Reference driver calls private_reset_tx_isp_module(0) before tisp_init */
+    ret = tx_isp_hardware_reset(0);  /* 0 = perform full reset */
+    if (ret < 0) {
+        ISP_ERROR("*** HARDWARE RESET FAILED: %d ***\n", ret);
+        return ret;
+    }
+    ISP_INFO("*** HARDWARE RESET COMPLETED SUCCESSFULLY ***\n");
+    
     /* Store sensor information globally - matches reference */
     width = sensor_attr->max_integration_time;  /* Assuming this maps to width */
     height = sensor_attr->integration_time_limit; /* Assuming this maps to height */
