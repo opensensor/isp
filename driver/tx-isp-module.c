@@ -3348,26 +3348,12 @@ static int tx_isp_init(void)
         goto err_free_dev;
     }
 
-    /* Create frame channel devices - required for video streaming */
-    ret = create_frame_channel_devices();
-    if (ret) {
-        pr_err("Failed to create frame channel devices: %d\n", ret);
-        destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
-        misc_deregister(&tx_isp_miscdev);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
-    }
-
     pr_info("TX ISP driver initialized successfully\n");
     pr_info("Device nodes created:\n");
     pr_info("  /dev/tx-isp (major=10, minor=dynamic)\n");
     pr_info("  /dev/isp-m0 (major=%d, minor=0) - ISP tuning interface\n", isp_tuning_major);
-    for (ret = 0; ret < num_channels; ret++) {
-        pr_info("  /dev/framechan%d - Frame channel %d\n", ret, ret);
-    }
     pr_info("  /proc/jz/isp/isp-w02\n");
+    pr_info("Note: Frame channel devices will be created by FS probe\n");
     
     /* Prepare I2C infrastructure for dynamic sensor registration */
     ret = prepare_i2c_infrastructure(ourISPdev);
