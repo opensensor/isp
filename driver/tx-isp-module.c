@@ -2013,13 +2013,7 @@ static int frame_channel_open(struct inode *inode, struct file *file)
     memset(&fcd->state.current_buffer, 0, sizeof(fcd->state.current_buffer));
     
     file->private_data = fcd;
-    
-    /* Start frame generation timer if first channel */
-    if (frame_timer_initialized && !timer_pending(&frame_sim_timer)) {
-        pr_info("Starting frame generation timer on channel open\n");
-        mod_timer(&frame_sim_timer, jiffies + msecs_to_jiffies(33));
-    }
-    
+
     return 0;
 }
 
