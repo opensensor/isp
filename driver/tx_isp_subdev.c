@@ -541,7 +541,7 @@ EXPORT_SYMBOL(tx_isp_subdev_deinit);
 static struct tx_isp_subdev_ops fs_subdev_ops = { 0 }; // All fields NULL/0
 
 /* Frame source probe function from decompiled code */
-static int tx_isp_fs_probe(struct platform_device *pdev)
+int tx_isp_fs_probe(struct platform_device *pdev)
 {
     struct tx_isp_subdev *sd = NULL;
     struct tx_isp_frame_channel *frame_chans = NULL;
@@ -630,9 +630,10 @@ err_free_sd:
     kfree(sd);
     return ret;
 }
+EXPORT_SYMBOL(tx_isp_fs_probe);
 
 /* Frame source remove function from decompiled code */
-static int tx_isp_fs_remove(struct platform_device *pdev)
+int tx_isp_fs_remove(struct platform_device *pdev)
 {
     struct tx_isp_subdev *sd = platform_get_drvdata(pdev);
 
@@ -645,6 +646,7 @@ static int tx_isp_fs_remove(struct platform_device *pdev)
 
     return 0;
 }
+EXPORT_SYMBOL(tx_isp_fs_remove);
 
 /* Platform driver structures */
 static struct platform_driver tx_isp_csi_driver = {
