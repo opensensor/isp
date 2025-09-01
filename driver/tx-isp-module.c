@@ -2842,7 +2842,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Sensor registration complete, final_result=0x%x\n", final_result);
         
         /* CRITICAL: If sensor registration succeeded, add to sensor list for enumeration */
-        if (final_result > 0 && final_result != 0xfffffdfd) {
+        if (final_result != 0xfffffdfd) {
             struct registered_sensor *reg_sensor;
             char sensor_name[32];
             
