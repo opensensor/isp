@@ -1575,6 +1575,9 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     pr_info("*** CRITICAL: Storing vic_dev at offset 0xd4 for Binary Ninja reference compatibility ***\n");
     *((void **)((char *)sd + 0xd4)) = vic_dev;
     
+    /* CRITICAL: Also store a self-pointer in the vic_dev structure */
+    vic_dev->self = vic_dev;
+    
     /* VERIFY: Check that we can retrieve it correctly */
     struct vic_device *verification = (struct vic_device *)*((void **)((char *)sd + 0xd4));
     pr_info("*** VERIFICATION: vic_dev stored=%p, retrieved=%p ***\n", vic_dev, verification);
@@ -1585,6 +1588,14 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         goto err_free_vic_dev;
     }
     pr_info("*** SUCCESS: VIC device correctly stored at offset 0xd4 ***\n");
+    
+    /* CRITICAL: Connect VIC subdev to global ISP device IMMEDIATELY */
+    if (ourISPdev) {
+        ourISPdev->vic_dev = (struct tx_isp_subdev *)vic_dev;
+        pr_info("*** CRITICAL: Connected VIC to global ISP device ***\n");
+    } else {
+        pr_warn("*** WARNING: Global ISP device not available during VIC probe ***\n");
+    }
 
     /* Initialize VIC specific locks */
     spin_lock_init(&sd->vic_lock);
