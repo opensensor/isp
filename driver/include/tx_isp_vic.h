@@ -99,30 +99,25 @@ struct tx_isp_vic_device {
             uint32_t height;                // 0xe0: Frame height (renamed from frame_height)
             uint32_t pixel_format;          // 0xe4: Pixel format
             uint8_t _pad_to_110[0x110 - 0xe4 - 4];
+            // Place sensor_attr directly without padding calculation
             struct tx_isp_sensor_attribute sensor_attr; // 0x110: Sensor attributes (not pointer)
-            uint8_t _pad_to_128[0x128 - 0x110 - sizeof(struct tx_isp_sensor_attribute)];
-            int state;                      // 0x128: 1=init, 2=active
-            uint8_t _pad_to_130[0x130 - 0x128 - 4];
-            spinlock_t lock;                // 0x130: Spinlock
-            uint8_t _pad_to_148[0x148 - 0x130 - sizeof(spinlock_t)];
-            struct completion frame_complete; // 0x148: Frame completion (renamed from frame_done)
-            uint8_t _pad_to_154[0x154 - 0x148 - sizeof(struct completion)];
-            struct mutex state_lock;        // 0x154: State mutex (renamed from snap_mlock)
-            uint8_t _pad_to_168[0x168 - 0x154 - sizeof(struct mutex)];
+            // Continue with other members after sensor_attr (let compiler handle alignment)
+            int state;                      // State: 1=init, 2=active
+            spinlock_t lock;                // Spinlock
+            struct completion frame_complete; // Frame completion
+            struct mutex mlock;             // Mutex (expected by tx-isp-module.c)
+            struct mutex state_lock;        // State mutex
             // Buffer management structures
             uint32_t buffer_count;          // Buffer count
             bool processing;                // Processing flag
             uint32_t vic_errors[13];        // Error array (13 elements, 0x34 bytes)
             uint32_t total_errors;          // Total error count
-            uint8_t _pad_to_1f4[0x1f4 - 0x168 - 4 - 1 - 0x34 - 4];
-            spinlock_t buffer_lock;         // 0x1f4: Buffer lock
+            spinlock_t buffer_lock;         // Buffer lock
             struct list_head queue_head;    // Buffer queues
             struct list_head free_head;
             struct list_head done_head;
-            uint8_t _pad_to_210[0x210 - 0x1f4 - sizeof(spinlock_t) - 3*sizeof(struct list_head)];
-            int streaming;                  // 0x210: Streaming state
-            uint8_t _pad_to_218[0x218 - 0x210 - 4];
-            uint32_t frame_count;           // 0x218: Frame counter
+            int streaming;                  // Streaming state
+            uint32_t frame_count;           // Frame counter
         };
         uint8_t _total_size[0x21c];        // Ensure total size is 0x21c
     };
