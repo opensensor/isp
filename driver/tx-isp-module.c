@@ -232,6 +232,10 @@ static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 /* Use existing frame_buffer structure from tx-libimp.h */
 
 /* Forward declaration for sensor registration handler */
+/* VIC sensor operations IOCTL - EXACT Binary Ninja implementation */
+static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+/* VIC core s_stream - EXACT Binary Ninja implementation */  
+static int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
 static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp);
 
 /* Frame channel state management */
@@ -3905,6 +3909,133 @@ static void tx_isp_exit(void)
     mutex_unlock(&sensor_list_mutex);
 
     pr_info("TX ISP driver removed\n");
+}
+
+/* ===== VIC SENSOR OPERATIONS - EXACT BINARY NINJA IMPLEMENTATIONS ===== */
+
+/* vic_sensor_ops_ioctl - EXACT Binary Ninja implementation */
+static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
+{
+    struct tx_isp_dev *isp_dev;
+    struct tx_isp_vic_device *vic_dev;
+    struct tx_isp_sensor_attribute *sensor_attr;
+    
+    if (!sd) {
+        pr_err("vic_sensor_ops_ioctl: Invalid subdev\n");
+        return -EINVAL;
+    }
+    
+    pr_info("*** vic_sensor_ops_ioctl: Binary Ninja implementation - cmd=0x%x ***\n", cmd);
+    
+    /* Binary Ninja: Get ISP device from subdev */
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if (!isp_dev || !isp_dev->vic_dev) {
+        pr_err("vic_sensor_ops_ioctl: Invalid ISP or VIC device\n");
+        return -EINVAL;
+    }
+    
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    
+    /* Binary Ninja: Get sensor attributes */
+    if (!isp_dev->sensor || !isp_dev->sensor->video.attr) {
+        pr_err("vic_sensor_ops_ioctl: No sensor attributes available\n");
+        return -EINVAL;
+    }
+    
+    sensor_attr = isp_dev->sensor->video.attr;
+    
+    /* Binary Ninja: Switch on IOCTL command */
+    switch (cmd) {
+    case 0x200000c:  /* Binary Ninja: VIC start command 1 */
+        pr_info("*** vic_sensor_ops_ioctl: IOCTL 0x200000c - CALLING tx_isp_vic_start ***\n");
+        return tx_isp_vic_start(vic_dev, sensor_attr);
+        
+    case 0x200000f:  /* Binary Ninja: VIC start command 2 */
+        pr_info("*** vic_sensor_ops_ioctl: IOCTL 0x200000f - CALLING tx_isp_vic_start ***\n");
+        return tx_isp_vic_start(vic_dev, sensor_attr);
+        
+    default:
+        pr_debug("vic_sensor_ops_ioctl: Unhandled IOCTL 0x%x\n", cmd);
+        return -ENOTTY;
+    }
+}
+
+/* vic_core_s_stream - EXACT Binary Ninja implementation */
+static int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
+{
+    struct tx_isp_dev *isp_dev;
+    struct tx_isp_vic_device *vic_dev;
+    struct tx_isp_sensor_attribute *sensor_attr;
+    int current_state;
+    
+    if (!sd) {
+        pr_err("vic_core_s_stream: Invalid subdev\n");
+        return -EINVAL;
+    }
+    
+    pr_info("*** vic_core_s_stream: Binary Ninja implementation - enable=%d ***\n", enable);
+    
+    /* Binary Ninja: Get ISP device */
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if (!isp_dev || !isp_dev->vic_dev) {
+        pr_err("vic_core_s_stream: Invalid ISP or VIC device\n");
+        return -EINVAL;
+    }
+    
+    /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    if (!vic_dev || (uintptr_t)vic_dev >= 0xfffff001) {
+        pr_err("vic_core_s_stream: Invalid VIC device pointer\n");
+        return -EINVAL;
+    }
+    
+    /* Binary Ninja: int32_t $v1_3 = *($s1_1 + 0x128) */
+    current_state = vic_dev->state;
+    
+    if (enable == 0) {
+        /* Binary Ninja: Stream disable */
+        pr_info("vic_core_s_stream: Disabling stream (state=%d)\n", current_state);
+        
+        if (current_state == 4) {
+            /* Binary Ninja: *($s1_1 + 0x128) = 3 */
+            vic_dev->state = 3;
+        }
+        return 0;
+        
+    } else {
+        /* Binary Ninja: Stream enable */
+        pr_info("vic_core_s_stream: Enabling stream (current_state=%d)\n", current_state);
+        
+        if (current_state != 4) {
+            /* Binary Ninja: Get sensor attributes for tx_isp_vic_start */
+            if (!isp_dev->sensor || !isp_dev->sensor->video.attr) {
+                pr_err("vic_core_s_stream: No sensor attributes for VIC start\n");
+                return -EINVAL;
+            }
+            
+            sensor_attr = isp_dev->sensor->video.attr;
+            
+            /* Binary Ninja: tx_vic_disable_irq() */
+            tx_vic_disable_irq(vic_dev);
+            
+            /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
+            pr_info("*** vic_core_s_stream: CALLING tx_isp_vic_start FOR STREAM ENABLE ***\n");
+            int vic_start_result = tx_isp_vic_start(vic_dev, sensor_attr);
+            
+            /* Binary Ninja: *($s1_1 + 0x128) = 4 */
+            vic_dev->state = 4;
+            
+            /* Binary Ninja: tx_vic_enable_irq() */
+            tx_vic_enable_irq(vic_dev);
+            
+            pr_info("*** vic_core_s_stream: tx_isp_vic_start returned %d, state set to 4 ***\n", vic_start_result);
+            
+            return vic_start_result;
+        }
+        
+        pr_info("vic_core_s_stream: Already in streaming state 4\n");
+        return 0;
+    }
 }
 
 /* ===== REFERENCE DRIVER FUNCTION IMPLEMENTATIONS ===== */
