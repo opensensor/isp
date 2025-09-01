@@ -890,12 +890,12 @@ int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *is
         return -EINVAL;
     }
     
-    ISP_INFO("*** tisp_init: MAIN TIZIANO ISP INITIALIZATION START ***\n");
+    ISP_INFO("*** tisp_init: EXACT Binary Ninja reference implementation ***\n");
     
-    /* CRITICAL: Call ispcore_core_ops_init FIRST */
-    ret = ispcore_core_ops_init(isp_dev, sensor_attr);
+    /* Validate sensor attributes first (prevents memory corruption) */
+    ret = tiziano_sync_sensor_attr_validate(sensor_attr);
     if (ret < 0) {
-        ISP_ERROR("*** tisp_init: ispcore_core_ops_init failed: %d ***\n", ret);
+        ISP_ERROR("*** tisp_init: Sensor attribute validation failed ***\n");
         return ret;
     }
     
