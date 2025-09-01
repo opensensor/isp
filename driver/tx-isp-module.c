@@ -4596,7 +4596,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         sensor_attr->integration_time = var_98.integration_time;
         sensor_attr->max_again = var_98.again;
         sensor_attr->dbus_type = var_98.interface_type;
-        sensor_attr->fps = var_98.fps;
+        /* FPS is stored in video structure, not sensor attributes */
         
         /* Initialize sensor structure */
         strncpy(new_sensor->info.name, var_98.name, sizeof(new_sensor->info.name) - 1);
@@ -4610,7 +4610,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         pr_info("*** SENSOR STRUCTURE CREATED AND CONNECTED TO ISP ***\n");
         pr_info("*** SENSOR: %s (ID=0x%x, %dx%d@%dfps) ***\n",
                 sensor_attr->name, sensor_attr->chip_id, 
-                sensor_attr->total_width, sensor_attr->total_height, sensor_attr->fps);
+                sensor_attr->total_width, sensor_attr->total_height, var_98.fps);
         
         /* Add to enumeration list */
         reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
