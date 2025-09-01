@@ -6,8 +6,8 @@
 
 #define TX_ISP_PROC_JZ_DIR "jz"
 #define TX_ISP_PROC_ISP_DIR "isp"
-#define TX_ISP_PROC_ISP_W01_FILE "isp-W01"
-#define TX_ISP_PROC_ISP_W02_FILE "isp-W02"
+#define TX_ISP_PROC_ISP_W01_FILE "isp-w01"
+#define TX_ISP_PROC_ISP_W02_FILE "isp-w02"
 
 struct proc_context {
     struct proc_dir_entry *jz_dir;
