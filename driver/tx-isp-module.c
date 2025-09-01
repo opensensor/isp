@@ -1944,64 +1944,7 @@ static void destroy_isp_tuning_device(void)
     }
 }
 
-// Frame channel device implementations - based on reference tx_isp_fs_probe
-static int frame_channel_open(struct inode *inode, struct file *file)
-{
-    struct frame_channel_device *fcd = NULL;
-    int minor = iminor(inode);
-    int i;
-    
-    // Find which frame channel device this is by matching minor number
-    for (i = 0; i < num_channels; i++) {
-        if (frame_channels[i].miscdev.minor == minor) {
-            fcd = &frame_channels[i];
-            break;
-        }
-    }
-    
-    if (!fcd) {
-        pr_err("Could not find frame channel device for minor %d\n", minor);
-        return -EINVAL;
-    }
-    
-    pr_info("Frame channel %d opened (minor=%d)\n", fcd->channel_num, minor);
-    
-    // Initialize channel state - reference sets state to 3 (ready)
-    fcd->state.enabled = false;
-    fcd->state.streaming = false;
-    fcd->state.format = 0x3231564e; // NV12 default
-    fcd->state.width = (fcd->channel_num == 0) ? 1920 : 640;
-    fcd->state.height = (fcd->channel_num == 0) ? 1080 : 360;
-    fcd->state.buffer_count = 0;
-    
-    /* Initialize simplified frame buffer management */
-    spin_lock_init(&fcd->state.buffer_lock);
-    init_waitqueue_head(&fcd->state.frame_wait);
-    fcd->state.sequence = 0;
-    fcd->state.frame_ready = false;
-    memset(&fcd->state.current_buffer, 0, sizeof(fcd->state.current_buffer));
-    
-    file->private_data = fcd;
-    
-    
-    return 0;
-}
-
-static int frame_channel_release(struct inode *inode, struct file *file)
-{
-    struct frame_channel_device *fcd = file->private_data;
-    
-    if (!fcd) {
-        return 0;
-    }
-    
-    pr_info("Frame channel %d released\n", fcd->channel_num);
-    
-    // Reference implementation cleans up channel resources
-    // Frees buffers, resets state, etc.
-    
-    return 0;
-}
+/* Frame channel implementations removed - handled by FS probe instead */
 
 static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
@@ -2766,72 +2709,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
     return 0;
 }
 
-// Create frame channel devices - based on reference tx_isp_fs_probe
-static int create_frame_channel_devices(void)
-{
-    int ret, i;
-    char *device_name;
-    
-    pr_info("Creating %d frame channel devices...\n", num_channels);
-    
-    for (i = 0; i < num_channels; i++) {
-        // Reference creates devices like "num0", "num1" etc. based on framesource error
-        // IMP_FrameSource_EnableChn looks for /dev/framechan%d devices (from decompiled code)
-        device_name = kasprintf(GFP_KERNEL, "framechan%d", i);
-        if (!device_name) {
-            pr_err("Failed to allocate name for channel %d\n", i);
-            ret = -ENOMEM;
-            goto cleanup;
-        }
-        
-        // Initialize frame channel structure
-        frame_channels[i].channel_num = i;
-        frame_channels[i].miscdev.minor = MISC_DYNAMIC_MINOR;
-        frame_channels[i].miscdev.name = device_name;
-        frame_channels[i].miscdev.fops = &frame_channel_fops;
-        
-        // Initialize channel state
-        memset(&frame_channels[i].state, 0, sizeof(frame_channels[i].state));
-        
-        ret = misc_register(&frame_channels[i].miscdev);
-        if (ret < 0) {
-            pr_err("Failed to register frame channel %d: %d\n", i, ret);
-            kfree(device_name);
-            goto cleanup;
-        }
-        
-        pr_info("Frame channel device created: /dev/%s (minor=%d)\n",
-                device_name, frame_channels[i].miscdev.minor);
-    }
-    
-    return 0;
-    
-cleanup:
-    // Clean up already created devices
-    for (i = i - 1; i >= 0; i--) {
-        if (frame_channels[i].miscdev.name) {
-            misc_deregister(&frame_channels[i].miscdev);
-            kfree(frame_channels[i].miscdev.name);
-            frame_channels[i].miscdev.name = NULL;
-        }
-    }
-    return ret;
-}
-
-// Destroy frame channel devices
-static void destroy_frame_channel_devices(void)
-{
-    int i;
-    
-    for (i = 0; i < num_channels; i++) {
-        if (frame_channels[i].miscdev.name) {
-            misc_deregister(&frame_channels[i].miscdev);
-            kfree(frame_channels[i].miscdev.name);
-            frame_channels[i].miscdev.name = NULL;
-            pr_info("Frame channel device %d destroyed\n", i);
-        }
-    }
-}
+/* Frame channel devices will be created by FS probe - removed create_frame_channel_devices */
 
 // Basic IOCTL handler matching reference behavior
 static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
