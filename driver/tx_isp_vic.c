@@ -1570,6 +1570,21 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     
     /* Link VIC device to subdev */
     tx_isp_set_subdevdata(sd, vic_dev);
+    
+    /* *** CRITICAL FIX: Store VIC device at EXACT offset 0xd4 for Binary Ninja compatibility *** */
+    pr_info("*** CRITICAL: Storing vic_dev at offset 0xd4 for Binary Ninja reference compatibility ***\n");
+    *((void **)((char *)sd + 0xd4)) = vic_dev;
+    
+    /* VERIFY: Check that we can retrieve it correctly */
+    struct vic_device *verification = (struct vic_device *)*((void **)((char *)sd + 0xd4));
+    pr_info("*** VERIFICATION: vic_dev stored=%p, retrieved=%p ***\n", vic_dev, verification);
+    
+    if (verification != vic_dev) {
+        pr_err("*** CRITICAL ERROR: VIC device storage/retrieval mismatch! ***\n");
+        ret = -EIO;
+        goto err_free_vic_dev;
+    }
+    pr_info("*** SUCCESS: VIC device correctly stored at offset 0xd4 ***\n");
 
     /* Initialize VIC specific locks */
     spin_lock_init(&sd->vic_lock);
