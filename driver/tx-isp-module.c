@@ -194,7 +194,6 @@ static void vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 static irqreturn_t isp_irq_handle(int irq, void *dev_id);
 static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
-static int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
@@ -5317,7 +5316,7 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 }
 
 /* system_irq_func_set - Binary Ninja exact implementation */
-static int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id))
+int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id))
 {
     /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
     if (index < 0 || index >= MAX_IRQ_HANDLERS) {
