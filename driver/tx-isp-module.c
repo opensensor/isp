@@ -4889,6 +4889,30 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         }
     }
     
+    /* *** CRITICAL: ADD SENSOR TO SENSOR LIST FOR ENUMERATION *** */
+    if (s6_1 == 0) {  /* Only add to list if registration was successful */
+        struct registered_sensor *reg_sensor;
+        
+        pr_info("*** ADDING SENSOR TO SENSOR LIST FOR ENUMERATION ***\n");
+        
+        reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
+        if (reg_sensor) {
+            /* Copy sensor information */
+            strncpy(reg_sensor->name, var_98.name, sizeof(reg_sensor->name) - 1);
+            reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
+            
+            mutex_lock(&sensor_list_mutex);
+            reg_sensor->index = sensor_count++;  /* Assign next available index */
+            list_add_tail(&reg_sensor->list, &sensor_list);
+            mutex_unlock(&sensor_list_mutex);
+            
+            pr_info("*** SENSOR ADDED TO LIST: index=%d name=%s ***\n", 
+                   reg_sensor->index, reg_sensor->name);
+        } else {
+            pr_err("Failed to allocate memory for sensor list entry\n");
+        }
+    }
+    
     pr_info("*** SENSOR REGISTRATION COMPLETE - NO ERRORS (s6_1=%d) ***\n", s6_1);
     
     /* Binary Ninja: return $s6_1 (typically 0 if successful) */
