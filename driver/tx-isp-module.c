@@ -6354,6 +6354,36 @@ label_12898:
     pr_debug("vic_mdma_irq_function: Channel %d MDMA interrupt processing complete\n", channel);
 }
 
+/* ip_done_interrupt_handler - Binary Ninja ISP processing complete interrupt */
+static irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)
+{
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+    
+    if (!isp_dev) {
+        return IRQ_NONE;
+    }
+    
+    pr_debug("*** ISP IP DONE INTERRUPT: Processing complete ***\n");
+    
+    /* Handle ISP processing completion - wake up any waiters */
+    if (isp_dev->frame_complete.done == 0) {
+        complete(&isp_dev->frame_complete);
+    }
+    
+    /* Update frame processing statistics */
+    isp_dev->frame_count++;
+    
+    /* Wake up frame channel waiters */
+    int i;
+    for (i = 0; i < num_channels; i++) {
+        if (frame_channels[i].state.streaming) {
+            frame_channel_wakeup_waiters(&frame_channels[i]);
+        }
+    }
+    
+    return IRQ_HANDLED;
+}
+
 /* Enhanced interrupt system initialization - Binary Ninja reference */
 static int init_isp_interrupt_system(struct tx_isp_dev *isp_dev)
 {
