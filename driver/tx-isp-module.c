@@ -1362,7 +1362,7 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
         /* Binary Ninja: private_spin_lock_init(arg2) */
         spin_lock_init(&isp_dev->lock);
         
-        /* Binary Ninja: if (private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) != 0) */
+        /* Binary Ninja: if (private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, IRQF_SHARED | IRQF_ONESHOT, *arg1, arg2) != 0) */
         ret = request_threaded_irq(irq_num, 
                                   isp_irq_handle,          /* Binary Ninja: isp_irq_handle */
                                   isp_irq_thread_handle,   /* Binary Ninja: isp_irq_thread_handle */
@@ -1373,7 +1373,7 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
         if (ret != 0) {
             /* Binary Ninja: int32_t var_18_2 = $v0_1; isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", "tx_isp_request_irq") */
             pr_err("*** tx_isp_request_irq: flags = 0x%08x, irq = %d, ret = 0x%08x ***\n",
-                   0x2000, irq_num, ret);
+                   IRQF_SHARED | IRQF_ONESHOT, irq_num, ret);
             /* Binary Ninja: *arg2 = 0 */
             isp_dev->isp_irq = 0;
             /* Binary Ninja: return 0xfffffffc */
