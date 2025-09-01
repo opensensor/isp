@@ -1536,13 +1536,13 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     /* CRITICAL: Binary Ninja global vic_start_ok flag check */
     /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
     if (vic_start_ok != 0) {
-        pr_debug("VIC interrupt: vic_start_ok=1, processing interrupts (v1_7=0x%x, v1_10=0x%x)\n", v1_7, v1_10);
+        pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
         
         /* Binary Ninja: if (($v1_7 & 1) != 0) */
         if ((v1_7 & 1) != 0) {
             /* Binary Ninja: *($s0 + 0x160) += 1 */
             vic_dev->frame_count++;
-            pr_info("VIC hardware interrupt: Frame completion detected (count=%u)\n", vic_dev->frame_count);
+            pr_info("*** VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
             
             /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
             vic_framedone_irq_function(vic_dev);
@@ -1705,7 +1705,8 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         }
         
     } else {
-        pr_debug("VIC interrupt: vic_start_ok=0, ignoring interrupt (v1_7=0x%x, v1_10=0x%x)\n", v1_7, v1_10);
+        pr_warn("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
+        pr_warn("*** This means VIC interrupts are firing but being ignored! ***\n");
     }
     
     /* Binary Ninja: return 1 */
@@ -4932,9 +4933,8 @@ static void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         *irq_enable_flag = 1;
         pr_info("*** tx_vic_enable_irq: SET INTERRUPT FLAG at +0x13c = 1 ***\n");
         
-        /* CRITICAL: Set global vic_start_ok flag for interrupt processing */
-        vic_start_ok = 1;
-        pr_info("*** tx_vic_enable_irq: SET GLOBAL vic_start_ok = 1 ***\n");
+        /* CRITICAL: Do NOT set vic_start_ok here - it should be set globally first */
+        pr_info("*** tx_vic_enable_irq: VIC device flag set, global vic_start_ok should already be 1 ***\n");
         
         /* Binary Ninja: int32_t $v0_1 = *(dump_vsd_5 + 0x84) */
         callback_func = *(void(**)(void*))((char*)dump_vsd_5 + 0x84);
@@ -5282,23 +5282,56 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         if (tisp_result == 0) {
                             pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED FOR MIPI ***\n");
                             
-            /* CRITICAL: Call Binary Ninja tx_vic_enable_irq to set interrupt flag at +0x13c */
-            pr_info("*** CALLING BINARY NINJA tx_vic_enable_irq FOR PROPER INTERRUPT ENABLE ***\n");
-            tx_vic_enable_irq(vic_dev);
-            pr_info("*** tx_vic_enable_irq COMPLETE - VIC interrupt flag +0x13c set ***\n");
+            /* CRITICAL: PROPER INTERRUPT ACTIVATION SEQUENCE FROM BINARY NINJA */
+            pr_info("*** IMPLEMENTING BINARY NINJA INTERRUPT ACTIVATION SEQUENCE ***\n");
             
-            /* CRITICAL: Set vic_start_ok global flag for Binary Ninja interrupt processing */
+            /* Step 1: Set global vic_start_ok flag FIRST */
             vic_start_ok = 1;
-            pr_info("*** CRITICAL: vic_start_ok = 1 SET - HARDWARE INTERRUPTS NOW ACTIVE ***\n");
+            pr_info("*** STEP 1: vic_start_ok = 1 SET ***\n");
             
-            /* CRITICAL: ENABLE THE MAIN ISP IRQ 63 - This was MISSING! */
-            pr_info("*** ENABLING MAIN ISP IRQ %d FOR HARDWARE INTERRUPT GENERATION ***\n", ourISPdev->isp_irq);
+            /* Step 2: Enable VIC device interrupt flag at +0x13c */
+            tx_vic_enable_irq(vic_dev);
+            pr_info("*** STEP 2: VIC device interrupt flag enabled ***\n");
+            
+            /* Step 3: CRITICAL - Configure ISP interrupt routing registers */
+            if (isp_dev->vic_regs) {
+                void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;
+                
+                /* Enable all ISP interrupt sources - Binary Ninja: 0xffffffff */
+                writel(0xffffffff, isp_regs + 0x30);
+                wmb();
+                pr_info("*** STEP 3a: ISP interrupt enable reg 0x30 = 0xffffffff ***\n");
+                
+                /* Enable VIC interrupt routing - Binary Ninja specific */
+                writel(0xffffffff, isp_regs + 0x38);
+                wmb();
+                pr_info("*** STEP 3b: ISP VIC interrupt enable reg 0x38 = 0xffffffff ***\n");
+                
+                /* CRITICAL: Enable VIC interrupt generation in VIC registers */
+                writel(0x1, vic_dev->vic_regs + 0x1e0);  /* Enable VIC status generation */
+                writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Unmask frame done (bit 0) */
+                writel(0xFFFFFFFC, vic_dev->vic_regs + 0x1ec);  /* Unmask DMA done (bits 0,1) */
+                wmb();
+                pr_info("*** STEP 3c: VIC interrupt registers configured for generation ***\n");
+            }
+            
+            /* Step 4: Enable the main kernel IRQ 63 */
             if (ourISPdev->isp_irq > 0) {
                 tx_isp_enable_irq(ourISPdev);
-                pr_info("*** MAIN ISP IRQ %d NOW ENABLED - HARDWARE INTERRUPTS SHOULD FIRE! ***\n", ourISPdev->isp_irq);
+                pr_info("*** STEP 4: MAIN ISP IRQ %d ENABLED - INTERRUPTS ACTIVE! ***\n", ourISPdev->isp_irq);
             } else {
                 pr_err("*** CRITICAL: NO MAIN ISP IRQ TO ENABLE! ***\n");
             }
+            
+            /* Step 5: CRITICAL - Start VIC frame generation to trigger interrupts */
+            if (vic_dev->vic_regs) {
+                u32 vic_ctrl = (4 << 16) | 0x80000021;  /* Start with 4 buffers + enable */
+                writel(vic_ctrl, vic_dev->vic_regs + 0x300);
+                wmb();
+                pr_info("*** STEP 5: VIC frame generation started (0x300=0x%x) ***\n", vic_ctrl);
+            }
+            
+            pr_info("*** BINARY NINJA INTERRUPT ACTIVATION COMPLETE - INTERRUPTS SHOULD FIRE! ***\n");
                         } else {
                             pr_info("*** tisp_init FAILED: %d - continuing ***\n", tisp_result);
                         }
