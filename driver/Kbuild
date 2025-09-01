@@ -4,6 +4,7 @@ ccflags-y += -I$(src)/include
 tx-isp-t31-objs :=  $(DIR)/tx-isp-module.o \
                 $(DIR)/tx_isp_core.o \
                $(DIR)/tx_isp_init.o \
+               $(DIR)/tx_isp_reset.o \
                $(DIR)/tx_isp_subdev.o \
                $(DIR)/tx_isp_proc.o \
                $(DIR)/tx_isp_sysfs.o \
