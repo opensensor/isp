@@ -214,7 +214,6 @@ static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *bu
 static int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
 static int private_reset_tx_isp_module(int arg);
-static int sensor_init(struct tx_isp_dev *isp_dev);
 
 /* CSI function forward declarations */
 static int csi_device_probe(struct tx_isp_dev *isp_dev);
@@ -6376,7 +6375,7 @@ static void vic_frame_work_function(struct work_struct *work)
 
 
 /* sensor_init - Binary Ninja exact implementation */
-static int sensor_init(struct tx_isp_dev *isp_dev)
+int sensor_init(struct tx_isp_dev *isp_dev)
 {
     /* Binary Ninja decompilation shows this function sets up sensor control structure */
     /* From Binary Ninja: void* $v0 = *(g_ispcore + 0x120) */

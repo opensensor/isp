@@ -76,6 +76,7 @@ static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t p
 static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sensor_attr);
 irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
+int sensor_init(struct tx_isp_dev *isp_dev);
 
 
 /* Core ISP interrupt handler */
