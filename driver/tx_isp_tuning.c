@@ -203,6 +203,7 @@ int tisp_ev_update(void);
 int tisp_ct_update(void);
 int tisp_ae_ir_update(void);
 
+int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_tuning_ctrl *ctrl);
 
 
 static inline u64 ktime_get_real_ns(void)
