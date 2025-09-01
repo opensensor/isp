@@ -5325,7 +5325,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
             
             /* Step 5: CRITICAL - Start VIC frame generation to trigger interrupts */
             if (vic_dev->vic_regs) {
-                u32 vic_ctrl = (4 << 16) | 0x80000020;  /* Start with 4 buffers + enable - FIXED: bit 0 cleared */
+                u32 vic_ctrl = 0x80000020;  /* Match EXACT normal stream value - no buffer count, bit 31 set, bit 5 set */
                 writel(vic_ctrl, vic_dev->vic_regs + 0x300);
                 wmb();
                 pr_info("*** STEP 5: VIC frame generation started (0x300=0x%x) ***\n", vic_ctrl);
