@@ -1832,7 +1832,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     
     /* Skip channel init if already done */
     for (i = 0; i < ISP_MAX_CHAN; i++) {
-        if (!isp->channels[i].active) {  /* Only init if not already done */
+        if (!isp->channels[i].enabled) {  /* Only init if not already done */
             tx_isp_frame_chan_init(&isp->channels[i]);
         }
     }
