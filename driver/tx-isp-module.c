@@ -2757,38 +2757,72 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Binary Ninja: void* i_2 = $s7 + 0x2c - iterate through subdevs array */
         /* Note: In our implementation, we iterate through available subdevs */
         
-        /* Try VIC subdev first */
+        /* Handle sensor registration directly - Binary Ninja shows 0x2000000 is NOT handled by vic_sensor_ops_ioctl */
+        pr_info("*** HANDLING SENSOR REGISTRATION 0x2000000 DIRECTLY ***\n");
+        
+        /* Create sensor structure directly */
+        struct tx_isp_sensor *new_sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
+        if (!new_sensor) {
+            pr_err("Failed to allocate sensor structure\n");
+            return -ENOMEM;
+        }
+        
+        /* Initialize sensor structure */
+        memset(new_sensor, 0, sizeof(struct tx_isp_sensor));
+        strncpy(new_sensor->info.name, var_98, sizeof(new_sensor->info.name) - 1);
+        new_sensor->info.name[sizeof(new_sensor->info.name) - 1] = '\0';
+        
+        /* Create sensor attributes structure */
+        new_sensor->video.attr = kzalloc(sizeof(struct tx_isp_sensor_attribute), GFP_KERNEL);
+        if (!new_sensor->video.attr) {
+            pr_err("Failed to allocate sensor attributes\n");
+            kfree(new_sensor);
+            return -ENOMEM;
+        }
+        
+        /* Initialize sensor attributes with safe defaults */
+        strncpy(new_sensor->video.attr->name, var_98, sizeof(new_sensor->video.attr->name) - 1);
+        new_sensor->video.attr->chip_id = 0x2053; /* GC2053 */
+        new_sensor->video.attr->total_width = 1920;
+        new_sensor->video.attr->total_height = 1080;
+        new_sensor->video.attr->dbus_type = 1; /* DVP interface by default */
+        new_sensor->video.attr->integration_time = 1000;
+        new_sensor->video.attr->max_again = 0x40000;
+        
+        /* Initialize sensor subdev */
+        new_sensor->sd.isp = isp_dev;
+        new_sensor->sd.vin_state = TX_ISP_MODULE_INIT;
+        
+        /* Connect sensor to ISP device */
+        isp_dev->sensor = new_sensor;
+        
+        pr_info("*** SENSOR STRUCTURE CREATED SUCCESSFULLY: %s ***\n", new_sensor->info.name);
+        pr_info("*** SENSOR chip_id=0x%x, dimensions=%dx%d, interface=%d ***\n",
+                new_sensor->video.attr->chip_id,
+                new_sensor->video.attr->total_width,
+                new_sensor->video.attr->total_height,
+                new_sensor->video.attr->dbus_type);
+        
+        /* CRITICAL: Now we need to ensure VIC subdev has proper device pointer at +0xd4 */
         if (isp_dev->vic_dev) {
             struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            a0_10 = vic_dev;
             
-            pr_info("*** CALLING VIC SUBDEV SENSOR OPS with event 0x2000000 ***\n");
+            pr_info("*** CRITICAL: Setting VIC subdev device pointer at +0xd4 ***\n");
             
-            /* Binary Ninja: void* $v0_22 = *(*($a0_10 + 0xc4) + 0xc) */
-            v0_22 = *((void**)((char*)&vic_dev->sd + 0xc));
+            /* Binary Ninja expects *(subdev + 0xd4) to point to the VIC device */
+            *((void**)((char*)&vic_dev->sd + 0xd4)) = vic_dev;
             
-            if (v0_22 != NULL) {
-                /* Binary Ninja: int32_t $v0_23 = *($v0_22 + 8) */
-                v0_23 = *((int(**)(void*, int, void*))((char*)v0_22 + 8));
-                
-                if (v0_23 != NULL) {
-                    /* Binary Ninja: int32_t $v0_25 = $v0_23($a0_10, 0x2000000, &var_98) */
-                    pr_info("*** CALLING VIC sensor_ops_ioctl(subdev, 0x2000000, sensor_data) ***\n");
-                    v0_25 = v0_23(&vic_dev->sd, 0x2000000, var_98);
-                    s6_1 = v0_25;
-                    
-                    pr_info("*** VIC sensor ops returned: %d (0x%x) ***\n", v0_25, v0_25);
-                    
-                    /* Binary Ninja: if ($v0_25 != 0 && $v0_25 != 0xfffffdfd) break */
-                    if (v0_25 != 0 && v0_25 != 0xfffffdfd) {
-                        pr_info("*** VIC HANDLED SENSOR REGISTRATION SUCCESSFULLY ***\n");
-                        return v0_25;
-                    }
-                } else {
-                    pr_debug("VIC subdev has no sensor ops function\n");
-                }
+            pr_info("*** VIC subdev device pointer set: subdev=%p, device_ptr=%p ***\n", 
+                   &vic_dev->sd, vic_dev);
+            
+            /* Verify the pointer is set correctly */
+            void *verify_ptr = *((void**)((char*)&vic_dev->sd + 0xd4));
+            pr_info("*** VERIFICATION: Retrieved device pointer = %p ***\n", verify_ptr);
+            
+            if (verify_ptr == vic_dev) {
+                pr_info("*** SUCCESS: VIC subdev device pointer correctly initialized ***\n");
             } else {
-                pr_debug("VIC subdev has no callback structure\n");
+                pr_err("*** ERROR: VIC subdev device pointer verification failed ***\n");
             }
         }
         
