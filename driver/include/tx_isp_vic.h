@@ -62,7 +62,6 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 int isp_vic_frd_show(struct seq_file *seq, void *v);
 int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
 long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
-int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
 
 /* VIC States */
 #define VIC_STATE_OFF       0
