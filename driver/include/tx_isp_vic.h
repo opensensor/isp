@@ -37,36 +37,12 @@ struct tx_isp_sensor_attribute;
 #define INT_FRAME_DONE      BIT(0)
 #define INT_ERROR           BIT(1)
 
-/* VIC device structure - matching reference driver layout */
-struct vic_device {
-    int state;                          /* VIC state */
-    void __iomem *vic_regs;            /* VIC register base */
-    u32 width;                         /* Frame width */
-    u32 height;                        /* Frame height */ 
-    u32 buffer_count;                  /* Number of buffers */
-    int streaming;                     /* Streaming state */
-    bool processing;                   /* Processing flag */
-    
-    /* Frame statistics */
-    u32 frame_count;                   /* Total frame count */
-    u32 total_errors;                  /* Total error count */
-    u32 vic_errors[13];                /* Error array for different error types */
-    
-    /* Sensor attributes */
-    struct tx_isp_sensor_attribute sensor_attr;  /* Sensor configuration */
-    
-    /* Synchronization */
-    struct mutex state_lock;           /* State protection mutex */
-    spinlock_t lock;                   /* Hardware access spinlock */
-    struct completion frame_complete;  /* Frame completion */
-};
-
 /* VIC Functions */
 int tx_isp_vic_probe(struct platform_device *pdev);
 int tx_isp_vic_remove(struct platform_device *pdev);
 
-/* VIC Operations */
-int tx_isp_vic_start(struct vic_device *vic_dev);
+/* VIC Operations - Use existing vic_device from tx_isp.h */
+int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sensor_attribute *sensor_attr);
 int tx_isp_vic_stop(struct tx_isp_subdev *sd);
 int tx_isp_vic_set_buffer(struct tx_isp_subdev *sd, dma_addr_t addr, u32 size);
 int tx_isp_vic_wait_frame_done(struct tx_isp_subdev *sd, int channel, int timeout_ms);
@@ -77,12 +53,6 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd);
 int vic_chardev_open(struct inode *inode, struct file *file);
 int vic_chardev_release(struct inode *inode, struct file *file);
 long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
-
-/* VIC Subdev Operations - from spec driver */
-int vic_core_ops_init(struct tx_isp_subdev *sd, int enable);
-int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
-int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
-int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
 
 /* VIC Proc Operations - from spec driver */
 int isp_vic_frd_show(struct seq_file *seq, void *v);
