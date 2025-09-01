@@ -1909,7 +1909,7 @@ static struct platform_driver tx_isp_vic_platform_driver = {
 };
 
 /* VIC platform device registration functions */
-static int __init tx_isp_vic_platform_init(void)
+int __init tx_isp_vic_platform_init(void)
 {
     int ret;
     
