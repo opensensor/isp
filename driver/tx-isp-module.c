@@ -3946,16 +3946,11 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
     
     /* Binary Ninja: Switch on IOCTL command */
     switch (cmd) {
-    case 0x2000000:  /* Binary Ninja: Sensor registration event - MAIN ENTRY POINT */
-        pr_info("*** vic_sensor_ops_ioctl: SENSOR REGISTRATION EVENT 0x2000000 - CALLING tx_isp_vic_start ***\n");
-        pr_info("*** This is the CORRECT entry point from handle_sensor_register! ***\n");
-        return tx_isp_vic_start(vic_dev, sensor_attr);
-        
-    case 0x200000c:  /* Binary Ninja: VIC start command 1 */
+    case 0x200000c:  /* Binary Ninja: VIC start command 1 - CORRECT trigger for tx_isp_vic_start */
         pr_info("*** vic_sensor_ops_ioctl: IOCTL 0x200000c - CALLING tx_isp_vic_start ***\n");
         return tx_isp_vic_start(vic_dev, sensor_attr);
         
-    case 0x200000f:  /* Binary Ninja: VIC start command 2 */
+    case 0x200000f:  /* Binary Ninja: VIC start command 2 - CORRECT trigger for tx_isp_vic_start */
         pr_info("*** vic_sensor_ops_ioctl: IOCTL 0x200000f - CALLING tx_isp_vic_start ***\n");
         return tx_isp_vic_start(vic_dev, sensor_attr);
         
@@ -4825,7 +4820,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
         a0_10 = vic_dev;
         
-        pr_info("*** CALLING VIC SUBDEV SENSOR OPS with event 0x2000000 ***\n");
+        pr_info("*** CALLING VIC SUBDEV SENSOR OPS with event 0x200000c (CORRECTED) ***\n");
         
         /* Binary Ninja: void* $v0_22 = *(*($a0_10 + 0xc4) + 0xc) */
         /* This gets the callback structure from subdev */
@@ -4836,9 +4831,9 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
             v0_23 = *((int(**)(void*, int, void*))((char*)v0_22 + 8));
             
             if (v0_23 != NULL) {
-                /* Binary Ninja: int32_t $v0_25 = $v0_23($a0_10, 0x2000000, &var_98) */
-                pr_info("*** CALLING VIC vic_sensor_ops_ioctl(subdev, 0x2000000, sensor_data) ***\n");
-                v0_25 = v0_23(&vic_dev->sd, 0x2000000, &var_98);
+                /* Binary Ninja: int32_t $v0_25 = $v0_23($a0_10, 0x200000c, &var_98) */
+                pr_info("*** CALLING VIC vic_sensor_ops_ioctl(subdev, 0x200000c, sensor_data) ***\n");
+                v0_25 = v0_23(&vic_dev->sd, 0x200000c, &var_98);
                 s6_1 = v0_25;
                 
                 pr_info("*** VIC sensor ops returned: %d (0x%x) ***\n", v0_25, v0_25);
@@ -4861,7 +4856,7 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
         a0_10 = csi_dev;
         
-        pr_info("*** CALLING CSI SUBDEV SENSOR OPS with event 0x2000000 ***\n");
+                pr_info("*** CALLING CSI SUBDEV SENSOR OPS with event 0x200000c ***\n");
         
         /* Check for CSI sensor ops callback */
         /* CSI might handle sensor registration differently */
@@ -4873,11 +4868,11 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
         struct tx_isp_sensor *sensor = isp_dev->sensor;
         a0_10 = &sensor->sd;
         
-        pr_info("*** CALLING SENSOR SUBDEV SENSOR OPS with event 0x2000000 ***\n");
+                pr_info("*** CALLING SENSOR SUBDEV SENSOR OPS with event 0x200000c ***\n");
         
         /* Check for sensor ops callback */
         if (sensor->sd.ops && sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
-            v0_25 = sensor->sd.ops->sensor->ioctl(&sensor->sd, 0x2000000, &var_98);
+            v0_25 = sensor->sd.ops->sensor->ioctl(&sensor->sd, 0x200000c, &var_98);
             s6_1 = v0_25;
             
             pr_info("*** SENSOR ops returned: %d (0x%x) ***\n", v0_25, v0_25);
