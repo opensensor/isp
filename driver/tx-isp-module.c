@@ -204,6 +204,90 @@ static struct platform_device tx_isp_vic_platform_device = {
     .resource = tx_isp_vic_resources,
 };
 
+/* CSI platform device resources - CRITICAL MISSING PIECE */
+static struct resource tx_isp_csi_resources[] = {
+    [0] = {
+        .start = 0x10022000,           /* T31 CSI base address */
+        .end   = 0x10022FFF,           /* T31 CSI end address */
+        .flags = IORESOURCE_MEM,
+    },
+    [1] = {
+        .start = 63,                   /* T31 CSI IRQ number (shared with ISP) */
+        .end   = 63,
+        .flags = IORESOURCE_IRQ,
+    },
+};
+
+static struct platform_device tx_isp_csi_platform_device = {
+    .name = "tx-isp-csi",
+    .id = -1,
+    .num_resources = ARRAY_SIZE(tx_isp_csi_resources),
+    .resource = tx_isp_csi_resources,
+};
+
+/* VIN platform device resources - CRITICAL MISSING PIECE */
+static struct resource tx_isp_vin_resources[] = {
+    [0] = {
+        .start = 0x13300000,           /* T31 VIN base address (part of ISP) */
+        .end   = 0x1330FFFF,           /* T31 VIN end address */
+        .flags = IORESOURCE_MEM,
+    },
+    [1] = {
+        .start = 63,                   /* T31 VIN IRQ number (shared with ISP) */
+        .end   = 63,
+        .flags = IORESOURCE_IRQ,
+    },
+};
+
+static struct platform_device tx_isp_vin_platform_device = {
+    .name = "tx-isp-vin",
+    .id = -1,
+    .num_resources = ARRAY_SIZE(tx_isp_vin_resources),
+    .resource = tx_isp_vin_resources,
+};
+
+/* Frame Source platform device resources - CRITICAL MISSING PIECE */
+static struct resource tx_isp_fs_resources[] = {
+    [0] = {
+        .start = 0x13310000,           /* T31 FS base address */
+        .end   = 0x1331FFFF,           /* T31 FS end address */
+        .flags = IORESOURCE_MEM,
+    },
+    [1] = {
+        .start = 63,                   /* T31 FS IRQ number (shared with ISP) */
+        .end   = 63,
+        .flags = IORESOURCE_IRQ,
+    },
+};
+
+static struct platform_device tx_isp_fs_platform_device = {
+    .name = "tx-isp-fs",
+    .id = -1,
+    .num_resources = ARRAY_SIZE(tx_isp_fs_resources),
+    .resource = tx_isp_fs_resources,
+};
+
+/* ISP Core platform device resources - CRITICAL MISSING PIECE */
+static struct resource tx_isp_core_resources[] = {
+    [0] = {
+        .start = 0x13300000,           /* T31 ISP Core base address */
+        .end   = 0x133FFFFF,           /* T31 ISP Core end address */
+        .flags = IORESOURCE_MEM,
+    },
+    [1] = {
+        .start = 63,                   /* T31 ISP Core IRQ number */
+        .end   = 63,
+        .flags = IORESOURCE_IRQ,
+    },
+};
+
+static struct platform_device tx_isp_core_platform_device = {
+    .name = "tx-isp-core",
+    .id = -1,
+    .num_resources = ARRAY_SIZE(tx_isp_core_resources),
+    .resource = tx_isp_core_resources,
+};
+
 /* Forward declaration for VIC event handler */
 static int vic_event_handler(void *subdev, int event_type, void *data);
 
@@ -3413,13 +3497,106 @@ static int tx_isp_init(void)
         pr_warn("Failed to prepare I2C infrastructure: %d\n", ret);
     }
     
-    /* *** CRITICAL: Register all sub-device platform drivers *** */
+    /* *** CRITICAL: Register all sub-device platform DEVICES first (Binary Ninja reference) *** */
+    pr_info("*** REGISTERING SUB-DEVICE PLATFORM DEVICES ***\n");
+    
+    /* Register CSI platform device */
+    ret = platform_device_register(&tx_isp_csi_platform_device);
+    if (ret) {
+        pr_err("Failed to register CSI platform device: %d\n", ret);
+        cleanup_i2c_infrastructure(ourISPdev);
+        destroy_frame_channel_devices();
+        destroy_isp_tuning_device();
+        tx_isp_proc_exit(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+    pr_info("*** CSI platform device registered ***\n");
+    
+    /* Register VIN platform device */
+    ret = platform_device_register(&tx_isp_vin_platform_device);
+    if (ret) {
+        pr_err("Failed to register VIN platform device: %d\n", ret);
+        platform_device_unregister(&tx_isp_csi_platform_device);
+        cleanup_i2c_infrastructure(ourISPdev);
+        destroy_frame_channel_devices();
+        destroy_isp_tuning_device();
+        tx_isp_proc_exit(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+    pr_info("*** VIN platform device registered ***\n");
+    
+    /* Register Frame Source platform device */
+    ret = platform_device_register(&tx_isp_fs_platform_device);
+    if (ret) {
+        pr_err("Failed to register FS platform device: %d\n", ret);
+        platform_device_unregister(&tx_isp_vin_platform_device);
+        platform_device_unregister(&tx_isp_csi_platform_device);
+        cleanup_i2c_infrastructure(ourISPdev);
+        destroy_frame_channel_devices();
+        destroy_isp_tuning_device();
+        tx_isp_proc_exit(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+    pr_info("*** FS platform device registered ***\n");
+    
+    /* Register ISP Core platform device */
+    ret = platform_device_register(&tx_isp_core_platform_device);
+    if (ret) {
+        pr_err("Failed to register ISP Core platform device: %d\n", ret);
+        platform_device_unregister(&tx_isp_fs_platform_device);
+        platform_device_unregister(&tx_isp_vin_platform_device);
+        platform_device_unregister(&tx_isp_csi_platform_device);
+        cleanup_i2c_infrastructure(ourISPdev);
+        destroy_frame_channel_devices();
+        destroy_isp_tuning_device();
+        tx_isp_proc_exit(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+    pr_info("*** ISP CORE platform device registered ***\n");
+    
+    /* Register VIC platform device */
+    ret = platform_device_register(&tx_isp_vic_platform_device);
+    if (ret) {
+        pr_err("Failed to register VIC platform device: %d\n", ret);
+        platform_device_unregister(&tx_isp_core_platform_device);
+        platform_device_unregister(&tx_isp_fs_platform_device);
+        platform_device_unregister(&tx_isp_vin_platform_device);
+        platform_device_unregister(&tx_isp_csi_platform_device);
+        cleanup_i2c_infrastructure(ourISPdev);
+        destroy_frame_channel_devices();
+        destroy_isp_tuning_device();
+        tx_isp_proc_exit(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+    pr_info("*** VIC platform device registered ***\n");
+    
+    /* *** CRITICAL: Register all sub-device platform drivers (Binary Ninja reference) *** */
     pr_info("*** REGISTERING SUB-DEVICE PLATFORM DRIVERS ***\n");
     
     /* Register CSI platform driver */
     ret = platform_driver_register(&tx_isp_csi_driver);
     if (ret) {
         pr_err("Failed to register CSI platform driver: %d\n", ret);
+        platform_device_unregister(&tx_isp_vic_platform_device);
+        platform_device_unregister(&tx_isp_core_platform_device);
+        platform_device_unregister(&tx_isp_fs_platform_device);
+        platform_device_unregister(&tx_isp_vin_platform_device);
+        platform_device_unregister(&tx_isp_csi_platform_device);
         cleanup_i2c_infrastructure(ourISPdev);
         destroy_frame_channel_devices();
         destroy_isp_tuning_device();
