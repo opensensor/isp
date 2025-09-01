@@ -319,6 +319,37 @@ static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *bu
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
 static int private_reset_tx_isp_module(int arg);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
+
+/* system_irq_func_set - EXACT Binary Ninja implementation */
+int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id))
+{
+    unsigned long flags;
+    
+    pr_info("system_irq_func_set: Setting IRQ handler for IRQ %d\n", index);
+    
+    /* Binary Ninja validation: check index bounds */
+    if (index < 0 || index >= MAX_IRQ_HANDLERS) {
+        pr_err("system_irq_func_set: Invalid IRQ index %d (max=%d)\n", index, MAX_IRQ_HANDLERS);
+        return -EINVAL;
+    }
+    
+    /* Binary Ninja: Lock the callback array for thread safety */
+    spin_lock_irqsave(&irq_cb_lock, flags);
+    
+    /* Binary Ninja: Set the handler in the callback array */
+    irq_func_cb[index] = handler;
+    
+    spin_unlock_irqrestore(&irq_cb_lock, flags);
+    
+    if (handler) {
+        pr_info("system_irq_func_set: IRQ %d handler set to %p\n", index, handler);
+    } else {
+        pr_info("system_irq_func_set: IRQ %d handler cleared\n", index);
+    }
+    
+    /* Binary Ninja: return success */
+    return 0;
+}
 int __init tx_isp_vic_platform_init(void);
 void __exit tx_isp_vic_platform_exit(void);
 int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);

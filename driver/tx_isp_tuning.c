@@ -3419,34 +3419,6 @@ static int (*cb[32])(void) = {NULL};
 static spinlock_t isp_irq_lock;
 static bool isp_irq_initialized = false;
 
-/* system_irq_func_set - Binary Ninja EXACT implementation */
-int system_irq_func_set(int irq_id, void *handler)
-{
-    unsigned long flags;
-    
-    pr_info("system_irq_func_set: Setting IRQ handler for IRQ %d\n", irq_id);
-    
-    if (irq_id < 0 || irq_id >= 32) {
-        pr_err("system_irq_func_set: Invalid IRQ ID %d\n", irq_id);
-        return -EINVAL;
-    }
-    
-    if (!isp_irq_initialized) {
-        spin_lock_init(&isp_irq_lock);
-        isp_irq_initialized = true;
-    }
-    
-    spin_lock_irqsave(&isp_irq_lock, flags);
-    
-    /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
-    irq_func_cb[irq_id] = (void (*)(void))handler;
-    
-    spin_unlock_irqrestore(&isp_irq_lock, flags);
-    
-    pr_info("system_irq_func_set: IRQ %d handler set to %p\n", irq_id, handler);
-    return 0;
-}
-
 /* tisp_event_set_cb - Binary Ninja EXACT implementation */
 int tisp_event_set_cb(int event_id, void *callback)
 {
@@ -3780,7 +3752,6 @@ EXPORT_SYMBOL(tisp_event_set_cb);
 EXPORT_SYMBOL(tiziano_dpc_init);
 EXPORT_SYMBOL(tisp_again_update);
 EXPORT_SYMBOL(tiziano_bcsh_init);
-EXPORT_SYMBOL(system_irq_func_set);
 EXPORT_SYMBOL(tisp_adr_process);
 EXPORT_SYMBOL(tiziano_adr_interrupt_static);
 EXPORT_SYMBOL(tisp_wdr_expTime_updata);
