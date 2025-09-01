@@ -738,6 +738,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
     isp->dev = &pdev->dev;
     isp->pdev = pdev;
 
+    /* Set global ISP device instance for Tiziano functions */
+    tx_isp_set_device(isp);
+
     /* Initialize memory mappings for ISP subsystems */
     ret = tx_isp_init_memory_mappings(isp);
     if (ret < 0) {
@@ -1093,5 +1096,3 @@ EXPORT_SYMBOL(private_gpio_direction_output);
 EXPORT_SYMBOL(private_clk_enable);
 EXPORT_SYMBOL(private_clk_put);
 EXPORT_SYMBOL(private_clk_set_rate);
-
-
