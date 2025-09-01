@@ -4129,21 +4129,12 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
         pr_info("tx_isp_vic_start: MIPI unlock sequence (2->4, NO unlock key)\n");
         
         /* Binary Ninja: while (*$v0_121 != 0) nop */
-        timeout = 10000;
-        while (timeout > 0) {
-            u32 status = readl(vic_regs + 0x0);
-            if (status == 0) {
-                pr_info("tx_isp_vic_start: MIPI VIC unlocked after %d iterations\n", 10000 - timeout);
-                break;
-            }
-            udelay(1);
-            timeout--;
+        /* EXACT Binary Ninja implementation - infinite wait, no timeout */
+        while (readl(vic_regs + 0x0) != 0) {
+            /* Binary Ninja shows just "nop" - busy wait */
+            cpu_relax();
         }
-        
-        if (timeout == 0) {
-            pr_err("tx_isp_vic_start: MIPI VIC unlock timeout!\n");
-            return -ETIMEDOUT;
-        }
+        pr_info("tx_isp_vic_start: MIPI VIC unlocked successfully\n");
         
         /* Binary Ninja: *$v0_121 = 1 */
         writel(1, vic_regs + 0x0);
