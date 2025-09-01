@@ -2834,55 +2834,39 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 new_sensor->video.attr->total_height,
                 new_sensor->video.attr->dbus_type);
         
-        /* CRITICAL: Now we need to ensure VIC subdev has proper device pointer at +0xd4 */
+        /* CRITICAL: VIC subdev initialization must happen BEFORE sensor registration */
+        /* The crash occurs because vic_sensor_ops_ioctl is called with NULL device pointer */
+        pr_info("*** CRITICAL: DEFERRING VIC SUBDEV INITIALIZATION FOR PLATFORM DRIVER ***\n");
+        pr_info("*** VIC device pointer will be set during tx_isp_vic_probe ***\n");
+        
+        /* CRITICAL: Check if VIC subdev is properly initialized before calling vic_sensor_ops_ioctl */
         if (isp_dev->vic_dev) {
             struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
             
-            pr_info("*** CRITICAL: Setting VIC subdev device pointer at +0xd4 ***\n");
+            /* CRITICAL: Verify VIC subdev has valid device pointer at +0xd4 */
+            void *vic_device_ptr = *((void**)((char*)&vic_dev->sd + 0xd4));
             
-            /* Binary Ninja expects *(subdev + 0xd4) to point to the VIC device */
-            *((void**)((char*)&vic_dev->sd + 0xd4)) = vic_dev;
+            pr_info("*** CHECKING VIC SUBDEV: vic_dev=%p, device_ptr_at_0xd4=%p ***\n", 
+                   vic_dev, vic_device_ptr);
             
-            /* CRITICAL: Also set up the event callback structure at subdev+0xc */
-            struct vic_event_callback *callback_struct = kzalloc(sizeof(struct vic_event_callback), GFP_KERNEL);
-            if (callback_struct) {
-                /* Set the event handler function pointer at offset +0x1c */
-                callback_struct->event_handler = vic_event_handler;
+            if (vic_device_ptr == vic_dev && vic_device_ptr != NULL) {
+                pr_info("*** VIC SUBDEV PROPERLY INITIALIZED - CALLING vic_sensor_ops_ioctl ***\n");
                 
-                /* Set the callback structure pointer at subdev+0xc */
-                *((void**)((char*)&vic_dev->sd + 0xc)) = callback_struct;
+                /* Call vic_sensor_ops_ioctl safely */
+                int vic_result = vic_sensor_ops_ioctl(&vic_dev->sd, 0x200000c, NULL);
+                pr_info("*** vic_sensor_ops_ioctl returned %d ***\n", vic_result);
                 
-                pr_info("*** VIC EVENT CALLBACK: callback_struct=%p, handler=%p ***\n", 
-                       callback_struct, vic_event_handler);
-                pr_info("*** VIC EVENT CALLBACK: Set at subdev+0xc=%p ***\n", 
-                       *((void**)((char*)&vic_dev->sd + 0xc)));
-            }
-            
-            pr_info("*** VIC subdev device pointer set: subdev=%p, device_ptr=%p ***\n", 
-                   &vic_dev->sd, vic_dev);
-            
-            /* Verify the pointer is set correctly */
-            void *verify_ptr = *((void**)((char*)&vic_dev->sd + 0xd4));
-            pr_info("*** VERIFICATION: Retrieved device pointer = %p ***\n", verify_ptr);
-            
-            if (verify_ptr == vic_dev) {
-                pr_info("*** SUCCESS: VIC subdev device pointer correctly initialized ***\n");
-                
-                /* CRITICAL: Now test vic_sensor_ops_ioctl with VALID subdev pointer */
-                pr_info("*** TESTING vic_sensor_ops_ioctl with VALID subdev=%p ***\n", &vic_dev->sd);
-                
-                /* Call vic_sensor_ops_ioctl with the VALID subdev pointer to start VIC */
-                int vic_test_result = vic_sensor_ops_ioctl(&vic_dev->sd, 0x200000c, NULL);
-                pr_info("*** VIC SENSOR OPS TEST: returned %d ***\n", vic_test_result);
-                
-                if (vic_test_result != -ENODEV) {
-                    pr_info("*** SUCCESS: VIC sensor ops working with valid subdev! ***\n");
-                } else {
-                    pr_warn("*** VIC sensor ops test: no sensor available yet ***\n");
+                if (vic_result == 0) {
+                    pr_info("*** SUCCESS: VIC sensor registration handled ***\n");
+                    return 0;
                 }
             } else {
-                pr_err("*** ERROR: VIC subdev device pointer verification failed ***\n");
+                pr_err("*** CRITICAL: VIC SUBDEV NOT PROPERLY INITIALIZED! ***\n");
+                pr_err("*** Expected device_ptr=%p, got=%p ***\n", vic_dev, vic_device_ptr);
+                pr_err("*** This would cause NULL pointer crash - SKIPPING vic_sensor_ops_ioctl ***\n");
             }
+        } else {
+            pr_warn("*** VIC device not available for sensor registration ***\n");
         }
         
         /* Try CSI subdev */
@@ -2898,7 +2882,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
         
         /* Binary Ninja: $s6_1 = 0 (default success if no subdev handled it) */
-        pr_info("*** SENSOR REGISTRATION: No subdev handled event, returning success ***\n");
+        pr_info("*** SENSOR REGISTRATION: Handled without VIC subdev ops, returning success ***\n");
         return 0;
     }
     case 0xc050561a: { // TX_ISP_SENSOR_ENUM_INPUT - Enumerate sensor inputs
