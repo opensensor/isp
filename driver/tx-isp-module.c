@@ -4964,19 +4964,19 @@ static void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
     pr_info("tx_vic_disable_irq: VIC interrupts disabled\n");
 }
 
-/* Handle sensor registration from userspace IOCTL - FIX STRUCTURE LAYOUT */
+/* Handle sensor registration from userspace IOCTL - RESTORE WORKING LAYOUT */
 static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
 {
-    /* CRITICAL: Match EXACT userspace structure layout from IMP library */
+    /* CRITICAL: Use WORKING structure layout from IMP library */
     struct tx_isp_sensor_register_info {
         char name[32];                    // +0x00: Sensor name (32 bytes)
-        u32 chip_id;                     // +0x20: Chip ID  
-        u32 interface_type;              // +0x24: Interface type (1=I2C, 2=MIPI) - MOVED UP
-        u32 i2c_addr;                    // +0x28: I2C address  
-        u32 i2c_adapter_id;              // +0x2C: I2C adapter number
-        u32 width;                       // +0x30: Total sensor width - MOVED DOWN
-        u32 height;                      // +0x34: Total sensor height - MOVED DOWN
-        u32 fps;                         // +0x38: Sensor FPS
+        u32 width;                       // +0x20: Total sensor width - RESTORED TO ORIGINAL POSITION
+        u32 height;                      // +0x24: Total sensor height - RESTORED TO ORIGINAL POSITION  
+        u32 fps;                         // +0x28: Sensor FPS
+        u32 interface_type;              // +0x2C: Interface type (1=I2C, 2=MIPI) - RESTORED TO ORIGINAL
+        u32 i2c_addr;                    // +0x30: I2C address - RESTORED TO ORIGINAL
+        u32 i2c_adapter_id;              // +0x34: I2C adapter number
+        u32 chip_id;                     // +0x38: Chip ID - RESTORED TO ORIGINAL POSITION
         u32 integration_time;            // +0x3C: Integration time
         u32 again;                       // +0x40: Analog gain
         u32 data_type;                   // +0x44: Data type/format
