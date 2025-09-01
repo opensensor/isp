@@ -1011,19 +1011,36 @@ static struct tx_isp_subdev_video_ops vic_video_ops = {
     .s_stream = vic_video_s_stream,
 };
 
-/* Define the core operations */
-static struct tx_isp_subdev_core_ops vic_core_ops = {
-    .init = vic_core_ops_init,
+/* VIC sensor operations structure - MISSING from original implementation */
+static struct tx_isp_subdev_sensor_ops vic_sensor_ops = {
+    .ioctl = vic_sensor_ops_ioctl,                    /* From tx-isp-module.c */
+    .sync_sensor_attr = vic_sensor_ops_sync_sensor_attr, /* From tx-isp-module.c */
 };
 
-/* Initialize the subdev ops structure with video operations */
+/* VIC core operations structure - MISSING ioctl registration */
+static struct tx_isp_subdev_core_ops vic_core_ops = {
+    .init = vic_core_ops_init,
+    .ioctl = vic_core_ops_ioctl,  /* MISSING from original! */
+};
+
+/* Complete VIC subdev ops structure - MISSING sensor ops registration */
 struct tx_isp_subdev_ops vic_subdev_ops = {
     .core = &vic_core_ops,
-    .video = &vic_video_ops,    /* NOW VIC HAS VIDEO STREAMING! */
-    .sensor = NULL,             /* No sensor ops for VIC */
+    .video = &vic_video_ops,
+    .sensor = &vic_sensor_ops,    /* MISSING from original! */
 };
 EXPORT_SYMBOL(vic_subdev_ops);
 
+
+/* VIC FRD file operations - MISSING from original implementation */
+static const struct file_operations isp_vic_frd_fops = {
+    .owner = THIS_MODULE,
+    .llseek = seq_lseek,                /* private_seq_lseek from hex dump */
+    .read = seq_read,                   /* private_seq_read from hex dump */
+    .unlocked_ioctl = isp_vic_cmd_set,  /* isp_vic_cmd_set from hex dump */
+    .open = dump_isp_vic_frd_open,      /* dump_isp_vic_frd_open from hex dump */
+    .release = single_release,          /* private_single_release from hex dump */
+};
 
 static const struct file_operations isp_w02_proc_fops = {
     .owner = THIS_MODULE,
@@ -1280,16 +1297,26 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         goto err_deinit_sd;
     }
 
-    /* Create /proc/jz/isp/isp-w02 */
+    /* Create /proc/jz/isp directory and entries */
     isp_dir = proc_mkdir("jz/isp", NULL);
     if (!isp_dir) {
         pr_err("Failed to create /proc/jz/isp directory\n");
         goto err_deinit_sd;
     }
 
+    /* Create /proc/jz/isp/isp-w02 for write operations */
     w02_entry = proc_create_data("isp-w02", 0666, isp_dir, &isp_w02_proc_fops, sd);
     if (!w02_entry) {
         pr_err("Failed to create /proc/jz/isp/isp-w02\n");
+        remove_proc_entry("jz/isp", NULL);
+        goto err_deinit_sd;
+    }
+
+    /* Create /proc/jz/isp/isp-vic-frd for VIC frame rate debugging - MISSING from original */
+    struct proc_dir_entry *vic_frd_entry = proc_create_data("isp-vic-frd", 0444, isp_dir, &isp_vic_frd_fops, sd);
+    if (!vic_frd_entry) {
+        pr_err("Failed to create /proc/jz/isp/isp-vic-frd\n");
+        remove_proc_entry("isp-w02", isp_dir);
         remove_proc_entry("jz/isp", NULL);
         goto err_deinit_sd;
     }
