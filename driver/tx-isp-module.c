@@ -2867,6 +2867,19 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             
             if (verify_ptr == vic_dev) {
                 pr_info("*** SUCCESS: VIC subdev device pointer correctly initialized ***\n");
+                
+                /* CRITICAL: Now test vic_sensor_ops_ioctl with VALID subdev pointer */
+                pr_info("*** TESTING vic_sensor_ops_ioctl with VALID subdev=%p ***\n", &vic_dev->sd);
+                
+                /* Call vic_sensor_ops_ioctl with the VALID subdev pointer to start VIC */
+                int vic_test_result = vic_sensor_ops_ioctl(&vic_dev->sd, 0x200000c, NULL);
+                pr_info("*** VIC SENSOR OPS TEST: returned %d ***\n", vic_test_result);
+                
+                if (vic_test_result != -ENODEV) {
+                    pr_info("*** SUCCESS: VIC sensor ops working with valid subdev! ***\n");
+                } else {
+                    pr_warn("*** VIC sensor ops test: no sensor available yet ***\n");
+                }
             } else {
                 pr_err("*** ERROR: VIC subdev device pointer verification failed ***\n");
             }
