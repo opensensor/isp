@@ -5656,22 +5656,22 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
             /* Binary Ninja: void* $v0_6 = **($a0_1 + 0xc4) */
             v0_6 = *((void**)((char*)a0_1 + 0xc4));
             
-                /* Binary Ninja: if ($v0_6 == 0) $s2 = &$s2[1] */
-                if (v0_6 == 0) {
-                    subdev_array = (void**)((char*)subdev_array + 4);
-                } else {
-                    /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 0x20) */
-                    v0_7 = *((int*)((char*)v0_6 + 0x20));
-                    
-                    /* Binary Ninja: if ($v0_7 != 0 && $v0_7() == 2) result = 2 */
-                    if (v0_7 != 0) {
-                        int (*subdev_handler)(void*, int, int) = (int(*)(void*, int, int))v0_7;
-                        if (subdev_handler(a0_1, irq, 0) == 2) {
-                            result = 2;
-                        }
+            /* Binary Ninja: if ($v0_6 == 0) $s2 = &$s2[1] */
+            if (v0_6 == 0) {
+                s2 = &s2[1];
+            } else {
+                /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 0x20) */
+                v0_7 = *((int*)((char*)v0_6 + 0x20));
+                
+                /* Binary Ninja: if ($v0_7 != 0 && $v0_7() == 2) result = 2 */
+                if (v0_7 != 0) {
+                    int (*subdev_handler)(void*, int, int) = (int(*)(void*, int, int))v0_7;
+                    if (subdev_handler(a0_1, irq, 0) == 2) {
+                        result = 2;
                     }
-                    subdev_array = (void**)((char*)subdev_array + 4);
                 }
+                s2 = &s2[1];
+            }
         }
         
         /* Binary Ninja: if ($s2 == arg2 - 8) break */
