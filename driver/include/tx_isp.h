@@ -332,7 +332,4 @@ void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan);
 void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan);
 int tx_isp_setup_default_links(struct tx_isp_dev *dev);
 
-int tx_isp_subdev_register_drivers(struct tx_isp_dev *isp);
-void tx_isp_subdev_unregister_drivers(void);
-
 #endif /* __TX_ISP_H__ */

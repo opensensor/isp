@@ -3227,6 +3227,64 @@ static const struct file_operations tx_isp_fops = {
     .release = tx_isp_release,
 };
 
+// Forward declarations for existing probe/remove functions
+extern int tx_isp_csi_probe(struct platform_device *pdev);
+extern int tx_isp_csi_remove(struct platform_device *pdev);
+extern int tx_isp_vin_probe(struct platform_device *pdev);
+extern int tx_isp_vin_remove(struct platform_device *pdev);
+extern int tx_isp_fs_probe(struct platform_device *pdev);
+extern int tx_isp_fs_remove(struct platform_device *pdev);
+extern int tx_isp_core_probe(struct platform_device *pdev);
+extern int tx_isp_core_remove(struct platform_device *pdev);
+extern int tx_isp_vic_probe(struct platform_device *pdev);
+extern int tx_isp_vic_remove(struct platform_device *pdev);
+
+/* Platform driver structures - connect to existing implementations */
+static struct platform_driver tx_isp_csi_driver = {
+    .probe = tx_isp_csi_probe,
+    .remove = tx_isp_csi_remove,
+    .driver = {
+        .name = "tx-isp-csi",
+        .owner = THIS_MODULE,
+    },
+};
+
+static struct platform_driver tx_isp_vin_driver = {
+    .probe = tx_isp_vin_probe,
+    .remove = tx_isp_vin_remove,
+    .driver = {
+        .name = "tx-isp-vin",
+        .owner = THIS_MODULE,
+    },
+};
+
+static struct platform_driver tx_isp_fs_driver = {
+    .probe = tx_isp_fs_probe,
+    .remove = tx_isp_fs_remove,
+    .driver = {
+        .name = "tx-isp-fs",
+        .owner = THIS_MODULE,
+    },
+};
+
+static struct platform_driver tx_isp_core_driver = {
+    .probe = tx_isp_core_probe,
+    .remove = tx_isp_core_remove,
+    .driver = {
+        .name = "tx-isp-core",
+        .owner = THIS_MODULE,
+    },
+};
+
+static struct platform_driver tx_isp_vic_driver = {
+    .probe = tx_isp_vic_probe,
+    .remove = tx_isp_vic_remove,
+    .driver = {
+        .name = "tx-isp-vic",
+        .owner = THIS_MODULE,
+    },
+};
+
 // Simple platform driver - minimal implementation
 static int tx_isp_platform_probe(struct platform_device *pdev)
 {
@@ -3355,11 +3413,13 @@ static int tx_isp_init(void)
         pr_warn("Failed to prepare I2C infrastructure: %d\n", ret);
     }
     
-    /* CRITICAL: Register VIC platform driver like reference driver */
-    pr_info("*** TX ISP VIC PLATFORM DRIVER REGISTRATION ***\n");
-    ret = tx_isp_vic_platform_init();
+    /* *** CRITICAL: Register all sub-device platform drivers *** */
+    pr_info("*** REGISTERING SUB-DEVICE PLATFORM DRIVERS ***\n");
+    
+    /* Register CSI platform driver */
+    ret = platform_driver_register(&tx_isp_csi_driver);
     if (ret) {
-        pr_err("Failed to initialize VIC platform driver: %d\n", ret);
+        pr_err("Failed to register CSI platform driver: %d\n", ret);
         cleanup_i2c_infrastructure(ourISPdev);
         destroy_frame_channel_devices();
         destroy_isp_tuning_device();
@@ -3369,6 +3429,104 @@ static int tx_isp_init(void)
         platform_device_unregister(&tx_isp_platform_device);
         goto err_free_dev;
     }
+    pr_info("*** CSI platform driver registered - tx_isp_csi_probe will be called ***\n");
+    
+    /* Register VIN platform driver */
+    ret = platform_driver_register(&tx_isp_vin_driver);
+    if (ret) {
+        pr_err("Failed to register VIN platform driver: %d\n", ret);
+        platform_driver_unregister(&tx_isp_csi_driver);
+        cleanup_i2c_infrastructure(ourISPdev);
+        destroy_frame_channel_devices();
+        destroy_isp_tuning_device();
+        tx_isp_proc_exit(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+    pr_info("*** VIN platform driver registered - tx_isp_vin_probe will be called ***\n");
+    
+    /* Register Frame Source platform driver */
+    ret = platform_driver_register(&tx_isp_fs_driver);
+    if (ret) {
+        pr_err("Failed to register FS platform driver: %d\n", ret);
+        platform_driver_unregister(&tx_isp_vin_driver);
+        platform_driver_unregister(&tx_isp_csi_driver);
+        cleanup_i2c_infrastructure(ourISPdev);
+        destroy_frame_channel_devices();
+        destroy_isp_tuning_device();
+        tx_isp_proc_exit(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+    pr_info("*** FS platform driver registered - tx_isp_fs_probe will be called ***\n");
+    
+    /* *** CRITICAL: Register ISP Core platform driver - calls tx_isp_create_graph_and_nodes! *** */
+    ret = platform_driver_register(&tx_isp_core_driver);
+    if (ret) {
+        pr_err("Failed to register ISP Core platform driver: %d\n", ret);
+        platform_driver_unregister(&tx_isp_fs_driver);
+        platform_driver_unregister(&tx_isp_vin_driver);
+        platform_driver_unregister(&tx_isp_csi_driver);
+        cleanup_i2c_infrastructure(ourISPdev);
+        destroy_frame_channel_devices();
+        destroy_isp_tuning_device();
+        tx_isp_proc_exit(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+    pr_info("*** ISP CORE platform driver registered - tx_isp_core_probe will call tx_isp_create_graph_and_nodes! ***\n");
+    
+    /* Register VIC platform driver */
+    ret = platform_driver_register(&tx_isp_vic_driver);
+    if (ret) {
+        pr_err("Failed to register VIC platform driver: %d\n", ret);
+        platform_driver_unregister(&tx_isp_core_driver);
+        platform_driver_unregister(&tx_isp_fs_driver);
+        platform_driver_unregister(&tx_isp_vin_driver);
+        platform_driver_unregister(&tx_isp_csi_driver);
+        cleanup_i2c_infrastructure(ourISPdev);
+        destroy_frame_channel_devices();
+        destroy_isp_tuning_device();
+        tx_isp_proc_exit(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+    pr_info("*** VIC platform driver registered - tx_isp_vic_probe will be called ***\n");
+    
+    /* CRITICAL: Register VIC platform init like reference driver */
+    pr_info("*** TX ISP VIC PLATFORM DRIVER INITIALIZATION ***\n");
+    ret = tx_isp_vic_platform_init();
+    if (ret) {
+        pr_err("Failed to initialize VIC platform driver: %d\n", ret);
+        platform_driver_unregister(&tx_isp_vic_driver);
+        platform_driver_unregister(&tx_isp_core_driver);
+        platform_driver_unregister(&tx_isp_fs_driver);
+        platform_driver_unregister(&tx_isp_vin_driver);
+        platform_driver_unregister(&tx_isp_csi_driver);
+        cleanup_i2c_infrastructure(ourISPdev);
+        destroy_frame_channel_devices();
+        destroy_isp_tuning_device();
+        tx_isp_proc_exit(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+    
+    pr_info("*** ALL SUB-DEVICE PLATFORM DRIVERS REGISTERED SUCCESSFULLY ***\n");
+    pr_info("***   - CSI driver will handle MIPI/DVP interface ***\n");
+    pr_info("***   - VIN driver will handle video input processing ***\n");
+    pr_info("***   - FS driver will handle frame source management ***\n");
+    pr_info("***   - CORE driver will call tx_isp_create_graph_and_nodes ***\n");
+    pr_info("***   - VIC driver will handle video input controller ***\n");
     
     /* Initialize CSI subdev only - VIC will be created by platform driver */
     ret = tx_isp_init_csi_subdev(ourISPdev);
