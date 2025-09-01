@@ -223,6 +223,8 @@ void tx_isp_proc_exit(struct tx_isp_dev *isp)
 
     proc = isp->proc_context;
 
+    if (proc->isp_w01_entry)
+        remove_proc_entry(TX_ISP_PROC_ISP_W01_FILE, proc->isp_dir);
     if (proc->isp_w02_entry)
         remove_proc_entry(TX_ISP_PROC_ISP_W02_FILE, proc->isp_dir);
     if (proc->isp_dir)
@@ -232,5 +234,5 @@ void tx_isp_proc_exit(struct tx_isp_dev *isp)
 
     kfree(proc);
     isp->proc_context = NULL;
-    pr_info("Removed proc entries: /proc/jz/isp/isp-w02\n");
+    pr_info("Removed proc entries: /proc/jz/isp/isp-w01 and /proc/jz/isp/isp-w02\n");
 }
