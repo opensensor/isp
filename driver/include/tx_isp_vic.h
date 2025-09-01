@@ -95,21 +95,26 @@ struct tx_isp_vic_device {
             uint8_t _pad_to_d4[0xd4 - 0xb8 - 8];
             struct tx_isp_vic_device *self; // 0xd4: Self-pointer  
             uint8_t _pad_to_dc[0xdc - 0xd4 - 8];
-            uint32_t frame_width;           // 0xdc: Frame width
-            uint32_t frame_height;          // 0xe0: Frame height
+            uint32_t width;                 // 0xdc: Frame width (renamed from frame_width)
+            uint32_t height;                // 0xe0: Frame height (renamed from frame_height)
             uint32_t pixel_format;          // 0xe4: Pixel format
             uint8_t _pad_to_110[0x110 - 0xe4 - 4];
-            struct tx_isp_sensor_attribute *sensor_attr; // 0x110: Sensor attributes
-            uint8_t _pad_to_128[0x128 - 0x110 - 8];
+            struct tx_isp_sensor_attribute sensor_attr; // 0x110: Sensor attributes (not pointer)
+            uint8_t _pad_to_128[0x128 - 0x110 - sizeof(struct tx_isp_sensor_attribute)];
             int state;                      // 0x128: 1=init, 2=active
             uint8_t _pad_to_130[0x130 - 0x128 - 4];
             spinlock_t lock;                // 0x130: Spinlock
-            struct mutex mlock;             // Mutex (overlapped)
-            uint8_t _pad_to_148[0x148 - 0x130 - sizeof(spinlock_t) - sizeof(struct mutex)];
-            struct completion frame_done;   // 0x148: Frame completion
+            uint8_t _pad_to_148[0x148 - 0x130 - sizeof(spinlock_t)];
+            struct completion frame_complete; // 0x148: Frame completion (renamed from frame_done)
             uint8_t _pad_to_154[0x154 - 0x148 - sizeof(struct completion)];
-            struct mutex snap_mlock;        // 0x154: Snapshot mutex
-            uint8_t _pad_to_1f4[0x1f4 - 0x154 - sizeof(struct mutex)];
+            struct mutex state_lock;        // 0x154: State mutex (renamed from snap_mlock)
+            uint8_t _pad_to_168[0x168 - 0x154 - sizeof(struct mutex)];
+            // Buffer management structures
+            uint32_t buffer_count;          // Buffer count
+            bool processing;                // Processing flag
+            uint32_t vic_errors[13];        // Error array (13 elements, 0x34 bytes)
+            uint32_t total_errors;          // Total error count
+            uint8_t _pad_to_1f4[0x1f4 - 0x168 - 4 - 1 - 0x34 - 4];
             spinlock_t buffer_lock;         // 0x1f4: Buffer lock
             struct list_head queue_head;    // Buffer queues
             struct list_head free_head;
