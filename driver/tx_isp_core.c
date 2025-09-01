@@ -1499,6 +1499,7 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
 /**
  * ispcore_core_ops_init - CRITICAL: Initialize ISP Core Operations
  * This is the EXACT reference implementation from Binary Ninja decompilation
+ * CRITICAL: tisp_init is called FROM THIS FUNCTION, not from handle_sensor_register
  */
 static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr)
 {
