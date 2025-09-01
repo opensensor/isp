@@ -3501,25 +3501,6 @@ static int tx_isp_init(void)
     }
     pr_info("*** VIC platform driver registered - tx_isp_vic_probe will be called ***\n");
     
-    /* CRITICAL: Register VIC platform init like reference driver */
-    pr_info("*** TX ISP VIC PLATFORM DRIVER INITIALIZATION ***\n");
-    ret = tx_isp_vic_platform_init();
-    if (ret) {
-        pr_err("Failed to initialize VIC platform driver: %d\n", ret);
-        platform_driver_unregister(&tx_isp_vic_driver);
-        platform_driver_unregister(&tx_isp_core_driver);
-        platform_driver_unregister(&tx_isp_fs_driver);
-        platform_driver_unregister(&tx_isp_vin_driver);
-        platform_driver_unregister(&tx_isp_csi_driver);
-        cleanup_i2c_infrastructure(ourISPdev);
-        destroy_frame_channel_devices();
-        destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
-        misc_deregister(&tx_isp_miscdev);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
-    }
     
     pr_info("*** ALL SUB-DEVICE PLATFORM DRIVERS REGISTERED SUCCESSFULLY ***\n");
     pr_info("***   - CSI driver will handle MIPI/DVP interface ***\n");
