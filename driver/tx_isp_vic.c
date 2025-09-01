@@ -526,7 +526,7 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 
 
 /* tx_isp_vic_start - EXACT Binary Ninja implementation (CORRECTED for MIPI) */
-static int tx_isp_vic_start(struct vic_device *vic_dev)
+int tx_isp_vic_start(struct vic_device *vic_dev)
 {
     void __iomem *vic_regs;
     u32 interface_type;
