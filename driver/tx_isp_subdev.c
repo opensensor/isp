@@ -104,15 +104,32 @@ static int frame_channel_release(struct inode *inode, struct file *file)
     return 0;
 }
 
-int tx_isp_send_event_to_remote(struct tx_isp_subdev_pad *pad, unsigned int cmd, void *data)
+// Binary Ninja EXACT implementation 
+int tx_isp_send_event_to_remote(struct v4l2_subdev *sd, unsigned int event, void *data)
 {
-    if (!pad)
-        return -0x203;  // 0xfffffdfd
-
-    if (pad->event)  // Use the existing event callback
-        return pad->event(pad, cmd, data);
-
-    return -0x203;
+    pr_info("*** tx_isp_send_event_to_remote: subdev=%p, event=0x%x ***\n", sd, event);
+    
+    if (sd != 0) {                              // arg1 != 0
+        void *callback = *(void **)(sd + 0xc); // void* $a0 = *(arg1 + 0xc)
+        pr_info("*** EVENT: subdev=%p, checking callback at offset +0xc ***\n", sd);
+        pr_info("*** EVENT: callback_struct=%p (from subdev+0xc) ***\n", callback);
+        
+        if (callback != 0) {                    // $a0 != 0
+            int (*handler)(void *, unsigned int, void *) = *(void **)(callback + 0x1c); // Get handler from callback+0x1c
+            pr_info("*** EVENT: callback found, checking handler at offset +0x1c ***\n");
+            pr_info("*** EVENT: event_callback=%p (from callback+0x1c) ***\n", handler);
+            
+            if (handler != 0) {                 // $t9_1 != 0
+                pr_info("*** EVENT: Calling event callback %p for event 0x%x ***\n", handler, event);
+                int ret = handler(callback, event, data); // Call handler (jump($t9_1))
+                pr_info("*** EVENT: Callback returned %d (0x%x) ***\n", ret, ret);
+                return ret;
+            }
+        }
+    }
+    
+    pr_err("*** EVENT: No valid callback chain - subdev=%p ***\n", sd);
+    return 0xfffffdfd; // -515 (binary: 0xfffffdfd)
 }
 
 static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
@@ -139,7 +156,10 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
                 break;
             }
 
-            ret = tx_isp_send_event_to_remote(chan->pad, 0x3000008, &type);
+            // Need to get the v4l2_subdev from pad structure
+            struct v4l2_subdev *sd = (chan->pad && chan->pad->sd) ? 
+                                     (struct v4l2_subdev *)chan->pad->sd : NULL;
+            ret = tx_isp_send_event_to_remote(sd, 0x3000008, &type);
             if (ret == 0 || ret == -0x203) {
                 return 0;
             }
