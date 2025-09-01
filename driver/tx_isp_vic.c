@@ -526,21 +526,21 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 
 
 /* tx_isp_vic_start - EXACT Binary Ninja implementation (CORRECTED for MIPI) */
-static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sensor_attribute *sensor_attr)
+static int tx_isp_vic_start(struct vic_device *vic_dev)
 {
     void __iomem *vic_regs;
     u32 interface_type;
     u32 sensor_format;
     u32 timeout = 10000;
 
-    if (!vic_dev || !vic_dev->vic_regs || !sensor_attr) {
+    if (!vic_dev || !vic_dev->vic_regs) {
         pr_err("tx_isp_vic_start: Invalid parameters\n");
         return -EINVAL;
     }
 
     vic_regs = vic_dev->vic_regs;
-    interface_type = sensor_attr->dbus_type;  /* Binary Ninja: *(*(arg1 + 0x110) + 0x14) */
-    sensor_format = sensor_attr->data_type;   /* Binary Ninja: *(arg1 + 0xe4) */
+    interface_type = vic_dev->sensor_attr.dbus_type;  /* Binary Ninja: *(*(arg1 + 0x110) + 0x14) */
+    sensor_format = vic_dev->sensor_attr.data_type;   /* Binary Ninja: *(arg1 + 0xe4) */
 
     pr_info("*** tx_isp_vic_start: EXACT Binary Ninja implementation ***\n");
     pr_info("tx_isp_vic_start: interface=%d, format=0x%x\n", interface_type, sensor_format);
@@ -570,16 +570,16 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
             else if (sensor_format == 7) stride_multiplier = 0x10;
         }
 
-        u32 buffer_calc = stride_multiplier * sensor_attr->integration_time;
+        u32 buffer_calc = stride_multiplier * vic_dev->sensor_attr.integration_time;
         u32 buffer_size = (buffer_calc >> 5) + ((buffer_calc & 0x1f) ? 1 : 0);
         writel(buffer_size, vic_regs + 0x100);
         writel(2, vic_regs + 0xc);
         writel(sensor_format, vic_regs + 0x14);
-        writel((vic_dev->frame_width << 16) | vic_dev->frame_height, vic_regs + 0x4);
+        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
         wmb();
 
         /* Binary Ninja: DVP timing and WDR configuration */
-        u32 wdr_mode = sensor_attr->wdr_cache;
+        u32 wdr_mode = vic_dev->sensor_attr.wdr_cache;
         u32 frame_mode = (wdr_mode == 0) ? 0x4440 : (wdr_mode == 1) ? 0x4140 : 0x4240;
         writel(frame_mode, vic_regs + 0x1ac);
         writel(frame_mode, vic_regs + 0x1a8);
@@ -593,7 +593,7 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
         wmb();
 
         /* *** CRITICAL: DVP unlock key - Binary Ninja exact *** */
-        u32 unlock_key = (sensor_attr->integration_time_apply_delay << 4) | sensor_attr->again_apply_delay;
+        u32 unlock_key = (vic_dev->sensor_attr.integration_time_apply_delay << 4) | vic_dev->sensor_attr.again_apply_delay;
         writel(unlock_key, vic_regs + 0x1a0);
         wmb();
         pr_info("tx_isp_vic_start: DVP unlock key 0x1a0 = 0x%x\n", unlock_key);
@@ -612,10 +612,10 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
         /* Binary Ninja format switch based on sensor_format (*(arg1 + 0xe4)) */
         if (sensor_format >= 0x300e) {
             /* Binary Ninja label_10928: Standard MIPI RAW path */
-            u32 dbus_type_check = sensor_attr->dbus_type;
+            u32 dbus_type_check = vic_dev->sensor_attr.dbus_type;
 
             /* Binary Ninja: Check integration_time_apply_delay for SONY mode */
-            if (sensor_attr->integration_time_apply_delay != 2) {
+            if (vic_dev->sensor_attr.integration_time_apply_delay != 2) {
                 /* Standard MIPI mode */
                 mipi_config = 0x20000;  /* &data_20000 */
                 if (dbus_type_check == 0) {
@@ -668,37 +668,37 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
         }
 
         /* Binary Ninja: Additional configuration flags */
-        if (sensor_attr->total_width == 2) {
+        if (vic_dev->sensor_attr.total_width == 2) {
             mipi_config |= 2;
         }
-        if (sensor_attr->total_height == 2) {
+        if (vic_dev->sensor_attr.total_height == 2) {
             mipi_config |= 1;
         }
 
         /* Binary Ninja: MIPI timing registers */
-        u32 integration_time = sensor_attr->integration_time;
+        u32 integration_time = vic_dev->sensor_attr.integration_time;
         if (integration_time != 0) {
-            writel((integration_time << 16) + vic_dev->frame_width, vic_regs + 0x18);
+            writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
             wmb();
         }
 
-        u32 again_value = sensor_attr->again;
+        u32 again_value = vic_dev->sensor_attr.again;
         if (again_value != 0) {
             writel(again_value, vic_regs + 0x3c);
             wmb();
         }
 
         /* Binary Ninja: Final timing setup - EXACT order */
-        writel((integration_time << 16) + vic_dev->frame_width, vic_regs + 0x18);
+        writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
         wmb();
 
         /* Binary Ninja: VIC register 0x10 with timing flags */
-        u32 final_mipi_config = (sensor_attr->total_width << 31) | mipi_config;
+        u32 final_mipi_config = (vic_dev->sensor_attr.total_width << 31) | mipi_config;
         writel(final_mipi_config, vic_regs + 0x10);
         wmb();
 
         /* Frame dimensions */
-        writel((vic_dev->frame_width << 16) | vic_dev->frame_height, vic_regs + 0x4);
+        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
         wmb();
 
         pr_info("tx_isp_vic_start: MIPI registers configured - 0x10=0x%x, 0x18=0x%x\n",
@@ -795,7 +795,7 @@ static int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sen
     wmb();
 
     /* Binary Ninja: Log WDR mode */
-    const char *wdr_msg = (sensor_attr->wdr_cache != 0) ?
+    const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
@@ -814,16 +814,21 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     struct vic_device *vic_dev;
     int result = 0;
     
-    pr_info("vic_sensor_ops_ioctl: cmd=0x%x, arg=%p\n", cmd, arg);
+    pr_info("*** vic_sensor_ops_ioctl: cmd=0x%x, arg=%p ***\n", cmd, arg);
     
+    /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     if (!sd || (unsigned long)sd >= 0xfffff001) {
         pr_err("vic_sensor_ops_ioctl: Invalid sd parameter\n");
         return result;
     }
     
-    vic_dev = (struct vic_device *)tx_isp_get_subdevdata(sd);
+    /* Binary Ninja: void* $a0 = *(arg1 + 0xd4) */
+    vic_dev = (struct vic_device *)*((void **)((char *)sd + 0xd4));
+    pr_info("*** vic_sensor_ops_ioctl: Retrieved vic_dev from offset 0xd4: %p ***\n", vic_dev);
+    
+    /* Binary Ninja: if ($a0 != 0 && $a0 u< 0xfffff001) */
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("vic_sensor_ops_ioctl: Invalid vic_dev\n");
+        pr_err("*** vic_sensor_ops_ioctl: Invalid vic_dev from offset 0xd4 ***\n");
         return result;
     }
     
@@ -836,8 +841,8 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     switch (cmd) {
         case 0x200000c:
         case 0x200000f:
-            pr_info("vic_sensor_ops_ioctl: Starting VIC (cmd=0x%x)\n", cmd);
-            return tx_isp_vic_start(vic_dev, &vic_dev->sensor_attr);
+            pr_info("*** vic_sensor_ops_ioctl: Starting VIC (cmd=0x%x) - CALLING tx_isp_vic_start ***\n", cmd);
+            return tx_isp_vic_start(vic_dev);
             
         case 0x200000d:
         case 0x2000010:
