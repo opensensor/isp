@@ -58,10 +58,6 @@ int isp_vic_frd_show(struct seq_file *seq, void *v);
 int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
 long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 
-/* VIC Register Access Macros */
-#define vic_read32(reg) readl(vic_dev->vic_regs + (reg))
-#define vic_write32(reg, val) writel((val), vic_dev->vic_regs + (reg))
-
 /* VIC States */
 #define VIC_STATE_OFF       0
 #define VIC_STATE_IDLE     1
