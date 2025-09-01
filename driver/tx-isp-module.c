@@ -5246,8 +5246,17 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                             }
                         }
                         
-                        /* Now call tisp_init for MIPI sensor */
-                        pr_info("*** CALLING tisp_init FOR MIPI SENSOR ***\n");
+                        /* CRITICAL FIX: Start CSI streaming BEFORE tisp_init for MIPI sensors */
+                        pr_info("*** STARTING CSI STREAMING BEFORE tisp_init FOR MIPI ***\n");
+                        int csi_stream_result = tx_isp_csi_s_stream(isp_dev, 1);
+                        if (csi_stream_result == 0) {
+                            pr_info("*** CSI STREAMING STARTED SUCCESSFULLY ***\n");
+                        } else {
+                            pr_warn("*** CSI streaming start failed: %d, continuing anyway ***\n", csi_stream_result);
+                        }
+                        
+                        /* Now call tisp_init with CSI already streaming */
+                        pr_info("*** CALLING tisp_init WITH CSI STREAMING FOR MIPI SENSOR ***\n");
                         int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
                         if (tisp_result == 0) {
                             pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED FOR MIPI ***\n");
