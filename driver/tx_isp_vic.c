@@ -1629,23 +1629,10 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         goto err_deinit_sd;
     }
 
-    /* Find existing /proc/jz/isp directory - DO NOT create isp-w02 here as main proc does it */
-    isp_dir = proc_mkdir("jz/isp", NULL);
-    if (!isp_dir) {
-        pr_err("Failed to find/create /proc/jz/isp directory\n");
-        goto err_deinit_sd;
-    }
-
-    /* CRITICAL FIX: Only create VIC-specific proc entries, not isp-w02 which main proc handles */
-    /* Create /proc/jz/isp/isp-vic-frd for VIC frame rate debugging - CRITICAL MISSING INTERFACE */
-    struct proc_dir_entry *vic_frd_entry = proc_create_data("isp-vic-frd", 0444, isp_dir, &isp_vic_frd_fops, sd);
-    if (!vic_frd_entry) {
-        pr_err("*** CRITICAL ERROR: Failed to create /proc/jz/isp/isp-vic-frd - VIC FRD interface missing! ***\n");
-        pr_err("*** This indicates VIC initialization is NOT completing fully ***\n");
-        goto err_deinit_sd;
-    }
-    pr_info("*** SUCCESS: Created /proc/jz/isp/isp-vic-frd - VIC FULLY INITIALIZED! ***\n");
-    pr_info("*** NOTE: /proc/jz/isp/isp-w02 will be created by main ISP proc module ***\n");
+    /* *** CRITICAL FIX: Do NOT create any proc entries in VIC probe *** */
+    /* *** The main proc module handles ALL proc filesystem creation *** */
+    /* *** This eliminates the duplicate /proc/jz/isp/ directory conflict *** */
+    pr_info("*** VIC PROBE: Skipping proc creation - handled by main proc module ***\n");
 
     pr_info("VIC probe completed successfully\n");
     return 0;
