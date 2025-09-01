@@ -3888,15 +3888,14 @@ static void tx_isp_exit(void)
 
 /* ===== VIC SENSOR OPERATIONS - EXACT BINARY NINJA IMPLEMENTATIONS ===== */
 
-/* vic_sensor_ops_ioctl - EXACT Binary Ninja implementation - FIXED */
+/* vic_sensor_ops_ioctl - FIXED with proper struct member access */
 static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
-    void *vic_device_ptr;
-    struct tx_isp_vic_device *vic_dev;
-    struct tx_isp_dev *isp_dev;
+    struct tx_isp_vic_device *vic_dev = NULL;
+    struct tx_isp_dev *isp_dev = NULL;
     struct tx_isp_sensor_attribute *sensor_attr;
     
-    pr_info("*** vic_sensor_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x%x ***\n", cmd);
+    pr_info("*** vic_sensor_ops_ioctl: FIXED implementation - cmd=0x%x ***\n", cmd);
     
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     if (!sd || (uintptr_t)sd >= 0xfffff001) {
@@ -3904,20 +3903,28 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
         return 0; /* Binary Ninja returns 0 for invalid subdev */
     }
     
-    /* Binary Ninja: void* $a0 = *(arg1 + 0xd4) */
-    vic_device_ptr = *((void**)((char*)sd + 0xd4));
-    
-    pr_info("*** vic_sensor_ops_ioctl: subdev=%p, vic_device_ptr=%p (from subdev+0xd4) ***\n", sd, vic_device_ptr);
-    
-    /* Binary Ninja: if ($a0 != 0 && $a0 u< 0xfffff001) */
-    if (!vic_device_ptr || (uintptr_t)vic_device_ptr >= 0xfffff001) {
-        pr_err("*** CRITICAL: vic_device_ptr is NULL at subdev+0xd4! ***\n");
-        pr_err("*** This causes the null pointer crash at virtual address 00000000 ***\n");
-        pr_err("*** subdev structure is not properly initialized ***\n");
-        return 0; /* Binary Ninja returns 0 for invalid device pointer */
+    /* FIXED: Use proper struct member access instead of raw pointer arithmetic */
+    /* Get ISP device from subdev first */
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if (!isp_dev) {
+        pr_err("*** vic_sensor_ops_ioctl: No ISP device in subdev->isp ***\n");
+        return 0;
     }
     
-    vic_dev = (struct tx_isp_vic_device *)vic_device_ptr;
+    /* Get VIC device through proper ISP device structure */
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    if (!vic_dev) {
+        pr_err("*** vic_sensor_ops_ioctl: No VIC device in isp_dev->vic_dev ***\n");
+        return 0;
+    }
+    
+    /* Additional safety check */
+    if ((uintptr_t)vic_dev >= 0xfffff001) {
+        pr_err("*** vic_sensor_ops_ioctl: Invalid VIC device pointer ***\n");
+        return 0;
+    }
+    
+    pr_info("*** vic_sensor_ops_ioctl: subdev=%p, isp_dev=%p, vic_dev=%p ***\n", sd, isp_dev, vic_dev);
     
     /* Binary Ninja: if (arg2 - 0x200000c u>= 0xd) return 0 */
     if (cmd - 0x200000c >= 0xd) {
