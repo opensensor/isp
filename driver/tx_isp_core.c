@@ -1806,31 +1806,39 @@ int tx_isp_core_probe(struct platform_device *pdev)
     struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
     int32_t ret = 0;
     int32_t i = 0;
+    
+    /* Get the global ISP device instance instead of creating a new one */
+    extern struct tx_isp_dev *ourISPdev;
+    
     printk("tx_isp_core_probe\n");
 
-    isp = private_kmalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
+    /* Use the existing global ISP device instance */
+    isp = ourISPdev;
     if (isp == NULL) {
-        ISP_ERROR("alloc tx_isp_dev failed!\n");
-        ret = -ENOMEM;
+        ISP_ERROR("*** tx_isp_core_probe: Global ISP device not initialized! ***\n");
+        ISP_ERROR("*** This means tx-isp-module.c tx_isp_init() was not called first ***\n");
+        ret = -ENODEV;
         goto _core_alloc_err;
     }
-
-    memset(isp, 0, sizeof(struct tx_isp_dev));
+    
+    pr_info("*** tx_isp_core_probe: Using global ISP device %p ***\n", isp);
+    
     private_platform_set_drvdata(pdev, isp);
-    private_spin_lock_init(&isp->lock);
-    mutex_init(&isp->mutex);
-    isp->dev = &pdev->dev;
-
+    
+    /* Initialize additional fields needed by core */
+    if (!isp->dev) {
+        isp->dev = &pdev->dev;
+    }
+    
+    /* Skip channel init if already done */
     for (i = 0; i < ISP_MAX_CHAN; i++) {
-        tx_isp_frame_chan_init(&isp->channels[i]);
+        if (!isp->channels[i].active) {  /* Only init if not already done */
+            tx_isp_frame_chan_init(&isp->channels[i]);
+        }
     }
 
-    ret = tx_isp_proc_init(isp);
-    if (ret < 0) {
-        ISP_ERROR("tx_isp_proc_init failed!\n");
-        ret = -EINVAL;
-        goto _core_proc_init_err;
-    }
+    /* Skip proc init since it's already done by tx-isp-module.c */
+    pr_info("*** tx_isp_core_probe: Skipping proc init - already done by tx-isp-module.c ***\n");
 
     ret = tx_isp_sysfs_init(isp);
     if (ret < 0) {
