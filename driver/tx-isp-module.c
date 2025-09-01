@@ -214,6 +214,7 @@ static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *bu
 static int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
 static int private_reset_tx_isp_module(int arg);
+int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 
 /* CSI function forward declarations */
 static int csi_device_probe(struct tx_isp_dev *isp_dev);
@@ -5313,8 +5314,6 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
     list_add_tail(&buffer->list, fifo_head);
     spin_unlock_irqrestore(&irq_cb_lock, flags);
 }
-
-/* system_irq_func_set is provided by the SDK in tx_isp_tuning.c - removed duplicate */
 
 /* isp_irq_handle - EXACT Binary Ninja implementation with CORRECT structure access */
 static irqreturn_t isp_irq_handle(int irq, void *dev_id)
