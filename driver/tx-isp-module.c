@@ -2840,6 +2840,37 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         } while ((char*)i_2 < (char*)isp_dev + 0x6c); /* Binary Ninja: while ($s7 + 0x6c != i_2) */
         
         pr_info("Sensor registration complete, final_result=0x%x\n", final_result);
+        
+        /* CRITICAL: If sensor registration succeeded, add to sensor list for enumeration */
+        if (final_result > 0 && final_result != 0xfffffdfd) {
+            struct registered_sensor *reg_sensor;
+            char sensor_name[32];
+            
+            /* Extract sensor name from sensor_data (null-terminated string at start) */
+            memset(sensor_name, 0, sizeof(sensor_name));
+            strncpy(sensor_name, sensor_data, sizeof(sensor_name) - 1);
+            sensor_name[sizeof(sensor_name) - 1] = '\0';
+            
+            pr_info("*** ADDING SUCCESSFULLY REGISTERED SENSOR TO LIST: %s ***\n", sensor_name);
+            
+            /* Add to sensor enumeration list */
+            reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
+            if (reg_sensor) {
+                strncpy(reg_sensor->name, sensor_name, sizeof(reg_sensor->name) - 1);
+                reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
+                
+                mutex_lock(&sensor_list_mutex);
+                reg_sensor->index = sensor_count++;
+                list_add_tail(&reg_sensor->list, &sensor_list);
+                mutex_unlock(&sensor_list_mutex);
+                
+                pr_info("*** SENSOR ADDED TO LIST: index=%d name=%s ***\n", 
+                       reg_sensor->index, reg_sensor->name);
+            } else {
+                pr_err("Failed to allocate memory for sensor list entry\n");
+            }
+        }
+        
         return final_result;
     }
     case 0xc050561a: { // TX_ISP_SENSOR_ENUM_INPUT - Enumerate sensor inputs
