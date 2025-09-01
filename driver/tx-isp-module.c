@@ -4964,19 +4964,24 @@ static void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
     pr_info("tx_vic_disable_irq: VIC interrupts disabled\n");
 }
 
-/* Handle sensor registration from userspace IOCTL - matches reference driver */
+/* Handle sensor registration from userspace IOCTL - EXACT Binary Ninja 0x50 byte structure */
 static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
 {
+    /* CRITICAL: Binary Ninja shows EXACT 0x50 byte structure layout */
     struct tx_isp_sensor_register_info {
-        char name[32];                    // +0x00: Sensor name (from userspace)
+        char name[32];                    // +0x00: Sensor name (32 bytes)
         u32 chip_id;                     // +0x20: Chip ID  
-        u32 width;                       // +0x24: Sensor width
-        u32 height;                      // +0x28: Sensor height  
+        u32 total_width;                 // +0x24: Total sensor width (including blanking)
+        u32 total_height;                // +0x28: Total sensor height (including blanking)  
         u32 fps;                         // +0x2C: Sensor FPS
-        u32 interface_type;              // +0x30: Interface type (1=I2C, 2=SPI)
-        u16 i2c_addr;                    // +0x34: I2C address
-        u8 i2c_adapter_id;               // +0x36: I2C adapter number
-        u8 reserved[0x50 - 0x37];        // Fill to 0x50 bytes like reference
+        u32 dbus_type;                   // +0x30: Interface type (1=DVP, 2=MIPI)
+        u32 i2c_addr;                    // +0x34: I2C address
+        u32 i2c_adapter_id;              // +0x38: I2C adapter number
+        u32 integration_time;            // +0x3C: Integration time
+        u32 again;                       // +0x40: Analog gain
+        u32 data_type;                   // +0x44: Data type/format
+        u32 wdr_cache;                   // +0x48: WDR mode
+        u32 reserved;                    // +0x4C: Reserved (total = 0x50 bytes)
     } __attribute__((packed)) reg_info;
     struct registered_sensor *reg_sensor;
     struct tx_isp_sensor *tx_sensor = NULL;
