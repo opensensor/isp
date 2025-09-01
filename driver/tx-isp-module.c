@@ -3369,7 +3369,6 @@ static int tx_isp_init(void)
     if (ret) {
         pr_err("Failed to register CSI platform device: %d\n", ret);
         cleanup_i2c_infrastructure(ourISPdev);
-        destroy_frame_channel_devices();
         destroy_isp_tuning_device();
         tx_isp_proc_exit(ourISPdev);
         misc_deregister(&tx_isp_miscdev);
@@ -3385,7 +3384,7 @@ static int tx_isp_init(void)
         pr_err("Failed to register VIN platform device: %d\n", ret);
         platform_device_unregister(&tx_isp_csi_platform_device);
         cleanup_i2c_infrastructure(ourISPdev);
-        destroy_frame_channel_devices();
+        
         destroy_isp_tuning_device();
         tx_isp_proc_exit(ourISPdev);
         misc_deregister(&tx_isp_miscdev);
@@ -3402,7 +3401,7 @@ static int tx_isp_init(void)
         platform_device_unregister(&tx_isp_vin_platform_device);
         platform_device_unregister(&tx_isp_csi_platform_device);
         cleanup_i2c_infrastructure(ourISPdev);
-        destroy_frame_channel_devices();
+        
         destroy_isp_tuning_device();
         tx_isp_proc_exit(ourISPdev);
         misc_deregister(&tx_isp_miscdev);
@@ -3420,7 +3419,7 @@ static int tx_isp_init(void)
         platform_device_unregister(&tx_isp_vin_platform_device);
         platform_device_unregister(&tx_isp_csi_platform_device);
         cleanup_i2c_infrastructure(ourISPdev);
-        destroy_frame_channel_devices();
+        
         destroy_isp_tuning_device();
         tx_isp_proc_exit(ourISPdev);
         misc_deregister(&tx_isp_miscdev);
@@ -3439,7 +3438,7 @@ static int tx_isp_init(void)
         platform_device_unregister(&tx_isp_vin_platform_device);
         platform_device_unregister(&tx_isp_csi_platform_device);
         cleanup_i2c_infrastructure(ourISPdev);
-        destroy_frame_channel_devices();
+        
         destroy_isp_tuning_device();
         tx_isp_proc_exit(ourISPdev);
         misc_deregister(&tx_isp_miscdev);
@@ -3462,7 +3461,7 @@ static int tx_isp_init(void)
         platform_device_unregister(&tx_isp_vin_platform_device);
         platform_device_unregister(&tx_isp_csi_platform_device);
         cleanup_i2c_infrastructure(ourISPdev);
-        destroy_frame_channel_devices();
+        
         destroy_isp_tuning_device();
         tx_isp_proc_exit(ourISPdev);
         misc_deregister(&tx_isp_miscdev);
@@ -3478,7 +3477,7 @@ static int tx_isp_init(void)
         pr_err("Failed to register VIN platform driver: %d\n", ret);
         platform_driver_unregister(&tx_isp_csi_driver);
         cleanup_i2c_infrastructure(ourISPdev);
-        destroy_frame_channel_devices();
+        
         destroy_isp_tuning_device();
         tx_isp_proc_exit(ourISPdev);
         misc_deregister(&tx_isp_miscdev);
@@ -3495,7 +3494,7 @@ static int tx_isp_init(void)
         platform_driver_unregister(&tx_isp_vin_driver);
         platform_driver_unregister(&tx_isp_csi_driver);
         cleanup_i2c_infrastructure(ourISPdev);
-        destroy_frame_channel_devices();
+        
         destroy_isp_tuning_device();
         tx_isp_proc_exit(ourISPdev);
         misc_deregister(&tx_isp_miscdev);
@@ -3513,7 +3512,7 @@ static int tx_isp_init(void)
         platform_driver_unregister(&tx_isp_vin_driver);
         platform_driver_unregister(&tx_isp_csi_driver);
         cleanup_i2c_infrastructure(ourISPdev);
-        destroy_frame_channel_devices();
+        
         destroy_isp_tuning_device();
         tx_isp_proc_exit(ourISPdev);
         misc_deregister(&tx_isp_miscdev);
@@ -3532,7 +3531,7 @@ static int tx_isp_init(void)
         platform_driver_unregister(&tx_isp_vin_driver);
         platform_driver_unregister(&tx_isp_csi_driver);
         cleanup_i2c_infrastructure(ourISPdev);
-        destroy_frame_channel_devices();
+        
         destroy_isp_tuning_device();
         tx_isp_proc_exit(ourISPdev);
         misc_deregister(&tx_isp_miscdev);
@@ -3556,7 +3555,7 @@ static int tx_isp_init(void)
         pr_err("Failed to initialize CSI subdev: %d\n", ret);
         tx_isp_vic_platform_exit();
         cleanup_i2c_infrastructure(ourISPdev);
-        destroy_frame_channel_devices();
+        
         destroy_isp_tuning_device();
         tx_isp_proc_exit(ourISPdev);
         misc_deregister(&tx_isp_miscdev);
@@ -3571,7 +3570,7 @@ static int tx_isp_init(void)
         pr_err("Failed to activate CSI subdev: %d\n", ret);
         tx_isp_vic_platform_exit();
         cleanup_i2c_infrastructure(ourISPdev);
-        destroy_frame_channel_devices();
+        
         destroy_isp_tuning_device();
         tx_isp_proc_exit(ourISPdev);
         misc_deregister(&tx_isp_miscdev);
@@ -3682,7 +3681,7 @@ static void tx_isp_exit(void)
         }
         
         /* Destroy frame channel devices */
-        destroy_frame_channel_devices();
+        
         
         /* Destroy ISP tuning device */
         destroy_isp_tuning_device();
