@@ -1401,7 +1401,7 @@ struct tx_isp_subdev_ops vic_subdev_ops = {
 EXPORT_SYMBOL(vic_subdev_ops);
 
 
-/* VIC FRD file operations - MISSING from original implementation */
+/* VIC FRD file operations - EXACT Binary Ninja implementation */
 static const struct file_operations isp_vic_frd_fops = {
     .owner = THIS_MODULE,
     .llseek = seq_lseek,                /* private_seq_lseek from hex dump */
@@ -1411,13 +1411,13 @@ static const struct file_operations isp_vic_frd_fops = {
     .release = single_release,          /* private_single_release from hex dump */
 };
 
+/* VIC W02 proc file operations - FIXED for proper proc interface */
 static const struct file_operations isp_w02_proc_fops = {
     .owner = THIS_MODULE,
     .open = vic_chardev_open,
     .release = vic_chardev_release,
-    .write = vic_proc_write
-//    .unlocked_ioctl = vic_chardev_ioctl,
-//    .compat_ioctl = vic_chardev_ioctl  // For 32-bit compatibility
+    .write = vic_proc_write,
+    .llseek = default_llseek,
 };
 
 /* Implementation of the open/release functions */
@@ -1682,28 +1682,31 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     }
 
     /* Create /proc/jz/isp directory and entries */
-    isp_dir = proc_mkdir("jz/isp", NULL);
+    isp_dir = proc_mkdir(\"jz/isp\", NULL);
     if (!isp_dir) {
-        pr_err("Failed to create /proc/jz/isp directory\n");
+        pr_err(\"Failed to create /proc/jz/isp directory\\n\");
         goto err_deinit_sd;
     }
 
     /* Create /proc/jz/isp/isp-w02 for write operations */
-    w02_entry = proc_create_data("isp-w02", 0666, isp_dir, &isp_w02_proc_fops, sd);
+    w02_entry = proc_create_data(\"isp-w02\", 0666, isp_dir, &isp_w02_proc_fops, sd);
     if (!w02_entry) {
-        pr_err("Failed to create /proc/jz/isp/isp-w02\n");
-        remove_proc_entry("jz/isp", NULL);
+        pr_err(\"Failed to create /proc/jz/isp/isp-w02\\n\");
+        remove_proc_entry(\"jz/isp\", NULL);
         goto err_deinit_sd;
     }
+    pr_info(\"*** Successfully created /proc/jz/isp/isp-w02 ***\\n\");
 
-    /* Create /proc/jz/isp/isp-vic-frd for VIC frame rate debugging - MISSING from original */
-    struct proc_dir_entry *vic_frd_entry = proc_create_data("isp-vic-frd", 0444, isp_dir, &isp_vic_frd_fops, sd);
+    /* Create /proc/jz/isp/isp-vic-frd for VIC frame rate debugging - CRITICAL MISSING INTERFACE */
+    struct proc_dir_entry *vic_frd_entry = proc_create_data(\"isp-vic-frd\", 0444, isp_dir, &isp_vic_frd_fops, sd);
     if (!vic_frd_entry) {
-        pr_err("Failed to create /proc/jz/isp/isp-vic-frd\n");
-        remove_proc_entry("isp-w02", isp_dir);
-        remove_proc_entry("jz/isp", NULL);
+        pr_err(\"*** CRITICAL ERROR: Failed to create /proc/jz/isp/isp-vic-frd - VIC FRD interface missing! ***\\n\");
+        pr_err(\"*** This indicates VIC initialization is NOT completing fully ***\\n\");
+        remove_proc_entry(\"isp-w02\", isp_dir);
+        remove_proc_entry(\"jz/isp\", NULL);
         goto err_deinit_sd;
     }
+    pr_info(\"*** SUCCESS: Created /proc/jz/isp/isp-vic-frd - VIC FULLY INITIALIZED! ***\\n\");
 
     pr_info("VIC probe completed successfully\n");
     return 0;
