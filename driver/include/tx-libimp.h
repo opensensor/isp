@@ -443,14 +443,6 @@ struct isp_zone_ctrl {
     __u32 value;      // var_10 = arg1 (output buffer)
 };
 
-// AE Zone data structure (from apical_isp_ae_zone_g_ctrl.isra.84)
-struct ae_zone_info {
-    u8 zones[MAX_AE_ZONES];    // Zone data
-    u16 metrics[4];           // Various metrics
-    u16 hist_data[MAX_HIST_BINS];
-    u8 additional[4];         // Additional data seen in tisp_g_ae_hist
-};
-
 
 // AE histogram and state structures
 struct ae_hist_data {
