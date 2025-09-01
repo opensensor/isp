@@ -1223,7 +1223,7 @@ static void vic_pipo_mdma_enable(struct vic_device *vic_dev)
 //}
 
 /* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja implementation */
-static int ispvic_frame_channel_s_stream(struct vic_device *vic_dev, int enable)
+int ispvic_frame_channel_s_stream(struct vic_device *vic_dev, int enable)
 {
     void __iomem *vic_base = vic_dev->vic_regs;
     unsigned long flags;
