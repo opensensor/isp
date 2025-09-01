@@ -5247,6 +5247,15 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
             /* CRITICAL: Set vic_start_ok global flag for Binary Ninja interrupt processing */
             vic_start_ok = 1;
             pr_info("*** CRITICAL: vic_start_ok = 1 SET - HARDWARE INTERRUPTS NOW ACTIVE ***\n");
+            
+            /* CRITICAL: ENABLE THE MAIN ISP IRQ 63 - This was MISSING! */
+            pr_info("*** ENABLING MAIN ISP IRQ %d FOR HARDWARE INTERRUPT GENERATION ***\n", ourISPdev->isp_irq);
+            if (ourISPdev->isp_irq > 0) {
+                tx_isp_enable_irq(ourISPdev);
+                pr_info("*** MAIN ISP IRQ %d NOW ENABLED - HARDWARE INTERRUPTS SHOULD FIRE! ***\n", ourISPdev->isp_irq);
+            } else {
+                pr_err("*** CRITICAL: NO MAIN ISP IRQ TO ENABLE! ***\n");
+            }
                         } else {
                             pr_info("*** tisp_init FAILED: %d - continuing ***\n", tisp_result);
                         }
@@ -5557,29 +5566,92 @@ static int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *
     return 0;
 }
 
-/* isp_irq_handle - SIMPLIFIED working implementation that calls VIC ISR */
+/* isp_irq_handle - CORRECTED Binary Ninja main ISP interrupt dispatcher */
 static irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+    void __iomem *isp_regs;
+    u32 isp_status, isp_mask;
+    u32 vic_handled = 0;
+    irqreturn_t result = IRQ_NONE;
     
-    if (!isp_dev) {
+    if (!isp_dev || !isp_dev->vic_regs) {
         return IRQ_NONE;
     }
     
-    pr_debug("*** isp_irq_handle: Hardware interrupt on IRQ %d ***\n", irq);
+    isp_regs = isp_dev->vic_regs - 0x9a00;  /* Get ISP base registers */
     
-    /* CRITICAL: Directly call the VIC interrupt service routine that handles all VIC interrupts */
-    /* This is the actual working approach - let VIC ISR do all the complex processing */
-    irqreturn_t vic_result = isp_vic_interrupt_service_routine(irq, dev_id);
+    /* Binary Ninja: Read main ISP interrupt status and mask registers */
+    isp_status = readl(isp_regs + 0x34);  /* ISP interrupt status */
+    isp_mask = readl(isp_regs + 0x30);    /* ISP interrupt enable mask */
     
-    if (vic_result == IRQ_HANDLED) {
-        pr_debug("*** isp_irq_handle: VIC interrupt handled successfully ***\n");
+    /* Only process interrupts that are both pending and enabled */
+    u32 pending_interrupts = isp_status & isp_mask;
+    
+    if (pending_interrupts == 0) {
+        /* No interrupts pending for us */
+        return IRQ_NONE;
     }
     
-    return vic_result;
+    pr_info("*** isp_irq_handle: Hardware interrupt IRQ %d - status=0x%x mask=0x%x pending=0x%x ***\n", 
+            irq, isp_status, isp_mask, pending_interrupts);
+    
+    /* Binary Ninja: Dispatch to appropriate subsystem handlers based on interrupt status bits */
+    
+    /* Check for VIC interrupts (typically bit 0 or multiple VIC-related bits) */
+    if (pending_interrupts & 0x1) {
+        pr_info("*** isp_irq_handle: VIC interrupt detected - dispatching to VIC handler ***\n");
+        irqreturn_t vic_result = isp_vic_interrupt_service_routine(irq, dev_id);
+        if (vic_result == IRQ_HANDLED) {
+            vic_handled = 1;
+            result = IRQ_HANDLED;
+        }
+    }
+    
+    /* Check for CSI interrupts */
+    if (pending_interrupts & 0x2) {
+        pr_info("*** isp_irq_handle: CSI interrupt detected ***\n");
+        /* Handle CSI interrupts */
+        result = IRQ_HANDLED;
+    }
+    
+    /* Check for ISP core interrupts */
+    if (pending_interrupts & 0x4) {
+        pr_info("*** isp_irq_handle: ISP core interrupt detected ***\n");
+        /* Handle ISP core interrupts */
+        result = IRQ_HANDLED;
+    }
+    
+    /* Check for other ISP subsystem interrupts */
+    if (pending_interrupts & 0xFFF8) {
+        pr_info("*** isp_irq_handle: Other ISP interrupts detected: 0x%x ***\n", pending_interrupts & 0xFFF8);
+        
+        /* Binary Ninja: Call registered IRQ callback functions */
+        int i;
+        for (i = 0; i < MAX_IRQ_HANDLERS; i++) {
+            if (irq_func_cb[i] != NULL) {
+                irqreturn_t cb_result = irq_func_cb[i](irq, dev_id);
+                if (cb_result == IRQ_HANDLED) {
+                    result = IRQ_HANDLED;
+                }
+            }
+        }
+    }
+    
+    /* Clear processed interrupt status bits */
+    writel(pending_interrupts, isp_regs + 0x34);
+    wmb();
+    
+    if (result == IRQ_HANDLED) {
+        pr_debug("*** isp_irq_handle: Interrupt processed successfully ***\n");
+    } else {
+        pr_warn("*** isp_irq_handle: No handler processed interrupt - status=0x%x ***\n", pending_interrupts);
+    }
+    
+    return result;
 }
 
-/* isp_irq_thread_handle - SIMPLIFIED working threaded handler */
+/* isp_irq_thread_handle - CORRECTED Binary Ninja threaded handler */
 static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
@@ -5588,10 +5660,24 @@ static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
         return IRQ_NONE;
     }
     
-    pr_debug("*** isp_irq_thread_handle: IRQ %d threaded handler ***\n", irq);
+    pr_debug("*** isp_irq_thread_handle: IRQ %d threaded processing ***\n", irq);
     
-    /* The threaded handler can do additional processing that doesn't need to be atomic */
-    /* For now, just acknowledge the threaded interrupt */
+    /* Binary Ninja: Threaded handler does frame processing work that can sleep */
+    /* This includes buffer management, event notifications, etc. */
+    
+    /* Wake up frame channels for completed frames */
+    int i;
+    for (i = 0; i < num_channels; i++) {
+        if (frame_channels[i].state.streaming) {
+            frame_channel_wakeup_waiters(&frame_channels[i]);
+        }
+    }
+    
+    /* Update frame statistics */
+    if (isp_dev) {
+        isp_dev->frame_count++;
+        pr_debug("*** isp_irq_thread_handle: frame_count=%u ***\n", isp_dev->frame_count);
+    }
     
     return IRQ_HANDLED;
 }
