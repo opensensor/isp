@@ -39,44 +39,28 @@ int tx_isp_hardware_reset(int reset_mode)
     u32 reg_val;
     int timeout_count;
     
-    mcp_log_info("tx_isp_hardware_reset: Starting hardware reset sequence", 
-                 (struct mcp_data_payload){
-                     .sensor_data = {.width = reset_mode, .height = 0},
-                     .operation = "hardware_reset_start"
-                 });
+    pr_info("*** TX ISP HARDWARE RESET: Starting reset sequence (mode=%d) ***\n", reset_mode);
     
     /* Early exit for non-reset mode (matches reference behavior) */
     if (reset_mode != 0) {
-        mcp_log_info("tx_isp_hardware_reset: Skip reset mode, returning success", 
-                     (struct mcp_data_payload){
-                         .operation = "hardware_reset_skip"
-                     });
+        pr_info("*** TX ISP HARDWARE RESET: Skip mode, returning success ***\n");
         return 0;
     }
     
     /* Map the reset control register */
     reset_reg = ioremap(TX_ISP_RESET_REG, 4);
     if (!reset_reg) {
-        pr_err("tx_isp_hardware_reset: Failed to map reset register 0x%08x\n", 
+        pr_err("*** TX ISP HARDWARE RESET: Failed to map reset register 0x%08x ***\n", 
                TX_ISP_RESET_REG);
-        mcp_log_error("tx_isp_hardware_reset: Reset register mapping failed", 
-                      (struct mcp_data_payload){
-                          .error_info = "ioremap_failed",
-                          .operation = "hardware_reset_error"
-                      });
         return -ENOMEM;
     }
     
     /* Step 1: Trigger hardware reset by setting bit 21 */
     reg_val = readl(reset_reg);
+    pr_info("*** TX ISP HARDWARE RESET: Initial register value: 0x%08x ***\n", reg_val);
     reg_val |= TX_ISP_RESET_TRIGGER;
     writel(reg_val, reset_reg);
-    
-    mcp_log_info("tx_isp_hardware_reset: Reset triggered, waiting for ready signal", 
-                 (struct mcp_data_payload){
-                     .buffer_info = {.physical_addr = reg_val},
-                     .operation = "hardware_reset_triggered"
-                 });
+    pr_info("*** TX ISP HARDWARE RESET: Reset triggered, reg=0x%08x, waiting for ready ***\n", reg_val);
     
     /* Step 2: Wait for hardware ready signal (bit 20) with timeout */
     for (timeout_count = TX_ISP_RESET_TIMEOUT; timeout_count > 0; timeout_count--) {
