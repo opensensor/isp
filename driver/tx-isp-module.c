@@ -5541,15 +5541,8 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                             }
                         }
                         
-                        /* STEP 2: Call tisp_init to initialize ISP core with MIPI support */
-                        pr_info("*** STEP 2: tisp_init for MIPI direct path ***\n");
-                        int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
-                        if (tisp_result == 0) {
-                            pr_info("*** tisp_init SUCCESS - ISP CORE READY FOR MIPI DATA ***\n");
-                        } else {
-                            pr_err("*** tisp_init FAILED: %d ***\n", tisp_result);
-                            return -EIO;
-                        }
+                        /* STEP 2: ISP core initialization is done via ispcore_core_ops_init, not here */
+                        pr_info("*** STEP 2: ISP core init handled by ispcore_core_ops_init (Binary Ninja) ***\n");
                         
                         /* STEP 3: Call tx_isp_vic_start to set vic_start_ok and unlock VIC */
                         pr_info("*** STEP 3: tx_isp_vic_start for MIPI interface (sets vic_start_ok) ***\n");
@@ -5602,13 +5595,8 @@ static int handle_sensor_register(struct tx_isp_dev *isp_dev, void __user *argp)
                         pr_info("*** tx_isp_vic_start SUCCESS - VIC UNLOCKED FOR DVP ***\n");
                         vic_dev->state = 2;
                         
-                        /* Then call tisp_init */
-                        int tisp_result = tisp_init(&tx_sensor->attr, isp_dev);
-                        if (tisp_result == 0) {
-                            pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED FOR DVP ***\n");
-                        } else {
-                            pr_info("*** tisp_init FAILED: %d ***\n", tisp_result);
-                        }
+                        /* ISP core init handled by ispcore_core_ops_init, not here (Binary Ninja) */
+                        pr_info("*** ISP core init handled by ispcore_core_ops_init (Binary Ninja) ***\n");
                         
                         /* Then call vic_pipo_mdma_enable */
                         void *mdma_result = vic_pipo_mdma_enable(vic_dev);
