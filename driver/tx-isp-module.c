@@ -2476,37 +2476,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
         }
         spin_unlock_irqrestore(&state->buffer_lock, flags);
         
-        /* TEMPORARY: Manually trigger frame completion since hardware interrupts aren't firing */
-        if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
-            pr_info("*** TEMPORARY: Manually generating frame completion (bypassing hardware) ***\n");
-            
-            /* SIMPLIFIED: Just wake up the frame channels directly */
-            int i;
-            for (i = 0; i < num_channels; i++) {
-                if (frame_channels[i].state.streaming) {
-                    unsigned long flags;
-                    struct frame_channel_device *fcd = &frame_channels[i];
-                    
-                    /* Mark frame as ready and wake up waiters */
-                    spin_lock_irqsave(&fcd->state.buffer_lock, flags);
-                    fcd->state.frame_ready = true;
-                    spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
-                    
-                    /* Wake up any threads waiting for frame completion */
-                    wake_up_interruptible(&fcd->state.frame_wait);
-                    
-                    pr_info("*** TEMPORARY: Generated frame completion for channel %d ***\n", i);
-                }
-            }
-            
-            /* Increment frame counter */
-            if (ourISPdev) {
-                ourISPdev->frame_count++;
-                pr_info("*** TEMPORARY: Frame count incremented to %u ***\n", ourISPdev->frame_count);
-            }
-            
-            pr_info("*** TEMPORARY: Manual frame generation complete ***\n");
-        }
+        /* Real hardware interrupts should handle frame completion */
         
         return 0;
     }
