@@ -725,7 +725,7 @@ static int ispcore_slake_module(struct tx_isp_dev *isp)
         /* Initialize channel structures - set channel enable flags */
         ISP_INFO("*** ispcore_slake_module: Initializing channel flags ***\n");
         for (i = 0; i < ISP_MAX_CHAN; i++) {
-            isp->channels[i].active = true;  /* Set channel active flag (offset 0x74 in reference) */
+            isp->channels[i].enabled = true;  /* Set channel enabled flag (streaming state) */
             ISP_INFO("Channel %d: enabled\n", i);
         }
         
