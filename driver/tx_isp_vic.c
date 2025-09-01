@@ -702,7 +702,7 @@ static int tx_isp_vic_start(struct vic_device *vic_dev)
         wmb();
 
         pr_info("tx_isp_vic_start: MIPI registers configured - 0x10=0x%x, 0x18=0x%x\n",
-                final_mipi_config, (integration_time << 16) + vic_dev->frame_width);
+                final_mipi_config, (integration_time << 16) + vic_dev->width);
 
         /* *** Binary Ninja EXACT unlock sequence *** */
         writel(2, vic_regs + 0x0);
