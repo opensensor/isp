@@ -35,6 +35,9 @@
 #define ISP_PIPELINE_CONFIGURED  1
 #define ISP_PIPELINE_STREAMING   2
 
+/* ISP constants for Binary Ninja compatibility */
+#define ISP_MAX_SUBDEVS          32
+
 /* Forward declarations */
 struct tx_isp_subdev;
 struct tx_isp_core;
@@ -284,6 +287,12 @@ struct tx_isp_dev {
     
     /* Pipeline state management */
     int pipeline_state;
+    
+    /* Binary Ninja compatibility members */
+    int subdev_count;                        /* Number of subdevices at offset 0x80 */
+    struct platform_device **subdev_list;   /* Subdevice list at offset 0x84 */
+    void *subdev_graph[ISP_MAX_SUBDEVS];     /* Subdevice graph array */
+    struct proc_dir_entry *proc_dir;         /* Proc directory at offset 0x11c */
 } __attribute__((aligned(4)));
 
 
