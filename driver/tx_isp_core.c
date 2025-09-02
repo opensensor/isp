@@ -1964,10 +1964,7 @@ extern void ispcore_frame_channel_streamoff(int32_t* arg1);
 extern int ispcore_frame_channel_dqbuf(void* arg1, void* arg2);
 extern int tisp_channel_attr_set(uint32_t channel_id, void* attr);
 extern int tisp_channel_fifo_clear(uint32_t channel_id);
-extern void __private_spin_lock_irqsave(void* lock, uint32_t* flags);
-extern void private_spin_unlock_irqrestore(void* lock, uint32_t flags);
-extern void arch_local_irq_restore(uint32_t flags);
-extern void preempt_schedule(void);
+
 
 /**
  * ispcore_pad_event_handle - Handle ISP pad events
