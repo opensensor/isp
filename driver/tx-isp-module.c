@@ -3512,7 +3512,7 @@ static int tx_isp_fs_remove(struct platform_device *pdev)
     return 0;
 }
 
-static int isp_core_tuning_init(void *core_dev)
+int isp_core_tuning_init(void *core_dev)
 {
     pr_info("*** isp_core_tuning_init: Creating ISP tuning interface (/dev/isp-m0) ***\n");
     
@@ -3527,13 +3527,13 @@ static int isp_core_tuning_init(void *core_dev)
     }
 }
 
-static void isp_core_tuning_deinit(void *core_dev)
+void isp_core_tuning_deinit(void *core_dev)
 {
     pr_info("isp_core_tuning_deinit: Destroying ISP tuning interface\n");
     destroy_isp_tuning_device();
 }
 
-static int sensor_early_init(void *core_dev)
+int sensor_early_init(void *core_dev)
 {
     pr_info("sensor_early_init: Preparing sensor infrastructure\n");
     return 0;
