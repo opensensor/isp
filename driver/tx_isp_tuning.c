@@ -3776,24 +3776,6 @@ static const struct file_operations isp_core_tunning_fops = {
     .compat_ioctl = isp_m0_chardev_ioctl,
 };
 
-/* system_irq_func_set - Binary Ninja EXACT implementation */
-int system_irq_func_set(int irq_id, void *handler)
-{
-    pr_info("system_irq_func_set: Setting IRQ handler for ID %d\n", irq_id);
-    
-    if (irq_id < 0 || irq_id >= 32) {
-        pr_err("system_irq_func_set: Invalid IRQ ID %d\n", irq_id);
-        return -EINVAL;
-    }
-    
-    /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
-    irq_func_cb[irq_id] = (void (*)(void))handler;
-    
-    pr_info("system_irq_func_set: IRQ %d handler set to %p\n", irq_id, handler);
-    return 0;
-}
-EXPORT_SYMBOL(system_irq_func_set);
-
 /* isp_core_tuning_init - Binary Ninja EXACT implementation */
 void *isp_core_tuning_init(void *arg1)
 {
