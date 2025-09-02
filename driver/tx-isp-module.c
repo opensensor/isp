@@ -449,6 +449,85 @@ int frame_channel_open(struct inode *inode, struct file *file);
 int frame_channel_release(struct inode *inode, struct file *file);
 static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
+/* Frame channel open handler - CRITICAL MISSING IMPLEMENTATION */
+int frame_channel_open(struct inode *inode, struct file *file)
+{
+    struct frame_channel_device *fcd = NULL;
+    int minor = iminor(inode);
+    int i;
+    
+    pr_info("*** FRAME CHANNEL OPEN: minor=%d ***\n", minor);
+    
+    /* Find the frame channel device by minor number */
+    for (i = 0; i < num_channels; i++) {
+        if (frame_channels[i].miscdev.minor == minor) {
+            fcd = &frame_channels[i];
+            break;
+        }
+    }
+    
+    if (!fcd) {
+        pr_err("Frame channel open: No device found for minor %d\n", minor);
+        return -ENODEV;
+    }
+    
+    /* Initialize channel state */
+    spin_lock_init(&fcd->state.buffer_lock);
+    init_waitqueue_head(&fcd->state.frame_wait);
+    
+    /* Set default format based on channel */
+    if (fcd->channel_num == 0) {
+        /* Main channel - HD */
+        fcd->state.width = 1920;
+        fcd->state.height = 1080;
+        fcd->state.format = 0x3231564e; /* NV12 */
+    } else {
+        /* Sub channel - smaller */
+        fcd->state.width = 640;
+        fcd->state.height = 360;  
+        fcd->state.format = 0x3231564e; /* NV12 */
+    }
+    
+    fcd->state.enabled = false;
+    fcd->state.streaming = false;
+    fcd->state.buffer_count = 0;
+    fcd->state.sequence = 0;
+    fcd->state.frame_ready = false;
+    
+    file->private_data = fcd;
+    
+    pr_info("*** FRAME CHANNEL %d OPENED - NOW READY FOR IOCTLS ***\n", fcd->channel_num);
+    pr_info("Channel %d: Default format %dx%d, pixfmt=0x%x\n", 
+            fcd->channel_num, fcd->state.width, fcd->state.height, fcd->state.format);
+    
+    return 0;
+}
+
+/* Frame channel release handler - CRITICAL MISSING IMPLEMENTATION */
+int frame_channel_release(struct inode *inode, struct file *file)
+{
+    struct frame_channel_device *fcd = file->private_data;
+    
+    if (!fcd) {
+        return 0;
+    }
+    
+    pr_info("*** FRAME CHANNEL %d RELEASED ***\n", fcd->channel_num);
+    
+    /* Stop streaming if active */
+    if (fcd->state.streaming) {
+        pr_info("Channel %d: Stopping streaming on release\n", fcd->channel_num);
+        fcd->state.streaming = false;
+        fcd->state.enabled = false;
+        
+        /* Wake up any waiters */
+        wake_up_interruptible(&fcd->state.frame_wait);
+    }
+    
+    file->private_data = NULL;
+    return 0;
+}
+
 /* Frame channel device file operations - moved up for early use */
 static const struct file_operations frame_channel_fops = {
     .owner = THIS_MODULE,
@@ -3597,8 +3676,27 @@ static int tx_isp_init(void)
         goto err_cleanup_platforms;
     }
     pr_info("*** SUBDEVICE GRAPH CREATED - FRAME DEVICES SHOULD NOW EXIST ***\n");
+    
+    /* *** CRITICAL: Create frame channel devices with proper IOCTL handlers *** */
+    pr_info("*** CREATING FRAME CHANNEL DEVICES FOR IOCTL ROUTING ***\n");
+    ret = create_frame_channel_devices();
+    if (ret) {
+        pr_err("Failed to create frame channel devices: %d\n", ret);
+        goto err_cleanup_graph;
+    }
+    pr_info("*** FRAME CHANNEL DEVICES CREATED - IOCTLS SHOULD NOW WORK ***\n");
 
     pr_info("TX ISP driver ready with new subdevice management system\n");
+err_cleanup_graph:
+    tx_isp_cleanup_subdev_graph(ourISPdev);
+    
+err_cleanup_platforms:
+    /* Clean up in reverse order */
+    platform_device_unregister(&tx_isp_core_platform_device);
+    platform_device_unregister(&tx_isp_fs_platform_device);
+    platform_device_unregister(&tx_isp_vin_platform_device);
+    platform_device_unregister(&tx_isp_vic_platform_device);
+    platform_device_unregister(&tx_isp_csi_platform_device);
     
     return 0;
 
