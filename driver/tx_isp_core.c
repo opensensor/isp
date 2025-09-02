@@ -1971,7 +1971,17 @@ static const struct file_operations isp_tuning_fops = {
 };
 
 
-/* Missing function implementations from Binary Ninja MCP decompilation */
+
+/* lock and mutex interfaces */
+void __private_spin_lock_irqsave(spinlock_t *lock, unsigned long *flags)
+{
+    raw_spin_lock_irqsave(spinlock_check(lock), *flags);
+}
+
+void private_spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags)
+{
+    spin_unlock_irqrestore(lock, flags);
+}
 
 /**
  * ispcore_frame_channel_streamoff - EXACT Binary Ninja implementation
