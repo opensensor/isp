@@ -2070,7 +2070,7 @@ static const struct file_operations isp_tuning_fops = {
     .release = isp_tuning_release,
 };
 
-/* Graph proc operations for /proc/jz/isp/* entries */
+/* Graph proc operations for /proc/jz/isp/* entries - Linux 3.10 compatible */
 static ssize_t graph_proc_read(struct file *file, char __user *buffer, size_t count, loff_t *pos)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)PDE_DATA(file_inode(file));
@@ -2102,8 +2102,10 @@ static ssize_t graph_proc_read(struct file *file, char __user *buffer, size_t co
     return len;
 }
 
-const struct proc_ops graph_proc_ops = {
-    .proc_read = graph_proc_read,
+/* Use file_operations for Linux 3.10 compatibility (proc_ops was added in 5.6) */
+static const struct file_operations graph_proc_fops = {
+    .owner = THIS_MODULE,
+    .read = graph_proc_read,
 };
 
 
