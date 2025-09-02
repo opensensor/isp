@@ -330,6 +330,13 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer);
 
+/* Forward declarations for new subdevice management functions */
+extern int tx_isp_init_subdev_registry(struct tx_isp_dev *isp,
+                                      struct platform_device **platform_devices,
+                                      int count);
+extern int tx_isp_create_subdev_graph(struct tx_isp_dev *isp);
+extern void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
+
 /* Reference driver function declarations - Binary Ninja exact names */
 static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev);
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sensor_attribute *sensor_attr);
