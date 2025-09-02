@@ -307,7 +307,6 @@ static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int c
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer);
-static int init_isp_interrupt_system(struct tx_isp_dev *isp_dev);
 
 /* Reference driver function declarations - Binary Ninja exact names */
 static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev);
@@ -3724,12 +3723,6 @@ static int tx_isp_init(void)
         pr_warn("No sensors detected, continuing with basic initialization: %d\n", ret);
     }
     
-    /* Initialize Binary Ninja interrupt system FIRST */
-    ret = init_isp_interrupt_system(ourISPdev);
-    if (ret) {
-        pr_warn("Binary Ninja interrupt system initialization failed: %d\n", ret);
-    }
-    
     /* Initialize hardware interrupt handling for real frame completion */
     ret = tx_isp_init_hardware_interrupts(ourISPdev);
     if (ret) {
@@ -5085,61 +5078,6 @@ irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)
     }
     
     return IRQ_HANDLED;
-}
-
-/* Enhanced interrupt system initialization - Binary Ninja reference */
-static int init_isp_interrupt_system(struct tx_isp_dev *isp_dev)
-{
-    int i, ret;
-    
-    if (!isp_dev) {
-        return -EINVAL;
-    }
-    
-    pr_info("*** INITIALIZING ISP INTERRUPT SYSTEM (Binary Ninja Reference) ***\n");
-    
-    /* Initialize IRQ callback arrays */
-    for (i = 0; i < MAX_IRQ_HANDLERS; i++) {
-        irq_func_cb[i] = NULL;
-    }
-    
-    for (i = 0; i < MAX_EVENT_HANDLERS; i++) {
-        event_func_cb[i] = NULL;
-    }
-    
-    /* Initialize VIC buffer FIFO */
-    INIT_LIST_HEAD(&vic_buffer_fifo);
-    
-    /* Initialize VIC MDMA channel state - Binary Ninja global variables */
-    vic_mdma_ch0_sub_get_num = 0;
-    vic_mdma_ch1_sub_get_num = 0;
-    vic_mdma_ch0_set_buff_index = 0;
-    vic_mdma_ch1_set_buff_index = 0;
-    
-    /* Set up Binary Ninja interrupt handlers in the callback array */
-    system_irq_func_set(0xd, ip_done_interrupt_handler);  /* IRQ 13 - ISP done */
-    
-    /* Register primary ISP interrupt handler using Binary Ninja methods */
-    if (isp_dev->isp_irq > 0) {
-        pr_info("*** REGISTERING BINARY NINJA ISP INTERRUPT HANDLERS ***\n");
-        
-        /* Use request_threaded_irq like Binary Ninja private_request_threaded_irq */
-        ret = request_threaded_irq(isp_dev->isp_irq, 
-                                  isp_irq_handle,          /* Primary handler */
-                                  isp_irq_thread_handle,   /* Threaded handler */
-                                  IRQF_SHARED | IRQF_ONESHOT,
-                                  "tx-isp-bn", isp_dev);
-        
-        if (ret == 0) {
-            pr_info("*** Binary Ninja ISP interrupt handlers registered on IRQ %d ***\n", isp_dev->isp_irq);
-        } else {
-            pr_err("*** Failed to register Binary Ninja ISP interrupt handlers: %d ***\n", ret);
-            return ret;
-        }
-    }
-    
-    pr_info("*** ISP INTERRUPT SYSTEM INITIALIZATION COMPLETE ***\n");
-    return 0;
 }
 
 /* tx_isp_send_event_to_remote - EXACT Binary Ninja implementation (renamed to avoid header conflict) */
