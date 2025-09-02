@@ -2353,21 +2353,6 @@ int tisp_g_fcrop_control(char* arg1)
 EXPORT_SYMBOL(tisp_g_fcrop_control);
 
 
-/* Missing tx_isp_hardware_reset function */
-int tx_isp_hardware_reset(int reset_type)
-{
-    pr_info("*** tx_isp_hardware_reset: Performing hardware reset (type=%d) ***\n", reset_type);
-    
-    /* In a real implementation, this would reset the ISP hardware */
-    /* For now, just simulate a successful reset */
-    msleep(10);  /* Allow time for reset */
-    
-    pr_info("*** tx_isp_hardware_reset: Hardware reset complete ***\n");
-    return 0;
-}
-EXPORT_SYMBOL(tx_isp_hardware_reset);
-
-
 /**
  * ispcore_pad_event_handle - Handle ISP pad events
  * This is the EXACT implementation from Binary Ninja decompilation
