@@ -1805,6 +1805,11 @@ static const struct file_operations graph_proc_fops = {
     .read = graph_proc_read,
 };
 
+/* Frame channel forward declarations */
+int frame_channel_open(struct inode *inode, struct file *file);
+int frame_channel_release(struct inode *inode, struct file *file);
+
+
 static long frame_channel_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     pr_info("Frame channel IOCTL: cmd=0x%x\n", cmd);
