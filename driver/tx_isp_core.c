@@ -1802,7 +1802,7 @@ EXPORT_SYMBOL(tisp_channel_start);
 /* Core probe function from decompiled code */
 
 /* tx_isp_core_probe - EXACT Binary Ninja implementation */
-static int tx_isp_core_probe(struct platform_device *pdev)
+int tx_isp_core_probe(struct platform_device *pdev)
 {
     void *core_dev;
     void *s2_1;

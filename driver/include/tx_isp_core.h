@@ -3,6 +3,7 @@
 
 /* Core Functions */
 int tx_isp_core_remove(struct platform_device *pdev);
+int tx_isp_core_probe(struct platform_device *pdev);
 
 /* Core Operations */
 int tx_isp_core_start(struct tx_isp_subdev *sd);
