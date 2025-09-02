@@ -2707,6 +2707,69 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
     return result;
 }
 
+/* Platform device driver data structures for graph creation */
+struct isp_subdev_data {
+    uint32_t device_type;     /* 0x00: Device type (1=source, 2=sink) */
+    uint32_t device_id;       /* 0x04: Device ID */
+    uint32_t src_index;       /* 0x08: Source index (for type 2) */
+    uint32_t dst_index;       /* 0x0C: Destination index */
+    struct miscdevice misc;   /* 0x10: Misc device (starts at 0xC, but we pad) */
+    char device_name[16];     /* 0x20: Device name */  
+    void *file_ops;           /* 0x30: File operations pointer */
+    void *proc_ops;           /* 0x34: Proc operations pointer */
+    char padding[0x100];      /* Padding to match Binary Ninja expectations */
+};
+
+static struct isp_subdev_data csi_subdev_data = {
+    .device_type = 1,    /* Source */
+    .device_id = 0,
+    .src_index = 0,
+    .dst_index = 0,
+    .device_name = "csi",
+    .file_ops = NULL,
+    .proc_ops = NULL
+};
+
+static struct isp_subdev_data vic_subdev_data = {
+    .device_type = 2,    /* Sink */
+    .device_id = 1, 
+    .src_index = 0,      /* Connect to CSI (index 0) */
+    .dst_index = 1,      /* VIC is at index 1 */
+    .device_name = "vic",
+    .file_ops = NULL,
+    .proc_ops = NULL
+};
+
+static struct isp_subdev_data vin_subdev_data = {
+    .device_type = 1,    /* Source */
+    .device_id = 2,
+    .src_index = 0,
+    .dst_index = 2,
+    .device_name = "vin", 
+    .file_ops = NULL,
+    .proc_ops = NULL
+};
+
+static struct isp_subdev_data fs_subdev_data = {
+    .device_type = 1,    /* Source */
+    .device_id = 3,
+    .src_index = 0,
+    .dst_index = 3,
+    .device_name = "fs",
+    .file_ops = NULL,
+    .proc_ops = NULL
+};
+
+static struct isp_subdev_data core_subdev_data = {
+    .device_type = 2,    /* Sink */
+    .device_id = 4,
+    .src_index = 1,      /* Connect to VIC */
+    .dst_index = 4,
+    .device_name = "core",
+    .file_ops = NULL,
+    .proc_ops = NULL
+};
+
 /* tx_isp_core_probe - EXACT Binary Ninja implementation */
 int tx_isp_core_probe(struct platform_device *pdev)
 {
@@ -2731,6 +2794,38 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     s2_1 = pdev->dev.platform_data;
+
+    /* CRITICAL: Set up platform devices with proper driver data before graph creation */
+    pr_info("*** tx_isp_core_probe: Setting up platform device driver data ***\n");
+    
+    /* Register platform device driver data for graph creation */
+    platform_set_drvdata(&tx_isp_csi_platform_device, &csi_subdev_data);
+    platform_set_drvdata(&tx_isp_vic_platform_device, &vic_subdev_data);
+    platform_set_drvdata(&tx_isp_vin_platform_device, &vin_subdev_data);
+    platform_set_drvdata(&tx_isp_fs_platform_device, &fs_subdev_data);
+    platform_set_drvdata(&tx_isp_core_platform_device, &core_subdev_data);
+    
+    /* CRITICAL: Set up subdev_count and subdev_list at Binary Ninja offsets */
+    struct platform_device *platform_devices[] = {
+        &tx_isp_csi_platform_device,
+        &tx_isp_vic_platform_device,
+        &tx_isp_vin_platform_device,
+        &tx_isp_fs_platform_device,
+        &tx_isp_core_platform_device
+    };
+    
+    /* Allocate and set up the subdev_list array */
+    struct platform_device **subdev_list = kzalloc(sizeof(platform_devices), GFP_KERNEL);
+    if (!subdev_list) {
+        pr_err("Failed to allocate subdev_list\n");
+        kfree(core_dev);
+        return -ENOMEM;
+    }
+    memcpy(subdev_list, platform_devices, sizeof(platform_devices));
+    
+    /* Set up Binary Ninja exact offsets in core_dev */
+    *((uint32_t*)((char*)core_dev + 0x80)) = ARRAY_SIZE(platform_devices);  /* subdev_count */
+    *((struct platform_device***)((char*)core_dev + 0x84)) = &subdev_list;  /* subdev_list ptr */
 
     /* CRITICAL: Initialize basic fields that tx_isp_subdev_init expects */
     /* Set up channel count first - this is what was missing! */
