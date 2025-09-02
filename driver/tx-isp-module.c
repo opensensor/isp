@@ -3347,8 +3347,6 @@ static const struct file_operations tx_isp_fops = {
 };
 
 // Forward declarations for initialization functions
-static int tx_isp_subdev_init(struct platform_device *pdev, void *dev, void *ops);
-static void tx_isp_subdev_deinit(void *dev);
 static int isp_core_tuning_init(void *core_dev);
 static void isp_core_tuning_deinit(void *core_dev);
 static int sensor_early_init(void *core_dev);
