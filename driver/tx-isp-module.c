@@ -3657,6 +3657,14 @@ static int tx_isp_init(void)
         pr_warn("Hardware interrupts not available: %d\n", ret);
     }
 
+    /* *** CRITICAL: Create ISP M0 tuning device node (matches reference driver) *** */
+    ret = tisp_code_create_tuning_node();
+    if (ret) {
+        pr_err("Failed to create ISP M0 tuning device: %d\n", ret);
+        /* Continue anyway - tuning is optional */
+    } else {
+        pr_info("*** ISP M0 TUNING DEVICE NODE CREATED SUCCESSFULLY ***\n");
+    }
 
     pr_info("TX ISP driver ready\n");
     
