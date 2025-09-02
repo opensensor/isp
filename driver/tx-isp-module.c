@@ -2818,10 +2818,7 @@ static int create_frame_channel_devices(void)
     char *device_name;
     
     pr_info("Creating %d frame channel devices...\n", num_channels);
-    
-    /* CRITICAL: Clean up any existing devices first to prevent EEXIST errors */
-    destroy_frame_channel_devices();
-    
+
     for (i = 0; i < num_channels; i++) {
         // Reference creates devices like "num0", "num1" etc. based on framesource error
         // IMP_FrameSource_EnableChn looks for /dev/framechan%d devices (from decompiled code)
@@ -3715,9 +3712,6 @@ static void tx_isp_exit(void)
     pr_info("TX ISP driver exiting...\n");
 
     if (ourISPdev) {
-        /* *** CRITICAL: Destroy frame channel devices FIRST to prevent EEXIST errors *** */
-        destroy_frame_channel_devices();
-        
         /* Clean up subdevice graph */
         tx_isp_cleanup_subdev_graph(ourISPdev);
         
