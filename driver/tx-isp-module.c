@@ -176,7 +176,7 @@ static struct resource tx_isp_resources[] = {
     },
 };
 
-static struct platform_device tx_isp_platform_device = {
+struct platform_device tx_isp_platform_device = {
     .name = "tx-isp",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_resources),
@@ -197,7 +197,7 @@ static struct resource tx_isp_vic_resources[] = {
     },
 };
 
-static struct platform_device tx_isp_vic_platform_device = {
+struct platform_device tx_isp_vic_platform_device = {
     .name = "tx-isp-vic",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_vic_resources),
@@ -218,7 +218,7 @@ static struct resource tx_isp_csi_resources[] = {
     },
 };
 
-static struct platform_device tx_isp_csi_platform_device = {
+struct platform_device tx_isp_csi_platform_device = {
     .name = "tx-isp-csi",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_csi_resources),
@@ -239,7 +239,7 @@ static struct resource tx_isp_vin_resources[] = {
     },
 };
 
-static struct platform_device tx_isp_vin_platform_device = {
+struct platform_device tx_isp_vin_platform_device = {
     .name = "tx-isp-vin",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_vin_resources),
@@ -280,7 +280,7 @@ static struct fs_platform_data fs_pdata = {
     }
 };
 
-static struct platform_device tx_isp_fs_platform_device = {
+struct platform_device tx_isp_fs_platform_device = {
     .name = "tx-isp-fs",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_fs_resources),
@@ -304,7 +304,7 @@ static struct resource tx_isp_core_resources[] = {
     },
 };
 
-static struct platform_device tx_isp_core_platform_device = {
+struct platform_device tx_isp_core_platform_device = {
     .name = "tx-isp-core",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_core_resources),
