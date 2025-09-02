@@ -2770,7 +2770,112 @@ static struct isp_subdev_data core_subdev_data = {
     .proc_ops = NULL
 };
 
-/* tx_isp_core_probe - EXACT Binary Ninja implementation */
+/* Frame channel device creation - implements the missing /dev/isp-fs* devices */
+static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
+{
+    int i, ret;
+    char dev_name[32];
+    
+    if (!isp_dev) {
+        return -EINVAL;
+    }
+    
+    pr_info("*** tx_isp_create_framechan_devices: Creating frame channel devices ***\n");
+    
+    /* Create frame channel devices /dev/isp-fs0, /dev/isp-fs1, etc. */
+    for (i = 0; i < 4; i++) {  /* Create 4 frame channels like reference */
+        struct miscdevice *fs_miscdev;
+        
+        /* Allocate misc device structure */
+        fs_miscdev = kzalloc(sizeof(struct miscdevice), GFP_KERNEL);
+        if (!fs_miscdev) {
+            pr_err("Failed to allocate misc device for isp-fs%d\n", i);
+            return -ENOMEM;
+        }
+        
+        /* Set up device name */
+        snprintf(dev_name, sizeof(dev_name), "isp-fs%d", i);
+        fs_miscdev->name = kstrdup(dev_name, GFP_KERNEL);
+        fs_miscdev->minor = MISC_DYNAMIC_MINOR;
+        
+        /* Use the existing frame_channel_fops from tx-isp-module.c */
+        extern const struct file_operations frame_channel_fops;
+        fs_miscdev->fops = &frame_channel_fops;
+        
+        /* Register the misc device */
+        ret = misc_register(fs_miscdev);
+        if (ret < 0) {
+            pr_err("Failed to register /dev/%s: %d\n", dev_name, ret);
+            kfree(fs_miscdev->name);
+            kfree(fs_miscdev);
+            return ret;
+        }
+        
+        pr_info("*** Created frame channel device: /dev/%s (major=10, minor=%d) ***\n", 
+                dev_name, fs_miscdev->minor);
+        
+        /* Store misc device reference for cleanup */
+        isp_dev->fs_miscdevs[i] = fs_miscdev;
+    }
+    
+    pr_info("*** tx_isp_create_framechan_devices: All frame channel devices created ***\n");
+    return 0;
+}
+
+/* Proc directory creation for graph nodes */
+static int tx_isp_create_graph_proc_entries(struct tx_isp_dev *isp_dev)
+{
+    struct proc_dir_entry *isp_proc_dir;
+    struct proc_dir_entry *graph_entry;
+    int i;
+    
+    if (!isp_dev) {
+        return -EINVAL;
+    }
+    
+    pr_info("*** tx_isp_create_graph_proc_entries: Creating graph proc directories ***\n");
+    
+    /* Create /proc/jz/isp/ directory if it doesn't exist */
+    isp_proc_dir = proc_mkdir_data("jz", 0755, NULL, NULL);
+    if (!isp_proc_dir) {
+        /* Try to get existing directory */
+        isp_proc_dir = proc_mkdir("jz", NULL);
+        if (!isp_proc_dir) {
+            pr_err("Failed to create /proc/jz directory\n");
+            return -ENOMEM;
+        }
+    }
+    
+    isp_proc_dir = proc_mkdir_data("isp", 0755, isp_proc_dir, NULL);
+    if (!isp_proc_dir) {
+        pr_err("Failed to create /proc/jz/isp directory\n");
+        return -ENOMEM;
+    }
+    
+    /* Create graph entries like reference driver */
+    const char* graph_names[] = {"isp-w00", "isp-w01", "isp-w02", "csi", "vic"};
+    
+    for (i = 0; i < ARRAY_SIZE(graph_names); i++) {
+        /* Use simple proc operations for now */
+        extern const struct proc_ops graph_proc_ops;
+        
+        graph_entry = proc_create_data(graph_names[i], 0644, isp_proc_dir, 
+                                      &graph_proc_ops, isp_dev);
+        if (graph_entry) {
+            pr_info("*** Created graph proc entry: /proc/jz/isp/%s ***\n", graph_names[i]);
+        } else {
+            pr_warn("Failed to create /proc/jz/isp/%s\n", graph_names[i]);
+        }
+    }
+    
+    /* Store proc directory for cleanup */
+    isp_dev->isp_proc_dir = isp_proc_dir;
+    
+    pr_info("*** tx_isp_create_graph_proc_entries: Graph proc directories created ***\n");
+    return 0;
+}
+
+/* tx_isp_core_probe - FIXED to properly create frame channel devices and proc entries */
 int tx_isp_core_probe(struct platform_device *pdev)
 {
     void *core_dev;
@@ -2780,7 +2885,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     void *channel_array;
     void *tuning_dev;
 
-    pr_info("*** tx_isp_core_probe: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** tx_isp_core_probe: FIXED Binary Ninja implementation ***\n");
 
     /* Binary Ninja: $v0, $a2 = private_kmalloc(0x218, 0xd0) */
     core_dev = kzalloc(0x218, GFP_KERNEL);
@@ -2795,10 +2900,17 @@ int tx_isp_core_probe(struct platform_device *pdev)
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     s2_1 = pdev->dev.platform_data;
 
-    /* CRITICAL: Set up platform devices with proper driver data before graph creation */
-    pr_info("*** tx_isp_core_probe: Setting up platform device driver data ***\n");
+    /* FIXED: Create proper platform device array that tx_isp_create_graph_and_nodes expects */
+    pr_info("*** tx_isp_core_probe: FIXED platform device setup ***\n");
     
-    /* Register platform device driver data for graph creation */
+    /* CRITICAL: Get the actual registered platform devices from the module */
+    extern struct platform_device tx_isp_csi_platform_device;
+    extern struct platform_device tx_isp_vic_platform_device;
+    extern struct platform_device tx_isp_vin_platform_device;
+    extern struct platform_device tx_isp_fs_platform_device;
+    extern struct platform_device tx_isp_core_platform_device;
+    
+    /* Set up platform device driver data DIRECTLY on the registered devices */
     platform_set_drvdata(&tx_isp_csi_platform_device, &csi_subdev_data);
     platform_set_drvdata(&tx_isp_vic_platform_device, &vic_subdev_data);
     platform_set_drvdata(&tx_isp_vin_platform_device, &vin_subdev_data);
@@ -2826,6 +2938,8 @@ int tx_isp_core_probe(struct platform_device *pdev)
     /* Set up Binary Ninja exact offsets in core_dev */
     *((uint32_t*)((char*)core_dev + 0x80)) = ARRAY_SIZE(platform_devices);  /* subdev_count */
     *((struct platform_device***)((char*)core_dev + 0x84)) = &subdev_list;  /* subdev_list ptr */
+    
+    pr_info("*** tx_isp_core_probe: Platform devices configured - count=%d ***\n", ARRAY_SIZE(platform_devices));
 
     /* CRITICAL: Initialize basic fields that tx_isp_subdev_init expects */
     /* Set up channel count first - this is what was missing! */
@@ -2950,6 +3064,23 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_err("*** tx_isp_core_probe: tx_isp_create_graph_and_nodes FAILED: %d ***\n", result);
                 }
                 
+                /* CRITICAL: Create frame channel devices (/dev/isp-fs*) */
+                pr_info("*** tx_isp_core_probe: Creating frame channel devices ***\n");
+                result = tx_isp_create_framechan_devices((struct tx_isp_dev *)core_dev);
+                if (result == 0) {
+                    pr_info("*** tx_isp_core_probe: Frame channel devices created successfully ***\n");
+                } else {
+                    pr_err("*** tx_isp_core_probe: Failed to create frame channel devices: %d ***\n", result);
+                }
+                
+                /* CRITICAL: Create graph proc directories (/proc/jz/isp/*) */
+                pr_info("*** tx_isp_core_probe: Creating graph proc entries ***\n");
+                result = tx_isp_create_graph_proc_entries((struct tx_isp_dev *)core_dev);
+                if (result == 0) {
+                    pr_info("*** tx_isp_core_probe: Graph proc entries created successfully ***\n");
+                } else {
+                    pr_err("*** tx_isp_core_probe: Failed to create graph proc entries: %d ***\n", result);
+                }
                 
                 return 0;
             }
