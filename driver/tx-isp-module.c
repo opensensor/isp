@@ -3749,8 +3749,9 @@ static void tx_isp_exit(void)
         /* Destroy frame channel devices */
         
         
-        /* Destroy ISP tuning device */
-
+        /* *** CRITICAL: Destroy ISP M0 tuning device node (matches reference driver) *** */
+        tisp_code_destroy_tuning_node();
+        pr_info("*** ISP M0 TUNING DEVICE NODE DESTROYED ***\n");
         
         /* Clean up proc entries */
 
