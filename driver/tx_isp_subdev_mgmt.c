@@ -66,23 +66,12 @@ int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
 int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
 void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
 
-static ssize_t frame_channel_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
-{
-    pr_info("frame_channel_read: %s\n", file->f_path.dentry->d_name.name);
-    return 0;
-}
-
-static ssize_t frame_channel_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
-{
-    pr_info("frame_channel_write: %s\n", file->f_path.dentry->d_name.name);
-    return count;
-}
-
-static long frame_channel_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-    pr_info("frame_channel_ioctl: %s cmd=0x%x\n", file->f_path.dentry->d_name.name, cmd);
-    return 0;
-}
+/* Frame channel device operation forward declarations */
+int frame_channel_open(struct inode *inode, struct file *file);
+int frame_channel_release(struct inode *inode, struct file *file);
+static long frame_channel_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+static ssize_t frame_channel_read(struct file *file, char __user *buf, size_t count, loff_t *ppos);
+static ssize_t frame_channel_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos);
 
 const struct file_operations frame_channel_fops = {
     .owner = THIS_MODULE,
