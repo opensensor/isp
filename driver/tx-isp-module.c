@@ -752,8 +752,8 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
     // Initialize synchronization primitives
     spin_lock_init(&vic_dev->lock);
     mutex_init(&vic_dev->mlock);
-    init_completion(&vic_dev->frame_done);
-    mutex_init(&vic_dev->snap_mlock);
+    init_completion(&vic_dev->frame_complete);
+    mutex_init(&vic_dev->mlock);
     spin_lock_init(&vic_dev->buffer_lock);
     
     // Initialize buffer queues
