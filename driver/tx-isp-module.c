@@ -3697,17 +3697,6 @@ err_cleanup_platforms:
     platform_device_unregister(&tx_isp_vin_platform_device);
     platform_device_unregister(&tx_isp_vic_platform_device);
     platform_device_unregister(&tx_isp_csi_platform_device);
-    
-    return 0;
-
-err_cleanup_platforms:
-    /* Clean up in reverse order */
-    platform_device_unregister(&tx_isp_core_platform_device);
-    platform_device_unregister(&tx_isp_fs_platform_device);
-    platform_device_unregister(&tx_isp_vin_platform_device);
-    platform_device_unregister(&tx_isp_vic_platform_device);
-    platform_device_unregister(&tx_isp_csi_platform_device);
-    
 err_cleanup_base:
     cleanup_i2c_infrastructure(ourISPdev);
     misc_deregister(&tx_isp_miscdev);
