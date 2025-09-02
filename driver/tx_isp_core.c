@@ -58,7 +58,6 @@ extern struct tx_isp_dev *ourISPdev;
 /* Forward declarations */
 static int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
 static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp);
-static int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp);
 static int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
 static int tx_isp_setup_media_links(struct tx_isp_dev *isp);
 static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp);
@@ -386,7 +385,7 @@ err_put_cgu_isp:
 }
 
 /* Create ISP processing graph and initialize subdevice nodes - EXACT Binary Ninja reference */
-static int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
+int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
 {
     int ret = 0;
     int i, j;
