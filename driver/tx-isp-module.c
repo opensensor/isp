@@ -51,6 +51,7 @@ extern uint32_t vic_start_ok;
 /* Kernel symbol export for sensor drivers to register */
 static struct tx_isp_subdev *registered_sensor_subdev = NULL;
 static DEFINE_MUTEX(sensor_register_mutex);
+static void destroy_frame_channel_devices(void);
 
 /* I2C infrastructure - create I2C devices dynamically during sensor registration */
 static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
