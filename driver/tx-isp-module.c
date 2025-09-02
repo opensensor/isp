@@ -1953,6 +1953,78 @@ static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int c
 
 /* Frame channel implementations removed - handled by FS probe instead */
 
+// Destroy ISP tuning device node (reference: tisp_code_destroy_tuning_node)
+static void destroy_isp_tuning_device(void)
+{
+    if (isp_tuning_class) {
+        device_destroy(isp_tuning_class, isp_tuning_devno);
+        class_destroy(isp_tuning_class);
+        cdev_del(&isp_tuning_cdev);
+        unregister_chrdev_region(isp_tuning_devno, 1);
+        isp_tuning_class = NULL;
+        pr_info("ISP tuning device destroyed\n");
+    }
+}
+
+// Frame channel device implementations - based on reference tx_isp_fs_probe
+static int frame_channel_open(struct inode *inode, struct file *file)
+{
+    struct frame_channel_device *fcd = NULL;
+    int minor = iminor(inode);
+    int i;
+    
+    // Find which frame channel device this is by matching minor number
+    for (i = 0; i < num_channels; i++) {
+        if (frame_channels[i].miscdev.minor == minor) {
+            fcd = &frame_channels[i];
+            break;
+        }
+    }
+    
+    if (!fcd) {
+        pr_err("Could not find frame channel device for minor %d\n", minor);
+        return -EINVAL;
+    }
+    
+    pr_info("Frame channel %d opened (minor=%d)\n", fcd->channel_num, minor);
+    
+    // Initialize channel state - reference sets state to 3 (ready)
+    fcd->state.enabled = false;
+    fcd->state.streaming = false;
+    fcd->state.format = 0x3231564e; // NV12 default
+    fcd->state.width = (fcd->channel_num == 0) ? 1920 : 640;
+    fcd->state.height = (fcd->channel_num == 0) ? 1080 : 360;
+    fcd->state.buffer_count = 0;
+    
+    /* Initialize simplified frame buffer management */
+    spin_lock_init(&fcd->state.buffer_lock);
+    init_waitqueue_head(&fcd->state.frame_wait);
+    fcd->state.sequence = 0;
+    fcd->state.frame_ready = false;
+    memset(&fcd->state.current_buffer, 0, sizeof(fcd->state.current_buffer));
+    
+    file->private_data = fcd;
+    
+    
+    return 0;
+}
+
+static int frame_channel_release(struct inode *inode, struct file *file)
+{
+    struct frame_channel_device *fcd = file->private_data;
+    
+    if (!fcd) {
+        return 0;
+    }
+    
+    pr_info("Frame channel %d released\n", fcd->channel_num);
+    
+    // Reference implementation cleans up channel resources
+    // Frees buffers, resets state, etc.
+    
+    return 0;
+}
+
 static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     void __user *argp = (void __user *)arg;
