@@ -59,7 +59,7 @@ static void __fill_v4l2_buffer(void *vb, struct v4l2_buffer *buf)
     memcpy(buf, &fbuf->v4l2_buf, sizeof(struct v4l2_buffer));
 }
 
-static int frame_channel_open(struct inode *inode, struct file *file)
+int frame_channel_open(struct inode *inode, struct file *file)
 {
     struct tx_isp_frame_channel *chan = container_of(file->private_data,
                                                     struct tx_isp_frame_channel,
@@ -89,7 +89,7 @@ static int frame_channel_open(struct inode *inode, struct file *file)
     return 0;
 }
 
-static int frame_channel_release(struct inode *inode, struct file *file)
+int frame_channel_release(struct inode *inode, struct file *file)
 {
     struct tx_isp_frame_channel *chan = container_of(file->private_data,
                                                     struct tx_isp_frame_channel,

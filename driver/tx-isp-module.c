@@ -429,8 +429,8 @@ static void vic_frame_work_function(struct work_struct *work);
 #define ISP_TUNING_GET_STATS2   0x20007409
 
 // Forward declarations for frame channel devices
-static int frame_channel_open(struct inode *inode, struct file *file);
-static int frame_channel_release(struct inode *inode, struct file *file);
+int frame_channel_open(struct inode *inode, struct file *file);
+int frame_channel_release(struct inode *inode, struct file *file);
 static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
 /* Frame channel device file operations - moved up for early use */
