@@ -3123,51 +3123,6 @@ int sensor_early_init(void *core_dev)
     return 0;
 }
 
-/* Platform driver structures - connect to existing implementations */
-static struct platform_driver tx_isp_csi_driver = {
-    .probe = tx_isp_csi_probe,
-    .remove = tx_isp_csi_remove,
-    .driver = {
-        .name = "tx-isp-csi",
-        .owner = THIS_MODULE,
-    },
-};
-
-static struct platform_driver tx_isp_vin_driver = {
-    .probe = tx_isp_vin_probe,
-    .remove = tx_isp_vin_remove,
-    .driver = {
-        .name = "tx-isp-vin",
-        .owner = THIS_MODULE,
-    },
-};
-
-static struct platform_driver tx_isp_fs_driver = {
-    .probe = tx_isp_fs_probe,
-    .remove = tx_isp_fs_remove,
-    .driver = {
-        .name = "tx-isp-fs",
-        .owner = THIS_MODULE,
-    },
-};
-
-static struct platform_driver tx_isp_core_driver = {
-    .probe = tx_isp_core_probe,
-    .remove = tx_isp_core_remove,
-    .driver = {
-        .name = "tx-isp-core",
-        .owner = THIS_MODULE,
-    },
-};
-
-static struct platform_driver tx_isp_vic_driver = {
-    .probe = tx_isp_vic_probe,
-    .remove = tx_isp_vic_remove,
-    .driver = {
-        .name = "tx-isp-vic",
-        .owner = THIS_MODULE,
-    },
-};
 
 // Simple platform driver - minimal implementation
 static int tx_isp_platform_probe(struct platform_device *pdev)
