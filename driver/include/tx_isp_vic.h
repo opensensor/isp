@@ -62,6 +62,12 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 int isp_vic_frd_show(struct seq_file *seq, void *v);
 int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
 long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
+int vic_event_handler(void *subdev, int event_type, void *data);
+
+// Forward declarations for initialization functions
+int isp_core_tuning_init(void *core_dev);
+void isp_core_tuning_deinit(void *core_dev);
+int sensor_early_init(void *core_dev);
 
 /* VIC States */
 #define VIC_STATE_OFF       0

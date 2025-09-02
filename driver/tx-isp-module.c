@@ -312,7 +312,6 @@ static struct platform_device tx_isp_core_platform_device = {
 };
 
 /* Forward declaration for VIC event handler */
-static int vic_event_handler(void *subdev, int event_type, void *data);
 
 /* Forward declarations - Using actual function names from reference driver */
 struct frame_channel_device; /* Forward declare struct */
@@ -3346,10 +3345,7 @@ static const struct file_operations tx_isp_fops = {
     .release = tx_isp_release,
 };
 
-// Forward declarations for initialization functions
-static int isp_core_tuning_init(void *core_dev);
-static void isp_core_tuning_deinit(void *core_dev);
-static int sensor_early_init(void *core_dev);
+
 
 /* tx_isp_fs_probe - EXACT Binary Ninja implementation */
 static int tx_isp_fs_probe(struct platform_device *pdev)
@@ -5325,7 +5321,7 @@ static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
 }
 
 /* VIC event handler function - handles ALL events including sensor registration */
-static int vic_event_handler(void *subdev, int event_type, void *data)
+int vic_event_handler(void *subdev, int event_type, void *data)
 {
     struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)subdev;
     
