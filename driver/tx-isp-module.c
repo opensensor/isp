@@ -5490,6 +5490,14 @@ int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd)
 }
 EXPORT_SYMBOL(tx_isp_unregister_sensor_subdev);
 
+/* Compatibility wrapper for old function name to resolve linking errors */
+int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
+{
+    pr_info("tx_isp_create_graph_and_nodes: Redirecting to new subdevice management system\n");
+    return tx_isp_create_subdev_graph(isp);
+}
+EXPORT_SYMBOL(tx_isp_create_graph_and_nodes);
+
 /* Export platform devices for tx_isp_core.c to reference */
 EXPORT_SYMBOL(tx_isp_csi_platform_device);
 EXPORT_SYMBOL(tx_isp_vic_platform_device);

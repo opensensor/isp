@@ -66,8 +66,71 @@ int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
 int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
 void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
 
-/* Frame channel file operations */
-extern const struct file_operations frame_channel_fops;
+/* Stub file operations for frame channels and proc entries */
+static int frame_channel_open(struct inode *inode, struct file *file)
+{
+    pr_info("frame_channel_open: %s\n", file->f_path.dentry->d_name.name);
+    return 0;
+}
+
+static int frame_channel_release(struct inode *inode, struct file *file)
+{
+    pr_info("frame_channel_release: %s\n", file->f_path.dentry->d_name.name);
+    return 0;
+}
+
+static ssize_t frame_channel_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
+{
+    pr_info("frame_channel_read: %s\n", file->f_path.dentry->d_name.name);
+    return 0;
+}
+
+static ssize_t frame_channel_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
+{
+    pr_info("frame_channel_write: %s\n", file->f_path.dentry->d_name.name);
+    return count;
+}
+
+static long frame_channel_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    pr_info("frame_channel_ioctl: %s cmd=0x%x\n", file->f_path.dentry->d_name.name, cmd);
+    return 0;
+}
+
+const struct file_operations frame_channel_fops = {
+    .owner = THIS_MODULE,
+    .open = frame_channel_open,
+    .release = frame_channel_release,
+    .read = frame_channel_read,
+    .write = frame_channel_write,
+    .unlocked_ioctl = frame_channel_ioctl,
+    .llseek = no_llseek,
+};
+
+static int graph_proc_show(struct seq_file *m, void *v)
+{
+    struct tx_isp_dev *isp = m->private;
+    
+    seq_printf(m, "TX ISP Subdevice Graph Status\n");
+    seq_printf(m, "=============================\n");
+    seq_printf(m, "Registry count: %d\n", subdev_count);
+    seq_printf(m, "ISP device: %p\n", isp);
+    
+    return 0;
+}
+
+static int graph_proc_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, graph_proc_show, PDE_DATA(inode));
+}
+
+const struct file_operations graph_proc_fops = {
+    .owner = THIS_MODULE,
+    .open = graph_proc_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = single_release,
+};
 
 /* Binary Ninja compatible subdevice data structure */
 struct isp_subdev_data {
