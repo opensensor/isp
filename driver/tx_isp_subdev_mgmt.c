@@ -160,10 +160,10 @@ static struct tx_isp_subdev_desc isp_subdev_descriptors[] = {
     },
     {
         .name = "tx-isp-vic", 
-        .type = TX_ISP_SUBDEV_TYPE_SINK,
+        .type = TX_ISP_SUBDEV_TYPE_SOURCE,  /* VIC is a source in the pipeline CSI->VIC->Core */
         .device_id = 1,
-        .src_index = 0,  /* Connect from CSI */
-        .dst_index = 1,
+        .src_index = 0,  /* Connect from CSI (not used for sources) */
+        .dst_index = 1,  /* Store VIC at index 1 for Core to find */
         .pdev = NULL,
         .fops = &frame_channel_fops,
         .create_misc_device = true,
@@ -195,7 +195,7 @@ static struct tx_isp_subdev_desc isp_subdev_descriptors[] = {
         .name = "tx-isp-core",
         .type = TX_ISP_SUBDEV_TYPE_SINK,
         .device_id = 4,
-        .src_index = 1,  /* Connect from VIC */
+        .src_index = 1,  /* Connect from VIC at index 1 */
         .dst_index = 4,
         .pdev = NULL,
         .fops = &frame_channel_fops,
