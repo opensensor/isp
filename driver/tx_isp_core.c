@@ -1967,7 +1967,7 @@ static const struct file_operations isp_tuning_fops = {
  */
 void ispcore_frame_channel_streamoff(int32_t* arg1)
 {
-    void* v0 = *arg1;
+    void* v0 = (void*)(uintptr_t)(*arg1);  /* Cast to avoid type mismatch */
     void* s0 = NULL;
 
     if (v0 != 0 && (uintptr_t)v0 < 0xfffff001) {
