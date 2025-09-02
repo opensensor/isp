@@ -3776,6 +3776,101 @@ static const struct file_operations isp_core_tunning_fops = {
     .compat_ioctl = isp_m0_chardev_ioctl,
 };
 
+/* Tuning device creation variables - Binary Ninja reference */
+static int tuning_major = 0;
+static struct class *tuning_class = NULL;
+static struct cdev tuning_cdev;
+static dev_t tuning_devno;
+
+/* tisp_code_create_tuning_node - Binary Ninja EXACT implementation */
+int tisp_code_create_tuning_node(void)
+{
+    int ret;
+    
+    pr_info("tisp_code_create_tuning_node: Creating ISP M0 tuning device node\n");
+    
+    /* Binary Ninja: if (major == 0) alloc_chrdev_region, else register_chrdev_region */
+    if (tuning_major == 0) {
+        ret = alloc_chrdev_region(&tuning_devno, 0, 1, "isp-m0");
+        if (ret < 0) {
+            pr_err("tisp_code_create_tuning_node: Failed to allocate chrdev region: %d\n", ret);
+            return ret;
+        }
+        tuning_major = MAJOR(tuning_devno);
+        pr_info("tisp_code_create_tuning_node: Allocated dynamic major %d\n", tuning_major);
+    } else {
+        tuning_devno = MKDEV(tuning_major, 0);
+        ret = register_chrdev_region(tuning_devno, 1, "isp-m0");
+        if (ret < 0) {
+            pr_err("tisp_code_create_tuning_node: Failed to register chrdev region: %d\n", ret);
+            return ret;
+        }
+        pr_info("tisp_code_create_tuning_node: Registered static major %d\n", tuning_major);
+    }
+    
+    /* Binary Ninja: cdev_init(&tuning_cdev, &isp_core_tunning_fops) */
+    cdev_init(&tuning_cdev, &isp_core_tunning_fops);
+    
+    /* Binary Ninja: cdev_add(&tuning_cdev, tuning_devno, 1) */
+    ret = cdev_add(&tuning_cdev, tuning_devno, 1);
+    if (ret < 0) {
+        pr_err("tisp_code_create_tuning_node: Failed to add cdev: %d\n", ret);
+        unregister_chrdev_region(tuning_devno, 1);
+        return ret;
+    }
+    
+    /* Binary Ninja: tuning_class = __class_create(&__this_module, "isp-m0", 0) */
+    tuning_class = class_create(THIS_MODULE, "isp-m0");
+    if (IS_ERR(tuning_class)) {
+        ret = PTR_ERR(tuning_class);
+        pr_err("tisp_code_create_tuning_node: Failed to create class: %d\n", ret);
+        cdev_del(&tuning_cdev);
+        unregister_chrdev_region(tuning_devno, 1);
+        return ret;
+    }
+    
+    /* Binary Ninja: device_create(tuning_class, 0, tuning_devno, 0, "isp-m0") */
+    if (device_create(tuning_class, NULL, tuning_devno, NULL, "isp-m0") == NULL) {
+        pr_err("tisp_code_create_tuning_node: Failed to create device\n");
+        class_destroy(tuning_class);
+        cdev_del(&tuning_cdev);
+        unregister_chrdev_region(tuning_devno, 1);
+        return -EFAULT;
+    }
+    
+    pr_info("*** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=%d, minor=0) ***\n", tuning_major);
+    return 0;
+}
+EXPORT_SYMBOL(tisp_code_create_tuning_node);
+
+/* tisp_code_destroy_tuning_node - Binary Ninja EXACT implementation */
+int tisp_code_destroy_tuning_node(void)
+{
+    pr_info("tisp_code_destroy_tuning_node: Destroying ISP M0 tuning device node\n");
+    
+    if (tuning_class) {
+        /* Binary Ninja: device_destroy(tuning_class, tuning_devno) */
+        device_destroy(tuning_class, tuning_devno);
+        
+        /* Binary Ninja: class_destroy(tuning_class) */
+        class_destroy(tuning_class);
+        tuning_class = NULL;
+    }
+    
+    /* Binary Ninja: cdev_del(&tuning_cdev) */
+    cdev_del(&tuning_cdev);
+    
+    /* Binary Ninja: unregister_chrdev_region(tuning_devno, 1) */
+    unregister_chrdev_region(tuning_devno, 1);
+    
+    /* Binary Ninja: tuning_major = 0 */
+    tuning_major = 0;
+    
+    pr_info("*** ISP M0 TUNING DEVICE DESTROYED ***\n");
+    return 0;
+}
+EXPORT_SYMBOL(tisp_code_destroy_tuning_node);
+
 /* isp_core_tuning_init - Binary Ninja EXACT implementation */
 void *isp_core_tuning_init(void *arg1)
 {
