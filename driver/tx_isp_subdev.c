@@ -92,7 +92,7 @@ int tx_isp_send_event_to_remote(struct v4l2_subdev *sd, unsigned int event, void
     return 0xfffffdfd; // -515 (binary: 0xfffffdfd)
 }
 
-static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     struct tx_isp_frame_channel *chan = container_of(file->private_data,
                                                     struct tx_isp_frame_channel,

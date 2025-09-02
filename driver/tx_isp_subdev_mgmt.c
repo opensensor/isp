@@ -69,7 +69,7 @@ void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
 /* Frame channel device operation forward declarations */
 int frame_channel_open(struct inode *inode, struct file *file);
 int frame_channel_release(struct inode *inode, struct file *file);
-static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
 const struct file_operations frame_channel_fops = {
     .owner = THIS_MODULE,
