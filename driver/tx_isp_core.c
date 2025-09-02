@@ -1978,7 +1978,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
 {
     int32_t result = 0;
     uint32_t var_58;
-    void* const v0_13;
+    void* v0_13;  /* Removed const qualifier */
     int32_t v1_7;
     
     /* Add MCP logging for method entry */
@@ -2165,8 +2165,8 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
         case 0x3000005: {
             /* Queue buffer */
             ISP_INFO("ispcore_pad_event_handle: case 0x3000005 (queue buffer)");
-            void* const v0_21;
-            void* const s3_4;
+            void* v0_21;  /* Removed const qualifier */
+            void* s3_4;   /* Removed const qualifier */
             
             if (arg1 == 0 || (uintptr_t)arg1 >= 0xfffff001) {
                 s3_4 = 0;
