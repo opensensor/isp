@@ -260,11 +260,34 @@ static struct resource tx_isp_fs_resources[] = {
     },
 };
 
+/* Frame Source platform data - provides channel configuration */
+struct fs_platform_data {
+    int num_channels;
+    struct {
+        int enabled;
+        char name[16];
+        int index;
+    } channels[4];
+};
+
+static struct fs_platform_data fs_pdata = {
+    .num_channels = 4,  /* Create 4 frame channels like reference */
+    .channels = {
+        {.enabled = 1, .name = "isp-w00", .index = 0},
+        {.enabled = 1, .name = "isp-w01", .index = 1}, 
+        {.enabled = 1, .name = "isp-w02", .index = 2},
+        {.enabled = 0, .name = "isp-w03", .index = 3},  /* Channel 3 disabled by default */
+    }
+};
+
 static struct platform_device tx_isp_fs_platform_device = {
     .name = "tx-isp-fs",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_fs_resources),
     .resource = tx_isp_fs_resources,
+    .dev = {
+        .platform_data = &fs_pdata,  /* Provide channel configuration */
+    },
 };
 
 /* ISP Core platform device resources - CRITICAL MISSING PIECE */
@@ -3843,23 +3866,11 @@ static int tx_isp_init(void)
         goto err_free_dev;
     }
 
-    /* Initialize proc entries */
-    pr_info("*** CALLING tx_isp_proc_init(ourISPdev=%p) ***\n", ourISPdev);
-    ret = tx_isp_proc_init(ourISPdev);
-    pr_info("*** tx_isp_proc_init() returned: %d ***\n", ret);
-    if (ret) {
-        pr_err("Failed to create proc entries: %d\n", ret);
-        misc_deregister(&tx_isp_miscdev);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
-    }
-
     /* Create ISP tuning device - required for IMP_ISP_EnableTuning() */
     ret = create_isp_tuning_device();
     if (ret) {
         pr_err("Failed to create ISP tuning device: %d\n", ret);
-        tx_isp_proc_exit(ourISPdev);
+
         misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
@@ -3888,7 +3899,7 @@ static int tx_isp_init(void)
         pr_err("Failed to register CSI platform device: %d\n", ret);
         cleanup_i2c_infrastructure(ourISPdev);
         destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
+
         misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
@@ -3904,7 +3915,7 @@ static int tx_isp_init(void)
         cleanup_i2c_infrastructure(ourISPdev);
         
         destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
+
         misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
@@ -3921,7 +3932,7 @@ static int tx_isp_init(void)
         cleanup_i2c_infrastructure(ourISPdev);
         
         destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
+
         misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
@@ -3939,7 +3950,7 @@ static int tx_isp_init(void)
         cleanup_i2c_infrastructure(ourISPdev);
         
         destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
+
         misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
@@ -3958,7 +3969,7 @@ static int tx_isp_init(void)
         cleanup_i2c_infrastructure(ourISPdev);
         
         destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
+
         misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
@@ -3981,7 +3992,7 @@ static int tx_isp_init(void)
         cleanup_i2c_infrastructure(ourISPdev);
         
         destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
+
         misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
@@ -3997,7 +4008,7 @@ static int tx_isp_init(void)
         cleanup_i2c_infrastructure(ourISPdev);
         
         destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
+
         misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
@@ -4014,7 +4025,7 @@ static int tx_isp_init(void)
         cleanup_i2c_infrastructure(ourISPdev);
         
         destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
+
         misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
@@ -4032,7 +4043,7 @@ static int tx_isp_init(void)
         cleanup_i2c_infrastructure(ourISPdev);
         
         destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
+
         misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
@@ -4051,7 +4062,7 @@ static int tx_isp_init(void)
         cleanup_i2c_infrastructure(ourISPdev);
         
         destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
+
         misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
@@ -4075,7 +4086,7 @@ static int tx_isp_init(void)
         cleanup_i2c_infrastructure(ourISPdev);
         
         destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
+
         misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
@@ -4090,7 +4101,7 @@ static int tx_isp_init(void)
         cleanup_i2c_infrastructure(ourISPdev);
         
         destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
+
         misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
@@ -4199,7 +4210,7 @@ static void tx_isp_exit(void)
         destroy_isp_tuning_device();
         
         /* Clean up proc entries */
-        tx_isp_proc_exit(ourISPdev);
+
         
         /* Unregister misc device */
         misc_deregister(&tx_isp_miscdev);

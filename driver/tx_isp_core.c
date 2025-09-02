@@ -1914,7 +1914,6 @@ _core_mem_err:
 _core_req_irq_err:
     tx_isp_sysfs_exit(isp);
 _core_sysfs_init_err:
-    tx_isp_proc_exit(isp);
 _core_proc_init_err:
     for (i = 0; i < ISP_MAX_CHAN; i++) {
         tx_isp_frame_chan_deinit(&isp->channels[i]);
@@ -1967,7 +1966,6 @@ int tx_isp_core_remove(struct platform_device *pdev)
 
     /* Cleanup subsystems */
     tx_isp_sysfs_exit(isp);
-    tx_isp_proc_exit(isp);
 
     /* Cleanup channels */
     for (i = 0; i < ISP_MAX_CHAN; i++) {

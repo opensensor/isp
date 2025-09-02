@@ -322,8 +322,6 @@ struct link_config {
 
 /* Function declarations */
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd);
-int tx_isp_proc_init(struct tx_isp_dev *isp);
-void tx_isp_proc_exit(struct tx_isp_dev *isp);
 int tx_isp_sysfs_init(struct tx_isp_dev *isp);
 void tx_isp_sysfs_exit(struct tx_isp_dev *isp);
 irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id);
