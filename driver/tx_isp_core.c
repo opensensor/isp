@@ -2352,14 +2352,6 @@ int tisp_g_fcrop_control(char* arg1)
 }
 EXPORT_SYMBOL(tisp_g_fcrop_control);
 
-/* Missing tx_isp_send_event_to_remote function */
-int tx_isp_send_event_to_remote(void* arg1, int32_t event, void* arg2)
-{
-    /* Simple stub implementation - in real driver this would send events to userspace */
-    pr_debug("tx_isp_send_event_to_remote: event=0x%x\n", event);
-    return 0;
-}
-EXPORT_SYMBOL(tx_isp_send_event_to_remote);
 
 /* Missing tx_isp_hardware_reset function */
 int tx_isp_hardware_reset(int reset_type)
