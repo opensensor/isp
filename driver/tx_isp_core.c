@@ -1970,6 +1970,39 @@ static const struct file_operations isp_tuning_fops = {
     .release = isp_tuning_release,
 };
 
+/* Main ISP device node - creates /dev/tx-isp */
+static struct miscdevice tx_isp_misc_device = {
+    .minor = MISC_DYNAMIC_MINOR,
+    .name = "tx-isp",
+    .fops = &isp_tuning_fops,
+};
+
+/* Framesource device nodes for channels - creates /dev/tx-isp-fs-* */
+static struct file_operations tx_isp_fs_fops = {
+    .owner = THIS_MODULE,
+    .unlocked_ioctl = isp_tuning_ioctl,  /* Route to same handler */
+    .open = isp_tuning_open,
+    .release = isp_tuning_release,
+};
+
+static struct miscdevice tx_isp_fs_devices[ISP_MAX_CHAN] = {
+    [0] = {
+        .minor = MISC_DYNAMIC_MINOR,
+        .name = "tx-isp-fs0",
+        .fops = &tx_isp_fs_fops,
+    },
+    [1] = {
+        .minor = MISC_DYNAMIC_MINOR,
+        .name = "tx-isp-fs1", 
+        .fops = &tx_isp_fs_fops,
+    },
+    [2] = {
+        .minor = MISC_DYNAMIC_MINOR,
+        .name = "tx-isp-fs2",
+        .fops = &tx_isp_fs_fops,
+    },
+};
+
 
 
 /* lock and mutex interfaces */
@@ -2838,6 +2871,16 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_err("*** tx_isp_core_probe: tx_isp_create_graph_and_nodes FAILED: %d ***\n", result);
                 }
                 
+                /* CRITICAL: Register device nodes that were missing from framesource failures */
+                pr_info("*** tx_isp_core_probe: Calling tx_isp_register_device_nodes ***\n");
+                result = tx_isp_register_device_nodes();
+                if (result == 0) {
+                    pr_info("*** tx_isp_core_probe: Device nodes registered successfully ***\n");
+                } else {
+                    pr_err("*** tx_isp_core_probe: Device node registration FAILED: %d ***\n", result);
+                    return result;
+                }
+                
                 return 0;
             }
 
@@ -2868,10 +2911,74 @@ int tx_isp_core_probe(struct platform_device *pdev)
     return result;
 }
 
+/**
+ * tx_isp_register_device_nodes - Register /dev/tx-isp and /dev/tx-isp-fs* device nodes
+ * This creates the device nodes that applications expect to find
+ */
+static int tx_isp_register_device_nodes(void)
+{
+    int ret, i;
+    
+    pr_info("*** tx_isp_register_device_nodes: Creating device nodes ***\n");
+    
+    /* Register main ISP device: /dev/tx-isp */
+    ret = misc_register(&tx_isp_misc_device);
+    if (ret) {
+        pr_err("Failed to register /dev/tx-isp: %d\n", ret);
+        return ret;
+    }
+    pr_info("Registered /dev/tx-isp successfully\n");
+    
+    /* Register framesource devices: /dev/tx-isp-fs0, /dev/tx-isp-fs1, /dev/tx-isp-fs2 */
+    for (i = 0; i < ISP_MAX_CHAN; i++) {
+        ret = misc_register(&tx_isp_fs_devices[i]);
+        if (ret) {
+            pr_err("Failed to register /dev/%s: %d\n", tx_isp_fs_devices[i].name, ret);
+            
+            /* Cleanup on failure */
+            while (--i >= 0) {
+                misc_deregister(&tx_isp_fs_devices[i]);
+            }
+            misc_deregister(&tx_isp_misc_device);
+            return ret;
+        }
+        pr_info("Registered /dev/%s successfully\n", tx_isp_fs_devices[i].name);
+    }
+    
+    pr_info("*** All ISP device nodes registered successfully ***\n");
+    return 0;
+}
+
+/**
+ * tx_isp_unregister_device_nodes - Unregister ISP device nodes
+ */
+static void tx_isp_unregister_device_nodes(void)
+{
+    int i;
+    
+    pr_info("*** tx_isp_unregister_device_nodes: Removing device nodes ***\n");
+    
+    /* Unregister framesource devices */
+    for (i = 0; i < ISP_MAX_CHAN; i++) {
+        misc_deregister(&tx_isp_fs_devices[i]);
+        pr_info("Unregistered /dev/%s\n", tx_isp_fs_devices[i].name);
+    }
+    
+    /* Unregister main ISP device */
+    misc_deregister(&tx_isp_misc_device);
+    pr_info("Unregistered /dev/tx-isp\n");
+    
+    pr_info("*** All ISP device nodes unregistered ***\n");
+}
+
 /* Core remove function */
 int tx_isp_core_remove(struct platform_device *pdev)
 {
     void *core_dev = platform_get_drvdata(pdev);
+    
+    /* Unregister device nodes */
+    tx_isp_unregister_device_nodes();
+    
     if (core_dev) {
         isp_core_tuning_deinit(core_dev);
         kfree(core_dev);
