@@ -2108,6 +2108,41 @@ static const struct file_operations graph_proc_fops = {
     .read = graph_proc_read,
 };
 
+/* Frame channel device file operations */
+static int frame_channel_open(struct inode *inode, struct file *file)
+{
+    pr_info("Frame channel device opened\n");
+    return 0;
+}
+
+static int frame_channel_release(struct inode *inode, struct file *file)
+{
+    pr_info("Frame channel device released\n");
+    return 0;
+}
+
+static long frame_channel_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    pr_info("Frame channel IOCTL: cmd=0x%x\n", cmd);
+    
+    /* Handle basic frame channel operations */
+    switch (cmd) {
+    case 0x40000000: /* Example frame channel command */
+        pr_info("Frame channel: basic command\n");
+        return 0;
+    default:
+        pr_info("Frame channel: unknown command 0x%x\n", cmd);
+        return -ENOTTY;
+    }
+}
+
+static const struct file_operations frame_channel_fops = {
+    .owner = THIS_MODULE,
+    .open = frame_channel_open,
+    .release = frame_channel_release,
+    .unlocked_ioctl = frame_channel_ioctl,
+};
+
 
 
 
@@ -2978,11 +3013,9 @@ static int tx_isp_create_graph_proc_entries(struct tx_isp_dev *isp_dev)
     const char* graph_names[] = {"isp-w00", "isp-w01", "isp-w02", "csi", "vic"};
     
     for (i = 0; i < ARRAY_SIZE(graph_names); i++) {
-        /* Use simple proc operations for now */
-        extern const struct proc_ops graph_proc_ops;
-        
+        /* Use file_operations for Linux 3.10 compatibility */
         graph_entry = proc_create_data(graph_names[i], 0644, isp_proc_dir, 
-                                      &graph_proc_ops, isp_dev);
+                                      &graph_proc_fops, isp_dev);
         if (graph_entry) {
             pr_info("*** Created graph proc entry: /proc/jz/isp/%s ***\n", graph_names[i]);
         } else {
