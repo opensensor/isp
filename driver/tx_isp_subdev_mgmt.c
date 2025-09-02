@@ -745,12 +745,77 @@ static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc)
     return data;
 }
 
-/* Forward declarations for functions that need to be implemented elsewhere */
-extern int tx_isp_csi_device_init(struct tx_isp_dev *isp);
-extern int tx_isp_vic_device_init(struct tx_isp_dev *isp);
-extern int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
-extern int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
-extern int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
+/* Simple stub implementations for basic pipeline functions */
+
+/**
+ * tx_isp_csi_device_init - Initialize CSI device (stub implementation)
+ */
+int tx_isp_csi_device_init(struct tx_isp_dev *isp)
+{
+    if (!isp) {
+        pr_err("tx_isp_csi_device_init: Invalid ISP device\n");
+        return -EINVAL;
+    }
+    
+    pr_info("tx_isp_csi_device_init: CSI device initialized (stub)\n");
+    return 0;
+}
+
+/**
+ * tx_isp_vic_device_init - Initialize VIC device (stub implementation)
+ */
+int tx_isp_vic_device_init(struct tx_isp_dev *isp)
+{
+    if (!isp) {
+        pr_err("tx_isp_vic_device_init: Invalid ISP device\n");
+        return -EINVAL;
+    }
+    
+    pr_info("tx_isp_vic_device_init: VIC device initialized (stub)\n");
+    return 0;
+}
+
+/**
+ * tx_isp_csi_device_deinit - Deinitialize CSI device (stub implementation)
+ */
+int tx_isp_csi_device_deinit(struct tx_isp_dev *isp)
+{
+    if (!isp) {
+        pr_err("tx_isp_csi_device_deinit: Invalid ISP device\n");
+        return -EINVAL;
+    }
+    
+    pr_info("tx_isp_csi_device_deinit: CSI device deinitialized (stub)\n");
+    return 0;
+}
+
+/**
+ * tx_isp_vic_device_deinit - Deinitialize VIC device (stub implementation)
+ */
+int tx_isp_vic_device_deinit(struct tx_isp_dev *isp)
+{
+    if (!isp) {
+        pr_err("tx_isp_vic_device_deinit: Invalid ISP device\n");
+        return -EINVAL;
+    }
+    
+    pr_info("tx_isp_vic_device_deinit: VIC device deinitialized (stub)\n");
+    return 0;
+}
+
+/**
+ * tx_isp_setup_pipeline - Setup ISP pipeline (stub implementation)
+ */
+int tx_isp_setup_pipeline(struct tx_isp_dev *isp)
+{
+    if (!isp) {
+        pr_err("tx_isp_setup_pipeline: Invalid ISP device\n");
+        return -EINVAL;
+    }
+    
+    pr_info("tx_isp_setup_pipeline: ISP pipeline configured (stub)\n");
+    return 0;
+}
 
 /* Export symbols for use by other modules */
 EXPORT_SYMBOL(tx_isp_subdev_register);
