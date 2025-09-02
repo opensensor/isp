@@ -3417,13 +3417,14 @@ static struct miscdevice tx_isp_miscdev = {
     .fops = &tx_isp_fops,
 };
 
-// Main initialization function following reference pattern exactly
+// Main initialization function - REFACTORED to use new subdevice management system
 static int tx_isp_init(void)
 {
     int ret;
     int gpio_mode_check;
+    struct platform_device *subdev_platforms[5];
 
-    pr_info("TX ISP driver initializing...\n");
+    pr_info("TX ISP driver initializing with new subdevice management system...\n");
 
     /* Step 1: Check driver interface (matches reference) */
     gpio_mode_check = 0;  // Always return success for standard kernel
@@ -3472,7 +3473,6 @@ static int tx_isp_init(void)
     pr_info("Device nodes created:\n");
     pr_info("  /dev/tx-isp (major=10, minor=dynamic)\n");
     pr_info("  /proc/jz/isp/isp-w02\n");
-    pr_info("Note: Frame channel devices will be created by FS probe\n");
     
     /* Prepare I2C infrastructure for dynamic sensor registration */
     ret = prepare_i2c_infrastructure(ourISPdev);
@@ -3480,173 +3480,100 @@ static int tx_isp_init(void)
         pr_warn("Failed to prepare I2C infrastructure: %d\n", ret);
     }
     
-    /* *** CRITICAL: Register all sub-device platform DEVICES first (Binary Ninja reference) *** */
-    pr_info("*** REGISTERING SUB-DEVICE PLATFORM DEVICES ***\n");
+    /* *** REFACTORED: Use new subdevice management system *** */
+    pr_info("*** INITIALIZING SUBDEVICE MANAGEMENT SYSTEM ***\n");
 
-    /* Register CSI platform device */
+    /* Register platform devices first - needed for the new system */
     ret = platform_device_register(&tx_isp_csi_platform_device);
     if (ret) {
         pr_err("Failed to register CSI platform device: %d\n", ret);
-        cleanup_i2c_infrastructure(ourISPdev);
-
-
-        misc_deregister(&tx_isp_miscdev);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
+        goto err_cleanup_base;
     }
-    pr_info("*** CSI platform device registered ***\n");
     
-    /* Register VIN platform device */
+    ret = platform_device_register(&tx_isp_vic_platform_device);
+    if (ret) {
+        pr_err("Failed to register VIC platform device: %d\n", ret);
+        platform_device_unregister(&tx_isp_csi_platform_device);
+        goto err_cleanup_base;
+    }
+    
     ret = platform_device_register(&tx_isp_vin_platform_device);
     if (ret) {
         pr_err("Failed to register VIN platform device: %d\n", ret);
+        platform_device_unregister(&tx_isp_vic_platform_device);
         platform_device_unregister(&tx_isp_csi_platform_device);
-        cleanup_i2c_infrastructure(ourISPdev);
-        
-
-
-        misc_deregister(&tx_isp_miscdev);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
+        goto err_cleanup_base;
     }
-    pr_info("*** VIN platform device registered ***\n");
     
-    /* Register Frame Source platform device */
     ret = platform_device_register(&tx_isp_fs_platform_device);
     if (ret) {
         pr_err("Failed to register FS platform device: %d\n", ret);
         platform_device_unregister(&tx_isp_vin_platform_device);
+        platform_device_unregister(&tx_isp_vic_platform_device);
         platform_device_unregister(&tx_isp_csi_platform_device);
-        cleanup_i2c_infrastructure(ourISPdev);
-        
-
-
-        misc_deregister(&tx_isp_miscdev);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
+        goto err_cleanup_base;
     }
-    pr_info("*** FS platform device registered ***\n");
     
-    /* Register ISP Core platform device */
     ret = platform_device_register(&tx_isp_core_platform_device);
     if (ret) {
-        pr_err("Failed to register ISP Core platform device: %d\n", ret);
+        pr_err("Failed to register Core platform device: %d\n", ret);
         platform_device_unregister(&tx_isp_fs_platform_device);
         platform_device_unregister(&tx_isp_vin_platform_device);
+        platform_device_unregister(&tx_isp_vic_platform_device);
         platform_device_unregister(&tx_isp_csi_platform_device);
-        cleanup_i2c_infrastructure(ourISPdev);
-        
-
-
-        misc_deregister(&tx_isp_miscdev);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
+        goto err_cleanup_base;
     }
-    pr_info("*** ISP CORE platform device registered ***\n");
-    
-    /* Register VIC platform device */
-    ret = platform_device_register(&tx_isp_vic_platform_device);
+
+    /* Build platform device array for the new management system */
+    subdev_platforms[0] = &tx_isp_csi_platform_device;
+    subdev_platforms[1] = &tx_isp_vic_platform_device;
+    subdev_platforms[2] = &tx_isp_vin_platform_device;
+    subdev_platforms[3] = &tx_isp_fs_platform_device;
+    subdev_platforms[4] = &tx_isp_core_platform_device;
+
+    /* *** NEW: Initialize subdevice registry with cleaner management *** */
+    ret = tx_isp_init_subdev_registry(ourISPdev, subdev_platforms, 5);
     if (ret) {
-        pr_err("Failed to register VIC platform device: %d\n", ret);
-        platform_device_unregister(&tx_isp_core_platform_device);
-        platform_device_unregister(&tx_isp_fs_platform_device);
-        platform_device_unregister(&tx_isp_vin_platform_device);
-        platform_device_unregister(&tx_isp_csi_platform_device);
-        cleanup_i2c_infrastructure(ourISPdev);
-        
-
-
-        misc_deregister(&tx_isp_miscdev);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
+        pr_err("Failed to initialize subdevice registry: %d\n", ret);
+        goto err_cleanup_platforms;
     }
-    pr_info("*** VIC platform device registered ***\n");
+    pr_info("*** SUBDEVICE REGISTRY INITIALIZED SUCCESSFULLY ***\n");
     
-    /* NOTE: Platform drivers are registered individually by each component file */
-    /* (tx_isp_csi.c, tx_isp_vin.c, tx_isp_core.c, tx_isp_vic.c, etc.) */
-    pr_info("*** SUB-DEVICE PLATFORM DRIVERS AUTO-REGISTERED BY INDIVIDUAL COMPONENTS ***\n");
-    pr_info("***   - CSI driver will handle MIPI/DVP interface (tx_isp_csi.c) ***\n");
-    pr_info("***   - VIN driver will handle video input processing (tx_isp_vin.c) ***\n");
-    pr_info("***   - FS driver will handle frame source management (tx_isp_fs.c) ***\n");
-    pr_info("***   - CORE driver will call tx_isp_create_graph_and_nodes (tx_isp_core.c) ***\n");
-    pr_info("***   - VIC driver will handle video input controller (tx_isp_vic.c) ***\n");
-    
-	ret = tx_isp_init_subdevs(ourISPdev);
+    /* Initialize device subsystems using the cleaner approach */
+    ret = tx_isp_init_subdevs(ourISPdev);
     if (ret) {
         pr_err("Failed to initialize subdev infrastructure: %d\n", ret);
-        cleanup_i2c_infrastructure(ourISPdev);
-        destroy_frame_channel_devices();
-        destroy_isp_tuning_device();
-        misc_deregister(&tx_isp_miscdev);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
+        goto err_cleanup_platforms;
     }
     
-	
-    /* Initialize CSI subdev only - VIC will be created by platform driver */
+    /* Initialize CSI and activate it */
     ret = tx_isp_init_csi_subdev(ourISPdev);
     if (ret) {
         pr_err("Failed to initialize CSI subdev: %d\n", ret);
-        tx_isp_vic_platform_exit();
-        cleanup_i2c_infrastructure(ourISPdev);
-        
-
-
-        misc_deregister(&tx_isp_miscdev);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
+        goto err_cleanup_platforms;
     }
     
-    /* Activate CSI subdev for MIPI reception */
     ret = tx_isp_activate_csi_subdev(ourISPdev);
     if (ret) {
         pr_err("Failed to activate CSI subdev: %d\n", ret);
-        tx_isp_vic_platform_exit();
-        cleanup_i2c_infrastructure(ourISPdev);
-        
-
-
-        misc_deregister(&tx_isp_miscdev);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
+        goto err_cleanup_platforms;
     }
     
     pr_info("Device subsystem initialization complete\n");
-    
-    /* *** CRITICAL: Call tx_isp_create_graph_and_nodes to create franchan devices *** */
-    ret = tx_isp_create_graph_and_nodes(ourISPdev);
-    if (ret) {
-        pr_err("Failed to create ISP graph and nodes: %d\n", ret);
-        tx_isp_vic_platform_exit();
-        cleanup_i2c_infrastructure(ourISPdev);
-        misc_deregister(&tx_isp_miscdev);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
-    }
-    pr_info("*** ISP GRAPH AND NODES CREATED - FRANCHAN DEVICES SHOULD NOW EXIST ***\n");
-    
+
     /* Initialize real sensor detection and hardware integration */
     ret = tx_isp_detect_and_register_sensors(ourISPdev);
     if (ret) {
         pr_warn("No sensors detected, continuing with basic initialization: %d\n", ret);
     }
     
-    /* Initialize hardware interrupt handling for real frame completion */
+    /* Initialize hardware interrupt handling */
     ret = tx_isp_init_hardware_interrupts(ourISPdev);
     if (ret) {
         pr_warn("Hardware interrupts not available: %d\n", ret);
     }
 
-    /* *** CRITICAL: Create ISP M0 tuning device node (matches reference driver) *** */
+    /* Create ISP M0 tuning device node */
     ret = tisp_code_create_tuning_node();
     if (ret) {
         pr_err("Failed to create ISP M0 tuning device: %d\n", ret);
@@ -3655,10 +3582,33 @@ static int tx_isp_init(void)
         pr_info("*** ISP M0 TUNING DEVICE NODE CREATED SUCCESSFULLY ***\n");
     }
 
-    pr_info("TX ISP driver ready\n");
+    /* *** REFACTORED: Use new subdevice graph creation system *** */
+    pr_info("*** CREATING SUBDEVICE GRAPH WITH NEW MANAGEMENT SYSTEM ***\n");
+    ret = tx_isp_create_subdev_graph(ourISPdev);
+    if (ret) {
+        pr_err("Failed to create ISP subdevice graph: %d\n", ret);
+        goto err_cleanup_platforms;
+    }
+    pr_info("*** SUBDEVICE GRAPH CREATED - FRAME DEVICES SHOULD NOW EXIST ***\n");
+
+    pr_info("TX ISP driver ready with new subdevice management system\n");
     
     return 0;
 
+err_cleanup_platforms:
+    /* Clean up in reverse order */
+    platform_device_unregister(&tx_isp_core_platform_device);
+    platform_device_unregister(&tx_isp_fs_platform_device);
+    platform_device_unregister(&tx_isp_vin_platform_device);
+    platform_device_unregister(&tx_isp_vic_platform_device);
+    platform_device_unregister(&tx_isp_csi_platform_device);
+    
+err_cleanup_base:
+    cleanup_i2c_infrastructure(ourISPdev);
+    misc_deregister(&tx_isp_miscdev);
+    platform_driver_unregister(&tx_isp_driver);
+    platform_device_unregister(&tx_isp_platform_device);
+    
 err_free_dev:
     kfree(ourISPdev);
     ourISPdev = NULL;
