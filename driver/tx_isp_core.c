@@ -2234,26 +2234,6 @@ int tisp_channel_stop(uint32_t channel_id)
 }
 EXPORT_SYMBOL(tisp_channel_stop);
 
-/* Missing spinlock functions - implement as wrappers around standard kernel functions */
-void __private_spin_lock_irqsave(void *lock_ptr, uint32_t *flags_ptr)
-{
-    spinlock_t *lock = (spinlock_t *)lock_ptr;
-    unsigned long flags;
-    
-    spin_lock_irqsave(lock, flags);
-    *flags_ptr = (uint32_t)flags;
-}
-EXPORT_SYMBOL(__private_spin_lock_irqsave);
-
-void private_spin_unlock_irqrestore(void *lock_ptr, uint32_t flags)
-{
-    spinlock_t *lock = (spinlock_t *)lock_ptr;
-    unsigned long kernel_flags = (unsigned long)flags;
-    
-    spin_unlock_irqrestore(lock, kernel_flags);
-}
-EXPORT_SYMBOL(private_spin_unlock_irqrestore);
-
 /* Missing function implementations from the Binary Ninja decompilation */
 
 /* Global variable for channel mask control */
