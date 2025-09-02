@@ -17,6 +17,10 @@
 /* Properly prototype the vb2 helper functions */
 static void __vb2_queue_free(void *queue, void *alloc_ctx);
 
+/* frame_channel_open and forward declarations */
+int frame_channel_open(struct inode *inode, struct file *file);
+int frame_channel_release(struct inode *inode, struct file *file);
+
 
 /* Frame buffer structure */
 struct frame_channel_buffer {
