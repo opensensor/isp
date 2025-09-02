@@ -381,6 +381,15 @@ static int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
 static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag);
 static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *sensor_attr);
 
+// ISP Tuning device support - missing component for /dev/isp-m0
+static struct cdev isp_tuning_cdev;
+static struct class *isp_tuning_class = NULL;
+static dev_t isp_tuning_devno;
+static int isp_tuning_major = 0;
+static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
+
+/* Use existing frame_buffer structure from tx-libimp.h */
+
 /* Forward declaration for sensor registration handler */
 /* VIC sensor operations IOCTL - EXACT Binary Ninja implementation */
 static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
@@ -1964,65 +1973,6 @@ static void destroy_isp_tuning_device(void)
         isp_tuning_class = NULL;
         pr_info("ISP tuning device destroyed\n");
     }
-}
-
-// Frame channel device implementations - based on reference tx_isp_fs_probe
-static int frame_channel_open(struct inode *inode, struct file *file)
-{
-    struct frame_channel_device *fcd = NULL;
-    int minor = iminor(inode);
-    int i;
-    
-    // Find which frame channel device this is by matching minor number
-    for (i = 0; i < num_channels; i++) {
-        if (frame_channels[i].miscdev.minor == minor) {
-            fcd = &frame_channels[i];
-            break;
-        }
-    }
-    
-    if (!fcd) {
-        pr_err("Could not find frame channel device for minor %d\n", minor);
-        return -EINVAL;
-    }
-    
-    pr_info("Frame channel %d opened (minor=%d)\n", fcd->channel_num, minor);
-    
-    // Initialize channel state - reference sets state to 3 (ready)
-    fcd->state.enabled = false;
-    fcd->state.streaming = false;
-    fcd->state.format = 0x3231564e; // NV12 default
-    fcd->state.width = (fcd->channel_num == 0) ? 1920 : 640;
-    fcd->state.height = (fcd->channel_num == 0) ? 1080 : 360;
-    fcd->state.buffer_count = 0;
-    
-    /* Initialize simplified frame buffer management */
-    spin_lock_init(&fcd->state.buffer_lock);
-    init_waitqueue_head(&fcd->state.frame_wait);
-    fcd->state.sequence = 0;
-    fcd->state.frame_ready = false;
-    memset(&fcd->state.current_buffer, 0, sizeof(fcd->state.current_buffer));
-    
-    file->private_data = fcd;
-    
-    
-    return 0;
-}
-
-static int frame_channel_release(struct inode *inode, struct file *file)
-{
-    struct frame_channel_device *fcd = file->private_data;
-    
-    if (!fcd) {
-        return 0;
-    }
-    
-    pr_info("Frame channel %d released\n", fcd->channel_num);
-    
-    // Reference implementation cleans up channel resources
-    // Frees buffers, resets state, etc.
-    
-    return 0;
 }
 
 static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
