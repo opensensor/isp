@@ -16,6 +16,14 @@
 
 /* ===== TIZIANO WDR PROCESSING PIPELINE - Binary Ninja Reference Implementation ===== */
 
+// ISP Tuning device support - missing component for /dev/isp-m0
+static struct cdev isp_tuning_cdev;
+static struct class *isp_tuning_class = NULL;
+static dev_t isp_tuning_devno;
+static int isp_tuning_major = 0;
+static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
+
+
 /* WDR Global Data Structures - From Binary Ninja Analysis */
 static uint32_t wdr_ev_now = 0;
 static uint32_t wdr_ev_list_deghost = 0;

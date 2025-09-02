@@ -381,15 +381,6 @@ static int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
 static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag);
 static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *sensor_attr);
 
-// ISP Tuning device support - missing component for /dev/isp-m0
-static struct cdev isp_tuning_cdev;
-static struct class *isp_tuning_class = NULL;
-static dev_t isp_tuning_devno;
-static int isp_tuning_major = 0;
-static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
-
-/* Use existing frame_buffer structure from tx-libimp.h */
-
 /* Forward declaration for sensor registration handler */
 /* VIC sensor operations IOCTL - EXACT Binary Ninja implementation */
 static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
