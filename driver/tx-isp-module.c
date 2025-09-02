@@ -743,8 +743,8 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
     
     // Initialize VIC device structure
     vic_dev->self = vic_dev;
-    vic_dev->frame_width = 1920;
-    vic_dev->frame_height = 1080;
+    vic_dev->width = 1920;
+    vic_dev->height = 1080;
     vic_dev->state = 1;
     vic_dev->streaming = 0;
     vic_dev->frame_count = 0;
@@ -3596,7 +3596,6 @@ static int tx_isp_init(void)
         cleanup_i2c_infrastructure(ourISPdev);
         destroy_frame_channel_devices();
         destroy_isp_tuning_device();
-        tx_isp_proc_exit(ourISPdev);
         misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
