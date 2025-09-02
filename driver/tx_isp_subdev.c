@@ -59,50 +59,6 @@ static void __fill_v4l2_buffer(void *vb, struct v4l2_buffer *buf)
     memcpy(buf, &fbuf->v4l2_buf, sizeof(struct v4l2_buffer));
 }
 
-int frame_channel_open(struct inode *inode, struct file *file)
-{
-    struct tx_isp_frame_channel *chan = container_of(file->private_data,
-                                                    struct tx_isp_frame_channel,
-                                                    misc);
-    if (!chan)
-        return -EINVAL;
-
-    mutex_lock(&chan->mlock);
-
-    if (chan->state < FRAME_CHAN_INIT) {
-        mutex_unlock(&chan->mlock);
-        ISP_ERROR("Frame channel%d is slake now, Please try later!\n", chan->pad_id);
-        return -1;
-    }
-
-    mutex_unlock(&chan->mlock);
-
-    // Initialize lists
-    INIT_LIST_HEAD(&chan->queue_head);
-    INIT_LIST_HEAD(&chan->done_head);
-    chan->queued_count = 0;
-    chan->done_count = 0;
-
-    init_completion(&chan->frame_done);
-
-    chan->state = FRAME_CHAN_OPENED;
-    return 0;
-}
-
-int frame_channel_release(struct inode *inode, struct file *file)
-{
-    struct tx_isp_frame_channel *chan = container_of(file->private_data,
-                                                    struct tx_isp_frame_channel,
-                                                    misc);
-    if (!chan)
-        return -EINVAL;
-
-    if (chan->state == FRAME_CHAN_STREAM) {
-        chan->state = FRAME_CHAN_INIT;
-    }
-
-    return 0;
-}
 
 // Binary Ninja EXACT implementation 
 int tx_isp_send_event_to_remote(struct v4l2_subdev *sd, unsigned int event, void *data)
