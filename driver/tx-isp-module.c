@@ -3497,20 +3497,6 @@ static int tx_isp_init(void)
     /* *** CRITICAL: Register all sub-device platform DEVICES first (Binary Ninja reference) *** */
     pr_info("*** REGISTERING SUB-DEVICE PLATFORM DEVICES ***\n");
     
-    /* Register CSI platform device */
-    ret = platform_device_register(&tx_isp_csi_platform_device);
-    if (ret) {
-        pr_err("Failed to register CSI platform device: %d\n", ret);
-        cleanup_i2c_infrastructure(ourISPdev);
-
-
-        misc_deregister(&tx_isp_miscdev);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
-    }
-    pr_info("*** CSI platform device registered ***\n");
-    
     /* Register VIN platform device */
     ret = platform_device_register(&tx_isp_vin_platform_device);
     if (ret) {
