@@ -1799,7 +1799,34 @@ int tisp_channel_start(int channel_id, struct tx_isp_channel_attr *attr)
 }
 EXPORT_SYMBOL(tisp_channel_start);
 
-/* Core probe function from decompiled code */
+static int isp_tuning_open(struct inode *inode, struct file *file)
+{
+    extern int isp_m0_chardev_open(struct inode *inode, struct file *file);
+
+    pr_info("ISP tuning device opened - routing to tx_isp_tuning.c\n");
+
+    /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
+    return isp_m0_chardev_open(inode, file);
+}
+
+static int isp_tuning_release(struct inode *inode, struct file *file)
+{
+    extern int isp_m0_chardev_release(struct inode *inode, struct file *file);
+
+    pr_info("ISP tuning device released - routing to tx_isp_tuning.c\n");
+
+    /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
+    return isp_m0_chardev_release(inode, file);
+}
+
+
+static const struct file_operations isp_tuning_fops = {
+    .owner = THIS_MODULE,
+    .unlocked_ioctl = isp_tuning_ioctl,
+    .open = isp_tuning_open,
+    .release = isp_tuning_release,
+};
+
 
 /* tx_isp_core_probe - EXACT Binary Ninja implementation */
 int tx_isp_core_probe(struct platform_device *pdev)
