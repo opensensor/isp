@@ -5256,6 +5256,13 @@ int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd)
 }
 EXPORT_SYMBOL(tx_isp_unregister_sensor_subdev);
 
+/* Export platform devices for tx_isp_core.c to reference */
+EXPORT_SYMBOL(tx_isp_csi_platform_device);
+EXPORT_SYMBOL(tx_isp_vic_platform_device);
+EXPORT_SYMBOL(tx_isp_vin_platform_device);
+EXPORT_SYMBOL(tx_isp_fs_platform_device);
+EXPORT_SYMBOL(tx_isp_core_platform_device);
+
 module_init(tx_isp_init);
 module_exit(tx_isp_exit);
 
