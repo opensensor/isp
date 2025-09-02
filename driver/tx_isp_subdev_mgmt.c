@@ -547,11 +547,11 @@ static int tx_isp_create_frame_channels(struct tx_isp_dev *isp)
 
         fs_miscdev = kzalloc(sizeof(struct miscdevice), GFP_KERNEL);
         if (!fs_miscdev) {
-            pr_err("Failed to allocate misc device for isp-fs%d\n", i);
+            pr_err("Failed to allocate misc device for framechan%d\n", i);
             return -ENOMEM;
         }
 
-        snprintf(dev_name, sizeof(dev_name), "isp-fs%d", i);
+        snprintf(dev_name, sizeof(dev_name), "framechan%d", i);
         fs_miscdev->name = kstrdup(dev_name, GFP_KERNEL);
         fs_miscdev->minor = MISC_DYNAMIC_MINOR;
         fs_miscdev->fops = &frame_channel_fops;
