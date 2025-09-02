@@ -1899,26 +1899,6 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
     return -EINVAL;
 }
 
-static int isp_tuning_open(struct inode *inode, struct file *file)
-{
-    extern int isp_m0_chardev_open(struct inode *inode, struct file *file);
-    
-    pr_info("ISP tuning device opened - routing to tx_isp_tuning.c\n");
-    
-    /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
-    return isp_m0_chardev_open(inode, file);
-}
-
-static int isp_tuning_release(struct inode *inode, struct file *file)
-{
-    extern int isp_m0_chardev_release(struct inode *inode, struct file *file);
-    
-    pr_info("ISP tuning device released - routing to tx_isp_tuning.c\n");
-    
-    /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
-    return isp_m0_chardev_release(inode, file);
-}
-
 // Destroy ISP tuning device node (reference: tisp_code_destroy_tuning_node)
 static void destroy_isp_tuning_device(void)
 {
@@ -3450,17 +3430,7 @@ static int tx_isp_fs_remove(struct platform_device *pdev)
 
 int isp_core_tuning_init(void *core_dev)
 {
-    pr_info("*** isp_core_tuning_init: Creating ISP tuning interface (/dev/isp-m0) ***\n");
-    
-    /* This should create the /dev/isp-m0 device like the existing create_isp_tuning_device() */
-    int ret = create_isp_tuning_device();
-    if (ret == 0) {
-        pr_info("*** isp_core_tuning_init: SUCCESS - /dev/isp-m0 created ***\n");
-        return (int)core_dev;  /* Return non-NULL for success */
-    } else {
-        pr_err("isp_core_tuning_init: Failed to create tuning device: %d\n", ret);
-        return 0; /* Return NULL for failure */
-    }
+    // TODO
 }
 
 void isp_core_tuning_deinit(void *core_dev)
@@ -3596,17 +3566,6 @@ static int tx_isp_init(void)
     ret = misc_register(&tx_isp_miscdev);
     if (ret != 0) {
         pr_err("Failed to register misc device: %d\n", ret);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
-    }
-
-    /* Create ISP tuning device - required for IMP_ISP_EnableTuning() */
-    ret = create_isp_tuning_device();
-    if (ret) {
-        pr_err("Failed to create ISP tuning device: %d\n", ret);
-
-        misc_deregister(&tx_isp_miscdev);
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
         goto err_free_dev;
