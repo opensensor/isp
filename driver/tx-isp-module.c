@@ -1416,13 +1416,6 @@ static int tx_isp_init_subdevs(struct tx_isp_dev *isp_dev)
     
     pr_info("Initializing device subsystems...\n");
     
-    // Initialize CSI subdev (critical for MIPI data reception!)
-    ret = tx_isp_init_csi_subdev(isp_dev);
-    if (ret) {
-        pr_err("Failed to initialize CSI subdev: %d\n", ret);
-        return ret;
-    }
-    
     // Initialize VIC subdev (critical for frame data flow)
     ret = tx_isp_init_vic_subdev(isp_dev);
     if (ret) {
@@ -3496,6 +3489,20 @@ static int tx_isp_init(void)
     
     /* *** CRITICAL: Register all sub-device platform DEVICES first (Binary Ninja reference) *** */
     pr_info("*** REGISTERING SUB-DEVICE PLATFORM DEVICES ***\n");
+
+    /* Register CSI platform device */
+    ret = platform_device_register(&tx_isp_csi_platform_device);
+    if (ret) {
+        pr_err("Failed to register CSI platform device: %d\n", ret);
+        cleanup_i2c_infrastructure(ourISPdev);
+
+
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+    pr_info("*** CSI platform device registered ***\n");
     
     /* Register VIN platform device */
     ret = platform_device_register(&tx_isp_vin_platform_device);
