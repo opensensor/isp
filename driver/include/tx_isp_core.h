@@ -2,7 +2,6 @@
 #define __TX_ISP_CORE_H__
 
 /* Core Functions */
-int tx_isp_core_probe(struct platform_device *pdev);
 int tx_isp_core_remove(struct platform_device *pdev);
 
 /* Core Operations */
