@@ -1986,6 +1986,42 @@ static const struct file_operations isp_tuning_fops = {
     .release = isp_tuning_release,
 };
 
+/* Graph proc operations for /proc/jz/isp/* entries */
+static ssize_t graph_proc_read(struct file *file, char __user *buffer, size_t count, loff_t *pos)
+{
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)PDE_DATA(file_inode(file));
+    char info_buf[256];
+    int len;
+    
+    if (*pos > 0) {
+        return 0; /* EOF */
+    }
+    
+    len = snprintf(info_buf, sizeof(info_buf), 
+                   "ISP Graph Node Info:\n"
+                   "Device: %p\n"
+                   "Frame Count: %u\n"
+                   "Pipeline State: %d\n",
+                   isp_dev, 
+                   isp_dev ? isp_dev->frame_count : 0,
+                   isp_dev ? isp_dev->pipeline_state : -1);
+    
+    if (len > count) {
+        len = count;
+    }
+    
+    if (copy_to_user(buffer, info_buf, len)) {
+        return -EFAULT;
+    }
+    
+    *pos += len;
+    return len;
+}
+
+const struct proc_ops graph_proc_ops = {
+    .proc_read = graph_proc_read,
+};
+
 
 
 
