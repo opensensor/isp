@@ -53,6 +53,7 @@ module_param(isp_memopt, int, S_IRUGO);
 MODULE_PARM_DESC(isp_memopt, "isp memory optimize");
 
 static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
+extern struct tx_isp_dev *ourISPdev;
 
 /* Forward declarations */
 static int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
@@ -2099,7 +2100,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
 }
 
 /* Core remove function */
-static int tx_isp_core_remove(struct platform_device *pdev)
+int tx_isp_core_remove(struct platform_device *pdev)
 {
     void *core_dev = platform_get_drvdata(pdev);
     if (core_dev) {
