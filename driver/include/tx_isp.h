@@ -330,4 +330,11 @@ void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan);
 void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan);
 int tx_isp_setup_default_links(struct tx_isp_dev *dev);
 
+/* Platform device declarations - defined in tx-isp-device.c */
+extern struct platform_device tx_isp_csi_platform_device;
+extern struct platform_device tx_isp_vic_platform_device;
+extern struct platform_device tx_isp_vin_platform_device;
+extern struct platform_device tx_isp_fs_platform_device;
+extern struct platform_device tx_isp_core_platform_device;
+
 #endif /* __TX_ISP_H__ */

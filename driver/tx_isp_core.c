@@ -404,13 +404,6 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
     /* *** CRITICAL: Populate module_graph array with registered platform devices *** */
     pr_info("*** tx_isp_create_graph_and_nodes: Populating module_graph array ***\n");
     
-    /* External platform device references from tx-isp-module.c */
-    extern struct platform_device tx_isp_csi_platform_device;
-    extern struct platform_device tx_isp_vic_platform_device; 
-    extern struct platform_device tx_isp_vin_platform_device;
-    extern struct platform_device tx_isp_fs_platform_device;
-    extern struct platform_device tx_isp_core_platform_device;
-    
     /* Binary Ninja: Populate platform device array at arg1 + 0x84 with count at arg1 + 0x80 */
     struct platform_device *platform_devices[] = {
         &tx_isp_csi_platform_device,
