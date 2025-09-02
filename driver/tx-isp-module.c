@@ -3276,11 +3276,6 @@ static int tx_isp_fs_remove(struct platform_device *pdev)
     return 0;
 }
 
-int isp_core_tuning_init(void *core_dev)
-{
-    // TODO
-}
-
 void isp_core_tuning_deinit(void *core_dev)
 {
     pr_info("isp_core_tuning_deinit: Destroying ISP tuning interface\n");
