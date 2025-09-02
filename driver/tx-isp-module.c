@@ -1422,14 +1422,7 @@ static int tx_isp_init_subdevs(struct tx_isp_dev *isp_dev)
         pr_err("Failed to initialize VIC subdev: %d\n", ret);
         return ret;
     }
-    
-    // Activate CSI subdev for MIPI reception
-    ret = tx_isp_activate_csi_subdev(isp_dev);
-    if (ret) {
-        pr_err("Failed to activate CSI subdev: %d\n", ret);
-        return ret;
-    }
-    
+
     pr_info("Device subsystem initialization complete\n");
     return 0;
 }
