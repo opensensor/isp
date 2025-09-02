@@ -3344,6 +3344,19 @@ static int tx_isp_init(void)
     
     pr_info("Device subsystem initialization complete\n");
     
+    /* *** CRITICAL: Call tx_isp_create_graph_and_nodes to create franchan devices *** */
+    ret = tx_isp_create_graph_and_nodes(ourISPdev);
+    if (ret) {
+        pr_err("Failed to create ISP graph and nodes: %d\n", ret);
+        tx_isp_vic_platform_exit();
+        cleanup_i2c_infrastructure(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+    pr_info("*** ISP GRAPH AND NODES CREATED - FRANCHAN DEVICES SHOULD NOW EXIST ***\n");
+    
     /* Initialize real sensor detection and hardware integration */
     ret = tx_isp_detect_and_register_sensors(ourISPdev);
     if (ret) {
