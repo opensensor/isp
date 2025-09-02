@@ -3518,40 +3518,6 @@ static int tx_isp_fs_remove(struct platform_device *pdev)
     return 0;
 }
 
-/* Simple stub implementations for other probe functions */
-static int tx_isp_csi_probe(struct platform_device *pdev)
-{
-    pr_info("tx_isp_csi_probe: CSI device probe\n");
-    return 0;
-}
-
-static int tx_isp_csi_remove(struct platform_device *pdev)
-{
-    return 0;
-}
-
-static int tx_isp_vin_probe(struct platform_device *pdev)
-{
-    pr_info("tx_isp_vin_probe: VIN device probe\n");
-    return 0;
-}
-
-static int tx_isp_vin_remove(struct platform_device *pdev)
-{
-    return 0;
-}
-
-static int tx_isp_vic_probe(struct platform_device *pdev)
-{
-    pr_info("tx_isp_vic_probe: VIC device probe\n");
-    return 0;
-}
-
-static int tx_isp_vic_remove(struct platform_device *pdev)
-{
-    return 0;
-}
-
 /* Stub implementations for helper functions */
 static int tx_isp_subdev_init(struct platform_device *pdev, void *dev, void *ops)
 {
