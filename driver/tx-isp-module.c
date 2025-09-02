@@ -3467,30 +3467,14 @@ static void tx_isp_exit(void)
         ourISPdev = NULL;
     }
 
-    /* *** CRITICAL: Unregister all sub-device platform drivers (reverse order) *** */
-    pr_info("*** UNREGISTERING SUB-DEVICE PLATFORM DRIVERS ***\n");
-    
-    /* Unregister VIC platform driver (last registered, first unregistered) */
-    platform_driver_unregister(&tx_isp_vic_driver);
-    pr_info("*** VIC platform driver unregistered ***\n");
-    
-    /* Unregister ISP Core platform driver */
-    platform_driver_unregister(&tx_isp_core_driver);
-    pr_info("*** ISP CORE platform driver unregistered ***\n");
-    
-    /* Unregister Frame Source platform driver */
-    platform_driver_unregister(&tx_isp_fs_driver);
-    pr_info("*** FS platform driver unregistered ***\n");
-    
-    /* Unregister VIN platform driver */
-    platform_driver_unregister(&tx_isp_vin_driver);
-    pr_info("*** VIN platform driver unregistered ***\n");
-    
-    /* Unregister CSI platform driver (first registered, last unregistered) */
-    platform_driver_unregister(&tx_isp_csi_driver);
-    pr_info("*** CSI platform driver unregistered ***\n");
-    
-    pr_info("*** ALL SUB-DEVICE PLATFORM DRIVERS UNREGISTERED SUCCESSFULLY ***\n");
+    /* NOTE: Platform drivers are unregistered individually by each component file */
+    /* (tx_isp_csi.c, tx_isp_vin.c, tx_isp_core.c, tx_isp_vic.c, etc.) during module exit */
+    pr_info("*** SUB-DEVICE PLATFORM DRIVERS AUTO-UNREGISTERED BY INDIVIDUAL COMPONENTS ***\n");
+    pr_info("***   - CSI driver cleaned up by tx_isp_csi.c module exit ***\n");
+    pr_info("***   - VIN driver cleaned up by tx_isp_vin.c module exit ***\n");
+    pr_info("***   - FS driver cleaned up by tx_isp_fs.c module exit ***\n");
+    pr_info("***   - CORE driver cleaned up by tx_isp_core.c module exit ***\n");
+    pr_info("***   - VIC driver cleaned up by tx_isp_vic.c module exit ***\n");
 
 
     /* Clean up sensor list */
