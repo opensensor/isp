@@ -401,8 +401,35 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
         return -EINVAL;
     }
     
+    /* *** CRITICAL: Populate module_graph array with registered platform devices *** */
+    pr_info("*** tx_isp_create_graph_and_nodes: Populating module_graph array ***\n");
+    
+    /* External platform device references from tx-isp-module.c */
+    extern struct platform_device tx_isp_csi_platform_device;
+    extern struct platform_device tx_isp_vic_platform_device; 
+    extern struct platform_device tx_isp_vin_platform_device;
+    extern struct platform_device tx_isp_fs_platform_device;
+    extern struct platform_device tx_isp_core_platform_device;
+    
+    /* Binary Ninja: Populate platform device array at arg1 + 0x84 with count at arg1 + 0x80 */
+    struct platform_device *platform_devices[] = {
+        &tx_isp_csi_platform_device,
+        &tx_isp_vic_platform_device,
+        &tx_isp_vin_platform_device,
+        &tx_isp_fs_platform_device,
+        &tx_isp_core_platform_device
+    };
+    
+    subdev_count = ARRAY_SIZE(platform_devices);
+    isp->subdev_count = subdev_count;  /* Store at *(arg1 + 0x80) */
+    
+    /* Store platform device pointers in ISP device structure */
+    for (i = 0; i < subdev_count && i < ISP_MAX_SUBDEVS; i++) {
+        isp->subdev_list[i] = platform_devices[i];
+        pr_info("*** module_graph[%d] = %s ***\n", i, platform_devices[i]->name);
+    }
+    
     /* Binary Ninja: Initialize subdevice list and count */
-    subdev_count = isp->subdev_count;  /* This would be *(arg1 + 0x80) */
     subdev_list = (struct platform_device **)&isp->subdev_list;  /* This would be arg1 + 0x84 */
     
     if (subdev_count == 0) {
