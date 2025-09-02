@@ -293,6 +293,12 @@ struct tx_isp_dev {
     struct platform_device **subdev_list;   /* Subdevice list at offset 0x84 */
     void *subdev_graph[ISP_MAX_SUBDEVS];     /* Subdevice graph array */
     struct proc_dir_entry *proc_dir;         /* Proc directory at offset 0x11c */
+    
+    /* Frame channel devices - needed for tx_isp_create_framechan_devices */
+    struct miscdevice *fs_miscdevs[4];       /* Frame source misc devices (/dev/isp-fs*) */
+    
+    /* ISP proc directory - needed for tx_isp_create_graph_proc_entries */
+    struct proc_dir_entry *isp_proc_dir;     /* ISP-specific proc directory */
 } __attribute__((aligned(4)));
 
 
