@@ -52,6 +52,7 @@ int isp_memopt;
 module_param(isp_memopt, int, S_IRUGO);
 MODULE_PARM_DESC(isp_memopt, "isp memory optimize");
 
+static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 
 /* Forward declarations */
 static int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);

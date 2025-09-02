@@ -20,7 +20,6 @@
 static struct cdev isp_tuning_cdev;
 static struct class *isp_tuning_class = NULL;
 static dev_t isp_tuning_devno;
-static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 
 
 /* WDR Global Data Structures - From Binary Ninja Analysis */
