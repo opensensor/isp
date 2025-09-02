@@ -3518,18 +3518,6 @@ static int tx_isp_fs_remove(struct platform_device *pdev)
     return 0;
 }
 
-/* Stub implementations for helper functions */
-static int tx_isp_subdev_init(struct platform_device *pdev, void *dev, void *ops)
-{
-    pr_info("tx_isp_subdev_init: Initializing subdev for %s\n", pdev->name);
-    return 0;
-}
-
-static void tx_isp_subdev_deinit(void *dev)
-{
-    pr_info("tx_isp_subdev_deinit: Cleaning up subdev\n");
-}
-
 static int isp_core_tuning_init(void *core_dev)
 {
     pr_info("*** isp_core_tuning_init: Creating ISP tuning interface (/dev/isp-m0) ***\n");
