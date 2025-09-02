@@ -1240,6 +1240,41 @@ static int tx_isp_csi_s_stream(struct tx_isp_dev *isp_dev, int enable)
     return csi_video_s_stream(&csi_dev->sd, enable);
 }
 
+// Initialize subdev infrastructure matching reference driver
+static int tx_isp_init_subdevs(struct tx_isp_dev *isp_dev)
+{
+    int ret = 0;
+    
+    if (!isp_dev) {
+        return -EINVAL;
+    }
+    
+    pr_info("Initializing device subsystems...\n");
+    
+    // Initialize CSI subdev (critical for MIPI data reception!)
+    ret = tx_isp_init_csi_subdev(isp_dev);
+    if (ret) {
+        pr_err("Failed to initialize CSI subdev: %d\n", ret);
+        return ret;
+    }
+    
+    // Initialize VIC subdev (critical for frame data flow)
+    ret = tx_isp_init_vic_subdev(isp_dev);
+    if (ret) {
+        pr_err("Failed to initialize VIC subdev: %d\n", ret);
+        return ret;
+    }
+    
+    // Activate CSI subdev for MIPI reception
+    ret = tx_isp_activate_csi_subdev(isp_dev);
+    if (ret) {
+        pr_err("Failed to activate CSI subdev: %d\n", ret);
+        return ret;
+    }
+    
+    pr_info("Device subsystem initialization complete\n");
+    return 0;
+}
 
 // Activate VIC subdev like reference tx_isp_vic_activate_subdev
 static int tx_isp_activate_vic_subdev(struct tx_isp_dev *isp_dev)
@@ -3312,6 +3347,20 @@ static int tx_isp_init(void)
     pr_info("***   - CORE driver will call tx_isp_create_graph_and_nodes (tx_isp_core.c) ***\n");
     pr_info("***   - VIC driver will handle video input controller (tx_isp_vic.c) ***\n");
     
+	ret = tx_isp_init_subdevs(ourISPdev);
+    if (ret) {
+        pr_err("Failed to initialize subdev infrastructure: %d\n", ret);
+        cleanup_i2c_infrastructure(ourISPdev);
+        destroy_frame_channel_devices();
+        destroy_isp_tuning_device();
+        tx_isp_proc_exit(ourISPdev);
+        misc_deregister(&tx_isp_miscdev);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+    
+	
     /* Initialize CSI subdev only - VIC will be created by platform driver */
     ret = tx_isp_init_csi_subdev(ourISPdev);
     if (ret) {
