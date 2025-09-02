@@ -2810,13 +2810,16 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, un
     return 0;
 }
 
-// Create frame channel devices - based on reference tx_isp_fs_probe
+// Create frame channel devices - based on reference tx_isp_fs_probe  
 static int create_frame_channel_devices(void)
 {
     int ret, i;
     char *device_name;
     
     pr_info("Creating %d frame channel devices...\n", num_channels);
+    
+    /* CRITICAL: Clean up any existing devices first to prevent EEXIST errors */
+    destroy_frame_channel_devices();
     
     for (i = 0; i < num_channels; i++) {
         // Reference creates devices like "num0", "num1" etc. based on framesource error
@@ -2852,17 +2855,11 @@ static int create_frame_channel_devices(void)
     
 cleanup:
     // Clean up already created devices
-    for (i = i - 1; i >= 0; i--) {
-        if (frame_channels[i].miscdev.name) {
-            misc_deregister(&frame_channels[i].miscdev);
-            kfree(frame_channels[i].miscdev.name);
-            frame_channels[i].miscdev.name = NULL;
-        }
-    }
+    destroy_frame_channel_devices();
     return ret;
 }
 
-// Destroy frame channel devices
+/* CRITICAL: Destroy frame channel devices - MISSING function that caused EEXIST */
 static void destroy_frame_channel_devices(void)
 {
     int i;
@@ -3717,6 +3714,16 @@ static void tx_isp_exit(void)
     pr_info("TX ISP driver exiting...\n");
 
     if (ourISPdev) {
+        /* *** CRITICAL: Destroy frame channel devices FIRST to prevent EEXIST errors *** */
+        destroy_frame_channel_devices();
+        
+        /* Clean up subdevice graph */
+        tx_isp_cleanup_subdev_graph(ourISPdev);
+        
+        /* *** CRITICAL: Destroy ISP M0 tuning device node (matches reference driver) *** */
+        tisp_code_destroy_tuning_node();
+        pr_info("*** ISP M0 TUNING DEVICE NODE DESTROYED ***\n");
+        
         /* Clean up clocks properly using Linux Clock Framework */
         if (ourISPdev->isp_clk) {
             clk_disable_unprepare(ourISPdev->isp_clk);
@@ -3779,18 +3786,16 @@ static void tx_isp_exit(void)
             ourISPdev->sensor = NULL;
         }
         
-        /* Destroy frame channel devices */
-        
-        
-        /* *** CRITICAL: Destroy ISP M0 tuning device node (matches reference driver) *** */
-        tisp_code_destroy_tuning_node();
-        pr_info("*** ISP M0 TUNING DEVICE NODE DESTROYED ***\n");
-        
-        /* Clean up proc entries */
-
-        
         /* Unregister misc device */
         misc_deregister(&tx_isp_miscdev);
+        
+        /* *** CRITICAL: Unregister platform devices that were registered in init *** */
+        platform_device_unregister(&tx_isp_core_platform_device);
+        platform_device_unregister(&tx_isp_fs_platform_device);
+        platform_device_unregister(&tx_isp_vin_platform_device);
+        platform_device_unregister(&tx_isp_vic_platform_device);
+        platform_device_unregister(&tx_isp_csi_platform_device);
+        pr_info("*** PLATFORM SUBDEVICES UNREGISTERED ***\n");
         
         /* Unregister platform components */
         platform_driver_unregister(&tx_isp_driver);
@@ -3800,16 +3805,6 @@ static void tx_isp_exit(void)
         kfree(ourISPdev);
         ourISPdev = NULL;
     }
-
-    /* NOTE: Platform drivers are unregistered individually by each component file */
-    /* (tx_isp_csi.c, tx_isp_vin.c, tx_isp_core.c, tx_isp_vic.c, etc.) during module exit */
-    pr_info("*** SUB-DEVICE PLATFORM DRIVERS AUTO-UNREGISTERED BY INDIVIDUAL COMPONENTS ***\n");
-    pr_info("***   - CSI driver cleaned up by tx_isp_csi.c module exit ***\n");
-    pr_info("***   - VIN driver cleaned up by tx_isp_vin.c module exit ***\n");
-    pr_info("***   - FS driver cleaned up by tx_isp_fs.c module exit ***\n");
-    pr_info("***   - CORE driver cleaned up by tx_isp_core.c module exit ***\n");
-    pr_info("***   - VIC driver cleaned up by tx_isp_vic.c module exit ***\n");
-
 
     /* Clean up sensor list */
     mutex_lock(&sensor_list_mutex);
