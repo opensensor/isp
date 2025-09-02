@@ -58,6 +58,13 @@ static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime);
 static int tx_isp_create_basic_pipeline(struct tx_isp_dev *isp);
 static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc);
 
+/* Basic pipeline function declarations */
+int tx_isp_csi_device_init(struct tx_isp_dev *isp);
+int tx_isp_vic_device_init(struct tx_isp_dev *isp);
+int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
+int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
+int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
+
 /* Frame channel file operations */
 extern const struct file_operations frame_channel_fops;
 
