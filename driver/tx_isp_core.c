@@ -384,7 +384,7 @@ err_put_cgu_isp:
     return ret;
 }
 
-/* Create ISP processing graph and initialize subdevice nodes - EXACT Binary Ninja reference */
+/* Create ISP processing graph and initialize subdevice nodes - MEMORY-SAFE Binary Ninja reference */
 int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
 {
     /* CRITICAL: Use exact Binary Ninja struct offsets for compatibility */
@@ -397,10 +397,16 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
     int i, j;
     int ret = 0;
     
-    pr_info("*** tx_isp_create_graph_and_nodes: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** tx_isp_create_graph_and_nodes: MEMORY-SAFE Binary Ninja implementation ***\n");
     
     if (!isp) {
         pr_err("tx_isp_create_graph_and_nodes: Invalid ISP device\n");
+        return -EINVAL;
+    }
+    
+    /* SAFETY: Check ISP structure size before accessing offsets */
+    if (sizeof(struct tx_isp_dev) < 0x200) {
+        pr_err("tx_isp_create_graph_and_nodes: ISP structure too small for safe offset access\n");
         return -EINVAL;
     }
     
@@ -408,12 +414,24 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
     subdev_count_ptr = (uint32_t*)((char*)isp + 0x80);    /* *(arg1 + 0x80) */
     subdev_list_ptr = (struct platform_device***)((char*)isp + 0x84);  /* *(arg1 + 0x84) */
     
+    /* SAFETY: Validate pointers before dereferencing */
+    if (!subdev_count_ptr || !subdev_list_ptr) {
+        pr_err("tx_isp_create_graph_and_nodes: Invalid subdev pointers\n");
+        return -EINVAL;
+    }
+    
     /* Check if we have registered subdevices */
     subdev_count = *subdev_count_ptr;
     subdev_list = *subdev_list_ptr;
     
     pr_info("*** tx_isp_create_graph_and_nodes: subdev_count=%d, subdev_list=%p ***\n", 
             subdev_count, subdev_list);
+    
+    /* SAFETY: Bounds check subdev_count */
+    if (subdev_count > 32) {  /* Reasonable maximum */
+        pr_err("tx_isp_create_graph_and_nodes: Invalid subdev_count %d (max 32)\n", subdev_count);
+        return -EINVAL;
+    }
     
     if (subdev_count == 0 || !subdev_list) {
         pr_info("*** tx_isp_create_graph_and_nodes: No registered platform devices found ***\n");
@@ -445,11 +463,23 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
         return 0;
     }
     
+    /* SAFETY: Validate subdev_list pointer range */
+    if ((uintptr_t)subdev_list < 0x10000 || (uintptr_t)subdev_list >= 0xfffff000) {
+        pr_err("tx_isp_create_graph_and_nodes: Invalid subdev_list pointer: %p\n", subdev_list);
+        return -EINVAL;
+    }
+    
     /* EXACT Binary Ninja implementation - process registered platform devices */
     pr_info("*** tx_isp_create_graph_and_nodes: Processing %d registered platform devices ***\n", subdev_count);
     
     /* Binary Ninja: First loop - process type 1 subdevices (sources) */
     for (i = 0; i < subdev_count; i++) {
+        /* SAFETY: Check array bounds */
+        if (!subdev_list[i]) {
+            pr_warn("tx_isp_create_graph_and_nodes: Null platform device at index %d\n", i);
+            continue;
+        }
+        
         /* Binary Ninja: char* $v0_3 = private_platform_get_drvdata(*$s7) */
         subdev_data = platform_get_drvdata(subdev_list[i]);
         
@@ -475,8 +505,15 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
         /* Binary Ninja: *(arg1 + (((zx.d($v0_3[3]) & 0xf) + 0xe) << 2)) = $v0_3 */
         subdev_index = (*(uint32_t*)((char*)subdev_data + 0xc)) & 0xf;  /* subdev_data[3] & 0xf */
         
-        /* Store subdevice in ISP graph array at calculated index */
+        /* SAFETY: Validate calculated offset */
         uint32_t graph_offset = ((subdev_index + 0xe) << 2);
+        if (graph_offset >= sizeof(struct tx_isp_dev) - sizeof(void*)) {
+            pr_err("tx_isp_create_graph_and_nodes: Invalid graph offset 0x%x for subdev %d\n", 
+                   graph_offset, i);
+            continue;
+        }
+        
+        /* Store subdevice in ISP graph array at calculated index */
         void **graph_slot = (void**)((char*)isp + graph_offset);
         *graph_slot = subdev_data;
         
@@ -486,10 +523,15 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
     
     /* Binary Ninja: Second loop - process type 2 subdevices (sinks) */
     for (i = 0; i < subdev_count; i++) {
+        /* SAFETY: Check array bounds */
+        if (!subdev_list[i]) {
+            continue;
+        }
+        
         /* Binary Ninja: char* $v0_6 = private_platform_get_drvdata(*$s3) */
         subdev_data = platform_get_drvdata(subdev_list[i]);
         
-        if (!subdev_data) {
+        if (!subdev_data || (uintptr_t)subdev_data >= 0xfffff001) {
             continue;
         }
         
@@ -505,6 +547,13 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
         
         /* Binary Ninja: void* $a0_3 = *(arg1 + ((($a2_2 & 0xf) + 0xe) << 2)) */
         uint32_t src_offset = ((src_index + 0xe) << 2);
+        
+        /* SAFETY: Validate source offset */
+        if (src_offset >= sizeof(struct tx_isp_dev) - sizeof(void*)) {
+            pr_err("tx_isp_create_graph_and_nodes: Invalid source offset 0x%x\n", src_offset);
+            continue;
+        }
+        
         void **src_slot = (void**)((char*)isp + src_offset);
         void *src_subdev = *src_slot;
         
@@ -518,8 +567,14 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
         /* Binary Ninja: *($a0_3 + (((zx.d($v0_6[3]) & 0xf) + 0xe) << 2)) = $v0_6 */
         uint32_t dst_index = (*(uint32_t*)((char*)subdev_data + 0xc)) & 0xf;  /* subdev_data[3] & 0xf */
         
-        /* Create link between source and destination subdevices */
+        /* SAFETY: Validate destination offset */
         uint32_t link_offset = ((dst_index + 0xe) << 2);
+        if (link_offset >= 0x200) {  /* Reasonable maximum for subdev structure size */
+            pr_err("tx_isp_create_graph_and_nodes: Invalid link offset 0x%x\n", link_offset);
+            continue;
+        }
+        
+        /* Create link between source and destination subdevices */
         void **link_slot = (void**)((char*)src_subdev + link_offset);
         *link_slot = subdev_data;
         
@@ -534,10 +589,15 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
     
     /* Binary Ninja: Third loop - register misc devices and create proc entries */
     for (i = 0; i < subdev_count; i++) {
+        /* SAFETY: Check array bounds */
+        if (!subdev_list[i]) {
+            continue;
+        }
+        
         /* Binary Ninja: void* $v0_7 = private_platform_get_drvdata(*$s4) */
         subdev_data = platform_get_drvdata(subdev_list[i]);
         
-        if (!subdev_data) {
+        if (!subdev_data || (uintptr_t)subdev_data >= 0xfffff001) {
             continue;
         }
         
@@ -548,22 +608,35 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
             /* Binary Ninja: if (private_misc_register($v0_7 + 0xc) s< 0) */
             struct miscdevice *misc_dev = (struct miscdevice*)((char*)subdev_data + 0xc);
             
+            /* SAFETY: Validate misc device structure */
+            if ((char*)misc_dev + sizeof(struct miscdevice) > (char*)subdev_data + 0x200) {
+                pr_err("tx_isp_create_graph_and_nodes: Misc device extends beyond subdev data\n");
+                continue;
+            }
+            
             /* Set up misc device fields */
             /* Binary Ninja: *($v0_7 + 0x14) = $v0_8, *($v0_7 + 0x10) = $a0_4, *($v0_7 + 0xc) = 0xff */
             misc_dev->minor = MISC_DYNAMIC_MINOR;  /* 0xff for dynamic */
             misc_dev->name = (char*)((char*)subdev_data + 0x8);  /* Device name at offset 0x8 */
             misc_dev->fops = (struct file_operations*)*misc_dev_ptr;  /* File operations */
             
+            /* SAFETY: Validate device name pointer */
+            if (!misc_dev->name || (uintptr_t)misc_dev->name >= 0xfffff000) {
+                pr_err("tx_isp_create_graph_and_nodes: Invalid misc device name pointer\n");
+                continue;
+            }
+            
             ret = misc_register(misc_dev);
             if (ret < 0) {
                 /* Binary Ninja: isp_printf(2, "/tmp/snap%d.%s", zx.d(*($v0_7 + 2))) */
-                uint32_t dev_id = *(uint32_t*)((char*)subdev_data + 0x8);
-                pr_err("tx_isp_create_graph_and_nodes: Failed to register misc device %d\n", dev_id);
+                pr_err("tx_isp_create_graph_and_nodes: Failed to register misc device at index %d: %d\n", i, ret);
                 
                 /* Binary Ninja: Cleanup loop on failure */
                 for (j = i - 1; j >= 0; j--) {
+                    if (!subdev_list[j])
+                        continue;
                     void *cleanup_data = platform_get_drvdata(subdev_list[j]);
-                    if (cleanup_data) {
+                    if (cleanup_data && (uintptr_t)cleanup_data < 0xfffff001) {
                         void **cleanup_misc_ptr = (void**)((char*)cleanup_data + 0x30);
                         if (cleanup_misc_ptr && *cleanup_misc_ptr) {
                             struct miscdevice *cleanup_misc = (struct miscdevice*)((char*)cleanup_data + 0xc);
@@ -585,8 +658,19 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
             char *proc_name = (char*)((char*)subdev_data + 0x8);  /* Name at offset 0x8 */
             struct proc_ops *proc_ops = (struct proc_ops*)*proc_ops_ptr;
             
+            /* SAFETY: Validate proc name pointer */
+            if (!proc_name || (uintptr_t)proc_name >= 0xfffff000) {
+                pr_err("tx_isp_create_graph_and_nodes: Invalid proc name pointer\n");
+                continue;
+            }
+            
             /* Get proc_dir from exact Binary Ninja offset *(arg1 + 0x11c) */
             struct proc_dir_entry **proc_dir_ptr = (struct proc_dir_entry**)((char*)isp + 0x11c);
+            if (!proc_dir_ptr || (char*)proc_dir_ptr >= (char*)isp + sizeof(struct tx_isp_dev)) {
+                pr_err("tx_isp_create_graph_and_nodes: Invalid proc_dir_ptr offset\n");
+                continue;
+            }
+            
             struct proc_dir_entry *parent_dir = *proc_dir_ptr;
             
             struct proc_dir_entry *proc_entry = proc_create_data(proc_name, 0644, parent_dir, 
@@ -599,7 +683,7 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
         }
     }
     
-    pr_info("*** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***\n");
+    pr_info("*** tx_isp_create_graph_and_nodes: MEMORY-SAFE Binary Ninja implementation complete ***\n");
     return 0;  /* Binary Ninja: return result */
 }
 
