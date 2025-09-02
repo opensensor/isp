@@ -3421,7 +3421,6 @@ static int tx_isp_init(void)
     pr_info("TX ISP driver initialized successfully\n");
     pr_info("Device nodes created:\n");
     pr_info("  /dev/tx-isp (major=10, minor=dynamic)\n");
-    pr_info("  /dev/isp-m0 (major=%d, minor=0) - ISP tuning interface\n", isp_tuning_major);
     pr_info("  /proc/jz/isp/isp-w02\n");
     pr_info("Note: Frame channel devices will be created by FS probe\n");
     

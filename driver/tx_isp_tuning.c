@@ -20,7 +20,6 @@
 static struct cdev isp_tuning_cdev;
 static struct class *isp_tuning_class = NULL;
 static dev_t isp_tuning_devno;
-static int isp_tuning_major = 0;
 static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 
 
