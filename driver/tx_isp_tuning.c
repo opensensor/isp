@@ -3760,3 +3760,81 @@ EXPORT_SYMBOL(tisp_wdr_ev_calculate);
 EXPORT_SYMBOL(tiziano_wdr_fusion1_curve_block_mean1);
 EXPORT_SYMBOL(Tiziano_wdr_fpga);
 EXPORT_SYMBOL(tiziano_wdr_soft_para_out);
+
+/* File operations structure for ISP M0 character device - Binary Ninja reference */
+static const struct file_operations isp_core_tunning_fops = {
+    .owner = THIS_MODULE,
+    .open = isp_m0_chardev_open,
+    .release = isp_m0_chardev_release,
+    .unlocked_ioctl = isp_m0_chardev_ioctl,
+    .compat_ioctl = isp_m0_chardev_ioctl,
+};
+
+/* system_irq_func_set - Binary Ninja EXACT implementation */
+int system_irq_func_set(int irq_id, void *handler)
+{
+    pr_info("system_irq_func_set: Setting IRQ handler for ID %d\n", irq_id);
+    
+    if (irq_id < 0 || irq_id >= 32) {
+        pr_err("system_irq_func_set: Invalid IRQ ID %d\n", irq_id);
+        return -EINVAL;
+    }
+    
+    /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
+    irq_func_cb[irq_id] = (void (*)(void))handler;
+    
+    pr_info("system_irq_func_set: IRQ %d handler set to %p\n", irq_id, handler);
+    return 0;
+}
+EXPORT_SYMBOL(system_irq_func_set);
+
+/* isp_core_tuning_init - Binary Ninja EXACT implementation */
+void *isp_core_tuning_init(void *arg1)
+{
+    void *result;
+    
+    pr_info("isp_core_tuning_init: Initializing ISP core tuning\n");
+    
+    /* Binary Ninja: result, $a2 = private_kmalloc(0x40d0, 0xd0) */
+    result = kmalloc(0x40d0, GFP_KERNEL);
+    
+    /* Binary Ninja: if (result == 0) */
+    if (result == NULL) {
+        pr_err("isp_core_tuning_init: Failed to allocate tuning memory (0x%x bytes)\n", 0x40d0);
+        return NULL;
+    }
+    
+    pr_info("isp_core_tuning_init: Allocated tuning structure at %p (size=0x%x)\n", result, 0x40d0);
+    
+    /* Binary Ninja: memset(result, 0, 0x40d0) */
+    memset(result, 0, 0x40d0);
+    
+    /* Binary Ninja: *result = arg1 */
+    *((void **)result) = arg1;
+    
+    /* Binary Ninja: private_spin_lock_init(&result[0x102e]) */
+    spin_lock_init((spinlock_t *)((char*)result + (0x102e * 4)));
+    pr_info("isp_core_tuning_init: Initialized spinlock at offset 0x102e\n");
+    
+    /* Binary Ninja: private_raw_mutex_init(&result[0x102e], "width is %d, height is %d, imagesize is %d\\n, save num is %d, buf size is %d", 0) */
+    /* Note: In actual implementation, mutex and spinlock would be at different offsets */
+    mutex_init((struct mutex *)((char*)result + (0x102e * 4) + sizeof(spinlock_t)));
+    pr_info("isp_core_tuning_init: Initialized mutex at offset 0x102e+spinlock_size\n");
+    
+    /* Binary Ninja: result[0x1031] = 1 */
+    *((uint32_t*)result + 0x1031) = 1;
+    pr_info("isp_core_tuning_init: Set result[0x1031] = 1\n");
+    
+    /* Binary Ninja: result[0x1032] = &isp_core_tunning_fops */
+    *((const struct file_operations **)result + 0x1032) = &isp_core_tunning_fops;
+    pr_info("isp_core_tuning_init: Set result[0x1032] = &isp_core_tunning_fops\n");
+    
+    /* Binary Ninja: result[0x1033] = isp_core_tuning_event */
+    *((int (**)(struct tx_isp_dev *, uint32_t))result + 0x1033) = isp_core_tuning_event;
+    pr_info("isp_core_tuning_init: Set result[0x1033] = isp_core_tuning_event\n");
+    
+    /* Binary Ninja: return result */
+    pr_info("isp_core_tuning_init: ISP core tuning initialization complete\n");
+    return result;
+}
+EXPORT_SYMBOL(isp_core_tuning_init);
