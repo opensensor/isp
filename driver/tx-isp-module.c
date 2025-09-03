@@ -3673,13 +3673,13 @@ static int tx_isp_init(void)
     pr_info("*** SUBDEVICE GRAPH CREATED - FRAME DEVICES SHOULD NOW EXIST ***\n");
     
     /* *** CRITICAL: Create frame channel devices with proper IOCTL handlers *** */
-    pr_info("*** CREATING FRAME CHANNEL DEVICES FOR IOCTL ROUTING ***\n");
-    ret = create_frame_channel_devices();
-    if (ret) {
-        pr_err("Failed to create frame channel devices: %d\n", ret);
-        goto err_cleanup_graph;
-    }
-    pr_info("*** FRAME CHANNEL DEVICES CREATED - IOCTLS SHOULD NOW WORK ***\n");
+//    pr_info("*** CREATING FRAME CHANNEL DEVICES FOR IOCTL ROUTING ***\n");
+//    ret = create_frame_channel_devices();
+//    if (ret) {
+//        pr_err("Failed to create frame channel devices: %d\n", ret);
+//        goto err_cleanup_graph;
+//    }
+//    pr_info("*** FRAME CHANNEL DEVICES CREATED - IOCTLS SHOULD NOW WORK ***\n");
 
     pr_info("TX ISP driver ready with new subdevice management system\n");
 err_cleanup_graph:
