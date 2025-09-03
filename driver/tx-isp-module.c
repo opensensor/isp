@@ -450,56 +450,82 @@ int frame_channel_open(struct inode *inode, struct file *file);
 int frame_channel_release(struct inode *inode, struct file *file);
 long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
-/* Frame channel open handler - CRITICAL MISSING IMPLEMENTATION */
+/* Frame channel open handler - FIXED to handle dynamic devices */
 int frame_channel_open(struct inode *inode, struct file *file)
 {
     struct frame_channel_device *fcd = NULL;
     int minor = iminor(inode);
     int i;
+    int channel_num = -1;
     
     pr_info("*** FRAME CHANNEL OPEN: minor=%d ***\n", minor);
     
-    /* Find the frame channel device by minor number */
+    /* CRITICAL FIX: Find the frame channel device by minor number */
+    /* First try to match against registered frame_channels array */
     for (i = 0; i < num_channels; i++) {
         if (frame_channels[i].miscdev.minor == minor) {
             fcd = &frame_channels[i];
+            channel_num = i;
             break;
         }
     }
     
+    /* FALLBACK: If not found in array, create a new frame channel entry */
+    /* This handles cases where devices were created externally */
     if (!fcd) {
-        pr_err("Frame channel open: No device found for minor %d\n", minor);
+        pr_info("*** FRAME CHANNEL OPEN: Device not in array, creating new entry for minor %d ***\n", minor);
+        
+        /* Determine channel number from minor - framechan0=minor X, framechan1=minor Y, etc */
+        /* Since we can't easily map minor to channel, we'll use the first available slot */
+        for (i = 0; i < 4; i++) { /* Max 4 channels */
+            if (frame_channels[i].miscdev.minor == 0 || frame_channels[i].miscdev.minor == MISC_DYNAMIC_MINOR) {
+                fcd = &frame_channels[i];
+                fcd->channel_num = i;
+                fcd->miscdev.minor = minor; /* Store the actual minor number */
+                channel_num = i;
+                pr_info("*** FRAME CHANNEL OPEN: Assigned to channel %d ***\n", i);
+                break;
+            }
+        }
+    }
+    
+    if (!fcd) {
+        pr_err("Frame channel open: No available slot for minor %d\n", minor);
         return -ENODEV;
     }
     
-    /* Initialize channel state */
-    spin_lock_init(&fcd->state.buffer_lock);
-    init_waitqueue_head(&fcd->state.frame_wait);
-    
-    /* Set default format based on channel */
-    if (fcd->channel_num == 0) {
-        /* Main channel - HD */
-        fcd->state.width = 1920;
-        fcd->state.height = 1080;
-        fcd->state.format = 0x3231564e; /* NV12 */
-    } else {
-        /* Sub channel - smaller */
-        fcd->state.width = 640;
-        fcd->state.height = 360;  
-        fcd->state.format = 0x3231564e; /* NV12 */
+    /* Initialize channel state if not already initialized */
+    if (!fcd->state.buffer_lock.rlock.raw_lock.val) {
+        spin_lock_init(&fcd->state.buffer_lock);
+        init_waitqueue_head(&fcd->state.frame_wait);
+        
+        /* Set default format based on channel */
+        if (fcd->channel_num == 0) {
+            /* Main channel - HD */
+            fcd->state.width = 1920;
+            fcd->state.height = 1080;
+            fcd->state.format = 0x3231564e; /* NV12 */
+        } else {
+            /* Sub channel - smaller */
+            fcd->state.width = 640;
+            fcd->state.height = 360;  
+            fcd->state.format = 0x3231564e; /* NV12 */
+        }
+        
+        fcd->state.enabled = false;
+        fcd->state.streaming = false;
+        fcd->state.buffer_count = 0;
+        fcd->state.sequence = 0;
+        fcd->state.frame_ready = false;
+        
+        pr_info("*** FRAME CHANNEL %d: Initialized state ***\n", fcd->channel_num);
     }
-    
-    fcd->state.enabled = false;
-    fcd->state.streaming = false;
-    fcd->state.buffer_count = 0;
-    fcd->state.sequence = 0;
-    fcd->state.frame_ready = false;
     
     file->private_data = fcd;
     
-    pr_info("*** FRAME CHANNEL %d OPENED - NOW READY FOR IOCTLS ***\n", fcd->channel_num);
-    pr_info("Channel %d: Default format %dx%d, pixfmt=0x%x\n", 
-            fcd->channel_num, fcd->state.width, fcd->state.height, fcd->state.format);
+    pr_info("*** FRAME CHANNEL %d OPENED SUCCESSFULLY - NOW READY FOR IOCTLS ***\n", fcd->channel_num);
+    pr_info("Channel %d: Format %dx%d, pixfmt=0x%x, minor=%d\n", 
+            fcd->channel_num, fcd->state.width, fcd->state.height, fcd->state.format, minor);
     
     return 0;
 }
@@ -3683,7 +3709,7 @@ static int tx_isp_init(void)
 
     pr_info("TX ISP driver ready with new subdevice management system\n");
     return 0;
-    
+
 err_cleanup_graph:
     tx_isp_cleanup_subdev_graph(ourISPdev);
     
