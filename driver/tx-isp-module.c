@@ -2977,7 +2977,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Sensor info request: returning success (1)\n");
         return 0;
     }
-    case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - EXACT Binary Ninja implementation
+    case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - SIMPLIFIED Binary Ninja implementation
         char sensor_data[0x50];
         void **i_2;
         void *module;
@@ -2987,7 +2987,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         int result;
         int final_result = 0;
         
-        pr_info("*** TX_ISP_SENSOR_REGISTER: EXACT Binary Ninja implementation ***\n");
+        pr_info("*** TX_ISP_SENSOR_REGISTER: SIMPLIFIED Binary Ninja implementation ***\n");
         
         /* Binary Ninja: private_copy_from_user(&var_98, arg3, 0x50) */
         if (copy_from_user(sensor_data, argp, 0x50)) {
@@ -2996,8 +2996,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
         
         pr_info("Sensor register: %.32s\n", sensor_data);
-        
-        pr_info("*** HANDLING SENSOR REGISTRATION 0x2000000 DIRECTLY ***\n");
         
         /* Binary Ninja: void* i_2 = $s7 + 0x2c */
         i_2 = (void**)((char*)isp_dev + 0x2c); /* Start of module_graph array */
@@ -3052,94 +3050,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         
         pr_info("Sensor registration complete, final_result=0x%x\n", final_result);
         
-        /* CRITICAL: If sensor registration succeeded, add to sensor list for enumeration AND CREATE I2C DEVICE */
-        if (final_result != 0xfffffdfd) {
-            struct registered_sensor *reg_sensor;
-            char sensor_name[32];
-            struct i2c_adapter *i2c_adap;
-            struct i2c_board_info board_info;
-            struct i2c_client *client;
-            
-            /* Extract sensor name from sensor_data (null-terminated string at start) */
-            memset(sensor_name, 0, sizeof(sensor_name));
-            strncpy(sensor_name, sensor_data, sizeof(sensor_name) - 1);
-            sensor_name[sizeof(sensor_name) - 1] = '\0';
-            
-            pr_info("*** ADDING SUCCESSFULLY REGISTERED SENSOR TO LIST: %s ***\n", sensor_name);
-            
-            /* *** CRITICAL FIX: CREATE I2C DEVICE TO TRIGGER SENSOR PROBE *** */
-            pr_info("*** CREATING I2C DEVICE FOR SENSOR %s ***\n", sensor_name);
-            
-            /* FORCE LOAD THE SENSOR MODULE FIRST */
-            pr_info("*** FORCING SENSOR MODULE LOAD: %s ***\n", sensor_name);
-            if (request_module("%s", sensor_name) == 0) {
-                pr_info("*** SENSOR MODULE %s LOADED SUCCESSFULLY ***\n", sensor_name);
-            } else {
-                pr_warn("*** SENSOR MODULE %s LOAD FAILED - CONTINUING ANYWAY ***\n", sensor_name);
-            }
-            
-            /* Give the module time to register */
-            msleep(100);
-            
-            /* Get I2C adapter (usually adapter 0 for embedded systems) */
-            i2c_adap = i2c_get_adapter(0);
-            if (i2c_adap) {
-                /* Set up board info for the sensor */
-                memset(&board_info, 0, sizeof(board_info));
-                strncpy(board_info.type, sensor_name, sizeof(board_info.type) - 1);
-                board_info.addr = 0x37; /* GC2053 I2C address */
-                
-                pr_info("*** CREATING I2C CLIENT: name=%s, addr=0x%02x, adapter=%s ***\n",
-                       board_info.type, board_info.addr, i2c_adap->name);
-                
-                /* Create the I2C client device - this will trigger gc2053_probe! */
-                client = isp_i2c_new_subdev_board(i2c_adap, &board_info);
-                if (client) {
-                    pr_info("*** SUCCESS: I2C CLIENT CREATED - SENSOR PROBE SHOULD BE CALLED! ***\n");
-                    pr_info("*** I2C CLIENT: %s at 0x%02x on %s ***\n", 
-                           client->name, client->addr, client->adapter->name);
-                    
-                    /* Give the probe function time to complete */
-                    msleep(200);
-                    
-                    /* Verify the sensor was registered */
-                    if (ourISPdev && ourISPdev->sensor) {
-                        pr_info("*** SUCCESS: SENSOR CONNECTED TO ISP! sensor=%p name=%s ***\n",
-                               ourISPdev->sensor, 
-                               ourISPdev->sensor->info.name[0] ? ourISPdev->sensor->info.name : "(unnamed)");
-                    } else {
-                        pr_err("*** SENSOR PROBE DID NOT CONNECT TO ISP - SOMETHING IS WRONG! ***\n");
-                        pr_err("*** ourISPdev=%p ***\n", ourISPdev);
-                        if (ourISPdev) {
-                            pr_err("*** ourISPdev->sensor=%p ***\n", ourISPdev->sensor);
-                        }
-                    }
-                } else {
-                    pr_err("*** FAILED TO CREATE I2C CLIENT FOR %s ***\n", sensor_name);
-                }
-                
-                i2c_put_adapter(i2c_adap);
-            } else {
-                pr_err("*** FAILED TO GET I2C ADAPTER 0 ***\n");
-            }
-            
-            /* Add to sensor enumeration list */
-            reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
-            if (reg_sensor) {
-                strncpy(reg_sensor->name, sensor_name, sizeof(reg_sensor->name) - 1);
-                reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
-                
-                mutex_lock(&sensor_list_mutex);
-                reg_sensor->index = sensor_count++;
-                list_add_tail(&reg_sensor->list, &sensor_list);
-                mutex_unlock(&sensor_list_mutex);
-                
-                pr_info("*** SENSOR ADDED TO LIST: index=%d name=%s ***\n", 
-                       reg_sensor->index, reg_sensor->name);
-            } else {
-                pr_err("Failed to allocate memory for sensor list entry\n");
-            }
-        }
+        /* SIMPLIFIED: Just return the result, don't create I2C devices here */
+        /* The sensor I2C device creation should happen elsewhere in the initialization */
         
         return final_result;
     }

@@ -1113,6 +1113,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     struct tx_isp_vic_device *vic_dev;
+    void __iomem *vic_regs;
     int result = 0;
     
     pr_info("*** vic_sensor_ops_ioctl: cmd=0x%x, arg=%p ***\n", cmd, arg);
@@ -1139,6 +1140,9 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         return 0;
     }
     
+    /* Binary Ninja: **($a0 + 0xb8) - get VIC register base */
+    vic_regs = vic_dev->vic_regs;  /* vic_regs should be at offset 0xb8 in vic_dev */
+    
     switch (cmd) {
         case 0x200000c:
         case 0x200000f:
@@ -1156,38 +1160,47 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
             return 0;
             
         case 0x200000e:
-            pr_info("vic_sensor_ops_ioctl: Setting VIC register 0x10 (cmd=0x%x)\n", cmd);
+            pr_info("vic_sensor_ops_ioctl: Setting VIC register to 0x10 (cmd=0x%x)\n", cmd);
             /* Binary Ninja: **($a0 + 0xb8) = 0x10 */
-            /* CRITICAL FIX: Use ISP core register base, not vic_dev->vic_regs */
-            if (ourISPdev && ourISPdev->core_regs) {
-                writel(0x10, ourISPdev->core_regs);
-                pr_info("vic_sensor_ops_ioctl: Wrote 0x10 to ISP core register\n");
+            if (vic_regs) {
+                writel(0x10, vic_regs);
+                pr_info("*** vic_sensor_ops_ioctl: Wrote 0x10 to VIC register base ***\n");
             } else {
-                pr_err("vic_sensor_ops_ioctl: No ISP device for register access\n");
+                pr_err("vic_sensor_ops_ioctl: No VIC register base available\n");
             }
             return 0;
             
         case 0x2000013:
             pr_info("vic_sensor_ops_ioctl: Resetting and setting VIC register (cmd=0x%x)\n", cmd);
             /* Binary Ninja: **($a0 + 0xb8) = 0, then = 4 */
-            /* CRITICAL FIX: Use ISP register base, not vic_dev->vic_regs */
-            if (ourISPdev && ourISPdev->core_regs) {
-                writel(0, ourISPdev->core_regs);
-                writel(4, ourISPdev->core_regs);
-                pr_info("vic_sensor_ops_ioctl: Wrote reset sequence to ISP base registers\n");
+            if (vic_regs) {
+                writel(0, vic_regs);
+                writel(4, vic_regs);
+                pr_info("*** vic_sensor_ops_ioctl: Wrote reset sequence (0, 4) to VIC register base ***\n");
             } else {
-                pr_err("vic_sensor_ops_ioctl: No ISP device for register access\n");
+                pr_err("vic_sensor_ops_ioctl: No VIC register base available\n");
             }
             return 0;
             
         case 0x2000017:
             pr_info("vic_sensor_ops_ioctl: GPIO configuration (cmd=0x%x)\n", cmd);
-            /* GPIO configuration logic - simplified for now */
+            /* Binary Ninja GPIO configuration - simplified for now */
+            if (arg) {
+                gpio_switch_state = 0;  /* Reset GPIO state */
+                /* memcpy(&gpio_info, arg, 0x2a) would go here */
+                pr_info("vic_sensor_ops_ioctl: GPIO config processed\n");
+            }
             return 0;
             
         case 0x2000018:
             pr_info("vic_sensor_ops_ioctl: GPIO switch state (cmd=0x%x)\n", cmd);
-            /* Binary Ninja: gpio_switch_state = 1, memcpy(&gpio_info, arg3, 0x2a) */
+            /* Binary Ninja: gpio_switch_state = 1, memcpy(&gpio_info, arg, 0x2a) */
+            gpio_switch_state = 1;
+            if (arg) {
+                /* Copy GPIO info structure */
+                memcpy(&gpio_info, arg, 0x2a);
+                pr_info("vic_sensor_ops_ioctl: GPIO switch state enabled, info copied\n");
+            }
             return 0;
             
         default:
