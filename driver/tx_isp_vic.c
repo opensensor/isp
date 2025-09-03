@@ -827,15 +827,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* CRITICAL FIX: Get VIC register base from main ISP device core registers */
-    /* Binary Ninja: VIC registers are accessed through the main ISP core register space */
-    if (!ourISPdev || !ourISPdev->core_regs) {
-        pr_err("tx_isp_vic_start: No ISP device or core register base available\n");
+    /* CRITICAL FIX: Get VIC register base from VIC device structure at offset 0xb8 */
+    /* Binary Ninja: VIC registers are accessed through *(vic_dev + 0xb8) */
+    vic_regs = *(void __iomem **)((char *)vic_dev + 0xb8);
+    if (!vic_regs) {
+        pr_err("tx_isp_vic_start: No VIC register base at offset 0xb8 in vic_dev\n");
         return -EINVAL;
     }
     
-    vic_regs = ourISPdev->core_regs;  /* Use ISP core register base for VIC access */
-    pr_info("*** tx_isp_vic_start: Using ISP core register base %p for VIC access ***\n", vic_regs);
+    pr_info("*** tx_isp_vic_start: Using VIC register base %p from offset 0xb8 ***\n", vic_regs);
 
     /* Get sensor attributes from the 540-byte VIC device structure (Binary Ninja layout) */
     /* Binary Ninja: *(*(arg1 + 0x110) + 0x14) - sensor attributes are at offset 0x110 in the structure */
@@ -1458,7 +1458,7 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 /* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
-    void __iomem *vic_base = vic_dev->vic_regs; /* *(arg1 + 0xb8) */
+    void __iomem *vic_base = *(void __iomem **)((char *)vic_dev + 0xb8); /* Binary Ninja: *(arg1 + 0xb8) */
     
     pr_info("*** VIC PIPO MDMA ENABLE - Binary Ninja exact sequence ***\n");
     
