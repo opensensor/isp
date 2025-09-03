@@ -827,15 +827,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* CRITICAL FIX: Get VIC register base from main ISP device, not from vic_dev->vic_regs */
-    /* Binary Ninja: VIC registers are accessed through the main ISP register space */
-    if (!ourISPdev || !ourISPdev->base) {
-        pr_err("tx_isp_vic_start: No ISP device or register base available\n");
+    /* CRITICAL FIX: Get VIC register base from main ISP device core registers */
+    /* Binary Ninja: VIC registers are accessed through the main ISP core register space */
+    if (!ourISPdev || !ourISPdev->core_regs) {
+        pr_err("tx_isp_vic_start: No ISP device or core register base available\n");
         return -EINVAL;
     }
     
-    vic_regs = ourISPdev->base;  /* Use main ISP register base for VIC access */
-    pr_info("*** tx_isp_vic_start: Using ISP register base %p for VIC access ***\n", vic_regs);
+    vic_regs = ourISPdev->core_regs;  /* Use ISP core register base for VIC access */
+    pr_info("*** tx_isp_vic_start: Using ISP core register base %p for VIC access ***\n", vic_regs);
 
     /* Get sensor attributes from the 540-byte VIC device structure (Binary Ninja layout) */
     /* Binary Ninja: *(*(arg1 + 0x110) + 0x14) - sensor attributes are at offset 0x110 in the structure */
@@ -1158,14 +1158,26 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         case 0x200000e:
             pr_info("vic_sensor_ops_ioctl: Setting VIC register 0x10 (cmd=0x%x)\n", cmd);
             /* Binary Ninja: **($a0 + 0xb8) = 0x10 */
-            writel(0x10, vic_dev->vic_regs);
+            /* CRITICAL FIX: Use ISP core register base, not vic_dev->vic_regs */
+            if (ourISPdev && ourISPdev->core_regs) {
+                writel(0x10, ourISPdev->core_regs);
+                pr_info("vic_sensor_ops_ioctl: Wrote 0x10 to ISP core register\n");
+            } else {
+                pr_err("vic_sensor_ops_ioctl: No ISP device for register access\n");
+            }
             return 0;
             
         case 0x2000013:
             pr_info("vic_sensor_ops_ioctl: Resetting and setting VIC register (cmd=0x%x)\n", cmd);
             /* Binary Ninja: **($a0 + 0xb8) = 0, then = 4 */
-            writel(0, vic_dev->vic_regs);
-            writel(4, vic_dev->vic_regs);
+            /* CRITICAL FIX: Use ISP register base, not vic_dev->vic_regs */
+            if (ourISPdev && ourISPdev->core_regs) {
+                writel(0, ourISPdev->core_regs);
+                writel(4, ourISPdev->core_regs);
+                pr_info("vic_sensor_ops_ioctl: Wrote reset sequence to ISP base registers\n");
+            } else {
+                pr_err("vic_sensor_ops_ioctl: No ISP device for register access\n");
+            }
             return 0;
             
         case 0x2000017:
