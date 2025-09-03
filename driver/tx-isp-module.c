@@ -494,12 +494,12 @@ int frame_channel_open(struct inode *inode, struct file *file)
         return -ENODEV;
     }
     
-    /* Initialize channel state if not already initialized */
-    if (!fcd->state.buffer_lock.rlock.raw_lock.val) {
-        spin_lock_init(&fcd->state.buffer_lock);
-        init_waitqueue_head(&fcd->state.frame_wait);
-        
-        /* Set default format based on channel */
+    /* Initialize channel state - safe to call multiple times in kernel 3.10 */
+    spin_lock_init(&fcd->state.buffer_lock);
+    init_waitqueue_head(&fcd->state.frame_wait);
+    
+    /* Set default format based on channel if not already set */
+    if (fcd->state.width == 0) {
         if (fcd->channel_num == 0) {
             /* Main channel - HD */
             fcd->state.width = 1920;
