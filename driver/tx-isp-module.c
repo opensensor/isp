@@ -3245,43 +3245,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EINVAL;
         }
     }
-    case 0xc050561a: { // TX_ISP_SENSOR_ENUM_INPUT - Enumerate sensor inputs
-        struct sensor_enum_input {
-            int index;
-            char name[32];
-        } input;
-        struct registered_sensor *sensor;
-        int found = 0;
-        
-        if (copy_from_user(&input, argp, sizeof(input)))
-            return -EFAULT;
-            
-        mutex_lock(&sensor_list_mutex);
-        
-        // Find sensor at requested index
-        
-        list_for_each_entry(sensor, &sensor_list, list) {
-            if (sensor->index == input.index) {
-                strncpy(input.name, sensor->name, sizeof(input.name) - 1);
-                input.name[sizeof(input.name) - 1] = '\0';
-                found = 1;
-                break;
-            }
-        }
-        
-        mutex_unlock(&sensor_list_mutex);
-        
-        if (!found) {
-            pr_info("No sensor at index %d\n", input.index);
-            return -EINVAL;
-        }
-        
-        if (copy_to_user(argp, &input, sizeof(input)))
-            return -EFAULT;
-            
-        pr_info("Sensor enumeration: index=%d name=%s\n", input.index, input.name);
-        return 0;
-    }
     case 0xc0045627: { // TX_ISP_SENSOR_SET_INPUT - Set active sensor input
         int input_index;
         struct registered_sensor *sensor;
