@@ -5558,9 +5558,21 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
         }
     }
     
-    /* Check if any channel is already streaming and set state accordingly */
-    sd->vin_state = TX_ISP_MODULE_INIT;  // Default to INIT
+    /* *** CRITICAL FIX: IMMEDIATELY CONNECT SENSOR TO ISP DEVICE *** */
     if (ourISPdev) {
+        pr_info("*** CRITICAL: CONNECTING SENSOR TO ISP DEVICE ***\n");
+        pr_info("Before: ourISPdev->sensor=%p\n", ourISPdev->sensor);
+        
+        /* Always set as primary sensor (replace any existing) */
+        ourISPdev->sensor = sensor;
+        pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor, 
+                sensor->info.name[0] ? sensor->info.name : "(unnamed)");
+        
+        /* Set the ISP reference in the sensor subdev */
+        sd->isp = (void *)ourISPdev;
+        
+        /* Check if any channel is already streaming and set state accordingly */
+        sd->vin_state = TX_ISP_MODULE_INIT;  // Default to INIT
         for (i = 0; i < num_channels; i++) {
             if (frame_channels[i].state.streaming) {
                 sd->vin_state = TX_ISP_MODULE_RUNNING;
@@ -5568,31 +5580,47 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
                 break;
             }
         }
-    }
-    pr_info("Sensor subdev state initialized to %s\n",
-            sd->vin_state == TX_ISP_MODULE_RUNNING ? "RUNNING" : "INIT");
-    
-    /* Store for next IOCTL to pick up */
-    registered_sensor_subdev = sd;
-    
-    /* Also directly register if ISP is ready */
-    if (ourISPdev && !ourISPdev->sensor) {
-        ourISPdev->sensor = sensor;
-        pr_info("Direct kernel registration of %s as primary sensor\n",
-                (sensor && sensor->info.name[0]) ? sensor->info.name : "(unnamed)");
+        pr_info("Sensor subdev state initialized to %s\n",
+                sd->vin_state == TX_ISP_MODULE_RUNNING ? "RUNNING" : "INIT");
         
-        /* Add to list */
+        /* Add to sensor enumeration list */
         reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
         if (reg_sensor) {
             strncpy(reg_sensor->name, sensor->info.name, sizeof(reg_sensor->name) - 1);
-            reg_sensor->index = sensor_count++;
+            reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
+            reg_sensor->index = sensor_count;
             reg_sensor->subdev = sd;
             
             mutex_lock(&sensor_list_mutex);
+            /* Replace any existing sensor with same name */
+            struct registered_sensor *existing, *tmp;
+            list_for_each_entry_safe(existing, tmp, &sensor_list, list) {
+                if (strncmp(existing->name, reg_sensor->name, sizeof(existing->name)) == 0) {
+                    list_del(&existing->list);
+                    kfree(existing);
+                    sensor_count--;
+                    break;
+                }
+            }
+            
+            reg_sensor->index = sensor_count++;
             list_add_tail(&reg_sensor->list, &sensor_list);
             mutex_unlock(&sensor_list_mutex);
+            
+            pr_info("*** SENSOR SUCCESSFULLY ADDED TO LIST: index=%d name=%s ***\n", 
+                   reg_sensor->index, reg_sensor->name);
         }
+        
+        pr_info("*** SENSOR REGISTRATION COMPLETE - SHOULD NOW WORK FOR STREAMING ***\n");
+        
+    } else {
+        pr_err("*** CRITICAL ERROR: ourISPdev is NULL - cannot register sensor! ***\n");
+        mutex_unlock(&sensor_register_mutex);
+        return -ENODEV;
     }
+    
+    /* Store for any additional IOCTL processing */
+    registered_sensor_subdev = sd;
     
     mutex_unlock(&sensor_register_mutex);
     return 0;
