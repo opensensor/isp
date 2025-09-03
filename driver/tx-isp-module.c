@@ -58,6 +58,7 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
                                                    struct i2c_board_info *info)
 {
     struct i2c_client *client;
+    int retry_count = 0;
     
     if (!adapter || !info) {
         pr_err("isp_i2c_new_subdev_board: Invalid parameters\n");
@@ -67,18 +68,35 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
     pr_info("Creating I2C subdev: type=%s addr=0x%02x on adapter %s\n",
             info->type, info->addr, adapter->name);
     
-    /* Load sensor module first */
-    request_module(info->type);
+    /* CRITICAL: Force load sensor module with retry logic */
+    pr_info("*** FORCING SENSOR MODULE LOAD: %s ***\n", info->type);
+    for (retry_count = 0; retry_count < 3; retry_count++) {
+        if (request_module("%s", info->type) == 0) {
+            pr_info("*** SENSOR MODULE %s LOADED SUCCESSFULLY (attempt %d) ***\n", 
+                   info->type, retry_count + 1);
+            break;
+        } else {
+            pr_warn("*** SENSOR MODULE %s LOAD FAILED (attempt %d) ***\n", 
+                   info->type, retry_count + 1);
+            msleep(50); /* Wait before retry */
+        }
+    }
     
-    /* Create I2C device (matches reference driver) */
+    /* Give extra time for module to register its I2C driver */
+    msleep(200);
+    
+    /* Create I2C device (this will trigger sensor probe if module loaded) */
     client = i2c_new_device(adapter, info);
     if (!client) {
-        pr_err("Failed to create I2C device for %s\n", info->type);
+        pr_err("*** FAILED TO CREATE I2C DEVICE FOR %s - MODULE NOT LOADED? ***\n", info->type);
         return NULL;
     }
     
-    pr_info("I2C device created successfully: %s at 0x%02x\n",
+    pr_info("*** I2C DEVICE CREATED: %s at 0x%02x - SENSOR PROBE SHOULD BE TRIGGERED ***\n",
             client->name, client->addr);
+    
+    /* Give probe function time to complete */
+    msleep(100);
     
     /* Test I2C communication immediately */
     pr_info("Testing I2C communication with %s...\n", info->type);
