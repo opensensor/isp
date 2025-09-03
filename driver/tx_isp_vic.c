@@ -814,7 +814,7 @@ int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
 long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 
 
-/* tx_isp_vic_start - EXACT Binary Ninja implementation (CORRECTED for MIPI) */
+/* tx_isp_vic_start - EXACT Binary Ninja implementation (FIXED register access) */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
@@ -822,14 +822,26 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     u32 sensor_format;
     u32 timeout = 10000;
 
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_err("tx_isp_vic_start: Invalid parameters\n");
+    if (!vic_dev) {
+        pr_err("tx_isp_vic_start: Invalid vic_dev parameter\n");
         return -EINVAL;
     }
 
-    vic_regs = vic_dev->vic_regs;
-    interface_type = vic_dev->sensor_attr.dbus_type;  /* Binary Ninja: *(*(arg1 + 0x110) + 0x14) */
-    sensor_format = vic_dev->sensor_attr.data_type;   /* Binary Ninja: *(arg1 + 0xe4) */
+    /* CRITICAL FIX: Get VIC register base from main ISP device, not from vic_dev->vic_regs */
+    /* Binary Ninja: VIC registers are accessed through the main ISP register space */
+    if (!ourISPdev || !ourISPdev->base) {
+        pr_err("tx_isp_vic_start: No ISP device or register base available\n");
+        return -EINVAL;
+    }
+    
+    vic_regs = ourISPdev->base;  /* Use main ISP register base for VIC access */
+    pr_info("*** tx_isp_vic_start: Using ISP register base %p for VIC access ***\n", vic_regs);
+
+    /* Get sensor attributes from the 540-byte VIC device structure (Binary Ninja layout) */
+    /* Binary Ninja: *(*(arg1 + 0x110) + 0x14) - sensor attributes are at offset 0x110 in the structure */
+    struct tx_isp_sensor_attribute *sensor_attr = (struct tx_isp_sensor_attribute *)((char *)vic_dev + 0x110);
+    interface_type = sensor_attr->dbus_type;
+    sensor_format = sensor_attr->data_type;
 
     pr_info("*** tx_isp_vic_start: EXACT Binary Ninja implementation ***\n");
     pr_info("tx_isp_vic_start: interface=%d, format=0x%x\n", interface_type, sensor_format);
