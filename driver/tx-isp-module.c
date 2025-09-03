@@ -448,7 +448,7 @@ static void vic_frame_work_function(struct work_struct *work);
 // Forward declarations for frame channel devices
 int frame_channel_open(struct inode *inode, struct file *file);
 int frame_channel_release(struct inode *inode, struct file *file);
-static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
 /* Frame channel open handler - CRITICAL MISSING IMPLEMENTATION */
 int frame_channel_open(struct inode *inode, struct file *file)
@@ -2048,7 +2048,7 @@ static void destroy_isp_tuning_device(void)
     }
 }
 
-static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     void __user *argp = (void __user *)arg;
     struct frame_channel_device *fcd = file->private_data;
