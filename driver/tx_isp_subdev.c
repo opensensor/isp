@@ -405,20 +405,20 @@ int tx_isp_fs_probe(struct platform_device *pdev)
 
     pr_info("FS probe called\n");
 
-    sd = kmalloc(sizeof(struct tx_isp_subdev), GFP_KERNEL);
-    if (sd == NULL) {
-        ISP_ERROR("Failed to allocate fs device\n");
-        return -ENOMEM;
-    }
+//    sd = kmalloc(sizeof(struct tx_isp_subdev), GFP_KERNEL);
+//    if (sd == NULL) {
+//        ISP_ERROR("Failed to allocate fs device\n");
+//        return -ENOMEM;
+//    }
+//
+//    memset(sd, 0, sizeof(struct tx_isp_subdev));
 
-    memset(sd, 0, sizeof(struct tx_isp_subdev));
-
-    ret = tx_isp_subdev_init(pdev, sd, &fs_subdev_ops);
-    if (ret < 0) {
-        ISP_ERROR("tx_isp_subdev_init failed!\n");
-        kfree(sd);
-        return ret;
-    }
+//    ret = tx_isp_subdev_init(pdev, sd, &fs_subdev_ops);
+//    if (ret < 0) {
+//        ISP_ERROR("tx_isp_subdev_init failed!\n");
+//        kfree(sd);
+//        return ret;
+//    }
 
 //    if (sd->num_outpads > 0) {
 //        frame_chans = kmalloc(sd->num_outpads * sizeof(struct tx_isp_frame_channel),
@@ -467,8 +467,8 @@ int tx_isp_fs_probe(struct platform_device *pdev)
 //        sd->num_channels = sd->num_outpads;
 //    }
 
-    platform_set_drvdata(pdev, sd);
-    sd->vin_state = 1;
+//    platform_set_drvdata(pdev, sd);
+//    sd->vin_state = 1;
 
     return 0;
 
