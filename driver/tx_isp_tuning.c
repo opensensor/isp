@@ -1227,10 +1227,11 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
 
     if (cmd == 0xc00c56c6) {
         pr_info("Tuning IOCTL\n");
-        // Extract the actual command from the tuning request
+        // REFERENCE DRIVER FIX: userspace passes 3-field structure, not 2-field
         struct {
-            int32_t mode;  // enable flag
-            uint32_t cmd;  // The actual command we want
+            int32_t mode;     // GET/SET flag (1=GET, 0=SET)
+            uint32_t cmd;     // Command ID (e.g. 0x8000030)
+            void __user *data_ptr;   // Pointer to user buffer for data
         } req;
 
         if (copy_from_user(&req, arg, sizeof(req))) {
@@ -1238,31 +1239,39 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
             return -EFAULT;
         }
 
+        pr_info("Tuning request: mode=%d, cmd=0x%x, data_ptr=%p\n", 
+                req.mode, req.cmd, req.data_ptr);
+
         // Set up the ctrl structure for the core functions
         ctrl.cmd = req.cmd;
+        ctrl.value = (unsigned long)req.data_ptr;  // Pass data pointer to handler
+        
         if (req.mode) {
             // GET operation
-            pr_info("GET operation\n");
+            pr_info("GET operation for cmd=0x%x\n", req.cmd);
             ret = apical_isp_core_ops_g_ctrl(dev, &ctrl);
             if (ret == 0 || ret == 0xfffffdfd) {
-                pr_info("Copying control back to user\n");
-                if (copy_to_user(arg, &ctrl, 8))  { // Write result back
-                    pr_err("Failed to copy control back to user\n");
-                    return -EFAULT;
-                }
-            }
-        } else {
-            // SET operation
-            pr_info("SET operation\n");
-            ret = apical_isp_core_ops_s_ctrl(dev, &ctrl);
-            if (ret == 0 || ret == 0xfffffdfd) {
-                pr_info("Copying control back to user\n");
-                if (copy_to_user(arg, &ctrl, 8))  { // Write result back
-                    pr_err("Failed to copy control back to user\n");
+                pr_info("GET operation successful, copying result back to user\n");
+                // Copy the updated request structure back (mode and cmd may be modified)
+                if (copy_to_user(arg, &req, sizeof(req))) {
+                    pr_err("Failed to copy tuning result back to user\n");
                     return -EFAULT;
                 }
             } else {
-                pr_err("Failed to set control: %d\n", ret);
+                pr_err("GET operation failed: %d\n", ret);
+            }
+        } else {
+            // SET operation
+            pr_info("SET operation for cmd=0x%x\n", req.cmd);
+            ret = apical_isp_core_ops_s_ctrl(dev, &ctrl);
+            if (ret == 0 || ret == 0xfffffdfd) {
+                pr_info("SET operation successful, copying result back to user\n");
+                if (copy_to_user(arg, &req, sizeof(req))) {
+                    pr_err("Failed to copy tuning result back to user\n");
+                    return -EFAULT;
+                }
+            } else {
+                pr_err("SET operation failed: %d\n", ret);
             }
         }
     } else {
