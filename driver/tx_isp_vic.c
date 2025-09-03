@@ -1510,7 +1510,7 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         return 0xffffffea; /* -EINVAL */
     }
     
-    vic_base = vic_dev->vic_regs; /* *(vic_dev + 0xb8) */
+    vic_base = *(void __iomem **)((char *)vic_dev + 0xb8); /* Binary Ninja: *(vic_dev + 0xb8) */
     
     /* Binary Ninja: Log stream operation */
     const char *stream_op = (enable != 0) ? "streamon" : "streamoff";
