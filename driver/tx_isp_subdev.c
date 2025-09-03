@@ -420,52 +420,52 @@ int tx_isp_fs_probe(struct platform_device *pdev)
         return ret;
     }
 
-    if (sd->num_outpads > 0) {
-        frame_chans = kmalloc(sd->num_outpads * sizeof(struct tx_isp_frame_channel),
-                                    GFP_KERNEL);
-        if (!frame_chans) {
-            ret = -ENOMEM;
-            goto err_free_sd;
-        }
-        memset(frame_chans, 0, sd->num_outpads * sizeof(struct tx_isp_frame_channel));
-
-        for (i = 0; i < sd->num_outpads; i++) {
-            struct tx_isp_frame_channel *chan = &frame_chans[i];
-            struct tx_isp_subdev_pad *pad = &sd->outpads[i];
-
-            chan->pad = pad;
-            chan->pad_id = i;
-
-            if (pad->type) {
-                snprintf(chan->name, sizeof(chan->name), "framechan%d", i);
-                chan->misc.minor = 0xFF;
-                chan->misc.fops = &fs_channel_ops;
-                chan->misc.name = chan->name;
-
-                if (misc_register(&chan->misc) < 0) {
-                    ISP_ERROR("Failed to register framechan%d!\n", i);
-                    ret = -ENODEV;
-                    goto err_free_chans;
-                }
-
-                chan->state = FRAME_CHAN_INIT;
-                spin_lock_init(&chan->slock);
-                private_raw_mutex_init(&chan->mlock, "chan->mlock", NULL);
-                init_completion(&chan->frame_done);
-                INIT_LIST_HEAD(&chan->queue_head);
-                INIT_LIST_HEAD(&chan->done_head);
-                chan->queued_count = 0;
-                chan->done_count = 0;
-                init_waitqueue_head(&chan->wait);
-                chan->active = 1;
-            } else {
-                chan->active = 0;
-            }
-        }
-
-        sd->frame_chans = frame_chans;
-        sd->num_channels = sd->num_outpads;
-    }
+//    if (sd->num_outpads > 0) {
+//        frame_chans = kmalloc(sd->num_outpads * sizeof(struct tx_isp_frame_channel),
+//                                    GFP_KERNEL);
+//        if (!frame_chans) {
+//            ret = -ENOMEM;
+//            goto err_free_sd;
+//        }
+//        memset(frame_chans, 0, sd->num_outpads * sizeof(struct tx_isp_frame_channel));
+//
+//        for (i = 0; i < sd->num_outpads; i++) {
+//            struct tx_isp_frame_channel *chan = &frame_chans[i];
+//            struct tx_isp_subdev_pad *pad = &sd->outpads[i];
+//
+//            chan->pad = pad;
+//            chan->pad_id = i;
+//
+//            if (pad->type) {
+//                snprintf(chan->name, sizeof(chan->name), "framechan%d", i);
+//                chan->misc.minor = 0xFF;
+//                chan->misc.fops = &fs_channel_ops;
+//                chan->misc.name = chan->name;
+//
+//                if (misc_register(&chan->misc) < 0) {
+//                    ISP_ERROR("Failed to register framechan%d!\n", i);
+//                    ret = -ENODEV;
+//                    goto err_free_chans;
+//                }
+//
+//                chan->state = FRAME_CHAN_INIT;
+//                spin_lock_init(&chan->slock);
+//                private_raw_mutex_init(&chan->mlock, "chan->mlock", NULL);
+//                init_completion(&chan->frame_done);
+//                INIT_LIST_HEAD(&chan->queue_head);
+//                INIT_LIST_HEAD(&chan->done_head);
+//                chan->queued_count = 0;
+//                chan->done_count = 0;
+//                init_waitqueue_head(&chan->wait);
+//                chan->active = 1;
+//            } else {
+//                chan->active = 0;
+//            }
+//        }
+//
+//        sd->frame_chans = frame_chans;
+//        sd->num_channels = sd->num_outpads;
+//    }
 
     platform_set_drvdata(pdev, sd);
     sd->vin_state = 1;
