@@ -2977,7 +2977,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Sensor info request: returning success (1)\n");
         return 0;
     }
-    case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - SIMPLIFIED Binary Ninja implementation
+    case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - FIXED to add sensors to enumeration list
         char sensor_data[0x50];
         void **i_2;
         void *module;
@@ -2986,8 +2986,13 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         int (*sensor_func)(void*, int, void*);
         int result;
         int final_result = 0;
+        char sensor_name[32];
+        struct registered_sensor *reg_sensor;
+        struct i2c_adapter *i2c_adapter = NULL;
+        struct i2c_board_info board_info;
+        struct i2c_client *client = NULL;
         
-        pr_info("*** TX_ISP_SENSOR_REGISTER: SIMPLIFIED Binary Ninja implementation ***\n");
+        pr_info("*** TX_ISP_SENSOR_REGISTER: FIXED Binary Ninja implementation ***\n");
         
         /* Binary Ninja: private_copy_from_user(&var_98, arg3, 0x50) */
         if (copy_from_user(sensor_data, argp, 0x50)) {
@@ -2995,7 +3000,12 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EFAULT;
         }
         
-        pr_info("Sensor register: %.32s\n", sensor_data);
+        strncpy(sensor_name, sensor_data, sizeof(sensor_name) - 1);
+        sensor_name[sizeof(sensor_name) - 1] = '\0';
+        pr_info("Sensor register: %s\n", sensor_name);
+        
+        /* *** CRITICAL: FIRST handle sensor registration normally *** */
+        pr_info("*** HANDLING SENSOR REGISTRATION 0x2000000 DIRECTLY ***\n");
         
         /* Binary Ninja: void* i_2 = $s7 + 0x2c */
         i_2 = (void**)((char*)isp_dev + 0x2c); /* Start of module_graph array */
@@ -3050,10 +3060,190 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         
         pr_info("Sensor registration complete, final_result=0x%x\n", final_result);
         
-        /* SIMPLIFIED: Just return the result, don't create I2C devices here */
-        /* The sensor I2C device creation should happen elsewhere in the initialization */
+        /* *** CRITICAL: Add sensor to enumeration list if registration succeeded *** */
+        if (final_result == 0 && sensor_name[0] != '\0') {
+            pr_info("*** ADDING SUCCESSFULLY REGISTERED SENSOR TO LIST: %s ***\n", sensor_name);
+            
+            /* Add to our sensor enumeration list */
+            reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
+            if (reg_sensor) {
+                strncpy(reg_sensor->name, sensor_name, sizeof(reg_sensor->name) - 1);
+                reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
+                
+                mutex_lock(&sensor_list_mutex);
+                reg_sensor->index = sensor_count++;
+                list_add_tail(&reg_sensor->list, &sensor_list);
+                mutex_unlock(&sensor_list_mutex);
+                
+                pr_info("*** SENSOR ADDED TO LIST: index=%d name=%s ***\n", 
+                       reg_sensor->index, reg_sensor->name);
+            }
+            
+            /* *** CRITICAL: Create I2C device for sensor *** */
+            pr_info("*** CREATING I2C DEVICE FOR SENSOR %s ***\n", sensor_name);
+            
+            /* Get I2C adapter - try i2c-0 first */
+            i2c_adapter = i2c_get_adapter(0);
+            if (!i2c_adapter) {
+                pr_warn("I2C adapter 0 not found, trying adapter 1\n");
+                i2c_adapter = i2c_get_adapter(1);
+            }
+            
+            if (i2c_adapter) {
+                /* Set up I2C board info for the sensor */
+                memset(&board_info, 0, sizeof(board_info));
+                strncpy(board_info.type, sensor_name, I2C_NAME_SIZE - 1);
+                board_info.type[I2C_NAME_SIZE - 1] = '\0';
+                
+                /* Common sensor I2C addresses - try GC2053 first */
+                if (strncmp(sensor_name, "gc2053", 6) == 0) {
+                    board_info.addr = 0x37; /* GC2053 I2C address */
+                } else if (strncmp(sensor_name, "imx307", 6) == 0) {
+                    board_info.addr = 0x1a; /* IMX307 I2C address */
+                } else {
+                    board_info.addr = 0x37; /* Default address */
+                }
+                
+                pr_info("*** CREATING I2C CLIENT: name=%s, addr=0x%x, adapter=%s ***\n",
+                       board_info.type, board_info.addr, i2c_adapter->name);
+                
+                /* Create the I2C device */
+                client = isp_i2c_new_subdev_board(i2c_adapter, &board_info);
+                if (client) {
+                    pr_info("*** SUCCESS: I2C CLIENT CREATED - SENSOR PROBE SHOULD BE CALLED! ***\n");
+                    pr_info("*** I2C CLIENT: %s at 0x%x on %s ***\n", 
+                           client->name, client->addr, client->adapter->name);
+                } else {
+                    pr_err("*** FAILED TO CREATE I2C CLIENT FOR %s ***\n", sensor_name);
+                }
+                
+                i2c_put_adapter(i2c_adapter);
+            } else {
+                pr_err("*** NO I2C ADAPTER AVAILABLE FOR SENSOR %s ***\n", sensor_name);
+            }
+        }
         
         return final_result;
+    }
+    case 0xc050561a: { // TX_ISP_SENSOR_ENUM_INPUT - FIXED Binary Ninja implementation
+        char enum_data[0x50];
+        void **s0_3;
+        void *a0_2;
+        void *v0_6;
+        int (*v0_7)(void);
+        int v0_8;
+        int sensor_found = 0;
+        struct {
+            int index;
+            char name[32];
+            int padding[4];  /* Extra padding to match 0x50 size */
+        } *input_data;
+        
+        pr_info("*** TX_ISP_SENSOR_ENUM_INPUT: FIXED Binary Ninja implementation ***\n");
+        
+        /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 0x50) != 0) */
+        if (copy_from_user(enum_data, argp, 0x50)) {
+            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy input data\n");
+            return -EFAULT;
+        }
+        
+        input_data = (void*)enum_data;
+        pr_info("Sensor enumeration: requesting index %d\n", input_data->index);
+        
+        /* *** FIRST: Check our sensor list for quick enumeration *** */
+        struct registered_sensor *sensor;
+        mutex_lock(&sensor_list_mutex);
+        list_for_each_entry(sensor, &sensor_list, list) {
+            if (sensor->index == input_data->index) {
+                strncpy(input_data->name, sensor->name, sizeof(input_data->name) - 1);
+                input_data->name[sizeof(input_data->name) - 1] = '\0';
+                sensor_found = 1;
+                pr_info("*** FOUND SENSOR: index=%d name=%s ***\n", 
+                       input_data->index, input_data->name);
+                break;
+            }
+        }
+        mutex_unlock(&sensor_list_mutex);
+        
+        if (!sensor_found) {
+            /* Binary Ninja: void* $s0_3 = $s7 + 0x2c */
+            s0_3 = (void**)((char*)isp_dev + 0x2c);
+            
+            /* Binary Ninja: void* $a0_2 = *$s0_3 */
+            a0_2 = *s0_3;
+            
+            /* Binary Ninja: while (true) loop */
+            while (true) {
+                /* Binary Ninja: if ($a0_2 != 0) */
+                if (a0_2 != 0) {
+                    /* Binary Ninja: void* $v0_6 = *(*($a0_2 + 0xc4) + 0xc) */
+                    void *subdev_ptr = *((void**)((char*)a0_2 + 0xc4));
+                    
+                    if (subdev_ptr == 0) {
+                        /* Binary Ninja: $s0_3 += 4 */
+                        s0_3 += 1;
+                    } else {
+                        v0_6 = *((void**)((char*)subdev_ptr + 0xc));
+                        
+                        /* Binary Ninja: if ($v0_6 == 0) $s0_3 += 4 */
+                        if (v0_6 == 0) {
+                            s0_3 += 1;
+                        } else {
+                            /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 8) */
+                            v0_7 = *((int(**)(void))((char*)v0_6 + 8));
+                            
+                            /* Binary Ninja: if ($v0_7 == 0) $s0_3 += 4 */
+                            if (v0_7 == 0) {
+                                s0_3 += 1;
+                            } else {
+                                /* Binary Ninja: int32_t $v0_8 = $v0_7() */
+                                v0_8 = v0_7();
+                                
+                                /* Binary Ninja: if ($v0_8 == 0) $s0_3 += 4 */
+                                if (v0_8 == 0) {
+                                    s0_3 += 1;
+                                } else {
+                                    /* Binary Ninja: $s0_3 += 4 */
+                                    s0_3 += 1;
+                                    
+                                    /* Binary Ninja: if ($v0_8 != 0xfffffdfd) return $v0_8 */
+                                    if (v0_8 != 0xfffffdfd) {
+                                        pr_info("Module enumeration returned: 0x%x\n", v0_8);
+                                        return v0_8;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    /* Binary Ninja: $s0_3 += 4 */
+                    s0_3 += 1;
+                }
+                
+                /* Binary Ninja: if ($s7 + 0x6c == $s0_3) break */
+                if (s0_3 == (void**)((char*)isp_dev + 0x6c)) {
+                    break;
+                }
+                
+                /* Binary Ninja: $a0_2 = *$s0_3 */
+                a0_2 = *s0_3;
+            }
+            
+            pr_info("No sensor found at index %d\n", input_data->index);
+        }
+        
+        if (sensor_found) {
+            /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 0x50) != 0) */
+            if (copy_to_user(argp, enum_data, 0x50)) {
+                pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy result to user\n");
+                return -EFAULT;
+            }
+            
+            pr_info("Sensor enumeration: index=%d name=%s\n", input_data->index, input_data->name);
+            return 0;
+        } else {
+            return -EINVAL;
+        }
     }
     case 0xc050561a: { // TX_ISP_SENSOR_ENUM_INPUT - Enumerate sensor inputs
         struct sensor_enum_input {
