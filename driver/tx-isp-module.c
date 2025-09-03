@@ -68,23 +68,6 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
     pr_info("Creating I2C subdev: type=%s addr=0x%02x on adapter %s\n",
             info->type, info->addr, adapter->name);
     
-    /* CRITICAL: Force load sensor module with retry logic */
-    pr_info("*** FORCING SENSOR MODULE LOAD: %s ***\n", info->type);
-    for (retry_count = 0; retry_count < 3; retry_count++) {
-        if (request_module("%s", info->type) == 0) {
-            pr_info("*** SENSOR MODULE %s LOADED SUCCESSFULLY (attempt %d) ***\n", 
-                   info->type, retry_count + 1);
-            break;
-        } else {
-            pr_warn("*** SENSOR MODULE %s LOAD FAILED (attempt %d) ***\n", 
-                   info->type, retry_count + 1);
-            msleep(50); /* Wait before retry */
-        }
-    }
-    
-    /* Give extra time for module to register its I2C driver */
-    msleep(200);
-    
     /* Create I2C device (this will trigger sensor probe if module loaded) */
     client = i2c_new_device(adapter, info);
     if (!client) {
@@ -94,9 +77,6 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
     
     pr_info("*** I2C DEVICE CREATED: %s at 0x%02x - SENSOR PROBE SHOULD BE TRIGGERED ***\n",
             client->name, client->addr);
-    
-    /* Give probe function time to complete */
-    msleep(100);
     
     /* Test I2C communication immediately */
     pr_info("Testing I2C communication with %s...\n", info->type);
