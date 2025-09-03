@@ -9,15 +9,14 @@
 #define AE_ZONE_DATA_SIZE 0x384  /* 900 bytes - matches Binary Ninja */
 #define ISP_AE_ZONE_BASE 0x1000  /* AE zone register base */
 
-/* AE Zone Data Structures - From Binary Ninja Analysis */
+/* AE Zone Data Structures - Binary Ninja Reference: 0x384 bytes (900 bytes exactly) */
 struct ae_zone_info {
-    uint32_t zone_status;                    /* AE zone processing status */
-    uint32_t zone_metrics[225];              /* 15x15 AE zones = 225 zones */
+    uint32_t zone_metrics[225];              /* 15x15 AE zones = 225 zones (900 bytes) */
 };
 
 /* AE Zone Global Data - Binary Ninja Reference (0xd3b24 equivalent) */
 static struct {
-    uint32_t zone_data[225];                 /* Zone luminance data */
+    uint32_t zone_data[225];                 /* Zone luminance data (exactly 900 bytes) */
     uint32_t zone_status;                    /* Processing status */
     spinlock_t lock;                         /* Protection spinlock */
     bool initialized;                        /* Initialization flag */
@@ -57,8 +56,8 @@ int tisp_ae_get_y_zone(void *arg1)
     spin_lock_irqsave(&ae_zone_data.lock, flags);
     mcp_log_info("tisp_ae_get_y_zone", "acquired spinlock", &ae_zone_data.lock);
     
-    /* Binary Ninja: memcpy(arg1, 0xd3b24, 0x384) */
-    memcpy(arg1, &ae_zone_data, AE_ZONE_DATA_SIZE);
+    /* Binary Ninja: memcpy(arg1, 0xd3b24, 0x384) - copy ONLY zone_data array */
+    memcpy(arg1, ae_zone_data.zone_data, AE_ZONE_DATA_SIZE);
     mcp_log_info("tisp_ae_get_y_zone", "copied AE zone data", &ae_zone_data);
     
     /* Binary Ninja: private_spin_unlock_irqrestore(0, var_18) */
@@ -71,7 +70,7 @@ int tisp_ae_get_y_zone(void *arg1)
 }
 EXPORT_SYMBOL(tisp_ae_get_y_zone);
 
-/* tisp_g_ae_zone - ISP tuning interface wrapper */
+/* tisp_g_ae_zone - Binary Ninja EXACT Implementation */
 int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
     struct ae_zone_info zones;
@@ -105,16 +104,16 @@ int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 
     mcp_log_info("tisp_g_ae_zone", "got AE zone data successfully", &zones);
 
-    /* Copy zone data to user-provided buffer */
+    /* Copy zone data to user-provided buffer - Fixed: correct size */
     if (copy_to_user((void __user *)ctrl->value, &zones, sizeof(zones))) {
         pr_err("tisp_g_ae_zone: Failed to copy data to user\n");
         mcp_log_info("tisp_g_ae_zone", "error copying to user", NULL);
         return -EFAULT;
     }
 
-    /* Set success status - data copied successfully */
-    ctrl->value = (unsigned long)&zones;
-    mcp_log_info("tisp_g_ae_zone", "exit success", &ctrl->value);
+    /* Binary Ninja: just return 0, don't modify ctrl->value */
+    mcp_log_info("tisp_g_ae_zone", "exit success", NULL);
+    /* Binary Ninja reference: return 0 */
     return 0;
 }
 EXPORT_SYMBOL(tisp_g_ae_zone);
