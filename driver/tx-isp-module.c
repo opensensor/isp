@@ -2505,13 +2505,50 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         state->enabled = true;
         state->streaming = true;
         
-        // Start the actual sensor hardware streaming FIRST
+        // *** CRITICAL: TRIGGER SENSOR HARDWARE INITIALIZATION AND STREAMING ***
         if (channel == 0 && ourISPdev && ourISPdev->sensor) {
             sensor = ourISPdev->sensor;
             
-            pr_info("*** CHANNEL %d STREAMON: STARTING SENSOR STREAMING ***\n", channel);
+            pr_info("*** CHANNEL %d STREAMON: INITIALIZING AND STARTING SENSOR HARDWARE ***\n", channel);
             pr_info("Channel %d: Found sensor %s for streaming\n",
                     channel, sensor ? sensor->info.name : "(unnamed)");
+            
+            // *** STEP 1: TRIGGER SENSOR HARDWARE INITIALIZATION (sensor_init) ***
+            if (sensor && sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
+                pr_info("*** Channel %d: CALLING SENSOR_INIT - WRITING INITIALIZATION REGISTERS ***\n", channel);
+                ret = sensor->sd.ops->core->init(&sensor->sd, 1);
+                if (ret) {
+                    pr_err("Channel %d: SENSOR_INIT FAILED: %d\n", channel, ret);
+                } else {
+                    pr_info("*** Channel %d: SENSOR_INIT SUCCESS - SENSOR REGISTERS PROGRAMMED ***\n", channel);
+                }
+            } else {
+                pr_err("*** Channel %d: NO SENSOR_INIT FUNCTION AVAILABLE! ***\n", channel);
+                pr_err("Channel %d: sensor=%p\n", channel, sensor);
+                if (sensor) {
+                    pr_err("Channel %d: sensor->sd.ops=%p\n", channel, sensor->sd.ops);
+                    if (sensor->sd.ops) {
+                        pr_err("Channel %d: sensor->sd.ops->core=%p\n", channel, sensor->sd.ops->core);
+                        if (sensor->sd.ops->core) {
+                            pr_err("Channel %d: sensor->sd.ops->core->init=%p\n", channel, sensor->sd.ops->core->init);
+                        }
+                    }
+                }
+            }
+            
+            // *** STEP 2: TRIGGER SENSOR g_chip_ident FOR PROPER HARDWARE RESET/SETUP ***
+            if (sensor && sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->g_chip_ident) {
+                struct tx_isp_chip_ident chip_ident;
+                pr_info("*** Channel %d: CALLING SENSOR_G_CHIP_IDENT - HARDWARE RESET AND SETUP ***\n", channel);
+                ret = sensor->sd.ops->core->g_chip_ident(&sensor->sd, &chip_ident);
+                if (ret) {
+                    pr_err("Channel %d: SENSOR_G_CHIP_IDENT FAILED: %d\n", channel, ret);
+                } else {
+                    pr_info("*** Channel %d: SENSOR_G_CHIP_IDENT SUCCESS - HARDWARE READY ***\n", channel);
+                }
+            } else {
+                pr_warn("Channel %d: No g_chip_ident function available\n", channel);
+            }
             
             // Detailed sensor structure debugging
             if (sensor) {
@@ -2528,7 +2565,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         channel, sensor->sd.vin_state, TX_ISP_MODULE_RUNNING);
             }
             
-            // Now start streaming with detailed error checking
+            // *** STEP 3: NOW START STREAMING WITH DETAILED ERROR CHECKING ***
             if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
                 sensor->sd.ops->video->s_stream) {
                 pr_info("*** Channel %d: CALLING SENSOR s_stream(1) - THIS SHOULD WRITE 0x3e=0x91 ***\n", channel);
@@ -3447,6 +3484,103 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // and calls tisp_s_wdr_en(0)
         
         return 0;
+    }
+    case 0xc008561b: { // TX_ISP_SENSOR_GET_CONTROL - Get sensor control value
+        struct sensor_control_arg {
+            uint32_t cmd;
+            uint32_t value;
+        } control_arg;
+        
+        if (copy_from_user(&control_arg, argp, sizeof(control_arg)))
+            return -EFAULT;
+        
+        pr_info("Sensor get control: cmd=0x%x\n", control_arg.cmd);
+        
+        // Route to sensor IOCTL handler if available
+        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
+            isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
+            ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, 
+                                                        control_arg.cmd, &control_arg.value);
+            if (ret == 0) {
+                if (copy_to_user(argp, &control_arg, sizeof(control_arg)))
+                    return -EFAULT;
+            }
+        } else {
+            // Default value
+            control_arg.value = 128; // Default middle value
+            if (copy_to_user(argp, &control_arg, sizeof(control_arg)))
+                return -EFAULT;
+        }
+        
+        return 0;
+    }
+    case 0xc008561c: { // TX_ISP_SENSOR_SET_CONTROL - Set sensor control value  
+        struct sensor_control_arg {
+            uint32_t cmd;
+            uint32_t value;
+        } control_arg;
+        
+        if (copy_from_user(&control_arg, argp, sizeof(control_arg)))
+            return -EFAULT;
+        
+        pr_info("Sensor set control: cmd=0x%x value=%d\n", control_arg.cmd, control_arg.value);
+        
+        // Route to sensor IOCTL handler if available
+        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
+            isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
+            ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, 
+                                                        control_arg.cmd, &control_arg.value);
+        } else {
+            pr_warn("No sensor IOCTL handler available for cmd=0x%x\n", control_arg.cmd);
+            ret = 0; // Return success to avoid breaking callers
+        }
+        
+        return ret;
+    }
+    case 0xc00c56c6: { // TX_ISP_SENSOR_TUNING_OPERATION - Advanced sensor tuning
+        struct sensor_tuning_arg {
+            uint32_t mode;      // 0=SET, 1=GET
+            uint32_t cmd;       // Tuning command
+            void *data_ptr;     // Data pointer (user space)
+        } tuning_arg;
+        
+        if (copy_from_user(&tuning_arg, argp, sizeof(tuning_arg)))
+            return -EFAULT;
+        
+        pr_info("Sensor tuning: mode=%d cmd=0x%x data_ptr=%p\n",
+                tuning_arg.mode, tuning_arg.cmd, tuning_arg.data_ptr);
+        
+        // Route tuning operations to sensor
+        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
+            isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
+            
+            // For GET operations, prepare buffer
+            if (tuning_arg.mode == 1) {
+                // GET operation - sensor should fill the value
+                uint32_t result_value = 0;
+                ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
+                                                           tuning_arg.cmd, &result_value);
+                if (ret == 0 && tuning_arg.data_ptr) {
+                    // Copy result back to user
+                    if (copy_to_user(tuning_arg.data_ptr, &result_value, sizeof(result_value)))
+                        return -EFAULT;
+                }
+            } else {
+                // SET operation - get value from user
+                uint32_t set_value = 0;
+                if (tuning_arg.data_ptr) {
+                    if (copy_from_user(&set_value, tuning_arg.data_ptr, sizeof(set_value)))
+                        return -EFAULT;
+                }
+                ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
+                                                           tuning_arg.cmd, &set_value);
+            }
+        } else {
+            pr_warn("No sensor available for tuning operation\n");
+            ret = 0; // Don't fail - return success for compatibility
+        }
+        
+        return ret;
     }
     default:
         pr_info("Unhandled ioctl cmd: 0x%x\n", cmd);
