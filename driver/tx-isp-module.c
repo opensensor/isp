@@ -3682,6 +3682,8 @@ static int tx_isp_init(void)
 //    pr_info("*** FRAME CHANNEL DEVICES CREATED - IOCTLS SHOULD NOW WORK ***\n");
 
     pr_info("TX ISP driver ready with new subdevice management system\n");
+    return 0;
+    
 err_cleanup_graph:
     tx_isp_cleanup_subdev_graph(ourISPdev);
     
