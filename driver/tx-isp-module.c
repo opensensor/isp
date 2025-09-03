@@ -3052,6 +3052,17 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* *** CRITICAL FIX: CREATE I2C DEVICE TO TRIGGER SENSOR PROBE *** */
             pr_info("*** CREATING I2C DEVICE FOR SENSOR %s ***\n", sensor_name);
             
+            /* FORCE LOAD THE SENSOR MODULE FIRST */
+            pr_info("*** FORCING SENSOR MODULE LOAD: %s ***\n", sensor_name);
+            if (request_module("%s", sensor_name) == 0) {
+                pr_info("*** SENSOR MODULE %s LOADED SUCCESSFULLY ***\n", sensor_name);
+            } else {
+                pr_warn("*** SENSOR MODULE %s LOAD FAILED - CONTINUING ANYWAY ***\n", sensor_name);
+            }
+            
+            /* Give the module time to register */
+            msleep(100);
+            
             /* Get I2C adapter (usually adapter 0 for embedded systems) */
             i2c_adap = i2c_get_adapter(0);
             if (i2c_adap) {
@@ -3069,6 +3080,22 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     pr_info("*** SUCCESS: I2C CLIENT CREATED - SENSOR PROBE SHOULD BE CALLED! ***\n");
                     pr_info("*** I2C CLIENT: %s at 0x%02x on %s ***\n", 
                            client->name, client->addr, client->adapter->name);
+                    
+                    /* Give the probe function time to complete */
+                    msleep(200);
+                    
+                    /* Verify the sensor was registered */
+                    if (ourISPdev && ourISPdev->sensor) {
+                        pr_info("*** SUCCESS: SENSOR CONNECTED TO ISP! sensor=%p name=%s ***\n",
+                               ourISPdev->sensor, 
+                               ourISPdev->sensor->info.name[0] ? ourISPdev->sensor->info.name : "(unnamed)");
+                    } else {
+                        pr_err("*** SENSOR PROBE DID NOT CONNECT TO ISP - SOMETHING IS WRONG! ***\n");
+                        pr_err("*** ourISPdev=%p ***\n", ourISPdev);
+                        if (ourISPdev) {
+                            pr_err("*** ourISPdev->sensor=%p ***\n", ourISPdev->sensor);
+                        }
+                    }
                 } else {
                     pr_err("*** FAILED TO CREATE I2C CLIENT FOR %s ***\n", sensor_name);
                 }
