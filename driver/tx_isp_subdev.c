@@ -20,6 +20,7 @@ static void __vb2_queue_free(void *queue, void *alloc_ctx);
 /* frame_channel_open and forward declarations */
 int frame_channel_open(struct inode *inode, struct file *file);
 int frame_channel_release(struct inode *inode, struct file *file);
+long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
 
 /* Frame buffer structure */
