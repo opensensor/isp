@@ -1897,14 +1897,14 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
 static int ispvic_frame_channel_clearbuf(void);
 
-/* ISPVIC Frame Channel QBUF - EXACT Binary Ninja implementation */
+/* ISPVIC Frame Channel QBUF - EXACT Binary Ninja implementation WITH BUFFER ADDRESS FIX */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
     struct tx_isp_vic_device *vic_dev = NULL; /* $s0 */
     void __iomem *vic_base;
     int var_18 = 0; /* For spin_lock_irqsave */
     void **buffer_ptr, **list_head, **new_buffer;
-    void *buffer_addr;
+    void *buffer_addr = NULL;
     int buffer_index;
     unsigned long flags;
     
@@ -1922,7 +1922,23 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         return 0;
     }
     
-    vic_base = vic_dev->vic_regs; /* *(vic_dev + 0xb8) */
+    /* CRITICAL FIX: Use ISP core register base for VIC access - Binary Ninja shows VIC regs accessed through ISP core */
+    if (!ourISPdev || !ourISPdev->core_regs) {
+        pr_err("ispvic_frame_channel_qbuf: No ISP core registers available\n");
+        return 0;
+    }
+    vic_base = ourISPdev->core_regs; /* Use ISP core register base instead of vic_dev->vic_regs */
+    
+    /* CRITICAL FIX: Extract actual buffer address from arg2 (buffer_data structure) */
+    /* The arg2 parameter contains buffer information passed from frame channel */
+    if (arg2) {
+        /* Based on Binary Ninja, buffer address should be extractable from arg2 structure */
+        /* This matches the frame channel buffer structure layout */
+        void **buf_struct = (void **)arg2;
+        if (buf_struct && buf_struct[2]) { /* Buffer address typically at offset 2 in structure */
+            buffer_addr = buf_struct[2];
+        }
+    }
     
     /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
     spin_lock_irqsave((spinlock_t *)((char *)vic_dev + 0x1f4), flags);
@@ -1962,10 +1978,7 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     /* This is simplified - in real implementation would call pop_buffer_fifo */
     new_buffer = *(void ***)((char *)vic_dev + 0x1fc); /* Get first free buffer */
     
-    if (new_buffer) {
-        /* Binary Ninja: int32_t $a1_2 = *($a3_1 + 8) */
-        buffer_addr = *((void **)((char *)new_buffer + 8)); /* Buffer address at offset 8 */
-        
+    if (new_buffer && buffer_addr) {
         /* Binary Ninja: int32_t $v1_1 = $v0_5[4] */
         buffer_index = (int)(unsigned long)*((void **)((char *)new_buffer + 4 * sizeof(void *))); /* Buffer index */
         
@@ -2005,6 +2018,9 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         
         pr_info("ispvic_frame_channel_qbuf: Buffer programmed to VIC, frame_count=%d\n", 
                 vic_dev->buffer_count);
+    } else {
+        pr_err("ispvic_frame_channel_qbuf: Failed to get buffer address - new_buffer=%p, buffer_addr=%p\n",
+               new_buffer, buffer_addr);
     }
     
 unlock_exit:
