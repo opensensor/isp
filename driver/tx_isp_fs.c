@@ -345,7 +345,7 @@ setup_complete:
 }
 
 /* FS remove function */
-static int tx_isp_fs_remove(struct platform_device *pdev)
+int tx_isp_fs_remove(struct platform_device *pdev)
 {
     struct tx_isp_fs_device *fs_dev = platform_get_drvdata(pdev);
     struct tx_isp_frame_channel *channels_buffer;
@@ -378,16 +378,6 @@ static int tx_isp_fs_remove(struct platform_device *pdev)
     pr_info("FS device removed\n");
     return 0;
 }
-
-/* FS platform driver structure */
-static struct platform_driver tx_isp_fs_platform_driver = {
-    .probe = tx_isp_fs_probe,
-    .remove = tx_isp_fs_remove,
-    .driver = {
-        .name = "tx-isp-fs",
-        .owner = THIS_MODULE,
-    },
-};
 
 /* FS platform init/exit functions */
 int __init tx_isp_fs_platform_init(void)

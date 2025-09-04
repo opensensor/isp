@@ -415,7 +415,8 @@ static struct platform_driver tx_isp_vin_driver = {
     },
 };
 
-static struct platform_driver tx_isp_fs_driver = {
+/* FS platform driver structure */
+static struct platform_driver tx_isp_fs_platform_driver = {
     .probe = tx_isp_fs_probe,
     .remove = tx_isp_fs_remove,
     .driver = {
