@@ -543,50 +543,8 @@ static int tx_isp_create_frame_channels(struct tx_isp_dev *isp)
     return 0;
 }
 
-/**
- * tx_isp_create_proc_entries - Create proc filesystem entries
- */
-static int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
-{
-    struct proc_dir_entry *isp_proc_dir;
-    struct proc_dir_entry *entry;
-    const char* proc_names[] = {"isp-w00", "isp-w01", "isp-w02", "csi", "vic"};
-    int i;
-
-    pr_info("tx_isp_create_proc_entries: Creating proc entries\n");
-
-    /* Create /proc/jz/isp directory */
-    isp_proc_dir = proc_mkdir_data("jz", 0755, NULL, NULL);
-    if (!isp_proc_dir) {
-        isp_proc_dir = proc_mkdir("jz", NULL);
-        if (!isp_proc_dir) {
-            pr_err("Failed to create /proc/jz directory\n");
-            return -ENOMEM;
-        }
-    }
-
-    isp_proc_dir = proc_mkdir_data("isp", 0755, isp_proc_dir, NULL);
-    if (!isp_proc_dir) {
-        pr_err("Failed to create /proc/jz/isp directory\n");
-        return -ENOMEM;
-    }
-
-    /* Create individual proc entries */
-    for (i = 0; i < ARRAY_SIZE(proc_names); i++) {
-        extern const struct file_operations graph_proc_fops;
-        
-        entry = proc_create_data(proc_names[i], 0644, isp_proc_dir,
-                                &graph_proc_fops, isp);
-        if (entry) {
-            pr_info("Created proc entry: /proc/jz/isp/%s\n", proc_names[i]);
-        } else {
-            pr_warn("Failed to create /proc/jz/isp/%s\n", proc_names[i]);
-        }
-    }
-
-    isp->isp_proc_dir = isp_proc_dir;
-    return 0;
-}
+/* tx_isp_create_proc_entries is implemented in tx_isp_proc.c */
+extern int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
 
 /**
  * tx_isp_create_misc_device - Create a misc device for a subdevice
