@@ -59,6 +59,10 @@ struct tx_isp_frame_channel {
 static int frame_chan_event(void *data);
 static int tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan);
 
+/* probe and remove forward declarations */
+int tx_isp_fs_probe(struct platform_device *pdev);
+int tx_isp_fs_remove(struct platform_device *pdev);
+
 /* FS subdev core operations */
 static int fs_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
