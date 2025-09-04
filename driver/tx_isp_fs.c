@@ -129,22 +129,15 @@ static int frame_chan_event(void *data)
     return 0;
 }
 
-/* Frame channel deinitialization - EXACT Binary Ninja implementation */
-static int tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan)
+/* Frame channel initialization/deinitialization */
+void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan)
 {
-    if (!chan) {
-        return 0;
+    pr_info("Deinitializing frame channel\n");
+    if (chan->active) {
+        misc_deregister(&chan->misc);
     }
-    
-    pr_info("*** tx_isp_frame_chan_deinit: channel=%p ***\n", chan);
-    
-    /* Deregister misc device */
-    misc_deregister(&chan->misc_dev);
-    
-    pr_info("tx_isp_frame_chan_deinit: misc device deregistered\n");
-    
-    return 0;
 }
+
 
 /* tx_isp_fs_probe - EXACT Binary Ninja implementation */
 int tx_isp_fs_probe(struct platform_device *pdev)

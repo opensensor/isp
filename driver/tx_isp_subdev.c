@@ -101,14 +101,6 @@ static const struct file_operations fs_channel_ops = {
     .unlocked_ioctl = frame_channel_unlocked_ioctl,
 };
 
-/* Frame channel initialization/deinitialization */
-void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan)
-{
-    pr_info("Deinitializing frame channel\n");
-    if (chan->active) {
-        misc_deregister(&chan->misc);
-    }
-}
 
 
 
