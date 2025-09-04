@@ -380,6 +380,19 @@ int tx_isp_fs_remove(struct platform_device *pdev)
     return 0;
 }
 
+
+
+/* FS platform driver structure */
+static struct platform_driver tx_isp_fs_platform_driver = {
+    .probe = tx_isp_fs_probe,
+    .remove = tx_isp_fs_remove,
+    .driver = {
+        .name = "tx-isp-fs",
+        .owner = THIS_MODULE,
+    },
+};
+
+
 /* FS platform init/exit functions */
 int __init tx_isp_fs_platform_init(void)
 {

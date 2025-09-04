@@ -396,11 +396,6 @@ EXPORT_SYMBOL(tx_isp_subdev_deinit);
 static struct tx_isp_subdev_ops fs_subdev_ops = { 0 }; // All fields NULL/0
 
 
-/* probe and remove forward declarations */
-int tx_isp_fs_probe(struct platform_device *pdev);
-int tx_isp_fs_remove(struct platform_device *pdev);
-
-
 /* Platform driver structures */
 static struct platform_driver tx_isp_csi_driver = {
     .probe = tx_isp_csi_probe,
@@ -416,16 +411,6 @@ static struct platform_driver tx_isp_vin_driver = {
     .remove = tx_isp_vin_remove,
     .driver = {
         .name = "tx-isp-vin",
-        .owner = THIS_MODULE,
-    },
-};
-
-/* FS platform driver structure */
-static struct platform_driver tx_isp_fs_platform_driver = {
-    .probe = tx_isp_fs_probe,
-    .remove = tx_isp_fs_remove,
-    .driver = {
-        .name = "tx-isp-fs",
         .owner = THIS_MODULE,
     },
 };
