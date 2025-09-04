@@ -377,8 +377,13 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
     /* Binary Ninja: return success */
     return 0;
 }
-int __init tx_isp_vic_platform_init(void);
-void __exit tx_isp_vic_platform_exit(void);
+/* Forward declarations for initialization functions */
+extern int tx_isp_vic_platform_init(void);
+extern void tx_isp_vic_platform_exit(void);
+extern int tx_isp_fs_platform_init(void);
+extern void tx_isp_fs_platform_exit(void);
+extern int tx_isp_fs_probe(struct platform_device *pdev);
+
 int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
 
 /* CSI function forward declarations */
@@ -3886,6 +3891,14 @@ static int tx_isp_init(void)
         platform_device_unregister(&tx_isp_csi_platform_device);
         goto err_cleanup_base;
     }
+
+    /* *** CRITICAL: Initialize FS platform driver (creates /proc/jz/isp/isp-fs like reference) *** */
+    ret = tx_isp_fs_platform_init();
+    if (ret) {
+        pr_err("Failed to initialize FS platform driver: %d\n", ret);
+        goto err_cleanup_platforms;
+    }
+    pr_info("*** FS PLATFORM DRIVER INITIALIZED - /proc/jz/isp/isp-fs SHOULD NOW EXIST ***\n");
 
     /* Build platform device array for the new management system */
     subdev_platforms[0] = &tx_isp_csi_platform_device;
