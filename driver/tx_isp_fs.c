@@ -26,19 +26,15 @@ struct tx_isp_fs_device {
     struct tx_isp_subdev subdev;            /* Base subdev structure */
     void __iomem *base_regs;                /* Base register mapping +0xb8 */
     
-    /* Binary Ninja structure layout - exact offsets */
-    uint8_t padding[0xc8 - sizeof(struct tx_isp_subdev) - sizeof(void *)];  /* Padding to 0xc8 */
-    
-    void *channel_configs;                   /* +0xcc - channel config array */
-    void *channel_buffer;                    /* +0xdc - kmalloc'ed channel buffer */
-    uint32_t channel_count;                  /* +0xe0 - number of channels */
-    uint32_t initialized;                    /* +0xe4 - initialization flag */
+    void *channel_configs;                   /* channel config array */
+    void *channel_buffer;                    /* kmalloc'ed channel buffer */
+    uint32_t channel_count;                  /* number of channels */
+    uint32_t initialized;                    /* initialization flag */
 } __attribute__((packed));
 
 
 /* Forward declarations */
 static int frame_chan_event(void *data);
-static int tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan);
 
 
 /* FS subdev core operations */
@@ -120,11 +116,11 @@ static int frame_chan_event(void *data)
     
     pr_info("*** frame_chan_event: channel=%p, state=%d ***\n", chan, chan->state);
     
-    /* Signal frame completion */
-    complete(&chan->frame_completion);
+    /* Signal frame completion - use correct field name */
+    complete(&chan->frame_done);
     
-    /* Wake up any waiting processes */
-    wake_up_interruptible(&chan->wait_queue);
+    /* Wake up any waiting processes - use correct field name */
+    wake_up_interruptible(&chan->wait);
     
     return 0;
 }
@@ -222,27 +218,24 @@ int tx_isp_fs_probe(struct platform_device *pdev)
             goto error_cleanup_loop;
         }
         
-        /* Binary Ninja: uint32_t $a2_4 = zx.d(*($s6_1 + 4)) */
-        /* Binary Ninja: $s0_2[0xaf] = $s6_1 */
-        current_channel->channel_config = channel_config_ptr;
-        /* Binary Ninja: $s0_2[0xb0] = $a2_4 */
-        current_channel->channel_id = *(uint32_t *)((char *)channel_config_ptr + 4);
+        /* Set pad info based on channel config */
+        current_channel->pad_id = i;
         
         /* Binary Ninja: if (zx.d(*($s6_1 + 5)) != 0) */
         if (*(uint32_t *)((char *)channel_config_ptr + 5) != 0) {
             /* Binary Ninja: sprintf(&$s0_2[0xab], "Err [VIC_INT] : mipi fid asfifo ovf!!!\n") */
-            snprintf(current_channel->device_name, sizeof(current_channel->device_name), 
+            snprintf(current_channel->name, sizeof(current_channel->name), 
                      "/dev/framechan%d", i);
             
             /* Binary Ninja: *$s0_2 = 0xff */
-            current_channel->misc_dev.minor = MISC_DYNAMIC_MINOR;
+            current_channel->misc.minor = MISC_DYNAMIC_MINOR;
             /* Binary Ninja: $s0_2[2] = &fs_channel_ops */
-            current_channel->misc_dev.fops = &fs_channel_ops;
+            current_channel->misc.fops = &fs_channel_ops;
             /* Binary Ninja: $s0_2[1] = &$s0_2[0xab] */
-            current_channel->misc_dev.name = current_channel->device_name;
+            current_channel->misc.name = current_channel->name;
             
             /* Binary Ninja: if (private_misc_register($s0_2) s< 0) */
-            ret = misc_register(&current_channel->misc_dev);
+            ret = misc_register(&current_channel->misc);
             if (ret < 0) {
                 /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch0 hcomp err !!!\n", $s0_2[0xb0]) */
                 pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
@@ -251,19 +244,15 @@ int tx_isp_fs_probe(struct platform_device *pdev)
                 goto error_cleanup_loop;
             }
             
-            /* Binary Ninja: Initialize channel structures - &$s0_2[9] u< 0xfffff001 */
-            /* Binary Ninja: memset(&$s0_2[9], 0, 0x218) */
-            memset(&current_channel->frame_completion, 0, 0x218);  /* Clear completion area */
-            
             /* Binary Ninja: Initialize completion and synchronization objects */
             /* Binary Ninja: private_init_completion(&$s0_2[0xb5]) */
-            init_completion(&current_channel->frame_completion);
+            init_completion(&current_channel->frame_done);
             /* Binary Ninja: private_spin_lock_init(&$s0_2[0x89]) */
-            spin_lock_init(&current_channel->buffer_lock);
+            spin_lock_init(&current_channel->slock);
             /* Binary Ninja: private_raw_mutex_init(&$s0_2[0xa], ...) */
-            mutex_init(&current_channel->channel_lock);
+            mutex_init(&current_channel->mlock);
             /* Binary Ninja: private_init_waitqueue_head(&$s0_2[0x8a]) */
-            init_waitqueue_head(&current_channel->wait_queue);
+            init_waitqueue_head(&current_channel->wait);
             
             /* Binary Ninja: Set up event callback */
             /* Binary Ninja: *($s6_1 + 0x1c) = frame_chan_event */
@@ -273,7 +262,7 @@ int tx_isp_fs_probe(struct platform_device *pdev)
             current_channel->state = 1;  /* Active state */
             
             pr_info("tx_isp_fs_probe: initialized frame channel %d: %s\n", 
-                    i, current_channel->device_name);
+                    i, current_channel->name);
         } else {
             /* Binary Ninja: $s0_2[0xb4] = 0 */
             current_channel->state = 0;  /* Inactive state */
