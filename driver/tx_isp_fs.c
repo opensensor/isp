@@ -35,25 +35,6 @@ struct tx_isp_fs_device {
     uint32_t initialized;                    /* +0xe4 - initialization flag */
 } __attribute__((packed));
 
-/* Frame channel structure - 0x2ec bytes per channel as per Binary Ninja */
-struct tx_isp_frame_channel {
-    struct miscdevice misc_dev;              /* +0x00 - misc device structure */
-    
-    uint8_t padding1[0xab * 4 - sizeof(struct miscdevice)];  /* Padding to +0xab */
-    
-    char device_name[64];                    /* +0xab - device name buffer */
-    void *channel_config;                    /* +0xaf - channel config pointer */
-    uint32_t channel_id;                     /* +0xb0 - channel ID */
-    
-    uint8_t padding2[0x2ec - 0xb0 * 4 - sizeof(uint32_t) - 64 - sizeof(void *)];  /* Rest of structure */
-    
-    struct completion frame_completion;      /* Frame completion */
-    struct mutex channel_lock;               /* Channel mutex */
-    spinlock_t buffer_lock;                  /* Buffer spinlock */
-    wait_queue_head_t wait_queue;           /* Wait queue */
-    
-    uint32_t state;                         /* +0xb4 - channel state */
-} __attribute__((packed));
 
 /* Forward declarations */
 static int frame_chan_event(void *data);
