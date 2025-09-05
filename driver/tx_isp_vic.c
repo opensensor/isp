@@ -24,6 +24,110 @@ extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
 
+/* *** CRITICAL: MISSING FUNCTION - tx_isp_create_vic_device *** */
+/* This function creates and links the VIC device structure to the ISP core */
+int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
+{
+    struct tx_isp_vic_device *vic_dev;
+    int ret = 0;
+    
+    if (!isp_dev) {
+        pr_err("tx_isp_create_vic_device: Invalid ISP device\n");
+        return -EINVAL;
+    }
+    
+    pr_info("*** tx_isp_create_vic_device: Creating VIC device structure ***\n");
+    
+    /* Allocate VIC device structure - same size as Binary Ninja tx_isp_vic_probe (0x21c bytes) */
+    vic_dev = kzalloc(0x21c, GFP_KERNEL);
+    if (!vic_dev) {
+        pr_err("tx_isp_create_vic_device: Failed to allocate VIC device (0x21c bytes)\n");
+        return -ENOMEM;
+    }
+    
+    /* Clear the structure */
+    memset(vic_dev, 0, 0x21c);
+    
+    pr_info("*** VIC DEVICE ALLOCATED: %p (size=0x21c bytes) ***\n", vic_dev);
+    
+    /* Initialize VIC device structure - Binary Ninja exact layout */
+    
+    /* Initialize spinlock at offset 0x130 */
+    spin_lock_init((spinlock_t *)((char *)vic_dev + 0x130));
+    
+    /* Initialize mutex at offset 0x154 */
+    mutex_init((struct mutex *)((char *)vic_dev + 0x154));
+    
+    /* Initialize completion at offset 0x148 */
+    init_completion((struct completion *)((char *)vic_dev + 0x148));
+    
+    /* Set initial state to 1 (INIT) at offset 0x128 */
+    *(uint32_t *)((char *)vic_dev + 0x128) = 1;
+    
+    /* Set self-pointer at offset 0xd4 */
+    *(void **)((char *)vic_dev + 0xd4) = vic_dev;
+    
+    /* Initialize VIC register pointers */
+    vic_dev->vic_regs = isp_dev->vic_regs; /* Use the same VIC registers mapped by ISP core */
+    
+    /* Initialize VIC device dimensions */
+    vic_dev->width = 1920;  /* Default HD width */
+    vic_dev->height = 1080; /* Default HD height */
+    
+    /* Set up VIC subdev structure */
+    memset(&vic_dev->sd, 0, sizeof(vic_dev->sd));
+    vic_dev->sd.isp = isp_dev;
+    vic_dev->sd.ops = &vic_subdev_ops;
+    vic_dev->sd.vin_state = TX_ISP_MODULE_INIT;
+    
+    /* Initialize buffer management */
+    INIT_LIST_HEAD(&vic_dev->queue_head);
+    INIT_LIST_HEAD(&vic_dev->done_head);
+    INIT_LIST_HEAD(&vic_dev->free_head);
+    spin_lock_init(&vic_dev->buffer_lock);
+    spin_lock_init(&vic_dev->lock);
+    mutex_init(&vic_dev->mlock);
+    mutex_init(&vic_dev->state_lock);
+    init_completion(&vic_dev->frame_complete);
+    
+    /* Initialize VIC error counters */
+    memset(vic_dev->vic_errors, 0, sizeof(vic_dev->vic_errors));
+    
+    /* Set initial frame count */
+    vic_dev->frame_count = 0;
+    vic_dev->buffer_count = 0;
+    vic_dev->streaming = 0;
+    vic_dev->state = 1; /* INIT state */
+    
+    /* Set up sensor attributes with defaults */
+    memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
+    vic_dev->sensor_attr.dbus_type = 2; /* Default to MIPI */
+    vic_dev->sensor_attr.total_width = 1920;
+    vic_dev->sensor_attr.total_height = 1080;
+    vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
+    
+    /* *** CRITICAL: Link VIC device to ISP core *** */
+    isp_dev->vic_dev = (struct tx_isp_subdev *)vic_dev;
+    
+    pr_info("*** CRITICAL: VIC DEVICE LINKED TO ISP CORE ***\n");
+    pr_info("  isp_dev->vic_dev = %p\n", isp_dev->vic_dev);
+    pr_info("  vic_dev->sd.isp = %p\n", vic_dev->sd.isp);
+    pr_info("  vic_dev->sd.ops = %p\n", vic_dev->sd.ops);
+    pr_info("  vic_dev->vic_regs = %p\n", vic_dev->vic_regs);
+    pr_info("  vic_dev->state = %d\n", vic_dev->state);
+    pr_info("  vic_dev dimensions = %dx%d\n", vic_dev->width, vic_dev->height);
+    
+    /* Set up tx_isp_get_subdevdata to work properly */
+    /* This sets up the private data pointer so tx_isp_get_subdevdata can retrieve the VIC device */
+    vic_dev->sd.dev_priv = vic_dev;
+    
+    pr_info("*** tx_isp_create_vic_device: VIC device creation complete ***\n");
+    pr_info("*** NO MORE 'NO VIC DEVICE' ERROR SHOULD OCCUR ***\n");
+    
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_create_vic_device);
+
 /* VIC frame completion handler */
 static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 {
@@ -423,28 +527,10 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
-/* Alias for the main VIC interrupt handler */
-#define tx_isp_vic_irq_handler isp_vic_interrupt_service_routine
-
 /* Initialize VIC hardware */
 static int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 {
-    u32 ctrl;
     void __iomem *vic_base;
-
-//    /* Reset VIC */
-//    vic_write32(VIC_CTRL, VIC_CTRL_RST);
-//    udelay(10);
-//    vic_write32(VIC_CTRL, 0);
-//
-//    /* Configure default settings */
-//    ctrl = VIC_CTRL_EN;  /* Enable VIC */
-//    vic_write32(VIC_CTRL, ctrl);
-//
-//    /* Clear and enable interrupts */
-//    vic_write32(VIC_INT_STATUS, 0xFFFFFFFF);
-//    vic_write32(VIC_INT_MASK, ~(INT_FRAME_DONE | INT_ERROR));
-
 
     // Initialize VIC hardware
     vic_base = ioremap(0x10023000, 0x1000);  // Direct map VIC
@@ -1874,38 +1960,6 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         pr_err("VIC: no private data in file\n");
         return -EINVAL;
     }
-
-//    switch (cmd) {
-//        case 0x1000000: { // VIC_IOCTL_CMD1:
-//            if (!sd->ops || !sd->ops->core_ops) {
-//                return 0;
-//            }
-//            ret = sd->ops->core_ops->ioctl(sd, cmd);
-//            if (ret == -515) { // 0xfffffdfd
-//                return 0;
-//            }
-//            break;
-//		}
-//        case 0x1000001: { // VIC_IOCTL_CMD2:
-//            if (!sd->ops || !sd->ops->core_ops) {
-//                return -EINVAL;
-//            }
-//            ret = sd->ops->core_ops->ioctl(sd, cmd);
-//            if (ret == -515) { // 0xfffffdfd
-//                return 0;
-//            }
-//            break;
-//		}
-//        case 0x3000009: { // 0x3000009
-//            ret = tx_isp_subdev_pipo(sd, (void __user *)arg);
-//            if (ret == -515) { // 0xfffffdfd
-//                return 0;
-//            }
-//            break;
-//		}
-//        default:
-//            return 0;
-//    }
 
     return ret;
 }

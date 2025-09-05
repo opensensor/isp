@@ -58,7 +58,7 @@ static DEFINE_MUTEX(sensor_register_mutex);
 static void destroy_frame_channel_devices(void);
 int __init tx_isp_subdev_platform_init(void);
 void __exit tx_isp_subdev_platform_exit(void);
-
+int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 
 /* I2C infrastructure - create I2C devices dynamically during sensor registration */
 static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
