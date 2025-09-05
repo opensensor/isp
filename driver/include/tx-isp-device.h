@@ -643,4 +643,124 @@ static inline void *tx_isp_get_subdev_hostdata(struct tx_isp_subdev *sd)
 {
 	return sd->host_priv;
 }
+
+/* Forward declarations for structures used in tx_isp_dev */
+struct isp_tuning_state;
+struct ae_info;
+struct awb_info;
+struct ae_state_info;
+struct af_zone_info;
+struct isp_core_ctrl;
+struct IspModule;
+
+/* White balance gains structure */
+struct wb_gains {
+	uint32_t r;
+	uint32_t g;
+	uint32_t b;
+};
+
+/* AF zone data structure matching Binary Ninja reference */
+#define MAX_AF_ZONES 16
+struct af_zone_data {
+	uint32_t status;
+	uint32_t zone_metrics[MAX_AF_ZONES];
+};
+
+/* Global AF zone data - Binary Ninja reference */
+extern struct af_zone_data af_zone_data;
+
+/* AF zone info structure */
+struct af_zone_info {
+	uint32_t zone_status;
+	uint32_t zone_metrics[MAX_AF_ZONES];
+};
+
+/* AE state info structure */
+struct ae_state_info {
+	uint32_t exposure;
+	uint32_t gain;
+	uint32_t status;
+};
+
+/* ISP Core Control structure - Binary Ninja reference */
+struct isp_core_ctrl {
+	uint32_t cmd;     /* Control command */
+	int32_t value;    /* Control value */
+};
+
+/* ISP Tuning Data structure - Based on Binary Ninja analysis and crash offset */
+struct isp_tuning_data {
+	/* Base tuning parameters - ensure proper alignment */
+	void *regs;                          /* 0x00: Register base pointer */
+	spinlock_t lock;                     /* 0x04: Tuning lock */
+	struct mutex mutex;                  /* 0x08: Tuning mutex (32-bit aligned) */
+	uint32_t state;                      /* 0x0c: Tuning state */
+	
+	/* Control values - CRITICAL: brightness must be at offset +0x68 */
+	uint32_t reserved1[20];              /* 0x10-0x5f: Reserved for proper alignment */
+	
+	/* CRITICAL: These must be at the correct offsets for the controls */
+	uint32_t brightness;                 /* 0x60: Brightness control (cmd 0x980900) */
+	uint32_t contrast;                   /* 0x64: Contrast control (cmd 0x980901) */
+	uint32_t saturation;                 /* 0x68: Saturation control (cmd 0x980902) */
+	uint32_t sharpness;                  /* 0x6c: Sharpness control (cmd 0x98091b) */
+	
+	/* Additional controls */
+	uint32_t hflip;                      /* 0x70: Horizontal flip (cmd 0x980914) */
+	uint32_t vflip;                      /* 0x74: Vertical flip (cmd 0x980915) */
+	uint32_t antiflicker;                /* 0x78: Anti-flicker (cmd 0x980918) */
+	uint32_t shading;                    /* 0x7c: Shading control */
+	
+	/* Extended controls */
+	uint32_t running_mode;               /* 0x80: ISP running mode */
+	uint32_t custom_mode;                /* 0x84: ISP custom mode */
+	uint32_t move_state;                 /* 0x88: Move state */
+	uint32_t ae_comp;                    /* 0x8c: AE compensation */
+	
+	/* Gain controls */
+	uint32_t max_again;                  /* 0x90: Maximum analog gain */
+	uint32_t max_dgain;                  /* 0x94: Maximum digital gain */
+	uint32_t total_gain;                 /* 0x98: Total gain */
+	uint32_t exposure;                   /* 0x9c: Exposure value */
+	
+	/* Strength controls */
+	uint32_t defog_strength;             /* 0xa0: Defog strength */
+	uint32_t dpc_strength;               /* 0xa4: DPC strength */
+	uint32_t drc_strength;               /* 0xa8: DRC strength */
+	uint32_t temper_strength;            /* 0xac: Temper strength */
+	uint32_t sinter_strength;            /* 0xb0: Sinter strength */
+	
+	/* White balance */
+	struct wb_gains wb_gains;            /* 0xb4: WB gains (R,G,B) */
+	uint32_t wb_temp;                    /* 0xc0: WB color temperature */
+	
+	/* BCSH controls */
+	uint8_t bcsh_hue;                    /* 0xc4: BCSH Hue */
+	uint8_t bcsh_brightness;             /* 0xc5: BCSH Brightness */
+	uint8_t bcsh_contrast;               /* 0xc6: BCSH Contrast */
+	uint8_t bcsh_saturation;             /* 0xc7: BCSH Saturation */
+	
+	/* FPS control */
+	uint32_t fps_num;                    /* 0xc8: FPS numerator */
+	uint32_t fps_den;                    /* 0xcc: FPS denominator */
+	
+	/* BCSH EV processing - Binary Ninja reference */
+	uint32_t bcsh_ev;                    /* 0xd0: BCSH EV value */
+	uint32_t bcsh_au32EvList_now[9];     /* 0xd4: EV list array */
+	uint32_t bcsh_au32SminListS_now[9];  /* 0xf8: S min list S */
+	uint32_t bcsh_au32SmaxListS_now[9];  /* 0x11c: S max list S */
+	uint32_t bcsh_au32SminListM_now[9];  /* 0x140: S min list M */
+	uint32_t bcsh_au32SmaxListM_now[9];  /* 0x164: S max list M */
+	
+	/* BCSH saturation processing */
+	uint32_t bcsh_saturation_value;      /* 0x188: Current saturation value */
+	uint32_t bcsh_saturation_max;        /* 0x18c: Max saturation */
+	uint32_t bcsh_saturation_min;        /* 0x190: Min saturation */
+	uint32_t bcsh_saturation_mult;       /* 0x194: Saturation multiplier */
+	
+	/* Padding to ensure structure is large enough for all accesses */
+	uint32_t reserved2[1000];            /* 0x198+: Reserved for future use and safety */
+} __attribute__((aligned(4)));
+
 #endif/*__TX_ISP_DEVICE_H__*/
