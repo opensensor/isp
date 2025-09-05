@@ -342,7 +342,26 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     }
 
     /* *** STEP: Build up subdev array and configure ops *** */
-    if (!strcmp(pdev->name, "tx-isp-csi")) {
+    if (!strcmp(pdev->name, "tx-isp-vic")) {
+        if (!dev->vic_dev) {
+            pr_err("*** CRITICAL ERROR: VIC DEVICE NOT CREATED! ***\n");
+            ret = -EINVAL;
+            goto err_free_out_channels;
+        }
+        
+        /* Configure VIC subdev ops and ISP reference */
+        dev->vic_dev->sd = sd;
+        sd->ops = ops;
+        sd->isp = (void*)dev;
+        
+        /* CRITICAL: Add VIC to subdev array at index 0 */
+        dev->subdevs[0] = sd;
+        
+        pr_info("*** SUCCESS: VIC SUBDEV REGISTERED AT INDEX 0 ***\n");
+        pr_info("VIC subdev: %p, ops: %p, video: %p\n",
+                sd, sd->ops, sd->ops ? sd->ops->video : NULL);
+                
+    } else if (!strcmp(pdev->name, "tx-isp-csi")) {
         if (!dev->csi_dev) {
             pr_err("*** CRITICAL ERROR: CSI DEVICE NOT CREATED! ***\n");
             ret = -EINVAL;
