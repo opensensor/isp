@@ -671,24 +671,6 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         pr_warn("CGU_ISP clock not found: %ld\n", PTR_ERR(cgu_isp_clk));
     }
     
-    // Try VIC-specific clock if it exists
-    vic_clk = clk_get(NULL, "vic");
-    if (!IS_ERR(vic_clk)) {
-        ret = clk_prepare_enable(vic_clk);
-        if (ret == 0) {
-            pr_info("SUCCESS: VIC clock enabled via clk framework\n");
-            /* VIC clock enabled successfully */
-        } else {
-            pr_err("Failed to enable VIC clock: %d\n", ret);
-            clk_put(vic_clk);
-        }
-    } else {
-        pr_warn("VIC clock not found: %ld\n", PTR_ERR(vic_clk));
-    }
-    
-    // FALLBACK: Try direct CPM manipulation if clock framework fails
-    pr_info("FALLBACK: Attempting direct CPM clock manipulation...\n");
-    
     // Map Clock/Power Management registers
     cpm_regs = ioremap(T31_CPM_BASE, T31_CPM_SIZE);
     if (!cpm_regs) {
