@@ -166,34 +166,29 @@ static int tx_isp_v4l2_querycap(struct file *file, void *priv,
     return 0;
 }
 
-/* VIDIOC_REQBUFS - Request buffers */
+/* Forward declare frame channel ioctl function from tx-isp-module.c */
+extern long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+
+/* VIDIOC_REQBUFS - Request buffers - Route to frame channel IOCTL */
 static int tx_isp_v4l2_reqbufs(struct file *file, void *priv,
                                struct v4l2_requestbuffers *rb)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    int ret;
     
     if (!dev) {
         return -EINVAL;
     }
     
-    pr_info("*** Channel %d: VIDIOC_REQBUFS count=%d memory=%d ***\n",
-            dev->channel_num, rb->count, rb->memory);
+    pr_info("*** V4L2 Channel %d: REQBUFS - Routing to frame channel IOCTL ***\n", dev->channel_num);
     
-    if (rb->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
-        return -EINVAL;
-    }
+    /* CRITICAL: Route to existing Binary Ninja frame_channel_unlocked_ioctl */
+    /* This preserves all the complex Binary Ninja buffer allocation logic */
+    ret = frame_channel_unlocked_ioctl(file, 0xc0145608, (unsigned long)rb);
     
-    if (rb->memory != V4L2_MEMORY_MMAP && rb->memory != V4L2_MEMORY_USERPTR) {
-        rb->memory = V4L2_MEMORY_MMAP; /* Default to mmap */
-    }
+    pr_info("*** V4L2 Channel %d: REQBUFS routed, result=%d ***\n", dev->channel_num, ret);
     
-    /* For encoder compatibility, we need to accept the buffer request */
-    rb->count = min_t(u32, rb->count, 32); /* Limit buffers */
-    
-    pr_info("*** Channel %d: REQBUFS SUCCESS - %d buffers allocated ***\n",
-            dev->channel_num, rb->count);
-    
-    return 0;
+    return ret;
 }
 
 /* VIDIOC_QBUF - Queue buffer */
