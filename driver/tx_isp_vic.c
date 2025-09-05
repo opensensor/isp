@@ -1605,15 +1605,38 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
+/* VIC PIPO MDMA Enable function - SAFE STRUCT ACCESS implementation */
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
-    void __iomem *vic_base = vic_dev->vic_regs;
+    void __iomem *vic_base;
     
-    pr_info("*** VIC PIPO MDMA ENABLE - Binary Ninja exact sequence ***\n");
+    pr_info("*** VIC PIPO MDMA ENABLE - SAFE STRUCT ACCESS implementation ***\n");
     
-    /* FIXED: Use proper struct member access */
-    u32 width = vic_dev->width;
+    /* CRITICAL: Validate vic_dev structure first */
+    if (!vic_dev) {
+        pr_err("vic_pipo_mdma_enable: NULL vic_dev parameter\n");
+        return;
+    }
+    
+    /* SAFE: Use proper struct member access instead of dangerous offsets */
+    u32 width = vic_dev->width;   /* Binary Ninja: *(arg1 + 0xdc) */
+    u32 height = vic_dev->height; /* Binary Ninja: *(arg1 + 0xe0) - SAFE REPLACEMENT */
+    
+    /* CRITICAL: Validate VIC register base access */
+    vic_base = vic_dev->vic_regs; /* Binary Ninja: *(arg1 + 0xb8) */
+    if (!vic_base) {
+        pr_err("vic_pipo_mdma_enable: NULL VIC register base\n");
+        return;
+    }
+    
+    /* SAFE: Validate register base before any writes */
+    if ((unsigned long)vic_base < 0x10000000 || (unsigned long)vic_base > 0x20000000) {
+        pr_err("vic_pipo_mdma_enable: Invalid VIC register base %p\n", vic_base);
+        return;
+    }
+    
+    pr_info("vic_pipo_mdma_enable: validated - vic_base=%p, dimensions=%dx%d\n", 
+            vic_base, width, height);
     
     /* Binary Ninja: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
@@ -1624,7 +1647,7 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     u32 stride = width << 1; /* width * 2 for stride */
     
     /* Binary Ninja: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
-    u32 height = *(uint32_t *)((char *)vic_dev + 0xe0);
+    /* SAFE: Use proper struct members instead of offset arithmetic */
     writel((width << 16) | height, vic_base + 0x304);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
@@ -1640,7 +1663,7 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
     
-    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE ***\n");
+    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - SAFE IMPLEMENTATION ***\n");
 }
 
 /* ISPVIC Frame Channel S_Stream - FIXED to use tx_isp_init_vic_registers methodology */
