@@ -2221,38 +2221,27 @@ static void destroy_isp_tuning_device(void)
 long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     void __user *argp = (void __user *)arg;
-    struct frame_channel_device *fcd = file->private_data;
-    struct frame_channel_device *fcd_offset_70 = NULL;
+    struct frame_channel_device *fcd;
     struct tx_isp_channel_state *state;
     int channel;
     
-    /* CRITICAL FIX: Validate file pointer first to prevent crash at BadVA: 00000000 */
+    /* SAFE IMPLEMENTATION: Use proper struct member access instead of unsafe offsets */
     if (!file) {
-        pr_err("frame_channel_unlocked_ioctl: NULL file pointer - CRITICAL CRASH PREVENTION\n");
+        pr_err("frame_channel_unlocked_ioctl: NULL file pointer - CRASH PREVENTION\n");
         return -EINVAL;
     }
     
-    /* CRITICAL FIX: Check both private_data and offset 0x70 locations like Binary Ninja expects */
+    /* SAFE FIX: Use only standard private_data - no unsafe offset access */
+    fcd = file->private_data;
     if (!fcd) {
-        /* Try to get device from offset 0x70 where Binary Ninja expects it */
-        if ((char*)file + 0x70 < (char*)file + sizeof(*file)) {
-            fcd_offset_70 = *((struct frame_channel_device**)((char*)file + 0x70));
-            if (fcd_offset_70) {
-                fcd = fcd_offset_70;
-                pr_info("*** RECOVERED: Using frame channel device from file+0x70: %p ***\n", fcd);
-            }
-        }
-        
-        if (!fcd) {
-            pr_err("*** CRITICAL: Frame channel device NULL at both private_data and file+0x70 ***\n");
-            pr_err("*** This prevents the crash at BadVA: 00000000 in Binary Ninja reference ***\n");
-            return -EINVAL;
-        }
+        pr_err("*** SAFE: Frame channel device NULL in private_data ***\n");
+        pr_err("*** This prevents the crash at BadVA: 00000000 safely ***\n");
+        return -EINVAL;
     }
     
-    /* CRITICAL FIX: Additional validation to ensure fcd is valid */
-    if ((uintptr_t)fcd < 0x1000 || (uintptr_t)fcd >= 0xfffff000) {
-        pr_err("*** CRITICAL: Frame channel device pointer out of valid range: %p ***\n", fcd);
+    /* SAFE VALIDATION: Ensure fcd is valid without unsafe pointer arithmetic */
+    if ((uintptr_t)fcd < PAGE_SIZE || IS_ERR(fcd)) {
+        pr_err("*** SAFE: Frame channel device pointer invalid: %p ***\n", fcd);
         return -EFAULT;
     }
     
