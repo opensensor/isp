@@ -69,12 +69,12 @@ int frame_channel_open(struct inode *inode, struct file *file);
 int frame_channel_release(struct inode *inode, struct file *file);
 long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
-const struct file_operations frame_channel_fops = {
+static const struct file_operations frame_channel_fops = {
     .owner = THIS_MODULE,
     .open = frame_channel_open,
     .release = frame_channel_release,
     .unlocked_ioctl = frame_channel_unlocked_ioctl,
-    .llseek = no_llseek,
+    .compat_ioctl = frame_channel_unlocked_ioctl,
 };
 
 static int graph_proc_show(struct seq_file *m, void *v)
