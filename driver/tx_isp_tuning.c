@@ -225,19 +225,6 @@ int tisp_ae_ir_update(void);
 
 int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 
-/* CRITICAL FIX: Get AE zone data */
-int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
-{
-    /* TODO: Implement proper AE zone data collection */
-    if (!dev || !ctrl) {
-        return -EINVAL;
-    }
-    
-    /* Set success for now - should implement actual zone reading */
-    ctrl->value = 1;
-    return 0;
-}
-
 
 static inline u64 ktime_get_real_ns(void)
 {
