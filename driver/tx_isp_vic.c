@@ -1602,7 +1602,7 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     /* STEP 2: Ensure CPM registers are configured for VIC access */
     pr_info("*** STREAMING S_STREAM: Ensuring CPM configuration for VIC ***\n");
     cpm_regs = ioremap(0x10000000, 0x1000);
-    if (cmp_regs) {
+    if (cpm_regs) {
         u32 clkgr0 = readl(cpm_regs + 0x20);
         u32 clkgr1 = readl(cpm_regs + 0x28);
         
@@ -1611,7 +1611,7 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         clkgr1 &= ~(1 << 30);
         
         writel(clkgr0, cpm_regs + 0x20);
-        writel(clkgr1, cmp_regs + 0x28);
+        writel(clkgr1, cpm_regs + 0x28);
         wmb();
         
         pr_info("S_STREAM: CPM clocks maintained for VIC streaming\n");
