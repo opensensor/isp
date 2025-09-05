@@ -3106,50 +3106,70 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     /* *** CRITICAL FIX: CREATE ACTUAL SENSOR STRUCTURE AND CONNECT TO ISP *** */
                     pr_info("*** CREATING ACTUAL SENSOR STRUCTURE FOR %s ***\n", sensor_name);
                     
+                    /* SAFE ALLOCATION: Allocate sensor structure with proper error checking */
                     sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
-                    if (sensor) {
-                        /* Initialize sensor structure */
-                        strncpy(sensor->info.name, sensor_name, sizeof(sensor->info.name) - 1);
-                        sensor->info.name[sizeof(sensor->info.name) - 1] = '\0';
-                        sensor->video.attr = kzalloc(sizeof(struct tx_isp_sensor_attribute), GFP_KERNEL);
-                        
-                        if (sensor->video.attr) {
-                            /* Set up basic sensor attributes for GC2053 */
-                            if (strncmp(sensor_name, "gc2053", 6) == 0) {
-                                sensor->video.attr->chip_id = 0x2053;
-                                sensor->video.attr->total_width = 1920;
-                                sensor->video.attr->total_height = 1080;
-                                sensor->video.attr->dbus_type = 1; // DVP interface
-                                sensor->video.attr->integration_time = 1000;
-                                sensor->video.attr->max_again = 0x40000;
-                                strncpy((char*)sensor->video.attr->name, sensor_name, 32);
-                            }
-                            
-                            /* Initialize subdev structure */
-                            memset(&sensor->sd, 0, sizeof(sensor->sd));
-                            sensor->sd.isp = (void *)isp_dev;
-                            sensor->sd.vin_state = TX_ISP_MODULE_INIT;
-                            
-                            /* *** CRITICAL: CONNECT SENSOR TO ISP DEVICE *** */
-                            pr_info("*** CONNECTING SENSOR TO ISP DEVICE ***\n");
-                            pr_info("Before: ourISPdev->sensor=%p\n", ourISPdev->sensor);
-                            
-                            ourISPdev->sensor = sensor;
-                            
-                            pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor, sensor->info.name);
-                            pr_info("*** SENSOR SUCCESSFULLY CONNECTED TO ISP DEVICE! ***\n");
-                            
-                            /* Update registry with actual subdev pointer */
-                            if (reg_sensor) {
-                                reg_sensor->subdev = &sensor->sd;
-                            }
-                        } else {
-                            kfree(sensor);
-                            sensor = NULL;
-                            pr_err("Failed to allocate sensor attributes\n");
-                        }
-                    } else {
-                        pr_err("Failed to allocate sensor structure\n");
+                    if (!sensor) {
+                        pr_err("*** CRITICAL ERROR: Failed to allocate sensor structure (size=%zu) ***\n", sizeof(struct tx_isp_sensor));
+                        return -ENOMEM;
+                    }
+                    pr_info("*** SENSOR STRUCTURE ALLOCATED: %p (size=%zu bytes) ***\n", sensor, sizeof(struct tx_isp_sensor));
+                    
+                    /* SAFE INITIALIZATION: Initialize sensor info first */
+                    memset(&sensor->info, 0, sizeof(sensor->info));
+                    strncpy(sensor->info.name, sensor_name, sizeof(sensor->info.name) - 1);
+                    sensor->info.name[sizeof(sensor->info.name) - 1] = '\0';
+                    
+                    /* SAFE ALLOCATION: Allocate sensor attributes with proper error checking */
+                    sensor->video.attr = kzalloc(sizeof(struct tx_isp_sensor_attribute), GFP_KERNEL);
+                    if (!sensor->video.attr) {
+                        pr_err("*** CRITICAL ERROR: Failed to allocate sensor attributes (size=%zu) ***\n", sizeof(struct tx_isp_sensor_attribute));
+                        kfree(sensor);
+                        return -ENOMEM;
+                    }
+                    pr_info("*** SENSOR ATTRIBUTES ALLOCATED: %p (size=%zu bytes) ***\n", sensor->video.attr, sizeof(struct tx_isp_sensor_attribute));
+                    
+                    /* SAFE INITIALIZATION: Set up basic sensor attributes for GC2053 */
+                    if (strncmp(sensor_name, "gc2053", 6) == 0) {
+                        sensor->video.attr->chip_id = 0x2053;
+                        sensor->video.attr->total_width = 1920;
+                        sensor->video.attr->total_height = 1080;
+                        sensor->video.attr->dbus_type = 1; // DVP interface
+                        sensor->video.attr->integration_time = 1000;
+                        sensor->video.attr->max_again = 0x40000;
+                        sensor->video.attr->name = sensor_name; /* Safe pointer assignment */
+                        pr_info("*** GC2053 SENSOR ATTRIBUTES CONFIGURED ***\n");
+                    }
+                    
+                    /* SAFE INITIALIZATION: Initialize subdev structure */
+                    memset(&sensor->sd, 0, sizeof(sensor->sd));
+                    sensor->sd.isp = (void *)isp_dev;
+                    sensor->sd.vin_state = TX_ISP_MODULE_INIT;
+                    sensor->index = 0;
+                    sensor->type = 0;
+                    INIT_LIST_HEAD(&sensor->list);
+                    pr_info("*** SENSOR SUBDEV INITIALIZED ***\n");
+                    
+                    /* SAFE CONNECTION: Verify ISP device before connecting */
+                    if (!ourISPdev) {
+                        pr_err("*** CRITICAL ERROR: ourISPdev is NULL! ***\n");
+                        kfree(sensor->video.attr);
+                        kfree(sensor);
+                        return -ENODEV;
+                    }
+                    
+                    /* *** CRITICAL: CONNECT SENSOR TO ISP DEVICE *** */
+                    pr_info("*** CONNECTING SENSOR TO ISP DEVICE ***\n");
+                    pr_info("Before: ourISPdev=%p, ourISPdev->sensor=%p\n", ourISPdev, ourISPdev->sensor);
+                    
+                    ourISPdev->sensor = sensor;
+                    
+                    pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor, sensor->info.name);
+                    pr_info("*** SENSOR SUCCESSFULLY CONNECTED TO ISP DEVICE! ***\n");
+                    
+                    /* SAFE UPDATE: Update registry with actual subdev pointer */
+                    if (reg_sensor) {
+                        reg_sensor->subdev = &sensor->sd;
+                        pr_info("*** SENSOR REGISTRY UPDATED ***\n");
                     }
                 } else {
                     pr_err("*** FAILED TO CREATE I2C CLIENT FOR %s ***\n", sensor_name);
