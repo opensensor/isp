@@ -1446,7 +1446,7 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
                     case 0x20007408: { /* Special operation 1 */
                         pr_info("tisp_code_tuning_ioctl: Special operation 1: 0x%x\n", cmd);
                         
-                        if (!access_ok(arg, 0x500c)) {
+                        if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for special op 1\n");
                             return -EFAULT;
                         }
@@ -1472,7 +1472,7 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
                     case 0x20007409: { /* Special operation 2 */
                         pr_info("tisp_code_tuning_ioctl: Special operation 2: 0x%x\n", cmd);
                         
-                        if (!access_ok(arg, 0x500c)) {
+                        if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for special op 2\n");
                             return -EFAULT;
                         }
