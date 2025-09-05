@@ -85,15 +85,47 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev)
         return -EINVAL;
     }
 
-    /* Iterate through all subdevices using SAFE struct member access */
-    for (i = 0; i < 16; i++) {
-        struct tx_isp_subdev *subdev = dev->subdevs[i];
+    /* Iterate through registered subdevices in subdev_graph[] */
+    int enabled_count = 0;
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        void *subdev_data = dev->subdev_graph[i];
+        struct tx_isp_subdev *subdev = NULL;
         
-        if (!subdev) {
+        if (!subdev_data) {
             continue;
         }
         
-        mcp_log_info("tx_isp_video_link_stream: Checking subdev %p (index %d)", subdev, i);
+        mcp_log_info("tx_isp_video_link_stream: Found subdev_data %p at graph index %d", subdev_data, i);
+        
+        /* Try to get subdevice from platform device if this is platform device data */
+        if (dev->subdev_list && i < dev->subdev_count && dev->subdev_list[i]) {
+            subdev = platform_get_drvdata(dev->subdev_list[i]);
+            if (subdev) {
+                mcp_log_info("tx_isp_video_link_stream: Got subdev %p from platform device %p", subdev, dev->subdev_list[i]);
+            }
+        }
+        
+        /* If we don't have a subdev yet, try alternative discovery methods */
+        if (!subdev) {
+            /* Check if subdev_data contains a subdevice pointer at known offset */
+            /* This is a safer approach than hardcoded offsets - check for valid pointer patterns */
+            struct tx_isp_subdev **potential_subdev = (struct tx_isp_subdev **)subdev_data;
+            if (potential_subdev && *potential_subdev) {
+                /* Basic validation - check if this looks like a valid subdev */
+                struct tx_isp_subdev *candidate = *potential_subdev;
+                if ((uintptr_t)candidate > 0x80000000 && (uintptr_t)candidate < 0xfffff000) {
+                    subdev = candidate;
+                    mcp_log_info("tx_isp_video_link_stream: Found subdev %p via pointer dereferencing", subdev);
+                }
+            }
+        }
+        
+        if (!subdev) {
+            mcp_log_info("tx_isp_video_link_stream: No subdev found for graph index %d, skipping", i);
+            continue;
+        }
+        
+        mcp_log_info("tx_isp_video_link_stream: Processing subdev %p (graph index %d)", subdev, i);
         
         /* Validate subdevice structure before use */
         if (!subdev->ops) {
@@ -107,6 +139,7 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev)
             
             /* Enable streaming on this subdevice */
             ret = subdev->ops->video->s_stream(subdev, 1);
+            enabled_count++;
             
             /* Handle special error code - 0xfffffdfd is not a real error */
             if (ret && ret != 0xfffffdfd) {
@@ -115,13 +148,28 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev)
                 /* Disable streams on all previously enabled subdevices */
                 int j;
                 for (j = 0; j < i; j++) {
-                    struct tx_isp_subdev *prev_subdev = dev->subdevs[j];
+                    void *prev_subdev_data = dev->subdev_graph[j];
+                    struct tx_isp_subdev *prev_subdev = NULL;
                     
-                    if (!prev_subdev || !prev_subdev->ops) {
+                    if (!prev_subdev_data) {
                         continue;
                     }
                     
-                    if (prev_subdev->ops->video && prev_subdev->ops->video->s_stream) {
+                    if (dev->subdev_list && j < dev->subdev_count && dev->subdev_list[j]) {
+                        prev_subdev = platform_get_drvdata(dev->subdev_list[j]);
+                    }
+                    
+                    if (!prev_subdev) {
+                        struct tx_isp_subdev **potential_prev = (struct tx_isp_subdev **)prev_subdev_data;
+                        if (potential_prev && *potential_prev) {
+                            struct tx_isp_subdev *candidate = *potential_prev;
+                            if ((uintptr_t)candidate > 0x80000000 && (uintptr_t)candidate < 0xfffff000) {
+                                prev_subdev = candidate;
+                            }
+                        }
+                    }
+                    
+                    if (prev_subdev && prev_subdev->ops && prev_subdev->ops->video && prev_subdev->ops->video->s_stream) {
                         mcp_log_info("tx_isp_video_link_stream: Disabling stream on subdev %p due to error", prev_subdev);
                         prev_subdev->ops->video->s_stream(prev_subdev, 0);
                     }
@@ -140,7 +188,7 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev)
         }
     }
 
-    mcp_log_info("tx_isp_video_link_stream: Video link stream enabled successfully");
+    mcp_log_info("tx_isp_video_link_stream: Enable operation completed successfully on %d subdevices", enabled_count);
     return 0;
 }
 
