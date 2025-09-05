@@ -2437,7 +2437,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 /* Sync DMA for buffer completion like Binary Ninja reference */
                 // In real implementation: dma_sync_single_for_device()
                 wmb(); // Memory barrier for DMA completion
-            } else {
             /* *** SOOTHING ORANGE FRAME GENERATION *** */
             pr_debug("Channel %d: Generating soothing orange frame data for buffer[%d]\n", channel, buf_index);
 
