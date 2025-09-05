@@ -2924,125 +2924,74 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         
         return final_result;
     }
-    case 0xc050561a: { // TX_ISP_SENSOR_ENUM_INPUT - FIXED Binary Ninja implementation
-        char enum_data[0x50];
-        void **s0_3;
-        void *a0_2;
-        void *v0_6;
-        int (*v0_7)(void);
-        int v0_8;
-        int sensor_found = 0;
-        struct {
+    case 0xc050561a: { // TX_ISP_SENSOR_ENUM_INPUT - MEMORY SAFE implementation
+        struct sensor_enum_data {
             int index;
             char name[32];
             int padding[4];  /* Extra padding to match 0x50 size */
-        } *input_data;
+        } input_data;
+        int sensor_found = 0;
         
-        pr_info("*** TX_ISP_SENSOR_ENUM_INPUT: FIXED Binary Ninja implementation ***\n");
+        pr_info("*** TX_ISP_SENSOR_ENUM_INPUT: MEMORY SAFE implementation ***\n");
         
-        /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 0x50) != 0) */
-        if (copy_from_user(enum_data, argp, 0x50)) {
+        /* SAFE: Use properly aligned structure for user data copy */
+        if (copy_from_user(&input_data, argp, sizeof(input_data))) {
             pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy input data\n");
             return -EFAULT;
         }
         
-        input_data = (void*)enum_data;
-        pr_info("Sensor enumeration: requesting index %d\n", input_data->index);
+        /* Validate input index to prevent array bounds issues */
+        if (input_data.index < 0 || input_data.index > 16) {
+            pr_warn("TX_ISP_SENSOR_ENUM_INPUT: Invalid sensor index %d (valid range: 0-16)\n", 
+                    input_data.index);
+            return -EINVAL;
+        }
         
-        /* *** FIRST: Check our sensor list for quick enumeration *** */
+        pr_info("Sensor enumeration: requesting index %d\n", input_data.index);
+        
+        /* SAFE: Check our registered sensor list first */
         struct registered_sensor *sensor;
         mutex_lock(&sensor_list_mutex);
         list_for_each_entry(sensor, &sensor_list, list) {
-            if (sensor->index == input_data->index) {
-                strncpy(input_data->name, sensor->name, sizeof(input_data->name) - 1);
-                input_data->name[sizeof(input_data->name) - 1] = '\0';
+            if (sensor->index == input_data.index) {
+                strncpy(input_data.name, sensor->name, sizeof(input_data.name) - 1);
+                input_data.name[sizeof(input_data.name) - 1] = '\0';
                 sensor_found = 1;
                 pr_info("*** FOUND SENSOR: index=%d name=%s ***\n", 
-                       input_data->index, input_data->name);
+                       input_data.index, input_data.name);
                 break;
             }
         }
         mutex_unlock(&sensor_list_mutex);
         
-        if (!sensor_found) {
-            /* Binary Ninja: void* $s0_3 = $s7 + 0x2c */
-            s0_3 = (void**)((char*)isp_dev + 0x2c);
-            
-            /* Binary Ninja: void* $a0_2 = *$s0_3 */
-            a0_2 = *s0_3;
-            
-            /* Binary Ninja: while (true) loop */
-            while (true) {
-                /* Binary Ninja: if ($a0_2 != 0) */
-                if (a0_2 != 0) {
-                    /* Binary Ninja: void* $v0_6 = *(*($a0_2 + 0xc4) + 0xc) */
-                    void *subdev_ptr = *((void**)((char*)a0_2 + 0xc4));
-                    
-                    if (subdev_ptr == 0) {
-                        /* Binary Ninja: $s0_3 += 4 */
-                        s0_3 += 1;
-                    } else {
-                        v0_6 = *((void**)((char*)subdev_ptr + 0xc));
-                        
-                        /* Binary Ninja: if ($v0_6 == 0) $s0_3 += 4 */
-                        if (v0_6 == 0) {
-                            s0_3 += 1;
-                        } else {
-                            /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 8) */
-                            v0_7 = *((int(**)(void))((char*)v0_6 + 8));
-                            
-                            /* Binary Ninja: if ($v0_7 == 0) $s0_3 += 4 */
-                            if (v0_7 == 0) {
-                                s0_3 += 1;
-                            } else {
-                                /* Binary Ninja: int32_t $v0_8 = $v0_7() */
-                                v0_8 = v0_7();
-                                
-                                /* Binary Ninja: if ($v0_8 == 0) $s0_3 += 4 */
-                                if (v0_8 == 0) {
-                                    s0_3 += 1;
-                                } else {
-                                    /* Binary Ninja: $s0_3 += 4 */
-                                    s0_3 += 1;
-                                    
-                                    /* Binary Ninja: if ($v0_8 != 0xfffffdfd) return $v0_8 */
-                                    if (v0_8 != 0xfffffdfd) {
-                                        pr_info("Module enumeration returned: 0x%x\n", v0_8);
-                                        return v0_8;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    /* Binary Ninja: $s0_3 += 4 */
-                    s0_3 += 1;
-                }
-                
-                /* Binary Ninja: if ($s7 + 0x6c == $s0_3) break */
-                if (s0_3 == (void**)((char*)isp_dev + 0x6c)) {
-                    break;
-                }
-                
-                /* Binary Ninja: $a0_2 = *$s0_3 */
-                a0_2 = *s0_3;
+        /* SAFE: If not found in registered list, check if we have a fallback sensor */
+        if (!sensor_found && ourISPdev && ourISPdev->sensor && input_data.index == 0) {
+            /* Special case: if requesting index 0 and we have a connected sensor */
+            struct tx_isp_sensor *active_sensor = ourISPdev->sensor;
+            if (active_sensor && active_sensor->info.name[0] != '\0') {
+                strncpy(input_data.name, active_sensor->info.name, sizeof(input_data.name) - 1);
+                input_data.name[sizeof(input_data.name) - 1] = '\0';
+                sensor_found = 1;
+                pr_info("*** FOUND ACTIVE SENSOR: index=%d name=%s ***\n", 
+                       input_data.index, input_data.name);
             }
-            
-            pr_info("No sensor found at index %d\n", input_data->index);
         }
         
-        if (sensor_found) {
-            /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 0x50) != 0) */
-            if (copy_to_user(argp, enum_data, 0x50)) {
-                pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy result to user\n");
-                return -EFAULT;
-            }
-            
-            pr_info("Sensor enumeration: index=%d name=%s\n", input_data->index, input_data->name);
-            return 0;
-        } else {
+        /* SAFE: Early return for invalid sensor index to prevent crashes */
+        if (!sensor_found) {
+            pr_info("No sensor found at index %d (total registered: %d)\n", 
+                    input_data.index, sensor_count);
             return -EINVAL;
         }
+        
+        /* SAFE: Copy result back to user with proper alignment */
+        if (copy_to_user(argp, &input_data, sizeof(input_data))) {
+            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy result to user\n");
+            return -EFAULT;
+        }
+        
+        pr_info("Sensor enumeration: index=%d name=%s\n", input_data.index, input_data.name);
+        return 0;
     }
     case 0xc0045627: { // TX_ISP_SENSOR_SET_INPUT - Set active sensor input
         int input_index;
