@@ -371,14 +371,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
     
     ctx->isp = isp;
     tx_isp_proc_ctx = ctx;
-    
-    /* Create /proc/jz directory */
-    ctx->jz_dir = proc_mkdir(TX_ISP_PROC_JZ_DIR, NULL);
-    if (!ctx->jz_dir) {
-        pr_err("Failed to create /proc/%s\n", TX_ISP_PROC_JZ_DIR);
-        goto error_free_ctx;
-    }
-    
+
     /* Create /proc/jz/isp directory */
     ctx->isp_dir = proc_mkdir(TX_ISP_PROC_ISP_DIR, ctx->jz_dir);
     if (!ctx->isp_dir) {
