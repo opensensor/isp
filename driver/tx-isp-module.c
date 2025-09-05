@@ -5662,14 +5662,10 @@ MODULE_AUTHOR("Matt Davis <matteius@gmail.com>");
 MODULE_DESCRIPTION("TX-ISP Camera Driver");
 MODULE_LICENSE("GPL");
 
-/* CRITICAL: V4L2 module dependencies - ensure V4L2 subsystem is loaded first */
-MODULE_SOFTDEP("pre: videodev");
-MODULE_SOFTDEP("pre: v4l2-common");
-MODULE_SOFTDEP("pre: videobuf2-core");
-MODULE_SOFTDEP("pre: videobuf2-memops");
+/* KERNEL 3.10 COMPATIBLE: V4L2 dependencies handled via Kbuild configuration */
+/* MODULE_SOFTDEP not available in kernel 3.10 - dependencies set in Kbuild */
 
-/* Additional kernel version compatibility */
-MODULE_INFO(kernel_version, UTS_RELEASE);
+/* Additional module metadata for kernel 3.10 compatibility */
 MODULE_INFO(supported, "T31 ISP Hardware");
 
 /* V4L2 symbol dependencies - declare what we need */
