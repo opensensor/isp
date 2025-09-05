@@ -2685,57 +2685,6 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
-/* Proc directory creation for graph nodes */
-static int tx_isp_create_graph_proc_entries(struct tx_isp_dev *isp_dev)
-{
-    struct proc_dir_entry *isp_proc_dir;
-    struct proc_dir_entry *graph_entry;
-    int i;
-    
-    if (!isp_dev) {
-        return -EINVAL;
-    }
-    
-    pr_info("*** tx_isp_create_graph_proc_entries: Creating graph proc directories ***\n");
-    
-    /* Create /proc/jz/isp/ directory if it doesn't exist */
-    isp_proc_dir = proc_mkdir_data("jz", 0755, NULL, NULL);
-    if (!isp_proc_dir) {
-        /* Try to get existing directory */
-        isp_proc_dir = proc_mkdir("jz", NULL);
-        if (!isp_proc_dir) {
-            pr_err("Failed to create /proc/jz directory\n");
-            return -ENOMEM;
-        }
-    }
-    
-    isp_proc_dir = proc_mkdir_data("isp", 0755, isp_proc_dir, NULL);
-    if (!isp_proc_dir) {
-        pr_err("Failed to create /proc/jz/isp directory\n");
-        return -ENOMEM;
-    }
-    
-    /* Create graph entries like reference driver */
-    const char* graph_names[] = {"isp-w00", "isp-w01", "isp-w02", "csi", "vic"};
-    
-    for (i = 0; i < ARRAY_SIZE(graph_names); i++) {
-        /* Use file_operations for Linux 3.10 compatibility */
-        graph_entry = proc_create_data(graph_names[i], 0644, isp_proc_dir, 
-                                      &graph_proc_fops, isp_dev);
-        if (graph_entry) {
-            pr_info("*** Created graph proc entry: /proc/jz/isp/%s ***\n", graph_names[i]);
-        } else {
-            pr_warn("Failed to create /proc/jz/isp/%s\n", graph_names[i]);
-        }
-    }
-    
-    /* Store proc directory for cleanup */
-    isp_dev->isp_proc_dir = isp_proc_dir;
-    
-    pr_info("*** tx_isp_create_graph_proc_entries: Graph proc directories created ***\n");
-    return 0;
-}
-
 /* tx_isp_core_probe - FIXED to properly create frame channel devices and proc entries */
 int tx_isp_core_probe(struct platform_device *pdev)
 {
@@ -2935,15 +2884,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_info("*** tx_isp_core_probe: Frame channel devices created successfully ***\n");
                 } else {
                     pr_err("*** tx_isp_core_probe: Failed to create frame channel devices: %d ***\n", result);
-                }
-                
-                /* CRITICAL: Create graph proc directories (/proc/jz/isp/*) */
-                pr_info("*** tx_isp_core_probe: Creating graph proc entries ***\n");
-                result = tx_isp_create_graph_proc_entries((struct tx_isp_dev *)core_dev);
-                if (result == 0) {
-                    pr_info("*** tx_isp_core_probe: Graph proc entries created successfully ***\n");
-                } else {
-                    pr_err("*** tx_isp_core_probe: Failed to create graph proc entries: %d ***\n", result);
                 }
                 
                 return 0;
