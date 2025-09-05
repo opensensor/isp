@@ -825,11 +825,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
         return -EFAULT;
     }
     
-    /* Validate the tuning structure has valid magic number if we have one */
-    if (tuning->magic != 0 && tuning->magic != 0xDEADBEEF && tuning->magic != 0x12345678) {
-        pr_err("CRITICAL: Tuning data structure corrupted (bad magic: 0x%x) for cmd=0x%x\n", tuning->magic, ctrl->cmd);
-        return -EFAULT;
-    }
+    /* Basic structure validation - no magic field needed */
     
     /* CRITICAL: Memory accessibility test before accessing any fields */
     if (!virt_addr_valid(tuning) || !access_ok(VERIFY_READ, tuning, sizeof(*tuning))) {
