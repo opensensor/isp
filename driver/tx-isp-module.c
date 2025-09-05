@@ -2441,7 +2441,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_debug("Channel %d: Generating soothing orange frame data for buffer[%d]\n", channel, buf_index);
 
             /* Calculate buffer physical address like the active sensor case above */
-            u32 buffer_phys_addr = 0x6300000 + (buf_index * (state->width * state->height * 2));
             void *buffer_virt = phys_to_virt(buffer_phys_addr);
 
             if (buffer_virt) {
@@ -2464,6 +2463,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         channel, frame_size_y, frame_size_uv);
             } else {
                 pr_debug("Channel %d: Could not map buffer for orange frame generation\n", channel);
+            }
             }
         }
         
