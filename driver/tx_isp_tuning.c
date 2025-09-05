@@ -1411,7 +1411,7 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
                         /* Binary Ninja: Call tisp_get_awb_info(tisp_par_ioctl) */
                         /* tisp_get_awb_info(tisp_par_ioctl); */
                         
-                        if (!access_ok(arg, 0x500c)) {
+                        if (!access_ok(VERIFY_WRITE, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for AWB info get\n");
                             return -EFAULT;
                         }
@@ -1427,7 +1427,7 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
                     case 0x20007407: { /* AWB info set */
                         pr_info("tisp_code_tuning_ioctl: AWB info set 0x%x\n", cmd);
                         
-                        if (!access_ok(arg, 0x500c)) {
+                        if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for AWB info set\n");
                             return -EFAULT;
                         }
