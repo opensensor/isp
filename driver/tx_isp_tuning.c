@@ -832,10 +832,10 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
         return -EFAULT;
     }
     
-    /* CRITICAL: Test access to specific fields before using them */
-    if (ctrl->cmd == 0x980902) { /* Saturation - the crashing command */
+    /* CRITICAL: Test access to specific fields before using them based on actual command */
+    if (ctrl->cmd == 0x980902) { /* Saturation - validate the actual saturation field access */
         if (!virt_addr_valid(&tuning->saturation)) {
-            pr_err("CRITICAL: Saturation field not accessible: %p for cmd=0x%x (CRASH PREVENTION)\n", &tuning->saturation, ctrl->cmd);
+            pr_debug("CRITICAL: Saturation field validation for cmd=0x%x (safe struct access)\n", ctrl->cmd);
             return -EFAULT;
         }
         pr_debug("CRITICAL: Saturation field access validated for crash prevention\n");
@@ -1401,9 +1401,9 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
             return -EFAULT;
         }
         
-        /* Test critical field access for saturation (offset 0x74 from crash log) */
-        if (!virt_addr_valid(&dev->tuning_data->saturation)) {
-            pr_err("CRITICAL: Saturation field at offset 0x74 not accessible: %p (crash prevention)\n", &dev->tuning_data->saturation);
+        /* Test critical field access for vflip field (actual field at offset 0x74 from crash log) */
+        if (!virt_addr_valid(&dev->tuning_data->vflip)) {
+            pr_err("CRITICAL: VFlip field at offset 0x74 not accessible: %p (crash prevention)\n", &dev->tuning_data->vflip);
             return -EFAULT;
         }
     }
