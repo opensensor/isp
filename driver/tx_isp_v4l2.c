@@ -430,12 +430,119 @@ static int tx_isp_v4l2_queryctrl(struct file *file, void *priv,
     return 0;
 }
 
+/* VIDIOC_G_CTRL - Get control value (encoder compatibility) */
+static int tx_isp_v4l2_g_ctrl(struct file *file, void *priv,
+                              struct v4l2_control *ctrl)
+{
+    struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    
+    if (!dev) {
+        return -EINVAL;
+    }
+    
+    /* Return default values for common controls */
+    switch (ctrl->id) {
+    case V4L2_CID_BRIGHTNESS:
+        ctrl->value = 128;
+        break;
+    case V4L2_CID_CONTRAST:
+        ctrl->value = 128;
+        break;
+    case V4L2_CID_SATURATION:
+        ctrl->value = 128;
+        break;
+    case V4L2_CID_HUE:
+        ctrl->value = 0;
+        break;
+    default:
+        return -EINVAL;
+    }
+    
+    pr_info("Channel %d: G_CTRL id=0x%x value=%d\n", 
+            dev->channel_num, ctrl->id, ctrl->value);
+    
+    return 0;
+}
+
+/* VIDIOC_S_CTRL - Set control value (encoder compatibility) */
+static int tx_isp_v4l2_s_ctrl(struct file *file, void *priv,
+                              struct v4l2_control *ctrl)
+{
+    struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    
+    if (!dev) {
+        return -EINVAL;
+    }
+    
+    pr_info("Channel %d: S_CTRL id=0x%x value=%d\n", 
+            dev->channel_num, ctrl->id, ctrl->value);
+    
+    /* Accept control values for encoder compatibility */
+    switch (ctrl->id) {
+    case V4L2_CID_BRIGHTNESS:
+    case V4L2_CID_CONTRAST:
+    case V4L2_CID_SATURATION:
+    case V4L2_CID_HUE:
+        /* Accept the values */
+        break;
+    default:
+        return -EINVAL;
+    }
+    
+    return 0;
+}
+
+/* VIDIOC_CROPCAP - Get crop capabilities (encoder compatibility) */
+static int tx_isp_v4l2_cropcap(struct file *file, void *priv,
+                               struct v4l2_cropcap *cap)
+{
+    struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    
+    if (!dev) {
+        return -EINVAL;
+    }
+    
+    if (cap->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+        return -EINVAL;
+    }
+    
+    /* Set crop capabilities based on channel */
+    cap->bounds.left = 0;
+    cap->bounds.top = 0;
+    cap->bounds.width = (dev->channel_num == 0) ? 1920 : 640;
+    cap->bounds.height = (dev->channel_num == 0) ? 1080 : 360;
+    
+    cap->defrect = cap->bounds;
+    cap->pixelaspect.numerator = 1;
+    cap->pixelaspect.denominator = 1;
+    
+    pr_info("Channel %d: CROPCAP %dx%d\n", 
+            dev->channel_num, cap->bounds.width, cap->bounds.height);
+    
+    return 0;
+}
+
 /* V4L2 ioctl operations */
 static const struct v4l2_ioctl_ops tx_isp_v4l2_ioctl_ops = {
     .vidioc_querycap      = tx_isp_v4l2_querycap,
     .vidioc_g_fmt_vid_cap = tx_isp_v4l2_g_fmt_vid_cap,
     .vidioc_s_fmt_vid_cap = tx_isp_v4l2_s_fmt_vid_cap,
     .vidioc_try_fmt_vid_cap = tx_isp_v4l2_g_fmt_vid_cap, /* Same as g_fmt for now */
+    
+    /* Format enumeration - CRITICAL for encoder */
+    .vidioc_enum_fmt_vid_cap = tx_isp_v4l2_enum_fmt_vid_cap,
+    
+    /* Streaming parameters - CRITICAL for encoder framerate */
+    .vidioc_g_parm        = tx_isp_v4l2_g_parm,
+    .vidioc_s_parm        = tx_isp_v4l2_s_parm,
+    
+    /* Controls - CRITICAL for encoder compatibility */
+    .vidioc_queryctrl     = tx_isp_v4l2_queryctrl,
+    .vidioc_g_ctrl        = tx_isp_v4l2_g_ctrl,
+    .vidioc_s_ctrl        = tx_isp_v4l2_s_ctrl,
+    
+    /* Crop capabilities - encoder compatibility */
+    .vidioc_cropcap       = tx_isp_v4l2_cropcap,
     
     /* Buffer management */
     .vidioc_reqbufs       = tx_isp_v4l2_reqbufs,
