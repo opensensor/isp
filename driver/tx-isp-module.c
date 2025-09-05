@@ -2076,38 +2076,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     state = &fcd->state;
     
     pr_info("*** Frame channel %d IOCTL: cmd=0x%x ***\n", channel, cmd);
-    
-    /* MCP Log: Map common IOCTL commands for better debugging */
-    switch (cmd) {
-    case 0xc0145608:
-        pr_info("*** Channel %d: IOCTL 0xc0145608 = VIDIOC_REQBUFS (Request buffers) ***\n", channel);
-        break;
-    case 0xc044560f:
-        pr_info("*** Channel %d: IOCTL 0xc044560f = VIDIOC_QBUF (Queue buffer) ***\n", channel);
-        break;
-    case 0xc0445611:
-        pr_info("*** Channel %d: IOCTL 0xc0445611 = VIDIOC_DQBUF (Dequeue buffer) ***\n", channel);
-        break;
-    case 0x80045612:
-        pr_info("*** Channel %d: IOCTL 0x80045612 = VIDIOC_STREAMON (Start streaming) ***\n", channel);
-        break;
-    case 0x80045613:
-        pr_info("*** Channel %d: IOCTL 0x80045613 = VIDIOC_STREAMOFF (Stop streaming) ***\n", channel);
-        break;
-    case 0xc07056c3:
-        pr_info("*** Channel %d: IOCTL 0xc07056c3 = VIDIOC_S_FMT (Set format) ***\n", channel);
-        break;
-    case 0x407056c4:
-        pr_info("*** Channel %d: IOCTL 0x407056c4 = VIDIOC_G_FMT (Get format) ***\n", channel);
-        break;
-    case 0x800456c5:
-        pr_info("*** Channel %d: IOCTL 0x800456c5 = SET_BANKS (Enable channel banks) ***\n", channel);
-        break;
-    default:
-        pr_info("*** Channel %d: IOCTL 0x%x (Unknown/Custom command) ***\n", channel, cmd);
-        break;
-    }
-    
+        
     // Add channel enable/disable IOCTLs that IMP_FrameSource_EnableChn uses
     switch (cmd) {
     case 0x40045620: { // Channel enable IOCTL (common pattern)
@@ -5290,51 +5259,44 @@ irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
-/* tx_isp_send_event_to_remote - EXACT Binary Ninja implementation (renamed to avoid header conflict) */
+/* tx_isp_send_event_to_remote - FIXED with proper struct member access (no unsafe offsets) */
 static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
 {
     struct tx_isp_subdev *sd = (struct tx_isp_subdev *)subdev;
-    void *callback_struct;
-    int (*event_callback)(void*, int, void*);
     
-    pr_info("*** tx_isp_send_event_to_remote: subdev=%p, event=0x%x ***\n", subdev, event_type);
+    pr_info("*** tx_isp_send_event_to_remote: FIXED implementation - subdev=%p, event=0x%x ***\n", subdev, event_type);
     
-    /* Binary Ninja: if (arg1 != 0) */
+    /* FIXED: Use proper struct member access instead of unsafe offsets */
     if (sd != NULL) {
-        pr_info("*** EVENT: subdev=%p, checking callback at offset +0xc ***\n", sd);
-        
-        /* Binary Ninja: void* $a0 = *(arg1 + 0xc) */
-        callback_struct = *((void**)((char*)sd + 0xc));
-        
-        pr_info("*** EVENT: callback_struct=%p (from subdev+0xc) ***\n", callback_struct);
-        
-        /* Binary Ninja: if ($a0 != 0) */
-        if (callback_struct != NULL) {
-            pr_info("*** EVENT: callback found, checking handler at offset +0x1c ***\n");
+        /* SAFE: Check if this subdev has proper ops structure */
+        if (sd->ops && sd->ops->sensor && sd->ops->sensor->ioctl) {
+            pr_info("*** EVENT: Found sensor ops ioctl, routing event ***\n");
             
-            /* Binary Ninja: int32_t $t9_1 = *($a0 + 0x1c) */
-            event_callback = *((int(**)(void*, int, void*))((char*)callback_struct + 0x1c));
-            
-            pr_info("*** EVENT: event_callback=%p (from callback+0x1c) ***\n", event_callback);
-            
-            /* Binary Ninja: if ($t9_1 != 0) jump($t9_1) */
-            if (event_callback != NULL) {
-                pr_info("*** EVENT: Calling event callback %p for event 0x%x ***\n", event_callback, event_type);
-                int result = event_callback(sd, event_type, data);
-                pr_info("*** EVENT: Callback returned %d (0x%x) ***\n", result, result);
-                return result;
-            } else {
-                pr_err("*** EVENT: event_callback is NULL at callback+0x1c ***\n");
-            }
-        } else {
-            pr_err("*** EVENT: No callback_struct found at subdev+0xc ***\n");
+            /* Route to sensor ops ioctl handler */
+            int result = sd->ops->sensor->ioctl(sd, event_type, data);
+            pr_info("*** EVENT: Sensor ioctl returned %d (0x%x) ***\n", result, result);
+            return result;
         }
+        
+        /* SAFE: Check for VIC-specific event handling */
+        if (sd->isp && ourISPdev && ourISPdev->vic_dev) {
+            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            
+            /* SAFE: Route to VIC event handler if this is a VIC subdev */
+            if (sd == &vic_dev->sd) {
+                pr_info("*** EVENT: Routing to VIC event handler ***\n");
+                int result = vic_event_handler(vic_dev, event_type, data);
+                pr_info("*** EVENT: VIC handler returned %d (0x%x) ***\n", result, result);
+                return result;
+            }
+        }
+        
+        pr_info("*** EVENT: No suitable event handler found for subdev ***\n");
     } else {
         pr_err("*** EVENT: subdev is NULL ***\n");
     }
     
     pr_info("*** EVENT: Returning 0xfffffdfd (no callback) ***\n");
-    /* Binary Ninja: return 0xfffffdfd */
     return 0xfffffdfd;
 }
 
