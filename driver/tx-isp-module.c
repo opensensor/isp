@@ -828,13 +828,7 @@ static int tx_isp_register_vic_platform_device(struct tx_isp_dev *isp_dev)
     if (!isp_dev) {
         return -EINVAL;
     }
-    
-    // CRITICAL: Initialize VIC register mapping first (BEFORE activation)
-    ret = tx_isp_init_vic_registers(isp_dev);
-    if (ret) {
-        pr_warn("VIC register mapping failed: %d\n", ret);
-    }
-    
+
     // Allocate VIC device (0x21c bytes exactly like reference)
     vic_dev = kzalloc(0x21c, GFP_KERNEL);
     if (!vic_dev) {
