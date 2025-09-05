@@ -6108,24 +6108,6 @@ int sensor_init(struct tx_isp_dev *isp_dev)
     return 0; /* Binary Ninja shows this typically returns success */
 }
 
-/* Forward declarations for sensor ops structures */
-static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable);
-static int sensor_subdev_core_reset(struct tx_isp_subdev *sd, int reset);
-static int sensor_subdev_core_g_chip_ident(struct tx_isp_subdev *sd, struct tx_isp_chip_ident *chip);
-static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable);
-
-/* Sensor subdev core operations */
-static struct tx_isp_subdev_core_ops sensor_subdev_core_ops = {
-    .init = sensor_subdev_core_init,
-    .reset = sensor_subdev_core_reset,
-    .g_chip_ident = sensor_subdev_core_g_chip_ident,
-};
-
-/* Sensor subdev video operations */
-static struct tx_isp_subdev_video_ops sensor_subdev_video_ops = {
-    .s_stream = sensor_subdev_video_s_stream,
-};
-
 /* Sensor subdev operation implementations */
 static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable)
 {
