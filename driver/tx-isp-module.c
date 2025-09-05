@@ -2441,7 +2441,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             } else {
                 pr_debug("Channel %d: DQBUF - No VIC device or invalid buffer index\n", channel);
             }
-            }
         }
         
         // Mark frame as consumed
