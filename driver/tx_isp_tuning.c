@@ -153,6 +153,30 @@ int tiziano_wdr_fusion1_curve_block_mean1(void);
 int Tiziano_wdr_fpga(void *struct_me, void *dev_para, void *ratio_para, void *x_thr);
 int tiziano_wdr_soft_para_out(void);
 
+/* AF zone data structure - aligned to prevent unaligned access */
+struct af_zone_info {
+    uint32_t zone_status;                    /* AF status */
+    uint32_t zone_metrics[MAX_AF_ZONES];     /* Zone metrics array */
+} __attribute__((packed, aligned(4)));
+
+/* AF zone global data - properly aligned */
+static struct {
+    uint32_t status __attribute__((aligned(4)));
+    uint32_t zone_metrics[MAX_AF_ZONES] __attribute__((aligned(4)));
+} af_zone_data __attribute__((aligned(4)));
+
+/* AE state structure - aligned to prevent crashes */
+struct ae_state_info {
+    uint32_t exposure __attribute__((aligned(4)));      /* Current exposure */
+    uint32_t gain __attribute__((aligned(4)));          /* Current gain */
+    uint32_t status __attribute__((aligned(4)));        /* AE status flags */
+} __attribute__((packed, aligned(4)));
+
+/* ISP register base definitions for proper alignment */
+#define ISP_AE_STATE_BASE    0x10000
+#define ISP_AF_ZONE_BASE     0x12000
+#define MAX_AF_ZONES         25
+
 /* Forward declarations for ISP pipeline init functions */
 int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps);
 int tiziano_awb_init(uint32_t height, uint32_t width);
@@ -210,6 +234,39 @@ int tisp_ct_update(void);
 int tisp_ae_ir_update(void);
 
 int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
+
+/* CRITICAL ALIGNMENT FIX: Add missing tisp_g_ae_zone function */
+int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
+{
+    struct {
+        uint32_t ae_zone_data[25] __attribute__((aligned(4))); /* 25 AE zones, aligned */
+        uint32_t ae_zone_status __attribute__((aligned(4)));   /* AE status, aligned */
+    } __attribute__((packed, aligned(4))) ae_zones;
+
+    if (!ctrl->data) {
+        pr_err("No data pointer for AE zone\n");
+        return -EINVAL;
+    }
+
+    /* Clear structure first with aligned access */
+    memset(&ae_zones, 0, sizeof(ae_zones));
+
+    /* Read AE zone data from hardware with aligned access */
+    for (int i = 0; i < 25; i++) {
+        ae_zones.ae_zone_data[i] = system_reg_read(ISP_AE_STATE_BASE + 0x100 + (i * 4));
+    }
+    ae_zones.ae_zone_status = system_reg_read(ISP_AE_STATE_BASE + 0x200);
+
+    /* Copy zone data to user-provided buffer */
+    if (copy_to_user((void __user *)(unsigned long)ctrl->data,
+                     &ae_zones, sizeof(ae_zones))) {
+        return -EFAULT;
+    }
+
+    /* Set success status */
+    ctrl->value = 1;
+    return 0;
+}
 
 
 static inline u64 ktime_get_real_ns(void)
@@ -1322,63 +1379,71 @@ int isp_m0_chardev_open(struct inode *inode, struct file *file)
         return -ENODEV;
     }
     
-    // CRITICAL: Always allocate/initialize tuning data
+    /* CRITICAL ALIGNMENT FIX: Use aligned allocation to prevent MIPS unaligned access */
     if (!dev->tuning_data) {
-        dev->tuning_data = kzalloc(sizeof(struct isp_tuning_data), GFP_KERNEL);
+        /* Allocate with proper alignment - MIPS requires 4-byte alignment */
+        dev->tuning_data = kzalloc(sizeof(struct isp_tuning_data), GFP_KERNEL | __GFP_DMA32);
         if (!dev->tuning_data) {
-            pr_err("Failed to allocate tuning data\n");
+            pr_err("Failed to allocate aligned tuning data\n");
             return -ENOMEM;
         }
-        pr_info("ISP M0 tuning data allocated at %p\n", dev->tuning_data);
-        // Initialize with state 2 for first open
-        dev->tuning_data->state = 2;
+        
+        /* Verify alignment - critical for MIPS */
+        if ((unsigned long)dev->tuning_data & 0x3) {
+            pr_err("CRITICAL: Tuning data not 4-byte aligned: %p\n", dev->tuning_data);
+            kfree(dev->tuning_data);
+            dev->tuning_data = NULL;
+            return -ENOMEM;
+        }
+        
+        pr_info("ISP M0 tuning data allocated at %p (aligned)\n", dev->tuning_data);
+        
+        /* Use aligned writes to prevent crashes */
+        *(volatile uint32_t*)&dev->tuning_data->state = 2;
     }
     
-    // REFERENCE DRIVER CHECK: state must be 2 to allow open
-    if (dev->tuning_data->state != 2) {
-        pr_err("ISP M0 open: Invalid state %d (must be 2)\n", dev->tuning_data->state);
+    /* REFERENCE DRIVER CHECK: state must be 2 to allow open */
+    /* Use aligned read to prevent crash */
+    uint32_t current_state = *(volatile uint32_t*)&dev->tuning_data->state;
+    if (current_state != 2) {
+        pr_err("ISP M0 open: Invalid state %d (must be 2)\n", current_state);
         return -EBUSY;
     }
     
     file->private_data = dev;
     pr_info("ISP M0 device opened, current tuning_data=%p\n", dev->tuning_data);
     
-    // REFERENCE DRIVER: Clear frame_done_cnt variables (frame_done_cnt.d = 0, frame_done_cnt:4 = 0)
-    // These would be cleared in real implementation
+    /* REFERENCE DRIVER: Set state from 2 to 3 using aligned write */
+    *(volatile uint32_t*)&dev->tuning_data->state = 3;  /* Active state */
     
-    // REFERENCE DRIVER: Set state from 2 to 3 
-    dev->tuning_data->state = 3;  // Active state
+    /* REFERENCE DRIVER: Clear offset 0x40ac using aligned write */
+    *(volatile uint32_t*)&dev->tuning_data->custom_mode = 0;
     
-    // REFERENCE DRIVER: Clear offset 0x40ac  
-    // In our implementation, we'll clear a tuning field as equivalent
-    dev->tuning_data->custom_mode = 0;
+    /* Initialize default values with aligned writes to prevent crashes */
+    *(volatile uint32_t*)&dev->tuning_data->brightness = 128;
+    *(volatile uint32_t*)&dev->tuning_data->contrast = 128;
+    *(volatile uint32_t*)&dev->tuning_data->saturation = 128;
+    *(volatile uint32_t*)&dev->tuning_data->sharpness = 128;
+    *(volatile uint32_t*)&dev->tuning_data->hflip = 0;
+    *(volatile uint32_t*)&dev->tuning_data->vflip = 0;
+    *(volatile uint32_t*)&dev->tuning_data->antiflicker = 0;
+    *(volatile uint32_t*)&dev->tuning_data->fps_num = 25;
+    *(volatile uint32_t*)&dev->tuning_data->fps_den = 1;
+    *(volatile uint32_t*)&dev->tuning_data->running_mode = 0;
+    *(volatile uint32_t*)&dev->tuning_data->max_again = 160;
+    *(volatile uint32_t*)&dev->tuning_data->max_dgain = 80;
+    *(volatile uint32_t*)&dev->tuning_data->ae_comp = 128;
+    *(volatile uint32_t*)&dev->tuning_data->defog_strength = 128;
+    *(volatile uint32_t*)&dev->tuning_data->dpc_strength = 128;
+    *(volatile uint32_t*)&dev->tuning_data->drc_strength = 128;
+    *(volatile uint32_t*)&dev->tuning_data->temper_strength = 128;
+    *(volatile uint32_t*)&dev->tuning_data->sinter_strength = 128;
     
-    // Initialize default values
-    dev->tuning_data->brightness = 128;
-    dev->tuning_data->contrast = 128;
-    dev->tuning_data->saturation = 128;
-    dev->tuning_data->sharpness = 128;
-    dev->tuning_data->hflip = 0;
-    dev->tuning_data->vflip = 0;
-    dev->tuning_data->antiflicker = 0;
-    dev->tuning_data->fps_num = 25;
-    dev->tuning_data->fps_den = 1;
-    dev->tuning_data->running_mode = 0;
-    dev->tuning_data->custom_mode = 0;
-    dev->tuning_data->max_again = 160;
-    dev->tuning_data->max_dgain = 80;
-    dev->tuning_data->ae_comp = 128;
-    dev->tuning_data->defog_strength = 128;
-    dev->tuning_data->dpc_strength = 128;
-    dev->tuning_data->drc_strength = 128;
-    dev->tuning_data->temper_strength = 128;
-    dev->tuning_data->sinter_strength = 128;
-    
-    // Set ISP device as tuning enabled
-    dev->tuning_enabled = 2;  // Enable tuning mode
+    /* Set ISP device as tuning enabled with aligned write */
+    *(volatile uint32_t*)&dev->tuning_enabled = 2;  /* Enable tuning mode */
     
     pr_info("ISP M0 tuning data initialized: state=%d, tuning_enabled=%d\n", 
-            dev->tuning_data->state, dev->tuning_enabled);
+            *(volatile uint32_t*)&dev->tuning_data->state, *(volatile uint32_t*)&dev->tuning_enabled);
     pr_info("ISP M0 device opened successfully\n");
     return 0;
 }
@@ -3434,6 +3499,23 @@ static int (*cb[32])(void) = {NULL};
 /* ISP interrupt state */
 static spinlock_t isp_irq_lock;
 static bool isp_irq_initialized = false;
+
+/* system_irq_func_set - Binary Ninja EXACT implementation */
+int system_irq_func_set(int irq_id, void *handler)
+{
+    pr_info("system_irq_func_set: Setting IRQ handler for IRQ %d\n", irq_id);
+    
+    if (irq_id < 0 || irq_id >= 32) {
+        pr_err("system_irq_func_set: Invalid IRQ ID %d\n", irq_id);
+        return -EINVAL;
+    }
+    
+    /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
+    irq_func_cb[irq_id] = (void (*)(void))handler;
+    
+    pr_info("system_irq_func_set: IRQ %d handler set to %p\n", irq_id, handler);
+    return 0;
+}
 
 /* tisp_event_set_cb - Binary Ninja EXACT implementation */
 int tisp_event_set_cb(int event_id, void *callback)
