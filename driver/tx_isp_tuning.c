@@ -1255,6 +1255,12 @@ out:
 /* Global tuning parameter buffer - Binary Ninja reference implementation */
 static void *tisp_par_ioctl = NULL;
 
+/* Global AF zone data - Binary Ninja reference implementation */
+struct af_zone_data af_zone_data = {
+	.status = 0,
+	.zone_metrics = {0}
+};
+
 /* ISP IRQ and Event System - Binary Ninja EXACT implementation */
 
 /* IRQ callback function array - Binary Ninja reference */
