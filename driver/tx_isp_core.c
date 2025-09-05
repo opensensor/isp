@@ -2929,9 +2929,12 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 /* Binary Ninja: Additional core device setup */
                 *((void**)((char*)core_dev + (0x35 * 4))) = core_dev;   /* $v0[0x35] = $v0 */
 
-                /* Binary Ninja: Tuning device integration */
-                void *tuning_data = (char*)tuning_dev + 0x40c8;
-                *((void**)((char*)core_dev + (0xc * 4))) = tuning_data; /* $v0[0xc] = *($v0_18 + 0x40c8) */
+                /* FIXED: Use tuning_dev directly instead of adding dangerous offset */
+                /* The Binary Ninja offset 0x40c8 was from a much larger structure */
+                /* Our isp_core_tuning_init returns exactly what we need */
+                void *tuning_data = tuning_dev;
+                *((void**)((char*)core_dev + (0xc * 4))) = tuning_data; /* $v0[0xc] = tuning_dev (FIXED) */
+                pr_info("*** tx_isp_core_probe: FIXED tuning pointer corruption - using tuning_dev=%p directly ***\n", tuning_data);
                 *((void**)((char*)core_dev + (0xd * 4))) = &isp_tuning_fops; /* $v0[0xd] = &isp_info_proc_fops */
 
                 /* Binary Ninja: Global device assignment */

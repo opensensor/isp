@@ -2423,22 +2423,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Set buffer physical address offset like Binary Ninja */
         buffer.m.offset = buf_index * buffer.bytesused;
         
-        /* Binary Ninja DMA sync: private_dma_sync_single_for_device(nullptr, var_44, var_40, 2) */
-        if (sensor_active && ourISPdev && ourISPdev->vic_dev) {
-            struct vic_device *vic_dev = (struct vic_device *)ourISPdev->vic_dev;
-            
-            /* Update VIC buffer tracking for this dequeue like Binary Ninja */
-            if (vic_dev && vic_dev->vic_regs && buf_index < 8) {
-                u32 buffer_phys_addr = 0x6300000 + (buf_index * (state->width * state->height * 2));
-                
-                pr_debug("Channel %d: DQBUF updating VIC buffer[%d] addr=0x%x\n",
-                        channel, buf_index, buffer_phys_addr);
-                
-                /* Sync DMA for buffer completion like Binary Ninja reference */
-                // In real implementation: dma_sync_single_for_device()
-                wmb(); // Memory barrier for DMA completion
-            }
-        } else {
+//        /* Binary Ninja DMA sync: private_dma_sync_single_for_device(nullptr, var_44, var_40, 2) */
+//        if (sensor_active && ourISPdev && ourISPdev->vic_dev) {
+//            struct vic_device *vic_dev = (struct vic_device *)ourISPdev->vic_dev;
+//
+//            /* Update VIC buffer tracking for this dequeue like Binary Ninja */
+//            if (vic_dev && vic_dev->vic_regs && buf_index < 8) {
+//                u32 buffer_phys_addr = 0x6300000 + (buf_index * (state->width * state->height * 2));
+//
+//                pr_debug("Channel %d: DQBUF updating VIC buffer[%d] addr=0x%x\n",
+//                        channel, buf_index, buffer_phys_addr);
+//
+//                /* Sync DMA for buffer completion like Binary Ninja reference */
+//                // In real implementation: dma_sync_single_for_device()
+//                wmb(); // Memory barrier for DMA completion
+//            }
+//        } else {
             /* *** SOOTHING ORANGE FRAME GENERATION *** */
             pr_debug("Channel %d: Generating soothing orange frame data for buffer[%d]\n", channel, buf_index);
             
@@ -2467,7 +2467,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             } else {
                 pr_debug("Channel %d: Could not map buffer for orange frame generation\n", channel);
             }
-        }
+        //}
         
         // Mark frame as consumed
         state->frame_ready = false;
