@@ -2465,7 +2465,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             } else {
                 pr_debug("Channel %d: Could not map buffer for orange frame generation\n", channel);
             }
-            }
         }
         
         // Mark frame as consumed
