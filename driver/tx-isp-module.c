@@ -3911,8 +3911,9 @@ static int tx_isp_init(void)
         pr_warn("Failed to prepare I2C infrastructure: %d\n", ret);
     }
     
-    /* *** REFACTORED: Use new subdevice management system *** */
+    /* *** CRITICAL: PROPERLY REGISTER SUBDEVICES FOR tx_isp_video_link_stream *** */
     pr_info("*** INITIALIZING SUBDEVICE MANAGEMENT SYSTEM ***\n");
+    pr_info("*** REGISTERING SUBDEVICES AT OFFSET 0x38 FOR tx_isp_video_link_stream ***\n");
 
     /* Register platform devices first - needed for the new system */
     ret = platform_device_register(&tx_isp_csi_platform_device);
@@ -3999,6 +4000,51 @@ static int tx_isp_init(void)
         pr_err("Failed to activate CSI subdev: %d\n", ret);
         goto err_cleanup_platforms;
     }
+    
+    /* *** CRITICAL: POPULATE SUBDEV ARRAY AT OFFSET 0x38 FOR tx_isp_video_link_stream *** */
+    pr_info("*** POPULATING SUBDEV ARRAY AT OFFSET 0x38 FOR STREAMING ***\n");
+    
+    /* Get subdev array pointer from Binary Ninja: offset 0x38 */
+    void **subdev_array = (void**)((char*)ourISPdev + 0x38);
+    
+    /* Clear the array first */
+    memset(subdev_array, 0, 16 * sizeof(void*));
+    
+    /* Register VIC subdev with proper ops structure */
+    if (ourISPdev->vic_dev) {
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        
+        /* Set up VIC subdev with ops pointing to vic_subdev_ops */
+        vic_dev->sd.ops = &vic_subdev_ops;
+        vic_dev->sd.isp = (void*)ourISPdev;
+        
+        /* Add VIC to subdev array at index 0 */
+        subdev_array[0] = &vic_dev->sd;
+        
+        pr_info("*** REGISTERED VIC SUBDEV AT INDEX 0 WITH VIDEO OPS ***\n");
+        pr_info("VIC subdev: %p, ops: %p, video: %p, s_stream: %p\n",
+                &vic_dev->sd, vic_dev->sd.ops, vic_dev->sd.ops->video,
+                vic_dev->sd.ops->video->s_stream);
+    }
+    
+    /* Register CSI subdev with proper ops structure */  
+    if (ourISPdev->csi_dev) {
+        struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
+        
+        /* Set up CSI subdev with ops pointing to csi_subdev_ops */
+        csi_dev->sd.ops = &csi_subdev_ops;
+        csi_dev->sd.isp = (void*)ourISPdev;
+        
+        /* Add CSI to subdev array at index 1 */
+        subdev_array[1] = &csi_dev->sd;
+        
+        pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 WITH VIDEO OPS ***\n");
+        pr_info("CSI subdev: %p, ops: %p, video: %p, s_stream: %p\n",
+                &csi_dev->sd, csi_dev->sd.ops, csi_dev->sd.ops->video,
+                csi_dev->sd.ops->video->s_stream);
+    }
+    
+    pr_info("*** SUBDEV ARRAY POPULATED - tx_isp_video_link_stream SHOULD NOW FIND SUBDEVICES! ***\n");
     
     pr_info("Device subsystem initialization complete\n");
 
@@ -4189,6 +4235,70 @@ static void tx_isp_exit(void)
 }
 
 /* ===== VIC SENSOR OPERATIONS - EXACT BINARY NINJA IMPLEMENTATIONS ===== */
+
+/* VIC video operations structure - CRITICAL for tx_isp_video_link_stream */
+static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
+
+static const struct tx_isp_subdev_video_ops vic_video_ops = {
+    .s_stream = vic_video_s_stream,
+};
+
+static const struct tx_isp_subdev_ops vic_subdev_ops = {
+    .video = &vic_video_ops,
+    .sensor = NULL,
+    .core = NULL,
+};
+
+/* CSI video operations structure - CRITICAL for tx_isp_video_link_stream */
+static int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);
+
+static const struct tx_isp_subdev_video_ops csi_video_ops = {
+    .s_stream = csi_video_s_stream,
+};
+
+static const struct tx_isp_subdev_ops csi_subdev_ops = {
+    .video = &csi_video_ops,
+    .sensor = NULL,
+    .core = NULL,
+};
+
+/* VIC video streaming function - CRITICAL for register activity */
+static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
+{
+    struct tx_isp_dev *isp_dev;
+    struct tx_isp_vic_device *vic_dev;
+    int ret;
+    
+    if (!sd) {
+        return -EINVAL;
+    }
+    
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if (!isp_dev || !isp_dev->vic_dev) {
+        return -EINVAL;
+    }
+    
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    
+    pr_info("*** VIC VIDEO STREAMING %s - THIS SHOULD TRIGGER REGISTER WRITES! ***\n",
+            enable ? "ENABLE" : "DISABLE");
+    
+    if (enable) {
+        /* Call vic_core_s_stream which calls tx_isp_vic_start */
+        ret = vic_core_s_stream(sd, enable);
+        pr_info("*** VIC VIDEO STREAMING ENABLE RETURNED %d ***\n", ret);
+        return ret;
+    } else {
+        return vic_core_s_stream(sd, enable);
+    }
+}
+
+/* CSI video streaming function - CRITICAL for register activity */
+static int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
+{
+    pr_info("*** CSI VIDEO STREAMING %s ***\n", enable ? "ENABLE" : "DISABLE");
+    return csi_video_s_stream(sd, enable);
+}
 
 /* vic_sensor_ops_ioctl - FIXED with proper struct member access */
 static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
