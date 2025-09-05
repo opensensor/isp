@@ -1227,13 +1227,17 @@ out:
 * ISP_CORE_G_CTRL: Get control 0xc008561b
 * ISP_TUNING_ENABLE: Enable tuning 0xc00c56c6
  */
+/* Global tuning parameter buffer - Binary Ninja reference implementation */
+static void *tisp_par_ioctl = NULL;
+
 /* tisp_code_tuning_ioctl - Binary Ninja EXACT implementation */
 extern struct tx_isp_dev *ourISPdev;
 int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
 {
-    int32_t *tisp_par_ioctl_ptr = (int32_t *)tisp_par_ioctl;
+    int32_t *tisp_par_ioctl_ptr;
     unsigned long s0_1 = (unsigned long)arg;
     int ret;
+    int32_t param_type;
     
     pr_info("ISP m0 IOCTL called: cmd=0x%x, arg=%p\n", cmd, arg);
     
@@ -1242,6 +1246,8 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
         pr_err("tisp_code_tuning_ioctl: Global buffer not allocated\n");
         return -ENOMEM;
     }
+    
+    tisp_par_ioctl_ptr = (int32_t *)tisp_par_ioctl;
     
     /* Binary Ninja: Check magic number 0x74 in command */
     if (((cmd >> 8) & 0xff) == 0x74) {
@@ -1252,7 +1258,7 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
                         pr_info("tisp_code_tuning_ioctl: GET operation 0x%x\n", cmd);
                         
                         /* Binary Ninja: Check access permissions */
-                        if (!access_ok(arg, 0x500c)) {
+                        if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for GET\n");
                             return -EFAULT;
                         }
@@ -1314,7 +1320,7 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
                         pr_info("tisp_code_tuning_ioctl: SET operation 0x%x\n", cmd);
                         
                         /* Binary Ninja: Check access permissions */
-                        if (!access_ok(arg, 0x500c)) {
+                        if (!access_ok(VERIFY_WRITE, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for SET\n");
                             return -EFAULT;
                         }
@@ -1367,7 +1373,7 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
                         /* tisp_get_ae_info(tisp_par_ioctl); */
                         
                         /* Binary Ninja: Copy result to user */
-                        if (!access_ok(arg, 0x500c)) {
+                        if (!access_ok(VERIFY_WRITE, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for AE info get\n");
                             return -EFAULT;
                         }
@@ -1383,7 +1389,7 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
                     case 0x20007404: { /* AE info set */
                         pr_info("tisp_code_tuning_ioctl: AE info set 0x%x\n", cmd);
                         
-                        if (!access_ok(arg, 0x500c)) {
+                        if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for AE info set\n");
                             return -EFAULT;
                         }
