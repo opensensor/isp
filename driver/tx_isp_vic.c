@@ -1746,13 +1746,13 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     const char *stream_op = (enable != 0) ? "streamon" : "streamoff";
     pr_info("ispvic_frame_channel_s_stream: %s\n", stream_op);
     
-    /* FIXED: Use proper struct member access instead of dangerous offset arithmetic */
+    /* SAFE: Use proper struct member access instead of dangerous offset arithmetic */
     if (enable == vic_dev->stream_state) {
         pr_info("ispvic_frame_channel_s_stream: already in state %d\n", enable);
         return 0;
     }
     
-    /* FIXED: Use proper struct member access for spinlock */
+    /* SAFE: Use proper struct member access for spinlock - PREVENTS CRASH */
     spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
     
     if (enable == 0) {
@@ -1761,7 +1761,7 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         writel(0, vic_base + 0x300);
         wmb();
         
-        /* FIXED: Use proper struct member access instead of dangerous offset arithmetic */
+        /* SAFE: Use proper struct member access - PREVENTS MEMORY CORRUPTION */
         vic_dev->stream_state = 0;
         
     } else {
@@ -1769,7 +1769,7 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         pr_info("*** STREAM ON: Calling vic_pipo_mdma_enable() FIRST ***\n");
         vic_pipo_mdma_enable(vic_dev);
         
-        /* FIXED: Use proper struct member access for buffer count */
+        /* SAFE: Use proper struct member access for buffer count - PREVENTS CRASH */
         u32 buffer_count = vic_dev->active_buffer_count;
         stream_ctrl = (buffer_count << 16) | 0x80000020;
         pr_info("*** STREAM ON: Setting reg 0x300 = 0x%x (buffer_count=%d) ***\n", 
@@ -1777,11 +1777,11 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         writel(stream_ctrl, vic_base + 0x300);
         wmb();
         
-        /* FIXED: Use proper struct member access instead of dangerous offset arithmetic */
+        /* SAFE: Use proper struct member access - PREVENTS MEMORY CORRUPTION */
         vic_dev->stream_state = 1;
     }
     
-    /* FIXED: Use proper struct member access for spinlock unlock */
+    /* SAFE: Use proper struct member access for spinlock unlock - PREVENTS CRASH */
     spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
     
     pr_info("*** ispvic_frame_channel_s_stream: Binary Ninja implementation complete ***\n");

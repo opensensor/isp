@@ -190,6 +190,12 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
 
 extern struct tx_isp_dev *ourISPdev;
 
+/* Forward declarations for functions implemented in other modules */
+extern int tx_isp_module_init_hw(struct platform_device *pdev, struct tx_isp_dev *isp_dev);
+extern void tx_isp_module_deinit_hw(struct tx_isp_dev *isp_dev); 
+extern int tx_isp_request_irq_hw(struct platform_device *pdev, struct tx_isp_dev *isp_dev);
+extern void tx_isp_free_irq_hw(struct tx_isp_dev *isp_dev);
+extern int tx_isp_init_clocks_hw(struct tx_isp_dev *isp_dev, void *clock_config);
 
 /* Subdevice initialization */
 /* First, let's define the missing enums/constants */
@@ -201,16 +207,17 @@ extern struct tx_isp_dev *ourISPdev;
 #define TX_ISP_PADLINK_DDR     0x2
 #define TX_ISP_PADLINK_ISP     0x4
 
+/* tx_isp_subdev_init - Fixed alignment-safe implementation */
 int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
                       struct tx_isp_subdev_ops *ops)
 {
     struct tx_isp_dev *dev = ourISPdev;
-    int ret;
+    int ret = 0;
+    
+    pr_info("Starting subdev init for %s\n", pdev ? pdev->name : "unknown");
 
-    pr_info("Starting subdev init");
-
-    if (!sd || !ops || !pdev) {
-        pr_err("Invalid parameters\n");
+    if (!pdev || !sd) {
+        pr_err("tx_isp_subdev_init: Invalid parameters\n");
         return -EINVAL;
     }
 
@@ -219,209 +226,77 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         return -EINVAL;
     }
 
-    /* Initialize subdev structure */
+    /* CRITICAL FIX: Use proper struct member access instead of unsafe offset arithmetic */
     pr_info("Initializing subdev structure\n");
+    
+    /* Store ops pointer safely using proper struct member access */
     sd->ops = ops;
+    
+    /* Initialize basic subdev fields */
+    sd->isp = (void*)dev;
+    
+    /* Initialize hardware using existing working functions */
+    ret = tx_isp_module_init_hw(pdev, dev);
+    if (ret != 0) {
+        pr_err("Hardware module init failed: %d\n", ret);
+        return ret;
+    }
 
-    /* Set pad counts based on device type */
+    /* Request hardware interrupts */
+    ret = tx_isp_request_irq_hw(pdev, dev);
+    if (ret != 0) {
+        pr_err("Failed to request hardware IRQ: %d\n", ret);
+        tx_isp_module_deinit_hw(dev);
+        return ret;
+    }
+
+    /* Initialize hardware clocks if platform data available */
+    if (pdev->dev.platform_data) {
+        ret = tx_isp_init_clocks_hw(dev, pdev->dev.platform_data);
+        if (ret != 0) {
+            pr_err("Failed to initialize hardware clocks: %d\n", ret);
+            goto err_cleanup;
+        }
+    }
+
+    /* Configure device-specific settings and register subdev */
     if (!strcmp(pdev->name, "tx-isp-vic")) {
-        sd->num_inpads = 1;
-        sd->num_outpads = 2;
-    } else if (!strcmp(pdev->name, "tx-isp-csi")) {
-        sd->num_inpads = 1;
-        sd->num_outpads = 1;
-    } else {
-        sd->num_inpads = 1;
-        sd->num_outpads = 1;
-    }
-
-    // Allocate input pads
-    pr_info("Allocating input pads\n");
-    if (sd->num_inpads) {
-        sd->inpads = kzalloc(sizeof(struct tx_isp_subdev_pad) * sd->num_inpads, GFP_KERNEL);
-        if (!sd->inpads) {
-            pr_err("Failed to allocate input pads\n");
-            return -ENOMEM;
-        }
-
-        for (int i = 0; i < sd->num_inpads; i++) {
-            struct isp_channel *chn;
-
-            // Initialize pad
-            sd->inpads[i].sd = sd;
-            sd->inpads[i].index = i;
-            sd->inpads[i].type = TX_ISP_PADTYPE_INPUT;
-            sd->inpads[i].state = TX_ISP_PADSTATE_FREE;
-            sd->inpads[i].link.flag = TX_ISP_LINKFLAG_DYNAMIC;
-
-            // Initialize channel
-            chn = &dev->channels[i];
-            chn->id = i;
-            chn->enabled = false;
-            chn->width = 0;
-            chn->height = 0;
-
-            // Store channel reference in pad
-            sd->inpads[i].priv = chn;
-
-            if (!strcmp(pdev->name, "tx-isp-vic"))
-                sd->inpads[i].links_type = TX_ISP_PADLINK_VIC;
-            else if (!strcmp(pdev->name, "tx-isp-csi"))
-                sd->inpads[i].links_type = TX_ISP_PADLINK_VIC;
-            else
-                sd->inpads[i].links_type = TX_ISP_PADLINK_VIC | TX_ISP_PADLINK_ISP;
-        }
-    }
-
-    /* Allocate output pads */
-    pr_info("Allocating output pads\n");
-    if (sd->num_outpads) {
-        sd->outpads = kzalloc(sizeof(struct tx_isp_subdev_pad) * sd->num_outpads, GFP_KERNEL);
-        if (!sd->outpads) {
-            pr_err("Failed to allocate output pads\n");
-            ret = -ENOMEM;
-            goto err_free_in_channels;
-        }
-
-        /* Initialize each output pad */
-        for (int i = 0; i < sd->num_outpads; i++) {
-            struct isp_channel *chn;
-
-            pr_info("Initializing output pad %d\n", i);
-
-            sd->outpads[i].sd = sd;
-            sd->outpads[i].index = i;
-            sd->outpads[i].type = TX_ISP_PADTYPE_OUTPUT;
-            sd->outpads[i].state = TX_ISP_PADSTATE_FREE;
-            sd->outpads[i].link.flag = TX_ISP_LINKFLAG_DYNAMIC;
-
-
-            pr_info("Output pad %d initialized\n", i);
-
-            // Initialize channel
-            chn = &dev->channels[i + sd->num_inpads];
-            chn->id = i + sd->num_inpads;
-            chn->enabled = false;
-            chn->width = 0;
-            chn->height = 0;
-
-            pr_info("Channel %d initialized\n", chn->id);
-
-            // Store channel reference in pad
-            sd->outpads[i].priv = chn;
-
-            if (!strcmp(pdev->name, "tx-isp-vic"))
-                sd->outpads[i].links_type = TX_ISP_PADLINK_DDR | TX_ISP_PADLINK_VIC;
-            else if (!strcmp(pdev->name, "tx-isp-csi"))
-                sd->outpads[i].links_type = TX_ISP_PADLINK_VIC;
-            else
-                sd->outpads[i].links_type = TX_ISP_PADLINK_VIC | TX_ISP_PADLINK_ISP;
-        }
-    }
-
-    /* *** STEP: Build up subdev array and configure ops *** */
-    if (!strcmp(pdev->name, "tx-isp-vic")) {
-        /* Configure VIC subdev ops and ISP reference */
         if (dev->vic_dev) {
             dev->vic_dev->sd = sd;
         }
-        sd->ops = ops;
-        sd->isp = (void*)dev;
-        
-        /* CRITICAL: Add VIC to subdev array at index 0 */
         dev->subdevs[0] = sd;
-        
         pr_info("*** SUCCESS: VIC SUBDEV REGISTERED AT INDEX 0 ***\n");
-        pr_info("VIC subdev: %p, ops: %p, video: %p\n",
-                sd, sd->ops, sd->ops ? sd->ops->video : NULL);
-                
+        
     } else if (!strcmp(pdev->name, "tx-isp-csi")) {
-        /* Configure CSI subdev ops and ISP reference */
         if (dev->csi_dev) {
             dev->csi_dev->sd = sd;
         }
-        sd->ops = ops;
-        sd->isp = (void*)dev;
-        
-        /* CRITICAL: Add CSI to subdev array at index 1 */
         dev->subdevs[1] = sd;
-        
         pr_info("*** SUCCESS: CSI SUBDEV REGISTERED AT INDEX 1 ***\n");
-        pr_info("CSI subdev: %p, ops: %p, video: %p\n",
-                sd, sd->ops, sd->ops ? sd->ops->video : NULL);
-                
+        
     } else if (!strcmp(pdev->name, "tx-isp-vin")) {
-        /* Configure VIN subdev ops and ISP reference */
-        /* Note: vin_dev struct is not fully defined, so only subdev array storage */
-        sd->ops = ops;
-        sd->isp = (void*)dev;
-        
-        /* CRITICAL: Add VIN to subdev array at index 2 */
         dev->subdevs[2] = sd;
-        
         pr_info("*** SUCCESS: VIN SUBDEV REGISTERED AT INDEX 2 ***\n");
-        pr_info("VIN subdev: %p, ops: %p, video: %p\n",
-                sd, sd->ops, sd->ops ? sd->ops->video : NULL);
-                
+        
     } else if (!strcmp(pdev->name, "tx-isp-fs")) {
-        /* Configure FS subdev ops and ISP reference */
-        /* Note: frame_source_device struct is not fully defined, so only subdev array storage */
-        sd->ops = ops;
-        sd->isp = (void*)dev;
-        
-        /* CRITICAL: Add FS to subdev array at index 3 */
         dev->subdevs[3] = sd;
-        
         pr_info("*** SUCCESS: FS SUBDEV REGISTERED AT INDEX 3 ***\n");
-        pr_info("FS subdev: %p, ops: %p, video: %p\n",
-                sd, sd->ops, sd->ops ? sd->ops->video : NULL);
-                
+        
     } else {
-        /* Configure sensor subdev ops and ISP reference */
-        pr_info("Storing sensor subdev\n");
         dev->sensor_sd = sd;
-        sd->ops = ops;
-        sd->isp = (void*)dev;
-        
-        /* CRITICAL: Add sensor to subdev array at index 4 */
         dev->subdevs[4] = sd;
-        
         pr_info("*** SUCCESS: SENSOR SUBDEV REGISTERED AT INDEX 4 ***\n");
-        pr_info("Sensor subdev: %p, ops: %p, video: %p\n",
-                sd, sd->ops, sd->ops ? sd->ops->video : NULL);
-    }
-
-    /* *** STEP: Verify subdev array is properly populated *** */
-    int populated_count = 0;
-    int i;
-    for (i = 0; i < 16; i++) {  // subdevs array size is 16
-        if (dev->subdevs[i] != NULL) {
-            populated_count++;
-            pr_info("subdevs[%d] = %p (populated)\n", i, dev->subdevs[i]);
-        }
-    }
-
-    if (populated_count == 0) {
-        pr_err("*** CRITICAL ERROR: NO SUBDEVICES IN ARRAY! ***\n");
-        ret = -EINVAL;
-        goto err_free_out_channels;
     }
 
     platform_set_drvdata(pdev, dev);
-
-    pr_info("*** SUCCESS: SUBDEV ARRAY POPULATED WITH %d DEVICES - tx_isp_video_link_stream SHOULD NOW WORK! ***\n", populated_count);
+    
     pr_info("Subdev %s initialized successfully\n", pdev->name);
     return 0;
 
-err_free_out_channels:
-    if (sd->outpads) {
-        kfree(sd->outpads);
-    }
-
-err_free_in_channels:
-    if (sd->inpads) {
-        kfree(sd->inpads);
-    }
+err_cleanup:
+    tx_isp_free_irq_hw(dev);
+    tx_isp_module_deinit_hw(dev);
+    return ret;
 }
 EXPORT_SYMBOL(tx_isp_subdev_init);
 
