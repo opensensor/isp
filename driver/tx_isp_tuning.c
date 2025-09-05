@@ -4346,7 +4346,7 @@ void *isp_core_tuning_init(void *arg1)
     }
     
     /* Initialize the tuning data structure with safe default values */
-    tuning_data->device = (struct tx_isp_dev *)arg1;
+    /* Note: No device field in struct - arg1 is available through global reference */
     
     /* Initialize BCSH values to safe defaults */
     tuning_data->brightness = 128;  /* Default brightness */
