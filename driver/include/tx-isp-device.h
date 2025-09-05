@@ -697,13 +697,13 @@ struct isp_tuning_data {
 	struct mutex mutex;                  /* 0x08: Tuning mutex (32-bit aligned) */
 	uint32_t state;                      /* 0x0c: Tuning state */
 	
-	/* Control values - CRITICAL: brightness must be at offset +0x68 */
-	uint32_t reserved1[20];              /* 0x10-0x5f: Reserved for proper alignment */
+	/* Control values - CRITICAL: saturation must be at offset +0x68 */
+	uint32_t reserved1[22];              /* 0x10-0x67: Reserved for proper alignment */
 	
 	/* CRITICAL: These must be at the correct offsets for the controls */
-	uint32_t brightness;                 /* 0x60: Brightness control (cmd 0x980900) */
-	uint32_t contrast;                   /* 0x64: Contrast control (cmd 0x980901) */
-	uint32_t saturation;                 /* 0x68: Saturation control (cmd 0x980902) */
+	uint32_t saturation;                 /* 0x68: Saturation control (cmd 0x980902) - CRASH LOCATION */
+	uint32_t brightness;                 /* 0x6c: Brightness control (cmd 0x980900) */
+	uint32_t contrast;                   /* 0x70: Contrast control (cmd 0x980901) */
 	uint32_t sharpness;                  /* 0x6c: Sharpness control (cmd 0x98091b) */
 	
 	/* Additional controls */
