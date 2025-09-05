@@ -1806,7 +1806,7 @@ static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
-static int tx_isp_video_link_stream_impl(struct tx_isp_dev *isp_dev, int enable)
+static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 {
     int i;
     
@@ -1824,7 +1824,7 @@ static int tx_isp_video_link_stream_impl(struct tx_isp_dev *isp_dev, int enable)
     return 0;
 }
 
-static int tx_isp_video_s_stream_impl(struct tx_isp_dev *isp_dev, int enable)
+static int tx_isp_video_s_stream(struct tx_isp_dev *isp_dev, int enable)
 {
     int i;
     
@@ -3288,16 +3288,16 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         return tx_isp_video_link_destroy_impl(isp_dev);
     }
     case 0x800456d2: { // TX_ISP_VIDEO_LINK_STREAM_ON - Enable video link streaming
-        return tx_isp_video_link_stream_impl(isp_dev, 1);
+        return tx_isp_video_link_stream(isp_dev, 1);
     }
     case 0x800456d3: { // TX_ISP_VIDEO_LINK_STREAM_OFF - Disable video link streaming
-        return tx_isp_video_link_stream_impl(isp_dev, 0);
+        return tx_isp_video_link_stream(isp_dev, 0);
     }
     case 0x80045612: { // VIDIOC_STREAMON - Start video streaming
-        return tx_isp_video_s_stream_impl(isp_dev, 1);
+        return tx_isp_video_s_stream(isp_dev, 1);
     }
     case 0x80045613: { // VIDIOC_STREAMOFF - Stop video streaming
-        return tx_isp_video_s_stream_impl(isp_dev, 0);
+        return tx_isp_video_s_stream(isp_dev, 0);
     }
     case 0x800456d8: { // TX_ISP_WDR_ENABLE - Enable WDR mode
         int wdr_enable = 1;
