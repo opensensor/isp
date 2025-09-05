@@ -55,6 +55,13 @@ MODULE_PARM_DESC(isp_memopt, "isp memory optimize");
 static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 extern struct tx_isp_dev *ourISPdev;
 
+/* Core subdev operations structure - CRITICAL for proper initialization */
+static struct tx_isp_subdev_ops core_subdev_ops = {
+    .name = "tx_isp_core",
+    .type = 2,  /* Sink type */
+    .pad_event_handle = ispcore_pad_event_handle
+};
+
 /* Forward declarations */
 static int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
 static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp);
@@ -2787,7 +2794,10 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
     /* CRITICAL: Initialize basic fields that tx_isp_subdev_init expects */
     /* Set up channel count first - this is what was missing! */
-    *((uint32_t*)((char*)core_dev + (0x32 * 4))) = ISP_MAX_CHAN;  /* Initialize channel count */
+    *((uint32_t*)((char*)core_dev + (0x32 * 4))) = ISP_MAX_CHAN;  /* Initialize channel count at offset 0xc8 */
+    
+    /* CRITICAL: Initialize device operations pointer - Binary Ninja shows this is stored at offset 0xc4 */
+    *((void**)((char*)core_dev + 0xc4)) = &core_subdev_ops;  /* Store ops at Binary Ninja offset 0xc4 */
     
     /* Initialize platform data reference */
     if (!s2_1) {
@@ -2800,7 +2810,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     }
 
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
-    if (tx_isp_subdev_init(pdev, core_dev, NULL) == 0) {
+    if (tx_isp_subdev_init(pdev, core_dev, &core_subdev_ops) == 0) {
         pr_info("*** tx_isp_core_probe: Subdev init SUCCESS ***\n");
         
         /* Binary Ninja: Spinlock and mutex initialization */
