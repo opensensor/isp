@@ -1780,24 +1780,30 @@ int isp_core_tuning_release(struct tx_isp_dev *dev)
 
 int isp_m0_chardev_release(struct inode *inode, struct file *file)
 {
-    struct tx_isp_dev *dev = file->private_data;
+    extern struct tx_isp_dev *ourISPdev;
+    void *tuning_buffer = file->private_data;
 
-    if (!dev) {
-        return -EINVAL;
+    pr_info("ISP M0 device release called\n");
+
+    /* CRITICAL: file->private_data contains tuning buffer, NOT device */
+    if (tuning_buffer) {
+        pr_info("Freeing tuning buffer: %p\n", tuning_buffer);
+        kfree(tuning_buffer);
+        file->private_data = NULL;
+    }
+    
+    /* Clear global tuning parameter buffer if it matches */
+    if (tisp_par_ioctl == tuning_buffer) {
+        tisp_par_ioctl = NULL;
+        pr_info("Cleared global tisp_par_ioctl reference\n");
     }
 
-    // First disable tuning if it's enabled
-    if (dev->tuning_enabled == 2) {
+    /* Use global device reference for any device operations */
+    if (ourISPdev && ourISPdev->tuning_enabled == 2) {
         pr_info("Disabling tuning on release\n");
-        isp_core_tuning_release(dev);
-        dev->tuning_enabled = 0;
+        isp_core_tuning_release(ourISPdev);
+        ourISPdev->tuning_enabled = 0;
     }
-
-    // Clear private_data
-    file->private_data = NULL;
-
-    // Note: Don't free tuning_data here as it might be used by other opens
-    // It will be freed when the driver is unloaded
 
     pr_info("ISP M0 device released\n");
     return 0;
