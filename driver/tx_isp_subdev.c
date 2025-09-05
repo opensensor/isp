@@ -382,7 +382,9 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
                 
     } else if (!strcmp(pdev->name, "tx-isp-vin")) {
         /* Configure VIN subdev ops and ISP reference */
-        dev->sensor_sd = sd;  // Keep individual reference for now
+        if (dev->vin_dev) {
+            dev->vin_dev->sd = sd;  // Store in proper VIN device
+        }
         sd->ops = ops;
         sd->isp = (void*)dev;
         
@@ -395,7 +397,9 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
                 
     } else if (!strcmp(pdev->name, "tx-isp-fs")) {
         /* Configure FS subdev ops and ISP reference */  
-        dev->sensor_sd = sd;  // Keep individual reference for now
+        if (dev->fs_dev) {
+            dev->fs_dev->sd = sd;  // Store in proper FS device
+        }
         sd->ops = ops;
         sd->isp = (void*)dev;
         
