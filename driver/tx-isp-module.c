@@ -1953,22 +1953,22 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
             /* MCP Log: Found valid subdev */
             pr_debug("tx_isp_video_link_stream: Found subdev[%d] = %p\n", i, subdev);
             
-            /* Binary Ninja: void* $v0_3 = *(*($a0 + 0xc4) + 4) */
-            void *subdev_ops_ptr = *((void**)((char*)subdev + 0xc4));
-            if (subdev_ops_ptr != NULL) {
-                video_ops = *((void**)((char*)subdev_ops_ptr + 4));
+            /* FIXED: Use proper struct member access instead of dangerous offset access */
+            struct tx_isp_subdev *tx_subdev = (struct tx_isp_subdev *)subdev;
+            if (tx_subdev->ops != NULL) {
+                struct tx_isp_subdev_ops *subdev_ops = tx_subdev->ops;
                 
-                if (video_ops != NULL) {
-                    /* Binary Ninja: int32_t $v0_4 = *($v0_3 + 4) */
-                    stream_func = *((int32_t(**)(void*, int))((char*)video_ops + 4));
+                if (subdev_ops->video != NULL) {
+                    /* FIXED: Access s_stream function through proper struct member */
+                    stream_func = (int32_t(**)(void*, int))subdev_ops->video->s_stream;
                     
                     if (stream_func != NULL) {
                         /* MCP Log: Found stream function, calling it */
                         pr_debug("tx_isp_video_link_stream: Calling s_stream on subdev[%d] = %p\n", 
                                 i, subdev);
                         
-                        /* Binary Ninja: int32_t result = $v0_4($a0, arg2) */
-                        result = stream_func(subdev, enable);
+                        /* FIXED: Call s_stream with proper subdev parameter */
+                        result = tx_subdev->ops->video->s_stream(tx_subdev, enable);
                         processed_count++;
                         
                         /* MCP Log: Stream function call result */
@@ -1990,25 +1990,21 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
                         int j;
                         for (j = i - 1; j >= 0; j--) {
                             void *prev_subdev = isp_dev->subdevs[j];
-                                    if (prev_subdev != NULL) {
-                                        void *prev_ops_ptr = *((void**)((char*)prev_subdev + 0xc4));
-                                        if (prev_ops_ptr != NULL) {
-                                            void *prev_video_ops = *((void**)((char*)prev_ops_ptr + 4));
-                                            if (prev_video_ops != NULL) {
-                                                int32_t (*prev_stream_func)(void*, int) = 
-                                                    *((int32_t(**)(void*, int))((char*)prev_video_ops + 4));
-                                                if (prev_stream_func != NULL) {
-                                                    /* MCP Log: Rollback operation */
-                                                    pr_debug("tx_isp_video_link_stream: Rollback - calling s_stream(%d) on subdev[%d]\n", 
-                                                            enable ? 0 : 1, j);
-                                                    
-                                                    /* Binary Ninja: $v0_7($a0_1, arg2 u< 1 ? 1 : 0) */
-                                                    prev_stream_func(prev_subdev, enable ? 0 : 1);
-                                                }
-                                            }
-                                        }
+                            if (prev_subdev != NULL) {
+                                /* FIXED: Use proper struct member access for rollback */
+                                struct tx_isp_subdev *prev_tx_subdev = (struct tx_isp_subdev *)prev_subdev;
+                                if (prev_tx_subdev->ops != NULL && prev_tx_subdev->ops->video != NULL) {
+                                    if (prev_tx_subdev->ops->video->s_stream != NULL) {
+                                        /* MCP Log: Rollback operation */
+                                        pr_debug("tx_isp_video_link_stream: Rollback - calling s_stream(%d) on subdev[%d]\n", 
+                                                enable ? 0 : 1, j);
+                                        
+                                        /* Binary Ninja: $v0_7($a0_1, arg2 u< 1 ? 1 : 0) */
+                                        prev_tx_subdev->ops->video->s_stream(prev_tx_subdev, enable ? 0 : 1);
                                     }
                                 }
+                            }
+                        }
                                 
                                 /* MCP Log: Rollback complete, returning error */
                                 pr_info("tx_isp_video_link_stream: Rollback complete, returning error %d\n", result);
