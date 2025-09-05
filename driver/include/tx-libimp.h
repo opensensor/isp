@@ -148,15 +148,6 @@
 #define ISP_AF_ZONE_STATUS    0x40         // Offset to zone status
 #define ISP_AF_ZONE_CONFIG    0x44         // Offset to zone configuration
 
-/* AF Zone structures */
-#define MAX_AF_ZONES      16  // Common size for AF windows/regions
-
-// Global AF zone data as seen in original code
-static struct af_zone_data {
-    uint32_t zone_metrics[MAX_AF_ZONES];  // Current zone metrics
-    uint32_t status;                      // Current AF status
-} af_zone_data;
-
 /* ISP Pipeline Register Structure */
 // Strucure for LIBIMP
 struct isp_pipeline_regs {
@@ -336,12 +327,6 @@ struct ae_hist_data {
     u32 histogram[256];    // 0x400 bytes of histogram data
     u8 stats[0x14];       // Additional statistics data
     u8 status[0x18];      // Status bytes including those at 0x414, 0x418, etc
-};
-
-struct ae_state_info {
-    u32 exposure;         // Current exposure value
-    u32 gain;            // Current gain value
-    u32 status;          // AE status/flags
 };
 
 // Hardware register structure
