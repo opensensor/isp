@@ -683,6 +683,7 @@ static int tx_isp_create_v4l2_device(int channel)
     vdev->v4l2_dev = &dev->v4l2_dev;
     vdev->fops = &tx_isp_v4l2_fops;
     vdev->ioctl_ops = &tx_isp_v4l2_ioctl_ops;
+    vdev->vfl_dir = VFL_DIR_RX;  /* Add this - indicates capture device */
     /* Note: device_caps member not available in this kernel version */
     /* Capabilities are communicated via VIDIOC_QUERYCAP ioctl instead */
     vdev->lock = &dev->lock;
