@@ -2592,42 +2592,62 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         channel, sensor->sd.vin_state, TX_ISP_MODULE_RUNNING);
             }
             
-            // *** STEP 3: NOW START STREAMING WITH DETAILED ERROR CHECKING ***
-            if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
-                sensor->sd.ops->video->s_stream) {
-                pr_info("*** Channel %d: CALLING SENSOR s_stream(1) - THIS SHOULD WRITE 0x3e=0x91 ***\n", channel);
-                pr_info("Channel %d: About to call %s->s_stream(1)\n",
-                        channel, sensor->info.name);
-                
-                ret = sensor->sd.ops->video->s_stream(&sensor->sd, 1);
-                
-                pr_info("*** Channel %d: SENSOR s_stream(1) RETURNED %d ***\n", channel, ret);
-                if (ret) {
-                    pr_err("Channel %d: FAILED to start sensor streaming: %d\n", channel, ret);
-                    pr_err("Channel %d: This means register 0x3e=0x91 was NOT written!\n", channel);
-                    state->streaming = false;
-                    return ret;
-                } else {
-                    pr_info("*** Channel %d: SENSOR STREAMING SUCCESS - 0x3e=0x91 SHOULD BE WRITTEN ***\n", channel);
-                    // CRITICAL: Set sensor state to RUNNING after successful streaming start
-                    sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
-                    pr_info("Channel %d: Sensor state set to RUNNING\n", channel);
-                }
+        // *** STEP 3: NOW START STREAMING WITH DETAILED ERROR CHECKING ***
+        if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
+            sensor->sd.ops->video->s_stream) {
+            pr_info("*** Channel %d: CALLING SENSOR s_stream(1) - THIS SHOULD WRITE 0x3e=0x91 ***\n", channel);
+            pr_info("Channel %d: About to call %s->s_stream(1)\n",
+                    channel, sensor->info.name);
+            
+            ret = sensor->sd.ops->video->s_stream(&sensor->sd, 1);
+            
+            pr_info("*** Channel %d: SENSOR s_stream(1) RETURNED %d ***\n", channel, ret);
+            if (ret) {
+                pr_err("Channel %d: FAILED to start sensor streaming: %d\n", channel, ret);
+                pr_err("Channel %d: This means register 0x3e=0x91 was NOT written!\n", channel);
+                state->streaming = false;
+                return ret;
             } else {
-                pr_err("*** Channel %d: CRITICAL ERROR - NO SENSOR s_stream OPERATION! ***\n", channel);
-                pr_err("Channel %d: sensor=%p\n", channel, sensor);
-                if (sensor) {
-                    pr_err("Channel %d: sensor->sd.ops=%p\n", channel, sensor->sd.ops);
-                    if (sensor->sd.ops) {
-                        pr_err("Channel %d: sensor->sd.ops->video=%p\n", channel, sensor->sd.ops->video);
-                        if (sensor->sd.ops->video) {
-                            pr_err("Channel %d: sensor->sd.ops->video->s_stream=%p\n",
-                                   channel, sensor->sd.ops->video->s_stream);
-                        }
+                pr_info("*** Channel %d: SENSOR STREAMING SUCCESS - 0x3e=0x91 SHOULD BE WRITTEN ***\n", channel);
+                // CRITICAL: Set sensor state to RUNNING after successful streaming start
+                sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
+                pr_info("Channel %d: Sensor state set to RUNNING\n", channel);
+            }
+        } else {
+            pr_err("*** Channel %d: CRITICAL ERROR - NO SENSOR s_stream OPERATION! ***\n", channel);
+            pr_err("Channel %d: sensor=%p\n", channel, sensor);
+            if (sensor) {
+                pr_err("Channel %d: sensor->sd.ops=%p\n", channel, sensor->sd.ops);
+                if (sensor->sd.ops) {
+                    pr_err("Channel %d: sensor->sd.ops->video=%p\n", channel, sensor->sd.ops->video);
+                    if (sensor->sd.ops->video) {
+                        pr_err("Channel %d: sensor->sd.ops->video->s_stream=%p\n",
+                               channel, sensor->sd.ops->video->s_stream);
                     }
                 }
-                pr_err("Channel %d: SENSOR STREAMING NOT AVAILABLE - VIDEO WILL BE GREEN!\n", channel);
             }
+            pr_err("Channel %d: SENSOR STREAMING NOT AVAILABLE - VIDEO WILL BE GREEN!\n", channel);
+        }
+        
+        // *** CRITICAL: TRIGGER VIC STREAMING CHAIN - THIS GENERATES THE REGISTER ACTIVITY! ***
+        if (ourISPdev && ourISPdev->vic_dev) {
+            struct tx_isp_vic_device *vic_streaming = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            
+            pr_info("*** Channel %d: NOW CALLING VIC STREAMING CHAIN - THIS SHOULD GENERATE REGISTER ACTIVITY! ***\n", channel);
+            
+            // CRITICAL: Call vic_core_s_stream which calls tx_isp_vic_start when streaming
+            ret = vic_core_s_stream(&vic_streaming->sd, 1);
+            
+            pr_info("*** Channel %d: VIC STREAMING RETURNED %d - REGISTER ACTIVITY SHOULD NOW BE VISIBLE! ***\n", channel, ret);
+            
+            if (ret) {
+                pr_err("Channel %d: VIC streaming failed: %d\n", channel, ret);
+            } else {
+                pr_info("*** Channel %d: VIC STREAMING SUCCESS - ALL HARDWARE SHOULD BE ACTIVE! ***\n", channel);
+            }
+        } else {
+            pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
+        }
         } else {
             if (channel == 0) {
                 pr_warn("*** Channel %d: NO SENSOR AVAILABLE FOR STREAMING ***\n", channel);
