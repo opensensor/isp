@@ -1236,7 +1236,7 @@ int system_irq_func_set(int irq_id, void *handler)
 
 /* ISP M0 IOCTL handler - handles both ISP core controls (0x56) and tuning (0x74) */
 extern struct tx_isp_dev *ourISPdev;
-int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
+int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __user *arg)
 {
     int ret = 0;
     uint8_t magic = (cmd >> 8) & 0xff;
@@ -1244,7 +1244,7 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
     pr_info("ISP m0 IOCTL called: cmd=0x%x, arg=%p, magic=0x%x\n", cmd, arg, magic);
     
     if (!ourISPdev) {
-        pr_err("isp_m0_chardev_ioctl: ISP device not available\n");
+        pr_err("isp_core_tunning_unlocked_ioctl: ISP device not available\n");
         return -ENODEV;
     }
     
@@ -1252,35 +1252,35 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
     if (magic == 0x56) {
         struct isp_core_ctrl ctrl;
         
-        pr_info("isp_m0_chardev_ioctl: Handling ISP core control command 0x%x\n", cmd);
+        pr_info("isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0x%x\n", cmd);
         
         switch (cmd) {
             case 0xc008561c: /* ISP_CORE_S_CTRL - Set control */
                 if (copy_from_user(&ctrl, (void __user *)arg, sizeof(ctrl))) {
-                    pr_err("isp_m0_chardev_ioctl: Failed to copy control data from user\n");
+                    pr_err("isp_core_tunning_unlocked_ioctl: Failed to copy control data from user\n");
                     return -EFAULT;
                 }
                 
-                pr_info("isp_m0_chardev_ioctl: Set control cmd=0x%x value=%d\n", ctrl.cmd, ctrl.value);
+                pr_info("isp_core_tunning_unlocked_ioctl: Set control cmd=0x%x value=%d\n", ctrl.cmd, ctrl.value);
                 ret = apical_isp_core_ops_s_ctrl(ourISPdev, &ctrl);
                 
                 if (ret == 0 && copy_to_user((void __user *)arg, &ctrl, sizeof(ctrl))) {
-                    pr_err("isp_m0_chardev_ioctl: Failed to copy control data to user\n");
+                    pr_err("isp_core_tunning_unlocked_ioctl: Failed to copy control data to user\n");
                     return -EFAULT;
                 }
                 break;
                 
             case 0xc008561b: /* ISP_CORE_G_CTRL - Get control */
                 if (copy_from_user(&ctrl, (void __user *)arg, sizeof(ctrl))) {
-                    pr_err("isp_m0_chardev_ioctl: Failed to copy control data from user\n");
+                    pr_err("isp_core_tunning_unlocked_ioctl: Failed to copy control data from user\n");
                     return -EFAULT;
                 }
                 
-                pr_info("isp_m0_chardev_ioctl: Get control cmd=0x%x\n", ctrl.cmd);
+                pr_info("isp_core_tunning_unlocked_ioctl: Get control cmd=0x%x\n", ctrl.cmd);
                 ret = apical_isp_core_ops_g_ctrl(ourISPdev, &ctrl);
                 
                 if (ret == 0 && copy_to_user((void __user *)arg, &ctrl, sizeof(ctrl))) {
-                    pr_err("isp_m0_chardev_ioctl: Failed to copy control data to user\n");
+                    pr_err("isp_core_tunning_unlocked_ioctl: Failed to copy control data to user\n");
                     return -EFAULT;
                 }
                 break;
@@ -1289,27 +1289,27 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
             {
                 uint32_t enable;
                 if (copy_from_user(&enable, (void __user *)arg, sizeof(enable))) {
-                    pr_err("isp_m0_chardev_ioctl: Failed to copy tuning enable data from user\n");
+                    pr_err("isp_core_tunning_unlocked_ioctl: Failed to copy tuning enable data from user\n");
                     return -EFAULT;
                 }
                 
-                pr_info("isp_m0_chardev_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
+                pr_info("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
                 
                 if (enable) {
                     if (ourISPdev->tuning_enabled != 2) {
                         /* Initialize tuning if not already initialized */
                         if (!ourISPdev->tuning_data) {
-                            pr_err("isp_m0_chardev_ioctl: Tuning data not initialized\n");
+                            pr_err("isp_core_tunning_unlocked_ioctl: Tuning data not initialized\n");
                             return -ENODEV;
                         }
                         ourISPdev->tuning_enabled = 2;
-                        pr_info("isp_m0_chardev_ioctl: ISP tuning enabled\n");
+                        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
                     }
                 } else {
                     if (ourISPdev->tuning_enabled == 2) {
                         isp_core_tuning_release(ourISPdev);
                         ourISPdev->tuning_enabled = 0;
-                        pr_info("isp_m0_chardev_ioctl: ISP tuning disabled\n");
+                        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning disabled\n");
                     }
                 }
                 ret = 0;
@@ -1317,7 +1317,7 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
             }
             
             default:
-                pr_warn("isp_m0_chardev_ioctl: Unknown ISP core control command: 0x%x\n", cmd);
+                pr_warn("isp_core_tunning_unlocked_ioctl: Unknown ISP core control command: 0x%x\n", cmd);
                 ret = -EINVAL;
                 break;
         }
@@ -1331,7 +1331,7 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
         unsigned long s0_1 = (unsigned long)arg;
         int32_t param_type;
         
-        pr_info("isp_m0_chardev_ioctl: Handling tuning parameter command 0x%x\n", cmd);
+        pr_info("isp_core_tunning_unlocked_ioctl: Handling tuning parameter command 0x%x\n", cmd);
         
         /* Binary Ninja: Check if tisp_par_ioctl is allocated */
         if (!tisp_par_ioctl) {
@@ -1605,7 +1605,7 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
         return -EINVAL;
     }
 }
-EXPORT_SYMBOL(isp_m0_chardev_ioctl);
+EXPORT_SYMBOL(isp_core_tunning_unlocked_ioctl);
 
 /* tisp_code_tuning_open - Binary Ninja EXACT implementation */
 int isp_m0_chardev_open(struct inode *inode, struct file *file)
@@ -4032,8 +4032,8 @@ static const struct file_operations isp_core_tunning_fops = {
     .owner = THIS_MODULE,
     .open = isp_m0_chardev_open,
     .release = isp_m0_chardev_release,
-    .unlocked_ioctl = isp_m0_chardev_ioctl,
-    .compat_ioctl = isp_m0_chardev_ioctl,
+    .unlocked_ioctl = isp_core_tunning_unlocked_ioctl,
+    .compat_ioctl = isp_core_tunning_unlocked_ioctl,
 };
 
 /* Tuning device creation variables - Binary Ninja reference */

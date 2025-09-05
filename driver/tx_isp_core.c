@@ -1657,22 +1657,22 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
     // Handle V4L2 control IOCTLs (VIDIOC_S_CTRL, VIDIOC_G_CTRL) - ROUTE TO tx_isp_tuning.c
     if (cmd == 0xc008561c || cmd == 0xc008561b) { // VIDIOC_S_CTRL / VIDIOC_G_CTRL
-        extern int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg);
+        extern int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __user *arg);
 
         pr_info("V4L2 Control: Routing to tx_isp_tuning.c implementation\n");
 
         /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
-        return isp_m0_chardev_ioctl(file, cmd, argp);
+        return isp_core_tunning_unlocked_ioctl(file, cmd, argp);
     }
 
     // Handle extended control IOCTL - ROUTE TO tx_isp_tuning.c
     if (cmd == 0xc00c56c6) { // VIDIOC_S_EXT_CTRLS or similar
-        extern int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg);
+        extern int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __user *arg);
 
         pr_info("Extended V4L2 control: Routing to tx_isp_tuning.c implementation\n");
 
         /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
-        return isp_m0_chardev_ioctl(file, cmd, argp);
+        return isp_core_tunning_unlocked_ioctl(file, cmd, argp);
     }
 
     // Check if this is a tuning command (0x74xx series from reference)
