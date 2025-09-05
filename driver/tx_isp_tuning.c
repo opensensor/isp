@@ -1362,7 +1362,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     
     /* CRITICAL: Binary Ninja shows check: if ($s0[0x1031] == 3) */
     /* This corresponds to tuning_enabled state check */
-    if (dev->tuning_enabled != 2) {
+    if (dev->tuning_enabled != 3) {
         return -ENODEV;
     }
     
@@ -1428,36 +1428,36 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 
                 pr_info("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
                 
-                if (enable) {
-                    if (dev->tuning_enabled != 2) {
-                        /* CRITICAL: Initialize tuning_data if not already initialized */
-                        if (!dev->tuning_data) {
-                            pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
-                            
-                            /* Allocate tuning data structure using the reference implementation */
-                            dev->tuning_data = isp_core_tuning_init(dev);
+                    if (enable) {
+                        if (dev->tuning_enabled != 3) {
+                            /* CRITICAL: Initialize tuning_data if not already initialized */
                             if (!dev->tuning_data) {
-                                pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
-                                return -ENOMEM;
+                                pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
+                                
+                                /* Allocate tuning data structure using the reference implementation */
+                                dev->tuning_data = isp_core_tuning_init(dev);
+                                if (!dev->tuning_data) {
+                                    pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
+                                    return -ENOMEM;
+                                }
+                                
+                                pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
+                                
+                                /* MCP LOG: Tuning data structure successfully initialized */
+                                pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
+                                pr_info("MCP_LOG: Tuning controls now ready for operation\n");
                             }
                             
-                            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
-                            
-                            /* MCP LOG: Tuning data structure successfully initialized */
-                            pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
-                            pr_info("MCP_LOG: Tuning controls now ready for operation\n");
+                            dev->tuning_enabled = 3;
+                            pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
                         }
-                        
-                        dev->tuning_enabled = 2;
-                        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
+                    } else {
+                        if (dev->tuning_enabled == 3) {
+                            isp_core_tuning_release(dev);
+                            dev->tuning_enabled = 0;
+                            pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning disabled\n");
+                        }
                     }
-                } else {
-                    if (dev->tuning_enabled == 2) {
-                        isp_core_tuning_release(dev);
-                        dev->tuning_enabled = 0;
-                        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning disabled\n");
-                    }
-                }
                 ret = 0;
                 break;
             }
@@ -1836,7 +1836,7 @@ int isp_m0_chardev_release(struct inode *inode, struct file *file)
     }
 
     /* Use global device reference for any device operations */
-    if (ourISPdev && ourISPdev->tuning_enabled == 2) {
+    if (ourISPdev && ourISPdev->tuning_enabled == 3) {
         pr_info("Disabling tuning on release\n");
         isp_core_tuning_release(ourISPdev);
         ourISPdev->tuning_enabled = 0;
