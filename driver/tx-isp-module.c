@@ -3751,6 +3751,10 @@ static void tx_isp_exit(void)
         /* Clean up subdevice graph */
         tx_isp_cleanup_subdev_graph(ourISPdev);
         
+        /* *** CRITICAL: Cleanup V4L2 video devices *** */
+        tx_isp_v4l2_cleanup();
+        pr_info("*** V4L2 VIDEO DEVICES CLEANED UP ***\n");
+        
         /* *** CRITICAL: Destroy ISP M0 tuning device node (matches reference driver) *** */
         tisp_code_destroy_tuning_node();
         pr_info("*** ISP M0 TUNING DEVICE NODE DESTROYED ***\n");
