@@ -4,8 +4,7 @@
 #include <linux/uaccess.h>
 #include "../include/tx_isp.h"
 
-#define TX_ISP_PROC_JZ_DIR "jz"
-#define TX_ISP_PROC_ISP_DIR "isp"
+#define TX_ISP_PROC_ISP_DIR "jz/isp"
 #define TX_ISP_PROC_ISP_W00_FILE "isp-w00"
 #define TX_ISP_PROC_ISP_W01_FILE "isp-w01"
 #define TX_ISP_PROC_ISP_W02_FILE "isp-w02"
@@ -15,7 +14,6 @@
 #define TX_ISP_PROC_VIC_FILE "vic"
 
 struct proc_context {
-    struct proc_dir_entry *jz_dir;
     struct proc_dir_entry *isp_dir;
     struct proc_dir_entry *isp_w00_entry;
     struct proc_dir_entry *isp_w01_entry;
@@ -25,7 +23,6 @@ struct proc_context {
     struct proc_dir_entry *csi_entry;
     struct proc_dir_entry *vic_entry;
     struct tx_isp_dev *isp;
-    bool jz_dir_created;  /* Track if we created jz_dir or just got reference */
 };
 
 /* ISP-W00 file operations - matches reference driver behavior */
@@ -417,18 +414,11 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
     ctx->isp = isp;
     tx_isp_proc_ctx = ctx;
 
-    /* Safely handle existing /proc/jz directory or create if needed */
-    ctx->jz_dir = get_or_create_proc_dir(TX_ISP_PROC_JZ_DIR, NULL, &ctx->jz_dir_created);
-    if (!ctx->jz_dir) {
-        pr_err("Failed to access or create /proc/%s\n", TX_ISP_PROC_JZ_DIR);
-        goto error_free_ctx;
-    }
-
     /* Create /proc/jz/isp directory - we always create this one */
-    ctx->isp_dir = proc_mkdir(TX_ISP_PROC_ISP_DIR, ctx->jz_dir);
+    ctx->isp_dir = proc_mkdir(TX_ISP_PROC_ISP_DIR, NULL);
     if (!ctx->isp_dir) {
-        pr_err("Failed to create /proc/%s/%s\n", TX_ISP_PROC_JZ_DIR, TX_ISP_PROC_ISP_DIR);
-        goto error_cleanup_jz_dir;
+        pr_err("Failed to create /proc/%s\n", TX_ISP_PROC_ISP_DIR);
+        goto error_free_ctx;
     }
 
     /* Create /proc/jz/isp/isp-w00 */
@@ -513,14 +503,6 @@ error_remove_w00:
     proc_remove(ctx->isp_w00_entry);
 error_remove_isp_dir:
     proc_remove(ctx->isp_dir);
-error_cleanup_jz_dir:
-    /* Only remove jz_dir if we created it, not if we just got a reference to existing one */
-    if (ctx->jz_dir && ctx->jz_dir_created) {
-        proc_remove(ctx->jz_dir);
-        pr_info("Removed jz_dir that we created\n");
-    } else if (ctx->jz_dir) {
-        pr_info("Left existing jz_dir intact (not created by us)\n");
-    }
 error_free_ctx:
     kfree(ctx);
     tx_isp_proc_ctx = NULL;
@@ -561,14 +543,6 @@ void tx_isp_remove_proc_entries(void)
     }
     if (ctx->isp_dir) {
         proc_remove(ctx->isp_dir);
-    }
-    
-    /* Only remove jz_dir if we created it, not if we just got a reference to existing one */
-    if (ctx->jz_dir && ctx->jz_dir_created) {
-        proc_remove(ctx->jz_dir);
-        pr_info("Removed jz_dir that we created during cleanup\n");
-    } else if (ctx->jz_dir) {
-        pr_info("Left existing jz_dir intact during cleanup (not created by us)\n");
     }
     
     kfree(ctx);
