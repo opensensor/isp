@@ -802,51 +802,6 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
         pr_err("apical_isp_core_ops_g_ctrl: NULL tuning data for cmd=0x%x\n", ctrl->cmd);
         return -ENODEV;
     }
-    
-    /* CRITICAL: Enhanced pointer validation - prevent kernel panic from userspace pointers */
-    if ((unsigned long)tuning < 0x80000000) {
-        pr_err("CRITICAL: Invalid tuning data pointer: %p for cmd=0x%x (not in kernel space)\n", tuning, ctrl->cmd);
-        return -EFAULT;
-    }
-    
-    /* CRITICAL: Check for specific crash patterns like 2cc20004 from the panic log */
-    uint32_t ptr_high = ((unsigned long)tuning) >> 16;
-    uint32_t ptr_low = ((unsigned long)tuning) & 0xFFFF;
-    
-    /* Check for userspace addresses that cause crashes (like 2cc20004) */
-    if (ptr_high == 0x2cc2 || ptr_high == 0x3928 || ptr_high == 0x5aaa || 
-        ptr_low == 0x0004 || ptr_low == 0xa51a || ptr_low == 0x5aaa) {
-        pr_err("CRITICAL: Tuning data contains known crash pattern %p for cmd=0x%x\n", tuning, ctrl->cmd);
-        return -EFAULT;
-    }
-    
-    /* CRITICAL: Additional alignment and bounds checking */
-    if (((unsigned long)tuning & 0x3) != 0) {
-        pr_err("CRITICAL: Tuning data pointer not aligned: %p for cmd=0x%x\n", tuning, ctrl->cmd);
-        return -EFAULT;
-    }
-    
-    /* CRITICAL: Memory accessibility test before accessing any fields */
-    if (!virt_addr_valid(tuning)) {
-        pr_err("CRITICAL: Tuning data virtual address not valid: %p for cmd=0x%x\n", tuning, ctrl->cmd);
-        return -EFAULT;
-    }
-    
-    /* CRITICAL: Test access to specific fields before using them based on actual command */
-    if (ctrl->cmd == 0x980902) { /* Saturation - validate the actual saturation field access */
-        if (!virt_addr_valid(&tuning->saturation)) {
-            pr_debug("CRITICAL: Saturation field validation for cmd=0x%x (safe struct access)\n", ctrl->cmd);
-            return -EFAULT;
-        }
-        pr_debug("CRITICAL: Saturation field access validated for crash prevention\n");
-    }
-    
-    /* CRITICAL: Probe memory access with exception handling for kernel safety */
-    if (probe_kernel_read(NULL, tuning, 4) != 0) {
-        pr_err("CRITICAL: Cannot safely read from tuning data: %p for cmd=0x%x (kernel probe failed)\n", tuning, ctrl->cmd);
-        return -EFAULT;
-    }
-
     //mutex_lock(&tuning->lock);
 
     pr_info("Get control: cmd=0x%x value=%d, tuning=%p (validated)\n", ctrl->cmd, ctrl->value, tuning);
@@ -1319,42 +1274,11 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     struct tx_isp_dev *dev = NULL;
     extern struct tx_isp_dev *ourISPdev;
     
-    /* CRITICAL: EARLY VALIDATION - prevent all known crash patterns before any processing */
-    if (!arg) {
-        pr_err("CRITICAL: NULL argument pointer passed to IOCTL (crash prevention)\n");
-        return -EFAULT;
-    }
-    
-    /* CRITICAL: Check for userspace pointers that cause crashes like 2cc20004 */
-    unsigned long arg_addr = (unsigned long)arg;
-    if (arg_addr < 0x80000000) {
-        uint32_t ptr_high = arg_addr >> 16;
-        uint32_t ptr_low = arg_addr & 0xFFFF;
-        
-        /* Check for the exact crash pattern from panic log */
-        if (ptr_high == 0x2cc2 || ptr_low == 0x0004) {
-            pr_err("CRITICAL: Detected exact crash pattern 2cc20004 - BLOCKING IOCTL (crash prevention)\n");
-            return -EFAULT;
-        }
-        
-        /* Check for other dangerous userspace patterns */
-        if (ptr_high < 0x1000 || arg_addr < 0x10000) {
-            pr_err("CRITICAL: Dangerous low userspace address %lx - BLOCKING IOCTL (crash prevention)\n", arg_addr);
-            return -EFAULT;
-        }
-    }
-    
     /* CRITICAL: Use global device reference - simplified like reference driver */
     dev = ourISPdev;
     if (!dev) {
         pr_err("isp_core_tunning_unlocked_ioctl: No ISP device available\n");
         return -ENODEV;
-    }
-    
-    /* CRITICAL: Additional device validation */
-    if ((unsigned long)dev < 0x80000000) {
-        pr_err("CRITICAL: Device pointer not in kernel space: %p (crash prevention)\n", dev);
-        return -EFAULT;
     }
     
     /* CRITICAL: Auto-initialize tuning for V4L2 controls if not already enabled */
@@ -1370,14 +1294,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 return -ENOMEM;
             }
             pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
-            
-            /* CRITICAL: Additional validation after allocation */
-            if ((unsigned long)dev->tuning_data < 0x80000000) {
-                pr_err("CRITICAL: Allocated tuning data not in kernel space: %p\n", dev->tuning_data);
-                kfree(dev->tuning_data);
-                dev->tuning_data = NULL;
-                return -EFAULT;
-            }
         }
         
         /* Enable tuning */
@@ -1389,23 +1305,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     if (magic == 0x74 && dev->tuning_enabled != 3) {
         pr_err("isp_core_tunning_unlocked_ioctl: Tuning commands require explicit enable (cmd=0x%x)\n", cmd);
         return -ENODEV;
-    }
-    
-    /* CRITICAL: Final validation before processing any commands */
-    if (magic == 0x56 && dev->tuning_data) {
-        /* Verify tuning data is still valid and safe */
-        if ((unsigned long)dev->tuning_data < 0x80000000) {
-            pr_err("CRITICAL: Tuning data corrupted to userspace address: %p (crash prevention)\n", dev->tuning_data);
-            dev->tuning_data = NULL;
-            dev->tuning_enabled = 0;
-            return -EFAULT;
-        }
-        
-        /* Test critical field access for vflip field (actual field at offset 0x74 from crash log) */
-        if (!virt_addr_valid(&dev->tuning_data->vflip)) {
-            pr_err("CRITICAL: VFlip field at offset 0x74 not accessible: %p (crash prevention)\n", &dev->tuning_data->vflip);
-            return -EFAULT;
-        }
     }
     
     /* Handle ISP core control commands (magic 0x56) */
