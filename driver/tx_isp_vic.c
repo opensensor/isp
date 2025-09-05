@@ -53,13 +53,13 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
     
     pr_debug("*** vic_framedone_irq_function: entry - vic_dev=%p ***\n", vic_dev);
     
-    /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
-    if (*(uint32_t *)((char *)vic_dev + 0x214) == 0) {
+    /* FIXED: Use proper struct member access instead of dangerous offset arithmetic */
+    if (vic_dev->processing == 0) {  /* 0x214 was pipe_enabled flag */
         /* goto label_123f4 - GPIO handling section */
         goto gpio_handling;
     } else {
-        /* Binary Ninja: result = *(arg1 + 0x210) */
-        void *pipe_ptr = *(void **)((char *)vic_dev + 0x210);
+        /* FIXED: Use proper struct member access */
+        void *pipe_ptr = (void *)(unsigned long)vic_dev->stream_state;  /* 0x210 was stream state */
         
         /* if (result != 0) */
         if (pipe_ptr != NULL) {
@@ -833,19 +833,17 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* CRITICAL FIX: Get VIC register base from VIC device structure at offset 0xb8 */
-    /* Binary Ninja: VIC registers are accessed through *(vic_dev + 0xb8) */
-    vic_regs = *(void __iomem **)((char *)vic_dev + 0xb8);
+    /* FIXED: Use proper struct member access instead of dangerous offset arithmetic */
+    vic_regs = vic_dev->vic_regs;
     if (!vic_regs) {
-        pr_err("tx_isp_vic_start: No VIC register base at offset 0xb8 in vic_dev\n");
+        pr_err("tx_isp_vic_start: No VIC register base in vic_dev\n");
         return -EINVAL;
     }
     
-    pr_info("*** tx_isp_vic_start: Using VIC register base %p from offset 0xb8 ***\n", vic_regs);
+    pr_info("*** tx_isp_vic_start: Using VIC register base %p from struct member ***\n", vic_regs);
 
-    /* Get sensor attributes from the 540-byte VIC device structure (Binary Ninja layout) */
-    /* Binary Ninja: *(*(arg1 + 0x110) + 0x14) - sensor attributes are at offset 0x110 in the structure */
-    struct tx_isp_sensor_attribute *sensor_attr = (struct tx_isp_sensor_attribute *)((char *)vic_dev + 0x110);
+    /* FIXED: Use proper struct member access for sensor attributes */
+    struct tx_isp_sensor_attribute *sensor_attr = &vic_dev->sensor_attr;
     interface_type = sensor_attr->dbus_type;
     sensor_format = sensor_attr->data_type;
 
