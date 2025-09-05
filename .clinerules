@@ -1,0 +1,61 @@
+# Cline Rules for C MCP Driver Implementation
+
+## CRITICAL: Reference Driver Adherence
+- NEVER embed logic from one reference method into another method
+- Each method in our implementation must correspond EXACTLY to one method in the reference driver
+- If reference has method `foo()` and `bar()`, implement them as separate `foo()` and `bar()` - do NOT combine their logic
+- Keep method boundaries identical to reference driver
+- If you're unsure about method structure, ASK to see the reference method before implementing
+
+## Method Implementation Rules
+- One reference method = One implementation method (1:1 mapping)
+- Match the core function signature from reference (return type, parameters, general structure)
+- **Naming flexibility**: Some variances in implementation naming conventions are acceptable, but maintain clarity and consistency
+- **Primary goal**: Match the hardware initialization patterns of the reference driver using Binary Ninja MCP
+- Implement ONLY the logic that belongs to that specific method
+- If reference method calls other methods, your implementation should also call those methods (don't inline)
+- Keep methods focused and single-purpose like the reference
+- Using hard-coded offsets like +0x2c is unsafe and makes our code brittle. Replace the offset-based access with proper
+struct member access based on our actual driver structures on an as needed basis.
+
+## MCP Integration Guidelines
+- Add MCP calls at the SAME points where reference driver would log/report
+- MCP calls are ADDITIONS to reference logic, not replacements
+- Format: `mcp_log_info("method_name: description", data);`
+- Place MCP calls at method entry, key decision points, and method exit
+- Don't let MCP calls change the core logic flow
+
+## Code Organization
+- Match reference file structure and method organization patterns
+- Use similar variable naming where practical (some variance acceptable)
+- Preserve reference commenting style and add MCP-specific comments only where needed
+- Keep helper methods separate if reference has them separate
+
+## Binary Ninja MCP Usage Rules - SUPPORTED OPERATIONS ONLY
+**Supported BN MCP operations:**
+- **Search for method** (query): Find and identify methods in reference driver
+- **Search for data** (query): Locate data structures, variables, constants in reference
+- **Decompile method only**: Get decompiled code for specific methods
+
+**Additional supported tooling:**
+- Reading and searching for files on CLI
+- Standard file system operations
+
+**Usage Guidelines:**
+- MANDATORY: Before implementing any method, use Binary Ninja MCP to search for and decompile the reference method
+- Query format: Use MCP to decompile the specific method you're about to implement
+- Do NOT attempt unsupported BN MCP operations
+- Always compare your implementation against the Binary Ninja decompiled reference before finalizing
+
+## When Confused or Stuck
+- STOP and use Binary Ninja MCP to search for and decompile the specific reference method you're implementing
+- Don't guess at method boundaries or logic flow - query the reference with Binary Ninja MCP first
+- Ask for clarification on which reference methods should be called vs inlined
+- Always get Binary Ninja decompilation before writing any method implementation
+
+## Quality Checks Before Submitting
+- Verify each method maps to exactly one reference method
+- Confirm hardware initialization patterns match reference driver (primary goal)
+- Check that method call chains match reference driver
+- Ensure MCP calls don't disrupt original logic flow
+- Validate that only supported BN MCP operations were used
