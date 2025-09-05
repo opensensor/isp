@@ -357,6 +357,10 @@ extern int tx_isp_fs_platform_init(void);
 extern void tx_isp_fs_platform_exit(void);
 extern int tx_isp_fs_probe(struct platform_device *pdev);
 
+/* V4L2 video device functions */
+extern int tx_isp_v4l2_init(void);
+extern void tx_isp_v4l2_cleanup(void);
+
 int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
 
 /* CSI function forward declarations */
