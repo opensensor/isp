@@ -288,11 +288,16 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         for (int i = 0; i < sd->num_outpads; i++) {
             struct isp_channel *chn;
 
+            pr_info("Initializing output pad %d\n", i);
+
             sd->outpads[i].sd = sd;
             sd->outpads[i].index = i;
             sd->outpads[i].type = TX_ISP_PADTYPE_OUTPUT;
             sd->outpads[i].state = TX_ISP_PADSTATE_FREE;
             sd->outpads[i].link.flag = TX_ISP_LINKFLAG_DYNAMIC;
+
+
+            pr_info("Output pad %d initialized\n", i);
 
             // Initialize channel
             chn = &dev->channels[i + sd->num_inpads];
@@ -300,6 +305,8 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             chn->enabled = false;
             chn->width = 0;
             chn->height = 0;
+
+            pr_info("Channel %d initialized\n", chn->id);
 
             // Store channel reference in pad
             sd->outpads[i].priv = chn;
