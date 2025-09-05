@@ -2437,7 +2437,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 /* Sync DMA for buffer completion like Binary Ninja reference */
                 // In real implementation: dma_sync_single_for_device()
                 wmb(); // Memory barrier for DMA completion
-            } else {
+            }         } else {
             /* *** SOOTHING ORANGE FRAME GENERATION *** */
             pr_debug("Channel %d: Generating soothing orange frame data for buffer[%d]\n", channel, buf_index);
 
@@ -2463,6 +2463,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
                 pr_debug("Channel %d: Orange frame generated - Y=%d pixels, UV=%d pixels\n",
                         channel, frame_size_y, frame_size_uv);
+            } else {
+                pr_debug("Channel %d: Could not map buffer for orange frame generation\n", channel);
+            }
             }
         }
         
