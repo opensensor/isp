@@ -5661,3 +5661,24 @@ module_exit(tx_isp_exit);
 MODULE_AUTHOR("Matt Davis <matteius@gmail.com>");
 MODULE_DESCRIPTION("TX-ISP Camera Driver");
 MODULE_LICENSE("GPL");
+
+/* CRITICAL: V4L2 module dependencies - ensure V4L2 subsystem is loaded first */
+MODULE_SOFTDEP("pre: videodev");
+MODULE_SOFTDEP("pre: v4l2-common");
+MODULE_SOFTDEP("pre: videobuf2-core");
+MODULE_SOFTDEP("pre: videobuf2-memops");
+
+/* Additional kernel version compatibility */
+MODULE_INFO(kernel_version, UTS_RELEASE);
+MODULE_INFO(supported, "T31 ISP Hardware");
+
+/* V4L2 symbol dependencies - declare what we need */
+MODULE_ALIAS("char-major-81-*");  /* V4L2 device major number */
+MODULE_DEVICE_TABLE(platform, tx_isp_platform_device_ids);
+
+/* Platform device ID table for proper device matching */
+static struct platform_device_id tx_isp_platform_device_ids[] = {
+    { "tx-isp", 0 },
+    { "tx-isp-t31", 0 },
+    { }
+};
