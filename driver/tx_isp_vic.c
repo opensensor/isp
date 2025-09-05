@@ -2021,7 +2021,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     platform_set_drvdata(pdev, vic_dev);
     
     /* Set up file operations for proc interface */
-    sd->fops = &isp_vic_frd_fops;
+    sd->ops = &isp_vic_frd_fops;
     
     /* Initialize VIC register base if ISP device is available */
     if (ourISPdev && ourISPdev->vic_regs) {
