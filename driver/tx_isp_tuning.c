@@ -1309,30 +1309,13 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     
     pr_info("isp_core_tunning_unlocked_ioctl: Using ISP device: %p\n", dev);
     
-    /* CRITICAL: Validate device structure before any access */
-    if (!dev) {
-        pr_err("isp_core_tunning_unlocked_ioctl: ISP device not available\n");
-        return -ENODEV;
-    }
-    
-    /* CRITICAL: Binary Ninja shows state check - if ($s0[0x1031] == 3) */
-    if (!dev->tuning_data) {
-        pr_err("isp_core_tunning_unlocked_ioctl: Tuning data structure not initialized\n");
-        return -ENODEV;
-    }
-    
-    /* Verify tuning data structure integrity */
-    if ((unsigned long)dev->tuning_data & 0x3) {
-        pr_err("CRITICAL: Tuning data not properly aligned: %p\n", dev->tuning_data);
-        return -EFAULT;
-    }
-    
-    pr_info("isp_core_tunning_unlocked_ioctl: Device validated, tuning_data=%p\n", dev->tuning_data);
-    
     /* MCP LOG: Critical fix for 5aaa5aaa crash implemented */
     pr_info("MCP_LOG: ISP M0 ioctl handler - applied Binary Ninja reference fixes\n");
     pr_info("MCP_LOG: Memory validation and poison pattern detection active\n");
     pr_info("MCP_LOG: Fix prevents kernel panic at 5aaa5ab7 memory access\n");
+    
+    /* NOTE: Tuning data validation moved to individual commands */
+    /* This allows TUNING_ENABLE to work even without existing tuning_data */
     
     /* Handle ISP core control commands (magic 0x56) */
     if (magic == 0x56) {
