@@ -1357,12 +1357,33 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     /* CRITICAL: Use global device reference - simplified like reference driver */
     dev = ourISPdev;
     if (!dev) {
+        pr_err("isp_core_tunning_unlocked_ioctl: No ISP device available\n");
         return -ENODEV;
     }
     
-    /* CRITICAL: Binary Ninja shows check: if ($s0[0x1031] == 3) */
-    /* This corresponds to tuning_enabled state check */
-    if (dev->tuning_enabled != 3) {
+    /* CRITICAL: Auto-initialize tuning for V4L2 controls if not already enabled */
+    if (magic == 0x56 && dev->tuning_enabled != 3) {
+        pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control\n");
+        
+        /* Initialize tuning_data if not already initialized */
+        if (!dev->tuning_data) {
+            pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
+            dev->tuning_data = isp_core_tuning_init(dev);
+            if (!dev->tuning_data) {
+                pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
+                return -ENOMEM;
+            }
+            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
+        }
+        
+        /* Enable tuning */
+        dev->tuning_enabled = 3;
+        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning auto-enabled for V4L2 controls\n");
+    }
+    
+    /* CRITICAL: Check tuning enabled for tuning commands only */
+    if (magic == 0x74 && dev->tuning_enabled != 3) {
+        pr_err("isp_core_tunning_unlocked_ioctl: Tuning commands require explicit enable (cmd=0x%x)\n", cmd);
         return -ENODEV;
     }
     
