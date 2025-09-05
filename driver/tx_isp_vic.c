@@ -1537,29 +1537,28 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         writel(0, vic_base + 0x300);
         wmb();
         
-        /* Binary Ninja: *($s0 + 0x210) = 0 */
-        *(int *)((char *)vic_dev + 0x210) = 0;
+        /* FIXED: Use proper struct member access instead of dangerous offset arithmetic */
+        vic_dev->stream_state = 0;
         
     } else {
         /* Stream ON - Binary Ninja: vic_pipo_mdma_enable($s0) FIRST */
         pr_info("*** STREAM ON: Calling vic_pipo_mdma_enable() FIRST ***\n");
         vic_pipo_mdma_enable(vic_dev);
         
-        /* Then set stream control register - Binary Ninja:
-         * *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
-        u32 buffer_count = *(uint32_t *)((char *)vic_dev + 0x218);
+        /* FIXED: Use proper struct member access for buffer count */
+        u32 buffer_count = vic_dev->active_buffer_count;
         stream_ctrl = (buffer_count << 16) | 0x80000020;
         pr_info("*** STREAM ON: Setting reg 0x300 = 0x%x (buffer_count=%d) ***\n", 
                 stream_ctrl, buffer_count);
         writel(stream_ctrl, vic_base + 0x300);
         wmb();
         
-        /* Binary Ninja: *($s0 + 0x210) = 1 */
-        *(int *)((char *)vic_dev + 0x210) = 1;
+        /* FIXED: Use proper struct member access instead of dangerous offset arithmetic */
+        vic_dev->stream_state = 1;
     }
     
-    /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0x1f4, var_18) */
-    spin_unlock_irqrestore((spinlock_t *)((char *)vic_dev + 0x1f4), flags);
+    /* FIXED: Use proper struct member access for spinlock unlock */
+    spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
     
     pr_info("*** ispvic_frame_channel_s_stream: Binary Ninja implementation complete ***\n");
     
