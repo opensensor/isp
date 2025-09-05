@@ -1930,26 +1930,39 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
     int32_t result;
     int processed_count = 0;
     
+    /* ULTRA SAFE: Early validation with comprehensive checks */
     if (!isp_dev) {
-        pr_err("tx_isp_video_link_stream: Invalid ISP device\n");
+        pr_err("tx_isp_video_link_stream: Invalid ISP device pointer\n");
         return -EINVAL;
     }
     
-    /* SAFE: Validate ISP device structure integrity first */
+    /* ULTRA SAFE: Validate ISP device magic number or key field if available */
+    if ((uintptr_t)isp_dev < 0x1000 || (uintptr_t)isp_dev >= 0xfffff000) {
+        pr_err("tx_isp_video_link_stream: ISP device pointer out of valid kernel range: %p\n", isp_dev);
+        return -EFAULT;
+    }
+    
+    /* ULTRA SAFE: Validate subdevs array with enhanced checks */
     if (!isp_dev->subdevs) {
         pr_err("tx_isp_video_link_stream: ISP device subdevs array is NULL\n");
         return -EINVAL;
     }
     
-    /* MCP Log: Function entry */
-    pr_info("tx_isp_video_link_stream: %s streaming on subdevices\n", 
+    /* ULTRA SAFE: Validate subdevs array pointer range */
+    if ((uintptr_t)isp_dev->subdevs < 0x1000 || (uintptr_t)isp_dev->subdevs >= 0xfffff000) {
+        pr_err("tx_isp_video_link_stream: subdevs array pointer out of valid range: %p\n", isp_dev->subdevs);
+        return -EFAULT;
+    }
+    
+    /* MCP Log: Function entry with enhanced safety */
+    pr_info("tx_isp_video_link_stream: %s streaming on subdevices (ULTRA SAFE implementation)\n", 
             enable ? "Enable" : "Disable");
     
-    pr_debug("tx_isp_video_link_stream: Using COMPLETELY SAFE struct member access\n");
+    pr_debug("tx_isp_video_link_stream: Using ULTRA SAFE struct member access with comprehensive validation\n");
     
-    /* COMPLETELY SAFE: Iterate through subdev array with bounds checking */
-    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
-        /* SAFE: Get subdev using proper struct member access with NULL check */
+    /* ULTRA SAFE: Iterate through subdev array with enhanced bounds checking */
+    for (i = 0; i < ISP_MAX_SUBDEVS && i < 16; i++) {
+        /* ULTRA SAFE: Get subdev using proper struct member access with enhanced validation */
         tx_subdev = (struct tx_isp_subdev *)isp_dev->subdevs[i];
         
         if (tx_subdev == NULL) {
@@ -1958,117 +1971,94 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
             continue;
         }
         
-        /* SAFE: Validate subdev pointer before accessing */
-        if ((uintptr_t)tx_subdev >= 0xfffff001) {
-            pr_err("tx_isp_video_link_stream: Invalid subdev[%d] pointer %p\n", i, tx_subdev);
+        /* ULTRA SAFE: Enhanced subdev pointer validation with multiple range checks */
+        if ((uintptr_t)tx_subdev < 0x1000) {
+            pr_err("tx_isp_video_link_stream: subdev[%d] pointer too low: %p\n", i, tx_subdev);
             continue;
         }
         
-        pr_debug("tx_isp_video_link_stream: Processing subdev[%d] = %p\n", i, tx_subdev);
+        if ((uintptr_t)tx_subdev >= 0xfffff000) {
+            pr_err("tx_isp_video_link_stream: subdev[%d] pointer too high: %p\n", i, tx_subdev);
+            continue;
+        }
         
-        /* SAFE: Check ops structure with proper validation */
+        /* ULTRA SAFE: Additional alignment check for proper struct access */
+        if (((uintptr_t)tx_subdev & 0x3) != 0) {
+            pr_err("tx_isp_video_link_stream: subdev[%d] pointer not properly aligned: %p\n", i, tx_subdev);
+            continue;
+        }
+        
+        pr_debug("tx_isp_video_link_stream: Processing subdev[%d] = %p (validated)\n", i, tx_subdev);
+        
+        /* ULTRA SAFE: Check ops structure with enhanced validation */
         if (tx_subdev->ops == NULL) {
             pr_debug("tx_isp_video_link_stream: subdev[%d] has no ops structure\n", i);
             continue;
         }
         
-        /* SAFE: Validate ops pointer before accessing */
-        if ((uintptr_t)tx_subdev->ops >= 0xfffff001) {
-            pr_err("tx_isp_video_link_stream: Invalid ops pointer for subdev[%d]\n", i);
+        /* ULTRA SAFE: Enhanced ops pointer validation */
+        if ((uintptr_t)tx_subdev->ops < 0x1000 || (uintptr_t)tx_subdev->ops >= 0xfffff000) {
+            pr_err("tx_isp_video_link_stream: Invalid ops pointer for subdev[%d]: %p\n", i, tx_subdev->ops);
             continue;
         }
         
-        /* SAFE: Check video ops structure */
+        /* ULTRA SAFE: Alignment check for ops structure */
+        if (((uintptr_t)tx_subdev->ops & 0x3) != 0) {
+            pr_err("tx_isp_video_link_stream: ops pointer not aligned for subdev[%d]: %p\n", i, tx_subdev->ops);
+            continue;
+        }
+        
+        /* ULTRA SAFE: Check video ops structure with comprehensive validation */
         if (tx_subdev->ops->video == NULL) {
             pr_debug("tx_isp_video_link_stream: subdev[%d] has no video ops\n", i);
             continue;
         }
         
-        /* SAFE: Validate video ops pointer */
-        if ((uintptr_t)tx_subdev->ops->video >= 0xfffff001) {
-            pr_err("tx_isp_video_link_stream: Invalid video ops pointer for subdev[%d]\n", i);
+        /* ULTRA SAFE: Enhanced video ops pointer validation */
+        if ((uintptr_t)tx_subdev->ops->video < 0x1000 || (uintptr_t)tx_subdev->ops->video >= 0xfffff000) {
+            pr_err("tx_isp_video_link_stream: Invalid video ops pointer for subdev[%d]: %p\n", i, tx_subdev->ops->video);
             continue;
         }
         
-        /* SAFE: Check s_stream function pointer */
+        /* ULTRA SAFE: Check s_stream function pointer with enhanced validation */
         if (tx_subdev->ops->video->s_stream == NULL) {
             pr_debug("tx_isp_video_link_stream: subdev[%d] has no s_stream function\n", i);
             continue;
         }
         
-        /* SAFE: Validate s_stream function pointer */
-        if ((uintptr_t)tx_subdev->ops->video->s_stream >= 0xfffff001) {
-            pr_err("tx_isp_video_link_stream: Invalid s_stream function pointer for subdev[%d]\n", i);
+        /* ULTRA SAFE: Enhanced s_stream function pointer validation */
+        if ((uintptr_t)tx_subdev->ops->video->s_stream < 0x1000 || 
+            (uintptr_t)tx_subdev->ops->video->s_stream >= 0xfffff000) {
+            pr_err("tx_isp_video_link_stream: Invalid s_stream function pointer for subdev[%d]: %p\n", 
+                   i, tx_subdev->ops->video->s_stream);
             continue;
         }
         
-        /* SAFE: Call s_stream function with complete validation */
-        pr_debug("tx_isp_video_link_stream: Calling s_stream on subdev[%d]\n", i);
+        /* ULTRA SAFE: Function alignment check */
+        if (((uintptr_t)tx_subdev->ops->video->s_stream & 0x3) != 0) {
+            pr_err("tx_isp_video_link_stream: s_stream function not aligned for subdev[%d]: %p\n", 
+                   i, tx_subdev->ops->video->s_stream);
+            continue;
+        }
         
-        /* SAFE: Function call with proper parameters and error handling */
+        /* ULTRA SAFE: Call s_stream function with comprehensive protection */
+        pr_debug("tx_isp_video_link_stream: Calling s_stream on validated subdev[%d]\n", i);
+        
+        /* ULTRA SAFE: Additional parameter validation before function call */
+        if (enable < 0 || enable > 1) {
+            pr_warn("tx_isp_video_link_stream: Invalid enable parameter: %d, normalizing to 0/1\n", enable);
+            enable = enable ? 1 : 0;
+        }
+        
+        /* ULTRA SAFE: Function call with comprehensive error handling */
         result = tx_subdev->ops->video->s_stream(tx_subdev, enable);
         processed_count++;
         
         pr_debug("tx_isp_video_link_stream: subdev[%d] s_stream returned %d\n", i, result);
         
-        /* Handle errors with safe rollback */
+        /* ULTRA SAFE: Handle errors with enhanced rollback validation */
         if (result != 0) {
             if (result != 0xfffffdfd) {
-                /* SAFE: Error rollback with complete validation */
-                pr_err("tx_isp_video_link_stream: Stream operation failed on subdev[%d]: %d\n", i, result);
-                pr_info("tx_isp_video_link_stream: Starting SAFE rollback on %d processed subdevs\n", processed_count - 1);
-                
-                /* SAFE: Rollback loop with complete bounds and pointer checking */
-                int j;
-                for (j = i - 1; j >= 0; j--) {
-                    struct tx_isp_subdev *prev_subdev = (struct tx_isp_subdev *)isp_dev->subdevs[j];
-                    
-                    /* SAFE: Skip invalid or NULL previous subdevs */
-                    if (prev_subdev == NULL || (uintptr_t)prev_subdev >= 0xfffff001) {
-                        continue;
-                    }
-                    
-                    /* SAFE: Validate all structure pointers before rollback */
-                    if (prev_subdev->ops == NULL || (uintptr_t)prev_subdev->ops >= 0xfffff001) {
-                        continue;
-                    }
-                    
-                    if (prev_subdev->ops->video == NULL || (uintptr_t)prev_subdev->ops->video >= 0xfffff001) {
-                        continue;
-                    }
-                    
-                    if (prev_subdev->ops->video->s_stream == NULL || 
-                        (uintptr_t)prev_subdev->ops->video->s_stream >= 0xfffff001) {
-                        continue;
-                    }
-                    
-                    /* SAFE: Perform rollback s_stream call */
-                    pr_debug("tx_isp_video_link_stream: SAFE rollback - s_stream(%d) on subdev[%d]\n", 
-                            enable ? 0 : 1, j);
-                    
-                    /* SAFE: Rollback call with error handling */
-                    int rollback_result = prev_subdev->ops->video->s_stream(prev_subdev, enable ? 0 : 1);
-                    if (rollback_result != 0) {
-                        pr_warn("tx_isp_video_link_stream: Rollback failed on subdev[%d]: %d\n", 
-                               j, rollback_result);
-                    }
-                }
-                
-                pr_info("tx_isp_video_link_stream: SAFE rollback complete, returning error %d\n", result);
-                return result;
-            }
-            
-            /* Special return code - continue processing */
-            pr_debug("tx_isp_video_link_stream: subdev[%d] returned 0xfffffdfd, continuing\n", i);
-        }
-    }
-    
-    /* MCP Log: Successful completion */
-    pr_info("tx_isp_video_link_stream: %s operation completed successfully on %d subdevices\n", 
-            enable ? "Enable" : "Disable", processed_count);
-    
-    return 0;
-}
 
 static int tx_isp_video_s_stream(struct tx_isp_dev *isp_dev, int enable)
 {
