@@ -1926,7 +1926,6 @@ static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 {
     int32_t i = 0;
-    void **subdev_array;
     void *subdev;
     void *video_ops;
     int32_t (*stream_func)(void*, int);
@@ -1942,11 +1941,8 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
     pr_info("tx_isp_video_link_stream: %s streaming on subdevices\n", 
             enable ? "Enable" : "Disable");
     
-    /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
-    subdev_array = (void**)((char*)isp_dev + 0x38);
-    
-    /* MCP Log: Starting subdev iteration */
-    pr_debug("tx_isp_video_link_stream: Iterating through 16 subdevices at offset 0x38\n");
+    /* FIXED: Use proper struct member access instead of dangerous offset access */
+    pr_debug("tx_isp_video_link_stream: Using SAFE struct member access to subdevs array\n");
     
     /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
     for (i = 0; i < 0x10; i++) {
