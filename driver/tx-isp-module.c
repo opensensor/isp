@@ -5587,18 +5587,27 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
                    reg_sensor->index, reg_sensor->name);
         }
         
-        pr_info("*** SENSOR REGISTRATION COMPLETE - SHOULD NOW WORK FOR STREAMING ***\n");
-        
-    } else {
-        pr_err("*** CRITICAL ERROR: ourISPdev is NULL - cannot register sensor! ***\n");
-        mutex_unlock(&sensor_register_mutex);
-        return -ENODEV;
+    pr_info("*** SENSOR REGISTRATION COMPLETE - SHOULD NOW WORK FOR STREAMING ***\n");
+    
+    /* *** CRITICAL: Initialize V4L2 video devices for proper VIDIOC_S_FMT support *** */
+    pr_info("*** INITIALIZING V4L2 VIDEO DEVICES FOR FRAMESOURCE COMPATIBILITY ***\n");
+    ret = tx_isp_v4l2_init();
+    if (ret) {
+        pr_err("Failed to initialize V4L2 video devices: %d\n", ret);
+        goto err_cleanup_graph;
     }
+    pr_info("*** V4L2 VIDEO DEVICES INITIALIZED - VIDIOC_S_FMT SHOULD NOW WORK ***\n");
     
-    /* Store for any additional IOCTL processing */
-    registered_sensor_subdev = sd;
-    
-    mutex_unlock(&sensor_register_mutex);
+    /* *** CRITICAL: Create frame channel devices with proper IOCTL handlers *** */
+//    pr_info("*** CREATING FRAME CHANNEL DEVICES FOR IOCTL ROUTING ***\n");
+//    ret = create_frame_channel_devices();
+//    if (ret) {
+//        pr_err("Failed to create frame channel devices: %d\n", ret);
+//        goto err_cleanup_graph;
+//    }
+//    pr_info("*** FRAME CHANNEL DEVICES CREATED - IOCTLS SHOULD NOW WORK ***\n");
+
+    pr_info("TX ISP driver ready with new subdevice management system\n");
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_register_sensor_subdev);
