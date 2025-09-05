@@ -558,7 +558,6 @@ static const struct v4l2_ioctl_ops tx_isp_v4l2_ioctl_ops = {
 static int tx_isp_v4l2_open(struct file *file)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
-    struct frame_channel_state *state;
 
     if (!dev) {
         pr_err("tx_isp_v4l2_open: Invalid device\n");
@@ -567,15 +566,9 @@ static int tx_isp_v4l2_open(struct file *file)
 
     pr_info("*** V4L2 Channel %d opened ***\n", dev->channel_num);
 
-    /* CRITICAL: Set up frame channel state for Binary Ninja IOCTLs */
-    state = kzalloc(sizeof(struct frame_channel_state), GFP_KERNEL);
-    if (!state) {
-        return -ENOMEM;
-    }
-
-    state->channel = dev->channel_num;
-    state->streaming = false;
-    file->private_data = state;
+    /* Set the channel number as private data for frame_channel_unlocked_ioctl */
+    /* The frame channel IOCTL expects file->private_data to be the channel number */
+    file->private_data = (void *)(unsigned long)dev->channel_num;
     
     return v4l2_fh_open(file);
 }
@@ -594,6 +587,9 @@ static int tx_isp_v4l2_release(struct file *file)
         }
     }
     
+    /* Clear private data */
+    file->private_data = NULL;
+
     return v4l2_fh_release(file);
 }
 
