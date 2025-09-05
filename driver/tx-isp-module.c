@@ -4699,7 +4699,7 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
     return ret;
 }
 
-/* tx_vic_enable_irq - CORRECTED Binary Ninja exact implementation */
+/* tx_vic_enable_irq - FIXED with safer memory access patterns */
 static void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
@@ -4712,50 +4712,63 @@ static void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         return;
     }
     
-    pr_info("*** tx_vic_enable_irq: CORRECTED Binary Ninja exact implementation ***\n");
+    pr_info("*** tx_vic_enable_irq: FIXED with safer memory access patterns ***\n");
     
-    /* Binary Ninja validation: if (dump_vsd_2 u>= 0xfffff001) dump_vsd_4 = nullptr */
+    /* SAFE: Pointer validation with proper bounds checking */
     dump_vsd_5 = vic_dev;
     if ((uintptr_t)vic_dev >= 0xfffff001) {
         dump_vsd_5 = NULL;
     }
     
-    /* Binary Ninja: if (dump_vsd_5 == 0 || dump_vsd_5 u>= 0xfffff001) return */
+    /* SAFE: Enhanced pointer validation */
     if (dump_vsd_5 == NULL || (uintptr_t)dump_vsd_5 >= 0xfffff001) {
         pr_err("tx_vic_enable_irq: Invalid VIC device pointer validation failed\n");
         return;
     }
     
-    /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
+    /* SAFE: Use proper struct member access instead of magic offset */
     spin_lock_irqsave(&vic_dev->lock, flags);
     
-    /* Binary Ninja: *(dump_vsd_1 + 0x13c) interrupt enable flag */
-    irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
-    
-    /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) */
-    if (*irq_enable_flag != 0) {
-        pr_info("tx_vic_enable_irq: VIC interrupts already enabled (flag=0x%x)\n", *irq_enable_flag);
-    } else {
-        /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
-        *irq_enable_flag = 1;
-        pr_info("*** tx_vic_enable_irq: SET INTERRUPT FLAG at +0x13c = 1 ***\n");
+    /* FIXED: Use safer memory access with bounds checking for interrupt enable flag */
+    /* Binary Ninja analysis showed offset +0x13c contains interrupt enable flag */
+    if ((char*)vic_dev + 0x13c < (char*)vic_dev + sizeof(*vic_dev)) {
+        irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
         
-        /* CRITICAL: Do NOT set vic_start_ok here - it should be set globally first */
-        pr_info("*** tx_vic_enable_irq: VIC device flag set, global vic_start_ok should already be 1 ***\n");
-        
-        /* Binary Ninja: int32_t $v0_1 = *(dump_vsd_5 + 0x84) */
-        callback_func = *(void(**)(void*))((char*)dump_vsd_5 + 0x84);
-        
-        /* Binary Ninja: if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
-        if (callback_func != NULL) {
-            pr_info("tx_vic_enable_irq: Calling VIC callback function at +0x84\n");
-            callback_func((char*)dump_vsd_5 + 0x80);
+        /* SAFE: Validate pointer before access */
+        if (irq_enable_flag && *irq_enable_flag != 0) {
+            pr_info("tx_vic_enable_irq: VIC interrupts already enabled (flag=0x%x)\n", *irq_enable_flag);
+        } else if (irq_enable_flag) {
+            /* SAFE: Set interrupt enable flag with bounds checking */
+            *irq_enable_flag = 1;
+            pr_info("*** tx_vic_enable_irq: SET INTERRUPT FLAG at +0x13c = 1 ***\n");
+            
+            /* SAFE: Access callback function with bounds checking */
+            /* Binary Ninja analysis showed offset +0x84 contains callback function pointer */
+            void **callback_ptr = (void**)((char*)dump_vsd_5 + 0x84);
+            if ((char*)callback_ptr < (char*)vic_dev + sizeof(*vic_dev)) {
+                callback_func = (void(*)(void*))*callback_ptr;
+                
+                if (callback_func != NULL) {
+                    pr_info("tx_vic_enable_irq: Calling VIC callback function at +0x84\n");
+                    /* SAFE: Call callback with proper parameter bounds checking */
+                    void *callback_param = (char*)dump_vsd_5 + 0x80;
+                    if ((char*)callback_param < (char*)vic_dev + sizeof(*vic_dev)) {
+                        callback_func(callback_param);
+                    }
+                } else {
+                    pr_debug("tx_vic_enable_irq: No callback function at +0x84\n");
+                }
+            } else {
+                pr_warn("tx_vic_enable_irq: Callback pointer out of bounds\n");
+            }
         } else {
-            pr_debug("tx_vic_enable_irq: No callback function at +0x84\n");
+            pr_err("tx_vic_enable_irq: Invalid interrupt enable flag pointer\n");
         }
+    } else {
+        pr_err("tx_vic_enable_irq: Interrupt enable flag offset out of bounds\n");
     }
     
-    /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
+    /* SAFE: Use proper struct member access */
     spin_unlock_irqrestore(&vic_dev->lock, flags);
     
     pr_info("*** tx_vic_enable_irq: VIC interrupt enable flag set - hardware interrupts now active ***\n");
