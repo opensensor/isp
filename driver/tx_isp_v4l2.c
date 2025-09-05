@@ -276,7 +276,8 @@ static int tx_isp_create_v4l2_device(int channel)
     vdev->v4l2_dev = &dev->v4l2_dev;
     vdev->fops = &tx_isp_v4l2_fops;
     vdev->ioctl_ops = &tx_isp_v4l2_ioctl_ops;
-    vdev->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+    /* Note: device_caps member not available in this kernel version */
+    /* Capabilities are communicated via VIDIOC_QUERYCAP ioctl instead */
     vdev->lock = &dev->lock;
     snprintf(vdev->name, sizeof(vdev->name), "tx-isp-ch%d", channel);
     video_set_drvdata(vdev, dev);
