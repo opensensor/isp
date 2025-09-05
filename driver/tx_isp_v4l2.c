@@ -174,44 +174,55 @@ static int tx_isp_v4l2_reqbufs(struct file *file, void *priv,
                                struct v4l2_requestbuffers *rb)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    struct file fake_file;
     int ret;
-    
+
     if (!dev) {
         return -EINVAL;
     }
-    
-    pr_info("*** V4L2 Channel %d: REQBUFS - Routing to frame channel IOCTL ***\n", dev->channel_num);
-    
-    /* CRITICAL: Route to existing Binary Ninja frame_channel_unlocked_ioctl */
-    /* This preserves all the complex Binary Ninja buffer allocation logic */
-    ret = frame_channel_unlocked_ioctl(file, 0xc0145608, (unsigned long)rb);
-    
-    pr_info("*** V4L2 Channel %d: REQBUFS routed, result=%d ***\n", dev->channel_num, ret);
+
+    pr_info("*** V4L2 Channel %d: REQBUFS count=%d ***\n",
+            dev->channel_num, rb->count);
+
+    /* Create a fake file structure for frame_channel_unlocked_ioctl */
+    memset(&fake_file, 0, sizeof(fake_file));
+    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
+
+    /* Route to frame_channel_unlocked_ioctl with channel context */
+    ret = frame_channel_unlocked_ioctl(&fake_file, 0xc0145608, (unsigned long)rb);
+
+    pr_info("*** V4L2 Channel %d: REQBUFS result=%d ***\n",
+            dev->channel_num, ret);
     
     return ret;
 }
+
 
 /* VIDIOC_QBUF - Queue buffer - Route to frame channel IOCTL */
 static int tx_isp_v4l2_qbuf(struct file *file, void *priv,
                             struct v4l2_buffer *buf)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    struct file fake_file;
     int ret;
-    
+
     if (!dev) {
         return -EINVAL;
     }
-    
-    pr_info("*** V4L2 Channel %d: QBUF - Routing to Binary Ninja frame channel IOCTL ***\n",
-            dev->channel_num);
-    
-    /* CRITICAL: Route to frame_channel_unlocked_ioctl QBUF (0xc044560f) */
-    /* This preserves the Binary Ninja tx_isp_send_event_to_remote logic */
-    ret = frame_channel_unlocked_ioctl(file, 0xc044560f, (unsigned long)buf);
-    
-    pr_info("*** V4L2 Channel %d: QBUF routed with Binary Ninja event system, result=%d ***\n", 
+
+    pr_info("*** V4L2 Channel %d: QBUF index=%d ***\n",
+            dev->channel_num, buf->index);
+
+    /* Create a fake file structure for frame_channel_unlocked_ioctl */
+    memset(&fake_file, 0, sizeof(fake_file));
+    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
+
+    /* Route to frame_channel_unlocked_ioctl QBUF (0xc044560f) */
+    ret = frame_channel_unlocked_ioctl(&fake_file, 0xc044560f, (unsigned long)buf);
+
+    pr_info("*** V4L2 Channel %d: QBUF result=%d ***\n",
             dev->channel_num, ret);
-    
+
     return ret;
 }
 
@@ -220,22 +231,25 @@ static int tx_isp_v4l2_dqbuf(struct file *file, void *priv,
                              struct v4l2_buffer *buf)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    struct file fake_file;
     int ret;
-    
+
     if (!dev) {
         return -EINVAL;
     }
-    
-    pr_info("*** V4L2 Channel %d: DQBUF - Routing to Binary Ninja frame channel IOCTL ***\n",
-            dev->channel_num);
-    
-    /* CRITICAL: Route to frame_channel_unlocked_ioctl DQBUF (0xc0445611) */
-    /* This preserves the Binary Ninja __fill_v4l2_buffer and sensor logic */
-    ret = frame_channel_unlocked_ioctl(file, 0xc0445611, (unsigned long)buf);
-    
-    pr_info("*** V4L2 Channel %d: DQBUF routed with Binary Ninja buffer logic, result=%d ***\n",
-            dev->channel_num, ret);
-    
+
+    pr_info("*** V4L2 Channel %d: DQBUF ***\n", dev->channel_num);
+
+    /* Create a fake file structure for frame_channel_unlocked_ioctl */
+    memset(&fake_file, 0, sizeof(fake_file));
+    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
+
+    /* Route to frame_channel_unlocked_ioctl DQBUF (0xc0445611) */
+    ret = frame_channel_unlocked_ioctl(&fake_file, 0xc0445611, (unsigned long)buf);
+
+    pr_info("*** V4L2 Channel %d: DQBUF result=%d, index=%d ***\n",
+            dev->channel_num, ret, (ret == 0) ? buf->index : -1);
+
     return ret;
 }
 
@@ -244,22 +258,26 @@ static int tx_isp_v4l2_streamon(struct file *file, void *priv,
                                 enum v4l2_buf_type type)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    struct file fake_file;
     int ret;
-    
+
     if (!dev) {
         return -EINVAL;
     }
-    
-    pr_info("*** V4L2 Channel %d: STREAMON - Routing to Binary Ninja frame channel IOCTL ***\n",
-            dev->channel_num);
-    
-    /* CRITICAL: Route to frame_channel_unlocked_ioctl STREAMON (0x80045612) */
-    /* This preserves the Binary Ninja sensor hardware initialization and VIC setup */
-    ret = frame_channel_unlocked_ioctl(file, 0x80045612, (unsigned long)&type);
-    
-    pr_info("*** V4L2 Channel %d: STREAMON routed with Binary Ninja hardware init, result=%d ***\n",
+
+    pr_info("*** V4L2 Channel %d: STREAMON type=%d ***\n",
+            dev->channel_num, type);
+
+    /* Create a fake file structure for frame_channel_unlocked_ioctl */
+    memset(&fake_file, 0, sizeof(fake_file));
+    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
+
+    /* Route to frame_channel_unlocked_ioctl STREAMON (0x80045612) */
+    ret = frame_channel_unlocked_ioctl(&fake_file, 0x80045612, (unsigned long)&type);
+
+    pr_info("*** V4L2 Channel %d: STREAMON result=%d ***\n",
             dev->channel_num, ret);
-    
+
     /* Update V4L2 state based on frame channel result */
     if (ret == 0) {
         mutex_lock(&dev->lock);
@@ -267,7 +285,7 @@ static int tx_isp_v4l2_streamon(struct file *file, void *priv,
         dev->sequence = 0;
         mutex_unlock(&dev->lock);
     }
-    
+
     return ret;
 }
 
@@ -276,29 +294,33 @@ static int tx_isp_v4l2_streamoff(struct file *file, void *priv,
                                  enum v4l2_buf_type type)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    struct file fake_file;
     int ret;
-    
+
     if (!dev) {
         return -EINVAL;
     }
-    
-    pr_info("*** V4L2 Channel %d: STREAMOFF - Routing to Binary Ninja frame channel IOCTL ***\n",
-            dev->channel_num);
-    
-    /* CRITICAL: Route to frame_channel_unlocked_ioctl STREAMOFF (0x80045613) */
-    /* This preserves the Binary Ninja sensor hardware shutdown logic */
-    ret = frame_channel_unlocked_ioctl(file, 0x80045613, (unsigned long)&type);
-    
-    pr_info("*** V4L2 Channel %d: STREAMOFF routed with Binary Ninja shutdown, result=%d ***\n",
+
+    pr_info("*** V4L2 Channel %d: STREAMOFF type=%d ***\n",
+            dev->channel_num, type);
+
+    /* Create a fake file structure for frame_channel_unlocked_ioctl */
+    memset(&fake_file, 0, sizeof(fake_file));
+    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
+
+    /* Route to frame_channel_unlocked_ioctl STREAMOFF (0x80045613) */
+    ret = frame_channel_unlocked_ioctl(&fake_file, 0x80045613, (unsigned long)&type);
+
+    pr_info("*** V4L2 Channel %d: STREAMOFF result=%d ***\n",
             dev->channel_num, ret);
-    
+
     /* Update V4L2 state based on frame channel result */
     if (ret == 0) {
         mutex_lock(&dev->lock);
         dev->streaming = false;
         mutex_unlock(&dev->lock);
     }
-    
+
     return ret;
 }
 
@@ -558,6 +580,7 @@ static const struct v4l2_ioctl_ops tx_isp_v4l2_ioctl_ops = {
 static int tx_isp_v4l2_open(struct file *file)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    int ret;
 
     if (!dev) {
         pr_err("tx_isp_v4l2_open: Invalid device\n");
@@ -566,11 +589,16 @@ static int tx_isp_v4l2_open(struct file *file)
 
     pr_info("*** V4L2 Channel %d opened ***\n", dev->channel_num);
 
-    /* Set the channel number as private data for frame_channel_unlocked_ioctl */
-    /* The frame channel IOCTL expects file->private_data to be the channel number */
-    file->private_data = (void *)(unsigned long)dev->channel_num;
-    
-    return v4l2_fh_open(file);
+    /* Let V4L2 set up its file handle */
+    ret = v4l2_fh_open(file);
+    if (ret)
+        return ret;
+
+    /* Store channel info in the V4L2 file handle for our IOCTLs */
+    /* The v4l2_fh structure should be in file->private_data now */
+    /* We'll pass the channel number through dev which is accessible via video_drvdata */
+
+    return 0;
 }
 
 static int tx_isp_v4l2_release(struct file *file)
