@@ -313,34 +313,6 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         }
     }
 
-    /* Map to appropriate register space */
-    pr_info("Mapping to register space\n");
-    if (dev->mem_region) {
-        if (!strcmp(pdev->name, "tx-isp-vic")) {
-            sd->base = dev->vic_regs;
-        } else if (!strcmp(pdev->name, "tx-isp-csi")) {
-            sd->base = ioremap(dev->csi_region->start,
-                             resource_size(dev->csi_region));
-
-            if (sd->base) {
-                // Basic CSI initialization
-                writel(1, sd->base + 0x40);
-                wmb();
-                udelay(100);
-
-                writel(0x1, sd->base + 0x04);
-                wmb();
-                udelay(100);
-
-                pr_info("CSI PHY initialized in probe\n");
-            }
-        } else {
-            sd->base = ioremap(dev->mem_region->start,
-                             resource_size(dev->mem_region));
-        }
-        pr_info("Using register base: %p\n", sd->base);
-    }
-
     /* *** STEP: Build up subdev array and configure ops *** */
     if (!strcmp(pdev->name, "tx-isp-vic")) {
         /* Configure VIC subdev ops and ISP reference */
