@@ -87,50 +87,45 @@ extern struct tx_isp_subdev_ops vic_subdev_ops;
 // VIC device structure matching Binary Ninja reference (0x21c bytes total)
 // Based on decompiled tx_isp_vic_start function offsets
 struct tx_isp_vic_device {
-    union {
-        struct {
-            // Base subdev structure at offset 0
-            struct tx_isp_subdev sd;
-        };
-        struct {
-            // Ensure exact offsets with fixed-size buffer
-            uint8_t _pad_to_b8[0xb8];
-            void __iomem *vic_regs;         // 0xb8: VIC hardware registers
-            uint8_t _pad_to_d4[0xd4 - 0xb8 - 8];
-            struct tx_isp_vic_device *self; // 0xd4: Self-pointer  
-            uint8_t _pad_to_dc[0xdc - 0xd4 - 8];
-            uint32_t width;                 // 0xdc: Frame width (renamed from frame_width)
-            uint32_t height;                // 0xe0: Frame height (renamed from frame_height)
-            uint32_t pixel_format;          // 0xe4: Pixel format
-            uint8_t _pad_to_110[0x110 - 0xe4 - 4];
-            // Place sensor_attr directly without padding calculation
-            struct tx_isp_sensor_attribute sensor_attr; // 0x110: Sensor attributes (not pointer)
-            // Continue with other members after sensor_attr (let compiler handle alignment)
-            int state;                      // State: 1=init, 2=active
-            spinlock_t lock;                // Spinlock
-            struct completion frame_complete; // Frame completion
-            struct mutex mlock;             // Mutex (expected by tx-isp-module.c)
-            struct mutex state_lock;        // State mutex
-            // Buffer management structures
-            uint32_t buffer_count;          // Buffer count
-            bool processing;                // Processing flag
-            uint32_t vic_errors[13];        // Error array (13 elements, 0x34 bytes)
-            uint32_t total_errors;          // Total error count
-            spinlock_t buffer_lock;         // Buffer lock
-            struct list_head queue_head;    // Buffer queues
-            struct list_head free_head;
-            struct list_head done_head;
-            int streaming;                  // Streaming state
-            uint32_t frame_count;           // Frame counter
-            uint8_t _pad_to_1f4[0x1f4 - sizeof(struct tx_isp_subdev) - 0x100]; // Padding to offset 0x1f4
-            spinlock_t buffer_mgmt_lock;    // 0x1f4: Buffer management spinlock
-            uint8_t _pad_to_210[0x210 - 0x1f4 - sizeof(spinlock_t)]; // Padding to offset 0x210  
-            int stream_state;               // 0x210: Stream state (0=off, 1=on)
-            uint8_t _pad_to_218[0x218 - 0x210 - sizeof(int)]; // Padding to offset 0x218
-            uint32_t active_buffer_count;   // 0x218: Active buffer count
-        };
-        uint8_t _total_size[0x21c];        // Ensure total size is 0x21c
-    };
-};
+    // Use a simplified approach with explicit offsets for critical members
+    uint8_t _pad_to_b8[0xb8];           // Padding to offset 0xb8
+    void __iomem *vic_regs;             // 0xb8: VIC hardware registers
+    uint8_t _pad_to_d4[0xd4 - 0xb8 - 8]; // Padding to offset 0xd4
+    struct tx_isp_vic_device *self;     // 0xd4: Self-pointer  
+    uint8_t _pad_to_dc[0xdc - 0xd4 - 8]; // Padding to offset 0xdc
+    uint32_t width;                     // 0xdc: Frame width
+    uint32_t height;                    // 0xe0: Frame height
+    uint32_t pixel_format;              // 0xe4: Pixel format
+    uint8_t _pad_to_110[0x110 - 0xe4 - 4]; // Padding to offset 0x110
+    struct tx_isp_sensor_attribute sensor_attr; // 0x110: Sensor attributes
+    
+    // Additional members without strict offset requirements
+    int state;                          // State: 1=init, 2=active
+    spinlock_t lock;                    // General spinlock
+    struct completion frame_complete;   // Frame completion
+    struct mutex mlock;                 // Mutex (expected by tx-isp-module.c)
+    struct mutex state_lock;            // State mutex
+    uint32_t buffer_count;              // Buffer count
+    bool processing;                    // Processing flag
+    uint32_t vic_errors[13];            // Error array (13 elements, 0x34 bytes)
+    uint32_t total_errors;              // Total error count
+    spinlock_t buffer_lock;             // Buffer lock
+    struct list_head queue_head;        // Buffer queues
+    struct list_head free_head;
+    struct list_head done_head;
+    int streaming;                      // Streaming state
+    uint32_t frame_count;               // Frame counter
+    
+    // Critical offset-dependent members placed at the end with explicit padding
+    uint8_t _pad_to_1f4[0x1f4 - 0x110 - sizeof(struct tx_isp_sensor_attribute) - 0x80]; // Safe padding to 0x1f4
+    spinlock_t buffer_mgmt_lock;        // 0x1f4: Buffer management spinlock
+    uint8_t _pad_to_210[0x210 - 0x1f4 - sizeof(spinlock_t)]; // Padding to offset 0x210  
+    int stream_state;                   // 0x210: Stream state (0=off, 1=on)
+    uint8_t _pad_to_218[0x218 - 0x210 - sizeof(int)]; // Padding to offset 0x218
+    uint32_t active_buffer_count;       // 0x218: Active buffer count
+    
+    // Final padding to ensure total size is 0x21c
+    uint8_t _pad_to_end[0x21c - 0x218 - 4]; // Padding to end of structure
+} __attribute__((packed));
 
 #endif /* __TX_ISP_VIC_H__ */
