@@ -341,25 +341,86 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         pr_info("Using register base: %p\n", sd->base);
     }
 
-    /* Store the subdev in device structure */
+    /* *** STEP: Build up subdev array and configure ops *** */
     if (!strcmp(pdev->name, "tx-isp-csi")) {
         if (!dev->csi_dev) {
-            pr_err("CSI device not initialized\n");
+            pr_err("*** CRITICAL ERROR: CSI DEVICE NOT CREATED! ***\n");
             ret = -EINVAL;
             goto err_free_out_channels;
         }
+        
+        /* Configure CSI subdev ops and ISP reference */
         dev->csi_dev->sd = sd;
+        sd->ops = ops;
+        sd->isp = (void*)dev;
+        
+        /* CRITICAL: Add CSI to subdev array at index 1 */
+        dev->subdevs[1] = sd;
+        
+        pr_info("*** SUCCESS: CSI SUBDEV REGISTERED AT INDEX 1 ***\n");
+        pr_info("CSI subdev: %p, ops: %p, video: %p\n",
+                sd, sd->ops, sd->ops ? sd->ops->video : NULL);
+                
     } else if (!strcmp(pdev->name, "tx-isp-vin")) {
-        dev->sensor_sd = sd;  // Store in sensor_sd for now
+        /* Configure VIN subdev ops and ISP reference */
+        dev->sensor_sd = sd;  // Keep individual reference for now
+        sd->ops = ops;
+        sd->isp = (void*)dev;
+        
+        /* CRITICAL: Add VIN to subdev array at index 2 */
+        dev->subdevs[2] = sd;
+        
+        pr_info("*** SUCCESS: VIN SUBDEV REGISTERED AT INDEX 2 ***\n");
+        pr_info("VIN subdev: %p, ops: %p, video: %p\n",
+                sd, sd->ops, sd->ops ? sd->ops->video : NULL);
+                
     } else if (!strcmp(pdev->name, "tx-isp-fs")) {
-        dev->sensor_sd = sd;  // Store in sensor_sd for now
+        /* Configure FS subdev ops and ISP reference */  
+        dev->sensor_sd = sd;  // Keep individual reference for now
+        sd->ops = ops;
+        sd->isp = (void*)dev;
+        
+        /* CRITICAL: Add FS to subdev array at index 3 */
+        dev->subdevs[3] = sd;
+        
+        pr_info("*** SUCCESS: FS SUBDEV REGISTERED AT INDEX 3 ***\n");
+        pr_info("FS subdev: %p, ops: %p, video: %p\n",
+                sd, sd->ops, sd->ops ? sd->ops->video : NULL);
+                
     } else {
+        /* Configure sensor subdev ops and ISP reference */
         pr_info("Storing sensor subdev\n");
         dev->sensor_sd = sd;
+        sd->ops = ops;
+        sd->isp = (void*)dev;
+        
+        /* CRITICAL: Add sensor to subdev array at index 4 */
+        dev->subdevs[4] = sd;
+        
+        pr_info("*** SUCCESS: SENSOR SUBDEV REGISTERED AT INDEX 4 ***\n");
+        pr_info("Sensor subdev: %p, ops: %p, video: %p\n",
+                sd, sd->ops, sd->ops ? sd->ops->video : NULL);
+    }
+
+    /* *** STEP: Verify subdev array is properly populated *** */
+    int populated_count = 0;
+    int i;
+    for (i = 0; i < 16; i++) {  // subdevs array size is 16
+        if (dev->subdevs[i] != NULL) {
+            populated_count++;
+            pr_info("subdevs[%d] = %p (populated)\n", i, dev->subdevs[i]);
+        }
+    }
+
+    if (populated_count == 0) {
+        pr_err("*** CRITICAL ERROR: NO SUBDEVICES IN ARRAY! ***\n");
+        ret = -EINVAL;
+        goto err_free_out_channels;
     }
 
     platform_set_drvdata(pdev, dev);
 
+    pr_info("*** SUCCESS: SUBDEV ARRAY POPULATED WITH %d DEVICES - tx_isp_video_link_stream SHOULD NOW WORK! ***\n", populated_count);
     pr_info("Subdev %s initialized successfully\n", pdev->name);
     return 0;
 
