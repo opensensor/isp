@@ -531,7 +531,7 @@ int frame_channel_open(struct inode *inode, struct file *file);
 int frame_channel_release(struct inode *inode, struct file *file);
 long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
-/* Frame channel open handler - FIXED to handle dynamic devices */
+/* Frame channel open handler - CRITICAL FIX for null pointer crash at offset 0x70 */
 int frame_channel_open(struct inode *inode, struct file *file)
 {
     struct frame_channel_device *fcd = NULL;
@@ -540,6 +540,12 @@ int frame_channel_open(struct inode *inode, struct file *file)
     int channel_num = -1;
     
     pr_info("*** FRAME CHANNEL OPEN: minor=%d ***\n", minor);
+    
+    /* CRITICAL FIX: Validate file pointer first */
+    if (!file) {
+        pr_err("Frame channel open: Invalid file pointer\n");
+        return -EINVAL;
+    }
     
     /* CRITICAL FIX: Find the frame channel device by minor number */
     /* First try to match against registered frame_channels array */
@@ -602,7 +608,18 @@ int frame_channel_open(struct inode *inode, struct file *file)
         pr_info("*** FRAME CHANNEL %d: Initialized state ***\n", fcd->channel_num);
     }
     
+    /* CRITICAL FIX: Store frame channel device at the exact offset expected by reference driver */
+    /* Binary Ninja shows frame_channel_unlocked_ioctl expects device at *(file + 0x70) */
     file->private_data = fcd;
+    
+    /* CRITICAL FIX: Also store at offset 0x70 where Binary Ninja expects it */
+    /* This prevents the null pointer dereference crash */
+    if ((char*)file + 0x70 < (char*)file + sizeof(*file)) {
+        *((struct frame_channel_device**)((char*)file + 0x70)) = fcd;
+        pr_info("*** CRITICAL FIX: Frame channel device stored at file+0x70 to prevent crash ***\n");
+    } else {
+        pr_warn("*** WARNING: Cannot store at file+0x70 - using private_data only ***\n");
+    }
     
     pr_info("*** FRAME CHANNEL %d OPENED SUCCESSFULLY - NOW READY FOR IOCTLS ***\n", fcd->channel_num);
     pr_info("Channel %d: Format %dx%d, pixfmt=0x%x, minor=%d\n", 
@@ -2205,12 +2222,38 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 {
     void __user *argp = (void __user *)arg;
     struct frame_channel_device *fcd = file->private_data;
+    struct frame_channel_device *fcd_offset_70 = NULL;
     struct tx_isp_channel_state *state;
     int channel;
     
-    if (!fcd) {
-        pr_err("Invalid frame channel device\n");
+    /* CRITICAL FIX: Validate file pointer first to prevent crash at BadVA: 00000000 */
+    if (!file) {
+        pr_err("frame_channel_unlocked_ioctl: NULL file pointer - CRITICAL CRASH PREVENTION\n");
         return -EINVAL;
+    }
+    
+    /* CRITICAL FIX: Check both private_data and offset 0x70 locations like Binary Ninja expects */
+    if (!fcd) {
+        /* Try to get device from offset 0x70 where Binary Ninja expects it */
+        if ((char*)file + 0x70 < (char*)file + sizeof(*file)) {
+            fcd_offset_70 = *((struct frame_channel_device**)((char*)file + 0x70));
+            if (fcd_offset_70) {
+                fcd = fcd_offset_70;
+                pr_info("*** RECOVERED: Using frame channel device from file+0x70: %p ***\n", fcd);
+            }
+        }
+        
+        if (!fcd) {
+            pr_err("*** CRITICAL: Frame channel device NULL at both private_data and file+0x70 ***\n");
+            pr_err("*** This prevents the crash at BadVA: 00000000 in Binary Ninja reference ***\n");
+            return -EINVAL;
+        }
+    }
+    
+    /* CRITICAL FIX: Additional validation to ensure fcd is valid */
+    if ((uintptr_t)fcd < 0x1000 || (uintptr_t)fcd >= 0xfffff000) {
+        pr_err("*** CRITICAL: Frame channel device pointer out of valid range: %p ***\n", fcd);
+        return -EFAULT;
     }
     
     channel = fcd->channel_num;
