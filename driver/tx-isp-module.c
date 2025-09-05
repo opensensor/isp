@@ -5380,7 +5380,7 @@ static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
     /* SAFE: Instead of direct struct access, use safe memory operations */
     /* Read the first few bytes to check if this looks like a valid structure */
     uint32_t struct_check;
-    if (copy_from_kernel_nofault(&struct_check, subdev, sizeof(uint32_t)) != 0) {
+    if (probe_kernel_read(&struct_check, subdev, sizeof(uint32_t)) != 0) {
         pr_err("*** EVENT: Cannot safely read subdev structure at %p ***\n", subdev);
         return 0xfffffdfd;
     }
@@ -5390,7 +5390,7 @@ static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
     
     /* MIPS-SAFE: Use aligned access to check ops pointer */
     void *ops_ptr = NULL;
-    if (copy_from_kernel_nofault(&ops_ptr, &sd->ops, sizeof(void*)) != 0) {
+    if (probe_kernel_read(&ops_ptr, &sd->ops, sizeof(void*)) != 0) {
         pr_warn("*** EVENT: Cannot safely read ops pointer from subdev ***\n");
         ops_ptr = NULL;
     }
