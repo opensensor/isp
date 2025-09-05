@@ -67,14 +67,14 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             void __iomem *vic_regs = vic_dev->vic_regs;
             
             /* Binary Ninja: void** i_1 = *(arg1 + 0x204) */
-            void **current_buf = *(void ***)((char *)vic_dev + 0x204);
+            void **current_buf = (void **)&vic_dev->queue_head;
             int buffer_count = 0;       /* $a1_1 = 0 */
             int buffer_found = 0;       /* $v1_1 = 0 */
             int buffer_match = 0;       /* $v0 = 0 */
             
             /* Binary Ninja: Loop through buffer list */
             /* for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
-            void **list_head = (void **)((char *)vic_dev + 0x204);
+            void **list_head = (void **)&vic_dev->queue_head;
             while (current_buf != list_head) {
                 /* $v1_1 += 0 u< $v0 ? 1 : 0 */
                 buffer_found += (buffer_match == 0) ? 1 : 0;
@@ -194,7 +194,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     }
     
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
-    vic_dev = (struct tx_isp_vic_device *)*((void **)((char *)sd + 0xd4));
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     
     /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
@@ -1462,12 +1462,12 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 /* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
-    void __iomem *vic_base = *(void __iomem **)((char *)vic_dev + 0xb8); /* Binary Ninja: *(arg1 + 0xb8) */
+    void __iomem *vic_base = vic_dev->vic_regs;
     
     pr_info("*** VIC PIPO MDMA ENABLE - Binary Ninja exact sequence ***\n");
     
-    /* Binary Ninja: int32_t $v1 = *(arg1 + 0xdc) */
-    u32 width = *(uint32_t *)((char *)vic_dev + 0xdc);
+    /* FIXED: Use proper struct member access */
+    u32 width = vic_dev->width;
     
     /* Binary Ninja: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
