@@ -220,33 +220,6 @@ int tisp_ae_ir_update(void);
 
 int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 
-/* CRITICAL ALIGNMENT FIX: Add missing tisp_g_ae_zone function */
-int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
-{
-    struct {
-        uint32_t ae_zone_data[25] __attribute__((aligned(4))); /* 25 AE zones, aligned */
-        uint32_t ae_zone_status __attribute__((aligned(4)));   /* AE status, aligned */
-    } __attribute__((packed, aligned(4))) ae_zones;
-
-    if (!ctrl) {
-        pr_err("No control structure for AE zone\n");
-        return -EINVAL;
-    }
-
-    /* Clear structure first with aligned access */
-    memset(&ae_zones, 0, sizeof(ae_zones));
-
-    /* Read AE zone data from hardware with aligned access */
-    for (int i = 0; i < 25; i++) {
-        ae_zones.ae_zone_data[i] = system_reg_read(ISP_AE_STATE_BASE + 0x100 + (i * 4));
-    }
-    ae_zones.ae_zone_status = system_reg_read(ISP_AE_STATE_BASE + 0x200);
-
-    /* For basic implementation, just return success */
-    ctrl->value = 1;
-    return 0;
-}
-
 
 static inline u64 ktime_get_real_ns(void)
 {
