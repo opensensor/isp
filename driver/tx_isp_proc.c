@@ -360,39 +360,46 @@ static struct proc_context *tx_isp_proc_ctx = NULL;
 /* Helper function to safely get or create proc directory on Linux 3.10 with overlays */
 static struct proc_dir_entry *get_or_create_proc_dir(const char *name, struct proc_dir_entry *parent, bool *created)
 {
-    struct proc_dir_entry *dir;
+    struct proc_dir_entry *dir = NULL;
     
     *created = false;
     
-    /* First attempt: try to find existing directory by looking in parent's subdir list */
-    if (parent) {
-        /* Walk through parent's subdirectories to find existing entry */
-        for (dir = parent->subdir; dir; dir = dir->next) {
-            if (dir->namelen == strlen(name) && 
-                strncmp(dir->name, name, dir->namelen) == 0 &&
-                S_ISDIR(dir->mode)) {
-                pr_info("Found existing proc directory: %s\n", name);
-                return dir;  /* Found existing directory */
-            }
-        }
-    } else {
-        /* For root proc entries, check if the directory already exists */
-        dir = proc_net_fops_create(&init_net, name, S_IFDIR | 0755, NULL);
-        if (dir) {
-            proc_net_remove(&init_net, name);  /* Remove the test entry */
-            /* Try to get the real entry */
-            return proc_mkdir(name, NULL);
-        }
-    }
-    
-    /* Directory doesn't exist - create it */
+    /* On Linux 3.10, try proc_mkdir which should handle existing directories gracefully */
     dir = proc_mkdir(name, parent);
     if (dir) {
+        /* Success - assume we created it for cleanup purposes */
         *created = true;
-        pr_info("Created new proc directory: %s\n", name);
+        pr_info("Created or accessed proc directory: %s\n", name);
+        return dir;
     }
     
-    return dir;
+    /* 
+     * If proc_mkdir failed, it could be because:
+     * 1. Directory exists but proc_mkdir doesn't return it (overlay fs issue)
+     * 2. Insufficient permissions
+     * 3. Out of memory
+     * 
+     * For Linux 3.10 with overlays, we try a different approach:
+     * Create a dummy file to test if the parent directory is writable
+     */
+    if (parent) {
+        struct proc_dir_entry *test_entry;
+        test_entry = proc_create("__tx_isp_test__", 0644, parent, &tx_isp_proc_csi_fops);
+        if (test_entry) {
+            /* Parent is writable, remove test entry */
+            proc_remove(test_entry);
+            
+            /* The directory might exist but be inaccessible via proc_mkdir
+             * In this case, we'll proceed without the jz directory reference
+             * and create our subdirectory directly under proc root if needed
+             */
+            pr_warn("Directory %s may exist but is not accessible via proc_mkdir\n", name);
+            return NULL;
+        }
+    }
+    
+    pr_err("Failed to create or access proc directory: %s\n", name);
+    return NULL;
 }
 /* Create all proc entries - matches reference driver layout */
 int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
