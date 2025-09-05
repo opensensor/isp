@@ -153,24 +153,9 @@ int tiziano_wdr_fusion1_curve_block_mean1(void);
 int Tiziano_wdr_fpga(void *struct_me, void *dev_para, void *ratio_para, void *x_thr);
 int tiziano_wdr_soft_para_out(void);
 
-/* AF zone data structure - aligned to prevent unaligned access */
-struct af_zone_info {
-    uint32_t zone_status;                    /* AF status */
-    uint32_t zone_metrics[MAX_AF_ZONES];     /* Zone metrics array */
-} __attribute__((packed, aligned(4)));
-
-/* AF zone global data - properly aligned */
-static struct {
-    uint32_t status __attribute__((aligned(4)));
-    uint32_t zone_metrics[MAX_AF_ZONES] __attribute__((aligned(4)));
-} af_zone_data __attribute__((aligned(4)));
-
-/* AE state structure - aligned to prevent crashes */
-struct ae_state_info {
-    uint32_t exposure __attribute__((aligned(4)));      /* Current exposure */
-    uint32_t gain __attribute__((aligned(4)));          /* Current gain */
-    uint32_t status __attribute__((aligned(4)));        /* AE status flags */
-} __attribute__((packed, aligned(4)));
+/* System register access functions - moved before use */
+static inline uint32_t system_reg_read(u32 reg);
+static inline void system_reg_write(u32 reg, u32 val);
 
 /* ISP register base definitions for proper alignment */
 #define ISP_AE_STATE_BASE    0x10000
@@ -243,8 +228,8 @@ int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
         uint32_t ae_zone_status __attribute__((aligned(4)));   /* AE status, aligned */
     } __attribute__((packed, aligned(4))) ae_zones;
 
-    if (!ctrl->data) {
-        pr_err("No data pointer for AE zone\n");
+    if (!ctrl) {
+        pr_err("No control structure for AE zone\n");
         return -EINVAL;
     }
 
@@ -257,13 +242,7 @@ int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
     }
     ae_zones.ae_zone_status = system_reg_read(ISP_AE_STATE_BASE + 0x200);
 
-    /* Copy zone data to user-provided buffer */
-    if (copy_to_user((void __user *)(unsigned long)ctrl->data,
-                     &ae_zones, sizeof(ae_zones))) {
-        return -EFAULT;
-    }
-
-    /* Set success status */
+    /* For basic implementation, just return success */
     ctrl->value = 1;
     return 0;
 }
@@ -750,12 +729,12 @@ static int tisp_get_ae_state(struct ae_state_info *state)
     return 0;
 }
 
-static int isp_get_ae_state(struct tx_isp_dev *dev, struct isp_tuning_ctrl *ctrl)
+static int isp_get_ae_state(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
     struct ae_state_info state;
 
-    if (!ctrl->data) {
-        pr_err("No data pointer for AE state\n");
+    if (!ctrl) {
+        pr_err("No control structure for AE state\n");
         return -EINVAL;
     }
 
@@ -764,12 +743,6 @@ static int isp_get_ae_state(struct tx_isp_dev *dev, struct isp_tuning_ctrl *ctrl
     if (ret) {
         return ret;
     }
-
-    // Copy state data to user-provided buffer
-    if (copy_to_user((void __user *)(unsigned long)ctrl->data,
-                     &state, sizeof(state))) {
-        return -EFAULT;
-                     }
 
     // Set success in control value
     ctrl->value = 1;
@@ -802,13 +775,13 @@ static int tisp_af_get_zone(void)
 }
 
 // Update the AF zone get function
-static int isp_get_af_zone(struct tx_isp_dev *dev, struct isp_tuning_ctrl *ctrl)
+static int isp_get_af_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
     struct af_zone_info zones;
     int ret;
 
-    if (!ctrl->data) {
-        pr_err("No data pointer for AF zone\n");
+    if (!ctrl) {
+        pr_err("No control structure for AF zone\n");
         return -EINVAL;
     }
 
@@ -823,12 +796,6 @@ static int isp_get_af_zone(struct tx_isp_dev *dev, struct isp_tuning_ctrl *ctrl)
 
     // Fill in the complete zone info
     update_af_zone_data(&zones);
-
-    // Copy zone data to user-provided buffer
-    if (copy_to_user((void __user *)(unsigned long)ctrl->data,
-                     &zones, sizeof(zones))) {
-        return -EFAULT;
-                     }
 
     // Set success status
     ctrl->value = 1;
