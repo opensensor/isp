@@ -664,8 +664,8 @@ static int tx_isp_create_v4l2_device(int channel)
                                    dev->format.fmt.pix.height * 3 / 2;
     dev->format.fmt.pix.colorspace = V4L2_COLORSPACE_REC709;
     
-    /* Initialize V4L2 device */
-    ret = v4l2_device_register(NULL, &dev->v4l2_dev);
+    /* Initialize V4L2 device - use ISP device as parent if available */
+    ret = v4l2_device_register(ourISPdev ? ourISPdev->dev : NULL, &dev->v4l2_dev);
     if (ret) {
         pr_err("Failed to register V4L2 device for channel %d: %d\n", channel, ret);
         goto err_free_dev;
