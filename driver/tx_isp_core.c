@@ -1835,26 +1835,86 @@ static int frame_channel_vidioc_get_fmt(void *channel_dev, void __user *arg);
 static long frame_channel_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     void __user *argp = (void __user *)arg;
-    void *channel_dev = file->private_data;
-    
-    pr_info("Frame channel IOCTL: cmd=0x%x\n", cmd);
-    
-    /* Handle frame channel operations based on Binary Ninja reference */
+    struct frame_channel_device *fcd = file->private_data;
+    struct tx_isp_channel_state *state;
+    int channel;
+
+    if (!fcd) {
+        pr_err("Invalid frame channel device\n");
+        return -EINVAL;
+    }
+
+    channel = fcd->channel_num;
+    state = &fcd->state;
+
+    pr_info("*** Frame channel %d IOCTL: cmd=0x%x ***\n", channel, cmd);
+
     switch (cmd) {
-    case 0xc07056c3: /* VIDIOC_S_FMT - Set video format */
-        pr_info("Frame channel: VIDIOC_S_FMT (set format)\n");
-        return frame_channel_vidioc_set_fmt(channel_dev, argp);
-        
+    /* Channel Enable/Disable IOCTLs */
+    case 0x40045620: /* Channel enable IOCTL */
+        pr_info("Frame channel %d: Enable channel (0x40045620)\n", channel);
+        return frame_channel_enable(fcd, argp);
+
+    case 0x40045621: /* Channel disable IOCTL */
+        pr_info("Frame channel %d: Disable channel (0x40045621)\n", channel);
+        return frame_channel_disable(fcd);
+
+    /* Channel Attributes */
+    case 0xc0205622: /* Get channel attributes */
+        pr_info("Frame channel %d: Get channel attributes (0xc0205622)\n", channel);
+        return frame_channel_get_attr(fcd, argp);
+
+    case 0xc0205623: /* Set channel attributes */
+        pr_info("Frame channel %d: Set channel attributes (0xc0205623)\n", channel);
+        return frame_channel_set_attr(fcd, argp);
+
+    /* V4L2 Buffer Management */
+    case 0xc0145608: /* VIDIOC_REQBUFS - Request buffers */
+        pr_info("Frame channel %d: VIDIOC_REQBUFS (0xc0145608)\n", channel);
+        return frame_channel_vidioc_reqbufs(fcd, argp);
+
+    case 0xc044560f: /* VIDIOC_QBUF - Queue buffer */
+        pr_info("Frame channel %d: VIDIOC_QBUF (0xc044560f)\n", channel);
+        return frame_channel_vidioc_qbuf(fcd, argp);
+
+    case 0xc0445609: /* VIDIOC_DQBUF - Dequeue buffer (variant 1) */
+        pr_info("Frame channel %d: VIDIOC_DQBUF variant 1 (0xc0445609)\n", channel);
+        return frame_channel_vidioc_dqbuf(fcd, argp);
+
+    case 0xc0445611: /* VIDIOC_DQBUF - Dequeue buffer (variant 2) */
+        pr_info("Frame channel %d: VIDIOC_DQBUF variant 2 (0xc0445611)\n", channel);
+        return frame_channel_vidioc_dqbuf_binary_ninja(fcd, argp);
+
+    /* Streaming Control */
+    case 0x80045612: /* VIDIOC_STREAMON - Start streaming */
+        pr_info("Frame channel %d: VIDIOC_STREAMON (0x80045612)\n", channel);
+        return frame_channel_vidioc_streamon(fcd, argp);
+
+    case 0x80045613: /* VIDIOC_STREAMOFF - Stop streaming */
+        pr_info("Frame channel %d: VIDIOC_STREAMOFF (0x80045613)\n", channel);
+        return frame_channel_vidioc_streamoff(fcd, argp);
+
+    /* Format Control */
     case 0x407056c4: /* VIDIOC_G_FMT - Get video format */
-        pr_info("Frame channel: VIDIOC_G_FMT (get format)\n");
-        return frame_channel_vidioc_get_fmt(channel_dev, argp);
-        
-    case 0x40000000: /* Example basic frame channel command */
-        pr_info("Frame channel: basic command\n");
-        return 0;
-        
+        pr_info("Frame channel %d: VIDIOC_G_FMT (0x407056c4)\n", channel);
+        return frame_channel_vidioc_get_fmt(fcd, argp);
+
+    case 0xc07056c3: /* VIDIOC_S_FMT - Set video format */
+        pr_info("Frame channel %d: VIDIOC_S_FMT (0xc07056c3)\n", channel);
+        return frame_channel_vidioc_set_fmt(fcd, argp);
+
+    /* Frame Synchronization */
+    case 0x400456bf: /* Frame completion wait */
+        pr_info("Frame channel %d: Frame completion wait (0x400456bf)\n", channel);
+        return frame_channel_wait_frame(fcd, argp);
+
+    /* Bank Configuration */
+    case 0x800456c5: /* Set banks configuration (critical for channel enable) */
+        pr_info("Frame channel %d: Set banks config (0x800456c5)\n", channel);
+        return frame_channel_set_banks(fcd, argp);
+
     default:
-        pr_info("Frame channel: unknown command 0x%x\n", cmd);
+        pr_info("Frame channel %d: Unhandled IOCTL 0x%x\n", channel, cmd);
         return -ENOTTY;
     }
 }
