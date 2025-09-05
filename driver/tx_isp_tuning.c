@@ -164,6 +164,9 @@ static inline void system_reg_write(u32 reg, u32 val);
 /* Forward declaration for release function */
 int isp_core_tuning_release(struct tx_isp_dev *dev);
 
+/* Forward declaration for core tuning init function */
+void *isp_core_tuning_init(void *arg1);
+
 /* Forward declarations for ISP pipeline init functions */
 int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps);
 int tiziano_awb_init(uint32_t height, uint32_t width);
