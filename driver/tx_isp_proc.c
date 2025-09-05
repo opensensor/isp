@@ -120,23 +120,25 @@ static const struct file_operations tx_isp_proc_w01_fops = {
     .release = single_release,
 };
 
-/* ISP-W02 file operations - CRITICAL: Client expects single integer */
+/* ISP-W02 file operations - CRITICAL: Match reference driver output format */
 static int tx_isp_proc_w02_show(struct seq_file *m, void *v)
 {
     struct tx_isp_dev *isp = m->private;
 
     if (!isp) {
-        /* Output single frame counter value for libimp's fscanf */
-        seq_printf(m, "0");
+        /* Output expected format: frame_counter, 0 on first line, then 13 zeros */
+        seq_printf(m, " 0, 0\n");
+        seq_printf(m, "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0\n");
         return 0;
     }
 
-    /* CRITICAL: libimp reads this with fscanf(stream, "%d", &var)
-     * and expects a single incrementing frame counter value.
-     * If this value doesn't change for 2+ reads, it logs "err:video drop"
-     * NO newline, just the number to match reference driver
+    /* CRITICAL: Output exact format as reference driver:
+     * Line 1: " frame_count, 0"
+     * Line 2: "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0"
+     * The frame_count increments to show ISP is processing frames
      */
-    seq_printf(m, "%u", isp->frame_count);
+    seq_printf(m, " %u, 0\n", isp->frame_count);
+    seq_printf(m, "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0\n");
     
     return 0;
 }
