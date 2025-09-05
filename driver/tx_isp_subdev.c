@@ -222,6 +222,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     /* Initialize subdev structure */
     pr_info("Initializing subdev structure\n");
     memset(sd, 0, sizeof(*sd));
+    sd->ops = ops;
 
     /* Set pad counts based on device type */
     if (!strcmp(pdev->name, "tx-isp-vic")) {
