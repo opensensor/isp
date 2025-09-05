@@ -2437,6 +2437,34 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 /* Sync DMA for buffer completion like Binary Ninja reference */
                 // In real implementation: dma_sync_single_for_device()
                 wmb(); // Memory barrier for DMA completion
+            } else {
+            /* *** SOOTHING ORANGE FRAME GENERATION *** */
+            pr_debug("Channel %d: Generating soothing orange frame data for buffer[%d]\n", channel, buf_index);
+
+            /* Calculate buffer physical address like the active sensor case above */
+            u32 buffer_phys_addr = 0x6300000 + (buf_index * (state->width * state->height * 2));
+            void *buffer_virt = phys_to_virt(buffer_phys_addr);
+
+            if (buffer_virt) {
+                u32 frame_size_y = state->width * state->height;  /* Y plane size */
+                u32 frame_size_uv = frame_size_y / 2;             /* UV plane size (NV12) */
+
+                /* Fill Y plane with orange luma (~165 for nice orange) */
+                memset(buffer_virt, 165, frame_size_y);
+
+                /* Fill UV plane with orange chroma (interleaved U,V for NV12) */
+                /* Orange chroma: U=~85, V=~165 */
+                u8 *uv_plane = (u8*)buffer_virt + frame_size_y;
+                int i;
+                for (i = 0; i < frame_size_uv; i += 2) {
+                    uv_plane[i] = 85;      /* U (Cb) component */
+                    uv_plane[i + 1] = 165; /* V (Cr) component */
+                }
+
+                pr_debug("Channel %d: Orange frame generated - Y=%d pixels, UV=%d pixels\n",
+                        channel, frame_size_y, frame_size_uv);
+            } else {
+                pr_debug("Channel %d: Could not map buffer for orange frame generation\n", channel);
             }
         }
         
