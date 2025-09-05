@@ -687,6 +687,7 @@ struct ae_state_info {
 struct isp_core_ctrl {
 	uint32_t cmd;     /* Control command */
 	int32_t value;    /* Control value */
+	u32 flag;         // Additional flags/data
 };
 
 /* ISP Tuning Data structure - Based on Binary Ninja analysis and crash offset */

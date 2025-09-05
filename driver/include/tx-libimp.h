@@ -308,12 +308,6 @@ struct dqbuf_resp {
     u32 pad3[4];         // Additional padding to ensure proper alignment
 };
 
-struct isp_core_ctrl {
-    u32 cmd;     // Control command
-    u32 value;   // Control value/result
-    u32 flag;    // Additional flags/data
-};
-
 struct isp_ae_hist_cfg {
     // Configuration bytes (0x10 bytes total)
     uint8_t config[4];        // Main config bytes
