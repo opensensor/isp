@@ -438,7 +438,7 @@ extern void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
 
 /* Reference driver function declarations - Binary Ninja exact names */
 static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev);
-int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev, struct tx_isp_sensor_attribute *sensor_attr);
+int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
 static void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev);
 static void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
@@ -4182,7 +4182,7 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
         
         sensor_attr = isp_dev->sensor->video.attr;
         /* Binary Ninja: return tx_isp_vic_start($a0) */
-        return tx_isp_vic_start(vic_dev, sensor_attr);
+        return tx_isp_vic_start(vic_dev);
         
     case 0x200000d:  /* Binary Ninja: case 0x200000d */
     case 0x2000010:  /* Binary Ninja: case 0x2000010 */
