@@ -160,23 +160,9 @@ static inline void system_reg_write(u32 reg, u32 val);
 /* ISP register base definitions for proper alignment */
 #define ISP_AE_STATE_BASE    0x10000
 #define ISP_AF_ZONE_BASE     0x12000
-#define MAX_AF_ZONES         25
 
-/* AE state structure */
-struct ae_state_info {
-    uint32_t exposure;
-    uint32_t gain;
-    uint32_t status;
-};
-
-/* AF zone structure */
-struct af_zone_info {
-    uint32_t zone_status;
-    uint32_t zone_metrics[MAX_AF_ZONES];
-};
-
-/* Global AF zone data */
-static struct af_zone_info af_zone_data = {0};
+/* Forward declaration for release function */
+int isp_core_tuning_release(struct tx_isp_dev *dev);
 
 /* Forward declarations for ISP pipeline init functions */
 int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps);
