@@ -699,14 +699,21 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
 // Simplified VIC registration - removed complex platform device array
 static int vic_registered = 0;
 
-// Initialize VIC register mapping for hardware access
+// Initialize VIC register mapping for hardware access - FIXED to match reference driver memory map
 static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
 {
-    // T31 ISP/VIC register base addresses from reference
-    #define T31_ISP_BASE_ADDR   0x13300000
-    #define T31_ISP_REG_SIZE    0x100000
-    // VIC registers are accessed through ISP core, not separate region
-    #define VIC_REG_OFFSET      0x9a00     // VIC registers start at ISP+0x9a00
+    // CORRECTED T31 register mappings based on /proc/iomem comparison:
+    // Reference driver uses:
+    // 13300000-1330ffff : isp-m0 (ISP core - 64KB only!)  
+    // 133e0000-133effff : isp-w02 (VIC write channel 2)
+    // 10023000-10023fff : isp-w01 (VIC device)
+    
+    #define T31_ISP_CORE_ADDR   0x13300000  // ISP core (isp-m0)
+    #define T31_ISP_CORE_SIZE   0x10000     // CORRECTED: Only 64KB like reference
+    #define T31_VIC_W02_ADDR    0x133e0000  // VIC write channel 2 (isp-w02) 
+    #define T31_VIC_W02_SIZE    0x10000     // VIC write channel 2 size
+    #define T31_VIC_W01_ADDR    0x10023000  // VIC device (isp-w01)
+    #define T31_VIC_W01_SIZE    0x1000      // VIC device size
     
     // T31 System Clock/Power Management
     #define T31_CPM_BASE        0x10000000
@@ -717,6 +724,9 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     #define CPM_RESET_REG       0xc4    // Reset control register
     
     void __iomem *cpm_regs = NULL;
+    void __iomem *isp_core_regs = NULL;
+    void __iomem *vic_w02_regs = NULL;
+    void __iomem *vic_w01_regs = NULL;
     u32 clkgr0, clkgr1, opcr;
     struct clk *isp_clk, *cgu_isp_clk, *vic_clk;
     int ret;
@@ -725,7 +735,7 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
         return -EINVAL;
     }
     
-    pr_info("Mapping ISP/VIC registers...\n");
+    pr_info("*** CORRECTED VIC register mapping to match reference driver /proc/iomem ***\n");
     
     // CRITICAL: Enable VIC clocks using Linux Clock Framework (like reference driver)
     pr_info("*** ENABLING VIC CLOCKS USING LINUX CLOCK FRAMEWORK ***\n");
@@ -855,19 +865,47 @@ static int tx_isp_init_vic_registers(struct tx_isp_dev *isp_dev)
     
     iounmap(cpm_regs);
     
-    pr_info("ISP register mapping complete\n");
+    pr_info("Clock and reset initialization complete\n");
     
-    // Map ISP registers (VIC is accessed through ISP core, not separate region)
-    {
-        void __iomem *isp_regs = ioremap(T31_ISP_BASE_ADDR, T31_ISP_REG_SIZE);
-        if (!isp_regs) {
-            pr_warn("Failed to map ISP registers at 0x%x\n", T31_ISP_BASE_ADDR);
-            return -ENOMEM;
-        }
-        
-        // VIC registers are accessed through ISP core at offset 0x9a00
-        isp_dev->vic_regs = isp_regs + VIC_REG_OFFSET;
+    // *** CRITICAL: Map registers exactly like reference driver /proc/iomem ***
+    pr_info("*** MAPPING REGISTERS TO MATCH REFERENCE DRIVER ***\n");
+    
+    // 1. Map ISP core (isp-m0): 13300000-1330ffff (64KB only!)
+    isp_core_regs = ioremap(T31_ISP_CORE_ADDR, T31_ISP_CORE_SIZE);
+    if (!isp_core_regs) {
+        pr_err("Failed to map ISP core registers at 0x%x\n", T31_ISP_CORE_ADDR);
+        return -ENOMEM;
     }
+    pr_info("*** ISP CORE (isp-m0) mapped: 0x%x -> %p (size=0x%x) ***\n", 
+           T31_ISP_CORE_ADDR, isp_core_regs, T31_ISP_CORE_SIZE);
+    
+    // 2. Map VIC write channel 2 (isp-w02): 133e0000-133effff - THIS WAS MISSING!
+    vic_w02_regs = ioremap(T31_VIC_W02_ADDR, T31_VIC_W02_SIZE);
+    if (!vic_w02_regs) {
+        pr_err("Failed to map VIC W02 registers at 0x%x\n", T31_VIC_W02_ADDR);
+        iounmap(isp_core_regs);
+        return -ENOMEM;
+    }
+    pr_info("*** VIC W02 (isp-w02) mapped: 0x%x -> %p (size=0x%x) ***\n", 
+           T31_VIC_W02_ADDR, vic_w02_regs, T31_VIC_W02_SIZE);
+    
+    // 3. Map VIC device (isp-w01): 10023000-10023fff 
+    vic_w01_regs = ioremap(T31_VIC_W01_ADDR, T31_VIC_W01_SIZE);
+    if (!vic_w01_regs) {
+        pr_err("Failed to map VIC W01 registers at 0x%x\n", T31_VIC_W01_ADDR);
+        iounmap(isp_core_regs);
+        iounmap(vic_w02_regs);
+        return -ENOMEM;
+    }
+    pr_info("*** VIC W01 (isp-w01) mapped: 0x%x -> %p (size=0x%x) ***\n", 
+           T31_VIC_W01_ADDR, vic_w01_regs, T31_VIC_W01_SIZE);
+    
+    // *** CRITICAL: Set VIC registers to the CORRECT region (isp-w02, not ISP+offset) ***
+    isp_dev->vic_regs = vic_w02_regs;  // VIC is at 0x133e0000, not ISP+0x9a00!
+    
+    pr_info("*** VIC REGISTER MAPPING CORRECTED - NOW MATCHES REFERENCE DRIVER ***\n");
+    pr_info("ISP core: %p, VIC W02: %p, VIC W01: %p\n", 
+           isp_core_regs, vic_w02_regs, vic_w01_regs);
     
     return 0;
 }
@@ -3808,6 +3846,15 @@ static int tx_isp_init(void)
     spin_lock_init(&ourISPdev->lock);
     ourISPdev->refcnt = 0;
     ourISPdev->is_open = false;
+    
+    /* *** CRITICAL: Initialize VIC registers - THIS TRIGGERS TRACE REGISTER ACTIVITY *** */
+    pr_info("*** CALLING tx_isp_init_vic_registers - THIS SHOULD TRIGGER TRACE REGISTERS ***\n");
+    ret = tx_isp_init_vic_registers(ourISPdev);
+    if (ret) {
+        pr_err("Failed to initialize VIC registers: %d\n", ret);
+        goto err_free_dev;
+    }
+    pr_info("*** VIC REGISTERS INITIALIZED - TRACE REGISTER ACTIVITY SHOULD NOW BE ACTIVE ***\n");
 
     /* Step 2: Register platform device (matches reference) */
     ret = platform_device_register(&tx_isp_platform_device);
