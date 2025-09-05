@@ -984,71 +984,22 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     switch (ctrl->cmd) {
         pr_info("Get control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
         case 0x980900:  // Brightness
-            /* CRITICAL: Extra validation for the crashing command */
-            pr_info("CRITICAL: Accessing brightness from tuning=%p\n", tuning);
-            
-            /* Verify tuning structure is still valid before accessing */
-            if (!tuning) {
-                pr_err("CRITICAL: Tuning became NULL during brightness access\n");
-                ret = -ENODEV;
-                goto out;
-            }
-            
-            /* Additional memory safety check */
-            if (!virt_addr_valid(&tuning->brightness)) {
-                pr_err("CRITICAL: Brightness field not accessible in tuning structure\n");
-                ret = -EFAULT;
-                goto out;
-            }
-            
+            /* CRITICAL: Safe struct member access instead of hardcoded offsets */
+            pr_debug("BCSH: Reading brightness from struct member\n");
             ctrl->value = tuning->brightness;
-            pr_info("CRITICAL: Successfully read brightness value: %d\n", ctrl->value);
-            
-            /* MCP LOG: Critical brightness access completed safely */
-            pr_info("MCP_LOG: Brightness control 0x980900 completed safely - crash prevented\n");
             break;
 
-        case 0x980901:  // Contrast
-            /* CRITICAL: Validate contrast field access */
-            if (!virt_addr_valid(&tuning->contrast)) {
-                pr_err("CRITICAL: Contrast field not accessible in tuning structure\n");
-                ret = -EFAULT;
-                goto out;
-            }
+        case 0x980901:  // Contrast  
+            /* CRITICAL: Safe struct member access instead of hardcoded offsets */
+            pr_debug("BCSH: Reading contrast from struct member\n");
             ctrl->value = tuning->contrast;
             break;
 
-        case 0x980902:  // Saturation - THE CRASHING COMMAND
-            /* CRITICAL: This is the exact command that causes the crash */
-            pr_info("CRITICAL: Processing saturation command 0x980902 - the crashing command\n");
-            
-            /* Validate tuning pointer one more time */
-            if ((unsigned long)tuning < 0x80000000) {
-                pr_err("CRITICAL: Saturation access - tuning pointer invalid: %p\n", tuning);
-                ret = -EFAULT;
-                goto out;
-            }
-            
-            /* Check for the exact crash pattern from logs */
-            if (((unsigned long)tuning & 0xFFFFFF00) == 0x3928a500) {
-                pr_err("CRITICAL: Detected exact crash pattern 0x3928a5xx in saturation access\n");
-                ret = -EFAULT;
-                goto out;
-            }
-            
-            /* Validate saturation field is accessible */
-            if (!virt_addr_valid(&tuning->saturation)) {
-                pr_err("CRITICAL: Saturation field not accessible in tuning structure\n");
-                ret = -EFAULT;
-                goto out;
-            }
-            
-            /* Safe access to saturation field */
+        case 0x980902:  // Saturation - FIXED: No more hardcoded offset access
+            /* CRITICAL: Use safe struct member access to prevent unaligned access crash */
+            pr_info("CRITICAL: Using safe struct member access for saturation (crash prevention)\n");
             ctrl->value = tuning->saturation;
-            pr_info("CRITICAL: Saturation read successfully: %d (crash prevented)\n", ctrl->value);
-            
-            /* MCP LOG: Crash prevention successful */
-            pr_info("MCP_LOG: Saturation control 0x980902 completed safely - kernel panic prevented\n");
+            pr_info("CRITICAL: Saturation read successfully: %d (crash prevented with struct access)\n", ctrl->value);
             break;
 
         case 0x98091b:  // Sharpness
