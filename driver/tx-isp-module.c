@@ -1990,21 +1990,9 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
             continue;
         }
         
-        /* SAFE: Validate subdev pointer */
-        if ((uintptr_t)subdev < 0x1000 || (uintptr_t)subdev >= 0xfffff000) {
-            pr_debug("tx_isp_video_link_stream: Invalid subdev[%d] pointer %p, skipping\n", i, subdev);
-            continue;
-        }
-        
         /* SAFE: Check ops structure using proper struct member access */
         if (!subdev->ops) {
             pr_debug("tx_isp_video_link_stream: subdev[%d] has no ops structure\n", i);
-            continue;
-        }
-        
-        /* SAFE: Validate ops pointer */
-        if ((uintptr_t)subdev->ops < 0x1000 || (uintptr_t)subdev->ops >= 0xfffff000) {
-            pr_warn("tx_isp_video_link_stream: subdev[%d] ops pointer out of range: %p, skipping\n", i, subdev->ops);
             continue;
         }
         
@@ -2014,21 +2002,9 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
             continue;
         }
         
-        /* SAFE: Validate video ops pointer */
-        if ((uintptr_t)subdev->ops->video < 0x1000 || (uintptr_t)subdev->ops->video >= 0xfffff000) {
-            pr_warn("tx_isp_video_link_stream: subdev[%d] video ops pointer out of range: %p, skipping\n", i, subdev->ops->video);
-            continue;
-        }
-        
         /* SAFE: Check s_stream function using proper struct member access */
         if (!subdev->ops->video->s_stream) {
             pr_debug("tx_isp_video_link_stream: subdev[%d] has no s_stream function\n", i);
-            continue;
-        }
-        
-        /* SAFE: Validate s_stream function pointer */
-        if ((uintptr_t)subdev->ops->video->s_stream < 0x1000 || (uintptr_t)subdev->ops->video->s_stream >= 0xfffff000) {
-            pr_warn("tx_isp_video_link_stream: subdev[%d] s_stream pointer out of range: %p, skipping\n", i, subdev->ops->video->s_stream);
             continue;
         }
         
@@ -2057,40 +2033,6 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
                 int j;
                 for (j = i - 1; j >= 0; j--) {
                     struct tx_isp_subdev *prev_subdev = isp_dev->subdevs[j];
-                    
-                    /* SAFE: Skip invalid or NULL previous subdevs using proper struct access */
-                    if (!prev_subdev) {
-                        continue;
-                    }
-                    
-                    /* SAFE: Validate all structure pointers before rollback using proper struct access */
-                    if ((uintptr_t)prev_subdev < 0x1000 || (uintptr_t)prev_subdev >= 0xfffff000) {
-                        continue;
-                    }
-                    
-                    if (!prev_subdev->ops) {
-                        continue;
-                    }
-                    
-                    if ((uintptr_t)prev_subdev->ops < 0x1000 || (uintptr_t)prev_subdev->ops >= 0xfffff000) {
-                        continue;
-                    }
-                    
-                    if (!prev_subdev->ops->video) {
-                        continue;
-                    }
-                    
-                    if ((uintptr_t)prev_subdev->ops->video < 0x1000 || (uintptr_t)prev_subdev->ops->video >= 0xfffff000) {
-                        continue;
-                    }
-                    
-                    if (!prev_subdev->ops->video->s_stream) {
-                        continue;
-                    }
-                    
-                    if ((uintptr_t)prev_subdev->ops->video->s_stream < 0x1000 || (uintptr_t)prev_subdev->ops->video->s_stream >= 0xfffff000) {
-                        continue;
-                    }
                     
                     /* SAFE: Rollback call using proper struct member access */
                     int rollback_result = prev_subdev->ops->video->s_stream(prev_subdev, enable ? 0 : 1);
