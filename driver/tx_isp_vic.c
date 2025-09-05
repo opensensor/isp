@@ -1558,15 +1558,18 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE ***\n");
 }
 
-/* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja implementation */
+/* ISPVIC Frame Channel S_Stream - FIXED to use tx_isp_init_vic_registers methodology */
 int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 {
     void __iomem *vic_base;
     unsigned long flags;
     u32 stream_ctrl;
     int var_18 = 0;
+    struct clk *isp_clk, *cgu_isp_clk;
+    void __iomem *cpm_regs;
+    int ret;
     
-    pr_info("*** ispvic_frame_channel_s_stream: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** ispvic_frame_channel_s_stream: APPLYING tx_isp_init_vic_registers METHODOLOGY ***\n");
     pr_info("ispvic_frame_channel_s_stream: vic_dev=%p, enable=%d\n", vic_dev, enable);
     
     /* Binary Ninja: if (arg1 == 0) return error */
@@ -1575,7 +1578,61 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         return 0xffffffea; /* -EINVAL */
     }
     
-    vic_base = *(void __iomem **)((char *)vic_dev + 0xb8); /* Binary Ninja: *(vic_dev + 0xb8) */
+    /* *** CRITICAL: Apply tx_isp_init_vic_registers methodology for streaming control *** */
+    
+    /* STEP 1: Ensure clocks are enabled using Linux Clock Framework */
+    pr_info("*** STREAMING S_STREAM: Ensuring ISP clocks via Clock Framework ***\n");
+    
+    isp_clk = clk_get(NULL, "isp");
+    if (!IS_ERR(isp_clk)) {
+        ret = clk_prepare_enable(isp_clk);
+        if (ret == 0) {
+            pr_info("S_STREAM: ISP clock confirmed enabled\n");
+        }
+    }
+    
+    cgu_isp_clk = clk_get(NULL, "cgu_isp");
+    if (!IS_ERR(cgu_isp_clk)) {
+        ret = clk_prepare_enable(cgu_isp_clk);
+        if (ret == 0) {
+            pr_info("S_STREAM: CGU_ISP clock confirmed enabled\n");
+        }
+    }
+
+    /* STEP 2: Ensure CPM registers are configured for VIC access */
+    pr_info("*** STREAMING S_STREAM: Ensuring CPM configuration for VIC ***\n");
+    cpm_regs = ioremap(0x10000000, 0x1000);
+    if (cmp_regs) {
+        u32 clkgr0 = readl(cpm_regs + 0x20);
+        u32 clkgr1 = readl(cpm_regs + 0x28);
+        
+        /* Ensure ISP/VIC clocks remain enabled */
+        clkgr0 &= ~((1 << 13) | (1 << 21) | (1 << 30));
+        clkgr1 &= ~(1 << 30);
+        
+        writel(clkgr0, cpm_regs + 0x20);
+        writel(clkgr1, cmp_regs + 0x28);
+        wmb();
+        
+        pr_info("S_STREAM: CPM clocks maintained for VIC streaming\n");
+        iounmap(cpm_regs);
+    }
+
+    /* STEP 3: Get VIC registers with validated access */
+    vic_base = vic_dev->vic_regs;
+    if (!vic_base) {
+        /* Use same successful mapping as tx_isp_init_vic_registers */
+        vic_base = ioremap(0x133e0000, 0x10000);
+        if (vic_base) {
+            pr_info("*** S_STREAM: Emergency VIC register mapping successful ***\n");
+            vic_dev->vic_regs = vic_base;
+        } else {
+            pr_err("ispvic_frame_channel_s_stream: Cannot access VIC registers\n");
+            return 0xffffffea;
+        }
+    }
+    
+    pr_info("*** S_STREAM: VIC register access confirmed at %p ***\n", vic_base);
     
     /* Binary Ninja: Log stream operation */
     const char *stream_op = (enable != 0) ? "streamon" : "streamoff";
