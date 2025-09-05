@@ -4241,25 +4241,15 @@ static void tx_isp_exit(void)
 /* ===== VIC SENSOR OPERATIONS - EXACT BINARY NINJA IMPLEMENTATIONS ===== */
 
 /* Forward declarations for streaming functions */
-static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 static int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable);
-
-/* VIC video operations structure - CRITICAL for tx_isp_video_link_stream */
-static struct tx_isp_subdev_video_ops vic_video_ops = {
-    .s_stream = vic_video_s_stream,
-};
 
 /* CSI video operations structure - CRITICAL for tx_isp_video_link_stream */
 static struct tx_isp_subdev_video_ops csi_video_ops = {
     .s_stream = csi_video_s_stream_impl,
 };
 
-/* Subdev ops structures - match header declarations (non-const) */
-struct tx_isp_subdev_ops vic_subdev_ops = {
-    .video = &vic_video_ops,
-    .sensor = NULL,
-    .core = NULL,
-};
+/* vic_subdev_ops is defined in tx_isp_vic.c - use external reference */
+extern struct tx_isp_subdev_ops vic_subdev_ops;
 
 static struct tx_isp_subdev_ops csi_subdev_ops = {
     .video = &csi_video_ops,
