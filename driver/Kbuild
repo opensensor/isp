@@ -1,43 +1,36 @@
+# Add include path
 ccflags-y += -I$(src)/include
 
-# CRITICAL: Add V4L2 subsystem dependencies
-ccflags-y += -DCONFIG_VIDEO_V4L2=y
-ccflags-y += -DCONFIG_MEDIA_SUPPORT=y
+# Define DIR if you're using a subdirectory structure
+# If files are in current directory, remove $(DIR)/ prefix
+DIR := .
 
-# Main ISP module objects - note changed name to tx-isp-t31 (ensure tx-isp-module.o is first)
-tx-isp-t31-objs :=  $(DIR)/tx-isp-module.o \
-                $(DIR)/tx_isp_core.o \
-               $(DIR)/tx_isp_init.o \
-               $(DIR)/tx_isp_reset.o \
-               $(DIR)/tx_isp_subdev.o \
-               $(DIR)/tx_isp_proc.o \
-               $(DIR)/tx_isp_sysfs.o \
-               $(DIR)/tx_isp_vic.o \
-               $(DIR)/tx_isp_csi.o \
-               $(DIR)/tx_isp_fs.o \
-               $(DIR)/tx_isp_tuning.o \
-               $(DIR)/tx_isp_v4l2.o \
-               $(DIR)/tx_isp_ae_zone.o \
-               $(DIR)/tx_isp_subdev_mgmt.o \
-               $(DIR)/tx_isp_vin.o
+# Main ISP module objects
+tx-isp-t31-objs := tx-isp-module.o \
+                   tx_isp_core.o \
+                   tx_isp_init.o \
+                   tx_isp_reset.o \
+                   tx_isp_subdev.o \
+                   tx_isp_proc.o \
+                   tx_isp_sysfs.o \
+                   tx_isp_vic.o \
+                   tx_isp_csi.o \
+                   tx_isp_fs.o \
+                   tx_isp_tuning.o \
+                   tx_isp_v4l2.o \
+                   tx_isp_ae_zone.o \
+                   tx_isp_subdev_mgmt.o \
+                   tx_isp_vin.o
 
 # ISP trace module objects  
-tx-isp-trace-objs := $(DIR)/tx-isp-trace.o
+tx-isp-trace-objs := tx-isp-trace.o
 
-# Build both modules - changed tx-isp.o to tx-isp-t31.o
+# Build both modules
 obj-m := tx-isp-t31.o tx-isp-trace.o
 
-# CRITICAL: V4L2 symbol dependencies - ensure V4L2 subsystem is available
-# These dependencies tell the kernel that our module needs V4L2 symbols
-# Reference: https://www.kernel.org/doc/Documentation/video4linux/v4l2-framework.txt
-KBUILD_EXTRA_SYMBOLS += $(KERNEL_SRC)/drivers/media/v4l2-core/Module.symvers
-KBUILD_EXTRA_SYMBOLS += $(KERNEL_SRC)/drivers/media/media/Module.symvers
+# For kernel 3.10, Module.symvers is usually in the kernel build directory
+# Adjust these paths to match your actual kernel build tree
+KBUILD_EXTRA_SYMBOLS := $(KBUILD_OUTPUT)/Module.symvers
 
-# Alternative dependency specification for older kernels
-ifdef CONFIG_VIDEO_V4L2
-    ccflags-y += -DHAS_V4L2_SUPPORT=1
-endif
-
-ifdef CONFIG_MEDIA_SUPPORT  
-    ccflags-y += -DHAS_MEDIA_SUPPORT=1
-endif
+# If V4L2 is built as modules, you might need:
+# KBUILD_EXTRA_SYMBOLS += $(KBUILD_OUTPUT)/drivers/media/v4l2-core/Module.symvers
