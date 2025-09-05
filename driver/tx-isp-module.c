@@ -4154,6 +4154,15 @@ static int tx_isp_init(void)
         pr_warn("Hardware interrupts not available: %d\n", ret);
     }
 
+    /* *** CRITICAL: INITIALIZE ISP HARDWARE REGISTERS (MISSING FROM OUR DRIVER) *** */
+    pr_info("*** INITIALIZING ISP HARDWARE REGISTERS - THIS WILL GENERATE REGISTER ACTIVITY ***\n");
+    ret = tx_isp_hardware_init(ourISPdev);
+    if (ret) {
+        pr_warn("ISP hardware initialization failed: %d, continuing anyway\n", ret);
+    } else {
+        pr_info("*** ISP HARDWARE REGISTERS INITIALIZED - SHOULD NOW MATCH REFERENCE DRIVER ***\n");
+    }
+
     /* Create ISP M0 tuning device node */
     ret = tisp_code_create_tuning_node();
     if (ret) {
