@@ -4066,6 +4066,15 @@ static int tx_isp_init(void)
     }
     pr_info("*** VIC REGISTERS INITIALIZED - TRACE REGISTER ACTIVITY SHOULD NOW BE ACTIVE ***\n");
 
+    /* *** CRITICAL FIX: Create and link VIC device structure immediately *** */
+    pr_info("*** CREATING VIC DEVICE STRUCTURE AND LINKING TO ISP CORE ***\n");
+    ret = tx_isp_create_vic_device(ourISPdev);
+    if (ret) {
+        pr_err("Failed to create VIC device structure: %d\n", ret);
+        goto err_free_dev;
+    }
+    pr_info("*** VIC DEVICE CREATED AND LINKED TO ISP CORE - NO MORE 'NO VIC DEVICE' ERROR ***\n");
+
     /* Step 2: Register platform device (matches reference) */
     ret = platform_device_register(&tx_isp_platform_device);
     if (ret != 0) {

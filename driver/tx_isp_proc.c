@@ -355,30 +355,41 @@ static const struct file_operations tx_isp_proc_vic_fops = {
 
 /* Global proc context */
 static struct proc_context *tx_isp_proc_ctx = NULL;
-
 /* Create all proc entries - matches reference driver layout */
 int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
 {
     struct proc_context *ctx;
-    
+
     pr_info("*** tx_isp_create_proc_entries: Creating proc entries to match reference driver ***\n");
-    
+
     ctx = kzalloc(sizeof(struct proc_context), GFP_KERNEL);
     if (!ctx) {
         pr_err("Failed to allocate proc context\n");
         return -ENOMEM;
     }
-    
+
     ctx->isp = isp;
     tx_isp_proc_ctx = ctx;
+
+    /* Find existing /proc/jz directory or create it */
+    ctx->jz_dir = proc_mkdir(TX_ISP_PROC_JZ_DIR, NULL);
+    if (!ctx->jz_dir) {
+        /* If mkdir failed, the directory likely exists - try to find it using proc_mkdir_mode */
+        ctx->jz_dir = proc_mkdir_mode(TX_ISP_PROC_JZ_DIR, 0755, NULL);
+        if (!ctx->jz_dir) {
+            pr_err("Failed to access or create /proc/%s\n", TX_ISP_PROC_JZ_DIR);
+            goto error_free_ctx;
+        }
+    }
+    pr_info("Using /proc/%s directory\n", TX_ISP_PROC_JZ_DIR);
 
     /* Create /proc/jz/isp directory */
     ctx->isp_dir = proc_mkdir(TX_ISP_PROC_ISP_DIR, ctx->jz_dir);
     if (!ctx->isp_dir) {
         pr_err("Failed to create /proc/%s/%s\n", TX_ISP_PROC_JZ_DIR, TX_ISP_PROC_ISP_DIR);
-        goto error_remove_jz;
+        goto error_free_ctx;
     }
-    
+
     /* Create /proc/jz/isp/isp-w00 */
     ctx->isp_w00_entry = proc_create_data(TX_ISP_PROC_ISP_W00_FILE, 0644, ctx->isp_dir,
                                          &tx_isp_proc_w00_fops, isp);
@@ -387,7 +398,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         goto error_remove_isp_dir;
     }
     pr_info("Created proc entry: /proc/jz/isp/isp-w00\n");
-    
+
     /* Create /proc/jz/isp/isp-w01 */
     ctx->isp_w01_entry = proc_create_data(TX_ISP_PROC_ISP_W01_FILE, 0644, ctx->isp_dir,
                                          &tx_isp_proc_w01_fops, isp);
@@ -396,7 +407,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         goto error_remove_w00;
     }
     pr_info("Created proc entry: /proc/jz/isp/isp-w01\n");
-    
+
     /* Create /proc/jz/isp/isp-w02 */
     ctx->isp_w02_entry = proc_create_data(TX_ISP_PROC_ISP_W02_FILE, 0644, ctx->isp_dir,
                                          &tx_isp_proc_w02_fops, isp);
@@ -405,7 +416,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         goto error_remove_w01;
     }
     pr_info("Created proc entry: /proc/jz/isp/isp-w02\n");
-    
+
     /* Create /proc/jz/isp/isp-fs - CRITICAL FOR REFERENCE DRIVER COMPATIBILITY */
     ctx->isp_fs_entry = proc_create_data(TX_ISP_PROC_ISP_FS_FILE, 0644, ctx->isp_dir,
                                         &tx_isp_proc_fs_fops, isp);
@@ -414,7 +425,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         goto error_remove_w02;
     }
     pr_info("*** CREATED PROC ENTRY: /proc/jz/isp/isp-fs (CRITICAL FOR FS FUNCTIONALITY) ***\n");
-    
+
     /* Create /proc/jz/isp/isp-m0 - CRITICAL FOR REFERENCE DRIVER COMPATIBILITY */
     ctx->isp_m0_entry = proc_create_data(TX_ISP_PROC_ISP_M0_FILE, 0644, ctx->isp_dir,
                                         &tx_isp_proc_m0_fops, isp);
@@ -423,7 +434,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         goto error_remove_fs;
     }
     pr_info("*** CREATED PROC ENTRY: /proc/jz/isp/isp-m0 (CRITICAL FOR M0 FUNCTIONALITY) ***\n");
-    
+
     /* Create /proc/jz/isp/csi */
     ctx->csi_entry = proc_create_data(TX_ISP_PROC_CSI_FILE, 0644, ctx->isp_dir,
                                      &tx_isp_proc_csi_fops, isp);
@@ -432,7 +443,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         goto error_remove_m0;
     }
     pr_info("Created proc entry: /proc/jz/isp/csi\n");
-    
+
     /* Create /proc/jz/isp/vic */
     ctx->vic_entry = proc_create_data(TX_ISP_PROC_VIC_FILE, 0644, ctx->isp_dir,
                                      &tx_isp_proc_vic_fops, isp);
@@ -441,10 +452,10 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         goto error_remove_csi;
     }
     pr_info("Created proc entry: /proc/jz/isp/vic\n");
-    
+
     pr_info("*** ALL PROC ENTRIES CREATED SUCCESSFULLY - MATCHES REFERENCE DRIVER LAYOUT ***\n");
     pr_info("*** /proc/jz/isp/ now contains: isp-w00, isp-w01, isp-w02, isp-fs, isp-m0, csi, vic ***\n");
-    
+
     return 0;
 
 error_remove_csi:
@@ -461,8 +472,7 @@ error_remove_w00:
     proc_remove(ctx->isp_w00_entry);
 error_remove_isp_dir:
     proc_remove(ctx->isp_dir);
-error_remove_jz:
-    proc_remove(ctx->jz_dir);
+    /* Don't remove jz_dir as it may be used by other modules */
 error_free_ctx:
     kfree(ctx);
     tx_isp_proc_ctx = NULL;
