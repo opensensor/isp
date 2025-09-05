@@ -2815,13 +2815,35 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* *** CRITICAL: FIRST handle sensor registration normally *** */
         pr_info("*** HANDLING SENSOR REGISTRATION 0x2000000 DIRECTLY ***\n");
         
-        /* Binary Ninja: void* i_2 = $s7 + 0x2c */
-        i_2 = (void**)((char*)isp_dev + 0x2c); /* Start of module_graph array */
+    /* CRITICAL FIX: Check if module graph array is properly initialized */
+    if (!isp_dev || (char*)isp_dev + 0x6c <= (char*)isp_dev + 0x2c) {
+        pr_err("TX_ISP_SENSOR_REGISTER: Invalid ISP device structure\n");
+        return -ENODEV;
+    }
+    
+    /* Binary Ninja: void* i_2 = $s7 + 0x2c */
+    i_2 = (void**)((char*)isp_dev + 0x2c); /* Start of module_graph array */
+    
+    /* CRITICAL FIX: Validate each pointer before dereferencing */
+    /* Binary Ninja: Loop through module_graph array */
+    do {
+        /* CRITICAL FIX: Check pointer validity before dereferencing */
+        if ((uintptr_t)i_2 >= 0xfffff001 || 
+            (uintptr_t)i_2 < (uintptr_t)isp_dev ||
+            (uintptr_t)i_2 >= (uintptr_t)isp_dev + 0x1000) {
+            pr_err("TX_ISP_SENSOR_REGISTER: Invalid i_2 pointer %p\n", i_2);
+            return -EFAULT;
+        }
         
-        /* Binary Ninja: Loop through module_graph array */
-        do {
-            /* Binary Ninja: void* $a0_10 = *i_2 */
-            module = *i_2;
+        /* Binary Ninja: void* $a0_10 = *i_2 */
+        module = *i_2;
+        
+        /* CRITICAL FIX: Validate module pointer before accessing */
+        if (module != NULL && (uintptr_t)module >= 0xfffff001) {
+            pr_err("TX_ISP_SENSOR_REGISTER: Invalid module pointer %p\n", module);
+            i_2 += 1; /* Move to next module */
+            continue;
+        }
             
             if (module != NULL) {
                 /* Binary Ninja: void* $v0_22 = *(*($a0_10 + 0xc4) + 0xc) */
