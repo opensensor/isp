@@ -820,27 +820,88 @@ int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
 long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 
 
-/* tx_isp_vic_start - EXACT Binary Ninja implementation (FIXED register access) */
+/* tx_isp_vic_start - FIXED to use tx_isp_init_vic_registers methodology */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
     u32 interface_type;
     u32 sensor_format;
     u32 timeout = 10000;
+    struct clk *isp_clk, *cgu_isp_clk;
+    void __iomem *cpm_regs;
+    int ret;
 
     if (!vic_dev) {
         pr_err("tx_isp_vic_start: Invalid vic_dev parameter\n");
         return -EINVAL;
     }
 
-    /* FIXED: Use proper struct member access instead of dangerous offset arithmetic */
-    vic_regs = vic_dev->vic_regs;
-    if (!vic_regs) {
-        pr_err("tx_isp_vic_start: No VIC register base in vic_dev\n");
-        return -EINVAL;
+    pr_info("*** tx_isp_vic_start: APPLYING tx_isp_init_vic_registers METHODOLOGY FOR STREAMING ***\n");
+
+    /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
+    
+    /* STEP 1: Enable clocks using Linux Clock Framework like tx_isp_init_vic_registers */
+    pr_info("*** STREAMING: Enabling ISP clocks using Linux Clock Framework ***\n");
+    
+    isp_clk = clk_get(NULL, "isp");
+    if (!IS_ERR(isp_clk)) {
+        ret = clk_prepare_enable(isp_clk);
+        if (ret == 0) {
+            pr_info("STREAMING: ISP clock enabled via clk framework\n");
+        } else {
+            pr_err("STREAMING: Failed to enable ISP clock: %d\n", ret);
+        }
+    } else {
+        pr_warn("STREAMING: ISP clock not found: %ld\n", PTR_ERR(isp_clk));
     }
     
-    pr_info("*** tx_isp_vic_start: Using VIC register base %p from struct member ***\n", vic_regs);
+    cgu_isp_clk = clk_get(NULL, "cgu_isp");
+    if (!IS_ERR(cgu_isp_clk)) {
+        ret = clk_prepare_enable(cgu_isp_clk);
+        if (ret == 0) {
+            pr_info("STREAMING: CGU_ISP clock enabled via clk framework\n");
+        } else {
+            pr_err("STREAMING: Failed to enable CGU_ISP clock: %d\n", ret);
+        }
+    }
+
+    /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
+    pr_info("*** STREAMING: Configuring CPM registers for VIC access ***\n");
+    cpm_regs = ioremap(0x10000000, 0x1000);
+    if (cpm_regs) {
+        u32 clkgr0 = readl(cpm_regs + 0x20);
+        u32 clkgr1 = readl(cpm_regs + 0x28);
+        
+        /* Enable ISP/VIC clocks */
+        clkgr0 &= ~(1 << 13); // ISP clock
+        clkgr0 &= ~(1 << 21); // Alternative ISP position
+        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
+        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
+        
+        writel(clkgr0, cpm_regs + 0x20);
+        writel(clkgr1, cpm_regs + 0x28);
+        wmb();
+        msleep(20);
+        
+        pr_info("STREAMING: CPM clocks configured for VIC access\n");
+        iounmap(cpm_regs);
+    }
+
+    /* STEP 3: Get VIC registers with same mapping as tx_isp_init_vic_registers */
+    vic_regs = vic_dev->vic_regs;
+    if (!vic_regs) {
+        /* Use the same successful mapping methodology */
+        vic_regs = ioremap(0x133e0000, 0x10000); // VIC W02 mapping like tx_isp_init_vic_registers
+        if (vic_regs) {
+            pr_info("*** STREAMING: Mapped VIC registers using tx_isp_init_vic_registers methodology ***\n");
+            vic_dev->vic_regs = vic_regs; // Store for future use
+        } else {
+            pr_err("tx_isp_vic_start: Failed to map VIC registers\n");
+            return -ENOMEM;
+        }
+    }
+    
+    pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
 
     /* FIXED: Use proper struct member access for sensor attributes */
     struct tx_isp_sensor_attribute *sensor_attr = &vic_dev->sensor_attr;
