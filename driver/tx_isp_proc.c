@@ -25,6 +25,7 @@ struct proc_context {
     struct proc_dir_entry *csi_entry;
     struct proc_dir_entry *vic_entry;
     struct tx_isp_dev *isp;
+    bool jz_dir_created;  /* Track if we created jz_dir or just got reference */
 };
 
 /* ISP-W00 file operations - matches reference driver behavior */
@@ -355,6 +356,44 @@ static const struct file_operations tx_isp_proc_vic_fops = {
 
 /* Global proc context */
 static struct proc_context *tx_isp_proc_ctx = NULL;
+
+/* Helper function to safely get or create proc directory on Linux 3.10 with overlays */
+static struct proc_dir_entry *get_or_create_proc_dir(const char *name, struct proc_dir_entry *parent, bool *created)
+{
+    struct proc_dir_entry *dir;
+    
+    *created = false;
+    
+    /* First attempt: try to find existing directory by looking in parent's subdir list */
+    if (parent) {
+        /* Walk through parent's subdirectories to find existing entry */
+        for (dir = parent->subdir; dir; dir = dir->next) {
+            if (dir->namelen == strlen(name) && 
+                strncmp(dir->name, name, dir->namelen) == 0 &&
+                S_ISDIR(dir->mode)) {
+                pr_info("Found existing proc directory: %s\n", name);
+                return dir;  /* Found existing directory */
+            }
+        }
+    } else {
+        /* For root proc entries, check if the directory already exists */
+        dir = proc_net_fops_create(&init_net, name, S_IFDIR | 0755, NULL);
+        if (dir) {
+            proc_net_remove(&init_net, name);  /* Remove the test entry */
+            /* Try to get the real entry */
+            return proc_mkdir(name, NULL);
+        }
+    }
+    
+    /* Directory doesn't exist - create it */
+    dir = proc_mkdir(name, parent);
+    if (dir) {
+        *created = true;
+        pr_info("Created new proc directory: %s\n", name);
+    }
+    
+    return dir;
+}
 /* Create all proc entries - matches reference driver layout */
 int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
 {
@@ -371,17 +410,20 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
     ctx->isp = isp;
     tx_isp_proc_ctx = ctx;
 
-    /* Find existing /proc/jz directory or create it */
+    /* Safely handle existing /proc/jz directory or create if needed */
+    ctx->jz_dir_created = false;
+    
+    /* Try to create directory - proc_mkdir returns existing dir if it exists */
     ctx->jz_dir = proc_mkdir(TX_ISP_PROC_JZ_DIR, NULL);
-    if (!ctx->jz_dir) {
-        /* If mkdir failed, the directory likely exists - try to find it using proc_mkdir_mode */
-        ctx->jz_dir = proc_mkdir_mode(TX_ISP_PROC_JZ_DIR, 0755, NULL);
-        if (!ctx->jz_dir) {
-            pr_err("Failed to access or create /proc/%s\n", TX_ISP_PROC_JZ_DIR);
-            goto error_free_ctx;
-        }
+    if (ctx->jz_dir) {
+        /* Success - either created new or got reference to existing */
+        pr_info("Using /proc/%s directory\n", TX_ISP_PROC_JZ_DIR);
+        ctx->jz_dir_created = true;  /* We'll manage this reference */
+    } else {
+        /* Failed completely - this is an actual error */
+        pr_err("Failed to access or create /proc/%s\n", TX_ISP_PROC_JZ_DIR);
+        goto error_free_ctx;
     }
-    pr_info("Using /proc/%s directory\n", TX_ISP_PROC_JZ_DIR);
 
     /* Create /proc/jz/isp directory */
     ctx->isp_dir = proc_mkdir(TX_ISP_PROC_ISP_DIR, ctx->jz_dir);
