@@ -26,7 +26,7 @@
  *
  * This function iterates through all subdevices in the ISP device and enables
  * video streaming on each one that has a video stream operation defined.
- * It follows the OEM implementation pattern by checking each subdevice in order.
+ * MEMORY SAFE implementation - uses proper struct member access instead of offsets.
  *
  * Returns 0 on success, negative error code on failure
  */
@@ -35,12 +35,14 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev)
     int ret = 0;
     int i;
 
-    pr_info("Enabling video link stream\n");
+    mcp_log_info("tx_isp_video_link_stream: *** MEMORY SAFE implementation ***");
 
     if (!dev) {
-        pr_err("Invalid ISP device\n");
+        mcp_log_error("tx_isp_video_link_stream: Invalid ISP device - null pointer");
         return -EINVAL;
     }
+
+    mcp_log_info("tx_isp_video_link_stream: Enabling video streaming on subdevices");
 
     /* Initialize CSI hardware before streaming */
     if (dev->csi_dev) {
@@ -50,97 +52,95 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev)
         if (dev->csi_pdev) {
             csi_sd = platform_get_drvdata(dev->csi_pdev);
             if (csi_sd && csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
-                pr_info("Initializing CSI hardware before streaming\n");
+                mcp_log_info("tx_isp_video_link_stream: Initializing CSI hardware before streaming");
                 
                 /* Make sure the CSI device is properly linked to the subdevice */
                 if (dev->csi_dev && !tx_isp_get_subdevdata(csi_sd)) {
                     tx_isp_set_subdevdata(csi_sd, dev->csi_dev);
+                    mcp_log_info("tx_isp_video_link_stream: Linked CSI device to subdevice");
                 }
                 
                 /* Also make sure the CSI device has the subdevice pointer */
                 if (dev->csi_dev && dev->csi_dev->sd == NULL) {
                     dev->csi_dev->sd = csi_sd;
+                    mcp_log_info("tx_isp_video_link_stream: Set CSI device subdev pointer");
                 }
                 
                 /* Initialize the CSI hardware */
                 ret = csi_sd->ops->core->init(csi_sd, 1);
                 if (ret) {
-                    pr_err("Failed to initialize CSI hardware: %d\n", ret);
+                    mcp_log_error("tx_isp_video_link_stream: Failed to initialize CSI hardware: %d", ret);
                     return ret;
                 }
             } else {
-                pr_err("ISP device is NULL\n");
+                mcp_log_error("tx_isp_video_link_stream: CSI subdev missing required ops");
                 return -EINVAL;
             }
         } else {
-            pr_err("CSI platform device is NULL\n");
+            mcp_log_error("tx_isp_video_link_stream: CSI platform device is NULL");
             return -EINVAL;
         }
     } else {
-        pr_err("ISP device is NULL\n");
+        mcp_log_error("tx_isp_video_link_stream: CSI device is NULL");
         return -EINVAL;
     }
 
-    /* Iterate through all modules in the module_graph (up to 16 as in OEM code) */
-    for (i = 0; i < 0x10; i++) {
-        void *module = dev->module_graph[i];
-        struct tx_isp_subdev *subdev = NULL;
-        
-        if (!module) {
-            continue;
-        }
-        
-        /* Get the subdevice from the module - handle alignment carefully */
-        /* The module structure has the subdev at offset 0xc4 */
-        void *subdev_ptr;
-        /* Use memcpy to avoid unaligned access */
-        memcpy(&subdev_ptr, ((char *)module) + 0xc4, sizeof(void *));
-        subdev = (struct tx_isp_subdev *)subdev_ptr;
+    /* Iterate through all subdevices using SAFE struct member access */
+    for (i = 0; i < 16; i++) {
+        struct tx_isp_subdev *subdev = dev->subdevs[i];
         
         if (!subdev) {
             continue;
         }
         
-        pr_info("Checking subdev %p (index %d)\n", subdev, i);
+        mcp_log_info("tx_isp_video_link_stream: Checking subdev %p (index %d)", subdev, i);
+        
+        /* Validate subdevice structure before use */
+        if (!subdev->ops) {
+            mcp_log_info("tx_isp_video_link_stream: Subdev %p has no ops", subdev);
+            continue;
+        }
         
         /* Check if this subdevice has video operations */
-        if (subdev->ops && subdev->ops->video && subdev->ops->video->s_stream) {
-            pr_info("Enabling stream on subdev %p\n", subdev);
+        if (subdev->ops->video && subdev->ops->video->s_stream) {
+            mcp_log_info("tx_isp_video_link_stream: Enabling stream on subdev %p", subdev);
             
             /* Enable streaming on this subdevice */
             ret = subdev->ops->video->s_stream(subdev, 1);
             
-            /* Handle special error code */
+            /* Handle special error code - 0xfffffdfd is not a real error */
             if (ret && ret != 0xfffffdfd) {
-                pr_err("Failed to enable stream on subdev %p: %d\n", subdev, ret);
+                mcp_log_error("tx_isp_video_link_stream: Failed to enable stream on subdev %p: %d", subdev, ret);
                 
                 /* Disable streams on all previously enabled subdevices */
                 int j;
                 for (j = 0; j < i; j++) {
-                    void *prev_module = dev->module_graph[j];
-                    struct tx_isp_subdev *prev_subdev = NULL;
+                    struct tx_isp_subdev *prev_subdev = dev->subdevs[j];
                     
-                    if (!prev_module) {
+                    if (!prev_subdev || !prev_subdev->ops) {
                         continue;
                     }
                     
-                    /* Use memcpy to avoid unaligned access */
-                    void *prev_subdev_ptr;
-                    memcpy(&prev_subdev_ptr, ((char *)prev_module) + 0xc4, sizeof(void *));
-                    prev_subdev = (struct tx_isp_subdev *)prev_subdev_ptr;
-                    
-                    if (prev_subdev && prev_subdev->ops && prev_subdev->ops->video && 
-                        prev_subdev->ops->video->s_stream) {
+                    if (prev_subdev->ops->video && prev_subdev->ops->video->s_stream) {
+                        mcp_log_info("tx_isp_video_link_stream: Disabling stream on subdev %p due to error", prev_subdev);
                         prev_subdev->ops->video->s_stream(prev_subdev, 0);
                     }
                 }
                 
                 return ret;
             }
+            
+            if (ret == 0) {
+                mcp_log_info("tx_isp_video_link_stream: Successfully enabled stream on subdev %p", subdev);
+            } else {
+                mcp_log_info("tx_isp_video_link_stream: Stream enable returned special code 0x%x on subdev %p", ret, subdev);
+            }
+        } else {
+            mcp_log_info("tx_isp_video_link_stream: Subdev %p has no video stream ops", subdev);
         }
     }
 
-    pr_info("Video link stream enabled\n");
+    mcp_log_info("tx_isp_video_link_stream: Video link stream enabled successfully");
     return 0;
 }
 
