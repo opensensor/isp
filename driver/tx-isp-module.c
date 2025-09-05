@@ -3085,6 +3085,53 @@ static void destroy_frame_channel_devices(void)
     }
 }
 
+
+
+/* ===== VIC SENSOR OPERATIONS - EXACT BINARY NINJA IMPLEMENTATIONS ===== */
+
+/* Forward declarations for streaming functions */
+static int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable);
+
+/* Forward declarations for sensor ops structures */
+static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable);
+static int sensor_subdev_core_reset(struct tx_isp_subdev *sd, int reset);
+static int sensor_subdev_core_g_chip_ident(struct tx_isp_subdev *sd, struct tx_isp_chip_ident *chip);
+static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable);
+
+/* Sensor subdev core operations */
+static struct tx_isp_subdev_core_ops sensor_subdev_core_ops = {
+    .init = sensor_subdev_core_init,
+    .reset = sensor_subdev_core_reset,
+    .g_chip_ident = sensor_subdev_core_g_chip_ident,
+};
+
+/* Sensor subdev video operations */
+static struct tx_isp_subdev_video_ops sensor_subdev_video_ops = {
+    .s_stream = sensor_subdev_video_s_stream,
+};
+
+/* CSI video operations structure - CRITICAL for tx_isp_video_link_stream */
+static struct tx_isp_subdev_video_ops csi_video_ops = {
+    .s_stream = csi_video_s_stream_impl,
+};
+
+/* vic_subdev_ops is defined in tx_isp_vic.c - use external reference */
+extern struct tx_isp_subdev_ops vic_subdev_ops;
+
+static struct tx_isp_subdev_ops csi_subdev_ops = {
+    .video = &csi_video_ops,
+    .sensor = NULL,
+    .core = NULL,
+};
+
+
+/* Complete sensor subdev ops structure */
+static struct tx_isp_subdev_ops sensor_subdev_ops = {
+    .core = &sensor_subdev_core_ops,
+    .video = &sensor_subdev_video_ops,
+    .sensor = NULL,
+};
+
 // Basic IOCTL handler matching reference behavior
 static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
@@ -4347,50 +4394,6 @@ static void tx_isp_exit(void)
 
     pr_info("TX ISP driver removed\n");
 }
-
-/* ===== VIC SENSOR OPERATIONS - EXACT BINARY NINJA IMPLEMENTATIONS ===== */
-
-/* Forward declarations for streaming functions */
-static int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable);
-
-/* Forward declarations for sensor ops structures */
-static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable);
-static int sensor_subdev_core_reset(struct tx_isp_subdev *sd, int reset);
-static int sensor_subdev_core_g_chip_ident(struct tx_isp_subdev *sd, struct tx_isp_chip_ident *chip);
-static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable);
-
-/* Sensor subdev core operations */
-static struct tx_isp_subdev_core_ops sensor_subdev_core_ops = {
-    .init = sensor_subdev_core_init,
-    .reset = sensor_subdev_core_reset,
-    .g_chip_ident = sensor_subdev_core_g_chip_ident,
-};
-
-/* Sensor subdev video operations */
-static struct tx_isp_subdev_video_ops sensor_subdev_video_ops = {
-    .s_stream = sensor_subdev_video_s_stream,
-};
-
-/* Complete sensor subdev ops structure */
-static struct tx_isp_subdev_ops sensor_subdev_ops = {
-    .core = &sensor_subdev_core_ops,
-    .video = &sensor_subdev_video_ops,
-    .sensor = NULL,
-};
-
-/* CSI video operations structure - CRITICAL for tx_isp_video_link_stream */
-static struct tx_isp_subdev_video_ops csi_video_ops = {
-    .s_stream = csi_video_s_stream_impl,
-};
-
-/* vic_subdev_ops is defined in tx_isp_vic.c - use external reference */
-extern struct tx_isp_subdev_ops vic_subdev_ops;
-
-static struct tx_isp_subdev_ops csi_subdev_ops = {
-    .video = &csi_video_ops,
-    .sensor = NULL,
-    .core = NULL,
-};
 
 /* VIC video streaming function - CRITICAL for register activity */
 static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
