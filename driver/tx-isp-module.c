@@ -4295,7 +4295,7 @@ static int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             
             /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
             pr_info("*** vic_core_s_stream: CALLING tx_isp_vic_start FOR STREAM ENABLE ***\n");
-            int vic_start_result = tx_isp_vic_start(vic_dev, sensor_attr);
+            int vic_start_result = tx_isp_vic_start(vic_dev);
             
             /* Binary Ninja: *($s1_1 + 0x128) = 4 */
             vic_dev->state = 4;
