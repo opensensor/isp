@@ -85,21 +85,114 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
     pr_info("*** I2C DEVICE CREATED: %s at 0x%02x - SENSOR PROBE SHOULD BE TRIGGERED ***\n",
             client->name, client->addr);
     
-    /* Test I2C communication immediately */
-    pr_info("Testing I2C communication with %s...\n", info->type);
+    /* *** FIXED: PROPER I2C COMMUNICATION TEST *** */
+    pr_info("*** TESTING I2C COMMUNICATION WITH %s (IMPROVED METHOD) ***\n", info->type);
     {
-        unsigned char test_buf;
-        struct i2c_msg test_msg = {
-            .addr = client->addr,
-            .flags = I2C_M_RD,
-            .len = 1,
-            .buf = &test_buf
-        };
-        int test_result = i2c_transfer(adapter, &test_msg, 1);
-        pr_info("I2C test result: %d (>0 = success, <0 = error)\n", test_result);
-        if (test_result < 0) {
-            pr_err("I2C communication test failed: %d\n", test_result);
-            pr_err("This indicates I2C bus or sensor hardware issue\n");
+        /* Instead of blind read, try sensor-specific register read */
+        if (strncmp(info->type, "gc2053", 6) == 0) {
+            /* GC2053-specific I2C test - read chip ID register */
+            unsigned char reg_addr = 0x03; /* GC2053 chip ID register (high byte) */
+            unsigned char chip_id_high = 0;
+            struct i2c_msg msgs[2] = {
+                {
+                    .addr = client->addr,
+                    .flags = 0,
+                    .len = 1,
+                    .buf = &reg_addr
+                },
+                {
+                    .addr = client->addr, 
+                    .flags = I2C_M_RD,
+                    .len = 1,
+                    .buf = &chip_id_high
+                }
+            };
+            
+            int test_result = i2c_transfer(adapter, msgs, 2);
+            pr_info("*** I2C GC2053 CHIP ID TEST: result=%d, chip_id_high=0x%02x ***\n", 
+                   test_result, chip_id_high);
+            
+            if (test_result == 2) {
+                if (chip_id_high == 0x20) {
+                    pr_info("*** SUCCESS: GC2053 CHIP ID CONFIRMED (0x20xx) ***\n");
+                } else {
+                    pr_warn("*** WARNING: Unexpected chip ID 0x%02x (expected 0x20) ***\n", chip_id_high);
+                }
+            } else if (test_result < 0) {
+                pr_err("*** FAILED: I2C communication failed: %d ***\n", test_result);
+                pr_err("*** DIAGNOSIS: I2C Error %d indicates hardware issues ***\n", test_result);
+                
+                /* Detailed error analysis */
+                switch (test_result) {
+                case -EIO:
+                    pr_err("*** -EIO: I/O error - check sensor power, I2C bus, connections ***\n");
+                    break;
+                case -EREMOTEIO:
+                    pr_err("*** -EREMOTEIO: No ACK from sensor - wrong address or dead sensor ***\n");
+                    break;
+                case -EOPNOTSUPP:
+                    pr_err("*** -EOPNOTSUPP: I2C adapter doesn't support this operation ***\n");
+                    break;
+                case -ETIMEDOUT:
+                    pr_err("*** -ETIMEDOUT: I2C bus timeout - bus may be hung ***\n");
+                    break;
+                default:
+                    pr_err("*** Unknown I2C error %d ***\n", test_result);
+                    break;
+                }
+                
+                /* Try alternative I2C addresses for GC2053 */
+                pr_info("*** TRYING ALTERNATIVE GC2053 I2C ADDRESSES ***\n");
+                unsigned char alt_addresses[] = {0x37, 0x3c, 0x21, 0x29};
+                int i;
+                for (i = 0; i < ARRAY_SIZE(alt_addresses); i++) {
+                    if (alt_addresses[i] == client->addr) continue; /* Skip original */
+                    
+                    msgs[0].addr = alt_addresses[i];
+                    msgs[1].addr = alt_addresses[i];
+                    
+                    test_result = i2c_transfer(adapter, msgs, 2);
+                    pr_info("*** Testing addr 0x%02x: result=%d, data=0x%02x ***\n", 
+                           alt_addresses[i], test_result, chip_id_high);
+                    
+                    if (test_result == 2) {
+                        pr_info("*** SUCCESS: GC2053 responds at address 0x%02x! ***\n", alt_addresses[i]);
+                        /* Update client address */
+                        client->addr = alt_addresses[i];
+                        break;
+                    }
+                }
+            } else {
+                pr_warn("*** PARTIAL SUCCESS: Got %d messages (expected 2) ***\n", test_result);
+            }
+        } else {
+            /* Generic I2C test for other sensors */
+            pr_info("*** GENERIC I2C TEST FOR %s ***\n", info->type);
+            
+            /* Try to read a common register that most sensors have */
+            unsigned char test_reg = 0x00; /* Most sensors have something at register 0x00 */
+            unsigned char test_data = 0;
+            struct i2c_msg msgs[2] = {
+                {
+                    .addr = client->addr,
+                    .flags = 0,
+                    .len = 1,
+                    .buf = &test_reg
+                },
+                {
+                    .addr = client->addr,
+                    .flags = I2C_M_RD, 
+                    .len = 1,
+                    .buf = &test_data
+                }
+            };
+            
+            int test_result = i2c_transfer(adapter, msgs, 2);
+            pr_info("*** I2C TEST: result=%d, reg[0x00]=0x%02x ***\n", test_result, test_data);
+            
+            if (test_result < 0) {
+                pr_err("*** I2C COMMUNICATION FAILED: %d ***\n", test_result);
+            }
         }
     }
     
