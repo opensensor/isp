@@ -1516,11 +1516,6 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
 }
 EXPORT_SYMBOL(isp_m0_chardev_ioctl);
 
-
-
-/* Global tuning parameter buffer - Binary Ninja reference implementation */
-static void *tisp_par_ioctl = NULL;
-
 /* tisp_code_tuning_open - Binary Ninja EXACT implementation */
 int isp_m0_chardev_open(struct inode *inode, struct file *file)
 {
