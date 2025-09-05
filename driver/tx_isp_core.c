@@ -2685,6 +2685,7 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
+
 /* tx_isp_core_probe - FIXED to properly create frame channel devices and proc entries */
 int tx_isp_core_probe(struct platform_device *pdev)
 {
@@ -2884,6 +2885,15 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_info("*** tx_isp_core_probe: Frame channel devices created successfully ***\n");
                 } else {
                     pr_err("*** tx_isp_core_probe: Failed to create frame channel devices: %d ***\n", result);
+                }
+
+                /* CRITICAL: Create proper proc directories (/proc/jz/isp/*) */
+                pr_info("*** tx_isp_core_probe: Creating ISP proc entries ***\n");
+                result = tx_isp_create_proc_entries((struct tx_isp_dev *)core_dev);
+                if (result == 0) {
+                    pr_info("*** tx_isp_core_probe: ISP proc entries created successfully ***\n");
+                } else {
+                    pr_err("*** tx_isp_core_probe: Failed to create ISP proc entries: %d ***\n", result);
                 }
                 
                 return 0;
