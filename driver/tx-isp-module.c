@@ -1946,8 +1946,8 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
     
     /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
     for (i = 0; i < 0x10; i++) {
-        /* Binary Ninja: void* $a0 = *$s4 */
-        subdev = subdev_array[i];
+        /* FIXED: Use proper struct member access instead of undefined subdev_array */
+        subdev = isp_dev->subdevs[i];
         
         if (subdev != NULL) {
             /* MCP Log: Found valid subdev */
@@ -1985,11 +1985,11 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
                                 pr_info("tx_isp_video_link_stream: Starting rollback on %d previously processed subdevs\n", 
                                         processed_count - 1);
                                 
-                                /* Binary Ninja: Rollback - disable previously enabled streams */
-                                /* Binary Ninja shows a rollback loop that disables streams in reverse order */
-                                int j;
-                                for (j = i - 1; j >= 0; j--) {
-                                    void *prev_subdev = subdev_array[j];
+                        /* Binary Ninja: Rollback - disable previously enabled streams */
+                        /* Binary Ninja shows a rollback loop that disables streams in reverse order */
+                        int j;
+                        for (j = i - 1; j >= 0; j--) {
+                            void *prev_subdev = isp_dev->subdevs[j];
                                     if (prev_subdev != NULL) {
                                         void *prev_ops_ptr = *((void**)((char*)prev_subdev + 0xc4));
                                         if (prev_ops_ptr != NULL) {
