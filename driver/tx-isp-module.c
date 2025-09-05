@@ -2463,8 +2463,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
                 pr_debug("Channel %d: Orange frame generated - Y=%d pixels, UV=%d pixels\n",
                         channel, frame_size_y, frame_size_uv);
-            } else {
-                pr_debug("Channel %d: Could not map buffer for orange frame generation\n", channel);
             }
         }
         
