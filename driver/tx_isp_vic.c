@@ -1964,76 +1964,91 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 }
 EXPORT_SYMBOL(vic_chardev_ioctl);
 
-/* tx_isp_vic_probe - EXACT Binary Ninja implementation */
+/* tx_isp_vic_probe - FIXED to prevent race condition and memory corruption */
 int tx_isp_vic_probe(struct platform_device *pdev)
 {
-    void *vic_device;
+    struct tx_isp_vic_device *vic_dev;
+    struct tx_isp_subdev *sd;
     int ret;
     
-    pr_info("*** tx_isp_vic_probe: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** tx_isp_vic_probe: FIXED Binary Ninja implementation ***\n");
     
-    /* Binary Ninja: $v0, $a2 = private_kmalloc(0x21c, 0xd0) */
-    vic_device = kzalloc(0x21c, GFP_KERNEL);  /* 0x21c = 540 bytes */
-    if (!vic_device) {
-        /* Binary Ninja: isp_printf(2, "Failed to allocate vic device\n", $a2) */
+    /* CRITICAL FIX: Use proper struct allocation instead of raw memory */
+    vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
+    if (!vic_dev) {
         pr_err("Failed to allocate vic device\n");
-        /* Binary Ninja: return 0xffffffff */
-        return -1;
+        return -ENOMEM;
     }
     
-    /* Binary Ninja: memset($v0, 0, 0x21c) */
-    memset(vic_device, 0, 0x21c);
+    /* Initialize VIC device structure properly to prevent memory corruption */
+    memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
     
-    /* Binary Ninja: void* $s2_1 = arg1[0x16] */
-    /* This references platform device resource information */
+    /* CRITICAL FIX: Initialize the subdev structure FIRST to prevent race condition */
+    sd = &vic_dev->sd;
+    memset(sd, 0, sizeof(struct tx_isp_subdev));
     
-    /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &vic_subdev_ops) != 0) */
-    ret = tx_isp_subdev_init(pdev, vic_device, &vic_subdev_ops);
+    /* RACE CONDITION FIX: Set up proper struct member access BEFORE subdev_init */
+    vic_dev->state = 1;  /* Initial state - INIT */
+    vic_dev->width = 1920;  /* Default HD width */
+    vic_dev->height = 1080; /* Default HD height */
+    
+    /* Initialize synchronization primitives BEFORE any other access */
+    spin_lock_init(&vic_dev->lock);
+    spin_lock_init(&vic_dev->buffer_lock);
+    mutex_init(&vic_dev->mlock);
+    mutex_init(&vic_dev->state_lock);
+    init_completion(&vic_dev->frame_complete);
+    
+    /* Initialize buffer management lists */
+    INIT_LIST_HEAD(&vic_dev->queue_head);
+    INIT_LIST_HEAD(&vic_dev->done_head);
+    INIT_LIST_HEAD(&vic_dev->free_head);
+    
+    /* CRITICAL: Set up subdev private data pointer BEFORE tx_isp_subdev_init */
+    sd->dev_priv = vic_dev;
+    
+    pr_info("*** VIC DEVICE STRUCTURE PROPERLY INITIALIZED - CALLING tx_isp_subdev_init ***\n");
+    
+    /* Now safely call subdev init with properly initialized structure */
+    ret = tx_isp_subdev_init(pdev, sd, &vic_subdev_ops);
     if (ret != 0) {
-        /* Binary Ninja: isp_printf(2, "Failed to init isp module(%d.%d)\n", zx.d(*($s2_1 + 2))) */
-        pr_err("Failed to init isp module\n");
-        /* Binary Ninja: private_kfree($v0) */
-        kfree(vic_device);
-        /* Binary Ninja: return 0xfffffff4 */
-        return -12;
+        pr_err("Failed to init isp module: %d\n", ret);
+        kfree(vic_dev);
+        return ret;
     }
     
-    /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
-    platform_set_drvdata(pdev, vic_device);
+    /* RACE CONDITION FIX: Set platform driver data AFTER successful init */
+    platform_set_drvdata(pdev, vic_dev);
     
-    /* Binary Ninja: *($v0 + 0x34) = &isp_vic_frd_fops */
-    *(void **)(vic_device + 0x34) = (void *)&isp_vic_frd_fops;
+    /* Set up file operations for proc interface */
+    sd->fops = &isp_vic_frd_fops;
     
-    /* Binary Ninja: private_spin_lock_init($v0 + 0x130) */
-    spin_lock_init((spinlock_t *)(vic_device + 0x130));
+    /* Initialize VIC register base if ISP device is available */
+    if (ourISPdev && ourISPdev->vic_regs) {
+        vic_dev->vic_regs = ourISPdev->vic_regs;
+        pr_info("*** VIC registers mapped: %p ***\n", vic_dev->vic_regs);
+    } else {
+        pr_warn("ISP device not available yet - VIC registers will be mapped later\n");
+    }
     
-    /* Binary Ninja: private_raw_mutex_init($v0 + 0x130, "&vsd->mlock", 0) */
-    /* Note: This seems to overlap with spinlock - reference driver has both */
-    mutex_init((struct mutex *)(vic_device + 0x130));
+    /* Initialize VIC error counters */
+    memset(vic_dev->vic_errors, 0, sizeof(vic_dev->vic_errors));
+    vic_dev->frame_count = 0;
+    vic_dev->buffer_count = 0;
+    vic_dev->streaming = 0;
     
-    /* Binary Ninja: private_raw_mutex_init($v0 + 0x154, "&vsd->snap_mlock", 0) */
-    mutex_init((struct mutex *)(vic_device + 0x154));
+    /* CRITICAL: Link VIC device to ISP core if available */
+    if (ourISPdev) {
+        ourISPdev->vic_dev = (struct tx_isp_subdev *)vic_dev;
+        pr_info("*** CRITICAL: VIC DEVICE LINKED TO ISP CORE ***\n");
+        pr_info("  isp_dev->vic_dev = %p\n", ourISPdev->vic_dev);
+        pr_info("  vic_dev->sd.isp = %p\n", sd->isp);
+    }
     
-    /* Binary Ninja: private_init_completion($v0 + 0x148) */
-    init_completion((struct completion *)(vic_device + 0x148));
+    pr_info("*** tx_isp_vic_probe: FIXED VIC device created successfully ***\n");
+    pr_info("VIC device: size=%zu, vic_dev=%p, sd=%p, state=%d\n", 
+            sizeof(struct tx_isp_vic_device), vic_dev, sd, vic_dev->state);
     
-    /* Binary Ninja: *($v0 + 0x128) = 1 */
-    *(uint32_t *)(vic_device + 0x128) = 1;  /* Initial state */
-    
-    /* Binary Ninja: dump_vsd = $v0 */
-    /* This sets a global variable for debugging */
-    
-    /* Binary Ninja: *($v0 + 0xd4) = $v0 */
-    *(void **)(vic_device + 0xd4) = vic_device;  /* Self-pointer */
-    
-    /* Binary Ninja: test_addr = $v0 + 0x80 */
-    /* This sets another global variable for testing */
-    
-    pr_info("*** tx_isp_vic_probe: Binary Ninja VIC device created successfully ***\n");
-    pr_info("VIC device: size=0x21c, ptr=%p, self=%p, state=%d\n", 
-            vic_device, *(void **)(vic_device + 0xd4), *(uint32_t *)(vic_device + 0x128));
-    
-    /* Binary Ninja: return 0 */
     return 0;
 }
 
