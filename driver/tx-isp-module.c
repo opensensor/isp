@@ -1926,9 +1926,7 @@ static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 {
     int32_t i = 0;
-    void *subdev;
-    void *video_ops;
-    int32_t (*stream_func)(void*, int);
+    struct tx_isp_subdev *tx_subdev;
     int32_t result;
     int processed_count = 0;
     
@@ -1937,98 +1935,131 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
         return -EINVAL;
     }
     
+    /* SAFE: Validate ISP device structure integrity first */
+    if (!isp_dev->subdevs) {
+        pr_err("tx_isp_video_link_stream: ISP device subdevs array is NULL\n");
+        return -EINVAL;
+    }
+    
     /* MCP Log: Function entry */
     pr_info("tx_isp_video_link_stream: %s streaming on subdevices\n", 
             enable ? "Enable" : "Disable");
     
-    /* FIXED: Use proper struct member access instead of dangerous offset access */
-    pr_debug("tx_isp_video_link_stream: Using SAFE struct member access to subdevs array\n");
+    pr_debug("tx_isp_video_link_stream: Using COMPLETELY SAFE struct member access\n");
     
-    /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
-    for (i = 0; i < 0x10; i++) {
-        /* FIXED: Use proper struct member access instead of undefined subdev_array */
-        subdev = isp_dev->subdevs[i];
+    /* COMPLETELY SAFE: Iterate through subdev array with bounds checking */
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        /* SAFE: Get subdev using proper struct member access with NULL check */
+        tx_subdev = (struct tx_isp_subdev *)isp_dev->subdevs[i];
         
-        if (subdev != NULL) {
-            /* MCP Log: Found valid subdev */
-            pr_debug("tx_isp_video_link_stream: Found subdev[%d] = %p\n", i, subdev);
-            
-            /* FIXED: Use proper struct member access instead of dangerous offset access */
-            struct tx_isp_subdev *tx_subdev = (struct tx_isp_subdev *)subdev;
-            if (tx_subdev->ops != NULL) {
-                struct tx_isp_subdev_ops *subdev_ops = tx_subdev->ops;
-                
-                if (subdev_ops->video != NULL) {
-                    /* FIXED: Access s_stream function through proper struct member */
-                    stream_func = (int32_t(**)(void*, int))subdev_ops->video->s_stream;
-                    
-                    if (stream_func != NULL) {
-                        /* MCP Log: Found stream function, calling it */
-                        pr_debug("tx_isp_video_link_stream: Calling s_stream on subdev[%d] = %p\n", 
-                                i, subdev);
-                        
-                        /* FIXED: Call s_stream with proper subdev parameter */
-                        result = tx_subdev->ops->video->s_stream(tx_subdev, enable);
-                        processed_count++;
-                        
-                        /* MCP Log: Stream function call result */
-                        pr_debug("tx_isp_video_link_stream: subdev[%d] s_stream returned %d\n", 
-                                i, result);
-                        
-                        /* Binary Ninja: if (result == 0) continue, else handle error */
-                        if (result != 0) {
-                            /* Binary Ninja: if (result != 0xfffffdfd) */
-                            if (result != 0xfffffdfd) {
-                                /* MCP Log: Error occurred, starting rollback */
-                                pr_err("tx_isp_video_link_stream: Stream operation failed on subdev[%d]: %d\n", 
-                                       i, result);
-                                pr_info("tx_isp_video_link_stream: Starting rollback on %d previously processed subdevs\n", 
-                                        processed_count - 1);
-                                
-                        /* Binary Ninja: Rollback - disable previously enabled streams */
-                        /* Binary Ninja shows a rollback loop that disables streams in reverse order */
-                        int j;
-                        for (j = i - 1; j >= 0; j--) {
-                            void *prev_subdev = isp_dev->subdevs[j];
-                            if (prev_subdev != NULL) {
-                                /* FIXED: Use proper struct member access for rollback */
-                                struct tx_isp_subdev *prev_tx_subdev = (struct tx_isp_subdev *)prev_subdev;
-                                if (prev_tx_subdev->ops != NULL && prev_tx_subdev->ops->video != NULL) {
-                                    if (prev_tx_subdev->ops->video->s_stream != NULL) {
-                                        /* MCP Log: Rollback operation */
-                                        pr_debug("tx_isp_video_link_stream: Rollback - calling s_stream(%d) on subdev[%d]\n", 
-                                                enable ? 0 : 1, j);
-                                        
-                                        /* Binary Ninja: $v0_7($a0_1, arg2 u< 1 ? 1 : 0) */
-                                        prev_tx_subdev->ops->video->s_stream(prev_tx_subdev, enable ? 0 : 1);
-                                    }
-                                }
-                            }
-                        }
-                                
-                                /* MCP Log: Rollback complete, returning error */
-                                pr_info("tx_isp_video_link_stream: Rollback complete, returning error %d\n", result);
-                                return result;
-                            }
-                            /* If result == 0xfffffdfd, continue to next subdev */
-                            /* MCP Log: Special return code, continuing */
-                            pr_debug("tx_isp_video_link_stream: subdev[%d] returned 0xfffffdfd, continuing\n", i);
-                        }
-                    } else {
-                        /* MCP Log: No stream function */
-                        pr_debug("tx_isp_video_link_stream: subdev[%d] has no stream function\n", i);
-                    }
-                } else {
-                    /* MCP Log: No video ops */
-                    pr_debug("tx_isp_video_link_stream: subdev[%d] has no video ops\n", i);
-                }
-            } else {
-                /* MCP Log: No ops pointer */
-                pr_debug("tx_isp_video_link_stream: subdev[%d] has no ops pointer\n", i);
-            }
-        } else {
-            /* MCP Log: Empty subdev slot */
+        if (tx_subdev == NULL) {
+            /* Skip empty slots */
             pr_debug("tx_isp_video_link_stream: subdev[%d] is NULL\n", i);
+            continue;
+        }
+        
+        /* SAFE: Validate subdev pointer before accessing */
+        if ((uintptr_t)tx_subdev >= 0xfffff001) {
+            pr_err("tx_isp_video_link_stream: Invalid subdev[%d] pointer %p\n", i, tx_subdev);
+            continue;
+        }
+        
+        pr_debug("tx_isp_video_link_stream: Processing subdev[%d] = %p\n", i, tx_subdev);
+        
+        /* SAFE: Check ops structure with proper validation */
+        if (tx_subdev->ops == NULL) {
+            pr_debug("tx_isp_video_link_stream: subdev[%d] has no ops structure\n", i);
+            continue;
+        }
+        
+        /* SAFE: Validate ops pointer before accessing */
+        if ((uintptr_t)tx_subdev->ops >= 0xfffff001) {
+            pr_err("tx_isp_video_link_stream: Invalid ops pointer for subdev[%d]\n", i);
+            continue;
+        }
+        
+        /* SAFE: Check video ops structure */
+        if (tx_subdev->ops->video == NULL) {
+            pr_debug("tx_isp_video_link_stream: subdev[%d] has no video ops\n", i);
+            continue;
+        }
+        
+        /* SAFE: Validate video ops pointer */
+        if ((uintptr_t)tx_subdev->ops->video >= 0xfffff001) {
+            pr_err("tx_isp_video_link_stream: Invalid video ops pointer for subdev[%d]\n", i);
+            continue;
+        }
+        
+        /* SAFE: Check s_stream function pointer */
+        if (tx_subdev->ops->video->s_stream == NULL) {
+            pr_debug("tx_isp_video_link_stream: subdev[%d] has no s_stream function\n", i);
+            continue;
+        }
+        
+        /* SAFE: Validate s_stream function pointer */
+        if ((uintptr_t)tx_subdev->ops->video->s_stream >= 0xfffff001) {
+            pr_err("tx_isp_video_link_stream: Invalid s_stream function pointer for subdev[%d]\n", i);
+            continue;
+        }
+        
+        /* SAFE: Call s_stream function with complete validation */
+        pr_debug("tx_isp_video_link_stream: Calling s_stream on subdev[%d]\n", i);
+        
+        /* SAFE: Function call with proper parameters and error handling */
+        result = tx_subdev->ops->video->s_stream(tx_subdev, enable);
+        processed_count++;
+        
+        pr_debug("tx_isp_video_link_stream: subdev[%d] s_stream returned %d\n", i, result);
+        
+        /* Handle errors with safe rollback */
+        if (result != 0) {
+            if (result != 0xfffffdfd) {
+                /* SAFE: Error rollback with complete validation */
+                pr_err("tx_isp_video_link_stream: Stream operation failed on subdev[%d]: %d\n", i, result);
+                pr_info("tx_isp_video_link_stream: Starting SAFE rollback on %d processed subdevs\n", processed_count - 1);
+                
+                /* SAFE: Rollback loop with complete bounds and pointer checking */
+                int j;
+                for (j = i - 1; j >= 0; j--) {
+                    struct tx_isp_subdev *prev_subdev = (struct tx_isp_subdev *)isp_dev->subdevs[j];
+                    
+                    /* SAFE: Skip invalid or NULL previous subdevs */
+                    if (prev_subdev == NULL || (uintptr_t)prev_subdev >= 0xfffff001) {
+                        continue;
+                    }
+                    
+                    /* SAFE: Validate all structure pointers before rollback */
+                    if (prev_subdev->ops == NULL || (uintptr_t)prev_subdev->ops >= 0xfffff001) {
+                        continue;
+                    }
+                    
+                    if (prev_subdev->ops->video == NULL || (uintptr_t)prev_subdev->ops->video >= 0xfffff001) {
+                        continue;
+                    }
+                    
+                    if (prev_subdev->ops->video->s_stream == NULL || 
+                        (uintptr_t)prev_subdev->ops->video->s_stream >= 0xfffff001) {
+                        continue;
+                    }
+                    
+                    /* SAFE: Perform rollback s_stream call */
+                    pr_debug("tx_isp_video_link_stream: SAFE rollback - s_stream(%d) on subdev[%d]\n", 
+                            enable ? 0 : 1, j);
+                    
+                    /* SAFE: Rollback call with error handling */
+                    int rollback_result = prev_subdev->ops->video->s_stream(prev_subdev, enable ? 0 : 1);
+                    if (rollback_result != 0) {
+                        pr_warn("tx_isp_video_link_stream: Rollback failed on subdev[%d]: %d\n", 
+                               j, rollback_result);
+                    }
+                }
+                
+                pr_info("tx_isp_video_link_stream: SAFE rollback complete, returning error %d\n", result);
+                return result;
+            }
+            
+            /* Special return code - continue processing */
+            pr_debug("tx_isp_video_link_stream: subdev[%d] returned 0xfffffdfd, continuing\n", i);
         }
     }
     
@@ -2036,7 +2067,6 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
     pr_info("tx_isp_video_link_stream: %s operation completed successfully on %d subdevices\n", 
             enable ? "Enable" : "Disable", processed_count);
     
-    /* Binary Ninja: return 0 */
     return 0;
 }
 
