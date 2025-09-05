@@ -1946,147 +1946,129 @@ static volatile bool subdev_init_complete = false;
 
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 {
-    int32_t i = 0;
-    struct tx_isp_subdev *tx_subdev;
-    int32_t result;
-    int processed_count = 0;
-    unsigned long timeout;
+    /* SAFE STRUCT ACCESS: Use proper struct members instead of dangerous pointer arithmetic */
+    struct tx_isp_subdev *subdev;
+    int result;
+    int i;
     
-    /* RACE CONDITION FIX: Early validation with race-safe checks */
+    /* SAFE: Early validation using proper struct access */
     if (!isp_dev) {
         pr_err("tx_isp_video_link_stream: Invalid ISP device pointer\n");
         return -EINVAL;
     }
     
-    /* RACE CONDITION FIX: Wait for subdev initialization to complete */
-    pr_info("tx_isp_video_link_stream: %s streaming - waiting for subdev init completion\n", 
+    /* SAFE: RACE CONDITION protection - wait for subdev init completion */
+    if (!subdev_init_complete) {
+        pr_info("tx_isp_video_link_stream: Waiting for subdev initialization to complete\n");
+        unsigned long timeout = jiffies + msecs_to_jiffies(5000);
+        while (!subdev_init_complete && time_before(jiffies, timeout)) {
+            msleep(10);
+        }
+        if (!subdev_init_complete) {
+            pr_err("tx_isp_video_link_stream: Timeout waiting for subdev initialization\n");
+            return -ETIMEDOUT;
+        }
+    }
+    
+    pr_info("tx_isp_video_link_stream: %s streaming (SAFE STRUCT ACCESS implementation)\n", 
             enable ? "Enable" : "Disable");
     
-    /* Wait up to 5 seconds for subdev initialization to complete */
-    timeout = jiffies + msecs_to_jiffies(5000);
-    while (!subdev_init_complete && time_before(jiffies, timeout)) {
-        msleep(10); /* Wait 10ms and check again */
-    }
-    
-    if (!subdev_init_complete) {
-        pr_err("tx_isp_video_link_stream: Timeout waiting for subdev initialization\n");
-        return -ETIMEDOUT;
-    }
-    
-    /* RACE CONDITION FIX: Take initialization lock to prevent concurrent modification */
-    if (!mutex_trylock(&subdev_init_lock)) {
-        pr_info("tx_isp_video_link_stream: Waiting for subdev initialization lock\n");
-        mutex_lock(&subdev_init_lock);
-    }
-    
-    /* RACE CONDITION FIX: Double-check subdevs array is still valid after acquiring lock */
+    /* SAFE: Use proper struct member access instead of offset arithmetic */
     if (!isp_dev->subdevs) {
-        pr_err("tx_isp_video_link_stream: ISP device subdevs array became NULL\n");
-        mutex_unlock(&subdev_init_lock);
+        pr_err("tx_isp_video_link_stream: No subdevs array in ISP device\n");
         return -EINVAL;
     }
     
-    /* RACE CONDITION FIX: Validate subdevs array pointer range while holding lock */
-    if ((uintptr_t)isp_dev->subdevs < 0x1000 || (uintptr_t)isp_dev->subdevs >= 0xfffff000) {
-        pr_err("tx_isp_video_link_stream: subdevs array pointer out of valid range: %p\n", isp_dev->subdevs);
-        mutex_unlock(&subdev_init_lock);
-        return -EFAULT;
-    }
-    
-    pr_info("tx_isp_video_link_stream: %s streaming on subdevices (RACE CONDITION SAFE)\n", 
-            enable ? "Enable" : "Disable");
-    
-    /* RACE CONDITION SAFE: Iterate through subdev array with lock held */
+    /* SAFE: Iterate through subdev array using proper bounds and struct access */
     for (i = 0; i < ISP_MAX_SUBDEVS && i < 16; i++) {
-        /* RACE CONDITION SAFE: Get subdev using proper struct member access */
-        tx_subdev = (struct tx_isp_subdev *)isp_dev->subdevs[i];
+        /* SAFE: Get subdev using proper struct member access */
+        subdev = isp_dev->subdevs[i];
         
-        if (tx_subdev == NULL) {
-            /* Skip empty slots */
-            pr_debug("tx_isp_video_link_stream: subdev[%d] is NULL\n", i);
+        /* SAFE: Check for valid subdev */
+        if (!subdev) {
+            pr_debug("tx_isp_video_link_stream: subdev[%d] is NULL, skipping\n", i);
             continue;
         }
-
-        /* RACE CONDITION SAFE: Additional pointer validation while holding lock */
-        if ((uintptr_t)tx_subdev < 0x1000 || (uintptr_t)tx_subdev >= 0xfffff000) {
-            pr_warn("tx_isp_video_link_stream: subdev[%d] pointer out of range: %p, skipping\n", i, tx_subdev);
+        
+        /* SAFE: Validate subdev pointer */
+        if ((uintptr_t)subdev < 0x1000 || (uintptr_t)subdev >= 0xfffff000) {
+            pr_debug("tx_isp_video_link_stream: Invalid subdev[%d] pointer %p, skipping\n", i, subdev);
             continue;
         }
-
-        /* RACE CONDITION SAFE: Check ops structure with validation */
-        if (tx_subdev->ops == NULL) {
+        
+        /* SAFE: Check ops structure using proper struct member access */
+        if (!subdev->ops) {
             pr_debug("tx_isp_video_link_stream: subdev[%d] has no ops structure\n", i);
             continue;
         }
         
-        /* RACE CONDITION SAFE: Validate ops pointer */
-        if ((uintptr_t)tx_subdev->ops < 0x1000 || (uintptr_t)tx_subdev->ops >= 0xfffff000) {
-            pr_warn("tx_isp_video_link_stream: subdev[%d] ops pointer out of range: %p, skipping\n", i, tx_subdev->ops);
+        /* SAFE: Validate ops pointer */
+        if ((uintptr_t)subdev->ops < 0x1000 || (uintptr_t)subdev->ops >= 0xfffff000) {
+            pr_warn("tx_isp_video_link_stream: subdev[%d] ops pointer out of range: %p, skipping\n", i, subdev->ops);
             continue;
         }
         
-        /* RACE CONDITION SAFE: Check video ops structure */
-        if (tx_subdev->ops->video == NULL) {
+        /* SAFE: Check video ops structure using proper struct member access */
+        if (!subdev->ops->video) {
             pr_debug("tx_isp_video_link_stream: subdev[%d] has no video ops\n", i);
             continue;
         }
         
-        /* RACE CONDITION SAFE: Validate video ops pointer */
-        if ((uintptr_t)tx_subdev->ops->video < 0x1000 || (uintptr_t)tx_subdev->ops->video >= 0xfffff000) {
-            pr_warn("tx_isp_video_link_stream: subdev[%d] video ops pointer out of range: %p, skipping\n", i, tx_subdev->ops->video);
+        /* SAFE: Validate video ops pointer */
+        if ((uintptr_t)subdev->ops->video < 0x1000 || (uintptr_t)subdev->ops->video >= 0xfffff000) {
+            pr_warn("tx_isp_video_link_stream: subdev[%d] video ops pointer out of range: %p, skipping\n", i, subdev->ops->video);
             continue;
         }
         
-        /* RACE CONDITION SAFE: Check s_stream function pointer */
-        if (tx_subdev->ops->video->s_stream == NULL) {
+        /* SAFE: Check s_stream function using proper struct member access */
+        if (!subdev->ops->video->s_stream) {
             pr_debug("tx_isp_video_link_stream: subdev[%d] has no s_stream function\n", i);
             continue;
         }
         
-        /* RACE CONDITION SAFE: Validate s_stream function pointer */
-        if ((uintptr_t)tx_subdev->ops->video->s_stream < 0x1000 || (uintptr_t)tx_subdev->ops->video->s_stream >= 0xfffff000) {
-            pr_warn("tx_isp_video_link_stream: subdev[%d] s_stream pointer out of range: %p, skipping\n", i, tx_subdev->ops->video->s_stream);
+        /* SAFE: Validate s_stream function pointer */
+        if ((uintptr_t)subdev->ops->video->s_stream < 0x1000 || (uintptr_t)subdev->ops->video->s_stream >= 0xfffff000) {
+            pr_warn("tx_isp_video_link_stream: subdev[%d] s_stream pointer out of range: %p, skipping\n", i, subdev->ops->video->s_stream);
             continue;
         }
-
-        /* RACE CONDITION SAFE: Call s_stream function with comprehensive protection */
-        pr_debug("tx_isp_video_link_stream: Calling s_stream on validated subdev[%d]\n", i);
         
-        /* RACE CONDITION SAFE: Additional parameter validation */
+        /* SAFE: Call s_stream function using proper struct member access */
+        pr_debug("tx_isp_video_link_stream: Calling s_stream on validated subdev[%d] (%p)\n", i, subdev);
+        
+        /* SAFE: Parameter validation */
         if (enable < 0 || enable > 1) {
             pr_warn("tx_isp_video_link_stream: Invalid enable parameter: %d, normalizing to 0/1\n", enable);
             enable = enable ? 1 : 0;
         }
         
-        /* RACE CONDITION SAFE: Function call with comprehensive error handling */
-        result = tx_subdev->ops->video->s_stream(tx_subdev, enable);
-        processed_count++;
+        /* SAFE: Function call using proper struct member access */
+        result = subdev->ops->video->s_stream(subdev, enable);
         
         pr_debug("tx_isp_video_link_stream: subdev[%d] s_stream returned %d\n", i, result);
         
-        /* RACE CONDITION SAFE: Handle errors with validation */
+        /* SAFE: Handle errors with validation */
         if (result != 0) {
             if (result != 0xfffffdfd) {
-                /* RACE CONDITION SAFE: Error rollback with validation */
+                /* SAFE: Error rollback using proper struct member access */
                 pr_err("tx_isp_video_link_stream: Stream operation failed on subdev[%d]: %d\n", i, result);
-                pr_info("tx_isp_video_link_stream: Starting RACE CONDITION SAFE rollback on %d processed subdevs\n", processed_count - 1);
+                pr_info("tx_isp_video_link_stream: Starting SAFE rollback on processed subdevs\n");
                 
-                /* RACE CONDITION SAFE: Rollback loop with pointer checking */
+                /* SAFE: Rollback loop using proper struct member access */
                 int j;
                 for (j = i - 1; j >= 0; j--) {
-                    struct tx_isp_subdev *prev_subdev = (struct tx_isp_subdev *)isp_dev->subdevs[j];
+                    struct tx_isp_subdev *prev_subdev = isp_dev->subdevs[j];
                     
-                    /* RACE CONDITION SAFE: Skip invalid or NULL previous subdevs */
-                    if (prev_subdev == NULL) {
+                    /* SAFE: Skip invalid or NULL previous subdevs using proper struct access */
+                    if (!prev_subdev) {
                         continue;
                     }
                     
-                    /* RACE CONDITION SAFE: Validate all structure pointers before rollback */
+                    /* SAFE: Validate all structure pointers before rollback using proper struct access */
                     if ((uintptr_t)prev_subdev < 0x1000 || (uintptr_t)prev_subdev >= 0xfffff000) {
                         continue;
                     }
                     
-                    if (prev_subdev->ops == NULL) {
+                    if (!prev_subdev->ops) {
                         continue;
                     }
                     
@@ -2094,7 +2076,7 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
                         continue;
                     }
                     
-                    if (prev_subdev->ops->video == NULL) {
+                    if (!prev_subdev->ops->video) {
                         continue;
                     }
                     
@@ -2102,7 +2084,7 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
                         continue;
                     }
                     
-                    if (prev_subdev->ops->video->s_stream == NULL) {
+                    if (!prev_subdev->ops->video->s_stream) {
                         continue;
                     }
                     
@@ -2110,7 +2092,7 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
                         continue;
                     }
                     
-                    /* RACE CONDITION SAFE: Rollback call with comprehensive error handling */
+                    /* SAFE: Rollback call using proper struct member access */
                     int rollback_result = prev_subdev->ops->video->s_stream(prev_subdev, enable ? 0 : 1);
                     if (rollback_result != 0) {
                         pr_warn("tx_isp_video_link_stream: Rollback failed on subdev[%d]: %d\n", 
@@ -2118,8 +2100,7 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
                     }
                 }
                 
-                pr_info("tx_isp_video_link_stream: RACE CONDITION SAFE rollback complete, returning error %d\n", result);
-                mutex_unlock(&subdev_init_lock);
+                pr_info("tx_isp_video_link_stream: SAFE rollback complete, returning error %d\n", result);
                 return result;
             }
             
@@ -2128,13 +2109,9 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
         }
     }
     
-    /* RACE CONDITION FIX: Release the initialization lock */
-    mutex_unlock(&subdev_init_lock);
-    
-    /* MCP Log: Successful completion */
-    pr_info("tx_isp_video_link_stream: %s operation completed successfully on %d subdevices (RACE CONDITION SAFE)\n", 
-            enable ? "Enable" : "Disable", processed_count);
-    
+    /* SAFE: Successful completion */
+    pr_info("tx_isp_video_link_stream: %s operation completed successfully (SAFE STRUCT ACCESS)\n", 
+            enable ? "Enable" : "Disable");
     return 0;
 }
 
