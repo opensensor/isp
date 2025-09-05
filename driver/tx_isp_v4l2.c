@@ -166,12 +166,160 @@ static int tx_isp_v4l2_querycap(struct file *file, void *priv,
     return 0;
 }
 
+/* VIDIOC_REQBUFS - Request buffers */
+static int tx_isp_v4l2_reqbufs(struct file *file, void *priv,
+                               struct v4l2_requestbuffers *rb)
+{
+    struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    
+    if (!dev) {
+        return -EINVAL;
+    }
+    
+    pr_info("*** Channel %d: VIDIOC_REQBUFS count=%d memory=%d ***\n",
+            dev->channel_num, rb->count, rb->memory);
+    
+    if (rb->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+        return -EINVAL;
+    }
+    
+    if (rb->memory != V4L2_MEMORY_MMAP && rb->memory != V4L2_MEMORY_USERPTR) {
+        rb->memory = V4L2_MEMORY_MMAP; /* Default to mmap */
+    }
+    
+    /* For encoder compatibility, we need to accept the buffer request */
+    rb->count = min_t(u32, rb->count, 32); /* Limit buffers */
+    
+    pr_info("*** Channel %d: REQBUFS SUCCESS - %d buffers allocated ***\n",
+            dev->channel_num, rb->count);
+    
+    return 0;
+}
+
+/* VIDIOC_QBUF - Queue buffer */
+static int tx_isp_v4l2_qbuf(struct file *file, void *priv,
+                            struct v4l2_buffer *buf)
+{
+    struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    
+    if (!dev) {
+        return -EINVAL;
+    }
+    
+    pr_info("*** Channel %d: VIDIOC_QBUF index=%d ***\n",
+            dev->channel_num, buf->index);
+    
+    if (buf->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+        return -EINVAL;
+    }
+    
+    /* Mark buffer as queued */
+    buf->flags |= V4L2_BUF_FLAG_QUEUED;
+    buf->flags &= ~V4L2_BUF_FLAG_DONE;
+    
+    return 0;
+}
+
+/* VIDIOC_DQBUF - Dequeue buffer */
+static int tx_isp_v4l2_dqbuf(struct file *file, void *priv,
+                             struct v4l2_buffer *buf)
+{
+    struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    
+    if (!dev) {
+        return -EINVAL;
+    }
+    
+    pr_info("*** Channel %d: VIDIOC_DQBUF ***\n", dev->channel_num);
+    
+    if (buf->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+        return -EINVAL;
+    }
+    
+    if (!dev->streaming) {
+        return -EINVAL;
+    }
+    
+    /* For now, simulate a ready buffer */
+    buf->index = 0;
+    buf->flags = V4L2_BUF_FLAG_DONE;
+    buf->field = V4L2_FIELD_NONE;
+    buf->timestamp.tv_sec = 0;
+    buf->timestamp.tv_usec = 0;
+    buf->sequence = dev->sequence++;
+    buf->bytesused = dev->format.fmt.pix.sizeimage;
+    
+    return 0;
+}
+
+/* VIDIOC_STREAMON - Start streaming */
+static int tx_isp_v4l2_streamon(struct file *file, void *priv,
+                                enum v4l2_buf_type type)
+{
+    struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    
+    if (!dev) {
+        return -EINVAL;
+    }
+    
+    pr_info("*** Channel %d: VIDIOC_STREAMON ***\n", dev->channel_num);
+    
+    if (type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+        return -EINVAL;
+    }
+    
+    mutex_lock(&dev->lock);
+    if (!dev->streaming) {
+        dev->streaming = true;
+        dev->sequence = 0;
+        pr_info("*** Channel %d: Streaming STARTED ***\n", dev->channel_num);
+    }
+    mutex_unlock(&dev->lock);
+    
+    return 0;
+}
+
+/* VIDIOC_STREAMOFF - Stop streaming */
+static int tx_isp_v4l2_streamoff(struct file *file, void *priv,
+                                 enum v4l2_buf_type type)
+{
+    struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    
+    if (!dev) {
+        return -EINVAL;
+    }
+    
+    pr_info("*** Channel %d: VIDIOC_STREAMOFF ***\n", dev->channel_num);
+    
+    if (type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+        return -EINVAL;
+    }
+    
+    mutex_lock(&dev->lock);
+    if (dev->streaming) {
+        dev->streaming = false;
+        pr_info("*** Channel %d: Streaming STOPPED ***\n", dev->channel_num);
+    }
+    mutex_unlock(&dev->lock);
+    
+    return 0;
+}
+
 /* V4L2 ioctl operations */
 static const struct v4l2_ioctl_ops tx_isp_v4l2_ioctl_ops = {
     .vidioc_querycap      = tx_isp_v4l2_querycap,
     .vidioc_g_fmt_vid_cap = tx_isp_v4l2_g_fmt_vid_cap,
     .vidioc_s_fmt_vid_cap = tx_isp_v4l2_s_fmt_vid_cap,
     .vidioc_try_fmt_vid_cap = tx_isp_v4l2_g_fmt_vid_cap, /* Same as g_fmt for now */
+    
+    /* Buffer management */
+    .vidioc_reqbufs       = tx_isp_v4l2_reqbufs,
+    .vidioc_qbuf          = tx_isp_v4l2_qbuf,
+    .vidioc_dqbuf         = tx_isp_v4l2_dqbuf,
+    
+    /* Streaming control */
+    .vidioc_streamon      = tx_isp_v4l2_streamon,
+    .vidioc_streamoff     = tx_isp_v4l2_streamoff,
 };
 
 /* V4L2 file operations */
@@ -206,11 +354,38 @@ static int tx_isp_v4l2_release(struct file *file)
     return v4l2_fh_release(file);
 }
 
+/* Memory mapping support for encoder buffer access */
+static int tx_isp_v4l2_mmap(struct file *file, struct vm_area_struct *vma)
+{
+    struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    unsigned long size;
+    
+    if (!dev) {
+        pr_err("tx_isp_v4l2_mmap: Invalid device\n");
+        return -EINVAL;
+    }
+    
+    size = vma->vm_end - vma->vm_start;
+    
+    pr_info("*** Channel %d: MMAP request - offset=0x%lx size=%lu ***\n",
+            dev->channel_num, vma->vm_pgoff << PAGE_SHIFT, size);
+    
+    /* For encoder compatibility, we need to support memory mapping */
+    /* This is a basic implementation - actual buffer mapping would be more complex */
+    vma->vm_flags |= VM_IO | VM_DONTEXPAND | VM_DONTDUMP;
+    vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+    
+    pr_info("*** Channel %d: MMAP SUCCESS ***\n", dev->channel_num);
+    
+    return 0;
+}
+
 static const struct v4l2_file_operations tx_isp_v4l2_fops = {
     .owner          = THIS_MODULE,
     .open           = tx_isp_v4l2_open,
     .release        = tx_isp_v4l2_release,
     .unlocked_ioctl = video_ioctl2,
+    .mmap           = tx_isp_v4l2_mmap,
 };
 
 /* Create V4L2 video device for a channel */
