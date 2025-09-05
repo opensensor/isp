@@ -3900,6 +3900,15 @@ static int tx_isp_init(void)
     }
     pr_info("*** FS PLATFORM DRIVER INITIALIZED - /proc/jz/isp/isp-fs SHOULD NOW EXIST ***\n");
 
+    /* *** CRITICAL: Initialize subdev platform drivers (CSI, VIC, VIN, CORE) *** */
+    ret = tx_isp_subdev_platform_init();
+    if (ret) {
+        pr_err("Failed to initialize subdev platform drivers: %d\n", ret);
+        tx_isp_fs_platform_exit();  /* Clean up FS driver */
+        goto err_cleanup_platforms;
+    }
+    pr_info("*** SUBDEV PLATFORM DRIVERS INITIALIZED - CSI/VIC/VIN/CORE DRIVERS REGISTERED ***\n");
+
     /* Build platform device array for the new management system */
     subdev_platforms[0] = &tx_isp_csi_platform_device;
     subdev_platforms[1] = &tx_isp_vic_platform_device;
