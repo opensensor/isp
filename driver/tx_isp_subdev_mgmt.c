@@ -51,8 +51,6 @@ static int tx_isp_init_sink_subdev(struct tx_isp_dev *isp,
                                   struct tx_isp_subdev_runtime *runtime);
 static int tx_isp_create_subdev_link(void *src_subdev, void *dst_subdev,
                                     struct tx_isp_subdev_desc *desc);
-static int tx_isp_create_subdev_interfaces(struct tx_isp_dev *isp);
-static int tx_isp_create_frame_channels(struct tx_isp_dev *isp);
 static int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
 static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime);
 static int tx_isp_create_basic_pipeline(struct tx_isp_dev *isp);
@@ -352,13 +350,6 @@ int tx_isp_create_subdev_graph(struct tx_isp_dev *isp)
         }
     }
 
-    /* Step 3: Create device nodes and proc entries */
-    ret = tx_isp_create_subdev_interfaces(isp);
-    if (ret < 0) {
-        pr_err("Failed to create subdev interfaces: %d\n", ret);
-        goto cleanup;
-    }
-
     pr_info("*** tx_isp_create_subdev_graph: Graph creation completed successfully ***\n");
     goto unlock;
 
@@ -458,88 +449,6 @@ static int tx_isp_create_subdev_link(void *src_subdev, void *dst_subdev,
      * *((void**)((char*)src_subdev + link_offset)) = dst_subdev;
      * We can implement this more safely with proper structures */
     
-    return 0;
-}
-
-/**
- * tx_isp_create_subdev_interfaces - Create device nodes and proc entries
- */
-static int tx_isp_create_subdev_interfaces(struct tx_isp_dev *isp)
-{
-    int ret = 0;
-    int i;
-
-    pr_info("tx_isp_create_subdev_interfaces: Creating device interfaces\n");
-
-    /* Create frame channel devices (/dev/isp-fs*) */
-    ret = tx_isp_create_frame_channels(isp);
-    if (ret < 0) {
-        pr_err("Failed to create frame channels: %d\n", ret);
-        return ret;
-    }
-
-    /* Create proc entries */
-    ret = tx_isp_create_proc_entries(isp);
-    if (ret < 0) {
-        pr_err("Failed to create proc entries: %d\n", ret);
-        return ret;
-    }
-
-    /* Create misc devices for eligible subdevices */
-    for (i = 0; i < subdev_count; i++) {
-        struct tx_isp_subdev_runtime *runtime = subdev_registry[i];
-        
-        if (!runtime || !runtime->desc || !runtime->desc->create_misc_device)
-            continue;
-
-        ret = tx_isp_create_misc_device(runtime);
-        if (ret < 0) {
-            pr_err("Failed to create misc device for %s: %d\n",
-                   runtime->desc->name, ret);
-            continue;  /* Don't fail the whole process for one device */
-        }
-    }
-
-    pr_info("tx_isp_create_subdev_interfaces: Interfaces created successfully\n");
-    return 0;
-}
-
-/**
- * tx_isp_create_frame_channels - Create frame channel devices
- */
-static int tx_isp_create_frame_channels(struct tx_isp_dev *isp)
-{
-    int i, ret;
-    char dev_name[32];
-
-    pr_info("tx_isp_create_frame_channels: Creating frame channel devices\n");
-
-    for (i = 0; i < 4; i++) {  /* Create 4 frame channels */
-        struct miscdevice *fs_miscdev;
-
-        fs_miscdev = kzalloc(sizeof(struct miscdevice), GFP_KERNEL);
-        if (!fs_miscdev) {
-            pr_err("Failed to allocate misc device for framechan%d\n", i);
-            return -ENOMEM;
-        }
-
-        snprintf(dev_name, sizeof(dev_name), "framechan%d", i);
-        fs_miscdev->name = kstrdup(dev_name, GFP_KERNEL);
-        fs_miscdev->minor = MISC_DYNAMIC_MINOR;
-        fs_miscdev->fops = &frame_channel_fops;
-
-        ret = misc_register(fs_miscdev);
-        if (ret < 0) {
-            pr_err("Failed to register /dev/%s: %d\n", dev_name, ret);
-            kfree(fs_miscdev->name);
-            kfree(fs_miscdev);
-            return ret;
-        }
-
-        isp->fs_miscdevs[i] = fs_miscdev;
-        pr_info("Created frame channel device: /dev/%s\n", dev_name);
-    }
-
     return 0;
 }
 
