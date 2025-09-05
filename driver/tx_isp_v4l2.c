@@ -211,7 +211,6 @@ static const struct v4l2_file_operations tx_isp_v4l2_fops = {
     .open           = tx_isp_v4l2_open,
     .release        = tx_isp_v4l2_release,
     .unlocked_ioctl = video_ioctl2,
-    .compat_ioctl   = video_ioctl2,
 };
 
 /* Create V4L2 video device for a channel */
