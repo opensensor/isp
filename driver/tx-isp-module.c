@@ -6181,11 +6181,12 @@ static int sensor_subdev_core_g_chip_ident(struct tx_isp_subdev *sd, struct tx_i
     pr_info("*** SENSOR_G_CHIP_IDENT: %s ***\n", sensor->info.name);
     
     /* Fill chip identification */
-    chip->chip_id = sensor->video.attr->chip_id;
+    chip->ident = sensor->video.attr->chip_id;
     strncpy(chip->name, sensor->info.name, sizeof(chip->name) - 1);
     chip->name[sizeof(chip->name) - 1] = '\0';
+    chip->revision = NULL; /* No revision info available */
     
-    pr_info("SENSOR_G_CHIP_IDENT: chip_id=0x%x name=%s\n", chip->chip_id, chip->name);
+    pr_info("SENSOR_G_CHIP_IDENT: ident=0x%x name=%s\n", chip->ident, chip->name);
     
     return 0;
 }
