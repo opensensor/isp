@@ -562,8 +562,13 @@ void tx_isp_remove_proc_entries(void)
     if (ctx->isp_dir) {
         proc_remove(ctx->isp_dir);
     }
-    if (ctx->jz_dir) {
+    
+    /* Only remove jz_dir if we created it, not if we just got a reference to existing one */
+    if (ctx->jz_dir && ctx->jz_dir_created) {
         proc_remove(ctx->jz_dir);
+        pr_info("Removed jz_dir that we created during cleanup\n");
+    } else if (ctx->jz_dir) {
+        pr_info("Left existing jz_dir intact during cleanup (not created by us)\n");
     }
     
     kfree(ctx);
