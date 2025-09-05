@@ -1205,6 +1205,18 @@ out:
 /* Global tuning parameter buffer - Binary Ninja reference implementation */
 static void *tisp_par_ioctl = NULL;
 
+/* ISP IRQ and Event System - Binary Ninja EXACT implementation */
+
+/* IRQ callback function array - Binary Ninja reference */
+static void (*irq_func_cb[32])(void) = {NULL};
+
+/* Event callback function array - Binary Ninja reference */
+static int (*cb[32])(void) = {NULL};
+
+/* ISP interrupt state */
+static spinlock_t isp_irq_lock;
+static bool isp_irq_initialized = false;
+
 /* system_irq_func_set - Set IRQ function callback */
 int system_irq_func_set(int irq_id, void *handler)
 {
@@ -3673,18 +3685,6 @@ int tisp_sdns_wdr_en(int enable)
     pr_info("tisp_sdns_wdr_en: %s SDNS WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
-
-/* ISP IRQ and Event System - Binary Ninja EXACT implementation */
-
-/* IRQ callback function array - Binary Ninja reference */
-static void (*irq_func_cb[32])(void) = {NULL};
-
-/* Event callback function array - Binary Ninja reference */
-static int (*cb[32])(void) = {NULL};
-
-/* ISP interrupt state */
-static spinlock_t isp_irq_lock;
-static bool isp_irq_initialized = false;
 
 /* tisp_event_set_cb - Binary Ninja EXACT implementation */
 int tisp_event_set_cb(int event_id, void *callback)
