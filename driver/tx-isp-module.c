@@ -436,6 +436,10 @@ extern int tx_isp_init_subdev_registry(struct tx_isp_dev *isp,
 extern int tx_isp_create_subdev_graph(struct tx_isp_dev *isp);
 extern void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
 
+/* Forward declarations for subdev ops structures */
+extern struct tx_isp_subdev_ops vic_subdev_ops;
+static struct tx_isp_subdev_ops csi_subdev_ops;
+
 /* Reference driver function declarations - Binary Ninja exact names */
 static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev);
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
