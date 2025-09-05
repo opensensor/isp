@@ -237,7 +237,13 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         if ((isr_main & 1) != 0) {
             /* *($s0 + 0x160) += 1 */
             vic_dev->frame_count += 1;
-            pr_info("VIC Frame done interrupt - frame_count=%d\n", vic_dev->frame_count);
+            
+            /* CRITICAL: Synchronize ISP device frame counter with VIC frame counter */
+            if (ourISPdev) {
+                ourISPdev->frame_count = vic_dev->frame_count;
+            }
+            
+            pr_info("VIC Frame done interrupt - frame_count=%d (synchronized with ISP)\n", vic_dev->frame_count);
             /* entry_$a2 = vic_framedone_irq_function($s0) */
             vic_framedone_irq_function(vic_dev);
         }

@@ -27,22 +27,47 @@ struct proc_context {
     struct tx_isp_dev *isp;
 };
 
-/* ISP-W01 file operations - the file userspace expects */
+/* ISP-W00 file operations - matches reference driver behavior */
+static int tx_isp_proc_w00_show(struct seq_file *m, void *v)
+{
+    struct tx_isp_dev *isp = m->private;
+
+    if (!isp) {
+        seq_printf(m, "0");
+        return 0;
+    }
+
+    /* Reference driver outputs single integer for vic frame counter */
+    seq_printf(m, "%u", isp->frame_count);
+    
+    return 0;
+}
+
+static int tx_isp_proc_w00_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, tx_isp_proc_w00_show, PDE_DATA(inode));
+}
+
+static const struct file_operations tx_isp_proc_w00_fops = {
+    .owner = THIS_MODULE,
+    .open = tx_isp_proc_w00_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = single_release,
+};
+
+/* ISP-W01 file operations - matches reference driver behavior */
 static int tx_isp_proc_w01_show(struct seq_file *m, void *v)
 {
     struct tx_isp_dev *isp = m->private;
 
     if (!isp) {
-        /* Output single frame counter value for libimp's fscanf */
-        seq_printf(m, "0\n");
+        seq_printf(m, "0");
         return 0;
     }
 
-    /* CRITICAL: libimp reads this with fscanf(stream, "%d", &var)
-     * and expects a single incrementing frame counter value.
-     * If this value doesn't change for 2+ reads, it logs "err:video drop"
-     */
-    seq_printf(m, "%u\n", isp->frame_count);
+    /* Reference driver outputs single integer for vic frame counter */
+    seq_printf(m, "%u", isp->frame_count);
     
     return 0;
 }
@@ -95,22 +120,23 @@ static const struct file_operations tx_isp_proc_w01_fops = {
     .release = single_release,
 };
 
-/* ISP-W02 file operations - the file userspace expects */
+/* ISP-W02 file operations - CRITICAL: Client expects single integer */
 static int tx_isp_proc_w02_show(struct seq_file *m, void *v)
 {
     struct tx_isp_dev *isp = m->private;
 
     if (!isp) {
         /* Output single frame counter value for libimp's fscanf */
-        seq_printf(m, "0\n");
+        seq_printf(m, "0");
         return 0;
     }
 
     /* CRITICAL: libimp reads this with fscanf(stream, "%d", &var)
      * and expects a single incrementing frame counter value.
      * If this value doesn't change for 2+ reads, it logs "err:video drop"
+     * NO newline, just the number to match reference driver
      */
-    seq_printf(m, "%u\n", isp->frame_count);
+    seq_printf(m, "%u", isp->frame_count);
     
     return 0;
 }
@@ -169,12 +195,12 @@ static int tx_isp_proc_fs_show(struct seq_file *m, void *v)
     struct tx_isp_dev *isp = m->private;
 
     if (!isp) {
-        seq_printf(m, "0\n");
+        seq_printf(m, "0");
         return 0;
     }
 
     /* FS proc entry for Frame Source status */
-    seq_printf(m, "%u\n", isp->frame_count);
+    seq_printf(m, "%u", isp->frame_count);
     
     return 0;
 }
@@ -230,12 +256,12 @@ static int tx_isp_proc_m0_show(struct seq_file *m, void *v)
     struct tx_isp_dev *isp = m->private;
 
     if (!isp) {
-        seq_printf(m, "0\n");
+        seq_printf(m, "0");
         return 0;
     }
 
     /* M0 proc entry for main ISP core status */
-    seq_printf(m, "%u\n", isp->frame_count);
+    seq_printf(m, "%u", isp->frame_count);
     
     return 0;
 }
@@ -360,7 +386,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
     
     /* Create /proc/jz/isp/isp-w00 */
     ctx->isp_w00_entry = proc_create_data(TX_ISP_PROC_ISP_W00_FILE, 0644, ctx->isp_dir,
-                                         &tx_isp_proc_w01_fops, isp);
+                                         &tx_isp_proc_w00_fops, isp);
     if (!ctx->isp_w00_entry) {
         pr_err("Failed to create isp-w00 proc entry\n");
         goto error_remove_isp_dir;
