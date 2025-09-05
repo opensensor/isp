@@ -382,9 +382,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
                 
     } else if (!strcmp(pdev->name, "tx-isp-vin")) {
         /* Configure VIN subdev ops and ISP reference */
-        if (dev->vin_dev) {
-            dev->vin_dev->sd = sd;  // Store in proper VIN device
-        }
+        /* Note: vin_dev struct is not fully defined, so only subdev array storage */
         sd->ops = ops;
         sd->isp = (void*)dev;
         
@@ -396,10 +394,8 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
                 sd, sd->ops, sd->ops ? sd->ops->video : NULL);
                 
     } else if (!strcmp(pdev->name, "tx-isp-fs")) {
-        /* Configure FS subdev ops and ISP reference */  
-        if (dev->fs_dev) {
-            dev->fs_dev->sd = sd;  // Store in proper FS device
-        }
+        /* Configure FS subdev ops and ISP reference */
+        /* Note: frame_source_device struct is not fully defined, so only subdev array storage */
         sd->ops = ops;
         sd->isp = (void*)dev;
         
