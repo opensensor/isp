@@ -1329,7 +1329,6 @@ int isp_m0_chardev_ioctl(struct file *file, unsigned int cmd, void __user *arg)
         
         /* Binary Ninja: Handle tuning parameter commands */
         if ((cmd & 0xff) < 0x33) {
-        if ((cmd & 0xff) < 0x33) {
             if ((cmd - 0x20007400) < 0xa) {
                 switch (cmd) {
                     case 0x20007400: { /* GET operation */
