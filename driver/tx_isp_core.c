@@ -1628,12 +1628,12 @@ EXPORT_SYMBOL(tisp_channel_start);
 
 static int isp_tuning_open(struct inode *inode, struct file *file)
 {
-    extern int isp_m0_chardev_open(struct inode *inode, struct file *file);
+    extern int tisp_code_tuning_open(struct inode *inode, struct file *file);
 
     pr_info("ISP tuning device opened - routing to tx_isp_tuning.c\n");
 
     /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
-    return isp_m0_chardev_open(inode, file);
+    return tisp_code_tuning_open(inode, file);
 }
 
 static int isp_tuning_release(struct inode *inode, struct file *file)

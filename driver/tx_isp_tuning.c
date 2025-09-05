@@ -781,14 +781,40 @@ static int isp_get_af_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
     int ret = 0;
-    struct isp_tuning_data *tuning = dev->tuning_data;
+    struct isp_tuning_data *tuning;
 
-    if (!dev || !tuning)
+    /* CRITICAL: Binary Ninja reference implementation safety checks */
+    if (!dev) {
+        pr_err("apical_isp_core_ops_g_ctrl: NULL device pointer\n");
         return -EINVAL;
+    }
+    
+    if (!ctrl) {
+        pr_err("apical_isp_core_ops_g_ctrl: NULL control pointer\n");
+        return -EINVAL;
+    }
+
+    tuning = dev->tuning_data;
+    if (!tuning) {
+        pr_err("apical_isp_core_ops_g_ctrl: NULL tuning data for cmd=0x%x\n", ctrl->cmd);
+        return -ENODEV;
+    }
+    
+    /* CRITICAL: Validate tuning structure integrity - prevent 5aaa5aaa crash */
+    if ((unsigned long)tuning < 0x1000 || ((unsigned long)tuning & 0x3) != 0) {
+        pr_err("CRITICAL: Invalid tuning data pointer: %p for cmd=0x%x\n", tuning, ctrl->cmd);
+        return -EFAULT;
+    }
+    
+    /* Additional safety check for poison patterns */
+    if (((unsigned long)tuning & 0xAAAAAAAA) == 0xAAAAAAAA) {
+        pr_err("CRITICAL: Tuning data contains poison pattern %p for cmd=0x%x\n", tuning, ctrl->cmd);
+        return -EFAULT;
+    }
 
     //mutex_lock(&tuning->lock);
 
-    pr_info("Get control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
+    pr_info("Get control: cmd=0x%x value=%d, tuning=%p\n", ctrl->cmd, ctrl->value, tuning);
 
     // Special case routing for 0x8000024-0x8000027
     if (ctrl->cmd >= 0x8000024) {
@@ -937,7 +963,25 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     switch (ctrl->cmd) {
         pr_info("Get control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
         case 0x980900:  // Brightness
+            /* CRITICAL: Extra validation for the crashing command */
+            pr_info("CRITICAL: Accessing brightness from tuning=%p\n", tuning);
+            
+            /* Verify tuning structure is still valid before accessing */
+            if (!tuning) {
+                pr_err("CRITICAL: Tuning became NULL during brightness access\n");
+                ret = -ENODEV;
+                goto out;
+            }
+            
+            /* Check for memory corruption */
+            if ((unsigned long)tuning & 0xAAAAAAAA) {
+                pr_err("CRITICAL: Memory corruption detected in tuning data: %p\n", tuning);
+                ret = -EFAULT;
+                goto out;
+            }
+            
             ctrl->value = tuning->brightness;
+            pr_info("CRITICAL: Successfully read brightness value: %d\n", ctrl->value);
             break;
 
         case 0x980901:  // Contrast
@@ -1234,8 +1278,7 @@ int system_irq_func_set(int irq_id, void *handler)
     return 0;
 }
 
-/* ISP M0 IOCTL handler - handles both ISP core controls (0x56) and tuning (0x74) */
-extern struct tx_isp_dev *ourISPdev;
+/* ISP M0 IOCTL handler - Binary Ninja EXACT reference implementation */
 int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __user *arg)
 {
     int ret = 0;
@@ -1243,10 +1286,42 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     
     pr_info("ISP m0 IOCTL called: cmd=0x%x, arg=%p, magic=0x%x\n", cmd, arg, magic);
     
-    if (!ourISPdev) {
+    /* CRITICAL: Binary Ninja reference implementation - proper device structure retrieval */
+    /* Reference: $s0 = *(*(*(arg1 + 0x70) + 0xc8) + 0x1bc) */
+    struct tx_isp_dev *dev = NULL;
+    
+    /* Get device from file private data first */
+    if (file && file->private_data) {
+        dev = (struct tx_isp_dev *)file->private_data;
+        pr_info("isp_core_tunning_unlocked_ioctl: Retrieved device from file->private_data: %p\n", dev);
+    }
+    
+    /* If not found in file, try global reference as fallback */
+    if (!dev) {
+        extern struct tx_isp_dev *ourISPdev;
+        dev = ourISPdev;
+        pr_info("isp_core_tunning_unlocked_ioctl: Using global device reference: %p\n", dev);
+    }
+    
+    /* CRITICAL: Validate device structure before any access */
+    if (!dev) {
         pr_err("isp_core_tunning_unlocked_ioctl: ISP device not available\n");
         return -ENODEV;
     }
+    
+    /* CRITICAL: Binary Ninja shows state check - if ($s0[0x1031] == 3) */
+    if (!dev->tuning_data) {
+        pr_err("isp_core_tunning_unlocked_ioctl: Tuning data structure not initialized\n");
+        return -ENODEV;
+    }
+    
+    /* Verify tuning data structure integrity */
+    if ((unsigned long)dev->tuning_data & 0x3) {
+        pr_err("CRITICAL: Tuning data not properly aligned: %p\n", dev->tuning_data);
+        return -EFAULT;
+    }
+    
+    pr_info("isp_core_tunning_unlocked_ioctl: Device validated, tuning_data=%p\n", dev->tuning_data);
     
     /* Handle ISP core control commands (magic 0x56) */
     if (magic == 0x56) {
@@ -1256,13 +1331,21 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
         
         switch (cmd) {
             case 0xc008561c: /* ISP_CORE_S_CTRL - Set control */
+                /* Binary Ninja: copy_from_user validation */
                 if (copy_from_user(&ctrl, (void __user *)arg, sizeof(ctrl))) {
                     pr_err("isp_core_tunning_unlocked_ioctl: Failed to copy control data from user\n");
                     return -EFAULT;
                 }
                 
                 pr_info("isp_core_tunning_unlocked_ioctl: Set control cmd=0x%x value=%d\n", ctrl.cmd, ctrl.value);
-                ret = apical_isp_core_ops_s_ctrl(ourISPdev, &ctrl);
+                
+                /* CRITICAL: Validate control command before processing */
+                if (ctrl.cmd == 0x980900 && !dev->tuning_data) {
+                    pr_err("isp_core_tunning_unlocked_ioctl: Brightness control attempted with NULL tuning data\n");
+                    return -ENODEV;
+                }
+                
+                ret = apical_isp_core_ops_s_ctrl(dev, &ctrl);
                 
                 if (ret == 0 && copy_to_user((void __user *)arg, &ctrl, sizeof(ctrl))) {
                     pr_err("isp_core_tunning_unlocked_ioctl: Failed to copy control data to user\n");
@@ -1271,13 +1354,32 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 break;
                 
             case 0xc008561b: /* ISP_CORE_G_CTRL - Get control */
+                /* Binary Ninja: copy_from_user validation */
                 if (copy_from_user(&ctrl, (void __user *)arg, sizeof(ctrl))) {
                     pr_err("isp_core_tunning_unlocked_ioctl: Failed to copy control data from user\n");
                     return -EFAULT;
                 }
                 
                 pr_info("isp_core_tunning_unlocked_ioctl: Get control cmd=0x%x\n", ctrl.cmd);
-                ret = apical_isp_core_ops_g_ctrl(ourISPdev, &ctrl);
+                
+                /* CRITICAL: Special validation for the crashing command 0x980900 */
+                if (ctrl.cmd == 0x980900) {
+                    pr_info("CRITICAL: Processing brightness get command - validating tuning data\n");
+                    if (!dev->tuning_data) {
+                        pr_err("CRITICAL: Brightness control cmd=0x980900 with NULL tuning_data\n");
+                        return -ENODEV;
+                    }
+                    
+                    /* Additional validation - check for poison pattern */
+                    if (((unsigned long)dev->tuning_data & 0xAAAAAAAA) == 0xAAAAAAAA) {
+                        pr_err("CRITICAL: Tuning data contains poison pattern: %p\n", dev->tuning_data);
+                        return -EFAULT;
+                    }
+                    
+                    pr_info("CRITICAL: Tuning data validated for brightness control\n");
+                }
+                
+                ret = apical_isp_core_ops_g_ctrl(dev, &ctrl);
                 
                 if (ret == 0 && copy_to_user((void __user *)arg, &ctrl, sizeof(ctrl))) {
                     pr_err("isp_core_tunning_unlocked_ioctl: Failed to copy control data to user\n");
@@ -1296,19 +1398,19 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 pr_info("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
                 
                 if (enable) {
-                    if (ourISPdev->tuning_enabled != 2) {
+                    if (dev->tuning_enabled != 2) {
                         /* Initialize tuning if not already initialized */
-                        if (!ourISPdev->tuning_data) {
+                        if (!dev->tuning_data) {
                             pr_err("isp_core_tunning_unlocked_ioctl: Tuning data not initialized\n");
                             return -ENODEV;
                         }
-                        ourISPdev->tuning_enabled = 2;
+                        dev->tuning_enabled = 2;
                         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
                     }
                 } else {
-                    if (ourISPdev->tuning_enabled == 2) {
-                        isp_core_tuning_release(ourISPdev);
-                        ourISPdev->tuning_enabled = 0;
+                    if (dev->tuning_enabled == 2) {
+                        isp_core_tuning_release(dev);
+                        dev->tuning_enabled = 0;
                         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning disabled\n");
                     }
                 }
@@ -1608,7 +1710,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 EXPORT_SYMBOL(isp_core_tunning_unlocked_ioctl);
 
 /* tisp_code_tuning_open - Binary Ninja EXACT implementation */
-int isp_m0_chardev_open(struct inode *inode, struct file *file)
+int tisp_code_tuning_open(struct inode *inode, struct file *file)
 {
     pr_info("ISP M0 device open called from pid %d\n", current->pid);
     
@@ -1645,7 +1747,7 @@ int isp_m0_chardev_open(struct inode *inode, struct file *file)
     /* return 0 */
     return 0;
 }
-EXPORT_SYMBOL(isp_m0_chardev_open);
+EXPORT_SYMBOL(tisp_code_tuning_open);
 
 
 int isp_core_tuning_release(struct tx_isp_dev *dev)
@@ -4030,7 +4132,7 @@ EXPORT_SYMBOL(tiziano_wdr_soft_para_out);
 /* File operations structure for ISP M0 character device - Binary Ninja reference */
 static const struct file_operations isp_core_tunning_fops = {
     .owner = THIS_MODULE,
-    .open = isp_m0_chardev_open,
+    .open = tisp_code_tuning_open,
     .release = isp_m0_chardev_release,
     .unlocked_ioctl = isp_core_tunning_unlocked_ioctl,
     .compat_ioctl = isp_core_tunning_unlocked_ioctl,
