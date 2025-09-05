@@ -3268,11 +3268,11 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         sensor->video.attr->chip_id = 0x2053;
                         sensor->video.attr->total_width = 1920;
                         sensor->video.attr->total_height = 1080;
-                        sensor->video.attr->dbus_type = 1; // DVP interface
+                        sensor->video.attr->dbus_type = 2; // MIPI interface (fixed from DVP)
                         sensor->video.attr->integration_time = 1000;
                         sensor->video.attr->max_again = 0x40000;
                         sensor->video.attr->name = sensor_name; /* Safe pointer assignment */
-                        pr_info("*** GC2053 SENSOR ATTRIBUTES CONFIGURED ***\n");
+                        pr_info("*** GC2053 SENSOR ATTRIBUTES CONFIGURED (MIPI interface) ***\n");
                     }
                     
                     /* SAFE INITIALIZATION: Initialize subdev structure */
@@ -3282,7 +3282,15 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     sensor->index = 0;
                     sensor->type = 0;
                     INIT_LIST_HEAD(&sensor->list);
-                    pr_info("*** SENSOR SUBDEV INITIALIZED ***\n");
+                    
+                    /* *** CRITICAL FIX: SET UP SENSOR SUBDEV OPS STRUCTURE *** */
+                    pr_info("*** CRITICAL: SETTING UP SENSOR SUBDEV OPS STRUCTURE ***\n");
+                    sensor->sd.ops = &sensor_subdev_ops;
+                    pr_info("*** SENSOR SUBDEV OPS CONFIGURED: core=%p, video=%p, s_stream=%p ***\n",
+                            sensor->sd.ops->core, sensor->sd.ops->video, 
+                            sensor->sd.ops->video ? sensor->sd.ops->video->s_stream : NULL);
+                    
+                    pr_info("*** SENSOR SUBDEV INITIALIZED WITH WORKING OPS STRUCTURE ***\n");
                     
                     /* SAFE CONNECTION: Verify ISP device before connecting */
                     if (!ourISPdev) {
