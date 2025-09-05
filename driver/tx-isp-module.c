@@ -3968,13 +3968,13 @@ static int tx_isp_init(void)
     ourISPdev->is_open = false;
     
     /* *** CRITICAL: Initialize VIC registers - THIS TRIGGERS TRACE REGISTER ACTIVITY *** */
-    pr_info("*** CALLING tx_isp_init_vic_registers - THIS SHOULD TRIGGER TRACE REGISTERS ***\n");
-    ret = tx_isp_init_vic_registers(ourISPdev);
-    if (ret) {
-        pr_err("Failed to initialize VIC registers: %d\n", ret);
-        goto err_free_dev;
-    }
-    pr_info("*** VIC REGISTERS INITIALIZED - TRACE REGISTER ACTIVITY SHOULD NOW BE ACTIVE ***\n");
+    // pr_info("*** CALLING tx_isp_init_vic_registers - THIS SHOULD TRIGGER TRACE REGISTERS ***\n");
+    // ret = tx_isp_init_vic_registers(ourISPdev);
+    // if (ret) {
+    //     pr_err("Failed to initialize VIC registers: %d\n", ret);
+    //     goto err_free_dev;
+    // }
+    // pr_info("*** VIC REGISTERS INITIALIZED - TRACE REGISTER ACTIVITY SHOULD NOW BE ACTIVE ***\n");
 
     /* *** CRITICAL FIX: Create and link VIC device structure immediately *** */
     pr_info("*** CREATING VIC DEVICE STRUCTURE AND LINKING TO ISP CORE ***\n");
