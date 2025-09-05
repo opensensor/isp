@@ -15,6 +15,8 @@
 - Implement ONLY the logic that belongs to that specific method
 - If reference method calls other methods, your implementation should also call those methods (don't inline)
 - Keep methods focused and single-purpose like the reference
+- Using hard-coded offsets like +0x2c is unsafe and makes our code brittle. Replace the offset-based access with proper
+struct member access based on our actual driver structures on an as needed basis.
 
 ## MCP Integration Guidelines
 - Add MCP calls at the SAME points where reference driver would log/report
