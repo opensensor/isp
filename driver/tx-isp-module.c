@@ -6126,13 +6126,6 @@ static struct tx_isp_subdev_video_ops sensor_subdev_video_ops = {
     .s_stream = sensor_subdev_video_s_stream,
 };
 
-/* Complete sensor subdev ops structure */
-static struct tx_isp_subdev_ops sensor_subdev_ops = {
-    .core = &sensor_subdev_core_ops,
-    .video = &sensor_subdev_video_ops,
-    .sensor = NULL,
-};
-
 /* Sensor subdev operation implementations */
 static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable)
 {
