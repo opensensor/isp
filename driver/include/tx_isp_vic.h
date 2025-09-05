@@ -122,6 +122,12 @@ struct tx_isp_vic_device {
             struct list_head done_head;
             int streaming;                  // Streaming state
             uint32_t frame_count;           // Frame counter
+            uint8_t _pad_to_1f4[0x1f4 - sizeof(struct tx_isp_subdev) - 0x100]; // Padding to offset 0x1f4
+            spinlock_t buffer_mgmt_lock;    // 0x1f4: Buffer management spinlock
+            uint8_t _pad_to_210[0x210 - 0x1f4 - sizeof(spinlock_t)]; // Padding to offset 0x210  
+            int stream_state;               // 0x210: Stream state (0=off, 1=on)
+            uint8_t _pad_to_218[0x218 - 0x210 - sizeof(int)]; // Padding to offset 0x218
+            uint32_t active_buffer_count;   // 0x218: Active buffer count
         };
         uint8_t _total_size[0x21c];        // Ensure total size is 0x21c
     };

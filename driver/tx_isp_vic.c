@@ -1522,14 +1522,14 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     const char *stream_op = (enable != 0) ? "streamon" : "streamoff";
     pr_info("ispvic_frame_channel_s_stream: %s\n", stream_op);
     
-    /* Binary Ninja: if (arg2 == *($s0 + 0x210)) return 0 */
-    if (enable == *(int *)((char *)vic_dev + 0x210)) {
+    /* FIXED: Use proper struct member access instead of dangerous offset arithmetic */
+    if (enable == vic_dev->stream_state) {
         pr_info("ispvic_frame_channel_s_stream: already in state %d\n", enable);
         return 0;
     }
     
-    /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
-    spin_lock_irqsave((spinlock_t *)((char *)vic_dev + 0x1f4), flags);
+    /* FIXED: Use proper struct member access for spinlock */
+    spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
     
     if (enable == 0) {
         /* Stream OFF - Binary Ninja: *(*($s0 + 0xb8) + 0x300) = 0 */
