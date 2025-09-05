@@ -191,92 +191,120 @@ static int tx_isp_v4l2_reqbufs(struct file *file, void *priv,
     return ret;
 }
 
-/* VIDIOC_QBUF - Queue buffer */
+/* VIDIOC_QBUF - Queue buffer - Route to frame channel IOCTL */
 static int tx_isp_v4l2_qbuf(struct file *file, void *priv,
                             struct v4l2_buffer *buf)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    int ret;
     
     if (!dev) {
         return -EINVAL;
     }
     
-    pr_info("*** Channel %d: VIDIOC_QBUF index=%d ***\n",
-            dev->channel_num, buf->index);
+    pr_info("*** V4L2 Channel %d: QBUF - Routing to Binary Ninja frame channel IOCTL ***\n",
+            dev->channel_num);
     
-    if (buf->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
-        return -EINVAL;
-    }
+    /* CRITICAL: Route to frame_channel_unlocked_ioctl QBUF (0xc044560f) */
+    /* This preserves the Binary Ninja tx_isp_send_event_to_remote logic */
+    ret = frame_channel_unlocked_ioctl(file, 0xc044560f, (unsigned long)buf);
     
-    /* Mark buffer as queued */
-    buf->flags |= V4L2_BUF_FLAG_QUEUED;
-    buf->flags &= ~V4L2_BUF_FLAG_DONE;
+    pr_info("*** V4L2 Channel %d: QBUF routed with Binary Ninja event system, result=%d ***\n", 
+            dev->channel_num, ret);
     
-    return 0;
+    return ret;
 }
 
-/* VIDIOC_DQBUF - Dequeue buffer */
+/* VIDIOC_DQBUF - Dequeue buffer - Route to frame channel IOCTL */
 static int tx_isp_v4l2_dqbuf(struct file *file, void *priv,
                              struct v4l2_buffer *buf)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    int ret;
     
     if (!dev) {
         return -EINVAL;
     }
     
-    pr_info("*** Channel %d: VIDIOC_DQBUF ***\n", dev->channel_num);
+    pr_info("*** V4L2 Channel %d: DQBUF - Routing to Binary Ninja frame channel IOCTL ***\n",
+            dev->channel_num);
     
-    if (buf->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
-        return -EINVAL;
-    }
+    /* CRITICAL: Route to frame_channel_unlocked_ioctl DQBUF (0xc0445611) */
+    /* This preserves the Binary Ninja __fill_v4l2_buffer and sensor logic */
+    ret = frame_channel_unlocked_ioctl(file, 0xc0445611, (unsigned long)buf);
     
-    if (!dev->streaming) {
-        return -EINVAL;
-    }
+    pr_info("*** V4L2 Channel %d: DQBUF routed with Binary Ninja buffer logic, result=%d ***\n",
+            dev->channel_num, ret);
     
-    /* For now, simulate a ready buffer */
-    buf->index = 0;
-    buf->flags = V4L2_BUF_FLAG_DONE;
-    buf->field = V4L2_FIELD_NONE;
-    buf->timestamp.tv_sec = 0;
-    buf->timestamp.tv_usec = 0;
-    buf->sequence = dev->sequence++;
-    buf->bytesused = dev->format.fmt.pix.sizeimage;
-    
-    return 0;
+    return ret;
 }
 
-/* VIDIOC_STREAMON - Start streaming */
+/* VIDIOC_STREAMON - Start streaming - Route to frame channel IOCTL */
 static int tx_isp_v4l2_streamon(struct file *file, void *priv,
                                 enum v4l2_buf_type type)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    int ret;
     
     if (!dev) {
         return -EINVAL;
     }
     
-    pr_info("*** Channel %d: VIDIOC_STREAMON ***\n", dev->channel_num);
+    pr_info("*** V4L2 Channel %d: STREAMON - Routing to Binary Ninja frame channel IOCTL ***\n",
+            dev->channel_num);
     
-    if (type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+    /* CRITICAL: Route to frame_channel_unlocked_ioctl STREAMON (0x80045612) */
+    /* This preserves the Binary Ninja sensor hardware initialization and VIC setup */
+    ret = frame_channel_unlocked_ioctl(file, 0x80045612, (unsigned long)&type);
+    
+    pr_info("*** V4L2 Channel %d: STREAMON routed with Binary Ninja hardware init, result=%d ***\n",
+            dev->channel_num, ret);
+    
+    /* Update V4L2 state based on frame channel result */
+    if (ret == 0) {
+        mutex_lock(&dev->lock);
+        dev->streaming = true;
+        dev->sequence = 0;
+        mutex_unlock(&dev->lock);
+    }
+    
+    return ret;
+}
+
+/* VIDIOC_STREAMOFF - Stop streaming - Route to frame channel IOCTL */
+static int tx_isp_v4l2_streamoff(struct file *file, void *priv,
+                                 enum v4l2_buf_type type)
+{
+    struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    int ret;
+    
+    if (!dev) {
         return -EINVAL;
     }
     
-    mutex_lock(&dev->lock);
-    if (!dev->streaming) {
-        dev->streaming = true;
-        dev->sequence = 0;
-        pr_info("*** Channel %d: Streaming STARTED ***\n", dev->channel_num);
-    }
-    mutex_unlock(&dev->lock);
+    pr_info("*** V4L2 Channel %d: STREAMOFF - Routing to Binary Ninja frame channel IOCTL ***\n",
+            dev->channel_num);
     
-    return 0;
+    /* CRITICAL: Route to frame_channel_unlocked_ioctl STREAMOFF (0x80045613) */
+    /* This preserves the Binary Ninja sensor hardware shutdown logic */
+    ret = frame_channel_unlocked_ioctl(file, 0x80045613, (unsigned long)&type);
+    
+    pr_info("*** V4L2 Channel %d: STREAMOFF routed with Binary Ninja shutdown, result=%d ***\n",
+            dev->channel_num, ret);
+    
+    /* Update V4L2 state based on frame channel result */
+    if (ret == 0) {
+        mutex_lock(&dev->lock);
+        dev->streaming = false;
+        mutex_unlock(&dev->lock);
+    }
+    
+    return ret;
 }
 
-/* VIDIOC_STREAMOFF - Stop streaming */
-static int tx_isp_v4l2_streamoff(struct file *file, void *priv,
-                                 enum v4l2_buf_type type)
+/* VIDIOC_ENUM_FMT - Enumerate supported formats (CRITICAL for encoder compatibility) */
+static int tx_isp_v4l2_enum_fmt_vid_cap(struct file *file, void *priv,
+                                        struct v4l2_fmtdesc *f)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
     
@@ -284,18 +312,120 @@ static int tx_isp_v4l2_streamoff(struct file *file, void *priv,
         return -EINVAL;
     }
     
-    pr_info("*** Channel %d: VIDIOC_STREAMOFF ***\n", dev->channel_num);
-    
-    if (type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+    if (f->index >= 2) {
         return -EINVAL;
     }
     
-    mutex_lock(&dev->lock);
-    if (dev->streaming) {
-        dev->streaming = false;
-        pr_info("*** Channel %d: Streaming STOPPED ***\n", dev->channel_num);
+    f->flags = 0;
+    f->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    
+    switch (f->index) {
+    case 0:
+        f->pixelformat = V4L2_PIX_FMT_NV12;
+        strcpy(f->description, "NV12 4:2:0");
+        break;
+    case 1:
+        f->pixelformat = V4L2_PIX_FMT_YUYV;
+        strcpy(f->description, "YUYV 4:2:2");
+        break;
+    default:
+        return -EINVAL;
     }
-    mutex_unlock(&dev->lock);
+    
+    pr_info("Channel %d: ENUM_FMT index=%d pixelformat=0x%x\n", 
+            dev->channel_num, f->index, f->pixelformat);
+    
+    return 0;
+}
+
+/* VIDIOC_G_PARM - Get streaming parameters (CRITICAL for encoder framerate) */
+static int tx_isp_v4l2_g_parm(struct file *file, void *priv,
+                              struct v4l2_streamparm *parm)
+{
+    struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    
+    if (!dev) {
+        return -EINVAL;
+    }
+    
+    if (parm->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+        return -EINVAL;
+    }
+    
+    parm->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
+    parm->parm.capture.timeperframe.numerator = 1;
+    parm->parm.capture.timeperframe.denominator = 30; /* 30 FPS */
+    parm->parm.capture.readbuffers = 4;
+    
+    pr_info("Channel %d: G_PARM framerate=%d/%d FPS\n", 
+            dev->channel_num, 
+            parm->parm.capture.timeperframe.denominator,
+            parm->parm.capture.timeperframe.numerator);
+    
+    return 0;
+}
+
+/* VIDIOC_S_PARM - Set streaming parameters */
+static int tx_isp_v4l2_s_parm(struct file *file, void *priv,
+                              struct v4l2_streamparm *parm)
+{
+    struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    
+    if (!dev) {
+        return -EINVAL;
+    }
+    
+    if (parm->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+        return -EINVAL;
+    }
+    
+    pr_info("Channel %d: S_PARM framerate=%d/%d FPS\n", 
+            dev->channel_num, 
+            parm->parm.capture.timeperframe.denominator,
+            parm->parm.capture.timeperframe.numerator);
+    
+    /* Accept the parameters - encoder compatibility */
+    parm->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
+    
+    return 0;
+}
+
+/* VIDIOC_QUERYCTRL - Query controls (for encoder compatibility) */
+static int tx_isp_v4l2_queryctrl(struct file *file, void *priv,
+                                 struct v4l2_queryctrl *qc)
+{
+    struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    
+    if (!dev) {
+        return -EINVAL;
+    }
+    
+    /* Return common controls for encoder compatibility */
+    switch (qc->id) {
+    case V4L2_CID_BRIGHTNESS:
+        strcpy(qc->name, "Brightness");
+        qc->type = V4L2_CTRL_TYPE_INTEGER;
+        qc->minimum = 0;
+        qc->maximum = 255;
+        qc->step = 1;
+        qc->default_value = 128;
+        qc->flags = 0;
+        break;
+    case V4L2_CID_CONTRAST:
+        strcpy(qc->name, "Contrast");
+        qc->type = V4L2_CTRL_TYPE_INTEGER;
+        qc->minimum = 0;
+        qc->maximum = 255;
+        qc->step = 1;
+        qc->default_value = 128;
+        qc->flags = 0;
+        break;
+    default:
+        return -EINVAL;
+    }
+    
+    pr_info("Channel %d: QUERYCTRL id=0x%x name=%s\n", 
+            dev->channel_num, qc->id, qc->name);
     
     return 0;
 }
