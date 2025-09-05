@@ -96,6 +96,7 @@ irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 int sensor_init(struct tx_isp_dev *isp_dev);
 void *isp_core_tuning_init(void *arg1);
+int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
 
 /* Core ISP interrupt handler */
 irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id)

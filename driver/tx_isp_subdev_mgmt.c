@@ -51,7 +51,7 @@ static int tx_isp_init_sink_subdev(struct tx_isp_dev *isp,
                                   struct tx_isp_subdev_runtime *runtime);
 static int tx_isp_create_subdev_link(void *src_subdev, void *dst_subdev,
                                     struct tx_isp_subdev_desc *desc);
-static int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
+int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
 static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime);
 static int tx_isp_create_basic_pipeline(struct tx_isp_dev *isp);
 static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc);
