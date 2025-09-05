@@ -4193,6 +4193,7 @@ static int tuning_major = 0;
 static struct class *tuning_class = NULL;
 static struct cdev tuning_cdev;
 static dev_t tuning_devno;
+static bool tuning_device_created = false;  /* Guard flag to prevent duplicate creation */
 
 /* tisp_code_create_tuning_node - Binary Ninja EXACT implementation */
 int tisp_code_create_tuning_node(void)
@@ -4200,6 +4201,12 @@ int tisp_code_create_tuning_node(void)
     int ret;
     
     pr_info("tisp_code_create_tuning_node: Creating ISP M0 tuning device node\n");
+    
+    /* CRITICAL: Guard against duplicate device creation */
+    if (tuning_device_created) {
+        pr_info("tisp_code_create_tuning_node: Device already created, skipping\n");
+        return 0;
+    }
     
     /* Binary Ninja: if (major == 0) alloc_chrdev_region, else register_chrdev_region */
     if (tuning_major == 0) {
@@ -4249,6 +4256,9 @@ int tisp_code_create_tuning_node(void)
         unregister_chrdev_region(tuning_devno, 1);
         return -EFAULT;
     }
+    
+    /* Set flag to prevent duplicate creation */
+    tuning_device_created = true;
     
     pr_info("*** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=%d, minor=0) ***\n", tuning_major);
     return 0;
