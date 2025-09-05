@@ -151,18 +151,6 @@
 /* AF Zone structures */
 #define MAX_AF_ZONES      16  // Common size for AF windows/regions
 
-struct af_zone_info {
-    uint32_t zone_metrics[MAX_AF_ZONES];  // Zone metrics like contrast values
-    uint32_t zone_status;                 // Overall AF status
-    uint32_t flags;                       // Zone configuration flags
-    struct {
-        uint16_t x;                       // Zone X position
-        uint16_t y;                       // Zone Y position
-        uint16_t width;                   // Zone width
-        uint16_t height;                  // Zone height
-    } windows[MAX_AF_ZONES];              // AF windows configuration
-};
-
 // Global AF zone data as seen in original code
 static struct af_zone_data {
     uint32_t zone_metrics[MAX_AF_ZONES];  // Current zone metrics
