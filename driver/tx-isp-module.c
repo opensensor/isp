@@ -4001,14 +4001,17 @@ static int tx_isp_init(void)
         goto err_cleanup_platforms;
     }
     
-    /* *** CRITICAL: POPULATE SUBDEV ARRAY AT OFFSET 0x38 FOR tx_isp_video_link_stream *** */
-    pr_info("*** POPULATING SUBDEV ARRAY AT OFFSET 0x38 FOR STREAMING ***\n");
+    /* *** FIXED: USE PROPER STRUCT MEMBER ACCESS INSTEAD OF DANGEROUS OFFSETS *** */
+    pr_info("*** POPULATING SUBDEV ARRAY USING SAFE STRUCT MEMBER ACCESS ***\n");
     
-    /* Get subdev array pointer from Binary Ninja: offset 0x38 */
-    void **subdev_array = (void**)((char*)ourISPdev + 0x38);
+    /* SAFE: Use proper struct member access instead of raw pointer arithmetic */
+    if (!ourISPdev->subdevs) {
+        pr_err("*** ERROR: ISP device subdevs array not initialized! ***\n");
+        goto err_cleanup_platforms;
+    }
     
-    /* Clear the array first */
-    memset(subdev_array, 0, 16 * sizeof(void*));
+    /* SAFE: Clear the array using proper bounds */
+    memset(ourISPdev->subdevs, 0, ISP_MAX_SUBDEVS * sizeof(void*));
     
     /* Register VIC subdev with proper ops structure */
     if (ourISPdev->vic_dev) {
@@ -4018,8 +4021,8 @@ static int tx_isp_init(void)
         vic_dev->sd.ops = &vic_subdev_ops;
         vic_dev->sd.isp = (void*)ourISPdev;
         
-        /* Add VIC to subdev array at index 0 */
-        subdev_array[0] = &vic_dev->sd;
+        /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
+        ourISPdev->subdevs[0] = &vic_dev->sd;
         
         pr_info("*** REGISTERED VIC SUBDEV AT INDEX 0 WITH VIDEO OPS ***\n");
         pr_info("VIC subdev: %p, ops: %p, video: %p, s_stream: %p\n",
@@ -4035,8 +4038,8 @@ static int tx_isp_init(void)
         csi_dev->sd.ops = &csi_subdev_ops;
         csi_dev->sd.isp = (void*)ourISPdev;
         
-        /* Add CSI to subdev array at index 1 */
-        subdev_array[1] = &csi_dev->sd;
+        /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
+        ourISPdev->subdevs[1] = &csi_dev->sd;
         
         pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 WITH VIDEO OPS ***\n");
         pr_info("CSI subdev: %p, ops: %p, video: %p, s_stream: %p\n",
@@ -4044,7 +4047,7 @@ static int tx_isp_init(void)
                 csi_dev->sd.ops->video->s_stream);
     }
     
-    pr_info("*** SUBDEV ARRAY POPULATED - tx_isp_video_link_stream SHOULD NOW FIND SUBDEVICES! ***\n");
+    pr_info("*** SUBDEV ARRAY POPULATED SAFELY - tx_isp_video_link_stream SHOULD NOW WORK! ***\n");
     
     pr_info("Device subsystem initialization complete\n");
 
