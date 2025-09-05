@@ -724,7 +724,7 @@ static int isp_get_ae_state(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
     return 0;
 }
 
-// Helper functions to update AF zone data
+// Helper functions to update AF zone data  
 static void update_af_zone_data(struct af_zone_info *info)
 {
     info->zone_status = af_zone_data.status;
