@@ -4236,27 +4236,28 @@ static void tx_isp_exit(void)
 
 /* ===== VIC SENSOR OPERATIONS - EXACT BINARY NINJA IMPLEMENTATIONS ===== */
 
-/* VIC video operations structure - CRITICAL for tx_isp_video_link_stream */
+/* Forward declarations for streaming functions */
 static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
+static int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable);
 
-static const struct tx_isp_subdev_video_ops vic_video_ops = {
+/* VIC video operations structure - CRITICAL for tx_isp_video_link_stream */
+static struct tx_isp_subdev_video_ops vic_video_ops = {
     .s_stream = vic_video_s_stream,
 };
 
-static const struct tx_isp_subdev_ops vic_subdev_ops = {
+/* CSI video operations structure - CRITICAL for tx_isp_video_link_stream */
+static struct tx_isp_subdev_video_ops csi_video_ops = {
+    .s_stream = csi_video_s_stream_impl,
+};
+
+/* Subdev ops structures - match header declarations (non-const) */
+struct tx_isp_subdev_ops vic_subdev_ops = {
     .video = &vic_video_ops,
     .sensor = NULL,
     .core = NULL,
 };
 
-/* CSI video operations structure - CRITICAL for tx_isp_video_link_stream */
-static int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);
-
-static const struct tx_isp_subdev_video_ops csi_video_ops = {
-    .s_stream = csi_video_s_stream,
-};
-
-static const struct tx_isp_subdev_ops csi_subdev_ops = {
+static struct tx_isp_subdev_ops csi_subdev_ops = {
     .video = &csi_video_ops,
     .sensor = NULL,
     .core = NULL,
@@ -4294,7 +4295,7 @@ static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
 }
 
 /* CSI video streaming function - CRITICAL for register activity */
-static int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
+static int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable)
 {
     pr_info("*** CSI VIDEO STREAMING %s ***\n", enable ? "ENABLE" : "DISABLE");
     return csi_video_s_stream(sd, enable);
