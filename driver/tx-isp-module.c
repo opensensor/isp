@@ -3781,17 +3781,6 @@ static int tx_isp_init(void)
         pr_warn("Hardware interrupts not available: %d\n", ret);
     }
 
-    /* *** CRITICAL: Initialize VIC registers and hardware reset BEFORE sensor I2C *** */
-    pr_info("*** INITIALIZING VIC REGISTERS AND HARDWARE RESET FOR SENSOR I2C ***\n");
-    ret = tx_isp_init_vic_registers(ourISPdev);
-    if (ret) {
-        pr_err("Failed to initialize VIC registers and hardware reset: %d\n", ret);
-        /* Continue - some functionality may still work */
-    } else {
-        pr_info("*** VIC REGISTERS AND TX-ISP HARDWARE RESET COMPLETE ***\n");
-        pr_info("*** SENSOR I2C COMMUNICATION SHOULD NOW WORK! ***\n");
-    }
-
     /* Create ISP M0 tuning device node */
     ret = tisp_code_create_tuning_node();
     if (ret) {
