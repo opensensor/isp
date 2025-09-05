@@ -2075,7 +2075,38 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     channel = fcd->channel_num;
     state = &fcd->state;
     
-    pr_info("Frame channel %d IOCTL: cmd=0x%x\n", channel, cmd);
+    pr_info("*** Frame channel %d IOCTL: cmd=0x%x ***\n", channel, cmd);
+    
+    /* MCP Log: Map common IOCTL commands for better debugging */
+    switch (cmd) {
+    case 0xc0145608:
+        pr_info("*** Channel %d: IOCTL 0xc0145608 = VIDIOC_REQBUFS (Request buffers) ***\n", channel);
+        break;
+    case 0xc044560f:
+        pr_info("*** Channel %d: IOCTL 0xc044560f = VIDIOC_QBUF (Queue buffer) ***\n", channel);
+        break;
+    case 0xc0445611:
+        pr_info("*** Channel %d: IOCTL 0xc0445611 = VIDIOC_DQBUF (Dequeue buffer) ***\n", channel);
+        break;
+    case 0x80045612:
+        pr_info("*** Channel %d: IOCTL 0x80045612 = VIDIOC_STREAMON (Start streaming) ***\n", channel);
+        break;
+    case 0x80045613:
+        pr_info("*** Channel %d: IOCTL 0x80045613 = VIDIOC_STREAMOFF (Stop streaming) ***\n", channel);
+        break;
+    case 0xc07056c3:
+        pr_info("*** Channel %d: IOCTL 0xc07056c3 = VIDIOC_S_FMT (Set format) ***\n", channel);
+        break;
+    case 0x407056c4:
+        pr_info("*** Channel %d: IOCTL 0x407056c4 = VIDIOC_G_FMT (Get format) ***\n", channel);
+        break;
+    case 0x800456c5:
+        pr_info("*** Channel %d: IOCTL 0x800456c5 = SET_BANKS (Enable channel banks) ***\n", channel);
+        break;
+    default:
+        pr_info("*** Channel %d: IOCTL 0x%x (Unknown/Custom command) ***\n", channel, cmd);
+        break;
+    }
     
     // Add channel enable/disable IOCTLs that IMP_FrameSource_EnableChn uses
     switch (cmd) {
