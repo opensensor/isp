@@ -2059,6 +2059,93 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
         /* ULTRA SAFE: Handle errors with enhanced rollback validation */
         if (result != 0) {
             if (result != 0xfffffdfd) {
+                /* ULTRA SAFE: Error rollback with comprehensive validation */
+                pr_err("tx_isp_video_link_stream: Stream operation failed on subdev[%d]: %d\n", i, result);
+                pr_info("tx_isp_video_link_stream: Starting ULTRA SAFE rollback on %d processed subdevs\n", processed_count - 1);
+                
+                /* ULTRA SAFE: Rollback loop with enhanced bounds and pointer checking */
+                int j;
+                for (j = i - 1; j >= 0; j--) {
+                    struct tx_isp_subdev *prev_subdev = (struct tx_isp_subdev *)isp_dev->subdevs[j];
+                    
+                    /* ULTRA SAFE: Skip invalid or NULL previous subdevs */
+                    if (prev_subdev == NULL) {
+                        continue;
+                    }
+                    
+                    /* ULTRA SAFE: Enhanced pointer validation for rollback */
+                    if ((uintptr_t)prev_subdev < 0x1000 || (uintptr_t)prev_subdev >= 0xfffff000) {
+                        pr_err("tx_isp_video_link_stream: Invalid rollback subdev[%d] pointer: %p\n", j, prev_subdev);
+                        continue;
+                    }
+                    
+                    /* ULTRA SAFE: Alignment check for rollback */
+                    if (((uintptr_t)prev_subdev & 0x3) != 0) {
+                        pr_err("tx_isp_video_link_stream: Rollback subdev[%d] not aligned: %p\n", j, prev_subdev);
+                        continue;
+                    }
+                    
+                    /* ULTRA SAFE: Validate all structure pointers before rollback */
+                    if (prev_subdev->ops == NULL) {
+                        continue;
+                    }
+                    
+                    if ((uintptr_t)prev_subdev->ops < 0x1000 || (uintptr_t)prev_subdev->ops >= 0xfffff000) {
+                        continue;
+                    }
+                    
+                    if (((uintptr_t)prev_subdev->ops & 0x3) != 0) {
+                        continue;
+                    }
+                    
+                    if (prev_subdev->ops->video == NULL) {
+                        continue;
+                    }
+                    
+                    if ((uintptr_t)prev_subdev->ops->video < 0x1000 || (uintptr_t)prev_subdev->ops->video >= 0xfffff000) {
+                        continue;
+                    }
+                    
+                    if (prev_subdev->ops->video->s_stream == NULL) {
+                        continue;
+                    }
+                    
+                    if ((uintptr_t)prev_subdev->ops->video->s_stream < 0x1000 || 
+                        (uintptr_t)prev_subdev->ops->video->s_stream >= 0xfffff000) {
+                        continue;
+                    }
+                    
+                    if (((uintptr_t)prev_subdev->ops->video->s_stream & 0x3) != 0) {
+                        continue;
+                    }
+                    
+                    /* ULTRA SAFE: Perform rollback s_stream call */
+                    pr_debug("tx_isp_video_link_stream: ULTRA SAFE rollback - s_stream(%d) on subdev[%d]\n", 
+                            enable ? 0 : 1, j);
+                    
+                    /* ULTRA SAFE: Rollback call with comprehensive error handling */
+                    int rollback_result = prev_subdev->ops->video->s_stream(prev_subdev, enable ? 0 : 1);
+                    if (rollback_result != 0) {
+                        pr_warn("tx_isp_video_link_stream: Rollback failed on subdev[%d]: %d\n", 
+                               j, rollback_result);
+                    }
+                }
+                
+                pr_info("tx_isp_video_link_stream: ULTRA SAFE rollback complete, returning error %d\n", result);
+                return result;
+            }
+            
+            /* Special return code - continue processing */
+            pr_debug("tx_isp_video_link_stream: subdev[%d] returned 0xfffffdfd, continuing\n", i);
+        }
+    }
+    
+    /* MCP Log: Successful completion */
+    pr_info("tx_isp_video_link_stream: %s operation completed successfully on %d subdevices (ULTRA SAFE)\n", 
+            enable ? "Enable" : "Disable", processed_count);
+    
+    return 0;
+}
 
 static int tx_isp_video_s_stream(struct tx_isp_dev *isp_dev, int enable)
 {
