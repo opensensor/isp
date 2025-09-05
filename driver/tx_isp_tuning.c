@@ -1335,83 +1335,45 @@ EXPORT_SYMBOL(isp_m0_chardev_ioctl);
 
 
 
+/* Global tuning parameter buffer - Binary Ninja reference implementation */
+static void *tisp_par_ioctl = NULL;
+
+/* tisp_code_tuning_open - Binary Ninja EXACT implementation */
 int isp_m0_chardev_open(struct inode *inode, struct file *file)
 {
-    struct tx_isp_dev *dev = ourISPdev;
-
     pr_info("ISP M0 device open called from pid %d\n", current->pid);
     
-    if (!dev) {
-        pr_err("ISP M0 open: No ISP device available\n");
-        return -ENODEV;
+    /* REFERENCE DRIVER: Direct implementation from Binary Ninja decompilation */
+    /* uint32_t $v0 = private_kmalloc(0x500c, 0xd0) */
+    void *tuning_buffer = kmalloc(0x500c, GFP_KERNEL | __GFP_DMA32);
+    
+    /* CRITICAL: Verify allocation success */
+    if (!tuning_buffer) {
+        pr_err("tisp_code_tuning_open: Failed to allocate tuning buffer (0x%x bytes)\n", 0x500c);
+        return -ENOMEM;
     }
     
-    /* CRITICAL ALIGNMENT FIX: Use aligned allocation to prevent MIPS unaligned access */
-    if (!dev->tuning_data) {
-        /* Allocate with proper alignment - MIPS requires 4-byte alignment */
-        dev->tuning_data = kzalloc(sizeof(struct isp_tuning_data), GFP_KERNEL | __GFP_DMA32);
-        if (!dev->tuning_data) {
-            pr_err("Failed to allocate aligned tuning data\n");
-            return -ENOMEM;
-        }
-        
-        /* Verify alignment - critical for MIPS */
-        if ((unsigned long)dev->tuning_data & 0x3) {
-            pr_err("CRITICAL: Tuning data not 4-byte aligned: %p\n", dev->tuning_data);
-            kfree(dev->tuning_data);
-            dev->tuning_data = NULL;
-            return -ENOMEM;
-        }
-        
-        pr_info("ISP M0 tuning data allocated at %p (aligned)\n", dev->tuning_data);
-        
-        /* Use aligned writes to prevent crashes */
-        *(volatile uint32_t*)&dev->tuning_data->state = 2;
+    /* CRITICAL: Verify alignment for MIPS - must be 4-byte aligned */
+    if ((unsigned long)tuning_buffer & 0x3) {
+        pr_err("CRITICAL: Tuning buffer not 4-byte aligned: %p\n", tuning_buffer);
+        kfree(tuning_buffer);
+        return -ENOMEM;
     }
     
-    /* REFERENCE DRIVER CHECK: state must be 2 to allow open */
-    /* Use aligned read to prevent crash */
-    uint32_t current_state = *(volatile uint32_t*)&dev->tuning_data->state;
-    if (current_state != 2) {
-        pr_err("ISP M0 open: Invalid state %d (must be 2)\n", current_state);
-        return -EBUSY;
-    }
+    /* tisp_par_ioctl = $v0 */
+    tisp_par_ioctl = tuning_buffer;
     
-    file->private_data = dev;
-    pr_info("ISP M0 device opened, current tuning_data=%p\n", dev->tuning_data);
+    /* memset($v0, 0, 0x500c) */
+    memset(tuning_buffer, 0, 0x500c);
     
-    /* REFERENCE DRIVER: Set state from 2 to 3 using aligned write */
-    *(volatile uint32_t*)&dev->tuning_data->state = 3;  /* Active state */
+    pr_info("*** REFERENCE DRIVER IMPLEMENTATION ***\n");
+    pr_info("ISP M0 tuning buffer allocated: %p (size=0x%x, aligned)\n", tuning_buffer, 0x500c);
+    pr_info("tisp_par_ioctl global variable set: %p\n", tisp_par_ioctl);
     
-    /* REFERENCE DRIVER: Clear offset 0x40ac using aligned write */
-    *(volatile uint32_t*)&dev->tuning_data->custom_mode = 0;
+    /* Store buffer pointer for file operations */
+    file->private_data = tuning_buffer;
     
-    /* Initialize default values with aligned writes to prevent crashes */
-    *(volatile uint32_t*)&dev->tuning_data->brightness = 128;
-    *(volatile uint32_t*)&dev->tuning_data->contrast = 128;
-    *(volatile uint32_t*)&dev->tuning_data->saturation = 128;
-    *(volatile uint32_t*)&dev->tuning_data->sharpness = 128;
-    *(volatile uint32_t*)&dev->tuning_data->hflip = 0;
-    *(volatile uint32_t*)&dev->tuning_data->vflip = 0;
-    *(volatile uint32_t*)&dev->tuning_data->antiflicker = 0;
-    *(volatile uint32_t*)&dev->tuning_data->fps_num = 25;
-    *(volatile uint32_t*)&dev->tuning_data->fps_den = 1;
-    *(volatile uint32_t*)&dev->tuning_data->running_mode = 0;
-    *(volatile uint32_t*)&dev->tuning_data->max_again = 160;
-    *(volatile uint32_t*)&dev->tuning_data->max_dgain = 80;
-    *(volatile uint32_t*)&dev->tuning_data->ae_comp = 128;
-    *(volatile uint32_t*)&dev->tuning_data->defog_strength = 128;
-    *(volatile uint32_t*)&dev->tuning_data->dpc_strength = 128;
-    *(volatile uint32_t*)&dev->tuning_data->drc_strength = 128;
-    *(volatile uint32_t*)&dev->tuning_data->temper_strength = 128;
-    *(volatile uint32_t*)&dev->tuning_data->sinter_strength = 128;
-    
-    /* Set ISP device as tuning enabled with aligned write */
-    *(volatile uint32_t*)&dev->tuning_enabled = 2;  /* Enable tuning mode */
-    
-    pr_info("ISP M0 tuning data initialized: state=%d, tuning_enabled=%d\n", 
-            *(volatile uint32_t*)&dev->tuning_data->state, *(volatile uint32_t*)&dev->tuning_enabled);
-    pr_info("ISP M0 device opened successfully\n");
+    /* return 0 */
     return 0;
 }
 EXPORT_SYMBOL(isp_m0_chardev_open);
