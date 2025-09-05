@@ -1410,11 +1410,24 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 
                 if (enable) {
                     if (dev->tuning_enabled != 2) {
-                        /* Initialize tuning if not already initialized */
+                        /* CRITICAL: Initialize tuning_data if not already initialized */
                         if (!dev->tuning_data) {
-                            pr_err("isp_core_tunning_unlocked_ioctl: Tuning data not initialized\n");
-                            return -ENODEV;
+                            pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
+                            
+                            /* Allocate tuning data structure using the reference implementation */
+                            dev->tuning_data = isp_core_tuning_init(dev);
+                            if (!dev->tuning_data) {
+                                pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
+                                return -ENOMEM;
+                            }
+                            
+                            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
+                            
+                            /* MCP LOG: Tuning data structure successfully initialized */
+                            pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
+                            pr_info("MCP_LOG: Tuning controls now ready for operation\n");
                         }
+                        
                         dev->tuning_enabled = 2;
                         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
                     }
