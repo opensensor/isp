@@ -2974,7 +2974,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Sensor info request: returning success (1)\n");
         return 0;
     }
-    case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - FIXED to add sensors to enumeration list
+    case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - FIXED to actually connect sensor to ISP device
         char sensor_data[0x50];
         void **i_2;
         void *module;
@@ -2988,8 +2988,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         struct i2c_adapter *i2c_adapter = NULL;
         struct i2c_board_info board_info;
         struct i2c_client *client = NULL;
+        struct tx_isp_sensor *sensor = NULL;
         
-        pr_info("*** TX_ISP_SENSOR_REGISTER: FIXED Binary Ninja implementation ***\n");
+        pr_info("*** TX_ISP_SENSOR_REGISTER: FIXED TO CREATE ACTUAL SENSOR CONNECTION ***\n");
         
         /* Binary Ninja: private_copy_from_user(&var_98, arg3, 0x50) */
         if (copy_from_user(sensor_data, argp, 0x50)) {
@@ -3048,7 +3049,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         
         pr_info("Sensor registration complete, final_result=0x%x\n", final_result);
         
-        /* *** CRITICAL: Add sensor to enumeration list if registration succeeded *** */
+        /* *** CRITICAL: Add sensor to enumeration list AND create actual sensor connection *** */
         if (final_result == 0 && sensor_name[0] != '\0') {
             pr_info("*** ADDING SUCCESSFULLY REGISTERED SENSOR TO LIST: %s ***\n", sensor_name);
             
@@ -3101,6 +3102,55 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     pr_info("*** SUCCESS: I2C CLIENT CREATED - SENSOR PROBE SHOULD BE CALLED! ***\n");
                     pr_info("*** I2C CLIENT: %s at 0x%x on %s ***\n", 
                            client->name, client->addr, client->adapter->name);
+                           
+                    /* *** CRITICAL FIX: CREATE ACTUAL SENSOR STRUCTURE AND CONNECT TO ISP *** */
+                    pr_info("*** CREATING ACTUAL SENSOR STRUCTURE FOR %s ***\n", sensor_name);
+                    
+                    sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
+                    if (sensor) {
+                        /* Initialize sensor structure */
+                        strncpy(sensor->info.name, sensor_name, sizeof(sensor->info.name) - 1);
+                        sensor->info.name[sizeof(sensor->info.name) - 1] = '\0';
+                        sensor->video.attr = kzalloc(sizeof(struct tx_isp_sensor_attribute), GFP_KERNEL);
+                        
+                        if (sensor->video.attr) {
+                            /* Set up basic sensor attributes for GC2053 */
+                            if (strncmp(sensor_name, "gc2053", 6) == 0) {
+                                sensor->video.attr->chip_id = 0x2053;
+                                sensor->video.attr->total_width = 1920;
+                                sensor->video.attr->total_height = 1080;
+                                sensor->video.attr->dbus_type = 1; // DVP interface
+                                sensor->video.attr->integration_time = 1000;
+                                sensor->video.attr->max_again = 0x40000;
+                                strncpy((char*)sensor->video.attr->name, sensor_name, 32);
+                            }
+                            
+                            /* Initialize subdev structure */
+                            memset(&sensor->sd, 0, sizeof(sensor->sd));
+                            sensor->sd.isp = (void *)isp_dev;
+                            sensor->sd.vin_state = TX_ISP_MODULE_INIT;
+                            
+                            /* *** CRITICAL: CONNECT SENSOR TO ISP DEVICE *** */
+                            pr_info("*** CONNECTING SENSOR TO ISP DEVICE ***\n");
+                            pr_info("Before: ourISPdev->sensor=%p\n", ourISPdev->sensor);
+                            
+                            ourISPdev->sensor = sensor;
+                            
+                            pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor, sensor->info.name);
+                            pr_info("*** SENSOR SUCCESSFULLY CONNECTED TO ISP DEVICE! ***\n");
+                            
+                            /* Update registry with actual subdev pointer */
+                            if (reg_sensor) {
+                                reg_sensor->subdev = &sensor->sd;
+                            }
+                        } else {
+                            kfree(sensor);
+                            sensor = NULL;
+                            pr_err("Failed to allocate sensor attributes\n");
+                        }
+                    } else {
+                        pr_err("Failed to allocate sensor structure\n");
+                    }
                 } else {
                     pr_err("*** FAILED TO CREATE I2C CLIENT FOR %s ***\n", sensor_name);
                 }
