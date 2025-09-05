@@ -690,7 +690,7 @@ static int tx_isp_create_v4l2_device(int channel)
     video_set_drvdata(vdev, dev);
     
     /* Register video device - this creates /dev/videoX */
-    ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
+    ret = video_register_device(vdev, VFL_TYPE_GRABBER, -1);
     if (ret) {
         pr_err("Failed to register video device for channel %d: %d\n", channel, ret);
         goto err_free_vdev;
