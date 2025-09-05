@@ -1292,19 +1292,22 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     /* CRITICAL: Binary Ninja reference implementation - proper device structure retrieval */
     /* Reference: $s0 = *(*(*(arg1 + 0x70) + 0xc8) + 0x1bc) */
     struct tx_isp_dev *dev = NULL;
+    extern struct tx_isp_dev *ourISPdev;
     
-    /* Get device from file private data first */
+    /* CRITICAL: file->private_data contains tuning buffer, NOT device structure */
     if (file && file->private_data) {
-        dev = (struct tx_isp_dev *)file->private_data;
-        pr_info("isp_core_tunning_unlocked_ioctl: Retrieved device from file->private_data: %p\n", dev);
+        void *tuning_buffer = file->private_data;
+        pr_info("isp_core_tunning_unlocked_ioctl: Tuning buffer from file: %p\n", tuning_buffer);
     }
     
-    /* If not found in file, try global reference as fallback */
+    /* CRITICAL: Use global device reference - file->private_data is tuning buffer */
+    dev = ourISPdev;
     if (!dev) {
-        extern struct tx_isp_dev *ourISPdev;
-        dev = ourISPdev;
-        pr_info("isp_core_tunning_unlocked_ioctl: Using global device reference: %p\n", dev);
+        pr_err("isp_core_tunning_unlocked_ioctl: Global ISP device not available\n");
+        return -ENODEV;
     }
+    
+    pr_info("isp_core_tunning_unlocked_ioctl: Using ISP device: %p\n", dev);
     
     /* CRITICAL: Validate device structure before any access */
     if (!dev) {
