@@ -1808,19 +1808,126 @@ static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
 
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 {
-    int i;
+    int32_t i = 0;
+    void **subdev_array;
+    void *subdev;
+    void *video_ops;
+    int32_t (*stream_func)(void*, int);
+    int32_t result;
+    int processed_count = 0;
     
-    // Reference: tx_isp_video_link_stream
-    // Iterates through 16 subdevices, calls video ops stream function
+    if (!isp_dev) {
+        pr_err("tx_isp_video_link_stream: Invalid ISP device\n");
+        return -EINVAL;
+    }
     
-    pr_info("Video link stream: %s\n", enable ? "enable" : "disable");
+    /* MCP Log: Function entry */
+    pr_info("tx_isp_video_link_stream: %s streaming on subdevices\n", 
+            enable ? "Enable" : "Disable");
     
-    // In full implementation:
-    // for (i = 0; i < 16; i++) {
-    //     if (isp_dev->subdevs[i] && isp_dev->subdevs[i]->ops->video->stream)
-    //         result = isp_dev->subdevs[i]->ops->video->stream(isp_dev->subdevs[i], enable);
-    // }
+    /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
+    subdev_array = (void**)((char*)isp_dev + 0x38);
     
+    /* MCP Log: Starting subdev iteration */
+    pr_debug("tx_isp_video_link_stream: Iterating through 16 subdevices at offset 0x38\n");
+    
+    /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
+    for (i = 0; i < 0x10; i++) {
+        /* Binary Ninja: void* $a0 = *$s4 */
+        subdev = subdev_array[i];
+        
+        if (subdev != NULL) {
+            /* MCP Log: Found valid subdev */
+            pr_debug("tx_isp_video_link_stream: Found subdev[%d] = %p\n", i, subdev);
+            
+            /* Binary Ninja: void* $v0_3 = *(*($a0 + 0xc4) + 4) */
+            void *subdev_ops_ptr = *((void**)((char*)subdev + 0xc4));
+            if (subdev_ops_ptr != NULL) {
+                video_ops = *((void**)((char*)subdev_ops_ptr + 4));
+                
+                if (video_ops != NULL) {
+                    /* Binary Ninja: int32_t $v0_4 = *($v0_3 + 4) */
+                    stream_func = *((int32_t(**)(void*, int))((char*)video_ops + 4));
+                    
+                    if (stream_func != NULL) {
+                        /* MCP Log: Found stream function, calling it */
+                        pr_debug("tx_isp_video_link_stream: Calling s_stream on subdev[%d] = %p\n", 
+                                i, subdev);
+                        
+                        /* Binary Ninja: int32_t result = $v0_4($a0, arg2) */
+                        result = stream_func(subdev, enable);
+                        processed_count++;
+                        
+                        /* MCP Log: Stream function call result */
+                        pr_debug("tx_isp_video_link_stream: subdev[%d] s_stream returned %d\n", 
+                                i, result);
+                        
+                        /* Binary Ninja: if (result == 0) continue, else handle error */
+                        if (result != 0) {
+                            /* Binary Ninja: if (result != 0xfffffdfd) */
+                            if (result != 0xfffffdfd) {
+                                /* MCP Log: Error occurred, starting rollback */
+                                pr_err("tx_isp_video_link_stream: Stream operation failed on subdev[%d]: %d\n", 
+                                       i, result);
+                                pr_info("tx_isp_video_link_stream: Starting rollback on %d previously processed subdevs\n", 
+                                        processed_count - 1);
+                                
+                                /* Binary Ninja: Rollback - disable previously enabled streams */
+                                /* Binary Ninja shows a rollback loop that disables streams in reverse order */
+                                int j;
+                                for (j = i - 1; j >= 0; j--) {
+                                    void *prev_subdev = subdev_array[j];
+                                    if (prev_subdev != NULL) {
+                                        void *prev_ops_ptr = *((void**)((char*)prev_subdev + 0xc4));
+                                        if (prev_ops_ptr != NULL) {
+                                            void *prev_video_ops = *((void**)((char*)prev_ops_ptr + 4));
+                                            if (prev_video_ops != NULL) {
+                                                int32_t (*prev_stream_func)(void*, int) = 
+                                                    *((int32_t(**)(void*, int))((char*)prev_video_ops + 4));
+                                                if (prev_stream_func != NULL) {
+                                                    /* MCP Log: Rollback operation */
+                                                    pr_debug("tx_isp_video_link_stream: Rollback - calling s_stream(%d) on subdev[%d]\n", 
+                                                            enable ? 0 : 1, j);
+                                                    
+                                                    /* Binary Ninja: $v0_7($a0_1, arg2 u< 1 ? 1 : 0) */
+                                                    prev_stream_func(prev_subdev, enable ? 0 : 1);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                /* MCP Log: Rollback complete, returning error */
+                                pr_info("tx_isp_video_link_stream: Rollback complete, returning error %d\n", result);
+                                return result;
+                            }
+                            /* If result == 0xfffffdfd, continue to next subdev */
+                            /* MCP Log: Special return code, continuing */
+                            pr_debug("tx_isp_video_link_stream: subdev[%d] returned 0xfffffdfd, continuing\n", i);
+                        }
+                    } else {
+                        /* MCP Log: No stream function */
+                        pr_debug("tx_isp_video_link_stream: subdev[%d] has no stream function\n", i);
+                    }
+                } else {
+                    /* MCP Log: No video ops */
+                    pr_debug("tx_isp_video_link_stream: subdev[%d] has no video ops\n", i);
+                }
+            } else {
+                /* MCP Log: No ops pointer */
+                pr_debug("tx_isp_video_link_stream: subdev[%d] has no ops pointer\n", i);
+            }
+        } else {
+            /* MCP Log: Empty subdev slot */
+            pr_debug("tx_isp_video_link_stream: subdev[%d] is NULL\n", i);
+        }
+    }
+    
+    /* MCP Log: Successful completion */
+    pr_info("tx_isp_video_link_stream: %s operation completed successfully on %d subdevices\n", 
+            enable ? "Enable" : "Disable", processed_count);
+    
+    /* Binary Ninja: return 0 */
     return 0;
 }
 
