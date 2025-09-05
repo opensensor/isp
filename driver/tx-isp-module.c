@@ -3819,6 +3819,15 @@ static int tx_isp_init(void)
 //    }
 //    pr_info("*** FRAME CHANNEL DEVICES CREATED - IOCTLS SHOULD NOW WORK ***\n");
 
+    /* *** CRITICAL: Initialize V4L2 video devices for encoder compatibility *** */
+    pr_info("*** INITIALIZING V4L2 VIDEO DEVICES FOR ENCODER SUPPORT ***\n");
+    ret = tx_isp_v4l2_init();
+    if (ret) {
+        pr_err("Failed to initialize V4L2 video devices: %d\n", ret);
+        goto err_cleanup_graph;
+    }
+    pr_info("*** V4L2 VIDEO DEVICES CREATED - /dev/video0, /dev/video1 NOW AVAILABLE ***\n");
+
     pr_info("TX ISP driver ready with new subdevice management system\n");
     return 0;
 
