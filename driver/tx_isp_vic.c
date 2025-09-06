@@ -1635,11 +1635,10 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         vic_base = ourISPdev->vic_regs; /* Fallback to ISP core mapping */
     }
     
-    /* CRITICAL: Final validation before any register writes */
-    /* Accept both physical (0x10000000-0x20000000) and kernel virtual (0x80000000+) addresses */
+    /* CRITICAL: Accept valid MIPS kernel virtual addresses */
+    /* MIPS KSEG0: 0x80000000-0x9fffffff (cached), KSEG1: 0xa0000000-0xbfffffff (uncached), KSEG2: 0xc0000000+ (mapped) */
     if (!vic_base || 
-        !((((unsigned long)vic_base >= 0x10000000 && (unsigned long)vic_base <= 0x20000000) ||
-           ((unsigned long)vic_base >= 0x80000000 && (unsigned long)vic_base <= 0xffffffff)))) {
+        !((unsigned long)vic_base >= 0x80000000)) {
         pr_err("vic_pipo_mdma_enable: Invalid VIC register base %p - ABORTING ALL WRITES\n", vic_base);
         goto unlock_exit;
     }
@@ -1651,39 +1650,32 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     pr_info("vic_pipo_mdma_enable: ATOMIC ACCESS - vic_base=%p, dimensions=%dx%d\n", 
             vic_base, width, height);
     
-    /* CRITICAL: All register writes ONLY if base is validated */
-    if (vic_base && 
-        (unsigned long)vic_base >= 0x10000000 && 
-        (unsigned long)vic_base <= 0x20000000) {
-        
-        /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x308) = 1 */
-        writel(1, vic_base + 0x308);
-        wmb();
-        pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
-        
-        /* Binary Ninja EXACT sequence: int32_t $v1_1 = $v1 << 1 */
-        stride = width << 1; /* width * 2 for stride */
-        
-        /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
-        writel((width << 16) | height, vic_base + 0x304);
-        wmb();
-        pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
-                (width << 16) | height, width, height);
-        
-        /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
-        writel(stride, vic_base + 0x310);
-        wmb();
-        pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
-        
-        /* Binary Ninja EXACT sequence: *(result + 0x314) = $v1_1 */
-        writel(stride, vic_base + 0x314);
-        wmb();
-        pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
-        
-        pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - RACE CONDITION FIXED ***\n");
-    } else {
-        pr_err("vic_pipo_mdma_enable: DOUBLE-CHECK FAILED - vic_base=%p is invalid\n", vic_base);
-    }
+    /* Write PIPO MDMA registers - base already validated */
+    /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x308) = 1 */
+    writel(1, vic_base + 0x308);
+    wmb();
+    pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
+    
+    /* Binary Ninja EXACT sequence: int32_t $v1_1 = $v1 << 1 */
+    stride = width << 1; /* width * 2 for stride */
+    
+    /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
+    writel((width << 16) | height, vic_base + 0x304);
+    wmb();
+    pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
+            (width << 16) | height, width, height);
+    
+    /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
+    writel(stride, vic_base + 0x310);
+    wmb();
+    pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
+    
+    /* Binary Ninja EXACT sequence: *(result + 0x314) = $v1_1 */
+    writel(stride, vic_base + 0x314);
+    wmb();
+    pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
+    
+    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - RACE CONDITION FIXED ***\n");
 
 unlock_exit:
     spin_unlock_irqrestore(&vic_dev->lock, flags);
