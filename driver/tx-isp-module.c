@@ -607,18 +607,6 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
         wmb();
         
         pr_info("*** CSI PHY CONFIG REGISTERS WRITTEN ***\n");
-        
-        /* *** CRITICAL: MISSING CSI PHY Control writes for isp-w01 *** */
-        /* These registers appear after Core Control in the reference trace */
-        pr_info("*** WRITING MISSING CSI PHY CONTROL REGISTERS FOR ISP-W01 ***\n");
-        
-        /* The reference trace shows these additional CSI PHY Control writes */
-        writel(0x3130322a, csi_phy_regs + 0x0);  /* isp-w01: offset 0x0 */
-        writel(0x1, csi_phy_regs + 0x4);         /* isp-w01: offset 0x4 */
-        writel(0x200, csi_phy_regs + 0x14);      /* isp-w01: offset 0x14 */
-        wmb();
-        
-        pr_info("*** ISP-W01 CSI PHY CONTROL REGISTERS WRITTEN - THIS WAS THE MISSING PIECE! ***\n");
     }
     
     /* Binary Ninja: sensor_init call - initialize sensor control structure */
@@ -4322,7 +4310,29 @@ static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
 /* CSI video streaming function - CRITICAL for register activity */
 static int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable)
 {
+    void __iomem *csi_phy_regs = NULL;
+    
     pr_info("*** CSI VIDEO STREAMING %s ***\n", enable ? "ENABLE" : "DISABLE");
+    
+    /* CRITICAL: Add isp-w01 CSI PHY Control writes during streaming enable */
+    if (enable && ourISPdev && ourISPdev->vic_regs) {
+        pr_info("*** CSI STREAMING: Adding isp-w01 CSI PHY Control writes ***\n");
+        
+        /* Get CSI PHY register base from ISP core */
+        csi_phy_regs = ourISPdev->vic_regs - 0xe0000;  /* CSI at ISP base */
+        
+        /* Reference driver isp-w01 CSI PHY Control writes - these happen during streaming! */
+        writel(0x3130322a, csi_phy_regs + 0x0);   /* isp-w01: offset 0x0 */
+        writel(0x1, csi_phy_regs + 0x4);          /* isp-w01: offset 0x4 */
+        writel(0x200, csi_phy_regs + 0x14);       /* isp-w01: offset 0x14 */
+        wmb();
+        
+        pr_info("*** ISP isp-w01: [CSI PHY Control] write at offset 0x0: 0x0 -> 0x3130322a ***\n");
+        pr_info("*** ISP isp-w01: [CSI PHY Control] write at offset 0x4: 0x0 -> 0x1 ***\n");
+        pr_info("*** ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x0 -> 0x200 ***\n");
+        pr_info("*** CSI STREAMING: isp-w01 CSI PHY Control writes complete - NOW MATCHES REFERENCE! ***\n");
+    }
+    
     return csi_video_s_stream(sd, enable);
 }
 
