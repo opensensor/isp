@@ -1076,17 +1076,36 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x10, vic_regs + 0x1b0);
         wmb();
 
-        /* Binary Ninja: DVP unlock sequence WITH unlock key */
+        /* Binary Ninja: DVP unlock sequence */
         writel(2, vic_regs + 0x0);
         wmb();
         writel(4, vic_regs + 0x0);
         wmb();
 
-        /* *** CRITICAL: DVP unlock key - Binary Ninja exact *** */
+        /* Binary Ninja: DVP unlock key - must be set BEFORE waiting */
         u32 unlock_key = (vic_dev->sensor_attr.integration_time_apply_delay << 4) | vic_dev->sensor_attr.again_apply_delay;
         writel(unlock_key, vic_regs + 0x1a0);
         wmb();
         pr_info("tx_isp_vic_start: DVP unlock key 0x1a0 = 0x%x\n", unlock_key);
+
+        /* Binary Ninja: while (*$v1_30 != 0) nop */
+        while (readl(vic_regs + 0x0) != 0) {
+            cpu_relax();
+        }
+        
+        pr_info("tx_isp_vic_start: DVP VIC unlocked successfully\n");
+        
+        /* Binary Ninja: Additional DVP register configuration */
+        void __iomem *sensor_base = vic_dev->vic_regs; /* Sensor register access */
+        u32 sensor_val1 = readl(sensor_base + 0x104); /* Binary Ninja: zx.d(*($a0_9 + 0x52)) << 0x10 | zx.d(*($a0_9 + 0x4e)) */
+        u32 sensor_val2 = readl(sensor_base + 0x108); /* Binary Ninja: zx.d(*($v1_31 + 0x5a)) << 0x10 | zx.d(*($v1_31 + 0x56)) */
+        writel(sensor_val1, vic_regs + 0x104);
+        writel(sensor_val2, vic_regs + 0x108);
+        wmb();
+        
+        /* Binary Ninja: *$v0_47 = 1 - Enable VIC */
+        writel(1, vic_regs + 0x0);
+        wmb();
 
     } else if (interface_type == 2) {
         /* *** CRITICAL: MIPI interface - EXACT Binary Ninja implementation *** */
@@ -1194,33 +1213,27 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("tx_isp_vic_start: MIPI registers configured - 0x10=0x%x, 0x18=0x%x\n",
                 final_mipi_config, (integration_time << 16) + vic_dev->width);
 
-        /* *** Binary Ninja EXACT unlock sequence *** */
+        /* *** Binary Ninja EXACT unlock sequence - NO artificial delays *** */
+        /* Binary Ninja: **(arg1 + 0xb8) = 2 */
         writel(2, vic_regs + 0x0);
         wmb();
+        
+        /* Binary Ninja: **(arg1 + 0xb8) = 4 */
         writel(4, vic_regs + 0x0);
         wmb();
 
-        /* Binary Ninja: Wait for unlock completion */
-        timeout = 10000;
-        while (timeout > 0) {
-            u32 vic_status = readl(vic_regs + 0x0);
-            if (vic_status == 0) {
-                break;
-            }
-            udelay(1);
-            timeout--;
+        /* Binary Ninja: while (*$v0_121 != 0) nop - Wait indefinitely like reference */
+        while (readl(vic_regs + 0x0) != 0) {
+            cpu_relax(); /* MIPS equivalent of nop */
         }
+        
+        pr_info("tx_isp_vic_start: VIC unlocked successfully\n");
 
-        if (timeout == 0) {
-            pr_err("tx_isp_vic_start: VIC unlock timeout\n");
-            return -ETIMEDOUT;
-        }
-
-        /* Binary Ninja: Enable VIC processing */
+        /* Binary Ninja: *$v0_121 = 1 - Enable VIC processing */
         writel(1, vic_regs + 0x0);
         wmb();
 
-        /* Binary Ninja: Final configuration registers */
+        /* Binary Ninja: Final MIPI configuration registers */
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4210, vic_regs + 0x1ac);
         writel(0x10, vic_regs + 0x1b0);
@@ -1230,23 +1243,35 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("tx_isp_vic_start: MIPI interface configured successfully\n");
 
     } else if (interface_type == 4) {
-        /* BT656 interface */
+        /* BT656 interface - Binary Ninja exact sequence */
         pr_info("tx_isp_vic_start: BT656 interface\n");
         writel(0, vic_regs + 0xc);
         writel(0x800c0000, vic_regs + 0x10);
+        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
+        
+        /* Binary Ninja unlock sequence */
         writel(2, vic_regs + 0x0);
+        wmb();
+        pr_info("tx_isp_vic_start: VIC_CTRL: %08x\n", readl(vic_regs + 0x0));
+        writel(1, vic_regs + 0x0);
         wmb();
 
     } else if (interface_type == 5) {
-        /* BT1120 interface */
+        /* BT1120 interface - Binary Ninja exact sequence */
         pr_info("tx_isp_vic_start: BT1120 interface\n");
         writel(4, vic_regs + 0xc);
         writel(0x800c0000, vic_regs + 0x10);
+        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
+        
+        /* Binary Ninja unlock sequence */
         writel(2, vic_regs + 0x0);
+        wmb();
+        pr_info("tx_isp_vic_start: VIC_CTRL: %08x\n", readl(vic_regs + 0x0));
+        writel(1, vic_regs + 0x0);
         wmb();
 
     } else {
@@ -1254,35 +1279,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* Binary Ninja: Wait for VIC unlock completion */
-    pr_info("tx_isp_vic_start: Waiting for VIC unlock completion...\n");
-    timeout = 10000;
-    while (timeout > 0) {
-        u32 status = readl(vic_regs + 0x0);
-        if (status == 0) {
-            pr_info("tx_isp_vic_start: VIC unlocked after %d iterations (status=0)\n", 10000 - timeout);
-            break;
-        }
-        udelay(1);
-        timeout--;
-    }
-
-    if (timeout == 0) {
-        pr_err("tx_isp_vic_start: VIC unlock timeout - still locked\n");
-        return -ETIMEDOUT;
-    }
-
-    /* Binary Ninja: Enable VIC processing */
-    writel(1, vic_regs + 0x0);
-    wmb();
-    pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1)\n");
-
-    /* Binary Ninja: Final configuration registers */
-    writel(0x100010, vic_regs + 0x1a4);
-    writel(0x4210, vic_regs + 0x1ac);
-    writel(0x10, vic_regs + 0x1b0);
-    writel(0, vic_regs + 0x1b4);
-    wmb();
+    /* Binary Ninja: VIC should already be unlocked by interface-specific code above */
+    pr_info("tx_isp_vic_start: VIC unlock handled by interface-specific code\n");
 
     /* Binary Ninja: Log WDR mode */
     const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
