@@ -1681,150 +1681,115 @@ unlock_exit:
     spin_unlock_irqrestore(&vic_dev->lock, flags);
 }
 
-/* ISPVIC Frame Channel S_Stream - FIXED: Register base race condition */
+/* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja Implementation with MCP LOGGING */
 int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 {
     void __iomem *vic_base = NULL;
     unsigned long flags;
-    u32 stream_ctrl;
-    struct clk *isp_clk, *cgu_isp_clk;
-    void __iomem *cpm_regs;
-    int ret;
+    const char *stream_op;
     
-    pr_info("*** ispvic_frame_channel_s_stream: RACE CONDITION FIX ***\n");
-    pr_info("ispvic_frame_channel_s_stream: vic_dev=%p, enable=%d\n", vic_dev, enable);
+    /* MCP LOG: Entry point with parameters */
+    pr_info("*** MCP LOG: ispvic_frame_channel_s_stream ENTRY - vic_dev=%p, enable=%d ***\n", vic_dev, enable);
     
-    /* Binary Ninja: if (arg1 == 0) return error */
+    /* Binary Ninja: isp_printf(2, "%s[%d]: invalid parameter\n", "ispvic_frame_channel_s_stream") */
     if (vic_dev == NULL) {
-        pr_err("ispvic_frame_channel_s_stream: invalid parameter\n");
-        return 0xffffffea; /* -EINVAL */
+        pr_err("%s[%d]: invalid parameter\n", __func__, __LINE__);
+        /* MCP LOG: Invalid parameter error */
+        pr_err("*** MCP LOG: ispvic_frame_channel_s_stream INVALID PARAMETER - returning -EINVAL ***\n");
+        return 0xffffffea;  /* -EINVAL */
     }
     
-    /* *** STEP 1: Ensure clocks are enabled using Linux Clock Framework *** */
-    pr_info("*** STREAMING S_STREAM: Ensuring ISP clocks via Clock Framework ***\n");
+    /* Binary Ninja: char const* const $v0_3 */
+    stream_op = (enable != 0) ? "streamon" : "streamoff";
     
-    isp_clk = clk_get(NULL, "isp");
-    if (!IS_ERR(isp_clk)) {
-        ret = clk_prepare_enable(isp_clk);
-        if (ret == 0) {
-            pr_info("S_STREAM: ISP clock confirmed enabled\n");
-        }
-    }
+    /* Binary Ninja: isp_printf(0, "%s[%d]: %s\n", "ispvic_frame_channel_s_stream") */
+    pr_info("%s[%d]: %s\n", __func__, __LINE__, stream_op);
     
-    cgu_isp_clk = clk_get(NULL, "cgu_isp");
-    if (!IS_ERR(cgu_isp_clk)) {
-        ret = clk_prepare_enable(cgu_isp_clk);
-        if (ret == 0) {
-            pr_info("S_STREAM: CGU_ISP clock confirmed enabled\n");
-        }
-    }
-
-    /* STEP 2: Ensure CPM registers are configured for VIC access */
-    pr_info("*** STREAMING S_STREAM: Ensuring CPM configuration for VIC ***\n");
-    cpm_regs = ioremap(0x10000000, 0x1000);
-    if (cpm_regs) {
-        u32 clkgr0 = readl(cpm_regs + 0x20);
-        u32 clkgr1 = readl(cpm_regs + 0x28);
-        
-        /* Ensure ISP/VIC clocks remain enabled */
-        clkgr0 &= ~((1 << 13) | (1 << 21) | (1 << 30));
-        clkgr1 &= ~(1 << 30);
-        
-        writel(clkgr0, cpm_regs + 0x20);
-        writel(clkgr1, cpm_regs + 0x28);
-        wmb();
-        
-        pr_info("S_STREAM: CPM clocks maintained for VIC streaming\n");
-        iounmap(cpm_regs);
-    }
+    /* MCP LOG: Stream state check */
+    pr_info("*** MCP LOG: ispvic_frame_channel_s_stream - current stream_state=%d, requested enable=%d ***\n", 
+            vic_dev->stream_state, enable);
     
-    /* Binary Ninja: Log stream operation */
-    const char *stream_op = (enable != 0) ? "streamon" : "streamoff";
-    pr_info("ispvic_frame_channel_s_stream: %s\n", stream_op);
-    
-    /* SAFE: Use proper struct member access instead of dangerous offset arithmetic */
+    /* Binary Ninja: if (arg2 == *($s0 + 0x210)) return 0 */
     if (enable == vic_dev->stream_state) {
-        pr_info("ispvic_frame_channel_s_stream: already in state %d\n", enable);
+        pr_info("*** MCP LOG: ispvic_frame_channel_s_stream ALREADY IN STATE %d - returning 0 ***\n", enable);
         return 0;
     }
     
-    /* RACE CONDITION FIX: Use lock to ensure atomic access to register base */
+    /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
     spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
     
-    /* ATOMIC: Get and validate VIC register base under lock */
+    /* CRITICAL: Get VIC register base - Binary Ninja: *($s0 + 0xb8) */
     vic_base = vic_dev->vic_regs;
-    if (!vic_base && ourISPdev) {
-        vic_base = ourISPdev->vic_regs; /* Fallback to ISP core mapping */
-    }
+    
+    /* MCP LOG: Register base validation */
+    pr_info("*** MCP LOG: ispvic_frame_channel_s_stream REGISTER BASE CHECK - vic_base=%p ***\n", vic_base);
+    
     if (!vic_base) {
-        /* Emergency mapping as last resort */
-        vic_base = ioremap(0x133e0000, 0x10000);
-        if (vic_base) {
-            pr_info("*** S_STREAM: Emergency VIC register mapping successful ***\n");
-            vic_dev->vic_regs = vic_base;
-        }
-    }
-    
-    /* CRITICAL: Accept valid MIPS kernel virtual addresses */
-    /* MIPS KSEG0: 0x80000000-0x9fffffff (cached), KSEG1: 0xa0000000-0xbfffffff (uncached), KSEG2: 0xc0000000+ (mapped) */
-    if (!vic_base || 
-        !((unsigned long)vic_base >= 0x80000000)) {
         pr_err("ispvic_frame_channel_s_stream: Invalid VIC register base %p - ABORTING ALL WRITES\n", vic_base);
+        /* MCP LOG: Register base validation failed */
+        pr_err("*** MCP LOG: ispvic_frame_channel_s_stream REGISTER BASE VALIDATION FAILED ***\n");
         spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
-        return 0xffffffea; /* Return error instead of proceeding */
+        return -EINVAL;
     }
     
-    pr_info("*** S_STREAM: ATOMIC VIC register access validated at %p ***\n", vic_base);
+    /* MCP LOG: Register base validation passed */
+    pr_info("*** MCP LOG: ispvic_frame_channel_s_stream REGISTER BASE VALIDATED - proceeding with %s ***\n", stream_op);
     
     if (enable == 0) {
-        /* Stream OFF - Binary Ninja: *(*($s0 + 0xb8) + 0x300) = 0 */
-        pr_info("*** STREAM OFF: Setting reg 0x300 = 0 ***\n");
+        /* MCP LOG: Stream OFF operation */
+        pr_info("*** MCP LOG: ispvic_frame_channel_s_stream STREAM OFF - writing 0 to reg 0x300 ***\n");
         
-        /* Write to VIC register - base already validated */
+        /* Binary Ninja: *(*($s0 + 0xb8) + 0x300) = 0 */
         writel(0, vic_base + 0x300);
         wmb();
-        pr_info("*** STREAM OFF: Register write completed - VIC base %p ***\n", vic_base);
         
-        /* SAFE: Use proper struct member access - PREVENTS MEMORY CORRUPTION */
+        /* Binary Ninja: *($s0 + 0x210) = 0 */
         vic_dev->stream_state = 0;
         
-    } else {
-        /* Stream ON - Binary Ninja: vic_pipo_mdma_enable($s0) FIRST */
-        pr_info("*** STREAM ON: Calling vic_pipo_mdma_enable() FIRST ***\n");
+        /* MCP LOG: Stream OFF completed */
+        pr_info("*** MCP LOG: ispvic_frame_channel_s_stream STREAM OFF COMPLETE - stream_state=0 ***\n");
         
-        /* CRITICAL: Call vic_pipo_mdma_enable() with current lock held to maintain atomicity */
-        /* Note: vic_pipo_mdma_enable() has its own locking, so we temporarily unlock here */
+    } else {
+        /* MCP LOG: Stream ON operation */
+        pr_info("*** MCP LOG: ispvic_frame_channel_s_stream STREAM ON - calling vic_pipo_mdma_enable() ***\n");
+        
+        /* Binary Ninja: vic_pipo_mdma_enable($s0) */
+        /* Note: Must call with lock held for atomicity */
         spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
         vic_pipo_mdma_enable(vic_dev);
         spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
         
-        /* Re-validate register base after vic_pipo_mdma_enable call */
+        /* Re-validate register base */
         vic_base = vic_dev->vic_regs;
-        if (!vic_base || (unsigned long)vic_base < 0x80000000) {
-            pr_err("*** STREAM ON: VIC register base became invalid after MDMA enable - ABORTING ***\n");
+        if (!vic_base) {
+            pr_err("ispvic_frame_channel_s_stream: VIC register base became invalid\n");
+            /* MCP LOG: Register base became invalid after MDMA enable */
+            pr_err("*** MCP LOG: ispvic_frame_channel_s_stream REGISTER BASE BECAME INVALID AFTER MDMA ***\n");
             spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
-            return 0xffffffea;
+            return -EINVAL;
         }
         
-        /* SAFE: Use proper struct member access for buffer count - PREVENTS CRASH */
-        u32 buffer_count = vic_dev->active_buffer_count;
-        stream_ctrl = (buffer_count << 16) | 0x80000020;
-        pr_info("*** STREAM ON: Setting reg 0x300 = 0x%x (buffer_count=%d) ***\n", 
-                stream_ctrl, buffer_count);
+        /* MCP LOG: Stream control register write */
+        u32 stream_ctrl = (vic_dev->active_buffer_count << 16) | 0x80000020;
+        pr_info("*** MCP LOG: ispvic_frame_channel_s_stream STREAM ON - writing 0x%x to reg 0x300 (buffer_count=%d) ***\n", 
+                stream_ctrl, vic_dev->active_buffer_count);
         
-        /* Write to VIC register - base already validated */
+        /* Binary Ninja: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         writel(stream_ctrl, vic_base + 0x300);
         wmb();
-        pr_info("*** STREAM ON: Register write completed - VIC base %p ***\n", vic_base);
         
-        /* SAFE: Use proper struct member access - PREVENTS MEMORY CORRUPTION */
+        /* Binary Ninja: *($s0 + 0x210) = 1 */
         vic_dev->stream_state = 1;
+        
+        /* MCP LOG: Stream ON completed */
+        pr_info("*** MCP LOG: ispvic_frame_channel_s_stream STREAM ON COMPLETE - stream_state=1 ***\n");
     }
     
-    /* SAFE: Use proper struct member access for spinlock unlock - PREVENTS CRASH */
+    /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0x1f4, var_18) */
     spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
     
-    pr_info("*** ispvic_frame_channel_s_stream: RACE CONDITION FIXED ***\n");
+    /* MCP LOG: Function exit */
+    pr_info("*** MCP LOG: ispvic_frame_channel_s_stream EXIT - returning 0 ***\n");
     
     /* Binary Ninja: return 0 */
     return 0;
