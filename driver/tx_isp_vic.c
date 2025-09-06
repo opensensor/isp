@@ -1259,7 +1259,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 }
 
 
-/* VIC sensor operations ioctl - EXACT Binary Ninja implementation */
+/* VIC sensor operations ioctl - FIXED for MIPS memory alignment */
 int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     struct tx_isp_vic_device *vic_dev;
@@ -1268,19 +1268,19 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     
     pr_info("*** vic_sensor_ops_ioctl: cmd=0x%x, arg=%p ***\n", cmd, arg);
     
-    /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
+    /* MIPS ALIGNMENT FIX: Validate sd parameter */
     if (!sd || (unsigned long)sd >= 0xfffff001) {
         pr_err("vic_sensor_ops_ioctl: Invalid sd parameter\n");
         return result;
     }
     
-    /* Binary Ninja: void* $a0 = *(arg1 + 0xd4) */
-    vic_dev = (struct tx_isp_vic_device *)*((void **)((char *)sd + 0xd4));
-    pr_info("*** vic_sensor_ops_ioctl: Retrieved vic_dev from offset 0xd4: %p ***\n", vic_dev);
+    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0xd4 */
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+    pr_info("*** vic_sensor_ops_ioctl: Retrieved vic_dev using SAFE access: %p ***\n", vic_dev);
     
-    /* Binary Ninja: if ($a0 != 0 && $a0 u< 0xfffff001) */
+    /* MIPS ALIGNMENT FIX: Validate vic_dev */
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("*** vic_sensor_ops_ioctl: Invalid vic_dev from offset 0xd4 ***\n");
+        pr_err("*** vic_sensor_ops_ioctl: Invalid vic_dev - using safe struct access ***\n");
         return result;
     }
     
@@ -1605,13 +1605,14 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* VIC PIPO MDMA Enable function - CRITICAL FIX for register base validation */
+/* VIC PIPO MDMA Enable function - FIXED: Register base race condition */
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
-    void __iomem *vic_base;
+    void __iomem *vic_base = NULL;
     u32 width, height, stride;
+    unsigned long flags;
     
-    pr_info("*** VIC PIPO MDMA ENABLE - CRITICAL FIX for register access ***\n");
+    pr_info("*** VIC PIPO MDMA ENABLE - RACE CONDITION FIX ***\n");
     
     /* CRITICAL: Validate vic_dev structure first */
     if (!vic_dev) {
@@ -1619,53 +1620,72 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
     
-    /* CRITICAL FIX: Use ISP core registers instead of vic_dev->vic_regs */
-    /* The crash shows vic_dev->vic_regs is invalid - use ISP core mapping */
-    if (!ourISPdev || !ourISPdev->vic_regs) {
-        pr_err("vic_pipo_mdma_enable: No valid ISP VIC register mapping available\n");
-        return;
+    /* RACE CONDITION FIX: Use lock to ensure atomic access to register base */
+    spin_lock_irqsave(&vic_dev->lock, flags);
+    
+    /* CRITICAL: Validate ISP device and register base atomically */
+    if (!ourISPdev) {
+        pr_err("vic_pipo_mdma_enable: No ISP device available\n");
+        goto unlock_exit;
     }
     
-    vic_base = ourISPdev->vic_regs; /* Use ISP core VIC register mapping */
-    
-    /* SAFE: Validate register base before any writes */
-    if ((unsigned long)vic_base < 0x10000000 || (unsigned long)vic_base > 0x20000000) {
-        pr_err("vic_pipo_mdma_enable: Invalid ISP VIC register base %p\n", vic_base);
-        return;
+    /* ATOMIC: Get register base under lock to prevent race condition */
+    vic_base = vic_dev->vic_regs;
+    if (!vic_base) {
+        vic_base = ourISPdev->vic_regs; /* Fallback to ISP core mapping */
     }
     
-    /* SAFE: Use proper struct member access - Binary Ninja: *(arg1 + 0xdc), *(arg1 + 0xe0) */
+    /* CRITICAL: Final validation before any register writes */
+    if (!vic_base || 
+        (unsigned long)vic_base < 0x10000000 || 
+        (unsigned long)vic_base > 0x20000000) {
+        pr_err("vic_pipo_mdma_enable: Invalid VIC register base %p - ABORTING ALL WRITES\n", vic_base);
+        goto unlock_exit;
+    }
+    
+    /* SAFE: Get dimensions under lock to prevent corruption */
     width = vic_dev->width;   /* Binary Ninja: *(arg1 + 0xdc) */
     height = vic_dev->height; /* Binary Ninja: *(arg1 + 0xe0) */
     
-    pr_info("vic_pipo_mdma_enable: VALIDATED - vic_base=%p, dimensions=%dx%d\n", 
+    pr_info("vic_pipo_mdma_enable: ATOMIC ACCESS - vic_base=%p, dimensions=%dx%d\n", 
             vic_base, width, height);
     
-    /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x308) = 1 */
-    writel(1, vic_base + 0x308);
-    wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
-    
-    /* Binary Ninja EXACT sequence: int32_t $v1_1 = $v1 << 1 */
-    stride = width << 1; /* width * 2 for stride */
-    
-    /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
-    writel((width << 16) | height, vic_base + 0x304);
-    wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
-            (width << 16) | height, width, height);
-    
-    /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
-    writel(stride, vic_base + 0x310);
-    wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
-    
-    /* Binary Ninja EXACT sequence: *(result + 0x314) = $v1_1 */
-    writel(stride, vic_base + 0x314);
-    wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
-    
-    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - REGISTER ACCESS FIXED ***\n");
+    /* CRITICAL: All register writes ONLY if base is validated */
+    if (vic_base && 
+        (unsigned long)vic_base >= 0x10000000 && 
+        (unsigned long)vic_base <= 0x20000000) {
+        
+        /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x308) = 1 */
+        writel(1, vic_base + 0x308);
+        wmb();
+        pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
+        
+        /* Binary Ninja EXACT sequence: int32_t $v1_1 = $v1 << 1 */
+        stride = width << 1; /* width * 2 for stride */
+        
+        /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
+        writel((width << 16) | height, vic_base + 0x304);
+        wmb();
+        pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
+                (width << 16) | height, width, height);
+        
+        /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
+        writel(stride, vic_base + 0x310);
+        wmb();
+        pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
+        
+        /* Binary Ninja EXACT sequence: *(result + 0x314) = $v1_1 */
+        writel(stride, vic_base + 0x314);
+        wmb();
+        pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
+        
+        pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - RACE CONDITION FIXED ***\n");
+    } else {
+        pr_err("vic_pipo_mdma_enable: DOUBLE-CHECK FAILED - vic_base=%p is invalid\n", vic_base);
+    }
+
+unlock_exit:
+    spin_unlock_irqrestore(&vic_dev->lock, flags);
 }
 
 /* ISPVIC Frame Channel S_Stream - FIXED to use tx_isp_init_vic_registers methodology */
@@ -2111,7 +2131,7 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
 static int ispvic_frame_channel_clearbuf(void);
 
-/* ISPVIC Frame Channel QBUF - EXACT Binary Ninja implementation WITH BUFFER ADDRESS FIX */
+/* ISPVIC Frame Channel QBUF - FIXED for MIPS memory alignment */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
     struct tx_isp_vic_device *vic_dev = NULL; /* $s0 */
@@ -2122,13 +2142,15 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     int buffer_index;
     unsigned long flags;
     
-    pr_info("*** ispvic_frame_channel_qbuf: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** ispvic_frame_channel_qbuf: FIXED for MIPS memory alignment ***\n");
     pr_info("ispvic_frame_channel_qbuf: arg1=%p, arg2=%p\n", arg1, arg2);
     
-    /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
+    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0xd4 */
     if (arg1 != NULL && (unsigned long)arg1 < 0xfffff001) {
-        vic_dev = *(struct tx_isp_vic_device **)((char *)arg1 + 0xd4);
-        pr_info("ispvic_frame_channel_qbuf: vic_dev retrieved from offset 0xd4: %p\n", vic_dev);
+        /* Cast arg1 to subdev and use safe access method */
+        struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
+        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+        pr_info("ispvic_frame_channel_qbuf: vic_dev retrieved using SAFE access: %p\n", vic_dev);
     }
     
     if (!vic_dev) {
@@ -2154,17 +2176,19 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         }
     }
     
-    /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
-    spin_lock_irqsave((spinlock_t *)((char *)vic_dev + 0x1f4), flags);
+    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset arithmetic */
+    spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
     
-    /* Binary Ninja: int32_t** $v0_2 = *($s0 + 0x1f8) */
-    buffer_ptr = *(void ***)((char *)vic_dev + 0x1f8);
+    /* SAFE: Use proper struct member access */
+    buffer_ptr = vic_dev->buffer_queue_tail;
     
-    /* Binary Ninja: *($s0 + 0x1f8) = arg2 */
-    *(void **)((char *)vic_dev + 0x1f8) = arg2;
+    /* SAFE: Use proper struct member access */
+    vic_dev->buffer_queue_tail = (void **)arg2;
     
-    /* Binary Ninja: *arg2 = $s0 + 0x1f4 */
-    *(void **)arg2 = (char *)vic_dev + 0x1f4;
+    /* SAFE: Set up buffer linkage safely */
+    if (arg2) {
+        *(void **)arg2 = &vic_dev->buffer_mgmt_lock;
+    }
     
     /* Binary Ninja: arg2[1] = $v0_2 */
     *((void **)((char *)arg2 + sizeof(void *))) = buffer_ptr;
@@ -2174,23 +2198,25 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         *buffer_ptr = arg2;
     }
     
-    /* Binary Ninja: Check if bank no free or qbuffer null */
-    void **free_list = (void **)((char *)vic_dev + 0x1fc);
-    void **queue_list = (void **)((char *)vic_dev + 0x1f4);
-    
-    if (free_list == *(void ***)((char *)vic_dev + 0x1fc)) {
+    /* CRITICAL FIX: Use safe buffer management with proper struct access */
+    if (list_empty(&vic_dev->free_head)) {
         pr_info("ispvic_frame_channel_qbuf: bank no free\n");
         goto unlock_exit;
     }
     
-    if (queue_list == *(void ***)((char *)vic_dev + 0x1f4)) {
+    if (list_empty(&vic_dev->queue_head)) {
         pr_info("ispvic_frame_channel_qbuf: qbuffer null\n");
         goto unlock_exit;
     }
     
-    /* Binary Ninja: Pop buffer from FIFO and get buffer info */
-    /* This is simplified - in real implementation would call pop_buffer_fifo */
-    new_buffer = *(void ***)((char *)vic_dev + 0x1fc); /* Get first free buffer */
+    /* SAFE: Get buffer from free list using proper list operations */
+    if (!list_empty(&vic_dev->free_head)) {
+        struct list_head *first_free = vic_dev->free_head.next;
+        new_buffer = (void **)first_free;
+        list_del(first_free);
+    } else {
+        new_buffer = NULL;
+    }
     
     if (new_buffer && buffer_addr) {
         /* Binary Ninja: int32_t $v1_1 = $v0_5[4] */
@@ -2208,27 +2234,15 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         pr_info("*** CRITICAL: VIC BUFFER WRITE - reg[0x%x] = 0x%lx (buffer[%d] addr) ***\n", 
                 reg_offset, (unsigned long)buffer_addr, buffer_index);
         
-        /* Binary Ninja: Move buffer from free list to active list */
-        /* void** $v1_5 = *($s0 + 0x208) */
-        list_head = *(void ***)((char *)vic_dev + 0x208);
-        
-        /* *($s0 + 0x208) = $v0_5 */
-        *(void **)((char *)vic_dev + 0x208) = new_buffer;
-        
-        /* *$v0_5 = $s0 + 0x204 */
-        *new_buffer = (char *)vic_dev + 0x204;
-        
-        /* $v0_5[1] = $v1_5 */
-        *((void **)((char *)new_buffer + sizeof(void *))) = list_head;
-        
-        /* *$v1_5 = $v0_5 */
-        if (list_head) {
-            *list_head = new_buffer;
+        /* CRITICAL FIX: Use safe list operations instead of dangerous pointer arithmetic */
+        if (new_buffer) {
+            /* Move buffer to active queue using safe list operations */
+            list_add_tail((struct list_head *)new_buffer, &vic_dev->queue_head);
+            
+            /* SAFE: Increment buffer count using proper struct member */
+            vic_dev->active_buffer_count++;
+            vic_dev->buffer_count = vic_dev->active_buffer_count;
         }
-        
-        /* Binary Ninja: *($s0 + 0x218) += 1 */
-        (*(uint32_t *)((char *)vic_dev + 0x218))++;
-        vic_dev->buffer_count = *(uint32_t *)((char *)vic_dev + 0x218);
         
         pr_info("ispvic_frame_channel_qbuf: Buffer programmed to VIC, frame_count=%d\n", 
                 vic_dev->buffer_count);
@@ -2238,8 +2252,8 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     }
     
 unlock_exit:
-    /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0x1f4, $a1_4) */
-    spin_unlock_irqrestore((spinlock_t *)((char *)vic_dev + 0x1f4), flags);
+    /* CRITICAL FIX: Use safe struct member access for spinlock */
+    spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
     
     pr_info("*** ispvic_frame_channel_qbuf: EXACT Binary Ninja implementation complete ***\n");
     
@@ -2254,7 +2268,7 @@ static int ispvic_frame_channel_clearbuf(void)
     return 0;
 }
 
-/* tx_isp_subdev_pipo - EXACT Binary Ninja implementation (1:1 mapping) */
+/* tx_isp_subdev_pipo - FIXED for MIPS memory alignment */
 int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
@@ -2264,14 +2278,14 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
     void **list_head;
     uint32_t offset_calc;
     
-    pr_info("*** tx_isp_subdev_pipo: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** tx_isp_subdev_pipo: FIXED for MIPS memory alignment ***\n");
     pr_info("tx_isp_subdev_pipo: entry - sd=%p, arg=%p\n", sd, arg);
     
-    /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
+    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0xd4 */
     if (sd != NULL && (unsigned long)sd < 0xfffff001) {
-        /* Binary Ninja: $s0 = *(arg1 + 0xd4) */
+        /* Use safe subdev data access method */
         vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-        pr_info("tx_isp_subdev_pipo: vic_dev retrieved from sd->priv = %p\n", vic_dev);
+        pr_info("tx_isp_subdev_pipo: vic_dev retrieved using SAFE access: %p\n", vic_dev);
     }
     
     if (!vic_dev) {
@@ -2279,41 +2293,31 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         return 0;  /* Binary Ninja returns 0 even on error */
     }
     
-    /* Binary Ninja: *($s0 + 0x20c) = 1 */
-    /* This sets streaming flag at offset 0x20c in our structure */
-    *(uint32_t *)((char *)vic_dev + 0x20c) = 1;
-    pr_info("tx_isp_subdev_pipo: set offset 0x20c = 1 (streaming init)\n");
+    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0x20c */
+    vic_dev->pipo_enabled = 1;
+    pr_info("tx_isp_subdev_pipo: set pipo_enabled = 1 (streaming init)\n");
     
     /* Binary Ninja: raw_pipe = arg2 (store globally) */
     /* Note: In Binary Ninja this is stored in a global variable */
     
     /* Binary Ninja: if (arg2 == 0) */
     if (arg == NULL) {
-        /* Binary Ninja: *($s0 + 0x214) = 0 */
-        *(uint32_t *)((char *)vic_dev + 0x214) = 0;
-        pr_info("tx_isp_subdev_pipo: arg is NULL - set offset 0x214 = 0\n");
+        /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0x214 */
+        vic_dev->processing = 0;
+        pr_info("tx_isp_subdev_pipo: arg is NULL - set processing = 0\n");
     } else {
         pr_info("tx_isp_subdev_pipo: arg is not NULL - initializing pipe structures\n");
         
-        /* Binary Ninja: Initialize linked list heads */
-        /* *($s0 + 0x204) = $s0 + 0x204 */
-        *(void **)((char *)vic_dev + 0x204) = (char *)vic_dev + 0x204;
-        /* *($s0 + 0x208) = $s0 + 0x204 */
-        *(void **)((char *)vic_dev + 0x208) = (char *)vic_dev + 0x204;
-        /* *($s0 + 0x1f4) = $s0 + 0x1f4 */
-        *(void **)((char *)vic_dev + 0x1f4) = (char *)vic_dev + 0x1f4;
-        /* *($s0 + 0x1f8) = $s0 + 0x1f4 */
-        *(void **)((char *)vic_dev + 0x1f8) = (char *)vic_dev + 0x1f4;
-        /* *($s0 + 0x1fc) = $s0 + 0x1fc */
-        *(void **)((char *)vic_dev + 0x1fc) = (char *)vic_dev + 0x1fc;
-        /* *($s0 + 0x200) = $s0 + 0x1fc */
-        *(void **)((char *)vic_dev + 0x200) = (char *)vic_dev + 0x1fc;
+        /* CRITICAL FIX: Use proper Linux list initialization instead of dangerous offset arithmetic */
+        INIT_LIST_HEAD(&vic_dev->queue_head);
+        INIT_LIST_HEAD(&vic_dev->done_head);
+        INIT_LIST_HEAD(&vic_dev->free_head);
         
-        pr_info("tx_isp_subdev_pipo: initialized linked list heads\n");
+        pr_info("tx_isp_subdev_pipo: initialized linked list heads safely\n");
         
-        /* Binary Ninja: private_spin_lock_init() - initialize spinlock */
-        spin_lock_init((spinlock_t *)((char *)vic_dev + 0x1f4));
-        pr_info("tx_isp_subdev_pipo: initialized spinlock at 0x1f4\n");
+        /* CRITICAL FIX: Use safe struct member access for spinlock initialization */
+        spin_lock_init(&vic_dev->buffer_mgmt_lock);
+        pr_info("tx_isp_subdev_pipo: initialized spinlock safely\n");
         
         /* Binary Ninja: Set up function pointers in raw_pipe structure */
         /* *raw_pipe = ispvic_frame_channel_qbuf */
@@ -2329,49 +2333,30 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
                 ispvic_frame_channel_qbuf, ispvic_frame_channel_clearbuf, 
                 ispvic_frame_channel_s_stream, sd);
         
-        /* Binary Ninja: Initialize buffer array - loop with i from 0 to 4 */
-        /* void** $v0_3 = $s0 + 0x168 */
-        buffer_ptr = (void **)((char *)vic_dev + 0x168);
-        
+        /* CRITICAL FIX: Initialize buffer array safely without dangerous pointer arithmetic */
         for (i = 0; i < 5; i++) {
-            /* Binary Ninja: $v0_3[4] = i */
-            buffer_ptr[4] = (void *)(unsigned long)i;
+            /* SAFE: Initialize buffer index using proper array access */
+            vic_dev->buffer_index[i] = i;
             
-            /* Binary Ninja: void*** $a0_1 = *($s0 + 0x200) */
-            list_head = *(void ***)((char *)vic_dev + 0x200);
-            
-            /* Binary Ninja: *($s0 + 0x200) = $v0_3 */
-            *(void **)((char *)vic_dev + 0x200) = buffer_ptr;
-            
-            /* Binary Ninja: $v0_3[1] = $a0_1 */
-            buffer_ptr[1] = list_head;
-            
-            /* Binary Ninja: *$v0_3 = $s0 + 0x1fc */
-            *buffer_ptr = (char *)vic_dev + 0x1fc;
-            
-            /* Binary Ninja: *$a0_1 = $v0_3 */
-            if (list_head) {
-                *list_head = buffer_ptr;
-            }
-            
-            /* Binary Ninja: int32_t $a1 = (i + 0xc6) << 2 */
+            /* SAFE: Clear VIC register using validated register access */
             offset_calc = (i + 0xc6) << 2;
             
-            /* Binary Ninja: *(*($s0 + 0xb8) + $a1) = 0 */
-            /* This clears a register at calculated offset */
-            if (vic_dev->vic_regs) {
-                *(uint32_t *)((char *)vic_dev->vic_regs + offset_calc) = 0;
+            /* SAFE: Use validated VIC register base with bounds checking */
+            if (vic_dev->vic_regs && 
+                (unsigned long)vic_dev->vic_regs >= 0x10000000 && 
+                (unsigned long)vic_dev->vic_regs < 0x20000000 &&
+                offset_calc < 0x1000) {
+                writel(0, vic_dev->vic_regs + offset_calc);
+            } else {
+                pr_warn("tx_isp_subdev_pipo: Skipping unsafe register write at offset 0x%x\n", offset_calc);
             }
             
-            /* Binary Ninja: $v0_3 = &$v0_3[7] - move to next buffer structure */
-            buffer_ptr = &buffer_ptr[7];
-            
-            pr_info("tx_isp_subdev_pipo: initialized buffer %d, offset_calc=0x%x\n", i, offset_calc);
+            pr_info("tx_isp_subdev_pipo: initialized buffer %d safely, offset_calc=0x%x\n", i, offset_calc);
         }
         
-        /* Binary Ninja: *($s0 + 0x214) = 1 */
-        *(uint32_t *)((char *)vic_dev + 0x214) = 1;
-        pr_info("tx_isp_subdev_pipo: set offset 0x214 = 1 (pipe enabled)\n");
+        /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0x214 */
+        vic_dev->processing = 1;
+        pr_info("tx_isp_subdev_pipo: set processing = 1 (pipe enabled)\n");
     }
     
     pr_info("tx_isp_subdev_pipo: completed successfully, returning 0\n");
