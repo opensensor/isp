@@ -248,35 +248,6 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     
     /* SAFE: Simple initialization without unsafe hardware calls */
     pr_info("Basic subdev initialization complete\n");
-//
-//    /* SAFE: Configure device-specific settings and register subdev */
-//    if (!strcmp(pdev->name, "tx-isp-vic")) {
-//        if (dev->vic_dev) {
-//            dev->vic_dev->sd = sd;
-//        }
-//        dev->subdevs[0] = sd;
-//        pr_info("*** SUCCESS: VIC SUBDEV REGISTERED AT INDEX 0 ***\n");
-//
-//    } else if (!strcmp(pdev->name, "tx-isp-csi")) {
-//        if (dev->csi_dev) {
-//            dev->csi_dev->sd = sd;
-//        }
-//        dev->subdevs[1] = sd;
-//        pr_info("*** SUCCESS: CSI SUBDEV REGISTERED AT INDEX 1 ***\n");
-//
-//    } else if (!strcmp(pdev->name, "tx-isp-vin")) {
-//        dev->subdevs[2] = sd;
-//        pr_info("*** SUCCESS: VIN SUBDEV REGISTERED AT INDEX 2 ***\n");
-//
-//    } else if (!strcmp(pdev->name, "tx-isp-fs")) {
-//        dev->subdevs[3] = sd;
-//        pr_info("*** SUCCESS: FS SUBDEV REGISTERED AT INDEX 3 ***\n");
-//
-//    } else {
-//        dev->sensor_sd = sd;
-//        dev->subdevs[4] = sd;
-//        pr_info("*** SUCCESS: SENSOR SUBDEV REGISTERED AT INDEX 4 ***\n");
-//    }
 
     /* SAFE: Set platform data using standard kernel API */
     platform_set_drvdata(pdev, dev);
