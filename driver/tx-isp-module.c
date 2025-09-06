@@ -531,16 +531,14 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     system_reg_write(0xb04c, 0x103);
     system_reg_write(0xb050, 0x3);
     
-    /* CRITICAL: These are the varying registers that differ between reference and our driver! */
-    /* Updated to match your actual register trace */
-    /* Reference writes: 0x341b, 0x46b0, 0x1813, [skip], 0x10a */
-    /* Your trace shows: 0x3422, 0x4657, 0x18ca, 0x11b */
+    /* CRITICAL: These are the varying registers that must match the reference driver exactly! */
+    /* Using the EXACT reference values from the trace provided */
     pr_info("*** WRITING CRITICAL VARYING REGISTERS - USING EXACT REFERENCE VALUES ***\n");
-    system_reg_write(0xb07c, 0x341b);     /* Reference: 0x341b, Your trace: 0x3422 */
-    system_reg_write(0xb080, 0x46b0);     /* Reference: 0x46b0, Your trace: 0x4657 */
-    system_reg_write(0xb084, 0x1813);     /* Reference: 0x1813, Your trace: 0x18ca */
+    system_reg_write(0xb07c, 0x341b);     /* Reference: 0x341b (EXACT match required) */
+    system_reg_write(0xb080, 0x46b0);     /* Reference: 0x46b0 (EXACT match required) */
+    system_reg_write(0xb084, 0x1813);     /* Reference: 0x1813 (EXACT match required) */
     /* Skip 0xb088 - reference doesn't write here */
-    system_reg_write(0xb08c, 0x10a);      /* Reference: 0x10a, Your trace: 0x11b */
+    system_reg_write(0xb08c, 0x10a);      /* Reference: 0x10a (EXACT match required) */
     
     pr_info("*** ISP CORE CONTROL REGISTERS WRITTEN - NOW MATCHES REFERENCE DRIVER ***\n");
     
