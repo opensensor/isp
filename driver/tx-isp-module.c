@@ -621,51 +621,6 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     return 0;
 }
 
-/* tx_isp_hardware_init - Main hardware initialization entry point */
-static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev)
-{
-    struct tx_isp_sensor_attribute *sensor_attr = NULL;
-    int ret;
-    
-    if (!isp_dev) {
-        return -EINVAL;
-    }
-    
-    pr_info("*** tx_isp_hardware_init: STARTING COMPLETE HARDWARE INITIALIZATION ***\n");
-    
-    /* Step 2: Get sensor attributes if available */
-    if (isp_dev->sensor && isp_dev->sensor->video.attr) {
-        sensor_attr = isp_dev->sensor->video.attr;
-        pr_info("Using sensor %s for hardware init\n", sensor_attr->name);
-    } else {
-        /* Create dummy sensor attributes for initialization */
-        static struct tx_isp_sensor_attribute dummy_attr = {
-            .name = "dummy",
-            .chip_id = 0x2053,
-            .total_width = 1920,
-            .total_height = 1080,
-            .dbus_type = 2,  /* MIPI interface */
-            .integration_time = 1000,
-            .max_again = 0x40000,
-        };
-        sensor_attr = &dummy_attr;
-        pr_info("Using dummy sensor attributes for hardware init\n");
-    }
-    
-    /* Step 3: Call tisp_init - THE MISSING FUNCTION WITH ALL THE REGISTER WRITES! */
-    pr_info("*** CALLING tisp_init - THE CRITICAL MISSING HARDWARE INITIALIZATION! ***\n");
-    ret = tisp_init(sensor_attr, isp_dev);
-    if (ret) {
-        pr_err("tisp_init failed: %d\n", ret);
-        return ret;
-    }
-    
-    pr_info("*** tx_isp_hardware_init: COMPLETE - HARDWARE NOW FULLY INITIALIZED ***\n");
-    pr_info("*** ALL REGISTER WRITES FROM REFERENCE DRIVER NOW IMPLEMENTED ***\n");
-    
-    return 0;
-}
-
 /* CSI function forward declarations */
 static int csi_device_probe(struct tx_isp_dev *isp_dev);
 static int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
@@ -4143,15 +4098,6 @@ static int tx_isp_init(void)
     ret = tx_isp_init_hardware_interrupts(ourISPdev);
     if (ret) {
         pr_warn("Hardware interrupts not available: %d\n", ret);
-    }
-
-    /* *** CRITICAL: INITIALIZE ISP HARDWARE REGISTERS (MISSING FROM OUR DRIVER) *** */
-    pr_info("*** INITIALIZING ISP HARDWARE REGISTERS - THIS WILL GENERATE REGISTER ACTIVITY ***\n");
-    ret = tx_isp_hardware_init(ourISPdev);
-    if (ret) {
-        pr_warn("ISP hardware initialization failed: %d, continuing anyway\n", ret);
-    } else {
-        pr_info("*** ISP HARDWARE REGISTERS INITIALIZED - SHOULD NOW MATCH REFERENCE DRIVER ***\n");
     }
 
     /* Create ISP M0 tuning device node */
