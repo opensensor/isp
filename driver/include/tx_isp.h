@@ -215,6 +215,7 @@ struct tx_isp_dev {
     struct i2c_adapter *i2c_adapter;
     struct tx_isp_subdev *sensor_sd;
     struct tx_isp_sensor *sensor;
+    struct tx_isp_sensor_attribute *sensor_attr;  /* Sensor attributes for Binary Ninja compatibility */
 
     /* IRQs */
     int isp_irq;
