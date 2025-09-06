@@ -1738,11 +1738,11 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             pr_info("*** STREAMING S_STREAM: Ensuring ISP clocks via Clock Framework ***\n");
             /* Verify clocks are still enabled before register access */
             struct clk *isp_clk = clk_get(NULL, "isp");
-            if (!IS_ERR(isp_clk) && __clk_is_enabled(isp_clk)) {
+            if (!IS_ERR(isp_clk) && clk_is_enabled(isp_clk)) {
                 pr_info("S_STREAM: ISP clock confirmed enabled\n");
             }
             struct clk *cgu_isp_clk = clk_get(NULL, "cgu_isp");
-            if (!IS_ERR(cgu_isp_clk) && __clk_is_enabled(cgu_isp_clk)) {
+            if (!IS_ERR(cgu_isp_clk) && clk_is_enabled(cgu_isp_clk)) {
                 pr_info("S_STREAM: CGU_ISP clock confirmed enabled\n");
             }
             
