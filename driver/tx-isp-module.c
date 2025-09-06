@@ -5672,7 +5672,7 @@ static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
                     
                     /* MIPS SAFE: Only increment frame count - no complex operations */
                     /* Use atomic operation to prevent alignment issues */
-                    if ((uintptr_t)&vic_dev->frame_count & 0x3) == 0) {
+                    if (((uintptr_t)&vic_dev->frame_count & 0x3) == 0) {
                         vic_dev->frame_count++;
                         pr_info("*** QBUF: Frame count incremented safely (count=%u) ***\n", vic_dev->frame_count);
                     } else {
