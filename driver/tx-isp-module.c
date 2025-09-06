@@ -5021,27 +5021,54 @@ static void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
     pr_info("*** tx_vic_enable_irq: MIPS-SAFE completion - no callback crash risk ***\n");
 }
 
-/* tx_vic_disable_irq - Binary Ninja implementation */
+/* tx_vic_disable_irq - MIPS-SAFE implementation */
 static void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
     
-    if (!vic_dev) {
-        pr_err("tx_vic_disable_irq: Invalid VIC device\n");
+    pr_info("*** tx_vic_disable_irq: MIPS-SAFE implementation ***\n");
+    
+    /* MIPS ALIGNMENT CHECK: Validate vic_dev pointer alignment */
+    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p not 4-byte aligned ***\n", vic_dev);
         return;
     }
     
-    pr_info("tx_vic_disable_irq: Disabling VIC interrupts\n");
+    /* MIPS SAFE: Bounds validation */
+    if ((uintptr_t)vic_dev >= 0xfffff001) {
+        pr_err("*** MIPS ERROR: vic_dev pointer 0x%p out of valid range ***\n", vic_dev);
+        return;
+    }
     
-    /* Binary Ninja: spinlock irqsave at offset +0x130 */
+    /* MIPS SAFE: Check for corrupted state before accessing */
+    if (vic_dev->state > 10) {
+        pr_err("*** MIPS ERROR: VIC device state corrupted (%d), cannot safely disable interrupts ***\n", vic_dev->state);
+        pr_err("*** MIPS SAFE: Skipping dangerous spinlock access on corrupted device ***\n");
+        return;
+    }
+    
+    /* MIPS SAFE: Validate lock structure alignment */
+    if (((uintptr_t)&vic_dev->lock & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->lock not aligned ***\n");
+        return;
+    }
+    
+    pr_info("*** MIPS-SAFE: VIC device state=%d, proceeding with safe disable ***\n", vic_dev->state);
+    
+    /* MIPS SAFE: Use proper struct member access with validation */
     spin_lock_irqsave(&vic_dev->lock, flags);
     
-    /* Binary Ninja: Clear interrupt enable flag at offset +0x13c */
-    vic_dev->state = 0;  /* Mark as interrupt-disabled state */
+    /* MIPS SAFE: Set interrupt disable state using safe bounds checking */
+    if (vic_dev->state >= 0 && vic_dev->state <= 10) {
+        vic_dev->state = 0;  /* Mark as interrupt-disabled state */
+        pr_info("*** MIPS-SAFE: VIC interrupt state set to disabled (0) ***\n");
+    } else {
+        pr_err("*** MIPS ERROR: Cannot set state on corrupted device (state=%d) ***\n", vic_dev->state);
+    }
     
     spin_unlock_irqrestore(&vic_dev->lock, flags);
     
-    pr_info("tx_vic_disable_irq: VIC interrupts disabled\n");
+    pr_info("*** tx_vic_disable_irq: MIPS-SAFE completion ***\n");
 }
 
 
