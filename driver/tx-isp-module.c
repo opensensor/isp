@@ -6188,52 +6188,6 @@ static void vic_frame_work_function(struct work_struct *work)
     }
 }
 
-
-/* sensor_init - Binary Ninja exact implementation */
-int sensor_init(struct tx_isp_dev *isp_dev)
-{
-    /* Binary Ninja decompilation shows this function sets up sensor control structure */
-    /* From Binary Ninja: void* $v0 = *(g_ispcore + 0x120) */
-    /* This function populates sensor control structures and function pointers */
-    
-    if (!isp_dev || !isp_dev->sensor) {
-        pr_info("sensor_init: No sensor available for initialization\n");
-        return 0; /* Not an error - sensor may not be ready yet */
-    }
-    
-    pr_info("sensor_init: Initializing sensor control structures\n");
-    
-    /* From Binary Ninja decompilation - this function sets up sensor function pointers */
-    /* These would be populated from the actual sensor attributes */
-    
-    struct tx_isp_sensor *sensor = isp_dev->sensor;
-    if (sensor && sensor->video.attr) {
-        /* Binary Ninja shows this function copies sensor attributes and sets up function pointers */
-        /* *(arg1 + 0x20) = *($v0 + 0x94) - chip_id */
-        /* *(arg1 + 0x24) = *($v0 + 0x98) - dimensions */
-        /* ... other sensor attributes */
-        
-        pr_info("sensor_init: Setting up sensor control for %s\n", sensor->info.name);
-        pr_info("sensor_init: Sensor chip_id=0x%x, dimensions=%dx%d\n",
-                sensor->video.attr->chip_id, 
-                sensor->video.attr->total_width, 
-                sensor->video.attr->total_height);
-        
-        /* Binary Ninja sets up function pointers for sensor operations */
-        /* *(arg1 + 0x5c) = sensor_hw_reset_disable */
-        /* *(arg1 + 0x60) = sensor_hw_reset_enable */
-        /* *(arg1 + 0x64) = sensor_alloc_analog_gain */
-        /* ... etc */
-        
-        pr_info("sensor_init: Sensor control structure initialized\n");
-    } else {
-        pr_warn("sensor_init: Sensor or sensor attributes not available\n");
-    }
-    
-    pr_info("sensor_init: Reference driver sensor initialization complete\n");
-    return 0; /* Binary Ninja shows this typically returns success */
-}
-
 /* Sensor subdev operation implementations */
 static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable)
 {
