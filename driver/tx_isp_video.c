@@ -107,16 +107,32 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev)
         
         /* If we don't have a subdev yet, try alternative discovery methods */
         if (!subdev) {
-            /* Check if subdev_data contains a subdevice pointer at known offset */
-            /* This is a safer approach than hardcoded offsets - check for valid pointer patterns */
-            struct tx_isp_subdev **potential_subdev = (struct tx_isp_subdev **)subdev_data;
-            if (potential_subdev && *potential_subdev) {
-                /* Basic validation - check if this looks like a valid subdev */
-                struct tx_isp_subdev *candidate = *potential_subdev;
-                if ((uintptr_t)candidate > 0x80000000 && (uintptr_t)candidate < 0xfffff000) {
-                    subdev = candidate;
-                    mcp_log_info("tx_isp_video_link_stream: Found subdev %p via pointer dereferencing", subdev);
+            /* MIPS ALIGNMENT FIX: Ensure proper 4-byte alignment before dereferencing */
+            uintptr_t subdev_addr = (uintptr_t)subdev_data;
+            
+            /* Check if subdev_data is properly aligned for MIPS (4-byte boundary) */
+            if ((subdev_addr & 0x3) == 0) {  /* Must be 4-byte aligned */
+                /* Safe to dereference as pointer */
+                struct tx_isp_subdev **potential_subdev = (struct tx_isp_subdev **)subdev_data;
+                if (potential_subdev) {
+                    /* Use safe memory access - check alignment before dereferencing */
+                    uintptr_t target_addr = (uintptr_t)potential_subdev;
+                    if ((target_addr & 0x3) == 0) {  /* Ensure target is also aligned */
+                        struct tx_isp_subdev *candidate = *potential_subdev;
+                        /* Validate candidate pointer alignment and range */
+                        uintptr_t candidate_addr = (uintptr_t)candidate;
+                        if (candidate && 
+                            (candidate_addr & 0x3) == 0 &&  /* Must be 4-byte aligned */
+                            candidate_addr > 0x80000000 && 
+                            candidate_addr < 0xfffff000) {
+                            subdev = candidate;
+                            mcp_log_info("tx_isp_video_link_stream: Found aligned subdev %p via safe dereferencing", subdev);
+                        }
+                    }
                 }
+            } else {
+                mcp_log_info("tx_isp_video_link_stream: Skipping unaligned subdev_data %p (addr=0x%lx)", 
+                             subdev_data, subdev_addr);
             }
         }
         
@@ -160,11 +176,24 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev)
                     }
                     
                     if (!prev_subdev) {
-                        struct tx_isp_subdev **potential_prev = (struct tx_isp_subdev **)prev_subdev_data;
-                        if (potential_prev && *potential_prev) {
-                            struct tx_isp_subdev *candidate = *potential_prev;
-                            if ((uintptr_t)candidate > 0x80000000 && (uintptr_t)candidate < 0xfffff000) {
-                                prev_subdev = candidate;
+                        /* MIPS ALIGNMENT FIX: Same alignment checks for cleanup code */
+                        uintptr_t prev_addr = (uintptr_t)prev_subdev_data;
+                        
+                        /* Check 4-byte alignment before dereferencing */
+                        if ((prev_addr & 0x3) == 0) {  /* Must be 4-byte aligned */
+                            struct tx_isp_subdev **potential_prev = (struct tx_isp_subdev **)prev_subdev_data;
+                            if (potential_prev) {
+                                uintptr_t prev_target_addr = (uintptr_t)potential_prev;
+                                if ((prev_target_addr & 0x3) == 0) {  /* Ensure target is also aligned */
+                                    struct tx_isp_subdev *candidate = *potential_prev;
+                                    uintptr_t candidate_addr = (uintptr_t)candidate;
+                                    if (candidate && 
+                                        (candidate_addr & 0x3) == 0 &&  /* Must be 4-byte aligned */
+                                        candidate_addr > 0x80000000 && 
+                                        candidate_addr < 0xfffff000) {
+                                        prev_subdev = candidate;
+                                    }
+                                }
                             }
                         }
                     }
