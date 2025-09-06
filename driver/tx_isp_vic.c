@@ -1773,11 +1773,10 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         }
     }
     
-    /* CRITICAL: Final validation before ANY register writes */
-    /* Accept both physical (0x10000000-0x20000000) and kernel virtual (0x80000000+) addresses */
+    /* CRITICAL: Accept valid MIPS kernel virtual addresses */
+    /* MIPS KSEG0: 0x80000000-0x9fffffff (cached), KSEG1: 0xa0000000-0xbfffffff (uncached), KSEG2: 0xc0000000+ (mapped) */
     if (!vic_base || 
-        !((((unsigned long)vic_base >= 0x10000000 && (unsigned long)vic_base <= 0x20000000) ||
-           ((unsigned long)vic_base >= 0x80000000 && (unsigned long)vic_base <= 0xffffffff)))) {
+        !((unsigned long)vic_base >= 0x80000000)) {
         pr_err("ispvic_frame_channel_s_stream: Invalid VIC register base %p - ABORTING ALL WRITES\n", vic_base);
         spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
         return 0xffffffea; /* Return error instead of proceeding */
@@ -1789,16 +1788,10 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         /* Stream OFF - Binary Ninja: *(*($s0 + 0xb8) + 0x300) = 0 */
         pr_info("*** STREAM OFF: Setting reg 0x300 = 0 ***\n");
         
-        /* CRITICAL: Only write to registers if base is validated */
-        if (vic_base && 
-            (unsigned long)vic_base >= 0x10000000 && 
-            (unsigned long)vic_base <= 0x20000000) {
-            writel(0, vic_base + 0x300);
-            wmb();
-            pr_info("*** STREAM OFF: Register write completed safely ***\n");
-        } else {
-            pr_err("*** STREAM OFF: SKIPPING register write - invalid base %p ***\n", vic_base);
-        }
+        /* Write to VIC register - base already validated */
+        writel(0, vic_base + 0x300);
+        wmb();
+        pr_info("*** STREAM OFF: Register write completed - VIC base %p ***\n", vic_base);
         
         /* SAFE: Use proper struct member access - PREVENTS MEMORY CORRUPTION */
         vic_dev->stream_state = 0;
@@ -1815,9 +1808,7 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         
         /* Re-validate register base after vic_pipo_mdma_enable call */
         vic_base = vic_dev->vic_regs;
-        if (!vic_base || 
-            (unsigned long)vic_base < 0x10000000 || 
-            (unsigned long)vic_base > 0x20000000) {
+        if (!vic_base || (unsigned long)vic_base < 0x80000000) {
             pr_err("*** STREAM ON: VIC register base became invalid after MDMA enable - ABORTING ***\n");
             spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
             return 0xffffffea;
@@ -1829,16 +1820,10 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         pr_info("*** STREAM ON: Setting reg 0x300 = 0x%x (buffer_count=%d) ***\n", 
                 stream_ctrl, buffer_count);
         
-        /* CRITICAL: Only write to registers if base is still validated */
-        if (vic_base && 
-            (unsigned long)vic_base >= 0x10000000 && 
-            (unsigned long)vic_base <= 0x20000000) {
-            writel(stream_ctrl, vic_base + 0x300);
-            wmb();
-            pr_info("*** STREAM ON: Register write completed safely ***\n");
-        } else {
-            pr_err("*** STREAM ON: SKIPPING register write - invalid base %p ***\n", vic_base);
-        }
+        /* Write to VIC register - base already validated */
+        writel(stream_ctrl, vic_base + 0x300);
+        wmb();
+        pr_info("*** STREAM ON: Register write completed - VIC base %p ***\n", vic_base);
         
         /* SAFE: Use proper struct member access - PREVENTS MEMORY CORRUPTION */
         vic_dev->stream_state = 1;
