@@ -798,13 +798,41 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     }
 
     tuning = dev->tuning_data;
+    
+    /* CRITICAL: Validate tuning pointer is not corrupted - prevent BadVA crash */
     if (!tuning) {
         pr_err("apical_isp_core_ops_g_ctrl: NULL tuning data for cmd=0x%x\n", ctrl->cmd);
         return -ENODEV;
     }
+    
+    /* CRITICAL: Validate tuning pointer is in valid kernel address space */
+    /* MIPS KSEG0: 0x80000000-0x9fffffff (cached), KSEG1: 0xa0000000-0xbfffffff (uncached), KSEG2: 0xc0000000+ (mapped) */
+    if ((unsigned long)tuning < 0x80000000) {
+        pr_err("CRITICAL: Corrupted tuning pointer detected: %p - PREVENTING CRASH\n", tuning);
+        pr_err("CRITICAL: This would have caused BadVA crash at address %p\n", tuning);
+        
+        /* Clear corrupted pointer and return safe error */
+        dev->tuning_data = NULL;
+        return -EFAULT;
+    }
+    
+    /* CRITICAL: Validate tuning pointer alignment for MIPS */
+    if ((unsigned long)tuning & 0x3) {
+        pr_err("CRITICAL: Unaligned tuning pointer: %p - PREVENTING CRASH\n", tuning);
+        dev->tuning_data = NULL;
+        return -EFAULT;
+    }
+    
+    /* CRITICAL: Validate that we can access the tuning structure safely */
+    if (!virt_addr_valid(tuning)) {
+        pr_err("CRITICAL: Invalid virtual address for tuning data: %p - PREVENTING CRASH\n", tuning);
+        dev->tuning_data = NULL;
+        return -EFAULT;
+    }
+    
     //mutex_lock(&tuning->lock);
 
-    pr_info("Get control: cmd=0x%x value=%d, tuning=%p (validated)\n", ctrl->cmd, ctrl->value, tuning);
+    pr_info("Get control: cmd=0x%x value=%d, tuning=%p (SAFELY validated)\n", ctrl->cmd, ctrl->value, tuning);
 
     // Special case routing for 0x8000024-0x8000027
     if (ctrl->cmd >= 0x8000024) {
@@ -965,7 +993,12 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
 
         case 0x980902:  // Saturation - FIXED: No more hardcoded offset access
-            /* CRITICAL: Use safe struct member access to prevent unaligned access crash */
+            /* CRITICAL: Double-check tuning pointer before accessing saturation field */
+            if (!virt_addr_valid(&tuning->saturation)) {
+                pr_err("CRITICAL: Cannot safely access saturation field at %p - PREVENTING BadVA CRASH\n", &tuning->saturation);
+                return -EFAULT;
+            }
+            
             pr_info("CRITICAL: Using safe struct member access for saturation (crash prevention)\n");
             ctrl->value = tuning->saturation;
             pr_info("CRITICAL: Saturation read successfully: %d (crash prevented with struct access)\n", ctrl->value);
