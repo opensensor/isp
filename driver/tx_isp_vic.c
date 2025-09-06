@@ -916,12 +916,39 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     void __iomem *cpm_regs;
     int ret;
 
-    if (!vic_dev) {
-        pr_err("tx_isp_vic_start: Invalid vic_dev parameter\n");
+    pr_info("*** tx_isp_vic_start: MIPS-SAFE implementation to prevent crash at 0xc062ece8 ***\n");
+
+    /* MIPS ALIGNMENT CHECK: Validate vic_dev pointer alignment */
+    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p not 4-byte aligned ***\n", vic_dev);
         return -EINVAL;
     }
 
-    pr_info("*** tx_isp_vic_start: APPLYING tx_isp_init_vic_registers METHODOLOGY FOR STREAMING ***\n");
+    /* MIPS SAFE: Bounds validation */
+    if ((uintptr_t)vic_dev >= 0xfffff001) {
+        pr_err("*** MIPS ERROR: vic_dev pointer 0x%p out of valid range ***\n", vic_dev);
+        return -EINVAL;
+    }
+
+    /* MIPS ALIGNMENT CHECK: Validate vic_dev->vic_regs access */
+    if (((uintptr_t)&vic_dev->vic_regs & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->vic_regs member not aligned ***\n");
+        return -EINVAL;
+    }
+
+    /* MIPS ALIGNMENT CHECK: Validate vic_dev->sensor_attr access */
+    if (((uintptr_t)&vic_dev->sensor_attr & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->sensor_attr member not aligned ***\n");
+        return -EINVAL;
+    }
+
+    /* MIPS ALIGNMENT CHECK: Validate vic_dev->width and height access */
+    if (((uintptr_t)&vic_dev->width & 0x3) != 0 || ((uintptr_t)&vic_dev->height & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->width/height members not aligned ***\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** tx_isp_vic_start: MIPS validation passed - applying tx_isp_init_vic_registers methodology ***\n");
 
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
     

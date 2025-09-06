@@ -448,6 +448,7 @@ static struct tx_isp_subdev_ops csi_subdev_ops;
 /* Reference driver function declarations - Binary Ninja exact names */
 static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev);
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
+int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable);  /* FIXED: Forward declaration for CSI streaming */
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
 static void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev);
 static void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
@@ -3050,7 +3051,7 @@ static void destroy_frame_channel_devices(void)
 /* ===== VIC SENSOR OPERATIONS - EXACT BINARY NINJA IMPLEMENTATIONS ===== */
 
 /* Forward declarations for streaming functions */
-static int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable);
+/* csi_video_s_stream_impl declaration moved to top of file */
 
 /* Forward declarations for sensor ops structures */
 static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable);
@@ -4388,7 +4389,7 @@ static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
 }
 
 /* CSI video streaming function - MIPS-SAFE implementation */
-static int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable)
+int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable)
 {
     pr_info("*** CSI VIDEO STREAMING %s - MIPS-SAFE implementation ***\n", enable ? "ENABLE" : "DISABLE");
     
