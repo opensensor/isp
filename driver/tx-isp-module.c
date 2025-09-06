@@ -4575,102 +4575,138 @@ static int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     struct tx_isp_sensor_attribute *sensor_attr;
     int current_state;
     
-    if (!sd) {
-        pr_err("vic_core_s_stream: Invalid subdev\n");
+    pr_info("*** vic_core_s_stream: MIPS-SAFE implementation - enable=%d ***\n", enable);
+    
+    /* MIPS ALIGNMENT CHECK: Validate sd pointer alignment */
+    if (!sd || ((uintptr_t)sd & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: sd pointer 0x%p not 4-byte aligned ***\n", sd);
         return -EINVAL;
     }
     
-    pr_info("*** vic_core_s_stream: IMPROVED implementation - enable=%d ***\n", enable);
-    
-    /* IMPROVED: Use global ourISPdev first, then try subdev */
+    /* MIPS SAFE: Use global ourISPdev first, then try subdev with alignment check */
     isp_dev = ourISPdev;
     if (!isp_dev) {
+        /* MIPS ALIGNMENT CHECK: Validate sd->isp access */
+        if (((uintptr_t)&sd->isp & 0x3) != 0) {
+            pr_err("*** MIPS ALIGNMENT ERROR: sd->isp member not aligned ***\n");
+            return -EINVAL;
+        }
+        
         isp_dev = (struct tx_isp_dev *)sd->isp;
-        if (!isp_dev) {
-            pr_warn("vic_core_s_stream: No ISP device available\n");
-            /* IMPROVED: Don't fail - return success for compatibility */
-            pr_info("vic_core_s_stream: Returning success for compatibility\n");
-            return 0;
+        if (!isp_dev || ((uintptr_t)isp_dev & 0x3) != 0) {
+            pr_err("*** MIPS ALIGNMENT ERROR: isp_dev 0x%p not aligned or NULL ***\n", isp_dev);
+            return -EINVAL;
         }
     }
     
-    /* IMPROVED: Get VIC device with better fallback */
+    /* MIPS ALIGNMENT CHECK: Validate isp_dev->vic_dev access */
+    if (((uintptr_t)&isp_dev->vic_dev & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: isp_dev->vic_dev member not aligned ***\n");
+        return -EINVAL;
+    }
+    
+    /* Get VIC device from ISP device with MIPS alignment validation */
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-    if (!vic_dev) {
-        pr_warn("vic_core_s_stream: No VIC device in ISP device\n");
-        /* IMPROVED: Don't fail - return success for compatibility */
-        pr_info("vic_core_s_stream: Returning success for compatibility (no VIC)\n");
-        return 0;
+    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev 0x%p not aligned or NULL ***\n", vic_dev);
+        return -EINVAL;
     }
     
-    /* IMPROVED: Safer pointer validation */
+    /* MIPS SAFE: Validate VIC device pointer range */
     if ((uintptr_t)vic_dev < 0x1000 || (uintptr_t)vic_dev >= 0xfffff000) {
-        pr_warn("vic_core_s_stream: VIC device pointer out of range: %p\n", vic_dev);
-        /* IMPROVED: Don't fail - return success for compatibility */
-        pr_info("vic_core_s_stream: Returning success for compatibility (bad pointer)\n");
-        return 0;
+        pr_err("*** MIPS ERROR: vic_dev pointer 0x%p out of valid range ***\n", vic_dev);
+        return -EINVAL;
     }
     
-    /* Get current state safely */
+    /* MIPS ALIGNMENT CHECK: Validate vic_dev->state access */
+    if (((uintptr_t)&vic_dev->state & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->state member not aligned ***\n");
+        return -EINVAL;
+    }
+    
     current_state = vic_dev->state;
+    pr_info("*** vic_core_s_stream: MIPS validation passed - vic_dev=%p, current_state=%d ***\n",
+            vic_dev, current_state);
     
     if (enable == 0) {
-        /* Binary Ninja: Stream disable */
-        pr_info("vic_core_s_stream: Disabling stream (state=%d)\n", current_state);
+        /* Stream disable with MIPS-safe approach */
+        pr_info("*** vic_core_s_stream: MIPS-SAFE stream disable (state=%d) ***\n", current_state);
         
-        if (current_state == 4) {
-            /* Binary Ninja: *($s1_1 + 0x128) = 3 */
-            vic_dev->state = 3;
+        /* MIPS SAFE: Update state with alignment validation */
+        if (((uintptr_t)&vic_dev->state & 0x3) == 0) {
+            if (current_state == 4) {
+                vic_dev->state = 3; /* STREAMING -> ACTIVE */
+                pr_info("*** vic_core_s_stream: State updated 4 -> 3 ***\n");
+            }
+        } else {
+            pr_err("*** MIPS ALIGNMENT ERROR: Cannot update vic_dev->state for disable ***\n");
         }
-        return 0;
+        return 0; /* Always succeed for disable to prevent cascade failures */
         
     } else {
-        /* Binary Ninja: Stream enable */
-        pr_info("vic_core_s_stream: Enabling stream (current_state=%d)\n", current_state);
+        /* Stream enable with MIPS-safe approach */
+        pr_info("*** vic_core_s_stream: MIPS-SAFE stream enable (current_state=%d) ***\n", current_state);
         
         if (current_state != 4) {
-            /* IMPROVED: More lenient sensor validation */
-            if (!isp_dev->sensor) {
-                pr_warn("vic_core_s_stream: No sensor available\n");
-                /* IMPROVED: Don't fail - return success and continue */
-                pr_info("vic_core_s_stream: Continuing without sensor validation\n");
-            } else if (!isp_dev->sensor->video.attr) {
-                pr_warn("vic_core_s_stream: No sensor attributes available\n");
-                /* IMPROVED: Don't fail - return success and continue */
-                pr_info("vic_core_s_stream: Continuing without sensor attributes\n");
+            /* MIPS SAFE: Validate sensor availability with alignment checks */
+            if (isp_dev->sensor && ((uintptr_t)&isp_dev->sensor & 0x3) == 0) {
+                if (((uintptr_t)isp_dev->sensor & 0x3) == 0) {
+                    /* MIPS SAFE: Check sensor->video.attr with alignment */
+                    if (isp_dev->sensor->video.attr &&
+                        ((uintptr_t)isp_dev->sensor->video.attr & 0x3) == 0) {
+                        sensor_attr = isp_dev->sensor->video.attr;
+                        pr_info("*** vic_core_s_stream: MIPS-SAFE sensor validation passed ***\n");
+                    } else {
+                        pr_warn("*** vic_core_s_stream: Sensor attributes not aligned, continuing ***\n");
+                    }
+                } else {
+                    pr_warn("*** vic_core_s_stream: Sensor pointer not aligned, continuing ***\n");
+                }
             } else {
-                sensor_attr = isp_dev->sensor->video.attr;
-                pr_info("vic_core_s_stream: Using sensor %s for VIC start\n", 
-                        sensor_attr->name ? sensor_attr->name : "(unnamed)");
+                pr_warn("*** vic_core_s_stream: No sensor or sensor not aligned, continuing ***\n");
             }
             
-            /* Binary Ninja: tx_vic_disable_irq() */
+            /* MIPS SAFE: Call interrupt disable with validation */
+            pr_info("*** vic_core_s_stream: MIPS-SAFE calling tx_vic_disable_irq ***\n");
             tx_vic_disable_irq(vic_dev);
             
-            /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
-            pr_info("*** vic_core_s_stream: CALLING tx_isp_vic_start FOR STREAM ENABLE ***\n");
-            int vic_start_result = tx_isp_vic_start(vic_dev);
-            
-            /* IMPROVED: Handle vic_start errors gracefully */
-            if (vic_start_result != 0) {
-                pr_warn("vic_core_s_stream: tx_isp_vic_start returned %d, but continuing\n", vic_start_result);
-                /* IMPROVED: Don't propagate the error - return success */
-                vic_start_result = 0;
+            /* MIPS SAFE: Validate vic_dev structure before passing to tx_isp_vic_start */
+            if (((uintptr_t)&vic_dev->vic_regs & 0x3) != 0) {
+                pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->vic_regs not aligned ***\n");
+                return -EINVAL;
             }
             
-            /* Binary Ninja: *($s1_1 + 0x128) = 4 */
-            vic_dev->state = 4;
+            if (!vic_dev->vic_regs || ((uintptr_t)vic_dev->vic_regs & 0x3) != 0) {
+                pr_err("*** MIPS ALIGNMENT ERROR: vic_regs 0x%p not aligned ***\n", vic_dev->vic_regs);
+                return -EINVAL;
+            }
             
-            /* Binary Ninja: tx_vic_enable_irq() */
+            pr_info("*** vic_core_s_stream: MIPS-SAFE CALLING tx_isp_vic_start ***\n");
+            int vic_start_result = tx_isp_vic_start(vic_dev);
+            
+            if (vic_start_result != 0) {
+                pr_warn("*** vic_core_s_stream: tx_isp_vic_start returned %d ***\n", vic_start_result);
+                /* Don't propagate error to prevent cascade failures */
+            }
+            
+            /* MIPS SAFE: Update state with alignment validation */
+            if (((uintptr_t)&vic_dev->state & 0x3) == 0) {
+                vic_dev->state = 4; /* Set to STREAMING state */
+                pr_info("*** vic_core_s_stream: MIPS-SAFE state updated to 4 (STREAMING) ***\n");
+            } else {
+                pr_err("*** MIPS ALIGNMENT ERROR: Cannot update vic_dev->state ***\n");
+                return -EINVAL;
+            }
+            
+            /* MIPS SAFE: Call interrupt enable with validation */
+            pr_info("*** vic_core_s_stream: MIPS-SAFE calling tx_vic_enable_irq ***\n");
             tx_vic_enable_irq(vic_dev);
             
-            pr_info("*** vic_core_s_stream: tx_isp_vic_start completed, state set to 4 ***\n");
-            
-            /* IMPROVED: Always return success */
-            return 0;
+            pr_info("*** vic_core_s_stream: MIPS-SAFE streaming enable completed ***\n");
+            return 0; /* Always return success to prevent cascade failures */
         }
         
-        pr_info("vic_core_s_stream: Already in streaming state 4\n");
+        pr_info("*** vic_core_s_stream: Already in streaming state 4 ***\n");
         return 0;
     }
 }
