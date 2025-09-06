@@ -24,6 +24,13 @@ static int print_level = ISP_WARN_LEVEL;
 module_param(print_level, int, S_IRUGO);
 MODULE_PARM_DESC(print_level, "isp print level");
 
+/* Debug macro for sensor functions */
+#define ISP_DEBUG(fmt, ...) \
+    do { \
+        if (print_level >= ISP_DEBUG_LEVEL) \
+            printk(KERN_DEBUG "ISP_DEBUG: " fmt, ##__VA_ARGS__); \
+    } while (0)
+
 static int isp_clk = 100000000;
 module_param(isp_clk, int, S_IRUGO);
 MODULE_PARM_DESC(isp_clk, "isp clock freq");
