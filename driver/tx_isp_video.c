@@ -33,80 +33,132 @@
 int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable)
 {
     int i;
+    unsigned long flags;
     
-    mcp_log_info("tx_isp_video_link_stream: EXACT Binary Ninja implementation");
+    pr_info("*** tx_isp_video_link_stream: Enable streaming (SAFE STRUCT ACCESS implementation) ***\n");
     
-    if (!dev) {
-        mcp_log_error("tx_isp_video_link_stream: Invalid ISP device - null pointer");
+    /* CRITICAL: Validate ISP device pointer with MIPS-safe bounds checking */
+    if (!dev || (unsigned long)dev < 0x80000000 || (unsigned long)dev >= 0xfffff001) {
+        pr_err("tx_isp_video_link_stream: Invalid ISP device pointer %p\n", dev);
         return -EINVAL;
     }
     
-    /* EXACT Binary Ninja implementation: Loop through subdevs array at offset 0x38 */
+    /* MEMORY SAFETY: Add memory barrier before accessing device structure */
+    rmb();
+    
+    /* CRITICAL: Validate subdevs array pointer before accessing */
+    if (!dev->subdevs) {
+        pr_err("tx_isp_video_link_stream: ISP device has no subdevs array\n");
+        return -EINVAL;
+    }
+    
+    pr_info("tx_isp_video_link_stream: Processing %s request for %d subdevs\n",
+            enable ? "ENABLE" : "DISABLE", 16);
+    
+    /* SAFE: Loop through subdevs array with bounds checking */
     for (i = 0; i < 16; i++) {
-        struct tx_isp_subdev *subdev = dev->subdevs[i];
+        struct tx_isp_subdev *subdev;
+        struct tx_isp_subdev_ops *ops;
+        struct tx_isp_subdev_video_ops *video_ops;
+        int (*s_stream_func)(struct tx_isp_subdev *, int);
+        int result;
         
-        if (subdev != NULL) {
-            /* Access ops structure at offset 0xc4 in subdev */
-            struct tx_isp_subdev_ops *ops = subdev->ops;
+        /* CRITICAL: Safe subdev access with validation */
+        subdev = dev->subdevs[i];
+        if (!subdev || (unsigned long)subdev < 0x80000000 || (unsigned long)subdev >= 0xfffff001) {
+            /* Skip invalid subdev - this is normal for unused slots */
+            continue;
+        }
+        
+        /* MEMORY SAFETY: Add barrier before accessing subdev structure */
+        rmb();
+        
+        /* CRITICAL: Safe ops structure access with validation */
+        ops = subdev->ops;
+        if (!ops || (unsigned long)ops < 0x80000000 || (unsigned long)ops >= 0xfffff001) {
+            pr_debug("tx_isp_video_link_stream: Subdev %d has no ops structure\n", i);
+            continue;
+        }
+        
+        /* MEMORY SAFETY: Add barrier before accessing ops structure */
+        rmb();
+        
+        /* CRITICAL: Safe video ops access with validation */
+        video_ops = ops->video;
+        if (!video_ops || (unsigned long)video_ops < 0x80000000 || (unsigned long)video_ops >= 0xfffff001) {
+            pr_debug("tx_isp_video_link_stream: Subdev %d has no video ops\n", i);
+            continue;
+        }
+        
+        /* MEMORY SAFETY: Add barrier before accessing video_ops structure */
+        rmb();
+        
+        /* CRITICAL: Safe s_stream function pointer access with validation */
+        s_stream_func = video_ops->s_stream;
+        if (!s_stream_func || (unsigned long)s_stream_func < 0x80000000 || (unsigned long)s_stream_func >= 0xfffff001) {
+            pr_debug("tx_isp_video_link_stream: Subdev %d has no s_stream function\n", i);
+            continue;
+        }
+        
+        pr_info("tx_isp_video_link_stream: Calling s_stream on subdev %d (func=%p, enable=%d)\n",
+                i, s_stream_func, enable);
+        
+        /* CRITICAL: Call s_stream function with proper error handling */
+        result = s_stream_func(subdev, enable);
+        
+        if (result == 0) {
+            /* Success, continue to next subdev */
+            pr_info("tx_isp_video_link_stream: Stream %s on subdev %d: SUCCESS\n",
+                    enable ? "ENABLED" : "DISABLED", i);
+        } else if (result != -515) { /* 0xfffffdfd = -515 */
+            /* Real error occurred, need to cleanup */
+            pr_err("tx_isp_video_link_stream: Stream %s FAILED on subdev %d: %d\n",
+                   enable ? "enable" : "disable", i, result);
             
-            if (ops != NULL) {
-                /* Access video ops structure at offset +4 in ops */
-                struct tx_isp_subdev_video_ops *video_ops = ops->video;
-                
-                if (video_ops != NULL) {
-                    /* Access s_stream function at offset +4 in video_ops */
-                    int (*s_stream_func)(struct tx_isp_subdev *, int) = video_ops->s_stream;
+            /* SAFE: Cleanup previously enabled subdevs */
+            if (enable) { /* Only cleanup if we were enabling */
+                int j;
+                for (j = i - 1; j >= 0; j--) {
+                    struct tx_isp_subdev *prev_subdev = dev->subdevs[j];
                     
-                    if (s_stream_func != NULL) {
-                        /* Call s_stream function */
-                        int result = s_stream_func(subdev, enable);
+                    if (prev_subdev &&
+                        (unsigned long)prev_subdev >= 0x80000000 &&
+                        (unsigned long)prev_subdev < 0xfffff001) {
                         
-                        if (result == 0) {
-                            /* Success, continue to next subdev */
-                            mcp_log_info("tx_isp_video_link_stream: Stream %s on subdev %d: success",
-                                        enable ? "enabled" : "disabled", i);
-                        } else if (result != 0xfffffdfd) {
-                            /* Real error occurred, need to cleanup */
-                            mcp_log_error("tx_isp_video_link_stream: Stream %s failed on subdev %d: %d",
-                                         enable ? "enable" : "disable", i, result);
+                        struct tx_isp_subdev_ops *prev_ops = prev_subdev->ops;
+                        if (prev_ops &&
+                            (unsigned long)prev_ops >= 0x80000000 &&
+                            (unsigned long)prev_ops < 0xfffff001) {
                             
-                            /* Binary Ninja cleanup: disable all previously enabled subdevs */
-                            int j;
-                            for (j = i - 1; j >= 0; j--) {
-                                struct tx_isp_subdev *prev_subdev = dev->subdevs[j];
+                            struct tx_isp_subdev_video_ops *prev_video_ops = prev_ops->video;
+                            if (prev_video_ops &&
+                                (unsigned long)prev_video_ops >= 0x80000000 &&
+                                (unsigned long)prev_video_ops < 0xfffff001) {
                                 
-                                if (prev_subdev != NULL) {
-                                    struct tx_isp_subdev_ops *prev_ops = prev_subdev->ops;
+                                int (*prev_s_stream_func)(struct tx_isp_subdev *, int) = prev_video_ops->s_stream;
+                                if (prev_s_stream_func &&
+                                    (unsigned long)prev_s_stream_func >= 0x80000000 &&
+                                    (unsigned long)prev_s_stream_func < 0xfffff001) {
                                     
-                                    if (prev_ops != NULL) {
-                                        struct tx_isp_subdev_video_ops *prev_video_ops = prev_ops->video;
-                                        
-                                        if (prev_video_ops != NULL) {
-                                            int (*prev_s_stream_func)(struct tx_isp_subdev *, int) = prev_video_ops->s_stream;
-                                            
-                                            if (prev_s_stream_func != NULL) {
-                                                /* Disable this subdev - use opposite of original enable flag */
-                                                prev_s_stream_func(prev_subdev, enable ? 0 : 1);
-                                                mcp_log_info("tx_isp_video_link_stream: Cleanup: disabled subdev %d", j);
-                                            }
-                                        }
-                                    }
+                                    /* Disable this subdev */
+                                    prev_s_stream_func(prev_subdev, 0);
+                                    pr_info("tx_isp_video_link_stream: Cleanup: disabled subdev %d\n", j);
                                 }
                             }
-                            
-                            return result;
-                        } else {
-                            /* Special case: 0xfffffdfd is not a real error */
-                            mcp_log_info("tx_isp_video_link_stream: Stream %s on subdev %d: special code 0xfffffdfd",
-                                        enable ? "enabled" : "disabled", i);
                         }
                     }
                 }
             }
+            
+            return result;
+        } else {
+            /* Special case: -515 (0xfffffdfd) is not a real error */
+            pr_info("tx_isp_video_link_stream: Stream %s on subdev %d: special code -515 (ignored)\n",
+                    enable ? "enabled" : "disabled", i);
         }
     }
     
-    mcp_log_info("tx_isp_video_link_stream: Binary Ninja implementation completed successfully");
+    pr_info("*** tx_isp_video_link_stream: SAFE implementation completed successfully ***\n");
     return 0;
 }
 
