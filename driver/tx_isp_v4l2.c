@@ -647,11 +647,52 @@ static int tx_isp_v4l2_mmap(struct file *file, struct vm_area_struct *vma)
     return 0;
 }
 
+/* Custom unlocked_ioctl that routes all operations to frame_channel_unlocked_ioctl */
+static long tx_isp_v4l2_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    struct file fake_file;
+    long ret;
+    
+    if (!dev) {
+        pr_err("tx_isp_v4l2_unlocked_ioctl: Invalid device\n");
+        return -EINVAL;
+    }
+    
+    pr_info("*** V4L2 Channel %d: IOCTL cmd=0x%x ***\n", dev->channel_num, cmd);
+    
+    /* First try standard V4L2 ioctl handling for operations we implement */
+    ret = video_ioctl2(file, cmd, arg);
+    
+    /* If V4L2 handled it successfully, return that result */
+    if (ret != -ENOTTY && ret != -EINVAL) {
+        pr_info("*** V4L2 Channel %d: IOCTL 0x%x handled by V4L2, result=%ld ***\n",
+                dev->channel_num, cmd, ret);
+        return ret;
+    }
+    
+    /* For unhandled ioctls or failures, route to frame_channel_unlocked_ioctl */
+    pr_info("*** V4L2 Channel %d: Routing IOCTL 0x%x to frame_channel_unlocked_ioctl ***\n",
+            dev->channel_num, cmd);
+    
+    /* Create a fake file structure for frame_channel_unlocked_ioctl */
+    memset(&fake_file, 0, sizeof(fake_file));
+    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
+    
+    /* Route to frame_channel_unlocked_ioctl */
+    ret = frame_channel_unlocked_ioctl(&fake_file, cmd, arg);
+    
+    pr_info("*** V4L2 Channel %d: frame_channel_unlocked_ioctl result=%ld for cmd=0x%x ***\n",
+            dev->channel_num, ret, cmd);
+    
+    return ret;
+}
+
 static const struct v4l2_file_operations tx_isp_v4l2_fops = {
     .owner          = THIS_MODULE,
     .open           = tx_isp_v4l2_open,
     .release        = tx_isp_v4l2_release,
-    .unlocked_ioctl = video_ioctl2,
+    .unlocked_ioctl = tx_isp_v4l2_unlocked_ioctl,
     .mmap           = tx_isp_v4l2_mmap,
 };
 
