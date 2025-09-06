@@ -1636,9 +1636,10 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     }
     
     /* CRITICAL: Final validation before any register writes */
+    /* Accept both physical (0x10000000-0x20000000) and kernel virtual (0x80000000+) addresses */
     if (!vic_base || 
-        (unsigned long)vic_base < 0x10000000 || 
-        (unsigned long)vic_base > 0x20000000) {
+        !((((unsigned long)vic_base >= 0x10000000 && (unsigned long)vic_base <= 0x20000000) ||
+           ((unsigned long)vic_base >= 0x80000000 && (unsigned long)vic_base <= 0xffffffff)))) {
         pr_err("vic_pipo_mdma_enable: Invalid VIC register base %p - ABORTING ALL WRITES\n", vic_base);
         goto unlock_exit;
     }
@@ -1773,9 +1774,10 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     }
     
     /* CRITICAL: Final validation before ANY register writes */
+    /* Accept both physical (0x10000000-0x20000000) and kernel virtual (0x80000000+) addresses */
     if (!vic_base || 
-        (unsigned long)vic_base < 0x10000000 || 
-        (unsigned long)vic_base > 0x20000000) {
+        !((((unsigned long)vic_base >= 0x10000000 && (unsigned long)vic_base <= 0x20000000) ||
+           ((unsigned long)vic_base >= 0x80000000 && (unsigned long)vic_base <= 0xffffffff)))) {
         pr_err("ispvic_frame_channel_s_stream: Invalid VIC register base %p - ABORTING ALL WRITES\n", vic_base);
         spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
         return 0xffffffea; /* Return error instead of proceeding */
