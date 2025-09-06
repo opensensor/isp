@@ -3993,14 +3993,24 @@ static int tx_isp_init(void)
     }
     pr_info("*** FS PLATFORM DRIVER INITIALIZED - /proc/jz/isp/isp-fs SHOULD NOW EXIST ***\n");
 
-    /* *** CRITICAL: Initialize subdev platform drivers (CSI, VIC, VIN, CORE) *** */
-    ret = tx_isp_subdev_platform_init();
+    /* *** CRITICAL: Initialize VIC platform driver - THIS WAS MISSING! *** */
+    ret = tx_isp_vic_platform_init();
     if (ret) {
-        pr_err("Failed to initialize subdev platform drivers: %d\n", ret);
+        pr_err("Failed to initialize VIC platform driver: %d\n", ret);
         tx_isp_fs_platform_exit();  /* Clean up FS driver */
         goto err_cleanup_platforms;
     }
-    pr_info("*** SUBDEV PLATFORM DRIVERS INITIALIZED - CSI/VIC/VIN/CORE DRIVERS REGISTERED ***\n");
+    pr_info("*** VIC PLATFORM DRIVER INITIALIZED - VIC DRIVER NOW REGISTERED ***\n");
+
+    /* *** CRITICAL: Initialize subdev platform drivers (CSI, VIN, CORE) *** */
+    ret = tx_isp_subdev_platform_init();
+    if (ret) {
+        pr_err("Failed to initialize subdev platform drivers: %d\n", ret);
+        tx_isp_vic_platform_exit();  /* Clean up VIC driver */
+        tx_isp_fs_platform_exit();  /* Clean up FS driver */
+        goto err_cleanup_platforms;
+    }
+    pr_info("*** SUBDEV PLATFORM DRIVERS INITIALIZED - CSI/VIN/CORE DRIVERS REGISTERED ***\n");
 
     /* Build platform device array for the new management system */
     subdev_platforms[0] = &tx_isp_csi_platform_device;
@@ -4167,6 +4177,10 @@ static void tx_isp_exit(void)
         /* *** CRITICAL: Destroy ISP M0 tuning device node (matches reference driver) *** */
         tisp_code_destroy_tuning_node();
         pr_info("*** ISP M0 TUNING DEVICE NODE DESTROYED ***\n");
+        
+        /* *** CRITICAL: Cleanup VIC platform driver *** */
+        tx_isp_vic_platform_exit();
+        pr_info("*** VIC PLATFORM DRIVER CLEANED UP ***\n");
         
         /* Clean up clocks properly using Linux Clock Framework */
         if (ourISPdev->isp_clk) {
