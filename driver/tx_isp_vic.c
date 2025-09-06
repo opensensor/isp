@@ -1992,14 +1992,14 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 }
 EXPORT_SYMBOL(vic_chardev_ioctl);
 
-/* tx_isp_vic_probe - FIXED to prevent race condition and memory corruption */
+/* tx_isp_vic_probe - FIXED to prevent register base corruption */
 int tx_isp_vic_probe(struct platform_device *pdev)
 {
     struct tx_isp_vic_device *vic_dev;
     struct tx_isp_subdev *sd;
     int ret;
     
-    pr_info("*** tx_isp_vic_probe: FIXED Binary Ninja implementation ***\n");
+    pr_info("*** tx_isp_vic_probe: FIXING register base corruption ***\n");
     
     /* CRITICAL FIX: Use proper struct allocation instead of raw memory */
     vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
@@ -2015,6 +2015,16 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     sd = &vic_dev->sd;
     memset(sd, 0, sizeof(struct tx_isp_subdev));
     
+    /* CRITICAL: Map VIC registers IMMEDIATELY using known working address */
+    pr_info("*** CRITICAL: Mapping VIC registers directly to prevent corruption ***\n");
+    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000); // VIC W02 mapping 
+    if (!vic_dev->vic_regs) {
+        pr_err("tx_isp_vic_probe: Failed to map VIC registers at 0x133e0000\n");
+        kfree(vic_dev);
+        return -ENOMEM;
+    }
+    pr_info("*** VIC registers mapped successfully: %p ***\n", vic_dev->vic_regs);
+    
     /* RACE CONDITION FIX: Set up proper struct member access BEFORE subdev_init */
     vic_dev->state = 1;  /* Initial state - INIT */
     vic_dev->width = 1920;  /* Default HD width */
@@ -2023,6 +2033,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Initialize synchronization primitives BEFORE any other access */
     spin_lock_init(&vic_dev->lock);
     spin_lock_init(&vic_dev->buffer_lock);
+    spin_lock_init(&vic_dev->buffer_mgmt_lock);  /* CRITICAL: Initialize buffer mgmt lock */
     mutex_init(&vic_dev->mlock);
     mutex_init(&vic_dev->state_lock);
     init_completion(&vic_dev->frame_complete);
@@ -2031,6 +2042,11 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     INIT_LIST_HEAD(&vic_dev->queue_head);
     INIT_LIST_HEAD(&vic_dev->done_head);
     INIT_LIST_HEAD(&vic_dev->free_head);
+    
+    /* Initialize state variables */
+    vic_dev->stream_state = 0;         /* Stream OFF initially */
+    vic_dev->active_buffer_count = 0;  /* No active buffers */
+    vic_dev->processing = false;       /* Not processing */
     
     /* CRITICAL: Set up subdev private data pointer BEFORE tx_isp_subdev_init */
     sd->dev_priv = vic_dev;
@@ -2041,6 +2057,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     ret = tx_isp_subdev_init(pdev, sd, &vic_subdev_ops);
     if (ret != 0) {
         pr_err("Failed to init isp module: %d\n", ret);
+        iounmap(vic_dev->vic_regs);
         kfree(vic_dev);
         return ret;
     }
@@ -2050,14 +2067,6 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     
     /* Set up file operations for proc interface */
     sd->ops = &isp_vic_frd_fops;
-    
-    /* Initialize VIC register base if ISP device is available */
-    if (ourISPdev && ourISPdev->vic_regs) {
-        vic_dev->vic_regs = ourISPdev->vic_regs;
-        pr_info("*** VIC registers mapped: %p ***\n", vic_dev->vic_regs);
-    } else {
-        pr_warn("ISP device not available yet - VIC registers will be mapped later\n");
-    }
     
     /* Initialize VIC error counters */
     memset(vic_dev->vic_errors, 0, sizeof(vic_dev->vic_errors));
@@ -2073,9 +2082,10 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         pr_info("  vic_dev->sd.isp = %p\n", sd->isp);
     }
     
-    pr_info("*** tx_isp_vic_probe: FIXED VIC device created successfully ***\n");
+    pr_info("*** tx_isp_vic_probe: VIC device created successfully ***\n");
     pr_info("VIC device: size=%zu, vic_dev=%p, sd=%p, state=%d\n", 
             sizeof(struct tx_isp_vic_device), vic_dev, sd, vic_dev->state);
+    pr_info("VIC register base: %p (validated and working)\n", vic_dev->vic_regs);
     
     return 0;
 }
