@@ -126,6 +126,9 @@ struct tx_isp_vic_device {
     struct list_head queue_head;        // Buffer queues
     struct list_head free_head;
     struct list_head done_head;
+    
+    // Buffer index array for VIC register mapping
+    int buffer_index[5];                // Buffer index array (5 buffers max)
 };
 
 #endif /* __TX_ISP_VIC_H__ */
