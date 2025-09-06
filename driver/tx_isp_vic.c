@@ -1605,12 +1605,13 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* VIC PIPO MDMA Enable function - SAFE STRUCT ACCESS implementation */
+/* VIC PIPO MDMA Enable function - CRITICAL FIX for register base validation */
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
+    u32 width, height, stride;
     
-    pr_info("*** VIC PIPO MDMA ENABLE - SAFE STRUCT ACCESS implementation ***\n");
+    pr_info("*** VIC PIPO MDMA ENABLE - CRITICAL FIX for register access ***\n");
     
     /* CRITICAL: Validate vic_dev structure first */
     if (!vic_dev) {
@@ -1618,52 +1619,53 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
     
-    /* SAFE: Use proper struct member access instead of dangerous offsets */
-    u32 width = vic_dev->width;   /* Binary Ninja: *(arg1 + 0xdc) */
-    u32 height = vic_dev->height; /* Binary Ninja: *(arg1 + 0xe0) - SAFE REPLACEMENT */
-    
-    /* CRITICAL: Validate VIC register base access */
-    vic_base = vic_dev->vic_regs; /* Binary Ninja: *(arg1 + 0xb8) */
-    if (!vic_base) {
-        pr_err("vic_pipo_mdma_enable: NULL VIC register base\n");
+    /* CRITICAL FIX: Use ISP core registers instead of vic_dev->vic_regs */
+    /* The crash shows vic_dev->vic_regs is invalid - use ISP core mapping */
+    if (!ourISPdev || !ourISPdev->vic_regs) {
+        pr_err("vic_pipo_mdma_enable: No valid ISP VIC register mapping available\n");
         return;
     }
+    
+    vic_base = ourISPdev->vic_regs; /* Use ISP core VIC register mapping */
     
     /* SAFE: Validate register base before any writes */
     if ((unsigned long)vic_base < 0x10000000 || (unsigned long)vic_base > 0x20000000) {
-        pr_err("vic_pipo_mdma_enable: Invalid VIC register base %p\n", vic_base);
+        pr_err("vic_pipo_mdma_enable: Invalid ISP VIC register base %p\n", vic_base);
         return;
     }
     
-    pr_info("vic_pipo_mdma_enable: validated - vic_base=%p, dimensions=%dx%d\n", 
+    /* SAFE: Use proper struct member access - Binary Ninja: *(arg1 + 0xdc), *(arg1 + 0xe0) */
+    width = vic_dev->width;   /* Binary Ninja: *(arg1 + 0xdc) */
+    height = vic_dev->height; /* Binary Ninja: *(arg1 + 0xe0) */
+    
+    pr_info("vic_pipo_mdma_enable: VALIDATED - vic_base=%p, dimensions=%dx%d\n", 
             vic_base, width, height);
     
-    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x308) = 1 */
+    /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
     
-    /* Binary Ninja: int32_t $v1_1 = $v1 << 1 */
-    u32 stride = width << 1; /* width * 2 for stride */
+    /* Binary Ninja EXACT sequence: int32_t $v1_1 = $v1 << 1 */
+    stride = width << 1; /* width * 2 for stride */
     
-    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
-    /* SAFE: Use proper struct members instead of offset arithmetic */
+    /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
     writel((width << 16) | height, vic_base + 0x304);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
             (width << 16) | height, width, height);
     
-    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
+    /* Binary Ninja EXACT sequence: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
     writel(stride, vic_base + 0x310);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
     
-    /* Binary Ninja: *(result + 0x314) = $v1_1 */
+    /* Binary Ninja EXACT sequence: *(result + 0x314) = $v1_1 */
     writel(stride, vic_base + 0x314);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
     
-    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - SAFE IMPLEMENTATION ***\n");
+    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - REGISTER ACCESS FIXED ***\n");
 }
 
 /* ISPVIC Frame Channel S_Stream - FIXED to use tx_isp_init_vic_registers methodology */
