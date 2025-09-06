@@ -119,7 +119,8 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
     
     /* *** CRITICAL: Link VIC device to ISP core *** */
-    isp_dev->vic_dev = (struct tx_isp_subdev *)vic_dev;
+    /* Store the VIC device properly - the subdev is PART of the VIC device */
+    isp_dev->vic_dev = (struct tx_isp_subdev *)&vic_dev->sd;
     
     pr_info("*** CRITICAL: VIC DEVICE LINKED TO ISP CORE ***\n");
     pr_info("  isp_dev->vic_dev = %p\n", isp_dev->vic_dev);
