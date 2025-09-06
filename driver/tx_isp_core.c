@@ -27,7 +27,7 @@ MODULE_PARM_DESC(print_level, "isp print level");
 /* Debug macro for sensor functions */
 #define ISP_DEBUG(fmt, ...) \
     do { \
-        if (print_level >= ISP_DEBUG_LEVEL) \
+        if (print_level <= ISP_INFO_LEVEL) \
             printk(KERN_DEBUG "ISP_DEBUG: " fmt, ##__VA_ARGS__); \
     } while (0)
 
