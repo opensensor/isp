@@ -4038,10 +4038,7 @@ static int tx_isp_init(void)
         pr_err("*** ERROR: ISP device subdevs array not initialized! ***\n");
         goto err_cleanup_platforms;
     }
-    
-    /* SAFE: Clear the array using proper bounds */
-    memset(ourISPdev->subdevs, 0, ISP_MAX_SUBDEVS * sizeof(void*));
-    
+
     /* Register VIC subdev with proper ops structure */
     if (ourISPdev->vic_dev) {
         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
@@ -4117,15 +4114,6 @@ static int tx_isp_init(void)
         goto err_cleanup_platforms;
     }
     pr_info("*** SUBDEVICE GRAPH CREATED - FRAME DEVICES SHOULD NOW EXIST ***\n");
-    
-    /* *** CRITICAL: Create frame channel devices with proper IOCTL handlers *** */
-//    pr_info("*** CREATING FRAME CHANNEL DEVICES FOR IOCTL ROUTING ***\n");
-//    ret = create_frame_channel_devices();
-//    if (ret) {
-//        pr_err("Failed to create frame channel devices: %d\n", ret);
-//        goto err_cleanup_graph;
-//    }
-//    pr_info("*** FRAME CHANNEL DEVICES CREATED - IOCTLS SHOULD NOW WORK ***\n");
 
     /* *** CRITICAL: Initialize V4L2 video devices for encoder compatibility *** */
     pr_info("*** INITIALIZING V4L2 VIDEO DEVICES FOR ENCODER SUPPORT ***\n");
