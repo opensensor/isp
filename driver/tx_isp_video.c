@@ -105,33 +105,30 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev)
             }
         }
         
-        /* If we don't have a subdev yet, try alternative discovery methods */
+        /* If we don't have a subdev yet, try direct cast - subdev_graph should contain direct subdev pointers */
         if (!subdev) {
-            /* MIPS ALIGNMENT FIX: Ensure proper 4-byte alignment before dereferencing */
+            /* SAFE: subdev_graph entries should be direct tx_isp_subdev pointers, not double pointers */
             uintptr_t subdev_addr = (uintptr_t)subdev_data;
             
-            /* Check if subdev_data is properly aligned for MIPS (4-byte boundary) */
-            if ((subdev_addr & 0x3) == 0) {  /* Must be 4-byte aligned */
-                /* Safe to dereference as pointer */
-                struct tx_isp_subdev **potential_subdev = (struct tx_isp_subdev **)subdev_data;
-                if (potential_subdev) {
-                    /* Use safe memory access - check alignment before dereferencing */
-                    uintptr_t target_addr = (uintptr_t)potential_subdev;
-                    if ((target_addr & 0x3) == 0) {  /* Ensure target is also aligned */
-                        struct tx_isp_subdev *candidate = *potential_subdev;
-                        /* Validate candidate pointer alignment and range */
-                        uintptr_t candidate_addr = (uintptr_t)candidate;
-                        if (candidate && 
-                            (candidate_addr & 0x3) == 0 &&  /* Must be 4-byte aligned */
-                            candidate_addr > 0x80000000 && 
-                            candidate_addr < 0xfffff000) {
-                            subdev = candidate;
-                            mcp_log_info("tx_isp_video_link_stream: Found aligned subdev %p via safe dereferencing", subdev);
-                        }
-                    }
+            /* Validate that this looks like a reasonable kernel virtual address */
+            if (subdev_addr > 0x80000000 && 
+                subdev_addr < 0xfffff000 && 
+                (subdev_addr & 0x3) == 0) {  /* Must be 4-byte aligned */
+                
+                /* Try direct cast to subdev structure */
+                struct tx_isp_subdev *candidate = (struct tx_isp_subdev *)subdev_data;
+                
+                /* Basic sanity check - does this look like a valid subdev structure? */
+                if (candidate && 
+                    (uintptr_t)candidate->ops > 0x80000000 && 
+                    (uintptr_t)candidate->ops < 0xfffff000) {
+                    subdev = candidate;
+                    mcp_log_info("tx_isp_video_link_stream: Found subdev %p via direct cast", subdev);
+                } else {
+                    mcp_log_info("tx_isp_video_link_stream: Direct cast failed validation for %p", subdev_data);
                 }
             } else {
-                mcp_log_info("tx_isp_video_link_stream: Skipping unaligned subdev_data %p (addr=0x%lx)", 
+                mcp_log_info("tx_isp_video_link_stream: Skipping invalid subdev_data %p (addr=0x%lx)", 
                              subdev_data, subdev_addr);
             }
         }
@@ -176,24 +173,21 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev)
                     }
                     
                     if (!prev_subdev) {
-                        /* MIPS ALIGNMENT FIX: Same alignment checks for cleanup code */
+                        /* SAFE: Try direct cast for cleanup code */
                         uintptr_t prev_addr = (uintptr_t)prev_subdev_data;
                         
-                        /* Check 4-byte alignment before dereferencing */
-                        if ((prev_addr & 0x3) == 0) {  /* Must be 4-byte aligned */
-                            struct tx_isp_subdev **potential_prev = (struct tx_isp_subdev **)prev_subdev_data;
-                            if (potential_prev) {
-                                uintptr_t prev_target_addr = (uintptr_t)potential_prev;
-                                if ((prev_target_addr & 0x3) == 0) {  /* Ensure target is also aligned */
-                                    struct tx_isp_subdev *candidate = *potential_prev;
-                                    uintptr_t candidate_addr = (uintptr_t)candidate;
-                                    if (candidate && 
-                                        (candidate_addr & 0x3) == 0 &&  /* Must be 4-byte aligned */
-                                        candidate_addr > 0x80000000 && 
-                                        candidate_addr < 0xfffff000) {
-                                        prev_subdev = candidate;
-                                    }
-                                }
+                        /* Validate that this looks like a reasonable kernel virtual address */
+                        if (prev_addr > 0x80000000 && 
+                            prev_addr < 0xfffff000 && 
+                            (prev_addr & 0x3) == 0) {  /* Must be 4-byte aligned */
+                            
+                            struct tx_isp_subdev *candidate = (struct tx_isp_subdev *)prev_subdev_data;
+                            
+                            /* Basic sanity check for cleanup */
+                            if (candidate && 
+                                (uintptr_t)candidate->ops > 0x80000000 && 
+                                (uintptr_t)candidate->ops < 0xfffff000) {
+                                prev_subdev = candidate;
                             }
                         }
                     }
