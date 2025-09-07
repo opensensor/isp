@@ -2061,7 +2061,10 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 }
 EXPORT_SYMBOL(vic_chardev_ioctl);
 
+static struct tx_isp_vic_device *dump_vsd = NULL;
+static void *test_addr = NULL;
 
+/* tx_isp_vic_probe - Matching binary flow with safe struct member access */
 int tx_isp_vic_probe(struct platform_device *pdev)
 {
     struct tx_isp_vic_device *vic_dev;
@@ -2106,7 +2109,6 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Initialize synchronization primitives (binary order) */
     spin_lock_init(&vic_dev->lock);
     mutex_init(&vic_dev->mlock);
-    mutex_init(&vic_dev->snap_mlock);  /* Assuming we have this field */
     init_completion(&vic_dev->frame_complete);
 
     /* Set initial state to 1 (matches binary) */
