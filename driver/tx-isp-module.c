@@ -38,6 +38,7 @@ struct registered_sensor {
     char name[32];
     int index;
     struct tx_isp_subdev *subdev;  // Store actual sensor subdev pointer
+    struct i2c_client *client;     // Store I2C client to avoid duplicates
     struct list_head list;
 };
 
@@ -60,17 +61,30 @@ int __init tx_isp_subdev_platform_init(void);
 void __exit tx_isp_subdev_platform_exit(void);
 int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 
+/* Global I2C client tracking to prevent duplicate creation */
+static struct i2c_client *global_sensor_i2c_client = NULL;
+static DEFINE_MUTEX(i2c_client_mutex);
+
 /* I2C infrastructure - create I2C devices dynamically during sensor registration */
 static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
                                                    struct i2c_board_info *info)
 {
     struct i2c_client *client;
-    int retry_count = 0;
     
     if (!adapter || !info) {
         pr_err("isp_i2c_new_subdev_board: Invalid parameters\n");
         return NULL;
     }
+    
+    /* Check if we already have a client for this address */
+    mutex_lock(&i2c_client_mutex);
+    if (global_sensor_i2c_client && global_sensor_i2c_client->addr == info->addr) {
+        pr_info("*** REUSING EXISTING I2C CLIENT: %s at 0x%02x ***\n",
+                global_sensor_i2c_client->name, global_sensor_i2c_client->addr);
+        mutex_unlock(&i2c_client_mutex);
+        return global_sensor_i2c_client;
+    }
+    mutex_unlock(&i2c_client_mutex);
     
     pr_info("Creating I2C subdev: type=%s addr=0x%02x on adapter %s\n",
             info->type, info->addr, adapter->name);
@@ -81,6 +95,13 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
         pr_err("*** FAILED TO CREATE I2C DEVICE FOR %s - MODULE NOT LOADED? ***\n", info->type);
         return NULL;
     }
+    
+    /* Store globally to prevent duplicates */
+    mutex_lock(&i2c_client_mutex);
+    if (!global_sensor_i2c_client) {
+        global_sensor_i2c_client = client;
+    }
+    mutex_unlock(&i2c_client_mutex);
     
     pr_info("*** I2C DEVICE CREATED: %s at 0x%02x - SENSOR PROBE SHOULD BE TRIGGERED ***\n",
             client->name, client->addr);
@@ -212,6 +233,14 @@ static int prepare_i2c_infrastructure(struct tx_isp_dev *dev)
 /* Clean up I2C infrastructure */
 static void cleanup_i2c_infrastructure(struct tx_isp_dev *dev)
 {
+    /* Clean up global I2C client */
+    mutex_lock(&i2c_client_mutex);
+    if (global_sensor_i2c_client) {
+        i2c_unregister_device(global_sensor_i2c_client);
+        global_sensor_i2c_client = NULL;
+    }
+    mutex_unlock(&i2c_client_mutex);
+    
     /* Clean up any remaining I2C clients and adapters */
     pr_info("I2C infrastructure cleanup complete\n");
 }
@@ -3230,6 +3259,11 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     pr_info("*** I2C CLIENT: %s at 0x%x on %s ***\n", 
                            client->name, client->addr, client->adapter->name);
                            
+                    /* Store I2C client in sensor registry to avoid duplicates */
+                    if (reg_sensor) {
+                        reg_sensor->client = client;
+                    }
+                           
                     /* *** CRITICAL FIX: CREATE ACTUAL SENSOR STRUCTURE AND CONNECT TO ISP *** */
                     pr_info("*** CREATING ACTUAL SENSOR STRUCTURE FOR %s ***\n", sensor_name);
                     
@@ -6118,6 +6152,7 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_sensor *sensor;
     struct i2c_client *client = NULL;
+    struct registered_sensor *reg_sensor;
     
     if (!sd || !sd->isp) {
         return -EINVAL;
@@ -6131,8 +6166,22 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
     pr_info("*** SENSOR_S_STREAM: %s %s ***\n", 
             sensor->info.name, enable ? "ENABLE" : "DISABLE");
     
-    /* CRITICAL: Get the actual I2C client from the sensor driver */
-    /* The sensor should have stored the I2C client when it was probed */
+    /* FIXED: Get existing I2C client instead of creating a new one */
+    mutex_lock(&sensor_list_mutex);
+    list_for_each_entry(reg_sensor, &sensor_list, list) {
+        if (strncmp(reg_sensor->name, sensor->info.name, sizeof(reg_sensor->name)) == 0) {
+            client = reg_sensor->client;
+            break;
+        }
+    }
+    mutex_unlock(&sensor_list_mutex);
+    
+    /* Fallback to global client if not found in registry */
+    if (!client) {
+        mutex_lock(&i2c_client_mutex);
+        client = global_sensor_i2c_client;
+        mutex_unlock(&i2c_client_mutex);
+    }
     
     if (enable) {
         pr_info("*** SENSOR_S_STREAM: ACTUALLY WRITING STREAMING REGISTERS TO HARDWARE ***\n");
@@ -6141,37 +6190,30 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
         if (strncmp(sensor->info.name, "gc2053", 6) == 0) {
             pr_info("*** GC2053: WRITING ACTUAL MIPI STREAMING ENABLE REGISTERS ***\n");
             
-            /* TODO: Get I2C client from sensor registration 
-             * For now, find the I2C device that was created during sensor registration */
-            struct i2c_adapter *adapter = i2c_get_adapter(0);
-            if (adapter) {
-                client = i2c_new_dummy(adapter, 0x37);
-                if (client) {
-                    /* GC2053 streaming enable sequence - ACTUAL I2C WRITES */
-                    pr_info("*** WRITING GC2053 STREAMING REGISTERS TO PHYSICAL HARDWARE ***\n");
-                    
-                    /* Page select */
-                    i2c_smbus_write_byte_data(client, 0xfe, 0x00);
-                    
-                    /* CRITICAL: Enable MIPI streaming - this is what was missing! */
-                    i2c_smbus_write_byte_data(client, 0x3e, 0x91);
-                    
-                    /* Additional GC2053 streaming registers */
-                    i2c_smbus_write_byte_data(client, 0xf7, 0x01);  /* PLL enable */
-                    i2c_smbus_write_byte_data(client, 0xf8, 0x06);  /* PLL multiplier */
-                    i2c_smbus_write_byte_data(client, 0xf9, 0xae);  /* PLL config */
-                    i2c_smbus_write_byte_data(client, 0xfa, 0x84);  /* Clock config */
-                    
-                    pr_info("*** GC2053: CRITICAL REGISTERS WRITTEN TO PHYSICAL SENSOR ***\n");
-                    pr_info("gc2053_write: reg=0xfe val=0x00 (page select)\n");
-                    pr_info("gc2053_write: reg=0x3e val=0x91 (MIPI stream enable)\n");
-                    pr_info("gc2053_write: reg=0xf7 val=0x01 (PLL enable)\n");
-                    pr_info("gc2053_write: reg=0xf8 val=0x06 (PLL multiplier)\n");
-                    pr_info("*** GC2053 NOW PHYSICALLY STREAMING MIPI DATA ***\n");
-                    
-                    i2c_unregister_device(client);
-                }
-                i2c_put_adapter(adapter);
+            if (client) {
+                /* GC2053 streaming enable sequence - ACTUAL I2C WRITES */
+                pr_info("*** WRITING GC2053 STREAMING REGISTERS TO PHYSICAL HARDWARE ***\n");
+                
+                /* Page select */
+                i2c_smbus_write_byte_data(client, 0xfe, 0x00);
+                
+                /* CRITICAL: Enable MIPI streaming - this is what was missing! */
+                i2c_smbus_write_byte_data(client, 0x3e, 0x91);
+                
+                /* Additional GC2053 streaming registers */
+                i2c_smbus_write_byte_data(client, 0xf7, 0x01);  /* PLL enable */
+                i2c_smbus_write_byte_data(client, 0xf8, 0x06);  /* PLL multiplier */
+                i2c_smbus_write_byte_data(client, 0xf9, 0xae);  /* PLL config */
+                i2c_smbus_write_byte_data(client, 0xfa, 0x84);  /* Clock config */
+                
+                pr_info("*** GC2053: CRITICAL REGISTERS WRITTEN TO PHYSICAL SENSOR ***\n");
+                pr_info("gc2053_write: reg=0xfe val=0x00 (page select)\n");
+                pr_info("gc2053_write: reg=0x3e val=0x91 (MIPI stream enable)\n");
+                pr_info("gc2053_write: reg=0xf7 val=0x01 (PLL enable)\n");
+                pr_info("gc2053_write: reg=0xf8 val=0x06 (PLL multiplier)\n");
+                pr_info("*** GC2053 NOW PHYSICALLY STREAMING MIPI DATA ***\n");
+            } else {
+                pr_err("*** ERROR: NO I2C CLIENT AVAILABLE FOR GC2053 REGISTER WRITES ***\n");
             }
         }
         
@@ -6189,17 +6231,13 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
     } else {
         /* Disable streaming */
         if (strncmp(sensor->info.name, "gc2053", 6) == 0) {
-            struct i2c_adapter *adapter = i2c_get_adapter(0);
-            if (adapter) {
-                client = i2c_new_dummy(adapter, 0x37);
-                if (client) {
-                    /* Disable MIPI streaming */
-                    i2c_smbus_write_byte_data(client, 0xfe, 0x00);
-                    i2c_smbus_write_byte_data(client, 0x3e, 0x00);  /* Disable streaming */
-                    pr_info("GC2053: Physical streaming disabled (0x3e=0x00)\n");
-                    i2c_unregister_device(client);
-                }
-                i2c_put_adapter(adapter);
+            if (client) {
+                /* Disable MIPI streaming using existing client */
+                i2c_smbus_write_byte_data(client, 0xfe, 0x00);
+                i2c_smbus_write_byte_data(client, 0x3e, 0x00);  /* Disable streaming */
+                pr_info("GC2053: Physical streaming disabled (0x3e=0x00)\n");
+            } else {
+                pr_err("*** ERROR: NO I2C CLIENT AVAILABLE FOR GC2053 STREAMING DISABLE ***\n");
             }
         }
         
