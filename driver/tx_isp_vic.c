@@ -1889,7 +1889,7 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     return ret;
 }
 
-/* CRITICAL MISSING FUNCTION: vic_core_s_stream - EXACT Binary Ninja implementation */
+/* CRITICAL MISSING FUNCTION: vic_core_s_stream - FIXED to call tx_isp_vic_start */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
@@ -1906,18 +1906,30 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
     
-    pr_info("VIC s_stream: enable=%d, current_state=%d\n", enable, vic_dev->state);
+    pr_info("VIC s_stream: enable=%d, current_state=%d, vic_start_ok=%d\n", enable, vic_dev->state, vic_start_ok);
     
     mutex_lock(&vic_dev->state_lock);
     
     if (enable) {
-        /* Start VIC streaming - Call Binary Ninja exact sequence */
+        /* Start VIC streaming - CRITICAL FIX: Call tx_isp_vic_start FIRST */
         if (vic_dev->state != 4) { /* Not already streaming */
+            
+            /* *** CRITICAL FIX: Call tx_isp_vic_start to set vic_start_ok = 1 *** */
+            pr_info("*** VIC: CRITICAL FIX - calling tx_isp_vic_start BEFORE streaming ***\n");
+            ret = tx_isp_vic_start(vic_dev);
+            if (ret != 0) {
+                pr_err("VIC: tx_isp_vic_start failed: %d - ABORTING stream start\n", ret);
+                goto unlock_exit;
+            }
+            pr_info("*** VIC: tx_isp_vic_start SUCCESS - vic_start_ok should now be 1 ***\n");
+            
+            /* Now start the streaming */
             pr_info("VIC: Starting streaming - calling ispvic_frame_channel_s_stream(1)\n");
             ret = ispvic_frame_channel_s_stream(vic_dev, 1);
             if (ret == 0) {
                 vic_dev->state = 4; /* STREAMING state */
                 pr_info("VIC: Streaming started successfully, state -> 4\n");
+                pr_info("*** VIC: STREAMING WITH INTERRUPTS ENABLED (vic_start_ok=%d) ***\n", vic_start_ok);
             } else {
                 pr_err("VIC: ispvic_frame_channel_s_stream failed: %d\n", ret);
             }
@@ -1932,15 +1944,18 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             if (ret == 0) {
                 vic_dev->state = 3; /* ACTIVE but not streaming */
                 pr_info("VIC: Streaming stopped, state -> 3\n");
+                /* Reset vic_start_ok when stopping */
+                vic_start_ok = 0;
+                pr_info("VIC: vic_start_ok reset to 0 (interrupts disabled)\n");
             }
         } else {
             pr_info("VIC: Not streaming (state=%d)\n", vic_dev->state);
         }
     }
-    
+
+unlock_exit:
     mutex_unlock(&vic_dev->state_lock);
     return ret;
-    return vic_video_s_stream(sd, enable);
 }
 
 /* Define VIC video operations */
