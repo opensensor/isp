@@ -222,16 +222,6 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
     return 0;
 }
 
-/* tx_isp_enable_irq and tx_isp_disable_irq - Binary Ninja implementations */
-void tx_isp_enable_irq(void *irq_info)
-{
-    if (irq_info) {
-        int irq_number = *((int *)irq_info);
-        pr_debug("tx_isp_enable_irq: Enabling IRQ %d\n", irq_number);
-        enable_irq(irq_number);
-    }
-}
-
 /* Core ISP interrupt handler - now calls the dispatch system */
 irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id)
 {
