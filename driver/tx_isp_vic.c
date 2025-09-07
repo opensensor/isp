@@ -2011,14 +2011,15 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 }
 EXPORT_SYMBOL(vic_chardev_ioctl);
 
-/* tx_isp_vic_probe - FIXED to prevent ALL memory corruption */
+/* tx_isp_vic_probe - FIXED to prevent ALL memory corruption AND register interrupts */
 int tx_isp_vic_probe(struct platform_device *pdev)
 {
     struct tx_isp_vic_device *vic_dev;
     struct tx_isp_subdev *sd;
     int ret;
+    int irq;
     
-    pr_info("*** tx_isp_vic_probe: FIXING ALL memory corruption issues ***\n");
+    pr_info("*** tx_isp_vic_probe: FIXING ALL memory corruption issues AND IRQ registration ***\n");
     
     /* CRITICAL FIX: Use proper struct allocation instead of raw memory */
     vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
@@ -2086,10 +2087,37 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     ret = tx_isp_subdev_init(pdev, sd, &vic_subdev_ops);
     if (ret != 0) {
         pr_err("Failed to init isp module: %d\n", ret);
-        iounmap(vic_dev->vic_regs);
-        kfree(vic_dev);
-        return ret;
+        goto err_subdev_init;
     }
+    
+    /* *** CRITICAL FIX: Register VIC interrupt using Binary Ninja exact method *** */
+    pr_info("*** CRITICAL FIX: Registering VIC interrupt handler using tx_isp_request_irq ***\n");
+    
+    /* Get IRQ number from platform device like reference driver */
+    irq = platform_get_irq(pdev, 0);
+    if (irq < 0) {
+        pr_err("Failed to get VIC IRQ from platform device: %d\n", irq);
+        ret = irq;
+        goto err_get_irq;
+    }
+    
+    pr_info("*** VIC IRQ number from platform: %d ***\n", irq);
+    
+    /* Register interrupt handler using same method as reference driver */
+    ret = request_threaded_irq(irq, isp_vic_interrupt_service_routine, NULL, 
+                               IRQF_SHARED, "tx-isp-vic", sd);
+    if (ret != 0) {
+        pr_err("Failed to request VIC IRQ %d: %d\n", irq, ret);
+        goto err_request_irq;
+    }
+    
+    pr_info("*** SUCCESS: VIC interrupt handler registered for IRQ %d ***\n", irq);
+    
+    /* Store IRQ number in subdev for cleanup */
+    sd->irq = irq;
+    
+    /* Set up VIC interrupt handler in subdev operations */
+    sd->interrupt_handler = isp_vic_interrupt_service_routine;
     
     /* RACE CONDITION FIX: Set platform driver data AFTER successful init */
     platform_set_drvdata(pdev, vic_dev);
@@ -2116,12 +2144,20 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         pr_info("  sd address = %p\n", sd);
     }
     
-    pr_info("*** tx_isp_vic_probe: VIC device created successfully ***\n");
-    pr_info("VIC device: size=%zu, vic_dev=%p, sd=%p, state=%d\n", 
-            sizeof(struct tx_isp_vic_device), vic_dev, sd, vic_dev->state);
+    pr_info("*** tx_isp_vic_probe: VIC device created successfully with IRQ %d registered ***\n", irq);
+    pr_info("VIC device: size=%zu, vic_dev=%p, sd=%p, state=%d, irq=%d\n", 
+            sizeof(struct tx_isp_vic_device), vic_dev, sd, vic_dev->state, irq);
     pr_info("VIC register base: %p (validated and working)\n", vic_dev->vic_regs);
     
     return 0;
+
+err_request_irq:
+err_get_irq:
+    tx_isp_subdev_deinit(sd);
+err_subdev_init:
+    iounmap(vic_dev->vic_regs);
+    kfree(vic_dev);
+    return ret;
 }
 
 /* VIC remove function */
