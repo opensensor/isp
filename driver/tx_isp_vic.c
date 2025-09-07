@@ -935,29 +935,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     void __iomem *cpm_regs;
     int ret;
 
-    pr_info("*** tx_isp_vic_start: CRITICAL CORRUPTION FIX - Direct ioremap approach ***\n");
+    pr_info("*** tx_isp_vic_start: Direct ioremap approach ***\n");
 
     if (!vic_dev) {
         pr_err("*** CRITICAL: vic_dev is NULL ***\n");
         return -EINVAL;
     }
-
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev pointer alignment */
-    if (((uintptr_t)vic_dev & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p not 4-byte aligned ***\n", vic_dev);
-        return -EINVAL;
-    }
-
-    /* MIPS SAFE: Bounds validation */
-    if ((uintptr_t)vic_dev >= 0xfffff001) {
-        pr_err("*** MIPS ERROR: vic_dev pointer 0x%p out of valid range ***\n", vic_dev);
-        return -EINVAL;
-    }
-
-    /* *** CRITICAL CORRUPTION FIX: Direct ioremap VIC registers instead of using vic_dev->vic_regs *** */
-    pr_info("*** CORRUPTION FIX: Mapping VIC registers directly to bypass corruption ***\n");
-    pr_info("*** OLD APPROACH: vic_dev->vic_regs = %p (potentially corrupted) ***\n", vic_dev->vic_regs);
-    
     /* Direct map VIC registers at known physical address 0x10023000 */
     vic_regs = ioremap(0x10023000, 0x1000);
     if (!vic_regs) {
@@ -965,44 +948,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -ENOMEM;
     }
     
-    pr_info("*** CORRUPTION FIX SUCCESS: VIC registers directly mapped at %p ***\n", vic_regs);
-    pr_info("*** This bypasses the corrupted vic_dev->vic_regs pointer entirely ***\n");
-
-    /* SENSOR ATTRIBUTE CORRUPTION DETECTION AND REPAIR */
-    pr_info("*** SENSOR ATTR CORRUPTION DETECTION ***\n");
-    
-    /* SAFE ACCESS TEST: Try to read known fields and check for garbage values */
-    u32 test_dbus_type = vic_dev->sensor_attr.dbus_type;
-    u32 test_data_type = vic_dev->sensor_attr.data_type;
-    u32 test_total_width = vic_dev->sensor_attr.total_width;
-    u32 test_total_height = vic_dev->sensor_attr.total_height;
-    
-    pr_info("*** SENSOR ATTR VALUES: Raw values ***\n");
-    pr_info("dbus_type = %u (0x%x)\n", test_dbus_type, test_dbus_type);
-    pr_info("data_type = %u (0x%x)\n", test_data_type, test_data_type);
-    pr_info("total_width = %u, total_height = %u\n", test_total_width, test_total_height);
-    
-    /* CORRUPTION DETECTION: Check for obviously corrupt values */
-    if (test_dbus_type > 10000 || test_data_type > 0x10000 || 
-        test_total_width > 10000 || test_total_height > 10000) {
-        pr_err("*** SEVERE CORRUPTION DETECTED: sensor_attr contains garbage ***\n");
-        pr_err("*** FIXING: Reinitializing sensor_attr to safe defaults ***\n");
-        
-        /* EMERGENCY REPAIR: Reinitialize the corrupted structure */
-        memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-        vic_dev->sensor_attr.dbus_type = 2; /* MIPI interface */
-        vic_dev->sensor_attr.data_type = 0x2b; /* RAW10 format */
-        vic_dev->sensor_attr.total_width = 1920;
-        vic_dev->sensor_attr.total_height = 1080;
-        vic_dev->sensor_attr.integration_time = 1000;
-        vic_dev->sensor_attr.again = 1024;
-        
-        pr_info("*** REPAIRED: sensor_attr reinitialized to safe values ***\n");
-        pr_info("New dbus_type = %d, data_type = 0x%x\n", 
-                vic_dev->sensor_attr.dbus_type, vic_dev->sensor_attr.data_type);
-    }
-
-    pr_info("*** tx_isp_vic_start: CORRUPTION CHECKS AND REPAIRS COMPLETE ***\n");
+    /* FIXED: Use proper struct member access for sensor attributes */
+    struct tx_isp_sensor_attribute *sensor_attr = &vic_dev->sensor_attr;
+    interface_type = sensor_attr->dbus_type;
+    sensor_format = sensor_attr->data_type;
 
     /* *** ENABLE CLOCKS USING LINUX CLOCK FRAMEWORK *** */
     pr_info("*** STREAMING: Enabling ISP clocks using Linux Clock Framework ***\n");
@@ -1052,11 +1001,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     pr_info("*** tx_isp_vic_start: Fresh VIC register mapping %p ready for streaming ***\n", vic_regs);
-
-    /* FIXED: Use proper struct member access for sensor attributes */
-    struct tx_isp_sensor_attribute *sensor_attr = &vic_dev->sensor_attr;
-    interface_type = sensor_attr->dbus_type;
-    sensor_format = sensor_attr->data_type;
 
     pr_info("*** tx_isp_vic_start: EXACT Binary Ninja implementation ***\n");
     pr_info("tx_isp_vic_start: interface=%d, format=0x%x\n", interface_type, sensor_format);
