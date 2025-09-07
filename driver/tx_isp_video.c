@@ -191,6 +191,7 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable)
         rmb();
         
         /* Use safe helper function to call subdev */
+        pr_info("tx_isp_video_link_stream: Calling safe_subdev_call for subdev %d\n", i);
         result = safe_subdev_call(subdev, enable, i);
         
         if (result == 0) {
