@@ -1510,12 +1510,12 @@ static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 	ISP_WARNING("SENSOR_INIT: Configuring %s (chip_id=0x%x, %dx%d)\n", 
 	            SENSOR_NAME, SENSOR_CHIP_ID, wsize->width, wsize->height);
 
-	sensor->video.mbus.width = wsize->width;
-	sensor->video.mbus.height = wsize->height;
-	sensor->video.mbus.code = wsize->mbus_code;
-	sensor->video.mbus.field = V4L2_FIELD_NONE;
-	sensor->video.mbus.colorspace = wsize->colorspace;
-	sensor->video.fps = wsize->fps;
+//	sensor->video.mbus.width = wsize->width;
+//	sensor->video.mbus.height = wsize->height;
+//	sensor->video.mbus.code = wsize->mbus_code;
+//	sensor->video.mbus.field = V4L2_FIELD_NONE;
+//	sensor->video.mbus.colorspace = wsize->colorspace;
+//	sensor->video.fps = wsize->fps;
 	
 	ISP_WARNING("*** CALLING SENSOR_WRITE_ARRAY WITH %p (should be 137 registers) ***\n", wsize->regs);
 	ret = sensor_write_array(sd, wsize->regs);
