@@ -84,6 +84,21 @@ int sensor_early_init(void *core_dev);
 extern struct tx_isp_subdev_ops vic_subdev_ops;
 
 
+/* VIC remote event handler structures - CRITICAL NULL POINTER CRASH FIX */
+/* These structures fix the tx_isp_send_event_to_remote null pointer crash */
+
+/* Event handler callback structure with function pointer at offset 0x1c */
+struct vic_event_handler {
+    char padding[28];                   // Padding to reach offset 0x1c  
+    void *event_callback;               // Function pointer at offset 0x1c
+} __attribute__((packed));
+
+/* Remote handler structure accessed through frame channel's remote_dev */
+struct vic_remote_handler {
+    char padding[12];                   // Padding to reach offset 0xc
+    struct vic_event_handler *event_handler_struct; // Pointer at offset 0xc
+} __attribute__((packed));
+
 // VIC device structure - simplified without dangerous offset arithmetic
 // Since we're fixing unsafe memory access patterns to use proper struct members,
 // we don't need complex padding calculations
@@ -132,6 +147,9 @@ struct tx_isp_vic_device {
     // IRQ handling members (added for interrupt registration)
     int irq_number;                     // IRQ number from platform device
     irq_handler_t irq_handler_func;     // IRQ handler function pointer
+    
+    // CRITICAL NULL POINTER CRASH FIX: Remote event handler for frame channels
+    struct vic_remote_handler *remote_handler; // Event handler chain for QBUF calls
 };
 
 #endif /* __TX_ISP_VIC_H__ */

@@ -897,6 +897,12 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     }
     pr_info("sensor_init: Reference driver sensor initialization complete\n");
 
+    ret = sensor_probe(isp_dev);
+    if (ret) {
+        pr_err("sensor_probe failed: %d\n", ret);
+        return ret;
+    }
+
     /* Binary Ninja: system_reg_write(4, arg1[0] << 0x10 | arg1[1]) */
     writel((sensor_attr->total_width << 16) | sensor_attr->total_height, isp_regs + 0x4);
     wmb();
