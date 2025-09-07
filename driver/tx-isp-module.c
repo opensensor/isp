@@ -786,7 +786,7 @@ static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 /* VIC sensor operations IOCTL - EXACT Binary Ninja implementation */
 static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 /* VIC core s_stream - EXACT Binary Ninja implementation */  
-int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
+int vic_core_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
 
 /* Frame channel state management */
 struct tx_isp_channel_state {
