@@ -174,22 +174,8 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     
     /* Set self-pointer at offset 0xd4 */
     *(void **)((char *)vic_dev + 0xd4) = vic_dev;
-    
-    /* *** CRITICAL FIX: Map VIC registers directly to prevent corruption *** */
-    pr_info("*** CRITICAL: Mapping VIC registers directly to prevent corruption ***\n");
-    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000); // VIC W02 mapping
-    if (!vic_dev->vic_regs) {
-        pr_err("tx_isp_create_vic_device: Failed to map VIC registers at 0x133e0000\n");
-        kfree(vic_dev);
-        return -ENOMEM;
-    }
-    pr_info("*** VIC registers mapped successfully: %p ***\n", vic_dev->vic_regs);
-    
-    /* Also store in ISP device for compatibility */
-    if (!isp_dev->vic_regs) {
-        isp_dev->vic_regs = vic_dev->vic_regs;
-    }
-    
+
+
     /* Initialize VIC device dimensions */
     vic_dev->width = 1920;  /* Default HD width */
     vic_dev->height = 1080; /* Default HD height */
