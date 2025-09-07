@@ -2515,16 +2515,7 @@ static struct platform_driver tx_isp_vic_platform_driver = {
 int __init tx_isp_vic_platform_init(void)
 {
     int ret;
-    
-    pr_info("*** TX ISP VIC PLATFORM DRIVER REGISTRATION ***\n");
-    
-    ret = platform_driver_register(&tx_isp_vic_platform_driver);
-    if (ret) {
-        pr_err("Failed to register VIC platform driver: %d\n", ret);
-        return ret;
-    }
-    
-    pr_info("VIC platform driver registered successfully\n");
+   
     return 0;
 }
 
