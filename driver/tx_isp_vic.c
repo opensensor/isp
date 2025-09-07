@@ -1091,7 +1091,7 @@ int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
 long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 
 
-/* tx_isp_vic_start - CRITICAL FIX: Memory corruption prevention with validation and race condition protection */
+/* tx_isp_vic_start - EXACT Binary Ninja reference implementation */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs = NULL;
@@ -1101,29 +1101,18 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     struct clk *isp_clk, *cgu_isp_clk;
     void __iomem *cpm_regs;
     int ret;
-    struct tx_isp_sensor_attribute sensor_attr_copy;
-    unsigned long flags;
     static DEFINE_MUTEX(vic_start_mutex); /* Prevent concurrent VIC starts */
 
-    pr_info("*** tx_isp_vic_start: MEMORY CORRUPTION & RACE CONDITION FIX ***\n");
+    pr_info("*** tx_isp_vic_start: EXACT Binary Ninja implementation ***\n");
 
-    /* CRITICAL VALIDATION: Comprehensive device integrity check */
-    ret = vic_validate_device_integrity(vic_dev, "tx_isp_vic_start");
-    if (ret != VIC_VALIDATION_OK) {
-        pr_err("*** CRITICAL: VIC device validation failed (%d) ***\n", ret);
+    /* CRITICAL FIX: Basic parameter validation only */
+    if (!vic_dev) {
+        pr_err("tx_isp_vic_start: NULL vic_dev\n");
         return -EINVAL;
     }
 
     /* CRITICAL FIX: Prevent concurrent VIC start operations */
     mutex_lock(&vic_start_mutex);
-
-    /* CRITICAL VALIDATION: Detect any memory corruption before proceeding */
-    ret = vic_detect_memory_corruption(vic_dev, "tx_isp_vic_start");
-    if (ret != VIC_VALIDATION_OK) {
-        pr_err("*** MEMORY CORRUPTION DETECTED: Aborting VIC start (%d) ***\n", ret);
-        mutex_unlock(&vic_start_mutex);
-        return -EINVAL;
-    }
 
     /* Direct map VIC registers at known physical address 0x10023000 */
     vic_regs = ioremap(0x10023000, 0x1000);
@@ -1133,78 +1122,24 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -ENOMEM;
     }
 
-    /* CRITICAL RACE CONDITION FIX: Atomic sensor attribute access */
-    /* Create a local copy of sensor attributes under spinlock protection */
-    spin_lock_irqsave(&vic_dev->lock, flags);
+    /* Binary Ninja EXACT: $v1 = *(arg1 + 0x110) - get sensor attributes */
+    /* Binary Ninja EXACT: $v0 = *($v1 + 0x14) - get interface type (dbus_type) */
+    interface_type = vic_dev->sensor_attr.dbus_type;
+    sensor_format = vic_dev->sensor_attr.data_type;
     
-    /* CRITICAL VALIDATION: Check sensor attribute structure integrity */
-    pr_info("*** MEMORY CORRUPTION CHECK: Validating sensor attributes ***\n");
-    pr_info("vic_dev=%p, sensor_attr=%p\n", vic_dev, &vic_dev->sensor_attr);
-    
-    /* CRITICAL FIX: Make atomic copy of sensor attributes to prevent corruption during access */
-    memcpy(&sensor_attr_copy, &vic_dev->sensor_attr, sizeof(sensor_attr_copy));
-    
-    /* Release spinlock after copying */
-    spin_unlock_irqrestore(&vic_dev->lock, flags);
-    
-    /* CRITICAL FIX: Validate and correct corrupted sensor attributes in the atomic copy */
-    if (sensor_attr_copy.dbus_type == 0 || sensor_attr_copy.dbus_type > 5 ||
-        sensor_attr_copy.dbus_type == 2003736140) {
-        pr_err("*** SENSOR VALIDATION ERROR [tx_isp_vic_start]: Invalid dbus_type %d (expected 1-5) ***\n",
-               sensor_attr_copy.dbus_type);
-        pr_err("*** MEMORY CORRUPTION DETECTED [tx_isp_vic_start]: Sensor attribute validation failed (-3) ***\n");
-        pr_err("*** MEMORY CORRUPTION DETECTED: Aborting VIC start (-3) ***\n");
-        pr_err("*** CORRUPTION FIX: Correcting dbus_type to MIPI (2) ***\n");
-        sensor_attr_copy.dbus_type = 2; /* MIPI interface - most common */
-    }
-    
-    if (sensor_attr_copy.data_type == 0) {
-        pr_err("*** MEMORY CORRUPTION DETECTED: Invalid data_type 0x%x ***\n",
-               sensor_attr_copy.data_type);
-        pr_err("*** CORRUPTION FIX: Correcting data_type to RAW10 (0x2b) ***\n");
-        sensor_attr_copy.data_type = 0x2b; /* RAW10 */
-    }
-    
-    /* Additional validation for other critical fields */
-    if (sensor_attr_copy.total_width == 0 || sensor_attr_copy.total_width > 8192) {
-        pr_err("*** MEMORY CORRUPTION DETECTED: Invalid total_width %d ***\n",
-               sensor_attr_copy.total_width);
-        sensor_attr_copy.total_width = 2200; /* GC2053 default */
-    }
-    
-    if (sensor_attr_copy.total_height == 0 || sensor_attr_copy.total_height > 8192) {
-        pr_err("*** MEMORY CORRUPTION DETECTED: Invalid total_height %d ***\n",
-               sensor_attr_copy.total_height);
-        sensor_attr_copy.total_height = 1125; /* GC2053 default */
-    }
-    
-    if (sensor_attr_copy.integration_time == 0) {
-        pr_err("*** MEMORY CORRUPTION DETECTED: Invalid integration_time %d ***\n",
-               sensor_attr_copy.integration_time);
-        sensor_attr_copy.integration_time = 0x465; /* Safe default */
-    }
-    
-    if (sensor_attr_copy.integration_time_apply_delay == 0) {
-        pr_err("*** MEMORY CORRUPTION DETECTED: Invalid integration_time_apply_delay %d ***\n",
-               sensor_attr_copy.integration_time_apply_delay);
-        sensor_attr_copy.integration_time_apply_delay = 2; /* Standard delay */
-    }
-    
-    if (sensor_attr_copy.again_apply_delay == 0) {
-        pr_err("*** MEMORY CORRUPTION DETECTED: Invalid again_apply_delay %d ***\n",
-               sensor_attr_copy.again_apply_delay);
-        sensor_attr_copy.again_apply_delay = 2; /* Standard delay */
-    }
-
-    /* Now use the validated/corrected values from the atomic copy */
-    interface_type = sensor_attr_copy.dbus_type;
-    sensor_format = sensor_attr_copy.data_type;
-    
-    pr_info("*** VALIDATED SENSOR ATTRIBUTES: interface=%d, format=0x%x ***\n",
+    pr_info("tx_isp_vic_start: interface_type=%d, sensor_format=0x%x\n", 
             interface_type, sensor_format);
-    pr_info("*** Dimensions: %dx%d, integration_time=%d ***\n",
-            sensor_attr_copy.total_width, sensor_attr_copy.total_height,
-            sensor_attr_copy.integration_time);
+    
+    /* Log current sensor attributes for debugging - NO VALIDATION, just info */
+    pr_info("*** SENSOR ATTRIBUTES (no validation): ***\n");
+    pr_info("  dbus_type=%d, data_type=0x%x\n", 
+            vic_dev->sensor_attr.dbus_type, vic_dev->sensor_attr.data_type);
+    pr_info("  dimensions: %dx%d, total: %dx%d\n", 
+            vic_dev->width, vic_dev->height,
+            vic_dev->sensor_attr.total_width, vic_dev->sensor_attr.total_height);
+    pr_info("  integration_time=%d, apply_delay=%d\n",
+            vic_dev->sensor_attr.integration_time, 
+            vic_dev->sensor_attr.integration_time_apply_delay);
 
     /* *** ENABLE CLOCKS USING LINUX CLOCK FRAMEWORK *** */
     pr_info("*** STREAMING: Enabling ISP clocks using Linux Clock Framework ***\n");
@@ -1255,65 +1190,101 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** tx_isp_vic_start: Fresh VIC register mapping %p ready for streaming ***\n", vic_regs);
 
-    pr_info("*** tx_isp_vic_start: EXACT Binary Ninja implementation ***\n");
-    pr_info("tx_isp_vic_start: interface=%d, format=0x%x\n", interface_type, sensor_format);
-    
     /* MCP LOG: VIC start with interface configuration */
     pr_info("MCP_LOG: VIC start initiated - interface=%d, format=0x%x, vic_base=%p\n", 
             interface_type, sensor_format, vic_regs);
 
-    /* Binary Ninja: interface 1=DVP, 2=MIPI, 3=BT601, 4=BT656, 5=BT1120 */
+    /* Binary Ninja EXACT: Switch on interface type ($v0) */
 
     if (interface_type == 1) {
-        /* DVP interface - Binary Ninja: if ($v0 == 1) */
+        /* DVP interface - Binary Ninja EXACT: if ($v0 == 1) */
         pr_info("tx_isp_vic_start: DVP interface configuration (type 1)\n");
 
-        /* Binary Ninja: Check flags match - use atomic copy */
-        if (sensor_attr_copy.dbus_type != interface_type) {
-            pr_warn("tx_isp_vic_start: DVP flags mismatch\n");
+        /* Binary Ninja EXACT: if (*($v1 + 0x18) != $v0) */
+        if (vic_dev->sensor_attr.flags != interface_type) {
+            pr_warn("tx_isp_vic_start: DVP flags mismatch - alternative config\n");
             writel(0xa000a, vic_regs + 0x1a4);
         } else {
             pr_info("tx_isp_vic_start: DVP flags match, normal configuration\n");
-            /* Binary Ninja: *(*(arg1 + 0xb8) + 0x10) = &data_20000 */
+            /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x10) = &data_20000 */
             writel(0x20000, vic_regs + 0x10);   /* DVP config register */
             writel(0x100010, vic_regs + 0x1a4); /* DMA config */
         }
 
-        /* Binary Ninja: DVP buffer calculations and configuration */
+        /* Binary Ninja EXACT: DVP buffer calculations */
+        /* $v1_3 = *($a0 + 0x7c) - sensor format */
+        /* $v0_3 = 8 - default stride multiplier */
         u32 stride_multiplier = 8;
         if (sensor_format != 0) {
             if (sensor_format == 1) stride_multiplier = 0xa;
             else if (sensor_format == 2) stride_multiplier = 0xc;
             else if (sensor_format == 7) stride_multiplier = 0x10;
+            else stride_multiplier = 0; /* Unknown format */
         }
 
-        u32 buffer_calc = stride_multiplier * sensor_attr_copy.integration_time;
+        /* Binary Ninja EXACT: $v0_4 = $v0_3 * *($a0 + 0x2c) */
+        u32 buffer_calc = stride_multiplier * vic_dev->sensor_attr.integration_time;
+        /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x100) = ($v0_4 u>> 5) + (0 u< ($v0_4 & 0x1f) ? 1 : 0) */
         u32 buffer_size = (buffer_calc >> 5) + ((buffer_calc & 0x1f) ? 1 : 0);
         writel(buffer_size, vic_regs + 0x100);
+        
+        /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0xc) = 2 */
         writel(2, vic_regs + 0xc);
+        /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x14) = *(*(arg1 + 0x110) + 0x7c) */
         writel(sensor_format, vic_regs + 0x14);
+        /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
         wmb();
 
-        /* Binary Ninja: DVP timing and WDR configuration */
-        u32 wdr_mode = sensor_attr_copy.wdr_cache;
-        u32 frame_mode = (wdr_mode == 0) ? 0x4440 : (wdr_mode == 1) ? 0x4140 : 0x4240;
+        /* Binary Ninja EXACT: WDR configuration based on wdr_cache */
+        u32 wdr_mode = vic_dev->sensor_attr.wdr_cache;
+        u32 frame_mode;
+        if (wdr_mode != 0) {
+            if (wdr_mode == 1) {
+                frame_mode = 0x4140;
+            } else if (wdr_mode == 2) {
+                frame_mode = 0x4240;
+            } else {
+                pr_info("Can not support this frame mode!!!\n");
+                frame_mode = 0x4440; /* Default */
+            }
+        } else {
+            frame_mode = 0x4440;
+        }
+        
+        /* Binary Ninja EXACT: *($v1_25 + 0x1ac) = $v0_33 */
         writel(frame_mode, vic_regs + 0x1ac);
+        /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x1a8) = $v0_33 */
         writel(frame_mode, vic_regs + 0x1a8);
+        /* Binary Ninja EXACT: *($v0_34 + 0x1b0) = 0x10 */
         writel(0x10, vic_regs + 0x1b0);
         wmb();
 
-        /* Binary Ninja: DVP unlock sequence WITH unlock key */
+        /* Binary Ninja EXACT: Reset sequence */
+        /* **(arg1 + 0xb8) = 2 */
         writel(2, vic_regs + 0x0);
         wmb();
+        /* **(arg1 + 0xb8) = 4 */
         writel(4, vic_regs + 0x0);
         wmb();
 
-        /* *** CRITICAL: DVP unlock key - Binary Ninja exact *** */
-        u32 unlock_key = (sensor_attr_copy.integration_time_apply_delay << 4) | sensor_attr_copy.again_apply_delay;
+        /* Binary Ninja EXACT: DVP unlock key */
+        /* *(*(arg1 + 0xb8) + 0x1a0) = *($v1_27 + 0x74) << 4 | *($v1_27 + 0x78) */
+        u32 unlock_key = (vic_dev->sensor_attr.integration_time_apply_delay << 4) | 
+                         vic_dev->sensor_attr.again_apply_delay;
         writel(unlock_key, vic_regs + 0x1a0);
         wmb();
         pr_info("tx_isp_vic_start: DVP unlock key 0x1a0 = 0x%x\n", unlock_key);
+
+        /* Binary Ninja EXACT: Wait for unlock completion */
+        /* while (*$v1_30 != 0) nop */
+        timeout = 10000;
+        while (timeout > 0) {
+            u32 status = readl(vic_regs + 0x0);
+            if (status == 0) break;
+            udelay(1);
+            timeout--;
+        }
 
     } else if (interface_type == 2) {
         /* *** CRITICAL: MIPI interface - EXACT Binary Ninja implementation *** */
@@ -1333,10 +1304,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja format switch based on sensor_format (*(arg1 + 0xe4)) */
         if (sensor_format >= 0x300e) {
             /* Binary Ninja label_10928: Standard MIPI RAW path */
-            u32 dbus_type_check = sensor_attr_copy.dbus_type;
+            u32 dbus_type_check = vic_dev->sensor_attr.flags;
 
             /* Binary Ninja: Check integration_time_apply_delay for SONY mode */
-            if (sensor_attr_copy.integration_time_apply_delay != 2) {
+            if (vic_dev->sensor_attr.integration_time_apply_delay != 2) {
                 /* Standard MIPI mode */
                 mipi_config = 0x20000;  /* &data_20000 */
                 if (dbus_type_check == 0) {
@@ -1391,22 +1362,22 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             }
         }
 
-        /* Binary Ninja: Additional configuration flags - using atomic copy */
-        if (sensor_attr_copy.total_width == 2) {
+        /* Binary Ninja: Additional configuration flags */
+        if (vic_dev->sensor_attr.total_width == 2) {
             mipi_config |= 2;
         }
-        if (sensor_attr_copy.total_height == 2) {
+        if (vic_dev->sensor_attr.total_height == 2) {
             mipi_config |= 1;
         }
 
-        /* Binary Ninja: MIPI timing registers - using atomic copy */
-        u32 integration_time = sensor_attr_copy.integration_time;
+        /* Binary Ninja: MIPI timing registers */
+        u32 integration_time = vic_dev->sensor_attr.integration_time;
         if (integration_time != 0) {
             writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
             wmb();
         }
 
-        u32 again_value = sensor_attr_copy.again;
+        u32 again_value = vic_dev->sensor_attr.again;
         if (again_value != 0) {
             writel(again_value, vic_regs + 0x3c);
             wmb();
@@ -1416,8 +1387,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
         wmb();
 
-        /* Binary Ninja: VIC register 0x10 with timing flags - using atomic copy */
-        u32 final_mipi_config = (sensor_attr_copy.total_width << 31) | mipi_config;
+        /* Binary Ninja: VIC register 0x10 with timing flags */
+        u32 final_mipi_config = (vic_dev->sensor_attr.total_width << 31) | mipi_config;
         writel(final_mipi_config, vic_regs + 0x10);
         wmb();
 
@@ -1502,14 +1473,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_err("*** MEMORY CORRUPTION DETECTED: Expected 1-5, got %d ***\n", interface_type);
         pr_err("*** Checking sensor attribute structure integrity ***\n");
         
-        /* Debug the sensor attribute structure using atomic copy */
+        /* Debug the sensor attribute structure */
         pr_err("vic_dev=%p, sensor_attr=%p\n", vic_dev, &vic_dev->sensor_attr);
         pr_err("sensor_attr offset from vic_dev: 0x%lx\n",
                (unsigned long)&vic_dev->sensor_attr - (unsigned long)vic_dev);
-        pr_err("dbus_type value: %d (expected 1-5)\n", sensor_attr_copy.dbus_type);
-        pr_err("data_type value: 0x%x\n", sensor_attr_copy.data_type);
+        pr_err("dbus_type value: %d (expected 1-5)\n", vic_dev->sensor_attr.dbus_type);
+        pr_err("data_type value: 0x%x\n", vic_dev->sensor_attr.data_type);
         pr_err("total_width: %d, total_height: %d\n",
-               sensor_attr_copy.total_width, sensor_attr_copy.total_height);
+               vic_dev->sensor_attr.total_width, vic_dev->sensor_attr.total_height);
         
         mutex_unlock(&vic_start_mutex);
         return -EINVAL;
@@ -1541,7 +1512,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
 
     /* Binary Ninja: Log WDR mode */
-    const char *wdr_msg = (sensor_attr_copy.wdr_cache != 0) ?
+    const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
