@@ -2137,7 +2137,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         return -EBUSY;
     }
 
-    vic_base = ioremap(0x10023000, 0x1000)
+    vic_base = ioremap(0x10023000, 0x1000);
     if (!vic_base) {
         pr_err("Failed to map VIC registers\n");
         release_mem_region(res->start, resource_size(res));
