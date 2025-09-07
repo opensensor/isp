@@ -1312,6 +1312,27 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
+    /* *** CRITICAL: Configure VIC interrupt masks to enable interrupts *** */
+    pr_info("*** CRITICAL: Configuring VIC interrupt masks for IRQ generation ***\n");
+    
+    /* Enable frame done interrupt (bit 0) and error interrupts as needed */
+    /* Clear interrupt mask register to enable interrupts (0 = enabled, 1 = masked) */
+    writel(0x00000000, vic_regs + 0x1e8);  /* Enable all main VIC interrupts */
+    wmb();
+    
+    /* Enable MDMA interrupts for channels 0 and 1 */
+    writel(0x00000000, vic_regs + 0x1ec);  /* Enable all MDMA interrupts */
+    wmb();
+    
+    /* Clear any pending interrupts before enabling */
+    writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear all pending main interrupts */
+    writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear all pending MDMA interrupts */
+    wmb();
+    
+    pr_info("*** VIC interrupt masks configured - interrupts should now fire! ***\n");
+    pr_info("  Main interrupt mask (0x1e8) = 0x%08x\n", readl(vic_regs + 0x1e8));
+    pr_info("  MDMA interrupt mask (0x1ec) = 0x%08x\n", readl(vic_regs + 0x1ec));
+
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     vic_start_ok = 1;
     pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
