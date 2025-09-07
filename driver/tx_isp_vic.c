@@ -1012,8 +1012,26 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         iounmap(cpm_regs);
     }
 
-    /* STEP 3: Get VIC registers - should already be mapped by tx_isp_create_vic_device */
+    /* STEP 3: Get VIC registers - with CRITICAL fallback mapping */
     vic_regs = vic_dev->vic_regs;
+    
+    /* CRITICAL FIX: If VIC registers not mapped, map them now */
+    if (!vic_regs) {
+        pr_warn("*** CRITICAL: VIC registers not mapped - mapping now ***\n");
+        vic_regs = ioremap(0x133e0000, 0x10000); // VIC W02 mapping
+        if (!vic_regs) {
+            pr_err("*** FATAL: Failed to map VIC registers at 0x133e0000 ***\n");
+            return -ENOMEM;
+        }
+        vic_dev->vic_regs = vic_regs; /* Store for future use */
+        pr_info("*** SUCCESS: VIC registers mapped at %p ***\n", vic_regs);
+        
+        /* Also store in ISP device for compatibility */
+        if (ourISPdev && !ourISPdev->vic_regs) {
+            ourISPdev->vic_regs = vic_regs;
+            pr_info("*** SUCCESS: VIC registers also stored in ISP device ***\n");
+        }
+    }
     
     /* CRITICAL MIPS VALIDATION: Ensure VIC register base is valid and aligned */
     if (!vic_regs ||
