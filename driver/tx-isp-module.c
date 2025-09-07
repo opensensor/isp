@@ -3334,24 +3334,24 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         
         pr_info("Sensor registration complete, final_result=0x%x\n", final_result);
         
-        /* *** CRITICAL: Add sensor to enumeration list AND create actual sensor connection *** */
-        if (final_result == 0 && sensor_name[0] != '\0') {
-            pr_info("*** ADDING SUCCESSFULLY REGISTERED SENSOR TO LIST: %s ***\n", sensor_name);
-            
-            /* Add to our sensor enumeration list */
-            reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
-            if (reg_sensor) {
-                strncpy(reg_sensor->name, sensor_name, sizeof(reg_sensor->name) - 1);
-                reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
+            /* *** CRITICAL: Add sensor to enumeration list AND create actual sensor connection *** */
+            if (final_result == 0 && sensor_name[0] != '\0') {
+                pr_info("*** ADDING SUCCESSFULLY REGISTERED SENSOR TO LIST: %s ***\n", sensor_name);
                 
-                mutex_lock(&sensor_list_mutex);
-                reg_sensor->index = sensor_count++;
-                list_add_tail(&reg_sensor->list, &sensor_list);
-                mutex_unlock(&sensor_list_mutex);
-                
-                pr_info("*** SENSOR ADDED TO LIST: index=%d name=%s ***\n", 
-                       reg_sensor->index, reg_sensor->name);
-            }
+                /* Add to our sensor enumeration list */
+                reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
+                if (reg_sensor) {
+                    strncpy(reg_sensor->name, sensor_name, sizeof(reg_sensor->name) - 1);
+                    reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
+                    
+                    mutex_lock(&sensor_list_mutex);
+                    reg_sensor->index = sensor_count++;
+                    list_add_tail(&reg_sensor->list, &sensor_list);
+                    mutex_unlock(&sensor_list_mutex);
+                    
+                    pr_info("*** SENSOR ADDED TO LIST: index=%d name=%s ***\n", 
+                           reg_sensor->index, reg_sensor->name);
+                }
             
             /* *** CRITICAL: Create I2C device for sensor *** */
             pr_info("*** CREATING I2C DEVICE FOR SENSOR %s ***\n", sensor_name);
@@ -3432,6 +3432,27 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
                 pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor, sensor->info.name);
                 pr_info("*** SENSOR SUCCESSFULLY CONNECTED TO ISP DEVICE! ***\n");
+                
+                /* *** CRITICAL FIX: SYNC SENSOR ATTRIBUTES TO VIC DEVICE *** */
+                pr_info("*** SYNCING SENSOR ATTRIBUTES TO VIC DEVICE ***\n");
+                if (ourISPdev->vic_dev) {
+                    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                    if (vic_dev && vic_dev->sd.ops && vic_dev->sd.ops->sensor && 
+                        vic_dev->sd.ops->sensor->sync_sensor_attr) {
+                        pr_info("*** CALLING vic_sensor_ops_sync_sensor_attr TO PROPAGATE MIPI CONFIG ***\n");
+                        int sync_ret = vic_dev->sd.ops->sensor->sync_sensor_attr(&vic_dev->sd, sensor->video.attr);
+                        if (sync_ret == 0) {
+                            pr_info("*** SUCCESS: VIC SENSOR ATTRIBUTES SYNCED (dbus_type=%d) ***\n", 
+                                    sensor->video.attr->dbus_type);
+                        } else {
+                            pr_err("*** ERROR: Failed to sync sensor attributes to VIC: %d ***\n", sync_ret);
+                        }
+                    } else {
+                        pr_err("*** ERROR: VIC device doesn't have sync_sensor_attr operation! ***\n");
+                    }
+                } else {
+                    pr_err("*** ERROR: No VIC device to sync sensor attributes to! ***\n");
+                }
 
                 /* SAFE UPDATE: Update registry with actual subdev pointer */
                 if (reg_sensor) {
