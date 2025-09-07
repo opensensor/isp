@@ -2134,11 +2134,9 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     
     pr_info("*** SUCCESS: VIC interrupt handler registered for IRQ %d ***\n", irq);
     
-    /* Store IRQ number in subdev for cleanup */
-    sd->irq = irq;
-    
-    /* Set up VIC interrupt handler in subdev operations */
-    sd->interrupt_handler = isp_vic_interrupt_service_routine;
+    /* Store IRQ information in VIC device structure instead */
+    vic_dev->irq_number = irq;
+    vic_dev->irq_handler_func = isp_vic_interrupt_service_routine;
     
     /* RACE CONDITION FIX: Set platform driver data AFTER successful init */
     platform_set_drvdata(pdev, vic_dev);
