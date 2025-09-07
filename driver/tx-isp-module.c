@@ -84,6 +84,16 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
         mutex_unlock(&i2c_client_mutex);
         return global_sensor_i2c_client;
     }
+    
+    /* Double-check: search for any existing client on this adapter at this address */
+    client = i2c_verify_client(i2c_get_clientdata(adapter->dev.parent));
+    if (client && client->addr == info->addr) {
+        pr_info("*** FOUND EXISTING I2C CLIENT ON BUS: %s at 0x%02x ***\n",
+                client->name, client->addr);
+        global_sensor_i2c_client = client;
+        mutex_unlock(&i2c_client_mutex);
+        return client;
+    }
     mutex_unlock(&i2c_client_mutex);
     
     pr_info("Creating I2C subdev: type=%s addr=0x%02x on adapter %s\n",
@@ -100,11 +110,14 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
     mutex_lock(&i2c_client_mutex);
     if (!global_sensor_i2c_client) {
         global_sensor_i2c_client = client;
+        pr_info("*** I2C DEVICE CREATED: %s at 0x%02x - SENSOR PROBE SHOULD BE TRIGGERED ***\n",
+                client->name, client->addr);
+    } else {
+        pr_info("*** I2C CLIENT ALREADY EXISTS, USING EXISTING ONE ***\n");
+        i2c_unregister_device(client);  /* Clean up duplicate */
+        client = global_sensor_i2c_client;
     }
     mutex_unlock(&i2c_client_mutex);
-    
-    pr_info("*** I2C DEVICE CREATED: %s at 0x%02x - SENSOR PROBE SHOULD BE TRIGGERED ***\n",
-            client->name, client->addr);
     
     /* *** FIXED: PROPER I2C COMMUNICATION TEST *** */
     pr_info("*** TESTING I2C COMMUNICATION WITH %s (IMPROVED METHOD) ***\n", info->type);
