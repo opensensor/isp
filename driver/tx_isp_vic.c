@@ -26,6 +26,9 @@ uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 static void tx_vic_disable_irq(void);
 static void tx_vic_enable_irq(void);
 
+/* Forward declaration for VIC start function */
+int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);
+
 /* vic_video_s_stream - EXACT Binary Ninja reference implementation */
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
