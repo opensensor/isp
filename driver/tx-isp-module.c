@@ -4607,12 +4607,8 @@ static int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     }
     
     /* Get VIC device from ISP device with MIPS alignment validation */
-    /* CRITICAL FIX: The vic_dev is stored as &vic_dev->sd, so we need to get the container */
-    if (isp_dev->vic_dev) {
-        vic_dev = container_of(isp_dev->vic_dev, struct tx_isp_vic_device, sd);
-    } else {
-        vic_dev = NULL;
-    }
+    /* CRITICAL FIX: Binary Ninja shows *(arg1 + 0xd4) - direct cast, not container_of */
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
         pr_err("*** MIPS ALIGNMENT ERROR: vic_dev 0x%p not aligned or NULL ***\n", vic_dev);
         return -EINVAL;
