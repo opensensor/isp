@@ -99,26 +99,22 @@ struct vic_remote_handler {
     struct vic_event_handler *event_handler_struct; // Pointer at offset 0xc
 } __attribute__((packed));
 
-// VIC device structure - CRITICAL MEMORY CORRUPTION FIX with proper MIPS alignment  
-// MIPS architecture requires 4-byte alignment for 32-bit values and 8-byte for 64-bit
-// Structure packing ensures Binary Ninja offset compatibility while preventing corruption
+// VIC device structure - Clean implementation using proper struct member access
+// No offset-based access - use proper C struct member names
 struct tx_isp_vic_device {
-    // Base subdev structure (expected by existing code)
+    // Base subdev structure
     struct tx_isp_subdev sd;
     
-    // VIC hardware registers - CRITICAL: Must be properly aligned
-    void __iomem *vic_regs;             // 64-bit pointer on 64-bit systems
+    // VIC hardware registers
+    void __iomem *vic_regs;
     
-    // VIC device properties - Group 32-bit values for alignment
+    // VIC device properties
     uint32_t width;                     // Frame width
     uint32_t height;                    // Frame height
     uint32_t pixel_format;              // Pixel format
     
-    // CRITICAL FIX: Padding to place sensor_attr at offset 0x110 for Binary Ninja compatibility
-    char binary_ninja_padding[0x110 - 0x20];  // Pad from current offset to 0x110
-    
-    // CRITICAL: Sensor attributes - MUST be at offset 0x110 for tx_isp_vic_start Binary Ninja reference  
-    struct tx_isp_sensor_attribute sensor_attr __attribute__((aligned(8))); // Force 8-byte alignment
+    // CRITICAL: Sensor attributes - accessed by proper struct member name, not offsets
+    struct tx_isp_sensor_attribute sensor_attr;
     
     // Device state and synchronization - Group related fields
     int state;                          // State: 1=init, 2=ready, 3=active, 4=streaming
