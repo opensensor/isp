@@ -2060,6 +2060,8 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
     return ret;
 }
 EXPORT_SYMBOL(vic_chardev_ioctl);
+
+
 int tx_isp_vic_probe(struct platform_device *pdev)
 {
     struct tx_isp_vic_device *vic_dev;
