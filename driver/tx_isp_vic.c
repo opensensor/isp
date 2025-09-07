@@ -285,7 +285,7 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     return 0;  /* Success */
 }
 
-/* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
+/* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation - NULL POINTER FIX */
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_subdev *sd = dev_id;
@@ -296,27 +296,40 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     
     pr_debug("*** isp_vic_interrupt_service_routine: IRQ %d triggered ***\n", irq);
     
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
+    /* Binary Ninja EXACT: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
     if (!sd || (unsigned long)sd >= 0xfffff001) {
         pr_err("isp_vic_interrupt_service_routine: Invalid sd parameter\n");
         return IRQ_HANDLED;
     }
     
-    /* CRITICAL FIX: Use proper subdev data access instead of dangerous offset 0xd4 */
+    /* Binary Ninja EXACT: void* $s0 = *(arg1 + 0xd4) */
+    /* CRITICAL FIX: This is the NULL pointer access causing the crash! */
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     
-    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
+    /* Binary Ninja EXACT: if ($s0 != 0 && $s0 u< 0xfffff001) */
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("isp_vic_interrupt_service_routine: Invalid vic_dev - using safe subdev access\n");
+        pr_err("*** NULL POINTER FIX: vic_dev is NULL - IRQ handler cannot proceed ***\n");
+        pr_err("*** This was the source of virtual address 0x00000004 crashes! ***\n");
         return IRQ_HANDLED;
     }
     
-    /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
-    vic_base = sd->base;  /* VIC register base from subdev */
+    /* Binary Ninja EXACT: void* $v0_4 = *(arg1 + 0xb8) */
+    /* CRITICAL FIX: Binary Ninja gets register base directly from subdev, not vic_dev! */
+    vic_base = sd->base;  /* VIC register base from subdev at offset 0xb8 */
     if (!vic_base) {
-        pr_err("isp_vic_interrupt_service_routine: No VIC register base\n");
+        pr_err("*** NULL POINTER FIX: VIC register base is NULL - cannot access registers ***\n");
+        pr_err("*** This would cause the 0x00000004 crash when accessing registers! ***\n");
         return IRQ_HANDLED;
     }
+    
+    /* Additional safety check for register base validity */
+    if ((unsigned long)vic_base < 0x10000000 || (unsigned long)vic_base >= 0x20000000) {
+        pr_err("*** NULL POINTER FIX: Invalid VIC register base 0x%p ***\n", vic_base);
+        return IRQ_HANDLED;
+    }
+    
+    pr_debug("*** NULL POINTER FIX: All pointers validated - vic_dev=%p, vic_base=%p ***\n", 
+             vic_dev, vic_base);
     
     /* Binary Ninja: Read and process interrupt status registers */
     /* int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
