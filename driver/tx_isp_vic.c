@@ -1152,10 +1152,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL FIX: Validate and correct corrupted sensor attributes in the atomic copy */
     if (sensor_attr_copy.dbus_type == 0 || sensor_attr_copy.dbus_type > 5 ||
         sensor_attr_copy.dbus_type == 2003736140) {
-        pr_err("*** MEMORY CORRUPTION DETECTED: Invalid dbus_type %d ***\n",
+        pr_err("*** SENSOR VALIDATION ERROR [tx_isp_vic_start]: Invalid dbus_type %d (expected 1-5) ***\n",
                sensor_attr_copy.dbus_type);
+        pr_err("*** MEMORY CORRUPTION DETECTED [tx_isp_vic_start]: Sensor attribute validation failed (-3) ***\n");
+        pr_err("*** MEMORY CORRUPTION DETECTED: Aborting VIC start (-3) ***\n");
         pr_err("*** CORRUPTION FIX: Correcting dbus_type to MIPI (2) ***\n");
-        sensor_attr_copy.dbus_type = 2; /* MIPI interface */
+        sensor_attr_copy.dbus_type = 2; /* MIPI interface - most common */
     }
     
     if (sensor_attr_copy.data_type == 0) {
