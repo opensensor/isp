@@ -2192,14 +2192,31 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     tx_isp_set_subdevdata(sd, vic_dev);
     pr_info("*** CRITICAL FIX: Set subdev data - sd=%p points to vic_dev=%p ***\n", sd, vic_dev);
 
-    /* *** CRITICAL NULL POINTER FIX: Set up pad event callback at offset 0x1c *** */
-    if (sd->inpads && sd->inpads[0].priv) {
-        struct vic_callback_struct *callback_struct = sd->inpads[0].priv;
-        callback_struct->event_callback = vic_pad_event_handler;
-        pr_info("*** CRITICAL NULL POINTER FIX: Event callback set at pad+0x1c = %p ***\n", 
-                vic_pad_event_handler);
+    /* *** CRITICAL NULL POINTER FIX: Set up VIC event callback system *** */
+    /* Based on Binary Ninja analysis, callbacks are stored in vic_dev structure at specific offsets */
+    /* From ispcore_pad_event_handle, we see callbacks at 0x1c0, 0x1c8, etc. */
+    /* We need to allocate and initialize the callback structure properly */
+    
+    /* Allocate callback structure with proper size and alignment */
+    struct vic_callback_struct *callback_struct = kzalloc(sizeof(struct vic_callback_struct), GFP_KERNEL);
+    if (!callback_struct) {
+        pr_err("*** CRITICAL ERROR: Failed to allocate VIC callback structure ***\n");
+        ret = -ENOMEM;
+        goto err_deinit_subdev;
+    }
+    
+    /* Set the event callback function pointer at the correct offset (0x1c) */
+    callback_struct->event_callback = vic_pad_event_handler;
+    
+    /* Initialize input pad with callback structure */
+    if (sd->inpads) {
+        sd->inpads[0].priv = callback_struct;
+        pr_info("*** CRITICAL NULL POINTER FIX: VIC callback structure allocated and set ***\n");
+        pr_info("*** Callback struct at %p, event_callback at offset 0x1c = %p ***\n", 
+                callback_struct, vic_pad_event_handler);
     } else {
-        pr_err("*** CRITICAL ERROR: Pad or pad->priv is NULL - cannot set event callback! ***\n");
+        pr_err("*** CRITICAL ERROR: sd->inpads is NULL - cannot set callback! ***\n");
+        kfree(callback_struct);
         ret = -EFAULT;
         goto err_deinit_subdev;
     }
