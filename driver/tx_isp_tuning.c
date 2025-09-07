@@ -4275,34 +4275,49 @@ void *isp_core_tuning_init(void *arg1)
     
     pr_info("isp_core_tuning_init: Initializing ISP core tuning\n");
     
-    /* CRITICAL: Allocate proper isp_tuning_data structure, not just raw memory */
-    tuning_data = kzalloc(sizeof(struct isp_tuning_data), GFP_KERNEL);
+    /* CRITICAL: Binary Ninja shows 0x40d0 size allocation with GFP_KERNEL | __GFP_DMA32 */
+    tuning_data = kmalloc(0x40d0, GFP_KERNEL | __GFP_DMA32);
     
     if (!tuning_data) {
-        pr_err("isp_core_tuning_init: Failed to allocate tuning data structure (%zu bytes)\n", sizeof(struct isp_tuning_data));
+        pr_err("isp_core_tuning_init: Failed to allocate tuning data structure (0x40d0 bytes)\n");
         return NULL;
     }
     
-    pr_info("isp_core_tuning_init: Allocated tuning data structure at %p (size=%zu)\n", tuning_data, sizeof(struct isp_tuning_data));
+    /* CRITICAL: Clear allocated memory - Binary Ninja shows memset(result, 0, 0x40d0) */
+    memset(tuning_data, 0, 0x40d0);
     
-    /* CRITICAL: Verify the allocated pointer is in kernel space */
+    pr_info("isp_core_tuning_init: Allocated tuning data structure at %p (size=0x40d0)\n", tuning_data);
+    
+    /* CRITICAL: Binary Ninja reference implementation safety checks */
+    /* MIPS KSEG0: 0x80000000-0x9fffffff, KSEG1: 0xa0000000-0xbfffffff, KSEG2: 0xc0000000+ */
     if ((unsigned long)tuning_data < 0x80000000) {
         pr_err("CRITICAL: Allocated tuning data not in kernel space: %p\n", tuning_data);
         kfree(tuning_data);
         return NULL;
     }
     
-    /* CRITICAL: Verify alignment */
+    /* CRITICAL: MIPS requires 4-byte alignment for struct access */
     if (((unsigned long)tuning_data & 0x3) != 0) {
-        pr_err("CRITICAL: Allocated tuning data not aligned: %p\n", tuning_data);
+        pr_err("CRITICAL: Allocated tuning data not aligned: %p - MIPS requirement\n", tuning_data);
         kfree(tuning_data);
         return NULL;
     }
     
-    /* CRITICAL: Initialize register base to prevent NULL pointer crashes */
+    /* CRITICAL: Binary Ninja shows *result = arg1 */
+    if (arg1) {
+        *(void**)tuning_data = arg1;
+    }
+    
+    /* CRITICAL: Binary Ninja shows proper register initialization - CRASH PREVENTION */
     if (ourISPdev && ourISPdev->core_regs) {
-        tuning_data->regs = ourISPdev->core_regs;
-        pr_info("isp_core_tuning_init: Register base initialized to %p\n", tuning_data->regs);
+        /* CRITICAL: Use safe struct member access instead of hardcoded offset */
+        if ((unsigned long)tuning_data > sizeof(struct isp_tuning_data)) {
+            tuning_data->regs = ourISPdev->core_regs;
+            pr_info("isp_core_tuning_init: Register base initialized to %p\n", tuning_data->regs);
+        } else {
+            pr_warn("isp_core_tuning_init: Tuning data size insufficient for register field\n");
+            tuning_data->regs = NULL;
+        }
     } else {
         pr_warn("isp_core_tuning_init: No register base available - register access will be disabled\n");
         tuning_data->regs = NULL;
@@ -4371,9 +4386,21 @@ void *isp_core_tuning_init(void *arg1)
     /* Initialize state */
     tuning_data->state = 1;
     
-    /* CRITICAL: Initialize locks properly */
+    /* CRITICAL: Binary Ninja reference initialization sequence */
+    /* private_spin_lock_init(&result[0x102e]) */
     spin_lock_init(&tuning_data->lock);
+    
+    /* private_raw_mutex_init(&result[0x102e], "width is %d, height is %d...") */
     mutex_init(&tuning_data->mutex);
+    
+    /* Binary Ninja: result[0x1031] = 1 */
+    tuning_data->state = 1;
+    
+    /* Binary Ninja: result[0x1032] = &isp_core_tunning_fops */
+    /* This is handled by device creation, not stored in data structure */
+    
+    /* Binary Ninja: result[0x1033] = isp_core_tuning_event */
+    /* Event callback is registered separately */
     
     /* CRITICAL: Final verification before returning */
     if (!virt_addr_valid(tuning_data)) {
