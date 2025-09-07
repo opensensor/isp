@@ -739,28 +739,17 @@ int frame_channel_open(struct inode *inode, struct file *file)
     int i;
     int channel_num = -1;
     
-    pr_info("*** FRAME CHANNEL OPEN: minor=%d - MIPS ALIGNMENT SAFE ***\n", minor);
+    pr_info("*** FRAME CHANNEL OPEN: minor=%d ***\n", minor);
     
-    /* MIPS ALIGNMENT CHECK: Validate file pointer alignment first */
-    if (!file || ((uintptr_t)file & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: file pointer 0x%p not 4-byte aligned ***\n", file);
+    /* CRITICAL FIX: Validate file pointer first */
+    if (!file) {
+        pr_err("Frame channel open: Invalid file pointer\n");
         return -EINVAL;
     }
     
-    /* MIPS SAFE: Validate file structure bounds */
-    if ((uintptr_t)file >= 0xfffff001) {
-        pr_err("*** MIPS ERROR: file pointer 0x%p out of valid range ***\n", file);
-        return -EFAULT;
-    }
-    
-    /* MIPS SAFE: Find the frame channel device with alignment checking */
+    /* CRITICAL FIX: Find the frame channel device by minor number */
+    /* First try to match against registered frame_channels array */
     for (i = 0; i < num_channels; i++) {
-        /* MIPS ALIGNMENT CHECK: Validate frame_channels array element alignment */
-        if (((uintptr_t)&frame_channels[i] & 0x3) != 0) {
-            pr_err("*** MIPS ALIGNMENT ERROR: frame_channels[%d] not aligned ***\n", i);
-            continue;
-        }
-        
         if (frame_channels[i].miscdev.minor == minor) {
             fcd = &frame_channels[i];
             channel_num = i;
@@ -768,64 +757,46 @@ int frame_channel_open(struct inode *inode, struct file *file)
         }
     }
     
-    /* MIPS SAFE: Create new entry if needed with alignment validation */
+    /* FALLBACK: If not found in array, create a new frame channel entry */
+    /* This handles cases where devices were created externally */
     if (!fcd) {
-        pr_info("*** FRAME CHANNEL OPEN: Creating new entry for minor %d (MIPS-safe) ***\n", minor);
+        pr_info("*** FRAME CHANNEL OPEN: Device not in array, creating new entry for minor %d ***\n", minor);
         
-        for (i = 0; i < 4; i++) {
-            /* MIPS ALIGNMENT CHECK: Validate each array element */
-            if (((uintptr_t)&frame_channels[i] & 0x3) != 0) {
-                pr_err("*** MIPS ALIGNMENT ERROR: frame_channels[%d] not aligned, skipping ***\n", i);
-                continue;
-            }
-            
+        /* Determine channel number from minor - framechan0=minor X, framechan1=minor Y, etc */
+        /* Since we can't easily map minor to channel, we'll use the first available slot */
+        for (i = 0; i < 4; i++) { /* Max 4 channels */
             if (frame_channels[i].miscdev.minor == 0 || frame_channels[i].miscdev.minor == MISC_DYNAMIC_MINOR) {
                 fcd = &frame_channels[i];
                 fcd->channel_num = i;
-                fcd->miscdev.minor = minor;
+                fcd->miscdev.minor = minor; /* Store the actual minor number */
                 channel_num = i;
-                pr_info("*** FRAME CHANNEL OPEN: Assigned to channel %d (MIPS-aligned) ***\n", i);
+                pr_info("*** FRAME CHANNEL OPEN: Assigned to channel %d ***\n", i);
                 break;
             }
         }
     }
     
     if (!fcd) {
-        pr_err("Frame channel open: No available aligned slot for minor %d\n", minor);
+        pr_err("Frame channel open: No available slot for minor %d\n", minor);
         return -ENODEV;
     }
     
-    /* MIPS ALIGNMENT CHECK: Validate fcd structure alignment */
-    if (((uintptr_t)fcd & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: fcd structure 0x%p not aligned ***\n", fcd);
-        return -EFAULT;
-    }
+    /* Initialize channel state - safe to call multiple times in kernel 3.10 */
+    spin_lock_init(&fcd->state.buffer_lock);
+    init_waitqueue_head(&fcd->state.frame_wait);
     
-    /* MIPS SAFE: Initialize channel state with alignment checks */
-    if (((uintptr_t)&fcd->state.buffer_lock & 0x3) == 0) {
-        spin_lock_init(&fcd->state.buffer_lock);
-    } else {
-        pr_err("*** MIPS ALIGNMENT ERROR: buffer_lock not aligned ***\n");
-        return -EFAULT;
-    }
-    
-    if (((uintptr_t)&fcd->state.frame_wait & 0x3) == 0) {
-        init_waitqueue_head(&fcd->state.frame_wait);
-    } else {
-        pr_err("*** MIPS ALIGNMENT ERROR: frame_wait not aligned ***\n");
-        return -EFAULT;
-    }
-    
-    /* MIPS SAFE: Set default format with alignment validation */
+    /* Set default format based on channel if not already set */
     if (fcd->state.width == 0) {
         if (fcd->channel_num == 0) {
+            /* Main channel - HD */
             fcd->state.width = 1920;
             fcd->state.height = 1080;
-            fcd->state.format = 0x3231564e; /* NV12 - aligned value */
+            fcd->state.format = 0x3231564e; /* NV12 */
         } else {
+            /* Sub channel - smaller */
             fcd->state.width = 640;
             fcd->state.height = 360;  
-            fcd->state.format = 0x3231564e; /* NV12 - aligned value */
+            fcd->state.format = 0x3231564e; /* NV12 */
         }
         
         fcd->state.enabled = false;
@@ -834,29 +805,23 @@ int frame_channel_open(struct inode *inode, struct file *file)
         fcd->state.sequence = 0;
         fcd->state.frame_ready = false;
         
-        pr_info("*** FRAME CHANNEL %d: State initialized (MIPS-safe) ***\n", fcd->channel_num);
+        pr_info("*** FRAME CHANNEL %d: Initialized state ***\n", fcd->channel_num);
     }
     
-    /* MIPS CRITICAL FIX: Store frame channel device with proper alignment */
-    /* MIPS SAFE: Validate private_data field alignment */
-    if (((uintptr_t)&file->private_data & 0x3) == 0) {
-        file->private_data = fcd;
-    } else {
-        pr_err("*** MIPS ALIGNMENT ERROR: file->private_data field not aligned ***\n");
-        return -EFAULT;
-    }
+    /* CRITICAL FIX: Store frame channel device at the exact offset expected by reference driver */
+    /* Binary Ninja shows frame_channel_unlocked_ioctl expects device at *(file + 0x70) */
+    file->private_data = fcd;
     
-    /* MIPS CRITICAL FIX: Store at offset 0x70 with strict alignment validation */
-    /* This prevents the BadVA crash by ensuring proper alignment */
-    if (((uintptr_t)((char*)file + 0x70) & 0x3) == 0 && 
-        (char*)file + 0x70 + sizeof(void*) <= (char*)file + sizeof(*file)) {
+    /* CRITICAL FIX: Also store at offset 0x70 where Binary Ninja expects it */
+    /* This prevents the null pointer dereference crash */
+    if ((char*)file + 0x70 < (char*)file + sizeof(*file)) {
         *((struct frame_channel_device**)((char*)file + 0x70)) = fcd;
-        pr_info("*** MIPS CRITICAL FIX: Frame channel device stored at file+0x70 with proper alignment ***\n");
+        pr_info("*** CRITICAL FIX: Frame channel device stored at file+0x70 to prevent crash ***\n");
     } else {
-        pr_warn("*** MIPS WARNING: Cannot store at file+0x70 due to alignment - using private_data only ***\n");
+        pr_warn("*** WARNING: Cannot store at file+0x70 - using private_data only ***\n");
     }
     
-    pr_info("*** FRAME CHANNEL %d OPENED SUCCESSFULLY - MIPS ALIGNMENT SAFE ***\n", fcd->channel_num);
+    pr_info("*** FRAME CHANNEL %d OPENED SUCCESSFULLY - NOW READY FOR IOCTLS ***\n", fcd->channel_num);
     pr_info("Channel %d: Format %dx%d, pixfmt=0x%x, minor=%d\n", 
             fcd->channel_num, fcd->state.width, fcd->state.height, fcd->state.format, minor);
     
@@ -3922,9 +3887,13 @@ static int tx_isp_init(void)
         return -ENOMEM;
     }
 
-    /* *** RACE CONDITION FIX: Create VIC device IMMEDIATELY after allocation *** */
-    /* This prevents any other code from trying to create it and causing conflicts */
-    pr_info("*** CREATING VIC DEVICE STRUCTURE IMMEDIATELY TO PREVENT RACE CONDITIONS ***\n");
+    /* Initialize device structure */
+    spin_lock_init(&ourISPdev->lock);
+    ourISPdev->refcnt = 0;
+    ourISPdev->is_open = false;
+    
+    /* *** CRITICAL FIX: Create and link VIC device structure immediately *** */
+    pr_info("*** CREATING VIC DEVICE STRUCTURE AND LINKING TO ISP CORE ***\n");
     ret = tx_isp_create_vic_device(ourISPdev);
     if (ret) {
         pr_err("Failed to create VIC device structure: %d\n", ret);
@@ -3932,13 +3901,7 @@ static int tx_isp_init(void)
         ourISPdev = NULL;
         return ret;
     }
-    pr_info("*** VIC DEVICE CREATED AND LINKED - RACE CONDITION PREVENTED ***\n");
-
-    /* Initialize device structure */
-    spin_lock_init(&ourISPdev->lock);
-    ourISPdev->refcnt = 0;
-    ourISPdev->is_open = false;
-
+	
     /* Step 2: Register platform device (matches reference) */
     ret = platform_device_register(&tx_isp_platform_device);
     if (ret != 0) {

@@ -1015,26 +1015,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         iounmap(cpm_regs);
     }
 
-    /* STEP 3: Get VIC registers - with CRITICAL fallback mapping */
+    /* STEP 3: Get VIC registers - should already be mapped by tx_isp_create_vic_device */
     vic_regs = vic_dev->vic_regs;
-    
-    /* CRITICAL FIX: If VIC registers not mapped, map them now */
-    if (!vic_regs) {
-        pr_warn("*** CRITICAL: VIC registers not mapped - mapping now ***\n");
-        vic_regs = ioremap(0x133e0000, 0x10000); // VIC W02 mapping
-        if (!vic_regs) {
-            pr_err("*** FATAL: Failed to map VIC registers at 0x133e0000 ***\n");
-            return -ENOMEM;
-        }
-        vic_dev->vic_regs = vic_regs; /* Store for future use */
-        pr_info("*** SUCCESS: VIC registers mapped at %p ***\n", vic_regs);
-        
-        /* Also store in ISP device for compatibility */
-        if (ourISPdev && !ourISPdev->vic_regs) {
-            ourISPdev->vic_regs = vic_regs;
-            pr_info("*** SUCCESS: VIC registers also stored in ISP device ***\n");
-        }
-    }
     
     /* CRITICAL MIPS VALIDATION: Ensure VIC register base is valid and aligned */
     if (!vic_regs ||
@@ -1048,25 +1030,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     
     pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
 
-    /* FIXED: Get sensor attributes from connected sensor subdev, not embedded logic */
-    struct tx_isp_sensor_attribute *sensor_attr = NULL;
-    interface_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* Default to MIPI */
-    sensor_format = 0x2b; /* Default RAW10 */
-    
-    /* Try to get sensor attributes from ISP core if sensor subdev is connected */
-    if (ourISPdev && ourISPdev->sensor) {
-        sensor_attr = &ourISPdev->sensor->video.attr;
-        if (sensor_attr) {
-            interface_type = sensor_attr->dbus_type;
-            sensor_format = sensor_attr->data_type;
-            pr_info("tx_isp_vic_start: Got sensor attributes from subdev - interface=%d, format=0x%x\n", 
-                    interface_type, sensor_format);
-        } else {
-            pr_warn("tx_isp_vic_start: No sensor attributes from subdev, using defaults\n");
-        }
-    } else {
-        pr_warn("tx_isp_vic_start: No sensor subdev connected, using defaults\n");
-    }
+    /* FIXED: Use proper struct member access for sensor attributes */
+    struct tx_isp_sensor_attribute *sensor_attr = &vic_dev->sensor_attr;
+    interface_type = sensor_attr->dbus_type;
+    sensor_format = sensor_attr->data_type;
 
     pr_info("*** tx_isp_vic_start: EXACT Binary Ninja implementation ***\n");
     pr_info("tx_isp_vic_start: interface=%d, format=0x%x\n", interface_type, sensor_format);
@@ -1088,38 +1055,41 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             writel(0x100010, vic_regs + 0x1a4); /* DMA config */
         }
 
-        /* DVP interface configuration - simplified without embedded sensor logic */
-        writel(0x20000, vic_regs + 0x10);   /* DVP config register */
-        writel(0x100010, vic_regs + 0x1a4); /* DMA config */
+        /* Binary Ninja: DVP buffer calculations and configuration */
+        u32 stride_multiplier = 8;
+        if (sensor_format != 0) {
+            if (sensor_format == 1) stride_multiplier = 0xa;
+            else if (sensor_format == 2) stride_multiplier = 0xc;
+            else if (sensor_format == 7) stride_multiplier = 0x10;
+        }
+
+        u32 buffer_calc = stride_multiplier * vic_dev->sensor_attr.integration_time;
+        u32 buffer_size = (buffer_calc >> 5) + ((buffer_calc & 0x1f) ? 1 : 0);
+        writel(buffer_size, vic_regs + 0x100);
         writel(2, vic_regs + 0xc);
+        writel(sensor_format, vic_regs + 0x14);
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
-        writel(0x4440, vic_regs + 0x1ac);   /* Frame mode */
-        writel(0x4440, vic_regs + 0x1a8);
+        wmb();
+
+        /* Binary Ninja: DVP timing and WDR configuration */
+        u32 wdr_mode = vic_dev->sensor_attr.wdr_cache;
+        u32 frame_mode = (wdr_mode == 0) ? 0x4440 : (wdr_mode == 1) ? 0x4140 : 0x4240;
+        writel(frame_mode, vic_regs + 0x1ac);
+        writel(frame_mode, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
         wmb();
 
-        /* DVP unlock sequence with timeout */
+        /* Binary Ninja: DVP unlock sequence WITH unlock key */
         writel(2, vic_regs + 0x0);
         wmb();
         writel(4, vic_regs + 0x0);
         wmb();
 
-        u32 unlock_timeout = 1000;
-        u32 ctrl_reg;
-        while ((ctrl_reg = readl(vic_regs + 0x0)) != 0 && unlock_timeout > 0) {
-            cpu_relax();
-            unlock_timeout--;
-            udelay(1);
-        }
-        
-        if (unlock_timeout == 0) {
-            pr_err("*** DVP VIC unlock timeout! ctrl_reg=0x%x ***\n", ctrl_reg);
-            return -EIO;
-        }
-        
-        pr_info("tx_isp_vic_start: DVP VIC unlocked successfully\n");
-        writel(1, vic_regs + 0x0);
+        /* *** CRITICAL: DVP unlock key - Binary Ninja exact *** */
+        u32 unlock_key = (vic_dev->sensor_attr.integration_time_apply_delay << 4) | vic_dev->sensor_attr.again_apply_delay;
+        writel(unlock_key, vic_regs + 0x1a0);
         wmb();
+        pr_info("tx_isp_vic_start: DVP unlock key 0x1a0 = 0x%x\n", unlock_key);
 
     } else if (interface_type == 2) {
         /* *** CRITICAL: MIPI interface - EXACT Binary Ninja implementation *** */
@@ -1132,94 +1102,122 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* *** EXACT Binary Ninja MIPI format handling *** */
         u32 mipi_config = 0x20000; /* Default value: &data_20000 */
 
-        /* MIPI format handling - simplified without embedded sensor attributes */
-        /* Default MIPI configuration for most sensors */
-        if (sensor_format == 0x2b) {
-            /* RAW10 format - most common */
-            mipi_config = 0x20000;
-        } else if (sensor_format == 0x2a) {
-            /* RAW8 format */
-            mipi_config = 0x20000;
+        /* Binary Ninja format switch based on sensor_format (*(arg1 + 0xe4)) */
+        if (sensor_format >= 0x300e) {
+            /* Binary Ninja label_10928: Standard MIPI RAW path */
+            u32 dbus_type_check = vic_dev->sensor_attr.dbus_type;
+
+            /* Binary Ninja: Check integration_time_apply_delay for SONY mode */
+            if (vic_dev->sensor_attr.integration_time_apply_delay != 2) {
+                /* Standard MIPI mode */
+                mipi_config = 0x20000;  /* &data_20000 */
+                if (dbus_type_check == 0) {
+                    /* OK - standard mode */
+                } else if (dbus_type_check == 1) {
+                    mipi_config = 0x120000; /* Alternative MIPI mode */
+                } else {
+                    pr_err("tx_isp_vic_start: VIC failed to config DVP mode!(10bits-sensor)\n");
+                    return -EINVAL;
+                }
+            } else {
+                /* SONY MIPI mode */
+                mipi_config = 0x30000;  /* &data_30000 */
+                if (dbus_type_check == 0) {
+                    /* OK - SONY standard */
+                } else if (dbus_type_check == 1) {
+                    mipi_config = 0x130000; /* SONY alternative */
+                } else {
+                    pr_err("tx_isp_vic_start: VIC failed to config DVP SONY mode!(10bits-sensor)\n");
+                    return -EINVAL;
+                }
+            }
+            pr_info("tx_isp_vic_start: MIPI format 0x%x -> config 0x%x (>= 0x300e path)\n",
+                    sensor_format, mipi_config);
         } else {
-            /* Default for unknown formats */
-            mipi_config = 0x20000;
+            /* Binary Ninja: Handle other format ranges */
+            if (sensor_format == 0x2011) {
+                mipi_config = 0xc0000;  /* &data_c0000 */
+            } else if (sensor_format >= 0x2012) {
+                /* Additional format handling from Binary Ninja */
+                if (sensor_format == 0x1008) {
+                    mipi_config = 0x80000;  /* &data_80000 */
+                } else if (sensor_format >= 0x1009) {
+                    if ((sensor_format - 0x2002) >= 4) {
+                        pr_err("tx_isp_vic_start: VIC do not support this format %d\n", sensor_format);
+                        return -EINVAL;
+                    }
+                    mipi_config = 0xc0000;  /* &data_c0000 */
+                } else {
+                    /* Default handling for other formats */
+                    mipi_config = 0x20000;
+                }
+            } else if (sensor_format == 0x1006) {
+                mipi_config = 0xa0000;  /* &data_a0000 */
+            } else {
+                /* For unknown formats including 0x2b, use default MIPI config */
+                pr_info("tx_isp_vic_start: Unknown/default format 0x%x, using standard MIPI config 0x20000\n", sensor_format);
+                mipi_config = 0x20000;
+            }
         }
 
-        /* MIPI timing registers */
-        writel((0x465 << 16) + vic_dev->width, vic_regs + 0x18);
+        /* Binary Ninja: Additional configuration flags */
+        if (vic_dev->sensor_attr.total_width == 2) {
+            mipi_config |= 2;
+        }
+        if (vic_dev->sensor_attr.total_height == 2) {
+            mipi_config |= 1;
+        }
+
+        /* Binary Ninja: MIPI timing registers */
+        u32 integration_time = vic_dev->sensor_attr.integration_time;
+        if (integration_time != 0) {
+            writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
+            wmb();
+        }
+
+        u32 again_value = vic_dev->sensor_attr.again;
+        if (again_value != 0) {
+            writel(again_value, vic_regs + 0x3c);
+            wmb();
+        }
+
+        /* Binary Ninja: Final timing setup - EXACT order */
+        writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
         wmb();
 
-        /* VIC register configuration */
-        writel(mipi_config, vic_regs + 0x10);
+        /* Binary Ninja: VIC register 0x10 with timing flags */
+        u32 final_mipi_config = (vic_dev->sensor_attr.total_width << 31) | mipi_config;
+        writel(final_mipi_config, vic_regs + 0x10);
         wmb();
 
         /* Frame dimensions */
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
         wmb();
 
-        pr_info("tx_isp_vic_start: MIPI registers configured - 0x10=0x%x\n", mipi_config);
+        pr_info("tx_isp_vic_start: MIPI registers configured - 0x10=0x%x, 0x18=0x%x\n",
+                final_mipi_config, (integration_time << 16) + vic_dev->width);
 
-        /* *** CRITICAL FIX: Add timeout to prevent infinite hang *** */
-        /* Binary Ninja: **(arg1 + 0xb8) = 2 */
+        /* *** Binary Ninja EXACT unlock sequence *** */
         writel(2, vic_regs + 0x0);
         wmb();
-        
-        /* Binary Ninja: **(arg1 + 0xb8) = 4 */
         writel(4, vic_regs + 0x0);
         wmb();
 
-        /* *** CRITICAL FIX: Add timeout to prevent infinite hang in unlock sequence *** */
-        u32 unlock_timeout = 1000;  /* 1000 iterations max */
-        u32 ctrl_reg;
-        while ((ctrl_reg = readl(vic_regs + 0x0)) != 0 && unlock_timeout > 0) {
-            cpu_relax(); /* MIPS equivalent of nop */
-            unlock_timeout--;
-            udelay(1);   /* Small delay */
-        }
-        
-        if (unlock_timeout == 0) {
-            pr_err("*** CRITICAL: VIC unlock timeout! ctrl_reg=0x%x - VIC may not be properly clocked ***\n", ctrl_reg);
-            pr_err("*** This indicates VIC hardware is not responding - checking clocks ***\n");
-            
-            /* Try one more time with more aggressive clock setup */
-            pr_info("*** RETRY: Aggressive clock configuration before unlock ***\n");
-            void __iomem *cpm_regs = ioremap(0x10000000, 0x1000);
-            if (cpm_regs) {
-                u32 clkgr0 = readl(cpm_regs + 0x20);
-                u32 clkgr1 = readl(cpm_regs + 0x28);
-                clkgr0 &= ~((1 << 13) | (1 << 21) | (1 << 30));  /* Clear ISP, ISP_ALT, VIC bits */
-                clkgr1 &= ~(1 << 30);                             /* Clear VIC bit in CLKGR1 */
-                writel(clkgr0, cpm_regs + 0x20);
-                writel(clkgr1, cpm_regs + 0x28);
-                wmb();
-                iounmap(cpm_regs);
-                msleep(50);  /* Give clocks time to stabilize */
-                
-                /* Retry unlock sequence */
-                pr_info("*** RETRY: VIC unlock sequence after clock fix ***\n");
-                writel(2, vic_regs + 0x0);
-                wmb();
-                writel(4, vic_regs + 0x0);
-                wmb();
-                
-                unlock_timeout = 500;
-                while ((ctrl_reg = readl(vic_regs + 0x0)) != 0 && unlock_timeout > 0) {
-                    cpu_relax();
-                    unlock_timeout--;
-                    udelay(2);
-                }
-                
-                if (unlock_timeout == 0) {
-                    pr_err("*** FATAL: VIC unlock failed even after clock fix - returning error ***\n");
-                    return -EIO;
-                }
-            } else {
-                pr_err("*** FATAL: VIC unlock failed and cannot access CPM for clock fix ***\n");
-                return -EIO;
+        /* Binary Ninja: Wait for unlock completion */
+        timeout = 10000;
+        while (timeout > 0) {
+            u32 vic_status = readl(vic_regs + 0x0);
+            if (vic_status == 0) {
+                break;
             }
+            udelay(1);
+            timeout--;
         }
-        
-        pr_info("tx_isp_vic_start: VIC unlocked successfully after %d attempts\n", 1000 - unlock_timeout);
+
+        if (timeout == 0) {
+            pr_err("tx_isp_vic_start: VIC unlock timeout\n");
+            return -ETIMEDOUT;
+        }
 
         /* Binary Ninja: *$v0_121 = 1 - Enable VIC processing */
         writel(1, vic_regs + 0x0);
@@ -1271,30 +1269,45 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* Binary Ninja: VIC should already be unlocked by interface-specific code above */
-    pr_info("tx_isp_vic_start: VIC unlock handled by interface-specific code\n");
+    /* Binary Ninja: Wait for VIC unlock completion */
+    pr_info("tx_isp_vic_start: Waiting for VIC unlock completion...\n");
+    timeout = 10000;
+    while (timeout > 0) {
+        u32 status = readl(vic_regs + 0x0);
+        if (status == 0) {
+            pr_info("tx_isp_vic_start: VIC unlocked after %d iterations (status=0)\n", 10000 - timeout);
+            break;
+        }
+        udelay(1);
+        timeout--;
+    }
 
-    /* VIC configured for Linear mode (WDR is sensor-specific) */
-    pr_info("tx_isp_vic_start: VIC configured for Linear mode\n");
+    if (timeout == 0) {
+        pr_err("tx_isp_vic_start: VIC unlock timeout - still locked\n");
+        return -ETIMEDOUT;
+    }
+
+    /* Binary Ninja: Enable VIC processing */
+    writel(1, vic_regs + 0x0);
+    wmb();
+    pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1)\n");
+
+    /* Binary Ninja: Final configuration registers */
+    writel(0x100010, vic_regs + 0x1a4);
+    writel(0x4210, vic_regs + 0x1ac);
+    writel(0x10, vic_regs + 0x1b0);
+    writel(0, vic_regs + 0x1b4);
+    wmb();
+
+    /* Binary Ninja: Log WDR mode */
+    const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
+        "WDR mode enabled" : "Linear mode enabled";
+    pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     vic_start_ok = 1;
     pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
     pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
-
-    /* *** CRITICAL MISSING STEP: Enable ISPVIC frame channel streaming *** */
-    pr_info("*** tx_isp_vic_start: Enabling ISPVIC frame channel streaming ***\n");
-    ret = ispvic_frame_channel_s_stream(vic_dev, 1); /* Enable streaming */
-    if (ret != 0) {
-        pr_err("tx_isp_vic_start: Failed to enable ISPVIC frame channel streaming: %d\n", ret);
-        vic_start_ok = 0; /* Disable on failure */
-        return ret;
-    }
-    pr_info("*** tx_isp_vic_start: ISPVIC frame channel streaming enabled successfully ***\n");
-
-    /* *** CRITICAL: Signal frame completion to wake up any waiting processes *** */
-    complete(&vic_dev->frame_complete);
-    pr_info("*** tx_isp_vic_start: Frame completion signaled - streaming ready ***\n");
 
     return 0;
 }
@@ -1904,108 +1917,53 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
-    int current_state;
     int ret = 0;
-
-    pr_info("*** vic_core_s_stream: MIPS-SAFE implementation - enable=%d ***\n", enable);
-
-    /* Binary Ninja: if (arg1 != 0) */
+    
     if (!sd) {
-        pr_err("vic_core_s_stream: NULL subdev parameter\n");
-        return -EINVAL; /* 0xffffffea */
-    }
-
-    /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
-    if ((unsigned long)sd >= 0xfffff001) {
-        pr_err("vic_core_s_stream: Invalid subdev pointer range\n");
+        pr_err("VIC s_stream: NULL subdev\n");
         return -EINVAL;
     }
-
-    /* CRITICAL FIX: Use safe struct member access instead of dangerous *(arg1 + 0xd4) */
+    
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    pr_info("*** vic_core_s_stream: Retrieved vic_dev using SAFE access: %p ***\n", vic_dev);
-
-    /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("vic_core_s_stream: Invalid vic_dev pointer\n");
+    if (!vic_dev) {
+        pr_err("VIC s_stream: NULL vic_dev\n");
         return -EINVAL;
     }
-
-        /* NOTE: VIC gets sensor attributes from separate sensor subdev via subdev system */
-    /* Do NOT embed sensor logic here - sensor module handles sensor-specific operations */
-
-    /* *** CRITICAL FIX: Validate and reset VIC state if corrupted *** */
-    current_state = vic_dev->state;
-    if (current_state < 1 || current_state > 4) {
-        pr_err("*** CRITICAL: VIC state corrupted (%d) - resetting to INIT state ***\n", current_state);
-        vic_dev->state = 1; /* Reset to INIT */
-        current_state = 1;
-    }
     
-    pr_info("vic_core_s_stream: current_state=%d, enable=%d\n", current_state, enable);
-
-    if (enable == 0) {
-        /* Binary Ninja: Stream OFF path */
-        pr_info("*** vic_core_s_stream: Stream OFF requested ***\n");
-        
-        /* Binary Ninja: if ($v1_3 == 4) *($s1_1 + 0x128) = 3 */
-        if (current_state == 4) {
-            vic_dev->state = 3; /* STREAMING -> ACTIVE */
-            pr_info("vic_core_s_stream: State changed 4 -> 3 (STREAMING -> ACTIVE)\n");
-        }
-        ret = 0; /* Binary Ninja: $v0 = 0 */
-        
-    } else {
-        /* Binary Ninja: Stream ON path */
-        pr_info("*** vic_core_s_stream: Stream ON requested ***\n");
-        
-        /* Binary Ninja: if ($v1_3 != 4) */
-        if (current_state != 4) {
-            pr_info("vic_core_s_stream: Starting VIC streaming (state %d != 4)\n", current_state);
-            
-            /* Binary Ninja: tx_vic_disable_irq() */
-            pr_info("*** vic_core_s_stream: Disabling VIC interrupts ***\n");
-            vic_start_ok = 0; /* Disable interrupt processing */
-            
-            /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
-            pr_info("*** vic_core_s_stream: Calling tx_isp_vic_start ***\n");
-            ret = tx_isp_vic_start(vic_dev);
-            
+    pr_info("VIC s_stream: enable=%d, current_state=%d\n", enable, vic_dev->state);
+    
+    mutex_lock(&vic_dev->state_lock);
+    
+    if (enable) {
+        /* Start VIC streaming - Call Binary Ninja exact sequence */
+        if (vic_dev->state != 4) { /* Not already streaming */
+            pr_info("VIC: Starting streaming - calling ispvic_frame_channel_s_stream(1)\n");
+            ret = ispvic_frame_channel_s_stream(vic_dev, 1);
             if (ret == 0) {
-                /* Binary Ninja: *($s1_1 + 0x128) = 4 */
-                vic_dev->state = 4; /* -> STREAMING */
-                pr_info("vic_core_s_stream: State changed -> 4 (STREAMING)\n");
-                
-                /* Binary Ninja: tx_vic_enable_irq() */
-                pr_info("*** vic_core_s_stream: Enabling VIC interrupts ***\n");
-                vic_start_ok = 1; /* Enable interrupt processing */
-                
+                vic_dev->state = 4; /* STREAMING state */
+                pr_info("VIC: Streaming started successfully, state -> 4\n");
             } else {
-                pr_err("vic_core_s_stream: tx_isp_vic_start failed: %d\n", ret);
-                /* Re-enable interrupts even on failure */
-                vic_start_ok = 1;
+                pr_err("VIC: ispvic_frame_channel_s_stream failed: %d\n", ret);
             }
-            
-            /* Binary Ninja: return $v0_1 */
-            pr_info("*** vic_core_s_stream: Returning %d ***\n", ret);
-            return ret;
         } else {
-            pr_info("vic_core_s_stream: Already streaming (state=%d)\n", current_state);
+            pr_info("VIC: Already streaming (state=%d)\n", vic_dev->state);
         }
-        ret = 0; /* Binary Ninja: $v0 = 0 */
+    } else {
+        /* Stop VIC streaming */
+        if (vic_dev->state == 4) { /* Currently streaming */
+            pr_info("VIC: Stopping streaming - calling ispvic_frame_channel_s_stream(0)\n");
+            ret = ispvic_frame_channel_s_stream(vic_dev, 0);
+            if (ret == 0) {
+                vic_dev->state = 3; /* ACTIVE but not streaming */
+                pr_info("VIC: Streaming stopped, state -> 3\n");
+            }
+        } else {
+            pr_info("VIC: Not streaming (state=%d)\n", vic_dev->state);
+        }
     }
-
-    pr_info("*** vic_core_s_stream: Completed - enable=%d, final_state=%d, ret=%d ***\n", 
-            enable, vic_dev->state, ret);
     
-    /* Binary Ninja: return $v0 */
+    mutex_unlock(&vic_dev->state_lock);
     return ret;
-}
-
-/* VIC video streaming operations - wrapper for vic_core_s_stream */
-static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
-{
-    pr_info("*** vic_video_s_stream: Calling vic_core_s_stream - enable=%d ***\n", enable);
     return vic_core_s_stream(sd, enable);
 }
 
