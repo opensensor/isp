@@ -947,7 +947,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_err("*** CRITICAL ERROR: Failed to directly map VIC registers at 0x10023000 ***\n");
         return -ENOMEM;
     }
-    
+
     /* FIXED: Use proper struct member access for sensor attributes */
     struct tx_isp_sensor_attribute *sensor_attr = &vic_dev->sensor_attr;
     interface_type = sensor_attr->dbus_type;
@@ -2082,6 +2082,64 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 
     /* Binary explicitly zeros the structure */
     memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
+
+    /* *** CRITICAL FIX: Initialize sensor_attr with safe default values *** */
+    /* This was the missing initialization causing uninitialized sensor_attr usage */
+    pr_info("*** CRITICAL FIX: Initializing vic_dev->sensor_attr with safe defaults ***\n");
+    
+    /* Initialize with typical MIPI sensor defaults based on GC2053 sensor */
+    vic_dev->sensor_attr.name = "vic-default";
+    vic_dev->sensor_attr.chip_id = 0x2053;  /* Default to GC2053 chip ID */
+    vic_dev->sensor_attr.cbus_type = TX_SENSOR_CONTROL_INTERFACE_I2C;
+    vic_dev->sensor_attr.cbus_mask = V4L2_SBUS_MASK_SAMPLE_8BITS | V4L2_SBUS_MASK_ADDR_8BITS;
+    vic_dev->sensor_attr.cbus_device = 0x37;  /* Default I2C address */
+    
+    /* CRITICAL: Set interface type to MIPI (2) - this prevents invalid interface errors */
+    vic_dev->sensor_attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;  /* 2 = MIPI */
+    
+    /* Set data format - RAW10 is most common */
+    vic_dev->sensor_attr.data_type = TX_SENSOR_DATA_TYPE_LINEAR;  /* 0x2b = RAW10 linear */
+    
+    /* Initialize timing parameters with safe defaults */
+    vic_dev->sensor_attr.max_again = 444864;  /* From GC2053 */
+    vic_dev->sensor_attr.max_dgain = 0;
+    vic_dev->sensor_attr.min_integration_time = 1;
+    vic_dev->sensor_attr.min_integration_time_native = 4;
+    vic_dev->sensor_attr.max_integration_time_native = 0x58a - 8;  /* From GC2053 30fps */
+    vic_dev->sensor_attr.integration_time_limit = 0x58a - 8;
+    vic_dev->sensor_attr.max_integration_time = 0x58a - 8;
+    
+    /* Frame timing defaults for 1920x1080@30fps */
+    vic_dev->sensor_attr.total_width = 0x44c * 2;   /* From GC2053 */
+    vic_dev->sensor_attr.total_height = 0x58a;      /* From GC2053 */
+    
+    /* Control timing - critical for tx_isp_vic_start */
+    vic_dev->sensor_attr.integration_time = 0x465;   /* Safe default */
+    vic_dev->sensor_attr.integration_time_apply_delay = 2;  /* Standard delay */
+    vic_dev->sensor_attr.again_apply_delay = 2;             /* Standard delay */
+    vic_dev->sensor_attr.dgain_apply_delay = 2;
+    vic_dev->sensor_attr.again = 0;  /* Default gain */
+    
+    /* WDR configuration */
+    vic_dev->sensor_attr.wdr_cache = 0;  /* Linear mode by default */
+    
+    /* Line timing */
+    vic_dev->sensor_attr.one_line_expr_in_us = 28;  /* From GC2053 30fps */
+    
+    /* Set safe frame dimensions for VIC */
+    vic_dev->width = 1920;   /* Default frame width */
+    vic_dev->height = 1080;  /* Default frame height */
+    
+    pr_info("*** vic_dev->sensor_attr initialized with defaults: ***\n");
+    pr_info("  dbus_type=%d (2=MIPI), data_type=0x%x\n", 
+            vic_dev->sensor_attr.dbus_type, vic_dev->sensor_attr.data_type);
+    pr_info("  dimensions: %dx%d, total: %dx%d\n", 
+            vic_dev->width, vic_dev->height,
+            vic_dev->sensor_attr.total_width, vic_dev->sensor_attr.total_height);
+    pr_info("  integration_time=%d, apply_delay=%d\n",
+            vic_dev->sensor_attr.integration_time, 
+            vic_dev->sensor_attr.integration_time_apply_delay);
+    pr_info("*** SENSOR ATTRIBUTE INITIALIZATION COMPLETE ***\n");
 
     /* Get subdev pointer */
     sd = &vic_dev->sd;
