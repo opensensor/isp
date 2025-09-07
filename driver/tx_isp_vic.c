@@ -144,37 +144,37 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
         return -EINVAL;
     }
     
-    pr_info("*** tx_isp_create_vic_device: Creating VIC device structure ***\n");
+    pr_info("*** tx_isp_create_vic_device: Creating VIC device structure (SAFE struct access) ***\n");
     
-    /* Allocate VIC device structure - same size as Binary Ninja tx_isp_vic_probe (0x21c bytes) */
-    vic_dev = kzalloc(0x21c, GFP_KERNEL);
+    /* MCP LOG: VIC device creation initiated */
+    pr_info("MCP_LOG: tx_isp_create_vic_device - Creating VIC device for ISP %p\n", isp_dev);
+    
+    /* FIXED: Allocate VIC device structure using proper struct size */
+    vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
     if (!vic_dev) {
-        pr_err("tx_isp_create_vic_device: Failed to allocate VIC device (0x21c bytes)\n");
+        pr_err("tx_isp_create_vic_device: Failed to allocate VIC device (size=%zu bytes)\n", 
+               sizeof(struct tx_isp_vic_device));
         return -ENOMEM;
     }
     
-    /* Clear the structure */
-    memset(vic_dev, 0, 0x21c);
+    /* Clear the structure using proper size */
+    memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
     
-    pr_info("*** VIC DEVICE ALLOCATED: %p (size=0x21c bytes) ***\n", vic_dev);
+    pr_info("*** VIC DEVICE ALLOCATED: %p (size=%zu bytes) ***\n", vic_dev, sizeof(struct tx_isp_vic_device));
     
-    /* Initialize VIC device structure - Binary Ninja exact layout */
+    /* FIXED: Initialize VIC device structure using SAFE struct member access */
     
-    /* Initialize spinlock at offset 0x130 */
-    spin_lock_init((spinlock_t *)((char *)vic_dev + 0x130));
+    /* SAFE: Initialize synchronization primitives using struct members */
+    spin_lock_init(&vic_dev->lock);
+    mutex_init(&vic_dev->mlock);
+    mutex_init(&vic_dev->state_lock);
+    init_completion(&vic_dev->frame_complete);
     
-    /* Initialize mutex at offset 0x154 */
-    mutex_init((struct mutex *)((char *)vic_dev + 0x154));
+    /* SAFE: Set initial state using struct member */
+    vic_dev->state = 1; /* INIT state */
     
-    /* Initialize completion at offset 0x148 */
-    init_completion((struct completion *)((char *)vic_dev + 0x148));
-    
-    /* Set initial state to 1 (INIT) at offset 0x128 */
-    *(uint32_t *)((char *)vic_dev + 0x128) = 1;
-    
-    /* Set self-pointer at offset 0xd4 */
-    *(void **)((char *)vic_dev + 0xd4) = vic_dev;
-
+    /* SAFE: Set self-pointer using struct member */
+    vic_dev->self = vic_dev;
 
     /* Initialize VIC device dimensions */
     vic_dev->width = 1920;  /* Default HD width */
@@ -186,24 +186,23 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     vic_dev->sd.ops = &vic_subdev_ops;
     vic_dev->sd.vin_state = TX_ISP_MODULE_INIT;
     
-    /* Initialize buffer management */
+    /* SAFE: Initialize buffer management using struct members */
     INIT_LIST_HEAD(&vic_dev->queue_head);
     INIT_LIST_HEAD(&vic_dev->done_head);
     INIT_LIST_HEAD(&vic_dev->free_head);
     spin_lock_init(&vic_dev->buffer_lock);
-    spin_lock_init(&vic_dev->lock);
-    mutex_init(&vic_dev->mlock);
-    mutex_init(&vic_dev->state_lock);
-    init_completion(&vic_dev->frame_complete);
+    spin_lock_init(&vic_dev->buffer_mgmt_lock);
     
     /* Initialize VIC error counters */
     memset(vic_dev->vic_errors, 0, sizeof(vic_dev->vic_errors));
     
-    /* Set initial frame count */
+    /* SAFE: Initialize counters using struct members */
     vic_dev->frame_count = 0;
     vic_dev->buffer_count = 0;
+    vic_dev->active_buffer_count = 0;
     vic_dev->streaming = 0;
-    vic_dev->state = 1; /* INIT state */
+    vic_dev->stream_state = 0;
+    vic_dev->processing = false;
     
     /* Set up sensor attributes with defaults */
     memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
@@ -216,7 +215,17 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* Store the VIC device properly - the subdev is PART of the VIC device */
     isp_dev->vic_dev = (struct tx_isp_subdev *)&vic_dev->sd;
     
-    pr_info("*** CRITICAL: VIC DEVICE LINKED TO ISP CORE ***\n");
+    /* Set up tx_isp_get_subdevdata to work properly */
+    /* This sets up the private data pointer so tx_isp_get_subdevdata can retrieve the VIC device */
+    vic_dev->sd.dev_priv = vic_dev;
+    
+    /* MCP LOG: VIC device creation completed */
+    pr_info("MCP_LOG: tx_isp_create_vic_device - VIC device created successfully\n");
+    pr_info("  vic_dev=%p, size=%zu bytes\n", vic_dev, sizeof(struct tx_isp_vic_device));
+    pr_info("  vic_dev->state=%d, vic_dev->self=%p\n", vic_dev->state, vic_dev->self);
+    pr_info("  isp_dev->vic_dev=%p, vic_dev->sd.dev_priv=%p\n", isp_dev->vic_dev, vic_dev->sd.dev_priv);
+    
+    pr_info("*** CRITICAL: VIC DEVICE LINKED TO ISP CORE (SAFE IMPLEMENTATION) ***\n");
     pr_info("  isp_dev->vic_dev = %p\n", isp_dev->vic_dev);
     pr_info("  vic_dev->sd.isp = %p\n", vic_dev->sd.isp);
     pr_info("  vic_dev->sd.ops = %p\n", vic_dev->sd.ops);
@@ -224,11 +233,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     pr_info("  vic_dev->state = %d\n", vic_dev->state);
     pr_info("  vic_dev dimensions = %dx%d\n", vic_dev->width, vic_dev->height);
     
-    /* Set up tx_isp_get_subdevdata to work properly */
-    /* This sets up the private data pointer so tx_isp_get_subdevdata can retrieve the VIC device */
-    vic_dev->sd.dev_priv = vic_dev;
-    
-    pr_info("*** tx_isp_create_vic_device: VIC device creation complete ***\n");
+    pr_info("*** tx_isp_create_vic_device: VIC device creation complete (UNSAFE OFFSETS ELIMINATED) ***\n");
     pr_info("*** NO MORE 'NO VIC DEVICE' ERROR SHOULD OCCUR ***\n");
     
     return 0;
