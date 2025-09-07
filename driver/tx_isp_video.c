@@ -29,79 +29,111 @@
  * MEMORY-SAFE implementation using proper struct member access instead of unsafe offsets.
  * Based on Binary Ninja reference driver but using safe struct member access patterns.
  */
+
+/**
+ * tx_isp_video_link_stream - Enable video streaming across all linked subdevices
+ * @dev: ISP device structure
+ *
+ * This function iterates through all subdevices in the ISP device and enables
+ * video streaming on each one that has a video stream operation defined.
+ * MEMORY SAFE implementation - uses proper struct member access and validation.
+ *
+ * Returns 0 on success, negative error code on failure
+ */
 int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable)
 {
-    int i;
-    int ret = 0;
-    struct tx_isp_subdev *sd;
-    struct tx_isp_subdev_ops *subdev_ops;
-    struct tx_isp_subdev_video_ops *video_ops;
+    int i, result;
+    int enabled_count = 0;
     
-    if (!dev) {
-        pr_err("tx_isp_video_link_stream: dev is NULL\n");
+    pr_info("*** tx_isp_video_link_stream: Enable streaming (SAFE STRUCT ACCESS implementation) ***\n");
+    
+    /* CRITICAL: Validate ISP device pointer with MIPS-safe bounds checking */
+    if (!is_valid_kernel_pointer(dev)) {
+        pr_err("tx_isp_video_link_stream: Invalid ISP device pointer %p\n", dev);
         return -EINVAL;
     }
     
-    pr_info("*** tx_isp_video_link_stream: %s streaming (MEMORY-SAFE) ***\n",
-            enable ? "ENABLING" : "DISABLING");
+    /* MEMORY SAFETY: Add memory barrier before accessing device structure */
+    rmb();
     
-    /* SAFE: Use proper struct member access instead of offset 0x38 */
-    /* Iterate through 16 subdevices as per Binary Ninja reference */
+    /* CRITICAL: Validate subdevs array pointer before accessing */
+    if (!is_valid_kernel_pointer(dev->subdevs)) {
+        pr_err("tx_isp_video_link_stream: ISP device has invalid subdevs array %p\n", dev->subdevs);
+        return -EINVAL;
+    }
+    
+    pr_info("tx_isp_video_link_stream: Processing %s request for %d subdevs\n",
+            enable ? "ENABLE" : "DISABLE", 16);
+    
+    /* SAFE: Loop through subdevs array with bounds checking */
     for (i = 0; i < 16; i++) {
-        sd = dev->subdevs[i];  /* SAFE: dev->subdevs instead of dev+0x38 */
+        struct tx_isp_subdev *subdev;
         
-        if (!sd) {
+        /* CRITICAL: Safe subdev access with validation */
+        subdev = dev->subdevs[i];
+        if (!is_valid_kernel_pointer(subdev)) {
+            /* Skip invalid subdev - this is normal for unused slots */
             continue;
         }
         
-        /* SAFE: Use proper struct member access instead of offset 0xc4 */
-        subdev_ops = sd->ops;
-        if (!subdev_ops) {
-            continue;
-        }
+        /* MEMORY SAFETY: Add barrier before accessing subdev */
+        rmb();
         
-        /* Get video ops from tx_isp_subdev_ops (not v4l2_subdev_ops) */
-        video_ops = subdev_ops->video;
-        if (!video_ops || !video_ops->s_stream) {
-            continue;
-        }
+        /* Use safe helper function to call subdev */
+        result = safe_subdev_call(subdev, enable, i);
         
-        /* Call s_stream function with proper tx_isp_subdev parameter */
-        ret = video_ops->s_stream(sd, enable);
-        
-        if (ret == 0) {
-            /* Success, continue to next */
+        if (result == 0) {
+            /* Success, continue to next subdev */
+            enabled_count++;
+            pr_info("tx_isp_video_link_stream: Stream %s on subdev %d: SUCCESS\n",
+                    enable ? "ENABLED" : "DISABLED", i);
+        } else if (result == -EINVAL) {
+            /* Invalid subdev structure - skip but don't fail */
+            pr_debug("tx_isp_video_link_stream: Subdev %d has invalid structure - skipping\n", i);
             continue;
-        } else if (ret == -ENOIOCTLCMD) {
-            /* Not implemented, continue */
-            continue;
-        } else {
-            /* Error occurred, rollback previous successful calls */
-            pr_err("tx_isp_video_link_stream: s_stream failed at subdev %d, ret=%d\n", i, ret);
+        } else if (result != -515) { /* 0xfffffdfd = -515 */
+            /* Real error occurred, need to cleanup */
+            pr_err("tx_isp_video_link_stream: Stream %s FAILED on subdev %d: %d\n",
+                   enable ? "enable" : "disable", i, result);
             
-            /* Rollback: disable all previously enabled subdevices */
-            while (--i >= 0) {
-                struct tx_isp_subdev *rollback_sd = dev->subdevs[i];  /* SAFE: proper member access */
-                if (!rollback_sd) continue;
+            /* SAFE: Cleanup previously enabled subdevs using safe helper */
+            if (enable && enabled_count > 0) {
+                pr_info("tx_isp_video_link_stream: Cleaning up %d previously enabled subdevs\n", enabled_count);
                 
-                struct tx_isp_subdev_ops *rollback_ops = rollback_sd->ops;  /* SAFE: proper member access */
-                if (!rollback_ops) continue;
-                
-                struct tx_isp_subdev_video_ops *rollback_video_ops = rollback_ops->video;
-                if (!rollback_video_ops || !rollback_video_ops->s_stream) continue;
-                
-                /* Disable this subdevice */
-                rollback_video_ops->s_stream(rollback_sd, enable ? 0 : 1);
+                int j;
+                for (j = i - 1; j >= 0; j--) {
+                    struct tx_isp_subdev *prev_subdev = dev->subdevs[j];
+                    
+                    if (is_valid_kernel_pointer(prev_subdev)) {
+                        /* Use safe helper to disable */
+                        int cleanup_result = safe_subdev_call(prev_subdev, 0, j);
+                        if (cleanup_result == 0) {
+                            pr_info("tx_isp_video_link_stream: Cleanup: disabled subdev %d\n", j);
+                        } else {
+                            pr_warn("tx_isp_video_link_stream: Cleanup failed for subdev %d: %d\n", j, cleanup_result);
+                        }
+                    }
+                }
             }
             
-            return ret;
+            return result;
+        } else {
+            /* Special case: -515 (0xfffffdfd) is not a real error */
+            pr_info("tx_isp_video_link_stream: Stream %s on subdev %d: special code -515 (ignored)\n",
+                    enable ? "enabled" : "disabled", i);
         }
     }
     
-    pr_info("*** tx_isp_video_link_stream: MEMORY-SAFE completion - no unaligned access risk ***\n");
+    pr_info("*** tx_isp_video_link_stream: SAFE implementation completed successfully ***\n");
+    pr_info("tx_isp_video_link_stream: %s %d subdevs successfully\n",
+            enable ? "ENABLED" : "DISABLED", enabled_count);
+    
+    /* MEMORY SAFETY: Final memory barrier */
+    wmb();
     
     return 0;
 }
+
 
 /**
  * tx_isp_video_link_stream_safe_wrapper - ATOMIC-SAFE wrapper  
