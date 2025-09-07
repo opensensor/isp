@@ -1107,17 +1107,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** tx_isp_vic_start: MEMORY CORRUPTION & RACE CONDITION FIX ***\n");
 
-    if (!vic_dev) {
-        pr_err("*** CRITICAL: vic_dev is NULL ***\n");
+    /* CRITICAL VALIDATION: Comprehensive device integrity check */
+    ret = vic_validate_device_integrity(vic_dev, "tx_isp_vic_start");
+    if (ret != VIC_VALIDATION_OK) {
+        pr_err("*** CRITICAL: VIC device validation failed (%d) ***\n", ret);
         return -EINVAL;
     }
 
     /* CRITICAL FIX: Prevent concurrent VIC start operations */
     mutex_lock(&vic_start_mutex);
 
-    /* CRITICAL FIX: Validate vic_dev structure integrity first */
-    if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("*** MEMORY CORRUPTION: Invalid vic_dev pointer 0x%p ***\n", vic_dev);
+    /* CRITICAL VALIDATION: Detect any memory corruption before proceeding */
+    ret = vic_detect_memory_corruption(vic_dev, "tx_isp_vic_start");
+    if (ret != VIC_VALIDATION_OK) {
+        pr_err("*** MEMORY CORRUPTION DETECTED: Aborting VIC start (%d) ***\n", ret);
         mutex_unlock(&vic_start_mutex);
         return -EINVAL;
     }
@@ -2419,7 +2422,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_dev->sensor_attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;  /* 2 = MIPI */
     
     /* Set data format - RAW10 is most common */
-    vic_dev->sensor_attr.data_type = TX_SENSOR_DATA_TYPE_LINEAR;  /* 0x2b = RAW10 linear */
+    vic_dev->sensor_attr.data_type = 0x2b;  /* RAW10 linear format */
     
     /* Initialize timing parameters with safe defaults */
     vic_dev->sensor_attr.max_again = 444864;  /* From GC2053 */
@@ -2592,38 +2595,77 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* *** CRITICAL FIX: Configure VIC interrupt masks in probe (not in tx_isp_vic_start) *** */
     pr_info("*** CRITICAL: Configuring VIC interrupt masks in probe function ***\n");
     
+    /* CRITICAL FIX: VIC registers may not be accessible until VIC is properly initialized */
+    /* First, ensure VIC is in a known state by performing a soft reset */
+    writel(0x4, vic_base + 0x0);  /* Set reset bit */
+    wmb();
+    udelay(10);  /* Wait for reset */
+    writel(0x0, vic_base + 0x0);  /* Clear reset bit */
+    wmb();
+    udelay(10);  /* Wait for reset completion */
+    
     /* Clear any pending interrupts first */
     writel(0xFFFFFFFF, vic_base + 0x1f0);  /* Clear all pending main interrupts */
     writel(0xFFFFFFFF, vic_base + 0x1f4);  /* Clear all pending MDMA interrupts */
     wmb();
     
+    /* CRITICAL FIX: Enable VIC clock domain before configuring interrupt masks */
+    /* This ensures the VIC registers are actually writable */
+    writel(0x1, vic_base + 0x0);  /* Enable VIC */
+    wmb();
+    udelay(100);  /* Wait for VIC to become ready */
+    
     /* Enable frame done interrupt (bit 0) and essential interrupts only */
     /* Mask register: 0 = interrupt enabled, 1 = interrupt masked */
     writel(0xFFFFFFFE, vic_base + 0x1e8);  /* Enable frame done interrupt (bit 0) */
     wmb();
+    udelay(10);  /* Allow register write to complete */
     
     /* Enable MDMA channel 0 and 1 interrupts for buffer management */
     writel(0xFFFFFFFC, vic_base + 0x1ec);  /* Enable MDMA channels 0,1 (bits 0,1) */
     wmb();
+    udelay(10);  /* Allow register write to complete */
     
-    /* Verify interrupt mask configuration */
-    u32 main_mask = readl(vic_base + 0x1e8);
-    u32 mdma_mask = readl(vic_base + 0x1ec);
+    /* Verify interrupt mask configuration with retry logic */
+    u32 main_mask, mdma_mask;
+    int retry_count = 0;
+    bool masks_configured = false;
+    
+    for (retry_count = 0; retry_count < 5; retry_count++) {
+        main_mask = readl(vic_base + 0x1e8);
+        mdma_mask = readl(vic_base + 0x1ec);
+        
+        if (main_mask == 0xFFFFFFFE && mdma_mask == 0xFFFFFFFC) {
+            masks_configured = true;
+            break;
+        }
+        
+        /* Retry writing the masks */
+        writel(0xFFFFFFFE, vic_base + 0x1e8);
+        writel(0xFFFFFFFC, vic_base + 0x1ec);
+        wmb();
+        udelay(50);
+    }
     
     pr_info("*** VIC interrupt masks configured in probe! ***\n");
-    pr_info("  Main interrupt mask (0x1e8) = 0x%08x (frame done enabled: bit 0 = %d)\n", 
+    pr_info("  Main interrupt mask (0x1e8) = 0x%08x (frame done enabled: bit 0 = %d)\n",
             main_mask, (main_mask & 1) == 0 ? 1 : 0);
-    pr_info("  MDMA interrupt mask (0x1ec) = 0x%08x (MDMA 0,1 enabled: bits 0,1 = %d,%d)\n", 
+    pr_info("  MDMA interrupt mask (0x1ec) = 0x%08x (MDMA 0,1 enabled: bits 0,1 = %d,%d)\n",
             mdma_mask, (mdma_mask & 1) == 0 ? 1 : 0, (mdma_mask & 2) == 0 ? 1 : 0);
             
     /* Verify that masks were written correctly */
-    if (main_mask == 0xFFFFFFFE && mdma_mask == 0xFFFFFFFC) {
-        pr_info("*** SUCCESS: VIC interrupt masks configured correctly in probe! ***\n");
+    if (masks_configured) {
+        pr_info("*** SUCCESS: VIC interrupt masks configured correctly in probe after %d retries! ***\n", retry_count);
     } else {
-        pr_err("*** ERROR: VIC interrupt mask configuration failed in probe! ***\n");
+        pr_err("*** ERROR: VIC interrupt mask configuration failed in probe after %d retries! ***\n", retry_count);
         pr_err("  Expected main=0xFFFFFFFE, got 0x%08x\n", main_mask);
         pr_err("  Expected mdma=0xFFFFFFFC, got 0x%08x\n", mdma_mask);
+        pr_info("*** CONTINUING: VIC may still function with default interrupt configuration ***\n");
     }
+    
+    /* Reset VIC to idle state after configuration */
+    writel(0x0, vic_base + 0x0);  /* Disable VIC until streaming starts */
+    wmb();
 
     /* Store global reference (binary uses 'dump_vsd' global) */
     dump_vsd = vic_dev;
