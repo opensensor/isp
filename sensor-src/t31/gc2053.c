@@ -2104,53 +2104,6 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		            sensor->info.name[0] ? sensor->info.name : SENSOR_NAME);
 	}
 	
-	/* *** CRITICAL FIX: FORCE SENSOR INITIALIZATION NOW TO WRITE ALL REGISTERS *** */
-	ISP_WARNING("*** FORCING IMMEDIATE SENSOR INITIALIZATION TO WRITE REGISTERS ***\n");
-	ISP_WARNING("*** THIS SHOULD GENERATE HUNDREDS OF I2C WRITES ***\n");
-	
-	/* Debug wsize configuration first */
-	ISP_WARNING("*** DEBUGGING WSIZE CONFIGURATION ***\n");
-	ISP_WARNING("data_interface=%d, sensor_max_fps=%d\n", data_interface, sensor_max_fps);
-	ISP_WARNING("TX_SENSOR_DATA_INTERFACE_MIPI=%d, TX_SENSOR_MAX_FPS_40=%d\n", 
-	            TX_SENSOR_DATA_INTERFACE_MIPI, TX_SENSOR_MAX_FPS_40);
-	ISP_WARNING("wsize=%p, wsize->regs=%p\n", wsize, wsize ? wsize->regs : NULL);
-	if (wsize) {
-		ISP_WARNING("wsize: width=%d, height=%d, fps=%d\n", wsize->width, wsize->height, wsize->fps);
-		
-		/* Count registers in the array */
-		if (wsize->regs) {
-			struct regval_list *regs = wsize->regs;
-			int reg_count = 0;
-			while (regs->reg_num != SENSOR_REG_END) {
-				reg_count++;
-				regs++;
-			}
-			ISP_WARNING("wsize->regs contains %d register writes\n", reg_count);
-		} else {
-			ISP_ERROR("*** CRITICAL: wsize->regs is NULL! ***\n");
-		}
-	} else {
-		ISP_ERROR("*** CRITICAL: wsize is NULL! ***\n");
-	}
-	
-	if (sd->ops && sd->ops->core && sd->ops->core->init) {
-		ISP_WARNING("*** CALLING SENSOR_INIT TO WRITE %s INITIALIZATION REGISTERS ***\n", SENSOR_NAME);
-		ret = sd->ops->core->init(sd, 1);
-		if (ret) {
-			ISP_ERROR("*** SENSOR_INIT FAILED: %d ***\n", ret);
-		} else {
-			ISP_WARNING("*** SENSOR_INIT SUCCESS - ALL REGISTERS SHOULD BE WRITTEN NOW ***\n");
-			ISP_WARNING("*** YOU SHOULD NOW SEE HUNDREDS OF I2C INTERRUPTS (NOT JUST 4) ***\n");
-		}
-	} else {
-		ISP_ERROR("*** CRITICAL ERROR: SENSOR INIT FUNCTION NOT AVAILABLE! ***\n");
-		ISP_ERROR("sd=%p, ops=%p\n", sd, sd->ops);
-		if (sd->ops) {
-			ISP_ERROR("core=%p, init=%p\n", sd->ops->core, 
-			          sd->ops->core ? sd->ops->core->init : NULL);
-		}
-	}
-	
 	pr_debug("probe ok ------->%s\n", SENSOR_NAME);
 	return 0;
 
