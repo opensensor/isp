@@ -1310,6 +1310,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
     pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
 
+    /* *** CRITICAL MISSING STEP: Enable ISPVIC frame channel streaming *** */
+    pr_info("*** tx_isp_vic_start: Enabling ISPVIC frame channel streaming ***\n");
+    ret = ispvic_frame_channel_s_stream(vic_dev, 1); /* Enable streaming */
+    if (ret != 0) {
+        pr_err("tx_isp_vic_start: Failed to enable ISPVIC frame channel streaming: %d\n", ret);
+        vic_start_ok = 0; /* Disable on failure */
+        return ret;
+    }
+    pr_info("*** tx_isp_vic_start: ISPVIC frame channel streaming enabled successfully ***\n");
+
+    /* *** CRITICAL: Signal frame completion to wake up any waiting processes *** */
+    complete(&vic_dev->frame_complete);
+    pr_info("*** tx_isp_vic_start: Frame completion signaled - streaming ready ***\n");
+
     return 0;
 }
 
