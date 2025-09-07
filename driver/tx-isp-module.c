@@ -4265,7 +4265,7 @@ static void tx_isp_exit(void)
 }
 
 /* VIC video streaming function - CRITICAL for register activity */
-static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
+int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_dev *isp_dev;
     struct tx_isp_vic_device *vic_dev;

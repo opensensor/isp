@@ -19,7 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
-
+int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
@@ -1964,7 +1964,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     
     mutex_unlock(&vic_dev->state_lock);
     return ret;
-    return vic_core_s_stream(sd, enable);
+    return vic_video_s_stream(sd, enable);
 }
 
 /* Define VIC video operations */
