@@ -107,29 +107,26 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable)
 }
 
 /**
- * tx_isp_video_link_stream_safe_wrapper - Additional safety wrapper
+ * tx_isp_video_link_stream_safe_wrapper - ATOMIC-SAFE wrapper  
  *
  * This provides an extra layer of safety for critical streaming operations
- * that were causing the crashes mentioned in the logs.
+ * that were causing the crashes. NO MUTEX OPERATIONS to prevent atomic context violations.
  */
 int tx_isp_video_link_stream_safe_wrapper(struct tx_isp_dev *dev, int enable)
 {
     int ret;
-    static DEFINE_MUTEX(streaming_mutex);
     
-    pr_info("*** tx_isp_video_link_stream_safe_wrapper: %s streaming ***\n",
+    pr_info("*** tx_isp_video_link_stream_safe_wrapper: %s streaming (ATOMIC-SAFE) ***\n",
             enable ? "ENABLING" : "DISABLING");
     
-    /* Global mutex to prevent concurrent streaming operations */
-    /* Do NOT disable interrupts - this can cause atomic context violations */
-    mutex_lock(&streaming_mutex);
+    /* CRITICAL FIX: NO MUTEX OPERATIONS - prevents atomic context violations */
+    /* The crash showed irqs_disabled(): 1 which means we're in atomic context */
+    /* Mutex operations cause "sleeping function called from invalid context" */
     
-    /* Call the main streaming function */
+    /* Call the main streaming function directly without any locking */
     ret = tx_isp_video_link_stream(dev, enable);
     
-    mutex_unlock(&streaming_mutex);
-    
-    pr_info("*** tx_isp_video_link_stream_safe_wrapper: completed with result %d ***\n", ret);
+    pr_info("*** tx_isp_video_link_stream_safe_wrapper: ATOMIC-SAFE completed with result %d ***\n", ret);
     
     return ret;
 }
