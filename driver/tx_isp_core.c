@@ -221,7 +221,7 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
 }
 
 /* tx_isp_enable_irq and tx_isp_disable_irq - Binary Ninja implementations */
-static void tx_isp_enable_irq(void *irq_info)
+void tx_isp_enable_irq(void *irq_info)
 {
     if (irq_info) {
         int irq_number = *((int *)irq_info);
@@ -230,7 +230,7 @@ static void tx_isp_enable_irq(void *irq_info)
     }
 }
 
-static void tx_isp_disable_irq(void *irq_info)
+void tx_isp_disable_irq(void *irq_info)
 {
     if (irq_info) {
         int irq_number = *((int *)irq_info);
