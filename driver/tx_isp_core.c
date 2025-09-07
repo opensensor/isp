@@ -95,9 +95,6 @@ static int tx_isp_vic_device_init(struct tx_isp_dev *isp);
 static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
 
-/* Forward declaration for VIC device creation from tx_isp_vic.c */
-extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
-
 /* Critical ISP Core initialization functions - MISSING FROM LOGS! */
 static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
 static int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
@@ -672,17 +669,6 @@ static int ispcore_slake_module(struct tx_isp_dev *isp)
     }
     
     ISP_INFO("*** ispcore_slake_module: CRITICAL ISP MODULE SLAKING START ***\n");
-    
-    /* CRITICAL: Ensure VIC device exists before proceeding */
-    if (!isp->vic_dev) {
-        ISP_INFO("*** ispcore_slake_module: No VIC device found - creating it now ***\n");
-        ret = tx_isp_create_vic_device(isp);
-        if (ret != 0) {
-            ISP_ERROR("*** ispcore_slake_module: Failed to create VIC device: %d ***\n", ret);
-            return ret;
-        }
-        ISP_INFO("*** ispcore_slake_module: VIC device created successfully ***\n");
-    }
     
     int isp_state = isp->vic_dev->state;
     ISP_INFO("*** ispcore_slake_module: Current ISP state = %d ***\n", isp_state);
@@ -2910,15 +2896,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
                 /* Set global device pointer safely */
                 ourISPdev = isp_dev;
-
-                /* Create VIC device safely */
-                ISP_INFO("tx_isp_core_probe: Creating VIC device");
-                result = tx_isp_create_vic_device(isp_dev);
-                if (result != 0) {
-                    ISP_ERROR("tx_isp_core_probe: Failed to create VIC device: %d", result);
-                    goto cleanup_channels;
-                }
-                ISP_INFO("tx_isp_core_probe: VIC device created successfully");
 
                 /* Initialize sensor system safely */
                 ISP_INFO("tx_isp_core_probe: Calling sensor_early_init");

@@ -131,115 +131,6 @@ static void tx_vic_enable_irq(void)
     /* This would enable VIC-specific interrupts if needed */
 }
 
-
-/* *** CRITICAL: MISSING FUNCTION - tx_isp_create_vic_device *** */
-/* This function creates and links the VIC device structure to the ISP core */
-int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
-{
-    struct tx_isp_vic_device *vic_dev;
-    int ret = 0;
-    
-    if (!isp_dev) {
-        pr_err("tx_isp_create_vic_device: Invalid ISP device\n");
-        return -EINVAL;
-    }
-    
-    pr_info("*** tx_isp_create_vic_device: Creating VIC device structure (SAFE struct access) ***\n");
-    
-    /* MCP LOG: VIC device creation initiated */
-    pr_info("MCP_LOG: tx_isp_create_vic_device - Creating VIC device for ISP %p\n", isp_dev);
-    
-    /* FIXED: Allocate VIC device structure using proper struct size */
-    vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
-    if (!vic_dev) {
-        pr_err("tx_isp_create_vic_device: Failed to allocate VIC device (size=%zu bytes)\n", 
-               sizeof(struct tx_isp_vic_device));
-        return -ENOMEM;
-    }
-    
-    /* Clear the structure using proper size */
-    memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
-    
-    pr_info("*** VIC DEVICE ALLOCATED: %p (size=%zu bytes) ***\n", vic_dev, sizeof(struct tx_isp_vic_device));
-    
-    /* FIXED: Initialize VIC device structure using SAFE struct member access */
-    
-    /* SAFE: Initialize synchronization primitives using struct members */
-    spin_lock_init(&vic_dev->lock);
-    mutex_init(&vic_dev->mlock);
-    mutex_init(&vic_dev->state_lock);
-    init_completion(&vic_dev->frame_complete);
-    
-    /* SAFE: Set initial state using struct member */
-    vic_dev->state = 1; /* INIT state */
-    
-    /* SAFE: Set self-pointer using struct member */
-    vic_dev->self = vic_dev;
-
-    /* Initialize VIC device dimensions */
-    vic_dev->width = 1920;  /* Default HD width */
-    vic_dev->height = 1080; /* Default HD height */
-    
-    /* Set up VIC subdev structure */
-    memset(&vic_dev->sd, 0, sizeof(vic_dev->sd));
-    vic_dev->sd.isp = isp_dev;
-    vic_dev->sd.ops = &vic_subdev_ops;
-    vic_dev->sd.vin_state = TX_ISP_MODULE_INIT;
-    
-    /* SAFE: Initialize buffer management using struct members */
-    INIT_LIST_HEAD(&vic_dev->queue_head);
-    INIT_LIST_HEAD(&vic_dev->done_head);
-    INIT_LIST_HEAD(&vic_dev->free_head);
-    spin_lock_init(&vic_dev->buffer_lock);
-    spin_lock_init(&vic_dev->buffer_mgmt_lock);
-    
-    /* Initialize VIC error counters */
-    memset(vic_dev->vic_errors, 0, sizeof(vic_dev->vic_errors));
-    
-    /* SAFE: Initialize counters using struct members */
-    vic_dev->frame_count = 0;
-    vic_dev->buffer_count = 0;
-    vic_dev->active_buffer_count = 0;
-    vic_dev->streaming = 0;
-    vic_dev->stream_state = 0;
-    vic_dev->processing = false;
-    
-    /* Set up sensor attributes with defaults */
-    memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-    vic_dev->sensor_attr.dbus_type = 2; /* Default to MIPI */
-    vic_dev->sensor_attr.total_width = 1920;
-    vic_dev->sensor_attr.total_height = 1080;
-    vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
-    
-    /* *** CRITICAL: Link VIC device to ISP core *** */
-    /* Store the VIC device properly - the subdev is PART of the VIC device */
-    isp_dev->vic_dev = (struct tx_isp_subdev *)&vic_dev->sd;
-    
-    /* Set up tx_isp_get_subdevdata to work properly */
-    /* This sets up the private data pointer so tx_isp_get_subdevdata can retrieve the VIC device */
-    vic_dev->sd.dev_priv = vic_dev;
-    
-    /* MCP LOG: VIC device creation completed */
-    pr_info("MCP_LOG: tx_isp_create_vic_device - VIC device created successfully\n");
-    pr_info("  vic_dev=%p, size=%zu bytes\n", vic_dev, sizeof(struct tx_isp_vic_device));
-    pr_info("  vic_dev->state=%d, vic_dev->self=%p\n", vic_dev->state, vic_dev->self);
-    pr_info("  isp_dev->vic_dev=%p, vic_dev->sd.dev_priv=%p\n", isp_dev->vic_dev, vic_dev->sd.dev_priv);
-    
-    pr_info("*** CRITICAL: VIC DEVICE LINKED TO ISP CORE (SAFE IMPLEMENTATION) ***\n");
-    pr_info("  isp_dev->vic_dev = %p\n", isp_dev->vic_dev);
-    pr_info("  vic_dev->sd.isp = %p\n", vic_dev->sd.isp);
-    pr_info("  vic_dev->sd.ops = %p\n", vic_dev->sd.ops);
-    pr_info("  vic_dev->vic_regs = %p\n", vic_dev->vic_regs);
-    pr_info("  vic_dev->state = %d\n", vic_dev->state);
-    pr_info("  vic_dev dimensions = %dx%d\n", vic_dev->width, vic_dev->height);
-    
-    pr_info("*** tx_isp_create_vic_device: VIC device creation complete (UNSAFE OFFSETS ELIMINATED) ***\n");
-    pr_info("*** NO MORE 'NO VIC DEVICE' ERROR SHOULD OCCUR ***\n");
-    
-    return 0;
-}
-EXPORT_SYMBOL(tx_isp_create_vic_device);
-
 /* VIC frame completion handler */
 static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 {
@@ -1168,7 +1059,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         iounmap(cpm_regs);
     }
 
-    /* STEP 3: Get VIC registers - should already be mapped by tx_isp_create_vic_device */
+    /* STEP 3: Get VIC registers */
     vic_regs = vic_dev->vic_regs;
     
     pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);

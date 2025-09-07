@@ -59,7 +59,6 @@ static DEFINE_MUTEX(sensor_register_mutex);
 static void destroy_frame_channel_devices(void);
 int __init tx_isp_subdev_platform_init(void);
 void __exit tx_isp_subdev_platform_exit(void);
-int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 void *isp_core_tuning_init(void *arg1);
 
 /* Global I2C client tracking to prevent duplicate creation */
@@ -4259,16 +4258,6 @@ static int tx_isp_init(void)
     spin_lock_init(&ourISPdev->lock);
     ourISPdev->refcnt = 0;
     ourISPdev->is_open = false;
-    
-    /* *** CRITICAL FIX: Create and link VIC device structure immediately *** */
-    pr_info("*** CREATING VIC DEVICE STRUCTURE AND LINKING TO ISP CORE ***\n");
-    ret = tx_isp_create_vic_device(ourISPdev);
-    if (ret) {
-        pr_err("Failed to create VIC device structure: %d\n", ret);
-        kfree(ourISPdev);
-        ourISPdev = NULL;
-        return ret;
-    }
 	
     /* Step 2: Register platform device (matches reference) */
     ret = platform_device_register(&tx_isp_platform_device);
