@@ -4631,37 +4631,6 @@ static void tx_isp_exit(void)
     pr_info("TX ISP driver removed\n");
 }
 
-/* VIC video streaming function - CRITICAL for register activity */
-int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
-{
-    struct tx_isp_dev *isp_dev;
-    struct tx_isp_vic_device *vic_dev;
-    int ret;
-    
-    if (!sd) {
-        return -EINVAL;
-    }
-    
-    isp_dev = (struct tx_isp_dev *)sd->isp;
-    if (!isp_dev || !isp_dev->vic_dev) {
-        return -EINVAL;
-    }
-    
-    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-    
-    pr_info("*** VIC VIDEO STREAMING %s - THIS SHOULD TRIGGER REGISTER WRITES! ***\n",
-            enable ? "ENABLE" : "DISABLE");
-    
-    if (enable) {
-        /* Call vic_core_s_stream which calls tx_isp_vic_start */
-        ret = vic_core_s_stream(vic_dev, enable);
-        pr_info("*** VIC VIDEO STREAMING ENABLE RETURNED %d ***\n", ret);
-        return ret;
-    } else {
-        return vic_core_s_stream(vic_dev, enable);
-    }
-}
-
 /* CSI video streaming function - MIPS-SAFE implementation */
 int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable)
 {
