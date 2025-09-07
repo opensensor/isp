@@ -6177,187 +6177,94 @@ static void vic_frame_work_function(struct work_struct *work)
     }
 }
 
-/* Sensor subdev operation implementations */
+/* CRITICAL FIX: Store original sensor ops for proper delegation */
+struct sensor_ops_storage {
+    struct tx_isp_subdev_ops *original_ops;
+    struct tx_isp_subdev *sensor_sd;
+};
+static struct sensor_ops_storage stored_sensor_ops;
+
+/* Sensor subdev operation implementations - FIXED TO DELEGATE TO REAL SENSOR DRIVER */
 static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable)
 {
-    struct tx_isp_sensor *sensor;
+    pr_info("*** ISP DELEGATING TO REAL SENSOR_INIT: enable=%d ***\n", enable);
     
-    if (!sd || !sd->isp) {
-        return -EINVAL;
-    }
-    
-    sensor = ((struct tx_isp_dev*)sd->isp)->sensor;
-    if (!sensor) {
+    /* CRITICAL FIX: Delegate to the actual sensor driver's init function */
+    if (stored_sensor_ops.original_ops && 
+        stored_sensor_ops.original_ops->core && 
+        stored_sensor_ops.original_ops->core->init) {
+        
+        pr_info("*** CALLING REAL SENSOR DRIVER INIT - THIS WRITES THE REGISTERS! ***\n");
+        
+        /* Call the actual sensor driver's init function */
+        int result = stored_sensor_ops.original_ops->core->init(stored_sensor_ops.sensor_sd, enable);
+        
+        pr_info("*** REAL SENSOR DRIVER INIT RETURNED: %d ***\n", result);
+        return result;
+    } else {
+        pr_err("*** ERROR: NO REAL SENSOR DRIVER INIT FUNCTION AVAILABLE! ***\n");
+        pr_err("*** THIS IS WHY SENSOR REGISTERS ARE NOT BEING WRITTEN! ***\n");
         return -ENODEV;
     }
-    
-    pr_info("*** SENSOR_INIT: %s enable=%d ***\n", sensor->info.name, enable);
-    
-    if (enable) {
-        /* Initialize sensor hardware */
-        if (sensor && sensor->video.attr) {
-            pr_info("SENSOR_INIT: Configuring %s (chip_id=0x%x, %dx%d)\n",
-                    sensor->info.name, sensor->video.attr->chip_id,
-                    sensor->video.attr->total_width, sensor->video.attr->total_height);
-        }
-        sd->vin_state = TX_ISP_MODULE_INIT;
-    } else {
-        /* Deinitialize sensor hardware */
-        pr_info("SENSOR_INIT: Deinitializing %s\n", sensor->info.name);
-        sd->vin_state = TX_ISP_MODULE_SLAKE;
-    }
-    
-    return 0;
 }
 
 static int sensor_subdev_core_reset(struct tx_isp_subdev *sd, int reset)
 {
-    struct tx_isp_sensor *sensor;
+    pr_info("*** ISP DELEGATING TO REAL SENSOR_RESET: reset=%d ***\n", reset);
     
-    if (!sd || !sd->isp) {
-        return -EINVAL;
+    /* CRITICAL FIX: Delegate to the actual sensor driver's reset function */
+    if (stored_sensor_ops.original_ops && 
+        stored_sensor_ops.original_ops->core && 
+        stored_sensor_ops.original_ops->core->reset) {
+        
+        return stored_sensor_ops.original_ops->core->reset(stored_sensor_ops.sensor_sd, reset);
+    } else {
+        pr_warn("*** NO REAL SENSOR DRIVER RESET FUNCTION AVAILABLE ***\n");
+        return 0; /* Non-critical, return success */
     }
-    
-    sensor = ((struct tx_isp_dev*)sd->isp)->sensor;
-    if (!sensor) {
-        return -ENODEV;
-    }
-    
-    pr_info("*** SENSOR_RESET: %s reset=%d ***\n", sensor->info.name, reset);
-    
-    /* Perform sensor reset operations */
-    if (reset) {
-        /* Reset sensor to default state */
-        sd->vin_state = TX_ISP_MODULE_INIT;
-    }
-    
-    return 0;
 }
 
 static int sensor_subdev_core_g_chip_ident(struct tx_isp_subdev *sd, struct tx_isp_chip_ident *chip)
 {
-    struct tx_isp_sensor *sensor;
+    pr_info("*** ISP DELEGATING TO REAL SENSOR_G_CHIP_IDENT ***\n");
     
-    if (!sd || !sd->isp || !chip) {
-        return -EINVAL;
-    }
-    
-    sensor = ((struct tx_isp_dev*)sd->isp)->sensor;
-    if (!sensor || !sensor->video.attr) {
+    /* CRITICAL FIX: Delegate to the actual sensor driver's g_chip_ident function */
+    if (stored_sensor_ops.original_ops && 
+        stored_sensor_ops.original_ops->core && 
+        stored_sensor_ops.original_ops->core->g_chip_ident) {
+        
+        pr_info("*** CALLING REAL SENSOR DRIVER G_CHIP_IDENT ***\n");
+        
+        int result = stored_sensor_ops.original_ops->core->g_chip_ident(stored_sensor_ops.sensor_sd, chip);
+        
+        pr_info("*** REAL SENSOR DRIVER G_CHIP_IDENT RETURNED: %d ***\n", result);
+        return result;
+    } else {
+        pr_err("*** ERROR: NO REAL SENSOR DRIVER G_CHIP_IDENT FUNCTION AVAILABLE! ***\n");
         return -ENODEV;
     }
-    
-    pr_info("*** SENSOR_G_CHIP_IDENT: %s ***\n", sensor->info.name);
-    
-    /* Fill chip identification */
-    chip->ident = sensor->video.attr->chip_id;
-    strncpy(chip->name, sensor->info.name, sizeof(chip->name) - 1);
-    chip->name[sizeof(chip->name) - 1] = '\0';
-    chip->revision = NULL; /* No revision info available */
-    
-    pr_info("SENSOR_G_CHIP_IDENT: ident=0x%x name=%s\n", chip->ident, chip->name);
-    
-    return 0;
 }
 
 static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
-    struct tx_isp_sensor *sensor;
-    struct i2c_client *client = NULL;
-    struct registered_sensor *reg_sensor;
+    pr_info("*** ISP DELEGATING TO REAL SENSOR_S_STREAM: enable=%d ***\n", enable);
     
-    if (!sd || !sd->isp) {
-        return -EINVAL;
-    }
-    
-    sensor = ((struct tx_isp_dev*)sd->isp)->sensor;
-    if (!sensor) {
+    /* CRITICAL FIX: Delegate to the actual sensor driver's s_stream function */
+    if (stored_sensor_ops.original_ops && 
+        stored_sensor_ops.original_ops->video && 
+        stored_sensor_ops.original_ops->video->s_stream) {
+        
+        pr_info("*** CALLING REAL SENSOR DRIVER S_STREAM - THIS WRITES 0x3e=0x91! ***\n");
+        
+        int result = stored_sensor_ops.original_ops->video->s_stream(stored_sensor_ops.sensor_sd, enable);
+        
+        pr_info("*** REAL SENSOR DRIVER S_STREAM RETURNED: %d ***\n", result);
+        return result;
+    } else {
+        pr_err("*** ERROR: NO REAL SENSOR DRIVER S_STREAM FUNCTION AVAILABLE! ***\n");
+        pr_err("*** THIS IS WHY 0x3e=0x91 IS NOT BEING WRITTEN! ***\n");
         return -ENODEV;
     }
-    
-    pr_info("*** SENSOR_S_STREAM: %s %s ***\n", 
-            sensor->info.name, enable ? "ENABLE" : "DISABLE");
-    
-    /* FIXED: Get existing I2C client instead of creating a new one */
-    mutex_lock(&sensor_list_mutex);
-    list_for_each_entry(reg_sensor, &sensor_list, list) {
-        if (strncmp(reg_sensor->name, sensor->info.name, sizeof(reg_sensor->name)) == 0) {
-            client = reg_sensor->client;
-            break;
-        }
-    }
-    mutex_unlock(&sensor_list_mutex);
-    
-    /* Fallback to global client if not found in registry */
-    if (!client) {
-        mutex_lock(&i2c_client_mutex);
-        client = global_sensor_i2c_client;
-        mutex_unlock(&i2c_client_mutex);
-    }
-    
-    if (enable) {
-        pr_info("*** SENSOR_S_STREAM: ACTUALLY WRITING STREAMING REGISTERS TO HARDWARE ***\n");
-        
-        /* CRITICAL: Actually write sensor registers via I2C */
-        if (strncmp(sensor->info.name, "gc2053", 6) == 0) {
-            pr_info("*** GC2053: WRITING ACTUAL MIPI STREAMING ENABLE REGISTERS ***\n");
-            
-            if (client) {
-                /* GC2053 streaming enable sequence - ACTUAL I2C WRITES */
-                pr_info("*** WRITING GC2053 STREAMING REGISTERS TO PHYSICAL HARDWARE ***\n");
-                
-                /* Page select */
-                i2c_smbus_write_byte_data(client, 0xfe, 0x00);
-                
-                /* CRITICAL: Enable MIPI streaming - this is what was missing! */
-                i2c_smbus_write_byte_data(client, 0x3e, 0x91);
-                
-                /* Additional GC2053 streaming registers */
-                i2c_smbus_write_byte_data(client, 0xf7, 0x01);  /* PLL enable */
-                i2c_smbus_write_byte_data(client, 0xf8, 0x06);  /* PLL multiplier */
-                i2c_smbus_write_byte_data(client, 0xf9, 0xae);  /* PLL config */
-                i2c_smbus_write_byte_data(client, 0xfa, 0x84);  /* Clock config */
-                
-                pr_info("*** GC2053: CRITICAL REGISTERS WRITTEN TO PHYSICAL SENSOR ***\n");
-                pr_info("gc2053_write: reg=0xfe val=0x00 (page select)\n");
-                pr_info("gc2053_write: reg=0x3e val=0x91 (MIPI stream enable)\n");
-                pr_info("gc2053_write: reg=0xf7 val=0x01 (PLL enable)\n");
-                pr_info("gc2053_write: reg=0xf8 val=0x06 (PLL multiplier)\n");
-                pr_info("*** GC2053 NOW PHYSICALLY STREAMING MIPI DATA ***\n");
-            } else {
-                pr_err("*** ERROR: NO I2C CLIENT AVAILABLE FOR GC2053 REGISTER WRITES ***\n");
-            }
-        }
-        
-        /* Check sensor interface type for logging */
-        if (sensor->video.attr) {
-            if (sensor->video.attr->dbus_type == 1) {
-                pr_info("SENSOR: DVP interface streaming\n");
-            } else if (sensor->video.attr->dbus_type == 2) {
-                pr_info("*** SENSOR: MIPI INTERFACE - PHYSICAL STREAMING NOW ACTIVE ***\n");
-            }
-        }
-        
-        sd->vin_state = TX_ISP_MODULE_RUNNING;
-        pr_info("*** SENSOR_S_STREAM: %s NOW PHYSICALLY STREAMING (state=RUNNING) ***\n", sensor->info.name);
-    } else {
-        /* Disable streaming */
-        if (strncmp(sensor->info.name, "gc2053", 6) == 0) {
-            if (client) {
-                /* Disable MIPI streaming using existing client */
-                i2c_smbus_write_byte_data(client, 0xfe, 0x00);
-                i2c_smbus_write_byte_data(client, 0x3e, 0x00);  /* Disable streaming */
-                pr_info("GC2053: Physical streaming disabled (0x3e=0x00)\n");
-            } else {
-                pr_err("*** ERROR: NO I2C CLIENT AVAILABLE FOR GC2053 STREAMING DISABLE ***\n");
-            }
-        }
-        
-        pr_info("SENSOR_S_STREAM: Stopping %s streaming\n", sensor->info.name);
-        sd->vin_state = TX_ISP_MODULE_INIT;
-    }
-    
-    return 0;
 }
 
 /* Kernel interface for sensor drivers to register their subdev */
