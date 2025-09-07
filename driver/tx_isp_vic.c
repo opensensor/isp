@@ -1412,57 +1412,80 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
     
     pr_info("*** vic_sensor_ops_sync_sensor_attr: CORRUPTION DETECTION ***\n");
     pr_info("vic_sensor_ops_sync_sensor_attr: sd=%p, attr=%p\n", sd, attr);
-
-    /* Debug vic_dev structure integrity */
-    pr_info("*** BEFORE SYNC: vic_dev structure integrity ***\n");
-    pr_info("vic_dev=%p, sensor_attr=%p\n", vic_dev, &vic_dev->sensor_attr);
-    pr_info("vic_dev->sensor_attr.dbus_type = %d\n", vic_dev->sensor_attr.dbus_type);
-    pr_info("vic_dev->sensor_attr.data_type = 0x%x\n", vic_dev->sensor_attr.data_type);
     
-    if (attr) {
-        pr_info("*** INPUT ATTR: Checking input sensor attributes ***\n");
-        pr_info("attr->dbus_type = %d\n", attr->dbus_type);
-        pr_info("attr->data_type = 0x%x\n", attr->data_type);
-        pr_info("attr->total_width = %d, total_height = %d\n", attr->total_width, attr->total_height);
-        
-        /* Validate input before copying */
-        if (attr->dbus_type > 5 || attr->dbus_type < 1) {
-            pr_err("*** CORRUPTION DETECTED IN INPUT: Invalid dbus_type %d ***\n", attr->dbus_type);
-            pr_err("*** FIXING: Correcting dbus_type to 2 (MIPI) ***\n");
-            attr->dbus_type = 2; /* Fix corruption at source */
-        }
-    }
-    
-    /* Binary Ninja: $v0_1 = arg2 == 0 ? memset : memcpy */
-    if (attr == NULL) {
-        /* Clear sensor attribute */
-        memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-        /* Reset to safe defaults */
-        vic_dev->sensor_attr.dbus_type = 2; /* Default to MIPI */
-        vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
-        pr_info("vic_sensor_ops_sync_sensor_attr: cleared and reset sensor attributes to safe defaults\n");
+    /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) */
+    if (sd != 0 && (unsigned long)sd < 0xfffff001) {
+        /* Binary Ninja EXACT: int32_t $a0 = *(arg1 + 0xd4) */
+        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     } else {
-        /* Copy sensor attribute with validation */
-        memcpy(&vic_dev->sensor_attr, attr, sizeof(vic_dev->sensor_attr));
-        
-        /* Post-copy validation and correction */
-        if (vic_dev->sensor_attr.dbus_type > 5 || vic_dev->sensor_attr.dbus_type < 1) {
-            pr_err("*** POST-COPY CORRUPTION: dbus_type became %d ***\n", vic_dev->sensor_attr.dbus_type);
-            vic_dev->sensor_attr.dbus_type = 2; /* Correct it */
-            pr_err("*** CORRECTED: dbus_type set to 2 (MIPI) ***\n");
-        }
-        
-        pr_info("vic_sensor_ops_sync_sensor_attr: copied sensor attributes\n");
+        pr_err("The parameter is invalid!\n");
+        return -EINVAL; /* 0xffffffea */
     }
     
-    /* Debug after synchronization */
-    pr_info("*** AFTER SYNC: Final sensor attribute values ***\n");
-    pr_info("vic_dev->sensor_attr.dbus_type = %d\n", vic_dev->sensor_attr.dbus_type);
-    pr_info("vic_dev->sensor_attr.data_type = 0x%x\n", vic_dev->sensor_attr.data_type);
-    pr_info("vic_dev->sensor_attr.total_width = %d, total_height = %d\n", 
-           vic_dev->sensor_attr.total_width, vic_dev->sensor_attr.total_height);
+    /* Binary Ninja EXACT: if ($a0 != 0 && $a0 u< 0xfffff001) */
+    if (vic_dev != 0 && (unsigned long)vic_dev < 0xfffff001) {
+        
+        /* Debug vic_dev structure integrity - NOW THAT WE HAVE IT */
+        pr_info("*** BEFORE SYNC: vic_dev structure integrity ***\n");
+        pr_info("vic_dev=%p, sensor_attr=%p\n", vic_dev, &vic_dev->sensor_attr);
+        pr_info("vic_dev->sensor_attr.dbus_type = %d\n", vic_dev->sensor_attr.dbus_type);
+        pr_info("vic_dev->sensor_attr.data_type = 0x%x\n", vic_dev->sensor_attr.data_type);
+        
+        if (attr) {
+            pr_info("*** INPUT ATTR: Checking input sensor attributes ***\n");
+            pr_info("attr->dbus_type = %d\n", attr->dbus_type);
+            pr_info("attr->data_type = 0x%x\n", attr->data_type);
+            pr_info("attr->total_width = %d, total_height = %d\n", attr->total_width, attr->total_height);
+            
+            /* Validate input before copying */
+            if (attr->dbus_type > 5 || attr->dbus_type < 1) {
+                pr_err("*** CORRUPTION DETECTED IN INPUT: Invalid dbus_type %d ***\n", attr->dbus_type);
+                pr_err("*** FIXING: Correcting dbus_type to 2 (MIPI) ***\n");
+                attr->dbus_type = 2; /* Fix corruption at source */
+            }
+        }
+        
+        /* Binary Ninja EXACT: void* const $v0_1 = arg2 == 0 ? memset : memcpy */
+        if (attr == NULL) {
+            /* Binary Ninja: memset path */
+            memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
+            /* Reset to safe defaults */
+            vic_dev->sensor_attr.dbus_type = 2; /* Default to MIPI */
+            vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
+            pr_info("*** MCP_LOG: vic_sensor_ops_sync_sensor_attr - memset path, reset to defaults ***\n");
+        } else {
+            /* Binary Ninja: memcpy path */
+            memcpy(&vic_dev->sensor_attr, attr, sizeof(vic_dev->sensor_attr));
+            
+            /* Post-copy validation and correction */
+            if (vic_dev->sensor_attr.dbus_type > 5 || vic_dev->sensor_attr.dbus_type < 1) {
+                pr_err("*** POST-COPY CORRUPTION: dbus_type became %d ***\n", vic_dev->sensor_attr.dbus_type);
+                vic_dev->sensor_attr.dbus_type = 2; /* Correct it */
+                pr_err("*** CORRECTED: dbus_type set to 2 (MIPI) ***\n");
+            }
+            
+            pr_info("*** MCP_LOG: vic_sensor_ops_sync_sensor_attr - memcpy path, attributes synchronized ***\n");
+        }
+        
+        /* Debug after synchronization */
+        pr_info("*** AFTER SYNC: Final sensor attribute values ***\n");
+        pr_info("vic_dev->sensor_attr.dbus_type = %d\n", vic_dev->sensor_attr.dbus_type);
+        pr_info("vic_dev->sensor_attr.data_type = 0x%x\n", vic_dev->sensor_attr.data_type);
+        pr_info("vic_dev->sensor_attr.total_width = %d, total_height = %d\n", 
+               vic_dev->sensor_attr.total_width, vic_dev->sensor_attr.total_height);
+        
+        /* Binary Ninja EXACT: return 0 */
+        return 0;
+        
+    } else {
+        /* Binary Ninja EXACT: Invalid vic_dev case */
+        pr_err("The parameter is invalid!\n");
+        return -EINVAL; /* 0xffffffea */
+    }
     
-    return 0;
+    /* Binary Ninja EXACT: Invalid sd case - should never reach here due to early return */
+    pr_err("The parameter is invalid!\n"); 
+    return -EINVAL; /* 0xffffffea */
 }
 
 /* VIC core operations ioctl - EXACT Binary Ninja implementation */
