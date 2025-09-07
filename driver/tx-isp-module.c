@@ -4404,6 +4404,20 @@ static int tx_isp_init(void)
         goto err_cleanup_platforms;
     }
 
+    /* CRITICAL: Initialize tuning_data if not already initialized */
+    if (!ourISPdev->tuning_data) {
+        pr_info("tx_isp_init: Initializing tuning data structure\n");
+
+        /* Allocate tuning data structure using the reference implementation */
+        ourISPdev->tuning_data = isp_core_tuning_init(ourISPdev);
+        if (!ourISPdev->tuning_data) {
+            pr_err("tx_isp_init: Failed to allocate tuning data\n");
+            return -ENOMEM;
+        }
+
+        pr_info("tx_isp_init: Tuning data allocated at %p\n", ourISPdev->tuning_data);
+    }
+
     /* Register VIC subdev with proper ops structure */
     if (ourISPdev->vic_dev) {
         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
