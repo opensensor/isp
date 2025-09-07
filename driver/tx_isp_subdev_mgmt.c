@@ -174,6 +174,8 @@ static struct tx_isp_subdev_desc isp_subdev_descriptors[] = {
     },
 };
 
+extern struct tx_isp_dev *ourISPdev;
+
 #define NUM_ISP_SUBDEVS ARRAY_SIZE(isp_subdev_descriptors)
 
 /**
