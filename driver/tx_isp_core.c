@@ -2226,7 +2226,7 @@ static int tx_isp_create_sensor_i2c_devices(struct tx_isp_dev *isp)
     ISP_INFO("*** This will trigger sensor_probe() when sensor driver loads ***\n");
     
     /* Store I2C client for cleanup */
-    isp->sensor_client = client;
+    isp->sensor_i2c_client = client;
     
     i2c_put_adapter(adapter);
     
@@ -2238,7 +2238,7 @@ static int tx_isp_create_sensor_i2c_devices(struct tx_isp_dev *isp)
  * sensor_early_init - Early sensor system initialization
  * This replaces the unsafe direct calls to sensor_init/sensor_probe
  */
-static int sensor_early_init(struct tx_isp_dev *isp)
+int sensor_early_init(struct tx_isp_dev *isp)
 {
     int ret;
     

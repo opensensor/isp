@@ -66,7 +66,7 @@ int vic_event_handler(void *subdev, int event_type, void *data);
 
 // Forward declarations for initialization functions
 void isp_core_tuning_deinit(void *core_dev);
-int sensor_early_init(void *core_dev);
+int sensor_early_init(struct tx_isp_dev *isp);
 
 /* VIC States */
 #define VIC_STATE_OFF       0
