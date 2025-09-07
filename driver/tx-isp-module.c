@@ -65,59 +65,149 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 static struct i2c_client *global_sensor_i2c_client = NULL;
 static DEFINE_MUTEX(i2c_client_mutex);
 
-/* I2C infrastructure - create I2C devices dynamically during sensor registration */
+/* MIPS-SAFE I2C infrastructure - Fixed for unaligned access crash */
 static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
                                                    struct i2c_board_info *info)
 {
-    struct i2c_client *client;
+    struct i2c_client *client = NULL;
+    struct device *dev = NULL;
+    struct module *owner = NULL;
+    void *subdev_data = NULL;
     
-    if (!adapter || !info) {
-        pr_err("isp_i2c_new_subdev_board: Invalid parameters\n");
+    pr_info("*** isp_i2c_new_subdev_board: MIPS-SAFE implementation - FIXED CRASH ***\n");
+    
+    /* MIPS ALIGNMENT CHECK: Validate pointer alignment */
+    if (!adapter || ((uintptr_t)adapter & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: adapter pointer 0x%p not 4-byte aligned ***\n", adapter);
         return NULL;
     }
     
-    /* Check if we already have a client for this address */
+    if (!info || ((uintptr_t)info & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: info pointer 0x%p not 4-byte aligned ***\n", info);
+        return NULL;
+    }
+    
+    /* MIPS SAFE: Validate info structure fields */
+    if (!info->type || strlen(info->type) == 0) {
+        pr_err("isp_i2c_new_subdev_board: Invalid device type\n");
+        return NULL;
+    }
+    
+    /* Check if we already have a client for this address - MIPS SAFE */
     mutex_lock(&i2c_client_mutex);
-    if (global_sensor_i2c_client && global_sensor_i2c_client->addr == info->addr) {
-        pr_info("*** REUSING EXISTING I2C CLIENT: %s at 0x%02x ***\n",
+    if (global_sensor_i2c_client && 
+        ((uintptr_t)global_sensor_i2c_client & 0x3) == 0 &&
+        global_sensor_i2c_client->addr == info->addr) {
+        pr_info("*** REUSING EXISTING I2C CLIENT: %s at 0x%02x (MIPS-safe) ***\n",
                 global_sensor_i2c_client->name, global_sensor_i2c_client->addr);
         mutex_unlock(&i2c_client_mutex);
         return global_sensor_i2c_client;
     }
-    
-    /* Double-check: search for any existing client on this adapter at this address */
-    client = i2c_verify_client(i2c_get_clientdata(adapter->dev.parent));
-    if (client && client->addr == info->addr) {
-        pr_info("*** FOUND EXISTING I2C CLIENT ON BUS: %s at 0x%02x ***\n",
-                client->name, client->addr);
-        global_sensor_i2c_client = client;
-        mutex_unlock(&i2c_client_mutex);
-        return client;
-    }
     mutex_unlock(&i2c_client_mutex);
     
-    pr_info("Creating I2C subdev: type=%s addr=0x%02x on adapter %s\n",
+    pr_info("Creating I2C subdev: type=%s addr=0x%02x on adapter %s (MIPS-safe)\n",
             info->type, info->addr, adapter->name);
     
-    /* Create I2C device (this will trigger sensor probe if module loaded) */
-    client = i2c_new_device(adapter, info);
-    if (!client) {
-        pr_err("*** FAILED TO CREATE I2C DEVICE FOR %s - MODULE NOT LOADED? ***\n", info->type);
-        return NULL;
+    /* CRITICAL FIX: Binary Ninja reference implementation - MIPS-SAFE VERSION */
+    /* Binary Ninja: private_request_module(1, arg2, arg3) */
+    pr_info("*** MIPS-SAFE: Requesting sensor module %s ***\n", info->type);
+    request_module("sensor_%s", info->type);
+    
+    /* MIPS SAFE: Binary Ninja: if (zx.d(*(arg2 + 0x16)) != 0) */
+    /* FIXED: Instead of unsafe *(arg2 + 0x16), check info->addr properly */
+    if (info->addr != 0) {
+        pr_info("*** MIPS-SAFE: Valid I2C address 0x%02x, creating device ***\n", info->addr);
+        
+        /* Binary Ninja: void* $v0_1 = private_i2c_new_device(arg1, arg2) */
+        client = i2c_new_device(adapter, info);
+        
+        /* MIPS SAFE: Binary Ninja: if ($v0_1 != 0) */
+        if (client && ((uintptr_t)client & 0x3) == 0) {
+            pr_info("*** MIPS-SAFE: I2C device created successfully at 0x%p ***\n", client);
+            
+            /* MIPS SAFE: Binary Ninja: void* $v0_2 = *($v0_1 + 0x1c) */
+            /* FIXED: Instead of unsafe *($v0_1 + 0x1c), use proper struct member */
+            dev = &client->dev;
+            if (dev && ((uintptr_t)dev & 0x3) == 0) {
+                
+                /* MIPS SAFE: Get device driver safely */
+                if (dev->driver && ((uintptr_t)dev->driver & 0x3) == 0) {
+                    owner = dev->driver->owner;
+                    
+                    /* Binary Ninja: if ($v0_2 != 0 && private_try_module_get(*($v0_2 + 0x2c)) != 0) */
+                    /* MIPS SAFE: Instead of unsafe *($v0_2 + 0x2c), use owner directly */
+                    if (owner && try_module_get(owner)) {
+                        pr_info("*** MIPS-SAFE: Module reference acquired for %s ***\n", info->type);
+                        
+                        /* Binary Ninja: int32_t result = private_i2c_get_clientdata($v0_1) */
+                        /* MIPS SAFE: Get client data safely */
+                        subdev_data = i2c_get_clientdata(client);
+                        
+                        /* Binary Ninja: private_module_put(*(*($v0_1 + 0x1c) + 0x2c)) */
+                        module_put(owner);
+                        
+                        /* Binary Ninja: if (result != 0) return result */
+                        if (subdev_data) {
+                            pr_info("*** MIPS-SAFE: Sensor subdev data found, device ready ***\n");
+                            
+                            /* Store globally to prevent duplicates - MIPS SAFE */
+                            mutex_lock(&i2c_client_mutex);
+                            if (!global_sensor_i2c_client) {
+                                global_sensor_i2c_client = client;
+                                pr_info("*** I2C DEVICE READY: %s at 0x%02x (MIPS-safe) ***\n",
+                                        client->name, client->addr);
+                            }
+                            mutex_unlock(&i2c_client_mutex);
+                            
+                            return client;
+                        } else {
+                            pr_info("*** MIPS-SAFE: No subdev data yet, device created but not probed ***\n");
+                        }
+                    } else {
+                        pr_info("*** MIPS-SAFE: Could not get module reference ***\n");
+                    }
+                } else {
+                    pr_info("*** MIPS-SAFE: Device driver not loaded or not aligned ***\n");
+                }
+            } else {
+                pr_err("*** MIPS ALIGNMENT ERROR: client->dev not properly aligned ***\n");
+            }
+            
+            /* Store the client even if probe hasn't completed yet */
+            mutex_lock(&i2c_client_mutex);
+            if (!global_sensor_i2c_client) {
+                global_sensor_i2c_client = client;
+                pr_info("*** I2C DEVICE STORED: %s at 0x%02x - probe may complete later ***\n",
+                        client->name, client->addr);
+            }
+            mutex_unlock(&i2c_client_mutex);
+            
+        } else if (!client) {
+            pr_err("*** FAILED TO CREATE I2C DEVICE FOR %s ***\n", info->type);
+        } else {
+            pr_err("*** MIPS ALIGNMENT ERROR: client pointer 0x%p not aligned ***\n", client);
+            i2c_unregister_device(client);
+            client = NULL;
+        }
+    } else {
+        pr_err("*** MIPS-SAFE: Invalid I2C address 0 ***\n");
     }
     
-    /* Store globally to prevent duplicates */
-    mutex_lock(&i2c_client_mutex);
-    if (!global_sensor_i2c_client) {
-        global_sensor_i2c_client = client;
-        pr_info("*** I2C DEVICE CREATED: %s at 0x%02x - SENSOR PROBE SHOULD BE TRIGGERED ***\n",
-                client->name, client->addr);
-    } else {
-        pr_info("*** I2C CLIENT ALREADY EXISTS, USING EXISTING ONE ***\n");
-        i2c_unregister_device(client);  /* Clean up duplicate */
-        client = global_sensor_i2c_client;
+    /* Binary Ninja: return 0 (NULL for failed client creation) */
+    return client;
+}
+
+/* MIPS-SAFE I2C communication test - Fixed for unaligned access */
+static int mips_safe_i2c_test(struct i2c_client *client, const char *sensor_type)
+{
+    int test_result = 0;
+    
+    if (!client || ((uintptr_t)client & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: client not properly aligned ***\n");
+        return -EINVAL;
     }
-    mutex_unlock(&i2c_client_mutex);
+    
+    pr_info("*** MIPS-SAFE I2C TEST FOR %s ***\n", sensor_type);
     
     /* *** FIXED: PROPER I2C COMMUNICATION TEST *** */
     pr_info("*** TESTING I2C COMMUNICATION WITH %s (IMPROVED METHOD) ***\n", info->type);
