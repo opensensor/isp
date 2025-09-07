@@ -1904,17 +1904,9 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
 }
 
 /* CRITICAL MISSING FUNCTION: vic_core_s_stream - FIXED to call tx_isp_vic_start */
-int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
+int vic_core_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 {
-    struct tx_isp_vic_device *vic_dev;
     int ret = 0;
-    
-    if (!sd) {
-        pr_err("VIC s_stream: NULL subdev\n");
-        return -EINVAL;
-    }
-    
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev) {
         pr_err("VIC s_stream: NULL vic_dev\n");
         return -EINVAL;
