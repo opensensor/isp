@@ -2006,77 +2006,147 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
     return 0; /* Always return success to prevent cascade failures */
 }
 
-/* tx_isp_video_s_stream - CRASH-SAFE implementation to prevent kernel panic */
+/* tx_isp_video_s_stream - EXACT Binary Ninja implementation with FIXED memory safety */
 static int tx_isp_video_s_stream(struct tx_isp_dev *isp_dev, int enable)
 {
-    pr_info("*** tx_isp_video_s_stream: MIPS-SAFE implementation - enable=%d ***\n", enable);
-    pr_info("*** MIPS-SAFE: Skipping subdev iteration that caused BadVA: 03e0000c ***\n");
-    pr_info("*** MIPS-SAFE: Processing streaming without risky subdev iteration ***\n");
+    struct tx_isp_subdev **subdevs;
+    struct tx_isp_subdev *subdev;
+    struct tx_isp_subdev_ops *ops;
+    struct tx_isp_subdev_video_ops *video_ops;
+    int (*s_stream_func)(struct tx_isp_subdev *, int);
+    int i, result;
     
-    /* CRITICAL CRASH FIX: Do NOT iterate through subdevs array that causes crashes */
-    /* The crash at BadVA: 03e0000c shows we're accessing invalid memory in subdev iteration */
+    pr_info("*** tx_isp_video_s_stream: FIXED Binary Ninja implementation - enable=%d ***\n", enable);
     
+    /* FIXED: Validate ISP device with proper error checking */
     if (!isp_dev) {
         pr_err("tx_isp_video_s_stream: Invalid ISP device\n");
         return -EINVAL;
     }
     
-    /* MIPS-SAFE: Instead of dangerous subdev iteration, directly call known working functions */
-    if (enable) {
-        pr_info("*** MIPS-SAFE: Enabling streaming without risky subdev iteration ***\n");
-        
-        /* SAFE: Call VIC streaming directly if available */
-        if (isp_dev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
-                pr_info("*** MIPS-SAFE: Calling VIC streaming directly ***\n");
-                vic_core_s_stream(&vic_dev->sd, enable);
-            }
-        }
-        
-        /* SAFE: Call CSI streaming directly if available */
-        if (isp_dev->csi_dev) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-            if (csi_dev && ((uintptr_t)csi_dev & 0x3) == 0) {
-                pr_info("*** MIPS-SAFE: Calling CSI streaming directly ***\n");
-                csi_video_s_stream_impl(&csi_dev->sd, enable);
-            }
-        }
-        
-        /* SAFE: Call sensor streaming directly if available */
-        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
-            isp_dev->sensor->sd.ops->video && isp_dev->sensor->sd.ops->video->s_stream) {
-            if (((uintptr_t)isp_dev->sensor & 0x3) == 0) {
-                pr_info("*** MIPS-SAFE: Calling sensor streaming directly ***\n");
-                isp_dev->sensor->sd.ops->video->s_stream(&isp_dev->sensor->sd, enable);
-            }
-        }
-        
-    } else {
-        pr_info("*** MIPS-SAFE: Disabling streaming without risky subdev iteration ***\n");
-        /* SAFE: Disable streaming on known devices */
-        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
-            isp_dev->sensor->sd.ops->video && isp_dev->sensor->sd.ops->video->s_stream) {
-            if (((uintptr_t)isp_dev->sensor & 0x3) == 0) {
-                isp_dev->sensor->sd.ops->video->s_stream(&isp_dev->sensor->sd, 0);
-            }
-        }
-        if (isp_dev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
-                vic_core_s_stream(&vic_dev->sd, 0);
-            }
-        }
-        if (isp_dev->csi_dev) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-            if (csi_dev && ((uintptr_t)csi_dev & 0x3) == 0) {
-                csi_video_s_stream_impl(&csi_dev->sd, 0);
-            }
-        }
+    /* FIXED: Get subdevs array using proper struct member access instead of offset +0x38 */
+    subdevs = isp_dev->subdevs;
+    if (!subdevs) {
+        pr_err("tx_isp_video_s_stream: No subdevs array available\n");
+        return -EINVAL;
     }
     
-    pr_info("*** tx_isp_video_s_stream: MIPS-SAFE completion - no unaligned access attempted ***\n");
-    return 0; /* Always return success to prevent cascade failures */
+    pr_info("*** tx_isp_video_s_stream: Processing %s request for subdevs ***\n",
+            enable ? "ENABLE" : "DISABLE");
+    
+    /* FIXED: Binary Ninja loop - for (int32_t i = 0; i != 0x10; i++) */
+    for (i = 0; i < 16; i++) {
+        /* FIXED: Binary Ninja: void* $a0 = *$s4 - get subdev from array */
+        subdev = subdevs[i];
+        
+        /* Binary Ninja: if ($a0 != 0) */
+        if (subdev != NULL) {
+            /* FIXED: Validate subdev pointer alignment and bounds */
+            if (((uintptr_t)subdev & 0x3) != 0) {
+                pr_warn("tx_isp_video_s_stream: Subdev %d not aligned (0x%p), skipping\n", i, subdev);
+                continue;
+            }
+            
+            if ((uintptr_t)subdev >= 0xfffff001) {
+                pr_warn("tx_isp_video_s_stream: Subdev %d out of range (0x%p), skipping\n", i, subdev);
+                continue;
+            }
+            
+            /* FIXED: Binary Ninja: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) 
+             * This accesses subdev->ops->video->s_stream safely */
+            ops = subdev->ops;
+            if (!ops) {
+                pr_debug("tx_isp_video_s_stream: Subdev %d has no ops, skipping\n", i);
+                continue;
+            }
+            
+            /* FIXED: Validate ops pointer alignment */
+            if (((uintptr_t)ops & 0x3) != 0) {
+                pr_warn("tx_isp_video_s_stream: Subdev %d ops not aligned (0x%p), skipping\n", i, ops);
+                continue;
+            }
+            
+            /* FIXED: Binary Ninja: *($v0_3 + 4) - get video ops structure */
+            video_ops = ops->video;
+            if (!video_ops) {
+                pr_debug("tx_isp_video_s_stream: Subdev %d has no video ops, skipping\n", i);
+                continue;
+            }
+            
+            /* FIXED: Validate video_ops pointer alignment */
+            if (((uintptr_t)video_ops & 0x3) != 0) {
+                pr_warn("tx_isp_video_s_stream: Subdev %d video_ops not aligned (0x%p), skipping\n", i, video_ops);
+                continue;
+            }
+            
+            /* FIXED: Binary Ninja: int32_t $v0_4 = *$v0_3 - get s_stream function pointer */
+            s_stream_func = video_ops->s_stream;
+            if (!s_stream_func) {
+                pr_debug("tx_isp_video_s_stream: Subdev %d has no s_stream function, skipping\n", i);
+                continue;
+            }
+            
+            /* FIXED: Validate function pointer alignment and bounds */
+            if (((uintptr_t)s_stream_func & 0x3) != 0) {
+                pr_warn("tx_isp_video_s_stream: Subdev %d s_stream not aligned (0x%p), skipping\n", i, s_stream_func);
+                continue;
+            }
+            
+            if ((uintptr_t)s_stream_func < 0xc0000000 || (uintptr_t)s_stream_func >= 0xfffff001) {
+                pr_warn("tx_isp_video_s_stream: Subdev %d s_stream out of kernel range (0x%p), skipping\n", i, s_stream_func);
+                continue;
+            }
+            
+            /* FIXED: Binary Ninja: result = $v0_4($a0, arg2) - call s_stream function */
+            pr_info("*** tx_isp_video_s_stream: Calling subdev %d s_stream(enable=%d) ***\n", i, enable);
+            result = s_stream_func(subdev, enable);
+            
+            /* FIXED: Binary Ninja error handling logic */
+            if (result == 0) {
+                /* Success - continue to next subdev */
+                pr_info("tx_isp_video_s_stream: Subdev %d s_stream SUCCESS\n", i);
+                continue;
+            } else if (result == 0xfffffdfd) { /* -515 */
+                /* Binary Ninja: Special code that's not a real error */
+                pr_info("tx_isp_video_s_stream: Subdev %d returned special code -515 (ignored)\n", i);
+                continue;
+            } else {
+                /* Real error occurred */
+                pr_err("tx_isp_video_s_stream: Subdev %d s_stream FAILED: %d\n", i, result);
+                
+                /* FIXED: Binary Ninja cleanup logic - disable previously enabled subdevs */
+                if (enable) {
+                    pr_info("tx_isp_video_s_stream: Cleaning up previously enabled subdevs\n");
+                    
+                    int j;
+                    for (j = i - 1; j >= 0; j--) {
+                        struct tx_isp_subdev *prev_subdev = subdevs[j];
+                        
+                        if (prev_subdev && prev_subdev->ops && prev_subdev->ops->video &&
+                            prev_subdev->ops->video->s_stream) {
+                            
+                            /* Disable previously enabled subdev */
+                            int cleanup_result = prev_subdev->ops->video->s_stream(prev_subdev, 0);
+                            if (cleanup_result == 0) {
+                                pr_info("tx_isp_video_s_stream: Cleanup: disabled subdev %d\n", j);
+                            } else {
+                                pr_warn("tx_isp_video_s_stream: Cleanup failed for subdev %d: %d\n", j, cleanup_result);
+                            }
+                        }
+                    }
+                }
+                
+                /* Binary Ninja: return result */
+                return result;
+            }
+        }
+        /* Binary Ninja: else { i += 1; } - continue to next subdev */
+    }
+    
+    pr_info("*** tx_isp_video_s_stream: FIXED Binary Ninja implementation completed successfully ***\n");
+    
+    /* Binary Ninja: return 0 */
+    return 0;
 }
 
 /* Real hardware frame completion detection - SDK compatible */
