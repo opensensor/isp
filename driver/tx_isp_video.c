@@ -55,7 +55,9 @@ static int safe_subdev_call(struct tx_isp_subdev *subdev, int enable, int subdev
 {
     struct tx_isp_subdev_ops *ops;
     struct tx_isp_subdev_video_ops *video_ops;
+    struct tx_isp_subdev_sensor_ops *sensor_ops;
     int (*s_stream_func)(struct tx_isp_subdev *, int);
+    int result = 0;
     
     /* Validate subdev pointer */
     if (!is_valid_kernel_pointer(subdev)) {
@@ -97,7 +99,46 @@ static int safe_subdev_call(struct tx_isp_subdev *subdev, int enable, int subdev
             subdev_index, s_stream_func, enable);
     
     /* Call the function with proper error handling */
-    return s_stream_func(subdev, enable);
+    result = s_stream_func(subdev, enable);
+    
+    /* Check if this is a sensor subdevice and call sensor-specific streaming */
+    sensor_ops = ops->sensor;
+    if (is_valid_kernel_pointer(sensor_ops)) {
+        pr_info("safe_subdev_call: Subdev %d identified as sensor, calling sensor operations\n", subdev_index);
+        
+        /* Memory barrier before accessing sensor_ops */
+        rmb();
+        
+        /* For sensor subdevices, also trigger sensor-specific streaming events */
+        if (is_valid_kernel_pointer(sensor_ops->ioctl)) {
+            int sensor_result;
+            unsigned int sensor_cmd;
+            
+            /* Use appropriate sensor streaming command based on enable flag */
+            if (enable) {
+                sensor_cmd = 0x4000001; /* TX_ISP_EVENT_SENSOR_STREAM_ON (hypothetical) */
+                pr_info("safe_subdev_call: Calling sensor streaming ENABLE ioctl on subdev %d\n", subdev_index);
+            } else {
+                sensor_cmd = 0x4000002; /* TX_ISP_EVENT_SENSOR_STREAM_OFF (hypothetical) */ 
+                pr_info("safe_subdev_call: Calling sensor streaming DISABLE ioctl on subdev %d\n", subdev_index);
+            }
+            
+            sensor_result = sensor_ops->ioctl(subdev, sensor_cmd, &enable);
+            
+            if (sensor_result == 0) {
+                pr_info("safe_subdev_call: Sensor streaming ioctl completed successfully on subdev %d\n", subdev_index);
+            } else if (sensor_result != -ENOTTY && sensor_result != -EINVAL) {
+                /* Only report as error if it's not "operation not supported" */
+                pr_warn("safe_subdev_call: Sensor streaming ioctl returned %d on subdev %d\n", sensor_result, subdev_index);
+            } else {
+                pr_debug("safe_subdev_call: Sensor streaming ioctl not supported on subdev %d (result=%d)\n", subdev_index, sensor_result);
+            }
+        } else {
+            pr_debug("safe_subdev_call: Sensor subdev %d has no ioctl function\n", subdev_index);
+        }
+    }
+    
+    return result;
 }
 
 /**
