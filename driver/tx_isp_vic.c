@@ -945,20 +945,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* DETAILED STRUCTURE INTEGRITY CHECK */
-    pr_info("*** STRUCTURE INTEGRITY: Checking vic_dev structure ***\n");
-    pr_info("vic_dev->self = %p (should equal vic_dev %p)\n", vic_dev->self, vic_dev);
-    pr_info("vic_dev->state = %d\n", vic_dev->state);
-    pr_info("vic_dev->width = %d, height = %d\n", vic_dev->width, vic_dev->height);
-    
-    /* CRITICAL: Check if vic_dev->self pointer matches - this indicates corruption */
-    if (vic_dev->self != vic_dev) {
-        pr_err("*** CORRUPTION DETECTED: vic_dev->self (%p) != vic_dev (%p) ***\n", 
-               vic_dev->self, vic_dev);
-        pr_err("*** This indicates the vic_dev structure is corrupted ***\n");
-        return -EINVAL;
-    }
-
     /* SENSOR ATTRIBUTE STRUCTURE INTEGRITY */
     pr_info("*** SENSOR ATTR INTEGRITY: Before accessing sensor attributes ***\n");
     pr_info("sensor_attr address: %p\n", &vic_dev->sensor_attr);
@@ -2191,9 +2177,6 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Store global reference (binary uses 'dump_vsd' global) */
     dump_vsd = vic_dev;
 
-    /* Set self-reference (binary sets at offset 0xd4) */
-    vic_dev->self = vic_dev;
-
     /* Set test_addr to point to sensor_attr or appropriate member */
     /* Binary points to offset 0x80 in the structure */
     test_addr = &vic_dev->sensor_attr;  /* Or another member around offset 0x80 */
@@ -2202,7 +2185,6 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     pr_info("VIC device: vic_dev=%p, size=%zu\n", vic_dev, sizeof(struct tx_isp_vic_device));
     pr_info("  sd: %p\n", sd);
     pr_info("  state: %d\n", vic_dev->state);
-    pr_info("  self-ref: %p\n", vic_dev->self);
     pr_info("  test_addr: %p\n", test_addr);
 
     return 0;

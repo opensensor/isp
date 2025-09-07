@@ -6013,13 +6013,6 @@ static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *bu
         return -EINVAL;
     }
     
-    /* MIPS SAFE: Get self pointer with alignment validation */
-    s0 = vic_dev->self;
-    if (!s0 || ((uintptr_t)s0 & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->self pointer 0x%p not aligned ***\n", s0);
-        return -EINVAL;
-    }
-    
     /* MIPS SAFE: Validate buffer_lock alignment before spinlock operations */
     if (((uintptr_t)&vic_dev->buffer_lock & 0x3) != 0) {
         pr_err("*** MIPS ALIGNMENT ERROR: buffer_lock not aligned ***\n");

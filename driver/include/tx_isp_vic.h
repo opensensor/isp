@@ -95,7 +95,6 @@ struct tx_isp_vic_device {
     void __iomem *vic_regs;
     
     // VIC device properties
-    struct tx_isp_vic_device *self;     // Self-pointer for reference driver compatibility
     uint32_t width;                     // Frame width
     uint32_t height;                    // Frame height
     uint32_t pixel_format;              // Pixel format
