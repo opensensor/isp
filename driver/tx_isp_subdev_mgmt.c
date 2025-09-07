@@ -375,6 +375,10 @@ static int tx_isp_init_source_subdev(struct tx_isp_dev *isp,
         pr_warn("tx_isp_init_source_subdev: No driver data for %s\n", desc->name);
         return 0;
     }
+    // if name is tx-isp-vic then
+    if (strcmp(desc->name, "tx-isp-vic") == 0) {
+        ourISPdev->vic_dev = driver_data;
+    }
 
     /* Store in ISP device graph array for compatibility */
     if (desc->dst_index < ISP_MAX_SUBDEVS) {
