@@ -2084,6 +2084,31 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	ISP_WARNING("*** FORCING IMMEDIATE SENSOR INITIALIZATION TO WRITE REGISTERS ***\n");
 	ISP_WARNING("*** THIS SHOULD GENERATE HUNDREDS OF I2C WRITES ***\n");
 	
+	/* Debug wsize configuration first */
+	ISP_WARNING("*** DEBUGGING WSIZE CONFIGURATION ***\n");
+	ISP_WARNING("data_interface=%d, sensor_max_fps=%d\n", data_interface, sensor_max_fps);
+	ISP_WARNING("TX_SENSOR_DATA_INTERFACE_MIPI=%d, TX_SENSOR_MAX_FPS_40=%d\n", 
+	            TX_SENSOR_DATA_INTERFACE_MIPI, TX_SENSOR_MAX_FPS_40);
+	ISP_WARNING("wsize=%p, wsize->regs=%p\n", wsize, wsize ? wsize->regs : NULL);
+	if (wsize) {
+		ISP_WARNING("wsize: width=%d, height=%d, fps=%d\n", wsize->width, wsize->height, wsize->fps);
+		
+		/* Count registers in the array */
+		if (wsize->regs) {
+			struct regval_list *regs = wsize->regs;
+			int reg_count = 0;
+			while (regs->reg_num != SENSOR_REG_END) {
+				reg_count++;
+				regs++;
+			}
+			ISP_WARNING("wsize->regs contains %d register writes\n", reg_count);
+		} else {
+			ISP_ERROR("*** CRITICAL: wsize->regs is NULL! ***\n");
+		}
+	} else {
+		ISP_ERROR("*** CRITICAL: wsize is NULL! ***\n");
+	}
+	
 	if (sd->ops && sd->ops->core && sd->ops->core->init) {
 		ISP_WARNING("*** CALLING SENSOR_INIT TO WRITE %s INITIALIZATION REGISTERS ***\n", SENSOR_NAME);
 		ret = sd->ops->core->init(sd, 1);
