@@ -26,51 +26,50 @@
  * @dev: TX ISP device structure 
  * @enable: 1 to enable streaming, 0 to disable
  *
- * Based on reference driver implementation. Iterates through subdevices
- * and calls their streaming functions. Handles rollback on failure.
+ * MEMORY-SAFE implementation using proper struct member access instead of unsafe offsets.
+ * Based on Binary Ninja reference driver but using safe struct member access patterns.
  */
 int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable)
 {
     int i;
     int ret = 0;
-    struct tx_isp_subdev **subdevs;
     struct tx_isp_subdev *sd;
-    struct v4l2_subdev *v4l2_sd;
-    struct v4l2_subdev_video_ops *video_ops;
+    struct tx_isp_subdev_ops *subdev_ops;
+    struct tx_isp_subdev_video_ops *video_ops;
     
     if (!dev) {
         pr_err("tx_isp_video_link_stream: dev is NULL\n");
         return -EINVAL;
     }
     
-    /* Get subdevs array starting at offset 0x38 from dev */
-    subdevs = (struct tx_isp_subdev **)((char *)dev + 0x38);
-    
-    pr_info("*** tx_isp_video_link_stream: %s streaming ***\n",
+    pr_info("*** tx_isp_video_link_stream: %s streaming (MEMORY-SAFE) ***\n",
             enable ? "ENABLING" : "DISABLING");
+    mcp_log_info("tx_isp_video_link_stream: entry", enable);
     
-    /* Iterate through 16 subdevices */
-    for (i = 0; i < 0x10; i++) {
-        sd = subdevs[i];
+    /* SAFE: Use proper struct member access instead of offset 0x38 */
+    /* Iterate through 16 subdevices as per Binary Ninja reference */
+    for (i = 0; i < 16; i++) {
+        sd = dev->subdevs[i];  /* SAFE: dev->subdevs instead of dev+0x38 */
         
         if (!sd) {
             continue;
         }
         
-        /* Get v4l2_subdev at offset 0xc4 */
-        v4l2_sd = (struct v4l2_subdev *)((char *)sd + 0xc4);
-        if (!v4l2_sd || !v4l2_sd->ops) {
+        /* SAFE: Use proper struct member access instead of offset 0xc4 */
+        subdev_ops = sd->ops;
+        if (!subdev_ops) {
             continue;
         }
         
-        /* Get video ops */
-        video_ops = v4l2_sd->ops->video;
+        /* Get video ops from tx_isp_subdev_ops (not v4l2_subdev_ops) */
+        video_ops = subdev_ops->video;
         if (!video_ops || !video_ops->s_stream) {
             continue;
         }
         
-        /* Call s_stream function */
-        ret = video_ops->s_stream(v4l2_sd, enable);
+        /* Call s_stream function with proper tx_isp_subdev parameter */
+        ret = video_ops->s_stream(sd, enable);
+        mcp_log_info("tx_isp_video_link_stream: subdev s_stream call", ret);
         
         if (ret == 0) {
             /* Success, continue to next */
@@ -81,27 +80,30 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable)
         } else {
             /* Error occurred, rollback previous successful calls */
             pr_err("tx_isp_video_link_stream: s_stream failed at subdev %d, ret=%d\n", i, ret);
+            mcp_log_info("tx_isp_video_link_stream: rollback starting", i);
             
             /* Rollback: disable all previously enabled subdevices */
             while (--i >= 0) {
-                struct tx_isp_subdev *rollback_sd = subdevs[i];
+                struct tx_isp_subdev *rollback_sd = dev->subdevs[i];  /* SAFE: proper member access */
                 if (!rollback_sd) continue;
                 
-                struct v4l2_subdev *rollback_v4l2_sd = (struct v4l2_subdev *)((char *)rollback_sd + 0xc4);
-                if (!rollback_v4l2_sd || !rollback_v4l2_sd->ops) continue;
+                struct tx_isp_subdev_ops *rollback_ops = rollback_sd->ops;  /* SAFE: proper member access */
+                if (!rollback_ops) continue;
                 
-                struct v4l2_subdev_video_ops *rollback_video_ops = rollback_v4l2_sd->ops->video;
+                struct tx_isp_subdev_video_ops *rollback_video_ops = rollback_ops->video;
                 if (!rollback_video_ops || !rollback_video_ops->s_stream) continue;
                 
                 /* Disable this subdevice */
-                rollback_video_ops->s_stream(rollback_v4l2_sd, enable ? 0 : 1);
+                rollback_video_ops->s_stream(rollback_sd, enable ? 0 : 1);
             }
             
+            mcp_log_info("tx_isp_video_link_stream: rollback complete", ret);
             return ret;
         }
     }
     
-    pr_info("*** tx_isp_video_link_stream: CRASH-SAFE completion - no unaligned access attempted ***\n");
+    pr_info("*** tx_isp_video_link_stream: MEMORY-SAFE completion - no unaligned access risk ***\n");
+    mcp_log_info("tx_isp_video_link_stream: successful completion", 0);
     
     return 0;
 }
