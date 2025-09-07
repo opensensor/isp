@@ -4209,7 +4209,7 @@ void *isp_core_tuning_init(void *arg1)
     struct isp_tuning_data *tuning_data;
     extern struct tx_isp_dev *ourISPdev;
     
-    pr_info("isp_core_tuning_init: Initializing ISP core tuning with corruption protection\n");
+    pr_info("isp_core_tuning_init: Initializing ISP core tuning\n");
     
     /* CRITICAL: Use larger allocation to prevent corruption and add guard pages */
     /* Binary Ninja shows 0x40d0 but we'll use proper struct size + safety margin */
@@ -4395,10 +4395,10 @@ void *isp_core_tuning_init(void *arg1)
         pr_info("isp_core_tuning_init: Linking to validated ISP device at %p\n", ourISPdev);
     }
     
-    pr_info("isp_core_tuning_init: Tuning data structure fully initialized with corruption protection\n");
+    pr_info("isp_core_tuning_init: Tuning data structure fully initialized\n");
     pr_info("isp_core_tuning_init: Address range: %p to %p (size=%zu)\n", 
             tuning_data, (char*)tuning_data + alloc_size, alloc_size);
-    pr_info("isp_core_tuning_init: Critical fields - Brightness=%d, Saturation=%d (corruption prevention)\n", 
+    pr_info("isp_core_tuning_init: Critical fields - Brightness=%d, Saturation=%d\n",
             tuning_data->brightness, tuning_data->saturation);
     pr_info("isp_core_tuning_init: State marker: %d (corruption detection)\n", tuning_data->state);
     pr_info("MCP_LOG: Tuning data structure allocated with comprehensive corruption protection\n");
