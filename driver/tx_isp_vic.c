@@ -1309,26 +1309,43 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
-    /* *** CRITICAL: Configure VIC interrupt masks to enable interrupts *** */
-    pr_info("*** CRITICAL: Configuring VIC interrupt masks for IRQ generation ***\n");
+    /* *** CRITICAL: Configure VIC interrupt masks using EXACT Binary Ninja method *** */
+    pr_info("*** CRITICAL: Configuring VIC interrupt masks using Binary Ninja exact method ***\n");
     
-    /* Enable frame done interrupt (bit 0) and error interrupts as needed */
-    /* Clear interrupt mask register to enable interrupts (0 = enabled, 1 = masked) */
-    writel(0x00000000, vic_regs + 0x1e8);  /* Enable all main VIC interrupts */
+    /* Binary Ninja exact: Enable frame done interrupt (bit 0) - essential for IRQ 63 */
+    /* The mask registers work as: 0 = interrupt enabled, 1 = interrupt masked */
+    
+    /* Enable only essential interrupts to start with - frame done (bit 0) */
+    writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* Enable frame done interrupt (bit 0), mask others */
     wmb();
     
-    /* Enable MDMA interrupts for channels 0 and 1 */
-    writel(0x00000000, vic_regs + 0x1ec);  /* Enable all MDMA interrupts */
+    /* Enable MDMA channel 0 and 1 interrupts (bits 0,1) for buffer management */
+    writel(0xFFFFFFFC, vic_regs + 0x1ec);  /* Enable MDMA channels 0,1, mask others */
     wmb();
     
-    /* Clear any pending interrupts before enabling */
+    /* Clear any pending interrupts before enabling - Binary Ninja exact method */
     writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear all pending main interrupts */
     writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear all pending MDMA interrupts */
     wmb();
     
-    pr_info("*** VIC interrupt masks configured - interrupts should now fire! ***\n");
-    pr_info("  Main interrupt mask (0x1e8) = 0x%08x\n", readl(vic_regs + 0x1e8));
-    pr_info("  MDMA interrupt mask (0x1ec) = 0x%08x\n", readl(vic_regs + 0x1ec));
+    /* Verify interrupt mask configuration */
+    u32 main_mask = readl(vic_regs + 0x1e8);
+    u32 mdma_mask = readl(vic_regs + 0x1ec);
+    
+    pr_info("*** VIC interrupt masks configured for IRQ generation! ***\n");
+    pr_info("  Main interrupt mask (0x1e8) = 0x%08x (frame done enabled: bit 0 = %d)\n", 
+            main_mask, (main_mask & 1) == 0 ? 1 : 0);
+    pr_info("  MDMA interrupt mask (0x1ec) = 0x%08x (MDMA 0,1 enabled: bits 0,1 = %d,%d)\n", 
+            mdma_mask, (mdma_mask & 1) == 0 ? 1 : 0, (mdma_mask & 2) == 0 ? 1 : 0);
+            
+    /* CRITICAL: Test that registers respond properly */
+    if (main_mask == 0xFFFFFFFE && mdma_mask == 0xFFFFFFFC) {
+        pr_info("*** SUCCESS: VIC interrupt masks configured correctly for IRQ 63! ***\n");
+    } else {
+        pr_err("*** ERROR: VIC interrupt mask configuration failed! ***\n");
+        pr_err("  Expected main=0xFFFFFFFE, got 0x%08x\n", main_mask);
+        pr_err("  Expected mdma=0xFFFFFFFC, got 0x%08x\n", mdma_mask);
+    }
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     vic_start_ok = 1;
@@ -2068,15 +2085,71 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     sd = &vic_dev->sd;
     memset(sd, 0, sizeof(struct tx_isp_subdev));
     
-    /* CRITICAL: Map VIC registers IMMEDIATELY using known working address */
-    pr_info("*** CRITICAL: Mapping VIC registers directly to prevent corruption ***\n");
-    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000); // VIC W02 mapping 
+    /* CRITICAL FIX: Use correct VIC register base address like reference driver */
+    pr_info("*** CRITICAL FIX: Mapping VIC registers with CORRECT base address ***\n");
+    
+    /* Try multiple known VIC base addresses from Ingenic T31 documentation */
+    void __iomem *vic_base_candidates[] = {
+        ioremap(0x10023000, 0x1000),  /* Primary VIC base address */
+        ioremap(0x133e0000, 0x10000), /* Alternative VIC W02 base */
+        ioremap(0x13280000, 0x10000), /* ISP VIC base variant */
+        NULL
+    };
+    
+    int base_index = 0;
+    vic_dev->vic_regs = NULL;
+    
+    /* Test each base address by trying to read/write a safe register */
+    for (base_index = 0; vic_base_candidates[base_index] != NULL; base_index++) {
+        void __iomem *test_base = vic_base_candidates[base_index];
+        if (!test_base) continue;
+        
+        /* Test register access - try to read a status register */
+        u32 test_read = readl(test_base + 0x0);
+        pr_info("*** Testing VIC base %d at %p: read 0x0 = 0x%x ***\n", 
+                base_index, test_base, test_read);
+        
+        /* Test write to a safe register (VIC control) */
+        u32 original_val = test_read;
+        writel(0x2, test_base + 0x0);  /* Write VIC reset state */
+        wmb();
+        u32 verify_write = readl(test_base + 0x0);
+        
+        if (verify_write == 0x2) {
+            pr_info("*** VIC BASE FOUND! Index %d at %p responds to writes ***\n", 
+                    base_index, test_base);
+            vic_dev->vic_regs = test_base;
+            
+            /* Restore original value */
+            writel(original_val, test_base + 0x0);
+            wmb();
+            
+            /* Clean up other candidates */
+            for (int cleanup = 0; cleanup < base_index; cleanup++) {
+                if (vic_base_candidates[cleanup]) {
+                    iounmap(vic_base_candidates[cleanup]);
+                }
+            }
+            for (int cleanup = base_index + 1; vic_base_candidates[cleanup] != NULL; cleanup++) {
+                if (vic_base_candidates[cleanup]) {
+                    iounmap(vic_base_candidates[cleanup]);
+                }
+            }
+            break;
+        } else {
+            pr_warn("*** VIC base %d at %p unresponsive: wrote 0x2, read 0x%x ***\n",
+                    base_index, test_base, verify_write);
+            iounmap(test_base);
+        }
+    }
+    
     if (!vic_dev->vic_regs) {
-        pr_err("tx_isp_vic_probe: Failed to map VIC registers at 0x133e0000\n");
+        pr_err("*** CRITICAL: NO RESPONSIVE VIC REGISTER BASE FOUND! ***\n");
         kfree(vic_dev);
         return -ENOMEM;
     }
-    pr_info("*** VIC registers mapped successfully: %p ***\n", vic_dev->vic_regs);
+    
+    pr_info("*** VIC registers mapped successfully: %p (responsive to register writes) ***\n", vic_dev->vic_regs);
     
     /* MEMORY CORRUPTION FIX: Set up self pointer using SAFE struct member access */
     vic_dev->self = vic_dev;  /* Use proper struct member instead of dangerous offset */
