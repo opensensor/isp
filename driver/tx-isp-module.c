@@ -31,7 +31,6 @@
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
-/* Remove duplicate - tx_isp_sensor_attribute already defined in SDK */
 
 // Simple sensor registration structure
 struct registered_sensor {

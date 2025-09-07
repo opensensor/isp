@@ -1412,18 +1412,7 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
     
     pr_info("*** vic_sensor_ops_sync_sensor_attr: CORRUPTION DETECTION ***\n");
     pr_info("vic_sensor_ops_sync_sensor_attr: sd=%p, attr=%p\n", sd, attr);
-    
-    if (!sd || (unsigned long)sd >= 0xfffff001) {
-        pr_err("The parameter is invalid!\n");
-        return -EINVAL;
-    }
-    
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("The parameter is invalid!\n");
-        return -EINVAL;
-    }
-    
+
     /* Debug vic_dev structure integrity */
     pr_info("*** BEFORE SYNC: vic_dev structure integrity ***\n");
     pr_info("vic_dev=%p, sensor_attr=%p\n", vic_dev, &vic_dev->sensor_attr);
