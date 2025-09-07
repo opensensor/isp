@@ -731,7 +731,7 @@ int frame_channel_open(struct inode *inode, struct file *file);
 int frame_channel_release(struct inode *inode, struct file *file);
 long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
-/* Frame channel open handler - CRITICAL FIX for null pointer crash at offset 0x70 */
+/* Frame channel open handler - CRITICAL FIX for MIPS unaligned access crashes */
 int frame_channel_open(struct inode *inode, struct file *file)
 {
     struct frame_channel_device *fcd = NULL;
@@ -739,17 +739,28 @@ int frame_channel_open(struct inode *inode, struct file *file)
     int i;
     int channel_num = -1;
     
-    pr_info("*** FRAME CHANNEL OPEN: minor=%d ***\n", minor);
+    pr_info("*** FRAME CHANNEL OPEN: minor=%d - MIPS ALIGNMENT SAFE ***\n", minor);
     
-    /* CRITICAL FIX: Validate file pointer first */
-    if (!file) {
-        pr_err("Frame channel open: Invalid file pointer\n");
+    /* MIPS ALIGNMENT CHECK: Validate file pointer alignment first */
+    if (!file || ((uintptr_t)file & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: file pointer 0x%p not 4-byte aligned ***\n", file);
         return -EINVAL;
     }
     
-    /* CRITICAL FIX: Find the frame channel device by minor number */
-    /* First try to match against registered frame_channels array */
+    /* MIPS SAFE: Validate file structure bounds */
+    if ((uintptr_t)file >= 0xfffff001) {
+        pr_err("*** MIPS ERROR: file pointer 0x%p out of valid range ***\n", file);
+        return -EFAULT;
+    }
+    
+    /* MIPS SAFE: Find the frame channel device with alignment checking */
     for (i = 0; i < num_channels; i++) {
+        /* MIPS ALIGNMENT CHECK: Validate frame_channels array element alignment */
+        if (((uintptr_t)&frame_channels[i] & 0x3) != 0) {
+            pr_err("*** MIPS ALIGNMENT ERROR: frame_channels[%d] not aligned ***\n", i);
+            continue;
+        }
+        
         if (frame_channels[i].miscdev.minor == minor) {
             fcd = &frame_channels[i];
             channel_num = i;
@@ -757,46 +768,64 @@ int frame_channel_open(struct inode *inode, struct file *file)
         }
     }
     
-    /* FALLBACK: If not found in array, create a new frame channel entry */
-    /* This handles cases where devices were created externally */
+    /* MIPS SAFE: Create new entry if needed with alignment validation */
     if (!fcd) {
-        pr_info("*** FRAME CHANNEL OPEN: Device not in array, creating new entry for minor %d ***\n", minor);
+        pr_info("*** FRAME CHANNEL OPEN: Creating new entry for minor %d (MIPS-safe) ***\n", minor);
         
-        /* Determine channel number from minor - framechan0=minor X, framechan1=minor Y, etc */
-        /* Since we can't easily map minor to channel, we'll use the first available slot */
-        for (i = 0; i < 4; i++) { /* Max 4 channels */
+        for (i = 0; i < 4; i++) {
+            /* MIPS ALIGNMENT CHECK: Validate each array element */
+            if (((uintptr_t)&frame_channels[i] & 0x3) != 0) {
+                pr_err("*** MIPS ALIGNMENT ERROR: frame_channels[%d] not aligned, skipping ***\n", i);
+                continue;
+            }
+            
             if (frame_channels[i].miscdev.minor == 0 || frame_channels[i].miscdev.minor == MISC_DYNAMIC_MINOR) {
                 fcd = &frame_channels[i];
                 fcd->channel_num = i;
-                fcd->miscdev.minor = minor; /* Store the actual minor number */
+                fcd->miscdev.minor = minor;
                 channel_num = i;
-                pr_info("*** FRAME CHANNEL OPEN: Assigned to channel %d ***\n", i);
+                pr_info("*** FRAME CHANNEL OPEN: Assigned to channel %d (MIPS-aligned) ***\n", i);
                 break;
             }
         }
     }
     
     if (!fcd) {
-        pr_err("Frame channel open: No available slot for minor %d\n", minor);
+        pr_err("Frame channel open: No available aligned slot for minor %d\n", minor);
         return -ENODEV;
     }
     
-    /* Initialize channel state - safe to call multiple times in kernel 3.10 */
-    spin_lock_init(&fcd->state.buffer_lock);
-    init_waitqueue_head(&fcd->state.frame_wait);
+    /* MIPS ALIGNMENT CHECK: Validate fcd structure alignment */
+    if (((uintptr_t)fcd & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: fcd structure 0x%p not aligned ***\n", fcd);
+        return -EFAULT;
+    }
     
-    /* Set default format based on channel if not already set */
+    /* MIPS SAFE: Initialize channel state with alignment checks */
+    if (((uintptr_t)&fcd->state.buffer_lock & 0x3) == 0) {
+        spin_lock_init(&fcd->state.buffer_lock);
+    } else {
+        pr_err("*** MIPS ALIGNMENT ERROR: buffer_lock not aligned ***\n");
+        return -EFAULT;
+    }
+    
+    if (((uintptr_t)&fcd->state.frame_wait & 0x3) == 0) {
+        init_waitqueue_head(&fcd->state.frame_wait);
+    } else {
+        pr_err("*** MIPS ALIGNMENT ERROR: frame_wait not aligned ***\n");
+        return -EFAULT;
+    }
+    
+    /* MIPS SAFE: Set default format with alignment validation */
     if (fcd->state.width == 0) {
         if (fcd->channel_num == 0) {
-            /* Main channel - HD */
             fcd->state.width = 1920;
             fcd->state.height = 1080;
-            fcd->state.format = 0x3231564e; /* NV12 */
+            fcd->state.format = 0x3231564e; /* NV12 - aligned value */
         } else {
-            /* Sub channel - smaller */
             fcd->state.width = 640;
             fcd->state.height = 360;  
-            fcd->state.format = 0x3231564e; /* NV12 */
+            fcd->state.format = 0x3231564e; /* NV12 - aligned value */
         }
         
         fcd->state.enabled = false;
@@ -805,23 +834,29 @@ int frame_channel_open(struct inode *inode, struct file *file)
         fcd->state.sequence = 0;
         fcd->state.frame_ready = false;
         
-        pr_info("*** FRAME CHANNEL %d: Initialized state ***\n", fcd->channel_num);
+        pr_info("*** FRAME CHANNEL %d: State initialized (MIPS-safe) ***\n", fcd->channel_num);
     }
     
-    /* CRITICAL FIX: Store frame channel device at the exact offset expected by reference driver */
-    /* Binary Ninja shows frame_channel_unlocked_ioctl expects device at *(file + 0x70) */
-    file->private_data = fcd;
-    
-    /* CRITICAL FIX: Also store at offset 0x70 where Binary Ninja expects it */
-    /* This prevents the null pointer dereference crash */
-    if ((char*)file + 0x70 < (char*)file + sizeof(*file)) {
-        *((struct frame_channel_device**)((char*)file + 0x70)) = fcd;
-        pr_info("*** CRITICAL FIX: Frame channel device stored at file+0x70 to prevent crash ***\n");
+    /* MIPS CRITICAL FIX: Store frame channel device with proper alignment */
+    /* MIPS SAFE: Validate private_data field alignment */
+    if (((uintptr_t)&file->private_data & 0x3) == 0) {
+        file->private_data = fcd;
     } else {
-        pr_warn("*** WARNING: Cannot store at file+0x70 - using private_data only ***\n");
+        pr_err("*** MIPS ALIGNMENT ERROR: file->private_data field not aligned ***\n");
+        return -EFAULT;
     }
     
-    pr_info("*** FRAME CHANNEL %d OPENED SUCCESSFULLY - NOW READY FOR IOCTLS ***\n", fcd->channel_num);
+    /* MIPS CRITICAL FIX: Store at offset 0x70 with strict alignment validation */
+    /* This prevents the BadVA crash by ensuring proper alignment */
+    if (((uintptr_t)((char*)file + 0x70) & 0x3) == 0 && 
+        (char*)file + 0x70 + sizeof(void*) <= (char*)file + sizeof(*file)) {
+        *((struct frame_channel_device**)((char*)file + 0x70)) = fcd;
+        pr_info("*** MIPS CRITICAL FIX: Frame channel device stored at file+0x70 with proper alignment ***\n");
+    } else {
+        pr_warn("*** MIPS WARNING: Cannot store at file+0x70 due to alignment - using private_data only ***\n");
+    }
+    
+    pr_info("*** FRAME CHANNEL %d OPENED SUCCESSFULLY - MIPS ALIGNMENT SAFE ***\n", fcd->channel_num);
     pr_info("Channel %d: Format %dx%d, pixfmt=0x%x, minor=%d\n", 
             fcd->channel_num, fcd->state.width, fcd->state.height, fcd->state.format, minor);
     
