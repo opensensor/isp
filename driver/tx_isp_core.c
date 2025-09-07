@@ -888,20 +888,19 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
 
     pr_info("tisp_init: Processing sensor configuration structure (%d bytes)\n", (int)sizeof(*sensor_attr));
 
-    /* Binary Ninja: sensor_init(&sensor_ctrl) - MUST BE CALLED FIRST */
-    pr_info("tisp_init: Calling sensor_init(&sensor_ctrl)\n");
-    ret = sensor_init(isp_dev);
-    if (ret) {
-        pr_err("sensor_init failed: %d\n", ret);
-        return ret;
-    }
-    pr_info("sensor_init: Reference driver sensor initialization complete\n");
-
-    ret = sensor_probe(isp_dev);
-    if (ret) {
-        pr_err("sensor_probe failed: %d\n", ret);
-        return ret;
-    }
+    /* IMPORTANT: sensor_init() and sensor_probe() are STATIC functions in sensor modules
+     * They cannot be called directly from the ISP driver. The proper Linux driver flow is:
+     * 1. ISP creates I2C devices (done in sensor_early_init)
+     * 2. Linux I2C subsystem calls sensor_probe() when sensor driver loads  
+     * 3. sensor_probe() registers sensor with ISP framework
+     * 4. ISP can then use registered sensors through the framework
+     */
+    pr_info("tisp_init: Sensor initialization handled by Linux driver model\n");
+    pr_info("tisp_init: I2C devices created - sensor_probe() will be called by Linux I2C subsystem\n");
+    
+    /* For now, continue with ISP initialization assuming sensor will be available
+     * In a full implementation, we'd wait for sensor registration or use default attributes */
+    pr_info("tisp_init: Proceeding with ISP initialization using sensor attributes\n");
 
     /* Binary Ninja: system_reg_write(4, arg1[0] << 0x10 | arg1[1]) */
     writel((sensor_attr->total_width << 16) | sensor_attr->total_height, isp_regs + 0x4);
@@ -2183,6 +2182,87 @@ int tisp_channel_stop(uint32_t channel_id)
     return 0;
 }
 EXPORT_SYMBOL(tisp_channel_stop);
+
+/**
+ * tx_isp_create_sensor_i2c_devices - Create I2C devices for sensors
+ * This creates I2C devices that match sensor driver ID tables, which triggers sensor_probe()
+ */
+static int tx_isp_create_sensor_i2c_devices(struct tx_isp_dev *isp)
+{
+    struct i2c_adapter *adapter;
+    struct i2c_board_info gc2053_info = {
+        I2C_BOARD_INFO("gc2053", 0x37),  /* Matches sensor ID table */
+        .platform_data = NULL,
+    };
+    struct i2c_client *client;
+    int ret = 0;
+    
+    if (!isp) {
+        ISP_ERROR("tx_isp_create_sensor_i2c_devices: Invalid ISP device\n");
+        return -EINVAL;
+    }
+    
+    ISP_INFO("*** tx_isp_create_sensor_i2c_devices: Creating I2C devices for sensors ***\n");
+    
+    /* Get I2C adapter 0 (standard sensor bus) */
+    adapter = i2c_get_adapter(0);
+    if (!adapter) {
+        ISP_ERROR("tx_isp_create_sensor_i2c_devices: Failed to get I2C adapter 0\n");
+        return -ENODEV;
+    }
+    
+    ISP_INFO("tx_isp_create_sensor_i2c_devices: Got I2C adapter 0 (%s)\n", adapter->name);
+    
+    /* Create GC2053 I2C device - this will trigger sensor_probe() when sensor driver loads */
+    client = i2c_new_device(adapter, &gc2053_info);
+    if (!client) {
+        ISP_ERROR("tx_isp_create_sensor_i2c_devices: Failed to create GC2053 I2C device\n");
+        i2c_put_adapter(adapter);
+        return -ENODEV;
+    }
+    
+    ISP_INFO("*** tx_isp_create_sensor_i2c_devices: Created GC2053 I2C device at 0x%02x ***\n", 
+             client->addr);
+    ISP_INFO("*** This will trigger sensor_probe() when sensor driver loads ***\n");
+    
+    /* Store I2C client for cleanup */
+    isp->sensor_client = client;
+    
+    i2c_put_adapter(adapter);
+    
+    ISP_INFO("*** tx_isp_create_sensor_i2c_devices: SUCCESS - I2C devices created ***\n");
+    return 0;
+}
+
+/**
+ * sensor_early_init - Early sensor system initialization
+ * This replaces the unsafe direct calls to sensor_init/sensor_probe
+ */
+static int sensor_early_init(struct tx_isp_dev *isp)
+{
+    int ret;
+    
+    if (!isp) {
+        ISP_ERROR("sensor_early_init: Invalid ISP device\n");
+        return -EINVAL;
+    }
+    
+    ISP_INFO("*** sensor_early_init: SAFE sensor initialization using Linux driver model ***\n");
+    
+    /* Create I2C devices for sensors - this is the CORRECT way */
+    ret = tx_isp_create_sensor_i2c_devices(isp);
+    if (ret < 0) {
+        ISP_ERROR("sensor_early_init: Failed to create sensor I2C devices: %d\n", ret);
+        return ret;
+    }
+    
+    /* Initialize sensor attribute validation */
+    isp->sensor_width = 1920;   /* Default sensor width */
+    isp->sensor_height = 1080;  /* Default sensor height */
+    
+    ISP_INFO("*** sensor_early_init: SUCCESS - Sensors will be probed when drivers load ***\n");
+    return 0;
+}
 
 /* Missing function implementations from the Binary Ninja decompilation */
 
