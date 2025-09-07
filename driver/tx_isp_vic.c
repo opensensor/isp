@@ -2196,10 +2196,14 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         goto err_subdev_init;
     }
     
-    /* *** CRITICAL FIX: Register VIC interrupt using Binary Ninja exact method *** */
-    pr_info("*** CRITICAL FIX: Registering VIC interrupt handler using tx_isp_request_irq ***\n");
+    /* *** CRITICAL FIX: Integration with ISP interrupt dispatch system *** */
+    pr_info("*** CRITICAL FIX: Integrating VIC with ISP interrupt dispatch system ***\n");
     
-    /* Get IRQ number from platform device like reference driver */
+    /* Store VIC interrupt handler function in VIC device for dispatch system */
+    vic_dev->irq_handler_func = isp_vic_interrupt_service_routine;
+    pr_info("*** VIC interrupt handler stored for dispatch: %p ***\n", vic_dev->irq_handler_func);
+    
+    /* Get IRQ number from platform device */
     irq = platform_get_irq(pdev, 0);
     if (irq < 0) {
         pr_err("Failed to get VIC IRQ from platform device: %d\n", irq);
@@ -2207,21 +2211,14 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         goto err_get_irq;
     }
     
-    pr_info("*** VIC IRQ number from platform: %d ***\n", irq);
-    
-    /* Register interrupt handler using same method as reference driver */
-    ret = request_threaded_irq(irq, isp_vic_interrupt_service_routine, NULL, 
-                               IRQF_SHARED, "tx-isp-vic", sd);
-    if (ret != 0) {
-        pr_err("Failed to request VIC IRQ %d: %d\n", irq, ret);
-        goto err_request_irq;
-    }
-    
-    pr_info("*** SUCCESS: VIC interrupt handler registered for IRQ %d ***\n", irq);
-    
-    /* Store IRQ information in VIC device structure instead */
     vic_dev->irq_number = irq;
-    vic_dev->irq_handler_func = isp_vic_interrupt_service_routine;
+    pr_info("*** VIC IRQ number stored: %d (will be registered by ISP core dispatch system) ***\n", irq);
+    
+    /* NOTE: Interrupt registration is handled by ISP core's dispatch system */
+    /* The tx_isp_request_irq function in tx_isp_core.c will register the main dispatch handler */
+    /* which will then call our vic_dev->irq_handler_func when VIC interrupts occur */
+    
+    pr_info("*** SUCCESS: VIC integrated with ISP dispatch system ***\n");
     
     /* RACE CONDITION FIX: Set platform driver data AFTER successful init */
     platform_set_drvdata(pdev, vic_dev);
