@@ -1031,10 +1031,19 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     void __iomem *cpm_regs;
     int ret;
 
-    pr_info("*** tx_isp_vic_start: MIPS-SAFE implementation to prevent crash at 0xc062ece8 ***\n");
+    pr_info("*** tx_isp_vic_start: CORRUPTION DEBUGGING - Entry point ***\n");
+
+    /* COMPREHENSIVE CORRUPTION DEBUGGING */
+    pr_info("*** CORRUPTION DEBUG: vic_dev pointer and structure integrity ***\n");
+    pr_info("vic_dev pointer: %p\n", vic_dev);
+    
+    if (!vic_dev) {
+        pr_err("*** CRITICAL: vic_dev is NULL ***\n");
+        return -EINVAL;
+    }
 
     /* MIPS ALIGNMENT CHECK: Validate vic_dev pointer alignment */
-    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
+    if (((uintptr_t)vic_dev & 0x3) != 0) {
         pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p not 4-byte aligned ***\n", vic_dev);
         return -EINVAL;
     }
@@ -1045,13 +1054,58 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev->vic_regs access */
-    if (((uintptr_t)&vic_dev->vic_regs & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->vic_regs member not aligned ***\n");
+    /* DETAILED STRUCTURE INTEGRITY CHECK */
+    pr_info("*** STRUCTURE INTEGRITY: Checking vic_dev structure ***\n");
+    pr_info("vic_dev->self = %p (should equal vic_dev %p)\n", vic_dev->self, vic_dev);
+    pr_info("vic_dev->state = %d\n", vic_dev->state);
+    pr_info("vic_dev->width = %d, height = %d\n", vic_dev->width, vic_dev->height);
+    
+    /* CRITICAL: Check if vic_dev->self pointer matches - this indicates corruption */
+    if (vic_dev->self != vic_dev) {
+        pr_err("*** CORRUPTION DETECTED: vic_dev->self (%p) != vic_dev (%p) ***\n", 
+               vic_dev->self, vic_dev);
+        pr_err("*** This indicates the vic_dev structure is corrupted ***\n");
         return -EINVAL;
     }
 
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev->sensor_attr access */
+    /* SENSOR ATTRIBUTE STRUCTURE INTEGRITY */
+    pr_info("*** SENSOR ATTR INTEGRITY: Before accessing sensor attributes ***\n");
+    pr_info("sensor_attr address: %p\n", &vic_dev->sensor_attr);
+    pr_info("sensor_attr offset from vic_dev: 0x%lx\n", 
+           (unsigned long)&vic_dev->sensor_attr - (unsigned long)vic_dev);
+    
+    /* SAFE ACCESS TEST: Try to read known fields and check for garbage values */
+    u32 test_dbus_type = vic_dev->sensor_attr.dbus_type;
+    u32 test_data_type = vic_dev->sensor_attr.data_type;
+    u32 test_total_width = vic_dev->sensor_attr.total_width;
+    u32 test_total_height = vic_dev->sensor_attr.total_height;
+    
+    pr_info("*** SENSOR ATTR VALUES: Raw values ***\n");
+    pr_info("dbus_type = %u (0x%x)\n", test_dbus_type, test_dbus_type);
+    pr_info("data_type = %u (0x%x)\n", test_data_type, test_data_type);
+    pr_info("total_width = %u, total_height = %u\n", test_total_width, test_total_height);
+    
+    /* CORRUPTION DETECTION: Check for obviously corrupt values */
+    if (test_dbus_type > 10000 || test_data_type > 0x10000 || 
+        test_total_width > 10000 || test_total_height > 10000) {
+        pr_err("*** SEVERE CORRUPTION DETECTED: sensor_attr contains garbage ***\n");
+        pr_err("*** FIXING: Reinitializing sensor_attr to safe defaults ***\n");
+        
+        /* EMERGENCY REPAIR: Reinitialize the corrupted structure */
+        memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
+        vic_dev->sensor_attr.dbus_type = 2; /* MIPI interface */
+        vic_dev->sensor_attr.data_type = 0x2b; /* RAW10 format */
+        vic_dev->sensor_attr.total_width = 1920;
+        vic_dev->sensor_attr.total_height = 1080;
+        vic_dev->sensor_attr.integration_time = 1000;
+        vic_dev->sensor_attr.again = 1024;
+        
+        pr_info("*** REPAIRED: sensor_attr reinitialized to safe values ***\n");
+        pr_info("New dbus_type = %d, data_type = 0x%x\n", 
+                vic_dev->sensor_attr.dbus_type, vic_dev->sensor_attr.data_type);
+    }
+
+    /* MIPS ALIGNMENT CHECK: Validate sensor_attr access */
     if (((uintptr_t)&vic_dev->sensor_attr & 0x3) != 0) {
         pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->sensor_attr member not aligned ***\n");
         return -EINVAL;
@@ -1063,7 +1117,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    pr_info("*** tx_isp_vic_start: MIPS validation passed - applying tx_isp_init_vic_registers methodology ***\n");
+    pr_info("*** tx_isp_vic_start: CORRUPTION CHECKS PASSED - continuing ***\n");
 
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
     
