@@ -1344,44 +1344,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
-    /* *** CRITICAL: Configure VIC interrupt masks using EXACT Binary Ninja method *** */
-    pr_info("*** CRITICAL: Configuring VIC interrupt masks using Binary Ninja exact method ***\n");
+    /* *** CRITICAL FIX: Binary Ninja reference does NOT configure interrupt masks in tx_isp_vic_start! *** */
+    /* The interrupt masks are configured by hardware initialization or probe function */
+    /* Binary Ninja tx_isp_vic_start just sets vic_start_ok = 1 at the very end */
     
-    /* Binary Ninja exact: Enable frame done interrupt (bit 0) - essential for IRQ 63 */
-    /* The mask registers work as: 0 = interrupt enabled, 1 = interrupt masked */
-    
-    /* Enable only essential interrupts to start with - frame done (bit 0) */
-    writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* Enable frame done interrupt (bit 0), mask others */
-    wmb();
-    
-    /* Enable MDMA channel 0 and 1 interrupts (bits 0,1) for buffer management */
-    writel(0xFFFFFFFC, vic_regs + 0x1ec);  /* Enable MDMA channels 0,1, mask others */
-    wmb();
-    
-    /* Clear any pending interrupts before enabling - Binary Ninja exact method */
-    writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear all pending main interrupts */
-    writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear all pending MDMA interrupts */
-    wmb();
-    
-    /* Verify interrupt mask configuration */
-    u32 main_mask = readl(vic_regs + 0x1e8);
-    u32 mdma_mask = readl(vic_regs + 0x1ec);
-    
-    pr_info("*** VIC interrupt masks configured for IRQ generation! ***\n");
-    pr_info("  Main interrupt mask (0x1e8) = 0x%08x (frame done enabled: bit 0 = %d)\n", 
-            main_mask, (main_mask & 1) == 0 ? 1 : 0);
-    pr_info("  MDMA interrupt mask (0x1ec) = 0x%08x (MDMA 0,1 enabled: bits 0,1 = %d,%d)\n", 
-            mdma_mask, (mdma_mask & 1) == 0 ? 1 : 0, (mdma_mask & 2) == 0 ? 1 : 0);
-            
-    /* CRITICAL: Test that registers respond properly */
-    if (main_mask == 0xFFFFFFFE && mdma_mask == 0xFFFFFFFC) {
-        pr_info("*** SUCCESS: VIC interrupt masks configured correctly for IRQ 63! ***\n");
-    } else {
-        pr_err("*** ERROR: VIC interrupt mask configuration failed! ***\n");
-        pr_err("  Expected main=0xFFFFFFFE, got 0x%08x\n", main_mask);
-        pr_err("  Expected mdma=0xFFFFFFFC, got 0x%08x\n", mdma_mask);
-    }
-
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     vic_start_ok = 1;
     pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
@@ -2268,6 +2234,42 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 
     pr_info("*** CRITICAL FIX: VIC interrupt handler registered - IRQ %d, dev_id=sd=%p ***\n", 
             irq, sd);
+
+    /* *** CRITICAL FIX: Configure VIC interrupt masks in probe (not in tx_isp_vic_start) *** */
+    pr_info("*** CRITICAL: Configuring VIC interrupt masks in probe function ***\n");
+    
+    /* Clear any pending interrupts first */
+    writel(0xFFFFFFFF, vic_base + 0x1f0);  /* Clear all pending main interrupts */
+    writel(0xFFFFFFFF, vic_base + 0x1f4);  /* Clear all pending MDMA interrupts */
+    wmb();
+    
+    /* Enable frame done interrupt (bit 0) and essential interrupts only */
+    /* Mask register: 0 = interrupt enabled, 1 = interrupt masked */
+    writel(0xFFFFFFFE, vic_base + 0x1e8);  /* Enable frame done interrupt (bit 0) */
+    wmb();
+    
+    /* Enable MDMA channel 0 and 1 interrupts for buffer management */
+    writel(0xFFFFFFFC, vic_base + 0x1ec);  /* Enable MDMA channels 0,1 (bits 0,1) */
+    wmb();
+    
+    /* Verify interrupt mask configuration */
+    u32 main_mask = readl(vic_base + 0x1e8);
+    u32 mdma_mask = readl(vic_base + 0x1ec);
+    
+    pr_info("*** VIC interrupt masks configured in probe! ***\n");
+    pr_info("  Main interrupt mask (0x1e8) = 0x%08x (frame done enabled: bit 0 = %d)\n", 
+            main_mask, (main_mask & 1) == 0 ? 1 : 0);
+    pr_info("  MDMA interrupt mask (0x1ec) = 0x%08x (MDMA 0,1 enabled: bits 0,1 = %d,%d)\n", 
+            mdma_mask, (mdma_mask & 1) == 0 ? 1 : 0, (mdma_mask & 2) == 0 ? 1 : 0);
+            
+    /* Verify that masks were written correctly */
+    if (main_mask == 0xFFFFFFFE && mdma_mask == 0xFFFFFFFC) {
+        pr_info("*** SUCCESS: VIC interrupt masks configured correctly in probe! ***\n");
+    } else {
+        pr_err("*** ERROR: VIC interrupt mask configuration failed in probe! ***\n");
+        pr_err("  Expected main=0xFFFFFFFE, got 0x%08x\n", main_mask);
+        pr_err("  Expected mdma=0xFFFFFFFC, got 0x%08x\n", mdma_mask);
+    }
 
     /* Store global reference (binary uses 'dump_vsd' global) */
     dump_vsd = vic_dev;
