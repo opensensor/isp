@@ -1234,7 +1234,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("tx_isp_vic_start: MIPI registers configured - 0x10=0x%x, 0x18=0x%x\n",
                 final_mipi_config, (integration_time << 16) + vic_dev->width);
 
-        /* *** Binary Ninja EXACT unlock sequence - NO artificial delays *** */
+        /* *** CRITICAL FIX: Add timeout to prevent infinite hang *** */
         /* Binary Ninja: **(arg1 + 0xb8) = 2 */
         writel(2, vic_regs + 0x0);
         wmb();
@@ -1243,12 +1243,58 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(4, vic_regs + 0x0);
         wmb();
 
-        /* Binary Ninja: while (*$v0_121 != 0) nop - Wait indefinitely like reference */
-        while (readl(vic_regs + 0x0) != 0) {
+        /* *** CRITICAL FIX: Add timeout to prevent infinite hang in unlock sequence *** */
+        u32 unlock_timeout = 1000;  /* 1000 iterations max */
+        u32 ctrl_reg;
+        while ((ctrl_reg = readl(vic_regs + 0x0)) != 0 && unlock_timeout > 0) {
             cpu_relax(); /* MIPS equivalent of nop */
+            unlock_timeout--;
+            udelay(1);   /* Small delay */
         }
         
-        pr_info("tx_isp_vic_start: VIC unlocked successfully\n");
+        if (unlock_timeout == 0) {
+            pr_err("*** CRITICAL: VIC unlock timeout! ctrl_reg=0x%x - VIC may not be properly clocked ***\n", ctrl_reg);
+            pr_err("*** This indicates VIC hardware is not responding - checking clocks ***\n");
+            
+            /* Try one more time with more aggressive clock setup */
+            pr_info("*** RETRY: Aggressive clock configuration before unlock ***\n");
+            void __iomem *cpm_regs = ioremap(0x10000000, 0x1000);
+            if (cpm_regs) {
+                u32 clkgr0 = readl(cpm_regs + 0x20);
+                u32 clkgr1 = readl(cpm_regs + 0x28);
+                clkgr0 &= ~((1 << 13) | (1 << 21) | (1 << 30));  /* Clear ISP, ISP_ALT, VIC bits */
+                clkgr1 &= ~(1 << 30);                             /* Clear VIC bit in CLKGR1 */
+                writel(clkgr0, cpm_regs + 0x20);
+                writel(clkgr1, cpm_regs + 0x28);
+                wmb();
+                iounmap(cpm_regs);
+                msleep(50);  /* Give clocks time to stabilize */
+                
+                /* Retry unlock sequence */
+                pr_info("*** RETRY: VIC unlock sequence after clock fix ***\n");
+                writel(2, vic_regs + 0x0);
+                wmb();
+                writel(4, vic_regs + 0x0);
+                wmb();
+                
+                unlock_timeout = 500;
+                while ((ctrl_reg = readl(vic_regs + 0x0)) != 0 && unlock_timeout > 0) {
+                    cpu_relax();
+                    unlock_timeout--;
+                    udelay(2);
+                }
+                
+                if (unlock_timeout == 0) {
+                    pr_err("*** FATAL: VIC unlock failed even after clock fix - returning error ***\n");
+                    return -EIO;
+                }
+            } else {
+                pr_err("*** FATAL: VIC unlock failed and cannot access CPM for clock fix ***\n");
+                return -EIO;
+            }
+        }
+        
+        pr_info("tx_isp_vic_start: VIC unlocked successfully after %d attempts\n", 1000 - unlock_timeout);
 
         /* Binary Ninja: *$v0_121 = 1 - Enable VIC processing */
         writel(1, vic_regs + 0x0);
