@@ -1939,7 +1939,9 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	private_clk_set_rate(sensor->mclk, 24000000);
 	private_clk_enable(sensor->mclk);
 	sensor_attr.dbus_type = data_interface;
+    ISP_WARNING("sensor_probe: data_interface=%d, sensor_max_fps=%d\n", data_interface, sensor_max_fps);
 	if ((data_interface == TX_SENSOR_DATA_INTERFACE_DVP) && (sensor_max_fps == TX_SENSOR_MAX_FPS_30)) {
+        ISP_WARNING("sensor_probe: DVP 30fps\n");
 		ret = set_sensor_gpio_function(sensor_gpio_func);
 		if (ret < 0)
 			goto err_set_sensor_gpio;
@@ -1958,6 +1960,7 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		vtsn0 = 0x05;
 		vtsn1 = 0x46;
 	} else if ((data_interface == TX_SENSOR_DATA_INTERFACE_DVP) && (sensor_max_fps == TX_SENSOR_MAX_FPS_15)) {
+        ISP_WARNING("sensor_probe: DVP 15fps\n");
 		ret = set_sensor_gpio_function(sensor_gpio_func);
 		if (ret < 0)
 			goto err_set_sensor_gpio;
@@ -1976,6 +1979,7 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		vtsn0 = 0x04;
 		vtsn1 = 0x65;
 	} else if ((data_interface == TX_SENSOR_DATA_INTERFACE_MIPI) && (sensor_max_fps == TX_SENSOR_MAX_FPS_30)) {
+        ISP_WARNING("sensor_probe: MIPI 30fps\n");
 		wsize = &sensor_win_sizes[2];
 		memcpy((void *) (&(sensor_attr.mipi)), (void *) (&sensor_mipi), sizeof(sensor_mipi));
 		sensor_attr.max_integration_time_native = 0x58a - 8;
@@ -1989,6 +1993,7 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		vtsn0 = 0x05;
 		vtsn1 = 0x8a;
 	} else if ((data_interface == TX_SENSOR_DATA_INTERFACE_MIPI) && (sensor_max_fps == TX_SENSOR_MAX_FPS_25)) {
+        ISP_WARNING("sensor_probe: MIPI 25fps\n");
 		wsize = &sensor_win_sizes[3];
 		memcpy((void *) (&(sensor_attr.mipi)), (void *) (&sensor_mipi), sizeof(sensor_mipi));
 		sensor_attr.max_integration_time_native = 0x51c - 8;
@@ -2002,6 +2007,7 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		vtsn0 = 0x05;
 		vtsn1 = 0x1c;
 	} else if ((data_interface == TX_SENSOR_DATA_INTERFACE_MIPI) && (sensor_max_fps == TX_SENSOR_MAX_FPS_15)) {
+        ISP_WARNING("sensor_probe: MIPI 15fps\n");
 		wsize = &sensor_win_sizes[4];
 		memcpy((void *) (&(sensor_attr.mipi)), (void *) (&sensor_mipi), sizeof(sensor_mipi));
 		sensor_attr.max_integration_time_native = 0x49d - 8;
@@ -2015,6 +2021,7 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		vtsn0 = 0x04;
 		vtsn1 = 0x9d;
 	} else if ((data_interface == TX_SENSOR_DATA_INTERFACE_MIPI) && (sensor_max_fps == TX_SENSOR_MAX_FPS_40)) {
+        ISP_WARNING("sensor_probe: MIPI 40fps\n");
 		wsize = &sensor_win_sizes[5];
 		memcpy((void *) (&(sensor_attr.mipi)), (void *) (&sensor_mipi), sizeof(sensor_mipi));
 		sensor_attr.max_integration_time_native = 0x465 - 8;
