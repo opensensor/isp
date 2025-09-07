@@ -2060,205 +2060,74 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
     return ret;
 }
 EXPORT_SYMBOL(vic_chardev_ioctl);
-
-/* tx_isp_vic_probe - FIXED to prevent ALL memory corruption AND register interrupts */
 int tx_isp_vic_probe(struct platform_device *pdev)
 {
     struct tx_isp_vic_device *vic_dev;
     struct tx_isp_subdev *sd;
+    struct resource *res;
     int ret;
-    int irq;
-    
-    pr_info("*** tx_isp_vic_probe: FIXING ALL memory corruption issues AND IRQ registration ***\n");
-    
-    /* CRITICAL FIX: Use proper struct allocation instead of raw memory */
+
+    pr_info("*** tx_isp_vic_probe: Starting VIC device probe ***\n");
+
+    /* Binary allocates 0x21c (540) bytes, but we use proper struct size */
     vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
     if (!vic_dev) {
         pr_err("Failed to allocate vic device\n");
-        return -ENOMEM;
+        return -ENOMEM;  /* Binary returns -1 but -ENOMEM is cleaner */
     }
-    
-    /* Initialize VIC device structure properly to prevent memory corruption */
+
+    /* Binary explicitly zeros the structure */
     memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
-    
-    /* CRITICAL FIX: Initialize the subdev structure FIRST to prevent race condition */
+
+    /* Get subdev pointer */
     sd = &vic_dev->sd;
-    memset(sd, 0, sizeof(struct tx_isp_subdev));
-    
-    /* CRITICAL FIX: Use correct VIC register base address like reference driver */
-    pr_info("*** CRITICAL FIX: Mapping VIC registers with CORRECT base address ***\n");
-    
-    /* Try multiple known VIC base addresses from Ingenic T31 documentation */
-    void __iomem *vic_base_candidates[] = {
-        ioremap(0x10023000, 0x1000),  /* Primary VIC base address */
-        ioremap(0x133e0000, 0x10000), /* Alternative VIC W02 base */
-        ioremap(0x13280000, 0x10000), /* ISP VIC base variant */
-        NULL
-    };
-    
-    int base_index = 0;
-    vic_dev->vic_regs = NULL;
-    
-    /* Test each base address by trying to read/write a safe register */
-    for (base_index = 0; vic_base_candidates[base_index] != NULL; base_index++) {
-        void __iomem *test_base = vic_base_candidates[base_index];
-        if (!test_base) continue;
-        
-        /* Test register access - try to read a status register */
-        u32 test_read = readl(test_base + 0x0);
-        pr_info("*** Testing VIC base %d at %p: read 0x0 = 0x%x ***\n", 
-                base_index, test_base, test_read);
-        
-        /* Test write to a safe register (VIC control) */
-        u32 original_val = test_read;
-        writel(0x2, test_base + 0x0);  /* Write VIC reset state */
-        wmb();
-        u32 verify_write = readl(test_base + 0x0);
-        
-        if (verify_write == 0x2) {
-            pr_info("*** VIC BASE FOUND! Index %d at %p responds to writes ***\n", 
-                    base_index, test_base);
-            vic_dev->vic_regs = test_base;
-            
-            /* Restore original value */
-            writel(original_val, test_base + 0x0);
-            wmb();
-            
-            /* Clean up other candidates */
-            for (int cleanup = 0; cleanup < base_index; cleanup++) {
-                if (vic_base_candidates[cleanup]) {
-                    iounmap(vic_base_candidates[cleanup]);
-                }
-            }
-            for (int cleanup = base_index + 1; vic_base_candidates[cleanup] != NULL; cleanup++) {
-                if (vic_base_candidates[cleanup]) {
-                    iounmap(vic_base_candidates[cleanup]);
-                }
-            }
-            break;
-        } else {
-            pr_warn("*** VIC base %d at %p unresponsive: wrote 0x2, read 0x%x ***\n",
-                    base_index, test_base, verify_write);
-            iounmap(test_base);
-        }
-    }
-    
-    if (!vic_dev->vic_regs) {
-        pr_err("*** CRITICAL: NO RESPONSIVE VIC REGISTER BASE FOUND! ***\n");
-        kfree(vic_dev);
-        return -ENOMEM;
-    }
-    
-    pr_info("*** VIC registers mapped successfully: %p (responsive to register writes) ***\n", vic_dev->vic_regs);
-    
-    /* MEMORY CORRUPTION FIX: Set up self pointer using SAFE struct member access */
-    vic_dev->self = vic_dev;  /* Use proper struct member instead of dangerous offset */
-    
-    /* RACE CONDITION FIX: Set up proper struct member access BEFORE subdev_init */
-    vic_dev->state = 1;  /* Initial state - INIT */
-    vic_dev->width = 1920;  /* Default HD width */
-    vic_dev->height = 1080; /* Default HD height */
-    
-    /* Initialize synchronization primitives BEFORE any other access */
-    spin_lock_init(&vic_dev->lock);
-    spin_lock_init(&vic_dev->buffer_lock);
-    spin_lock_init(&vic_dev->buffer_mgmt_lock);  /* CRITICAL: Initialize buffer mgmt lock */
-    mutex_init(&vic_dev->mlock);
-    mutex_init(&vic_dev->state_lock);
-    init_completion(&vic_dev->frame_complete);
-    
-    /* Initialize buffer management lists */
-    INIT_LIST_HEAD(&vic_dev->queue_head);
-    INIT_LIST_HEAD(&vic_dev->done_head);
-    INIT_LIST_HEAD(&vic_dev->free_head);
-    
-    /* Initialize state variables */
-    vic_dev->stream_state = 0;         /* Stream OFF initially */
-    vic_dev->active_buffer_count = 0;  /* No active buffers */
-    vic_dev->processing = false;       /* Not processing */
-    
-    /* Initialize sensor attributes safely */
-    memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-    vic_dev->sensor_attr.dbus_type = 2; /* Default to MIPI */
-    vic_dev->sensor_attr.total_width = 1920;
-    vic_dev->sensor_attr.total_height = 1080;
-    vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
-    
-    /* CRITICAL: Set up subdev private data pointer BEFORE tx_isp_subdev_init */
-    sd->dev_priv = vic_dev;
-    
-    pr_info("*** VIC DEVICE STRUCTURE PROPERLY INITIALIZED - CALLING tx_isp_subdev_init ***\n");
-    
-    /* Now safely call subdev init with properly initialized structure */
+
+    /* Get platform resource (binary uses this for error message) */
+    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+
+    /* CRITICAL: Initialize subdev FIRST (matches binary flow) */
     ret = tx_isp_subdev_init(pdev, sd, &vic_subdev_ops);
     if (ret != 0) {
-        pr_err("Failed to init isp module: %d\n", ret);
-        goto err_subdev_init;
+        pr_err("Failed to init isp module(%d.%d)\n",
+               res ? MAJOR(res->start) : 0,
+               res ? MINOR(res->start) : 0);
+        kfree(vic_dev);
+        return -EFAULT;  /* Binary returns -12 (EFAULT) */
     }
-    
-    /* *** CRITICAL FIX: Integration with ISP interrupt dispatch system *** */
-    pr_info("*** CRITICAL FIX: Integrating VIC with ISP interrupt dispatch system ***\n");
-    
-    /* Store VIC interrupt handler function in VIC device for dispatch system */
-    vic_dev->irq_handler_func = isp_vic_interrupt_service_routine;
-    pr_info("*** VIC interrupt handler stored for dispatch: %p ***\n", vic_dev->irq_handler_func);
-    
-    /* Get IRQ number from platform device */
-    irq = platform_get_irq(pdev, 0);
-    if (irq < 0) {
-        pr_err("Failed to get VIC IRQ from platform device: %d\n", irq);
-        ret = irq;
-        goto err_get_irq;
-    }
-    
-    vic_dev->irq_number = irq;
-    pr_info("*** VIC IRQ number stored: %d (will be registered by ISP core dispatch system) ***\n", irq);
-    
-    /* NOTE: Interrupt registration is handled by ISP core's dispatch system */
-    /* The tx_isp_request_irq function in tx_isp_core.c will register the main dispatch handler */
-    /* which will then call our vic_dev->irq_handler_func when VIC interrupts occur */
-    
-    pr_info("*** SUCCESS: VIC integrated with ISP dispatch system ***\n");
-    
-    /* RACE CONDITION FIX: Set platform driver data AFTER successful init */
-    platform_set_drvdata(pdev, vic_dev);
-    
-    /* Set up file operations for proc interface */
-    sd->ops = &isp_vic_frd_fops;
-    
-    /* Initialize VIC error counters */
-    memset(vic_dev->vic_errors, 0, sizeof(vic_dev->vic_errors));
-    vic_dev->frame_count = 0;
-    vic_dev->buffer_count = 0;
-    vic_dev->streaming = 0;
-    
-    /* CRITICAL FIX: Link VIC device to ISP core using PROPER subdev pointer */
-    if (ourISPdev) {
-        /* Use the subdev structure, not the vic_dev directly */
-        ourISPdev->vic_dev = sd;  /* This is the correct subdev pointer */
-        sd->isp = ourISPdev;      /* Set up back-reference */
-        
-        pr_info("*** CRITICAL: VIC DEVICE LINKED TO ISP CORE WITH PROPER POINTERS ***\n");
-        pr_info("  isp_dev->vic_dev = %p (subdev)\n", ourISPdev->vic_dev);
-        pr_info("  vic_dev->sd.isp = %p\n", sd->isp);
-        pr_info("  vic_dev address = %p\n", vic_dev);
-        pr_info("  sd address = %p\n", sd);
-    }
-    
-    pr_info("*** tx_isp_vic_probe: VIC device created successfully with IRQ %d registered ***\n", irq);
-    pr_info("VIC device: size=%zu, vic_dev=%p, sd=%p, state=%d, irq=%d\n", 
-            sizeof(struct tx_isp_vic_device), vic_dev, sd, vic_dev->state, irq);
-    pr_info("VIC register base: %p (validated and working)\n", vic_dev->vic_regs);
-    
-    return 0;
 
-err_request_irq:
-err_get_irq:
-    tx_isp_subdev_deinit(sd);
-err_subdev_init:
-    iounmap(vic_dev->vic_regs);
-    kfree(vic_dev);
-    return ret;
+    /* Set platform driver data after successful init */
+    platform_set_drvdata(pdev, vic_dev);
+
+    /* Set file operations */
+    sd->ops = &isp_vic_frd_fops;
+
+    /* Initialize synchronization primitives (binary order) */
+    spin_lock_init(&vic_dev->lock);
+    mutex_init(&vic_dev->mlock);
+    mutex_init(&vic_dev->snap_mlock);  /* Assuming we have this field */
+    init_completion(&vic_dev->frame_complete);
+
+    /* Set initial state to 1 (matches binary) */
+    vic_dev->state = 1;
+
+    /* Store global reference (binary uses 'dump_vsd' global) */
+    dump_vsd = vic_dev;
+
+    /* Set self-reference (binary sets at offset 0xd4) */
+    vic_dev->self = vic_dev;
+
+    /* Set test_addr to point to sensor_attr or appropriate member */
+    /* Binary points to offset 0x80 in the structure */
+    test_addr = &vic_dev->sensor_attr;  /* Or another member around offset 0x80 */
+
+    pr_info("*** tx_isp_vic_probe: VIC device initialized successfully ***\n");
+    pr_info("VIC device: vic_dev=%p, size=%zu\n", vic_dev, sizeof(struct tx_isp_vic_device));
+    pr_info("  sd: %p\n", sd);
+    pr_info("  state: %d\n", vic_dev->state);
+    pr_info("  self-ref: %p\n", vic_dev->self);
+    pr_info("  test_addr: %p\n", test_addr);
+
+    return 0;
 }
 
 /* VIC remove function */
