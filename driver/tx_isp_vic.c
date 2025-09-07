@@ -2216,6 +2216,9 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     
     /* Store the remote handler globally so frame channels can access it */
     vic_dev->remote_handler = remote_handler;
+
+    // Initialize the wait queue
+    init_waitqueue_head(&vic_dev->wait_queue);
     
     pr_info("*** CRITICAL NULL POINTER FIX: VIC event handler chain set up ***\n");
     pr_info("*** Remote handler at %p -> callback struct at %p -> event_callback = %p ***\n", 
