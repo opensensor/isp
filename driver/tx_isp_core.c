@@ -110,6 +110,8 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
 int sensor_init(struct tx_isp_dev *isp_dev);
 void *isp_core_tuning_init(void *arg1);
 int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
+void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
+void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
 
 /* ISP interrupt dispatch system - EXACT Binary Ninja implementation */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
@@ -227,15 +229,6 @@ void tx_isp_enable_irq(void *irq_info)
         int irq_number = *((int *)irq_info);
         pr_debug("tx_isp_enable_irq: Enabling IRQ %d\n", irq_number);
         enable_irq(irq_number);
-    }
-}
-
-void tx_isp_disable_irq(void *irq_info)
-{
-    if (irq_info) {
-        int irq_number = *((int *)irq_info);
-        pr_debug("tx_isp_disable_irq: Disabling IRQ %d\n", irq_number);
-        disable_irq(irq_number);
     }
 }
 

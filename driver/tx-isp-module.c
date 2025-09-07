@@ -1673,7 +1673,7 @@ static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const cha
 
 // Initialize real hardware interrupt handling - Kernel 3.10 compatible, SDK compatible
 /* tx_isp_enable_irq - CORRECTED Binary Ninja exact implementation */
-static void tx_isp_enable_irq(struct tx_isp_dev *isp_dev)
+void tx_isp_enable_irq(struct tx_isp_dev *isp_dev)
 {
     if (!isp_dev || isp_dev->isp_irq <= 0) {
         pr_err("tx_isp_enable_irq: Invalid parameters (dev=%p, irq=%d)\n", 
@@ -1691,7 +1691,7 @@ static void tx_isp_enable_irq(struct tx_isp_dev *isp_dev)
 }
 
 /* tx_isp_disable_irq - CORRECTED Binary Ninja exact implementation */
-static void tx_isp_disable_irq(struct tx_isp_dev *isp_dev)
+void tx_isp_disable_irq(struct tx_isp_dev *isp_dev)
 {
     if (!isp_dev || isp_dev->isp_irq <= 0) {
         pr_err("tx_isp_disable_irq: Invalid parameters (dev=%p, irq=%d)\n", 
