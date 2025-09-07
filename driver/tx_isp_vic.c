@@ -1457,14 +1457,66 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
             /* Binary Ninja: memcpy path */
             memcpy(&vic_dev->sensor_attr, attr, sizeof(vic_dev->sensor_attr));
             
-            /* Post-copy validation and correction */
+            /* CRITICAL FIX: Comprehensive validation and correction of all invalid attributes */
+            int needs_correction = 0;
+            
             if (vic_dev->sensor_attr.dbus_type > 5 || vic_dev->sensor_attr.dbus_type < 1) {
-                pr_err("*** POST-COPY CORRUPTION: dbus_type became %d ***\n", vic_dev->sensor_attr.dbus_type);
-                vic_dev->sensor_attr.dbus_type = 2; /* Correct it */
-                pr_err("*** CORRECTED: dbus_type set to 2 (MIPI) ***\n");
+                pr_err("*** SENSOR CORRUPTION FIX: Invalid dbus_type %d, correcting to MIPI (2) ***\n", 
+                       vic_dev->sensor_attr.dbus_type);
+                vic_dev->sensor_attr.dbus_type = 2; /* MIPI */
+                needs_correction = 1;
             }
             
-            pr_info("*** MCP_LOG: vic_sensor_ops_sync_sensor_attr - memcpy path, attributes synchronized ***\n");
+            if (vic_dev->sensor_attr.data_type == 0) {
+                pr_err("*** SENSOR CORRUPTION FIX: Invalid data_type 0x%x, correcting to RAW10 (0x2b) ***\n",
+                       vic_dev->sensor_attr.data_type);
+                vic_dev->sensor_attr.data_type = 0x2b; /* RAW10 */
+                needs_correction = 1;
+            }
+            
+            if (vic_dev->sensor_attr.integration_time == 0) {
+                pr_err("*** SENSOR CORRUPTION FIX: Invalid integration_time %d, correcting to 0x465 ***\n",
+                       vic_dev->sensor_attr.integration_time);
+                vic_dev->sensor_attr.integration_time = 0x465;
+                needs_correction = 1;
+            }
+            
+            if (vic_dev->sensor_attr.integration_time_apply_delay == 0) {
+                pr_err("*** SENSOR CORRUPTION FIX: Invalid integration_time_apply_delay %d, correcting to 2 ***\n",
+                       vic_dev->sensor_attr.integration_time_apply_delay);
+                vic_dev->sensor_attr.integration_time_apply_delay = 2;
+                needs_correction = 1;
+            }
+            
+            if (vic_dev->sensor_attr.again_apply_delay == 0) {
+                pr_err("*** SENSOR CORRUPTION FIX: Invalid again_apply_delay %d, correcting to 2 ***\n",
+                       vic_dev->sensor_attr.again_apply_delay);
+                vic_dev->sensor_attr.again_apply_delay = 2;
+                needs_correction = 1;
+            }
+            
+            if (vic_dev->sensor_attr.total_width == 0) {
+                pr_err("*** SENSOR CORRUPTION FIX: Invalid total_width %d, correcting to 0x898 ***\n",
+                       vic_dev->sensor_attr.total_width);
+                vic_dev->sensor_attr.total_width = 0x898; /* 2200 for GC2053 */
+                needs_correction = 1;
+            }
+            
+            if (vic_dev->sensor_attr.total_height == 0) {
+                pr_err("*** SENSOR CORRUPTION FIX: Invalid total_height %d, correcting to 0x58a ***\n",
+                       vic_dev->sensor_attr.total_height);
+                vic_dev->sensor_attr.total_height = 0x58a; /* 1418 for GC2053 */
+                needs_correction = 1;
+            }
+            
+            if (needs_correction) {
+                pr_err("*** CRITICAL: Sensor driver provided invalid attributes - all corrected! ***\n");
+                pr_info("*** SENSOR FIX: dbus_type=%d, data_type=0x%x, integration_time=%d ***\n",
+                        vic_dev->sensor_attr.dbus_type, vic_dev->sensor_attr.data_type, 
+                        vic_dev->sensor_attr.integration_time);
+            }
+            
+            pr_info("*** MCP_LOG: vic_sensor_ops_sync_sensor_attr - memcpy path, attributes synchronized and validated ***\n");
         }
         
         /* Debug after synchronization */

@@ -2080,6 +2080,28 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		            sensor->info.name[0] ? sensor->info.name : SENSOR_NAME);
 	}
 	
+	/* *** CRITICAL FIX: FORCE SENSOR INITIALIZATION NOW TO WRITE ALL REGISTERS *** */
+	ISP_WARNING("*** FORCING IMMEDIATE SENSOR INITIALIZATION TO WRITE REGISTERS ***\n");
+	ISP_WARNING("*** THIS SHOULD GENERATE HUNDREDS OF I2C WRITES ***\n");
+	
+	if (sd->ops && sd->ops->core && sd->ops->core->init) {
+		ISP_WARNING("*** CALLING SENSOR_INIT TO WRITE %s INITIALIZATION REGISTERS ***\n", SENSOR_NAME);
+		ret = sd->ops->core->init(sd, 1);
+		if (ret) {
+			ISP_ERROR("*** SENSOR_INIT FAILED: %d ***\n", ret);
+		} else {
+			ISP_WARNING("*** SENSOR_INIT SUCCESS - ALL REGISTERS SHOULD BE WRITTEN NOW ***\n");
+			ISP_WARNING("*** YOU SHOULD NOW SEE HUNDREDS OF I2C INTERRUPTS (NOT JUST 4) ***\n");
+		}
+	} else {
+		ISP_ERROR("*** CRITICAL ERROR: SENSOR INIT FUNCTION NOT AVAILABLE! ***\n");
+		ISP_ERROR("sd=%p, ops=%p\n", sd, sd->ops);
+		if (sd->ops) {
+			ISP_ERROR("core=%p, init=%p\n", sd->ops->core, 
+			          sd->ops->core ? sd->ops->core->init : NULL);
+		}
+	}
+	
 	pr_debug("probe ok ------->%s\n", SENSOR_NAME);
 	return 0;
 
