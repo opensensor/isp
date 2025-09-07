@@ -207,14 +207,14 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
     
     /* Binary Ninja: Store IRQ info in structure */
     /* arg2[1] = tx_isp_enable_irq */
-    *((void **)((char *)irq_info + 4)) = (void *)tx_vic_enable_irq;
+    *((void **)((char *)irq_info + 4)) = (void *)tx_isp_enable_irq;
     /* *arg2 = $v0_1 */
     *((int *)irq_info) = irq_number;
     /* arg2[2] = tx_isp_disable_irq */
-    *((void **)((char *)irq_info + 8)) = (void *)tx_vic_disable_irq;
+    *((void **)((char *)irq_info + 8)) = (void *)tx_isp_disable_irq;
     
     /* Binary Ninja: tx_isp_disable_irq(arg2) - initially disable */
-    tx_vic_disable_irq(irq_info);
+    tx_isp_disable_irq(irq_info);
     
     pr_info("*** tx_isp_request_irq: IRQ %d registered successfully with dispatch system ***\n", irq_number);
     return 0;
