@@ -1896,57 +1896,104 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     return ret;
 }
 
-/* VIC video streaming operations - matching reference driver vic_core_s_stream */
-static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
+/* CRITICAL MISSING FUNCTION: vic_core_s_stream - EXACT Binary Ninja implementation */
+static int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
+    int current_state;
     int ret = 0;
-    
+
+    pr_info("*** vic_core_s_stream: MIPS-SAFE implementation - enable=%d ***\n", enable);
+
+    /* Binary Ninja: if (arg1 != 0) */
     if (!sd) {
-        pr_err("VIC s_stream: NULL subdev\n");
+        pr_err("vic_core_s_stream: NULL subdev parameter\n");
+        return -EINVAL; /* 0xffffffea */
+    }
+
+    /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
+    if ((unsigned long)sd >= 0xfffff001) {
+        pr_err("vic_core_s_stream: Invalid subdev pointer range\n");
         return -EINVAL;
     }
-    
+
+    /* CRITICAL FIX: Use safe struct member access instead of dangerous *(arg1 + 0xd4) */
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    if (!vic_dev) {
-        pr_err("VIC s_stream: NULL vic_dev\n");
+    pr_info("*** vic_core_s_stream: Retrieved vic_dev using SAFE access: %p ***\n", vic_dev);
+
+    /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_err("vic_core_s_stream: Invalid vic_dev pointer\n");
         return -EINVAL;
     }
-    
-    pr_info("VIC s_stream: enable=%d, current_state=%d\n", enable, vic_dev->state);
-    
-    mutex_lock(&vic_dev->state_lock);
-    
-    if (enable) {
-        /* Start VIC streaming - Call Binary Ninja exact sequence */
-        if (vic_dev->state != 4) { /* Not already streaming */
-            pr_info("VIC: Starting streaming - calling ispvic_frame_channel_s_stream(1)\n");
-            ret = ispvic_frame_channel_s_stream(vic_dev, 1);
-            if (ret == 0) {
-                vic_dev->state = 4; /* STREAMING state */
-                pr_info("VIC: Streaming started successfully, state -> 4\n");
-            } else {
-                pr_err("VIC: ispvic_frame_channel_s_stream failed: %d\n", ret);
-            }
-        } else {
-            pr_info("VIC: Already streaming (state=%d)\n", vic_dev->state);
+
+    /* CRITICAL FIX: Use safe struct member access instead of dangerous *($s1_1 + 0x128) */
+    current_state = vic_dev->state;
+    pr_info("vic_core_s_stream: current_state=%d, enable=%d\n", current_state, enable);
+
+    if (enable == 0) {
+        /* Binary Ninja: Stream OFF path */
+        pr_info("*** vic_core_s_stream: Stream OFF requested ***\n");
+        
+        /* Binary Ninja: if ($v1_3 == 4) *($s1_1 + 0x128) = 3 */
+        if (current_state == 4) {
+            vic_dev->state = 3; /* STREAMING -> ACTIVE */
+            pr_info("vic_core_s_stream: State changed 4 -> 3 (STREAMING -> ACTIVE)\n");
         }
+        ret = 0; /* Binary Ninja: $v0 = 0 */
+        
     } else {
-        /* Stop VIC streaming */
-        if (vic_dev->state == 4) { /* Currently streaming */
-            pr_info("VIC: Stopping streaming - calling ispvic_frame_channel_s_stream(0)\n");
-            ret = ispvic_frame_channel_s_stream(vic_dev, 0);
+        /* Binary Ninja: Stream ON path */
+        pr_info("*** vic_core_s_stream: Stream ON requested ***\n");
+        
+        /* Binary Ninja: if ($v1_3 != 4) */
+        if (current_state != 4) {
+            pr_info("vic_core_s_stream: Starting VIC streaming (state %d != 4)\n", current_state);
+            
+            /* Binary Ninja: tx_vic_disable_irq() */
+            pr_info("*** vic_core_s_stream: Disabling VIC interrupts ***\n");
+            vic_start_ok = 0; /* Disable interrupt processing */
+            
+            /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
+            pr_info("*** vic_core_s_stream: Calling tx_isp_vic_start ***\n");
+            ret = tx_isp_vic_start(vic_dev);
+            
             if (ret == 0) {
-                vic_dev->state = 3; /* ACTIVE but not streaming */
-                pr_info("VIC: Streaming stopped, state -> 3\n");
+                /* Binary Ninja: *($s1_1 + 0x128) = 4 */
+                vic_dev->state = 4; /* -> STREAMING */
+                pr_info("vic_core_s_stream: State changed -> 4 (STREAMING)\n");
+                
+                /* Binary Ninja: tx_vic_enable_irq() */
+                pr_info("*** vic_core_s_stream: Enabling VIC interrupts ***\n");
+                vic_start_ok = 1; /* Enable interrupt processing */
+                
+            } else {
+                pr_err("vic_core_s_stream: tx_isp_vic_start failed: %d\n", ret);
+                /* Re-enable interrupts even on failure */
+                vic_start_ok = 1;
             }
+            
+            /* Binary Ninja: return $v0_1 */
+            pr_info("*** vic_core_s_stream: Returning %d ***\n", ret);
+            return ret;
         } else {
-            pr_info("VIC: Not streaming (state=%d)\n", vic_dev->state);
+            pr_info("vic_core_s_stream: Already streaming (state=%d)\n", current_state);
         }
+        ret = 0; /* Binary Ninja: $v0 = 0 */
     }
+
+    pr_info("*** vic_core_s_stream: Completed - enable=%d, final_state=%d, ret=%d ***\n", 
+            enable, vic_dev->state, ret);
     
-    mutex_unlock(&vic_dev->state_lock);
+    /* Binary Ninja: return $v0 */
     return ret;
+}
+
+/* VIC video streaming operations - wrapper for vic_core_s_stream */
+static int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
+{
+    pr_info("*** vic_video_s_stream: Calling vic_core_s_stream - enable=%d ***\n", enable);
+    return vic_core_s_stream(sd, enable);
 }
 
 /* Define VIC video operations */
@@ -2348,6 +2395,7 @@ void __exit tx_isp_vic_platform_exit(void)
 EXPORT_SYMBOL(tx_isp_vic_stop);
 EXPORT_SYMBOL(tx_isp_vic_set_buffer);
 EXPORT_SYMBOL(tx_isp_vic_wait_frame_done);
+EXPORT_SYMBOL(vic_core_s_stream);  /* CRITICAL: Export the missing function */
 
 /* Export VIC platform init/exit for main module */
 EXPORT_SYMBOL(tx_isp_vic_platform_init);
