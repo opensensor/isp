@@ -1050,8 +1050,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* FIXED: Get sensor attributes from connected sensor subdev, not embedded logic */
     struct tx_isp_sensor_attribute *sensor_attr = NULL;
-    u32 interface_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* Default to MIPI */
-    u32 sensor_format = 0x2b; /* Default RAW10 */
+    interface_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* Default to MIPI */
+    sensor_format = 0x2b; /* Default RAW10 */
     
     /* Try to get sensor attributes from ISP core if sensor subdev is connected */
     if (ourISPdev && ourISPdev->sensor) {
