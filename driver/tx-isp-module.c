@@ -6276,7 +6276,8 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
     pr_info("*** CRITICAL: SETTING UP SENSOR SUBDEV OPS STRUCTURE ***\n");
     sd->ops = &sensor_subdev_ops;
     pr_info("Sensor subdev ops setup: core=%p, video=%p, s_stream=%p\n",
-            sd->ops->core, sd->ops->video, sd->ops->video->s_stream);
+            sd->ops->core, sd->ops->video, 
+            sd->ops->video ? sd->ops->video->s_stream : NULL);
     
     /* *** CRITICAL FIX: IMMEDIATELY CONNECT SENSOR TO ISP DEVICE *** */
     if (ourISPdev) {
