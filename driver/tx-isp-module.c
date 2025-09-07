@@ -4412,7 +4412,7 @@ static int tx_isp_init(void)
         vic_dev->sd.ops = &vic_subdev_ops;
         vic_dev->sd.isp = (void*)ourISPdev;
         vic_dev->sd.vin_state = TX_ISP_MODULE_INIT;
-        vic_dev->vic_regs = ioremap(0x10023000, 0x1000);  // VIC base from /proc/iomem
+        vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);  // VIC base from /proc/iomem
         ourISPdev->vic_regs = vic_dev->vic_regs;
         
         /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
