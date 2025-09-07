@@ -200,6 +200,7 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
 /* MIPS-SAFE I2C communication test - Fixed for unaligned access */
 static int mips_safe_i2c_test(struct i2c_client *client, const char *sensor_type)
 {
+    struct i2c_adapter *adapter;
     int test_result = 0;
     
     if (!client || ((uintptr_t)client & 0x3) != 0) {
@@ -207,13 +208,25 @@ static int mips_safe_i2c_test(struct i2c_client *client, const char *sensor_type
         return -EINVAL;
     }
     
+    if (!sensor_type) {
+        pr_err("*** MIPS ERROR: sensor_type is NULL ***\n");
+        return -EINVAL;
+    }
+    
+    /* Get I2C adapter from client */
+    adapter = client->adapter;
+    if (!adapter) {
+        pr_err("*** MIPS ERROR: No I2C adapter available ***\n");
+        return -ENODEV;
+    }
+    
     pr_info("*** MIPS-SAFE I2C TEST FOR %s ***\n", sensor_type);
     
     /* *** FIXED: PROPER I2C COMMUNICATION TEST *** */
-    pr_info("*** TESTING I2C COMMUNICATION WITH %s (IMPROVED METHOD) ***\n", info->type);
+    pr_info("*** TESTING I2C COMMUNICATION WITH %s (IMPROVED METHOD) ***\n", sensor_type);
     {
         /* Instead of blind read, try sensor-specific register read */
-        if (strncmp(info->type, "gc2053", 6) == 0) {
+        if (strncmp(sensor_type, "gc2053", 6) == 0) {
             /* GC2053-specific I2C test - read chip ID register */
             unsigned char reg_addr = 0x03; /* GC2053 chip ID register (high byte) */
             unsigned char chip_id_high = 0;
@@ -232,7 +245,7 @@ static int mips_safe_i2c_test(struct i2c_client *client, const char *sensor_type
                 }
             };
             
-            int test_result = i2c_transfer(adapter, msgs, 2);
+            test_result = i2c_transfer(adapter, msgs, 2);
             pr_info("*** I2C GC2053 CHIP ID TEST: result=%d, chip_id_high=0x%02x ***\n", 
                    test_result, chip_id_high);
             
@@ -291,7 +304,7 @@ static int mips_safe_i2c_test(struct i2c_client *client, const char *sensor_type
             }
         } else {
             /* Generic I2C test for other sensors */
-            pr_info("*** GENERIC I2C TEST FOR %s ***\n", info->type);
+            pr_info("*** GENERIC I2C TEST FOR %s ***\n", sensor_type);
             
             /* Try to read a common register that most sensors have */
             unsigned char test_reg = 0x00; /* Most sensors have something at register 0x00 */
@@ -311,7 +324,7 @@ static int mips_safe_i2c_test(struct i2c_client *client, const char *sensor_type
                 }
             };
             
-            int test_result = i2c_transfer(adapter, msgs, 2);
+            test_result = i2c_transfer(adapter, msgs, 2);
             pr_info("*** I2C TEST: result=%d, reg[0x00]=0x%02x ***\n", test_result, test_data);
             
             if (test_result < 0) {
@@ -320,7 +333,7 @@ static int mips_safe_i2c_test(struct i2c_client *client, const char *sensor_type
         }
     }
     
-    return client;
+    return test_result >= 0 ? 0 : test_result;
 }
 
 /* Prepare I2C infrastructure for dynamic sensor registration */
