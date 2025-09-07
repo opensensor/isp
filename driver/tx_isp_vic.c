@@ -2192,6 +2192,18 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     tx_isp_set_subdevdata(sd, vic_dev);
     pr_info("*** CRITICAL FIX: Set subdev data - sd=%p points to vic_dev=%p ***\n", sd, vic_dev);
 
+    /* *** CRITICAL NULL POINTER FIX: Set up pad event callback at offset 0x1c *** */
+    if (sd->inpads && sd->inpads[0].priv) {
+        struct vic_callback_struct *callback_struct = sd->inpads[0].priv;
+        callback_struct->event_callback = vic_pad_event_handler;
+        pr_info("*** CRITICAL NULL POINTER FIX: Event callback set at pad+0x1c = %p ***\n", 
+                vic_pad_event_handler);
+    } else {
+        pr_err("*** CRITICAL ERROR: Pad or pad->priv is NULL - cannot set event callback! ***\n");
+        ret = -EFAULT;
+        goto err_deinit_subdev;
+    }
+
     /* Set platform driver data after successful init */
     platform_set_drvdata(pdev, vic_dev);
 
