@@ -2193,14 +2193,27 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     pr_info("*** CRITICAL FIX: Set subdev data - sd=%p points to vic_dev=%p ***\n", sd, vic_dev);
 
     /* *** CRITICAL NULL POINTER FIX: Set up VIC event callback system *** */
-    /* Based on Binary Ninja analysis, callbacks are stored in vic_dev structure at specific offsets */
-    /* From ispcore_pad_event_handle, we see callbacks at 0x1c0, 0x1c8, etc. */
-    /* We need to allocate and initialize the callback structure properly */
+    /* The crash occurs in tx_isp_send_event_to_remote when it tries to call a function */
+    /* pointer at offset 0x1c in a structure accessed through frame channel's remote_dev */
     
-    /* Allocate callback structure with proper size and alignment */
+    /* Create the remote event handler structure that frame channels expect */
+    struct vic_remote_handler {
+        char padding[12];           /* Padding to reach offset 0xc */
+        void *event_handler_struct; /* Pointer at offset 0xc */
+    } __attribute__((packed));
+    
+    struct vic_remote_handler *remote_handler = kzalloc(sizeof(struct vic_remote_handler), GFP_KERNEL);
+    if (!remote_handler) {
+        pr_err("*** CRITICAL ERROR: Failed to allocate VIC remote handler ***\n");
+        ret = -ENOMEM;
+        goto err_deinit_subdev;
+    }
+    
+    /* Allocate the event handler structure with function pointer at offset 0x1c */
     struct vic_callback_struct *callback_struct = kzalloc(sizeof(struct vic_callback_struct), GFP_KERNEL);
     if (!callback_struct) {
         pr_err("*** CRITICAL ERROR: Failed to allocate VIC callback structure ***\n");
+        kfree(remote_handler);
         ret = -ENOMEM;
         goto err_deinit_subdev;
     }
@@ -2208,17 +2221,19 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Set the event callback function pointer at the correct offset (0x1c) */
     callback_struct->event_callback = vic_pad_event_handler;
     
-    /* Initialize input pad with callback structure */
+    /* Link the structures: remote_handler->event_handler_struct points to callback_struct */
+    remote_handler->event_handler_struct = callback_struct;
+    
+    /* Store the remote handler globally so frame channels can access it */
+    vic_dev->remote_handler = remote_handler;
+    
+    pr_info("*** CRITICAL NULL POINTER FIX: VIC event handler chain set up ***\n");
+    pr_info("*** Remote handler at %p -> callback struct at %p -> event_callback = %p ***\n", 
+            remote_handler, callback_struct, vic_pad_event_handler);
+    
+    /* Also set up input pad for backward compatibility */
     if (sd->inpads) {
         sd->inpads[0].priv = callback_struct;
-        pr_info("*** CRITICAL NULL POINTER FIX: VIC callback structure allocated and set ***\n");
-        pr_info("*** Callback struct at %p, event_callback at offset 0x1c = %p ***\n", 
-                callback_struct, vic_pad_event_handler);
-    } else {
-        pr_err("*** CRITICAL ERROR: sd->inpads is NULL - cannot set callback! ***\n");
-        kfree(callback_struct);
-        ret = -EFAULT;
-        goto err_deinit_subdev;
     }
 
     /* Set platform driver data after successful init */
