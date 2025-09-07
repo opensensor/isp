@@ -154,6 +154,9 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 
+/* Forward declaration for streaming functions */
+int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2);
+
 /* GPIO info and state for vic_framedone_irq_function - matching reference driver */
 static volatile int gpio_switch_state = 0;
 static struct {
