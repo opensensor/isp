@@ -1928,9 +1928,24 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
             }
         }
         
+        /* SAFE: Call sensor streaming directly if available */
+        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
+            isp_dev->sensor->sd.ops->video && isp_dev->sensor->sd.ops->video->s_stream) {
+            if (((uintptr_t)isp_dev->sensor & 0x3) == 0) {
+                pr_info("*** MIPS-SAFE: Calling sensor streaming directly ***\n");
+                isp_dev->sensor->sd.ops->video->s_stream(&isp_dev->sensor->sd, enable);
+            }
+        }
+        
     } else {
         pr_info("*** MIPS-SAFE: Disabling streaming without risky subdev iteration ***\n");
         /* SAFE: Disable streaming on known devices */
+        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
+            isp_dev->sensor->sd.ops->video && isp_dev->sensor->sd.ops->video->s_stream) {
+            if (((uintptr_t)isp_dev->sensor & 0x3) == 0) {
+                isp_dev->sensor->sd.ops->video->s_stream(&isp_dev->sensor->sd, 0);
+            }
+        }
         if (isp_dev->vic_dev) {
             struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
             if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
@@ -3950,19 +3965,22 @@ static int tx_isp_init(void)
         return -ENOMEM;
     }
 
+    /* *** RACE CONDITION FIX: Create VIC device IMMEDIATELY after allocation *** */
+    /* This prevents any other code from trying to create it and causing conflicts */
+    pr_info("*** CREATING VIC DEVICE STRUCTURE IMMEDIATELY TO PREVENT RACE CONDITIONS ***\n");
+    ret = tx_isp_create_vic_device(ourISPdev);
+    if (ret) {
+        pr_err("Failed to create VIC device structure: %d\n", ret);
+        kfree(ourISPdev);
+        ourISPdev = NULL;
+        return ret;
+    }
+    pr_info("*** VIC DEVICE CREATED AND LINKED - RACE CONDITION PREVENTED ***\n");
+
     /* Initialize device structure */
     spin_lock_init(&ourISPdev->lock);
     ourISPdev->refcnt = 0;
     ourISPdev->is_open = false;
-    
-    /* *** CRITICAL FIX: Create and link VIC device structure immediately *** */
-    pr_info("*** CREATING VIC DEVICE STRUCTURE AND LINKING TO ISP CORE ***\n");
-    ret = tx_isp_create_vic_device(ourISPdev);
-    if (ret) {
-        pr_err("Failed to create VIC device structure: %d\n", ret);
-        goto err_free_dev;
-    }
-    pr_info("*** VIC DEVICE CREATED AND LINKED TO ISP CORE - NO MORE 'NO VIC DEVICE' ERROR ***\n");
 
     /* Step 2: Register platform device (matches reference) */
     ret = platform_device_register(&tx_isp_platform_device);
