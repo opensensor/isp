@@ -1505,8 +1505,15 @@ static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 	struct tx_isp_sensor *sensor = sd_to_sensor_device(sd);
 	int ret = 0;
 
-	if (!enable)
+	ISP_WARNING("*** SENSOR_INIT: %s enable=%d ***\n", SENSOR_NAME, enable);
+
+	if (!enable) {
+		ISP_WARNING("SENSOR_INIT: Disabled, returning success\n");
 		return ISP_SUCCESS;
+	}
+
+	ISP_WARNING("SENSOR_INIT: Configuring %s (chip_id=0x%x, %dx%d)\n", 
+	            SENSOR_NAME, SENSOR_CHIP_ID, wsize->width, wsize->height);
 
 	sensor->video.mbus.width = wsize->width;
 	sensor->video.mbus.height = wsize->height;
@@ -1514,12 +1521,22 @@ static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 	sensor->video.mbus.field = V4L2_FIELD_NONE;
 	sensor->video.mbus.colorspace = wsize->colorspace;
 	sensor->video.fps = wsize->fps;
+	
+	ISP_WARNING("*** CALLING SENSOR_WRITE_ARRAY WITH %p (should be 137 registers) ***\n", wsize->regs);
 	ret = sensor_write_array(sd, wsize->regs);
-	if (ret)
+	ISP_WARNING("*** SENSOR_WRITE_ARRAY RETURNED: %d ***\n", ret);
+	
+	if (ret) {
+		ISP_ERROR("*** SENSOR_WRITE_ARRAY FAILED: %d ***\n", ret);
 		return ret;
+	}
 
+	ISP_WARNING("*** CALLING TX_ISP_EVENT_SYNC_SENSOR_ATTR ***\n");
 	ret = tx_isp_call_subdev_notify(sd, TX_ISP_EVENT_SYNC_SENSOR_ATTR, &sensor->video);
+	ISP_WARNING("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR RETURNED: %d ***\n", ret);
+	
 	sensor->priv = wsize;
+	ISP_WARNING("*** SENSOR_INIT COMPLETE FOR %s ***\n", SENSOR_NAME);
 	return 0;
 }
 
