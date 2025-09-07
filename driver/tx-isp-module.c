@@ -60,6 +60,7 @@ static void destroy_frame_channel_devices(void);
 int __init tx_isp_subdev_platform_init(void);
 void __exit tx_isp_subdev_platform_exit(void);
 void *isp_core_tuning_init(void *arg1);
+int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
 
 /* Global I2C client tracking to prevent duplicate creation */
 static struct i2c_client *global_sensor_i2c_client = NULL;
