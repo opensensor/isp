@@ -35,12 +35,7 @@ struct tx_isp_fs_channel_config {
 
 /* Memory-safe frame source device structure */
 struct tx_isp_fs_device {
-    struct tx_isp_subdev subdev;                        /* 0x00: Base subdev structure */
-    
-    /* Use opaque buffer to reach the correct Binary Ninja offsets without risky padding */
-    uint8_t reserved_data[0xe8 - sizeof(struct tx_isp_subdev) - 6*sizeof(void*) - sizeof(uint32_t)];
-    
-    /* Critical fields at their Binary Ninja offsets - accessed via safe helper functions */
+    struct tx_isp_subdev subdev;                        /* 0x00: Base subdev structure */    
     struct tx_isp_fs_channel_config *channel_configs;   /* Channel config array pointer */
     void *self_pointer;                                 /* Self-pointer */
     struct tx_isp_frame_channel *channel_buffer;        /* Channel buffer pointer */
