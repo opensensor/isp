@@ -129,6 +129,10 @@ struct tx_isp_vic_device {
     
     // Buffer index array for VIC register mapping
     int buffer_index[5];                // Buffer index array (5 buffers max)
+    
+    // IRQ handling members (added for interrupt registration)
+    int irq_number;                     // IRQ number from platform device
+    irq_handler_t irq_handler_func;     // IRQ handler function pointer
 };
 
 #endif /* __TX_ISP_VIC_H__ */
