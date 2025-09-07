@@ -1117,16 +1117,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* STEP 3: Get VIC registers - should already be mapped by tx_isp_create_vic_device */
     vic_regs = vic_dev->vic_regs;
     
-    /* CRITICAL MIPS VALIDATION: Ensure VIC register base is valid and aligned */
-    if (!vic_regs ||
-        ((uintptr_t)vic_regs & 0x3) != 0 ||
-        (uintptr_t)vic_regs < 0x80000000 ||
-        (uintptr_t)vic_regs == 0x1440ffe1) {
-        pr_err("*** CRITICAL: VIC register base CORRUPTED: %p ***\n", vic_regs);
-        pr_err("*** This is the exact cause of the crash at 0xc062b410 ***\n");
-        return -EINVAL;
-    }
-    
     pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
 
     /* FIXED: Use proper struct member access for sensor attributes */
