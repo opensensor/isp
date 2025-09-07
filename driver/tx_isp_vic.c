@@ -1140,8 +1140,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL VALIDATION: Check sensor attribute structure integrity */
     pr_info("*** MEMORY CORRUPTION CHECK: Validating sensor attributes ***\n");
     pr_info("vic_dev=%p, sensor_attr=%p\n", vic_dev, &vic_dev->sensor_attr);
-    pr_info("sensor_attr offset from vic_dev: 0x%lx\n",
-           (unsigned long)&vic_dev->sensor_attr - (unsigned long)vic_dev);
     
     /* CRITICAL FIX: Make atomic copy of sensor attributes to prevent corruption during access */
     memcpy(&sensor_attr_copy, &vic_dev->sensor_attr, sizeof(sensor_attr_copy));
