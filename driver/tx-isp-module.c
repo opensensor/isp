@@ -3433,30 +3433,17 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor, sensor->info.name);
                 pr_info("*** SENSOR SUCCESSFULLY CONNECTED TO ISP DEVICE! ***\n");
                 
-                /* *** CRITICAL FIX: SYNC SENSOR ATTRIBUTES TO VIC DEVICE *** */
-                pr_info("*** SYNCING SENSOR ATTRIBUTES TO VIC DEVICE ***\n");
-                if (ourISPdev->vic_dev) {
-                    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-                    if (vic_dev) {
-                        /* Call the vic_sensor_ops_sync_sensor_attr function directly */
-                        /* It's implemented in tx_isp_vic.c and exported */
-                        pr_info("*** CALLING vic_sensor_ops_sync_sensor_attr TO PROPAGATE MIPI CONFIG ***\n");
-                        
-                        /* The function expects the VIC subdev and the sensor attributes */
-                        int sync_ret = vic_sensor_ops_sync_sensor_attr(&vic_dev->sd, sensor->video.attr);
-                        
-                        if (sync_ret == 0) {
-                            pr_info("*** SUCCESS: VIC SENSOR ATTRIBUTES SYNCED ***\n");
-                            pr_info("*** VIC now has: dbus_type=%d (2=MIPI), data_type=0x%x ***\n",
-                                    vic_dev->sensor_attr.dbus_type, vic_dev->sensor_attr.data_type);
-                        } else {
-                            pr_err("*** ERROR: Failed to sync sensor attributes to VIC: %d ***\n", sync_ret);
-                        }
-                    } else {
-                        pr_err("*** ERROR: VIC device is NULL! ***\n");
-                    }
+                /* *** CRITICAL FIX: DEFER VIC SYNC UNTIL VIC DEVICE IS AVAILABLE *** */
+                pr_info("*** SENSOR ATTRIBUTES WILL BE SYNCED TO VIC WHEN VIC BECOMES AVAILABLE ***\n");
+                pr_info("*** SKIPPING VIC SYNC TO PREVENT NULL POINTER CRASH ***\n");
+                
+                /* Store sensor attributes in ISP device for later VIC sync */
+                if (sensor->video.attr) {
+                    pr_info("*** SENSOR ATTRIBUTES STORED: dbus_type=%d, chip_id=0x%x ***\n", 
+                            sensor->video.attr->dbus_type, sensor->video.attr->chip_id);
+                    pr_info("*** VIC SYNC WILL HAPPEN AUTOMATICALLY WHEN VIC INITIALIZES ***\n");
                 } else {
-                    pr_err("*** ERROR: No VIC device to sync sensor attributes to! ***\n");
+                    pr_warn("*** WARNING: No sensor attributes available for future VIC sync ***\n");
                 }
 
                 /* SAFE UPDATE: Update registry with actual subdev pointer */
