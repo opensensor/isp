@@ -1509,48 +1509,19 @@ int sensor_init(struct tx_isp_dev *isp_dev)
     ISP_INFO("***   - Mode control functions: configured ***\n");
     ISP_INFO("***   - Utility functions: configured ***\n");
     
-    /* CRITICAL: Set up sensor subdevice operations structure - this fixes the NULL ops issue */
-    ISP_INFO("*** sensor_init: Setting up sensor subdevice operations (fixes NULL ops) ***\n");
+    /* CRITICAL: Initialize sensor subdevice operations - will be set by sensor modules */
+    ISP_INFO("*** sensor_init: Preparing for sensor subdevice operations ***\n");
     
-    /* Allocate and set up sensor subdev operations if not present */
-    if (!isp_dev->sensor_subdev_ops) {
-        struct tx_isp_subdev_ops *sensor_ops = kzalloc(sizeof(struct tx_isp_subdev_ops), GFP_KERNEL);
-        if (!sensor_ops) {
-            ISP_ERROR("sensor_init: Failed to allocate sensor subdev ops\n");
-            return -ENOMEM;
-        }
-        
-        /* Set up sensor-specific operations */
-        sensor_ops->core = NULL;     /* Core operations */
-        sensor_ops->video = NULL;    /* Video operations */
-        sensor_ops->pad = NULL;      /* Pad operations - will be set later */
-        sensor_ops->sensor = NULL;   /* Sensor operations - will be set later */
-        sensor_ops->internal = NULL; /* Internal operations */
-        
-        isp_dev->sensor_subdev_ops = sensor_ops;
-        ISP_INFO("sensor_init: Sensor subdev operations structure allocated and initialized\n");
-    }
+    /* Initialize sensor subdev ops pointer to NULL - will be set when sensor registers */
+    isp_dev->sensor_subdev_ops = NULL;
     
-    /* CRITICAL: Set up the missing sensor operations that were causing NULL pointer errors */
-    if (isp_dev->sensor_subdev_ops) {
-        /* Set up a minimal sensor operations structure to prevent NULL ops errors */
-        if (!isp_dev->sensor_subdev_ops->sensor) {
-            struct tx_isp_sensor_ops *sensor_ops = kzalloc(sizeof(struct tx_isp_sensor_ops), GFP_KERNEL);
-            if (sensor_ops) {
-                /* Set up essential sensor operations to fix "NO SENSOR s_stream OPERATION!" */
-                sensor_ops->s_stream = sensor_s_stream_stub;
-                sensor_ops->g_register = NULL; /* Optional */
-                sensor_ops->s_register = NULL; /* Optional */
-                
-                isp_dev->sensor_subdev_ops->sensor = sensor_ops;
-                ISP_INFO("sensor_init: Sensor operations structure set up successfully\n");
-            }
-        }
-        
-        /* Ensure the ISP device has a reference to the sensor operations */
-        isp_dev->sensor_ops_initialized = true;
-        ISP_INFO("sensor_init: Sensor operations marked as initialized\n");
-    }
+    /* Mark sensor operations as not yet initialized - will be set when sensor registers */
+    isp_dev->sensor_ops_initialized = false;
+    
+    ISP_INFO("*** sensor_init: Sensor operations will be provided by sensor modules ***\n");
+    ISP_INFO("***   - Sensor modules (like gc2063.c) will register via I2C ***\n");
+    ISP_INFO("***   - They provide their own tx_isp_subdev_ops with video->s_stream ***\n");
+    ISP_INFO("***   - No stub functions needed - real sensor operations will be used ***\n");
     
     /* Binary Ninja: return sensor_get_lines_per_second */
     /* The reference returns the last function pointer, but we'll return success */

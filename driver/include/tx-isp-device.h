@@ -275,6 +275,13 @@ struct tx_isp_subdev_sensor_ops {
 	int (*ioctl)(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 };
 
+/* Sensor operations structure - needed for sensor_init */
+struct tx_isp_sensor_ops {
+	int (*s_stream)(struct tx_isp_subdev *sd, int enable);
+	int (*g_register)(struct tx_isp_subdev *sd, struct tx_isp_dbg_register *reg);
+	int (*s_register)(struct tx_isp_subdev *sd, const struct tx_isp_dbg_register *reg);
+};
+
 struct tx_isp_subdev_pad_ops {
 	int (*g_fmt)(struct tx_isp_subdev *sd, struct v4l2_format *f);
 	int (*s_fmt)(struct tx_isp_subdev *sd, struct v4l2_format *f);

@@ -216,6 +216,8 @@ struct tx_isp_dev {
     struct tx_isp_subdev *sensor_sd;
     struct tx_isp_sensor *sensor;
     struct tx_isp_sensor_attribute *sensor_attr;  /* Sensor attributes for Binary Ninja compatibility */
+    struct tx_isp_subdev_ops *sensor_subdev_ops;  /* Sensor subdev operations */
+    bool sensor_ops_initialized;                  /* Sensor operations initialization flag */
 
     /* IRQs */
     int isp_irq;
