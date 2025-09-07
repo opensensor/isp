@@ -2219,6 +2219,9 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* This was the missing initialization causing uninitialized sensor_attr usage */
     pr_info("*** CRITICAL FIX: Initializing vic_dev->sensor_attr with safe defaults ***\n");
     
+    /* CRITICAL: Clear entire structure first to prevent any garbage values */
+    memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
+    
     /* Initialize with typical MIPI sensor defaults based on GC2053 sensor */
     vic_dev->sensor_attr.name = "vic-default";
     vic_dev->sensor_attr.chip_id = 0x2053;  /* Default to GC2053 chip ID */
@@ -2261,6 +2264,22 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Set safe frame dimensions for VIC */
     vic_dev->width = 1920;   /* Default frame width */
     vic_dev->height = 1080;  /* Default frame height */
+    
+    /* CRITICAL FIX: Add memory barrier to ensure all initialization is visible */
+    wmb();
+    
+    /* CRITICAL FIX: Validate the initialized structure */
+    if (vic_dev->sensor_attr.dbus_type < 1 || vic_dev->sensor_attr.dbus_type > 5) {
+        pr_err("*** INITIALIZATION ERROR: Invalid dbus_type %d after initialization! ***\n",
+               vic_dev->sensor_attr.dbus_type);
+        vic_dev->sensor_attr.dbus_type = 2; /* Force MIPI */
+    }
+    
+    if (vic_dev->sensor_attr.data_type == 0) {
+        pr_err("*** INITIALIZATION ERROR: Invalid data_type 0x%x after initialization! ***\n",
+               vic_dev->sensor_attr.data_type);
+        vic_dev->sensor_attr.data_type = 0x2b; /* Force RAW10 */
+    }
     
     pr_info("*** vic_dev->sensor_attr initialized with defaults: ***\n");
     pr_info("  dbus_type=%d (2=MIPI), data_type=0x%x\n", 
