@@ -2035,6 +2035,7 @@ static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
 /* RACE CONDITION SAFE: Global initialization lock for subdev array access */
 static DEFINE_MUTEX(subdev_init_lock);
 static volatile bool subdev_init_complete = false;
+int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable);
 
 /* REMOVED: static tx_isp_video_link_stream implementation */
 /* This conflicted with the proper implementation in tx_isp_video.c */
