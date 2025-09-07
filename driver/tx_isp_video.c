@@ -44,7 +44,6 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable)
     
     pr_info("*** tx_isp_video_link_stream: %s streaming (MEMORY-SAFE) ***\n",
             enable ? "ENABLING" : "DISABLING");
-    mcp_log_info("tx_isp_video_link_stream: entry", enable);
     
     /* SAFE: Use proper struct member access instead of offset 0x38 */
     /* Iterate through 16 subdevices as per Binary Ninja reference */
@@ -69,7 +68,6 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable)
         
         /* Call s_stream function with proper tx_isp_subdev parameter */
         ret = video_ops->s_stream(sd, enable);
-        mcp_log_info("tx_isp_video_link_stream: subdev s_stream call", ret);
         
         if (ret == 0) {
             /* Success, continue to next */
@@ -80,7 +78,6 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable)
         } else {
             /* Error occurred, rollback previous successful calls */
             pr_err("tx_isp_video_link_stream: s_stream failed at subdev %d, ret=%d\n", i, ret);
-            mcp_log_info("tx_isp_video_link_stream: rollback starting", i);
             
             /* Rollback: disable all previously enabled subdevices */
             while (--i >= 0) {
@@ -97,13 +94,11 @@ int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable)
                 rollback_video_ops->s_stream(rollback_sd, enable ? 0 : 1);
             }
             
-            mcp_log_info("tx_isp_video_link_stream: rollback complete", ret);
             return ret;
         }
     }
     
     pr_info("*** tx_isp_video_link_stream: MEMORY-SAFE completion - no unaligned access risk ***\n");
-    mcp_log_info("tx_isp_video_link_stream: successful completion", 0);
     
     return 0;
 }
