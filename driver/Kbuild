@@ -17,7 +17,6 @@ tx-isp-t31-objs :=  $(DIR)/tx-isp-module.o \
                $(DIR)/tx_isp_fs.o \
                $(DIR)/tx_isp_tuning.o \
                $(DIR)/tx_isp_v4l2.o \
-               $(DIR)/tx_isp_video.o \
                $(DIR)/tx_isp_ae_zone.o \
                $(DIR)/tx_isp_subdev_mgmt.o \
                $(DIR)/tx_isp_vin.o
