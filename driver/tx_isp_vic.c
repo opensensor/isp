@@ -1962,8 +1962,30 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    /* CRITICAL FIX: Use safe struct member access instead of dangerous *($s1_1 + 0x128) */
+    /* *** CRITICAL FIX: Initialize VIC device with proper sensor attributes *** */
+    if (!vic_dev->sensor_attr.dbus_type || vic_dev->sensor_attr.dbus_type == 0) {
+        pr_info("*** CRITICAL: VIC sensor attributes not set - initializing for gc2053/MIPI ***\n");
+        vic_dev->sensor_attr.dbus_type = 2;        /* MIPI interface */
+        vic_dev->sensor_attr.data_type = 0x2b;     /* RAW10 format */
+        vic_dev->sensor_attr.total_width = 1920;   /* HD width */
+        vic_dev->sensor_attr.total_height = 1080;  /* HD height */
+        vic_dev->sensor_attr.integration_time = 0x465; /* Default integration time */
+        vic_dev->sensor_attr.again = 0x80;        /* Default analog gain */
+        vic_dev->sensor_attr.integration_time_apply_delay = 2; /* SONY mode delay */
+        vic_dev->sensor_attr.again_apply_delay = 2; /* SONY mode delay */
+        vic_dev->sensor_attr.wdr_cache = 0;       /* Linear mode */
+        pr_info("*** CRITICAL: VIC sensor attributes initialized - interface=%d, format=0x%x ***\n", 
+                vic_dev->sensor_attr.dbus_type, vic_dev->sensor_attr.data_type);
+    }
+
+    /* *** CRITICAL FIX: Validate and reset VIC state if corrupted *** */
     current_state = vic_dev->state;
+    if (current_state < 1 || current_state > 4) {
+        pr_err("*** CRITICAL: VIC state corrupted (%d) - resetting to INIT state ***\n", current_state);
+        vic_dev->state = 1; /* Reset to INIT */
+        current_state = 1;
+    }
+    
     pr_info("vic_core_s_stream: current_state=%d, enable=%d\n", current_state, enable);
 
     if (enable == 0) {
