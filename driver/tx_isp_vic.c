@@ -1292,11 +1292,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         timeout--;
     }
 
-    if (timeout == 0) {
-        pr_err("tx_isp_vic_start: VIC unlock timeout - still locked\n");
-        return -ETIMEDOUT;
-    }
-
     /* Binary Ninja: Enable VIC processing */
     writel(1, vic_regs + 0x0);
     wmb();
