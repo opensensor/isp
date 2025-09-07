@@ -29,6 +29,173 @@ static void tx_vic_enable_irq(void);
 /* Forward declaration for VIC start function */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);
 
+/* CRITICAL VALIDATION FRAMEWORK: Comprehensive error checking and validation */
+
+/* VIC validation error codes */
+#define VIC_VALIDATION_OK                    0
+#define VIC_VALIDATION_ERR_NULL_POINTER     -1
+#define VIC_VALIDATION_ERR_INVALID_RANGE    -2
+#define VIC_VALIDATION_ERR_CORRUPTED_DATA   -3
+#define VIC_VALIDATION_ERR_ALIGNMENT        -4
+#define VIC_VALIDATION_ERR_RACE_CONDITION   -5
+
+/* Comprehensive VIC device validation function */
+static int vic_validate_device_integrity(struct tx_isp_vic_device *vic_dev, const char *caller)
+{
+    if (!vic_dev) {
+        pr_err("*** VIC VALIDATION ERROR [%s]: NULL vic_dev pointer ***\n", caller);
+        return VIC_VALIDATION_ERR_NULL_POINTER;
+    }
+    
+    /* Validate pointer range - must be in kernel space */
+    if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_err("*** VIC VALIDATION ERROR [%s]: vic_dev pointer 0x%p out of valid range ***\n",
+               caller, vic_dev);
+        return VIC_VALIDATION_ERR_INVALID_RANGE;
+    }
+    
+    /* Validate structure alignment - critical for MIPS */
+    if ((unsigned long)vic_dev & 0x7) {
+        pr_err("*** VIC VALIDATION ERROR [%s]: vic_dev 0x%p not 8-byte aligned ***\n",
+               caller, vic_dev);
+        return VIC_VALIDATION_ERR_ALIGNMENT;
+    }
+    
+    /* Validate VIC register base */
+    if (vic_dev->vic_regs) {
+        if ((unsigned long)vic_dev->vic_regs < 0x10000000 ||
+            (unsigned long)vic_dev->vic_regs >= 0x20000000) {
+            pr_err("*** VIC VALIDATION ERROR [%s]: Invalid vic_regs 0x%p ***\n",
+                   caller, vic_dev->vic_regs);
+            return VIC_VALIDATION_ERR_INVALID_RANGE;
+        }
+    }
+    
+    return VIC_VALIDATION_OK;
+}
+
+/* Comprehensive sensor attribute validation function */
+static int vic_validate_sensor_attributes(struct tx_isp_sensor_attribute *attr, const char *caller)
+{
+    if (!attr) {
+        pr_err("*** SENSOR VALIDATION ERROR [%s]: NULL sensor attribute pointer ***\n", caller);
+        return VIC_VALIDATION_ERR_NULL_POINTER;
+    }
+    
+    /* Validate dbus_type - critical field that was getting corrupted */
+    if (attr->dbus_type < 1 || attr->dbus_type > 5 || attr->dbus_type == 2003736140) {
+        pr_err("*** SENSOR VALIDATION ERROR [%s]: Invalid dbus_type %d (expected 1-5) ***\n",
+               caller, attr->dbus_type);
+        return VIC_VALIDATION_ERR_CORRUPTED_DATA;
+    }
+    
+    /* Validate data_type */
+    if (attr->data_type == 0 || attr->data_type > 0x3000) {
+        pr_err("*** SENSOR VALIDATION ERROR [%s]: Invalid data_type 0x%x ***\n",
+               caller, attr->data_type);
+        return VIC_VALIDATION_ERR_CORRUPTED_DATA;
+    }
+    
+    /* Validate frame dimensions */
+    if (attr->total_width == 0 || attr->total_width > 8192 ||
+        attr->total_height == 0 || attr->total_height > 8192) {
+        pr_err("*** SENSOR VALIDATION ERROR [%s]: Invalid dimensions %dx%d ***\n",
+               caller, attr->total_width, attr->total_height);
+        return VIC_VALIDATION_ERR_CORRUPTED_DATA;
+    }
+    
+    /* Validate timing parameters */
+    if (attr->integration_time == 0 || attr->integration_time > 0x10000) {
+        pr_err("*** SENSOR VALIDATION ERROR [%s]: Invalid integration_time %d ***\n",
+               caller, attr->integration_time);
+        return VIC_VALIDATION_ERR_CORRUPTED_DATA;
+    }
+    
+    if (attr->integration_time_apply_delay == 0 || attr->integration_time_apply_delay > 10) {
+        pr_err("*** SENSOR VALIDATION ERROR [%s]: Invalid integration_time_apply_delay %d ***\n",
+               caller, attr->integration_time_apply_delay);
+        return VIC_VALIDATION_ERR_CORRUPTED_DATA;
+    }
+    
+    if (attr->again_apply_delay == 0 || attr->again_apply_delay > 10) {
+        pr_err("*** SENSOR VALIDATION ERROR [%s]: Invalid again_apply_delay %d ***\n",
+               caller, attr->again_apply_delay);
+        return VIC_VALIDATION_ERR_CORRUPTED_DATA;
+    }
+    
+    return VIC_VALIDATION_OK;
+}
+
+/* VIC state validation function */
+static int vic_validate_state_transition(struct tx_isp_vic_device *vic_dev, int new_state, const char *caller)
+{
+    if (!vic_dev) {
+        return VIC_VALIDATION_ERR_NULL_POINTER;
+    }
+    
+    int current_state = vic_dev->state;
+    
+    /* Valid state transitions: 1->2->3->4 and reverse */
+    bool valid_transition = false;
+    
+    switch (current_state) {
+        case 1: /* INIT */
+            valid_transition = (new_state == 2); /* -> READY */
+            break;
+        case 2: /* READY */
+            valid_transition = (new_state == 1 || new_state == 3); /* -> INIT or ACTIVE */
+            break;
+        case 3: /* ACTIVE */
+            valid_transition = (new_state == 2 || new_state == 4); /* -> READY or STREAMING */
+            break;
+        case 4: /* STREAMING */
+            valid_transition = (new_state == 3); /* -> ACTIVE */
+            break;
+        default:
+            pr_err("*** VIC STATE VALIDATION ERROR [%s]: Invalid current state %d ***\n",
+                   caller, current_state);
+            return VIC_VALIDATION_ERR_CORRUPTED_DATA;
+    }
+    
+    if (!valid_transition) {
+        pr_err("*** VIC STATE VALIDATION ERROR [%s]: Invalid transition %d -> %d ***\n",
+               caller, current_state, new_state);
+        return VIC_VALIDATION_ERR_CORRUPTED_DATA;
+    }
+    
+    return VIC_VALIDATION_OK;
+}
+
+/* Memory corruption detection function */
+static int vic_detect_memory_corruption(struct tx_isp_vic_device *vic_dev, const char *caller)
+{
+    int validation_result;
+    
+    /* Validate device structure */
+    validation_result = vic_validate_device_integrity(vic_dev, caller);
+    if (validation_result != VIC_VALIDATION_OK) {
+        pr_err("*** MEMORY CORRUPTION DETECTED [%s]: Device validation failed (%d) ***\n",
+               caller, validation_result);
+        return validation_result;
+    }
+    
+    /* Validate sensor attributes */
+    validation_result = vic_validate_sensor_attributes(&vic_dev->sensor_attr, caller);
+    if (validation_result != VIC_VALIDATION_OK) {
+        pr_err("*** MEMORY CORRUPTION DETECTED [%s]: Sensor attribute validation failed (%d) ***\n",
+               caller, validation_result);
+        return validation_result;
+    }
+    
+    /* Check for specific corruption patterns we've seen */
+    if (vic_dev->sensor_attr.dbus_type == 2003736140) {
+        pr_err("*** SPECIFIC CORRUPTION DETECTED [%s]: dbus_type has garbage value 2003736140 ***\n", caller);
+        return VIC_VALIDATION_ERR_CORRUPTED_DATA;
+    }
+    
+    return VIC_VALIDATION_OK;
+}
+
 /* vic_video_s_stream - EXACT Binary Ninja reference implementation */
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
@@ -924,7 +1091,7 @@ int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
 long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 
 
-/* tx_isp_vic_start - CRITICAL FIX: Memory corruption prevention with validation */
+/* tx_isp_vic_start - CRITICAL FIX: Memory corruption prevention with validation and race condition protection */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs = NULL;
@@ -934,18 +1101,24 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     struct clk *isp_clk, *cgu_isp_clk;
     void __iomem *cpm_regs;
     int ret;
-    struct tx_isp_sensor_attribute *sensor_attr;
+    struct tx_isp_sensor_attribute sensor_attr_copy;
+    unsigned long flags;
+    static DEFINE_MUTEX(vic_start_mutex); /* Prevent concurrent VIC starts */
 
-    pr_info("*** tx_isp_vic_start: MEMORY CORRUPTION FIX - Binary Ninja exact implementation ***\n");
+    pr_info("*** tx_isp_vic_start: MEMORY CORRUPTION & RACE CONDITION FIX ***\n");
 
     if (!vic_dev) {
         pr_err("*** CRITICAL: vic_dev is NULL ***\n");
         return -EINVAL;
     }
 
+    /* CRITICAL FIX: Prevent concurrent VIC start operations */
+    mutex_lock(&vic_start_mutex);
+
     /* CRITICAL FIX: Validate vic_dev structure integrity first */
     if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff001) {
         pr_err("*** MEMORY CORRUPTION: Invalid vic_dev pointer 0x%p ***\n", vic_dev);
+        mutex_unlock(&vic_start_mutex);
         return -EINVAL;
     }
 
@@ -953,75 +1126,82 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     vic_regs = ioremap(0x10023000, 0x1000);
     if (!vic_regs) {
         pr_err("*** CRITICAL ERROR: Failed to directly map VIC registers at 0x10023000 ***\n");
+        mutex_unlock(&vic_start_mutex);
         return -ENOMEM;
     }
 
-    /* CRITICAL FIX: Binary Ninja shows sensor_attr at offset 0x110 from vic_dev base */
-    /* Our structure has sensor_attr as a direct member, so we need to validate it */
-    sensor_attr = &vic_dev->sensor_attr;
+    /* CRITICAL RACE CONDITION FIX: Atomic sensor attribute access */
+    /* Create a local copy of sensor attributes under spinlock protection */
+    spin_lock_irqsave(&vic_dev->lock, flags);
     
     /* CRITICAL VALIDATION: Check sensor attribute structure integrity */
     pr_info("*** MEMORY CORRUPTION CHECK: Validating sensor attributes ***\n");
-    pr_info("vic_dev=%p, sensor_attr=%p\n", vic_dev, sensor_attr);
+    pr_info("vic_dev=%p, sensor_attr=%p\n", vic_dev, &vic_dev->sensor_attr);
     pr_info("sensor_attr offset from vic_dev: 0x%lx\n",
-           (unsigned long)sensor_attr - (unsigned long)vic_dev);
+           (unsigned long)&vic_dev->sensor_attr - (unsigned long)vic_dev);
     
-    /* CRITICAL FIX: Validate and correct corrupted sensor attributes */
-    if (sensor_attr->dbus_type == 0 || sensor_attr->dbus_type > 5 ||
-        sensor_attr->dbus_type == 2003736140) {
+    /* CRITICAL FIX: Make atomic copy of sensor attributes to prevent corruption during access */
+    memcpy(&sensor_attr_copy, &vic_dev->sensor_attr, sizeof(sensor_attr_copy));
+    
+    /* Release spinlock after copying */
+    spin_unlock_irqrestore(&vic_dev->lock, flags);
+    
+    /* CRITICAL FIX: Validate and correct corrupted sensor attributes in the atomic copy */
+    if (sensor_attr_copy.dbus_type == 0 || sensor_attr_copy.dbus_type > 5 ||
+        sensor_attr_copy.dbus_type == 2003736140) {
         pr_err("*** MEMORY CORRUPTION DETECTED: Invalid dbus_type %d ***\n",
-               sensor_attr->dbus_type);
+               sensor_attr_copy.dbus_type);
         pr_err("*** CORRUPTION FIX: Correcting dbus_type to MIPI (2) ***\n");
-        sensor_attr->dbus_type = 2; /* MIPI interface */
+        sensor_attr_copy.dbus_type = 2; /* MIPI interface */
     }
     
-    if (sensor_attr->data_type == 0) {
+    if (sensor_attr_copy.data_type == 0) {
         pr_err("*** MEMORY CORRUPTION DETECTED: Invalid data_type 0x%x ***\n",
-               sensor_attr->data_type);
+               sensor_attr_copy.data_type);
         pr_err("*** CORRUPTION FIX: Correcting data_type to RAW10 (0x2b) ***\n");
-        sensor_attr->data_type = 0x2b; /* RAW10 */
+        sensor_attr_copy.data_type = 0x2b; /* RAW10 */
     }
     
     /* Additional validation for other critical fields */
-    if (sensor_attr->total_width == 0 || sensor_attr->total_width > 8192) {
+    if (sensor_attr_copy.total_width == 0 || sensor_attr_copy.total_width > 8192) {
         pr_err("*** MEMORY CORRUPTION DETECTED: Invalid total_width %d ***\n",
-               sensor_attr->total_width);
-        sensor_attr->total_width = 2200; /* GC2053 default */
+               sensor_attr_copy.total_width);
+        sensor_attr_copy.total_width = 2200; /* GC2053 default */
     }
     
-    if (sensor_attr->total_height == 0 || sensor_attr->total_height > 8192) {
+    if (sensor_attr_copy.total_height == 0 || sensor_attr_copy.total_height > 8192) {
         pr_err("*** MEMORY CORRUPTION DETECTED: Invalid total_height %d ***\n",
-               sensor_attr->total_height);
-        sensor_attr->total_height = 1125; /* GC2053 default */
+               sensor_attr_copy.total_height);
+        sensor_attr_copy.total_height = 1125; /* GC2053 default */
     }
     
-    if (sensor_attr->integration_time == 0) {
+    if (sensor_attr_copy.integration_time == 0) {
         pr_err("*** MEMORY CORRUPTION DETECTED: Invalid integration_time %d ***\n",
-               sensor_attr->integration_time);
-        sensor_attr->integration_time = 0x465; /* Safe default */
+               sensor_attr_copy.integration_time);
+        sensor_attr_copy.integration_time = 0x465; /* Safe default */
     }
     
-    if (sensor_attr->integration_time_apply_delay == 0) {
+    if (sensor_attr_copy.integration_time_apply_delay == 0) {
         pr_err("*** MEMORY CORRUPTION DETECTED: Invalid integration_time_apply_delay %d ***\n",
-               sensor_attr->integration_time_apply_delay);
-        sensor_attr->integration_time_apply_delay = 2; /* Standard delay */
+               sensor_attr_copy.integration_time_apply_delay);
+        sensor_attr_copy.integration_time_apply_delay = 2; /* Standard delay */
     }
     
-    if (sensor_attr->again_apply_delay == 0) {
+    if (sensor_attr_copy.again_apply_delay == 0) {
         pr_err("*** MEMORY CORRUPTION DETECTED: Invalid again_apply_delay %d ***\n",
-               sensor_attr->again_apply_delay);
-        sensor_attr->again_apply_delay = 2; /* Standard delay */
+               sensor_attr_copy.again_apply_delay);
+        sensor_attr_copy.again_apply_delay = 2; /* Standard delay */
     }
 
-    /* Now use the validated/corrected values */
-    interface_type = sensor_attr->dbus_type;
-    sensor_format = sensor_attr->data_type;
+    /* Now use the validated/corrected values from the atomic copy */
+    interface_type = sensor_attr_copy.dbus_type;
+    sensor_format = sensor_attr_copy.data_type;
     
     pr_info("*** VALIDATED SENSOR ATTRIBUTES: interface=%d, format=0x%x ***\n",
             interface_type, sensor_format);
     pr_info("*** Dimensions: %dx%d, integration_time=%d ***\n",
-            sensor_attr->total_width, sensor_attr->total_height,
-            sensor_attr->integration_time);
+            sensor_attr_copy.total_width, sensor_attr_copy.total_height,
+            sensor_attr_copy.integration_time);
 
     /* *** ENABLE CLOCKS USING LINUX CLOCK FRAMEWORK *** */
     pr_info("*** STREAMING: Enabling ISP clocks using Linux Clock Framework ***\n");
@@ -1085,8 +1265,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* DVP interface - Binary Ninja: if ($v0 == 1) */
         pr_info("tx_isp_vic_start: DVP interface configuration (type 1)\n");
 
-        /* Binary Ninja: Check flags match */
-        if (vic_dev->sensor_attr.dbus_type != interface_type) {
+        /* Binary Ninja: Check flags match - use atomic copy */
+        if (sensor_attr_copy.dbus_type != interface_type) {
             pr_warn("tx_isp_vic_start: DVP flags mismatch\n");
             writel(0xa000a, vic_regs + 0x1a4);
         } else {
@@ -1104,7 +1284,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             else if (sensor_format == 7) stride_multiplier = 0x10;
         }
 
-        u32 buffer_calc = stride_multiplier * vic_dev->sensor_attr.integration_time;
+        u32 buffer_calc = stride_multiplier * sensor_attr_copy.integration_time;
         u32 buffer_size = (buffer_calc >> 5) + ((buffer_calc & 0x1f) ? 1 : 0);
         writel(buffer_size, vic_regs + 0x100);
         writel(2, vic_regs + 0xc);
@@ -1113,7 +1293,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
 
         /* Binary Ninja: DVP timing and WDR configuration */
-        u32 wdr_mode = vic_dev->sensor_attr.wdr_cache;
+        u32 wdr_mode = sensor_attr_copy.wdr_cache;
         u32 frame_mode = (wdr_mode == 0) ? 0x4440 : (wdr_mode == 1) ? 0x4140 : 0x4240;
         writel(frame_mode, vic_regs + 0x1ac);
         writel(frame_mode, vic_regs + 0x1a8);
@@ -1127,7 +1307,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
 
         /* *** CRITICAL: DVP unlock key - Binary Ninja exact *** */
-        u32 unlock_key = (vic_dev->sensor_attr.integration_time_apply_delay << 4) | vic_dev->sensor_attr.again_apply_delay;
+        u32 unlock_key = (sensor_attr_copy.integration_time_apply_delay << 4) | sensor_attr_copy.again_apply_delay;
         writel(unlock_key, vic_regs + 0x1a0);
         wmb();
         pr_info("tx_isp_vic_start: DVP unlock key 0x1a0 = 0x%x\n", unlock_key);
@@ -1144,16 +1324,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         u32 verify_mipi_ctrl = readl(vic_regs + 0xc);
         pr_info("MCP_LOG: MIPI control register write - wrote 3 to 0xc, readback = 0x%x\n", verify_mipi_ctrl);
 
-        /* *** EXACT Binary Ninja MIPI format handling *** */
+        /* *** EXACT Binary Ninja MIPI format handling - using atomic copy *** */
         u32 mipi_config = 0x20000; /* Default value: &data_20000 */
 
         /* Binary Ninja format switch based on sensor_format (*(arg1 + 0xe4)) */
         if (sensor_format >= 0x300e) {
             /* Binary Ninja label_10928: Standard MIPI RAW path */
-            u32 dbus_type_check = vic_dev->sensor_attr.dbus_type;
+            u32 dbus_type_check = sensor_attr_copy.dbus_type;
 
             /* Binary Ninja: Check integration_time_apply_delay for SONY mode */
-            if (vic_dev->sensor_attr.integration_time_apply_delay != 2) {
+            if (sensor_attr_copy.integration_time_apply_delay != 2) {
                 /* Standard MIPI mode */
                 mipi_config = 0x20000;  /* &data_20000 */
                 if (dbus_type_check == 0) {
@@ -1162,6 +1342,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                     mipi_config = 0x120000; /* Alternative MIPI mode */
                 } else {
                     pr_err("tx_isp_vic_start: VIC failed to config DVP mode!(10bits-sensor)\n");
+                    mutex_unlock(&vic_start_mutex);
                     return -EINVAL;
                 }
             } else {
@@ -1173,6 +1354,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                     mipi_config = 0x130000; /* SONY alternative */
                 } else {
                     pr_err("tx_isp_vic_start: VIC failed to config DVP SONY mode!(10bits-sensor)\n");
+                    mutex_unlock(&vic_start_mutex);
                     return -EINVAL;
                 }
             }
@@ -1189,6 +1371,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                 } else if (sensor_format >= 0x1009) {
                     if ((sensor_format - 0x2002) >= 4) {
                         pr_err("tx_isp_vic_start: VIC do not support this format %d\n", sensor_format);
+                        mutex_unlock(&vic_start_mutex);
                         return -EINVAL;
                     }
                     mipi_config = 0xc0000;  /* &data_c0000 */
@@ -1205,22 +1388,22 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             }
         }
 
-        /* Binary Ninja: Additional configuration flags */
-        if (vic_dev->sensor_attr.total_width == 2) {
+        /* Binary Ninja: Additional configuration flags - using atomic copy */
+        if (sensor_attr_copy.total_width == 2) {
             mipi_config |= 2;
         }
-        if (vic_dev->sensor_attr.total_height == 2) {
+        if (sensor_attr_copy.total_height == 2) {
             mipi_config |= 1;
         }
 
-        /* Binary Ninja: MIPI timing registers */
-        u32 integration_time = vic_dev->sensor_attr.integration_time;
+        /* Binary Ninja: MIPI timing registers - using atomic copy */
+        u32 integration_time = sensor_attr_copy.integration_time;
         if (integration_time != 0) {
             writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
             wmb();
         }
 
-        u32 again_value = vic_dev->sensor_attr.again;
+        u32 again_value = sensor_attr_copy.again;
         if (again_value != 0) {
             writel(again_value, vic_regs + 0x3c);
             wmb();
@@ -1230,8 +1413,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
         wmb();
 
-        /* Binary Ninja: VIC register 0x10 with timing flags */
-        u32 final_mipi_config = (vic_dev->sensor_attr.total_width << 31) | mipi_config;
+        /* Binary Ninja: VIC register 0x10 with timing flags - using atomic copy */
+        u32 final_mipi_config = (sensor_attr_copy.total_width << 31) | mipi_config;
         writel(final_mipi_config, vic_regs + 0x10);
         wmb();
 
@@ -1316,15 +1499,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_err("*** MEMORY CORRUPTION DETECTED: Expected 1-5, got %d ***\n", interface_type);
         pr_err("*** Checking sensor attribute structure integrity ***\n");
         
-        /* Debug the sensor attribute structure */
+        /* Debug the sensor attribute structure using atomic copy */
         pr_err("vic_dev=%p, sensor_attr=%p\n", vic_dev, &vic_dev->sensor_attr);
-        pr_err("sensor_attr offset from vic_dev: 0x%lx\n", 
+        pr_err("sensor_attr offset from vic_dev: 0x%lx\n",
                (unsigned long)&vic_dev->sensor_attr - (unsigned long)vic_dev);
-        pr_err("dbus_type value: %d (expected 1-5)\n", vic_dev->sensor_attr.dbus_type);
-        pr_err("data_type value: 0x%x\n", vic_dev->sensor_attr.data_type);
-        pr_err("total_width: %d, total_height: %d\n", 
-               vic_dev->sensor_attr.total_width, vic_dev->sensor_attr.total_height);
+        pr_err("dbus_type value: %d (expected 1-5)\n", sensor_attr_copy.dbus_type);
+        pr_err("data_type value: 0x%x\n", sensor_attr_copy.data_type);
+        pr_err("total_width: %d, total_height: %d\n",
+               sensor_attr_copy.total_width, sensor_attr_copy.total_height);
         
+        mutex_unlock(&vic_start_mutex);
         return -EINVAL;
     }
 
@@ -1354,7 +1538,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
 
     /* Binary Ninja: Log WDR mode */
-    const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
+    const char *wdr_msg = (sensor_attr_copy.wdr_cache != 0) ?
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
@@ -1368,9 +1552,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
 
     /* MCP LOG: VIC start completed successfully */
-    pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d, interface=%d\n", 
+    pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d, interface=%d\n",
             vic_start_ok, interface_type);
 
+    /* CRITICAL FIX: Release mutex before returning */
+    mutex_unlock(&vic_start_mutex);
     return 0;
 }
 
