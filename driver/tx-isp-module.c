@@ -4154,7 +4154,7 @@ static int tx_isp_init(void)
         pr_info("*** VIC registers not yet mapped, attempting direct mapping ***\n");
         
         /* Direct map VIC registers if not already available */
-        ourISPdev->vic_regs = ioremap(0x133e0000, 0x10000);  /* VIC base from /proc/iomem */
+        ourISPdev->vic_regs = ioremap(0x10023000, 0x1000);  /* VIC base from /proc/iomem */
         if (!ourISPdev->vic_regs) {
             pr_err("Failed to directly map VIC registers\n");
             goto err_cleanup_platforms;
@@ -4210,9 +4210,8 @@ static int tx_isp_init(void)
         vic_dev->sd.ops = &vic_subdev_ops;
         vic_dev->sd.isp = (void*)ourISPdev;
         vic_dev->sd.vin_state = TX_ISP_MODULE_INIT;
-        vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);  // VIC base from /proc/iomem
-        ourISPdev->vic_regs = vic_dev->vic_regs;
-        
+        vic_dev->vic_regs = ioremap(0x10023000, 0x1000);  // VIC base from /proc/iomem
+
         /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
         ourISPdev->subdevs[0] = &vic_dev->sd;
         
