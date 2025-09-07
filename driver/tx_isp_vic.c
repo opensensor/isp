@@ -2021,9 +2021,7 @@ int vic_core_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     }
     
     pr_info("VIC s_stream: enable=%d, current_state=%d, vic_start_ok=%d\n", enable, vic_dev->state, vic_start_ok);
-    
-    mutex_lock(&vic_dev->state_lock);
-    
+
     if (enable) {
         /* Start VIC streaming - CRITICAL FIX: Call tx_isp_vic_start FIRST */
         if (vic_dev->state != 4) { /* Not already streaming */
@@ -2068,7 +2066,6 @@ int vic_core_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     }
 
 unlock_exit:
-    mutex_unlock(&vic_dev->state_lock);
     return ret;
 }
 
