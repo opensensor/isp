@@ -2122,21 +2122,47 @@ EXPORT_SYMBOL(vic_chardev_ioctl);
 static struct tx_isp_vic_device *dump_vsd = NULL;
 static void *test_addr = NULL;
 
-/* tx_isp_vic_probe - Matching binary flow with safe struct member access */
+/* tx_isp_vic_probe - CRITICAL NULL POINTER CRASH FIX */
 int tx_isp_vic_probe(struct platform_device *pdev)
 {
     struct tx_isp_vic_device *vic_dev;
     struct tx_isp_subdev *sd;
     struct resource *res;
+    void __iomem *vic_base;
+    int irq;
     int ret;
 
-    pr_info("*** tx_isp_vic_probe: Starting VIC device probe ***\n");
+    pr_info("*** tx_isp_vic_probe: Starting VIC device probe - NULL POINTER CRASH FIX ***\n");
+
+    /* Get platform resource FIRST to map VIC registers */
+    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+    if (!res) {
+        pr_err("No VIC memory resource found\n");
+        return -ENODEV;
+    }
+
+    /* CRITICAL FIX: Map VIC registers - this prevents the NULL pointer crash! */
+    if (!request_mem_region(res->start, resource_size(res), "tx-isp-vic")) {
+        pr_err("VIC memory region already in use\n");
+        return -EBUSY;
+    }
+
+    vic_base = ioremap(res->start, resource_size(res));
+    if (!vic_base) {
+        pr_err("Failed to map VIC registers\n");
+        release_mem_region(res->start, resource_size(res));
+        return -ENOMEM;
+    }
+
+    pr_info("*** CRITICAL FIX: VIC registers mapped at %p (phys=0x%08x, size=0x%x) ***\n", 
+            vic_base, (u32)res->start, (u32)resource_size(res));
 
     /* Binary allocates 0x21c (540) bytes, but we use proper struct size */
     vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
     if (!vic_dev) {
         pr_err("Failed to allocate vic device\n");
-        return -ENOMEM;  /* Binary returns -1 but -ENOMEM is cleaner */
+        ret = -ENOMEM;
+        goto err_unmap;
     }
 
     /* Binary explicitly zeros the structure */
@@ -2145,8 +2171,12 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Get subdev pointer */
     sd = &vic_dev->sd;
 
-    /* Get platform resource (binary uses this for error message) */
-    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+    /* CRITICAL FIX: Set VIC register base in BOTH locations that interrupt handler needs! */
+    vic_dev->vic_regs = vic_base;  /* For vic_dev->vic_regs access */
+    sd->base = vic_base;           /* For Binary Ninja *(arg1 + 0xb8) access in IRQ handler */
+
+    pr_info("*** CRITICAL FIX: VIC register bases set - vic_dev->vic_regs=%p, sd->base=%p ***\n",
+            vic_dev->vic_regs, sd->base);
 
     /* CRITICAL: Initialize subdev FIRST (matches binary flow) */
     ret = tx_isp_subdev_init(pdev, sd, &vic_subdev_ops);
@@ -2154,9 +2184,13 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         pr_err("Failed to init isp module(%d.%d)\n",
                res ? MAJOR(res->start) : 0,
                res ? MINOR(res->start) : 0);
-        kfree(vic_dev);
-        return -EFAULT;  /* Binary returns -12 (EFAULT) */
+        ret = -EFAULT;  /* Binary returns -12 (EFAULT) */
+        goto err_free_vic;
     }
+
+    /* CRITICAL FIX: Set subdev data so tx_isp_get_subdevdata() works in interrupt handler */
+    tx_isp_set_subdevdata(sd, vic_dev);
+    pr_info("*** CRITICAL FIX: Set subdev data - sd=%p points to vic_dev=%p ***\n", sd, vic_dev);
 
     /* Set platform driver data after successful init */
     platform_set_drvdata(pdev, vic_dev);
@@ -2167,10 +2201,36 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Initialize synchronization primitives (binary order) */
     spin_lock_init(&vic_dev->lock);
     mutex_init(&vic_dev->mlock);
+    mutex_init(&vic_dev->state_lock);
+    spin_lock_init(&vic_dev->buffer_mgmt_lock);  /* For QBUF operations */
     init_completion(&vic_dev->frame_complete);
+
+    /* Initialize list heads for buffer management */
+    INIT_LIST_HEAD(&vic_dev->queue_head);
+    INIT_LIST_HEAD(&vic_dev->done_head);
+    INIT_LIST_HEAD(&vic_dev->free_head);
 
     /* Set initial state to 1 (matches binary) */
     vic_dev->state = 1;
+
+    /* CRITICAL FIX: Register interrupt handler with proper dev_id */
+    irq = platform_get_irq(pdev, 0);
+    if (irq < 0) {
+        pr_err("Failed to get VIC IRQ\n");
+        ret = irq;
+        goto err_deinit_subdev;
+    }
+
+    /* CRITICAL: Pass sd as dev_id so interrupt handler can access both sd and vic_dev */
+    ret = request_irq(irq, isp_vic_interrupt_service_routine, 
+                      IRQF_SHARED, "tx-isp-vic", sd);
+    if (ret) {
+        pr_err("Failed to register VIC interrupt handler: %d\n", ret);
+        goto err_deinit_subdev;
+    }
+
+    pr_info("*** CRITICAL FIX: VIC interrupt handler registered - IRQ %d, dev_id=sd=%p ***\n", 
+            irq, sd);
 
     /* Store global reference (binary uses 'dump_vsd' global) */
     dump_vsd = vic_dev;
@@ -2179,13 +2239,34 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Binary points to offset 0x80 in the structure */
     test_addr = &vic_dev->sensor_attr;  /* Or another member around offset 0x80 */
 
-    pr_info("*** tx_isp_vic_probe: VIC device initialized successfully ***\n");
+    pr_info("*** tx_isp_vic_probe: VIC device initialized successfully - NULL POINTER CRASH FIXED ***\n");
     pr_info("VIC device: vic_dev=%p, size=%zu\n", vic_dev, sizeof(struct tx_isp_vic_device));
-    pr_info("  sd: %p\n", sd);
+    pr_info("  sd: %p (base=%p)\n", sd, sd->base);
+    pr_info("  vic_regs: %p\n", vic_dev->vic_regs);
     pr_info("  state: %d\n", vic_dev->state);
+    pr_info("  IRQ: %d\n", irq);
     pr_info("  test_addr: %p\n", test_addr);
 
+    /* Verify critical pointers that interrupt handler needs */
+    if (!sd->base || !vic_dev->vic_regs) {
+        pr_err("*** CRITICAL ERROR: VIC register bases not set properly! ***\n");
+        ret = -EFAULT;
+        goto err_free_irq;
+    }
+
+    pr_info("*** SUCCESS: All critical pointers validated - ready for interrupts ***\n");
     return 0;
+
+err_free_irq:
+    free_irq(irq, sd);
+err_deinit_subdev:
+    tx_isp_subdev_deinit(sd);
+err_free_vic:
+    kfree(vic_dev);
+err_unmap:
+    iounmap(vic_base);
+    release_mem_region(res->start, resource_size(res));
+    return ret;
 }
 
 /* VIC remove function */
