@@ -2983,16 +2983,25 @@ int tx_isp_core_probe(struct platform_device *pdev)
             }
 
 cleanup_channels:
-    /* Clean up temporary channel array */
-    kfree(channel_array);
-    tx_isp_subdev_deinit(isp_dev);
-    result = -ENOMEM;
+            kfree(channel_array);
+        } else {
+            ISP_ERROR("tx_isp_core_probe: Failed to allocate output channels");
+        }
+
+        tx_isp_subdev_deinit(isp_dev);
+        result = -ENOMEM;
+    } else {
+        /* Error message with platform data info */
+        uint32_t platform_id = platform_data ? *((uint32_t*)((char*)platform_data + 2)) : 0;
+        ISP_ERROR("tx_isp_core_probe: Failed to init isp module(%d.%d)", platform_id, platform_id);
+        result = -ENODEV;
+    }
 
     /* Cleanup on failure */
     if (isp_dev->subdev_list) {
         kfree(isp_dev->subdev_list);
     }
-    kfree(core_dev);
+    kfree(isp_dev);
     return result;
 }
 
