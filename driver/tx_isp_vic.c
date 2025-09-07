@@ -1897,7 +1897,7 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
 }
 
 /* CRITICAL MISSING FUNCTION: vic_core_s_stream - EXACT Binary Ninja implementation */
-static int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
+int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
     int current_state;
