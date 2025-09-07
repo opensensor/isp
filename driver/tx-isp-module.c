@@ -3380,6 +3380,126 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("*** SENSOR ADDED TO LIST: index=%d name=%s ***\n", 
                        reg_sensor->index, reg_sensor->name);
             }
+            
+            /* *** CRITICAL: Create I2C device for sensor *** */
+            pr_info("*** CREATING I2C DEVICE FOR SENSOR %s ***\n", sensor_name);
+            
+            /* Get I2C adapter - try i2c-0 first */
+            i2c_adapter = i2c_get_adapter(0);
+            if (!i2c_adapter) {
+                pr_warn("I2C adapter 0 not found, trying adapter 1\n");
+                i2c_adapter = i2c_get_adapter(1);
+            }
+            
+            if (i2c_adapter) {
+                /* Set up I2C board info for the sensor */
+                memset(&board_info, 0, sizeof(board_info));
+                strncpy(board_info.type, sensor_name, I2C_NAME_SIZE - 1);
+                board_info.type[I2C_NAME_SIZE - 1] = '\0';
+                
+                /* Common sensor I2C addresses - try GC2053 first */
+                if (strncmp(sensor_name, "gc2053", 6) == 0) {
+                    board_info.addr = 0x37; /* GC2053 I2C address */
+                } else if (strncmp(sensor_name, "imx307", 6) == 0) {
+                    board_info.addr = 0x1a; /* IMX307 I2C address */
+                } else {
+                    board_info.addr = 0x37; /* Default address */
+                }
+                
+                pr_info("*** CREATING I2C CLIENT: name=%s, addr=0x%x, adapter=%s ***\n",
+                       board_info.type, board_info.addr, i2c_adapter->name);
+                
+                /* Create the I2C device */
+                client = isp_i2c_new_subdev_board(i2c_adapter, &board_info);
+                if (client) {
+                    pr_info("*** SUCCESS: I2C CLIENT CREATED - SENSOR PROBE SHOULD BE CALLED! ***\n");
+                    pr_info("*** I2C CLIENT: %s at 0x%x on %s ***\n", 
+                           client->name, client->addr, client->adapter->name);
+                           
+                    /* *** CRITICAL FIX: CREATE ACTUAL SENSOR STRUCTURE AND CONNECT TO ISP *** */
+                    pr_info("*** CREATING ACTUAL SENSOR STRUCTURE FOR %s ***\n", sensor_name);
+                    
+                    /* SAFE ALLOCATION: Allocate sensor structure with proper error checking */
+                    sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
+                    if (!sensor) {
+                        pr_err("*** CRITICAL ERROR: Failed to allocate sensor structure (size=%zu) ***\n", sizeof(struct tx_isp_sensor));
+                        return -ENOMEM;
+                    }
+                    pr_info("*** SENSOR STRUCTURE ALLOCATED: %p (size=%zu bytes) ***\n", sensor, sizeof(struct tx_isp_sensor));
+                    
+                    /* SAFE INITIALIZATION: Initialize sensor info first */
+                    memset(&sensor->info, 0, sizeof(sensor->info));
+                    strncpy(sensor->info.name, sensor_name, sizeof(sensor->info.name) - 1);
+                    sensor->info.name[sizeof(sensor->info.name) - 1] = '\0';
+                    
+                    /* SAFE ALLOCATION: Allocate sensor attributes with proper error checking */
+                    sensor->video.attr = kzalloc(sizeof(struct tx_isp_sensor_attribute), GFP_KERNEL);
+                    if (!sensor->video.attr) {
+                        pr_err("*** CRITICAL ERROR: Failed to allocate sensor attributes (size=%zu) ***\n", sizeof(struct tx_isp_sensor_attribute));
+                        kfree(sensor);
+                        return -ENOMEM;
+                    }
+                    pr_info("*** SENSOR ATTRIBUTES ALLOCATED: %p (size=%zu bytes) ***\n", sensor->video.attr, sizeof(struct tx_isp_sensor_attribute));
+                    
+                    /* SAFE INITIALIZATION: Set up basic sensor attributes for GC2053 */
+                    if (strncmp(sensor_name, "gc2053", 6) == 0) {
+                        sensor->video.attr->chip_id = 0x2053;
+                        sensor->video.attr->total_width = 1920;
+                        sensor->video.attr->total_height = 1080;
+                        sensor->video.attr->dbus_type = 2; // MIPI interface (fixed from DVP)
+                        sensor->video.attr->integration_time = 1000;
+                        sensor->video.attr->max_again = 0x40000;
+                        sensor->video.attr->name = sensor_name; /* Safe pointer assignment */
+                        pr_info("*** GC2053 SENSOR ATTRIBUTES CONFIGURED (MIPI interface) ***\n");
+                    }
+                    
+                    /* SAFE INITIALIZATION: Initialize subdev structure */
+                    memset(&sensor->sd, 0, sizeof(sensor->sd));
+                    sensor->sd.isp = (void *)isp_dev;
+                    sensor->sd.vin_state = TX_ISP_MODULE_INIT;
+                    sensor->index = 0;
+                    sensor->type = 0;
+                    INIT_LIST_HEAD(&sensor->list);
+                    
+                    /* *** CRITICAL FIX: SET UP SENSOR SUBDEV OPS STRUCTURE *** */
+                    pr_info("*** CRITICAL: SETTING UP SENSOR SUBDEV OPS STRUCTURE ***\n");
+                    sensor->sd.ops = &sensor_subdev_ops;
+                    pr_info("*** SENSOR SUBDEV OPS CONFIGURED: core=%p, video=%p, s_stream=%p ***\n",
+                            sensor->sd.ops->core, sensor->sd.ops->video, 
+                            sensor->sd.ops->video ? sensor->sd.ops->video->s_stream : NULL);
+                    
+                    pr_info("*** SENSOR SUBDEV INITIALIZED WITH WORKING OPS STRUCTURE ***\n");
+                    
+                    /* SAFE CONNECTION: Verify ISP device before connecting */
+                    if (!ourISPdev) {
+                        pr_err("*** CRITICAL ERROR: ourISPdev is NULL! ***\n");
+                        kfree(sensor->video.attr);
+                        kfree(sensor);
+                        return -ENODEV;
+                    }
+                    
+                    /* *** CRITICAL: CONNECT SENSOR TO ISP DEVICE *** */
+                    pr_info("*** CONNECTING SENSOR TO ISP DEVICE ***\n");
+                    pr_info("Before: ourISPdev=%p, ourISPdev->sensor=%p\n", ourISPdev, ourISPdev->sensor);
+                    
+                    ourISPdev->sensor = sensor;
+                    
+                    pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor, sensor->info.name);
+                    pr_info("*** SENSOR SUCCESSFULLY CONNECTED TO ISP DEVICE! ***\n");
+                    
+                    /* SAFE UPDATE: Update registry with actual subdev pointer */
+                    if (reg_sensor) {
+                        reg_sensor->subdev = &sensor->sd;
+                        pr_info("*** SENSOR REGISTRY UPDATED ***\n");
+                    }
+                } else {
+                    pr_err("*** FAILED TO CREATE I2C CLIENT FOR %s ***\n", sensor_name);
+                }
+                
+                i2c_put_adapter(i2c_adapter);
+            } else {
+                pr_err("*** NO I2C ADAPTER AVAILABLE FOR SENSOR %s ***\n", sensor_name);
+            }
         }
         
         return final_result;
