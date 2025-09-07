@@ -1754,16 +1754,31 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     
     pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja implementation - CRASH FIX ***\n");
     
-    /* CRITICAL CRASH FIX: Remove validation that was incorrectly rejecting valid VIC base */
-    /* Binary Ninja reference does NO validation - it directly accesses registers */
-    
-    /* Binary Ninja EXACT: void __iomem *vic_base = *(arg1 + 0xb8) */
+    /* CRITICAL CRASH FIX: Handle different VIC devices by using direct mapping if vic_regs is NULL */
     vic_base = vic_dev->vic_regs;
+    
+    /* CRITICAL FIX: If vic_regs is NULL, use direct ioremap like tx_isp_vic_start does */
+    if (!vic_base) {
+        pr_info("*** CRITICAL FIX: vic_dev->vic_regs is NULL, using direct VIC mapping ***\n");
+        vic_base = ioremap(0x10023000, 0x1000);
+        if (!vic_base) {
+            pr_err("*** CRITICAL ERROR: Failed to map VIC registers directly ***\n");
+            return NULL;
+        }
+        pr_info("*** CORRUPTION FIX: VIC registers directly mapped at %p ***\n", vic_base);
+    }
     
     /* Binary Ninja EXACT: int32_t $v1 = *(arg1 + 0xdc) */
     width = vic_dev->width;
     /* Binary Ninja: height from *(arg1 + 0xe0) */
     height = vic_dev->height;
+    
+    /* CRITICAL FIX: Use safe default dimensions if corrupted */
+    if (width == 0 || height == 0) {
+        pr_info("*** DIMENSION FIX: Using safe 1920x1080 defaults instead of %dx%d ***\n", width, height);
+        width = 1920;
+        height = 1080;
+    }
     
     pr_info("vic_pipo_mdma_enable: vic_base=%p, dimensions=%dx%d\n", 
             vic_base, width, height);

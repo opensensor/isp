@@ -91,7 +91,6 @@ static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link
 static int tx_isp_configure_default_links(struct tx_isp_dev *isp);
 static int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
 static int tx_isp_csi_device_init(struct tx_isp_dev *isp);
-static int tx_isp_vic_device_init(struct tx_isp_dev *isp);
 static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
 
@@ -600,34 +599,6 @@ static int tx_isp_csi_device_init(struct tx_isp_dev *isp)
     }
     
     pr_info("CSI device initialized\n");
-    return 0;
-}
-
-/* Initialize VIC device */
-static int tx_isp_vic_device_init(struct tx_isp_dev *isp)
-{
-    struct vic_device *vic_dev;
-    
-    pr_info("Initializing VIC device\n");
-    
-    /* Allocate VIC device structure if not already present */
-    if (!isp->vic_dev) {
-        vic_dev = kzalloc(sizeof(struct vic_device), GFP_KERNEL);
-        if (!vic_dev) {
-            pr_err("Failed to allocate VIC device\n");
-            return -ENOMEM;
-        }
-        
-        /* Initialize VIC device structure */
-        vic_dev->state = 1; /* INIT state */
-        mutex_init(&vic_dev->state_lock);
-        spin_lock_init(&vic_dev->lock);
-        init_completion(&vic_dev->frame_complete);
-        
-        isp->vic_dev = vic_dev;
-    }
-    
-    pr_info("VIC device initialized\n");
     return 0;
 }
 
