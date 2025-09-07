@@ -2858,7 +2858,8 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 
                 /* Set channel ID safely */
                 channel->id = i;
-                channel->isp_dev = isp_dev;
+                channel->channel_id = i;
+                channel->dev = &pdev->dev;
                 
                 /* Enable all channels for testing */
                 channel->enabled = true;
@@ -2880,9 +2881,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
                 /* Initialize channel state safely */
                 channel->state = 1;  /* INIT state */
-                spin_lock_init(&channel->lock);
-                channel->event_handler = ispcore_pad_event_handle;
-                channel->event_data = channel;
+                spin_lock_init(&channel->state_lock);
+                channel->event_hdlr = (struct isp_event_handler *)ispcore_pad_event_handle;
+                channel->event_priv = channel;
 
                 ISP_INFO("tx_isp_core_probe: Channel %d initialized: %dx%d", 
                          i, channel->width, channel->height);
