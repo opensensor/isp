@@ -4271,23 +4271,33 @@ static int tx_isp_init(void)
         goto err_cleanup_base;
     }
 
+    /* *** CRITICAL: Initialize VIC platform driver FIRST to ensure registers are mapped *** */
+    ret = tx_isp_vic_platform_init();
+    if (ret) {
+        pr_err("Failed to initialize VIC platform driver: %d\n", ret);
+        goto err_cleanup_platforms;
+    }
+    pr_info("*** VIC PLATFORM DRIVER INITIALIZED - VIC REGISTERS NOW AVAILABLE ***\n");
+    
     /* *** CRITICAL: Initialize FS platform driver (creates /proc/jz/isp/isp-fs like reference) *** */
     ret = tx_isp_fs_platform_init();
     if (ret) {
         pr_err("Failed to initialize FS platform driver: %d\n", ret);
+        tx_isp_vic_platform_exit();  /* Clean up VIC driver */
         goto err_cleanup_platforms;
     }
     pr_info("*** FS PLATFORM DRIVER INITIALIZED - /proc/jz/isp/isp-fs SHOULD NOW EXIST ***\n");
 
-    /* *** CRITICAL: Initialize subdev platform drivers (CSI, VIC, VIN, CORE) *** */
-    /* NOTE: VIC driver is registered inside tx_isp_subdev_platform_init() to avoid double registration */
+    /* *** CRITICAL: Initialize remaining subdev platform drivers (CSI, VIN, CORE) *** */
+    /* NOTE: VIC driver already initialized above to ensure registers are available early */
     ret = tx_isp_subdev_platform_init();
     if (ret) {
         pr_err("Failed to initialize subdev platform drivers: %d\n", ret);
         tx_isp_fs_platform_exit();  /* Clean up FS driver */
+        tx_isp_vic_platform_exit();  /* Clean up VIC driver */
         goto err_cleanup_platforms;
     }
-    pr_info("*** SUBDEV PLATFORM DRIVERS INITIALIZED - CSI/VIC/VIN/CORE DRIVERS REGISTERED ***\n");
+    pr_info("*** SUBDEV PLATFORM DRIVERS INITIALIZED - CSI/VIN/CORE DRIVERS REGISTERED ***\n");
 
     /* Build platform device array for the new management system */
     subdev_platforms[0] = &tx_isp_csi_platform_device;
@@ -4304,7 +4314,23 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEVICE REGISTRY INITIALIZED SUCCESSFULLY ***\n");
     
-    /* Initialize CSI and activate it */
+    /* *** CRITICAL: Ensure VIC registers are mapped before CSI initialization *** */
+    pr_info("*** VERIFYING VIC REGISTERS ARE AVAILABLE BEFORE CSI INIT ***\n");
+    if (!ourISPdev->vic_regs) {
+        pr_info("*** VIC registers not yet mapped, attempting direct mapping ***\n");
+        
+        /* Direct map VIC registers if not already available */
+        ourISPdev->vic_regs = ioremap(0x133e0000, 0x10000);  /* VIC base from /proc/iomem */
+        if (!ourISPdev->vic_regs) {
+            pr_err("Failed to directly map VIC registers\n");
+            goto err_cleanup_platforms;
+        }
+        pr_info("*** VIC registers directly mapped to %p ***\n", ourISPdev->vic_regs);
+    } else {
+        pr_info("*** VIC registers already available at %p ***\n", ourISPdev->vic_regs);
+    }
+
+    /* Initialize CSI and activate it - VIC registers now guaranteed to be available */
     ret = tx_isp_init_csi_subdev(ourISPdev);
     if (ret) {
         pr_err("Failed to initialize CSI subdev: %d\n", ret);
@@ -4316,6 +4342,8 @@ static int tx_isp_init(void)
         pr_err("Failed to activate CSI subdev: %d\n", ret);
         goto err_cleanup_platforms;
     }
+    
+    pr_info("*** CSI INITIALIZED WITH VIC REGISTERS AVAILABLE ***\n");
     
     /* *** FIXED: USE PROPER STRUCT MEMBER ACCESS INSTEAD OF DANGEROUS OFFSETS *** */
     pr_info("*** POPULATING SUBDEV ARRAY USING SAFE STRUCT MEMBER ACCESS ***\n");
@@ -4436,6 +4464,9 @@ err_cleanup_graph:
     
 err_cleanup_platforms:
     /* Clean up in reverse order */
+    tx_isp_subdev_platform_exit();  /* Clean up subdev drivers */
+    tx_isp_fs_platform_exit();      /* Clean up FS driver */
+    tx_isp_vic_platform_exit();     /* Clean up VIC driver */
     platform_device_unregister(&tx_isp_core_platform_device);
     platform_device_unregister(&tx_isp_fs_platform_device);
     platform_device_unregister(&tx_isp_vin_platform_device);
