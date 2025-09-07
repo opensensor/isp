@@ -1363,74 +1363,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(1, vic_regs + 0x0);
         wmb();
 
-    } else if (interface_type == 16 || interface_type == 0x10) {
-        /* CRITICAL FIX: Interface type 16 - map to MIPI behavior */
-        pr_info("*** tx_isp_vic_start: Interface type 16 detected - mapping to MIPI behavior ***\n");
-        pr_info("*** This suggests struct alignment issues - interface should be 2 (MIPI) ***\n");
-        
-        /* MCP LOG: Interface type correction */
-        pr_info("MCP_LOG: Interface type 16 corrected to MIPI - base=%p, dimensions=%dx%d\n", 
-                vic_regs, vic_dev->width, vic_dev->height);
-        
-        /* Use MIPI interface configuration (same as interface_type == 2) */
-        writel(3, vic_regs + 0xc);
-        wmb();
-        
-        /* Use default MIPI format configuration */
-        u32 mipi_config_16 = 0x20000; /* Standard MIPI config */
-        
-        /* Apply sensor dimensions */
-        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
-        wmb();
-        
-        /* MIPI timing configuration */
-        u32 integration_time = vic_dev->sensor_attr.integration_time;
-        if (integration_time != 0) {
-            writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
-            wmb();
-        }
-        
-        /* MIPI control register */
-        writel(mipi_config_16, vic_regs + 0x10);
-        wmb();
-        
-        /* Standard MIPI unlock sequence */
-        writel(2, vic_regs + 0x0);
-        wmb();
-        writel(4, vic_regs + 0x0);
-        wmb();
-        
-        /* Wait for unlock */
-        timeout = 10000;
-        while (timeout > 0) {
-            u32 vic_status = readl(vic_regs + 0x0);
-            if (vic_status == 0) {
-                pr_info("tx_isp_vic_start: Interface 16 VIC unlocked after %d iterations\n", 10000 - timeout);
-                break;
-            }
-            udelay(1);
-            timeout--;
-        }
-        
-        if (timeout == 0) {
-            pr_warn("tx_isp_vic_start: Interface 16 VIC unlock timeout - continuing anyway\n");
-        }
-        
-        /* Enable VIC processing */
-        writel(1, vic_regs + 0x0);
-        wmb();
-        
-        /* Standard MIPI configuration registers */
-        writel(0x100010, vic_regs + 0x1a4);
-        writel(0x4210, vic_regs + 0x1ac);
-        writel(0x10, vic_regs + 0x1b0);
-        writel(0, vic_regs + 0x1b4);
-        wmb();
-        
-        pr_info("*** tx_isp_vic_start: Interface 16 configured as MIPI successfully ***\n");
-
     } else {
         pr_err("tx_isp_vic_start: Unsupported interface type %d\n", interface_type);
+        pr_err("*** MEMORY CORRUPTION DETECTED: Expected 1-5, got %d ***\n", interface_type);
+        pr_err("*** Checking sensor attribute structure integrity ***\n");
+        
+        /* Debug the sensor attribute structure */
+        pr_err("vic_dev=%p, sensor_attr=%p\n", vic_dev, &vic_dev->sensor_attr);
+        pr_err("sensor_attr offset from vic_dev: 0x%lx\n", 
+               (unsigned long)&vic_dev->sensor_attr - (unsigned long)vic_dev);
+        pr_err("dbus_type value: %d (expected 1-5)\n", vic_dev->sensor_attr.dbus_type);
+        pr_err("data_type value: 0x%x\n", vic_dev->sensor_attr.data_type);
+        pr_err("total_width: %d, total_height: %d\n", 
+               vic_dev->sensor_attr.total_width, vic_dev->sensor_attr.total_height);
+        
         return -EINVAL;
     }
 
@@ -1620,6 +1566,7 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
 {
     struct tx_isp_vic_device *vic_dev;
     
+    pr_info("*** vic_sensor_ops_sync_sensor_attr: CORRUPTION DETECTION ***\n");
     pr_info("vic_sensor_ops_sync_sensor_attr: sd=%p, attr=%p\n", sd, attr);
     
     if (!sd || (unsigned long)sd >= 0xfffff001) {
@@ -1633,16 +1580,54 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
         return -EINVAL;
     }
     
+    /* Debug vic_dev structure integrity */
+    pr_info("*** BEFORE SYNC: vic_dev structure integrity ***\n");
+    pr_info("vic_dev=%p, sensor_attr=%p\n", vic_dev, &vic_dev->sensor_attr);
+    pr_info("vic_dev->sensor_attr.dbus_type = %d\n", vic_dev->sensor_attr.dbus_type);
+    pr_info("vic_dev->sensor_attr.data_type = 0x%x\n", vic_dev->sensor_attr.data_type);
+    
+    if (attr) {
+        pr_info("*** INPUT ATTR: Checking input sensor attributes ***\n");
+        pr_info("attr->dbus_type = %d\n", attr->dbus_type);
+        pr_info("attr->data_type = 0x%x\n", attr->data_type);
+        pr_info("attr->total_width = %d, total_height = %d\n", attr->total_width, attr->total_height);
+        
+        /* Validate input before copying */
+        if (attr->dbus_type > 5 || attr->dbus_type < 1) {
+            pr_err("*** CORRUPTION DETECTED IN INPUT: Invalid dbus_type %d ***\n", attr->dbus_type);
+            pr_err("*** FIXING: Correcting dbus_type to 2 (MIPI) ***\n");
+            attr->dbus_type = 2; /* Fix corruption at source */
+        }
+    }
+    
     /* Binary Ninja: $v0_1 = arg2 == 0 ? memset : memcpy */
     if (attr == NULL) {
         /* Clear sensor attribute */
         memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-        pr_info("vic_sensor_ops_sync_sensor_attr: cleared sensor attributes\n");
+        /* Reset to safe defaults */
+        vic_dev->sensor_attr.dbus_type = 2; /* Default to MIPI */
+        vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
+        pr_info("vic_sensor_ops_sync_sensor_attr: cleared and reset sensor attributes to safe defaults\n");
     } else {
-        /* Copy sensor attribute */
+        /* Copy sensor attribute with validation */
         memcpy(&vic_dev->sensor_attr, attr, sizeof(vic_dev->sensor_attr));
+        
+        /* Post-copy validation and correction */
+        if (vic_dev->sensor_attr.dbus_type > 5 || vic_dev->sensor_attr.dbus_type < 1) {
+            pr_err("*** POST-COPY CORRUPTION: dbus_type became %d ***\n", vic_dev->sensor_attr.dbus_type);
+            vic_dev->sensor_attr.dbus_type = 2; /* Correct it */
+            pr_err("*** CORRECTED: dbus_type set to 2 (MIPI) ***\n");
+        }
+        
         pr_info("vic_sensor_ops_sync_sensor_attr: copied sensor attributes\n");
     }
+    
+    /* Debug after synchronization */
+    pr_info("*** AFTER SYNC: Final sensor attribute values ***\n");
+    pr_info("vic_dev->sensor_attr.dbus_type = %d\n", vic_dev->sensor_attr.dbus_type);
+    pr_info("vic_dev->sensor_attr.data_type = 0x%x\n", vic_dev->sensor_attr.data_type);
+    pr_info("vic_dev->sensor_attr.total_width = %d, total_height = %d\n", 
+           vic_dev->sensor_attr.total_width, vic_dev->sensor_attr.total_height);
     
     return 0;
 }
