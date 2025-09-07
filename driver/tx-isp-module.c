@@ -4127,12 +4127,6 @@ void isp_core_tuning_deinit(void *core_dev)
     pr_info("isp_core_tuning_deinit: Destroying ISP tuning interface\n");
 }
 
-int sensor_early_init(void *core_dev)
-{
-    pr_info("sensor_early_init: Preparing sensor infrastructure\n");
-    return 0;
-}
-
 
 // Simple platform driver - minimal implementation
 static int tx_isp_platform_probe(struct platform_device *pdev)
