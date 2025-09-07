@@ -1891,166 +1891,158 @@ static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
 static DEFINE_MUTEX(subdev_init_lock);
 static volatile bool subdev_init_complete = false;
 
+/* tx_isp_video_link_stream - EXACT Binary Ninja implementation using safe struct member access */
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 {
-    pr_info("*** tx_isp_video_link_stream: MIPS-SAFE implementation - enable=%d ***\n", enable);
+    int i;
+    struct tx_isp_subdev *subdev;
+    int result;
+    int final_result = 0;
     
-    /* MIPS ALIGNMENT CHECK: Validate isp_dev pointer alignment */
-    if (!isp_dev || ((uintptr_t)isp_dev & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: isp_dev pointer 0x%p not 4-byte aligned ***\n", isp_dev);
+    pr_info("*** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=%d ***\n", enable);
+    
+    if (!isp_dev) {
+        pr_err("tx_isp_video_link_stream: Invalid ISP device\n");
         return -EINVAL;
     }
     
-    /* MIPS SAFE: Bounds validation */
-    if ((uintptr_t)isp_dev >= 0xfffff001) {
-        pr_err("*** MIPS ERROR: isp_dev pointer 0x%p out of valid range ***\n", isp_dev);
+    /* SAFE: Use proper struct member access instead of offset 0x38 */
+    if (!isp_dev->subdevs) {
+        pr_err("tx_isp_video_link_stream: No subdevs array\n");
         return -EINVAL;
     }
     
-    /* MIPS SAFE: Check if subdevs array exists and is aligned */
-    if (!isp_dev->subdevs || ((uintptr_t)isp_dev->subdevs & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: subdevs array 0x%p not aligned or NULL ***\n", isp_dev->subdevs);
-        return -EINVAL;
-    }
+    pr_info("*** IMPLEMENTING EXACT BINARY NINJA SUBDEV ITERATION (SAFE VERSION) ***\n");
     
-    pr_info("*** tx_isp_video_link_stream: MIPS-SAFE processing - no dangerous pointer access ***\n");
-    
-    /* MIPS SAFE: Instead of iterating through potentially corrupted subdev array,
-     * directly call the specific streaming functions we know are safe */
-    
-    if (enable) {
-        pr_info("*** MIPS-SAFE: Enabling streaming without risky subdev iteration ***\n");
+    /* Binary Ninja: for (int32_t i = 0; i != 0x10; i++) - iterate through 16 subdevs */
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        /* SAFE: Use proper struct member access instead of *(arg1 + 0x38 + i*4) */
+        subdev = isp_dev->subdevs[i];
         
-        /* MIPS SAFE: Call VIC streaming directly if available */
-        if (isp_dev->vic_dev && ((uintptr_t)isp_dev->vic_dev & 0x3) == 0) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            
-            /* MIPS SAFE: Validate VIC device structure alignment */
-            if (((uintptr_t)vic_dev & 0x3) == 0) {
-                pr_info("*** MIPS-SAFE: Calling VIC streaming directly ***\n");
-                int vic_result = vic_core_s_stream(&vic_dev->sd, enable);
-                pr_info("*** MIPS-SAFE: VIC streaming returned %d ***\n", vic_result);
+        /* Binary Ninja: if ($a0 != 0) */
+        if (subdev != NULL) {
+            /* Binary Ninja: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) */
+            /* SAFE: Use proper struct member access instead of dangerous offset access */
+            if (subdev->ops && subdev->ops->video && subdev->ops->video->s_stream) {
+                /* Binary Ninja: int32_t result = $v0_4($a0, arg2) */
+                pr_info("*** CALLING SUBDEV[%d]->s_stream(%d) ***\n", i, enable);
+                result = subdev->ops->video->s_stream(subdev, enable);
+                
+                /* Binary Ninja: if (result == 0) continue, else handle error */
+                if (result == 0) {
+                    pr_info("*** SUBDEV[%d] s_stream SUCCESS ***\n", i);
+                    continue;
+                } else {
+                    pr_warn("*** SUBDEV[%d] s_stream returned %d ***\n", i, result);
+                    
+                    /* Binary Ninja: if (result != 0xfffffdfd) - serious error, rollback */
+                    if (result != 0xfffffdfd) {
+                        pr_err("*** SUBDEV[%d] SERIOUS ERROR %d - PERFORMING ROLLBACK ***\n", i, result);
+                        
+                        /* Binary Ninja rollback logic - disable previous subdevs */
+                        int rollback_idx;
+                        for (rollback_idx = i - 1; rollback_idx >= 0; rollback_idx--) {
+                            struct tx_isp_subdev *rollback_subdev = isp_dev->subdevs[rollback_idx];
+                            
+                            if (rollback_subdev && rollback_subdev->ops && 
+                                rollback_subdev->ops->video && rollback_subdev->ops->video->s_stream) {
+                                pr_info("*** ROLLBACK: Disabling subdev[%d] ***\n", rollback_idx);
+                                rollback_subdev->ops->video->s_stream(rollback_subdev, enable ? 0 : 1);
+                            }
+                        }
+                        
+                        final_result = result;
+                        break;
+                    }
+                    /* Binary Ninja: if result == 0xfffffdfd, continue (not implemented) */
+                }
             } else {
-                pr_warn("*** MIPS WARNING: VIC device not aligned, skipping ***\n");
+                pr_debug("tx_isp_video_link_stream: Subdev[%d] has no s_stream op\n", i);
             }
-        }
-        
-        /* MIPS SAFE: Call CSI streaming directly if available */
-        if (isp_dev->csi_dev && ((uintptr_t)isp_dev->csi_dev & 0x3) == 0) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-            
-            /* MIPS SAFE: Validate CSI device structure alignment */
-            if (((uintptr_t)csi_dev & 0x3) == 0) {
-                pr_info("*** MIPS-SAFE: Calling CSI streaming directly ***\n");
-                int csi_result = csi_video_s_stream(&csi_dev->sd, enable);
-                pr_info("*** MIPS-SAFE: CSI streaming returned %d ***\n", csi_result);
-            } else {
-                pr_warn("*** MIPS WARNING: CSI device not aligned, skipping ***\n");
-            }
-        }
-        
-    } else {
-        pr_info("*** MIPS-SAFE: Disabling streaming without risky subdev iteration ***\n");
-        
-        /* MIPS SAFE: Disable streaming on known devices */
-        if (isp_dev->vic_dev && ((uintptr_t)isp_dev->vic_dev & 0x3) == 0) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            if (((uintptr_t)vic_dev & 0x3) == 0) {
-                vic_core_s_stream(&vic_dev->sd, enable);
-            }
-        }
-        
-        if (isp_dev->csi_dev && ((uintptr_t)isp_dev->csi_dev & 0x3) == 0) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-            if (((uintptr_t)csi_dev & 0x3) == 0) {
-                csi_video_s_stream(&csi_dev->sd, enable);
-            }
+        } else {
+            pr_debug("tx_isp_video_link_stream: Subdev[%d] is NULL\n", i);
         }
     }
     
-    pr_info("*** tx_isp_video_link_stream: MIPS-SAFE completion - no unaligned access attempted ***\n");
-    return 0; /* Always return success to prevent cascade failures */
+    pr_info("*** tx_isp_video_link_stream: Binary Ninja iteration complete, result=%d ***\n", final_result);
+    return final_result;
 }
 
+/* tx_isp_video_s_stream - EXACT Binary Ninja implementation using safe struct member access */
 static int tx_isp_video_s_stream(struct tx_isp_dev *isp_dev, int enable)
 {
-    pr_info("*** tx_isp_video_s_stream: MIPS-SAFE implementation - enable=%d ***\n", enable);
+    int i;
+    struct tx_isp_subdev *subdev;
+    int result;
+    int final_result = 0;
     
-    /* MIPS ALIGNMENT CHECK: Validate isp_dev pointer alignment */
-    if (!isp_dev || ((uintptr_t)isp_dev & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: isp_dev pointer 0x%p not 4-byte aligned ***\n", isp_dev);
+    pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja implementation - enable=%d ***\n", enable);
+    
+    if (!isp_dev) {
+        pr_err("tx_isp_video_s_stream: Invalid ISP device\n");
         return -EINVAL;
     }
     
-    /* MIPS SAFE: Bounds validation */
-    if ((uintptr_t)isp_dev >= 0xfffff001) {
-        pr_err("*** MIPS ERROR: isp_dev pointer 0x%p out of valid range ***\n", isp_dev);
+    /* SAFE: Use proper struct member access instead of offset 0x38 */
+    if (!isp_dev->subdevs) {
+        pr_err("tx_isp_video_s_stream: No subdevs array\n");
         return -EINVAL;
     }
     
-    /* MIPS SAFE: Check if subdevs array exists and is aligned */
-    if (!isp_dev->subdevs || ((uintptr_t)isp_dev->subdevs & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: subdevs array 0x%p not aligned or NULL ***\n", isp_dev->subdevs);
-        return -EINVAL;
-    }
+    pr_info("*** IMPLEMENTING EXACT BINARY NINJA SUBDEV ITERATION (SAFE VERSION) ***\n");
     
-    pr_info("*** tx_isp_video_s_stream: MIPS-SAFE processing - no dangerous pointer access ***\n");
-    
-    /* MIPS SAFE: Instead of iterating through potentially corrupted subdev array,
-     * directly call the specific streaming functions we know are safe */
-    
-    if (enable) {
-        pr_info("*** MIPS-SAFE: Enabling streaming without risky subdev iteration ***\n");
+    /* Binary Ninja: for (int32_t i = 0; i != 0x10; i++) - iterate through 16 subdevs */
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        /* SAFE: Use proper struct member access instead of *(arg1 + 0x38 + i*4) */
+        subdev = isp_dev->subdevs[i];
         
-        /* MIPS SAFE: Call VIC streaming directly if available */
-        if (isp_dev->vic_dev && ((uintptr_t)isp_dev->vic_dev & 0x3) == 0) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            
-            /* MIPS SAFE: Validate VIC device structure alignment */
-            if (((uintptr_t)vic_dev & 0x3) == 0) {
-                pr_info("*** MIPS-SAFE: Calling VIC streaming directly ***\n");
-                int vic_result = vic_core_s_stream(&vic_dev->sd, enable);
-                pr_info("*** MIPS-SAFE: VIC streaming returned %d ***\n", vic_result);
+        /* Binary Ninja: if ($a0 != 0) */
+        if (subdev != NULL) {
+            /* Binary Ninja: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) */
+            /* SAFE: Use proper struct member access instead of dangerous offset access */
+            if (subdev->ops && subdev->ops->video && subdev->ops->video->s_stream) {
+                /* Binary Ninja: int32_t result = $v0_4($a0, arg2) */
+                pr_info("*** CALLING SUBDEV[%d]->s_stream(%d) ***\n", i, enable);
+                result = subdev->ops->video->s_stream(subdev, enable);
+                
+                /* Binary Ninja: if (result == 0) continue, else handle error */
+                if (result == 0) {
+                    pr_info("*** SUBDEV[%d] s_stream SUCCESS ***\n", i);
+                    continue;
+                } else {
+                    pr_warn("*** SUBDEV[%d] s_stream returned %d ***\n", i, result);
+                    
+                    /* Binary Ninja: if (result != 0xfffffdfd) - serious error, rollback */
+                    if (result != 0xfffffdfd) {
+                        pr_err("*** SUBDEV[%d] SERIOUS ERROR %d - PERFORMING ROLLBACK ***\n", i, result);
+                        
+                        /* Binary Ninja rollback logic - disable previous subdevs */
+                        int rollback_idx;
+                        for (rollback_idx = i - 1; rollback_idx >= 0; rollback_idx--) {
+                            struct tx_isp_subdev *rollback_subdev = isp_dev->subdevs[rollback_idx];
+                            
+                            if (rollback_subdev && rollback_subdev->ops && 
+                                rollback_subdev->ops->video && rollback_subdev->ops->video->s_stream) {
+                                pr_info("*** ROLLBACK: Disabling subdev[%d] ***\n", rollback_idx);
+                                rollback_subdev->ops->video->s_stream(rollback_subdev, enable ? 0 : 1);
+                            }
+                        }
+                        
+                        final_result = result;
+                        break;
+                    }
+                    /* Binary Ninja: if result == 0xfffffdfd, continue (not implemented) */
+                }
             } else {
-                pr_warn("*** MIPS WARNING: VIC device not aligned, skipping ***\n");
+                pr_debug("tx_isp_video_s_stream: Subdev[%d] has no s_stream op\n", i);
             }
-        }
-        
-        /* MIPS SAFE: Call CSI streaming directly if available */
-        if (isp_dev->csi_dev && ((uintptr_t)isp_dev->csi_dev & 0x3) == 0) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-            
-            /* MIPS SAFE: Validate CSI device structure alignment */
-            if (((uintptr_t)csi_dev & 0x3) == 0) {
-                pr_info("*** MIPS-SAFE: Calling CSI streaming directly ***\n");
-                int csi_result = csi_video_s_stream_impl(&csi_dev->sd, enable);
-                pr_info("*** MIPS-SAFE: CSI streaming returned %d ***\n", csi_result);
-            } else {
-                pr_warn("*** MIPS WARNING: CSI device not aligned, skipping ***\n");
-            }
-        }
-        
-    } else {
-        pr_info("*** MIPS-SAFE: Disabling streaming without risky subdev iteration ***\n");
-        
-        /* MIPS SAFE: Disable streaming on known devices */
-        if (isp_dev->vic_dev && ((uintptr_t)isp_dev->vic_dev & 0x3) == 0) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            if (((uintptr_t)vic_dev & 0x3) == 0) {
-                vic_core_s_stream(&vic_dev->sd, enable);
-            }
-        }
-        
-        if (isp_dev->csi_dev && ((uintptr_t)isp_dev->csi_dev & 0x3) == 0) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-            if (((uintptr_t)csi_dev & 0x3) == 0) {
-                csi_video_s_stream_impl(&csi_dev->sd, enable);
-            }
+        } else {
+            pr_debug("tx_isp_video_s_stream: Subdev[%d] is NULL\n", i);
         }
     }
     
-    pr_info("*** tx_isp_video_s_stream: MIPS-SAFE completion - no unaligned access attempted ***\n");
-    return 0; /* Always return success to prevent cascade failures */
+    pr_info("*** tx_isp_video_s_stream: Binary Ninja iteration complete, result=%d ***\n", final_result);
+    return final_result;
 }
 
 /* Real hardware frame completion detection - SDK compatible */
