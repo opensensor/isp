@@ -121,6 +121,7 @@ struct tx_isp_vic_device {
     struct completion frame_complete;   // Frame completion
     struct mutex mlock;                 // Main mutex
     struct mutex state_lock;            // State mutex
+    wait_queue_head_t wait_queue;       // Wait queue for interrupt-driven process wakeup
     
     // Buffer management (using safe struct members instead of offset arithmetic)
     spinlock_t buffer_mgmt_lock;        // Buffer management spinlock (was at offset 0x1f4)
