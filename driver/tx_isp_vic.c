@@ -2250,25 +2250,98 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
 static int ispvic_frame_channel_clearbuf(void);
 
-/* ISPVIC Frame Channel QBUF - ULTRA SAFE implementation to prevent crashes */
+/* ISPVIC Frame Channel QBUF - FIXED: Safe struct member access instead of dangerous offsets */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
-    pr_info("*** ispvic_frame_channel_qbuf: ULTRA SAFE - touches NO passed pointers ***\n");
+    struct tx_isp_subdev *sd = NULL;
+    struct tx_isp_vic_device *vic_dev = NULL;
+    unsigned long flags;
+    struct list_head *prev_node;
+    void *buffer_info = arg2;
+    
+    pr_info("*** ispvic_frame_channel_qbuf: FIXED implementation with safe struct access ***\n");
     pr_info("ispvic_frame_channel_qbuf: arg1=%p, arg2=%p\n", arg1, arg2);
     
-    /* CRITICAL CRASH FIX: Do NOT access any passed pointers that could be corrupted */
-    /* The crash at BadVA 00000535 shows we're accessing invalid memory through arg1/arg2 */
+    /* CRITICAL FIX: Safe parameter validation */
+    if (!arg1 || (unsigned long)arg1 >= 0xfffff001) {
+        pr_err("ispvic_frame_channel_qbuf: Invalid arg1 parameter\n");
+        return 0; /* Binary Ninja returns 0 even on error */
+    }
     
-    /* ULTRA SAFE: Only log that we received the call, don't touch any pointers */
-    pr_info("*** QBUF EVENT: Processing without touching any passed pointers ***\n");
+    /* CRITICAL FIX: Use safe subdev access instead of dangerous *(arg1 + 0xd4) */
+    sd = (struct tx_isp_subdev *)arg1;
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     
-    /* SAFE: Just return success without doing any dangerous memory access */
-    /* This prevents the crash while allowing the system to continue */
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_err("ispvic_frame_channel_qbuf: Invalid vic_dev - using safe struct access\n");
+        return 0;
+    }
     
-    pr_info("*** ispvic_frame_channel_qbuf: ULTRA SAFE implementation complete ***\n");
+    if (!buffer_info) {
+        pr_err("ispvic_frame_channel_qbuf: NULL buffer_info\n");
+        return 0;
+    }
     
-    /* Binary Ninja: return 0 */
-    return 0;
+    pr_info("ispvic_frame_channel_qbuf: vic_dev=%p retrieved safely\n", vic_dev);
+    
+    /* CRITICAL FIX: Use proper struct member access instead of dangerous offset 0x1f4 */
+    spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
+    
+    /* Binary Ninja: Queue management - SAFE implementation */
+    
+    /* SAFE: Check if free buffer list is empty */
+    if (list_empty(&vic_dev->free_head)) {
+        pr_warn("ispvic_frame_channel_qbuf: bank no free\n");
+        goto unlock_exit;
+    }
+    
+    /* SAFE: Check if queue buffer list is empty */
+    if (list_empty(&vic_dev->queue_head)) {
+        pr_warn("ispvic_frame_channel_qbuf: qbuffer null\n");
+        goto unlock_exit;
+    }
+    
+    /* SAFE: Pop buffer from free list and add to queue list */
+    struct list_head *free_buffer = vic_dev->free_head.next;
+    if (free_buffer != &vic_dev->free_head) {
+        /* Remove from free list */
+        list_del(free_buffer);
+        
+        /* Add to done list */
+        list_add_tail(free_buffer, &vic_dev->done_head);
+        
+        /* CRITICAL FIX: Safe register write using validated VIC base */
+        if (vic_dev->vic_regs && 
+            (unsigned long)vic_dev->vic_regs >= 0x80000000) {
+            
+            /* SAFE: Calculate register offset safely */
+            u32 buffer_index = vic_dev->active_buffer_count % 5; /* Limit to 5 buffers */
+            u32 reg_offset = (buffer_index + 0xc6) << 2;
+            
+            /* SAFE: Write buffer address to VIC register with bounds check */
+            if (reg_offset < 0x1000) { /* Ensure within VIC register space */
+                u32 buffer_addr = (u32)(unsigned long)buffer_info; /* Safe cast */
+                writel(buffer_addr, vic_dev->vic_regs + reg_offset);
+                wmb();
+                pr_info("ispvic_frame_channel_qbuf: wrote buffer 0x%x to reg offset 0x%x\n", 
+                        buffer_addr, reg_offset);
+            }
+        }
+        
+        /* SAFE: Increment active buffer count */
+        vic_dev->active_buffer_count++;
+        
+        pr_info("*** QBUF EVENT: Buffer queued successfully - active_count=%d ***\n", 
+                vic_dev->active_buffer_count);
+    } else {
+        pr_warn("ispvic_frame_channel_qbuf: No free buffers available\n");
+    }
+
+unlock_exit:
+    spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
+    
+    pr_info("*** ispvic_frame_channel_qbuf: Safe implementation complete ***\n");
+    return 0; /* Binary Ninja: return 0 */
 }
 
 /* ISPVIC Frame Channel Clear Buffer - placeholder matching Binary Ninja reference */
