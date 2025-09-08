@@ -1054,65 +1054,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     
     pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
 
-        	/* Map secondary ISP register space if needed */
-	void __iomem *isp_w02_regs = vic_dev->vic_regs;
-	if (isp_w02_regs) {
-	    pr_info("ISP isp-w02: Initializing CSI PHY Control registers\n");
-
-	    /* CSI PHY Control writes for isp-w02 */
-	    writel(0x7800438, isp_w02_regs + 0x4);
-	    writel(0x2, isp_w02_regs + 0xc);
-	    writel(0x2, isp_w02_regs + 0x14);
-	    writel(0xf00, isp_w02_regs + 0x18);
-	    writel(0x800800, isp_w02_regs + 0x60);
-	    writel(0x9d09d0, isp_w02_regs + 0x64);
-	    writel(0x6002, isp_w02_regs + 0x70);
-	    writel(0x7003, isp_w02_regs + 0x74);
-	    writel(0xeb8080, isp_w02_regs + 0xc0);
-	    writel(0x108080, isp_w02_regs + 0xc4);
-	    writel(0x29f06e, isp_w02_regs + 0xc8);
-	    writel(0x913622, isp_w02_regs + 0xcc);
-	    writel(0x515af0, isp_w02_regs + 0xd0);
-	    writel(0xaaa610, isp_w02_regs + 0xd4);
-	    writel(0xd21092, isp_w02_regs + 0xd8);
-	    writel(0x6acade, isp_w02_regs + 0xdc);
-	    writel(0xeb8080, isp_w02_regs + 0xe0);
-	    writel(0x108080, isp_w02_regs + 0xe4);
-	    writel(0x29f06e, isp_w02_regs + 0xe8);
-	    writel(0x913622, isp_w02_regs + 0xec);
-	    writel(0x515af0, isp_w02_regs + 0xf0);
-	    writel(0xaaa610, isp_w02_regs + 0xf4);
-	    writel(0xd21092, isp_w02_regs + 0xf8);
-	    writel(0x6acade, isp_w02_regs + 0xfc);
-	    wmb();
-
-	    pr_info("ISP isp-w02: Initializing CSI PHY Config registers\n");
-
-	    /* CSI PHY Config writes for isp-w02 */
-	    writel(0x2d0, isp_w02_regs + 0x100);
-	    writel(0x2c000, isp_w02_regs + 0x10c);
-	    writel(0x7800000, isp_w02_regs + 0x110);
-	    writel(0x100010, isp_w02_regs + 0x1a4);
-	    writel(0x4440, isp_w02_regs + 0x1a8);
-	    writel(0x10, isp_w02_regs + 0x1b0);
-	    wmb();
-
-	    iounmap(isp_w02_regs);
-	}
-
-	/* Initialize isp-w01 module */
-	void __iomem *isp_w01_regs = ioremap(0x13310000, 0x10000); /* Adjust base address as needed */
-	if (isp_w01_regs) {
-	    pr_info("ISP isp-w01: Initializing CSI PHY Control registers\n");
-
-	    writel(0x3130322a, isp_w01_regs + 0x0);
-	    writel(0x1, isp_w01_regs + 0x4);
-	    writel(0x200, isp_w01_regs + 0x14);
-	    wmb();
-
-	    iounmap(isp_w01_regs);
-	}
-
 
     /* FIXED: Use proper struct member access for sensor attributes */
     sensor_attr = &vic_dev->sensor_attr;
