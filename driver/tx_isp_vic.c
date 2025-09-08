@@ -1171,10 +1171,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x1ff00, vic_regs + 0xb038);      /* Core Control register */
     writel(0x103, vic_regs + 0xb04c);        /* Core Control register */
     writel(0x3, vic_regs + 0xb050);          /* Core Control register */
-    writel(0x341b, vic_regs + 0xb07c);       /* Core Control register */
-    writel(0x46b0, vic_regs + 0xb080);       /* Core Control register */
-    writel(0x1813, vic_regs + 0xb084);       /* Core Control register */
-    writel(0x10a, vic_regs + 0xb08c);        /* Core Control register */
+//    writel(0x341b, vic_regs + 0xb07c);       /* Core Control register */
+//    writel(0x46b0, vic_regs + 0xb080);       /* Core Control register */
+//    writel(0x1813, vic_regs + 0xb084);       /* Core Control register */
+//    writel(0x10a, vic_regs + 0xb08c);        /* Core Control register */
     wmb();
 
     pr_info("*** Completed writing ALL missing initialization registers from reference trace ***\n");
