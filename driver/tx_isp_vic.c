@@ -1955,6 +1955,189 @@ static inline uint32_t system_reg_read(u32 reg)
 
 void system_reg_write(u32 reg, u32 value);
 
+
+/* vic_mdma_enable - EXACT Binary Ninja implementation */
+static uint32_t vic_mdma_enable(void* arg1, int32_t arg2, int32_t arg3, uint32_t arg4,
+      int32_t arg5, char arg6)
+{
+    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)arg1;
+    void __iomem *vic_regs;
+    int32_t width, height;
+    uint32_t format_type = (uint32_t)arg6;
+    int32_t stride;
+    int32_t frame_size;
+    int32_t buffer_addr = arg5;
+    uint32_t buffer_count = arg4;
+    int32_t dual_channel = arg3;
+    int32_t enable_flag = arg2;
+    uint32_t result;
+    int32_t control_value;
+
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_err("vic_mdma_enable: Invalid VIC device\n");
+        return 0;
+    }
+
+    vic_regs = vic_dev->vic_regs;
+    width = vic_dev->width;   /* *(arg1 + 0xdc) */
+    height = vic_dev->height; /* *(arg1 + 0xe0) */
+
+    pr_info("*** vic_mdma_enable: EXACT Binary Ninja implementation ***\n");
+    pr_info("Parameters: width=%d, height=%d, buffers=%d, dual_ch=%d, format=%d\n",
+            width, height, buffer_count, dual_channel, format_type);
+
+    /* Binary Ninja: $t1 = zx.d(arg6) */
+    /* Binary Ninja: if ($t1 != 7) $a1 <<= 1 */
+    if (format_type != 7) {
+        stride = width << 1;  /* Double stride for YUV formats */
+    } else {
+        stride = width;  /* Single stride for RAW format */
+    }
+
+    /* Binary Ninja: vic_mdma_ch0_set_buff_index = 4; vic_mdma_ch1_set_buff_index = 4 */
+    vic_mdma_ch0_set_buff_index = 4;
+    vic_mdma_ch1_set_buff_index = 4;
+
+    /* Binary Ninja: int32_t $v1_2 = $a1 * $v1_1 */
+    frame_size = stride * height;
+
+    /* Binary Ninja: vic_mdma_ch0_sub_get_num = arg4 */
+    vic_mdma_ch0_sub_get_num = buffer_count;
+    if (dual_channel != 0) {
+        /* Binary Ninja: vic_mdma_ch1_sub_get_num = arg4 */
+        vic_mdma_ch1_sub_get_num = buffer_count;
+    }
+
+    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x308) = 1 */
+    writel(1, vic_regs + 0x308);
+    wmb();
+
+    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
+    writel((width << 16) | height, vic_regs + 0x304);
+    wmb();
+
+    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x310) = $a1; *(*(arg1 + 0xb8) + 0x314) = $a1 */
+    writel(stride, vic_regs + 0x310);
+    writel(stride, vic_regs + 0x314);
+    wmb();
+
+    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x318) = arg5 */
+    writel(buffer_addr, vic_regs + 0x318);
+    wmb();
+
+    /* Binary Ninja: Complex buffer address calculation for multiple buffers */
+    if (dual_channel == 0) {
+        /* Single channel mode - Binary Ninja buffer layout */
+        int32_t buf_offset = frame_size;
+        int32_t buf1_addr = buffer_addr + buf_offset;
+        int32_t buf2_addr = buf1_addr + frame_size;
+        int32_t buf3_addr = buf2_addr + frame_size;
+
+        writel(buf1_addr, vic_regs + 0x31c);
+        writel(buf2_addr, vic_regs + 0x320);
+        writel(buf3_addr, vic_regs + 0x324);
+
+        int32_t buf4_addr = buf3_addr + frame_size;
+        writel(buf4_addr, vic_regs + 0x328);
+        wmb();
+
+        pr_info("Single channel: base=0x%x, buf1=0x%x, buf2=0x%x, buf3=0x%x, buf4=0x%x\n",
+               buffer_addr, buf1_addr, buf2_addr, buf3_addr, buf4_addr);
+    } else {
+        /* Dual channel mode - Binary Ninja interleaved buffer layout */
+        int32_t ch_stride = stride << 1;  /* Channel stride doubled */
+        int32_t buf1_addr = buffer_addr + ch_stride;
+        int32_t buf2_addr = buf1_addr + ch_stride;
+        int32_t buf3_addr = buf2_addr + ch_stride;
+        int32_t buf4_addr = buf3_addr + ch_stride;
+
+        writel(buf1_addr, vic_regs + 0x31c);
+        writel(buf2_addr, vic_regs + 0x320);
+        writel(buf3_addr, vic_regs + 0x324);
+        writel(buf4_addr, vic_regs + 0x328);
+        wmb();
+
+        pr_info("Dual channel: base=0x%x, stride=%d, buf1=0x%x, buf2=0x%x\n",
+               buffer_addr, ch_stride, buf1_addr, buf2_addr);
+    }
+
+    /* Binary Ninja: Additional buffer registers for extended mode */
+    int32_t base_ch1 = buffer_addr + (stride << 1);
+    writel(base_ch1, vic_regs + 0x340);
+    writel(base_ch1 + frame_size, vic_regs + 0x344);
+    writel(base_ch1 + (frame_size << 1), vic_regs + 0x348);
+    writel(base_ch1 + (frame_size * 3), vic_regs + 0x34c);
+    writel(base_ch1 + (frame_size << 2), vic_regs + 0x350);
+    wmb();
+
+    /* Binary Ninja: Special case for format 7 (RAW mode) */
+    if (format_type == 7) {
+        writel(base_ch1, vic_regs + 0x32c);
+        writel(base_ch1 + frame_size, vic_regs + 0x330);
+        writel(base_ch1 + (frame_size << 1), vic_regs + 0x334);
+        writel(base_ch1 + (frame_size * 3), vic_regs + 0x338);
+        writel(base_ch1 + (frame_size << 2), vic_regs + 0x33c);
+        wmb();
+    }
+
+    /* Binary Ninja: Final control register setup */
+    if (buffer_count < 8) {
+        result = buffer_count << 16;
+        control_value = result | 0x80000020 | format_type;
+    } else {
+        result = 0x80080020;
+        control_value = format_type | 0x80080020;
+    }
+
+    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x300) = $a3 */
+    writel(control_value, vic_regs + 0x300);
+    wmb();
+
+    pr_info("*** vic_mdma_enable: MDMA configured - control=0x%x, result=0x%x ***\n",
+           control_value, result);
+
+    return result;
+}
+
+/* vic_pipo_mdma_enable - EXACT Binary Ninja implementation (simplified version) */
+static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
+{
+    void __iomem *vic_regs;
+    uint32_t width, stride;
+
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_err("vic_pipo_mdma_enable: Invalid parameters\n");
+        return NULL;
+    }
+
+    vic_regs = vic_dev->vic_regs;
+    width = vic_dev->width;   /* *(arg1 + 0xdc) */
+    stride = width << 1;      /* $v1_1 = $v1 << 1 */
+
+    pr_info("*** vic_pipo_mdma_enable: Binary Ninja implementation ***\n");
+    pr_info("Parameters: width=%d, height=%d, stride=%d\n",
+           width, vic_dev->height, stride);
+
+    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x308) = 1 */
+    writel(1, vic_regs + 0x308);
+    wmb();
+
+    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
+    writel((width << 16) | vic_dev->height, vic_regs + 0x304);
+    wmb();
+
+    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x310) = $v1_1; *(result + 0x314) = $v1_1 */
+    writel(stride, vic_regs + 0x310);
+    writel(stride, vic_regs + 0x314);
+    wmb();
+
+    pr_info("*** vic_pipo_mdma_enable: PIPO MDMA enabled ***\n");
+
+    /* Binary Ninja: return result */
+    return vic_regs;
+}
+
+
 /* isp_vic_cmd_set - EXACT Binary Ninja implementation for snapraw/saveraw */
 static int32_t isp_vic_cmd_set(void* arg1, int32_t arg2, int32_t arg3)
 {
