@@ -6273,10 +6273,10 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
         if (vic_dev->state == 1) {
             vic_dev->state = 2;
             // TODO call other activation functions here
-    		ret = tx_isp_activate_csi_subdev(ourISPdev);
+    		int ret = tx_isp_activate_csi_subdev(ourISPdev);
     		if (ret) {
         		pr_err("Failed to activate CSI subdev: %d\n", ret);
-        		goto err_cleanup_platforms;
+                return ret;
     		}
             pr_info("VIC: Pipeline activated\n");
         }
