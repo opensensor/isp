@@ -619,6 +619,7 @@ extern int tx_isp_fs_probe(struct platform_device *pdev);
 extern int tx_isp_csi_module_init(void);
 extern void tx_isp_csi_module_exit(void);
 extern int csi_init_core_control_registers(void);
+extern int csi_core_ops_init(struct tx_isp_subdev *sd, int mode, int sensor_format);
 
 /* V4L2 video device functions */
 extern int tx_isp_v4l2_init(void);
