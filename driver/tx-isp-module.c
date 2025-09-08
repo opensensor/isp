@@ -1804,11 +1804,11 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             /* Binary Ninja: *($s0 + 0x160) += 1 */
             vic_dev->frame_count++;
             pr_info("*** VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
-            
+
             /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-            vic_framedone_irq_function(vic_dev);
+            //vic_framedone_irq_function(vic_dev);
         }
-        
+
         /* Binary Ninja: Error handling for frame asfifo overflow */
         if ((v1_7 & 0x200) != 0) {
             pr_err("Err [VIC_INT] : frame asfifo ovf!!!!!\n");
