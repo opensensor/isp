@@ -774,7 +774,7 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
 
 /* CSI function forward declarations */
 static int csi_device_probe(struct tx_isp_dev *isp_dev);
-static int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
+int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
 static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag);
 static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *sensor_attr);
 
@@ -1511,7 +1511,7 @@ static int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 }
 
 /* tx_isp_csi_activate_subdev - Binary Ninja exact implementation */
-static int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
+int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_csi_device *csi_dev;
     struct tx_isp_dev *isp_dev;
@@ -4401,16 +4401,10 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEVICE REGISTRY INITIALIZED SUCCESSFULLY ***\n");
     
-    /* Initialize CSI and activate it */
+    /* Initialize CSI */
     ret = tx_isp_init_csi_subdev(ourISPdev);
     if (ret) {
         pr_err("Failed to initialize CSI subdev: %d\n", ret);
-        goto err_cleanup_platforms;
-    }
-    
-    ret = tx_isp_activate_csi_subdev(ourISPdev);
-    if (ret) {
-        pr_err("Failed to activate CSI subdev: %d\n", ret);
         goto err_cleanup_platforms;
     }
     
@@ -6278,6 +6272,12 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
         // Activate VIC
         if (vic_dev->state == 1) {
             vic_dev->state = 2;
+            // TODO call other activation functions here
+    		ret = tx_isp_activate_csi_subdev(ourISPdev);
+    		if (ret) {
+        		pr_err("Failed to activate CSI subdev: %d\n", ret);
+        		goto err_cleanup_platforms;
+    		}
             pr_info("VIC: Pipeline activated\n");
         }
         

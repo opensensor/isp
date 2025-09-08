@@ -57,7 +57,6 @@ static int tx_isp_create_basic_pipeline(struct tx_isp_dev *isp);
 static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc);
 
 /* Basic pipeline function declarations */
-int tx_isp_csi_device_init(struct tx_isp_dev *isp);
 int tx_isp_vic_device_init(struct tx_isp_dev *isp);
 int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
@@ -656,20 +655,6 @@ static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc)
 }
 
 /* Simple stub implementations for basic pipeline functions */
-
-/**
- * tx_isp_csi_device_init - Initialize CSI device (stub implementation)
- */
-int tx_isp_csi_device_init(struct tx_isp_dev *isp)
-{
-    if (!isp) {
-        pr_err("tx_isp_csi_device_init: Invalid ISP device\n");
-        return -EINVAL;
-    }
-    
-    pr_info("tx_isp_csi_device_init: CSI device initialized (stub)\n");
-    return 0;
-}
 
 /**
  * tx_isp_vic_device_init - Initialize VIC device (stub implementation)
