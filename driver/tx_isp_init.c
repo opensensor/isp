@@ -29,21 +29,6 @@ static int tiziano_init_processing_pipeline(struct tx_isp_sensor_attribute *sens
 static void tiziano_free_processing_buffers(struct tx_isp_dev *isp);
 static void tiziano_deinit_processing_pipeline(void);
 
-/* Global ISP device pointer */
-static struct tx_isp_dev *g_isp_device = NULL;
-
-/* Get ISP device instance */
-struct tx_isp_dev *tx_isp_get_device(void)
-{
-    return g_isp_device;
-}
-
-/* Set ISP device instance - called from core probe */
-void tx_isp_set_device(struct tx_isp_dev *isp)
-{
-    g_isp_device = isp;
-}
-
 /* Tiziano ISP initialization function - based on reference tisp_init */
 int tiziano_isp_init(struct tx_isp_sensor_attribute *sensor_attr, char *param_name)
 {
