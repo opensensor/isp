@@ -3016,38 +3016,38 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_err("Channel %d: SENSOR STREAMING NOT AVAILABLE - VIDEO WILL BE GREEN!\n", channel);
             }
             
-        // *** CRITICAL: CALL BINARY NINJA tisp_init TO WRITE MISSING REGISTERS! ***
-        pr_info("*** Channel %d: CALLING BINARY NINJA tisp_init - THIS WRITES THE MISSING CORE CONTROL REGISTERS! ***\n", channel);
+        // *** CRITICAL: TRIGGER VIC STREAMING CHAIN FIRST - THIS GENERATES THE VIC REGISTER ACTIVITY! ***
+        if (ourISPdev && ourISPdev->vic_dev) {
+            struct tx_isp_vic_device *vic_streaming = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            
+            pr_info("*** Channel %d: CALLING VIC STREAMING CHAIN FIRST - CORRECT REFERENCE ORDER! ***\n", channel);
+            
+            // CRITICAL: Call vic_core_s_stream which calls tx_isp_vic_start when streaming
+            ret = vic_core_s_stream(&vic_streaming->sd, 1);
+            
+            pr_info("*** Channel %d: VIC STREAMING RETURNED %d - VIC REGISTERS NOW CONFIGURED! ***\n", channel, ret);
+            
+            if (ret) {
+                pr_err("Channel %d: VIC streaming failed: %d\n", channel, ret);
+            } else {
+                pr_info("*** Channel %d: VIC STREAMING SUCCESS - NOW READY FOR CSI PHY CONFIG! ***\n", channel);
+            }
+        } else {
+            pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
+        }
+        
+        // *** CRITICAL: NOW CALL BINARY NINJA tisp_init AFTER VIC - CORRECT REFERENCE ORDER! ***
+        pr_info("*** Channel %d: CALLING BINARY NINJA tisp_init AFTER VIC CONFIG - CORRECT TIMING! ***\n", channel);
         
         if (sensor && sensor->video.attr) {
             ret = tisp_init(sensor->video.attr, ourISPdev);
             if (ret) {
                 pr_err("*** Channel %d: BINARY NINJA tisp_init FAILED: %d ***\n", channel, ret);
             } else {
-                pr_info("*** Channel %d: BINARY NINJA tisp_init SUCCESS - CORE CONTROL REGISTERS WRITTEN! ***\n", channel);
+                pr_info("*** Channel %d: BINARY NINJA tisp_init SUCCESS - CSI PHY AFTER VIC! ***\n", channel);
                 pr_info("*** Channel %d: 0xb07c=0x341b, 0xb080=0x46b0, 0xb084=0x1813, 0xb08c=0x10a NOW WRITTEN! ***\n", channel);
-                pr_info("*** Channel %d: CSI PHY CONTROL REGISTERS (0x200-0x2f4) NOW WRITTEN! ***\n", channel);
+                pr_info("*** Channel %d: CSI PHY CONTROL REGISTERS NOW WRITTEN AFTER VIC CONFIG! ***\n", channel);
             }
-        }
-        
-        // *** CRITICAL: TRIGGER VIC STREAMING CHAIN - THIS GENERATES THE REGISTER ACTIVITY! ***
-        if (ourISPdev && ourISPdev->vic_dev) {
-            struct tx_isp_vic_device *vic_streaming = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-            
-            pr_info("*** Channel %d: NOW CALLING VIC STREAMING CHAIN - THIS SHOULD GENERATE REGISTER ACTIVITY! ***\n", channel);
-            
-            // CRITICAL: Call vic_core_s_stream which calls tx_isp_vic_start when streaming
-            ret = vic_core_s_stream(&vic_streaming->sd, 1);
-            
-            pr_info("*** Channel %d: VIC STREAMING RETURNED %d - REGISTER ACTIVITY SHOULD NOW BE VISIBLE! ***\n", channel, ret);
-            
-            if (ret) {
-                pr_err("Channel %d: VIC streaming failed: %d\n", channel, ret);
-            } else {
-                pr_info("*** Channel %d: VIC STREAMING SUCCESS - ALL HARDWARE SHOULD BE ACTIVE! ***\n", channel);
-            }
-        } else {
-            pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
         }
         } else {
             if (channel == 0) {
