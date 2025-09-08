@@ -1978,15 +1978,10 @@ static int32_t isp_vic_cmd_set(void* arg1, int32_t arg2, int32_t arg3)
     vic_regs = vic_dev->vic_regs;
 
     /* Binary Ninja: void* $s5 = *(arg1 + 0x70) */
-    isp_node = vic_dev->isp_node;  /* Assume isp_node at +0x70 */
-
+    /* Assume isp_node at +0x70 */
     /* Binary Ninja: void* $v0 = *($s5 + 0x3c) */
     /* Binary Ninja: void* $s0 = nullptr; if ($v0 != 0 && $v0 u< 0xfffff001) $s0 = *($v0 + 0xd4) */
-    void *node_data = NULL;
-    if (isp_node) {
-        /* Get ISP device from VIC for command processing */
-        node_data = ourISPdev;  /* Use global ISP device */
-    }
+    void *node_data = ourISPdev;  /* Use global ISP device */
 
     if (!node_data) {
         pr_err("isp_vic_cmd_set: Can't ops the node!\n");
