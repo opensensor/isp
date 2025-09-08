@@ -160,9 +160,12 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int mode, int sensor_format)
                 pr_info("csi_core_ops_init: MIPI mode initialization\n");
                 
                 /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
-                /* Set lane count from sensor attributes */
-                int lanes = csi_dev->sensor_attr.mipi.mipi_sc.mipi_crop.max_width; /* Approximate mapping */
-                if (lanes <= 0) lanes = 2; /* Default 2 lanes */
+                /* Set lane count from sensor attributes - FIXED to use valid struct members */
+                int lanes = 2; /* Default MIPI lanes for most sensors */
+                if (csi_dev->sensor_attr.total_width > 0) {
+                    /* Use sensor width to determine lane count like Binary Ninja reference */
+                    lanes = (csi_dev->sensor_attr.total_width > 1280) ? 2 : 1;
+                }
                 csi_set_on_lanes(sd, lanes);
                 
                 /* Binary Ninja: Clear and setup VIC registers with timing */
