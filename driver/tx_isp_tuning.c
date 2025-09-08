@@ -786,7 +786,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     int ret = 0;
     struct isp_tuning_data *tuning;
 
-    /* CRITICAL: Binary Ninja reference implementation safety checks */
+    /* Basic validation only - alignment issues should be impossible now */
     if (!dev) {
         pr_err("apical_isp_core_ops_g_ctrl: NULL device pointer\n");
         return -EINVAL;
@@ -799,70 +799,16 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
 
     tuning = dev->tuning_data;
     
-    /* CRITICAL: Validate tuning pointer is not corrupted - prevent BadVA crash */
+    /* Simple validation - proper allocation should prevent issues */
     if (!tuning) {
         pr_err("apical_isp_core_ops_g_ctrl: NULL tuning data for cmd=0x%x\n", ctrl->cmd);
         return -ENODEV;
     }
     
-    /* CRITICAL: Validate tuning pointer is in valid kernel address space */
-    /* MIPS KSEG0: 0x80000000-0x9fffffff (cached), KSEG1: 0xa0000000-0xbfffffff (uncached), KSEG2: 0xc0000000+ (mapped) */
-    if ((unsigned long)tuning < 0x80000000) {
-        pr_err("CRITICAL: Corrupted tuning pointer detected: %08x - PREVENTING CRASH\n", (unsigned int)tuning);
-        pr_err("CRITICAL: This would have caused BadVA crash at address %08x\n", (unsigned int)tuning);
-        pr_err("CRITICAL: Expected valid kernel pointer >= 0x80000000, got %08x\n", (unsigned int)tuning);
-        
-        /* CRITICAL FIX: Attempt to recover by reinitializing tuning data */
-        pr_err("*** ATTEMPTING TUNING DATA RECOVERY ***\n");
-        
-        /* Clear corrupted pointer first */
-        dev->tuning_data = NULL;
-        
-        /* Try to reinitialize tuning data */
-        dev->tuning_data = isp_core_tuning_init(dev);
-        if (dev->tuning_data) {
-            pr_info("*** SUCCESS: Tuning data recovery successful - new pointer: %p ***\n", dev->tuning_data);
-            tuning = dev->tuning_data;
-            /* Validate recovery was successful */
-            if ((unsigned long)tuning >= 0x80000000 && virt_addr_valid(tuning)) {
-                pr_info("*** RECOVERY VALIDATED: New tuning data pointer is valid ***\n");
-                /* Continue with recovered pointer */
-            } else {
-                pr_err("*** RECOVERY FAILED: New tuning data still invalid ***\n");
-                return -EFAULT;
-            }
-        } else {
-            pr_err("*** RECOVERY FAILED: Could not reinitialize tuning data ***\n");
-            return -EFAULT;
-        }
-    }
-    
-    /* CRITICAL: Validate tuning pointer alignment for MIPS */
-    if ((unsigned long)tuning & 0x3) {
-        pr_err("CRITICAL: Unaligned tuning pointer: %p - PREVENTING CRASH\n", tuning);
-        dev->tuning_data = NULL;
-        return -EFAULT;
-    }
-    
-    /* CRITICAL: Validate that we can access the tuning structure safely */
-    if (!virt_addr_valid(tuning)) {
-        pr_err("CRITICAL: Invalid virtual address for tuning data: %p - PREVENTING CRASH\n", tuning);
-        dev->tuning_data = NULL;
-        return -EFAULT;
-    }
-    
-    /* CRITICAL: Additional corruption check - validate structure magic if available */
-    if (tuning->state == 0 || tuning->state > 10) {
-        pr_err("CRITICAL: Tuning data state corrupted: %d - indicates memory corruption\n", tuning->state);
-        /* Try to recover */
-        dev->tuning_data = NULL;
-        dev->tuning_data = isp_core_tuning_init(dev);
-        if (dev->tuning_data) {
-            tuning = dev->tuning_data;
-            pr_info("*** Tuning data state corruption recovered ***\n");
-        } else {
-            return -EFAULT;
-        }
+    /* Basic state check */
+    if (tuning->state != 1) {
+        pr_err("apical_isp_core_ops_g_ctrl: Invalid tuning state: %d\n", tuning->state);
+        return -EINVAL;
     }
     
     //mutex_lock(&tuning->lock);
@@ -1812,20 +1758,21 @@ int isp_core_tuning_release(struct tx_isp_dev *dev)
     if (!tuning)
         return 0;
 
-    // Unmap registers but preserve tuning data structure
-    if (tuning->regs) {
-        /* CRITICAL: Validate register address before unmapping */
-        if ((unsigned long)tuning->regs >= 0x10000000 && virt_addr_valid(tuning->regs)) {
-            pr_info("isp_core_tuning_release: Unmapping register base %p\n", tuning->regs);
-            iounmap(tuning->regs);
-        } else {
-            pr_warn("isp_core_tuning_release: Invalid register base %p - skipping iounmap to prevent crash\n", tuning->regs);
-        }
-        tuning->regs = NULL;
-    }
-
-    // Just clear state - mutex cleanup handled by userspace
+    /* Clear state first */
     tuning->state = 0;
+    
+    /* Clean up synchronization primitives */
+    mutex_destroy(&tuning->mutex);
+    
+    /* Free the page-based allocation */
+    if (tuning->allocation_pages) {
+        free_pages(tuning->allocation_pages, tuning->allocation_order);
+        pr_info("isp_core_tuning_release: Released pages at %p (order=%d)\n",
+                (void*)tuning->allocation_pages, tuning->allocation_order);
+    }
+    
+    /* Clear the tuning data reference */
+    dev->tuning_data = NULL;
 
     return 0;
 }
@@ -4352,42 +4299,24 @@ void *isp_core_tuning_init(void *arg1)
         return NULL;
     }
     
-    /* CRITICAL: Binary Ninja shows *result = arg1 */
-    if (arg1) {
-        *(void**)tuning_data = arg1;
-    }
+    /* Store allocation info for later cleanup */
+    tuning_data->allocation_order = order;
+    tuning_data->allocation_pages = pages;
     
-    /* CRITICAL: Binary Ninja shows proper register initialization - CRASH PREVENTION */
-    if (ourISPdev && ourISPdev->core_regs) {
-        /* CRITICAL: Validate register base before assignment */
-        if ((unsigned long)ourISPdev->core_regs >= 0x10000000 && virt_addr_valid(ourISPdev->core_regs)) {
-            /* CRITICAL: Use safe struct member access instead of hardcoded offset */
-            if ((unsigned long)tuning_data > sizeof(struct isp_tuning_data)) {
-                tuning_data->regs = ourISPdev->core_regs;
-                pr_info("isp_core_tuning_init: Register base initialized to %p\n", tuning_data->regs);
-            } else {
-                pr_warn("isp_core_tuning_init: Tuning data size insufficient for register field\n");
-                tuning_data->regs = NULL;
-            }
-        } else {
-            pr_warn("isp_core_tuning_init: Invalid register base %p - setting to NULL to prevent crashes\n", ourISPdev->core_regs);
-            tuning_data->regs = NULL;
-        }
+    /* CRITICAL: Initialize register base safely */
+    if (ourISPdev && ourISPdev->core_regs && virt_addr_valid(ourISPdev->core_regs)) {
+        tuning_data->regs = ourISPdev->core_regs;
+        pr_info("isp_core_tuning_init: Register base initialized to %p\n", tuning_data->regs);
     } else {
-        pr_warn("isp_core_tuning_init: No register base available - register access will be disabled\n");
         tuning_data->regs = NULL;
+        pr_info("isp_core_tuning_init: No valid register base - register access disabled\n");
     }
     
-    /* Initialize the tuning data structure with safe default values */
-    /* Note: No device field in struct - arg1 is available through global reference */
-    
-    /* Initialize BCSH values to safe defaults */
-    tuning_data->brightness = 128;  /* Default brightness */
-    tuning_data->contrast = 128;    /* Default contrast */
-    tuning_data->saturation = 128;  /* Default saturation - the crashing field! */
-    tuning_data->sharpness = 128;   /* Default sharpness */
-    
-    /* Initialize other control values */
+    /* Initialize tuning data structure with safe, aligned defaults */
+    tuning_data->brightness = 128;
+    tuning_data->contrast = 128;
+    tuning_data->saturation = 128;
+    tuning_data->sharpness = 128;
     tuning_data->hflip = 0;
     tuning_data->vflip = 0;
     tuning_data->antiflicker = 0;
@@ -4403,12 +4332,10 @@ void *isp_core_tuning_init(void *arg1)
     tuning_data->sinter_strength = 0;
     tuning_data->running_mode = 0;
     tuning_data->custom_mode = 0;
-    
-    /* Initialize FPS values */
     tuning_data->fps_num = 25;
     tuning_data->fps_den = 1;
     
-    /* Initialize BCSH arrays with safe default values */
+    /* Initialize BCSH arrays */
     for (int i = 0; i < 9; i++) {
         tuning_data->bcsh_au32EvList_now[i] = 0x1000 * (i + 1);
         tuning_data->bcsh_au32SminListS_now[i] = 0x80 + (i * 0x10);
@@ -4433,94 +4360,21 @@ void *isp_core_tuning_init(void *arg1)
     tuning_data->bcsh_saturation_max = 0x100;
     tuning_data->bcsh_saturation_min = 0x80;
     tuning_data->bcsh_saturation_mult = 0x100;
-    
-    /* Initialize exposure and gain values */
     tuning_data->exposure = 0x1000;
     tuning_data->total_gain = 0x100;
     
-    /* Initialize state */
-    tuning_data->state = 1;
-    
-    /* CRITICAL: Binary Ninja reference initialization sequence */
-    /* private_spin_lock_init(&result[0x102e]) */
+    /* Initialize synchronization primitives */
     spin_lock_init(&tuning_data->lock);
-    
-    /* private_raw_mutex_init(&result[0x102e], "width is %d, height is %d...") */
     mutex_init(&tuning_data->mutex);
     
-    /* Binary Ninja: result[0x1031] = 1 */
+    /* Set valid state marker */
     tuning_data->state = 1;
     
-    /* Binary Ninja: result[0x1032] = &isp_core_tunning_fops */
-    /* This is handled by device creation, not stored in data structure */
-    
-    /* Binary Ninja: result[0x1033] = isp_core_tuning_event */
-    /* Event callback is registered separately */
-    
-    /* CRITICAL: Set magic values for corruption detection */
-    tuning_data->state = 1;  /* Valid state marker */
-    
-    /* CRITICAL: Final verification with comprehensive testing before returning */
-    if (!virt_addr_valid(tuning_data)) {
-        pr_err("CRITICAL: Tuning data virtual address not valid: %p\n", tuning_data);
-        kfree(tuning_data);
-        return NULL;
-    }
-    
-    /* Test access to the critical saturation field */
-    if (!virt_addr_valid(&tuning_data->saturation)) {
-        pr_err("CRITICAL: Saturation field not accessible: %p\n", &tuning_data->saturation);
-        kfree(tuning_data);
-        return NULL;
-    }
-    
-    /* Test access to the critical VFlip field at expected offset */
-    if (!virt_addr_valid(&tuning_data->vflip)) {
-        pr_err("CRITICAL: VFlip field not accessible: %p\n", &tuning_data->vflip);
-        kfree(tuning_data);
-        return NULL;
-    }
-    
-    /* CRITICAL: Test write access to ensure no memory protection issues */
-    tuning_data->brightness = 128;
-    tuning_data->saturation = 128;  /* Test the critical field */
-    
-    if (tuning_data->brightness != 128 || tuning_data->saturation != 128) {
-        pr_err("CRITICAL: Tuning data write test failed - memory corruption detected\n");
-        kfree(tuning_data);
-        return NULL;
-    }
-    
-    /* CRITICAL: Set up corruption detection pattern at end of structure */
-    char *end_marker = (char*)tuning_data + alloc_size - 16;
-    memcpy(end_marker, "TUNING_GUARD_OK", 16);
-    
-    /* CRITICAL: Global device reference integrity check */
-    if (ourISPdev) {
-        /* Ensure the ISP device isn't corrupted before linking */
-        if ((unsigned long)ourISPdev < 0x80000000 || !virt_addr_valid(ourISPdev)) {
-            pr_err("CRITICAL: ourISPdev pointer corrupted: %p - cannot link safely\n", ourISPdev);
-            kfree(tuning_data);
-            return NULL;
-        }
-        
-        pr_info("isp_core_tuning_init: Linking to validated ISP device at %p\n", ourISPdev);
-    }
-    
-    pr_info("isp_core_tuning_init: Tuning data structure fully initialized with corruption protection\n");
-    pr_info("isp_core_tuning_init: Address range: %p to %p (size=%zu)\n", 
-            tuning_data, (char*)tuning_data + alloc_size, alloc_size);
-    pr_info("isp_core_tuning_init: Critical fields - Brightness=%d, Saturation=%d (corruption prevention)\n", 
+    pr_info("isp_core_tuning_init: Tuning data structure initialized successfully\n");
+    pr_info("isp_core_tuning_init: Address: %p, aligned: 16-byte, state: %d\n",
+            tuning_data, tuning_data->state);
+    pr_info("isp_core_tuning_init: Critical fields - Brightness=%d, Saturation=%d\n",
             tuning_data->brightness, tuning_data->saturation);
-    pr_info("isp_core_tuning_init: State marker: %d (corruption detection)\n", tuning_data->state);
-    pr_info("MCP_LOG: Tuning data structure allocated with comprehensive corruption protection\n");
-    
-    /* CRITICAL: Final pointer validation before return */
-    if ((unsigned long)tuning_data < 0x80000000) {
-        pr_err("CRITICAL: Final validation failed - pointer not in kernel space: %08x\n", (unsigned int)tuning_data);
-        kfree(tuning_data);
-        return NULL;
-    }
     
     return tuning_data;
 }
