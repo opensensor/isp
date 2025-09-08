@@ -390,11 +390,11 @@ struct vic_buffer_entry {
 };
 
 /* VIC MDMA channel state - Binary Ninja global variables */
-static uint32_t vic_mdma_ch0_sub_get_num = 0;
-static uint32_t vic_mdma_ch1_sub_get_num = 0;
-static uint32_t vic_mdma_ch0_set_buff_index = 0;
-static uint32_t vic_mdma_ch1_set_buff_index = 0;
-static struct list_head vic_buffer_fifo;
+uint32_t vic_mdma_ch0_sub_get_num = 0;
+uint32_t vic_mdma_ch1_sub_get_num = 0;
+uint32_t vic_mdma_ch0_set_buff_index = 0;
+uint32_t vic_mdma_ch1_set_buff_index = 0;
+struct list_head vic_buffer_fifo;
 
 /* GPIO switch state for VIC frame done - Binary Ninja reference */
 static uint32_t gpio_switch_state = 0;

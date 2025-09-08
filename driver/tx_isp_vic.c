@@ -1955,6 +1955,12 @@ static inline uint32_t system_reg_read(u32 reg)
 
 void system_reg_write(u32 reg, u32 value);
 
+extern uint32_t vic_mdma_ch0_sub_get_num = 0;
+extern uint32_t vic_mdma_ch1_sub_get_num = 0;
+extern uint32_t vic_mdma_ch0_set_buff_index = 0;
+extern uint32_t vic_mdma_ch1_set_buff_index = 0;
+extern struct list_head vic_buffer_fifo;
+
 
 /* vic_mdma_enable - EXACT Binary Ninja implementation */
 static uint32_t vic_mdma_enable(void* arg1, int32_t arg2, int32_t arg3, uint32_t arg4,
