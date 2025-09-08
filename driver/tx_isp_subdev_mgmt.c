@@ -514,7 +514,6 @@ static int tx_isp_csi_device_init(struct tx_isp_dev *isp)
     pr_info("CSI device initialized\n");
     return 0;
 }
-}
 
 
 /**
