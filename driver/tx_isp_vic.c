@@ -195,95 +195,95 @@ static int vic_detect_memory_corruption(struct tx_isp_vic_device *vic_dev, const
     
     return VIC_VALIDATION_OK;
 }
-
-/* vic_video_s_stream - EXACT Binary Ninja reference implementation */
-int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
-{
-    struct tx_isp_vic_device *vic_dev;
-    int result = -EINVAL;  /* 0xffffffea */
-    
-    pr_info("*** vic_video_s_stream: EXACT Binary Ninja implementation ***\n");
-    pr_info("vic_video_s_stream: sd=%p, enable=%d\n", sd, enable);
-    
-    /* Binary Ninja: if (arg1 != 0) */
-    if (sd != 0) {
-        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
-        if ((unsigned long)sd >= 0xfffff001) {
-            pr_err("vic_video_s_stream: Invalid sd pointer range\n");
-            return -EINVAL;
-        }
-        
-        /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
-        /* CRITICAL FIX: Use tx_isp_get_subdevdata instead of dangerous offset 0xd4 */
-        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-        result = -EINVAL;
-        
-        pr_info("vic_video_s_stream: vic_dev=%p (retrieved safely)\n", vic_dev);
-        
-        /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
-        if (vic_dev != 0 && (unsigned long)vic_dev < 0xfffff001) {
-            /* Binary Ninja: int32_t $v1_3 = *($s1_1 + 0x128) */
-            int current_state = vic_dev->state;  /* Use safe struct member access */
-            
-            pr_info("vic_video_s_stream: current_state=%d\n", current_state);
-            
-            /* Binary Ninja: if (arg2 == 0) */
-            if (enable == 0) {
-                /* DISABLE streaming */
-                result = 0;
-                
-                /* Binary Ninja: if ($v1_3 == 4) */
-                if (current_state == 4) {
-                    /* Binary Ninja: *($s1_1 + 0x128) = 3 */
-                    vic_dev->state = 3;  /* STREAMING -> ACTIVE */
-                    pr_info("*** VIC STREAMING DISABLED: state 4 -> 3 ***\n");
-                    
-                    /* Additional cleanup - reset vic_start_ok when stopping */
-                    vic_start_ok = 0;
-                    pr_info("*** vic_start_ok reset to 0 (interrupts disabled) ***\n");
-                }
-                
-            } else {
-                /* ENABLE streaming */
-                result = 0;
-                
-                /* Binary Ninja: if ($v1_3 != 4) */
-                if (current_state != 4) {
-                    pr_info("*** VIC STREAMING ENABLE: Starting VIC hardware (current_state=%d) ***\n", current_state);
-                    
-                    /* Binary Ninja: tx_vic_disable_irq() */
-                    tx_vic_disable_irq();
-                    
-                    /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
-                    /* *** CRITICAL: This call sets vic_start_ok = 1 *** */
-                    int vic_start_result = tx_isp_vic_start(vic_dev);
-                    
-                    /* Binary Ninja: *($s1_1 + 0x128) = 4 */
-                    vic_dev->state = 4;  /* Set to STREAMING state */
-                    
-                    /* Binary Ninja: tx_vic_enable_irq() */
-                    tx_vic_enable_irq();
-                    
-                    pr_info("*** VIC STREAMING ENABLED: vic_start_result=%d, state -> 4, vic_start_ok=%d ***\n",
-                            vic_start_result, vic_start_ok);
-                    
-                    /* Binary Ninja: return $v0_1 */
-                    return vic_start_result;
-                } else {
-                    pr_info("vic_video_s_stream: Already streaming (state=%d)\n", current_state);
-                }
-            }
-        } else {
-            pr_err("vic_video_s_stream: Invalid vic_dev pointer %p\n", vic_dev);
-        }
-    } else {
-        pr_err("vic_video_s_stream: NULL sd parameter\n");
-    }
-    
-    /* Binary Ninja: return $v0 */
-    pr_info("vic_video_s_stream: returning result=%d\n", result);
-    return result;
-}
+//
+///* vic_video_s_stream - EXACT Binary Ninja reference implementation */
+//int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
+//{
+//    struct tx_isp_vic_device *vic_dev;
+//    int result = -EINVAL;  /* 0xffffffea */
+//
+//    pr_info("*** vic_video_s_stream: EXACT Binary Ninja implementation ***\n");
+//    pr_info("vic_video_s_stream: sd=%p, enable=%d\n", sd, enable);
+//
+//    /* Binary Ninja: if (arg1 != 0) */
+//    if (sd != 0) {
+//        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
+//        if ((unsigned long)sd >= 0xfffff001) {
+//            pr_err("vic_video_s_stream: Invalid sd pointer range\n");
+//            return -EINVAL;
+//        }
+//
+//        /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
+//        /* CRITICAL FIX: Use tx_isp_get_subdevdata instead of dangerous offset 0xd4 */
+//        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+//        result = -EINVAL;
+//
+//        pr_info("vic_video_s_stream: vic_dev=%p (retrieved safely)\n", vic_dev);
+//
+//        /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
+//        if (vic_dev != 0 && (unsigned long)vic_dev < 0xfffff001) {
+//            /* Binary Ninja: int32_t $v1_3 = *($s1_1 + 0x128) */
+//            int current_state = vic_dev->state;  /* Use safe struct member access */
+//
+//            pr_info("vic_video_s_stream: current_state=%d\n", current_state);
+//
+//            /* Binary Ninja: if (arg2 == 0) */
+//            if (enable == 0) {
+//                /* DISABLE streaming */
+//                result = 0;
+//
+//                /* Binary Ninja: if ($v1_3 == 4) */
+//                if (current_state == 4) {
+//                    /* Binary Ninja: *($s1_1 + 0x128) = 3 */
+//                    vic_dev->state = 3;  /* STREAMING -> ACTIVE */
+//                    pr_info("*** VIC STREAMING DISABLED: state 4 -> 3 ***\n");
+//
+//                    /* Additional cleanup - reset vic_start_ok when stopping */
+//                    vic_start_ok = 0;
+//                    pr_info("*** vic_start_ok reset to 0 (interrupts disabled) ***\n");
+//                }
+//
+//            } else {
+//                /* ENABLE streaming */
+//                result = 0;
+//
+//                /* Binary Ninja: if ($v1_3 != 4) */
+//                if (current_state != 4) {
+//                    pr_info("*** VIC STREAMING ENABLE: Starting VIC hardware (current_state=%d) ***\n", current_state);
+//
+//                    /* Binary Ninja: tx_vic_disable_irq() */
+//                    tx_vic_disable_irq();
+//
+//                    /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
+//                    /* *** CRITICAL: This call sets vic_start_ok = 1 *** */
+//                    int vic_start_result = tx_isp_vic_start(vic_dev);
+//
+//                    /* Binary Ninja: *($s1_1 + 0x128) = 4 */
+//                    vic_dev->state = 4;  /* Set to STREAMING state */
+//
+//                    /* Binary Ninja: tx_vic_enable_irq() */
+//                    tx_vic_enable_irq();
+//
+//                    pr_info("*** VIC STREAMING ENABLED: vic_start_result=%d, state -> 4, vic_start_ok=%d ***\n",
+//                            vic_start_result, vic_start_ok);
+//
+//                    /* Binary Ninja: return $v0_1 */
+//                    return vic_start_result;
+//                } else {
+//                    pr_info("vic_video_s_stream: Already streaming (state=%d)\n", current_state);
+//                }
+//            }
+//        } else {
+//            pr_err("vic_video_s_stream: Invalid vic_dev pointer %p\n", vic_dev);
+//        }
+//    } else {
+//        pr_err("vic_video_s_stream: NULL sd parameter\n");
+//    }
+//
+//    /* Binary Ninja: return $v0 */
+//    pr_info("vic_video_s_stream: returning result=%d\n", result);
+//    return result;
+//}
 
 /* VIC interrupt control functions */
 static void tx_vic_disable_irq(void)

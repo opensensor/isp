@@ -4229,23 +4229,7 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEVICE REGISTRY INITIALIZED SUCCESSFULLY ***\n");
     
-    /* *** CRITICAL: Ensure VIC registers are mapped before CSI initialization *** */
-    pr_info("*** VERIFYING VIC REGISTERS ARE AVAILABLE BEFORE CSI INIT ***\n");
-    if (!ourISPdev->vic_regs) {
-        pr_info("*** VIC registers not yet mapped, attempting direct mapping ***\n");
-        
-        /* Direct map VIC registers if not already available */
-        ourISPdev->vic_regs = ioremap(0x10023000, 0x1000);  /* VIC base from /proc/iomem */
-        if (!ourISPdev->vic_regs) {
-            pr_err("Failed to directly map VIC registers\n");
-            goto err_cleanup_platforms;
-        }
-        pr_info("*** VIC registers directly mapped to %p ***\n", ourISPdev->vic_regs);
-    } else {
-        pr_info("*** VIC registers already available at %p ***\n", ourISPdev->vic_regs);
-    }
-
-    /* Initialize CSI and activate it - VIC registers now guaranteed to be available */
+    /* Initialize CSI and activate it */
     ret = tx_isp_init_csi_subdev(ourISPdev);
     if (ret) {
         pr_err("Failed to initialize CSI subdev: %d\n", ret);
@@ -4257,8 +4241,6 @@ static int tx_isp_init(void)
         pr_err("Failed to activate CSI subdev: %d\n", ret);
         goto err_cleanup_platforms;
     }
-    
-    pr_info("*** CSI INITIALIZED WITH VIC REGISTERS AVAILABLE ***\n");
     
     /* *** FIXED: USE PROPER STRUCT MEMBER ACCESS INSTEAD OF DANGEROUS OFFSETS *** */
     pr_info("*** POPULATING SUBDEV ARRAY USING SAFE STRUCT MEMBER ACCESS ***\n");
@@ -4513,6 +4495,37 @@ static void tx_isp_exit(void)
     mutex_unlock(&sensor_list_mutex);
 
     pr_info("TX ISP driver removed\n");
+}
+
+/* VIC video streaming function - CRITICAL for register activity */
+int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
+{
+    struct tx_isp_dev *isp_dev;
+    struct tx_isp_vic_device *vic_dev;
+    int ret;
+    
+    if (!sd) {
+        return -EINVAL;
+    }
+    
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if (!isp_dev || !isp_dev->vic_dev) {
+        return -EINVAL;
+    }
+    
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    
+    pr_info("*** VIC VIDEO STREAMING %s - THIS SHOULD TRIGGER REGISTER WRITES! ***\n",
+            enable ? "ENABLE" : "DISABLE");
+    
+    if (enable) {
+        /* Call vic_core_s_stream which calls tx_isp_vic_start */
+        ret = vic_core_s_stream(sd, enable);
+        pr_info("*** VIC VIDEO STREAMING ENABLE RETURNED %d ***\n", ret);
+        return ret;
+    } else {
+        return vic_core_s_stream(sd, enable);
+    }
 }
 
 /* CSI video streaming function - MIPS-SAFE implementation */
