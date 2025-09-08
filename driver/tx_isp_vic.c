@@ -369,14 +369,22 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     u32 mdma_status = readl(vic_base + 0x1e4);
     isr_mdma = (~mdma_mask) & mdma_status;
     
-    /* Binary Ninja: Store processed interrupts back */
-    /* *($v0_4 + 0x1f0) = $v1_7 */
-    writel(isr_main, vic_base + 0x1f0);
-    /* *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
-    writel(isr_mdma, vic_base + 0x1f4);
+    /* *** CRITICAL FIX: ALWAYS clear ALL interrupt status bits immediately *** */
+    /* This prevents interrupts from accumulating during start/stop/start sequences */
+    /* Clear the main interrupt status register - acknowledge ALL pending interrupts */
+    writel(isr_status, vic_base + 0x1f0);  /* Clear ALL bits, not just processed ones */
+    /* Clear the MDMA interrupt status register - acknowledge ALL pending interrupts */
+    writel(mdma_status, vic_base + 0x1f4);  /* Clear ALL bits, not just processed ones */
     wmb();
     
-    pr_debug("isp_vic_interrupt_service_routine: isr_main=0x%x, isr_mdma=0x%x\n", isr_main, isr_mdma);
+    pr_debug("isp_vic_interrupt_service_routine: isr_main=0x%x, isr_mdma=0x%x (ALL status cleared)\n", isr_main, isr_mdma);
+    
+    /* Additional safety: Clear any other interrupt status registers that might exist */
+    writel(0xFFFFFFFF, vic_base + 0x1e0);  /* Clear main interrupt status completely */
+    writel(0xFFFFFFFF, vic_base + 0x1e4);  /* Clear MDMA interrupt status completely */
+    wmb();
+    
+    pr_debug("isp_vic_interrupt_service_routine: ALL interrupt status registers forcibly cleared\n");
     
     /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
     if (vic_start_ok != 0) {
@@ -394,7 +402,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             
             pr_info("VIC Frame done interrupt - frame_count=%d (synchronized with ISP)\n", vic_dev->frame_count);
             /* entry_$a2 = vic_framedone_irq_function($s0) */
-            // vic_framedone_irq_function(vic_dev);
+            vic_framedone_irq_function(vic_dev);
         }
         
         /* Binary Ninja: Error interrupt handling */
