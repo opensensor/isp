@@ -1940,6 +1940,18 @@ struct tx_isp_subdev_ops vic_subdev_ops = {
 EXPORT_SYMBOL(vic_subdev_ops);
 
 
+/* System register access functions */
+static inline uint32_t system_reg_read(u32 reg)
+{
+    extern struct tx_isp_dev *ourISPdev;
+
+    if (!ourISPdev || !ourISPdev->vic_regs) {
+        return 0;
+    }
+
+    void __iomem *isp_base = ourISPdev->vic_regs - 0x9a00; /* Get ISP base */
+    return readl(isp_base + reg);
+}
 
 /* isp_vic_cmd_set - EXACT Binary Ninja implementation for snapraw/saveraw */
 static int32_t isp_vic_cmd_set(void* arg1, int32_t arg2, int32_t arg3)

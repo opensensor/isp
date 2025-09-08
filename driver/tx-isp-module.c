@@ -623,11 +623,11 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 
 /* Forward declaration for hardware initialization */
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
-static void system_reg_write(u32 reg, u32 value);
+void system_reg_write(u32 reg, u32 value);
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
 
 /* system_reg_write - Helper function to write ISP registers safely */
-static void system_reg_write(u32 reg, u32 value)
+void system_reg_write(u32 reg, u32 value)
 {
     void __iomem *isp_regs = NULL;
     
