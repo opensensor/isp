@@ -61,7 +61,6 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 /* VIC Proc Operations - from spec driver */
 int isp_vic_frd_show(struct seq_file *seq, void *v);
 int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
-long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 int vic_event_handler(void *subdev, int event_type, void *data);
 
 // Forward declarations for initialization functions
