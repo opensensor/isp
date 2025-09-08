@@ -996,7 +996,34 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 	/* STEP 0: Initialize secondary ISP modules (isp-w02) */
 	pr_info("*** STREAMING: Initializing secondary ISP module (isp-w02) ***\n");
 
-	/* Map secondary ISP register space if needed */
+	/* THEN continue with the existing clock enable code... */
+
+    /* STEP 1: Enable clocks using Linux Clock Framework like tx_isp_init_vic_registers */
+    pr_info("*** STREAMING: Enabling ISP clocks using Linux Clock Framework ***\n");
+
+    isp_clk = clk_get(NULL, "isp");
+    if (!IS_ERR(isp_clk)) {
+        ret = clk_prepare_enable(isp_clk);
+        if (ret == 0) {
+            pr_info("STREAMING: ISP clock enabled via clk framework\n");
+        } else {
+            pr_err("STREAMING: Failed to enable ISP clock: %d\n", ret);
+        }
+    } else {
+        pr_warn("STREAMING: ISP clock not found: %ld\n", PTR_ERR(isp_clk));
+    }
+
+    cgu_isp_clk = clk_get(NULL, "cgu_isp");
+    if (!IS_ERR(cgu_isp_clk)) {
+        ret = clk_prepare_enable(cgu_isp_clk);
+        if (ret == 0) {
+            pr_info("STREAMING: CGU_ISP clock enabled via clk framework\n");
+        } else {
+            pr_err("STREAMING: Failed to enable CGU_ISP clock: %d\n", ret);
+        }
+    }
+
+    	/* Map secondary ISP register space if needed */
 	void __iomem *isp_w02_regs = ioremap(0x13300000, 0x10000); /* Adjust base address as needed */
 	if (isp_w02_regs) {
 	    pr_info("ISP isp-w02: Initializing CSI PHY Control registers\n");
@@ -1054,33 +1081,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
 	    iounmap(isp_w01_regs);
 	}
-
-	/* THEN continue with the existing clock enable code... */
-
-    /* STEP 1: Enable clocks using Linux Clock Framework like tx_isp_init_vic_registers */
-    pr_info("*** STREAMING: Enabling ISP clocks using Linux Clock Framework ***\n");
-
-    isp_clk = clk_get(NULL, "isp");
-    if (!IS_ERR(isp_clk)) {
-        ret = clk_prepare_enable(isp_clk);
-        if (ret == 0) {
-            pr_info("STREAMING: ISP clock enabled via clk framework\n");
-        } else {
-            pr_err("STREAMING: Failed to enable ISP clock: %d\n", ret);
-        }
-    } else {
-        pr_warn("STREAMING: ISP clock not found: %ld\n", PTR_ERR(isp_clk));
-    }
-
-    cgu_isp_clk = clk_get(NULL, "cgu_isp");
-    if (!IS_ERR(cgu_isp_clk)) {
-        ret = clk_prepare_enable(cgu_isp_clk);
-        if (ret == 0) {
-            pr_info("STREAMING: CGU_ISP clock enabled via clk framework\n");
-        } else {
-            pr_err("STREAMING: Failed to enable CGU_ISP clock: %d\n", ret);
-        }
-    }
 
     /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
     pr_info("*** STREAMING: Configuring CPM registers for VIC access ***\n");
