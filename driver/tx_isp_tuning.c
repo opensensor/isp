@@ -4110,19 +4110,6 @@ int isp_setup_irq_handling(struct tx_isp_dev *dev)
         return ret;
     }
     
-    /* Request ISP interrupt */
-    if (dev->isp_irq > 0) {
-        ret = request_irq(dev->isp_irq, isp_irq_dispatcher, IRQF_SHARED, 
-                         "tx-isp", dev);
-        if (ret) {
-            pr_err("isp_setup_irq_handling: Failed to request IRQ %d: %d\n", 
-                   dev->isp_irq, ret);
-            return ret;
-        }
-        
-        pr_info("isp_setup_irq_handling: IRQ %d registered successfully\n", dev->isp_irq);
-    }
-    
     /* Enable basic ISP interrupts */
     if (dev->core_regs) {
         writel(0xFFFFFFFF, dev->core_regs + 0x44); /* Enable all ISP interrupts */
