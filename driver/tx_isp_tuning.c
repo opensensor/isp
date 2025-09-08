@@ -1814,7 +1814,13 @@ int isp_core_tuning_release(struct tx_isp_dev *dev)
 
     // Unmap registers but preserve tuning data structure
     if (tuning->regs) {
-        iounmap(tuning->regs);
+        /* CRITICAL: Validate register address before unmapping */
+        if ((unsigned long)tuning->regs >= 0x10000000 && virt_addr_valid(tuning->regs)) {
+            pr_info("isp_core_tuning_release: Unmapping register base %p\n", tuning->regs);
+            iounmap(tuning->regs);
+        } else {
+            pr_warn("isp_core_tuning_release: Invalid register base %p - skipping iounmap to prevent crash\n", tuning->regs);
+        }
         tuning->regs = NULL;
     }
 
@@ -4352,12 +4358,18 @@ void *isp_core_tuning_init(void *arg1)
     
     /* CRITICAL: Binary Ninja shows proper register initialization - CRASH PREVENTION */
     if (ourISPdev && ourISPdev->core_regs) {
-        /* CRITICAL: Use safe struct member access instead of hardcoded offset */
-        if ((unsigned long)tuning_data > sizeof(struct isp_tuning_data)) {
-            tuning_data->regs = ourISPdev->core_regs;
-            pr_info("isp_core_tuning_init: Register base initialized to %p\n", tuning_data->regs);
+        /* CRITICAL: Validate register base before assignment */
+        if ((unsigned long)ourISPdev->core_regs >= 0x10000000 && virt_addr_valid(ourISPdev->core_regs)) {
+            /* CRITICAL: Use safe struct member access instead of hardcoded offset */
+            if ((unsigned long)tuning_data > sizeof(struct isp_tuning_data)) {
+                tuning_data->regs = ourISPdev->core_regs;
+                pr_info("isp_core_tuning_init: Register base initialized to %p\n", tuning_data->regs);
+            } else {
+                pr_warn("isp_core_tuning_init: Tuning data size insufficient for register field\n");
+                tuning_data->regs = NULL;
+            }
         } else {
-            pr_warn("isp_core_tuning_init: Tuning data size insufficient for register field\n");
+            pr_warn("isp_core_tuning_init: Invalid register base %p - setting to NULL to prevent crashes\n", ourISPdev->core_regs);
             tuning_data->regs = NULL;
         }
     } else {
