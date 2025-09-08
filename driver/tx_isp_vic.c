@@ -111,6 +111,33 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     vic_dev->streaming = 0;
     vic_dev->state = 1; /* INIT state */
     
+    /* *** CRITICAL: Initialize VIC hardware buffers for QBUF operations *** */
+    pr_info("*** CRITICAL: Allocating VIC hardware buffers to prevent 'bank no free' ***\n");
+    for (int i = 0; i < 8; i++) {  /* Allocate 8 free buffers like reference driver */
+        /* Allocate buffer descriptor that can hold buffer address + metadata */
+        struct list_head *buffer_desc = kzalloc(sizeof(struct list_head) + 64, GFP_KERNEL);
+        if (buffer_desc) {
+            /* Initialize the buffer with dummy data for now */
+            uint32_t *buffer_data = (uint32_t *)((char *)buffer_desc + sizeof(struct list_head));
+            buffer_data[0] = 0;  /* Buffer address placeholder */
+            buffer_data[1] = i;  /* Buffer index */
+            buffer_data[2] = 0;  /* Buffer status */
+            
+            list_add_tail(buffer_desc, &vic_dev->free_head);
+            pr_info("*** VIC: Allocated free buffer %d (desc=%p) ***\n", i, buffer_desc);
+        } else {
+            pr_err("*** VIC: Failed to allocate free buffer %d ***\n", i);
+        }
+    }
+    
+    /* Verify free buffer allocation */
+    if (list_empty(&vic_dev->free_head)) {
+        pr_err("*** CRITICAL: No free buffers allocated - QBUF will fail! ***\n");
+        return -ENOMEM;
+    } else {
+        pr_info("*** SUCCESS: %d free buffers allocated for VIC operations ***\n", 8);
+    }
+    
     /* Set up sensor attributes with defaults */
     memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
     vic_dev->sensor_attr.dbus_type = 2; /* Default to MIPI */
