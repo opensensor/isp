@@ -23,6 +23,10 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
+/* Global VIC device reference for interrupt control - Binary Ninja exact match */
+static struct tx_isp_vic_device *dump_vsd = NULL;
+static void *test_addr = NULL;
+
 
 /* *** CRITICAL: MISSING FUNCTION - tx_isp_create_vic_device *** */
 /* This function creates and links the VIC device structure to the ISP core */
