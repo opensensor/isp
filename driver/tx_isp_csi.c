@@ -307,11 +307,12 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int mode, int sensor_format)
             /* Additional sensor format configuration */
             u32 format_config = 0;
             if (sensor_format != 0) {
-                format_config = vic_regs;
+                /* Default format configuration for non-zero sensor formats */
+                format_config = 0;
             } else {
                 /* Format-specific configuration based on Binary Ninja switch logic */
                 if ((sensor_format - 0x50) < 0x1e) {
-                    format_config = vic_regs;
+                    format_config = 0;  /* Default for this range */
                 } else {
                     /* Complex format detection logic from Binary Ninja */
                     if (sensor_format >= 0x6e && sensor_format < 0x96) {
@@ -322,13 +323,18 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int mode, int sensor_format)
                         format_config = 3;
                     }
                 }
-                
-                /* Apply format configuration to CSI registers */
+            }
+            
+            /* Apply format configuration to CSI registers */
+            if (csi_regs) {
                 reg_val = readl(csi_regs + 0x160);
                 reg_val = (reg_val & 0xfffffff0) | format_config;
                 writel(reg_val, csi_regs + 0x160);
                 writel(reg_val, csi_regs + 0x1e0);
                 writel(reg_val, csi_regs + 0x260);
+                wmb();
+                
+                pr_info("MCP_LOG: CSI format configuration applied - format_config=%d\n", format_config);
             }
             
             /* Final CSI enable sequence */
