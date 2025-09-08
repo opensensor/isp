@@ -503,14 +503,6 @@ static int tx_isp_create_basic_pipeline(struct tx_isp_dev *isp)
         return ret;
     }
 
-    /* Initialize VIC device */
-    ret = tx_isp_vic_device_init(isp);
-    if (ret < 0) {
-        pr_err("Failed to initialize VIC device: %d\n", ret);
-        tx_isp_csi_device_deinit(isp);
-        return ret;
-    }
-
     /* Setup pipeline */
     ret = tx_isp_setup_pipeline(isp);
     if (ret < 0) {
