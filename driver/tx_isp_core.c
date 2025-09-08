@@ -2146,7 +2146,7 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
         a1_2 = (v1_1 << 0x10) | a1_1;
     }
 
-    extern int system_reg_write(uint32_t offset, uint32_t value);
+    extern void system_reg_write(uint32_t offset, uint32_t value);
     system_reg_write(0x9860, a1_2);
     system_reg_write(0x9864, (tispinfo_2 << 0x10) | s2);
 
@@ -2334,7 +2334,8 @@ int tisp_s_fcrop_control(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4,
     
     uint32_t a1_15 = 0xf0000 | msca_ch_en_4;
     msca_ch_en = a1_15;
-    return system_reg_write(0x9804, a1_15);
+    system_reg_write(0x9804, a1_15);
+    return 0;
 }
 EXPORT_SYMBOL(tisp_s_fcrop_control);
 
