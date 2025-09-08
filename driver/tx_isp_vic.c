@@ -2227,7 +2227,7 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     } else {
         /* Binary Ninja EXACT: Process buffer from queue */
         /* int32_t $a1_1, $a2_1 = pop_buffer_fifo($s0 + 0x1f4) */
-        struct list_head *queue_buffer = list_first_entry(&vic_dev->queue_head, struct list_head, list);
+        struct list_head *queue_buffer = vic_dev->queue_head.next;
         list_del(queue_buffer);
         
         /* Binary Ninja EXACT: void** $v0_5, void* $a3_1 = $a1_1($a2_1) */
