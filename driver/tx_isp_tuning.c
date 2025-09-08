@@ -4308,46 +4308,47 @@ int tisp_code_destroy_tuning_node(void)
 }
 EXPORT_SYMBOL(tisp_code_destroy_tuning_node);
 
-/* isp_core_tuning_init - Binary Ninja EXACT implementation with proper tuning data structure */
+/* isp_core_tuning_init - Robust allocation with guaranteed alignment */
 void *isp_core_tuning_init(void *arg1)
 {
     struct isp_tuning_data *tuning_data;
+    void *raw_allocation = NULL;
     extern struct tx_isp_dev *ourISPdev;
     
-    pr_info("isp_core_tuning_init: Initializing ISP core tuning with corruption protection\n");
+    pr_info("isp_core_tuning_init: Initializing ISP core tuning with guaranteed alignment\n");
     
-    /* CRITICAL: Use larger allocation to prevent corruption and add guard pages */
-    /* Binary Ninja shows 0x40d0 but we'll use proper struct size + safety margin */
-    size_t alloc_size = sizeof(struct isp_tuning_data) + 0x1000; /* Add 4KB safety margin */
+    /* CRITICAL: Calculate aligned allocation size - must be multiple of 16 for MIPS32 */
+    size_t struct_size = sizeof(struct isp_tuning_data);
+    size_t aligned_size = ALIGN(struct_size, 16);  /* 16-byte alignment for MIPS32 safety */
     
-    pr_info("isp_core_tuning_init: Allocating %zu bytes (struct=%zu + safety=0x1000)\n", 
-            alloc_size, sizeof(struct isp_tuning_data));
+    pr_info("isp_core_tuning_init: Struct size=%zu, aligned size=%zu\n", struct_size, aligned_size);
     
-    /* CRITICAL: Use GFP_KERNEL | __GFP_ZERO for automatic clearing + DMA32 for MIPS */
-    tuning_data = kzalloc(alloc_size, GFP_KERNEL | __GFP_DMA32);
+    /* CRITICAL: Allocate with explicit alignment guarantee - use kmem_cache or aligned allocation */
+    /* Method 1: Use __get_free_pages for guaranteed alignment */
+    int order = get_order(aligned_size);
+    unsigned long pages = __get_free_pages(GFP_KERNEL | __GFP_ZERO | __GFP_DMA32, order);
     
-    if (!tuning_data) {
-        pr_err("isp_core_tuning_init: Failed to allocate tuning data structure (%zu bytes)\n", alloc_size);
+    if (!pages) {
+        pr_err("isp_core_tuning_init: Failed to allocate aligned pages (order=%d, size=%zu)\n", order, aligned_size);
         return NULL;
     }
     
-    /* CRITICAL: Memory is already zeroed by kzalloc, but add explicit clear for safety */
-    memset(tuning_data, 0, alloc_size);
+    tuning_data = (struct isp_tuning_data *)pages;
     
-    pr_info("isp_core_tuning_init: Allocated tuning data structure at %p (size=%zu)\n", tuning_data, alloc_size);
+    pr_info("isp_core_tuning_init: Allocated tuning data at %p (order=%d, size=%zu)\n",
+            tuning_data, order, aligned_size);
     
-    /* CRITICAL: Binary Ninja reference implementation safety checks */
-    /* MIPS KSEG0: 0x80000000-0x9fffffff, KSEG1: 0xa0000000-0xbfffffff, KSEG2: 0xc0000000+ */
+    /* CRITICAL: Verify alignment is perfect - must be at least 16-byte aligned */
+    if (((unsigned long)tuning_data & 0xF) != 0) {
+        pr_err("CRITICAL: Allocated tuning data not 16-byte aligned: %p - this should never happen with __get_free_pages\n", tuning_data);
+        free_pages(pages, order);
+        return NULL;
+    }
+    
+    /* CRITICAL: Verify kernel space address */
     if ((unsigned long)tuning_data < 0x80000000) {
         pr_err("CRITICAL: Allocated tuning data not in kernel space: %p\n", tuning_data);
-        kfree(tuning_data);
-        return NULL;
-    }
-    
-    /* CRITICAL: MIPS requires 4-byte alignment for struct access */
-    if (((unsigned long)tuning_data & 0x3) != 0) {
-        pr_err("CRITICAL: Allocated tuning data not aligned: %p - MIPS requirement\n", tuning_data);
-        kfree(tuning_data);
+        free_pages(pages, order);
         return NULL;
     }
     
