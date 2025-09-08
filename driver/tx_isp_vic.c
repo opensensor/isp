@@ -1303,35 +1303,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         /* Binary Ninja format switch based on sensor_format (*(arg1 + 0xe4)) */
         if (sensor_format >= 0x300e) {
-            /* Binary Ninja label_10928: Standard MIPI RAW path */
-            u32 dbus_type_check = vic_dev->sensor_attr.flags;
-
             /* Binary Ninja: Check integration_time_apply_delay for SONY mode */
-            if (vic_dev->sensor_attr.integration_time_apply_delay != 2) {
                 /* Standard MIPI mode */
-                mipi_config = 0x20000;  /* &data_20000 */
-                if (dbus_type_check == 0) {
-                    /* OK - standard mode */
-                } else if (dbus_type_check == 1) {
-                    mipi_config = 0x120000; /* Alternative MIPI mode */
-                } else {
-                    pr_err("tx_isp_vic_start: VIC failed to config DVP mode!(10bits-sensor)\n");
-                    mutex_unlock(&vic_start_mutex);
-                    return -EINVAL;
-                }
-            } else {
-                /* SONY MIPI mode */
-                mipi_config = 0x30000;  /* &data_30000 */
-                if (dbus_type_check == 0) {
-                    /* OK - SONY standard */
-                } else if (dbus_type_check == 1) {
-                    mipi_config = 0x130000; /* SONY alternative */
-                } else {
-                    pr_err("tx_isp_vic_start: VIC failed to config DVP SONY mode!(10bits-sensor)\n");
-                    mutex_unlock(&vic_start_mutex);
-                    return -EINVAL;
-                }
-            }
+            mipi_config = 0x20000;  /* &data_20000 */
+
             pr_info("tx_isp_vic_start: MIPI format 0x%x -> config 0x%x (>= 0x300e path)\n",
                     sensor_format, mipi_config);
         } else {
