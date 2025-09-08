@@ -2203,7 +2203,7 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
  */
 int tisp_channel_fifo_clear(uint32_t channel_id)
 {
-    extern int system_reg_write(uint32_t offset, uint32_t value);
+    extern void system_reg_write(uint32_t offset, uint32_t value);
     
     int32_t s1 = ((channel_id + 0x98) << 8);
     system_reg_write(s1 + 0x19c, 1);
