@@ -1411,35 +1411,17 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0, vic_regs + 0x1b4);
     wmb();
 
-    /* Binary Ninja: Log WDR mode */
+    /* Binary Ninja: Final WDR mode message like reference */
     const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
-        "WDR mode enabled" : "Linear mode enabled";
-    pr_info("tx_isp_vic_start: %s\n", wdr_msg);
+        "tx_isp_vic_start:wdr mode" : "tx_isp_vic_start:linear mode";
+    pr_info("%s\n", wdr_msg);
 
-    /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
+    /* *** CRITICAL TIMING FIX: Set vic_start_ok = 1 ONLY at the very end *** */
+    /* Binary Ninja EXACT: vic_start_ok = 1 - this must be the LAST operation! */
     vic_start_ok = 1;
     
-    /* CRITICAL: Enable ISP system-level interrupts when VIC streaming starts */
-    extern void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
-    
-    /* FIXED: Use proper VIC-to-ISP device linkage */
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)vic_dev->sd.isp;
-    if (!isp_dev && ourISPdev) {
-        /* Fallback: Use global ISP device if subdev link not set */
-        isp_dev = ourISPdev;
-        pr_info("*** tx_isp_vic_start: Using global ISP device fallback ***\n");
-    }
-    
-    if (isp_dev) {
-        pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
-        tx_isp_enable_irq(isp_dev);
-        pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
-    } else {
-        pr_err("*** tx_isp_vic_start: No ISP device found for interrupt enable ***\n");
-    }
-    
-    pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
-    pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
+    pr_info("*** TIMING FIX: vic_start_ok = 1 set AFTER all hardware init complete ***\n");
+    pr_info("*** VIC interrupts now enabled - no more early control limit errors ***\n");
 
     /* MCP LOG: VIC start completed successfully */
     pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d, interface=%d\n", 
