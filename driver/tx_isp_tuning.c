@@ -210,6 +210,9 @@ int tisp_ev_update(void);
 int tisp_ct_update(void);
 int tisp_ae_ir_update(void);
 
+/* Forward declaration for missing AE hardware function */
+int tiziano_ae_set_hardware_param(int channel, uint8_t *params, int enable_flag);
+
 int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 
 
@@ -575,79 +578,6 @@ static struct tiziano_dn_params {
     uint32_t night_params[0x20]; // Night mode params
 } dn_params;
 
-static int tisp_day_or_night_s_ctrl(uint32_t mode)
-{
-    //void __iomem *regs = ourISPdev->reg_base;
-    uint32_t bypass_val, top_ctrl;
-
-    if (mode > 1) {
-        pr_err("%s: Unsupported mode %d\n", __func__, mode);
-        return -EINVAL;
-    }
-
-    // Copy appropriate parameter set // TODO
-//    if (mode == 0) {
-//        memcpy(&dn_params.day_params, day_mode_defaults, sizeof(dn_params.day_params));
-//        ourISPdev->day_night = 0;
-//    } else {
-//        memcpy(&dn_params.night_params, night_mode_defaults, sizeof(dn_params.night_params));
-//        ourISPdev->day_night = 1;
-//    }
-//
-//    // Read current top control register
-//    bypass_val = readl(regs + 0xC);
-//
-//    // Apply parameters to hardware
-//    for (int i = 0; i < 0x20; i++) {
-//        uint32_t *params = mode ? dn_params.night_params : dn_params.day_params;
-//        uint32_t val = ~(1 << i) & bypass_val;
-//        val |= params[i] << i;
-//        bypass_val = val;
-//    }
-//
-//    // Set appropriate bypass bits based on chip variant
-////    if (ourISPdev->chip_id == 0xa2ea4) { // TODO
-////        bypass_val &= 0xb577fffd;
-////        top_ctrl = 0x34000009;
-////    } else {
-//        bypass_val &= 0xa1fffff6;
-//        top_ctrl = 0x880002;
-//    //}
-//
-//    bypass_val |= top_ctrl;
-//
-//    pr_info("%s: Setting top bypass to 0x%x\n", __func__, bypass_val);
-//    writel(bypass_val, regs + 0xC);
-
-    // Refresh all pipeline stages for mode change
-//    tiziano_defog_refresh();
-//    tiziano_ae_refresh();
-//    tiziano_awb_refresh();
-//    tiziano_dmsc_refresh();
-//    tiziano_sharpen_refresh();
-//    tiziano_mdns_refresh();
-//    tiziano_sdns_refresh();
-//    tiziano_gib_refresh();
-//    tiziano_lsc_refresh();
-//    tiziano_ccm_refresh();
-//    tiziano_clm_refresh();
-//    tiziano_gamma_refresh();
-//    tiziano_adr_refresh();
-//    tiziano_dpc_refresh();
-//    tiziano_af_refresh();
-//    tiziano_bcsh_refresh();
-//    tiziano_rdns_refresh();
-//    tiziano_ydns_refresh();
-
-    // Reset custom mode and update poll state
-//    ourISPdev->custom_mode = 0;
-//    ourISPdev->poll_state = ((mode & 0xFF) << 16) | 1;
-//
-//    // Wake up any waiters
-//    wake_up_interruptible(&ourISPdev->poll_wait);
-
-    return 0;
-}
 
 
 
