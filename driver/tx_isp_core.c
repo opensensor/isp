@@ -3239,6 +3239,25 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 } else {
                     pr_err("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
                 }
+
+                /* CRITICAL: Set up memory mappings for register access */
+                pr_info("*** tx_isp_core_probe: Setting up ISP memory mappings ***\n");
+                result = tx_isp_init_memory_mappings((struct tx_isp_dev *)core_dev);
+                if (result == 0) {
+                    pr_info("*** tx_isp_core_probe: ISP memory mappings initialized successfully ***\n");
+                } else {
+                    pr_err("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
+                }
+
+                /* CRITICAL: Start continuous processing - this generates the register activity your trace captures! */
+                pr_info("*** tx_isp_core_probe: Starting continuous processing system ***\n");
+                result = isp_start_continuous_processing((struct tx_isp_dev *)core_dev);
+                if (result == 0) {
+                    pr_info("*** tx_isp_core_probe: Continuous processing started successfully ***\n");
+                    pr_info("*** YOUR TRACE MODULE SHOULD NOW CAPTURE CONTINUOUS REGISTER WRITES! ***\n");
+                } else {
+                    pr_err("*** tx_isp_core_probe: Failed to start continuous processing: %d ***\n", result);
+                }
                 
                 return 0;
             }
