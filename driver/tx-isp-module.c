@@ -652,6 +652,91 @@ void system_reg_write(u32 reg, u32 value)
     wmb();
 }
 
+/* ===== REGISTER ACCESS WRAPPER FUNCTIONS - MISSING LINKER SYMBOLS ===== */
+
+/* isp_write32 - Write to ISP core registers */
+void isp_write32(u32 reg, u32 val)
+{
+    void __iomem *isp_regs = NULL;
+    
+    if (!ourISPdev || !ourISPdev->vic_regs) {
+        pr_warn("isp_write32: No ISP registers available for reg=0x%x val=0x%x\n", reg, val);
+        return;
+    }
+    
+    /* ISP core registers are at 0x13300000, VIC is at 0x133e0000 */
+    isp_regs = ourISPdev->vic_regs - 0xe0000;
+    
+    pr_debug("isp_write32: reg[0x%x] = 0x%x\n", reg, val);
+    writel(val, isp_regs + reg);
+    wmb();
+}
+EXPORT_SYMBOL(isp_write32);
+
+/* isp_read32 - Read from ISP core registers */
+u32 isp_read32(u32 reg)
+{
+    void __iomem *isp_regs = NULL;
+    u32 val = 0;
+    
+    if (!ourISPdev || !ourISPdev->vic_regs) {
+        pr_warn("isp_read32: No ISP registers available for reg=0x%x\n", reg);
+        return 0;
+    }
+    
+    /* ISP core registers are at 0x13300000, VIC is at 0x133e0000 */
+    isp_regs = ourISPdev->vic_regs - 0xe0000;
+    
+    val = readl(isp_regs + reg);
+    pr_debug("isp_read32: reg[0x%x] = 0x%x\n", reg, val);
+    
+    return val;
+}
+EXPORT_SYMBOL(isp_read32);
+
+/* vic_write32 - Write to VIC registers */
+void vic_write32(u32 reg, u32 val)
+{
+    if (!ourISPdev || !ourISPdev->vic_dev) {
+        pr_warn("vic_write32: No VIC device available for reg=0x%x val=0x%x\n", reg, val);
+        return;
+    }
+    
+    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+    if (!vic_dev->vic_regs) {
+        pr_warn("vic_write32: No VIC registers mapped for reg=0x%x val=0x%x\n", reg, val);
+        return;
+    }
+    
+    pr_debug("vic_write32: reg[0x%x] = 0x%x\n", reg, val);
+    writel(val, vic_dev->vic_regs + reg);
+    wmb();
+}
+EXPORT_SYMBOL(vic_write32);
+
+/* vic_read32 - Read from VIC registers */
+u32 vic_read32(u32 reg)
+{
+    u32 val = 0;
+    
+    if (!ourISPdev || !ourISPdev->vic_dev) {
+        pr_warn("vic_read32: No VIC device available for reg=0x%x\n", reg);
+        return 0;
+    }
+    
+    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+    if (!vic_dev->vic_regs) {
+        pr_warn("vic_read32: No VIC registers mapped for reg=0x%x\n", reg);
+        return 0;
+    }
+    
+    val = readl(vic_dev->vic_regs + reg);
+    pr_debug("vic_read32: reg[0x%x] = 0x%x\n", reg, val);
+    
+    return val;
+}
+EXPORT_SYMBOL(vic_read32);
+
 /* tisp_init - EXACT Binary Ninja implementation - THE MISSING HARDWARE INIT! */
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
 {
