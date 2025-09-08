@@ -1441,8 +1441,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         "tx_isp_vic_start:wdr mode" : "tx_isp_vic_start:linear mode";
     pr_info("%s\n", wdr_msg);
 
-    /* *** CRITICAL TIMING FIX: DO NOT set vic_start_ok = 1 here! *** */
-    /* vic_start_ok should ONLY be set by tx_vic_enable_irq() after streaming setup */
+    vic_start_ok = 1
 
     pr_info("*** TIMING FIX: vic_start_ok left at 0 - interrupts DISABLED during init ***\n");
     pr_info("*** VIC hardware initialized but interrupts DISABLED - prevents early firing ***\n");
