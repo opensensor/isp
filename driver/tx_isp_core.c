@@ -853,6 +853,8 @@ EXPORT_SYMBOL(data_b2e10);
 uint32_t data_b2e14 = 0;
 EXPORT_SYMBOL(data_b2e14);
 
+void system_reg_write(u32 reg, u32 value);
+
 
 /* tisp_init - EXACT Binary Ninja reference implementation - NO hardware reset here */
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
