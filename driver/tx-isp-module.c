@@ -4486,10 +4486,26 @@ static int tx_isp_init(void)
         pr_info("*** SHOULD SEE BOTH IRQ 37 AND 38 IN /proc/interrupts NOW ***\n");
     }
     
-    /* *** CRITICAL: Create additional IRQ handler for IRQ 38 *** */
-    pr_info("*** REGISTERING SECONDARY IRQ HANDLER FOR IRQ 38 (isp-w02) ***\n");
+    /* *** CRITICAL: Register BOTH IRQ handlers for complete interrupt support *** */
+    pr_info("*** REGISTERING BOTH IRQ HANDLERS (37 + 38) FOR COMPLETE INTERRUPT SUPPORT ***\n");
+    
+    /* Register IRQ 37 (isp-m0) - Primary ISP processing */
+    ret = request_threaded_irq(37, 
+                              isp_irq_handle,
+                              isp_irq_thread_handle,   
+                              IRQF_SHARED,             
+                              "isp-m0",                /* Match stock driver name */
+                              ourISPdev);              
+    if (ret != 0) {
+        pr_err("*** FAILED TO REQUEST IRQ 37 (isp-m0): %d ***\n", ret);
+    } else {
+        pr_info("*** SUCCESS: IRQ 37 (isp-m0) REGISTERED ***\n");
+        ourISPdev->isp_irq = 37;
+    }
+    
+    /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
     ret = request_threaded_irq(38, 
-                              isp_irq_handle,          /* Same handlers as IRQ 37 */
+                              isp_irq_handle,          /* Same handlers work for both IRQs */
                               isp_irq_thread_handle,   
                               IRQF_SHARED,             
                               "isp-w02",               /* Match stock driver name */
@@ -4500,6 +4516,29 @@ static int tx_isp_init(void)
     } else {
         pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
         ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
+    }
+    
+    /* *** CRITICAL: Enable interrupt generation at hardware level *** */
+    pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
+    if (ourISPdev->vic_dev) {
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        
+        if (vic_dev->vic_regs) {
+            pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
+            
+            /* Enable VIC interrupts - from reference driver */
+            writel(0x3FFFFFFF, vic_dev->vic_regs + 0x1e0);  /* Enable all VIC interrupts */
+            writel(0x0, vic_dev->vic_regs + 0x1e8);         /* Clear interrupt masks */
+            writel(0xF, vic_dev->vic_regs + 0x1e4);         /* Enable MDMA interrupts */
+            writel(0x0, vic_dev->vic_regs + 0x1ec);         /* Clear MDMA masks */
+            wmb();
+            
+            pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
+            
+            /* Set global VIC interrupt enable flag */
+            vic_start_ok = 1;
+            pr_info("*** vic_start_ok SET TO 1 - INTERRUPTS WILL NOW BE PROCESSED! ***\n");
+        }
     }
 
     /* Create ISP M0 tuning device node */
