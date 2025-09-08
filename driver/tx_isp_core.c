@@ -2212,31 +2212,6 @@ int tisp_channel_fifo_clear(uint32_t channel_id)
     return 0;
 }
 
-/* Missing system_reg_write function - implement as register write wrapper */
-int system_reg_write(uint32_t offset, uint32_t value)
-{
-    struct tx_isp_dev *isp_dev = tx_isp_get_device();
-    if (!isp_dev || !isp_dev->vic_regs) {
-        pr_err("system_reg_write: No ISP device or registers available\n");
-        return -EINVAL;
-    }
-    
-    void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;  /* Get ISP base */
-    
-    writel(value, isp_regs + offset);
-    wmb();
-    
-    /* Add debug for important register writes */
-    if (offset == 0x800) {  /* ISP core enable */
-        pr_info("system_reg_write: ISP core enable = 0x%x\n", value);
-    } else if (offset == 0x9804) {  /* Channel enable */
-        pr_info("system_reg_write: Channel enable = 0x%x\n", value);
-    }
-    
-    return 0;
-}
-EXPORT_SYMBOL(system_reg_write);
-
 /* Missing tisp_channel_stop function */
 int tisp_channel_stop(uint32_t channel_id)
 {
