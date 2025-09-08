@@ -597,7 +597,6 @@ extern struct tx_isp_subdev_ops vic_subdev_ops;
 static struct tx_isp_subdev_ops csi_subdev_ops;
 
 /* Reference driver function declarations - Binary Ninja exact names */
-static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev);
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
 int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable);  /* FIXED: Forward declaration for CSI streaming */
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);

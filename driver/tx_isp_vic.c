@@ -2099,44 +2099,6 @@ static uint32_t vic_mdma_enable(void* arg1, int32_t arg2, int32_t arg3, uint32_t
     return result;
 }
 
-/* vic_pipo_mdma_enable - EXACT Binary Ninja implementation (simplified version) */
-static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
-{
-    void __iomem *vic_regs;
-    uint32_t width, stride;
-
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_err("vic_pipo_mdma_enable: Invalid parameters\n");
-        return NULL;
-    }
-
-    vic_regs = vic_dev->vic_regs;
-    width = vic_dev->width;   /* *(arg1 + 0xdc) */
-    stride = width << 1;      /* $v1_1 = $v1 << 1 */
-
-    pr_info("*** vic_pipo_mdma_enable: Binary Ninja implementation ***\n");
-    pr_info("Parameters: width=%d, height=%d, stride=%d\n",
-           width, vic_dev->height, stride);
-
-    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x308) = 1 */
-    writel(1, vic_regs + 0x308);
-    wmb();
-
-    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
-    writel((width << 16) | vic_dev->height, vic_regs + 0x304);
-    wmb();
-
-    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x310) = $v1_1; *(result + 0x314) = $v1_1 */
-    writel(stride, vic_regs + 0x310);
-    writel(stride, vic_regs + 0x314);
-    wmb();
-
-    pr_info("*** vic_pipo_mdma_enable: PIPO MDMA enabled ***\n");
-
-    /* Binary Ninja: return result */
-    return vic_regs;
-}
-
 
 /* isp_vic_cmd_set - EXACT Binary Ninja implementation for snapraw/saveraw */
 static int32_t isp_vic_cmd_set(void* arg1, int32_t arg2, int32_t arg3)
