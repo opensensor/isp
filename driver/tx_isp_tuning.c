@@ -649,40 +649,6 @@ static int tisp_day_or_night_s_ctrl(uint32_t mode)
     return 0;
 }
 
-static int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
-{
-      pr_info("isp_core_tuning_event: event=0x%x\n", event);
-    if (!dev)
-        return -EINVAL;
-
-//    switch (event) {
-//        case ISP_TUNING_EVENT_MODE0:
-//            writel(2, dev->reg_base + 0x40c4);
-//        break;
-//
-//        case ISP_TUNING_EVENT_MODE1:
-//            writel(1, dev->reg_base + 0x40c4);
-//        break;
-//
-//        case ISP_TUNING_EVENT_FRAME:
-//          pr_info("ISP_TUNING_EVENT_FRAME\n");
-//            //isp_frame_done_wakeup();
-//        break;
-//
-//        case ISP_TUNING_EVENT_DN:
-//        {
-//            uint32_t dn_mode = readl(dev->reg_base + 0x40a4);
-//            tisp_day_or_night_s_ctrl(dn_mode); // We'll need this function too
-//            writel(dn_mode, dev->reg_base + 0x40a4);
-//        }
-//        break;
-//
-//        default:
-//            return -EINVAL;
-//    }
-
-    return 0;
-}
 
 
 static int apical_isp_ae_g_roi(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
