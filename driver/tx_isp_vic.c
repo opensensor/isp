@@ -1023,8 +1023,39 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         }
     }
 
-    	/* Map secondary ISP register space if needed */
-	void __iomem *isp_w02_regs = ioremap(0x13300000, 0x10000); /* Adjust base address as needed */
+    /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
+    pr_info("*** STREAMING: Configuring CPM registers for VIC access ***\n");
+    cpm_regs = ioremap(0x10000000, 0x1000);
+    if (cpm_regs) {
+        u32 clkgr0 = readl(cpm_regs + 0x20);
+        u32 clkgr1 = readl(cpm_regs + 0x28);
+
+        /* Enable ISP/VIC clocks */
+        clkgr0 &= ~(1 << 13); // ISP clock
+        clkgr0 &= ~(1 << 21); // Alternative ISP position
+        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
+        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
+
+        writel(clkgr0, cpm_regs + 0x20);
+        writel(clkgr1, cpm_regs + 0x28);
+        wmb();
+        msleep(20);
+
+        pr_info("STREAMING: CPM clocks configured for VIC access\n");
+        iounmap(cpm_regs);
+    }
+
+    /* STEP 3: Get VIC registers - should already be mapped by tx_isp_create_vic_device */
+    vic_regs = vic_dev->vic_regs;
+    if (!vic_regs) {
+        pr_err("*** CRITICAL: No VIC register base - initialization required first ***\n");
+        return -EINVAL;
+    }
+    
+    pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
+
+        	/* Map secondary ISP register space if needed */
+	void __iomem *isp_w02_regs = vic_dev->vic_regs;
 	if (isp_w02_regs) {
 	    pr_info("ISP isp-w02: Initializing CSI PHY Control registers\n");
 
@@ -1082,36 +1113,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 	    iounmap(isp_w01_regs);
 	}
 
-    /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
-    pr_info("*** STREAMING: Configuring CPM registers for VIC access ***\n");
-    cpm_regs = ioremap(0x10000000, 0x1000);
-    if (cpm_regs) {
-        u32 clkgr0 = readl(cpm_regs + 0x20);
-        u32 clkgr1 = readl(cpm_regs + 0x28);
-
-        /* Enable ISP/VIC clocks */
-        clkgr0 &= ~(1 << 13); // ISP clock
-        clkgr0 &= ~(1 << 21); // Alternative ISP position
-        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
-        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
-
-        writel(clkgr0, cpm_regs + 0x20);
-        writel(clkgr1, cpm_regs + 0x28);
-        wmb();
-        msleep(20);
-
-        pr_info("STREAMING: CPM clocks configured for VIC access\n");
-        iounmap(cpm_regs);
-    }
-
-    /* STEP 3: Get VIC registers - should already be mapped by tx_isp_create_vic_device */
-    vic_regs = vic_dev->vic_regs;
-    if (!vic_regs) {
-        pr_err("*** CRITICAL: No VIC register base - initialization required first ***\n");
-        return -EINVAL;
-    }
-    
-    pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
 
     /* FIXED: Use proper struct member access for sensor attributes */
     sensor_attr = &vic_dev->sensor_attr;
