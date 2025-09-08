@@ -2719,7 +2719,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 ret = 0;
                 
                 /* Binary Ninja EXACT: if ($v1_3 != 4) - not already streaming */
-                if (current_state == 3) {
+                if (current_state != 4) {
                     pr_info("*** EXACT Binary Ninja ORDER: 1. DISABLE IRQ ***\n");
                     /* Binary Ninja EXACT: tx_vic_disable_irq() - FIRST */
                     tx_vic_disable_irq();
