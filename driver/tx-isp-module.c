@@ -406,7 +406,8 @@ struct vic_event_callback {
     int (*event_handler)(void*, int, void*); /* +0x1c: Event handler function */
 } __attribute__((packed));
 
-/* T31 ISP platform device with CORRECT IRQ resource - FIXED for stock driver compatibility */
+/* T31 ISP platform device with CORRECT IRQ resources - FIXED for stock driver compatibility */
+/* CRITICAL FIX: Stock driver uses TWO separate IRQs - 37 (isp-m0) and 38 (isp-w02) */
 static struct resource tx_isp_resources[] = {
     [0] = {
         .start = 0x13300000,           /* T31 ISP base address */
@@ -414,8 +415,13 @@ static struct resource tx_isp_resources[] = {
         .flags = IORESOURCE_MEM,
     },
     [1] = {
-        .start = 37,                   /* T31 ISP IRQ number - CORRECTED from stock driver (isp-m0) */
+        .start = 37,                   /* T31 ISP IRQ 37 (isp-m0) - PRIMARY ISP PROCESSING */
         .end   = 37,
+        .flags = IORESOURCE_IRQ,
+    },
+    [2] = {
+        .start = 38,                   /* T31 ISP IRQ 38 (isp-w02) - SECONDARY ISP CHANNEL */
+        .end   = 38,
         .flags = IORESOURCE_IRQ,
     },
 };
@@ -427,7 +433,7 @@ struct platform_device tx_isp_platform_device = {
     .resource = tx_isp_resources,
 };
 
-/* VIC platform device resources - CRITICAL MISSING PIECE */
+/* VIC platform device resources - CORRECTED IRQ */
 static struct resource tx_isp_vic_resources[] = {
     [0] = {
         .start = 0x10023000,           /* T31 VIC base address */
@@ -435,8 +441,8 @@ static struct resource tx_isp_vic_resources[] = {
         .flags = IORESOURCE_MEM,
     },
     [1] = {
-        .start = 63,                   /* T31 VIC IRQ number (shared with ISP) */
-        .end   = 63,
+        .start = 37,                   /* T31 VIC IRQ 37 - MATCHES STOCK DRIVER isp-m0 */
+        .end   = 37,
         .flags = IORESOURCE_IRQ,
     },
 };
@@ -448,7 +454,7 @@ struct platform_device tx_isp_vic_platform_device = {
     .resource = tx_isp_vic_resources,
 };
 
-/* CSI platform device resources - CRITICAL MISSING PIECE */
+/* CSI platform device resources - CORRECTED IRQ */
 static struct resource tx_isp_csi_resources[] = {
     [0] = {
         .start = 0x10022000,           /* T31 CSI base address */
@@ -456,8 +462,8 @@ static struct resource tx_isp_csi_resources[] = {
         .flags = IORESOURCE_MEM,
     },
     [1] = {
-        .start = 63,                   /* T31 CSI IRQ number (shared with ISP) */
-        .end   = 63,
+        .start = 38,                   /* T31 CSI IRQ 38 - MATCHES STOCK DRIVER isp-w02 */
+        .end   = 38,
         .flags = IORESOURCE_IRQ,
     },
 };
@@ -469,7 +475,7 @@ struct platform_device tx_isp_csi_platform_device = {
     .resource = tx_isp_csi_resources,
 };
 
-/* VIN platform device resources - CRITICAL MISSING PIECE */
+/* VIN platform device resources - CORRECTED IRQ */
 static struct resource tx_isp_vin_resources[] = {
     [0] = {
         .start = 0x13300000,           /* T31 VIN base address (part of ISP) */
@@ -477,8 +483,8 @@ static struct resource tx_isp_vin_resources[] = {
         .flags = IORESOURCE_MEM,
     },
     [1] = {
-        .start = 63,                   /* T31 VIN IRQ number (shared with ISP) */
-        .end   = 63,
+        .start = 37,                   /* T31 VIN IRQ 37 - MATCHES STOCK DRIVER isp-m0 */
+        .end   = 37,
         .flags = IORESOURCE_IRQ,
     },
 };
@@ -490,7 +496,7 @@ struct platform_device tx_isp_vin_platform_device = {
     .resource = tx_isp_vin_resources,
 };
 
-/* Frame Source platform device resources - CRITICAL MISSING PIECE */
+/* Frame Source platform device resources - CORRECTED IRQ */
 static struct resource tx_isp_fs_resources[] = {
     [0] = {
         .start = 0x13310000,           /* T31 FS base address */
@@ -498,8 +504,8 @@ static struct resource tx_isp_fs_resources[] = {
         .flags = IORESOURCE_MEM,
     },
     [1] = {
-        .start = 63,                   /* T31 FS IRQ number (shared with ISP) */
-        .end   = 63,
+        .start = 38,                   /* T31 FS IRQ 38 - MATCHES STOCK DRIVER isp-w02 */
+        .end   = 38,
         .flags = IORESOURCE_IRQ,
     },
 };
@@ -534,7 +540,7 @@ struct platform_device tx_isp_fs_platform_device = {
     },
 };
 
-/* ISP Core platform device resources - CRITICAL MISSING PIECE */
+/* ISP Core platform device resources - CORRECTED IRQ */
 static struct resource tx_isp_core_resources[] = {
     [0] = {
         .start = 0x13300000,           /* T31 ISP Core base address */
@@ -542,8 +548,8 @@ static struct resource tx_isp_core_resources[] = {
         .flags = IORESOURCE_MEM,
     },
     [1] = {
-        .start = 63,                   /* T31 ISP Core IRQ number */
-        .end   = 63,
+        .start = 37,                   /* T31 ISP Core IRQ 37 - MATCHES STOCK DRIVER isp-m0 */
+        .end   = 37,
         .flags = IORESOURCE_IRQ,
     },
 };
