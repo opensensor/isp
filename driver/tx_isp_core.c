@@ -2330,7 +2330,8 @@ int tisp_s_fcrop_control(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4,
     
     uint32_t a1_15 = 0xf0000 | msca_ch_en_4;
     msca_ch_en = a1_15;
-    return system_reg_write(0x9804, a1_15);
+    system_reg_write(0x9804, a1_15);
+    return 0;
 }
 EXPORT_SYMBOL(tisp_s_fcrop_control);
 
