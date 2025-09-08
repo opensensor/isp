@@ -148,7 +148,6 @@ struct tx_isp_vic_device {
     
     // Buffer index array for VIC register mapping
     int buffer_index[5];                // Buffer index array (5 buffers max)
-    char padding_align3[3];             // Pad to 4-byte boundary after 5 ints
     
     // IRQ handling members
     int irq_number;                     // IRQ number from platform device
