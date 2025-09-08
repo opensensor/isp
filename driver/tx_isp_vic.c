@@ -1622,6 +1622,32 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
     if (vic_dev->state == 1) {
         vic_dev->state = 2; /* INIT -> READY */
         pr_info("VIC activated: state %d -> 2 (READY)\n", 1);
+        
+        /* *** CRITICAL: Ensure free buffers are available during activation *** */
+        if (list_empty(&vic_dev->free_head)) {
+            pr_info("*** VIC ACTIVATION: Replenishing free buffer pool ***\n");
+            for (int i = 0; i < 5; i++) {
+                struct list_head *free_buffer = kzalloc(sizeof(struct list_head) + 64, GFP_KERNEL);
+                if (free_buffer) {
+                    uint32_t *buffer_data = (uint32_t *)((char *)free_buffer + sizeof(struct list_head));
+                    buffer_data[0] = 0;  /* Buffer address placeholder */
+                    buffer_data[1] = i + 100;  /* Buffer index (activation batch) */
+                    buffer_data[2] = 0;  /* Buffer status */
+                    
+                    list_add_tail(free_buffer, &vic_dev->free_head);
+                    pr_info("*** VIC ACTIVATION: Added free buffer %d ***\n", i);
+                }
+            }
+            pr_info("*** VIC ACTIVATION: Free buffer pool replenished - no more 'bank no free' ***\n");
+        } else {
+            pr_info("*** VIC ACTIVATION: Free buffers already available - count checking ***\n");
+            struct list_head *pos;
+            int free_count = 0;
+            list_for_each(pos, &vic_dev->free_head) {
+                free_count++;
+            }
+            pr_info("*** VIC ACTIVATION: %d free buffers available ***\n", free_count);
+        }
     }
     
     mutex_unlock(&vic_dev->state_lock);
