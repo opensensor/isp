@@ -1048,7 +1048,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
 
     /* FIXED: Use proper struct member access for sensor attributes */
-    struct tx_isp_sensor_attribute *sensor_attr = &vic_dev->sensor_attr;
+    sensor_attr = &vic_dev->sensor_attr;
     interface_type = sensor_attr->dbus_type;
     sensor_format = sensor_attr->data_type;
 
