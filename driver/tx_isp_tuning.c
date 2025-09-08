@@ -153,6 +153,66 @@ int tiziano_wdr_fusion1_curve_block_mean1(void);
 int Tiziano_wdr_fpga(void *struct_me, void *dev_para, void *ratio_para, void *x_thr);
 int tiziano_wdr_soft_para_out(void);
 
+
+/* Forward declarations for ISP pipeline init functions */
+int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps);
+int tiziano_awb_init(uint32_t height, uint32_t width);
+int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps);
+int tiziano_gib_init(void);
+int tiziano_lsc_init(void);
+int tiziano_ccm_init(void);
+int tiziano_dmsc_init(void);
+int tiziano_sharpen_init(void);
+int tiziano_sdns_init(void);
+int tiziano_mdns_init(uint32_t width, uint32_t height);
+int tiziano_clm_init(void);
+int tiziano_dpc_init(void);
+int tiziano_hldc_init(void);
+int tiziano_defog_init(uint32_t width, uint32_t height);
+int tiziano_adr_init(uint32_t width, uint32_t height);
+int tiziano_af_init(uint32_t height, uint32_t width);
+int tiziano_bcsh_init(void);
+int tiziano_ydns_init(void);
+int tiziano_rdns_init(void);
+
+/* Forward declarations for WDR functions */
+int tisp_gb_init(void);
+int tiziano_wdr_init(uint32_t width, uint32_t height);
+int tisp_wdr_init(void);
+
+/* Forward declarations for WDR enable functions */
+int tisp_dpc_wdr_en(int enable);
+int tisp_lsc_wdr_en(int enable);
+int tisp_gamma_wdr_en(int enable);
+int tisp_sharpen_wdr_en(int enable);
+int tisp_ccm_wdr_en(int enable);
+int tisp_bcsh_wdr_en(int enable);
+int tisp_rdns_wdr_en(int enable);
+int tisp_adr_wdr_en(int enable);
+int tisp_defog_wdr_en(int enable);
+int tisp_mdns_wdr_en(int enable);
+int tisp_dmsc_wdr_en(int enable);
+int tisp_ae_wdr_en(int enable);
+int tisp_sdns_wdr_en(int enable);
+
+/* Forward declarations for event and IRQ functions */
+int tisp_event_set_cb(int event_id, void *callback);
+int system_irq_func_set(int irq_id, void *handler);
+int tisp_adr_process(void);
+void tiziano_adr_interrupt_static(void);
+int tisp_event_init(void);
+int tisp_param_operate_init(void);
+
+/* Forward declarations for update functions */
+int tisp_tgain_update(void);
+int tisp_again_update(void);
+int tisp_ev_update(void);
+int tisp_ct_update(void);
+int tisp_ae_ir_update(void);
+
+int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
+
+
 /* System register access functions - moved before use */
 static inline uint32_t system_reg_read(u32 reg);
 static inline void system_reg_write(u32 reg, u32 val);
@@ -311,65 +371,6 @@ int tisp_init(void *sensor_info, char *param_name)
     
     return 0;
 }
-
-/* Forward declarations for ISP pipeline init functions */
-int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps);
-int tiziano_awb_init(uint32_t height, uint32_t width);
-int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps);
-int tiziano_gib_init(void);
-int tiziano_lsc_init(void);
-int tiziano_ccm_init(void);
-int tiziano_dmsc_init(void);
-int tiziano_sharpen_init(void);
-int tiziano_sdns_init(void);
-int tiziano_mdns_init(uint32_t width, uint32_t height);
-int tiziano_clm_init(void);
-int tiziano_dpc_init(void);
-int tiziano_hldc_init(void);
-int tiziano_defog_init(uint32_t width, uint32_t height);
-int tiziano_adr_init(uint32_t width, uint32_t height);
-int tiziano_af_init(uint32_t height, uint32_t width);
-int tiziano_bcsh_init(void);
-int tiziano_ydns_init(void);
-int tiziano_rdns_init(void);
-
-/* Forward declarations for WDR functions */
-int tisp_gb_init(void);
-int tiziano_wdr_init(uint32_t width, uint32_t height);
-int tisp_wdr_init(void);
-
-/* Forward declarations for WDR enable functions */
-int tisp_dpc_wdr_en(int enable);
-int tisp_lsc_wdr_en(int enable);
-int tisp_gamma_wdr_en(int enable);
-int tisp_sharpen_wdr_en(int enable);
-int tisp_ccm_wdr_en(int enable);
-int tisp_bcsh_wdr_en(int enable);
-int tisp_rdns_wdr_en(int enable);
-int tisp_adr_wdr_en(int enable);
-int tisp_defog_wdr_en(int enable);
-int tisp_mdns_wdr_en(int enable);
-int tisp_dmsc_wdr_en(int enable);
-int tisp_ae_wdr_en(int enable);
-int tisp_sdns_wdr_en(int enable);
-
-/* Forward declarations for event and IRQ functions */
-int tisp_event_set_cb(int event_id, void *callback);
-int system_irq_func_set(int irq_id, void *handler);
-int tisp_adr_process(void);
-void tiziano_adr_interrupt_static(void);
-int tisp_event_init(void);
-int tisp_param_operate_init(void);
-
-/* Forward declarations for update functions */
-int tisp_tgain_update(void);
-int tisp_again_update(void);
-int tisp_ev_update(void);
-int tisp_ct_update(void);
-int tisp_ae_ir_update(void);
-
-int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
-
 
 static inline u64 ktime_get_real_ns(void)
 {
@@ -1547,6 +1548,15 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                                 pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
                                 pr_info("MCP_LOG: Tuning controls now ready for operation\n");
                             }
+                            
+                            /* CRITICAL: Call tisp_init to trigger hardware initialization - THE MISSING LINK */
+                            pr_info("*** CALLING tisp_init - THIS SHOULD TRIGGER REGISTER ACTIVITY LIKE REFERENCE DRIVER ***\n");
+                            ret = tisp_init(NULL, "default");
+                            if (ret != 0) {
+                                pr_err("isp_core_tunning_unlocked_ioctl: tisp_init failed: %d\n", ret);
+                                return ret;
+                            }
+                            pr_info("*** tisp_init COMPLETED - HARDWARE INITIALIZATION FINISHED ***\n");
                             
                             dev->tuning_enabled = 3;
                             pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
