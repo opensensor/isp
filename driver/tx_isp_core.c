@@ -112,6 +112,7 @@ void *isp_core_tuning_init(void *arg1);
 int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
+void system_reg_write(u32 reg, u32 value);
 
 /* ISP interrupt dispatch system - EXACT Binary Ninja implementation */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
@@ -2144,7 +2145,6 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
         a1_2 = (v1_1 << 0x10) | a1_1;
     }
 
-    extern int system_reg_write(uint32_t offset, uint32_t value);
     system_reg_write(0x9860, a1_2);
     system_reg_write(0x9864, (tispinfo_2 << 0x10) | s2);
 
