@@ -853,8 +853,6 @@ EXPORT_SYMBOL(data_b2e10);
 uint32_t data_b2e14 = 0;
 EXPORT_SYMBOL(data_b2e14);
 
-void system_reg_write(u32 reg, u32 value);
-
 
 /* tisp_init - EXACT Binary Ninja reference implementation - NO hardware reset here */
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
@@ -2146,7 +2144,7 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
         a1_2 = (v1_1 << 0x10) | a1_1;
     }
 
-    extern void system_reg_write(uint32_t offset, uint32_t value);
+    extern int system_reg_write(uint32_t offset, uint32_t value);
     system_reg_write(0x9860, a1_2);
     system_reg_write(0x9864, (tispinfo_2 << 0x10) | s2);
 
@@ -2203,7 +2201,7 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
  */
 int tisp_channel_fifo_clear(uint32_t channel_id)
 {
-    extern void system_reg_write(uint32_t offset, uint32_t value);
+    extern int system_reg_write(uint32_t offset, uint32_t value);
     
     int32_t s1 = ((channel_id + 0x98) << 8);
     system_reg_write(s1 + 0x19c, 1);
@@ -2213,6 +2211,31 @@ int tisp_channel_fifo_clear(uint32_t channel_id)
     
     return 0;
 }
+
+/* Missing system_reg_write function - implement as register write wrapper */
+int system_reg_write(uint32_t offset, uint32_t value)
+{
+    struct tx_isp_dev *isp_dev = tx_isp_get_device();
+    if (!isp_dev || !isp_dev->vic_regs) {
+        pr_err("system_reg_write: No ISP device or registers available\n");
+        return -EINVAL;
+    }
+    
+    void __iomem *isp_regs = isp_dev->vic_regs - 0x9a00;  /* Get ISP base */
+    
+    writel(value, isp_regs + offset);
+    wmb();
+    
+    /* Add debug for important register writes */
+    if (offset == 0x800) {  /* ISP core enable */
+        pr_info("system_reg_write: ISP core enable = 0x%x\n", value);
+    } else if (offset == 0x9804) {  /* Channel enable */
+        pr_info("system_reg_write: Channel enable = 0x%x\n", value);
+    }
+    
+    return 0;
+}
+EXPORT_SYMBOL(system_reg_write);
 
 /* Missing tisp_channel_stop function */
 int tisp_channel_stop(uint32_t channel_id)
@@ -2334,8 +2357,7 @@ int tisp_s_fcrop_control(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4,
     
     uint32_t a1_15 = 0xf0000 | msca_ch_en_4;
     msca_ch_en = a1_15;
-    system_reg_write(0x9804, a1_15);
-    return 0;
+    return system_reg_write(0x9804, a1_15);
 }
 EXPORT_SYMBOL(tisp_s_fcrop_control);
 
