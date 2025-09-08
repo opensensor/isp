@@ -4314,46 +4314,60 @@ static int tx_isp_init(void)
     pr_info("*** INITIALIZING SUBDEVICE MANAGEMENT SYSTEM ***\n");
     pr_info("*** REGISTERING SUBDEVICES AT OFFSET 0x38 FOR tx_isp_video_link_stream ***\n");
 
-    /* Register platform devices first - needed for the new system */
+    /* *** CRITICAL: Register platform devices with proper IRQ setup *** */
+    pr_info("*** REGISTERING PLATFORM DEVICES FOR DUAL IRQ SETUP (37 + 38) ***\n");
+    
     ret = platform_device_register(&tx_isp_csi_platform_device);
     if (ret) {
-        pr_err("Failed to register CSI platform device: %d\n", ret);
+        pr_err("Failed to register CSI platform device (IRQ 38): %d\n", ret);
         goto err_cleanup_base;
+    } else {
+        pr_info("*** CSI platform device registered for IRQ 38 (isp-w02) ***\n");
     }
     
     ret = platform_device_register(&tx_isp_vic_platform_device);
     if (ret) {
-        pr_err("Failed to register VIC platform device: %d\n", ret);
+        pr_err("Failed to register VIC platform device (IRQ 37): %d\n", ret);
         platform_device_unregister(&tx_isp_csi_platform_device);
         goto err_cleanup_base;
+    } else {
+        pr_info("*** VIC platform device registered for IRQ 37 (isp-m0) ***\n");
     }
     
     ret = platform_device_register(&tx_isp_vin_platform_device);
     if (ret) {
-        pr_err("Failed to register VIN platform device: %d\n", ret);
+        pr_err("Failed to register VIN platform device (IRQ 37): %d\n", ret);
         platform_device_unregister(&tx_isp_vic_platform_device);
         platform_device_unregister(&tx_isp_csi_platform_device);
         goto err_cleanup_base;
+    } else {
+        pr_info("*** VIN platform device registered for IRQ 37 (isp-m0) ***\n");
     }
     
     ret = platform_device_register(&tx_isp_fs_platform_device);
     if (ret) {
-        pr_err("Failed to register FS platform device: %d\n", ret);
+        pr_err("Failed to register FS platform device (IRQ 38): %d\n", ret);
         platform_device_unregister(&tx_isp_vin_platform_device);
         platform_device_unregister(&tx_isp_vic_platform_device);
         platform_device_unregister(&tx_isp_csi_platform_device);
         goto err_cleanup_base;
+    } else {
+        pr_info("*** FS platform device registered for IRQ 38 (isp-w02) ***\n");
     }
     
     ret = platform_device_register(&tx_isp_core_platform_device);
     if (ret) {
-        pr_err("Failed to register Core platform device: %d\n", ret);
+        pr_err("Failed to register Core platform device (IRQ 37): %d\n", ret);
         platform_device_unregister(&tx_isp_fs_platform_device);
         platform_device_unregister(&tx_isp_vin_platform_device);
         platform_device_unregister(&tx_isp_vic_platform_device);
         platform_device_unregister(&tx_isp_csi_platform_device);
         goto err_cleanup_base;
+    } else {
+        pr_info("*** Core platform device registered for IRQ 37 (isp-m0) ***\n");
     }
+    
+    pr_info("*** ALL PLATFORM DEVICES REGISTERED - SHOULD SEE IRQ 37 + 38 IN /proc/interrupts ***\n");
 
     /* *** CRITICAL: Initialize FS platform driver (creates /proc/jz/isp/isp-fs like reference) *** */
     ret = tx_isp_fs_platform_init();
@@ -4462,10 +4476,30 @@ static int tx_isp_init(void)
         pr_warn("No sensors detected, continuing with basic initialization: %d\n", ret);
     }
     
-    /* Initialize hardware interrupt handling */
+    /* *** CRITICAL: Initialize hardware interrupt handling for BOTH IRQs *** */
+    pr_info("*** INITIALIZING HARDWARE INTERRUPTS FOR IRQ 37 AND 38 ***\n");
     ret = tx_isp_init_hardware_interrupts(ourISPdev);
     if (ret) {
         pr_warn("Hardware interrupts not available: %d\n", ret);
+    } else {
+        pr_info("*** HARDWARE INTERRUPT INITIALIZATION COMPLETE ***\n");
+        pr_info("*** SHOULD SEE BOTH IRQ 37 AND 38 IN /proc/interrupts NOW ***\n");
+    }
+    
+    /* *** CRITICAL: Create additional IRQ handler for IRQ 38 *** */
+    pr_info("*** REGISTERING SECONDARY IRQ HANDLER FOR IRQ 38 (isp-w02) ***\n");
+    ret = request_threaded_irq(38, 
+                              isp_irq_handle,          /* Same handlers as IRQ 37 */
+                              isp_irq_thread_handle,   
+                              IRQF_SHARED,             
+                              "isp-w02",               /* Match stock driver name */
+                              ourISPdev);              
+    if (ret != 0) {
+        pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
+        pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
+    } else {
+        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
+        ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
     }
 
     /* Create ISP M0 tuning device node */
