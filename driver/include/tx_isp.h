@@ -221,6 +221,7 @@ struct tx_isp_dev {
 
     /* IRQs */
     int isp_irq;
+    int isp_irq2;
     spinlock_t irq_lock;
     volatile u32 irq_enabled;
     void (*irq_handler)(void *);
