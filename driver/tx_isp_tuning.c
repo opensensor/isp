@@ -4847,13 +4847,16 @@ void *isp_core_tuning_init(void *arg1)
     tuning_data->allocation_order = order;
     tuning_data->allocation_pages = pages;
     
-    /* CRITICAL: Initialize register base safely */
-    if (ourISPdev && ourISPdev->core_regs && virt_addr_valid(ourISPdev->core_regs)) {
-        tuning_data->regs = ourISPdev->core_regs;
-        pr_info("isp_core_tuning_init: Register base initialized to %p\n", tuning_data->regs);
+    /* CRITICAL: Initialize register base safely using working VIC registers */
+    if (ourISPdev && ourISPdev->vic_regs && virt_addr_valid(ourISPdev->vic_regs)) {
+        /* Use VIC register base to derive ISP base - same method as system_reg_write */
+        tuning_data->regs = ourISPdev->vic_regs - 0x9a00;  /* Get ISP base from VIC base */
+        pr_info("isp_core_tuning_init: Register base initialized to %p (derived from VIC base %p)\n", 
+                tuning_data->regs, ourISPdev->vic_regs);
+        pr_info("*** isp_core_tuning_init: REGISTER ACCESS ENABLED - CONTINUOUS WRITES NOW POSSIBLE! ***\n");
     } else {
         tuning_data->regs = NULL;
-        pr_info("isp_core_tuning_init: No valid register base - register access disabled\n");
+        pr_info("isp_core_tuning_init: No valid VIC register base - register access disabled\n");
     }
     
     /* Initialize tuning data structure with safe, aligned defaults */
