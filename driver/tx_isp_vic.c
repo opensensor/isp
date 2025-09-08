@@ -1121,9 +1121,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 //    wmb();
 
     /* CSI PHY Config registers - from reference trace */
-    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
-    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
-    wmb();
+//    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
+//    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
+//    wmb();
 
     /* *** MISSING ISP Control registers - from reference trace *** */
     pr_info("*** Writing missing ISP Control registers (0x9804-0x98a8) ***\n");
@@ -2720,7 +2720,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 ret = 0;
                 
                 /* Binary Ninja EXACT: if ($v1_3 != 4) - not already streaming */
-                if (current_state != 4) {
+                if (current_state == 2) {
                     pr_info("*** EXACT Binary Ninja ORDER: 1. DISABLE IRQ ***\n");
                     /* Binary Ninja EXACT: tx_vic_disable_irq() - FIRST */
                     tx_vic_disable_irq();
