@@ -394,7 +394,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             
             pr_info("VIC Frame done interrupt - frame_count=%d (synchronized with ISP)\n", vic_dev->frame_count);
             /* entry_$a2 = vic_framedone_irq_function($s0) */
-            vic_framedone_irq_function(vic_dev);
+            // vic_framedone_irq_function(vic_dev);
         }
         
         /* Binary Ninja: Error interrupt handling */
@@ -516,12 +516,12 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         /* Binary Ninja: MDMA interrupt handling */
         if ((isr_mdma & 1) != 0) {
             pr_debug("VIC MDMA channel 0 interrupt\n");
-            vic_mdma_irq_function(vic_dev, 0);
+            // vic_mdma_irq_function(vic_dev, 0);
         }
         
         if ((isr_mdma & 2) != 0) {
             pr_debug("VIC MDMA channel 1 interrupt\n");
-            vic_mdma_irq_function(vic_dev, 1);
+            // vic_mdma_irq_function(vic_dev, 1);
         }
         
         if ((isr_mdma & 4) != 0) {
