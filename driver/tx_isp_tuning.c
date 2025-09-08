@@ -939,7 +939,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     int ret = 0;
     struct isp_tuning_data *tuning;
 
-    /* Basic validation only - alignment issues should be impossible now */
+    /* CRITICAL: Comprehensive validation to prevent BadVA crashes */
     if (!dev) {
         pr_err("apical_isp_core_ops_g_ctrl: NULL device pointer\n");
         return -EINVAL;
@@ -950,15 +950,40 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
         return -EINVAL;
     }
 
+    /* CRITICAL: Validate device structure integrity */
+    if (!virt_addr_valid(dev) || (unsigned long)dev < 0x80000000) {
+        pr_err("apical_isp_core_ops_g_ctrl: Invalid device pointer: %p\n", dev);
+        return -EFAULT;
+    }
+
     tuning = dev->tuning_data;
     
-    /* Simple validation - proper allocation should prevent issues */
+    /* CRITICAL: Validate tuning pointer before ANY access */
     if (!tuning) {
         pr_err("apical_isp_core_ops_g_ctrl: NULL tuning data for cmd=0x%x\n", ctrl->cmd);
         return -ENODEV;
     }
     
-    /* Basic state check */
+    /* CRITICAL: Validate tuning pointer is valid kernel memory */
+    if (!virt_addr_valid(tuning) || (unsigned long)tuning < 0x80000000) {
+        pr_err("apical_isp_core_ops_g_ctrl: Invalid tuning pointer: %p - PREVENTS BadVA CRASH\n", tuning);
+        dev->tuning_data = NULL; /* Clear corrupted pointer */
+        return -EFAULT;
+    }
+    
+    /* CRITICAL: Validate tuning pointer is properly aligned (16-byte for MIPS32) */
+    if (((unsigned long)tuning & 0xF) != 0) {
+        pr_err("apical_isp_core_ops_g_ctrl: Misaligned tuning pointer: %p - PREVENTS BadVA CRASH\n", tuning);
+        return -EFAULT;
+    }
+    
+    /* CRITICAL: Test read access to state field before proceeding */
+    if (!access_ok(VERIFY_READ, &tuning->state, sizeof(tuning->state))) {
+        pr_err("apical_isp_core_ops_g_ctrl: Cannot access tuning state field - PREVENTS BadVA CRASH\n");
+        return -EFAULT;
+    }
+    
+    /* CRITICAL: Validate state field value */
     if (tuning->state != 1) {
         pr_err("apical_isp_core_ops_g_ctrl: Invalid tuning state: %d\n", tuning->state);
         return -EINVAL;
@@ -1115,27 +1140,46 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     switch (ctrl->cmd) {
         pr_info("Get control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
         case 0x980900:  // Brightness
-            /* CRITICAL: Safe struct member access instead of hardcoded offsets */
-            pr_debug("BCSH: Reading brightness from struct member\n");
-            ctrl->value = tuning->brightness;
-            break;
-
-        case 0x980901:  // Contrast  
-            /* CRITICAL: Safe struct member access instead of hardcoded offsets */
-            pr_debug("BCSH: Reading contrast from struct member\n");
-            ctrl->value = tuning->contrast;
-            break;
-
-        case 0x980902:  // Saturation - FIXED: No more hardcoded offset access
-            /* CRITICAL: Double-check tuning pointer before accessing saturation field */
-            if (!virt_addr_valid(&tuning->saturation)) {
-                pr_err("CRITICAL: Cannot safely access saturation field at %p - PREVENTING BadVA CRASH\n", &tuning->saturation);
+            /* CRITICAL: SAFE access with validation like Binary Ninja reference */
+            if (!access_ok(VERIFY_READ, &tuning->brightness, sizeof(tuning->brightness))) {
+                pr_err("CRITICAL: Cannot access brightness field - PREVENTS BadVA CRASH\n");
                 return -EFAULT;
             }
             
-            pr_info("CRITICAL: Using safe struct member access for saturation (crash prevention)\n");
+            pr_debug("BCSH: Reading brightness from validated struct member\n");
+            ctrl->value = tuning->brightness;
+            pr_debug("BCSH: Brightness read successfully: %d\n", ctrl->value);
+            break;
+
+        case 0x980901:  // Contrast  
+            /* CRITICAL: SAFE access with validation */
+            if (!access_ok(VERIFY_READ, &tuning->contrast, sizeof(tuning->contrast))) {
+                pr_err("CRITICAL: Cannot access contrast field - PREVENTS BadVA CRASH\n");
+                return -EFAULT;
+            }
+            
+            pr_debug("BCSH: Reading contrast from validated struct member\n");
+            ctrl->value = tuning->contrast;
+            pr_debug("BCSH: Contrast read successfully: %d\n", ctrl->value);
+            break;
+
+        case 0x980902:  // Saturation - CRITICAL FIX for BadVA crash
+            /* CRITICAL: Multiple validation layers to prevent BadVA crash */
+            if (!access_ok(VERIFY_READ, &tuning->saturation, sizeof(tuning->saturation))) {
+                pr_err("CRITICAL: Cannot access saturation field at %p - PREVENTING BadVA CRASH\n", &tuning->saturation);
+                return -EFAULT;
+            }
+            
+            /* Additional safety check - verify field address is reasonable */
+            if ((unsigned long)&tuning->saturation < (unsigned long)tuning || 
+                (unsigned long)&tuning->saturation > (unsigned long)tuning + sizeof(*tuning)) {
+                pr_err("CRITICAL: Saturation field address out of bounds - PREVENTING BadVA CRASH\n");
+                return -EFAULT;
+            }
+            
+            pr_info("CRITICAL: Using SAFE validated struct member access for saturation\n");
             ctrl->value = tuning->saturation;
-            pr_info("CRITICAL: Saturation read successfully: %d (crash prevented with struct access)\n", ctrl->value);
+            pr_info("CRITICAL: Saturation read successfully: %d (BadVA crash prevented)\n", ctrl->value);
             break;
 
         case 0x98091b:  // Sharpness
