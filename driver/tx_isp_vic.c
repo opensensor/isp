@@ -1001,16 +1001,35 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** tx_isp_vic_start: MIPS validation passed - applying tx_isp_init_vic_registers methodology ***\n");
 
+    /* *** CRITICAL: DISABLE ALL VIC INTERRUPTS AT HARDWARE LEVEL FIRST *** */
+    vic_regs = vic_dev->vic_regs;
+    if (!vic_regs) {
+        pr_err("*** CRITICAL: No VIC register base - initialization required first ***\n");
+        return -EINVAL;
+    }
+    
+    pr_info("*** STEP 0: DISABLE ALL VIC INTERRUPTS BEFORE ANY REGISTER WRITES ***\n");
+    
+    /* Disable ALL VIC interrupt sources at hardware level */
+    writel(0xFFFFFFFF, vic_regs + 0x1e8);  /* Mask ALL main interrupts */
+    writel(0xFFFFFFFF, vic_regs + 0x1ec);  /* Mask ALL MDMA interrupts */
+    wmb();
+    
+    /* Clear ALL pending interrupt status */
+    writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear main interrupt status */
+    writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+    writel(0x0, vic_regs + 0x1e0);         /* Clear main interrupt register */
+    writel(0x0, vic_regs + 0x1e4);         /* Clear MDMA interrupt register */
+    wmb();
+    
+    pr_info("*** ALL VIC HARDWARE INTERRUPTS DISABLED - SAFE FOR INITIALIZATION ***\n");
+
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
 
-    	/* Add this BEFORE the existing clock enable code in tx_isp_vic_start */
+    /* STEP 1: Initialize secondary ISP modules (isp-w02) */
+    pr_info("*** STREAMING: Initializing secondary ISP module (isp-w02) ***\n");
 
-	/* STEP 0: Initialize secondary ISP modules (isp-w02) */
-	pr_info("*** STREAMING: Initializing secondary ISP module (isp-w02) ***\n");
-
-	/* THEN continue with the existing clock enable code... */
-
-    /* STEP 1: Enable clocks using Linux Clock Framework like tx_isp_init_vic_registers */
+    /* STEP 2: Enable clocks using Linux Clock Framework like tx_isp_init_vic_registers */
     pr_info("*** STREAMING: Enabling ISP clocks using Linux Clock Framework ***\n");
 
     isp_clk = clk_get(NULL, "isp");
@@ -1057,13 +1076,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         iounmap(cpm_regs);
     }
 
-    /* STEP 3: Get VIC registers - should already be mapped by tx_isp_create_vic_device */
-    vic_regs = vic_dev->vic_regs;
-    if (!vic_regs) {
-        pr_err("*** CRITICAL: No VIC register base - initialization required first ***\n");
-        return -EINVAL;
-    }
-    
+    /* STEP 3: VIC register base already validated and secured above */
     pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
 
 
@@ -1433,6 +1446,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     
     pr_info("*** TIMING FIX: vic_start_ok left at 0 - interrupts DISABLED during init ***\n");
     pr_info("*** VIC hardware initialized but interrupts DISABLED - prevents early firing ***\n");
+    
+    /* *** FINAL SAFETY: Ensure ALL interrupts stay masked until tx_vic_enable_irq() *** */
+    writel(0xFFFFFFFF, vic_regs + 0x1e8);  /* Keep ALL main interrupts masked */
+    writel(0xFFFFFFFF, vic_regs + 0x1ec);  /* Keep ALL MDMA interrupts masked */
+    wmb();
+    
+    pr_info("*** VIC INTERRUPTS REMAIN MASKED UNTIL tx_vic_enable_irq() ***\n");
 
     /* MCP LOG: VIC start completed successfully */
     pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d (DISABLED), interface=%d\n", 
