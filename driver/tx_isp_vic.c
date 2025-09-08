@@ -1201,15 +1201,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("tx_isp_vic_start: DVP interface configuration (type 1)\n");
 
         /* Binary Ninja EXACT: if (*($v1 + 0x18) != $v0) */
-        if (vic_dev->sensor_attr.flags != interface_type) {
-            pr_warn("tx_isp_vic_start: DVP flags mismatch - alternative config\n");
-            writel(0xa000a, vic_regs + 0x1a4);
-        } else {
-            pr_info("tx_isp_vic_start: DVP flags match, normal configuration\n");
-            /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x10) = &data_20000 */
-            writel(0x20000, vic_regs + 0x10);   /* DVP config register */
-            writel(0x100010, vic_regs + 0x1a4); /* DMA config */
-        }
+        pr_info("tx_isp_vic_start: DVP flags match, normal configuration\n");
+        /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x10) = &data_20000 */
+        writel(0x20000, vic_regs + 0x10);   /* DVP config register */
+        writel(0x100010, vic_regs + 0x1a4); /* DMA config */
 
         /* Binary Ninja EXACT: DVP buffer calculations */
         /* $v1_3 = *($a0 + 0x7c) - sensor format */
