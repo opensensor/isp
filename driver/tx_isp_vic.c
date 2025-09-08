@@ -2127,143 +2127,141 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
 static int ispvic_frame_channel_clearbuf(void);
 
-/* ispvic_frame_channel_qbuf - EXACT Binary Ninja implementation with VIC register writes */
+/* ispvic_frame_channel_qbuf - EXACT Binary Ninja reference implementation */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
-    struct tx_isp_vic_device *vic_dev = NULL;
+    void *s0 = NULL;  /* Binary Ninja: void* $s0 = nullptr */
     int32_t var_18 = 0;
     
-    pr_info("*** ispvic_frame_channel_qbuf: MIPS-SAFE implementation with alignment checks ***\n");
+    pr_info("*** ispvic_frame_channel_qbuf: EXACT Binary Ninja implementation ***\n");
     
     /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
     if (arg1 != 0 && (unsigned long)arg1 < 0xfffff001) {
-        /* CRITICAL FIX: arg1 IS the subdev, get vic_dev from it safely */
-        struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
+        /* CRITICAL: Binary Ninja expects arg1 + 0xd4 to contain the vic_dev pointer */
+        /* arg1 should be a structure where offset 0xd4 contains the vic_dev */
+        s0 = *((void **)((char *)arg1 + 0xd4));
         
-        /* MIPS ALIGNMENT CHECK: Validate subdev pointer alignment */
-        if (((uintptr_t)sd & 0x3) != 0) {
-            pr_err("*** MIPS ALIGNMENT ERROR: subdev pointer 0x%p not aligned ***\n", sd);
-            return 0;
+        /* CRITICAL FIX: Validate the retrieved pointer */
+        if (!s0) {
+            pr_err("*** CRITICAL: Retrieved NULL pointer from arg1 + 0xd4 ***\n");
+            pr_err("*** This indicates VIC device was not properly initialized ***\n");
+            pr_err("*** arg1=%p, expected vic_dev at offset 0xd4 is NULL ***\n", arg1);
+            return -EINVAL;  /* Return error instead of 0 */
         }
         
-        /* Get vic_dev from subdev - this should be at offset 0xd4 in Binary Ninja */
-        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-        
-        /* CRITICAL FIX: Validate vic_dev->self pointer for MIPS alignment */
-        if (!vic_dev) {
-            pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p is NULL ***\n", vic_dev);
-            return 0;
+        /* Validate MIPS alignment */
+        if (((uintptr_t)s0 & 0x3) != 0) {
+            pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p not aligned ***\n", s0);
+            return -EINVAL;
         }
         
-        if (((uintptr_t)vic_dev & 0x3) != 0) {
-            pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p not aligned ***\n", vic_dev);
-            return 0;
-        }
-        
-        /* Additional safety check - verify vic_dev->self pointer if it exists */
-        if (vic_dev->self && ((uintptr_t)vic_dev->self & 0x3) != 0) {
-            pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->self pointer 0x%p not aligned ***\n", vic_dev->self);
-            return 0;
-        }
-        
-        pr_info("*** MIPS ALIGNMENT CHECKS PASSED: vic_dev=%p ***\n", vic_dev);
+        pr_info("*** SUCCESS: Retrieved vic_dev=%p from arg1+0xd4 (arg1=%p) ***\n", s0, arg1);
+    } else {
+        pr_err("*** CRITICAL: Invalid arg1 parameter: %p ***\n", arg1);
+        return -EINVAL;
     }
     
-    if (!vic_dev) {
-        pr_err("ispvic_frame_channel_qbuf: vic_dev is NULL after safe retrieval\n");
-        return 0;
-    }
+    /* Cast to vic_dev for easier handling */
+    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)s0;
     
     /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
-    /* Use proper spinlock member instead of offset 0x1f4 */
-    __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
+    __private_spin_lock_irqsave((spinlock_t *)((char *)s0 + 0x1f4), &var_18);
     
-    /* Binary Ninja EXACT: Queue buffer management logic */
-    /* int32_t** $v0_2 = *($s0 + 0x1f8) - get next pointer from queue_head.next */
-    struct list_head **v0_2 = (struct list_head **)&vic_dev->queue_head.next;
+    /* Binary Ninja EXACT: int32_t** $v0_2 = *($s0 + 0x1f8) */
+    int32_t **v0_2 = *((int32_t ***)((char *)s0 + 0x1f8));
     
-    /* Binary Ninja EXACT: *($s0 + 0x1f8) = arg2 - set queue_head.next = arg2 */
-    struct list_head *buffer_node = (struct list_head *)arg2;
-    if (buffer_node) {
-        /* Binary Ninja EXACT: *arg2 = $s0 + 0x1f4 - buffer_node->next = queue_head */
-        buffer_node->next = &vic_dev->queue_head;
-        /* Binary Ninja EXACT: arg2[1] = $v0_2 - buffer_node->prev = old_next */
-        buffer_node->prev = vic_dev->queue_head.next;
-        /* Binary Ninja EXACT: *$v0_2 = arg2 - update the linkage */
-        vic_dev->queue_head.next = buffer_node;
-        
-        pr_info("ispvic_frame_channel_qbuf: Buffer node linked to queue\n");
-    }
+    /* Binary Ninja EXACT: *($s0 + 0x1f8) = arg2 */
+    *((void **)((char *)s0 + 0x1f8)) = arg2;
     
-    /* Binary Ninja EXACT: Check for free buffers */
-    /* if ($s0 + 0x1fc == *($s0 + 0x1fc)) - check if free_head is empty */
-    if (vic_dev->free_head.next == &vic_dev->free_head) {
-        pr_info("bank no free\n");  /* isp_printf(0, "bank no free\n", $s0 + 0x1fc) */
+    /* Binary Ninja EXACT: *arg2 = $s0 + 0x1f4 */
+    *((void **)arg2) = (char *)s0 + 0x1f4;
+    
+    /* Binary Ninja EXACT: arg2[1] = $v0_2 */
+    *((int32_t **)((char *)arg2 + 4)) = (int32_t *)v0_2;
+    
+    /* Binary Ninja EXACT: *$v0_2 = arg2 */
+    *v0_2 = (int32_t *)arg2;
+    
+    int32_t a1_4;  /* For unlock parameter */
+    
+    /* Binary Ninja EXACT: if ($s0 + 0x1fc == *($s0 + 0x1fc)) */
+    void *free_head = (char *)s0 + 0x1fc;
+    void *free_next = *((void **)((char *)s0 + 0x1fc));
+    
+    if (free_head == free_next) {
+        /* Binary Ninja EXACT: isp_printf(0, "bank no free\n", $s0 + 0x1fc) */
+        pr_info("ispvic_frame_channel_qbuf: bank no free (MIPS-safe)\n");
+        a1_4 = var_18;
     }
-    /* else if ($s0 + 0x1f4 == *($s0 + 0x1f4)) - check if queue_head is empty */
-    else if (vic_dev->queue_head.next == &vic_dev->queue_head) {
-        pr_info("qbuffer null\n");  /* isp_printf(0, "qbuffer null\n", $s0 + 0x1fc) */
-    }
+    /* Binary Ninja EXACT: else if ($s0 + 0x1f4 == *($s0 + 0x1f4)) */
     else {
-        /* Binary Ninja EXACT: Buffer processing logic with VIC register writes */
-        /* $a1_1, $a2_1 = pop_buffer_fifo($s0 + 0x1f4) - get buffer from queue */
-        struct list_head *buffer_entry = vic_dev->queue_head.next;
-        if (buffer_entry && buffer_entry != &vic_dev->queue_head) {
-            /* Remove from queue */
-            vic_dev->queue_head.next = buffer_entry->next;
-            buffer_entry->next->prev = &vic_dev->queue_head;
+        void *queue_head = (char *)s0 + 0x1f4;
+        void *queue_next = *((void **)((char *)s0 + 0x1f4));
+        
+        if (queue_head == queue_next) {
+            /* Binary Ninja EXACT: isp_printf(0, "qbuffer null\n", $s0 + 0x1fc) */
+            pr_info("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
+            a1_4 = var_18;
+        } else {
+            /* Binary Ninja EXACT: Buffer processing logic */
+            /* $a1_1, $a2_1 = pop_buffer_fifo($s0 + 0x1f4) */
+            /* void** $v0_5, void* $a3_1 = $a1_1($a2_1) */
+            void **v0_5 = (void **)queue_next;  /* Simplified buffer entry */
+            void *a3_1 = v0_5;  /* Buffer data structure */
             
-            /* Binary Ninja EXACT: Get buffer data from list entry */
-            /* void** $v0_5, void* $a3_1 = $a1_1($a2_1) - extract buffer info */
-            /* int32_t $a1_2 = *($a3_1 + 8) - get buffer address from offset 8 */
-            u32 buffer_addr = (u32)(unsigned long)arg2; /* Buffer address from arg2 */
+            /* Binary Ninja EXACT: int32_t $a1_2 = *($a3_1 + 8) */
+            int32_t a1_2 = *((int32_t *)((char *)a3_1 + 8));
             
-            /* Binary Ninja EXACT: int32_t $v1_1 = $v0_5[4] - get buffer index */
-            u32 buffer_index = vic_dev->active_buffer_count % 5; /* Limit to 5 buffers */
+            /* Binary Ninja EXACT: int32_t $v1_1 = $v0_5[4] */
+            int32_t v1_1 = ((int32_t *)v0_5)[4];
             
-            /* Binary Ninja EXACT: $v0_5[2] = $a1_2 - store buffer addr in list entry */
-            /* This would be setting buffer_entry[2] = buffer_addr in real implementation */
+            /* Binary Ninja EXACT: $v0_5[2] = $a1_2 */
+            ((int32_t *)v0_5)[2] = a1_2;
             
             /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
-            /* CRITICAL: Write buffer address to VIC register - this is the key missing piece! */
-            if (vic_dev->vic_regs && 
-                (unsigned long)vic_dev->vic_regs >= 0x80000000 &&
-                buffer_index < 5) {
-                u32 reg_offset = (buffer_index + 0xc6) << 2;
-                writel(buffer_addr, vic_dev->vic_regs + reg_offset);
-                wmb();
-                pr_info("*** VIC REGISTER WRITE: buffer 0x%x -> reg[0x%x] (index=%d) ***\n", 
-                        buffer_addr, reg_offset, buffer_index);
+            void *vic_regs = *((void **)((char *)s0 + 0xb8));
+            if (vic_regs && (unsigned long)vic_regs >= 0x80000000) {
+                uint32_t reg_offset = (v1_1 + 0xc6) << 2;
+                if (reg_offset < 0x1000) {  /* Bounds check */
+                    writel(a1_2, vic_regs + reg_offset);
+                    wmb();
+                    pr_info("*** VIC HARDWARE: Buffer 0x%x -> reg[0x%x] (index=%d) ***\n", 
+                            a1_2, reg_offset, v1_1);
+                }
             } else {
-                pr_warn("ispvic_frame_channel_qbuf: Skipping VIC register write - invalid base %p or index %d\n", 
-                        vic_dev->vic_regs, buffer_index);
+                pr_err("ispvic_frame_channel_qbuf: Invalid VIC register base %p\n", vic_regs);
             }
             
-            /* Binary Ninja EXACT: Add to done list */
-            /* void** $v1_5 = *($s0 + 0x208) - get done_head.next */
-            /* *($s0 + 0x208) = $v0_5 - done_head.next = buffer_entry */
-            /* *$v0_5 = $s0 + 0x204 - buffer_entry->next = done_head */
-            /* $v0_5[1] = $v1_5 - buffer_entry->prev = old_done_next */
-            /* *$v1_5 = $v0_5 - old_done_next->prev = buffer_entry */
-            buffer_entry->next = vic_dev->done_head.next;
-            buffer_entry->prev = &vic_dev->done_head;
-            vic_dev->done_head.next->prev = buffer_entry;
-            vic_dev->done_head.next = buffer_entry;
+            /* Binary Ninja EXACT: Done list management */
+            /* void** $v1_5 = *($s0 + 0x208) */
+            void **v1_5 = *((void ***)((char *)s0 + 0x208));
             
-            /* Binary Ninja EXACT: *($s0 + 0x218) += 1 - increment active buffer count */
-            vic_dev->active_buffer_count += 1;
+            /* Binary Ninja EXACT: *($s0 + 0x208) = $v0_5 */
+            *((void **)((char *)s0 + 0x208)) = v0_5;
             
-            pr_info("*** QBUF: Buffer processed with VIC register write - active_count=%d ***\n", 
-                    vic_dev->active_buffer_count);
-        } else {
-            pr_warn("ispvic_frame_channel_qbuf: No valid buffer entry found in queue\n");
+            /* Binary Ninja EXACT: *$v0_5 = $s0 + 0x204 */
+            *v0_5 = (char *)s0 + 0x204;
+            
+            /* Binary Ninja EXACT: $v0_5[1] = $v1_5 */
+            v0_5[1] = v1_5;
+            
+            /* Binary Ninja EXACT: *$v1_5 = $v0_5 */
+            *v1_5 = v0_5;
+            
+            /* Binary Ninja EXACT: *($s0 + 0x218) += 1 */
+            *((int32_t *)((char *)s0 + 0x218)) += 1;
+            
+            pr_info("*** VIC QBUF: Buffer processed successfully - active_count=%d ***\n", 
+                    *((int32_t *)((char *)s0 + 0x218)));
+            
+            a1_4 = var_18;
         }
     }
     
     /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, $a1_4) */
-    private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
+    private_spin_unlock_irqrestore((spinlock_t *)((char *)s0 + 0x1f4), a1_4);
     
-    pr_info("*** ispvic_frame_channel_qbuf: MIPS-SAFE completion ***\n");
+    pr_info("*** ispvic_frame_channel_qbuf: SUCCESS - returning 0 ***\n");
     /* Binary Ninja EXACT: return 0 */
     return 0;
 }
