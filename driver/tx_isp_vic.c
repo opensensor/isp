@@ -2207,6 +2207,7 @@ unlock_exit:
     return ret;
 }
 
+int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 /* Define VIC video operations */
 static struct tx_isp_subdev_video_ops vic_video_ops = {
     .s_stream = vic_video_s_stream,
