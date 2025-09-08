@@ -110,6 +110,26 @@ static uint32_t data_d7220 = 0;
 static uint32_t data_d7224 = 0;
 static uint32_t data_d7228 = 0;
 
+/* Missing AE global variables - Binary Ninja reference */
+uint32_t data_b0df4 = 0;   /* IspAeFlag */
+EXPORT_SYMBOL(data_b0df4);
+uint32_t data_b0df8 = 0;   /* AE flag 2 */
+EXPORT_SYMBOL(data_b0df8);
+uint32_t data_b0e00 = 0;   /* AE flag 3 */
+EXPORT_SYMBOL(data_b0e00);
+uint32_t data_b0e04 = 0;   /* AE flag 4 */
+EXPORT_SYMBOL(data_b0e04);
+uint32_t data_b0e08 = 0;   /* AE flag 5 */
+EXPORT_SYMBOL(data_b0e08);
+uint32_t data_b0e0c = 0;   /* AE flag 6 */
+EXPORT_SYMBOL(data_b0e0c);
+uint32_t data_b0e14 = 0;   /* AE flag 7 */
+EXPORT_SYMBOL(data_b0e14);
+uint32_t data_b0e18 = 0;   /* AE flag 8 */
+EXPORT_SYMBOL(data_b0e18);
+uint32_t data_b2e74 = 0;   /* WDR mode flag */
+EXPORT_SYMBOL(data_b2e74);
+
 /* WDR Data Structure Pointers - From Binary Ninja */
 static void *TizianoWdrFpgaStructMe = NULL;
 static void *data_d94a8 = NULL;
