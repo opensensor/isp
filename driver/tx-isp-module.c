@@ -1796,9 +1796,9 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     
     /* CRITICAL: Binary Ninja global vic_start_ok flag check */
     /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
+    pr_info("*** VIC HARDWARE INTERRUPT: maybe processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
     if (vic_start_ok != 0) {
-        pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
-        
+
         /* Binary Ninja: if (($v1_7 & 1) != 0) */
         if ((v1_7 & 1) != 0) {
             /* Binary Ninja: *($s0 + 0x160) += 1 */
