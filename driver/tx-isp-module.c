@@ -1510,53 +1510,6 @@ static int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     return 0;
 }
 
-/* tx_isp_csi_activate_subdev - Binary Ninja exact implementation */
-int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
-{
-    struct tx_isp_csi_device *csi_dev;
-    struct tx_isp_dev *isp_dev;
-    
-    if (!sd) {
-        return -EINVAL;
-    }
-    
-    /* Cast isp pointer properly */
-    isp_dev = (struct tx_isp_dev *)sd->isp;
-    if (!isp_dev) {
-        return -EINVAL;
-    }
-    
-    /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
-    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-    if (!csi_dev) {
-        return -EINVAL;
-    }
-    
-    /* Binary Ninja: private_mutex_lock($s1_1 + 0x12c) */
-    mutex_lock(&csi_dev->mlock);
-    
-    /* Binary Ninja: if (*($s1_1 + 0x128) == 1) */
-    if (csi_dev->state == 1) {
-        /* Binary Ninja: *($s1_1 + 0x128) = 2 */
-        csi_dev->state = 2;
-        
-        /* Binary Ninja: Enable CSI clocks if available */
-        /* int32_t* $s1_2 = *(arg1 + 0xbc) */
-        if (csi_dev->csi_clk) {
-            /* Binary Ninja: while (i u< *(arg1 + 0xc0)) private_clk_enable(*$s1_2) */
-            clk_enable(csi_dev->csi_clk);
-            pr_info("tx_isp_csi_activate_subdev: CSI clock enabled\n");
-        }
-        
-        pr_info("tx_isp_csi_activate_subdev: CSI activated, state=%d\n", csi_dev->state);
-    }
-    
-    /* Binary Ninja: private_mutex_unlock($s1_1 + 0x12c) */
-    mutex_unlock(&csi_dev->mlock);
-    
-    return 0;
-}
-
 /* CSI video streaming control - Updated to use standalone methods */
 static int tx_isp_csi_s_stream(struct tx_isp_dev *isp_dev, int enable)
 {
