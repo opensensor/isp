@@ -1007,21 +1007,21 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_err("*** CRITICAL: No VIC register base - initialization required first ***\n");
         return -EINVAL;
     }
-    
+
     pr_info("*** STEP 0: DISABLE ALL VIC INTERRUPTS BEFORE ANY REGISTER WRITES ***\n");
-    
+
     /* Disable ALL VIC interrupt sources at hardware level */
     writel(0xFFFFFFFF, vic_regs + 0x1e8);  /* Mask ALL main interrupts */
     writel(0xFFFFFFFF, vic_regs + 0x1ec);  /* Mask ALL MDMA interrupts */
     wmb();
-    
+
     /* Clear ALL pending interrupt status */
     writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear main interrupt status */
     writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
     writel(0x0, vic_regs + 0x1e0);         /* Clear main interrupt register */
     writel(0x0, vic_regs + 0x1e4);         /* Clear MDMA interrupt register */
     wmb();
-    
+
     pr_info("*** ALL VIC HARDWARE INTERRUPTS DISABLED - SAFE FOR INITIALIZATION ***\n");
 
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
@@ -1086,49 +1086,49 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     sensor_format = sensor_attr->data_type;
 
     pr_info("tx_isp_vic_start: interface=%d, format=0x%x\n", interface_type, sensor_format);
-    
+
     /* MCP LOG: VIC start with interface configuration */
-    pr_info("MCP_LOG: VIC start initiated - interface=%d, format=0x%x, vic_base=%p\n", 
+    pr_info("MCP_LOG: VIC start initiated - interface=%d, format=0x%x, vic_base=%p\n",
             interface_type, sensor_format, vic_regs);
 
-    /* *** WRITE MISSING REGISTERS TO MATCH REFERENCE TRACE *** */
-    pr_info("*** Writing missing registers to match reference driver trace ***\n");
-    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace */
-    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace */
-    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace */
-    wmb();
+//    /* *** WRITE MISSING REGISTERS TO MATCH REFERENCE TRACE *** */
+//    pr_info("*** Writing missing registers to match reference driver trace ***\n");
+//    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace */
+//    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace */
+//    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace */
+//    wmb();
+//
+//    /* CSI PHY Control registers - write to VIC register space offsets that match trace */
+//    writel(0x54560031, vic_regs + 0x0);      /* First register from reference trace */
+//    writel(0x7800438, vic_regs + 0x4);       /* Second register from reference trace */
+//    writel(0x1, vic_regs + 0x8);             /* Third register from reference trace */
+//    writel(0x80700008, vic_regs + 0xc);      /* Fourth register from reference trace */
+//    writel(0x1, vic_regs + 0x28);            /* Fifth register from reference trace */
+//    writel(0x400040, vic_regs + 0x2c);       /* Sixth register from reference trace */
+//    writel(0x1, vic_regs + 0x90);            /* Seventh register from reference trace */
+//    writel(0x1, vic_regs + 0x94);            /* Eighth register from reference trace */
+//    writel(0x30000, vic_regs + 0x98);        /* Ninth register from reference trace */
+//    writel(0x58050000, vic_regs + 0xa8);     /* Tenth register from reference trace */
+//    writel(0x58050000, vic_regs + 0xac);     /* Eleventh register from reference trace */
+//    writel(0x40000, vic_regs + 0xc4);        /* Register from reference trace */
+//    writel(0x400040, vic_regs + 0xc8);       /* Register from reference trace */
+//    writel(0x100, vic_regs + 0xcc);          /* Register from reference trace */
+//    writel(0xc, vic_regs + 0xd4);            /* Register from reference trace */
+//    writel(0xffffff, vic_regs + 0xd8);       /* Register from reference trace */
+//    writel(0x100, vic_regs + 0xe0);          /* Register from reference trace */
+//    writel(0x400040, vic_regs + 0xe4);       /* Register from reference trace */
+//    writel(0xff808000, vic_regs + 0xf0);     /* Register from reference trace */
+//    wmb();
 
-    /* CSI PHY Control registers - write to VIC register space offsets that match trace */
-    writel(0x54560031, vic_regs + 0x0);      /* First register from reference trace */
-    writel(0x7800438, vic_regs + 0x4);       /* Second register from reference trace */
-    writel(0x1, vic_regs + 0x8);             /* Third register from reference trace */
-    writel(0x80700008, vic_regs + 0xc);      /* Fourth register from reference trace */
-    writel(0x1, vic_regs + 0x28);            /* Fifth register from reference trace */
-    writel(0x400040, vic_regs + 0x2c);       /* Sixth register from reference trace */
-    writel(0x1, vic_regs + 0x90);            /* Seventh register from reference trace */
-    writel(0x1, vic_regs + 0x94);            /* Eighth register from reference trace */
-    writel(0x30000, vic_regs + 0x98);        /* Ninth register from reference trace */
-    writel(0x58050000, vic_regs + 0xa8);     /* Tenth register from reference trace */
-    writel(0x58050000, vic_regs + 0xac);     /* Eleventh register from reference trace */
-    writel(0x40000, vic_regs + 0xc4);        /* Register from reference trace */
-    writel(0x400040, vic_regs + 0xc8);       /* Register from reference trace */
-    writel(0x100, vic_regs + 0xcc);          /* Register from reference trace */
-    writel(0xc, vic_regs + 0xd4);            /* Register from reference trace */
-    writel(0xffffff, vic_regs + 0xd8);       /* Register from reference trace */
-    writel(0x100, vic_regs + 0xe0);          /* Register from reference trace */
-    writel(0x400040, vic_regs + 0xe4);       /* Register from reference trace */
-    writel(0xff808000, vic_regs + 0xf0);     /* Register from reference trace */
-    wmb();
-    
-    /* CSI PHY Config registers - from reference trace */
-    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
-    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
-    wmb();
-    
+//    /* CSI PHY Config registers - from reference trace */
+//    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
+//    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
+//    wmb();
+
     /* *** MISSING ISP Control registers - from reference trace *** */
     pr_info("*** Writing missing ISP Control registers (0x9804-0x98a8) ***\n");
     writel(0x3f00, vic_regs + 0x9804);       /* ISP Control register */
-    writel(0x7800438, vic_regs + 0x9864);    /* ISP Control register */  
+    writel(0x7800438, vic_regs + 0x9864);    /* ISP Control register */
     writel(0xc0000000, vic_regs + 0x987c);   /* ISP Control register */
     writel(0x1, vic_regs + 0x9880);          /* ISP Control register */
     writel(0x1, vic_regs + 0x9884);          /* ISP Control register */
@@ -1136,7 +1136,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x1010001, vic_regs + 0x989c);    /* ISP Control register */
     writel(0x1010001, vic_regs + 0x98a8);    /* ISP Control register */
     wmb();
-    
+
     /* *** MISSING VIC Control registers - from reference trace *** */
     pr_info("*** Writing missing VIC Control registers (0x9a00-0x9ac8) ***\n");
     writel(0x50002d0, vic_regs + 0x9a00);    /* VIC Control register */
@@ -1152,7 +1152,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x200, vic_regs + 0x9ac0);        /* VIC Control register */
     writel(0x200, vic_regs + 0x9ac8);        /* VIC Control register */
     wmb();
-    
+
     /* *** MISSING Core Control registers - from reference trace *** */
     pr_info("*** Writing missing Core Control registers (0xb004-0xb08c) ***\n");
     writel(0xf001f001, vic_regs + 0xb004);   /* Core Control register */
@@ -1176,7 +1176,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x1813, vic_regs + 0xb084);       /* Core Control register */
     writel(0x10a, vic_regs + 0xb08c);        /* Core Control register */
     wmb();
-    
+
     pr_info("*** Completed writing ALL missing initialization registers from reference trace ***\n");
 
     /* Binary Ninja: interface 1=DVP, 2=MIPI, 3=BT601, 4=BT656, 5=BT1120 */
@@ -1235,7 +1235,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(*(arg1 + 0xb8) + 0xc) = 3 */
         writel(3, vic_regs + 0xc);
         wmb();
-        
+
         /* MCP LOG: Critical MIPI register write */
         u32 verify_mipi_ctrl = readl(vic_regs + 0xc);
         pr_info("MCP_LOG: MIPI control register write - wrote 3 to 0xc, readback = 0x%x\n", verify_mipi_ctrl);
@@ -1374,7 +1374,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("tx_isp_vic_start: BT601 interface\n");
         ret = -ENOTSUPP;
         goto exit_func;
-        
+
     } else if (interface_type == 4) {
         /* BT656 interface */
         pr_info("tx_isp_vic_start: BT656 interface\n");
@@ -1383,7 +1383,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
-        
+
         /* Unlock sequence */
         writel(2, vic_regs + 0x0);
         wmb();
@@ -1398,7 +1398,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
-        
+
         /* Unlock sequence */
         writel(2, vic_regs + 0x0);
         wmb();
@@ -1443,19 +1443,19 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* *** CRITICAL TIMING FIX: DO NOT set vic_start_ok = 1 here! *** */
     /* vic_start_ok should ONLY be set by tx_vic_enable_irq() after streaming setup */
-    
+
     pr_info("*** TIMING FIX: vic_start_ok left at 0 - interrupts DISABLED during init ***\n");
     pr_info("*** VIC hardware initialized but interrupts DISABLED - prevents early firing ***\n");
-    
+
     /* *** FINAL SAFETY: Ensure ALL interrupts stay masked until tx_vic_enable_irq() *** */
     writel(0xFFFFFFFF, vic_regs + 0x1e8);  /* Keep ALL main interrupts masked */
     writel(0xFFFFFFFF, vic_regs + 0x1ec);  /* Keep ALL MDMA interrupts masked */
     wmb();
-    
+
     pr_info("*** VIC INTERRUPTS REMAIN MASKED UNTIL tx_vic_enable_irq() ***\n");
 
     /* MCP LOG: VIC start completed successfully */
-    pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d (DISABLED), interface=%d\n", 
+    pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d (DISABLED), interface=%d\n",
             vic_start_ok, interface_type);
 
     ret = 0;
@@ -1466,7 +1466,6 @@ exit_func:
 
 
 
-/* tx_isp_vic_start - EXACT Binary Ninja implementation matching reference trace */
 int tx_isp_vic_start2(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
@@ -2469,6 +2468,8 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n", 
                     stream_ctrl, vic_base, 1);
         }
+
+        tx_isp_vic_start2(vic_dev);
         
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
         vic_dev->stream_state = 1;
