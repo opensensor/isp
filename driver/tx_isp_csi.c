@@ -500,24 +500,22 @@ int csi_init_core_control_registers(void)
 }
 EXPORT_SYMBOL(csi_init_core_control_registers);
 
-/* Module initialization and cleanup */
-static int __init tx_isp_csi_init(void)
+/* CSI Initialization function for integration into main module */
+int tx_isp_csi_module_init(void)
 {
-    pr_info("TX ISP CSI module loaded\n");
+    pr_info("TX ISP CSI functions initialized\n");
     return 0;
 }
 
-static void __exit tx_isp_csi_exit(void)
+/* CSI Cleanup function for integration into main module */
+void tx_isp_csi_module_exit(void)
 {
     if (global_csi_dev) {
         tx_isp_csi_remove(NULL);
     }
-    pr_info("TX ISP CSI module unloaded\n");
+    pr_info("TX ISP CSI functions cleaned up\n");
 }
 
-module_init(tx_isp_csi_init);
-module_exit(tx_isp_csi_exit);
-
-MODULE_DESCRIPTION("TX ISP CSI Driver - Missing Hardware Initialization");
-MODULE_AUTHOR("Reverse Engineering Team"); 
-MODULE_LICENSE("GPL");
+/* Export functions for integration into main module */
+EXPORT_SYMBOL(tx_isp_csi_module_init);
+EXPORT_SYMBOL(tx_isp_csi_module_exit);
