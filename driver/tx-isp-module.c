@@ -4687,17 +4687,6 @@ int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable)
     
     /* MIPS SAFE: Instead of dangerous register access, use safe state management */
     if (enable) {
-        pr_info("*** MIPS-SAFE: CSI streaming enable without dangerous register access ***\n");
-        
-        /* MIPS SAFE: Only access VIC registers if properly aligned */
-        if (ourISPdev->vic_regs && ((uintptr_t)ourISPdev->vic_regs & 0x3) == 0) {
-            pr_info("*** MIPS-SAFE: VIC registers available and aligned ***\n");
-            /* Skip dangerous CSI PHY register access that was causing crashes */
-            pr_info("*** MIPS-SAFE: Skipping CSI PHY register writes to prevent crashes ***\n");
-        } else {
-            pr_warn("*** MIPS WARNING: VIC registers not available or not aligned ***\n");
-        }
-        
         /* MIPS SAFE: Set CSI device state if available */
         if (ourISPdev->csi_dev && ((uintptr_t)ourISPdev->csi_dev & 0x3) == 0) {
             struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
