@@ -2145,14 +2145,14 @@ static void tx_vic_enable_irq(void)
         
         /* *** CRITICAL: ENABLE INTERRUPTS AT HARDWARE LEVEL *** */
         if (vic_regs && (unsigned long)vic_regs >= 0x80000000) {
-            /* Enable essential VIC interrupts - frame done and critical errors */
+            /* Enable VIC interrupts for proper operation */
             /* In VIC registers: 1 = masked, 0 = unmasked */
-            /* Unmask frame done (bit 0), keep other interrupts masked initially */
+            /* Unmask frame done (bit 0) and essential processing interrupts */
             writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* Unmask frame done interrupt (bit 0) */
-            /* Unmask essential MDMA interrupts (bits 0-1 for channels) */  
-            writel(0xFFFFFFFC, vic_regs + 0x1ec);  /* Unmask MDMA channel 0&1 interrupts */
+            /* Unmask MDMA channel 0&1 and essential DMA interrupts */  
+            writel(0xFFFFFFF0, vic_regs + 0x1ec);  /* Unmask MDMA interrupts (bits 0-3) */
             wmb();
-            pr_info("*** tx_vic_enable_irq: UNMASKED essential VIC hardware interrupts (frame_done + MDMA) ***\n");
+            pr_info("*** tx_vic_enable_irq: UNMASKED VIC hardware interrupts (frame_done + extended MDMA) ***\n");
         }
         
         /* Binary Ninja: int32_t $v0_1 = *(dump_vsd_5 + 0x84) - get enable callback */
