@@ -1796,7 +1796,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     
     /* CRITICAL: Binary Ninja global vic_start_ok flag check */
     /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
-    //if (vic_start_ok != 0) {
+    if (vic_start_ok != 0) {
         pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
         
         /* Binary Ninja: if (($v1_7 & 1) != 0) */
@@ -1965,10 +1965,10 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             }
         }
         
-//    } else {
-//        pr_warn("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
-//        pr_warn("*** This means VIC interrupts are firing but being ignored! ***\n");
-//    }
+    } else {
+        pr_warn("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
+        pr_warn("*** This means VIC interrupts are firing but being ignored! ***\n");
+    }
     
     /* Binary Ninja: return 1 */
     return IRQ_HANDLED;
