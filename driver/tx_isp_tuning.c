@@ -230,6 +230,13 @@ void *isp_core_tuning_init(void *arg1);
 /* Forward declaration for tisp_init - Binary Ninja EXACT implementation */
 int tisp_init(void *sensor_info, char *param_name);
 
+
+int tisp_set_csc_version(int version)
+{
+    pr_info("tisp_set_csc_version: Setting CSC version %d\n", version);
+    return 0;
+}
+
 /* tisp_init - Binary Ninja EXACT implementation - THE MISSING HARDWARE INITIALIZER */
 int tisp_init(void *sensor_info, char *param_name)
 {
@@ -4140,11 +4147,6 @@ int tisp_param_operate_init(void)
     return 0;
 }
 
-int tisp_set_csc_version(int version)
-{
-    pr_info("tisp_set_csc_version: Setting CSC version %d\n", version);
-    return 0;
-}
 
 /* Update functions for event callbacks */
 int tisp_tgain_update(void)
