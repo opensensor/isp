@@ -1327,10 +1327,19 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     
     /* CRITICAL: Enable ISP system-level interrupts when VIC streaming starts */
     extern void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
-    struct tx_isp_dev *isp_dev = tx_isp_get_device();
+    
+    /* FIXED: Use proper VIC-to-ISP device linkage */
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)vic_dev->sd.isp;
+    if (!isp_dev && ourISPdev) {
+        /* Fallback: Use global ISP device if subdev link not set */
+        isp_dev = ourISPdev;
+        pr_info("*** tx_isp_vic_start: Using global ISP device fallback ***\n");
+    }
+    
     if (isp_dev) {
         pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
         tx_isp_enable_irq(isp_dev);
+        pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
     } else {
         pr_err("*** tx_isp_vic_start: No ISP device found for interrupt enable ***\n");
     }
