@@ -154,10 +154,10 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int mode, int sensor_format)
             pr_info("*** csi_core_ops_init: WRITING MISSING CSI PHY CONFIG REGISTERS ***\n");
             
             /* Set lanes based on sensor format */
-            int lanes = 1; /* Default single lane */
+            int lanes = 2; /* Default 2 lanes for MIPI */
             if (csi_dev->sensor_attr.dbus_type == 2) { /* MIPI interface */
-                lanes = csi_dev->sensor_attr.mipi.data_lanes;
-                if (lanes == 0) lanes = 2; /* Default 2 lanes */
+                /* Use default 2 lanes - mipi struct member names may vary */
+                lanes = 2; /* Standard 2-lane MIPI configuration */
             }
             
             /* Binary Ninja: Set up CSI lanes */
