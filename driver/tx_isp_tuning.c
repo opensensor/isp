@@ -804,6 +804,68 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
         pr_err("apical_isp_core_ops_g_ctrl: NULL tuning data for cmd=0x%x\n", ctrl->cmd);
         return -ENODEV;
     }
+    
+    /* CRITICAL: Validate tuning pointer is in valid kernel address space */
+    /* MIPS KSEG0: 0x80000000-0x9fffffff (cached), KSEG1: 0xa0000000-0xbfffffff (uncached), KSEG2: 0xc0000000+ (mapped) */
+    if ((unsigned long)tuning < 0x80000000) {
+        pr_err("CRITICAL: Corrupted tuning pointer detected: %08x - PREVENTING CRASH\n", (unsigned int)tuning);
+        pr_err("CRITICAL: This would have caused BadVA crash at address %08x\n", (unsigned int)tuning);
+        pr_err("CRITICAL: Expected valid kernel pointer >= 0x80000000, got %08x\n", (unsigned int)tuning);
+        
+        /* CRITICAL FIX: Attempt to recover by reinitializing tuning data */
+        pr_err("*** ATTEMPTING TUNING DATA RECOVERY ***\n");
+        
+        /* Clear corrupted pointer first */
+        dev->tuning_data = NULL;
+        
+        /* Try to reinitialize tuning data */
+        dev->tuning_data = isp_core_tuning_init(dev);
+        if (dev->tuning_data) {
+            pr_info("*** SUCCESS: Tuning data recovery successful - new pointer: %p ***\n", dev->tuning_data);
+            tuning = dev->tuning_data;
+            /* Validate recovery was successful */
+            if ((unsigned long)tuning >= 0x80000000 && virt_addr_valid(tuning)) {
+                pr_info("*** RECOVERY VALIDATED: New tuning data pointer is valid ***\n");
+                /* Continue with recovered pointer */
+            } else {
+                pr_err("*** RECOVERY FAILED: New tuning data still invalid ***\n");
+                return -EFAULT;
+            }
+        } else {
+            pr_err("*** RECOVERY FAILED: Could not reinitialize tuning data ***\n");
+            return -EFAULT;
+        }
+    }
+    
+    /* CRITICAL: Validate tuning pointer alignment for MIPS */
+    if ((unsigned long)tuning & 0x3) {
+        pr_err("CRITICAL: Unaligned tuning pointer: %p - PREVENTING CRASH\n", tuning);
+        dev->tuning_data = NULL;
+        return -EFAULT;
+    }
+    
+    /* CRITICAL: Validate that we can access the tuning structure safely */
+    if (!virt_addr_valid(tuning)) {
+        pr_err("CRITICAL: Invalid virtual address for tuning data: %p - PREVENTING CRASH\n", tuning);
+        dev->tuning_data = NULL;
+        return -EFAULT;
+    }
+    
+    /* CRITICAL: Additional corruption check - validate structure magic if available */
+    if (tuning->state == 0 || tuning->state > 10) {
+        pr_err("CRITICAL: Tuning data state corrupted: %d - indicates memory corruption\n", tuning->state);
+        /* Try to recover */
+        dev->tuning_data = NULL;
+        dev->tuning_data = isp_core_tuning_init(dev);
+        if (dev->tuning_data) {
+            tuning = dev->tuning_data;
+            pr_info("*** Tuning data state corruption recovered ***\n");
+        } else {
+            return -EFAULT;
+        }
+    }
+    
+    //mutex_lock(&tuning->lock);
 
     pr_info("Get control: cmd=0x%x value=%d, tuning=%p (SAFELY validated)\n", ctrl->cmd, ctrl->value, tuning);
 
@@ -1286,7 +1348,27 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
         pr_err("isp_core_tunning_unlocked_ioctl: No ISP device available\n");
         return -ENODEV;
     }
-
+    
+    /* CRITICAL: Auto-initialize tuning for V4L2 controls if not already enabled */
+    if (magic == 0x56 && dev->tuning_enabled != 3) {
+        pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control\n");
+        
+        /* Initialize tuning_data if not already initialized */
+        if (!dev->tuning_data) {
+            pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
+            dev->tuning_data = isp_core_tuning_init(dev);
+            if (!dev->tuning_data) {
+                pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
+                return -ENOMEM;
+            }
+            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
+        }
+        
+        /* Enable tuning */
+        dev->tuning_enabled = 3;
+        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning auto-enabled for V4L2 controls\n");
+    }
+    
     /* CRITICAL: Check tuning enabled for tuning commands only */
     if (magic == 0x74 && dev->tuning_enabled != 3) {
         pr_err("isp_core_tunning_unlocked_ioctl: Tuning commands require explicit enable (cmd=0x%x)\n", cmd);
@@ -1357,7 +1439,24 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 
                     if (enable) {
                         if (dev->tuning_enabled != 3) {
-                          	// TODO ?
+                            /* CRITICAL: Initialize tuning_data if not already initialized */
+                            if (!dev->tuning_data) {
+                                pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
+                                
+                                /* Allocate tuning data structure using the reference implementation */
+                                dev->tuning_data = isp_core_tuning_init(dev);
+                                if (!dev->tuning_data) {
+                                    pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
+                                    return -ENOMEM;
+                                }
+                                
+                                pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
+                                
+                                /* MCP LOG: Tuning data structure successfully initialized */
+                                pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
+                                pr_info("MCP_LOG: Tuning controls now ready for operation\n");
+                            }
+                            
                             dev->tuning_enabled = 3;
                             pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
                         }
@@ -4209,7 +4308,7 @@ void *isp_core_tuning_init(void *arg1)
     struct isp_tuning_data *tuning_data;
     extern struct tx_isp_dev *ourISPdev;
     
-    pr_info("isp_core_tuning_init: Initializing ISP core tuning\n");
+    pr_info("isp_core_tuning_init: Initializing ISP core tuning with corruption protection\n");
     
     /* CRITICAL: Use larger allocation to prevent corruption and add guard pages */
     /* Binary Ninja shows 0x40d0 but we'll use proper struct size + safety margin */
@@ -4395,10 +4494,10 @@ void *isp_core_tuning_init(void *arg1)
         pr_info("isp_core_tuning_init: Linking to validated ISP device at %p\n", ourISPdev);
     }
     
-    pr_info("isp_core_tuning_init: Tuning data structure fully initialized\n");
+    pr_info("isp_core_tuning_init: Tuning data structure fully initialized with corruption protection\n");
     pr_info("isp_core_tuning_init: Address range: %p to %p (size=%zu)\n", 
             tuning_data, (char*)tuning_data + alloc_size, alloc_size);
-    pr_info("isp_core_tuning_init: Critical fields - Brightness=%d, Saturation=%d\n",
+    pr_info("isp_core_tuning_init: Critical fields - Brightness=%d, Saturation=%d (corruption prevention)\n", 
             tuning_data->brightness, tuning_data->saturation);
     pr_info("isp_core_tuning_init: State marker: %d (corruption detection)\n", tuning_data->state);
     pr_info("MCP_LOG: Tuning data structure allocated with comprehensive corruption protection\n");

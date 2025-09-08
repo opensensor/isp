@@ -83,6 +83,8 @@ static struct tx_isp_subdev_ops core_subdev_ops = {
 };
 
 /* Forward declarations */
+static int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
+static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp);
 static int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
 static int tx_isp_setup_media_links(struct tx_isp_dev *isp);
 static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp);
@@ -91,8 +93,12 @@ static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link
 static int tx_isp_configure_default_links(struct tx_isp_dev *isp);
 static int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
 static int tx_isp_csi_device_init(struct tx_isp_dev *isp);
+static int tx_isp_vic_device_init(struct tx_isp_dev *isp);
 static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
+
+/* Forward declaration for VIC device creation from tx_isp_vic.c */
+extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 
 /* Critical ISP Core initialization functions - MISSING FROM LOGS! */
 static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
@@ -235,6 +241,86 @@ void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan)
         mutex_init(&chan->mlock);
         init_completion(&chan->frame_done);
     }
+}
+
+
+/* Initialize memory mappings for ISP subsystems */
+static int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
+{
+    pr_info("Initializing ISP memory mappings\n");
+    
+    /* Map ISP Core registers */
+    isp->core_regs = ioremap(0x13300000, 0x10000);
+    if (!isp->core_regs) {
+        pr_err("Failed to map ISP core registers\n");
+        return -ENOMEM;
+    }
+    pr_info("ISP core registers mapped at 0x13300000\n");
+    
+    /* Map VIC registers */
+    isp->vic_regs = ioremap(0x10023000, 0x1000);
+    if (!isp->vic_regs) {
+        pr_err("Failed to map VIC registers\n");
+        goto err_unmap_core;
+    }
+    pr_info("VIC registers mapped at 0x10023000\n");
+    
+    /* Map CSI registers - use a different variable to avoid conflicts */
+    isp->csi_regs = ioremap(0x10022000, 0x1000);
+    if (!isp->csi_regs) {
+        pr_err("Failed to map CSI registers\n");
+        goto err_unmap_vic;
+    }
+    pr_info("CSI registers mapped at 0x10022000\n");
+    
+    /* Map PHY registers */
+    isp->phy_base = ioremap(0x10021000, 0x1000);
+    if (!isp->phy_base) {
+        pr_err("Failed to map PHY registers\n");
+        goto err_unmap_csi;
+    }
+    pr_info("PHY registers mapped at 0x10021000\n");
+    
+    pr_info("All ISP memory mappings initialized successfully\n");
+    return 0;
+    
+err_unmap_csi:
+    iounmap(isp->csi_regs);
+    isp->csi_regs = NULL;
+err_unmap_vic:
+    iounmap(isp->vic_regs);
+    isp->vic_regs = NULL;
+err_unmap_core:
+    iounmap(isp->core_regs);
+    isp->core_regs = NULL;
+    return -ENOMEM;
+}
+
+/* Deinitialize memory mappings */
+static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp)
+{
+    if (isp->phy_base) {
+        iounmap(isp->phy_base);
+        isp->phy_base = NULL;
+    }
+    
+    if (isp->csi_regs) {
+        iounmap(isp->csi_regs);
+        isp->csi_regs = NULL;
+    }
+    
+    if (isp->vic_regs) {
+        iounmap(isp->vic_regs);
+        isp->vic_regs = NULL;
+    }
+    
+    if (isp->core_regs) {
+        iounmap(isp->core_regs);
+        isp->core_regs = NULL;
+    }
+    
+    pr_info("All ISP memory mappings cleaned up\n");
+    return 0;
 }
 
 /* Configure ISP system clocks */
@@ -602,6 +688,34 @@ static int tx_isp_csi_device_init(struct tx_isp_dev *isp)
     return 0;
 }
 
+/* Initialize VIC device */
+static int tx_isp_vic_device_init(struct tx_isp_dev *isp)
+{
+    struct vic_device *vic_dev;
+    
+    pr_info("Initializing VIC device\n");
+    
+    /* Allocate VIC device structure if not already present */
+    if (!isp->vic_dev) {
+        vic_dev = kzalloc(sizeof(struct vic_device), GFP_KERNEL);
+        if (!vic_dev) {
+            pr_err("Failed to allocate VIC device\n");
+            return -ENOMEM;
+        }
+        
+        /* Initialize VIC device structure */
+        vic_dev->state = 1; /* INIT state */
+        mutex_init(&vic_dev->state_lock);
+        spin_lock_init(&vic_dev->lock);
+        init_completion(&vic_dev->frame_complete);
+        
+        isp->vic_dev = vic_dev;
+    }
+    
+    pr_info("VIC device initialized\n");
+    return 0;
+}
+
 /* Deinitialize CSI device */
 static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp)
 {
@@ -640,6 +754,17 @@ static int ispcore_slake_module(struct tx_isp_dev *isp)
     }
     
     ISP_INFO("*** ispcore_slake_module: CRITICAL ISP MODULE SLAKING START ***\n");
+    
+    /* CRITICAL: Ensure VIC device exists before proceeding */
+    if (!isp->vic_dev) {
+        ISP_INFO("*** ispcore_slake_module: No VIC device found - creating it now ***\n");
+        ret = tx_isp_create_vic_device(isp);
+        if (ret != 0) {
+            ISP_ERROR("*** ispcore_slake_module: Failed to create VIC device: %d ***\n", ret);
+            return ret;
+        }
+        ISP_INFO("*** ispcore_slake_module: VIC device created successfully ***\n");
+    }
     
     int isp_state = isp->vic_dev->state;
     ISP_INFO("*** ispcore_slake_module: Current ISP state = %d ***\n", isp_state);
@@ -859,19 +984,14 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
 
     pr_info("tisp_init: Processing sensor configuration structure (%d bytes)\n", (int)sizeof(*sensor_attr));
 
-    /* IMPORTANT: sensor_init() and sensor_probe() are STATIC functions in sensor modules
-     * They cannot be called directly from the ISP driver. The proper Linux driver flow is:
-     * 1. ISP creates I2C devices (done in sensor_early_init)
-     * 2. Linux I2C subsystem calls sensor_probe() when sensor driver loads  
-     * 3. sensor_probe() registers sensor with ISP framework
-     * 4. ISP can then use registered sensors through the framework
-     */
-    pr_info("tisp_init: Sensor initialization handled by Linux driver model\n");
-    pr_info("tisp_init: I2C devices created - sensor_probe() will be called by Linux I2C subsystem\n");
-    
-    /* For now, continue with ISP initialization assuming sensor will be available
-     * In a full implementation, we'd wait for sensor registration or use default attributes */
-    pr_info("tisp_init: Proceeding with ISP initialization using sensor attributes\n");
+    /* Binary Ninja: sensor_init(&sensor_ctrl) - MUST BE CALLED FIRST */
+    pr_info("tisp_init: Calling sensor_init(&sensor_ctrl)\n");
+    ret = sensor_init(isp_dev);
+    if (ret) {
+        pr_err("sensor_init failed: %d\n", ret);
+        return ret;
+    }
+    pr_info("sensor_init: Reference driver sensor initialization complete\n");
 
     /* Binary Ninja: system_reg_write(4, arg1[0] << 0x10 | arg1[1]) */
     writel((sensor_attr->total_width << 16) | sensor_attr->total_height, isp_regs + 0x4);
@@ -2154,87 +2274,6 @@ int tisp_channel_stop(uint32_t channel_id)
 }
 EXPORT_SYMBOL(tisp_channel_stop);
 
-/**
- * tx_isp_create_sensor_i2c_devices - Create I2C devices for sensors
- * This creates I2C devices that match sensor driver ID tables, which triggers sensor_probe()
- */
-static int tx_isp_create_sensor_i2c_devices(struct tx_isp_dev *isp)
-{
-    struct i2c_adapter *adapter;
-    struct i2c_board_info gc2053_info = {
-        I2C_BOARD_INFO("gc2053", 0x37),  /* Matches sensor ID table */
-        .platform_data = NULL,
-    };
-    struct i2c_client *client;
-    int ret = 0;
-    
-    if (!isp) {
-        ISP_ERROR("tx_isp_create_sensor_i2c_devices: Invalid ISP device\n");
-        return -EINVAL;
-    }
-    
-    ISP_INFO("*** tx_isp_create_sensor_i2c_devices: Creating I2C devices for sensors ***\n");
-    
-    /* Get I2C adapter 0 (standard sensor bus) */
-    adapter = i2c_get_adapter(0);
-    if (!adapter) {
-        ISP_ERROR("tx_isp_create_sensor_i2c_devices: Failed to get I2C adapter 0\n");
-        return -ENODEV;
-    }
-    
-    ISP_INFO("tx_isp_create_sensor_i2c_devices: Got I2C adapter 0 (%s)\n", adapter->name);
-    
-    /* Create GC2053 I2C device - this will trigger sensor_probe() when sensor driver loads */
-    client = i2c_new_device(adapter, &gc2053_info);
-    if (!client) {
-        ISP_ERROR("tx_isp_create_sensor_i2c_devices: Failed to create GC2053 I2C device\n");
-        i2c_put_adapter(adapter);
-        return -ENODEV;
-    }
-    
-    ISP_INFO("*** tx_isp_create_sensor_i2c_devices: Created GC2053 I2C device at 0x%02x ***\n", 
-             client->addr);
-    ISP_INFO("*** This will trigger sensor_probe() when sensor driver loads ***\n");
-    
-    /* Store I2C client for cleanup */
-    isp->sensor_i2c_client = client;
-    
-    i2c_put_adapter(adapter);
-    
-    ISP_INFO("*** tx_isp_create_sensor_i2c_devices: SUCCESS - I2C devices created ***\n");
-    return 0;
-}
-
-/**
- * sensor_early_init - Early sensor system initialization
- * This replaces the unsafe direct calls to sensor_init/sensor_probe
- */
-int sensor_early_init(struct tx_isp_dev *isp)
-{
-    int ret;
-    
-    if (!isp) {
-        ISP_ERROR("sensor_early_init: Invalid ISP device\n");
-        return -EINVAL;
-    }
-    
-    ISP_INFO("*** sensor_early_init: SAFE sensor initialization using Linux driver model ***\n");
-    
-    /* Create I2C devices for sensors - this is the CORRECT way */
-    ret = tx_isp_create_sensor_i2c_devices(isp);
-    if (ret < 0) {
-        ISP_ERROR("sensor_early_init: Failed to create sensor I2C devices: %d\n", ret);
-        return ret;
-    }
-    
-    /* Initialize sensor attribute validation */
-    isp->sensor_width = 1920;   /* Default sensor width */
-    isp->sensor_height = 1080;  /* Default sensor height */
-    
-    ISP_INFO("*** sensor_early_init: SUCCESS - Sensors will be probed when drivers load ***\n");
-    return 0;
-}
-
 /* Missing function implementations from the Binary Ninja decompilation */
 
 /* Global variable for channel mask control */
@@ -2797,50 +2836,49 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
 }
 
 
-/**
- * tx_isp_core_probe - SAFE implementation using proper struct member access
- * This replaces ALL unsafe offset-based memory accesses with proper struct access
- */
+/* tx_isp_core_probe - FIXED to properly create frame channel devices and proc entries */
 int tx_isp_core_probe(struct platform_device *pdev)
 {
-    struct tx_isp_dev *isp_dev;
-    void *platform_data;
+    void *core_dev;
+    void *s2_1;
     int result;
     uint32_t channel_count;
-    struct isp_channel *channel_array;
+    void *channel_array;
     void *tuning_dev;
 
-    /* Add MCP logging for method entry */
-    ISP_INFO("tx_isp_core_probe: entry - converting from unsafe offset access");
+    pr_info("*** tx_isp_core_probe: FIXED Binary Ninja implementation ***\n");
 
-    /* Allocate ISP device structure - using proper struct instead of raw allocation */
-    isp_dev = kzalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
-    if (!isp_dev) {
-        ISP_ERROR("tx_isp_core_probe: Failed to allocate ISP device structure");
+    /* Binary Ninja: $v0, $a2 = private_kmalloc(0x218, 0xd0) */
+    core_dev = kzalloc(0x218, GFP_KERNEL);
+    if (core_dev == NULL) {
+        isp_printf(2, "addr ctl is 0x%x\n", 0);
         return -ENOMEM;
     }
 
-    /* Initialize device structure safely */
-    memset(isp_dev, 0, sizeof(struct tx_isp_dev));
-    
-    /* Get platform data safely */
-    platform_data = pdev->dev.platform_data;
+    /* Binary Ninja: memset($v0, 0, 0x218) */
+    memset(core_dev, 0, 0x218);
 
-    /* Set up platform device references safely */
+    /* Binary Ninja: void* $s2_1 = arg1[0x16] */
+    s2_1 = pdev->dev.platform_data;
+
+    /* FIXED: Create proper platform device array that tx_isp_create_graph_and_nodes expects */
+    pr_info("*** tx_isp_core_probe: FIXED platform device setup ***\n");
+    
+    /* CRITICAL: Get the actual registered platform devices from the module */
     extern struct platform_device tx_isp_csi_platform_device;
-    extern struct platform_device tx_isp_vic_platform_device; 
+    extern struct platform_device tx_isp_vic_platform_device;
     extern struct platform_device tx_isp_vin_platform_device;
     extern struct platform_device tx_isp_fs_platform_device;
     extern struct platform_device tx_isp_core_platform_device;
     
-    /* Set up platform device driver data on registered devices */
+    /* Set up platform device driver data DIRECTLY on the registered devices */
     platform_set_drvdata(&tx_isp_csi_platform_device, &csi_subdev_data);
     platform_set_drvdata(&tx_isp_vic_platform_device, &vic_subdev_data);
     platform_set_drvdata(&tx_isp_vin_platform_device, &vin_subdev_data);
     platform_set_drvdata(&tx_isp_fs_platform_device, &fs_subdev_data);
     platform_set_drvdata(&tx_isp_core_platform_device, &core_subdev_data);
     
-    /* Set up subdev list safely using struct members */
+    /* CRITICAL: Set up subdev_count and subdev_list at Binary Ninja offsets */
     struct platform_device *platform_devices[] = {
         &tx_isp_csi_platform_device,
         &tx_isp_vic_platform_device,
@@ -2849,193 +2887,215 @@ int tx_isp_core_probe(struct platform_device *pdev)
         &tx_isp_core_platform_device
     };
     
-    /* Allocate subdev list safely */
-    isp_dev->subdev_list = kzalloc(sizeof(platform_devices), GFP_KERNEL);
-    if (!isp_dev->subdev_list) {
-        ISP_ERROR("tx_isp_core_probe: Failed to allocate subdev_list");
-        kfree(isp_dev);
+    /* Allocate and set up the subdev_list array */
+    struct platform_device **subdev_list = kzalloc(sizeof(platform_devices), GFP_KERNEL);
+    if (!subdev_list) {
+        pr_err("Failed to allocate subdev_list\n");
+        kfree(core_dev);
         return -ENOMEM;
     }
-    memcpy(isp_dev->subdev_list, platform_devices, sizeof(platform_devices));
+    memcpy(subdev_list, platform_devices, sizeof(platform_devices));
     
-    /* Set up device counts safely using struct members */
-    isp_dev->subdev_count = ARRAY_SIZE(platform_devices);
+    /* Set up Binary Ninja exact offsets in core_dev */
+    *((uint32_t*)((char*)core_dev + 0x80)) = ARRAY_SIZE(platform_devices);  /* subdev_count */
+    *((struct platform_device***)((char*)core_dev + 0x84)) = &subdev_list;  /* subdev_list ptr */
     
-    ISP_INFO("tx_isp_core_probe: Platform devices configured - count=%d", isp_dev->subdev_count);
+    pr_info("*** tx_isp_core_probe: Platform devices configured - count=%d ***\n", ARRAY_SIZE(platform_devices));
 
-    /* Initialize basic device fields safely */
-    isp_dev->dev = &pdev->dev;
-    isp_dev->pdev = pdev;
+    /* CRITICAL: Initialize basic fields that tx_isp_subdev_init expects */
+    /* Set up channel count first - this is what was missing! */
+    *((uint32_t*)((char*)core_dev + (0x32 * 4))) = ISP_MAX_CHAN;  /* Initialize channel count at offset 0xc8 */
     
-    /* Create minimal platform data if none exists */
-    if (!platform_data) {
-        platform_data = kzalloc(16, GFP_KERNEL);
-        if (platform_data) {
-            *((uint32_t*)((char*)platform_data + 2)) = 1;  /* Set valid ID */
-            pdev->dev.platform_data = platform_data;
+    /* CRITICAL: Initialize device operations pointer - Binary Ninja shows this is stored at offset 0xc4 */
+    *((void**)((char*)core_dev + 0xc4)) = &core_subdev_ops;  /* Store ops at Binary Ninja offset 0xc4 */
+    
+    /* Initialize platform data reference */
+    if (!s2_1) {
+        /* Create minimal platform data if none exists */
+        s2_1 = kzalloc(16, GFP_KERNEL);
+        if (s2_1) {
+            *((uint32_t*)((char*)s2_1 + 2)) = 1;  /* Set some valid ID */
+            pdev->dev.platform_data = s2_1;
         }
     }
 
-    /* Initialize subdev using safe struct access */
-    if (tx_isp_subdev_init(pdev, isp_dev, &core_subdev_ops) == 0) {
-        ISP_INFO("tx_isp_core_probe: Subdev init SUCCESS");
+    /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
+    if (tx_isp_subdev_init(pdev, core_dev, &core_subdev_ops) == 0) {
+        pr_info("*** tx_isp_core_probe: Subdev init SUCCESS ***\n");
         
-        /* Initialize synchronization primitives safely */
-        spin_lock_init(&isp_dev->irq_lock);
-        mutex_init(&isp_dev->mutex);
+        /* Binary Ninja: Spinlock and mutex initialization */
+        spin_lock_init((spinlock_t*)((char*)core_dev + (0x37 * 4)));
+        mutex_init((struct mutex*)((char*)core_dev + (0x37 * 4)));
 
-        /* Set up channel configuration safely */
-        channel_count = ISP_MAX_CHAN;
-        
-        ISP_INFO("tx_isp_core_probe: Channel count = %d", channel_count);
+        /* Binary Ninja: Channel configuration */
+        channel_count = *((uint32_t*)((char*)core_dev + (0x32 * 4)));  /* uint32_t $a0_4 = zx.d($v0[0x32].w) */
+        *((uint32_t*)((char*)core_dev + (0x55 * 4))) = channel_count;  /* $v0[0x55] = $a0_4 */
+        *((void**)((char*)core_dev + (0x4e * 4))) = s2_1;             /* $v0[0x4e] = $v0_3 */
 
-        /* Allocate channel array safely using proper struct */
-        channel_array = kzalloc(channel_count * sizeof(struct isp_channel), GFP_KERNEL);
-        if (channel_array) {
-            memset(channel_array, 0, channel_count * sizeof(struct isp_channel));
+        pr_info("*** tx_isp_core_probe: Channel count = %d ***\n", channel_count);
 
-            /* Initialize channels safely using struct members */
-            int i;
-            for (i = 0; i < channel_count; i++) {
-                struct isp_channel *channel = &channel_array[i];
-                
-                /* Set channel ID safely */
-                channel->id = i;
-                channel->channel_id = i;
-                channel->dev = &pdev->dev;
-                
-                /* Enable all channels for testing */
-                channel->enabled = true;
-                
-                /* Channel-specific configuration */
-                if (i == 0) {
-                    /* Channel 0 specific config */
-                    channel->width = 0x0a40;   /* 2624 */
-                    channel->height = 0x0800;  /* 2048 */
-                } else if (i == 1) {
-                    /* Channel 1 specific config */
-                    channel->width = 0x780;    /* 1920 */
-                    channel->height = 0x438;   /* 1080 */
+        /* Binary Ninja: Channel array allocation */
+        channel_array = kzalloc(channel_count * 0xc4, GFP_KERNEL);
+        if (channel_array != NULL) {
+            memset(channel_array, 0, channel_count * 0xc4);
+
+            /* Binary Ninja: Channel initialization loop */
+            int s2_2 = 0;
+            void *s1_1 = channel_array;
+            while (s2_2 < channel_count) {
+                int s4_2 = s2_2 * 0x24;
+
+                *((int*)((char*)s1_1 + 0x70)) = s2_2;                                    /* *($s1_1 + 0x70) = $s2_2 */
+                *((void**)((char*)s1_1 + 0x78)) = (char*)core_dev + 0xcc + s4_2;       /* $v0[0x33] = 0xcc bytes offset */
+
+                /* Binary Ninja: Channel enable check */
+                /* For now, enable all channels since we don't have proper platform data */
+                uint32_t channel_enabled = 1;  /* Force enable for testing */
+                if (channel_enabled != 0) {
+                    /* Binary Ninja: Channel-specific configuration */
+                    if (s2_2 == 0) {
+                        /* Binary Ninja: __builtin_memcpy($s1_1 + 0x80, specific_data, 0x12) */
+                        memcpy((char*)s1_1 + 0x80, "\x40\x0a\x00\x00\x00\x08\x00\x00\x80\x00\x00\x00\x80\x00\x00\x00\x01\x00", 0x12);
+                    } else if (s2_2 == 1) {
+                        *((uint32_t*)((char*)s1_1 + 0x80)) = 0x780;  /* *($s1_1 + 0x80) = 0x780 */
+                        *((uint32_t*)((char*)s1_1 + 0x84)) = 0x438;  /* *($s1_1 + 0x84) = 0x438 */
+                        *((uint8_t*)((char*)s1_1 + 0x90)) = s2_2;    /* *($s1_1 + 0x90) = $s2_2.b */
+                        *((uint8_t*)((char*)s1_1 + 0x91)) = s2_2;    /* *($s1_1 + 0x91) = $s2_2.b */
+                    } else {
+                        *((uint32_t*)((char*)s1_1 + 0x88)) = 0x80;   /* *($s1_1 + 0x88) = 0x80 */
+                    }
+
+                    *((int*)((char*)s1_1 + 0x74)) = 1;           /* *($s1_1 + 0x74) = 1 */
+                    spin_lock_init((spinlock_t*)((char*)s1_1 + 0x9c));
+                    *((void**)((char*)s1_1 + 0x7c)) = core_dev;  /* *($s1_1 + 0x7c) = $v0 */
+
+                    /* Binary Ninja: Event handler setup */
+                    *((void**)((char*)core_dev + 0xcc + s4_2 + 0x1c)) = ispcore_pad_event_handle;  /* ispcore_pad_event_handle */
+                    *((void**)((char*)core_dev + 0xcc + s4_2 + 0x20)) = s1_1;              /* Event handler data */
                 } else {
-                    /* Other channels */
-                    channel->width = 0x80;     /* 128 */
-                    channel->height = 0x80;    /* 128 */
+                    *((int*)((char*)s1_1 + 0x74)) = 0;  /* *($s1_1 + 0x74) = 0 */
                 }
 
-                /* Initialize channel state safely */
-                channel->state = 1;  /* INIT state */
-                spin_lock_init(&channel->state_lock);
-                channel->event_hdlr = (struct isp_event_handler *)ispcore_pad_event_handle;
-                channel->event_priv = channel;
-
-                ISP_INFO("tx_isp_core_probe: Channel %d initialized: %dx%d", 
-                         i, channel->width, channel->height);
+                s2_2++;
+                s1_1 = (char*)s1_1 + 0xc4;
             }
 
-            /* Store channel array safely in device struct */
-            memcpy(isp_dev->channels, channel_array, channel_count * sizeof(struct isp_channel));
+            *((void**)((char*)core_dev + (0x54 * 4))) = channel_array;  /* $v0[0x54] = $v0_4 */
 
-            /* Initialize tuning system safely */
-            ISP_INFO("tx_isp_core_probe: Calling isp_core_tuning_init");
-            tuning_dev = (void*)isp_core_tuning_init(isp_dev);
-            isp_dev->tuning_data = (struct isp_tuning_data *)tuning_dev;
+            /* Binary Ninja: *** CRITICAL: isp_core_tuning_init call *** */
+            pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init ***\n");
+            tuning_dev = (void*)isp_core_tuning_init(core_dev);
+            *((void**)((char*)core_dev + (0x6f * 4))) = tuning_dev;     /* $v0[0x6f] = $v0_15 */
 
-            if (tuning_dev) {
-                ISP_INFO("tx_isp_core_probe: Tuning init SUCCESS");
+            if (tuning_dev != NULL) {
+                pr_info("*** tx_isp_core_probe: Tuning init SUCCESS ***\n");
+                *((int*)((char*)core_dev + (0x3a * 4))) = 1;            /* $v0[0x3a] = 1 */
+                platform_set_drvdata(pdev, core_dev);
+
+                /* Binary Ninja: Additional core device setup */
+                *((void**)((char*)core_dev + (0x35 * 4))) = core_dev;   /* $v0[0x35] = $v0 */
+
+                /* FIXED: Use tuning_dev directly instead of adding dangerous offset */
+                /* The Binary Ninja offset 0x40c8 was from a much larger structure */
+                /* Our isp_core_tuning_init returns exactly what we need */
+                void *tuning_data = tuning_dev;
+                *((void**)((char*)core_dev + (0xc * 4))) = tuning_data; /* $v0[0xc] = tuning_dev (FIXED) */
+                pr_info("*** tx_isp_core_probe: FIXED tuning pointer corruption - using tuning_dev=%p directly ***\n", tuning_data);
+                *((void**)((char*)core_dev + (0xd * 4))) = &isp_tuning_fops; /* $v0[0xd] = &isp_info_proc_fops */
+
+                /* Binary Ninja: Global device assignment */
+                ourISPdev = (struct tx_isp_dev *)core_dev;  /* Set global device pointer */
+
+                /* CRITICAL: Create VIC device BEFORE sensor_early_init */
+                pr_info("*** tx_isp_core_probe: Creating VIC device ***\n");
+                result = tx_isp_create_vic_device((struct tx_isp_dev *)core_dev);
+                if (result != 0) {
+                    pr_err("*** tx_isp_core_probe: Failed to create VIC device: %d ***\n", result);
+                    return result;
+                } else {
+                    pr_info("*** tx_isp_core_probe: VIC device created successfully ***\n");
+                }
+
+                /* Binary Ninja: sensor_early_init($v0) */
+                pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
+                sensor_early_init(core_dev);
+
+                /* Binary Ninja: Clock initialization */
+                uint32_t isp_clk_1 = 0; /* get_isp_clk() would be called here */
+                if (isp_clk_1 == 0)
+                    isp_clk_1 = isp_clk;
+                isp_clk = isp_clk_1;
+
+                pr_info("*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
+                pr_info("***   - Core device size: 0x218 bytes ***\n");
+                pr_info("***   - Channel count: %d ***\n", channel_count);
+                pr_info("***   - Tuning device: %p ***\n", tuning_dev);
+                pr_info("***   - Global ISP device set: %p ***\n", ourISPdev);
                 
-                /* Set device state safely */
-                isp_dev->refcnt = 1;
-                platform_set_drvdata(pdev, isp_dev);
-
-                /* Set up tuning file operations safely */
-                /* Note: We avoid the dangerous +0x40c8 offset from Binary Ninja */
-                /* and use the tuning_dev pointer directly */
-
-                /* Set global device pointer safely */
-                ourISPdev = isp_dev;
-
-                /* Initialize sensor system safely */
-                ISP_INFO("tx_isp_core_probe: Calling sensor_early_init");
-                sensor_early_init(isp_dev);
-
-                /* Initialize clock system safely */
-                uint32_t isp_clk_rate = isp_clk;
-                if (isp_clk_rate == 0) {
-                    isp_clk_rate = 100000000;  /* Default 100MHz */
-                }
-                isp_clk = isp_clk_rate;
-
-                /* Create graph and nodes safely */
-                ISP_INFO("tx_isp_core_probe: Creating graph and nodes");
-                result = tx_isp_create_graph_and_nodes(isp_dev);
+                /* CRITICAL: Now that core device is set up, call the key function that creates graph and nodes */
+                pr_info("*** tx_isp_core_probe: Calling tx_isp_create_graph_and_nodes ***\n");
+                result = tx_isp_create_graph_and_nodes((struct tx_isp_dev *)core_dev);
                 if (result == 0) {
-                    ISP_INFO("tx_isp_core_probe: Graph and nodes created successfully");
+                    pr_info("*** tx_isp_core_probe: tx_isp_create_graph_and_nodes SUCCESS ***\n");
                 } else {
-                    ISP_ERROR("tx_isp_core_probe: Failed to create graph and nodes: %d", result);
+                    pr_err("*** tx_isp_core_probe: tx_isp_create_graph_and_nodes FAILED: %d ***\n", result);
                 }
                 
-                /* Create frame channel devices safely */
-                ISP_INFO("tx_isp_core_probe: Creating frame channel devices");
-                result = tx_isp_create_framechan_devices(isp_dev);
+                /* CRITICAL: Create frame channel devices (/dev/isp-fs*) */
+                pr_info("*** tx_isp_core_probe: Creating frame channel devices ***\n");
+                result = tx_isp_create_framechan_devices((struct tx_isp_dev *)core_dev);
                 if (result == 0) {
-                    ISP_INFO("tx_isp_core_probe: Frame channel devices created successfully");
+                    pr_info("*** tx_isp_core_probe: Frame channel devices created successfully ***\n");
                 } else {
-                    ISP_ERROR("tx_isp_core_probe: Failed to create frame channel devices: %d", result);
+                    pr_err("*** tx_isp_core_probe: Failed to create frame channel devices: %d ***\n", result);
                 }
 
-                /* Create proc entries safely */
-                ISP_INFO("tx_isp_core_probe: Creating ISP proc entries");
-                result = tx_isp_create_proc_entries(isp_dev);
+                /* CRITICAL: Create proper proc directories (/proc/jz/isp/*) */
+                pr_info("*** tx_isp_core_probe: Creating ISP proc entries ***\n");
+                result = tx_isp_create_proc_entries((struct tx_isp_dev *)core_dev);
                 if (result == 0) {
-                    ISP_INFO("tx_isp_core_probe: ISP proc entries created successfully");
+                    pr_info("*** tx_isp_core_probe: ISP proc entries created successfully ***\n");
                 } else {
-                    ISP_ERROR("tx_isp_core_probe: Failed to create ISP proc entries: %d", result);
+                    pr_err("*** tx_isp_core_probe: Failed to create ISP proc entries: %d ***\n", result);
                 }
 
-                /* Create tuning device node safely */
-                ISP_INFO("tx_isp_core_probe: Creating ISP M0 tuning device node");
+                /* CRITICAL: Create the ISP M0 tuning device node /dev/isp-m0 */
+                pr_info("*** tx_isp_core_probe: Creating ISP M0 tuning device node ***\n");
                 extern int tisp_code_create_tuning_node(void);
                 result = tisp_code_create_tuning_node();
                 if (result == 0) {
-                    ISP_INFO("tx_isp_core_probe: ISP M0 tuning device node created successfully");
+                    pr_info("*** tx_isp_core_probe: ISP M0 tuning device node created successfully ***\n");
                 } else {
-                    ISP_ERROR("tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d", result);
+                    pr_err("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
                 }
-
-                ISP_INFO("tx_isp_core_probe: SUCCESS - All unsafe offset accesses converted to safe struct access");
                 
-                /* Clean up temporary channel array */
-                kfree(channel_array);
                 return 0;
             }
 
-            ISP_ERROR("tx_isp_core_probe: Failed to init tuning module");
+            isp_printf(2, "Failed to init tuning module!\n");
 
-            /* Cleanup on tuning init failure */
-            if (isp_dev->refcnt >= 2) {
-                ispcore_slake_module(isp_dev);
+            /* Binary Ninja: Cleanup on tuning init failure */
+            if (*((int*)((char*)core_dev + (0x3a * 4))) >= 2) {
+                ispcore_slake_module((struct tx_isp_dev *)core_dev);
             }
 
-cleanup_channels:
             kfree(channel_array);
+            *((int*)((char*)core_dev + (0x56 * 4))) = 1;      /* $v0[0x56] = 1 */
+            *((void**)((char*)core_dev + (0x54 * 4))) = NULL; /* $v0[0x54] = 0 */
         } else {
-            ISP_ERROR("tx_isp_core_probe: Failed to allocate output channels");
+            isp_printf(2, "Failed to init output channels!\n");
         }
 
-        tx_isp_subdev_deinit(isp_dev);
+        tx_isp_subdev_deinit(core_dev);
         result = -ENOMEM;
     } else {
-        /* Error message with platform data info */
-        uint32_t platform_id = platform_data ? *((uint32_t*)((char*)platform_data + 2)) : 0;
-        ISP_ERROR("tx_isp_core_probe: Failed to init isp module(%d.%d)", platform_id, platform_id);
+        /* Binary Ninja: Error message with platform data info */
+        uint32_t platform_id = s2_1 ? *((uint32_t*)((char*)s2_1 + 2)) : 0;
+        isp_printf(2, "Failed to init isp module(%d.%d)\n", platform_id, platform_id);
         result = -ENODEV;
     }
 
-    /* Cleanup on failure */
-    if (isp_dev->subdev_list) {
-        kfree(isp_dev->subdev_list);
-    }
-    kfree(isp_dev);
+    kfree(core_dev);
     return result;
 }
 

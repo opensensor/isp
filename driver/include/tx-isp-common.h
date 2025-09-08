@@ -386,7 +386,7 @@ typedef struct tx_isp_sensor_ctrl{
 
 #define TX_ISP_GAIN_FIXED_POINT 16
 #define LOG2_GAIN_SHIFT 16
-struct tx_isp_sensor_attribute {
+struct tx_isp_sensor_attribute{
 	const char *name;
 	unsigned int chip_id;
 	enum tx_sensor_control_bus_type cbus_type;
@@ -394,15 +394,16 @@ struct tx_isp_sensor_attribute {
 	unsigned int cbus_device;
 	enum tx_sensor_data_bus_type dbus_type;
 	union {
-		struct tx_isp_mipi_bus mipi;
-		struct tx_isp_dvp_bus dvp;
-		struct tx_isp_bt1120_bus bt1120;
-		struct tx_isp_bt656_bus bt656bus;
-		struct tx_isp_bt601_bus bt601bus;
+		struct tx_isp_mipi_bus		mipi;
+		struct tx_isp_dvp_bus		dvp;
+		struct tx_isp_bt1120_bus	bt1120;
+		struct tx_isp_bt656_bus		bt656bus;
+		struct tx_isp_bt601_bus		bt601bus;
 		char string[64];
 	};
-	unsigned int max_again;	//the format is .16
-	unsigned int max_dgain;	//the format is .16
+	enum tx_sensor_data_type data_type;
+	unsigned int max_again; //the format is .16
+	unsigned int max_dgain; //the format is .16
 	unsigned int again;
 	unsigned int dgain;
 	unsigned short min_integration_time;
@@ -426,7 +427,6 @@ struct tx_isp_sensor_attribute {
 	unsigned int wdr_cache; //the format is .16
 	unsigned int expo;
 	unsigned int expo_fs;
-	enum tx_sensor_data_type data_type;
 	void *priv; /* point to struct tx_isp_sensor_board_info */
 };
 

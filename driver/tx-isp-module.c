@@ -31,6 +31,7 @@
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
+/* Remove duplicate - tx_isp_sensor_attribute already defined in SDK */
 
 // Simple sensor registration structure
 struct registered_sensor {
@@ -58,13 +59,143 @@ static DEFINE_MUTEX(sensor_register_mutex);
 static void destroy_frame_channel_devices(void);
 int __init tx_isp_subdev_platform_init(void);
 void __exit tx_isp_subdev_platform_exit(void);
-void *isp_core_tuning_init(void *arg1);
-int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
+int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 
 /* Global I2C client tracking to prevent duplicate creation */
 static struct i2c_client *global_sensor_i2c_client = NULL;
 static DEFINE_MUTEX(i2c_client_mutex);
 
+/* MIPS-SAFE I2C infrastructure - Fixed for unaligned access crash */
+static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
+                                                   struct i2c_board_info *info)
+{
+    struct i2c_client *client = NULL;
+    struct device *dev = NULL;
+    struct module *owner = NULL;
+    void *subdev_data = NULL;
+    
+    pr_info("*** isp_i2c_new_subdev_board: MIPS-SAFE implementation - FIXED CRASH ***\n");
+    
+    /* MIPS ALIGNMENT CHECK: Validate pointer alignment */
+    if (!adapter || ((uintptr_t)adapter & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: adapter pointer 0x%p not 4-byte aligned ***\n", adapter);
+        return NULL;
+    }
+    
+    if (!info || ((uintptr_t)info & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: info pointer 0x%p not 4-byte aligned ***\n", info);
+        return NULL;
+    }
+    
+    /* MIPS SAFE: Validate info structure fields */
+    if (!info->type || strlen(info->type) == 0) {
+        pr_err("isp_i2c_new_subdev_board: Invalid device type\n");
+        return NULL;
+    }
+    
+    /* Check if we already have a client for this address - MIPS SAFE */
+    mutex_lock(&i2c_client_mutex);
+    if (global_sensor_i2c_client && 
+        ((uintptr_t)global_sensor_i2c_client & 0x3) == 0 &&
+        global_sensor_i2c_client->addr == info->addr) {
+        pr_info("*** REUSING EXISTING I2C CLIENT: %s at 0x%02x (MIPS-safe) ***\n",
+                global_sensor_i2c_client->name, global_sensor_i2c_client->addr);
+        mutex_unlock(&i2c_client_mutex);
+        return global_sensor_i2c_client;
+    }
+    mutex_unlock(&i2c_client_mutex);
+    
+    pr_info("Creating I2C subdev: type=%s addr=0x%02x on adapter %s (MIPS-safe)\n",
+            info->type, info->addr, adapter->name);
+    
+    /* CRITICAL FIX: Binary Ninja reference implementation - MIPS-SAFE VERSION */
+    /* Binary Ninja: private_request_module(1, arg2, arg3) */
+    pr_info("*** MIPS-SAFE: Requesting sensor module %s ***\n", info->type);
+    request_module("sensor_%s", info->type);
+    
+    /* MIPS SAFE: Binary Ninja: if (zx.d(*(arg2 + 0x16)) != 0) */
+    /* FIXED: Instead of unsafe *(arg2 + 0x16), check info->addr properly */
+    if (info->addr != 0) {
+        pr_info("*** MIPS-SAFE: Valid I2C address 0x%02x, creating device ***\n", info->addr);
+        
+        /* Binary Ninja: void* $v0_1 = private_i2c_new_device(arg1, arg2) */
+        client = i2c_new_device(adapter, info);
+        
+        /* MIPS SAFE: Binary Ninja: if ($v0_1 != 0) */
+        if (client && ((uintptr_t)client & 0x3) == 0) {
+            pr_info("*** MIPS-SAFE: I2C device created successfully at 0x%p ***\n", client);
+            
+            /* MIPS SAFE: Binary Ninja: void* $v0_2 = *($v0_1 + 0x1c) */
+            /* FIXED: Instead of unsafe *($v0_1 + 0x1c), use proper struct member */
+            dev = &client->dev;
+            if (dev && ((uintptr_t)dev & 0x3) == 0) {
+                
+                /* MIPS SAFE: Get device driver safely */
+                if (dev->driver && ((uintptr_t)dev->driver & 0x3) == 0) {
+                    owner = dev->driver->owner;
+                    
+                    /* Binary Ninja: if ($v0_2 != 0 && private_try_module_get(*($v0_2 + 0x2c)) != 0) */
+                    /* MIPS SAFE: Instead of unsafe *($v0_2 + 0x2c), use owner directly */
+                    if (owner && try_module_get(owner)) {
+                        pr_info("*** MIPS-SAFE: Module reference acquired for %s ***\n", info->type);
+                        
+                        /* Binary Ninja: int32_t result = private_i2c_get_clientdata($v0_1) */
+                        /* MIPS SAFE: Get client data safely */
+                        subdev_data = i2c_get_clientdata(client);
+                        
+                        /* Binary Ninja: private_module_put(*(*($v0_1 + 0x1c) + 0x2c)) */
+                        module_put(owner);
+                        
+                        /* Binary Ninja: if (result != 0) return result */
+                        if (subdev_data) {
+                            pr_info("*** MIPS-SAFE: Sensor subdev data found, device ready ***\n");
+                            
+                            /* Store globally to prevent duplicates - MIPS SAFE */
+                            mutex_lock(&i2c_client_mutex);
+                            if (!global_sensor_i2c_client) {
+                                global_sensor_i2c_client = client;
+                                pr_info("*** I2C DEVICE READY: %s at 0x%02x (MIPS-safe) ***\n",
+                                        client->name, client->addr);
+                            }
+                            mutex_unlock(&i2c_client_mutex);
+                            
+                            return client;
+                        } else {
+                            pr_info("*** MIPS-SAFE: No subdev data yet, device created but not probed ***\n");
+                        }
+                    } else {
+                        pr_info("*** MIPS-SAFE: Could not get module reference ***\n");
+                    }
+                } else {
+                    pr_info("*** MIPS-SAFE: Device driver not loaded or not aligned ***\n");
+                }
+            } else {
+                pr_err("*** MIPS ALIGNMENT ERROR: client->dev not properly aligned ***\n");
+            }
+            
+            /* Store the client even if probe hasn't completed yet */
+            mutex_lock(&i2c_client_mutex);
+            if (!global_sensor_i2c_client) {
+                global_sensor_i2c_client = client;
+                pr_info("*** I2C DEVICE STORED: %s at 0x%02x - probe may complete later ***\n",
+                        client->name, client->addr);
+            }
+            mutex_unlock(&i2c_client_mutex);
+            
+        } else if (!client) {
+            pr_err("*** FAILED TO CREATE I2C DEVICE FOR %s ***\n", info->type);
+        } else {
+            pr_err("*** MIPS ALIGNMENT ERROR: client pointer 0x%p not aligned ***\n", client);
+            i2c_unregister_device(client);
+            client = NULL;
+        }
+    } else {
+        pr_err("*** MIPS-SAFE: Invalid I2C address 0 ***\n");
+    }
+    
+    /* Binary Ninja: return 0 (NULL for failed client creation) */
+    return client;
+}
 
 /* MIPS-SAFE I2C communication test - Fixed for unaligned access */
 static int mips_safe_i2c_test(struct i2c_client *client, const char *sensor_type)
@@ -655,7 +786,7 @@ static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 /* VIC sensor operations IOCTL - EXACT Binary Ninja implementation */
 static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 /* VIC core s_stream - EXACT Binary Ninja implementation */  
-int vic_core_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
+int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
 
 /* Frame channel state management */
 struct tx_isp_channel_state {
@@ -2842,7 +2973,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("*** Channel %d: NOW CALLING VIC STREAMING CHAIN - THIS SHOULD GENERATE REGISTER ACTIVITY! ***\n", channel);
                 
                 // CRITICAL: Call vic_core_s_stream which calls tx_isp_vic_start when streaming
-                ret = vic_core_s_stream(&vic_streaming, 1);
+                ret = vic_core_s_stream(&vic_streaming->sd, 1);
                 
                 pr_info("*** Channel %d: VIC STREAMING RETURNED %d - REGISTER ACTIVITY SHOULD NOW BE VISIBLE! ***\n", channel, ret);
                 
@@ -3334,128 +3465,144 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         
         pr_info("Sensor registration complete, final_result=0x%x\n", final_result);
         
-            /* *** CRITICAL: Add sensor to enumeration list AND create actual sensor connection *** */
-            if (final_result == 0 && sensor_name[0] != '\0') {
-                pr_info("*** ADDING SUCCESSFULLY REGISTERED SENSOR TO LIST: %s ***\n", sensor_name);
+        /* *** CRITICAL: Add sensor to enumeration list AND create actual sensor connection *** */
+        if (final_result == 0 && sensor_name[0] != '\0') {
+            pr_info("*** ADDING SUCCESSFULLY REGISTERED SENSOR TO LIST: %s ***\n", sensor_name);
+            
+            /* Add to our sensor enumeration list */
+            reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
+            if (reg_sensor) {
+                strncpy(reg_sensor->name, sensor_name, sizeof(reg_sensor->name) - 1);
+                reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
                 
-                /* Add to our sensor enumeration list */
-                reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
-                if (reg_sensor) {
-                    strncpy(reg_sensor->name, sensor_name, sizeof(reg_sensor->name) - 1);
-                    reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
-                    
-                    mutex_lock(&sensor_list_mutex);
-                    reg_sensor->index = sensor_count++;
-                    list_add_tail(&reg_sensor->list, &sensor_list);
-                    mutex_unlock(&sensor_list_mutex);
-                    
-                    pr_info("*** SENSOR ADDED TO LIST: index=%d name=%s ***\n", 
-                           reg_sensor->index, reg_sensor->name);
-                }
+                mutex_lock(&sensor_list_mutex);
+                reg_sensor->index = sensor_count++;
+                list_add_tail(&reg_sensor->list, &sensor_list);
+                mutex_unlock(&sensor_list_mutex);
+                
+                pr_info("*** SENSOR ADDED TO LIST: index=%d name=%s ***\n", 
+                       reg_sensor->index, reg_sensor->name);
+            }
             
             /* *** CRITICAL: Create I2C device for sensor *** */
             pr_info("*** CREATING I2C DEVICE FOR SENSOR %s ***\n", sensor_name);
-
-            client = isp_dev->sensor_i2c_client;
-            if (client) {
-                pr_info("*** SUCCESS: I2C CLIENT CREATED - SENSOR PROBE SHOULD BE CALLED! ***\n");
-                pr_info("*** I2C CLIENT: %s at 0x%x on %s ***\n",
-                       client->name, client->addr, client->adapter->name);
-
-                /* *** CRITICAL FIX: CREATE ACTUAL SENSOR STRUCTURE AND CONNECT TO ISP *** */
-                pr_info("*** CREATING ACTUAL SENSOR STRUCTURE FOR %s ***\n", sensor_name);
-
-                /* SAFE ALLOCATION: Allocate sensor structure with proper error checking */
-                sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
-                if (!sensor) {
-                    pr_err("*** CRITICAL ERROR: Failed to allocate sensor structure (size=%zu) ***\n", sizeof(struct tx_isp_sensor));
-                    return -ENOMEM;
-                }
-                pr_info("*** SENSOR STRUCTURE ALLOCATED: %p (size=%zu bytes) ***\n", sensor, sizeof(struct tx_isp_sensor));
-
-                /* SAFE INITIALIZATION: Initialize sensor info first */
-                memset(&sensor->info, 0, sizeof(sensor->info));
-                strncpy(sensor->info.name, sensor_name, sizeof(sensor->info.name) - 1);
-                sensor->info.name[sizeof(sensor->info.name) - 1] = '\0';
-
-                /* SAFE ALLOCATION: Allocate sensor attributes with proper error checking */
-                sensor->video.attr = kzalloc(sizeof(struct tx_isp_sensor_attribute), GFP_KERNEL);
-                if (!sensor->video.attr) {
-                    pr_err("*** CRITICAL ERROR: Failed to allocate sensor attributes (size=%zu) ***\n", sizeof(struct tx_isp_sensor_attribute));
-                    kfree(sensor);
-                    return -ENOMEM;
-                }
-                pr_info("*** SENSOR ATTRIBUTES ALLOCATED: %p (size=%zu bytes) ***\n", sensor->video.attr, sizeof(struct tx_isp_sensor_attribute));
-
-                /* SAFE INITIALIZATION: Set up basic sensor attributes for GC2053 */
-                if (strncmp(sensor_name, "gc2053", 6) == 0) {
-                    sensor->video.attr->chip_id = 0x2053;
-                    sensor->video.attr->total_width = 1920;
-                    sensor->video.attr->total_height = 1080;
-                    sensor->video.attr->dbus_type = 2; // MIPI interface (fixed from DVP)
-                    sensor->video.attr->integration_time = 1000;
-                    sensor->video.attr->max_again = 0x40000;
-                    sensor->video.attr->name = sensor_name; /* Safe pointer assignment */
-                    pr_info("*** GC2053 SENSOR ATTRIBUTES CONFIGURED (MIPI interface) ***\n");
-                }
-
-                /* SAFE INITIALIZATION: Initialize subdev structure */
-                memset(&sensor->sd, 0, sizeof(sensor->sd));
-                sensor->sd.isp = (void *)isp_dev;
-                sensor->sd.vin_state = TX_ISP_MODULE_INIT;
-                sensor->index = 0;
-                sensor->type = 0;
-                INIT_LIST_HEAD(&sensor->list);
-
-                /* *** CRITICAL FIX: SET UP SENSOR SUBDEV OPS STRUCTURE *** */
-                pr_info("*** CRITICAL: SETTING UP SENSOR SUBDEV OPS STRUCTURE ***\n");
-                sensor->sd.ops = &sensor_subdev_ops;
-                pr_info("*** SENSOR SUBDEV OPS CONFIGURED: core=%p, video=%p, s_stream=%p ***\n",
-                        sensor->sd.ops->core, sensor->sd.ops->video,
-                        sensor->sd.ops->video ? sensor->sd.ops->video->s_stream : NULL);
-
-                pr_info("*** SENSOR SUBDEV INITIALIZED WITH WORKING OPS STRUCTURE ***\n");
-
-                /* SAFE CONNECTION: Verify ISP device before connecting */
-                if (!ourISPdev) {
-                    pr_err("*** CRITICAL ERROR: ourISPdev is NULL! ***\n");
-                    kfree(sensor->video.attr);
-                    kfree(sensor);
-                    return -ENODEV;
-                }
-
-                /* *** CRITICAL: CONNECT SENSOR TO ISP DEVICE *** */
-                pr_info("*** CONNECTING SENSOR TO ISP DEVICE ***\n");
-                pr_info("Before: ourISPdev=%p, ourISPdev->sensor=%p\n", ourISPdev, ourISPdev->sensor);
-
-                ourISPdev->sensor = sensor;
-
-                pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor, sensor->info.name);
-                pr_info("*** SENSOR SUCCESSFULLY CONNECTED TO ISP DEVICE! ***\n");
-                
-                /* *** CRITICAL FIX: DEFER VIC SYNC UNTIL VIC DEVICE IS AVAILABLE *** */
-                pr_info("*** SENSOR ATTRIBUTES WILL BE SYNCED TO VIC WHEN VIC BECOMES AVAILABLE ***\n");
-                pr_info("*** SKIPPING VIC SYNC TO PREVENT NULL POINTER CRASH ***\n");
-                
-                /* Store sensor attributes in ISP device for later VIC sync */
-                if (sensor->video.attr) {
-                    pr_info("*** SENSOR ATTRIBUTES STORED: dbus_type=%d, chip_id=0x%x ***\n", 
-                            sensor->video.attr->dbus_type, sensor->video.attr->chip_id);
-                    pr_info("*** VIC SYNC WILL HAPPEN AUTOMATICALLY WHEN VIC INITIALIZES ***\n");
-                } else {
-                    pr_warn("*** WARNING: No sensor attributes available for future VIC sync ***\n");
-                }
-
-                /* SAFE UPDATE: Update registry with actual subdev pointer */
-                if (reg_sensor) {
-                    reg_sensor->subdev = &sensor->sd;
-                    pr_info("*** SENSOR REGISTRY UPDATED ***\n");
-                }
-            } else {
-                pr_err("*** FAILED TO CREATE I2C CLIENT FOR %s ***\n", sensor_name);
+            
+            /* Get I2C adapter - try i2c-0 first */
+            i2c_adapter = i2c_get_adapter(0);
+            if (!i2c_adapter) {
+                pr_warn("I2C adapter 0 not found, trying adapter 1\n");
+                i2c_adapter = i2c_get_adapter(1);
             }
-
-            //i2c_put_adapter(i2c_adapter);
+            
+            if (i2c_adapter) {
+                /* Set up I2C board info for the sensor */
+                memset(&board_info, 0, sizeof(board_info));
+                strncpy(board_info.type, sensor_name, I2C_NAME_SIZE - 1);
+                board_info.type[I2C_NAME_SIZE - 1] = '\0';
+                
+                /* Common sensor I2C addresses - try GC2053 first */
+                if (strncmp(sensor_name, "gc2053", 6) == 0) {
+                    board_info.addr = 0x37; /* GC2053 I2C address */
+                } else if (strncmp(sensor_name, "imx307", 6) == 0) {
+                    board_info.addr = 0x1a; /* IMX307 I2C address */
+                } else {
+                    board_info.addr = 0x37; /* Default address */
+                }
+                
+                pr_info("*** CREATING I2C CLIENT: name=%s, addr=0x%x, adapter=%s ***\n",
+                       board_info.type, board_info.addr, i2c_adapter->name);
+                
+                /* Create the I2C device */
+                client = isp_i2c_new_subdev_board(i2c_adapter, &board_info);
+                if (client) {
+                    pr_info("*** SUCCESS: I2C CLIENT CREATED - SENSOR PROBE SHOULD BE CALLED! ***\n");
+                    pr_info("*** I2C CLIENT: %s at 0x%x on %s ***\n", 
+                           client->name, client->addr, client->adapter->name);
+                           
+                    /* *** CRITICAL FIX: CREATE ACTUAL SENSOR STRUCTURE AND CONNECT TO ISP *** */
+                    pr_info("*** CREATING ACTUAL SENSOR STRUCTURE FOR %s ***\n", sensor_name);
+                    
+                    /* SAFE ALLOCATION: Allocate sensor structure with proper error checking */
+                    sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
+                    if (!sensor) {
+                        pr_err("*** CRITICAL ERROR: Failed to allocate sensor structure (size=%zu) ***\n", sizeof(struct tx_isp_sensor));
+                        return -ENOMEM;
+                    }
+                    pr_info("*** SENSOR STRUCTURE ALLOCATED: %p (size=%zu bytes) ***\n", sensor, sizeof(struct tx_isp_sensor));
+                    
+                    /* SAFE INITIALIZATION: Initialize sensor info first */
+                    memset(&sensor->info, 0, sizeof(sensor->info));
+                    strncpy(sensor->info.name, sensor_name, sizeof(sensor->info.name) - 1);
+                    sensor->info.name[sizeof(sensor->info.name) - 1] = '\0';
+                    
+                    /* SAFE ALLOCATION: Allocate sensor attributes with proper error checking */
+                    sensor->video.attr = kzalloc(sizeof(struct tx_isp_sensor_attribute), GFP_KERNEL);
+                    if (!sensor->video.attr) {
+                        pr_err("*** CRITICAL ERROR: Failed to allocate sensor attributes (size=%zu) ***\n", sizeof(struct tx_isp_sensor_attribute));
+                        kfree(sensor);
+                        return -ENOMEM;
+                    }
+                    pr_info("*** SENSOR ATTRIBUTES ALLOCATED: %p (size=%zu bytes) ***\n", sensor->video.attr, sizeof(struct tx_isp_sensor_attribute));
+                    
+                    /* SAFE INITIALIZATION: Set up basic sensor attributes for GC2053 */
+                    if (strncmp(sensor_name, "gc2053", 6) == 0) {
+                        sensor->video.attr->chip_id = 0x2053;
+                        sensor->video.attr->total_width = 1920;
+                        sensor->video.attr->total_height = 1080;
+                        sensor->video.attr->dbus_type = 2; // MIPI interface (fixed from DVP)
+                        sensor->video.attr->integration_time = 1000;
+                        sensor->video.attr->max_again = 0x40000;
+                        sensor->video.attr->name = sensor_name; /* Safe pointer assignment */
+                        pr_info("*** GC2053 SENSOR ATTRIBUTES CONFIGURED (MIPI interface) ***\n");
+                    }
+                    
+                    /* SAFE INITIALIZATION: Initialize subdev structure */
+                    memset(&sensor->sd, 0, sizeof(sensor->sd));
+                    sensor->sd.isp = (void *)isp_dev;
+                    sensor->sd.vin_state = TX_ISP_MODULE_INIT;
+                    sensor->index = 0;
+                    sensor->type = 0;
+                    INIT_LIST_HEAD(&sensor->list);
+                    
+                    /* *** CRITICAL FIX: SET UP SENSOR SUBDEV OPS STRUCTURE *** */
+                    pr_info("*** CRITICAL: SETTING UP SENSOR SUBDEV OPS STRUCTURE ***\n");
+                    sensor->sd.ops = &sensor_subdev_ops;
+                    pr_info("*** SENSOR SUBDEV OPS CONFIGURED: core=%p, video=%p, s_stream=%p ***\n",
+                            sensor->sd.ops->core, sensor->sd.ops->video, 
+                            sensor->sd.ops->video ? sensor->sd.ops->video->s_stream : NULL);
+                    
+                    pr_info("*** SENSOR SUBDEV INITIALIZED WITH WORKING OPS STRUCTURE ***\n");
+                    
+                    /* SAFE CONNECTION: Verify ISP device before connecting */
+                    if (!ourISPdev) {
+                        pr_err("*** CRITICAL ERROR: ourISPdev is NULL! ***\n");
+                        kfree(sensor->video.attr);
+                        kfree(sensor);
+                        return -ENODEV;
+                    }
+                    
+                    /* *** CRITICAL: CONNECT SENSOR TO ISP DEVICE *** */
+                    pr_info("*** CONNECTING SENSOR TO ISP DEVICE ***\n");
+                    pr_info("Before: ourISPdev=%p, ourISPdev->sensor=%p\n", ourISPdev, ourISPdev->sensor);
+                    
+                    ourISPdev->sensor = sensor;
+                    
+                    pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor, sensor->info.name);
+                    pr_info("*** SENSOR SUCCESSFULLY CONNECTED TO ISP DEVICE! ***\n");
+                    
+                    /* SAFE UPDATE: Update registry with actual subdev pointer */
+                    if (reg_sensor) {
+                        reg_sensor->subdev = &sensor->sd;
+                        pr_info("*** SENSOR REGISTRY UPDATED ***\n");
+                    }
+                } else {
+                    pr_err("*** FAILED TO CREATE I2C CLIENT FOR %s ***\n", sensor_name);
+                }
+                
+                i2c_put_adapter(i2c_adapter);
+            } else {
+                pr_err("*** NO I2C ADAPTER AVAILABLE FOR SENSOR %s ***\n", sensor_name);
+            }
         }
         
         return final_result;
@@ -4048,6 +4195,12 @@ void isp_core_tuning_deinit(void *core_dev)
     pr_info("isp_core_tuning_deinit: Destroying ISP tuning interface\n");
 }
 
+int sensor_early_init(void *core_dev)
+{
+    pr_info("sensor_early_init: Preparing sensor infrastructure\n");
+    return 0;
+}
+
 
 // Simple platform driver - minimal implementation
 static int tx_isp_platform_probe(struct platform_device *pdev)
@@ -4105,6 +4258,16 @@ static int tx_isp_init(void)
     spin_lock_init(&ourISPdev->lock);
     ourISPdev->refcnt = 0;
     ourISPdev->is_open = false;
+    
+    /* *** CRITICAL FIX: Create and link VIC device structure immediately *** */
+    pr_info("*** CREATING VIC DEVICE STRUCTURE AND LINKING TO ISP CORE ***\n");
+    ret = tx_isp_create_vic_device(ourISPdev);
+    if (ret) {
+        pr_err("Failed to create VIC device structure: %d\n", ret);
+        kfree(ourISPdev);
+        ourISPdev = NULL;
+        return ret;
+    }
 	
     /* Step 2: Register platform device (matches reference) */
     ret = platform_device_register(&tx_isp_platform_device);
@@ -4186,33 +4349,23 @@ static int tx_isp_init(void)
         goto err_cleanup_base;
     }
 
-    /* *** CRITICAL: Initialize VIC platform driver FIRST to ensure registers are mapped *** */
-    ret = tx_isp_vic_platform_init();
-    if (ret) {
-        pr_err("Failed to initialize VIC platform driver: %d\n", ret);
-        goto err_cleanup_platforms;
-    }
-    pr_info("*** VIC PLATFORM DRIVER INITIALIZED - VIC REGISTERS NOW AVAILABLE ***\n");
-    
     /* *** CRITICAL: Initialize FS platform driver (creates /proc/jz/isp/isp-fs like reference) *** */
     ret = tx_isp_fs_platform_init();
     if (ret) {
         pr_err("Failed to initialize FS platform driver: %d\n", ret);
-        tx_isp_vic_platform_exit();  /* Clean up VIC driver */
         goto err_cleanup_platforms;
     }
     pr_info("*** FS PLATFORM DRIVER INITIALIZED - /proc/jz/isp/isp-fs SHOULD NOW EXIST ***\n");
 
-    /* *** CRITICAL: Initialize remaining subdev platform drivers (CSI, VIN, CORE) *** */
-    /* NOTE: VIC driver already initialized above to ensure registers are available early */
+    /* *** CRITICAL: Initialize subdev platform drivers (CSI, VIC, VIN, CORE) *** */
+    /* NOTE: VIC driver is registered inside tx_isp_subdev_platform_init() to avoid double registration */
     ret = tx_isp_subdev_platform_init();
     if (ret) {
         pr_err("Failed to initialize subdev platform drivers: %d\n", ret);
         tx_isp_fs_platform_exit();  /* Clean up FS driver */
-        tx_isp_vic_platform_exit();  /* Clean up VIC driver */
         goto err_cleanup_platforms;
     }
-    pr_info("*** SUBDEV PLATFORM DRIVERS INITIALIZED - CSI/VIN/CORE DRIVERS REGISTERED ***\n");
+    pr_info("*** SUBDEV PLATFORM DRIVERS INITIALIZED - CSI/VIC/VIN/CORE DRIVERS REGISTERED ***\n");
 
     /* Build platform device array for the new management system */
     subdev_platforms[0] = &tx_isp_csi_platform_device;
@@ -4251,20 +4404,6 @@ static int tx_isp_init(void)
         goto err_cleanup_platforms;
     }
 
-    /* CRITICAL: Initialize tuning_data if not already initialized */
-    if (!ourISPdev->tuning_data) {
-        pr_info("tx_isp_init: Initializing tuning data structure\n");
-
-        /* Allocate tuning data structure using the reference implementation */
-        ourISPdev->tuning_data = isp_core_tuning_init(ourISPdev);
-        if (!ourISPdev->tuning_data) {
-            pr_err("tx_isp_init: Failed to allocate tuning data\n");
-            return -ENOMEM;
-        }
-
-        pr_info("tx_isp_init: Tuning data allocated at %p\n", ourISPdev->tuning_data);
-    }
-
     /* Register VIC subdev with proper ops structure */
     if (ourISPdev->vic_dev) {
         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
@@ -4272,9 +4411,7 @@ static int tx_isp_init(void)
         /* Set up VIC subdev with ops pointing to vic_subdev_ops */
         vic_dev->sd.ops = &vic_subdev_ops;
         vic_dev->sd.isp = (void*)ourISPdev;
-        vic_dev->sd.vin_state = TX_ISP_MODULE_INIT;
-        vic_dev->vic_regs = ioremap(0x10023000, 0x1000);  // VIC base from /proc/iomem
-
+        
         /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
         ourISPdev->subdevs[0] = &vic_dev->sd;
         
@@ -4360,9 +4497,6 @@ err_cleanup_graph:
     
 err_cleanup_platforms:
     /* Clean up in reverse order */
-    tx_isp_subdev_platform_exit();  /* Clean up subdev drivers */
-    tx_isp_fs_platform_exit();      /* Clean up FS driver */
-    tx_isp_vic_platform_exit();     /* Clean up VIC driver */
     platform_device_unregister(&tx_isp_core_platform_device);
     platform_device_unregister(&tx_isp_fs_platform_device);
     platform_device_unregister(&tx_isp_vin_platform_device);
@@ -5903,6 +6037,13 @@ static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *bu
         return -EINVAL;
     }
     
+    /* MIPS SAFE: Get self pointer with alignment validation */
+    s0 = vic_dev->self;
+    if (!s0 || ((uintptr_t)s0 & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->self pointer 0x%p not aligned ***\n", s0);
+        return -EINVAL;
+    }
+    
     /* MIPS SAFE: Validate buffer_lock alignment before spinlock operations */
     if (((uintptr_t)&vic_dev->buffer_lock & 0x3) != 0) {
         pr_err("*** MIPS ALIGNMENT ERROR: buffer_lock not aligned ***\n");
@@ -6206,6 +6347,8 @@ static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable)
         pr_err("*** THIS IS WHY SENSOR REGISTERS ARE NOT BEING WRITTEN! ***\n");
         return -ENODEV;
     }
+    
+    return 0;
 }
 
 static int sensor_subdev_core_reset(struct tx_isp_subdev *sd, int reset)

@@ -58,6 +58,7 @@ static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc);
 
 /* Basic pipeline function declarations */
 int tx_isp_csi_device_init(struct tx_isp_dev *isp);
+int tx_isp_vic_device_init(struct tx_isp_dev *isp);
 int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
 int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
@@ -172,8 +173,6 @@ static struct tx_isp_subdev_desc isp_subdev_descriptors[] = {
         .create_proc_entry = true,
     },
 };
-
-extern struct tx_isp_dev *ourISPdev;
 
 #define NUM_ISP_SUBDEVS ARRAY_SIZE(isp_subdev_descriptors)
 
@@ -503,6 +502,14 @@ static int tx_isp_create_basic_pipeline(struct tx_isp_dev *isp)
         return ret;
     }
 
+    /* Initialize VIC device */
+    ret = tx_isp_vic_device_init(isp);
+    if (ret < 0) {
+        pr_err("Failed to initialize VIC device: %d\n", ret);
+        tx_isp_csi_device_deinit(isp);
+        return ret;
+    }
+
     /* Setup pipeline */
     ret = tx_isp_setup_pipeline(isp);
     if (ret < 0) {
@@ -661,6 +668,20 @@ int tx_isp_csi_device_init(struct tx_isp_dev *isp)
     }
     
     pr_info("tx_isp_csi_device_init: CSI device initialized (stub)\n");
+    return 0;
+}
+
+/**
+ * tx_isp_vic_device_init - Initialize VIC device (stub implementation)
+ */
+int tx_isp_vic_device_init(struct tx_isp_dev *isp)
+{
+    if (!isp) {
+        pr_err("tx_isp_vic_device_init: Invalid ISP device\n");
+        return -EINVAL;
+    }
+    
+    pr_info("tx_isp_vic_device_init: VIC device initialized (stub)\n");
     return 0;
 }
 

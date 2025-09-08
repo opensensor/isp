@@ -21,49 +21,16 @@
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
 
-/* Frame source channel configuration structure - 0x24 bytes per channel */
-struct tx_isp_fs_channel_config {
-    uint32_t field_00;                      /* 0x00: Configuration field */
-    uint32_t field_04;                      /* 0x04: Pad ID field (referenced at +4) */
-    uint8_t pad_08;                         /* 0x08: Padding byte */
-    uint32_t channel_enabled;               /* 0x09: Channel enable flag (checked at +5 in BN) */
-    uint32_t field_0c[3];                   /* 0x0c-0x17: Reserved fields */
-    uint32_t field_18;                      /* 0x18: Additional field */
-    void (*event_callback)(void *data);     /* 0x1c: Event callback function pointer */
-    uint32_t field_20;                      /* 0x20: Final field */
-} __attribute__((packed));
-
-/* Memory-safe frame source device structure */
+/* Global frame source device structure - 0xe8 bytes as per Binary Ninja */
 struct tx_isp_fs_device {
-    struct tx_isp_subdev subdev;                        /* 0x00: Base subdev structure */    
-    struct tx_isp_fs_channel_config *channel_configs;   /* Channel config array pointer */
-    void *self_pointer;                                 /* Self-pointer */
-    struct tx_isp_frame_channel *channel_buffer;        /* Channel buffer pointer */
-    uint32_t channel_count;                             /* Active channel count */
-    uint32_t initialized;                               /* Initialization flag */ 
-    uint32_t channel_count_field;                       /* Channel count source field */
+    struct tx_isp_subdev subdev;            /* Base subdev structure */
+    void __iomem *base_regs;                /* Base register mapping +0xb8 */
+    
+    void *channel_configs;                   /* channel config array */
+    void *channel_buffer;                    /* kmalloc'ed channel buffer */
+    uint32_t channel_count;                  /* number of channels */
+    uint32_t initialized;                    /* initialization flag */
 } __attribute__((packed));
-
-/* Memory-safe access helpers to prevent offset-based arithmetic */
-static inline uint32_t tx_isp_fs_get_channel_count(struct tx_isp_fs_device *fs_dev)
-{
-    return fs_dev->channel_count_field;
-}
-
-static inline void tx_isp_fs_set_channel_count(struct tx_isp_fs_device *fs_dev, uint32_t count)
-{
-    fs_dev->channel_count = count;
-}
-
-static inline struct tx_isp_frame_channel *tx_isp_fs_get_channel_buffer(struct tx_isp_fs_device *fs_dev)
-{
-    return fs_dev->channel_buffer;
-}
-
-static inline void tx_isp_fs_set_channel_buffer(struct tx_isp_fs_device *fs_dev, struct tx_isp_frame_channel *buffer)
-{
-    fs_dev->channel_buffer = buffer;
-}
 
 
 /* Forward declarations */
@@ -168,158 +135,148 @@ void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan)
 }
 
 
-/* tx_isp_fs_probe - Memory-safe implementation following Binary Ninja reference */
+/* tx_isp_fs_probe - EXACT Binary Ninja implementation */
 int tx_isp_fs_probe(struct platform_device *pdev)
 {
     struct tx_isp_fs_device *fs_dev;
     struct tx_isp_frame_channel *channels_buffer = NULL;
     struct tx_isp_frame_channel *current_channel;
-    struct tx_isp_fs_channel_config *channel_config;
+    void *channel_config_ptr;
     uint32_t channel_count;
     int ret;
     int i;
     
-    /* MCP log entry point */
-    pr_info("*** MCP LOG: tx_isp_fs_probe entry ***\n");
+    pr_info("*** tx_isp_fs_probe: EXACT Binary Ninja implementation ***\n");
     
-    /* Allocate main FS device structure - must be 0xe8 bytes */
-    fs_dev = kzalloc(sizeof(struct tx_isp_fs_device), GFP_KERNEL);
+    /* Binary Ninja: $v0, $a2 = private_kmalloc(0xe8, 0xd0) */
+    fs_dev = kzalloc(0xe8, GFP_KERNEL);  /* 0xe8 = 232 bytes */
     if (!fs_dev) {
+        /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : control limit err!!!\n", $a2) */
         pr_err("Err [VIC_INT] : control limit err!!!\n");
-        /* MCP log allocation failure */
-        pr_info("*** MCP LOG: tx_isp_fs_probe allocation failed ***\n");
+        /* Binary Ninja: return 0xfffffff4 */
         return -12;
     }
     
-    /* MCP log successful allocation */
-    pr_info("*** MCP LOG: tx_isp_fs_probe allocated fs_dev=%p, size=0x%lx ***\n", 
-            fs_dev, sizeof(struct tx_isp_fs_device));
+    /* Binary Ninja: memset($v0, 0, 0xe8) */
+    memset(fs_dev, 0, 0xe8);
     
-    /* Initialize subdev - following reference driver pattern */
+    /* Binary Ninja: void* $s2_1 = arg1[0x16] */
+    /* This references platform device resource information */
+    
+    /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &fs_subdev_ops) == 0) */
     ret = tx_isp_subdev_init(pdev, &fs_dev->subdev, &fs_subdev_ops);
     if (ret != 0) {
+        /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : image syfifo ovf !!!\n", zx.d(*($s2_1 + 2))) */
         pr_err("Err [VIC_INT] : image syfifo ovf !!!\n");
-        /* MCP log subdev init failure */
-        pr_info("*** MCP LOG: tx_isp_fs_probe subdev_init failed, ret=%d ***\n", ret);
+        /* Binary Ninja: private_kfree($v0) */
         kfree(fs_dev);
+        /* Binary Ninja: return 0xfffffff4 */
         return -12;
     }
     
-    /* MCP log successful subdev init */
-    pr_info("*** MCP LOG: tx_isp_fs_probe subdev initialized ***\n");
+    /* Binary Ninja: uint32_t $a0_2 = zx.d(*($v0 + 0xc8)) */
+    channel_count = *(uint32_t *)((char *)fs_dev + 0xc8);
+    /* Binary Ninja: *($v0 + 0xe0) = $a0_2 */
+    fs_dev->channel_count = channel_count;
     
-    /* Memory-safe channel count access - use helper functions */
-    channel_count = tx_isp_fs_get_channel_count(fs_dev);
-    tx_isp_fs_set_channel_count(fs_dev, channel_count);
+    pr_info("tx_isp_fs_probe: channel_count=%d\n", channel_count);
     
-    /* MCP log channel count */
-    pr_info("*** MCP LOG: tx_isp_fs_probe channel_count=%d ***\n", channel_count);
-    
-    /* Handle zero channels case */
+    /* Binary Ninja: if ($a0_2 == 0) goto label_1c670 */
     if (channel_count == 0) {
         goto setup_complete;
     }
     
-    /* Allocate channel buffer - memory-safe allocation */
-    channels_buffer = kzalloc(channel_count * sizeof(struct tx_isp_frame_channel), GFP_KERNEL);
+    /* Binary Ninja: int32_t $v0_3 = private_kmalloc($a0_2 * 0x2ec, 0xd0) */
+    channels_buffer = kzalloc(channel_count * 0x2ec, GFP_KERNEL);  /* 0x2ec = 748 bytes per channel */
     if (!channels_buffer) {
         pr_err("Failed to allocate channels buffer\n");
-        /* MCP log channel buffer allocation failure */
-        pr_info("*** MCP LOG: tx_isp_fs_probe channel buffer allocation failed ***\n");
         ret = -ENOMEM;
         goto error_cleanup;
     }
     
-    /* Memory-safe assignment using helper function */
-    tx_isp_fs_set_channel_buffer(fs_dev, channels_buffer);
+    /* Binary Ninja: *($v0 + 0xdc) = $v0_3 */
+    fs_dev->channel_buffer = channels_buffer;
     
-    /* MCP log channel buffer allocation */
-    pr_info("*** MCP LOG: tx_isp_fs_probe allocated channel buffer=%p, count=%d ***\n", 
-            channels_buffer, channel_count);
+    /* Binary Ninja: memset($v0_3, 0, 0x2ec * $a2_2) */
+    memset(channels_buffer, 0, 0x2ec * channel_count);
     
-    /* Initialize channels using memory-safe array access */
+    /* Binary Ninja: Channel initialization loop */
+    pr_info("tx_isp_fs_probe: initializing %d frame channels\n", channel_count);
+    
     for (i = 0; i < channel_count; i++) {
-        /* Memory-safe channel access - use proper array indexing */
-        current_channel = &channels_buffer[i];
+        /* Binary Ninja: int32_t $s4_1 = $s2_2 * 0x2ec */
+        /* Binary Ninja: int32_t* $s0_2 = *($v0 + 0xdc) + $s4_1 */
+        current_channel = (struct tx_isp_frame_channel *)((char *)channels_buffer + (i * 0x2ec));
         
-        /* Memory-safe channel config access */
-        if (fs_dev->channel_configs) {
-            channel_config = &fs_dev->channel_configs[i];
-        } else {
-            /* Handle missing channel config gracefully */
-            pr_warn("tx_isp_fs_probe: missing channel configs, channel %d inactive\n", i);
-            current_channel->state = 0;
-            continue;
-        }
+        /* Binary Ninja: void* $s6_1 = $s2_2 * 0x24 + *($v0 + 0xcc) */
+        channel_config_ptr = (char *)fs_dev->channel_configs + (i * 0x24);
         
-        /* Validate pointers before use */
-        if (!current_channel || !channel_config) {
-            pr_err("tx_isp_fs_probe: invalid channel pointers at index %d\n", i);
+        /* Binary Ninja: if ($s0_2 == 0 || $s0_2 u>= 0xfffff001 || $s6_1 == 0 || $s6_1 u>= 0xfffff001) */
+        if (!current_channel || (unsigned long)current_channel >= 0xfffff001 ||
+            !channel_config_ptr || (unsigned long)channel_config_ptr >= 0xfffff001) {
             ret = -EINVAL;
             goto error_cleanup_loop;
         }
         
-        /* Memory-safe pad ID assignment */
+        /* Set pad info based on channel config */
         current_channel->pad_id = i;
         
-        /* MCP log channel initialization start */
-        pr_info("*** MCP LOG: tx_isp_fs_probe initializing channel %d ***\n", i);
-        
-        /* Memory-safe channel enable check */
-        if (channel_config->channel_enabled != 0) {
-            /* Create channel device name safely */
+        /* Binary Ninja: if (zx.d(*($s6_1 + 5)) != 0) */
+        if (*(uint32_t *)((char *)channel_config_ptr + 5) != 0) {
+            /* Binary Ninja: sprintf(&$s0_2[0xab], "Err [VIC_INT] : mipi fid asfifo ovf!!!\n") */
             snprintf(current_channel->name, sizeof(current_channel->name), 
                      "/dev/framechan%d", i);
             
-            /* Configure misc device safely */
+            /* Binary Ninja: *$s0_2 = 0xff */
             current_channel->misc.minor = MISC_DYNAMIC_MINOR;
+            /* Binary Ninja: $s0_2[2] = &fs_channel_ops */
             current_channel->misc.fops = &fs_channel_ops;
+            /* Binary Ninja: $s0_2[1] = &$s0_2[0xab] */
             current_channel->misc.name = current_channel->name;
             
-            /* Register misc device */
+            /* Binary Ninja: if (private_misc_register($s0_2) s< 0) */
             ret = misc_register(&current_channel->misc);
             if (ret < 0) {
+                /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch0 hcomp err !!!\n", $s0_2[0xb0]) */
                 pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
-                /* MCP log misc register failure */
-                pr_info("*** MCP LOG: tx_isp_fs_probe misc_register failed for channel %d, ret=%d ***\n", i, ret);
+                /* Binary Ninja: result = 0xfffffffe */
                 ret = -2;
                 goto error_cleanup_loop;
             }
             
-            /* Initialize synchronization objects safely */
+            /* Binary Ninja: Initialize completion and synchronization objects */
+            /* Binary Ninja: private_init_completion(&$s0_2[0xb5]) */
             init_completion(&current_channel->frame_done);
+            /* Binary Ninja: private_spin_lock_init(&$s0_2[0x89]) */
             spin_lock_init(&current_channel->slock);
+            /* Binary Ninja: private_raw_mutex_init(&$s0_2[0xa], ...) */
             mutex_init(&current_channel->mlock);
+            /* Binary Ninja: private_init_waitqueue_head(&$s0_2[0x8a]) */
             init_waitqueue_head(&current_channel->wait);
             
-            /* Memory-safe event callback assignment */
-            channel_config->event_callback = frame_chan_event;
+            /* Binary Ninja: Set up event callback */
+            /* Binary Ninja: *($s6_1 + 0x1c) = frame_chan_event */
+            *(void **)((char *)channel_config_ptr + 0x1c) = frame_chan_event;
             
-            /* Set channel as active */
-            current_channel->state = 1;
-            current_channel->active = 1;
+            /* Binary Ninja: $s0_2[0xb4] = 1 */
+            current_channel->state = 1;  /* Active state */
             
-            /* MCP log successful channel initialization */
-            pr_info("*** MCP LOG: tx_isp_fs_probe initialized channel %d: %s ***\n", 
+            pr_info("tx_isp_fs_probe: initialized frame channel %d: %s\n", 
                     i, current_channel->name);
         } else {
-            /* Channel inactive */
-            current_channel->state = 0;
-            current_channel->active = 0;
-            /* MCP log inactive channel */
-            pr_info("*** MCP LOG: tx_isp_fs_probe channel %d inactive ***\n", i);
+            /* Binary Ninja: $s0_2[0xb4] = 0 */
+            current_channel->state = 0;  /* Inactive state */
+            pr_info("tx_isp_fs_probe: channel %d inactive\n", i);
         }
     }
     
     goto setup_complete;
     
 error_cleanup_loop:
-    /* Memory-safe error cleanup */
+    /* Binary Ninja: Error cleanup - deinitialize created channels */
     for (i = i - 1; i >= 0; i--) {
-        current_channel = &channels_buffer[i];
-        if (current_channel->active) {
-            tx_isp_frame_chan_deinit(current_channel);
-        }
+        current_channel = (struct tx_isp_frame_channel *)((char *)channels_buffer + (i * 0x2ec));
+        tx_isp_frame_chan_deinit(current_channel);
     }
 
 error_cleanup:
@@ -327,60 +284,51 @@ error_cleanup:
         kfree(channels_buffer);
     }
     kfree(fs_dev);
-    /* MCP log error cleanup */
-    pr_info("*** MCP LOG: tx_isp_fs_probe error cleanup completed, ret=%d ***\n", ret);
     return ret;
 
 setup_complete:
-    /* Memory-safe final setup */
+    /* Binary Ninja: label_1c670 */
+    /* Binary Ninja: *($v0 + 0xe4) = 1 */
     fs_dev->initialized = 1;
     
+    /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
     platform_set_drvdata(pdev, fs_dev);
     
-    /* Memory-safe file operations assignment */
-    tx_isp_set_subdev_nodeops(&fs_dev->subdev, (struct file_operations *)&isp_framesource_fops);
+    /* Binary Ninja: *($v0 + 0x34) = &isp_framesource_fops */
+    *(const struct file_operations **)((char *)&fs_dev->subdev + 0x34) = &isp_framesource_fops;
     
-    /* Memory-safe self-pointer assignment */
-    fs_dev->self_pointer = fs_dev;
+    /* Binary Ninja: *($v0 + 0xd4) = $v0 */
+    *(struct tx_isp_fs_device **)((char *)fs_dev + 0xd4) = fs_dev;  /* Self-pointer */
     
-    /* MCP log successful completion */
-    pr_info("*** MCP LOG: tx_isp_fs_probe completed successfully, channels=%d ***\n", channel_count);
+    pr_info("*** tx_isp_fs_probe: FS device created successfully (size=0xe8, channels=%d) ***\n", 
+            channel_count);
     pr_info("*** FS PROBE COMPLETE - /proc/jz/isp/isp-fs SHOULD NOW BE AVAILABLE ***\n");
     
+    /* Binary Ninja: return 0 */
     return 0;
 }
 
-/* FS remove function - Memory-safe implementation */
+/* FS remove function */
 int tx_isp_fs_remove(struct platform_device *pdev)
 {
     struct tx_isp_fs_device *fs_dev = platform_get_drvdata(pdev);
     struct tx_isp_frame_channel *channels_buffer;
     struct tx_isp_frame_channel *current_channel;
-    uint32_t channel_count;
     int i;
     
-    pr_info("*** MCP LOG: tx_isp_fs_remove entry ***\n");
+    pr_info("*** tx_isp_fs_remove ***\n");
     
     if (!fs_dev) {
-        pr_info("*** MCP LOG: tx_isp_fs_remove no device data ***\n");
         return 0;
     }
     
-    /* Memory-safe cleanup using helper functions */
-    channels_buffer = tx_isp_fs_get_channel_buffer(fs_dev);
-    channel_count = fs_dev->channel_count;
-    
-    /* MCP log cleanup start */
-    pr_info("*** MCP LOG: tx_isp_fs_remove cleaning up %d channels ***\n", channel_count);
-    
+    /* Clean up frame channels */
+    channels_buffer = (struct tx_isp_frame_channel *)fs_dev->channel_buffer;
     if (channels_buffer) {
-        for (i = 0; i < channel_count; i++) {
-            /* Memory-safe channel access - use proper array indexing */
-            current_channel = &channels_buffer[i];
+        for (i = 0; i < fs_dev->channel_count; i++) {
+            current_channel = (struct tx_isp_frame_channel *)((char *)channels_buffer + (i * 0x2ec));
             if (current_channel->state) {
                 tx_isp_frame_chan_deinit(current_channel);
-                /* MCP log channel cleanup */
-                pr_info("*** MCP LOG: tx_isp_fs_remove cleaned channel %d ***\n", i);
             }
         }
         kfree(channels_buffer);
@@ -391,8 +339,7 @@ int tx_isp_fs_remove(struct platform_device *pdev)
     
     kfree(fs_dev);
     
-    /* MCP log completion */
-    pr_info("*** MCP LOG: tx_isp_fs_remove completed successfully ***\n");
+    pr_info("FS device removed\n");
     return 0;
 }
 
