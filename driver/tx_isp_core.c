@@ -262,6 +262,17 @@ extern struct tx_isp_dev *ourISPdev;
 /* Global ISP core pointer for Binary Ninja compatibility */
 static struct tx_isp_dev *g_ispcore = NULL;
 
+/**
+ * tx_isp_get_device - CRITICAL: Get global ISP device pointer
+ * This function returns the global ISP device pointer that is needed
+ * by the VIC start process to enable system-level interrupts
+ */
+struct tx_isp_dev *tx_isp_get_device(void)
+{
+    return ourISPdev;
+}
+EXPORT_SYMBOL(tx_isp_get_device);
+
 /* Core subdev pad operations */
 static struct tx_isp_subdev_pad_ops core_pad_ops = {
     .s_fmt = NULL,  /* Will be filled when needed */
