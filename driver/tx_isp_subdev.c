@@ -65,11 +65,12 @@ static void __fill_v4l2_buffer(void *vb, struct v4l2_buffer *buf)
 }
 
 
+// TODO vic_event_handler
 // CRITICAL FIX: Safe implementation using proper struct member access instead of offset arithmetic
 int tx_isp_send_event_to_remote(struct v4l2_subdev *sd, unsigned int event, void *data)
 {
     pr_info("*** tx_isp_send_event_to_remote: SAFE implementation - subdev=%p, event=0x%x ***\n", sd, event);
-    
+
     if (sd != NULL) {
         // SAFE: Use proper struct member access instead of unsafe offset arithmetic
         if (sd->ops != NULL) {

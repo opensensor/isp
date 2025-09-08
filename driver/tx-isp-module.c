@@ -5900,10 +5900,14 @@ irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
-/* tx_isp_send_event_to_remote - MIPS-SAFE implementation with alignment checks */
+/* tx_isp_send_event_to_remote - MIPS-SAFE implementation with VIC event handler integration */
 static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
 {
-    pr_info("*** tx_isp_send_event_to_remote: MIPS-SAFE implementation - event=0x%x ***\n", event_type);
+    struct tx_isp_vic_device *vic_dev = NULL;
+    struct tx_isp_subdev *sd = (struct tx_isp_subdev *)subdev;
+    int result = 0;
+    
+    pr_info("*** tx_isp_send_event_to_remote: MIPS-SAFE with VIC handler - event=0x%x ***\n", event_type);
     
     /* CRITICAL MIPS FIX: Never access ANY pointers that could be unaligned or corrupted */
     /* The crash at BadVA: 0x5f4942b3 was caused by unaligned memory access on MIPS */
@@ -5919,47 +5923,70 @@ static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
         return 0; /* Return success to prevent cascade failures */
     }
     
-    /* MIPS SAFE: Only access global data with proper alignment validation */
-    if (event_type == 0x3000008) {
-        pr_info("*** QBUF EVENT: MIPS-safe processing without risky pointer access ***\n");
-        
-        /* MIPS SAFE: Validate ourISPdev alignment before access */
-        if (ourISPdev && ((uintptr_t)ourISPdev & 0x3) == 0) {
-            /* MIPS SAFE: Additional validation before accessing vic_dev */
-            if (ourISPdev->vic_dev && ((uintptr_t)ourISPdev->vic_dev & 0x3) == 0) {
-                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+    /* MIPS SAFE: Determine target device - use global ISP device if subdev is VIC-related */
+    if (ourISPdev && ((uintptr_t)ourISPdev & 0x3) == 0) {
+        if (ourISPdev->vic_dev && ((uintptr_t)ourISPdev->vic_dev & 0x3) == 0) {
+            vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            
+            /* MIPS SAFE: Validate VIC device structure alignment */
+            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
+                pr_info("*** ROUTING EVENT 0x%x TO VIC_EVENT_HANDLER ***\n", event_type);
                 
-                /* MIPS SAFE: Validate vic_dev structure alignment */
-                if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
-                    pr_info("*** QBUF: VIC hardware available with proper MIPS alignment ***\n");
-                    
-                    /* MIPS SAFE: Only increment frame count - no complex operations */
-                    /* Use atomic operation to prevent alignment issues */
-                    if (((uintptr_t)&vic_dev->frame_count & 0x3) == 0) {
-                        vic_dev->frame_count++;
-                        pr_info("*** QBUF: Frame count incremented safely (count=%u) ***\n", vic_dev->frame_count);
-                    } else {
-                        pr_warn("*** QBUF: Frame count not aligned, skipping increment ***\n");
-                    }
-                    
-                    return 0;
+                /* MIPS SAFE: Call vic_event_handler with proper alignment checks */
+                result = vic_event_handler(vic_dev, event_type, data);
+                
+                pr_info("*** VIC_EVENT_HANDLER RETURNED: %d ***\n", result);
+                
+                /* MIPS SAFE: Handle special VIC return codes */
+                if (result == 0xfffffdfd) {
+                    pr_info("*** VIC HANDLER: No callback available for event 0x%x ***\n", event_type);
+                    return 0xfffffdfd; /* Pass through the "no handler" code */
+                } else if (result == 0) {
+                    pr_info("*** VIC HANDLER: Event 0x%x processed successfully ***\n", event_type);
+                    return 0; /* Success */
                 } else {
-                    pr_warn("*** QBUF: VIC device not properly aligned (0x%p) ***\n", vic_dev);
+                    pr_info("*** VIC HANDLER: Event 0x%x returned code %d ***\n", event_type, result);
+                    return result; /* Pass through the result */
                 }
             } else {
-                pr_warn("*** QBUF: VIC device pointer not aligned or NULL ***\n");
+                pr_warn("*** VIC device not properly aligned (0x%p) - skipping VIC handler ***\n", vic_dev);
             }
         } else {
-            pr_warn("*** QBUF: ISP device not properly aligned or NULL ***\n");
+            pr_warn("*** VIC device pointer not aligned or NULL - skipping VIC handler ***\n");
         }
-        
-        pr_info("*** QBUF: Returning success without hardware access (MIPS-safe) ***\n");
-        return 0;
+    } else {
+        pr_warn("*** ISP device not properly aligned or NULL - skipping VIC handler ***\n");
     }
     
-    /* MIPS SAFE: For all other events, return success without any risky operations */
-    pr_info("*** EVENT 0x%x: MIPS-safe completion - no unaligned access attempted ***\n", event_type);
-    return 0; /* Always return success to prevent cascade failures */
+    /* MIPS SAFE: Fallback processing for specific critical events */
+    switch (event_type) {
+    case 0x3000008: /* TX_ISP_EVENT_FRAME_QBUF */
+        pr_info("*** QBUF EVENT: MIPS-safe fallback processing ***\n");
+        
+        /* MIPS SAFE: Basic frame count increment as fallback */
+        if (vic_dev && ((uintptr_t)&vic_dev->frame_count & 0x3) == 0) {
+            vic_dev->frame_count++;
+            pr_info("*** QBUF: Frame count incremented safely (count=%u) ***\n", vic_dev->frame_count);
+        }
+        return 0;
+        
+    case 0x3000006: /* TX_ISP_EVENT_FRAME_DQBUF */
+        pr_info("*** DQBUF EVENT: MIPS-safe fallback processing ***\n");
+        return 0;
+        
+    case 0x3000003: /* TX_ISP_EVENT_FRAME_STREAMON */
+        pr_info("*** STREAMON EVENT: MIPS-safe fallback processing ***\n");
+        return 0;
+        
+    case 0x200000c: /* VIC sensor registration events */
+    case 0x200000f:
+        pr_info("*** VIC SENSOR EVENT 0x%x: MIPS-safe fallback processing ***\n", event_type);
+        return 0;
+        
+    default:
+        pr_info("*** EVENT 0x%x: MIPS-safe completion - no specific handler ***\n", event_type);
+        return 0xfffffdfd; /* Return "no handler" code for unknown events */
+    }
 }
 
 /* VIC event handler function - handles ALL events including sensor registration */
