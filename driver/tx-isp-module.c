@@ -406,7 +406,7 @@ struct vic_event_callback {
     int (*event_handler)(void*, int, void*); /* +0x1c: Event handler function */
 } __attribute__((packed));
 
-/* T31 ISP platform device with proper IRQ resource - Binary Ninja compatible */
+/* T31 ISP platform device with CORRECT IRQ resource - FIXED for stock driver compatibility */
 static struct resource tx_isp_resources[] = {
     [0] = {
         .start = 0x13300000,           /* T31 ISP base address */
@@ -414,8 +414,8 @@ static struct resource tx_isp_resources[] = {
         .flags = IORESOURCE_MEM,
     },
     [1] = {
-        .start = 63,                   /* T31 ISP IRQ number */
-        .end   = 63,
+        .start = 37,                   /* T31 ISP IRQ number - CORRECTED from stock driver (isp-m0) */
+        .end   = 37,
         .flags = IORESOURCE_IRQ,
     },
 };
