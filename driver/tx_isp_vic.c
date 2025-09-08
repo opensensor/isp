@@ -149,6 +149,9 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* Store the VIC device properly - the subdev is PART of the VIC device */
     isp_dev->vic_dev = (struct tx_isp_subdev *)&vic_dev->sd;
     
+    /* *** CRITICAL FIX: Ensure VIC subdev has proper ISP device back-reference *** */
+    vic_dev->sd.isp = isp_dev;  /* This ensures tx_isp_vic_start can find the ISP device */
+    
     pr_info("*** CRITICAL: VIC DEVICE LINKED TO ISP CORE ***\n");
     pr_info("  isp_dev->vic_dev = %p\n", isp_dev->vic_dev);
     pr_info("  vic_dev->sd.isp = %p\n", vic_dev->sd.isp);
