@@ -402,6 +402,11 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             /* CRITICAL: Synchronize ISP device frame counter with VIC frame counter */
             if (ourISPdev) {
                 ourISPdev->frame_count = vic_dev->frame_count;
+                
+                /* *** CRITICAL: TRIGGER TUNING EVENT PROCESSING FOR CONTINUOUS REGISTER WRITES *** */
+                extern void isp_process_frame_statistics(struct tx_isp_dev *dev);
+                pr_info("*** VIC FRAME DONE: TRIGGERING ISP TUNING EVENT PROCESSING ***\n");
+                isp_process_frame_statistics(ourISPdev);
             }
             
             pr_info("VIC Frame done interrupt - frame_count=%d (synchronized with ISP)\n", vic_dev->frame_count);
