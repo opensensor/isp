@@ -236,6 +236,7 @@ int tisp_set_csc_version(int version)
     pr_info("tisp_set_csc_version: Setting CSC version %d\n", version);
     return 0;
 }
+void system_reg_write(u32 reg, u32 value);
 
 /* tisp_init - Binary Ninja EXACT implementation - THE MISSING HARDWARE INITIALIZER */
 int tisp_init(void *sensor_info, char *param_name)

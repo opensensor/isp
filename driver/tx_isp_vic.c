@@ -1953,6 +1953,8 @@ static inline uint32_t system_reg_read(u32 reg)
     return readl(isp_base + reg);
 }
 
+void system_reg_write(u32 reg, u32 value);
+
 /* isp_vic_cmd_set - EXACT Binary Ninja implementation for snapraw/saveraw */
 static int32_t isp_vic_cmd_set(void* arg1, int32_t arg2, int32_t arg3)
 {
@@ -1992,19 +1994,13 @@ static int32_t isp_vic_cmd_set(void* arg1, int32_t arg2, int32_t arg3)
     pr_info("isp_vic_cmd_set: count is %d\n", arg3);
 
     /* Binary Ninja: Command buffer allocation */
-    if (arg3 < 0x21) {
-        /* Binary Ninja: $s2_1 = &vic_cmd_buf */
-        cmd_buffer = (char *)&vic_cmd_buf;  /* Use static buffer */
-        use_temp_buffer = 1;
-    } else {
-        /* Binary Ninja: $s2_1 = private_kmalloc(arg3 + 1, 0xd0) */
-        allocated_buffer = kmalloc(arg3 + 1, GFP_KERNEL);
-        if (!allocated_buffer) {
-            return -ENOMEM;
-        }
-        cmd_buffer = allocated_buffer;
-        use_temp_buffer = 0;
+    /* Binary Ninja: $s2_1 = private_kmalloc(arg3 + 1, 0xd0) */
+    allocated_buffer = kmalloc(arg3 + 1, GFP_KERNEL);
+    if (!allocated_buffer) {
+        return -ENOMEM;
     }
+    cmd_buffer = allocated_buffer;
+    use_temp_buffer = 0;
 
     /* Binary Ninja: if (private_copy_from_user($s2_1, arg2, arg3) != 0) */
     if (copy_from_user(cmd_buffer, (void __user *)arg2, arg3)) {
