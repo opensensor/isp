@@ -1291,46 +1291,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
-    /* *** CRITICAL: Configure VIC interrupt masks using EXACT Binary Ninja method *** */
-    pr_info("*** CRITICAL: Configuring VIC interrupt masks using Binary Ninja exact method ***\n");
-    
-    /* Binary Ninja exact: Enable frame done interrupt (bit 0) - essential for IRQ 63 */
-    /* The mask registers work as: 0 = interrupt enabled, 1 = interrupt masked */
-    
-    /* Enable only essential interrupts to start with - frame done (bit 0) */
-    writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* Enable frame done interrupt (bit 0), mask others */
-    wmb();
-    
-    /* Enable MDMA channel 0 and 1 interrupts (bits 0,1) for buffer management */
-    writel(0xFFFFFFFC, vic_regs + 0x1ec);  /* Enable MDMA channels 0,1, mask others */
-    wmb();
-    
-    /* Clear any pending interrupts before enabling - Binary Ninja exact method */
-    writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear all pending main interrupts */
-    writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear all pending MDMA interrupts */
-    wmb();
-    
-    /* Verify interrupt mask configuration */
-    u32 main_mask = readl(vic_regs + 0x1e8);
-    u32 mdma_mask = readl(vic_regs + 0x1ec);
-    
-    pr_info("*** VIC interrupt masks configured for IRQ generation! ***\n");
-    pr_info("  Main interrupt mask (0x1e8) = 0x%08x (frame done enabled: bit 0 = %d)\n", 
-            main_mask, (main_mask & 1) == 0 ? 1 : 0);
-    pr_info("  MDMA interrupt mask (0x1ec) = 0x%08x (MDMA 0,1 enabled: bits 0,1 = %d,%d)\n", 
-            mdma_mask, (mdma_mask & 1) == 0 ? 1 : 0, (mdma_mask & 2) == 0 ? 1 : 0);
-            
-    /* CRITICAL: Test that registers respond properly */
-    if (main_mask == 0xFFFFFFFE && mdma_mask == 0xFFFFFFFC) {
-        pr_info("*** SUCCESS: VIC interrupt masks configured correctly for IRQ 63! ***\n");
-    } else {
-        pr_err("*** ERROR: VIC interrupt mask configuration failed! ***\n");
-        pr_err("  Expected main=0xFFFFFFFE, got 0x%08x\n", main_mask);
-        pr_err("  Expected mdma=0xFFFFFFFC, got 0x%08x\n", mdma_mask);
-    }
+    /* *** CRITICAL: Binary Ninja EXACT - NO interrupt mask configuration needed *** */
+    pr_info("*** Binary Ninja EXACT: VIC start does NOT configure interrupt masks ***\n");
+    pr_info("*** The reference driver relies on hardware defaults or ISP-level interrupt setup ***\n");
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     vic_start_ok = 1;
+    
+    /* CRITICAL: Enable ISP system-level interrupts when VIC streaming starts */
+    extern void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
+    struct tx_isp_dev *isp_dev = tx_isp_get_device();
+    if (isp_dev) {
+        pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
+        tx_isp_enable_irq(isp_dev);
+    } else {
+        pr_err("*** tx_isp_vic_start: No ISP device found for interrupt enable ***\n");
+    }
+    
     pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
     pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
 
