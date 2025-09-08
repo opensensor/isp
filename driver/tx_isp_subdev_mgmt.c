@@ -376,10 +376,6 @@ static int tx_isp_init_source_subdev(struct tx_isp_dev *isp,
         pr_warn("tx_isp_init_source_subdev: No driver data for %s\n", desc->name);
         return 0;
     }
-    // if name is tx-isp-vic then
-    if (strcmp(desc->name, "tx-isp-vic") == 0) {
-        ourISPdev->vic_dev = driver_data;
-    }
 
     /* Store in ISP device graph array for compatibility */
     if (desc->dst_index < ISP_MAX_SUBDEVS) {
@@ -504,6 +500,14 @@ static int tx_isp_create_basic_pipeline(struct tx_isp_dev *isp)
     ret = tx_isp_csi_device_init(isp);
     if (ret < 0) {
         pr_err("Failed to initialize CSI device: %d\n", ret);
+        return ret;
+    }
+
+    /* Initialize VIC device */
+    ret = tx_isp_vic_device_init(isp);
+    if (ret < 0) {
+        pr_err("Failed to initialize VIC device: %d\n", ret);
+        tx_isp_csi_device_deinit(isp);
         return ret;
     }
 
