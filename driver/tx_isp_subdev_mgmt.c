@@ -485,6 +485,38 @@ static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime)
     return 0;
 }
 
+
+/* Initialize CSI device */
+static int tx_isp_csi_device_init(struct tx_isp_dev *isp)
+{
+    struct csi_device *csi_dev;
+
+    pr_info("Initializing CSI device\n");
+
+    /* Allocate CSI device structure if not already present */
+    if (!isp->csi_dev) {
+        csi_dev = kzalloc(sizeof(struct csi_device), GFP_KERNEL);
+        if (!csi_dev) {
+            pr_err("Failed to allocate CSI device\n");
+            return -ENOMEM;
+        }
+
+        /* Initialize CSI device structure */
+        strcpy(csi_dev->device_name, "tx_isp_csi");
+        csi_dev->dev = isp->dev;
+        csi_dev->state = 1; /* INIT state */
+        mutex_init(&csi_dev->mutex);
+        spin_lock_init(&csi_dev->lock);
+
+        isp->csi_dev = csi_dev;
+    }
+
+    pr_info("CSI device initialized\n");
+    return 0;
+}
+}
+
+
 /**
  * tx_isp_create_basic_pipeline - Create basic pipeline when no subdevices are registered
  */
