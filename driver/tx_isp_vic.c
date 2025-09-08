@@ -2039,6 +2039,8 @@ static void tx_vic_disable_irq(void)
     void *dump_vsd_2 = dump_vsd;
     void *dump_vsd_5 = NULL;
     int32_t var_18 = 0;
+    struct tx_isp_vic_device *vic_dev;
+    void __iomem *vic_regs;
     
     /* Binary Ninja: Validate dump_vsd pointer */
     if (dump_vsd_2 != 0) {
@@ -2057,12 +2059,25 @@ static void tx_vic_disable_irq(void)
         return;
     }
     
+    /* Get VIC device to access hardware registers */
+    vic_dev = (struct tx_isp_vic_device *)dump_vsd_5;
+    vic_regs = vic_dev->vic_regs;
+    
     /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
     __private_spin_lock_irqsave((spinlock_t *)((char *)dump_vsd_2 + 0x130), &var_18);
     
     /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) - check if interrupts currently enabled */
     uint32_t *irq_enable_flag = (uint32_t *)((char *)dump_vsd_5 + 0x13c);
     if (*irq_enable_flag != 0) {
+        /* *** CRITICAL: DISABLE INTERRUPTS AT HARDWARE LEVEL FIRST *** */
+        if (vic_regs && (unsigned long)vic_regs >= 0x80000000) {
+            /* Mask ALL VIC interrupts at hardware level */
+            writel(0xFFFFFFFF, vic_regs + 0x1e8);  /* Mask ALL main interrupts */
+            writel(0xFFFFFFFF, vic_regs + 0x1ec);  /* Mask ALL MDMA interrupts */
+            wmb();
+            pr_info("*** tx_vic_disable_irq: MASKED all VIC hardware interrupts ***\n");
+        }
+        
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 0 - disable interrupts */
         *irq_enable_flag = 0;
         vic_start_ok = 0;  /* Global flag that controls interrupt processing */
@@ -2091,6 +2106,8 @@ static void tx_vic_enable_irq(void)
     void *dump_vsd_2 = dump_vsd;
     void *dump_vsd_5 = NULL;
     int32_t var_18 = 0;
+    struct tx_isp_vic_device *vic_dev;
+    void __iomem *vic_regs;
     
     /* Binary Ninja: Validate dump_vsd pointer */
     if (dump_vsd_2 != 0) {
@@ -2109,6 +2126,10 @@ static void tx_vic_enable_irq(void)
         return;
     }
     
+    /* Get VIC device to access hardware registers */
+    vic_dev = (struct tx_isp_vic_device *)dump_vsd_5;
+    vic_regs = vic_dev->vic_regs;
+    
     /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
     __private_spin_lock_irqsave((spinlock_t *)((char *)dump_vsd_2 + 0x130), &var_18);
     
@@ -2121,6 +2142,16 @@ static void tx_vic_enable_irq(void)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 - enable interrupts */
         *irq_enable_flag = 1;
         vic_start_ok = 1;  /* Global flag that controls interrupt processing */
+        
+        /* *** CRITICAL: ENABLE INTERRUPTS AT HARDWARE LEVEL *** */
+        if (vic_regs && (unsigned long)vic_regs >= 0x80000000) {
+            /* Enable only essential VIC interrupts - frame done and error handling */
+            /* Frame done interrupt (bit 0) and critical error interrupts */
+            writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* Unmask frame done interrupt (bit 0) */
+            writel(0xFFFFFFFE, vic_regs + 0x1ec);  /* Unmask essential MDMA interrupts */
+            wmb();
+            pr_info("*** tx_vic_enable_irq: UNMASKED essential VIC hardware interrupts ***\n");
+        }
         
         /* Binary Ninja: int32_t $v0_1 = *(dump_vsd_5 + 0x84) - get enable callback */
         void (*enable_callback)(void *) = *(void (**)(void *))((char *)dump_vsd_5 + 0x84);
