@@ -51,7 +51,7 @@ int32_t Tiziano_wdr_fpga(int32_t* arg1, int32_t* arg2, int32_t* arg3, int32_t* a
 int32_t __enqueue_in_driver(void* arg1);
 int32_t __fill_v4l2_buffer(void* arg1, void* arg2);
 int32_t __frame_channel_vb2_streamoff(void* arg1, int32_t arg2, int32_t arg3);
-int32_t __private_spin_lock_irqsave(void);
+
 int32_t __vb2_queue_free(void* arg1, int32_t arg2);
 int32_t ae0_interrupt_hist(void);
 int32_t ae0_interrupt_static(void);
@@ -153,113 +153,113 @@ int32_t mbus_to_bayer_write(int32_t arg1);
 int32_t netlink_send_msg(int32_t arg1, int16_t arg2);
 int32_t printf_func0(int32_t arg1, int32_t arg2);
 int32_t printf_func1(int32_t arg1, int32_t arg2);
-int32_t private_capable(void);
-int32_t private_clk_disable(void);
-int32_t private_clk_enable(void);
-int32_t private_clk_get(void);
-int32_t private_clk_get_rate(void);
-int32_t private_clk_is_enabled(void);
-int32_t private_clk_put(void);
-int32_t private_clk_set_rate(void);
-int32_t private_complete(void);
-int32_t private_copy_from_user(void);
-int32_t private_copy_to_user(void);
-int32_t private_dev_get_drvdata(void);
-int32_t private_dev_set_drvdata(void);
-int32_t private_disable_irq(void);
-int32_t private_dma_cache_sync(void);
-int32_t private_do_gettimeofday(void);
-int32_t private_driver_get_interface(void);
-int32_t private_enable_irq(void);
-int32_t private_filp_close(void);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 int32_t private_filp_open(int32_t, int32_t, int16_t arg3);
-int32_t private_free_irq(void);
+
 int32_t private_get_driver_interface(int32_t* arg1);
 int32_t private_get_fs(int32_t arg1);
-int32_t private_get_init_net(void);
-int32_t private_get_isp_priv_mem(void);
-int32_t private_getrawmonotonic(void);
-int32_t private_gpio_direction_input(void);
-int32_t private_gpio_direction_output(void);
-int32_t private_gpio_free(void);
-int32_t private_gpio_request(void);
-int32_t private_gpio_set_debounce(void);
-int32_t private_i2c_add_driver(void);
-int32_t private_i2c_del_driver(void);
-int32_t private_i2c_get_adapter(void);
-int32_t private_i2c_get_clientdata(void);
-int32_t private_i2c_new_device(void);
-int32_t private_i2c_put_adapter(void);
-int32_t private_i2c_register_driver(void);
-int32_t private_i2c_set_clientdata(void);
-int32_t private_i2c_transfer(void);
-int32_t private_i2c_unregister_device(void);
-int32_t private_init_completion(void);
-int32_t private_init_waitqueue_head(void);
-int32_t private_ioremap(void);
-int32_t private_iounmap(void);
-int32_t private_jz_proc_mkdir(void);
-int32_t private_jzgpio_ctrl_pull(void);
-int32_t private_jzgpio_set_func(void);
-int32_t private_kfree(void);
-int32_t private_kmalloc(void);
-int32_t private_kthread_run(void);
-int32_t private_kthread_should_stop(void);
-int32_t private_kthread_stop(void);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 int32_t private_log2_fixed_to_fixed(uint32_t arg1);
 int32_t private_log2_fixed_to_fixed_64(uint32_t arg1, uint32_t arg2, int32_t arg3, char arg4);
 int32_t private_log2_int_to_fixed(uint32_t arg1);
 int32_t private_log2_int_to_fixed_64(uint32_t arg1, uint32_t arg2, char arg3, char arg4);
-int32_t private_misc_deregister(void);
-int32_t private_misc_register(void);
-int32_t private_module_put(void);
-int32_t private_msleep(void);
-int32_t private_mutex_lock(void);
-int32_t private_mutex_unlock(void);
-int32_t private_netlink_kernel_create(void);
-int32_t private_netlink_unicast(void);
-int32_t private_nlmsg_new(void);
-int32_t private_nlmsg_put(void);
-int32_t private_platform_device_register(void);
-int32_t private_platform_device_unregister(void);
-int32_t private_platform_driver_register(void);
-int32_t private_platform_driver_unregister(void);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 int32_t private_platform_get_drvdata(int32_t arg1);
-int32_t private_platform_get_irq(void);
-int32_t private_platform_get_resource(void);
-int32_t private_platform_set_drvdata(void);
+
+
+
 int32_t private_proc_create_data(int32_t, int16_t arg2);
-int32_t private_proc_remove(void);
-int32_t private_raw_mutex_init(void);
-int32_t private_release_mem_region(void);
-int32_t private_request_mem_region(void);
+
+
+
+
 int32_t private_request_module(int32_t arg1, int32_t arg2, int32_t arg3);
-int32_t private_request_threaded_irq(void);
+
 int32_t private_reset_tx_isp_module(int32_t arg1);
-int32_t private_sched_clock(void);
-int32_t private_schedule_hrtimeout(void);
-int32_t private_schedule_work(void);
-int32_t private_seq_lseek(void);
+
+
+
+
 int32_t private_seq_printf(int32_t arg1, int32_t arg2, int32_t arg3);
-int32_t private_seq_read(void);
-int32_t private_set_fs(void);
-int32_t private_simple_strtoull(void);
-int32_t private_single_open_size(void);
-int32_t private_single_release(void);
-int32_t private_sock_release(void);
-int32_t private_spin_lock_init(void);
-int32_t private_spin_unlock_irqrestore(void);
-int32_t private_try_module_get(void);
-int32_t private_vfree(void);
-int32_t private_vfs_llseek(void);
-int32_t private_vfs_read(void);
-int32_t private_vfs_write(void);
-int32_t private_vmalloc(void);
-int32_t private_wait_event_interruptible(void);
-int32_t private_wait_for_completion_interruptible(void);
-int32_t private_wait_for_completion_timeout(void);
-int32_t private_wake_up(void);
-int32_t private_wake_up_all(void);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 int32_t sensor_alloc_analog_gain(int32_t arg1, int16_t* arg2);
 int32_t sensor_alloc_analog_gain_short(int32_t arg1, void* arg2);
 int32_t sensor_alloc_digital_gain(int32_t arg1, void* arg2);
@@ -987,7 +987,7 @@ void* find_new_buffer(void);
 void* frame_channel_unlocked_ioctl(void* arg1, int32_t arg2, void* arg3);
 void* isp_mem_init(void);
 void* ispcore_irq_fs_work(void);
-void* private_dma_sync_single_for_device(void* arg1);
+
 void* tisp_ae1_get_hist(int32_t* arg1);
 void* tisp_dmsc_wdr_en(uint32_t arg1);
 void* tisp_dpc_wdr_en(uint32_t arg1);

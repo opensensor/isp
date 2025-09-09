@@ -279,7 +279,7 @@ int private_jzgpio_ctrl_pull(enum gpio_port port, int enable_pull,unsigned long 
 /* system interfaces */
 void private_msleep(unsigned int msecs);
 bool private_capable(int cap);
-unsigned long long private_sched_clock(void);
+
 bool private_try_module_get(struct module *module);
 int private_request_module(bool wait, const char *fmt, ...);
 void private_module_put(struct module *module);
@@ -288,7 +288,7 @@ void private_module_put(struct module *module);
 void private_init_completion(struct completion *x);
 void private_complete(struct completion *x);
 int private_wait_for_completion_interruptible(struct completion *x);
-int private_wait_event_interruptible(wait_queue_head_t *q, int (*state)(void *), void *data);
+
 void private_wake_up_all(wait_queue_head_t *q);
 void private_wake_up(wait_queue_head_t *q);
 void private_init_waitqueue_head(wait_queue_head_t *q);
@@ -314,14 +314,14 @@ int private_seq_printf(struct seq_file *m, const char *f, ...);
 unsigned long long private_simple_strtoull(const char *cp, char **endp, unsigned int base);
 
 /* kthread interfaces */
-bool private_kthread_should_stop(void);
-struct task_struct* private_kthread_run(int (*threadfn)(void *data), void *data, const char namefmt[]);
+
+
 int private_kthread_stop(struct task_struct *k);
 
 void* private_kmalloc(size_t s, gfp_t gfp);
-void private_kfree(void *p);
-long private_copy_from_user(void *to, const void __user *from, long size);
-long private_copy_to_user(void __user *to, const void *from, long size);
+
+
+
 
 /* netlink */
 struct sk_buff* private_nlmsg_new(size_t payload, gfp_t flags);
@@ -338,16 +338,16 @@ int private_filp_close(struct file *filp, fl_owner_t id);
 ssize_t private_vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos);
 ssize_t private_vfs_write(struct file *file, const char __user *buf, size_t count, loff_t *pos);
 loff_t private_vfs_llseek(struct file *file, loff_t offset, int whence);
-mm_segment_t private_get_fs(void);
+
 void private_set_fs(mm_segment_t val);
 void private_dma_cache_sync(struct device *dev, void *vaddr, size_t size,
 			 enum dma_data_direction direction);
 void private_getrawmonotonic(struct timespec *ts);
-struct net *private_get_init_net(void);
+
 
 /* isp driver interface */
 void private_get_isp_priv_mem(unsigned int *phyaddr, unsigned int *size);
 
-int private_driver_get_interface(void);
+
 
 #endif /*__TXX_DRV_FUNCS_H__*/
