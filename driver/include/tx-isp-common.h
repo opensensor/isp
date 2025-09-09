@@ -13,12 +13,10 @@
 #include <media/v4l2-common.h>
 #include <media/v4l2-device.h>
 #include <linux/clk.h>
-#include <linux/types.h>
-#include <linux/device.h>
-#include <linux/miscdevice.h>
-#include <linux/videodev2.h>
 
+#include "txx-funcs.h"
 #include "tx-isp-device.h"
+#include "tx-isp-debug.h"
 
 #define ISP_SUCCESS 0
 
@@ -60,17 +58,6 @@
 #define V4L2_SBUS_MASK_SPI_INVERSE_DATA		0x4000
 #define V4L2_SBUS_MASK_SPI_HALF_ADDR		0x8000
 #define V4L2_SBUS_MASK_SPI_LSB			0x10000
-
-
-// ISP Tuning IOCTLs from reference (0x20007400 series)
-#define ISP_TUNING_GET_PARAM    0x20007400
-#define ISP_TUNING_SET_PARAM    0x20007401
-#define ISP_TUNING_GET_AE_INFO  0x20007403
-#define ISP_TUNING_SET_AE_INFO  0x20007404
-#define ISP_TUNING_GET_AWB_INFO 0x20007406
-#define ISP_TUNING_SET_AWB_INFO 0x20007407
-#define ISP_TUNING_GET_STATS    0x20007408
-#define ISP_TUNING_GET_STATS2   0x20007409
 
 //RGBIR
 enum rgbir_mbus_fmt{
@@ -333,11 +320,6 @@ struct tx_isp_mipi_bus{
 	unsigned int settle_time_apative_en;
 	struct vic_mipi_sensor_ctl mipi_sc;
 	struct vic_mipi_vcrop_del mipi_vcropdel;
-	
-	/* Additional members needed by Binary Ninja VIC implementation */
-	unsigned int mipi_lanes;   /* Number of MIPI lanes */
-	unsigned int clk_pol;      /* Clock polarity */
-	unsigned int data_pol;     /* Data polarity */
 };
 
 struct tx_isp_dvp_bus{
@@ -433,18 +415,6 @@ struct tx_isp_sensor_attribute{
 	unsigned int expo;
 	unsigned int expo_fs;
 	void *priv; /* point to struct tx_isp_sensor_board_info */
-	
-	/* Additional members needed by Binary Ninja VIC implementation */
-	unsigned int hsync_pol;                   /* Horizontal sync polarity */
-	unsigned int vsync_pol;                   /* Vertical sync polarity */
-	unsigned int pclk_pol;                    /* Pixel clock polarity */
-	unsigned int de_pol;                      /* Data enable polarity */
-	unsigned int data_pol;                    /* Data polarity */
-	unsigned int pclk_delay;                  /* Pixel clock delay */
-	unsigned int data_delay;                  /* Data delay */
-	unsigned int fps;                         /* Frame rate */
-	unsigned int integration_time_long;       /* Long integration time for WDR */
-	unsigned int max_integration_time_long;   /* Max long integration time for WDR */
 };
 
 /* define common struct */
@@ -659,8 +629,6 @@ enum tx_isp_notify_statement {
 	TX_ISP_NOTIFY_LINK_SETUP = 0x10,
 	TX_ISP_NOTIFY_LINK_DESTROY,
 };
-
-
 
 struct tx_isp_sensor{
 	struct tx_isp_subdev sd;

@@ -12,10 +12,6 @@
 #ifndef __TX_ISP_H__
 #define __TX_ISP_H__
 
-#include <linux/platform_device.h>
-#include <linux/miscdevice.h>
-#include <linux/v4l2-common.h>
-
 #define DUMMY_CLOCK_RATE 0x0000ffff
 
 /* --------------------------------------------------------------------------
@@ -93,6 +89,14 @@ struct tx_isp_device_clk{
 	unsigned long rate;
 };
 
+/* All TX descriptors have these 2 fields at the beginning */
+struct tx_isp_descriptor {
+	unsigned char  type;
+	unsigned char  subtype;
+	unsigned char  parentid;
+	unsigned char  unitid;
+};
+
 /* Video device entity Descriptor */
 struct tx_isp_device_descriptor {
 	unsigned char  type;
@@ -124,6 +128,5 @@ struct tx_isp_widget_descriptor {
 	unsigned char  clks_num;
 	struct tx_isp_device_clk *clks;
 };
-
 
 #endif /*__TX_ISP_H__*/

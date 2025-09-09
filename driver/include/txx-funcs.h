@@ -238,6 +238,13 @@ void private_mutex_lock(struct mutex *lock);
 void private_mutex_unlock(struct mutex *lock);
 void private_raw_mutex_init(struct mutex *lock, const char *name, struct lock_class_key *key);
 
+#define private_mutex_init(mutex) \
+	do {								\
+	static struct lock_class_key __key;		\
+							\
+	private_raw_mutex_init((mutex), #mutex, &__key);		\
+} while (0)
+
 /* clock interfaces */
 struct clk * private_clk_get(struct device *dev, const char *id);
 int private_clk_enable(struct clk *clk);

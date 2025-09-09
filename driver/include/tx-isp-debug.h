@@ -15,12 +15,12 @@
 /* =================== print tools ================== */
 
 #define ISP_INFO_LEVEL		0x0
-#define ISP_WARN_LEVEL	0x1
+#define ISP_WARNING_LEVEL	0x1
 #define ISP_ERROR_LEVEL		0x2
 #define ISP_PRINT(level, format, ...)			\
 	isp_printf(level, format, ##__VA_ARGS__)
 #define ISP_INFO(...) ISP_PRINT(ISP_INFO_LEVEL, __VA_ARGS__)
-#define ISP_WARNING(...) ISP_PRINT(ISP_WARN_LEVEL, __VA_ARGS__)
+#define ISP_WARNING(...) ISP_PRINT(ISP_WARNING_LEVEL, __VA_ARGS__)
 #define ISP_ERROR(...) ISP_PRINT(ISP_ERROR_LEVEL, __VA_ARGS__)
 
 //extern unsigned int isp_print_level;
