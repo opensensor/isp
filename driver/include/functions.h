@@ -64,7 +64,6 @@ int32_t apical_isp_core_ops_s_ctrl(int32_t* arg1, int32_t* arg2, int32_t arg3);
 int32_t apical_isp_hvflip_update(void* arg1, int32_t arg2);
 int32_t awb_interrupt_static(void);
 int32_t check_state(void* arg1);
-int32_t cleanup_module(void);
 int32_t clm_lut2reg(int16_t* arg1, int32_t arg2, void* arg3, int32_t arg4);
 int32_t cm_control(int32_t* arg1, int32_t arg2, int32_t* arg3);
 int32_t csi_core_ops_init(void* arg1, int32_t arg2, int32_t arg3);
