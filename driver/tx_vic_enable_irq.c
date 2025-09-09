@@ -4,12 +4,12 @@
   void tx_vic_enable_irq()
 
 {
-    void* dump_vsd_2 = dump_vsd;
+    char* dump_vsd_2 = (char*)(dump_vsd); // Fixed void pointer assignment
     void* const dump_vsd_5 = nullptr;
-        void* const dump_vsd_4 = dump_vsd_2;
     
     if (dump_vsd_2)
     {
+        void* const dump_vsd_4 = dump_vsd_2;
         
         if ((uintptr_t)dump_vsd_2 >= 0xfffff001)
             dump_vsd_4 = nullptr;
@@ -19,7 +19,7 @@
     
     int32_t var_18 = 0;
     
-    if (!dump_vsd_5 || (uintptr_t)dump_vsd_5 >= 0xfffff001)
+    if (!(uintptr_t)dump_vsd_5 || (uintptr_t)dump_vsd_5 >= 0xfffff001)
         return;
     
     __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18_1);
@@ -31,7 +31,7 @@
     else
     {
         int32_t $v0_1 = *(dump_vsd_5 + 0x84);
-        *(((int32_t*)((char*)dump_vsd_1 + 0x13c))) = 1; // Fixed void pointer dereference
+        *((int32_t*)((char*)dump_vsd_1 + 0x13c)) = 1; // Fixed void pointer dereference
         dump_vsd_3 = dump_vsd;
         
         if ($v0_1)

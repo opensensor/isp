@@ -1,16 +1,17 @@
 #include "include/main.h"
 
 
-  int32_t ispcore_core_ops_init(void* arg1, int32_t arg2)
+  int32_t ispcore_core_ops_init(int32_t* arg1, int32_t arg2)
 
 {
-    void* $s0 = nullptr;
+    char* $s0 = (char*)(nullptr); // Fixed void pointer assignment
     int32_t var_18 = 0;
     int32_t result = 0xffffffea;
         int32_t $v0_3 = *($s0 + 0xe8);
+                int32_t $v1_55;
     
     if (arg1 && (uintptr_t)arg1 < 0xfffff001)
-        $s0 = *(arg1 + 0xd4);
+        $s0 = arg1[0x35];
     
     
     if ($s0 && $(uintptr_t)s0 < 0xfffff001)
@@ -19,9 +20,8 @@
         
         if ($v0_3 != 1)
         {
-            if (!arg2)
+            if (!(uintptr_t)arg2)
             {
-                int32_t $v1_55;
                 
                 if ($v0_3 != 4)
                     $v1_55 = *($s0 + 0xe8);
@@ -34,7 +34,7 @@
                 if ($v1_55 == 3)
                 {
                     private_kthread_stop(*($s0 + 0x1b8));
-                    *(((int32_t*)((char*)$s0 + 0xe8))) = 2; // Fixed void pointer dereference
+                    *((int32_t*)((char*)$s0 + 0xe8)) = 2; // Fixed void pointer dereference
                 }
                 
                 tisp_deinit();
@@ -50,8 +50,8 @@
             
             if (result_1)
             {
-                isp_printf(); // Fixed: macro call, removed arguments);
                 return 0xffffffea;
+                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
             }
             
             __private_spin_lock_irqsave($s0 + 0xdc, &var_18_21);
@@ -59,9 +59,9 @@
             
             if (*($s0 + 0xe8) != 2)
             {
-                private_spin_unlock_irqrestore($s0 + 0xdc, $a1_1);
-                isp_printf(); // Fixed: macro call, removed arguments);
                 return 0xffffffff;
+                private_spin_unlock_irqrestore($s0 + 0xdc, $a1_1);
+                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
             }
             
             int32_t $a2_3 = private_spin_unlock_irqrestore($s0 + 0xdc, $a1_1);
@@ -82,8 +82,8 @@
                             uint32_t $a0_7 = *($s0 + 0x140);
                             uint32_t $a3_1 = *($s0 + 0x142);
                             uint32_t $v1_7 = ($a0_7 * *($a2_4 + 0x24)) >> 3;
-                *(((void**)((char*)$s0 + 0x140))) = $v1_1; // Fixed void pointer dereference
-                *(((void**)((char*)$s0 + 0x142))) = $v0_5; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s0 + 0x140)) = $v1_1; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s0 + 0x142)) = $v0_5; // Fixed void pointer dereference
                 
                 if ($v1_2 != 4)
                 {
@@ -94,11 +94,11 @@
                         
                         if (*($v0_11 + 0x74))
                         {
-                            *(((void**)((char*)$v0_11 + 4))) = $a0_7; // Fixed void pointer dereference
-                            *(((void**)((char*)$v0_11 + 8))) = $a3_1; // Fixed void pointer dereference
-                            *(((void**)((char*)$v0_11 + 0xc))) = *($a2_4 + 0x20); // Fixed void pointer dereference
-                            *(((void**)((char*)$v0_11 + 0x14))) = $v1_7; // Fixed void pointer dereference
-                            *(((void**)((char*)$v0_11 + 0x18))) = $a3_1 * $v1_7; // Fixed void pointer dereference
+                            *((int32_t*)((char*)$v0_11 + 4)) = $a0_7; // Fixed void pointer dereference
+                            *((int32_t*)((char*)$v0_11 + 8)) = $a3_1; // Fixed void pointer dereference
+                            *((int32_t*)((char*)$v0_11 + 0xc)) = *($a2_4 + 0x20); // Fixed void pointer dereference
+                            *((int32_t*)((char*)$v0_11 + 0x14)) = $v1_7; // Fixed void pointer dereference
+                            *((int32_t*)((char*)$v0_11 + 0x18)) = $a3_1 * $v1_7; // Fixed void pointer dereference
                         }
                     }
                 }
@@ -107,7 +107,7 @@
             }
             else
             {
-                isp_printf(); // Fixed: macro call, removed arguments;
+                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                 $v0_6 = *($s0 + 0xf4);
             }
             
@@ -115,12 +115,11 @@
                 int32_t var_70_4_1 = 0x13;
             else
             {
-                            else if ($(uintptr_t)v0_6 >= 0x3308)
-                                else if ($(uintptr_t)v0_6 >= 0x330c)
-                                    else if ($(uintptr_t)v0_6 == 0x330e)
-                                    else if ($(uintptr_t)v0_6 == 0x330f)
-                                        int32_t var_80_5 = $v0_6;
                 int32_t $v0_12;
+                        int32_t $v0_16;
+                        int32_t $v0_17;
+                        int32_t $v1_25;
+                                        int32_t var_80_5 = $v0_6;
                 
                 if ($(uintptr_t)v0_6 >= 0x3110)
                 {
@@ -128,23 +127,24 @@
                         var_70_4 = 0x13;
                     else
                     {
-                        int32_t $v0_16;
-                        int32_t $v0_17;
-                        int32_t $v1_25;
                         
                         if ($(uintptr_t)v0_6 >= 0x3210)
                         {
                             if ($(uintptr_t)v0_6 == 0x3307)
                                 var_70_4 = 0xb;
+                            else if ($(uintptr_t)v0_6 >= 0x3308)
                             {
                                 if ($(uintptr_t)v0_6 == 0x330b)
                                     var_70_4 = 0xf;
+                                else if ($(uintptr_t)v0_6 >= 0x330c)
                                 {
                                     if ($(uintptr_t)v0_6 == 0x330d)
                                         var_70_4 = 0x11;
                                     else if ($(uintptr_t)v0_6 < 0x330d)
                                         var_70_4 = 0x10;
+                                    else if ($(uintptr_t)v0_6 == 0x330e)
                                         var_70_4 = 0x12;
+                                    else if ($(uintptr_t)v0_6 == 0x330f)
                                         var_70_4 = 0x13;
                                     else
                                     {
@@ -203,9 +203,9 @@
                             var_70_4_5 = 0xb;
                         else if ($(uintptr_t)v0_6 >= 0x3208)
                         {
-                            else if ($(uintptr_t)v0_6 >= 0x320c)
                             if ($(uintptr_t)v0_6 == 0x320b)
                                 var_70_4 = 0xf;
+                            else if ($(uintptr_t)v0_6 >= 0x320c)
                             {
                                 if ($(uintptr_t)v0_6 == 0x320d)
                                     $v0_12 = 0x11;
@@ -218,10 +218,10 @@
                             }
                             else
                             {
+                                    goto label_78e54;
                                 if ($(uintptr_t)v0_6 != 0x3209)
                                 {
                                     $v0_17 = $(uintptr_t)v0_6 < 0x320a ? 1 : 0;
-                                    goto label_78e54;
                                 }
                                 
                                 var_70_4_6 = 0xd;
@@ -231,10 +231,10 @@
                             var_70_4_7 = 7;
                         else if ($(uintptr_t)v0_6 >= 0x3204)
                         {
+                                goto label_78e24;
                             if ($(uintptr_t)v0_6 != 0x3205)
                             {
                                 $v0_16 = $(uintptr_t)v0_6 < 0x3206 ? 1 : 0;
-                                goto label_78e24;
                             }
                             
                             var_70_4_8 = 9;
@@ -243,10 +243,10 @@
                             var_70_4_9 = 5;
                         else
                         {
+                                goto label_78e08;
                             $v1_25 = 0x3200;
                             
                             if ($(uintptr_t)v0_6 < 0x3202)
-                                goto label_78e08;
                             
                             var_70_4 = 6;
                         }
@@ -256,9 +256,9 @@
                     var_70_4_10 = 3;
                 else if ($(uintptr_t)v0_6 >= 0x3014)
                 {
-                    else if ($(uintptr_t)v0_6 >= 0x3107)
                     if ($(uintptr_t)v0_6 == 0x3106)
                         var_70_4 = 0xa;
+                    else if ($(uintptr_t)v0_6 >= 0x3107)
                     {
                         if ($(uintptr_t)v0_6 == 0x310a)
                             var_70_4 = 0xe;
@@ -351,7 +351,7 @@
             }
             
             void var_6c_7;
-            void* $v1_32 = &var_6c_8;
+            char* $v1_32 = (char*)(&var_6c_8); // Fixed void pointer assignment
             var_78_22 = *($s0 + 0x124);
             int32_t var_74_1_1 = *($s0 + 0x128);
             char* $v0_22 = **($s0 + 0x120);
@@ -359,7 +359,7 @@
             
             do
             {
-            char* $v0_23 = *((char*)$s0 + 0x120); // Fixed void pointer arithmetic
+            int32_t* $v0_23 = (int32_t*)((char*)$s0  + 0x120); // Fixed void pointer arithmetic
             int32_t $a1_2 = *($s0 + 0x12c);
             uint32_t $a2_5 = *($v0_23 + 0xb2);
             int32_t var_5c_1 = *($v0_23 + 0x94);
@@ -386,24 +386,24 @@
             int16_t var_30_1 = *(*($s0 + 0x120) + 0xbc);
             int32_t var_1c_1 = *($s0 + 0x17c);
             int32_t $v0_27 =
+                return 0xffffffea;
                 i_1 = *$v0_22;
                 $v0_22 = &$v0_22[1];
                 *$v1_32 = i_1;
                 $v1_32 += 1;
             } while (i_1);
-            *(((void**)((char*)$v0_23 + 0xbc))) = ($a1_2 & 0xffff) * 0xf4240 / ($a1_2 >> 0x10) / $a2_5; // Fixed void pointer dereference
+            *((int32_t*)((char*)$v0_23 + 0xbc)) = ($a1_2 & 0xffff) * 0xf4240 / ($a1_2 >> 0x10) / $a2_5; // Fixed void pointer dereference
             tisp_init(&var_78, $s0 + 0x1d8);
                 private_kthread_run(isp_fw_process, 0, "Err [VIC_INT] : mipi ch3 vcomp err !!!\n");
-            *(((void**)((char*)$s0 + 0x1b8))) = $v0_27; // Fixed void pointer dereference
+            *((int32_t*)((char*)$s0 + 0x1b8)) = $v0_27; // Fixed void pointer dereference
             
             if (!$v0_27 || $(uintptr_t)v0_27 >= 0xfffff001)
             {
                 isp_printf(2, "Err [VIC_INT] : dma arb trans done ovf!!!\n", 
                     "ispcore_core_ops_init");
-                return 0xffffffea;
             }
             
-            *(((int32_t*)((char*)$s0 + 0xe8))) = 3; // Fixed void pointer dereference
+            *((int32_t*)((char*)$s0 + 0xe8)) = 3; // Fixed void pointer dereference
         }
     }
     

@@ -4,7 +4,7 @@
   void check_csi_error() __noreturn
 
 {
-        char* $v0_2 = *((char*)dump_csd + 0xb8); // Fixed void pointer arithmetic
+        int32_t* $v0_2 = (int32_t*)((char*)dump_csd  + 0xb8); // Fixed void pointer arithmetic
         int32_t $a2_1 = *($v0_2 + 0x20);
         int32_t $s3_1 = *($v0_2 + 0x24);
     while (true)
@@ -12,7 +12,7 @@
         dump_csi_reg(dump_csd);
         
         if ($a2_1)
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         
         if ($s3_1)
             isp_printf(0, 

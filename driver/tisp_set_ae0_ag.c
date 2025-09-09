@@ -4,17 +4,17 @@
   uint32_t tisp_set_ae0_ag(void* arg1, void* arg2, int32_t* arg3, int32_t* arg4)
 
 {
+    int32_t $a0;
     int32_t arg_0 = $a0;
     int32_t $s5 = *arg3;
+    int32_t $a1;
     int32_t arg_4 = $a1;
+    int32_t $a2;
     int32_t arg_8 = $a2;
+    int32_t $a3;
     int32_t arg_c = $a3;
     int32_t $fp = *(arg2 + 4);
     int32_t $s7 = *(arg2 + 8);
-    int32_t $a0;
-    int32_t $a1;
-    int32_t $a2;
-    int32_t $a3;
     uint32_t ag_new_1;
     int32_t dmsc_sp_d_w_stren_wdr_array_1;
     
@@ -54,16 +54,16 @@
     }
     else
     {
+            goto label_6192c;
         if (*(arg1 + 4) != $fp)
         {
             dmsc_sp_d_w_stren_wdr_array_1 = dmsc_sp_d_w_stren_wdr_array;
-            goto label_6192c;
         }
         
         if (*(arg1 + 8) != $s7)
         {
-            dmsc_sp_d_w_stren_wdr_array_1 = dmsc_sp_d_w_stren_wdr_array;
             goto label_6192c;
+            dmsc_sp_d_w_stren_wdr_array_1 = dmsc_sp_d_w_stren_wdr_array;
         }
         
         if (dmsc_sp_d_w_stren_wdr_array)
@@ -71,9 +71,9 @@
         
         ag_new_1 = ag_new;
     }
-    *(((void**)((char*)arg2 + 4))) = ag_new_1; // Fixed void pointer dereference
+    *((int32_t*)((char*)arg2 + 4)) = ag_new_1; // Fixed void pointer dereference
     uint32_t dg_new_2 = dg_new;
-    *(((void**)((char*)arg2 + 8))) = dg_new_2; // Fixed void pointer dereference
+    *((int32_t*)((char*)arg2 + 8)) = dg_new_2; // Fixed void pointer dereference
     return dg_new_2;
 }
 

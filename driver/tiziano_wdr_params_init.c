@@ -5,7 +5,7 @@
 
 {
     int32_t param_wdr_tool_control_array_1 = param_wdr_tool_control_array;
-            void* $a1_1 = U"#',17=DKS[clu~" + i;
+            char* $a1_1 = (char*)(U"#',17=DKS[clu~" + i); // Fixed void pointer assignment
     
     if (param_wdr_tool_control_array_1 == 1)
     {
@@ -25,7 +25,7 @@
     
     if (param_wdr_tool_control_array_1 == 2)
     {
-            void* $a1_2 = U"#',17=DKS[clu~" + i_1;
+            char* $a1_2 = (char*)(U"#',17=DKS[clu~" + i_1); // Fixed void pointer assignment
         param_wdr_gam_y_array = 0;
         data_b240c = param_wdr_tool_control_array_1;
         data_b2350 = 0;
@@ -38,7 +38,7 @@
     }
     else if (param_wdr_tool_control_array_1 == 3)
     {
-            void* $a1_3 = U"#',17=DKS[clu~" + i_2;
+            char* $a1_3 = (char*)(U"#',17=DKS[clu~" + i_2); // Fixed void pointer assignment
         param_wdr_gam_y_array = 0;
         data_b240c = param_wdr_tool_control_array_1;
         data_b2350 = 0;
@@ -64,7 +64,7 @@
     else if (param_wdr_tool_control_array_1 == 9)
     {
             int32_t $a3_2 = *(&fusion1_cure_y_tmp + i_3);
-            void* $a2_1 = U"#',17=DKS[clu~" + i_3;
+            char* $a2_1 = (char*)(U"#',17=DKS[clu~" + i_3); // Fixed void pointer assignment
         param_wdr_gam_y_array = 0;
         data_b240c = 0;
         data_b2350 = 0;
@@ -83,7 +83,7 @@
     {
         int32_t $a1_4 = data_b158c;
         int32_t $lo_1 = (data_b1590 - $a1_4) / 0x21;
-            void* $t0_1 = U"#',17=DKS[clu~" + i_4;
+            char* $t0_1 = (char*)(U"#',17=DKS[clu~" + i_4); // Fixed void pointer assignment
         
         for (int32_t i_4 = 0; (uintptr_t)i_4 != 0x84; )
         {
@@ -99,7 +99,7 @@
     else
     {
             int32_t $t0_3 = *(&fusion1_cure_y_tmp + i_5);
-            void* $a3_3 = U"#',17=DKS[clu~" + i_5;
+            char* $a3_3 = (char*)(U"#',17=DKS[clu~" + i_5); // Fixed void pointer assignment
         for (int32_t i_5 = 0; (uintptr_t)i_5 != 0x84; )
         {
             i_5 += 4;
@@ -112,7 +112,7 @@
     if (!$v0_1)
     {
             int32_t $a2_3 = *(&wdr_gam_y33_array + i_6);
-            void* $a1_5 = &param_wdr_gam_y_array_def + i_6;
+            char* $a1_5 = (char*)(&param_wdr_gam_y_array_def + i_6); // Fixed void pointer assignment
         for (int32_t i_6 = 0; (uintptr_t)i_6 != 0x84; )
         {
             i_6 += 4;

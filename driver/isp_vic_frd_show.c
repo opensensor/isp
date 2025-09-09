@@ -4,8 +4,8 @@
   int32_t isp_vic_frd_show(void* arg1)
 
 {
-    char* $v0 = *((char*)arg1 + 0x3c); // Fixed void pointer arithmetic
-        char* $v0_1 = *((char*)$v0 + 0xd4); // Fixed void pointer arithmetic
+    int32_t* $v0 = (int32_t*)((char*)arg1  + 0x3c); // Fixed void pointer arithmetic
+        int32_t* $v0_1 = (int32_t*)((char*)$v0  + 0xd4); // Fixed void pointer arithmetic
             int32_t i = 0;
             int32_t $a3_1 = 0;
                 int32_t $a1_2 = *(&vic_err + i);
@@ -28,7 +28,7 @@
         
         if ($v0_1 && $(uintptr_t)v0_1 < 0xfffff001)
         {
-            *(((int32_t*)((char*)$v0_1 + 0x164))) = 0; // Fixed void pointer dereference
+            *((int32_t*)((char*)$v0_1 + 0x164)) = 0; // Fixed void pointer dereference
             
             do
             {
@@ -36,14 +36,14 @@
                 $a3_1 += $a1_2;
             } while ((uintptr_t)i != 0x34);
             
-            *(((void**)((char*)$v0_1 + 0x164))) = $a3_1; // Fixed void pointer dereference
+            *((int32_t*)((char*)$v0_1 + 0x164)) = $a3_1; // Fixed void pointer dereference
             return $v0_3 + private_seq_printf(arg1, 
                 "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n", vic_err);
         }
     }
     
-    int32_t entry_$a2;
-    isp_printf(); // Fixed: macro call, removed arguments;
+    int32_t entry_a2;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     return 0;
 }
 

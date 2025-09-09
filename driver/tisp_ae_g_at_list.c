@@ -6,6 +6,7 @@
 {
     wchar32* $v0 = U"KA7-(";
     int32_t $v1 = arg1 + 0x28;
+    return 0;
     
     do
     {
@@ -14,6 +15,5 @@
         $v0 = &$v0[1];
     } while (arg1 != $v1);
     
-    return 0;
 }
 

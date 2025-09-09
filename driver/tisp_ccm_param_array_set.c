@@ -5,10 +5,10 @@
 
 {
         int32_t var_10_1 = arg1;
+        return 0xffffffff;
     if (arg1 - (uintptr_t)0xa9 >= 0xc)
     {
-        isp_printf(); // Fixed: macro call, removed arguments;
-        return 0xffffffff;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     }
     
     int32_t $v0_2;

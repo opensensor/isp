@@ -4,8 +4,8 @@
   void* tisp_sharpen_wdr_en(uint32_t arg1)
 
 {
-    sharpen_wdr_en = arg1;
     void* result;
+    sharpen_wdr_en = arg1;
     
     if (arg1)
     {

@@ -8,8 +8,11 @@
         int32_t* $a0_1 = &wdr_ev_list;
         uint32_t wdr_ev_old_2 = wdr_ev_old;
         int32_t $a3_1 = 0;
+        int32_t $v0_1;
+        int32_t $t0_1;
             int32_t $t3_1 = *$a0_1;
                 int32_t $t1_2 = $a3_1 * 3;
+                int32_t $a0_2;
                     int32_t $a2_1 = (&param_wdr_gam_y_array)[$t0_1];
                     int32_t $a3_5 = (&param_wdr_gam_y_array)[$t1_2 - 2];
                     int32_t $v1_1 = $a0_2 < wdr_ev_old_2 ? 1 : 0;
@@ -20,8 +23,6 @@
     if (param_wdr_gam_y_array_1 == 1)
     {
         data_b240c = 3;
-        int32_t $v0_1;
-        int32_t $t0_1;
         
         while (true)
         {
@@ -29,7 +30,6 @@
             if ($t3_1 >= wdr_ev_old_2)
             {
                 $t0_1 = $t1_2 + 1;
-                int32_t $a0_2;
                 
                 if ($a3_1)
                     $a0_2 = (&wdr_ev_list)[$a3_1 - 1];
@@ -88,10 +88,10 @@
         
         for (int32_t i = 0; (uintptr_t)i != 0x21; )
         {
-            else if ($v0_1 != i)
             if (i < $v0_1)
                 *$v1_10 = $t1_8;
-                *$v1_10 = *($v1_10 - 4) - $lo_3;
+            else if ($v0_1 != i)
+                *((int32_t*)$v1_10) = *($v1_10 - 4) - $lo_3; // Fixed void pointer dereference
             else
                 *$v1_10 = $a3_6;
             
@@ -109,12 +109,6 @@
     {
         int32_t wdr_ev_list_1 = wdr_ev_list;
         uint32_t wdr_ev_old_1 = wdr_ev_old;
-            int32_t $a0_8 = data_b1558;
-                int32_t $v1_14 = data_b155c;
-                    int32_t mdns_c_edge_wei_adj_value5_array_2 = mdns_c_edge_wei_adj_value5_array;
-                    int32_t $v0_41 = data_d9188;
-                    int32_t $t5_4 = wdr_ev_old_1 - $a0_8;
-                        int32_t $a1_22 = $a0_8 - $v1_14;
         int32_t $v0_8;
         int32_t $a2_10;
         int32_t $a3_7;
@@ -122,9 +116,7 @@
         wchar32 $t1_9;
         int32_t $t2_1;
         int32_t $t4_2;
-        
-        if (wdr_ev_list_1 < wdr_ev_old_1)
-        {
+            int32_t $a0_8 = data_b1558;
             int32_t $v0_40;
             int32_t $v1_12;
             int32_t $v1_13;
@@ -133,6 +125,14 @@
             int32_t $t3_2;
             int32_t $t5_2;
             int32_t $t5_3;
+                int32_t $v1_14 = data_b155c;
+                    int32_t mdns_c_edge_wei_adj_value5_array_2 = mdns_c_edge_wei_adj_value5_array;
+                    int32_t $v0_41 = data_d9188;
+                    int32_t $t5_4 = wdr_ev_old_1 - $a0_8;
+                        int32_t $a1_22 = $a0_8 - $v1_14;
+        
+        if (wdr_ev_list_1 < wdr_ev_old_1)
+        {
             
             if ($a0_8 < wdr_ev_old_1)
             {
@@ -276,10 +276,10 @@
                     
                     if ($t6_4 >= $v0_40)
                     {
+                        goto label_6a170;
                         $t5_3 = ($t6_4 - $v0_40) * $t5_4;
                         $a1_20 = $a0_8 - $v1_14;
                         $v1_13 = $v1_14 - $a0_8;
-                        goto label_6a170;
                     }
                     
                     $t5_2 = ($v0_40 - $t6_4) * $t5_4;
@@ -293,10 +293,6 @@
                 if ($t3_3 < wdr_ev_old_1)
                 {
                     int32_t $a0_10 = data_b1564;
-                            int32_t $a3_13 = data_d9108;
-                            int32_t $v0_142 = data_d9128;
-                            int32_t $a1_55 = wdr_ev_old_1 - $a0_10;
-                                int32_t $a2_32 = $a0_10 - $t3_3;
                     int32_t $v1_43;
                     int32_t $v1_47;
                     int32_t $a1_53;
@@ -304,6 +300,10 @@
                     int32_t $t5_7;
                     int32_t $t6_12;
                     int32_t $t6_23;
+                            int32_t $a3_13 = data_d9108;
+                            int32_t $v0_142 = data_d9128;
+                            int32_t $a1_55 = wdr_ev_old_1 - $a0_10;
+                                int32_t $a2_32 = $a0_10 - $t3_3;
                     
                     if ($a0_10 < wdr_ev_old_1)
                     {
@@ -446,10 +446,10 @@
                             
                             if ($v1_44 >= $v0_40)
                             {
+                                goto label_6a88c;
                                 $a1_54 = ($v1_44 - $v0_40) * $a1_55;
                                 $t6_23 = $a0_10 - $t3_3;
                                 $v1_47 = $t3_3 - $a0_10;
-                                goto label_6a88c;
                             }
                             
                             $a1_53 = ($v0_40 - $v1_44) * $a1_55;
@@ -463,16 +463,16 @@
                         if ($a0_10 < wdr_ev_old_1)
                         {
                             int32_t $v1_48 = data_b1570;
-                                int32_t $a0_14 = data_b1574;
-                                    int32_t $a3_16 = data_d90a8;
-                                    int32_t $v0_253 = data_d9008;
-                                    int32_t $a1_60 = wdr_ev_old_1 - $v1_48;
-                                        int32_t $a2_47 = $v1_48 - $a0_14;
                             int32_t $v1_73;
                             int32_t $a1_59;
                             int32_t $t3_4;
                             int32_t $t5_12;
                             int32_t $t5_13;
+                                int32_t $a0_14 = data_b1574;
+                                    int32_t $a3_16 = data_d90a8;
+                                    int32_t $v0_253 = data_d9008;
+                                    int32_t $a1_60 = wdr_ev_old_1 - $v1_48;
+                                        int32_t $a2_47 = $v1_48 - $a0_14;
                             
                             if ($v1_48 < wdr_ev_old_1)
                             {
@@ -614,10 +614,10 @@
                                     
                                     if ($t5_23 >= $v0_40)
                                     {
+                                        goto label_6af8c;
                                         $a1_54 = ($t5_23 - $v0_40) * $a1_60;
                                         $t5_13 = $v1_48 - $a0_14;
                                         $v1_47 = $a0_14 - $v1_48;
-                                        goto label_6af8c;
                                     }
                                     
                                     $a1_59 = ($v0_40 - $t5_23) * $a1_60;
@@ -938,8 +938,8 @@
                             
                             if ($t6_24 >= $v0_40)
                             {
-                                $a1_54 = ($t6_24 - $v0_40) * $a1_57;
                                 goto label_6aae0;
+                                $a1_54 = ($t6_24 - $v0_40) * $a1_57;
                             }
                             
                             int32_t $t7_25 = $t3_3 - $a0_10;
@@ -1467,7 +1467,7 @@
         int32_t $t7_28 = $a2_10 - $a3_7;
         int32_t $t1_30 = $t0_5 - $t1_9;
         int32_t $lo_104 = $t1_30 / $t7_28;
-        void* $a3_18 = &param_fusion1_cure_y_array[$a3_7];
+        char* $a3_18 = (char*)(&param_fusion1_cure_y_array[$a3_7]); // Fixed void pointer assignment
         int32_t $t5_27 = $t1_30 % $t7_28;
         int32_t $v1_77 = $t5_27 >> 0x1f;
         int32_t $v1_78 = 0;
@@ -1477,17 +1477,17 @@
             int32_t $a0_18 = *$a3_18;
             
             if ($v1_78 >= ($v1_77 ^ $t5_27) - $v1_77)
-                *(((void**)((char*)$a3_18 + 4))) = $a0_18 + $lo_104; // Fixed void pointer dereference
+                *((int32_t*)((char*)$a3_18 + 4)) = $a0_18 + $lo_104; // Fixed void pointer dereference
             else if ($lo_104 < 0)
-                *(((void**)((char*)$a3_18 + 4))) = $lo_104 - 1 + $a0_18; // Fixed void pointer dereference
+                *((int32_t*)((char*)$a3_18 + 4)) = $lo_104 - 1 + $a0_18; // Fixed void pointer dereference
             else if ($lo_104)
-                *(((void**)((char*)$a3_18 + 4))) = $a0_18 + $lo_104 + 1; // Fixed void pointer dereference
+                *((int32_t*)((char*)$a3_18 + 4)) = $a0_18 + $lo_104 + 1; // Fixed void pointer dereference
             else if ($t1_30 > 0)
-                *(((void**)((char*)$a3_18 + 4))) = $a0_18 + 1; // Fixed void pointer dereference
+                *((int32_t*)((char*)$a3_18 + 4)) = $a0_18 + 1; // Fixed void pointer dereference
             else if ($t1_30)
-                *(((void**)((char*)$a3_18 + 4))) = $a0_18 - 1; // Fixed void pointer dereference
+                *((int32_t*)((char*)$a3_18 + 4)) = $a0_18 - 1; // Fixed void pointer dereference
             else
-                *(((void**)((char*)$a3_18 + 4))) = $a0_18; // Fixed void pointer dereference
+                *((int32_t*)((char*)$a3_18 + 4)) = $a0_18; // Fixed void pointer dereference
             
             $v1_78 += 1;
             $a3_18 += 4;
@@ -1496,7 +1496,7 @@
         int32_t $t5_30 = $t2_1 - $a2_10;
         int32_t $t0_73 = $t4_2 - $t0_5;
         int32_t $lo_105 = $t0_73 / $t5_30;
-        void* $a2_50 = &param_fusion1_cure_y_array[$a2_10];
+        char* $a2_50 = (char*)(&param_fusion1_cure_y_array[$a2_10]); // Fixed void pointer assignment
         int32_t $v1_79 = $t0_73 % $t5_30;
         int32_t $a0_21 = $v1_79 >> 0x1f;
         int32_t $a0_22 = 0;
@@ -1506,17 +1506,17 @@
             int32_t $a3_21 = *$a2_50;
             
             if ($a0_22 >= ($a0_21 ^ $v1_79) - $a0_21)
-                *(((void**)((char*)$a2_50 + 4))) = $a3_21 + $lo_105; // Fixed void pointer dereference
+                *((int32_t*)((char*)$a2_50 + 4)) = $a3_21 + $lo_105; // Fixed void pointer dereference
             else if ($lo_105 < 0)
-                *(((void**)((char*)$a2_50 + 4))) = $lo_105 - 1 + $a3_21; // Fixed void pointer dereference
+                *((int32_t*)((char*)$a2_50 + 4)) = $lo_105 - 1 + $a3_21; // Fixed void pointer dereference
             else if ($lo_105)
-                *(((void**)((char*)$a2_50 + 4))) = $a3_21 + $lo_105 + 1; // Fixed void pointer dereference
+                *((int32_t*)((char*)$a2_50 + 4)) = $a3_21 + $lo_105 + 1; // Fixed void pointer dereference
             else if ($t0_73 > 0)
-                *(((void**)((char*)$a2_50 + 4))) = $a3_21 + 1; // Fixed void pointer dereference
+                *((int32_t*)((char*)$a2_50 + 4)) = $a3_21 + 1; // Fixed void pointer dereference
             else if ($t0_73)
-                *(((void**)((char*)$a2_50 + 4))) = $a3_21 - 1; // Fixed void pointer dereference
+                *((int32_t*)((char*)$a2_50 + 4)) = $a3_21 - 1; // Fixed void pointer dereference
             else
-                *(((void**)((char*)$a2_50 + 4))) = $a3_21; // Fixed void pointer dereference
+                *((int32_t*)((char*)$a2_50 + 4)) = $a3_21; // Fixed void pointer dereference
             
             $a0_22 += 1;
             $a2_50 += 4;
@@ -1524,7 +1524,7 @@
         
         int32_t $v0_289 = $v0_8 - $t4_2;
         int32_t $lo_106 = $v0_289 / (0x20 - $t2_1);
-        void* $t2_11 = &param_fusion1_cure_y_array[$t2_1];
+        char* $t2_11 = (char*)(&param_fusion1_cure_y_array[$t2_1]); // Fixed void pointer assignment
         int32_t i_1 = 0;
         int32_t $a0_23 = $v0_289 % (0x20 - $t2_1);
         int32_t $a2_52 = $a0_23 >> 0x1f;
@@ -1534,17 +1534,17 @@
             int32_t $a2_55 = *$t2_11;
             
             if (i_1 >= ($a2_52 ^ $a0_23) - $a2_52)
-                *(((void**)((char*)$t2_11 + 4))) = $a2_55 + $lo_106; // Fixed void pointer dereference
+                *((int32_t*)((char*)$t2_11 + 4)) = $a2_55 + $lo_106; // Fixed void pointer dereference
             else if ($lo_106 < 0)
-                *(((void**)((char*)$t2_11 + 4))) = $lo_106 - 1 + $a2_55; // Fixed void pointer dereference
+                *((int32_t*)((char*)$t2_11 + 4)) = $lo_106 - 1 + $a2_55; // Fixed void pointer dereference
             else if ($lo_106)
-                *(((void**)((char*)$t2_11 + 4))) = $lo_106 + 1 + $a2_55; // Fixed void pointer dereference
+                *((int32_t*)((char*)$t2_11 + 4)) = $lo_106 + 1 + $a2_55; // Fixed void pointer dereference
             else if ($v0_289 > 0)
-                *(((void**)((char*)$t2_11 + 4))) = $a2_55 + 1; // Fixed void pointer dereference
+                *((int32_t*)((char*)$t2_11 + 4)) = $a2_55 + 1; // Fixed void pointer dereference
             else if ($v0_289)
-                *(((void**)((char*)$t2_11 + 4))) = $a2_55 - 1; // Fixed void pointer dereference
+                *((int32_t*)((char*)$t2_11 + 4)) = $a2_55 - 1; // Fixed void pointer dereference
             else
-                *(((void**)((char*)$t2_11 + 4))) = $a2_55; // Fixed void pointer dereference
+                *((int32_t*)((char*)$t2_11 + 4)) = $a2_55; // Fixed void pointer dereference
             
             i_1 += 1;
             $t2_11 += 4;

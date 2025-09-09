@@ -5,16 +5,17 @@
 
 {
     int32_t* i = arg2 + 4;
-    void* $a0 = arg1 + 4;
+    char* $a0 = (char*)(arg1 + 4); // Fixed void pointer assignment
+    int32_t j_1;
+    int32_t $t0_1;
         int32_t $t9_1 = *i;
         int32_t* $t5_1 = arg3;
         int32_t $s0_1 = 0x2710;
             int32_t $t2_1 = *$t5_1;
             int32_t $v1_1 = $t2_1 - $t9_1;
+                goto label_2c3a0;
     *($a0 - 4) = 0;
-    *(((void**)((char*)$a0 + 0x1c))) = 0xfff; // Fixed void pointer dereference
-    int32_t j_1;
-    int32_t $t0_1;
+    *((int32_t*)((char*)$a0 + 0x1c)) = 0xfff; // Fixed void pointer dereference
     
     do
     {
@@ -31,7 +32,6 @@
             {
                 $t0_1 = 0;
                 j_1 = j;
-                goto label_2c3a0;
             }
             
             if ($v1_1 != $s0_1)

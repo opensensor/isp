@@ -34,7 +34,7 @@
         }
     }
     
-    void* $a0_1 = *$s1_1;
+    char* $a0_1 = (char*)(*$s1_1); // Fixed void pointer assignment
     
     while (true)
     {

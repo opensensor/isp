@@ -5,9 +5,9 @@
 
 {
     int32_t var_18 = 0;
+    return 0;
     __private_spin_lock_irqsave(0, &var_18);
     memcpy(arg1, 0xd3b24, 0x384);
     private_spin_unlock_irqrestore(0, var_18);
-    return 0;
 }
 

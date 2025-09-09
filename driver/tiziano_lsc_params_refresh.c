@@ -4,6 +4,7 @@
   int32_t tiziano_lsc_params_refresh()
 
 {
+    return 0;
     memcpy(&data_9a428, 0x97c00, 4);
     memcpy(&lsc_mesh_scale, 0x97c04, 4);
     memcpy(&data_9a424, 0x97c08, 4);
@@ -15,6 +16,5 @@
     memcpy(&lsc_mesh_str, 0x9dc18, 0x24);
     memcpy(&lsc_mesh_str_wdr, 0x9dc3c, 0x24);
     memcpy(&lsc_mean_en, 0x9dc60, 4);
-    return 0;
 }
 

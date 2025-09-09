@@ -6,18 +6,18 @@
 {
     int32_t $t5 = *(arg5 + 0xc);
     int32_t $t7 = *(arg5 + 4);
-    void* arg_0 = arg1;
-    void* arg_4 = arg2;
-    void* arg_8 = arg3;
+    char* arg_0 = (char*)(arg1); // Fixed void pointer assignment
+    char* arg_4 = (char*)(arg2); // Fixed void pointer assignment
+    char* arg_8 = (char*)(arg3); // Fixed void pointer assignment
+    int32_t $a3;
     int32_t arg_c = $a3;
-    void* $t3 = arg5 + 0x4c;
+    char* $t3 = (char*)(arg5 + 0x4c); // Fixed void pointer assignment
     int32_t $t4 = 0;
     int32_t $t2 = 0;
         int32_t $a3_1 = 0;
         int32_t $t1_1 = 0;
             int32_t $v1_1 = $t4 + $a3_1;
             int32_t $v1_6 = *(arg5 + $a3_1 + 0x10) * *$t3;
-    int32_t $a3;
     
     while (true)
     {
@@ -34,7 +34,7 @@
             
             $t1_1 += 1;
             $a3_1 += 4;
-            *(((void**)((char*)arg4 + $v1_1))) = (*(arg1 + $v1_1) + *(arg2 + $v1_1) + *(arg3 + $v1_1)) / $v1_6; // Fixed void pointer dereference
+            *((int32_t*)((char*)arg4 + $v1_1)) = (*(arg1 + $v1_1) + *(arg2 + $v1_1) + *(arg3 + $v1_1)) / $v1_6; // Fixed void pointer dereference
         }
         
         $t2 += 1;

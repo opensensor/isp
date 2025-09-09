@@ -5,6 +5,7 @@
 
 {
     int32_t $a3 = data_c49b0;
+    return 0;
     system_reg_write(0x485c, 
         dmsc_sp_ud_par_array << 0x10 | data_c49a4 << 0xc | $a3 | data_c49a8 << 8 | data_c49ac << 4
             | $a3 << 2);
@@ -23,6 +24,5 @@
     system_reg_write(0x48bc, dmsc_sp_ud_flat_stren_intp << 0x10 | data_c49c8);
     system_reg_write(0x48c0, dmsc_sp_ud_flat_stren_intp);
     system_reg_write(0x48c4, dmsc_sp_ud_oe_stren_intp << 8 | data_c49cc | data_c49d0 << 0x1b);
-    return 0;
 }
 

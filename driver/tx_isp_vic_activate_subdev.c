@@ -5,12 +5,13 @@
 
 {
     int32_t result = 0xffffffea;
-        char* $s0_1 = *((char*)arg1 + 0xd4); // Fixed void pointer arithmetic
+            return 0xffffffea;
+        int32_t* $s0_1 = (int32_t*)((char*)arg1  + 0xd4); // Fixed void pointer arithmetic
+            return 0;
     
     if (arg1)
     {
         if ((uintptr_t)arg1 >= 0xfffff001)
-            return 0xffffffea;
         
         result = 0xffffffea;
         
@@ -19,10 +20,9 @@
             private_mutex_lock($s0_1 + 0x130);
             
             if (*($s0_1 + 0x128) == 1)
-                *(((int32_t*)((char*)$s0_1 + 0x128))) = 2; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s0_1 + 0x128)) = 2; // Fixed void pointer dereference
             
             private_mutex_unlock($s0_1 + 0x130);
-            return 0;
         }
     }
     

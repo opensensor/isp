@@ -4,12 +4,12 @@
   int32_t tiziano_ae_init(int32_t arg1, int32_t arg2, int32_t arg3)
 
 {
+    int32_t $a3;
     int32_t arg_c = $a3;
     uint32_t ta_custom_en_1 = ta_custom_en;
         int32_t $v1_1 = data_b0e10;
             int32_t $v0_2 = data_afcd4;
             int32_t $v0_3 = data_afcd4;
-    int32_t $a3;
     memset(&tisp_ae_hist, 0, 0x42c);
     __builtin_memcpy(&data_d4fbc, 
         "\x0d\x00\x00\x00\x40\x00\x00\x00\x90\x00\x00\x00\xc0\x00\x00\x00\x0f\x00\x00\x00\x0f\x00\x00\x00", 

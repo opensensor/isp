@@ -4,6 +4,7 @@
   int32_t tiziano_rdns_params_refresh()
 
 {
+    return 0;
     memcpy(&rdns_out_opt_array, 0x98048, 4);
     memcpy(&rdns_awb_gain_par_cfg_array, 0x9804c, 0x10);
     memcpy(&rdns_oe_num_array, 0x9805c, 0x24);
@@ -25,6 +26,5 @@
     memcpy(&rdns_mv_text_thres_array, 0x982c0, 0x24);
     memcpy(&rdns_text_base_thres_wdr_array, 0x982e4, 0x24);
     memcpy(&rdns_sl_par_cfg, 0x98308, 8);
-    return 0;
 }
 

@@ -5,11 +5,11 @@
 
 {
         int32_t $a3_1 = *(i + 0xa9e30);
-        void* $a2_2 = arg1 + i;
+        char* $a2_2 = (char*)(arg1 + i); // Fixed void pointer assignment
     for (int32_t i = 0; (uintptr_t)i != 0x1c; )
     {
         i += 4;
-        *(((void**)((char*)$a2_2 + 0xc))) = $a3_1; // Fixed void pointer dereference
+        *((int32_t*)((char*)$a2_2 + 0xc)) = $a3_1; // Fixed void pointer dereference
     }
     
     *arg1 = _awb_cluster;

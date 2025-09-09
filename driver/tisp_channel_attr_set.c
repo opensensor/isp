@@ -19,18 +19,18 @@
     int32_t var_60 = arg2[9];
     int32_t var_64 = arg2[8];
     int32_t var_68 = data_b2f34;
-    else if (arg1 == 1)
-    else if (arg1 == 2)
     int32_t tispinfo_2 = tispinfo;
     int32_t $s2 = data_b2f34;
-    isp_printf(); // Fixed: macro call, removed arguments;
+    int32_t $a1_2;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     
-    if (!arg1)
+    if (!(uintptr_t)arg1)
         memcpy(&ds0_attr, arg2, 0x34);
+    else if (arg1 == 1)
         memcpy(&ds1_attr, arg2, 0x34);
+    else if (arg1 == 2)
         memcpy(&ds2_attr, arg2, 0x34);
     
-    int32_t $a1_2;
     
     if (!data_b2e04)
     {
@@ -46,11 +46,11 @@
         int32_t $v1_1 = data_b2e08;
         int32_t $a0_1 = data_b2e14;
         int32_t $a1_1 = data_b2e0c;
+            return 0xffffffff;
         
         if (tispinfo_2 < tispinfo_3 + $v1_1 || $s2 < $a0_1 + $a1_1)
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
-            return 0xffffffff;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
         
         tispinfo_2 = tispinfo_3;
@@ -99,11 +99,11 @@
             int32_t var_5c_1 = $v0_20;
             int32_t tispinfo_5 = tispinfo_4;
             int32_t tispinfo_7 = tispinfo_6;
+            return 0xffffffff;
         
         if (tispinfo_4 < tispinfo_6 + $a1_9 || $s7_1 < $v0_20 + $a2_1)
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
-            return 0xffffffff;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
         
         tispinfo_4 = tispinfo_6;

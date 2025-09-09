@@ -5,6 +5,7 @@
 
 {
         int32_t $a0 = *(arg1 + 0xd4);
+            return 0;
     if (arg1 && (uintptr_t)arg1 < 0xfffff001)
     {
         
@@ -15,11 +16,10 @@
             $v0_1 = !arg2 ? memset : memcpy;
             
             $v0_1();
-            return 0;
         }
     }
     
-    isp_printf(); // Fixed: macro call, removed arguments;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     return 0xffffffea;
 }
 

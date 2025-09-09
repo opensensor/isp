@@ -5,8 +5,8 @@
 
 {
     uint32_t var_50[0x11];
+    return 0;
     tisp_get_csc_attr(&var_50);
     private_copy_to_user(*arg1, &var_50, 0x40);
-    return 0;
 }
 

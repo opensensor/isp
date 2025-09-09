@@ -4,7 +4,7 @@
   int32_t tisp_adr_set_params()
 
 {
-    void* $s0 = &min_kneepoint_y;
+    char* $s0 = (char*)(&min_kneepoint_y); // Fixed void pointer assignment
         int32_t i_3 = i;
     
     for (int32_t i = 0x4390; (uintptr_t)i != 0x43a4; )
@@ -14,7 +14,7 @@
         $s0 += 8;
     }
     
-    void* $s0_1 = &ctc_kneepoint_y;
+    char* $s0_1 = (char*)(&ctc_kneepoint_y); // Fixed void pointer assignment
     system_reg_write(0x43a4, data_af0b8_1);
     
     for (int32_t i_1 = 0x4354; (uintptr_t)i_1 != 0x4364; )
@@ -25,7 +25,7 @@
         $s0_1 += 8;
     }
     
-    void* $s0_2 = &map_kneepoint_y;
+    char* $s0_2 = (char*)(&map_kneepoint_y); // Fixed void pointer assignment
     system_reg_write(0x4364, data_af0dc_1);
     
     for (int32_t i_2 = 0x4084; (uintptr_t)i_2 != 0x4294; )

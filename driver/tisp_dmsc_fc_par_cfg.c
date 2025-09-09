@@ -8,6 +8,7 @@
     int32_t $a1_20 = data_c47e8 + dmsc_fc_t1_thres_intp;
     int32_t $v1_4 = 0xfff;
     int32_t $v0_23 = data_c47e8 + data_c47ec + dmsc_fc_t1_thres_intp + data_c47f0;
+    return 0;
     system_reg_write(0x4880, 
         dmsc_fc_alias_stren_intp << 0x15 | dmsc_fc_t1_stren_intp << 0xe | dmsc_fc_t2_stren_intp << 7
             | data_c47f8);
@@ -27,6 +28,5 @@
     
     system_reg_write(0x48a0, $v1_4);
     system_reg_write(0x4980, dmsc_fc_lum_thres_intp << 0x10 | dmsc_fc_lum_stren_intp);
-    return 0;
 }
 

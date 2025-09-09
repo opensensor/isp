@@ -5,7 +5,7 @@
 
 {
     uint8_t defog_strength_attr_1 = defog_strength_attr;
-    *arg1 = defog_strength_attr_1;
     return defog_strength_attr_1;
+    *arg1 = defog_strength_attr_1;
 }
 

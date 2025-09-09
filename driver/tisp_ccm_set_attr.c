@@ -20,7 +20,7 @@
     else
     {
         int32_t i = 0;
-                void* $a3_2 = &cm_sat_list + i;
+                char* $a3_2 = (char*)(&cm_sat_list + i); // Fixed void pointer assignment
         memcpy(&tiziano_ccm_a_linear, 0xc5308, 0x24);
         memcpy(&tiziano_ccm_t_linear, 0xc5308, 0x24);
         memcpy(&tiziano_ccm_d_linear, 0xc5308, 0x24);
@@ -32,7 +32,7 @@
         {
             do
             {
-                *(((void**)((char*)&cm_sat_list_wdr + i))) = 0x100; // Fixed void pointer dereference
+                *(&cm_sat_list_wdr + i) = 0x100;
                 i += 4;
                 *$a3_2 = 0x100;
             } while ((uintptr_t)i != 0x24);

@@ -4,20 +4,20 @@
   int32_t tiziano_adr_5x5_param()
 
 {
-        void* $t4_8 = &adr_lut11_value_sum + i;
     void var_c0;
-    memcpy(&var_c0, 0x7d380, 0x7c);
     void* var_38_1;
+        char* $t4_8 = (char*)(&adr_lut11_value_sum + i); // Fixed void pointer assignment
+    memcpy(&var_c0, 0x7d380, 0x7c);
     
     for (int32_t i = 0; (uintptr_t)i != 0x80; )
     {
-        *(((int32_t*)((char*)&adr_lut7_counter + i))) = 0; // Fixed void pointer dereference
-        *(((int32_t*)((char*)&adr_lut8_counter + i))) = 0; // Fixed void pointer dereference
-        *(((int32_t*)((char*)&adr_lut12_counter + i))) = 0; // Fixed void pointer dereference
-        *(((int32_t*)((char*)&adr_lut1_value_sum + i))) = 0; // Fixed void pointer dereference
-        *(((int32_t*)((char*)&adr_lut2_value_sum + i))) = 0; // Fixed void pointer dereference
-        *(((int32_t*)((char*)&adr_lut3_value_sum + i))) = 0; // Fixed void pointer dereference
-        *(((int32_t*)((char*)&adr_lut6_value_sum + i))) = 0; // Fixed void pointer dereference
+        *(&adr_lut7_counter + i) = 0;
+        *(&adr_lut8_counter + i) = 0;
+        *(&adr_lut12_counter + i) = 0;
+        *(&adr_lut1_value_sum + i) = 0;
+        *(&adr_lut2_value_sum + i) = 0;
+        *(&adr_lut3_value_sum + i) = 0;
+        *(&adr_lut6_value_sum + i) = 0;
         i += 4;
         *$t4_8 = 0;
         var_38_1 = &adr_lut7_counter;
@@ -41,15 +41,69 @@
     do
     {
         int32_t $v0_5 = *(&var_c0 + i_1);
-        void* $t3_1 = &param_adr_centre_w_dis_array_tmp + i_1;
-        uint32_t i_2 = i_4;
-            void* $a0_2 = var_38_1 + ($v0_14 << 2);
+        char* $t3_1 = (char*)(&param_adr_centre_w_dis_array_tmp + i_1); // Fixed void pointer assignment
         int32_t $lo_3;
         int32_t $hi_2;
-        $hi_2 = HIGHD($hi * $v0_5 + ($v0_5 >> 0x1f) * $lo_1);
-        $lo_3 = LOWD($hi * $v0_5 + ($v0_5 >> 0x1f) * $lo_1);
         int32_t $lo_4;
         int32_t $hi_3;
+        uint32_t i_2 = i_4;
+            int32_t $v0_14;
+            int32_t $t1_1;
+            int32_t $t3_2;
+            int32_t $t4_14;
+            int32_t $t5_2;
+            int32_t $t7_2;
+            int32_t $t8_2;
+            char* $a0_2 = (char*)(var_38_1 + ($v0_14 << 2)); // Fixed void pointer assignment
+            int32_t $v0_18;
+            int32_t $t1_2;
+            int32_t $t3_3;
+            int32_t $t4_15;
+            int32_t $t5_3;
+            int32_t $t6_2;
+            int32_t $t8_3;
+            int32_t $t9_1;
+            int32_t $v0_20;
+            int32_t $t1_3;
+            int32_t $t3_4;
+            int32_t $t4_16;
+            int32_t $t5_4;
+            int32_t $t6_3;
+            int32_t $t7_3;
+            int32_t $v0_22;
+            int32_t $t1_4;
+            int32_t $t2_4;
+            int32_t $t3_5;
+            int32_t $t4_17;
+            int32_t $t5_5;
+            int32_t $t6_4;
+            int32_t $v0_24;
+            int32_t $t1_5;
+            int32_t $t2_5;
+            int32_t $t3_6;
+            int32_t $t4_18;
+            int32_t $t5_6;
+            int32_t $t8_4;
+            int32_t $v0_27;
+            int32_t $t0_4;
+            int32_t $t1_6;
+            int32_t $t3_7;
+            int32_t $t4_19;
+            int32_t $t5_7;
+            int32_t $t6_7;
+            int32_t $t9_2;
+            int32_t $v0_29;
+            int32_t $t0_5;
+            int32_t $t1_7;
+            int32_t $t3_8;
+            int32_t $t4_20;
+            int32_t $t5_8;
+            int32_t $t7_4;
+            int32_t $v0_32;
+            int32_t $t3_9;
+            int32_t $t6_10;
+        $hi_2 = HIGHD($hi * $v0_5 + ($v0_5 >> 0x1f) * $lo_1);
+        $lo_3 = LOWD($hi * $v0_5 + ($v0_5 >> 0x1f) * $lo_1);
         $hi_3 = HIGHD($v0_5 * $lo_1);
         $lo_4 = LOWD($v0_5 * $lo_1);
         i_1 += 4;
@@ -66,74 +120,20 @@
         
         while (i_4 + $lo >= i_2)
         {
-            int32_t $v0_14;
-            int32_t $t1_1;
-            int32_t $t3_2;
-            int32_t $t4_14;
-            int32_t $t5_2;
-            int32_t $t7_2;
-            int32_t $t8_2;
             $v0_14 = (0x60000 - 0x53ac)($t1, i_2, $t9, $s0, $t4_13);
             *$a0_2 += 1;
-            int32_t $v0_18;
-            int32_t $t1_2;
-            int32_t $t3_3;
-            int32_t $t4_15;
-            int32_t $t5_3;
-            int32_t $t6_2;
-            int32_t $t8_3;
-            int32_t $t9_1;
             $v0_18 = $t5_2($t1_1, $t3_2, $t7_2, $t8_2, $t4_14);
             *(&adr_lut1_value_sum + $t6_2) += $v0_18;
-            int32_t $v0_20;
-            int32_t $t1_3;
-            int32_t $t3_4;
-            int32_t $t4_16;
-            int32_t $t5_4;
-            int32_t $t6_3;
-            int32_t $t7_3;
             $v0_20 = $t5_3($t1_2, $t3_3, $t9_1, $t8_3, $t4_15);
             *(&adr_lut2_value_sum + $t6_3) += $v0_20;
-            int32_t $v0_22;
-            int32_t $t1_4;
-            int32_t $t2_4;
-            int32_t $t3_5;
-            int32_t $t4_17;
-            int32_t $t5_5;
-            int32_t $t6_4;
             $v0_22 = $t5_4($t1_3, $t3_4, $t7_3, $s0, $t4_16);
             *(&adr_lut6_value_sum + $t6_4) += $v0_22;
-            int32_t $v0_24;
-            int32_t $t1_5;
-            int32_t $t2_5;
-            int32_t $t3_6;
-            int32_t $t4_18;
-            int32_t $t5_6;
-            int32_t $t8_4;
             $v0_24 = $t5_5($t1_4, $t3_5, $t2_4, $s0, $t4_17);
             *(&adr_lut8_counter + ($v0_24 << 2)) += 1;
-            int32_t $v0_27;
-            int32_t $t0_4;
-            int32_t $t1_6;
-            int32_t $t3_7;
-            int32_t $t4_19;
-            int32_t $t5_7;
-            int32_t $t6_7;
-            int32_t $t9_2;
             $v0_27 = $t5_6($t1_5, $t3_6, $t2_5, $t8_4, $t4_18);
             *(&adr_lut3_value_sum + $t6_7) += $v0_27;
-            int32_t $v0_29;
-            int32_t $t0_5;
-            int32_t $t1_7;
-            int32_t $t3_8;
-            int32_t $t4_20;
-            int32_t $t5_8;
-            int32_t $t7_4;
             $v0_29 = $t5_7($t1_6, $t3_7, $t9_2, $t0_4, $t4_19);
             *(&adr_lut12_counter + ($v0_29 << 2)) += 1;
-            int32_t $v0_32;
-            int32_t $t3_9;
-            int32_t $t6_10;
             $v0_32 = $t5_8($t1_7, $t3_8, $t7_4, $t0_5, $t4_20);
             i_2 = $t3_9 + 1;
             *(&adr_lut11_value_sum + $t6_10) += $v0_32;
@@ -162,15 +162,15 @@
         else if ($v0_36)
         {
             int32_t $lo_5 = $v0_36 / 2;
-            *$t1_8 = ($lo_5 + *(&adr_lut1_value_sum + $v1_8)) / $v0_36;
-            *$t0_6 = ($lo_5 + *(&adr_lut2_value_sum + $v1_8)) / $v0_36;
-            *$a3_9 = ($lo_5 + *(&adr_lut6_value_sum + $v1_8)) / $v0_36;
+            *((int32_t*)$t1_8) = ($lo_5 + *(&adr_lut1_value_sum + $v1_8)) / $v0_36; // Fixed void pointer dereference
+            *((int32_t*)$t0_6) = ($lo_5 + *(&adr_lut2_value_sum + $v1_8)) / $v0_36; // Fixed void pointer dereference
+            *((int32_t*)$a3_9) = ($lo_5 + *(&adr_lut6_value_sum + $v1_8)) / $v0_36; // Fixed void pointer dereference
         }
         else
         {
-            *$t1_8 = *($t1_8 - 4);
-            *$t0_6 = *($t0_6 - 4);
-            *$a3_9 = *($a3_9 - 4);
+            *((int32_t*)$t1_8) = *($t1_8 - 4); // Fixed void pointer dereference
+            *((int32_t*)$t0_6) = *($t0_6 - 4); // Fixed void pointer dereference
+            *((int32_t*)$a3_9) = *($a3_9 - 4); // Fixed void pointer dereference
         }
         
         int32_t $v0_41 = *(&adr_lut8_counter + $v1_8);

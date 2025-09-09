@@ -29,7 +29,7 @@
     int32_t $a2_12 = $v1_21 | $a3_1;
     int32_t $a1_7;
     
-    if (!arg1)
+    if (!(uintptr_t)arg1)
     {
         if (arg3)
             $a1_7 = 0xa028;

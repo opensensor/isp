@@ -6,12 +6,12 @@
 {
     int32_t $v0;
     int32_t $a2;
+        return 0xffffffff;
     $v0 = private_vmalloc(0x1c);
     
     if (!$v0)
     {
-        isp_printf(); // Fixed: macro call, removed arguments!\n", $a2);
-        return 0xffffffff;
+        isp_printf(); // Fixed: macro with no parameters, removed 2 arguments!\n", $a2);
     }
     
     tisp_g_wb_zone();

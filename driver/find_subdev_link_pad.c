@@ -5,10 +5,11 @@
 
 {
     int32_t* $a3 = arg1 + 0x38;
-    void* $v0 = *$a3;
+    char* $v0 = (char*)(*$a3); // Fixed void pointer assignment
             char* $v1_1 = *($v0 + 8);
             char* $a2_1 = *arg2;
             uint32_t $t0_1 = *$v1_1;
+            uint32_t $at_1;
                 uint32_t temp1_1 = $t0_1;
     
     while (true)
@@ -17,7 +18,6 @@
             $a3 = &$a3[1];
         else
         {
-            uint32_t $at_1;
             
             while (true)
             {
@@ -58,7 +58,7 @@
                     if ($v1_3 < *($v0 + 0xc8))
                         return $v1_3 * 0x24 + *($v0 + 0xcc);
                 }
-                isp_printf(); // Fixed: macro call, removed arguments;
+                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                 return 0;
             }
         }

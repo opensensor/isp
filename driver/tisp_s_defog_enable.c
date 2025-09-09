@@ -5,13 +5,14 @@
 
 {
     int32_t $v0 = system_reg_read(0xc);
-    
-    if ((($v0 >> 0xb ^ 1) & 1) == arg1)
         return 0;
-    
-    int32_t (* $v0_2)(int32_t arg1, int32_t arg2);
     int32_t sensor_info_1;
     int32_t $a1_2;
+            return 0xffffffff;
+    
+    if ((($v0 >> 0xb ^ 1) & 1) == arg1)
+    
+    int32_t (* $v0_2)(int32_t arg1, int32_t arg2);
     
     if (arg1 != 1)
     {
@@ -20,7 +21,6 @@
             isp_printf(2, 
                 "width is %d, height is %d, imagesize is %d\n, snap num is %d, buf size is %d", 
                 arg1);
-            return 0xffffffff;
         }
         
         $a1_2 = $v0 | 0x800;

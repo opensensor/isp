@@ -5,16 +5,16 @@
 
 {
     int32_t $s5 = *arg3;
+    int32_t $a2;
     int32_t arg_8 = $a2;
+    int32_t $a0;
     int32_t arg_0 = $a0;
+    int32_t $a1;
     int32_t arg_4 = $a1;
+    int32_t $a3;
     int32_t arg_c = $a3;
     int32_t dmsc_uu_thres_wdr_array_1 = *(arg2 + 0x10);
     int32_t $a2_1 = *(arg2 + 0x14);
-    int32_t $a2;
-    int32_t $a0;
-    int32_t $a1;
-    int32_t $a3;
     uint32_t ag1_new_1;
     int32_t $v0_2;
     
@@ -54,10 +54,10 @@
     }
     else
     {
+            goto label_61ac8;
         if (*(arg1 + 0x10) != dmsc_uu_thres_wdr_array_1)
         {
             $v0_2 = data_c470c;
-            goto label_61ac8;
         }
         
         $v0_2 = data_c470c_1;
@@ -70,9 +70,9 @@
         if ($v0_2)
             goto label_61ac0;
     }
-    *(((void**)((char*)arg2 + 0x10))) = ag1_new_1; // Fixed void pointer dereference
+    *((int32_t*)((char*)arg2 + 0x10)) = ag1_new_1; // Fixed void pointer dereference
     uint32_t dg1_new_2 = dg1_new;
-    *(((void**)((char*)arg2 + 0x14))) = dg1_new_2; // Fixed void pointer dereference
+    *((int32_t*)((char*)arg2 + 0x14)) = dg1_new_2; // Fixed void pointer dereference
     return dg1_new_2;
 }
 

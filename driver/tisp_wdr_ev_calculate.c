@@ -10,12 +10,12 @@
     int32_t $t1 = data_b1e68;
     int32_t $a2 = data_b1e70;
     uint32_t wdr_weight_in_list_deghost_3 = 0;
-    else if ($a2 >= $v0)
-    time_short = $v0;
     int32_t $v1_1;
+    time_short = $v0;
     
     if ($v1 < $v0)
         $v1_1 = data_b1e5c;
+    else if ($a2 >= $v0)
     {
         wdr_weight_in_list_deghost_3 = wdr_weight_in_list_deghost;
         $v1_1 = data_b1e5c;
@@ -45,17 +45,17 @@
     {
         uint32_t wdr_ev_now_1 = wdr_ev_now;
         int32_t* $a1_3 = &wdr_ev_list_deghost;
-        else if (data_b149c >= wdr_ev_now_1)
+        uint32_t wdr_weight_in_list_deghost_1;
             int32_t $a3_1 = 0;
                 int32_t $t4_1 = *$a1_3;
                 int32_t $v1_3 = $a3_1 + 1;
                     int32_t $a2_2 = $a1_3[1];
                         int32_t $v0_8 = (&wdr_weight_in_list_deghost)[$a3_1];
                         int32_t $a1_4 = $a2_2 - $t4_1;
-        uint32_t wdr_weight_in_list_deghost_1;
         
         if (wdr_ev_list_deghost >= wdr_ev_now_1)
             wdr_weight_in_list_deghost_1 = wdr_weight_in_list_deghost;
+        else if (data_b149c >= wdr_ev_now_1)
         {
             
             while (true)
@@ -133,6 +133,7 @@
                         int32_t $t9_1 = (&wdr_detail_w_in0_list)[$a0_4];
                         int32_t $a1_8 = $v0_20 < wdr_ev_old_1 ? 1 : 0;
                         int32_t $t5_4 = $t7_1 < $v0_20 ? 1 : 0;
+                        int32_t $t8_2;
                             int32_t $t9_5 = wdr_ev_old_1 - $v0_20;
                             int32_t $ra_4 = $v0_20 - $t7_1;
         wdr_ev_changed = 0;
@@ -147,7 +148,6 @@
                     
                     if ($t7_1 != $v0_20)
                     {
-                        int32_t $t8_2;
                         
                         if ($t9_1 >= $t8_1)
                         {

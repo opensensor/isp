@@ -5,7 +5,7 @@
 
 {
     uint32_t adr_ratio_1 = adr_ratio;
-    *arg1 = adr_ratio_1;
     return adr_ratio_1;
+    *arg1 = adr_ratio_1;
 }
 

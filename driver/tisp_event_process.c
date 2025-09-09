@@ -5,11 +5,11 @@
 
 {
     int32_t $v0 = private_wait_for_completion_timeout(&tevent_info, 0x14);
+        return 0;
     
     if ($(uintptr_t)v0 == 0xfffffe00)
     {
-        isp_printf(); // Fixed: macro call, removed arguments;
-        return 0;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     }
     
     if (!$v0)
@@ -20,14 +20,14 @@
     
     if ($s0_1 == &data_b33b0_3)
     {
-        isp_printf(); // Fixed: macro call, removed arguments;
-        arch_local_irq_restore($v0_2);
         return 0xffffffff;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+        arch_local_irq_restore($v0_2);
     }
     
     void** $v0_3 = $s0_1[1];
-    void* $v1_1 = *$s0_1;
-    *(((void**)((char*)$v1_1 + 4))) = $v0_3; // Fixed void pointer dereference
+    char* $v1_1 = (char*)(*$s0_1); // Fixed void pointer assignment
+    *((int32_t*)((char*)$v1_1 + 4)) = $v0_3; // Fixed void pointer dereference
     *$v0_3 = $v1_1;
     *$s0_1 = 0x100100;
     $s0_1[1] = 0x200200;

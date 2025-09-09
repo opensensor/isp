@@ -6,9 +6,9 @@
 {
     int32_t var_38 = arg1;
     int32_t $v0_2 = ds0_attr << 1 | data_b2df0;
-    isp_printf(); // Fixed: macro call, removed arguments;
     int16_t $a0_1;
     int16_t $s2;
+    isp_printf(); // Fixed: macro with no parameters, removed 4 arguments;
     
     if ($v0_2 == 2)
     {
@@ -109,13 +109,13 @@
     
     if (arg1 == 2)
     {
-        void* $v1_19 = data_ca490;
+        char* $v1_19 = (char*)(data_ca490); // Fixed void pointer assignment
         uint32_t $v1_20 = *(result - 0x72);
+            uint32_t $v1_21;
         result = $v1_19 + 0x72;
         
         while (true)
         {
-            uint32_t $v1_21;
             
             if ($v1_20 != 1)
                 $v1_21 = *(result - 0x3a);
@@ -151,8 +151,9 @@
     }
     else
     {
-            void* $a3_2 = data_ca490;
+            char* $a3_2 = (char*)(data_ca490); // Fixed void pointer assignment
             uint32_t $v1_32 = *(result - 0x74);
+                uint32_t $v1_33;
         result = 1;
         
         if (arg1 == 3)
@@ -161,7 +162,6 @@
             
             while (true)
             {
-                uint32_t $v1_33;
                 
                 if ($v1_32 != 1)
                     $v1_33 = *(result - 0x3c);
@@ -202,39 +202,39 @@
         {
             int32_t i = 0;
             int32_t $v1_4 = 0;
-                void* $v0_9 = data_ca490;
+                char* $v0_9 = (char*)(data_ca490); // Fixed void pointer assignment
+                void* $v1_5;
                     uint32_t var_34_1 = *($v0_9 + 2);
                     uint32_t var_38_1 = *($v0_9 + 4);
-                    void* $v0_12 = data_ca490 + $v1_4;
+                    char* $v0_12 = (char*)(data_ca490 + $v1_4); // Fixed void pointer assignment
             
             do
             {
-                void* $v1_5;
                 
                 if (*($v0_9 + $v1_4) != 1)
                     $v1_5 = i * 0xe;
                 else
                 {
-                    isp_printf(); // Fixed: macro call, removed arguments;
-                    *(((void**)((char*)$v0_12 + 4))) = $s2 - *($v0_12 + 6) - *($v0_12 + 4); // Fixed void pointer dereference
+                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+                    *((int32_t*)((char*)$v0_12 + 4)) = $s2 - *($v0_12 + 6) - *($v0_12 + 4); // Fixed void pointer dereference
                     $v1_5 = i * 0xe;
                 }
                 
                 int32_t $v0_13 = data_ca490_1;
-                void* $a0_6 = $v1_5 + $v0_13;
-                void* $v1_11 = i * 0xe;
+                char* $a0_6 = (char*)($v1_5 + $v0_13); // Fixed void pointer assignment
+                char* $v1_11 = (char*)(i * 0xe); // Fixed void pointer assignment
                 
                 if (*($a0_6 + 0x38) == 1)
                 {
-                    *(((void**)((char*)$a0_6 + 0x3c))) = $s3 - *($a0_6 + 0x3e) - *($a0_6 + 0x3c); // Fixed void pointer dereference
+                    *((int32_t*)((char*)$a0_6 + 0x3c)) = $s3 - *($a0_6 + 0x3e) - *($a0_6 + 0x3c); // Fixed void pointer dereference
                     $v1_11 = i * 0xe;
                 }
                 
-                void* $v0_14 = $v1_11 + $v0_13;
+                char* $v0_14 = (char*)($v1_11 + $v0_13); // Fixed void pointer assignment
                 i += 1;
                 
                 if (*($v0_14 + 0x70) == 1)
-                    *(((void**)((char*)$v0_14 + 0x74))) = $s5 - *($v0_14 + 0x76) - *($v0_14 + 0x74); // Fixed void pointer dereference
+                    *((int32_t*)((char*)$v0_14 + 0x74)) = $s5 - *($v0_14 + 0x76) - *($v0_14 + 0x74); // Fixed void pointer dereference
                 
                 result = 4;
                 $v1_4 = i * 0xe;

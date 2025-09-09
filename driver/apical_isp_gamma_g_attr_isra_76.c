@@ -4,14 +4,14 @@
   int32_t apical_isp_gamma_g_attr.isra.76(int32_t* arg1)
 
 {
-    int32_t result = tisp_g_Gamma(&var_218);
-            int16_t $a1_2 = *(&var_218 + i);
-            void* $a0_1 = &var_114 + i;
     void var_218;
+    int32_t result = tisp_g_Gamma(&var_218);
+        void var_114;
+            int16_t $a1_2 = *(&var_218 + i);
+            char* $a0_1 = (char*)(&var_114 + i); // Fixed void pointer assignment
     
     if (!result)
     {
-        void var_114;
         
         for (int32_t i = 0; (uintptr_t)i != 0x102; )
         {

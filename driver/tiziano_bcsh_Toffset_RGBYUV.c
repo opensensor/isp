@@ -4,10 +4,10 @@
   int32_t tiziano_bcsh_Toffset_RGBYUV(int32_t* arg1, int32_t* arg2, int32_t* arg3)
 
 {
-    int32_t* i = &var_78;
-        int32_t $v1_1 = *arg2;
     int32_t var_78;
+    int32_t* i = &var_78;
     int32_t var_30;
+        int32_t $v1_1 = *arg2;
     
     do
     {

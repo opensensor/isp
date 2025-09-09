@@ -7,8 +7,9 @@
     int32_t $v1_1 = *(arg1 + 0x118);
     int32_t result = 0;
         int32_t $s3_1 = *(($v1_1 << 3) + 0x7ad50);
-        void* $s1_1 = (&configs)[$v1_1 * 2];
+        char* $s1_1 = (char*)((&configs)[$v1_1 * 2]); // Fixed void pointer assignment
         int32_t $s2_1 = 0;
+                return 0;
     
     if ($v1_1 >= 0)
     {
@@ -17,11 +18,10 @@
         {
             if ($s2_1 >= $s3_1)
             {
-                *(((void**)((char*)arg1 + 0x118))) = 0xffffffff; // Fixed void pointer dereference
-                return 0;
+                *((int32_t*)((char*)arg1 + 0x118)) = 0xffffffff; // Fixed void pointer dereference
             }
             
-            void* $v0_2 = find_subdev_link_pad(arg1, $s1_1);
+            char* $v0_2 = (char*)(find_subdev_link_pad(arg1, $s1_1)); // Fixed void pointer assignment
             
             if ($v0_2 && find_subdev_link_pad(arg1, $s1_1 + 8))
             {

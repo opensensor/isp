@@ -10,10 +10,10 @@
     int32_t $v0 = 1 << (_AePointPos_1 & 0x1f);
     int32_t var_40 = $v0;
     int32_t var_3c = $v0;
+        char var_b4[0x44];
     
     for (int32_t i = 0; (uintptr_t)i < 0x40; i += 1)
     {
-        char var_b4[0x44];
         var_b4[i] = *(i + &IspAeExp);
     }
     
@@ -49,11 +49,11 @@
     uint32_t $v0_2 = data_b0cec_1;
     int32_t $v1 = $v0_2 << 2;
     int32_t $a1_13 = $v0_2 + 1;
-    void* $a0_3 = &ev0_cache + $v1;
+    char* $a0_3 = (char*)(&ev0_cache + $v1); // Fixed void pointer assignment
     EffectFrame = $v0_2;
     EffectCount0 = $v0_2;
     int32_t $a2_3 = $a1_13;
-    void* $v1_1 = &ad0_cache + $v1;
+    char* $v1_1 = (char*)(&ad0_cache + $v1); // Fixed void pointer assignment
     int32_t $a3_13 = 0;
     
     while (true)
@@ -64,9 +64,9 @@
         if (temp1_1 <= 0)
             break;
         
-        *(((void**)((char*)$a0_3 + 4))) = *$a0_3; // Fixed void pointer dereference
+        *((int32_t*)((char*)$a0_3 + 4)) = *$a0_3; // Fixed void pointer dereference
         $a0_3 -= 4;
-        *(((void**)((char*)$v1_1 + 4))) = *$v1_1; // Fixed void pointer dereference
+        *((int32_t*)((char*)$v1_1 + 4)) = *$v1_1; // Fixed void pointer dereference
         $v1_1 -= 4;
         $a3_13 = 1;
     }
@@ -77,8 +77,8 @@
     if ($a3_13)
         EffectCount0 = $v0_2 - $a1_13;
     
-    void* var_2c_1 = &data_b0000_8;
-    void* var_30_1_1 = &data_b0000_9;
+    char* var_2c_1 = (char*)(&data_b0000_8); // Fixed void pointer assignment
+    char* var_30_1_1 = (char*)(&data_b0000_9); // Fixed void pointer assignment
     int32_t $v0_4 =
         fix_point_mult3_32(_AePointPos_1, _ae_reg << (_AePointPos_1 & 0x1f), data_d04a0_1);
     int32_t $a2_5 = data_d04a4_3;
@@ -86,8 +86,8 @@
     *(var_2c_1_1 - 0x3e4) = fix_point_mult2_32(_AePointPos_1, data_d04a0_2, $a2_5);
     uint32_t EffectFrame_1 = EffectFrame;
     EffectCount0 = EffectFrame_1;
-    void* $a0_6 = &(&ag0_cache)[EffectFrame_1];
-    void* $v1_3 = &(&dg0_cache)[EffectFrame_1];
+    char* $a0_6 = (char*)(&(&ag0_cache)[EffectFrame_1]); // Fixed void pointer assignment
+    char* $v1_3 = (char*)(&(&dg0_cache)[EffectFrame_1]); // Fixed void pointer assignment
     uint32_t EffectFrame_4 = EffectFrame_1;
     int32_t $t7_1 = 0;
     
@@ -100,9 +100,9 @@
             break;
         
         EffectFrame_4 -= 1;
-        *(((void**)((char*)$a0_6 + 4))) = *$a0_6; // Fixed void pointer dereference
+        *((int32_t*)((char*)$a0_6 + 4)) = *$a0_6; // Fixed void pointer dereference
         $t7_1 = 1;
-        *(((void**)((char*)$v1_3 + 4))) = *$v1_3; // Fixed void pointer dereference
+        *((int32_t*)((char*)$v1_3 + 4)) = *$v1_3; // Fixed void pointer dereference
     }
     
     uint32_t EffectFrame_3 = EffectFrame_1;
@@ -132,8 +132,8 @@
             if ($a0_9 <= 0)
                 break;
             
-            *(((void**)((char*)$v1_6 + 0xafc4c))) = *(var_30_1 - 0x3bc); // Fixed void pointer dereference
-            *(((void**)((char*)$v1_6 + 0xafc24))) = *(var_2c_1 - 0x3e4); // Fixed void pointer dereference
+            *((int32_t*)((char*)$v1_6 + 0xafc4c)) = *(var_30_1 - 0x3bc); // Fixed void pointer dereference
+            *((int32_t*)((char*)$v1_6 + 0xafc24)) = *(var_2c_1 - 0x3e4); // Fixed void pointer dereference
             $a0_9 -= 1;
         }
         
@@ -202,8 +202,8 @@
         again_old = $a0_18;
     else
     {
-        if (!dmsc_sp_d_w_stren_wdr_array)
             return 0;
+        if (!dmsc_sp_d_w_stren_wdr_array)
         
         again_old = $a0_18;
     }

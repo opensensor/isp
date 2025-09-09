@@ -5,20 +5,22 @@
 
 {
     int32_t _AePointPos_1 = *_AePointPos;
+    int32_t $a1;
     int32_t arg_4 = $a1;
+    int32_t $a2;
     int32_t arg_8 = $a2;
+    int32_t $a3;
     int32_t arg_c = $a3;
+    int32_t $a0;
     int32_t arg_0 = $a0;
     int32_t $v0 = fix_point_mult3_32(_AePointPos_1, *arg2 << (_AePointPos_1 & 0x1f), arg2[1]);
     uint32_t* i = arg5;
-    void* $a0_2 = &ae1_ev_list;
+    char* $a0_2 = (char*)(&ae1_ev_list); // Fixed void pointer assignment
         uint32_t $a1_4 = *$a0_2;
+    int32_t $a0_3;
         int32_t* $a1_7 = arg4;
             int32_t $v1_6 = 0;
-    int32_t $a1;
-    int32_t $a2;
-    int32_t $a3;
-    int32_t $a0;
+            int32_t $v1_7;
     
     do
     {
@@ -35,14 +37,12 @@
         $a0_2 += 4;
     } while (&arg5[0xa] != i);
     
-    int32_t $a0_3;
     
     if (*arg4 << (_AePointPos_1 & 0x1f) < $v0)
     {
         
         if ($v0 < arg4[9] << (_AePointPos_1 & 0x1f))
         {
-            int32_t $v1_7;
             
             while (true)
             {
@@ -70,9 +70,9 @@
             
             int32_t $a0_11 = *(arg5 + $v1_7);
             int32_t $a1_8 = *(arg5 + $v1_7 + 4);
-            void* $v1_8 = arg4 + $v1_7;
+            char* $v1_8 = (char*)(arg4 + $v1_7); // Fixed void pointer assignment
             uint32_t $v0_1 = $v0 >> (_AePointPos_1 & 0x1f);
-            void* $s1_1 = arg4 + $v1_7 + 4;
+            char* $s1_1 = (char*)(arg4 + $v1_7 + 4); // Fixed void pointer assignment
             
             if ($a1_8 >= $a0_11)
             {
@@ -188,6 +188,8 @@
                 int32_t $s7_1 = fix_point_div_32(_AePointPos_1, $s5_1, $s2_1);
                 int32_t $fp_1 = fix_point_div_32(_AePointPos_1, $fp, $s1_2);
                 int32_t $v0_22 = 1 << (_AePointPos_1 & 0x1f);
+                int32_t $a2_17;
+                        goto label_61f48;
             
             if ($v0_16 >= $s4_7)
                 arg2[3] = $s3_2;
@@ -195,12 +197,10 @@
             {
                     fix_point_div_32(_AePointPos_1, $s7 << (_AePointPos_1 & 0x1f), $v0_15);
                 fix_point_div_32(_AePointPos_1, $v0_22, $v0_16);
-                int32_t $a2_17;
                 
                 if ($s3_3 < $v0_18)
                 {
                     if (fix_point_mult2_32(_AePointPos_1, $s3_3, $s7_1) >= $v0_18)
-                        goto label_61f48;
                     
                     $a2_17 = $v0_15;
                     

@@ -7,6 +7,7 @@
     int32_t result = data_ca490;
     uint32_t $s1 = arg1;
         int32_t* $v0 = data_ca490;
+            char var_b0[0xa0];
     
     if (result)
     {
@@ -14,7 +15,6 @@
         
         for (int32_t i = 0; (uintptr_t)i < 0x9c; i += 1)
         {
-            char var_b0[0xa0];
             var_b0[i] = *(&$v0[4] + i);
         }
         

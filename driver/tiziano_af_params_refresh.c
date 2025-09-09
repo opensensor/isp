@@ -4,6 +4,7 @@
   int32_t tiziano_af_params_refresh()
 
 {
+    return 0;
     memcpy(&stAFParam_Zone, 0xa675c, 0x90);
     memcpy(&stAFParam_ThresEnable, 0xa67ec, 0x34);
     memcpy(&stAFParam_FIR0_V, 0xa6820, 0x14);
@@ -23,6 +24,5 @@
     memcpy(&AFParam_FvWmean, 0xa6974, 0x3c);
     memcpy(&AFParam_Fv, 0xa69b0, 0xc);
     memcpy(&AFWeight_Param, 0xa69bc, 0x384);
-    return 0;
 }
 

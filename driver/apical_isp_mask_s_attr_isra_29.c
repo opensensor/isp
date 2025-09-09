@@ -5,12 +5,12 @@
 
 {
     int32_t var_b8;
+        char var_158[0xa0];
+        char var_a8[0xa4];
     private_copy_from_user(&var_b8, arg1, 0xac);
     
     for (int32_t i = 0; (uintptr_t)i < 0x9c; i += 1)
     {
-        char var_158[0xa0];
-        char var_a8[0xa4];
         var_158[i] = var_a8[i];
     }
     

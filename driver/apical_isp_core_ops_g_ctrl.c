@@ -7,6 +7,7 @@
     int32_t $a1 = *arg2;
     uint32_t var_98;
     int32_t result;
+        return result;
     
     if ($(uintptr_t)a1 == 0x8000032)
     {
@@ -14,7 +15,6 @@
         result = 0;
     label_1856c:
         arg2[1] = var_98;
-        return result;
     }
     
     char const* const $a2_4;
@@ -27,11 +27,11 @@
     
     if ($(uintptr_t)a1 >= 0x8000033)
     {
+            goto label_1856c;
         if ($(uintptr_t)a1 == 0x80000a2)
         {
             tisp_g_drc_strength(&var_98);
             result = 0;
-            goto label_1856c;
         }
         
         int32_t $v0_11;
@@ -41,6 +41,7 @@
         
         if ($(uintptr_t)a1 >= 0x80000a3)
         {
+                    return 0;
             if ($(uintptr_t)a1 == 0x80000e5)
                 return apical_isp_mask_g_attr.isra.68(&arg2[1]);
             
@@ -49,35 +50,34 @@
                 if ($(uintptr_t)a1 == 0x80000e0)
                 {
                     arg2[1] = *(*(*arg1 + 0xd4) + 0x12c);
-                    return 0;
                 }
                 
                 if ($(uintptr_t)a1 >= 0x80000e1)
                 {
+                        goto label_180c0;
                     if ($(uintptr_t)a1 == 0x80000e2)
                     {
                         tisp_g_module_control(&var_98);
                         $a2_3 = 4;
-                        goto label_180c0;
                     }
                     
                     if ($(uintptr_t)a1 < 0x80000e2)
                     {
-                        arg2[1] = arg1[0x1029] & 1;
                         return 0;
+                        arg2[1] = arg1[0x1029] & 1;
                     }
                     
                     if ($(uintptr_t)a1 == 0x80000e3)
                     {
+                        goto label_180c0;
                         tisp_g_fcrop_control(&var_98);
                         $a2_3 = 0x14;
-                        goto label_180c0;
                     }
                     
                     if ($(uintptr_t)a1 != 0x80000e4)
                         return 0xffffffff;
                     
-                    char* $a0_3 = *((char*)*arg1 + 0xd4); // Fixed void pointer arithmetic
+                    int32_t* $a0_3 = (int32_t*)((char*)*arg1  + 0xd4); // Fixed void pointer arithmetic
                     int32_t $v0_17 = *($a0_3 + 0x168);
                     
                     if ($v0_17)
@@ -92,10 +92,10 @@
                 
                 if ($(uintptr_t)a1 >= 0x80000a7)
                 {
-                    if ($a1 - 0x80000c0 < 3)
                         return 0;
-                    
                     return 0xffffffff;
+                    if ($a1 - 0x80000c0 < 3)
+                    
                 }
                 
                 if ($(uintptr_t)a1 != 0x80000a5)
@@ -111,6 +111,7 @@
             
             if ($(uintptr_t)a1 >= 0x8000121)
             {
+                            return 0;
                 if ($(uintptr_t)a1 != 0x8000162)
                 {
                     if ($(uintptr_t)a1 >= 0x8000163)
@@ -118,7 +119,6 @@
                         if ($(uintptr_t)a1 == 0x8000167)
                         {
                             arg2[1] = arg1[0x3b1];
-                            return 0;
                         }
                         
                         if ($(uintptr_t)a1 == 0x8000169)
@@ -134,9 +134,9 @@
                 int32_t $s1_1 = arg2[1];
                 var_18_16 = 0;
                 int32_t var_14_1_1 = 0;
-                void* entry_$gp;
+                void* entry_gp;
                 
-                if (!((($s1_1 + 0x18) | $s1_1) & *(entry_$gp + 0x18)))
+                if (!((($s1_1 + 0x18) | $s1_1) & *(entry_gp_1 + 0x18)))
                 {
                     __might_sleep("nv12", 0xc9, 0);
                     __copy_user(&var_98, $s1_1, 0x18);
@@ -147,7 +147,7 @@
                 int32_t var_90_2 = var_18_18;
                 int32_t var_8c_2 = var_14_1_2;
                 
-                if (!((($s0_1 + 0x18) | $s0_1) & *(entry_$gp + 0x18)))
+                if (!((($s0_1 + 0x18) | $s0_1) & *(entry_gp_2 + 0x18)))
                 {
                     __might_sleep("nv12", 0xc9, 0);
                     __copy_user($s0_1, &var_98, 0x18);
@@ -158,21 +158,21 @@
             
             if ($(uintptr_t)a1 == 0x80000ea)
             {
+                return result;
                 tisp_get_wdr_output_mode(&var_98);
                 result = 0;
                 $a2_5 = 4;
             label_18864:
                 private_copy_to_user(arg2[1], &var_98, $a2_5);
-                return result;
             }
             
             if ($(uintptr_t)a1 >= 0x80000eb)
             {
+                    goto label_180c0;
                 if ($(uintptr_t)a1 == 0x8000100)
                 {
                     tisp_g_ccm_attr(&var_98);
                     $a2_3 = 0x28;
-                    goto label_180c0;
                 }
                 
                 if ($(uintptr_t)a1 != 0x8000101)
@@ -191,11 +191,11 @@
             
             if ($v0_57 >= 0)
             {
-                arg2[1] = $v0_57;
                 return 0;
+                arg2[1] = $v0_57;
             }
             
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
             return 0xffffffff;
         }
         
@@ -204,6 +204,7 @@
         
         if ($(uintptr_t)a1 == 0x8000043)
         {
+            return 0;
             tisp_g_af_metric(&var_98);
             $a2_3 = 4;
         label_180c0:
@@ -211,11 +212,11 @@
             $a1_1 = &var_98;
         label_180d4:
             private_copy_to_user($a0_6, $a1_1, $a2_3);
-            return 0;
         }
         
         if ($(uintptr_t)a1 >= 0x8000044)
         {
+                    goto label_180c0;
             if ($(uintptr_t)a1 >= 0x8000084)
             {
                 if ($(uintptr_t)a1 == 0x8000084)
@@ -225,7 +226,6 @@
                 label_18818:
                     $v0_26($a0_12);
                     $a2_3 = 0x14;
-                    goto label_180c0;
                 }
                 
                 $v0_11 = $(uintptr_t)a1 < 0x80000a0 ? 1 : 0;
@@ -243,17 +243,17 @@
             if ($(uintptr_t)a1 == 0x8000045)
             {
                 int32_t $a3_1 = arg2[1];
-                char* $v0_21 = *((char*)*arg1 + 0xd4); // Fixed void pointer arithmetic
-                char* $v1_25 = *((char*)$v0_21 + 0x120); // Fixed void pointer arithmetic
+                int32_t* $v0_21 = (int32_t*)((char*)*arg1  + 0xd4); // Fixed void pointer arithmetic
+                int32_t* $v1_25 = (int32_t*)((char*)$v0_21  + 0x120); // Fixed void pointer arithmetic
                 uint32_t var_94_1 = *($v1_25 + 0xb2);
                 int32_t var_90_1 = *($v0_21 + 0x12c);
                 int32_t var_8c_1 = *($v0_21 + 0x124);
+                goto label_180d4;
                 $a2_3 = 0x14;
                 $a1_1 = &var_98;
                 var_98 = *($v1_25 + 0xb0);
                 $a0_6 = $a3_1;
                 var_88 = *($v0_21 + 0x128);
-                goto label_180d4;
             }
             
             if ($(uintptr_t)a1 < 0x8000045)
@@ -272,26 +272,26 @@
         
         if ($(uintptr_t)a1 == 0x8000038)
         {
+            return 0;
             tisp_g_ae_at_list(&var_98);
             private_copy_to_user(arg2[1], &var_98, 0x28);
-            return 0;
         }
         
         if ($(uintptr_t)a1 >= 0x8000039)
         {
+                return 0;
+                return 0xffffffff;
+            goto label_18864;
             if ($(uintptr_t)a1 >= 0x8000042)
                 return apical_isp_af_hist_g_attr.isra.95(&arg2[1]);
             
             if ($(uintptr_t)a1 >= 0x8000040)
-                return 0;
             
             if ($(uintptr_t)a1 != 0x8000039)
-                return 0xffffffff;
             
             tisp_get_defog_strength(&var_98);
             result = 0;
             $a2_5 = 1;
-            goto label_18864;
         }
         
         if ($(uintptr_t)a1 == 0x8000035)
@@ -299,19 +299,19 @@
         
         if ($(uintptr_t)a1 < 0x8000036)
         {
-            if ($(uintptr_t)a1 != 0x8000033)
                 return 0xffffffff;
+            goto label_186f0;
+            if ($(uintptr_t)a1 != 0x8000033)
             
             $a0_2 = &var_98;
             $v0_8 = tisp_get_ae_luma;
-            goto label_186f0;
         }
         
         if ($(uintptr_t)a1 == 0x8000036)
         {
+            goto label_180c0;
             tisp_get_ae_state(&var_98);
             $a2_3 = 0xc;
-            goto label_180c0;
         }
         
         if ($(uintptr_t)a1 != 0x8000037)
@@ -327,25 +327,25 @@
     }
     else
     {
-        if ($(uintptr_t)a1 == 0x800000b)
-            return apical_isp_awb_zone_statis_g_attr.isra.94(&arg2[1]);
-        
         int16_t var_94;
         int16_t var_90;
         int32_t var_8c;
+                int32_t $v0_35;
+                uint32_t $v1_31;
+                        int32_t $a2_1;
+        if ($(uintptr_t)a1 == 0x800000b)
+            return apical_isp_awb_zone_statis_g_attr.isra.94(&arg2[1]);
+        
         
         if ($(uintptr_t)a1 < 0x800000c)
         {
             if ($(uintptr_t)a1 >= 0x8000002)
             {
-                int32_t $v0_35;
-                uint32_t $v1_31;
                 
                 if ($(uintptr_t)a1 >= 0x8000008)
                 {
                     if ($(uintptr_t)a1 != 0x8000009)
                     {
-                        int32_t $a2_1;
                         
                         if ($(uintptr_t)a1 >= 0x800000a)
                         {
@@ -368,9 +368,10 @@
                 }
                 else
                 {
-                        uint32_t $v0_28 = var_98;
-                    if ($(uintptr_t)a1 >= 0x8000006)
                         return 0;
+                        uint32_t $v0_28 = var_98;
+                            return 0xffffffff;
+                    if ($(uintptr_t)a1 >= 0x8000006)
                     
                     if ($(uintptr_t)a1 == 0x8000004)
                     {
@@ -378,8 +379,7 @@
                         
                         if ($(uintptr_t)v0_28 >= 0xa)
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments;
-                            return 0xffffffff;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         }
                         
                         switch ($v0_28)
@@ -445,10 +445,10 @@
                     
                     if ($(uintptr_t)a1 < 0x8000005)
                     {
-                        if ($(uintptr_t)a1 == 0x8000003)
                             return 0;
-                        
                         return 0xffffffff;
+                        if ($(uintptr_t)a1 == 0x8000003)
+                        
                     }
                     
                     tisp_g_wb_attr(&var_98_13);
@@ -467,31 +467,31 @@
             
             if ($(uintptr_t)a1 == 0x980915)
             {
-                arg2[1] = arg1[0x3ac];
                 return 0;
+                arg2[1] = arg1[0x3ac];
             }
             
             if ($(uintptr_t)a1 >= 0x980916)
             {
+                    return 0;
                 if ($(uintptr_t)a1 == 0x98091b)
                 {
                     arg2[1] = arg1[0xfdb];
-                    return 0;
                 }
                 
                 if ($(uintptr_t)a1 < 0x98091c)
                 {
-                    if ($(uintptr_t)a1 != 0x980918)
                         return 0xffffffff;
+                    return 0;
+                    if ($(uintptr_t)a1 != 0x980918)
                     
                     arg2[1] = arg1[0x3bf];
-                    return 0;
                 }
                 
                 if ($(uintptr_t)a1 == 0x98091f)
                 {
-                    arg2[1] = arg1[0x1027];
                     return 0;
+                    arg2[1] = arg1[0x1027];
                 }
                 
                 if ($(uintptr_t)a1 != 0x9a091a)
@@ -503,23 +503,23 @@
             
             if ($(uintptr_t)a1 == 0x980901)
             {
-                arg2[1] = arg1[0x1023];
                 return 0;
+                arg2[1] = arg1[0x1023];
             }
             
             if ($(uintptr_t)a1 < 0x980902)
             {
-                if ($(uintptr_t)a1 != 0x980900)
                     return 0xffffffff;
+                return 0;
+                if ($(uintptr_t)a1 != 0x980900)
                 
                 arg2[1] = arg1[0x1025];
-                return 0;
             }
             
             if ($(uintptr_t)a1 == 0x980902)
             {
-                arg2[1] = arg1[0x1024];
                 return 0;
+                arg2[1] = arg1[0x1024];
             }
             
             if ($(uintptr_t)a1 != 0x980914)
@@ -531,31 +531,31 @@
         
         if ($(uintptr_t)a1 == 0x8000027)
         {
-            tisp_g_ev_attr(&var_98);
             uint32_t var_7c;
-            arg2[1] = var_7c;
             return 0;
+            tisp_g_ev_attr(&var_98);
+            arg2[1] = var_7c;
         }
         
         if ($(uintptr_t)a1 < 0x8000028)
         {
+                    return 0;
+                    return 0;
             if ($(uintptr_t)a1 < 0x8000023)
             {
                 if ($(uintptr_t)a1 >= 0x8000020)
-                    return 0;
                 
                 if ($(uintptr_t)a1 == 0x800000e)
                 {
                     tisp_g_awb_cluster(&var_98);
                     private_copy_to_user(arg2[1], &var_98, 0x28);
-                    return 0;
                 }
                 
                 if ($(uintptr_t)a1 == 0x800000f)
                 {
+                    return 0;
                     tisp_g_awb_ct_trend(&var_98);
                     private_copy_to_user(arg2[1], &var_98, 0x18);
-                    return 0;
                 }
                 
                 if ($(uintptr_t)a1 != 0x800000d)
@@ -571,12 +571,12 @@
             
             if ($(uintptr_t)a1 < 0x8000024)
             {
+                return 0;
                 $a0_2 = &var_98;
                 $v0_8 = tisp_get_ae_comp;
             label_186f0:
                 $v0_8($a0_2);
                 arg2[1] = var_98;
-                return 0;
             }
             
             if ($(uintptr_t)a1 == 0x8000025)
@@ -593,20 +593,20 @@
         
         if ($(uintptr_t)a1 >= 0x800002d)
         {
+                return 0;
             if ($(uintptr_t)a1 == 0x800002f)
             {
                 tisp_g_ae_min(&var_98);
                 private_copy_to_user(arg2[1], &var_98, 0x10);
-                return 0;
             }
             
             if ($(uintptr_t)a1 >= 0x8000030)
             {
+                    return 0xffffffff;
                 if ($(uintptr_t)a1 == 0x8000030)
                     return apical_isp_ae_zone_g_ctrl.isra.84(&arg2[1]);
                 
                 if ($(uintptr_t)a1 != 0x8000031)
-                    return 0xffffffff;
                 
                 return apical_isp_ae_hist_origin_g_attr.isra.92(&arg2[1]);
             }
@@ -622,8 +622,8 @@
             
             if (!$v0_45)
             {
-                isp_printf(); // Fixed: macro call, removed arguments;
                 return 0xffffffff;
+                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
             }
             
             tisp_g_ae_hist($v0_45);
@@ -651,8 +651,8 @@
         
         if ($(uintptr_t)a1 != 0x800002a)
         {
-            if ($(uintptr_t)a1 != 0x800002b)
                 return 0xffffffff;
+            if ($(uintptr_t)a1 != 0x800002b)
             
             return apical_isp_gamma_g_attr.isra.76(&arg2[1]);
         }
@@ -665,7 +665,7 @@
         
         $a2_4 = "apical_isp_hi_light_depress_g_ctrl";
     }
-    isp_printf(); // Fixed: macro call, removed arguments;
+    isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
     return result;
 }
 

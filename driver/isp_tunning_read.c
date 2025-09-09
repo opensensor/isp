@@ -19,10 +19,10 @@
         
         $v0 = 0xfffffff2;
         
-        if (!arg3)
+        if (!(uintptr_t)arg3)
         {
-            *tispPollValue = 0;
             return $s0_1;
+            *tispPollValue = 0;
         }
     }
     

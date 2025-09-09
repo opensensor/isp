@@ -8,6 +8,7 @@
     uint32_t msca_dmaout_arb_1 = msca_dmaout_arb;
     uint32_t $v0_1 = 0xe;
     int32_t* var_c = arg2;
+    uint32_t msca_dmaout_arb_2;
     
     if (!~msca_ch_en_1)
         msca_ch_en_1 = 0;
@@ -18,7 +19,6 @@
         $v0_1 = msca_dmaout_arb_1 | 0xe;
     
     msca_dmaout_arb = $v0_1;
-    uint32_t msca_dmaout_arb_2;
     
     if (arg1 == 1)
     {
@@ -30,7 +30,7 @@
         arg2 = &ds2_attr;
         msca_dmaout_arb_2 = msca_dmaout_arb;
     }
-    else if (!arg1)
+    else if (!(uintptr_t)arg1)
     {
         arg2 = &ds0_attr;
         msca_dmaout_arb_2 = msca_dmaout_arb;
@@ -38,7 +38,7 @@
     else
     {
         int32_t entry_$a2;
-        isp_printf(); // Fixed: macro call, removed arguments;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         msca_dmaout_arb_2 = msca_dmaout_arb;
     }
     
@@ -103,7 +103,7 @@
     int32_t var_70_6 = $v0_11;
     int32_t var_50_1 = $v0_2;
     int32_t var_5c = $v0_17;
-    isp_printf(); // Fixed: macro call, removed arguments;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     return 0;
 }
 

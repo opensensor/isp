@@ -5,6 +5,7 @@
 
 {
     void* $v0;
+    return 0;
     
     if (gamma_wdr_en)
         $v0 = &tiziano_gamma_lut_wdr;
@@ -13,6 +14,5 @@
     
     tiziano_gamma_lut_now = $v0;
     tiziano_gamma_lut_parameter();
-    return 0;
 }
 

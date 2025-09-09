@@ -34,7 +34,7 @@
     }
     
     int32_t $t0_1 = $a1 >> 1;
-    void* $a0 = arg1 + 8;
+    char* $a0 = (char*)(arg1 + 8); // Fixed void pointer assignment
     int32_t $a3 = 1;
     int32_t $v0_1 = 0;
     

@@ -1,17 +1,17 @@
 #include "include/main.h"
 
 
-  int32_t ispcore_slake_module(void* arg1)
+  int32_t ispcore_slake_module(int32_t* arg1)
 
 {
     int32_t result = 0xffffffea;
-        char* $s0_1 = *((char*)arg1 + 0xd4); // Fixed void pointer arithmetic
+            return 0xffffffea;
+        char* $s0_1 = (char*)(arg1[0x35]); // Fixed void pointer assignment
             int32_t $v0 = *($s0_1 + 0xe8);
     
     if (arg1)
     {
         if ((uintptr_t)arg1 >= 0xfffff001)
-            return 0xffffffea;
         
         result = 0xffffffea;
         
@@ -22,7 +22,7 @@
             {
                 if ($v0 >= 3)
                 {
-                    isp_printf(); // Fixed: macro call, removed arguments;
+                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                     ispcore_core_ops_init(arg1, 0);
                 }
                 
@@ -30,7 +30,7 @@
                 
                 while (true)
                 {
-                    void* $a2_1 = $v0_2 * 0xc4;
+                    char* $a2_1 = (char*)($v0_2 * 0xc4); // Fixed void pointer assignment
                     
                     if ($v0_2 >= *($s0_1 + 0x154))
                         break;
@@ -39,21 +39,21 @@
                     *($a2_1 + *($s0_1 + 0x150) + 0x74) = 1;
                 }
                 
-                char* $a0_1 = *((char*)$s0_1 + 0x1bc); // Fixed void pointer arithmetic
+                int32_t* $a0_1 = (int32_t*)((char*)$s0_1  + 0x1bc); // Fixed void pointer arithmetic
                 (*($a0_1 + 0x40cc))($a0_1, 0x4000001, 0);
-                *(((int32_t*)((char*)$s0_1 + 0xe8))) = 1; // Fixed void pointer dereference
-                void* $s3_1 = $s0_1 + 0x38;
-                void* $s2_1 = *$s3_1;
+                *((int32_t*)((char*)$s0_1 + 0xe8)) = 1; // Fixed void pointer dereference
+                char* $s3_1 = (char*)($s0_1 + 0x38); // Fixed void pointer assignment
+                char* $s2_1 = (char*)(*$s3_1); // Fixed void pointer assignment
                 int32_t $s0_3;
                 
                 while (true)
                 {
-                    else if ($(uintptr_t)s2_1 >= 0xfffff001)
                         char* $v0_6 = (char*)(*(*($s2_1 + 0xc4) + 0x10)); // Fixed void pointer assignment
                             int32_t $v0_7 = *($v0_6 + 4);
                                 int32_t $v0_8 = $v0_7($s2_1);
                     if (!$s2_1)
                         $s3_1 += 4;
+                    else if ($(uintptr_t)s2_1 >= 0xfffff001)
                         $s3_1 += 4;
                     else
                     {
@@ -74,8 +74,8 @@
                                 {
                                     if ($(uintptr_t)v0_8 != 0xfffffdfd)
                                     {
-                                        isp_printf(); // Fixed: macro call, removed arguments);
-                                        $s0_3 = *(arg1 + 0xc0);
+                                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+                                        $s0_3 = arg1[0x30];
                                         break;
                                     }
                                     
@@ -87,7 +87,7 @@
                     
                     if ($s0_1 + 0x78 == $s3_1)
                     {
-                        $s0_3 = *(arg1 + 0xc0);
+                        $s0_3 = arg1[0x30];
                         break;
                     }
                     
@@ -95,7 +95,7 @@
                 }
                 
                 int32_t $s2_2 = $s0_3 - 1;
-                int32_t* $s0_5 = *(arg1 + 0xbc) + ($s0_3 << 2);
+                int32_t* $s0_5 = arg1[0x2f] + ($s0_3 << 2);
                 
                 while (true)
                 {

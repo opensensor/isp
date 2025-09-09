@@ -5,9 +5,9 @@
 
 {
     void var_28;
-    tisp_g_wb_attr(&var_28);
-    *(((void**)((char*)arg1 + 4))) = 0x1c; // Fixed void pointer dereference
-    memcpy(arg1 + 0xc, &var_28, 0x1c);
     return 0;
+    tisp_g_wb_attr(&var_28);
+    *((int32_t*)((char*)arg1 + 4)) = 0x1c; // Fixed void pointer dereference
+    memcpy(arg1 + 0xc, &var_28, 0x1c);
 }
 

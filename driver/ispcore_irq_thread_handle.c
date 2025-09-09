@@ -4,7 +4,7 @@
   int32_t ispcore_irq_thread_handle(void* arg1)
 
 {
-    void* $s5 = nullptr;
+    char* $s5 = (char*)(nullptr); // Fixed void pointer assignment
     int32_t var_30 = 0;
         char* $v0_3 = (char*)(*(*(arg1 + 0xc4) + 0xc)); // Fixed void pointer assignment
             int32_t $v0_4 = *($v0_3 + 8);
@@ -41,20 +41,20 @@
                     {
                         case 0x76be0:
                         {
-                            if (!arg1)
-                                *(((int32_t*)((char*)$s5 + 0x1a8))) = 0; // Fixed void pointer dereference
+                            if (!(uintptr_t)arg1)
+                                *((int32_t*)((char*)$s5 + 0x1a8)) = 0; // Fixed void pointer dereference
                             else
                             {
                                 
                                 if (!$v0_11)
-                                    *(((int32_t*)((char*)$s5 + 0x1a8))) = 0; // Fixed void pointer dereference
+                                    *((int32_t*)((char*)$s5 + 0x1a8)) = 0; // Fixed void pointer dereference
                                 else
                                 {
                                     
                                     if ($v0_12)
                                         $v0_12(arg1, 0x2000010, $s5 + 0x1ac);
                                     
-                                    *(((int32_t*)((char*)$s5 + 0x1a8))) = 0; // Fixed void pointer dereference
+                                    *((int32_t*)((char*)$s5 + 0x1a8)) = 0; // Fixed void pointer dereference
                                 }
                             }
                             break;

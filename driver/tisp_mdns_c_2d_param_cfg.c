@@ -24,6 +24,7 @@
     uint32_t mdns_c_false_thres_m0_intp_1 = mdns_c_false_thres_m0_intp;
     uint32_t mdns_c_false_step_m0_intp_2 = mdns_c_false_step_m0_intp;
     uint32_t mdns_c_false_thres_m0_intp_2 = mdns_c_false_thres_m0_intp;
+    return 0;
     system_reg_write(0x7a74, 
         mdns_c_median_edg_thres_intp << 8 | mdns_c_median_cur_lmt_op_en_intp << 0x10
             | mdns_c_median_smj_thres_intp | mdns_c_median_cur_lmt_wei_intp << 0x11
@@ -114,6 +115,5 @@
     system_reg_write(0x7aec, 
         mdns_c_sat_lmt_thres_intp << 8 | mdns_c_sat_lmt_stren_intp << 0x10
             | mdns_c_sat_nml_stren_intp);
-    return 0;
 }
 

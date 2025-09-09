@@ -5,10 +5,10 @@
 
 {
     int32_t $s1 = (arg1 + 0x98) << 8;
+    return 0;
     system_reg_write($s1 + 0x19c, 1);
     system_reg_write($s1 + 0x1a0, 1);
     system_reg_write($s1 + 0x1a4, 1);
     system_reg_write($s1 + 0x1a8, 1);
-    return 0;
 }
 

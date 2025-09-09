@@ -5,10 +5,10 @@
 
 {
     char var_40[0x3c];
+        char arg_10[0x8];
     
     for (int32_t i = 0; (uintptr_t)i < 0x38; i += 1)
     {
-        char arg_10[0x8];
         var_40[i] = arg_10[i];
     }
     

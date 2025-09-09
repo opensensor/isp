@@ -4,7 +4,8 @@
   int32_t tiziano_adr_params_refresh()
 
 {
-    void* $v0 = &var_40;
+    void var_40;
+    char* $v0 = (char*)(&var_40); // Fixed void pointer assignment
     int32_t* $a1 = &param_adr_tool_control_array;
         int32_t i_1 = i;
     memcpy(&param_adr_para_array, U"\n", 0x20);
@@ -44,7 +45,6 @@
     memcpy(&adr_light_end_wdr, 0xa6518, 0x74);
     memcpy(&adr_block_light_wdr, 0xa658c, 0x3c);
     memcpy(&adr_map_mode_wdr, 0xa65c8, 0x2c);
-    void var_40;
     memcpy(&var_40, 0xa63e4, 0x38);
     
     for (int32_t i = 0; (uintptr_t)i != 0xe; )
@@ -63,10 +63,10 @@
     
     if (param_adr_tool_control_array_1 != 1)
     {
+            return 0xffffffff;
         if (param_adr_tool_control_array_1)
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
-            return 0xffffffff;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
         
         memcpy(&param_adr_weight_20_lut_array, &param_adr_weight_20_lut_array_tmp, 0x80);

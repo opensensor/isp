@@ -10,25 +10,25 @@
     int32_t arg_0 = arg1;
     int32_t arg_8 = arg3;
     int32_t var_20 = arg3;
-    isp_printf(); // Fixed: macro call, removed arguments;
+        int32_t $v0_11;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     
-    if (!arg1 || **&IspAeExp < arg1)
-        isp_printf(); // Fixed: macro call, removed arguments;
+    if (!(uintptr_t)arg1 || **&IspAeExp < arg1)
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     else
         *dmsc_sp_d_ud_ns_opt = arg1;
     
     if ((uintptr_t)arg2 < 0x400 || **&data_d04b8 < arg2)
-        isp_printf(); // Fixed: macro call, removed arguments;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     else
         data_c471c = arg2;
     
     if (data_b2e74 == 1)
     {
-        int32_t $v0_11;
         
-        if (!arg3 || **&data_d04d4 < arg3)
+        if (!(uintptr_t)arg3 || **&data_d04d4 < arg3)
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
             $v0_11 = (uintptr_t)arg4 < 0x400 ? 1 : 0;
         }
         else
@@ -38,7 +38,7 @@
         }
         
         if ($v0_11 || **&data_d04d8_1 < arg4)
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         else
             dmsc_sp_ud_ns_thres_array = arg4;
     }

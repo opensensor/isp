@@ -6,12 +6,12 @@
 {
     int32_t $v0;
     int32_t $a2;
+        return 0xffffffff;
     $v0 = private_kmalloc(0x42c, 0xd0);
     
     if (!$v0)
     {
-        isp_printf(); // Fixed: macro call, removed arguments;
-        return 0xffffffff;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     }
     
     tisp_g_ae_hist($v0);

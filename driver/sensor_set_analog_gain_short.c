@@ -5,13 +5,13 @@
 
 {
     uint32_t ispcore_1 = g_ispcore;
-    char* $v1 = *((char*)ispcore_1 + 0x120); // Fixed void pointer arithmetic
+    int32_t* $v1 = (int32_t*)((char*)ispcore_1  + 0x120); // Fixed void pointer arithmetic
     
     if (*($v1 + 0xe4) != arg1)
     {
-        *(((void**)((char*)$v1 + 0xe4))) = arg1; // Fixed void pointer dereference
-        *(((int32_t*)((char*)ispcore_1 + 0x188))) = 1; // Fixed void pointer dereference
-        *(((void**)((char*)ispcore_1 + 0x18c))) = arg1; // Fixed void pointer dereference
+        *((int32_t*)((char*)$v1 + 0xe4)) = arg1; // Fixed void pointer dereference
+        *((int32_t*)((char*)ispcore_1 + 0x188)) = 1; // Fixed void pointer dereference
+        *((int32_t*)((char*)ispcore_1 + 0x18c)) = arg1; // Fixed void pointer dereference
     }
     
     return ispcore_1;

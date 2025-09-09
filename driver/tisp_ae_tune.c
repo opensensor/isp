@@ -11,6 +11,7 @@
     int32_t $s7 = arg4 << (arg5 & 0x1f);
     int32_t $s3 = 0x80 << (arg5 & 0x1f);
     int32_t result = *arg3 + fix_point_div_32(arg5, fix_point_mult3_32(arg5, $s7, $s5), $s3);
+    return result;
     
     if (arg6 < $v0 + $s1)
         $v0 = arg6 - $s1;
@@ -21,6 +22,5 @@
     
     *arg2 = $s1 + fix_point_div_32(arg5, fix_point_mult3_32(arg5, $s7, $v0), $s3);
     *arg3 = result;
-    return result;
 }
 

@@ -5,6 +5,7 @@
 
 {
         uint32_t $v0_1 = data_9a40c;
+            int32_t $a0_2;
     if (lsc_ct_update_flag != 1)
     {
         
@@ -12,7 +13,6 @@
             data_9a408 = 0;
         else if (data_9a414 < $v0_1)
         {
-            int32_t $a0_2;
             
             if (data_9a418 >= $v0_1)
                 $a0_2 = 2;
@@ -30,9 +30,9 @@
         
         if ($v1_1 != data_9a404_1)
         {
+            return 1;
             lsc_ct_last = $v0_1;
             data_9a404 = $v1_1;
-            return 1;
         }
         
         uint32_t lsc_ct_last_1 = lsc_ct_last;
@@ -42,6 +42,7 @@
         else
         {
             int32_t $v1_4;
+                return 1;
             
             $v1_4 = lsc_ct_last_1 >= $v0_1 ? lsc_ct_last_1 < $v0_1 + 0x1e ? 1 : 0
                 : $v0_1 < lsc_ct_last_1 + 0x1e ? 1 : 0;
@@ -49,7 +50,6 @@
             if (!$v1_4)
             {
                 lsc_ct_last = $v0_1;
-                return 1;
             }
         }
     }

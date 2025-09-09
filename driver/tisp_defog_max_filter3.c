@@ -4,14 +4,14 @@
   char (*)[0xb8] tisp_defog_max_filter3(void* arg1, int32_t arg2)
 
 {
-        int32_t $t3_1 = i - 1;
     char var_d0[0xb8];
     int32_t $v1_1;
+        int32_t $t3_1 = i - 1;
+        int32_t $t6_1;
+        int32_t $s1_1;
     
     for (int32_t i = 0; (uintptr_t)i != 0xa; )
     {
-        int32_t $t6_1;
-        int32_t $s1_1;
         
         if (!i)
         {
@@ -93,11 +93,11 @@
     
     do
     {
+    return result;
         arg2 += 1;
         *(arg2 - 1) = *result;
         result = &(*result)[1];
     } while (arg2 != $v1_1);
     
-    return result;
 }
 

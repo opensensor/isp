@@ -4,15 +4,15 @@
   int32_t tisp_log2_int_to_fixed_64(uint32_t arg1, uint32_t arg2, char arg3, char arg4)
 
 {
+        return 0;
     uint32_t $s3 = arg3;
     uint32_t $s2 = arg4;
-    if (!(arg1 | arg2))
-        return 0;
-    
     uint32_t $v0;
     int32_t $s0;
+    if (!(arg1 | arg2))
     
-    if (!arg2)
+    
+    if (!(uintptr_t)arg2)
     {
         $v0 = arg1;
         $s0 = 0;
@@ -79,9 +79,9 @@
     
     for (int32_t i = 0; i < $s3; i += 1)
     {
-        int32_t $v1_2 = (($v1 * $s1) << 1) + $hi_1;
         int32_t $lo_1;
         int32_t $hi_1;
+        int32_t $v1_2 = (($v1 * $s1) << 1) + $hi_1;
         $hi_1 = HIGHD($s1 * $s1);
         $lo_1 = LOWD($s1 * $s1);
         $a2_4 = $a0 >> 0x1f | $a2_4 << 1;

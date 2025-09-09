@@ -5,37 +5,37 @@
 
 {
     int32_t $v0 = 0xffffffea;
-        char* $s1_1 = *((char*)arg1 + 0xd4); // Fixed void pointer arithmetic
+            return 0xffffffea;
+        int32_t* $s1_1 = (int32_t*)((char*)arg1  + 0xd4); // Fixed void pointer arithmetic
             int32_t $v1_3 = *($s1_1 + 0x128);
     
     if (arg1)
     {
         if ((uintptr_t)arg1 >= 0xfffff001)
-            return 0xffffffea;
         
         $v0 = 0xffffffea;
         
         if ($s1_1 && $(uintptr_t)s1_1 < 0xfffff001)
         {
             
-            if (!arg2)
+            if (!(uintptr_t)arg2)
             {
                 $v0 = 0;
                 
                 if ($v1_3 == 4)
-                    *(((int32_t*)((char*)$s1_1 + 0x128))) = 3; // Fixed void pointer dereference
+                    *((int32_t*)((char*)$s1_1 + 0x128)) = 3; // Fixed void pointer dereference
             }
             else
             {
                     int32_t $v0_1 = tx_isp_vic_start($s1_1);
+                    return $v0_1;
                 $v0 = 0;
                 
                 if ($v1_3 != 4)
                 {
                     tx_vic_disable_irq();
-                    *(((int32_t*)((char*)$s1_1 + 0x128))) = 4; // Fixed void pointer dereference
+                    *((int32_t*)((char*)$s1_1 + 0x128)) = 4; // Fixed void pointer dereference
                     tx_vic_enable_irq();
-                    return $v0_1;
                 }
             }
         }

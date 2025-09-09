@@ -5,9 +5,9 @@
 
 {
     int32_t $a0 = data_b2f3c;
+    int32_t $a0_1;
     tisp_param_operate_deinit();
     tisp_event_exit();
-    int32_t $a0_1;
     
     if (!$a0)
         $a0_1 = data_b2f54;

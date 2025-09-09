@@ -4,9 +4,9 @@
   int32_t tisp_mdns_wdr_en(uint32_t arg1)
 
 {
-    void* var_30 = &data_b0000;
-    mdns_wdr_en = arg1;
+    char* var_30 = (char*)(&data_b0000); // Fixed void pointer assignment
     void* $v0_1;
+    mdns_wdr_en = arg1;
     
     if (arg1)
     {

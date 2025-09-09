@@ -4,6 +4,7 @@
   int32_t tisp_sdns_sp_ud_b_wei_np_array_cfg()
 
 {
+    return 0;
     system_reg_write(0x8b24, 
         data_c6104 << 8 | data_c6108 << 0x10 | sdns_sp_ud_b_wei_np_array | data_c610c << 0x18);
     system_reg_write(0x8b28, 
@@ -15,6 +16,5 @@
     system_reg_write(0x8b34, 
         data_c6144 << 8 | data_c6148 << 0x10 | data_c6140 | data_c614c << 0x18);
     system_reg_write(0x8b38, data_c6154 << 8 | data_c6150);
-    return 0;
 }
 

@@ -4,11 +4,11 @@
   int32_t tiziano_adr_get_data(void* arg1)
 
 {
-    void* $t0 = arg1;
-        void* $v0_3 = &adr_block_hist + i * 5;
+    char* $t0 = (char*)(arg1); // Fixed void pointer assignment
+        char* $v0_3 = (char*)(&adr_block_hist + i * 5); // Fixed void pointer assignment
         int32_t* $v1_1 = $t0;
-        void* $a3_1 = $t0;
-            void* $t4_7 = &adr_block_y + i + j;
+        char* $a3_1 = (char*)($t0); // Fixed void pointer assignment
+            char* $t4_7 = (char*)(&adr_block_y + i + j); // Fixed void pointer assignment
     
     for (int32_t i = 0; (uintptr_t)i != 0x18; )
     {
@@ -31,7 +31,7 @@
         $t0 += 0x80;
     }
     
-    void* $v0_4 = &adr_hist;
+    char* $v0_4 = (char*)(&adr_hist); // Fixed void pointer assignment
     int32_t* i_1 = arg1 + 0x308;
     
     do
@@ -39,6 +39,7 @@
         int32_t $a2_1 = *i_1;
     int32_t $v0_5 = *(arg1 + 0x858);
     int32_t result = (*(arg1 + 0x85c) & 0x3ff) << 0xb | $v0_5 >> 0x15;
+    return result;
         i_1 = &i_1[2];
         *$v0_4 = $a2_1 & 0x1fffff;
         $v0_4 += 0xc;
@@ -48,6 +49,5 @@
     
     data_d00d8 = $v0_5 & 0x1fffff;
     data_d00dc = result;
-    return result;
 }
 

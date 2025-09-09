@@ -4,19 +4,19 @@
   int32_t ispcore_interrupt_service_routine(void* arg1)
 
 {
-    char* $v0 = *((char*)arg1 + 0xb8); // Fixed void pointer arithmetic
-    char* $s0 = *((char*)arg1 + 0xd4); // Fixed void pointer arithmetic
+    int32_t* $v0 = (int32_t*)((char*)arg1  + 0xb8); // Fixed void pointer arithmetic
+    int32_t* $s0 = (int32_t*)((char*)arg1  + 0xd4); // Fixed void pointer arithmetic
     int32_t $s1 = *($v0 + 0xb4);
+    int32_t $a0;
         int32_t var_44_1 = *(*(arg1 + 0xb8) + 0x84c);
         int32_t var_48_1 = 0x3f8;
-    *(((void**)((char*)$v0 + 0xb8))) = $s1; // Fixed void pointer dereference
-    int32_t $a0;
+    *((int32_t*)((char*)$v0 + 0xb8)) = $s1; // Fixed void pointer dereference
     
     if (!($s1 & 0x3f8))
         $a0 = *($s0 + 0x15c);
     else
     {
-        isp_printf(); // Fixed: macro call, removed arguments;
+        isp_printf(); // Fixed: macro with no parameters, removed 6 arguments;
         data_ca57c += 1;
         $a0 = *($s0 + 0x15c);
     }
@@ -93,7 +93,7 @@
     
     if ($v0_17)
     {
-        char* $s3_2 = *((char*)$s0 + 0x150); // Fixed void pointer arithmetic
+        int32_t* $s3_2 = (int32_t*)((char*)$s0  + 0x150); // Fixed void pointer arithmetic
         data_ca584 += 1;
         
         if (data_ca554 == 2)
@@ -116,7 +116,7 @@
             $v0_28 = *(arg1 + 0xb8);
         }
         
-        char* $a0_1 = *((char*)$s0 + 0x1bc); // Fixed void pointer arithmetic
+        int32_t* $a0_1 = (int32_t*)((char*)$s0  + 0x1bc); // Fixed void pointer arithmetic
         
         if ($a0_1)
             (*($a0_1 + 0x40cc))($a0_1, 0x4000002, 0);
@@ -143,12 +143,12 @@
         if ($v1_10 == 1)
         {
             uint8_t isp_day_night_switch_drop_frame_num_1 = *isp_day_night_switch_drop_frame_num;
+            void* $a0_3;
             *isp_day_night_switch_drop_frame_cnt = isp_day_night_switch_drop_frame_num_1;
             (*(isp_day_night_switch_drop_frame_cnt + 1)) = isp_day_night_switch_drop_frame_num_1;
             (*(isp_day_night_switch_drop_frame_cnt + 2)) = isp_day_night_switch_drop_frame_num_1;
             isp_day_night_switch_drop_frame_cnt_pdq_interrupt =
                 isp_day_night_switch_drop_frame_num_1;
-            void* $a0_3;
             
             if (*(*($s0 + 0x1bc) + 0x40a4) != $v1_10)
                 $a0_3 = *($s0 + 0x1bc);
@@ -161,20 +161,20 @@
             if ($a0_3)
                 (*($a0_3 + 0x40cc))($a0_3, 0x4000003, 0);
             
-            *(((int32_t*)((char*)$s0 + 0x178))) = 0; // Fixed void pointer dereference
+            *((int32_t*)((char*)$s0 + 0x178)) = 0; // Fixed void pointer dereference
             data_ca570_2 = 1;
             $v0_35 = *($s0 + 0x134);
         }
         else
         {
             int32_t $a1_1;
+                    goto label_79b2c;
             
             if ($v1_10 != 2)
             {
                 if ($v1_10 == 3)
                 {
                     $a1_1 = 0xff008080;
-                    goto label_79b2c;
                 }
                 
                 $v0_35 = *($s0 + 0x134);
@@ -184,7 +184,7 @@
                 $a1_1 = 0xff00ff00;
             label_79b2c:
                 system_reg_write(0x6030, $a1_1);
-                *(((int32_t*)((char*)$s0 + 0x178))) = 0; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s0 + 0x178)) = 0; // Fixed void pointer dereference
                 $v0_35 = *($s0 + 0x134);
             }
         }
@@ -200,7 +200,7 @@
             if (*($s0 + 0x11c) == $v0_35)
             {
                 mbus_to_bayer_write(*($s0 + 0xf4));
-                *(((int32_t*)((char*)$s0 + 0x11c))) = 0; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s0 + 0x11c)) = 0; // Fixed void pointer dereference
                 first_into_1 = first_into;
             }
         }
@@ -219,7 +219,7 @@
     
     if ($v0_36)
     {
-        char* $s5_1 = *((char*)$s0 + 0x150); // Fixed void pointer arithmetic
+        int32_t* $s5_1 = (int32_t*)((char*)$s0  + 0x150); // Fixed void pointer arithmetic
         int32_t $v0_37 = *(arg1 + 0xb8);
             int32_t var_38_2 = *($v0_37 + 0x9a74);
             int32_t var_34_2 = *($v0_37 + 0x9a8c);
@@ -248,7 +248,7 @@
     
     if ($v0_39)
     {
-        char* $s4_1 = *((char*)$s0 + 0x150); // Fixed void pointer arithmetic
+        int32_t* $s4_1 = (int32_t*)((char*)$s0  + 0x150); // Fixed void pointer arithmetic
         int32_t $v0_42 = *(arg1 + 0xb8);
             int32_t var_38_3 = *($v0_42 + 0x9b74);
             int32_t var_34_3 = *($v0_42 + 0x9b8c);
@@ -263,7 +263,7 @@
         }
     }
     
-    void* $s2_1 = &irq_func_cb;
+    char* $s2_1 = (char*)(&irq_func_cb); // Fixed void pointer assignment
     int32_t i = 0;
     int32_t result = 1;
     

@@ -4,7 +4,7 @@
   uint8_t tisp_af_get_statistics(void* arg1, int32_t arg2, int32_t arg3)
 
 {
-    void* $t2 = arg1;
+    char* $t2 = (char*)(arg1); // Fixed void pointer assignment
     int32_t $t3 = 0;
     int32_t $t1 = 0;
         int32_t* $v0_1 = $t2;
@@ -26,14 +26,14 @@
             if (arg3 << 2 == $t0_1)
                 break;
             
-            *(((void**)((char*)&af_array_fird0 + $v1_1))) = *$v0_1 & 0x3fffff; // Fixed void pointer dereference
+            *(&af_array_fird0 + $v1_1) = *$v0_1 & 0x3fffff;
             $t0_1 += 4;
-            *(((void**)((char*)&af_array_fird1 + $v1_1))) = ($v0_1[1] & 0xfff) << 0xa | *$v0_1 >> 0x16; // Fixed void pointer dereference
+            *(&af_array_fird1 + $v1_1) = ($v0_1[1] & 0xfff) << 0xa | *$v0_1 >> 0x16;
             $v0_1 = &$v0_1[4];
-            *(((void**)((char*)&af_array_iird0 + $v1_1))) = $s4_3 | $a3_10 >> 0xc; // Fixed void pointer dereference
-            *(((void**)((char*)&y_sp_fl_sl_0_array + $v1_1))) = (*($v0_1 - 8) & 0xfffffc) >> 2; // Fixed void pointer dereference
-            *(((void**)((char*)&tisp_BCSH_u32HLSPslope + $v1_1))) = (*($v0_1 - 4) & 0x7fff) << 8 | *($v0_1 - 5); // Fixed void pointer dereference
-            *(((void**)((char*)&af_array_high_luma_cnt + $v1_1))) = (*($v0_1 - 4) & 0x3fff1000) >> 0xf; // Fixed void pointer dereference
+            *(&af_array_iird0 + $v1_1) = $s4_3 | $a3_10 >> 0xc;
+            *(&y_sp_fl_sl_0_array + $v1_1) = (*($v0_1 - 8) & 0xfffffc) >> 2;
+            *(&tisp_BCSH_u32HLSPslope + $v1_1) = (*($v0_1 - 4) & 0x7fff) << 8 | *($v0_1 - 5);
+            *(&af_array_high_luma_cnt + $v1_1) = (*($v0_1 - 4) & 0x3fff1000) >> 0xf;
         }
         
         $t1 += 1;

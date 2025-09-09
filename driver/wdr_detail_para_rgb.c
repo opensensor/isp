@@ -11,10 +11,10 @@
     int32_t $a3 = $t6_1;
     int32_t $t1 = 0;
     int32_t $t2 = 0;
-        int32_t $v0_3 = *(arg3 + 0x3fc);
-        void* $v1_2 = arg3;
-            int32_t $a1 = *($v1_2 + 4);
     int32_t $v1_1;
+        int32_t $v0_3 = *(arg3 + 0x3fc);
+        char* $v1_2 = (char*)(arg3); // Fixed void pointer assignment
+            int32_t $a1 = *($v1_2 + 4);
     
     while (true)
     {
@@ -51,7 +51,7 @@
     while (true)
     {
         int32_t $a3_2 = *(arg3 + 0x3fc);
-        void* $t3_2 = arg3;
+        char* $t3_2 = (char*)(arg3); // Fixed void pointer assignment
             int32_t $t0_2 = *($t3_2 + 4);
         $a3_1 = $t6_2 - $t5_1;
         

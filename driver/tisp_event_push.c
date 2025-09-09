@@ -6,17 +6,17 @@
 {
     int32_t $v0 = arch_local_irq_save();
     int32_t* $v0_1 = data_b33b8;
+        return 0xffffffff;
     
     if ($v0_1 == &data_b33b8)
     {
-        isp_printf(); // Fixed: macro call, removed arguments;
+        isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
         arch_local_irq_restore($v0);
-        return 0xffffffff;
     }
     
     void** $a0_1 = $v0_1[1];
-    void* $a1_1 = *$v0_1;
-    *(((void**)((char*)$a1_1 + 4))) = $a0_1; // Fixed void pointer dereference
+    char* $a1_1 = (char*)(*$v0_1); // Fixed void pointer assignment
+    *((int32_t*)((char*)$a1_1 + 4)) = $a0_1; // Fixed void pointer dereference
     *$a0_1 = $a1_1;
     *$v0_1 = 0x100100;
     $v0_1[1] = 0x200200;

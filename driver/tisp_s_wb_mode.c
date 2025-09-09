@@ -7,12 +7,12 @@
     int32_t arg_0 = arg1;
     int32_t arg_4 = arg2;
     int32_t arg_8 = arg3;
-    int32_t arg_c = $a3;
     int32_t $a3;
+    int32_t arg_c = $a3;
     int32_t $v1_2;
     
     if ((uintptr_t)arg1 >= 0xa)
-        isp_printf(); // Fixed: macro call, removed arguments;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     else
         switch (arg1)
         {
@@ -81,8 +81,8 @@
             }
             case 9:
             {
-                $v1_2 = 9;
                 goto label_29490;
+                $v1_2 = 9;
             }
         }
     awb_moa = 1;

@@ -4,6 +4,7 @@
   int32_t tisp_sdns_all_reg_refresh(int32_t arg1)
 
 {
+    return 0;
     tisp_sdns_intp(arg1);
     tisp_sdns_grad_thres_opt_cfg();
     tisp_sdns_h_mv_wei_opt_cfg();
@@ -35,6 +36,5 @@
     tisp_sdns_sp_ud_w_wei_np_array_cfg();
     tisp_sdns_sp_ud_b_wei_np_array_cfg();
     system_reg_write(0x8b4c, 1);
-    return 0;
 }
 

@@ -7,7 +7,7 @@
     uint32_t $s0 = arg1;
     uint32_t var_10 = $s0;
     tisp_bcsh_s_hue($s0);
-    return isp_printf(); // Fixed: macro call, removed arguments\n", 
+    return isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", 
         "tisp_set_bcsh_hue");
 }
 

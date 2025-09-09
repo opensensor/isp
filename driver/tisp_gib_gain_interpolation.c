@@ -11,19 +11,19 @@
     int32_t $v0_2 = tisp_simple_intp($s2, $s3, &tiziano_gib_deirm_blc_gb_linear);
     int32_t $v0_3 = tisp_simple_intp($s2, $s3, &tiziano_gib_deirm_blc_b_linear);
     int32_t $v0_4 = tisp_simple_intp($s2, $s3, U"A?CB?????");
-    int32_t $v0_6 = $v0_5 & 0x1f;
     int32_t $v0_5;
     int32_t $a2;
-    $v0_5 = system_reg_read(8);
+    int32_t $v0_6 = $v0_5 & 0x1f;
     int32_t $s1;
     int32_t $s2_1;
     int32_t $s3_1;
     int32_t $s4;
+    $v0_5 = system_reg_read(8);
     
     if ($(uintptr_t)v0_6 >= 0x18)
     {
     label_318a8:
-        isp_printf(); // Fixed: macro call, removed arguments;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         $s1 = 0;
         $s3_1 = 0;
         $s2_1 = 0;
@@ -114,15 +114,15 @@
             }
             case 0xc:
             {
+                goto label_317b8;
                 $s1 = $v0_2;
                 $s3_1 = $v0_4;
-                goto label_317b8;
             }
             case 0xd:
             {
+                goto label_317d4;
                 $s1 = $v0_1;
                 $s3_1 = $v0_4;
-                goto label_317d4;
             }
             case 0xe:
             {
@@ -152,9 +152,9 @@
             }
             case 0x11:
             {
+                goto label_31818;
                 $s1 = $s0;
                 $s3_1 = $v0_4;
-                goto label_31818;
             }
             case 0x12:
             {

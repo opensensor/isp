@@ -4,9 +4,9 @@
   int32_t tisp_dn_mode_set(int32_t arg1)
 
 {
+    int32_t var_10;
     int32_t $v0 = var_10;
     uint32_t $a0_1 = 0;
-    int32_t var_10;
     memcpy(&var_10, arg1 + 0xc, 4);
     
     if ($v0)
@@ -15,7 +15,7 @@
         
         if ($v0 != 1)
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
             $a0_1 = 0;
         }
     }

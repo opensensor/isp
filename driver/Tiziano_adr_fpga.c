@@ -9,6 +9,8 @@
     int32_t* arg_8 = arg3;
     int32_t* var_c4 = arg3;
     int32_t* arg_c = arg4;
+    void var_2b0;
+    void var_2d4;
     int32_t $v0_3 = fix_point_div_32(0x10, 0x385b0000, 0x27100000);
     int32_t $v0_4 = *arg16;
     int32_t $v1_1 = arg16[0xa];
@@ -59,28 +61,26 @@
     int32_t $a0_21 = arg14[8];
     int32_t $a0_22 = arg14[9];
     int32_t $v1_15 = arg14[0xa];
+    int32_t var_144;
+    int32_t var_1d8;
+    int32_t var_190;
+    int32_t var_16c;
         int32_t $a0_25 = *(arg10 + i);
-        void* $a3_4 = &var_1d8 + i;
-    void var_2b0;
+        void var_220;
+        char* $a3_4 = (char*)(&var_1d8 + i); // Fixed void pointer assignment
     memcpy(&var_2b0, 0x7b1f0, 0x24);
-    void var_2d4;
     memcpy(&var_2d4, 0x7b214, 0x24);
     int32_t (* var_118)(int32_t arg1, int32_t arg2, int32_t arg3) = fix_point_div_32;
-    int32_t var_144;
     __builtin_memcpy(&var_144, 
         "\x1e\x00\x00\x00\x28\x00\x00\x00\x32\x00\x00\x00\x3c\x00\x00\x00\x46\x00\x00\x00\x50\x00\x00\x"
     "00\x64\x00\x00\x00", 
         0x1c);
-    int32_t var_1d8;
-    int32_t var_190;
-    int32_t var_16c;
     
     for (int32_t i = 0; (uintptr_t)i != 0x24; )
     {
-        void var_220;
-        *(((void**)((char*)&var_220 + i))) = $a0_25; // Fixed void pointer dereference
-        *(((void**)((char*)&var_16c + i))) = $a0_25; // Fixed void pointer dereference
-        *(((void**)((char*)&var_190 + i))) = $a0_25; // Fixed void pointer dereference
+        *(&var_220 + i) = $a0_25;
+        *(&var_16c + i) = $a0_25;
+        *(&var_190 + i) = $a0_25;
         i += 4;
         *$a3_4 = $a0_25;
     }
@@ -101,7 +101,8 @@
     int32_t $a2_1 = 0;
     int32_t* i_2 = arg7;
         int32_t $t3_2 = *i_2;
-        void* $t1_3 = &data_a80c0 + i_3;
+    void* $t1_4;
+        char* $t1_3 = (char*)(&data_a80c0 + i_3); // Fixed void pointer assignment
         int32_t $lo_3 = (*(&adr_hist_512 + i_3) << 8) / ($v0_12 >> 8);
         i_1 = &i_1[1];
         $v1_16 += $t3_1;
@@ -121,7 +122,6 @@
         $a0_27 = &$a0_27[1];
     } while (&arg7[0x200] != i_2);
     
-    void* $t1_4;
     
     for (int32_t i_3 = 0; (uintptr_t)i_3 != 0x800; )
     {
@@ -130,18 +130,18 @@
         $t1_4 = &data_a80c0;
     }
     
-    void* $s7_1 = arg9 + 0x78;
+    char* $s7_1 = (char*)(arg9 + 0x78); // Fixed void pointer assignment
     
     for (int32_t i_4 = 0; (uintptr_t)i_4 != 0x1e0; )
     {
-        void* $v1_18 = &adr_block_hist_120 + i_4;
-        void* $v0_19 = $s7_1;
+        char* $v1_18 = (char*)(&adr_block_hist_120 + i_4); // Fixed void pointer assignment
+        char* $v0_19 = (char*)($s7_1); // Fixed void pointer assignment
             int32_t $t5_3 = *($v0_19 + 0x1c);
         
         for (int32_t j = 1; j != 5; )
         {
             j += 1;
-            *$v1_18 = *($v0_19 + 0x14);
+            *((int32_t*)$v1_18) = *($v0_19 + 0x14); // Fixed void pointer dereference
             $v1_18 += 0x14;
             *($v1_18 - 0x10) = *($v0_19 + 0x18);
             $v0_19 += 0x14;
@@ -154,13 +154,13 @@
         $s7_1 += 0x78;
     }
     
-    void* $a3_6 = &arg8[6];
+    char* $a3_6 = (char*)(&arg8[6]); // Fixed void pointer assignment
     int32_t* $v0_23;
     
     for (int32_t i_5 = 0; (uintptr_t)i_5 != 0x60; )
     {
             int32_t $t6_1 = *($a3_6 + j_1 + 4);
-            void* $v0_22 = &adr_block_y_24 + i_5 + j_1;
+            char* $v0_22 = (char*)(&adr_block_y_24 + i_5 + j_1); // Fixed void pointer assignment
         for (int32_t j_1 = 0; (uintptr_t)j_1 != 0x10; )
         {
             j_1 += 4;
@@ -192,8 +192,8 @@
         data_b785c = data_b785c + arg8[0x29] + arg8[0x2e] + arg8[0x2f];
     }
     
-    void* var_118_1 = &block_mean_y;
-    void* $t3_4 = &block_mean_y;
+    char* var_118_1 = (char*)(&block_mean_y); // Fixed void pointer assignment
+    char* $t3_4 = (char*)(&block_mean_y); // Fixed void pointer assignment
     int32_t i_20 = 0;
     int32_t i_21 = 0;
     int32_t var_114_1 = 0xfff;
@@ -235,36 +235,15 @@
     
     do
     {
-        int32_t* var_e0_1 = &var_148;
-        int32_t* $v1_100 = &var_148;
-        int32_t i_9 = 0;
-            int32_t $t2_2 = *$v1_100;
-            int32_t $t0_2 = i_9 * 9;
-                    void* $a1_80 = &var_16c + i_8;
-                    int32_t $v1_103 = *(&var_420 + ($t0_2 << 2) + i_8);
         int32_t var_1fc;
-        (&data_30000 - 0x427c)(&var_1fc, *(&var_148 + i_7), arg11, arg12, $t1_4, 8, 0xa, 0x10, $t0);
-        i_7 += 4;
-        *$s4_1 = var_1fc;
-        $s4_1 = &$s4_1[9];
         int32_t var_1f8;
-        *($s4_1 - 0x20) = var_1f8;
         int32_t var_1f4;
-        *($s4_1 - 0x1c) = var_1f4;
         int32_t var_1f0;
-        *($s4_1 - 0x18) = var_1f0;
         int32_t var_1ec;
-        *($s4_1 - 0x14) = var_1ec;
         int32_t var_1e8;
-        *($s4_1 - 0x10) = var_1e8;
         int32_t var_1e4;
-        *($s4_1 - 0xc) = var_1e4;
         int32_t var_1e0;
-        *($s4_1 - 8) = var_1e0;
         int32_t var_1dc;
-        *($s4_1 - 4) = var_1dc;
-    } while ((uintptr_t)i_7 != 0x20);
-    
     int32_t var_41c;
     int32_t var_418;
     int32_t var_414;
@@ -288,10 +267,31 @@
     int32_t var_160;
     int32_t var_15c;
     int32_t var_14c;
+        int32_t* var_e0_1 = &var_148;
+        int32_t* $v1_100 = &var_148;
+        int32_t i_9 = 0;
+        int32_t $v0_172;
+            int32_t $t2_2 = *$v1_100;
+            int32_t $t0_2 = i_9 * 9;
+                    char* $a1_80 = (char*)(&var_16c + i_8); // Fixed void pointer assignment
+                    int32_t $v1_103 = *(&var_420 + ($t0_2 << 2) + i_8);
+        (&data_30000 - 0x427c)(&var_1fc, *(&var_148 + i_7), arg11, arg12, $t1_4, 8, 0xa, 0x10, $t0);
+        i_7 += 4;
+        *$s4_1 = var_1fc;
+        $s4_1 = &$s4_1[9];
+        *($s4_1 - 0x20) = var_1f8;
+        *($s4_1 - 0x1c) = var_1f4;
+        *($s4_1 - 0x18) = var_1f0;
+        *($s4_1 - 0x14) = var_1ec;
+        *($s4_1 - 0x10) = var_1e8;
+        *($s4_1 - 0xc) = var_1e4;
+        *($s4_1 - 8) = var_1e0;
+        *($s4_1 - 4) = var_1dc;
+    } while ((uintptr_t)i_7 != 0x20);
+    
     
     if ($s6_1 != 1)
     {
-        int32_t $v0_172;
         
         while (true)
         {
@@ -310,29 +310,29 @@
             
             if ($s1 < $t2_2)
             {
-                if (i_9)
-                {
                     int32_t $v0_182;
                     int32_t $t0_5;
                     int32_t $t1_5;
                     int32_t $t2_3;
                     int32_t $t3_9;
-                    $v0_182 = interpolate_adr_x8_y12((&var_420)[i_9 + 0xb5], $t2_2, 
-                        (&var_420)[$t0_2 - 8], (&var_420)[$t0_2 + 1], $s1);
-                    var_168 = $v0_182;
                     int32_t $v0_189;
                     int32_t $t0_6;
                     int32_t $t1_6;
                     int32_t $t2_4;
                     int32_t $t3_10;
-                    $v0_189 =
-                        $t1_5($t3_9, $t2_3, (&var_420)[$t0_5 - 7], (&var_420)[$t0_5 + 2], $s1);
-                    var_164 = $v0_189;
                     int32_t $v0_196;
                     int32_t $t0_7;
                     int32_t $t1_7;
                     int32_t $t2_5;
                     int32_t $t3_11;
+                if (i_9)
+                {
+                    $v0_182 = interpolate_adr_x8_y12((&var_420)[i_9 + 0xb5], $t2_2, 
+                        (&var_420)[$t0_2 - 8], (&var_420)[$t0_2 + 1], $s1);
+                    var_168 = $v0_182;
+                    $v0_189 =
+                        $t1_5($t3_9, $t2_3, (&var_420)[$t0_5 - 7], (&var_420)[$t0_5 + 2], $s1);
+                    var_164 = $v0_189;
                     $v0_196 =
                         $t1_6($t3_10, $t2_4, (&var_420)[$t0_6 - 6], (&var_420)[$t0_6 + 3], $s1);
                     var_160 = $v0_196;
@@ -342,7 +342,7 @@
                 }
                 else
                 {
-                        void* $a1_82 = &var_16c + i_9;
+                        char* $a1_82 = (char*)(&var_16c + i_9); // Fixed void pointer assignment
                         int32_t $v1_106 = *(&var_420 + ($t0_2 << 2) + i_9);
                     do
                     {
@@ -362,7 +362,7 @@
             if (i_9 == 8)
             {
                     int32_t $a1_88 = *(&var_420 + i_10 + 0x120);
-                    void* $a0_88 = &var_16c + i_10;
+                    char* $a0_88 = (char*)(&var_16c + i_10); // Fixed void pointer assignment
                 for (int32_t i_10 = 0; (uintptr_t)i_10 != 0x24; )
                 {
                     i_10 += 4;
@@ -436,9 +436,11 @@
         do
         {
             int32_t $a2_122 = *$v0_477;
-            else if ($a2_122 >= $v0_461)
+            int32_t $v0_493;
         int32_t $v0_523 = 0;
+        int32_t var_18c;
             int32_t $s1_11 = *var_e0_1;
+            int32_t $v0_528;
                 int32_t $v0_524 = $v0_523 * 9;
                 int32_t var_188_1 = (&var_420)[$v0_524 + 2];
                 int32_t var_184_1 = (&var_420)[$v0_524 + 3];
@@ -446,7 +448,6 @@
                 int32_t var_17c_1 = (&var_420)[$v0_524 + 5];
                 int32_t var_178_1 = (&var_420)[$v0_524 + 6];
                 int32_t var_174_1 = (&var_420)[$v0_524 + 7];
-            int32_t $v0_493;
             
             if ($a2_122 < $v0_456)
                 $v0_493 = $v0_463 - ((fix_point_mult2_32(0xa, 
@@ -468,6 +469,7 @@
                 $v0_493 = $s1_10 - ((fix_point_mult2_32(0xa, 
                     fix_point_div_32(0xa, ($s1_10 - $s3_11) << 0xa, $v0_468 << 0xa), 
                     (var_15c - $a2_122) << 0xa) + 0x200) >> 0xa);
+            else if ($a2_122 >= $v0_461)
                 $v0_493 = $a0_128;
             else
                 $v0_493 = $a0_128 - ((fix_point_mult2_32(0xa, 
@@ -480,11 +482,9 @@
             $v0_477 = var_c4;
         } while (&arg4[0xb] != i_11);
         
-        int32_t var_18c;
         
         while (true)
         {
-            int32_t $v0_528;
             
             if ($v0_9 == $s1_11)
             {
@@ -508,10 +508,10 @@
                     int32_t $s2_32 = (&var_420)[$v0_523 + 0xb5];
                     int32_t $a1_158 = (&var_420)[$s4_8 + 1];
                     int32_t $s5_5 = (&var_420)[$s4_8 - 8];
-                if ($v0_523)
-                {
                     int32_t $a1_159;
                     int32_t $s7_2;
+                if ($v0_523)
+                {
                     
                     if ($s5_5 >= $a1_158)
                     {
@@ -658,9 +658,9 @@
         {
             int32_t $v1_257 = var_1b4;
             int32_t $s7_5 = *$s6_4;
+            int32_t $v0_591;
                 int32_t $a1_175 = *arg13;
             *$s1_14 = *i_13;
-            int32_t $v0_591;
             
             if ($s7_5 < $v1_257)
             {
@@ -840,13 +840,13 @@
     }
     else
     {
-            int32_t $a1_6 = *($t3_6 + i_14);
-            void* $a0_58 = &var_16c + i_14;
         void var_244;
-        subsection_up(&var_244, &var_2b0, $t1_4, 8);
         void var_268;
         void* $t3_6;
         int32_t $t4_4;
+            int32_t $a1_6 = *($t3_6 + i_14);
+            char* $a0_58 = (char*)(&var_16c + i_14); // Fixed void pointer assignment
+        subsection_up(&var_244, &var_2b0, $t1_4, 8);
         $t3_6 = subsection_light(&var_244, &var_2d4, $v0_9 * 0xa, &var_268);
         
         for (int32_t i_14 = 0; (uintptr_t)i_14 != 0x24; )
@@ -918,11 +918,11 @@
         do
         {
             int32_t $a2_19 = *$v0_61;
-            else if ($a2_19 >= $v0_44)
-        void* $t3_7 = $t4_4(&var_244, &var_2d4, 0, &var_28c);
-            int32_t $v1_89 = *($t3_7 + i_16);
-            void* $a1_26 = &var_1b4 + i_16;
             int32_t $v0_77;
+        void var_28c;
+        char* $t3_7 = (char*)($t4_4(&var_244, &var_2d4, 0, &var_28c)); // Fixed void pointer assignment
+            int32_t $v1_89 = *($t3_7 + i_16);
+            char* $a1_26 = (char*)(&var_1b4 + i_16); // Fixed void pointer assignment
             
             if ($a2_19 < $v0_39)
                 $v0_77 = $v0_46 - ((fix_point_mult2_32(0xa, 
@@ -944,6 +944,7 @@
                 $v0_77 = $s1_2 - ((fix_point_mult2_32(0xa, 
                     fix_point_div_32(0xa, ($s1_2 - $s3_2) << 0xa, $v0_51 << 0xa), 
                     (var_15c - $a2_19) << 0xa) + 0x200) >> 0xa);
+            else if ($a2_19 >= $v0_44)
                 $v0_77 = $a0_62;
             else
                 $v0_77 = $a0_62 - ((fix_point_mult2_32(0xa, 
@@ -956,11 +957,10 @@
             $v0_61 = var_cc;
         } while (i_15 != &arg4[0xb]);
         
-        void var_28c;
         
         for (int32_t i_16 = 0; (uintptr_t)i_16 != 0x24; )
         {
-            *(((void**)((char*)&var_190 + i_16))) = $v1_89; // Fixed void pointer dereference
+            *(&var_190 + i_16) = $v1_89;
             i_16 += 4;
             *$a1_26 = $v1_89;
         }
@@ -999,12 +999,12 @@
             }
             else
             {
+                int32_t $v0_116;
                     int32_t $a1_33 = arg13[2];
                     int32_t $v0_121 = arg13[1];
                     int32_t $a0_74 = $a1_33 - $v0_121;
                     int32_t $a2_38 = (var_1ac - var_1b0) << 0xa;
                     int32_t $s2_7 = (var_1ac - $v0_110) << 0xa;
-                int32_t $v0_116;
                 
                 if ($v0_110 < var_1ac)
                 {
@@ -1165,12 +1165,12 @@
     }
     else
     {
+            int32_t $lo_7;
+            int32_t $hi_6;
         $v1_98 = $v1_5;
         
         if ($v0_4 == 3)
         {
-            int32_t $lo_7;
-            int32_t $hi_6;
             $hi_6 = HIGHD($a0_13 * $a0_14 + (0x100 - $a0_14) * $lo_2);
             $lo_7 = LOWD($a0_13 * $a0_14 + (0x100 - $a0_14) * $lo_2);
             var_128 = $lo_7 / 0x100;
@@ -1224,10 +1224,10 @@
         
         if ($a0_17)
         {
-        label_2d938:
             int32_t $v1_125;
             int32_t $v0_231;
             int32_t $v1_124;
+        label_2d938:
             
             if ($a0_17 == 1)
             {
@@ -1244,15 +1244,15 @@
             }
             else
             {
+                    int32_t $lo_15;
+                    int32_t $hi_12;
+                    goto label_2d9a0;
                 if ($a0_17 == 3)
                 {
                     $v1_124 = 0x100;
-                    int32_t $lo_15;
-                    int32_t $hi_12;
                     $hi_12 = HIGHD(var_124_1 * $a0_19 + ($v0_8 + 0xc8) / 2 * (0x100 - $a0_19));
                     $lo_15 = LOWD(var_124_1 * $a0_19 + ($v0_8 + 0xc8) / 2 * (0x100 - $a0_19));
                     $v0_231 = $lo_15;
-                    goto label_2d9a0;
                 }
                 
                 $v1_125 = $v1_5;
@@ -1281,6 +1281,9 @@
     {
         int32_t $v1_109 = var_128;
         int32_t $a0_90 = $v1_7;
+            int32_t $v1_116;
+            int32_t $v0_215;
+            int32_t $v1_115;
         
         if (var_128 < $v1_6)
             $v1_109 = $v1_6;
@@ -1295,9 +1298,6 @@
         {
             $v1_112 = $v0_5;
         label_2d828:
-            int32_t $v1_116;
-            int32_t $v0_215;
-            int32_t $v1_115;
             
             if ($v1_112 == 1)
             {
@@ -1314,15 +1314,15 @@
             }
             else
             {
+                    int32_t $lo_11;
+                    int32_t $hi_9;
+                    goto label_2d898;
                 if ($v0_5 == 3)
                 {
                     $v1_115 = 0x100;
-                    int32_t $lo_11;
-                    int32_t $hi_9;
                     $hi_9 = HIGHD($a0_15 * $a0_16 + (var_128_1 - var_114_1) / 2 * (0x100 - $a0_16));
                     $lo_11 = LOWD($a0_15 * $a0_16 + (var_128_1 - var_114_1) / 2 * (0x100 - $a0_16));
                     $v0_215 = $lo_11;
-                    goto label_2d898;
                 }
                 
                 $v1_116 = $v1_5;
@@ -1368,14 +1368,14 @@
     int32_t* $fp_1 = arg6;
     int32_t $v0_248 = $v1_13 << 0x10;
     int32_t* var_11c_2_1 = $fp_1;
-    void* var_98_1_1 = &adr_hist_512;
+    char* var_98_1_1 = (char*)(&adr_hist_512); // Fixed void pointer assignment
     void* const var_8c_1_1 = &data_20000_2;
     int32_t var_e8_3 = 0x3ffffc;
-    void* $v0_253 = var_118_1_1;
+    char* $v0_253 = (char*)(var_118_1_1); // Fixed void pointer assignment
     
     while (true)
     {
-        void* $v0_256 = var_118_1;
+        char* $v0_256 = (char*)(var_118_1); // Fixed void pointer assignment
         
         if (*$v0_253 < 2)
         {
@@ -1439,11 +1439,11 @@
         while (true)
         {
             int32_t $s1_4 = *$a0_108;
+            int32_t $v0_314;
                 int32_t $v1_141 = $v1_140 * 9;
                 int32_t var_1c4_1 = (&var_420)[$v1_141 + 5];
                 int32_t var_1c0_1 = (&var_420)[$v1_141 + 6];
                 int32_t var_1bc_1 = (&var_420)[$v1_141 + 7];
-            int32_t $v0_314;
             
             if ($v0_281 == $s1_4)
             {
@@ -1470,10 +1470,10 @@
                     int32_t $s0_1 = (&var_420)[$v1_140 + 0xb5];
                     int32_t $a1_106 = (&var_420)[$s2_22 + 1];
                     int32_t $s3_3 = (&var_420)[$s2_22 - 8];
-                if ($v1_140)
-                {
                     int32_t $a1_107;
                     int32_t $s5_1;
+                if ($v1_140)
+                {
                     
                     if ($s3_3 >= $a1_106)
                     {
@@ -1647,12 +1647,11 @@
         do
         {
             int32_t $a2_95 = *$s4_4;
-            else if ($a2_95 >= $v0_372)
+            int32_t $v0_401;
                 int32_t $v0_435 = *$s4_4;
                     int32_t $v0_438 = $v0_435 - *($s4_4 - 4);
                     int32_t $a1_138 = (&var_300)[i_18];
                     int32_t $a0_118 = *($s0_5 - 4);
-            int32_t $v0_401;
             
             if ($a2_95 < $v0_367)
                 $v0_401 = $s5_4 - (((var_8c_1 + 0xfd4)(0xa, 
@@ -1674,6 +1673,7 @@
                 $v0_401 = $a2_89 - (((var_8c_1 + 0xfd4)(0xa, 
                     fix_point_div_32(0xa, ($a2_89 - $v0_383) << 0xa, $v0_385 << 0xa), 
                     (var_1c8 - $a2_95) << 0xa) + 0x200) >> 0xa);
+            else if ($a2_95 >= $v0_372)
                 $v0_401 = $v0_374;
             else
                 $v0_401 = $v0_374 - (((var_8c_1 + 0xfd4)(0xa, 
@@ -1762,7 +1762,7 @@
             else
             {
                     int32_t $a1_139 = *(arg5 + result);
-                    void* $a0_123 = $fp_1 + result;
+                    char* $a0_123 = (char*)($fp_1 + result); // Fixed void pointer assignment
                 result = 0;
                 
                 while (true)

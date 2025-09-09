@@ -4,8 +4,8 @@
   int32_t tx_isp_vic_remove(int32_t arg1)
 
 {
-    void* $v0 = private_platform_get_drvdata();
-    void* $s0 = $v0;
+    char* $v0 = (char*)(private_platform_get_drvdata()); // Fixed void pointer assignment
+    char* $s0 = (char*)($v0); // Fixed void pointer assignment
     int32_t $s1 = 0;
     
     if ($v0)

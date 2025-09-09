@@ -6,6 +6,7 @@
 {
     int32_t $s2 = arg1 >> 0x10;
     int32_t $s0 = arg1 & 0xffff;
+    return 0;
     ydns_mv_thres0_intp = tisp_simple_intp($s2, $s0, &sdns_mv_num_thr_9x9_array);
     ydns_mv_thres1_intp = tisp_simple_intp($s2, $s0, &sdns_mv_num_thr_11x11_array);
     sdns_h_s_9_array = tisp_simple_intp($s2, $s0, &ydns_mv_thres2_array);
@@ -20,6 +21,5 @@
     sdns_h_s_10_array = tisp_simple_intp($s2, $s0, &ydns_edge_wei_array);
     ydns_edge_div_intp = tisp_simple_intp($s2, $s0, &ydns_edge_div_array);
     ydns_edge_thres_intp = tisp_simple_intp($s2, $s0, &ydns_edge_thres_array);
-    return 0;
 }
 

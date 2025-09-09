@@ -6,6 +6,7 @@
 {
     int32_t $s2 = arg1 >> 0x10;
     int32_t $s0 = arg1 & 0xffff;
+    return 0;
     mdns_y_sad_win_opt_intp = tisp_simple_intp($s2, $s0, &mdns_y_sad_win_opt_array);
     mdns_y_sad_ave_thres_intp = tisp_simple_intp($s2, $s0, mdns_y_sad_ave_thres_array_now);
     mdns_y_sad_ave_slope_intp = tisp_simple_intp($s2, $s0, &mdns_y_sad_ave_slope_array);
@@ -427,6 +428,5 @@
     mdns_c_sat_lmt_thres_intp = tisp_simple_intp($s2, $s0, &mdns_c_sat_lmt_thres_array);
     mdns_c_sat_lmt_stren_intp = tisp_simple_intp($s2, $s0, &mdns_c_sat_lmt_stren_array);
     mdns_c_sat_nml_stren_intp = tisp_simple_intp($s2, $s0, &mdns_c_sat_nml_stren_array);
-    return 0;
 }
 

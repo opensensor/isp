@@ -4,32 +4,32 @@
   int32_t tx_isp_vic_start(void* arg1)
 
 {
-    char* $v1 = *((char*)arg1 + 0x110); // Fixed void pointer arithmetic
+    int32_t* $v1 = (int32_t*)((char*)arg1  + 0x110); // Fixed void pointer arithmetic
     int32_t $v0 = *($v1 + 0x14);
     int32_t* $v0_47;
+        int32_t $v0_2;
+        void* $v1_2;
     int32_t entry_$a2;
     
     if ($v0 == 1)
     {
-        int32_t $v0_2;
-        void* $v1_2;
         
         if (*($v1 + 0x18) != $v0)
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
             $v1_2 = *(arg1 + 0xb8);
             $v0_2 = 0xa000a;
         }
         else
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
             *(*(arg1 + 0xb8) + 0x10) = &data_20000;
             $v1_2 = *(arg1 + 0xb8);
             $v0_2 = 0x100010;
         }
         
-        *(((void**)((char*)$v1_2 + 0x1a4))) = $v0_2; // Fixed void pointer dereference
-        char* $a0 = *((char*)arg1 + 0x110); // Fixed void pointer arithmetic
+        *((int32_t*)((char*)$v1_2 + 0x1a4)) = $v0_2; // Fixed void pointer dereference
+        int32_t* $a0 = (int32_t*)((char*)arg1  + 0x110); // Fixed void pointer arithmetic
         int32_t $v1_3 = *($a0 + 0x7c);
         int32_t $v0_3 = 8;
         
@@ -56,13 +56,13 @@
         *(*(arg1 + 0xb8) + 0xc) = 2;
         *(*(arg1 + 0xb8) + 0x14) = *(*(arg1 + 0x110) + 0x7c);
         *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0);
-        char* $a3_1 = *((char*)arg1 + 0x110); // Fixed void pointer arithmetic
+        int32_t* $a3_1 = (int32_t*)((char*)arg1  + 0x110); // Fixed void pointer arithmetic
         int32_t $v0_16 = *($a3_1 + 0x40) << 0x19 | *($a3_1 + 0x44) << 0x18 | *($a3_1 + 0x78)
             | *($a3_1 + 0x48) << 0x17 | *($a3_1 + 0x5c) << 0x16 | *($a3_1 + 0x60) << 0x14;
         int32_t $a2_2 = $v0_16 | *($a3_1 + 0x64) << 0x12;
         *(*(arg1 + 0xb8) + 0x10c) = $a2_2 | *($a3_1 + 0x68) << 0xc | *($a3_1 + 0x6c) << 8
             | *($a3_1 + 0x74) << 4 | *($a3_1 + 0x70) << 2;
-        char* $v1_19 = *((char*)arg1 + 0x110); // Fixed void pointer arithmetic
+        int32_t* $v1_19 = (int32_t*)((char*)arg1  + 0x110); // Fixed void pointer arithmetic
         *(*(arg1 + 0xb8) + 0x110) = *($v1_19 + 0x2c) << 0x10 | *($v1_19 + 0x4c);
         *(*(arg1 + 0xb8) + 0x114) = *(*(arg1 + 0x110) + 0x50);
         *(*(arg1 + 0xb8) + 0x118) = *(*(arg1 + 0x110) + 0x54);
@@ -74,21 +74,21 @@
         
         if ($v0_32)
         {
+                goto label_1043c;
             if ($v0_32 == 1)
             {
                 $v1_25 = *(arg1 + 0xb8);
                 $v0_33 = 0x4140;
-                goto label_1043c;
             }
             
             if ($v0_32 == 2)
             {
+                goto label_1043c;
                 $v1_25 = *(arg1 + 0xb8);
                 $v0_33 = 0x4240;
-                goto label_1043c;
             }
             
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
             $v0_34 = *(arg1 + 0xb8);
         }
         else
@@ -96,23 +96,23 @@
             $v1_25 = *(arg1 + 0xb8);
             $v0_33 = 0x4440;
         label_1043c:
-            *(((void**)((char*)$v1_25 + 0x1ac))) = $v0_33; // Fixed void pointer dereference
+            *((int32_t*)((char*)$v1_25 + 0x1ac)) = $v0_33; // Fixed void pointer dereference
             *(*(arg1 + 0xb8) + 0x1a8) = $v0_33;
             $v0_34 = *(arg1 + 0xb8);
         }
-        *(((void**)((char*)$v0_34 + 0x1b0))) = 0x10; // Fixed void pointer dereference
-        **(((int32_t*)((char*)arg1 + 0xb8))) = 2; // Fixed void pointer dereference
-        **(((int32_t*)((char*)arg1 + 0xb8))) = 4; // Fixed void pointer dereference
-        char* $v1_27 = *((char*)arg1 + 0x110); // Fixed void pointer arithmetic
+        *((int32_t*)((char*)$v0_34 + 0x1b0)) = 0x10; // Fixed void pointer dereference
+        **((int32_t*)((char*)arg1 + 0xb8)) = 2; // Fixed void pointer dereference
+        **((int32_t*)((char*)arg1 + 0xb8)) = 4; // Fixed void pointer dereference
+        int32_t* $v1_27 = (int32_t*)((char*)arg1  + 0x110); // Fixed void pointer arithmetic
         *(*(arg1 + 0xb8) + 0x1a0) = *($v1_27 + 0x74) << 4 | *($v1_27 + 0x78);
         int32_t* $v1_30 = *(arg1 + 0xb8);
         
         while (*$v1_30)
             /* nop */
         
-        char* $a0_9 = *((char*)arg1 + 0x110); // Fixed void pointer arithmetic
+        int32_t* $a0_9 = (int32_t*)((char*)arg1  + 0x110); // Fixed void pointer arithmetic
         $v1_30[0x41] = *($a0_9 + 0x52) << 0x10 | *($a0_9 + 0x4e);
-        char* $v1_31 = *((char*)arg1 + 0x110); // Fixed void pointer arithmetic
+        int32_t* $v1_31 = (int32_t*)((char*)arg1  + 0x110); // Fixed void pointer arithmetic
         *(*(arg1 + 0xb8) + 0x108) = *($v1_31 + 0x5a) << 0x10 | *($v1_31 + 0x56);
         $v0_47 = *(arg1 + 0xb8);
         goto label_107d4;
@@ -125,15 +125,15 @@
     
     if ($v0 != 5)
     {
+                return 0xffffffff;
         if ($v0 == 4)
         {
-            $a2_3 = isp_printf(); // Fixed: macro call, removed arguments;
+            $a2_3 = isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
             *(*(arg1 + 0xb8) + 0xc) = 0;
             
             if (*(*(arg1 + 0x110) + 0x18))
             {
-                isp_printf(); // Fixed: macro call, removed arguments;
-                return 0xffffffff;
+                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
             }
             
             *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0);
@@ -150,10 +150,10 @@
         
         if ($v0 != 3)
         {
+                return 0xffffffff;
             if ($v0 != 2)
             {
-                isp_printf(); // Fixed: macro call, removed arguments;
-                return 0xffffffff;
+                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
             }
             
             *(*(arg1 + 0xb8) + 0xc) = 3;
@@ -165,17 +165,17 @@
             
             if ($(uintptr_t)v0_95 >= 0x3010)
             {
+                            goto label_10928;
+                            goto label_109ac;
                 if ($(uintptr_t)v0_95 >= 0x3110)
                 {
                     if ($(uintptr_t)v0_95 >= 0x3200)
                     {
                         if ($(uintptr_t)v0_95 < 0x3210)
-                            goto label_10928;
                         
                         if ($v0_95 - (uintptr_t)0x3300 < 0x10)
                         {
                             $v0_96 = *(arg1 + 0x110);
-                            goto label_109ac;
                         }
                         
                         int32_t var_18_6 = $v0_95;
@@ -184,15 +184,14 @@
                     
                     int32_t var_18_5 = $v0_95;
                 label_109d4:
-                    isp_printf(); // Fixed: macro call, removed arguments;
+                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                     $v1_50 = nullptr;
                     result = 0xffffffff;
                 }
                 else
                 {
-                        int32_t $v0_99 = *($v0_98 + 0x18);
-                        else if ($v0_99 == 4)
                     void* $v0_98;
+                        int32_t $v0_99 = *($v0_98 + 0x18);
                     
                     if ($(uintptr_t)v0_95 >= 0x3100)
                     {
@@ -202,6 +201,7 @@
                         
                         if ($v0_99 == 3)
                             result = 0;
+                        else if ($v0_99 == 4)
                         {
                             $v1_50 = 0x100000;
                             result = 0;
@@ -210,13 +210,14 @@
                         {
                             $a1_6 = "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n";
                         label_10990:
-                            isp_printf(); // Fixed: macro call, removed arguments;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                             $v1_50 = nullptr;
                             result = 0xffffffff;
                         }
                     }
                     else
                     {
+                                goto label_108fc;
                         if ($(uintptr_t)v0_95 >= 0x3013)
                         {
                             $v1_57 = $(uintptr_t)v0_95 < 0x3015 ? 1 : 0;
@@ -225,7 +226,6 @@
                             if ($v1_57)
                             {
                                 $v0_98 = *(arg1 + 0x110);
-                                goto label_108fc;
                             }
                             
                             int32_t var_18_4 = $v0_95;
@@ -245,8 +245,9 @@
             }
             else
             {
-                    int32_t $v0_100 = *($v0_97 + 0x18);
                 void* $v0_97;
+                    int32_t $v0_100 = *($v0_97 + 0x18);
+                                goto label_10990;
                 
                 if ($(uintptr_t)v0_95 >= 0x300e)
                 {
@@ -265,7 +266,6 @@
                             if ($v0_100 != 1)
                             {
                                 $a1_6 = "%s[%d] VIC failed to config DVP mode!(10bits-sensor)\n";
-                                goto label_10990;
                             }
                             
                             $v1_50 = 0x120000;
@@ -274,6 +274,7 @@
                     }
                     else
                     {
+                                goto label_10990;
                         $v1_50 = &data_30000;
                         
                         if (!$v0_100)
@@ -284,7 +285,6 @@
                             {
                                 $a1_6 =
                                     "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n";
-                                goto label_10990;
                             }
                             
                             $v1_50 = 0x130000;
@@ -294,6 +294,8 @@
                 }
                 else
                 {
+                                goto label_10928;
+                                goto label_108b8;
                     $v1_50 = &data_c0000;
                     
                     if ($(uintptr_t)v0_95 == 0x2011)
@@ -303,24 +305,22 @@
                         if ($(uintptr_t)v0_95 >= 0x2012)
                         {
                             if ($(uintptr_t)v0_95 == 0x3007)
-                                goto label_10928;
                             
                             if ($(uintptr_t)v0_95 < 0x3008)
                             {
                                 $v1_57 = $v0_95 - 0x3001 < 2 ? 1 : 0;
-                                goto label_108b8;
                             }
                             
                             if ($(uintptr_t)v0_95 == 0x3008)
                             {
-                                $v0_96 = *(arg1 + 0x110);
                                 goto label_109ac;
+                                $v0_96 = *(arg1 + 0x110);
                             }
                             
                             if ($(uintptr_t)v0_95 == 0x300a)
                             {
-                                $v0_97 = *(arg1 + 0x110);
                                 goto label_10938;
+                                $v0_97 = *(arg1 + 0x110);
                             }
                             
                             int32_t var_18_3 = $v0_95;
@@ -334,9 +334,9 @@
                         else if ($(uintptr_t)v0_95 >= 0x1009)
                         {
                                 int32_t var_18_2 = $v0_95;
+                                goto label_109d4;
                             if ($v0_95 - 0x2002 >= 4)
                             {
-                                goto label_109d4;
                             }
                             
                             $v1_50 = &data_c0000;
@@ -345,18 +345,18 @@
                         else
                         {
                                 int32_t var_18_1 = $v0_95;
+                                goto label_109d4;
                             $v1_50 = &data_a0000;
                             result = 0;
                             
                             if ($(uintptr_t)v0_95 != 0x1006)
                             {
-                                goto label_109d4;
                             }
                         }
                     }
                 }
             }
-            char* $v0_102 = *((char*)arg1 + 0x110); // Fixed void pointer arithmetic
+            int32_t* $v0_102 = (int32_t*)((char*)arg1  + 0x110); // Fixed void pointer arithmetic
             
             if (*($v0_102 + 0x24) == 2)
                 $v1_50 |= 2;
@@ -383,8 +383,8 @@
             *(*(arg1 + 0xb8) + 0x18) = (*($v0_108 + 0x22) << 0x10) + *(arg1 + 0xdc);
             *(*(arg1 + 0xb8) + 0x10) = *(*(arg1 + 0x110) + 0x28) << 0x1f | $v1_50;
             *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0);
-            **(((int32_t*)((char*)arg1 + 0xb8))) = 2; // Fixed void pointer dereference
-            **(((int32_t*)((char*)arg1 + 0xb8))) = 4; // Fixed void pointer dereference
+            **((int32_t*)((char*)arg1 + 0xb8)) = 2; // Fixed void pointer dereference
+            **((int32_t*)((char*)arg1 + 0xb8)) = 4; // Fixed void pointer dereference
             int32_t* $v0_121 = *(arg1 + 0xb8);
             
             while (*$v0_121)
@@ -400,17 +400,17 @@
         else
         {
             int32_t $v1_44 = *(*(arg1 + 0x110) + 0x18);
-            $a2_3 = isp_printf(); // Fixed: macro call, removed arguments;
-            *(*(arg1 + 0xb8) + 0xc) = 1;
             int32_t $v0_79;
             void* $v1_47;
+                    return 0xffffffff;
+            $a2_3 = isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+            *(*(arg1 + 0xb8) + 0xc) = 1;
             
             if ($v1_44)
             {
                 if ($v1_44 != 1)
                 {
-                    isp_printf(); // Fixed: macro call, removed arguments;
-                    return 0xffffffff;
+                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                 }
                 
                 *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0);
@@ -426,7 +426,7 @@
                 $v0_79 = 0x800c8000;
             }
             
-            *(((void**)((char*)$v1_47 + 0x10))) = $v0_79; // Fixed void pointer dereference
+            *((int32_t*)((char*)$v1_47 + 0x10)) = $v0_79; // Fixed void pointer dereference
             *(*(arg1 + 0xb8) + 0x18) = *(arg1 + 0xdc) << 1 | 0x100000;
             *(*(arg1 + 0xb8) + 0x3c) = 0x30;
             *(*(arg1 + 0xb8) + 0x1c) = 0x1b8;
@@ -436,8 +436,8 @@
             *(*(arg1 + 0xb8) + 0x1a0) = 0;
             *(*(arg1 + 0xb8) + 0x1a4) = 0x100010;
             *(*(arg1 + 0xb8) + 0x1ac) = 0x4440;
-            **(((int32_t*)((char*)arg1 + 0xb8))) = 2; // Fixed void pointer dereference
-            isp_printf(); // Fixed: macro call, removed arguments);
+            **((int32_t*)((char*)arg1 + 0xb8)) = 2; // Fixed void pointer dereference
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
             $v0_47 = *(arg1 + 0xb8);
         label_107d4:
             *$v0_47 = 1;
@@ -447,13 +447,13 @@
     }
     else
     {
-        $a2_3 = isp_printf(); // Fixed: macro call, removed arguments;
+            return 0xffffffff;
+        $a2_3 = isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         *(*(arg1 + 0xb8) + 0xc) = 4;
         
         if (*(*(arg1 + 0x110) + 0x18))
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
-            return 0xffffffff;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
         
         *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0);
@@ -464,8 +464,8 @@
         $v0_58 = *(arg1 + 0xb8);
     label_1065c:
         *$v0_58 = 2;
-        isp_printf(); // Fixed: macro call, removed arguments);
-        **(((int32_t*)((char*)arg1 + 0xb8))) = 1; // Fixed void pointer dereference
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+        **((int32_t*)((char*)arg1 + 0xb8)) = 1; // Fixed void pointer dereference
         result = 0;
         $v0_125 = *(arg1 + 0x110);
     }
@@ -476,7 +476,7 @@
     else
         $a1_9 = "%s:%d::linear mode\\n";
     
-    isp_printf(); // Fixed: macro call, removed arguments;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     vic_start_ok = 1;
     return result;
 }

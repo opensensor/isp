@@ -5,7 +5,7 @@
 
 {
     int32_t $a0 = *arg1;
-    if (!arg1)
+    if (!(uintptr_t)arg1)
         return;
     
     

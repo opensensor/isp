@@ -4,6 +4,7 @@
   int32_t tisp_af_process_impl()
 
 {
+        char var_30[0x2c];
     IspAfStaticParam = &stAFParam_Zone;
     data_d6500 = &af_array_fird0;
     data_d6504 = &af_array_fird1;
@@ -19,7 +20,6 @@
     
     for (int32_t i = 0; (uintptr_t)i < 0x28; i += 1)
     {
-        char var_30[0x2c];
         var_30[i] = *(&data_d650c + i);
     }
     

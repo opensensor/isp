@@ -4,6 +4,7 @@
   int32_t tiziano_gib_params_refresh()
 
 {
+    return 0;
     memcpy(&tiziano_gib_config_line, 0x97568, 0x30);
     memcpy(&tiziano_gib_r_g_linear, 0x97598, 8);
     memcpy(&tiziano_gib_b_ir_linear, 0x975a0, 8);
@@ -26,6 +27,5 @@
     memcpy(&tiziano_gib_deir_matrix_h, 0x97b4c, 0x3c);
     memcpy(&tiziano_gib_deir_matrix_m, 0x97b88, 0x3c);
     memcpy(&tiziano_gib_deir_matrix_l, 0x97bc4, 0x3c);
-    return 0;
 }
 

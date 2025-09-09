@@ -5,7 +5,7 @@
 
 {
     uint8_t ae_comp_x_1 = ae_comp_x;
-    *arg1 = ae_comp_x_1;
     return ae_comp_x_1;
+    *arg1 = ae_comp_x_1;
 }
 

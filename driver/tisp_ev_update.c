@@ -31,7 +31,7 @@
             *ev_last = arg1;
         }
         
-        *(((void**)((char*)ev_last + 4))) = arg2; // Fixed void pointer dereference
+        *((int32_t*)((char*)ev_last + 4)) = arg2; // Fixed void pointer dereference
     }
     
     return 0;

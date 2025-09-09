@@ -4,11 +4,11 @@
   void* tiziano_bcsh_Tccm_RGBYUV(int32_t* arg1, int32_t* arg2, int32_t* arg3, int32_t* arg4, int32_t arg5 @ $hi)
 
 {
-    void* $s5 = &var_a0;
-    void* i = &var_a0;
-        int32_t $a0 = *arg2;
     void var_a0;
+    char* $s5 = (char*)(&var_a0); // Fixed void pointer assignment
+    char* i = (char*)(&var_a0); // Fixed void pointer assignment
     int32_t var_58;
+        int32_t $a0 = *arg2;
     
     do
     {
@@ -21,7 +21,7 @@
         else
             *i = 1;
         
-        *(((void**)((char*)i + 4))) = $a0; // Fixed void pointer dereference
+        *((int32_t*)((char*)i + 4)) = $a0; // Fixed void pointer dereference
         i += 8;
         arg2 = &arg2[1];
     } while (&var_58_5 != i);
@@ -73,42 +73,42 @@
     {
         int32_t $t1_1 = *$s5;
         int32_t $t5_1 = *($s5 + 4);
+        int32_t var_e4;
         int32_t $s6_1 = $t1_1 * var_e8 * fix_point_mult2_32(0x10, $t5_1, var_e4 << 6);
         int32_t $fp_1 = *($s5 + 8);
         int32_t $s4_1 = *($s5 + 0xc);
+        int32_t var_d0;
+        int32_t var_cc;
         int32_t $v1_1 = $fp_1 * var_d0 * fix_point_mult2_32(0x10, $s4_1, var_cc << 6);
         int32_t $s0_5 = *($s5 + 0x10);
         int32_t $s6_2 = *($s5 + 0x14);
-        int32_t $t6_6 = $t1_1 * var_e0 * fix_point_mult2_32(0x10, $t5_1, var_dc << 6);
-        int32_t $t6_8 = $fp_1 * var_c8 * fix_point_mult2_32(0x10, $s4_1, var_c4 << 6) + $t6_6;
-        int32_t j = 0;
-        int32_t* $v0_16 = &var_58;
-            int32_t $a0_4 = *(i_3 + j);
-        int32_t var_e4;
-        int32_t var_d0;
-        int32_t var_cc;
         int32_t var_b8;
         int32_t var_b4;
-        *i_3 = $s0_5 * var_b8 * fix_point_mult2_32(0x10, $s6_2, var_b4 << 6) + $v1_1 + $s6_1;
         int32_t var_e0;
         int32_t var_dc;
+        int32_t $t6_6 = $t1_1 * var_e0 * fix_point_mult2_32(0x10, $t5_1, var_dc << 6);
         int32_t var_c8;
         int32_t var_c4;
+        int32_t $t6_8 = $fp_1 * var_c8 * fix_point_mult2_32(0x10, $s4_1, var_c4 << 6) + $t6_6;
         int32_t var_b0;
         int32_t var_ac;
-        i_3[1] = $s0_5 * var_b0 * fix_point_mult2_32(0x10, $s6_2, var_ac << 6) + $t6_8;
         int32_t var_d8;
         int32_t var_d4;
         int32_t var_c0;
         int32_t var_bc;
         int32_t $lo_2;
         int32_t $hi;
+        int32_t j = 0;
+        int32_t var_a8;
+        int32_t var_a4;
+        int32_t* $v0_16 = &var_58;
+            int32_t $a0_4 = *(i_3 + j);
+        *i_3 = $s0_5 * var_b8 * fix_point_mult2_32(0x10, $s6_2, var_b4 << 6) + $v1_1 + $s6_1;
+        i_3[1] = $s0_5 * var_b0 * fix_point_mult2_32(0x10, $s6_2, var_ac << 6) + $t6_8;
         $hi = HIGHD(COMBINE(arg5, $t1_1 * var_d8 * fix_point_mult2_32(0x10, $t5_1, var_d4 << 6))
             + $fp_1 * var_c0 * fix_point_mult2_32(0x10, $s4_1, var_bc << 6));
         $lo_2 = LOWD(COMBINE(arg5, $t1_1 * var_d8 * fix_point_mult2_32(0x10, $t5_1, var_d4 << 6))
             + $fp_1 * var_c0 * fix_point_mult2_32(0x10, $s4_1, var_bc << 6));
-        int32_t var_a8;
-        int32_t var_a4;
         i_3[2] = $s0_5 * var_a8 * fix_point_mult2_32(0x10, $s6_2, var_a4 << 6) + $lo_2;
         
         do
@@ -327,8 +327,8 @@
     }
     
     void var_178;
-    void* $s5_1 = &var_178_1;
-    void* i_4 = &var_178_3;
+    char* $s5_1 = (char*)(&var_178_1); // Fixed void pointer assignment
+    char* i_4 = (char*)(&var_178_3); // Fixed void pointer assignment
     int32_t* $a0_29 = arg1;
     
     do
@@ -343,7 +343,7 @@
         else
             *i_4 = 1;
         
-        *(((void**)((char*)i_4 + 4))) = $v1_17; // Fixed void pointer dereference
+        *((int32_t*)((char*)i_4 + 4)) = $v1_17; // Fixed void pointer dereference
         i_4 += 8;
         $a0_29 = &$a0_29[1];
     } while (&var_130_3 != i_4);
@@ -352,13 +352,13 @@
     
     for (int32_t i_5 = 0; i_5 != 9; )
     {
-        else if (i_5 >= 6)
+        int32_t $v0_49;
             int32_t $a3_9 = -($s6_5) * *($s5_1 - 0x18);
             int32_t $v0_54 = fix_point_mult2_32(0x10, $s2, *($s5_1 - 0x14));
-        int32_t $v0_49;
         
         if (i_5 < 3)
             $v0_49 = *$s5_1 * *($s5_1 + 4);
+        else if (i_5 >= 6)
         {
             $v0_49 = *$s5_1 * fix_point_mult2_32(0x10, $s1, *($s5_1 + 4)) + $a3_9 * $v0_54;
         }

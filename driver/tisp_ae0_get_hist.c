@@ -4,22 +4,22 @@
   int32_t tisp_ae0_get_hist(int32_t* arg1, int32_t arg2, int32_t arg3)
 
 {
-    void* $s5 = &IspAeStatic;
-    void* $v0 = &IspAeStatic;
+    char* $s5 = (char*)(&IspAeStatic); // Fixed void pointer assignment
+    char* $v0 = (char*)(&IspAeStatic); // Fixed void pointer assignment
     
     do
     {
         if (arg2 == 1)
         {
-            *(((void**)((char*)$v0 + 0x1518))) = *arg1 & 0x1fffff; // Fixed void pointer dereference
-            *(((void**)((char*)$v0 + 0x151c))) = arg1[1] & 0x1fffff; // Fixed void pointer dereference
+            *((int32_t*)((char*)$v0 + 0x1518)) = *arg1 & 0x1fffff; // Fixed void pointer dereference
+            *((int32_t*)((char*)$v0 + 0x151c)) = arg1[1] & 0x1fffff; // Fixed void pointer dereference
             
             if (arg3 != arg2)
                 arg1 = &arg1[2];
             else
             {
-                *(((void**)((char*)$v0 + 0x1918))) = arg1[0x100] & 0x1fffff; // Fixed void pointer dereference
-                *(((void**)((char*)$v0 + 0x191c))) = arg1[0x101] & 0x1fffff; // Fixed void pointer dereference
+                *((int32_t*)((char*)$v0 + 0x1918)) = arg1[0x100] & 0x1fffff; // Fixed void pointer dereference
+                *((int32_t*)((char*)$v0 + 0x191c)) = arg1[0x101] & 0x1fffff; // Fixed void pointer dereference
                 arg1 = &arg1[2];
             }
         }
@@ -27,8 +27,8 @@
             arg1 = &arg1[2];
         else
         {
-            *(((void**)((char*)$v0 + 0x1918))) = *arg1 & 0x1fffff; // Fixed void pointer dereference
-            *(((void**)((char*)$v0 + 0x191c))) = arg1[1] & 0x1fffff; // Fixed void pointer dereference
+            *((int32_t*)((char*)$v0 + 0x1918)) = *arg1 & 0x1fffff; // Fixed void pointer dereference
+            *((int32_t*)((char*)$v0 + 0x191c)) = arg1[1] & 0x1fffff; // Fixed void pointer dereference
             arg1 = &arg1[2];
         }
         
@@ -130,11 +130,11 @@
     {
             int32_t var_48_1 = 0xffff;
             int32_t var_44_1 = 0;
-        for (int32_t* i_1 = &tisp_ae_hist; (uintptr_t)i_1 != 0xd4bb8; i_1 = &i_1[1])
-        {
             int32_t $v0_7;
             int32_t $v1_3;
             int32_t $a1_12;
+        for (int32_t* i_1 = &tisp_ae_hist; (uintptr_t)i_1 != 0xd4bb8; i_1 = &i_1[1])
+        {
             $v0_7 = (&data_20000 + 0x918)(0);
             i_1[0x101] = fix_point_div(0, $a1_12, $v0_7, $v1_3, $s5_2, 0);
         }

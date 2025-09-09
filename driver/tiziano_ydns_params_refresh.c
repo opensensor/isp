@@ -4,6 +4,7 @@
   int32_t tiziano_ydns_params_refresh()
 
 {
+    return 0;
     memcpy(&sdns_mv_num_thr_7x7_array, 0xa7120, 4);
     memcpy(&sdns_mv_num_thr_9x9_array, 0xa7124, 0x24);
     memcpy(&sdns_mv_num_thr_11x11_array, 0xa7148, 0x24);
@@ -19,6 +20,5 @@
     memcpy(&ydns_edge_wei_array, 0xa72b0, 0x24);
     memcpy(&ydns_edge_div_array, 0xa72d4, 0x24);
     memcpy(&ydns_edge_thres_array, 0xa72f8, 0x24);
-    return 0;
 }
 

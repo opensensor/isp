@@ -5,10 +5,10 @@
 
 {
     int32_t var_18 = 0x384;
+    return 0;
     memcpy(0xa69bc, arg1, 0x384);
     memcpy(tparams_day + 0x11e9c, arg1, var_18);
     memcpy(tparams_night + 0x11e9c, arg1, var_18);
     tisp_af_param_array_set(0x3bf, arg1, &var_18);
-    return 0;
 }
 

@@ -5,6 +5,7 @@
 
 {
     void* $v0;
+    return 0;
     
     if (rdns_wdr_en)
         $v0 = &rdns_text_base_thres_wdr_array;
@@ -15,6 +16,5 @@
     rdns_gain_old = 0xffffffff;
     tiziano_rdns_params_refresh();
     tisp_rdns_par_refresh(isp_printf, isp_printf, 1);
-    return 0;
 }
 

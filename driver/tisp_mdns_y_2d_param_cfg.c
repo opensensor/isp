@@ -14,6 +14,7 @@
     uint32_t mdns_y_fspa_ref_fus_wei_0_intp_3 = mdns_y_fspa_ref_fus_wei_0_intp;
     uint32_t mdns_y_fiir_fus_wei0_intp_1 = mdns_y_fiir_fus_wei0_intp;
     uint32_t $s1_2 = mdns_y_fiir_fus_wei0_intp_1 << 8 | mdns_y_fiir_fus_wei0_intp_1 << 0x10
+    return 0;
     system_reg_write(0x79a4, 
         mdns_y_pspa_cur_bi_wei_seg_intp << 8 | mdns_y_pspa_cur_lmt_op_en_intp << 0xa
             | mdns_y_pspa_cur_bi_thres_intp);
@@ -81,6 +82,5 @@
         mdns_y_fiir_fus_wei6_intp << 8 | mdns_y_fiir_fus_wei7_intp << 0x10
             | mdns_y_fiir_fus_wei5_intp | mdns_y_fiir_fus_wei8_intp << 0x18);
     system_reg_write(0x7a00, mdns_y_con_stren_intp << 8);
-    return 0;
 }
 

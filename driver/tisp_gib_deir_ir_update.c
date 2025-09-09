@@ -21,7 +21,7 @@
         {
             trig_set_deir = 0;
             tiziano_gib_deir_ir_interpolation(arg1);
-            *(((void**)((char*)gib_ir_value + 4))) = *gib_ir_value; // Fixed void pointer dereference
+            *((int32_t*)((char*)gib_ir_value + 4)) = *gib_ir_value; // Fixed void pointer dereference
         }
     }
     

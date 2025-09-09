@@ -4,8 +4,8 @@
   void* tisp_dmsc_wdr_en(uint32_t arg1)
 
 {
-    dmsc_wdr_en = arg1;
     void* result;
+    dmsc_wdr_en = arg1;
     
     if (arg1)
     {

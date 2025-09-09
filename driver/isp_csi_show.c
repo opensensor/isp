@@ -4,12 +4,14 @@
   int32_t isp_csi_show(void* arg1)
 
 {
-    char* $v0 = *((char*)arg1 + 0x3c); // Fixed void pointer arithmetic
-        char* $s1_1 = *((char*)$v0 + 0xd4); // Fixed void pointer arithmetic
-            char* $v0_2 = *((char*)$s1_1 + 0xb8); // Fixed void pointer arithmetic
+    int32_t* $v0 = (int32_t*)((char*)arg1  + 0x3c); // Fixed void pointer arithmetic
+        int32_t* $s1_1 = (int32_t*)((char*)$v0  + 0xd4); // Fixed void pointer arithmetic
+            int32_t* $v0_2 = (int32_t*)((char*)$s1_1  + 0xb8); // Fixed void pointer arithmetic
             int32_t $v1_1 = *($v0_2 + 0x20);
             int32_t result = 0;
             int32_t $v0_4 = *($v0_2 + 0x24);
+            void* $v0_10;
+                    return result;
     
     if ($v0 && $(uintptr_t)v0 < 0xfffff001)
     {
@@ -23,14 +25,12 @@
             if ($v0_4)
                 result += seq_printf(arg1, "sensor type is BT601!\n", $v0_4);
             
-            void* $v0_10;
             
             if ($v1_1)
                 $v0_10 = *($s1_1 + 0xb8);
             else
             {
                 if (!$v0_4)
-                    return result;
                 
                 $v0_10 = *($s1_1 + 0xb8);
             }
@@ -40,8 +40,8 @@
         }
     }
     
-    int32_t entry_$a2;
-    isp_printf(); // Fixed: macro call, removed arguments\n", entry_$a2);
+    int32_t entry_a2_8;
+    isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", entry_a2_9);
     return 0;
 }
 

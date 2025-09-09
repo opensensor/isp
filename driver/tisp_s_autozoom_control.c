@@ -8,20 +8,20 @@
     int32_t arg_4 = arg2;
     int32_t arg_8 = arg3;
     int32_t arg_c = arg4;
+    int32_t* $a1;
+                goto label_74258;
+            goto label_742b8;
     char const* const $a1_1;
     int32_t (* $t9)(int32_t arg1, int32_t arg2);
-    int32_t* $a1;
     
     if (arg1)
     {
         if (arg1 == 1)
         {
             if (!(msca_ch_en & 2))
-                goto label_74258;
             
             ds1_attr = arg2;
             $a1 = &ds1_attr;
-            goto label_742b8;
         }
         
         uint32_t msca_ch_en_1 = msca_ch_en;
@@ -31,9 +31,9 @@
         
         if (msca_ch_en_1 & 4)
         {
+            goto label_742b8;
             ds2_attr = arg2;
             $a1 = &ds2_attr;
-            goto label_742b8;
         }
         
         $a1_1 = "&vsd->mlock";

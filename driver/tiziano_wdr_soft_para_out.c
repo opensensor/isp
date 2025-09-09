@@ -4,6 +4,7 @@
   int32_t tiziano_wdr_soft_para_out()
 
 {
+    return 0;
     system_reg_write(0x2604, (wdr_para_array5 & 0x1fff) << 0x10 | (wdr_para_array4 & 0x1fff));
     system_reg_write(0x2608, (wdr_para_init_div5 & 0x3fff) << 0x10 | (wdr_para_init_div4 & 0x3fff));
     system_reg_write(0x24e8, (data_b2340 & 0x7f) << 0x10 | (param_wdr_detail_th_w_array & 0x7f));
@@ -223,6 +224,5 @@
     system_reg_write(0x2620, data_b15b8 & &data_7ffff);
     system_reg_write(0x2624, data_b15c4 & &data_7ffff);
     system_reg_write(0x2628, data_b15d0 & &data_7ffff);
-    return 0;
 }
 

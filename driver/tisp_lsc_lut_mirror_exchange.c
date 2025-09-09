@@ -11,10 +11,10 @@
     int32_t $t0 = *$a0;
     int32_t $v0 = *$a1_1;
     int32_t result = (($v0 >> ($v1 & 0x1f) & 0xfff) << ($t3 & 0x1f)
+    return result;
         | (0xfff << (((1 - arg5) * 0xc) & 0x1f) & $t0)) & 0xffffff;
     *$a1_1 = (($t0 >> ($t3 & 0x1f) & 0xfff) << ($v1 & 0x1f)
         | (0xfff << (((1 - arg4) * 0xc) & 0x1f) & $v0)) & 0xffffff;
     *$a0 = result;
-    return result;
 }
 

@@ -5,13 +5,13 @@
 
 {
     int32_t defog_rgbra_list_1 = defog_rgbra_list;
-    memcpy(&defog_rgbra_list, &data_a56b0[0x2d], 0x24);
     void* $a1_1;
+            return 0xffffffff;
+    memcpy(&defog_rgbra_list, &data_a56b0[0x2d], 0x24);
     
     if (defog_rgbra_list_1 != 1)
     {
         if (defog_rgbra_list_1)
-            return 0xffffffff;
         
         memcpy(&data_aca90[6], &param_defog_weightlut20_tmp, 0x80);
         memcpy(&param_defog_weightlut02, &param_defog_weightlut02_tmp, 0x80);

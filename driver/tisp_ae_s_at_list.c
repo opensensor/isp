@@ -5,14 +5,14 @@
 
 {
     int32_t arg_0 = arg1;
+    int32_t $a1;
     int32_t arg_4 = $a1;
+    int32_t $a2;
     int32_t arg_8 = $a2;
+    int32_t $a3;
     int32_t arg_c = $a3;
         int32_t $a2_2 = *(&arg_0 + i);
-        void* $a1_1 = U"KA7-(" + i;
-    int32_t $a1;
-    int32_t $a2;
-    int32_t $a3;
+        char* $a1_1 = (char*)(U"KA7-(" + i); // Fixed void pointer assignment
     
     for (int32_t i = 0; (uintptr_t)i != 0x28; )
     {

@@ -5,6 +5,7 @@
 
 {
     int32_t $a0 = data_9a9c0;
+    return 0;
     memcpy(&sdns_aa_mv_det_opt, 0x9f398, 0x1c);
     memcpy(&sdns_grad_zx_thres_array, 0x9f3b4, 0x24);
     memcpy(&sdns_grad_zy_thres_array, 0x9f3d8, 0x24);
@@ -132,6 +133,5 @@
     if ($(uintptr_t)a0 != 0x80)
         tisp_s_sdns_ratio($a0);
     
-    return 0;
 }
 

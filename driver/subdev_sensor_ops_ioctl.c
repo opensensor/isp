@@ -4,10 +4,11 @@
   int32_t subdev_sensor_ops_ioctl(void* arg1, int32_t arg2, char* arg3)
 
 {
-    char* $a0 = *((char*)arg1 + 0xe4); // Fixed void pointer arithmetic
+    int32_t* $a0 = (int32_t*)((char*)arg1  + 0xe4); // Fixed void pointer arithmetic
     int32_t result;
     int32_t $v0_7;
     int32_t $a2;
+            return 0xffffffff;
     
     if (arg2 - (uintptr_t)0x2000000 >= 0x13)
     {
@@ -15,8 +16,7 @@
         
         if (!$a0)
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
-            return 0xffffffff;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
         
         char* $v0_11 = (char*)(*(*($a0 + 0xc4) + 0xc)); // Fixed void pointer assignment
@@ -34,15 +34,15 @@
     else
         switch (arg2)
         {
+                    return 0xffffffea;
+                    return 0xffffffff;
             case 0x2000000:
             {
-                if (!arg1 || !arg3)
-                    return 0xffffffea;
+                if (!(uintptr_t)arg1 || !(uintptr_t)arg3)
                 
                 if (*(arg1 + 0xf4) == 1)
                 {
-                    isp_printf(); // Fixed: macro call, removed arguments;
-                    return 0xffffffff;
+                    isp_printf(); // Fixed: macro with no parameters, removed 15 arguments;
                 }
                 
                 int32_t $v0_16 = *(arg3 + 0x20);
@@ -52,28 +52,28 @@
                 if ($v0_16 == 1)
                 {
                     int32_t $v0_17 = private_i2c_get_adapter(*(arg3 + 0x3c));
+                        return 0xffffffea;
                     
                     if (!$v0_17)
                     {
-                        isp_printf(); // Fixed: macro call, removed arguments);
-                        return 0xffffffea;
+                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
                     }
                     
                     void var_40;
                     memset(&var_40_1, 0, 0x28);
                     memcpy(&var_40_2, &arg3[0x24], 0x14);
                     int16_t var_2a_1 = *(arg3 + 0x38);
-                    void* $v0_19 = isp_i2c_new_subdev_board($v0_17, &var_40_3, 0);
+                    char* $v0_19 = (char*)(isp_i2c_new_subdev_board($v0_17, &var_40_3, 0)); // Fixed void pointer assignment
                     $s2_1 = $v0_19;
                     
                     if ($v0_19 && $(uintptr_t)v0_19 < 0xfffff001)
                     {
-                        $s3_2 = *($s2_1 + 0xd8);
                         goto label_14470;
+                        $s3_2 = *($s2_1 + 0xd8);
                     }
                     
                     private_i2c_put_adapter($v0_17);
-                    isp_printf(); // Fixed: macro call, removed arguments;
+                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                     return 0xffffffea;
                 }
                 
@@ -81,9 +81,9 @@
                 
                 if ($v0_16 != 2)
                 {
+                    return 0xffffffea;
                     isp_printf(1, "The parameter is invalid!\n", 
                         "subdev_sensor_ops_register_sensor");
-                    return 0xffffffea;
                 }
                 
                 $s3_2 = *0xd8;
@@ -96,6 +96,7 @@
                     int32_t* $v0_22 = **($s2_1 + 0xc4);
                         int32_t $v0_23 = *$v0_22;
                             int32_t $a2_4 = *($s2_1 + 8);
+                            return 0;
                     
                     if (!$v0_22)
                         $v1_1 = *(arg3 + 0x20);
@@ -106,14 +107,13 @@
                         {
                             private_mutex_lock(arg1 + 0xe8);
                             void** $v0_25 = *(arg1 + 0xe0);
-                            *(((void**)((char*)arg1 + 0xe0))) = $s3_2 + 0xe4; // Fixed void pointer dereference
-                            *(((void**)((char*)$s3_2 + 0xe4))) = arg1 + 0xdc; // Fixed void pointer dereference
-                            *(((void**)((char*)$s3_2 + 0xe8))) = $v0_25; // Fixed void pointer dereference
+                            *((int32_t*)((char*)arg1 + 0xe0)) = $s3_2 + 0xe4; // Fixed void pointer dereference
+                            *((int32_t*)((char*)$s3_2 + 0xe4)) = arg1 + 0xdc; // Fixed void pointer dereference
+                            *((int32_t*)((char*)$s3_2 + 0xe8)) = $v0_25; // Fixed void pointer dereference
                             *$v0_25 = $s3_2 + 0xe4;
                             private_mutex_unlock(arg1 + 0xe8);
-                            *(((void**)((char*)$s2_1 + 0x78))) = *(arg1 + 0x78); // Fixed void pointer dereference
-                            isp_printf(); // Fixed: macro call, removed arguments;
-                            return 0;
+                            *((int32_t*)((char*)$s2_1 + 0x78)) = *(arg1 + 0x78); // Fixed void pointer dereference
+                            isp_printf(); // Fixed: macro with no parameters, removed 4 arguments;
                         }
                         
                         $v1_1 = *(arg3 + 0x20);
@@ -124,7 +124,7 @@
                 
                 if ($v1_1 == 1)
                 {
-                    char* $s0_1 = *((char*)$s2_1 + 0xd4); // Fixed void pointer arithmetic
+                    int32_t* $s0_1 = (int32_t*)((char*)$s2_1  + 0xd4); // Fixed void pointer arithmetic
                     int32_t $a0_11 = *($s0_1 + 0x18);
                     
                     if ($a0_11)
@@ -139,16 +139,16 @@
             }
             case 0x2000001:
             {
-                if (!arg1)
                     return 0xffffffea;
+                    return 0xffffffea;
+                    return 0xffffffff;
+                if (!(uintptr_t)arg1)
                 
-                if (!arg3)
-                    return 0xffffffea;
+                if (!(uintptr_t)arg3)
                 
                 if (*(arg1 + 0xf4) == 1)
                 {
-                    isp_printf(); // Fixed: macro call, removed arguments;
-                    return 0xffffffff;
+                    isp_printf(); // Fixed: macro with no parameters, removed 15 arguments;
                 }
                 
                 private_mutex_lock(arg1 + 0xe8);
@@ -158,8 +158,8 @@
                 while (true)
                 {
                     char* $v1_5 = arg3;
-                    int32_t (* $v0_30)();
                     void* $a0_19;
+                    int32_t (* $v0_30)();
                     
                     if ($s2_3 + 0xe4 == arg1 + 0xdc)
                     {
@@ -168,10 +168,10 @@
                     }
                     else
                     {
-                        void* $v0_29 = $s2_3 + 0xec;
+                        char* $v0_29 = (char*)($s2_3 + 0xec); // Fixed void pointer assignment
                         uint32_t $a1_7 = *$v0_29;
-                            uint32_t temp1_2 = $a1_7;
                         uint32_t $at_1;
+                            uint32_t temp1_2 = $a1_7;
                         
                         while (true)
                         {
@@ -198,25 +198,25 @@
                         }
                         else if ($s2_3)
                         {
+                                return 0xffffffea;
                             if ($s2_3 == *(arg1 + 0xe4))
                             {
-                                isp_printf(); // Fixed: macro call, removed arguments);
-                                return 0xffffffea;
+                                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
                             }
                             
                             void** $v1_3 = *($s2_3 + 0xe8);
-                            char* $a0_14 = *((char*)$s2_3 + 0xe4); // Fixed void pointer arithmetic
-                            *(((void**)((char*)$a0_14 + 4))) = $v1_3; // Fixed void pointer dereference
+                            int32_t* $a0_14 = (int32_t*)((char*)$s2_3  + 0xe4); // Fixed void pointer arithmetic
+                            *((int32_t*)((char*)$a0_14 + 4)) = $v1_3; // Fixed void pointer dereference
                             *$v1_3 = $a0_14;
-                            *(((void**)((char*)$s2_3 + 0xe4))) = 0x100100; // Fixed void pointer dereference
-                            *(((void**)((char*)$s2_3 + 0xe8))) = 0x200200; // Fixed void pointer dereference
+                            *((int32_t*)((char*)$s2_3 + 0xe4)) = 0x100100; // Fixed void pointer dereference
+                            *((int32_t*)((char*)$s2_3 + 0xe8)) = 0x200200; // Fixed void pointer dereference
                             private_mutex_unlock(arg1 + 0xe8);
                             $v0_27 = *($s2_3 + 0x10c);
                             
                             if ($v0_27 != 1)
                                 break;
                             
-                            char* $s0_3 = *((char*)$s2_3 + 0xd4); // Fixed void pointer arithmetic
+                            int32_t* $s0_3 = (int32_t*)((char*)$s2_3  + 0xd4); // Fixed void pointer arithmetic
                             int32_t $a0_21 = *($s0_3 + 0x18);
                             
                             if ($a0_21)
@@ -239,7 +239,7 @@
                 if ($v0_27 == 2)
                     return 0;
                 
-                isp_printf(); // Fixed: macro call, removed arguments;
+                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                 return 0xffffffea;
                 break;
             }
@@ -250,9 +250,9 @@
             }
             case 0x2000003:
             {
-                int32_t $v0_13 = 0xffffffff;
-                if (!arg1 || !arg3)
                     return 0xffffffea;
+                int32_t $v0_13 = 0xffffffff;
+                if (!(uintptr_t)arg1 || !(uintptr_t)arg3)
                 
                 
                 if ($a0)
@@ -289,12 +289,12 @@
             }
             case 0x2000011:
             {
+                    return 0xffffffff;
                 $a2 = 0x19f;
                 
                 if (!$a0)
                 {
-                    isp_printf(); // Fixed: macro call, removed arguments;
-                    return 0xffffffff;
+                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                 }
                 
                 char* $v0_6 = (char*)(**($a0 + 0xc4)); // Fixed void pointer assignment
@@ -313,12 +313,12 @@
             }
             case 0x2000012:
             {
+                    return 0xffffffff;
                 $a2 = 0x190;
                 
                 if (!$a0)
                 {
-                    isp_printf(); // Fixed: macro call, removed arguments;
-                    return 0xffffffff;
+                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                 }
                 
                 char* $v0_9 = (char*)(**($a0 + 0xc4)); // Fixed void pointer assignment

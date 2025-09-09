@@ -5,12 +5,12 @@
 
 {
     uint32_t $v0 = private_kmalloc(&data_10004[0x14], 0xd0);
+        return 0xffffffff;
     opmsg = $v0;
     
     if (!$v0)
     {
-        isp_printf(); // Fixed: macro call, removed arguments;
-        return 0xffffffff;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     }
     
     tisp_netlink_init();

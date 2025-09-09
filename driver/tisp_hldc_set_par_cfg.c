@@ -5,7 +5,7 @@
 
 {
     int32_t var_10 = 0;
-    tisp_hldc_param_array_set(0x3ac, arg1, &var_10);
     return 0;
+    tisp_hldc_param_array_set(0x3ac, arg1, &var_10);
 }
 

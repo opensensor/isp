@@ -6,6 +6,7 @@
 {
     int32_t $a0 = data_b2ea8;
     int32_t $v1_1 = $a0 < ae_exp_th ? 1 : 0;
+    int32_t* $v0_2;
     data_d04b8 = &data_b0cfc;
     __builtin_memcpy(&data_d04bc, 
         "\x00\x0d\x0b\x00\x04\x0d\x0b\x00\x08\x0d\x0b\x00\x0c\x0d\x0b\x00\x10\x0d\x0b\x00\x14\x0d\x0b\x00", 
@@ -15,7 +16,6 @@
     if ($v1_1)
         ae_exp_th = $a0;
     
-    int32_t* $v0_2;
     
     if (tisp_math_exp2(data_b2e9c, 0x10, 0xa) >= data_b0cfc)
         $v0_2 = data_d04bc;
@@ -66,7 +66,7 @@
     *dmsc_sp_d_ud_ns_opt = **&data_d04c4_2;
     data_c471c_1 = **&data_d04c8_2;
     data_c4720_1 = **&data_d04cc_2;
-    *(((void**)((char*)dmsc_sp_d_ud_ns_opt + 4))) = **&data_d04d0_1; // Fixed void pointer dereference
+    *((int32_t*)((char*)dmsc_sp_d_ud_ns_opt + 4)) = **&data_d04d0_1; // Fixed void pointer dereference
     data_d04d4_1 = &data_b0d18_1;
     data_d04d8_2 = &data_b0d1c_1;
     __builtin_memcpy(&data_d04dc_1, 
@@ -76,11 +76,11 @@
     if (data_b0e10_2 == 1)
     {
         int32_t $v1_20 = data_b2ed0;
+        int32_t* $v1_21;
         
         if ($v1_20 < data_b0d18)
             data_b0d18 = $v1_20;
         
-        int32_t* $v1_21;
         
         if (tisp_math_exp2(data_b2ed4, 0x10, 0xa) >= data_b0d1c)
             $v1_21 = data_d04dc;

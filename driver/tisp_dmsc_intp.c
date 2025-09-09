@@ -6,6 +6,7 @@
 {
     int32_t $s2 = arg1 >> 0x10;
     int32_t $s0 = arg1 & 0xffff;
+    return 0;
     dmsc_hv_thres_1_intp = tisp_simple_intp($s2, $s0, &dmsc_hv_thres_1_array);
     dmsc_hv_stren_intp = tisp_simple_intp($s2, $s0, &dmsc_hv_stren_array);
     dmsc_aa_thres_1_intp = tisp_simple_intp($s2, $s0, &dmsc_aa_thres_1_array);
@@ -50,6 +51,5 @@
     dmsc_fc_lum_thres_intp = tisp_simple_intp($s2, $s0, &dmsc_fc_lum_thres_array);
     dmsc_sp_d_ns_thres_intp = tisp_simple_intp($s2, $s0, &dmsc_sp_d_ns_thres_array);
     dmsc_sp_ud_ns_thres_intp = tisp_simple_intp($s2, $s0, &dmsc_sp_ud_ns_thres_array);
-    return 0;
 }
 

@@ -6,6 +6,10 @@
 {
     int32_t tisp_BCSH_au32OffsetYUVy_1 = *tisp_BCSH_au32OffsetYUVy;
     uint32_t $s5 = data_9a91d;
+        int32_t var_48_4;
+        int32_t $a1_1;
+        int32_t $a2_1;
+        int32_t $a3_1;
             uint32_t $v0_10 =
             int32_t $a3_3 = data_aa688;
             uint32_t $v0_11 = tiziano_bcsh_StrenCal.part.0($s5, 0x80, 0x100, $a3_3, 0x1800);
@@ -21,10 +25,6 @@
     
     if ($(uintptr_t)s5 != 0x80)
     {
-        int32_t var_48_4;
-        int32_t $a1_1;
-        int32_t $a2_1;
-        int32_t $a3_1;
         
         if ($s5 << 0x18 >> 0x18 < 0)
         {
@@ -70,8 +70,8 @@
     }
     
     **&data_c5400_1 = *(tisp_BCSH_au32OffsetYUVy + 4) + tisp_BCSH_u32OffsetRGB2yuv - 0x800 + $s7;
-    *(((void**)((char*)data_c5400_2 + 4))) = data_aa67c_1; // Fixed void pointer dereference
-    *(((void**)((char*)data_c5400_3 + 8))) = data_aa680_1; // Fixed void pointer dereference
+    *((int32_t*)((char*)data_c5400_2 + 4)) = data_aa67c_1; // Fixed void pointer dereference
+    *((int32_t*)((char*)data_c5400_3 + 8)) = data_aa680_1; // Fixed void pointer dereference
     int32_t tisp_BCSH_au32C_1 = tisp_BCSH_au32C;
     uint32_t $v1_3;
     
@@ -180,7 +180,7 @@
         *$v0_62 = 0;
     }
     
-    void* tisp_BCSH_au32Sthres_now_1 = tisp_BCSH_au32Sthres_now;
+    char* tisp_BCSH_au32Sthres_now_1 = (char*)(tisp_BCSH_au32Sthres_now); // Fixed void pointer assignment
     data_c5414_1 = tisp_BCSH_au32Sthres_now_1;
     data_c5418_1 = &tisp_BCSH_ai32Svalue;
     data_c541c_1 = &tisp_BCSH_u32Sstep;
@@ -205,19 +205,19 @@
         if ($a2_3 < $a1_7)
             $v1_14 = $a1_7 - $a2_3;
         
-        *(((void**)((char*)tisp_BCSH_u32Sstep + 4))) = $v1_14 / $v0_69; // Fixed void pointer dereference
+        *((int32_t*)((char*)tisp_BCSH_u32Sstep + 4)) = $v1_14 / $v0_69; // Fixed void pointer dereference
     }
     else
     {
-        *(((void**)((char*)tisp_BCSH_au32Sthres_now_1 + 4))) = $v0_66; // Fixed void pointer dereference
+        *((int32_t*)((char*)tisp_BCSH_au32Sthres_now_1 + 4)) = $v0_66; // Fixed void pointer dereference
         **&data_c541c = 0;
-        *(((int32_t*)((char*)data_c541c + 4))) = 0; // Fixed void pointer dereference
+        *((int32_t*)((char*)data_c541c + 4)) = 0; // Fixed void pointer dereference
     }
     
     data_c5420_1 = &tisp_BCSH_au32HMatrix;
-    void* tisp_BCSH_au32HDP_now_1 = tisp_BCSH_au32HDP_now;
+    char* tisp_BCSH_au32HDP_now_1 = (char*)(tisp_BCSH_au32HDP_now); // Fixed void pointer assignment
     data_c542c_1 = tisp_BCSH_au32HBP_now;
-    void* tisp_BCSH_au32HLSP_now_1 = tisp_BCSH_au32HLSP_now;
+    char* tisp_BCSH_au32HLSP_now_1 = (char*)(tisp_BCSH_au32HLSP_now); // Fixed void pointer assignment
     data_c5424_1 = tisp_BCSH_au32HDP_now_1;
     data_c5434_1 = tisp_BCSH_au32HLSP_now_1;
     data_c5428_1 = &tisp_BCSH_u32HDPslope;
@@ -230,11 +230,11 @@
         tisp_BCSH_u32HDPslope = 0x400 / ($v0_72 - $a1_9);
     else
     {
-        *(((void**)((char*)tisp_BCSH_au32HDP_now_1 + 4))) = $v0_72; // Fixed void pointer dereference
+        *((int32_t*)((char*)tisp_BCSH_au32HDP_now_1 + 4)) = $v0_72; // Fixed void pointer dereference
         **&data_c5428 = 0;
     }
     
-    void* $v1_15 = data_c542c_2;
+    char* $v1_15 = (char*)(data_c542c_2); // Fixed void pointer assignment
     int32_t $a0_32 = *($v1_15 + 4);
     int32_t $v0_76 = *($v1_15 + 8);
     
@@ -242,11 +242,11 @@
         **&data_c5430_2 = 0x400 / ($v0_76 - $a0_32);
     else
     {
-        *(((void**)((char*)$v1_15 + 4))) = $v0_76; // Fixed void pointer dereference
+        *((int32_t*)((char*)$v1_15 + 4)) = $v0_76; // Fixed void pointer dereference
         **&data_c5430 = 0;
     }
     
-    void* $v1_16 = data_c5434_2;
+    char* $v1_16 = (char*)(data_c5434_2); // Fixed void pointer assignment
     int32_t $a0_33 = *($v1_16 + 4);
     int32_t $v0_80 = *($v1_16 + 8);
     int32_t* result;
@@ -258,7 +258,7 @@
     }
     else
     {
-        *(((void**)((char*)$v1_16 + 4))) = $v0_80; // Fixed void pointer dereference
+        *((int32_t*)((char*)$v1_16 + 4)) = $v0_80; // Fixed void pointer dereference
         result = data_c5438;
         *result = 0;
     }

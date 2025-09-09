@@ -5,15 +5,16 @@
 
 {
     int32_t result = 0xffffffea;
-        char* $s0_1 = *((char*)arg1 + 0xd4); // Fixed void pointer arithmetic
-                    char* $a0_21 = *((char*)$s0_1 + 0xb8); // Fixed void pointer arithmetic
-                    char* $a0_22 = *((char*)$s0_1 + 0xb8); // Fixed void pointer arithmetic
-                    char* $a0_23 = *((char*)$s0_1 + 0xb8); // Fixed void pointer arithmetic
+            return 0xffffffea;
+        int32_t* $s0_1 = (int32_t*)((char*)arg1  + 0xd4); // Fixed void pointer arithmetic
+                int32_t $v0_17;
+                    int32_t* $a0_21 = (int32_t*)((char*)$s0_1  + 0xb8); // Fixed void pointer arithmetic
+                    int32_t* $a0_22 = (int32_t*)((char*)$s0_1  + 0xb8); // Fixed void pointer arithmetic
+                    int32_t* $a0_23 = (int32_t*)((char*)$s0_1  + 0xb8); // Fixed void pointer arithmetic
     
     if (arg1)
     {
         if ((uintptr_t)arg1 >= 0xfffff001)
-            return 0xffffffea;
         
         result = 0xffffffea;
         
@@ -23,11 +24,10 @@
             
             if (*($s0_1 + 0x128) >= 2)
             {
-                int32_t $v0_17;
                 
-                if (!arg2)
+                if (!(uintptr_t)arg2)
                 {
-                    isp_printf(); // Fixed: macro call, removed arguments;
+                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                     *($a0_21 + 8) &= 0xfffffffe;
                     *($a0_22 + 0xc) &= 0xfffffffe;
                     *($a0_23 + 0x10) &= 0xfffffffe;
@@ -35,13 +35,15 @@
                 }
                 else
                 {
-                    char* $v1_5 = *((char*)$s0_1 + 0x110); // Fixed void pointer arithmetic
+                    int32_t* $v1_5 = (int32_t*)((char*)$s0_1  + 0x110); // Fixed void pointer arithmetic
                     int32_t $s2_1 = *($v1_5 + 0x14);
-                        char* $v0_2 = *((char*)$s0_1 + 0xb8); // Fixed void pointer arithmetic
-                        char* $v1_9 = *((char*)$s0_1 + 0xb8); // Fixed void pointer arithmetic
-                        char* $v0_7 = *((char*)$s0_1 + 0x110); // Fixed void pointer arithmetic
+                        int32_t* $v0_2 = (int32_t*)((char*)$s0_1  + 0xb8); // Fixed void pointer arithmetic
+                        int32_t* $v1_9 = (int32_t*)((char*)$s0_1  + 0xb8); // Fixed void pointer arithmetic
+                        int32_t* $v0_7 = (int32_t*)((char*)$s0_1  + 0x110); // Fixed void pointer arithmetic
                         int32_t $v1_10 = *($v0_7 + 0x3c);
+                        int32_t* $v0_8;
                             int32_t $v0_9 = *($v0_7 + 0x1c);
+                            void* $a0_2;
                     
                     if ($s2_1 == 1)
                     {
@@ -53,13 +55,11 @@
                         private_msleep(1);
                         *(*($s0_1 + 0xb8) + 0xc) = $s2_1;
                         private_msleep(1);
-                        int32_t* $v0_8;
                         
                         if ($v1_10)
                             $v0_8 = *($s0_1 + 0x13c);
                         else
                         {
-                            void* $a0_2;
                             
                             if ($v0_9 - (uintptr_t)0x50 < 0x1e)
                                 $a0_2 = *($s0_1 + 0x13c);
@@ -119,7 +119,7 @@
                             }
                             
                             int32_t $v0_14 = (*($a0_2 + 0x160) & 0xfffffff0) | $v1_10;
-                            *(((void**)((char*)$a0_2 + 0x160))) = $v0_14; // Fixed void pointer dereference
+                            *((int32_t*)((char*)$a0_2 + 0x160)) = $v0_14; // Fixed void pointer dereference
                             *(*($s0_1 + 0x13c) + 0x1e0) = $v0_14;
                             *(*($s0_1 + 0x13c) + 0x260) = $v0_14;
                             $v0_8 = *($s0_1 + 0x13c);
@@ -133,7 +133,7 @@
                     }
                     else if ($s2_1 != 2)
                     {
-                        isp_printf(); // Fixed: macro call, removed arguments\n", 
+                        isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", 
                             $s2_1);
                         $v0_17 = 3;
                     }
@@ -141,14 +141,14 @@
                     {
                         *(*($s0_1 + 0xb8) + 0xc) = 0;
                         *(*($s0_1 + 0xb8) + 0xc) = 1;
-                        **(((void**)((char*)$s0_1 + 0x13c))) = 0x7d; // Fixed void pointer dereference
+                        **((int32_t*)((char*)$s0_1 + 0x13c)) = 0x7d; // Fixed void pointer dereference
                         *(*($s0_1 + 0x13c) + 0x80) = 0x3e;
                         *(*($s0_1 + 0x13c) + 0x2cc) = 1;
                         $v0_17 = 3;
                     }
                 }
                 
-                *(((void**)((char*)$s0_1 + 0x128))) = $v0_17; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s0_1 + 0x128)) = $v0_17; // Fixed void pointer dereference
                 return 0;
             }
         }

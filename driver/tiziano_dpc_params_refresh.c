@@ -5,6 +5,7 @@
 
 {
     int32_t $a0 = data_9ab24;
+    return 0;
     memcpy(&ctr_md_np_array, 0x9ef50, 0x40);
     memcpy(&ctr_std_np_array, 0x9ef90, 0x40);
     memcpy(&dpc_s_con_par_array, 0x9efd0, 0x14);
@@ -40,6 +41,5 @@
     if ($(uintptr_t)a0 != 0x80)
         tisp_s_dpc_str_internal($a0);
     
-    return 0;
 }
 

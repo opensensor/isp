@@ -10,6 +10,7 @@
         int32_t $a3_1 = *$v0;
         int32_t $t0_1 = i * $a3_1;
     uint8_t result = $a1 / (data_b2e1c * sensor_info / 4);
+    return result;
     
     do
     {
@@ -19,6 +20,5 @@
     } while ((uintptr_t)i != 0x100);
     
     *arg1 = result;
-    return result;
 }
 

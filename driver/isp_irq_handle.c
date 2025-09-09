@@ -4,9 +4,9 @@
   int32_t isp_irq_handle(int32_t arg1, void* arg2)
 
 {
+    int32_t result;
         char* $v0_2 = (char*)(**(arg2 + 0x44)); // Fixed void pointer assignment
             int32_t $v0_3 = *($v0_2 + 0x20);
-    int32_t result;
     
     if ((uintptr_t)arg2 != 0x80)
     {
@@ -30,7 +30,7 @@
         result = 1;
     
     int32_t* $s2 = arg2 - 0x48;
-    void* $a0_1 = *$s2;
+    char* $a0_1 = (char*)(*$s2); // Fixed void pointer assignment
     
     while (true)
     {

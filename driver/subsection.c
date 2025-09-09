@@ -7,17 +7,17 @@
     int32_t $v0 = 2 << (arg7 & 0x1f);
     int32_t $v0_3 = subsection_map(0x1388, 
     int16_t* var_3c = arg4;
-    void* $a1_2 = arg4;
+    char* $a1_2 = (char*)(arg4); // Fixed void pointer assignment
     int32_t $v0_4 = 0;
+    int32_t $a1_9;
         int32_t $a0_1 = *$a1_2;
-            void* $s7_2 = &arg3[$v0_4];
+            char* $s7_2 = (char*)(&arg3[$v0_4]); // Fixed void pointer assignment
             int32_t $v0_8 = fix_point_div_32(arg7, 
             int32_t $v0_10 =
     arg1[8] = 0xfff;
     *arg1 = 0;
         (fix_point_div_32(arg7, 0xfff << (arg7 & 0x1f), $v0) + 0x200) >> (arg7 & 0x1f), arg2, arg3, 
         arg4, arg5, arg6, arg7, arg8, arg9);
-    int32_t $a1_9;
     
     while (true)
     {
@@ -47,14 +47,14 @@
         arg5[(fix_point_div_32(arg7, $a1_9 << (arg7 & 0x1f), $fp_2) + 0x200) >> (arg7 & 0x1f)] / 2, 
         (fix_point_div_32(arg7, $v0_3 << (arg7 & 0x1f), $v0) + 0x200) >> (arg7 & 0x1f), arg2, arg3, 
         arg4, arg5, arg6, arg7, arg8, arg9);
-    void* $a1_13 = arg4;
+    char* $a1_13 = (char*)(arg4); // Fixed void pointer assignment
     int32_t $v0_21 = 0;
     int32_t $a1_20;
     
     while (true)
     {
         int32_t $a0_9 = *$a1_13;
-            void* $a3_4 = &arg3[$v0_21];
+            char* $a3_4 = (char*)(&arg3[$v0_21]); // Fixed void pointer assignment
             int32_t $v0_25 = fix_point_div_32(arg7, 
             int32_t $v0_27 =
         
@@ -83,14 +83,14 @@
             / 2, 
         (fix_point_div_32(arg7, $v0_20 << (arg7 & 0x1f), $v0) + 0x200) >> (arg7 & 0x1f), arg2, 
         arg3, arg4, arg5, arg6, arg7, arg8, arg9);
-    void* $a2_16 = arg4;
+    char* $a2_16 = (char*)(arg4); // Fixed void pointer assignment
     int32_t $a0_17 = 0;
     int32_t $v0_43;
     
     while (true)
     {
         int32_t $a1_24 = *$a2_16;
-            void* $t1_7 = &arg3[$a0_17];
+            char* $t1_7 = (char*)(&arg3[$a0_17]); // Fixed void pointer assignment
             int32_t $v0_39 = fix_point_div_32(arg7, 
             int32_t $v0_41 =
         
@@ -127,7 +127,7 @@
     while (true)
     {
         int32_t $a1_36 = *var_3c;
-            void* $s4_2 = &arg3[$a0_29];
+            char* $s4_2 = (char*)(&arg3[$a0_29]); // Fixed void pointer assignment
             int32_t $v0_57 = fix_point_div_32(arg7, 
             int32_t $v0_59 =
         

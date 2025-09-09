@@ -4,7 +4,7 @@
   int32_t tisp_fw_process()
 
 {
-    tisp_event_process();
     return 0;
+    tisp_event_process();
 }
 

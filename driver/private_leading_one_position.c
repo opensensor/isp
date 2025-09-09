@@ -4,13 +4,13 @@
   int32_t private_leading_one_position(uint32_t arg1) __attribute__((pure))
 
 {
-        arg1 u>>= 0x10;
     char result;
     
     if (arg1 < isp_printf)
         result = 0;
     else
     {
+        arg1 u>>= 0x10;
         result = 0x10;
     }
     

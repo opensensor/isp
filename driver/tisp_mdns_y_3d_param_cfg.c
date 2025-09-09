@@ -18,6 +18,7 @@
     int32_t $hi_3 = $s3 % mdns_y_sta_blk_size_intp_1;
     int32_t $lo_2 = $s5 / mdns_y_sta_blk_size_intp_1;
     int32_t $a1 = 0 < $hi_3 ? 1 : 0;
+    int32_t $v1_3;
     int32_t $t2 = $s2 / mdns_y_sta_blk_size_intp_1;
     int32_t $s7 = $s3 / mdns_y_sta_blk_size_intp_1;
     int32_t $t1 = $s4 / mdns_y_sta_blk_size_intp_1;
@@ -44,6 +45,7 @@
     uint32_t mdns_y_ass_wei_adj_value5_intp_1 = mdns_y_ass_wei_adj_value5_intp;
     uint32_t mdns_y_ass_thr_adj_value5_intp_1 = mdns_y_ass_thr_adj_value5_intp;
     uint32_t mdns_y_sad_wei_adj_value5_intp_1 = mdns_y_sad_wei_adj_value5_intp;
+    return 0;
     
     if (mdns_y_sta_blk_size_intp_1 & 3)
         mdns_y_sta_blk_size_intp_1 = ((mdns_y_sta_blk_size_intp_1 >> 2) + 1) << 2;
@@ -51,7 +53,6 @@
     if ((uintptr_t)mdns_y_sta_blk_size_intp_1 < 0x10)
         mdns_y_sta_blk_size_intp_1 = 0x10;
     
-    int32_t $v1_3;
     
     $v1_3 = !$hi ? $lo_2 : $lo_2 + 1;
     
@@ -217,6 +218,5 @@
     system_reg_write(0x7940, 
         mdns_y_sad_wei_adj_value5_intp_1 << 8 | mdns_y_sad_wei_adj_value5_intp_1 << 0x10
             | mdns_y_sad_wei_adj_value4_intp | mdns_y_sad_wei_adj_value5_intp_1 << 0x18);
-    return 0;
 }
 

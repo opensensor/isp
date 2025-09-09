@@ -4,14 +4,14 @@
   int32_t tiziano_s_wb_algo(int32_t arg1)
 
 {
+            return 0xffffffff;
     if (arg1 == 1)
         data_a9f68 = arg1;
     else
     {
         if (arg1 && arg1 != 2)
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
-            return 0xffffffff;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
         
         data_a9f68_4 = 0;

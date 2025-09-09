@@ -5,14 +5,14 @@
 
 {
     char* $v0 = private_kmalloc(arg3 + 1, 0xd0);
+        return 0xfffffff4;
+        return 0xfffffff2;
     
     if (!$v0)
-        return 0xfffffff4;
     
     if (private_copy_from_user($v0, arg2, arg3))
     {
         private_kfree($v0);
-        return 0xfffffff2;
     }
     
     char* $v1_1 = $v0;
@@ -49,10 +49,10 @@
     if ($a1_2)
     {
         char* $v1_2 = $v0;
-        char const* const $v0_4 = "Can not support this frame mode!!!\n";
         int32_t $a0_4 = 0x10;
         uint32_t $at_2;
         uint32_t $a1_3;
+        char const* const $v0_4 = "Can not support this frame mode!!!\n";
         
         while (true)
         {
@@ -82,10 +82,10 @@
         if ($a1_4)
         {
             char* $v1_3 = $v0;
-            char const* const $v0_6 = "sensor type is BT1120!\n";
             int32_t $a0_6 = 0x11;
             uint32_t $at_3;
             uint32_t $a1_5;
+            char const* const $v0_6 = "sensor type is BT1120!\n";
             
             while (true)
             {

@@ -4,23 +4,27 @@
   int32_t isp_info_show.isra.0(void* arg1)
 
 {
-    char* $v0 = *((char*)arg1 + 0x3c); // Fixed void pointer arithmetic
-    void* $s5 = nullptr;
+    int32_t* $v0 = (int32_t*)((char*)arg1  + 0x3c); // Fixed void pointer arithmetic
+    char* $s5 = (char*)(nullptr); // Fixed void pointer assignment
     uint32_t var_30 = 0x1388;
-    char* $s6 = *((char*)$s5 + 0x1bc); // Fixed void pointer arithmetic
+    int32_t* $s6 = (int32_t*)((char*)$s5  + 0x1bc); // Fixed void pointer arithmetic
     uint32_t var_34 = 0;
+    int32_t var_3c;
+    int32_t $v0_1;
+    int32_t $a2_1;
     int32_t* $v0_6 = private_kmalloc(0x1e0, 0xd0);
     int32_t $s4_1 = 0xffffffff;
+    int32_t var_e8;
+    int32_t var_4c;
+    void var_68;
     int32_t $v0_8 = *($s5 + 0xf4);
-    else if ($(uintptr_t)v0_8 >= 0x3202)
-                else if ($(uintptr_t)v0_8 >= 0x3309)
+            int32_t $v0_12;
+            int32_t $v0_13;
+            int32_t $v1_19;
     
     if ($v0 && $(uintptr_t)v0 < 0xfffff001)
         $s5 = *($v0 + 0xd4);
     
-    int32_t var_3c;
-    int32_t $v0_1;
-    int32_t $a2_1;
     $v0_1 = private_seq_printf(arg1, 
         "width is %d, height is %d, imagesize is %d\n, snap num is %d, buf size is %d", 
         tisp_g_awb_start(&var_3c));
@@ -33,30 +37,26 @@
     if ($v0_6)
         $s4_1 = tisp_get_antiflicker_step($v0_6, &var_34);
     
-    int32_t var_e8;
     tisp_g_ev_attr(&var_e8);
-    int32_t var_4c;
     tisp_g_ae_min(&var_4c);
-    void var_68;
     tisp_g_wb_attr(&var_68);
     tisp_g_wb_ct(&var_30);
     char const* const $s7_1;
     
     if ($(uintptr_t)v0_8 == 0x3201)
         $s7_1 = "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n";
+    else if ($(uintptr_t)v0_8 >= 0x3202)
     {
         if ($(uintptr_t)v0_8 == 0x3300)
             $s7_1 = "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n";
         else
         {
-            int32_t $v0_12;
-            int32_t $v0_13;
-            int32_t $v1_19;
             
             if ($(uintptr_t)v0_8 >= 0x3301)
             {
                 if ($(uintptr_t)v0_8 == 0x3308)
                     $s7_1 = "qbuffer null\n";
+                else if ($(uintptr_t)v0_8 >= 0x3309)
                 {
                     if ($(uintptr_t)v0_8 == 0x330c)
                         $s7_1 = "&vsd->mlock";
@@ -117,6 +117,7 @@
                 $s7_1 = "qbuffer null\\n";
             else if ($(uintptr_t)v0_8 >= 0x3209)
             {
+                        goto label_77564;
                 if ($(uintptr_t)v0_8 == 0x320c)
                     $s7_1 = "&vsd->mlock";
                 else if ($(uintptr_t)v0_8 < 0x320d)
@@ -124,7 +125,6 @@
                     $v0_13 = $(uintptr_t)v0_8 < 0x320b ? 1 : 0;
                     
                     if ($(uintptr_t)v0_8 != 0x320a)
-                        goto label_77564;
                     
                     $s7_1 = "Failed to allocate vic device\n";
                 }
@@ -132,10 +132,10 @@
                     $s7_1 = " %d, %d\\n";
                 else
                 {
+                        goto label_77588;
                     $v1_19 = 0x320f;
                     
                     if ($(uintptr_t)v0_8 >= 0x320e)
-                        goto label_77588;
                     
                     $s7_1 = "&vsd->snap_mlock";
                 }
@@ -144,10 +144,10 @@
                 $s7_1 = "%s[%d] VIC do not support this format %d\\n";
             else if ($(uintptr_t)v0_8 >= 0x3205)
             {
+                    goto label_77538;
                 $v0_12 = $(uintptr_t)v0_8 < 0x3207 ? 1 : 0;
                 
                 if ($(uintptr_t)v0_8 != 0x3206)
-                    goto label_77538;
                 
                 $s7_1 = "%s:%d::linear mode\n";
             }
@@ -163,19 +163,19 @@
         $s7_1 = "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\\n";
     else if ($(uintptr_t)v0_8 >= 0x3103)
     {
-        else if ($(uintptr_t)v0_8 >= 0x310a)
-            else if ($(uintptr_t)v0_8 >= 0x310e)
-                else if ($(uintptr_t)v0_8 == 0x3200)
         if ($(uintptr_t)v0_8 == 0x3109)
             $s7_1 = "bank no free\n";
+        else if ($(uintptr_t)v0_8 >= 0x310a)
         {
             if ($(uintptr_t)v0_8 == 0x310d)
                 $s7_1 = "&vsd->snap_mlock";
+            else if ($(uintptr_t)v0_8 >= 0x310e)
             {
                 if ($(uintptr_t)v0_8 == 0x310f)
                     $s7_1 = "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n";
                 else if ($(uintptr_t)v0_8 < 0x310f)
                     $s7_1 = " %d, %d\n";
+                else if ($(uintptr_t)v0_8 == 0x3200)
                     $s7_1 = "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n";
                 else
                     $s7_1 = "The parameter is invalid!\n";
@@ -209,13 +209,13 @@
         $s7_1 = "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\\n";
     else if ($(uintptr_t)v0_8 >= 0x3010)
     {
-        else if ($(uintptr_t)v0_8 >= 0x3014)
-            else if ($(uintptr_t)v0_8 >= 0x3101 || $(uintptr_t)v0_8 == 0x3014)
         if ($(uintptr_t)v0_8 == 0x3013)
             $s7_1 = "sensor type is BT601!\n";
+        else if ($(uintptr_t)v0_8 >= 0x3014)
         {
             if ($(uintptr_t)v0_8 == 0x3100)
                 $s7_1 = "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n";
+            else if ($(uintptr_t)v0_8 >= 0x3101 || $(uintptr_t)v0_8 == 0x3014)
                 $s7_1 = "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n";
             else
                 $s7_1 = "The parameter is invalid!\n";
@@ -229,9 +229,9 @@
     }
     else if ($(uintptr_t)v0_8 >= 0x3009)
     {
-        else if ($(uintptr_t)v0_8 == 0x300e)
         if ($(uintptr_t)v0_8 == 0x300a)
             $s7_1 = "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n";
+        else if ($(uintptr_t)v0_8 == 0x300e)
             $s7_1 = "sensor type is BT601!\n";
         else
             $s7_1 = "The parameter is invalid!\n";
@@ -332,15 +332,15 @@
     
     if (!$s4_1)
     {
-        int32_t $s0_36 = $s0_35 + $v0_58;
-        int32_t* $s5_1 = $v0_6;
         int32_t $v0_58;
         int32_t $a2_41;
+        int32_t $s0_36 = $s0_35 + $v0_58;
+        int32_t* $s5_1 = $v0_6;
+            int32_t $v0_61;
         $v0_58 = private_seq_printf(arg1, "Err [VIC_INT] : hor err ch3 !!!!!\n", var_34 + 1);
         
         while (var_34 >= $s4_1)
         {
-            int32_t $v0_61;
             $v0_61 = private_seq_printf(arg1, tisp_day_or_night_s_ctrl, *$s5_1);
             $s0_36 += $v0_61;
             $s4_1 += 1;

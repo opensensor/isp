@@ -4,12 +4,12 @@
   int32_t tisp_set_sensor_integration_time(int32_t arg1)
 
 {
+    void var_38;
+    int16_t var_28;
         int32_t $v0_5 = data_b2eec(arg1, &var_38);
             int32_t _AePointPos_1 = *_AePointPos;
             int32_t $v0_6 =
             int32_t _AePointPos_2 = *_AePointPos;
-    void var_38;
-    int16_t var_28;
     
     if (!dmsc_sp_d_w_stren_wdr_array)
     {

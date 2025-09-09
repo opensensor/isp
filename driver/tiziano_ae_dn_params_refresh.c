@@ -7,6 +7,7 @@
     uint32_t $a3 = data_b2e54;
     int32_t $a1 = data_b2e44;
     uint32_t $a2 = data_b2e56;
+    return 0;
     IspAeFlag = 1;
     data_b0df4 = 1;
     data_b0df8 = 1;
@@ -27,6 +28,5 @@
     tiziano_ae_set_hardware_param(1, &_ae_parameter, 1);
     ae_comp_default = data_b0c18;
     tisp_ae_s_comp(*ae_comp_x);
-    return 0;
 }
 

@@ -4,6 +4,7 @@
   int32_t tiziano_ae_para_addr()
 
 {
+    void* $t4_1;
     IspAe0WmeanParam = &IspAeStatic;
     data_d4658 = &data_d0878;
     data_d465c = &data_d0bfc;
@@ -38,7 +39,6 @@
     dmsc_sp_ud_dark_thres_intp = &_AePointPos;
     dmsc_sp_d_brig_thres_intp = U"KA7-(";
     dmsc_sp_d_w_stren_intp = &ae1_comp_ev_list;
-    void* $t4_1;
     
     if (data_b0e10)
     {

@@ -5,7 +5,7 @@
 
 {
     uint32_t _awb_ct_1 = _awb_ct;
-    *arg1 = _awb_ct_1;
     return _awb_ct_1;
+    *arg1 = _awb_ct_1;
 }
 

@@ -10,14 +10,14 @@
     int32_t arg_c = arg4;
     dmsc_sp_d_w_stren_wdr_array = arg1;
     
-    if (!arg1)
+    if (!(uintptr_t)arg1)
     {
         data_c46e0 = arg6;
         
         if (arg6)
         {
             data_c46b8 = arg4;
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
         
         data_c46e4_1 = arg7;
@@ -30,7 +30,7 @@
                 $a0_3 = arg2;
             
             data_c46b0 = $a0_3;
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 4 arguments;
         }
         
         data_c46e8_1 = arg8;
@@ -43,7 +43,7 @@
                 $a0_4 = arg5;
             
             data_c46bc = $a0_4;
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
         
         data_c473c_1 = arg17;
@@ -56,7 +56,7 @@
                 $a0_5 = arg3;
             
             data_c46b4 = $a0_5;
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
         
         data_c470c_2 = arg13;
@@ -84,13 +84,13 @@
         data_c46b4 = $a1;
         data_c46b8 = arg4;
         data_c46bc = $v1_4;
-        isp_printf(); // Fixed: macro call, removed arguments;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         data_c470c = arg13;
     }
     
     int32_t $a0_6 = 0x400;
     
-    if (!arg13)
+    if (!(uintptr_t)arg13)
     {
             int32_t $a0_7 = 0x400;
         data_c46ec = arg9;
@@ -102,7 +102,7 @@
                 $a0_7 = arg12;
             
             data_c46f8 = $a0_7;
-            isp_printf(); // Fixed: macro call, removed arguments!\n", arg9);
+            isp_printf(); // Fixed: macro with no parameters, removed 2 arguments!\n", arg9);
         }
         
         data_c46f0_1 = arg10;
@@ -115,7 +115,7 @@
                 $a0_8 = arg11;
             
             dmsc_uu_thres_wdr_array = $a0_8;
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
         
         data_c4714_1 = arg15;
@@ -128,7 +128,7 @@
                 $a0_9 = arg16;
             
             dmsc_awb_gain = $a0_9;
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
         
         data_c4740_1 = arg18;
@@ -141,7 +141,7 @@
                 $a0_10 = arg14;
             
             data_c4710 = $a0_10;
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
     }
     else

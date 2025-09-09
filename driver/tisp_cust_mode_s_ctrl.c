@@ -5,11 +5,11 @@
 
 {
     uint32_t tparams_cust_1 = tparams_cust;
+        return 0xffffffff;
         uint32_t day_night_2 = day_night;
         uint32_t $v0_1 = 3;
     
     if (!tparams_cust_1)
-        return 0xffffffff;
     
     if (arg1 == 1)
     {
@@ -21,25 +21,25 @@
         
         day_night = $v0_1;
     }
-    else if (!arg1)
+    else if (!(uintptr_t)arg1)
     {
         uint32_t day_night_1 = day_night;
-        else if (day_night_1 >= 2)
-            else if (day_night_1 == 3)
         
         if (day_night_1 == 1)
             memcpy(0x94b20, tparams_night, 0x137f0);
+        else if (day_night_1 >= 2)
         {
             if (day_night_1 == 2)
                 memcpy(0x94b20, tparams_day, 0x137f0);
+            else if (day_night_1 == 3)
                 memcpy(0x94b20, tparams_night, 0x137f0);
             else
-                isp_printf(); // Fixed: macro call, removed arguments;
+                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
         else if (!day_night_1)
             memcpy(0x94b20, tparams_day, 0x137f0);
         else
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         
         cust_mode = 0;
     }
@@ -70,7 +70,7 @@
     
     int32_t $s0_2 = $v0_4 | $s0_1;
     int32_t var_10_3 = $s0_2;
-    isp_printf(); // Fixed: macro call, removed arguments;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     system_reg_write(0xc, $s0_2);
     tiziano_defog_dn_params_refresh();
     tiziano_ae_dn_params_refresh();

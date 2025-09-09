@@ -4,7 +4,7 @@
   int32_t tiziano_sdns_init()
 
 {
-    void* var_2c = &data_b0000;
+    char* var_2c = (char*)(&data_b0000); // Fixed void pointer assignment
     void* $v0_1;
     
     if (sdns_wdr_en)

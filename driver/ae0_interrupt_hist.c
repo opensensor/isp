@@ -5,9 +5,9 @@
 
 {
     int32_t $s0 = (system_reg_read(0xa050) & 3) << 0xb;
-    private_dma_cache_sync(0, $s0 + data_b2f48, 0x800, 0);
     int32_t $a0_1;
     int32_t $a2;
+    private_dma_cache_sync(0, $s0 + data_b2f48, 0x800, 0);
     
     if (data_b0e10 != 1)
     {

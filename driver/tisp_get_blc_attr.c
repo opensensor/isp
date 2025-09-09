@@ -5,24 +5,24 @@
 
 {
     int32_t $s1 = system_reg_read(8) & 0x1f;
+    void var_68;
     uint32_t $v0_2 = *(&var_68 + ($s1 << 1));
+    int32_t var_38;
+    int32_t var_24;
+    int32_t $v0_12;
         int32_t var_38_2 = system_reg_read(0x1060) & 0xfff;
         int32_t $v0_15 = system_reg_read(0x1064);
         int32_t var_34_1 = $v0_15 & 0xfff;
         int32_t var_30_1 = $v0_15 >> 0x10 & 0xfff;
         int32_t $v0_18 = system_reg_read(0x1068);
         int32_t var_2c_1 = $v0_18 & 0xfff;
-    void var_68;
     memcpy(&var_68, 0x7dc64, 0x30);
     
     if ($(uintptr_t)s1 >= 0x18)
         $s1 = 0;
     
-    int32_t var_38;
     __builtin_memset(&var_38, 0, 0x14);
-    int32_t var_24;
     tisp_g_module_control(&var_24);
-    int32_t $v0_12;
     
     if ((var_24 & 9) == 9)
     {

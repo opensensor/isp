@@ -8,9 +8,11 @@
     int32_t* $s6 = globe_ispdev_1 + 0x38;
     int32_t $v1 = 0;
     int32_t $s1 = arg2 & 0xff000000;
-    void* $a0 = *$s6;
+    char* $a0 = (char*)(*$s6); // Fixed void pointer assignment
+            int32_t $v0_3;
                 char* $v0_2 = (char*)(**($a0 + 0xc4)); // Fixed void pointer assignment
                         int32_t $v0_6 = $v0_3();
+                                return $v0_6;
     
     while (true)
     {
@@ -18,7 +20,6 @@
             $s6 = &$s6[1];
         else
         {
-            int32_t $v0_3;
             
             if ($(uintptr_t)s1 == 0x1000000)
             {
@@ -39,7 +40,6 @@
                             $v1 = 0xfffffdfd;
                             
                             if ($(uintptr_t)v0_6 != 0xfffffdfd)
-                                return $v0_6;
                         }
                     }
                 }
@@ -49,12 +49,12 @@
             else if ($(uintptr_t)s1 == 0x2000000)
             {
                 char* $v0_5 = (char*)(*(*($a0 + 0xc4) + 0xc)); // Fixed void pointer assignment
+                    goto label_1d2c8;
                 $v1 = 0xfffffdfd;
                 
                 if ($v0_5)
                 {
                     $v0_3 = *($v0_5 + 8);
-                    goto label_1d2c8;
                 }
             }
             else

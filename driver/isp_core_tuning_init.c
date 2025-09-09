@@ -6,12 +6,12 @@
 {
     int32_t* result;
     int32_t $a2;
+        return nullptr;
     result = private_kmalloc(0x40d0, 0xd0);
     
     if (!result)
     {
-        isp_printf(); // Fixed: macro call, removed arguments;
-        return nullptr;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     }
     
     memset(result, 0, 0x40d0);

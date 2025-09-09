@@ -4,6 +4,7 @@
   int32_t tisp_sdns_gaussian_x_cfg()
 
 {
+    return 0;
     system_reg_write(0x88d0, 0xf0007);
     system_reg_write(0x88d4, 0x33001e);
     system_reg_write(0x88d8, 0x3b001c);
@@ -36,6 +37,5 @@
     system_reg_write(0x8944, 0x2d441aad);
     system_reg_write(0x8948, 0xea906e5);
     system_reg_write(0x894c, 0x33801e5b);
-    return 0;
 }
 

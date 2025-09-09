@@ -4,11 +4,13 @@
   int32_t video_input_cmd_set(void* arg1, int32_t arg2, int32_t arg3)
 
 {
-    char* $s3 = *((char*)arg1 + 0x70); // Fixed void pointer arithmetic
-    char* $v0 = *((char*)$s3 + 0x3c); // Fixed void pointer arithmetic
-        char* $v0_1 = *((char*)$v0 + 0xd8); // Fixed void pointer arithmetic
-            char* $s1_1 = *((char*)$v0_1 + 0xe4); // Fixed void pointer arithmetic
+    int32_t* $s3 = (int32_t*)((char*)arg1  + 0x70); // Fixed void pointer arithmetic
+    int32_t* $v0 = (int32_t*)((char*)$s3  + 0x3c); // Fixed void pointer arithmetic
+        int32_t* $v0_1 = (int32_t*)((char*)$v0  + 0xd8); // Fixed void pointer arithmetic
+            int32_t* $s1_1 = (int32_t*)((char*)$v0_1  + 0xe4); // Fixed void pointer arithmetic
                 int32_t $s4_1 = (uintptr_t)arg3 < 0x81 ? 1 : 0;
+                    int32_t result;
+                    char* $s0_1;
                         int32_t $a2_1 = arg3;
     
     if ($v0 && $(uintptr_t)v0 < 0xfffff001)
@@ -22,8 +24,6 @@
                 
                 if ($(uintptr_t)s1_1 < 0xfffff001)
                 {
-                    int32_t result;
-                    char* $s0_1;
                     
                     if ($s4_1)
                     {
@@ -43,11 +43,11 @@
                         {
                             int32_t $v0_8 = 9;
                             char* $a0_4 = $s0_1;
-                            char const* const $v1_4 =
                             int32_t $a1_1 = 9;
-                                "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n";
                             uint32_t $at_2;
                             uint32_t $a2_3;
+                            char const* const $v1_4 =
+                                "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n";
                             
                             while (true)
                             {
@@ -78,10 +78,10 @@
                             if ($a2_4)
                             {
                                 char* $a0_8 = $s0_1;
-                                char const* const $v1_5 = "%s[%d] do not support this interface\n";
                                 int32_t $a1_3 = 6;
                                 uint32_t $at_3;
                                 uint32_t $a2_7;
+                                char const* const $v1_5 = "%s[%d] do not support this interface\n";
                                 
                                 while (true)
                                 {
@@ -288,10 +288,10 @@
                                 int32_t var_40_1 = $v0_9;
                                 int32_t var_3c_1 = 0;
                                 char* $v0_12 = (char*)(**($s1_1 + 0xc4)); // Fixed void pointer assignment
-                                    int32_t $v0_13 = *($v0_12 + 0xc);
-                                var_48 = $s1_1 + 0x8c;
                                 int32_t $s1_2;
                                 int32_t var_38;
+                                    int32_t $v0_13 = *($v0_12 + 0xc);
+                                var_48 = $s1_1 + 0x8c;
                                 
                                 if ($v0_12)
                                 {
@@ -335,13 +335,13 @@
                     else
                     {
                         char* $v0_4 = private_kmalloc(arg3 + 1, 0xd0);
+                            goto label_13998;
                         $s0_1 = $v0_4;
                         result = 0xfffffff4;
                         
                         if ($v0_4)
                         {
                             memset($v0_4, 0, arg3 + 1);
-                            goto label_13998;
                         }
                     }
                     return result;

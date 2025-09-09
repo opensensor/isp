@@ -4,6 +4,7 @@
   int32_t tisp_dmsc_sp_d_b_wei_np_cfg()
 
 {
+    return 0;
     system_reg_write(0x4908, 
         data_c4f50 << 0x18 | data_c4f4c << 0x12 | dmsc_sp_d_b_wei_np_array | data_c4f48 << 0xc
             | data_c4f44 << 6);
@@ -14,6 +15,5 @@
     system_reg_write(0x4914, 
         data_c4f8c << 0x18 | data_c4f88 << 0x12 | data_c4f7c | data_c4f84 << 0xc | data_c4f80 << 6);
     system_reg_write(0x4918, data_c4f94 << 6 | data_c4f90);
-    return 0;
 }
 

@@ -5,6 +5,7 @@
 
 {
     int32_t var_a0;
+            return 0xffffffff;
     memset(&var_a0, 0, 0x98);
     memcpy(&var_a0, &dmsc_sp_d_w_stren_wdr_array, 0x98);
     
@@ -12,8 +13,7 @@
     {
         if (arg1)
         {
-            isp_printf(); // Fixed: macro call, removed arguments!\n", arg1);
-            return 0xffffffff;
+            isp_printf(); // Fixed: macro with no parameters, removed 2 arguments!\n", arg1);
         }
         
         var_a0_9 = 0;

@@ -8,13 +8,14 @@
     int32_t $a1_146 = (data_acb10[3] & 0x1f) << 8 | (data_acb10[4] & 0x1f) << 0x10
     int32_t $a1_174 = (data_ac8fc[4] & 0x1f) << 8 | (data_ac8fc[5] & 0x1f) << 0x10
     int32_t $a1_178 = (data_ac8fc[8] & 0x1f) << 8 | (data_ac8fc[9] & 0x1f) << 0x10
-    void* param_defog_main_para_array_now_1 = param_defog_main_para_array_now;
-    void* param_defog_main_para_array_now_2 = param_defog_main_para_array_now;
+    char* param_defog_main_para_array_now_1 = (char*)(param_defog_main_para_array_now); // Fixed void pointer assignment
+    char* param_defog_main_para_array_now_2 = (char*)(param_defog_main_para_array_now); // Fixed void pointer assignment
     int32_t $v0_329 = (*(param_defog_main_para_array_now_2 + 0xc) & 0xf) << 2
-    void* param_defog_main_para_array_now_3 = param_defog_main_para_array_now;
+    char* param_defog_main_para_array_now_3 = (char*)(param_defog_main_para_array_now); // Fixed void pointer assignment
     int32_t $a1_253 = (*(param_defog_main_para_array_now_3 + 0x20) & 0x1f) << 8
     int32_t $a1_260 = (data_acc14[4] & 0x3f) << 8 | (data_acc14[5] & 0x3f) << 0x10
-    void* param_defog_fpga_para_array_now_1 = param_defog_fpga_para_array_now;
+    char* param_defog_fpga_para_array_now_1 = (char*)(param_defog_fpga_para_array_now); // Fixed void pointer assignment
+    return 0;
     system_reg_write(0x5850, 
         (data_ac84c[0] & 0x7fff) << 0x10 | (param_defog_cent3_w_dis_array & 0x7fff));
     system_reg_write(0x5854, (data_ac84c[2] & 0x7fff) << 0x10 | (data_ac84c[1] & 0x7fff));
@@ -219,6 +220,5 @@
     system_reg_write(0x5b10, 
         *(param_defog_fpga_para_array_now_1 + 8) << 0x10
             | *(param_defog_fpga_para_array_now_1 + 4));
-    return 0;
 }
 

@@ -4,18 +4,18 @@
   int32_t tx_isp_release(int32_t arg1, void* arg2)
 
 {
-    char* $s1 = *((char*)arg2 + 0x70); // Fixed void pointer arithmetic
+    int32_t* $s1 = (int32_t*)((char*)arg2  + 0x70); // Fixed void pointer arithmetic
     int32_t $s0 = *($s1 + 0x108);
-    void* $s2 = $s1 + 0x2c;
+    char* $s2 = (char*)($s1 + 0x2c); // Fixed void pointer assignment
+        return 0;
     
     if ($s0)
     {
-        *(((void**)((char*)$s1 + 0x108))) = $s0 - 1; // Fixed void pointer dereference
-        return 0;
+        *((int32_t*)((char*)$s1 + 0x108)) = $s0 - 1; // Fixed void pointer dereference
     }
     
     int32_t $v0_1 = 0;
-    void* $a0 = *$s2;
+    char* $a0 = (char*)(*$s2); // Fixed void pointer assignment
     
     while (true)
     {
@@ -36,6 +36,7 @@
                 }
                 else
                 {
+                            return $v0_1;
                     $v0_1 = $v0_4();
                     
                     if (!$v0_1)
@@ -43,7 +44,6 @@
                     else
                     {
                         if ($(uintptr_t)v0_1 != 0xfffffdfd)
-                            return $v0_1;
                         
                         $v0_1 = 0xfffffdfd;
                         $s2 += 4;
@@ -67,8 +67,8 @@
     
     if ($(uintptr_t)v0_1 != 0xfffffdfd)
     {
-        if ($v0_1)
             return $v0_1;
+        if ($v0_1)
         
         $v0_5 = *($s1 + 0x10c);
     }

@@ -4,6 +4,7 @@
   int32_t tisp_dmsc_deir_rgb_par_cfg()
 
 {
+    return 0;
     system_reg_write(0x4950, dmsc_r_deir_array << 0x10 | data_c5074);
     system_reg_write(0x4954, data_c5078 << 0x10 | data_c507c);
     system_reg_write(0x4958, data_c5080 << 0x10 | data_c5084);
@@ -16,6 +17,5 @@
     system_reg_write(0x4974, data_c5038 << 0x10 | data_c503c);
     system_reg_write(0x4978, data_c5040 << 0x10 | data_c5044);
     system_reg_write(0x497c, data_c5048 << 0x10 | data_c504c);
-    return 0;
 }
 

@@ -4,12 +4,12 @@
   uint32_t Tiziano_awb_fpga(void* arg1, void* arg2, void* arg3, void* arg4, int32_t* arg5, int32_t* arg6, void* arg7, int32_t arg8, int32_t* arg9, int32_t* arg10, void* arg11, int32_t* arg12, int32_t arg13)
 
 {
-    void* arg_4 = arg2;
-    void* arg_0 = arg1;
+    char* arg_4 = (char*)(arg2); // Fixed void pointer assignment
+    char* arg_0 = (char*)(arg1); // Fixed void pointer assignment
     int32_t $s2 = *arg10;
     int32_t j = *(arg7 + 0xc);
-    void* arg_c = arg4;
-    void* arg_8 = arg3;
+    char* arg_c = (char*)(arg4); // Fixed void pointer assignment
+    char* arg_8 = (char*)(arg3); // Fixed void pointer assignment
     int32_t $s5 = *(arg7 + 4);
     int32_t $a0_1 = *arg6;
     int32_t $s1 = *arg5;
@@ -26,14 +26,14 @@
     int32_t $v0_9 = fix_point_mult2_32($s2, $s3, arg9[1]);
     int32_t $s3_1 = j << 2;
     int32_t $t8 = j * $s5;
-    void* $t2 = nullptr;
+    char* $t2 = (char*)(nullptr); // Fixed void pointer assignment
     int32_t $t9 = $t8 << 2;
     int32_t $s4 = 0;
     int32_t $v1_3 = 0;
-    void* $t1 = &zone_rgbg;
-        void* $s6_1 = $t1 + $s4;
+    char* $t1 = (char*)(&zone_rgbg); // Fixed void pointer assignment
+        char* $s6_1 = (char*)($t1 + $s4); // Fixed void pointer assignment
         int32_t* $t6_1 = arg1 + $s4;
-        void* $t0_2 = &zone_pix_cnt + $s4;
+        char* $t0_2 = (char*)(&zone_pix_cnt + $s4); // Fixed void pointer assignment
         int32_t* $fp_1 = arg3 + $s4;
         int32_t $t5_1 = $s4 + $t9;
         int32_t* $s7_1 = arg2 + $s4;
@@ -51,14 +51,14 @@
             if ($a0_5)
             {
                 *$s6_1 = var_74($s2, (*$t6_1 << ($s2 & 0x1f)) / $a0_5, $v0_7);
-                *(((void**)((char*)$t2 + $s6_1 + $t5_1))) = var_74($s2, (*$fp_1 << ($s2 & 0x1f)) / *$s7_1, $v0_9); // Fixed void pointer dereference
+                *((int32_t*)((char*)$t2 + $s6_1 + $t5_1)) = var_74($s2, (*$fp_1 << ($s2 & 0x1f)) / *$s7_1, $v0_9); // Fixed void pointer dereference
                 *$t0_2 = *$t4_1;
             }
             else
             {
                 *$s6_1 = 0;
                 *$t0_2 = 0;
-                *(((int32_t*)((char*)$t2 + $s6_1 + $t5_1))) = 0; // Fixed void pointer dereference
+                *((int32_t*)((char*)$t2 + $s6_1 + $t5_1)) = 0; // Fixed void pointer dereference
             }
             
             $t3_1 += 1;
@@ -78,9 +78,9 @@
     awb_rg_global = 0;
     awb_bg_global = 0;
     *awb_pix_cnt = $t8;
-    *(((void**)((char*)awb_pix_cnt + 4))) = $t8; // Fixed void pointer dereference
-    void* $fp_2 = $t1;
-    void* $v1_4 = $t1;
+    *((int32_t*)((char*)awb_pix_cnt + 4)) = $t8; // Fixed void pointer dereference
+    char* $fp_2 = (char*)($t1); // Fixed void pointer assignment
+    char* $v1_4 = (char*)($t1); // Fixed void pointer assignment
     int32_t $a0_10 = $t8;
     int32_t $a1_10 = $t8;
     int32_t $t3_2 = 0;
@@ -134,7 +134,7 @@
         *awb_pix_cnt = $a1_10;
     
     if ($t3_2)
-        *(((void**)((char*)awb_pix_cnt + 4))) = $a0_10; // Fixed void pointer dereference
+        *((int32_t*)((char*)awb_pix_cnt + 4)) = $a0_10; // Fixed void pointer dereference
     
     uint32_t awb_rg_global_1 = awb_rg_global;
     int32_t var_f8_3 = *arg9;
@@ -172,11 +172,11 @@
     
     while (i != $s5 * 0xf)
     {
-        void* $v0_40 = &tisp_wb_zone_attr + i;
-        void* $a0_18 = arg4 + $a2_8;
+        char* $v0_40 = (char*)(&tisp_wb_zone_attr + i); // Fixed void pointer assignment
+        char* $a0_18 = (char*)(arg4 + $a2_8); // Fixed void pointer assignment
         int32_t $t2_3 = 0;
-        void* $v1_8 = $v0_40;
-        void* $t5_6 = $v0_40;
+        char* $v1_8 = (char*)($v0_40); // Fixed void pointer assignment
+        char* $t5_6 = (char*)($v0_40); // Fixed void pointer assignment
             int32_t $t6_4 = *$a0_18;
                 int32_t $a1_15 = $a2_8 + $t2_3;
         
@@ -185,15 +185,15 @@
             
             if ($t6_4)
             {
-                *$v1_8 = *(arg1 + $a1_15) / $t6_4;
-                *(((void**)((char*)$v1_8 + 0xe1))) = *(arg2 + $a1_15) / *$a0_18; // Fixed void pointer dereference
-                *(((void**)((char*)$v1_8 + 0x1c2))) = *(arg3 + $a1_15) / *$a0_18; // Fixed void pointer dereference
+                *((int32_t*)$v1_8) = *(arg1 + $a1_15) / $t6_4; // Fixed void pointer dereference
+                *((int32_t*)((char*)$v1_8 + 0xe1)) = *(arg2 + $a1_15) / *$a0_18; // Fixed void pointer dereference
+                *((int32_t*)((char*)$v1_8 + 0x1c2)) = *(arg3 + $a1_15) / *$a0_18; // Fixed void pointer dereference
             }
             else
             {
                 *$v0_40 = 0;
-                *(((int32_t*)((char*)$v0_40 + 0xe1))) = 0; // Fixed void pointer dereference
-                *(((int32_t*)((char*)$v0_40 + 0x1c2))) = 0; // Fixed void pointer dereference
+                *((int32_t*)((char*)$v0_40 + 0xe1)) = 0; // Fixed void pointer dereference
+                *((int32_t*)((char*)$v0_40 + 0x1c2)) = 0; // Fixed void pointer dereference
             }
             
             $v0_40 += 1;
@@ -221,9 +221,9 @@
             
             if (arg8 >= *(arg4 + $v0_42))
             {
-                *(((int32_t*)((char*)$t1 + $v0_42))) = 0; // Fixed void pointer dereference
-                *(((int32_t*)((char*)$t1 + $v1_9 + $a0_19 + $t9))) = 0; // Fixed void pointer dereference
-                *(((int32_t*)((char*)&zone_pix_cnt + $v0_42))) = 0; // Fixed void pointer dereference
+                *((int32_t*)((char*)$t1 + $v0_42)) = 0; // Fixed void pointer dereference
+                *((int32_t*)((char*)$t1 + $v1_9 + $a0_19 + $t9)) = 0; // Fixed void pointer dereference
+                *(&zone_pix_cnt + $v0_42) = 0;
             }
             
             $v1_9 += 4;
@@ -234,7 +234,7 @@
     }
     
     int32_t $v0_44 = data_98468_1;
-    void* $v1_10 = &zone_rgbg_last;
+    char* $v1_10 = (char*)(&zone_rgbg_last); // Fixed void pointer assignment
     uint32_t awb_moa_1;
     int32_t $a0_21;
     
@@ -248,8 +248,8 @@
         {
             for (int32_t i_1 = 0; $s3_1 != i_1; i_1 += 4)
             {
-                *(((void**)((char*)$v1_10 + i_1))) = *($fp_2 + i_1); // Fixed void pointer dereference
-                *(((void**)((char*)$v1_10 + $t9 + i_1))) = *($fp_2 + $t9 + i_1); // Fixed void pointer dereference
+                *((int32_t*)((char*)$v1_10 + i_1)) = *($fp_2 + i_1); // Fixed void pointer dereference
+                *((int32_t*)((char*)$v1_10 + $t9 + i_1)) = *($fp_2 + $t9 + i_1); // Fixed void pointer dereference
             }
             
             $a0_21 += 1;
@@ -265,7 +265,7 @@
         for (int32_t i_2 = 0; (uintptr_t)i_2 < 0x38; i_2 += 1)
         {
             void arg_34;
-            *(((void**)((char*)&var_f8 + i_2))) = *(&arg_34 + i_2); // Fixed void pointer dereference
+            *(&var_f8 + i_2) = *(&arg_34 + i_2);
         }
         
         Tiziano_Awb_Ct_Detect(&zone_rgbg, &zone_pix_cnt, arg12, arg13);
@@ -279,8 +279,8 @@
             
             for (int32_t i_3 = 0; (uintptr_t)i_3 != 0x3c; )
             {
-                *(((void**)((char*)&data_9842c + i_3))) = $t2_7; // Fixed void pointer dereference
-                *(((void**)((char*)&data_983f0 + i_3))) = var_b4; // Fixed void pointer dereference
+                *(&data_9842c + i_3) = $t2_7;
+                *(&data_983f0 + i_3) = var_b4;
                 i_3 += 4;
                 *$a0_26 = _awb_ct_1;
             }
@@ -290,9 +290,9 @@
             goto label_286c4;
         }
         
-        void* i_4 = &data_9842c;
-        void* $a0_22 = &data_983f0;
-        void* $v1_13 = &data_983b4;
+        char* i_4 = (char*)(&data_9842c); // Fixed void pointer assignment
+        char* $a0_22 = (char*)(&data_983f0); // Fixed void pointer assignment
+        char* $v1_13 = (char*)(&data_983b4); // Fixed void pointer assignment
         
         do
         {
@@ -310,6 +310,8 @@
         uint32_t $lo_9 = (($a0_23 >> 1) + $t5_8) / $a0_23;
         uint32_t $lo_10 = (($v1_14 >> 1) + $t4_6) / $v1_14;
         int32_t awb_gain_original_1 = *awb_gain_original;
+        uint32_t $v0_60;
+        uint32_t $v1_15;
             int32_t $a0_28 = 1 << (($s2 + 0x10) & 0x1f);
             int32_t $a1_32 = 1 << (($s2 - 1) & 0x1f);
             uint32_t $v1_20 = ($a0_28 / $v1_15 + $a1_32) >> ($s2 & 0x1f);
@@ -322,7 +324,7 @@
             i_4 += 4;
             *(i_4 - 4) = $t1_21;
             $v1_13 += 4;
-            *$a0_22 = *($a0_22 + 4);
+            *((int32_t*)$a0_22) = *($a0_22 + 4); // Fixed void pointer dereference
             $a0_22 += 4;
             *($v1_13 - 4) = *$v1_13;
         } while (i_4 != &data_98464);
@@ -352,8 +354,6 @@
         var_b8 = $lo_9;
         var_b4 = $lo_10;
         _awb_ct = (($t0_10 >> 1) + $t3_7) / $t0_10;
-        uint32_t $v0_60;
-        uint32_t $v1_15;
         
         if ($lo_9 != awb_gain_original_1)
         {
@@ -363,7 +363,7 @@
             $v0_60 = var_b4;
         label_286d0:
             *awb_gain_original = $v1_15;
-            *(((void**)((char*)awb_gain_original + 4))) = $v0_60; // Fixed void pointer dereference
+            *((int32_t*)((char*)awb_gain_original + 4)) = $v0_60; // Fixed void pointer dereference
             
             if ($v0_2 < $v1_20)
                 $a1_34 = $v1_20 - $v0_2;
@@ -388,9 +388,9 @@
             if ($a0_1)
             {
                 int32_t $a0_38 = $a0_2;
+                    goto label_28810;
                 
                 if ($v1_1 >= $a0_33)
-                    goto label_28810;
                 
                 if ($a2_16 != 1)
                 {
@@ -474,8 +474,8 @@
     }
     else
     {
-        void* $a2_10 = &zone_rgbg_last;
-        void* $a3_2 = $fp_2;
+        char* $a2_10 = (char*)(&zone_rgbg_last); // Fixed void pointer assignment
+        char* $a3_2 = (char*)($fp_2); // Fixed void pointer assignment
         int32_t $t0_4 = 0;
         int32_t $t1_20 = 0;
             int32_t $a0_20 = 0;

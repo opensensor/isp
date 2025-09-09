@@ -4,19 +4,19 @@
   int32_t tx_isp_open(int32_t arg1, void* arg2)
 
 {
-    char* $v1_1 = *((char*)arg2 + 0x70); // Fixed void pointer arithmetic
+    int32_t* $v1_1 = (int32_t*)((char*)arg2  + 0x70); // Fixed void pointer arithmetic
     int32_t $v0 = *($v1_1 + 0x108);
+        return 0;
     
     if ($v0)
     {
-        *(((void**)((char*)$v1_1 + 0x108))) = $v0 + 1; // Fixed void pointer dereference
-        return 0;
+        *((int32_t*)((char*)$v1_1 + 0x108)) = $v0 + 1; // Fixed void pointer dereference
     }
     
-    void* $s1 = $v1_1 + 0x2c;
-    *(((void**)((char*)$v1_1 + 0x10c))) = 0xffffffff; // Fixed void pointer dereference
+    char* $s1 = (char*)($v1_1 + 0x2c); // Fixed void pointer assignment
+    *((int32_t*)((char*)$v1_1 + 0x10c)) = 0xffffffff; // Fixed void pointer dereference
     int32_t result = 0;
-    void* $a0 = *$s1;
+    char* $a0 = (char*)(*$s1); // Fixed void pointer assignment
     
     while (true)
     {
@@ -60,8 +60,8 @@
         
         if ($s1 == $v1_1 + 0x6c)
         {
-            if ((uintptr_t)result == 0xfffffdfd)
                 return 0;
+            if ((uintptr_t)result == 0xfffffdfd)
             
             break;
         }

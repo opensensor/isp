@@ -9,7 +9,10 @@
     int32_t _AePointPos_1 = *_AePointPos;
     int32_t $a1_5 = $lo - $v1_3;
     int32_t $v0_5 = fix_point_div_32(_AePointPos_1, $a1_5 << (_AePointPos_1 & 0x1f), 
-    void* $s2 = &scene_luma_old;
+    uint8_t var_20;
+    uint8_t $t1;
+    int32_t $t2_1;
+    char* $s2 = (char*)(&scene_luma_old); // Fixed void pointer assignment
         int32_t $v0_8 = *(i + 4);
     
     if ($v1_3 >= $lo)
@@ -17,16 +20,13 @@
     
         $lo << (_AePointPos_1 & 0x1f));
     fix_point_mult2_32(_AePointPos_1, *(((data_b0cec + 1) << 2) + &ev0_cache), $v0_5);
-    uint8_t var_20;
-    uint8_t $t1;
-    int32_t $t2_1;
     $t1 = tisp_ae_g_luma(&var_20);
     
     if (!var_20)
         var_20 = $t1;
     
     
-    for (void* i = &scene_luma_old; i != &data_afb38; )
+    for (char* i = (char*)(&scene_luma_old); // Fixed void pointer assignment i != &data_afb38; )
     {
         i += 4;
         *(i - 4) = $v0_8;
@@ -40,6 +40,7 @@
     {
         int32_t $a2_4 = i_1 * *$s2;
     uint32_t result = $v0_11 / 0x24;
+    return result;
         i_1 += 1;
         $s2 += 4;
         $v0_11 += $a2_4;
@@ -48,6 +49,5 @@
     scene_luma_wmean = $v0_11;
     scene_luma_weight = 0x24;
     *arg1 = result;
-    return result;
 }
 

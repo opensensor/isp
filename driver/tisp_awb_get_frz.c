@@ -5,7 +5,7 @@
 
 {
     uint8_t awb_frz_1 = awb_frz;
-    *arg1 = awb_frz_1;
     return awb_frz_1;
+    *arg1 = awb_frz_1;
 }
 

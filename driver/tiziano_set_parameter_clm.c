@@ -11,6 +11,7 @@
     int32_t $s3 = $s0 + 0x690;
     int32_t $v0_3 = $s0 - 0x68000;
         int32_t $a0_1 = $s0;
+    int32_t i_1;
         int32_t $a1_3 = *(i_1 + tiziano_adr_params_init+0xf60);
         int32_t i_3 = i_1;
     clm_lut2reg(&tiziano_clm_s_lut, &tiziano_clm_h_lut, &tiziano_clm_s_reg, &tiziano_clm_h_reg);
@@ -30,7 +31,6 @@
         $v0_3 = $s0 - 0x68000;
     } while ($s0 != $s3);
     
-    int32_t i_1;
     
     for (i_1 = 0x70000; i_1 != &data_70690; )
     {
@@ -45,11 +45,11 @@
     do
     {
         int32_t $a0_2 = $s0_1;
+    return 0;
         $s0_1 += 4;
         system_reg_write($a0_2, *(&tiziano_clm_s_reg + $v0_7));
         $v0_7 = $s0_1 - 0x78000;
     } while ($s0_1 != $s2);
     
-    return 0;
 }
 

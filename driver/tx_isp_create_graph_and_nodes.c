@@ -14,12 +14,12 @@
         
         if (!$v0_3)
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
             i += 1;
         }
         else if ($(uintptr_t)v0_3 >= 0xfffff001)
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
             i += 1;
         }
         else if (*$v0_3 != 1)
@@ -49,7 +49,7 @@
             
             if (!$a0_3)
             {
-                isp_printf(); // Fixed: macro call, removed arguments;
+                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                 break;
             }
             
@@ -65,25 +65,25 @@
     while (true)
     {
         int32_t result = $s1 < *(arg1 + 0x80) ? 1 : 0;
-        void* $v0_7 = private_platform_get_drvdata(*$s4);
+            return result;
+        char* $v0_7 = (char*)(private_platform_get_drvdata(*$s4)); // Fixed void pointer assignment
         int32_t $v0_8 = *($v0_7 + 0x30);
             int32_t $a0_4 = *($v0_7 + 8);
-                void* $s2_1 = &(arg1 + 0x84)[$s1 * 2];
+                char* $s2_1 = (char*)(&(arg1 + 0x84)[$s1 * 2]); // Fixed void pointer assignment
                     char* $v0_12 = (char*)(private_platform_get_drvdata(*($s2_1 - 8))); // Fixed void pointer assignment
         
         if (!result)
-            return result;
         
         
         if ($v0_8)
         {
-            *(((void**)((char*)$v0_7 + 0x14))) = $v0_8; // Fixed void pointer dereference
-            *(((void**)((char*)$v0_7 + 0x10))) = $a0_4; // Fixed void pointer dereference
-            *(((void**)((char*)$v0_7 + 0xc))) = 0xff; // Fixed void pointer dereference
+            *((int32_t*)((char*)$v0_7 + 0x14)) = $v0_8; // Fixed void pointer dereference
+            *((int32_t*)((char*)$v0_7 + 0x10)) = $a0_4; // Fixed void pointer dereference
+            *((int32_t*)((char*)$v0_7 + 0xc)) = 0xff; // Fixed void pointer dereference
             
             if (private_misc_register($v0_7 + 0xc) < 0)
             {
-                isp_printf(); // Fixed: macro call, removed arguments);
+                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
                 
                 while (true)
                 {

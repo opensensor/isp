@@ -4,7 +4,7 @@
   int32_t tisp_g_af_zone()
 
 {
-    tisp_af_get_zone();
     return 0;
+    tisp_af_get_zone();
 }
 

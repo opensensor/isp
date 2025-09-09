@@ -5,14 +5,14 @@
 
 {
     int32_t $v0 = system_reg_read(0x2680);
-            void* $v1_4 = i + data_b2f9c;
+            char* $v1_4 = (char*)(i + data_b2f9c); // Fixed void pointer assignment
             int32_t* $s1_1 = $v1_4;
-            void* $v0_1 = $v1_4 + 0x2000;
-            void* $a1_1 = $v1_4;
+            char* $v0_1 = (char*)($v1_4 + 0x2000); // Fixed void pointer assignment
+            char* $a1_1 = (char*)($v1_4); // Fixed void pointer assignment
                     int16_t $a3_1 = *($v1_4 + j);
                     int16_t* $a2_2 = $a1_1 + j;
     
-    for (void* i = nullptr; (uintptr_t)i != 0x8000; )
+    for (char* i = (char*)(nullptr); // Fixed void pointer assignment (uintptr_t)i != 0x8000; )
     {
         if ($v0 != i + data_b2fa0)
             i += 0x2000;

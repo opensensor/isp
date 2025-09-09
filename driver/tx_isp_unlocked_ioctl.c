@@ -4,15 +4,15 @@
   int32_t tx_isp_unlocked_ioctl(void* arg1, int32_t arg2, int32_t arg3)
 
 {
-    char* $s7 = *((char*)arg1 + 0x70); // Fixed void pointer arithmetic
-        char* $v1_22 = (char*)(*(*($s7 + 0x2c) + 0xd4)); // Fixed void pointer assignment
-        char* $v0_96 = *((char*)$v1_22 + 0x120); // Fixed void pointer arithmetic
-        int32_t $a0_41 = *($v0_96 + 0x90);
-        else if ($a0_41 != 2)
-        int32_t var_a8_3 = var_94;
+    int32_t* $s7 = (int32_t*)((char*)arg1  + 0x70); // Fixed void pointer arithmetic
     int32_t $s6_1;
     uint32_t var_98;
     int32_t var_94;
+        char* $v1_22 = (char*)(*(*($s7 + 0x2c) + 0xd4)); // Fixed void pointer assignment
+        int32_t* $v0_96 = (int32_t*)((char*)$v1_22  + 0x120); // Fixed void pointer arithmetic
+        int32_t $a0_41 = *($v0_96 + 0x90);
+        int32_t var_a8_3 = var_94;
+            return 0xfffffff2;
     
     if ((uintptr_t)arg2 == 0x800856d7)
     {
@@ -21,22 +21,23 @@
         
         if ($a0_41 == 1)
             var_94 = (*($v1_22 + 0x124) * *($v1_22 + 0x128)) << 1;
-            isp_printf(); // Fixed: macro call, removed arguments;
+        else if ($a0_41 != 2)
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         else
             var_94 = *($v0_96 + 0xe8);
         
-        isp_printf(); // Fixed: macro call, removed arguments;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         $s6_1 = 0;
         
         if (private_copy_to_user(arg3, &var_98, 8))
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
-            return 0xfffffff2;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
     }
     else
     {
         int32_t var_90;
+                    return 0xfffffff2;
         char const* const $a1_3;
         char const* const $a2_1;
         
@@ -50,8 +51,7 @@
                 label_1f3d0:
                     $a1_3 = "bank no free\n";
                 label_1df8c:
-                    isp_printf(); // Fixed: macro call, removed arguments;
-                    return 0xfffffff2;
+                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                 }
                 
                 $s6_1 = 0;
@@ -78,15 +78,16 @@
                         
                         if (private_copy_to_user(arg3, &var_98_22, 0x24))
                         {
+                            goto label_1df8c;
                             $a2_1 = "tx_isp_get_frame_drop";
                             $a1_3 = "sensor type is BT656!\n";
-                            goto label_1df8c;
                         }
                     }
                     else if ((uintptr_t)arg2 >= 0xc00456e8)
                     {
                         int32_t $v0_103;
                         void* $s0_12;
+                                goto label_1df8c;
                         
                         if ((uintptr_t)arg2 == 0xc00456e9)
                         {
@@ -96,7 +97,6 @@
                             {
                                 $a2_1 = "tx_isp_set_gpio_sta";
                                 $a1_3 = "sensor type is BT601!\n";
-                                goto label_1df8c;
                             }
                             
                             $s6_1 = 0xfffffffe;
@@ -112,13 +112,13 @@
                         }
                         else if ((uintptr_t)arg2 < 0xc00456e9)
                         {
+                                goto label_1df8c;
                             $s0_12 = *($s7 + 0x2c);
                             
                             if (private_copy_from_user(&var_98, arg3, 0x2a))
                             {
                                 $a2_1 = "tx_isp_set_gpio_init";
                                 $a1_3 = "sensor type is BT601!\n";
-                                goto label_1df8c;
                             }
                             
                             $s6_1 = 0xfffffffe;
@@ -135,14 +135,15 @@
                         else if ((uintptr_t)arg2 == 0xc0385650)
                         {
                             int32_t $v0_57 = private_copy_from_user(&var_98, arg3, 0x38);
+                            int32_t $v0_65;
                                 int32_t var_40_2 = var_70;
                                 int32_t var_3c_2 = var_6c;
-                                void* $s0_7 = $s7 + 0x2c;
-                                void* $a0_23 = *$s0_7;
+                                char* $s0_7 = (char*)($s7 + 0x2c); // Fixed void pointer assignment
+                                char* $a0_23 = (char*)(*$s0_7); // Fixed void pointer assignment
                                         char* $v0_61 = (char*)(*(*($a0_23 + 0xc4) + 0xc)); // Fixed void pointer assignment
                                             int32_t $v0_62 = *($v0_61 + 8);
                                                 int32_t $v0_63 = $v0_62();
-                            int32_t $v0_65;
+                                                        return $v0_63;
                             
                             if (!$v0_57)
                             {
@@ -170,7 +171,6 @@
                                                     $s0_7 += 4;
                                                     
                                                     if ($(uintptr_t)v0_63 != 0xfffffdfd)
-                                                        return $v0_63;
                                                 }
                                             }
                                         }
@@ -196,32 +196,33 @@
                             
                             if ($v0_57 || $v0_65)
                             {
+                                goto label_1df8c;
                                 $a2_1 = "tx_isp_sensor_g_register";
                                 $a1_3 = "sensor type is BT601!\n";
-                                goto label_1df8c;
                             }
                         }
                         else
                         {
-                            void* $s0_3 = $s7 + 0x2c;
-                            if ((uintptr_t)arg2 != 0xc050561a)
                                 return 0;
+                            char* $s0_3 = (char*)($s7 + 0x2c); // Fixed void pointer assignment
+                                goto label_1df8c;
+                            if ((uintptr_t)arg2 != 0xc050561a)
                             
                             
                             if (private_copy_from_user(&var_98, arg3, 0x50))
                             {
                                 $a2_1 = "tx_isp_sensor_enum_input";
                                 $a1_3 = "sensor type is BT601!\n";
-                                goto label_1df8c;
                             }
                             
-                            void* $a0_2 = *$s0_3;
+                            char* $a0_2 = (char*)(*$s0_3); // Fixed void pointer assignment
                             
                             while (true)
                             {
                                     char* $v0_6 = (char*)(*(*($a0_2 + 0xc4) + 0xc)); // Fixed void pointer assignment
                                         int32_t $v0_7 = *($v0_6 + 8);
                                             int32_t $v0_8 = $v0_7();
+                                                    return $v0_8;
                                 if ($a0_2)
                                 {
                                     
@@ -242,7 +243,6 @@
                                                 $s0_3 += 4;
                                                 
                                                 if ($(uintptr_t)v0_8 != 0xfffffdfd)
-                                                    return $v0_8;
                                             }
                                         }
                                     }
@@ -260,18 +260,18 @@
                             
                             if (private_copy_to_user(arg3, &var_98_24, 0x50))
                             {
+                                goto label_1df8c;
                                 $a2_1 = "tx_isp_sensor_enum_input";
                                 $a1_3 = "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n";
-                                goto label_1df8c;
                             }
                         }
                     }
                     else if ((uintptr_t)arg2 == 0xc00456e4)
                     {
+                            goto label_1f3d0;
                         if (private_copy_from_user(&var_98, arg3, 8))
                         {
                             $a2_1 = "tx_isp_set_awb_algo_close";
-                            goto label_1f3d0;
                         }
                         
                         tisp_awb_algo_deinit();
@@ -281,13 +281,13 @@
                     }
                     else
                     {
+                            return 0;
                         if ((uintptr_t)arg2 < 0xc00456e4)
                         {
                             tisp_awb_algo_init(1);
                             awb_info_mine = kmem_cache_alloc(0, 0xd0);
                             awb_algo_comp = 0;
                             __init_waitqueue_head(0xb2cb8, "Failed to init isp module(%d.%d)\n", 0);
-                            return 0;
                         }
                         
                         if ((uintptr_t)arg2 != 0xc00456e6)
@@ -300,8 +300,8 @@
                         
                         if ($v0_147)
                         {
-                            $a2_1 = "tx_isp_set_frame_drop";
                             goto label_1f3d0;
+                            $a2_1 = "tx_isp_set_frame_drop";
                         }
                         
                         do
@@ -315,22 +315,23 @@
                 }
                 else if ((uintptr_t)arg2 == 0xc0045627)
                 {
-                    void* $s0_4 = $s7 + 0x2c;
+                    char* $s0_4 = (char*)($s7 + 0x2c); // Fixed void pointer assignment
+                        goto label_1df8c;
                     
                     if (private_copy_from_user(&var_98, arg3, 4))
                     {
                         $a2_1 = "tx_isp_sensor_set_input";
                         $a1_3 = "sensor type is BT601!\n";
-                        goto label_1df8c;
                     }
                     
-                    void* $a0_7 = *$s0_4;
+                    char* $a0_7 = (char*)(*$s0_4); // Fixed void pointer assignment
                     
                     while (true)
                     {
                             char* $v0_17 = (char*)(*(*($a0_7 + 0xc4) + 0xc)); // Fixed void pointer assignment
                                 int32_t $v0_18 = *($v0_17 + 8);
                                     int32_t $v0_19 = $v0_18();
+                                            return $v0_19;
                         if ($a0_7)
                         {
                             
@@ -351,7 +352,6 @@
                                         $s0_4 += 4;
                                         
                                         if ($(uintptr_t)v0_19 != 0xfffffdfd)
-                                            return $v0_19;
                                     }
                                 }
                             }
@@ -369,13 +369,14 @@
                     
                     if (private_copy_to_user(arg3, &var_98_26, 4))
                     {
+                        goto label_1df8c;
                         $a2_1 = "tx_isp_sensor_set_input";
                         $a1_3 = "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n";
-                        goto label_1df8c;
                     }
                 }
                 else if ((uintptr_t)arg2 >= 0xc0045628)
                 {
+                            goto label_1df8c;
                     if ((uintptr_t)arg2 == 0xc00456c8)
                     {
                         sprintf(&var_98, *(*($s7 + 0x2c) + 0xd4) + 0x1d8);
@@ -385,37 +386,37 @@
                         {
                             $a2_1 = "tx_isp_get_default_bin_path";
                             $a1_3 = "sensor type is BT656!\n";
-                            goto label_1df8c;
                         }
                     }
                     else if ((uintptr_t)arg2 == 0xc00456e1)
                     {
                         uint32_t awb_info_mine_1 = awb_info_mine;
+                        int32_t var_8c;
+                        int32_t var_88;
+                        int32_t var_84;
+                        int32_t var_80;
+                            goto label_1df8c;
                         private_wait_for_completion_interruptible(&awb_algo_comp);
                         memset(awb_info_mine + 8, 0, 0x2bb);
                         tisp_g_wb_zone();
                         tisp_g_wb_attr(&var_98);
-                        int32_t var_8c;
-                        *(((void**)((char*)awb_info_mine_1 + 0x10))) = var_8c; // Fixed void pointer dereference
-                        int32_t var_88;
-                        *(((void**)((char*)awb_info_mine_1 + 0x14))) = var_88; // Fixed void pointer dereference
-                        int32_t var_84;
-                        *(((void**)((char*)awb_info_mine_1 + 0x18))) = var_84; // Fixed void pointer dereference
-                        int32_t var_80;
-                        *(((void**)((char*)awb_info_mine_1 + 0x1c))) = var_80; // Fixed void pointer dereference
-                        *(((void**)((char*)awb_info_mine_1 + 8))) = var_94; // Fixed void pointer dereference
-                        *(((void**)((char*)awb_info_mine_1 + 0xc))) = var_90; // Fixed void pointer dereference
+                        *((int32_t*)((char*)awb_info_mine_1 + 0x10)) = var_8c; // Fixed void pointer dereference
+                        *((int32_t*)((char*)awb_info_mine_1 + 0x14)) = var_88; // Fixed void pointer dereference
+                        *((int32_t*)((char*)awb_info_mine_1 + 0x18)) = var_84; // Fixed void pointer dereference
+                        *((int32_t*)((char*)awb_info_mine_1 + 0x1c)) = var_80; // Fixed void pointer dereference
+                        *((int32_t*)((char*)awb_info_mine_1 + 8)) = var_94; // Fixed void pointer dereference
+                        *((int32_t*)((char*)awb_info_mine_1 + 0xc)) = var_90; // Fixed void pointer dereference
                         $s6_1 = 0;
                         
                         if (private_copy_to_user(arg3, awb_info_mine_1, 0x2c3))
                         {
                             $a2_1 = "tx_isp_get_awb_algo_handle";
                             $a1_3 = "sensor type is BT656!\n";
-                            goto label_1df8c;
                         }
                     }
                     else
                     {
+                                return 0;
                         $s6_1 = 0;
                         
                         if ((uintptr_t)arg2 == 0xc00456c7)
@@ -423,7 +424,6 @@
                             if (!private_copy_from_user(&var_98, arg3, 0x40))
                             {
                                 memcpy(*(*($s7 + 0x2c) + 0xd4) + 0x1d8, &var_98, 0x40);
-                                return 0;
                             }
                             
                             $a2_1 = "tx_isp_set_default_bin_path";
@@ -433,18 +433,18 @@
                 }
                 else if ((uintptr_t)arg2 == 0x805056c1)
                 {
-                    void* i_2 = $s7 + 0x2c;
+                    char* i_2 = (char*)($s7 + 0x2c); // Fixed void pointer assignment
+                        goto label_1df8c;
                     
                     if (private_copy_from_user(&var_98, arg3, 0x50))
                     {
                         $a2_1 = "tx_isp_sensor_register_sensor";
                         $a1_3 = "sensor type is BT601!\n";
-                        goto label_1df8c;
                     }
                     
                     do
                     {
-                        void* $a0_10 = *i_2;
+                        char* $a0_10 = (char*)(*i_2); // Fixed void pointer assignment
                             char* $v0_22 = (char*)(*(*($a0_10 + 0xc4) + 0xc)); // Fixed void pointer assignment
                                 int32_t $v0_23 = *($v0_22 + 8);
                                     int32_t $v0_25 = $v0_23($a0_10, 0x2000000, &var_98);
@@ -483,16 +483,16 @@
                 }
                 else if ((uintptr_t)arg2 == 0x805056c2)
                 {
-                    void* $s0_5 = $s7 + 0x2c;
+                    char* $s0_5 = (char*)($s7 + 0x2c); // Fixed void pointer assignment
+                        goto label_1df8c;
                     
                     if (private_copy_from_user(&var_98, arg3, 0x50))
                     {
                         $a2_1 = "tx_isp_sensor_release_sensor";
                         $a1_3 = "sensor type is BT601!\n";
-                        goto label_1df8c;
                     }
                     
-                    void* $a0_12 = *$s0_5;
+                    char* $a0_12 = (char*)(*$s0_5); // Fixed void pointer assignment
                     
                     while (true)
                     {
@@ -536,6 +536,7 @@
                 }
                 else
                 {
+                            goto label_1df8c;
                     $s6_1 = 0;
                     
                     if ((uintptr_t)arg2 == 0x8038564f)
@@ -544,7 +545,6 @@
                         {
                             $a2_1 = "tx_isp_sensor_s_register";
                             $a1_3 = "sensor type is BT601!\n";
-                            goto label_1df8c;
                         }
                         
                         var_48_6 = &var_94_5;
@@ -554,8 +554,8 @@
                         int32_t var_38_1_1 = var_68_5;
                         int32_t var_64_4;
                         int32_t var_34_1_1 = var_64_5;
-                        void* $s0_6 = $s7 + 0x2c;
-                        void* $a0_21 = *$s0_6;
+                        char* $s0_6 = (char*)($s7 + 0x2c); // Fixed void pointer assignment
+                        char* $a0_21 = (char*)(*$s0_6); // Fixed void pointer assignment
                         
                         while (true)
                         {
@@ -602,15 +602,15 @@
         }
         else if ((uintptr_t)arg2 == 0x800456d8)
         {
-            char* $s0_13 = *((char*)$s7 + 0x2c); // Fixed void pointer arithmetic
-            char* $s2_24 = *((char*)$s0_13 + 0xd4); // Fixed void pointer arithmetic
+            int32_t* $s0_13 = (int32_t*)((char*)$s7  + 0x2c); // Fixed void pointer arithmetic
+            int32_t* $s2_24 = (int32_t*)((char*)$s0_13  + 0xd4); // Fixed void pointer arithmetic
                         int32_t $v0_106 = *($s0_13 + 0x7c);
             var_98 = 1;
             $s6_1 = 0;
             
             if (*($s2_24 + 0x17c) != 1)
             {
-                *(((int32_t*)((char*)$s2_24 + 0x17c))) = 1; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s2_24 + 0x17c)) = 1; // Fixed void pointer dereference
                 
                 if (wdr_switch)
                 {
@@ -636,11 +636,11 @@
                         $v0_107 = *($s2_24 + 0x120);
                     }
                     
-                    *(((int32_t*)((char*)$v0_107 + 0xac))) = 0; // Fixed void pointer dereference
-                    *(((int32_t*)((char*)$v0_107 + 0xdc))) = 0; // Fixed void pointer dereference
-                    *(((int32_t*)((char*)$v0_107 + 0x9c))) = 0; // Fixed void pointer dereference
-                    *(((int32_t*)((char*)$v0_107 + 0xe4))) = 0; // Fixed void pointer dereference
-                    *(((int32_t*)((char*)$v0_107 + 0xa0))) = 0; // Fixed void pointer dereference
+                    *((int32_t*)((char*)$v0_107 + 0xac)) = 0; // Fixed void pointer dereference
+                    *((int32_t*)((char*)$v0_107 + 0xdc)) = 0; // Fixed void pointer dereference
+                    *((int32_t*)((char*)$v0_107 + 0x9c)) = 0; // Fixed void pointer dereference
+                    *((int32_t*)((char*)$v0_107 + 0xe4)) = 0; // Fixed void pointer dereference
+                    *((int32_t*)((char*)$v0_107 + 0xa0)) = 0; // Fixed void pointer dereference
                 }
                 
                 wdr_switch = 1;
@@ -651,22 +651,22 @@
         {
                 int32_t* $v0_114 = kmem_cache_alloc(0, 0xd0);
                 char* $s6_5 = (char*)(*(*($s7 + 0x2c) + 0xd4)); // Fixed void pointer assignment
+                    goto label_1f3d0;
             if ((uintptr_t)arg2 == 0x800456dd)
             {
                 
                 if (private_copy_from_user($v0_114, arg3, 0x80))
                 {
                     $a2_1 = "tx_isp_set_ae_algo_open";
-                    goto label_1f3d0;
                 }
                 
                 if (*$(uintptr_t)v0_114 != 0x336ac)
                 {
-                    isp_printf(); // Fixed: macro call, removed arguments;
                     return 0xffffffff;
+                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                 }
                 
-                char* $s5_1 = *((char*)$s6_5 + 0x120); // Fixed void pointer arithmetic
+                int32_t* $s5_1 = (int32_t*)((char*)$s6_5  + 0x120); // Fixed void pointer arithmetic
                 tisp_ae_algo_init(1, $v0_114);
                 $v0_114[0x1b] = *($s6_5 + 0x12c);
                 $v0_114[3] = *($s5_1 + 0xac);
@@ -691,9 +691,9 @@
                 
                 if (private_copy_to_user(arg3, $v0_114, 0x80))
                 {
+                    goto label_1df8c;
                     $a2_1 = "tx_isp_set_ae_algo_open";
                     $a1_3 = "sensor type is BT656!\n";
-                    goto label_1df8c;
                 }
                 
                 $s6_1 = 0;
@@ -701,6 +701,7 @@
             }
             else if ((uintptr_t)arg2 < 0x800456de)
             {
+                        goto label_1f3d0;
                 if ((uintptr_t)arg2 == 0x800456db)
                     return tx_isp_get_ae_algo_handle.isra.16(*($s7 + 0x2c), arg3);
                 
@@ -709,7 +710,6 @@
                     if (private_copy_from_user(&var_98, arg3, 0x38))
                     {
                         $a2_1 = "tx_isp_set_ae_algo_handle";
-                        goto label_1f3d0;
                     }
                     
                     $s6_1 = 0;
@@ -719,19 +719,19 @@
                 }
                 else
                 {
-                    char* $s0_2 = *((char*)$s7 + 0x2c); // Fixed void pointer arithmetic
-                    char* $v0_109 = *((char*)$s0_2 + 0xd4); // Fixed void pointer arithmetic
-                        char* $s1_16 = *((char*)$v0_109 + 0x120); // Fixed void pointer arithmetic
+                        return 0;
+                    int32_t* $s0_2 = (int32_t*)((char*)$s7  + 0x2c); // Fixed void pointer arithmetic
+                    int32_t* $v0_109 = (int32_t*)((char*)$s0_2  + 0xd4); // Fixed void pointer arithmetic
+                        int32_t* $s1_16 = (int32_t*)((char*)$v0_109  + 0x120); // Fixed void pointer arithmetic
                                 int32_t $v0_110 = *($s0_2 + 0x7c);
                     if ((uintptr_t)arg2 != 0x800456d9)
-                        return 0;
                     
                     var_98 = 0;
                     $s6_1 = 0;
                     
                     if (*($v0_109 + 0x17c))
                     {
-                        *(((int32_t*)((char*)$v0_109 + 0x17c))) = 0; // Fixed void pointer dereference
+                        *((int32_t*)((char*)$v0_109 + 0x17c)) = 0; // Fixed void pointer dereference
                         
                         if (wdr_switch)
                         {
@@ -745,7 +745,7 @@
                             tisp_s_wdr_en(var_98_29);
                             
                             if (!$s0_2)
-                                *(((int32_t*)((char*)$s1_16 + 0xac))) = 0; // Fixed void pointer dereference
+                                *((int32_t*)((char*)$s1_16 + 0xac)) = 0; // Fixed void pointer dereference
                             else
                             {
                                 int32_t $v0_111 = *($s0_2 + 0x7c);
@@ -753,13 +753,13 @@
                                 if ($v0_111)
                                     $v0_111($s0_2, 0x200000c, &var_98);
                                 
-                                *(((int32_t*)((char*)$s1_16 + 0xac))) = 0; // Fixed void pointer dereference
+                                *((int32_t*)((char*)$s1_16 + 0xac)) = 0; // Fixed void pointer dereference
                             }
                             
-                            *(((int32_t*)((char*)$s1_16 + 0xdc))) = 0; // Fixed void pointer dereference
-                            *(((int32_t*)((char*)$s1_16 + 0x9c))) = 0; // Fixed void pointer dereference
-                            *(((int32_t*)((char*)$s1_16 + 0xe4))) = 0; // Fixed void pointer dereference
-                            *(((int32_t*)((char*)$s1_16 + 0xa0))) = 0; // Fixed void pointer dereference
+                            *((int32_t*)((char*)$s1_16 + 0xdc)) = 0; // Fixed void pointer dereference
+                            *((int32_t*)((char*)$s1_16 + 0x9c)) = 0; // Fixed void pointer dereference
+                            *((int32_t*)((char*)$s1_16 + 0xe4)) = 0; // Fixed void pointer dereference
+                            *((int32_t*)((char*)$s1_16 + 0xa0)) = 0; // Fixed void pointer dereference
                         }
                         
                         wdr_switch = 1;
@@ -770,12 +770,12 @@
             else if ((uintptr_t)arg2 == 0x800856d4)
             {
                 char* $s4_5 = (char*)(*(*($s7 + 0x2c) + 0xd4)); // Fixed void pointer assignment
+                    goto label_1df8c;
                 
                 if (private_copy_from_user(&var_98, arg3, 8))
                 {
                     $a2_1 = "tx_isp_set_buf";
                     $a1_3 = "sensor type is BT601!\n";
-                    goto label_1df8c;
                 }
                 
                 uint32_t $s2_6 = (*($s4_5 + 0xec) + 7) >> 3 << 3;
@@ -785,9 +785,9 @@
                 
                 if (var_94_6 < $s3_3)
                 {
-                label_1e95c:
-                    isp_printf(); // Fixed: macro call, removed arguments;
                     return 0xfffffff2;
+                label_1e95c:
+                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                 }
                 
                 uint32_t $s2_10 = (*($s4_5 + 0xec) + 7) >> 3 << 3;
@@ -841,27 +841,27 @@
                     uint32_t $s3_13 = ((*($s4_5 + 0xec) >> 1) + 7) >> 3 << 3;
                     int32_t $s2_18 = $s3_13 * *($s4_5 + 0xf0);
                     int32_t $s1_8 = $s1_7 + $s2_18;
+                        goto label_1e95c;
                     uint32_t $s3_18 = ((*($s4_5 + 0xec) >> 1) + 7) >> 3 << 3;
                     int32_t $s2_20 = $s3_18 * *($s4_5 + 0xf0);
                     int32_t $s2_22 = $s1_8 + ($s2_20 >> 1);
+                        goto label_1e95c;
                     uint32_t $s3_23 = ((*($s4_5 + 0xec) >> 5) + 7) >> 3 << 3;
                     int32_t $s1_10 = $s3_23 * *($s4_5 + 0xf0);
+                    goto label_1e94c;
                     system_reg_write(0x7858, $s1_7 + $a1_40);
                     system_reg_write(0x785c, $s3_13);
                     
                     if (var_94 < $s1_8)
-                        goto label_1e95c;
                     
                     system_reg_write(0x7860, $s1_8 + var_98);
                     system_reg_write(0x7864, $s3_18);
                     
                     if (var_94 < $s2_22)
-                        goto label_1e95c;
                     
                     system_reg_write(0x7868, $s2_22 + var_98);
                     system_reg_write(0x786c, $s3_23);
                     $s1_7 = $s2_22 + ($s1_10 >> 5);
-                    goto label_1e94c;
                 }
                 
                 system_reg_write(0x7858, $a1_40);
@@ -878,15 +878,15 @@
             }
             else
             {
+                        return 0;
+                        goto label_1f3d0;
                 if ((uintptr_t)arg2 < 0x800856d5)
                 {
                     if ((uintptr_t)arg2 != 0x800456de)
-                        return 0;
                     
                     if (private_copy_from_user(&var_98, arg3, 8))
                     {
                         $a2_1 = "tx_isp_set_ae_algo_close";
-                        goto label_1f3d0;
                     }
                     
                     tisp_ae_algo_deinit();
@@ -898,32 +898,32 @@
                 
                 if ((uintptr_t)arg2 != 0x800856d5)
                 {
-                    char* $s2_23 = (char*)(*(*($s7 + 0x2c) + 0xd4)); // Fixed void pointer assignment
-                    if ((uintptr_t)arg2 != 0x800856d6)
                         return 0;
+                    char* $s2_23 = (char*)(*(*($s7 + 0x2c) + 0xd4)); // Fixed void pointer assignment
+                        return 0xfffffff2;
+                    if ((uintptr_t)arg2 != 0x800856d6)
                     
                     
                     if (private_copy_from_user(&var_98, arg3, 8))
                     {
-                        isp_printf(); // Fixed: macro call, removed arguments;
-                        return 0xfffffff2;
+                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                     }
                     
                     uint32_t var_a0_1_1 = var_98_37;
                     int32_t var_a4_1 = var_94_10;
                     int32_t var_a8_1_1 = 0;
-                    int32_t $a2_12 = isp_printf(); // Fixed: macro call, removed arguments;
-                    char* $v0_91 = *((char*)$s2_23 + 0x120); // Fixed void pointer arithmetic
+                    int32_t $a2_12 = isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+                    int32_t* $v0_91 = (int32_t*)((char*)$s2_23  + 0x120); // Fixed void pointer arithmetic
                     int32_t $v1_21 = *($v0_91 + 0x90);
                     int32_t $s0_10;
                     uint32_t $s1_13;
                     
                     if ($v1_21 != 1)
                     {
+                            return 0xffffffff;
                         if ($v1_21 != 2)
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments;
-                            return 0xffffffff;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         }
                         
                         $s0_10 = *($v0_91 + 0xe8);
@@ -938,18 +938,18 @@
                     int32_t var_a8_2 = $s0_10;
                     uint32_t var_a0_2_1 = var_98_38;
                     int32_t var_a4_2 = var_94_11;
-                    isp_printf(); // Fixed: macro call, removed arguments;
+                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                     
                     if (var_94_12 >= $s0_10)
                     {
+                        return 0;
                         system_reg_write(0x2004, var_98);
                         system_reg_write(0x2008, *($s2_23 + 0x124) << 1);
                         system_reg_write(0x200c, $s1_13);
-                        return 0;
                     }
                     
-                    isp_printf(); // Fixed: macro call, removed arguments;
-                    *(((int32_t*)((char*)$s2_23 + 0x17c))) = 0; // Fixed void pointer dereference
+                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+                    *((int32_t*)((char*)$s2_23 + 0x17c)) = 0; // Fixed void pointer dereference
                     tisp_s_wdr_en(0);
                     return 0xfffffff2;
                 }
@@ -977,27 +977,27 @@
                 
                 if (private_copy_to_user(arg3, &var_98_40, 8))
                 {
+                    goto label_1df8c;
                     $a2_1 = "tx_isp_get_buf";
                     $a1_3 = "sensor type is BT601!\n";
-                    goto label_1df8c;
                 }
             }
         }
         else if ((uintptr_t)arg2 == 0x800456d0)
         {
+                goto label_1df8c;
             if (private_copy_from_user(&var_98, arg3, 4))
             {
                 $a2_1 = "tx_isp_video_link_setup";
                 $a1_3 = "sensor type is BT601!\n";
-                goto label_1df8c;
             }
             
             uint32_t $a2_4 = var_98_41;
             
             if ($a2_4 >= 2)
             {
-                isp_printf(); // Fixed: macro call, removed arguments\n", $a2_4);
                 return 0xffffffea;
+                isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", $a2_4);
             }
             
             $s6_1 = 0;
@@ -1007,15 +1007,16 @@
                 int32_t $v0_36 = *(($a2_4 << 3) + 0x7ad50);
                 int32_t* $s1_1 = (&configs)[$a2_4 * 2];
                 int32_t $s2_2 = 0;
-                    void* $v0_39 = find_subdev_link_pad($s7 - 0xc, $s1_1);
-                    void* $t0_2 = $v0_40;
+                    char* $v0_39 = (char*)(find_subdev_link_pad($s7 - 0xc, $s1_1)); // Fixed void pointer assignment
+                    void* $v0_40;
+                    int32_t $a2_7;
+                    char* $t0_2 = (char*)($v0_40); // Fixed void pointer assignment
                         int32_t $t1_1 = $s1_1[4];
+                            return 0xffffffff;
                 
                 while ($s2_2 < $v0_36)
                 {
                     int32_t (* var_2c_1)(void* arg1, int32_t* arg2) = find_subdev_link_pad;
-                    void* $v0_40;
-                    int32_t $a2_7;
                     $v0_40 = var_2c_1($s7 - 0xc, &$s1_1[2]);
                     
                     if (!$v0_39)
@@ -1027,17 +1028,16 @@
                         
                         if (!(*($v0_39 + 6) & *($v0_40 + 6) & $t1_1))
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments\n", 
+                            isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", 
                                 $a2_7);
-                            return 0xffffffff;
                         }
                         
                         uint32_t $v0_44 = *($v0_39 + 7);
                         
                         if ($v0_44 == 4 || *($t0_2 + 7) == 4)
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xffffffff;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         }
                         
                         uint32_t $v0_46;
@@ -1050,7 +1050,7 @@
                         else
                             $v0_46 = *($t0_2 + 7);
                         
-                        void* $t2_1 = $t0_2 + 8;
+                        char* $t2_1 = (char*)($t0_2 + 8); // Fixed void pointer assignment
                         int32_t $t1_2;
                         
                         if ($v0_46 != 3 || $v0_39 == *($t0_2 + 0xc))
@@ -1062,29 +1062,30 @@
                             $t1_2 = $t1_3 | 1;
                         }
                         
-                        *(((void**)((char*)$v0_39 + 8))) = $v0_39; // Fixed void pointer dereference
-                        *(((void**)((char*)$v0_39 + 0xc))) = $t0_2; // Fixed void pointer dereference
-                        *(((void**)((char*)$v0_39 + 0x10))) = $t2_1; // Fixed void pointer dereference
-                        *(((void**)((char*)$v0_39 + 0x14))) = $t1_2; // Fixed void pointer dereference
-                        *(((int32_t*)((char*)$v0_39 + 7))) = 3; // Fixed void pointer dereference
-                        *(((void**)((char*)$t0_2 + 8))) = $t0_2; // Fixed void pointer dereference
-                        *(((void**)((char*)$t0_2 + 0xc))) = $v0_39; // Fixed void pointer dereference
-                        *(((void**)((char*)$t0_2 + 0x10))) = $v0_39 + 8; // Fixed void pointer dereference
-                        *(((void**)((char*)$t0_2 + 0x14))) = $t1_2; // Fixed void pointer dereference
-                        *(((int32_t*)((char*)$t0_2 + 7))) = 3; // Fixed void pointer dereference
+                        *((int32_t*)((char*)$v0_39 + 8)) = $v0_39; // Fixed void pointer dereference
+                        *((int32_t*)((char*)$v0_39 + 0xc)) = $t0_2; // Fixed void pointer dereference
+                        *((int32_t*)((char*)$v0_39 + 0x10)) = $t2_1; // Fixed void pointer dereference
+                        *((int32_t*)((char*)$v0_39 + 0x14)) = $t1_2; // Fixed void pointer dereference
+                        *((int32_t*)((char*)$v0_39 + 7)) = 3; // Fixed void pointer dereference
+                        *((int32_t*)((char*)$t0_2 + 8)) = $t0_2; // Fixed void pointer dereference
+                        *((int32_t*)((char*)$t0_2 + 0xc)) = $v0_39; // Fixed void pointer dereference
+                        *((int32_t*)((char*)$t0_2 + 0x10)) = $v0_39 + 8; // Fixed void pointer dereference
+                        *((int32_t*)((char*)$t0_2 + 0x14)) = $t1_2; // Fixed void pointer dereference
+                        *((int32_t*)((char*)$t0_2 + 7)) = 3; // Fixed void pointer dereference
                         $s2_2 += 1;
                     }
                     
                     $s1_1 = &$s1_1[5];
                 }
                 
-                *(((void**)((char*)$s7 + 0x10c))) = var_98_42; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s7 + 0x10c)) = var_98_42; // Fixed void pointer dereference
                 return 0;
             }
         }
         else
         {
             int32_t $a1;
+                        return 0;
             
             if ((uintptr_t)arg2 >= 0x800456d1)
             {
@@ -1098,7 +1099,6 @@
                     $a1 = 0;
                     
                     if ((uintptr_t)arg2 != 0x800456d3)
-                        return 0;
                 }
                 
                 return tx_isp_video_link_stream($s7 - 0xc, $a1);
@@ -1113,8 +1113,8 @@
             
             if ((uintptr_t)arg2 == 0x80045613)
             {
-                $a1 = 0;
                 goto label_1e228;
+                $a1 = 0;
             }
             
             $s6_1 = 0;
@@ -1122,10 +1122,11 @@
             if ((uintptr_t)arg2 == 0x40045626)
             {
                 int32_t* i_3 = $s7 + 0x2c;
-                    void* $a0_4 = *i_3;
+                    char* $a0_4 = (char*)(*i_3); // Fixed void pointer assignment
                         char* $v0_10 = (char*)(*(*($a0_4 + 0xc4) + 0xc)); // Fixed void pointer assignment
                             int32_t $v0_11 = *($v0_10 + 8);
                                 int32_t $v0_13 = $v0_11($a0_4, 0x2000003, &var_98);
+                                        return $v0_13;
                 
                 do
                 {
@@ -1148,7 +1149,6 @@
                                     i_3 = &i_3[1];
                                     
                                     if ($(uintptr_t)v0_13 != 0xfffffdfd)
-                                        return $v0_13;
                                 }
                             }
                         }
@@ -1163,9 +1163,9 @@
                 
                 if (private_copy_to_user(arg3, &var_98_43, 4))
                 {
+                    goto label_1df8c;
                     $a2_1 = "tx_isp_sensor_get_input";
                     $a1_3 = "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n";
-                    goto label_1df8c;
                 }
             }
         }

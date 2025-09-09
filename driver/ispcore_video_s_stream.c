@@ -1,34 +1,34 @@
 #include "include/main.h"
 
 
-  int32_t ispcore_video_s_stream(void* arg1, int32_t arg2)
+  int32_t ispcore_video_s_stream(int32_t* arg1, int32_t arg2)
 
 {
-    char* $s0 = *((char*)arg1 + 0xd4); // Fixed void pointer arithmetic
+    char* $s0 = (char*)(arg1[0x35]); // Fixed void pointer assignment
     int32_t var_28 = 0;
+        return 0xffffffff;
     __private_spin_lock_irqsave($s0 + 0xdc, &var_28);
     
     if (*($s0 + 0xe8) < 3)
     {
-        isp_printf(); // Fixed: macro call, removed arguments;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         private_spin_unlock_irqrestore($s0 + 0xdc, var_28);
-        return 0xffffffff;
     }
     
     private_spin_unlock_irqrestore($s0 + 0xdc, var_28_8);
-    *(((int32_t*)((char*)$s0 + 0x164))) = 0; // Fixed void pointer dereference
-    *(((int32_t*)((char*)$s0 + 0x168))) = 0; // Fixed void pointer dereference
-    *(((int32_t*)((char*)$s0 + 0x170))) = 0; // Fixed void pointer dereference
-    *(((int32_t*)((char*)$s0 + 0x160))) = 0; // Fixed void pointer dereference
+    *((int32_t*)((char*)$s0 + 0x164)) = 0; // Fixed void pointer dereference
+    *((int32_t*)((char*)$s0 + 0x168)) = 0; // Fixed void pointer dereference
+    *((int32_t*)((char*)$s0 + 0x170)) = 0; // Fixed void pointer dereference
+    *((int32_t*)((char*)$s0 + 0x160)) = 0; // Fixed void pointer dereference
     int32_t $v0_3 = *($s0 + 0xe8);
     void* $s3_1;
     
-    if (!arg2)
+    if (!(uintptr_t)arg2)
     {
             int32_t $s2_1 = 0;
-            char* $v0_5 = *((char*)$s0 + 0x150); // Fixed void pointer arithmetic
-                void* $v0_6 = $v0_5 + $s2_1;
-        $s3_1 = arg1 + 0x38;
+            int32_t* $v0_5 = (int32_t*)((char*)$s0  + 0x150); // Fixed void pointer arithmetic
+                char* $v0_6 = (char*)($v0_5 + $s2_1); // Fixed void pointer assignment
+        $s3_1 = &arg1[0xe];
         
         if ($v0_3 == 4)
         {
@@ -46,16 +46,16 @@
                 $v0_5 = *($s0 + 0x150);
             }
             
-            *(((int32_t*)((char*)$s0 + 0xe8))) = 3; // Fixed void pointer dereference
-            $s3_1 = arg1 + 0x38;
+            *((int32_t*)((char*)$s0 + 0xe8)) = 3; // Fixed void pointer dereference
+            $s3_1 = &arg1[0xe];
         }
     }
     else if ($v0_3 != 3)
-        $s3_1 = arg1 + 0x38;
+        $s3_1 = &arg1[0xe];
     else
     {
-        *(((int32_t*)((char*)$s0 + 0xe8))) = 4; // Fixed void pointer dereference
-        $s3_1 = arg1 + 0x38;
+        *((int32_t*)((char*)$s0 + 0xe8)) = 4; // Fixed void pointer dereference
+        $s3_1 = &arg1[0xe];
     }
     
     int32_t result = 0;
@@ -63,7 +63,7 @@
     
     while (true)
     {
-        void* $a0_5 = *$s3_1;
+        char* $a0_5 = (char*)(*$s3_1); // Fixed void pointer assignment
             int32_t* $v0_7 = *(*($a0_5 + 0xc4) + 4);
                 int32_t $v0_8 = *$v0_7;
                     int32_t result_1 = $v0_8($a0_5, arg2);
@@ -100,26 +100,26 @@
         else
             $s3_1 += 4;
         
-        if (arg1 + 0x78 == $s3_1)
+        if (&arg1[0x1e] == $s3_1)
         {
             $a0_4 = *($s0 + 0x15c);
             break;
         }
     }
     
-    char* $v0_10 = *((char*)arg1 + 0xb8); // Fixed void pointer arithmetic
+    char* $v0_10 = (char*)(arg1[0x2e]); // Fixed void pointer assignment
     int32_t (* $v0_11)(int32_t* arg1);
-    void* $a0_6;
+    int32_t* $a0_6;
     
-    if ($a0_4 == 1 || !arg2)
+    if ($a0_4 == 1 || !(uintptr_t)arg2)
     {
-        *(((int32_t*)((char*)$v0_10 + 0xb0))) = 0; // Fixed void pointer dereference
+        *((int32_t*)((char*)$v0_10 + 0xb0)) = 0; // Fixed void pointer dereference
         $a0_6 = arg1;
         $v0_11 = tx_isp_disable_irq;
     }
     else
     {
-        *(((void**)((char*)$v0_10 + 0xb0))) = 0xffffffff; // Fixed void pointer dereference
+        *((int32_t*)((char*)$v0_10 + 0xb0)) = 0xffffffff; // Fixed void pointer dereference
         $a0_6 = arg1;
         $v0_11 = tx_isp_enable_irq;
     }

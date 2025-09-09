@@ -5,8 +5,8 @@
 
 {
     void var_a0;
+    return 0;
     tisp_get_ae_attr(&var_a0);
     private_copy_to_user(*arg1, &var_a0, 0x98);
-    return 0;
 }
 

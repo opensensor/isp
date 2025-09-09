@@ -4,6 +4,7 @@
   int32_t tisp_dmsc_all_reg_refresh(int32_t arg1)
 
 {
+    return 0;
     tisp_dmsc_intp(arg1);
     tisp_dmsc_out_opt_cfg();
     tisp_dmsc_uu_par_cfg();
@@ -26,6 +27,5 @@
     tisp_dmsc_deir_rgb_par_cfg();
     tisp_dmsc_d_ud_ns_par_cfg();
     system_reg_write(0x499c, 1);
-    return 0;
 }
 

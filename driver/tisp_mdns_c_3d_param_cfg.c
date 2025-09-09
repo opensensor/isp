@@ -13,6 +13,7 @@
     uint32_t mdns_c_ass_wei_adj_value5_intp_1 = mdns_c_ass_wei_adj_value5_intp;
     uint32_t mdns_c_ass_thr_adj_value5_intp_1 = mdns_c_ass_thr_adj_value5_intp;
     uint32_t mdns_c_sad_wei_adj_value5_intp_1 = mdns_c_sad_wei_adj_value5_intp;
+    return 0;
     system_reg_write(0x7a64, 
         mdns_c_sad_ave_thres_intp << 3 | mdns_c_sad_ave_slope_intp << 0xc | mdns_c_sad_win_opt_intp
             | mdns_c_sad_ass_thres_intp << 0x10 | mdns_c_sad_dtb_thres_intp << 0x18);
@@ -86,6 +87,5 @@
     system_reg_write(0x7a60, 
         mdns_c_sad_wei_adj_value5_intp_1 << 8 | mdns_c_sad_wei_adj_value5_intp_1 << 0x10
             | mdns_c_sad_wei_adj_value4_intp | mdns_c_sad_wei_adj_value5_intp_1 << 0x18);
-    return 0;
 }
 

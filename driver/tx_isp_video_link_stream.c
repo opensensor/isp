@@ -5,12 +5,12 @@
 
 {
     int32_t* $s4 = arg1 + 0x38;
-        void* $a0 = *$s4;
+        char* $a0 = (char*)(*$s4); // Fixed void pointer assignment
             char* $v0_3 = (char*)(*(*($a0 + 0xc4) + 4)); // Fixed void pointer assignment
                 int32_t $v0_4 = *($v0_3 + 4);
                     int32_t result = $v0_4($a0, arg2);
-                            void* $s0_1 = arg1 + (i << 2);
-                                char* $a0_1 = *((char*)$s0_1 + 0x38); // Fixed void pointer arithmetic
+                            char* $s0_1 = (char*)(arg1 + (i << 2)); // Fixed void pointer assignment
+                                int32_t* $a0_1 = (int32_t*)((char*)$s0_1  + 0x38); // Fixed void pointer arithmetic
                                     char* $v0_6 = (char*)(*(*($a0_1 + 0xc4) + 4)); // Fixed void pointer assignment
                                         int32_t $v0_7 = *($v0_6 + 4);
     

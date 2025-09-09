@@ -6,14 +6,15 @@
 {
     int32_t var_28 = 0xc;
     int32_t var_2c = 0x18;
+    int32_t var_38;
+    uint32_t flicker_hz_1;
             uint32_t var_60 = arg1;
+            return 0xffffffff;
     
     if (arg1)
         flicker_hz = arg1;
     
-    int32_t var_38;
     memcpy(&var_38, 0x94d68, 0xc);
-    uint32_t flicker_hz_1;
     memcpy(&flicker_hz_1, 0x94d74, var_2c);
     
     if ((uintptr_t)arg1 == 0x32 || (uintptr_t)arg1 == 0x3c)
@@ -22,8 +23,7 @@
     {
         if (arg1)
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
-            return 0xffffffff;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
         
         var_38_13 = 0;
@@ -48,7 +48,7 @@
     uint32_t var_58_1_1 = $v0_3;
     int32_t var_5c_1_2 = $v0_2;
     uint32_t flicker_hz_2 = flicker_hz_1;
-    isp_printf(); // Fixed: macro call, removed arguments;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     return 0;
 }
 

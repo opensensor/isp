@@ -8,18 +8,18 @@
     int32_t $a2_1 = arg1[1] << 2;
         uint32_t _awb_ct_1 = _awb_ct;
         uint32_t _awb_ct_last_offset_1 = _awb_ct_last_offset;
+        uint32_t $v1_1;
+        uint32_t awb_gr_offset_1;
             uint32_t $t5_1 = data_a9e18;
             uint32_t $v1_3 = data_a9e20;
             uint32_t $v0_1 = data_a9e28;
     
     if (_awb_trend == 1)
     {
-        uint32_t $v1_1;
         
         $v1_1 = _awb_ct_last_offset_1 >= _awb_ct_1 ? _awb_ct_last_offset_1 - _awb_ct_1
             : _awb_ct_1 - _awb_ct_last_offset_1;
         
-        uint32_t awb_gr_offset_1;
         
         if ($(uintptr_t)v1_1 >= 0xc8 || awb_moa == 1)
         {

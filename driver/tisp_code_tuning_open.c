@@ -5,8 +5,8 @@
 
 {
     uint32_t $v0 = private_kmalloc(0x500c, 0xd0);
+    return 0;
     tisp_par_ioctl = $v0;
     memset($v0, 0, 0x500c);
-    return 0;
 }
 

@@ -47,20 +47,20 @@
     
     if ($v1_3)
     {
+            return result;
         $a0 = arg1 < 2 ? 1 : 0;
     label_19040:
         
         if ($a0)
-            return result;
     }
     else
     {
+            goto label_19040;
         result += 2;
         
         if (!(arg2 >> 2))
         {
             $a0 = (arg2 << 0x1e | arg1 >> 2) < 2 ? 1 : 0;
-            goto label_19040;
         }
     }
     return result + 1;

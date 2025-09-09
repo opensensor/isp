@@ -6,12 +6,12 @@
 {
     uint32_t $a1 = arg2;
     uint32_t $a2 = arg3;
-    
-    if (!arg1)
         return 0;
-    
     uint32_t $v1_1;
     uint32_t $t0_1;
+    
+    if (!(uintptr_t)arg1)
+    
     
     if (arg1 < isp_printf)
     {

@@ -5,6 +5,7 @@
 
 {
     uint32_t $a0 = data_9a44c;
+    return 0;
     memcpy(&dmsc_uu_np_array, 0x9dc64, 0x40);
     memcpy(&dmsc_r_deir_array, 0x9dca4, 0x20);
     memcpy(&dmsc_g_deir_array, 0x9dcc4, 0x20);
@@ -83,6 +84,5 @@
     if ($(uintptr_t)a0 != 0x80)
         tisp_dmsc_sharpness_set($a0);
     
-    return 0;
 }
 

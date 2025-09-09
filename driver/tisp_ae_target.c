@@ -5,15 +5,15 @@
 
 {
     int32_t* $t0 = arg2;
+        return arg3[9];
     int32_t $v0_6 = 0;
+    int32_t $v0_7;
     if (*arg2 << (arg4 & 0x1f) >= arg1)
         return *arg3;
     
     
     if (arg1 >= arg2[9] << (arg4 & 0x1f))
-        return arg3[9];
     
-    int32_t $v0_7;
     
     while (true)
     {
@@ -41,9 +41,9 @@
     
     int32_t $t0_1 = *(arg3 + $v0_7);
     int32_t $v1_8 = *(arg3 + $v0_7 + 4);
-    void* $v0_8 = arg2 + $v0_7;
+    char* $v0_8 = (char*)(arg2 + $v0_7); // Fixed void pointer assignment
     uint32_t $a0 = arg1 >> (arg4 & 0x1f);
-    void* $a1 = arg2 + $v0_7 + 4;
+    char* $a1 = (char*)(arg2 + $v0_7 + 4); // Fixed void pointer assignment
     
     if ($v1_8 >= $t0_1)
     {

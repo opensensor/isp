@@ -5,6 +5,7 @@
 
 {
     uint32_t deir_en_1 = deir_en;
+    return 0;
     tiziano_gib_params_refresh();
     
     if (deir_en_1 != 1)
@@ -15,6 +16,5 @@
         data_aa2fc = deir_en_1;
     
     tiziano_gib_lut_parameter();
-    return 0;
 }
 

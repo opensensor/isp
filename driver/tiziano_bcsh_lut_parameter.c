@@ -40,7 +40,8 @@
     uint32_t $v1_1 = data_c53e4;
     uint32_t $a2_10 = data_c53ec;
     uint32_t $v0_7 = data_9a614 >> 0xa;
-        void* tisp_BCSH_au32HLSP_now_1 = tisp_BCSH_au32HLSP_now;
+    int32_t $a0_48;
+        char* tisp_BCSH_au32HLSP_now_1 = (char*)(tisp_BCSH_au32HLSP_now); // Fixed void pointer assignment
         int32_t $v1_7 = $v0_7 < 2 ? 1 : 0;
         uint32_t $v0_8 = tisp_BCSH_au32clip0_1 - $v0_7;
         uint32_t $a2_11 = $v0_7 - 1;
@@ -57,7 +58,6 @@
     else if (!$a2_10)
         $a2_10 = 1;
     
-    int32_t $a0_48;
     
     if (tisp_BCSH_au32clip0_1 == 1)
         $a0_48 = *(tisp_BCSH_au32EvList_now + (($v1_1 - 1) << 2));
@@ -84,11 +84,12 @@
     }
     else if (data_c53e8_1 == 1)
     {
-        void* tisp_BCSH_au32EvList_now_1 = tisp_BCSH_au32EvList_now;
+        char* tisp_BCSH_au32EvList_now_1 = (char*)(tisp_BCSH_au32EvList_now); // Fixed void pointer assignment
         int32_t $v1_8 = *(tisp_BCSH_au32EvList_now_1 + 0x20);
             int32_t $a0_50 = *(tisp_BCSH_au32EvList_now_1 + (($a2_10 - 1) << 2));
-                void* tisp_BCSH_au32HLSP_now_2 = tisp_BCSH_au32HLSP_now;
+                char* tisp_BCSH_au32HLSP_now_2 = (char*)(tisp_BCSH_au32HLSP_now); // Fixed void pointer assignment
                 int32_t $t9_1 = *(tisp_BCSH_au32HLSP_now_2 + 8);
+                int32_t $s1_6;
                     int32_t $s0_1 = $a0_50 - $v1_8;
         
         if ($v0_7 >= $v1_8)
@@ -98,7 +99,6 @@
             
             if ($a0_50 < $v0_7)
             {
-                int32_t $s1_6;
                 
                 if (!$t9_1)
                     $s1_6 = *(tisp_BCSH_au32HLSP_now_2 + 4);

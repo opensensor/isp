@@ -4,6 +4,7 @@
   int32_t tiziano_sharpen_params_refresh()
 
 {
+    return 0;
     memcpy(&y_sp_out_opt_array, 0x9e878, 4);
     memcpy(&y_sp_sl_exp_thres_array, 0x9e87c, 0x24);
     memcpy(&y_sp_sl_exp_num_array, 0x9e8a0, 0x24);
@@ -53,6 +54,5 @@
     memcpy(&y_sp_b_sl_stren_2_wdr_array, 0x9eee4, 0x24);
     memcpy(&y_sp_b_sl_stren_3_wdr_array, 0x9ef08, 0x24);
     memcpy(&y_sp_fl_sl_3_array, 0x9ef2c, 0x24);
-    return 0;
 }
 

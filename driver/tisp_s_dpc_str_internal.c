@@ -5,17 +5,17 @@
 
 {
     wchar32* i = U"dP<<2(";
-    void* $t0 = &dpc_d_m1_dthres_array;
-    void* $a3 = &dpc_d_m3_dthres_array;
-    void* $a1 = &dpc_d_m1_fthres_array;
-    void* $v1 = &dpc_d_m3_fthres_array;
+    char* $t0 = (char*)(&dpc_d_m1_dthres_array); // Fixed void pointer assignment
+    char* $a3 = (char*)(&dpc_d_m3_dthres_array); // Fixed void pointer assignment
+    char* $a1 = (char*)(&dpc_d_m1_fthres_array); // Fixed void pointer assignment
+    char* $v1 = (char*)(&dpc_d_m3_fthres_array); // Fixed void pointer assignment
+        int32_t $a2_13;
             int32_t $t9_1 = *(i - 0x24);
             int32_t $t9_6 = i[0x74];
     data_9ab24 = arg1;
     
     do
     {
-        int32_t $a2_13;
         
         if ((uintptr_t)arg1 >= 0x81)
         {

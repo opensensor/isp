@@ -4,8 +4,8 @@
   int32_t tisp_defog_wdr_en(uint32_t arg1)
 
 {
-    defog_wdr_en = arg1;
     void* $v0;
+    defog_wdr_en = arg1;
     
     if (arg1)
     {

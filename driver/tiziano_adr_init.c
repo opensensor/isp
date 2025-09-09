@@ -20,9 +20,10 @@
     uint32_t $s0_3 = ($s0_1 + 1) >> 1;
     uint32_t $v0_3 = ($s7_1 + 1) >> 1;
     uint32_t width_def_1 = width_def;
+    int32_t param_adr_tool_control_array_1;
                     uint32_t height_def_1 = height_def;
                             int32_t $a3_9 = *(&param_adr_centre_w_dis_array_tmp_4M + i);
-                            void* $a2_5 = &param_adr_centre_w_dis_array_tmp + i;
+                            char* $a2_5 = (char*)(&param_adr_centre_w_dis_array_tmp + i); // Fixed void pointer assignment
     data_af158 = arg1;
     data_af15c = arg2;
     
@@ -53,7 +54,6 @@
     else
         data_ace54 = ($s0_3 * 3 + 1) >> 1;
     
-    int32_t param_adr_tool_control_array_1;
     
     if ((uintptr_t)width_def_1 != 0x780)
     {
@@ -75,7 +75,7 @@
                         for (int32_t i_1 = 0; (uintptr_t)i_1 != 0x80; )
                         {
                             int32_t $t7_40 = *(&param_adr_weight_21_lut_array_tmp_4M + i_1);
-                            void* $t6_20 = &param_adr_weight_21_lut_array_tmp + i_1;
+                            char* $t6_20 = (char*)(&param_adr_weight_21_lut_array_tmp + i_1); // Fixed void pointer assignment
                             *(&param_adr_weight_20_lut_array_tmp + i_1) =
                                 *(&param_adr_weight_20_lut_array_tmp_4M + i_1);
                             *(&param_adr_weight_02_lut_array_tmp + i_1) =
@@ -98,7 +98,7 @@
                     else
                     {
                             int32_t $a3_11 = *(&param_adr_centre_w_dis_array_tmp_5MA + i_2);
-                            void* $a2_6 = &param_adr_centre_w_dis_array_tmp + i_2;
+                            char* $a2_6 = (char*)(&param_adr_centre_w_dis_array_tmp + i_2); // Fixed void pointer assignment
                         for (int32_t i_2 = 0; (uintptr_t)i_2 != 0x7c; )
                         {
                             i_2 += 4;
@@ -108,7 +108,7 @@
                         for (int32_t i_3 = 0; (uintptr_t)i_3 != 0x80; )
                         {
                             int32_t $t7_50 = *(&param_adr_weight_21_lut_array_tmp_5MA + i_3);
-                            void* $t6_25 = &param_adr_weight_21_lut_array_tmp + i_3;
+                            char* $t6_25 = (char*)(&param_adr_weight_21_lut_array_tmp + i_3); // Fixed void pointer assignment
                             *(&param_adr_weight_20_lut_array_tmp + i_3) =
                                 *(&param_adr_weight_20_lut_array_tmp_5MA + i_3);
                             *(&param_adr_weight_02_lut_array_tmp + i_3) =
@@ -204,7 +204,7 @@
                 else
                 {
                         int32_t $a3_13 = *(&param_adr_centre_w_dis_array_tmp_720P + i_4);
-                        void* $a2_7 = &param_adr_centre_w_dis_array_tmp + i_4;
+                        char* $a2_7 = (char*)(&param_adr_centre_w_dis_array_tmp + i_4); // Fixed void pointer assignment
                     for (int32_t i_4 = 0; (uintptr_t)i_4 != 0x7c; )
                     {
                         i_4 += 4;
@@ -214,7 +214,7 @@
                     for (int32_t i_5 = 0; (uintptr_t)i_5 != 0x80; )
                     {
                         int32_t $t7_60 = *(&param_adr_weight_21_lut_array_tmp_720P + i_5);
-                        void* $t6_30 = &param_adr_weight_21_lut_array_tmp + i_5;
+                        char* $t6_30 = (char*)(&param_adr_weight_21_lut_array_tmp + i_5); // Fixed void pointer assignment
                         *(&param_adr_weight_20_lut_array_tmp + i_5) =
                             *(&param_adr_weight_20_lut_array_tmp_720P + i_5);
                         *(&param_adr_weight_02_lut_array_tmp + i_5) =
@@ -238,7 +238,7 @@
             else
             {
                     int32_t $a3_7 = *(&param_adr_centre_w_dis_array_tmp_5M + i_6);
-                    void* $a2_4 = &param_adr_centre_w_dis_array_tmp + i_6;
+                    char* $a2_4 = (char*)(&param_adr_centre_w_dis_array_tmp + i_6); // Fixed void pointer assignment
                 for (int32_t i_6 = 0; (uintptr_t)i_6 != 0x7c; )
                 {
                     i_6 += 4;
@@ -248,7 +248,7 @@
                 for (int32_t i_7 = 0; (uintptr_t)i_7 != 0x80; )
                 {
                     int32_t $t7_30 = *(&param_adr_weight_21_lut_array_tmp_5M + i_7);
-                    void* $t6_15 = &param_adr_weight_21_lut_array_tmp + i_7;
+                    char* $t6_15 = (char*)(&param_adr_weight_21_lut_array_tmp + i_7); // Fixed void pointer assignment
                     *(&param_adr_weight_20_lut_array_tmp + i_7) =
                         *(&param_adr_weight_20_lut_array_tmp_5M + i_7);
                     *(&param_adr_weight_02_lut_array_tmp + i_7) =
@@ -272,7 +272,7 @@
         else
         {
                 int32_t $a3_5 = *(&param_adr_centre_w_dis_array_tmp_3M + i_8);
-                void* $a2_3 = &param_adr_centre_w_dis_array_tmp + i_8;
+                char* $a2_3 = (char*)(&param_adr_centre_w_dis_array_tmp + i_8); // Fixed void pointer assignment
             for (int32_t i_8 = 0; (uintptr_t)i_8 != 0x7c; )
             {
                 i_8 += 4;
@@ -282,7 +282,7 @@
             for (int32_t i_9 = 0; (uintptr_t)i_9 != 0x80; )
             {
                 int32_t $t7_20 = *(&param_adr_weight_21_lut_array_tmp_3M + i_9);
-                void* $t6_10 = &param_adr_weight_21_lut_array_tmp + i_9;
+                char* $t6_10 = (char*)(&param_adr_weight_21_lut_array_tmp + i_9); // Fixed void pointer assignment
                 *(&param_adr_weight_20_lut_array_tmp + i_9) =
                     *(&param_adr_weight_20_lut_array_tmp_3M + i_9);
                 *(&param_adr_weight_02_lut_array_tmp + i_9) =
@@ -306,7 +306,7 @@
     else
     {
             int32_t $a3_3 = *(&param_adr_centre_w_dis_array_tmp_1080P + i_10);
-            void* $a2_2 = &param_adr_centre_w_dis_array_tmp + i_10;
+            char* $a2_2 = (char*)(&param_adr_centre_w_dis_array_tmp + i_10); // Fixed void pointer assignment
         for (int32_t i_10 = 0; (uintptr_t)i_10 != 0x7c; )
         {
             i_10 += 4;
@@ -316,7 +316,7 @@
         for (int32_t i_11 = 0; (uintptr_t)i_11 != 0x80; )
         {
             int32_t $t7_10 = *(&param_adr_weight_21_lut_array_tmp_1080P + i_11);
-            void* $t6_5 = &param_adr_weight_21_lut_array_tmp + i_11;
+            char* $t6_5 = (char*)(&param_adr_weight_21_lut_array_tmp + i_11); // Fixed void pointer assignment
             *(&param_adr_weight_20_lut_array_tmp + i_11) =
                 *(&param_adr_weight_20_lut_array_tmp_1080P + i_11);
             *(&param_adr_weight_02_lut_array_tmp + i_11) =
@@ -337,9 +337,9 @@
     if (!param_adr_tool_control_array_1)
     {
             int32_t $a3_15 = *(&param_adr_centre_w_dis_array_tmp + i_12);
-            void* $a2_8 = &param_adr_centre_w_dis_array + i_12;
+            char* $a2_8 = (char*)(&param_adr_centre_w_dis_array + i_12); // Fixed void pointer assignment
             int32_t $t7_70 = *(&param_adr_weight_21_lut_array_tmp + i_13);
-            void* $t6_35 = &param_adr_weight_21_lut_array + i_13;
+            char* $t6_35 = (char*)(&param_adr_weight_21_lut_array + i_13); // Fixed void pointer assignment
         do
         {
             i_12 += 4;
@@ -348,10 +348,10 @@
         
         for (int32_t i_13 = 0; (uintptr_t)i_13 != 0x80; )
         {
-            *(((void**)((char*)&param_adr_weight_20_lut_array + i_13))) = *(&param_adr_weight_20_lut_array_tmp + i_13); // Fixed void pointer dereference
-            *(((void**)((char*)&param_adr_weight_02_lut_array + i_13))) = *(&param_adr_weight_02_lut_array_tmp + i_13); // Fixed void pointer dereference
-            *(((void**)((char*)&param_adr_weight_12_lut_array + i_13))) = *(&param_adr_weight_12_lut_array_tmp + i_13); // Fixed void pointer dereference
-            *(((void**)((char*)&param_adr_weight_22_lut_array + i_13))) = *(&param_adr_weight_22_lut_array_tmp + i_13); // Fixed void pointer dereference
+            *(&param_adr_weight_20_lut_array + i_13) = *(&param_adr_weight_20_lut_array_tmp + i_13);
+            *(&param_adr_weight_02_lut_array + i_13) = *(&param_adr_weight_02_lut_array_tmp + i_13);
+            *(&param_adr_weight_12_lut_array + i_13) = *(&param_adr_weight_12_lut_array_tmp + i_13);
+            *(&param_adr_weight_22_lut_array + i_13) = *(&param_adr_weight_22_lut_array_tmp + i_13);
             i_13 += 4;
             *$t6_35 = $t7_70;
         }

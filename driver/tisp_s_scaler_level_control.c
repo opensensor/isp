@@ -15,6 +15,10 @@
     int32_t $v0_2 = system_reg_read($s3_1 + 0x1c4);
     int32_t $v0_3 = system_reg_read($s3_1 + 0x1c4);
     uint32_t msca_ch_en_2 = msca_ch_en;
+    uint32_t $s0;
+    uint32_t $s2_1;
+    uint32_t $s4;
+    uint32_t $fp_1;
             int32_t $a2_2 = (arg3 & 0xff) * 3;
     
     if (!~msca_ch_en_1)
@@ -24,12 +28,8 @@
     
     if (!(1 << ($s1 & 0x1f) & msca_ch_en_2))
         /* tailcall */
-        return isp_printf(); // Fixed: macro call, removed arguments;
+        return isp_printf(); // Fixed: macro with no parameters, removed 15 arguments;
     
-    uint32_t $s0;
-    uint32_t $s2_1;
-    uint32_t $s4;
-    uint32_t $fp_1;
     
     if (arg2)
     {
@@ -39,7 +39,7 @@
         $s4 = $v0_3 & 0x7ff;
         
         if (arg2 != 1)
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 4 arguments;
         else
         {
             
@@ -51,7 +51,7 @@
                 $s2_1 = $fp_1;
             }
             else if ($a2_2 - (uintptr_t)0x81 >= 0x100)
-                isp_printf(); // Fixed: macro call, removed arguments;
+                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
             else
             {
                 $fp_1 = $a2_2 + 0x80;

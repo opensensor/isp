@@ -6,11 +6,12 @@
 {
     int32_t arg_0 = arg1;
     int32_t* $a0 = &_awb_cluster;
+    int32_t $a3;
     int32_t arg_c = $a3;
     int32_t* i = &arg_0;
-        int32_t $a3_1 = i[3];
-    int32_t $a3;
     void arg_1c;
+        int32_t $a3_1 = i[3];
+    return 0;
     
     do
     {
@@ -22,6 +23,5 @@
     _awb_cluster = arg_0;
     data_a9e4c = arg2;
     data_a9e50 = arg3;
-    return 0;
 }
 

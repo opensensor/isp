@@ -19,7 +19,7 @@
         }
         
         private_kfree($s1);
-        *(((int32_t*)((char*)arg1 + 0xbc))) = 0; // Fixed void pointer dereference
+        *((int32_t*)((char*)arg1 + 0xbc)) = 0; // Fixed void pointer dereference
     }
     
     return 0;

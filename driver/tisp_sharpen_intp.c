@@ -6,6 +6,7 @@
 {
     int32_t $s2 = arg1 >> 0x10;
     int32_t $s0 = arg1 & 0xffff;
+    return 0;
     y_sp_sl_exp_thres_intp = tisp_simple_intp($s2, $s0, &y_sp_sl_exp_thres_array);
     y_sp_sl_exp_num_intp = tisp_simple_intp($s2, $s0, &y_sp_sl_exp_num_array);
     y_sp_uu_min_stren_intp = tisp_simple_intp($s2, $s0, &y_sp_uu_min_stren_array);
@@ -37,6 +38,5 @@
     y_sp_fl_sl_1_array_intp = tisp_simple_intp($s2, $s0, &y_sp_fl_sl_1_array);
     y_sp_fl_sl_2_array_intp = tisp_simple_intp($s2, $s0, &y_sp_fl_sl_2_array);
     y_sp_fl_sl_3_array_intp = tisp_simple_intp($s2, $s0, &y_sp_fl_sl_3_array);
-    return 0;
 }
 

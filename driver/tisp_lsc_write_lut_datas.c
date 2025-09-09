@@ -15,7 +15,6 @@
     if (lsc_ct_update_flag == 1 || data_9a400_1 == 1 || lsc_api_flag == 1)
     {
         int32_t $v0_5 = data_9a408;
-        else if ($v0_5 == 1)
             int32_t $a1_2 = data_9a410;
             uint32_t $lo_1 = ((data_9a40c - $a1_2) << 0xc) / (data_9a414 - $a1_2);
             int32_t $a3_2 = data_9a428 << 2;
@@ -28,6 +27,7 @@
         
         if (!$v0_5)
             memcpy(&lsc_final_lut, &lsc_a_lut, 0x1ffc);
+        else if ($v0_5 == 1)
         {
             
             for (int32_t i = 0; $a3_2 != i; i += 4)
@@ -45,7 +45,7 @@
                 if ($(uintptr_t)v0_12 >= 0x1000)
                     $v0_12 = 0xfff;
                 
-                *(((void**)((char*)&lsc_final_lut + i))) = $a0_5 << 0xc | $v0_12; // Fixed void pointer dereference
+                *(&lsc_final_lut + i) = $a0_5 << 0xc | $v0_12;
             }
         }
         else if ($v0_5 == 2)
@@ -79,7 +79,7 @@
                 if ($(uintptr_t)v0_20 >= 0x1000)
                     $v0_20 = 0xfff;
                 
-                *(((void**)((char*)&lsc_final_lut + i_1))) = $a0_11 << 0xc | $v0_20; // Fixed void pointer dereference
+                *(&lsc_final_lut + i_1) = $a0_11 << 0xc | $v0_20;
             }
         }
     }
@@ -108,7 +108,7 @@
     if (lsc_gain_update_flag == 1 || lsc_ct_update_flag == 1 || data_9a400_3 == 1
         || lsc_api_flag == 1)
     {
-        void* $s6_1 = &lsc_final_lut;
+        char* $s6_1 = (char*)(&lsc_final_lut); // Fixed void pointer assignment
         int32_t $fp_1 = 0;
             int32_t $a2_1 = *$s6_1;
             int32_t $a0_13 = *($s6_1 + 4);

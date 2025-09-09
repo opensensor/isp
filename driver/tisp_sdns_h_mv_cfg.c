@@ -4,6 +4,7 @@
   int32_t tisp_sdns_h_mv_cfg()
 
 {
+    return 0;
     system_reg_write(0x886c, 
         sdns_h_mv_2_intp << 8 | sdns_h_mv_3_intp << 0x10 | sdns_h_mv_1_intp
             | sdns_h_mv_4_intp << 0x18);
@@ -16,6 +17,5 @@
     system_reg_write(0x8878, 
         sdns_h_mv_14_intp << 8 | sdns_h_mv_15_intp << 0x10 | sdns_h_mv_13_intp
             | sdns_h_mv_16_intp << 0x18);
-    return 0;
 }
 

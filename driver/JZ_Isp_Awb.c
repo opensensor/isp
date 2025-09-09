@@ -5,8 +5,8 @@
 
 {
     int32_t $s4 = data_983b0;
-    _awb_ct_last = _awb_ct;
     uint64_t* $v1_8;
+    _awb_ct_last = _awb_ct;
     
     if ($s4 < _awb_mode << 0xa)
     {

@@ -4,15 +4,15 @@
   int32_t tisp_s_ae_it_max()
 
 {
-    int32_t var_84 = $a0;
     int32_t var_a0;
-    memcpy(&var_a0, &dmsc_sp_d_w_stren_wdr_array, 0x98);
     int32_t $a0;
+    int32_t var_84 = $a0;
+        char var_128[0x88];
+        char var_90[0xc];
+    memcpy(&var_a0, &dmsc_sp_d_w_stren_wdr_array, 0x98);
     
     for (int32_t i = 0; (uintptr_t)i < 0x88; i += 1)
     {
-        char var_128[0x88];
-        char var_90[0xc];
         var_128[i] = var_90[i];
     }
     

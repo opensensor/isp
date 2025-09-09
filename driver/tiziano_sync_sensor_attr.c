@@ -17,6 +17,7 @@
     char $v1_2 = data_b2e5a;
     char $v1_3 = data_b2e5c;
     char $v1_4 = data_b2e5e;
+    return 0;
     sensor_info = *arg1;
     data_b2e1c = arg1[1];
     data_b2e34 = $v0_2;
@@ -60,6 +61,5 @@
     data_b2ecc = $a1_2;
     data_b2eb8 = $v1_4;
     data_b2ed4 = arg1[0x15];
-    return 0;
 }
 

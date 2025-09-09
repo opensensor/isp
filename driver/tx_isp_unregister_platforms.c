@@ -4,13 +4,13 @@
   int32_t (*)() tx_isp_unregister_platforms(void* arg1)
 
 {
-    void* $s0 = arg1;
-    char* $v0 = *((char*)$s0 + 4); // Fixed void pointer arithmetic
+    char* $s0 = (char*)(arg1); // Fixed void pointer assignment
+    int32_t* $v0 = (int32_t*)((char*)$s0  + 4); // Fixed void pointer arithmetic
+        int32_t $a0;
     int32_t (* result)();
     
     while (true)
     {
-        int32_t $a0;
         
         if (!$v0)
             $a0 = *$s0;

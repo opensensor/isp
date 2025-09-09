@@ -9,7 +9,7 @@
     
     if (arg1 == 1)
         tisp_lsc_param_array_set(0x59, arg2, &var_20);
-    else if (!arg1)
+    else if (!(uintptr_t)arg1)
     {
         
         for (int32_t i = 0x54; (uintptr_t)i != 0x59; )

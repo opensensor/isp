@@ -4,7 +4,7 @@
   int32_t tisp_adr_process()
 
 {
-    tiziano_adr_algorithm();
     return 0;
+    tiziano_adr_algorithm();
 }
 

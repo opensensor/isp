@@ -4,8 +4,8 @@
   int32_t video_input_cmd_show(void* arg1)
 
 {
-    char* $v1_2 = *((char*)arg1 + 0x3c); // Fixed void pointer arithmetic
-    void* $v0 = nullptr;
+    int32_t* $v1_2 = (int32_t*)((char*)arg1  + 0x3c); // Fixed void pointer arithmetic
+    char* $v0 = (char*)(nullptr); // Fixed void pointer assignment
     
     if ($v1_2)
     {
@@ -19,8 +19,8 @@
         /* tailcall */
         return private_seq_printf(arg1, "Failed to allocate vic device\\n", &video_input_cmd_buf);
     
-    int32_t entry_$a2;
+    int32_t entry_a2_4;
     /* tailcall */
-    return private_seq_printf(arg1, " %d, %d\\n", entry_$a2);
+    return private_seq_printf(arg1, " %d, %d\\n", entry_a2_5);
 }
 

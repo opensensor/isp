@@ -8,17 +8,17 @@
     
     if ($v0_1)
     {
-        *(((void**)((char*)arg1 + 0xf8))) = $v0_1 - 1; // Fixed void pointer dereference
+        *((int32_t*)((char*)arg1 + 0xf8)) = $v0_1 - 1; // Fixed void pointer dereference
         $v0_1 = *(arg1 + 0xf8);
     }
     
     if ($v0_1)
         return 0;
     
-    int32_t entry_$a2;
+    int32_t entry_a2_6;
     
     if (*(arg1 + 0xf4) == 4)
-        entry_$a2 = vin_s_stream(arg1, 0);
+        entry_a2_7 = vin_s_stream(arg1, 0);
     
     int32_t $v0_2;
     
@@ -42,7 +42,7 @@
     private_mutex_lock(arg1 + 0xe8);
     
     if (*(arg1 + 0xf4) == 2)
-        *(((int32_t*)((char*)arg1 + 0xf4))) = 1; // Fixed void pointer dereference
+        *((int32_t*)((char*)arg1 + 0xf4)) = 1; // Fixed void pointer dereference
     
     private_mutex_unlock(arg1 + 0xe8);
     return 0;

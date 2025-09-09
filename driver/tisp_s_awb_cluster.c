@@ -5,13 +5,13 @@
 
 {
     int32_t i = 0;
-    int32_t arg_c = $a3;
     int32_t $a3;
+    int32_t arg_c = $a3;
+        char var_20[0x1c];
+        void arg_10;
     
     for (; (uintptr_t)i < 0x18; i += 1)
     {
-        char var_20[0x1c];
-        void arg_10;
         var_20[i] = *(&arg_10 + i);
     }
     

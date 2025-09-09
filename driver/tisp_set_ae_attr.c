@@ -4,9 +4,9 @@
   int32_t tisp_set_ae_attr(int32_t* arg1)
 
 {
+        char var_90[0x8c];
     for (int32_t i = 0; (uintptr_t)i < 0x88; i += 1)
     {
-        char var_90[0x8c];
         var_90[i] = *(&arg1[4] + i);
     }
     

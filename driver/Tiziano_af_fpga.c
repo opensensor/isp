@@ -12,22 +12,22 @@
     int32_t $s7 = arg9[2];
     int32_t $s6 = arg9[3];
     int32_t $v0_1 = 1 << ($s2 & 0x1f);
-    void* arg_0 = arg1;
-    void* arg_4 = arg2;
-    void* arg_8 = arg3;
-    void* arg_c = arg4;
-    void* const var_60 = &data_20000;
+    char* arg_0 = (char*)(arg1); // Fixed void pointer assignment
+    char* arg_4 = (char*)(arg2); // Fixed void pointer assignment
+    char* arg_8 = (char*)(arg3); // Fixed void pointer assignment
+    char* arg_c = (char*)(arg4); // Fixed void pointer assignment
     int32_t $t0 = 0;
     int32_t $s0 = 0;
     int32_t $s1 = 0;
     int32_t i = 0;
-    void* var_5c = &fv_value;
+    char* var_5c = (char*)(&fv_value); // Fixed void pointer assignment
             int32_t $a3_1 = i * 0x3c + (j << 2);
             int32_t $t8_1 = *(arg5 + $a3_1);
             int32_t $s3_1 = *(arg3 + $a3_1);
             int32_t $s4_2 = (var_60 + 0xfd4)($s2, *(arg4 + $a3_1) << ($s2 & 0x1f), $t5)
             int32_t $s3_2 = (var_60 + 0xfd4)($s2, $t8_1 << ($s2 & 0x1f), $fp)
             int32_t $v0_23 = *(arg6 + $a3_1);
+    void* const var_60 = &data_20000;
     
     for (; i != $v1; i += 1)
     {
@@ -53,7 +53,7 @@
         + fix_point_mult2_32($s2, $lo_1 << ($s2 & 0x1f), $s6)) >> ($s2 & 0x1f);
     uint32_t $v1_8 = (fix_point_mult2_32($s2, $s1 >> 3 << ($s2 & 0x1f), $s7)
         + fix_point_mult2_32($s2, $s0 >> 3 << ($s2 & 0x1f), $s6)) >> ($s2 & 0x1f);
-    void* i_1 = arg8 + 4;
+    char* i_1 = (char*)(arg8 + 4); // Fixed void pointer assignment
     
     do
     {
@@ -63,7 +63,7 @@
         *(i_1 - 8) = $a1_15;
     } while (arg8 + 0x3c != i_1);
     
-    *(((void**)((char*)arg8 + 0x38))) = $s5_3; // Fixed void pointer dereference
+    *((int32_t*)((char*)arg8 + 0x38)) = $s5_3; // Fixed void pointer dereference
     *arg7 = $lo * $s2_1;
     arg7[1] = $lo_1 * $s2_1;
     arg7[2] = $s5_3 * $s2_1;

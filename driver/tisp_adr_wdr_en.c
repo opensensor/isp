@@ -4,8 +4,8 @@
   int32_t tisp_adr_wdr_en(uint32_t arg1)
 
 {
-    adr_wdr_en = arg1;
     void* $v0;
+    adr_wdr_en = arg1;
     
     if (arg1)
     {

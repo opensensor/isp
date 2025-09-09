@@ -5,14 +5,14 @@
 
 {
     int32_t result = 0xffffffea;
-        char* $s0_1 = *((char*)arg1 + 0xd4); // Fixed void pointer arithmetic
+            return 0xffffffea;
+        int32_t* $s0_1 = (int32_t*)((char*)arg1  + 0xd4); // Fixed void pointer arithmetic
                 int32_t* $s2_1 = *(arg1 + 0xbc);
                 int32_t i = 0;
     
     if (arg1)
     {
         if ((uintptr_t)arg1 >= 0xfffff001)
-            return 0xffffffea;
         
         result = 0xffffffea;
         
@@ -39,6 +39,7 @@
                 while (true)
                 {
                     char* $v0_6 = (char*)($a3_1 + *($s0_1 + 0x150)); // Fixed void pointer assignment
+                        return 0xffffffff;
                     $a3_1 = $a2_1 * 0xc4;
                     
                     if ($a2_1 >= *($s0_1 + 0x154))
@@ -47,27 +48,26 @@
                     
                     if (*($v0_6 + 0x74) != 1)
                     {
-                        isp_printf(); // Fixed: macro call, removed arguments;
-                        return 0xffffffff;
+                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                     }
                     
-                    *(((int32_t*)((char*)$v0_6 + 0x74))) = 2; // Fixed void pointer dereference
+                    *((int32_t*)((char*)$v0_6 + 0x74)) = 2; // Fixed void pointer dereference
                     $a2_1 += 1;
                 }
                 
-                char* $a0_3 = *((char*)$s0_1 + 0x1bc); // Fixed void pointer arithmetic
+                int32_t* $a0_3 = (int32_t*)((char*)$s0_1  + 0x1bc); // Fixed void pointer arithmetic
                 (*($a0_3 + 0x40cc))($a0_3, 0x4000000, 0, $a3_1);
-                void* $s2_2 = $s0_1 + 0x38;
-                void* $s1_2 = *$s2_2;
+                char* $s2_2 = (char*)($s0_1 + 0x38); // Fixed void pointer assignment
+                char* $s1_2 = (char*)(*$s2_2); // Fixed void pointer assignment
                 
                 while (true)
                 {
-                    else if ($(uintptr_t)s1_2 >= 0xfffff001)
                         int32_t* $v0_10 = *(*($s1_2 + 0xc4) + 0x10);
                             int32_t $v0_11 = *$v0_10;
                                 int32_t $v0_12 = $v0_11($s1_2);
                     if (!$s1_2)
                         $s2_2 += 4;
+                    else if ($(uintptr_t)s1_2 >= 0xfffff001)
                         $s2_2 += 4;
                     else
                     {
@@ -99,7 +99,7 @@
                     $s1_2 = *$s2_2;
                 }
                 
-                *(((int32_t*)((char*)$s0_1 + 0xe8))) = 2; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s0_1 + 0xe8)) = 2; // Fixed void pointer dereference
                 return 0;
             }
         }

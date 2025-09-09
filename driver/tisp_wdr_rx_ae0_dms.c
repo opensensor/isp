@@ -5,8 +5,8 @@
 
 {
     int32_t $t1_1 = *(arg4 + 4) * *(arg4 + 0xc);
-    void* $a3 = arg4 + 0x10;
-    void* $v1 = &wdr_block_mean0;
+    char* $a3 = (char*)(arg4 + 0x10); // Fixed void pointer assignment
+    char* $v1 = (char*)(&wdr_block_mean0); // Fixed void pointer assignment
     int32_t $t2 = 0;
         int32_t $v0 = $t2 < $t1_1 ? 1 : 0;
         int32_t $v0_3 = *arg1 + *arg2 + *arg3;

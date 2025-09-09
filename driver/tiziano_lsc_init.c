@@ -5,6 +5,7 @@
 
 {
     void* $v0;
+    return 0;
     
     if (lsc_wdr_en)
         $v0 = &lsc_mesh_str_wdr;
@@ -19,6 +20,5 @@
     lsc_last_str = 0;
     data_9a400 = 1;
     tisp_lsc_write_lut_datas();
-    return 0;
 }
 

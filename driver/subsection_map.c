@@ -10,6 +10,7 @@
     int32_t i_1 = 0;
         int32_t $a3 = *$t1;
         int32_t $a1 = $a3 - arg1;
+            goto label_2bbe4;
     
     for (int32_t i = 0; (uintptr_t)i != 0x200; )
     {
@@ -21,7 +22,6 @@
         {
             $v1 = 0;
             i_1 = i;
-            goto label_2bbe4;
         }
         
         if ($a1 != $t2)

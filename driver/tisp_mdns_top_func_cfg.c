@@ -5,6 +5,7 @@
 
 {
     int32_t $a1 = 0x101;
+    return 0;
     
     if (arg1)
         $a1 = mdns_y_sf_cur_en_array << 4 | mdns_y_sf_ref_en_array << 8 | 0x10001
@@ -17,6 +18,5 @@
             | mdns_sta_group_num_array << 0xc | mdns_psn_enable_array << 0x10
             | mdns_psn_max_num_array << 0x14);
     system_reg_write(0x7808, mdns_uv_debug_array << 5 | mdns_y_debug_array);
-    return 0;
 }
 

@@ -4,6 +4,7 @@
   int32_t tisp_y_sp_uu_w_b_wei_cfg()
 
 {
+    return 0;
     system_reg_write(0x7038, 
         data_c5944 << 8 | data_c5948 << 0x10 | y_sp_uu_np_array | data_c594c << 0x18);
     system_reg_write(0x703c, 
@@ -28,6 +29,5 @@
         data_c58e4 << 8 | data_c58e8 << 0x10 | data_c58e0 | data_c58ec << 0x18);
     system_reg_write(0x7064, 
         data_c58f4 << 8 | data_c58f8 << 0x10 | data_c58f0 | data_c58fc << 0x18);
-    return 0;
 }
 

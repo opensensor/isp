@@ -4,11 +4,11 @@
   int32_t ispcore_frame_channel_streamoff(int32_t* arg1)
 
 {
-    void* $v0 = *arg1;
-    void* $s0 = nullptr;
+    char* $v0 = (char*)(*arg1); // Fixed void pointer assignment
+    char* $s0 = (char*)(nullptr); // Fixed void pointer assignment
     int32_t $v1_2 = *($s0 + 0x15c);
-    void* $s2 = arg1[8];
-    char* $s3 = *((char*)$s0 + 0x120); // Fixed void pointer arithmetic
+    char* $s2 = (char*)(arg1[8]); // Fixed void pointer assignment
+    int32_t* $s3 = (int32_t*)((char*)$s0  + 0x120); // Fixed void pointer arithmetic
     int32_t var_28 = 0;
         uint32_t $s5_1 = *(arg1 + 7);
             int32_t $a1_2 = var_28;
@@ -28,12 +28,12 @@
             {
                 private_spin_unlock_irqrestore($s2 + 0x9c, $a1_2);
                 tisp_channel_stop(arg1[1]);
-                *(((int32_t*)((char*)$s2 + 0x74))) = 3; // Fixed void pointer dereference
-                *(((int32_t*)((char*)arg1 + 7))) = 3; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s2 + 0x74)) = 3; // Fixed void pointer dereference
+                *((int32_t*)((char*)arg1 + 7)) = 3; // Fixed void pointer dereference
                 memset($s2, 0, 0x70);
-                *(((int32_t*)((char*)$s3 + 0x9c))) = 0; // Fixed void pointer dereference
-                *(((int32_t*)((char*)$s3 + 0xac))) = 0; // Fixed void pointer dereference
-                *(((int32_t*)((char*)$s0 + 0x17c))) = 0; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s3 + 0x9c)) = 0; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s3 + 0xac)) = 0; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s0 + 0x17c)) = 0; // Fixed void pointer dereference
             }
             else
                 private_spin_unlock_irqrestore($s2 + 0x9c, $a1_2);

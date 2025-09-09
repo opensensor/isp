@@ -6,26 +6,26 @@
 {
     int32_t var_20 = 0;
     int32_t* $a2 = &var_20;
-    int32_t* $a1 = &var_58;
-        void* $v0_3 = tparams_night + isp_printf;
     int32_t var_58;
+    int32_t* $a1 = &var_58;
+        char* $v0_3 = (char*)(tparams_night + isp_printf); // Fixed void pointer assignment
     
     if (arg1 != 1)
     {
         tisp_wdr_param_array_get(0x431, $a1, $a2);
         var_58 = 2;
         tisp_wdr_param_array_set(0x431, &var_58, &var_20);
-        *(((int32_t*)((char*)tparams_day + subdev_sensor_ops_set_input+0x90))) = 2; // Fixed void pointer dereference
-        *(((int32_t*)((char*)$v0_3 + 0x34f0))) = 2; // Fixed void pointer dereference
+        *((int32_t*)((char*)tparams_day + subdev_sensor_ops_set_input+0x90)) = 2; // Fixed void pointer dereference
+        *((int32_t*)((char*)$v0_3 + 0x34f0)) = 2; // Fixed void pointer dereference
     }
     else
     {
-        void* $v0_1 = tparams_night + isp_printf;
+        char* $v0_1 = (char*)(tparams_night + isp_printf); // Fixed void pointer assignment
         tisp_wdr_param_array_get(0x431, $a1, $a2);
         var_58 = 0;
         tisp_wdr_param_array_set(0x431, &var_58, &var_20);
-        *(((int32_t*)((char*)tparams_day + subdev_sensor_ops_set_input+0x90))) = 0; // Fixed void pointer dereference
-        *(((int32_t*)((char*)$v0_1 + 0x34f0))) = 0; // Fixed void pointer dereference
+        *((int32_t*)((char*)tparams_day + subdev_sensor_ops_set_input+0x90)) = 0; // Fixed void pointer dereference
+        *((int32_t*)((char*)$v0_1 + 0x34f0)) = 0; // Fixed void pointer dereference
     }
     
     tisp_ae_wdr_en(arg1);

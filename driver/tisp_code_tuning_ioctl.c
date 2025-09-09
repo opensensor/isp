@@ -4,11 +4,19 @@
   int32_t tisp_code_tuning_ioctl(int32_t arg1, int32_t arg2, int32_t arg3)
 
 {
+    int32_t $a2;
                 int32_t $s0_1 = arg3;
+                int32_t $a0_2;
+                uint32_t tisp_par_ioctl_3;
+                uint32_t tisp_par_ioctl_4;
+                uint32_t tisp_par_ioctl_13;
+                int32_t $a2_2;
+                int32_t $s1_2;
+                uint32_t tisp_par_ioctl_9;
                         int32_t $s2_2 = (arg3 + 0x500c) | arg3;
                         uint32_t tisp_par_ioctl_10 = tisp_par_ioctl;
+                            return 0xfffffff2;
     char const* const $a1;
-    int32_t $a2;
     
     if (arg2 >> (uintptr_t)8 == 0x74)
     {
@@ -17,14 +25,7 @@
             if (arg2 - (uintptr_t)0x20007400 < 0xa)
             {
                 int32_t (* $v0_25)(void* arg1);
-                int32_t $a0_2;
-                uint32_t tisp_par_ioctl_3;
-                uint32_t tisp_par_ioctl_4;
                 char const* const $a1_11;
-                uint32_t tisp_par_ioctl_13;
-                int32_t $a2_2;
-                int32_t $s1_2;
-                uint32_t tisp_par_ioctl_9;
                 void* entry_$gp;
                 
                 switch (arg2)
@@ -34,8 +35,7 @@
                         
                         if ($s2_2 & *(entry_$gp + 0x18))
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments;
-                            return 0xfffffff2;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
@@ -44,15 +44,15 @@
                         
                         if (arg3)
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         }
                         
                         int32_t $v0_8 = *tisp_par_ioctl_1;
                         int32_t $v0_12;
                         
                         if ($(uintptr_t)v0_8 >= 0x19)
-                            $v0_12 = *(entry_$gp + 0x18);
+                            $v0_12 = *(entry_gp_3 + 0x18);
                         else
                             switch ($v0_8)
                             {
@@ -234,8 +234,8 @@
                         
                         if ($s2_2 & $v0_12)
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
@@ -245,11 +245,11 @@
                     case 0x20007401:
                     {
                         uint32_t tisp_par_ioctl_6 = tisp_par_ioctl;
+                            return 0xfffffff2;
                         
                         if (((arg3 + 0x500c) | arg3) & *(entry_$gp + 0x18))
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments;
-                            return 0xfffffff2;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
@@ -258,8 +258,8 @@
                         
                         if (arg3)
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         }
                         
                         int32_t $a1_8 = *tisp_par_ioctl_2;
@@ -267,10 +267,10 @@
                         if ($a1_8 - (uintptr_t)1 >= 0x18)
                         {
                             int32_t var_28_1 = $a1_8;
-                        label_245e0:
-                            isp_printf(); // Fixed: macro call, removed arguments\n", 
-                                "tisp_set_par_process");
                             return 0;
+                        label_245e0:
+                            isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", 
+                                "tisp_set_par_process");
                         }
                         
                         int32_t (* $v0_19)(void* arg1);
@@ -285,8 +285,8 @@
                             }
                             case 2:
                             {
-                                tisp_lsc_set_par_cfg(tisp_par_ioctl_2[2], &tisp_par_ioctl_2[3]);
                                 return 0;
+                                tisp_lsc_set_par_cfg(tisp_par_ioctl_2[2], &tisp_par_ioctl_2[3]);
                                 break;
                             }
                             case 3:
@@ -425,6 +425,7 @@
                     case 0x20007403:
                     {
                         uint32_t tisp_par_ioctl_5 = tisp_par_ioctl;
+                            return 0xfffffff2;
                         tisp_par_ioctl_4 = tisp_par_ioctl;
                         $v0_25 = tisp_get_ae_info;
                     label_24740:
@@ -432,8 +433,7 @@
                         
                         if ((($s0_1 + 0x500c) | $s0_1) & *(entry_$gp + 0x18))
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments;
-                            return 0xfffffff2;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
@@ -442,31 +442,31 @@
                     label_24790:
                         arg3 = __copy_user($a0_2, tisp_par_ioctl_13, 0x500c);
                         
-                        if (!arg3)
+                        if (!(uintptr_t)arg3)
                             return 0;
                         
-                        isp_printf(); // Fixed: macro call, removed arguments;
+                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         return 0xfffffff2;
                         break;
                     }
                     case 0x20007404:
                     {
                         uint32_t tisp_par_ioctl_7 = tisp_par_ioctl;
+                            return 0xfffffff2;
                         
                         if (((arg3 + 0x500c) | arg3) & *(entry_$gp + 0x18))
                         {
                             isp_printf(2, "%s[%d] VIC do not support this format %d\n", 
                                 "tisp_code_tuning_ioctl");
-                            return 0xfffffff2;
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
                         
                         if (__copy_user(tisp_par_ioctl_7, $s0_1, 0x500c))
                         {
+                            return 0xfffffff2;
                             isp_printf(2, "%s[%d] VIC do not support this format %d\n", 
                                 "tisp_code_tuning_ioctl");
-                            return 0xfffffff2;
                         }
                         
                         tisp_set_ae_info(tisp_par_ioctl);
@@ -474,28 +474,28 @@
                     }
                     case 0x20007406:
                     {
+                        goto label_24740;
                         tisp_par_ioctl_4 = tisp_par_ioctl;
                         $v0_25 = tisp_get_awb_info;
-                        goto label_24740;
                     }
                     case 0x20007407:
                     {
                         uint32_t tisp_par_ioctl_8 = tisp_par_ioctl;
+                            return 0xfffffff2;
                         
                         if (((arg3 + 0x500c) | arg3) & *(entry_$gp + 0x18))
                         {
                             isp_printf(2, "%s[%d] VIC do not support this format %d\n", 
                                 "tisp_code_tuning_ioctl");
-                            return 0xfffffff2;
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
                         
                         if (__copy_user(tisp_par_ioctl_8, $s0_1, 0x500c))
                         {
+                            return 0xfffffff2;
                             isp_printf(2, "%s[%d] VIC do not support this format %d\n", 
                                 "tisp_code_tuning_ioctl");
-                            return 0xfffffff2;
                         }
                         
                         tisp_set_awb_info(tisp_par_ioctl);
@@ -504,12 +504,12 @@
                     case 0x20007408:
                     {
                         uint32_t tisp_par_ioctl_11 = tisp_par_ioctl;
+                            return 0xfffffff2;
                         $s1_2 = (arg3 + 0x500c) | arg3;
                         
                         if ($s1_2 & *(entry_$gp + 0x18))
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments;
-                            return 0xfffffff2;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
@@ -518,21 +518,21 @@
                         
                         if (arg3)
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         }
                         
-                        *(((void**)((char*)tisp_par_ioctl_3 + 4))) = 0xb; // Fixed void pointer dereference
+                        *((int32_t*)((char*)tisp_par_ioctl_3 + 4)) = 0xb; // Fixed void pointer dereference
                         $a2_2 = 0xb;
                         $a1_11 = "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\\n";
                     label_24688:
                         arg3 = memcpy(tisp_par_ioctl_3 + 0xc, $a1_11, $a2_2);
                         tisp_par_ioctl_9 = tisp_par_ioctl;
                         
-                        if ($s1_2 & *(entry_$gp + 0x18))
+                        if ($s1_2 & *(entry_gp_4 + 0x18))
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
@@ -544,12 +544,12 @@
                     case 0x20007409:
                     {
                         uint32_t tisp_par_ioctl_12 = tisp_par_ioctl;
+                            return 0xfffffff2;
                         $s1_2 = (arg3 + 0x500c) | arg3;
                         
                         if ($s1_2 & *(entry_$gp + 0x18))
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments;
-                            return 0xfffffff2;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
@@ -558,11 +558,11 @@
                         
                         if (arg3)
                         {
-                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
+                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         }
                         
-                        *(((void**)((char*)tisp_par_ioctl_3 + 4))) = 0xf; // Fixed void pointer dereference
+                        *((int32_t*)((char*)tisp_par_ioctl_3 + 4)) = 0xf; // Fixed void pointer dereference
                         $a2_2 = 0xf;
                         $a1_11 = "%s[%d] VIC failed to config DVP mode!(10bits-sensor)\\n";
                         goto label_24688;
@@ -582,7 +582,7 @@
         $a1 = "not support the gpio mode!\n";
     }
     
-    isp_printf(); // Fixed: macro call, removed arguments;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     return 0xffffffea;
 }
 

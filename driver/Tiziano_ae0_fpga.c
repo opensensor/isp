@@ -92,7 +92,7 @@
         $a3_2 += *$s1_2;
     }
     
-    void* $a0_8 = arg5;
+    char* $a0_8 = (char*)(arg5); // Fixed void pointer assignment
     int32_t $v0_4 = 0;
     int32_t $t1_1 = 0;
     
@@ -122,7 +122,7 @@
     
     if ($s4 == 1)
     {
-        void* $s1_5 = arg5 + (i_4 << 2);
+        char* $s1_5 = (char*)(arg5 + (i_4 << 2)); // Fixed void pointer assignment
         uint32_t i_1 = i_4;
         int32_t $v1_4 = 0;
             int32_t $v0_9 =
@@ -157,7 +157,7 @@
     for (int32_t i_2 = 0; (uintptr_t)i_2 < 0x40; i_2 += 1)
     {
         void arg_a4;
-        *(((void**)((char*)&var_cc + i_2))) = *(&arg_a4 + i_2); // Fixed void pointer dereference
+        *(&var_cc + i_2) = *(&arg_a4 + i_2);
     }
     
     for (int32_t i_3 = 0; (uintptr_t)i_3 < 0x4c; i_3 += 1)

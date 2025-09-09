@@ -5,12 +5,12 @@
 
 {
     int32_t $v0 = *arg1;
-    else if ($v0 == 4)
+    return 0;
     
     if ($v0 < 4)
         tisp_set_csc_version($v0);
+    else if ($v0 == 4)
         tisp_set_user_csc(&arg1[1]);
     
-    return 0;
 }
 

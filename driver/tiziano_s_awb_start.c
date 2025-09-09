@@ -8,10 +8,10 @@
     int32_t arg_4 = arg2;
     int32_t _AwbPointPos_1 = *_AwbPointPos;
     int32_t arg_0 = arg1;
-    *(((void**)((char*)tparams_day_1 + 0x10e8))) = arg1; // Fixed void pointer dereference
-    *(((void**)((char*)tparams_day_1 + 0x10ec))) = arg2; // Fixed void pointer dereference
-    *(((void**)((char*)tparams_day_1 + 0x10f0))) = arg1; // Fixed void pointer dereference
-    *(((void**)((char*)tparams_day_1 + 0x10f4))) = arg2; // Fixed void pointer dereference
+    *((int32_t*)((char*)tparams_day_1 + 0x10e8)) = arg1; // Fixed void pointer dereference
+    *((int32_t*)((char*)tparams_day_1 + 0x10ec)) = arg2; // Fixed void pointer dereference
+    *((int32_t*)((char*)tparams_day_1 + 0x10f0)) = arg1; // Fixed void pointer dereference
+    *((int32_t*)((char*)tparams_day_1 + 0x10f4)) = arg2; // Fixed void pointer dereference
     data_a9f94 = arg2;
     data_a9f9c = arg2;
     data_a9f90 = arg1;

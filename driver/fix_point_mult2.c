@@ -7,7 +7,7 @@
     int32_t $s0;
     int32_t $s6;
     
-    if (!arg1)
+    if (!(uintptr_t)arg1)
     {
         $s0 = 0;
         $s6 = 0;

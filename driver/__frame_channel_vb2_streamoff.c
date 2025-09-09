@@ -5,6 +5,7 @@
 
 {
     int32_t $a0;
+            return 0;
     char const* const $a1;
     
     if (*(arg1 + 0x24) == arg2)
@@ -12,8 +13,7 @@
         if (*(arg1 + 0x230) & 1)
         {
             __vb2_queue_cancel(arg1 + 0x24);
-            *(((int32_t*)((char*)arg1 + 0x2d0))) = 3; // Fixed void pointer dereference
-            return 0;
+            *((int32_t*)((char*)arg1 + 0x2d0)) = 3; // Fixed void pointer dereference
         }
         
         $a1 = "streamon";
@@ -25,7 +25,7 @@
         $a0 = 2;
     }
     
-    isp_printf(); // Fixed: macro call, removed arguments;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     return 0xffffffea;
 }
 

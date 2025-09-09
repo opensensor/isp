@@ -9,16 +9,16 @@
     int32_t arg_4 = arg2;
     int32_t arg_8 = arg3;
     int32_t arg_c = arg4;
+    uint32_t msca_ch_en_4;
     
     if (!~msca_ch_en_1)
         msca_ch_en_1 = 0;
     
     msca_ch_en = msca_ch_en_1;
-    uint32_t msca_ch_en_4;
     
     if (!(arg1 & 0xff))
     {
-        isp_printf(); // Fixed: macro call, removed arguments;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         msca_ch_en_4 = msca_ch_en;
     }
     else

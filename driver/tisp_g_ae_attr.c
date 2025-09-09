@@ -5,11 +5,11 @@
 
 {
     void var_a0;
-    tisp_ae_manual_get(&var_a0);
     int32_t var_94;
-    *arg1 = var_94;
     int32_t var_6c;
-    arg1[0xc] = var_6c;
     return 0;
+    tisp_ae_manual_get(&var_a0);
+    *arg1 = var_94;
+    arg1[0xc] = var_6c;
 }
 

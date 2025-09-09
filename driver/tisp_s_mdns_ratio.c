@@ -5,22 +5,22 @@
 
 {
     uint32_t mdns_wdr_en_1 = mdns_wdr_en;
-    void* $v0 = &data_a1788;
+    char* $v0 = (char*)(&data_a1788); // Fixed void pointer assignment
     int32_t i = 0;
     int32_t $t0 = (uintptr_t)arg1 < 0x81 ? 1 : 0;
-        void* $t9_2 = mdns_y_sad_ave_thres_array_now + i;
+        char* $t9_2 = (char*)(mdns_y_sad_ave_thres_array_now + i); // Fixed void pointer assignment
+        int32_t $v1_13;
+        void* $t9_10;
             int32_t $v1_14 = *($v0 - 0xd8);
+            uint32_t $v1_15;
                 int32_t $a1_13 = 0xc8 - $v1_14;
     data_9ab00 = arg1;
     
     do
     {
-        int32_t $v1_13;
-        void* $t9_10;
         
         if (mdns_wdr_en_1)
         {
-            uint32_t $v1_15;
             
             if ($t0)
                 $v1_15 = (arg1 * $v1_14) >> 7;
@@ -49,7 +49,7 @@
                 $v1_18 = (($a1_16 * (arg1 - 0x80)) >> 7) + $v1_17;
             }
             
-            *(((void**)((char*)mdns_y_sta_ave_thres_array_now + i))) = $v1_18; // Fixed void pointer dereference
+            *((int32_t*)((char*)mdns_y_sta_ave_thres_array_now + i)) = $v1_18; // Fixed void pointer dereference
             int32_t $v1_20 = *($v0 - 0xb4);
             uint32_t $v1_21;
             
@@ -65,7 +65,7 @@
                 $v1_21 = (($a1_19 * (arg1 - 0x80)) >> 7) + $v1_20;
             }
             
-            *(((void**)((char*)mdns_y_sad_ass_thres_array_now + i))) = $v1_21; // Fixed void pointer dereference
+            *((int32_t*)((char*)mdns_y_sad_ass_thres_array_now + i)) = $v1_21; // Fixed void pointer dereference
             int32_t $v1_23 = *($v0 - 0x6c);
             uint32_t $v1_24;
             
@@ -81,15 +81,15 @@
                 $v1_24 = (($a1_22 * (arg1 - 0x80)) >> 7) + $v1_23;
             }
             
-            *(((void**)((char*)mdns_y_sta_ass_thres_array_now + i))) = $v1_24; // Fixed void pointer dereference
+            *((int32_t*)((char*)mdns_y_sta_ass_thres_array_now + i)) = $v1_24; // Fixed void pointer dereference
             $v1_13 = *$v0;
             $t9_10 = mdns_y_ref_wei_b_min_array_now + i;
         }
         else
         {
             int32_t $v1_1 = *($v0 - 0x10d0);
-                int32_t $a1_1 = 0xc8 - $v1_1;
             uint32_t $v1_2;
+                int32_t $a1_1 = 0xc8 - $v1_1;
             
             if ($t0)
                 $v1_2 = (arg1 * $v1_1) >> 7;
@@ -118,7 +118,7 @@
                 $v1_5 = (($a1_4 * (arg1 - 0x80)) >> 7) + $v1_4;
             }
             
-            *(((void**)((char*)mdns_y_sta_ave_thres_array_now + i))) = $v1_5; // Fixed void pointer dereference
+            *((int32_t*)((char*)mdns_y_sta_ave_thres_array_now + i)) = $v1_5; // Fixed void pointer dereference
             int32_t $v1_7 = *($v0 - 0x1064);
             uint32_t $v1_8;
             
@@ -134,7 +134,7 @@
                 $v1_8 = (($a1_7 * (arg1 - 0x80)) >> 7) + $v1_7;
             }
             
-            *(((void**)((char*)mdns_y_sad_ass_thres_array_now + i))) = $v1_8; // Fixed void pointer dereference
+            *((int32_t*)((char*)mdns_y_sad_ass_thres_array_now + i)) = $v1_8; // Fixed void pointer dereference
             int32_t $v1_10 = *($v0 - 0xfb0);
             uint32_t $v1_11;
             
@@ -150,7 +150,7 @@
                 $v1_11 = (($a1_10 * (arg1 - 0x80)) >> 7) + $v1_10;
             }
             
-            *(((void**)((char*)mdns_y_sta_ass_thres_array_now + i))) = $v1_11; // Fixed void pointer dereference
+            *((int32_t*)((char*)mdns_y_sta_ass_thres_array_now + i)) = $v1_11; // Fixed void pointer dereference
             $v1_13 = *($v0 - 0xdec);
             $t9_10 = mdns_y_ref_wei_b_min_array_now + i;
         }

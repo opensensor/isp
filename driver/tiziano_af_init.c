@@ -10,6 +10,7 @@
     char stAFParam_Zone_1 = stAFParam_Zone;
     char $a1_3 = data_b1380;
     char $v1_1 = data_b137c;
+    return 0;
     af_first = 0;
     tiziano_af_params_refresh();
     data_d652c = arg2;
@@ -28,6 +29,5 @@
     data_d6c78 = $a1_3;
     data_d6c7b = $v1_1;
     private_spin_lock_init(0);
-    return 0;
 }
 

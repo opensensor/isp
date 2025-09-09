@@ -4,23 +4,25 @@
   int32_t tiziano_bcsh_update()
 
 {
-    void* tisp_BCSH_au32SminListS_now_1 = tisp_BCSH_au32SminListS_now;
-    void* tisp_BCSH_au32SmaxListS_now_1 = tisp_BCSH_au32SmaxListS_now;
-    void* tisp_BCSH_au32EvList_now_1 = tisp_BCSH_au32EvList_now;
-    void* tisp_BCSH_au32SminListM_now_1 = tisp_BCSH_au32SminListM_now;
-    void* tisp_BCSH_au32SmaxListM_now_1 = tisp_BCSH_au32SmaxListM_now;
-    void* tisp_BCSH_au32OffsetRGB_now_1 = tisp_BCSH_au32OffsetRGB_now;
+    char* tisp_BCSH_au32SminListS_now_1 = (char*)(tisp_BCSH_au32SminListS_now); // Fixed void pointer assignment
+    char* tisp_BCSH_au32SmaxListS_now_1 = (char*)(tisp_BCSH_au32SmaxListS_now); // Fixed void pointer assignment
+    char* tisp_BCSH_au32EvList_now_1 = (char*)(tisp_BCSH_au32EvList_now); // Fixed void pointer assignment
+    char* tisp_BCSH_au32SminListM_now_1 = (char*)(tisp_BCSH_au32SminListM_now); // Fixed void pointer assignment
+    char* tisp_BCSH_au32SmaxListM_now_1 = (char*)(tisp_BCSH_au32SmaxListM_now); // Fixed void pointer assignment
+    char* tisp_BCSH_au32OffsetRGB_now_1 = (char*)(tisp_BCSH_au32OffsetRGB_now); // Fixed void pointer assignment
     uint32_t $v0_1 = data_9a614 >> 0xa;
-        void* $a3_1 = tisp_BCSH_au32EvList_now_1 + 4;
+        char* $a3_1 = (char*)(tisp_BCSH_au32EvList_now_1 + 4); // Fixed void pointer assignment
             int32_t i_2 = 0;
+            int32_t i;
                 int32_t $ra_1 = *($a3_1 - 4);
                 int32_t $t0_1 = i_2 << 2;
                     int32_t $a2_2 = *$a3_1;
-                    void* $t4_1 = $a3_1 - tisp_BCSH_au32EvList_now_1;
+                    char* $t4_1 = (char*)($a3_1 - tisp_BCSH_au32EvList_now_1); // Fixed void pointer assignment
                         int32_t $a0_4 = *(tisp_BCSH_au32SminListS_now_1 + $t0_1);
                         int32_t $t3_1 = *(tisp_BCSH_au32SminListS_now_1 + $t4_1);
                         int32_t $a1_2 = $ra_1 < $v0_1 ? 1 : 0;
                         int32_t $t9_1 = $a2_2 < $ra_1 ? 1 : 0;
+                        int32_t $v1_19;
                             int32_t $v1_20 = $v0_1 - $ra_1;
                             int32_t $a2_4 = $a2_2 - $ra_1;
     data_9a610;
@@ -30,7 +32,6 @@
         
         if ($v0_1 < *(tisp_BCSH_au32EvList_now_1 + 0x20))
         {
-            int32_t i;
             
             do
             {
@@ -41,7 +42,6 @@
                     
                     if ($a2_2 >= $v0_1)
                     {
-                        int32_t $v1_19;
                         
                         if ($t3_1 >= $a0_4)
                         {

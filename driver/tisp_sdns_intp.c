@@ -6,6 +6,7 @@
 {
     int32_t $s2 = arg1 >> 0x10;
     int32_t $s0 = arg1 & 0xffff;
+    return 0;
     sdns_grad_zx_thres_intp = tisp_simple_intp($s2, $s0, sdns_grad_zx_thres_array_now);
     sdns_grad_zy_thres_intp = tisp_simple_intp($s2, $s0, sdns_grad_zy_thres_array_now);
     sdns_std_thr1_intp = tisp_simple_intp($s2, $s0, sdns_std_thr1_array_now);
@@ -77,6 +78,5 @@
     sdns_sp_ud_flat_thres_intp = tisp_simple_intp($s2, $s0, &sdns_sp_ud_flat_thres_array);
     sdns_ave_thres_intp = tisp_simple_intp($s2, $s0, sdns_ave_thres_array_now);
     sdns_sp_ud_flat_stren_intp = tisp_simple_intp($s2, $s0, &sdns_sp_ud_flat_stren_array);
-    return 0;
 }
 

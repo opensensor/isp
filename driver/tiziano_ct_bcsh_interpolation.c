@@ -4,16 +4,16 @@
   int32_t tiziano_ct_bcsh_interpolation(int32_t arg1)
 
 {
-    int32_t var_4 = $ra;
-        else if ((uintptr_t)arg1 >= 0xea7)
     int32_t $ra;
+    int32_t var_4 = $ra;
+        uint32_t $v1_3;
     
     if ((uintptr_t)arg1 < 0x1357)
     {
-        uint32_t $v1_3;
         
         if ((uintptr_t)arg1 >= 0xf0b)
             $v1_3 = 1;
+        else if ((uintptr_t)arg1 >= 0xea7)
             $v1_3 = 2;
         else if ((uintptr_t)arg1 < 0xb23)
             $v1_3 = 4;
@@ -65,14 +65,14 @@
             int32_t $v1_9 = 0xf0a - arg1;
                 int32_t $v1_10 = *(&tisp_BCSH_as32CCMMatrix_t + i);
                 int32_t $v0_5 = *(&tisp_BCSH_as32CCMMatrix_d + i);
-                void* $v1_11 = &tisp_BCSH_as32CCMMatrix + i;
+                int32_t $v0_10;
+                char* $v1_11 = (char*)(&tisp_BCSH_as32CCMMatrix + i); // Fixed void pointer assignment
             
             if ((uintptr_t)arg1 >= 0xf0b)
                 $v1_9 = arg1 - 0xf0a;
             
             for (int32_t i = 0; (uintptr_t)i != 0x24; )
             {
-                int32_t $v0_10;
                 
                 $v0_10 = $v0_5 >= $v1_10 ? ($v0_5 - $v1_10) * $v1_9 / 0x44c + $v1_10
                     : $v1_10 - ($v1_10 - $v0_5) * $v1_9 / 0x44c;
@@ -92,14 +92,14 @@
             int32_t $v1_12 = 0xb22 - arg1;
                 int32_t $v1_13 = *(&tisp_BCSH_as32CCMMatrix_a + i_1);
                 int32_t $v0_16 = *(&tisp_BCSH_as32CCMMatrix_t + i_1);
-                void* $v1_14 = &tisp_BCSH_as32CCMMatrix + i_1;
+                int32_t $v0_21;
+                char* $v1_14 = (char*)(&tisp_BCSH_as32CCMMatrix + i_1); // Fixed void pointer assignment
             
             if ((uintptr_t)arg1 >= 0xb23)
                 $v1_12 = arg1 - 0xb22;
             
             for (int32_t i_1 = 0; (uintptr_t)i_1 != 0x24; )
             {
-                int32_t $v0_21;
                 
                 $v0_21 = $v0_16 >= $v1_13 ? ($v0_16 - $v1_13) * $v1_12 / 0x384 + $v1_13
                     : $v1_13 - ($v1_13 - $v0_16) * $v1_12 / 0x384;

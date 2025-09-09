@@ -5,13 +5,13 @@
 
 {
     int32_t result = 0xffffffea;
-        char* $s0_1 = *((char*)arg1 + 0xd4); // Fixed void pointer arithmetic
+            return 0xffffffea;
+        int32_t* $s0_1 = (int32_t*)((char*)arg1  + 0xd4); // Fixed void pointer arithmetic
             int32_t $v1_2 = *($s0_1 + 0x128);
     
     if (arg1)
     {
         if ((uintptr_t)arg1 >= 0xfffff001)
-            return 0xffffffea;
         
         result = 0xffffffea;
         
@@ -25,7 +25,7 @@
                 $v1_2 = *($s0_1 + 0x128);
             }
             
-            void* $s2_1 = $s0_1 + 0x12c;
+            char* $s2_1 = (char*)($s0_1 + 0x12c); // Fixed void pointer assignment
             
             if ($v1_2 == 3)
             {
@@ -37,11 +37,11 @@
             
             if (*($s0_1 + 0x128) == 2)
             {
-                char* $v0 = *((char*)arg1 + 0xbc); // Fixed void pointer arithmetic
+                int32_t* $v0 = (int32_t*)((char*)arg1  + 0xbc); // Fixed void pointer arithmetic
                     int32_t $s0_2 = *(arg1 + 0xc0);
                     int32_t $s1_2 = $s0_2 - 1;
                     int32_t* $s0_4 = $v0 + ($s0_2 << 2);
-                *(((int32_t*)((char*)$s0_1 + 0x128))) = 1; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s0_1 + 0x128)) = 1; // Fixed void pointer dereference
                 
                 if ($v0 && $(uintptr_t)v0 < 0xfffff001)
                 {

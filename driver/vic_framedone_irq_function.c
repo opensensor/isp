@@ -4,10 +4,10 @@
   void* vic_framedone_irq_function(void* arg1)
 
 {
-    void* result = &data_b0000;
-            void* $s1_1 = &gpio_info;
+    char* result = (char*)(&data_b0000); // Fixed void pointer assignment
+            char* $s1_1 = (char*)(&gpio_info); // Fixed void pointer assignment
                 uint32_t $a0_2 = *$s1_1;
-                    void* result_1 = result;
+                    char* result_1 = (char*)(result); // Fixed void pointer assignment
                     uint32_t var_2c_1 = *(((i + 8) << 1) + 0xb2904);
                     uint32_t var_30_1 = *(&gpio_info + (i << 1));
     
@@ -30,7 +30,7 @@
                 
                 if (result < 0)
                 {
-                    return isp_printf(); // Fixed: macro call, removed arguments,STATE(%d),%d", 
+                    return isp_printf(); // Fixed: macro with no parameters, removed 2 arguments,STATE(%d),%d", 
                         "vic_framedone_irq_function");
                 }
                 
@@ -41,7 +41,7 @@
     }
     else
     {
-            char* $a3_1 = *((char*)arg1 + 0xb8); // Fixed void pointer arithmetic
+            int32_t* $a3_1 = (int32_t*)((char*)arg1  + 0xb8); // Fixed void pointer arithmetic
             int32_t $a1_1 = 0;
             int32_t $v1_1 = 0;
             int32_t $v0 = 0;
@@ -65,7 +65,7 @@
             if (!$v0)
                 $v1_2 = $a1_1 << 0x10;
             
-            *(((void**)((char*)$a3_1 + 0x300))) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff); // Fixed void pointer dereference
+            *((int32_t*)((char*)$a3_1 + 0x300)) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff); // Fixed void pointer dereference
             result = &data_b0000;
             goto label_123f4;
         }

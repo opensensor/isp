@@ -45,7 +45,7 @@
     data_cd4b8_1 = U"_PKAK<Z";
     data_cd4bc_1 = &defog_block_area_div;
     data_cd4c0_1 = &defog_block_area_index;
-    void* param_defog_fpga_para_array_now_1 = param_defog_fpga_para_array_now;
+    char* param_defog_fpga_para_array_now_1 = (char*)(param_defog_fpga_para_array_now); // Fixed void pointer assignment
     data_cd4fc_1 = &defog_update_paras;
     data_cd4c4_1 = param_defog_fpga_para_array_now_1;
     data_cd4c8_1 = &defog_block_transmit_t;

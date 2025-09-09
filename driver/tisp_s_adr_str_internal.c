@@ -5,19 +5,19 @@
 
 {
     uint32_t adr_wdr_en_1 = adr_wdr_en;
-    void* $v0 = &data_a663c;
+    char* $v0 = (char*)(&data_a663c); // Fixed void pointer assignment
     int32_t i = 0;
     int32_t $t5 = (uintptr_t)arg1 < 0x81 ? 1 : 0;
-            int32_t $a3_3 = *$v0;
-    adr_ratio = arg1;
-    
-    do
-    {
         uint32_t $v1_21;
         uint32_t $a2_2;
         uint32_t histSub_4096_diff_2;
         uint32_t $s3_2;
         int32_t $v1_10;
+            int32_t $a3_3 = *$v0;
+    adr_ratio = arg1;
+    
+    do
+    {
         
         if (adr_wdr_en_1)
         {
@@ -69,6 +69,7 @@
                 int32_t $a1_2 = 0x1f4 - $s3_1;
                 int32_t $a2_1 = *($v0 - 0x190);
                 int32_t $v1_7 = 0x258 - $a2_1;
+                goto label_5cf94;
             
             if (!$t5)
             {
@@ -88,7 +89,6 @@
                 
                 $a2_2 = (($v1_7 * (arg1 - 0x80)) >> 7) + $a2_1;
                 $v1_10 = *($v0 - 0x16c);
-                goto label_5cf94;
             }
             
             histSub_4096_diff_2 = (arg1 * $a3_1) >> 7;
@@ -101,21 +101,21 @@
         if (histSub_4096_diff_1 >= histSub_4096_diff_2)
             histSub_4096_diff_2 = histSub_4096_diff_1;
         
-        *(((void**)((char*)adr_mapb1_list_now + i))) = histSub_4096_diff_2; // Fixed void pointer dereference
+        *((int32_t*)((char*)adr_mapb1_list_now + i)) = histSub_4096_diff_2; // Fixed void pointer dereference
         uint32_t $s4_3 = data_ae7e4_1;
         
         if ($s4_3 >= $s3_2)
             $s3_2 = $s4_3;
         
-        *(((void**)((char*)adr_mapb2_list_now + i))) = $s3_2; // Fixed void pointer dereference
+        *((int32_t*)((char*)adr_mapb2_list_now + i)) = $s3_2; // Fixed void pointer dereference
         uint32_t $s3_8 = data_ae7e8_1;
         
         if ($s3_8 >= $a2_2)
             $a2_2 = $s3_8;
         
-        *(((void**)((char*)adr_mapb3_list_now + i))) = $a2_2; // Fixed void pointer dereference
+        *((int32_t*)((char*)adr_mapb3_list_now + i)) = $a2_2; // Fixed void pointer dereference
         uint32_t $a3_7 = data_ae7ec_1;
-        void* $a1_17 = adr_mapb4_list_now + i;
+        char* $a1_17 = (char*)(adr_mapb4_list_now + i); // Fixed void pointer assignment
         
         if ($a3_7 >= $v1_21)
             $v1_21 = $a3_7;

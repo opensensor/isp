@@ -6,14 +6,14 @@
 {
     int32_t var_10 = 0;
     int32_t $a2_1 = tisp_gamma_param_array_get(0x3d, &wdr_gam_y129_array, &var_10);
+        return 0xffffffff;
     
     if ((uintptr_t)var_10 != 0x102)
     {
-        isp_printf(); // Fixed: macro call, removed arguments;
-        return 0xffffffff;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     }
     
-    void* $v0_1 = &wdr_gam_y129_array;
+    char* $v0_1 = (char*)(&wdr_gam_y129_array); // Fixed void pointer assignment
     
     for (int32_t i = 0; (uintptr_t)i != 0x84; )
     {
@@ -28,14 +28,14 @@
     if (!i_1)
     {
             int32_t $a2_4 = *(&wdr_gam_y33_array + i_1);
-            void* $a1_1 = &param_wdr_gam_y_array_def + i_1;
+            char* $a1_1 = (char*)(&param_wdr_gam_y_array_def + i_1); // Fixed void pointer assignment
+        return 0;
         do
         {
             i_1 += 4;
             *$a1_1 = $a2_4;
         } while ((uintptr_t)i_1 != 0x84);
         
-        return 0;
     }
     
     if (i_1 != 1)

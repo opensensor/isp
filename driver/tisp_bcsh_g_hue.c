@@ -5,7 +5,7 @@
 
 {
     char result = data_9a6fc;
-    *arg1 = result;
     return result;
+    *arg1 = result;
 }
 

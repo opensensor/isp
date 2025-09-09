@@ -5,6 +5,7 @@
 
 {
     int32_t result;
+    return result;
     
     do
     {
@@ -18,6 +19,5 @@
         arg2 = &arg2[1];
     } while (arg1 != &arg1[9]);
     
-    return result;
 }
 

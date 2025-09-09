@@ -4,12 +4,12 @@
   int32_t tisp_set_sensor_integration_time_short(int32_t arg1)
 
 {
+    void var_38;
+    int16_t var_26;
         int32_t $v0_5 = data_b2ef0(arg1, &var_38);
             int32_t _AePointPos_1 = *_AePointPos;
             int32_t $v0_6 =
             int32_t _AePointPos_2 = *_AePointPos;
-    void var_38;
-    int16_t var_26;
     
     if (!data_c470c)
     {

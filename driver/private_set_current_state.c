@@ -5,8 +5,8 @@
 
 {
     int32_t* result = *entry_$gp;
+    return result;
     int32_t* entry_$gp;
     *result = arg1;
-    return result;
 }
 

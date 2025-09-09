@@ -5,8 +5,8 @@
 
 {
     int32_t var_18 = 0;
+    return 0;
     tisp_gamma_param_array_set(0x3c, arg1, &var_18);
     tisp_gamma_param_array_set(0x3d, arg1 + var_18, &var_18);
-    return 0;
 }
 

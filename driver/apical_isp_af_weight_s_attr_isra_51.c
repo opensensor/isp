@@ -6,12 +6,12 @@
 {
     void* $v0;
     int32_t $a2;
+        return 0xffffffff;
     $v0 = private_kmalloc(0x384, 0xd0);
     
     if (!$v0)
     {
-        isp_printf(); // Fixed: macro call, removed arguments\n", $a2);
-        return 0xffffffff;
+        isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", $a2);
     }
     
     int32_t $a1_1 = *arg1;
@@ -19,10 +19,11 @@
     
     if ($a1_1)
     {
+        char var_f8[0xec];
         int32_t i = 0;
         int32_t $a2_1 = 0;
                 uint32_t $a1_2 = var_f8[j + i];
-        char var_f8[0xec];
+                    goto label_15df4;
         private_copy_from_user(&var_f8, $a1_1, 0xe1);
         
         do
@@ -32,9 +33,8 @@
                 
                 if ($a1_2 >= 9)
                 {
-                    isp_printf(); // Fixed: macro call, removed arguments;
+                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                     result = 0xffffffff;
-                    goto label_15df4;
                 }
                 
                 uint32_t* $a0_6 = $v0 + (j << 2) + $a2_1;

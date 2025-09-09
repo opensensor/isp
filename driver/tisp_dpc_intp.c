@@ -6,6 +6,7 @@
 {
     int32_t $s2 = arg1 >> 0x10;
     int32_t $s0 = arg1 & 0xffff;
+    return 0;
     dpc_d_m1_fthres_intp = tisp_simple_intp($s2, $s0, dpc_d_m1_fthres_array_now);
     dpc_d_m1_dthres_intp = tisp_simple_intp($s2, $s0, dpc_d_m1_dthres_array_now);
     dpc_d_m2_level_intp = tisp_simple_intp($s2, $s0, &dpc_d_m2_level_array);
@@ -25,6 +26,5 @@
     ctr_md_thres_intp = tisp_simple_intp($s2, $s0, &ctr_md_thres_array);
     ctr_el_thres_intp = tisp_simple_intp($s2, $s0, &ctr_el_thres_array);
     ctr_eh_thres_intp = tisp_simple_intp($s2, $s0, &ctr_eh_thres_array);
-    return 0;
 }
 

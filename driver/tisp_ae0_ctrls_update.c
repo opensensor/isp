@@ -18,6 +18,7 @@
     int32_t $v0_22 = data_c4720;
     int32_t* $v0_25 = data_d04d0;
     int32_t $v1_6 = *(dmsc_sp_d_ud_ns_opt + 4);
+    return 0;
     
     if (data_b2ea8 < $a0)
         data_c46c8 = **&IspAeExp;
@@ -62,6 +63,5 @@
     if ($v1_6 != *$v0_25)
         *$v0_25 = $v1_6;
     
-    return 0;
 }
 

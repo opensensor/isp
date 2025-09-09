@@ -6,7 +6,7 @@
 {
     int32_t var_30 = 0;
     void var_38;
-    tisp_event_push(&var_38);
     return 0;
+    tisp_event_push(&var_38);
 }
 

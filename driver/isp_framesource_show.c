@@ -4,9 +4,10 @@
   int32_t isp_framesource_show(void* arg1)
 
 {
-    char* $v0 = *((char*)arg1 + 0x3c); // Fixed void pointer arithmetic
-    void* $s4 = nullptr;
+    int32_t* $v0 = (int32_t*)((char*)arg1  + 0x3c); // Fixed void pointer arithmetic
+    char* $s4 = (char*)(nullptr); // Fixed void pointer assignment
     int32_t var_40 = 0;
+        return 0;
     
     if ($v0 && $(uintptr_t)v0 < 0xfffff001)
         $s4 = *($v0 + 0xd4);
@@ -15,8 +16,7 @@
     if (!$s4 || $(uintptr_t)s4 >= 0xfffff001)
     {
         int32_t entry_$a2;
-        isp_printf(); // Fixed: macro call, removed arguments;
-        return 0;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     }
     
     int32_t i = 0;
@@ -30,6 +30,7 @@
             int32_t var_50_1 = *($s1_1 + 0x24a);
             int32_t $s0_3 = result + private_seq_printf(arg1, 
             int32_t $s0_4 = $s0_3 + private_seq_printf(arg1, 
+            uint32_t $v0_14;
         char const* const $a2_1;
         
         if (*($s1_1 + 0x2d0) != 4)
@@ -54,7 +55,6 @@
                 $a2_4 = "VIC_CTRL : %08x\n";
             
                 "%s[%d] VIC failed to config DVP mode!(10bits-sensor)\n", $a2_4);
-            uint32_t $v0_14;
             
             if (!*($s1_1 + 0x284))
                 $v0_14 = *($s1_1 + 0x270);
@@ -121,9 +121,9 @@
             {
                 int32_t $s0_16 = $s0_14 + private_seq_printf(arg1, 
                 int32_t var_50_2 = 0;
+                int32_t $v0_34;
                     "register is 0x%x, value is 0x%x\n", isp_ch0_pre_dequeue_drop) +
                     private_seq_printf(arg1, "count is %d\n", isp_ch0_pre_dequeue_intc_ahead_cnt);
-                int32_t $v0_34;
                 $v0_34 = private_seq_printf(arg1, "snapraw", isp_ch0_pdq_cnt);
                 $s0_14 = $s0_16 + $v0_34;
             }
@@ -131,11 +131,11 @@
             result = $s0_14 + private_seq_printf(arg1, 
                 "width is %d, height is %d, imagesize is %d\\n, snap num is %d, buf size is %d", 
                 $a2_19);
-            void* $s1_2 = $s1_1 + 0x10c;
+            char* $s1_2 = (char*)($s1_1 + 0x10c); // Fixed void pointer assignment
             
             for (int32_t j = 0; (uintptr_t)j != 0x40; )
             {
-                void* $v0_36 = *$s1_2;
+                char* $v0_36 = (char*)(*$s1_2); // Fixed void pointer assignment
                     int32_t var_48_1 = *($v0_36 + 0x54);
                     int32_t var_4c_2 = *($v0_36 + 0x50);
                     uint32_t var_50_3 = *($v0_36 + 0x4c);

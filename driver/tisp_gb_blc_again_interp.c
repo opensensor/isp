@@ -16,7 +16,7 @@
     int32_t $s6_1;
     int32_t $s7_1;
     
-    if (!arg2)
+    if (!(uintptr_t)arg2)
     {
         *tisp_gb_blc_ag = arg1;
         $s4_1 = 0x1020;
@@ -31,7 +31,7 @@
     }
     else
     {
-        *(((void**)((char*)tisp_gb_blc_ag + 4))) = arg1; // Fixed void pointer dereference
+        *((int32_t*)((char*)tisp_gb_blc_ag + 4)) = arg1; // Fixed void pointer dereference
         $s4_1 = 0x102c;
         $s6_1 = 0x1028;
         $s7_1 = 0x1024;
@@ -49,7 +49,7 @@
     if ($(uintptr_t)v0_7 >= 0x18)
     {
     label_32958:
-        isp_printf(); // Fixed: macro call, removed arguments;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         $fp = 0;
         $s1 = 0;
         $v1_1 = 0;
@@ -140,15 +140,15 @@
             }
             case 0xc:
             {
+                goto label_32868;
                 $fp = $v0_2;
                 $s1 = $v0_4;
-                goto label_32868;
             }
             case 0xd:
             {
+                goto label_32884;
                 $fp = $v0_1;
                 $s1 = $v0_4;
-                goto label_32884;
             }
             case 0xe:
             {
@@ -178,9 +178,9 @@
             }
             case 0x11:
             {
+                goto label_328c8;
                 $fp = $s0;
                 $s1 = $v0_4;
-                goto label_328c8;
             }
             case 0x12:
             {

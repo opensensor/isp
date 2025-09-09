@@ -4,7 +4,7 @@
   int32_t tiziano_mdns_init(int32_t arg1, int32_t arg2)
 
 {
-    void* var_2c = &data_b0000;
+    char* var_2c = (char*)(&data_b0000); // Fixed void pointer assignment
     void* $v0_1;
     
     if (mdns_wdr_en)

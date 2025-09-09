@@ -6,13 +6,13 @@
 {
     int32_t $v0 = data_ca490;
     int32_t arg_0 = arg1;
+    int32_t $a1;
     int32_t arg_4 = $a1;
+    int32_t $a2;
     int32_t arg_8 = $a2;
+    int32_t $a3;
     int32_t arg_c = $a3;
     int32_t $a0 = data_ca490;
-    int32_t $a1;
-    int32_t $a2;
-    int32_t $a3;
     
     if (!$v0)
         data_ca490 = private_kmalloc(0xac, 0xd0);

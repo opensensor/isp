@@ -11,14 +11,14 @@
     uint32_t var_38 = $fp;
     uint32_t msca_ch_en_1 = msca_ch_en;
     int32_t $s4 = 0 < system_reg_read(0x9968) ? 1 : 0;
+    int32_t $s1;
     _setLeftPart32(arg1);
-    isp_printf(); // Fixed: macro call, removed arguments;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     
     if (!~msca_ch_en_1)
         msca_ch_en_1 = 0;
     
     msca_ch_en = msca_ch_en_1;
-    int32_t $s1;
     
     if (arg1 != 1)
     {
@@ -31,7 +31,7 @@
     {
         uint32_t var_34_1 = $v1;
         uint32_t var_38_1 = $fp;
-        isp_printf(); // Fixed: macro call, removed arguments;
+        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         system_reg_write(0x9938, $s5_1);
         system_reg_write(0x993c, *arg2[2] << 0x10 | arg3);
         system_yvu_or_yuv($s4, 0x9940, arg4 << 0x10 | *arg3[2]);

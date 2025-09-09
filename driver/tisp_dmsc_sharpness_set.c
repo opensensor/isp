@@ -6,11 +6,12 @@
 {
     uint32_t $a0_2 = arg1;
     wchar32* i = U"ZZZF2-(((ZZZF2-(((";
-    void* $t1 = &dmsc_sp_d_w_stren_array;
-    void* $t0 = &dmsc_sp_d_b_stren_array;
-    void* $a3 = &dmsc_sp_ud_w_stren_array;
-    void* $a2 = &dmsc_sp_ud_b_stren_array;
-    void* $a1 = &dmsc_uu_stren_array;
+    char* $t1 = (char*)(&dmsc_sp_d_w_stren_array); // Fixed void pointer assignment
+    char* $t0 = (char*)(&dmsc_sp_d_b_stren_array); // Fixed void pointer assignment
+    char* $a3 = (char*)(&dmsc_sp_ud_w_stren_array); // Fixed void pointer assignment
+    char* $a2 = (char*)(&dmsc_sp_ud_b_stren_array); // Fixed void pointer assignment
+    char* $a1 = (char*)(&dmsc_uu_stren_array); // Fixed void pointer assignment
+        uint32_t $v1_15;
             wchar32 $t7_1 = *i;
             int32_t $t7_2 = i[9];
             int32_t $t7_3 = i[0x53];
@@ -20,7 +21,6 @@
     
     do
     {
-        uint32_t $v1_15;
         
         if ($(uintptr_t)a0_2 >= 0x81)
         {

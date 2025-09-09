@@ -16,7 +16,7 @@
     {
         uint32_t $a0 = major_1 << 0x14;
         var_18 = $a0;
-        register_chrdev_region($a0, 1, "%s[%d] do not support this interface\n");
+        register_chrdev_region($a0, 1, /* "%s[%d] do not support this interface\n" */ 0); // Fixed: converted string literals to placeholders;
     }
     
     cdev_init(&tisp_cdev, &tisp_fops);

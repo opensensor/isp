@@ -5,6 +5,7 @@
 
 {
         int32_t result = arg3 - arg5;
+            return result;
     if (arg4 >= arg6)
     {
         
@@ -12,10 +13,9 @@
             result = arg3 - arg5;
         
         if (arg6 != arg4 || arg3 >= arg5)
-            return result;
     }
     
-    isp_printf(); // Fixed: macro call, removed arguments;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     return arg3 - arg5;
 }
 

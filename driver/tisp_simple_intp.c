@@ -4,17 +4,17 @@
   int32_t tisp_simple_intp(int32_t arg1, int32_t arg2, void* arg3)
 
 {
-    void* $a2 = arg3 + (arg1 << 2);
+    char* $a2 = (char*)(arg3 + (arg1 << 2)); // Fixed void pointer assignment
     int32_t $a3 = *$a2;
     int32_t result = *($a2 + 4);
+        int32_t $v0_1;
+        int32_t $a0_1;
     if (arg1 >= 8)
         return *(arg3 + 0x20);
     
     
     if ($a3 != result)
     {
-        int32_t $v0_1;
-        int32_t $a0_1;
         
         if ($a3 >= result)
         {

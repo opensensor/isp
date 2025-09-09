@@ -5,7 +5,7 @@
 
 {
     int32_t result = data_9ab24;
-    *arg1 = result;
     return result;
+    *arg1 = result;
 }
 

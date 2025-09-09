@@ -5,8 +5,8 @@
 
 {
     int32_t $s7 = arg2 * arg1;
-    defog_frm_num = 0;
     void* $v0_1;
+    defog_frm_num = 0;
     
     if (defog_wdr_en)
     {
@@ -89,22 +89,22 @@
     if ((uintptr_t)arg1 == 0x500)
     {
         memcpy(&defog_block_sizen, &block_sizen_1280, 0x4c);
-        *(((int32_t*)((char*)defog_block_area_index + 4))) = 2; // Fixed void pointer dereference
+        *((int32_t*)((char*)defog_block_area_index + 4)) = 2; // Fixed void pointer dereference
     }
     else if ((uintptr_t)arg1 == 0x780)
     {
         memcpy(&defog_block_sizen, &block_sizen_1920, 0x4c);
-        *(((void**)((char*)defog_block_area_index + 4))) = 0xc; // Fixed void pointer dereference
+        *((int32_t*)((char*)defog_block_area_index + 4)) = 0xc; // Fixed void pointer dereference
     }
     else if ((uintptr_t)arg1 == 0x900)
     {
         memcpy(&defog_block_sizen, &block_sizen_2304, 0x4c);
-        *(((int32_t*)((char*)defog_block_area_index + 4))) = 0; // Fixed void pointer dereference
+        *((int32_t*)((char*)defog_block_area_index + 4)) = 0; // Fixed void pointer dereference
     }
     else if ((uintptr_t)arg1 == 0xa00)
     {
         memcpy(&defog_block_sizen, &block_sizen_2560, 0x4c);
-        *(((int32_t*)((char*)defog_block_area_index + 4))) = 4; // Fixed void pointer dereference
+        *((int32_t*)((char*)defog_block_area_index + 4)) = 4; // Fixed void pointer dereference
     }
     else if ((uintptr_t)arg1 != 0xa20)
     {
@@ -112,7 +112,7 @@
         int32_t i_1 = 1;
         int32_t $v0_5 = arg1 % 0x12;
             int32_t $v1_6 = arg1 / 0x12 + *$a0_1;
-        *(((void**)((char*)defog_block_area_index + 4))) = $v0_5; // Fixed void pointer dereference
+        *((int32_t*)((char*)defog_block_area_index + 4)) = $v0_5; // Fixed void pointer dereference
         
         do
         {
@@ -128,7 +128,7 @@
     else
     {
         memcpy(&defog_block_sizen, &block_sizen_2592, 0x4c);
-        *(((int32_t*)((char*)defog_block_area_index + 4))) = 0; // Fixed void pointer dereference
+        *((int32_t*)((char*)defog_block_area_index + 4)) = 0; // Fixed void pointer dereference
     }
     
     if ($(uintptr_t)s7 == 0xe1000)
@@ -207,14 +207,14 @@
         int32_t $s7_1 = ($lo_3 + 1) * (arg1 / 0x12 + 1);
         int32_t $a1_5 = $s7_1 - ($lo_3 + 1);
         int32_t $s2_3 = $s7_1 - (arg1 / 0x12 + 1);
-        defog_3x3_5x5_params_init(arg1, arg2);
-        defog_block_area_div = fix_point_div_64(0, $lo_3 + 1, 0, 0x10, $s7_1, 0);
         int32_t $v0_8;
         int32_t $a1_6;
-        $v0_8 = fix_point_div_64(0, $a1_5, 0, 0x10, $a1_5, 0);
-        data_acd98 = $v0_8;
         int32_t $v0_9;
         int32_t $a1_7;
+        defog_3x3_5x5_params_init(arg1, arg2);
+        defog_block_area_div = fix_point_div_64(0, $lo_3 + 1, 0, 0x10, $s7_1, 0);
+        $v0_8 = fix_point_div_64(0, $a1_5, 0, 0x10, $a1_5, 0);
+        data_acd98 = $v0_8;
         $v0_9 = fix_point_div_64(0, $a1_6, 0, 0x10, $s2_3, 0);
         data_acd9c = $v0_9;
         data_acda0 = fix_point_div_64(0, $a1_7, 0, 0x10, $s2_3 - $lo_3, 0);

@@ -10,21 +10,21 @@
     int32_t $v0 = 1 << (_AePointPos_1 & 0x1f);
     int32_t var_38 = $v0;
     int32_t var_34 = $v0;
+    char var_c8[0x4c];
+    char var_7c[0x44];
     uint32_t $v0_1 = data_b0cec;
     int32_t $a1_12 = $v0_1 + 1;
-    void* $a0_6 = &(&ev1_cache)[$v0_1];
+    char* $a0_6 = (char*)(&(&ev1_cache)[$v0_1]); // Fixed void pointer assignment
     int32_t $a2_8 = $a1_12;
-    void* $v1_5 = &(&ad1_cache)[$v0_1];
+    char* $v1_5 = (char*)(&(&ad1_cache)[$v0_1]); // Fixed void pointer assignment
     int32_t $a3_6 = 0;
         int32_t temp1_1 = $a2_8;
-    char var_c8[0x4c];
     
     for (int32_t i = 0; (uintptr_t)i < 0x38; i += 1)
         var_c8[i] = *(&dmsc_aa_thres_1_intp + i);
     
     Tiziano_ae1_fpga(dmsc_nor_alias_thres_intp, dmsc_hvaa_stren_intp, dmsc_hvaa_thres_1_intp, 
         dmsc_aa_stren_intp);
-    char var_7c[0x44];
     
     for (int32_t i_1 = 0; (uintptr_t)i_1 < 0x40; i_1 += 1)
         var_7c[i_1] = *(i_1 + &IspAeExp);
@@ -54,9 +54,9 @@
         if (temp1_1 <= 0)
             break;
         
-        *(((void**)((char*)$a0_6 + 4))) = *$a0_6; // Fixed void pointer dereference
+        *((int32_t*)((char*)$a0_6 + 4)) = *$a0_6; // Fixed void pointer dereference
         $a0_6 -= 4;
-        *(((void**)((char*)$v1_5 + 4))) = *$v1_5; // Fixed void pointer dereference
+        *((int32_t*)((char*)$v1_5 + 4)) = *$v1_5; // Fixed void pointer dereference
         $v1_5 -= 4;
         $a3_6 = 1;
     }
@@ -71,8 +71,8 @@
     ad1_cache = fix_point_mult2_32(_AePointPos_1, data_d04ac_2, data_d04b0_1);
     uint32_t EffectFrame_1 = EffectFrame;
     EffectCount1 = EffectFrame_1;
-    void* $t1_1 = &(&ag1_cache)[EffectFrame_1];
-    void* $a3_9 = &(&dg1_cache)[EffectFrame_1];
+    char* $t1_1 = (char*)(&(&ag1_cache)[EffectFrame_1]); // Fixed void pointer assignment
+    char* $a3_9 = (char*)(&(&dg1_cache)[EffectFrame_1]); // Fixed void pointer assignment
     uint32_t EffectFrame_3 = EffectFrame_1;
     int32_t $t4_1 = 0;
     
@@ -85,8 +85,8 @@
             break;
         
         EffectFrame_3 -= 1;
-        *(((void**)((char*)$t1_1 + 4))) = *$t1_1; // Fixed void pointer dereference
-        *(((void**)((char*)$a3_9 + 4))) = *$a3_9; // Fixed void pointer dereference
+        *((int32_t*)((char*)$t1_1 + 4)) = *$t1_1; // Fixed void pointer dereference
+        *((int32_t*)((char*)$a3_9 + 4)) = *$a3_9; // Fixed void pointer dereference
         $t4_1 = 1;
     }
     
@@ -117,8 +117,8 @@
             if ($t1_2 <= 0)
                 break;
             
-            *(((void**)((char*)$a3_13 + 0xafbb4))) = ev1_cache; // Fixed void pointer dereference
-            *(((void**)((char*)$a3_13 + 0xafb8c))) = ad1_cache; // Fixed void pointer dereference
+            *((int32_t*)((char*)$a3_13 + 0xafbb4)) = ev1_cache; // Fixed void pointer dereference
+            *((int32_t*)((char*)$a3_13 + 0xafb8c)) = ad1_cache; // Fixed void pointer dereference
             $t1_2 -= 1;
         }
         

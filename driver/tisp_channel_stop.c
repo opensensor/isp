@@ -8,6 +8,7 @@
     int32_t $s0 = 1 << (arg1 & 0x1f);
     int32_t $a1 = ~$s0 & msca_ch_en_1;
     int32_t $s2 = 0xbb9;
+    int32_t $v0_2;
             int32_t var_28_1 = arg1;
     
     if (!~msca_ch_en_1)
@@ -15,7 +16,6 @@
     
     msca_ch_en = $a1;
     system_reg_write(0x9804, $a1);
-    int32_t $v0_2;
     
     do
     {
@@ -25,7 +25,7 @@
         
         if (!$s2)
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
             break;
         }
     } while ($s0 & $v0_2);

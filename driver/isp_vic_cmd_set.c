@@ -4,16 +4,16 @@
   int32_t isp_vic_cmd_set(void* arg1, int32_t arg2, int32_t arg3)
 
 {
-    char* $s5 = *((char*)arg1 + 0x70); // Fixed void pointer arithmetic
-    char* $v0 = *((char*)$s5 + 0x3c); // Fixed void pointer arithmetic
-    void* $s0 = nullptr;
+    int32_t* $s5 = (int32_t*)((char*)arg1  + 0x70); // Fixed void pointer arithmetic
+    int32_t* $v0 = (int32_t*)((char*)$s5  + 0x3c); // Fixed void pointer arithmetic
+    char* $s0 = (char*)(nullptr); // Fixed void pointer assignment
+    void* $a0;
     
     if ($v0 && $(uintptr_t)v0 < 0xfffff001)
         $s0 = *($v0 + 0xd4);
     
-    isp_printf(); // Fixed: macro call, removed arguments;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     void* const $v0_3;
-    void* $a0;
     char const* const $a1;
     
     if (!$s0 || $(uintptr_t)s0 >= 0xfffff001)
@@ -26,6 +26,7 @@
     {
         int32_t $v0_2 = (uintptr_t)arg3 < 0x21 ? 1 : 0;
         char* $s2_1;
+                return 0xfffffff4;
         
         if ($v0_2)
             $s2_1 = &vic_cmd_buf;
@@ -34,21 +35,20 @@
             $s2_1 = private_kmalloc(arg3 + 1, 0xd0);
             
             if (!$s2_1)
-                return 0xfffffff4;
         }
         
         int32_t result;
         
         if (private_copy_from_user($s2_1, arg2, arg3))
         {
+                return result;
+            return result;
             result = 0xfffffff2;
         label_1217c:
             
             if ($v0_2)
-                return result;
             
             private_kfree($s2_1);
-            return result;
         }
         
         int32_t $v0_6 = 7;
@@ -152,6 +152,7 @@
                 if (!($a1_18 - $at_3))
                 {
                     int32_t $a2_21 = isp_printf(1, 
+                    goto label_1215c;
                         "\t\t\t "savenum" is the num of you save raw picture.\n ", 
                         isp_printf(1, "\t\t\t "snapraw"  is cmd; \n", 
                             isp_printf(1, 
@@ -161,15 +162,14 @@
                                 isp_printf(1, "\t\t snapraw\n", 
                                     isp_printf(1, "\t cmd:\n", 
                                         isp_printf(1, "help:\n", 
-                                            isp_printf(); // Fixed: macro call, removed arguments)))))));
+                                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments)))))));
                     isp_printf(1, &$LC37, 
                         isp_printf(1, "\t\t\t "savenum" is the num of you save raw picture.\n ", 
                             isp_printf(1, "\t\t\t "saveraw"  is cmd; \n", 
                                 isp_printf(1, 
                                     "\t\t\t please use this cmd: \n\t"echo saveraw savenum > /proc/jz/isp/isp-w02"\n", 
-                                    isp_printf(); // Fixed: macro call, removed arguments))));
+                                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments))));
                     $a0_19 = *($s0 + 0x140);
-                    goto label_1215c;
                 }
                 
                 $a0_19 = *($s0 + 0x140);
@@ -180,7 +180,7 @@
                     goto label_1217c;
                 
                 isp_free_buffer($a0_19);
-                *(((int32_t*)((char*)$s0 + 0x140))) = 0; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s0 + 0x140)) = 0; // Fixed void pointer dereference
             label_12174:
                 result = arg3;
                 goto label_1217c;
@@ -228,24 +228,24 @@
             
             if (!$s1_2)
             {
-                    char* $v1_12 = *((char*)$s0 + 0x110); // Fixed void pointer arithmetic
+                    int32_t* $v1_12 = (int32_t*)((char*)$s0  + 0x110); // Fixed void pointer arithmetic
                     int32_t $a0_20 = *($v1_12 + 0x7c);
-                *(((void**)((char*)$s0 + 0x140))) = $v0_19; // Fixed void pointer dereference
-                
-                if ($v0_19)
-                {
-                    *(((void**)((char*)$s0 + 0x144))) = $v0_19 - 0x80000000; // Fixed void pointer dereference
                     int32_t var_a0_5;
                     char var_9c_4;
                     int32_t $a2_11;
                     uint32_t $a3_6;
+                            goto label_11ee0;
+                *((int32_t*)((char*)$s0 + 0x140)) = $v0_19; // Fixed void pointer dereference
+                
+                if ($v0_19)
+                {
+                    *((int32_t*)((char*)$s0 + 0x144)) = $v0_19 - 0x80000000; // Fixed void pointer dereference
                     
                     if ($a0_20 != 7)
                     {
                         var_9c_4 = 0;
                         
                         if (!*($v1_12 + 0x90))
-                            goto label_11ee0;
                         
                         var_a0_5 = $v0_19;
                         $a3_6 = $s3_2;
@@ -265,17 +265,17 @@
                     
                     while (true)
                     {
-                            void* const var_40_3 = &data_80000;
-                            void* const var_38_2 = &$LC33;
+                        int32_t $v0_30;
                             int32_t $s5_2 = 0;
-                            char const* const var_34_1 = "nv12";
                                 int32_t $v0_31 = private_filp_open(&var_90, 0x301, 0x1f6);
                                 int32_t $t1_3 = var_50;
-                        int32_t $v0_30;
                         $v0_30 = (&data_20000 - 0x6a78)($s0 + 0x148);
                         
                         if ($v0_30 >= 0)
                         {
+                            void* const var_40_3 = &data_80000;
+                            void* const var_38_2 = &$LC33;
+                            char const* const var_34_1 = "nv12";
                             
                             do
                             {
@@ -319,7 +319,6 @@
         {
             uint32_t $v0_7 = simple_strtoull(&$s2_1[8], 0, $a2_3);
             uint32_t $s3_1 = $v0_7;
-            else if (arg3 == 8)
             int32_t $a2_4 = *($s0 + 0xdc);
             int32_t $s4_1 = $a2_4 << 1;
             int32_t $s4_3 = $s4_1 * *($s0 + 0xe0);
@@ -329,11 +328,18 @@
             int32_t var_98_1 = $s7_1;
             int32_t $s1_1 = *($s0 + 0x140);
                 int32_t $v0_11 = isp_malloc_buffer($s7_1);
-                char* $a0_6 = *((char*)$s0 + 0x110); // Fixed void pointer arithmetic
+                    goto label_12174;
+                int32_t* $a0_6 = (int32_t*)((char*)$s0  + 0x110); // Fixed void pointer arithmetic
                 int32_t $a1_3 = *($a0_6 + 0x7c);
+                int32_t var_a0_2;
+                char var_9c_2;
+                int32_t $a2_6;
+                uint32_t $a3_2;
+                        goto label_11b70;
             
             if ($v0_7 < 2)
                 $s3_1 = 1;
+            else if (arg3 == 8)
                 $s3_1 = 1;
             
             
@@ -351,23 +357,17 @@
             
             if (!$s1_1)
             {
-                *(((void**)((char*)$s0 + 0x140))) = $v0_11; // Fixed void pointer dereference
+                *((int32_t*)((char*)$s0 + 0x140)) = $v0_11; // Fixed void pointer dereference
                 
                 if (!$v0_11)
-                    goto label_12174;
                 
-                *(((void**)((char*)$s0 + 0x144))) = $v0_11 - 0x80000000; // Fixed void pointer dereference
-                int32_t var_a0_2;
-                char var_9c_2;
-                int32_t $a2_6;
-                uint32_t $a3_2;
+                *((int32_t*)((char*)$s0 + 0x144)) = $v0_11 - 0x80000000; // Fixed void pointer dereference
                 
                 if ($a1_3 != 7)
                 {
                     var_9c_2 = 0;
                     
                     if (!*($a0_6 + 0x90))
-                        goto label_11b70;
                     
                     var_a0_2 = $v0_11;
                     $a3_2 = $s3_1;
@@ -387,16 +387,16 @@
                 
                 while (true)
                 {
-                        void* const var_4c_2 = &data_80000;
+                    int32_t $v0_13;
                         int32_t $s7_3 = 0;
-                        char const* const var_48_1 = "nv12";
                             int32_t $v0_14 = private_filp_open(&var_90, 0x301, 0x1f6);
                             int32_t $t1_1 = var_50;
-                    int32_t $v0_13;
                     $v0_13 = (&data_20000 - 0x6a78)($s0 + 0x148);
                     
                     if ($v0_13 >= 0)
                     {
+                        void* const var_4c_2 = &data_80000;
+                        char const* const var_48_1 = "nv12";
                         
                         do
                         {
@@ -425,10 +425,10 @@
                     
                     if (!$s7_2)
                     {
+                        goto label_1215c;
                     label_121b8:
                         private_seq_printf($s5, "snapraw timeout!\n", $a2_7);
                         $a0_19 = *($s0 + 0x140);
-                        goto label_1215c;
                     }
                 }
                 

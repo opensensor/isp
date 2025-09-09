@@ -6,18 +6,18 @@
 {
     int32_t $v1 = 0;
     int32_t $v0 = 0;
+    char var_e0[0xbc];
             int32_t $s4_1 = 0 < i ? 1 : 0;
             int32_t $t5_2 = ($v1 - $v0) * 0x12 + i - $s4_1;
             int32_t j = -($v0);
             int32_t $t4_1 = 0;
             int32_t $t1_1 = 0;
             int32_t $s2_1 = 0;
-                void* $v0_6 = arg3 + ((j * 3 - $s4_1) << 2);
+                char* $v0_6 = (char*)(arg3 + ((j * 3 - $s4_1) << 2)); // Fixed void pointer assignment
                 char* $t0_2 = arg1 + $t5_2 + $t4_1;
                     int32_t $s5_1 = *($v0_6 + 0x10);
                     uint32_t $s7_1 = *$t0_2;
-            void* $t2_2 = &var_e0[i + $v1 * 0x12];
-    char var_e0[0xbc];
+            char* $t2_2 = (char*)(&var_e0[i + $v1 * 0x12]); // Fixed void pointer assignment
     
     while (true)
     {
@@ -56,11 +56,11 @@
     
     do
     {
+    return result;
         arg2 += 1;
         *(arg2 - 1) = *result;
         result = &(*result)[1];
     } while ($v1_1 != arg2);
     
-    return result;
 }
 

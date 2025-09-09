@@ -7,10 +7,10 @@
     int32_t $a1 = data_9a454;
     int32_t ccm_real_1 = ccm_real;
     uint32_t $a1_1 = $a1 >> 0xa;
+    int32_t $v0_1;
         int32_t $a0_1 = data_c52ec;
     data_9a450;
     data_c52f8 = 0x64;
-    int32_t $v0_1;
     
     if (ccm_real_1 != 1)
     {
@@ -22,20 +22,20 @@
     
     if (ccm_real_1 == 1 || data_c52f0_1 < $v0_1)
     {
-        void* cm_ev_list_now_1 = cm_ev_list_now;
-        void* cm_sat_list_now_1 = cm_sat_list_now;
-        void* cm_ev_list_now_2 = cm_ev_list_now_1;
+        char* cm_ev_list_now_1 = (char*)(cm_ev_list_now); // Fixed void pointer assignment
+        char* cm_sat_list_now_1 = (char*)(cm_sat_list_now); // Fixed void pointer assignment
+        char* cm_ev_list_now_2 = (char*)(cm_ev_list_now_1); // Fixed void pointer assignment
         int32_t $a3_1 = 0;
+        int32_t $v0_3;
             int32_t $t0_1 = *cm_ev_list_now_2;
                     int32_t $a2_1 = *(cm_ev_list_now_1 + ($a3_1 << 2) - 4);
-                    void* $v1_3 = cm_sat_list_now_1 + ($a3_1 << 2);
+                    char* $v1_3 = (char*)(cm_sat_list_now_1 + ($a3_1 << 2)); // Fixed void pointer assignment
                         int32_t $t1_1 = *(cm_sat_list_now_1 + ($a3_1 << 2) - 4);
                         int32_t $v0_4 = *$v1_3;
                         int32_t $a3_5 = $t0_1 < $a2_1 ? 1 : 0;
                         int32_t $v1_4 = $a2_1 < $a1_1 ? 1 : 0;
                             int32_t $t3_2 = $a1_1 - $a2_1;
                             int32_t $a2_3 = $t0_1 - $a2_1;
-        int32_t $v0_3;
         
         while (true)
         {

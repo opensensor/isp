@@ -4,6 +4,7 @@
   int32_t tiziano_wdr_init(uint32_t arg1, uint32_t arg2)
 
 {
+    void var_b0;
     uint32_t $lo = (arg2 + 5) / 0xa;
     uint32_t $s7 = (arg1 + 8) >> 4;
     int32_t $s2 = 0;
@@ -34,14 +35,13 @@
     int32_t $v0_20 = $s7_1 + $v0_19;
     int32_t $v1 = arg2 - $v0_5;
     int32_t $v0_23 = arg1 - $v0_20;
-    void* $a1_1 = &var_b0;
+    char* $a1_1 = (char*)(&var_b0); // Fixed void pointer assignment
+    int32_t $a0_2;
+    int32_t $s2_1;
         int32_t $a0_1 = *$a1_1;
-    void var_b0;
     memcpy(&var_b0, 0x7da3c, 0x28);
     width_wdr_def = arg1;
     height_wdr_def = arg2;
-    int32_t $a0_2;
-    int32_t $s2_1;
     
     while (true)
     {

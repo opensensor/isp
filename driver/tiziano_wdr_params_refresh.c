@@ -4,7 +4,8 @@
   int32_t tiziano_wdr_params_refresh()
 
 {
-    void* $v0 = &var_40;
+    void var_40;
+    char* $v0 = (char*)(&var_40); // Fixed void pointer assignment
     int32_t* $v1 = &param_wdr_tool_control_array;
         int32_t i_1 = i;
     memcpy(&param_wdr_para_array, 0xa7424, 0x28);
@@ -51,7 +52,6 @@
     memcpy(&wdr_detail_w_in4_list[9], &data_a7f64[9], 0x24);
     memcpy(U"@@@@@@@@@@@@@@@@@@         ", &data_a7f64[0x12], 0x24);
     memcpy(&mdns_y_fspa_ref_fus_wei_224_wdr_array, &data_a7f64[0x1b], 0x40);
-    void var_40;
     memcpy(&var_40, 0x98010, 0x38);
     
     for (int32_t i = 0; (uintptr_t)i != 0xe; )

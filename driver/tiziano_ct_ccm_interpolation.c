@@ -4,18 +4,18 @@
   uint32_t tiziano_ct_ccm_interpolation(int32_t arg1, int32_t arg2)
 
 {
-    int32_t var_4 = $ra;
-        else if (arg2 + 0xaf0 >= arg1)
     int32_t $ra;
+    int32_t var_4 = $ra;
+        uint32_t $v0_3;
     
     if (0x1388 - arg2 >= arg1)
     {
-        uint32_t $v0_3;
         
         if (arg2 + 0xed8 < arg1)
             $v0_3 = 1;
         else if (0xed8 - arg2 < arg1)
             $v0_3 = 2;
+        else if (arg2 + 0xaf0 >= arg1)
             $v0_3 = 4;
         else
             $v0_3 = 3;
@@ -66,7 +66,8 @@
             int32_t $v0_10 = 0x1388 - arg2 - (arg2 + 0xed8);
                 int32_t $v1_3 = *(&_ccm_t_parameter + i);
                 int32_t $v0_13 = *(&_ccm_d_parameter + i);
-                void* $v1_4 = &ccm_parameter + i;
+                int32_t $v0_18;
+                char* $v1_4 = (char*)(&ccm_parameter + i); // Fixed void pointer assignment
             
             if (arg2 + 0xed8 < arg1)
                 $v1_1 = arg1 - (arg2 + 0xed8);
@@ -77,7 +78,6 @@
             
             for (int32_t i = 0; (uintptr_t)i != 0x24; )
             {
-                int32_t $v0_18;
                 
                 $v0_18 = $v0_13 >= $v1_3 ? ($v0_13 - $v1_3) * $v1_1 / $v0_10 + $v1_3
                     : $v1_3 - ($v1_3 - $v0_13) * $v1_1 / $v0_10;
@@ -98,7 +98,8 @@
             int32_t $v1_5 = 0xed8 - arg2 - (arg2 + 0xaf0);
                 int32_t $a1_5 = *(&_ccm_a_parameter + i_1);
                 int32_t $v0_25 = *(&_ccm_t_parameter + i_1);
-                void* $a1_6 = &ccm_parameter + i_1;
+                int32_t $v0_30;
+                char* $a1_6 = (char*)(&ccm_parameter + i_1); // Fixed void pointer assignment
             
             if (arg2 + 0xaf0 < arg1)
                 $a0_1 = arg1 - (arg2 + 0xaf0);
@@ -109,7 +110,6 @@
             
             for (int32_t i_1 = 0; (uintptr_t)i_1 != 0x24; )
             {
-                int32_t $v0_30;
                 
                 $v0_30 = $v0_25 >= $a1_5 ? ($v0_25 - $a1_5) * $a0_1 / $v1_5 + $a1_5
                     : $a1_5 - ($a1_5 - $v0_25) * $a0_1 / $v1_5;

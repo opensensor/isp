@@ -6,11 +6,11 @@
 {
     int32_t $v1 = arg2[3];
     int32_t $t0_1;
+    int32_t $a2_1;
     
     if (arg1 < $v1)
         $t0_1 = arg2[1];
     
-    int32_t $a2_1;
     
     if (arg1 >= $v1 || $t0_1 >= arg1)
         $a2_1 = arg3 << (arg4 & 0x1f);

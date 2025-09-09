@@ -7,6 +7,7 @@
     int32_t* $v1 = &ispmem;
     int32_t $v0 = 0;
     uint32_t $a1_1;
+            return nullptr;
     
     while (true)
     {
@@ -19,13 +20,12 @@
         $v1 = &$v1[5];
         
         if ($(uintptr_t)v0 == 0x14)
-            return nullptr;
     }
     
     int32_t $s0_1 = $v0 * 0x14;
-    void* result = $s0_1 + 0xb2a6c;
+    char* result = (char*)($s0_1 + 0xb2a6c); // Fixed void pointer assignment
     memset(result, $a1_1, 0x14);
-    *(((int32_t*)((char*)$s0_1 + 0xb2a6d))) = 1; // Fixed void pointer dereference
+    *((int32_t*)((char*)$s0_1 + 0xb2a6d)) = 1; // Fixed void pointer dereference
     return result;
 }
 

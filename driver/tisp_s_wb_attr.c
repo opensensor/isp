@@ -10,9 +10,9 @@
     int32_t arg_4 = arg2;
     int32_t var_10 = arg6;
     int32_t arg_8 = arg3;
-    int32_t arg_c = $a3;
     int32_t $a3;
-    tisp_s_wb_mode(arg1, arg2, arg3);
+    int32_t arg_c = $a3;
     return 0;
+    tisp_s_wb_mode(arg1, arg2, arg3);
 }
 

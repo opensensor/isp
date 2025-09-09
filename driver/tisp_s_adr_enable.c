@@ -6,6 +6,7 @@
 {
     int32_t $v0 = system_reg_read(0xc);
     int32_t $a1_1;
+            return 0xffffffff;
     
     if (arg1 != 1)
     {
@@ -13,8 +14,7 @@
         
         if (arg1)
         {
-            isp_printf(); // Fixed: macro call, removed arguments;
-            return 0xffffffff;
+            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
         }
     }
     else

@@ -4,6 +4,7 @@
   int32_t tisp_ae1_ctrls_update()
 
 {
+        return 0;
     int32_t $v1_1 = data_c4700;
     uint32_t $v0_5 = tisp_math_exp2(data_b2ed4, 0x10, 0xa);
     int32_t $v1_2 = data_c46fc;
@@ -17,8 +18,8 @@
     int32_t $v0_19 = data_c4734;
     int32_t* $v0_22 = data_d04f0;
     int32_t $v1_11 = data_c4738;
+    return 0;
     if (data_b0e10 != 1)
-        return 0;
     
     
     if (data_b2ed0 < $v1_1)
@@ -64,6 +65,5 @@
     if ($v1_11 != *$v0_22)
         *$v0_22 = $v1_11;
     
-    return 0;
 }
 

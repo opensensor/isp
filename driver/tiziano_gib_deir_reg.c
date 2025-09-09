@@ -4,11 +4,12 @@
   int32_t tiziano_gib_deir_reg(void* arg1, void* arg2, void* arg3)
 
 {
-    void* const i = &data_80000;
     int32_t* $s3 = arg1 + 4;
     int32_t* $s2 = arg2 + 4;
     int32_t* $s1 = arg3 + 4;
-        void* $a0_2 = i + 0x100;
+        char* $a0_2 = (char*)(i + 0x100); // Fixed void pointer assignment
+    return 0;
+    void* const i = &data_80000;
     
     do
     {
@@ -21,6 +22,5 @@
         $s1 = &$s1[1];
     } while (i != ".%d)\n");
     
-    return 0;
 }
 

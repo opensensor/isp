@@ -6,11 +6,11 @@
 {
         int32_t $v1_1 = *arg2;
         int32_t $t0_1 = *arg1;
-    do
-    {
         int32_t $v1_2;
         int32_t $lo_1;
         int32_t $hi_1;
+    do
+    {
         
         if ($v1_1 >= $t0_1)
         {

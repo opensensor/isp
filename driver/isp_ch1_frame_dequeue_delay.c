@@ -4,7 +4,7 @@
   int32_t isp_ch1_frame_dequeue_delay()
 
 {
-    char* $s0 = *((char*)mdns_y_pspa_cur_bi_wei0_array + 0xd4); // Fixed void pointer arithmetic
+    int32_t* $s0 = (int32_t*)((char*)mdns_y_pspa_cur_bi_wei0_array  + 0xd4); // Fixed void pointer arithmetic
     uint32_t isp_ch1_dequeue_delay_time_1 = isp_ch1_dequeue_delay_time;
     void var_10;
     private_ktime_set(&var_10, isp_ch1_dequeue_delay_time_1 / 0x3e8, 

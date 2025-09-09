@@ -6,6 +6,8 @@
 {
     uint32_t $v0 = private_vmalloc(0x137f0);
     uint32_t $v0_1 = private_vmalloc(0x137f0);
+    int32_t $v0_3;
+    uint32_t tparams_cust_1;
     uint32_t isp_memopt_1 = isp_memopt;
         uint32_t tparams_day_1 = tparams_day;
         uint32_t tparams_night_1 = tparams_night;
@@ -23,28 +25,26 @@
     if (!strlen(arg2))
         snprintf(arg2, 0x40, "snapraw", 0xb2e24);
     
-    int32_t $v0_3;
-    uint32_t tparams_cust_1;
     $v0_3 = tiziano_load_parameters(arg2);
     
     if (isp_memopt_1 == 1)
     {
-        *(((int32_t*)((char*)tparams_day_1 + 0xbb50))) = 0; // Fixed void pointer dereference
-        *(((void**)((char*)tparams_day_1 + 0xbb58))) = isp_memopt_1; // Fixed void pointer dereference
-        *(((int32_t*)((char*)tparams_day_1 + 0xbb68))) = 0; // Fixed void pointer dereference
-        *(((int32_t*)((char*)tparams_day_1 + 0xbb60))) = 0; // Fixed void pointer dereference
-        *(((int32_t*)((char*)tparams_night_1 + 0xbb50))) = 0; // Fixed void pointer dereference
-        *(((void**)((char*)tparams_night_1 + 0xbb58))) = isp_memopt_1; // Fixed void pointer dereference
-        *(((int32_t*)((char*)tparams_night_1 + 0xbb68))) = 0; // Fixed void pointer dereference
-        *(((int32_t*)((char*)tparams_night_1 + 0xbb60))) = 0; // Fixed void pointer dereference
+        *((int32_t*)((char*)tparams_day_1 + 0xbb50)) = 0; // Fixed void pointer dereference
+        *((int32_t*)((char*)tparams_day_1 + 0xbb58)) = isp_memopt_1; // Fixed void pointer dereference
+        *((int32_t*)((char*)tparams_day_1 + 0xbb68)) = 0; // Fixed void pointer dereference
+        *((int32_t*)((char*)tparams_day_1 + 0xbb60)) = 0; // Fixed void pointer dereference
+        *((int32_t*)((char*)tparams_night_1 + 0xbb50)) = 0; // Fixed void pointer dereference
+        *((int32_t*)((char*)tparams_night_1 + 0xbb58)) = isp_memopt_1; // Fixed void pointer dereference
+        *((int32_t*)((char*)tparams_night_1 + 0xbb68)) = 0; // Fixed void pointer dereference
+        *((int32_t*)((char*)tparams_night_1 + 0xbb60)) = 0; // Fixed void pointer dereference
         tparams_cust_1 = tparams_cust;
         
         if (tparams_cust_1)
         {
-            *(((int32_t*)((char*)tparams_cust_1 + 0xbb50))) = 0; // Fixed void pointer dereference
-            *(((void**)((char*)tparams_cust_1 + 0xbb58))) = isp_memopt_1; // Fixed void pointer dereference
-            *(((int32_t*)((char*)tparams_cust_1 + 0xbb68))) = 0; // Fixed void pointer dereference
-            *(((int32_t*)((char*)tparams_cust_1 + 0xbb60))) = 0; // Fixed void pointer dereference
+            *((int32_t*)((char*)tparams_cust_1 + 0xbb50)) = 0; // Fixed void pointer dereference
+            *((int32_t*)((char*)tparams_cust_1 + 0xbb58)) = isp_memopt_1; // Fixed void pointer dereference
+            *((int32_t*)((char*)tparams_cust_1 + 0xbb68)) = 0; // Fixed void pointer dereference
+            *((int32_t*)((char*)tparams_cust_1 + 0xbb60)) = 0; // Fixed void pointer dereference
         }
         
         int32_t* $a1_1 = tparams_day_1 + 0xd838;
@@ -89,7 +89,7 @@
     int32_t $v0_8 = arg1[2];
     
     if ($(uintptr_t)v0_8 >= 0x15)
-        isp_printf(); // Fixed: macro call, removed arguments!\n", "tisp_init");
+        isp_printf(); // Fixed: macro with no parameters, removed 2 arguments!\n", "tisp_init");
     else
         switch ($v0_8)
         {
@@ -228,7 +228,7 @@
     system_reg_write(0x1c, $a1_7);
     sensor_init(&sensor_ctrl);
     tisp_set_csc_version(0);
-    isp_printf(); // Fixed: macro call, removed arguments;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     int32_t $s3 = 0x8077efff;
     
     for (int32_t i = 0; (uintptr_t)i != 0x20; )
@@ -240,7 +240,7 @@
     }
     
     int32_t var_70_7 = $s3;
-    isp_printf(); // Fixed: macro call, removed arguments;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     int32_t $v0_12;
     int32_t $s3_2;
     
@@ -259,7 +259,7 @@
     system_reg_write(0xc, $s3_3);
     int32_t var_70_1_2 = data_b2e74_2;
     int32_t var_6c_4 = $s3_3;
-    isp_printf(); // Fixed: macro call, removed arguments;
+    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
     system_reg_write(0x30, 0xffffffff);
     int32_t $a1_9 = 0x33f;
     
@@ -271,7 +271,7 @@
     
     if ($v0_14)
     {
-        void* var_30_1 = &data_b0000;
+        char* var_30_1 = (char*)(&data_b0000); // Fixed void pointer assignment
         int32_t $v0_15 = private_kmalloc(0x6000, 0xd0);
             int32_t $v0_16 = private_kmalloc(0x4000, 0xd0);
                 int32_t $v0_17 = private_kmalloc(0x4000, 0xd0);
@@ -287,8 +287,13 @@
                             int32_t $v0_26 = private_kmalloc(0x8000, 0xd0);
                                 uint32_t var_70_3 = *(arg1 + 0x4a);
                                 int32_t tispinfo_1 = tispinfo;
+                                int32_t var_4c;
                                 int32_t var_6c_2 = var_4c;
                                 int32_t tispinfo_2 = tispinfo_1;
+                                uint32_t $a0_8;
+                                char $a1_48;
+                                char $a2_6;
+                                int32_t $a1_53;
         system_reg_write(0xa02c, $v0_14 - 0x80000000);
         system_reg_write(0xa030, $v0_14 - 0x7ffff000);
         system_reg_write(0xa034, $v0_14 - 0x7fffe000);
@@ -355,7 +360,7 @@
                         data_b2f84 = $v0_18;
                         data_b2f88 = $v0_18 - 0x80000000;
                         data_b2f80 = 4;
-                        isp_printf(); // Fixed: macro call, removed arguments;
+                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                         
                         if ($v0_25)
                         {
@@ -379,11 +384,7 @@
                                 data_b2f98 = 4;
                                 data_b2fa0 = $v0_26 - 0x80000000;
                                 data_b2f9c = $v0_26;
-                                int32_t var_4c;
                                 tiziano_ae_init(data_b2f34, tispinfo_1, arg1[0xc]);
-                                uint32_t $a0_8;
-                                char $a1_48;
-                                char $a2_6;
                                 $a0_8 = tiziano_awb_init(data_b2f34, tispinfo);
                                 tiziano_gamma_init($a0_8, $a1_48, $a2_6);
                                 tiziano_gib_init();
@@ -402,7 +403,6 @@
                                 tiziano_bcsh_init();
                                 tiziano_ydns_init();
                                 tiziano_rdns_init();
-                                int32_t $a1_53;
                                 
                                 if (data_b2e74 != 1)
                                     $a1_53 = arg1[2];
@@ -458,7 +458,7 @@
                                 if ($v0_31)
                                 {
                                     int32_t var_70_4 = $v0_31;
-                                    isp_printf(); // Fixed: macro call, removed arguments;
+                                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
                                 }
                                 
                                 return 0;

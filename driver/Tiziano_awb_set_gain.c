@@ -16,10 +16,10 @@
     uint32_t $v0_6 = ($s0_1 + $v0_4) >> (arg2 & 0x1f);
     uint32_t var_1c_1 = $v0_6;
     int32_t tisp_wb_attr_1 = tisp_wb_attr;
+    uint32_t var_1c_2;
     var_20 = ($v0_1 + $s0_1) >> (arg2 & 0x1f);
     data_b5a48 = isp_printf / $a2_2;
     data_b5a4c = isp_printf / $v0_6;
-    uint32_t var_1c_2;
     
     if (tisp_wb_attr_1 - 1 < 8)
     {
@@ -36,8 +36,8 @@
     
     if (!awb_frz)
     {
-        system_reg_write_awb(2, 0x1804, var_28);
         int32_t var_24;
+        system_reg_write_awb(2, 0x1804, var_28);
         system_reg_write_awb(2, 0x1808, var_24);
         system_reg_write_awb(2, 0x180c, var_28);
         system_reg_write_awb(2, 0x1810, var_24);

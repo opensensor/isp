@@ -5,9 +5,9 @@
 
 {
     void var_90;
-    tisp_g_ev_attr(&var_90);
     int32_t var_70;
-    *arg1 = var_70;
     return 0;
+    tisp_g_ev_attr(&var_90);
+    *arg1 = var_70;
 }
 

@@ -6,12 +6,12 @@
 {
     void* $v0;
     int32_t $a2;
+        return 0xffffffff;
     $v0 = private_kmalloc(0x384, 0xd0);
     
     if (!$v0)
     {
-        isp_printf(); // Fixed: macro call, removed arguments\n", $a2);
-        return 0xffffffff;
+        isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", $a2);
     }
     
     int32_t result = tisp_g_af_weight($v0);
@@ -20,9 +20,9 @@
     if (!result)
     {
         int32_t $a2_1 = 0;
-                void* $a1_2 = &var_f8[j + i];
-                char $a0_4 = *($v0 + (j << 2) + $a2_1);
         char var_f8[0xe8];
+                char* $a1_2 = (char*)(&var_f8[j + i]); // Fixed void pointer assignment
+                char $a0_4 = *($v0 + (j << 2) + $a2_1);
         
         do
         {

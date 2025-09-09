@@ -5,8 +5,8 @@
 
 {
     uint32_t wdr_ev_now_1 = wdr_ev_now;
-    void* $v1 = &param_multiValueHigh_software_in_array;
-    void* $a0 = &param_multiValueLow_software_in_array;
+    char* $v1 = (char*)(&param_multiValueHigh_software_in_array); // Fixed void pointer assignment
+    char* $a0 = (char*)(&param_multiValueLow_software_in_array); // Fixed void pointer assignment
     int32_t wdr_ev_list_deghost_1 = wdr_ev_list_deghost;
     int32_t $t5 = data_b1bcc;
     int32_t $t1 = data_b1c34;
@@ -17,6 +17,7 @@
     int32_t $a3 = wdr_ev_list_deghost_1 < wdr_ev_now_1 ? 1 : 0;
     int32_t i = 0;
     int32_t $t2 = wdr_ev_now_1 < $v0 ? 1 : 0;
+            wchar32 $v0_4;
                 int32_t $t0_1 = *$a0;
                 int32_t $v0_5 = *$v1;
     tisp_wdr_expTime_updata();
@@ -30,7 +31,6 @@
     {
         if ((uintptr_t)i != 0x1a)
         {
-            wchar32 $v0_4;
             
             if (!$a3)
                 $v0_4 = *$a0;
@@ -135,7 +135,7 @@
     
     for (int32_t i_2 = 0; (uintptr_t)i_2 != 0x20; )
     {
-        void* $v0_16 = &wdr_block_mean1_max + i_2;
+        char* $v0_16 = (char*)(&wdr_block_mean1_max + i_2); // Fixed void pointer assignment
         i_2 += 4;
         *$v0_16 = 0;
         $v0_17 = &wdr_block_mean1_max;
@@ -146,20 +146,20 @@
     int32_t $t1_1 = data_d9524_1;
     int32_t $t0_2 = data_d9528_1;
     int32_t i_3 = 0;
-    void* $v1_6 = &wdr_block_mean1;
+    char* $v1_6 = (char*)(&wdr_block_mean1); // Fixed void pointer assignment
     
     do
     {
         int32_t $v1_7 = *$v1_6;
                 int32_t $s0_2 = *(&wdr_block_mean1 + j);
-                void* $t9_1 = &wdr_block_mean1_max + j;
+                char* $t9_1 = (char*)(&wdr_block_mean1_max + j); // Fixed void pointer assignment
         
         if (wdr_block_mean1_max < $v1_7)
         {
             for (int32_t j = 0; (uintptr_t)j != 0x1c; )
             {
                 j += 4;
-                *(((void**)((char*)$t9_1 + 4))) = $s0_2; // Fixed void pointer dereference
+                *((int32_t*)((char*)$t9_1 + 4)) = $s0_2; // Fixed void pointer dereference
             }
             
             wdr_block_mean1_max = $v1_7;
@@ -167,11 +167,11 @@
         else if (data_d7210_1 < $v1_7)
         {
                 int32_t $s0_4 = *(j_1 + 0xd9514);
-                void* $t9_2 = &wdr_block_mean1_max + j_1;
+                char* $t9_2 = (char*)(&wdr_block_mean1_max + j_1); // Fixed void pointer assignment
             for (int32_t j_1 = 0; (uintptr_t)j_1 != 0x18; )
             {
                 j_1 += 4;
-                *(((void**)((char*)$t9_2 + 8))) = $s0_4; // Fixed void pointer dereference
+                *((int32_t*)((char*)$t9_2 + 8)) = $s0_4; // Fixed void pointer dereference
             }
             
             data_d7210_2 = $v1_7;
@@ -179,11 +179,11 @@
         else if (data_d7214_1 < $v1_7)
         {
                 int32_t $s0_6 = *(j_2 + 0xd9518);
-                void* $t9_3 = &wdr_block_mean1_max + j_2;
+                char* $t9_3 = (char*)(&wdr_block_mean1_max + j_2); // Fixed void pointer assignment
             for (int32_t j_2 = 0; (uintptr_t)j_2 != 0x14; )
             {
                 j_2 += 4;
-                *(((void**)((char*)$t9_3 + 0xc))) = $s0_6; // Fixed void pointer dereference
+                *((int32_t*)((char*)$t9_3 + 0xc)) = $s0_6; // Fixed void pointer dereference
             }
             
             data_d7214_2 = $v1_7;
@@ -264,11 +264,11 @@
     
     if ($v1_13 <= 0)
     {
-        else if (data_d9074 != 1)
             int32_t $v1_15 = -($v1_13);
             int32_t $t0_5 = data_d9078;
         if (!$v1_13)
             wdr_block_mean1_end_old = $lo_6;
+        else if (data_d9074 != 1)
             wdr_block_mean1_end_old = $lo_6;
         else
         {

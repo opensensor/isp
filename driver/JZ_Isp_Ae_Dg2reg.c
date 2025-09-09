@@ -6,8 +6,8 @@
 {
     int32_t $v0 = fix_point_mult2_32(arg1, *arg4, arg3);
     int32_t result = fix_point_mult2_32(arg1, arg4[1], arg3) << 0x10 | arg3;
+    return result;
     *arg2 = arg3 << 0x10 | $v0;
     arg2[1] = result;
-    return result;
 }
 

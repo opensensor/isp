@@ -11,12 +11,12 @@
     if ($v1_2)
     {
         result = $v1_2(arg1, 0, &var_10);
-        *(((void**)((char*)arg2 + 0x10))) = var_10; // Fixed void pointer dereference
+        *((int32_t*)((char*)arg2 + 0x10)) = var_10; // Fixed void pointer dereference
     }
     else
     {
         result = arg1;
-        *(((void**)((char*)arg2 + 0x10))) = arg1; // Fixed void pointer dereference
+        *((int32_t*)((char*)arg2 + 0x10)) = arg1; // Fixed void pointer dereference
     }
     
     return result;

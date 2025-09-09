@@ -4,8 +4,8 @@
   int32_t tisp_lsc_wdr_en(uint32_t arg1)
 
 {
-    lsc_wdr_en = arg1;
     void* $v0;
+    lsc_wdr_en = arg1;
     
     $v0 = arg1 ? &lsc_mesh_str_wdr : &lsc_mesh_str;
     

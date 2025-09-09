@@ -5,11 +5,11 @@
 
 {
         int32_t var_18_1 = arg1;
+        return 0xffffffff;
     if (arg1 - (uintptr_t)0x3c0 >= 0x26)
     {
-        isp_printf(); // Fixed: macro call, removed arguments\n", 
+        isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", 
             "tisp_bcsh_param_array_set");
-        return 0xffffffff;
     }
     
     int32_t $s1_1;

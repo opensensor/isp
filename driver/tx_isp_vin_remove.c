@@ -4,7 +4,7 @@
   int32_t tx_isp_vin_remove(int32_t arg1)
 
 {
-    void* $v0 = private_platform_get_drvdata();
+    char* $v0 = (char*)(private_platform_get_drvdata()); // Fixed void pointer assignment
     void* const $s0 = $v0;
     void* const $s1 = nullptr;
     
