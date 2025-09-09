@@ -5381,16 +5381,16 @@ char data_93960[] = "TISP_PARAM_WDR_WEIGHTLUT20_ARRAY"; // offset: 0x93960
 int32_t data_94b3c = 0x0;
 
 // Data at address 0x94d40
-wchar_t data_94d40[] = L"dddddAA<2--((("; // offset: 0x94d40
+
 
 // Data at address 0x95920
-wchar_t data_95920[] = L"FFFFFFFFFFFFFFF"; // offset: 0x95920
+
 
 // Data at address 0x9599c
-wchar_t data_9599c[] = L"FF<2--(#"; // offset: 0x9599c
+
 
 // Data at address 0x975a8
-wchar_t data_975a8[] = L"CDCCBBBBBBDCCCCCCCBDCBCCCCCBDDCCCCCC"; // offset: 0x975a8
+
 
 // Data at address 0x983b0
 int32_t data_983b0 = 0x9490;
@@ -5501,187 +5501,187 @@ int32_t data_9ab10 = 0x969c;
 int32_t data_9ab24 = 0x8789;
 
 // Data at address 0x9dd44
-wchar_t data_9dd44[] = L"          "; // offset: 0x9dd44
+
 
 // Data at address 0x9dd9c
-wchar_t data_9dd9c[] = L"          "; // offset: 0x9dd9c
+
 
 // Data at address 0x9ddf4
-wchar_t data_9ddf4[] = L"    "; // offset: 0x9ddf4
+
 
 // Data at address 0x9de4c
-wchar_t data_9de4c[] = L"    "; // offset: 0x9de4c
+
 
 // Data at address 0x9dea8
-wchar_t data_9dea8[] = L"ddddddddddd"; // offset: 0x9dea8
+
 
 // Data at address 0x9def0
-wchar_t data_9def0[] = L"ddddddddddd"; // offset: 0x9def0
+
 
 // Data at address 0x9e068
-wchar_t data_9e068[] = L"ddddddddd8\n"; // offset: 0x9e068
+
 
 // Data at address 0x9e0d0
-wchar_t data_9e0d0[] = L"ZZZF2-(((ZZZF2-((("; // offset: 0x9e0d0
+
 
 // Data at address 0x9e1cc
-wchar_t data_9e1cc[] = L">>>>>>>>>"; // offset: 0x9e1cc
+
 
 // Data at address 0x9e21c
-wchar_t data_9e21c[] = L"PPP<((("; // offset: 0x9e21c
+
 
 // Data at address 0x9e240
-wchar_t data_9e240[] = L"PPP<((("; // offset: 0x9e240
+
 
 // Data at address 0x9e318
-wchar_t data_9e318[] = L"\n\n\n\n\n\n\n\n\n$$$$$$$$$"; // offset: 0x9e318
+
 
 // Data at address 0x9e3e8
-wchar_t data_9e3e8[] = L"ddddddddd"; // offset: 0x9e3e8
+
 
 // Data at address 0x9e45c
-wchar_t data_9e45c[] = L"222222222"; // offset: 0x9e45c
+
 
 // Data at address 0x9e634
-wchar_t data_9e634[] = L"(((dZPFF<"; // offset: 0x9e634
+
 
 // Data at address 0x9e658
-wchar_t data_9e658[] = L"ZZZZPPFFFddddPPFF2PPPPPP"; // offset: 0x9e658
+
 
 // Data at address 0x9e95c
-wchar_t data_9e95c[] = L"?????????ddddddddd"; // offset: 0x9e95c
+
 
 // Data at address 0x9e9d8
-wchar_t data_9e9d8[] = L"\n\n\n\n\n\n\n\n\n"; // offset: 0x9e9d8
+
 
 // Data at address 0x9ea20
-wchar_t data_9ea20[] = L"\n\n\n\n\n\n\n\n\n"; // offset: 0x9ea20
+
 
 // Data at address 0x9ea68
-wchar_t data_9ea68[] = L"\n\n\n\n\n\n\n\n\n?"; // offset: 0x9ea68
+
 
 // Data at address 0x9eb4c
-wchar_t data_9eb4c[] = L"                        "; // offset: 0x9eb4c
+
 
 // Data at address 0x9efe4
-wchar_t data_9efe4[] = L"PZZnn"; // offset: 0x9efe4
+
 
 // Data at address 0x9f008
-wchar_t data_9f008[] = L"dP<<2("; // offset: 0x9f008
+
 
 // Data at address 0x9f05c
-wchar_t data_9f05c[] = L"ddP2"; // offset: 0x9f05c
+
 
 // Data at address 0x9f080
-wchar_t data_9f080[] = L"\n\n\n\nddP2"; // offset: 0x9f080
+
 
 // Data at address 0x9f1d8
-wchar_t data_9f1d8[] = L"2<<PPFFPP"; // offset: 0x9f1d8
+
 
 // Data at address 0x9f454
-wchar_t data_9f454[] = L"\n\n\n\n\n\n\n\n\n"; // offset: 0x9f454
+
 
 // Data at address 0x9f4c0
-wchar_t data_9f4c0[] = L"((((((((("; // offset: 0x9f4c0
+
 
 // Data at address 0x9fa88
-wchar_t data_9fa88[] = L"              "; // offset: 0x9fa88
+
 
 // Data at address 0x9fcbc
-wchar_t data_9fcbc[] = L"\n\n\n\n\n\n\n\n\n"; // offset: 0x9fcbc
+
 
 // Data at address 0xa0568
-wchar_t data_a0568[] = L"\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"; // offset: 0xa0568
+
 
 // Data at address 0xa0a2c
-wchar_t data_a0a2c[] = L"\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"; // offset: 0xa0a2c
+
 
 // Data at address 0xa0cb4
-wchar_t data_a0cb4[] = L"         $$$$$$$$$"; // offset: 0xa0cb4
+
 
 // Data at address 0xa0d68
-wchar_t data_a0d68[] = L"\t\t\t\t\t\t\t\t\t"; // offset: 0xa0d68
+
 
 // Data at address 0xa1a10
-wchar_t data_a1a10[] = L"\n\n\n\n\n\n\n\n\n"; // offset: 0xa1a10
+
 
 // Data at address 0xa1ac4
-wchar_t data_a1ac4[] = L"((((((((("; // offset: 0xa1ac4
+
 
 // Data at address 0xa1d94
-wchar_t data_a1d94[] = L"22xx"; // offset: 0xa1d94
+
 
 // Data at address 0xa1ff8
-wchar_t data_a1ff8[] = L"22xx"; // offset: 0xa1ff8
+
 
 // Data at address 0xa20f4
-wchar_t data_a20f4[] = L"\n\n\n\n\n\n\n\n\n"; // offset: 0xa20f4
+
 
 // Data at address 0xa237c
-wchar_t data_a237c[] = L"CCCCCCCCC"; // offset: 0xa237c
+
 
 // Data at address 0xa276c
-wchar_t data_a276c[] = L"222222"; // offset: 0xa276c
+
 
 // Data at address 0xa2820
-wchar_t data_a2820[] = L"((((((((("; // offset: 0xa2820
+
 
 // Data at address 0xa291c
-wchar_t data_a291c[] = L"\n\n\n\n\n\n\n\n\n"; // offset: 0xa291c
+
 
 // Data at address 0xa3654
-wchar_t data_a3654[] = L"\n\n\n\n\n\nPPP"; // offset: 0xa3654
+
 
 // Data at address 0xa3c60
-wchar_t data_a3c60[] = L"\n\n\n\n\n\nPPP"; // offset: 0xa3c60
+
 
 // Data at address 0xa3ee8
-wchar_t data_a3ee8[] = L"\n\n\n\n\n\nPPP"; // offset: 0xa3ee8
+
 
 // Data at address 0xa41b8
-wchar_t data_a41b8[] = L"         "; // offset: 0xa41b8
+
 
 // Data at address 0xa465c
-wchar_t data_a465c[] = L"dddddd"; // offset: 0xa465c
+
 
 // Data at address 0xa4680
-wchar_t data_a4680[] = L"@@@@@@@@@"; // offset: 0xa4680
+
 
 // Data at address 0xa56b0
-wchar_t data_a56b0[] = L"PPZZZPPPPFNMLKJIHFFIGOFDCBBA?>=<;:99LLKJIHGFE"; // offset: 0xa56b0
+
 
 // Data at address 0xa58d0
-wchar_t data_a58d0[] = L"  <Z"; // offset: 0xa58d0
+
 
 // Data at address 0xa58e4
-wchar_t data_a58e4[] = L"PFFAL7Z"; // offset: 0xa58e4
+
 
 // Data at address 0xa5a8c
-wchar_t data_a5a8c[] = L"UZ____F"; // offset: 0xa5a8c
+
 
 // Data at address 0xa5b4c
-wchar_t data_a5b4c[] = L"(2222\n"; // offset: 0xa5b4c
+
 
 // Data at address 0xa71b4
-wchar_t data_a71b4[] = L"dddddddddddddddddd"; // offset: 0xa71b4
+
 
 // Data at address 0xa7344
-wchar_t data_a7344[] = L"@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"; // offset: 0xa7344
+
 
 // Data at address 0xa73d4
-wchar_t data_a73d4[] = L"@@A?CB?????"; // offset: 0xa73d4
+
 
 // Data at address 0xa777c
-wchar_t data_a777c[] = L"\t\t#\',17=DKS[clu~"; // offset: 0xa777c
+
 
 // Data at address 0xa7d04
-wchar_t data_a7d04[] = L"$$@@"; // offset: 0xa7d04
+
 
 // Data at address 0xa7f64
-wchar_t data_a7f64[] = L"         @@@@@@@@@@@@@@@@@@"; // offset: 0xa7f64
+
 
 // Data at address 0xa804c
-wchar_t data_a804c[] = L"@@@@"; // offset: 0xa804c
+
 
 // Data at address 0xa8318
 void* data_a8318 = &netlink_rcv_msg;
@@ -5822,7 +5822,7 @@ int32_t data_a9fc4 = 0x1;
 int32_t data_a9fc8 = 0xf;
 
 // Data at address 0xa9fcc
-wchar_t data_a9fcc[] = L"@@@@@@@@@@@@@@@$$$$$$$$$$$$$$$"; // offset: 0xa9fcc
+
 
 // Data at address 0xaa044
 int32_t data_aa044 = 0x80;
@@ -5879,7 +5879,7 @@ uint64_t gib_ir_value = 0x0000002d0000002dULL;
 uint64_t gib_ir_mode = 0x1;
 
 // Data at address 0xaa22c
-wchar_t tiziano_gib_deirm_blc_ir_linear[] = L"A?CB?????"; // offset: 0xaa22c
+
 
 // Data at address 0xaa2e0
 uint64_t tiziano_gib_b_ir_linear = 0x0000040000000400ULL;
@@ -5924,7 +5924,7 @@ int32_t data_aa318 = 0xfff;
 int32_t data_aa31c = 0xfff;
 
 // Data at address 0xaa320
-wchar_t tisp_gb_blc_ir[] = L"A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa320
+
 
 // Data at address 0xaa3d4
 const char tisp_gb_dgain_rgbir_s[] = "A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // length: 180
@@ -6589,7 +6589,7 @@ void* param_defog_main_para_array_now = (void*)0xacc44;
 void* param_defog_fpga_para_array_now = (void*)0xacce8;
 
 // Data at address 0xaac68
-wchar_t* param_defog_block_t_x_array_now = (void*)0xacd3c /* pointer to data */;
+
 
 // Data at address 0xaac6c
 void* defog_trsy4_list_now = (void*)0xcd554;
@@ -6706,7 +6706,7 @@ int32_t data_ac844 = 0x10dc;
 int32_t param_defog_cent3_w_dis_array = 0x10;
 
 // Data at address 0xac84c
-wchar_t data_ac84c[] = L"!2DWk"; // offset: 0xac84c
+
 
 // Data at address 0xac860
 const char data_ac860[] = "!2DWk"; // length: 20
@@ -6826,7 +6826,7 @@ int32_t data_ac8f4 = 0x7;
 int32_t data_ac8f8 = 0x8;
 
 // Data at address 0xac8fc
-wchar_t data_ac8fc[] = L"\t\n\n\n\n\n\n\n\n\n\n"; // offset: 0xac8fc
+
 
 // Data at address 0xac92c
 int32_t data_ac92c = 0x0;
@@ -7096,7 +7096,7 @@ int32_t data_aca88 = 0xb;
 int32_t data_aca8c = 0xc;
 
 // Data at address 0xaca90
-wchar_t data_aca90[] = L"\r\r\r\r\r\r"; // offset: 0xaca90
+
 
 // Data at address 0xacaac
 int32_t data_acaac = 0x0;
@@ -7174,7 +7174,7 @@ int32_t data_acb08 = 0xb;
 int32_t data_acb0c = 0xc;
 
 // Data at address 0xacb10
-wchar_t data_acb10[] = L"\r\r\r\r\r\r"; // offset: 0xacb10
+
 
 // Data at address 0xacb28
 const char param_defog_dark_l2_array[] = "\r\r\r\r\r\r"; // length: 24
@@ -7354,7 +7354,7 @@ char param_defog_color_control_array = 0x8;
 int32_t data_acc10 = 0x18;
 
 // Data at address 0xacc14
-wchar_t data_acc14[] = L" (8<<<<<"; // offset: 0xacc14
+
 
 // Data at address 0xacc34
 const char data_acc34[] = " (8<<<<<"; // length: 32
@@ -7459,7 +7459,7 @@ int32_t data_acce0 = 0x3cc;
 int32_t data_acce4 = 0x438;
 
 // Data at address 0xacd28
-wchar_t param_defog_block_t_y_array[] = L"(2222_PKAK<Z"; // offset: 0xacd28
+
 
 // Data at address 0xacd50
 int32_t defog_rgbra_list = 0x0;
@@ -8341,7 +8341,7 @@ int32_t data_af82c = 0x7;
 int32_t data_af830 = 0x8;
 
 // Data at address 0xaf834
-wchar_t data_af834[] = L"\t\t\n\n"; // offset: 0xaf834
+
 
 // Data at address 0xaf844
 const char data_af844[] = "\t\t\n\n"; // length: 16
@@ -8920,7 +8920,7 @@ int32_t data_afcdc = 0x400;
 int32_t data_afce0 = 0x400;
 
 // Data at address 0xb088c
-wchar_t _at_list_wdr[] = L"KA7-("; // offset: 0xb088c
+
 
 // Data at address 0xb0940
 uint32_t _nodes_num = 0x77;
@@ -8941,7 +8941,7 @@ int32_t data_b0b30 = 0x2e5;
 int32_t _deflicker_para = 0x0;
 
 // Data at address 0xb0bc0
-wchar_t ae_comp_at_list[] = L"KA7-("; // offset: 0xb0bc0
+
 
 // Data at address 0xb0c10
 int32_t ae_comp_param = 0x0;
@@ -8950,7 +8950,7 @@ int32_t ae_comp_param = 0x0;
 int32_t data_b0c18 = 0x80;
 
 // Data at address 0xb0c28
-wchar_t _at_list[] = L"KA7-("; // offset: 0xb0c28
+
 
 // Data at address 0xb0cec
 int32_t data_b0cec = 0x0;
@@ -8977,7 +8977,7 @@ int16_t data_b0d4c = 0xf;
 int16_t data_b0d54 = 0xf;
 
 // Data at address 0xb0d58
-wchar_t data_b0d58[] = L"@@@@@@@@@@@@@@@$$$$$$$$$$$$$$$"; // offset: 0xb0d58
+
 
 // Data at address 0xb0de0
 int32_t data_b0de0 = 0x400;
@@ -9436,7 +9436,7 @@ int32_t data_b148c = 0x9c4;
 int32_t data_b149c = 0x1194;
 
 // Data at address 0xb14a0
-wchar_t wdr_detail_w_in4_list[] = L"@@@@@@@@@@@@@@@@@@         "; // offset: 0xb14a0
+
 
 // Data at address 0xb150c
 int32_t wdr_weight_p_in_list = 0x1c20;
@@ -9562,7 +9562,7 @@ int32_t data_b15e8 = 0x108;
 int32_t data_b15ec = 0x107;
 
 // Data at address 0xb15f0
-wchar_t data_b15f0[] = L"yWB3(!"; // offset: 0xb15f0
+
 
 // Data at address 0xb1608
 int32_t data_b1608 = 0x1b;
@@ -9607,7 +9607,7 @@ int32_t data_b1638 = 0x18;
 int32_t data_b163c = 0x18;
 
 // Data at address 0xb1640
-wchar_t wdr_thrAll_software_out[] = L"JRZx"; // offset: 0xb1640
+
 
 // Data at address 0xb1650
 const char data_b1650[] = "JRZx"; // length: 16
@@ -10765,7 +10765,7 @@ int16_t data_b205c = 0xa5;
 int32_t data_b2060 = 0x89;
 
 // Data at address 0xb2064
-wchar_t data_b2064[] = L"nT;#"; // offset: 0xb2064
+
 
 // Data at address 0xb2074
 const char data_b2074[] = "nT;#"; // length: 16
@@ -11320,7 +11320,7 @@ int32_t data_b2350 = 0x1;
 int32_t data_b2354 = 0x1f40;
 
 // Data at address 0xb2358
-wchar_t param_fusion1_cure_y_array[] = L"#\',17=DKS[clu~"; // offset: 0xb2358
+
 
 // Data at address 0xb2390
 const char data_b2390[] = "#\',17=DKS[clu~"; // length: 56
@@ -19649,16 +19649,16 @@ unsigned char tiziano_gib_deirm_blc_gr_linear[] = { 0xfd, 0x00, 0x00, 0x00, 0xfe
 unsigned char tiziano_gib_deirm_blc_r_linear[] = { 0xfd, 0x00, 0x00, 0x00, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xaa2bc
 
 // Data at address 0xaa344
-wchar_t tisp_gb_blc_b[] = L"A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa344
+
 
 // Data at address 0xaa368
-wchar_t tisp_gb_blc_gb[] = L"A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa368
+
 
 // Data at address 0xaa38c
-wchar_t tisp_gb_blc_gr[] = L"A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa38c
+
 
 // Data at address 0xaa3b0
-wchar_t tisp_gb_blc_r[] = L"A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa3b0
+
 
 // Data at address 0xaa410
 unsigned char lsc_ct_points[] = { 0xf4, 0x01, 0x00, 0x00, 0xd0, 0x07, 0x00, 0x00, 0xc4, 0x09, 0x00, 0x00, 0xac, 0x0d, 0x00, 0x00, 0x64, 0xe5, 0x0b, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xd0, 0x4a, 0x0c, 0x00, 0xf4, 0x4a, 0x0c, 0x00, 0x1c, 0x4c, 0x0c, 0x00, 0x40, 0x4c, 0x0c, 0x00, 0x48, 0x4d, 0x0c, 0x00, 0x6c, 0x4d, 0x0c, 0x00, 0x80, 0x00, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xaa410
@@ -19923,10 +19923,10 @@ unsigned char param_defog_weightlut02_tmp[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x
 unsigned char param_defog_weightlut20_tmp[] = "\r\r\r\r\r\r"; // offset: 0xac74c
 
 // Data at address 0xac928
-wchar_t param_defog_weightlut22[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00 }; // offset: 0xac928
+
 
 // Data at address 0xacaa8
-wchar_t param_defog_weightlut20[] = L"\r\r\r\r\r\r"; // offset: 0xacaa8
+
 
 // Data at address 0xacc44
 unsigned char param_defog_main_para_array[] = { 0x48, 0x00, 0x00, 0x00, 0xf2, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x6b, 0x00, 0x00, 0x00, 0xd6, 0x00, 0x00, 0x00, 0x41, 0x01, 0x00, 0x00, 0xac, 0x01, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xacc44
@@ -19935,7 +19935,7 @@ unsigned char param_defog_main_para_array[] = { 0x48, 0x00, 0x00, 0x00, 0xf2, 0x
 unsigned char param_defog_fpga_para_array[] = { 0x00, 0x00, 0x00, 0x00, 0x54, 0x00, 0x00, 0x00, 0xab, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0xf0, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xacce8
 
 // Data at address 0xacd3c
-wchar_t param_defog_block_t_x_array[] = L"(2222_PKAK<Z"; // offset: 0xacd3c
+
 
 // Data at address 0xacda4
 unsigned char defog_t_par_list2[] = { 0x6e, 0x00, 0x00, 0x00, 0x40, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0xee, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x50, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xa0, 0x00, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xacda4
@@ -20217,10 +20217,10 @@ unsigned char ratio_sub_value[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x
 unsigned char ratio_value[] = { 0x00, 0x20, 0x00, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x40, 0x01, 0x00, 0x00, 0xe0, 0x01, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf4, 0x01, 0x00, 0x00, 0xe8, 0x03, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xb1444
 
 // Data at address 0xb14c4
-wchar_t wdr_detail_w_in3_list[] = L"@@@@@@@@@@@@@@@@@@         "; // offset: 0xb14c4
+
 
 // Data at address 0xb14e8
-wchar_t wdr_detail_w_in2_list[] = L"@@@@@@@@@@@@@@@@@@         "; // offset: 0xb14e8
+
 
 // Data at address 0xb1ae0
 unsigned char param_wdr_detial_para_software_in_array[] = { 0x54, 0x01, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0xb8, 0x01, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1f, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xb1ae0
