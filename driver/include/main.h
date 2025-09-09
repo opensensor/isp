@@ -11490,9 +11490,6 @@ extern void* ispcore_internal_ops; // Fixed function pointer assignment
 // Data at address 0xb25ac
 void* ispcore_subdev_video_ops = &ispcore_video_s_stream;
 
-// Data at address 0xb25b4
-void* data_b25b4 = &ispcore_link_setup;
-
 // Data at address 0xb25b8
 void* ispcore_sensor_ops = &ispcore_sensor_ops_release_all_sensor;
 
