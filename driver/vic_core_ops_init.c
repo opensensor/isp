@@ -1,11 +1,13 @@
 #include "include/main.h"
 
-
-  // Conflicting signature - using extern declaration
-extern void vic_core_ops_init(void);
-
+// Function implementation for vic_core_ops_init
+int vic_core_ops_init(void* arg1, void* arg2)
 {
+    if (!arg1 || (uintptr_t)arg1 >= 0xfffff001)
+    {
         return 0xffffffea;
+    }
+    
     if (!(uintptr_t)arg1 || (uintptr_t)arg1 >= 0xfffff001)
     {
         isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
@@ -38,4 +40,3 @@ extern void vic_core_ops_init(void);
     
     return result;
 }
-
