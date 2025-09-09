@@ -10,7 +10,8 @@ int32_t ae0_interrupt_hist()
 
     $s0 = (system_reg_read(0xa050) & 3) << 0xb;
 
-    private_dma_cache_sync();
+    // TODO
+    //private_dma_cache_sync();
 
     if (data_b0e10 != 1)
     {
