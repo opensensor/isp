@@ -258,7 +258,37 @@ int tisp_set_csc_version(int version)
     pr_info("tisp_set_csc_version: Setting CSC version %d\n", version);
     return 0;
 }
-void system_reg_write(u32 reg, u32 value);
+/* system_reg_write - Binary Ninja EXACT implementation with proper VIC register mapping */
+void system_reg_write(u32 reg, u32 value)
+{
+    extern struct tx_isp_dev *ourISPdev;
+    void __iomem *isp_base;
+    
+    if (!ourISPdev) {
+        pr_err("system_reg_write: No ISP device available - cannot write register 0x%x\n", reg);
+        return;
+    }
+    
+    /* CRITICAL: Check VIC registers are mapped */
+    if (!ourISPdev->vic_regs) {
+        pr_err("*** CRITICAL ERROR: VIC registers not mapped! Cannot write ISP registers! ***");
+        pr_err("*** ISP hardware initialization FAILED - no register access! ***");
+        return;
+    }
+    
+    /* Binary Ninja: VIC registers are at +0x9a00 offset from ISP base */
+    isp_base = ourISPdev->vic_regs - 0x9a00;
+    
+    pr_debug("system_reg_write: Writing 0x%x to register 0x%x (base=%p, vic=%p)\n", 
+             value, reg, isp_base, ourISPdev->vic_regs);
+    
+    /* Write to hardware register */
+    writel(value, isp_base + reg);
+    wmb(); /* Write memory barrier */
+    
+    /* This should now generate trace activity */
+    pr_debug("*** REGISTER WRITTEN: 0x%x = 0x%x - TRACE SHOULD CAPTURE THIS ***\n", reg, value);
+}
 
 /* tisp_init - Binary Ninja EXACT implementation - THE MISSING HARDWARE INITIALIZER */
 int tisp_init(void *sensor_info, char *param_name)
