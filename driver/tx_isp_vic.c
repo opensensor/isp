@@ -1021,10 +1021,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         /* *** WRITE MISSING REGISTERS TO MATCH REFERENCE TRACE *** */
     pr_info("*** Writing missing registers to match reference driver trace ***\n");
-//    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace */
-//    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace */
-//    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace */
-//    wmb();
+    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace */
+    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace */
+    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace */
+    wmb();
 
     /* CSI PHY Control registers - write to VIC register space offsets that match trace */
     writel(0x54560031, vic_regs + 0x0);      /* First register from reference trace */
@@ -1049,9 +1049,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
 
     /* CSI PHY Config registers - from reference trace */
-    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
-    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
-    wmb();
+//    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
+//    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
+//    wmb();
 
     /* *** MISSING ISP Control registers - from reference trace *** */
     pr_info("*** Writing missing ISP Control registers (0x9804-0x98a8) ***\n");
