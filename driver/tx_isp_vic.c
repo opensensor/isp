@@ -1025,61 +1025,61 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x1, vic_regs + 0x4);             /* Second register from reference trace */
     writel(0x200, vic_regs + 0x14);          /* Third register from reference trace */
     wmb();
-//
-//    /* CSI PHY Control registers - write to VIC register space offsets that match trace */
-//    writel(0x54560031, vic_regs + 0x0);      /* First register from reference trace */
-//    writel(0x7800438, vic_regs + 0x4);       /* Second register from reference trace */
-//    writel(0x1, vic_regs + 0x8);             /* Third register from reference trace */
-//    writel(0x80700008, vic_regs + 0xc);      /* Fourth register from reference trace */
-//    writel(0x1, vic_regs + 0x28);            /* Fifth register from reference trace */
-//    writel(0x400040, vic_regs + 0x2c);       /* Sixth register from reference trace */
-//    writel(0x1, vic_regs + 0x90);            /* Seventh register from reference trace */
-//    writel(0x1, vic_regs + 0x94);            /* Eighth register from reference trace */
-//    writel(0x30000, vic_regs + 0x98);        /* Ninth register from reference trace */
-//    writel(0x58050000, vic_regs + 0xa8);     /* Tenth register from reference trace */
-//    writel(0x58050000, vic_regs + 0xac);     /* Eleventh register from reference trace */
-//    writel(0x40000, vic_regs + 0xc4);        /* Register from reference trace */
-//    writel(0x400040, vic_regs + 0xc8);       /* Register from reference trace */
-//    writel(0x100, vic_regs + 0xcc);          /* Register from reference trace */
-//    writel(0xc, vic_regs + 0xd4);            /* Register from reference trace */
-//    writel(0xffffff, vic_regs + 0xd8);       /* Register from reference trace */
-//    writel(0x100, vic_regs + 0xe0);          /* Register from reference trace */
-//    writel(0x400040, vic_regs + 0xe4);       /* Register from reference trace */
-//    writel(0xff808000, vic_regs + 0xf0);     /* Register from reference trace */
-//    wmb();
-//
-//    /* CSI PHY Config registers - from reference trace */
-//    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
-//    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
-//    wmb();
-//
-//    /* *** MISSING ISP Control registers - from reference trace *** */
-//    pr_info("*** Writing missing ISP Control registers (0x9804-0x98a8) ***\n");
-//    writel(0x3f00, vic_regs + 0x9804);       /* ISP Control register */
-//    writel(0x7800438, vic_regs + 0x9864);    /* ISP Control register */
-//    writel(0xc0000000, vic_regs + 0x987c);   /* ISP Control register */
-//    writel(0x1, vic_regs + 0x9880);          /* ISP Control register */
-//    writel(0x1, vic_regs + 0x9884);          /* ISP Control register */
-//    writel(0x1010001, vic_regs + 0x9890);    /* ISP Control register */
-//    writel(0x1010001, vic_regs + 0x989c);    /* ISP Control register */
-//    writel(0x1010001, vic_regs + 0x98a8);    /* ISP Control register */
-//    wmb();
-//
-//    /* *** MISSING VIC Control registers - from reference trace *** */
-//    pr_info("*** Writing missing VIC Control registers (0x9a00-0x9ac8) ***\n");
-//    writel(0x50002d0, vic_regs + 0x9a00);    /* VIC Control register */
-//    writel(0x3000300, vic_regs + 0x9a04);    /* VIC Control register */
-//    writel(0x50002d0, vic_regs + 0x9a2c);    /* VIC Control register */
-//    writel(0x1, vic_regs + 0x9a34);          /* VIC Control register */
-//    writel(0x1, vic_regs + 0x9a70);          /* VIC Control register */
-//    writel(0x1, vic_regs + 0x9a7c);          /* VIC Control register */
-//    writel(0x500, vic_regs + 0x9a80);        /* VIC Control register */
-//    writel(0x1, vic_regs + 0x9a88);          /* VIC Control register */
-//    writel(0x1, vic_regs + 0x9a94);          /* VIC Control register */
-//    writel(0x500, vic_regs + 0x9a98);        /* VIC Control register */
-//    writel(0x200, vic_regs + 0x9ac0);        /* VIC Control register */
-//    writel(0x200, vic_regs + 0x9ac8);        /* VIC Control register */
-//    wmb();
+
+    /* CSI PHY Control registers - write to VIC register space offsets that match trace */
+    writel(0x54560031, vic_regs + 0x0);      /* First register from reference trace */
+    writel(0x7800438, vic_regs + 0x4);       /* Second register from reference trace */
+    writel(0x1, vic_regs + 0x8);             /* Third register from reference trace */
+    writel(0x80700008, vic_regs + 0xc);      /* Fourth register from reference trace */
+    writel(0x1, vic_regs + 0x28);            /* Fifth register from reference trace */
+    writel(0x400040, vic_regs + 0x2c);       /* Sixth register from reference trace */
+    writel(0x1, vic_regs + 0x90);            /* Seventh register from reference trace */
+    writel(0x1, vic_regs + 0x94);            /* Eighth register from reference trace */
+    writel(0x30000, vic_regs + 0x98);        /* Ninth register from reference trace */
+    writel(0x58050000, vic_regs + 0xa8);     /* Tenth register from reference trace */
+    writel(0x58050000, vic_regs + 0xac);     /* Eleventh register from reference trace */
+    writel(0x40000, vic_regs + 0xc4);        /* Register from reference trace */
+    writel(0x400040, vic_regs + 0xc8);       /* Register from reference trace */
+    writel(0x100, vic_regs + 0xcc);          /* Register from reference trace */
+    writel(0xc, vic_regs + 0xd4);            /* Register from reference trace */
+    writel(0xffffff, vic_regs + 0xd8);       /* Register from reference trace */
+    writel(0x100, vic_regs + 0xe0);          /* Register from reference trace */
+    writel(0x400040, vic_regs + 0xe4);       /* Register from reference trace */
+    writel(0xff808000, vic_regs + 0xf0);     /* Register from reference trace */
+    wmb();
+
+    /* CSI PHY Config registers - from reference trace */
+    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
+    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
+    wmb();
+
+    /* *** MISSING ISP Control registers - from reference trace *** */
+    pr_info("*** Writing missing ISP Control registers (0x9804-0x98a8) ***\n");
+    writel(0x3f00, vic_regs + 0x9804);       /* ISP Control register */
+    writel(0x7800438, vic_regs + 0x9864);    /* ISP Control register */
+    writel(0xc0000000, vic_regs + 0x987c);   /* ISP Control register */
+    writel(0x1, vic_regs + 0x9880);          /* ISP Control register */
+    writel(0x1, vic_regs + 0x9884);          /* ISP Control register */
+    writel(0x1010001, vic_regs + 0x9890);    /* ISP Control register */
+    writel(0x1010001, vic_regs + 0x989c);    /* ISP Control register */
+    writel(0x1010001, vic_regs + 0x98a8);    /* ISP Control register */
+    wmb();
+
+    /* *** MISSING VIC Control registers - from reference trace *** */
+    pr_info("*** Writing missing VIC Control registers (0x9a00-0x9ac8) ***\n");
+    writel(0x50002d0, vic_regs + 0x9a00);    /* VIC Control register */
+    writel(0x3000300, vic_regs + 0x9a04);    /* VIC Control register */
+    writel(0x50002d0, vic_regs + 0x9a2c);    /* VIC Control register */
+    writel(0x1, vic_regs + 0x9a34);          /* VIC Control register */
+    writel(0x1, vic_regs + 0x9a70);          /* VIC Control register */
+    writel(0x1, vic_regs + 0x9a7c);          /* VIC Control register */
+    writel(0x500, vic_regs + 0x9a80);        /* VIC Control register */
+    writel(0x1, vic_regs + 0x9a88);          /* VIC Control register */
+    writel(0x1, vic_regs + 0x9a94);          /* VIC Control register */
+    writel(0x500, vic_regs + 0x9a98);        /* VIC Control register */
+    writel(0x200, vic_regs + 0x9ac0);        /* VIC Control register */
+    writel(0x200, vic_regs + 0x9ac8);        /* VIC Control register */
+    wmb();
 //
 //    /* *** MISSING Core Control registers - from reference trace *** */
 //    pr_info("*** Writing missing Core Control registers (0xb004-0xb08c) ***\n");
@@ -1104,8 +1104,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 //    writel(0x1813, vic_regs + 0xb084);       /* Core Control register */
 //    writel(0x10a, vic_regs + 0xb08c);        /* Core Control register */
 //    wmb();
-//
-//    pr_info("*** Completed writing ALL missing initialization registers from reference trace ***\n");
+
+    pr_info("*** Completed writing ALL missing initialization registers from reference trace ***\n");
 
     /* Binary Ninja: interface 1=DVP, 2=MIPI, 3=BT601, 4=BT656, 5=BT1120 */
     if (interface_type == 1) {
