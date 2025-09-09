@@ -234,7 +234,7 @@ int tisp_ae_ir_update(void);
 int tiziano_ae_set_hardware_param(int channel, uint8_t *params, int enable_flag);
 
 int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
-
+void system_reg_write(u32 reg, u32 value);
 
 /* System register access functions - moved before use */
 static inline uint32_t system_reg_read(u32 reg);
