@@ -637,16 +637,44 @@ void system_reg_write(u32 reg, u32 value)
 {
     void __iomem *isp_regs = NULL;
     
-    if (!ourISPdev || !ourISPdev->vic_regs) {
-        pr_warn("system_reg_write: No ISP registers available for reg=0x%x val=0x%x\n", reg, value);
+    pr_debug("*** system_reg_write: DEBUGGING - ourISPdev=%p ***\n", ourISPdev);
+    if (ourISPdev) {
+        pr_debug("*** system_reg_write: vic_regs=%p ***\n", ourISPdev->vic_regs);
+    }
+    
+    if (!ourISPdev) {
+        pr_warn("system_reg_write: ourISPdev is NULL! Cannot write reg=0x%x val=0x%x\n", reg, value);
         return;
     }
     
-    /* Map ISP registers based on VIC base (which is at 0x133e0000) */
-    /* ISP core registers are at 0x13300000 = vic_regs - 0xe0000 */
-    isp_regs = ourISPdev->vic_regs - 0xe0000;
+    if (!ourISPdev->vic_regs) {
+        pr_warn("system_reg_write: vic_regs is NULL! Cannot write reg=0x%x val=0x%x\n", reg, value);
+        pr_warn("*** CRITICAL: VIC registers not mapped yet - need to initialize VIC device first! ***\n");
+        
+        /* EMERGENCY FIX: Try to create VIC device if it doesn't exist */
+        if (!ourISPdev->vic_dev) {
+            pr_warn("*** EMERGENCY: Creating VIC device structure for register access ***\n");
+            int ret = tx_isp_create_vic_device(ourISPdev);
+            if (ret) {
+                pr_err("*** EMERGENCY VIC CREATION FAILED: %d ***\n", ret);
+                return;
+            }
+            pr_info("*** EMERGENCY VIC CREATION SUCCESS - retrying register write ***\n");
+        }
+        
+        /* Check again after emergency fix */
+        if (!ourISPdev->vic_regs) {
+            pr_err("system_reg_write: STILL no VIC registers after emergency fix! reg=0x%x val=0x%x\n", reg, value);
+            return;
+        }
+    }
     
-    pr_debug("system_reg_write: Writing ISP reg[0x%x] = 0x%x\n", reg, value);
+    /* Map ISP registers based on VIC base */
+    /* VIC is at 0x10023000, ISP core is at 0x13300000 */
+    isp_regs = ourISPdev->vic_regs - 0x9a00;  /* Calculate ISP base from VIC base */
+    
+    pr_info("*** system_reg_write: SUCCESS - Writing ISP reg[0x%x] = 0x%x (base=%p) ***\n", 
+            reg, value, isp_regs);
     
     /* Write to ISP register with proper offset */
     writel(value, isp_regs + reg);
