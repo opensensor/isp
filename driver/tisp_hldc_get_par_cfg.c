@@ -5,9 +5,9 @@
 
 {
     *arg2 = 0;
-    int32_t var_10_32 = 0;
-    tisp_hldc_param_array_get(0x3ac, arg1, &var_10_33);
-    *arg2 += var_10_34;
+    int32_t var_10_38 = 0;
+    tisp_hldc_param_array_get(0x3ac, arg1, &var_10_39);
+    *arg2 += var_10_40;
     return 0;
 }
 

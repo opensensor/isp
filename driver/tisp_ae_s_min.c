@@ -9,7 +9,7 @@
     int32_t var_1c_14 = arg4;
     int32_t arg_0 = arg1;
     int32_t arg_8 = arg3;
-    int32_t var_20_154 = arg3;
+    int32_t var_20_197 = arg3;
     isp_printf(0, "%s[%d] do not support this interface\\n", arg1);
     
     if (!arg1 || **&IspAeExp < arg1)

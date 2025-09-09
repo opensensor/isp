@@ -5,13 +5,13 @@
 
 {
     int32_t $v1_2 = *(*(g_ispcore + 0x120) + 0xd0);
-    int32_t var_10_21 = 0;
+    int32_t var_10_24 = 0;
     int32_t result;
     
     if ($v1_2)
     {
-        result = $v1_2(arg1, 0, &var_10_22);
-        *(arg2 + 0x10) = var_10_23;
+        result = $v1_2(arg1, 0, &var_10_25);
+        *(arg2 + 0x10) = var_10_26;
     }
     else
     {

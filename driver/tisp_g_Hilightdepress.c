@@ -14,10 +14,10 @@
         return 0xffffffff;
     }
     
-    int32_t var_20_160;
+    int32_t var_20_203;
     
-    if (var_38_58 && var_20_161 != 1)
-        *arg1 = var_20_162 - 1;
+    if (var_38_58 && var_20_204 != 1)
+        *arg1 = var_20_205 - 1;
     else
         *arg1 = 0;
     

@@ -69,7 +69,7 @@
     }
     
     int32_t $s0_2 = $v0_4 | $s0_1;
-    int32_t var_10_49 = $s0_2;
+    int32_t var_10_55 = $s0_2;
     isp_printf(0, "sensor type is BT1120!\\n", "tisp_cust_mode_s_ctrl");
     system_reg_write(0xc, $s0_2);
     tiziano_defog_dn_params_refresh();

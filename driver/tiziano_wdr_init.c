@@ -4,8 +4,8 @@
   int32_t tiziano_wdr_init(uint32_t arg1, uint32_t arg2)
 
 {
-    void var_b0_67;
-    memcpy(&var_b0_68, 0x7da3c, 0x28);
+    void var_b0_69;
+    memcpy(&var_b0_70, 0x7da3c, 0x28);
     uint32_t $lo = (arg2 + 5) / 0xa;
     width_wdr_def = arg1;
     height_wdr_def = arg2;
@@ -38,7 +38,7 @@
     int32_t $v0_20 = $s7_1 + $v0_19;
     int32_t $v1 = arg2 - $v0_5;
     int32_t $v0_23 = arg1 - $v0_20;
-    void* $a1_1 = &var_b0_69;
+    void* $a1_1 = &var_b0_71;
     int32_t $a0_2;
     int32_t $s2_1;
     

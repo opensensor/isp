@@ -14,9 +14,9 @@
     
     for (; i < 0x48; i += 1)
     {
-        char var_50_31[0x4c];
+        char var_50_29[0x4c];
         void arg_10;
-        var_50_32[i] = *(&arg_10 + i);
+        var_50_30[i] = *(&arg_10 + i);
     }
     
     tisp_af_set_attr(arg1);

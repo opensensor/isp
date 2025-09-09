@@ -15,13 +15,13 @@
     int32_t $v0_5 = fix_point_div_32(_AePointPos_1, $a1_5 << (_AePointPos_1 & 0x1f), 
         $lo << (_AePointPos_1 & 0x1f));
     fix_point_mult2_32(_AePointPos_1, *(((data_b0cec_2 + 1) << 2) + &ev0_cache), $v0_5);
-    uint8_t var_20_155;
+    uint8_t var_20_198;
     uint8_t $t1;
     int32_t $t2_1;
-    $t1 = tisp_ae_g_luma(&var_20_156);
+    $t1 = tisp_ae_g_luma(&var_20_199);
     
-    if (!var_20_157)
-        var_20_158 = $t1;
+    if (!var_20_200)
+        var_20_201 = $t1;
     
     void* $s2 = &scene_luma_old;
     
@@ -32,7 +32,7 @@
         *(i - 4) = $v0_8;
     }
     
-    data_afb38_2 = fix_point_div_32(_AePointPos_1, $t2_1, var_20_159 << (_AePointPos_1 & 0x1f)) >> 2;
+    data_afb38_2 = fix_point_div_32(_AePointPos_1, $t2_1, var_20_202 << (_AePointPos_1 & 0x1f)) >> 2;
     int32_t i_1 = 0;
     uint32_t $v0_11 = 0;
     

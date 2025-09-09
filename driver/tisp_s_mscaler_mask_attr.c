@@ -39,8 +39,8 @@
     
     for (int32_t i = 0; i < 0x9c; i += 1)
     {
-        char var_b0_70[0xa0];
-        var_b0_71[i] = *(&$v0_4[4] + i);
+        char var_b0_72[0xa0];
+        var_b0_73[i] = *(&$v0_4[4] + i);
     }
     
     tisp_mscaler_mask_setreg(*$v0_4, $v0_4[1], $v0_4[2], $v0_4[3]);

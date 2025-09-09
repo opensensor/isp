@@ -5,13 +5,13 @@
 
 {
     int32_t $s1 = arg1;
-    int32_t var_20_88 = 0;
+    int32_t var_20_131 = 0;
     
     for (int32_t i = 0x35a; i != 0x380; )
     {
-        tisp_defog_param_array_set(i, $s1, &var_20_89);
+        tisp_defog_param_array_set(i, $s1, &var_20_132);
         i += 1;
-        $s1 += var_20_90;
+        $s1 += var_20_133;
     }
     
     return 0;

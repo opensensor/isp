@@ -6,13 +6,13 @@
 {
     void* $v1_1 = *(g_ispcore + 0x120);
     int32_t $a1 = *($v1_1 + 0xd0);
-    int32_t var_10_24 = 0;
+    int32_t var_10_27 = 0;
     int32_t result;
     
     if ($a1)
     {
-        result = (*($v1_1 + 0xd4))(arg1, 0, &var_10_25);
-        *(arg2 + 0x12) = var_10_26;
+        result = (*($v1_1 + 0xd4))(arg1, 0, &var_10_28);
+        *(arg2 + 0x12) = var_10_29;
     }
     else
     {

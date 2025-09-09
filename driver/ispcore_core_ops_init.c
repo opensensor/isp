@@ -1,13 +1,13 @@
 #include "include/main.h"
 
 
-  int32_t ispcore_core_ops_init(void* arg1, int32_t arg2)
+  int32_t ispcore_core_ops_init(int32_t* arg1, int32_t arg2)
 
 {
     void* $s0 = nullptr;
     
     if (arg1 && arg1 < 0xfffff001)
-        $s0 = *(arg1 + 0xd4);
+        $s0 = arg1[0x35];
     
     int32_t var_18_129 = 0;
     int32_t result = 0xffffffea;
@@ -50,7 +50,7 @@
             
             if (result_1)
             {
-                isp_printf(2, "Err [VIC_INT] : mipi ch3 hcomp err !!!\\n", *(arg1 + 8));
+                isp_printf(2, "Err [VIC_INT] : mipi ch3 hcomp err !!!\\n", arg1[2]);
                 return 0xffffffea;
             }
             
@@ -112,7 +112,7 @@
             }
             
             if ($v0_6 == 0x310f)
-                int32_t var_70_4_3 = 0x13;
+                int32_t var_70_4_2 = 0x13;
             else
             {
                 int32_t $v0_12;
@@ -120,7 +120,7 @@
                 if ($v0_6 >= 0x3110)
                 {
                     if ($v0_6 == 0x320f)
-                        var_70_4_4 = 0x13;
+                        var_70_4_3 = 0x13;
                     else
                     {
                         int32_t $v0_16;
@@ -130,21 +130,21 @@
                         if ($v0_6 >= 0x3210)
                         {
                             if ($v0_6 == 0x3307)
-                                var_70_4_5 = 0xb;
+                                var_70_4_4 = 0xb;
                             else if ($v0_6 >= 0x3308)
                             {
                                 if ($v0_6 == 0x330b)
-                                    var_70_4_6 = 0xf;
+                                    var_70_4_5 = 0xf;
                                 else if ($v0_6 >= 0x330c)
                                 {
                                     if ($v0_6 == 0x330d)
-                                        var_70_4_7 = 0x11;
+                                        var_70_4_6 = 0x11;
                                     else if ($v0_6 < 0x330d)
-                                        var_70_4_8 = 0x10;
+                                        var_70_4_7 = 0x10;
                                     else if ($v0_6 == 0x330e)
-                                        var_70_4_9 = 0x12;
+                                        var_70_4_8 = 0x12;
                                     else if ($v0_6 == 0x330f)
-                                        var_70_4_10 = 0x13;
+                                        var_70_4_9 = 0x13;
                                     else
                                     {
                                         int32_t var_80_5_1 = $v0_6;
@@ -153,43 +153,43 @@
                                     }
                                 }
                                 else if ($v0_6 == 0x3309)
-                                    var_70_4_11 = 0xd;
+                                    var_70_4_10 = 0xd;
                                 else
                                 {
                                     $v0_17 = $v0_6 < 0x330a ? 1 : 0;
                                 label_78e54:
                                     
-                                    var_70_4_12 = $v0_17 ? 0xc : 0xe;
+                                    var_70_4_11 = $v0_17 ? 0xc : 0xe;
                                 }
                             }
                             else if ($v0_6 == 0x3303)
-                                var_70_4_13 = 7;
+                                var_70_4_12 = 7;
                             else if ($v0_6 >= 0x3304)
                             {
                                 if ($v0_6 == 0x3305)
-                                    var_70_4_14 = 9;
+                                    var_70_4_13 = 9;
                                 else
                                 {
                                     $v0_16 = $v0_6 < 0x3306 ? 1 : 0;
                                 label_78e24:
                                     
-                                    var_70_4_15 = $v0_16 ? 8 : 0xa;
+                                    var_70_4_14 = $v0_16 ? 8 : 0xa;
                                 }
                             }
                             else if ($v0_6 == 0x3301)
-                                var_70_4_16 = 5;
+                                var_70_4_15 = 5;
                             else
                             {
                                 $v1_25 = 0x3300;
                                 
                                 if ($v0_6 >= 0x3302)
-                                    var_70_4_17 = 6;
+                                    var_70_4_16 = 6;
                                 else
                                 {
                                 label_78e08:
                                     
                                     if ($v0_6 == $v1_25)
-                                        var_70_4_18 = 4;
+                                        var_70_4_17 = 4;
                                     else
                                     {
                                         int32_t var_80_4_1 = $v0_6;
@@ -200,11 +200,11 @@
                             }
                         }
                         else if ($v0_6 == 0x3207)
-                            var_70_4_19 = 0xb;
+                            var_70_4_18 = 0xb;
                         else if ($v0_6 >= 0x3208)
                         {
                             if ($v0_6 == 0x320b)
-                                var_70_4_20 = 0xf;
+                                var_70_4_19 = 0xf;
                             else if ($v0_6 >= 0x320c)
                             {
                                 if ($v0_6 == 0x320d)
@@ -214,7 +214,7 @@
                                 else
                                     $v0_12 = 0x12;
                                 
-                                var_70_4_21 = $v0_12;
+                                var_70_4_20 = $v0_12;
                             }
                             else
                             {
@@ -224,11 +224,11 @@
                                     goto label_78e54;
                                 }
                                 
-                                var_70_4_22 = 0xd;
+                                var_70_4_21 = 0xd;
                             }
                         }
                         else if ($v0_6 == 0x3203)
-                            var_70_4_23 = 7;
+                            var_70_4_22 = 7;
                         else if ($v0_6 >= 0x3204)
                         {
                             if ($v0_6 != 0x3205)
@@ -237,10 +237,10 @@
                                 goto label_78e24;
                             }
                             
-                            var_70_4_24 = 9;
+                            var_70_4_23 = 9;
                         }
                         else if ($v0_6 == 0x3201)
-                            var_70_4_25 = 5;
+                            var_70_4_24 = 5;
                         else
                         {
                             $v1_25 = 0x3200;
@@ -248,20 +248,20 @@
                             if ($v0_6 < 0x3202)
                                 goto label_78e08;
                             
-                            var_70_4_26 = 6;
+                            var_70_4_25 = 6;
                         }
                     }
                 }
                 else if ($v0_6 == 0x3013)
-                    var_70_4_27 = 3;
+                    var_70_4_26 = 3;
                 else if ($v0_6 >= 0x3014)
                 {
                     if ($v0_6 == 0x3106)
-                        var_70_4_28 = 0xa;
+                        var_70_4_27 = 0xa;
                     else if ($v0_6 >= 0x3107)
                     {
                         if ($v0_6 == 0x310a)
-                            var_70_4_29 = 0xe;
+                            var_70_4_28 = 0xe;
                         else if ($v0_6 < 0x310b)
                         {
                             if ($v0_6 == 0x3108)
@@ -271,16 +271,16 @@
                             else
                                 $v0_12 = 0xd;
                             
-                            var_70_4_30 = $v0_12;
+                            var_70_4_29 = $v0_12;
                         }
                         else if ($v0_6 == 0x310c)
-                            var_70_4_31 = 0x10;
+                            var_70_4_30 = 0x10;
                         else if ($v0_6 < 0x310c)
-                            var_70_4_32 = 0xf;
+                            var_70_4_31 = 0xf;
                         else if ($v0_6 == 0x310d)
-                            var_70_4_33 = 0x11;
+                            var_70_4_32 = 0x11;
                         else if ($v0_6 == 0x310e)
-                            var_70_4_34 = 0x12;
+                            var_70_4_33 = 0x12;
                         else
                         {
                             int32_t var_80_3_1 = $v0_6;
@@ -289,7 +289,7 @@
                         }
                     }
                     else if ($v0_6 == 0x3102)
-                        var_70_4_35 = 6;
+                        var_70_4_34 = 6;
                     else if ($v0_6 >= 0x3103)
                     {
                         if ($v0_6 == 0x3104)
@@ -299,12 +299,12 @@
                         else
                             $v0_12 = 9;
                         
-                        var_70_4_36 = $v0_12;
+                        var_70_4_35 = $v0_12;
                     }
                     else if ($v0_6 == 0x3100)
-                        var_70_4_37 = 4;
+                        var_70_4_36 = 4;
                     else if ($v0_6 >= 0x3101)
-                        var_70_4_38 = 5;
+                        var_70_4_37 = 5;
                     else if ($v0_6 == 0x3014)
                         int32_t var_70_3_2 = 0;
                     else
@@ -315,7 +315,7 @@
                     }
                 }
                 else if ($v0_6 == 0x300b)
-                    var_70_4_39 = 1;
+                    var_70_4_38 = 1;
                 else if ($v0_6 >= 0x300c)
                 {
                     if ($v0_6 == 0x300f)
@@ -323,23 +323,23 @@
                     else if ($v0_6 < 0x3010)
                     {
                         if ($v0_6 != 0x300d)
-                            var_70_4_40 = 3;
+                            var_70_4_39 = 3;
                         else
-                            int32_t var_70_1_5 = 0;
+                            int32_t var_70_1_4 = 0;
                     }
                     else if ($v0_6 == 0x3011)
-                        var_70_4_41 = 2;
+                        var_70_4_40 = 2;
                     else if ($v0_6 < 0x3012)
-                        var_70_4_42 = 3;
+                        var_70_4_41 = 3;
                     else
                         int32_t var_70_2_2 = 0;
                 }
                 else if ($v0_6 >= 0x3009)
-                    var_70_4_43 = 2;
+                    var_70_4_42 = 2;
                 else if ($v0_6 >= 0x3003 || $v0_6 == 0x3001)
-                    var_70_4_44 = 1;
+                    var_70_4_43 = 1;
                 else if ($v0_6 >= 0x3002)
-                    var_70_4_45 = 2;
+                    var_70_4_44 = 2;
                 else if ($v0_6 != 0x2011)
                 {
                     int32_t var_80_1_5 = $v0_6;
@@ -347,7 +347,7 @@
                         "ispcore_core_ops_init");
                 }
                 else
-                    var_70_4_46 = 0x14;
+                    var_70_4_45 = 0x14;
             }
             
             void var_6c_17;
@@ -371,7 +371,7 @@
             int32_t var_4c_1_7 = $a1_2;
             int32_t var_58_1_4 = *($v0_23 + 0x98);
             int32_t var_54_1_7 = *($v0_23 + 0x9c);
-            int32_t var_20_1_7 = *($v0_23 + 0xe4);
+            int32_t var_20_1_6 = *($v0_23 + 0xe4);
             int32_t var_50_1_7 = *($v0_23 + 0xa0);
             int16_t var_48_1_12 = *($v0_23 + 0xa4);
             int16_t var_2e_1_1 = *($v0_23 + 0xd8);

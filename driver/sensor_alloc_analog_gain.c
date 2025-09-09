@@ -5,9 +5,9 @@
 
 {
     int32_t $v0_2 = *(*(g_ispcore + 0x120) + 0xc0);
-    int32_t var_10_12 = 0;
-    int32_t result = $v0_2(arg1, 0x10, &var_10_13);
-    *arg2 = var_10_14;
+    int32_t var_10_15 = 0;
+    int32_t result = $v0_2(arg1, 0x10, &var_10_16);
+    *arg2 = var_10_17;
     return result;
 }
 

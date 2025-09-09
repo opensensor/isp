@@ -14,9 +14,9 @@
     
     for (; i < 0x18; i += 1)
     {
-        char var_20_165[0x1c];
+        char var_20_208[0x1c];
         void arg_10;
-        var_20_166[i] = *(&arg_10 + i);
+        var_20_209[i] = *(&arg_10 + i);
     }
     
     tisp_ae_s_at_list(arg1);

@@ -33,8 +33,8 @@
         if ($v0_3 >= 5 && $a0_1 - 5 < 0xb)
         {
             uint8_t var_9a_1 = $v0_3;
-            char var_50_5;
-            char var_a8_2 = var_50_6;
+            char var_50_3;
+            char var_a8_2 = var_50_4;
             char var_3f;
             char var_97_1 = var_3f_1;
             char var_3a;

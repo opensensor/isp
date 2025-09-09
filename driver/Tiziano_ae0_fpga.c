@@ -56,7 +56,7 @@
     int32_t* var_c8_12 = &var_5c_6;
     int32_t var_58_20;
     int32_t* var_cc_7 = &var_58_21;
-    int32_t* var_d0_17 = &var_60_15;
+    int32_t* var_d0_16 = &var_60_15;
     int32_t* var_d4_15 = &var_68_17;
     int32_t* var_d8_3 = &var_54_12;
     int32_t var_dc_6 = $a0;

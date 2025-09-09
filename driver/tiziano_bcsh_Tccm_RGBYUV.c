@@ -82,18 +82,18 @@
         int32_t $v1_1 = $fp_1 * var_d0_1 * fix_point_mult2_32(0x10, $s4_1, var_cc_6 << 6);
         int32_t $s0_5 = *($s5 + 0x10);
         int32_t $s6_2 = *($s5 + 0x14);
-        int32_t var_b8_35;
-        int32_t var_b4_12;
-        *i_3 = $s0_5 * var_b8_36 * fix_point_mult2_32(0x10, $s6_2, var_b4_13 << 6) + $v1_1 + $s6_1;
+        int32_t var_b8_37;
+        int32_t var_b4_14;
+        *i_3 = $s0_5 * var_b8_38 * fix_point_mult2_32(0x10, $s6_2, var_b4_15 << 6) + $v1_1 + $s6_1;
         int32_t var_e0;
         int32_t var_dc;
         int32_t $t6_6 = $t1_1 * var_e0_2 * fix_point_mult2_32(0x10, $t5_1, var_dc_1 << 6);
         int32_t var_c8;
         int32_t var_c4_6;
         int32_t $t6_8 = $fp_1 * var_c8_1 * fix_point_mult2_32(0x10, $s4_1, var_c4_7 << 6) + $t6_6;
-        int32_t var_b0_55;
-        int32_t var_ac_15;
-        i_3[1] = $s0_5 * var_b0_56 * fix_point_mult2_32(0x10, $s6_2, var_ac_16 << 6) + $t6_8;
+        int32_t var_b0_57;
+        int32_t var_ac_17;
+        i_3[1] = $s0_5 * var_b0_58 * fix_point_mult2_32(0x10, $s6_2, var_ac_18 << 6) + $t6_8;
         int32_t var_d8;
         int32_t var_d4;
         int32_t var_c0;
@@ -133,9 +133,9 @@
         int32_t $s6_3 = $t2_7 * var_130_2 * fix_point_mult2_32(0x10, var_54_5, var_12c_1);
         int32_t var_118_9;
         int32_t var_114_7;
-        int32_t var_50_18;
+        int32_t var_50_16;
         int32_t var_4c_11;
-        int32_t $t7_5 = var_50_19 * var_118_10 * fix_point_mult2_32(0x10, var_4c_12, var_114_8) + $s6_3;
+        int32_t $t7_5 = var_50_17 * var_118_10 * fix_point_mult2_32(0x10, var_4c_12, var_114_8) + $s6_3;
         int32_t var_100_2;
         int32_t var_fc;
         int32_t var_48_29;
@@ -146,19 +146,19 @@
         int32_t $t7_10 = $t2_7 * var_128_21 * fix_point_mult2_32(0x10, var_54_6, var_124_20);
         int32_t var_110;
         int32_t var_10c_3;
-        int32_t $t7_12 = var_50_20 * var_110_2 * fix_point_mult2_32(0x10, var_4c_13, var_10c_4) + $t7_10;
-        int32_t var_f8_22;
+        int32_t $t7_12 = var_50_18 * var_110_2 * fix_point_mult2_32(0x10, var_4c_13, var_10c_4) + $t7_10;
+        int32_t var_f8_23;
         int32_t var_f4;
-        i_3[1] = var_48_31 * var_f8_23 * fix_point_mult2_32(0x10, var_44_22, var_f4_2) + $t7_12;
-        int32_t var_120_15;
+        i_3[1] = var_48_31 * var_f8_24 * fix_point_mult2_32(0x10, var_44_22, var_f4_1) + $t7_12;
+        int32_t var_120_11;
         int32_t var_11c_10;
         int32_t var_108_3;
         int32_t var_104;
         int32_t $lo_4;
-        arg5 = HIGHD(COMBINE($hi, $t2_7 * var_120_16 * fix_point_mult2_32(0x10, var_54_7, var_11c_11))
-            + var_50_21 * var_108_4 * fix_point_mult2_32(0x10, var_4c_14, var_104_1));
-        $lo_4 = LOWD(COMBINE($hi, $t2_7 * var_120_17 * fix_point_mult2_32(0x10, var_54_8, var_11c_12))
-            + var_50_22 * var_108_5 * fix_point_mult2_32(0x10, var_4c_15, var_104_2));
+        arg5 = HIGHD(COMBINE($hi, $t2_7 * var_120_12 * fix_point_mult2_32(0x10, var_54_7, var_11c_11))
+            + var_50_19 * var_108_4 * fix_point_mult2_32(0x10, var_4c_14, var_104_1));
+        $lo_4 = LOWD(COMBINE($hi, $t2_7 * var_120_13 * fix_point_mult2_32(0x10, var_54_8, var_11c_12))
+            + var_50_20 * var_108_5 * fix_point_mult2_32(0x10, var_4c_15, var_104_2));
         i_3 = &i_3[3];
         int32_t var_f0;
         int32_t var_ec;

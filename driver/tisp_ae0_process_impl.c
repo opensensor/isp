@@ -13,8 +13,8 @@
     
     for (int32_t i = 0; i < 0x40; i += 1)
     {
-        char var_b4_16[0x44];
-        var_b4_17[i] = *(i + &IspAeExp);
+        char var_b4_18[0x44];
+        var_b4_19[i] = *(i + &IspAeExp);
     }
     
     for (int32_t i_1 = 0; i_1 < 0x5c; i_1 += 1)

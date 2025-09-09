@@ -37,7 +37,7 @@
         }
     }
     
-    int32_t var_50_30 = 0xb;
+    int32_t var_50_28 = 0xb;
     void var_58_23;
     tisp_event_push(&var_58_24);
     return 1;

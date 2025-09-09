@@ -1,7 +1,7 @@
 #include "include/main.h"
 
 
-  int32_t ispcore_slake_module(void* arg1)
+  int32_t ispcore_slake_module(int32_t* arg1)
 
 {
     int32_t result = 0xffffffea;
@@ -11,7 +11,7 @@
         if (arg1 >= 0xfffff001)
             return 0xffffffea;
         
-        void* $s0_1 = *(arg1 + 0xd4);
+        void* $s0_1 = arg1[0x35];
         result = 0xffffffea;
         
         if ($s0_1 && $s0_1 < 0xfffff001)
@@ -75,7 +75,7 @@
                                     if ($v0_8 != 0xfffffdfd)
                                     {
                                         isp_printf(2, "error handler!!!\\n", *($s2_1 + 8));
-                                        $s0_3 = *(arg1 + 0xc0);
+                                        $s0_3 = arg1[0x30];
                                         break;
                                     }
                                     
@@ -87,7 +87,7 @@
                     
                     if ($s0_1 + 0x78 == $s3_1)
                     {
-                        $s0_3 = *(arg1 + 0xc0);
+                        $s0_3 = arg1[0x30];
                         break;
                     }
                     
@@ -95,7 +95,7 @@
                 }
                 
                 int32_t $s2_2 = $s0_3 - 1;
-                int32_t* $s0_5 = *(arg1 + 0xbc) + ($s0_3 << 2);
+                int32_t* $s0_5 = arg1[0x2f] + ($s0_3 << 2);
                 
                 while (true)
                 {

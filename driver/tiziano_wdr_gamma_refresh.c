@@ -4,10 +4,10 @@
   int32_t tiziano_wdr_gamma_refresh()
 
 {
-    int32_t var_10_46 = 0;
-    int32_t $a2_1 = tisp_gamma_param_array_get(0x3d, &wdr_gam_y129_array, &var_10_47);
+    int32_t var_10_52 = 0;
+    int32_t $a2_1 = tisp_gamma_param_array_get(0x3d, &wdr_gam_y129_array, &var_10_53);
     
-    if (var_10_48 != 0x102)
+    if (var_10_54 != 0x102)
     {
         isp_printf(2, "not support the gpio mode!\\n", $a2_1);
         return 0xffffffff;

@@ -1,10 +1,10 @@
 #include "include/main.h"
 
 
-  int32_t ispcore_video_s_stream(void* arg1, int32_t arg2)
+  int32_t ispcore_video_s_stream(int32_t* arg1, int32_t arg2)
 
 {
-    void* $s0 = *(arg1 + 0xd4);
+    void* $s0 = arg1[0x35];
     int32_t var_28_44 = 0;
     __private_spin_lock_irqsave($s0 + 0xdc, &var_28_45);
     
@@ -25,7 +25,7 @@
     
     if (!arg2)
     {
-        $s3_1 = arg1 + 0x38;
+        $s3_1 = &arg1[0xe];
         
         if ($v0_3 == 4)
         {
@@ -47,15 +47,15 @@
             }
             
             *($s0 + 0xe8) = 3;
-            $s3_1 = arg1 + 0x38;
+            $s3_1 = &arg1[0xe];
         }
     }
     else if ($v0_3 != 3)
-        $s3_1 = arg1 + 0x38;
+        $s3_1 = &arg1[0xe];
     else
     {
         *($s0 + 0xe8) = 4;
-        $s3_1 = arg1 + 0x38;
+        $s3_1 = &arg1[0xe];
     }
     
     int32_t result = 0;
@@ -100,16 +100,16 @@
         else
             $s3_1 += 4;
         
-        if (arg1 + 0x78 == $s3_1)
+        if (&arg1[0x1e] == $s3_1)
         {
             $a0_4 = *($s0 + 0x15c);
             break;
         }
     }
     
-    void* $v0_10 = *(arg1 + 0xb8);
+    void* $v0_10 = arg1[0x2e];
     int32_t (* $v0_11)(int32_t* arg1);
-    void* $a0_6;
+    int32_t* $a0_6;
     
     if ($a0_4 == 1 || !arg2)
     {

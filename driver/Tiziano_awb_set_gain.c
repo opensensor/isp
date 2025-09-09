@@ -7,13 +7,13 @@
     uint32_t $a1 = *(arg1 + 0x10);
     int32_t $v0 = *(arg1 + 0x14);
     int32_t $a2 = *arg3;
-    uint32_t var_20_145 = $a1;
+    uint32_t var_20_188 = $a1;
     int32_t $v0_1 = fix_point_mult2_32(arg2, $a1 << (arg2 & 0x1f), $a2);
     int32_t $s0_1 = 1 << ((arg2 - 1) & 0x1f);
     int32_t $a2_1 = arg3[1];
-    var_20_146 = ($v0_1 + $s0_1) >> (arg2 & 0x1f);
+    var_20_189 = ($v0_1 + $s0_1) >> (arg2 & 0x1f);
     int32_t $v0_4 = fix_point_mult2_32(arg2, $v0 << (arg2 & 0x1f), $a2_1);
-    uint32_t $a2_2 = var_20_147;
+    uint32_t $a2_2 = var_20_190;
     uint32_t $v0_6 = ($s0_1 + $v0_4) >> (arg2 & 0x1f);
     uint32_t var_1c_1_2 = $v0_6;
     data_b5a48_1 = isp_printf / $a2_2;
@@ -23,16 +23,16 @@
     
     if (tisp_wb_attr_1 - 1 < 8)
     {
-        var_20_148 = data_b5a38_1;
+        var_20_191 = data_b5a38_1;
         var_1c_2_2 = data_b5a3c_1;
     }
     else if (tisp_wb_attr_1 == 9)
     {
-        var_20_149 = ((data_b5a38_2 + 0x40) * $a2_2) >> 6;
+        var_20_192 = ((data_b5a38_2 + 0x40) * $a2_2) >> 6;
         var_1c_2_3 = ((data_b5a3c_2 + 0x40) * $v0_6) >> 6;
     }
     int32_t var_28_17;
-    JZ_Isp_Awb_Awbg2reg(&var_20_150, &var_28_18);
+    JZ_Isp_Awb_Awbg2reg(&var_20_193, &var_28_18);
     
     if (!awb_frz)
     {

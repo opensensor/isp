@@ -101,7 +101,7 @@
     int32_t var_68_12 = $v0_14;
     int32_t var_6c_10 = $v0_13;
     int32_t var_70_14 = $v0_11;
-    int32_t var_50_11 = $v0_2;
+    int32_t var_50_9 = $v0_2;
     int32_t var_5c_1 = $v0_17;
     isp_printf(0, "sensor type is BT1120!\\n", arg1);
     return 0;

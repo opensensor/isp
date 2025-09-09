@@ -13,6 +13,9 @@
 #define ARCH_ENDIAN LITTLE
 #define BASE_ADDRESS 0x10000
 
+/* Function Declarations */
+#include "functions.h"
+
 /* Type Definitions */
 
 /* Platform Types */
@@ -20,17 +23,75 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+/* ELF and System Types - Prevent incomplete type errors */
+struct Elf32_Ident {
+    unsigned char ei_mag[4];     // Magic number
+    unsigned char ei_class;      // File class
+    unsigned char ei_data;       // Data encoding
+    unsigned char ei_version;    // File version
+    unsigned char ei_osabi;      // OS/ABI identification
+    unsigned char ei_abiversion; // ABI version
+    unsigned char ei_pad[7];     // Padding
+};
+
+enum e_type {
+    ET_NONE = 0,    // No file type
+    ET_REL = 1,     // Relocatable file
+    ET_EXEC = 2,    // Executable file
+    ET_DYN = 3,     // Shared object file
+    ET_CORE = 4     // Core file
+};
+
+enum e_machine {
+    EM_NONE = 0,     // No machine
+    EM_M32 = 1,      // AT&T WE 32100
+    EM_SPARC = 2,    // SPARC
+    EM_386 = 3,      // Intel 80386
+    EM_68K = 4,      // Motorola 68000
+    EM_MIPS = 8,     // MIPS
+    EM_ARM = 40,     // ARM
+    EM_X86_64 = 62   // AMD x86-64
+};
+
+enum p_type {
+    PT_NULL = 0,     // Program header table entry unused
+    PT_LOAD = 1,     // Loadable program segment
+    PT_DYNAMIC = 2,  // Dynamic linking information
+    PT_INTERP = 3,   // Program interpreter
+    PT_NOTE = 4      // Auxiliary information
+};
+
+enum p_flags {
+    PF_X = 1,        // Execute
+    PF_W = 2,        // Write
+    PF_R = 4         // Read
+};
+
+enum sh_type {
+    SHT_NULL = 0,     // Section header table entry unused
+    SHT_PROGBITS = 1, // Program data
+    SHT_SYMTAB = 2,   // Symbol table
+    SHT_STRTAB = 3,   // String table
+    SHT_NOBITS = 8    // Program space with no data (bss)
+};
+
+enum sh_flags {
+    SHF_WRITE = 1,    // Writable
+    SHF_ALLOC = 2,    // Occupies memory during execution
+    SHF_EXECINSTR = 4 // Executable
+};
+
 typedef uint32_t DWORD;
 typedef uint16_t WORD;
 typedef uint8_t BYTE;
 
 /* User-Defined Types */
 typedef struct Elf32_Header {
-    struct Elf32_Ident ident; // offset: 0x0
-    enum e_type type; // offset: 0x10
-    enum e_machine machine; // offset: 0x12
+    struct struct Elf32_Ident ident; // offset: 0x0
+    enum e_type { e_type_DEFAULT = 0 } type; // offset: 0x10
+    enum e_machine { e_machine_DEFAULT = 0 } machine; // offset: 0x12
     uint32_t version; // offset: 0x14
-    void (*)() entry; // offset: 0x18
+    void (*)(void) entry; // offset: 0x18
     uint32_t program_header_offset; // offset: 0x1c
     uint32_t section_header_offset; // offset: 0x20
     uint32_t flags; // offset: 0x24
@@ -43,30 +104,30 @@ typedef struct Elf32_Header {
 } Elf32_Header;
 
 typedef struct Elf32_Ident {
-    char[0x4] signature; // offset: 0x0
+    char[4] signature; // offset: 0x0
     uint8_t file_class; // offset: 0x4
     uint8_t encoding; // offset: 0x5
     uint8_t version; // offset: 0x6
     uint8_t os; // offset: 0x7
     uint8_t abi_version; // offset: 0x8
-    char[0x7] pad; // offset: 0x9
+    char[7] pad; // offset: 0x9
 } Elf32_Ident;
 
 typedef struct Elf32_ProgramHeader {
-    enum p_type type; // offset: 0x0
+    enum p_type { p_type_DEFAULT = 0 } type; // offset: 0x0
     uint32_t offset; // offset: 0x4
     uint32_t virtual_address; // offset: 0x8
     uint32_t physical_address; // offset: 0xc
     uint32_t file_size; // offset: 0x10
     uint32_t memory_size; // offset: 0x14
-    enum p_flags flags; // offset: 0x18
+    enum p_flags { p_flags_DEFAULT = 0 } flags; // offset: 0x18
     uint32_t align; // offset: 0x1c
 } Elf32_ProgramHeader;
 
 typedef struct Elf32_SectionHeader {
     uint32_t name; // offset: 0x0
-    enum sh_type type; // offset: 0x4
-    enum sh_flags flags; // offset: 0x8
+    enum sh_type { sh_type_DEFAULT = 0 } type; // offset: 0x4
+    enum sh_flags { sh_flags_DEFAULT = 0 } flags; // offset: 0x8
     uint32_t address; // offset: 0xc
     uint32_t offset; // offset: 0x10
     uint32_t size; // offset: 0x14
@@ -243,7 +304,7 @@ typedef void* va_list;
 char data_10004[] = { 0xc4, 0x2c, 0x42, 0x8c, 0xd0, 0xff, 0xbd, 0x27, 0x2b, 0x10, 0x82, 0x00, 0x28, 0x00, 0xb1, 0xaf, 0x2c, 0x00, 0xbf, 0xaf, 0x24, 0x00, 0xb0, 0xaf, 0x38, 0x00, 0xa6, 0xaf, 0x3c, 0x00, 0xa7, 0xaf, 0x14, 0x00, 0x40, 0x14 }; // offset: 0x10004
 
 // Data at address 0x10028
-char data_10028[] = 0xa2003800008825; // offset: 0x10028
+char data_10028[] = 0x00a2003800008825ULL; // offset: 0x10028
 
 // Data at address 0x7a170
 uint64_t __ksymtab_isp_printf = &isp_printf;
@@ -323,8 +384,29 @@ uint64_t __ksymtab_tx_isp_subdev_deinit = &tx_isp_subdev_deinit;
 // Data at address 0x7a238
 uint64_t __ksymtab_tx_isp_subdev_init = &tx_isp_subdev_init;
 
+// Data at address 0x7a280
+char const __param_str_isp_memopt[] = "isp_memopt"; // offset: 0x7a280
+
+// Data at address 0x7a28c
+char const __param_str_isp_day_night_switch_drop_frame_num[] = "isp_day_night_switch_drop_frame_num"; // offset: 0x7a28c
+
+// Data at address 0x7a2b0
+char const __param_str_isp_ch1_dequeue_delay_time[] = "isp_ch1_dequeue_delay_time"; // offset: 0x7a2b0
+
+// Data at address 0x7a2cc
+char const __param_str_isp_ch0_pre_dequeue_valid_lines[] = "isp_ch0_pre_dequeue_valid_lines"; // offset: 0x7a2cc
+
+// Data at address 0x7a2ec
+char const __param_str_isp_ch0_pre_dequeue_interrupt_process[] = "isp_ch0_pre_dequeue_interrupt_process"; // offset: 0x7a2ec
+
+// Data at address 0x7a314
+char const __param_str_isp_ch0_pre_dequeue_time[] = "isp_ch0_pre_dequeue_time"; // offset: 0x7a314
+
 // Data at address 0x7a330
-const char __param_str_isp_clk[] = "isp_clk"; // length: 7
+char const __param_str_isp_clk[] = "isp_clk"; // offset: 0x7a330
+
+// Data at address 0x7a338
+char const __param_str_print_level[] = "print_level"; // offset: 0x7a338
 
 // Data at address 0x7a350
 uint32_t jump_table_7a350[] = (void*)0x111a8; // offset: 0x7a350
@@ -369,7 +451,7 @@ uint32_t jump_table_7a4f0[] = (void*)0x16820; // offset: 0x7a4f0
 uint32_t jump_table_7a518[] = (void*)0x182b0; // offset: 0x7a518
 
 // Data at address 0x7a540
-uint24_t CSWTCH_84 = { 0x00, 0x32, 0x3c };
+uint32_t CSWTCH_84 = 0x003c3200U;
 
 // Data at address 0x7a544
 char const __func___34540[] = "tiziano_isp_awb_ct_trend_g_attr"; // offset: 0x7a544
@@ -1028,6 +1110,33 @@ char const __func___34538[] = "mbus_to_bayer_write"; // offset: 0x7df48
 // Data at address 0x7df64
 char const _LC1[] = "flags = 0x%08x, jzflags = %p,0x%08x"; // offset: 0x7df64
 
+// Data at address 0x7df88
+char const data_7df88[] = "tx-isp"; // offset: 0x7df88
+
+// Data at address 0x7df90
+char const data_7df90[] = "isp-fs"; // offset: 0x7df90
+
+// Data at address 0x7df98
+char const data_7df98[] = "isp-m0"; // offset: 0x7df98
+
+// Data at address 0x7dfa0
+char const data_7dfa0[] = "cgu_isp"; // offset: 0x7dfa0
+
+// Data at address 0x7dfac
+char const data_7dfac[] = "isp-device"; // offset: 0x7dfac
+
+// Data at address 0x7dfb8
+char const data_7dfb8[] = "isp-irq-id"; // offset: 0x7dfb8
+
+// Data at address 0x7dfc4
+char const data_7dfc4[] = "isp-w02"; // offset: 0x7dfc4
+
+// Data at address 0x7dfcc
+char const data_7dfcc[] = "isp-w01"; // offset: 0x7dfcc
+
+// Data at address 0x7dfd8
+char const data_7dfd8[] = "isp-w00"; // offset: 0x7dfd8
+
 // Data at address 0x7e018
 char const _LC2[] = "Can not support this frame mode!!!\n"; // offset: 0x7e018
 
@@ -1140,25 +1249,25 @@ char const _LC39[] = "\t cmd:\n"; // offset: 0x7e40c
 char const _LC40[] = "\t\t snapraw\n"; // offset: 0x7e414
 
 // Data at address 0x7e420
-char const _LC41[] = "\t\t\t use cmd " snapraw" you should set ispmem first!!!!!\n"; // offset: 0x7e420
+char const _LC41[] = "\t\t\t use cmd \" snapraw\" you should set ispmem first!!!!!\n"; // offset: 0x7e420
 
 // Data at address 0x7e45c
-char const _LC42[] = "\t\t\t please use this cmd: \n\t"echo snapraw savenum > /proc/jz/isp/isp-w02"\n"; // offset: 0x7e45c
+char const _LC42[] = "\t\t\t please use this cmd: \n\t\"echo snapraw savenum > /proc/jz/isp/isp-w02\"\n"; // offset: 0x7e45c
 
 // Data at address 0x7e4a8
-char const _LC43[] = "\t\t\t "snapraw"  is cmd; \n"; // offset: 0x7e4a8
+char const _LC43[] = "\t\t\t \"snapraw\"  is cmd; \n"; // offset: 0x7e4a8
 
 // Data at address 0x7e4c4
-char const _LC44[] = "\t\t\t "savenum" is the num of you save raw picture.\n "; // offset: 0x7e4c4
+char const _LC44[] = "\t\t\t \"savenum\" is the num of you save raw picture.\n "; // offset: 0x7e4c4
 
 // Data at address 0x7e4f8
 char const _LC45[] = "\t\t saveraw\n"; // offset: 0x7e4f8
 
 // Data at address 0x7e504
-char const _LC46[] = "\t\t\t please use this cmd: \n\t"echo saveraw savenum > /proc/jz/isp/isp-w02"\n"; // offset: 0x7e504
+char const _LC46[] = "\t\t\t please use this cmd: \n\t\"echo saveraw savenum > /proc/jz/isp/isp-w02\"\n"; // offset: 0x7e504
 
 // Data at address 0x7e550
-char const _LC47[] = "\t\t\t "saveraw"  is cmd; \n"; // offset: 0x7e550
+char const _LC47[] = "\t\t\t \"saveraw\"  is cmd; \n"; // offset: 0x7e550
 
 // Data at address 0x7e56c
 char const _LC48[] = "Can\'t ops the node!\n"; // offset: 0x7e56c
@@ -1280,8 +1389,29 @@ char const _LC86[] = "error handler!!!\n"; // offset: 0x7eac0
 // Data at address 0x7ead4
 char const _LC87[] = "addr ctl is 0x%x\n"; // offset: 0x7ead4
 
+// Data at address 0x7eae8
+char const data_7eae8[] = "isp-w02"; // offset: 0x7eae8
+
+// Data at address 0x7ee0c
+char const data_7ee0c[] = "isp-w00"; // offset: 0x7ee0c
+
+// Data at address 0x7f144
+char const data_7f144[] = "isp-w01"; // offset: 0x7f144
+
 // Data at address 0x80080
 char const data_80080[] = "Failed to init isp module(%d.%d)\n"; // offset: 0x80080
+
+// Data at address 0x800d4
+char const data_800d4[] = "isp-fs"; // offset: 0x800d4
+
+// Data at address 0x805c4
+char const _LC37[] = "tx-isp"; // offset: 0x805c4
+
+// Data at address 0x80678
+char const data_80678[] = "isp-m0"; // offset: 0x80678
+
+// Data at address 0x80680
+char const data_80680[] = "isp-fs"; // offset: 0x80680
 
 // Data at address 0x825e8
 char const _LC88[] = "Failed to init isp module(%d.%d)\n"; // offset: 0x825e8
@@ -1298,8 +1428,11 @@ char const _LC91[] = "Failed to init tuning module!\n"; // offset: 0x82644
 // Data at address 0x82664
 char const _LC92[] = "ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\n"; // offset: 0x82664
 
+// Data at address 0x826a0
+char const data_826a0[] = "isp-m0"; // offset: 0x826a0
+
 // Data at address 0x82c40
-void* __param_isp_memopt = (void*)0x7a280;
+char const (*) __param_isp_memopt[] = (void*)0x7a280 /* pointer to data */; // offset: 0x82c40
 
 // Data at address 0x82c44
 void* data_82c44 = (void*)0xda618;
@@ -1308,7 +1441,7 @@ void* data_82c44 = (void*)0xda618;
 void* data_82c4c = (void*)0xb2ccc /* pointer to data */;
 
 // Data at address 0x82c50
-void* __param_isp_day_night_switch_drop_frame_num = (void*)0x7a28c;
+char const (*) __param_isp_day_night_switch_drop_frame_num[] = (void*)0x7a28c /* pointer to data */; // offset: 0x82c50
 
 // Data at address 0x82c54
 void* data_82c54 = (void*)0xda618;
@@ -1317,7 +1450,7 @@ void* data_82c54 = (void*)0xda618;
 void* data_82c5c = (void*)0xb2c10 /* pointer to data */;
 
 // Data at address 0x82c60
-void* __param_isp_ch1_dequeue_delay_time = (void*)0x7a2b0;
+char const (*) __param_isp_ch1_dequeue_delay_time[] = (void*)0x7a2b0 /* pointer to data */; // offset: 0x82c60
 
 // Data at address 0x82c64
 void* data_82c64 = (void*)0xda618;
@@ -1326,7 +1459,7 @@ void* data_82c64 = (void*)0xda618;
 void* data_82c6c = (void*)0xda4a8 /* pointer to data */;
 
 // Data at address 0x82c70
-void* __param_isp_ch0_pre_dequeue_valid_lines = (void*)0x7a2cc;
+char const (*) __param_isp_ch0_pre_dequeue_valid_lines[] = (void*)0x7a2cc /* pointer to data */; // offset: 0x82c70
 
 // Data at address 0x82c74
 void* data_82c74 = (void*)0xda618;
@@ -1335,7 +1468,7 @@ void* data_82c74 = (void*)0xda618;
 void* data_82c7c = (void*)0x83848 /* pointer to data */;
 
 // Data at address 0x82c80
-void* __param_isp_ch0_pre_dequeue_interrupt_process = (void*)0x7a2ec;
+char const (*) __param_isp_ch0_pre_dequeue_interrupt_process[] = (void*)0x7a2ec /* pointer to data */; // offset: 0x82c80
 
 // Data at address 0x82c84
 void* data_82c84 = (void*)0xda618;
@@ -1344,7 +1477,7 @@ void* data_82c84 = (void*)0xda618;
 void* data_82c8c = (void*)0xb2c14 /* pointer to data */;
 
 // Data at address 0x82c90
-void* __param_isp_ch0_pre_dequeue_time = (void*)0x7a314;
+char const (*) __param_isp_ch0_pre_dequeue_time[] = (void*)0x7a314 /* pointer to data */; // offset: 0x82c90
 
 // Data at address 0x82c94
 void* data_82c94 = (void*)0xda618;
@@ -1353,7 +1486,7 @@ void* data_82c94 = (void*)0xda618;
 void* data_82c9c = (void*)0xda550 /* pointer to data */;
 
 // Data at address 0x82ca0
-void* __param_isp_clk = (void*)0x7a330 /* pointer to data */;
+char const (*) __param_isp_clk[] = (void*)0x7a330 /* pointer to data */; // offset: 0x82ca0
 
 // Data at address 0x82ca4
 void* data_82ca4 = (void*)0xda618;
@@ -1362,7 +1495,7 @@ void* data_82ca4 = (void*)0xda618;
 void* data_82cac = (void*)0x82cc0 /* pointer to data */;
 
 // Data at address 0x82cb0
-void* __param_print_level = (void*)0x7a338;
+char const (*) __param_print_level[] = (void*)0x7a338 /* pointer to data */; // offset: 0x82cb0
 
 // Data at address 0x82cb4
 void* data_82cb4 = (void*)0xda618;
@@ -1371,13 +1504,13 @@ void* data_82cb4 = (void*)0xda618;
 void* data_82cbc = (void*)0x82cc4 /* pointer to data */;
 
 // Data at address 0x82cc0
-uint32_t isp_clk = { 0x00, 0xe1, 0xf5, 0x05 };
+uint32_t isp_clk = 0x05f5e100U;
 
 // Data at address 0x82cc4
 uint32_t print_level = 0x1;
 
 // Data at address 0x82cd0
-void* tx_isp_platform_device = (void*)0x7df88;
+char const (*) tx_isp_platform_device[] = (void*)0x7df88 /* pointer to data */; // offset: 0x82cd0
 
 // Data at address 0x82d28
 void* data_82d28 = (void*)0x82da8;
@@ -1407,7 +1540,7 @@ void* data_82dc0 = (void*)0x83228 /* pointer to data */;
 void* data_82dc4 = (void*)0x82dc8 /* pointer to data */;
 
 // Data at address 0x82dc8
-void* tx_isp_fs_platform_device = (void*)0x7df90;
+char const (*) tx_isp_fs_platform_device[] = (void*)0x7df90 /* pointer to data */; // offset: 0x82dc8
 
 // Data at address 0x82e20
 void* data_82e20 = (void*)0x82ea0;
@@ -1422,10 +1555,10 @@ void* data_82e88 = &tx_isp_release_device;
 void* data_82eb0 = (void*)0x82eb4 /* pointer to data */;
 
 // Data at address 0x82eb4
-uint48_t tx_isp_fs_pads = 0x100210021002;
+uint48_t tx_isp_fs_pads = 0x0000100210021002ULL;
 
 // Data at address 0x82ec0
-void* tx_isp_core_platform_device = (void*)0x7df98;
+char const (*) tx_isp_core_platform_device[] = (void*)0x7df98 /* pointer to data */; // offset: 0x82ec0
 
 // Data at address 0x82f18
 void* data_82f18 = (void*)0x82f98;
@@ -1446,22 +1579,22 @@ void* data_82fa0 = (void*)0x82fb4 /* pointer to data */;
 void* data_82fa8 = (void*)0x82fac /* pointer to data */;
 
 // Data at address 0x82fac
-uint64_t tx_isp_core_pads = 0x300230023002;
+uint64_t tx_isp_core_pads = 0x0000300230023002ULL;
 
 // Data at address 0x82fb4
-void* isp_core_clk_info = (void*)0x7dfa0;
+char const (*) isp_core_clk_info[] = (void*)0x7dfa0 /* pointer to data */; // offset: 0x82fb4
 
 // Data at address 0x82fbc
 void* data_82fbc = (void*)0x7dfa8;
 
 // Data at address 0x82fcc
-void* data_82fcc = (void*)0x7dfac;
+char const (*) data_82fcc[] = (void*)0x7dfac /* pointer to data */; // offset: 0x82fcc
 
 // Data at address 0x82fe8
-void* data_82fe8 = (void*)0x7dfb8;
+char const (*) data_82fe8[] = (void*)0x7dfb8 /* pointer to data */; // offset: 0x82fe8
 
 // Data at address 0x83000
-void* tx_isp_vic_platform_device = (void*)0x7dfc4;
+char const (*) tx_isp_vic_platform_device[] = (void*)0x7dfc4 /* pointer to data */; // offset: 0x83000
 
 // Data at address 0x83058
 void* data_83058 = (void*)0x830d8;
@@ -1476,13 +1609,13 @@ void* data_830c0 = &tx_isp_release_device;
 void* data_830cc = (void*)0x830e4;
 
 // Data at address 0x830ec
-void* data_830ec = (void*)0x7dfac;
+char const (*) data_830ec[] = (void*)0x7dfac /* pointer to data */; // offset: 0x830ec
 
 // Data at address 0x83108
-void* data_83108 = (void*)0x7dfb8;
+char const (*) data_83108[] = (void*)0x7dfb8 /* pointer to data */; // offset: 0x83108
 
 // Data at address 0x83120
-void* tx_isp_csi_platform_device = (void*)0x7dfcc;
+char const (*) tx_isp_csi_platform_device[] = (void*)0x7dfcc /* pointer to data */; // offset: 0x83120
 
 // Data at address 0x83178
 void* data_83178 = (void*)0x831f8;
@@ -1503,10 +1636,10 @@ void* data_83200 = (void*)0x83204 /* pointer to data */;
 uint64_t isp_csi_clk_info = (void*)0x7dfd4;
 
 // Data at address 0x83214
-void* data_83214 = (void*)0x7dfac;
+char const (*) data_83214[] = (void*)0x7dfac /* pointer to data */; // offset: 0x83214
 
 // Data at address 0x83228
-void* tx_isp_vin_platform_device = (void*)0x7dfd8;
+char const (*) tx_isp_vin_platform_device[] = (void*)0x7dfd8 /* pointer to data */; // offset: 0x83228
 
 // Data at address 0x83280
 void* data_83280 = (void*)0x83300;
@@ -1518,7 +1651,7 @@ void* data_83298 = (void*)0x83310 /* pointer to data */;
 void* data_832e8 = &tx_isp_release_device;
 
 // Data at address 0x83310
-uint64_t tx_isp_module_dma_mask = 0xffffffffffffffff;
+uint64_t tx_isp_module_dma_mask = 0xffffffffffffffffULL;
 
 // Data at address 0x83320
 void* tx_isp_vic_driver = &tx_isp_vic_probe;
@@ -1527,7 +1660,7 @@ void* tx_isp_vic_driver = &tx_isp_vic_probe;
 void* data_83324 = &tx_isp_vic_remove;
 
 // Data at address 0x83334
-void* data_83334 = (void*)0x7eae8;
+char const (*) data_83334[] = (void*)0x7eae8 /* pointer to data */; // offset: 0x83334
 
 // Data at address 0x8333c
 void* data_8333c = (void*)0xb27e0;
@@ -1587,7 +1720,7 @@ void* tx_isp_vin_driver = &tx_isp_vin_probe;
 void* data_83444 = &tx_isp_vin_remove;
 
 // Data at address 0x83454
-void* data_83454 = (void*)0x7ee0c;
+char const (*) data_83454[] = (void*)0x7ee0c /* pointer to data */; // offset: 0x83454
 
 // Data at address 0x8345c
 void* data_8345c = (void*)0xb27e0;
@@ -1647,7 +1780,7 @@ void* tx_isp_csi_driver = &tx_isp_csi_probe;
 void* data_83564 = &tx_isp_csi_remove;
 
 // Data at address 0x83574
-void* data_83574 = (void*)0x7f144;
+char const (*) data_83574[] = (void*)0x7f144 /* pointer to data */; // offset: 0x83574
 
 // Data at address 0x8357c
 void* data_8357c = (void*)0xb27e0;
@@ -1701,7 +1834,7 @@ void* data_836ac = &isp_core_tunning_open;
 void* data_836b4 = &isp_core_tunning_release;
 
 // Data at address 0x836ec
-uint64_t frame_done_wq = 0x836ec00000000;
+uint64_t frame_done_wq = 0x000836ec00000000ULL;
 
 // Data at address 0x83700
 void* tx_isp_fs_driver = &tx_isp_fs_probe;
@@ -1710,7 +1843,7 @@ void* tx_isp_fs_driver = &tx_isp_fs_probe;
 void* data_83704 = &tx_isp_fs_remove;
 
 // Data at address 0x83714
-void* data_83714 = (void*)0x800d4;
+char const (*) data_83714[] = (void*)0x800d4 /* pointer to data */; // offset: 0x83714
 
 // Data at address 0x8371c
 void* data_8371c = (void*)0xb27e0;
@@ -1752,7 +1885,7 @@ void* tx_isp_driver = &tx_isp_probe;
 void* data_83854 = &tx_isp_remove;
 
 // Data at address 0x83864
-void* data_83864 = (void*)0x805c4;
+char const (*) data_83864[] = (void*)0x805c4 /* pointer to data */; // offset: 0x83864
 
 // Data at address 0x8386c
 void* data_8386c = (void*)0xb27e0;
@@ -1767,28 +1900,28 @@ void* data_838d0 = &tx_isp_open;
 void* data_838d8 = &tx_isp_release;
 
 // Data at address 0x83910
-void* link2 = (void*)0x80678;
+char const (*) link2[] = (void*)0x80678 /* pointer to data */; // offset: 0x83910
 
 // Data at address 0x83918
-void* data_83918 = (void*)0x80680;
+char const (*) data_83918[] = (void*)0x80680 /* pointer to data */; // offset: 0x83918
 
 // Data at address 0x83924
-void* link1 = (void*)0x80678;
+char const (*) link1[] = (void*)0x80678 /* pointer to data */; // offset: 0x83924
 
 // Data at address 0x8392c
-void* data_8392c = (void*)0x80680;
+char const (*) data_8392c[] = (void*)0x80680 /* pointer to data */; // offset: 0x8392c
 
 // Data at address 0x83938
-void* data_83938 = (void*)0x80678;
+char const (*) data_83938[] = (void*)0x80678 /* pointer to data */; // offset: 0x83938
 
 // Data at address 0x83940
-void* data_83940 = (void*)0x80680;
+char const (*) data_83940[] = (void*)0x80680 /* pointer to data */; // offset: 0x83940
 
 // Data at address 0x8394c
-void* data_8394c = (void*)0x80678;
+char const (*) data_8394c[] = (void*)0x80678 /* pointer to data */; // offset: 0x8394c
 
 // Data at address 0x83954
-void* data_83954 = (void*)0x80680;
+char const (*) data_83954[] = (void*)0x80680 /* pointer to data */; // offset: 0x83954
 
 // Data at address 0x83960
 char tparams[] = "TISP_PARAM_TOP_BYPASS"; // offset: 0x83960
@@ -1821,7 +1954,7 @@ void* data_83b5c = (void*)0x94cf0;
 void* data_83b9c = (void*)0x94d18;
 
 // Data at address 0x83bdc
-void* data_83bdc = (void*)0x94d40 /* pointer to data */;
+wchar32 (*) data_83bdc[] = (void*)0x94d40 /* pointer to data */; // offset: 0x83bdc
 
 // Data at address 0x83c1c
 void* data_83c1c = (void*)0x94d68;
@@ -1857,16 +1990,16 @@ void* data_83e5c = (void*)0x958f4;
 void* data_83e9c = (void*)0x9590c;
 
 // Data at address 0x83edc
-void* data_83edc = (void*)0x95920 /* pointer to data */;
+wchar32 (*) data_83edc[] = (void*)0x95920 /* pointer to data */; // offset: 0x83edc
 
 // Data at address 0x83f1c
-void* data_83f1c = (void*)0x9595c;
+wchar32 (*) data_83f1c[] = (void*)0x9595c; // offset: 0x83f1c
 
 // Data at address 0x83f5c
 void* data_83f5c = (void*)0x95974;
 
 // Data at address 0x83f9c
-void* data_83f9c = (void*)0x9599c /* pointer to data */;
+wchar32 (*) data_83f9c[] = (void*)0x9599c /* pointer to data */; // offset: 0x83f9c
 
 // Data at address 0x83fdc
 void* data_83fdc = (void*)0x959c4;
@@ -1881,7 +2014,7 @@ void* data_8405c = (void*)0x95a14;
 void* data_8409c = (void*)0x95a3c;
 
 // Data at address 0x840dc
-void* data_840dc = (void*)0x95a64;
+wchar32 (*) data_840dc[] = (void*)0x95a64; // offset: 0x840dc
 
 // Data at address 0x8411c
 void* data_8411c = (void*)0x95a8c;
@@ -1989,13 +2122,13 @@ void* data_8495c = (void*)0x97598;
 void* data_8499c = (void*)0x975a0;
 
 // Data at address 0x849dc
-void* data_849dc = (void*)0x975a8 /* pointer to data */;
+wchar32 (*) data_849dc[] = (void*)0x975a8 /* pointer to data */; // offset: 0x849dc
 
 // Data at address 0x84a1c
-void* data_84a1c = (void*)0x975cc /* pointer to data */;
+wchar32 (*) data_84a1c[] = (void*)0x975cc /* pointer to data */; // offset: 0x84a1c
 
 // Data at address 0x84a5c
-void* data_84a5c = (void*)0x975f0 /* pointer to data */;
+wchar32 (*) data_84a5c[] = (void*)0x975f0 /* pointer to data */; // offset: 0x84a5c
 
 // Data at address 0x84a9c
 void* data_84a9c = (void*)0x97614 /* pointer to data */;
@@ -2094,28 +2227,28 @@ void* data_8521c = (void*)0x9dce4;
 void* data_8525c = (void*)0x9dd04;
 
 // Data at address 0x8529c
-void* data_8529c = (void*)0x9dd44 /* pointer to data */;
+wchar32 (*) data_8529c[] = (void*)0x9dd44 /* pointer to data */; // offset: 0x8529c
 
 // Data at address 0x852dc
-void* data_852dc = (void*)0x9dd9c /* pointer to data */;
+wchar32 (*) data_852dc[] = (void*)0x9dd9c /* pointer to data */; // offset: 0x852dc
 
 // Data at address 0x8531c
-void* data_8531c = (void*)0x9ddf4 /* pointer to data */;
+wchar32 (*) data_8531c[] = (void*)0x9ddf4 /* pointer to data */; // offset: 0x8531c
 
 // Data at address 0x8535c
-void* data_8535c = (void*)0x9de4c /* pointer to data */;
+wchar32 (*) data_8535c[] = (void*)0x9de4c /* pointer to data */; // offset: 0x8535c
 
 // Data at address 0x8539c
 void* data_8539c = (void*)0x9dea4;
 
 // Data at address 0x853dc
-void* data_853dc = (void*)0x9dea8 /* pointer to data */;
+wchar32 (*) data_853dc[] = (void*)0x9dea8 /* pointer to data */; // offset: 0x853dc
 
 // Data at address 0x8541c
-void* data_8541c = (void*)0x9decc /* pointer to data */;
+wchar32 (*) data_8541c[] = (void*)0x9decc /* pointer to data */; // offset: 0x8541c
 
 // Data at address 0x8545c
-void* data_8545c = (void*)0x9def0 /* pointer to data */;
+wchar32 (*) data_8545c[] = (void*)0x9def0 /* pointer to data */; // offset: 0x8545c
 
 // Data at address 0x8549c
 void* data_8549c = (void*)0x9df14 /* pointer to data */;
@@ -2124,7 +2257,7 @@ void* data_8549c = (void*)0x9df14 /* pointer to data */;
 void* data_854dc = (void*)0x9df38;
 
 // Data at address 0x8551c
-void* data_8551c = (void*)0x9df5c;
+wchar32 (*) data_8551c[] = (void*)0x9df5c; // offset: 0x8551c
 
 // Data at address 0x8555c
 void* data_8555c = (void*)0x9df80;
@@ -2136,7 +2269,7 @@ void* data_8559c = (void*)0x9dfa4;
 void* data_855dc = (void*)0x9dfc8;
 
 // Data at address 0x8561c
-void* data_8561c = (void*)0x9dfec;
+wchar32 (*) data_8561c[] = (void*)0x9dfec; // offset: 0x8561c
 
 // Data at address 0x8565c
 void* data_8565c = (void*)0x9dffc;
@@ -2148,10 +2281,10 @@ void* data_8569c = (void*)0x9e020;
 void* data_856dc = (void*)0x9e044;
 
 // Data at address 0x8571c
-void* data_8571c = (void*)0x9e068 /* pointer to data */;
+wchar32 (*) data_8571c[] = (void*)0x9e068 /* pointer to data */; // offset: 0x8571c
 
 // Data at address 0x8575c
-void* data_8575c = (void*)0x9e08c /* pointer to data */;
+wchar32 (*) data_8575c[] = (void*)0x9e08c /* pointer to data */; // offset: 0x8575c
 
 // Data at address 0x8579c
 void* data_8579c = (void*)0x9e09c;
@@ -2160,10 +2293,10 @@ void* data_8579c = (void*)0x9e09c;
 void* data_857dc = (void*)0x9e0c0;
 
 // Data at address 0x8581c
-void* data_8581c = (void*)0x9e0d0 /* pointer to data */;
+wchar32 (*) data_8581c[] = (void*)0x9e0d0 /* pointer to data */; // offset: 0x8581c
 
 // Data at address 0x8585c
-void* data_8585c = (void*)0x9e0f4 /* pointer to data */;
+wchar32 (*) data_8585c[] = (void*)0x9e0f4 /* pointer to data */; // offset: 0x8585c
 
 // Data at address 0x8589c
 void* data_8589c = (void*)0x9e118;
@@ -2181,16 +2314,16 @@ void* data_8595c = (void*)0x9e184;
 void* data_8599c = (void*)0x9e1a8;
 
 // Data at address 0x859dc
-void* data_859dc = (void*)0x9e1cc /* pointer to data */;
+wchar32 (*) data_859dc[] = (void*)0x9e1cc /* pointer to data */; // offset: 0x859dc
 
 // Data at address 0x85a1c
-void* data_85a1c = (void*)0x9e1f0;
+wchar32 (*) data_85a1c[] = (void*)0x9e1f0; // offset: 0x85a1c
 
 // Data at address 0x85a5c
-void* data_85a5c = (void*)0x9e21c /* pointer to data */;
+wchar32 (*) data_85a5c[] = (void*)0x9e21c /* pointer to data */; // offset: 0x85a5c
 
 // Data at address 0x85a9c
-void* data_85a9c = (void*)0x9e240 /* pointer to data */;
+wchar32 (*) data_85a9c[] = (void*)0x9e240 /* pointer to data */; // offset: 0x85a9c
 
 // Data at address 0x85adc
 void* data_85adc = (void*)0x9e264;
@@ -2208,13 +2341,13 @@ void* data_85b9c = (void*)0x9e2d0;
 void* data_85bdc = (void*)0x9e2f4;
 
 // Data at address 0x85c1c
-void* data_85c1c = (void*)0x9e318 /* pointer to data */;
+wchar32 (*) data_85c1c[] = (void*)0x9e318 /* pointer to data */; // offset: 0x85c1c
 
 // Data at address 0x85c5c
-void* data_85c5c = (void*)0x9e33c /* pointer to data */;
+wchar32 (*) data_85c5c[] = (void*)0x9e33c /* pointer to data */; // offset: 0x85c5c
 
 // Data at address 0x85c9c
-void* data_85c9c = (void*)0x9e360;
+wchar32 (*) data_85c9c[] = (void*)0x9e360; // offset: 0x85c9c
 
 // Data at address 0x85cdc
 void* data_85cdc = (void*)0x9e394;
@@ -2226,7 +2359,7 @@ void* data_85d1c = (void*)0x9e3bc;
 void* data_85d5c = (void*)0x9e3e0;
 
 // Data at address 0x85d9c
-void* data_85d9c = (void*)0x9e3e8 /* pointer to data */;
+wchar32 (*) data_85d9c[] = (void*)0x9e3e8 /* pointer to data */; // offset: 0x85d9c
 
 // Data at address 0x85ddc
 void* data_85ddc = (void*)0x9e40c;
@@ -2238,10 +2371,10 @@ void* data_85e1c = (void*)0x9e430;
 void* data_85e5c = (void*)0x9e438;
 
 // Data at address 0x85e9c
-void* data_85e9c = (void*)0x9e45c /* pointer to data */;
+wchar32 (*) data_85e9c[] = (void*)0x9e45c /* pointer to data */; // offset: 0x85e9c
 
 // Data at address 0x85edc
-void* data_85edc = (void*)0x9e480 /* pointer to data */;
+wchar32 (*) data_85edc[] = (void*)0x9e480 /* pointer to data */; // offset: 0x85edc
 
 // Data at address 0x85f1c
 void* data_85f1c = (void*)0x9e4a4;
@@ -2271,7 +2404,7 @@ void* data_860dc = (void*)0x9e578;
 void* data_8611c = (void*)0x9e59c;
 
 // Data at address 0x8615c
-void* data_8615c = (void*)0x9e5c0;
+wchar32 (*) data_8615c[] = (void*)0x9e5c0; // offset: 0x8615c
 
 // Data at address 0x8619c
 void* data_8619c = (void*)0x9e5e4;
@@ -2283,16 +2416,16 @@ void* data_861dc = (void*)0x9e608;
 void* data_8621c = (void*)0x9e610;
 
 // Data at address 0x8625c
-void* data_8625c = (void*)0x9e634 /* pointer to data */;
+wchar32 (*) data_8625c[] = (void*)0x9e634 /* pointer to data */; // offset: 0x8625c
 
 // Data at address 0x8629c
-void* data_8629c = (void*)0x9e658 /* pointer to data */;
+wchar32 (*) data_8629c[] = (void*)0x9e658 /* pointer to data */; // offset: 0x8629c
 
 // Data at address 0x862dc
-void* data_862dc = (void*)0x9e67c /* pointer to data */;
+wchar32 (*) data_862dc[] = (void*)0x9e67c /* pointer to data */; // offset: 0x862dc
 
 // Data at address 0x8631c
-void* data_8631c = (void*)0x9e6a0 /* pointer to data */;
+wchar32 (*) data_8631c[] = (void*)0x9e6a0 /* pointer to data */; // offset: 0x8631c
 
 // Data at address 0x8635c
 void* data_8635c = (void*)0x9e6c4;
@@ -2358,37 +2491,37 @@ void* data_8681c = (void*)0x9e8f0;
 void* data_8685c = (void*)0x9e914;
 
 // Data at address 0x8689c
-void* data_8689c = (void*)0x9e938;
+wchar32 (*) data_8689c[] = (void*)0x9e938; // offset: 0x8689c
 
 // Data at address 0x868dc
-void* data_868dc = (void*)0x9e95c /* pointer to data */;
+wchar32 (*) data_868dc[] = (void*)0x9e95c /* pointer to data */; // offset: 0x868dc
 
 // Data at address 0x8691c
-void* data_8691c = (void*)0x9e980 /* pointer to data */;
+wchar32 (*) data_8691c[] = (void*)0x9e980 /* pointer to data */; // offset: 0x8691c
 
 // Data at address 0x8695c
-void* data_8695c = (void*)0x9e9a4 /* pointer to data */;
+wchar32 (*) data_8695c[] = (void*)0x9e9a4 /* pointer to data */; // offset: 0x8695c
 
 // Data at address 0x8699c
 void* data_8699c = (void*)0x9e9b4;
 
 // Data at address 0x869dc
-void* data_869dc = (void*)0x9e9d8 /* pointer to data */;
+wchar32 (*) data_869dc[] = (void*)0x9e9d8 /* pointer to data */; // offset: 0x869dc
 
 // Data at address 0x86a1c
-void* data_86a1c = (void*)0x9e9fc;
+wchar32 (*) data_86a1c[] = (void*)0x9e9fc; // offset: 0x86a1c
 
 // Data at address 0x86a5c
-void* data_86a5c = (void*)0x9ea20 /* pointer to data */;
+wchar32 (*) data_86a5c[] = (void*)0x9ea20 /* pointer to data */; // offset: 0x86a5c
 
 // Data at address 0x86a9c
-void* data_86a9c = (void*)0x9ea44;
+wchar32 (*) data_86a9c[] = (void*)0x9ea44; // offset: 0x86a9c
 
 // Data at address 0x86adc
-void* data_86adc = (void*)0x9ea68 /* pointer to data */;
+wchar32 (*) data_86adc[] = (void*)0x9ea68 /* pointer to data */; // offset: 0x86adc
 
 // Data at address 0x86b1c
-void* data_86b1c = (void*)0x9ea8c /* pointer to data */;
+wchar32 (*) data_86b1c[] = (void*)0x9ea8c /* pointer to data */; // offset: 0x86b1c
 
 // Data at address 0x86b5c
 void* data_86b5c = (void*)0x9ea94;
@@ -2403,37 +2536,37 @@ void* data_86bdc = (void*)0x9eae8;
 void* data_86c1c = (void*)0x9eb0c;
 
 // Data at address 0x86c5c
-void* data_86c5c = (void*)0x9eb4c /* pointer to data */;
+wchar32 (*) data_86c5c[] = (void*)0x9eb4c /* pointer to data */; // offset: 0x86c5c
 
 // Data at address 0x86c9c
-void* data_86c9c = (void*)0x9eb8c /* pointer to data */;
+wchar32 (*) data_86c9c[] = (void*)0x9eb8c /* pointer to data */; // offset: 0x86c9c
 
 // Data at address 0x86cdc
-void* data_86cdc = (void*)0x9ebcc;
+wchar32 (*) data_86cdc[] = (void*)0x9ebcc; // offset: 0x86cdc
 
 // Data at address 0x86d1c
-void* data_86d1c = (void*)0x9ebf0;
+wchar32 (*) data_86d1c[] = (void*)0x9ebf0; // offset: 0x86d1c
 
 // Data at address 0x86d5c
 void* data_86d5c = (void*)0x9ec14;
 
 // Data at address 0x86d9c
-void* data_86d9c = (void*)0x9ec38;
+wchar32 (*) data_86d9c[] = (void*)0x9ec38; // offset: 0x86d9c
 
 // Data at address 0x86ddc
-void* data_86ddc = (void*)0x9ec5c;
+wchar32 (*) data_86ddc[] = (void*)0x9ec5c; // offset: 0x86ddc
 
 // Data at address 0x86e1c
-void* data_86e1c = (void*)0x9ec80;
+wchar32 (*) data_86e1c[] = (void*)0x9ec80; // offset: 0x86e1c
 
 // Data at address 0x86e5c
-void* data_86e5c = (void*)0x9eca4;
+wchar32 (*) data_86e5c[] = (void*)0x9eca4; // offset: 0x86e5c
 
 // Data at address 0x86e9c
-void* data_86e9c = (void*)0x9ecc8;
+wchar32 (*) data_86e9c[] = (void*)0x9ecc8; // offset: 0x86e9c
 
 // Data at address 0x86edc
-void* data_86edc = (void*)0x9ecec;
+wchar32 (*) data_86edc[] = (void*)0x9ecec; // offset: 0x86edc
 
 // Data at address 0x86f1c
 void* data_86f1c = (void*)0x9ed10;
@@ -2493,10 +2626,10 @@ void* data_8735c = (void*)0x9ef90;
 void* data_8739c = (void*)0x9efd0;
 
 // Data at address 0x873dc
-void* data_873dc = (void*)0x9efe4 /* pointer to data */;
+wchar32 (*) data_873dc[] = (void*)0x9efe4 /* pointer to data */; // offset: 0x873dc
 
 // Data at address 0x8741c
-void* data_8741c = (void*)0x9f008 /* pointer to data */;
+wchar32 (*) data_8741c[] = (void*)0x9f008 /* pointer to data */; // offset: 0x8741c
 
 // Data at address 0x8745c
 void* data_8745c = (void*)0x9f02c;
@@ -2505,16 +2638,16 @@ void* data_8745c = (void*)0x9f02c;
 void* data_8749c = (void*)0x9f038;
 
 // Data at address 0x874dc
-void* data_874dc = (void*)0x9f05c /* pointer to data */;
+wchar32 (*) data_874dc[] = (void*)0x9f05c /* pointer to data */; // offset: 0x874dc
 
 // Data at address 0x8751c
-void* data_8751c = (void*)0x9f080 /* pointer to data */;
+wchar32 (*) data_8751c[] = (void*)0x9f080 /* pointer to data */; // offset: 0x8751c
 
 // Data at address 0x8755c
-void* data_8755c = (void*)0x9f0a4;
+wchar32 (*) data_8755c[] = (void*)0x9f0a4; // offset: 0x8755c
 
 // Data at address 0x8759c
-void* data_8759c = (void*)0x9f0c8;
+wchar32 (*) data_8759c[] = (void*)0x9f0c8; // offset: 0x8759c
 
 // Data at address 0x875dc
 void* data_875dc = (void*)0x9f0ec;
@@ -2526,7 +2659,7 @@ void* data_8761c = (void*)0x9f110;
 void* data_8765c = (void*)0x9f134;
 
 // Data at address 0x8769c
-void* data_8769c = (void*)0x9f158;
+wchar32 (*) data_8769c[] = (void*)0x9f158; // offset: 0x8769c
 
 // Data at address 0x876dc
 void* data_876dc = (void*)0x9f17c;
@@ -2538,13 +2671,13 @@ void* data_8771c = (void*)0x9f1a0;
 void* data_8775c = (void*)0x9f1c4;
 
 // Data at address 0x8779c
-void* data_8779c = (void*)0x9f1d8 /* pointer to data */;
+wchar32 (*) data_8779c[] = (void*)0x9f1d8 /* pointer to data */; // offset: 0x8779c
 
 // Data at address 0x877dc
-void* data_877dc = (void*)0x9f1fc;
+wchar32 (*) data_877dc[] = (void*)0x9f1fc; // offset: 0x877dc
 
 // Data at address 0x8781c
-void* data_8781c = (void*)0x9f220;
+wchar32 (*) data_8781c[] = (void*)0x9f220; // offset: 0x8781c
 
 // Data at address 0x8785c
 void* data_8785c = (void*)0x9f230;
@@ -2571,10 +2704,10 @@ void* data_879dc = (void*)0x9f310;
 void* data_87a1c = (void*)0x9f334;
 
 // Data at address 0x87a5c
-void* data_87a5c = (void*)0x9f358;
+wchar32 (*) data_87a5c[] = (void*)0x9f358; // offset: 0x87a5c
 
 // Data at address 0x87a9c
-void* data_87a9c = (void*)0x9f37c;
+wchar32 (*) data_87a9c[] = (void*)0x9f37c; // offset: 0x87a9c
 
 // Data at address 0x87adc
 void* data_87adc = (void*)0x9f398;
@@ -2595,25 +2728,25 @@ void* data_87bdc = (void*)0x9f420;
 void* data_87c1c = (void*)0x9f444;
 
 // Data at address 0x87c5c
-void* data_87c5c = (void*)0x9f454 /* pointer to data */;
+wchar32 (*) data_87c5c[] = (void*)0x9f454 /* pointer to data */; // offset: 0x87c5c
 
 // Data at address 0x87c9c
-void* data_87c9c = (void*)0x9f478;
+wchar32 (*) data_87c9c[] = (void*)0x9f478; // offset: 0x87c9c
 
 // Data at address 0x87cdc
 void* data_87cdc = (void*)0x9f49c;
 
 // Data at address 0x87d1c
-void* data_87d1c = (void*)0x9f4c0 /* pointer to data */;
+wchar32 (*) data_87d1c[] = (void*)0x9f4c0 /* pointer to data */; // offset: 0x87d1c
 
 // Data at address 0x87d5c
-void* data_87d5c = (void*)0x9f4e4;
+wchar32 (*) data_87d5c[] = (void*)0x9f4e4; // offset: 0x87d5c
 
 // Data at address 0x87d9c
-void* data_87d9c = (void*)0x9f520;
+wchar32 (*) data_87d9c[] = (void*)0x9f520; // offset: 0x87d9c
 
 // Data at address 0x87ddc
-void* data_87ddc = (void*)0x9f55c;
+wchar32 (*) data_87ddc[] = (void*)0x9f55c; // offset: 0x87ddc
 
 // Data at address 0x87e1c
 void* data_87e1c = (void*)0x9f580;
@@ -2676,19 +2809,19 @@ void* data_8829c = (void*)0x9f808;
 void* data_882dc = (void*)0x9f82c;
 
 // Data at address 0x8831c
-void* data_8831c = (void*)0x9f850;
+wchar32 (*) data_8831c[] = (void*)0x9f850; // offset: 0x8831c
 
 // Data at address 0x8835c
-void* data_8835c = (void*)0x9f874;
+wchar32 (*) data_8835c[] = (void*)0x9f874; // offset: 0x8835c
 
 // Data at address 0x8839c
-void* data_8839c = (void*)0x9f898;
+wchar32 (*) data_8839c[] = (void*)0x9f898; // offset: 0x8839c
 
 // Data at address 0x883dc
-void* data_883dc = (void*)0x9f8bc;
+wchar32 (*) data_883dc[] = (void*)0x9f8bc; // offset: 0x883dc
 
 // Data at address 0x8841c
-void* data_8841c = (void*)0x9f8e0;
+wchar32 (*) data_8841c[] = (void*)0x9f8e0; // offset: 0x8841c
 
 // Data at address 0x8845c
 void* data_8845c = (void*)0x9f904;
@@ -2724,7 +2857,7 @@ void* data_8869c = (void*)0x9fa28;
 void* data_886dc = (void*)0x9fa4c;
 
 // Data at address 0x8871c
-void* data_8871c = (void*)0x9fa88 /* pointer to data */;
+wchar32 (*) data_8871c[] = (void*)0x9fa88 /* pointer to data */; // offset: 0x8871c
 
 // Data at address 0x8875c
 void* data_8875c = (void*)0x9fac8;
@@ -2751,13 +2884,13 @@ void* data_888dc = (void*)0x9fc68;
 void* data_8891c = (void*)0x9fc74;
 
 // Data at address 0x8895c
-void* data_8895c = (void*)0x9fc98;
+wchar32 (*) data_8895c[] = (void*)0x9fc98; // offset: 0x8895c
 
 // Data at address 0x8899c
-void* data_8899c = (void*)0x9fcbc /* pointer to data */;
+wchar32 (*) data_8899c[] = (void*)0x9fcbc /* pointer to data */; // offset: 0x8899c
 
 // Data at address 0x889dc
-void* data_889dc = (void*)0x9fce0 /* pointer to data */;
+wchar32 (*) data_889dc[] = (void*)0x9fce0 /* pointer to data */; // offset: 0x889dc
 
 // Data at address 0x88a1c
 void* data_88a1c = (void*)0x9fd04;
@@ -2859,7 +2992,7 @@ void* data_891dc = (void*)0xa01b8;
 void* data_8921c = (void*)0xa0210;
 
 // Data at address 0x8925c
-void* data_8925c = (void*)0xa0234;
+wchar32 (*) data_8925c[] = (void*)0xa0234; // offset: 0x8925c
 
 // Data at address 0x8929c
 void* data_8929c = (void*)0xa0258;
@@ -2931,13 +3064,13 @@ void* data_897dc = (void*)0xa0538;
 void* data_8981c = (void*)0xa0544;
 
 // Data at address 0x8985c
-void* data_8985c = (void*)0xa0568 /* pointer to data */;
+wchar32 (*) data_8985c[] = (void*)0xa0568 /* pointer to data */; // offset: 0x8985c
 
 // Data at address 0x8989c
-void* data_8989c = (void*)0xa058c /* pointer to data */;
+wchar32 (*) data_8989c[] = (void*)0xa058c /* pointer to data */; // offset: 0x8989c
 
 // Data at address 0x898dc
-void* data_898dc = (void*)0xa05b0 /* pointer to data */;
+wchar32 (*) data_898dc[] = (void*)0xa05b0 /* pointer to data */; // offset: 0x898dc
 
 // Data at address 0x8991c
 void* data_8991c = (void*)0xa05d4;
@@ -3072,19 +3205,19 @@ void* data_8a35c = (void*)0xa09e4;
 void* data_8a39c = (void*)0xa0a08;
 
 // Data at address 0x8a3dc
-void* data_8a3dc = (void*)0xa0a2c /* pointer to data */;
+wchar32 (*) data_8a3dc[] = (void*)0xa0a2c /* pointer to data */; // offset: 0x8a3dc
 
 // Data at address 0x8a41c
-void* data_8a41c = (void*)0xa0a50 /* pointer to data */;
+wchar32 (*) data_8a41c[] = (void*)0xa0a50 /* pointer to data */; // offset: 0x8a41c
 
 // Data at address 0x8a45c
-void* data_8a45c = (void*)0xa0a74 /* pointer to data */;
+wchar32 (*) data_8a45c[] = (void*)0xa0a74 /* pointer to data */; // offset: 0x8a45c
 
 // Data at address 0x8a49c
-void* data_8a49c = (void*)0xa0a98 /* pointer to data */;
+wchar32 (*) data_8a49c[] = (void*)0xa0a98 /* pointer to data */; // offset: 0x8a49c
 
 // Data at address 0x8a4dc
-void* data_8a4dc = (void*)0xa0abc /* pointer to data */;
+wchar32 (*) data_8a4dc[] = (void*)0xa0abc /* pointer to data */; // offset: 0x8a4dc
 
 // Data at address 0x8a51c
 void* data_8a51c = (void*)0xa0ae0;
@@ -3126,13 +3259,13 @@ void* data_8a7dc = (void*)0xa0c6c;
 void* data_8a81c = (void*)0xa0c90;
 
 // Data at address 0x8a85c
-void* data_8a85c = (void*)0xa0cb4 /* pointer to data */;
+wchar32 (*) data_8a85c[] = (void*)0xa0cb4 /* pointer to data */; // offset: 0x8a85c
 
 // Data at address 0x8a89c
-void* data_8a89c = (void*)0xa0cd8 /* pointer to data */;
+wchar32 (*) data_8a89c[] = (void*)0xa0cd8 /* pointer to data */; // offset: 0x8a89c
 
 // Data at address 0x8a8dc
-void* data_8a8dc = (void*)0xa0cfc;
+wchar32 (*) data_8a8dc[] = (void*)0xa0cfc; // offset: 0x8a8dc
 
 // Data at address 0x8a91c
 void* data_8a91c = (void*)0xa0d20;
@@ -3141,10 +3274,10 @@ void* data_8a91c = (void*)0xa0d20;
 void* data_8a95c = (void*)0xa0d44;
 
 // Data at address 0x8a99c
-void* data_8a99c = (void*)0xa0d68 /* pointer to data */;
+wchar32 (*) data_8a99c[] = (void*)0xa0d68 /* pointer to data */; // offset: 0x8a99c
 
 // Data at address 0x8a9dc
-void* data_8a9dc = (void*)0xa0d8c /* pointer to data */;
+wchar32 (*) data_8a9dc[] = (void*)0xa0d8c /* pointer to data */; // offset: 0x8a9dc
 
 // Data at address 0x8aa1c
 void* data_8aa1c = (void*)0xa0db0;
@@ -3411,10 +3544,10 @@ void* data_8bf9c = (void*)0xa19c8;
 void* data_8bfdc = (void*)0xa19ec;
 
 // Data at address 0x8c01c
-void* data_8c01c = (void*)0xa1a10 /* pointer to data */;
+wchar32 (*) data_8c01c[] = (void*)0xa1a10 /* pointer to data */; // offset: 0x8c01c
 
 // Data at address 0x8c05c
-void* data_8c05c = (void*)0xa1a34;
+wchar32 (*) data_8c05c[] = (void*)0xa1a34; // offset: 0x8c05c
 
 // Data at address 0x8c09c
 void* data_8c09c = (void*)0xa1a58;
@@ -3426,10 +3559,10 @@ void* data_8c0dc = (void*)0xa1a7c;
 void* data_8c11c = (void*)0xa1aa0;
 
 // Data at address 0x8c15c
-void* data_8c15c = (void*)0xa1ac4 /* pointer to data */;
+wchar32 (*) data_8c15c[] = (void*)0xa1ac4 /* pointer to data */; // offset: 0x8c15c
 
 // Data at address 0x8c19c
-void* data_8c19c = (void*)0xa1ae8;
+wchar32 (*) data_8c19c[] = (void*)0xa1ae8; // offset: 0x8c19c
 
 // Data at address 0x8c1dc
 void* data_8c1dc = (void*)0xa1b0c;
@@ -3486,7 +3619,7 @@ void* data_8c5dc = (void*)0xa1d4c;
 void* data_8c61c = (void*)0xa1d70;
 
 // Data at address 0x8c65c
-void* data_8c65c = (void*)0xa1d94 /* pointer to data */;
+wchar32 (*) data_8c65c[] = (void*)0xa1d94 /* pointer to data */; // offset: 0x8c65c
 
 // Data at address 0x8c69c
 void* data_8c69c = (void*)0xa1db8;
@@ -3498,7 +3631,7 @@ void* data_8c6dc = (void*)0xa1ddc;
 void* data_8c71c = (void*)0xa1e00;
 
 // Data at address 0x8c75c
-void* data_8c75c = (void*)0xa1e24;
+wchar32 (*) data_8c75c[] = (void*)0xa1e24; // offset: 0x8c75c
 
 // Data at address 0x8c79c
 void* data_8c79c = (void*)0xa1e48;
@@ -3537,7 +3670,7 @@ void* data_8ca1c = (void*)0xa1fb0;
 void* data_8ca5c = (void*)0xa1fd4;
 
 // Data at address 0x8ca9c
-void* data_8ca9c = (void*)0xa1ff8 /* pointer to data */;
+wchar32 (*) data_8ca9c[] = (void*)0xa1ff8 /* pointer to data */; // offset: 0x8ca9c
 
 // Data at address 0x8cadc
 void* data_8cadc = (void*)0xa201c;
@@ -3546,10 +3679,10 @@ void* data_8cadc = (void*)0xa201c;
 void* data_8cb1c = (void*)0xa2040;
 
 // Data at address 0x8cb5c
-void* data_8cb5c = (void*)0xa2064;
+wchar32 (*) data_8cb5c[] = (void*)0xa2064; // offset: 0x8cb5c
 
 // Data at address 0x8cb9c
-void* data_8cb9c = (void*)0xa2088;
+wchar32 (*) data_8cb9c[] = (void*)0xa2088; // offset: 0x8cb9c
 
 // Data at address 0x8cbdc
 void* data_8cbdc = (void*)0xa20ac;
@@ -3558,7 +3691,7 @@ void* data_8cbdc = (void*)0xa20ac;
 void* data_8cc1c = (void*)0xa20d0;
 
 // Data at address 0x8cc5c
-void* data_8cc5c = (void*)0xa20f4 /* pointer to data */;
+wchar32 (*) data_8cc5c[] = (void*)0xa20f4 /* pointer to data */; // offset: 0x8cc5c
 
 // Data at address 0x8cc9c
 void* data_8cc9c = (void*)0xa2118;
@@ -3612,10 +3745,10 @@ void* data_8d05c = (void*)0xa2334;
 void* data_8d09c = (void*)0xa2358;
 
 // Data at address 0x8d0dc
-void* data_8d0dc = (void*)0xa237c /* pointer to data */;
+wchar32 (*) data_8d0dc[] = (void*)0xa237c /* pointer to data */; // offset: 0x8d0dc
 
 // Data at address 0x8d11c
-void* data_8d11c = (void*)0xa23a0 /* pointer to data */;
+wchar32 (*) data_8d11c[] = (void*)0xa23a0 /* pointer to data */; // offset: 0x8d11c
 
 // Data at address 0x8d15c
 void* data_8d15c = (void*)0xa23c4;
@@ -3696,7 +3829,7 @@ void* data_8d75c = (void*)0xa2724;
 void* data_8d79c = (void*)0xa2748;
 
 // Data at address 0x8d7dc
-void* data_8d7dc = (void*)0xa276c /* pointer to data */;
+wchar32 (*) data_8d7dc[] = (void*)0xa276c /* pointer to data */; // offset: 0x8d7dc
 
 // Data at address 0x8d81c
 void* data_8d81c = (void*)0xa2790;
@@ -3711,10 +3844,10 @@ void* data_8d89c = (void*)0xa27d8;
 void* data_8d8dc = (void*)0xa27fc;
 
 // Data at address 0x8d91c
-void* data_8d91c = (void*)0xa2820 /* pointer to data */;
+wchar32 (*) data_8d91c[] = (void*)0xa2820 /* pointer to data */; // offset: 0x8d91c
 
 // Data at address 0x8d95c
-void* data_8d95c = (void*)0xa2844;
+wchar32 (*) data_8d95c[] = (void*)0xa2844; // offset: 0x8d95c
 
 // Data at address 0x8d99c
 void* data_8d99c = (void*)0xa2868;
@@ -3732,10 +3865,10 @@ void* data_8da5c = (void*)0xa28d4;
 void* data_8da9c = (void*)0xa28f8;
 
 // Data at address 0x8dadc
-void* data_8dadc = (void*)0xa291c /* pointer to data */;
+wchar32 (*) data_8dadc[] = (void*)0xa291c /* pointer to data */; // offset: 0x8dadc
 
 // Data at address 0x8db1c
-void* data_8db1c = (void*)0xa2940;
+wchar32 (*) data_8db1c[] = (void*)0xa2940; // offset: 0x8db1c
 
 // Data at address 0x8db5c
 void* data_8db5c = (void*)0xa2964;
@@ -4014,10 +4147,10 @@ void* data_8f1dc = (void*)0xa360c;
 void* data_8f21c = (void*)0xa3630;
 
 // Data at address 0x8f25c
-void* data_8f25c = (void*)0xa3654 /* pointer to data */;
+wchar32 (*) data_8f25c[] = (void*)0xa3654 /* pointer to data */; // offset: 0x8f25c
 
 // Data at address 0x8f29c
-void* data_8f29c = (void*)0xa3678;
+wchar32 (*) data_8f29c[] = (void*)0xa3678; // offset: 0x8f29c
 
 // Data at address 0x8f2dc
 void* data_8f2dc = (void*)0xa369c;
@@ -4143,10 +4276,10 @@ void* data_8fc9c = (void*)0xa3c18;
 void* data_8fcdc = (void*)0xa3c3c;
 
 // Data at address 0x8fd1c
-void* data_8fd1c = (void*)0xa3c60 /* pointer to data */;
+wchar32 (*) data_8fd1c[] = (void*)0xa3c60 /* pointer to data */; // offset: 0x8fd1c
 
 // Data at address 0x8fd5c
-void* data_8fd5c = (void*)0xa3c84;
+wchar32 (*) data_8fd5c[] = (void*)0xa3c84; // offset: 0x8fd5c
 
 // Data at address 0x8fd9c
 void* data_8fd9c = (void*)0xa3ca8;
@@ -4197,7 +4330,7 @@ void* data_9011c = (void*)0xa3ea0;
 void* data_9015c = (void*)0xa3ec4;
 
 // Data at address 0x9019c
-void* data_9019c = (void*)0xa3ee8 /* pointer to data */;
+wchar32 (*) data_9019c[] = (void*)0xa3ee8 /* pointer to data */; // offset: 0x9019c
 
 // Data at address 0x901dc
 void* data_901dc = (void*)0xa3f0c;
@@ -4257,10 +4390,10 @@ void* data_9061c = (void*)0xa4170;
 void* data_9065c = (void*)0xa4194;
 
 // Data at address 0x9069c
-void* data_9069c = (void*)0xa41b8 /* pointer to data */;
+wchar32 (*) data_9069c[] = (void*)0xa41b8 /* pointer to data */; // offset: 0x9069c
 
 // Data at address 0x906dc
-void* data_906dc = (void*)0xa41dc /* pointer to data */;
+wchar32 (*) data_906dc[] = (void*)0xa41dc /* pointer to data */; // offset: 0x906dc
 
 // Data at address 0x9071c
 void* data_9071c = (void*)0xa4200;
@@ -4356,13 +4489,13 @@ void* data_90e5c = (void*)0xa4614;
 void* data_90e9c = (void*)0xa4638;
 
 // Data at address 0x90edc
-void* data_90edc = (void*)0xa465c /* pointer to data */;
+wchar32 (*) data_90edc[] = (void*)0xa465c /* pointer to data */; // offset: 0x90edc
 
 // Data at address 0x90f1c
-void* data_90f1c = (void*)0xa4680 /* pointer to data */;
+wchar32 (*) data_90f1c[] = (void*)0xa4680 /* pointer to data */; // offset: 0x90f1c
 
 // Data at address 0x90f5c
-void* data_90f5c = (void*)0xa46a4 /* pointer to data */;
+wchar32 (*) data_90f5c[] = (void*)0xa46a4 /* pointer to data */; // offset: 0x90f5c
 
 // Data at address 0x90f9c
 void* data_90f9c = (void*)0xa4abe;
@@ -4374,10 +4507,10 @@ void* data_90fdc = (void*)0xa52f4;
 void* data_9101c = (void*)0xa52f8;
 
 // Data at address 0x9105c
-void* data_9105c = (void*)0xa5378;
+wchar32 (*) data_9105c[] = (void*)0xa5378; // offset: 0x9105c
 
 // Data at address 0x9109c
-void* data_9109c = (void*)0xa53f8;
+wchar32 (*) data_9109c[] = (void*)0xa53f8; // offset: 0x9109c
 
 // Data at address 0x910dc
 void* data_910dc = (void*)0xa5478;
@@ -4386,7 +4519,7 @@ void* data_910dc = (void*)0xa5478;
 void* data_9111c = (void*)0xa54f8;
 
 // Data at address 0x9115c
-void* data_9115c = (void*)0xa5578;
+wchar32 (*) data_9115c[] = (void*)0xa5578; // offset: 0x9115c
 
 // Data at address 0x9119c
 void* data_9119c = (void*)0xa55b0;
@@ -4398,13 +4531,13 @@ void* data_911dc = (void*)0xa5610;
 void* data_9121c = (void*)0xa568c;
 
 // Data at address 0x9125c
-void* data_9125c = (void*)0xa56b0 /* pointer to data */;
+wchar32 (*) data_9125c[] = (void*)0xa56b0 /* pointer to data */; // offset: 0x9125c
 
 // Data at address 0x9129c
-void* data_9129c = (void*)0xa56d4 /* pointer to data */;
+wchar32 (*) data_9129c[] = (void*)0xa56d4 /* pointer to data */; // offset: 0x9129c
 
 // Data at address 0x912dc
-void* data_912dc = (void*)0xa56f8 /* pointer to data */;
+wchar32 (*) data_912dc[] = (void*)0xa56f8 /* pointer to data */; // offset: 0x912dc
 
 // Data at address 0x9131c
 void* data_9131c = (void*)0xa571c /* pointer to data */;
@@ -4440,13 +4573,13 @@ void* data_9155c = (void*)0xa5880;
 void* data_9159c = (void*)0xa58a8;
 
 // Data at address 0x915dc
-void* data_915dc = (void*)0xa58d0;
+wchar32 (*) data_915dc[] = (void*)0xa58d0 /* pointer to data */; // offset: 0x915dc
 
 // Data at address 0x9161c
-void* data_9161c = (void*)0xa58e4 /* pointer to data */;
+wchar32 (*) data_9161c[] = (void*)0xa58e4 /* pointer to data */; // offset: 0x9161c
 
 // Data at address 0x9165c
-void* data_9165c = (void*)0xa58f8 /* pointer to data */;
+wchar32 (*) data_9165c[] = (void*)0xa58f8 /* pointer to data */; // offset: 0x9165c
 
 // Data at address 0x9169c
 void* data_9169c = (void*)0xa5924;
@@ -4461,19 +4594,19 @@ void* data_9171c = (void*)0xa59b4;
 void* data_9175c = (void*)0xa59d8;
 
 // Data at address 0x9179c
-void* data_9179c = (void*)0xa59fc;
+wchar32 (*) data_9179c[] = (void*)0xa59fc; // offset: 0x9179c
 
 // Data at address 0x917dc
-void* data_917dc = (void*)0xa5a20;
+wchar32 (*) data_917dc[] = (void*)0xa5a20; // offset: 0x917dc
 
 // Data at address 0x9181c
-void* data_9181c = (void*)0xa5a44;
+wchar32 (*) data_9181c[] = (void*)0xa5a44; // offset: 0x9181c
 
 // Data at address 0x9185c
-void* data_9185c = (void*)0xa5a68;
+wchar32 (*) data_9185c[] = (void*)0xa5a68; // offset: 0x9185c
 
 // Data at address 0x9189c
-void* data_9189c = (void*)0xa5a8c;
+wchar32 (*) data_9189c[] = (void*)0xa5a8c /* pointer to data */; // offset: 0x9189c
 
 // Data at address 0x918dc
 void* data_918dc = (void*)0xa5ab8;
@@ -4485,7 +4618,7 @@ void* data_9191c = (void*)0xa5acc;
 void* data_9195c = (void*)0xa5b0c;
 
 // Data at address 0x9199c
-void* data_9199c = (void*)0xa5b4c;
+wchar32 (*) data_9199c[] = (void*)0xa5b4c /* pointer to data */; // offset: 0x9199c
 
 // Data at address 0x919dc
 void* data_919dc = (void*)0xa5b6c;
@@ -4806,13 +4939,13 @@ void* data_933dc = (void*)0xa716c;
 void* data_9341c = (void*)0xa7190;
 
 // Data at address 0x9345c
-void* data_9345c = (void*)0xa71b4 /* pointer to data */;
+wchar32 (*) data_9345c[] = (void*)0xa71b4 /* pointer to data */; // offset: 0x9345c
 
 // Data at address 0x9349c
-void* data_9349c = (void*)0xa71d8 /* pointer to data */;
+wchar32 (*) data_9349c[] = (void*)0xa71d8 /* pointer to data */; // offset: 0x9349c
 
 // Data at address 0x934dc
-void* data_934dc = (void*)0xa71fc /* pointer to data */;
+wchar32 (*) data_934dc[] = (void*)0xa71fc /* pointer to data */; // offset: 0x934dc
 
 // Data at address 0x9351c
 void* data_9351c = (void*)0xa7220;
@@ -4836,7 +4969,7 @@ void* data_9365c = (void*)0xa72d4;
 void* data_9369c = (void*)0xa72f8;
 
 // Data at address 0x936dc
-void* data_936dc = (void*)0xa731c;
+wchar32 (*) data_936dc[] = (void*)0xa731c; // offset: 0x936dc
 
 // Data at address 0x9371c
 void* data_9371c = (void*)0xa7324;
@@ -4845,22 +4978,22 @@ void* data_9371c = (void*)0xa7324;
 void* data_9375c = (void*)0xa7334;
 
 // Data at address 0x9379c
-void* data_9379c = (void*)0xa7344 /* pointer to data */;
+wchar32 (*) data_9379c[] = (void*)0xa7344 /* pointer to data */; // offset: 0x9379c
 
 // Data at address 0x937dc
-void* data_937dc = (void*)0xa7368 /* pointer to data */;
+wchar32 (*) data_937dc[] = (void*)0xa7368 /* pointer to data */; // offset: 0x937dc
 
 // Data at address 0x9381c
-void* data_9381c = (void*)0xa738c /* pointer to data */;
+wchar32 (*) data_9381c[] = (void*)0xa738c /* pointer to data */; // offset: 0x9381c
 
 // Data at address 0x9385c
-void* data_9385c = (void*)0xa73b0 /* pointer to data */;
+wchar32 (*) data_9385c[] = (void*)0xa73b0 /* pointer to data */; // offset: 0x9385c
 
 // Data at address 0x9389c
-void* data_9389c = (void*)0xa73d4 /* pointer to data */;
+wchar32 (*) data_9389c[] = (void*)0xa73d4 /* pointer to data */; // offset: 0x9389c
 
 // Data at address 0x938dc
-void* data_938dc = (void*)0xa73f8 /* pointer to data */;
+wchar32 (*) data_938dc[] = (void*)0xa73f8 /* pointer to data */; // offset: 0x938dc
 
 // Data at address 0x9391c
 void* data_9391c = (void*)0xa7400;
@@ -4899,7 +5032,7 @@ void* data_93b5c = (void*)0xa7760;
 void* data_93b9c = (void*)0xa7770;
 
 // Data at address 0x93bdc
-void* data_93bdc = (void*)0xa777c /* pointer to data */;
+wchar32 (*) data_93bdc[] = (void*)0xa777c /* pointer to data */; // offset: 0x93bdc
 
 // Data at address 0x93c1c
 void* data_93c1c = (void*)0xa7800;
@@ -4968,16 +5101,16 @@ void* data_9411c = (void*)0xa7bcc;
 void* data_9415c = (void*)0xa7c34;
 
 // Data at address 0x9419c
-void* data_9419c = (void*)0xa7c9c;
+wchar32 (*) data_9419c[] = (void*)0xa7c9c; // offset: 0x9419c
 
 // Data at address 0x941dc
-void* data_941dc = (void*)0xa7d04 /* pointer to data */;
+wchar32 (*) data_941dc[] = (void*)0xa7d04 /* pointer to data */; // offset: 0x941dc
 
 // Data at address 0x9421c
 void* data_9421c = (void*)0xa7d6c;
 
 // Data at address 0x9425c
-void* data_9425c = (void*)0xa7dd4;
+wchar32 (*) data_9425c[] = (void*)0xa7dd4; // offset: 0x9425c
 
 // Data at address 0x9429c
 void* data_9429c = (void*)0xa7df4;
@@ -5007,16 +5140,16 @@ void* data_9445c = (void*)0xa7f1c;
 void* data_9449c = (void*)0xa7f40;
 
 // Data at address 0x944dc
-void* data_944dc = (void*)0xa7f64 /* pointer to data */;
+wchar32 (*) data_944dc[] = (void*)0xa7f64 /* pointer to data */; // offset: 0x944dc
 
 // Data at address 0x9451c
-void* data_9451c = (void*)0xa7f88 /* pointer to data */;
+wchar32 (*) data_9451c[] = (void*)0xa7f88 /* pointer to data */; // offset: 0x9451c
 
 // Data at address 0x9455c
-void* data_9455c = (void*)0xa7fac /* pointer to data */;
+wchar32 (*) data_9455c[] = (void*)0xa7fac /* pointer to data */; // offset: 0x9455c
 
 // Data at address 0x9459c
-void* data_9459c = (void*)0xa7fd0 /* pointer to data */;
+wchar32 (*) data_9459c[] = (void*)0xa7fd0 /* pointer to data */; // offset: 0x9459c
 
 // Data at address 0x945dc
 void* data_945dc = (void*)0xa8010;
@@ -5025,10 +5158,10 @@ void* data_945dc = (void*)0xa8010;
 void* data_9461c = (void*)0xa8048;
 
 // Data at address 0x9465c
-void* data_9465c = (void*)0xa804c;
+wchar32 (*) data_9465c[] = (void*)0xa804c /* pointer to data */; // offset: 0x9465c
 
 // Data at address 0x9469c
-void* data_9469c = (void*)0xa805c;
+wchar32 (*) data_9469c[] = (void*)0xa805c; // offset: 0x9469c
 
 // Data at address 0x946dc
 void* data_946dc = (void*)0xa8080;
@@ -5357,8 +5490,17 @@ wchar32 data_a4680[] = "@@@@@@@@@"; // offset: 0xa4680
 // Data at address 0xa56b0
 wchar32 data_a56b0[] = "PPZZZPPPPFNMLKJIHFFIGOFDCBBA?>=<;:99LLKJIHGFE"; // offset: 0xa56b0
 
+// Data at address 0xa58d0
+wchar32 data_a58d0[] = "  <Z"; // offset: 0xa58d0
+
 // Data at address 0xa58e4
 wchar32 data_a58e4[] = "PFFAL7Z"; // offset: 0xa58e4
+
+// Data at address 0xa5a8c
+wchar32 data_a5a8c[] = "UZ____F"; // offset: 0xa5a8c
+
+// Data at address 0xa5b4c
+wchar32 data_a5b4c[] = "(2222\n"; // offset: 0xa5b4c
 
 // Data at address 0xa71b4
 wchar32 data_a71b4[] = "dddddddddddddddddd"; // offset: 0xa71b4
@@ -5377,6 +5519,9 @@ wchar32 data_a7d04[] = "$$@@"; // offset: 0xa7d04
 
 // Data at address 0xa7f64
 wchar32 data_a7f64[] = "         @@@@@@@@@@@@@@@@@@"; // offset: 0xa7f64
+
+// Data at address 0xa804c
+wchar32 data_a804c[] = "@@@@"; // offset: 0xa804c
 
 // Data at address 0xa8318
 void* data_a8318 = &netlink_rcv_msg;
@@ -5400,10 +5545,10 @@ void* data_a835c = &tisp_code_tuning_open;
 void* data_a8364 = &tisp_code_tuning_release;
 
 // Data at address 0xa83a0
-uint32_t msca_dmaout_arb = 0xffffffff;
+uint32_t msca_dmaout_arb = 0xffffffffU;
 
 // Data at address 0xa83a4
-uint32_t msca_ch_en = 0xffffffff;
+uint32_t msca_ch_en = 0xffffffffU;
 
 // Data at address 0xa83b0
 uint32_t _ev = (void*)0x64000;
@@ -5451,10 +5596,10 @@ int32_t data_a9e4c = 0x0;
 int32_t data_a9e50 = 0x20;
 
 // Data at address 0xa9e60
-uint64_t _awb_ct_para_in = 0x800000000;
+uint64_t _awb_ct_para_in = 0x0000000800000000ULL;
 
 // Data at address 0xa9e68
-uint64_t _awb_ct_para_ot = 0x800000001;
+uint64_t _awb_ct_para_ot = 0x0000000800000001ULL;
 
 // Data at address 0xa9f18
 uint32_t _light_src_num = 0x3;
@@ -5463,7 +5608,7 @@ uint32_t _light_src_num = 0x3;
 int32_t data_a9f68 = 0x0;
 
 // Data at address 0xa9f6c
-uint64_t _wb_static = 0x72c000006ec;
+uint64_t _wb_static = 0x0000072c000006ecULL;
 
 // Data at address 0xa9f74
 uint32_t _awb_ct_last = 0x1388;
@@ -5493,13 +5638,13 @@ int32_t data_a9f98 = 0x100;
 int32_t data_a9f9c = 0x100;
 
 // Data at address 0xa9fa0
-uint64_t _awb_cof = 0x400000001;
+uint64_t _awb_cof = 0x0000000400000001ULL;
 
 // Data at address 0xa9fa8
 uint64_t _AwbPointPos = 0xa;
 
 // Data at address 0xa9fb0
-uint64_t _awb_lowlight_rg_th = 0x18600000041;
+uint64_t _awb_lowlight_rg_th = 0x0000018600000041ULL;
 
 // Data at address 0xa9fb8
 uint32_t _pixel_cnt_th = 0x19;
@@ -5568,7 +5713,7 @@ int32_t data_aa214 = 0x33;
 int32_t data_aa218 = 0x80;
 
 // Data at address 0xaa21c
-uint64_t gib_ir_value = 0x2d0000002d;
+uint64_t gib_ir_value = 0x0000002d0000002dULL;
 
 // Data at address 0xaa224
 uint64_t gib_ir_mode = 0x1;
@@ -5577,10 +5722,10 @@ uint64_t gib_ir_mode = 0x1;
 wchar32 tiziano_gib_deirm_blc_ir_linear[] = "A?CB?????"; // offset: 0xaa22c
 
 // Data at address 0xaa2e0
-uint64_t tiziano_gib_b_ir_linear = 0x40000000400;
+uint64_t tiziano_gib_b_ir_linear = 0x0000040000000400ULL;
 
 // Data at address 0xaa2e8
-uint64_t tiziano_gib_r_g_linear = 0x40000000400;
+uint64_t tiziano_gib_r_g_linear = 0x0000040000000400ULL;
 
 // Data at address 0xaa2f0
 int32_t tiziano_gib_config_line = 0x1;
@@ -5667,7 +5812,7 @@ uint32_t lsc_lut_stride = 0x1;
 uint32_t lsc_lut_num = 0x1;
 
 // Data at address 0xaa430
-uint32_t gain_old = 0xffffffff;
+uint32_t gain_old = 0xffffffffU;
 
 // Data at address 0xaa434
 void* dmsc_sp_ud_b_stren_array_now = (void*)0xc4ad0;
@@ -5811,7 +5956,7 @@ int32_t data_aa690 = 0x500;
 int32_t data_aa6cc = 0x36c;
 
 // Data at address 0xaa6e8
-uint64_t tisp_BCSH_au32OffsetYUVy = 0x440000003c0;
+uint64_t tisp_BCSH_au32OffsetYUVy = 0x00000440000003c0ULL;
 
 // Data at address 0xaa6fc
 uint8_t bcsh_hue_in = 0x80;
@@ -5904,7 +6049,7 @@ uint8_t bcsh_contrast = 0x80;
 uint8_t bcsh_brightness = 0x80;
 
 // Data at address 0xaa920
-uint32_t gain_old_aa920 = 0xffffffff;
+uint32_t gain_old_aa920 = 0xffffffffU;
 
 // Data at address 0xaa924
 void* y_sp_b_sl_stren_3_array_now = (void*)0xc57a0;
@@ -6021,10 +6166,10 @@ void* sdns_h_mv_wei_now = (void*)0xc6f38;
 uint32_t sdns_ratio = 0x80;
 
 // Data at address 0xaa9c4
-uint32_t gain_old_aa9c4 = 0xffffffff;
+uint32_t gain_old_aa9c4 = 0xffffffffU;
 
 // Data at address 0xaa9d0
-uint32_t gain_old_aa9d0 = 0xffffffff;
+uint32_t gain_old_aa9d0 = 0xffffffffU;
 
 // Data at address 0xaa9d4
 void* mdns_c_fiir_fus_wei8_array_now = (void*)0xc83ac;
@@ -6261,7 +6406,7 @@ uint32_t vin_height = 0x438;
 uint32_t vin_width = 0x780;
 
 // Data at address 0xaab10
-uint32_t gain_old_aab10 = 0xffffffff;
+uint32_t gain_old_aab10 = 0xffffffffU;
 
 // Data at address 0xaab14
 void* dpc_d_m3_fthres_array_now = (void*)0xcb828;
@@ -6285,7 +6430,7 @@ void* param_defog_main_para_array_now = (void*)0xacc44;
 void* param_defog_fpga_para_array_now = (void*)0xacce8;
 
 // Data at address 0xaac68
-void* param_defog_block_t_x_array_now = (void*)0xacd3c /* pointer to data */;
+wchar32 (*) param_defog_block_t_x_array_now[] = (void*)0xacd3c /* pointer to data */; // offset: 0xaac68
 
 // Data at address 0xaac6c
 void* defog_trsy4_list_now = (void*)0xcd554;
@@ -7194,19 +7339,19 @@ int32_t data_acd84 = 0x1;
 int32_t data_acd88 = 0x1;
 
 // Data at address 0xacd8c
-uint64_t defog_block_area_index = 0xc00000000;
+uint64_t defog_block_area_index = 0x0000000c00000000ULL;
 
 // Data at address 0xacd94
-int32_t defog_block_area_div = { 0x19, 0xbd, 0x5a, 0x00 };
+int32_t defog_block_area_div = 0x005abd19U;
 
 // Data at address 0xacd98
-int32_t data_acd98 = { 0x3e, 0x98, 0x5b, 0x00 };
+int32_t data_acd98 = 0x005b983eU;
 
 // Data at address 0xacd9c
-int32_t data_acd9c = { 0x19, 0xbd, 0x5a, 0x00 };
+int32_t data_acd9c = 0x005abd19U;
 
 // Data at address 0xacda0
-int32_t data_acda0 = { 0x3e, 0x98, 0x5b, 0x00 };
+int32_t data_acda0 = 0x005b983eU;
 
 // Data at address 0xace44
 uint32_t defog_strength_attr = 0x80;
@@ -7425,7 +7570,7 @@ int16_t data_af26a = 0x9d5;
 int16_t data_af26c = 0x9ef;
 
 // Data at address 0xaf26e
-char data_af26e[] = "\t\t\n"\n;\nU\nl\n"; // offset: 0xaf26e
+char data_af26e[] = "\t\t\n\"\n;\nU\nl\n"; // offset: 0xaf26e
 
 // Data at address 0xaf278
 const char data_af278[] = "\t\t\n\"\n;\nU\nl\n"; // length: 11
@@ -8652,7 +8797,7 @@ wchar32 _at_list[] = "KA7-("; // offset: 0xb0c28
 int32_t data_b0cec = 0x0;
 
 // Data at address 0xb0cf0
-uint64_t _AePointPos = 0x4000000000a;
+uint64_t _AePointPos = 0x000004000000000aULL;
 
 // Data at address 0xb0cf8
 int32_t ae_exp_th = 0x693;
@@ -9108,10 +9253,10 @@ int32_t data_b1400 = 0x1;
 int32_t data_b1404 = 0x0;
 
 // Data at address 0xb1410
-uint32_t ydns_gain_old = 0xffffffff;
+uint32_t ydns_gain_old = 0xffffffffU;
 
 // Data at address 0xb1420
-uint32_t rdns_gain_old = 0xffffffff;
+uint32_t rdns_gain_old = 0xffffffffU;
 
 // Data at address 0xb1424
 void* rdns_text_base_thres_array_now = (void*)0xd7134;
@@ -11148,7 +11293,7 @@ void* tx_isp_core_driver = &tx_isp_core_probe;
 void* data_b24d4 = &tx_isp_core_remove;
 
 // Data at address 0xb24e4
-void* data_b24e4 = (void*)0x826a0;
+char const (*) data_b24e4[] = (void*)0x826a0 /* pointer to data */; // offset: 0xb24e4
 
 // Data at address 0xb24ec
 void* data_b24ec = (void*)0xb27e0;
@@ -11244,7 +11389,7 @@ char isp_output_fmt[] = "YUV 4:2:0 semi planar, Y/CbCr"; // offset: 0xb261c
 uint32_t first_into = 0x1;
 
 // Data at address 0xb27d8
-uint32_t isp_clk_b27d8 = { 0x00, 0xe1, 0xf5, 0x05 };
+uint32_t isp_clk_b27d8 = 0x05f5e100U;
 
 // Data at address 0xb289c
 void* data_b289c = &init_module;
@@ -17544,7 +17689,7 @@ uint8_t isp_core_debug_type = 0x0;
 uint8_t isp_day_night_switch_drop_frame_cnt_pdq_interrupt = 0x0;
 
 // Data at address 0xda4a4
-uint24_t isp_day_night_switch_drop_frame_cnt = 0x0;
+uint32_t isp_day_night_switch_drop_frame_cnt = 0x0;
 
 // Data at address 0xda4a8
 uint32_t isp_ch1_dequeue_delay_time = 0x0;
@@ -17591,27 +17736,6 @@ uint32_t isp_ch0_frm_done = 0x0;
 // Data at address 0x10000
 unsigned char __key_33294[] = { 0x08, 0x00, 0x02, 0x3c, 0xc4, 0x2c, 0x42, 0x8c, 0xd0, 0xff, 0xbd, 0x27, 0x2b, 0x10, 0x82, 0x00, 0x28, 0x00, 0xb1, 0xaf, 0x2c, 0x00, 0xbf, 0xaf, 0x24, 0x00, 0xb0, 0xaf, 0x38, 0x00, 0xa6, 0xaf, 0x3c, 0x00, 0xa7, 0xaf, 0x14, 0x00, 0x40, 0x14, 0x25, 0x88, 0x00, 0x00, 0x38, 0x00, 0xa2, 0x27, 0x18, 0x00, 0xa2, 0xaf, 0x18, 0x00, 0xa2, 0x27, 0x25, 0x80, 0x80, 0x00, 0x14, 0x00, 0xa2, 0xaf /* ... 192 more bytes ... */ }; // offset: 0x10000
 
-// Data at address 0x7a280
-unsigned char __param_str_isp_memopt[] = "isp_memopt"; // offset: 0x7a280
-
-// Data at address 0x7a28c
-unsigned char __param_str_isp_day_night_switch_drop_frame_num[] = "isp_day_night_switch_drop_frame_num"; // offset: 0x7a28c
-
-// Data at address 0x7a2b0
-unsigned char __param_str_isp_ch1_dequeue_delay_time[] = "isp_ch1_dequeue_delay_time"; // offset: 0x7a2b0
-
-// Data at address 0x7a2cc
-unsigned char __param_str_isp_ch0_pre_dequeue_valid_lines[] = "isp_ch0_pre_dequeue_valid_lines"; // offset: 0x7a2cc
-
-// Data at address 0x7a2ec
-unsigned char __param_str_isp_ch0_pre_dequeue_interrupt_process[] = "isp_ch0_pre_dequeue_interrupt_process"; // offset: 0x7a2ec
-
-// Data at address 0x7a314
-unsigned char __param_str_isp_ch0_pre_dequeue_time[] = "isp_ch0_pre_dequeue_time"; // offset: 0x7a314
-
-// Data at address 0x7a338
-unsigned char __param_str_print_level[] = "print_level"; // offset: 0x7a338
-
 // Data at address 0x7a9b0
 unsigned char __pow2_lut[] = { 0x00, 0x00, 0x00, 0x40, 0x4c, 0xc3, 0x66, 0x41, 0xb4, 0x61, 0xd5, 0x42, 0x40, 0x07, 0x4c, 0x44, 0xf2, 0xe0, 0xca, 0x45, 0xc6, 0x1c, 0x52, 0x47, 0xba, 0xe9, 0xe1, 0x48, 0xd4, 0x77, 0x7a, 0x4a, 0x29, 0xf8, 0x1b, 0x4c, 0xdd, 0x9c, 0xc6, 0x4d, 0x30, 0x99, 0x7a, 0x4f, 0x82, 0x21, 0x38, 0x51, 0x55, 0x6b, 0xff, 0x52, 0x5a, 0xad, 0xd0, 0x54, 0x75, 0x1f, 0xac, 0x56, 0xc1, 0xfa, 0x91, 0x58 /* ... 192 more bytes ... */ }; // offset: 0x7a9b0
 
@@ -17634,7 +17758,7 @@ unsigned char _LC1_7dffc[] = "sensor type is OTHER_MIPI!\n"; // offset: 0x7dffc
 unsigned char _LC33[] = { 0x72, 0x61, 0x77, 0x00, 0x73, 0x61, 0x76, 0x65, 0x72, 0x61, 0x77, 0x00, 0x77, 0x69, 0x64, 0x74, 0x68, 0x20, 0x69, 0x73, 0x20, 0x25, 0x64, 0x2c, 0x20, 0x68, 0x65, 0x69, 0x67, 0x68, 0x74, 0x20, 0x69, 0x73, 0x20, 0x25, 0x64, 0x2c, 0x20, 0x69, 0x6d, 0x61, 0x67, 0x65, 0x73, 0x69, 0x7a, 0x65, 0x20, 0x69, 0x73, 0x20, 0x25, 0x64, 0x0a, 0x2c, 0x20, 0x73, 0x61, 0x76, 0x65, 0x20, 0x6e, 0x75 /* ... 192 more bytes ... */ }; // offset: 0x7e3a0
 
 // Data at address 0x7e400
-unsigned char _LC37[] = { 0x0a, 0x0a, 0x00, 0x00, 0x68, 0x65, 0x6c, 0x70, 0x3a, 0x0a, 0x00, 0x00, 0x09, 0x20, 0x63, 0x6d, 0x64, 0x3a, 0x0a, 0x00, 0x09, 0x09, 0x20, 0x73, 0x6e, 0x61, 0x70, 0x72, 0x61, 0x77, 0x0a, 0x00, 0x09, 0x09, 0x09, 0x20, 0x75, 0x73, 0x65, 0x20, 0x63, 0x6d, 0x64, 0x20, 0x22, 0x20, 0x73, 0x6e, 0x61, 0x70, 0x72, 0x61, 0x77, 0x22, 0x20, 0x79, 0x6f, 0x75, 0x20, 0x73, 0x68, 0x6f, 0x75, 0x6c /* ... 192 more bytes ... */ }; // offset: 0x7e400
+unsigned char _LC37_7e400[] = { 0x0a, 0x0a, 0x00, 0x00, 0x68, 0x65, 0x6c, 0x70, 0x3a, 0x0a, 0x00, 0x00, 0x09, 0x20, 0x63, 0x6d, 0x64, 0x3a, 0x0a, 0x00, 0x09, 0x09, 0x20, 0x73, 0x6e, 0x61, 0x70, 0x72, 0x61, 0x77, 0x0a, 0x00, 0x09, 0x09, 0x09, 0x20, 0x75, 0x73, 0x65, 0x20, 0x63, 0x6d, 0x64, 0x20, 0x22, 0x20, 0x73, 0x6e, 0x61, 0x70, 0x72, 0x61, 0x77, 0x22, 0x20, 0x79, 0x6f, 0x75, 0x20, 0x73, 0x68, 0x6f, 0x75, 0x6c /* ... 192 more bytes ... */ }; // offset: 0x7e400
 
 // Data at address 0x7eaf0
 unsigned char _LC0_7eaf0[] = "[%d] Don\'t have active sensor!\n"; // offset: 0x7eaf0
@@ -18280,9 +18404,6 @@ unsigned char _LC35_8057c[] = "Failed to register isp device(%d)\n"; // offset: 
 
 // Data at address 0x805a0
 unsigned char _LC36_805a0[] = "Failed to init isp module(%d.%d)\n"; // offset: 0x805a0
-
-// Data at address 0x805c4
-unsigned char _LC37_805c4[] = "tx-isp"; // offset: 0x805c4
 
 // Data at address 0x805cc
 unsigned char _LC38_805cc[] = "Failed to register tx-isp miscdev!\n"; // offset: 0x805cc
@@ -19917,7 +20038,7 @@ unsigned char param_multiValueLow_software_in_array[] = { 0x64, 0x00, 0x00, 0x00
 unsigned char param_d_thr_normal_min_software_in_array[] = { 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00, 0x1a, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xb1c38
 
 // Data at address 0xb1ca0
-unsigned char param_d_thr_normal2_software_in_array[] = " "$&(*,.2<"; // offset: 0xb1ca0
+unsigned char param_d_thr_normal2_software_in_array[] = " \"$&(*,.2<"; // offset: 0xb1ca0
 
 // Data at address 0xb1d08
 unsigned char param_d_thr_normal1_software_in_array[] = { 0x1f, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xb1d08
@@ -22589,1038 +22710,73 @@ unsigned char irq_func_cb[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
 
 /* Function Pointers and Tables */
 
-/* Function Prototypes */
+/* Symbol Table Entries - Fixed syntax (dynamically discovered) */
+void* __ksymtab_isp_printf = (void*)isp_printf; // Symbol table entry
+void* __ksymtab_private_capable = (void*)private_capable; // Symbol table entry
+void* __ksymtab_private_clk_disable = (void*)private_clk_disable; // Symbol table entry
+void* __ksymtab_private_clk_enable = (void*)private_clk_enable; // Symbol table entry
+void* __ksymtab_private_clk_put = (void*)private_clk_put; // Symbol table entry
+void* __ksymtab_private_clk_set_rate = (void*)private_clk_set_rate; // Symbol table entry
+void* __ksymtab_private_driver_get_interface = (void*)private_driver_get_interface; // Symbol table entry
+void* __ksymtab_private_gpio_direction_output = (void*)private_gpio_direction_output; // Symbol table entry
+void* __ksymtab_private_gpio_free = (void*)private_gpio_free; // Symbol table entry
+void* __ksymtab_private_gpio_request = (void*)private_gpio_request; // Symbol table entry
+void* __ksymtab_private_i2c_add_driver = (void*)private_i2c_add_driver; // Symbol table entry
+void* __ksymtab_private_i2c_del_driver = (void*)private_i2c_del_driver; // Symbol table entry
+void* __ksymtab_private_i2c_get_clientdata = (void*)private_i2c_get_clientdata; // Symbol table entry
+void* __ksymtab_private_i2c_set_clientdata = (void*)private_i2c_set_clientdata; // Symbol table entry
+void* __ksymtab_private_i2c_transfer = (void*)private_i2c_transfer; // Symbol table entry
+void* __ksymtab_private_jzgpio_set_func = (void*)private_jzgpio_set_func; // Symbol table entry
+void* __ksymtab_private_log2_fixed_to_fixed = (void*)private_log2_fixed_to_fixed; // Symbol table entry
+void* __ksymtab_private_log2_int_to_fixed = (void*)private_log2_int_to_fixed; // Symbol table entry
+void* __ksymtab_private_math_exp2 = (void*)private_math_exp2; // Symbol table entry
+void* __ksymtab_private_msleep = (void*)private_msleep; // Symbol table entry
+void* __ksymtab_tisp_log2_fixed_to_fixed = (void*)tisp_log2_fixed_to_fixed; // Symbol table entry
+void* __ksymtab_tisp_math_exp2 = (void*)tisp_math_exp2; // Symbol table entry
+void* __ksymtab_tx_isp_exit = (void*)tx_isp_exit; // Symbol table entry
+void* __ksymtab_tx_isp_init = (void*)tx_isp_init; // Symbol table entry
+void* __ksymtab_tx_isp_subdev_deinit = (void*)tx_isp_subdev_deinit; // Symbol table entry
+void* __ksymtab_tx_isp_subdev_init = (void*)tx_isp_subdev_init; // Symbol table entry
+void* __kstrtab_isp_printf = (void*)isp_printf; // Symbol table entry
+void* __kstrtab_private_driver_get_interface = (void*)private_driver_get_interface; // Symbol table entry
+void* __kstrtab_private_capable = (void*)private_capable; // Symbol table entry
+void* __kstrtab_private_msleep = (void*)private_msleep; // Symbol table entry
+void* __kstrtab_private_jzgpio_set_func = (void*)private_jzgpio_set_func; // Symbol table entry
+void* __kstrtab_private_gpio_direction_output = (void*)private_gpio_direction_output; // Symbol table entry
+void* __kstrtab_private_gpio_free = (void*)private_gpio_free; // Symbol table entry
+void* __kstrtab_private_gpio_request = (void*)private_gpio_request; // Symbol table entry
+void* __kstrtab_private_i2c_add_driver = (void*)private_i2c_add_driver; // Symbol table entry
+void* __kstrtab_private_i2c_set_clientdata = (void*)private_i2c_set_clientdata; // Symbol table entry
+void* __kstrtab_private_i2c_get_clientdata = (void*)private_i2c_get_clientdata; // Symbol table entry
+void* __kstrtab_private_i2c_del_driver = (void*)private_i2c_del_driver; // Symbol table entry
+void* __kstrtab_private_i2c_transfer = (void*)private_i2c_transfer; // Symbol table entry
+void* __kstrtab_private_clk_set_rate = (void*)private_clk_set_rate; // Symbol table entry
+void* __kstrtab_private_clk_put = (void*)private_clk_put; // Symbol table entry
+void* __kstrtab_private_clk_disable = (void*)private_clk_disable; // Symbol table entry
+void* __kstrtab_private_clk_enable = (void*)private_clk_enable; // Symbol table entry
+void* __kstrtab_private_log2_fixed_to_fixed = (void*)private_log2_fixed_to_fixed; // Symbol table entry
+void* __kstrtab_private_log2_int_to_fixed = (void*)private_log2_int_to_fixed; // Symbol table entry
+void* __kstrtab_private_math_exp2 = (void*)private_math_exp2; // Symbol table entry
+void* __kstrtab_tx_isp_exit = (void*)tx_isp_exit; // Symbol table entry
+void* __kstrtab_tx_isp_init = (void*)tx_isp_init; // Symbol table entry
+void* __kstrtab_tx_isp_subdev_deinit = (void*)tx_isp_subdev_deinit; // Symbol table entry
+void* __kstrtab_tx_isp_subdev_init = (void*)tx_isp_subdev_init; // Symbol table entry
+void* __kstrtab_tisp_log2_fixed_to_fixed = (void*)tisp_log2_fixed_to_fixed; // Symbol table entry
+void* __kstrtab_tisp_math_exp2 = (void*)tisp_math_exp2; // Symbol table entry
 
-void isp_printf(void);
-void get_isp_clk(void);
-void private_vmalloc(void);
-void private_vfree(void);
-void private_ktime_set(void);
-void private_set_current_state(void);
-void private_schedule_hrtimeout(void);
-void private_schedule_work(void);
-void private_do_gettimeofday(void);
-void private_dma_sync_single_for_device(void);
-void private_get_driver_interface(void);
-void tx_isp_release_device(void);
-void pop_buffer_fifo(void);
-void tx_isp_vic_start(void);
-void ispvic_frame_channel_qbuf(void);
-void ispvic_frame_channel_clearbuf(void);
-void tx_isp_vic_probe(void);
-void dump_isp_vic_frd_open(void);
-void isp_vic_frd_show(void);
-void tx_isp_vic_activate_subdev(void);
-void vic_sensor_ops_ioctl(void);
-void vic_sensor_ops_sync_sensor_attr(void);
-void dump_vic_reg(void);
-void check_vic_error(void);
-void tx_vic_enable_irq(void);
-void tx_vic_disable_irq(void);
-void vic_core_s_stream(void);
-void vic_core_ops_init(void);
-void tx_isp_vic_slake_subdev(void);
-void vic_mdma_enable(void);
-void isp_vic_cmd_set(void);
-void vic_pipo_mdma_enable(void);
-void ispvic_frame_channel_s_stream(void);
-void vic_framedone_irq_function(void);
-void vic_mdma_irq_function(void);
-void isp_vic_interrupt_service_routine(void);
-void tx_isp_subdev_pipo(void);
-void vic_core_ops_ioctl(void);
-void vic_core_ops_ioctl(void);
-void vin_s_stream(void);
-void tx_isp_vin_activate_subdev(void);
-void tx_isp_vin_init(void);
-void subdev_sensor_ops_set_input(void);
-void tx_isp_vin_reset(void);
-void tx_isp_vin_probe(void);
-void video_input_cmd_open(void);
-void video_input_cmd_set(void);
-void video_input_cmd_show(void);
-void subdev_sensor_ops_release_all_sensor(void);
-void tx_isp_vin_slake_subdev(void);
-void isp_i2c_new_subdev_board(void);
-void subdev_sensor_ops_enum_input(void);
-void subdev_sensor_ops_ioctl(void);
-void tx_isp_csi_probe(void);
-void dump_isp_csi_open(void);
-void isp_csi_show(void);
-void csi_core_ops_init(void);
-void csi_sensor_ops_ioctl(void);
-void csi_sensor_ops_sync_sensor_attr(void);
-void tx_isp_csi_activate_subdev(void);
-void csi_video_s_stream(void);
-void tx_isp_csi_slake_subdev(void);
-void dump_csi_reg(void);
-void check_csi_error(void);
-void csi_set_on_lanes(void);
-void isp_core_tunning_open(void);
-void isp_core_tunning_release(void);
-void apical_isp_hvflip_update(void);
-void apical_isp_mask_s_attr_isra_29(void);
-void apical_isp_gamma_s_attr_isra_34(void);
-void apical_isp_expr_s_ctrl_isra_35(void);
-void apical_isp_ae_s_roi_isra_36(void);
-void apical_isp_ae_zone_weight_s_attr_isra_47(void);
-void apical_isp_af_hist_s_attr_isra_50(void);
-void apical_isp_af_weight_s_attr_isra_51(void);
-void apical_isp_core_ops_s_ctrl(void);
-void apical_isp_mask_g_attr_isra_68(void);
-void apical_isp_expr_g_ctrl_isra_72(void);
-void apical_isp_max_again_g_ctrl_isra_73(void);
-void apical_isp_max_dgain_g_ctrl_isra_74(void);
-void apical_isp_ev_g_attr_isra_75(void);
-void apical_isp_gamma_g_attr_isra_76(void);
-void apical_isp_ae_g_roi_isra_77(void);
-void apical_isp_ae_zone_g_ctrl_isra_84(void);
-void apical_isp_af_zone_g_ctrl_isra_85(void);
-void apical_isp_ae_zone_weight_g_attr_isra_89(void);
-void apical_isp_ae_hist_origin_g_attr_isra_92(void);
-void apical_isp_awb_zone_statis_g_attr_isra_94(void);
-void apical_isp_af_hist_g_attr_isra_95(void);
-void apical_isp_af_weight_g_attr_isra_96(void);
-void tiziano_isp_ae_manual_attr_g_ctrl_isra_103(void);
-void tiziano_isp_csc_g_attr_isra_108(void);
-void isp_frame_done_wait(void);
-void apical_isp_core_ops_g_ctrl(void);
-void isp_core_tunning_unlocked_ioctl(void);
-void isp_frame_done_wakeup(void);
-void isp_core_tuning_event(void);
-void isp_core_tuning_init(void);
-void isp_core_tuning_deinit(void);
-void private_math_exp2(void);
-void private_clk_enable(void);
-void private_clk_disable(void);
-void private_clk_put(void);
-void private_clk_set_rate(void);
-void private_i2c_transfer(void);
-void private_i2c_del_driver(void);
-void private_i2c_get_clientdata(void);
-void private_i2c_set_clientdata(void);
-void private_i2c_add_driver(void);
-void private_gpio_request(void);
-void private_gpio_free(void);
-void private_gpio_direction_output(void);
-void private_jzgpio_set_func(void);
-void private_msleep(void);
-void private_capable(void);
-void private_driver_get_interface(void);
-void private_leading_one_position(void);
-void private_log2_int_to_fixed(void);
-void private_log2_fixed_to_fixed(void);
-void private_leading_one_position_64(void);
-void private_log2_int_to_fixed_64(void);
-void private_log2_fixed_to_fixed_64(void);
-void private_platform_driver_register(void);
-void private_platform_driver_unregister(void);
-void private_platform_set_drvdata(void);
-void private_platform_get_drvdata(void);
-void private_platform_device_register(void);
-void private_platform_device_unregister(void);
-void private_platform_get_resource(void);
-void private_dev_set_drvdata(void);
-void private_dev_get_drvdata(void);
-void private_platform_get_irq(void);
-void private_request_mem_region(void);
-void private_release_mem_region(void);
-void private_ioremap(void);
-void private_iounmap(void);
-void private_request_threaded_irq(void);
-void private_enable_irq(void);
-void private_disable_irq(void);
-void private_free_irq(void);
-void __private_spin_lock_irqsave(void);
-void private_spin_unlock_irqrestore(void);
-void private_spin_lock_init(void);
-void private_mutex_lock(void);
-void private_mutex_unlock(void);
-void private_raw_mutex_init(void);
-void private_clk_get(void);
-void private_clk_is_enabled(void);
-void private_clk_get_rate(void);
-void private_i2c_get_adapter(void);
-void private_i2c_put_adapter(void);
-void private_i2c_register_driver(void);
-void private_i2c_new_device(void);
-void private_i2c_unregister_device(void);
-void private_gpio_direction_input(void);
-void private_gpio_set_debounce(void);
-void private_jzgpio_ctrl_pull(void);
-void private_sched_clock(void);
-void private_try_module_get(void);
-void private_request_module(void);
-void private_module_put(void);
-void private_init_completion(void);
-void private_complete(void);
-void private_wait_for_completion_interruptible(void);
-void private_wait_event_interruptible(void);
-void private_wake_up_all(void);
-void private_wake_up(void);
-void private_init_waitqueue_head(void);
-void private_wait_for_completion_timeout(void);
-void private_misc_register(void);
-void private_misc_deregister(void);
-void private_proc_create_data(void);
-void private_seq_read(void);
-void private_seq_lseek(void);
-void private_single_release(void);
-void private_single_open_size(void);
-void private_jz_proc_mkdir(void);
-void private_proc_remove(void);
-void private_seq_printf(void);
-void private_simple_strtoull(void);
-void private_kthread_should_stop(void);
-void private_kthread_run(void);
-void private_kthread_stop(void);
-void private_kmalloc(void);
-void private_kfree(void);
-void private_copy_from_user(void);
-void private_copy_to_user(void);
-void private_nlmsg_new(void);
-void private_nlmsg_put(void);
-void private_netlink_unicast(void);
-void private_netlink_kernel_create(void);
-void private_sock_release(void);
-void private_filp_open(void);
-void private_filp_close(void);
-void private_vfs_read(void);
-void private_vfs_write(void);
-void private_vfs_llseek(void);
-void private_get_fs(void);
-void private_set_fs(void);
-void private_dma_cache_sync(void);
-void private_getrawmonotonic(void);
-void private_get_init_net(void);
-void private_get_isp_priv_mem(void);
-void find_new_buffer(void);
-void isp_mem_init(void);
-void isp_malloc_buffer(void);
-void isp_free_buffer(void);
-void private_devm_clk_get(void);
-void private_clk_prepare_enable(void);
-void private_clk_disable_unprepare(void);
-void private_devm_clk_put(void);
-void isp_irq_handle(void);
-void isp_irq_thread_handle(void);
-void tx_isp_enable_irq(void);
-void tx_isp_disable_irq(void);
-void tx_isp_request_irq(void);
-void tx_isp_free_irq(void);
-void fs_activate_module(void);
-void __enqueue_in_driver(void);
-void __vb2_queue_cancel(void);
-void __vb2_queue_free(void);
-void dump_isp_framesource_open(void);
-void isp_framesource_show(void);
-void __fill_v4l2_buffer(void);
-void frame_chan_event(void);
-void frame_channel_open(void);
-void frame_channel_vidioc_set_fmt(void);
-void frame_channel_vidioc_get_fmt(void);
-void check_state(void);
-void __frame_channel_vb2_streamoff(void);
-void fs_slake_module(void);
-void frame_channel_release(void);
-void frame_channel_unlocked_ioctl(void);
-void tx_isp_frame_chan_deinit(void);
-void tx_isp_fs_probe(void);
-void sensor_alloc_analog_gain(void);
-void sensor_alloc_analog_gain_short(void);
-void sensor_alloc_digital_gain(void);
-void sensor_alloc_integration_time(void);
-void sensor_alloc_integration_time_short(void);
-void sensor_set_integration_time(void);
-void sensor_set_integration_time_short(void);
-void sensor_set_analog_gain(void);
-void sensor_set_analog_gain_short(void);
-void sensor_set_digital_gain(void);
-void sensor_get_normal_fps(void);
-void sensor_read_black_pedestal(void);
-void sensor_end_changes(void);
-void sensor_get_id(void);
-void sensor_set_wdr_mode(void);
-void sensor_fps_control(void);
-void sensor_disable_isp(void);
-void sensor_get_lines_per_second(void);
-void sensor_set_mode(void);
-void sensor_start_changes(void);
-void sensor_hw_reset_enable(void);
-void sensor_hw_reset_disable(void);
-void sensor_init(void);
-void sensor_early_init(void);
-void tx_isp_video_s_stream(void);
-void tx_isp_video_link_stream(void);
-void tx_isp_open(void);
-void tx_isp_notify(void);
-void find_subdev_link_pad(void);
-void isp_subdev_release_clks(void);
-void isp_subdev_init_clks(void);
-void tx_isp_unregister_platforms(void);
-void tx_isp_exit(void);
-void subdev_video_destroy_link(void);
-void tx_isp_video_link_destroy_isra_5(void);
-void tx_isp_release(void);
-void tx_isp_init(void);
-void tx_isp_get_ae_algo_handle_isra_16(void);
-void tx_isp_unlocked_ioctl(void);
-void private_reset_tx_isp_module(void);
-void tx_isp_reg_set(void);
-void tx_isp_send_event_to_remote(void);
-void tx_isp_module_init(void);
-void tx_isp_module_deinit(void);
-void tx_isp_subdev_init(void);
-void tx_isp_subdev_deinit(void);
-void tx_isp_create_graph_and_nodes(void);
-void tx_isp_probe(void);
-void tisp_math_exp2(void);
-void fix_point_add(void);
-void fix_point_sub(void);
-void fix_point_mult2(void);
-void fix_point_mult3(void);
-void fix_point_add_64(void);
-void fix_point_sub_64(void);
-void fix_point_mult2_64(void);
-void fix_point_mult3_64(void);
-void fix_point_div_64(void);
-void fix_point_div(void);
-void fix_point_add_32(void);
-void fix_point_sub_32(void);
-void fix_point_mult2_32(void);
-void fix_point_mult3_32(void);
-void fix_point_div_32(void);
-void fix_point_intp(void);
-void table_intp(void);
-void tisp_simple_intp(void);
-void tisp_log2_int_to_fixed(void);
-void tisp_log2_fixed_to_fixed(void);
-void tisp_log2_int_to_fixed_64(void);
-void tisp_log2_fixed_to_fixed_64(void);
-void netlink_rcv_msg(void);
-void netlink_send_msg(void);
-void tisp_netlink_event_set_cb(void);
-void tisp_netlink_init(void);
-void tisp_netlink_exit(void);
-void isp_tunning_poll(void);
-void tisp_code_tuning_release(void);
-void tisp_param_operate_process(void);
-void isp_tunning_read(void);
-void tisp_code_tuning_open(void);
-void tisp_top_param_array_get(void);
-void tisp_get_ae_info(void);
-void tisp_set_ae_info(void);
-void tisp_get_awb_info(void);
-void tisp_set_awb_info(void);
-void tisp_reg_map_get(void);
-void tisp_reg_map_set(void);
-void tisp_dn_mode_get(void);
-void tisp_dn_mode_set(void);
-void tisp_blc_get_par_cfg(void);
-void tisp_blc_set_par_cfg(void);
-void tisp_lsc_get_par_cfg(void);
-void tisp_lsc_set_par_cfg(void);
-void tisp_wdr_get_par_cfg(void);
-void tisp_wdr_set_par_cfg(void);
-void tisp_dpc_get_par_cfg(void);
-void tisp_dpc_set_par_cfg(void);
-void tisp_gib_get_par_cfg(void);
-void tisp_gib_set_par_cfg(void);
-void tisp_rdns_get_par_cfg(void);
-void tisp_rdns_set_par_cfg(void);
-void tisp_adr_get_par_cfg(void);
-void tisp_adr_set_par_cfg(void);
-void tisp_dmsc_get_par_cfg(void);
-void tisp_dmsc_set_par_cfg(void);
-void tisp_ccm_get_par_cfg(void);
-void tisp_ccm_set_par_cfg(void);
-void tisp_gamma_get_par_cfg(void);
-void tisp_gamma_set_par_cfg(void);
-void tisp_defog_get_par_cfg(void);
-void tisp_defog_set_par_cfg(void);
-void tisp_mdns_get_par_cfg(void);
-void tisp_mdns_set_par_cfg(void);
-void tisp_ydns_get_par_cfg(void);
-void tisp_ydns_set_par_cfg(void);
-void tisp_bcsh_get_par_cfg(void);
-void tisp_bcsh_set_par_cfg(void);
-void tisp_clm_get_par_cfg(void);
-void tisp_clm_set_par_cfg(void);
-void tisp_ysp_get_par_cfg(void);
-void tisp_ysp_set_par_cfg(void);
-void tisp_sdns_get_par_cfg(void);
-void tisp_sdns_set_par_cfg(void);
-void tisp_af_get_par_cfg(void);
-void tisp_af_set_par_cfg(void);
-void tisp_hldc_get_par_cfg(void);
-void tisp_hldc_set_par_cfg(void);
-void tisp_ae_get_par_cfg(void);
-void tisp_ae_set_par_cfg(void);
-void tisp_awb_get_par_cfg(void);
-void tisp_awb_set_par_cfg(void);
-void tisp_code_tuning_ioctl(void);
-void tisp_code_create_tuning_node(void);
-void tisp_param_operate_init(void);
-void tisp_code_destroy_tuning_node(void);
-void tisp_param_operate_deinit(void);
-void tisp_again_update(void);
-void tisp_tgain_update(void);
-void tisp_ev_update(void);
-void tisp_ct_update(void);
-void tisp_ae_ir_update(void);
-void ip_done_interrupt_static(void);
-void tisp_deinit(void);
-void tisp_fw_process(void);
-void tisp_channel_start(void);
-void tisp_channel_stop(void);
-void tisp_channel_fifo_clear(void);
-void tisp_channel_attr_set(void);
-void tiziano_load_parameters(void);
-void tisp_init(void);
-void tiziano_sync_sensor_attr(void);
-void tisp_event_init(void);
-void tisp_event_set_cb(void);
-void tisp_event_push(void);
-void tisp_event_exit(void);
-void tisp_event_process(void);
-void JZ_Isp_Awb_Reg2par(void);
-void JZ_Isp_Awb_Awbg2reg(void);
-void JZ_Isp_Get_Awb_Statistics(void);
-void tisp_awb_ev_update(void);
-void tiziano_awb_params_refresh(void);
-void tiziano_awb_dump(void);
-void system_reg_write_awb(void);
-void Tiziano_awb_set_gain(void);
-void Tiziano_awb_fpga(void);
-void JZ_Isp_Awb(void);
-void tiziano_awb_set_lum_th_freq(void);
-void awb_interrupt_static(void);
-void tiziano_awb_set_hardware_param(void);
-void tiziano_awb_dn_params_refresh(void);
-void tiziano_awb_init(void);
-void tisp_g_wb_mode(void);
-void tisp_awb_set_frz(void);
-void tisp_awb_get_frz(void);
-void tisp_s_wb_mode(void);
-void tisp_awb_get_ct(void);
-void tisp_awb_set_ct(void);
-void tiziano_s_awb_start(void);
-void tiziano_g_awb_start(void);
-void tiziano_s_wb_algo(void);
-void tisp_awb_get_zone(void);
-void tisp_awb_set_cluster_awb_params(void);
-void tisp_awb_get_cluster_awb_params(void);
-void tisp_awb_set_ct_trend(void);
-void tisp_awb_get_ct_trend(void);
-void tisp_awb_param_array_get(void);
-void tisp_awb_param_array_set(void);
-void tisp_awb_algo_init(void);
-void tisp_awb_algo_handle(void);
-void tisp_awb_deinit(void);
-void ISPAWBInterpolation1(void);
-void ISPAWBInterpolation2(void);
-void func_zone_ct_weight(void);
-void Tiziano_Awb_Ct_Detect(void);
-void subsection_map(void);
-void subsection(void);
-void subsection_up(void);
-void subsection_light(void);
-void interpolate_adr_x8_y12(void);
-void Tiziano_adr_fpga(void);
-void cm_control(void);
-void minFun(void);
-void maxFun(void);
-void Log2(void);
-void absFun(void);
-void getVar(void);
-void wdr_detail_para_rgb(void);
-void Tiziano_wdr_fpga(void);
-void tiziano_gamma_lut_parameter(void);
-void tiziano_gamma_params_refresh(void);
-void tisp_gamma_wdr_en(void);
-void tiziano_gamma_dn_params_refresh(void);
-void tiziano_gamma_init(void);
-void tisp_gamma_param_array_get(void);
-void tisp_gamma_param_array_set(void);
-void system_reg_write_gib(void);
-void tisp_gib_gain_interpolation(void);
-void tiziano_gib_lut_parameter(void);
-void tiziano_gib_params_refresh(void);
-void tiziano_gib_dn_params_refresh(void);
-void tiziano_gib_deir_reg(void);
-void tiziano_gib_deir_interpolate(void);
-void tiziano_gib_deir_ir_interpolation(void);
-void tisp_gib_deir_ir_update(void);
-void tiziano_gib_init(void);
-void tisp_gib_param_array_get(void);
-void tisp_gib_param_array_set(void);
-void system_reg_write_gb(void);
-void tisp_gb_blc_again_interp(void);
-void tisp_gb_init_reg(void);
-void tisp_gb_params_refresh(void);
-void tisp_gb_dn_params_refresh(void);
-void tisp_gb_init(void);
-void tisp_gb_param_array_get(void);
-void tisp_gb_param_array_set(void);
-void tisp_lsc_wdr_en(void);
-void tisp_lsc_ct_update(void);
-void tisp_lsc_gain_update(void);
-void tiziano_lsc_params_refresh(void);
-void tiziano_lsc_dn_params_refresh(void);
-void tisp_lsc_param_array_get(void);
-void tisp_lsc_judge_ct_update_flag(void);
-void tisp_lsc_judge_gain_update_flag(void);
-void tisp_lsc_write_lut_datas(void);
-void tiziano_lsc_init(void);
-void tisp_lsc_param_array_set(void);
-void tisp_lsc_upside_down_lut(void);
-void tisp_lsc_lut_mirror_exchange(void);
-void tisp_lsc_mirror_flip(void);
-void tisp_dmsc_out_opt_cfg(void);
-void tisp_dmsc_uu_par_cfg(void);
-void tisp_dmsc_alias_par_cfg(void);
-void tisp_dmsc_uu_np_cfg(void);
-void tisp_dmsc_sp_d_sigma_3_np_cfg(void);
-void tisp_dmsc_sp_d_w_wei_np_cfg(void);
-void tisp_dmsc_sp_d_b_wei_np_cfg(void);
-void tisp_dmsc_sp_ud_w_wei_np_cfg(void);
-void tisp_dmsc_sp_ud_b_wei_np_cfg(void);
-void tisp_dmsc_dir_par_cfg(void);
-void tisp_dmsc_nor_par_cfg(void);
-void tisp_dmsc_sp_d_par_cfg(void);
-void tisp_dmsc_sp_ud_par_cfg(void);
-void tisp_dmsc_sp_alias_par_cfg(void);
-void tisp_dmsc_rgb_alias_par_cfg(void);
-void tisp_dmsc_fc_par_cfg(void);
-void tisp_dmsc_deir_par_cfg(void);
-void tisp_dmsc_awb_gain_par_cfg(void);
-void tisp_dmsc_deir_rgb_par_cfg(void);
-void tisp_dmsc_d_ud_ns_par_cfg(void);
-void tisp_dmsc_intp(void);
-void tisp_dmsc_wdr_en(void);
-void tisp_dmsc_all_reg_refresh(void);
-void tisp_dmsc_intp_reg_refresh(void);
-void tisp_dmsc_par_refresh(void);
-void tisp_dmsc_refresh(void);
-void tisp_dmsc_param_array_get(void);
-void tisp_dmsc_param_array_set(void);
-void tisp_dmsc_sharpness_set(void);
-void tiziano_dmsc_params_refresh(void);
-void tiziano_dmsc_dn_params_refresh(void);
-void tiziano_dmsc_init(void);
-void tisp_dmsc_sharpness_get(void);
-void tiziano_ccm_lut_parameter(void);
-void jz_isp_ccm_reg2par(void);
-void jz_isp_ccm_para2reg(void);
-void jz_isp_ccm_parameter_convert(void);
-void tiziano_ct_ccm_interpolation(void);
-void jz_isp_ccm(void);
-void tisp_ccm_ev_update(void);
-void tisp_ccm_ct_update(void);
-void tiziano_ccm_params_refresh(void);
-void tisp_ccm_wdr_en(void);
-void tiziano_ccm_dn_params_refresh(void);
-void tiziano_ccm_init(void);
-void tisp_ccm_get_attr(void);
-void tisp_ccm_set_attr(void);
-void tisp_ccm_param_array_get(void);
-void tisp_ccm_param_array_set(void);
-void tiziano_bcsh_StrenCal_part_0(void);
-void tiziano_bcsh_dump2(void);
-void tiziano_bcsh_lut_parameter(void);
-void tiziano_bcsh_reg2para(void);
-void tiziano_bcsh_para2reg(void);
-void tiziano_bcsh_Tccm_Comp2Orig(void);
-void tiziano_ct_bcsh_interpolation(void);
-void tiziano_bcsh_Tccm_RGBYUV(void);
-void tiziano_bcsh_Tccm_RGB2YUV(void);
-void tiziano_bcsh_Toffset_RGBYUV(void);
-void tiziano_bcsh_Toffset_RGB2YUV(void);
-void tiziano_bcsh_StrenCal(void);
-void tiziano_bcsh_TransitParam(void);
-void tiziano_bcsh_update(void);
-void tisp_bcsh_ev_update(void);
-void tisp_bcsh_ct_update(void);
-void tisp_bcsh_wdr_en(void);
-void tiziano_bcsh_dump(void);
-void tiziano_bcsh_params_refresh(void);
-void tiziano_bcsh_dn_params_refresh(void);
-void tiziano_bcsh_init(void);
-void tisp_bcsh_param_array_get(void);
-void tisp_bcsh_param_array_set(void);
-void tisp_bcsh_set_mjpeg_contrast(void);
-void tisp_bcsh_contrast(void);
-void tisp_bcsh_saturation(void);
-void tisp_bcsh_brightness(void);
-void tisp_bcsh_s_hue(void);
-void tisp_bcsh_g_hue(void);
-void tisp_bcsh_g_brightness(void);
-void tisp_bcsh_g_saturation(void);
-void tisp_bcsh_g_contrast(void);
-void tisp_bcsh_get_attr(void);
-void tisp_bcsh_set_attr(void);
-void tisp_bcsh_s_rgb_coefft(void);
-void tisp_bcsh_g_rgb_coefft(void);
-void tisp_sharpen_intp(void);
-void tisp_y_sp_sl_exp_cfg(void);
-void tisp_y_sp_std_scope_cfg(void);
-void tisp_y_sp_uu_cfg(void);
-void tisp_y_sp_fl_thres_cfg(void);
-void tisp_y_sp_v1_v2_coef_cfg(void);
-void tisp_y_sp_w_b_ll_cfg(void);
-void tisp_y_sp_uu_w_b_wei_cfg(void);
-void tisp_y_sp_w_b_sl_cfg(void);
-void tisp_y_sp_uu_fl_sl_cfg(void);
-void tisp_sharpen_wdr_en(void);
-void tisp_sharpen_all_reg_refresh(void);
-void tisp_sharpen_intp_reg_refresh(void);
-void tisp_sharpen_par_refresh(void);
-void tiziano_sharpen_params_refresh(void);
-void tiziano_sharpen_init(void);
-void tisp_sharpen_refresh(void);
-void tiziano_sharpen_dn_params_refresh(void);
-void tisp_sharpen_param_array_get(void);
-void tisp_sharpen_param_array_set(void);
-void tisp_sdns_grad_thres_opt_cfg(void);
-void tisp_sdns_h_mv_wei_opt_cfg(void);
-void tisp_sdns_mv_seg_number_num_thres_cfg(void);
-void tisp_sdns_g_det_val_div_cfg(void);
-void tisp_sdns_r_s_mv_cfg(void);
-void tisp_sdns_h_s_cfg(void);
-void tisp_sdns_h_mv_cfg(void);
-void tisp_sdns_dark_light_tt_opt_cfg(void);
-void tisp_sdns_d_s1_thres_cfg(void);
-void tisp_sdns_w_thres_cfg(void);
-void tisp_sdns_hls_en_ave_filter_cfg(void);
-void tisp_sdns_gaussian_y_cfg(void);
-void tisp_sdns_gaussian_x_cfg(void);
-void tisp_sdns_gaussian_k_cfg(void);
-void tisp_sdns_h_line_cfg(void);
-void tisp_sdns_sp_std_en_seg_opt_cfg(void);
-void tisp_sdns_sp_uu_cfg(void);
-void tisp_sdns_sp_v2_d_w_b_ll_hl_flat_cfg(void);
-void tisp_sdns_sp_ud_v2_v1_coef_w_wei_opt_cfg(void);
-void tisp_sdns_sp_ud_w_stren_cfg(void);
-void tisp_sdns_sp_ud_w_limit_b_wei_opt_cfg(void);
-void tisp_sdns_sp_ud_b_stren_cfg(void);
-void tisp_sdns_sp_ud_b_limit_srd_ll_hl_flat_cfg(void);
-void tisp_sdns_sp_ud_stren_shift_opt_cfg(void);
-void tisp_sdns_sp_uu_np_array_cfg(void);
-void tisp_sdns_sp_d_w_wei_np_array_cfg(void);
-void tisp_sdns_sp_d_b_wei_np_array_cfg(void);
-void tisp_sdns_sp_ud_w_wei_np_array_cfg(void);
-void tisp_sdns_sp_ud_b_wei_np_array_cfg(void);
-void tisp_sdns_intp(void);
-void tisp_sdns_all_reg_refresh(void);
-void tisp_sdns_intp_reg_refresh(void);
-void tisp_sdns_par_refresh(void);
-void tisp_sdns_refresh(void);
-void tisp_sdns_param_array_get(void);
-void tisp_sdns_param_array_set(void);
-void tisp_s_sdns_ratio(void);
-void tisp_sdns_wdr_en(void);
-void tiziano_sdns_params_refresh(void);
-void tiziano_sdns_init(void);
-void tiziano_sdns_dn_params_refresh(void);
-void tisp_mdns_top_func_cfg(void);
-void tisp_mdns_y_3d_param_cfg(void);
-void tisp_mdns_y_2d_param_cfg(void);
-void tisp_mdns_c_3d_param_cfg(void);
-void tisp_mdns_c_2d_param_cfg(void);
-void tisp_mdns_intp(void);
-void tisp_mdns_all_reg_refresh(void);
-void tisp_mdns_top_func_refresh(void);
-void tisp_mdns_reg_trigger(void);
-void tisp_mdns_intp_reg_refresh(void);
-void tisp_mdns_par_refresh(void);
-void tisp_mdns_bypass(void);
-void tisp_mdns_refresh(void);
-void tisp_mdns_param_array_get(void);
-void tisp_mdns_param_array_set(void);
-void tisp_s_mdns_ratio(void);
-void tisp_mdns_wdr_en(void);
-void tiziano_mdns_params_refresh(void);
-void tiziano_mdns_dn_params_refresh(void);
-void tiziano_mdns_init(void);
-void tisp_ctr_md_np_cfg(void);
-void tisp_ctr_std_np_cfg(void);
-void tisp_dpc_s_par_cfg(void);
-void tisp_dpc_d_m1_par_cfg(void);
-void tisp_dpc_d_m2_par_cfg(void);
-void tisp_dpc_d_m3_par_cfg(void);
-void tisp_dpc_cor_par_cfg(void);
-void tisp_ctr_par_cfg(void);
-void tisp_dpc_intp(void);
-void tisp_dpc_wdr_en(void);
-void tisp_dpc_all_reg_refresh(void);
-void tisp_dpc_intp_reg_refresh(void);
-void tisp_dpc_par_refresh(void);
-void tisp_dpc_refresh(void);
-void tisp_dpc_param_array_get(void);
-void tisp_dpc_param_array_set(void);
-void tisp_s_dpc_str_internal(void);
-void tiziano_dpc_params_refresh(void);
-void tiziano_dpc_dn_params_refresh(void);
-void tiziano_dpc_init(void);
-void tisp_g_dpc_str_internal(void);
-void system_reg_write_clm(void);
-void clm_lut2reg(void);
-void tiziano_set_parameter_clm(void);
-void tiziano_clm_params_refresh(void);
-void tiziano_clm_dn_params_refresh(void);
-void tiziano_clm_init(void);
-void tisp_clm_param_array_get(void);
-void tisp_clm_param_array_set(void);
-void tisp_set_csc_version(void);
-void tisp_set_user_csc(void);
-void tisp_get_current_csc(void);
-void tisp_defog_ev_update(void);
-void tiziano_defog_get_data(void);
-void tiziano_defog_set_reg_params(void);
-void tiziano_defog_interrupt_static(void);
-void tisp_defog_max_filter3(void);
-void tisp_defog_img_filter5(void);
-void tisp_defog_soft_process(void);
-void tiziano_defog_algorithm(void);
-void tisp_defog_process(void);
-void tiziano_defog_params_init(void);
-void tiziano_defog_params_refresh(void);
-void tisp_defog_wdr_en(void);
-void tiziano_defog_dn_params_refresh(void);
-void defog_wei_interpcot(void);
-void defog_3x3_5x5_params_init(void);
-void tiziano_defog_init(void);
-void tisp_defog_param_array_get(void);
-void tisp_defog_param_array_set(void);
-void defog_itp(void);
-void tisp_g_defog_str_internal(void);
-void tisp_s_defog_str_internal(void);
-void tisp_adr_ev_update(void);
-void tiziano_adr_get_data(void);
-void tiziano_adr_algorithm(void);
-void tisp_adr_process(void);
-void tisp_adr_set_params(void);
-void tiziano_adr_interrupt_static(void);
-void tiziano_adr_5x5_param_distance(void);
-void tiziano_adr_5x5_param(void);
-void tiziano_adr_params_init(void);
-void tiziano_adr_gamma_refresh(void);
-void tisp_adr_param_array_get(void);
-void tisp_adr_param_array_set(void);
-void tisp_g_adr_str_internal(void);
-void tisp_s_adr_str_internal(void);
-void tiziano_adr_params_refresh(void);
-void tiziano_adr_dn_params_refresh(void);
-void tisp_adr_wdr_en(void);
-void tiziano_adr_init(void);
-void tisp_hldc_con_par_cfg(void);
-void tisp_hldc_par_refresh(void);
-void tiziano_hldc_params_refresh(void);
-void tiziano_hldc_init(void);
-void tisp_hldc_param_array_get(void);
-void tisp_hldc_param_array_set(void);
-void tisp_set_sensor_integration_time(void);
-void tisp_set_sensor_integration_time_short(void);
-void tisp_set_sensor_analog_gain(void);
-void tisp_set_sensor_analog_gain_short(void);
-void tisp_set_sensor_digital_gain_short(void);
-void tisp_set_sensor_digital_gain(void);
-void JZ_Isp_Ae_Reg2par(void);
-void JZ_Isp_Ae_Dg2reg(void);
-void printf_func0(void);
-void printf_func1(void);
-void tisp_ae0_get_statistics(void);
-void ae0_interrupt_static(void);
-void tisp_ae1_get_statistics(void);
-void ae1_interrupt_static(void);
-void tisp_ae1_get_hist(void);
-void ae1_interrupt_hist(void);
-void tisp_ae0_get_hist(void);
-void ae0_interrupt_hist(void);
-void tisp_ae_get_hist_custome(void);
-void tisp_ae_set_hist_custome(void);
-void AePweightCalculate(void);
-void ae0_weight_mean2(void);
-void tisp_ae_tune(void);
-void tisp_ae_target(void);
-void ae0_tune2(void);
-void tisp_ae_g_min(void);
-void tisp_ae_s_min(void);
-void Tiziano_ae0_fpga(void);
-void tisp_set_ae0_ag(void);
-void tisp_set_ae1_ag(void);
-void tisp_ae1_expt(void);
-void tisp_ae_mean_update(void);
-void ae1_weight_mean2(void);
-void Tiziano_ae1_fpga(void);
-void tisp_ae0_ctrls_update(void);
-void tisp_ae1_ctrls_update(void);
-void tiziano_ae_dump(void);
-void tiziano_ae_params_refresh(void);
-void tiziano_ae_s_max_again(void);
-void tiziano_ae_s_max_isp_dgain(void);
-void tisp_ae_s_at_list(void);
-void tisp_ae_g_at_list(void);
-void tiziano_deflicker_expt(void);
-void tiziano_deflicker_expt_tune(void);
-void system_reg_write_ae(void);
-void tisp_ae1_process_impl(void);
-void tisp_ae1_process(void);
-void tiziano_ae_set_hardware_param(void);
-void tiziano_ae_para_addr(void);
-void tiziano_ae_init_exp_th(void);
-void tisp_ae_wdr_en(void);
-void tiziano_ae_init(void);
-void tisp_ae_min_max_set(void);
-void tiziano_ae_s_ev_start(void);
-void tisp_ae_state_get(void);
-void tisp_ae_manual_get(void);
-void tisp_ae_manual_set(void);
-void tisp_ae_get_y_zone(void);
-void tisp_ae_s_comp(void);
-void tiziano_ae_dn_params_refresh(void);
-void tisp_ae_g_comp(void);
-void tisp_ae_g_luma(void);
-void tisp_ae_g_scene_luma(void);
-void tisp_ae0_process_impl(void);
-void tisp_ae0_process(void);
-void tisp_ae_get_antiflicker_step(void);
-void tisp_ae_param_array_get(void);
-void tisp_ae_param_array_set(void);
-void tisp_ae_trig(void);
-void tisp_ae_deinit(void);
-void tisp_ae_algo_init(void);
-void tisp_ae_algo_handle(void);
-void tisp_af_get_statistics(void);
-void Tiziano_af_fpga(void);
-void tisp_af_process_impl(void);
-void af_interrupt_static(void);
-void tiziano_af_params_refresh(void);
-void tiziano_af_dump(void);
-void system_reg_write_af(void);
-void tiziano_af_set_hardware_param(void);
-void tiziano_af_init(void);
-void tisp_af_get_metric(void);
-void tisp_af_get_attr(void);
-void tisp_af_set_attr_refresh(void);
-void tisp_af_set_attr(void);
-void tiziano_af_dn_params_refresh(void);
-void tisp_af_param_array_get(void);
-void tisp_af_param_array_set(void);
-void tisp_af_get_zone(void);
-void tisp_ydns_param_cfg(void);
-void tisp_ydns_intp(void);
-void tisp_ydns_all_reg_refresh(void);
-void tisp_ydns_intp_reg_refresh(void);
-void tisp_ydns_par_refresh(void);
-void tisp_ydns_gain_update(void);
-void tiziano_ydns_params_refresh(void);
-void tiziano_ydns_dn_params_refresh(void);
-void tiziano_ydns_init(void);
-void tisp_ydns_refresh(void);
-void tisp_ydns_param_array_get(void);
-void tisp_ydns_param_array_set(void);
-void tisp_rdns_intp(void);
-void tisp_rdns_awb_gain_par_cfg(void);
-void tisp_rdns_opt_cfg(void);
-void tisp_rdns_slope_cfg(void);
-void tisp_rdns_thres_par_cfg(void);
-void tisp_rdns_gray_np_par_cfg(void);
-void tisp_rdns_text_np_par_cfg(void);
-void tisp_rdns_lum_np_par_cfg(void);
-void tisp_rdns_std_np_par_cfg(void);
-void tisp_rdns_sl_par_cfg(void);
-void tisp_rdns_awb_gain_updata(void);
-void tisp_rdns_wdr_en(void);
-void tisp_rdns_all_reg_refresh(void);
-void tisp_rdns_intp_reg_refresh(void);
-void tisp_rdns_par_refresh(void);
-void tisp_rdns_gain_update(void);
-void tiziano_rdns_params_refresh(void);
-void tiziano_rdns_init(void);
-void tisp_rdns_refresh(void);
-void tiziano_rdns_dn_params_refresh(void);
-void tisp_rdns_param_array_get(void);
-void tisp_rdns_param_array_set(void);
-void tiziano_wdr_fusion1_curve(void);
-void tiziano_wdr_fusion1_curve_block_mean1(void);
-void tisp_wdr_rx_ae0_infm(void);
-void tisp_wdr_rx_ae1_infm(void);
-void tisp_wdr_rx_ae0_dms(void);
-void tisp_wdr_rx_ae1_dms(void);
-void tisp_wdr_expTime_updata(void);
-void tisp_wdr_ev_update(void);
-void tisp_wdr_ev_calculate(void);
-void tiziano_wdr_get_data(void);
-void tiziano_wdr_interrupt_static(void);
-void tiziano_wdr_algorithm(void);
-void tiziano_wdr_soft_para_out(void);
-void tisp_wdr_process(void);
-void tiziano_wdr_5x5_param_distance(void);
-void tiziano_wdr_5x5_param(void);
-void tiziano_wdr_params_init(void);
-void tiziano_wdr_gamma_refresh(void);
-void tiziano_wdr_params_refresh(void);
-void tiziano_wdr_dn_params_refresh(void);
-void tiziano_wdr_init(void);
-void tisp_wdr_param_array_get(void);
-void tisp_wdr_param_array_set(void);
-void system_yvu_or_yuv(void);
-void tisp_day_or_night_s_ctrl(void);
-void tisp_cust_mode_s_ctrl(void);
-void tisp_cust_mode_g_ctrl(void);
-void tisp_day_or_night_g_ctrl(void);
-void tisp_mirror_enable(void);
-void tisp_hv_flip_enable(void);
-void tisp_hv_flip_get(void);
-void tisp_flip_enable(void);
-void tisp_set_fps(void);
-void tisp_set_brightness(void);
-void tisp_set_ae_comp(void);
-void tisp_get_ae_comp(void);
-void tisp_get_ae_luma(void);
-void tisp_set_sharpness(void);
-void tisp_set_saturation(void);
-void tisp_set_contrast(void);
-void tisp_set_bcsh_hue(void);
-void tisp_get_brightness(void);
-void tisp_get_sharpness(void);
-void tisp_get_saturation(void);
-void tisp_get_contrast(void);
-void tisp_get_bcsh_hue(void);
-void tisp_top_sel(void);
-void tisp_top_read(void);
-void tisp_g_ncuinfo(void);
-void tisp_s_antiflick(void);
-void tisp_s_Hilightdepress(void);
-void tisp_g_Hilightdepress(void);
-void tisp_s_BacklightComp(void);
-void tisp_g_BacklightComp(void);
-void tisp_s_Gamma(void);
-void tisp_g_Gamma(void);
-void tisp_s_aeroi_weight(void);
-void tisp_g_aeroi_weight(void);
-void tisp_s_aezone_weight(void);
-void tisp_g_aezone_weight(void);
-void tisp_s_af_weight(void);
-void tisp_g_af_weight(void);
-void tisp_g_ev_attr(void);
-void tisp_g_wb_attr(void);
-void tisp_s_wb_attr(void);
-void tisp_g_wb_zone(void);
-void tisp_g_wb_ct(void);
-void tisp_s_wb_ct(void);
-void tisp_s_awb_cluster(void);
-void tisp_g_awb_cluster(void);
-void tisp_s_awb_ct_trend(void);
-void tisp_g_awb_ct_trend(void);
-void tisp_g_ccm_attr(void);
-void tisp_s_ccm_attr(void);
-void tisp_g_ae_hist(void);
-void tisp_s_ae_hist(void);
-void tisp_s_ae_at_list(void);
-void tisp_g_ae_at_list(void);
-void tisp_s_3dns_ratio(void);
-void tisp_s_2dns_ratio(void);
-void tisp_s_ae_attr(void);
-void tisp_g_ae_attr(void);
-void tisp_g_ae_min(void);
-void tisp_s_ae_min(void);
-void tisp_g_ae_zone(void);
-void tisp_g_af_zone(void);
-void tisp_g_af_metric(void);
-void tisp_g_af_attr(void);
-void tisp_s_af_attr(void);
-void tisp_s_wb_frz(void);
-void tisp_g_wb_frz(void);
-void tisp_s_module_control(void);
-void tisp_g_module_control(void);
-void tisp_s_autozoom_control(void);
-void tisp_g_autozoom_control(void);
-void tisp_s_scaler_level_control(void);
-void tisp_s_fcrop_control(void);
-void tisp_g_fcrop_control(void);
-void tisp_s_wdr_en(void);
-void tisp_s_wdr_init_en(void);
-void tisp_g_wdr_en(void);
-void tisp_s_max_again(void);
-void tisp_s_max_isp_dgain(void);
-void tisp_g_dpc_strength(void);
-void tisp_s_dpc_strength(void);
-void tisp_g_drc_strength(void);
-void tisp_s_drc_strength(void);
-void tisp_mscaler_mask_change(void);
-void tisp_mscaler_mask_setreg(void);
-void tisp_s_mscaler_mask_attr(void);
-void tisp_g_mscaler_mask_attr(void);
-void tisp_s_mscaler_hvflip_mask(void);
-void tisp_s_ev_start(void);
-void tisp_s_awb_start(void);
-void tisp_g_awb_start(void);
-void tisp_s_awb_algo(void);
-void tisp_deinit_free(void);
-void tisp_s_ae_it_max(void);
-void tisp_g_ae_it_max(void);
-void tisp_s_adr_enable(void);
-void tisp_s_defog_enable(void);
-void tisp_set_ae_freeze(void);
-void tisp_get_antiflicker_step(void);
-void tisp_set_ae_attr(void);
-void tisp_get_ae_attr(void);
-void tisp_get_ae_state(void);
-void tisp_get_blc_attr(void);
-void tisp_set_defog_strength(void);
-void tisp_get_defog_strength(void);
-void tisp_set_csc_attr(void);
-void tisp_get_csc_attr(void);
-void tisp_ae_algo_deinit(void);
-void tisp_awb_algo_deinit(void);
-void tisp_set_wdr_output_mode(void);
-void tisp_get_wdr_output_mode(void);
-void tisp_set_bcsh_fixed_contrast(void);
-void tisp_set_frame_drop(void);
-void tisp_get_frame_drop(void);
-void tisp_s_rgb_coefft(void);
-void tisp_g_rgb_coefft(void);
-void tisp_lsc_hvflip(void);
-void ispcore_sensor_ops_release_all_sensor(void);
-void ispcore_sensor_ops_ioctl(void);
-void ispcore_irq_fs_work(void);
-void ispcore_link_setup(void);
-void isp_pre_frame_dequeue(void);
-void isp_ch1_frame_dequeue_delay(void);
-void ispcore_frame_channel_dqbuf(void);
-void ispcore_core_ops_ioctl(void);
-void isp_fw_process(void);
-void ispcore_irq_thread_handle(void);
-void ispcore_frame_channel_streamoff(void);
-void dump_isp_info_open(void);
-void isp_core_cmd_set(void);
-void ispcore_sync_sensor_attr(void);
-void isp_info_show_isra_0(void);
-void isp_core_debug_show(void);
-void ispcore_pad_event_handle(void);
-void ispcore_activate_module(void);
-void dump_msca_regs(void);
-void system_reg_write(void);
-void system_reg_read(void);
-void exception_handle(void);
-void tx_isp_enable_irq(void);
-void tx_isp_disable_irq(void);
-void ispcore_video_s_stream(void);
-void ispcore_core_ops_init(void);
-void ispcore_slake_module(void);
-void tx_isp_core_probe(void);
-void system_irq_func_set(void);
-void mbus_to_bayer_write(void);
-void ispcore_interrupt_service_routine(void);
-void init_module(void);
-void cleanup_module(void);
-void tx_isp_vic_remove(void);
-void tx_isp_vin_remove(void);
-void tx_isp_csi_remove(void);
-void tx_isp_fs_remove(void);
-void tx_isp_remove(void);
-void tx_isp_core_remove(void);
+/* Jump Tables - Fixed array syntax (dynamically discovered) */
+void* jump_table_9381c[1] = { (void*)0x9381c }; // Jump table
+void* jump_table_82ec0[1] = { (void*)0x82ec0 }; // Jump table
+void* jump_table_7d2a8[1] = { (void*)0x7d2a8 }; // Jump table
+void* jump_table_8741c[1] = { (void*)0x8741c }; // Jump table
+void* jump_table_93bdc[1] = { (void*)0x93bdc }; // Jump table
+void* jump_table_8545c[1] = { (void*)0x8545c }; // Jump table
+void* jump_table_7b4c0[1] = { (void*)0x7b4c0 }; // Jump table
+void* jump_table_7d4ac[1] = { (void*)0x7d4ac }; // Jump table
+void* jump_table_8839c[1] = { (void*)0x8839c }; // Jump table
+void* jump_table_941dc[1] = { (void*)0x941dc }; // Jump table
 
+/* Special Data - Fixed types and syntax */
+unsigned char data_10028[8] = { 0xa2, 0x00, 0x38, 0x00, 0x00, 0x88, 0x25, 0x00 }; // Fixed byte array
+unsigned char CSWTCH_84[3] = { 0x00, 0x32, 0x3c }; // Fixed byte array
 #endif /* MAIN_H */

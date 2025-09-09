@@ -4,7 +4,7 @@
   int32_t tisp_s_awb_ct_trend(int32_t arg1, int32_t arg2, int32_t arg3)
 
 {
-    int32_t var_10_66 = arg2;
+    int32_t var_10_72 = arg2;
     int32_t arg_0 = arg1;
     int32_t var_c_15 = arg3;
     int32_t $a1;

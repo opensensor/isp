@@ -4,8 +4,8 @@
   int32_t defog_3x3_5x5_params_init(int32_t arg1, int32_t arg2)
 
 {
-    void var_b8_41;
-    memcpy(&var_b8_42, 0x7d0b4, 0x60);
+    void var_b8_43;
+    memcpy(&var_b8_44, 0x7d0b4, 0x60);
     void var_1b4_5;
     memcpy(&var_1b4_6, 0x7d114, 0xfc);
     void var_2b0_3;
@@ -19,7 +19,7 @@
     do
     {
         void* $t0_1 = &param_defog_cent3_w_dis_array_tmp + i;
-        int32_t $v1_3 = $lo_3 * *(&var_b8_43 + i);
+        int32_t $v1_3 = $lo_3 * *(&var_b8_45 + i);
         i += 4;
         *$t0_1 = ($v1_3 + 0x2000) >> 0xe;
     } while (i != 0x60);

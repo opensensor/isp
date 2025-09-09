@@ -37,7 +37,7 @@
             int16_t var_22_1_1 = *($v0_3 + 0xba);
             *($v0_3 + 0xbc) = ($a1 & 0xffff) * 0xf4240 / ($a1 >> 0x10) / $a2;
             void* $v0_4 = *($s0_1 + 0x120);
-            int16_t var_20_1_6 = *($v0_4 + 0xbc);
+            int16_t var_20_1_5 = *($v0_4 + 0xbc);
             int16_t var_1e_1_1 = *($v0_4 + 0xd8);
             int16_t var_1c_1_4 = *($v0_4 + 0xda);
             int32_t var_14_1_5 = *($v0_4 + 0xe0);

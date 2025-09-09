@@ -287,14 +287,13 @@
                                 snprintf(&var_90_1, 0x40, var_40_3_1 - 0x1c78, $s5_2, $v1_15);
                                 int32_t $v0_31 = private_filp_open(&var_90_2, 0x301, 0x1f6);
                                 private_get_fs(&var_50_1);
-                                int32_t $t1_3 = var_50_2;
                                 int32_t (* var_30_1_1)() = private_set_fs;
                                 private_set_fs(0);
                                 private_vfs_write($v0_31, *($s0 + 0x144) + $s1_2, $s4_6, 
                                     $v0_31 + 0x28);
                                 private_filp_close($v0_31, 0);
                                 $s5_2 += 1;
-                                var_30_1_2($t1_3);
+                                var_30_1_2();
                                 $s1_2 += $s4_6;
                             } while ($s3_2 != $s5_2);
                             
@@ -407,14 +406,13 @@
                             
                             snprintf(&var_90_3, 0x40, var_4c_2_1 - 0x1c78, $s7_3, var_a0_3_3);
                             int32_t $v0_14 = private_filp_open(&var_90_4, 0x301, 0x1f6);
-                            private_get_fs(&var_50_3);
-                            int32_t $t1_1 = var_50_4;
+                            private_get_fs(&var_50_2);
                             int32_t (* var_40_1_1)() = private_set_fs;
                             private_set_fs(0);
                             private_vfs_write($v0_14, *($s0 + 0x144) + $s1_1, $s4_3, $v0_14 + 0x28);
                             private_filp_close($v0_14, 0);
                             $s7_3 += 1;
-                            var_40_1_2($t1_1);
+                            var_40_1_2();
                             $s1_1 += $s4_3;
                         } while ($s7_3 != $s3_1);
                         

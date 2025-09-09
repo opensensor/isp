@@ -4,7 +4,7 @@
   int32_t cm_control(int32_t* arg1, int32_t arg2, int32_t* arg3)
 
 {
-    int32_t var_50_16 = ((arg2 * 0xb375) >> 8) + 0x4c8b;
+    int32_t var_50_14 = ((arg2 * 0xb375) >> 8) + 0x4c8b;
     int32_t var_40_25 = ((arg2 * 0x69ba) >> 8) + 0x9646;
     int32_t var_4c_10 = 0x9646 - ((arg2 * 0x9646) >> 8);
     int32_t var_34_17 = 0x9646 - ((arg2 * 0x9646) >> 8);
@@ -40,7 +40,7 @@
     
     for (int32_t i_1 = 0; i_1 != 0x24; )
     {
-        int32_t $v1_4 = *(&var_50_17 + i_1);
+        int32_t $v1_4 = *(&var_50_15 + i_1);
         
         if ($v1_4 < 0)
         {

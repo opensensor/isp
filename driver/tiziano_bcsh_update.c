@@ -362,8 +362,8 @@
     
     for (int32_t i_1 = 0; i_1 < 0x3c; i_1 += 1)
     {
-        char var_50_25[0x40];
-        var_50_26[i_1] = *(&data_c5400_5 + i_1);
+        char var_50_23[0x40];
+        var_50_24[i_1] = *(&data_c5400_5 + i_1);
     }
     
     tiziano_bcsh_lut_parameter(tisp_BCSH, data_c53f4_2, data_c53f8_2, data_c53fc_2);

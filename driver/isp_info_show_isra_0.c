@@ -284,7 +284,7 @@
         private_seq_printf(arg1, "\\t\\t\\t "savenum" is the num of you save raw picture.\\n ", var_c8_20);
     int32_t var_e4_2;
     int32_t var_d4_16;
-    int32_t var_d0_18;
+    int32_t var_d0_17;
     int32_t var_c4_18;
     int32_t var_c0_13;
     int32_t var_bc_6;
@@ -293,7 +293,7 @@
         "\\t\\t\\t please use this cmd: \\n\\t"echo saveraw savenum > /proc/jz/isp/isp-w02"\\n", var_bc_7)
         + private_seq_printf(arg1, "\\t\\t\\t "saveraw"  is cmd; \\n", var_d4_17)
         + private_seq_printf(arg1, "Can\'t ops the node!\\n", var_c4_19)
-        + private_seq_printf(arg1, "snapraw timeout!\\n", var_d0_19)
+        + private_seq_printf(arg1, "snapraw timeout!\\n", var_d0_18)
         + private_seq_printf(arg1, "streamon", var_e4_3);
     int32_t var_e0_15;
     int32_t var_dc_7;
@@ -304,9 +304,9 @@
         + private_seq_printf(arg1, "%s[%d]: %s\\n", var_4c_20)
         + private_seq_printf(arg1, "%s[%d] SET ERR GPIO(%d),STATE(%d),%d", var_48_45)
         + private_seq_printf(arg1, "line : %d; bank_addr:0x%x; addr:0x%x\\n", isp_printf / var_54_17);
-    int32_t var_50_33;
+    int32_t var_50_31;
     int32_t $s0_31 = $s0_25 + private_seq_printf(arg1, 
-        "line = %d, i=%d ;num = %d;busy_buf_count %d\\n", isp_printf / var_50_34)
+        "line = %d, i=%d ;num = %d;busy_buf_count %d\\n", isp_printf / var_50_32)
         + private_seq_printf(arg1, "function: %s ; vic dma addrrss error!!!\\n", var_30_36)
         + private_seq_printf(arg1, "VIC_ADDR_DMA_CONTROL : 0x%x\\n", var_3c_18)
         + private_seq_printf(arg1, "busy_buf null; busy_buf_count= %d\\n", *($s6 + 0x4090))

@@ -14,8 +14,8 @@
         
         for (int32_t i = 0; i < 0x9c; i += 1)
         {
-            char var_b0_72[0xa0];
-            var_b0_73[i] = *(&$v0[4] + i);
+            char var_b0_74[0xa0];
+            var_b0_75[i] = *(&$v0[4] + i);
         }
         
         result = tisp_mscaler_mask_setreg(*$v0, $v0[1], $v0[2], $v0[3]);

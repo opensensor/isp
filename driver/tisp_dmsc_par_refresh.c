@@ -16,13 +16,13 @@
         if ($v0_2 >= arg2)
         {
             data_9a430_2 = arg1;
-            tisp_dmsc_intp_reg_refresh();
+            tisp_dmsc_intp_reg_refresh(arg1);
         }
     }
     else
     {
         data_9a430_3 = arg1;
-        tisp_dmsc_all_reg_refresh();
+        tisp_dmsc_all_reg_refresh(arg1);
     }
     
     if (arg3 == 1)

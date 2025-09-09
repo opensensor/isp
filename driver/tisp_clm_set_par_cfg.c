@@ -5,13 +5,13 @@
 
 {
     int32_t $s1 = arg1;
-    int32_t var_20_112 = 0;
+    int32_t var_20_155 = 0;
     
     for (int32_t i = 0x357; i != 0x35a; )
     {
-        tisp_clm_param_array_set(i, $s1, &var_20_113);
+        tisp_clm_param_array_set(i, $s1, &var_20_156);
         i += 1;
-        $s1 += var_20_114;
+        $s1 += var_20_157;
     }
     
     return 0;

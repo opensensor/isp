@@ -12,7 +12,7 @@
     int32_t var_44_15 = arg2[6];
     int32_t var_48_19 = arg2[5];
     int32_t var_4c_7 = arg2[4];
-    int32_t var_50_12 = arg2[3];
+    int32_t var_50_10 = arg2[3];
     int32_t var_54_3 = arg2[0xc];
     int32_t var_58_4 = arg2[0xb];
     int32_t var_5c_2 = arg2[0xa];

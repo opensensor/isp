@@ -61,19 +61,19 @@
     int32_t (* var_2c_1_7)(int32_t arg1, int32_t arg2, int32_t arg3) = fix_point_mult3_32;
     data_c46bc_6 = $v0_10;
     uint32_t $v0_16 = fix_point_mult2_32(0xa, fix_point_mult3_32(0xa, $s7, $s4_1), $v0_10);
-    uint32_t $v0_17 = var_2c_1_8(0xa, $s4_1, 0x400, $v0_10);
+    uint32_t $v0_17 = var_2c_1_8(0xa, $s4_1, 0x400);
     
     if (*(var_48_1_9 + 0x4770) == 1)
     {
         int32_t $v0_20 = $v1_2($v1_6, &var_14e_2);
         
         if ($v1_6 != $v0_20)
-            $fp = fix_point_div_32(0xa, fix_point_mult2_32(0xa, $fp, $v1_6 << 0xa), $v0_20 << 0xa);
+            fix_point_div_32(0xa, fix_point_mult2_32(0xa, $fp, $v1_6 << 0xa), $v0_20 << 0xa);
         
         int16_t var_13c;
         $v1_3(var_13c_1, &var_158_7);
         data_c46f8_9 = $v0_20;
-        uint32_t $fp_1 = var_30_1_15($v1_1(result_1($fp << 6, 0x10, 0x10), &var_68_23), 0x10, 0x10) >> 6;
+        uint32_t $fp_1 = var_30_1_15($v1_1(result_1(), &var_68_23), 0x10, 0x10) >> 6;
         int16_t var_5a;
         $v1_4(var_5a_1, &var_68_24);
         data_c4710_5 = 0x400;
@@ -84,7 +84,7 @@
         system_reg_write_ae(3, 0x100c, $s5_2);
         system_reg_write_ae(3, 0x1010, $s5_2);
         dmsc_awb_gain = $v0_36;
-        var_2c_1_9(0xa, $fp_1, 0x400, $v0_36);
+        var_2c_1_9(0xa, $fp_1, 0x400);
     }
     
     if ($v0_16 != ta_custom_ev)
@@ -99,7 +99,7 @@
     
     if ($v0_17 != ta_custom_tgain)
     {
-        int32_t $v0_44 = result_1($v0_17 << 6, 0x10, 0x10);
+        int32_t $v0_44 = result_1();
         int32_t var_c0_1_17 = 4;
         int32_t var_b8_1_10 = $v0_44;
         int32_t var_b4_1_1 = 0;
@@ -113,12 +113,12 @@
     
     if ($s4_1 != ta_custom_again)
     {
-        int32_t $v0_46 = result($s4_1 << 6, 0x10, 0x10);
+        int32_t $v0_46 = result();
         int32_t var_f0_1_1 = 5;
         int32_t var_e8_1_1 = $v0_46;
         int32_t var_e4_1_1 = 0;
-        void var_f8_24;
-        result = tisp_event_push(&var_f8_25);
+        void var_f8_25;
+        result = tisp_event_push(&var_f8_26);
         data_c46b0_6 = $s4_1;
         data_c46d8_2 = $v0_46;
         ta_custom_again = $s4_1;

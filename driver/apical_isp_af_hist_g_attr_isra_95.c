@@ -22,7 +22,7 @@
     int32_t var_ac_8;
     int32_t var_54 = var_ac_9;
     char var_a8_13;
-    char var_50_7 = var_a8_14;
+    char var_50_5 = var_a8_14;
     char var_a7;
     char var_4f_2 = var_a7_2;
     int16_t var_a6;

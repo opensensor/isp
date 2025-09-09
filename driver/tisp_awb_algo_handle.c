@@ -7,8 +7,8 @@
     if (*(arg1 + 8) != 1)
         return 1;
     
-    int32_t var_10_40;
-    int32_t var_30_1_7 = var_10_41;
+    int32_t var_10_46;
+    int32_t var_30_1_7 = var_10_47;
     int32_t var_1c_10;
     int32_t var_18_84;
     int32_t var_14_22;

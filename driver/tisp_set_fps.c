@@ -35,7 +35,7 @@
     data_b2e54_6 = $a2_2;
     data_b2e64_5 = $v0_4;
     uint32_t var_14_1_4 = $a1_1;
-    uint32_t var_20_1_5 = $a2_2;
+    uint32_t var_20_1_4 = $a2_2;
     data_b2e56_6 = $a3_1;
     uint32_t var_1c_1_3 = $a3_1;
     uint32_t var_28_1_5 = $a0_3;

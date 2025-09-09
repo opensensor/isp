@@ -292,14 +292,14 @@ label_2a0c0:
                             void* $s4_6 = &arg10[$v0_52 + 0x3fffffff];
                             void* $s2_12 = arg10 + (($v0_52 + 0x3fffffff) << 2) + 4;
                             int32_t $v0_95 = var_ac_2_2($fp, *$s3_2, *$s4_6, *$s2_12, 
-                                *(arg7 + $s5_3), *(arg7 + $s5_3 + 4), var_120_1);
+                                *(arg7 + $s5_3), *(arg7 + $s5_3 + 4));
                             void* $s7_5 = &arg11[$s0_2 + 0x3fffffff];
                             void* $s0_10 = arg11 + (($s0_2 + 0x3fffffff) << 2) + 4;
                             var_124_2 = var_ac_2_3($fp, *$s3_2, *$s4_6, *$s2_12, 
                                 *(arg7 + $s5_3 + 0x3c), *(arg7 + $s5_3 + 0x40));
                             var_128_2 = $v0_95;
                             *$s1_2 = (var_30_1_9 - 0x62f0)($fp, *var_a8_2_4, *$s7_5, *$s0_10, var_128_3, 
-                                var_124_3);
+                                var_124_3, var_120_1);
                             
                             if ($v0_5 != 1)
                                 $v0_64 = var_78_1_5;
@@ -317,15 +317,16 @@ label_2a0c0:
                                 var_128_1_1 = $v0_114;
                                 $a0_51 = $fp;
                             label_2a7a4:
-                                $v0_123 = $v0_86($a0_51, $a1_22, $a2_15, $a3_4, var_128_1_2, 
-                                    var_124_1_2, var_120_2) >> ($fp & 0x1f);
-                                var_120_3 = var_a0_26;
+                                $v0_123 =
+                                    $v0_86($a0_51, $a1_22, $a2_15, $a3_4, var_128_1_2, var_124_1_2)
+                                    >> ($fp & 0x1f);
+                                var_120_2 = var_a0_26;
                                 var_124_4 = var_a4_17;
                                 $v1_52 = *$s1_2;
                             label_2a7c8:
                                 var_128_4 = $v1_52;
                                 *$s1_2 = func_zone_ct_weight(0xf4240 / $v0_123, arg5, $v0_6, $fp, 
-                                    var_128_5, var_124_5, var_120_4);
+                                    var_128_5, var_124_5, var_120_3);
                                 $v0_64 = var_78_1_6;
                             }
                         }
@@ -336,8 +337,7 @@ label_2a0c0:
                             int32_t $s0_3 = $s0_2 * 0x3c;
                             var_124_6 = *(arg7 + $s0_3 + 0x38);
                             var_128_6 = *(arg7 + $s0_3 - 4);
-                            *$s1_2 =
-                                var_ac_2_6($fp, *var_a8_2_6, *$s4_3, *$s7_4, var_128_7, var_124_7, var_120_5);
+                            *$s1_2 = var_ac_2_6($fp, *var_a8_2_6, *$s4_3, *$s7_4, var_128_7, var_124_7);
                             
                             if ($v0_5 == 1)
                             {
@@ -383,7 +383,7 @@ label_2a0c0:
                         if ($v0_5 == 1)
                         {
                             $v0_123 = *(arg12 + 0x380);
-                            var_120_6 = var_a0_27;
+                            var_120_4 = var_a0_27;
                             var_124_8 = var_a4_18;
                             goto label_2a7c8;
                         }
@@ -396,7 +396,7 @@ label_2a0c0:
                         void* $s2_8 = &arg10[$v0_52];
                         var_124_9 = *(arg7 + ($v0_52 << 2) + 0x348);
                         var_128_8 = *(arg7 + ($v0_52 << 2) + 0x344);
-                        *$s1_2 = var_ac_2_8($fp, *$s3_2, *$s5_2, *$s2_8, var_128_9, var_124_10, var_120_7);
+                        *$s1_2 = var_ac_2_8($fp, *$s3_2, *$s5_2, *$s2_8, var_128_9, var_124_10);
                         
                         if ($v0_5 == 1)
                         {
@@ -1131,7 +1131,7 @@ label_2a0c0:
             int32_t $v0_214 = $v1_114 * 0x3c + ($s7_6 << 2);
             int32_t $v0_217 = (&data_20000_6 + 0x1018)($fp, *(&rgbg_wght + $v0_214), 
                 *(&zone_pix_wgh + $v0_214), *(arg13 + $v0_214) << ($fp & 0x1f), var_128_10, var_124_11, 
-                var_120_8);
+                var_120_5);
             int32_t (* var_a4_1_2)(int32_t arg1, int32_t arg2, int32_t arg3) = fix_point_mult2_32;
             int32_t $v0_219 = $t0_6 + fix_point_mult2_32($fp, *$s1_4, $v0_217);
             $s5_5 += $v0_219 < $t0_6 ? 1 : 0;
@@ -1229,7 +1229,9 @@ label_2a0c0:
                 $v1_121 += $v0_206;
             }
             
-            int32_t $v0_258 = fix_point_div_32($fp, $s7_7, $s2_14);
+            int32_t $v0_258;
+            int32_t $a1_62;
+            $v0_258 = fix_point_div_32($fp, $s7_7, $s2_14);
             int32_t (* var_6c_3_1)(int32_t arg1, int32_t arg2, int32_t arg3) = fix_point_div_32;
             
             if (!$v0_258)
@@ -1266,12 +1268,9 @@ label_2a0c0:
                         if ($v1_8 < $v0_273)
                             *$s5_7 = 0;
                         else if ($v0_273 >= $v0_1)
-                        {
-                            int32_t $a3_49 = *$s4_9;
-                            *$s5_7 = (var_58_3_2 + 0xfd4)($fp, $a3_49, 
+                            *$s5_7 = (var_58_3_2 + 0xfd4)($fp, *$s4_9, 
                                 (1 << ($fp & 0x1f))
-                                    - var_6c_3_3($fp, $v0_273 - $v0_1, $v1_8 - $v0_1, $a3_49));
-                        }
+                                    - var_6c_3_3($fp, $v0_273 - $v0_1, $v1_8 - $v0_1));
                         else
                             *$s5_7 = *$s4_9;
                         
@@ -1281,8 +1280,9 @@ label_2a0c0:
                         int32_t $a0_88 = $v0_283 < var_a8_6_3 ? 1 : 0;
                         var_a8_6_4 = $v0_283;
                         var_90_3_2 += $a0_88;
-                        int32_t $v0_290 = (var_58_3_4 + 0xfd4)($fp, 
-                            *(var_a0_3_5 + $s7_8 + $v0_208 + var_80_1_3), $v0_280);
+                        int32_t $v0_290;
+                        $v0_290 = (var_58_3_4 + 0xfd4)($fp, *(var_a0_3_5 + $s7_8 + $v0_208 + var_80_1_3), 
+                            $v0_280);
                         $s7_8 += 4;
                         int32_t $v0_291 = var_a4_3_2 + $v0_290;
                         int32_t $a0_90 = $v0_291 < var_a4_3_3 ? 1 : 0;
@@ -1304,12 +1304,11 @@ label_2a0c0:
                     $v0_304 = arg10[0xe];
                 else
                 {
-                    int32_t var_128_8_1 = $s2_15;
-                    int32_t var_124_8_1 = $s3_7;
-                    i_18 = var_78_3_2($fp);
-                    int32_t var_128_9_1 = $s2_15;
-                    int32_t var_124_9_1 = $s3_7;
-                    i_17 = var_78_3_3($fp);
+                    int32_t i_20;
+                    int32_t $a1_69;
+                    i_20 = var_78_3_2($fp, $a1_62, var_a8_6_5, var_90_3_3, $s2_15, $s3_7);
+                    i_18 = i_20;
+                    i_17 = var_78_3_3($fp, $a1_69, var_a4_3_5, var_8c_4_3, $s2_15, $s3_7);
                     $v0_304 = arg10[0xe];
                 }
             }
@@ -1344,20 +1343,20 @@ label_2a0c0:
         int32_t* $v1_148 = arg10;
         int32_t var_128_10_1;
         int32_t var_124_10_1;
-        int32_t (* $v0_325)(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, 
+        int32_t (* $v0_324)(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, 
             int32_t arg6);
         int32_t $a0_101;
         int32_t i_16;
-        int32_t $a2_73;
-        int32_t $a3_51;
-        int32_t $v0_317;
+        int32_t $a2_75;
+        int32_t $a3_53;
+        int32_t $v0_316;
         int32_t $a0_95;
         int32_t $s0_17;
         
         if (i_10 == i_11)
         {
             $s0_17 = 0xf;
-            int32_t $v0_316;
+            int32_t $v0_315;
             
             if (i_9 != i_15)
             {
@@ -1379,96 +1378,96 @@ label_2a0c0:
                 
                 if ($s0_17 == 0xf)
                 {
-                    $v0_316 = $a0_95 << 2;
+                    $v0_315 = $a0_95 << 2;
                     goto label_2b908;
                 }
                 
                 if ($s3_8 == 0xe)
                 {
-                    $v0_317 = $s0_17 << 2;
+                    $v0_316 = $s0_17 << 2;
                     goto label_2b94c;
                 }
                 
                 void* $s0_20 = arg12 + ((($s3_8 + 1) * 0xf + $s0_17 + 0x3ffffff0) << 2);
                 void* $s5_8 = &arg10[$s0_17 + 0x3fffffff];
                 void* $s4_13 = arg10 + (($s0_17 + 0x3fffffff) << 2) + 4;
-                int32_t $v0_331 =
+                int32_t $v0_330 =
                     ISPAWBInterpolation1($fp, i_10, *$s5_8, *$s4_13, *$s0_20, *($s0_20 + 4));
-                int32_t $v0_334 = ISPAWBInterpolation1($fp, i_10, *$s5_8, *$s4_13, 
+                int32_t $v0_333 = ISPAWBInterpolation1($fp, i_10, *$s5_8, *$s4_13, 
                     *($s0_20 + 0x3c), *($s0_20 + 0x40));
                 void* $v1_161 = &arg11[$s3_8];
-                $a3_51 = *($v1_161 + 4);
-                $a2_73 = *$v1_161;
-                var_124_10_2 = $v0_334;
-                var_128_10_2 = $v0_331;
+                $a3_53 = *($v1_161 + 4);
+                $a2_75 = *$v1_161;
+                var_124_10_2 = $v0_333;
+                var_128_10_2 = $v0_330;
                 i_16 = i_9;
                 $a0_101 = $fp;
-                $v0_325 = ISPAWBInterpolation2;
+                $v0_324 = ISPAWBInterpolation2;
             }
             else
             {
                 $a0_95 = 0xf;
             label_2b8fc:
-                $v0_316 = 0x3c;
+                $v0_315 = 0x3c;
             label_2b908:
-                void* $v0_319 = arg11 + $v0_316 - 4;
-                $a3_51 = *($v0_319 + 4);
-                $a2_73 = *$v0_319;
+                void* $v0_318 = arg11 + $v0_315 - 4;
+                $a3_53 = *($v0_318 + 4);
+                $a2_75 = *$v0_318;
                 void* $a0_96 = $a0_95 * 0x3c + arg12;
                 i_16 = i_9;
                 var_124_10_3 = *($a0_96 + 0x38);
                 var_128_10_3 = *($a0_96 - 4);
                 $a0_101 = $fp;
-                $v0_325 = ISPAWBInterpolation1;
+                $v0_324 = ISPAWBInterpolation1;
             }
         }
         else
         {
-            int32_t $a2_72 = 0;
+            int32_t $a2_74 = 0;
             
             while (i_10 < *$v1_148 << ($fp & 0x1f) || i_10 >= $v1_148[1] << ($fp & 0x1f))
             {
                 $v1_148 = &$v1_148[1];
                 
-                if ($a2_72 == 0xe)
+                if ($a2_74 == 0xe)
                     break;
                 
-                $a2_72 += 1;
+                $a2_74 += 1;
             }
             
-            $s0_17 = $a2_72 + 1;
+            $s0_17 = $a2_74 + 1;
             
             if (i_9 != i_15)
                 goto label_2b894;
             
-            if ($a2_72 == 0xe)
+            if ($a2_74 == 0xe)
             {
                 $a0_95 = 0xf;
                 goto label_2b8fc;
             }
             
-            $v0_317 = $s0_17 << 2;
+            $v0_316 = $s0_17 << 2;
         label_2b94c:
-            void* $v1_157 = arg10 + $v0_317 - 4;
-            $a3_51 = *($v1_157 + 4);
-            $a2_73 = *$v1_157;
+            void* $v1_157 = arg10 + $v0_316 - 4;
+            $a3_53 = *($v1_157 + 4);
+            $a2_75 = *$v1_157;
             i_16 = i_10;
-            void* $v0_323 = arg12 + $v0_317 - 4;
-            var_124_10_4 = *($v0_323 + 0x34c);
-            var_128_10_4 = *($v0_323 + 0x348);
+            void* $v0_322 = arg12 + $v0_316 - 4;
+            var_124_10_4 = *($v0_322 + 0x34c);
+            var_128_10_4 = *($v0_322 + 0x348);
             $a0_101 = $fp;
-            $v0_325 = ISPAWBInterpolation1;
+            $v0_324 = ISPAWBInterpolation1;
         }
-        int32_t $v0_335 = $v0_325($a0_101, i_16, $a2_73, $a3_51, var_128_10_5, var_124_10_5, var_120_9);
-        uint32_t $v0_336;
+        int32_t $v0_334 = $v0_324($a0_101, i_16, $a2_75, $a3_53, var_128_10_5, var_124_10_5);
+        uint32_t $v0_335;
         
-        if ($v0_335)
-            $v0_336 =
-                ($v0_47 + fix_point_div_32($fp, 0xf4240 << ($fp & 0x1f), $v0_335)) >> ($fp & 0x1f);
+        if ($v0_334)
+            $v0_335 =
+                ($v0_47 + fix_point_div_32($fp, 0xf4240 << ($fp & 0x1f), $v0_334)) >> ($fp & 0x1f);
         else
-            $v0_336 = 0x1388;
+            $v0_335 = 0x1388;
         
-        *arg15 = $v0_336;
+        *arg15 = $v0_335;
         *arg19 = (i_10 + $v0_47) >> ($fp & 0x1f);
         arg19[1] = (i_9 + $v0_47) >> ($fp & 0x1f);
         result = arg20;
