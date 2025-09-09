@@ -1,0 +1,73 @@
+#include "include/main.h"
+
+
+  int32_t tisp_sdns_gaussian_k_cfg()
+
+{
+    system_reg_write(0x8950, 0x3333);
+    system_reg_write(0x8954, 0x2000);
+    system_reg_write(0x8958, 0x1111);
+    system_reg_write(0x895c, 0x55d);
+    system_reg_write(0x8960, 0xccd);
+    system_reg_write(0x8964, 0x842);
+    system_reg_write(0x8968, 0x421);
+    system_reg_write(0x896c, 0x153);
+    system_reg_write(0x8970, 0x5c8);
+    system_reg_write(0x8974, 0x3a8);
+    system_reg_write(0x8978, 0x1d1);
+    system_reg_write(0x897c, 0x97);
+    system_reg_write(0x8980, 0x342);
+    system_reg_write(0x8984, 0x20c);
+    system_reg_write(0x8988, 0x106);
+    system_reg_write(0x898c, 0x55);
+    system_reg_write(0x8990, 0x212);
+    system_reg_write(0x8994, 0x152);
+    system_reg_write(0x8998, 0xa7);
+    system_reg_write(0x899c, 0x37);
+    system_reg_write(0x89a0, 0x172);
+    system_reg_write(0x89a4, 0xea);
+    system_reg_write(0x89a8, 0x74);
+    system_reg_write(0x89ac, 0x26);
+    system_reg_write(0x89b0, 0x10f);
+    system_reg_write(0x89b4, 0xac);
+    system_reg_write(0x89b8, 0x55);
+    system_reg_write(0x89bc, 0x1c);
+    system_reg_write(0x89c0, 0xd0);
+    system_reg_write(0x89c4, 0x84);
+    system_reg_write(0x89c8, 0x41);
+    system_reg_write(0x89cc, 0x15);
+    system_reg_write(0x89d0, 0xa4);
+    system_reg_write(0x89d4, 0x68);
+    system_reg_write(0x89d8, 0x34);
+    system_reg_write(0x89dc, 0x11);
+    system_reg_write(0x89e0, 0x85);
+    system_reg_write(0x89e4, 0x54);
+    system_reg_write(0x89e8, 0x2a);
+    system_reg_write(0x89ec, 0xe);
+    system_reg_write(0x89f0, 0x6e);
+    system_reg_write(0x89f4, 0x46);
+    system_reg_write(0x89f8, 0x23);
+    system_reg_write(0x89fc, 0xb);
+    system_reg_write(0x8a00, 0x5c);
+    system_reg_write(0x8a04, 0x3b);
+    system_reg_write(0x8a08, 0x1d);
+    system_reg_write(0x8a0c, 9);
+    system_reg_write(0x8a10, 0x4f);
+    system_reg_write(0x8a14, 0x32);
+    system_reg_write(0x8a18, 0x19);
+    system_reg_write(0x8a1c, 8);
+    system_reg_write(0x8a20, 0x44);
+    system_reg_write(0x8a24, 0x2b);
+    system_reg_write(0x8a28, 0x15);
+    system_reg_write(0x8a2c, 7);
+    system_reg_write(0x8a30, 0x3b);
+    system_reg_write(0x8a34, 0x25);
+    system_reg_write(0x8a38, 0x13);
+    system_reg_write(0x8a3c, 6);
+    system_reg_write(0x8a40, 0x34);
+    system_reg_write(0x8a44, 0x21);
+    system_reg_write(0x8a48, 0x10);
+    system_reg_write(0x8a4c, 5);
+    return 0;
+}
+

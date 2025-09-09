@@ -1,0 +1,11 @@
+#include "include/main.h"
+
+
+  int32_t tisp_rdns_awb_gain_par_cfg()
+
+{
+    system_reg_write(0x3000, data_d71e4_1 << 0x10 | rdns_awb_gain_par_cfg_array);
+    system_reg_write(0x3004, data_d71ec_1 << 0x10 | data_d71e8_1);
+    return 0;
+}
+

@@ -1,0 +1,12 @@
+#include "include/main.h"
+
+
+  int32_t apical_isp_ae_zone_g_ctrl.isra.84(int32_t* arg1)
+
+{
+    void var_390;
+    tisp_g_ae_zone(&var_390_1);
+    private_copy_to_user(*arg1, &var_390_2, 0x384);
+    return 0;
+}
+

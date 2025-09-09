@@ -1,0 +1,10 @@
+#include "include/main.h"
+
+
+  int32_t tisp_sdns_sp_ud_stren_shift_opt_cfg()
+
+{
+    system_reg_write(0x8ac8, data_c6334_1);
+    return 0;
+}
+

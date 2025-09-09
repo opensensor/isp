@@ -1,0 +1,228 @@
+#include "include/main.h"
+
+
+  int32_t tiziano_wdr_soft_para_out()
+
+{
+    system_reg_write(0x2604, (wdr_para_array5 & 0x1fff) << 0x10 | (wdr_para_array4 & 0x1fff));
+    system_reg_write(0x2608, (wdr_para_init_div5 & 0x3fff) << 0x10 | (wdr_para_init_div4 & 0x3fff));
+    system_reg_write(0x24e8, (data_b2340_2 & 0x7f) << 0x10 | (param_wdr_detail_th_w_array & 0x7f));
+    system_reg_write(0x24ec, (data_b2348_2 & 0x7f) << 0x10 | (data_b2344_2 & 0x7f));
+    system_reg_write(0x24f0, data_b234c_2 & 0x7f);
+    system_reg_write(0x24a4, 
+        (param_fusion1_cure_y_array[1] & 0x1ff) << 0x10 | (param_fusion1_cure_y_array[0] & 0x1ff));
+    system_reg_write(0x24a8, 
+        (param_fusion1_cure_y_array[3] & 0x1ff) << 0x10 | (param_fusion1_cure_y_array[2] & 0x1ff));
+    system_reg_write(0x24ac, 
+        (param_fusion1_cure_y_array[5] & 0x1ff) << 0x10 | (param_fusion1_cure_y_array[4] & 0x1ff));
+    system_reg_write(0x24b0, 
+        (param_fusion1_cure_y_array[7] & 0x1ff) << 0x10 | (param_fusion1_cure_y_array[6] & 0x1ff));
+    system_reg_write(0x24b4, 
+        (param_fusion1_cure_y_array[9] & 0x1ff) << 0x10 | (param_fusion1_cure_y_array[8] & 0x1ff));
+    system_reg_write(0x24b8, 
+        (param_fusion1_cure_y_array[0xb] & 0x1ff) << 0x10
+            | (param_fusion1_cure_y_array[0xa] & 0x1ff));
+    system_reg_write(0x24bc, 
+        (param_fusion1_cure_y_array[0xd] & 0x1ff) << 0x10
+            | (param_fusion1_cure_y_array[0xc] & 0x1ff));
+    system_reg_write(0x24c0, (data_b2394_1 & 0x1ff) << 0x10 | (data_b2390_1 & 0x1ff));
+    system_reg_write(0x24c4, (data_b239c_1 & 0x1ff) << 0x10 | (data_b2398_1 & 0x1ff));
+    system_reg_write(0x24c8, (data_b23a4_1 & 0x1ff) << 0x10 | (data_b23a0_1 & 0x1ff));
+    system_reg_write(0x24cc, (data_b23ac_1 & 0x1ff) << 0x10 | (data_b23a8_1 & 0x1ff));
+    system_reg_write(0x24d0, (data_b23b4_1 & 0x1ff) << 0x10 | (data_b23b0_1 & 0x1ff));
+    system_reg_write(0x24d4, (data_b23bc_1 & 0x1ff) << 0x10 | (data_b23b8_1 & 0x1ff));
+    system_reg_write(0x24d8, (data_b23c4_1 & 0x1ff) << 0x10 | (data_b23c0_1 & 0x1ff));
+    system_reg_write(0x24dc, (data_b23cc_1 & 0x1ff) << 0x10 | (data_b23c8_1 & 0x1ff));
+    system_reg_write(0x24e0, (data_b23d4_1 & 0x1ff) << 0x10 | (data_b23d0_1 & 0x1ff));
+    system_reg_write(0x24e4, data_b23d8_1 & 0x1ff);
+    system_reg_write(0x2040, 
+        (data_b1fd0_1 & 0x1f) << 8 | (data_b1fd4_1 & 0xf) << 0x10 | data_b1fcc_1
+            | (data_b1ff8_4 & 0x3f) << 0x18);
+    system_reg_write(0x2050, (data_b1718_1 & 0xfff) << 0x10 | (wdr_mapR_software_out & 0xfff));
+    system_reg_write(0x2054, (data_b1720_1 & 0xfff) << 0x10 | (data_b171c_1 & 0xfff));
+    system_reg_write(0x2058, (data_b1728_1 & 0xfff) << 0x10 | (data_b1724_1 & 0xfff));
+    system_reg_write(0x205c, (data_b1730_1 & 0xfff) << 0x10 | (data_b172c_1 & 0xfff));
+    system_reg_write(0x2060, (data_b1738_1 & 0xfff) << 0x10 | (data_b1734_1 & 0xfff));
+    system_reg_write(0x2064, (data_b1740_1 & 0xfff) << 0x10 | (data_b173c_1 & 0xfff));
+    system_reg_write(0x2068, (data_b1748_1 & 0xfff) << 0x10 | (data_b1744_1 & 0xfff));
+    system_reg_write(0x206c, (data_b1750_1 & 0xfff) << 0x10 | (data_b174c_1 & 0xfff));
+    system_reg_write(0x2070, (data_b1758_1 & 0xfff) << 0x10 | (data_b1754_1 & 0xfff));
+    system_reg_write(0x2074, (data_b1760_1 & 0xfff) << 0x10 | (data_b175c_1 & 0xfff));
+    system_reg_write(0x2078, (data_b1768_1 & 0xfff) << 0x10 | (data_b1764_1 & 0xfff));
+    system_reg_write(0x207c, (data_b1770_1 & 0xfff) << 0x10 | (data_b176c_1 & 0xfff));
+    system_reg_write(0x2080, (data_b1778_1 & 0xfff) << 0x10 | (data_b1774_1 & 0xfff));
+    system_reg_write(0x2084, (data_b1780_1 & 0xfff) << 0x10 | (data_b177c_1 & 0xfff));
+    system_reg_write(0x2088, (data_b1788_1 & 0xfff) << 0x10 | (data_b1784_1 & 0xfff));
+    system_reg_write(0x208c, (data_b1790_1 & 0xfff) << 0x10 | (data_b178c_1 & 0xfff));
+    system_reg_write(0x2090, (data_b1798_1 & 0xfff) << 0x10 | (data_b1794_1 & 0xfff));
+    system_reg_write(0x2094, (data_b17a0_1 & 0xfff) << 0x10 | (data_b179c_1 & 0xfff));
+    system_reg_write(0x2098, (data_b17a8_1 & 0xfff) << 0x10 | (data_b17a4_1 & 0xfff));
+    system_reg_write(0x209c, (data_b17b0_1 & 0xfff) << 0x10 | (data_b17ac_1 & 0xfff));
+    system_reg_write(0x20a0, (data_b17b8_1 & 0xfff) << 0x10 | (data_b17b4_1 & 0xfff));
+    system_reg_write(0x20a4, (data_b17c0_1 & 0xfff) << 0x10 | (data_b17bc_1 & 0xfff));
+    system_reg_write(0x20a8, (data_b17c8_1 & 0xfff) << 0x10 | (data_b17c4_1 & 0xfff));
+    system_reg_write(0x20ac, (data_b17d0_1 & 0xfff) << 0x10 | (data_b17cc_1 & 0xfff));
+    system_reg_write(0x20b0, (data_b17d8_1 & 0xfff) << 0x10 | (data_b17d4_1 & 0xfff));
+    system_reg_write(0x20b4, (data_b17e0_1 & 0xfff) << 0x10 | (data_b17dc_1 & 0xfff));
+    system_reg_write(0x20b8, (data_b17e8_1 & 0xfff) << 0x10 | (data_b17e4_1 & 0xfff));
+    system_reg_write(0x20bc, (data_b17f0_1 & 0xfff) << 0x10 | (data_b17ec_1 & 0xfff));
+    system_reg_write(0x20c0, (data_b17f8_1 & 0xfff) << 0x10 | (data_b17f4_1 & 0xfff));
+    system_reg_write(0x20c4, (data_b1800_1 & 0xfff) << 0x10 | (data_b17fc_1 & 0xfff));
+    system_reg_write(0x20c8, (data_b1808_1 & 0xfff) << 0x10 | (data_b1804_1 & 0xfff));
+    system_reg_write(0x20cc, (data_b1810_1 & 0xfff) << 0x10 | (data_b180c_1 & 0xfff));
+    system_reg_write(0x20d0, (data_b1818_1 & 0xfff) << 0x10 | (data_b1814_1 & 0xfff));
+    system_reg_write(0x20d4, (data_b1820_1 & 0xfff) << 0x10 | (data_b181c_1 & 0xfff));
+    system_reg_write(0x20d8, (data_b1828_1 & 0xfff) << 0x10 | (data_b1824_1 & 0xfff));
+    system_reg_write(0x20dc, (data_b1830_1 & 0xfff) << 0x10 | (data_b182c_1 & 0xfff));
+    system_reg_write(0x20e0, (data_b1838_1 & 0xfff) << 0x10 | (data_b1834_1 & 0xfff));
+    system_reg_write(0x20e4, (data_b1840_1 & 0xfff) << 0x10 | (data_b183c_1 & 0xfff));
+    system_reg_write(0x20e8, (data_b1848_1 & 0xfff) << 0x10 | (data_b1844_1 & 0xfff));
+    system_reg_write(0x20ec, (data_b1850_1 & 0xfff) << 0x10 | (data_b184c_1 & 0xfff));
+    system_reg_write(0x20f0, data_b1854_1 & 0xfff);
+    system_reg_write(0x20f4, (data_b185c_1 & 0xfff) << 0x10 | (wdr_mapG_software_out & 0xfff));
+    system_reg_write(0x20f8, (data_b1864_1 & 0xfff) << 0x10 | (data_b1860_1 & 0xfff));
+    system_reg_write(0x20fc, (data_b186c_1 & 0xfff) << 0x10 | (data_b1868_1 & 0xfff));
+    system_reg_write(0x2100, (data_b1874_1 & 0xfff) << 0x10 | (data_b1870_1 & 0xfff));
+    system_reg_write(0x2104, (data_b187c_1 & 0xfff) << 0x10 | (data_b1878_1 & 0xfff));
+    system_reg_write(0x2108, (data_b1884_1 & 0xfff) << 0x10 | (data_b1880_1 & 0xfff));
+    system_reg_write(0x210c, (data_b188c_1 & 0xfff) << 0x10 | (data_b1888_1 & 0xfff));
+    system_reg_write(0x2110, (data_b1894_1 & 0xfff) << 0x10 | (data_b1890_1 & 0xfff));
+    system_reg_write(0x2114, (data_b189c_1 & 0xfff) << 0x10 | (data_b1898_1 & 0xfff));
+    system_reg_write(0x2118, (data_b18a4_1 & 0xfff) << 0x10 | (data_b18a0_1 & 0xfff));
+    system_reg_write(0x211c, (data_b18ac_1 & 0xfff) << 0x10 | (data_b18a8_1 & 0xfff));
+    system_reg_write(0x2120, (data_b18b4_1 & 0xfff) << 0x10 | (data_b18b0_1 & 0xfff));
+    system_reg_write(0x2124, (data_b18bc_1 & 0xfff) << 0x10 | (data_b18b8_1 & 0xfff));
+    system_reg_write(0x2128, (data_b18c4_1 & 0xfff) << 0x10 | (data_b18c0_1 & 0xfff));
+    system_reg_write(0x212c, (data_b18cc_1 & 0xfff) << 0x10 | (data_b18c8_1 & 0xfff));
+    system_reg_write(0x2130, (data_b18d4_1 & 0xfff) << 0x10 | (data_b18d0_1 & 0xfff));
+    system_reg_write(0x2134, (data_b18dc_1 & 0xfff) << 0x10 | (data_b18d8_1 & 0xfff));
+    system_reg_write(0x2138, (data_b18e4_1 & 0xfff) << 0x10 | (data_b18e0_1 & 0xfff));
+    system_reg_write(0x213c, (data_b18ec_1 & 0xfff) << 0x10 | (data_b18e8_1 & 0xfff));
+    system_reg_write(0x2140, (data_b18f4_1 & 0xfff) << 0x10 | (data_b18f0_1 & 0xfff));
+    system_reg_write(0x2144, (data_b18fc_1 & 0xfff) << 0x10 | (data_b18f8_1 & 0xfff));
+    system_reg_write(0x2148, (data_b1904_1 & 0xfff) << 0x10 | (data_b1900_1 & 0xfff));
+    system_reg_write(0x214c, (data_b190c_1 & 0xfff) << 0x10 | (data_b1908_1 & 0xfff));
+    system_reg_write(0x2150, (data_b1914_1 & 0xfff) << 0x10 | (data_b1910_1 & 0xfff));
+    system_reg_write(0x2154, (data_b191c_1 & 0xfff) << 0x10 | (data_b1918_1 & 0xfff));
+    system_reg_write(0x2158, (data_b1924_1 & 0xfff) << 0x10 | (data_b1920_1 & 0xfff));
+    system_reg_write(0x215c, (data_b192c_1 & 0xfff) << 0x10 | (data_b1928_1 & 0xfff));
+    system_reg_write(0x2160, (data_b1934_1 & 0xfff) << 0x10 | (data_b1930_1 & 0xfff));
+    system_reg_write(0x2164, (data_b193c_1 & 0xfff) << 0x10 | (data_b1938_1 & 0xfff));
+    system_reg_write(0x2168, (data_b1944_1 & 0xfff) << 0x10 | (data_b1940_1 & 0xfff));
+    system_reg_write(0x216c, (data_b194c_1 & 0xfff) << 0x10 | (data_b1948_1 & 0xfff));
+    system_reg_write(0x2170, (data_b1954_1 & 0xfff) << 0x10 | (data_b1950_1 & 0xfff));
+    system_reg_write(0x2174, (data_b195c_1 & 0xfff) << 0x10 | (data_b1958_1 & 0xfff));
+    system_reg_write(0x2178, (data_b1964_1 & 0xfff) << 0x10 | (data_b1960_1 & 0xfff));
+    system_reg_write(0x217c, (data_b196c_1 & 0xfff) << 0x10 | (data_b1968_1 & 0xfff));
+    system_reg_write(0x2180, (data_b1974_1 & 0xfff) << 0x10 | (data_b1970_1 & 0xfff));
+    system_reg_write(0x2184, (data_b197c_1 & 0xfff) << 0x10 | (data_b1978_1 & 0xfff));
+    system_reg_write(0x2188, (data_b1984_1 & 0xfff) << 0x10 | (data_b1980_1 & 0xfff));
+    system_reg_write(0x218c, (data_b198c_1 & 0xfff) << 0x10 | (data_b1988_1 & 0xfff));
+    system_reg_write(0x2190, (data_b1994_1 & 0xfff) << 0x10 | (data_b1990_1 & 0xfff));
+    system_reg_write(0x2194, data_b1998_1 & 0xfff);
+    system_reg_write(0x2198, (data_b19a0_1 & 0xfff) << 0x10 | (wdr_mapB_software_out & 0xfff));
+    system_reg_write(0x219c, (data_b19a8_1 & 0xfff) << 0x10 | (data_b19a4_1 & 0xfff));
+    system_reg_write(0x21a0, (data_b19b0_1 & 0xfff) << 0x10 | (data_b19ac_1 & 0xfff));
+    system_reg_write(0x21a4, (data_b19b8_1 & 0xfff) << 0x10 | (data_b19b4_1 & 0xfff));
+    system_reg_write(0x21a8, (data_b19c0_1 & 0xfff) << 0x10 | (data_b19bc_1 & 0xfff));
+    system_reg_write(0x21ac, (data_b19c8_1 & 0xfff) << 0x10 | (data_b19c4_1 & 0xfff));
+    system_reg_write(0x21b0, (data_b19d0_1 & 0xfff) << 0x10 | (data_b19cc_1 & 0xfff));
+    system_reg_write(0x21b4, (data_b19d8_1 & 0xfff) << 0x10 | (data_b19d4_1 & 0xfff));
+    system_reg_write(0x21b8, (data_b19e0_1 & 0xfff) << 0x10 | (data_b19dc_1 & 0xfff));
+    system_reg_write(0x21bc, (data_b19e8_1 & 0xfff) << 0x10 | (data_b19e4_1 & 0xfff));
+    system_reg_write(0x21c0, (data_b19f0_1 & 0xfff) << 0x10 | (data_b19ec_1 & 0xfff));
+    system_reg_write(0x21c4, (data_b19f8_1 & 0xfff) << 0x10 | (data_b19f4_1 & 0xfff));
+    system_reg_write(0x21c8, (data_b1a00_1 & 0xfff) << 0x10 | (data_b19fc_1 & 0xfff));
+    system_reg_write(0x21cc, (data_b1a08_1 & 0xfff) << 0x10 | (data_b1a04_1 & 0xfff));
+    system_reg_write(0x21d0, (data_b1a10_1 & 0xfff) << 0x10 | (data_b1a0c_1 & 0xfff));
+    system_reg_write(0x21d4, (data_b1a18_1 & 0xfff) << 0x10 | (data_b1a14_1 & 0xfff));
+    system_reg_write(0x21d8, (data_b1a20_1 & 0xfff) << 0x10 | (data_b1a1c_1 & 0xfff));
+    system_reg_write(0x21dc, (data_b1a28_1 & 0xfff) << 0x10 | (data_b1a24_1 & 0xfff));
+    system_reg_write(0x21e0, (data_b1a30_1 & 0xfff) << 0x10 | (data_b1a2c_1 & 0xfff));
+    system_reg_write(0x21e4, (data_b1a38_1 & 0xfff) << 0x10 | (data_b1a34_1 & 0xfff));
+    system_reg_write(0x21e8, (data_b1a40_1 & 0xfff) << 0x10 | (data_b1a3c_1 & 0xfff));
+    system_reg_write(0x21ec, (data_b1a48_1 & 0xfff) << 0x10 | (data_b1a44_1 & 0xfff));
+    system_reg_write(0x21f0, (data_b1a50_1 & 0xfff) << 0x10 | (data_b1a4c_1 & 0xfff));
+    system_reg_write(0x21f4, (data_b1a58_1 & 0xfff) << 0x10 | (data_b1a54_1 & 0xfff));
+    system_reg_write(0x21f8, (data_b1a60_1 & 0xfff) << 0x10 | (data_b1a5c_1 & 0xfff));
+    system_reg_write(0x21fc, (data_b1a68_1 & 0xfff) << 0x10 | (data_b1a64_1 & 0xfff));
+    system_reg_write(0x2200, (data_b1a70_1 & 0xfff) << 0x10 | (data_b1a6c_1 & 0xfff));
+    system_reg_write(0x2204, (data_b1a78_1 & 0xfff) << 0x10 | (data_b1a74_1 & 0xfff));
+    system_reg_write(0x2208, (data_b1a80_1 & 0xfff) << 0x10 | (data_b1a7c_1 & 0xfff));
+    system_reg_write(0x220c, (data_b1a88_1 & 0xfff) << 0x10 | (data_b1a84_1 & 0xfff));
+    system_reg_write(0x2210, (data_b1a90_1 & 0xfff) << 0x10 | (data_b1a8c_1 & 0xfff));
+    system_reg_write(0x2214, (data_b1a98_1 & 0xfff) << 0x10 | (data_b1a94_1 & 0xfff));
+    system_reg_write(0x2218, (data_b1aa0_1 & 0xfff) << 0x10 | (data_b1a9c_1 & 0xfff));
+    system_reg_write(0x221c, (data_b1aa8_1 & 0xfff) << 0x10 | (data_b1aa4_1 & 0xfff));
+    system_reg_write(0x2220, (data_b1ab0_1 & 0xfff) << 0x10 | (data_b1aac_1 & 0xfff));
+    system_reg_write(0x2224, (data_b1ab8_1 & 0xfff) << 0x10 | (data_b1ab4_1 & 0xfff));
+    system_reg_write(0x2228, (data_b1ac0_1 & 0xfff) << 0x10 | (data_b1abc_1 & 0xfff));
+    system_reg_write(0x222c, (data_b1ac8_1 & 0xfff) << 0x10 | (data_b1ac4_1 & 0xfff));
+    system_reg_write(0x2230, (data_b1ad0_1 & 0xfff) << 0x10 | (data_b1acc_1 & 0xfff));
+    system_reg_write(0x2234, (data_b1ad8_1 & 0xfff) << 0x10 | (data_b1ad4_1 & 0xfff));
+    system_reg_write(0x2238, data_b1adc_1 & 0xfff);
+    system_reg_write(0x2274, (data_b16b0_1 & 0xf) << 0x10 | (wdr_thrLableN_software_out & 0xf));
+    system_reg_write(0x2278, (data_b16b8_1 & 0xf) << 0x10 | (data_b16b4_1 & 0xf));
+    system_reg_write(0x227c, (data_b16c0_1 & 0xf) << 0x10 | (data_b16bc_1 & 0xf));
+    system_reg_write(0x2280, (data_b16c8_1 & 0xf) << 0x10 | (data_b16c4_1 & 0xf));
+    system_reg_write(0x2284, (data_b16d0_1 & 0xf) << 0x10 | (data_b16cc_1 & 0xf));
+    system_reg_write(0x2288, (data_b16d8_1 & 0xf) << 0x10 | (data_b16d4_1 & 0xf));
+    system_reg_write(0x228c, (data_b16e0_1 & 0xf) << 0x10 | (data_b16dc_1 & 0xf));
+    system_reg_write(0x2290, (data_b16e8_1 & 0xf) << 0x10 | (data_b16e4_1 & 0xf));
+    system_reg_write(0x2294, (data_b16f0_1 & 0xf) << 0x10 | (data_b16ec_1 & 0xf));
+    system_reg_write(0x2298, (data_b16f8_1 & 0xf) << 0x10 | (data_b16f4_1 & 0xf));
+    system_reg_write(0x229c, (data_b1700_1 & 0xf) << 0x10 | (data_b16fc_1 & 0xf));
+    system_reg_write(0x22a0, (data_b1708_1 & 0xf) << 0x10 | (data_b1704_1 & 0xf));
+    system_reg_write(0x22a4, (data_b1710_1 & 0xf) << 0x10 | (data_b170c_1 & 0xf));
+    system_reg_write(0x22a8, 
+        (wdr_thrAll_software_out[1] & 0x7ff) << 0x10 | (wdr_thrAll_software_out[0] & 0x7ff));
+    system_reg_write(0x22ac, 
+        (wdr_thrAll_software_out[3] & 0x7ff) << 0x10 | (wdr_thrAll_software_out[2] & 0x7ff));
+    system_reg_write(0x22b0, (data_b1654_1 & 0x7ff) << 0x10 | (data_b1650_1 & 0x7ff));
+    system_reg_write(0x22b4, (data_b165c_1 & 0x7ff) << 0x10 | (data_b1658_1 & 0x7ff));
+    system_reg_write(0x22b8, (data_b1664_1 & 0x7ff) << 0x10 | (data_b1660_1 & 0x7ff));
+    system_reg_write(0x22bc, (data_b166c_1 & 0x7ff) << 0x10 | (data_b1668_1 & 0x7ff));
+    system_reg_write(0x22c0, (data_b1674_1 & 0x7ff) << 0x10 | (data_b1670_1 & 0x7ff));
+    system_reg_write(0x22c4, (data_b167c_1 & 0x7ff) << 0x10 | (data_b1678_1 & 0x7ff));
+    system_reg_write(0x22c8, (data_b1684_1 & 0x7ff) << 0x10 | (data_b1680_1 & 0x7ff));
+    system_reg_write(0x22cc, (data_b168c_1 & 0x7ff) << 0x10 | (data_b1688_1 & 0x7ff));
+    system_reg_write(0x22d0, (data_b1694_1 & 0x7ff) << 0x10 | (data_b1690_1 & 0x7ff));
+    system_reg_write(0x22d4, (data_b169c_1 & 0x7ff) << 0x10 | (data_b1698_1 & 0x7ff));
+    system_reg_write(0x22d8, (data_b16a4_1 & 0x7ff) << 0x10 | (data_b16a0_1 & 0x7ff));
+    system_reg_write(0x22dc, data_b16a8_4 & 0x7ff);
+    system_reg_write(0x22e0, wdr_thrRangeK_software_out & 0x1ffff);
+    system_reg_write(0x22e4, data_b15d8_1 & 0x1ffff);
+    system_reg_write(0x22e8, data_b15dc_1 & 0x1ffff);
+    system_reg_write(0x22ec, data_b15e0_1 & 0x1ffff);
+    system_reg_write(0x22f0, data_b15e4_1 & 0x1ffff);
+    system_reg_write(0x22f4, data_b15e8_1 & 0x1ffff);
+    system_reg_write(0x22f8, data_b15ec_1 & 0x1ffff);
+    system_reg_write(0x22fc, data_b15f0_1[0] & 0x1ffff);
+    system_reg_write(0x2300, data_b15f0_2[1] & 0x1ffff);
+    system_reg_write(0x2304, data_b15f0_3[2] & 0x1ffff);
+    system_reg_write(0x2308, data_b15f0_4[3] & 0x1ffff);
+    system_reg_write(0x230c, data_b15f0_5[4] & 0x1ffff);
+    system_reg_write(0x2310, data_b15f0_6[5] & 0x1ffff);
+    system_reg_write(0x2314, data_b1608_1 & 0x1ffff);
+    system_reg_write(0x2318, data_b160c_1 & 0x1ffff);
+    system_reg_write(0x231c, data_b1610_1 & 0x1ffff);
+    system_reg_write(0x2320, data_b1614_1 & 0x1ffff);
+    system_reg_write(0x2324, data_b1618_1 & 0x1ffff);
+    system_reg_write(0x2328, data_b161c_1 & 0x1ffff);
+    system_reg_write(0x232c, data_b1620_1 & 0x1ffff);
+    system_reg_write(0x2330, data_b1624_1 & 0x1ffff);
+    system_reg_write(0x2334, data_b1628_1 & 0x1ffff);
+    system_reg_write(0x2338, data_b162c_1 & 0x1ffff);
+    system_reg_write(0x233c, data_b1630_1 & 0x1ffff);
+    system_reg_write(0x2340, data_b1634_1 & 0x1ffff);
+    system_reg_write(0x2344, data_b1638_1 & 0x1ffff);
+    system_reg_write(0x2348, data_b163c_1 & 0x1ffff);
+    system_reg_write(0x2614, (data_b15b4_2 & 0xfff) << 0x10 | (wdr_detial_para_software_out & 0xfff));
+    system_reg_write(0x2618, (data_b15c0_2 & 0xfff) << 0x10 | (data_b15bc_2 & 0xfff));
+    system_reg_write(0x261c, (data_b15cc_2 & 0xfff) << 0x10 | (data_b15c8_2 & 0xfff));
+    system_reg_write(0x2620, data_b15b8_2 & &data_7ffff);
+    system_reg_write(0x2624, data_b15c4_2 & &data_7ffff_1);
+    system_reg_write(0x2628, data_b15d0_2 & &data_7ffff_2);
+    return 0;
+}
+

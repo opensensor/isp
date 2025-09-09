@@ -1,0 +1,21 @@
+#include "include/main.h"
+
+
+  int32_t fix_point_sub_64(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6)
+
+{
+    if (arg4 >= arg6)
+    {
+        int32_t result = arg3 - arg5;
+        
+        if (arg6 == arg4)
+            result = arg3 - arg5;
+        
+        if (arg6 != arg4 || arg3 >= arg5)
+            return result;
+    }
+    
+    isp_printf(2, &$LC0, arg3);
+    return arg3 - arg5;
+}
+
