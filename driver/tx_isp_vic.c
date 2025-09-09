@@ -1021,10 +1021,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         /* *** WRITE MISSING REGISTERS TO MATCH REFERENCE TRACE *** */
     pr_info("*** Writing missing registers to match reference driver trace ***\n");
-    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace */
-    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace */
-    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace */
-    wmb();
+//    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace */
+//    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace */
+//    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace */
+//    wmb();
 
     /* CSI PHY Control registers - write to VIC register space offsets that match trace */
     writel(0x54560031, vic_regs + 0x0);      /* First register from reference trace */
@@ -1064,46 +1064,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x1010001, vic_regs + 0x989c);    /* ISP Control register */
     writel(0x1010001, vic_regs + 0x98a8);    /* ISP Control register */
     wmb();
-
-    // /* *** MISSING VIC Control registers - from reference trace *** */
-    // pr_info("*** Writing missing VIC Control registers (0x9a00-0x9ac8) ***\n");
-    // writel(0x50002d0, vic_regs + 0x9a00);    /* VIC Control register */
-    // writel(0x3000300, vic_regs + 0x9a04);    /* VIC Control register */
-    // writel(0x50002d0, vic_regs + 0x9a2c);    /* VIC Control register */
-    // writel(0x1, vic_regs + 0x9a34);          /* VIC Control register */
-    // writel(0x1, vic_regs + 0x9a70);          /* VIC Control register */
-    // writel(0x1, vic_regs + 0x9a7c);          /* VIC Control register */
-    // writel(0x500, vic_regs + 0x9a80);        /* VIC Control register */
-    // writel(0x1, vic_regs + 0x9a88);          /* VIC Control register */
-    // writel(0x1, vic_regs + 0x9a94);          /* VIC Control register */
-    // writel(0x500, vic_regs + 0x9a98);        /* VIC Control register */
-    // writel(0x200, vic_regs + 0x9ac0);        /* VIC Control register */
-    // writel(0x200, vic_regs + 0x9ac8);        /* VIC Control register */
-    // wmb();
-//
-//    /* *** MISSING Core Control registers - from reference trace *** */
-//    pr_info("*** Writing missing Core Control registers (0xb004-0xb08c) ***\n");
-//    writel(0xf001f001, vic_regs + 0xb004);   /* Core Control register */
-//    writel(0x40404040, vic_regs + 0xb008);   /* Core Control register */
-//    writel(0x40404040, vic_regs + 0xb00c);   /* Core Control register */
-//    writel(0x40404040, vic_regs + 0xb010);   /* Core Control register */
-//    writel(0x404040, vic_regs + 0xb014);     /* Core Control register */
-//    writel(0x40404040, vic_regs + 0xb018);   /* Core Control register */
-//    writel(0x40404040, vic_regs + 0xb01c);   /* Core Control register */
-//    writel(0x40404040, vic_regs + 0xb020);   /* Core Control register */
-//    writel(0x404040, vic_regs + 0xb024);     /* Core Control register */
-//    writel(0x1000080, vic_regs + 0xb028);    /* Core Control register */
-//    writel(0x1000080, vic_regs + 0xb02c);    /* Core Control register */
-//    writel(0x100, vic_regs + 0xb030);        /* Core Control register */
-//    writel(0xffff0100, vic_regs + 0xb034);   /* Core Control register */
-//    writel(0x1ff00, vic_regs + 0xb038);      /* Core Control register */
-//    writel(0x103, vic_regs + 0xb04c);        /* Core Control register */
-//    writel(0x3, vic_regs + 0xb050);          /* Core Control register */
-//    writel(0x341b, vic_regs + 0xb07c);       /* Core Control register */
-//    writel(0x46b0, vic_regs + 0xb080);       /* Core Control register */
-//    writel(0x1813, vic_regs + 0xb084);       /* Core Control register */
-//    writel(0x10a, vic_regs + 0xb08c);        /* Core Control register */
-//    wmb();
 
     pr_info("*** Completed writing ALL missing initialization registers from reference trace ***\n");
 
