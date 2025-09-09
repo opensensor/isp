@@ -110,7 +110,7 @@ static uint32_t data_d7220 = 0;
 static uint32_t data_d7224 = 0;
 static uint32_t data_d7228 = 0;
 
-/* Missing AE global variables - Binary Ninja reference */
+/* Missing AE global variables - Binary Ninja reference with correct values from reference driver */
 uint32_t data_b0df4 = 0;   /* IspAeFlag */
 EXPORT_SYMBOL(data_b0df4);
 uint32_t data_b0df8 = 0;   /* AE flag 2 */
@@ -123,12 +123,57 @@ uint32_t data_b0e08 = 0;   /* AE flag 5 */
 EXPORT_SYMBOL(data_b0e08);
 uint32_t data_b0e0c = 0;   /* AE flag 6 */
 EXPORT_SYMBOL(data_b0e0c);
+uint32_t data_b0e10 = 0;   /* AE flag WDR */
+EXPORT_SYMBOL(data_b0e10);
 uint32_t data_b0e14 = 0;   /* AE flag 7 */
 EXPORT_SYMBOL(data_b0e14);
 uint32_t data_b0e18 = 0;   /* AE flag 8 */
 EXPORT_SYMBOL(data_b0e18);
 uint32_t data_b2e74 = 0;   /* WDR mode flag */
 EXPORT_SYMBOL(data_b2e74);
+
+/* AE gain variables from reference driver */
+uint32_t dg1_new = 0x400;  /* Digital gain 1 */
+EXPORT_SYMBOL(dg1_new);
+uint32_t ag1_new = 0x400;  /* Analog gain 1 */
+EXPORT_SYMBOL(ag1_new);
+uint32_t dg_new = 0x400;   /* Digital gain */
+EXPORT_SYMBOL(dg_new);
+uint32_t ag_new = 0x400;   /* Analog gain */
+EXPORT_SYMBOL(ag_new);
+
+/* AE result and status variables from reference driver */
+uint32_t _ae_result = 0x3d7;  /* AE result value from reference */
+EXPORT_SYMBOL(_ae_result);
+uint32_t _ae_stat = 0x42;     /* AE statistics value from reference */
+EXPORT_SYMBOL(_ae_stat);
+uint32_t _AePointPos_d = 0;   /* AE point position */
+EXPORT_SYMBOL(_AePointPos_d);
+
+/* AE data variables from reference driver with correct values */
+uint32_t data_afcd0 = 0x400;  /* From reference driver */
+EXPORT_SYMBOL(data_afcd0);
+uint32_t data_afcd4 = 0x400;  /* From reference driver */
+EXPORT_SYMBOL(data_afcd4);
+uint32_t data_afcd8 = 0x1f4;  /* From reference driver (500 decimal) */
+EXPORT_SYMBOL(data_afcd8);
+uint32_t data_afcdc = 0x400;  /* From reference driver */
+EXPORT_SYMBOL(data_afcdc);
+uint32_t data_afce0 = 0x400;  /* From reference driver */
+EXPORT_SYMBOL(data_afce0);
+
+/* Additional AE variables from reference driver */
+uint32_t data_afcbc = 0x0;    /* From reference driver */
+EXPORT_SYMBOL(data_afcbc);
+uint32_t data_afcc0 = 0x80;   /* From reference driver */
+EXPORT_SYMBOL(data_afcc0);
+
+/* AE weight matrix from reference driver */
+uint32_t _ae_wm_q[16] = {
+    0x200, 0x200, 0x200, 0x200, 0x200, 0x200, 0x200, 0x200,
+    0x200, 0x200, 0x200, 0x200, 0x200, 0x200, 0x200, 0x200
+};
+EXPORT_SYMBOL(_ae_wm_q);
 
 /* WDR Data Structure Pointers - From Binary Ninja */
 static void *TizianoWdrFpgaStructMe = NULL;
