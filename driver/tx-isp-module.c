@@ -2204,6 +2204,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
 {
     void **subdevs_ptr;    /* $s4 in reference: arg1 + 0x38 */
     int i;
+    int ret = 0;
     
     pr_info("*** tx_isp_video_s_stream: FIXED Binary Ninja implementation - enable=%d ***\n", enable);
     
@@ -2211,6 +2212,22 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     if (!is_valid_kernel_pointer(dev)) {
         pr_err("tx_isp_video_s_stream: Invalid ISP device pointer %p\n", dev);
         return -EINVAL;
+    }
+    
+    /* *** CRITICAL FIX: CALL tisp_init ON STREAM ENABLE - THIS WAS THE MISSING PIECE! *** */
+    if (enable && dev->sensor && dev->sensor->video.attr) {
+        pr_info("*** tx_isp_video_s_stream: CALLING tisp_init - THIS GENERATES THE MISSING REGISTER WRITES! ***\n");
+        
+        ret = tisp_init(dev->sensor->video.attr, dev);
+        if (ret) {
+            pr_err("*** tx_isp_video_s_stream: tisp_init FAILED: %d ***\n", ret);
+            pr_err("*** CRITICAL: HARDWARE REGISTERS NOT WRITTEN - TRACE MODULE WILL SEE NO ACTIVITY! ***\n");
+            return ret;
+        } else {
+            pr_info("*** tx_isp_video_s_stream: tisp_init SUCCESS - HARDWARE REGISTERS NOW WRITTEN! ***\n");
+            pr_info("*** YOUR TRACE MODULE SHOULD NOW CAPTURE REGISTER WRITES! ***\n");
+            pr_info("*** INCLUDING: 0xb004=0xf001f001, 0xb07c=0x341b, 0xb080=0x46b0, etc. ***\n");
+        }
     }
     
     /* Memory barrier before accessing device structure */
