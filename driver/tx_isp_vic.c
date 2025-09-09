@@ -1065,21 +1065,21 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x1010001, vic_regs + 0x98a8);    /* ISP Control register */
     wmb();
 
-    /* *** MISSING VIC Control registers - from reference trace *** */
-    pr_info("*** Writing missing VIC Control registers (0x9a00-0x9ac8) ***\n");
-    writel(0x50002d0, vic_regs + 0x9a00);    /* VIC Control register */
-    writel(0x3000300, vic_regs + 0x9a04);    /* VIC Control register */
-    writel(0x50002d0, vic_regs + 0x9a2c);    /* VIC Control register */
-    writel(0x1, vic_regs + 0x9a34);          /* VIC Control register */
-    writel(0x1, vic_regs + 0x9a70);          /* VIC Control register */
-    writel(0x1, vic_regs + 0x9a7c);          /* VIC Control register */
-    writel(0x500, vic_regs + 0x9a80);        /* VIC Control register */
-    writel(0x1, vic_regs + 0x9a88);          /* VIC Control register */
-    writel(0x1, vic_regs + 0x9a94);          /* VIC Control register */
-    writel(0x500, vic_regs + 0x9a98);        /* VIC Control register */
-    writel(0x200, vic_regs + 0x9ac0);        /* VIC Control register */
-    writel(0x200, vic_regs + 0x9ac8);        /* VIC Control register */
-    wmb();
+    // /* *** MISSING VIC Control registers - from reference trace *** */
+    // pr_info("*** Writing missing VIC Control registers (0x9a00-0x9ac8) ***\n");
+    // writel(0x50002d0, vic_regs + 0x9a00);    /* VIC Control register */
+    // writel(0x3000300, vic_regs + 0x9a04);    /* VIC Control register */
+    // writel(0x50002d0, vic_regs + 0x9a2c);    /* VIC Control register */
+    // writel(0x1, vic_regs + 0x9a34);          /* VIC Control register */
+    // writel(0x1, vic_regs + 0x9a70);          /* VIC Control register */
+    // writel(0x1, vic_regs + 0x9a7c);          /* VIC Control register */
+    // writel(0x500, vic_regs + 0x9a80);        /* VIC Control register */
+    // writel(0x1, vic_regs + 0x9a88);          /* VIC Control register */
+    // writel(0x1, vic_regs + 0x9a94);          /* VIC Control register */
+    // writel(0x500, vic_regs + 0x9a98);        /* VIC Control register */
+    // writel(0x200, vic_regs + 0x9ac0);        /* VIC Control register */
+    // writel(0x200, vic_regs + 0x9ac8);        /* VIC Control register */
+    // wmb();
 //
 //    /* *** MISSING Core Control registers - from reference trace *** */
 //    pr_info("*** Writing missing Core Control registers (0xb004-0xb08c) ***\n");
