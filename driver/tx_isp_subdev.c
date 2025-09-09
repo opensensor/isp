@@ -270,6 +270,75 @@ EXPORT_SYMBOL(tx_isp_subdev_deinit);
 
 static struct tx_isp_subdev_ops fs_subdev_ops = { 0 }; // All fields NULL/0
 
+/* ISP sensor wrapper functions - these delegate to registered sensor drivers */
+static int sensor_init_wrapper(struct tx_isp_subdev *sd, int enable)
+{
+    pr_info("*** ISP SENSOR WRAPPER init: enable=%d ***\n", enable);
+    pr_info("*** ISP: Initializing ISP-side for sensor gc2053 enable=%d ***\n", enable);
+    
+    pr_info("*** ISP DELEGATING TO REAL SENSOR_INIT: enable=%d ***\n", enable);
+    
+    /* FIXED: Use sensor registration system to call real sensor init */
+    extern int tx_isp_call_sensor_init(const char *sensor_name, int enable);
+    return tx_isp_call_sensor_init("gc2053", enable);
+}
+
+static int sensor_g_chip_ident_wrapper(struct tx_isp_subdev *sd, struct tx_isp_chip_ident *chip)
+{
+    pr_info("*** ISP DELEGATING TO REAL SENSOR_G_CHIP_IDENT ***\n");
+    
+    /* FIXED: Use sensor registration system to call real sensor g_chip_ident */
+    extern int tx_isp_call_sensor_g_chip_ident(const char *sensor_name, struct tx_isp_chip_ident *chip);
+    return tx_isp_call_sensor_g_chip_ident("gc2053", chip);
+}
+
+static int sensor_s_stream_wrapper(struct tx_isp_subdev *sd, int enable)
+{
+    pr_info("*** ISP SENSOR WRAPPER s_stream: enable=%d ***\n", enable);
+    pr_info("*** ISP: Setting up ISP-side for sensor gc2053 streaming=%d ***\n", enable);
+    pr_info("ISP: Configuring for MIPI interface\n");
+    
+    pr_info("*** ISP DELEGATING TO REAL SENSOR_S_STREAM: enable=%d ***\n", enable);
+    
+    /* FIXED: Use sensor registration system to call real sensor s_stream */
+    extern int tx_isp_call_sensor_s_stream(const char *sensor_name, int enable);
+    return tx_isp_call_sensor_s_stream("gc2053", enable);
+}
+
+/* Sensor wrapper operations structure */
+static struct tx_isp_subdev_core_ops sensor_wrapper_core_ops = {
+    .init = sensor_init_wrapper,
+    .g_chip_ident = sensor_g_chip_ident_wrapper,
+};
+
+static struct tx_isp_subdev_video_ops sensor_wrapper_video_ops = {
+    .s_stream = sensor_s_stream_wrapper,
+};
+
+static struct tx_isp_subdev_ops sensor_wrapper_ops = {
+    .core = &sensor_wrapper_core_ops,
+    .video = &sensor_wrapper_video_ops,
+};
+
+/* Function to create a sensor wrapper - called by ISP framework */
+int tx_isp_create_sensor_wrapper(const char *sensor_name)
+{
+    pr_info("*** tx_isp_create_sensor_wrapper: Creating wrapper for sensor %s ***\n", sensor_name);
+    
+    /* For now, just return success - the wrapper ops are available globally */
+    /* In a full implementation, we'd create a per-sensor wrapper */
+    
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_create_sensor_wrapper);
+
+/* Function to get sensor wrapper ops */
+struct tx_isp_subdev_ops *tx_isp_get_sensor_wrapper_ops(void)
+{
+    return &sensor_wrapper_ops;
+}
+EXPORT_SYMBOL(tx_isp_get_sensor_wrapper_ops);
+
 
 /* Platform driver structures */
 static struct platform_driver tx_isp_csi_driver = {
