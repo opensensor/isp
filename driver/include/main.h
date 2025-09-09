@@ -134,58 +134,6 @@ typedef uint32_t DWORD;
 typedef uint16_t WORD;
 typedef uint8_t BYTE;
 
-/* User-Defined Types */
-typedef struct Elf32_Header {
-    struct Elf32_Ident ident; // offset: 0x0
-    enum e_type type; // offset: 0x10
-    enum e_machine machine; // offset: 0x12
-    uint32_t version; // offset: 0x14
-    void (*entry)(void); // offset: 0x18
-    uint32_t program_header_offset; // offset: 0x1c
-    uint32_t section_header_offset; // offset: 0x20
-    uint32_t flags; // offset: 0x24
-    uint16_t header_size; // offset: 0x28
-    uint16_t program_header_size; // offset: 0x2a
-    uint16_t program_header_count; // offset: 0x2c
-    uint16_t section_header_size; // offset: 0x2e
-    uint16_t section_header_count; // offset: 0x30
-    uint16_t string_table; // offset: 0x32
-} Elf32_Header;
-
-typedef struct Elf32_Ident_Alt {
-    char signature[4]; // offset: 0x0
-    uint8_t file_class; // offset: 0x4
-    uint8_t encoding; // offset: 0x5
-    uint8_t version; // offset: 0x6
-    uint8_t os; // offset: 0x7
-    uint8_t abi_version; // offset: 0x8
-    char pad[7]; // offset: 0x9
-} Elf32_Ident_Alt;
-
-typedef struct Elf32_ProgramHeader {
-    enum p_type type; // offset: 0x0
-    uint32_t offset; // offset: 0x4
-    uint32_t virtual_address; // offset: 0x8
-    uint32_t physical_address; // offset: 0xc
-    uint32_t file_size; // offset: 0x10
-    uint32_t memory_size; // offset: 0x14
-    enum p_flags flags; // offset: 0x18
-    uint32_t align; // offset: 0x1c
-} Elf32_ProgramHeader;
-
-typedef struct Elf32_SectionHeader {
-    uint32_t name; // offset: 0x0
-    enum sh_type type; // offset: 0x4
-    enum sh_flags flags; // offset: 0x8
-    uint32_t address; // offset: 0xc
-    uint32_t offset; // offset: 0x10
-    uint32_t size; // offset: 0x14
-    uint32_t link; // offset: 0x18
-    uint32_t info; // offset: 0x1c
-    uint32_t align; // offset: 0x20
-    uint32_t entry_size; // offset: 0x24
-} Elf32_SectionHeader;
-
 // Type: va_list
 typedef void* va_list;
 
