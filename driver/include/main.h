@@ -1690,7 +1690,6 @@ char const* tx_isp_platform_device = (void*)0x7df88 /* pointer to data */;
 
 
 // Data at address 0x82d90
-void* data_82d90 = &tx_isp_release_device;
 
 // Data at address 0x82db0
 
