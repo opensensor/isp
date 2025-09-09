@@ -372,22 +372,14 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     u32 mdma_status = readl(vic_base + 0x1e4);
     isr_mdma = (~mdma_mask) & mdma_status;
     
-    /* *** CRITICAL FIX: ALWAYS clear ALL interrupt status bits immediately *** */
-    /* This prevents interrupts from accumulating during start/stop/start sequences */
-    /* Clear the main interrupt status register - acknowledge ALL pending interrupts */
-    writel(isr_status, vic_base + 0x1f0);  /* Clear ALL bits, not just processed ones */
-    /* Clear the MDMA interrupt status register - acknowledge ALL pending interrupts */
-    writel(mdma_status, vic_base + 0x1f4);  /* Clear ALL bits, not just processed ones */
+    /* Binary Ninja: Store processed interrupts back */
+    /* *($v0_4 + 0x1f0) = $v1_7 */
+    writel(isr_main, vic_base + 0x1f0);
+    /* *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
+    writel(isr_mdma, vic_base + 0x1f4);
     wmb();
     
-    pr_debug("isp_vic_interrupt_service_routine: isr_main=0x%x, isr_mdma=0x%x (ALL status cleared)\n", isr_main, isr_mdma);
-    
-    /* Additional safety: Clear any other interrupt status registers that might exist */
-    writel(0xFFFFFFFF, vic_base + 0x1e0);  /* Clear main interrupt status completely */
-    writel(0xFFFFFFFF, vic_base + 0x1e4);  /* Clear MDMA interrupt status completely */
-    wmb();
-    
-    pr_debug("isp_vic_interrupt_service_routine: ALL interrupt status registers forcibly cleared\n");
+    pr_debug("isp_vic_interrupt_service_routine: isr_main=0x%x, isr_mdma=0x%x\n", isr_main, isr_mdma);
     
     /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
     if (vic_start_ok != 0) {
@@ -532,12 +524,12 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         /* Binary Ninja: MDMA interrupt handling */
         if ((isr_mdma & 1) != 0) {
             pr_debug("VIC MDMA channel 0 interrupt\n");
-            // vic_mdma_irq_function(vic_dev, 0);
+            vic_mdma_irq_function(vic_dev, 0);
         }
         
         if ((isr_mdma & 2) != 0) {
             pr_debug("VIC MDMA channel 1 interrupt\n");
-            // vic_mdma_irq_function(vic_dev, 1);
+            vic_mdma_irq_function(vic_dev, 1);
         }
         
         if ((isr_mdma & 4) != 0) {
@@ -1419,26 +1411,38 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0, vic_regs + 0x1b4);
     wmb();
 
-    /* Binary Ninja: Final WDR mode message like reference */
+    /* Binary Ninja: Log WDR mode */
     const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
-        "tx_isp_vic_start:wdr mode" : "tx_isp_vic_start:linear mode";
-    pr_info("%s\n", wdr_msg);
+        "WDR mode enabled" : "Linear mode enabled";
+    pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
-    /* *** CRITICAL TIMING FIX: DO NOT set vic_start_ok = 1 here! *** */
-    /* vic_start_ok should ONLY be set by tx_vic_enable_irq() after streaming setup */
-
-    pr_info("*** TIMING FIX: vic_start_ok left at 0 - interrupts DISABLED during init ***\n");
-    pr_info("*** VIC hardware initialized but interrupts DISABLED - prevents early firing ***\n");
-
-    /* *** FINAL SAFETY: Ensure ALL interrupts stay masked until tx_vic_enable_irq() *** */
-    writel(0xFFFFFFFF, vic_regs + 0x1e8);  /* Keep ALL main interrupts masked */
-    writel(0xFFFFFFFF, vic_regs + 0x1ec);  /* Keep ALL MDMA interrupts masked */
-    wmb();
-
-    pr_info("*** VIC INTERRUPTS REMAIN MASKED UNTIL tx_vic_enable_irq() ***\n");
+    /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
+    vic_start_ok = 1;
+    
+    /* CRITICAL: Enable ISP system-level interrupts when VIC streaming starts */
+    extern void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
+    
+    /* FIXED: Use proper VIC-to-ISP device linkage */
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)vic_dev->sd.isp;
+    if (!isp_dev && ourISPdev) {
+        /* Fallback: Use global ISP device if subdev link not set */
+        isp_dev = ourISPdev;
+        pr_info("*** tx_isp_vic_start: Using global ISP device fallback ***\n");
+    }
+    
+    if (isp_dev) {
+        pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
+        tx_isp_enable_irq(isp_dev);
+        pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
+    } else {
+        pr_err("*** tx_isp_vic_start: No ISP device found for interrupt enable ***\n");
+    }
+    
+    pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
+    pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
 
     /* MCP LOG: VIC start completed successfully */
-    pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d (DISABLED), interface=%d\n",
+    pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d, interface=%d\n", 
             vic_start_ok, interface_type);
 
     ret = 0;
