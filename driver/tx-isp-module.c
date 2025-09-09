@@ -738,10 +738,12 @@ u32 vic_read32(u32 reg)
 }
 EXPORT_SYMBOL(vic_read32);
 
-/* tisp_init - EXACT Binary Ninja implementation - THE MISSING HARDWARE INIT! */
+/* tisp_init - FIXED Binary Ninja implementation with proper register access */
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
 {
-    pr_info("*** tisp_init: IMPLEMENTING MISSING HARDWARE REGISTER INITIALIZATION ***\n");
+    void __iomem *isp_regs = NULL;
+    
+    pr_info("*** tisp_init: EXACT Binary Ninja implementation - THE MISSING HARDWARE INIT! ***\n");
     pr_info("*** THIS FUNCTION CONTAINS ALL THE system_reg_write CALLS FROM REFERENCE ***\n");
     
     if (!sensor_attr || !isp_dev) {
@@ -749,11 +751,20 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
         return -EINVAL;
     }
     
-    /* CRITICAL FIX: Check if ISP registers are available before proceeding */
-    if (!isp_dev->vic_regs) {
-        pr_err("*** CRITICAL ERROR: VIC registers not mapped! Cannot write ISP registers! ***\n");
-        pr_err("*** ISP hardware initialization FAILED - no register access! ***\n");
-        return -ENODEV;
+    /* CRITICAL FIX: Map ISP registers directly if VIC registers aren't available */
+    if (isp_dev->vic_regs) {
+        /* Use VIC base to calculate ISP base: ISP core at 0x13300000, VIC at 0x133e0000 */
+        isp_regs = isp_dev->vic_regs - 0xe0000;
+        pr_info("*** Using VIC-based ISP register access: vic_regs=%p, isp_regs=%p ***\n", 
+                isp_dev->vic_regs, isp_regs);
+    } else {
+        /* Direct ISP register mapping as fallback */
+        isp_regs = ioremap(0x13300000, 0x100000);  /* Map ISP core directly */
+        if (!isp_regs) {
+            pr_err("*** CRITICAL ERROR: Cannot map ISP registers directly! ***\n");
+            return -ENODEV;
+        }
+        pr_info("*** Using direct ISP register mapping: isp_regs=%p ***\n", isp_regs);
     }
     
     /* CRITICAL FIX: Safe sensor name access - avoid corrupted pointer dereference */
