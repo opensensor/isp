@@ -38,8 +38,8 @@
     }
     
     int32_t var_50_10 = 0xb;
-    void var_58_12;
-    tisp_event_push(&var_58_13);
+    void var_58_11;
+    tisp_event_push(&var_58_12);
     return 1;
 }
 

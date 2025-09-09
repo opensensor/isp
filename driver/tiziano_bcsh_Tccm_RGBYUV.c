@@ -24,7 +24,7 @@
         *((int32_t*)((char*)i + 4)) = $a0; // Fixed void pointer dereference
         i += 8;
         arg2 = &arg2[1];
-    } while (&var_58_5 != i);
+    } while (&var_58_4 != i);
     
     int32_t var_e8;
     int32_t* i_1 = &var_e8_1;
@@ -127,10 +127,10 @@
             $v0_16 = &$v0_16[2];
         } while ((uintptr_t)j != 0xc);
         
-        int32_t $t2_7 = var_58_6;
+        int32_t $t2_7 = var_58_5;
         int32_t var_12c;
         int32_t var_54;
-        int32_t $s6_3 = $t2_7 * var_130_2 * fix_point_mult2_32(0x10, var_54_2, var_12c_1);
+        int32_t $s6_3 = $t2_7 * var_130_2 * fix_point_mult2_32(0x10, var_54_1, var_12c_1);
         int32_t var_118_3;
         int32_t var_114_4;
         int32_t var_50_3;
@@ -143,21 +143,21 @@
         *i_3 = var_48_16 * var_100_1 * fix_point_mult2_32(0x10, var_44_8, var_fc_2) + $t7_5;
         int32_t var_128_2;
         int32_t var_124_6;
-        int32_t $t7_10 = $t2_7 * var_128_3 * fix_point_mult2_32(0x10, var_54_3, var_124_7);
+        int32_t $t7_10 = $t2_7 * var_128_3 * fix_point_mult2_32(0x10, var_54_2, var_124_7);
         int32_t var_110;
         int32_t var_10c;
         int32_t $t7_12 = var_50_5 * var_110_2 * fix_point_mult2_32(0x10, var_4c_3, var_10c_1) + $t7_10;
         int32_t var_f8_6;
         int32_t var_f4;
         i_3[1] = var_48_17 * var_f8_7 * fix_point_mult2_32(0x10, var_44_9, var_f4_2) + $t7_12;
-        int32_t var_120_3;
+        int32_t var_120_2;
         int32_t var_11c_5;
         int32_t var_108;
         int32_t var_104;
         int32_t $lo_4;
-        arg5 = HIGHD(COMBINE($hi, $t2_7 * var_120_4 * fix_point_mult2_32(0x10, var_54_4, var_11c_6))
+        arg5 = HIGHD(COMBINE($hi, $t2_7 * var_120_3 * fix_point_mult2_32(0x10, var_54_3, var_11c_6))
             + var_50_6 * var_108_1 * fix_point_mult2_32(0x10, var_4c_4, var_104_1));
-        $lo_4 = LOWD(COMBINE($hi, $t2_7 * var_120_5 * fix_point_mult2_32(0x10, var_54_5, var_11c_7))
+        $lo_4 = LOWD(COMBINE($hi, $t2_7 * var_120_4 * fix_point_mult2_32(0x10, var_54_4, var_11c_7))
             + var_50_7 * var_108_2 * fix_point_mult2_32(0x10, var_4c_5, var_104_2));
         i_3 = &i_3[3];
         int32_t var_f0;

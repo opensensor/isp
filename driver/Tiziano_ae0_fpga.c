@@ -54,11 +54,11 @@
     
     int32_t var_5c_3;
     int32_t* var_c8_3 = &var_5c_4;
-    int32_t var_58_9;
-    int32_t* var_cc_4 = &var_58_10;
+    int32_t var_58_8;
+    int32_t* var_cc_4 = &var_58_9;
     int32_t* var_d0_8 = &var_60_5;
     int32_t* var_d4_7 = &var_68_9;
-    int32_t* var_d8 = &var_54_8;
+    int32_t* var_d8 = &var_54_7;
     int32_t var_dc = $a0;
     int32_t var_e0_3 = $a1;
     char var_118_6[0x38];
@@ -141,18 +141,18 @@
         }
         
         int32_t $s5_1 = $v1_2 * $fp * $s6 * $v1_3;
-        var_54_9 = ($v1_4 + $s5_1) * var_54_10 / $s5_1;
+        var_54_8 = ($v1_4 + $s5_1) * var_54_9 / $s5_1;
         $v0_16 = var_5c_6;
     }
     
     int32_t var_7c = $t1_1;
     int32_t var_70_10 = $v0_16;
     int32_t var_84_3 = $a3_2;
-    int32_t var_74_3 = var_58_11;
+    int32_t var_74_3 = var_58_10;
     int32_t var_78_19 = $v1_1;
     int32_t var_80_6 = $v1;
     int32_t* var_88_7 = &var_68_10;
-    uint32_t var_8c_8 = var_54_11;
+    uint32_t var_8c_8 = var_54_10;
     
     for (int32_t i_2 = 0; (uintptr_t)i_2 < 0x40; i_2 += 1)
     {

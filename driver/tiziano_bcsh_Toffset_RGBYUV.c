@@ -65,9 +65,9 @@
     int32_t var_60_3;
     int32_t var_5c_1;
     var_30_6 = $s4 * var_60_4 * fix_point_mult2_32(0x10, var_5c_2, $s5_1);
-    int32_t var_58_7;
-    int32_t var_54_6;
-    var_30_7 += var_b8_11 * var_58_8 * fix_point_mult2_32(0x10, var_54_7, $s7_1);
+    int32_t var_58_6;
+    int32_t var_54_5;
+    var_30_7 += var_b8_11 * var_58_7 * fix_point_mult2_32(0x10, var_54_6, $s7_1);
     int32_t var_50_8;
     int32_t var_4c_6;
     arg1[1] = var_b0_20 * var_50_9 * fix_point_mult2_32(0x10, var_4c_7, $s6_1) + var_30_8;

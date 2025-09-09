@@ -24,6 +24,9 @@
 #include <stdbool.h>
 
 /* ELF and System Types - Prevent incomplete type errors */
+#ifndef ELF_TYPES_DEFINED
+#define ELF_TYPES_DEFINED
+
 struct Elf32_Ident {
     unsigned char ei_mag[4];     // Magic number
     unsigned char ei_class;      // File class
@@ -34,6 +37,7 @@ struct Elf32_Ident {
     unsigned char ei_pad[7];     // Padding
 };
 
+#ifndef ET_NONE
 enum e_type {
     ET_NONE = 0,    // No file type
     ET_REL = 1,     // Relocatable file
@@ -41,7 +45,9 @@ enum e_type {
     ET_DYN = 3,     // Shared object file
     ET_CORE = 4     // Core file
 };
+#endif
 
+#ifndef EM_NONE
 enum e_machine {
     EM_NONE = 0,     // No machine
     EM_M32 = 1,      // AT&T WE 32100
@@ -52,7 +58,9 @@ enum e_machine {
     EM_ARM = 40,     // ARM
     EM_X86_64 = 62   // AMD x86-64
 };
+#endif
 
+#ifndef PT_NULL
 enum p_type {
     PT_NULL = 0,     // Program header table entry unused
     PT_LOAD = 1,     // Loadable program segment
@@ -60,13 +68,17 @@ enum p_type {
     PT_INTERP = 3,   // Program interpreter
     PT_NOTE = 4      // Auxiliary information
 };
+#endif
 
+#ifndef PF_X
 enum p_flags {
     PF_X = 1,        // Execute
     PF_W = 2,        // Write
     PF_R = 4         // Read
 };
+#endif
 
+#ifndef SHT_NULL
 enum sh_type {
     SHT_NULL = 0,     // Section header table entry unused
     SHT_PROGBITS = 1, // Program data
@@ -74,12 +86,17 @@ enum sh_type {
     SHT_STRTAB = 3,   // String table
     SHT_NOBITS = 8    // Program space with no data (bss)
 };
+#endif
 
+#ifndef SHF_WRITE
 enum sh_flags {
     SHF_WRITE = 1,    // Writable
     SHF_ALLOC = 2,    // Occupies memory during execution
     SHF_EXECINSTR = 4 // Executable
 };
+#endif
+
+#endif /* ELF_TYPES_DEFINED */
 
 typedef uint32_t DWORD;
 typedef uint16_t WORD;
@@ -304,85 +321,85 @@ typedef void* va_list;
 char data_10004[] = { 0xc4, 0x2c, 0x42, 0x8c, 0xd0, 0xff, 0xbd, 0x27, 0x2b, 0x10, 0x82, 0x00, 0x28, 0x00, 0xb1, 0xaf, 0x2c, 0x00, 0xbf, 0xaf, 0x24, 0x00, 0xb0, 0xaf, 0x38, 0x00, 0xa6, 0xaf, 0x3c, 0x00, 0xa7, 0xaf, 0x14, 0x00, 0x40, 0x14 }; // offset: 0x10004
 
 // Data at address 0x10028
-char data_10028[] = 0x00a2003800008825ULL; // offset: 0x10028
+char data_10028[] = { 0xa2, 0x00, 0x38, 0x00, 0x00, 0x88, 0x25 }; // offset: 0x10028
 
 // Data at address 0x7a170
-uint64_t __ksymtab_isp_printf = &isp_printf;
+extern void* __ksymtab_isp_printf; // Fixed function pointer assignment
 
 // Data at address 0x7a178
-uint64_t __ksymtab_private_capable = &private_capable;
+extern void* __ksymtab_private_capable; // Fixed function pointer assignment
 
 // Data at address 0x7a180
-uint64_t __ksymtab_private_clk_disable = &private_clk_disable;
+extern void* __ksymtab_private_clk_disable; // Fixed function pointer assignment
 
 // Data at address 0x7a188
-uint64_t __ksymtab_private_clk_enable = &private_clk_enable;
+extern void* __ksymtab_private_clk_enable; // Fixed function pointer assignment
 
 // Data at address 0x7a190
-uint64_t __ksymtab_private_clk_put = &private_clk_put;
+extern void* __ksymtab_private_clk_put; // Fixed function pointer assignment
 
 // Data at address 0x7a198
-uint64_t __ksymtab_private_clk_set_rate = &private_clk_set_rate;
+extern void* __ksymtab_private_clk_set_rate; // Fixed function pointer assignment
 
 // Data at address 0x7a1a0
-uint64_t __ksymtab_private_driver_get_interface = &private_driver_get_interface;
+extern void* __ksymtab_private_driver_get_interface; // Fixed function pointer assignment
 
 // Data at address 0x7a1a8
-uint64_t __ksymtab_private_gpio_direction_output = &private_gpio_direction_output;
+extern void* __ksymtab_private_gpio_direction_output; // Fixed function pointer assignment
 
 // Data at address 0x7a1b0
-uint64_t __ksymtab_private_gpio_free = &private_gpio_free;
+extern void* __ksymtab_private_gpio_free; // Fixed function pointer assignment
 
 // Data at address 0x7a1b8
-uint64_t __ksymtab_private_gpio_request = &private_gpio_request;
+extern void* __ksymtab_private_gpio_request; // Fixed function pointer assignment
 
 // Data at address 0x7a1c0
-uint64_t __ksymtab_private_i2c_add_driver = &private_i2c_add_driver;
+extern void* __ksymtab_private_i2c_add_driver; // Fixed function pointer assignment
 
 // Data at address 0x7a1c8
-uint64_t __ksymtab_private_i2c_del_driver = &private_i2c_del_driver;
+extern void* __ksymtab_private_i2c_del_driver; // Fixed function pointer assignment
 
 // Data at address 0x7a1d0
-uint64_t __ksymtab_private_i2c_get_clientdata = &private_i2c_get_clientdata;
+extern void* __ksymtab_private_i2c_get_clientdata; // Fixed function pointer assignment
 
 // Data at address 0x7a1d8
-uint64_t __ksymtab_private_i2c_set_clientdata = &private_i2c_set_clientdata;
+extern void* __ksymtab_private_i2c_set_clientdata; // Fixed function pointer assignment
 
 // Data at address 0x7a1e0
-uint64_t __ksymtab_private_i2c_transfer = &private_i2c_transfer;
+extern void* __ksymtab_private_i2c_transfer; // Fixed function pointer assignment
 
 // Data at address 0x7a1e8
-uint64_t __ksymtab_private_jzgpio_set_func = &private_jzgpio_set_func;
+extern void* __ksymtab_private_jzgpio_set_func; // Fixed function pointer assignment
 
 // Data at address 0x7a1f0
-uint64_t __ksymtab_private_log2_fixed_to_fixed = &private_log2_fixed_to_fixed;
+extern void* __ksymtab_private_log2_fixed_to_fixed; // Fixed function pointer assignment
 
 // Data at address 0x7a1f8
-uint64_t __ksymtab_private_log2_int_to_fixed = &private_log2_int_to_fixed;
+extern void* __ksymtab_private_log2_int_to_fixed; // Fixed function pointer assignment
 
 // Data at address 0x7a200
-uint64_t __ksymtab_private_math_exp2 = &private_math_exp2;
+extern void* __ksymtab_private_math_exp2; // Fixed function pointer assignment
 
 // Data at address 0x7a208
-uint64_t __ksymtab_private_msleep = &private_msleep;
+extern void* __ksymtab_private_msleep; // Fixed function pointer assignment
 
 // Data at address 0x7a210
-uint64_t __ksymtab_tisp_log2_fixed_to_fixed = &tisp_log2_fixed_to_fixed;
+extern void* __ksymtab_tisp_log2_fixed_to_fixed; // Fixed function pointer assignment
 
 // Data at address 0x7a218
-uint64_t __ksymtab_tisp_math_exp2 = &tisp_math_exp2;
+extern void* __ksymtab_tisp_math_exp2; // Fixed function pointer assignment
 
 // Data at address 0x7a220
-uint64_t __ksymtab_tx_isp_exit = &tx_isp_exit;
+extern void* __ksymtab_tx_isp_exit; // Fixed function pointer assignment
 
 // Data at address 0x7a228
-uint64_t __ksymtab_tx_isp_init = &tx_isp_init;
+extern void* __ksymtab_tx_isp_init; // Fixed function pointer assignment
 
 // Data at address 0x7a230
-uint64_t __ksymtab_tx_isp_subdev_deinit = &tx_isp_subdev_deinit;
+extern void* __ksymtab_tx_isp_subdev_deinit; // Fixed function pointer assignment
 
 // Data at address 0x7a238
-uint64_t __ksymtab_tx_isp_subdev_init = &tx_isp_subdev_init;
+extern void* __ksymtab_tx_isp_subdev_init; // Fixed function pointer assignment
 
 // Data at address 0x7a280
 char const __param_str_isp_memopt[] = "isp_memopt"; // offset: 0x7a280
@@ -907,7 +924,7 @@ char const __func___31165[] = "tisp_clm_param_array_get"; // offset: 0x7d04c
 uint32_t jump_table_7d070[] = (void*)0x520dc; // offset: 0x7d070
 
 // Data at address 0x7d090
-wchar32 const data_7d090[] = "8H8H]H8H8"; // offset: 0x7d090
+wchar_t const data_7d090[] = L"8H8H]H8H8"; // offset: 0x7d090
 
 // Data at address 0x7d210
 uint32_t jump_table_7d210[] = (void*)0x56e88; // offset: 0x7d210
@@ -1432,7 +1449,7 @@ char const _LC92[] = "ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\
 char const data_826a0[] = "isp-m0"; // offset: 0x826a0
 
 // Data at address 0x82c40
-char const (*) __param_isp_memopt[] = (void*)0x7a280 /* pointer to data */; // offset: 0x82c40
+char const* __param_isp_memopt = (void*)0x7a280 /* pointer to data */;
 
 // Data at address 0x82c44
 void* data_82c44 = (void*)0xda618;
@@ -1441,7 +1458,7 @@ void* data_82c44 = (void*)0xda618;
 void* data_82c4c = (void*)0xb2ccc /* pointer to data */;
 
 // Data at address 0x82c50
-char const (*) __param_isp_day_night_switch_drop_frame_num[] = (void*)0x7a28c /* pointer to data */; // offset: 0x82c50
+char const* __param_isp_day_night_switch_drop_frame_num = (void*)0x7a28c /* pointer to data */;
 
 // Data at address 0x82c54
 void* data_82c54 = (void*)0xda618;
@@ -1450,7 +1467,7 @@ void* data_82c54 = (void*)0xda618;
 void* data_82c5c = (void*)0xb2c10 /* pointer to data */;
 
 // Data at address 0x82c60
-char const (*) __param_isp_ch1_dequeue_delay_time[] = (void*)0x7a2b0 /* pointer to data */; // offset: 0x82c60
+char const* __param_isp_ch1_dequeue_delay_time = (void*)0x7a2b0 /* pointer to data */;
 
 // Data at address 0x82c64
 void* data_82c64 = (void*)0xda618;
@@ -1459,7 +1476,7 @@ void* data_82c64 = (void*)0xda618;
 void* data_82c6c = (void*)0xda4a8 /* pointer to data */;
 
 // Data at address 0x82c70
-char const (*) __param_isp_ch0_pre_dequeue_valid_lines[] = (void*)0x7a2cc /* pointer to data */; // offset: 0x82c70
+char const* __param_isp_ch0_pre_dequeue_valid_lines = (void*)0x7a2cc /* pointer to data */;
 
 // Data at address 0x82c74
 void* data_82c74 = (void*)0xda618;
@@ -1468,7 +1485,7 @@ void* data_82c74 = (void*)0xda618;
 void* data_82c7c = (void*)0x83848 /* pointer to data */;
 
 // Data at address 0x82c80
-char const (*) __param_isp_ch0_pre_dequeue_interrupt_process[] = (void*)0x7a2ec /* pointer to data */; // offset: 0x82c80
+char const* __param_isp_ch0_pre_dequeue_interrupt_process = (void*)0x7a2ec /* pointer to data */;
 
 // Data at address 0x82c84
 void* data_82c84 = (void*)0xda618;
@@ -1477,7 +1494,7 @@ void* data_82c84 = (void*)0xda618;
 void* data_82c8c = (void*)0xb2c14 /* pointer to data */;
 
 // Data at address 0x82c90
-char const (*) __param_isp_ch0_pre_dequeue_time[] = (void*)0x7a314 /* pointer to data */; // offset: 0x82c90
+char const* __param_isp_ch0_pre_dequeue_time = (void*)0x7a314 /* pointer to data */;
 
 // Data at address 0x82c94
 void* data_82c94 = (void*)0xda618;
@@ -1486,7 +1503,7 @@ void* data_82c94 = (void*)0xda618;
 void* data_82c9c = (void*)0xda550 /* pointer to data */;
 
 // Data at address 0x82ca0
-char const (*) __param_isp_clk[] = (void*)0x7a330 /* pointer to data */; // offset: 0x82ca0
+char const* __param_isp_clk = (void*)0x7a330 /* pointer to data */;
 
 // Data at address 0x82ca4
 void* data_82ca4 = (void*)0xda618;
@@ -1495,7 +1512,7 @@ void* data_82ca4 = (void*)0xda618;
 void* data_82cac = (void*)0x82cc0 /* pointer to data */;
 
 // Data at address 0x82cb0
-char const (*) __param_print_level[] = (void*)0x7a338 /* pointer to data */; // offset: 0x82cb0
+char const* __param_print_level = (void*)0x7a338 /* pointer to data */;
 
 // Data at address 0x82cb4
 void* data_82cb4 = (void*)0xda618;
@@ -1510,7 +1527,7 @@ uint32_t isp_clk = 0x05f5e100U;
 uint32_t print_level = 0x1;
 
 // Data at address 0x82cd0
-char const (*) tx_isp_platform_device[] = (void*)0x7df88 /* pointer to data */; // offset: 0x82cd0
+char const* tx_isp_platform_device = (void*)0x7df88 /* pointer to data */;
 
 // Data at address 0x82d28
 void* data_82d28 = (void*)0x82da8;
@@ -1540,7 +1557,7 @@ void* data_82dc0 = (void*)0x83228 /* pointer to data */;
 void* data_82dc4 = (void*)0x82dc8 /* pointer to data */;
 
 // Data at address 0x82dc8
-char const (*) tx_isp_fs_platform_device[] = (void*)0x7df90 /* pointer to data */; // offset: 0x82dc8
+char const* tx_isp_fs_platform_device = (void*)0x7df90 /* pointer to data */;
 
 // Data at address 0x82e20
 void* data_82e20 = (void*)0x82ea0;
@@ -1558,7 +1575,7 @@ void* data_82eb0 = (void*)0x82eb4 /* pointer to data */;
 uint48_t tx_isp_fs_pads = 0x0000100210021002ULL;
 
 // Data at address 0x82ec0
-char const (*) tx_isp_core_platform_device[] = (void*)0x7df98 /* pointer to data */; // offset: 0x82ec0
+char const* tx_isp_core_platform_device = (void*)0x7df98 /* pointer to data */;
 
 // Data at address 0x82f18
 void* data_82f18 = (void*)0x82f98;
@@ -1582,19 +1599,19 @@ void* data_82fa8 = (void*)0x82fac /* pointer to data */;
 uint64_t tx_isp_core_pads = 0x0000300230023002ULL;
 
 // Data at address 0x82fb4
-char const (*) isp_core_clk_info[] = (void*)0x7dfa0 /* pointer to data */; // offset: 0x82fb4
+char const* isp_core_clk_info = (void*)0x7dfa0 /* pointer to data */;
 
 // Data at address 0x82fbc
 void* data_82fbc = (void*)0x7dfa8;
 
 // Data at address 0x82fcc
-char const (*) data_82fcc[] = (void*)0x7dfac /* pointer to data */; // offset: 0x82fcc
+char const* data_82fcc = (void*)0x7dfac /* pointer to data */;
 
 // Data at address 0x82fe8
-char const (*) data_82fe8[] = (void*)0x7dfb8 /* pointer to data */; // offset: 0x82fe8
+char const* data_82fe8 = (void*)0x7dfb8 /* pointer to data */;
 
 // Data at address 0x83000
-char const (*) tx_isp_vic_platform_device[] = (void*)0x7dfc4 /* pointer to data */; // offset: 0x83000
+char const* tx_isp_vic_platform_device = (void*)0x7dfc4 /* pointer to data */;
 
 // Data at address 0x83058
 void* data_83058 = (void*)0x830d8;
@@ -1609,13 +1626,13 @@ void* data_830c0 = &tx_isp_release_device;
 void* data_830cc = (void*)0x830e4;
 
 // Data at address 0x830ec
-char const (*) data_830ec[] = (void*)0x7dfac /* pointer to data */; // offset: 0x830ec
+char const* data_830ec = (void*)0x7dfac /* pointer to data */;
 
 // Data at address 0x83108
-char const (*) data_83108[] = (void*)0x7dfb8 /* pointer to data */; // offset: 0x83108
+char const* data_83108 = (void*)0x7dfb8 /* pointer to data */;
 
 // Data at address 0x83120
-char const (*) tx_isp_csi_platform_device[] = (void*)0x7dfcc /* pointer to data */; // offset: 0x83120
+char const* tx_isp_csi_platform_device = (void*)0x7dfcc /* pointer to data */;
 
 // Data at address 0x83178
 void* data_83178 = (void*)0x831f8;
@@ -1636,10 +1653,10 @@ void* data_83200 = (void*)0x83204 /* pointer to data */;
 uint64_t isp_csi_clk_info = (void*)0x7dfd4;
 
 // Data at address 0x83214
-char const (*) data_83214[] = (void*)0x7dfac /* pointer to data */; // offset: 0x83214
+char const* data_83214 = (void*)0x7dfac /* pointer to data */;
 
 // Data at address 0x83228
-char const (*) tx_isp_vin_platform_device[] = (void*)0x7dfd8 /* pointer to data */; // offset: 0x83228
+char const* tx_isp_vin_platform_device = (void*)0x7dfd8 /* pointer to data */;
 
 // Data at address 0x83280
 void* data_83280 = (void*)0x83300;
@@ -1660,7 +1677,7 @@ void* tx_isp_vic_driver = &tx_isp_vic_probe;
 void* data_83324 = &tx_isp_vic_remove;
 
 // Data at address 0x83334
-char const (*) data_83334[] = (void*)0x7eae8 /* pointer to data */; // offset: 0x83334
+char const* data_83334 = (void*)0x7eae8 /* pointer to data */;
 
 // Data at address 0x8333c
 void* data_8333c = (void*)0xb27e0;
@@ -1693,7 +1710,7 @@ void* data_833ec = (void*)0x833fc;
 void* data_833f0 = (void*)0x833f4 /* pointer to data */;
 
 // Data at address 0x833f4
-uint64_t vic_subdev_internal_ops = &tx_isp_vic_activate_subdev;
+extern void* vic_subdev_internal_ops; // Fixed function pointer assignment
 
 // Data at address 0x83400
 void* data_83400 = &vic_sensor_ops_sync_sensor_attr;
@@ -1720,7 +1737,7 @@ void* tx_isp_vin_driver = &tx_isp_vin_probe;
 void* data_83444 = &tx_isp_vin_remove;
 
 // Data at address 0x83454
-char const (*) data_83454[] = (void*)0x7ee0c /* pointer to data */; // offset: 0x83454
+char const* data_83454 = (void*)0x7ee0c /* pointer to data */;
 
 // Data at address 0x8345c
 void* data_8345c = (void*)0xb27e0;
@@ -1771,7 +1788,7 @@ void* data_83534 = &tx_isp_vin_reset;
 void* data_83548 = &vic_core_ops_ioctl;
 
 // Data at address 0x83554
-uint64_t vin_subdev_internal_ops = &tx_isp_vin_activate_subdev;
+extern void* vin_subdev_internal_ops; // Fixed function pointer assignment
 
 // Data at address 0x83560
 void* tx_isp_csi_driver = &tx_isp_csi_probe;
@@ -1780,7 +1797,7 @@ void* tx_isp_csi_driver = &tx_isp_csi_probe;
 void* data_83564 = &tx_isp_csi_remove;
 
 // Data at address 0x83574
-char const (*) data_83574[] = (void*)0x7f144 /* pointer to data */; // offset: 0x83574
+char const* data_83574 = (void*)0x7f144 /* pointer to data */;
 
 // Data at address 0x8357c
 void* data_8357c = (void*)0xb27e0;
@@ -1822,7 +1839,7 @@ void* csi_video_ops = &csi_video_s_stream;
 void* data_83650 = &csi_core_ops_init;
 
 // Data at address 0x83674
-uint64_t csi_subdev_internal_ops = &tx_isp_csi_activate_subdev;
+extern void* csi_subdev_internal_ops; // Fixed function pointer assignment
 
 // Data at address 0x836a0
 void* data_836a0 = &isp_core_tunning_unlocked_ioctl;
@@ -1843,7 +1860,7 @@ void* tx_isp_fs_driver = &tx_isp_fs_probe;
 void* data_83704 = &tx_isp_fs_remove;
 
 // Data at address 0x83714
-char const (*) data_83714[] = (void*)0x800d4 /* pointer to data */; // offset: 0x83714
+char const* data_83714 = (void*)0x800d4 /* pointer to data */;
 
 // Data at address 0x8371c
 void* data_8371c = (void*)0xb27e0;
@@ -1864,7 +1881,7 @@ void* data_83788 = &private_single_release;
 void* data_837d0 = (void*)0x837d4 /* pointer to data */;
 
 // Data at address 0x837d4
-uint64_t fs_internal_ops = &fs_activate_module;
+extern void* fs_internal_ops; // Fixed function pointer assignment
 
 // Data at address 0x837fc
 void* data_837fc = &frame_channel_unlocked_ioctl;
@@ -1885,7 +1902,7 @@ void* tx_isp_driver = &tx_isp_probe;
 void* data_83854 = &tx_isp_remove;
 
 // Data at address 0x83864
-char const (*) data_83864[] = (void*)0x805c4 /* pointer to data */; // offset: 0x83864
+char const* data_83864 = (void*)0x805c4 /* pointer to data */;
 
 // Data at address 0x8386c
 void* data_8386c = (void*)0xb27e0;
@@ -1900,28 +1917,28 @@ void* data_838d0 = &tx_isp_open;
 void* data_838d8 = &tx_isp_release;
 
 // Data at address 0x83910
-char const (*) link2[] = (void*)0x80678 /* pointer to data */; // offset: 0x83910
+char const* link2 = (void*)0x80678 /* pointer to data */;
 
 // Data at address 0x83918
-char const (*) data_83918[] = (void*)0x80680 /* pointer to data */; // offset: 0x83918
+char const* data_83918 = (void*)0x80680 /* pointer to data */;
 
 // Data at address 0x83924
-char const (*) link1[] = (void*)0x80678 /* pointer to data */; // offset: 0x83924
+char const* link1 = (void*)0x80678 /* pointer to data */;
 
 // Data at address 0x8392c
-char const (*) data_8392c[] = (void*)0x80680 /* pointer to data */; // offset: 0x8392c
+char const* data_8392c = (void*)0x80680 /* pointer to data */;
 
 // Data at address 0x83938
-char const (*) data_83938[] = (void*)0x80678 /* pointer to data */; // offset: 0x83938
+char const* data_83938 = (void*)0x80678 /* pointer to data */;
 
 // Data at address 0x83940
-char const (*) data_83940[] = (void*)0x80680 /* pointer to data */; // offset: 0x83940
+char const* data_83940 = (void*)0x80680 /* pointer to data */;
 
 // Data at address 0x8394c
-char const (*) data_8394c[] = (void*)0x80678 /* pointer to data */; // offset: 0x8394c
+char const* data_8394c = (void*)0x80678 /* pointer to data */;
 
 // Data at address 0x83954
-char const (*) data_83954[] = (void*)0x80680 /* pointer to data */; // offset: 0x83954
+char const* data_83954 = (void*)0x80680 /* pointer to data */;
 
 // Data at address 0x83960
 char tparams[] = "TISP_PARAM_TOP_BYPASS"; // offset: 0x83960
@@ -1954,7 +1971,7 @@ void* data_83b5c = (void*)0x94cf0;
 void* data_83b9c = (void*)0x94d18;
 
 // Data at address 0x83bdc
-wchar32 (*) data_83bdc[] = (void*)0x94d40 /* pointer to data */; // offset: 0x83bdc
+wchar_t* data_83bdc = (void*)0x94d40 /* pointer to data */;
 
 // Data at address 0x83c1c
 void* data_83c1c = (void*)0x94d68;
@@ -1990,16 +2007,16 @@ void* data_83e5c = (void*)0x958f4;
 void* data_83e9c = (void*)0x9590c;
 
 // Data at address 0x83edc
-wchar32 (*) data_83edc[] = (void*)0x95920 /* pointer to data */; // offset: 0x83edc
+wchar_t* data_83edc = (void*)0x95920 /* pointer to data */;
 
 // Data at address 0x83f1c
-wchar32 (*) data_83f1c[] = (void*)0x9595c; // offset: 0x83f1c
+wchar_t* data_83f1c = (void*)0x9595c;
 
 // Data at address 0x83f5c
 void* data_83f5c = (void*)0x95974;
 
 // Data at address 0x83f9c
-wchar32 (*) data_83f9c[] = (void*)0x9599c /* pointer to data */; // offset: 0x83f9c
+wchar_t* data_83f9c = (void*)0x9599c /* pointer to data */;
 
 // Data at address 0x83fdc
 void* data_83fdc = (void*)0x959c4;
@@ -2014,7 +2031,7 @@ void* data_8405c = (void*)0x95a14;
 void* data_8409c = (void*)0x95a3c;
 
 // Data at address 0x840dc
-wchar32 (*) data_840dc[] = (void*)0x95a64; // offset: 0x840dc
+wchar_t* data_840dc = (void*)0x95a64;
 
 // Data at address 0x8411c
 void* data_8411c = (void*)0x95a8c;
@@ -2122,13 +2139,13 @@ void* data_8495c = (void*)0x97598;
 void* data_8499c = (void*)0x975a0;
 
 // Data at address 0x849dc
-wchar32 (*) data_849dc[] = (void*)0x975a8 /* pointer to data */; // offset: 0x849dc
+wchar_t* data_849dc = (void*)0x975a8 /* pointer to data */;
 
 // Data at address 0x84a1c
-wchar32 (*) data_84a1c[] = (void*)0x975cc /* pointer to data */; // offset: 0x84a1c
+wchar_t* data_84a1c = (void*)0x975cc /* pointer to data */;
 
 // Data at address 0x84a5c
-wchar32 (*) data_84a5c[] = (void*)0x975f0 /* pointer to data */; // offset: 0x84a5c
+wchar_t* data_84a5c = (void*)0x975f0 /* pointer to data */;
 
 // Data at address 0x84a9c
 void* data_84a9c = (void*)0x97614 /* pointer to data */;
@@ -2227,28 +2244,28 @@ void* data_8521c = (void*)0x9dce4;
 void* data_8525c = (void*)0x9dd04;
 
 // Data at address 0x8529c
-wchar32 (*) data_8529c[] = (void*)0x9dd44 /* pointer to data */; // offset: 0x8529c
+wchar_t* data_8529c = (void*)0x9dd44 /* pointer to data */;
 
 // Data at address 0x852dc
-wchar32 (*) data_852dc[] = (void*)0x9dd9c /* pointer to data */; // offset: 0x852dc
+wchar_t* data_852dc = (void*)0x9dd9c /* pointer to data */;
 
 // Data at address 0x8531c
-wchar32 (*) data_8531c[] = (void*)0x9ddf4 /* pointer to data */; // offset: 0x8531c
+wchar_t* data_8531c = (void*)0x9ddf4 /* pointer to data */;
 
 // Data at address 0x8535c
-wchar32 (*) data_8535c[] = (void*)0x9de4c /* pointer to data */; // offset: 0x8535c
+wchar_t* data_8535c = (void*)0x9de4c /* pointer to data */;
 
 // Data at address 0x8539c
 void* data_8539c = (void*)0x9dea4;
 
 // Data at address 0x853dc
-wchar32 (*) data_853dc[] = (void*)0x9dea8 /* pointer to data */; // offset: 0x853dc
+wchar_t* data_853dc = (void*)0x9dea8 /* pointer to data */;
 
 // Data at address 0x8541c
-wchar32 (*) data_8541c[] = (void*)0x9decc /* pointer to data */; // offset: 0x8541c
+wchar_t* data_8541c = (void*)0x9decc /* pointer to data */;
 
 // Data at address 0x8545c
-wchar32 (*) data_8545c[] = (void*)0x9def0 /* pointer to data */; // offset: 0x8545c
+wchar_t* data_8545c = (void*)0x9def0 /* pointer to data */;
 
 // Data at address 0x8549c
 void* data_8549c = (void*)0x9df14 /* pointer to data */;
@@ -2257,7 +2274,7 @@ void* data_8549c = (void*)0x9df14 /* pointer to data */;
 void* data_854dc = (void*)0x9df38;
 
 // Data at address 0x8551c
-wchar32 (*) data_8551c[] = (void*)0x9df5c; // offset: 0x8551c
+wchar_t* data_8551c = (void*)0x9df5c;
 
 // Data at address 0x8555c
 void* data_8555c = (void*)0x9df80;
@@ -2269,7 +2286,7 @@ void* data_8559c = (void*)0x9dfa4;
 void* data_855dc = (void*)0x9dfc8;
 
 // Data at address 0x8561c
-wchar32 (*) data_8561c[] = (void*)0x9dfec; // offset: 0x8561c
+wchar_t* data_8561c = (void*)0x9dfec;
 
 // Data at address 0x8565c
 void* data_8565c = (void*)0x9dffc;
@@ -2281,10 +2298,10 @@ void* data_8569c = (void*)0x9e020;
 void* data_856dc = (void*)0x9e044;
 
 // Data at address 0x8571c
-wchar32 (*) data_8571c[] = (void*)0x9e068 /* pointer to data */; // offset: 0x8571c
+wchar_t* data_8571c = (void*)0x9e068 /* pointer to data */;
 
 // Data at address 0x8575c
-wchar32 (*) data_8575c[] = (void*)0x9e08c /* pointer to data */; // offset: 0x8575c
+wchar_t* data_8575c = (void*)0x9e08c /* pointer to data */;
 
 // Data at address 0x8579c
 void* data_8579c = (void*)0x9e09c;
@@ -2293,10 +2310,10 @@ void* data_8579c = (void*)0x9e09c;
 void* data_857dc = (void*)0x9e0c0;
 
 // Data at address 0x8581c
-wchar32 (*) data_8581c[] = (void*)0x9e0d0 /* pointer to data */; // offset: 0x8581c
+wchar_t* data_8581c = (void*)0x9e0d0 /* pointer to data */;
 
 // Data at address 0x8585c
-wchar32 (*) data_8585c[] = (void*)0x9e0f4 /* pointer to data */; // offset: 0x8585c
+wchar_t* data_8585c = (void*)0x9e0f4 /* pointer to data */;
 
 // Data at address 0x8589c
 void* data_8589c = (void*)0x9e118;
@@ -2314,16 +2331,16 @@ void* data_8595c = (void*)0x9e184;
 void* data_8599c = (void*)0x9e1a8;
 
 // Data at address 0x859dc
-wchar32 (*) data_859dc[] = (void*)0x9e1cc /* pointer to data */; // offset: 0x859dc
+wchar_t* data_859dc = (void*)0x9e1cc /* pointer to data */;
 
 // Data at address 0x85a1c
-wchar32 (*) data_85a1c[] = (void*)0x9e1f0; // offset: 0x85a1c
+wchar_t* data_85a1c = (void*)0x9e1f0;
 
 // Data at address 0x85a5c
-wchar32 (*) data_85a5c[] = (void*)0x9e21c /* pointer to data */; // offset: 0x85a5c
+wchar_t* data_85a5c = (void*)0x9e21c /* pointer to data */;
 
 // Data at address 0x85a9c
-wchar32 (*) data_85a9c[] = (void*)0x9e240 /* pointer to data */; // offset: 0x85a9c
+wchar_t* data_85a9c = (void*)0x9e240 /* pointer to data */;
 
 // Data at address 0x85adc
 void* data_85adc = (void*)0x9e264;
@@ -2341,13 +2358,13 @@ void* data_85b9c = (void*)0x9e2d0;
 void* data_85bdc = (void*)0x9e2f4;
 
 // Data at address 0x85c1c
-wchar32 (*) data_85c1c[] = (void*)0x9e318 /* pointer to data */; // offset: 0x85c1c
+wchar_t* data_85c1c = (void*)0x9e318 /* pointer to data */;
 
 // Data at address 0x85c5c
-wchar32 (*) data_85c5c[] = (void*)0x9e33c /* pointer to data */; // offset: 0x85c5c
+wchar_t* data_85c5c = (void*)0x9e33c /* pointer to data */;
 
 // Data at address 0x85c9c
-wchar32 (*) data_85c9c[] = (void*)0x9e360; // offset: 0x85c9c
+wchar_t* data_85c9c = (void*)0x9e360;
 
 // Data at address 0x85cdc
 void* data_85cdc = (void*)0x9e394;
@@ -2359,7 +2376,7 @@ void* data_85d1c = (void*)0x9e3bc;
 void* data_85d5c = (void*)0x9e3e0;
 
 // Data at address 0x85d9c
-wchar32 (*) data_85d9c[] = (void*)0x9e3e8 /* pointer to data */; // offset: 0x85d9c
+wchar_t* data_85d9c = (void*)0x9e3e8 /* pointer to data */;
 
 // Data at address 0x85ddc
 void* data_85ddc = (void*)0x9e40c;
@@ -2371,10 +2388,10 @@ void* data_85e1c = (void*)0x9e430;
 void* data_85e5c = (void*)0x9e438;
 
 // Data at address 0x85e9c
-wchar32 (*) data_85e9c[] = (void*)0x9e45c /* pointer to data */; // offset: 0x85e9c
+wchar_t* data_85e9c = (void*)0x9e45c /* pointer to data */;
 
 // Data at address 0x85edc
-wchar32 (*) data_85edc[] = (void*)0x9e480 /* pointer to data */; // offset: 0x85edc
+wchar_t* data_85edc = (void*)0x9e480 /* pointer to data */;
 
 // Data at address 0x85f1c
 void* data_85f1c = (void*)0x9e4a4;
@@ -2404,7 +2421,7 @@ void* data_860dc = (void*)0x9e578;
 void* data_8611c = (void*)0x9e59c;
 
 // Data at address 0x8615c
-wchar32 (*) data_8615c[] = (void*)0x9e5c0; // offset: 0x8615c
+wchar_t* data_8615c = (void*)0x9e5c0;
 
 // Data at address 0x8619c
 void* data_8619c = (void*)0x9e5e4;
@@ -2416,16 +2433,16 @@ void* data_861dc = (void*)0x9e608;
 void* data_8621c = (void*)0x9e610;
 
 // Data at address 0x8625c
-wchar32 (*) data_8625c[] = (void*)0x9e634 /* pointer to data */; // offset: 0x8625c
+wchar_t* data_8625c = (void*)0x9e634 /* pointer to data */;
 
 // Data at address 0x8629c
-wchar32 (*) data_8629c[] = (void*)0x9e658 /* pointer to data */; // offset: 0x8629c
+wchar_t* data_8629c = (void*)0x9e658 /* pointer to data */;
 
 // Data at address 0x862dc
-wchar32 (*) data_862dc[] = (void*)0x9e67c /* pointer to data */; // offset: 0x862dc
+wchar_t* data_862dc = (void*)0x9e67c /* pointer to data */;
 
 // Data at address 0x8631c
-wchar32 (*) data_8631c[] = (void*)0x9e6a0 /* pointer to data */; // offset: 0x8631c
+wchar_t* data_8631c = (void*)0x9e6a0 /* pointer to data */;
 
 // Data at address 0x8635c
 void* data_8635c = (void*)0x9e6c4;
@@ -2491,37 +2508,37 @@ void* data_8681c = (void*)0x9e8f0;
 void* data_8685c = (void*)0x9e914;
 
 // Data at address 0x8689c
-wchar32 (*) data_8689c[] = (void*)0x9e938; // offset: 0x8689c
+wchar_t* data_8689c = (void*)0x9e938;
 
 // Data at address 0x868dc
-wchar32 (*) data_868dc[] = (void*)0x9e95c /* pointer to data */; // offset: 0x868dc
+wchar_t* data_868dc = (void*)0x9e95c /* pointer to data */;
 
 // Data at address 0x8691c
-wchar32 (*) data_8691c[] = (void*)0x9e980 /* pointer to data */; // offset: 0x8691c
+wchar_t* data_8691c = (void*)0x9e980 /* pointer to data */;
 
 // Data at address 0x8695c
-wchar32 (*) data_8695c[] = (void*)0x9e9a4 /* pointer to data */; // offset: 0x8695c
+wchar_t* data_8695c = (void*)0x9e9a4 /* pointer to data */;
 
 // Data at address 0x8699c
 void* data_8699c = (void*)0x9e9b4;
 
 // Data at address 0x869dc
-wchar32 (*) data_869dc[] = (void*)0x9e9d8 /* pointer to data */; // offset: 0x869dc
+wchar_t* data_869dc = (void*)0x9e9d8 /* pointer to data */;
 
 // Data at address 0x86a1c
-wchar32 (*) data_86a1c[] = (void*)0x9e9fc; // offset: 0x86a1c
+wchar_t* data_86a1c = (void*)0x9e9fc;
 
 // Data at address 0x86a5c
-wchar32 (*) data_86a5c[] = (void*)0x9ea20 /* pointer to data */; // offset: 0x86a5c
+wchar_t* data_86a5c = (void*)0x9ea20 /* pointer to data */;
 
 // Data at address 0x86a9c
-wchar32 (*) data_86a9c[] = (void*)0x9ea44; // offset: 0x86a9c
+wchar_t* data_86a9c = (void*)0x9ea44;
 
 // Data at address 0x86adc
-wchar32 (*) data_86adc[] = (void*)0x9ea68 /* pointer to data */; // offset: 0x86adc
+wchar_t* data_86adc = (void*)0x9ea68 /* pointer to data */;
 
 // Data at address 0x86b1c
-wchar32 (*) data_86b1c[] = (void*)0x9ea8c /* pointer to data */; // offset: 0x86b1c
+wchar_t* data_86b1c = (void*)0x9ea8c /* pointer to data */;
 
 // Data at address 0x86b5c
 void* data_86b5c = (void*)0x9ea94;
@@ -2536,37 +2553,37 @@ void* data_86bdc = (void*)0x9eae8;
 void* data_86c1c = (void*)0x9eb0c;
 
 // Data at address 0x86c5c
-wchar32 (*) data_86c5c[] = (void*)0x9eb4c /* pointer to data */; // offset: 0x86c5c
+wchar_t* data_86c5c = (void*)0x9eb4c /* pointer to data */;
 
 // Data at address 0x86c9c
-wchar32 (*) data_86c9c[] = (void*)0x9eb8c /* pointer to data */; // offset: 0x86c9c
+wchar_t* data_86c9c = (void*)0x9eb8c /* pointer to data */;
 
 // Data at address 0x86cdc
-wchar32 (*) data_86cdc[] = (void*)0x9ebcc; // offset: 0x86cdc
+wchar_t* data_86cdc = (void*)0x9ebcc;
 
 // Data at address 0x86d1c
-wchar32 (*) data_86d1c[] = (void*)0x9ebf0; // offset: 0x86d1c
+wchar_t* data_86d1c = (void*)0x9ebf0;
 
 // Data at address 0x86d5c
 void* data_86d5c = (void*)0x9ec14;
 
 // Data at address 0x86d9c
-wchar32 (*) data_86d9c[] = (void*)0x9ec38; // offset: 0x86d9c
+wchar_t* data_86d9c = (void*)0x9ec38;
 
 // Data at address 0x86ddc
-wchar32 (*) data_86ddc[] = (void*)0x9ec5c; // offset: 0x86ddc
+wchar_t* data_86ddc = (void*)0x9ec5c;
 
 // Data at address 0x86e1c
-wchar32 (*) data_86e1c[] = (void*)0x9ec80; // offset: 0x86e1c
+wchar_t* data_86e1c = (void*)0x9ec80;
 
 // Data at address 0x86e5c
-wchar32 (*) data_86e5c[] = (void*)0x9eca4; // offset: 0x86e5c
+wchar_t* data_86e5c = (void*)0x9eca4;
 
 // Data at address 0x86e9c
-wchar32 (*) data_86e9c[] = (void*)0x9ecc8; // offset: 0x86e9c
+wchar_t* data_86e9c = (void*)0x9ecc8;
 
 // Data at address 0x86edc
-wchar32 (*) data_86edc[] = (void*)0x9ecec; // offset: 0x86edc
+wchar_t* data_86edc = (void*)0x9ecec;
 
 // Data at address 0x86f1c
 void* data_86f1c = (void*)0x9ed10;
@@ -2626,10 +2643,10 @@ void* data_8735c = (void*)0x9ef90;
 void* data_8739c = (void*)0x9efd0;
 
 // Data at address 0x873dc
-wchar32 (*) data_873dc[] = (void*)0x9efe4 /* pointer to data */; // offset: 0x873dc
+wchar_t* data_873dc = (void*)0x9efe4 /* pointer to data */;
 
 // Data at address 0x8741c
-wchar32 (*) data_8741c[] = (void*)0x9f008 /* pointer to data */; // offset: 0x8741c
+wchar_t* data_8741c = (void*)0x9f008 /* pointer to data */;
 
 // Data at address 0x8745c
 void* data_8745c = (void*)0x9f02c;
@@ -2638,16 +2655,16 @@ void* data_8745c = (void*)0x9f02c;
 void* data_8749c = (void*)0x9f038;
 
 // Data at address 0x874dc
-wchar32 (*) data_874dc[] = (void*)0x9f05c /* pointer to data */; // offset: 0x874dc
+wchar_t* data_874dc = (void*)0x9f05c /* pointer to data */;
 
 // Data at address 0x8751c
-wchar32 (*) data_8751c[] = (void*)0x9f080 /* pointer to data */; // offset: 0x8751c
+wchar_t* data_8751c = (void*)0x9f080 /* pointer to data */;
 
 // Data at address 0x8755c
-wchar32 (*) data_8755c[] = (void*)0x9f0a4; // offset: 0x8755c
+wchar_t* data_8755c = (void*)0x9f0a4;
 
 // Data at address 0x8759c
-wchar32 (*) data_8759c[] = (void*)0x9f0c8; // offset: 0x8759c
+wchar_t* data_8759c = (void*)0x9f0c8;
 
 // Data at address 0x875dc
 void* data_875dc = (void*)0x9f0ec;
@@ -2659,7 +2676,7 @@ void* data_8761c = (void*)0x9f110;
 void* data_8765c = (void*)0x9f134;
 
 // Data at address 0x8769c
-wchar32 (*) data_8769c[] = (void*)0x9f158; // offset: 0x8769c
+wchar_t* data_8769c = (void*)0x9f158;
 
 // Data at address 0x876dc
 void* data_876dc = (void*)0x9f17c;
@@ -2671,13 +2688,13 @@ void* data_8771c = (void*)0x9f1a0;
 void* data_8775c = (void*)0x9f1c4;
 
 // Data at address 0x8779c
-wchar32 (*) data_8779c[] = (void*)0x9f1d8 /* pointer to data */; // offset: 0x8779c
+wchar_t* data_8779c = (void*)0x9f1d8 /* pointer to data */;
 
 // Data at address 0x877dc
-wchar32 (*) data_877dc[] = (void*)0x9f1fc; // offset: 0x877dc
+wchar_t* data_877dc = (void*)0x9f1fc;
 
 // Data at address 0x8781c
-wchar32 (*) data_8781c[] = (void*)0x9f220; // offset: 0x8781c
+wchar_t* data_8781c = (void*)0x9f220;
 
 // Data at address 0x8785c
 void* data_8785c = (void*)0x9f230;
@@ -2704,10 +2721,10 @@ void* data_879dc = (void*)0x9f310;
 void* data_87a1c = (void*)0x9f334;
 
 // Data at address 0x87a5c
-wchar32 (*) data_87a5c[] = (void*)0x9f358; // offset: 0x87a5c
+wchar_t* data_87a5c = (void*)0x9f358;
 
 // Data at address 0x87a9c
-wchar32 (*) data_87a9c[] = (void*)0x9f37c; // offset: 0x87a9c
+wchar_t* data_87a9c = (void*)0x9f37c;
 
 // Data at address 0x87adc
 void* data_87adc = (void*)0x9f398;
@@ -2728,25 +2745,25 @@ void* data_87bdc = (void*)0x9f420;
 void* data_87c1c = (void*)0x9f444;
 
 // Data at address 0x87c5c
-wchar32 (*) data_87c5c[] = (void*)0x9f454 /* pointer to data */; // offset: 0x87c5c
+wchar_t* data_87c5c = (void*)0x9f454 /* pointer to data */;
 
 // Data at address 0x87c9c
-wchar32 (*) data_87c9c[] = (void*)0x9f478; // offset: 0x87c9c
+wchar_t* data_87c9c = (void*)0x9f478;
 
 // Data at address 0x87cdc
 void* data_87cdc = (void*)0x9f49c;
 
 // Data at address 0x87d1c
-wchar32 (*) data_87d1c[] = (void*)0x9f4c0 /* pointer to data */; // offset: 0x87d1c
+wchar_t* data_87d1c = (void*)0x9f4c0 /* pointer to data */;
 
 // Data at address 0x87d5c
-wchar32 (*) data_87d5c[] = (void*)0x9f4e4; // offset: 0x87d5c
+wchar_t* data_87d5c = (void*)0x9f4e4;
 
 // Data at address 0x87d9c
-wchar32 (*) data_87d9c[] = (void*)0x9f520; // offset: 0x87d9c
+wchar_t* data_87d9c = (void*)0x9f520;
 
 // Data at address 0x87ddc
-wchar32 (*) data_87ddc[] = (void*)0x9f55c; // offset: 0x87ddc
+wchar_t* data_87ddc = (void*)0x9f55c;
 
 // Data at address 0x87e1c
 void* data_87e1c = (void*)0x9f580;
@@ -2809,19 +2826,19 @@ void* data_8829c = (void*)0x9f808;
 void* data_882dc = (void*)0x9f82c;
 
 // Data at address 0x8831c
-wchar32 (*) data_8831c[] = (void*)0x9f850; // offset: 0x8831c
+wchar_t* data_8831c = (void*)0x9f850;
 
 // Data at address 0x8835c
-wchar32 (*) data_8835c[] = (void*)0x9f874; // offset: 0x8835c
+wchar_t* data_8835c = (void*)0x9f874;
 
 // Data at address 0x8839c
-wchar32 (*) data_8839c[] = (void*)0x9f898; // offset: 0x8839c
+wchar_t* data_8839c = (void*)0x9f898;
 
 // Data at address 0x883dc
-wchar32 (*) data_883dc[] = (void*)0x9f8bc; // offset: 0x883dc
+wchar_t* data_883dc = (void*)0x9f8bc;
 
 // Data at address 0x8841c
-wchar32 (*) data_8841c[] = (void*)0x9f8e0; // offset: 0x8841c
+wchar_t* data_8841c = (void*)0x9f8e0;
 
 // Data at address 0x8845c
 void* data_8845c = (void*)0x9f904;
@@ -2857,7 +2874,7 @@ void* data_8869c = (void*)0x9fa28;
 void* data_886dc = (void*)0x9fa4c;
 
 // Data at address 0x8871c
-wchar32 (*) data_8871c[] = (void*)0x9fa88 /* pointer to data */; // offset: 0x8871c
+wchar_t* data_8871c = (void*)0x9fa88 /* pointer to data */;
 
 // Data at address 0x8875c
 void* data_8875c = (void*)0x9fac8;
@@ -2884,13 +2901,13 @@ void* data_888dc = (void*)0x9fc68;
 void* data_8891c = (void*)0x9fc74;
 
 // Data at address 0x8895c
-wchar32 (*) data_8895c[] = (void*)0x9fc98; // offset: 0x8895c
+wchar_t* data_8895c = (void*)0x9fc98;
 
 // Data at address 0x8899c
-wchar32 (*) data_8899c[] = (void*)0x9fcbc /* pointer to data */; // offset: 0x8899c
+wchar_t* data_8899c = (void*)0x9fcbc /* pointer to data */;
 
 // Data at address 0x889dc
-wchar32 (*) data_889dc[] = (void*)0x9fce0 /* pointer to data */; // offset: 0x889dc
+wchar_t* data_889dc = (void*)0x9fce0 /* pointer to data */;
 
 // Data at address 0x88a1c
 void* data_88a1c = (void*)0x9fd04;
@@ -2992,7 +3009,7 @@ void* data_891dc = (void*)0xa01b8;
 void* data_8921c = (void*)0xa0210;
 
 // Data at address 0x8925c
-wchar32 (*) data_8925c[] = (void*)0xa0234; // offset: 0x8925c
+wchar_t* data_8925c = (void*)0xa0234;
 
 // Data at address 0x8929c
 void* data_8929c = (void*)0xa0258;
@@ -3064,13 +3081,13 @@ void* data_897dc = (void*)0xa0538;
 void* data_8981c = (void*)0xa0544;
 
 // Data at address 0x8985c
-wchar32 (*) data_8985c[] = (void*)0xa0568 /* pointer to data */; // offset: 0x8985c
+wchar_t* data_8985c = (void*)0xa0568 /* pointer to data */;
 
 // Data at address 0x8989c
-wchar32 (*) data_8989c[] = (void*)0xa058c /* pointer to data */; // offset: 0x8989c
+wchar_t* data_8989c = (void*)0xa058c /* pointer to data */;
 
 // Data at address 0x898dc
-wchar32 (*) data_898dc[] = (void*)0xa05b0 /* pointer to data */; // offset: 0x898dc
+wchar_t* data_898dc = (void*)0xa05b0 /* pointer to data */;
 
 // Data at address 0x8991c
 void* data_8991c = (void*)0xa05d4;
@@ -3205,19 +3222,19 @@ void* data_8a35c = (void*)0xa09e4;
 void* data_8a39c = (void*)0xa0a08;
 
 // Data at address 0x8a3dc
-wchar32 (*) data_8a3dc[] = (void*)0xa0a2c /* pointer to data */; // offset: 0x8a3dc
+wchar_t* data_8a3dc = (void*)0xa0a2c /* pointer to data */;
 
 // Data at address 0x8a41c
-wchar32 (*) data_8a41c[] = (void*)0xa0a50 /* pointer to data */; // offset: 0x8a41c
+wchar_t* data_8a41c = (void*)0xa0a50 /* pointer to data */;
 
 // Data at address 0x8a45c
-wchar32 (*) data_8a45c[] = (void*)0xa0a74 /* pointer to data */; // offset: 0x8a45c
+wchar_t* data_8a45c = (void*)0xa0a74 /* pointer to data */;
 
 // Data at address 0x8a49c
-wchar32 (*) data_8a49c[] = (void*)0xa0a98 /* pointer to data */; // offset: 0x8a49c
+wchar_t* data_8a49c = (void*)0xa0a98 /* pointer to data */;
 
 // Data at address 0x8a4dc
-wchar32 (*) data_8a4dc[] = (void*)0xa0abc /* pointer to data */; // offset: 0x8a4dc
+wchar_t* data_8a4dc = (void*)0xa0abc /* pointer to data */;
 
 // Data at address 0x8a51c
 void* data_8a51c = (void*)0xa0ae0;
@@ -3259,13 +3276,13 @@ void* data_8a7dc = (void*)0xa0c6c;
 void* data_8a81c = (void*)0xa0c90;
 
 // Data at address 0x8a85c
-wchar32 (*) data_8a85c[] = (void*)0xa0cb4 /* pointer to data */; // offset: 0x8a85c
+wchar_t* data_8a85c = (void*)0xa0cb4 /* pointer to data */;
 
 // Data at address 0x8a89c
-wchar32 (*) data_8a89c[] = (void*)0xa0cd8 /* pointer to data */; // offset: 0x8a89c
+wchar_t* data_8a89c = (void*)0xa0cd8 /* pointer to data */;
 
 // Data at address 0x8a8dc
-wchar32 (*) data_8a8dc[] = (void*)0xa0cfc; // offset: 0x8a8dc
+wchar_t* data_8a8dc = (void*)0xa0cfc;
 
 // Data at address 0x8a91c
 void* data_8a91c = (void*)0xa0d20;
@@ -3274,10 +3291,10 @@ void* data_8a91c = (void*)0xa0d20;
 void* data_8a95c = (void*)0xa0d44;
 
 // Data at address 0x8a99c
-wchar32 (*) data_8a99c[] = (void*)0xa0d68 /* pointer to data */; // offset: 0x8a99c
+wchar_t* data_8a99c = (void*)0xa0d68 /* pointer to data */;
 
 // Data at address 0x8a9dc
-wchar32 (*) data_8a9dc[] = (void*)0xa0d8c /* pointer to data */; // offset: 0x8a9dc
+wchar_t* data_8a9dc = (void*)0xa0d8c /* pointer to data */;
 
 // Data at address 0x8aa1c
 void* data_8aa1c = (void*)0xa0db0;
@@ -3544,10 +3561,10 @@ void* data_8bf9c = (void*)0xa19c8;
 void* data_8bfdc = (void*)0xa19ec;
 
 // Data at address 0x8c01c
-wchar32 (*) data_8c01c[] = (void*)0xa1a10 /* pointer to data */; // offset: 0x8c01c
+wchar_t* data_8c01c = (void*)0xa1a10 /* pointer to data */;
 
 // Data at address 0x8c05c
-wchar32 (*) data_8c05c[] = (void*)0xa1a34; // offset: 0x8c05c
+wchar_t* data_8c05c = (void*)0xa1a34;
 
 // Data at address 0x8c09c
 void* data_8c09c = (void*)0xa1a58;
@@ -3559,10 +3576,10 @@ void* data_8c0dc = (void*)0xa1a7c;
 void* data_8c11c = (void*)0xa1aa0;
 
 // Data at address 0x8c15c
-wchar32 (*) data_8c15c[] = (void*)0xa1ac4 /* pointer to data */; // offset: 0x8c15c
+wchar_t* data_8c15c = (void*)0xa1ac4 /* pointer to data */;
 
 // Data at address 0x8c19c
-wchar32 (*) data_8c19c[] = (void*)0xa1ae8; // offset: 0x8c19c
+wchar_t* data_8c19c = (void*)0xa1ae8;
 
 // Data at address 0x8c1dc
 void* data_8c1dc = (void*)0xa1b0c;
@@ -3619,7 +3636,7 @@ void* data_8c5dc = (void*)0xa1d4c;
 void* data_8c61c = (void*)0xa1d70;
 
 // Data at address 0x8c65c
-wchar32 (*) data_8c65c[] = (void*)0xa1d94 /* pointer to data */; // offset: 0x8c65c
+wchar_t* data_8c65c = (void*)0xa1d94 /* pointer to data */;
 
 // Data at address 0x8c69c
 void* data_8c69c = (void*)0xa1db8;
@@ -3631,7 +3648,7 @@ void* data_8c6dc = (void*)0xa1ddc;
 void* data_8c71c = (void*)0xa1e00;
 
 // Data at address 0x8c75c
-wchar32 (*) data_8c75c[] = (void*)0xa1e24; // offset: 0x8c75c
+wchar_t* data_8c75c = (void*)0xa1e24;
 
 // Data at address 0x8c79c
 void* data_8c79c = (void*)0xa1e48;
@@ -3670,7 +3687,7 @@ void* data_8ca1c = (void*)0xa1fb0;
 void* data_8ca5c = (void*)0xa1fd4;
 
 // Data at address 0x8ca9c
-wchar32 (*) data_8ca9c[] = (void*)0xa1ff8 /* pointer to data */; // offset: 0x8ca9c
+wchar_t* data_8ca9c = (void*)0xa1ff8 /* pointer to data */;
 
 // Data at address 0x8cadc
 void* data_8cadc = (void*)0xa201c;
@@ -3679,10 +3696,10 @@ void* data_8cadc = (void*)0xa201c;
 void* data_8cb1c = (void*)0xa2040;
 
 // Data at address 0x8cb5c
-wchar32 (*) data_8cb5c[] = (void*)0xa2064; // offset: 0x8cb5c
+wchar_t* data_8cb5c = (void*)0xa2064;
 
 // Data at address 0x8cb9c
-wchar32 (*) data_8cb9c[] = (void*)0xa2088; // offset: 0x8cb9c
+wchar_t* data_8cb9c = (void*)0xa2088;
 
 // Data at address 0x8cbdc
 void* data_8cbdc = (void*)0xa20ac;
@@ -3691,7 +3708,7 @@ void* data_8cbdc = (void*)0xa20ac;
 void* data_8cc1c = (void*)0xa20d0;
 
 // Data at address 0x8cc5c
-wchar32 (*) data_8cc5c[] = (void*)0xa20f4 /* pointer to data */; // offset: 0x8cc5c
+wchar_t* data_8cc5c = (void*)0xa20f4 /* pointer to data */;
 
 // Data at address 0x8cc9c
 void* data_8cc9c = (void*)0xa2118;
@@ -3745,10 +3762,10 @@ void* data_8d05c = (void*)0xa2334;
 void* data_8d09c = (void*)0xa2358;
 
 // Data at address 0x8d0dc
-wchar32 (*) data_8d0dc[] = (void*)0xa237c /* pointer to data */; // offset: 0x8d0dc
+wchar_t* data_8d0dc = (void*)0xa237c /* pointer to data */;
 
 // Data at address 0x8d11c
-wchar32 (*) data_8d11c[] = (void*)0xa23a0 /* pointer to data */; // offset: 0x8d11c
+wchar_t* data_8d11c = (void*)0xa23a0 /* pointer to data */;
 
 // Data at address 0x8d15c
 void* data_8d15c = (void*)0xa23c4;
@@ -3829,7 +3846,7 @@ void* data_8d75c = (void*)0xa2724;
 void* data_8d79c = (void*)0xa2748;
 
 // Data at address 0x8d7dc
-wchar32 (*) data_8d7dc[] = (void*)0xa276c /* pointer to data */; // offset: 0x8d7dc
+wchar_t* data_8d7dc = (void*)0xa276c /* pointer to data */;
 
 // Data at address 0x8d81c
 void* data_8d81c = (void*)0xa2790;
@@ -3844,10 +3861,10 @@ void* data_8d89c = (void*)0xa27d8;
 void* data_8d8dc = (void*)0xa27fc;
 
 // Data at address 0x8d91c
-wchar32 (*) data_8d91c[] = (void*)0xa2820 /* pointer to data */; // offset: 0x8d91c
+wchar_t* data_8d91c = (void*)0xa2820 /* pointer to data */;
 
 // Data at address 0x8d95c
-wchar32 (*) data_8d95c[] = (void*)0xa2844; // offset: 0x8d95c
+wchar_t* data_8d95c = (void*)0xa2844;
 
 // Data at address 0x8d99c
 void* data_8d99c = (void*)0xa2868;
@@ -3865,10 +3882,10 @@ void* data_8da5c = (void*)0xa28d4;
 void* data_8da9c = (void*)0xa28f8;
 
 // Data at address 0x8dadc
-wchar32 (*) data_8dadc[] = (void*)0xa291c /* pointer to data */; // offset: 0x8dadc
+wchar_t* data_8dadc = (void*)0xa291c /* pointer to data */;
 
 // Data at address 0x8db1c
-wchar32 (*) data_8db1c[] = (void*)0xa2940; // offset: 0x8db1c
+wchar_t* data_8db1c = (void*)0xa2940;
 
 // Data at address 0x8db5c
 void* data_8db5c = (void*)0xa2964;
@@ -4147,10 +4164,10 @@ void* data_8f1dc = (void*)0xa360c;
 void* data_8f21c = (void*)0xa3630;
 
 // Data at address 0x8f25c
-wchar32 (*) data_8f25c[] = (void*)0xa3654 /* pointer to data */; // offset: 0x8f25c
+wchar_t* data_8f25c = (void*)0xa3654 /* pointer to data */;
 
 // Data at address 0x8f29c
-wchar32 (*) data_8f29c[] = (void*)0xa3678; // offset: 0x8f29c
+wchar_t* data_8f29c = (void*)0xa3678;
 
 // Data at address 0x8f2dc
 void* data_8f2dc = (void*)0xa369c;
@@ -4276,10 +4293,10 @@ void* data_8fc9c = (void*)0xa3c18;
 void* data_8fcdc = (void*)0xa3c3c;
 
 // Data at address 0x8fd1c
-wchar32 (*) data_8fd1c[] = (void*)0xa3c60 /* pointer to data */; // offset: 0x8fd1c
+wchar_t* data_8fd1c = (void*)0xa3c60 /* pointer to data */;
 
 // Data at address 0x8fd5c
-wchar32 (*) data_8fd5c[] = (void*)0xa3c84; // offset: 0x8fd5c
+wchar_t* data_8fd5c = (void*)0xa3c84;
 
 // Data at address 0x8fd9c
 void* data_8fd9c = (void*)0xa3ca8;
@@ -4330,7 +4347,7 @@ void* data_9011c = (void*)0xa3ea0;
 void* data_9015c = (void*)0xa3ec4;
 
 // Data at address 0x9019c
-wchar32 (*) data_9019c[] = (void*)0xa3ee8 /* pointer to data */; // offset: 0x9019c
+wchar_t* data_9019c = (void*)0xa3ee8 /* pointer to data */;
 
 // Data at address 0x901dc
 void* data_901dc = (void*)0xa3f0c;
@@ -4390,10 +4407,10 @@ void* data_9061c = (void*)0xa4170;
 void* data_9065c = (void*)0xa4194;
 
 // Data at address 0x9069c
-wchar32 (*) data_9069c[] = (void*)0xa41b8 /* pointer to data */; // offset: 0x9069c
+wchar_t* data_9069c = (void*)0xa41b8 /* pointer to data */;
 
 // Data at address 0x906dc
-wchar32 (*) data_906dc[] = (void*)0xa41dc /* pointer to data */; // offset: 0x906dc
+wchar_t* data_906dc = (void*)0xa41dc /* pointer to data */;
 
 // Data at address 0x9071c
 void* data_9071c = (void*)0xa4200;
@@ -4489,13 +4506,13 @@ void* data_90e5c = (void*)0xa4614;
 void* data_90e9c = (void*)0xa4638;
 
 // Data at address 0x90edc
-wchar32 (*) data_90edc[] = (void*)0xa465c /* pointer to data */; // offset: 0x90edc
+wchar_t* data_90edc = (void*)0xa465c /* pointer to data */;
 
 // Data at address 0x90f1c
-wchar32 (*) data_90f1c[] = (void*)0xa4680 /* pointer to data */; // offset: 0x90f1c
+wchar_t* data_90f1c = (void*)0xa4680 /* pointer to data */;
 
 // Data at address 0x90f5c
-wchar32 (*) data_90f5c[] = (void*)0xa46a4 /* pointer to data */; // offset: 0x90f5c
+wchar_t* data_90f5c = (void*)0xa46a4 /* pointer to data */;
 
 // Data at address 0x90f9c
 void* data_90f9c = (void*)0xa4abe;
@@ -4507,10 +4524,10 @@ void* data_90fdc = (void*)0xa52f4;
 void* data_9101c = (void*)0xa52f8;
 
 // Data at address 0x9105c
-wchar32 (*) data_9105c[] = (void*)0xa5378; // offset: 0x9105c
+wchar_t* data_9105c = (void*)0xa5378;
 
 // Data at address 0x9109c
-wchar32 (*) data_9109c[] = (void*)0xa53f8; // offset: 0x9109c
+wchar_t* data_9109c = (void*)0xa53f8;
 
 // Data at address 0x910dc
 void* data_910dc = (void*)0xa5478;
@@ -4519,7 +4536,7 @@ void* data_910dc = (void*)0xa5478;
 void* data_9111c = (void*)0xa54f8;
 
 // Data at address 0x9115c
-wchar32 (*) data_9115c[] = (void*)0xa5578; // offset: 0x9115c
+wchar_t* data_9115c = (void*)0xa5578;
 
 // Data at address 0x9119c
 void* data_9119c = (void*)0xa55b0;
@@ -4531,13 +4548,13 @@ void* data_911dc = (void*)0xa5610;
 void* data_9121c = (void*)0xa568c;
 
 // Data at address 0x9125c
-wchar32 (*) data_9125c[] = (void*)0xa56b0 /* pointer to data */; // offset: 0x9125c
+wchar_t* data_9125c = (void*)0xa56b0 /* pointer to data */;
 
 // Data at address 0x9129c
-wchar32 (*) data_9129c[] = (void*)0xa56d4 /* pointer to data */; // offset: 0x9129c
+wchar_t* data_9129c = (void*)0xa56d4 /* pointer to data */;
 
 // Data at address 0x912dc
-wchar32 (*) data_912dc[] = (void*)0xa56f8 /* pointer to data */; // offset: 0x912dc
+wchar_t* data_912dc = (void*)0xa56f8 /* pointer to data */;
 
 // Data at address 0x9131c
 void* data_9131c = (void*)0xa571c /* pointer to data */;
@@ -4573,13 +4590,13 @@ void* data_9155c = (void*)0xa5880;
 void* data_9159c = (void*)0xa58a8;
 
 // Data at address 0x915dc
-wchar32 (*) data_915dc[] = (void*)0xa58d0 /* pointer to data */; // offset: 0x915dc
+wchar_t* data_915dc = (void*)0xa58d0 /* pointer to data */;
 
 // Data at address 0x9161c
-wchar32 (*) data_9161c[] = (void*)0xa58e4 /* pointer to data */; // offset: 0x9161c
+wchar_t* data_9161c = (void*)0xa58e4 /* pointer to data */;
 
 // Data at address 0x9165c
-wchar32 (*) data_9165c[] = (void*)0xa58f8 /* pointer to data */; // offset: 0x9165c
+wchar_t* data_9165c = (void*)0xa58f8 /* pointer to data */;
 
 // Data at address 0x9169c
 void* data_9169c = (void*)0xa5924;
@@ -4594,19 +4611,19 @@ void* data_9171c = (void*)0xa59b4;
 void* data_9175c = (void*)0xa59d8;
 
 // Data at address 0x9179c
-wchar32 (*) data_9179c[] = (void*)0xa59fc; // offset: 0x9179c
+wchar_t* data_9179c = (void*)0xa59fc;
 
 // Data at address 0x917dc
-wchar32 (*) data_917dc[] = (void*)0xa5a20; // offset: 0x917dc
+wchar_t* data_917dc = (void*)0xa5a20;
 
 // Data at address 0x9181c
-wchar32 (*) data_9181c[] = (void*)0xa5a44; // offset: 0x9181c
+wchar_t* data_9181c = (void*)0xa5a44;
 
 // Data at address 0x9185c
-wchar32 (*) data_9185c[] = (void*)0xa5a68; // offset: 0x9185c
+wchar_t* data_9185c = (void*)0xa5a68;
 
 // Data at address 0x9189c
-wchar32 (*) data_9189c[] = (void*)0xa5a8c /* pointer to data */; // offset: 0x9189c
+wchar_t* data_9189c = (void*)0xa5a8c /* pointer to data */;
 
 // Data at address 0x918dc
 void* data_918dc = (void*)0xa5ab8;
@@ -4618,7 +4635,7 @@ void* data_9191c = (void*)0xa5acc;
 void* data_9195c = (void*)0xa5b0c;
 
 // Data at address 0x9199c
-wchar32 (*) data_9199c[] = (void*)0xa5b4c /* pointer to data */; // offset: 0x9199c
+wchar_t* data_9199c = (void*)0xa5b4c /* pointer to data */;
 
 // Data at address 0x919dc
 void* data_919dc = (void*)0xa5b6c;
@@ -4939,13 +4956,13 @@ void* data_933dc = (void*)0xa716c;
 void* data_9341c = (void*)0xa7190;
 
 // Data at address 0x9345c
-wchar32 (*) data_9345c[] = (void*)0xa71b4 /* pointer to data */; // offset: 0x9345c
+wchar_t* data_9345c = (void*)0xa71b4 /* pointer to data */;
 
 // Data at address 0x9349c
-wchar32 (*) data_9349c[] = (void*)0xa71d8 /* pointer to data */; // offset: 0x9349c
+wchar_t* data_9349c = (void*)0xa71d8 /* pointer to data */;
 
 // Data at address 0x934dc
-wchar32 (*) data_934dc[] = (void*)0xa71fc /* pointer to data */; // offset: 0x934dc
+wchar_t* data_934dc = (void*)0xa71fc /* pointer to data */;
 
 // Data at address 0x9351c
 void* data_9351c = (void*)0xa7220;
@@ -4969,7 +4986,7 @@ void* data_9365c = (void*)0xa72d4;
 void* data_9369c = (void*)0xa72f8;
 
 // Data at address 0x936dc
-wchar32 (*) data_936dc[] = (void*)0xa731c; // offset: 0x936dc
+wchar_t* data_936dc = (void*)0xa731c;
 
 // Data at address 0x9371c
 void* data_9371c = (void*)0xa7324;
@@ -4978,22 +4995,22 @@ void* data_9371c = (void*)0xa7324;
 void* data_9375c = (void*)0xa7334;
 
 // Data at address 0x9379c
-wchar32 (*) data_9379c[] = (void*)0xa7344 /* pointer to data */; // offset: 0x9379c
+wchar_t* data_9379c = (void*)0xa7344 /* pointer to data */;
 
 // Data at address 0x937dc
-wchar32 (*) data_937dc[] = (void*)0xa7368 /* pointer to data */; // offset: 0x937dc
+wchar_t* data_937dc = (void*)0xa7368 /* pointer to data */;
 
 // Data at address 0x9381c
-wchar32 (*) data_9381c[] = (void*)0xa738c /* pointer to data */; // offset: 0x9381c
+wchar_t* data_9381c = (void*)0xa738c /* pointer to data */;
 
 // Data at address 0x9385c
-wchar32 (*) data_9385c[] = (void*)0xa73b0 /* pointer to data */; // offset: 0x9385c
+wchar_t* data_9385c = (void*)0xa73b0 /* pointer to data */;
 
 // Data at address 0x9389c
-wchar32 (*) data_9389c[] = (void*)0xa73d4 /* pointer to data */; // offset: 0x9389c
+wchar_t* data_9389c = (void*)0xa73d4 /* pointer to data */;
 
 // Data at address 0x938dc
-wchar32 (*) data_938dc[] = (void*)0xa73f8 /* pointer to data */; // offset: 0x938dc
+wchar_t* data_938dc = (void*)0xa73f8 /* pointer to data */;
 
 // Data at address 0x9391c
 void* data_9391c = (void*)0xa7400;
@@ -5032,7 +5049,7 @@ void* data_93b5c = (void*)0xa7760;
 void* data_93b9c = (void*)0xa7770;
 
 // Data at address 0x93bdc
-wchar32 (*) data_93bdc[] = (void*)0xa777c /* pointer to data */; // offset: 0x93bdc
+wchar_t* data_93bdc = (void*)0xa777c /* pointer to data */;
 
 // Data at address 0x93c1c
 void* data_93c1c = (void*)0xa7800;
@@ -5101,16 +5118,16 @@ void* data_9411c = (void*)0xa7bcc;
 void* data_9415c = (void*)0xa7c34;
 
 // Data at address 0x9419c
-wchar32 (*) data_9419c[] = (void*)0xa7c9c; // offset: 0x9419c
+wchar_t* data_9419c = (void*)0xa7c9c;
 
 // Data at address 0x941dc
-wchar32 (*) data_941dc[] = (void*)0xa7d04 /* pointer to data */; // offset: 0x941dc
+wchar_t* data_941dc = (void*)0xa7d04 /* pointer to data */;
 
 // Data at address 0x9421c
 void* data_9421c = (void*)0xa7d6c;
 
 // Data at address 0x9425c
-wchar32 (*) data_9425c[] = (void*)0xa7dd4; // offset: 0x9425c
+wchar_t* data_9425c = (void*)0xa7dd4;
 
 // Data at address 0x9429c
 void* data_9429c = (void*)0xa7df4;
@@ -5140,16 +5157,16 @@ void* data_9445c = (void*)0xa7f1c;
 void* data_9449c = (void*)0xa7f40;
 
 // Data at address 0x944dc
-wchar32 (*) data_944dc[] = (void*)0xa7f64 /* pointer to data */; // offset: 0x944dc
+wchar_t* data_944dc = (void*)0xa7f64 /* pointer to data */;
 
 // Data at address 0x9451c
-wchar32 (*) data_9451c[] = (void*)0xa7f88 /* pointer to data */; // offset: 0x9451c
+wchar_t* data_9451c = (void*)0xa7f88 /* pointer to data */;
 
 // Data at address 0x9455c
-wchar32 (*) data_9455c[] = (void*)0xa7fac /* pointer to data */; // offset: 0x9455c
+wchar_t* data_9455c = (void*)0xa7fac /* pointer to data */;
 
 // Data at address 0x9459c
-wchar32 (*) data_9459c[] = (void*)0xa7fd0 /* pointer to data */; // offset: 0x9459c
+wchar_t* data_9459c = (void*)0xa7fd0 /* pointer to data */;
 
 // Data at address 0x945dc
 void* data_945dc = (void*)0xa8010;
@@ -5158,10 +5175,10 @@ void* data_945dc = (void*)0xa8010;
 void* data_9461c = (void*)0xa8048;
 
 // Data at address 0x9465c
-wchar32 (*) data_9465c[] = (void*)0xa804c /* pointer to data */; // offset: 0x9465c
+wchar_t* data_9465c = (void*)0xa804c /* pointer to data */;
 
 // Data at address 0x9469c
-wchar32 (*) data_9469c[] = (void*)0xa805c; // offset: 0x9469c
+wchar_t* data_9469c = (void*)0xa805c;
 
 // Data at address 0x946dc
 void* data_946dc = (void*)0xa8080;
@@ -5221,16 +5238,16 @@ void* data_94b1c = (void*)0xa8308;
 int32_t data_94b3c = 0x0;
 
 // Data at address 0x94d40
-wchar32 data_94d40[] = "dddddAA<2--((("; // offset: 0x94d40
+wchar_t data_94d40[] = L"dddddAA<2--((("; // offset: 0x94d40
 
 // Data at address 0x95920
-wchar32 data_95920[] = "FFFFFFFFFFFFFFF"; // offset: 0x95920
+wchar_t data_95920[] = L"FFFFFFFFFFFFFFF"; // offset: 0x95920
 
 // Data at address 0x9599c
-wchar32 data_9599c[] = "FF<2--(#"; // offset: 0x9599c
+wchar_t data_9599c[] = L"FF<2--(#"; // offset: 0x9599c
 
 // Data at address 0x975a8
-wchar32 data_975a8[] = "CDCCBBBBBBDCCCCCCCBDCBCCCCCBDDCCCCCC"; // offset: 0x975a8
+wchar_t data_975a8[] = L"CDCCBBBBBBDCCCCCCCBDCBCCCCCBDDCCCCCC"; // offset: 0x975a8
 
 // Data at address 0x983b0
 int32_t data_983b0 = 0x9490;
@@ -5341,187 +5358,187 @@ int32_t data_9ab10 = 0x969c;
 int32_t data_9ab24 = 0x8789;
 
 // Data at address 0x9dd44
-wchar32 data_9dd44[] = "          "; // offset: 0x9dd44
+wchar_t data_9dd44[] = L"          "; // offset: 0x9dd44
 
 // Data at address 0x9dd9c
-wchar32 data_9dd9c[] = "          "; // offset: 0x9dd9c
+wchar_t data_9dd9c[] = L"          "; // offset: 0x9dd9c
 
 // Data at address 0x9ddf4
-wchar32 data_9ddf4[] = "    "; // offset: 0x9ddf4
+wchar_t data_9ddf4[] = L"    "; // offset: 0x9ddf4
 
 // Data at address 0x9de4c
-wchar32 data_9de4c[] = "    "; // offset: 0x9de4c
+wchar_t data_9de4c[] = L"    "; // offset: 0x9de4c
 
 // Data at address 0x9dea8
-wchar32 data_9dea8[] = "ddddddddddd"; // offset: 0x9dea8
+wchar_t data_9dea8[] = L"ddddddddddd"; // offset: 0x9dea8
 
 // Data at address 0x9def0
-wchar32 data_9def0[] = "ddddddddddd"; // offset: 0x9def0
+wchar_t data_9def0[] = L"ddddddddddd"; // offset: 0x9def0
 
 // Data at address 0x9e068
-wchar32 data_9e068[] = "ddddddddd8\n"; // offset: 0x9e068
+wchar_t data_9e068[] = L"ddddddddd8\n"; // offset: 0x9e068
 
 // Data at address 0x9e0d0
-wchar32 data_9e0d0[] = "ZZZF2-(((ZZZF2-((("; // offset: 0x9e0d0
+wchar_t data_9e0d0[] = L"ZZZF2-(((ZZZF2-((("; // offset: 0x9e0d0
 
 // Data at address 0x9e1cc
-wchar32 data_9e1cc[] = ">>>>>>>>>"; // offset: 0x9e1cc
+wchar_t data_9e1cc[] = L">>>>>>>>>"; // offset: 0x9e1cc
 
 // Data at address 0x9e21c
-wchar32 data_9e21c[] = "PPP<((("; // offset: 0x9e21c
+wchar_t data_9e21c[] = L"PPP<((("; // offset: 0x9e21c
 
 // Data at address 0x9e240
-wchar32 data_9e240[] = "PPP<((("; // offset: 0x9e240
+wchar_t data_9e240[] = L"PPP<((("; // offset: 0x9e240
 
 // Data at address 0x9e318
-wchar32 data_9e318[] = "\n\n\n\n\n\n\n\n\n$$$$$$$$$"; // offset: 0x9e318
+wchar_t data_9e318[] = L"\n\n\n\n\n\n\n\n\n$$$$$$$$$"; // offset: 0x9e318
 
 // Data at address 0x9e3e8
-wchar32 data_9e3e8[] = "ddddddddd"; // offset: 0x9e3e8
+wchar_t data_9e3e8[] = L"ddddddddd"; // offset: 0x9e3e8
 
 // Data at address 0x9e45c
-wchar32 data_9e45c[] = "222222222"; // offset: 0x9e45c
+wchar_t data_9e45c[] = L"222222222"; // offset: 0x9e45c
 
 // Data at address 0x9e634
-wchar32 data_9e634[] = "(((dZPFF<"; // offset: 0x9e634
+wchar_t data_9e634[] = L"(((dZPFF<"; // offset: 0x9e634
 
 // Data at address 0x9e658
-wchar32 data_9e658[] = "ZZZZPPFFFddddPPFF2PPPPPP"; // offset: 0x9e658
+wchar_t data_9e658[] = L"ZZZZPPFFFddddPPFF2PPPPPP"; // offset: 0x9e658
 
 // Data at address 0x9e95c
-wchar32 data_9e95c[] = "?????????ddddddddd"; // offset: 0x9e95c
+wchar_t data_9e95c[] = L"?????????ddddddddd"; // offset: 0x9e95c
 
 // Data at address 0x9e9d8
-wchar32 data_9e9d8[] = "\n\n\n\n\n\n\n\n\n"; // offset: 0x9e9d8
+wchar_t data_9e9d8[] = L"\n\n\n\n\n\n\n\n\n"; // offset: 0x9e9d8
 
 // Data at address 0x9ea20
-wchar32 data_9ea20[] = "\n\n\n\n\n\n\n\n\n"; // offset: 0x9ea20
+wchar_t data_9ea20[] = L"\n\n\n\n\n\n\n\n\n"; // offset: 0x9ea20
 
 // Data at address 0x9ea68
-wchar32 data_9ea68[] = "\n\n\n\n\n\n\n\n\n?"; // offset: 0x9ea68
+wchar_t data_9ea68[] = L"\n\n\n\n\n\n\n\n\n?"; // offset: 0x9ea68
 
 // Data at address 0x9eb4c
-wchar32 data_9eb4c[] = "                        "; // offset: 0x9eb4c
+wchar_t data_9eb4c[] = L"                        "; // offset: 0x9eb4c
 
 // Data at address 0x9efe4
-wchar32 data_9efe4[] = "PZZnn"; // offset: 0x9efe4
+wchar_t data_9efe4[] = L"PZZnn"; // offset: 0x9efe4
 
 // Data at address 0x9f008
-wchar32 data_9f008[] = "dP<<2("; // offset: 0x9f008
+wchar_t data_9f008[] = L"dP<<2("; // offset: 0x9f008
 
 // Data at address 0x9f05c
-wchar32 data_9f05c[] = "ddP2"; // offset: 0x9f05c
+wchar_t data_9f05c[] = L"ddP2"; // offset: 0x9f05c
 
 // Data at address 0x9f080
-wchar32 data_9f080[] = "\n\n\n\nddP2"; // offset: 0x9f080
+wchar_t data_9f080[] = L"\n\n\n\nddP2"; // offset: 0x9f080
 
 // Data at address 0x9f1d8
-wchar32 data_9f1d8[] = "2<<PPFFPP"; // offset: 0x9f1d8
+wchar_t data_9f1d8[] = L"2<<PPFFPP"; // offset: 0x9f1d8
 
 // Data at address 0x9f454
-wchar32 data_9f454[] = "\n\n\n\n\n\n\n\n\n"; // offset: 0x9f454
+wchar_t data_9f454[] = L"\n\n\n\n\n\n\n\n\n"; // offset: 0x9f454
 
 // Data at address 0x9f4c0
-wchar32 data_9f4c0[] = "((((((((("; // offset: 0x9f4c0
+wchar_t data_9f4c0[] = L"((((((((("; // offset: 0x9f4c0
 
 // Data at address 0x9fa88
-wchar32 data_9fa88[] = "              "; // offset: 0x9fa88
+wchar_t data_9fa88[] = L"              "; // offset: 0x9fa88
 
 // Data at address 0x9fcbc
-wchar32 data_9fcbc[] = "\n\n\n\n\n\n\n\n\n"; // offset: 0x9fcbc
+wchar_t data_9fcbc[] = L"\n\n\n\n\n\n\n\n\n"; // offset: 0x9fcbc
 
 // Data at address 0xa0568
-wchar32 data_a0568[] = "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"; // offset: 0xa0568
+wchar_t data_a0568[] = L"\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"; // offset: 0xa0568
 
 // Data at address 0xa0a2c
-wchar32 data_a0a2c[] = "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"; // offset: 0xa0a2c
+wchar_t data_a0a2c[] = L"\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"; // offset: 0xa0a2c
 
 // Data at address 0xa0cb4
-wchar32 data_a0cb4[] = "         $$$$$$$$$"; // offset: 0xa0cb4
+wchar_t data_a0cb4[] = L"         $$$$$$$$$"; // offset: 0xa0cb4
 
 // Data at address 0xa0d68
-wchar32 data_a0d68[] = "\t\t\t\t\t\t\t\t\t"; // offset: 0xa0d68
+wchar_t data_a0d68[] = L"\t\t\t\t\t\t\t\t\t"; // offset: 0xa0d68
 
 // Data at address 0xa1a10
-wchar32 data_a1a10[] = "\n\n\n\n\n\n\n\n\n"; // offset: 0xa1a10
+wchar_t data_a1a10[] = L"\n\n\n\n\n\n\n\n\n"; // offset: 0xa1a10
 
 // Data at address 0xa1ac4
-wchar32 data_a1ac4[] = "((((((((("; // offset: 0xa1ac4
+wchar_t data_a1ac4[] = L"((((((((("; // offset: 0xa1ac4
 
 // Data at address 0xa1d94
-wchar32 data_a1d94[] = "22xx"; // offset: 0xa1d94
+wchar_t data_a1d94[] = L"22xx"; // offset: 0xa1d94
 
 // Data at address 0xa1ff8
-wchar32 data_a1ff8[] = "22xx"; // offset: 0xa1ff8
+wchar_t data_a1ff8[] = L"22xx"; // offset: 0xa1ff8
 
 // Data at address 0xa20f4
-wchar32 data_a20f4[] = "\n\n\n\n\n\n\n\n\n"; // offset: 0xa20f4
+wchar_t data_a20f4[] = L"\n\n\n\n\n\n\n\n\n"; // offset: 0xa20f4
 
 // Data at address 0xa237c
-wchar32 data_a237c[] = "CCCCCCCCC"; // offset: 0xa237c
+wchar_t data_a237c[] = L"CCCCCCCCC"; // offset: 0xa237c
 
 // Data at address 0xa276c
-wchar32 data_a276c[] = "222222"; // offset: 0xa276c
+wchar_t data_a276c[] = L"222222"; // offset: 0xa276c
 
 // Data at address 0xa2820
-wchar32 data_a2820[] = "((((((((("; // offset: 0xa2820
+wchar_t data_a2820[] = L"((((((((("; // offset: 0xa2820
 
 // Data at address 0xa291c
-wchar32 data_a291c[] = "\n\n\n\n\n\n\n\n\n"; // offset: 0xa291c
+wchar_t data_a291c[] = L"\n\n\n\n\n\n\n\n\n"; // offset: 0xa291c
 
 // Data at address 0xa3654
-wchar32 data_a3654[] = "\n\n\n\n\n\nPPP"; // offset: 0xa3654
+wchar_t data_a3654[] = L"\n\n\n\n\n\nPPP"; // offset: 0xa3654
 
 // Data at address 0xa3c60
-wchar32 data_a3c60[] = "\n\n\n\n\n\nPPP"; // offset: 0xa3c60
+wchar_t data_a3c60[] = L"\n\n\n\n\n\nPPP"; // offset: 0xa3c60
 
 // Data at address 0xa3ee8
-wchar32 data_a3ee8[] = "\n\n\n\n\n\nPPP"; // offset: 0xa3ee8
+wchar_t data_a3ee8[] = L"\n\n\n\n\n\nPPP"; // offset: 0xa3ee8
 
 // Data at address 0xa41b8
-wchar32 data_a41b8[] = "         "; // offset: 0xa41b8
+wchar_t data_a41b8[] = L"         "; // offset: 0xa41b8
 
 // Data at address 0xa465c
-wchar32 data_a465c[] = "dddddd"; // offset: 0xa465c
+wchar_t data_a465c[] = L"dddddd"; // offset: 0xa465c
 
 // Data at address 0xa4680
-wchar32 data_a4680[] = "@@@@@@@@@"; // offset: 0xa4680
+wchar_t data_a4680[] = L"@@@@@@@@@"; // offset: 0xa4680
 
 // Data at address 0xa56b0
-wchar32 data_a56b0[] = "PPZZZPPPPFNMLKJIHFFIGOFDCBBA?>=<;:99LLKJIHGFE"; // offset: 0xa56b0
+wchar_t data_a56b0[] = L"PPZZZPPPPFNMLKJIHFFIGOFDCBBA?>=<;:99LLKJIHGFE"; // offset: 0xa56b0
 
 // Data at address 0xa58d0
-wchar32 data_a58d0[] = "  <Z"; // offset: 0xa58d0
+wchar_t data_a58d0[] = L"  <Z"; // offset: 0xa58d0
 
 // Data at address 0xa58e4
-wchar32 data_a58e4[] = "PFFAL7Z"; // offset: 0xa58e4
+wchar_t data_a58e4[] = L"PFFAL7Z"; // offset: 0xa58e4
 
 // Data at address 0xa5a8c
-wchar32 data_a5a8c[] = "UZ____F"; // offset: 0xa5a8c
+wchar_t data_a5a8c[] = L"UZ____F"; // offset: 0xa5a8c
 
 // Data at address 0xa5b4c
-wchar32 data_a5b4c[] = "(2222\n"; // offset: 0xa5b4c
+wchar_t data_a5b4c[] = L"(2222\n"; // offset: 0xa5b4c
 
 // Data at address 0xa71b4
-wchar32 data_a71b4[] = "dddddddddddddddddd"; // offset: 0xa71b4
+wchar_t data_a71b4[] = L"dddddddddddddddddd"; // offset: 0xa71b4
 
 // Data at address 0xa7344
-wchar32 data_a7344[] = "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"; // offset: 0xa7344
+wchar_t data_a7344[] = L"@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"; // offset: 0xa7344
 
 // Data at address 0xa73d4
-wchar32 data_a73d4[] = "@@A?CB?????"; // offset: 0xa73d4
+wchar_t data_a73d4[] = L"@@A?CB?????"; // offset: 0xa73d4
 
 // Data at address 0xa777c
-wchar32 data_a777c[] = "\t\t#\',17=DKS[clu~"; // offset: 0xa777c
+wchar_t data_a777c[] = L"\t\t#\',17=DKS[clu~"; // offset: 0xa777c
 
 // Data at address 0xa7d04
-wchar32 data_a7d04[] = "$$@@"; // offset: 0xa7d04
+wchar_t data_a7d04[] = L"$$@@"; // offset: 0xa7d04
 
 // Data at address 0xa7f64
-wchar32 data_a7f64[] = "         @@@@@@@@@@@@@@@@@@"; // offset: 0xa7f64
+wchar_t data_a7f64[] = L"         @@@@@@@@@@@@@@@@@@"; // offset: 0xa7f64
 
 // Data at address 0xa804c
-wchar32 data_a804c[] = "@@@@"; // offset: 0xa804c
+wchar_t data_a804c[] = L"@@@@"; // offset: 0xa804c
 
 // Data at address 0xa8318
 void* data_a8318 = &netlink_rcv_msg;
@@ -5551,7 +5568,7 @@ uint32_t msca_dmaout_arb = 0xffffffffU;
 uint32_t msca_ch_en = 0xffffffffU;
 
 // Data at address 0xa83b0
-uint32_t _ev = (void*)0x64000;
+extern uint32_t _ev[]; // Fixed invalid initializer
 
 // Data at address 0xa8468
 uint32_t first_frame = 0x1;
@@ -5662,7 +5679,7 @@ int32_t data_a9fc4 = 0x1;
 int32_t data_a9fc8 = 0xf;
 
 // Data at address 0xa9fcc
-wchar32 data_a9fcc[] = "@@@@@@@@@@@@@@@$$$$$$$$$$$$$$$"; // offset: 0xa9fcc
+wchar_t data_a9fcc[] = L"@@@@@@@@@@@@@@@$$$$$$$$$$$$$$$"; // offset: 0xa9fcc
 
 // Data at address 0xaa044
 int32_t data_aa044 = 0x80;
@@ -5719,7 +5736,7 @@ uint64_t gib_ir_value = 0x0000002d0000002dULL;
 uint64_t gib_ir_mode = 0x1;
 
 // Data at address 0xaa22c
-wchar32 tiziano_gib_deirm_blc_ir_linear[] = "A?CB?????"; // offset: 0xaa22c
+wchar_t tiziano_gib_deirm_blc_ir_linear[] = L"A?CB?????"; // offset: 0xaa22c
 
 // Data at address 0xaa2e0
 uint64_t tiziano_gib_b_ir_linear = 0x0000040000000400ULL;
@@ -5764,7 +5781,7 @@ int32_t data_aa318 = 0xfff;
 int32_t data_aa31c = 0xfff;
 
 // Data at address 0xaa320
-wchar32 tisp_gb_blc_ir[] = "A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa320
+wchar_t tisp_gb_blc_ir[] = L"A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa320
 
 // Data at address 0xaa3d4
 const char tisp_gb_dgain_rgbir_s[] = "A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // length: 180
@@ -5839,7 +5856,7 @@ uint8_t dmsc_ratio = 0x80;
 uint32_t _ct = 0x1770;
 
 // Data at address 0xaa454
-uint32_t _ev_aa454 = (void*)0x64000;
+extern uint32_t _ev_aa454[]; // Fixed invalid initializer
 
 // Data at address 0xaa458
 void* cm_sat_list_now = (void*)0xc5194;
@@ -5920,7 +5937,7 @@ int32_t tisp_BCSH_au32Sthres_wdr = 0x0;
 uint32_t BCSH_ct = 0x1770;
 
 // Data at address 0xaa614
-uint32_t BCSH_ev = (void*)0x64000;
+extern uint32_t BCSH_ev[]; // Fixed invalid initializer
 
 // Data at address 0xaa66c
 int32_t tisp_BCSH_au32Offset0 = 0x400;
@@ -6430,7 +6447,7 @@ void* param_defog_main_para_array_now = (void*)0xacc44;
 void* param_defog_fpga_para_array_now = (void*)0xacce8;
 
 // Data at address 0xaac68
-wchar32 (*) param_defog_block_t_x_array_now[] = (void*)0xacd3c /* pointer to data */; // offset: 0xaac68
+wchar_t* param_defog_block_t_x_array_now = (void*)0xacd3c /* pointer to data */;
 
 // Data at address 0xaac6c
 void* defog_trsy4_list_now = (void*)0xcd554;
@@ -6547,7 +6564,7 @@ int32_t data_ac844 = 0x10dc;
 int32_t param_defog_cent3_w_dis_array = 0x10;
 
 // Data at address 0xac84c
-wchar32 data_ac84c[] = "!2DWk"; // offset: 0xac84c
+wchar_t data_ac84c[] = L"!2DWk"; // offset: 0xac84c
 
 // Data at address 0xac860
 const char data_ac860[] = "!2DWk"; // length: 20
@@ -6667,7 +6684,7 @@ int32_t data_ac8f4 = 0x7;
 int32_t data_ac8f8 = 0x8;
 
 // Data at address 0xac8fc
-wchar32 data_ac8fc[] = "\t\n\n\n\n\n\n\n\n\n\n"; // offset: 0xac8fc
+wchar_t data_ac8fc[] = L"\t\n\n\n\n\n\n\n\n\n\n"; // offset: 0xac8fc
 
 // Data at address 0xac92c
 int32_t data_ac92c = 0x0;
@@ -6937,7 +6954,7 @@ int32_t data_aca88 = 0xb;
 int32_t data_aca8c = 0xc;
 
 // Data at address 0xaca90
-wchar32 data_aca90[] = "\r\r\r\r\r\r"; // offset: 0xaca90
+wchar_t data_aca90[] = L"\r\r\r\r\r\r"; // offset: 0xaca90
 
 // Data at address 0xacaac
 int32_t data_acaac = 0x0;
@@ -7015,7 +7032,7 @@ int32_t data_acb08 = 0xb;
 int32_t data_acb0c = 0xc;
 
 // Data at address 0xacb10
-wchar32 data_acb10[] = "\r\r\r\r\r\r"; // offset: 0xacb10
+wchar_t data_acb10[] = L"\r\r\r\r\r\r"; // offset: 0xacb10
 
 // Data at address 0xacb28
 const char param_defog_dark_l2_array[] = "\r\r\r\r\r\r"; // length: 24
@@ -7195,7 +7212,7 @@ char param_defog_color_control_array = 0x8;
 int32_t data_acc10 = 0x18;
 
 // Data at address 0xacc14
-wchar32 data_acc14[] = " (8<<<<<"; // offset: 0xacc14
+wchar_t data_acc14[] = L" (8<<<<<"; // offset: 0xacc14
 
 // Data at address 0xacc34
 const char data_acc34[] = " (8<<<<<"; // length: 32
@@ -7300,7 +7317,7 @@ int32_t data_acce0 = 0x3cc;
 int32_t data_acce4 = 0x438;
 
 // Data at address 0xacd28
-wchar32 param_defog_block_t_y_array[] = "(2222_PKAK<Z"; // offset: 0xacd28
+wchar_t param_defog_block_t_y_array[] = L"(2222_PKAK<Z"; // offset: 0xacd28
 
 // Data at address 0xacd50
 int32_t defog_rgbra_list = 0x0;
@@ -8182,7 +8199,7 @@ int32_t data_af82c = 0x7;
 int32_t data_af830 = 0x8;
 
 // Data at address 0xaf834
-wchar32 data_af834[] = "\t\t\n\n"; // offset: 0xaf834
+wchar_t data_af834[] = L"\t\t\n\n"; // offset: 0xaf834
 
 // Data at address 0xaf844
 const char data_af844[] = "\t\t\n\n"; // length: 16
@@ -8761,7 +8778,7 @@ int32_t data_afcdc = 0x400;
 int32_t data_afce0 = 0x400;
 
 // Data at address 0xb088c
-wchar32 _at_list_wdr[] = "KA7-("; // offset: 0xb088c
+wchar_t _at_list_wdr[] = L"KA7-("; // offset: 0xb088c
 
 // Data at address 0xb0940
 uint32_t _nodes_num = 0x77;
@@ -8782,7 +8799,7 @@ int32_t data_b0b30 = 0x2e5;
 int32_t _deflicker_para = 0x0;
 
 // Data at address 0xb0bc0
-wchar32 ae_comp_at_list[] = "KA7-("; // offset: 0xb0bc0
+wchar_t ae_comp_at_list[] = L"KA7-("; // offset: 0xb0bc0
 
 // Data at address 0xb0c10
 int32_t ae_comp_param = 0x0;
@@ -8791,7 +8808,7 @@ int32_t ae_comp_param = 0x0;
 int32_t data_b0c18 = 0x80;
 
 // Data at address 0xb0c28
-wchar32 _at_list[] = "KA7-("; // offset: 0xb0c28
+wchar_t _at_list[] = L"KA7-("; // offset: 0xb0c28
 
 // Data at address 0xb0cec
 int32_t data_b0cec = 0x0;
@@ -8818,7 +8835,7 @@ int16_t data_b0d4c = 0xf;
 int16_t data_b0d54 = 0xf;
 
 // Data at address 0xb0d58
-wchar32 data_b0d58[] = "@@@@@@@@@@@@@@@$$$$$$$$$$$$$$$"; // offset: 0xb0d58
+wchar_t data_b0d58[] = L"@@@@@@@@@@@@@@@$$$$$$$$$$$$$$$"; // offset: 0xb0d58
 
 // Data at address 0xb0de0
 int32_t data_b0de0 = 0x400;
@@ -9277,7 +9294,7 @@ int32_t data_b148c = 0x9c4;
 int32_t data_b149c = 0x1194;
 
 // Data at address 0xb14a0
-wchar32 wdr_detail_w_in4_list[] = "@@@@@@@@@@@@@@@@@@         "; // offset: 0xb14a0
+wchar_t wdr_detail_w_in4_list[] = L"@@@@@@@@@@@@@@@@@@         "; // offset: 0xb14a0
 
 // Data at address 0xb150c
 int32_t wdr_weight_p_in_list = 0x1c20;
@@ -9403,7 +9420,7 @@ int32_t data_b15e8 = 0x108;
 int32_t data_b15ec = 0x107;
 
 // Data at address 0xb15f0
-wchar32 data_b15f0[] = "yWB3(!"; // offset: 0xb15f0
+wchar_t data_b15f0[] = L"yWB3(!"; // offset: 0xb15f0
 
 // Data at address 0xb1608
 int32_t data_b1608 = 0x1b;
@@ -9448,7 +9465,7 @@ int32_t data_b1638 = 0x18;
 int32_t data_b163c = 0x18;
 
 // Data at address 0xb1640
-wchar32 wdr_thrAll_software_out[] = "JRZx"; // offset: 0xb1640
+wchar_t wdr_thrAll_software_out[] = L"JRZx"; // offset: 0xb1640
 
 // Data at address 0xb1650
 const char data_b1650[] = "JRZx"; // length: 16
@@ -10606,7 +10623,7 @@ int16_t data_b205c = 0xa5;
 int32_t data_b2060 = 0x89;
 
 // Data at address 0xb2064
-wchar32 data_b2064[] = "nT;#"; // offset: 0xb2064
+wchar_t data_b2064[] = L"nT;#"; // offset: 0xb2064
 
 // Data at address 0xb2074
 const char data_b2074[] = "nT;#"; // length: 16
@@ -11161,7 +11178,7 @@ int32_t data_b2350 = 0x1;
 int32_t data_b2354 = 0x1f40;
 
 // Data at address 0xb2358
-wchar32 param_fusion1_cure_y_array[] = "#\',17=DKS[clu~"; // offset: 0xb2358
+wchar_t param_fusion1_cure_y_array[] = L"#\',17=DKS[clu~"; // offset: 0xb2358
 
 // Data at address 0xb2390
 const char data_b2390[] = "#\',17=DKS[clu~"; // length: 56
@@ -11293,7 +11310,7 @@ void* tx_isp_core_driver = &tx_isp_core_probe;
 void* data_b24d4 = &tx_isp_core_remove;
 
 // Data at address 0xb24e4
-char const (*) data_b24e4[] = (void*)0x826a0 /* pointer to data */; // offset: 0xb24e4
+char const* data_b24e4 = (void*)0x826a0 /* pointer to data */;
 
 // Data at address 0xb24ec
 void* data_b24ec = (void*)0xb27e0;
@@ -11326,7 +11343,7 @@ void* data_b259c = (void*)0xb25b8 /* pointer to data */;
 void* data_b25a0 = (void*)0xb25a4 /* pointer to data */;
 
 // Data at address 0xb25a4
-uint64_t ispcore_internal_ops = &ispcore_activate_module;
+extern void* ispcore_internal_ops; // Fixed function pointer assignment
 
 // Data at address 0xb25ac
 void* ispcore_subdev_video_ops = &ispcore_video_s_stream;
@@ -19468,16 +19485,16 @@ unsigned char tiziano_gib_deirm_blc_gr_linear[] = { 0xfd, 0x00, 0x00, 0x00, 0xfe
 unsigned char tiziano_gib_deirm_blc_r_linear[] = { 0xfd, 0x00, 0x00, 0x00, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xaa2bc
 
 // Data at address 0xaa344
-wchar32 tisp_gb_blc_b[] = "A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa344
+wchar_t tisp_gb_blc_b[] = L"A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa344
 
 // Data at address 0xaa368
-wchar32 tisp_gb_blc_gb[] = "A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa368
+wchar_t tisp_gb_blc_gb[] = L"A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa368
 
 // Data at address 0xaa38c
-wchar32 tisp_gb_blc_gr[] = "A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa38c
+wchar_t tisp_gb_blc_gr[] = L"A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa38c
 
 // Data at address 0xaa3b0
-wchar32 tisp_gb_blc_r[] = "A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa3b0
+wchar_t tisp_gb_blc_r[] = L"A?CB?????A?CB?????A?CB?????A?CB?????A?CB?????"; // offset: 0xaa3b0
 
 // Data at address 0xaa410
 unsigned char lsc_ct_points[] = { 0xf4, 0x01, 0x00, 0x00, 0xd0, 0x07, 0x00, 0x00, 0xc4, 0x09, 0x00, 0x00, 0xac, 0x0d, 0x00, 0x00, 0x64, 0xe5, 0x0b, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xd0, 0x4a, 0x0c, 0x00, 0xf4, 0x4a, 0x0c, 0x00, 0x1c, 0x4c, 0x0c, 0x00, 0x40, 0x4c, 0x0c, 0x00, 0x48, 0x4d, 0x0c, 0x00, 0x6c, 0x4d, 0x0c, 0x00, 0x80, 0x00, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xaa410
@@ -19723,10 +19740,10 @@ unsigned char param_defog_weightlut02_tmp[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x
 unsigned char param_defog_weightlut20_tmp[] = "\r\r\r\r\r\r"; // offset: 0xac74c
 
 // Data at address 0xac928
-wchar32 param_defog_weightlut22[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00 }; // offset: 0xac928
+wchar_t param_defog_weightlut22[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00 }; // offset: 0xac928
 
 // Data at address 0xacaa8
-wchar32 param_defog_weightlut20[] = "\r\r\r\r\r\r"; // offset: 0xacaa8
+wchar_t param_defog_weightlut20[] = L"\r\r\r\r\r\r"; // offset: 0xacaa8
 
 // Data at address 0xacc44
 unsigned char param_defog_main_para_array[] = { 0x48, 0x00, 0x00, 0x00, 0xf2, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x6b, 0x00, 0x00, 0x00, 0xd6, 0x00, 0x00, 0x00, 0x41, 0x01, 0x00, 0x00, 0xac, 0x01, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xacc44
@@ -19735,7 +19752,7 @@ unsigned char param_defog_main_para_array[] = { 0x48, 0x00, 0x00, 0x00, 0xf2, 0x
 unsigned char param_defog_fpga_para_array[] = { 0x00, 0x00, 0x00, 0x00, 0x54, 0x00, 0x00, 0x00, 0xab, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0xf0, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xacce8
 
 // Data at address 0xacd3c
-wchar32 param_defog_block_t_x_array[] = "(2222_PKAK<Z"; // offset: 0xacd3c
+wchar_t param_defog_block_t_x_array[] = L"(2222_PKAK<Z"; // offset: 0xacd3c
 
 // Data at address 0xacda4
 unsigned char defog_t_par_list2[] = { 0x6e, 0x00, 0x00, 0x00, 0x40, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0xee, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x50, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xa0, 0x00, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xacda4
@@ -20017,10 +20034,10 @@ unsigned char ratio_sub_value[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x
 unsigned char ratio_value[] = { 0x00, 0x20, 0x00, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x40, 0x01, 0x00, 0x00, 0xe0, 0x01, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf4, 0x01, 0x00, 0x00, 0xe8, 0x03, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xb1444
 
 // Data at address 0xb14c4
-wchar32 wdr_detail_w_in3_list[] = "@@@@@@@@@@@@@@@@@@         "; // offset: 0xb14c4
+wchar_t wdr_detail_w_in3_list[] = L"@@@@@@@@@@@@@@@@@@         "; // offset: 0xb14c4
 
 // Data at address 0xb14e8
-wchar32 wdr_detail_w_in2_list[] = "@@@@@@@@@@@@@@@@@@         "; // offset: 0xb14e8
+wchar_t wdr_detail_w_in2_list[] = L"@@@@@@@@@@@@@@@@@@         "; // offset: 0xb14e8
 
 // Data at address 0xb1ae0
 unsigned char param_wdr_detial_para_software_in_array[] = { 0x54, 0x01, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0xb8, 0x01, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1f, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00 /* ... 192 more bytes ... */ }; // offset: 0xb1ae0
@@ -22711,70 +22728,70 @@ unsigned char irq_func_cb[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
 /* Function Pointers and Tables */
 
 /* Symbol Table Entries - Fixed syntax (dynamically discovered) */
-void* __ksymtab_isp_printf = (void*)isp_printf; // Symbol table entry
-void* __ksymtab_private_capable = (void*)private_capable; // Symbol table entry
-void* __ksymtab_private_clk_disable = (void*)private_clk_disable; // Symbol table entry
-void* __ksymtab_private_clk_enable = (void*)private_clk_enable; // Symbol table entry
-void* __ksymtab_private_clk_put = (void*)private_clk_put; // Symbol table entry
-void* __ksymtab_private_clk_set_rate = (void*)private_clk_set_rate; // Symbol table entry
-void* __ksymtab_private_driver_get_interface = (void*)private_driver_get_interface; // Symbol table entry
-void* __ksymtab_private_gpio_direction_output = (void*)private_gpio_direction_output; // Symbol table entry
-void* __ksymtab_private_gpio_free = (void*)private_gpio_free; // Symbol table entry
-void* __ksymtab_private_gpio_request = (void*)private_gpio_request; // Symbol table entry
-void* __ksymtab_private_i2c_add_driver = (void*)private_i2c_add_driver; // Symbol table entry
-void* __ksymtab_private_i2c_del_driver = (void*)private_i2c_del_driver; // Symbol table entry
-void* __ksymtab_private_i2c_get_clientdata = (void*)private_i2c_get_clientdata; // Symbol table entry
-void* __ksymtab_private_i2c_set_clientdata = (void*)private_i2c_set_clientdata; // Symbol table entry
-void* __ksymtab_private_i2c_transfer = (void*)private_i2c_transfer; // Symbol table entry
-void* __ksymtab_private_jzgpio_set_func = (void*)private_jzgpio_set_func; // Symbol table entry
-void* __ksymtab_private_log2_fixed_to_fixed = (void*)private_log2_fixed_to_fixed; // Symbol table entry
-void* __ksymtab_private_log2_int_to_fixed = (void*)private_log2_int_to_fixed; // Symbol table entry
-void* __ksymtab_private_math_exp2 = (void*)private_math_exp2; // Symbol table entry
-void* __ksymtab_private_msleep = (void*)private_msleep; // Symbol table entry
-void* __ksymtab_tisp_log2_fixed_to_fixed = (void*)tisp_log2_fixed_to_fixed; // Symbol table entry
-void* __ksymtab_tisp_math_exp2 = (void*)tisp_math_exp2; // Symbol table entry
-void* __ksymtab_tx_isp_exit = (void*)tx_isp_exit; // Symbol table entry
-void* __ksymtab_tx_isp_init = (void*)tx_isp_init; // Symbol table entry
-void* __ksymtab_tx_isp_subdev_deinit = (void*)tx_isp_subdev_deinit; // Symbol table entry
-void* __ksymtab_tx_isp_subdev_init = (void*)tx_isp_subdev_init; // Symbol table entry
-void* __kstrtab_isp_printf = (void*)isp_printf; // Symbol table entry
-void* __kstrtab_private_driver_get_interface = (void*)private_driver_get_interface; // Symbol table entry
-void* __kstrtab_private_capable = (void*)private_capable; // Symbol table entry
-void* __kstrtab_private_msleep = (void*)private_msleep; // Symbol table entry
-void* __kstrtab_private_jzgpio_set_func = (void*)private_jzgpio_set_func; // Symbol table entry
-void* __kstrtab_private_gpio_direction_output = (void*)private_gpio_direction_output; // Symbol table entry
-void* __kstrtab_private_gpio_free = (void*)private_gpio_free; // Symbol table entry
-void* __kstrtab_private_gpio_request = (void*)private_gpio_request; // Symbol table entry
-void* __kstrtab_private_i2c_add_driver = (void*)private_i2c_add_driver; // Symbol table entry
-void* __kstrtab_private_i2c_set_clientdata = (void*)private_i2c_set_clientdata; // Symbol table entry
-void* __kstrtab_private_i2c_get_clientdata = (void*)private_i2c_get_clientdata; // Symbol table entry
-void* __kstrtab_private_i2c_del_driver = (void*)private_i2c_del_driver; // Symbol table entry
-void* __kstrtab_private_i2c_transfer = (void*)private_i2c_transfer; // Symbol table entry
-void* __kstrtab_private_clk_set_rate = (void*)private_clk_set_rate; // Symbol table entry
-void* __kstrtab_private_clk_put = (void*)private_clk_put; // Symbol table entry
-void* __kstrtab_private_clk_disable = (void*)private_clk_disable; // Symbol table entry
-void* __kstrtab_private_clk_enable = (void*)private_clk_enable; // Symbol table entry
-void* __kstrtab_private_log2_fixed_to_fixed = (void*)private_log2_fixed_to_fixed; // Symbol table entry
-void* __kstrtab_private_log2_int_to_fixed = (void*)private_log2_int_to_fixed; // Symbol table entry
-void* __kstrtab_private_math_exp2 = (void*)private_math_exp2; // Symbol table entry
-void* __kstrtab_tx_isp_exit = (void*)tx_isp_exit; // Symbol table entry
-void* __kstrtab_tx_isp_init = (void*)tx_isp_init; // Symbol table entry
-void* __kstrtab_tx_isp_subdev_deinit = (void*)tx_isp_subdev_deinit; // Symbol table entry
-void* __kstrtab_tx_isp_subdev_init = (void*)tx_isp_subdev_init; // Symbol table entry
-void* __kstrtab_tisp_log2_fixed_to_fixed = (void*)tisp_log2_fixed_to_fixed; // Symbol table entry
-void* __kstrtab_tisp_math_exp2 = (void*)tisp_math_exp2; // Symbol table entry
+extern void* __ksymtab_isp_printf; // Symbol table entry
+extern void* __ksymtab_private_capable; // Symbol table entry
+extern void* __ksymtab_private_clk_disable; // Symbol table entry
+extern void* __ksymtab_private_clk_enable; // Symbol table entry
+extern void* __ksymtab_private_clk_put; // Symbol table entry
+extern void* __ksymtab_private_clk_set_rate; // Symbol table entry
+extern void* __ksymtab_private_driver_get_interface; // Symbol table entry
+extern void* __ksymtab_private_gpio_direction_output; // Symbol table entry
+extern void* __ksymtab_private_gpio_free; // Symbol table entry
+extern void* __ksymtab_private_gpio_request; // Symbol table entry
+extern void* __ksymtab_private_i2c_add_driver; // Symbol table entry
+extern void* __ksymtab_private_i2c_del_driver; // Symbol table entry
+extern void* __ksymtab_private_i2c_get_clientdata; // Symbol table entry
+extern void* __ksymtab_private_i2c_set_clientdata; // Symbol table entry
+extern void* __ksymtab_private_i2c_transfer; // Symbol table entry
+extern void* __ksymtab_private_jzgpio_set_func; // Symbol table entry
+extern void* __ksymtab_private_log2_fixed_to_fixed; // Symbol table entry
+extern void* __ksymtab_private_log2_int_to_fixed; // Symbol table entry
+extern void* __ksymtab_private_math_exp2; // Symbol table entry
+extern void* __ksymtab_private_msleep; // Symbol table entry
+extern void* __ksymtab_tisp_log2_fixed_to_fixed; // Symbol table entry
+extern void* __ksymtab_tisp_math_exp2; // Symbol table entry
+extern void* __ksymtab_tx_isp_exit; // Symbol table entry
+extern void* __ksymtab_tx_isp_init; // Symbol table entry
+extern void* __ksymtab_tx_isp_subdev_deinit; // Symbol table entry
+extern void* __ksymtab_tx_isp_subdev_init; // Symbol table entry
+extern unsigned char __kstrtab_isp_printf[]; // String table entry
+extern unsigned char __kstrtab_private_driver_get_interface[]; // String table entry
+extern unsigned char __kstrtab_private_capable[]; // String table entry
+extern unsigned char __kstrtab_private_msleep[]; // String table entry
+extern unsigned char __kstrtab_private_jzgpio_set_func[]; // String table entry
+extern unsigned char __kstrtab_private_gpio_direction_output[]; // String table entry
+extern unsigned char __kstrtab_private_gpio_free[]; // String table entry
+extern unsigned char __kstrtab_private_gpio_request[]; // String table entry
+extern unsigned char __kstrtab_private_i2c_add_driver[]; // String table entry
+extern unsigned char __kstrtab_private_i2c_set_clientdata[]; // String table entry
+extern unsigned char __kstrtab_private_i2c_get_clientdata[]; // String table entry
+extern unsigned char __kstrtab_private_i2c_del_driver[]; // String table entry
+extern unsigned char __kstrtab_private_i2c_transfer[]; // String table entry
+extern unsigned char __kstrtab_private_clk_set_rate[]; // String table entry
+extern unsigned char __kstrtab_private_clk_put[]; // String table entry
+extern unsigned char __kstrtab_private_clk_disable[]; // String table entry
+extern unsigned char __kstrtab_private_clk_enable[]; // String table entry
+extern unsigned char __kstrtab_private_log2_fixed_to_fixed[]; // String table entry
+extern unsigned char __kstrtab_private_log2_int_to_fixed[]; // String table entry
+extern unsigned char __kstrtab_private_math_exp2[]; // String table entry
+extern unsigned char __kstrtab_tx_isp_exit[]; // String table entry
+extern unsigned char __kstrtab_tx_isp_init[]; // String table entry
+extern unsigned char __kstrtab_tx_isp_subdev_deinit[]; // String table entry
+extern unsigned char __kstrtab_tx_isp_subdev_init[]; // String table entry
+extern unsigned char __kstrtab_tisp_log2_fixed_to_fixed[]; // String table entry
+extern unsigned char __kstrtab_tisp_math_exp2[]; // String table entry
 
 /* Jump Tables - Fixed array syntax (dynamically discovered) */
-void* jump_table_7a3f0[1] = { (void*)0x7a3f0 }; // Jump table
-void* jump_table_85a5c[1] = { (void*)0x85a5c }; // Jump table
+void* jump_table_7b550[1] = { (void*)0x7b550 }; // Jump table
+void* jump_table_7b34c[1] = { (void*)0x7b34c }; // Jump table
+void* jump_table_8695c[1] = { (void*)0x8695c }; // Jump table
+void* jump_table_8985c[1] = { (void*)0x8985c }; // Jump table
+void* jump_table_82c40[1] = { (void*)0x82c40 }; // Jump table
+void* jump_table_8751c[1] = { (void*)0x8751c }; // Jump table
+void* jump_table_8831c[1] = { (void*)0x8831c }; // Jump table
+void* jump_table_7b280[1] = { (void*)0x7b280 }; // Jump table
 void* jump_table_8a8dc[1] = { (void*)0x8a8dc }; // Jump table
-void* crc_table[1] = { (void*)0x7b050 }; // Jump table
-void* jump_table_86edc[1] = { (void*)0x86edc }; // Jump table
-void* jump_table_82ec0[1] = { (void*)0x82ec0 }; // Jump table
-void* jump_table_853dc[1] = { (void*)0x853dc }; // Jump table
-void* jump_table_86a5c[1] = { (void*)0x86a5c }; // Jump table
-void* jump_table_9115c[1] = { (void*)0x9115c }; // Jump table
-void* jump_table_82cb0[1] = { (void*)0x82cb0 }; // Jump table
+void* jump_table_9181c[1] = { (void*)0x9181c }; // Jump table
 
 /* Special Data - Fixed types and syntax */
 unsigned char data_10028[8] = { 0xa2, 0x00, 0x38, 0x00, 0x00, 0x88, 0x25, 0x00 }; // Fixed byte array

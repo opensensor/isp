@@ -193,14 +193,14 @@
                                 $a1_12 += 1;
                             }
                             
-                            memset(&var_58_14, 0, 0x34);
+                            memset(&var_58_13, 0, 0x34);
                             uint32_t $a0_25 = arg1[1];
                             uint32_t var_38_1_5 = *(arg3 + 0x5c);
                             int32_t var_34_1_6 = *(arg3 + 0x64);
                             int32_t var_30_1_3 = *(arg3 + 0x60);
                             int32_t var_2c_1_5 = *(arg3 + 0x68);
                             int32_t var_28_1_3 = *(arg3 + 0x6c);
-                            var_58_15 = *(arg3 + 0x48);
+                            var_58_14 = *(arg3 + 0x48);
                             int32_t var_54_1_2 = *(arg3 + 0x4c);
                             int32_t var_50_1_1 = *(arg3 + 0x50);
                             uint32_t var_4c_1_2 = *(arg3 + 0x34);
@@ -209,7 +209,7 @@
                             int32_t var_40_1_4 = *(arg3 + 0x40);
                             int32_t var_3c_1_5 = *(arg3 + 0x44);
                             
-                            if (tisp_channel_attr_set($a0_25, &var_58_16))
+                            if (tisp_channel_attr_set($a0_25, &var_58_15))
                             {
                                 return 0;
                                 isp_printf(2, "Err [VIC_INT] : dma syfifo ovf!!!\n", 
@@ -243,7 +243,7 @@
                         var_58 = 0;
                     }
                     else
-                        var_58_17 = 0;
+                        var_58_16 = 0;
                 }
                 
                 char* $s2_1 = (char*)(arg1[8]); // Fixed void pointer assignment
@@ -262,7 +262,7 @@
                 if (*(arg1 + 7) != 3)
                     return 0;
                 
-                __private_spin_lock_irqsave($s2_1 + 0x9c, &var_58_18);
+                __private_spin_lock_irqsave($s2_1 + 0x9c, &var_58_17);
                 
                 if (*($s2_1 + 0x74) != 4)
                 {
@@ -315,7 +315,7 @@
                         var_58 = 0;
                     }
                     else
-                        var_58_19 = 0;
+                        var_58_18 = 0;
                 }
                 
                 if (*($v0_21 + 0x15c) != 1)
@@ -336,7 +336,7 @@
                         }
                         
                         *(arg3 - 0x1c) = 4;
-                        __private_spin_lock_irqsave($s1_2 + 0x9c, &var_58_20);
+                        __private_spin_lock_irqsave($s1_2 + 0x9c, &var_58_19);
                         
                         if (*($s1_2 + 0xc) != 0x3231564e)
                         {
@@ -353,7 +353,7 @@
                         *((int32_t*)((char*)arg3 + 0xc)) = $v0_26 * $a1_9 + $a0_13; // Fixed void pointer dereference
                         *(*($s3_4 + 0xb8) + (*($s1_2 + 0x70) << 8) + 0x996c) = $a0_13;
                         *(*($s3_4 + 0xb8) + (*($s1_2 + 0x70) << 8) + 0x9984) = *(arg3 + 0xc);
-                        private_spin_unlock_irqrestore($s1_2 + 0x9c, var_58_21);
+                        private_spin_unlock_irqrestore($s1_2 + 0x9c, var_58_20);
                     }
                 }
                 else
@@ -391,7 +391,7 @@
                         var_58 = 0;
                     }
                     else
-                        var_58_22 = 0;
+                        var_58_21 = 0;
                 }
                 
                 if (*($v0_13 + 0x15c) == 1)
