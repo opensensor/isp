@@ -1274,52 +1274,56 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                         return -EINVAL;
                     }
                 }
+        } else {
+            /* Handle specific lower format codes */
+            if (data_format == 0x2011) {
+                mipi_config = 0xc0000;
+            } else if (data_format >= 0x2012) {
+                if (data_format == 0x3007) {
+                    goto mipi_standard_10bit;
+                } else if (data_format < 0x3008) {
+                    if ((data_format - 0x3001) < 2) {
+                        goto mipi_8bit_mode;
+                    } else {
+                        pr_err("VIC do not support this format %d\n", data_format);
+                        return -EINVAL;
+                    }
+                } else if (data_format == 0x3008) {
+                    mipi_config = 0x40000;
+                    if (sensor_attr->integration_time_apply_delay == 2) {
+                        mipi_config = 0x50000;
+                    }
+                } else if (data_format == 0x300a) {
+                    goto mipi_standard_10bit;
+                } else {
+                    pr_err("VIC do not support this format %d\n", data_format);
+                    return -EINVAL;
+                }
             } else {
-                /* Handle specific lower format codes */
-                if (data_format == 0x2011) {
-                    mipi_config = 0xc0000;
-                } else if (data_format >= 0x2012) {
-                    if (data_format == 0x3007) {
-                        goto mipi_standard_10bit;
-                    } else if (data_format < 0x3008) {
-                        if ((data_format - 0x3001) < 2) {
-                            goto mipi_8bit_mode;
-                        } else {
-                            pr_err("VIC do not support this format %d\n", data_format);
-                            return -EINVAL;
-                        }
-                    } else if (data_format == 0x3008) {
-                        mipi_config = 0x40000;
-                        if (sensor_attr->integration_time_apply_delay == 2) {
-                            mipi_config = 0x50000;
-                        }
-                    } else if (data_format == 0x300a) {
-                        goto mipi_standard_10bit;
+                /* 0x1008, 0x1006, 0x2b (RAW10) etc */
+                if (data_format == 0x1008) {
+                    mipi_config = 0x80000;
+                } else if (data_format == 0x2b) {
+                    /* RAW10 format - use standard 10-bit MIPI path */
+                    pr_info("tx_isp_vic_start: RAW10 format (0x2b) detected - using standard 10-bit path\n");
+                    goto mipi_standard_10bit;
+                } else if (data_format >= 0x1009) {
+                    if ((data_format - 0x2002) < 4) {
+                        mipi_config = 0xc0000;
                     } else {
                         pr_err("VIC do not support this format %d\n", data_format);
                         return -EINVAL;
                     }
                 } else {
-                    /* 0x1008, 0x1006 etc */
-                    if (data_format == 0x1008) {
-                        mipi_config = 0x80000;
-                    } else if (data_format >= 0x1009) {
-                        if ((data_format - 0x2002) < 4) {
-                            mipi_config = 0xc0000;
-                        } else {
-                            pr_err("VIC do not support this format %d\n", data_format);
-                            return -EINVAL;
-                        }
+                    if (data_format == 0x1006) {
+                        mipi_config = 0xa0000;
                     } else {
-                        if (data_format == 0x1006) {
-                            mipi_config = 0xa0000;
-                        } else {
-                            pr_err("VIC do not support this format %d\n", data_format);
-                            return -EINVAL;
-                        }
+                        pr_err("VIC do not support this format %d\n", data_format);
+                        return -EINVAL;
                     }
                 }
             }
+        }
         }
         
         /* Binary Ninja: Additional MIPI lane configuration */
