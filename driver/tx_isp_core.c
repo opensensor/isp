@@ -3256,8 +3256,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     .total_height = 1125,  /* GC2053 total height */  
                     .dbus_type = 2,        /* MIPI interface */
                     .chip_id = 0x2053,     /* GC2053 chip ID */
-                    .wdr_cache = 0,        /* Linear mode */
-                    .fps = 25              /* 25 FPS */
+                    .wdr_cache = 0         /* Linear mode */
                 };
                 
                 /* Call tisp_init to initialize the hardware pipeline - this was missing! */
