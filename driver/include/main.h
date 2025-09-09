@@ -574,6 +574,9 @@ char const __func___34251[] = "tx_isp_subdev_init"; // offset: 0x7ad10
 // Data at address 0x7ad24
 char const __func___34189[] = "tx_isp_module_init"; // offset: 0x7ad24
 
+// Data at address 0x83440
+void* tx_isp_vin_driver = &tx_isp_vin_probe;
+
 c// Data at address 0x7ad38
 void* isp_drivers = tx_isp_vin_driver; // offset: 0x7ad38
 
@@ -1902,8 +1905,6 @@ void* data_83430 = &vic_core_ops_ioctl;
 // Data at address 0x83434
 void* data_83434 = &isp_vic_interrupt_service_routine;
 
-// Data at address 0x83440
-void* tx_isp_vin_driver = &tx_isp_vin_probe;
 
 // Data at address 0x83444
 void* data_83444 = &tx_isp_vin_remove;
