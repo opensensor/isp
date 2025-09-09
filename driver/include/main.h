@@ -1246,25 +1246,25 @@ char const __func___32625[] = "tisp_cust_mode_s_ctrl"; // offset: 0x7ddbc
 char const __func___32610[] = "tisp_day_or_night_s_ctrl"; // offset: 0x7ddd4
 
 // Data at address 0x7ddf0
-void* data_7ddf0 = (void*)0x7668c;
+
 
 // Data at address 0x7ddf4
-void* data_7ddf4 = (void*)0x76650;
+
 
 // Data at address 0x7ddf8
-void* data_7ddf8 = (void*)0x7665c;
+
 
 // Data at address 0x7ddfc
-void* data_7ddfc = (void*)0x76668;
+
 
 // Data at address 0x7de00
-void* data_7de00 = (void*)0x76674;
+
 
 // Data at address 0x7de04
-void* data_7de04 = (void*)0x76694;
+
 
 // Data at address 0x7de08
-void* data_7de08 = (void*)0x76680;
+
 
 // Data at address 0x7de0c
 
@@ -1627,73 +1627,73 @@ char const data_826a0[] = "isp-m0"; // offset: 0x826a0
 char const* __param_isp_memopt = (void*)0x7a280 /* pointer to data */;
 
 // Data at address 0x82c44
-void* data_82c44 = (void*)0xda618;
+
 
 // Data at address 0x82c4c
-void* data_82c4c = (void*)0xb2ccc /* pointer to data */;
+
 
 // Data at address 0x82c50
 char const* __param_isp_day_night_switch_drop_frame_num = (void*)0x7a28c /* pointer to data */;
 
 // Data at address 0x82c54
-void* data_82c54 = (void*)0xda618;
+
 
 // Data at address 0x82c5c
-void* data_82c5c = (void*)0xb2c10 /* pointer to data */;
+
 
 // Data at address 0x82c60
 char const* __param_isp_ch1_dequeue_delay_time = (void*)0x7a2b0 /* pointer to data */;
 
 // Data at address 0x82c64
-void* data_82c64 = (void*)0xda618;
+
 
 // Data at address 0x82c6c
-void* data_82c6c = (void*)0xda4a8 /* pointer to data */;
+
 
 // Data at address 0x82c70
 char const* __param_isp_ch0_pre_dequeue_valid_lines = (void*)0x7a2cc /* pointer to data */;
 
 // Data at address 0x82c74
-void* data_82c74 = (void*)0xda618;
+
 
 // Data at address 0x82c7c
-void* data_82c7c = (void*)0x83848 /* pointer to data */;
+
 
 // Data at address 0x82c80
 char const* __param_isp_ch0_pre_dequeue_interrupt_process = (void*)0x7a2ec /* pointer to data */;
 
 // Data at address 0x82c84
-void* data_82c84 = (void*)0xda618;
+
 
 // Data at address 0x82c8c
-void* data_82c8c = (void*)0xb2c14 /* pointer to data */;
+
 
 // Data at address 0x82c90
 char const* __param_isp_ch0_pre_dequeue_time = (void*)0x7a314 /* pointer to data */;
 
 // Data at address 0x82c94
-void* data_82c94 = (void*)0xda618;
+
 
 // Data at address 0x82c9c
-void* data_82c9c = (void*)0xda550 /* pointer to data */;
+
 
 // Data at address 0x82ca0
 char const* __param_isp_clk = (void*)0x7a330 /* pointer to data */;
 
 // Data at address 0x82ca4
-void* data_82ca4 = (void*)0xda618;
+
 
 // Data at address 0x82cac
-void* data_82cac = (void*)0x82cc0 /* pointer to data */;
+
 
 // Data at address 0x82cb0
 char const* __param_print_level = (void*)0x7a338 /* pointer to data */;
 
 // Data at address 0x82cb4
-void* data_82cb4 = (void*)0xda618;
+
 
 // Data at address 0x82cbc
-void* data_82cbc = (void*)0x82cc4 /* pointer to data */;
+
 
 // Data at address 0x82cc0
 uint32_t isp_clk = 0x05f5e100U;
@@ -1705,46 +1705,46 @@ uint32_t print_level = 0x1;
 char const* tx_isp_platform_device = (void*)0x7df88 /* pointer to data */;
 
 // Data at address 0x82d28
-void* data_82d28 = (void*)0x82da8;
+
 
 // Data at address 0x82d40
-void* data_82d40 = (void*)0x83310 /* pointer to data */;
+
 
 // Data at address 0x82d90
 void* data_82d90 = &tx_isp_release_device;
 
 // Data at address 0x82db0
-void* data_82db0 = (void*)0x82db4 /* pointer to data */;
+
 
 // Data at address 0x82db4
 void* tx_isp_devices = (void*)0x82ec0 /* pointer to data */;
 
 // Data at address 0x82db8
-void* data_82db8 = (void*)0x83000 /* pointer to data */;
+
 
 // Data at address 0x82dbc
-void* data_82dbc = (void*)0x83120 /* pointer to data */;
+
 
 // Data at address 0x82dc0
-void* data_82dc0 = (void*)0x83228 /* pointer to data */;
+
 
 // Data at address 0x82dc4
-void* data_82dc4 = (void*)0x82dc8 /* pointer to data */;
+
 
 // Data at address 0x82dc8
 char const* tx_isp_fs_platform_device = (void*)0x7df90 /* pointer to data */;
 
 // Data at address 0x82e20
-void* data_82e20 = (void*)0x82ea0;
+
 
 // Data at address 0x82e38
-void* data_82e38 = (void*)0x83310 /* pointer to data */;
+
 
 // Data at address 0x82e88
 void* data_82e88 = &tx_isp_release_device;
 
 // Data at address 0x82eb0
-void* data_82eb0 = (void*)0x82eb4 /* pointer to data */;
+
 
 // Data at address 0x82eb4
 uint48_t tx_isp_fs_pads = 0x0000100210021002ULL;
@@ -1753,22 +1753,22 @@ uint48_t tx_isp_fs_pads = 0x0000100210021002ULL;
 char const* tx_isp_core_platform_device = (void*)0x7df98 /* pointer to data */;
 
 // Data at address 0x82f18
-void* data_82f18 = (void*)0x82f98;
+
 
 // Data at address 0x82f30
-void* data_82f30 = (void*)0x83310 /* pointer to data */;
+
 
 // Data at address 0x82f80
 void* data_82f80 = &tx_isp_release_device;
 
 // Data at address 0x82f8c
-void* data_82f8c = (void*)0x82fc4;
+
 
 // Data at address 0x82fa0
-void* data_82fa0 = (void*)0x82fb4 /* pointer to data */;
+
 
 // Data at address 0x82fa8
-void* data_82fa8 = (void*)0x82fac /* pointer to data */;
+
 
 // Data at address 0x82fac
 uint64_t tx_isp_core_pads = 0x0000300230023002ULL;
@@ -1777,67 +1777,67 @@ uint64_t tx_isp_core_pads = 0x0000300230023002ULL;
 char const* isp_core_clk_info = (void*)0x7dfa0 /* pointer to data */;
 
 // Data at address 0x82fbc
-void* data_82fbc = (void*)0x7dfa8;
+
 
 // Data at address 0x82fcc
-char const* data_82fcc = (void*)0x7dfac /* pointer to data */;
+
 
 // Data at address 0x82fe8
-char const* data_82fe8 = (void*)0x7dfb8 /* pointer to data */;
+
 
 // Data at address 0x83000
 char const* tx_isp_vic_platform_device = (void*)0x7dfc4 /* pointer to data */;
 
 // Data at address 0x83058
-void* data_83058 = (void*)0x830d8;
+
 
 // Data at address 0x83070
-void* data_83070 = (void*)0x83310 /* pointer to data */;
+
 
 // Data at address 0x830c0
 void* data_830c0 = &tx_isp_release_device;
 
 // Data at address 0x830cc
-void* data_830cc = (void*)0x830e4;
+
 
 // Data at address 0x830ec
-char const* data_830ec = (void*)0x7dfac /* pointer to data */;
+
 
 // Data at address 0x83108
-char const* data_83108 = (void*)0x7dfb8 /* pointer to data */;
+
 
 // Data at address 0x83120
 char const* tx_isp_csi_platform_device = (void*)0x7dfcc /* pointer to data */;
 
 // Data at address 0x83178
-void* data_83178 = (void*)0x831f8;
+
 
 // Data at address 0x83190
-void* data_83190 = (void*)0x83310 /* pointer to data */;
+
 
 // Data at address 0x831e0
 void* data_831e0 = &tx_isp_release_device;
 
 // Data at address 0x831ec
-void* data_831ec = (void*)0x8320c;
+
 
 // Data at address 0x83200
-void* data_83200 = (void*)0x83204 /* pointer to data */;
+
 
 // Data at address 0x83204
 uint64_t isp_csi_clk_info = (void*)0x7dfd4;
 
 // Data at address 0x83214
-char const* data_83214 = (void*)0x7dfac /* pointer to data */;
+
 
 // Data at address 0x83228
 char const* tx_isp_vin_platform_device = (void*)0x7dfd8 /* pointer to data */;
 
 // Data at address 0x83280
-void* data_83280 = (void*)0x83300;
+
 
 // Data at address 0x83298
-void* data_83298 = (void*)0x83310 /* pointer to data */;
+
 
 // Data at address 0x832e8
 void* data_832e8 = &tx_isp_release_device;
@@ -1852,10 +1852,10 @@ void* tx_isp_vic_driver = &tx_isp_vic_probe;
 void* data_83324 = &tx_isp_vic_remove;
 
 // Data at address 0x83334
-char const* data_83334 = (void*)0x7eae8 /* pointer to data */;
+
 
 // Data at address 0x8333c
-void* data_8333c = (void*)0xb27e0;
+
 
 // Data at address 0x83378
 void* data_83378 = &private_seq_lseek;
@@ -1876,13 +1876,13 @@ void* data_833a8 = &private_single_release;
 void* vic_subdev_ops = (void*)0x83414;
 
 // Data at address 0x833e4
-void* data_833e4 = (void*)0x83408 /* pointer to data */;
+
 
 // Data at address 0x833ec
-void* data_833ec = (void*)0x833fc;
+
 
 // Data at address 0x833f0
-void* data_833f0 = (void*)0x833f4 /* pointer to data */;
+
 
 // Data at address 0x833f4
 extern void* vic_subdev_internal_ops; // Fixed function pointer assignment
@@ -1910,10 +1910,10 @@ void* data_83434 = &isp_vic_interrupt_service_routine;
 void* data_83444 = &tx_isp_vin_remove;
 
 // Data at address 0x83454
-char const* data_83454 = (void*)0x7ee0c /* pointer to data */;
+
 
 // Data at address 0x8345c
-void* data_8345c = (void*)0xb27e0;
+
 
 // Data at address 0x83498
 void* data_83498 = &private_seq_lseek;
@@ -1934,13 +1934,13 @@ void* data_834c8 = &private_single_release;
 void* vin_subdev_ops = (void*)0x8352c;
 
 // Data at address 0x83504
-void* data_83504 = (void*)0x83520 /* pointer to data */;
+
 
 // Data at address 0x8350c
-void* data_8350c = (void*)0x83514 /* pointer to data */;
+
 
 // Data at address 0x83510
-void* data_83510 = (void*)0x83554 /* pointer to data */;
+
 
 // Data at address 0x83514
 void* vin_subdev_sensor_ops = &subdev_sensor_ops_release_all_sensor;
@@ -1970,10 +1970,10 @@ void* tx_isp_csi_driver = &tx_isp_csi_probe;
 void* data_83564 = &tx_isp_csi_remove;
 
 // Data at address 0x83574
-char const* data_83574 = (void*)0x7f144 /* pointer to data */;
+
 
 // Data at address 0x8357c
-void* data_8357c = (void*)0xb27e0;
+
 
 // Data at address 0x835b8
 void* data_835b8 = &private_seq_lseek;
@@ -1991,13 +1991,13 @@ void* data_835e8 = &private_single_release;
 void* csi_subdev_ops = (void*)0x8364c;
 
 // Data at address 0x83624
-void* data_83624 = (void*)0x83640 /* pointer to data */;
+
 
 // Data at address 0x8362c
-void* data_8362c = (void*)0x83634;
+
 
 // Data at address 0x83630
-void* data_83630 = (void*)0x83674 /* pointer to data */;
+
 
 // Data at address 0x83638
 void* data_83638 = &csi_sensor_ops_sync_sensor_attr;
@@ -2033,10 +2033,10 @@ void* tx_isp_fs_driver = &tx_isp_fs_probe;
 void* data_83704 = &tx_isp_fs_remove;
 
 // Data at address 0x83714
-char const* data_83714 = (void*)0x800d4 /* pointer to data */;
+
 
 // Data at address 0x8371c
-void* data_8371c = (void*)0xb27e0;
+
 
 // Data at address 0x83758
 void* data_83758 = &private_seq_lseek;
@@ -2051,7 +2051,7 @@ void* data_83780 = &dump_isp_framesource_open;
 void* data_83788 = &private_single_release;
 
 // Data at address 0x837d0
-void* data_837d0 = (void*)0x837d4 /* pointer to data */;
+
 
 // Data at address 0x837d4
 extern void* fs_internal_ops; // Fixed function pointer assignment
@@ -2075,10 +2075,10 @@ void* tx_isp_driver = &tx_isp_probe;
 void* data_83854 = &tx_isp_remove;
 
 // Data at address 0x83864
-char const* data_83864 = (void*)0x805c4 /* pointer to data */;
+
 
 // Data at address 0x8386c
-void* data_8386c = (void*)0xb27e0;
+
 
 // Data at address 0x838c4
 void* data_838c4 = &tx_isp_unlocked_ioctl;
@@ -2093,3319 +2093,3319 @@ void* data_838d8 = &tx_isp_release;
 char const* link2 = (void*)0x80678 /* pointer to data */;
 
 // Data at address 0x83918
-char const* data_83918 = (void*)0x80680 /* pointer to data */;
+
 
 // Data at address 0x83924
 char const* link1 = (void*)0x80678 /* pointer to data */;
 
 // Data at address 0x8392c
-char const* data_8392c = (void*)0x80680 /* pointer to data */;
+
 
 // Data at address 0x83938
-char const* data_83938 = (void*)0x80678 /* pointer to data */;
+
 
 // Data at address 0x83940
-char const* data_83940 = (void*)0x80680 /* pointer to data */;
+
 
 // Data at address 0x8394c
-char const* data_8394c = (void*)0x80678 /* pointer to data */;
+
 
 // Data at address 0x83954
-char const* data_83954 = (void*)0x80680 /* pointer to data */;
+
 
 // Data at address 0x83960
 char tparams[] = "TISP_PARAM_TOP_BYPASS"; // offset: 0x83960
 
 // Data at address 0x8399c
-void* data_8399c = (void*)0x94b20;
+
 
 // Data at address 0x839dc
-void* data_839dc = (void*)0x94ba0;
+
 
 // Data at address 0x83a1c
-void* data_83a1c = (void*)0x94c48;
+
 
 // Data at address 0x83a5c
-void* data_83a5c = (void*)0x94c98;
+
 
 // Data at address 0x83a9c
-void* data_83a9c = (void*)0x94ca0;
+
 
 // Data at address 0x83adc
-void* data_83adc = (void*)0x94ccc;
+
 
 // Data at address 0x83b1c
-void* data_83b1c = (void*)0x94ce0;
+
 
 // Data at address 0x83b5c
-void* data_83b5c = (void*)0x94cf0;
+
 
 // Data at address 0x83b9c
-void* data_83b9c = (void*)0x94d18;
+
 
 // Data at address 0x83bdc
-wchar_t* data_83bdc = (void*)0x94d40 /* pointer to data */;
+
 
 // Data at address 0x83c1c
-void* data_83c1c = (void*)0x94d68;
+
 
 // Data at address 0x83c5c
-void* data_83c5c = (void*)0x94d74;
+
 
 // Data at address 0x83c9c
-void* data_83c9c = (void*)0x94d8c;
+
 
 // Data at address 0x83cdc
-void* data_83cdc = (void*)0x94db8;
+
 
 // Data at address 0x83d1c
-void* data_83d1c = (void*)0x94dc8;
+
 
 // Data at address 0x83d5c
-void* data_83d5c = (void*)0x94e18;
+
 
 // Data at address 0x83d9c
-void* data_83d9c = (void*)0x94e68;
+
 
 // Data at address 0x83ddc
-void* data_83ddc = (void*)0x951ec;
+
 
 // Data at address 0x83e1c
-void* data_83e1c = (void*)0x95570;
+
 
 // Data at address 0x83e5c
-void* data_83e5c = (void*)0x958f4;
+
 
 // Data at address 0x83e9c
-void* data_83e9c = (void*)0x9590c;
+
 
 // Data at address 0x83edc
-wchar_t* data_83edc = (void*)0x95920 /* pointer to data */;
+
 
 // Data at address 0x83f1c
-wchar_t* data_83f1c = (void*)0x9595c;
+
 
 // Data at address 0x83f5c
-void* data_83f5c = (void*)0x95974;
+
 
 // Data at address 0x83f9c
-wchar_t* data_83f9c = (void*)0x9599c /* pointer to data */;
+
 
 // Data at address 0x83fdc
-void* data_83fdc = (void*)0x959c4;
+
 
 // Data at address 0x8401c
-void* data_8401c = (void*)0x959ec;
+
 
 // Data at address 0x8405c
-void* data_8405c = (void*)0x95a14;
+
 
 // Data at address 0x8409c
-void* data_8409c = (void*)0x95a3c;
+
 
 // Data at address 0x840dc
-wchar_t* data_840dc = (void*)0x95a64;
+
 
 // Data at address 0x8411c
-void* data_8411c = (void*)0x95a8c;
+
 
 // Data at address 0x8415c
-void* data_8415c = (void*)0x95ab8;
+
 
 // Data at address 0x8419c
-void* data_8419c = (void*)0x95ac8;
+
 
 // Data at address 0x841dc
-void* data_841dc = (void*)0x95ae0;
+
 
 // Data at address 0x8421c
-void* data_8421c = (void*)0x95b08;
+
 
 // Data at address 0x8425c
-void* data_8425c = (void*)0x95b30;
+
 
 // Data at address 0x8429c
-void* data_8429c = (void*)0x95be4;
+
 
 // Data at address 0x842dc
-void* data_842dc = (void*)0x95be8;
+
 
 // Data at address 0x8431c
-void* data_8431c = (void*)0x95bf0;
+
 
 // Data at address 0x8435c
-void* data_8435c = (void*)0x95bf8;
+
 
 // Data at address 0x8439c
-void* data_8439c = (void*)0x95c00;
+
 
 // Data at address 0x843dc
-void* data_843dc = (void*)0x95c18;
+
 
 // Data at address 0x8441c
-void* data_8441c = (void*)0x95c24;
+
 
 // Data at address 0x8445c
-void* data_8445c = (void*)0x95c28;
+
 
 // Data at address 0x8449c
-void* data_8449c = (void*)0x95c2c;
+
 
 // Data at address 0x844dc
-void* data_844dc = (void*)0x95c34;
+
 
 // Data at address 0x8451c
-void* data_8451c = (void*)0x95c84;
+
 
 // Data at address 0x8455c
-void* data_8455c = (void*)0x95c88;
+
 
 // Data at address 0x8459c
-void* data_8459c = (void*)0x95cc4;
+
 
 // Data at address 0x845dc
-void* data_845dc = (void*)0x95d00;
+
 
 // Data at address 0x8461c
-void* data_8461c = (void*)0x95d10;
+
 
 // Data at address 0x8465c
-void* data_8465c = (void*)0x95d20;
+
 
 // Data at address 0x8469c
-void* data_8469c = (void*)0x95d30;
+
 
 // Data at address 0x846dc
-void* data_846dc = (void*)0x95d38;
+
 
 // Data at address 0x8471c
-void* data_8471c = (void*)0x95d40;
+
 
 // Data at address 0x8475c
-void* data_8475c = (void*)0x95d4c;
+
 
 // Data at address 0x8479c
-void* data_8479c = (void*)0x960d0;
+
 
 // Data at address 0x847dc
-void* data_847dc = (void*)0x96454;
+
 
 // Data at address 0x8481c
-void* data_8481c = (void*)0x967d8;
+
 
 // Data at address 0x8485c
-void* data_8485c = (void*)0x96b5c;
+
 
 // Data at address 0x8489c
-void* data_8489c = (void*)0x97364;
+
 
 // Data at address 0x848dc
-void* data_848dc = (void*)0x97466;
+
 
 // Data at address 0x8491c
-void* data_8491c = (void*)0x97568;
+
 
 // Data at address 0x8495c
-void* data_8495c = (void*)0x97598;
+
 
 // Data at address 0x8499c
-void* data_8499c = (void*)0x975a0;
+
 
 // Data at address 0x849dc
-wchar_t* data_849dc = (void*)0x975a8 /* pointer to data */;
+
 
 // Data at address 0x84a1c
-wchar_t* data_84a1c = (void*)0x975cc /* pointer to data */;
+
 
 // Data at address 0x84a5c
-wchar_t* data_84a5c = (void*)0x975f0 /* pointer to data */;
+
 
 // Data at address 0x84a9c
-void* data_84a9c = (void*)0x97614 /* pointer to data */;
+
 
 // Data at address 0x84adc
-void* data_84adc = (void*)0x97638 /* pointer to data */;
+
 
 // Data at address 0x84b1c
-void* data_84b1c = (void*)0x9765c;
+
 
 // Data at address 0x84b5c
-void* data_84b5c = (void*)0x9766c;
+
 
 // Data at address 0x84b9c
-void* data_84b9c = (void*)0x976a8;
+
 
 // Data at address 0x84bdc
-void* data_84bdc = (void*)0x9772c;
+
 
 // Data at address 0x84c1c
-void* data_84c1c = (void*)0x977b0;
+
 
 // Data at address 0x84c5c
-void* data_84c5c = (void*)0x97834;
+
 
 // Data at address 0x84c9c
-void* data_84c9c = (void*)0x978b8;
+
 
 // Data at address 0x84cdc
-void* data_84cdc = (void*)0x9793c;
+
 
 // Data at address 0x84d1c
-void* data_84d1c = (void*)0x979c0;
+
 
 // Data at address 0x84d5c
-void* data_84d5c = (void*)0x97a44;
+
 
 // Data at address 0x84d9c
-void* data_84d9c = (void*)0x97ac8;
+
 
 // Data at address 0x84ddc
-void* data_84ddc = (void*)0x97b4c;
+
 
 // Data at address 0x84e1c
-void* data_84e1c = (void*)0x97b88;
+
 
 // Data at address 0x84e5c
-void* data_84e5c = (void*)0x97bc4;
+
 
 // Data at address 0x84e9c
-void* data_84e9c = (void*)0x97c00;
+
 
 // Data at address 0x84edc
-void* data_84edc = (void*)0x97c04;
+
 
 // Data at address 0x84f1c
-void* data_84f1c = (void*)0x97c08;
+
 
 // Data at address 0x84f5c
-void* data_84f5c = (void*)0x97c0c;
+
 
 // Data at address 0x84f9c
-void* data_84f9c = (void*)0x97c14;
+
 
 // Data at address 0x84fdc
-void* data_84fdc = (void*)0x97c24;
+
 
 // Data at address 0x8501c
-void* data_8501c = (void*)0x99c20;
+
 
 // Data at address 0x8505c
-void* data_8505c = (void*)0x9bc1c;
+
 
 // Data at address 0x8509c
-void* data_8509c = (void*)0x9dc18;
+
 
 // Data at address 0x850dc
-void* data_850dc = (void*)0x9dc3c;
+
 
 // Data at address 0x8511c
-void* data_8511c = (void*)0x9dc60;
+
 
 // Data at address 0x8515c
-void* data_8515c = (void*)0x9dc64;
+
 
 // Data at address 0x8519c
-void* data_8519c = (void*)0x9dca4;
+
 
 // Data at address 0x851dc
-void* data_851dc = (void*)0x9dcc4;
+
 
 // Data at address 0x8521c
-void* data_8521c = (void*)0x9dce4;
+
 
 // Data at address 0x8525c
-void* data_8525c = (void*)0x9dd04;
+
 
 // Data at address 0x8529c
-wchar_t* data_8529c = (void*)0x9dd44 /* pointer to data */;
+
 
 // Data at address 0x852dc
-wchar_t* data_852dc = (void*)0x9dd9c /* pointer to data */;
+
 
 // Data at address 0x8531c
-wchar_t* data_8531c = (void*)0x9ddf4 /* pointer to data */;
+
 
 // Data at address 0x8535c
-wchar_t* data_8535c = (void*)0x9de4c /* pointer to data */;
+
 
 // Data at address 0x8539c
-void* data_8539c = (void*)0x9dea4;
+
 
 // Data at address 0x853dc
-wchar_t* data_853dc = (void*)0x9dea8 /* pointer to data */;
+
 
 // Data at address 0x8541c
-wchar_t* data_8541c = (void*)0x9decc /* pointer to data */;
+
 
 // Data at address 0x8545c
-wchar_t* data_8545c = (void*)0x9def0 /* pointer to data */;
+
 
 // Data at address 0x8549c
-void* data_8549c = (void*)0x9df14 /* pointer to data */;
+
 
 // Data at address 0x854dc
-void* data_854dc = (void*)0x9df38;
+
 
 // Data at address 0x8551c
-wchar_t* data_8551c = (void*)0x9df5c;
+
 
 // Data at address 0x8555c
-void* data_8555c = (void*)0x9df80;
+
 
 // Data at address 0x8559c
-void* data_8559c = (void*)0x9dfa4;
+
 
 // Data at address 0x855dc
-void* data_855dc = (void*)0x9dfc8;
+
 
 // Data at address 0x8561c
-wchar_t* data_8561c = (void*)0x9dfec;
+
 
 // Data at address 0x8565c
-void* data_8565c = (void*)0x9dffc;
+
 
 // Data at address 0x8569c
-void* data_8569c = (void*)0x9e020;
+
 
 // Data at address 0x856dc
-void* data_856dc = (void*)0x9e044;
+
 
 // Data at address 0x8571c
-wchar_t* data_8571c = (void*)0x9e068 /* pointer to data */;
+
 
 // Data at address 0x8575c
-wchar_t* data_8575c = (void*)0x9e08c /* pointer to data */;
+
 
 // Data at address 0x8579c
-void* data_8579c = (void*)0x9e09c;
+
 
 // Data at address 0x857dc
-void* data_857dc = (void*)0x9e0c0;
+
 
 // Data at address 0x8581c
-wchar_t* data_8581c = (void*)0x9e0d0 /* pointer to data */;
+
 
 // Data at address 0x8585c
-wchar_t* data_8585c = (void*)0x9e0f4 /* pointer to data */;
+
 
 // Data at address 0x8589c
-void* data_8589c = (void*)0x9e118;
+
 
 // Data at address 0x858dc
-void* data_858dc = (void*)0x9e13c;
+
 
 // Data at address 0x8591c
-void* data_8591c = (void*)0x9e160;
+
 
 // Data at address 0x8595c
-void* data_8595c = (void*)0x9e184;
+
 
 // Data at address 0x8599c
-void* data_8599c = (void*)0x9e1a8;
+
 
 // Data at address 0x859dc
-wchar_t* data_859dc = (void*)0x9e1cc /* pointer to data */;
+
 
 // Data at address 0x85a1c
-wchar_t* data_85a1c = (void*)0x9e1f0;
+
 
 // Data at address 0x85a5c
-wchar_t* data_85a5c = (void*)0x9e21c /* pointer to data */;
+
 
 // Data at address 0x85a9c
-wchar_t* data_85a9c = (void*)0x9e240 /* pointer to data */;
+
 
 // Data at address 0x85adc
-void* data_85adc = (void*)0x9e264;
+
 
 // Data at address 0x85b1c
-void* data_85b1c = (void*)0x9e288;
+
 
 // Data at address 0x85b5c
-void* data_85b5c = (void*)0x9e2ac;
+
 
 // Data at address 0x85b9c
-void* data_85b9c = (void*)0x9e2d0;
+
 
 // Data at address 0x85bdc
-void* data_85bdc = (void*)0x9e2f4;
+
 
 // Data at address 0x85c1c
-wchar_t* data_85c1c = (void*)0x9e318 /* pointer to data */;
+
 
 // Data at address 0x85c5c
-wchar_t* data_85c5c = (void*)0x9e33c /* pointer to data */;
+
 
 // Data at address 0x85c9c
-wchar_t* data_85c9c = (void*)0x9e360;
+
 
 // Data at address 0x85cdc
-void* data_85cdc = (void*)0x9e394;
+
 
 // Data at address 0x85d1c
-void* data_85d1c = (void*)0x9e3bc;
+
 
 // Data at address 0x85d5c
-void* data_85d5c = (void*)0x9e3e0;
+
 
 // Data at address 0x85d9c
-wchar_t* data_85d9c = (void*)0x9e3e8 /* pointer to data */;
+
 
 // Data at address 0x85ddc
-void* data_85ddc = (void*)0x9e40c;
+
 
 // Data at address 0x85e1c
-void* data_85e1c = (void*)0x9e430;
+
 
 // Data at address 0x85e5c
-void* data_85e5c = (void*)0x9e438;
+
 
 // Data at address 0x85e9c
-wchar_t* data_85e9c = (void*)0x9e45c /* pointer to data */;
+
 
 // Data at address 0x85edc
-wchar_t* data_85edc = (void*)0x9e480 /* pointer to data */;
+
 
 // Data at address 0x85f1c
-void* data_85f1c = (void*)0x9e4a4;
+
 
 // Data at address 0x85f5c
-void* data_85f5c = (void*)0x9e4c8;
+
 
 // Data at address 0x85f9c
-void* data_85f9c = (void*)0x9e4ec;
+
 
 // Data at address 0x85fdc
-void* data_85fdc = (void*)0x9e510;
+
 
 // Data at address 0x8601c
-void* data_8601c = (void*)0x9e534;
+
 
 // Data at address 0x8605c
-void* data_8605c = (void*)0x9e55c;
+
 
 // Data at address 0x8609c
-void* data_8609c = (void*)0x9e564;
+
 
 // Data at address 0x860dc
-void* data_860dc = (void*)0x9e578;
+
 
 // Data at address 0x8611c
-void* data_8611c = (void*)0x9e59c;
+
 
 // Data at address 0x8615c
-wchar_t* data_8615c = (void*)0x9e5c0;
+
 
 // Data at address 0x8619c
-void* data_8619c = (void*)0x9e5e4;
+
 
 // Data at address 0x861dc
-void* data_861dc = (void*)0x9e608;
+
 
 // Data at address 0x8621c
-void* data_8621c = (void*)0x9e610;
+
 
 // Data at address 0x8625c
-wchar_t* data_8625c = (void*)0x9e634 /* pointer to data */;
+
 
 // Data at address 0x8629c
-wchar_t* data_8629c = (void*)0x9e658 /* pointer to data */;
+
 
 // Data at address 0x862dc
-wchar_t* data_862dc = (void*)0x9e67c /* pointer to data */;
+
 
 // Data at address 0x8631c
-wchar_t* data_8631c = (void*)0x9e6a0 /* pointer to data */;
+
 
 // Data at address 0x8635c
-void* data_8635c = (void*)0x9e6c4;
+
 
 // Data at address 0x8639c
-void* data_8639c = (void*)0x9e6e8;
+
 
 // Data at address 0x863dc
-void* data_863dc = (void*)0x9e6f4;
+
 
 // Data at address 0x8641c
-void* data_8641c = (void*)0x9e708;
+
 
 // Data at address 0x8645c
-void* data_8645c = (void*)0x9e72c;
+
 
 // Data at address 0x8649c
-void* data_8649c = (void*)0x9e750;
+
 
 // Data at address 0x864dc
-void* data_864dc = (void*)0x9e774;
+
 
 // Data at address 0x8651c
-void* data_8651c = (void*)0x9e798;
+
 
 // Data at address 0x8655c
-void* data_8655c = (void*)0x9e7bc;
+
 
 // Data at address 0x8659c
-void* data_8659c = (void*)0x9e7e0;
+
 
 // Data at address 0x865dc
-void* data_865dc = (void*)0x9e804;
+
 
 // Data at address 0x8661c
-void* data_8661c = (void*)0x9e828;
+
 
 // Data at address 0x8665c
-void* data_8665c = (void*)0x9e84c;
+
 
 // Data at address 0x8669c
-void* data_8669c = (void*)0x9e870;
+
 
 // Data at address 0x866dc
-void* data_866dc = (void*)0x9e878;
+
 
 // Data at address 0x8671c
-void* data_8671c = (void*)0x9e87c;
+
 
 // Data at address 0x8675c
-void* data_8675c = (void*)0x9e8a0;
+
 
 // Data at address 0x8679c
-void* data_8679c = (void*)0x9e8c4;
+
 
 // Data at address 0x867dc
-void* data_867dc = (void*)0x9e8cc;
+
 
 // Data at address 0x8681c
-void* data_8681c = (void*)0x9e8f0;
+
 
 // Data at address 0x8685c
-void* data_8685c = (void*)0x9e914;
+
 
 // Data at address 0x8689c
-wchar_t* data_8689c = (void*)0x9e938;
+
 
 // Data at address 0x868dc
-wchar_t* data_868dc = (void*)0x9e95c /* pointer to data */;
+
 
 // Data at address 0x8691c
-wchar_t* data_8691c = (void*)0x9e980 /* pointer to data */;
+
 
 // Data at address 0x8695c
-wchar_t* data_8695c = (void*)0x9e9a4 /* pointer to data */;
+
 
 // Data at address 0x8699c
-void* data_8699c = (void*)0x9e9b4;
+
 
 // Data at address 0x869dc
-wchar_t* data_869dc = (void*)0x9e9d8 /* pointer to data */;
+
 
 // Data at address 0x86a1c
-wchar_t* data_86a1c = (void*)0x9e9fc;
+
 
 // Data at address 0x86a5c
-wchar_t* data_86a5c = (void*)0x9ea20 /* pointer to data */;
+
 
 // Data at address 0x86a9c
-wchar_t* data_86a9c = (void*)0x9ea44;
+
 
 // Data at address 0x86adc
-wchar_t* data_86adc = (void*)0x9ea68 /* pointer to data */;
+
 
 // Data at address 0x86b1c
-wchar_t* data_86b1c = (void*)0x9ea8c /* pointer to data */;
+
 
 // Data at address 0x86b5c
-void* data_86b5c = (void*)0x9ea94;
+
 
 // Data at address 0x86b9c
-void* data_86b9c = (void*)0x9eab8;
+
 
 // Data at address 0x86bdc
-void* data_86bdc = (void*)0x9eae8;
+
 
 // Data at address 0x86c1c
-void* data_86c1c = (void*)0x9eb0c;
+
 
 // Data at address 0x86c5c
-wchar_t* data_86c5c = (void*)0x9eb4c /* pointer to data */;
+
 
 // Data at address 0x86c9c
-wchar_t* data_86c9c = (void*)0x9eb8c /* pointer to data */;
+
 
 // Data at address 0x86cdc
-wchar_t* data_86cdc = (void*)0x9ebcc;
+
 
 // Data at address 0x86d1c
-wchar_t* data_86d1c = (void*)0x9ebf0;
+
 
 // Data at address 0x86d5c
-void* data_86d5c = (void*)0x9ec14;
+
 
 // Data at address 0x86d9c
-wchar_t* data_86d9c = (void*)0x9ec38;
+
 
 // Data at address 0x86ddc
-wchar_t* data_86ddc = (void*)0x9ec5c;
+
 
 // Data at address 0x86e1c
-wchar_t* data_86e1c = (void*)0x9ec80;
+
 
 // Data at address 0x86e5c
-wchar_t* data_86e5c = (void*)0x9eca4;
+
 
 // Data at address 0x86e9c
-wchar_t* data_86e9c = (void*)0x9ecc8;
+
 
 // Data at address 0x86edc
-wchar_t* data_86edc = (void*)0x9ecec;
+
 
 // Data at address 0x86f1c
-void* data_86f1c = (void*)0x9ed10;
+
 
 // Data at address 0x86f5c
-void* data_86f5c = (void*)0x9ed34;
+
 
 // Data at address 0x86f9c
-void* data_86f9c = (void*)0x9ed58;
+
 
 // Data at address 0x86fdc
-void* data_86fdc = (void*)0x9ed7c;
+
 
 // Data at address 0x8701c
-void* data_8701c = (void*)0x9eda0;
+
 
 // Data at address 0x8705c
-void* data_8705c = (void*)0x9edc4;
+
 
 // Data at address 0x8709c
-void* data_8709c = (void*)0x9ede8;
+
 
 // Data at address 0x870dc
-void* data_870dc = (void*)0x9ee0c;
+
 
 // Data at address 0x8711c
-void* data_8711c = (void*)0x9ee30;
+
 
 // Data at address 0x8715c
-void* data_8715c = (void*)0x9ee54;
+
 
 // Data at address 0x8719c
-void* data_8719c = (void*)0x9ee78;
+
 
 // Data at address 0x871dc
-void* data_871dc = (void*)0x9ee9c;
+
 
 // Data at address 0x8721c
-void* data_8721c = (void*)0x9eec0;
+
 
 // Data at address 0x8725c
-void* data_8725c = (void*)0x9eee4;
+
 
 // Data at address 0x8729c
-void* data_8729c = (void*)0x9ef08;
+
 
 // Data at address 0x872dc
-void* data_872dc = (void*)0x9ef2c;
+
 
 // Data at address 0x8731c
-void* data_8731c = (void*)0x9ef50;
+
 
 // Data at address 0x8735c
-void* data_8735c = (void*)0x9ef90;
+
 
 // Data at address 0x8739c
-void* data_8739c = (void*)0x9efd0;
+
 
 // Data at address 0x873dc
-wchar_t* data_873dc = (void*)0x9efe4 /* pointer to data */;
+
 
 // Data at address 0x8741c
-wchar_t* data_8741c = (void*)0x9f008 /* pointer to data */;
+
 
 // Data at address 0x8745c
-void* data_8745c = (void*)0x9f02c;
+
 
 // Data at address 0x8749c
-void* data_8749c = (void*)0x9f038;
+
 
 // Data at address 0x874dc
-wchar_t* data_874dc = (void*)0x9f05c /* pointer to data */;
+
 
 // Data at address 0x8751c
-wchar_t* data_8751c = (void*)0x9f080 /* pointer to data */;
+
 
 // Data at address 0x8755c
-wchar_t* data_8755c = (void*)0x9f0a4;
+
 
 // Data at address 0x8759c
-wchar_t* data_8759c = (void*)0x9f0c8;
+
 
 // Data at address 0x875dc
-void* data_875dc = (void*)0x9f0ec;
+
 
 // Data at address 0x8761c
-void* data_8761c = (void*)0x9f110;
+
 
 // Data at address 0x8765c
-void* data_8765c = (void*)0x9f134;
+
 
 // Data at address 0x8769c
-wchar_t* data_8769c = (void*)0x9f158;
+
 
 // Data at address 0x876dc
-void* data_876dc = (void*)0x9f17c;
+
 
 // Data at address 0x8771c
-void* data_8771c = (void*)0x9f1a0;
+
 
 // Data at address 0x8775c
-void* data_8775c = (void*)0x9f1c4;
+
 
 // Data at address 0x8779c
-wchar_t* data_8779c = (void*)0x9f1d8 /* pointer to data */;
+
 
 // Data at address 0x877dc
-wchar_t* data_877dc = (void*)0x9f1fc;
+
 
 // Data at address 0x8781c
-wchar_t* data_8781c = (void*)0x9f220;
+
 
 // Data at address 0x8785c
-void* data_8785c = (void*)0x9f230;
+
 
 // Data at address 0x8789c
-void* data_8789c = (void*)0x9f25c;
+
 
 // Data at address 0x878dc
-void* data_878dc = (void*)0x9f280;
+
 
 // Data at address 0x8791c
-void* data_8791c = (void*)0x9f2a4;
+
 
 // Data at address 0x8795c
-void* data_8795c = (void*)0x9f2c8;
+
 
 // Data at address 0x8799c
-void* data_8799c = (void*)0x9f2ec;
+
 
 // Data at address 0x879dc
-void* data_879dc = (void*)0x9f310;
+
 
 // Data at address 0x87a1c
-void* data_87a1c = (void*)0x9f334;
+
 
 // Data at address 0x87a5c
-wchar_t* data_87a5c = (void*)0x9f358;
+
 
 // Data at address 0x87a9c
-wchar_t* data_87a9c = (void*)0x9f37c;
+
 
 // Data at address 0x87adc
-void* data_87adc = (void*)0x9f398;
+
 
 // Data at address 0x87b1c
-void* data_87b1c = (void*)0x9f3b4;
+
 
 // Data at address 0x87b5c
-void* data_87b5c = (void*)0x9f3d8;
+
 
 // Data at address 0x87b9c
-void* data_87b9c = (void*)0x9f3fc;
+
 
 // Data at address 0x87bdc
-void* data_87bdc = (void*)0x9f420;
+
 
 // Data at address 0x87c1c
-void* data_87c1c = (void*)0x9f444;
+
 
 // Data at address 0x87c5c
-wchar_t* data_87c5c = (void*)0x9f454 /* pointer to data */;
+
 
 // Data at address 0x87c9c
-wchar_t* data_87c9c = (void*)0x9f478;
+
 
 // Data at address 0x87cdc
-void* data_87cdc = (void*)0x9f49c;
+
 
 // Data at address 0x87d1c
-wchar_t* data_87d1c = (void*)0x9f4c0 /* pointer to data */;
+
 
 // Data at address 0x87d5c
-wchar_t* data_87d5c = (void*)0x9f4e4;
+
 
 // Data at address 0x87d9c
-wchar_t* data_87d9c = (void*)0x9f520;
+
 
 // Data at address 0x87ddc
-wchar_t* data_87ddc = (void*)0x9f55c;
+
 
 // Data at address 0x87e1c
-void* data_87e1c = (void*)0x9f580;
+
 
 // Data at address 0x87e5c
-void* data_87e5c = (void*)0x9f5a4;
+
 
 // Data at address 0x87e9c
-void* data_87e9c = (void*)0x9f5c8;
+
 
 // Data at address 0x87edc
-void* data_87edc = (void*)0x9f5ec;
+
 
 // Data at address 0x87f1c
-void* data_87f1c = (void*)0x9f610;
+
 
 // Data at address 0x87f5c
-void* data_87f5c = (void*)0x9f634;
+
 
 // Data at address 0x87f9c
-void* data_87f9c = (void*)0x9f658;
+
 
 // Data at address 0x87fdc
-void* data_87fdc = (void*)0x9f67c;
+
 
 // Data at address 0x8801c
-void* data_8801c = (void*)0x9f6a0;
+
 
 // Data at address 0x8805c
-void* data_8805c = (void*)0x9f6c4;
+
 
 // Data at address 0x8809c
-void* data_8809c = (void*)0x9f6e8;
+
 
 // Data at address 0x880dc
-void* data_880dc = (void*)0x9f70c;
+
 
 // Data at address 0x8811c
-void* data_8811c = (void*)0x9f730;
+
 
 // Data at address 0x8815c
-void* data_8815c = (void*)0x9f754;
+
 
 // Data at address 0x8819c
-void* data_8819c = (void*)0x9f778;
+
 
 // Data at address 0x881dc
-void* data_881dc = (void*)0x9f79c;
+
 
 // Data at address 0x8821c
-void* data_8821c = (void*)0x9f7c0;
+
 
 // Data at address 0x8825c
-void* data_8825c = (void*)0x9f7e4;
+
 
 // Data at address 0x8829c
-void* data_8829c = (void*)0x9f808;
+
 
 // Data at address 0x882dc
-void* data_882dc = (void*)0x9f82c;
+
 
 // Data at address 0x8831c
-wchar_t* data_8831c = (void*)0x9f850;
+
 
 // Data at address 0x8835c
-wchar_t* data_8835c = (void*)0x9f874;
+
 
 // Data at address 0x8839c
-wchar_t* data_8839c = (void*)0x9f898;
+
 
 // Data at address 0x883dc
-wchar_t* data_883dc = (void*)0x9f8bc;
+
 
 // Data at address 0x8841c
-wchar_t* data_8841c = (void*)0x9f8e0;
+
 
 // Data at address 0x8845c
-void* data_8845c = (void*)0x9f904;
+
 
 // Data at address 0x8849c
-void* data_8849c = (void*)0x9f928;
+
 
 // Data at address 0x884dc
-void* data_884dc = (void*)0x9f94c;
+
 
 // Data at address 0x8851c
-void* data_8851c = (void*)0x9f970;
+
 
 // Data at address 0x8855c
-void* data_8855c = (void*)0x9f994;
+
 
 // Data at address 0x8859c
-void* data_8859c = (void*)0x9f9b8;
+
 
 // Data at address 0x885dc
-void* data_885dc = (void*)0x9f9dc;
+
 
 // Data at address 0x8861c
-void* data_8861c = (void*)0x9fa00;
+
 
 // Data at address 0x8865c
-void* data_8865c = (void*)0x9fa24;
+
 
 // Data at address 0x8869c
-void* data_8869c = (void*)0x9fa28;
+
 
 // Data at address 0x886dc
-void* data_886dc = (void*)0x9fa4c;
+
 
 // Data at address 0x8871c
-wchar_t* data_8871c = (void*)0x9fa88 /* pointer to data */;
+
 
 // Data at address 0x8875c
-void* data_8875c = (void*)0x9fac8;
+
 
 // Data at address 0x8879c
-void* data_8879c = (void*)0x9fad4;
+
 
 // Data at address 0x887dc
-void* data_887dc = (void*)0x9fae0;
+
 
 // Data at address 0x8881c
-void* data_8881c = (void*)0x9fbe0;
+
 
 // Data at address 0x8885c
-void* data_8885c = (void*)0x9fc20;
+
 
 // Data at address 0x8889c
-void* data_8889c = (void*)0x9fc60;
+
 
 // Data at address 0x888dc
-void* data_888dc = (void*)0x9fc68;
+
 
 // Data at address 0x8891c
-void* data_8891c = (void*)0x9fc74;
+
 
 // Data at address 0x8895c
-wchar_t* data_8895c = (void*)0x9fc98;
+
 
 // Data at address 0x8899c
-wchar_t* data_8899c = (void*)0x9fcbc /* pointer to data */;
+
 
 // Data at address 0x889dc
-wchar_t* data_889dc = (void*)0x9fce0 /* pointer to data */;
+
 
 // Data at address 0x88a1c
-void* data_88a1c = (void*)0x9fd04;
+
 
 // Data at address 0x88a5c
-void* data_88a5c = (void*)0x9fd14;
+
 
 // Data at address 0x88a9c
-void* data_88a9c = (void*)0x9fd1c;
+
 
 // Data at address 0x88adc
-void* data_88adc = (void*)0x9fd40;
+
 
 // Data at address 0x88b1c
-void* data_88b1c = (void*)0x9fd64;
+
 
 // Data at address 0x88b5c
-void* data_88b5c = (void*)0x9fd88;
+
 
 // Data at address 0x88b9c
-void* data_88b9c = (void*)0x9fdac;
+
 
 // Data at address 0x88bdc
-void* data_88bdc = (void*)0x9fdd0;
+
 
 // Data at address 0x88c1c
-void* data_88c1c = (void*)0x9fdf4;
+
 
 // Data at address 0x88c5c
-void* data_88c5c = (void*)0x9fe18;
+
 
 // Data at address 0x88c9c
-void* data_88c9c = (void*)0x9fe3c;
+
 
 // Data at address 0x88cdc
-void* data_88cdc = (void*)0x9fe60;
+
 
 // Data at address 0x88d1c
-void* data_88d1c = (void*)0x9fe84;
+
 
 // Data at address 0x88d5c
-void* data_88d5c = (void*)0x9fea8;
+
 
 // Data at address 0x88d9c
-void* data_88d9c = (void*)0x9fecc;
+
 
 // Data at address 0x88ddc
-void* data_88ddc = (void*)0x9feec;
+
 
 // Data at address 0x88e1c
-void* data_88e1c = (void*)0x9ff10;
+
 
 // Data at address 0x88e5c
-void* data_88e5c = (void*)0x9ff34;
+
 
 // Data at address 0x88e9c
-void* data_88e9c = (void*)0x9ff58;
+
 
 // Data at address 0x88edc
-void* data_88edc = (void*)0x9ff7c;
+
 
 // Data at address 0x88f1c
-void* data_88f1c = (void*)0x9ffa0;
+
 
 // Data at address 0x88f5c
-void* data_88f5c = (void*)0x9ffc4;
+
 
 // Data at address 0x88f9c
-void* data_88f9c = (void*)0x9ffe8;
+
 
 // Data at address 0x88fdc
-void* data_88fdc = (void*)0xa000c;
+
 
 // Data at address 0x8901c
-void* data_8901c = (void*)0xa0030;
+
 
 // Data at address 0x8905c
-void* data_8905c = (void*)0xa0054;
+
 
 // Data at address 0x8909c
-void* data_8909c = (void*)0xa0078;
+
 
 // Data at address 0x890dc
-void* data_890dc = (void*)0xa009c;
+
 
 // Data at address 0x8911c
-void* data_8911c = (void*)0xa00c8;
+
 
 // Data at address 0x8915c
-void* data_8915c = (void*)0xa0108;
+
 
 // Data at address 0x8919c
-void* data_8919c = (void*)0xa0160;
+
 
 // Data at address 0x891dc
-void* data_891dc = (void*)0xa01b8;
+
 
 // Data at address 0x8921c
-void* data_8921c = (void*)0xa0210;
+
 
 // Data at address 0x8925c
-wchar_t* data_8925c = (void*)0xa0234;
+
 
 // Data at address 0x8929c
-void* data_8929c = (void*)0xa0258;
+
 
 // Data at address 0x892dc
-void* data_892dc = (void*)0xa027c;
+
 
 // Data at address 0x8931c
-void* data_8931c = (void*)0xa02a0;
+
 
 // Data at address 0x8935c
-void* data_8935c = (void*)0xa02c4;
+
 
 // Data at address 0x8939c
-void* data_8939c = (void*)0xa02d4;
+
 
 // Data at address 0x893dc
-void* data_893dc = (void*)0xa02f8;
+
 
 // Data at address 0x8941c
-void* data_8941c = (void*)0xa031c;
+
 
 // Data at address 0x8945c
-void* data_8945c = (void*)0xa0340;
+
 
 // Data at address 0x8949c
-void* data_8949c = (void*)0xa0364;
+
 
 // Data at address 0x894dc
-void* data_894dc = (void*)0xa0388;
+
 
 // Data at address 0x8951c
-void* data_8951c = (void*)0xa03ac;
+
 
 // Data at address 0x8955c
-void* data_8955c = (void*)0xa03d0;
+
 
 // Data at address 0x8959c
-void* data_8959c = (void*)0xa03f4;
+
 
 // Data at address 0x895dc
-void* data_895dc = (void*)0xa0418;
+
 
 // Data at address 0x8961c
-void* data_8961c = (void*)0xa043c;
+
 
 // Data at address 0x8965c
-void* data_8965c = (void*)0xa0460;
+
 
 // Data at address 0x8969c
-void* data_8969c = (void*)0xa0484;
+
 
 // Data at address 0x896dc
-void* data_896dc = (void*)0xa04a8;
+
 
 // Data at address 0x8971c
-void* data_8971c = (void*)0xa04cc;
+
 
 // Data at address 0x8975c
-void* data_8975c = (void*)0xa04f0;
+
 
 // Data at address 0x8979c
-void* data_8979c = (void*)0xa0514;
+
 
 // Data at address 0x897dc
-void* data_897dc = (void*)0xa0538;
+
 
 // Data at address 0x8981c
-void* data_8981c = (void*)0xa0544;
+
 
 // Data at address 0x8985c
-wchar_t* data_8985c = (void*)0xa0568 /* pointer to data */;
+
 
 // Data at address 0x8989c
-wchar_t* data_8989c = (void*)0xa058c /* pointer to data */;
+
 
 // Data at address 0x898dc
-wchar_t* data_898dc = (void*)0xa05b0 /* pointer to data */;
+
 
 // Data at address 0x8991c
-void* data_8991c = (void*)0xa05d4;
+
 
 // Data at address 0x8995c
-void* data_8995c = (void*)0xa05f8;
+
 
 // Data at address 0x8999c
-void* data_8999c = (void*)0xa0650;
+
 
 // Data at address 0x899dc
-void* data_899dc = (void*)0xa0654;
+
 
 // Data at address 0x89a1c
-void* data_89a1c = (void*)0xa0658;
+
 
 // Data at address 0x89a5c
-void* data_89a5c = (void*)0xa065c;
+
 
 // Data at address 0x89a9c
-void* data_89a9c = (void*)0xa0660;
+
 
 // Data at address 0x89adc
-void* data_89adc = (void*)0xa0664;
+
 
 // Data at address 0x89b1c
-void* data_89b1c = (void*)0xa0668;
+
 
 // Data at address 0x89b5c
-void* data_89b5c = (void*)0xa066c;
+
 
 // Data at address 0x89b9c
-void* data_89b9c = (void*)0xa0670;
+
 
 // Data at address 0x89bdc
-void* data_89bdc = (void*)0xa0674;
+
 
 // Data at address 0x89c1c
-void* data_89c1c = (void*)0xa0678;
+
 
 // Data at address 0x89c20
 char data_89c20[] = "TISP_PARAM_MDNS_STA_MAX_NUM_ARRAY"; // offset: 0x89c20
 
 // Data at address 0x89c5c
-void* data_89c5c = (void*)0xa067c;
+
 
 // Data at address 0x89c9c
-void* data_89c9c = (void*)0xa0680;
+
 
 // Data at address 0x89cdc
-void* data_89cdc = (void*)0xa0684;
+
 
 // Data at address 0x89d1c
-void* data_89d1c = (void*)0xa0688;
+
 
 // Data at address 0x89d5c
-void* data_89d5c = (void*)0xa068c;
+
 
 // Data at address 0x89d9c
-void* data_89d9c = (void*)0xa0690;
+
 
 // Data at address 0x89ddc
-void* data_89ddc = (void*)0xa0694;
+
 
 // Data at address 0x89e1c
-void* data_89e1c = (void*)0xa06b8;
+
 
 // Data at address 0x89e5c
-void* data_89e5c = (void*)0xa06dc;
+
 
 // Data at address 0x89e9c
-void* data_89e9c = (void*)0xa0700;
+
 
 // Data at address 0x89edc
-void* data_89edc = (void*)0xa0724;
+
 
 // Data at address 0x89f1c
-void* data_89f1c = (void*)0xa0748;
+
 
 // Data at address 0x89f5c
-void* data_89f5c = (void*)0xa076c;
+
 
 // Data at address 0x89f9c
-void* data_89f9c = (void*)0xa0790;
+
 
 // Data at address 0x89fdc
-void* data_89fdc = (void*)0xa07b4;
+
 
 // Data at address 0x8a01c
-void* data_8a01c = (void*)0xa07d8;
+
 
 // Data at address 0x8a05c
-void* data_8a05c = (void*)0xa07fc;
+
 
 // Data at address 0x8a09c
-void* data_8a09c = (void*)0xa0820;
+
 
 // Data at address 0x8a0dc
-void* data_8a0dc = (void*)0xa0860;
+
 
 // Data at address 0x8a11c
-void* data_8a11c = (void*)0xa08a0;
+
 
 // Data at address 0x8a15c
-void* data_8a15c = (void*)0xa08c4;
+
 
 // Data at address 0x8a19c
-void* data_8a19c = (void*)0xa08e8;
+
 
 // Data at address 0x8a1dc
-void* data_8a1dc = (void*)0xa090c;
+
 
 // Data at address 0x8a21c
-void* data_8a21c = (void*)0xa0930;
+
 
 // Data at address 0x8a25c
-void* data_8a25c = (void*)0xa0954;
+
 
 // Data at address 0x8a29c
-void* data_8a29c = (void*)0xa0978;
+
 
 // Data at address 0x8a2dc
-void* data_8a2dc = (void*)0xa099c;
+
 
 // Data at address 0x8a31c
-void* data_8a31c = (void*)0xa09c0;
+
 
 // Data at address 0x8a35c
-void* data_8a35c = (void*)0xa09e4;
+
 
 // Data at address 0x8a39c
-void* data_8a39c = (void*)0xa0a08;
+
 
 // Data at address 0x8a3dc
-wchar_t* data_8a3dc = (void*)0xa0a2c /* pointer to data */;
+
 
 // Data at address 0x8a41c
-wchar_t* data_8a41c = (void*)0xa0a50 /* pointer to data */;
+
 
 // Data at address 0x8a45c
-wchar_t* data_8a45c = (void*)0xa0a74 /* pointer to data */;
+
 
 // Data at address 0x8a49c
-wchar_t* data_8a49c = (void*)0xa0a98 /* pointer to data */;
+
 
 // Data at address 0x8a4dc
-wchar_t* data_8a4dc = (void*)0xa0abc /* pointer to data */;
+
 
 // Data at address 0x8a51c
-void* data_8a51c = (void*)0xa0ae0;
+
 
 // Data at address 0x8a55c
-void* data_8a55c = (void*)0xa0b04;
+
 
 // Data at address 0x8a59c
-void* data_8a59c = (void*)0xa0b28;
+
 
 // Data at address 0x8a5dc
-void* data_8a5dc = (void*)0xa0b4c;
+
 
 // Data at address 0x8a61c
-void* data_8a61c = (void*)0xa0b70;
+
 
 // Data at address 0x8a65c
-void* data_8a65c = (void*)0xa0b94;
+
 
 // Data at address 0x8a69c
-void* data_8a69c = (void*)0xa0bb8;
+
 
 // Data at address 0x8a6dc
-void* data_8a6dc = (void*)0xa0bdc;
+
 
 // Data at address 0x8a71c
-void* data_8a71c = (void*)0xa0c00;
+
 
 // Data at address 0x8a75c
-void* data_8a75c = (void*)0xa0c24;
+
 
 // Data at address 0x8a79c
-void* data_8a79c = (void*)0xa0c48;
+
 
 // Data at address 0x8a7dc
-void* data_8a7dc = (void*)0xa0c6c;
+
 
 // Data at address 0x8a81c
-void* data_8a81c = (void*)0xa0c90;
+
 
 // Data at address 0x8a85c
-wchar_t* data_8a85c = (void*)0xa0cb4 /* pointer to data */;
+
 
 // Data at address 0x8a89c
-wchar_t* data_8a89c = (void*)0xa0cd8 /* pointer to data */;
+
 
 // Data at address 0x8a8dc
-wchar_t* data_8a8dc = (void*)0xa0cfc;
+
 
 // Data at address 0x8a91c
-void* data_8a91c = (void*)0xa0d20;
+
 
 // Data at address 0x8a95c
-void* data_8a95c = (void*)0xa0d44;
+
 
 // Data at address 0x8a99c
-wchar_t* data_8a99c = (void*)0xa0d68 /* pointer to data */;
+
 
 // Data at address 0x8a9dc
-wchar_t* data_8a9dc = (void*)0xa0d8c /* pointer to data */;
+
 
 // Data at address 0x8aa1c
-void* data_8aa1c = (void*)0xa0db0;
+
 
 // Data at address 0x8aa5c
-void* data_8aa5c = (void*)0xa0dd4;
+
 
 // Data at address 0x8aa9c
-void* data_8aa9c = (void*)0xa0df8;
+
 
 // Data at address 0x8aadc
-void* data_8aadc = (void*)0xa0e1c;
+
 
 // Data at address 0x8ab1c
-void* data_8ab1c = (void*)0xa0e40;
+
 
 // Data at address 0x8ab5c
-void* data_8ab5c = (void*)0xa0e64;
+
 
 // Data at address 0x8ab9c
-void* data_8ab9c = (void*)0xa0e88;
+
 
 // Data at address 0x8abdc
-void* data_8abdc = (void*)0xa0eac;
+
 
 // Data at address 0x8ac1c
-void* data_8ac1c = (void*)0xa0ed0;
+
 
 // Data at address 0x8ac5c
-void* data_8ac5c = (void*)0xa0ef4;
+
 
 // Data at address 0x8ac9c
-void* data_8ac9c = (void*)0xa0f18;
+
 
 // Data at address 0x8acdc
-void* data_8acdc = (void*)0xa0f3c;
+
 
 // Data at address 0x8ad1c
-void* data_8ad1c = (void*)0xa0f60;
+
 
 // Data at address 0x8ad5c
-void* data_8ad5c = (void*)0xa0f84;
+
 
 // Data at address 0x8ad9c
-void* data_8ad9c = (void*)0xa0fa8;
+
 
 // Data at address 0x8addc
-void* data_8addc = (void*)0xa0fcc;
+
 
 // Data at address 0x8ae1c
-void* data_8ae1c = (void*)0xa0ff0;
+
 
 // Data at address 0x8ae5c
-void* data_8ae5c = (void*)0xa1014;
+
 
 // Data at address 0x8ae9c
-void* data_8ae9c = (void*)0xa1038;
+
 
 // Data at address 0x8aedc
-void* data_8aedc = (void*)0xa105c;
+
 
 // Data at address 0x8af1c
-void* data_8af1c = (void*)0xa1080;
+
 
 // Data at address 0x8af5c
-void* data_8af5c = (void*)0xa10a4;
+
 
 // Data at address 0x8af9c
-void* data_8af9c = (void*)0xa10c8;
+
 
 // Data at address 0x8afdc
-void* data_8afdc = (void*)0xa10ec;
+
 
 // Data at address 0x8b01c
-void* data_8b01c = (void*)0xa1110;
+
 
 // Data at address 0x8b05c
-void* data_8b05c = (void*)0xa1134;
+
 
 // Data at address 0x8b09c
-void* data_8b09c = (void*)0xa1158;
+
 
 // Data at address 0x8b0dc
-void* data_8b0dc = (void*)0xa117c;
+
 
 // Data at address 0x8b11c
-void* data_8b11c = (void*)0xa11a0;
+
 
 // Data at address 0x8b15c
-void* data_8b15c = (void*)0xa11c4;
+
 
 // Data at address 0x8b19c
-void* data_8b19c = (void*)0xa11e8;
+
 
 // Data at address 0x8b1dc
-void* data_8b1dc = (void*)0xa120c;
+
 
 // Data at address 0x8b21c
-void* data_8b21c = (void*)0xa1230;
+
 
 // Data at address 0x8b25c
-void* data_8b25c = (void*)0xa1254;
+
 
 // Data at address 0x8b29c
-void* data_8b29c = (void*)0xa1278;
+
 
 // Data at address 0x8b2dc
-void* data_8b2dc = (void*)0xa129c;
+
 
 // Data at address 0x8b31c
-void* data_8b31c = (void*)0xa12c0;
+
 
 // Data at address 0x8b35c
-void* data_8b35c = (void*)0xa12e4;
+
 
 // Data at address 0x8b39c
-void* data_8b39c = (void*)0xa1308;
+
 
 // Data at address 0x8b3dc
-void* data_8b3dc = (void*)0xa132c;
+
 
 // Data at address 0x8b41c
-void* data_8b41c = (void*)0xa1350;
+
 
 // Data at address 0x8b45c
-void* data_8b45c = (void*)0xa1374;
+
 
 // Data at address 0x8b49c
-void* data_8b49c = (void*)0xa1398;
+
 
 // Data at address 0x8b4dc
-void* data_8b4dc = (void*)0xa13bc;
+
 
 // Data at address 0x8b51c
-void* data_8b51c = (void*)0xa13e0;
+
 
 // Data at address 0x8b55c
-void* data_8b55c = (void*)0xa1404;
+
 
 // Data at address 0x8b59c
-void* data_8b59c = (void*)0xa1428;
+
 
 // Data at address 0x8b5dc
-void* data_8b5dc = (void*)0xa144c;
+
 
 // Data at address 0x8b61c
-void* data_8b61c = (void*)0xa1470;
+
 
 // Data at address 0x8b65c
-void* data_8b65c = (void*)0xa1494;
+
 
 // Data at address 0x8b69c
-void* data_8b69c = (void*)0xa14b8;
+
 
 // Data at address 0x8b6dc
-void* data_8b6dc = (void*)0xa14dc;
+
 
 // Data at address 0x8b71c
-void* data_8b71c = (void*)0xa1500;
+
 
 // Data at address 0x8b75c
-void* data_8b75c = (void*)0xa1524;
+
 
 // Data at address 0x8b79c
-void* data_8b79c = (void*)0xa1548;
+
 
 // Data at address 0x8b7dc
-void* data_8b7dc = (void*)0xa156c;
+
 
 // Data at address 0x8b81c
-void* data_8b81c = (void*)0xa1590;
+
 
 // Data at address 0x8b85c
-void* data_8b85c = (void*)0xa15b4;
+
 
 // Data at address 0x8b89c
-void* data_8b89c = (void*)0xa15d8;
+
 
 // Data at address 0x8b8dc
-void* data_8b8dc = (void*)0xa15fc;
+
 
 // Data at address 0x8b91c
-void* data_8b91c = (void*)0xa1620;
+
 
 // Data at address 0x8b95c
-void* data_8b95c = (void*)0xa1644;
+
 
 // Data at address 0x8b99c
-void* data_8b99c = (void*)0xa1668;
+
 
 // Data at address 0x8b9dc
-void* data_8b9dc = (void*)0xa168c;
+
 
 // Data at address 0x8ba1c
-void* data_8ba1c = (void*)0xa16b0;
+
 
 // Data at address 0x8ba5c
-void* data_8ba5c = (void*)0xa16d4;
+
 
 // Data at address 0x8ba9c
-void* data_8ba9c = (void*)0xa16f8;
+
 
 // Data at address 0x8badc
-void* data_8badc = (void*)0xa171c;
+
 
 // Data at address 0x8bb1c
-void* data_8bb1c = (void*)0xa1740;
+
 
 // Data at address 0x8bb5c
-void* data_8bb5c = (void*)0xa1764;
+
 
 // Data at address 0x8bb9c
-void* data_8bb9c = (void*)0xa1788;
+
 
 // Data at address 0x8bbdc
-void* data_8bbdc = (void*)0xa17ac;
+
 
 // Data at address 0x8bc1c
-void* data_8bc1c = (void*)0xa17d0;
+
 
 // Data at address 0x8bc5c
-void* data_8bc5c = (void*)0xa17f4;
+
 
 // Data at address 0x8bc9c
-void* data_8bc9c = (void*)0xa1818;
+
 
 // Data at address 0x8bcdc
-void* data_8bcdc = (void*)0xa183c;
+
 
 // Data at address 0x8bd1c
-void* data_8bd1c = (void*)0xa1860;
+
 
 // Data at address 0x8bd5c
-void* data_8bd5c = (void*)0xa1884;
+
 
 // Data at address 0x8bd9c
-void* data_8bd9c = (void*)0xa18a8;
+
 
 // Data at address 0x8bddc
-void* data_8bddc = (void*)0xa18cc;
+
 
 // Data at address 0x8be1c
-void* data_8be1c = (void*)0xa18f0;
+
 
 // Data at address 0x8be5c
-void* data_8be5c = (void*)0xa1914;
+
 
 // Data at address 0x8be9c
-void* data_8be9c = (void*)0xa1938;
+
 
 // Data at address 0x8bedc
-void* data_8bedc = (void*)0xa195c;
+
 
 // Data at address 0x8bf1c
-void* data_8bf1c = (void*)0xa1980;
+
 
 // Data at address 0x8bf5c
-void* data_8bf5c = (void*)0xa19a4;
+
 
 // Data at address 0x8bf9c
-void* data_8bf9c = (void*)0xa19c8;
+
 
 // Data at address 0x8bfdc
-void* data_8bfdc = (void*)0xa19ec;
+
 
 // Data at address 0x8c01c
-wchar_t* data_8c01c = (void*)0xa1a10 /* pointer to data */;
+
 
 // Data at address 0x8c05c
-wchar_t* data_8c05c = (void*)0xa1a34;
+
 
 // Data at address 0x8c09c
-void* data_8c09c = (void*)0xa1a58;
+
 
 // Data at address 0x8c0dc
-void* data_8c0dc = (void*)0xa1a7c;
+
 
 // Data at address 0x8c11c
-void* data_8c11c = (void*)0xa1aa0;
+
 
 // Data at address 0x8c15c
-wchar_t* data_8c15c = (void*)0xa1ac4 /* pointer to data */;
+
 
 // Data at address 0x8c19c
-wchar_t* data_8c19c = (void*)0xa1ae8;
+
 
 // Data at address 0x8c1dc
-void* data_8c1dc = (void*)0xa1b0c;
+
 
 // Data at address 0x8c21c
-void* data_8c21c = (void*)0xa1b30;
+
 
 // Data at address 0x8c25c
-void* data_8c25c = (void*)0xa1b54;
+
 
 // Data at address 0x8c29c
-void* data_8c29c = (void*)0xa1b78;
+
 
 // Data at address 0x8c2dc
-void* data_8c2dc = (void*)0xa1b9c;
+
 
 // Data at address 0x8c31c
-void* data_8c31c = (void*)0xa1bc0;
+
 
 // Data at address 0x8c35c
-void* data_8c35c = (void*)0xa1be4;
+
 
 // Data at address 0x8c39c
-void* data_8c39c = (void*)0xa1c08;
+
 
 // Data at address 0x8c3dc
-void* data_8c3dc = (void*)0xa1c2c;
+
 
 // Data at address 0x8c41c
-void* data_8c41c = (void*)0xa1c50;
+
 
 // Data at address 0x8c45c
-void* data_8c45c = (void*)0xa1c74;
+
 
 // Data at address 0x8c49c
-void* data_8c49c = (void*)0xa1c98;
+
 
 // Data at address 0x8c4dc
-void* data_8c4dc = (void*)0xa1cbc;
+
 
 // Data at address 0x8c51c
-void* data_8c51c = (void*)0xa1ce0;
+
 
 // Data at address 0x8c55c
-void* data_8c55c = (void*)0xa1d04;
+
 
 // Data at address 0x8c59c
-void* data_8c59c = (void*)0xa1d28;
+
 
 // Data at address 0x8c5dc
-void* data_8c5dc = (void*)0xa1d4c;
+
 
 // Data at address 0x8c61c
-void* data_8c61c = (void*)0xa1d70;
+
 
 // Data at address 0x8c65c
-wchar_t* data_8c65c = (void*)0xa1d94 /* pointer to data */;
+
 
 // Data at address 0x8c69c
-void* data_8c69c = (void*)0xa1db8;
+
 
 // Data at address 0x8c6dc
-void* data_8c6dc = (void*)0xa1ddc;
+
 
 // Data at address 0x8c71c
-void* data_8c71c = (void*)0xa1e00;
+
 
 // Data at address 0x8c75c
-wchar_t* data_8c75c = (void*)0xa1e24;
+
 
 // Data at address 0x8c79c
-void* data_8c79c = (void*)0xa1e48;
+
 
 // Data at address 0x8c7dc
-void* data_8c7dc = (void*)0xa1e6c;
+
 
 // Data at address 0x8c81c
-void* data_8c81c = (void*)0xa1e90;
+
 
 // Data at address 0x8c85c
-void* data_8c85c = (void*)0xa1eb4;
+
 
 // Data at address 0x8c89c
-void* data_8c89c = (void*)0xa1ed8;
+
 
 // Data at address 0x8c8dc
-void* data_8c8dc = (void*)0xa1efc;
+
 
 // Data at address 0x8c91c
-void* data_8c91c = (void*)0xa1f20;
+
 
 // Data at address 0x8c95c
-void* data_8c95c = (void*)0xa1f44;
+
 
 // Data at address 0x8c99c
-void* data_8c99c = (void*)0xa1f68;
+
 
 // Data at address 0x8c9dc
-void* data_8c9dc = (void*)0xa1f8c;
+
 
 // Data at address 0x8ca1c
-void* data_8ca1c = (void*)0xa1fb0;
+
 
 // Data at address 0x8ca5c
-void* data_8ca5c = (void*)0xa1fd4;
+
 
 // Data at address 0x8ca9c
-wchar_t* data_8ca9c = (void*)0xa1ff8 /* pointer to data */;
+
 
 // Data at address 0x8cadc
-void* data_8cadc = (void*)0xa201c;
+
 
 // Data at address 0x8cb1c
-void* data_8cb1c = (void*)0xa2040;
+
 
 // Data at address 0x8cb5c
-wchar_t* data_8cb5c = (void*)0xa2064;
+
 
 // Data at address 0x8cb9c
-wchar_t* data_8cb9c = (void*)0xa2088;
+
 
 // Data at address 0x8cbdc
-void* data_8cbdc = (void*)0xa20ac;
+
 
 // Data at address 0x8cc1c
-void* data_8cc1c = (void*)0xa20d0;
+
 
 // Data at address 0x8cc5c
-wchar_t* data_8cc5c = (void*)0xa20f4 /* pointer to data */;
+
 
 // Data at address 0x8cc9c
-void* data_8cc9c = (void*)0xa2118;
+
 
 // Data at address 0x8ccdc
-void* data_8ccdc = (void*)0xa213c;
+
 
 // Data at address 0x8cd1c
-void* data_8cd1c = (void*)0xa2160;
+
 
 // Data at address 0x8cd5c
-void* data_8cd5c = (void*)0xa2184;
+
 
 // Data at address 0x8cd9c
-void* data_8cd9c = (void*)0xa21a8;
+
 
 // Data at address 0x8cddc
-void* data_8cddc = (void*)0xa21cc;
+
 
 // Data at address 0x8ce1c
-void* data_8ce1c = (void*)0xa21f0;
+
 
 // Data at address 0x8ce5c
-void* data_8ce5c = (void*)0xa2214;
+
 
 // Data at address 0x8ce9c
-void* data_8ce9c = (void*)0xa2238;
+
 
 // Data at address 0x8cedc
-void* data_8cedc = (void*)0xa225c;
+
 
 // Data at address 0x8cf1c
-void* data_8cf1c = (void*)0xa2280;
+
 
 // Data at address 0x8cf5c
-void* data_8cf5c = (void*)0xa22a4;
+
 
 // Data at address 0x8cf9c
-void* data_8cf9c = (void*)0xa22c8;
+
 
 // Data at address 0x8cfdc
-void* data_8cfdc = (void*)0xa22ec;
+
 
 // Data at address 0x8d01c
-void* data_8d01c = (void*)0xa2310;
+
 
 // Data at address 0x8d05c
-void* data_8d05c = (void*)0xa2334;
+
 
 // Data at address 0x8d09c
-void* data_8d09c = (void*)0xa2358;
+
 
 // Data at address 0x8d0dc
-wchar_t* data_8d0dc = (void*)0xa237c /* pointer to data */;
+
 
 // Data at address 0x8d11c
-wchar_t* data_8d11c = (void*)0xa23a0 /* pointer to data */;
+
 
 // Data at address 0x8d15c
-void* data_8d15c = (void*)0xa23c4;
+
 
 // Data at address 0x8d19c
-void* data_8d19c = (void*)0xa23e8;
+
 
 // Data at address 0x8d1dc
-void* data_8d1dc = (void*)0xa240c;
+
 
 // Data at address 0x8d21c
-void* data_8d21c = (void*)0xa2430;
+
 
 // Data at address 0x8d25c
-void* data_8d25c = (void*)0xa2454;
+
 
 // Data at address 0x8d29c
-void* data_8d29c = (void*)0xa2478;
+
 
 // Data at address 0x8d2dc
-void* data_8d2dc = (void*)0xa249c;
+
 
 // Data at address 0x8d31c
-void* data_8d31c = (void*)0xa24c0;
+
 
 // Data at address 0x8d35c
-void* data_8d35c = (void*)0xa24e4;
+
 
 // Data at address 0x8d39c
-void* data_8d39c = (void*)0xa2508;
+
 
 // Data at address 0x8d3dc
-void* data_8d3dc = (void*)0xa252c;
+
 
 // Data at address 0x8d41c
-void* data_8d41c = (void*)0xa2550;
+
 
 // Data at address 0x8d45c
-void* data_8d45c = (void*)0xa2574;
+
 
 // Data at address 0x8d49c
-void* data_8d49c = (void*)0xa2598;
+
 
 // Data at address 0x8d4dc
-void* data_8d4dc = (void*)0xa25bc;
+
 
 // Data at address 0x8d51c
-void* data_8d51c = (void*)0xa25e0;
+
 
 // Data at address 0x8d55c
-void* data_8d55c = (void*)0xa2604;
+
 
 // Data at address 0x8d59c
-void* data_8d59c = (void*)0xa2628;
+
 
 // Data at address 0x8d5dc
-void* data_8d5dc = (void*)0xa264c;
+
 
 // Data at address 0x8d61c
-void* data_8d61c = (void*)0xa2670;
+
 
 // Data at address 0x8d65c
-void* data_8d65c = (void*)0xa2694;
+
 
 // Data at address 0x8d69c
-void* data_8d69c = (void*)0xa26b8;
+
 
 // Data at address 0x8d6dc
-void* data_8d6dc = (void*)0xa26dc;
+
 
 // Data at address 0x8d71c
-void* data_8d71c = (void*)0xa2700;
+
 
 // Data at address 0x8d75c
-void* data_8d75c = (void*)0xa2724;
+
 
 // Data at address 0x8d79c
-void* data_8d79c = (void*)0xa2748;
+
 
 // Data at address 0x8d7dc
-wchar_t* data_8d7dc = (void*)0xa276c /* pointer to data */;
+
 
 // Data at address 0x8d81c
-void* data_8d81c = (void*)0xa2790;
+
 
 // Data at address 0x8d85c
-void* data_8d85c = (void*)0xa27b4;
+
 
 // Data at address 0x8d89c
-void* data_8d89c = (void*)0xa27d8;
+
 
 // Data at address 0x8d8dc
-void* data_8d8dc = (void*)0xa27fc;
+
 
 // Data at address 0x8d91c
-wchar_t* data_8d91c = (void*)0xa2820 /* pointer to data */;
+
 
 // Data at address 0x8d95c
-wchar_t* data_8d95c = (void*)0xa2844;
+
 
 // Data at address 0x8d99c
-void* data_8d99c = (void*)0xa2868;
+
 
 // Data at address 0x8d9dc
-void* data_8d9dc = (void*)0xa288c;
+
 
 // Data at address 0x8da1c
-void* data_8da1c = (void*)0xa28b0;
+
 
 // Data at address 0x8da5c
-void* data_8da5c = (void*)0xa28d4;
+
 
 // Data at address 0x8da9c
-void* data_8da9c = (void*)0xa28f8;
+
 
 // Data at address 0x8dadc
-wchar_t* data_8dadc = (void*)0xa291c /* pointer to data */;
+
 
 // Data at address 0x8db1c
-wchar_t* data_8db1c = (void*)0xa2940;
+
 
 // Data at address 0x8db5c
-void* data_8db5c = (void*)0xa2964;
+
 
 // Data at address 0x8db9c
-void* data_8db9c = (void*)0xa2988;
+
 
 // Data at address 0x8dbdc
-void* data_8dbdc = (void*)0xa29ac;
+
 
 // Data at address 0x8dc1c
-void* data_8dc1c = (void*)0xa29d0;
+
 
 // Data at address 0x8dc5c
-void* data_8dc5c = (void*)0xa29f4;
+
 
 // Data at address 0x8dc9c
-void* data_8dc9c = (void*)0xa2a18;
+
 
 // Data at address 0x8dcdc
-void* data_8dcdc = (void*)0xa2a3c;
+
 
 // Data at address 0x8dd1c
-void* data_8dd1c = (void*)0xa2a60;
+
 
 // Data at address 0x8dd5c
-void* data_8dd5c = (void*)0xa2a84;
+
 
 // Data at address 0x8dd9c
-void* data_8dd9c = (void*)0xa2aa8;
+
 
 // Data at address 0x8dddc
-void* data_8dddc = (void*)0xa2acc;
+
 
 // Data at address 0x8de1c
-void* data_8de1c = (void*)0xa2af0;
+
 
 // Data at address 0x8de5c
-void* data_8de5c = (void*)0xa2b14;
+
 
 // Data at address 0x8de9c
-void* data_8de9c = (void*)0xa2b38;
+
 
 // Data at address 0x8dedc
-void* data_8dedc = (void*)0xa2b5c;
+
 
 // Data at address 0x8df1c
-void* data_8df1c = (void*)0xa2b80;
+
 
 // Data at address 0x8df5c
-void* data_8df5c = (void*)0xa2ba4;
+
 
 // Data at address 0x8df9c
-void* data_8df9c = (void*)0xa2bc8;
+
 
 // Data at address 0x8dfdc
-void* data_8dfdc = (void*)0xa2bec;
+
 
 // Data at address 0x8e01c
-void* data_8e01c = (void*)0xa2c10;
+
 
 // Data at address 0x8e05c
-void* data_8e05c = (void*)0xa2c34;
+
 
 // Data at address 0x8e09c
-void* data_8e09c = (void*)0xa2c58;
+
 
 // Data at address 0x8e0dc
-void* data_8e0dc = (void*)0xa2c7c;
+
 
 // Data at address 0x8e11c
-void* data_8e11c = (void*)0xa2ca0;
+
 
 // Data at address 0x8e15c
-void* data_8e15c = (void*)0xa2cc4;
+
 
 // Data at address 0x8e19c
-void* data_8e19c = (void*)0xa2ce8;
+
 
 // Data at address 0x8e1dc
-void* data_8e1dc = (void*)0xa2d0c;
+
 
 // Data at address 0x8e21c
-void* data_8e21c = (void*)0xa2d30;
+
 
 // Data at address 0x8e25c
-void* data_8e25c = (void*)0xa2d54;
+
 
 // Data at address 0x8e29c
-void* data_8e29c = (void*)0xa2d78;
+
 
 // Data at address 0x8e2dc
-void* data_8e2dc = (void*)0xa2d9c;
+
 
 // Data at address 0x8e31c
-void* data_8e31c = (void*)0xa2dc0;
+
 
 // Data at address 0x8e35c
-void* data_8e35c = (void*)0xa2de4;
+
 
 // Data at address 0x8e39c
-void* data_8e39c = (void*)0xa2e08;
+
 
 // Data at address 0x8e3dc
-void* data_8e3dc = (void*)0xa2e2c;
+
 
 // Data at address 0x8e41c
-void* data_8e41c = (void*)0xa2e50;
+
 
 // Data at address 0x8e45c
-void* data_8e45c = (void*)0xa2e74;
+
 
 // Data at address 0x8e49c
-void* data_8e49c = (void*)0xa2e98;
+
 
 // Data at address 0x8e4dc
-void* data_8e4dc = (void*)0xa2ebc;
+
 
 // Data at address 0x8e51c
-void* data_8e51c = (void*)0xa2ee0;
+
 
 // Data at address 0x8e55c
-void* data_8e55c = (void*)0xa2f04;
+
 
 // Data at address 0x8e59c
-void* data_8e59c = (void*)0xa2f28;
+
 
 // Data at address 0x8e5dc
-void* data_8e5dc = (void*)0xa2f4c;
+
 
 // Data at address 0x8e61c
-void* data_8e61c = (void*)0xa2f70;
+
 
 // Data at address 0x8e65c
-void* data_8e65c = (void*)0xa2f94;
+
 
 // Data at address 0x8e69c
-void* data_8e69c = (void*)0xa2fb8;
+
 
 // Data at address 0x8e6dc
-void* data_8e6dc = (void*)0xa2fdc;
+
 
 // Data at address 0x8e71c
-void* data_8e71c = (void*)0xa3000;
+
 
 // Data at address 0x8e75c
-void* data_8e75c = (void*)0xa3024;
+
 
 // Data at address 0x8e79c
-void* data_8e79c = (void*)0xa3048;
+
 
 // Data at address 0x8e7dc
-void* data_8e7dc = (void*)0xa306c;
+
 
 // Data at address 0x8e81c
-void* data_8e81c = (void*)0xa3090;
+
 
 // Data at address 0x8e85c
-void* data_8e85c = (void*)0xa30b4;
+
 
 // Data at address 0x8e89c
-void* data_8e89c = (void*)0xa30d8;
+
 
 // Data at address 0x8e8dc
-void* data_8e8dc = (void*)0xa30fc;
+
 
 // Data at address 0x8e91c
-void* data_8e91c = (void*)0xa3120;
+
 
 // Data at address 0x8e95c
-void* data_8e95c = (void*)0xa3144;
+
 
 // Data at address 0x8e99c
-void* data_8e99c = (void*)0xa3168;
+
 
 // Data at address 0x8e9dc
-void* data_8e9dc = (void*)0xa318c;
+
 
 // Data at address 0x8ea1c
-void* data_8ea1c = (void*)0xa31b0;
+
 
 // Data at address 0x8ea5c
-void* data_8ea5c = (void*)0xa31d4;
+
 
 // Data at address 0x8ea9c
-void* data_8ea9c = (void*)0xa31f8;
+
 
 // Data at address 0x8eadc
-void* data_8eadc = (void*)0xa321c;
+
 
 // Data at address 0x8eb1c
-void* data_8eb1c = (void*)0xa3240;
+
 
 // Data at address 0x8eb5c
-void* data_8eb5c = (void*)0xa3264;
+
 
 // Data at address 0x8eb9c
-void* data_8eb9c = (void*)0xa3288;
+
 
 // Data at address 0x8ebdc
-void* data_8ebdc = (void*)0xa32ac;
+
 
 // Data at address 0x8ec1c
-void* data_8ec1c = (void*)0xa32d0;
+
 
 // Data at address 0x8ec5c
-void* data_8ec5c = (void*)0xa32f4;
+
 
 // Data at address 0x8ec9c
-void* data_8ec9c = (void*)0xa3318;
+
 
 // Data at address 0x8ecdc
-void* data_8ecdc = (void*)0xa333c;
+
 
 // Data at address 0x8ed1c
-void* data_8ed1c = (void*)0xa3360;
+
 
 // Data at address 0x8ed5c
-void* data_8ed5c = (void*)0xa3384;
+
 
 // Data at address 0x8ed9c
-void* data_8ed9c = (void*)0xa33a8;
+
 
 // Data at address 0x8eddc
-void* data_8eddc = (void*)0xa33cc;
+
 
 // Data at address 0x8ee1c
-void* data_8ee1c = (void*)0xa33f0;
+
 
 // Data at address 0x8ee5c
-void* data_8ee5c = (void*)0xa3414;
+
 
 // Data at address 0x8ee9c
-void* data_8ee9c = (void*)0xa3438;
+
 
 // Data at address 0x8eedc
-void* data_8eedc = (void*)0xa345c;
+
 
 // Data at address 0x8ef1c
-void* data_8ef1c = (void*)0xa3480;
+
 
 // Data at address 0x8ef5c
-void* data_8ef5c = (void*)0xa34a4;
+
 
 // Data at address 0x8ef9c
-void* data_8ef9c = (void*)0xa34c8;
+
 
 // Data at address 0x8efdc
-void* data_8efdc = (void*)0xa34ec;
+
 
 // Data at address 0x8f01c
-void* data_8f01c = (void*)0xa3510;
+
 
 // Data at address 0x8f05c
-void* data_8f05c = (void*)0xa3534;
+
 
 // Data at address 0x8f09c
-void* data_8f09c = (void*)0xa3558;
+
 
 // Data at address 0x8f0dc
-void* data_8f0dc = (void*)0xa357c;
+
 
 // Data at address 0x8f11c
-void* data_8f11c = (void*)0xa35a0;
+
 
 // Data at address 0x8f15c
-void* data_8f15c = (void*)0xa35c4;
+
 
 // Data at address 0x8f19c
-void* data_8f19c = (void*)0xa35e8;
+
 
 // Data at address 0x8f1dc
-void* data_8f1dc = (void*)0xa360c;
+
 
 // Data at address 0x8f21c
-void* data_8f21c = (void*)0xa3630;
+
 
 // Data at address 0x8f25c
-wchar_t* data_8f25c = (void*)0xa3654 /* pointer to data */;
+
 
 // Data at address 0x8f29c
-wchar_t* data_8f29c = (void*)0xa3678;
+
 
 // Data at address 0x8f2dc
-void* data_8f2dc = (void*)0xa369c;
+
 
 // Data at address 0x8f31c
-void* data_8f31c = (void*)0xa36c0;
+
 
 // Data at address 0x8f35c
-void* data_8f35c = (void*)0xa36e4;
+
 
 // Data at address 0x8f39c
-void* data_8f39c = (void*)0xa3708;
+
 
 // Data at address 0x8f3dc
-void* data_8f3dc = (void*)0xa372c;
+
 
 // Data at address 0x8f41c
-void* data_8f41c = (void*)0xa3750;
+
 
 // Data at address 0x8f45c
-void* data_8f45c = (void*)0xa3774;
+
 
 // Data at address 0x8f49c
-void* data_8f49c = (void*)0xa3798;
+
 
 // Data at address 0x8f4dc
-void* data_8f4dc = (void*)0xa37bc;
+
 
 // Data at address 0x8f51c
-void* data_8f51c = (void*)0xa37e0;
+
 
 // Data at address 0x8f55c
-void* data_8f55c = (void*)0xa3804;
+
 
 // Data at address 0x8f59c
-void* data_8f59c = (void*)0xa3828;
+
 
 // Data at address 0x8f5dc
-void* data_8f5dc = (void*)0xa384c;
+
 
 // Data at address 0x8f61c
-void* data_8f61c = (void*)0xa3870;
+
 
 // Data at address 0x8f65c
-void* data_8f65c = (void*)0xa3894;
+
 
 // Data at address 0x8f69c
-void* data_8f69c = (void*)0xa38b8;
+
 
 // Data at address 0x8f6dc
-void* data_8f6dc = (void*)0xa38dc;
+
 
 // Data at address 0x8f71c
-void* data_8f71c = (void*)0xa3900;
+
 
 // Data at address 0x8f75c
-void* data_8f75c = (void*)0xa3924;
+
 
 // Data at address 0x8f79c
-void* data_8f79c = (void*)0xa3948;
+
 
 // Data at address 0x8f7dc
-void* data_8f7dc = (void*)0xa396c;
+
 
 // Data at address 0x8f81c
-void* data_8f81c = (void*)0xa3990;
+
 
 // Data at address 0x8f85c
-void* data_8f85c = (void*)0xa39b4;
+
 
 // Data at address 0x8f89c
-void* data_8f89c = (void*)0xa39d8;
+
 
 // Data at address 0x8f8dc
-void* data_8f8dc = (void*)0xa39fc;
+
 
 // Data at address 0x8f91c
-void* data_8f91c = (void*)0xa3a20;
+
 
 // Data at address 0x8f95c
-void* data_8f95c = (void*)0xa3a44;
+
 
 // Data at address 0x8f99c
-void* data_8f99c = (void*)0xa3a68;
+
 
 // Data at address 0x8f9dc
-void* data_8f9dc = (void*)0xa3a8c;
+
 
 // Data at address 0x8fa1c
-void* data_8fa1c = (void*)0xa3ab0;
+
 
 // Data at address 0x8fa5c
-void* data_8fa5c = (void*)0xa3ad4;
+
 
 // Data at address 0x8fa9c
-void* data_8fa9c = (void*)0xa3af8;
+
 
 // Data at address 0x8fadc
-void* data_8fadc = (void*)0xa3b1c;
+
 
 // Data at address 0x8fb1c
-void* data_8fb1c = (void*)0xa3b40;
+
 
 // Data at address 0x8fb5c
-void* data_8fb5c = (void*)0xa3b64;
+
 
 // Data at address 0x8fb9c
-void* data_8fb9c = (void*)0xa3b88;
+
 
 // Data at address 0x8fbdc
-void* data_8fbdc = (void*)0xa3bac;
+
 
 // Data at address 0x8fc1c
-void* data_8fc1c = (void*)0xa3bd0;
+
 
 // Data at address 0x8fc5c
-void* data_8fc5c = (void*)0xa3bf4;
+
 
 // Data at address 0x8fc9c
-void* data_8fc9c = (void*)0xa3c18;
+
 
 // Data at address 0x8fcdc
-void* data_8fcdc = (void*)0xa3c3c;
+
 
 // Data at address 0x8fd1c
-wchar_t* data_8fd1c = (void*)0xa3c60 /* pointer to data */;
+
 
 // Data at address 0x8fd5c
-wchar_t* data_8fd5c = (void*)0xa3c84;
+
 
 // Data at address 0x8fd9c
-void* data_8fd9c = (void*)0xa3ca8;
+
 
 // Data at address 0x8fddc
-void* data_8fddc = (void*)0xa3ccc;
+
 
 // Data at address 0x8fe1c
-void* data_8fe1c = (void*)0xa3cf0;
+
 
 // Data at address 0x8fe5c
-void* data_8fe5c = (void*)0xa3d14;
+
 
 // Data at address 0x8fe9c
-void* data_8fe9c = (void*)0xa3d38;
+
 
 // Data at address 0x8fedc
-void* data_8fedc = (void*)0xa3d5c;
+
 
 // Data at address 0x8ff1c
-void* data_8ff1c = (void*)0xa3d80;
+
 
 // Data at address 0x8ff5c
-void* data_8ff5c = (void*)0xa3da4;
+
 
 // Data at address 0x8ff9c
-void* data_8ff9c = (void*)0xa3dc8;
+
 
 // Data at address 0x8ffdc
-void* data_8ffdc = (void*)0xa3dec;
+
 
 // Data at address 0x9001c
-void* data_9001c = (void*)0xa3e10;
+
 
 // Data at address 0x9005c
-void* data_9005c = (void*)0xa3e34;
+
 
 // Data at address 0x9009c
-void* data_9009c = (void*)0xa3e58;
+
 
 // Data at address 0x900dc
-void* data_900dc = (void*)0xa3e7c;
+
 
 // Data at address 0x9011c
-void* data_9011c = (void*)0xa3ea0;
+
 
 // Data at address 0x9015c
-void* data_9015c = (void*)0xa3ec4;
+
 
 // Data at address 0x9019c
-wchar_t* data_9019c = (void*)0xa3ee8 /* pointer to data */;
+
 
 // Data at address 0x901dc
-void* data_901dc = (void*)0xa3f0c;
+
 
 // Data at address 0x9021c
-void* data_9021c = (void*)0xa3f30;
+
 
 // Data at address 0x9025c
-void* data_9025c = (void*)0xa3f54;
+
 
 // Data at address 0x9029c
-void* data_9029c = (void*)0xa3f78;
+
 
 // Data at address 0x902dc
-void* data_902dc = (void*)0xa3f9c;
+
 
 // Data at address 0x9031c
-void* data_9031c = (void*)0xa3fc0;
+
 
 // Data at address 0x9035c
-void* data_9035c = (void*)0xa3fe4;
+
 
 // Data at address 0x9039c
-void* data_9039c = (void*)0xa4008;
+
 
 // Data at address 0x903dc
-void* data_903dc = (void*)0xa402c;
+
 
 // Data at address 0x9041c
-void* data_9041c = (void*)0xa4050;
+
 
 // Data at address 0x9045c
-void* data_9045c = (void*)0xa4074;
+
 
 // Data at address 0x9049c
-void* data_9049c = (void*)0xa4098;
+
 
 // Data at address 0x904dc
-void* data_904dc = (void*)0xa40bc;
+
 
 // Data at address 0x9051c
-void* data_9051c = (void*)0xa40e0;
+
 
 // Data at address 0x9055c
-void* data_9055c = (void*)0xa4104;
+
 
 // Data at address 0x9059c
-void* data_9059c = (void*)0xa4128;
+
 
 // Data at address 0x905dc
-void* data_905dc = (void*)0xa414c;
+
 
 // Data at address 0x9061c
-void* data_9061c = (void*)0xa4170;
+
 
 // Data at address 0x9065c
-void* data_9065c = (void*)0xa4194;
+
 
 // Data at address 0x9069c
-wchar_t* data_9069c = (void*)0xa41b8 /* pointer to data */;
+
 
 // Data at address 0x906dc
-wchar_t* data_906dc = (void*)0xa41dc /* pointer to data */;
+
 
 // Data at address 0x9071c
-void* data_9071c = (void*)0xa4200;
+
 
 // Data at address 0x9075c
-void* data_9075c = (void*)0xa4224;
+
 
 // Data at address 0x9079c
-void* data_9079c = (void*)0xa4248;
+
 
 // Data at address 0x907dc
-void* data_907dc = (void*)0xa426c;
+
 
 // Data at address 0x9081c
-void* data_9081c = (void*)0xa4290;
+
 
 // Data at address 0x9085c
-void* data_9085c = (void*)0xa42b4;
+
 
 // Data at address 0x9089c
-void* data_9089c = (void*)0xa42d8;
+
 
 // Data at address 0x908dc
-void* data_908dc = (void*)0xa42fc;
+
 
 // Data at address 0x9091c
-void* data_9091c = (void*)0xa4320;
+
 
 // Data at address 0x9095c
-void* data_9095c = (void*)0xa4344;
+
 
 // Data at address 0x9099c
-void* data_9099c = (void*)0xa4368;
+
 
 // Data at address 0x909dc
-void* data_909dc = (void*)0xa438c;
+
 
 // Data at address 0x90a1c
-void* data_90a1c = (void*)0xa43b0;
+
 
 // Data at address 0x90a5c
-void* data_90a5c = (void*)0xa43d4;
+
 
 // Data at address 0x90a9c
-void* data_90a9c = (void*)0xa43f8;
+
 
 // Data at address 0x90adc
-void* data_90adc = (void*)0xa441c;
+
 
 // Data at address 0x90b1c
-void* data_90b1c = (void*)0xa4440;
+
 
 // Data at address 0x90b5c
-void* data_90b5c = (void*)0xa4464;
+
 
 // Data at address 0x90b9c
-void* data_90b9c = (void*)0xa4488;
+
 
 // Data at address 0x90bdc
-void* data_90bdc = (void*)0xa44ac;
+
 
 // Data at address 0x90c1c
-void* data_90c1c = (void*)0xa44d0;
+
 
 // Data at address 0x90c5c
-void* data_90c5c = (void*)0xa44f4;
+
 
 // Data at address 0x90c9c
-void* data_90c9c = (void*)0xa4518;
+
 
 // Data at address 0x90cdc
-void* data_90cdc = (void*)0xa453c;
+
 
 // Data at address 0x90d1c
-void* data_90d1c = (void*)0xa4560;
+
 
 // Data at address 0x90d5c
-void* data_90d5c = (void*)0xa4584;
+
 
 // Data at address 0x90d9c
-void* data_90d9c = (void*)0xa45a8;
+
 
 // Data at address 0x90ddc
-void* data_90ddc = (void*)0xa45cc;
+
 
 // Data at address 0x90e1c
-void* data_90e1c = (void*)0xa45f0;
+
 
 // Data at address 0x90e5c
-void* data_90e5c = (void*)0xa4614;
+
 
 // Data at address 0x90e9c
-void* data_90e9c = (void*)0xa4638;
+
 
 // Data at address 0x90edc
-wchar_t* data_90edc = (void*)0xa465c /* pointer to data */;
+
 
 // Data at address 0x90f1c
-wchar_t* data_90f1c = (void*)0xa4680 /* pointer to data */;
+
 
 // Data at address 0x90f5c
-wchar_t* data_90f5c = (void*)0xa46a4 /* pointer to data */;
+
 
 // Data at address 0x90f9c
-void* data_90f9c = (void*)0xa4abe;
+
 
 // Data at address 0x90fdc
-void* data_90fdc = (void*)0xa52f4;
+
 
 // Data at address 0x9101c
-void* data_9101c = (void*)0xa52f8;
+
 
 // Data at address 0x9105c
-wchar_t* data_9105c = (void*)0xa5378;
+
 
 // Data at address 0x9109c
-wchar_t* data_9109c = (void*)0xa53f8;
+
 
 // Data at address 0x910dc
-void* data_910dc = (void*)0xa5478;
+
 
 // Data at address 0x9111c
-void* data_9111c = (void*)0xa54f8;
+
 
 // Data at address 0x9115c
-wchar_t* data_9115c = (void*)0xa5578;
+
 
 // Data at address 0x9119c
-void* data_9119c = (void*)0xa55b0;
+
 
 // Data at address 0x911dc
-void* data_911dc = (void*)0xa5610;
+
 
 // Data at address 0x9121c
-void* data_9121c = (void*)0xa568c;
+
 
 // Data at address 0x9125c
-wchar_t* data_9125c = (void*)0xa56b0 /* pointer to data */;
+
 
 // Data at address 0x9129c
-wchar_t* data_9129c = (void*)0xa56d4 /* pointer to data */;
+
 
 // Data at address 0x912dc
-wchar_t* data_912dc = (void*)0xa56f8 /* pointer to data */;
+
 
 // Data at address 0x9131c
-void* data_9131c = (void*)0xa571c /* pointer to data */;
+
 
 // Data at address 0x9135c
-void* data_9135c = (void*)0xa5740 /* pointer to data */;
+
 
 // Data at address 0x9139c
-void* data_9139c = (void*)0xa5764 /* pointer to data */;
+
 
 // Data at address 0x913dc
-void* data_913dc = (void*)0xa5788;
+
 
 // Data at address 0x9141c
-void* data_9141c = (void*)0xa57b4;
+
 
 // Data at address 0x9145c
-void* data_9145c = (void*)0xa57ec;
+
 
 // Data at address 0x9149c
-void* data_9149c = (void*)0xa5814;
+
 
 // Data at address 0x914dc
-void* data_914dc = (void*)0xa583c;
+
 
 // Data at address 0x9151c
-void* data_9151c = (void*)0xa585c;
+
 
 // Data at address 0x9155c
-void* data_9155c = (void*)0xa5880;
+
 
 // Data at address 0x9159c
-void* data_9159c = (void*)0xa58a8;
+
 
 // Data at address 0x915dc
-wchar_t* data_915dc = (void*)0xa58d0 /* pointer to data */;
+
 
 // Data at address 0x9161c
-wchar_t* data_9161c = (void*)0xa58e4 /* pointer to data */;
+
 
 // Data at address 0x9165c
-wchar_t* data_9165c = (void*)0xa58f8 /* pointer to data */;
+
 
 // Data at address 0x9169c
-void* data_9169c = (void*)0xa5924;
+
 
 // Data at address 0x916dc
-void* data_916dc = (void*)0xa5998;
+
 
 // Data at address 0x9171c
-void* data_9171c = (void*)0xa59b4;
+
 
 // Data at address 0x9175c
-void* data_9175c = (void*)0xa59d8;
+
 
 // Data at address 0x9179c
-wchar_t* data_9179c = (void*)0xa59fc;
+
 
 // Data at address 0x917dc
-wchar_t* data_917dc = (void*)0xa5a20;
+
 
 // Data at address 0x9181c
-wchar_t* data_9181c = (void*)0xa5a44;
+
 
 // Data at address 0x9185c
-wchar_t* data_9185c = (void*)0xa5a68;
+
 
 // Data at address 0x9189c
-wchar_t* data_9189c = (void*)0xa5a8c /* pointer to data */;
+
 
 // Data at address 0x918dc
-void* data_918dc = (void*)0xa5ab8;
+
 
 // Data at address 0x9191c
-void* data_9191c = (void*)0xa5acc;
+
 
 // Data at address 0x9195c
-void* data_9195c = (void*)0xa5b0c;
+
 
 // Data at address 0x9199c
-wchar_t* data_9199c = (void*)0xa5b4c /* pointer to data */;
+
 
 // Data at address 0x919dc
-void* data_919dc = (void*)0xa5b6c;
+
 
 // Data at address 0x91a1c
-void* data_91a1c = (void*)0xa5bec;
+
 
 // Data at address 0x91a5c
-void* data_91a5c = (void*)0xa5c6c;
+
 
 // Data at address 0x91a9c
-void* data_91a9c = (void*)0xa5cec;
+
 
 // Data at address 0x91adc
-void* data_91adc = (void*)0xa5d6c;
+
 
 // Data at address 0x91b1c
-void* data_91b1c = (void*)0xa5dec;
+
 
 // Data at address 0x91b5c
-void* data_91b5c = (void*)0xa5e30;
+
 
 // Data at address 0x91b9c
-void* data_91b9c = (void*)0xa5e8c;
+
 
 // Data at address 0x91bdc
-void* data_91bdc = (void*)0xa5ee8;
+
 
 // Data at address 0x91c1c
-void* data_91c1c = (void*)0xa5f18;
+
 
 // Data at address 0x91c5c
-void* data_91c5c = (void*)0xa5f48;
+
 
 // Data at address 0x91c9c
-void* data_91c9c = (void*)0xa5f78;
+
 
 // Data at address 0x91cdc
-void* data_91cdc = (void*)0xa5fa8;
+
 
 // Data at address 0x91d1c
-void* data_91d1c = (void*)0xa5fd8;
+
 
 // Data at address 0x91d5c
-void* data_91d5c = (void*)0xa6010;
+
 
 // Data at address 0x91d9c
-void* data_91d9c = (void*)0xa608c;
+
 
 // Data at address 0x91ddc
-void* data_91ddc = (void*)0xa609c;
+
 
 // Data at address 0x91e1c
-void* data_91e1c = (void*)0xa60c0;
+
 
 // Data at address 0x91e5c
-void* data_91e5c = (void*)0xa61c2;
+
 
 // Data at address 0x91e9c
-void* data_91e9c = (void*)0xa62c4;
+
 
 // Data at address 0x91edc
-void* data_91edc = (void*)0xa62e8;
+
 
 // Data at address 0x91f1c
-void* data_91f1c = (void*)0xa635c;
+
 
 // Data at address 0x91f5c
-void* data_91f5c = (void*)0xa6398;
+
 
 // Data at address 0x91f9c
-void* data_91f9c = (void*)0xa63c4;
+
 
 // Data at address 0x91fdc
-void* data_91fdc = (void*)0xa63e4;
+
 
 // Data at address 0x9201c
-void* data_9201c = (void*)0xa641c;
+
 
 // Data at address 0x9205c
-void* data_9205c = (void*)0xa6440;
+
 
 // Data at address 0x9209c
-void* data_9209c = (void*)0xa6464;
+
 
 // Data at address 0x920dc
-void* data_920dc = (void*)0xa6488;
+
 
 // Data at address 0x9211c
-void* data_9211c = (void*)0xa64ac;
+
 
 // Data at address 0x9215c
-void* data_9215c = (void*)0xa64d0;
+
 
 // Data at address 0x9219c
-void* data_9219c = (void*)0xa64f4;
+
 
 // Data at address 0x921dc
-void* data_921dc = (void*)0xa6518;
+
 
 // Data at address 0x9221c
-void* data_9221c = (void*)0xa658c;
+
 
 // Data at address 0x9225c
-void* data_9225c = (void*)0xa65c8;
+
 
 // Data at address 0x9229c
-void* data_9229c = (void*)0xa65f4;
+
 
 // Data at address 0x922dc
-void* data_922dc = (void*)0xa6618;
+
 
 // Data at address 0x9231c
-void* data_9231c = (void*)0xa663c;
+
 
 // Data at address 0x9235c
-void* data_9235c = (void*)0xa6660;
+
 
 // Data at address 0x9239c
-void* data_9239c = (void*)0xa6684;
+
 
 // Data at address 0x923dc
-void* data_923dc = (void*)0xa66a8;
+
 
 // Data at address 0x9241c
-void* data_9241c = (void*)0xa66cc;
+
 
 // Data at address 0x9245c
-void* data_9245c = (void*)0xa66f0;
+
 
 // Data at address 0x9249c
-void* data_9249c = (void*)0xa6714;
+
 
 // Data at address 0x924dc
-void* data_924dc = (void*)0xa675c;
+
 
 // Data at address 0x9251c
-void* data_9251c = (void*)0xa67ec;
+
 
 // Data at address 0x9255c
-void* data_9255c = (void*)0xa6820;
+
 
 // Data at address 0x9259c
-void* data_9259c = (void*)0xa6834;
+
 
 // Data at address 0x925dc
-void* data_925dc = (void*)0xa6854;
+
 
 // Data at address 0x9261c
-void* data_9261c = (void*)0xa6864;
+
 
 // Data at address 0x9265c
-void* data_9265c = (void*)0xa6878;
+
 
 // Data at address 0x9269c
-void* data_9269c = (void*)0xa6898;
+
 
 // Data at address 0x926dc
-void* data_926dc = (void*)0xa68a8;
+
 
 // Data at address 0x9271c
-void* data_9271c = (void*)0xa68d0;
+
 
 // Data at address 0x9275c
-void* data_9275c = (void*)0xa68f0;
+
 
 // Data at address 0x9279c
-void* data_9279c = (void*)0xa6900;
+
 
 // Data at address 0x927dc
-void* data_927dc = (void*)0xa6928;
+
 
 // Data at address 0x9281c
-void* data_9281c = (void*)0xa6948;
+
 
 // Data at address 0x9285c
-void* data_9285c = (void*)0xa6958;
+
 
 // Data at address 0x9289c
-void* data_9289c = (void*)0xa6960;
+
 
 // Data at address 0x928dc
-void* data_928dc = (void*)0xa6974;
+
 
 // Data at address 0x9291c
-void* data_9291c = (void*)0xa69b0;
+
 
 // Data at address 0x9295c
-void* data_9295c = (void*)0xa69bc;
+
 
 // Data at address 0x9299c
-void* data_9299c = (void*)0xa6d40;
+
 
 // Data at address 0x929dc
-void* data_929dc = (void*)0xa6d64;
+
 
 // Data at address 0x92a1c
-void* data_92a1c = (void*)0xa6d88;
+
 
 // Data at address 0x92a5c
-void* data_92a5c = (void*)0xa6dac;
+
 
 // Data at address 0x92a9c
-void* data_92a9c = (void*)0xa6db8;
+
 
 // Data at address 0x92adc
-void* data_92adc = (void*)0xa6dc4;
+
 
 // Data at address 0x92b1c
-void* data_92b1c = (void*)0xa6dd0;
+
 
 // Data at address 0x92b5c
-void* data_92b5c = (void*)0xa6ddc;
+
 
 // Data at address 0x92b9c
-void* data_92b9c = (void*)0xa6e00;
+
 
 // Data at address 0x92bdc
-void* data_92bdc = (void*)0xa6e24;
+
 
 // Data at address 0x92c1c
-void* data_92c1c = (void*)0xa6e48;
+
 
 // Data at address 0x92c5c
-void* data_92c5c = (void*)0xa6e6c;
+
 
 // Data at address 0x92c9c
-void* data_92c9c = (void*)0xa6e90;
+
 
 // Data at address 0x92cdc
-void* data_92cdc = (void*)0xa6ea4;
+
 
 // Data at address 0x92d1c
-void* data_92d1c = (void*)0xa6ec8;
+
 
 // Data at address 0x92d5c
-void* data_92d5c = (void*)0xa6eec;
+
 
 // Data at address 0x92d9c
-void* data_92d9c = (void*)0xa6f10;
+
 
 // Data at address 0x92ddc
-void* data_92ddc = (void*)0xa6f34;
+
 
 // Data at address 0x92e1c
-void* data_92e1c = (void*)0xa6f38;
+
 
 // Data at address 0x92e5c
-void* data_92e5c = (void*)0xa6f44;
+
 
 // Data at address 0x92e9c
-void* data_92e9c = (void*)0xa6f4c;
+
 
 // Data at address 0x92edc
-void* data_92edc = (void*)0xa6f5c;
+
 
 // Data at address 0x92f1c
-void* data_92f1c = (void*)0xa6f6c;
+
 
 // Data at address 0x92f5c
-void* data_92f5c = (void*)0xa6f90;
+
 
 // Data at address 0x92f9c
-void* data_92f9c = (void*)0xa6fb4;
+
 
 // Data at address 0x92fdc
-void* data_92fdc = (void*)0xa6fd8;
+
 
 // Data at address 0x9301c
-void* data_9301c = (void*)0xa6fe4;
+
 
 // Data at address 0x9305c
-void* data_9305c = (void*)0xa6ff0;
+
 
 // Data at address 0x9309c
-void* data_9309c = (void*)0xa6ffc;
+
 
 // Data at address 0x930dc
-void* data_930dc = (void*)0xa7008;
+
 
 // Data at address 0x9311c
-void* data_9311c = (void*)0xa702c;
+
 
 // Data at address 0x9315c
-void* data_9315c = (void*)0xa7050;
+
 
 // Data at address 0x9319c
-void* data_9319c = (void*)0xa7074;
+
 
 // Data at address 0x931dc
-void* data_931dc = (void*)0xa7098;
+
 
 // Data at address 0x9321c
-void* data_9321c = (void*)0xa70bc;
+
 
 // Data at address 0x9325c
-void* data_9325c = (void*)0xa70c8;
+
 
 // Data at address 0x9329c
-void* data_9329c = (void*)0xa70ec;
+
 
 // Data at address 0x932dc
-void* data_932dc = (void*)0xa7110;
+
 
 // Data at address 0x9331c
-void* data_9331c = (void*)0xa7120;
+
 
 // Data at address 0x9335c
-void* data_9335c = (void*)0xa7124;
+
 
 // Data at address 0x9339c
-void* data_9339c = (void*)0xa7148;
+
 
 // Data at address 0x933dc
-void* data_933dc = (void*)0xa716c;
+
 
 // Data at address 0x9341c
-void* data_9341c = (void*)0xa7190;
+
 
 // Data at address 0x9345c
-wchar_t* data_9345c = (void*)0xa71b4 /* pointer to data */;
+
 
 // Data at address 0x9349c
-wchar_t* data_9349c = (void*)0xa71d8 /* pointer to data */;
+
 
 // Data at address 0x934dc
-wchar_t* data_934dc = (void*)0xa71fc /* pointer to data */;
+
 
 // Data at address 0x9351c
-void* data_9351c = (void*)0xa7220;
+
 
 // Data at address 0x9355c
-void* data_9355c = (void*)0xa7244;
+
 
 // Data at address 0x9359c
-void* data_9359c = (void*)0xa7268;
+
 
 // Data at address 0x935dc
-void* data_935dc = (void*)0xa728c;
+
 
 // Data at address 0x9361c
-void* data_9361c = (void*)0xa72b0;
+
 
 // Data at address 0x9365c
-void* data_9365c = (void*)0xa72d4;
+
 
 // Data at address 0x9369c
-void* data_9369c = (void*)0xa72f8;
+
 
 // Data at address 0x936dc
-wchar_t* data_936dc = (void*)0xa731c;
+
 
 // Data at address 0x9371c
-void* data_9371c = (void*)0xa7324;
+
 
 // Data at address 0x9375c
-void* data_9375c = (void*)0xa7334;
+
 
 // Data at address 0x9379c
-wchar_t* data_9379c = (void*)0xa7344 /* pointer to data */;
+
 
 // Data at address 0x937dc
-wchar_t* data_937dc = (void*)0xa7368 /* pointer to data */;
+
 
 // Data at address 0x9381c
-wchar_t* data_9381c = (void*)0xa738c /* pointer to data */;
+
 
 // Data at address 0x9385c
-wchar_t* data_9385c = (void*)0xa73b0 /* pointer to data */;
+
 
 // Data at address 0x9389c
-wchar_t* data_9389c = (void*)0xa73d4 /* pointer to data */;
+
 
 // Data at address 0x938dc
-wchar_t* data_938dc = (void*)0xa73f8 /* pointer to data */;
+
 
 // Data at address 0x9391c
-void* data_9391c = (void*)0xa7400;
+
 
 // Data at address 0x9395c
-void* data_9395c = (void*)0xa7424;
+
 
 // Data at address 0x93960
 char data_93960[] = "TISP_PARAM_WDR_WEIGHTLUT20_ARRAY"; // offset: 0x93960
 
 // Data at address 0x9399c
-void* data_9399c = (void*)0xa744c;
+
 
 // Data at address 0x939dc
-void* data_939dc = (void*)0xa74cc;
+
 
 // Data at address 0x93a1c
-void* data_93a1c = (void*)0xa754c;
+
 
 // Data at address 0x93a5c
-void* data_93a5c = (void*)0xa75cc;
+
 
 // Data at address 0x93a9c
-void* data_93a9c = (void*)0xa764c;
+
 
 // Data at address 0x93adc
-void* data_93adc = (void*)0xa76cc;
+
 
 // Data at address 0x93b1c
-void* data_93b1c = (void*)0xa7750;
+
 
 // Data at address 0x93b5c
-void* data_93b5c = (void*)0xa7760;
+
 
 // Data at address 0x93b9c
-void* data_93b9c = (void*)0xa7770;
+
 
 // Data at address 0x93bdc
-wchar_t* data_93bdc = (void*)0xa777c /* pointer to data */;
+
 
 // Data at address 0x93c1c
-void* data_93c1c = (void*)0xa7800;
+
 
 // Data at address 0x93c5c
-void* data_93c5c = (void*)0xa781c;
+
 
 // Data at address 0x93c9c
-void* data_93c9c = (void*)0xa7830;
+
 
 // Data at address 0x93cdc
-void* data_93cdc = (void*)0xa7840;
+
 
 // Data at address 0x93d1c
-void* data_93d1c = (void*)0xa78bc;
+
 
 // Data at address 0x93d5c
-void* data_93d5c = (void*)0xa78d8;
+
 
 // Data at address 0x93d9c
-void* data_93d9c = (void*)0xa790c;
+
 
 // Data at address 0x93ddc
-void* data_93ddc = (void*)0xa7920;
+
 
 // Data at address 0x93e1c
-void* data_93e1c = (void*)0xa7930;
+
 
 // Data at address 0x93e5c
-void* data_93e5c = (void*)0xa7944;
+
 
 // Data at address 0x93e9c
-void* data_93e9c = (void*)0xa79b0;
+
 
 // Data at address 0x93edc
-void* data_93edc = (void*)0xa79c0;
+
 
 // Data at address 0x93f1c
-void* data_93f1c = (void*)0xa79d4;
+
 
 // Data at address 0x93f5c
-void* data_93f5c = (void*)0xa79f0;
+
 
 // Data at address 0x93f9c
-void* data_93f9c = (void*)0xa7a00;
+
 
 // Data at address 0x93fdc
-void* data_93fdc = (void*)0xa7a10;
+
 
 // Data at address 0x9401c
-void* data_9401c = (void*)0xa7a60;
+
 
 // Data at address 0x9405c
-void* data_9405c = (void*)0xa7ab8;
+
 
 // Data at address 0x9409c
-void* data_9409c = (void*)0xa7afc;
+
 
 // Data at address 0x940dc
-void* data_940dc = (void*)0xa7b64;
+
 
 // Data at address 0x9411c
-void* data_9411c = (void*)0xa7bcc;
+
 
 // Data at address 0x9415c
-void* data_9415c = (void*)0xa7c34;
+
 
 // Data at address 0x9419c
-wchar_t* data_9419c = (void*)0xa7c9c;
+
 
 // Data at address 0x941dc
-wchar_t* data_941dc = (void*)0xa7d04 /* pointer to data */;
+
 
 // Data at address 0x9421c
-void* data_9421c = (void*)0xa7d6c;
+
 
 // Data at address 0x9425c
-wchar_t* data_9425c = (void*)0xa7dd4;
+
 
 // Data at address 0x9429c
-void* data_9429c = (void*)0xa7df4;
+
 
 // Data at address 0x942dc
-void* data_942dc = (void*)0xa7e60;
+
 
 // Data at address 0x9431c
-void* data_9431c = (void*)0xa7e68;
+
 
 // Data at address 0x9435c
-void* data_9435c = (void*)0xa7e8c;
+
 
 // Data at address 0x9439c
-void* data_9439c = (void*)0xa7eb0;
+
 
 // Data at address 0x943dc
-void* data_943dc = (void*)0xa7ed4;
+
 
 // Data at address 0x9441c
-void* data_9441c = (void*)0xa7ef8;
+
 
 // Data at address 0x9445c
-void* data_9445c = (void*)0xa7f1c;
+
 
 // Data at address 0x9449c
-void* data_9449c = (void*)0xa7f40;
+
 
 // Data at address 0x944dc
-wchar_t* data_944dc = (void*)0xa7f64 /* pointer to data */;
+
 
 // Data at address 0x9451c
-wchar_t* data_9451c = (void*)0xa7f88 /* pointer to data */;
+
 
 // Data at address 0x9455c
-wchar_t* data_9455c = (void*)0xa7fac /* pointer to data */;
+
 
 // Data at address 0x9459c
-wchar_t* data_9459c = (void*)0xa7fd0 /* pointer to data */;
+
 
 // Data at address 0x945dc
-void* data_945dc = (void*)0xa8010;
+
 
 // Data at address 0x9461c
-void* data_9461c = (void*)0xa8048;
+
 
 // Data at address 0x9465c
-wchar_t* data_9465c = (void*)0xa804c /* pointer to data */;
+
 
 // Data at address 0x9469c
-wchar_t* data_9469c = (void*)0xa805c;
+
 
 // Data at address 0x946dc
-void* data_946dc = (void*)0xa8080;
+
 
 // Data at address 0x9471c
-void* data_9471c = (void*)0xa8094;
+
 
 // Data at address 0x9475c
-void* data_9475c = (void*)0xa80b8;
+
 
 // Data at address 0x9479c
-void* data_9479c = (void*)0xa80c0;
+
 
 // Data at address 0x947dc
-void* data_947dc = (void*)0xa80e4;
+
 
 // Data at address 0x9481c
-void* data_9481c = (void*)0xa8108;
+
 
 // Data at address 0x9485c
-void* data_9485c = (void*)0xa812c;
+
 
 // Data at address 0x9489c
-void* data_9489c = (void*)0xa8150;
+
 
 // Data at address 0x948dc
-void* data_948dc = (void*)0xa8174;
+
 
 // Data at address 0x9491c
-void* data_9491c = (void*)0xa8198;
+
 
 // Data at address 0x9495c
-void* data_9495c = (void*)0xa81bc;
+
 
 // Data at address 0x9499c
-void* data_9499c = (void*)0xa81e0;
+
 
 // Data at address 0x949dc
-void* data_949dc = (void*)0xa8200;
+
 
 // Data at address 0x94a1c
-void* data_94a1c = (void*)0xa8240;
+
 
 // Data at address 0x94a5c
-void* data_94a5c = (void*)0xa8280;
+
 
 // Data at address 0x94a9c
-void* data_94a9c = (void*)0xa82c0;
+
 
 // Data at address 0x94adc
-void* data_94adc = (void*)0xa82e4;
+
 
 // Data at address 0x94b1c
-void* data_94b1c = (void*)0xa8308;
+
 
 // Data at address 0x94b3c
 int32_t data_94b3c = 0x0;
@@ -11483,10 +11483,10 @@ void* tx_isp_core_driver = &tx_isp_core_probe;
 void* data_b24d4 = &tx_isp_core_remove;
 
 // Data at address 0xb24e4
-char const* data_b24e4 = (void*)0x826a0 /* pointer to data */;
+
 
 // Data at address 0xb24ec
-void* data_b24ec = (void*)0xb27e0;
+
 
 // Data at address 0xb2528
 void* data_b2528 = &private_seq_lseek;
@@ -11507,13 +11507,13 @@ void* data_b2558 = &private_single_release;
 void* core_subdev_ops = (void*)0xb25c4;
 
 // Data at address 0xb2594
-void* data_b2594 = (void*)0xb25ac /* pointer to data */;
+
 
 // Data at address 0xb259c
-void* data_b259c = (void*)0xb25b8 /* pointer to data */;
+
 
 // Data at address 0xb25a0
-void* data_b25a0 = (void*)0xb25a4 /* pointer to data */;
+
 
 // Data at address 0xb25a4
 extern void* ispcore_internal_ops; // Fixed function pointer assignment
@@ -11546,28 +11546,28 @@ void* data_b25e4 = &ispcore_interrupt_service_routine;
 void* data_b25e8 = &ispcore_irq_thread_handle;
 
 // Data at address 0xb25f0
-void* data_b25f0 = (void*)0xb25f0 /* pointer to data */;
+
 
 // Data at address 0xb25f4
-void* data_b25f4 = (void*)0xb25f0 /* pointer to data */;
+
 
 // Data at address 0xb25f8
 void* data_b25f8 = &ispcore_irq_fs_work;
 
 // Data at address 0xb2600
-void* data_b2600 = (void*)0xb2600 /* pointer to data */;
+
 
 // Data at address 0xb2604
-void* data_b2604 = (void*)0xb2600 /* pointer to data */;
+
 
 // Data at address 0xb2608
 void* data_b2608 = &isp_ch1_frame_dequeue_delay;
 
 // Data at address 0xb2610
-void* data_b2610 = (void*)0xb2610 /* pointer to data */;
+
 
 // Data at address 0xb2614
-void* data_b2614 = (void*)0xb2610 /* pointer to data */;
+
 
 // Data at address 0xb2618
 void* data_b2618 = &isp_pre_frame_dequeue;
