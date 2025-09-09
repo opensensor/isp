@@ -3,11 +3,6 @@
 #ifndef MAIN_H
 #define MAIN_H
 
-/* Standard Includes */
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
-
 /* Architecture Information */
 #define ARCH_BITS 32
 #define ARCH_ENDIAN LITTLE
@@ -20,7 +15,6 @@
 
 /* Platform Types */
 #include <stdint.h>
-#include <stddef.h>
 #include <stdbool.h>
 
 /* ELF and System Types - Prevent incomplete type errors */
