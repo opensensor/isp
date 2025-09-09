@@ -1723,7 +1723,7 @@ void* data_82e88 = &tx_isp_release_device;
 
 
 // Data at address 0x82eb4
-uint48_t tx_isp_fs_pads = 0x0000100210021002ULL;
+uint64_t tx_isp_fs_pads = 0x0000100210021002ULL;
 
 // Data at address 0x82ec0
 char const* tx_isp_core_platform_device = (void*)0x7df98 /* pointer to data */;
@@ -2065,39 +2065,6 @@ void* data_838d0 = &tx_isp_open;
 // Data at address 0x838d8
 void* data_838d8 = &tx_isp_release;
 
-// Data at address 0x83910
-char const* link2 = (void*)0x80678 /* pointer to data */;
-
-// Data at address 0x83918
-
-
-// Data at address 0x83924
-char const* link1 = (void*)0x80678 /* pointer to data */;
-
-
-// Data at address 0x83440
-void* tx_isp_vin_driver = &tx_isp_vin_probe;
-
-// Data at address 0x7ad38
-void* isp_drivers = tx_isp_vin_driver; // offset: 0x7ad38
-
-// Data at address 0x7ad3c
-void* data_7ad3c = tx_isp_csi_driver; // offset: 0x7ad3c
-
-// Data at address 0x7ad40
-void* data_7ad40 = tx_isp_vic_driver; // offset: 0x7ad40
-
-// Data at address 0x7ad44
-void* data_7ad44 = tx_isp_core_driver; // offset: 0x7ad44
-
-// Data at address 0x7ad48
-void* data_7ad48 = tx_isp_fs_driver; // offset: 0x7ad48
-
-// Data at address 0x7ad4c
-void* configs = link1; // offset: 0x7ad4c;
-
-// Data at address 0x7ad54
-void* data_7ad54 = link2; /* pointer to data */;
 
 
 // Data at address 0x8392c
