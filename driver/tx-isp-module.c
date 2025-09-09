@@ -749,8 +749,21 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
         return -EINVAL;
     }
     
+    /* CRITICAL FIX: Check if ISP registers are available before proceeding */
+    if (!isp_dev->vic_regs) {
+        pr_err("*** CRITICAL ERROR: VIC registers not mapped! Cannot write ISP registers! ***\n");
+        pr_err("*** ISP hardware initialization FAILED - no register access! ***\n");
+        return -ENODEV;
+    }
+    
+    /* CRITICAL FIX: Safe sensor name access - avoid corrupted pointer dereference */
+    const char *sensor_name = "(unnamed)";
+    if (sensor_attr && ourISPdev && ourISPdev->sensor && ourISPdev->sensor->info.name[0]) {
+        sensor_name = ourISPdev->sensor->info.name;
+    }
+    
     pr_info("tisp_init: Initializing ISP hardware for sensor %s (%dx%d)\n",
-            sensor_attr->name ? sensor_attr->name : "(unnamed)",
+            sensor_name,
             sensor_attr->total_width, sensor_attr->total_height);
     
     /* *** BINARY NINJA REGISTER SEQUENCE - THE MISSING HARDWARE INITIALIZATION! *** */
