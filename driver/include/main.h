@@ -17,6 +17,16 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifndef __cplusplus
+#ifndef _STDBOOL_H
+enum {
+    false = 0,
+    true = 1
+};
+typedef _Bool bool;
+#endif
+#endif
+
 /* ELF and System Types - Prevent incomplete type errors */
 #ifndef ELF_TYPES_DEFINED
 #define ELF_TYPES_DEFINED
