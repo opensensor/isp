@@ -333,6 +333,11 @@ struct tx_isp_mipi_bus{
 	unsigned int settle_time_apative_en;
 	struct vic_mipi_sensor_ctl mipi_sc;
 	struct vic_mipi_vcrop_del mipi_vcropdel;
+	
+	/* Additional members needed by Binary Ninja VIC implementation */
+	unsigned int mipi_lanes;   /* Number of MIPI lanes */
+	unsigned int clk_pol;      /* Clock polarity */
+	unsigned int data_pol;     /* Data polarity */
 };
 
 struct tx_isp_dvp_bus{
