@@ -8,14 +8,34 @@
 #define ARCH_ENDIAN LITTLE
 #define BASE_ADDRESS 0x10000
 
-/* Function Declarations */
-#include "functions.h"
-
 /* Type Definitions */
+
+
 
 /* Platform Types */
 #include <stdint.h>
 #include <stdbool.h>
+
+/* Function Declarations */
+#include "functions.h"
+
+
+// Prevent type conflicts
+#ifdef __KERNEL__
+    // Building as kernel module
+    #include <linux/types.h>
+    #include <linux/kernel.h>
+#else
+    // Building as userspace or with standard library
+    #include <stdint.h>
+    #include <stdbool.h>
+    #include <stddef.h>
+
+    // Define kernel-compatible types if needed
+    #ifndef _LINUX_TYPES_H
+        typedef unsigned long kernel_ulong_t;
+#endif
+#endif
 
 #ifndef __cplusplus
 #ifndef _STDBOOL_H
