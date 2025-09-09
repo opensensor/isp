@@ -980,26 +980,24 @@ int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
 long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 
 
-/* tx_isp_vic_start - EXACT Reference Binary Ninja implementation */
+/* tx_isp_vic_start - FIXED: Exact Reference Binary Ninja implementation */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
-    struct clk *isp_clk, *cgu_isp_clk;
-    void __iomem *cpm_regs;
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type, sensor_format;
     u32 timeout = 10000;
     int ret = 0;
 
-    pr_info("*** tx_isp_vic_start: EXACT Reference Binary Ninja implementation ***\n");
+    pr_info("*** tx_isp_vic_start: FIXED Reference Binary Ninja implementation ***\n");
 
-    /* Validate vic_dev structure */
+    /* Binary Ninja EXACT: Validate vic_dev structure */
     if (!vic_dev) {
         pr_err("*** CRITICAL: Invalid vic_dev pointer %p ***\n", vic_dev);
         return -EINVAL;
     }
 
-    /* Get VIC registers - should already be mapped by tx_isp_create_vic_device */
+    /* Binary Ninja EXACT: Get VIC registers from *(arg1 + 0xb8) */
     vic_regs = vic_dev->vic_regs;
     if (!vic_regs) {
         pr_err("*** CRITICAL: No VIC register base - initialization required first ***\n");
@@ -1008,31 +1006,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     
     pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
 
-    /* STEP 1: Direct CPM register manipulation instead of sleeping clock framework */
-    pr_info("*** STREAMING: Configuring CPM registers for VIC access (non-sleeping) ***\n");
-    cpm_regs = ioremap(0x10000000, 0x1000);
-    if (cpm_regs) {
-        u32 clkgr0 = readl(cpm_regs + 0x20);
-        u32 clkgr1 = readl(cpm_regs + 0x28);
-
-        /* Enable ISP/VIC clocks via direct register manipulation */
-        clkgr0 &= ~(1 << 13); // ISP clock
-        clkgr0 &= ~(1 << 21); // Alternative ISP position
-        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
-        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
-
-        writel(clkgr0, cpm_regs + 0x20);
-        writel(clkgr1, cpm_regs + 0x28);
-        wmb();
-
-        pr_info("STREAMING: CPM clocks configured for VIC access (atomic-safe)\n");
-        iounmap(cpm_regs);
-    }
-
-    /* Get sensor attributes from VIC device */
+    /* Binary Ninja EXACT: Get sensor attributes from vic_dev + 0x110 */
     sensor_attr = &vic_dev->sensor_attr;
-    interface_type = sensor_attr->dbus_type;
-    sensor_format = sensor_attr->data_type;
+    interface_type = sensor_attr->dbus_type;  /* Binary Ninja: *(arg1 + 0x110) */
+    sensor_format = sensor_attr->data_type;   /* Binary Ninja: *(*(arg1 + 0x110) + 0x7c) */
 
     pr_info("tx_isp_vic_start: interface=%d, format=0x%x\n", interface_type, sensor_format);
 
@@ -1040,68 +1017,18 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("MCP_LOG: VIC start initiated - interface=%d, format=0x%x, vic_base=%p\n",
             interface_type, sensor_format, vic_regs);
 
-        /* *** WRITE MISSING REGISTERS TO MATCH REFERENCE TRACE *** */
-    pr_info("*** Writing missing registers to match reference driver trace ***\n");
-    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace */
-    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace */
-    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace */
-    wmb();
-
-    /* CSI PHY Control registers - write to VIC register space offsets that match trace */
-    writel(0x54560031, vic_regs + 0x0);      /* First register from reference trace */
-    writel(0x7800438, vic_regs + 0x4);       /* Second register from reference trace */
-    writel(0x1, vic_regs + 0x8);             /* Third register from reference trace */
-    writel(0x80700008, vic_regs + 0xc);      /* Fourth register from reference trace */
-    writel(0x1, vic_regs + 0x28);            /* Fifth register from reference trace */
-    writel(0x400040, vic_regs + 0x2c);       /* Sixth register from reference trace */
-    writel(0x1, vic_regs + 0x90);            /* Seventh register from reference trace */
-    writel(0x1, vic_regs + 0x94);            /* Eighth register from reference trace */
-    writel(0x30000, vic_regs + 0x98);        /* Ninth register from reference trace */
-    writel(0x58050000, vic_regs + 0xa8);     /* Tenth register from reference trace */
-    writel(0x58050000, vic_regs + 0xac);     /* Eleventh register from reference trace */
-    writel(0x40000, vic_regs + 0xc4);        /* Register from reference trace */
-    writel(0x400040, vic_regs + 0xc8);       /* Register from reference trace */
-    writel(0x100, vic_regs + 0xcc);          /* Register from reference trace */
-    writel(0xc, vic_regs + 0xd4);            /* Register from reference trace */
-    writel(0xffffff, vic_regs + 0xd8);       /* Register from reference trace */
-    writel(0x100, vic_regs + 0xe0);          /* Register from reference trace */
-    writel(0x400040, vic_regs + 0xe4);       /* Register from reference trace */
-    writel(0xff808000, vic_regs + 0xf0);     /* Register from reference trace */
-    wmb();
-
-    /* CSI PHY Config registers - from reference trace */
-    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
-    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
-    wmb();
-
-    /* *** MISSING ISP Control registers - from reference trace *** */
-    pr_info("*** Writing missing ISP Control registers (0x9804-0x98a8) ***\n");
-    writel(0x3f00, vic_regs + 0x9804);       /* ISP Control register */
-    writel(0x7800438, vic_regs + 0x9864);    /* ISP Control register */
-    writel(0xc0000000, vic_regs + 0x987c);   /* ISP Control register */
-    writel(0x1, vic_regs + 0x9880);          /* ISP Control register */
-    writel(0x1, vic_regs + 0x9884);          /* ISP Control register */
-    writel(0x1010001, vic_regs + 0x9890);    /* ISP Control register */
-    writel(0x1010001, vic_regs + 0x989c);    /* ISP Control register */
-    writel(0x1010001, vic_regs + 0x98a8);    /* ISP Control register */
-    wmb();
-
-    pr_info("*** Completed writing ALL missing initialization registers from reference trace ***\n");
-
-    /* *** EXACT Binary Ninja tx_isp_vic_start implementation - NO MORE SIDE EFFECTS *** */
-    pr_info("*** Implementing EXACT Binary Ninja tx_isp_vic_start logic - no side effects ***\n");
-
-    /* Binary Ninja: interface 1=DVP, 2=MIPI, 3=BT601, 4=BT656, 5=BT1120 */
+    /* Binary Ninja EXACT: Interface type handling - $v0 = *(*(arg1 + 0x110) + 0x14) */
+    /* interface 1=DVP, 2=MIPI, 3=BT601, 4=BT656, 5=BT1120 */
     if (interface_type == 1) {
-        /* DVP interface - EXACT Binary Ninja implementation */
+        /* DVP interface - Binary Ninja EXACT implementation */
         pr_info("tx_isp_vic_start: DVP interface configuration (type 1)\n");
         
-        /* Binary Ninja: Check GPIO mode flags */
-        u32 gpio_flags = sensor_attr->mipi.mipi_lanes; /* Sensor GPIO flags */
-        u32 jz_flags = sensor_attr->integration_time_apply_delay; /* JZ flags */
+        /* Binary Ninja EXACT: if (*($v1 + 0x18) != $v0) - GPIO flags comparison */
+        u32 gpio_flags = sensor_attr->mipi.mipi_lanes;    /* *(*(arg1 + 0x110) + 0x18) */
+        u32 jz_flags = sensor_attr->integration_time_apply_delay; /* Reference flags */
         u32 dma_config;
         
-        if (gpio_flags != jz_flags) {
+        if (gpio_flags != interface_type) {  /* Binary Ninja comparison logic */
             pr_info("flags = 0x%08x, jzflags = %p,0x%08x\n", gpio_flags, &jz_flags, jz_flags);
             dma_config = 0xa000a;
         } else {
@@ -1110,49 +1037,55 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             dma_config = 0x100010;
         }
         
+        /* Binary Ninja EXACT: *($v1_2 + 0x1a4) = $v0_2 */
         writel(dma_config, vic_regs + 0x1a4);
         
-        /* Binary Ninja: Data format to pixel depth conversion */
-        u32 pixel_depth = 8; /* Default 8 bits */
-        if (sensor_attr->data_type != 0) {
-            if (sensor_attr->data_type == 1) pixel_depth = 10;
-            else if (sensor_attr->data_type == 2) pixel_depth = 12;
-            else if (sensor_attr->data_type == 7) pixel_depth = 16;
+        /* Binary Ninja EXACT: Data format to pixel depth conversion */
+        u32 pixel_depth = 8; /* $v0_3 = 8 */
+        u32 data_type = sensor_attr->data_type; /* $v1_3 = *($a0 + 0x7c) */
+        
+        if (data_type != 0) {
+            if (data_type == 1) pixel_depth = 10;      /* $v0_3 = 0xa */
+            else if (data_type == 2) pixel_depth = 12; /* $v0_3 = 0xc */
+            else if (data_type == 7) pixel_depth = 16; /* $v0_3 = 0x10 */
             else pixel_depth = 0;
         }
         
-        /* Binary Ninja: Calculate line buffer size */
-        u32 line_buffer_size = (pixel_depth * vic_dev->width + 31) >> 5; /* Divide by 32, round up */
+        /* Binary Ninja EXACT: Calculate line buffer size - ($v0_4 u>> 5) + (0 u< ($v0_4 & 0x1f) ? 1 : 0) */
+        u32 width = vic_dev->width;  /* *(arg1 + 0xdc) */
+        u32 pixel_total = pixel_depth * width;  /* $v0_4 = $v0_3 * *($a0 + 0x2c) */
+        u32 line_buffer_size = (pixel_total >> 5) + ((pixel_total & 0x1f) ? 1 : 0);
         writel(line_buffer_size, vic_regs + 0x100);
         
-        /* Binary Ninja: Standard DVP registers */
-        writel(2, vic_regs + 0xc);           /* Interface type */
+        /* Binary Ninja EXACT: Interface and format registers */
+        writel(2, vic_regs + 0xc);   /* *(*(arg1 + 0xb8) + 0xc) = 2 */
         writel(sensor_attr->data_type, vic_regs + 0x14);
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
         
-        /* Binary Ninja: Complex bit-field register for timing control */
-        u32 timing_ctrl = (sensor_attr->hsync_pol << 25) | 
-                         (sensor_attr->vsync_pol << 24) | 
-                         (sensor_attr->pclk_pol) |
-                         (sensor_attr->de_pol << 23) |
-                         (sensor_attr->data_pol << 22) |
-                         (sensor_attr->pclk_delay << 20) |
-                         (sensor_attr->data_delay << 18) |
-                         (sensor_attr->fps << 12) |
-                         (sensor_attr->max_again << 8) |
-                         (sensor_attr->max_dgain << 4) |
-                         (sensor_attr->min_integration_time << 2);
+        /* Binary Ninja EXACT: Complex timing control register */
+        u32 timing_ctrl = (sensor_attr->hsync_pol << 25) |        /* *($a3_1 + 0x40) << 0x19 */
+                         (sensor_attr->vsync_pol << 24) |         /* *($a3_1 + 0x44) << 0x18 */
+                         (sensor_attr->pclk_pol) |                /* *($a3_1 + 0x78) */
+                         (sensor_attr->de_pol << 23) |            /* *($a3_1 + 0x48) << 0x17 */
+                         (sensor_attr->data_pol << 22) |          /* *($a3_1 + 0x5c) << 0x16 */
+                         (sensor_attr->pclk_delay << 20) |        /* *($a3_1 + 0x60) << 0x14 */
+                         (sensor_attr->data_delay << 18) |        /* *($a3_1 + 0x64) << 0x12 */
+                         (sensor_attr->fps << 12) |               /* *($a3_1 + 0x68) << 0xc */
+                         (sensor_attr->max_again << 8) |          /* *($a3_1 + 0x6c) << 8 */
+                         (sensor_attr->max_dgain << 4) |          /* *($a3_1 + 0x74) << 4 */
+                         (sensor_attr->min_integration_time << 2); /* *($a3_1 + 0x70) << 2 */
         writel(timing_ctrl, vic_regs + 0x10c);
         
-        /* Binary Ninja: More sensor attribute registers */
+        /* Binary Ninja EXACT: Sensor timing registers */
         writel((sensor_attr->total_width << 16) | sensor_attr->min_integration_time_native, vic_regs + 0x110);
         writel(sensor_attr->max_integration_time_native, vic_regs + 0x114);
         writel(sensor_attr->max_integration_time_short, vic_regs + 0x118);
         writel(sensor_attr->integration_time_limit, vic_regs + 0x11c);
         
-        /* Binary Ninja: WDR mode configuration */
-        u32 wdr_mode = sensor_attr->wdr_cache;
+        /* Binary Ninja EXACT: WDR mode configuration */
+        u32 wdr_mode = sensor_attr->wdr_cache;  /* *(*(arg1 + 0x110) + 0x74) */
         u32 frame_mode;
+        
         if (wdr_mode == 0) {
             frame_mode = 0x4440; /* Linear mode */
         } else if (wdr_mode == 1) {
@@ -1161,32 +1094,34 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             frame_mode = 0x4240; /* WDR mode 2 */
         } else {
             pr_err("Can not support this frame mode!!!\n");
-            return -EINVAL;
+            return 0xffffffff;  /* Binary Ninja exact return value */
         }
         
         writel(frame_mode, vic_regs + 0x1ac);
         writel(frame_mode, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
         
-        /* Binary Ninja EXACT unlock sequence */
+        /* Binary Ninja EXACT: **(arg1 + 0xb8) = 2, then = 4 */
         writel(2, vic_regs + 0x0);
         writel(4, vic_regs + 0x0);
         
-        /* Binary Ninja: Additional timing registers */
+        /* Binary Ninja EXACT: Additional timing register */
         u32 timing_reg = (sensor_attr->max_dgain << 4) | sensor_attr->data_type;
         writel(timing_reg, vic_regs + 0x1a0);
         
-        /* Wait for unlock */
+        /* Binary Ninja EXACT: Wait for unlock - while (*$v1_30 != 0) */
         timeout = 10000;
         while (timeout > 0 && readl(vic_regs + 0x0) != 0) {
+            /* nop in original */
             udelay(1);
             timeout--;
         }
         
-        /* Binary Ninja: Final DVP registers */
+        /* Binary Ninja EXACT: Final integration time registers */
         writel((sensor_attr->integration_time_short << 16) | sensor_attr->integration_time_long, vic_regs + 0x104);
         writel((sensor_attr->max_integration_time_short << 16) | sensor_attr->max_integration_time_long, vic_regs + 0x108);
         
+        /* Binary Ninja EXACT: *$v0_47 = 1 (goto label_107d4) */
         writel(1, vic_regs + 0x0);
 
     } else if (interface_type == 2) {
