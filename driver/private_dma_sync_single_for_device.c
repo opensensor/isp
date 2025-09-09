@@ -4,6 +4,7 @@
   void* private_dma_sync_single_for_device(void* arg1)
 
 {
+    int32_t $t9 = *(result + 0x24);
     void* result;
     
     if (arg1)
@@ -12,7 +13,6 @@
     if (!arg1 || !result)
         result = nullptr;
     
-    int32_t $t9 = *(result + 0x24);
     
     if (!$t9)
         return result;

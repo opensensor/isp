@@ -5,12 +5,12 @@
 
 {
     int32_t $v0 = system_reg_read(0xc);
-    void var_18_116;
-    int32_t var_14_38;
-    tisp_mdns_param_array_get(0x180, &var_14_39, &var_18_117);
-    void* result = $v0 & &data_7ffff_4;
+    void* result = $v0 & &data_7ffff;
+    void var_18;
+    int32_t var_14;
+    tisp_mdns_param_array_get(0x180, &var_14, &var_18);
     
-    if (!var_14_40)
+    if (!var_14)
         result |= 0x80000000;
     
     *arg1 = result;

@@ -4,10 +4,10 @@
   int32_t tisp_wdr_param_array_get(int32_t arg1, int32_t arg2, int32_t* arg3)
 
 {
-    if (arg1 - 0x3ff >= 0x33)
+        int32_t var_18_1 = arg1;
+    if (arg1 - (uintptr_t)0x3ff >= 0x33)
     {
-        int32_t var_18_1_28 = arg1;
-        isp_printf(2, "sensor type is BT656!\\n", "tisp_wdr_param_array_get");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     
@@ -78,7 +78,7 @@
         }
         case 0x409:
         {
-            $a1_1 = U"#\',17=DKS[clu~";
+            $a1_1 = U"#',17=DKS[clu~";
             $s1_1 = 0x84;
             break;
         }

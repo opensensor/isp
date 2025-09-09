@@ -5,14 +5,14 @@
 
 {
     int32_t* result = *(arg1 + 0x50) < 0x10 ? 1 : 0;
+            uint32_t net_event_process_1 = net_event_process;
     
     if (!result)
     {
         result = *(arg1 + 0xa4);
         
-        if (result != 0xfffffff0)
+        if ((uintptr_t)result != 0xfffffff0)
         {
-            uint32_t net_event_process_1 = net_event_process;
             
             if (net_event_process_1)
                 /* tailcall */

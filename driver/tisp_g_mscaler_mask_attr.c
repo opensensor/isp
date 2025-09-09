@@ -6,7 +6,7 @@
 {
     void* const $v0;
     
-    if (data_ca48c_5)
+    if (data_ca48c)
         $v0 = memcpy;
     else
         $v0 = memset;

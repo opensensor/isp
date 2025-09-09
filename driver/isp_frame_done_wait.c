@@ -4,21 +4,21 @@
   int32_t isp_frame_done_wait(int32_t arg1, int32_t* arg2)
 
 {
-    frame_done_cond = 0;
     int32_t $s0 = arg1;
+        int32_t var_38 = 0;
+        int32_t var_34_1 = *entry_$gp;
+        void* const var_30_1 = autoremove_wake_function;
+        int32_t* var_2c = &var_2c;
+    frame_done_cond = 0;
     
     if (frame_done_cond != 1)
     {
-        int32_t var_38_12 = 0;
         int32_t* entry_$gp;
-        int32_t var_34_1_4 = *entry_$gp;
-        void* const var_30_1_4 = autoremove_wake_function;
-        int32_t* var_2c_6 = &var_2c_7;
-        int32_t** var_28_1_1 = &var_2c_8;
+        int32_t** var_28_1 = &var_2c;
         
         while (true)
         {
-            prepare_to_wait(&frame_done_wq, &var_38_13, 1);
+            prepare_to_wait(&frame_done_wq, &var_38, 1);
             
             if (frame_done_cond != 1)
             {
@@ -41,7 +41,7 @@
             break;
         }
         
-        finish_wait(&frame_done_wq, &var_38_14);
+        finish_wait(&frame_done_wq, &var_38_1);
     }
     
     int32_t frame_done_cnt_1 = *frame_done_cnt;
@@ -49,7 +49,7 @@
     *arg2 = frame_done_cnt_1;
     int32_t result = 0xfffffe00;
     
-    if ($s0 != 0xfffffe00)
+    if ($(uintptr_t)s0 != 0xfffffe00)
     {
         result = 0xffffff6f;
         

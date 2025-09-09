@@ -4,10 +4,10 @@
   int32_t tisp_dpc_param_array_set(int32_t arg1, int32_t arg2, int32_t* arg3)
 
 {
-    if (arg1 - 0xe6 >= 0x1f)
+        int32_t var_10_1 = arg1;
+    if (arg1 - (uintptr_t)0xe6 >= 0x1f)
     {
-        int32_t var_10_1_9 = arg1;
-        isp_printf(2, &$LC0, "tisp_dpc_param_array_set");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     
@@ -206,7 +206,7 @@
     
     *arg3 = $a2_1;
     memcpy($a0_1);
-    tisp_dpc_all_reg_refresh(data_9ab10_4 + 0x200);
+    tisp_dpc_all_reg_refresh(data_9ab10_1 + 0x200);
     return 0;
 }
 

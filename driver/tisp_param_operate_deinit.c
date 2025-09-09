@@ -4,8 +4,8 @@
   int32_t tisp_param_operate_deinit()
 
 {
-    tisp_netlink_exit();
     uint32_t opmsg_1 = opmsg;
+    tisp_netlink_exit();
     
     if (opmsg_1)
     {

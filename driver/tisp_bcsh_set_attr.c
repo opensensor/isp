@@ -26,7 +26,7 @@
         memcpy(&tisp_BCSH_au32CCMMatrix_t_wdr, 0xc5490, 0x24);
         memcpy(&tisp_BCSH_au32CCMMatrix_a_wdr, 0xc5490, 0x24);
         
-        if (!data_c548d_1)
+        if (!data_c548d)
         {
             tisp_BCSH_au32Sthres = 0;
             tisp_BCSH_au32Sthres_wdr = 0;

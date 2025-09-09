@@ -5,7 +5,7 @@
 
 {
     if (arg2 < arg3)
-        isp_printf(2, &$LC0, arg3);
+        isp_printf(); // Fixed: macro call, removed arguments;
     
     return arg2 - arg3;
 }

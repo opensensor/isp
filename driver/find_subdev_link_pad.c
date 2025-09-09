@@ -6,6 +6,10 @@
 {
     int32_t* $a3 = arg1 + 0x38;
     void* $v0 = *$a3;
+            char* $v1_1 = *($v0 + 8);
+            char* $a2_1 = *arg2;
+            uint32_t $t0_1 = *$v1_1;
+                uint32_t temp1_1 = $t0_1;
     
     while (true)
     {
@@ -13,9 +17,6 @@
             $a3 = &$a3[1];
         else
         {
-            char* $v1_1 = *($v0 + 8);
-            char* $a2_1 = *arg2;
-            uint32_t $t0_1 = *$v1_1;
             uint32_t $at_1;
             
             while (true)
@@ -27,7 +28,6 @@
                 if ($at_1 != $t0_1)
                     break;
                 
-                uint32_t temp1_1 = $t0_1;
                 $t0_1 = *$v1_1;
                 
                 if (!temp1_1)
@@ -58,7 +58,7 @@
                     if ($v1_3 < *($v0 + 0xc8))
                         return $v1_3 * 0x24 + *($v0 + 0xcc);
                 }
-                isp_printf(2, &$LC0, $a2_1);
+                isp_printf(); // Fixed: macro call, removed arguments;
                 return 0;
             }
         }

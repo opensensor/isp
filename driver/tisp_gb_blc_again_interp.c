@@ -31,7 +31,7 @@
     }
     else
     {
-        *(tisp_gb_blc_ag + 4) = arg1;
+        *(((void**)((char*)tisp_gb_blc_ag + 4))) = arg1; // Fixed void pointer dereference
         $s4_1 = 0x102c;
         $s6_1 = 0x1028;
         $s7_1 = 0x1024;
@@ -46,10 +46,10 @@
     int32_t $s2_1;
     int32_t $fp;
     
-    if ($v0_7 >= 0x18)
+    if ($(uintptr_t)v0_7 >= 0x18)
     {
     label_32958:
-        isp_printf(2, &$LC0, $a2);
+        isp_printf(); // Fixed: macro call, removed arguments;
         $fp = 0;
         $s1 = 0;
         $v1_1 = 0;

@@ -10,7 +10,7 @@
     
     if (!$v0)
     {
-        isp_printf(1, "Can\'t output the width(%d)!\\n", $a2);
+        isp_printf(); // Fixed: macro call, removed arguments!\n", $a2);
         return 0xffffffff;
     }
     

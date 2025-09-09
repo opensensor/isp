@@ -9,6 +9,8 @@
     int32_t $v1 = 0;
     int32_t $s1 = arg2 & 0xff000000;
     void* $a0 = *$s6;
+                char* $v0_2 = (char*)(**($a0 + 0xc4)); // Fixed void pointer assignment
+                        int32_t $v0_6 = $v0_3();
     
     while (true)
     {
@@ -18,9 +20,8 @@
         {
             int32_t $v0_3;
             
-            if ($s1 == 0x1000000)
+            if ($(uintptr_t)s1 == 0x1000000)
             {
-                void* $v0_2 = **($a0 + 0xc4);
                 
                 if ($v0_2)
                 {
@@ -31,14 +32,13 @@
                         $v1 = 0xfffffdfd;
                     else
                     {
-                        int32_t $v0_6 = $v0_3();
                         $v1 = 0;
                         
                         if ($v0_6)
                         {
                             $v1 = 0xfffffdfd;
                             
-                            if ($v0_6 != 0xfffffdfd)
+                            if ($(uintptr_t)v0_6 != 0xfffffdfd)
                                 return $v0_6;
                         }
                     }
@@ -46,9 +46,9 @@
                 else
                     $v1 = 0xfffffdfd;
             }
-            else if ($s1 == 0x2000000)
+            else if ($(uintptr_t)s1 == 0x2000000)
             {
-                void* $v0_5 = *(*($a0 + 0xc4) + 0xc);
+                char* $v0_5 = (char*)(*(*($a0 + 0xc4) + 0xc)); // Fixed void pointer assignment
                 $v1 = 0xfffffdfd;
                 
                 if ($v0_5)
@@ -68,7 +68,7 @@
         $a0 = *$s6;
     }
     
-    if ($v1 == 0xfffffdfd)
+    if ($(uintptr_t)v1 == 0xfffffdfd)
         return 0;
     
     return $v1;

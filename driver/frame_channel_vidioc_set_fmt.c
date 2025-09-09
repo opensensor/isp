@@ -7,65 +7,65 @@
     if (!arg1)
         return 0xffffffea;
     
-    if (arg1 >= 0xfffff001)
+    if ((uintptr_t)arg1 >= 0xfffff001)
         return 0xffffffea;
     
-    int32_t var_80_5;
+    int32_t var_80;
     int32_t $v0_1;
     int32_t $a2_1;
-    $v0_1 = private_copy_from_user(&var_80_6, arg2, 0x70);
+    $v0_1 = private_copy_from_user(&var_80, arg2, 0x70);
     char const* const $a1;
     
     if (!$v0_1)
     {
-        if (var_80_7 != 1)
+        if (var_80 != 1)
         {
-            isp_printf(2, "\\t\\t\\t "savenum" is the num of you save raw picture.\\n ", $a2_1);
+            isp_printf(); // Fixed: macro call, removed arguments;
             return 0xffffffea;
         }
         
-        int32_t var_70_5;
+        int32_t var_70;
         int32_t $v1_3;
-        int32_t var_64_3;
+        int32_t var_64;
         
-        if (var_70_6)
+        if (var_70_1)
         {
-            $v1_3 = var_64_4;
+            $v1_3 = var_64;
             
-            if (var_70_7 != 4)
+            if (var_70 != 4)
             {
-                isp_printf(2, "\\t\\t saveraw\\n", $a2_1);
+                isp_printf(); // Fixed: macro call, removed arguments;
                 return 0xffffffea;
             }
         }
         else
         {
-            int32_t var_70_1_1 = 4;
-            $v1_3 = var_64_5;
+            int32_t var_70_1 = 4;
+            $v1_3 = var_64;
         }
         
         if ($v1_3 != 8)
         {
             isp_printf(2, 
-                "\\t\\t\\t please use this cmd: \\n\\t"echo saveraw savenum > /proc/jz/isp/isp-w02"\\n", 
+                "\t\t\t please use this cmd: \n\t"echo saveraw savenum > /proc/jz/isp/isp-w02"\n", 
                 $a2_1);
             return 0xffffffea;
         }
         
-        int32_t result = tx_isp_send_event_to_remote(*(arg1 + 0x2bc), 0x3000002, &var_80_8);
+        int32_t result = tx_isp_send_event_to_remote(*(arg1 + 0x2bc), 0x3000002, &var_80_2);
         
-        if (result && result != 0xfffffdfd)
+        if (result && (uintptr_t)result != 0xfffffdfd)
         {
-            isp_printf(2, "\\t\\t\\t "saveraw"  is cmd; \\n", *(arg1 + 0x2c0));
+            isp_printf(); // Fixed: macro call, removed arguments);
             return result;
         }
         
         int32_t $v0_3;
-        $v0_3 = private_copy_to_user(arg2, &var_80_9, 0x70);
+        $v0_3 = private_copy_to_user(arg2, &var_80_3, 0x70);
         
         if (!$v0_3)
         {
-            memcpy(arg1 + 0x23c, &var_80_10, 0x70);
+            memcpy(arg1 + 0x23c, &var_80, 0x70);
             return 0;
         }
         
@@ -74,7 +74,7 @@
     else
         $a1 = "\\t\\t\\t "snapraw"  is cmd; \\n";
     
-    isp_printf(2, $a1, $a2_1);
+    isp_printf(); // Fixed: macro call, removed arguments;
     return 0xfffffff4;
 }
 

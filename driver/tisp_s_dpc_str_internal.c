@@ -4,21 +4,21 @@
   int32_t tisp_s_dpc_str_internal(int32_t arg1)
 
 {
-    data_9ab24_1 = arg1;
     wchar32* i = U"dP<<2(";
     void* $t0 = &dpc_d_m1_dthres_array;
     void* $a3 = &dpc_d_m3_dthres_array;
     void* $a1 = &dpc_d_m1_fthres_array;
     void* $v1 = &dpc_d_m3_fthres_array;
+            int32_t $t9_1 = *(i - 0x24);
+            int32_t $t9_6 = i[0x74];
+    data_9ab24 = arg1;
     
     do
     {
         int32_t $a2_13;
         
-        if (arg1 >= 0x81)
+        if ((uintptr_t)arg1 >= 0x81)
         {
-            int32_t $t9_1 = *(i - 0x24);
-            int32_t $t9_6 = i[0x74];
             *$a1 = (((0x4b0 - $t9_1) * (arg1 - 0x80)) >> 7) + $t9_1;
             *$v1 = (((0x4b0 - $t9_6) * (arg1 - 0x80)) >> 7) + $t9_6;
             *$t0 = ((0x100 - arg1) * *i + arg1 * 5 - 0x280) >> 7;
@@ -27,13 +27,13 @@
         else
         {
             uint32_t $a2_3 = (arg1 * *(i - 0x24)) >> 7;
+            uint32_t $a2_6 = (arg1 * i[0x74]) >> 7;
             
             if ($a2_3 < 5)
                 *$a1 = 5;
             else
                 *$a1 = $a2_3;
             
-            uint32_t $a2_6 = (arg1 * i[0x74]) >> 7;
             
             if ($a2_6 < 5)
                 *$v1 = 5;
@@ -50,9 +50,9 @@
         $a3 += 4;
         $a1 += 4;
         $v1 += 4;
-    } while (i != 0x9f02c);
+    } while ((uintptr_t)i != 0x9f02c);
     
     /* tailcall */
-    return tisp_dpc_all_reg_refresh(data_9ab10_5 + 0x200);
+    return tisp_dpc_all_reg_refresh(data_9ab10_2 + 0x200);
 }
 

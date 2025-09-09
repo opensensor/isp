@@ -21,20 +21,20 @@
     {
         int32_t $t1_1 = 0;
         int32_t $t2_1 = 0;
+            int32_t $t0_1 = $s0_2 - 1;
+            int32_t i = 0;
+                int32_t $t5_3 = (i + $t1_1) / 2 * 3;
+                int32_t $t6_3 = ($t0_1 + $t1_1) / 2 * 3;
         
         while (true)
         {
-            int32_t $t0_1 = $s0_2 - 1;
             
             if ($t2_1 >= $s1_3)
                 break;
             
-            int32_t i = 0;
             
             while (i < $s0_2 >> 1)
             {
-                int32_t $t5_3 = (i + $t1_1) / 2 * 3;
-                int32_t $t6_3 = ($t0_1 + $t1_1) / 2 * 3;
                 int32_t $t7_1;
                 int32_t $t8_2;
                 int32_t $t9_2;
@@ -84,7 +84,7 @@
     }
     
     lsc_api_flag = 1;
-    data_9a400_9 = 1;
+    data_9a400_5 = 1;
     tisp_lsc_write_lut_datas();
     lsc_api_flag = 0;
     return 0;

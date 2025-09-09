@@ -4,10 +4,10 @@
   int32_t tisp_adr_param_array_set(int32_t arg1, int32_t* arg2, int32_t* arg3)
 
 {
-    if (arg1 - 0x380 >= 0x2c)
+        int32_t var_18_1 = arg1;
+    if (arg1 - (uintptr_t)0x380 >= 0x2c)
     {
-        int32_t var_18_1_21 = arg1;
-        isp_printf(2, "sensor type is BT1120!\\n", "tisp_adr_param_array_set");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     
@@ -166,10 +166,10 @@
         case 0x399:
         {
             int32_t* $a0_9 = &param_adr_tool_control_array;
-            
-            for (int32_t i = 0; i != 0xe; )
-            {
                 int32_t i_1 = i;
+            
+            for (int32_t i = 0; (uintptr_t)i != 0xe; )
+            {
                 i += 1;
                 
                 if (i_1 != 1)

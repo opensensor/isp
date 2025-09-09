@@ -4,6 +4,7 @@
   int32_t tiziano_dpc_params_refresh()
 
 {
+    int32_t $a0 = data_9ab24;
     memcpy(&ctr_md_np_array, 0x9ef50, 0x40);
     memcpy(&ctr_std_np_array, 0x9ef90, 0x40);
     memcpy(&dpc_s_con_par_array, 0x9efd0, 0x14);
@@ -35,9 +36,8 @@
     memcpy(&dpc_d_m3_fthres_wdr_array, 0x9f334, 0x24);
     memcpy(&dpc_d_m3_dthres_wdr_array, &data_9f358, 0x24);
     memcpy(&ctr_con_par_array, &data_9f37c, 0x1c);
-    int32_t $a0 = data_9ab24_2;
     
-    if ($a0 != 0x80)
+    if ($(uintptr_t)a0 != 0x80)
         tisp_s_dpc_str_internal($a0);
     
     return 0;

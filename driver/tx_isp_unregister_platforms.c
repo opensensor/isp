@@ -5,7 +5,7 @@
 
 {
     void* $s0 = arg1;
-    void* $v0 = *($s0 + 4);
+    char* $v0 = *((char*)$s0 + 4); // Fixed void pointer arithmetic
     int32_t (* result)();
     
     while (true)

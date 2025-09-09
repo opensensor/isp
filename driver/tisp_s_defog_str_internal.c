@@ -7,14 +7,14 @@
     int32_t $v0_1 = **&param_defog_main_para_array_now;
     int32_t $v1 = 0x1f;
     uint32_t $t3 = *arg1;
-    
-    if ($v0_1 >= 0x1f)
-        $v1 = $v0_1;
-    
-    defog_strength_attr = $t3;
     uint32_t defog_wdr_en_1 = defog_wdr_en;
     int32_t $t2_1 = $v1;
     wchar32* $t1 = U"PPZZZPPPPFNMLKJIHFFIGOFDCBBA?>=<;:99LLKJIHGFE";
+    
+    if ($(uintptr_t)v0_1 >= 0x1f)
+        $v1 = $v0_1;
+    
+    defog_strength_attr = $t3;
     int32_t result;
     int32_t $t5_1;
     int32_t i;
@@ -95,8 +95,8 @@
         }
         
         $t1 = $t1_5 + 4;
-        *(defog_trsy0_list_now_1 + $t5_1) = result_1;
-        *(defog_trsy1_list_now + $t5_1) = $s6_1;
+        *(((void**)((char*)defog_trsy0_list_now_1 + $t5_1))) = result_1; // Fixed void pointer dereference
+        *(((void**)((char*)defog_trsy1_list_now + $t5_1))) = $s6_1; // Fixed void pointer dereference
         *(*($t9_1 - 0x538c) + $t5_1) = $s4_1;
         *(*($t8_1 - 0x5390) + $t5_1) = $s5_1;
         *(*($t7_1 - 0x5394) + $t5_1) = result;

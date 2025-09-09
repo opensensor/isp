@@ -5,23 +5,23 @@
 
 {
     IspAe0WmeanParam = &IspAeStatic;
-    data_d4658_1 = &data_d0878_1;
-    data_d465c_1 = &data_d0bfc_1;
-    data_d4660_1 = &data_d0f80_1;
-    data_d4664_1 = &data_d1304_1;
-    data_d4668_1 = &data_d1688_1;
-    data_d466c_1 = &data_d1a0c_6;
-    data_d4670_2 = 0xd37a0;
-    data_d4674_1 = 0xd3b24;
-    data_d4678_1 = &_ae_parameter;
-    data_d467c_1 = &_ae_zone_weight;
-    data_d4680_1 = &_exp_parameter;
-    data_d468c_1 = &_scene_roi_weight;
-    data_d4690_1 = &_log2_lut;
-    data_d4694_1 = &_weight_lut;
-    data_d4698_1 = &_AePointPos;
-    data_d4684_1 = &_ae_stat;
-    data_d4688_1 = &_scene_roui_weight;
+    data_d4658 = &data_d0878;
+    data_d465c = &data_d0bfc;
+    data_d4660 = &data_d0f80;
+    data_d4664 = &data_d1304;
+    data_d4668 = &data_d1688;
+    data_d466c = &data_d1a0c;
+    data_d4670 = 0xd37a0;
+    data_d4674 = 0xd3b24;
+    data_d4678 = &_ae_parameter;
+    data_d467c = &_ae_zone_weight;
+    data_d4680 = &_exp_parameter;
+    data_d468c = &_scene_roi_weight;
+    data_d4690 = &_log2_lut;
+    data_d4694 = &_weight_lut;
+    data_d4698 = &_AePointPos;
+    data_d4684 = &_ae_stat;
+    data_d4688 = &_scene_roui_weight;
     dmsc_sp_ud_std_stren_intp = &_exp_parameter;
     dmsc_deir_fusion_stren_intp = &_ae_result;
     dmsc_deir_fusion_thres_intp = &_ae_reg;
@@ -30,7 +30,7 @@
     dmsc_fc_t1_thres_intp = &_deflicker_para;
     dmsc_fc_alias_stren_intp = &ae_ev_step;
     dmsc_sp_alias_thres_intp = &ae_stable_tol;
-    dmsc_sp_ud_brig_thres_intp = &data_d1e0c_1;
+    dmsc_sp_ud_brig_thres_intp = &data_d1e0c;
     dmsc_sp_ud_b_stren_intp = &_nodes_num;
     dmsc_sp_d_dark_thres_intp = &ae_comp_ev_list;
     dmsc_sp_d_oe_stren_intp = &_ae_parameter;
@@ -40,7 +40,7 @@
     dmsc_sp_d_w_stren_intp = &ae1_comp_ev_list;
     void* $t4_1;
     
-    if (data_b0e10_4)
+    if (data_b0e10)
     {
         dmsc_sp_d_flat_thres_intp = &ae0_ev_list_wdr;
         dmsc_sp_d_flat_stren_intp = &_lum_list_wdr;
@@ -62,12 +62,12 @@
     }
     
     dmsc_sp_d_b_stren_intp = $t4_1;
-    dmsc_nor_alias_thres_intp = &data_d220c_2;
-    dmsc_hvaa_stren_intp = &data_d2590_1;
-    dmsc_hvaa_thres_1_intp = &data_d2914_1;
-    dmsc_aa_thres_1_intp = &data_d2c98_1;
-    dmsc_hv_stren_intp = &data_d301c_1;
-    dmsc_hv_thres_1_intp = &data_d33a0_1;
+    dmsc_nor_alias_thres_intp = &data_d220c;
+    dmsc_hvaa_stren_intp = &data_d2590;
+    dmsc_hvaa_thres_1_intp = &data_d2914;
+    dmsc_aa_thres_1_intp = &data_d2c98;
+    dmsc_hv_stren_intp = &data_d301c;
+    dmsc_hv_thres_1_intp = &data_d33a0;
     dmsc_alias_thres_2_intp = 0xd3ea8;
     dmsc_alias_thres_1_intp = 0xd422c;
     dmsc_alias_stren_intp = &_ae_parameter;

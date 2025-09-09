@@ -11,15 +11,15 @@
     {
         if (arg2 == 1)
         {
-            *($v0 + 0x1518) = *arg1 & 0x1fffff;
-            *($v0 + 0x151c) = arg1[1] & 0x1fffff;
+            *(((void**)((char*)$v0 + 0x1518))) = *arg1 & 0x1fffff; // Fixed void pointer dereference
+            *(((void**)((char*)$v0 + 0x151c))) = arg1[1] & 0x1fffff; // Fixed void pointer dereference
             
             if (arg3 != arg2)
                 arg1 = &arg1[2];
             else
             {
-                *($v0 + 0x1918) = arg1[0x100] & 0x1fffff;
-                *($v0 + 0x191c) = arg1[0x101] & 0x1fffff;
+                *(((void**)((char*)$v0 + 0x1918))) = arg1[0x100] & 0x1fffff; // Fixed void pointer dereference
+                *(((void**)((char*)$v0 + 0x191c))) = arg1[0x101] & 0x1fffff; // Fixed void pointer dereference
                 arg1 = &arg1[2];
             }
         }
@@ -27,19 +27,19 @@
             arg1 = &arg1[2];
         else
         {
-            *($v0 + 0x1918) = *arg1 & 0x1fffff;
-            *($v0 + 0x191c) = arg1[1] & 0x1fffff;
+            *(((void**)((char*)$v0 + 0x1918))) = *arg1 & 0x1fffff; // Fixed void pointer dereference
+            *(((void**)((char*)$v0 + 0x191c))) = arg1[1] & 0x1fffff; // Fixed void pointer dereference
             arg1 = &arg1[2];
         }
         
         $v0 += 8;
     } while (arg1 != &arg1[0x100]);
     
-    memcpy(&tisp_ae_hist, &data_d1a0c_1, 0x400);
-    int32_t var_40_37;
-    __private_spin_lock_irqsave(0, &var_40_38);
+    memcpy(&tisp_ae_hist, &data_d1a0c, 0x400);
+    int32_t var_40_20;
+    __private_spin_lock_irqsave(0, &var_40_21);
     memcpy(&data_d4fbc_1, 0xd4b90, 0x10);
-    private_spin_unlock_irqrestore(0, var_40_39);
+    private_spin_unlock_irqrestore(0, var_40_22);
     int32_t $a0 = data_d4fbc_2;
     data_d4fa8_1 = 0;
     int32_t $a1_2 = 0;
@@ -68,7 +68,7 @@
     
     while ($a0 < $v1_1)
     {
-        int32_t $a2_3 = *(($a0 << 2) + &data_d1a0c_2);
+        int32_t $a2_3 = *(($a0 << 2) + &data_d1a0c);
         $a0 += 1;
         $a1_4 += $a2_3;
         $a2 = 1;
@@ -84,7 +84,7 @@
     
     while ($v1_1 < $a0_2)
     {
-        int32_t $a2_7 = *(($v1_1 << 2) + &data_d1a0c_3);
+        int32_t $a2_7 = *(($v1_1 << 2) + &data_d1a0c);
         $v1_1 += 1;
         $a1_5 += $a2_7;
         $a2_4 = 1;
@@ -100,7 +100,7 @@
     
     while ($a0_2 < i)
     {
-        int32_t $a2_11 = *(($a0_2 << 2) + &data_d1a0c_4);
+        int32_t $a2_11 = *(($a0_2 << 2) + &data_d1a0c);
         $a0_2 += 1;
         $a1_6 += $a2_11;
         $a2_8 = 1;
@@ -113,9 +113,9 @@
     int32_t $v0_5 = $v0_4 + data_d4fb4_2;
     int32_t $a0_4 = 0;
     
-    while (i < 0x100)
+    while ((uintptr_t)i < 0x100)
     {
-        int32_t $a1_10 = *((i << 2) + &data_d1a0c_5);
+        int32_t $a1_10 = *((i << 2) + &data_d1a0c);
         i += 1;
         $a0_4 += $a1_10;
         $a1_7 = 1;
@@ -128,14 +128,14 @@
     
     if ($s5_2)
     {
-        for (int32_t* i_1 = &tisp_ae_hist; i_1 != 0xd4bb8; i_1 = &i_1[1])
+            int32_t var_48_1 = 0xffff;
+            int32_t var_44_1 = 0;
+        for (int32_t* i_1 = &tisp_ae_hist; (uintptr_t)i_1 != 0xd4bb8; i_1 = &i_1[1])
         {
-            int32_t var_48_1_7 = 0xffff;
-            int32_t var_44_1_2 = 0;
             int32_t $v0_7;
             int32_t $v1_3;
             int32_t $a1_12;
-            $v0_7 = (&data_20000_12 + 0x918)(0);
+            $v0_7 = (&data_20000 + 0x918)(0);
             i_1[0x101] = fix_point_div(0, $a1_12, $v0_7, $v1_3, $s5_2, 0);
         }
         
@@ -143,16 +143,16 @@
     }
     else
     {
-        data_d4fa8_5 = 0xffff;
-        data_d4fac_4 = 0;
-        data_d4fb0_4 = 0;
-        data_d4fb4_4 = 0;
-        data_d4fb8_4 = 0;
+        data_d4fa8 = 0xffff;
+        data_d4fac = 0;
+        data_d4fb0 = 0;
+        data_d4fb4 = 0;
+        data_d4fb8 = 0;
     }
     
-    __private_spin_lock_irqsave(0, &var_40_40);
+    __private_spin_lock_irqsave(0, &var_40_23);
     memcpy(&tisp_ae_hist_last, &tisp_ae_hist, 0x400);
-    memcpy(0xd4b7c, &data_d4fa8_6, 0x14);
-    return private_spin_unlock_irqrestore(0, var_40_41);
+    memcpy(0xd4b7c, &data_d4fa8_5, 0x14);
+    return private_spin_unlock_irqrestore(0, var_40_24);
 }
 

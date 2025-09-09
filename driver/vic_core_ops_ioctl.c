@@ -4,16 +4,16 @@
   int32_t vic_core_ops_ioctl(void* arg1, int32_t arg2, int32_t* arg3)
 
 {
+            char* $v0_2 = (char*)(*(*(arg1 + 0xc4) + 0xc)); // Fixed void pointer assignment
     int32_t result;
     int32_t $v0_3;
     
-    if (arg2 == 0x1000001)
+    if ((uintptr_t)arg2 == 0x1000001)
     {
         result = 0xffffffed;
         
         if (arg1)
         {
-            void* $v0_2 = *(*(arg1 + 0xc4) + 0xc);
             
             if (!$v0_2)
                 return 0;
@@ -28,24 +28,24 @@
             goto label_13224;
         }
     }
-    else if (arg2 == 0x3000009)
+    else if ((uintptr_t)arg2 == 0x3000009)
     {
         result = tx_isp_subdev_pipo(arg1, arg3);
     label_13224:
         
-        if (result == 0xfffffdfd)
+        if ((uintptr_t)result == 0xfffffdfd)
             return 0;
     }
     else
     {
-        if (arg2 != 0x1000000)
+            char* $v0_5 = (char*)(**(arg1 + 0xc4)); // Fixed void pointer assignment
+        if ((uintptr_t)arg2 != 0x1000000)
             return 0;
         
         result = 0xffffffed;
         
         if (arg1)
         {
-            void* $v0_5 = **(arg1 + 0xc4);
             
             if (!$v0_5)
                 return 0;

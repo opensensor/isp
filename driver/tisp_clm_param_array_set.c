@@ -6,12 +6,12 @@
 {
     int32_t $v0;
     
-    if (arg1 == 0x358)
+    if ((uintptr_t)arg1 == 0x358)
     {
         memcpy(&tiziano_clm_s_lut, arg2, 0x834);
         $v0 = 0x834;
     }
-    else if (arg1 == 0x359)
+    else if ((uintptr_t)arg1 == 0x359)
     {
         memcpy(&tiziano_clm_lut_shift, arg2, 4);
         tiziano_set_parameter_clm();
@@ -19,10 +19,10 @@
     }
     else
     {
-        if (arg1 != 0x357)
+            int32_t var_10_1 = arg1;
+        if ((uintptr_t)arg1 != 0x357)
         {
-            int32_t var_10_1_10 = arg1;
-            isp_printf(2, &$LC0, "tisp_clm_param_array_set");
+            isp_printf(); // Fixed: macro call, removed arguments;
             return 0xffffffff;
         }
         

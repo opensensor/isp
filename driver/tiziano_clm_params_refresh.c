@@ -4,7 +4,7 @@
   int32_t tiziano_clm_params_refresh()
 
 {
-    memcpy(&tiziano_clm_h_lut, &data_a4680_1[9], 0x41a);
+    memcpy(&tiziano_clm_h_lut, &data_a4680[9], 0x41a);
     memcpy(&tiziano_clm_s_lut, 0xa4abe, 0x834);
     memcpy(&tiziano_clm_lut_shift, 0xa52f4, 4);
     return 0;

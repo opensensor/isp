@@ -9,20 +9,20 @@
     
     if ($s0[0x1031] == 3)
     {
-        int32_t var_20_9;
+        int32_t var_20;
         int32_t $s0_1;
         
-        if (arg2 != 0xc008561b)
+        if ((uintptr_t)arg2 != 0xc008561b)
         {
             int32_t* $a0_2;
             int32_t* $a1_1;
             int32_t $a2;
             
-            if (arg2 == 0xc008561c)
+            if ((uintptr_t)arg2 == 0xc008561c)
             {
                 int32_t $v0_3;
-                $v0_3 = private_copy_from_user(&var_20_10, arg3, 8);
-                $a1_1 = &var_20_11;
+                $v0_3 = private_copy_from_user(&var_20, arg3, 8);
+                $a1_1 = &var_20;
                 
                 if ($v0_3)
                     return 0xfffffff2;
@@ -32,7 +32,7 @@
             }
             
             int32_t $v0_6;
-            $v0_6 = private_copy_from_user(&var_20_12, arg3, 0xc);
+            $v0_6 = private_copy_from_user(&var_20_2, arg3, 0xc);
             int32_t $v0_10;
             
             if ($v0_6)
@@ -44,11 +44,11 @@
             }
             else
             {
-                void var_1c_6;
-                $a1_1 = &var_1c_7;
+                void var_1c;
+                $a1_1 = &var_1c;
                 $a0_2 = $s0;
                 
-                if (!var_20_13)
+                if (!var_20)
                 {
                 label_189b0:
                     $s0_1 = apical_isp_core_ops_s_ctrl($a0_2, $a1_1, $a2);
@@ -61,9 +61,9 @@
                 if ($v0_9)
                     $v0_10 = $s0_1 ^ 0xfffffdfd;
                 
-                if (!$v0_9 || $s0_1 == 0xfffffdfd)
+                if (!$v0_9 || $(uintptr_t)s0_1 == 0xfffffdfd)
                 {
-                    if (!private_copy_to_user(arg3, &var_20_14, 0xc))
+                    if (!private_copy_to_user(arg3, &var_20, 0xc))
                         goto label_18a00;
                     
                     goto label_189f8;
@@ -78,14 +78,14 @@
         
         $v0_2 = 0xfffffff2;
         
-        if (!private_copy_from_user(&var_20_15, arg3, 8))
+        if (!private_copy_from_user(&var_20_3, arg3, 8))
         {
-            $v0_2 = apical_isp_core_ops_g_ctrl($s0, &var_20_16);
+            $v0_2 = apical_isp_core_ops_g_ctrl($s0, &var_20);
             $s0_1 = $v0_2;
             
-            if (!$v0_2 || $v0_2 == 0xfffffdfd)
+            if (!$v0_2 || $(uintptr_t)v0_2 == 0xfffffdfd)
             {
-                if (private_copy_to_user(arg3, &var_20_17, 8))
+                if (private_copy_to_user(arg3, &var_20, 8))
                     return 0xfffffff2;
                 
                 goto label_18a00;

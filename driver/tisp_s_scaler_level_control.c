@@ -7,23 +7,24 @@
     int32_t $s1 = arg1 & 0xff;
     uint32_t msca_ch_en_1 = msca_ch_en;
     int32_t $s3_1 = ($s1 + 0x98) << 8;
-    
-    if (!~msca_ch_en_1)
-        msca_ch_en_1 = 0;
-    
     int32_t arg_0 = arg1;
     int32_t arg_8 = arg3;
     int32_t arg_4 = arg2;
-    msca_ch_en = msca_ch_en_1;
     int32_t $v0 = system_reg_read($s3_1 + 0x1c0);
     int32_t $v0_1 = system_reg_read($s3_1 + 0x1c0);
     int32_t $v0_2 = system_reg_read($s3_1 + 0x1c4);
     int32_t $v0_3 = system_reg_read($s3_1 + 0x1c4);
     uint32_t msca_ch_en_2 = msca_ch_en;
+            int32_t $a2_2 = (arg3 & 0xff) * 3;
+    
+    if (!~msca_ch_en_1)
+        msca_ch_en_1 = 0;
+    
+    msca_ch_en = msca_ch_en_1;
     
     if (!(1 << ($s1 & 0x1f) & msca_ch_en_2))
         /* tailcall */
-        return isp_printf(2, "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\\n", $s1);
+        return isp_printf(); // Fixed: macro call, removed arguments;
     
     uint32_t $s0;
     uint32_t $s2_1;
@@ -38,20 +39,19 @@
         $s4 = $v0_3 & 0x7ff;
         
         if (arg2 != 1)
-            isp_printf(2, " %d, %d\\n", arg2);
+            isp_printf(); // Fixed: macro call, removed arguments;
         else
         {
-            int32_t $a2_2 = (arg3 & 0xff) * 3;
             
-            if ($a2_2 < 0x81)
+            if ($(uintptr_t)a2_2 < 0x81)
             {
                 $s0 = 0x80 - $a2_2;
                 $fp_1 = $a2_2 + 0x80;
                 $s4 = $s0;
                 $s2_1 = $fp_1;
             }
-            else if ($a2_2 - 0x81 >= 0x100)
-                isp_printf(1, "&vsd->snap_mlock", $a2_2);
+            else if ($a2_2 - (uintptr_t)0x81 >= 0x100)
+                isp_printf(); // Fixed: macro call, removed arguments;
             else
             {
                 $fp_1 = $a2_2 + 0x80;

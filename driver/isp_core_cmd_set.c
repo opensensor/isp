@@ -49,7 +49,7 @@
     if ($a1_2)
     {
         char* $v1_2 = $v0;
-        char const* const $v0_4 = "Can not support this frame mode!!!\\n";
+        char const* const $v0_4 = "Can not support this frame mode!!!\n";
         int32_t $a0_4 = 0x10;
         uint32_t $at_2;
         uint32_t $a1_3;
@@ -82,7 +82,7 @@
         if ($a1_4)
         {
             char* $v1_3 = $v0;
-            char const* const $v0_6 = "sensor type is BT1120!\\n";
+            char const* const $v0_6 = "sensor type is BT1120!\n";
             int32_t $a0_6 = 0x11;
             uint32_t $at_3;
             uint32_t $a1_5;
@@ -115,7 +115,7 @@
             if ($a1_6)
             {
                 char* $v1_4 = $v0;
-                char* $v0_8 = "VIC_CTRL : %08x\\n";
+                char* $v0_8 = "VIC_CTRL : %08x\n";
                 int32_t $a0_8 = 0x12;
                 uint32_t $at_4;
                 uint32_t $a1_7;
@@ -157,7 +157,7 @@
     else
     {
         isp_core_debug_type = 1;
-        data_ca554_1 = 1;
+        data_ca554 = 1;
         private_msleep(0xc8, $a1_2);
     }
     

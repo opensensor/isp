@@ -4,10 +4,10 @@
   int32_t tisp_sdns_param_array_set(int32_t arg1, int32_t arg2, int32_t* arg3)
 
 {
-    if (arg1 - 0x105 >= 0x7b)
+        int32_t var_18_1 = arg1;
+    if (arg1 - (uintptr_t)0x105 >= 0x7b)
     {
-        int32_t var_18_1_14 = arg1;
-        isp_printf(2, &$LC0, "tisp_sdns_param_array_set");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     
@@ -759,8 +759,8 @@
     memcpy($a0, arg2, $s2_1);
     *arg3 = $s2_1;
     
-    if (arg1 == 0x17f)
-        tisp_sdns_all_reg_refresh(data_9a9c4_4 + 0x200);
+    if ((uintptr_t)arg1 == 0x17f)
+        tisp_sdns_all_reg_refresh(data_9a9c4_1 + 0x200);
     
     return 0;
 }

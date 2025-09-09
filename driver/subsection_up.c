@@ -6,23 +6,23 @@
 {
     int32_t* i = arg2 + 4;
     void* $a0 = arg1 + 4;
+        int32_t $t9_1 = *i;
+        int32_t* $t5_1 = arg3;
+        int32_t $s0_1 = 0x2710;
+            int32_t $t2_1 = *$t5_1;
+            int32_t $v1_1 = $t2_1 - $t9_1;
     *($a0 - 4) = 0;
-    *($a0 + 0x1c) = 0xfff;
+    *(((void**)((char*)$a0 + 0x1c))) = 0xfff; // Fixed void pointer dereference
     int32_t j_1;
     int32_t $t0_1;
     
     do
     {
-        int32_t $t9_1 = *i;
-        int32_t* $t5_1 = arg3;
-        int32_t $s0_1 = 0x2710;
         $t0_1 = 0;
         j_1 = 0;
         
-        for (int32_t j = 0; j != 0x200; )
+        for (int32_t j = 0; (uintptr_t)j != 0x200; )
         {
-            int32_t $t2_1 = *$t5_1;
-            int32_t $v1_1 = $t2_1 - $t9_1;
             
             if ($t9_1 >= $t2_1)
                 $v1_1 = $t9_1 - $t2_1;

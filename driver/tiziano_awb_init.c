@@ -4,16 +4,16 @@
   int32_t tiziano_awb_init(int32_t arg1, int32_t arg2)
 
 {
-    awb_first = 0;
-    memset(&tisp_wb_attr, 0, 0x1c);
-    tiziano_awb_params_refresh();
     int32_t* $v0 = &_awb_parameter;
     int32_t* $a2 = &_awb_parameter;
     int32_t $a0 = 0;
+        int32_t $v1_1 = data_a9fc8;
+    awb_first = 0;
+    memset(&tisp_wb_attr, 0, 0x1c);
+    tiziano_awb_params_refresh();
     
     while (true)
     {
-        int32_t $v1_1 = data_a9fc8_3;
         $a2 = &$a2[1];
         
         if ($a0 >= $v1_1)
@@ -27,7 +27,7 @@
     
     while (true)
     {
-        int32_t $v1_3 = data_a9fc0_3;
+        int32_t $v1_3 = data_a9fc0;
         $v0 = &$v0[1];
         
         if ($a1_1 >= $v1_3)

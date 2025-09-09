@@ -17,19 +17,19 @@
     }
     else if ($v1 == 4)
     {
+        char* $a0 = *((char*)arg1 + 0xe4); // Fixed void pointer arithmetic
+            int32_t $v0 = 4;
         $s0_1 = arg1;
     label_132e4:
-        void* $a0 = *(arg1 + 0xe4);
         
         if (!$a0)
         {
         label_132f4:
-            int32_t $v0 = 4;
             
             if (!arg2)
                 $v0 = 3;
             
-            *($s0_1 + 0xf4) = $v0;
+            *(((void**)((char*)$s0_1 + 0xf4))) = $v0; // Fixed void pointer dereference
             return 0;
         }
         

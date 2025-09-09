@@ -5,13 +5,13 @@
 
 {
     int32_t* $s1 = arg1;
-    int32_t var_20_113 = 0;
+    int32_t var_20 = 0;
     
-    for (int32_t i = 0x380; i != 0x3ac; )
+    for (int32_t i = 0x380; (uintptr_t)i != 0x3ac; )
     {
-        tisp_adr_param_array_set(i, $s1, &var_20_114);
+        tisp_adr_param_array_set(i, $s1, &var_20);
         i += 1;
-        $s1 += var_20_115;
+        $s1 += var_20;
     }
     
     return 0;

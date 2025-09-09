@@ -4,12 +4,15 @@
   int32_t tiziano_wdr_params_refresh()
 
 {
+    void* $v0 = &var_40;
+    int32_t* $v1 = &param_wdr_tool_control_array;
+        int32_t i_1 = i;
     memcpy(&param_wdr_para_array, 0xa7424, 0x28);
     memcpy(&param_wdr_gam_y_array, 0xa76cc, 0x84);
     memcpy(&param_wdr_w_point_weight_x_array, 0xa7750, 0x10);
     memcpy(&param_wdr_w_point_weight_y_array, 0xa7760, 0x10);
     memcpy(&param_wdr_w_point_weight_pow_array, 0xa7770, 0xc);
-    memcpy(U"#\',17=DKS[clu~", U"#\',17=DKS[clu~", 0x84);
+    memcpy(U"#',17=DKS[clu~", U"#',17=DKS[clu~", 0x84);
     memcpy(&param_wdr_detail_th_w_array, 0xa7800, 0x1c);
     memcpy(&param_wdr_contrast_t_y_mux_array, 0xa781c, 0x14);
     memcpy(&param_wdr_ct_cl_para_array, 0xa7830, 0x10);
@@ -45,17 +48,14 @@
     memcpy(&wdr_detail_w_in0_list, 0xa7f1c, 0x24);
     memcpy(&wdr_detail_w_in1_list, 0xa7f40, 0x24);
     memcpy(&wdr_detail_w_in4_list[0x12], U"         @@@@@@@@@@@@@@@@@@", 0x24);
-    memcpy(&wdr_detail_w_in4_list[9], &data_a7f64_1[9], 0x24);
-    memcpy(U"@@@@@@@@@@@@@@@@@@         ", &data_a7f64_2[0x12], 0x24);
-    memcpy(&mdns_y_fspa_ref_fus_wei_224_wdr_array, &data_a7f64_3[0x1b], 0x40);
-    void var_40_49;
-    memcpy(&var_40_50, 0x98010, 0x38);
-    void* $v0 = &var_40_51;
-    int32_t* $v1 = &param_wdr_tool_control_array;
+    memcpy(&wdr_detail_w_in4_list[9], &data_a7f64[9], 0x24);
+    memcpy(U"@@@@@@@@@@@@@@@@@@         ", &data_a7f64[0x12], 0x24);
+    memcpy(&mdns_y_fspa_ref_fus_wei_224_wdr_array, &data_a7f64[0x1b], 0x40);
+    void var_40;
+    memcpy(&var_40, 0x98010, 0x38);
     
-    for (int32_t i = 0; i != 0xe; )
+    for (int32_t i = 0; (uintptr_t)i != 0xe; )
     {
-        int32_t i_1 = i;
         i += 1;
         
         if (i_1 != 2)

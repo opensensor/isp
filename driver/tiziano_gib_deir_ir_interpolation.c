@@ -5,11 +5,12 @@
 
 {
     int32_t gib_ir_point_1 = gib_ir_point;
+    int32_t var_4 = $ra;
+    int32_t $t7 = data_aa218;
+    int32_t $t5 = data_aa210;
+    int32_t $t8 = data_aa214;
+        else if (gib_ir_point_1 >= arg1)
     int32_t $ra;
-    int32_t var_4_2 = $ra;
-    int32_t $t7 = data_aa218_1;
-    int32_t $t5 = data_aa210_1;
-    int32_t $t8 = data_aa214_1;
     
     if ($t7 >= arg1)
     {
@@ -19,7 +20,6 @@
             $v1_3 = 1;
         else if ($t5 < arg1)
             $v1_3 = 2;
-        else if (gib_ir_point_1 >= arg1)
             $v1_3 = 4;
         else
             $v1_3 = 3;

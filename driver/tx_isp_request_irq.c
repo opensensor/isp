@@ -6,7 +6,7 @@
 {
     if (!arg1 || !arg2)
     {
-        isp_printf(2, &$LC0, "tx_isp_request_irq");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffea;
     }
     
@@ -14,13 +14,13 @@
     
     if ($v0_1 >= 0)
     {
+            int32_t var_18_2 = $v0_1;
         private_spin_lock_init(arg2);
         
         if (private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, 
             *arg1, arg2))
         {
-            int32_t var_18_2_1 = $v0_1;
-            isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", "tx_isp_request_irq");
+            isp_printf(); // Fixed: macro call, removed arguments;
             *arg2 = 0;
             return 0xfffffffc;
         }

@@ -11,6 +11,9 @@
     int32_t $a3 = $t6_1;
     int32_t $t1 = 0;
     int32_t $t2 = 0;
+        int32_t $v0_3 = *(arg3 + 0x3fc);
+        void* $v1_2 = arg3;
+            int32_t $a1 = *($v1_2 + 4);
     int32_t $v1_1;
     
     while (true)
@@ -20,12 +23,9 @@
         if ($v0 + arg2[1] < $a3)
             break;
         
-        int32_t $v0_3 = *(arg3 + 0x3fc);
-        void* $v1_2 = arg3;
         
-        for (int32_t i = 0x1f; i != 0x100f; )
+        for (int32_t i = 0x1f; (uintptr_t)i != 0x100f; )
         {
-            int32_t $a1 = *($v1_2 + 4);
             
             if ($a3 < i)
             {
@@ -50,17 +50,17 @@
     
     while (true)
     {
+        int32_t $a3_2 = *(arg3 + 0x3fc);
+        void* $t3_2 = arg3;
+            int32_t $t0_2 = *($t3_2 + 4);
         $a3_1 = $t6_2 - $t5_1;
         
         if ($v0_1 + arg2[4] < $t6_2)
             break;
         
-        int32_t $a3_2 = *(arg3 + 0x3fc);
-        void* $t3_2 = arg3;
         
-        for (int32_t i_1 = 0x1f; i_1 != 0x100f; )
+        for (int32_t i_1 = 0x1f; (uintptr_t)i_1 != 0x100f; )
         {
-            int32_t $t0_2 = *($t3_2 + 4);
             
             if ($t6_2 < i_1)
             {

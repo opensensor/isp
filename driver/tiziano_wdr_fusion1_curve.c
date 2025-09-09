@@ -5,23 +5,29 @@
 
 {
     int32_t param_wdr_gam_y_array_1 = param_wdr_gam_y_array;
-    
-    if (param_wdr_gam_y_array_1 == 1)
-    {
-        data_b240c_1 = 3;
         int32_t* $a0_1 = &wdr_ev_list;
         uint32_t wdr_ev_old_2 = wdr_ev_old;
         int32_t $a3_1 = 0;
+            int32_t $t3_1 = *$a0_1;
+                int32_t $t1_2 = $a3_1 * 3;
+                    int32_t $a2_1 = (&param_wdr_gam_y_array)[$t0_1];
+                    int32_t $a3_5 = (&param_wdr_gam_y_array)[$t1_2 - 2];
+                    int32_t $v1_1 = $a0_2 < wdr_ev_old_2 ? 1 : 0;
+                    int32_t $a1_4 = $t3_1 < $a0_2 ? 1 : 0;
+                        int32_t $t1_7 = wdr_ev_old_2 - $a0_2;
+                        int32_t $a0_4 = $t3_1 - $a0_2;
+    
+    if (param_wdr_gam_y_array_1 == 1)
+    {
+        data_b240c = 3;
         int32_t $v0_1;
         int32_t $t0_1;
         
         while (true)
         {
-            int32_t $t3_1 = *$a0_1;
             
             if ($t3_1 >= wdr_ev_old_2)
             {
-                int32_t $t1_2 = $a3_1 * 3;
                 $t0_1 = $t1_2 + 1;
                 int32_t $a0_2;
                 
@@ -30,19 +36,13 @@
                 
                 if ($a3_1 && $t3_1 != $a0_2)
                 {
-                    int32_t $a2_1 = (&param_wdr_gam_y_array)[$t0_1];
-                    int32_t $a3_5 = (&param_wdr_gam_y_array)[$t1_2 - 2];
-                    int32_t $v1_1 = $a0_2 < wdr_ev_old_2 ? 1 : 0;
-                    int32_t $a1_4 = $t3_1 < $a0_2 ? 1 : 0;
                     
                     if ($a2_1 >= $a3_5)
                     {
-                        int32_t $t1_7 = wdr_ev_old_2 - $a0_2;
                         
                         if (!$v1_1)
                             $t1_7 = $a0_2 - wdr_ev_old_2;
                         
-                        int32_t $a0_4 = $t3_1 - $a0_2;
                         
                         if ($a1_4)
                             $a0_4 = $a0_2 - $t3_1;
@@ -52,11 +52,11 @@
                     else
                     {
                         int32_t $t1_6 = wdr_ev_old_2 - $a0_2;
+                        int32_t $a0_3 = $t3_1 - $a0_2;
                         
                         if (!$v1_1)
                             $t1_6 = $a0_2 - wdr_ev_old_2;
                         
-                        int32_t $a0_3 = $t3_1 - $a0_2;
                         
                         if ($a1_4)
                             $a0_3 = $a0_2 - $t3_1;
@@ -75,7 +75,7 @@
             
             if ($a3_1 == 9)
             {
-                $v0_1 = data_d92e8_1;
+                $v0_1 = data_d92e8;
                 $t0_1 = 0x19;
                 break;
             }
@@ -86,16 +86,16 @@
         wchar32 $t1_8 = data_d9300_1;
         wchar32* $v1_10 = U"#\',17=DKS[clu~";
         
-        for (int32_t i = 0; i != 0x21; )
+        for (int32_t i = 0; (uintptr_t)i != 0x21; )
         {
+            else if ($v0_1 != i)
             if (i < $v0_1)
                 *$v1_10 = $t1_8;
-            else if ($v0_1 != i)
                 *$v1_10 = *($v1_10 - 4) - $lo_3;
             else
                 *$v1_10 = $a3_6;
             
-            if (*$v1_10 >= 0x101)
+            if (*$(uintptr_t)v1_10 >= 0x101)
                 *$v1_10 = 0x100;
             
             i += 1;
@@ -109,6 +109,12 @@
     {
         int32_t wdr_ev_list_1 = wdr_ev_list;
         uint32_t wdr_ev_old_1 = wdr_ev_old;
+            int32_t $a0_8 = data_b1558;
+                int32_t $v1_14 = data_b155c;
+                    int32_t mdns_c_edge_wei_adj_value5_array_2 = mdns_c_edge_wei_adj_value5_array;
+                    int32_t $v0_41 = data_d9188;
+                    int32_t $t5_4 = wdr_ev_old_1 - $a0_8;
+                        int32_t $a1_22 = $a0_8 - $v1_14;
         int32_t $v0_8;
         int32_t $a2_10;
         int32_t $a3_7;
@@ -119,7 +125,6 @@
         
         if (wdr_ev_list_1 < wdr_ev_old_1)
         {
-            int32_t $a0_8 = data_b1558_1;
             int32_t $v0_40;
             int32_t $v1_12;
             int32_t $v1_13;
@@ -131,18 +136,13 @@
             
             if ($a0_8 < wdr_ev_old_1)
             {
-                int32_t $v1_14 = data_b155c_1;
                 
                 if ($v1_14 >= wdr_ev_old_1)
                 {
-                    int32_t mdns_c_edge_wei_adj_value5_array_2 = mdns_c_edge_wei_adj_value5_array;
-                    int32_t $v0_41 = data_d9188_1;
-                    int32_t $t5_4 = wdr_ev_old_1 - $a0_8;
                     $t3_2 = $v1_14 < $a0_8 ? 1 : 0;
                     
                     if ($v0_41 >= mdns_c_edge_wei_adj_value5_array_2)
                     {
-                        int32_t $a1_22 = $a0_8 - $v1_14;
                         
                         if (!$t3_2)
                             $a1_22 = $v1_14 - $a0_8;
@@ -292,7 +292,11 @@
                 
                 if ($t3_3 < wdr_ev_old_1)
                 {
-                    int32_t $a0_10 = data_b1564_1;
+                    int32_t $a0_10 = data_b1564;
+                            int32_t $a3_13 = data_d9108;
+                            int32_t $v0_142 = data_d9128;
+                            int32_t $a1_55 = wdr_ev_old_1 - $a0_10;
+                                int32_t $a2_32 = $a0_10 - $t3_3;
                     int32_t $v1_43;
                     int32_t $v1_47;
                     int32_t $a1_53;
@@ -303,18 +307,14 @@
                     
                     if ($a0_10 < wdr_ev_old_1)
                     {
-                        $t3_3 = data_b1568_1;
+                        $t3_3 = data_b1568;
                         
                         if ($t3_3 >= wdr_ev_old_1)
                         {
-                            int32_t $a3_13 = data_d9108_1;
-                            int32_t $v0_142 = data_d9128_1;
-                            int32_t $a1_55 = wdr_ev_old_1 - $a0_10;
                             $t5_7 = $t3_3 < $a0_10 ? 1 : 0;
                             
                             if ($v0_142 >= $a3_13)
                             {
-                                int32_t $a2_32 = $a0_10 - $t3_3;
                                 
                                 if (!$t5_7)
                                     $a2_32 = $t3_3 - $a0_10;
@@ -462,7 +462,12 @@
                         
                         if ($a0_10 < wdr_ev_old_1)
                         {
-                            int32_t $v1_48 = data_b1570_1;
+                            int32_t $v1_48 = data_b1570;
+                                int32_t $a0_14 = data_b1574;
+                                    int32_t $a3_16 = data_d90a8;
+                                    int32_t $v0_253 = data_d9008;
+                                    int32_t $a1_60 = wdr_ev_old_1 - $v1_48;
+                                        int32_t $a2_47 = $v1_48 - $a0_14;
                             int32_t $v1_73;
                             int32_t $a1_59;
                             int32_t $t3_4;
@@ -471,18 +476,13 @@
                             
                             if ($v1_48 < wdr_ev_old_1)
                             {
-                                int32_t $a0_14 = data_b1574_1;
                                 
                                 if ($a0_14 >= wdr_ev_old_1)
                                 {
-                                    int32_t $a3_16 = data_d90a8_1;
-                                    int32_t $v0_253 = data_d9008_1;
-                                    int32_t $a1_60 = wdr_ev_old_1 - $v1_48;
                                     $t3_4 = $a0_14 < $v1_48 ? 1 : 0;
                                     
                                     if ($v0_253 >= $a3_16)
                                     {
-                                        int32_t $a2_47 = $v1_48 - $a0_14;
                                         
                                         if (!$t3_4)
                                             $a2_47 = $a0_14 - $v1_48;
@@ -626,7 +626,7 @@
                                     goto label_6af74;
                                 }
                                 
-                                $a3_7 = data_d9008_2;
+                                $a3_7 = data_d9008_1;
                                 $a2_10 = data_d900c_2;
                                 $t2_1 = data_d9010_2;
                                 $t1_9 = data_d9014_2;
@@ -636,14 +636,14 @@
                             }
                             else
                             {
-                                int32_t $a3_15 = data_d9088_1;
-                                int32_t $v0_216 = data_d90a8_2;
+                                int32_t $a3_15 = data_d9088;
+                                int32_t $v0_216 = data_d90a8;
                                 int32_t $a1_58 = wdr_ev_old_1 - $a0_10;
+                                    int32_t $a2_41 = $a0_10 - $v1_48;
                                 $t3_4 = $v1_48 < $a0_10 ? 1 : 0;
                                 
                                 if ($v0_216 >= $a3_15)
                                 {
-                                    int32_t $a2_41 = $a0_10 - $v1_48;
                                     
                                     if (!$t3_4)
                                         $a2_41 = $v1_48 - $a0_10;
@@ -799,14 +799,14 @@
                         }
                         else
                         {
-                            int32_t $a3_14 = data_d9128_2;
-                            int32_t $v0_179 = data_d9088_2;
-                            $t5_7 = $a0_10 < $t3_3 ? 1 : 0;
+                            int32_t $a3_14 = data_d9128;
+                            int32_t $v0_179 = data_d9088;
                             int32_t $a1_57 = wdr_ev_old_1 - $t3_3;
+                                int32_t $v1_51 = $t3_3 - $a0_10;
+                            $t5_7 = $a0_10 < $t3_3 ? 1 : 0;
                             
                             if ($v0_179 >= $a3_14)
                             {
-                                int32_t $v1_51 = $t3_3 - $a0_10;
                                 
                                 if (!$t5_7)
                                     $v1_51 = $a0_10 - $t3_3;
@@ -952,14 +952,14 @@
                     }
                     else
                     {
-                        int32_t $a3_12 = data_d91a8_1;
-                        int32_t $v0_105 = data_d9108_2;
+                        int32_t $a3_12 = data_d91a8;
+                        int32_t $v0_105 = data_d9108;
                         int32_t $a1_52 = wdr_ev_old_1 - $t3_3;
+                            int32_t $v1_20 = $t3_3 - $a0_10;
                         $t5_7 = $a0_10 < $t3_3 ? 1 : 0;
                         
                         if ($v0_105 >= $a3_12)
                         {
-                            int32_t $v1_20 = $t3_3 - $a0_10;
                             
                             if (!$t5_7)
                                 $v1_20 = $a0_10 - $t3_3;
@@ -1115,14 +1115,14 @@
                 }
                 else
                 {
-                    int32_t $a3_11 = data_d9188_2;
-                    int32_t $v0_73 = data_d91a8_2;
+                    int32_t $a3_11 = data_d9188;
+                    int32_t $v0_73 = data_d91a8;
                     int32_t $a0_11 = wdr_ev_old_1 - $v1_14;
                     int32_t $t5_6 = $t3_3 < $v1_14 ? 1 : 0;
+                        int32_t $a1_38 = $v1_14 - $t3_3;
                     
                     if ($v0_73 >= $a3_11)
                     {
-                        int32_t $a1_38 = $v1_14 - $t3_3;
                         
                         if (!$t5_6)
                             $a1_38 = $t3_3 - $v1_14;
@@ -1274,14 +1274,14 @@
             }
             else
             {
-                int32_t $a3_9 = data_c9208_1;
+                int32_t $a3_9 = data_c9208;
                 int32_t mdns_c_edge_wei_adj_value5_array_1 = mdns_c_edge_wei_adj_value5_array;
                 int32_t $t5_1 = wdr_ev_old_1 - wdr_ev_list_1;
+                    int32_t $a1_6 = wdr_ev_list_1 - $a0_8;
                 $t3_2 = $a0_8 < wdr_ev_list_1 ? 1 : 0;
                 
                 if (mdns_c_edge_wei_adj_value5_array_1 >= $a3_9)
                 {
-                    int32_t $a1_6 = wdr_ev_list_1 - $a0_8;
                     
                     if (!$t3_2)
                         $a1_6 = $a0_8 - wdr_ev_list_1;
@@ -1439,13 +1439,13 @@
         }
         else
         {
-            $a3_7 = data_c9208_2;
-            $a2_10 = data_c920c_2;
-            $t2_1 = data_c9210_2;
-            $t1_9 = data_c9214_2;
-            $t0_5 = data_c9218_2;
-            $t4_2 = data_c921c_2;
-            $v0_8 = data_c9220_2;
+            $a3_7 = data_c9208;
+            $a2_10 = data_c920c;
+            $t2_1 = data_c9210;
+            $t1_9 = data_c9214;
+            $t0_5 = data_c9218;
+            $t4_2 = data_c921c;
+            $v0_8 = data_c9220;
         }
         
         wchar32* $t3_5 = U"#\',17=DKS[clu~";
@@ -1477,17 +1477,17 @@
             int32_t $a0_18 = *$a3_18;
             
             if ($v1_78 >= ($v1_77 ^ $t5_27) - $v1_77)
-                *($a3_18 + 4) = $a0_18 + $lo_104;
+                *(((void**)((char*)$a3_18 + 4))) = $a0_18 + $lo_104; // Fixed void pointer dereference
             else if ($lo_104 < 0)
-                *($a3_18 + 4) = $lo_104 - 1 + $a0_18;
+                *(((void**)((char*)$a3_18 + 4))) = $lo_104 - 1 + $a0_18; // Fixed void pointer dereference
             else if ($lo_104)
-                *($a3_18 + 4) = $a0_18 + $lo_104 + 1;
+                *(((void**)((char*)$a3_18 + 4))) = $a0_18 + $lo_104 + 1; // Fixed void pointer dereference
             else if ($t1_30 > 0)
-                *($a3_18 + 4) = $a0_18 + 1;
+                *(((void**)((char*)$a3_18 + 4))) = $a0_18 + 1; // Fixed void pointer dereference
             else if ($t1_30)
-                *($a3_18 + 4) = $a0_18 - 1;
+                *(((void**)((char*)$a3_18 + 4))) = $a0_18 - 1; // Fixed void pointer dereference
             else
-                *($a3_18 + 4) = $a0_18;
+                *(((void**)((char*)$a3_18 + 4))) = $a0_18; // Fixed void pointer dereference
             
             $v1_78 += 1;
             $a3_18 += 4;
@@ -1506,17 +1506,17 @@
             int32_t $a3_21 = *$a2_50;
             
             if ($a0_22 >= ($a0_21 ^ $v1_79) - $a0_21)
-                *($a2_50 + 4) = $a3_21 + $lo_105;
+                *(((void**)((char*)$a2_50 + 4))) = $a3_21 + $lo_105; // Fixed void pointer dereference
             else if ($lo_105 < 0)
-                *($a2_50 + 4) = $lo_105 - 1 + $a3_21;
+                *(((void**)((char*)$a2_50 + 4))) = $lo_105 - 1 + $a3_21; // Fixed void pointer dereference
             else if ($lo_105)
-                *($a2_50 + 4) = $a3_21 + $lo_105 + 1;
+                *(((void**)((char*)$a2_50 + 4))) = $a3_21 + $lo_105 + 1; // Fixed void pointer dereference
             else if ($t0_73 > 0)
-                *($a2_50 + 4) = $a3_21 + 1;
+                *(((void**)((char*)$a2_50 + 4))) = $a3_21 + 1; // Fixed void pointer dereference
             else if ($t0_73)
-                *($a2_50 + 4) = $a3_21 - 1;
+                *(((void**)((char*)$a2_50 + 4))) = $a3_21 - 1; // Fixed void pointer dereference
             else
-                *($a2_50 + 4) = $a3_21;
+                *(((void**)((char*)$a2_50 + 4))) = $a3_21; // Fixed void pointer dereference
             
             $a0_22 += 1;
             $a2_50 += 4;
@@ -1529,22 +1529,22 @@
         int32_t $a0_23 = $v0_289 % (0x20 - $t2_1);
         int32_t $a2_52 = $a0_23 >> 0x1f;
         
-        while (i_1 < 0x20 - $t2_1)
+        while ((uintptr_t)i_1 < 0x20 - $t2_1)
         {
             int32_t $a2_55 = *$t2_11;
             
             if (i_1 >= ($a2_52 ^ $a0_23) - $a2_52)
-                *($t2_11 + 4) = $a2_55 + $lo_106;
+                *(((void**)((char*)$t2_11 + 4))) = $a2_55 + $lo_106; // Fixed void pointer dereference
             else if ($lo_106 < 0)
-                *($t2_11 + 4) = $lo_106 - 1 + $a2_55;
+                *(((void**)((char*)$t2_11 + 4))) = $lo_106 - 1 + $a2_55; // Fixed void pointer dereference
             else if ($lo_106)
-                *($t2_11 + 4) = $lo_106 + 1 + $a2_55;
+                *(((void**)((char*)$t2_11 + 4))) = $lo_106 + 1 + $a2_55; // Fixed void pointer dereference
             else if ($v0_289 > 0)
-                *($t2_11 + 4) = $a2_55 + 1;
+                *(((void**)((char*)$t2_11 + 4))) = $a2_55 + 1; // Fixed void pointer dereference
             else if ($v0_289)
-                *($t2_11 + 4) = $a2_55 - 1;
+                *(((void**)((char*)$t2_11 + 4))) = $a2_55 - 1; // Fixed void pointer dereference
             else
-                *($t2_11 + 4) = $a2_55;
+                *(((void**)((char*)$t2_11 + 4))) = $a2_55; // Fixed void pointer dereference
             
             i_1 += 1;
             $t2_11 += 4;
@@ -1554,7 +1554,7 @@
         
         while (true)
         {
-            if ($v1_83 >= 0x101)
+            if ($(uintptr_t)v1_83 >= 0x101)
                 *$t3_5 = 0x100;
             
             $t3_5 = &$t3_5[1];

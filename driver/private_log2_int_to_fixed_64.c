@@ -5,11 +5,11 @@
 
 {
     uint32_t $s2 = arg3;
+    uint32_t $s1_1 = arg4;
     
     if (!(arg1 | arg2))
         return 0;
     
-    uint32_t $s1_1 = arg4;
     int32_t $v0_1;
     int32_t $a3;
     int32_t $t0_2;
@@ -19,7 +19,7 @@
     int32_t $a1;
     int32_t $a2_1;
     
-    if ($v0_1 >= 0x10)
+    if ($(uintptr_t)v0_1 >= 0x10)
     {
         $a2_1 = $v0_1 - 0xf;
         $a0 = $t0_2;
@@ -43,11 +43,11 @@
     
     for (int32_t i = 0; i < $s2; i += 1)
     {
+        int32_t $v1_3 = (($v1_1 * $s0_1) << 1) + $hi_1;
         int32_t $lo_1;
         int32_t $hi_1;
         $hi_1 = HIGHD($s0_1 * $s0_1);
         $lo_1 = LOWD($s0_1 * $s0_1);
-        int32_t $v1_3 = (($v1_1 * $s0_1) << 1) + $hi_1;
         $a2_2 = $a0_1 >> 0x1f | $a2_2 << 1;
         $a0_1 <<= 1;
         

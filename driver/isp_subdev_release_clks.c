@@ -5,11 +5,11 @@
 
 {
     int32_t* $s1 = *(arg1 + 0xbc);
+        int32_t* $s3_1 = $s1;
+        int32_t i = 0;
     
     if ($s1)
     {
-        int32_t* $s3_1 = $s1;
-        int32_t i = 0;
         
         while (i < *(arg1 + 0xc0))
         {
@@ -19,7 +19,7 @@
         }
         
         private_kfree($s1);
-        *(arg1 + 0xbc) = 0;
+        *(((int32_t*)((char*)arg1 + 0xbc))) = 0; // Fixed void pointer dereference
     }
     
     return 0;

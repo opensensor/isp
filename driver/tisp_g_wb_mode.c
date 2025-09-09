@@ -8,8 +8,8 @@
     
     if (!tisp_wb_attr)
     {
-        *(arg1 + 4) = isp_printf / data_b5a48_2;
-        *(arg1 + 8) = isp_printf / data_b5a4c_2;
+        *(((void**)((char*)arg1 + 4))) = isp_printf / data_b5a48; // Fixed void pointer dereference
+        *(((void**)((char*)arg1 + 8))) = isp_printf / data_b5a4c; // Fixed void pointer dereference
     }
     
     return 0;

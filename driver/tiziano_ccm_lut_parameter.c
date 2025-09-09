@@ -5,8 +5,9 @@
 
 {
     void* $s4 = arg1 + 4;
+        int32_t $a0_1 = (i + 0x2802) << 1;
     
-    for (int32_t i = 0; i != 0xa; )
+    for (int32_t i = 0; (uintptr_t)i != 0xa; )
     {
         int32_t $s0_2;
         
@@ -16,7 +17,6 @@
             $s0_2 = *(arg1 + 0x20);
         
         system_reg_write(0x5000, 1);
-        int32_t $a0_1 = (i + 0x2802) << 1;
         i += 2;
         system_reg_write($a0_1, $s0_2);
         $s4 += 8;
@@ -24,9 +24,9 @@
     
     if (ccm_real == 1)
     {
-        system_reg_write(0x5018, data_aa470_1 << 0x10 | tiziano_ccm_dp_cfg << 0xc | data_aa474_1);
-        int32_t $a1_4 = data_aa470_2;
-        int32_t $v0_6 = data_aa474_2;
+        int32_t $a1_4 = data_aa470;
+        int32_t $v0_6 = data_aa474;
+        system_reg_write(0x5018, data_aa470 << 0x10 | tiziano_ccm_dp_cfg << 0xc | data_aa474);
         uint32_t $a1_5;
         
         if ($a1_4 != $v0_6)

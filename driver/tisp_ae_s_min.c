@@ -6,44 +6,44 @@
 {
     int32_t arg_4 = arg2;
     int32_t arg_c = arg4;
-    int32_t var_1c_14 = arg4;
+    int32_t var_1c = arg4;
     int32_t arg_0 = arg1;
     int32_t arg_8 = arg3;
-    int32_t var_20_197 = arg3;
-    isp_printf(0, "%s[%d] do not support this interface\\n", arg1);
+    int32_t var_20 = arg3;
+    isp_printf(); // Fixed: macro call, removed arguments;
     
     if (!arg1 || **&IspAeExp < arg1)
-        isp_printf(1, "%s:%d::linear mode\\n", arg1);
+        isp_printf(); // Fixed: macro call, removed arguments;
     else
         *dmsc_sp_d_ud_ns_opt = arg1;
     
-    if (arg2 < 0x400 || **&data_d04b8_1 < arg2)
-        isp_printf(1, "%s:%d::wdr mode\\n", arg2);
+    if ((uintptr_t)arg2 < 0x400 || **&data_d04b8 < arg2)
+        isp_printf(); // Fixed: macro call, removed arguments;
     else
-        data_c471c_2 = arg2;
+        data_c471c = arg2;
     
-    if (data_b2e74_7 == 1)
+    if (data_b2e74 == 1)
     {
         int32_t $v0_11;
         
-        if (!arg3 || **&data_d04d4_1 < arg3)
+        if (!arg3 || **&data_d04d4 < arg3)
         {
-            isp_printf(1, "qbuffer null\\n", arg3);
-            $v0_11 = arg4 < 0x400 ? 1 : 0;
+            isp_printf(); // Fixed: macro call, removed arguments;
+            $v0_11 = (uintptr_t)arg4 < 0x400 ? 1 : 0;
         }
         else
         {
-            data_c4730_2 = arg3;
-            $v0_11 = arg4 < 0x400 ? 1 : 0;
+            data_c4730 = arg3;
+            $v0_11 = (uintptr_t)arg4 < 0x400 ? 1 : 0;
         }
         
         if ($v0_11 || **&data_d04d8_1 < arg4)
-            isp_printf(1, "bank no free\\n", arg4);
+            isp_printf(); // Fixed: macro call, removed arguments;
         else
             dmsc_sp_ud_ns_thres_array = arg4;
     }
     
-    data_b0e0c_4 = 0;
+    data_b0e0c_2 = 0;
     return 0;
 }
 

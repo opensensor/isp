@@ -10,7 +10,7 @@
     {
         result = *arg2;
         
-        if (result >= 0x2000)
+        if ((uintptr_t)result >= 0x2000)
             result -= 0x4000;
         
         *arg1 = result;

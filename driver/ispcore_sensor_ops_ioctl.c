@@ -7,6 +7,7 @@
     int32_t result = 0;
     int32_t* $s1 = arg1 + 0x38;
     void* $a0 = *$s1;
+            char* $v0_1 = (char*)(*(*($a0 + 0xc4) + 0xc)); // Fixed void pointer assignment
     
     while (true)
     {
@@ -14,7 +15,6 @@
             $s1 = &$s1[1];
         else
         {
-            void* $v0_1 = *(*($a0 + 0xc4) + 0xc);
             int32_t $v0_2;
             
             if ($v0_1)
@@ -33,7 +33,7 @@
                     $s1 = &$s1[1];
                 else
                 {
-                    if (result != 0xfffffdfd)
+                    if ((uintptr_t)result != 0xfffffdfd)
                         break;
                     
                     result = 0xfffffdfd;
@@ -44,7 +44,7 @@
         
         if ($s1 == arg1 + 0x78)
         {
-            if (result == 0xfffffdfd)
+            if ((uintptr_t)result == 0xfffffdfd)
                 return 0;
             
             break;

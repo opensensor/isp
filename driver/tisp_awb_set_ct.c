@@ -5,6 +5,6 @@
 
 {
     awb_ct_manual = *arg1;
-    return &data_b0000_7;
+    return &data_b0000;
 }
 

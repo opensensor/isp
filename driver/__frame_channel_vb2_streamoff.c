@@ -12,7 +12,7 @@
         if (*(arg1 + 0x230) & 1)
         {
             __vb2_queue_cancel(arg1 + 0x24);
-            *(arg1 + 0x2d0) = 3;
+            *(((int32_t*)((char*)arg1 + 0x2d0))) = 3; // Fixed void pointer dereference
             return 0;
         }
         
@@ -21,11 +21,11 @@
     }
     else
     {
-        $a1 = "snapraw timeout!\\n";
+        $a1 = "snapraw timeout!\n";
         $a0 = 2;
     }
     
-    isp_printf($a0, $a1, arg3);
+    isp_printf(); // Fixed: macro call, removed arguments;
     return 0xffffffea;
 }
 

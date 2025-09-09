@@ -5,50 +5,50 @@
 
 {
     int32_t* $s4 = arg1 + 0x38;
-    
-    for (int32_t i = 0; i != 0x10; )
-    {
         void* $a0 = *$s4;
+            int32_t* $v0_3 = *(*($a0 + 0xc4) + 4);
+                int32_t $v0_4 = *$v0_3;
+                    int32_t result = $v0_4($a0, arg2);
+                            void* $s0_1 = arg1 + (i << 2);
+                                char* $a0_1 = *((char*)$s0_1 + 0x38); // Fixed void pointer arithmetic
+                                    int32_t* $v0_6 = *(*($a0_1 + 0xc4) + 4);
+                                        int32_t $v0_7 = *$v0_6;
+    
+    for (int32_t i = 0; (uintptr_t)i != 0x10; )
+    {
         
         if ($a0)
         {
-            int32_t* $v0_3 = *(*($a0 + 0xc4) + 4);
             
             if (!$v0_3)
                 i += 1;
             else
             {
-                int32_t $v0_4 = *$v0_3;
                 
                 if (!$v0_4)
                     i += 1;
                 else
                 {
-                    int32_t result = $v0_4($a0, arg2);
                     
                     if (!result)
                         i += 1;
                     else
                     {
-                        if (result != 0xfffffdfd)
+                        if ((uintptr_t)result != 0xfffffdfd)
                         {
-                            void* $s0_1 = arg1 + (i << 2);
                             
                             while (arg1 != $s0_1)
                             {
-                                void* $a0_1 = *($s0_1 + 0x38);
                                 
                                 if (!$a0_1)
                                     $s0_1 -= 4;
                                 else
                                 {
-                                    int32_t* $v0_6 = *(*($a0_1 + 0xc4) + 4);
                                     
                                     if (!$v0_6)
                                         $s0_1 -= 4;
                                     else
                                     {
-                                        int32_t $v0_7 = *$v0_6;
                                         
                                         if (!$v0_7)
                                             $s0_1 -= 4;

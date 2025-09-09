@@ -4,16 +4,16 @@
   int32_t isp_irq_handle(int32_t arg1, void* arg2)
 
 {
+        char* $v0_2 = (char*)(**(arg2 + 0x44)); // Fixed void pointer assignment
+            int32_t $v0_3 = *($v0_2 + 0x20);
     int32_t result;
     
-    if (arg2 != 0x80)
+    if ((uintptr_t)arg2 != 0x80)
     {
-        void* $v0_2 = **(arg2 + 0x44);
         result = 1;
         
         if ($v0_2)
         {
-            int32_t $v0_3 = *($v0_2 + 0x20);
             
             if (!$v0_3)
                 result = 1;
@@ -34,17 +34,17 @@
     
     while (true)
     {
+            char* $v0_6 = (char*)(**($a0_1 + 0xc4)); // Fixed void pointer assignment
+                int32_t $v0_7 = *($v0_6 + 0x20);
         if (!$a0_1)
             $s2 = &$s2[1];
         else
         {
-            void* $v0_6 = **($a0_1 + 0xc4);
             
             if (!$v0_6)
                 $s2 = &$s2[1];
             else
             {
-                int32_t $v0_7 = *($v0_6 + 0x20);
                 
                 if ($v0_7 && $v0_7() == 2)
                     result = 2;

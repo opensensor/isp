@@ -5,13 +5,13 @@
 
 {
     int32_t $s2 = arg1;
-    int32_t var_20_140 = 0;
+    int32_t var_20 = 0;
+        int32_t $v1_1 = var_20;
     *arg2 = 0;
     
-    for (int32_t i = 0x3e6; i != 0x3f5; )
+    for (int32_t i = 0x3e6; (uintptr_t)i != 0x3f5; )
     {
-        tisp_ydns_param_array_get(i, $s2, &var_20_141);
-        int32_t $v1_1 = var_20_142;
+        tisp_ydns_param_array_get(i, $s2, &var_20);
         i += 1;
         $s2 += $v1_1;
         *arg2 += $v1_1;

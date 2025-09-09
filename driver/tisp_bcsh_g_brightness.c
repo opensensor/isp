@@ -4,6 +4,6 @@
   uint32_t tisp_bcsh_g_brightness()
 
 {
-    return data_9a91f_3;
+    return data_9a91f;
 }
 

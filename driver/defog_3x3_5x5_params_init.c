@@ -4,37 +4,37 @@
   int32_t defog_3x3_5x5_params_init(int32_t arg1, int32_t arg2)
 
 {
-    void var_b8_43;
-    memcpy(&var_b8_44, 0x7d0b4, 0x60);
-    void var_1b4_5;
-    memcpy(&var_1b4_6, 0x7d114, 0xfc);
-    void var_2b0_3;
-    memset(&var_2b0_4, 0, 0xfc);
     uint32_t $lo = (arg2 + 5) / 0xa;
     int32_t i = 0;
     uint32_t $lo_1 = (arg1 + 9) / 0x12;
     uint32_t $t2 = $lo_1 << 2;
-    uint32_t $lo_3 = ((arg2 * arg1 + 0x3f4) / 0x7e9 * data_acd54_1 + 0x32) / 0x64;
+    uint32_t $lo_3 = ((arg2 * arg1 + 0x3f4) / 0x7e9 * data_acd54 + 0x32) / 0x64;
+        void* $t0_1 = &param_defog_cent3_w_dis_array_tmp + i;
+        int32_t $v1_3 = $lo_3 * *(&var_b8 + i);
+        void* $a3_1 = &var_2b0 + i_1;
+        int32_t $v1_7 = *(&var_1b4 + i_1);
+    void var_b8;
+    memcpy(&var_b8, 0x7d0b4, 0x60);
+    void var_1b4;
+    memcpy(&var_1b4, 0x7d114, 0xfc);
+    void var_2b0;
+    memset(&var_2b0, 0, 0xfc);
     
     do
     {
-        void* $t0_1 = &param_defog_cent3_w_dis_array_tmp + i;
-        int32_t $v1_3 = $lo_3 * *(&var_b8_45 + i);
         i += 4;
         *$t0_1 = ($v1_3 + 0x2000) >> 0xe;
-    } while (i != 0x60);
+    } while ((uintptr_t)i != 0x60);
     
-    for (int32_t i_1 = 0; i_1 != 0xfc; )
+    for (int32_t i_1 = 0; (uintptr_t)i_1 != 0xfc; )
     {
-        void* $a3_1 = &var_2b0_5 + i_1;
-        int32_t $v1_7 = *(&var_1b4_7 + i_1);
         i_1 += 4;
         *$a3_1 = ($lo_3 * $v1_7 + 0x1000) >> 0xd;
     }
     
-    void* $v1_11 = &var_2b0_6;
+    void* $v1_11 = &var_2b0;
     
-    for (int32_t i_2 = 0; i_2 != 0x7c; )
+    for (int32_t i_2 = 0; (uintptr_t)i_2 != 0x7c; )
     {
         void* $a3_2 = &param_defog_cent5_w_dis_array_tmp + i_2;
         i_2 += 4;
@@ -101,21 +101,21 @@
         int32_t $t4_1 = $v1_15 * $v1_15;
         int32_t $t3_1 = $t2 + $lo_1 - 1;
         int32_t $a0_13 = 0;
-        
-        while ($a0_13 != $t2)
-        {
             int32_t $v1_17 = $t3_1 + (-($lo_1) << 1);
             int32_t $t1_1 = $v1_17 * $v1_17;
             int32_t $v1_18 = $v1_17 - ($lo_1 << 1);
             int32_t $t0_4 = $t3_1 * $t3_1;
             int32_t $v1_19 = $v1_18 * $v1_18;
-            void* $t0_7 = &var_2b0_7;
+            void* $t0_7 = &var_2b0;
+        
+        while ($a0_13 != $t2)
+        {
             
-            for (int32_t i_3 = 0; i_3 != 0x3f; )
+            for (int32_t i_3 = 0; (uintptr_t)i_3 != 0x3f; )
             {
                 if (($s7_1 + $t0_4 + 0x20) >> 6 < *$t0_7)
                 {
-                    *($v0_6 + $a0_13 + $a3_4) = 0x3f - i_3;
+                    *(((void**)((char*)$v0_6 + $a0_13 + $a3_4))) = 0x3f - i_3; // Fixed void pointer dereference
                     break;
                 }
                 
@@ -123,13 +123,13 @@
                 $t0_7 += 4;
             }
             
-            void* $t0_10 = &var_2b0_8;
+            void* $t0_10 = &var_2b0_1;
             
-            for (int32_t i_4 = 0; i_4 != 0x3f; )
+            for (int32_t i_4 = 0; (uintptr_t)i_4 != 0x3f; )
             {
                 if (($s7_1 + $t1_1 + 0x20) >> 6 < *$t0_10)
                 {
-                    *($v0_7 + $a0_13 + $a3_4) = 0x3f - i_4;
+                    *(((void**)((char*)$v0_7 + $a0_13 + $a3_4))) = 0x3f - i_4; // Fixed void pointer dereference
                     break;
                 }
                 
@@ -137,13 +137,13 @@
                 $t0_10 += 4;
             }
             
-            void* $t0_13 = &var_2b0_9;
+            void* $t0_13 = &var_2b0_2;
             
-            for (int32_t i_5 = 0; i_5 != 0x3f; )
+            for (int32_t i_5 = 0; (uintptr_t)i_5 != 0x3f; )
             {
                 if (($s7_1 + $v1_19 + 0x20) >> 6 < *$t0_13)
                 {
-                    *($v0_8 + $a0_13 + $a3_4) = 0x3f - i_5;
+                    *(((void**)((char*)$v0_8 + $a0_13 + $a3_4))) = 0x3f - i_5; // Fixed void pointer dereference
                     break;
                 }
                 
@@ -151,13 +151,13 @@
                 $t0_13 += 4;
             }
             
-            void* $t0_16 = &var_2b0_10;
+            void* $t0_16 = &var_2b0_3;
             
-            for (int32_t i_6 = 0; i_6 != 0x3f; )
+            for (int32_t i_6 = 0; (uintptr_t)i_6 != 0x3f; )
             {
                 if (($t0_4 + $fp_1 + 0x20) >> 6 < *$t0_16)
                 {
-                    *($v0_9 + $a0_13 + $a3_4) = 0x3f - i_6;
+                    *(((void**)((char*)$v0_9 + $a0_13 + $a3_4))) = 0x3f - i_6; // Fixed void pointer dereference
                     break;
                 }
                 
@@ -165,13 +165,13 @@
                 $t0_16 += 4;
             }
             
-            void* $t0_19 = &var_2b0_11;
+            void* $t0_19 = &var_2b0_4;
             
-            for (int32_t i_7 = 0; i_7 != 0x3f; )
+            for (int32_t i_7 = 0; (uintptr_t)i_7 != 0x3f; )
             {
                 if (($t1_1 + $fp_1 + 0x20) >> 6 < *$t0_19)
                 {
-                    *($v0_10 + $a0_13 + $a3_4) = 0x3f - i_7;
+                    *(((void**)((char*)$v0_10 + $a0_13 + $a3_4))) = 0x3f - i_7; // Fixed void pointer dereference
                     break;
                 }
                 
@@ -179,13 +179,13 @@
                 $t0_19 += 4;
             }
             
-            void* $t0_22 = &var_2b0_12;
+            void* $t0_22 = &var_2b0_5;
             
-            for (int32_t i_8 = 0; i_8 != 0x3f; )
+            for (int32_t i_8 = 0; (uintptr_t)i_8 != 0x3f; )
             {
                 if (($v1_19 + $fp_1 + 0x20) >> 6 < *$t0_22)
                 {
-                    *($v0_11 + $a0_13 + $a3_4) = 0x3f - i_8;
+                    *(((void**)((char*)$v0_11 + $a0_13 + $a3_4))) = 0x3f - i_8; // Fixed void pointer dereference
                     break;
                 }
                 
@@ -193,13 +193,13 @@
                 $t0_22 += 4;
             }
             
-            void* $t0_25 = &var_2b0_13;
+            void* $t0_25 = &var_2b0_6;
             
-            for (int32_t i_9 = 0; i_9 != 0x3f; )
+            for (int32_t i_9 = 0; (uintptr_t)i_9 != 0x3f; )
             {
                 if (($t0_4 + $t4_1 + 0x20) >> 6 < *$t0_25)
                 {
-                    *($v0_12 + $a0_13 + $a3_4) = 0x3f - i_9;
+                    *(((void**)((char*)$v0_12 + $a0_13 + $a3_4))) = 0x3f - i_9; // Fixed void pointer dereference
                     break;
                 }
                 
@@ -207,13 +207,13 @@
                 $t0_25 += 4;
             }
             
-            void* $t0_28 = &var_2b0_14;
+            void* $t0_28 = &var_2b0_7;
             
-            for (int32_t i_10 = 0; i_10 != 0x3f; )
+            for (int32_t i_10 = 0; (uintptr_t)i_10 != 0x3f; )
             {
                 if (($t1_1 + $t4_1 + 0x20) >> 6 < *$t0_28)
                 {
-                    *($v0_13 + $a0_13 + $a3_4) = 0x3f - i_10;
+                    *(((void**)((char*)$v0_13 + $a0_13 + $a3_4))) = 0x3f - i_10; // Fixed void pointer dereference
                     break;
                 }
                 
@@ -244,19 +244,19 @@
         void* $a1_4 = $v0_10 + $a0_19;
         void* $t5_7 = $v0_11 + $a0_19;
         void* $t3_2 = $v0_13 + $a0_19;
+            int32_t $v1_35 = $a0_19 + $t1_25;
         
         while (true)
         {
-            int32_t $v1_35 = $a0_19 + $t1_25;
             
             if ($t2 == $t1_25)
                 break;
             
-            *($v0_21 + $v1_35) = *$a1_4 >> 1;
-            *($v0_22 + $v1_35) = (*$a1_4 + *$t5_7) >> 2;
-            *($v0_23 + $v1_35) = (*$a1_4 + *$t3_2) >> 2;
-            *($v0_24 + $v1_35) = *$t5_7 >> 1;
-            *($v0_25 + $v1_35) = *$t3_2 >> 1;
+            *(((void**)((char*)$v0_21 + $v1_35))) = *$a1_4 >> 1; // Fixed void pointer dereference
+            *(((void**)((char*)$v0_22 + $v1_35))) = (*$a1_4 + *$t5_7) >> 2; // Fixed void pointer dereference
+            *(((void**)((char*)$v0_23 + $v1_35))) = (*$a1_4 + *$t3_2) >> 2; // Fixed void pointer dereference
+            *(((void**)((char*)$v0_24 + $v1_35))) = *$t5_7 >> 1; // Fixed void pointer dereference
+            *(((void**)((char*)$v0_25 + $v1_35))) = *$t3_2 >> 1; // Fixed void pointer dereference
             $a1_4 += 4;
             $t1_25 += 4;
             $t5_7 += 4;

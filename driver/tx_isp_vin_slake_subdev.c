@@ -8,7 +8,7 @@
     
     if ($v0_1)
     {
-        *(arg1 + 0xf8) = $v0_1 - 1;
+        *(((void**)((char*)arg1 + 0xf8))) = $v0_1 - 1; // Fixed void pointer dereference
         $v0_1 = *(arg1 + 0xf8);
     }
     
@@ -32,8 +32,8 @@
     
     if ($v0_2)
     {
-        int32_t var_18_24 = 0xffffffff;
-        subdev_sensor_ops_set_input(arg1, &var_18_25, entry_$a2);
+        int32_t var_18 = 0xffffffff;
+        subdev_sensor_ops_set_input(arg1, &var_18, entry_$a2);
     }
     
     if (*(arg1 + 0xdc) != arg1 + 0xdc)
@@ -42,7 +42,7 @@
     private_mutex_lock(arg1 + 0xe8);
     
     if (*(arg1 + 0xf4) == 2)
-        *(arg1 + 0xf4) = 1;
+        *(((int32_t*)((char*)arg1 + 0xf4))) = 1; // Fixed void pointer dereference
     
     private_mutex_unlock(arg1 + 0xe8);
     return 0;

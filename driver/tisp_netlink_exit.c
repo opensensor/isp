@@ -5,10 +5,10 @@
 
 {
     uint32_t nlsk_1 = nlsk;
+        int32_t $a0_1 = *(nlsk_1 + 0x130);
     
     if (nlsk_1)
     {
-        int32_t $a0_1 = *(nlsk_1 + 0x130);
         
         if ($a0_1)
             /* tailcall */

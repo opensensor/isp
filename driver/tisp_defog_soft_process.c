@@ -20,37 +20,50 @@
     int32_t $v1_10 = arg24[4];
     int32_t $v1_11 = 0x100 - *(arg10 + 8);
     int32_t $v0_7 = 1;
+    int32_t $a3_1 = *(arg10 + 4) + 1;
+    void* $v0_8 = kmem_cache_alloc(0, 0x20);
+    void* $v0_9 = kmem_cache_alloc(0, 0x20);
+    void* $v0_10 = kmem_cache_alloc(0, 0x20);
+    void* $v0_11 = kmem_cache_alloc(0, 0x20);
+    int32_t* i_4 = kmem_cache_alloc(0, 0x20);
+    int32_t* $v0_12 = kmem_cache_alloc(0, 0x20);
+    char* $v0_13 = kmem_cache_alloc(0, 0x20);
+    int32_t $t0_1 = $t0;
+    int32_t $a0_14 = 0xff;
+    int32_t $a3_2 = $a3_1;
+    int32_t $v0_15 = 2;
+    int32_t $a0_15 = $a0_14 - $t0_1;
+    int32_t $t0_2 = 0;
+    int32_t var_b8_1 = 0;
+    int32_t var_bc_1 = 0;
+    int32_t var_c0_1 = 0;
+    int32_t var_c4_1 = 0;
+    int32_t var_90 = 0;
+        int32_t j = 0;
+        int32_t* $t6_1 = arg5 + $t0_2;
+        int32_t* $t5_1 = arg12 + $t0_2;
+        int32_t* $t4_1 = arg13 + $t0_2;
+        int32_t* $t3_1 = arg14 + $t0_2;
+            int32_t $v0_24 = j < arg9[1] ? 1 : 0;
     
     if ($a0_5 < $a0_6)
         $v0_7 = $a0_6 - $a0_5;
     
-    int32_t $a3_1 = *(arg10 + 4) + 1;
-    void var_f0_2;
-    memcpy(&var_f0_3, U"8H8H]H8H8", 0x24, $a3_1);
-    void* $v0_8 = kmem_cache_alloc(0, 0x20);
-    void* $v0_9 = kmem_cache_alloc(0, 0x20);
-    void* $v0_10 = kmem_cache_alloc(0, 0x20);
+    void var_f0;
+    memcpy(&var_f0, U"8H8H]H8H8", 0x24, $a3_1);
     memset($v0_10, 0, 0x2d0);
-    void* $v0_11 = kmem_cache_alloc(0, 0x20);
     memset($v0_11, 0, 0x2d0);
-    int32_t* i_4 = kmem_cache_alloc(0, 0x20);
     memset(i_4, 0, 0x3c);
-    int32_t* $v0_12 = kmem_cache_alloc(0, 0x20);
     memset($v0_12, 0, 0x3c);
-    char* $v0_13 = kmem_cache_alloc(0, 0x20);
     memset($v0_13, 0, 0xb4);
-    int32_t $t0_1 = $t0;
-    int32_t $a0_14 = 0xff;
     
-    if ($t1 < 0x100)
+    if ($(uintptr_t)t1 < 0x100)
         $a0_14 = $t1;
     
-    int32_t $a3_2 = $a3_1;
     
     if ($a0_14 < $t0_1)
         $t0_1 = $a0_14;
     
-    int32_t $v0_15 = 2;
     
     if ($a3_2 < 2)
         $a3_2 = 2;
@@ -61,25 +74,12 @@
     if ($v1_11 >= 2)
         $v0_15 = $v1_11;
     
-    int32_t $a0_15 = $a0_14 - $t0_1;
-    int32_t $t0_2 = 0;
-    int32_t var_b8_1_1 = 0;
-    int32_t var_bc_1_1 = 0;
-    int32_t var_c0_1_1 = 0;
-    int32_t var_c4_1_1 = 0;
-    int32_t var_90_24 = 0;
     
-    for (int32_t i = 0; i != 0xa; )
+    for (int32_t i = 0; (uintptr_t)i != 0xa; )
     {
-        int32_t j = 0;
-        int32_t* $t6_1 = arg5 + $t0_2;
-        int32_t* $t5_1 = arg12 + $t0_2;
-        int32_t* $t4_1 = arg13 + $t0_2;
-        int32_t* $t3_1 = arg14 + $t0_2;
         
         do
         {
-            int32_t $v0_24 = j < arg9[1] ? 1 : 0;
             int32_t $v0_26;
             
             if (i >= *arg9)
@@ -120,7 +120,7 @@
             if ($v1_20 < 0)
                 $v1_20 = 0;
             
-            if ($v1_20 >= 0x100)
+            if ($(uintptr_t)v1_20 >= 0x100)
                 $v1_20 = 0xff;
             
             int32_t $a3_14;
@@ -128,35 +128,35 @@
             if ($v1_10 != 1)
             {
                 int32_t $a3_15 = $a0 + $t9_1 - 0x40;
+                int32_t $s6_3 = $a3_15;
+                int32_t $a3_21 = $a0_1 + $ra_1 - 0x40;
+                int32_t $s6_6 = $a3_21;
+                int32_t $a3_27 = $a0_2 + $a2_8 - 0x40;
+                int32_t $s6_9 = $a3_27;
                 
                 if ($a3_15 < 0)
                     $a3_15 = 0;
                 
-                int32_t $s6_3 = $a3_15;
                 
-                if ($a3_15 >= 0x100)
+                if ($(uintptr_t)a3_15 >= 0x100)
                     $s6_3 = 0xff;
                 
                 *$t5_1 = $t0_1 + (($s6_3 * $a0_15) >> 8);
-                int32_t $a3_21 = $a0_1 + $ra_1 - 0x40;
                 
                 if ($a3_21 < 0)
                     $a3_21 = 0;
                 
-                int32_t $s6_6 = $a3_21;
                 
-                if ($a3_21 >= 0x100)
+                if ($(uintptr_t)a3_21 >= 0x100)
                     $s6_6 = 0xff;
                 
                 *$t4_1 = $t0_1 + (($s6_6 * $a0_15) >> 8);
-                int32_t $a3_27 = $a0_2 + $a2_8 - 0x40;
                 
                 if ($a3_27 < 0)
                     $a3_27 = 0;
                 
-                int32_t $s6_9 = $a3_27;
                 
-                if ($a3_27 >= 0x100)
+                if ($(uintptr_t)a3_27 >= 0x100)
                     $s6_9 = 0xff;
                 
                 $a3_14 = $t0_1 + (($s6_9 * $a0_15) >> 8);
@@ -169,7 +169,7 @@
             }
             
             *$t3_1 = $a3_14;
-            *($v0_8 + j + i * 0x12) = $v1_20;
+            *(((void**)((char*)$v0_8 + j + i * 0x12))) = $v1_20; // Fixed void pointer dereference
             *($v0_9 + (j << 1) + i * 0x24) = $v1_20 - *$t6_1;
             *$t6_1 = $v1_20;
             
@@ -178,6 +178,12 @@
             else
             {
                 int32_t $s6_15 = *arg21;
+                else if ($t9_1 >= arg21[4])
+                else if ($ra_1 >= arg21[4])
+                else if ($a2_8 >= arg21[4])
+                else if ($v1_20 >= arg21[4])
+                int32_t $s7_2 = $t0_2 + $s7_1;
+                int32_t* $t9_7 = arg1 + (var_90 << 2);
                 int32_t $t9_2;
                 
                 if ($t9_1 < $s6_15)
@@ -188,7 +194,6 @@
                     $t9_2 = arg21[7];
                 else if ($t9_1 < arg21[3])
                     $t9_2 = arg21[8];
-                else if ($t9_1 >= arg21[4])
                     $t9_2 = arg21[0xa];
                 else
                     $t9_2 = arg21[9];
@@ -203,7 +208,6 @@
                     $a3_48 = arg21[7];
                 else if ($ra_1 < arg21[3])
                     $a3_48 = arg21[8];
-                else if ($ra_1 >= arg21[4])
                     $a3_48 = arg21[0xa];
                 else
                     $a3_48 = arg21[9];
@@ -218,7 +222,6 @@
                     $a2_9 = arg21[7];
                 else if ($a2_8 < arg21[3])
                     $a2_9 = arg21[8];
-                else if ($a2_8 >= arg21[4])
                     $a2_9 = arg21[0xa];
                 else
                     $a2_9 = arg21[9];
@@ -233,28 +236,25 @@
                     $v1_21 = arg21[7];
                 else if ($v1_20 < arg21[3])
                     $v1_21 = arg21[8];
-                else if ($v1_20 >= arg21[4])
                     $v1_21 = arg21[0xa];
                 else
                     $v1_21 = arg21[9];
                 
-                int32_t $s7_2 = $t0_2 + $s7_1;
-                var_c4_1_2 += $t9_2;
-                var_c0_1_2 += $a3_48;
-                var_bc_1_2 += $a2_9;
-                var_b8_1_2 += $v1_21;
-                int32_t* $t9_7 = arg1 + (var_90_25 << 2);
+                var_c4_1 += $t9_2;
+                var_c0_1 += $a3_48;
+                var_bc_1 += $a2_9;
+                var_b8_1 += $v1_21;
                 int32_t $lo_6;
                 int32_t $hi_6;
                 $hi_6 = HIGHD($v0_26 * *$t9_7);
                 $lo_6 = LOWD($v0_26 * *$t9_7);
-                *($v0_10 + $s7_2) = (($hi_6 << 0x10 | $lo_6 >> 0x10) + ($lo_6 >> 0xf & 1)) / $a3_2;
+                *(((void**)((char*)$v0_10 + $s7_2))) = (($hi_6 << 0x10 | $lo_6 >> 0x10) + ($lo_6 >> 0xf & 1)) / $a3_2; // Fixed void pointer dereference
                 int32_t $lo_8;
                 int32_t $hi_7;
                 $hi_7 = HIGHD($v0_26 * $t9_7[2]);
                 $lo_8 = LOWD($v0_26 * $t9_7[2]);
-                *($v0_11 + $s7_2) = (($hi_7 << 0x10 | $lo_8 >> 0x10) + ($lo_8 >> 0xf & 1)) / $v0_15;
-                var_90_26 += 3;
+                *(((void**)((char*)$v0_11 + $s7_2))) = (($hi_7 << 0x10 | $lo_8 >> 0x10) + ($lo_8 >> 0xf & 1)) / $v0_15; // Fixed void pointer dereference
+                var_90 += 3;
                 j += 1;
             }
             
@@ -262,7 +262,7 @@
             $t5_1 = &$t5_1[1];
             $t4_1 = &$t4_1[1];
             $t3_1 = &$t3_1[1];
-        } while (j != 0x12);
+        } while ((uintptr_t)j != 0x12);
         
         i += 1;
         $t0_2 += 0x48;
@@ -276,12 +276,23 @@
     {
         int32_t i_1 = 0;
         void* $v0_36 = $v0_10;
-        
-        do
-        {
             int32_t j_1 = 0;
             int32_t* $v1_35 = $v0_36 + i_1;
             void* $v0_38 = $v0_11 + i_1;
+        int32_t $t4_2 = arg22[3];
+        int32_t* i_2 = i_4;
+        int32_t* $t3_2 = $v0_12;
+        int32_t $v0_39 = 0;
+            int32_t $lo_10 = ((*$t3_2 >> 6) + 1) / 3;
+            int32_t $lo_11 = ((*i_2 >> 6) + 1) / 3;
+            int32_t $t0_3 = $t4_2 < $lo_10 ? 1 : 0;
+                int32_t $a0_22 = arg22[2];
+                    int32_t $a2_82 = arg22[1];
+                        int32_t $a3_62 = *arg22;
+                            else if ($a3_62 >= $lo_10)
+        
+        do
+        {
             
             do
             {
@@ -322,31 +333,21 @@
             
             i_1 += 0x48;
             $v0_36 = $v0_10;
-        } while (i_1 != 0x120);
+        } while ((uintptr_t)i_1 != 0x120);
         
-        int32_t $t4_2 = arg22[3];
-        int32_t* i_2 = i_4;
-        int32_t* $t3_2 = $v0_12;
-        int32_t $v0_39 = 0;
         
         do
         {
-            int32_t $lo_10 = ((*$t3_2 >> 6) + 1) / 3;
-            int32_t $lo_11 = ((*i_2 >> 6) + 1) / 3;
-            int32_t $t0_3 = $t4_2 < $lo_10 ? 1 : 0;
             int32_t $v1_40;
             
             if ($t4_2 >= $lo_11)
             {
-                int32_t $a0_22 = arg22[2];
                 
                 if ($a0_22 >= $lo_11)
                 {
-                    int32_t $a2_82 = arg22[1];
                     
                     if ($a2_82 >= $lo_11)
                     {
-                        int32_t $a3_62 = *arg22;
                         
                         if ($a3_62 >= $lo_11)
                         {
@@ -356,7 +357,6 @@
                                 $v1_40 = arg22[0x19];
                             else if ($a2_82 < $lo_10)
                                 $v1_40 = arg22[0x1a];
-                            else if ($a3_62 >= $lo_10)
                                 $v1_40 = arg22[0x1c];
                             else
                                 $v1_40 = arg22[0x1b];
@@ -411,12 +411,12 @@
         } while (&i_4[0xf] != i_2);
         
         arg23[6] = $v0_39;
-        $v1_34 = var_c4_1_3 + var_c0_1_3 + var_bc_1_3 + var_b8_1_3 + $v0_39;
-        arg23[2] = var_c4_1_4;
+        $v1_34 = var_c4_1_1 + var_c0_1_1 + var_bc_1_1 + var_b8_1_1 + $v0_39;
+        arg23[2] = var_c4_1_2;
         arg23[1] = $v1_34;
-        arg23[3] = var_c0_1_4;
-        arg23[4] = var_bc_1_4;
-        arg23[5] = var_b8_1_4;
+        arg23[3] = var_c0_1_2;
+        arg23[4] = var_bc_1_2;
+        arg23[5] = var_b8_1_2;
     }
     
     int32_t* $a2_86 = arg15;
@@ -447,12 +447,12 @@
         }
         else
         {
-            if ($v0_40)
-            {
                 int32_t $a3_65 = $v1_34 - *(arg15 + ($v0_40 << 2) - 4);
                 int32_t $v1_50 = $a0_38 - $v1_34;
                 int32_t $a2_89 = $a3_65 + $v1_50;
                 int32_t $t1_35 = $a2_89 >> 1;
+            if ($v0_40)
+            {
                 int32_t $lo_13;
                 int32_t $hi_11;
                 $hi_11 = HIGHD($a3_65 * arg16[$v0_40] + $v1_50 * *(arg16 + ($v0_40 << 2) - 4));
@@ -548,7 +548,7 @@
                     $t2 = j_2 - 2;
                     $t4_3 = 0x11;
                     
-                    if (j_2 < 0xf)
+                    if ((uintptr_t)j_2 < 0xf)
                     {
                         $t4_3 = j_2 + 2;
                         $v1_53 = $t3_3 - $t1_38 + 1;
@@ -562,23 +562,23 @@
                 int16_t* $a1_12 = $v0_9 + (($t1_38 * 0x12 + $t2) << 1);
                 int16_t* $t8_2 = $a1_12;
                 int32_t $v1_56 = 0;
-                int32_t var_c4_2_1 = 0;
+                int32_t var_c4_2 = 0;
                 
                 while (true)
                 {
                     int16_t* $ra_19 = $t8_2;
+                    int32_t $t9_8 = $t2;
+                        int32_t $t5_5 = *$ra_19;
+                        int32_t $a3_68 = $v1_56 + $t5_5;
                     
                     if ($t3_3 < $t7_1)
                         break;
                     
-                    int32_t $t9_8 = $t2;
                     
                     while ($t4_3 >= $t9_8)
                     {
-                        int32_t $t5_5 = *$ra_19;
                         $t9_8 += 1;
-                        var_c4_2_2 += $t5_5;
-                        int32_t $a3_68 = $v1_56 + $t5_5;
+                        var_c4_2 += $t5_5;
                         $v1_56 -= $t5_5;
                         
                         if ($t5_5 >= 1)
@@ -597,21 +597,21 @@
                 while (true)
                 {
                     int16_t* $t9_9 = $a1_12;
+                    int32_t $t8_4 = $t2;
+                        int32_t $ra_20 = $t4_3 < $t8_4 ? 1 : 0;
+                        int32_t $t5_9 = *$t9_9 - var_c4_2 / $v0_82;
                     
                     if ($t3_3 < $t7_2)
                         break;
                     
-                    int32_t $t8_4 = $t2;
                     
                     while (true)
                     {
-                        int32_t $ra_20 = $t4_3 < $t8_4 ? 1 : 0;
                         $t8_4 += 1;
                         
                         if ($ra_20)
                             break;
                         
-                        int32_t $t5_9 = *$t9_9 - var_c4_2_3 / $v0_82;
                         $t5_7 = $t5_9 * $t5_9;
                         $t9_9 = &$t9_9[1];
                     }
@@ -631,14 +631,14 @@
                 
                 j_2 += 1;
                 $t0_11 = &$t0_11[1];
-            } while (j_2 != 0x12);
+            } while ((uintptr_t)j_2 != 0x12);
             
             i_3 += 1;
             $v0_72 = i_3 < 3 ? 1 : 0;
-        } while (i_3 != 0xa);
+        } while ((uintptr_t)i_3 != 0xa);
         
         tisp_defog_max_filter3($v0_13, $v0_13);
-        tisp_defog_img_filter5($v0_13, $v0_13, &var_f0_4);
+        tisp_defog_img_filter5($v0_13, $v0_13, &var_f0_2);
         $v0_71 = $v0_70;
     }
     
@@ -651,23 +651,23 @@
     {
         uint32_t $v0_93 = *$a1_18;
         int32_t $v1_66 = *arg6;
+            int32_t $a0_72 = arg6[1];
+                int32_t $v1_68 = arg6[2];
+                    int32_t $a0_74 = arg6[3];
+                    else if ($v0_93 >= arg6[4])
         int32_t $v0_94;
         
         if ($v0_93 >= $v1_66)
         {
-            int32_t $a0_72 = arg6[1];
             
             if ($v0_93 >= $a0_72)
             {
-                int32_t $v1_68 = arg6[2];
                 
                 if ($v0_93 >= $v1_68)
                 {
-                    int32_t $a0_74 = arg6[3];
                     
                     if ($v0_93 < $a0_74)
                         $v0_94 = ($s5_1 - $s6_17) * ($v0_93 - $v1_68) / ($s3_1 - $s4_1) + arg7[2];
-                    else if ($v0_93 >= arg6[4])
                         $v0_94 = arg7[4];
                     else
                         $v0_94 = ($v0_71 - $s5_1) * ($v0_93 - $a0_74) / ($v0_68 - $s3_1) + arg7[3];
@@ -688,7 +688,7 @@
         
         int32_t $v0_106 = $v1_72;
         
-        if ($v1_72 >= 0x100)
+        if ($(uintptr_t)v1_72 >= 0x100)
             $v0_106 = 0xff;
         
         if ($a0_3 != 1)

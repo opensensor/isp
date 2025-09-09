@@ -6,6 +6,6 @@
 {
     ae_ev_init_strict = arg1;
     ae_ev_init_en = 1;
-    return &data_d0000_2;
+    return &data_d0000;
 }
 

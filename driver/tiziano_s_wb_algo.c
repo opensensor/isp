@@ -5,16 +5,16 @@
 
 {
     if (arg1 == 1)
-        data_a9f68_6 = arg1;
+        data_a9f68 = arg1;
     else
     {
         if (arg1 && arg1 != 2)
         {
-            isp_printf(2, "sensor type is BT1120!\\n", "tiziano_s_wb_algo");
+            isp_printf(); // Fixed: macro call, removed arguments;
             return 0xffffffff;
         }
         
-        data_a9f68_7 = 0;
+        data_a9f68_4 = 0;
     }
     
     tiziano_awb_set_hardware_param();

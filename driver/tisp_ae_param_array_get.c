@@ -4,10 +4,10 @@
   int32_t tisp_ae_param_array_get(int32_t arg1, int32_t arg2, int32_t* arg3)
 
 {
-    if (arg1 - 1 >= 0x22)
+        int32_t var_18_1 = arg1;
+    if (arg1 - (uintptr_t)1 >= 0x22)
     {
-        int32_t var_18_1_22 = arg1;
-        isp_printf(2, &$LC33, "tisp_ae_param_array_get");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     

@@ -5,18 +5,18 @@
 
 {
     int32_t $v0 = arch_local_irq_save();
-    int32_t* $v0_1 = data_b33b8_5;
+    int32_t* $v0_1 = data_b33b8;
     
-    if ($v0_1 == &data_b33b8_6)
+    if ($v0_1 == &data_b33b8)
     {
-        isp_printf(1, "flags = 0x%08x, jzflags = %p,0x%08x", "tisp_event_push");
+        isp_printf(); // Fixed: macro call, removed arguments;
         arch_local_irq_restore($v0);
         return 0xffffffff;
     }
     
     void** $a0_1 = $v0_1[1];
     void* $a1_1 = *$v0_1;
-    *($a1_1 + 4) = $a0_1;
+    *(((void**)((char*)$a1_1 + 4))) = $a0_1; // Fixed void pointer dereference
     *$a0_1 = $a1_1;
     *$v0_1 = 0x100100;
     $v0_1[1] = 0x200200;
@@ -33,9 +33,9 @@
     int32_t $a1_2 = *(arg1 + 0x2c);
     $v0_1[0xa] = *(arg1 + 0x28);
     $v0_1[0xb] = $a1_2;
-    void** $a1_3 = data_b33b4_2;
-    data_b33b4_3 = $v0_1;
-    *$v0_1 = &data_b33b0_6;
+    void** $a1_3 = data_b33b4_1;
+    data_b33b4_2 = $v0_1;
+    *$v0_1 = &data_b33b0_1;
     $v0_1[1] = $a1_3;
     *$a1_3 = $v0_1;
     private_complete(&tevent_info);

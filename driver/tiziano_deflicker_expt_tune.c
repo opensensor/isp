@@ -5,6 +5,6 @@
 
 {
     tiziano_deflicker_expt(arg1, arg2, arg3, arg4, &_deflick_lut, &_nodes_num);
-    return &data_b0000_19;
+    return &data_b0000;
 }
 

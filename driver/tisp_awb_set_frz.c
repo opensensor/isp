@@ -5,6 +5,6 @@
 
 {
     awb_frz = arg1;
-    return &data_b0000_6;
+    return &data_b0000;
 }
 

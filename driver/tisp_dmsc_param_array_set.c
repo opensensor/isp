@@ -4,10 +4,10 @@
   int32_t tisp_dmsc_param_array_set(int32_t arg1, int32_t arg2, int32_t* arg3)
 
 {
-    if (arg1 - 0x5f >= 0x4a)
+        int32_t var_10_1 = arg1;
+    if (arg1 - (uintptr_t)0x5f >= 0x4a)
     {
-        int32_t var_10_1_5 = arg1;
-        isp_printf(2, &$LC0, "tisp_dmsc_param_array_set");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     
@@ -464,7 +464,7 @@
     
     *arg3 = $a2_1;
     memcpy($a0_1);
-    tisp_dmsc_all_reg_refresh(data_9a430_4);
+    tisp_dmsc_all_reg_refresh(data_9a430_1);
     return 0;
 }
 

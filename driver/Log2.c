@@ -5,15 +5,15 @@
 
 {
     int32_t result = 0;
+        int32_t $v1_1 = 1;
+        int32_t $a2_1 = 1;
+            int32_t $t0_1 = $a2_1 < result + 1 ? 1 : 0;
     
     while (true)
     {
-        int32_t $v1_1 = 1;
-        int32_t $a2_1 = 1;
         
         while (true)
         {
-            int32_t $t0_1 = $a2_1 < result + 1 ? 1 : 0;
             $a2_1 += 1;
             
             if (!$t0_1)
@@ -25,7 +25,7 @@
         if ($v1_1 >= arg1)
             return result;
         
-        if (result == 0xb)
+        if ((uintptr_t)result == 0xb)
             break;
         
         result += 1;

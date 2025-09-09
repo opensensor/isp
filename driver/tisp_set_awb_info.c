@@ -4,17 +4,17 @@
   int32_t tisp_set_awb_info(void* arg1)
 
 {
-    *(arg1 + 4) = 0x1c;
-    int32_t var_28_9;
-    memcpy(&var_28_10, arg1 + 0xc, 0x1c);
-    int32_t var_10_33;
-    int32_t var_30_7 = var_10_34;
-    int32_t var_24_4;
-    int32_t var_20_70;
-    int32_t var_1c_8;
-    int32_t var_18_59;
-    int32_t var_14_16;
-    tisp_s_wb_attr(var_28_11, var_24_5, var_20_71, var_1c_9, var_18_60, var_14_17);
+    int32_t var_30 = var_10;
+    *(((void**)((char*)arg1 + 4))) = 0x1c; // Fixed void pointer dereference
+    int32_t var_28;
+    memcpy(&var_28, arg1 + 0xc, 0x1c);
+    int32_t var_10;
+    int32_t var_24;
+    int32_t var_20;
+    int32_t var_1c;
+    int32_t var_18;
+    int32_t var_14;
+    tisp_s_wb_attr(var_28, var_24, var_20, var_1c, var_18, var_14);
     return 0;
 }
 

@@ -4,11 +4,11 @@
   int32_t vic_sensor_ops_sync_sensor_attr(void* arg1, int32_t arg2, int32_t arg3)
 
 {
-    if (arg1 && arg1 < 0xfffff001)
-    {
         int32_t $a0 = *(arg1 + 0xd4);
+    if (arg1 && (uintptr_t)arg1 < 0xfffff001)
+    {
         
-        if ($a0 && $a0 < 0xfffff001)
+        if ($a0 && $(uintptr_t)a0 < 0xfffff001)
         {
             void* const $v0_1;
             
@@ -19,7 +19,7 @@
         }
     }
     
-    isp_printf(2, "The parameter is invalid!\\n", arg3);
+    isp_printf(); // Fixed: macro call, removed arguments;
     return 0xffffffea;
 }
 

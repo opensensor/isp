@@ -8,16 +8,16 @@
     int32_t $a2 = 0;
     int32_t $a1 = 0;
     int32_t $v1 = *$v0;
+            int32_t $v1_2 = $v0[1];
     
     while (true)
     {
-        if ($v1 >= 0xc8)
+        if ($(uintptr_t)v1 >= 0xc8)
             $v0 = &$v0[1];
         else
         {
-            int32_t $v1_2 = $v0[1];
             
-            if ($v1_2 >= 0xc8)
+            if ($(uintptr_t)v1_2 >= 0xc8)
                 $v0 = &$v0[1];
             else
             {
@@ -41,14 +41,14 @@
     while (true)
     {
         int32_t $v1_7 = $a3 < $a1 + 1 ? 1 : 0;
+        int32_t $lo_3 = (*$a0 - *($a0 - 8) + 1) / 2;
+        int32_t $v1_13 = $lo_3 * 0xa - ($a2 * 0xa + $t0_1) / $a1;
         $a3 += 1;
         
         if (!$v1_7)
             break;
         
-        int32_t $lo_3 = (*$a0 - *($a0 - 8) + 1) / 2;
         $a0 += 4;
-        int32_t $v1_13 = $lo_3 * 0xa - ($a2 * 0xa + $t0_1) / $a1;
         $v0_1 += $v1_13 * $v1_13;
     }
     

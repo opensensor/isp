@@ -6,14 +6,18 @@
 {
     int32_t $a1 = *(arg1 + 0xdc);
     uint32_t $t1 = arg6;
+    int32_t $v1_1 = *(arg1 + 0xe0);
+    int32_t $v1_2 = $a1 * $v1_1;
+    int32_t $a1_1 = $v1_2 << 1;
+    int32_t $t0_7 = $v1_2 + arg5;
+        int32_t $v0_5 = $v1_2 + $t0_7;
+        int32_t $v0_6 = $v1_2 + $v0_5;
     
     if ($t1 != 7)
         $a1 <<= 1;
     
     vic_mdma_ch0_set_buff_index = 4;
-    int32_t $v1_1 = *(arg1 + 0xe0);
     vic_mdma_ch1_set_buff_index = 4;
-    int32_t $v1_2 = $a1 * $v1_1;
     vic_mdma_ch0_sub_get_num = arg4;
     
     if (arg3)
@@ -23,27 +27,23 @@
     *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0);
     *(*(arg1 + 0xb8) + 0x310) = $a1;
     *(*(arg1 + 0xb8) + 0x314) = $a1;
-    int32_t $a1_1 = $v1_2 << 1;
-    int32_t $t0_7 = $v1_2 + arg5;
     *(*(arg1 + 0xb8) + 0x318) = arg5;
     int32_t $v1_6;
     
     if (!arg3)
     {
         *(*(arg1 + 0xb8) + 0x31c) = $t0_7;
-        int32_t $v0_5 = $v1_2 + $t0_7;
         *(*(arg1 + 0xb8) + 0x320) = $v0_5;
-        int32_t $v0_6 = $v1_2 + $v0_5;
         *(*(arg1 + 0xb8) + 0x324) = $v0_6;
         $v1_6 = $v1_2 + $v0_6;
     }
     else
     {
         int32_t $v1_3 = arg5 + $a1_1;
-        *(*(arg1 + 0xb8) + 0x31c) = $v1_3;
         int32_t $v1_4 = $a1_1 + $v1_3;
-        *(*(arg1 + 0xb8) + 0x320) = $v1_4;
         int32_t $v1_5 = $a1_1 + $v1_4;
+        *(*(arg1 + 0xb8) + 0x31c) = $v1_3;
+        *(*(arg1 + 0xb8) + 0x320) = $v1_4;
         *(*(arg1 + 0xb8) + 0x324) = $v1_5;
         $v1_6 = $a1_1 + $v1_5;
     }

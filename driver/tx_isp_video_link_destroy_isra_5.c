@@ -6,18 +6,18 @@
 {
     int32_t $v1_1 = *(arg1 + 0x118);
     int32_t result = 0;
-    
-    if ($v1_1 >= 0)
-    {
         int32_t $s3_1 = *(($v1_1 << 3) + 0x7ad50);
         void* $s1_1 = (&configs)[$v1_1 * 2];
         int32_t $s2_1 = 0;
+    
+    if ($v1_1 >= 0)
+    {
         
         while (true)
         {
             if ($s2_1 >= $s3_1)
             {
-                *(arg1 + 0x118) = 0xffffffff;
+                *(((void**)((char*)arg1 + 0x118))) = 0xffffffff; // Fixed void pointer dereference
                 return 0;
             }
             
@@ -35,7 +35,7 @@
                 {
                     $s1_1 += 0x14;
                     
-                    if (result != 0xfffffdfd)
+                    if ((uintptr_t)result != 0xfffffdfd)
                         break;
                     
                     continue;

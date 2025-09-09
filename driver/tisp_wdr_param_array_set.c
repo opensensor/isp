@@ -4,10 +4,10 @@
   int32_t tisp_wdr_param_array_set(int32_t arg1, int32_t* arg2, int32_t* arg3)
 
 {
-    if (arg1 - 0x3ff >= 0x33)
+        int32_t var_10_1 = arg1;
+    if (arg1 - (uintptr_t)0x3ff >= 0x33)
     {
-        int32_t var_10_1_15 = arg1;
-        isp_printf(2, "sensor type is BT601!\\n", "tisp_wdr_param_array_set");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     
@@ -77,7 +77,7 @@
         }
         case 0x409:
         {
-            memcpy(U"#\',17=DKS[clu~");
+            memcpy(U"#',17=DKS[clu~");
             $v0_2 = 0x84;
             break;
         }
@@ -318,10 +318,10 @@
         case 0x431:
         {
             int32_t* $v0_3 = &param_wdr_tool_control_array;
-            
-            for (int32_t i = 0; i != 0xe; )
-            {
                 int32_t i_1 = i;
+            
+            for (int32_t i = 0; (uintptr_t)i != 0xe; )
+            {
                 i += 1;
                 
                 if (i_1 != 2)

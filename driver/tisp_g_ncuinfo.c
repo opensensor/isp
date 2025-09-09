@@ -8,7 +8,7 @@
         return 0;
     
     int32_t entry_$a2;
-    isp_printf(2, "%s[%d] VIC failed to config DVP mode!(10bits-sensor)\\n", entry_$a2);
+    isp_printf(); // Fixed: macro call, removed arguments\n", entry_$a2);
     return 0xffffffff;
 }
 

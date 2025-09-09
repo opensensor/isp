@@ -7,21 +7,21 @@
     void* $s0_1;
     void* $s1_1;
     
-    if (arg2 == 0x80)
+    if ((uintptr_t)arg2 == 0x80)
     {
         $s1_1 = arg2 - 0x48;
         $s0_1 = arg2 - 8;
     }
     else
     {
-        void* $v0_2 = **(arg2 + 0x44);
+        char* $v0_2 = (char*)(**(arg2 + 0x44)); // Fixed void pointer assignment
+            int32_t $v0_3 = *($v0_2 + 0x24);
         $s1_1 = arg2 - 0x48;
         
         if (!$v0_2)
             $s0_1 = arg2 - 8;
         else
         {
-            int32_t $v0_3 = *($v0_2 + 0x24);
             
             if (!$v0_3)
                 $s0_1 = arg2 - 8;
@@ -38,17 +38,17 @@
     
     while (true)
     {
+            char* $v0_5 = (char*)(**($a0_1 + 0xc4)); // Fixed void pointer assignment
+                int32_t $v0_6 = *($v0_5 + 0x24);
         if (!$a0_1)
             $s1_1 += 4;
         else
         {
-            void* $v0_5 = **($a0_1 + 0xc4);
             
             if (!$v0_5)
                 $s1_1 += 4;
             else
             {
-                int32_t $v0_6 = *($v0_5 + 0x24);
                 
                 if (!$v0_6)
                     $s1_1 += 4;

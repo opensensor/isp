@@ -4,10 +4,10 @@
   int32_t table_intp(int32_t arg1, int32_t* arg2, int32_t arg3, int32_t arg4)
 
 {
+    uint32_t $v0_1 = 1;
     if (arg2[1] >= arg4)
         return *arg2;
     
-    uint32_t $v0_1 = 1;
     void* $t0_2;
     int32_t $t1_1;
     
@@ -26,7 +26,7 @@
     }
     
     void* $a1 = &arg2[($v0_1 - 1) * 2];
-    int32_t var_c_3 = arg4;
+    int32_t var_c = arg4;
     return fix_point_intp(arg1, *($a1 + 4), $t1_1, *$a1, *$t0_2);
 }
 

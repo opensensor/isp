@@ -10,7 +10,7 @@
     
     if (!$v0)
     {
-        isp_printf(1, "Failed to allocate vic device\\n", $a2);
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     

@@ -6,9 +6,9 @@
 {
     uint32_t $a1 = arg2[1];
     
-    if ($a1 >= 0x20)
+    if ($(uintptr_t)a1 >= 0x20)
     {
-        isp_printf(1, "/tmp/snap%d.%s", arg3);
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     

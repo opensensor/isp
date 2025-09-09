@@ -5,13 +5,13 @@
 
 {
     int32_t $s1 = arg1;
-    int32_t var_20_119 = 0;
+    int32_t var_20 = 0;
     
-    for (int32_t i = 0x5f; i != 0xa9; )
+    for (int32_t i = 0x5f; (uintptr_t)i != 0xa9; )
     {
-        tisp_dmsc_param_array_set(i, $s1, &var_20_120);
+        tisp_dmsc_param_array_set(i, $s1, &var_20);
         i += 1;
-        $s1 += var_20_121;
+        $s1 += var_20;
     }
     
     return 0;

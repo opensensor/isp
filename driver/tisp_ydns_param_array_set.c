@@ -4,10 +4,10 @@
   int32_t tisp_ydns_param_array_set(int32_t arg1, int32_t arg2, int32_t* arg3)
 
 {
-    if (arg1 - 0x3e6 >= 0xf)
+        int32_t var_10_1 = arg1;
+    if (arg1 - (uintptr_t)0x3e6 >= 0xf)
     {
-        int32_t var_10_1_13 = arg1;
-        isp_printf(2, &$LC0, "tisp_ydns_param_array_set");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     

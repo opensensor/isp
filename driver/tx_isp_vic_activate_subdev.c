@@ -5,21 +5,21 @@
 
 {
     int32_t result = 0xffffffea;
+        char* $s0_1 = *((char*)arg1 + 0xd4); // Fixed void pointer arithmetic
     
     if (arg1)
     {
-        if (arg1 >= 0xfffff001)
+        if ((uintptr_t)arg1 >= 0xfffff001)
             return 0xffffffea;
         
-        void* $s0_1 = *(arg1 + 0xd4);
         result = 0xffffffea;
         
-        if ($s0_1 && $s0_1 < 0xfffff001)
+        if ($s0_1 && $(uintptr_t)s0_1 < 0xfffff001)
         {
             private_mutex_lock($s0_1 + 0x130);
             
             if (*($s0_1 + 0x128) == 1)
-                *($s0_1 + 0x128) = 2;
+                *(((int32_t*)((char*)$s0_1 + 0x128))) = 2; // Fixed void pointer dereference
             
             private_mutex_unlock($s0_1 + 0x130);
             return 0;

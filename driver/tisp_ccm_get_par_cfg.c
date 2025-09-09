@@ -5,13 +5,13 @@
 
 {
     int32_t $s2 = arg1;
-    int32_t var_20_122 = 0;
+    int32_t var_20 = 0;
+        int32_t $v1_1 = var_20;
     *arg2 = 0;
     
-    for (int32_t i = 0xa9; i != 0xb5; )
+    for (int32_t i = 0xa9; (uintptr_t)i != 0xb5; )
     {
-        tisp_ccm_param_array_get(i, $s2, &var_20_123);
-        int32_t $v1_1 = var_20_124;
+        tisp_ccm_param_array_get(i, $s2, &var_20);
         i += 1;
         $s2 += $v1_1;
         *arg2 += $v1_1;

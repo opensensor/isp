@@ -10,7 +10,7 @@
     if ($v0)
         return 0;
     
-    isp_printf(2, "Can not support this frame mode!!!\\n", "tisp_netlink_init");
+    isp_printf(); // Fixed: macro call, removed arguments;
     return 0xffffffff;
 }
 

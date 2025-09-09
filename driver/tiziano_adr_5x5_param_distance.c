@@ -4,6 +4,8 @@
   int32_t tiziano_adr_5x5_param_distance(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, void* arg5)
 
 {
+    int32_t* $v1_1 = arg5 + 0x78;
+    int32_t i = 0x1e;
     int32_t $lo;
     
     $lo = arg3 >= arg1 ? (arg3 - arg1) / 8 : (arg1 - arg3) / 8;
@@ -12,8 +14,6 @@
     
     $lo_1 = arg4 >= arg2 ? (arg4 - arg2) / 8 : (arg2 - arg4) / 8;
     
-    int32_t* $v1_1 = arg5 + 0x78;
-    int32_t i = 0x1e;
     int32_t $lo_3;
     int32_t $hi_5;
     $hi_5 = HIGHD($lo_1 * $lo_1 + $lo * $lo);
@@ -26,7 +26,7 @@
         
         i -= 1;
         $v1_1 = &$v1_1[-1];
-    } while (i != 0xffffffff);
+    } while ((uintptr_t)i != 0xffffffff);
     
     return 0;
 }

@@ -4,10 +4,10 @@
   int32_t tisp_mdns_param_array_set(int32_t arg1, int32_t arg2, int32_t* arg3)
 
 {
-    if (arg1 - 0x180 >= 0x1d7)
+        int32_t var_10_1 = arg1;
+    if (arg1 - (uintptr_t)0x180 >= 0x1d7)
     {
-        int32_t var_10_1_8 = arg1;
-        isp_printf(2, &$LC0, "tisp_mdns_param_array_set");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     
@@ -114,7 +114,7 @@
         case 0x190:
         {
             memcpy(&mdns_ref_wei_byps_array, arg2, 4);
-            tisp_mdns_all_reg_refresh(data_9a9d0_4);
+            tisp_mdns_all_reg_refresh(data_9a9d0);
             tisp_mdns_top_func_refresh();
             tisp_mdns_reg_trigger();
             $v0_1 = 4;
@@ -837,7 +837,7 @@
         case 0x208:
         {
             memcpy(&mdns_y_ref_wei_b_min_wdr_array, arg2, 0x24);
-            tisp_mdns_all_reg_refresh(data_9a9d0_5);
+            tisp_mdns_all_reg_refresh(data_9a9d0);
             tisp_mdns_reg_trigger();
             $v0_1 = 0x24;
             break;
@@ -1535,7 +1535,7 @@
         case 0x27c:
         {
             memcpy(&mdns_y_fiir_fus_wei8_wdr_array, arg2, 0x24);
-            tisp_mdns_all_reg_refresh(data_9a9d0_6);
+            tisp_mdns_all_reg_refresh(data_9a9d0);
             tisp_mdns_reg_trigger();
             $v0_1 = 0x24;
             break;
@@ -2035,7 +2035,7 @@
         case 0x2cf:
         {
             memcpy(&mdns_c_ref_wei_b_min_wdr_array, arg2, 0x24);
-            tisp_mdns_all_reg_refresh(data_9a9d0_7);
+            tisp_mdns_all_reg_refresh(data_9a9d0);
             tisp_mdns_reg_trigger();
             $v0_1 = 0x24;
             break;
@@ -2841,7 +2841,7 @@
         case 0x355:
         {
             memcpy(&mdns_c_fiir_fus_wei8_wdr_array, arg2, 0x24);
-            tisp_mdns_all_reg_refresh(data_9a9d0_8);
+            tisp_mdns_all_reg_refresh(data_9a9d0);
             tisp_mdns_reg_trigger();
             $v0_1 = 0x24;
             break;

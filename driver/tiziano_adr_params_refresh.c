@@ -4,7 +4,10 @@
   int32_t tiziano_adr_params_refresh()
 
 {
-    memcpy(&param_adr_para_array, U"\\n", 0x20);
+    void* $v0 = &var_40;
+    int32_t* $a1 = &param_adr_tool_control_array;
+        int32_t i_1 = i;
+    memcpy(&param_adr_para_array, U"\n", 0x20);
     memcpy(&param_adr_ctc_kneepoint_array, 0xa5dec, 0x44);
     memcpy(&param_adr_min_kneepoint_array, 0xa5e30, 0x5c);
     memcpy(&param_adr_map_kneepoint_array, 0xa5e8c, 0x5c);
@@ -32,7 +35,7 @@
     memcpy(&adr_blp2_list, 0xa66f0, 0x24);
     memcpy(&adr_ev_list_wdr, 0xa65f4, 0x24);
     memcpy(&adr_ligb_list_wdr, 0xa6618, 0x24);
-    memcpy(&adr_mapb1_list_wdr, &data_a663c_1, 0x24);
+    memcpy(&adr_mapb1_list_wdr, &data_a663c, 0x24);
     memcpy(&adr_mapb2_list_wdr, 0xa6660, 0x24);
     memcpy(&adr_mapb3_list_wdr, 0xa6684, 0x24);
     memcpy(&adr_mapb4_list_wdr, 0xa66a8, 0x24);
@@ -41,14 +44,11 @@
     memcpy(&adr_light_end_wdr, 0xa6518, 0x74);
     memcpy(&adr_block_light_wdr, 0xa658c, 0x3c);
     memcpy(&adr_map_mode_wdr, 0xa65c8, 0x2c);
-    void var_40_32;
-    memcpy(&var_40_33, 0xa63e4, 0x38);
-    void* $v0 = &var_40_34;
-    int32_t* $a1 = &param_adr_tool_control_array;
+    void var_40;
+    memcpy(&var_40, 0xa63e4, 0x38);
     
-    for (int32_t i = 0; i != 0xe; )
+    for (int32_t i = 0; (uintptr_t)i != 0xe; )
     {
-        int32_t i_1 = i;
         i += 1;
         
         if (i_1 != 1)
@@ -65,7 +65,7 @@
     {
         if (param_adr_tool_control_array_1)
         {
-            isp_printf(2, "VIC_CTRL : %08x\\n", 0xe);
+            isp_printf(); // Fixed: macro call, removed arguments;
             return 0xffffffff;
         }
         
@@ -89,7 +89,7 @@
     memcpy(&param_adr_centre_w_dis_array, $a1_1, 0x7c);
     uint32_t adr_ratio_1 = adr_ratio;
     
-    if (adr_ratio_1 != 0x80)
+    if ((uintptr_t)adr_ratio_1 != 0x80)
         tisp_s_adr_str_internal(adr_ratio_1);
     
     tiziano_adr_gamma_refresh();

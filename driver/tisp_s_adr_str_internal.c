@@ -4,11 +4,12 @@
   int32_t tisp_s_adr_str_internal(uint32_t arg1)
 
 {
-    adr_ratio = arg1;
     uint32_t adr_wdr_en_1 = adr_wdr_en;
     void* $v0 = &data_a663c;
     int32_t i = 0;
-    int32_t $t5 = arg1 < 0x81 ? 1 : 0;
+    int32_t $t5 = (uintptr_t)arg1 < 0x81 ? 1 : 0;
+            int32_t $a3_3 = *$v0;
+    adr_ratio = arg1;
     
     do
     {
@@ -20,7 +21,6 @@
         
         if (adr_wdr_en_1)
         {
-            int32_t $a3_3 = *$v0;
             
             if ($t5)
             {
@@ -32,30 +32,30 @@
             else
             {
                 int32_t $v1_12 = 0x190 - $a3_3;
-                
-                if ($a3_3 >= 0x190)
-                    $v1_12 = 0;
-                
                 int32_t $s3_5 = *($v0 + 0x24);
                 int32_t $a1_5 = 0x1f4 - $s3_5;
+                int32_t $a2_5 = *($v0 + 0x48);
+                int32_t $v1_18 = 0x258 - $a2_5;
+                int32_t $a1_7 = 0x258 - $v1_10;
+                
+                if ($(uintptr_t)a3_3 >= 0x190)
+                    $v1_12 = 0;
+                
                 histSub_4096_diff_2 = (($v1_12 * (arg1 - 0x80)) >> 7) + $a3_3;
                 
-                if ($s3_5 >= 0x1f4)
+                if ($(uintptr_t)s3_5 >= 0x1f4)
                     $a1_5 = 0;
                 
-                int32_t $a2_5 = *($v0 + 0x48);
                 $s3_2 = (($a1_5 * (arg1 - 0x80)) >> 7) + $s3_5;
-                int32_t $v1_18 = 0x258 - $a2_5;
                 
-                if ($a2_5 >= 0x258)
+                if ($(uintptr_t)a2_5 >= 0x258)
                     $v1_18 = 0;
                 
                 $a2_2 = (($v1_18 * (arg1 - 0x80)) >> 7) + $a2_5;
                 $v1_10 = *($v0 + 0x6c);
             label_5cf94:
-                int32_t $a1_7 = 0x258 - $v1_10;
                 
-                if ($v1_10 >= 0x258)
+                if ($(uintptr_t)v1_10 >= 0x258)
                     $a1_7 = 0;
                 
                 $v1_21 = (($a1_7 * (arg1 - 0x80)) >> 7) + $v1_10;
@@ -64,26 +64,26 @@
         else
         {
             int32_t $a3_1 = *($v0 - 0x1d8);
+                int32_t $v1_1 = 0x190 - $a3_1;
+                int32_t $s3_1 = *($v0 - 0x1b4);
+                int32_t $a1_2 = 0x1f4 - $s3_1;
+                int32_t $a2_1 = *($v0 - 0x190);
+                int32_t $v1_7 = 0x258 - $a2_1;
             
             if (!$t5)
             {
-                int32_t $v1_1 = 0x190 - $a3_1;
                 
-                if ($a3_1 >= 0x190)
+                if ($(uintptr_t)a3_1 >= 0x190)
                     $v1_1 = 0;
                 
-                int32_t $s3_1 = *($v0 - 0x1b4);
-                int32_t $a1_2 = 0x1f4 - $s3_1;
                 histSub_4096_diff_2 = (($v1_1 * (arg1 - 0x80)) >> 7) + $a3_1;
                 
-                if ($s3_1 >= 0x1f4)
+                if ($(uintptr_t)s3_1 >= 0x1f4)
                     $a1_2 = 0;
                 
-                int32_t $a2_1 = *($v0 - 0x190);
                 $s3_2 = (($a1_2 * (arg1 - 0x80)) >> 7) + $s3_1;
-                int32_t $v1_7 = 0x258 - $a2_1;
                 
-                if ($a2_1 >= 0x258)
+                if ($(uintptr_t)a2_1 >= 0x258)
                     $v1_7 = 0;
                 
                 $a2_2 = (($v1_7 * (arg1 - 0x80)) >> 7) + $a2_1;
@@ -101,19 +101,19 @@
         if (histSub_4096_diff_1 >= histSub_4096_diff_2)
             histSub_4096_diff_2 = histSub_4096_diff_1;
         
-        *(adr_mapb1_list_now + i) = histSub_4096_diff_2;
+        *(((void**)((char*)adr_mapb1_list_now + i))) = histSub_4096_diff_2; // Fixed void pointer dereference
         uint32_t $s4_3 = data_ae7e4_1;
         
         if ($s4_3 >= $s3_2)
             $s3_2 = $s4_3;
         
-        *(adr_mapb2_list_now + i) = $s3_2;
+        *(((void**)((char*)adr_mapb2_list_now + i))) = $s3_2; // Fixed void pointer dereference
         uint32_t $s3_8 = data_ae7e8_1;
         
         if ($s3_8 >= $a2_2)
             $a2_2 = $s3_8;
         
-        *(adr_mapb3_list_now + i) = $a2_2;
+        *(((void**)((char*)adr_mapb3_list_now + i))) = $a2_2; // Fixed void pointer dereference
         uint32_t $a3_7 = data_ae7ec_1;
         void* $a1_17 = adr_mapb4_list_now + i;
         
@@ -123,7 +123,7 @@
         i += 4;
         *$a1_17 = $v1_21;
         $v0 += 4;
-    } while (i != 0x24);
+    } while ((uintptr_t)i != 0x24);
     
     tiziano_adr_params_init();
     ev_changed = 1;

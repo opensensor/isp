@@ -4,14 +4,15 @@
   int32_t fix_point_mult2_64(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6)
 
 {
+    int32_t $a3 = arg4 & $v1;
+    int32_t $s4_1 = arg3 & $v0;
+    int32_t $fp_1 = arg5 & $v0;
     int32_t $v0;
     int32_t $v1;
     $v0 = __lshrdi3(0xffffffff, 0xffffffff, 0x40 - arg1);
     int32_t $v0_1;
     int32_t $v1_1;
     $v0_1 = __lshrdi3(arg3, arg4, arg1);
-    int32_t $a3 = arg4 & $v1;
-    int32_t $s4_1 = arg3 & $v0;
     int32_t $v0_3;
     int32_t $v1_2;
     $v0_3 = __lshrdi3(arg5, arg6, arg1, $a3, $v0, $a3);
@@ -19,7 +20,6 @@
     int32_t $hi_1;
     $hi_1 = HIGHD($v1_2 * $v0_1 + $v0_3 * $v1_1);
     $lo_1 = LOWD($v1_2 * $v0_1 + $v0_3 * $v1_1);
-    int32_t $fp_1 = arg5 & $v0;
     int32_t $lo_2;
     int32_t $hi_2;
     $hi_2 = HIGHD($v0_1 * $v0_3);

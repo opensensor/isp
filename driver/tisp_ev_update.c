@@ -5,12 +5,12 @@
 
 {
     int32_t $v0 = system_reg_read(0xc);
+        int32_t $v0_4 = $v0 & 0x800;
     
     if (*ev_last != arg1 || *(ev_last + 4) != arg2)
     {
         tisp_awb_ev_update(arg1);
         tisp_ccm_ev_update(arg1);
-        int32_t $v0_4 = $v0 & 0x800;
         
         if (!($v0 & 0x80))
         {
@@ -31,7 +31,7 @@
             *ev_last = arg1;
         }
         
-        *(ev_last + 4) = arg2;
+        *(((void**)((char*)ev_last + 4))) = arg2; // Fixed void pointer dereference
     }
     
     return 0;

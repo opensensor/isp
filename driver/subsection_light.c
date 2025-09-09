@@ -4,10 +4,10 @@
   int32_t subsection_light(int32_t* arg1, int32_t* arg2, int32_t arg3, int32_t arg4)
 
 {
-    do
-    {
         int32_t $v1_1 = *arg2;
         int32_t $t0_1 = *arg1;
+    do
+    {
         int32_t $v1_2;
         int32_t $lo_1;
         int32_t $hi_1;

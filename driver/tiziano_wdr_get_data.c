@@ -5,21 +5,21 @@
 
 {
     int32_t* $a1 = arg1;
-    
-    for (int32_t i = 0; i != 0x400; )
-    {
         int32_t $t0_1 = *$a1;
         int32_t $a3_1 = $a1[1];
         int32_t $v1_2 = i >> 2 << 2;
         int32_t $s0_1 = $a1[2];
         int32_t $a2_1 = $a1[3];
-        *($v1_2 + &wdr_hist_R0) = $t0_1 & 0x1fffff;
-        *($v1_2 + &wdr_hist_G0) = ($a3_1 & 0x3ff) << 0xb | $t0_1 >> 0x15;
-        *($v1_2 + &wdr_hist_B0) = $a3_1 >> 0xa & 0x1fffff;
+    
+    for (int32_t i = 0; (uintptr_t)i != 0x400; )
+    {
+        *(((void**)((char*)$v1_2 + &wdr_hist_R0))) = $t0_1 & 0x1fffff; // Fixed void pointer dereference
+        *(((void**)((char*)$v1_2 + &wdr_hist_G0))) = ($a3_1 & 0x3ff) << 0xb | $t0_1 >> 0x15; // Fixed void pointer dereference
+        *(((void**)((char*)$v1_2 + &wdr_hist_B0))) = $a3_1 >> 0xa & 0x1fffff; // Fixed void pointer dereference
         (&mdns_y_ass_wei_adj_value1_intp)[i >> 2] = $s0_1 & 0x1fffff;
         i += 4;
         (&mdns_c_false_edg_thres1_intp)[i >> 2] = ($a2_1 & 0x3ff) << 0xb | $s0_1 >> 0x15;
-        *($v1_2 + &wdr_hist_B1) = $a2_1 >> 0xa & 0x1fffff;
+        *(((void**)((char*)$v1_2 + &wdr_hist_B1))) = $a2_1 >> 0xa & 0x1fffff; // Fixed void pointer dereference
         $a1 = &$a1[4];
     }
     

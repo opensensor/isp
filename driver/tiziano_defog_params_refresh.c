@@ -4,8 +4,8 @@
   int32_t tiziano_defog_params_refresh()
 
 {
-    memcpy(&defog_rgbra_list, &data_a56b0_1[0x2d], 0x24);
     int32_t defog_rgbra_list_1 = defog_rgbra_list;
+    memcpy(&defog_rgbra_list, &data_a56b0[0x2d], 0x24);
     void* $a1_1;
     
     if (defog_rgbra_list_1 != 1)
@@ -13,20 +13,20 @@
         if (defog_rgbra_list_1)
             return 0xffffffff;
         
-        memcpy(&data_aca90_8[6], &param_defog_weightlut20_tmp, 0x80);
+        memcpy(&data_aca90[6], &param_defog_weightlut20_tmp, 0x80);
         memcpy(&param_defog_weightlut02, &param_defog_weightlut02_tmp, 0x80);
         memcpy(&param_defog_weightlut12, &param_defog_weightlut12_tmp, 0x80);
-        memcpy(&data_ac8fc_13[0xb], &param_defog_weightlut22_tmp, 0x80);
+        memcpy(&data_ac8fc[0xb], &param_defog_weightlut22_tmp, 0x80);
         memcpy(&param_defog_weightlut21, &param_defog_weightlut21_tmp, 0x80);
         memcpy(&param_defog_cent3_w_dis_array, &param_defog_cent3_w_dis_array_tmp, 0x60);
         $a1_1 = &param_defog_cent5_w_dis_array_tmp;
     }
     else
     {
-        memcpy(&data_aca90_9[6], 0xa52f8, 0x80);
+        memcpy(&data_aca90[6], 0xa52f8, 0x80);
         memcpy(&param_defog_weightlut02, &data_a5378, 0x80);
         memcpy(&param_defog_weightlut12, &data_a53f8, 0x80);
-        memcpy(&data_ac8fc_14[0xb], 0xa5478, 0x80);
+        memcpy(&data_ac8fc[0xb], 0xa5478, 0x80);
         memcpy(&param_defog_weightlut21, 0xa54f8, 0x80);
         memcpy(&param_defog_cent3_w_dis_array, 0xa55b0, 0x60);
         $a1_1 = &data_a5610;
@@ -38,10 +38,10 @@
     memcpy(&defog_manual_ctrl, 0xa5998, 0x1c);
     memcpy(&defog_ev_list, 0xa568c, 0x24);
     memcpy(&defog_trsy0_list, U"PPZZZPPPPFNMLKJIHFFIGOFDCBBA?>=<;:99LLKJIHGFE", 0x24);
-    memcpy(&defog_trsy1_list, &data_a56b0_2[9], 0x24);
-    memcpy(&defog_trsy2_list, &data_a56b0_3[0x12], 0x24);
-    memcpy(&defog_trsy3_list, &data_a56b0_4[0x1b], 0x24);
-    memcpy(&defog_trsy4_list, &data_a56b0_5[0x24], 0x24);
+    memcpy(&defog_trsy1_list, &data_a56b0_1[9], 0x24);
+    memcpy(&defog_trsy2_list, &data_a56b0_2[0x12], 0x24);
+    memcpy(&defog_trsy3_list, &data_a56b0_3[0x1b], 0x24);
+    memcpy(&defog_trsy4_list, &data_a56b0_4[0x24], 0x24);
     memcpy(&param_defog_main_para_array, 0xa5788, 0x2c);
     memcpy(&param_defog_color_control_array, 0xa57b4, 0x38);
     memcpy(&param_defog_lc_s_array, 0xa57ec, 0x28);

@@ -4,27 +4,27 @@
   int32_t isp_vic_cmd_set(void* arg1, int32_t arg2, int32_t arg3)
 
 {
-    void* $s5 = *(arg1 + 0x70);
-    void* $v0 = *($s5 + 0x3c);
+    char* $s5 = *((char*)arg1 + 0x70); // Fixed void pointer arithmetic
+    char* $v0 = *((char*)$s5 + 0x3c); // Fixed void pointer arithmetic
     void* $s0 = nullptr;
     
-    if ($v0 && $v0 < 0xfffff001)
+    if ($v0 && $(uintptr_t)v0 < 0xfffff001)
         $s0 = *($v0 + 0xd4);
     
-    isp_printf(0, "count is %d\\n", arg3);
+    isp_printf(); // Fixed: macro call, removed arguments;
     void* const $v0_3;
     void* $a0;
     char const* const $a1;
     
-    if (!$s0 || $s0 >= 0xfffff001)
+    if (!$s0 || $(uintptr_t)s0 >= 0xfffff001)
     {
-        $a1 = "Can\'t ops the node!\\n";
+        $a1 = "Can't ops the node!\n";
         $a0 = $s5;
         $v0_3 = seq_printf;
     }
     else
     {
-        int32_t $v0_2 = arg3 < 0x21 ? 1 : 0;
+        int32_t $v0_2 = (uintptr_t)arg3 < 0x21 ? 1 : 0;
         char* $s2_1;
         
         if ($v0_2)
@@ -152,22 +152,22 @@
                 if (!($a1_18 - $at_3))
                 {
                     int32_t $a2_21 = isp_printf(1, 
-                        "\\t\\t\\t "savenum" is the num of you save raw picture.\\n ", 
-                        isp_printf(1, "\\t\\t\\t "snapraw"  is cmd; \\n", 
+                        "\t\t\t "savenum" is the num of you save raw picture.\n ", 
+                        isp_printf(1, "\t\t\t "snapraw"  is cmd; \n", 
                             isp_printf(1, 
-                                "\\t\\t\\t please use this cmd: \\n\\t"echo snapraw savenum > /proc/jz/isp/isp-w02"\\n", 
+                                "\t\t\t please use this cmd: \n\t"echo snapraw savenum > /proc/jz/isp/isp-w02"\n", 
                                 isp_printf(1, 
-                                "\\t\\t\\t use cmd " snapraw" you should set ispmem first!!!!!\\n", 
-                                isp_printf(1, "\\t\\t snapraw\\n", 
-                                    isp_printf(1, "\\t cmd:\\n", 
-                                        isp_printf(1, "help:\\n", 
-                                            isp_printf(1, &$LC37, $a2_3))))))));
+                                "\t\t\t use cmd " snapraw" you should set ispmem first!!!!!\n", 
+                                isp_printf(1, "\t\t snapraw\n", 
+                                    isp_printf(1, "\t cmd:\n", 
+                                        isp_printf(1, "help:\n", 
+                                            isp_printf(); // Fixed: macro call, removed arguments)))))));
                     isp_printf(1, &$LC37, 
-                        isp_printf(1, "\\t\\t\\t "savenum" is the num of you save raw picture.\\n ", 
-                            isp_printf(1, "\\t\\t\\t "saveraw"  is cmd; \\n", 
+                        isp_printf(1, "\t\t\t "savenum" is the num of you save raw picture.\n ", 
+                            isp_printf(1, "\t\t\t "saveraw"  is cmd; \n", 
                                 isp_printf(1, 
-                                    "\\t\\t\\t please use this cmd: \\n\\t"echo saveraw savenum > /proc/jz/isp/isp-w02"\\n", 
-                                    isp_printf(1, "\\t\\t saveraw\\n", $a2_21)))));
+                                    "\t\t\t please use this cmd: \n\t"echo saveraw savenum > /proc/jz/isp/isp-w02"\n", 
+                                    isp_printf(); // Fixed: macro call, removed arguments))));
                     $a0_19 = *($s0 + 0x140);
                     goto label_1215c;
                 }
@@ -180,7 +180,7 @@
                     goto label_1217c;
                 
                 isp_free_buffer($a0_19);
-                *($s0 + 0x140) = 0;
+                *(((int32_t*)((char*)$s0 + 0x140))) = 0; // Fixed void pointer dereference
             label_12174:
                 result = arg3;
                 goto label_1217c;
@@ -221,20 +221,20 @@
                 $a2_10);
             $a2_5 = *($s0 + 0xdc);
             
-            if ($a2_5 >= 0xa81)
+            if ($(uintptr_t)a2_5 >= 0xa81)
                 return private_seq_printf($s5, "Can\'t output the width(%d)!\\n", $a2_5);
             
             int32_t $s1_2 = *($s0 + 0x140);
             
             if (!$s1_2)
             {
-                *($s0 + 0x140) = $v0_19;
+                    char* $v1_12 = *((char*)$s0 + 0x110); // Fixed void pointer arithmetic
+                    int32_t $a0_20 = *($v1_12 + 0x7c);
+                *(((void**)((char*)$s0 + 0x140))) = $v0_19; // Fixed void pointer dereference
                 
                 if ($v0_19)
                 {
-                    void* $v1_12 = *($s0 + 0x110);
-                    *($s0 + 0x144) = $v0_19 - 0x80000000;
-                    int32_t $a0_20 = *($v1_12 + 0x7c);
+                    *(((void**)((char*)$s0 + 0x144))) = $v0_19 - 0x80000000; // Fixed void pointer dereference
                     int32_t var_a0_5;
                     char var_9c_4;
                     int32_t $a2_11;
@@ -242,58 +242,59 @@
                     
                     if ($a0_20 != 7)
                     {
-                        var_9c_4_1 = 0;
+                        var_9c_4 = 0;
                         
                         if (!*($v1_12 + 0x90))
                             goto label_11ee0;
                         
-                        var_a0_5_1 = $v0_19;
+                        var_a0_5 = $v0_19;
                         $a3_6 = $s3_2;
                         $a2_11 = 1;
                     }
                     else
                     {
-                        var_9c_4_2 = $a0_20;
+                        var_9c_4 = $a0_20;
                     label_11ee0:
-                        var_a0_5_2 = $v0_19;
+                        var_a0_5 = $v0_19;
                         $a3_6 = $s3_2;
                         $a2_11 = 0;
                     }
                     
-                    vic_mdma_enable($s0, 0, $a2_11, $a3_6, var_a0_5_3, var_9c_4_3);
+                    vic_mdma_enable($s0, 0, $a2_11, $a3_6, var_a0_5, var_9c_4);
                     int32_t $s7_5 = 0x258;
                     
                     while (true)
                     {
+                            void* const var_40_3 = &data_80000;
+                            void* const var_38_2 = &$LC33;
+                            int32_t $s5_2 = 0;
+                            char const* const var_34_1 = "nv12";
+                                int32_t $v0_31 = private_filp_open(&var_90, 0x301, 0x1f6);
+                                int32_t $t1_3 = var_50;
                         int32_t $v0_30;
-                        $v0_30 = (&data_20000_2 - 0x6a78)($s0 + 0x148);
+                        $v0_30 = (&data_20000 - 0x6a78)($s0 + 0x148);
                         
                         if ($v0_30 >= 0)
                         {
-                            void* const var_40_3 = &data_80000_1;
-                            void* const var_38_2_1 = &$LC33;
-                            int32_t $s5_2 = 0;
-                            char const* const var_34_1_1 = "nv12";
                             
                             do
                             {
                                 void* const $v1_15;
                                 
                                 if (*(*($s0 + 0x110) + 0x7c) != 7)
-                                    $v1_15 = var_38_2_2;
+                                    $v1_15 = var_38_2;
                                 else
-                                    $v1_15 = var_34_1_2;
+                                    $v1_15 = var_34_1;
                                 
-                                snprintf(&var_90_1, 0x40, var_40_3_1 - 0x1c78, $s5_2, $v1_15);
-                                int32_t $v0_31 = private_filp_open(&var_90_2, 0x301, 0x1f6);
-                                private_get_fs(&var_50_1);
-                                int32_t (* var_30_1_1)() = private_set_fs;
+                                snprintf(&var_90, 0x40, var_40_3 - 0x1c78, $s5_2, $v1_15);
+                                private_get_fs(&var_50);
+                                int32_t (* var_30_1)() = private_set_fs;
                                 private_set_fs(0);
                                 private_vfs_write($v0_31, *($s0 + 0x144) + $s1_2, $s4_6, 
                                     $v0_31 + 0x28);
                                 private_filp_close($v0_31, 0);
                                 $s5_2 += 1;
-                                var_30_1_2();
+                                var_30_1($t1_3);
                                 $s1_2 += $s4_6;
                             } while ($s3_2 != $s5_2);
                             
@@ -318,44 +319,44 @@
         {
             uint32_t $v0_7 = simple_strtoull(&$s2_1[8], 0, $a2_3);
             uint32_t $s3_1 = $v0_7;
-            
-            if ($v0_7 < 2)
-                $s3_1 = 1;
             else if (arg3 == 8)
-                $s3_1 = 1;
-            
             int32_t $a2_4 = *($s0 + 0xdc);
             int32_t $s4_1 = $a2_4 << 1;
-            
-            if (*(*($s0 + 0x110) + 0x7c) == 7)
-                $s4_1 = ($s4_1 + $a2_4) >> 1;
-            
             int32_t $s4_3 = $s4_1 * *($s0 + 0xe0);
             uint32_t var_9c_1 = $s3_1;
             int32_t $s7_1 = $s3_1 * $s4_3;
             int32_t var_a0_1 = $s4_3;
             int32_t var_98_1 = $s7_1;
+            int32_t $s1_1 = *($s0 + 0x140);
+                int32_t $v0_11 = isp_malloc_buffer($s7_1);
+                char* $a0_6 = *((char*)$s0 + 0x110); // Fixed void pointer arithmetic
+                int32_t $a1_3 = *($a0_6 + 0x7c);
+            
+            if ($v0_7 < 2)
+                $s3_1 = 1;
+                $s3_1 = 1;
+            
+            
+            if (*(*($s0 + 0x110) + 0x7c) == 7)
+                $s4_1 = ($s4_1 + $a2_4) >> 1;
+            
             isp_printf(1, 
-                "width is %d, height is %d, imagesize is %d\\n, snap num is %d, buf size is %d", 
+                "width is %d, height is %d, imagesize is %d\n, snap num is %d, buf size is %d", 
                 $a2_4);
             $a2_5 = *($s0 + 0xdc);
             
-            if ($a2_5 >= 0xa81)
-                return private_seq_printf($s5, "Can\'t output the width(%d)!\\n", $a2_5);
+            if ($(uintptr_t)a2_5 >= 0xa81)
+                return private_seq_printf($s5, "Can't output the width(%d)!\n", $a2_5);
             
-            int32_t $s1_1 = *($s0 + 0x140);
             
             if (!$s1_1)
             {
-                int32_t $v0_11 = isp_malloc_buffer($s7_1);
-                *($s0 + 0x140) = $v0_11;
+                *(((void**)((char*)$s0 + 0x140))) = $v0_11; // Fixed void pointer dereference
                 
                 if (!$v0_11)
                     goto label_12174;
                 
-                void* $a0_6 = *($s0 + 0x110);
-                *($s0 + 0x144) = $v0_11 - 0x80000000;
-                int32_t $a1_3 = *($a0_6 + 0x7c);
+                *(((void**)((char*)$s0 + 0x144))) = $v0_11 - 0x80000000; // Fixed void pointer dereference
                 int32_t var_a0_2;
                 char var_9c_2;
                 int32_t $a2_6;
@@ -363,56 +364,57 @@
                 
                 if ($a1_3 != 7)
                 {
-                    var_9c_2_1 = 0;
+                    var_9c_2 = 0;
                     
                     if (!*($a0_6 + 0x90))
                         goto label_11b70;
                     
-                    var_a0_2_1 = $v0_11;
+                    var_a0_2 = $v0_11;
                     $a3_2 = $s3_1;
                     $a2_6 = 1;
                 }
                 else
                 {
-                    var_9c_2_2 = $a1_3;
+                    var_9c_2 = $a1_3;
                 label_11b70:
-                    var_a0_2_2 = $v0_11;
+                    var_a0_2 = $v0_11;
                     $a3_2 = $s3_1;
                     $a2_6 = 0;
                 }
                 
-                vic_mdma_enable($s0, 0, $a2_6, $a3_2, var_a0_2_3, var_9c_2_3);
+                vic_mdma_enable($s0, 0, $a2_6, $a3_2, var_a0_2, var_9c_2);
                 int32_t $s7_2 = 0x258;
                 
                 while (true)
                 {
+                        void* const var_4c_2 = &data_80000;
+                        int32_t $s7_3 = 0;
+                        char const* const var_48_1 = "nv12";
+                            int32_t $v0_14 = private_filp_open(&var_90, 0x301, 0x1f6);
+                            int32_t $t1_1 = var_50;
                     int32_t $v0_13;
-                    $v0_13 = (&data_20000_3 - 0x6a78)($s0 + 0x148);
+                    $v0_13 = (&data_20000 - 0x6a78)($s0 + 0x148);
                     
                     if ($v0_13 >= 0)
                     {
-                        void* const var_4c_2 = &data_80000_2;
-                        int32_t $s7_3 = 0;
-                        char const* const var_48_1_1 = "nv12";
                         
                         do
                         {
                             char const* const var_a0_3;
                             
                             if (*(*($s0 + 0x110) + 0x7c) != 7)
-                                var_a0_3_1 = &$LC33;
+                                var_a0_3 = &$LC33;
                             else
-                                var_a0_3_2 = var_48_1_2;
+                                var_a0_3 = var_48_1;
                             
-                            snprintf(&var_90_3, 0x40, var_4c_2_1 - 0x1c78, $s7_3, var_a0_3_3);
-                            int32_t $v0_14 = private_filp_open(&var_90_4, 0x301, 0x1f6);
-                            private_get_fs(&var_50_2);
-                            int32_t (* var_40_1_1)() = private_set_fs;
+                            snprintf(&var_90, 0x40, var_4c_2 - 0x1c78, $s7_3, var_a0_3);
+                            private_get_fs(&var_50);
+                            int32_t (* var_40_1)() = private_set_fs;
                             private_set_fs(0);
                             private_vfs_write($v0_14, *($s0 + 0x144) + $s1_1, $s4_3, $v0_14 + 0x28);
                             private_filp_close($v0_14, 0);
                             $s7_3 += 1;
-                            var_40_1_2();
+                            var_40_1($t1_1);
                             $s1_1 += $s4_3;
                         } while ($s7_3 != $s3_1);
                         
@@ -424,7 +426,7 @@
                     if (!$s7_2)
                     {
                     label_121b8:
-                        private_seq_printf($s5, "snapraw timeout!\\n", $a2_7);
+                        private_seq_printf($s5, "snapraw timeout!\n", $a2_7);
                         $a0_19 = *($s0 + 0x140);
                         goto label_1215c;
                     }

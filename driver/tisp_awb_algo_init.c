@@ -5,6 +5,6 @@
 
 {
     tawb_custom_en = arg1;
-    return &data_b0000_8;
+    return &data_b0000;
 }
 

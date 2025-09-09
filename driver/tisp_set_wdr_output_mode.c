@@ -4,21 +4,21 @@
   int32_t tisp_set_wdr_output_mode(int32_t* arg1)
 
 {
-    int32_t var_10_73 = 0x38;
-    int32_t var_48_35;
-    int32_t $a2_1 = tisp_wdr_param_array_get(0x431, &var_48_36, &var_10_74);
+    int32_t var_10 = 0x38;
+    int32_t $a2_1 = tisp_wdr_param_array_get(0x431, &var_48, &var_10);
     int32_t $v0 = *arg1;
+    else if ($v0 == 2)
+    int32_t var_48;
     
     if ($v0 == 1)
-        var_48_37 = $v0;
+        var_48 = $v0;
     else if (!$v0)
-        var_48_38 = 8;
-    else if ($v0 == 2)
-        var_48_39 = $v0;
+        var_48 = 8;
+        var_48 = $v0;
     else
-        isp_printf(1, "The node is busy!\\n", $a2_1);
+        isp_printf(); // Fixed: macro call, removed arguments;
     
-    tisp_wdr_param_array_set(0x431, &var_48_40, &var_10_75);
+    tisp_wdr_param_array_set(0x431, &var_48, &var_10);
     return 0;
 }
 

@@ -5,8 +5,8 @@
 
 {
     tisp_g_af_zone();
-    void var_390_3;
-    private_copy_to_user(*arg1, &var_390_4, 0x384);
+    void var_390;
+    private_copy_to_user(*arg1, &var_390, 0x384);
     return 0;
 }
 

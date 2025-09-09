@@ -5,9 +5,9 @@
 
 {
     int32_t $a0_1 = arg2 << 0x16 | arg1 >> 0xa;
+    uint32_t wdr_ev_old_1 = wdr_ev_old;
     wdr_ev_changed = 1;
     wdr_ev_now = $a0_1;
-    uint32_t wdr_ev_old_1 = wdr_ev_old;
     int32_t $v0;
     
     $v0 = wdr_ev_old_1 >= $a0_1 ? wdr_ev_old_1 - $a0_1 : $a0_1 - wdr_ev_old_1;

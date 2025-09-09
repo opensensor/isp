@@ -5,13 +5,13 @@
 
 {
     int32_t $s1 = arg1;
-    int32_t var_20_167 = 0;
+    int32_t var_20 = 0;
     
-    for (int32_t i = 0x105; i != 0x180; )
+    for (int32_t i = 0x105; (uintptr_t)i != 0x180; )
     {
-        tisp_sdns_param_array_set(i, $s1, &var_20_168);
+        tisp_sdns_param_array_set(i, $s1, &var_20);
         i += 1;
-        $s1 += var_20_169;
+        $s1 += var_20;
     }
     
     return 0;

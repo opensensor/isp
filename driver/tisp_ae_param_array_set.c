@@ -4,10 +4,10 @@
   int32_t tisp_ae_param_array_set(int32_t arg1, int32_t arg2, int32_t* arg3)
 
 {
-    if (arg1 - 1 >= 0x22)
+        int32_t var_18_1 = arg1;
+    if (arg1 - (uintptr_t)1 >= 0x22)
     {
-        int32_t var_18_1_23 = arg1;
-        isp_printf(2, &$LC33, "tisp_ae_param_array_set");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     
@@ -78,7 +78,7 @@
         case 0xb:
         {
             memcpy(&_flicker_t, arg2, 0x18);
-            tiziano_deflicker_expt(_flicker_t, data_b0b28_5, data_b0b2c_5, data_b0b30_5, &_deflick_lut, 
+            tiziano_deflicker_expt(_flicker_t, data_b0b28, data_b0b2c, data_b0b30, &_deflick_lut, 
                 &_nodes_num);
             $v0_2 = 0x18;
             break;
@@ -215,9 +215,9 @@
     }
     
     *arg3 = $v0_2;
-    data_b0e00_7 = 1;
-    data_b0e04_7 = 1;
-    data_b0e0c_14 = 0;
+    data_b0e00_2 = 1;
+    data_b0e04_3 = 1;
+    data_b0e0c_7 = 0;
     tiziano_ae_set_hardware_param(0, &_ae_parameter, 1);
     tiziano_ae_set_hardware_param(1, &_ae_parameter, 1);
     return 0;

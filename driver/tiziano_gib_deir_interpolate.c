@@ -7,11 +7,11 @@
     int32_t* i = arg6;
     int32_t* $t1 = arg5;
     int32_t $a2_1 = arg3 + ((arg3 ^ arg4) < 1 ? 1 : 0) - arg4;
+        int32_t $v0_1 = *i;
     uint32_t result;
     
     do
     {
-        int32_t $v0_1 = *i;
         int32_t $lo_2;
         int32_t $hi_2;
         $hi_2 = HIGHD($v0_1 * $a2_1 + (*$t1 - $v0_1) * (arg2 - arg4));

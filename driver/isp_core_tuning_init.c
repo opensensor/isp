@@ -10,7 +10,7 @@
     
     if (!result)
     {
-        isp_printf(2, "saveraw", $a2);
+        isp_printf(); // Fixed: macro call, removed arguments;
         return nullptr;
     }
     

@@ -5,16 +5,19 @@
 
 {
     int32_t result = 0xffffffea;
+        char* $s0_1 = *((char*)arg1 + 0xd4); // Fixed void pointer arithmetic
+                    char* $a0_21 = *((char*)$s0_1 + 0xb8); // Fixed void pointer arithmetic
+                    char* $a0_22 = *((char*)$s0_1 + 0xb8); // Fixed void pointer arithmetic
+                    char* $a0_23 = *((char*)$s0_1 + 0xb8); // Fixed void pointer arithmetic
     
     if (arg1)
     {
-        if (arg1 >= 0xfffff001)
+        if ((uintptr_t)arg1 >= 0xfffff001)
             return 0xffffffea;
         
-        void* $s0_1 = *(arg1 + 0xd4);
         result = 0xffffffea;
         
-        if ($s0_1 && $s0_1 < 0xfffff001)
+        if ($s0_1 && $(uintptr_t)s0_1 < 0xfffff001)
         {
             result = 0;
             
@@ -24,86 +27,83 @@
                 
                 if (!arg2)
                 {
-                    isp_printf(0, "%s[%d] VIC do not support this format %d\\n", arg3);
-                    void* $a0_21 = *($s0_1 + 0xb8);
+                    isp_printf(); // Fixed: macro call, removed arguments;
                     *($a0_21 + 8) &= 0xfffffffe;
-                    void* $a0_22 = *($s0_1 + 0xb8);
                     *($a0_22 + 0xc) &= 0xfffffffe;
-                    void* $a0_23 = *($s0_1 + 0xb8);
                     *($a0_23 + 0x10) &= 0xfffffffe;
                     $v0_17 = 2;
                 }
                 else
                 {
-                    void* $v1_5 = *($s0_1 + 0x110);
+                    char* $v1_5 = *((char*)$s0_1 + 0x110); // Fixed void pointer arithmetic
                     int32_t $s2_1 = *($v1_5 + 0x14);
+                        char* $v0_2 = *((char*)$s0_1 + 0xb8); // Fixed void pointer arithmetic
+                        char* $v1_9 = *((char*)$s0_1 + 0xb8); // Fixed void pointer arithmetic
+                        char* $v0_7 = *((char*)$s0_1 + 0x110); // Fixed void pointer arithmetic
+                        int32_t $v1_10 = *($v0_7 + 0x3c);
+                            int32_t $v0_9 = *($v0_7 + 0x1c);
                     
                     if ($s2_1 == 1)
                     {
                         *(*($s0_1 + 0xb8) + 4) = *($v1_5 + 0x24) - 1;
-                        void* $v0_2 = *($s0_1 + 0xb8);
                         *($v0_2 + 8) &= 0xfffffffe;
                         *(*($s0_1 + 0xb8) + 0xc) = 0;
                         private_msleep(1);
-                        void* $v1_9 = *($s0_1 + 0xb8);
                         *($v1_9 + 0x10) &= 0xfffffffe;
                         private_msleep(1);
                         *(*($s0_1 + 0xb8) + 0xc) = $s2_1;
                         private_msleep(1);
-                        void* $v0_7 = *($s0_1 + 0x110);
-                        int32_t $v1_10 = *($v0_7 + 0x3c);
                         int32_t* $v0_8;
                         
                         if ($v1_10)
                             $v0_8 = *($s0_1 + 0x13c);
                         else
                         {
-                            int32_t $v0_9 = *($v0_7 + 0x1c);
                             void* $a0_2;
                             
-                            if ($v0_9 - 0x50 < 0x1e)
+                            if ($v0_9 - (uintptr_t)0x50 < 0x1e)
                                 $a0_2 = *($s0_1 + 0x13c);
                             else
                             {
                                 $v1_10 = 1;
                                 
-                                if ($v0_9 - 0x6e >= 0x28)
+                                if ($v0_9 - (uintptr_t)0x6e >= 0x28)
                                 {
                                     $v1_10 = 2;
                                     
-                                    if ($v0_9 - 0x96 >= 0x32)
+                                    if ($v0_9 - (uintptr_t)0x96 >= 0x32)
                                     {
                                         $v1_10 = 3;
                                         
-                                        if ($v0_9 - 0xc8 >= 0x32)
+                                        if ($v0_9 - (uintptr_t)0xc8 >= 0x32)
                                         {
                                             $v1_10 = 4;
                                             
-                                            if ($v0_9 - 0xfa >= 0x32)
+                                            if ($v0_9 - (uintptr_t)0xfa >= 0x32)
                                             {
                                                 $v1_10 = 5;
                                                 
-                                                if ($v0_9 - 0x12c >= 0x64)
+                                                if ($v0_9 - (uintptr_t)0x12c >= 0x64)
                                                 {
                                                     $v1_10 = 6;
                                                     
-                                                    if ($v0_9 - 0x190 >= 0x64)
+                                                    if ($v0_9 - (uintptr_t)0x190 >= 0x64)
                                                     {
                                                         $v1_10 = 7;
                                                         
-                                                        if ($v0_9 - 0x1f4 >= 0x64)
+                                                        if ($v0_9 - (uintptr_t)0x1f4 >= 0x64)
                                                         {
                                                             $v1_10 = 8;
                                                             
-                                                            if ($v0_9 - 0x258 >= 0x64)
+                                                            if ($v0_9 - (uintptr_t)0x258 >= 0x64)
                                                             {
                                                                 $v1_10 = 9;
                                                                 
-                                                                if ($v0_9 - 0x2bc >= 0x64)
+                                                                if ($v0_9 - (uintptr_t)0x2bc >= 0x64)
                                                                 {
                                                                     $v1_10 = 0xa;
                                                                     
-                                                                    if ($v0_9 - 0x320 >= 0xc8)
+                                                                    if ($v0_9 - (uintptr_t)0x320 >= 0xc8)
                                                                         $v1_10 = 0xb;
                                                                 }
                                                             }
@@ -119,7 +119,7 @@
                             }
                             
                             int32_t $v0_14 = (*($a0_2 + 0x160) & 0xfffffff0) | $v1_10;
-                            *($a0_2 + 0x160) = $v0_14;
+                            *(((void**)((char*)$a0_2 + 0x160))) = $v0_14; // Fixed void pointer dereference
                             *(*($s0_1 + 0x13c) + 0x1e0) = $v0_14;
                             *(*($s0_1 + 0x13c) + 0x260) = $v0_14;
                             $v0_8 = *($s0_1 + 0x13c);
@@ -133,7 +133,7 @@
                     }
                     else if ($s2_1 != 2)
                     {
-                        isp_printf(1, "%s[%d] VIC failed to config DVP mode!(10bits-sensor)\\n", 
+                        isp_printf(); // Fixed: macro call, removed arguments\n", 
                             $s2_1);
                         $v0_17 = 3;
                     }
@@ -141,14 +141,14 @@
                     {
                         *(*($s0_1 + 0xb8) + 0xc) = 0;
                         *(*($s0_1 + 0xb8) + 0xc) = 1;
-                        **($s0_1 + 0x13c) = 0x7d;
+                        **(((void**)((char*)$s0_1 + 0x13c))) = 0x7d; // Fixed void pointer dereference
                         *(*($s0_1 + 0x13c) + 0x80) = 0x3e;
                         *(*($s0_1 + 0x13c) + 0x2cc) = 1;
                         $v0_17 = 3;
                     }
                 }
                 
-                *($s0_1 + 0x128) = $v0_17;
+                *(((void**)((char*)$s0_1 + 0x128))) = $v0_17; // Fixed void pointer dereference
                 return 0;
             }
         }

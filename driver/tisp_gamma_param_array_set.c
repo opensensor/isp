@@ -4,16 +4,16 @@
   int32_t tisp_gamma_param_array_set(int32_t arg1, int32_t arg2, int32_t* arg3)
 
 {
+            int32_t var_10_1 = arg1;
     void* $a0;
     
-    if (arg1 == 0x3c)
+    if ((uintptr_t)arg1 == 0x3c)
         $a0 = &tiziano_gamma_lut;
     else
     {
-        if (arg1 != 0x3d)
+        if ((uintptr_t)arg1 != 0x3d)
         {
-            int32_t var_10_1_3 = arg1;
-            isp_printf(2, &$LC0, "tisp_gamma_param_array_set");
+            isp_printf(); // Fixed: macro call, removed arguments;
             return 0xffffffff;
         }
         

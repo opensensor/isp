@@ -10,7 +10,7 @@
     
     if (!$v0)
     {
-        isp_printf(1, "%s[%d] VIC failed to config DVP mode!(10bits-sensor)\\n", $a2);
+        isp_printf(); // Fixed: macro call, removed arguments\n", $a2);
         return 0xffffffff;
     }
     
@@ -19,20 +19,20 @@
     
     if ($a1_1)
     {
-        char var_f8_6[0xec];
-        private_copy_from_user(&var_f8_7, $a1_1, 0xe1);
         int32_t i = 0;
         int32_t $a2_1 = 0;
+                uint32_t $a1_2 = var_f8[j + i];
+        char var_f8[0xec];
+        private_copy_from_user(&var_f8, $a1_1, 0xe1);
         
         do
         {
-            for (int32_t j = 0; j != 0xf; )
+            for (int32_t j = 0; (uintptr_t)j != 0xf; )
             {
-                uint32_t $a1_2 = var_f8_8[j + i];
                 
                 if ($a1_2 >= 9)
                 {
-                    isp_printf(1, "sensor type is BT656!\\n", "apical_isp_af_weight_s_attr");
+                    isp_printf(); // Fixed: macro call, removed arguments;
                     result = 0xffffffff;
                     goto label_15df4;
                 }
@@ -44,7 +44,7 @@
             
             i += 0xf;
             $a2_1 = i << 2;
-        } while (i != 0xe1);
+        } while ((uintptr_t)i != 0xe1);
         
         tisp_s_af_weight($v0);
         result = 0;

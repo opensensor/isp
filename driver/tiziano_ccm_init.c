@@ -26,12 +26,12 @@
     cm_sat_list_now = $v0;
     memset(&ccm_real, 0, 0x18);
     memset(&ccm_ctrl, 0, 0x28);
-    data_c52ec_4 = data_9a454_3 >> 0xa;
-    data_c52f4_4 = data_9a450_3;
+    data_c52ec_1 = data_9a454_1 >> 0xa;
+    data_c52f4_1 = data_9a450_1;
     data_c52fc_3 = 0x100;
     ccm_real = 1;
-    data_c52f8_5 = 0x64;
-    data_c52f0_3 = 0x28;
+    data_c52f8_3 = 0x64;
+    data_c52f0_2 = 0x28;
     tiziano_ccm_params_refresh();
     memcpy(&ccm_parameter, &_ccm_d_parameter, 0x24);
     jz_isp_ccm();

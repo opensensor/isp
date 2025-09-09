@@ -32,7 +32,7 @@
     }
     
     y_sp_b_sl_stren_3_array_now = $v0;
-    data_9a920_4 = 0xffffffff;
+    data_9a920_1 = 0xffffffff;
     tiziano_sharpen_params_refresh();
     tisp_sharpen_par_refresh(isp_printf, isp_printf, 1);
     return 0;

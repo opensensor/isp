@@ -4,28 +4,28 @@
   int32_t tiziano_af_set_hardware_param()
 
 {
-    uint32_t $v0_2 = (data_d652c_1 - 0xf) / data_b1384_2;
+    uint32_t $v0_2 = (data_d652c - 0xf) / data_b1384;
+    int32_t* $a1 = &stAFParam_Zone;
+    int32_t* $a2 = &stAFParam_Zone;
+    int32_t $a0_2 = 0;
     
     if ($v0_2 & 1)
         $v0_2 -= 1;
     
-    data_b1388_1 = $v0_2;
-    int32_t* $a1 = &stAFParam_Zone;
-    int32_t* $a2 = &stAFParam_Zone;
-    int32_t $a0_2 = 0;
+    data_b1388 = $v0_2;
     
     while (true)
     {
         $a2 = &$a2[1];
         
-        if ($a0_2 >= data_b1384_3)
+        if ($a0_2 >= data_b1384)
             break;
         
         $a0_2 += 1;
-        $a2[3] = data_b1388_2;
+        $a2[3] = data_b1388;
     }
     
-    uint32_t $v0_8 = (data_d6530_1 - 3) / data_b137c_2;
+    uint32_t $v0_8 = (data_d6530_1 - 3) / data_b137c_1;
     
     if ($v0_8 & 1)
         $v0_8 -= 1;
@@ -36,35 +36,35 @@
     
     while (true)
     {
-        $a0_3 = data_b137c_3;
+        $a0_3 = data_b137c;
         $a1 = &$a1[1];
         
         if ($v0_9 >= $a0_3)
             break;
         
         $v0_9 += 1;
-        $a1[0x12] = data_b13c4_2;
+        $a1[0x12] = data_b13c4;
     }
     
     if (!af_first)
     {
         af_first = 1;
         system_reg_write(0xb804, 
-            data_b1384_4 << 0x1c | data_b1380_1 << 0x10 | stAFParam_Zone | $a0_3 << 0xc);
+            data_b1384 << 0x1c | data_b1380 << 0x10 | stAFParam_Zone | $a0_3 << 0xc);
         system_reg_write(0xb808, 
-            data_b1394_1 << 0x18 | data_b1390_1 << 0x10 | data_b1388_3 | data_b138c_1 << 8);
+            data_b1394 << 0x18 | data_b1390 << 0x10 | data_b1388 | data_b138c << 8);
         system_reg_write(0xb80c, 
-            data_b13a4_1 << 0x18 | data_b13a0_1 << 0x10 | data_b1398_1 | data_b139c_1 << 8);
+            data_b13a4 << 0x18 | data_b13a0 << 0x10 | data_b1398 | data_b139c << 8);
         system_reg_write(0xb810, 
-            data_b13b4_1 << 0x18 | data_b13b0_1 << 0x10 | data_b13a8_1 | data_b13ac_1 << 8);
-        system_reg_write(0xb814, data_b13c0_1 << 0x10 | data_b13bc_1 << 8 | data_b13b8_1);
+            data_b13b4 << 0x18 | data_b13b0 << 0x10 | data_b13a8 | data_b13ac << 8);
+        system_reg_write(0xb814, data_b13c0 << 0x10 | data_b13bc << 8 | data_b13b8);
         system_reg_write(0xb818, 
-            data_b13d0_1 << 0x18 | data_b13cc_1 << 0x10 | data_b13c4_3 | data_b13c8_1 << 8);
+            data_b13d0 << 0x18 | data_b13cc << 0x10 | data_b13c4 | data_b13c8 << 8);
         system_reg_write(0xb81c, 
-            data_b13e0_1 << 0x18 | data_b13dc_1 << 0x10 | data_b13d4_1 | data_b13d8_1 << 8);
+            data_b13e0 << 0x18 | data_b13dc << 0x10 | data_b13d4 | data_b13d8 << 8);
         system_reg_write(0xb820, 
-            data_b13f0_1 << 0x18 | data_b13ec_1 << 0x10 | data_b13e4_1 | data_b13e8_1 << 8);
-        system_reg_write(0xb824, data_b13fc_1 << 0x10 | data_b13f8_1 << 8 | data_b13f4_1);
+            data_b13f0 << 0x18 | data_b13ec << 0x10 | data_b13e4 | data_b13e8 << 8);
+        system_reg_write(0xb824, data_b13fc << 0x10 | data_b13f8 << 8 | data_b13f4);
     }
     
     system_reg_write_af(1, 0xb828, 

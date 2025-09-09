@@ -4,8 +4,8 @@
   int32_t tisp_mdns_wdr_en(uint32_t arg1)
 
 {
+    void* var_30 = &data_b0000;
     mdns_wdr_en = arg1;
-    void* var_30_20 = &data_b0000_16;
     void* $v0_1;
     
     if (arg1)
@@ -167,6 +167,6 @@
     
     mdns_c_fiir_fus_wei8_array_now = $v0_1;
     /* tailcall */
-    return tisp_s_mdns_ratio(data_9ab00_2);
+    return tisp_s_mdns_ratio(data_9ab00_1);
 }
 

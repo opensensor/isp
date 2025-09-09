@@ -4,7 +4,7 @@
   int32_t defog_itp(int32_t arg1, int32_t arg2, int32_t arg3) __attribute__((pure))
 
 {
-    if (arg1 < 0x80)
+    if ((uintptr_t)arg1 < 0x80)
     {
         int32_t $lo_4;
         int32_t $hi_3;

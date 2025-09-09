@@ -37,16 +37,22 @@
     int32_t $s4_2 = *arg11 << 0x10 | arg11[1];
     int32_t $s3_2 = arg11[2] << 0x10 | arg11[3];
     uint32_t tisp_BCSH_au32clip0_1 = tisp_BCSH_au32clip0;
-    uint32_t $v1_1 = data_c53e4_1;
-    uint32_t $a2_10 = data_c53ec_1;
-    uint32_t $v0_7 = data_9a614_1 >> 0xa;
+    uint32_t $v1_1 = data_c53e4;
+    uint32_t $a2_10 = data_c53ec;
+    uint32_t $v0_7 = data_9a614 >> 0xa;
+        void* tisp_BCSH_au32HLSP_now_1 = tisp_BCSH_au32HLSP_now;
+        int32_t $v1_7 = $v0_7 < 2 ? 1 : 0;
+        uint32_t $v0_8 = tisp_BCSH_au32clip0_1 - $v0_7;
+        uint32_t $a2_11 = $v0_7 - 1;
+        uint32_t tisp_BCSH_au32clip0_2 = $a0_48 - 1;
+        int32_t $v0_9 = 1;
     
-    if ($v1_1 >= 0xa)
+    if ($(uintptr_t)v1_1 >= 0xa)
         $v1_1 = 9;
     else if (!$v1_1)
         $v1_1 = 1;
     
-    if ($a2_10 >= 0xa)
+    if ($(uintptr_t)a2_10 >= 0xa)
         $a2_10 = 9;
     else if (!$a2_10)
         $a2_10 = 1;
@@ -58,15 +64,10 @@
     
     if (tisp_BCSH_au32clip0_1 == 1 && $v0_7 < $a0_48)
     {
-        void* tisp_BCSH_au32HLSP_now_1 = tisp_BCSH_au32HLSP_now;
-        int32_t $v1_7 = $v0_7 < 2 ? 1 : 0;
-        uint32_t $v0_8 = tisp_BCSH_au32clip0_1 - $v0_7;
-        uint32_t $a2_11 = $v0_7 - 1;
         
         if ($v1_7)
             $a2_11 = $v0_8;
         
-        uint32_t tisp_BCSH_au32clip0_2 = $a0_48 - 1;
         
         if (!$a0_48)
             tisp_BCSH_au32clip0_2 = tisp_BCSH_au32clip0_1;
@@ -74,7 +75,6 @@
         if (!$v1_7)
             $v0_8 = $v0_7 - 1;
         
-        int32_t $v0_9 = 1;
         
         if ($a0_48)
             $v0_9 = $a0_48 - 1;
@@ -86,24 +86,24 @@
     {
         void* tisp_BCSH_au32EvList_now_1 = tisp_BCSH_au32EvList_now;
         int32_t $v1_8 = *(tisp_BCSH_au32EvList_now_1 + 0x20);
+            int32_t $a0_50 = *(tisp_BCSH_au32EvList_now_1 + (($a2_10 - 1) << 2));
+                void* tisp_BCSH_au32HLSP_now_2 = tisp_BCSH_au32HLSP_now;
+                int32_t $t9_1 = *(tisp_BCSH_au32HLSP_now_2 + 8);
+                    int32_t $s0_1 = $a0_50 - $v1_8;
         
         if ($v0_7 >= $v1_8)
             $s1_3 = 0;
         else
         {
-            int32_t $a0_50 = *(tisp_BCSH_au32EvList_now_1 + (($a2_10 - 1) << 2));
             
             if ($a0_50 < $v0_7)
             {
-                void* tisp_BCSH_au32HLSP_now_2 = tisp_BCSH_au32HLSP_now;
-                int32_t $t9_1 = *(tisp_BCSH_au32HLSP_now_2 + 8);
                 int32_t $s1_6;
                 
                 if (!$t9_1)
                     $s1_6 = *(tisp_BCSH_au32HLSP_now_2 + 4);
                 else
                 {
-                    int32_t $s0_1 = $a0_50 - $v1_8;
                     
                     if ($v1_8 >= $a0_50)
                         $s0_1 = $v1_8 - $a0_50;

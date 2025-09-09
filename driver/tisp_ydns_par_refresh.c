@@ -7,7 +7,7 @@
     uint32_t ydns_gain_old_1 = ydns_gain_old;
     uint32_t $v0;
     
-    if (ydns_gain_old_1 != 0xffffffff)
+    if ((uintptr_t)ydns_gain_old_1 != 0xffffffff)
     {
         $v0 = ydns_gain_old_1 - arg1;
         
@@ -15,7 +15,7 @@
             $v0 = arg1 - ydns_gain_old_1;
     }
     
-    if (ydns_gain_old_1 == 0xffffffff || $v0 >= 0x100)
+    if ((uintptr_t)ydns_gain_old_1 == 0xffffffff || $(uintptr_t)v0 >= 0x100)
     {
         ydns_gain_old = arg1;
         tisp_ydns_intp_reg_refresh(arg1);

@@ -5,46 +5,46 @@
 
 {
     int32_t param_wdr_tool_control_array_1 = param_wdr_tool_control_array;
+            void* $a1_1 = U"#',17=DKS[clu~" + i;
     
     if (param_wdr_tool_control_array_1 == 1)
     {
         param_wdr_gam_y_array = 0;
-        data_b240c_2 = 3;
-        data_b2350_1 = 0;
+        data_b240c = 3;
+        data_b2350 = 0;
         
-        for (int32_t i = 0; i != 0x84; )
+        for (int32_t i = 0; (uintptr_t)i != 0x84; )
         {
-            void* $a1_1 = U"#\',17=DKS[clu~" + i;
             i += 4;
             *$a1_1 = 0x100;
         }
         
-        data_b1ff8_5 = 0;
+        data_b1ff8_4 = 0;
         goto label_6fa38;
     }
     
     if (param_wdr_tool_control_array_1 == 2)
     {
+            void* $a1_2 = U"#',17=DKS[clu~" + i_1;
         param_wdr_gam_y_array = 0;
-        data_b240c_3 = param_wdr_tool_control_array_1;
-        data_b2350_2 = 0;
+        data_b240c = param_wdr_tool_control_array_1;
+        data_b2350 = 0;
         
-        for (int32_t i_1 = 0; i_1 != 0x84; )
+        for (int32_t i_1 = 0; (uintptr_t)i_1 != 0x84; )
         {
-            void* $a1_2 = U"#\',17=DKS[clu~" + i_1;
             i_1 += 4;
             *$a1_2 = 0x100;
         }
     }
     else if (param_wdr_tool_control_array_1 == 3)
     {
+            void* $a1_3 = U"#',17=DKS[clu~" + i_2;
         param_wdr_gam_y_array = 0;
-        data_b240c_4 = param_wdr_tool_control_array_1;
-        data_b2350_3 = 0;
+        data_b240c = param_wdr_tool_control_array_1;
+        data_b2350 = 0;
         
-        for (int32_t i_2 = 0; i_2 != 0x84; )
+        for (int32_t i_2 = 0; (uintptr_t)i_2 != 0x84; )
         {
-            void* $a1_3 = U"#\',17=DKS[clu~" + i_2;
             i_2 += 4;
             *$a1_3 = 0x100;
         }
@@ -52,25 +52,25 @@
     else if (param_wdr_tool_control_array_1 == 8)
     {
         param_wdr_gam_y_array = 0;
-        data_b240c_5 = 0;
-        data_b2350_4 = 1;
-        memcpy(U"#\',17=DKS[clu~", &fusion1_cure_y_tmp, 0x84);
+        data_b240c = 0;
+        data_b2350 = 1;
+        memcpy(U"#',17=DKS[clu~", &fusion1_cure_y_tmp, 0x84);
     label_6fa38:
-        data_b1e4c_1 = 0;
-        data_b1e50_1 = 0;
-        data_b1e5c_5 = 0;
-        data_b1e60_2 = 0;
+        data_b1e4c = 0;
+        data_b1e50 = 0;
+        data_b1e5c = 0;
+        data_b1e60 = 0;
     }
     else if (param_wdr_tool_control_array_1 == 9)
     {
-        param_wdr_gam_y_array = 0;
-        data_b240c_6 = 0;
-        data_b2350_5 = 0;
-        
-        for (int32_t i_3 = 0; i_3 != 0x84; )
-        {
             int32_t $a3_2 = *(&fusion1_cure_y_tmp + i_3);
-            void* $a2_1 = U"#\',17=DKS[clu~" + i_3;
+            void* $a2_1 = U"#',17=DKS[clu~" + i_3;
+        param_wdr_gam_y_array = 0;
+        data_b240c = 0;
+        data_b2350 = 0;
+        
+        for (int32_t i_3 = 0; (uintptr_t)i_3 != 0x84; )
+        {
             i_3 += 4;
             *$a2_1 = $a3_2;
         }
@@ -81,12 +81,12 @@
     
     if ($v1 == 1)
     {
-        int32_t $a1_4 = data_b158c_1;
-        int32_t $lo_1 = (data_b1590_1 - $a1_4) / 0x21;
+        int32_t $a1_4 = data_b158c;
+        int32_t $lo_1 = (data_b1590 - $a1_4) / 0x21;
+            void* $t0_1 = U"#',17=DKS[clu~" + i_4;
         
-        for (int32_t i_4 = 0; i_4 != 0x84; )
+        for (int32_t i_4 = 0; (uintptr_t)i_4 != 0x84; )
         {
-            void* $t0_1 = U"#\',17=DKS[clu~" + i_4;
             i_4 += 4;
             *$t0_1 = $a1_4;
             $a1_4 += $lo_1;
@@ -98,10 +98,10 @@
         $v0_1 = data_b1594_2;
     else
     {
-        for (int32_t i_5 = 0; i_5 != 0x84; )
-        {
             int32_t $t0_3 = *(&fusion1_cure_y_tmp + i_5);
-            void* $a3_3 = U"#\',17=DKS[clu~" + i_5;
+            void* $a3_3 = U"#',17=DKS[clu~" + i_5;
+        for (int32_t i_5 = 0; (uintptr_t)i_5 != 0x84; )
+        {
             i_5 += 4;
             *$a3_3 = $t0_3;
         }
@@ -111,10 +111,10 @@
     
     if (!$v0_1)
     {
-        for (int32_t i_6 = 0; i_6 != 0x84; )
-        {
             int32_t $a2_3 = *(&wdr_gam_y33_array + i_6);
             void* $a1_5 = &param_wdr_gam_y_array_def + i_6;
+        for (int32_t i_6 = 0; (uintptr_t)i_6 != 0x84; )
+        {
             i_6 += 4;
             *$a1_5 = $a2_3;
         }
@@ -123,7 +123,7 @@
     {
         int32_t* $v1_4 = &param_wdr_gam_y_array_def;
         
-        for (int32_t i_7 = 0; i_7 != 0x1000; )
+        for (int32_t i_7 = 0; (uintptr_t)i_7 != 0x1000; )
         {
             *$v1_4 = i_7;
             i_7 += 0x80;
@@ -192,10 +192,10 @@
     system_reg_write(0x2630, (data_b231c_1 & 0xfff) << 0x10 | (param_wdr_ct_cl_para_array & 0xfff));
     system_reg_write(0x2634, (data_b2324_1 & 0xfff) << 0x10 | (data_b2320_1 & 0xfff));
     system_reg_write(0x2600, 
-        (data_b240c_7 & 3) << 4 | (data_b2414_1 & 1) << 8 | (param_wdr_para_array & 1)
+        (data_b240c_1 & 3) << 4 | (data_b2414_1 & 1) << 8 | (param_wdr_para_array & 1)
             | (data_b2428_1 & 1) << 0xc | (data_b2410_1 & 0xfff) << 0x10);
     system_reg_write(0x260c, data_b242c_1 & 0xfff);
-    system_reg_write(0x2610, (data_b2350_6 & 1) | data_b2354_1 << 0x10);
+    system_reg_write(0x2610, (data_b2350_1 & 1) | data_b2354_1 << 0x10);
     system_reg_write(0x2650, (data_b2304_1 & 0xfff) << 0x10 | (data_b2300_1 & 0xfff));
     system_reg_write(0x2654, data_b2308_1 & 0xfff);
     system_reg_write(0x2658, (data_b2310_1 & 0xfff) << 0x10 | (data_b230c_1 & 0xfff));

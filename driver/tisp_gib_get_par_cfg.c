@@ -5,13 +5,13 @@
 
 {
     int32_t $s2 = arg1;
-    int32_t var_20_98 = 0;
+    int32_t var_20 = 0;
+        int32_t $v1_1 = var_20;
     *arg2 = 0;
     
-    for (int32_t i = 0x3e; i != 0x54; )
+    for (int32_t i = 0x3e; (uintptr_t)i != 0x54; )
     {
-        tisp_gib_param_array_get(i, $s2, &var_20_99);
-        int32_t $v1_1 = var_20_100;
+        tisp_gib_param_array_get(i, $s2, &var_20);
         i += 1;
         $s2 += $v1_1;
         *arg2 += $v1_1;

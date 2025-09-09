@@ -4,10 +4,10 @@
   int32_t mbus_to_bayer_write(int32_t arg1)
 
 {
-    if (arg1 - 0x3001 >= 0x14)
+        int32_t var_10_1 = arg1;
+    if (arg1 - (uintptr_t)0x3001 >= 0x14)
     {
-        int32_t var_10_1_16 = arg1;
-        isp_printf(2, "Err [VIC_INT] : mipi ch2 vcomp err !!!\\n", "mbus_to_bayer_write");
+        isp_printf(); // Fixed: macro call, removed arguments;
     }
     else
     {

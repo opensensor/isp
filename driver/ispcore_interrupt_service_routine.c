@@ -4,20 +4,20 @@
   int32_t ispcore_interrupt_service_routine(void* arg1)
 
 {
-    void* $v0 = *(arg1 + 0xb8);
-    void* $s0 = *(arg1 + 0xd4);
+    char* $v0 = *((char*)arg1 + 0xb8); // Fixed void pointer arithmetic
+    char* $s0 = *((char*)arg1 + 0xd4); // Fixed void pointer arithmetic
     int32_t $s1 = *($v0 + 0xb4);
-    *($v0 + 0xb8) = $s1;
+        int32_t var_44_1 = *(*(arg1 + 0xb8) + 0x84c);
+        int32_t var_48_1 = 0x3f8;
+    *(((void**)((char*)$v0 + 0xb8))) = $s1; // Fixed void pointer dereference
     int32_t $a0;
     
     if (!($s1 & 0x3f8))
         $a0 = *($s0 + 0x15c);
     else
     {
-        int32_t var_44_1_5 = *(*(arg1 + 0xb8) + 0x84c);
-        int32_t var_48_1_13 = 0x3f8;
-        isp_printf(1, "ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\\n", $s1);
-        data_ca57c_2 += 1;
+        isp_printf(); // Fixed: macro call, removed arguments;
+        data_ca57c += 1;
         $a0 = *($s0 + 0x15c);
     }
     
@@ -40,7 +40,7 @@
         if (*($s0 + 0x17c))
             exception_handle();
         
-        data_ca578_2 += 1;
+        data_ca578 += 1;
         $v0_9 = $s1 & 0x100;
     }
     
@@ -49,26 +49,26 @@
         if (*($s0 + 0x17c))
             exception_handle();
         
-        data_ca574_2 += 1;
+        data_ca574 += 1;
     }
     
     int32_t $v0_14 = $s1 & 0x2000;
     
     if ($s3_1)
     {
-        uint32_t $v1_1 = data_ca554_3;
+        uint32_t $v1_1 = data_ca554;
         
         if ($v1_1 == 1)
         {
-            private_do_gettimeofday(&data_ca568_2);
-            data_ca554_4 = 2;
-            $v1_1 = data_ca554_5;
+            private_do_gettimeofday(&data_ca568);
+            data_ca554 = 2;
+            $v1_1 = data_ca554;
         }
         
         if ($v1_1 == 3)
         {
-            private_do_gettimeofday(&data_ca558_2);
-            data_ca554_6 = 4;
+            private_do_gettimeofday(&data_ca558);
+            data_ca554 = 4;
         }
         
         $v0_14 = $s1 & 0x2000;
@@ -84,39 +84,39 @@
     
     if ($v0_14)
     {
-        data_ca580_1 += 1;
+        data_ca580 += 1;
         $v0_17 = $s1 & 1;
     }
     
     int32_t $v0_36 = $s1 & 2;
-    void var_40_62;
+    void var_40_29;
     
     if ($v0_17)
     {
-        data_ca584_2 += 1;
-        void* $s3_2 = *($s0 + 0x150);
+        char* $s3_2 = *((char*)$s0 + 0x150); // Fixed void pointer arithmetic
+        data_ca584 += 1;
         
-        if (data_ca554_7 == 2)
+        if (data_ca554 == 2)
         {
-            private_do_gettimeofday(&data_ca560_1);
-            data_ca554_8 = 3;
+            private_do_gettimeofday(&data_ca560);
+            data_ca554 = 3;
         }
         
         int32_t $v0_28 = *(arg1 + 0xb8);
         
         while (!(*($v0_28 + 0x997c) & 1))
         {
-            int32_t var_38_1_19 = *($v0_28 + 0x9974);
-            int32_t var_34_1_16 = *($v0_28 + 0x998c);
-            int32_t var_30_1_20 = *($v0_28 + 0x9990);
-            int32_t var_2c_1_15 = 0;
-            int32_t var_28_1_9 = *($s0 + 0x128) << 0x10
+            int32_t var_38_1 = *($v0_28 + 0x9974);
+            int32_t var_34_1 = *($v0_28 + 0x998c);
+            int32_t var_30_1 = *($v0_28 + 0x9990);
+            int32_t var_2c_1 = 0;
+            int32_t var_28_1 = *($s0 + 0x128) << 0x10
                 | *(*(mdns_y_pspa_cur_bi_wei0_array + 0xb8) + 0x9888) >> 0x10;
-            tx_isp_send_event_to_remote(*($s3_2 + 0x78), 0x3000006, &var_40_63);
+            tx_isp_send_event_to_remote(*($s3_2 + 0x78), 0x3000006, &var_40);
             $v0_28 = *(arg1 + 0xb8);
         }
         
-        void* $a0_1 = *($s0 + 0x1bc);
+        char* $a0_1 = *((char*)$s0 + 0x1bc); // Fixed void pointer arithmetic
         
         if ($a0_1)
             (*($a0_1 + 0x40cc))($a0_1, 0x4000002, 0);
@@ -128,11 +128,11 @@
         else
         {
             if (*(*($s0 + 0x1bc) + 0x40a4))
-                data_ca570_2 = 0;
+                data_ca570 = 0;
             else
             {
                 system_reg_write(0x6030, 0xff00ff00);
-                data_ca570_3 = 0;
+                data_ca570 = 0;
             }
             
             $v1_10 = *($s0 + 0x178);
@@ -161,8 +161,8 @@
             if ($a0_3)
                 (*($a0_3 + 0x40cc))($a0_3, 0x4000003, 0);
             
-            *($s0 + 0x178) = 0;
-            data_ca570_4 = 1;
+            *(((int32_t*)((char*)$s0 + 0x178))) = 0; // Fixed void pointer dereference
+            data_ca570_2 = 1;
             $v0_35 = *($s0 + 0x134);
         }
         else
@@ -184,7 +184,7 @@
                 $a1_1 = 0xff00ff00;
             label_79b2c:
                 system_reg_write(0x6030, $a1_1);
-                *($s0 + 0x178) = 0;
+                *(((int32_t*)((char*)$s0 + 0x178))) = 0; // Fixed void pointer dereference
                 $v0_35 = *($s0 + 0x134);
             }
         }
@@ -200,7 +200,7 @@
             if (*($s0 + 0x11c) == $v0_35)
             {
                 mbus_to_bayer_write(*($s0 + 0xf4));
-                *($s0 + 0x11c) = 0;
+                *(((int32_t*)((char*)$s0 + 0x11c))) = 0; // Fixed void pointer dereference
                 first_into_1 = first_into;
             }
         }
@@ -219,25 +219,25 @@
     
     if ($v0_36)
     {
-        void* $s5_1 = *($s0 + 0x150);
+        char* $s5_1 = *((char*)$s0 + 0x150); // Fixed void pointer arithmetic
         int32_t $v0_37 = *(arg1 + 0xb8);
+            int32_t var_38_2 = *($v0_37 + 0x9a74);
+            int32_t var_34_2 = *($v0_37 + 0x9a8c);
+            int32_t var_28_2 = 0;
+            int32_t var_30_2 = *($v0_37 + 0x9a90);
+            int32_t var_2c_2 = 0;
         
         while (!(*($v0_37 + 0x9a7c) & 1))
         {
-            int32_t var_38_2_4 = *($v0_37 + 0x9a74);
-            int32_t var_34_2_1 = *($v0_37 + 0x9a8c);
-            int32_t var_28_2_2 = 0;
-            int32_t var_30_2_6 = *($v0_37 + 0x9a90);
-            int32_t var_2c_2_2 = 0;
             
             if (!isp_ch1_dequeue_delay_time)
             {
-                tx_isp_send_event_to_remote(*($s5_1 + 0x13c), 0x3000006, &var_40_64);
+                tx_isp_send_event_to_remote(*($s5_1 + 0x13c), 0x3000006, &var_40);
                 $v0_37 = *(arg1 + 0xb8);
             }
             else
             {
-                memcpy(&ch1_buf, &var_40_65, 0x1c);
+                memcpy(&ch1_buf, &var_40, 0x1c);
                 private_schedule_work(&ch1_frame_dequeue_delay);
                 $v0_37 = *(arg1 + 0xb8);
             }
@@ -248,17 +248,17 @@
     
     if ($v0_39)
     {
-        void* $s4_1 = *($s0 + 0x150);
+        char* $s4_1 = *((char*)$s0 + 0x150); // Fixed void pointer arithmetic
         int32_t $v0_42 = *(arg1 + 0xb8);
+            int32_t var_38_3 = *($v0_42 + 0x9b74);
+            int32_t var_34_3 = *($v0_42 + 0x9b8c);
+            int32_t var_28_3 = 0;
+            int32_t var_30_3 = *($v0_42 + 0x9b90);
+            int32_t var_2c_3 = 0;
         
         while (!(*($v0_42 + 0x9b7c) & 1))
         {
-            int32_t var_38_3_1 = *($v0_42 + 0x9b74);
-            int32_t var_34_3_1 = *($v0_42 + 0x9b8c);
-            int32_t var_28_3_1 = 0;
-            int32_t var_30_3_1 = *($v0_42 + 0x9b90);
-            int32_t var_2c_3_1 = 0;
-            tx_isp_send_event_to_remote(*($s4_1 + 0x200), 0x3000006, &var_40_66);
+            tx_isp_send_event_to_remote(*($s4_1 + 0x200), 0x3000006, &var_40);
             $v0_42 = *(arg1 + 0xb8);
         }
     }
@@ -270,15 +270,15 @@
     do
     {
         int32_t $v0_46 = 1 << (i & 0x1f) & $s1;
+            int32_t $v0_47 = *$s2_1;
+                int32_t result_1 = $v0_47();
         i += 1;
         
         if ($v0_46)
         {
-            int32_t $v0_47 = *$s2_1;
             
             if ($v0_47)
             {
-                int32_t result_1 = $v0_47();
                 
                 if (result_1 != 1)
                     result = result_1;
@@ -286,7 +286,7 @@
         }
         
         $s2_1 += 4;
-    } while (i != 0x20);
+    } while ((uintptr_t)i != 0x20);
     
     return result;
 }

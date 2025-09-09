@@ -5,6 +5,8 @@
 
 {
     uint32_t tparams_cust_1 = tparams_cust;
+        uint32_t day_night_2 = day_night;
+        uint32_t $v0_1 = 3;
     
     if (!tparams_cust_1)
         return 0xffffffff;
@@ -12,9 +14,7 @@
     if (arg1 == 1)
     {
         memcpy(0x94b20, tparams_cust_1, 0x137f0);
-        uint32_t day_night_2 = day_night;
         cust_mode = arg1;
-        uint32_t $v0_1 = 3;
         
         if (!(0xfffffffd & day_night_2))
             $v0_1 = 2;
@@ -24,29 +24,29 @@
     else if (!arg1)
     {
         uint32_t day_night_1 = day_night;
+        else if (day_night_1 >= 2)
+            else if (day_night_1 == 3)
         
         if (day_night_1 == 1)
             memcpy(0x94b20, tparams_night, 0x137f0);
-        else if (day_night_1 >= 2)
         {
             if (day_night_1 == 2)
                 memcpy(0x94b20, tparams_day, 0x137f0);
-            else if (day_night_1 == 3)
                 memcpy(0x94b20, tparams_night, 0x137f0);
             else
-                isp_printf(2, "Can not support this frame mode!!!\\n", "tisp_cust_mode_s_ctrl");
+                isp_printf(); // Fixed: macro call, removed arguments;
         }
         else if (!day_night_1)
             memcpy(0x94b20, tparams_day, 0x137f0);
         else
-            isp_printf(2, "Can not support this frame mode!!!\\n", "tisp_cust_mode_s_ctrl");
+            isp_printf(); // Fixed: macro call, removed arguments;
         
         cust_mode = 0;
     }
     
     int32_t $v0_2 = system_reg_read(0xc);
     
-    for (int32_t i = 0; i != 0x20; )
+    for (int32_t i = 0; (uintptr_t)i != 0x20; )
     {
         int32_t $v0_3 = ~(1 << (i & 0x1f)) & $v0_2;
         int32_t $a0_6 = *((i << 2) + 0x94b20) << (i & 0x1f);
@@ -57,7 +57,7 @@
     int32_t $v0_4;
     int32_t $s0_1;
     
-    if (data_b2e74_9 != 1)
+    if (data_b2e74_6 != 1)
     {
         $v0_4 = $v0_2 & 0xb577fffd;
         $s0_1 = 0x34000009;
@@ -69,8 +69,8 @@
     }
     
     int32_t $s0_2 = $v0_4 | $s0_1;
-    int32_t var_10_55 = $s0_2;
-    isp_printf(0, "sensor type is BT1120!\\n", "tisp_cust_mode_s_ctrl");
+    int32_t var_10_3 = $s0_2;
+    isp_printf(); // Fixed: macro call, removed arguments;
     system_reg_write(0xc, $s0_2);
     tiziano_defog_dn_params_refresh();
     tiziano_ae_dn_params_refresh();

@@ -4,10 +4,10 @@
   int32_t tisp_bcsh_param_array_set(int32_t arg1, int32_t* arg2, int32_t* arg3)
 
 {
-    if (arg1 - 0x3c0 >= 0x26)
+        int32_t var_18_1 = arg1;
+    if (arg1 - (uintptr_t)0x3c0 >= 0x26)
     {
-        int32_t var_18_1_11 = arg1;
-        isp_printf(2, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\\n", 
+        isp_printf(); // Fixed: macro call, removed arguments\n", 
             "tisp_bcsh_param_array_set");
         return 0xffffffff;
     }

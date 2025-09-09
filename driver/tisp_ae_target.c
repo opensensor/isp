@@ -4,15 +4,15 @@
   int32_t tisp_ae_target(int32_t arg1, int32_t* arg2, int32_t* arg3, int32_t arg4)
 
 {
+    int32_t* $t0 = arg2;
+    int32_t $v0_6 = 0;
     if (*arg2 << (arg4 & 0x1f) >= arg1)
         return *arg3;
     
-    int32_t* $t0 = arg2;
     
     if (arg1 >= arg2[9] << (arg4 & 0x1f))
         return arg3[9];
     
-    int32_t $v0_6 = 0;
     int32_t $v0_7;
     
     while (true)
@@ -49,12 +49,12 @@
     {
         int32_t $t1_3 = *$v0_8;
         int32_t $a0_3 = $t1_3 - $a0;
+        int32_t $a1_2 = *$a1;
+        int32_t $v0_13 = $t1_3 - $a1_2;
         
         if ($t1_3 < $a0)
             $a0_3 = $a0 - $t1_3;
         
-        int32_t $a1_2 = *$a1;
-        int32_t $v0_13 = $t1_3 - $a1_2;
         
         if ($a1_2 >= $t1_3)
             $v0_13 = $a1_2 - $t1_3;

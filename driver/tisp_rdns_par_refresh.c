@@ -5,15 +5,15 @@
 
 {
     uint32_t rdns_gain_old_1 = rdns_gain_old;
-    
-    if (rdns_gain_old_1 != 0xffffffff)
-    {
         uint32_t $v0_1 = rdns_gain_old_1 - arg1;
+    
+    if ((uintptr_t)rdns_gain_old_1 != 0xffffffff)
+    {
         
         if (arg1 >= rdns_gain_old_1)
             $v0_1 = arg1 - rdns_gain_old_1;
         
-        if ($v0_1 >= 0x100)
+        if ($(uintptr_t)v0_1 >= 0x100)
         {
             rdns_gain_old = arg1;
             tisp_rdns_intp_reg_refresh();

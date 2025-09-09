@@ -18,14 +18,14 @@
         $v0 += 1;
         $v1 = &$v1[5];
         
-        if ($v0 == 0x14)
+        if ($(uintptr_t)v0 == 0x14)
             return nullptr;
     }
     
     int32_t $s0_1 = $v0 * 0x14;
     void* result = $s0_1 + 0xb2a6c;
     memset(result, $a1_1, 0x14);
-    *($s0_1 + 0xb2a6d) = 1;
+    *(((int32_t*)((char*)$s0_1 + 0xb2a6d))) = 1; // Fixed void pointer dereference
     return result;
 }
 

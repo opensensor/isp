@@ -4,10 +4,10 @@
   int32_t tisp_defog_param_array_set(int32_t arg1, int32_t arg2, int32_t* arg3)
 
 {
-    if (arg1 - 0x35a >= 0x26)
+        int32_t var_18_1 = arg1;
+    if (arg1 - (uintptr_t)0x35a >= 0x26)
     {
-        int32_t var_18_1_19 = arg1;
-        isp_printf(2, "sensor type is BT1120!\\n", "tisp_defog_param_array_set");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     
@@ -15,7 +15,7 @@
     {
         case 0x35a:
         {
-            memcpy(&data_aca90_12[6]);
+            memcpy(&data_aca90[6]);
             *arg3 = 0x80;
             break;
         }
@@ -33,7 +33,7 @@
         }
         case 0x35d:
         {
-            memcpy(&data_ac8fc_17[0xb]);
+            memcpy(&data_ac8fc[0xb]);
             *arg3 = 0x80;
             break;
         }
@@ -107,11 +107,11 @@
             {
                 memcpy(&param_defog_cent3_w_dis_array, &param_defog_cent3_w_dis_array_tmp, 0x60);
                 memcpy(&param_defog_cent5_w_dis_array, &param_defog_cent5_w_dis_array_tmp, 0x7c);
-                memcpy(&data_ac8fc_18[0xb], &param_defog_weightlut22_tmp, 0x80);
+                memcpy(&data_ac8fc[0xb], &param_defog_weightlut22_tmp, 0x80);
                 memcpy(&param_defog_weightlut12, &param_defog_weightlut12_tmp, 0x80);
                 memcpy(&param_defog_weightlut21, &param_defog_weightlut21_tmp, 0x80);
                 memcpy(&param_defog_weightlut02, &param_defog_weightlut02_tmp, 0x80);
-                memcpy(&data_aca90_13[6], &param_defog_weightlut20_tmp, 0x80);
+                memcpy(&data_aca90[6], &param_defog_weightlut20_tmp, 0x80);
                 *arg3 = 0x24;
             }
             break;

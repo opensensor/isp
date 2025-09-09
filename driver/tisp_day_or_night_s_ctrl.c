@@ -10,7 +10,7 @@
         day_night = 0;
     }
     else if (arg1 != 1)
-        isp_printf(2, "Can not support this frame mode!!!\\n", "tisp_day_or_night_s_ctrl");
+        isp_printf(); // Fixed: macro call, removed arguments;
     else
     {
         memcpy(0x94b20, tparams_night, 0x137f0);
@@ -19,7 +19,7 @@
     
     int32_t $v0 = system_reg_read(0xc);
     
-    for (int32_t i = 0; i != 0x20; )
+    for (int32_t i = 0; (uintptr_t)i != 0x20; )
     {
         int32_t $v0_1 = ~(1 << (i & 0x1f)) & $v0;
         int32_t $a0_6 = *((i << 2) + 0x94b20) << (i & 0x1f);
@@ -30,7 +30,7 @@
     int32_t $v0_2;
     int32_t $s0;
     
-    if (data_b2e74_8 != 1)
+    if (data_b2e74_5 != 1)
     {
         $v0_2 = $v0 & 0xb577fffd;
         $s0 = 0x34000009;
@@ -42,7 +42,7 @@
     }
     
     int32_t $s0_1 = $v0_2 | $s0;
-    isp_printf(0, "sensor type is BT1120!\\n", "tisp_day_or_night_s_ctrl");
+    isp_printf(); // Fixed: macro call, removed arguments;
     system_reg_write(0xc, $s0_1);
     tiziano_defog_dn_params_refresh();
     tiziano_ae_dn_params_refresh();

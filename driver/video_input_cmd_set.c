@@ -4,22 +4,23 @@
   int32_t video_input_cmd_set(void* arg1, int32_t arg2, int32_t arg3)
 
 {
-    void* $s3 = *(arg1 + 0x70);
-    void* $v0 = *($s3 + 0x3c);
+    char* $s3 = *((char*)arg1 + 0x70); // Fixed void pointer arithmetic
+    char* $v0 = *((char*)$s3 + 0x3c); // Fixed void pointer arithmetic
+        char* $v0_1 = *((char*)$v0 + 0xd8); // Fixed void pointer arithmetic
+            char* $s1_1 = *((char*)$v0_1 + 0xe4); // Fixed void pointer arithmetic
+                int32_t $s4_1 = (uintptr_t)arg3 < 0x81 ? 1 : 0;
+                        int32_t $a2_1 = arg3;
     
-    if ($v0 && $v0 < 0xfffff001)
+    if ($v0 && $(uintptr_t)v0 < 0xfffff001)
     {
-        void* $v0_1 = *($v0 + 0xd8);
         
-        if ($v0_1 && $v0_1 < 0xfffff001)
+        if ($v0_1 && $(uintptr_t)v0_1 < 0xfffff001)
         {
-            void* $s1_1 = *($v0_1 + 0xe4);
             
             if ($s1_1)
             {
-                int32_t $s4_1 = arg3 < 0x81 ? 1 : 0;
                 
-                if ($s1_1 < 0xfffff001)
+                if ($(uintptr_t)s1_1 < 0xfffff001)
                 {
                     int32_t result;
                     char* $s0_1;
@@ -28,12 +29,11 @@
                     {
                         $s0_1 = &video_input_cmd_buf;
                     label_13998:
-                        int32_t $a2_1 = arg3;
                         void* entry_$gp;
                         
                         if (!((arg3 | arg2 | (arg3 + arg2)) & *(entry_$gp + 0x18)))
                         {
-                            __might_sleep("sensor type is BT601!\\n", 0xc9, 0);
+                            __might_sleep("sensor type is BT601!\n", 0xc9, 0);
                             $a2_1 = __copy_user($s0_1, arg2, arg3);
                         }
                         
@@ -44,8 +44,8 @@
                             int32_t $v0_8 = 9;
                             char* $a0_4 = $s0_1;
                             char const* const $v1_4 =
-                                "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\\n";
                             int32_t $a1_1 = 9;
+                                "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n";
                             uint32_t $at_2;
                             uint32_t $a2_3;
                             
@@ -78,7 +78,7 @@
                             if ($a2_4)
                             {
                                 char* $a0_8 = $s0_1;
-                                char const* const $v1_5 = "%s[%d] do not support this interface\\n";
+                                char const* const $v1_5 = "%s[%d] do not support this interface\n";
                                 int32_t $a1_3 = 6;
                                 uint32_t $at_3;
                                 uint32_t $a2_7;
@@ -109,7 +109,7 @@
                                 if ($a2_7 - $at_3)
                                 {
                                     char* $a0_10 = $s0_1;
-                                    char* $v1_6 = "%s:%d::linear mode\\n";
+                                    char* $v1_6 = "%s:%d::linear mode\n";
                                     int32_t $a1_5 = 5;
                                     uint32_t $at_4;
                                     uint32_t $a2_9;
@@ -140,7 +140,7 @@
                                     if ($a2_9 - $at_4)
                                     {
                                         char* $a0_12 = $s0_1;
-                                        char* $v1_7 = "%s:%d::wdr mode\\n";
+                                        char* $v1_7 = "%s:%d::wdr mode\n";
                                         uint32_t $at_5;
                                         uint32_t $a1_7;
                                         
@@ -176,30 +176,30 @@
                                         {
                                             int32_t var_30 = 0;
                                             int32_t $v0_25 =
-                                                private_simple_strtoull(&$s0_1[0xa], &var_30_2, 0);
                                             int32_t $v0_26 =
-                                                private_simple_strtoull(var_30_3 + 1, 0, 0);
-                                            private_seq_printf($s3, "qbuffer null\\n", $v0_25);
-                                            var_48_2 = $s1_1 + 0x8c;
-                                            int32_t var_40_2_1 = $v0_25;
+                                            int32_t var_40_2 = $v0_25;
                                             int32_t var_3c_2 = 0;
-                                            int32_t var_38_1_1 = $v0_26;
-                                            int32_t var_34_1_3 = 0;
-                                            void* $v0_29 = **($s1_1 + 0xc4);
+                                            int32_t var_38_1 = $v0_26;
+                                            int32_t var_34_1 = 0;
+                                            char* $v0_29 = (char*)(**($s1_1 + 0xc4)); // Fixed void pointer assignment
+                                                int32_t $v0_30 = *($v0_29 + 0x18);
+                                                private_simple_strtoull(&$s0_1[0xa], &var_30, 0);
+                                                private_simple_strtoull(var_30 + 1, 0, 0);
+                                            private_seq_printf($s3, "qbuffer null\n", $v0_25);
+                                            var_48 = $s1_1 + 0x8c;
                                             char const* const $a2_12;
                                             
                                             if (!$v0_29)
-                                                $a2_12 = "Failed to init isp module(%d.%d)\\n";
+                                                $a2_12 = "Failed to init isp module(%d.%d)\n";
                                             else
                                             {
-                                                int32_t $v0_30 = *($v0_29 + 0x18);
                                                 
                                                 if (!$v0_30)
-                                                    $a2_12 = "Failed to init isp module(%d.%d)\\n";
-                                                else if ($v0_30($s1_1, &var_48_3))
-                                                    $a2_12 = "Failed to init isp module(%d.%d)\\n";
+                                                    $a2_12 = "Failed to init isp module(%d.%d)\n";
+                                                else if ($v0_30($s1_1, &var_48))
+                                                    $a2_12 = "Failed to init isp module(%d.%d)\n";
                                                 else
-                                                    $a2_12 = "bank no free\\n";
+                                                    $a2_12 = "bank no free\n";
                                             }
                                             
                                             sprintf(&video_input_cmd_buf, 
@@ -209,28 +209,28 @@
                                     }
                                     else
                                     {
-                                        var_48_4 = $s1_1 + 0x8c;
-                                        void* $v0_22 = **($s1_1 + 0xc4);
+                                        char* $v0_22 = (char*)(**($s1_1 + 0xc4)); // Fixed void pointer assignment
+                                            int32_t $v0_23 = *($v0_22 + 0x14);
+                                        var_48 = $s1_1 + 0x8c;
                                         
                                         if ($v0_22)
                                         {
-                                            int32_t $v0_23 = *($v0_22 + 0x14);
                                             
                                             if (!$v0_23)
                                             {
                                                 isp_printf(2, 
                                                     "%s[%d] VIC failed to config DVP SONY "
-                                                "mode!(10bits-sensor)\\n", 
+                                                "mode!(10bits-sensor)\n", 
                                                     "video_input_cmd_set");
                                                 result = arg3;
                                             }
-                                            else if (!$v0_23($s1_1, &var_48_5))
+                                            else if (!$v0_23($s1_1, &var_48_1))
                                                 result = arg3;
                                             else
                                             {
                                                 isp_printf(2, 
                                                     "%s[%d] VIC failed to config DVP SONY "
-                                                "mode!(10bits-sensor)\\n", 
+                                                "mode!(10bits-sensor)\n", 
                                                     "video_input_cmd_set");
                                                 result = arg3;
                                             }
@@ -239,7 +239,7 @@
                                         {
                                             isp_printf(2, 
                                                 "%s[%d] VIC failed to config DVP SONY "
-                                            "mode!(10bits-sensor)\\n", 
+                                            "mode!(10bits-sensor)\n", 
                                                 "video_input_cmd_set");
                                             result = arg3;
                                         }
@@ -247,28 +247,28 @@
                                 }
                                 else
                                 {
-                                    var_48_6 = $s1_1 + 0x8c;
-                                    void* $v0_17 = **($s1_1 + 0xc4);
+                                    char* $v0_17 = (char*)(**($s1_1 + 0xc4)); // Fixed void pointer assignment
+                                        int32_t $v0_18 = *($v0_17 + 0x10);
+                                    var_48 = $s1_1 + 0x8c;
                                     
                                     if ($v0_17)
                                     {
-                                        int32_t $v0_18 = *($v0_17 + 0x10);
                                         
                                         if (!$v0_18)
                                         {
                                             isp_printf(2, 
                                                 "%s[%d] VIC failed to config DVP SONY "
-                                            "mode!(10bits-sensor)\\n", 
+                                            "mode!(10bits-sensor)\n", 
                                                 "video_input_cmd_set");
                                             result = arg3;
                                         }
-                                        else if (!$v0_18($s1_1, &var_48_7))
+                                        else if (!$v0_18($s1_1, &var_48_2))
                                             result = arg3;
                                         else
                                         {
                                             isp_printf(2, 
                                                 "%s[%d] VIC failed to config DVP SONY "
-                                            "mode!(10bits-sensor)\\n", 
+                                            "mode!(10bits-sensor)\n", 
                                                 "video_input_cmd_set");
                                             result = arg3;
                                         }
@@ -276,7 +276,7 @@
                                     else
                                     {
                                         isp_printf(2, 
-                                            "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\\n", 
+                                            "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", 
                                             "video_input_cmd_set");
                                         result = arg3;
                                     }
@@ -285,40 +285,40 @@
                             else
                             {
                                 int32_t $v0_9 = private_simple_strtoull(&$s0_1[0xa], 0, $a2_4);
-                                var_48_8 = $s1_1 + 0x8c;
-                                int32_t var_40_1_4 = $v0_9;
-                                int32_t var_3c_1_2 = 0;
-                                void* $v0_12 = **($s1_1 + 0xc4);
+                                int32_t var_40_1 = $v0_9;
+                                int32_t var_3c_1 = 0;
+                                char* $v0_12 = (char*)(**($s1_1 + 0xc4)); // Fixed void pointer assignment
+                                    int32_t $v0_13 = *($v0_12 + 0xc);
+                                var_48 = $s1_1 + 0x8c;
                                 int32_t $s1_2;
-                                int32_t var_38_4;
+                                int32_t var_38;
                                 
                                 if ($v0_12)
                                 {
-                                    int32_t $v0_13 = *($v0_12 + 0xc);
                                     
                                     if (!$v0_13)
                                     {
                                         isp_printf(2, 
-                                            "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\\n", 
+                                            "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", 
                                             "video_input_cmd_set");
-                                        $s1_2 = var_38_5;
+                                        $s1_2 = var_38;
                                     }
-                                    else if ($v0_13($s1_1, &var_48_9, &data_80000_4))
+                                    else if ($v0_13($s1_1, &var_48_3, &data_80000_2))
                                     {
                                         isp_printf(2, 
-                                            "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\\n", 
+                                            "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", 
                                             "video_input_cmd_set");
-                                        $s1_2 = var_38_6;
+                                        $s1_2 = var_38;
                                     }
                                     else
-                                        $s1_2 = var_38_7;
+                                        $s1_2 = var_38;
                                 }
                                 else
                                 {
                                     isp_printf(2, 
-                                        "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\\n", 
+                                        "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", 
                                         "video_input_cmd_set");
-                                    $s1_2 = var_38_8;
+                                    $s1_2 = var_38;
                                 }
                                 private_seq_printf($s3, 
                                     "%s[%d] VIC failed to config DVP mode!(10bits-sensor)\\n", 

@@ -13,13 +13,13 @@
         
         if (arg1)
         {
-            isp_printf(2, "snapraw", arg1);
+            isp_printf(); // Fixed: macro call, removed arguments;
             return 0xffffffff;
         }
     }
     else
     {
-        tiziano_adr_init(sensor_info, data_b2e1c_5);
+        tiziano_adr_init(sensor_info, data_b2e1c);
         $a1_1 = $v0 & 0xffffff7f;
     }
     

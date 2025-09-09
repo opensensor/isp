@@ -4,10 +4,10 @@
   int32_t tisp_gb_param_array_set(int32_t arg1, int32_t arg2, int32_t* arg3)
 
 {
-    if (arg1 - 0x3f5 >= 0xa)
+        int32_t var_10_1 = arg1;
+    if (arg1 - (uintptr_t)0x3f5 >= 0xa)
     {
-        int32_t var_10_1_4 = arg1;
-        isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", "tisp_gb_param_array_set");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     

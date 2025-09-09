@@ -6,7 +6,7 @@
 {
     s_bcsh_mjpeg_mode = arg1;
     s_bcsh_mjpeg_y_range_low = arg2;
-    data_9a91c_2 = arg3;
+    data_9a91c = arg3;
     /* tailcall */
     return tiziano_bcsh_update();
 }

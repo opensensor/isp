@@ -5,22 +5,22 @@
 
 {
     int32_t $s0 = arg1;
-    int32_t var_28_12 = 0;
+    int32_t var_28 = 0;
+        int32_t $v1_1 = var_28;
     *arg2 = 0;
     
-    for (int32_t i = 0x54; i != 0x59; )
+    for (int32_t i = 0x54; (uintptr_t)i != 0x59; )
     {
-        tisp_lsc_param_array_get(i, $s0, &var_28_13);
-        int32_t $v1_1 = var_28_14;
+        tisp_lsc_param_array_get(i, $s0, &var_28);
         i += 1;
         $s0 += $v1_1;
         *arg2 += $v1_1;
     }
     
-    for (int32_t i_1 = 0x5c; i_1 != 0x5f; )
+    for (int32_t i_1 = 0x5c; (uintptr_t)i_1 != 0x5f; )
     {
-        tisp_lsc_param_array_get(i_1, $s0, &var_28_15);
-        int32_t $v1_2 = var_28_16;
+        int32_t $v1_2 = var_28;
+        tisp_lsc_param_array_get(i_1, $s0, &var_28);
         i_1 += 1;
         $s0 += $v1_2;
         *arg2 += $v1_2;

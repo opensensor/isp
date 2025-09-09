@@ -4,10 +4,10 @@
   int32_t tisp_lsc_param_array_get(int32_t arg1, int32_t arg2, int32_t* arg3)
 
 {
-    if (arg1 - 0x54 >= 0xb)
+        int32_t var_18_1 = arg1;
+    if (arg1 - (uintptr_t)0x54 >= 0xb)
     {
-        int32_t var_18_1_7 = arg1;
-        isp_printf(2, &$LC0, "tisp_lsc_param_array_get");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     
@@ -18,7 +18,7 @@
     {
         case 0x54:
         {
-            $a1_1 = &data_9a428_2;
+            $a1_1 = &data_9a428;
             $s0_1 = 4;
             break;
         }
@@ -30,7 +30,7 @@
         }
         case 0x56:
         {
-            $a1_1 = &data_9a424_2;
+            $a1_1 = &data_9a424;
             $s0_1 = 4;
             break;
         }
@@ -42,7 +42,7 @@
         }
         case 0x58:
         {
-            $a1_1 = &data_9a410_2;
+            $a1_1 = &data_9a410;
             $s0_1 = 0x10;
             break;
         }

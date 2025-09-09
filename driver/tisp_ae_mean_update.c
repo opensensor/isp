@@ -5,18 +5,18 @@
 
 {
     uint32_t wmean_new_2 = wmean_new;
-    uint32_t $v0 = data_b0d4c_2;
-    uint32_t $a3 = data_b0d54_2;
+    uint32_t $v0 = data_b0d4c;
+    uint32_t $a3 = data_b0d54;
     int32_t $a2 = 0;
+        int32_t* $t4_1 = i * 0x3c + data_d4670;
+        int32_t $t3_3 = 0;
+            int32_t $t6_1 = $t3_3 < $a3 ? 1 : 0;
     
     for (int32_t i = 0; i < $v0; i += 1)
     {
-        int32_t* $t4_1 = i * 0x3c + data_d4670_1;
-        int32_t $t3_3 = 0;
         
         while (true)
         {
-            int32_t $t6_1 = $t3_3 < $a3 ? 1 : 0;
             $t3_3 += 1;
             
             if (!$t6_1)

@@ -4,7 +4,7 @@
   int32_t tiziano_mdns_init(int32_t arg1, int32_t arg2)
 
 {
-    void* var_2c_10 = &data_b0000_17;
+    void* var_2c = &data_b0000;
     void* $v0_1;
     
     if (mdns_wdr_en)
@@ -165,9 +165,9 @@
     }
     
     mdns_c_fiir_fus_wei8_array_now = $v0_1;
-    data_9ab08_3 = arg1;
-    data_9ab04_3 = arg2;
-    data_9a9d0_12 = 0xffffffff;
+    data_9ab08_1 = arg1;
+    data_9ab04_1 = arg2;
+    data_9a9d0_2 = 0xffffffff;
     tiziano_mdns_params_refresh();
     tisp_mdns_par_refresh(isp_printf, isp_printf);
     tisp_mdns_bypass(0);

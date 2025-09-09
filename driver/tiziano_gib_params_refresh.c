@@ -8,10 +8,10 @@
     memcpy(&tiziano_gib_r_g_linear, 0x97598, 8);
     memcpy(&tiziano_gib_b_ir_linear, 0x975a0, 8);
     memcpy(&tiziano_gib_deirm_blc_r_linear, U"CDCCBBBBBBDCCCCCCCBDCBCCCCCBDDCCCCCC", 0x24);
-    memcpy(&tiziano_gib_deirm_blc_gr_linear, &data_975a8_1[9], 0x24);
-    memcpy(&tiziano_gib_deirm_blc_gb_linear, &data_975a8_2[0x12], 0x24);
-    memcpy(&tiziano_gib_deirm_blc_b_linear, &data_975a8_3[0x1b], 0x24);
-    memcpy(U"A?CB?????", &data_975a8_4[0x24], 0x24);
+    memcpy(&tiziano_gib_deirm_blc_gr_linear, &data_975a8[9], 0x24);
+    memcpy(&tiziano_gib_deirm_blc_gb_linear, &data_975a8[0x12], 0x24);
+    memcpy(&tiziano_gib_deirm_blc_b_linear, &data_975a8[0x1b], 0x24);
+    memcpy(U"A?CB?????", &data_975a8[0x24], 0x24);
     memcpy(&gib_ir_point, 0x9765c, 0x10);
     memcpy(&gib_ir_reser, 0x9766c, 0x3c);
     memcpy(&tiziano_gib_deir_r_h, 0x976a8, 0x84);

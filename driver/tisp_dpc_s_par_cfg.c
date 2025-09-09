@@ -5,7 +5,7 @@
 
 {
     system_reg_write(0x2800, 
-        data_cba48_1 << 8 | data_cba4c_1 << 0xc | dpc_s_con_par_array | data_cba50_1 << 0x10);
+        data_cba48 << 8 | data_cba4c << 0xc | dpc_s_con_par_array | data_cba50 << 0x10);
     return 0;
 }
 

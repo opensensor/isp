@@ -7,6 +7,6 @@
     if (ta_custom_en == 1)
         ta_custom_en = 0;
     
-    return &data_d0000_3;
+    return &data_d0000;
 }
 

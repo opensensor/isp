@@ -4,23 +4,23 @@
   int32_t private_leading_one_position(uint32_t arg1) __attribute__((pure))
 
 {
+        arg1 u>>= 0x10;
     char result;
     
     if (arg1 < isp_printf)
         result = 0;
     else
     {
-        arg1 u>>= 0x10;
         result = 0x10;
     }
     
-    int32_t $v1_1 = arg1 < 0x10 ? 1 : 0;
+    int32_t $v1_1 = (uintptr_t)arg1 < 0x10 ? 1 : 0;
     
-    if (arg1 >= 0x100)
+    if ((uintptr_t)arg1 >= 0x100)
     {
         arg1 u>>= 8;
         result += 8;
-        $v1_1 = arg1 < 0x10 ? 1 : 0;
+        $v1_1 = (uintptr_t)arg1 < 0x10 ? 1 : 0;
     }
     
     int32_t $v1_2 = arg1 < 4 ? 1 : 0;

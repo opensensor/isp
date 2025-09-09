@@ -22,7 +22,7 @@
     }
     
     dpc_d_m3_fthres_array_now = $v0;
-    data_9ab10_8 = 0xffffffff;
+    data_9ab10_3 = 0xffffffff;
     tiziano_dpc_params_refresh();
     tisp_dpc_par_refresh(isp_printf, isp_printf, 1);
     return 0;

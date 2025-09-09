@@ -4,7 +4,7 @@
   int32_t tiziano_sdns_init()
 
 {
-    void* var_2c_9 = &data_b0000_15;
+    void* var_2c = &data_b0000;
     void* $v0_1;
     
     if (sdns_wdr_en)
@@ -71,7 +71,7 @@
     }
     
     sdns_ave_thres_array_now = $v0_1;
-    data_9a9c4_6 = 0xffffffff;
+    data_9a9c4_3 = 0xffffffff;
     tiziano_sdns_params_refresh();
     tisp_sdns_par_refresh(isp_printf, isp_printf, 1);
     return 0;

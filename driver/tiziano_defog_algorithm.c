@@ -4,34 +4,34 @@
   int32_t tiziano_defog_algorithm()
 
 {
+    int32_t $a0_5 = data_acd58;
+        uint32_t ev_now_1 = ev_now;
     if (defog_frm_num < 2)
         defog_update_paras = 0;
-    else if (!data_acd70_1)
+    else if (!data_acd70)
         defog_update_paras = 0;
     else
         defog_update_paras = 1;
     
-    data_acd78_1 = 0x528;
-    data_acd7c_1 = 0x12c;
-    data_acd80_1 = 0xfa0;
+    data_acd78 = 0x528;
+    data_acd7c = 0x12c;
+    data_acd80 = 0xfa0;
     
-    if (!data_acd68_1)
-        data_acd84_1 = 0;
+    if (!data_acd68)
+        data_acd84 = 0;
     else
-        data_acd84_2 = 1;
+        data_acd84 = 1;
     
-    if (!data_acd6c_1)
-        data_acd88_1 = 0;
+    if (!data_acd6c)
+        data_acd88 = 0;
     else
-        data_acd88_2 = 1;
+        data_acd88 = 1;
     
-    int32_t $a0_5 = data_acd58_1;
     
     if ($a0_5 == 1)
     {
-        uint32_t ev_now_1 = ev_now;
         defog_manual_ctrl = $a0_5;
-        data_ceab8_1 = ev_now_1;
+        data_ceab8 = ev_now_1;
     }
     
     TizianoDefogStructMe = &defog_block_hist_info;
@@ -62,10 +62,10 @@
     data_cd4f0_1 = &defog_t_par_list1;
     data_cd4f4_1 = &defog_t_par_list2;
     
-    for (; i < 0x50; i += 1)
+    for (; (uintptr_t)i < 0x50; i += 1)
     {
-        char var_58_14[0x50];
-        var_58_15[i] = *(&data_cd4b0_2 + i);
+        char var_58[0x50];
+        var_58[i] = *(&data_cd4b0 + i);
     }
     
     tisp_defog_soft_process(TizianoDefogStructMe, data_cd4a4_2, data_cd4a8_2, data_cd4ac_2);

@@ -8,11 +8,11 @@
     int32_t $t2 = 0x2710;
     int32_t $v1 = 0;
     int32_t i_1 = 0;
-    
-    for (int32_t i = 0; i != 0x200; )
-    {
         int32_t $a3 = *$t1;
         int32_t $a1 = $a3 - arg1;
+    
+    for (int32_t i = 0; (uintptr_t)i != 0x200; )
+    {
         
         if (arg1 >= $a3)
             $a1 = arg1 - $a3;
@@ -55,11 +55,11 @@
     {
         int32_t $v0_3 = *$a0_1;
         int32_t $t1_1 = $v1_1 << 1;
+            int16_t* $t1_2 = arg5 + $t1_1;
+            int32_t $v0_6 = fix_point_mult2_32(arg9, 
         
         if ($t0_2 < $v0_3)
         {
-            int16_t* $t1_2 = arg5 + $t1_1;
-            int32_t $v0_6 = fix_point_mult2_32(arg9, 
                 fix_point_div_32(arg9, (*$t1_2 - *(arg5 + $t1_1 - 2)) << (arg9 & 0x1f), 
                     ($v0_3 - *(arg4 + $t1_1 - 2)) << (arg9 & 0x1f)), 
                 ($v0_3 - $t0_2) << (arg9 & 0x1f));
@@ -70,7 +70,7 @@
         $v1_1 += 1;
         $a0_1 = &$a0_1[1];
         
-        if ($v1_1 == 0x81)
+        if ($(uintptr_t)v1_1 == 0x81)
         {
             $s0_2 = *(arg5 + 0x100);
             break;

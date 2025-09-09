@@ -7,33 +7,33 @@
     void* $t2 = arg1;
     int32_t $t3 = 0;
     int32_t $t1 = 0;
+        int32_t* $v0_1 = $t2;
+        int32_t $t0_1 = 0;
+            int32_t $v1_1 = $t3 + $t0_1;
+            int32_t $s4_3 = ($v0_1[2] & 3) << 0x14;
+            int32_t $a3_10 = $v0_1[1];
     
     while (true)
     {
-        int32_t* $v0_1 = $t2;
         
         if ($t1 == arg2)
             break;
         
-        int32_t $t0_1 = 0;
         
         while (true)
         {
-            int32_t $v1_1 = $t3 + $t0_1;
             
             if (arg3 << 2 == $t0_1)
                 break;
             
-            *(&af_array_fird0 + $v1_1) = *$v0_1 & 0x3fffff;
+            *(((void**)((char*)&af_array_fird0 + $v1_1))) = *$v0_1 & 0x3fffff; // Fixed void pointer dereference
             $t0_1 += 4;
-            *(&af_array_fird1 + $v1_1) = ($v0_1[1] & 0xfff) << 0xa | *$v0_1 >> 0x16;
-            int32_t $s4_3 = ($v0_1[2] & 3) << 0x14;
-            int32_t $a3_10 = $v0_1[1];
+            *(((void**)((char*)&af_array_fird1 + $v1_1))) = ($v0_1[1] & 0xfff) << 0xa | *$v0_1 >> 0x16; // Fixed void pointer dereference
             $v0_1 = &$v0_1[4];
-            *(&af_array_iird0 + $v1_1) = $s4_3 | $a3_10 >> 0xc;
-            *(&y_sp_fl_sl_0_array + $v1_1) = (*($v0_1 - 8) & 0xfffffc) >> 2;
-            *(&tisp_BCSH_u32HLSPslope + $v1_1) = (*($v0_1 - 4) & 0x7fff) << 8 | *($v0_1 - 5);
-            *(&af_array_high_luma_cnt + $v1_1) = (*($v0_1 - 4) & 0x3fff1000) >> 0xf;
+            *(((void**)((char*)&af_array_iird0 + $v1_1))) = $s4_3 | $a3_10 >> 0xc; // Fixed void pointer dereference
+            *(((void**)((char*)&y_sp_fl_sl_0_array + $v1_1))) = (*($v0_1 - 8) & 0xfffffc) >> 2; // Fixed void pointer dereference
+            *(((void**)((char*)&tisp_BCSH_u32HLSPslope + $v1_1))) = (*($v0_1 - 4) & 0x7fff) << 8 | *($v0_1 - 5); // Fixed void pointer dereference
+            *(((void**)((char*)&af_array_high_luma_cnt + $v1_1))) = (*($v0_1 - 4) & 0x3fff1000) >> 0xf; // Fixed void pointer dereference
         }
         
         $t1 += 1;

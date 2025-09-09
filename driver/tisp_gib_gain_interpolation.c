@@ -11,19 +11,19 @@
     int32_t $v0_2 = tisp_simple_intp($s2, $s3, &tiziano_gib_deirm_blc_gb_linear);
     int32_t $v0_3 = tisp_simple_intp($s2, $s3, &tiziano_gib_deirm_blc_b_linear);
     int32_t $v0_4 = tisp_simple_intp($s2, $s3, U"A?CB?????");
+    int32_t $v0_6 = $v0_5 & 0x1f;
     int32_t $v0_5;
     int32_t $a2;
     $v0_5 = system_reg_read(8);
-    int32_t $v0_6 = $v0_5 & 0x1f;
     int32_t $s1;
     int32_t $s2_1;
     int32_t $s3_1;
     int32_t $s4;
     
-    if ($v0_6 >= 0x18)
+    if ($(uintptr_t)v0_6 >= 0x18)
     {
     label_318a8:
-        isp_printf(2, &$LC0, $a2);
+        isp_printf(); // Fixed: macro call, removed arguments;
         $s1 = 0;
         $s3_1 = 0;
         $s2_1 = 0;

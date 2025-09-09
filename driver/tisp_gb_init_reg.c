@@ -8,10 +8,10 @@
     
     if (!init.31768)
     {
-        system_reg_write_gb(1, 0x1000, data_aa3e8_1 << 0x10 | tisp_gb_dgain_rgbir_l);
-        system_reg_write_gb(1, 0x1004, data_aa3f0_1 << 0x10 | data_aa3ec_1);
-        system_reg_write_gb(1, 0x100c, data_aa3d8_1 << 0x10 | tisp_gb_dgain_rgbir_s);
-        system_reg_write_gb(1, 0x1010, data_aa3e0_1 << 0x10 | data_aa3dc_1);
+        system_reg_write_gb(1, 0x1000, data_aa3e8 << 0x10 | tisp_gb_dgain_rgbir_l);
+        system_reg_write_gb(1, 0x1004, data_aa3f0 << 0x10 | data_aa3ec);
+        system_reg_write_gb(1, 0x100c, data_aa3d8 << 0x10 | tisp_gb_dgain_rgbir_s);
+        system_reg_write_gb(1, 0x1010, data_aa3e0 << 0x10 | data_aa3dc);
     }
     
     tisp_gb_blc_again_interp(*tisp_gb_blc_ag, 0);

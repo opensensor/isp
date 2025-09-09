@@ -5,8 +5,8 @@
 
 {
     void var_390;
-    tisp_g_ae_zone(&var_390_1);
-    private_copy_to_user(*arg1, &var_390_2, 0x384);
+    tisp_g_ae_zone(&var_390);
+    private_copy_to_user(*arg1, &var_390, 0x384);
     return 0;
 }
 

@@ -4,6 +4,7 @@
   int32_t tx_isp_init()
 
 {
+            int32_t $v0_3 = private_platform_driver_register(&tx_isp_driver);
     int32_t $v0;
     int32_t $a2;
     $v0 = private_driver_get_interface();
@@ -18,7 +19,6 @@
         
         if (!$v0_1)
         {
-            int32_t $v0_3 = private_platform_driver_register(&tx_isp_driver);
             
             if (!$v0_3)
                 return 0;
@@ -32,10 +32,10 @@
     else
     {
         $s0 = $v0;
-        $a1_1 = "VIC_CTRL : %08x\\n";
+        $a1_1 = "VIC_CTRL : %08x\n";
     }
     
-    isp_printf(1, $a1_1, $a2);
+    isp_printf(); // Fixed: macro call, removed arguments;
     return $s0;
 }
 

@@ -4,26 +4,26 @@
   void* ispcore_irq_fs_work()
 
 {
-    void* result = &data_d0000_6;
-    void* $s5 = *(mdns_y_pspa_cur_bi_wei0_array + 0xd4);
-    int32_t var_30_28 = 0;
+    void* result = &data_d0000;
+    char* $s5 = *((char*)mdns_y_pspa_cur_bi_wei0_array + 0xd4); // Fixed void pointer arithmetic
+    int32_t var_30 = 0;
+        int32_t* $s2_1 = $s5 + 0x180;
+            else if (i == 5)
     
     if ($s5)
     {
-        int32_t* $s2_1 = $s5 + 0x180;
         
         for (int32_t i = 0; i != 7; )
         {
             if (!*$s2_1)
                 i += 1;
-            else if (i == 5)
                 i += 1;
             else
             {
                 if (i < 7)
-❓                    /* jump -> (&data_7ddf0_1)[i] */
+❓                    /* jump -> (&data_7ddf0)[i] */
                 
-                var_30_29 = $s2_1[1];
+                var_30 = $s2_1[1];
                 
                 if (*(*($s5 + 0x120) + 0xf0) != 1)
                     i += 1;

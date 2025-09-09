@@ -4,20 +4,20 @@
   int32_t tisp_mscaler_mask_setreg(int32_t arg1, int32_t arg2, int32_t arg3, int24_t arg4, int32_t arg5, int16_t arg6, int16_t arg7, int32_t arg8, char arg9, uint32_t arg10, int16_t arg11, int16_t arg12, int16_t arg13, char arg14, char arg15, int32_t arg16, int16_t arg17, int16_t arg18, int32_t arg19, char arg20, uint32_t arg21, int16_t arg22, int16_t arg23, int16_t arg24, char arg25, char arg26, int32_t arg27, int16_t arg28, int16_t arg29, int32_t arg30, char arg31, uint32_t arg32, int16_t arg33, int16_t arg34, int16_t arg35, char arg36, char arg37, int32_t arg38, int16_t arg39, int16_t arg40, int32_t arg41, char arg42, uint32_t arg43, int16_t arg44, int16_t arg45, int16_t arg46, char arg47, char arg48, int32_t arg49, int16_t arg50, int16_t arg51, int32_t arg52, char arg53, uint32_t arg54, int16_t arg55, int16_t arg56, int16_t arg57, char arg58, char arg59, int32_t arg60, int16_t arg61, int16_t arg62, int32_t arg63)
 
 {
-    _setLeftPart32(arg1);
     uint32_t $v1 = *arg1[2];
     uint32_t $fp = arg2;
     uint32_t $s5_1 = _setRightPart32(arg1);
-    uint32_t var_34_29 = $v1;
-    uint32_t var_38_68 = $fp;
-    isp_printf(1, "count is %d\\n", "tisp_mscaler_mask_setreg");
+    uint32_t var_34 = $v1;
+    uint32_t var_38 = $fp;
     uint32_t msca_ch_en_1 = msca_ch_en;
+    int32_t $s4 = 0 < system_reg_read(0x9968) ? 1 : 0;
+    _setLeftPart32(arg1);
+    isp_printf(); // Fixed: macro call, removed arguments;
     
     if (!~msca_ch_en_1)
         msca_ch_en_1 = 0;
     
     msca_ch_en = msca_ch_en_1;
-    int32_t $s4 = 0 < system_reg_read(0x9968) ? 1 : 0;
     int32_t $s1;
     
     if (arg1 != 1)
@@ -29,9 +29,9 @@
     }
     else
     {
-        uint32_t var_34_1_11 = $v1;
-        uint32_t var_38_1_14 = $fp;
-        isp_printf(1, "count is %d\\n", "tisp_mscaler_mask_setreg");
+        uint32_t var_34_1 = $v1;
+        uint32_t var_38_1 = $fp;
+        isp_printf(); // Fixed: macro call, removed arguments;
         system_reg_write(0x9938, $s5_1);
         system_reg_write(0x993c, *arg2[2] << 0x10 | arg3);
         system_yvu_or_yuv($s4, 0x9940, arg4 << 0x10 | *arg3[2]);

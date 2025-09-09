@@ -4,6 +4,7 @@
   int32_t tiziano_mdns_params_refresh()
 
 {
+    int32_t $a0 = data_9ab00;
     memcpy(&mdns_y_filter_en_array, 0xa0650, 4);
     memcpy(&mdns_y_sf_cur_en_array, 0xa0654, 4);
     memcpy(&mdns_y_sf_ref_en_array, 0xa0658, 4);
@@ -47,10 +48,10 @@
     memcpy(&mdns_y_ref_wei_increase_array, 0xa0a08, 0x24);
     memcpy(&mdns_y_corner_length_t_array, 
         \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n", 0x24);
-    memcpy(&mdns_y_corner_length_b_array, &data_a0a2c_1[9], 0x24);
-    memcpy(&mdns_y_corner_length_l_array, &data_a0a2c_2[0x12], 0x24);
-    memcpy(&mdns_y_corner_length_r_array, &data_a0a2c_3[0x1b], 0x24);
-    memcpy(&mdns_y_edge_win_opt_array, &data_a0a2c_4[0x24], 0x24);
+    memcpy(&mdns_y_corner_length_b_array, &data_a0a2c[9], 0x24);
+    memcpy(&mdns_y_corner_length_l_array, &data_a0a2c[0x12], 0x24);
+    memcpy(&mdns_y_corner_length_r_array, &data_a0a2c[0x1b], 0x24);
+    memcpy(&mdns_y_edge_win_opt_array, &data_a0a2c[0x24], 0x24);
     memcpy(&mdns_y_edge_div_opt_array, 0xa0ae0, 0x24);
     memcpy(&mdns_y_edge_type_opt_array, 0xa0b04, 0x24);
     memcpy(&mdns_y_luma_win_opt_array, 0xa0b28, 0x24);
@@ -65,12 +66,12 @@
     memcpy(&mdns_y_hist_cmp_thres0_array, 0xa0c6c, 0x24);
     memcpy(&mdns_y_hist_cmp_thres1_array, 0xa0c90, 0x24);
     memcpy(&mdns_y_hist_cmp_thres2_array, U"         $$$$$$$$$", 0x24);
-    memcpy(&mdns_y_hist_cmp_thres3_array, &data_a0cb4_1[9], 0x24);
+    memcpy(&mdns_y_hist_cmp_thres3_array, &data_a0cb4[9], 0x24);
     memcpy(&mdns_y_hist_thres0_array, &data_a0cfc, 0x24);
     memcpy(&mdns_y_hist_thres1_array, 0xa0d20, 0x24);
     memcpy(&mdns_y_hist_thres2_array, 0xa0d44, 0x24);
-    memcpy(&mdns_y_hist_thres3_array, U"\\t\\t\\t\\t\\t\\t\\t\\t\\t", 0x24);
-    memcpy(&mdns_y_edge_thr_adj_seg_array, &data_a0d68_1[9], 0x24);
+    memcpy(&mdns_y_hist_thres3_array, U"\t\t\t\t\t\t\t\t\t", 0x24);
+    memcpy(&mdns_y_edge_thr_adj_seg_array, &data_a0d68[9], 0x24);
     memcpy(&mdns_y_luma_thr_adj_seg_array, 0xa0db0, 0x24);
     memcpy(&mdns_y_dtb_thr_adj_seg_array, 0xa0dd4, 0x24);
     memcpy(&mdns_y_ass_thr_adj_seg_array, 0xa0df8, 0x24);
@@ -152,7 +153,7 @@
     memcpy(&mdns_y_pspa_ref_bi_wei1_array, 0xa19a4, 0x24);
     memcpy(&mdns_y_pspa_ref_bi_wei2_array, 0xa19c8, 0x24);
     memcpy(&mdns_y_pspa_ref_bi_wei3_array, 0xa19ec, 0x24);
-    memcpy(&mdns_y_pspa_ref_bi_wei4_array, U"\\n\\n\\n\\n\\n\\n\\n\\n\\n", 0x24);
+    memcpy(&mdns_y_pspa_ref_bi_wei4_array, U"\n\n\n\n\n\n\n\n\n", 0x24);
     memcpy(&mdns_y_pspa_ref_lmt_op_en_array, &data_a1a34, 0x24);
     memcpy(&mdns_y_pspa_ref_lmt_wei_array, 0xa1a58, 0x24);
     memcpy(&mdns_y_piir_edge_thres0_array, 0xa1a7c, 0x24);
@@ -201,7 +202,7 @@
     memcpy(&mdns_y_fspa_ref_fus_wei_208_array, &data_a2088, 0x24);
     memcpy(&mdns_y_fspa_ref_fus_wei_224_array, 0xa20ac, 0x24);
     memcpy(&mdns_y_fspa_ref_fus_wei_240_array, 0xa20d0, 0x24);
-    memcpy(&mdns_y_fiir_edge_thres0_array, U"\\n\\n\\n\\n\\n\\n\\n\\n\\n", 0x24);
+    memcpy(&mdns_y_fiir_edge_thres0_array, U"\n\n\n\n\n\n\n\n\n", 0x24);
     memcpy(&mdns_y_fiir_edge_thres1_array, 0xa2118, 0x24);
     memcpy(&mdns_y_fiir_edge_thres2_array, 0xa213c, 0x24);
     memcpy(&mdns_y_fiir_edge_wei0_array, 0xa2160, 0x24);
@@ -228,7 +229,7 @@
     memcpy(&mdns_c_ref_wei_mv_array, 0xa28b0, 0x24);
     memcpy(&mdns_c_ref_wei_fake_array, 0xa28d4, 0x24);
     memcpy(&mdns_c_ref_wei_f_max_array, 0xa28f8, 0x24);
-    memcpy(&mdns_c_ref_wei_f_min_array, U"\\n\\n\\n\\n\\n\\n\\n\\n\\n", 0x24);
+    memcpy(&mdns_c_ref_wei_f_min_array, U"\n\n\n\n\n\n\n\n\n", 0x24);
     memcpy(&mdns_c_ref_wei_b_max_array, &data_a2940, 0x24);
     memcpy(&mdns_c_ref_wei_b_min_array, 0xa2964, 0x24);
     memcpy(&mdns_c_ref_wei_r_max_array, 0xa2988, 0x24);
@@ -318,7 +319,7 @@
     memcpy(&mdns_c_bgm_ref_src_array, 0xa35e8, 0x24);
     memcpy(&mdns_c_bgm_false_thres_array, 0xa360c, 0x24);
     memcpy(&mdns_c_bgm_false_step_array, 0xa3630, 0x24);
-    memcpy(&mdns_c_piir_edge_thres0_array, U"\\n\\n\\n\\n\\n\\nPPP", 0x24);
+    memcpy(&mdns_c_piir_edge_thres0_array, U"\n\n\n\n\n\nPPP", 0x24);
     memcpy(&mdns_c_piir_edge_thres1_array, &data_a3678, 0x24);
     memcpy(&mdns_c_piir_edge_thres2_array, 0xa369c, 0x24);
     memcpy(&mdns_c_piir_edge_wei0_array, 0xa36c0, 0x24);
@@ -361,7 +362,7 @@
     memcpy(&mdns_c_fspa_ref_fus_wei_208_array, 0xa3bf4, 0x24);
     memcpy(&mdns_c_fspa_ref_fus_wei_224_array, 0xa3c18, 0x24);
     memcpy(&mdns_c_fspa_ref_fus_wei_240_array, 0xa3c3c, 0x24);
-    memcpy(&mdns_c_fiir_edge_thres0_array, U"\\n\\n\\n\\n\\n\\nPPP", 0x24);
+    memcpy(&mdns_c_fiir_edge_thres0_array, U"\n\n\n\n\n\nPPP", 0x24);
     memcpy(&mdns_c_fiir_edge_thres1_array, &data_a3c84, 0x24);
     memcpy(&mdns_c_fiir_edge_thres2_array, 0xa3ca8, 0x24);
     memcpy(&mdns_c_fiir_edge_wei0_array, 0xa3ccc, 0x24);
@@ -379,7 +380,7 @@
     memcpy(&mdns_c_fiir_fus_wei7_array, 0xa3e7c, 0x24);
     memcpy(&mdns_c_fiir_fus_wei8_array, 0xa3ea0, 0x24);
     memcpy(&mdns_c_false_smj_thres_array, 0xa3ec4, 0x24);
-    memcpy(&mdns_c_false_edg_thres0_array, U"\\n\\n\\n\\n\\n\\nPPP", 0x24);
+    memcpy(&mdns_c_false_edg_thres0_array, U"\n\n\n\n\n\nPPP", 0x24);
     memcpy(&mdns_c_false_edg_thres1_array, 0xa3f0c, 0x24);
     memcpy(&mdns_c_false_edg_thres2_array, 0xa3f30, 0x24);
     memcpy(&mdns_c_false_thres_s0_array, 0xa3f54, 0x24);
@@ -406,8 +407,8 @@
     memcpy(&mdns_y_sta_ass_thres_wdr_array, 0xa171c, 0x24);
     memcpy(&mdns_y_sta_motion_thres_wdr_array, 0xa1740, 0x24);
     memcpy(&mdns_y_ref_wei_b_max_wdr_array, 0xa1764, 0x24);
-    memcpy(&mdns_y_ref_wei_b_min_wdr_array, &data_a1788_1, 0x24);
-    memcpy(&mdns_y_pspa_cur_median_win_opt_wdr_array, &data_a237c_1[9], 0x24);
+    memcpy(&mdns_y_ref_wei_b_min_wdr_array, &data_a1788, 0x24);
+    memcpy(&mdns_y_pspa_cur_median_win_opt_wdr_array, &data_a237c[9], 0x24);
     memcpy(&mdns_y_pspa_cur_bi_thres_wdr_array, 0xa23c4, 0x24);
     memcpy(&mdns_y_pspa_cur_bi_wei0_wdr_array, 0xa23e8, 0x24);
     memcpy(&mdns_y_pspa_ref_median_win_opt_wdr_array, 0xa240c, 0x24);
@@ -442,7 +443,7 @@
     memcpy(&mdns_c_sad_ass_thres_wdr_array, 0xa333c, 0x24);
     memcpy(&mdns_c_ref_wei_b_max_wdr_array, 0xa3360, 0x24);
     memcpy(&mdns_c_ref_wei_b_min_wdr_array, 0xa3384, 0x24);
-    memcpy(&mdns_c_median_cur_ss_wei_wdr_array, &data_a41b8_1[9], 0x24);
+    memcpy(&mdns_c_median_cur_ss_wei_wdr_array, &data_a41b8[9], 0x24);
     memcpy(&mdns_c_median_cur_se_wei_wdr_array, 0xa4200, 0x24);
     memcpy(&mdns_c_median_cur_ms_wei_wdr_array, 0xa4224, 0x24);
     memcpy(&mdns_c_median_cur_me_wei_wdr_array, 0xa4248, 0x24);
@@ -476,9 +477,8 @@
     memcpy(&mdns_c_fiir_fus_wei7_wdr_array, 0xa4638, 0x24);
     memcpy(&mdns_c_fiir_fus_wei8_wdr_array, U"dddddd", 0x24);
     memcpy(&mdns_c_sat_nml_stren_array, U"@@@@@@@@@", 0x24);
-    int32_t $a0 = data_9ab00_3;
     
-    if ($a0 != 0x80)
+    if ($(uintptr_t)a0 != 0x80)
         tisp_s_mdns_ratio($a0);
     
     return 0;

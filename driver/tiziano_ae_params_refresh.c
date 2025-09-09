@@ -27,7 +27,7 @@
     memcpy(U"KA7-(", U"FF<2--(#", 0x28);
     memcpy(&ae_extra_at_list, 0x959c4, 0x28);
     
-    if (!data_b0df8_1)
+    if (!data_b0df8)
     {
         memcpy(&_ae_result, 0x958f4, 0x18);
         memcpy(&_ae_stat, 0x9590c, 0x14);
@@ -38,35 +38,35 @@
     memcpy(&ae1_comp_ev_list, 0x95b08, 0x28);
     int32_t $lo = sensor_info / 2;
     void* $v0 = &_ae_parameter;
-    data_b0df8_2 = 0;
+    data_b0df8_1 = 0;
     void* $a3 = &_ae_parameter;
     int32_t $a2 = 0;
     
     while (true)
     {
-        int32_t $a0_1 = *data_b0d54_3;
+        int32_t $a0_1 = *data_b0d54;
         $a3 += 4;
         
         if ($a2 >= $a0_1)
             break;
         
         $a2 += 1;
-        *($a3 + 0xc) = $lo / $a0_1;
+        *(((void**)((char*)$a3 + 0xc))) = $lo / $a0_1; // Fixed void pointer dereference
     }
     
-    int32_t $lo_2 = data_b2e1c_2 / 2;
+    int32_t $lo_2 = data_b2e1c_1 / 2;
     int32_t $a1_2 = 0;
     
     while (true)
     {
-        int32_t $v1_1 = *data_b0d4c_3;
+        int32_t $v1_1 = *data_b0d4c;
         $v0 += 4;
         
         if ($a1_2 >= $v1_1)
             break;
         
         $a1_2 += 1;
-        *($v0 + 0x48) = $lo_2 / $v1_1;
+        *(((void**)((char*)$v0 + 0x48))) = $lo_2 / $v1_1; // Fixed void pointer dereference
     }
     
     memcpy(&ae0_ev_list_wdr, 0x95a14, 0x28);

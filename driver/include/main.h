@@ -22765,16 +22765,16 @@ void* __kstrtab_tisp_log2_fixed_to_fixed = (void*)tisp_log2_fixed_to_fixed; // S
 void* __kstrtab_tisp_math_exp2 = (void*)tisp_math_exp2; // Symbol table entry
 
 /* Jump Tables - Fixed array syntax (dynamically discovered) */
-void* jump_table_9381c[1] = { (void*)0x9381c }; // Jump table
-void* jump_table_82ec0[1] = { (void*)0x82ec0 }; // Jump table
-void* jump_table_7d2a8[1] = { (void*)0x7d2a8 }; // Jump table
-void* jump_table_8741c[1] = { (void*)0x8741c }; // Jump table
-void* jump_table_93bdc[1] = { (void*)0x93bdc }; // Jump table
-void* jump_table_8545c[1] = { (void*)0x8545c }; // Jump table
-void* jump_table_7b4c0[1] = { (void*)0x7b4c0 }; // Jump table
-void* jump_table_7d4ac[1] = { (void*)0x7d4ac }; // Jump table
-void* jump_table_8839c[1] = { (void*)0x8839c }; // Jump table
+void* jump_table_83910[1] = { (void*)0x83910 }; // Jump table
+void* jump_table_7b2f4[1] = { (void*)0x7b2f4 }; // Jump table
 void* jump_table_941dc[1] = { (void*)0x941dc }; // Jump table
+void* jump_table_9459c[1] = { (void*)0x9459c }; // Jump table
+void* jump_table_8a8dc[1] = { (void*)0x8a8dc }; // Jump table
+void* jump_table_7d2a8[1] = { (void*)0x7d2a8 }; // Jump table
+void* jump_table_83108[1] = { (void*)0x83108 }; // Jump table
+void* jump_table_840dc[1] = { (void*)0x840dc }; // Jump table
+void* jump_table_82c50[1] = { (void*)0x82c50 }; // Jump table
+void* jump_table_7b4c0[1] = { (void*)0x7b4c0 }; // Jump table
 
 /* Special Data - Fixed types and syntax */
 unsigned char data_10028[8] = { 0xa2, 0x00, 0x38, 0x00, 0x00, 0x88, 0x25, 0x00 }; // Fixed byte array

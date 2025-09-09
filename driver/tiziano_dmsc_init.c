@@ -26,7 +26,7 @@
     }
     
     dmsc_sp_ud_b_stren_array_now = $v0;
-    data_9a430_8 = 0xffffffff;
+    data_9a430_3 = 0xffffffff;
     tiziano_dmsc_params_refresh();
     tisp_dmsc_par_refresh(isp_printf, isp_printf, 1);
     return 0;

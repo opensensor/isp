@@ -5,13 +5,13 @@
 
 {
     int32_t $s1 = arg1;
-    int32_t var_20_125 = 0;
+    int32_t var_20 = 0;
     
-    for (void* i = 0xa9; i != 0xb5; )
+    for (void* i = 0xa9; (uintptr_t)i != 0xb5; )
     {
-        Tiziano_awb_set_gain(i, $s1, &var_20_126);
+        Tiziano_awb_set_gain(i, $s1, &var_20);
         i += 1;
-        $s1 += var_20_127;
+        $s1 += var_20;
     }
     
     return 0;

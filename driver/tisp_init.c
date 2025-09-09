@@ -4,16 +4,19 @@
   int32_t tisp_init(int32_t* arg1, int32_t arg2)
 
 {
+    uint32_t $v0 = private_vmalloc(0x137f0);
+    uint32_t $v0_1 = private_vmalloc(0x137f0);
+    uint32_t isp_memopt_1 = isp_memopt;
+        uint32_t tparams_day_1 = tparams_day;
+        uint32_t tparams_night_1 = tparams_night;
     memset(&tispinfo, 0, 0x74);
     memset(&sensor_info, 0, 0x60);
     memset(&ds0_attr, 0, 0x34);
     memset(&ds1_attr, 0, 0x34);
     memset(&ds2_attr, 0, 0x34);
     memcpy(&sensor_info, arg1, 0x60);
-    uint32_t $v0 = private_vmalloc(0x137f0);
     tparams_day = $v0;
     memset($v0, 0, 0x137f0);
-    uint32_t $v0_1 = private_vmalloc(0x137f0);
     tparams_night = $v0_1;
     memset($v0_1, 0, 0x137f0);
     
@@ -23,28 +26,25 @@
     int32_t $v0_3;
     uint32_t tparams_cust_1;
     $v0_3 = tiziano_load_parameters(arg2);
-    uint32_t isp_memopt_1 = isp_memopt;
     
     if (isp_memopt_1 == 1)
     {
-        uint32_t tparams_day_1 = tparams_day;
-        *(tparams_day_1 + 0xbb50) = 0;
-        *(tparams_day_1 + 0xbb58) = isp_memopt_1;
-        *(tparams_day_1 + 0xbb68) = 0;
-        *(tparams_day_1 + 0xbb60) = 0;
-        uint32_t tparams_night_1 = tparams_night;
-        *(tparams_night_1 + 0xbb50) = 0;
-        *(tparams_night_1 + 0xbb58) = isp_memopt_1;
-        *(tparams_night_1 + 0xbb68) = 0;
-        *(tparams_night_1 + 0xbb60) = 0;
+        *(((int32_t*)((char*)tparams_day_1 + 0xbb50))) = 0; // Fixed void pointer dereference
+        *(((void**)((char*)tparams_day_1 + 0xbb58))) = isp_memopt_1; // Fixed void pointer dereference
+        *(((int32_t*)((char*)tparams_day_1 + 0xbb68))) = 0; // Fixed void pointer dereference
+        *(((int32_t*)((char*)tparams_day_1 + 0xbb60))) = 0; // Fixed void pointer dereference
+        *(((int32_t*)((char*)tparams_night_1 + 0xbb50))) = 0; // Fixed void pointer dereference
+        *(((void**)((char*)tparams_night_1 + 0xbb58))) = isp_memopt_1; // Fixed void pointer dereference
+        *(((int32_t*)((char*)tparams_night_1 + 0xbb68))) = 0; // Fixed void pointer dereference
+        *(((int32_t*)((char*)tparams_night_1 + 0xbb60))) = 0; // Fixed void pointer dereference
         tparams_cust_1 = tparams_cust;
         
         if (tparams_cust_1)
         {
-            *(tparams_cust_1 + 0xbb50) = 0;
-            *(tparams_cust_1 + 0xbb58) = isp_memopt_1;
-            *(tparams_cust_1 + 0xbb68) = 0;
-            *(tparams_cust_1 + 0xbb60) = 0;
+            *(((int32_t*)((char*)tparams_cust_1 + 0xbb50))) = 0; // Fixed void pointer dereference
+            *(((void**)((char*)tparams_cust_1 + 0xbb58))) = isp_memopt_1; // Fixed void pointer dereference
+            *(((int32_t*)((char*)tparams_cust_1 + 0xbb68))) = 0; // Fixed void pointer dereference
+            *(((int32_t*)((char*)tparams_cust_1 + 0xbb60))) = 0; // Fixed void pointer dereference
         }
         
         int32_t* $a1_1 = tparams_day_1 + 0xd838;
@@ -76,7 +76,7 @@
     else
     {
         isp_printf(2, 
-            "width is %d, height is %d, imagesize is %d\\n, snap num is %d, buf size is %d", 
+            "width is %d, height is %d, imagesize is %d\n, snap num is %d, buf size is %d", 
             tparams_cust_1);
         $v0_4 = *arg1;
     }
@@ -85,11 +85,11 @@
     uint32_t $v0_6 = *arg1;
     tispinfo = $v0_6;
     uint32_t $v0_7 = arg1[1];
-    data_b2f34_4 = $v0_7;
+    data_b2f34_1 = $v0_7;
     int32_t $v0_8 = arg1[2];
     
-    if ($v0_8 >= 0x15)
-        isp_printf(2, "Can\'t output the width(%d)!\\n", "tisp_init");
+    if ($(uintptr_t)v0_8 >= 0x15)
+        isp_printf(); // Fixed: macro call, removed arguments!\n", "tisp_init");
     else
         switch ($v0_8)
         {
@@ -228,10 +228,10 @@
     system_reg_write(0x1c, $a1_7);
     sensor_init(&sensor_ctrl);
     tisp_set_csc_version(0);
-    isp_printf(0, "The node is busy!\\n", 0x8077efff);
+    isp_printf(); // Fixed: macro call, removed arguments;
     int32_t $s3 = 0x8077efff;
     
-    for (int32_t i = 0; i != 0x20; )
+    for (int32_t i = 0; (uintptr_t)i != 0x20; )
     {
         int32_t $s3_1 = ~(1 << (i & 0x1f)) & $s3;
         int32_t $v1_12 = *((i << 2) + 0x94b20) << (i & 0x1f);
@@ -239,12 +239,12 @@
         $s3 = $v1_12 + $s3_1;
     }
     
-    int32_t var_70_15 = $s3;
-    isp_printf(0, "/tmp/snap%d.%s", "tisp_init");
+    int32_t var_70_7 = $s3;
+    isp_printf(); // Fixed: macro call, removed arguments;
     int32_t $v0_12;
     int32_t $s3_2;
     
-    if (data_b2e74_2 != 1)
+    if (data_b2e74_1 != 1)
     {
         $s3_2 = $s3 & 0xb577fffd;
         $v0_12 = 0x34000009;
@@ -257,13 +257,13 @@
     
     int32_t $s3_3 = $s3_2 | $v0_12;
     system_reg_write(0xc, $s3_3);
-    int32_t var_70_1_3 = data_b2e74_3;
-    int32_t var_6c_11 = $s3_3;
-    isp_printf(0, "nv12", "tisp_init");
+    int32_t var_70_1_2 = data_b2e74_2;
+    int32_t var_6c_4 = $s3_3;
+    isp_printf(); // Fixed: macro call, removed arguments;
     system_reg_write(0x30, 0xffffffff);
     int32_t $a1_9 = 0x33f;
     
-    if (data_b2e74_4 != 1)
+    if (data_b2e74_3 != 1)
         $a1_9 = 0x133;
     
     system_reg_write(0x10, $a1_9);
@@ -271,6 +271,24 @@
     
     if ($v0_14)
     {
+        void* var_30_1 = &data_b0000;
+        int32_t $v0_15 = private_kmalloc(0x6000, 0xd0);
+            int32_t $v0_16 = private_kmalloc(0x4000, 0xd0);
+                int32_t $v0_17 = private_kmalloc(0x4000, 0xd0);
+                    int32_t $v0_18 = private_kmalloc(0x4000, 0xd0);
+                        uint32_t var_5c_1 = data_b2e62;
+                        uint32_t var_60_1 = data_b2e64;
+                        uint32_t var_64_1 = data_b2e56;
+                        uint32_t var_68_1 = data_b2e54;
+                        uint32_t var_6c_1 = data_b2e58;
+                        uint32_t $v0_24 = data_b2e48;
+                        uint32_t var_70_2 = $v0_24;
+                        int32_t $v0_25 = private_kmalloc(0x4000, 0xd0);
+                            int32_t $v0_26 = private_kmalloc(0x8000, 0xd0);
+                                uint32_t var_70_3 = *(arg1 + 0x4a);
+                                int32_t tispinfo_1 = tispinfo;
+                                int32_t var_6c_2 = var_4c;
+                                int32_t tispinfo_2 = tispinfo_1;
         system_reg_write(0xa02c, $v0_14 - 0x80000000);
         system_reg_write(0xa030, $v0_14 - 0x7ffff000);
         system_reg_write(0xa034, $v0_14 - 0x7fffe000);
@@ -280,14 +298,12 @@
         system_reg_write(0xa044, $v0_14 - 0x7fffb000);
         system_reg_write(0xa048, $v0_14 - 0x7fffa800);
         system_reg_write(0xa04c, 0x33);
-        void* var_30_1_6 = &data_b0000_3;
-        data_b2f3c_3 = $v0_14;
-        data_b2f48_1 = $v0_14 + 0x4000;
-        data_b2f38_1 = 4;
-        data_b2f40_1 = $v0_14 - 0x80000000;
-        data_b2f44_1 = 4;
-        data_b2f4c_1 = $v0_14 - 0x7fffc000;
-        int32_t $v0_15 = private_kmalloc(0x6000, 0xd0);
+        data_b2f3c = $v0_14;
+        data_b2f48 = $v0_14 + 0x4000;
+        data_b2f38 = 4;
+        data_b2f40 = $v0_14 - 0x80000000;
+        data_b2f44 = 4;
+        data_b2f4c = $v0_14 - 0x7fffc000;
         
         if ($v0_15)
         {
@@ -300,13 +316,12 @@
             system_reg_write(0xa844, $v0_15 - 0x7fffb000);
             system_reg_write(0xa848, $v0_15 - 0x7fffa800);
             system_reg_write(0xa84c, 0x33);
-            data_b2f54_4 = $v0_15;
-            data_b2f60_1 = $v0_15 + 0x4000;
-            data_b2f50_1 = 4;
-            data_b2f58_1 = $v0_15 - 0x80000000;
-            data_b2f5c_1 = 4;
-            data_b2f64_1 = $v0_15 - 0x7fffc000;
-            int32_t $v0_16 = private_kmalloc(0x4000, 0xd0);
+            data_b2f54 = $v0_15;
+            data_b2f60 = $v0_15 + 0x4000;
+            data_b2f50 = 4;
+            data_b2f58 = $v0_15 - 0x80000000;
+            data_b2f5c = 4;
+            data_b2f64 = $v0_15 - 0x7fffc000;
             
             if ($v0_16)
             {
@@ -315,10 +330,9 @@
                 system_reg_write(0xb044, $v0_16 - 0x7fffe000);
                 system_reg_write(0xb048, $v0_16 - 0x7fffd000);
                 system_reg_write(0xb04c, 3);
-                data_b2f6c_4 = $v0_16;
-                data_b2f68_1 = 4;
-                data_b2f70_1 = $v0_16 - 0x80000000;
-                int32_t $v0_17 = private_kmalloc(0x4000, 0xd0);
+                data_b2f6c = $v0_16;
+                data_b2f68 = 4;
+                data_b2f70 = $v0_16 - 0x80000000;
                 
                 if ($v0_17)
                 {
@@ -327,10 +341,9 @@
                     system_reg_write(0x449c, $v0_17 - 0x7fffe000);
                     system_reg_write(0x44a0, $v0_17 - 0x7fffd000);
                     system_reg_write(0x4490, 3);
-                    data_b2f78_4 = $v0_17;
-                    data_b2f74_1 = 4;
-                    data_b2f7c_1 = $v0_17 - 0x80000000;
-                    int32_t $v0_18 = private_kmalloc(0x4000, 0xd0);
+                    data_b2f78 = $v0_17;
+                    data_b2f74 = 4;
+                    data_b2f7c = $v0_17 - 0x80000000;
                     
                     if ($v0_18)
                     {
@@ -339,18 +352,10 @@
                         system_reg_write(0x5b8c, $v0_18 - 0x7fffe000);
                         system_reg_write(0x5b90, $v0_18 - 0x7fffd000);
                         system_reg_write(0x5b80, 3);
-                        uint32_t var_5c_1_2 = data_b2e62_1;
-                        uint32_t var_60_1_1 = data_b2e64_1;
-                        uint32_t var_64_1_4 = data_b2e56_1;
-                        uint32_t var_68_1_3 = data_b2e54_1;
-                        uint32_t var_6c_1_1 = data_b2e58_1;
-                        uint32_t $v0_24 = data_b2e48_1;
-                        data_b2f84_4 = $v0_18;
-                        uint32_t var_70_2_1 = $v0_24;
-                        data_b2f88_1 = $v0_18 - 0x80000000;
-                        data_b2f80_1 = 4;
-                        isp_printf(0, &$LC33, "tisp_init");
-                        int32_t $v0_25 = private_kmalloc(0x4000, 0xd0);
+                        data_b2f84 = $v0_18;
+                        data_b2f88 = $v0_18 - 0x80000000;
+                        data_b2f80 = 4;
+                        isp_printf(); // Fixed: macro call, removed arguments;
                         
                         if ($v0_25)
                         {
@@ -359,10 +364,9 @@
                             system_reg_write(0xb8b0, $v0_25 - 0x7fffe000);
                             system_reg_write(0xb8b4, $v0_25 - 0x7fffd000);
                             system_reg_write(0xb8b8, 3);
-                            data_b2f90_4 = $v0_25;
-                            data_b2f8c_1 = 4;
-                            data_b2f94_1 = $v0_25 - 0x80000000;
-                            int32_t $v0_26 = private_kmalloc(0x8000, 0xd0);
+                            data_b2f90 = $v0_25;
+                            data_b2f8c = 4;
+                            data_b2f94 = $v0_25 - 0x80000000;
                             
                             if ($v0_26)
                             {
@@ -372,19 +376,15 @@
                                 system_reg_write(0x201c, $v0_26 - 0x7fffa000);
                                 system_reg_write(0x2020, 0x400);
                                 system_reg_write(0x2024, 3);
-                                data_b2f98_1 = 4;
-                                data_b2fa0_1 = $v0_26 - 0x80000000;
-                                data_b2f9c_4 = $v0_26;
-                                uint32_t var_70_3_1 = *(arg1 + 0x4a);
-                                int32_t tispinfo_1 = tispinfo;
-                                int32_t var_4c_8;
-                                int32_t var_6c_2_1 = var_4c_9;
-                                int32_t tispinfo_2 = tispinfo_1;
-                                tiziano_ae_init(data_b2f34_5, tispinfo_1, arg1[0xc]);
+                                data_b2f98 = 4;
+                                data_b2fa0 = $v0_26 - 0x80000000;
+                                data_b2f9c = $v0_26;
+                                int32_t var_4c;
+                                tiziano_ae_init(data_b2f34, tispinfo_1, arg1[0xc]);
                                 uint32_t $a0_8;
                                 char $a1_48;
                                 char $a2_6;
-                                $a0_8 = tiziano_awb_init(data_b2f34_6, tispinfo);
+                                $a0_8 = tiziano_awb_init(data_b2f34, tispinfo);
                                 tiziano_gamma_init($a0_8, $a1_48, $a2_6);
                                 tiziano_gib_init();
                                 tiziano_lsc_init();
@@ -404,7 +404,7 @@
                                 tiziano_rdns_init();
                                 int32_t $a1_53;
                                 
-                                if (data_b2e74_5 != 1)
+                                if (data_b2e74 != 1)
                                     $a1_53 = arg1[2];
                                 else
                                 {
@@ -429,7 +429,7 @@
                                 int32_t $v0_30;
                                 int32_t $v1_29;
                                 
-                                if (data_b2e74_6)
+                                if (data_b2e74_4)
                                 {
                                     $v0_30 = 0x10;
                                     $v1_29 = 0x12;
@@ -440,7 +440,7 @@
                                     $v1_29 = 0x1e;
                                 }
                                 
-                                if ($a1_53 == 0x14)
+                                if ($(uintptr_t)a1_53 == 0x14)
                                     $v0_30 = $v1_29;
                                 
                                 system_reg_write(0x804, $v0_30);
@@ -457,8 +457,8 @@
                                 
                                 if ($v0_31)
                                 {
-                                    int32_t var_70_4_1 = $v0_31;
-                                    isp_printf(2, "saveraw", "tisp_init");
+                                    int32_t var_70_4 = $v0_31;
+                                    isp_printf(); // Fixed: macro call, removed arguments;
                                 }
                                 
                                 return 0;

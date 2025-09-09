@@ -5,13 +5,14 @@
 
 {
     int32_t $v1 = *(arg1 + 0x134);
+        int32_t $a3_1 = 1;
+            else if (arg2 != 3)
     char $s0_1;
     
     if ($v1 != 1)
         $s0_1 = arg2 & 0xff;
     else
     {
-        int32_t $a3_1 = 1;
         int32_t $a2_1;
         
         if (arg2 == $v1)
@@ -22,7 +23,6 @@
             
             if (arg2 == 2)
                 $a2_1 = 1;
-            else if (arg2 != 3)
                 $a2_1 = 0;
             else
             {
@@ -32,8 +32,8 @@
         }
         
         tisp_lsc_hvflip(*(arg1 + 0x124), *(arg1 + 0x128), $a2_1, $a3_1);
-        *(arg1 + 0x1ac) = arg2;
-        *(arg1 + 0x1a8) = 1;
+        *(((void**)((char*)arg1 + 0x1ac))) = arg2; // Fixed void pointer dereference
+        *(((int32_t*)((char*)arg1 + 0x1a8))) = 1; // Fixed void pointer dereference
         $s0_1 = arg2 & 0xfd;
     }
     

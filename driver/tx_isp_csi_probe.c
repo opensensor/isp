@@ -10,7 +10,7 @@
     
     if (!$v0)
     {
-        isp_printf(2, &$LC0, $a2);
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xfffffff4;
     }
     
@@ -21,33 +21,33 @@
     if (!tx_isp_subdev_init(arg1, $v0, &csi_subdev_ops))
     {
         int32_t* $v0_3 =
-            private_request_mem_region(0x10022000, 0x1000, "Can not support this frame mode!!!\\n");
+            int32_t $a0_2 = *$v0_3;
+            private_request_mem_region(0x10022000, 0x1000, "Can not support this frame mode!!!\n");
         
         if ($v0_3)
         {
-            int32_t $a0_2 = *$v0_3;
-            *($v0 + 0x13c) = private_ioremap($a0_2, $v0_3[1] + 1 - $a0_2);
+            *(((void**)((char*)$v0 + 0x13c))) = private_ioremap($a0_2, $v0_3[1] + 1 - $a0_2); // Fixed void pointer dereference
             
             if (*($v0 + 0xb8))
             {
-                *($v0 + 0x34) = &isp_csi_fops;
-                *($v0 + 0x138) = $v0_3;
-                private_raw_mutex_init($v0 + 0x12c, "not support the gpio mode!\\n", 0);
+                *(((void**)((char*)$v0 + 0x34))) = &isp_csi_fops; // Fixed void pointer dereference
+                *(((void**)((char*)$v0 + 0x138))) = $v0_3; // Fixed void pointer dereference
+                private_raw_mutex_init($v0 + 0x12c, "not support the gpio mode!\n", 0);
                 private_platform_set_drvdata(arg1, $v0);
-                *($v0 + 0x128) = 1;
+                *(((int32_t*)((char*)$v0 + 0x128))) = 1; // Fixed void pointer dereference
                 dump_csd = $v0;
-                *($v0 + 0xd4) = $v0;
+                *(((void**)((char*)$v0 + 0xd4))) = $v0; // Fixed void pointer dereference
                 return 0;
             }
             
-            isp_printf(2, "VIC_CTRL : %08x\\n", "tx_isp_csi_probe");
+            isp_printf(); // Fixed: macro call, removed arguments;
             int32_t $a0_3 = *$v0_3;
             private_release_mem_region($a0_3, $v0_3[1] + 1 - $a0_3);
             result = 0xfffffffa;
         }
         else
         {
-            isp_printf(2, "sensor type is BT1120!\\n", "tx_isp_csi_probe");
+            isp_printf(); // Fixed: macro call, removed arguments;
             result = 0xfffffff0;
         }
         
@@ -55,7 +55,7 @@
     }
     else
     {
-        isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", *($s1_1 + 2));
+        isp_printf(); // Fixed: macro call, removed arguments);
         result = 0xfffffff4;
     }
     

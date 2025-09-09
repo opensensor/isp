@@ -9,8 +9,8 @@
     
     $v0 = arg1 ? &lsc_mesh_str_wdr : &lsc_mesh_str;
     
-    data_9a420_1 = $v0;
-    data_9a400_1 = 1;
-    return &data_a0000_1;
+    data_9a420 = $v0;
+    data_9a400 = 1;
+    return &data_a0000;
 }
 

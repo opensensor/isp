@@ -4,13 +4,14 @@
   int32_t tiziano_sdns_params_refresh()
 
 {
+    int32_t $a0 = data_9a9c0;
     memcpy(&sdns_aa_mv_det_opt, 0x9f398, 0x1c);
     memcpy(&sdns_grad_zx_thres_array, 0x9f3b4, 0x24);
     memcpy(&sdns_grad_zy_thres_array, 0x9f3d8, 0x24);
     memcpy(&sdns_std_thr1_array, 0x9f3fc, 0x24);
     memcpy(&sdns_std_thr2_array, 0x9f420, 0x24);
     memcpy(&sdns_h_mv_wei, 0x9f444, 0x10);
-    memcpy(&sdns_mv_num_thr_5x5_array, U"\\n\\n\\n\\n\\n\\n\\n\\n\\n", 0x24);
+    memcpy(&sdns_mv_num_thr_5x5_array, U"\n\n\n\n\n\n\n\n\n", 0x24);
     memcpy(&sdns_mv_num_thr_7x7_array, &data_9f478, 0x24);
     memcpy(&sdns_mv_num_thr_9x9_array, 0x9f49c, 0x24);
     memcpy(&sdns_mv_num_thr_11x11_array, U"(((((((((", 0x24);
@@ -63,8 +64,8 @@
     memcpy(&sdns_sp_uu_par, 0x9fc68, 0xc);
     memcpy(&sdns_sp_uu_thres_array, 0x9fc74, 0x24);
     memcpy(&sdns_sp_uu_stren_array, &data_9fc98, 0x24);
-    memcpy(&sdns_sp_mv_uu_thres_array, U"\\n\\n\\n\\n\\n\\n\\n\\n\\n", 0x24);
-    memcpy(&sdns_sp_mv_uu_stren_array, &data_9fcbc_1[9], 0x24);
+    memcpy(&sdns_sp_mv_uu_thres_array, U"\n\n\n\n\n\n\n\n\n", 0x24);
+    memcpy(&sdns_sp_mv_uu_stren_array, &data_9fcbc[9], 0x24);
     memcpy(&sdns_sp_mv_wei_uu_value, 0x9fd04, 0x10);
     memcpy(&sdns_sp_d_v2_sigma_win5_slope, 0x9fd14, 8);
     memcpy(&sdns_sp_d_v2_win5_thres_array, 0x9fd1c, 0x24);
@@ -122,14 +123,13 @@
     memcpy(&sdns_sharpen_tt_opt_wdr_array, 0xa0514, 0x24);
     memcpy(&sdns_ave_fliter_wdr, 0xa0538, 0xc);
     memcpy(&sdns_ave_thres_wdr_array, 0xa0544, 0x24);
-    memcpy(&sdns_sp_uu_thres_wdr_array, U"\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n", 0x24);
-    memcpy(&sdns_sp_uu_stren_wdr_array, &data_a0568_1[9], 0x24);
-    memcpy(&sdns_sp_mv_uu_thres_wdr_array, &data_a0568_2[0x12], 0x24);
+    memcpy(&sdns_sp_uu_thres_wdr_array, U"\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n", 0x24);
+    memcpy(&sdns_sp_uu_stren_wdr_array, &data_a0568[9], 0x24);
+    memcpy(&sdns_sp_mv_uu_thres_wdr_array, &data_a0568[0x12], 0x24);
     memcpy(&sdns_sp_mv_uu_stren_wdr_array, 0xa05d4, 0x24);
     memcpy(&sdns_sp_ud_b_wei_np_array, 0xa05f8, 0x58);
-    int32_t $a0 = data_9a9c0_3;
     
-    if ($a0 != 0x80)
+    if ($(uintptr_t)a0 != 0x80)
         tisp_s_sdns_ratio($a0);
     
     return 0;

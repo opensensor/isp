@@ -42,11 +42,11 @@
     tisp_BCSH_au32OffsetRGB_now = $v0;
     memset(&bcsh_ctrl, 0, 0x28);
     memset(&BCSH_real, 0, 0x14);
-    int32_t $v1 = data_9a614_4;
+    int32_t $v1 = data_9a614_1;
     BCSH_real = 1;
-    data_c5478_3 = $v1 >> 0xa;
+    data_c5478_1 = $v1 >> 0xa;
     data_c547c_2 = 0x28;
-    data_c5480_3 = data_9a610_3;
+    data_c5480_1 = data_9a610_1;
     data_c5484_2 = 0x64;
     tiziano_bcsh_params_refresh();
     memcpy(&tisp_BCSH_as32CCMMatrix, &tisp_BCSH_as32CCMMatrix_d, 0x24);

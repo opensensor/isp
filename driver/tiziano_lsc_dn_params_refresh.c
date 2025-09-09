@@ -5,7 +5,7 @@
 
 {
     tiziano_lsc_params_refresh();
-    data_9a400_2 = 1;
+    data_9a400 = 1;
     return 0;
 }
 

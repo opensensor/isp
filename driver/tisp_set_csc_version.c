@@ -8,7 +8,7 @@
     
     if ($a2_2 >= 5)
     {
-        isp_printf(2, &$LC0, $a2_2);
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     

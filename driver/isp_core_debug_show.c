@@ -11,12 +11,12 @@
     isp_core_debug_type = 0;
     int32_t entry_$a2;
     
-    if (data_ca554_2 != 4)
+    if (data_ca554 != 4)
         /* tailcall */
-        return private_seq_printf(arg1, "Err [VIC_INT] : dvp hcomp err!!!!\\n", entry_$a2);
+        return private_seq_printf(arg1, "Err [VIC_INT] : dvp hcomp err!!!!\n", entry_$a2);
     /* tailcall */
-    return private_seq_printf(arg1, "Err [VIC_INT] : hvf err !!!!!\\n", 
-        data_ca568_1 * 0xfff0bdc0 + data_ca558_1 * 0xf4240 + data_ca55c_1
+    return private_seq_printf(arg1, "Err [VIC_INT] : hvf err !!!!!\n", 
+        data_ca568 * 0xfff0bdc0 + data_ca558 * 0xf4240 + data_ca55c
             - mdns_y_pspa_cur_bi_wei_seg_array);
 }
 

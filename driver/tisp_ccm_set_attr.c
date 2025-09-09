@@ -19,23 +19,23 @@
     }
     else
     {
+        int32_t i = 0;
+                void* $a3_2 = &cm_sat_list + i;
         memcpy(&tiziano_ccm_a_linear, 0xc5308, 0x24);
         memcpy(&tiziano_ccm_t_linear, 0xc5308, 0x24);
         memcpy(&tiziano_ccm_d_linear, 0xc5308, 0x24);
         memcpy(&tiziano_ccm_a_wdr, 0xc5308, 0x24);
         memcpy(&tiziano_ccm_t_wdr, 0xc5308, 0x24);
         memcpy(&tiziano_ccm_d_wdr, 0xc5308, 0x24);
-        int32_t i = 0;
         
-        if (!data_c5305_1)
+        if (!data_c5305)
         {
             do
             {
-                *(&cm_sat_list_wdr + i) = 0x100;
-                void* $a3_2 = &cm_sat_list + i;
+                *(((void**)((char*)&cm_sat_list_wdr + i))) = 0x100; // Fixed void pointer dereference
                 i += 4;
                 *$a3_2 = 0x100;
-            } while (i != 0x24);
+            } while ((uintptr_t)i != 0x24);
         }
     }
     

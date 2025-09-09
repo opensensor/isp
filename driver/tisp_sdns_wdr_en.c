@@ -4,8 +4,8 @@
   int32_t tisp_sdns_wdr_en(uint32_t arg1)
 
 {
+    void* var_30 = &data_b0000;
     sdns_wdr_en = arg1;
-    void* var_30_19 = &data_b0000_14;
     void* $v0_1;
     
     if (arg1)
@@ -73,6 +73,6 @@
     
     sdns_ave_thres_array_now = $v0_1;
     /* tailcall */
-    return tisp_s_sdns_ratio(data_9a9c0_2);
+    return tisp_s_sdns_ratio(data_9a9c0_1);
 }
 

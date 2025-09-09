@@ -4,10 +4,10 @@
   int32_t tisp_defog_param_array_get(int32_t arg1, int32_t arg2, int32_t* arg3)
 
 {
-    if (arg1 - 0x35a >= 0x26)
+        int32_t var_18_1 = arg1;
+    if (arg1 - (uintptr_t)0x35a >= 0x26)
     {
-        int32_t var_18_1_18 = arg1;
-        isp_printf(2, "sensor type is BT1120!\\n", "tisp_defog_param_array_get");
+        isp_printf(); // Fixed: macro call, removed arguments;
         return 0xffffffff;
     }
     
@@ -18,7 +18,7 @@
     {
         case 0x35a:
         {
-            $a1_1 = &data_aca90_11[6];
+            $a1_1 = &data_aca90[6];
             $s1_1 = 0x80;
             break;
         }
@@ -36,7 +36,7 @@
         }
         case 0x35d:
         {
-            $a1_1 = &data_ac8fc_16[0xb];
+            $a1_1 = &data_ac8fc[0xb];
             $s1_1 = 0x80;
             break;
         }

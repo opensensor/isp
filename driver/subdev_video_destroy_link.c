@@ -4,16 +4,16 @@
   int32_t subdev_video_destroy_link(int32_t* arg1)
 
 {
-    if (arg1[3])
-    {
         void* $a1_1 = *arg1;
         int32_t* $v0 = arg1[2];
         void* $v1_1 = arg1[1];
+    if (arg1[3])
+    {
         *arg1 = 0;
         arg1[1] = 0;
         arg1[2] = 0;
         arg1[3] = 0;
-        *($a1_1 + 7) = 2;
+        *(((int32_t*)((char*)$a1_1 + 7))) = 2; // Fixed void pointer dereference
         
         if ($v0)
         {
@@ -24,7 +24,7 @@
         }
         
         if ($v1_1)
-            *($v1_1 + 7) = 2;
+            *(((int32_t*)((char*)$v1_1 + 7))) = 2; // Fixed void pointer dereference
     }
     
     return 0;

@@ -18,7 +18,7 @@
         if (arg1)
         {
             isp_printf(2, 
-                "width is %d, height is %d, imagesize is %d\\n, snap num is %d, buf size is %d", 
+                "width is %d, height is %d, imagesize is %d\n, snap num is %d, buf size is %d", 
                 arg1);
             return 0xffffffff;
         }
@@ -31,7 +31,7 @@
     {
         system_reg_write(0xc, $v0 & 0xfffff7ff);
         sensor_info_1 = sensor_info;
-        $a1_2 = data_b2e1c_6;
+        $a1_2 = data_b2e1c;
         $v0_2 = tiziano_defog_init;
     }
     

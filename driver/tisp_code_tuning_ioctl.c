@@ -4,16 +4,18 @@
   int32_t tisp_code_tuning_ioctl(int32_t arg1, int32_t arg2, int32_t arg3)
 
 {
+                int32_t $s0_1 = arg3;
+                        int32_t $s2_2 = (arg3 + 0x500c) | arg3;
+                        uint32_t tisp_par_ioctl_10 = tisp_par_ioctl;
     char const* const $a1;
     int32_t $a2;
     
-    if (arg2 >> 8 == 0x74)
+    if (arg2 >> (uintptr_t)8 == 0x74)
     {
         if ((arg2 & 0xff) < 0x33)
         {
-            if (arg2 - 0x20007400 < 0xa)
+            if (arg2 - (uintptr_t)0x20007400 < 0xa)
             {
-                int32_t $s0_1 = arg3;
                 int32_t (* $v0_25)(void* arg1);
                 int32_t $a0_2;
                 uint32_t tisp_par_ioctl_3;
@@ -29,12 +31,10 @@
                 {
                     case 0x20007400:
                     {
-                        int32_t $s2_2 = (arg3 + 0x500c) | arg3;
-                        uint32_t tisp_par_ioctl_10 = tisp_par_ioctl;
                         
                         if ($s2_2 & *(entry_$gp + 0x18))
                         {
-                            isp_printf(2, "sensor type is BT601!\\n", arg3);
+                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
                         }
                         
@@ -44,14 +44,14 @@
                         
                         if (arg3)
                         {
-                            isp_printf(2, "sensor type is BT601!\\n", arg3);
+                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
                         }
                         
                         int32_t $v0_8 = *tisp_par_ioctl_1;
                         int32_t $v0_12;
                         
-                        if ($v0_8 >= 0x19)
+                        if ($(uintptr_t)v0_8 >= 0x19)
                             $v0_12 = *(entry_$gp + 0x18);
                         else
                             switch ($v0_8)
@@ -234,7 +234,7 @@
                         
                         if ($s2_2 & $v0_12)
                         {
-                            isp_printf(2, "sensor type is BT601!\\n", arg3);
+                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
                         }
                         
@@ -248,7 +248,7 @@
                         
                         if (((arg3 + 0x500c) | arg3) & *(entry_$gp + 0x18))
                         {
-                            isp_printf(2, "sensor type is BT601!\\n", arg3);
+                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
                         }
                         
@@ -258,17 +258,17 @@
                         
                         if (arg3)
                         {
-                            isp_printf(2, "sensor type is BT601!\\n", arg3);
+                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
                         }
                         
                         int32_t $a1_8 = *tisp_par_ioctl_2;
                         
-                        if ($a1_8 - 1 >= 0x18)
+                        if ($a1_8 - (uintptr_t)1 >= 0x18)
                         {
+                            int32_t var_28_1 = $a1_8;
                         label_245e0:
-                            int32_t var_28_1_2 = $a1_8;
-                            isp_printf(2, "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\\n", 
+                            isp_printf(); // Fixed: macro call, removed arguments\n", 
                                 "tisp_set_par_process");
                             return 0;
                         }
@@ -424,15 +424,15 @@
                     }
                     case 0x20007403:
                     {
+                        uint32_t tisp_par_ioctl_5 = tisp_par_ioctl;
                         tisp_par_ioctl_4 = tisp_par_ioctl;
                         $v0_25 = tisp_get_ae_info;
                     label_24740:
                         arg3 = $v0_25(tisp_par_ioctl_4);
-                        uint32_t tisp_par_ioctl_5 = tisp_par_ioctl;
                         
                         if ((($s0_1 + 0x500c) | $s0_1) & *(entry_$gp + 0x18))
                         {
-                            isp_printf(2, "sensor type is BT601!\\n", arg3);
+                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
                         }
                         
@@ -445,7 +445,7 @@
                         if (!arg3)
                             return 0;
                         
-                        isp_printf(2, "sensor type is BT601!\\n", arg3);
+                        isp_printf(); // Fixed: macro call, removed arguments;
                         return 0xfffffff2;
                         break;
                     }
@@ -455,7 +455,7 @@
                         
                         if (((arg3 + 0x500c) | arg3) & *(entry_$gp + 0x18))
                         {
-                            isp_printf(2, "%s[%d] VIC do not support this format %d\\n", 
+                            isp_printf(2, "%s[%d] VIC do not support this format %d\n", 
                                 "tisp_code_tuning_ioctl");
                             return 0xfffffff2;
                         }
@@ -464,7 +464,7 @@
                         
                         if (__copy_user(tisp_par_ioctl_7, $s0_1, 0x500c))
                         {
-                            isp_printf(2, "%s[%d] VIC do not support this format %d\\n", 
+                            isp_printf(2, "%s[%d] VIC do not support this format %d\n", 
                                 "tisp_code_tuning_ioctl");
                             return 0xfffffff2;
                         }
@@ -484,7 +484,7 @@
                         
                         if (((arg3 + 0x500c) | arg3) & *(entry_$gp + 0x18))
                         {
-                            isp_printf(2, "%s[%d] VIC do not support this format %d\\n", 
+                            isp_printf(2, "%s[%d] VIC do not support this format %d\n", 
                                 "tisp_code_tuning_ioctl");
                             return 0xfffffff2;
                         }
@@ -493,7 +493,7 @@
                         
                         if (__copy_user(tisp_par_ioctl_8, $s0_1, 0x500c))
                         {
-                            isp_printf(2, "%s[%d] VIC do not support this format %d\\n", 
+                            isp_printf(2, "%s[%d] VIC do not support this format %d\n", 
                                 "tisp_code_tuning_ioctl");
                             return 0xfffffff2;
                         }
@@ -503,12 +503,12 @@
                     }
                     case 0x20007408:
                     {
-                        $s1_2 = (arg3 + 0x500c) | arg3;
                         uint32_t tisp_par_ioctl_11 = tisp_par_ioctl;
+                        $s1_2 = (arg3 + 0x500c) | arg3;
                         
                         if ($s1_2 & *(entry_$gp + 0x18))
                         {
-                            isp_printf(2, "sensor type is BT601!\\n", arg3);
+                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
                         }
                         
@@ -518,11 +518,11 @@
                         
                         if (arg3)
                         {
-                            isp_printf(2, "sensor type is BT601!\\n", arg3);
+                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
                         }
                         
-                        *(tisp_par_ioctl_3 + 4) = 0xb;
+                        *(((void**)((char*)tisp_par_ioctl_3 + 4))) = 0xb; // Fixed void pointer dereference
                         $a2_2 = 0xb;
                         $a1_11 = "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\\n";
                     label_24688:
@@ -531,7 +531,7 @@
                         
                         if ($s1_2 & *(entry_$gp + 0x18))
                         {
-                            isp_printf(2, "sensor type is BT601!\\n", arg3);
+                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
                         }
                         
@@ -543,12 +543,12 @@
                     }
                     case 0x20007409:
                     {
-                        $s1_2 = (arg3 + 0x500c) | arg3;
                         uint32_t tisp_par_ioctl_12 = tisp_par_ioctl;
+                        $s1_2 = (arg3 + 0x500c) | arg3;
                         
                         if ($s1_2 & *(entry_$gp + 0x18))
                         {
-                            isp_printf(2, "sensor type is BT601!\\n", arg3);
+                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
                         }
                         
@@ -558,11 +558,11 @@
                         
                         if (arg3)
                         {
-                            isp_printf(2, "sensor type is BT601!\\n", arg3);
+                            isp_printf(); // Fixed: macro call, removed arguments;
                             return 0xfffffff2;
                         }
                         
-                        *(tisp_par_ioctl_3 + 4) = 0xf;
+                        *(((void**)((char*)tisp_par_ioctl_3 + 4))) = 0xf; // Fixed void pointer dereference
                         $a2_2 = 0xf;
                         $a1_11 = "%s[%d] VIC failed to config DVP mode!(10bits-sensor)\\n";
                         goto label_24688;
@@ -579,10 +579,10 @@
     else
     {
         $a2 = arg2;
-        $a1 = "not support the gpio mode!\\n";
+        $a1 = "not support the gpio mode!\n";
     }
     
-    isp_printf(2, $a1, $a2);
+    isp_printf(); // Fixed: macro call, removed arguments;
     return 0xffffffea;
 }
 

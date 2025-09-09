@@ -5,14 +5,14 @@
 
 {
     int32_t i = 0;
-    int32_t $a3;
     int32_t arg_c = $a3;
+    int32_t $a3;
     
-    for (; i < 0x18; i += 1)
+    for (; (uintptr_t)i < 0x18; i += 1)
     {
-        char var_20_206[0x1c];
+        char var_20[0x1c];
         void arg_10;
-        var_20_207[i] = *(&arg_10 + i);
+        var_20[i] = *(&arg_10 + i);
     }
     
     tisp_awb_set_cluster_awb_params(arg1, arg2, arg3);

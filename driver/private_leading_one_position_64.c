@@ -13,24 +13,24 @@
         arg2 = 0;
     }
     
-    int32_t $v1_1 = arg1 < 0x100 ? 1 : 0;
+    int32_t $v1_1 = (uintptr_t)arg1 < 0x100 ? 1 : 0;
     
     if (arg1 >= isp_printf)
     {
         arg1 u>>= 0x10;
         arg2 = 0;
         result += 0x10;
-        $v1_1 = arg1 < 0x100 ? 1 : 0;
+        $v1_1 = (uintptr_t)arg1 < 0x100 ? 1 : 0;
     }
     
-    int32_t $v1_2 = arg1 < 0x10 ? 1 : 0;
+    int32_t $v1_2 = (uintptr_t)arg1 < 0x10 ? 1 : 0;
     
     if (!$v1_1)
     {
         arg1 u>>= 8;
         arg2 = 0;
         result += 8;
-        $v1_2 = arg1 < 0x10 ? 1 : 0;
+        $v1_2 = (uintptr_t)arg1 < 0x10 ? 1 : 0;
     }
     
     int32_t $v1_3 = arg1 < 4 ? 1 : 0;

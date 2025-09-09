@@ -5,16 +5,16 @@
 
 {
     int32_t $a0 = arg2 - arg1;
+    int32_t $a1 = arg2 - arg3;
+    int32_t $t0 = arg4 - arg5;
     
     if (arg2 < arg1)
         $a0 = arg1 - arg2;
     
-    int32_t $a1 = arg2 - arg3;
     
     if (arg2 < arg3)
         $a1 = arg3 - arg2;
     
-    int32_t $t0 = arg4 - arg5;
     
     if (arg4 < arg5)
         $t0 = arg5 - arg4;

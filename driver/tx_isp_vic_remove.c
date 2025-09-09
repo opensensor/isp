@@ -10,7 +10,7 @@
     
     if ($v0)
     {
-        if ($v0 < 0xfffff001)
+        if ($(uintptr_t)v0 < 0xfffff001)
             $s1 = *($s0 + 0xd4);
         else
             $s0 = nullptr;

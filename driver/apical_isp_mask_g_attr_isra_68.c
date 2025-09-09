@@ -5,8 +5,8 @@
 
 {
     tisp_g_mscaler_mask_attr();
-    void var_b8_5;
-    private_copy_to_user(*arg1, &var_b8_6, 0xac);
+    void var_b8;
+    private_copy_to_user(*arg1, &var_b8, 0xac);
     return 0;
 }
 
