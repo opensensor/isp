@@ -1719,7 +1719,7 @@ char const* tx_isp_fs_platform_device = (void*)0x7df90 /* pointer to data */;
 
 
 // Data at address 0x82e88
-void* data_82e88 = &tx_isp_release_device;
+
 
 // Data at address 0x82eb0
 
@@ -1737,7 +1737,7 @@ char const* tx_isp_core_platform_device = (void*)0x7df98 /* pointer to data */;
 
 
 // Data at address 0x82f80
-void* data_82f80 = &tx_isp_release_device;
+
 
 // Data at address 0x82f8c
 
@@ -1773,7 +1773,7 @@ char const* tx_isp_vic_platform_device = (void*)0x7dfc4 /* pointer to data */;
 
 
 // Data at address 0x830c0
-void* data_830c0 = &tx_isp_release_device;
+
 
 // Data at address 0x830cc
 
@@ -1794,7 +1794,7 @@ char const* tx_isp_csi_platform_device = (void*)0x7dfcc /* pointer to data */;
 
 
 // Data at address 0x831e0
-void* data_831e0 = &tx_isp_release_device;
+
 
 // Data at address 0x831ec
 
@@ -1816,7 +1816,7 @@ void* data_831e0 = &tx_isp_release_device;
 
 
 // Data at address 0x832e8
-void* data_832e8 = &tx_isp_release_device;
+
 
 // Data at address 0x83310
 uint64_t tx_isp_module_dma_mask = 0xffffffffffffffffULL;
