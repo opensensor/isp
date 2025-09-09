@@ -997,41 +997,18 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** tx_isp_vic_start: MIPS validation passed - applying tx_isp_init_vic_registers methodology ***\n");
 
-    /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
+    /* *** CRITICAL FIX: ATOMIC CONTEXT VIOLATION - Move clock operations to non-atomic context *** */
+    /* Clock framework functions can sleep and must NOT be called with interrupts disabled */
+    pr_info("*** ATOMIC CONTEXT FIX: Using direct CPM register manipulation instead of sleeping clk framework ***\n");
 
-    /* STEP 1: Enable clocks using Linux Clock Framework like tx_isp_init_vic_registers */
-    pr_info("*** STREAMING: Enabling ISP clocks using Linux Clock Framework ***\n");
-
-    isp_clk = clk_get(NULL, "isp");
-    if (!IS_ERR(isp_clk)) {
-        ret = clk_prepare_enable(isp_clk);
-        if (ret == 0) {
-            pr_info("STREAMING: ISP clock enabled via clk framework\n");
-        } else {
-            pr_err("STREAMING: Failed to enable ISP clock: %d\n", ret);
-        }
-    } else {
-        pr_warn("STREAMING: ISP clock not found: %ld\n", PTR_ERR(isp_clk));
-    }
-
-    cgu_isp_clk = clk_get(NULL, "cgu_isp");
-    if (!IS_ERR(cgu_isp_clk)) {
-        ret = clk_prepare_enable(cgu_isp_clk);
-        if (ret == 0) {
-            pr_info("STREAMING: CGU_ISP clock enabled via clk framework\n");
-        } else {
-            pr_err("STREAMING: Failed to enable CGU_ISP clock: %d\n", ret);
-        }
-    }
-
-    /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
-    pr_info("*** STREAMING: Configuring CPM registers for VIC access ***\n");
+    /* STEP 1: Direct CPM register manipulation instead of sleeping clock framework */
+    pr_info("*** STREAMING: Configuring CPM registers for VIC access (non-sleeping) ***\n");
     cpm_regs = ioremap(0x10000000, 0x1000);
     if (cpm_regs) {
         u32 clkgr0 = readl(cpm_regs + 0x20);
         u32 clkgr1 = readl(cpm_regs + 0x28);
 
-        /* Enable ISP/VIC clocks */
+        /* Enable ISP/VIC clocks via direct register manipulation */
         clkgr0 &= ~(1 << 13); // ISP clock
         clkgr0 &= ~(1 << 21); // Alternative ISP position
         clkgr0 &= ~(1 << 30); // VIC in CLKGR0
@@ -1041,7 +1018,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(clkgr1, cpm_regs + 0x28);
         wmb();
 
-        pr_info("STREAMING: CPM clocks configured for VIC access\n");
+        pr_info("STREAMING: CPM clocks configured for VIC access (atomic-safe)\n");
         iounmap(cpm_regs);
     }
 
@@ -2160,13 +2137,47 @@ static void tx_vic_enable_irq(void)
     private_spin_unlock_irqrestore((spinlock_t *)((char *)dump_vsd_2 + 0x130), var_18);
 }
 
-/* vic_core_s_stream - EXACT Binary Ninja implementation with correct order */
+/* CRITICAL FIX: Enable clocks BEFORE any atomic operations */
+static int vic_enable_clocks_non_atomic(struct tx_isp_vic_device *vic_dev)
+{
+    struct clk *isp_clk, *cgu_isp_clk;
+    int ret = 0;
+    
+    pr_info("*** ATOMIC CONTEXT FIX: Enabling clocks in NON-ATOMIC context ***\n");
+    
+    /* Enable clocks using Linux Clock Framework - this CAN sleep, so do it first */
+    isp_clk = clk_get(NULL, "isp");
+    if (!IS_ERR(isp_clk)) {
+        ret = clk_prepare_enable(isp_clk);
+        if (ret == 0) {
+            pr_info("STREAMING: ISP clock enabled via clk framework (NON-ATOMIC)\n");
+        } else {
+            pr_err("STREAMING: Failed to enable ISP clock: %d\n", ret);
+        }
+    } else {
+        pr_warn("STREAMING: ISP clock not found: %ld\n", PTR_ERR(isp_clk));
+    }
+
+    cgu_isp_clk = clk_get(NULL, "cgu_isp");
+    if (!IS_ERR(cgu_isp_clk)) {
+        ret = clk_prepare_enable(cgu_isp_clk);
+        if (ret == 0) {
+            pr_info("STREAMING: CGU_ISP clock enabled via clk framework (NON-ATOMIC)\n");
+        } else {
+            pr_err("STREAMING: Failed to enable CGU_ISP clock: %d\n", ret);
+        }
+    }
+    
+    return ret;
+}
+
+/* vic_core_s_stream - FIXED for atomic context violation */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
     int ret = 0;
     
-    pr_info("*** vic_core_s_stream: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** vic_core_s_stream: ATOMIC CONTEXT FIX implementation ***\n");
     
     /* Binary Ninja EXACT: if (arg1 != 0) */
     if (sd != 0) {
@@ -2206,29 +2217,39 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 /* Binary Ninja EXACT: if ($v1_3 != 4) - not already streaming */
                 if (current_state != 4) {
-                    pr_info("*** EXACT Binary Ninja ORDER: 1. DISABLE IRQ ***\n");
-                    /* Binary Ninja EXACT: tx_vic_disable_irq() - FIRST */
+                    pr_info("*** ATOMIC CONTEXT FIX: 1. ENABLE CLOCKS FIRST (NON-ATOMIC) ***\n");
+                    /* CRITICAL FIX: Enable clocks BEFORE entering atomic context */
+                    ret = vic_enable_clocks_non_atomic(vic_dev);
+                    if (ret != 0) {
+                        pr_err("vic_core_s_stream: Clock enable failed: %d\n", ret);
+                        return ret;
+                    }
+                    
+                    pr_info("*** ATOMIC CONTEXT FIX: 2. DISABLE IRQ (ENTER ATOMIC) ***\n");
+                    /* Binary Ninja EXACT: tx_vic_disable_irq() - Now safe to enter atomic context */
                     tx_vic_disable_irq();
                     
-                    pr_info("*** EXACT Binary Ninja ORDER: 2. VIC START ***\n");
-                    /* Binary Ninja EXACT: int32_t $v0_1 = tx_isp_vic_start($s1_1) - SECOND */
+                    pr_info("*** ATOMIC CONTEXT FIX: 3. VIC START (ATOMIC-SAFE) ***\n");
+                    /* Binary Ninja EXACT: int32_t $v0_1 = tx_isp_vic_start($s1_1) - Now atomic-safe */
                     ret = tx_isp_vic_start(vic_dev);
                     
                     if (ret == 0) {
-                        pr_info("*** EXACT Binary Ninja ORDER: 3. SET STATE 4 ***\n");
+                        pr_info("*** ATOMIC CONTEXT FIX: 4. SET STATE 4 ***\n");
                         /* Binary Ninja EXACT: *($s1_1 + 0x128) = 4 - THIRD */
                         vic_dev->state = 4;
                         
                         /* Start the actual streaming */
                         ispvic_frame_channel_s_stream(vic_dev, 1);
                         
-                        pr_info("*** EXACT Binary Ninja ORDER: 4. ENABLE IRQ ***\n");
+                        pr_info("*** ATOMIC CONTEXT FIX: 5. ENABLE IRQ (EXIT ATOMIC) ***\n");
                         /* Binary Ninja EXACT: tx_vic_enable_irq() - FOURTH */
                         tx_vic_enable_irq();
                         
-                        pr_info("*** ORDER OF OPERATIONS FIXED: No more early interrupts! ***\n");
+                        pr_info("*** ATOMIC CONTEXT VIOLATION FIXED: No more sleeping function in atomic context! ***\n");
                     } else {
                         pr_err("vic_core_s_stream: tx_isp_vic_start failed: %d\n", ret);
+                        /* Re-enable interrupts on error */
+                        tx_vic_enable_irq();
                     }
                     
                     /* Binary Ninja EXACT: return $v0_1 */
