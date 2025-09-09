@@ -11,6 +11,6 @@
     
     if ((uintptr_t)var_10 == 0x102)
     
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
 }
 

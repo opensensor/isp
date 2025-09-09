@@ -19,7 +19,7 @@
             
             if (*(arg1 + 0xf4) == 4)
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
+
             }
             
             int32_t $v0_2 = *(arg1 + 0x7c);
@@ -27,7 +27,7 @@
             if (!$v0_2)
             {
                 $s0 = 0xfffffdfd;
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
             }
             else
             {
@@ -49,7 +49,7 @@
                     if (!$v0_14)
                 }
                 else
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
             }
         }
         else
@@ -76,7 +76,7 @@
             if (*($s1_3 + 0xdc) != $a2_2)
             {
                 return 0xffffffea;
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             }
             
             *((int32_t*)((char*)arg1 + 0xe4)) = $s1_3; // Fixed void pointer dereference
@@ -100,7 +100,7 @@
                     
                     if (!$v0_8)
                     {
-                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
                     }
                     
                     int32_t $v0_9 = $v0_8($s1_3, 0x1000000, &var_20);
@@ -108,7 +108,7 @@
                     if ($v0_9)
                     {
                         return $v0_9;
-                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
                     }
                     
                     *arg2 = *($s1_3 + 0x26c) << 0x10 | *($s1_3 + 0x270);

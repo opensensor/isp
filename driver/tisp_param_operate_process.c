@@ -175,7 +175,7 @@
             {
                 return 0xffffffff;
             label_22068:
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             }
             
             $a2_1 = &var_20_6;
@@ -387,7 +387,7 @@
         {
             if ($v1 != 3)
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             }
             
             int32_t $v0_100 = arg1[1];
@@ -451,7 +451,7 @@
                             return 0;
                         if ($v0_100 != 5)
                         {
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                             *((int32_t*)((char*)opmsg + 0x14)) = 1; // Fixed void pointer dereference
                         }
                         
@@ -484,7 +484,7 @@
                             opmsg_1 = opmsg;
                         else
                         {
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                             $v1_7 = 0;
                             opmsg_1 = opmsg;
                         }
@@ -623,7 +623,7 @@
             }
             else if ($(uintptr_t)v0_89 != 0xa)
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 *((int32_t*)((char*)opmsg + 0x14)) = 1; // Fixed void pointer dereference
                 $a1_25 = 0x18;
             }

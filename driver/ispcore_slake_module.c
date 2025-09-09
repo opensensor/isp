@@ -22,7 +22,7 @@
             {
                 if ($v0 >= 3)
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     ispcore_core_ops_init(arg1, 0);
                 }
                 
@@ -74,7 +74,7 @@
                                 {
                                     if ($(uintptr_t)v0_8 != 0xfffffdfd)
                                     {
-                                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
                                         $s0_3 = *(arg1 + 0xc0);
                                         break;
                                     }

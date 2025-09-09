@@ -23,7 +23,7 @@
         
         if ($a2_1 != printk || $v1_1 != $a2_1)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
+
         }
     }
     

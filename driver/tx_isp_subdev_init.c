@@ -7,7 +7,7 @@
         return 0xffffffea;
     if (!(uintptr_t)arg1 || !(uintptr_t)arg2)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     *((int32_t*)((char*)arg2 + 0xc4)) = arg3; // Fixed void pointer dereference
@@ -15,7 +15,7 @@
     if (tx_isp_module_init(arg1, arg2))
     {
         return 0xfffffff4;
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     char* $s1_1 = arg1[0x16];
@@ -30,7 +30,7 @@
         
         if (result_1)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 4 arguments;
+
             tx_isp_module_deinit(arg2);
         }
         
@@ -97,7 +97,7 @@
         if (!$v0_22)
         {
             goto label_1fb80;
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             result = 0xfffffff0;
         }
         
@@ -109,7 +109,7 @@
         if (!$v0_23)
         {
             goto label_1fb60;
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             result = 0xfffffffa;
         }
         
@@ -122,7 +122,7 @@
                 return 0;
             if ($v0_5 != 2)
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             }
             
             *((int32_t*)((char*)arg2 + 0xc0)) = $s1_1[4]; // Fixed void pointer dereference
@@ -143,9 +143,9 @@
         {
             int32_t $a0_15 = *$s3_2;
             return result;
-            isp_printf(); // Fixed: macro with no parameters, removed 4 arguments);
+
         label_1fb44:
-            isp_printf(); // Fixed: macro with no parameters, removed 2 arguments!\n", 0x77d);
+
             private_iounmap(*(arg2 + 0xb8));
         label_1fb60:
             private_release_mem_region($a0_15, $s3_2[1] + 1 - $a0_15);
@@ -173,7 +173,7 @@
             
             if (!$v0_7)
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
             label_1fad0:
                 isp_subdev_release_clks(arg2);
                 result = 0xfffffff4;
@@ -224,7 +224,7 @@
             
             if (!$s2_1)
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
                 private_kfree(0);
             }
             

@@ -41,7 +41,7 @@
     }
     
     int32_t entry_a2_8;
-    isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", entry_a2_9);
+
     return 0;
 }
 

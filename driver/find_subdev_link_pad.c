@@ -58,7 +58,7 @@
                     if ($v1_3 < *($v0 + 0xc8))
                         return $v1_3 * 0x24 + *($v0 + 0xcc);
                 }
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 return 0;
             }
         }

@@ -7,7 +7,7 @@
         return 0xffffffea;
     if (!(uintptr_t)arg1 || (uintptr_t)arg1 >= 0xfffff001)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", arg3);
+
     }
     
     void* const $v0_1;

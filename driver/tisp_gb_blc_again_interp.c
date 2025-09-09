@@ -49,7 +49,7 @@
     if ($(uintptr_t)v0_7 >= 0x18)
     {
     label_32958:
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         $fp = 0;
         $s1 = 0;
         $v1_1 = 0;

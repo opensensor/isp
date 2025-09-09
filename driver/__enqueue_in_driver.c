@@ -11,7 +11,7 @@
     *((int32_t*)((char*)arg1 + 0x4c)) = 3; // Fixed void pointer dereference
     
     if (result && (uintptr_t)result != 0xfffffdfd)
-        isp_printf(); // Fixed: macro with no parameters, removed 5 arguments);
+
     
 }
 

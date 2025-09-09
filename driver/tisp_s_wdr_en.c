@@ -19,7 +19,7 @@
      while (!i);
     system_reg_write(0x20, $v0_2 | 4);
     system_reg_write(0x20, $v0_2 & 0xfffffffb);
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     
     if (arg1 != 1)
     {
@@ -32,7 +32,7 @@
         int32_t var_2c_1 = $s1;
         uint32_t var_30_1 = arg1;
         $s1 = ($v0_3 & 0xa1ffdf76) | 0x880002;
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         data_b2e74 = arg1;
         $a1_3 = 0x10;
     }
@@ -57,7 +57,7 @@
     system_reg_write(0x800, 1);
     int32_t var_2c_2_1 = $s1;
     uint32_t var_30_2_3 = arg1;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     return 0;
 }
 

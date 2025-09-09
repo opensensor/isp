@@ -16,7 +16,7 @@
     
     if (!*(arg1 + 0x214))
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         
         if (arg2)
         {
@@ -77,7 +77,7 @@
             
             if (!$v0_2)
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 vic_mdma_ch1_sub_get_num_1 = *(arg1 + 0x1fc);
             }
             else
@@ -117,7 +117,7 @@
                         {
                             int32_t var_3c_1 = $v0_8;
                             int32_t var_40_2 = $v0_5;
-                            isp_printf(); // Fixed: macro with no parameters, removed 4 arguments;
+
                             $s2_2 += 1;
                         }
                         else
@@ -125,7 +125,7 @@
                             int32_t var_40_1 = $v0_7[2];
                             uint32_t raw_pipe_2 = raw_pipe;
                             *((int32_t*)((char*)arg1 + 0x218)) = $v0_8 - 1; // Fixed void pointer dereference
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                             (*(raw_pipe_2 + 4))(*(raw_pipe_2 + 0x14), $v0_7);
                             int32_t** $v0_11 = *(arg1 + 0x200);
                             *((int32_t*)((char*)arg1 + 0x200)) = $v0_7; // Fixed void pointer dereference

@@ -11,7 +11,7 @@
     
     if (!$v0)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     int32_t $a2_1 = memset($v0, 0, 0x120);
@@ -22,7 +22,7 @@
         result = 0xffffffea;
     else if (*($s2_1 + 4) >= 0x11)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         result = 0xffffffea;
     }
     else
@@ -150,13 +150,13 @@
                     private_proc_remove(*($v0 + 0x11c));
                 }
                 else
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 
                 private_misc_deregister($v0 + 0xc);
             }
             else
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 result = 0xfffffffe;
             }
             
@@ -164,7 +164,7 @@
         }
         else
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
             result = 0xfffffff4;
         }
         

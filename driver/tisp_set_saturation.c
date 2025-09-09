@@ -7,6 +7,6 @@
     uint32_t $s0 = arg1;
     uint32_t var_10 = $s0;
     tisp_bcsh_saturation($s0);
-    return isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+    return
 }
 

@@ -11,7 +11,7 @@
     
     if (!$v0)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     memset($v0, 0, 0xe8);
@@ -69,7 +69,7 @@
                     
                     if (private_misc_register($s0_2) < 0)
                     {
-                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         result = 0xfffffffe;
                     }
                     else if (&$s0_2[9] < 0xfffff001)
@@ -130,7 +130,7 @@
     }
     else
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
         result = 0xfffffff4;
     }
     

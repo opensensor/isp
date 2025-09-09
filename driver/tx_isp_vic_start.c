@@ -16,13 +16,13 @@
         
         if (*($v1 + 0x18) != $v0)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
+
             $v1_2 = *(arg1 + 0xb8);
             $v0_2 = 0xa000a;
         }
         else
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             *(*(arg1 + 0xb8) + 0x10) = &data_20000;
             $v1_2 = *(arg1 + 0xb8);
             $v0_2 = 0x100010;
@@ -88,7 +88,7 @@
                 $v0_33 = 0x4240;
             }
             
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             $v0_34 = *(arg1 + 0xb8);
         }
         else
@@ -128,12 +128,12 @@
                 return 0xffffffff;
         if ($v0 == 4)
         {
-            $a2_3 = isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+            $a2_3 =
             *(*(arg1 + 0xb8) + 0xc) = 0;
             
             if (*(*(arg1 + 0x110) + 0x18))
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             }
             
             *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0);
@@ -153,7 +153,7 @@
                 return 0xffffffff;
             if ($v0 != 2)
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             }
             
             *(*(arg1 + 0xb8) + 0xc) = 3;
@@ -184,7 +184,7 @@
                     
                     int32_t var_18_5 = $v0_95;
                 label_109d4:
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     $v1_50 = nullptr;
                     result = 0xffffffff;
                 }
@@ -210,7 +210,7 @@
                         {
                             $a1_6 = "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n";
                         label_10990:
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                             $v1_50 = nullptr;
                             result = 0xffffffff;
                         }
@@ -403,14 +403,14 @@
             int32_t $v0_79;
             void* $v1_47;
                     return 0xffffffff;
-            $a2_3 = isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+            $a2_3 =
             *(*(arg1 + 0xb8) + 0xc) = 1;
             
             if ($v1_44)
             {
                 if ($v1_44 != 1)
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 }
                 
                 *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0);
@@ -437,7 +437,7 @@
             *(*(arg1 + 0xb8) + 0x1a4) = 0x100010;
             *(*(arg1 + 0xb8) + 0x1ac) = 0x4440;
             **((int32_t*)((char*)arg1 + 0xb8)) = 2; // Fixed void pointer dereference
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
             $v0_47 = *(arg1 + 0xb8);
         label_107d4:
             *$v0_47 = 1;
@@ -448,12 +448,12 @@
     else
     {
             return 0xffffffff;
-        $a2_3 = isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+        $a2_3 =
         *(*(arg1 + 0xb8) + 0xc) = 4;
         
         if (*(*(arg1 + 0x110) + 0x18))
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         }
         
         *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0);
@@ -464,7 +464,7 @@
         $v0_58 = *(arg1 + 0xb8);
     label_1065c:
         *$v0_58 = 2;
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
         **((int32_t*)((char*)arg1 + 0xb8)) = 1; // Fixed void pointer dereference
         result = 0;
         $v0_125 = *(arg1 + 0x110);
@@ -476,7 +476,7 @@
     else
         $a1_9 = "%s:%d::linear mode\\n";
     
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     vic_start_ok = 1;
     return result;
 }

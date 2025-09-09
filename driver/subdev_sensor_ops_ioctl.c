@@ -16,7 +16,7 @@
         
         if (!$a0)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         }
         
         char* $v0_11 = (char*)(*(*($a0 + 0xc4) + 0xc)); // Fixed void pointer assignment
@@ -42,7 +42,7 @@
                 
                 if (*(arg1 + 0xf4) == 1)
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 15 arguments;
+
                 }
                 
                 int32_t $v0_16 = *(arg3 + 0x20);
@@ -56,7 +56,7 @@
                     
                     if (!$v0_17)
                     {
-                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
                     }
                     
                     void var_40;
@@ -73,7 +73,7 @@
                     }
                     
                     private_i2c_put_adapter($v0_17);
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     return 0xffffffea;
                 }
                 
@@ -113,7 +113,7 @@
                             *$v0_25 = $s3_2 + 0xe4;
                             private_mutex_unlock(arg1 + 0xe8);
                             *((int32_t*)((char*)$s2_1 + 0x78)) = *(arg1 + 0x78); // Fixed void pointer dereference
-                            isp_printf(); // Fixed: macro with no parameters, removed 4 arguments;
+
                         }
                         
                         $v1_1 = *(arg3 + 0x20);
@@ -148,7 +148,7 @@
                 
                 if (*(arg1 + 0xf4) == 1)
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 15 arguments;
+
                 }
                 
                 private_mutex_lock(arg1 + 0xe8);
@@ -201,7 +201,7 @@
                                 return 0xffffffea;
                             if ($s2_3 == *(arg1 + 0xe4))
                             {
-                                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
                             }
                             
                             void** $v1_3 = *($s2_3 + 0xe8);
@@ -239,7 +239,7 @@
                 if ($v0_27 == 2)
                     return 0;
                 
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 return 0xffffffea;
                 break;
             }
@@ -294,7 +294,7 @@
                 
                 if (!$a0)
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 }
                 
                 char* $v0_6 = (char*)(**($a0 + 0xc4)); // Fixed void pointer assignment
@@ -318,7 +318,7 @@
                 
                 if (!$a0)
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 }
                 
                 char* $v0_9 = (char*)(**($a0 + 0xc4)); // Fixed void pointer assignment

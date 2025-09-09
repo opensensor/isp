@@ -37,7 +37,7 @@
     else
     {
         int32_t entry_$a2;
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         msca_dmaout_arb_2 = msca_dmaout_arb;
     }
     
@@ -102,7 +102,7 @@
     int32_t var_70_6 = $v0_11;
     int32_t var_50_1 = $v0_2;
     int32_t var_5c = $v0_17;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     return 0;
 }
 

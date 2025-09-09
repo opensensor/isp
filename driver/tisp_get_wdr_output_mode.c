@@ -15,7 +15,7 @@
     else if ($v0 == 8)
         *arg1 = 0;
     else if ($v0 != 1)
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     else
         *arg1 = $v0;
     

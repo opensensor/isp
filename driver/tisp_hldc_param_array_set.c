@@ -8,7 +8,7 @@
         return 0xffffffff;
     if ((uintptr_t)arg1 != 0x3ac)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     memcpy(&hldc_con_par_array, arg2, 0x48);

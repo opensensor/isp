@@ -135,7 +135,7 @@
         }
     }
     
-    isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", 
+
         "apical_isp_af_hist_s_attr");
     return 0xffffffff;
 }

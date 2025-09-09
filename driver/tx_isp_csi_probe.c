@@ -11,7 +11,7 @@
     
     if (!$v0)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     memset($v0, 0, 0x148);
@@ -40,14 +40,14 @@
                 *((int32_t*)((char*)$v0 + 0xd4)) = $v0; // Fixed void pointer dereference
             }
             
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             int32_t $a0_3 = *$v0_3;
             private_release_mem_region($a0_3, $v0_3[1] + 1 - $a0_3);
             result = 0xfffffffa;
         }
         else
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             result = 0xfffffff0;
         }
         
@@ -55,7 +55,7 @@
     }
     else
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 5 arguments);
+
         result = 0xfffffff4;
     }
     

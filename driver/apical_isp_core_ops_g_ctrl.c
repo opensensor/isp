@@ -195,7 +195,7 @@
                 arg2[1] = $v0_57;
             }
             
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             return 0xffffffff;
         }
         
@@ -379,7 +379,7 @@
                         
                         if ($(uintptr_t)v0_28 >= 0xa)
                         {
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         }
                         
                         switch ($v0_28)
@@ -623,7 +623,7 @@
             if (!$v0_45)
             {
                 return 0xffffffff;
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             }
             
             tisp_g_ae_hist($v0_45);
@@ -665,7 +665,7 @@
         
         $a2_4 = "apical_isp_hi_light_depress_g_ctrl";
     }
-    isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
+
     return result;
 }
 

@@ -11,7 +11,7 @@
     
     if ((uintptr_t)var_c != 0x2c)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     int32_t var_24;

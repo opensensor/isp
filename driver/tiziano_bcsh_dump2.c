@@ -10,36 +10,36 @@
     int32_t* $a3;
     int32_t* arg_c = $a3;
     int32_t var_48 = *arg8;
-    isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     /* tailcall */
-    return isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+    return
 }
 

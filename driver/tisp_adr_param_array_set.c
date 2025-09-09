@@ -8,7 +8,7 @@
         return 0xffffffff;
     if (arg1 - (uintptr_t)0x380 >= 0x2c)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     switch (arg1)

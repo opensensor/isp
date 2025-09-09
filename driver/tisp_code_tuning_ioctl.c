@@ -35,7 +35,7 @@
                         
                         if ($s2_2 & *(entry_$gp + 0x18))
                         {
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
@@ -45,7 +45,7 @@
                         if (arg3)
                         {
                             return 0xfffffff2;
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         }
                         
                         int32_t $v0_8 = *tisp_par_ioctl_1;
@@ -235,7 +235,7 @@
                         if ($s2_2 & $v0_12)
                         {
                             return 0xfffffff2;
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
@@ -249,7 +249,7 @@
                         
                         if (((arg3 + 0x500c) | arg3) & *(entry_$gp + 0x18))
                         {
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
@@ -259,7 +259,7 @@
                         if (arg3)
                         {
                             return 0xfffffff2;
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         }
                         
                         int32_t $a1_8 = *tisp_par_ioctl_2;
@@ -269,7 +269,7 @@
                             int32_t var_28_1 = $a1_8;
                             return 0;
                         label_245e0:
-                            isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", 
+
                                 "tisp_set_par_process");
                         }
                         
@@ -433,7 +433,7 @@
                         
                         if ((($s0_1 + 0x500c) | $s0_1) & *(entry_$gp + 0x18))
                         {
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
@@ -445,7 +445,7 @@
                         if (!(uintptr_t)arg3)
                             return 0;
                         
-                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         return 0xfffffff2;
                         break;
                     }
@@ -509,7 +509,7 @@
                         
                         if ($s1_2 & *(entry_$gp + 0x18))
                         {
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
@@ -519,7 +519,7 @@
                         if (arg3)
                         {
                             return 0xfffffff2;
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         }
                         
                         *((int32_t*)((char*)tisp_par_ioctl_3 + 4)) = 0xb; // Fixed void pointer dereference
@@ -532,7 +532,7 @@
                         if ($s1_2 & *(entry_gp_4 + 0x18))
                         {
                             return 0xfffffff2;
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
@@ -549,7 +549,7 @@
                         
                         if ($s1_2 & *(entry_$gp + 0x18))
                         {
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         }
                         
                         __might_sleep("VIC_CTRL : %08x\\n", 0xc9, 0);
@@ -559,7 +559,7 @@
                         if (arg3)
                         {
                             return 0xfffffff2;
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         }
                         
                         *((int32_t*)((char*)tisp_par_ioctl_3 + 4)) = 0xf; // Fixed void pointer dereference
@@ -582,7 +582,7 @@
         $a1 = "not support the gpio mode!\n";
     }
     
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     return 0xffffffea;
 }
 

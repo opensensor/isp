@@ -9,7 +9,7 @@
     
     if ($(uintptr_t)a1 >= 0x20)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     int32_t result = *arg2;

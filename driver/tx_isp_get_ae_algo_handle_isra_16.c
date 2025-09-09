@@ -63,6 +63,6 @@
     
     if (!private_copy_to_user(arg2, ae_info_mine_2, 0x7d8))
     
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
 }
 

@@ -28,7 +28,7 @@
     
     if (!(1 << ($s1 & 0x1f) & msca_ch_en_2))
         /* tailcall */
-        return isp_printf(); // Fixed: macro with no parameters, removed 15 arguments;
+        return
     
     
     if (arg2)
@@ -39,7 +39,7 @@
         $s4 = $v0_3 & 0x7ff;
         
         if (arg2 != 1)
-            isp_printf(); // Fixed: macro with no parameters, removed 4 arguments;
+
         else
         {
             
@@ -51,7 +51,7 @@
                 $s2_1 = $fp_1;
             }
             else if ($a2_2 - (uintptr_t)0x81 >= 0x100)
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             else
             {
                 $fp_1 = $a2_2 + 0x80;

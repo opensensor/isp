@@ -16,7 +16,7 @@
     
     if ((uintptr_t)var_18 != 0x102)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
+
     }
     
     char* $a3_1 = (char*)(&histSub_4096_out); // Fixed void pointer assignment

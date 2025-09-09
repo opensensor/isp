@@ -9,6 +9,6 @@
     if (arg1)
     
     int32_t entry_$a2;
-    isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", entry_$a2);
+
 }
 

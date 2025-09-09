@@ -8,7 +8,7 @@
         return 0xffffffff;
     if (arg1 - (uintptr_t)0x3ff >= 0x33)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     int32_t $v0_2;

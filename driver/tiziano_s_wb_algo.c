@@ -11,7 +11,7 @@
     {
         if (arg1 && arg1 != 2)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         }
         
         data_a9f68_4 = 0;

@@ -11,7 +11,7 @@
     
     if (!$v0)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 2 arguments!\n", $a2);
+
     }
     
     tisp_g_wb_zone();

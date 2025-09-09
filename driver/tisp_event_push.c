@@ -10,7 +10,7 @@
     
     if ($v0_1 == &data_b33b8)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
+
         arch_local_irq_restore($v0);
     }
     

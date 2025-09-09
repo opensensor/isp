@@ -11,7 +11,7 @@
     if (*(arg1 + 0xf4) == 1)
     {
         int32_t entry_$a2;
-        isp_printf(); // Fixed: macro with no parameters, removed 15 arguments;
+
     }
     
     int32_t* $v0_2 = *(arg1 + 0xdc);
@@ -49,7 +49,7 @@
         }
     }
     
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     return 0xffffffea;
 }
 

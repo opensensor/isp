@@ -13,7 +13,7 @@
     {
         if (arg1)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 2 arguments!\n", arg1);
+
         }
         
         var_a0_9 = 0;

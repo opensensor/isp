@@ -16,7 +16,7 @@
     {
         if ($v0_1 != 1)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         }
         
         int32_t var_68_2 = $v0_1;
@@ -28,7 +28,7 @@
                 return 0xffffffff;
             if (var_14)
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             }
             
             var_98 = var_10_1;
@@ -41,7 +41,7 @@
             if (!$v1_2)
             {
                 var_108 = 0;
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             }
             
             var_98_1 = var_10_2 / $v1_2;

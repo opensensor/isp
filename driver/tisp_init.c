@@ -89,7 +89,7 @@
     int32_t $v0_8 = arg1[2];
     
     if ($(uintptr_t)v0_8 >= 0x15)
-        isp_printf(); // Fixed: macro with no parameters, removed 2 arguments!\n", "tisp_init");
+
     else
         switch ($v0_8)
         {
@@ -228,7 +228,7 @@
     system_reg_write(0x1c, $a1_7);
     sensor_init(&sensor_ctrl);
     tisp_set_csc_version(0);
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     int32_t $s3 = 0x8077efff;
     
     for (int32_t i = 0; (uintptr_t)i != 0x20; )
@@ -240,7 +240,7 @@
     }
     
     int32_t var_70_7 = $s3;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     int32_t $v0_12;
     int32_t $s3_2;
     
@@ -259,7 +259,7 @@
     system_reg_write(0xc, $s3_3);
     int32_t var_70_1_2 = data_b2e74_2;
     int32_t var_6c_4 = $s3_3;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     system_reg_write(0x30, 0xffffffff);
     int32_t $a1_9 = 0x33f;
     
@@ -360,7 +360,7 @@
                         data_b2f84 = $v0_18;
                         data_b2f88 = $v0_18 - 0x80000000;
                         data_b2f80 = 4;
-                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         
                         if ($v0_25)
                         {
@@ -458,7 +458,7 @@
                                 if ($v0_31)
                                 {
                                     int32_t var_70_4 = $v0_31;
-                                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                                 }
                                 
                                 return 0;

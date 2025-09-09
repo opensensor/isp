@@ -11,7 +11,7 @@
     
     if (!result)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     memset(result, 0, 0x40d0);

@@ -14,7 +14,7 @@
     
     if (!(uintptr_t)arg1)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     char const* const $v0_3;
@@ -22,7 +22,7 @@
     $v0_3 = arg2 ? "streamon" : "streamoff";
     
     char const* const var_20_1 = $v0_3;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     
     if (arg2 == *($s0 + 0x210))
         return 0;

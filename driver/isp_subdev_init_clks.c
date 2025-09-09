@@ -14,7 +14,7 @@
         
         if (!$v0_1)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
+
         }
         
         memset($v0_1, 0, $s1);
@@ -54,13 +54,13 @@
                 }
                 else
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     $s0_3 = $s0_2 << 2;
                 }
             }
             else
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 result = *$s4_1;
                 $s0_3 = $s0_2 << 2;
             }

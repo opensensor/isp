@@ -22,16 +22,16 @@
         if ($a0_41 == 1)
             var_94 = (*($v1_22 + 0x124) * *($v1_22 + 0x128)) << 1;
         else if ($a0_41 != 2)
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         else
             var_94 = *($v0_96 + 0xe8);
         
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         $s6_1 = 0;
         
         if (private_copy_to_user(arg3, &var_98, 8))
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         }
     }
     else
@@ -51,7 +51,7 @@
                 label_1f3d0:
                     $a1_3 = "bank no free\n";
                 label_1df8c:
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 }
                 
                 $s6_1 = 0;
@@ -663,7 +663,7 @@
                 if (*$(uintptr_t)v0_114 != 0x336ac)
                 {
                     return 0xffffffff;
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 }
                 
                 int32_t* $s5_1 = (int32_t*)((char*)$s6_5  + 0x120); // Fixed void pointer arithmetic
@@ -787,7 +787,7 @@
                 {
                     return 0xfffffff2;
                 label_1e95c:
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 }
                 
                 uint32_t $s2_10 = (*($s4_5 + 0xec) + 7) >> 3 << 3;
@@ -906,13 +906,13 @@
                     
                     if (private_copy_from_user(&var_98, arg3, 8))
                     {
-                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     }
                     
                     uint32_t var_a0_1_1 = var_98_37;
                     int32_t var_a4_1 = var_94_10;
                     int32_t var_a8_1_1 = 0;
-                    int32_t $a2_12 = isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+                    int32_t $a2_12 =
                     int32_t* $v0_91 = (int32_t*)((char*)$s2_23  + 0x120); // Fixed void pointer arithmetic
                     int32_t $v1_21 = *($v0_91 + 0x90);
                     int32_t $s0_10;
@@ -923,7 +923,7 @@
                             return 0xffffffff;
                         if ($v1_21 != 2)
                         {
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         }
                         
                         $s0_10 = *($v0_91 + 0xe8);
@@ -938,7 +938,7 @@
                     int32_t var_a8_2 = $s0_10;
                     uint32_t var_a0_2_1 = var_98_38;
                     int32_t var_a4_2 = var_94_11;
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     
                     if (var_94_12 >= $s0_10)
                     {
@@ -948,7 +948,7 @@
                         system_reg_write(0x200c, $s1_13);
                     }
                     
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     *((int32_t*)((char*)$s2_23 + 0x17c)) = 0; // Fixed void pointer dereference
                     tisp_s_wdr_en(0);
                     return 0xfffffff2;
@@ -997,7 +997,7 @@
             if ($a2_4 >= 2)
             {
                 return 0xffffffea;
-                isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", $a2_4);
+
             }
             
             $s6_1 = 0;
@@ -1028,7 +1028,7 @@
                         
                         if (!(*($v0_39 + 6) & *($v0_40 + 6) & $t1_1))
                         {
-                            isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", 
+
                                 $a2_7);
                         }
                         
@@ -1037,7 +1037,7 @@
                         if ($v0_44 == 4 || *($t0_2 + 7) == 4)
                         {
                             return 0xffffffff;
-                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         }
                         
                         uint32_t $v0_46;

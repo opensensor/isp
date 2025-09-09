@@ -8,7 +8,7 @@
         return 0xffffffff;
     if (arg1 - (uintptr_t)0x3c0 >= 0x26)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", 
+
             "tisp_bcsh_param_array_get");
     }
     

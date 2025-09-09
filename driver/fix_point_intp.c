@@ -17,7 +17,7 @@
                     int32_t $v1_6 = $a0_1 - $s2_1;
                     int32_t $a2_3 = $a0_1 < $v1_6 ? 1 : 0;
     if (arg3 < arg2)
-        isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
+
     
     if (arg3 != arg2)
     {
@@ -59,7 +59,7 @@
     else if (arg4 != arg5)
     {
         return 0;
-        isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
+
     }
     
     return arg4;

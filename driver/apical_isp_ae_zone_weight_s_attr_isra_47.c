@@ -11,7 +11,7 @@
     
     if (!$v0)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     int32_t $a1_1 = *arg1;
@@ -33,7 +33,7 @@
                 
                 if ($a1_2 >= 9)
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", 
+
                         "apical_isp_ae_zone_weight_s_attr");
                     result = 0xffffffff;
                 }

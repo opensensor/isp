@@ -16,7 +16,7 @@
     if (!$s4 || $(uintptr_t)s4 >= 0xfffff001)
     {
         int32_t entry_$a2;
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     int32_t i = 0;

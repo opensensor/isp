@@ -11,7 +11,7 @@
     
     if (!$v0)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     memset($v0, 0, 0xfc);
@@ -25,7 +25,7 @@
     if (tx_isp_subdev_init(arg1, $v0, &vin_subdev_ops))
     {
         return 0xfffffff4;
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
         private_kfree($v0);
     }
     

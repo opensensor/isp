@@ -10,7 +10,7 @@
         day_night = 0;
     }
     else if (arg1 != 1)
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     else
     {
         memcpy(0x94b20, tparams_night, 0x137f0);
@@ -42,7 +42,7 @@
     }
     
     int32_t $s0_1 = $v0_2 | $s0;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     system_reg_write(0xc, $s0_1);
     tiziano_defog_dn_params_refresh();
     tiziano_ae_dn_params_refresh();

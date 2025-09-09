@@ -18,7 +18,7 @@
     
     if (!(arg1 & 0xff))
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         msca_ch_en_4 = msca_ch_en;
     }
     else

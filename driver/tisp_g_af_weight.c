@@ -11,6 +11,6 @@
     
     if ((uintptr_t)var_10 == 0x384)
     
-    isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", "tisp_g_af_weight");
+
 }
 

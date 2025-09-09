@@ -17,7 +17,7 @@
     else if ($v0 == 2)
         var_48 = $v0;
     else
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     
     tisp_wdr_param_array_set(0x431, &var_48, &var_10);
 }

@@ -23,7 +23,7 @@
     {
         if (arg1)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         }
         
         var_38_13 = 0;
@@ -48,7 +48,7 @@
     uint32_t var_58_1_1 = $v0_3;
     int32_t var_5c_1_2 = $v0_2;
     uint32_t flicker_hz_2 = flicker_hz_1;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     return 0;
 }
 

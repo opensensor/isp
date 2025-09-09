@@ -13,7 +13,7 @@
     if (!$v0)
         var_18 = 0;
     else if ($v0 != 1)
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     else
         var_18 = $v0;
     

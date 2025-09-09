@@ -20,11 +20,11 @@
             return private_netlink_unicast(nlsk, $v0, 0x32, 0x40);
         }
         
-        isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
+
         kfree_skb($v0);
     }
     else
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     
     return 0xffffffff;
 }

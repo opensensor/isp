@@ -12,7 +12,7 @@
         dump_csi_reg(dump_csd);
         
         if ($a2_1)
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         
         if ($s3_1)
             isp_printf(0, 

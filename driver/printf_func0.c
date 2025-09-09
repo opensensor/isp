@@ -6,7 +6,7 @@
 {
     int32_t result = IntNum.(uintptr_t)32264_1 < 0x88b8 ? 1 : 0;
         int32_t $s1_1 = arg1;
-        int32_t $a2_1 = isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+        int32_t $a2_1 =
         char* i_2 = (char*)(&IspAeStatic); // Fixed void pointer assignment
     uint32_t IntNum.32264_1 = IntNum.32264;
     IntNum.32264 = IntNum.32264_1 + 1;
@@ -25,49 +25,49 @@
             {
                 case 0:
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
+
                     i_2 = &IspAeStatic;
                     break;
                 }
                 case 1:
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     i_2 = &data_d0878;
                     break;
                 }
                 case 2:
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     i_2 = &data_d0bfc;
                     break;
                 }
                 case 3:
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     i_2 = &data_d1304;
                     break;
                 }
                 case 4:
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     i_2 = &data_d1688;
                     break;
                 }
                 case 5:
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     i_2 = &data_d0f80;
                     break;
                 }
                 case 6:
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     i_2 = &data_d1a0c;
                     break;
                 }
                 case 7:
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", $a2_1);
+
                     i_2 = &data_d1e0c;
                     break;
                 }
@@ -92,11 +92,11 @@
                 
                 i += 0x3c;
                 $a2_4 =
-                    isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", $a2_3);
+
                 j = 0;
             } while (i != i_2 + 0x384);
             
-            $a2_1 = isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", $a2_4);
+            $a2_1 =
             $s1_1 += 1;
         }
     }

@@ -11,7 +11,7 @@
     
     if ($v0_1 < 0)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     int16_t $a0_3 = data_b2ea4_2;
@@ -41,7 +41,7 @@
     uint32_t var_28_1_1 = $a0_3;
     int32_t var_18_1_1 = $v0_4 & 0xffff;
     int32_t var_24_1 = $v1_1 & 0xffff;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     uint32_t flicker_hz_1 = flicker_hz;
     
     if (!flicker_hz_1)
@@ -50,7 +50,7 @@
     tiziano_deflicker_expt_tune(flicker_hz_1, data_b2e44_3, data_b2e56_3, data_b2e54_3);
     uint32_t var_24_2 = data_b2e54_4;
     uint32_t var_28_2_1 = data_b2e56_4;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     return 0;
 }
 

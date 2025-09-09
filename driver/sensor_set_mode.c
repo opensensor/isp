@@ -39,6 +39,6 @@
         }
     }
     
-    return isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+    return
 }
 

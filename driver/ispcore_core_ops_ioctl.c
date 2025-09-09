@@ -18,7 +18,7 @@
         result = 0xffffffed;
         
         if (!(uintptr_t)arg1)
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         else
         {
             result = 0xfffffdfd;
@@ -39,7 +39,7 @@
                 result = 0xfffffdfd;
             }
             
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         }
     }
     else if ((uintptr_t)arg2 != 0x1000001)
@@ -147,7 +147,7 @@
         }
         
         result = 0xffffffed;
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     return result;
 }

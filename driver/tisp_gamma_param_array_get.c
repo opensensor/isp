@@ -14,7 +14,7 @@
     {
         if ((uintptr_t)arg1 != 0x3d)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         }
         
         $a1 = &tiziano_gamma_lut_wdr;

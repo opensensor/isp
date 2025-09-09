@@ -5,7 +5,7 @@
 
 {
     if (arg2 < arg3)
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     
     return arg2 - arg3;
 }

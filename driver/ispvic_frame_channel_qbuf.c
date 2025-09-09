@@ -20,12 +20,12 @@
     
     if ($s0 + 0x1fc == *($s0 + 0x1fc))
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         $a1_4 = var_18;
     }
     else if ($s0 + 0x1f4 == *($s0 + 0x1f4))
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         $a1_4 = var_18;
     }
     else

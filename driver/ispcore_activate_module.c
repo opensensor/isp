@@ -48,7 +48,7 @@
                     
                     if (*($v0_6 + 0x74) != 1)
                     {
-                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     }
                     
                     *((int32_t*)((char*)$v0_6 + 0x74)) = 2; // Fixed void pointer dereference

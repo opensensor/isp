@@ -9,7 +9,7 @@
     
     if ($(uintptr_t)v0 == 0xfffffe00)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     if (!$v0)
@@ -21,7 +21,7 @@
     if ($s0_1 == &data_b33b0_3)
     {
         return 0xffffffff;
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         arch_local_irq_restore($v0_2);
     }
     

@@ -13,7 +13,7 @@
     
     if (result)
     {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         
         while (true)
         {
@@ -26,37 +26,37 @@
             {
                 case 0:
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
+
                     i_2 = &data_d220c;
                     break;
                 }
                 case 1:
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     i_2 = &data_d2590;
                     break;
                 }
                 case 2:
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     i_2 = &data_d2914;
                     break;
                 }
                 case 3:
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     i_2 = &data_d2c98;
                     break;
                 }
                 case 4:
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     i_2 = &data_d301c;
                     break;
                 }
                 case 5:
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     i_2 = &data_d33a0;
                     break;
                 }
@@ -81,11 +81,11 @@
                 
                 i += 0x3c;
                 $a2_4 =
-                    isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", $a2_3);
+
                 j = 0;
             } while (i != i_2 + 0x384);
             
-            $a2_1 = isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", $a2_4);
+            $a2_1 =
             $s1_1 += 1;
         }
     }

@@ -12,7 +12,7 @@
     
     if (!$v0)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", $a2);
+
     }
     
     memset($v0, 0, 0x34);
@@ -31,7 +31,7 @@
     if ($(uintptr_t)v0_2 >= 0xfffff001)
     {
         return 0xffffffff;
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     char* $v0_5 = (char*)(*(*($s1_1 + 0xc) + 0x28)); // Fixed void pointer assignment
@@ -57,7 +57,7 @@
         if (!$v0_7)
         {
         label_25cf0:
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             $a0_22 = $s1_1;
         label_25f4c:
             private_filp_close($a0_22, 0);
@@ -131,9 +131,9 @@
         if ($a2_7)
         {
             goto label_25f64;
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
             isp_printf(2, "qbuffer null\n", 
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
         }
         
         char* $v0_12 = (char*)(&$s4_2[8]); // Fixed void pointer assignment
@@ -170,10 +170,10 @@
         if ($a1_6 - $at_2)
         {
             goto label_25f4c;
-            $a2_10 = isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+            $a2_10 =
             $a1_8 = "Failed to init isp module(%d.%d)\n";
         label_25e58:
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
             $a0_22 = $s1_1;
         }
         
@@ -203,7 +203,7 @@
             goto label_25f4c;
             $a1_10 = "&vsd->mlock";
         label_25ee0:
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             $a0_22 = $s1_1;
         }
         
@@ -218,7 +218,7 @@
         if ($(uintptr_t)v0_19 >= 0xfffff001)
         {
             return 0;
-            isp_printf(); // Fixed: macro with no parameters, removed 4 arguments;
+
         label_25f34:
             private_vfree(*($v0 + 0x28));
             private_vfree($v0);
@@ -299,8 +299,8 @@
                 {
                     goto label_25f64;
                     isp_printf(2, "The parameter is invalid!\n", 
-                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
+
                 }
                 
                 uint32_t $at_4;
@@ -332,7 +332,7 @@
                 if ($a0_27 - $at_4)
                 {
                     goto label_25e58;
-                    $a2_10 = isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+                    $a2_10 =
                     $a1_8 = "register is 0x%x, value is 0x%x\n";
                 }
                 
@@ -380,7 +380,7 @@
         }
     }
     
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     $a0_22 = $s1_1;
     goto label_25f4c;
 }

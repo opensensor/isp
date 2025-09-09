@@ -51,7 +51,7 @@
             if (result_1)
             {
                 return 0xffffffea;
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
             }
             
             __private_spin_lock_irqsave($s0 + 0xdc, &var_18_21);
@@ -61,7 +61,7 @@
             {
                 return 0xffffffff;
                 private_spin_unlock_irqrestore($s0 + 0xdc, $a1_1);
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
             }
             
             int32_t $a2_3 = private_spin_unlock_irqrestore($s0 + 0xdc, $a1_1);
@@ -107,7 +107,7 @@
             }
             else
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 $v0_6 = *($s0 + 0xf4);
             }
             

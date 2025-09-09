@@ -1,76 +1,63 @@
 #include "include/main.h"
 
-
-  void* vic_framedone_irq_function(void* arg1)
-
+void* vic_framedone_irq_function(void* arg1)
 {
-    char* result = (char*)(&data_b0000); // Fixed void pointer assignment
-            char* $s1_1 = (char*)(&gpio_info); // Fixed void pointer assignment
-                uint32_t $a0_2 = *$s1_1;
-                    char* result_1 = (char*)(result); // Fixed void pointer assignment
-                    uint32_t var_2c_1 = *(((i + 8) << 1) + 0xb2904);
-                    uint32_t var_30_1 = *(&gpio_info + (i << 1));
-    
-    if (!*(arg1 + 0x214))
+    char* result = (char*)(&data_b0000);
+
+    if (!*(int32_t*)((char*)arg1 + 0x214))
     {
-    label_123f4:
-        
-        if (gpio_switch_state)
-        {
-            gpio_switch_state = 0;
-            
-            for (int32_t i = 0; (uintptr_t)i != 0xa; )
+        label_123f4:
+
+            if (gpio_switch_state)
             {
-                result = private_gpio_direction_output;
-                
-                if ($(uintptr_t)a0_2 == 0xff)
-                    break;
-                
-                result = private_gpio_direction_output($a0_2, *($s1_1 + 0x14));
-                
-                if (result < 0)
+                gpio_switch_state = 0;
+
+                for (int32_t i = 0; i < 10; i++)
                 {
-                    return isp_printf(); // Fixed: macro with no parameters, removed 2 arguments,STATE(%d),%d", 
-                        "vic_framedone_irq_function");
+                    char* gpio_ptr = (char*)(&gpio_info) + (i * 8);
+                    uint32_t gpio_num = *(uint32_t*)gpio_ptr;
+
+                    if (gpio_num == 0xff)
+                        break;
+
+                    result = (char*)private_gpio_direction_output(gpio_num, *(uint32_t*)(gpio_ptr + 0x14));
+
+                    if ((intptr_t)result < 0)
+                    {
+                        return result;
+                    }
                 }
-                
-                i += 1;
-                $s1_1 += 2;
             }
-        }
     }
     else
     {
-            int32_t* $a3_1 = (int32_t*)((char*)arg1  + 0xb8); // Fixed void pointer arithmetic
-            int32_t $a1_1 = 0;
-            int32_t $v1_1 = 0;
-            int32_t $v0 = 0;
-        result = *(arg1 + 0x210);
-        
+        int32_t* base_ptr = (int32_t*)((char*)arg1 + 0xb8);
+        int32_t count = 0;
+        int32_t found_count = 0;
+        int32_t found = 0;
+
+        result = *(char**)((char*)arg1 + 0x210);
+
         if (result)
         {
-            void** i_1 = *(arg1 + 0x204);
-            
-            for (; i_1 != arg1 + 0x204; i_1 = *i_1)
+            void** node = *(void***)((char*)arg1 + 0x204);
+
+            for (; node != (void**)((char*)arg1 + 0x204); node = (void**)*node)
             {
-                $v1_1 += 0 < $v0 ? 1 : 0;
-                $a1_1 += 1;
-                
-                if (i_1[2] == *($a3_1 + 0x380))
-                    $v0 = 1;
+                found_count += (found > 0) ? 1 : 0;
+                count += 1;
+
+                if (node[2] == *(void**)((char*)base_ptr + 0xe00))
+                    found = 1;
             }
-            
-            int32_t $v1_2 = $v1_1 << 0x10;
-            
-            if (!$v0)
-                $v1_2 = $a1_1 << 0x10;
-            
-            *((int32_t*)((char*)$a3_1 + 0x300)) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff); // Fixed void pointer dereference
-            result = &data_b0000;
+
+            int32_t value = found ? (found_count << 0x10) : (count << 0x10);
+
+            *(int32_t*)((char*)base_ptr + 0xc00) = value | (*(int32_t*)((char*)base_ptr + 0xc00) & 0xfff0ffff);
+            result = (char*)&data_b0000;
             goto label_123f4;
         }
     }
-    
+
     return result;
 }
-

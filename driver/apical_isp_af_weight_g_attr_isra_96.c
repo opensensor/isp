@@ -11,7 +11,7 @@
     
     if (!$v0)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", $a2);
+
     }
     
     int32_t result = tisp_g_af_weight($v0);

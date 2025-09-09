@@ -7,7 +7,7 @@
         int32_t var_10_1 = arg1;
     if (arg1 - (uintptr_t)0x3001 >= 0x14)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     else
     {

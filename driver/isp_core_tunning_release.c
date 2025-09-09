@@ -6,7 +6,7 @@
 {
     char* $s0 = (char*)(*(*(*(arg2 + 0x70) + 0xc8) + 0x1bc)); // Fixed void pointer assignment
         int32_t $a0 = *($s0 + 0x40ac);
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     
     if (*($s0 + 0x40c4) != 2)
     {

@@ -11,7 +11,7 @@
     
     if (*($s0 + 0xe8) < 3)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         private_spin_unlock_irqrestore($s0 + 0xdc, var_28);
     }
     

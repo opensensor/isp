@@ -57,15 +57,15 @@
                     
                     $a2_3 = *($s0_2 + 0x2c0);
                 label_1af4c:
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     
                     while ($s0_2 + 0x210 != $s5_2 + 0x58)
                     {
-                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
                         $s5_2 = *($s5_2 + 0x58) - 0x58;
                     }
                     
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
                     break;
                 }
                 
@@ -88,7 +88,7 @@
                 uint8_t isp_ch0_pre_dequeue_intc_ahead_cnt_1 = isp_ch0_pre_dequeue_intc_ahead_cnt;
             
             if ($a2_2 != *(arg3 + 8))
-                $a2_2 = isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+                $a2_2 =
             
             if (isp_ch0_pre_dequeue_intc_ahead == 1)
                 $a2_2 = isp_printf(2, 
@@ -97,7 +97,7 @@
             
             if (isp_ch0_pre_dequeue_flag != 1)
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 isp_ch0_pre_dequeue_intc_ahead = 1;
                 isp_ch0_pre_dequeue_intc_ahead_cnt = isp_ch0_pre_dequeue_intc_ahead_cnt_1 + 1;
                 isp_ch0_pdq_intc_cnt += 1;
@@ -118,7 +118,7 @@
                 if (*($s0_2 + 0x244) == $s2_1 || !$v0_11)
                 {
                     if (isp_ch0_pre_dequeue_intc_ahead != 1)
-                        $a2 = isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+                        $a2 =
                     
                     $s6_1 = *($s0_2 + 0x210);
                 }
@@ -174,7 +174,7 @@
                             if ($(uintptr_t)v0_22 == 0x58)
                             {
                             label_1b1f0:
-                                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                                 $s3_6 = $s3_5 + 1;
                                 *($s0_2 + 0x2e4) += 1;
                             }
@@ -303,7 +303,7 @@
                     }
                 }
                 else
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             }
             else
                 isp_ch0_pre_dequeue_drop += 1;
@@ -312,7 +312,7 @@
         private_spin_unlock_irqrestore($s0_2 + 0x2c4, var_38_2);
     }
     else
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     
     return 0;
 }

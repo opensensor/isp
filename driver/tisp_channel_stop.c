@@ -25,7 +25,7 @@
         
         if (!$s2)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             break;
         }
     } while ($s0 & $v0_2);

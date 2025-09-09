@@ -23,7 +23,7 @@
             return 0xffffffff;
         if ((uintptr_t)arg1 != 0x357)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         }
         
         $a1 = &tiziano_clm_h_lut;

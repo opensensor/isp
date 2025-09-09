@@ -27,7 +27,7 @@
                 
                 if (!(uintptr_t)arg2)
                 {
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                     *($a0_21 + 8) &= 0xfffffffe;
                     *($a0_22 + 0xc) &= 0xfffffffe;
                     *($a0_23 + 0x10) &= 0xfffffffe;
@@ -133,7 +133,7 @@
                     }
                     else if ($s2_1 != 2)
                     {
-                        isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", 
+
                             $s2_1);
                         $v0_17 = 3;
                     }

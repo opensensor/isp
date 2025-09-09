@@ -10,7 +10,7 @@ int vic_core_ops_init(void* arg1, void* arg2)
     
     if (!(uintptr_t)arg1 || (uintptr_t)arg1 >= 0xfffff001)
     {
-        isp_printf();
+
     }
 
     char* $s1_1 = (char*)arg1 + 0xd4;

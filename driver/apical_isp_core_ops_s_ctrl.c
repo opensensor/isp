@@ -270,7 +270,7 @@
                 if ($(uintptr_t)v0_44 >= 0xa)
                 {
                     return 0xffffffff;
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 }
                 
                 uint32_t $a0_26;
@@ -416,7 +416,7 @@
                 
                 if (!$v0_32)
                 
-                isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
+
             }
             
             if ($(uintptr_t)a0 < 0x980919)
@@ -495,7 +495,7 @@
                             $a1_23 = tisp_wdr_process;
                         }
                         
-                        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                         return 0;
                     }
                     
@@ -689,7 +689,7 @@
                 label_169ec:
                     $a0_32 = 1;
                 label_169fc:
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 }
                 
                 $v0_58 = tisp_s_2dns_ratio;
@@ -699,7 +699,7 @@
                 $v0_60 = $v0_58($a0_9);
                 
                 if ($v0_60 < 0)
-                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 
                 return $v0_60;
             }
@@ -828,7 +828,7 @@
                     }
                 }
                 
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 return $s0_1;
             }
             

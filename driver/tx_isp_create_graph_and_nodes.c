@@ -14,12 +14,12 @@
         
         if (!$v0_3)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             i += 1;
         }
         else if ($(uintptr_t)v0_3 >= 0xfffff001)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             i += 1;
         }
         else if (*$v0_3 != 1)
@@ -49,7 +49,7 @@
             
             if (!$a0_3)
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
                 break;
             }
             
@@ -83,7 +83,7 @@
             
             if (private_misc_register($v0_7 + 0xc) < 0)
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
                 
                 while (true)
                 {

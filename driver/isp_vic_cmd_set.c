@@ -12,7 +12,7 @@
     if ($v0 && $(uintptr_t)v0 < 0xfffff001)
         $s0 = *($v0 + 0xd4);
     
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     void* const $v0_3;
     char const* const $a1;
     
@@ -162,13 +162,13 @@
                                 isp_printf(1, "\t\t snapraw\n", 
                                     isp_printf(1, "\t cmd:\n", 
                                         isp_printf(1, "help:\n", 
-                                            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments)))))));
+
                     isp_printf(1, &$LC37, 
                         isp_printf(1, "\t\t\t "savenum" is the num of you save raw picture.\n ", 
                             isp_printf(1, "\t\t\t "saveraw"  is cmd; \n", 
                                 isp_printf(1, 
                                     "\t\t\t please use this cmd: \n\t"echo saveraw savenum > /proc/jz/isp/isp-w02"\n", 
-                                    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments))));
+
                     $a0_19 = *($s0 + 0x140);
                 }
                 

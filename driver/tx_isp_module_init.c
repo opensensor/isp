@@ -7,7 +7,7 @@
         return 0xffffffea;
     if (!(uintptr_t)arg2)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     if (arg1)

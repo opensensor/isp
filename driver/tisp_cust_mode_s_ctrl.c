@@ -34,12 +34,12 @@
             else if (day_night_1 == 3)
                 memcpy(0x94b20, tparams_night, 0x137f0);
             else
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         }
         else if (!day_night_1)
             memcpy(0x94b20, tparams_day, 0x137f0);
         else
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         
         cust_mode = 0;
     }
@@ -70,7 +70,7 @@
     
     int32_t $s0_2 = $v0_4 | $s0_1;
     int32_t var_10_3 = $s0_2;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     system_reg_write(0xc, $s0_2);
     tiziano_defog_dn_params_refresh();
     tiziano_ae_dn_params_refresh();

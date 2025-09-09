@@ -15,7 +15,7 @@
         
         if ($v0 != 1)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 5 arguments;
+
             $a0_1 = 0;
         }
     }

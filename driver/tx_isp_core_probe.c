@@ -11,7 +11,7 @@
     
     if (!$v0)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     memset($v0, 0, 0x218);
@@ -100,7 +100,7 @@
                 isp_clk = isp_clk_1;
             }
             
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             
             if (*($v0 + 0xe8) >= 2)
                 ispcore_slake_module($v0);
@@ -111,14 +111,14 @@
         }
         else
             isp_printf(2, "Failed to init output channels!\\n", 
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
         
         tx_isp_subdev_deinit($v0);
         result = 0xffffffea;
     }
     else
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 2 arguments\n", *($s2_1 + 2));
+
         result = 0xfffffff4;
     }
     

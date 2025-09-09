@@ -66,7 +66,7 @@
             return 0xffffffff;
         if (param_adr_tool_control_array_1)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         }
         
         memcpy(&param_adr_weight_20_lut_array, &param_adr_weight_20_lut_array_tmp, 0x80);

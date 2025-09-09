@@ -35,7 +35,7 @@
         $a1_1 = "VIC_CTRL : %08x\n";
     }
     
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     return $s0;
 }
 

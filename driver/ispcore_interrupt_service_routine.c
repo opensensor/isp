@@ -16,7 +16,7 @@
         $a0 = *($s0 + 0x15c);
     else
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 6 arguments;
+
         data_ca57c += 1;
         $a0 = *($s0 + 0x15c);
     }

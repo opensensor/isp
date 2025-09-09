@@ -12,7 +12,7 @@
     int32_t $v1_2;
     
     if ((uintptr_t)arg1 >= 0xa)
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     else
         switch (arg1)
         {

@@ -22,7 +22,7 @@
     int32_t tispinfo_2 = tispinfo;
     int32_t $s2 = data_b2f34;
     int32_t $a1_2;
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     
     if (!(uintptr_t)arg1)
         memcpy(&ds0_attr, arg2, 0x34);
@@ -50,7 +50,7 @@
         
         if (tispinfo_2 < tispinfo_3 + $v1_1 || $s2 < $a0_1 + $a1_1)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         }
         
         tispinfo_2 = tispinfo_3;
@@ -103,7 +103,7 @@
         
         if (tispinfo_4 < tispinfo_6 + $a1_9 || $s7_1 < $v0_20 + $a2_1)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         }
         
         tispinfo_4 = tispinfo_6;

@@ -16,7 +16,7 @@
     
     if (result && (uintptr_t)result != 0xfffffdfd)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
     }
     
     int32_t var_64_1 = 8;
@@ -32,7 +32,7 @@
         memcpy(arg1 + 0x23c, &var_80, 0x70);
     }
     
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     return 0xfffffff4;
 }
 

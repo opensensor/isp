@@ -21,7 +21,7 @@
     {
         if (var_80 != 1)
         {
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
         }
         
         int32_t var_70;
@@ -35,7 +35,7 @@
             
             if (var_70 != 4)
             {
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
             }
         }
         else
@@ -57,7 +57,7 @@
         if (result && (uintptr_t)result != 0xfffffdfd)
         {
             return result;
-            isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
+
         }
         
         int32_t $v0_3;
@@ -74,7 +74,7 @@
     else
         $a1 = "\\t\\t\\t "snapraw"  is cmd; \\n";
     
-    isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     return 0xfffffff4;
 }
 

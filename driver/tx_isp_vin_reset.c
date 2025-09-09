@@ -9,7 +9,7 @@
     
     if (!$a0)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     char* $v0_1 = (char*)(**($a0 + 0xc4)); // Fixed void pointer assignment

@@ -9,7 +9,7 @@
     
     if ($a2_2 >= 5)
     {
-        isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+
     }
     
     switch ($a2_2)
