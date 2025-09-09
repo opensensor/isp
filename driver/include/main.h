@@ -577,7 +577,7 @@ char const __func___34189[] = "tx_isp_module_init"; // offset: 0x7ad24
 // Data at address 0x83440
 void* tx_isp_vin_driver = &tx_isp_vin_probe;
 
-c// Data at address 0x7ad38
+// Data at address 0x7ad38
 void* isp_drivers = tx_isp_vin_driver; // offset: 0x7ad38
 
 // Data at address 0x7ad3c
