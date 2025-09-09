@@ -469,6 +469,27 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         if ((isr_main & 0x200000) != 0) {
             vic_dev->vic_errors[7] += 1;
             pr_err("Err [VIC_INT] : control limit err!!!\n");
+            
+            /* *** MCP LOG: Detailed control limit error debugging *** */
+            void __iomem *vic_base = vic_dev->vic_regs;
+            if (vic_base) {
+                u32 vic_ctrl = readl(vic_base + 0x0);
+                u32 vic_mode = readl(vic_base + 0xc);
+                u32 lane_config = readl(vic_base + 4);
+                u32 mipi_config = readl(vic_base + 0x10);
+                u32 frame_size = readl(vic_base + 0x4);
+                
+                pr_err("MCP_LOG: CONTROL LIMIT ERROR DEBUG:\n");
+                pr_err("  VIC_CTRL (0x0) = 0x%x\n", vic_ctrl);
+                pr_err("  VIC_MODE (0xc) = 0x%x\n", vic_mode);
+                pr_err("  LANE_CONFIG (0x4) = 0x%x (lanes=%d)\n", lane_config, (lane_config & 3) + 1);
+                pr_err("  MIPI_CONFIG (0x10) = 0x%x\n", mipi_config);
+                pr_err("  FRAME_SIZE (0x4) = 0x%x (%dx%d)\n", frame_size, 
+                       (frame_size >> 16) & 0xFFFF, frame_size & 0xFFFF);
+                pr_err("  Sensor interface: %d, format: 0x%x\n", 
+                       vic_dev->sensor_attr.dbus_type, vic_dev->sensor_attr.data_type);
+                pr_err("*** This suggests CSI lane configuration may be incorrect ***\n");
+            }
         }
         
         if ((isr_main & 0x400000) != 0) {
