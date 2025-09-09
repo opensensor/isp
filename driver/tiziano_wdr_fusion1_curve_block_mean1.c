@@ -10,7 +10,7 @@
     int32_t $a2;
     int32_t $a3;
     int32_t $t0;
-    wchar32 $t1;
+    wchar_t $t1;
     int32_t $t2;
     int32_t $t4;
         int32_t $a0_1 = data_d8f8c;
@@ -1341,8 +1341,8 @@
         $v0 = data_c9220;
     }
     
-    wchar32* $t3_5 = U"#\',17=DKS[clu~";
-    wchar32* $a0_7 = U"#\',17=DKS[clu~";
+    wchar_t* $t3_5 = U"#\',17=DKS[clu~";
+    wchar_t* $a0_7 = U"#\',17=DKS[clu~";
     int32_t $v1_48 = 0;
     
     while (true)
@@ -1443,7 +1443,7 @@
         $t2_18 += 4;
     }
     
-    wchar32 $v1_56 = param_fusion1_cure_y_array[0];
+    wchar_t $v1_56 = param_fusion1_cure_y_array[0];
     
     while (true)
     {

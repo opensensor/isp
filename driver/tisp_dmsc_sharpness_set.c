@@ -5,14 +5,14 @@
 
 {
     uint32_t $a0_2 = arg1;
-    wchar32* i = U"ZZZF2-(((ZZZF2-(((";
+    wchar_t* i = U"ZZZF2-(((ZZZF2-(((";
     char* $t1 = (char*)(&dmsc_sp_d_w_stren_array); // Fixed void pointer assignment
     char* $t0 = (char*)(&dmsc_sp_d_b_stren_array); // Fixed void pointer assignment
     char* $a3 = (char*)(&dmsc_sp_ud_w_stren_array); // Fixed void pointer assignment
     char* $a2 = (char*)(&dmsc_sp_ud_b_stren_array); // Fixed void pointer assignment
     char* $a1 = (char*)(&dmsc_uu_stren_array); // Fixed void pointer assignment
         uint32_t $v1_15;
-            wchar32 $t7_1 = *i;
+            wchar_t $t7_1 = *i;
             int32_t $t7_2 = i[9];
             int32_t $t7_3 = i[0x53];
             int32_t $t7_4 = i[0x5c];

@@ -1,7 +1,7 @@
 #include "include/main.h"
 
 
-  int32_t ispcore_core_ops_init(int32_t* arg1, int32_t arg2)
+  int32_t ispcore_core_ops_init(void* arg1, int32_t arg2)
 
 {
     char* $s0 = (char*)(nullptr); // Fixed void pointer assignment
@@ -11,7 +11,7 @@
                 int32_t $v1_55;
     
     if (arg1 && (uintptr_t)arg1 < 0xfffff001)
-        $s0 = arg1[0x35];
+        $s0 = *(arg1 + 0xd4);
     
     
     if ($s0 && $(uintptr_t)s0 < 0xfffff001)
@@ -51,7 +51,7 @@
             if (result_1)
             {
                 return 0xffffffea;
-                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments;
+                isp_printf(); // Fixed: macro with no parameters, removed 3 arguments);
             }
             
             __private_spin_lock_irqsave($s0 + 0xdc, &var_18_21);

@@ -39,7 +39,7 @@
     data_cd4a8_1 = &defog_sum_block_g;
     data_cd4ac_1 = &defog_sum_block_b;
     data_cd4b0_1 = &defog_block_mean_y_last;
-    wchar32 (* param_defog_block_t_x_array_now_1)[0x2] = param_defog_block_t_x_array_now;
+    wchar_t (* param_defog_block_t_x_array_now_1)[0x2] = param_defog_block_t_x_array_now;
     data_cd4f8_1 = &defog_manual_ctrl;
     data_cd4b4_1 = param_defog_block_t_x_array_now_1;
     data_cd4b8_1 = U"_PKAK<Z";

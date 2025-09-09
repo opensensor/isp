@@ -81,10 +81,10 @@
             }
         }
         
-        wchar32 $a3_6 = (&param_wdr_gam_y_array)[$t0_1 + 1];
+        wchar_t $a3_6 = (&param_wdr_gam_y_array)[$t0_1 + 1];
         uint32_t $lo_3 = ($a3_6 - (&param_wdr_gam_y_array)[$t0_1 + 2]) / (0x20 - $v0_1);
-        wchar32 $t1_8 = data_d9300_1;
-        wchar32* $v1_10 = U"#\',17=DKS[clu~";
+        wchar_t $t1_8 = data_d9300_1;
+        wchar_t* $v1_10 = U"#\',17=DKS[clu~";
         
         for (int32_t i = 0; (uintptr_t)i != 0x21; )
         {
@@ -113,7 +113,7 @@
         int32_t $a2_10;
         int32_t $a3_7;
         int32_t $t0_5;
-        wchar32 $t1_9;
+        wchar_t $t1_9;
         int32_t $t2_1;
         int32_t $t4_2;
             int32_t $a0_8 = data_b1558;
@@ -1448,8 +1448,8 @@
             $v0_8 = data_c9220;
         }
         
-        wchar32* $t3_5 = U"#\',17=DKS[clu~";
-        wchar32* $a0_15 = U"#\',17=DKS[clu~";
+        wchar_t* $t3_5 = U"#\',17=DKS[clu~";
+        wchar_t* $a0_15 = U"#\',17=DKS[clu~";
         int32_t $v1_75 = 0;
         
         while (true)
@@ -1550,7 +1550,7 @@
             $t2_11 += 4;
         }
         
-        wchar32 $v1_83 = param_fusion1_cure_y_array[0];
+        wchar_t $v1_83 = param_fusion1_cure_y_array[0];
         
         while (true)
         {

@@ -173,7 +173,7 @@ label_2a0c0:
     char* var_34_1_4 = (char*)(&rgbg_wght); // Fixed void pointer assignment
     int32_t (* var_ac_2)(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, 
         int32_t arg6) = ISPAWBInterpolation1;
-    void* const var_30_1 = &data_30000;
+    void* void* var_30_1 = (void*)&data_30000; // Fixed function pointer assignment
     int32_t var_128;
     int32_t var_124;
     int32_t var_120;
@@ -1189,7 +1189,7 @@ label_2a0c0:
             $v0_304 = arg10[0xe];
         else
         {
-            void* const var_a8_5 = &data_20000;
+            void* void* var_a8_5 = (void*)&data_20000; // Fixed function pointer assignment
             
             while ($t4_18 != arg9)
             {
@@ -1259,7 +1259,7 @@ label_2a0c0:
                 
                 while (var_b0_4 != arg9)
                 {
-                    void* const var_58_3 = &data_20000;
+                    void* void* var_58_3 = (void*)&data_20000; // Fixed function pointer assignment
                     
                     while (var_ac_5 != arg8)
                     {

@@ -1369,7 +1369,7 @@
     int32_t $v0_248 = $v1_13 << 0x10;
     int32_t* var_11c_2_1 = $fp_1;
     char* var_98_1_1 = (char*)(&adr_hist_512); // Fixed void pointer assignment
-    void* const var_8c_1_1 = &data_20000_2;
+    void* void* var_8c_1_1 = (void*)&data_20000_2; // Fixed function pointer assignment
     int32_t var_e8_3 = 0x3ffffc;
     char* $v0_253 = (char*)(var_118_1_1); // Fixed void pointer assignment
     

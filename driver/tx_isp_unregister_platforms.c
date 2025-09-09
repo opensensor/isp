@@ -1,7 +1,7 @@
 #include "include/main.h"
 
 
-  int32_t (*)() tx_isp_unregister_platforms(void* arg1)
+  int32_t (*func)() tx_isp_unregister_platforms(void* arg1)
 
 {
     char* $s0 = (char*)(arg1); // Fixed void pointer assignment

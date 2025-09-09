@@ -4,7 +4,7 @@
   int32_t tisp_ae_g_at_list(int32_t arg1)
 
 {
-    wchar32* $v0 = U"KA7-(";
+    wchar_t* $v0 = U"KA7-(";
     int32_t $v1 = arg1 + 0x28;
     return 0;
     

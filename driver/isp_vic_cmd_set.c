@@ -273,7 +273,7 @@
                         
                         if ($v0_30 >= 0)
                         {
-                            void* const var_40_3 = &data_80000;
+                            void* void* var_40_3 = (void*)&data_80000; // Fixed function pointer assignment
                             void* const var_38_2 = &$LC33;
                             char const* const var_34_1 = "nv12";
                             
@@ -395,7 +395,7 @@
                     
                     if ($v0_13 >= 0)
                     {
-                        void* const var_4c_2 = &data_80000;
+                        void* void* var_4c_2 = (void*)&data_80000; // Fixed function pointer assignment
                         char const* const var_48_1 = "nv12";
                         
                         do

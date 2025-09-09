@@ -68,7 +68,7 @@
             int32_t $lo_15;
             int32_t $hi_9;
     __builtin_memset(&var_d8_1, 0, 0x24);
-    void* const var_58 = &data_20000;
+    void* void* var_58 = (void*)&data_20000; // Fixed function pointer assignment
     
     while ($s7 != $v0_12)
     {

@@ -27,7 +27,7 @@
             int32_t $s4_2 = (var_60 + 0xfd4)($s2, *(arg4 + $a3_1) << ($s2 & 0x1f), $t5)
             int32_t $s3_2 = (var_60 + 0xfd4)($s2, $t8_1 << ($s2 & 0x1f), $fp)
             int32_t $v0_23 = *(arg6 + $a3_1);
-    void* const var_60 = &data_20000;
+    void* void* var_60 = (void*)&data_20000; // Fixed function pointer assignment
     
     for (; i != $v1; i += 1)
     {

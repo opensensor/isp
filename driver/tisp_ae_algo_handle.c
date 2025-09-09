@@ -1,7 +1,7 @@
 #include "include/main.h"
 
 
-  int32_t (*)() tisp_ae_algo_handle(void* arg1)
+  int32_t (*func)() tisp_ae_algo_handle(void* arg1)
 
 {
     int32_t $v1 = data_b2ee0;

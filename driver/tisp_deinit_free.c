@@ -13,7 +13,7 @@
     }
     
     int32_t $a0_1 = data_ca48c_3;
-    void* const result = &data_20000_3;
+    void* void* result = (void*)&data_20000_3; // Fixed function pointer assignment
     
     if ($a0_1)
     {

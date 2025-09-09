@@ -16,13 +16,13 @@
         if ($v0_2 >= arg2)
         {
             data_9a9c4 = arg1;
-            tisp_sdns_intp_reg_refresh(arg1);
+            tisp_sdns_intp_reg_refresh();
         }
     }
     else
     {
         data_9a9c4 = arg1;
-        tisp_sdns_all_reg_refresh(arg1);
+        tisp_sdns_all_reg_refresh();
     }
     
     if (arg3 == 1)

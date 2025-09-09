@@ -13,11 +13,11 @@
     int32_t $v0 = data_b148c;
     int32_t $t6 = wdr_ev_now_1 - wdr_ev_list_deghost_1;
     int32_t $a1 = wdr_ev_list_deghost_1 - $v0;
-    wchar32* $a2_1 = U"JRZx";
+    wchar_t* $a2_1 = U"JRZx";
     int32_t $a3 = wdr_ev_list_deghost_1 < wdr_ev_now_1 ? 1 : 0;
     int32_t i = 0;
     int32_t $t2 = wdr_ev_now_1 < $v0 ? 1 : 0;
-            wchar32 $v0_4;
+            wchar_t $v0_4;
                 int32_t $t0_1 = *$a0;
                 int32_t $v0_5 = *$v1;
     tisp_wdr_expTime_updata();

@@ -9,7 +9,7 @@
     int32_t* $s1 = arg3 + 4;
         char* $a0_2 = (char*)(i + 0x100); // Fixed void pointer assignment
     return 0;
-    void* const i = &data_80000;
+    void* void* i = (void*)&data_80000; // Fixed function pointer assignment
     
     do
     {

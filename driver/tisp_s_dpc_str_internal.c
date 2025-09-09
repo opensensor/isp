@@ -4,7 +4,7 @@
   int32_t tisp_s_dpc_str_internal(int32_t arg1)
 
 {
-    wchar32* i = U"dP<<2(";
+    wchar_t* i = U"dP<<2(";
     char* $t0 = (char*)(&dpc_d_m1_dthres_array); // Fixed void pointer assignment
     char* $a3 = (char*)(&dpc_d_m3_dthres_array); // Fixed void pointer assignment
     char* $a1 = (char*)(&dpc_d_m1_fthres_array); // Fixed void pointer assignment

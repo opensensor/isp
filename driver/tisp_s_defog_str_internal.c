@@ -9,7 +9,7 @@
     uint32_t $t3 = *arg1;
     uint32_t defog_wdr_en_1 = defog_wdr_en;
     int32_t $t2_1 = $v1;
-    wchar32* $t1 = U"PPZZZPPPPFNMLKJIHFFIGOFDCBBA?>=<;:99LLKJIHGFE";
+    wchar_t* $t1 = U"PPZZZPPPPFNMLKJIHFFIGOFDCBBA?>=<;:99LLKJIHGFE";
     int32_t result;
     int32_t $t5_1;
     int32_t i;
