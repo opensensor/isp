@@ -116,7 +116,7 @@
     cm_control(&ccm_parameter, data_c52fc_2, &var_34_13);
     void var_58_1;
     jz_isp_ccm_para2reg(&var_58_2, &var_34_14);
-    tiziano_ccm_lut_parameter(&var_58_3);
+    tiziano_ccm_lut_parameter(&var_58_4);
     ccm_real = 0;
     return 0;
 }

@@ -238,7 +238,7 @@
                 int32_t var_90_2 = $s6_1 << 0x16 | $s4_3 >> 0xa;
                 int32_t var_8c_2 = $s6_1 >> 0xa;
                 goto label_25cf0;
-            $v0_26 = var_44();
+            $v0_26 = var_44($s4_3);
             *((int32_t*)((char*)$v0 + 0x28)) = $v0_26; // Fixed void pointer dereference
             
             if (!$v0_26)
@@ -252,18 +252,20 @@
             $a1_3 = "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\\n";
         else
         {
+            int32_t $a1_12;
                 char* $s6_2 = *($v0 + 0x28);
                 int32_t $v1_6 = 8;
                 char* $v0_31 = (char*)($v0); // Fixed void pointer assignment
                 char* $a0_26 = $s6_2;
-                int32_t $a1_14 = 8;
+                int32_t $a1_13 = 8;
                 uint32_t $at_3;
                 uint32_t $a2_16;
+            
             if ($s6_1)
             {
-                *($v0 + 0x28);
+                $a1_12 = *($v0 + 0x28);
             label_25d48:
-                var_30_2();
+                var_30_2($s1_1, $a1_12, $s4_3);
                 private_filp_close($s1_1, 0);
                 private_set_fs($s7_1);
                 
@@ -272,9 +274,9 @@
                     $a2_16 = *$v0_31;
                     $at_3 = *$a0_26;
                     
-                    if ($a1_14)
+                    if ($a1_13)
                     {
-                        $a1_14 -= 1;
+                        $a1_13 -= 1;
                         $v0_31 += 1;
                         
                         if ($at_3 != $a2_16)
@@ -338,14 +340,14 @@
                 *((int32_t*)((char*)$v0 + 0x10)) = $v0_33; // Fixed void pointer dereference
                 int32_t $a3_3 = *($s6_2 + 0x14);
                 *((int32_t*)((char*)$v0 + 0x14)) = $a3_3; // Fixed void pointer dereference
-                char* $a1_15 = (char*)(&$s6_2[0x18]); // Fixed void pointer assignment
+                char* $a1_14 = (char*)(&$s6_2[0x18]); // Fixed void pointer assignment
                 int32_t $v1_7 = 0;
                 
                 while (true)
                 {
-                    char* temp1_2 = (char*)($a1_15); // Fixed void pointer assignment
-                    int32_t $v1_8 = $v1_7 ^ *($a1_15 - 4);
-                    $a1_15 += 4;
+                    char* temp1_2 = (char*)($a1_14); // Fixed void pointer assignment
+                    int32_t $v1_8 = $v1_7 ^ *($a1_14 - 4);
+                    $a1_14 += 4;
                     
                     if (&$s6_2[0x18 + ($v0_33 >> 2 << 2)] == temp1_2)
                         break;
@@ -359,7 +361,7 @@
                     $a1_10 = "count is %d\n";
                 }
                 
-                uint32_t $v0_38 = var_44_6();
+                uint32_t $v0_38 = var_44_6(0x137f0);
                 tparams_cust = $v0_38;
                 var_40_1_3($v0_38, 0, 0x137f0);
                 uint32_t tparams_cust_1 = tparams_cust;
@@ -371,7 +373,7 @@
             if (*($v0 + 0x2c) >= $s4_3)
             {
                 goto label_25d48;
-                *($v0 + 0x28);
+                $a1_12 = *($v0 + 0x28);
             }
             
             $a1_3 = "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\\n";

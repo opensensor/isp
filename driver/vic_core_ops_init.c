@@ -1,7 +1,8 @@
 #include "include/main.h"
 
 
-  int32_t vic_core_ops_init(void* arg1, int32_t arg2, int32_t arg3)
+  // Conflicting signature - using extern declaration
+extern void vic_core_ops_init(void);
 
 {
         return 0xffffffea;
@@ -20,7 +21,7 @@
         
         if ($v0_2 != 2)
         {
-            tx_vic_disable_irq(0x5310000);
+            tx_vic_disable_irq(); // Fixed: removed arguments for void function;
             *((int32_t*)((char*)$s1_1 + 0x128)) = 2; // Fixed void pointer dereference
         }
     }
@@ -30,7 +31,7 @@
         
         if ($v0_2 != 3)
         {
-            tx_vic_enable_irq(0x5310000);
+            tx_vic_enable_irq(); // Fixed: removed arguments for void function;
             *((int32_t*)((char*)$s1_1 + 0x128)) = 3; // Fixed void pointer dereference
         }
     }

@@ -284,7 +284,7 @@
         private_seq_printf(arg1, "\\t\\t\\t "savenum" is the num of you save raw picture.\\n ", var_c8_5);
     int32_t var_e4;
     int32_t var_d4_8;
-    int32_t var_d0_9;
+    int32_t var_d0_8;
     int32_t var_c4_7;
     int32_t var_c0_4;
     int32_t var_bc_3;
@@ -293,17 +293,17 @@
         "\\t\\t\\t please use this cmd: \\n\\t"echo saveraw savenum > /proc/jz/isp/isp-w02"\\n", var_bc_4)
         + private_seq_printf(arg1, "\\t\\t\\t "saveraw"  is cmd; \\n", var_d4_9)
         + private_seq_printf(arg1, "Can\'t ops the node!\\n", var_c4_8)
-        + private_seq_printf(arg1, "snapraw timeout!\\n", var_d0_10)
+        + private_seq_printf(arg1, "snapraw timeout!\\n", var_d0_9)
         + private_seq_printf(arg1, "streamon", var_e4_1);
     int32_t var_e0_4;
     int32_t var_dc_1;
-    int32_t var_54_11;
+    int32_t var_54_12;
     int32_t var_48_21;
     int32_t $s0_25 = $s0_20 + private_seq_printf(arg1, "streamoff", var_dc_2)
         + private_seq_printf(arg1, "%s[%d]: invalid parameter\\n", var_e0_5)
         + private_seq_printf(arg1, "%s[%d]: %s\\n", var_4c_8)
         + private_seq_printf(arg1, "%s[%d] SET ERR GPIO(%d),STATE(%d),%d", var_48_22)
-        + private_seq_printf(arg1, "line : %d; bank_addr:0x%x; addr:0x%x\\n", isp_printf / var_54_12);
+        + private_seq_printf(arg1, "line : %d; bank_addr:0x%x; addr:0x%x\\n", isp_printf / var_54_13);
     int32_t var_50_11;
     int32_t $s0_31 = $s0_25 + private_seq_printf(arg1, 
         "line = %d, i=%d ;num = %d;busy_buf_count %d\\n", isp_printf / var_50_12)
