@@ -1,7 +1,7 @@
 #include "include/main.h"
 
 
-  void* tiziano_bcsh_Tccm_RGBYUV(int32_t* arg1, int32_t* arg2, int32_t* arg3, int32_t* arg4, int32_t arg5 @ $hi)
+  void* tiziano_bcsh_Tccm_RGBYUV(int32_t* arg1, int32_t* arg2, int32_t* arg3, int32_t* arg4, int32_t arg5)
 
 {
     void var_a0;

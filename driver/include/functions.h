@@ -996,7 +996,7 @@ void* tisp_dpc_wdr_en(uint32_t arg1);
 void* tisp_g_module_control(void** arg1);
 void* tisp_rdns_wdr_en(uint32_t arg1);
 void* tisp_sharpen_wdr_en(uint32_t arg1);
-void* tiziano_bcsh_Tccm_RGBYUV(int32_t* arg1, int32_t* arg2, int32_t* arg3, int32_t* arg4, int32_t arg5 @ $hi);
+void* tiziano_bcsh_Tccm_RGBYUV(int32_t* arg1, int32_t* arg2, int32_t* arg3, int32_t* arg4, int32_t arg5);
 void* tiziano_defog_get_data(void* arg1);
 void* vic_framedone_irq_function(void* arg1);
 void* vic_pipo_mdma_enable(void* arg1);
