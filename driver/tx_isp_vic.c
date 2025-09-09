@@ -1049,9 +1049,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
 
     /* CSI PHY Config registers - from reference trace */
-//    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
-//    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
-//    wmb();
+    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
+    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
+    wmb();
 
     /* *** MISSING ISP Control registers - from reference trace *** */
     pr_info("*** Writing missing ISP Control registers (0x9804-0x98a8) ***\n");
