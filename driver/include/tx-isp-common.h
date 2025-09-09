@@ -650,4 +650,6 @@ struct tx_isp_sensor{
 #define tx_isp_readb(base, reg)			__raw_readb((base) + (reg))
 #define tx_isp_writeb(base, reg, value)		__raw_writeb((value), ((base) + (reg)))
 
+int private_driver_get_interface(void);
+
 #endif /*__TX_ISP_COMMON_H__*/
