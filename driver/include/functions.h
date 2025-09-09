@@ -27,10 +27,6 @@ struct mutex;
 struct spinlock;
 struct work_struct;
 
-/* Generic enums for GPIO and other subsystems */
-enum gpio_port { GPIO_PORT_A, GPIO_PORT_B, GPIO_PORT_C, GPIO_PORT_D };
-enum gpio_function { GPIO_FUNC_0, GPIO_FUNC_1, GPIO_FUNC_2, GPIO_FUNC_3 };
-
 int vic_core_ops_init(void* arg1, void* arg2);
 int16_t tisp_bcsh_g_rgb_coefft(int16_t* arg1);
 int16_t tisp_g_rgb_coefft(int16_t* arg1);
@@ -152,112 +148,6 @@ int32_t mbus_to_bayer_write(int32_t arg1);
 int32_t netlink_send_msg(int32_t arg1, int16_t arg2);
 int32_t printf_func0(int32_t arg1, int32_t arg2);
 int32_t printf_func1(int32_t arg1, int32_t arg2);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-int32_t private_filp_open(int32_t, int32_t, int16_t arg3);
-
-int32_t private_get_driver_interface(int32_t* arg1);
-int32_t private_get_fs(int32_t arg1);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-int32_t private_log2_fixed_to_fixed(uint32_t arg1);
-int32_t private_log2_fixed_to_fixed_64(uint32_t arg1, uint32_t arg2, int32_t arg3, char arg4);
-int32_t private_log2_int_to_fixed(uint32_t arg1);
-int32_t private_log2_int_to_fixed_64(uint32_t arg1, uint32_t arg2, char arg3, char arg4);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-int32_t private_platform_get_drvdata(int32_t arg1);
-
-
-
-int32_t private_proc_create_data(int32_t, int16_t arg2);
-
-
-
-
-int32_t private_request_module(int32_t arg1, int32_t arg2, int32_t arg3);
-
-int32_t private_reset_tx_isp_module(int32_t arg1);
-
-
-
-
-int32_t private_seq_printf(int32_t arg1, int32_t arg2, int32_t arg3);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 int32_t sensor_alloc_analog_gain(int32_t arg1, int16_t* arg2);
 int32_t sensor_alloc_analog_gain_short(int32_t arg1, void* arg2);
