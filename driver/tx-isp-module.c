@@ -590,7 +590,6 @@ extern void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
 /* Forward declarations for hardware initialization functions */
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
-extern int sensor_init(struct tx_isp_dev *isp_dev);
 
 /* Forward declarations for subdev ops structures */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
@@ -900,13 +899,6 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
         wmb();
         
         pr_info("*** CSI PHY CONFIG REGISTERS WRITTEN ***\n");
-    }
-    
-    /* Binary Ninja: sensor_init call - initialize sensor control structure */
-    pr_info("*** CALLING sensor_init - INITIALIZING SENSOR CONTROL STRUCTURE ***\n");
-    int sensor_init_result = sensor_init(isp_dev);
-    if (sensor_init_result != 0) {
-        pr_warn("tisp_init: sensor_init returned %d, continuing anyway\n", sensor_init_result);
     }
     
     pr_info("*** tisp_init: COMPLETE - ALL MISSING HARDWARE REGISTERS NOW WRITTEN! ***\n");

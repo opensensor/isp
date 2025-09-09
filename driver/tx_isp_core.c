@@ -314,7 +314,6 @@ static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t p
 static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sensor_attr);
 irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
-int sensor_init(struct tx_isp_dev *isp_dev);
 void *isp_core_tuning_init(void *arg1);
 int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
@@ -1162,16 +1161,6 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     data_b2e74 = sensor_attr->wdr_cache;  /* WDR mode from sensor */
 
     pr_info("tisp_init: Processing sensor configuration structure (%d bytes)\n", (int)sizeof(*sensor_attr));
-
-    /* Binary Ninja: sensor_init(&sensor_ctrl) - MUST BE CALLED FIRST */
-    pr_info("tisp_init: Calling sensor_init(&sensor_ctrl)\n");
-    ret = sensor_init(isp_dev);
-    if (ret) {
-        pr_err("sensor_init failed: %d\n", ret);
-        return ret;
-    }
-    pr_info("sensor_init: Reference driver sensor initialization complete\n");
-
     /* Binary Ninja: system_reg_write(4, arg1[0] << 0x10 | arg1[1]) */
     writel((sensor_attr->total_width << 16) | sensor_attr->total_height, isp_regs + 0x4);
     wmb();
