@@ -22952,20 +22952,4 @@ extern unsigned char __kstrtab_tx_isp_subdev_deinit[]; // String table entry
 extern unsigned char __kstrtab_tx_isp_subdev_init[]; // String table entry
 extern unsigned char __kstrtab_tisp_log2_fixed_to_fixed[]; // String table entry
 extern unsigned char __kstrtab_tisp_math_exp2[]; // String table entry
-
-/* Jump Tables - Fixed array syntax (dynamically discovered) */
-extern void* jump_table_7cf00[]; // Jump table at 0x7cf00
-extern void* jump_table_917dc[]; // Jump table at 0x917dc
-extern void* jump_table_9451c[]; // Jump table at 0x9451c
-extern void* jump_table_8cb5c[]; // Jump table at 0x8cb5c
-extern void* jump_table_82fb4[]; // Jump table at 0x82fb4
-extern void* jump_table_93bdc[]; // Jump table at 0x93bdc
-extern void* jump_table_8895c[]; // Jump table at 0x8895c
-extern void* jump_table_86e9c[]; // Jump table at 0x86e9c
-extern void* jump_table_7b7f4[]; // Jump table at 0x7b7f4
-extern void* jump_table_8fd5c[]; // Jump table at 0x8fd5c
-
-/* Special Data - Fixed types and syntax */
-extern unsigned char data_10028[]; // Fixed byte array - prevent redefinition
-extern unsigned char CSWTCH_84[]; // Fixed byte array - prevent redefinition
 #endif /* MAIN_H */
