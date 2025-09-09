@@ -1940,19 +1940,19 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     
     /* CRITICAL: Binary Ninja global vic_start_ok flag check */
     /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
-    pr_info("*** VIC HARDWARE INTERRUPT: maybe processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
     if (vic_start_ok != 0) {
-
+        pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
+        
         /* Binary Ninja: if (($v1_7 & 1) != 0) */
         if ((v1_7 & 1) != 0) {
             /* Binary Ninja: *($s0 + 0x160) += 1 */
             vic_dev->frame_count++;
             pr_info("*** VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
-
+            
             /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-            //vic_framedone_irq_function(vic_dev);
+            vic_framedone_irq_function(vic_dev);
         }
-
+        
         /* Binary Ninja: Error handling for frame asfifo overflow */
         if ((v1_7 & 0x200) != 0) {
             pr_err("Err [VIC_INT] : frame asfifo ovf!!!!!\n");
@@ -4638,29 +4638,29 @@ static int tx_isp_init(void)
         pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
         ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
     }
-//
-//    /* *** CRITICAL: Enable interrupt generation at hardware level *** */
-//    pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
-//    if (ourISPdev->vic_dev) {
-//        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-//
-//        if (vic_dev->vic_regs) {
-//            pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
-//
-//            /* Enable VIC interrupts - from reference driver */
-//            writel(0x3FFFFFFF, vic_dev->vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-//            writel(0x0, vic_dev->vic_regs + 0x1e8);         /* Clear interrupt masks */
-//            writel(0xF, vic_dev->vic_regs + 0x1e4);         /* Enable MDMA interrupts */
-//            writel(0x0, vic_dev->vic_regs + 0x1ec);         /* Clear MDMA masks */
-//            wmb();
-//
-//            pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
-//
-//            /* Set global VIC interrupt enable flag */
-//            vic_start_ok = 1;
-//            pr_info("*** vic_start_ok SET TO 1 - INTERRUPTS WILL NOW BE PROCESSED! ***\n");
-//        }
-//    }
+    
+    /* *** CRITICAL: Enable interrupt generation at hardware level *** */
+    pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
+    if (ourISPdev->vic_dev) {
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        
+        if (vic_dev->vic_regs) {
+            pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
+            
+            /* Enable VIC interrupts - from reference driver */
+            writel(0x3FFFFFFF, vic_dev->vic_regs + 0x1e0);  /* Enable all VIC interrupts */
+            writel(0x0, vic_dev->vic_regs + 0x1e8);         /* Clear interrupt masks */
+            writel(0xF, vic_dev->vic_regs + 0x1e4);         /* Enable MDMA interrupts */
+            writel(0x0, vic_dev->vic_regs + 0x1ec);         /* Clear MDMA masks */
+            wmb();
+            
+            pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
+            
+            /* Set global VIC interrupt enable flag */
+            vic_start_ok = 1;
+            pr_info("*** vic_start_ok SET TO 1 - INTERRUPTS WILL NOW BE PROCESSED! ***\n");
+        }
+    }
 
     /* Create ISP M0 tuning device node */
     ret = tisp_code_create_tuning_node();
