@@ -1801,7 +1801,7 @@ uint64_t tx_isp_module_dma_mask = 0xffffffffffffffffULL;
 void* tx_isp_vic_driver = &tx_isp_vic_probe;
 
 // Data at address 0x83324
-void* data_83324 = &tx_isp_vic_remove;
+
 
 // Data at address 0x83334
 
@@ -1810,19 +1810,19 @@ void* data_83324 = &tx_isp_vic_remove;
 
 
 // Data at address 0x83378
-void* data_83378 = &private_seq_lseek;
+
 
 // Data at address 0x8337c
-void* data_8337c = &private_seq_read;
+
 
 // Data at address 0x83380
-void* data_83380 = &isp_vic_cmd_set;
+
 
 // Data at address 0x833a0
-void* data_833a0 = &dump_isp_vic_frd_open;
+
 
 // Data at address 0x833a8
-void* data_833a8 = &private_single_release;
+
 
 // Data at address 0x833e0
 void* vic_subdev_ops = (void*)0x83414;
@@ -1840,26 +1840,26 @@ void* vic_subdev_ops = (void*)0x83414;
 extern void* vic_subdev_internal_ops; // Fixed function pointer assignment
 
 // Data at address 0x83400
-void* data_83400 = &vic_sensor_ops_sync_sensor_attr;
+
 
 // Data at address 0x83404
-void* data_83404 = &vic_sensor_ops_ioctl;
+
 
 // Data at address 0x83408
 void* vic_video_ops = &vic_core_s_stream;
 
 // Data at address 0x83418
-void* data_83418 = &vic_core_ops_init;
+
 
 // Data at address 0x83430
-void* data_83430 = &vic_core_ops_ioctl;
+
 
 // Data at address 0x83434
-void* data_83434 = &isp_vic_interrupt_service_routine;
+
 
 
 // Data at address 0x83444
-void* data_83444 = &tx_isp_vin_remove;
+
 
 // Data at address 0x83454
 
@@ -1868,19 +1868,19 @@ void* data_83444 = &tx_isp_vin_remove;
 
 
 // Data at address 0x83498
-void* data_83498 = &private_seq_lseek;
+
 
 // Data at address 0x8349c
-void* data_8349c = &private_seq_read;
+
 
 // Data at address 0x834a0
-void* data_834a0 = &video_input_cmd_set;
+
 
 // Data at address 0x834c0
-void* data_834c0 = &video_input_cmd_open;
+
 
 // Data at address 0x834c8
-void* data_834c8 = &private_single_release;
+
 
 // Data at address 0x83500
 void* vin_subdev_ops = (void*)0x8352c;
@@ -1898,19 +1898,19 @@ void* vin_subdev_ops = (void*)0x8352c;
 void* vin_subdev_sensor_ops = &subdev_sensor_ops_release_all_sensor;
 
 // Data at address 0x8351c
-void* data_8351c = &subdev_sensor_ops_ioctl;
+
 
 // Data at address 0x83520
 void* vin_subdev_video_ops = &vin_s_stream;
 
 // Data at address 0x83530
-void* data_83530 = &tx_isp_vin_init;
+
 
 // Data at address 0x83534
-void* data_83534 = &tx_isp_vin_reset;
+
 
 // Data at address 0x83548
-void* data_83548 = &vic_core_ops_ioctl;
+
 
 // Data at address 0x83554
 extern void* vin_subdev_internal_ops; // Fixed function pointer assignment
@@ -1919,7 +1919,7 @@ extern void* vin_subdev_internal_ops; // Fixed function pointer assignment
 void* tx_isp_csi_driver = &tx_isp_csi_probe;
 
 // Data at address 0x83564
-void* data_83564 = &tx_isp_csi_remove;
+
 
 // Data at address 0x83574
 
@@ -1928,16 +1928,16 @@ void* data_83564 = &tx_isp_csi_remove;
 
 
 // Data at address 0x835b8
-void* data_835b8 = &private_seq_lseek;
+
 
 // Data at address 0x835bc
-void* data_835bc = &private_seq_read;
+
 
 // Data at address 0x835e0
-void* data_835e0 = &dump_isp_csi_open;
+
 
 // Data at address 0x835e8
-void* data_835e8 = &private_single_release;
+
 
 // Data at address 0x83620
 void* csi_subdev_ops = (void*)0x8364c;
@@ -1952,28 +1952,28 @@ void* csi_subdev_ops = (void*)0x8364c;
 
 
 // Data at address 0x83638
-void* data_83638 = &csi_sensor_ops_sync_sensor_attr;
+
 
 // Data at address 0x8363c
-void* data_8363c = &csi_sensor_ops_ioctl;
+
 
 // Data at address 0x83640
 void* csi_video_ops = &csi_video_s_stream;
 
 // Data at address 0x83650
-void* data_83650 = &csi_core_ops_init;
+
 
 // Data at address 0x83674
 extern void* csi_subdev_internal_ops; // Fixed function pointer assignment
 
 // Data at address 0x836a0
-void* data_836a0 = &isp_core_tunning_unlocked_ioctl;
+
 
 // Data at address 0x836ac
-void* data_836ac = &isp_core_tunning_open;
+
 
 // Data at address 0x836b4
-void* data_836b4 = &isp_core_tunning_release;
+
 
 // Data at address 0x836ec
 uint64_t frame_done_wq = 0x000836ec00000000ULL;
@@ -1982,7 +1982,7 @@ uint64_t frame_done_wq = 0x000836ec00000000ULL;
 void* tx_isp_fs_driver = &tx_isp_fs_probe;
 
 // Data at address 0x83704
-void* data_83704 = &tx_isp_fs_remove;
+
 
 // Data at address 0x83714
 
@@ -1991,16 +1991,16 @@ void* data_83704 = &tx_isp_fs_remove;
 
 
 // Data at address 0x83758
-void* data_83758 = &private_seq_lseek;
+
 
 // Data at address 0x8375c
-void* data_8375c = &private_seq_read;
+
 
 // Data at address 0x83780
-void* data_83780 = &dump_isp_framesource_open;
+
 
 // Data at address 0x83788
-void* data_83788 = &private_single_release;
+
 
 // Data at address 0x837d0
 
@@ -2009,13 +2009,13 @@ void* data_83788 = &private_single_release;
 extern void* fs_internal_ops; // Fixed function pointer assignment
 
 // Data at address 0x837fc
-void* data_837fc = &frame_channel_unlocked_ioctl;
+
 
 // Data at address 0x83808
-void* data_83808 = &frame_channel_open;
+
 
 // Data at address 0x83810
-void* data_83810 = &frame_channel_release;
+
 
 // Data at address 0x83848
 uint32_t isp_ch0_pre_dequeue_valid_lines = 0x384;
@@ -2024,7 +2024,7 @@ uint32_t isp_ch0_pre_dequeue_valid_lines = 0x384;
 void* tx_isp_driver = &tx_isp_probe;
 
 // Data at address 0x83854
-void* data_83854 = &tx_isp_remove;
+
 
 // Data at address 0x83864
 
@@ -2033,13 +2033,13 @@ void* data_83854 = &tx_isp_remove;
 
 
 // Data at address 0x838c4
-void* data_838c4 = &tx_isp_unlocked_ioctl;
+
 
 // Data at address 0x838d0
-void* data_838d0 = &tx_isp_open;
+
 
 // Data at address 0x838d8
-void* data_838d8 = &tx_isp_release;
+
 
 
 
@@ -5659,25 +5659,25 @@ int32_t data_9ab24 = 0x8789;
 
 
 // Data at address 0xa8318
-void* data_a8318 = &netlink_rcv_msg;
+
 
 // Data at address 0xa8330
 void* tisp_fops = (void*)0xb27e0;
 
 // Data at address 0xa8338
-void* data_a8338 = &isp_tunning_read;
+
 
 // Data at address 0xa834c
-void* data_a834c = &isp_tunning_poll;
+
 
 // Data at address 0xa8350
-void* data_a8350 = &tisp_code_tuning_ioctl;
+
 
 // Data at address 0xa835c
-void* data_a835c = &tisp_code_tuning_open;
+
 
 // Data at address 0xa8364
-void* data_a8364 = &tisp_code_tuning_release;
+
 
 // Data at address 0xa83a0
 uint32_t msca_dmaout_arb = 0xffffffffU;
@@ -11424,7 +11424,7 @@ uint32_t flicker_hz = 0x32;
 void* tx_isp_core_driver = &tx_isp_core_probe;
 
 // Data at address 0xb24d4
-void* data_b24d4 = &tx_isp_core_remove;
+
 
 // Data at address 0xb24e4
 
@@ -11433,19 +11433,19 @@ void* data_b24d4 = &tx_isp_core_remove;
 
 
 // Data at address 0xb2528
-void* data_b2528 = &private_seq_lseek;
+
 
 // Data at address 0xb252c
-void* data_b252c = &private_seq_read;
+
 
 // Data at address 0xb2530
-void* data_b2530 = &isp_core_cmd_set;
+
 
 // Data at address 0xb2550
-void* data_b2550 = &dump_isp_info_open;
+
 
 // Data at address 0xb2558
-void* data_b2558 = &private_single_release;
+
 
 // Data at address 0xb2590
 void* core_subdev_ops = (void*)0xb25c4;
@@ -11469,22 +11469,22 @@ void* ispcore_subdev_video_ops = &ispcore_video_s_stream;
 void* ispcore_sensor_ops = &ispcore_sensor_ops_release_all_sensor;
 
 // Data at address 0xb25bc
-void* data_b25bc = &ispcore_sync_sensor_attr;
+
 
 // Data at address 0xb25c0
-void* data_b25c0 = &ispcore_sensor_ops_ioctl;
+
 
 // Data at address 0xb25c8
-void* data_b25c8 = &ispcore_core_ops_init;
+
 
 // Data at address 0xb25e0
-void* data_b25e0 = &ispcore_core_ops_ioctl;
+
 
 // Data at address 0xb25e4
-void* data_b25e4 = &ispcore_interrupt_service_routine;
+
 
 // Data at address 0xb25e8
-void* data_b25e8 = &ispcore_irq_thread_handle;
+
 
 // Data at address 0xb25f0
 
@@ -11493,7 +11493,7 @@ void* data_b25e8 = &ispcore_irq_thread_handle;
 
 
 // Data at address 0xb25f8
-void* data_b25f8 = &ispcore_irq_fs_work;
+
 
 // Data at address 0xb2600
 
@@ -11502,7 +11502,7 @@ void* data_b25f8 = &ispcore_irq_fs_work;
 
 
 // Data at address 0xb2608
-void* data_b2608 = &isp_ch1_frame_dequeue_delay;
+
 
 // Data at address 0xb2610
 
@@ -11511,7 +11511,7 @@ void* data_b2608 = &isp_ch1_frame_dequeue_delay;
 
 
 // Data at address 0xb2618
-void* data_b2618 = &isp_pre_frame_dequeue;
+
 
 // Data at address 0xb261c
 char isp_output_fmt[] = "YUV 4:2:0 semi planar, Y/CbCr"; // offset: 0xb261c
@@ -11523,10 +11523,10 @@ uint32_t first_into = 0x1;
 uint32_t isp_clk_b27d8 = 0x05f5e100U;
 
 // Data at address 0xb289c
-void* data_b289c = &init_module;
+
 
 // Data at address 0xb28f8
-void* data_b28f8 = &cleanup_module;
+
 
 // Data at address 0xb292c
 uint32_t raw_pipe = 0x0;
