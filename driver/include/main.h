@@ -1079,7 +1079,6 @@ char const __func___31165[] = "tisp_clm_param_array_get"; // offset: 0x7d04c
 
 
 // Data at address 0x7d090
-wchar_t const data_7d090[] = L"8H8H]H8H8"; // offset: 0x7d090
 
 // Data at address 0x7d210
 
