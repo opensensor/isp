@@ -819,7 +819,6 @@ int32_t* tiziano_bcsh_TransitParam(void);
 int32_t* vic_mdma_irq_function(void* arg1, int32_t arg2);
 uint32_t Tiziano_awb_fpga(void* arg1, void* arg2, void* arg3, void* arg4, int32_t* arg5, int32_t* arg6, void* arg7, int32_t arg8, int32_t* arg9, int32_t* arg10, void* arg11, int32_t* arg12, int32_t arg13);
 uint32_t get_isp_clk(void);
-uint32_t private_math_exp2(int32_t arg1, char arg2, char arg3);
 uint32_t sensor_get_id(void);
 uint32_t sensor_get_normal_fps(void);
 uint32_t sensor_set_analog_gain(int32_t arg1);
