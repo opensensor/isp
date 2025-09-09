@@ -1801,13 +1801,11 @@ void* data_831e0 = &tx_isp_release_device;
 
 
 // Data at address 0x83204
-uint64_t isp_csi_clk_info = (void*)0x7dfd4;
 
 // Data at address 0x83214
 
 
 // Data at address 0x83228
-char const* tx_isp_vin_platform_device = (void*)0x7dfd8 /* pointer to data */;
 
 // Data at address 0x83280
 
@@ -6136,7 +6134,6 @@ int32_t data_aa708 = 0xddb4;
 int32_t CosValue = 0x8000;
 
 // Data at address 0xaa710
-int32_t data_aa710 = &isp_printf;
 
 // Data at address 0xaa714
 int32_t data_aa714 = 0x8000;
