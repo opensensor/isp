@@ -43,6 +43,9 @@
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
+
+#include "txx-funcs.h"
+
 /* Platform Types - only if not in kernel mode */
 #ifndef __KERNEL__
 typedef uint32_t DWORD;
