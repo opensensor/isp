@@ -1,10 +1,14 @@
 #include "include/main.h"
 
 
-  int32_t private_driver_get_interface()
-
+/* Must be check the return value */
+__must_check int private_driver_get_interface(void)
 {
-    private_get_driver_interface(&pfaces);
-    return -((pfaces < 1 ? 1 : 0));
+    pfaces = get_driver_common_interfaces();
+    if(pfaces && (pfaces->flags_0 != (unsigned int)printk || pfaces->flags_0 != pfaces->flags_1)){
+        printk("flags = 0x%08x, printk = %p", pfaces->flags_0, printk);
+        return -1;
+    }else
+        return 0;
 }
-
+EXPORT_SYMBOL(private_driver_get_interface);
