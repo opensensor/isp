@@ -81,10 +81,9 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     }
     pr_info("*** VIC registers mapped successfully: %p ***\n", vic_dev->vic_regs);
     
-    /* Also store in ISP device for compatibility */
-    if (!isp_dev->vic_regs) {
-        isp_dev->vic_regs = vic_dev->vic_regs;
-    }
+    /* *** CRITICAL FIX: Store in ISP device for system_reg_write compatibility *** */
+    isp_dev->vic_regs = vic_dev->vic_regs;
+    pr_info("*** ISP device vic_regs set to: %p ***\n", isp_dev->vic_regs);
     
     /* Initialize VIC device dimensions */
     vic_dev->width = 1920;  /* Default HD width */

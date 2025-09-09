@@ -3247,6 +3247,28 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_err("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
                 }
 
+                /* CRITICAL: Initialize ISP hardware pipeline using tisp_init - THE MISSING CALL! */
+                pr_info("*** tx_isp_core_probe: Calling tisp_init for hardware initialization ***\n");
+                
+                /* Create a default sensor attribute structure for initialization */
+                struct tx_isp_sensor_attribute default_sensor_attr = {
+                    .total_width = 2200,   /* GC2053 total width */
+                    .total_height = 1125,  /* GC2053 total height */  
+                    .dbus_type = 2,        /* MIPI interface */
+                    .chip_id = 0x2053,     /* GC2053 chip ID */
+                    .wdr_cache = 0,        /* Linear mode */
+                    .fps = 25              /* 25 FPS */
+                };
+                
+                /* Call tisp_init to initialize the hardware pipeline - this was missing! */
+                result = tisp_init(&default_sensor_attr, (struct tx_isp_dev *)core_dev);
+                if (result == 0) {
+                    pr_info("*** tx_isp_core_probe: tisp_init SUCCESS - ISP hardware pipeline initialized ***\n");
+                } else {
+                    pr_err("*** tx_isp_core_probe: tisp_init FAILED: %d ***\n", result);
+                    /* Continue anyway - some parts may still work */
+                }
+
                 /* CRITICAL: Start continuous processing - this generates the register activity your trace captures! */
                 pr_info("*** tx_isp_core_probe: Starting continuous processing system ***\n");
                 result = isp_start_continuous_processing((struct tx_isp_dev *)core_dev);
