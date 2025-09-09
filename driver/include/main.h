@@ -988,10 +988,10 @@ char const __func___31817[] = "tisp_gb_param_array_set"; // offset: 0x7b490
 char const __func___31797[] = "tisp_gb_param_array_get"; // offset: 0x7b4a8
 
 // Data at address 0x7b4c0
-uint32_t jump_table_7b4c0[] = (void*)0x331e8; // offset: 0x7b4c0
+
 
 // Data at address 0x7b4ec
-uint32_t jump_table_7b4ec[] = (void*)0x33a74; // offset: 0x7b4ec
+
 
 // Data at address 0x7b518
 char const __func___31203[] = "tisp_lsc_param_array_set"; // offset: 0x7b518
@@ -1000,10 +1000,10 @@ char const __func___31203[] = "tisp_lsc_param_array_set"; // offset: 0x7b518
 char const __func___31182[] = "tisp_lsc_param_array_get"; // offset: 0x7b534
 
 // Data at address 0x7b550
-uint32_t jump_table_7b550[] = (void*)0x35f3c; // offset: 0x7b550
+
 
 // Data at address 0x7b678
-uint32_t jump_table_7b678[] = (void*)0x36374; // offset: 0x7b678
+
 
 // Data at address 0x7b7a0
 char const __func___31523[] = "tisp_dmsc_param_array_set"; // offset: 0x7b7a0
@@ -1012,13 +1012,13 @@ char const __func___31523[] = "tisp_dmsc_param_array_set"; // offset: 0x7b7a0
 char const __func___31439[] = "tisp_dmsc_param_array_get"; // offset: 0x7b7bc
 
 // Data at address 0x7b7e0
-uint32_t jump_table_7b7e0[] = (void*)0x37098; // offset: 0x7b7e0
+
 
 // Data at address 0x7b7f4
-uint32_t jump_table_7b7f4[] = (void*)0x37bd0; // offset: 0x7b7f4
+
 
 // Data at address 0x7b824
-uint32_t jump_table_7b824[] = (void*)0x37cf4; // offset: 0x7b824
+
 
 // Data at address 0x7b854
 char const __func___31886[] = "tisp_ccm_param_array_set"; // offset: 0x7b854
@@ -1027,13 +1027,13 @@ char const __func___31886[] = "tisp_ccm_param_array_set"; // offset: 0x7b854
 char const __func___31864[] = "tisp_ccm_param_array_get"; // offset: 0x7b870
 
 // Data at address 0x7b890
-uint32_t jump_table_7b890[] = (void*)0x38870; // offset: 0x7b890
+
 
 // Data at address 0x7b8c8
-uint32_t jump_table_7b8c8[] = (void*)0x3b4dc; // offset: 0x7b8c8
+
 
 // Data at address 0x7b960
-uint32_t jump_table_7b960[] = (void*)0x3b730; // offset: 0x7b960
+
 
 // Data at address 0x7b9f8
 char const __func___32183[] = "tisp_bcsh_param_array_set"; // offset: 0x7b9f8
@@ -1042,10 +1042,10 @@ char const __func___32183[] = "tisp_bcsh_param_array_set"; // offset: 0x7b9f8
 char const __func___32135[] = "tisp_bcsh_param_array_get"; // offset: 0x7ba14
 
 // Data at address 0x7ba30
-uint32_t jump_table_7ba30[] = (void*)0x3d264; // offset: 0x7ba30
+
 
 // Data at address 0x7baf4
-uint32_t jump_table_7baf4[] = (void*)0x3d2ec; // offset: 0x7baf4
+
 
 // Data at address 0x7bbb8
 char const __func___31386[] = "tisp_sharpen_param_array_set"; // offset: 0x7bbb8
@@ -1054,10 +1054,10 @@ char const __func___31386[] = "tisp_sharpen_param_array_set"; // offset: 0x7bbb8
 char const __func___31327[] = "tisp_sharpen_param_array_get"; // offset: 0x7bbd8
 
 // Data at address 0x7bc00
-uint32_t jump_table_7bc00[] = (void*)0x403cc; // offset: 0x7bc00
+
 
 // Data at address 0x7bdec
-uint32_t jump_table_7bdec[] = (void*)0x40c18; // offset: 0x7bdec
+
 
 // Data at address 0x7bfd8
 char const __func___31752[] = "tisp_sdns_param_array_set"; // offset: 0x7bfd8
@@ -1066,10 +1066,10 @@ char const __func___31752[] = "tisp_sdns_param_array_set"; // offset: 0x7bfd8
 char const __func___31619[] = "tisp_sdns_param_array_get"; // offset: 0x7bff4
 
 // Data at address 0x7c010
-uint32_t jump_table_7c010[] = (void*)0x493a4; // offset: 0x7c010
+
 
 // Data at address 0x7c76c
-uint32_t jump_table_7c76c[] = (void*)0x4942c; // offset: 0x7c76c
+
 
 // Data at address 0x7cec8
 char const __func___33101[] = "tisp_mdns_param_array_set"; // offset: 0x7cec8
@@ -1078,10 +1078,10 @@ char const __func___33101[] = "tisp_mdns_param_array_set"; // offset: 0x7cec8
 char const __func___32620[] = "tisp_mdns_param_array_get"; // offset: 0x7cee4
 
 // Data at address 0x7cf00
-uint32_t jump_table_7cf00[] = (void*)0x51320; // offset: 0x7cf00
+
 
 // Data at address 0x7cf7c
-uint32_t jump_table_7cf7c[] = (void*)0x51540; // offset: 0x7cf7c
+
 
 // Data at address 0x7cff8
 char const __func___31332[] = "tisp_dpc_param_array_set"; // offset: 0x7cff8
@@ -1096,16 +1096,16 @@ char const __func___31178[] = "tisp_clm_param_array_set"; // offset: 0x7d030
 char const __func___31165[] = "tisp_clm_param_array_get"; // offset: 0x7d04c
 
 // Data at address 0x7d070
-uint32_t jump_table_7d070[] = (void*)0x520dc; // offset: 0x7d070
+
 
 // Data at address 0x7d090
 wchar_t const data_7d090[] = L"8H8H]H8H8"; // offset: 0x7d090
 
 // Data at address 0x7d210
-uint32_t jump_table_7d210[] = (void*)0x56e88; // offset: 0x7d210
+
 
 // Data at address 0x7d2a8
-uint32_t jump_table_7d2a8[] = (void*)0x56f14; // offset: 0x7d2a8
+
 
 // Data at address 0x7d340
 char const __func___31793[] = "tisp_defog_param_array_set"; // offset: 0x7d340
@@ -1114,10 +1114,10 @@ char const __func___31793[] = "tisp_defog_param_array_set"; // offset: 0x7d340
 char const __func___31745[] = "tisp_defog_param_array_get"; // offset: 0x7d35c
 
 // Data at address 0x7d3fc
-uint32_t jump_table_7d3fc[] = (void*)0x5c8a8; // offset: 0x7d3fc
+
 
 // Data at address 0x7d4ac
-uint32_t jump_table_7d4ac[] = (void*)0x5c930; // offset: 0x7d4ac
+
 
 // Data at address 0x7d55c
 char const __func___31480[] = "tisp_adr_param_array_set"; // offset: 0x7d55c
@@ -1132,16 +1132,16 @@ char const __func___30935[] = "tisp_hldc_param_array_set"; // offset: 0x7d5a0
 char const __func___30924[] = "tisp_hldc_param_array_get"; // offset: 0x7d5bc
 
 // Data at address 0x7d5e0
-uint32_t jump_table_7d5e0[] = (void*)0x5ec14; // offset: 0x7d5e0
+
 
 // Data at address 0x7d600
-uint32_t jump_table_7d600[] = (void*)0x5ee40; // offset: 0x7d600
+
 
 // Data at address 0x7d618
-uint32_t jump_table_7d618[] = (void*)0x65750; // offset: 0x7d618
+
 
 // Data at address 0x7d6a0
-uint32_t jump_table_7d6a0[] = (void*)0x657dc; // offset: 0x7d6a0
+
 
 // Data at address 0x7d728
 char const __func___33100[] = "tisp_ae_param_array_set"; // offset: 0x7d728
@@ -1150,10 +1150,10 @@ char const __func___33100[] = "tisp_ae_param_array_set"; // offset: 0x7d728
 char const __func___33056[] = "tisp_ae_param_array_get"; // offset: 0x7d740
 
 // Data at address 0x7d760
-uint32_t jump_table_7d760[] = (void*)0x67e6c; // offset: 0x7d760
+
 
 // Data at address 0x7d7ac
-uint32_t jump_table_7d7ac[] = (void*)0x6800c; // offset: 0x7d7ac
+
 
 // Data at address 0x7d7f8
 char const __func___31908[] = "tisp_af_param_array_set"; // offset: 0x7d7f8
@@ -1162,10 +1162,10 @@ char const __func___31908[] = "tisp_af_param_array_set"; // offset: 0x7d7f8
 char const __func___31879[] = "tisp_af_param_array_get"; // offset: 0x7d810
 
 // Data at address 0x7d830
-uint32_t jump_table_7d830[] = (void*)0x687b4; // offset: 0x7d830
+
 
 // Data at address 0x7d86c
-uint32_t jump_table_7d86c[] = (void*)0x68838; // offset: 0x7d86c
+
 
 // Data at address 0x7d8a8
 char const __func___31222[] = "tisp_ydns_param_array_set"; // offset: 0x7d8a8
@@ -1174,10 +1174,10 @@ char const __func___31222[] = "tisp_ydns_param_array_set"; // offset: 0x7d8a8
 char const __func___31197[] = "tisp_ydns_param_array_get"; // offset: 0x7d8c4
 
 // Data at address 0x7d8e0
-uint32_t jump_table_7d8e0[] = (void*)0x69800; // offset: 0x7d8e0
+
 
 // Data at address 0x7d934
-uint32_t jump_table_7d934[] = (void*)0x69880; // offset: 0x7d934
+
 
 // Data at address 0x7d988
 char const __func___31290[] = "tisp_rdns_param_array_set"; // offset: 0x7d988
@@ -1186,10 +1186,10 @@ char const __func___31290[] = "tisp_rdns_param_array_set"; // offset: 0x7d988
 char const __func___31259[] = "tisp_rdns_param_array_get"; // offset: 0x7d9a4
 
 // Data at address 0x7da64
-uint32_t jump_table_7da64[] = (void*)0x71d3c; // offset: 0x7da64
+
 
 // Data at address 0x7db30
-uint32_t jump_table_7db30[] = (void*)0x71dbc; // offset: 0x7db30
+
 
 // Data at address 0x7dbfc
 char const __func___31827[] = "tisp_wdr_param_array_set"; // offset: 0x7dbfc
@@ -1267,13 +1267,13 @@ void* data_7de04 = (void*)0x76694;
 void* data_7de08 = (void*)0x76680;
 
 // Data at address 0x7de0c
-uint32_t jump_table_7de0c[] = (void*)0x76c28; // offset: 0x7de0c
+
 
 // Data at address 0x7de24
-uint32_t jump_table_7de24[] = (void*)0x77d1c; // offset: 0x7de24
+
 
 // Data at address 0x7de40
-uint32_t jump_table_7de40[] = (void*)0x7971c; // offset: 0x7de40
+
 
 // Data at address 0x7de90
 char const __func___34634[] = "ispcore_frame_channel_qbuf"; // offset: 0x7de90
