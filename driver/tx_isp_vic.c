@@ -1048,7 +1048,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(clkgr0, cpm_regs + 0x20);
         writel(clkgr1, cpm_regs + 0x28);
         wmb();
-        msleep(20);
 
         pr_info("STREAMING: CPM clocks configured for VIC access\n");
         iounmap(cpm_regs);
