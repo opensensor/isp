@@ -1,7 +1,7 @@
 #include "include/main.h"
 
 
-  int32_t private_log2_fixed_to_fixed_64(uint32_t arg1, uint32_t arg2, int32_t arg3, char arg4)
+  int32_t private_log2_fixed_to_fixed_64(uint32_t arg1, uint32_t arg2, int32_t arg3)
 
 {
     uint32_t $s1 = arg4;
