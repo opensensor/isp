@@ -8,43 +8,37 @@
 #define ARCH_ENDIAN LITTLE
 #define BASE_ADDRESS 0x10000
 
-/* Type Definitions */
-
-
-
-/* Platform Types */
-#include <stdint.h>
-#include <stdbool.h>
-
-/* Function Declarations */
-#include "functions.h"
-
-
-// Prevent type conflicts
+/* Prevent type conflicts - decide if we're building for kernel or userspace */
 #ifdef __KERNEL__
-    // Building as kernel module
+    /* Building as kernel module - use kernel types only */
     #include <linux/types.h>
     #include <linux/kernel.h>
+    #include <linux/stddef.h>
+
+    /* Don't include standard library headers in kernel mode */
 #else
-    // Building as userspace or with standard library
+    /* Building as userspace or with standard library */
     #include <stdint.h>
     #include <stdbool.h>
     #include <stddef.h>
 
-    // Define kernel-compatible types if needed
-    #ifndef _LINUX_TYPES_H
-        typedef unsigned long kernel_ulong_t;
-#endif
+    /* Define kernel-compatible types if needed */
+    typedef unsigned long kernel_ulong_t;
 #endif
 
-#ifndef __cplusplus
-#ifndef _STDBOOL_H
-enum {
-    false = 0,
-    true = 1
-};
-typedef _Bool bool;
-#endif
+/* Include functions after type definitions */
+#include "functions.h"
+
+/* Platform Types - only if not in kernel mode */
+#ifndef __KERNEL__
+typedef uint32_t DWORD;
+typedef uint16_t WORD;
+typedef uint8_t BYTE;
+#else
+/* For kernel mode, use kernel types */
+typedef u32 DWORD;
+typedef u16 WORD;
+typedef u8 BYTE;
 #endif
 
 /* ELF and System Types - Prevent incomplete type errors */
