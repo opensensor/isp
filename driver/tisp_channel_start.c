@@ -1,13 +1,12 @@
 #include "include/main.h"
 
 
-  int32_t tisp_channel_start(int32_t arg1, int32_t* arg2 @ $s7)
+  int32_t tisp_channel_start(int32_t arg1)
 
 {
     uint32_t msca_ch_en_1 = msca_ch_en;
     uint32_t msca_dmaout_arb_1 = msca_dmaout_arb;
     uint32_t $v0_1 = 0xe;
-    int32_t* var_c = arg2;
     uint32_t msca_dmaout_arb_2;
     
     if (!~msca_ch_en_1)

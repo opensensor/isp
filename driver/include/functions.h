@@ -387,7 +387,7 @@ int32_t tisp_ccm_set_par_cfg(int32_t arg1);
 int32_t tisp_ccm_wdr_en(uint32_t arg1);
 int32_t tisp_channel_attr_set(int32_t arg1, int32_t* arg2);
 int32_t tisp_channel_fifo_clear(int32_t arg1);
-int32_t tisp_channel_start(int32_t arg1, int32_t* arg2 @ $s7);
+int32_t tisp_channel_start(int32_t arg1);
 int32_t tisp_channel_stop(int32_t arg1);
 int32_t tisp_clm_get_par_cfg(int32_t arg1, int32_t* arg2);
 int32_t tisp_clm_param_array_get(int32_t arg1, int32_t arg2, int32_t* arg3);
