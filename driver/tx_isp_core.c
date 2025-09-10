@@ -294,11 +294,10 @@ static struct tx_isp_subdev_ops core_subdev_ops = {
 static int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
 static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp);
 int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
-static int tx_isp_setup_media_links(struct tx_isp_dev *isp);
 static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp);
 static int tx_isp_create_subdev_links(struct tx_isp_dev *isp);
 static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link);
-static int tx_isp_configure_default_links(struct tx_isp_dev *isp);
+
 static int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
 int tx_isp_vic_device_init(struct tx_isp_dev *isp);
 static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
@@ -672,7 +671,7 @@ err_put_cgu_isp:
 }
 
 /* Setup media entity links and pads */
-static int tx_isp_setup_media_links(struct tx_isp_dev *isp)
+int tx_isp_setup_media_links(struct tx_isp_dev *isp)
 {
     int ret;
     
@@ -780,7 +779,7 @@ static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link
 }
 
 /* Configure default link routing */
-static int tx_isp_configure_default_links(struct tx_isp_dev *isp)
+int tx_isp_configure_default_links(struct tx_isp_dev *isp)
 {
     pr_info("Configuring default link routing\n");
     

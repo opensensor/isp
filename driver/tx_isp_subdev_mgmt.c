@@ -62,6 +62,8 @@ int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
 int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
 void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
+int tx_isp_setup_media_links(struct tx_isp_dev *isp);
+int tx_isp_configure_default_links(struct tx_isp_dev *isp);
 
 /* Frame channel device operation forward declarations */
 int frame_channel_open(struct inode *inode, struct file *file);
