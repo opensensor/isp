@@ -1101,7 +1101,7 @@ if (!IS_ERR(cgu_isp_clk)) {
     /* CSI PHY Config registers - from reference trace */
     writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
     writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
-	writel(0x10, vic_regs + 0x120);   	    /* DVP config register */
+	//writel(0x10, vic_regs + 0x120);   	    /* DVP config register */
     wmb();
     
     /* *** MISSING ISP Control registers - from reference trace *** */
