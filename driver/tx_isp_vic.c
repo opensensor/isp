@@ -1272,7 +1272,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
 
 
-	vic_dynamic_timing_negotiation(vic_dev);
+	//vic_dynamic_timing_negotiation(vic_dev);
 
     /* MCP LOG: VIC start completed successfully */
     pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d, interface=%d\n", 
