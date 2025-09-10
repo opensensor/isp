@@ -754,14 +754,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** tx_isp_vic_start: MIPS validation passed - applying tx_isp_init_vic_registers methodology ***\n");
 
     /* *** CRASH FIX: Initialize proper memory mapping BEFORE register writes *** */
-    if (!isp_full_regs) {
-        isp_full_regs = ioremap(ISP_BASE_ADDR, ISP_FULL_SIZE);
-        if (!isp_full_regs) {
-            pr_err("ISP: CRASH FIX - Failed to map ISP registers\n");
-            return -ENOMEM;
-        }
-        pr_info("ISP: CRASH FIX - Mapped full ISP register space\n");
-    }
+//    if (!isp_full_regs) {
+//        isp_full_regs = ioremap(ISP_BASE_ADDR, ISP_FULL_SIZE);
+//        if (!isp_full_regs) {
+//            pr_err("ISP: CRASH FIX - Failed to map ISP registers\n");
+//            return -ENOMEM;
+//        }
+//        pr_info("ISP: CRASH FIX - Mapped full ISP register space\n");
+//    }
 
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
 
@@ -950,7 +950,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* *** MISSING ISP Control registers - from reference trace *** */
     pr_info("*** Writing missing ISP Control registers (0x9804-0x98a8) ***\n");
     writel(0x3f00, vic_regs + 0x9804);       /* ISP Control register */
-                                             
+
     /* CRASH FIX: Use proper base address for ISP Control registers */
     /* OLD CRASHING CODE: writel(0x3f00, vic_regs + 0x9804); */
     /* NEW FIXED CODE: */
