@@ -1417,11 +1417,12 @@ int system_irq_func_set(int irq_id, void *handler)
     return 0;
 }
 
-/* ISP M0 IOCTL handler - Binary Ninja EXACT reference implementation */
+/* ISP M0 IOCTL handler - RACE CONDITION FIXED Binary Ninja implementation */
 int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __user *arg)
 {
     int ret = 0;
     uint8_t magic = (cmd >> 8) & 0xff;
+    static DEFINE_MUTEX(tuning_init_mutex);  /* CRITICAL: Prevent race conditions */
     
     /* CRITICAL: Binary Ninja reference implementation - proper device structure retrieval */
     /* Reference: $s0 = *(*(*(arg1 + 0x70) + 0xc8) + 0x1bc) */
@@ -1435,24 +1436,37 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
         return -ENODEV;
     }
     
-    /* CRITICAL: Auto-initialize tuning for V4L2 controls if not already enabled */
-    if (magic == 0x56 && dev->tuning_enabled != 3) {
-        pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control\n");
+    /* CRITICAL: RACE CONDITION FIX - Serialize tuning initialization */
+    if (magic == 0x56) {
+        mutex_lock(&tuning_init_mutex);
         
-        /* Initialize tuning_data if not already initialized */
-        if (!dev->tuning_data) {
-            pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
-            dev->tuning_data = isp_core_tuning_init(dev);
+        /* Double-check pattern to prevent race conditions */
+        if (dev->tuning_enabled != 3) {
+            pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control\n");
+            
+            /* CRITICAL: Check if another thread already initialized */
             if (!dev->tuning_data) {
-                pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
-                return -ENOMEM;
+                pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
+                
+                /* CRITICAL: Allocate with proper synchronization */
+                struct isp_tuning_data *new_tuning = isp_core_tuning_init(dev);
+                if (!new_tuning) {
+                    pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
+                    mutex_unlock(&tuning_init_mutex);
+                    return -ENOMEM;
+                }
+                
+                /* CRITICAL: Atomic assignment to prevent race */
+                dev->tuning_data = new_tuning;
+                pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
             }
-            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
+            
+            /* CRITICAL: Enable tuning atomically */
+            dev->tuning_enabled = 3;
+            pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning auto-enabled for V4L2 controls\n");
         }
         
-        /* Enable tuning */
-        dev->tuning_enabled = 3;
-        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning auto-enabled for V4L2 controls\n");
+        mutex_unlock(&tuning_init_mutex);
     }
     
     /* CRITICAL: Check tuning enabled for tuning commands only */
@@ -1513,7 +1527,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 }
                 break;
                 
-            case 0xc00c56c6: /* ISP_TUNING_ENABLE - Enable/disable tuning */
+            case 0xc00c56c6: /* ISP_TUNING_ENABLE - Enable/disable tuning - RACE CONDITION FIXED */
             {
                 uint32_t enable;
                 if (copy_from_user(&enable, (void __user *)arg, sizeof(enable))) {
@@ -1523,45 +1537,64 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 
                 pr_info("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
                 
-                    if (enable) {
-                        if (dev->tuning_enabled != 3) {
-                            /* CRITICAL: Initialize tuning_data if not already initialized */
-                            if (!dev->tuning_data) {
-                                pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
-                                
-                                /* Allocate tuning data structure using the reference implementation */
-                                dev->tuning_data = isp_core_tuning_init(dev);
-                                if (!dev->tuning_data) {
-                                    pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
-                                    return -ENOMEM;
-                                }
-                                
-                                pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
-                                
-                                /* MCP LOG: Tuning data structure successfully initialized */
-                                pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
-                                pr_info("MCP_LOG: Tuning controls now ready for operation\n");
+                /* CRITICAL: RACE CONDITION FIX - Serialize enable/disable operations */
+                mutex_lock(&tuning_init_mutex);
+                
+                if (enable) {
+                    /* CRITICAL: Double-check pattern to prevent multiple initialization */
+                    if (dev->tuning_enabled != 3) {
+                        /* CRITICAL: Check if tuning data already exists from another thread */
+                        if (!dev->tuning_data) {
+                            pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
+                            
+                            /* CRITICAL: Allocate with proper error handling */
+                            struct isp_tuning_data *new_tuning = isp_core_tuning_init(dev);
+                            if (!new_tuning) {
+                                pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
+                                mutex_unlock(&tuning_init_mutex);
+                                return -ENOMEM;
                             }
                             
-                            /* CRITICAL: Call tisp_init to trigger hardware initialization - THE MISSING LINK */
-                            pr_info("*** CALLING tisp_init - THIS SHOULD TRIGGER REGISTER ACTIVITY LIKE REFERENCE DRIVER ***\n");
-                            ret = tisp_init(NULL, "default");
-                            if (ret != 0) {
-                                pr_err("isp_core_tunning_unlocked_ioctl: tisp_init failed: %d\n", ret);
-                                return ret;
-                            }
-                            pr_info("*** tisp_init COMPLETED - HARDWARE INITIALIZATION FINISHED ***\n");
+                            /* CRITICAL: Atomic assignment */
+                            dev->tuning_data = new_tuning;
+                            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
                             
-                            dev->tuning_enabled = 3;
-                            pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
+                            /* MCP LOG: Tuning data structure successfully initialized */
+                            pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
+                            pr_info("MCP_LOG: Tuning controls now ready for operation\n");
                         }
-                    } else {
-                        if (dev->tuning_enabled == 3) {
-                            isp_core_tuning_release(dev);
-                            dev->tuning_enabled = 0;
-                            pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning disabled\n");
+                        
+                        /* CRITICAL: Call tisp_init to trigger hardware initialization - THE MISSING LINK */
+                        pr_info("*** CALLING tisp_init - THIS SHOULD TRIGGER REGISTER ACTIVITY LIKE REFERENCE DRIVER ***\n");
+                        ret = tisp_init(NULL, "default");
+                        if (ret != 0) {
+                            pr_err("isp_core_tunning_unlocked_ioctl: tisp_init failed: %d\n", ret);
+                            mutex_unlock(&tuning_init_mutex);
+                            return ret;
                         }
+                        pr_info("*** tisp_init COMPLETED - HARDWARE INITIALIZATION FINISHED ***\n");
+                        
+                        /* CRITICAL: Enable tuning atomically */
+                        dev->tuning_enabled = 3;
+                        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
                     }
+                } else {
+                    /* CRITICAL: Safe disable with proper cleanup */
+                    if (dev->tuning_enabled == 3) {
+                        /* CRITICAL: Disable first to prevent new operations */
+                        dev->tuning_enabled = 0;
+                        
+                        /* CRITICAL: Clean up tuning data safely */
+                        if (dev->tuning_data) {
+                            isp_core_tuning_release(dev);
+                            /* Note: isp_core_tuning_release sets dev->tuning_data = NULL */
+                        }
+                        
+                        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning disabled\n");
+                    }
+                }
+                
+                mutex_unlock(&tuning_init_mutex);
                 ret = 0;
                 break;
             }
@@ -1900,29 +1933,60 @@ EXPORT_SYMBOL(tisp_code_tuning_open);
 
 int isp_core_tuning_release(struct tx_isp_dev *dev)
 {
-    struct isp_tuning_data *tuning = dev->tuning_data;
+    struct isp_tuning_data *tuning;
+    static DEFINE_MUTEX(release_mutex);  /* CRITICAL: Prevent race conditions during release */
 
     pr_info("##### %s %d #####\n", __func__, __LINE__);
 
-    if (!tuning)
-        return 0;
+    if (!dev) {
+        pr_err("isp_core_tuning_release: NULL device pointer\n");
+        return -EINVAL;
+    }
 
-    /* Clear state first */
-    tuning->state = 0;
+    /* CRITICAL: RACE CONDITION FIX - Serialize release operations */
+    mutex_lock(&release_mutex);
     
-    /* Clean up synchronization primitives */
-    mutex_destroy(&tuning->mutex);
+    tuning = dev->tuning_data;
+    if (!tuning) {
+        pr_info("isp_core_tuning_release: No tuning data to release\n");
+        mutex_unlock(&release_mutex);
+        return 0;
+    }
+
+    /* CRITICAL: Validate tuning pointer before access */
+    if (!virt_addr_valid(tuning) || (unsigned long)tuning < 0x80000000) {
+        pr_err("isp_core_tuning_release: Invalid tuning pointer: %p\n", tuning);
+        dev->tuning_data = NULL;  /* Clear corrupted pointer */
+        mutex_unlock(&release_mutex);
+        return -EFAULT;
+    }
+
+    /* CRITICAL: Clear device reference first to prevent new operations */
+    dev->tuning_data = NULL;
     
-    /* Free the page-based allocation */
-    if (tuning->allocation_pages) {
+    /* CRITICAL: Mark state as invalid to prevent concurrent access */
+    if (access_ok(VERIFY_WRITE, &tuning->state, sizeof(tuning->state))) {
+        tuning->state = 0;
+    }
+    
+    /* CRITICAL: Clean up synchronization primitives safely */
+    if (access_ok(VERIFY_WRITE, &tuning->mutex, sizeof(tuning->mutex))) {
+        mutex_destroy(&tuning->mutex);
+    }
+    
+    /* CRITICAL: Free the page-based allocation with validation */
+    if (tuning->allocation_pages && tuning->allocation_order >= 0 && tuning->allocation_order < 10) {
+        pr_info("isp_core_tuning_release: Releasing pages at %p (order=%d)\n",
+                (void*)tuning->allocation_pages, tuning->allocation_order);
         free_pages(tuning->allocation_pages, tuning->allocation_order);
-        pr_info("isp_core_tuning_release: Released pages at %p (order=%d)\n",
+    } else {
+        pr_warn("isp_core_tuning_release: Invalid allocation info - pages=%p, order=%d\n",
                 (void*)tuning->allocation_pages, tuning->allocation_order);
     }
     
-    /* Clear the tuning data reference */
-    dev->tuning_data = NULL;
-
+    mutex_unlock(&release_mutex);
+    
+    pr_info("isp_core_tuning_release: Tuning data released safely\n");
     return 0;
 }
 
@@ -4978,14 +5042,18 @@ int tisp_code_destroy_tuning_node(void)
 }
 EXPORT_SYMBOL(tisp_code_destroy_tuning_node);
 
-/* isp_core_tuning_init - Robust allocation with guaranteed alignment */
+/* isp_core_tuning_init - RACE CONDITION SAFE allocation with guaranteed alignment */
 void *isp_core_tuning_init(void *arg1)
 {
     struct isp_tuning_data *tuning_data;
     void *raw_allocation = NULL;
     extern struct tx_isp_dev *ourISPdev;
+    static DEFINE_MUTEX(init_mutex);  /* CRITICAL: Prevent race conditions during init */
     
     pr_info("isp_core_tuning_init: Initializing ISP core tuning with guaranteed alignment\n");
+    
+    /* CRITICAL: RACE CONDITION FIX - Serialize initialization */
+    mutex_lock(&init_mutex);
     
     /* CRITICAL: Calculate aligned allocation size - must be multiple of 16 for MIPS32 */
     size_t struct_size = sizeof(struct isp_tuning_data);
@@ -4993,13 +5061,26 @@ void *isp_core_tuning_init(void *arg1)
     
     pr_info("isp_core_tuning_init: Struct size=%zu, aligned size=%zu\n", struct_size, aligned_size);
     
-    /* CRITICAL: Allocate with explicit alignment guarantee - use kmem_cache or aligned allocation */
-    /* Method 1: Use __get_free_pages for guaranteed alignment */
+    /* CRITICAL: Validate allocation size is reasonable */
+    if (aligned_size > PAGE_SIZE * 4) {
+        pr_err("isp_core_tuning_init: Allocation size too large: %zu\n", aligned_size);
+        mutex_unlock(&init_mutex);
+        return NULL;
+    }
+    
+    /* CRITICAL: Allocate with explicit alignment guarantee - use __get_free_pages for guaranteed alignment */
     int order = get_order(aligned_size);
+    if (order < 0 || order > 10) {  /* Sanity check order */
+        pr_err("isp_core_tuning_init: Invalid allocation order: %d\n", order);
+        mutex_unlock(&init_mutex);
+        return NULL;
+    }
+    
     unsigned long pages = __get_free_pages(GFP_KERNEL | __GFP_ZERO | __GFP_DMA32, order);
     
     if (!pages) {
         pr_err("isp_core_tuning_init: Failed to allocate aligned pages (order=%d, size=%zu)\n", order, aligned_size);
+        mutex_unlock(&init_mutex);
         return NULL;
     }
     
@@ -5008,10 +5089,19 @@ void *isp_core_tuning_init(void *arg1)
     pr_info("isp_core_tuning_init: Allocated tuning data at %p (order=%d, size=%zu)\n",
             tuning_data, order, aligned_size);
     
+    /* CRITICAL: Verify allocation integrity */
+    if (!virt_addr_valid(tuning_data)) {
+        pr_err("CRITICAL: Allocated tuning data not valid virtual address: %p\n", tuning_data);
+        free_pages(pages, order);
+        mutex_unlock(&init_mutex);
+        return NULL;
+    }
+    
     /* CRITICAL: Verify alignment is perfect - must be at least 16-byte aligned */
     if (((unsigned long)tuning_data & 0xF) != 0) {
         pr_err("CRITICAL: Allocated tuning data not 16-byte aligned: %p - this should never happen with __get_free_pages\n", tuning_data);
         free_pages(pages, order);
+        mutex_unlock(&init_mutex);
         return NULL;
     }
     
@@ -5019,8 +5109,12 @@ void *isp_core_tuning_init(void *arg1)
     if ((unsigned long)tuning_data < 0x80000000) {
         pr_err("CRITICAL: Allocated tuning data not in kernel space: %p\n", tuning_data);
         free_pages(pages, order);
+        mutex_unlock(&init_mutex);
         return NULL;
     }
+    
+    /* CRITICAL: Zero out the structure completely to prevent uninitialized access */
+    memset(tuning_data, 0, aligned_size);
     
     /* Store allocation info for later cleanup */
     tuning_data->allocation_order = order;
@@ -5106,8 +5200,13 @@ void *isp_core_tuning_init(void *arg1)
     spin_lock_init(&tuning_data->lock);
     mutex_init(&tuning_data->mutex);
     
-    /* Set valid state marker */
+    /* CRITICAL: Set valid state marker LAST to indicate structure is ready */
     tuning_data->state = 1;
+    
+    /* CRITICAL: Memory barrier to ensure all initialization is visible before state=1 */
+    wmb();
+    
+    mutex_unlock(&init_mutex);
     
     pr_info("isp_core_tuning_init: Tuning data structure initialized successfully\n");
     pr_info("isp_core_tuning_init: Address: %p, aligned: 16-byte, state: %d\n",
