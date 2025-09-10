@@ -316,8 +316,69 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
 int sensor_init(struct tx_isp_dev *isp_dev);
 void *isp_core_tuning_init(void *arg1);
 int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
-void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
-void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
+/* IRQ info structure - matches Binary Ninja tx_isp_request_irq layout */
+struct tx_isp_irq_info {
+    int irq_number;                    /* IRQ number at offset 0 */
+    void (*enable_func)(void *);       /* Enable function at offset 4 */
+    void (*disable_func)(void *);      /* Disable function at offset 8 */
+    spinlock_t lock;                   /* Spinlock for IRQ operations */
+};
+
+/* Global IRQ info structure */
+static struct tx_isp_irq_info isp_irq_info = {
+    .irq_number = 37,  /* FIXED: Use correct IRQ number 37 */
+    .enable_func = NULL,
+    .disable_func = NULL,
+};
+
+/* tx_isp_enable_irq - EXACT Binary Ninja implementation */
+void tx_isp_enable_irq(void *irq_info)
+{
+    if (!irq_info) {
+        pr_err("tx_isp_enable_irq: Invalid IRQ info\n");
+        return;
+    }
+    
+    /* Binary Ninja: return private_enable_irq(*arg1) __tailcall */
+    int irq_number = *((int *)irq_info);  /* *arg1 - get IRQ number from structure */
+    
+    pr_info("*** tx_isp_enable_irq: Enabling IRQ %d ***\n", irq_number);
+    
+    if (irq_number <= 0) {
+        pr_err("*** tx_isp_enable_irq: Invalid IRQ number %d ***\n", irq_number);
+        return;
+    }
+    
+    /* Enable the IRQ */
+    enable_irq(irq_number);
+    
+    pr_info("*** tx_isp_enable_irq: IRQ %d enabled successfully ***\n", irq_number);
+}
+
+/* tx_isp_disable_irq - EXACT Binary Ninja implementation */
+void tx_isp_disable_irq(void *irq_info)
+{
+    if (!irq_info) {
+        pr_err("tx_isp_disable_irq: Invalid IRQ info\n");
+        return;
+    }
+    
+    /* Binary Ninja: return private_disable_irq(*arg1) __tailcall */
+    int irq_number = *((int *)irq_info);  /* *arg1 - get IRQ number from structure */
+    
+    pr_info("*** tx_isp_disable_irq: Disabling IRQ %d ***\n", irq_number);
+    
+    if (irq_number <= 0) {
+        pr_err("*** tx_isp_disable_irq: Invalid IRQ number %d ***\n", irq_number);
+        return;
+    }
+    
+    /* Disable the IRQ */
+    disable_irq(irq_number);
+    
+    pr_info("*** tx_isp_disable_irq: IRQ %d disabled successfully ***\n", irq_number);
+}
+
 void system_reg_write(u32 reg, u32 value);
 
 /* ISP interrupt dispatch system - EXACT Binary Ninja implementation */
@@ -385,47 +446,50 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
-/* tx_isp_request_irq - EXACT Binary Ninja implementation */
-static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
+/* tx_isp_request_irq - FIXED to use global IRQ info structure */
+static int tx_isp_request_irq(struct platform_device *pdev, void *unused_param)
 {
     int irq_number;
     int ret;
     
-    if (!pdev || !irq_info) {
-        pr_err("tx_isp_request_irq: Invalid parameters\n");
+    if (!pdev) {
+        pr_err("tx_isp_request_irq: Invalid platform device\n");
         return -EINVAL;
     }
     
-    /* Binary Ninja: int32_t $v0_1 = private_platform_get_irq(arg1, 0) */
-    irq_number = platform_get_irq(pdev, 0);
-    if (irq_number < 0) {
-        pr_err("tx_isp_request_irq: Failed to get IRQ: %d\n", irq_number);
-        return irq_number;
+    pr_info("*** tx_isp_request_irq: FIXED to use global IRQ info structure ***\n");
+    
+    /* FIXED: Use our global IRQ info structure instead of corrupted parameter */
+    /* The global structure already has the correct IRQ number (37) */
+    irq_number = isp_irq_info.irq_number;
+    
+    pr_info("*** tx_isp_request_irq: Using FIXED IRQ number %d from global structure ***\n", irq_number);
+    
+    if (irq_number <= 0) {
+        pr_err("*** tx_isp_request_irq: Invalid IRQ number %d in global structure ***\n", irq_number);
+        return -EINVAL;
     }
     
-    /* Binary Ninja: private_spin_lock_init(arg2) */
-    spin_lock_init((spinlock_t *)irq_info);
+    /* Initialize the spinlock in our global structure */
+    spin_lock_init(&isp_irq_info.lock);
     
-    /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
+    /* Register the threaded IRQ handler using our global structure as dev_id */
     ret = request_threaded_irq(irq_number, isp_irq_handle, isp_irq_thread_handle, 
-                               IRQF_SHARED, dev_name(&pdev->dev), irq_info);
+                               IRQF_SHARED, dev_name(&pdev->dev), &isp_irq_info);
     if (ret != 0) {
         pr_err("tx_isp_request_irq: Failed to request IRQ %d: %d\n", irq_number, ret);
         return ret;
     }
     
-    /* Binary Ninja: Store IRQ info in structure */
-    /* arg2[1] = tx_isp_enable_irq */
-    *((void **)((char *)irq_info + 4)) = (void *)tx_isp_enable_irq;
-    /* *arg2 = $v0_1 */
-    *((int *)irq_info) = irq_number;
-    /* arg2[2] = tx_isp_disable_irq */
-    *((void **)((char *)irq_info + 8)) = (void *)tx_isp_disable_irq;
+    /* Set up the function pointers in our global structure */
+    isp_irq_info.enable_func = tx_isp_enable_irq;
+    isp_irq_info.disable_func = tx_isp_disable_irq;
     
-    /* Binary Ninja: tx_isp_disable_irq(arg2) - initially disable */
-    tx_isp_disable_irq(irq_info);
+    /* Initially disable the IRQ */
+    tx_isp_disable_irq(&isp_irq_info);
     
-    pr_info("*** tx_isp_request_irq: IRQ %d registered successfully with dispatch system ***\n", irq_number);
+    pr_info("*** tx_isp_request_irq: IRQ %d registered successfully with FIXED global structure ***\n", irq_number);
+    pr_info("*** tx_isp_request_irq: This should fix the invalid IRQ number -2142874224 issue! ***\n");
     return 0;
 }
 
@@ -3163,6 +3227,26 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_err("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
                 }
 
+
+                /* CRITICAL: Request and configure ISP interrupts - THIS WAS MISSING! */
+                pr_info("*** tx_isp_core_probe: Requesting ISP interrupts (IRQ 37) ***\n");
+                result = tx_isp_request_irq(pdev, NULL);
+                if (result == 0) {
+                    pr_info("*** tx_isp_core_probe: ISP interrupts registered successfully ***\n");
+                } else {
+                    pr_err("*** tx_isp_core_probe: Failed to register ISP interrupts: %d ***\n", result);
+                    return result;
+                }
+
+                /* CRITICAL: Configure VIC interrupt registers - THIS ENABLES HARDWARE INTERRUPTS! */
+                pr_info("*** tx_isp_core_probe: Configuring VIC interrupt registers ***\n");
+                result = tx_isp_configure_vic_interrupts((struct tx_isp_dev *)core_dev);
+                if (result == 0) {
+                    pr_info("*** tx_isp_core_probe: VIC interrupts configured successfully ***\n");
+                } else {
+                    pr_err("*** tx_isp_core_probe: Failed to configure VIC interrupts: %d ***\n", result);
+                    return result;
+                }
 
                 /* CRITICAL: Start continuous processing - this generates the register activity your trace captures! */
                 pr_info("*** tx_isp_core_probe: Starting continuous processing system ***\n");
