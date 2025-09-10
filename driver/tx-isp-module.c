@@ -1823,12 +1823,12 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                 /* *** CRITICAL: TRIGGER TUNING EVENT PROCESSING FOR CONTINUOUS REGISTER WRITES *** */
                 pr_info("*** VIC FRAME DONE: TRIGGERING ISP TUNING EVENT PROCESSING ***\n");
                 // TODO
-                isp_process_frame_statistics(ourISPdev);
+                // isp_process_frame_statistics(ourISPdev);
             }
 
             pr_info("VIC Frame done interrupt - frame_count=%d (synchronized with ISP)\n", vic_dev->frame_count);
             /* entry_$a2 = vic_framedone_irq_function($s0) */
-            vic_framedone_irq_function(vic_dev);
+            // vic_framedone_irq_function(vic_dev); // TODO
         }
 
         /* Binary Ninja: Error interrupt handling */
@@ -1912,9 +1912,9 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                 pr_err("  MIPI_CONFIG (0x10) = 0x%x\n", mipi_config);
                 pr_err("  FRAME_SIZE (0x4) = 0x%x (%dx%d)\n", frame_size,
                        (frame_size >> 16) & 0xFFFF, frame_size & 0xFFFF);
-                pr_err("  Sensor interface: %d, format: 0x%x\n",
-                       vic_dev->sensor_attr.dbus_type, vic_dev->sensor_attr.data_type);
-                pr_err("*** This suggests CSI lane configuration may be incorrect ***\n");
+//                pr_err("  Sensor interface: %d, format: 0x%x\n",
+//                       vic_dev->sensor_attr.dbus_type, vic_dev->sensor_attr.data_type);
+//                pr_err("*** This suggests CSI lane configuration may be incorrect ***\n");
             }
         }
 
@@ -5380,87 +5380,87 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
     
     pr_debug("*** isp_irq_handle: IRQ %d fired ***\n", irq);
     
-    /* Binary Ninja: if (arg2 != 0x80) */
-    if ((uintptr_t)dev_id != 0x80) {
-        /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
-        if (isp_dev && isp_dev->vic_dev) {
-            v0_2 = *((void**)((char*)isp_dev->vic_dev + 0x44));
-            result = 1;
-            
-            /* Binary Ninja: if ($v0_2 != 0) */
-            if (v0_2 != NULL) {
-                /* Binary Ninja: int32_t $v0_3 = *($v0_2 + 0x20) */
-                v0_3 = *((int*)((char*)v0_2 + 0x20));
-                
-                /* Binary Ninja: if ($v0_3 == 0) result = 1 else ... */
-                if (v0_3 == 0) {
-                    result = 1;
-                } else {
-                    result = 1;
-                    /* Binary Ninja: if ($v0_3(arg2 - 0x80, 0, 0) == 2) result = 2 */
-                    int (*handler_func)(void*, int, int) = (int(*)(void*, int, int))v0_3;
-                    if (handler_func) {
-                        handler_result = handler_func((char*)dev_id - 0x80, 0, 0);
-                        if (handler_result == 2) {
-                            result = 2;  /* IRQ_WAKE_THREAD */
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        result = 1;
-    }
-    
-    /* Binary Ninja: int32_t* $s2 = arg2 - 0x48; void* $a0_1 = *$s2 */
-    s2 = (void**)((char*)dev_id - 0x48);
-    a0_1 = *s2;
-    
-    /* Binary Ninja: while (true) loop through subdev array */
-    while (true) {
-        /* Binary Ninja: if ($a0_1 == 0) $s2 = &$s2[1] */
-        if (a0_1 == NULL) {
-            s2 = &s2[1];
-        } else {
-            /* Binary Ninja: void* $v0_6 = **($a0_1 + 0xc4) */
-            v0_6 = *((void**)((char*)a0_1 + 0xc4));
-            
-            /* Binary Ninja: if ($v0_6 == 0) $s2 = &$s2[1] */
-            if (v0_6 == 0) {
-                s2 = &s2[1];
-            } else {
-                /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 0x20) */
-                v0_7 = *((int*)((char*)v0_6 + 0x20));
-                
-                /* Binary Ninja: if ($v0_7 != 0 && $v0_7() == 2) result = 2 */
-                if (v0_7 != 0) {
-                    int (*subdev_handler)(void*, int, int) = (int(*)(void*, int, int))v0_7;
-                    if (subdev_handler(a0_1, irq, 0) == 2) {
-                        result = 2;
-                    }
-                }
-                s2 = &s2[1];
-            }
-        }
-        
-        /* Binary Ninja: if ($s2 == arg2 - 8) break */
-        if (s2 == (void**)((char*)dev_id - 8)) {
-            break;
-        }
-        
-        /* Binary Ninja: $a0_1 = *$s2 */
-        a0_1 = *s2;
-    }
-    
-    /* CRITICAL: Route to actual VIC interrupt handler if we have VIC hardware interrupt */
-    if (result == 1 && isp_dev && isp_dev->vic_dev) {
-        /* Call the actual VIC interrupt service routine */
-        irqreturn_t vic_result = isp_vic_interrupt_service_routine(irq, dev_id);
-        if (vic_result == IRQ_WAKE_THREAD) {
-            result = 2;
-        }
-        pr_debug("*** isp_irq_handle: VIC ISR returned %d ***\n", vic_result);
-    }
+//    /* Binary Ninja: if (arg2 != 0x80) */
+//    if ((uintptr_t)dev_id != 0x80) {
+//        /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
+//        if (isp_dev && isp_dev->vic_dev) {
+//            v0_2 = *((void**)((char*)isp_dev->vic_dev + 0x44));
+//            result = 1;
+//
+//            /* Binary Ninja: if ($v0_2 != 0) */
+//            if (v0_2 != NULL) {
+//                /* Binary Ninja: int32_t $v0_3 = *($v0_2 + 0x20) */
+//                v0_3 = *((int*)((char*)v0_2 + 0x20));
+//
+//                /* Binary Ninja: if ($v0_3 == 0) result = 1 else ... */
+//                if (v0_3 == 0) {
+//                    result = 1;
+//                } else {
+//                    result = 1;
+//                    /* Binary Ninja: if ($v0_3(arg2 - 0x80, 0, 0) == 2) result = 2 */
+//                    int (*handler_func)(void*, int, int) = (int(*)(void*, int, int))v0_3;
+//                    if (handler_func) {
+//                        handler_result = handler_func((char*)dev_id - 0x80, 0, 0);
+//                        if (handler_result == 2) {
+//                            result = 2;  /* IRQ_WAKE_THREAD */
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//    } else {
+//        result = 1;
+//    }
+//
+//    /* Binary Ninja: int32_t* $s2 = arg2 - 0x48; void* $a0_1 = *$s2 */
+//    s2 = (void**)((char*)dev_id - 0x48);
+//    a0_1 = *s2;
+//
+//    /* Binary Ninja: while (true) loop through subdev array */
+//    while (true) {
+//        /* Binary Ninja: if ($a0_1 == 0) $s2 = &$s2[1] */
+//        if (a0_1 == NULL) {
+//            s2 = &s2[1];
+//        } else {
+//            /* Binary Ninja: void* $v0_6 = **($a0_1 + 0xc4) */
+//            v0_6 = *((void**)((char*)a0_1 + 0xc4));
+//
+//            /* Binary Ninja: if ($v0_6 == 0) $s2 = &$s2[1] */
+//            if (v0_6 == 0) {
+//                s2 = &s2[1];
+//            } else {
+//                /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 0x20) */
+//                v0_7 = *((int*)((char*)v0_6 + 0x20));
+//
+//                /* Binary Ninja: if ($v0_7 != 0 && $v0_7() == 2) result = 2 */
+//                if (v0_7 != 0) {
+//                    int (*subdev_handler)(void*, int, int) = (int(*)(void*, int, int))v0_7;
+//                    if (subdev_handler(a0_1, irq, 0) == 2) {
+//                        result = 2;
+//                    }
+//                }
+//                s2 = &s2[1];
+//            }
+//        }
+//
+//        /* Binary Ninja: if ($s2 == arg2 - 8) break */
+//        if (s2 == (void**)((char*)dev_id - 8)) {
+//            break;
+//        }
+//
+//        /* Binary Ninja: $a0_1 = *$s2 */
+//        a0_1 = *s2;
+//    }
+//
+//    /* CRITICAL: Route to actual VIC interrupt handler if we have VIC hardware interrupt */
+//    if (result == 1 && isp_dev && isp_dev->vic_dev) {
+//        /* Call the actual VIC interrupt service routine */
+//        irqreturn_t vic_result = isp_vic_interrupt_service_routine(irq, dev_id);
+//        if (vic_result == IRQ_WAKE_THREAD) {
+//            result = 2;
+//        }
+//        pr_debug("*** isp_irq_handle: VIC ISR returned %d ***\n", vic_result);
+//    }
     
     pr_debug("*** isp_irq_handle: Binary Ninja IRQ %d processed, result=%d ***\n", irq, result);
     
@@ -5481,82 +5481,82 @@ static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
     int v0_6;
     
     pr_debug("*** isp_irq_thread_handle: Threaded IRQ %d ***\n", irq);
-    
-    /* Binary Ninja: if (arg2 == 0x80) */
-    if ((uintptr_t)dev_id == 0x80) {
-        /* Binary Ninja: $s1_1 = arg2 - 0x48; $s0_1 = arg2 - 8 */
-        s1_1 = (char*)dev_id - 0x48;
-        s0_1 = (char*)dev_id - 8;
-    } else {
-        /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
-        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-        if (isp_dev && isp_dev->vic_dev) {
-            v0_2 = *((void**)((char*)isp_dev->vic_dev + 0x44));
-        } else {
-            v0_2 = NULL;
-        }
-        s1_1 = (char*)dev_id - 0x48;
-        
-        /* Binary Ninja: if ($v0_2 == 0) $s0_1 = arg2 - 8 */
-        if (v0_2 == NULL) {
-            s0_1 = (char*)dev_id - 8;
-        } else {
-            /* Binary Ninja: int32_t $v0_3 = *($v0_2 + 0x24) */
-            v0_3 = *((int*)((char*)v0_2 + 0x24));
-            
-            /* Binary Ninja: if ($v0_3 == 0) $s0_1 = arg2 - 8 */
-            if (v0_3 == 0) {
-                s0_1 = (char*)dev_id - 8;
-            } else {
-                /* Binary Ninja: $v0_3(arg2 - 0x80, 0) */
-                void (*thread_func)(void*, int) = (void(*)(void*, int))v0_3;
-                thread_func((char*)dev_id - 0x80, 0);
-                s1_1 = (char*)dev_id - 0x48;
-                s0_1 = (char*)dev_id - 8;
-            }
-        }
-    }
-    
-    /* Binary Ninja: void* $a0_1 = *$s1_1 */
-    subdev_array = (void**)s1_1;
-    a0_1 = *subdev_array;
-    
-    /* Binary Ninja: while (true) loop */
-    while (true) {
-        /* Binary Ninja: if ($a0_1 == 0) $s1_1 += 4 */
-        if (a0_1 == NULL) {
-            subdev_array = (void**)((char*)subdev_array + 4);
-        } else {
-            /* Binary Ninja: void* $v0_5 = **($a0_1 + 0xc4) */
-            v0_5 = *((void**)((char*)a0_1 + 0xc4));
-            
-            /* Binary Ninja: if ($v0_5 == 0) $s1_1 += 4 */
-            if (v0_5 == NULL) {
-                subdev_array = (void**)((char*)subdev_array + 4);
-            } else {
-                /* Binary Ninja: int32_t $v0_6 = *($v0_5 + 0x24) */
-                v0_6 = *((int*)((char*)v0_5 + 0x24));
-                
-                /* Binary Ninja: if ($v0_6 == 0) $s1_1 += 4 */
-                if (v0_6 == 0) {
-                    subdev_array = (void**)((char*)subdev_array + 4);
-                } else {
-                    /* Binary Ninja: $v0_6() */
-                    void (*thread_handler)(void*, int) = (void(*)(void*, int))v0_6;
-                    thread_handler(a0_1, irq);
-                    subdev_array = (void**)((char*)subdev_array + 4);
-                }
-            }
-        }
-        
-        /* Binary Ninja: if ($s1_1 == $s0_1) break */
-        if (subdev_array == (void**)s0_1) {
-            break;
-        }
-        
-        /* Binary Ninja: $a0_1 = *$s1_1 */
-        a0_1 = *subdev_array;
-    }
+//
+//    /* Binary Ninja: if (arg2 == 0x80) */
+//    if ((uintptr_t)dev_id == 0x80) {
+//        /* Binary Ninja: $s1_1 = arg2 - 0x48; $s0_1 = arg2 - 8 */
+//        s1_1 = (char*)dev_id - 0x48;
+//        s0_1 = (char*)dev_id - 8;
+//    } else {
+//        /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
+//        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+//        if (isp_dev && isp_dev->vic_dev) {
+//            v0_2 = *((void**)((char*)isp_dev->vic_dev + 0x44));
+//        } else {
+//            v0_2 = NULL;
+//        }
+//        s1_1 = (char*)dev_id - 0x48;
+//
+//        /* Binary Ninja: if ($v0_2 == 0) $s0_1 = arg2 - 8 */
+//        if (v0_2 == NULL) {
+//            s0_1 = (char*)dev_id - 8;
+//        } else {
+//            /* Binary Ninja: int32_t $v0_3 = *($v0_2 + 0x24) */
+//            v0_3 = *((int*)((char*)v0_2 + 0x24));
+//
+//            /* Binary Ninja: if ($v0_3 == 0) $s0_1 = arg2 - 8 */
+//            if (v0_3 == 0) {
+//                s0_1 = (char*)dev_id - 8;
+//            } else {
+//                /* Binary Ninja: $v0_3(arg2 - 0x80, 0) */
+//                void (*thread_func)(void*, int) = (void(*)(void*, int))v0_3;
+//                thread_func((char*)dev_id - 0x80, 0);
+//                s1_1 = (char*)dev_id - 0x48;
+//                s0_1 = (char*)dev_id - 8;
+//            }
+//        }
+//    }
+//
+//    /* Binary Ninja: void* $a0_1 = *$s1_1 */
+//    subdev_array = (void**)s1_1;
+//    a0_1 = *subdev_array;
+//
+//    /* Binary Ninja: while (true) loop */
+//    while (true) {
+//        /* Binary Ninja: if ($a0_1 == 0) $s1_1 += 4 */
+//        if (a0_1 == NULL) {
+//            subdev_array = (void**)((char*)subdev_array + 4);
+//        } else {
+//            /* Binary Ninja: void* $v0_5 = **($a0_1 + 0xc4) */
+//            v0_5 = *((void**)((char*)a0_1 + 0xc4));
+//
+//            /* Binary Ninja: if ($v0_5 == 0) $s1_1 += 4 */
+//            if (v0_5 == NULL) {
+//                subdev_array = (void**)((char*)subdev_array + 4);
+//            } else {
+//                /* Binary Ninja: int32_t $v0_6 = *($v0_5 + 0x24) */
+//                v0_6 = *((int*)((char*)v0_5 + 0x24));
+//
+//                /* Binary Ninja: if ($v0_6 == 0) $s1_1 += 4 */
+//                if (v0_6 == 0) {
+//                    subdev_array = (void**)((char*)subdev_array + 4);
+//                } else {
+//                    /* Binary Ninja: $v0_6() */
+//                    void (*thread_handler)(void*, int) = (void(*)(void*, int))v0_6;
+//                    thread_handler(a0_1, irq);
+//                    subdev_array = (void**)((char*)subdev_array + 4);
+//                }
+//            }
+//        }
+//
+//        /* Binary Ninja: if ($s1_1 == $s0_1) break */
+//        if (subdev_array == (void**)s0_1) {
+//            break;
+//        }
+//
+//        /* Binary Ninja: $a0_1 = *$s1_1 */
+//        a0_1 = *subdev_array;
+//    }
     
     pr_debug("*** isp_irq_thread_handle: Binary Ninja threaded IRQ %d processed ***\n", irq);
     
