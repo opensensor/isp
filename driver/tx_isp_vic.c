@@ -972,6 +972,7 @@ if (!IS_ERR(cgu_isp_clk)) {
     writel(0x100, vic_regs + 0xe0);          /* Register from reference trace */
     writel(0x400040, vic_regs + 0xe4);       /* Register from reference trace */
     writel(0xff808000, vic_regs + 0xf0);     /* Register from reference trace */
+    writel(0x10, vic_regs + 0x120);
     wmb();
     
     /* CSI PHY Config registers - from reference trace */
