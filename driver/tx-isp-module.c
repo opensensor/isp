@@ -1629,11 +1629,19 @@ void tx_isp_enable_irq(struct tx_isp_dev *isp_dev)
 {
     pr_info("*** tx_isp_enable_irq: CORRECTED Binary Ninja implementation ***\n");
     
+    if (!isp_dev) {
+        pr_err("tx_isp_enable_irq: Invalid ISP device\n");
+        return;
+    }
+    
     /* Binary Ninja: return private_enable_irq(*arg1) __tailcall
      * This means: enable_irq(isp_dev->isp_irq) */
-    enable_irq(37);
-    
-    pr_info("*** tx_isp_enable_irq: Kernel IRQ %d ENABLED ***\n", isp_dev->isp_irq);
+    if (isp_dev->isp_irq > 0) {
+        enable_irq(isp_dev->isp_irq);
+        pr_info("*** tx_isp_enable_irq: Kernel IRQ %d ENABLED ***\n", isp_dev->isp_irq);
+    } else {
+        pr_err("*** tx_isp_enable_irq: Invalid IRQ number %d ***\n", isp_dev->isp_irq);
+    }
 }
 
 /* tx_isp_disable_irq - CORRECTED Binary Ninja exact implementation */
@@ -1671,6 +1679,9 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
     if (irq_num >= 0) {
         pr_info("*** Platform IRQ found: %d ***\n", irq_num);
         
+        /* CRITICAL FIX: Store IRQ number FIRST before any operations that might fail */
+        isp_dev->isp_irq = irq_num;  /* Store IRQ number immediately */
+        
         /* Binary Ninja: private_spin_lock_init(arg2) */
         spin_lock_init(&isp_dev->lock);
         
@@ -1685,22 +1696,22 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
         if (ret != 0) {
             /* Binary Ninja: int32_t var_18_2 = $v0_1; isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", "tx_isp_request_irq") */
             pr_err("*** tx_isp_request_irq: flags = 0x%08x, irq = %d, ret = 0x%08x ***\n",
-                   IRQF_SHARED | IRQF_ONESHOT, irq_num, ret);
+                   IRQF_SHARED, irq_num, ret);
             /* Binary Ninja: *arg2 = 0 */
-            isp_dev->isp_irq = 0;
+            isp_dev->isp_irq = 0;  /* Clear on failure */
             /* Binary Ninja: return 0xfffffffc */
             return 0xfffffffc;
         }
         
         /* Binary Ninja: arg2[1] = tx_isp_enable_irq; *arg2 = $v0_1; arg2[2] = tx_isp_disable_irq */
         isp_dev->irq_enable_func = tx_isp_enable_irq;   /* arg2[1] = tx_isp_enable_irq */
-        isp_dev->isp_irq = irq_num;                     /* *arg2 = $v0_1 */
+        /* isp_dev->isp_irq already set above */         /* *arg2 = $v0_1 */
         isp_dev->irq_disable_func = tx_isp_disable_irq; /* arg2[2] = tx_isp_disable_irq */
         
         /* Binary Ninja: tx_isp_disable_irq(arg2) */
         tx_isp_disable_irq(isp_dev);
         
-        pr_info("*** tx_isp_request_irq: IRQ %d registered with Binary Ninja handlers ***\n", irq_num);
+        pr_info("*** tx_isp_request_irq: IRQ %d registered and stored in isp_dev->isp_irq ***\n", irq_num);
         
     } else {
         /* Binary Ninja: *arg2 = 0 */
