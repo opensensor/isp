@@ -333,7 +333,6 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_subdev *sd = dev_id;
     struct tx_isp_vic_device *vic_dev;
-    unsigned long timeout;
     void __iomem *vic_base;
     u32 isr_main, isr_mdma;
     irqreturn_t ret = IRQ_HANDLED;
@@ -1181,7 +1180,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(timing_reg, vic_regs + 0x1a0);
         
         /* Binary Ninja EXACT: Wait for unlock - while (*$v1_30 != 0) */
-        timeout = 10000;
+        int timeout = 10000;
         while (timeout > 0 && readl(vic_regs + 0x0) != 0) {
             /* nop in original */
             udelay(1);
