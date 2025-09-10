@@ -300,7 +300,7 @@ static int tx_isp_create_subdev_links(struct tx_isp_dev *isp);
 static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link);
 static int tx_isp_configure_default_links(struct tx_isp_dev *isp);
 static int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
-static int tx_isp_vic_device_init(struct tx_isp_dev *isp);
+int tx_isp_vic_device_init(struct tx_isp_dev *isp);
 static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
 
@@ -671,45 +671,6 @@ err_put_cgu_isp:
     return ret;
 }
 
-/* Setup ISP processing pipeline */
-static int tx_isp_setup_pipeline(struct tx_isp_dev *isp)
-{
-    int ret;
-    
-    pr_info("Setting up ISP processing pipeline: CSI -> VIC -> Output\n");
-    
-    /* Initialize the processing pipeline state */
-    isp->pipeline_state = ISP_PIPELINE_IDLE;
-    
-    /* Configure default data path settings */
-    if (isp->csi_dev) {
-        isp->csi_dev->state = 1; /* INIT state */
-        pr_info("CSI device ready for configuration\n");
-    }
-    
-    if (isp->vic_dev) {
-        isp->vic_dev->state = 1; /* INIT state */
-        pr_info("VIC device ready for configuration\n");
-    }
-    
-    /* Setup media entity links and pads */
-    ret = tx_isp_setup_media_links(isp);
-    if (ret < 0) {
-        pr_err("Failed to setup media links: %d\n", ret);
-        return ret;
-    }
-    
-    /* Configure default link routing */
-    ret = tx_isp_configure_default_links(isp);
-    if (ret < 0) {
-        pr_err("Failed to configure default links: %d\n", ret);
-        return ret;
-    }
-    
-    pr_info("ISP pipeline setup completed\n");
-    return 0;
-}
-
 /* Setup media entity links and pads */
 static int tx_isp_setup_media_links(struct tx_isp_dev *isp)
 {
@@ -864,34 +825,6 @@ static int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
     }
     
     pr_info("Format propagation configured\n");
-    return 0;
-}
-
-/* Initialize VIC device */
-static int tx_isp_vic_device_init(struct tx_isp_dev *isp)
-{
-    struct vic_device *vic_dev;
-    
-    pr_info("Initializing VIC device\n");
-    
-    /* Allocate VIC device structure if not already present */
-    if (!isp->vic_dev) {
-        vic_dev = kzalloc(sizeof(struct vic_device), GFP_KERNEL);
-        if (!vic_dev) {
-            pr_err("Failed to allocate VIC device\n");
-            return -ENOMEM;
-        }
-        
-        /* Initialize VIC device structure */
-        vic_dev->state = 1; /* INIT state */
-        mutex_init(&vic_dev->state_lock);
-        spin_lock_init(&vic_dev->lock);
-        init_completion(&vic_dev->frame_complete);
-        
-        isp->vic_dev = vic_dev;
-    }
-    
-    pr_info("VIC device initialized\n");
     return 0;
 }
 
