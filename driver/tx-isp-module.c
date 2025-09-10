@@ -1440,12 +1440,6 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     /* Binary Ninja: *($v0 + 0x128) = 1 (initial state) */
     csi_dev->state = 1;
     
-    /* Binary Ninja: *($v0 + 0xd4) = $v0 (self-pointer) */
-    *((void**)((char*)csi_dev + 0xd4)) = csi_dev;
-    
-    /* Connect to ISP device */
-    isp_dev->csi_dev = (struct tx_isp_subdev *)csi_dev;
-    
     /* Binary Ninja: dump_csd = $v0 (global CSI device pointer) */
     /* Store globally for debug access */
     
@@ -1454,8 +1448,7 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     pr_info("  Basic regs (+0xb8): %p (0x10022000)\n", csi_basic_regs);
     pr_info("  ISP CSI regs (+0x13c): %p\n", isp_csi_regs);
     pr_info("  State (+0x128): %d\n", csi_dev->state);
-    pr_info("  Self (+0xd4): %p\n", csi_dev);
-    
+
     pr_info("*** csi_device_probe: Binary Ninja CSI device created successfully ***\n");
     return 0;
     
@@ -6063,7 +6056,6 @@ int vic_event_handler(void *subdev, int event_type, void *data)
 /* ispvic_frame_channel_qbuf - MIPS-SAFE implementation with alignment checks */
 static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *buffer)
 {
-    void *s0;
     unsigned long var_18 = 0;
     unsigned long a1_4;
     void *a3_1;
@@ -6087,13 +6079,6 @@ static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *bu
     /* MIPS SAFE: Validate vic_dev structure bounds */
     if ((uintptr_t)vic_dev >= 0xfffff001) {
         pr_err("*** MIPS ERROR: vic_dev pointer 0x%p out of valid range ***\n", vic_dev);
-        return -EINVAL;
-    }
-    
-    /* MIPS SAFE: Get self pointer with alignment validation */
-    s0 = vic_dev->self;
-    if (!s0 || ((uintptr_t)s0 & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->self pointer 0x%p not aligned ***\n", s0);
         return -EINVAL;
     }
     
