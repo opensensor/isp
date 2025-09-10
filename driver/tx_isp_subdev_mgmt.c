@@ -692,7 +692,7 @@ static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc)
  */
 
 /* Initialize VIC device */
-static int tx_isp_vic_device_init(struct tx_isp_dev *isp)
+int tx_isp_vic_device_init(struct tx_isp_dev *isp)
 {
     struct vic_device *vic_dev;
 
