@@ -22,7 +22,7 @@ u32 tx_isp_check_reset_status(void);
 /* ISP Device Management */
 struct tx_isp_dev *tx_isp_get_device(void);
 void tx_isp_set_device(struct tx_isp_dev *isp);
-
+int vic_dynamic_timing_negotiation(struct tx_isp_vic_device *vic_dev);
 int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp);
 
 
