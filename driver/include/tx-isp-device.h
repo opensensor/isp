@@ -660,6 +660,9 @@ struct af_zone_info;
 struct isp_core_ctrl;
 struct IspModule;
 
+/* Forward declaration for tuning event handler */
+typedef int (*isp_event_handler_t)(struct tx_isp_dev *dev, uint32_t event);
+
 /* White balance gains structure */
 struct wb_gains {
 	uint32_t r;
@@ -716,8 +719,12 @@ struct isp_tuning_data {
 	unsigned long allocation_pages;      /* 0x10: Pages allocated via __get_free_pages */
 	int allocation_order;                /* 0x14: Allocation order for cleanup */
 	
+	/* Missing struct members from tuning file */
+	void *device_ref;                    /* 0x18: Device reference pointer */
+	isp_event_handler_t event_handler;   /* 0x1c: Event handler function pointer */
+	
 	/* Control values - CRITICAL: saturation must be at offset +0x68 */
-	uint32_t reserved1[20];              /* 0x18-0x67: Reserved for proper alignment (reduced by 2) */
+	uint32_t reserved1[18];              /* 0x20-0x67: Reserved for proper alignment (reduced by 4) */
 	
 	/* CRITICAL: These must be at the correct offsets for the controls */
 	uint32_t saturation;                 /* 0x68: Saturation control (cmd 0x980902) - CRASH LOCATION */
