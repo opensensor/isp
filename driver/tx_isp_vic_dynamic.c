@@ -325,7 +325,7 @@ static int vic_calibrate_core_control(struct tx_isp_vic_device *vic_dev,
         if (violations == 0) {
             /* Test sensor communication with this config */
             if (vic_test_sensor_communication(vic_dev)) {
-                ctx->current.core_control = core_configs[i];
+                ctx->active_params.core_control = core_configs[i];
                 pr_info("VIC CORE CALIBRATION: Success with config 0x%x\n", 
                         core_configs[i]);
                 return 0;
@@ -337,7 +337,7 @@ static int vic_calibrate_core_control(struct tx_isp_vic_device *vic_dev,
     }
     
     pr_warn("VIC CORE CALIBRATION: No optimal config found, using conservative\n");
-    ctx->current.core_control = core_configs[0];  /* Fall back to conservative */
+    ctx->active_params.core_control = core_configs[0];  /* Fall back to conservative */
     return 0;
 }
 
@@ -377,7 +377,7 @@ int vic_dynamic_timing_negotiation(struct tx_isp_vic_device *vic_dev)
             
         case VIC_TIMING_CONSERVATIVE:
             pr_info("VIC DYNAMIC: STATE 2 - Apply conservative parameters\n");
-            ret = vic_apply_timing_params(vic_dev, &ctx.current);
+            ret = vic_apply_timing_params(vic_dev, &ctx.active_params);
             if (ret == 0) {
                 ctx.state = VIC_TIMING_SENSOR_DETECT;
             } else {
@@ -394,7 +394,7 @@ int vic_dynamic_timing_negotiation(struct tx_isp_vic_device *vic_dev)
             } else {
                 pr_warn("VIC DYNAMIC: Sensor not responsive, retrying with different params\n");
                 /* Try different conservative parameters */
-                ctx.current.csi_phy_config = 0x59010000;  /* Alternative PHY config */
+                ctx.active_params.csi_phy_config = 0x59010000;  /* Alternative PHY config */
                 ctx.state = VIC_TIMING_CONSERVATIVE;
             }
             break;
