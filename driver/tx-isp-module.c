@@ -4531,12 +4531,13 @@ static int tx_isp_init(void)
             writel(0xF, vic_dev->vic_regs + 0x1e4);         /* Enable MDMA interrupts */
             writel(0x0, vic_dev->vic_regs + 0x1ec);         /* Clear MDMA masks */
             wmb();
-            
-            pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
-            
-            /* Set global VIC interrupt enable flag */
-            vic_start_ok = 1;
-            pr_info("*** vic_start_ok SET TO 1 - INTERRUPTS WILL NOW BE PROCESSED! ***\n");
+
+            // TODO
+//            pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
+//
+//            /* Set global VIC interrupt enable flag */
+//            vic_start_ok = 1;
+//            pr_info("*** vic_start_ok SET TO 1 - INTERRUPTS WILL NOW BE PROCESSED! ***\n");
         }
     }
 
