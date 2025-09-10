@@ -26,7 +26,7 @@ uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 /* Global VIC device reference for interrupt control - Binary Ninja exact match */
 static struct tx_isp_vic_device *dump_vsd = NULL;
 static void *test_addr = NULL;
-
+int vic_dynamic_timing_negotiation(struct tx_isp_vic_device *vic_dev);
 
 /* *** CRITICAL: MISSING FUNCTION - tx_isp_create_vic_device *** */
 /* This function creates and links the VIC device structure to the ISP core */
