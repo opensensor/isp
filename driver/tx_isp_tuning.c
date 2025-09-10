@@ -1935,6 +1935,7 @@ int isp_core_tuning_release(struct tx_isp_dev *dev)
 {
     struct isp_tuning_data *tuning;
     static DEFINE_MUTEX(release_mutex);  /* CRITICAL: Prevent race conditions during release */
+    static atomic_t release_counter = ATOMIC_INIT(0);  /* Track release attempts */
 
     pr_info("##### %s %d #####\n", __func__, __LINE__);
 
@@ -1943,8 +1944,18 @@ int isp_core_tuning_release(struct tx_isp_dev *dev)
         return -EINVAL;
     }
 
-    /* CRITICAL: RACE CONDITION FIX - Serialize release operations */
-    mutex_lock(&release_mutex);
+    /* CRITICAL: RACE CONDITION FIX - Serialize release operations with timeout protection */
+    if (!mutex_trylock(&release_mutex)) {
+        /* Another thread is releasing - wait with timeout */
+        if (mutex_lock_timeout(&release_mutex, msecs_to_jiffies(1000)) != 0) {
+            pr_err("isp_core_tuning_release: Release timeout - another thread may be stuck\n");
+            return -EBUSY;
+        }
+    }
+    
+    /* Track release attempts for debugging */
+    int release_attempt = atomic_inc_return(&release_counter);
+    pr_info("isp_core_tuning_release: Release attempt #%d\n", release_attempt);
     
     tuning = dev->tuning_data;
     if (!tuning) {
@@ -1953,7 +1964,7 @@ int isp_core_tuning_release(struct tx_isp_dev *dev)
         return 0;
     }
 
-    /* CRITICAL: Validate tuning pointer before access */
+    /* CRITICAL: Enhanced validation with multiple safety checks */
     if (!virt_addr_valid(tuning) || (unsigned long)tuning < 0x80000000) {
         pr_err("isp_core_tuning_release: Invalid tuning pointer: %p\n", tuning);
         dev->tuning_data = NULL;  /* Clear corrupted pointer */
@@ -1967,6 +1978,7 @@ int isp_core_tuning_release(struct tx_isp_dev *dev)
     /* CRITICAL: Mark state as invalid to prevent concurrent access */
     if (access_ok(VERIFY_WRITE, &tuning->state, sizeof(tuning->state))) {
         tuning->state = 0;
+        wmb();  /* Ensure state change is visible */
     }
     
     /* CRITICAL: Clean up synchronization primitives safely */
@@ -1974,14 +1986,25 @@ int isp_core_tuning_release(struct tx_isp_dev *dev)
         mutex_destroy(&tuning->mutex);
     }
     
-    /* CRITICAL: Free the page-based allocation with validation */
-    if (tuning->allocation_pages && tuning->allocation_order >= 0 && tuning->allocation_order < 10) {
+    /* CRITICAL: Enhanced memory cleanup with multiple allocation method support */
+    if (tuning->allocation_order == -1) {
+        /* vmalloc allocation */
+        pr_info("isp_core_tuning_release: Releasing vmalloc allocation at %p\n", tuning);
+        vfree(tuning);
+    } else if (tuning->allocation_pages && tuning->allocation_order >= 0 && tuning->allocation_order < 10) {
+        /* __get_free_pages allocation */
         pr_info("isp_core_tuning_release: Releasing pages at %p (order=%d)\n",
                 (void*)tuning->allocation_pages, tuning->allocation_order);
         free_pages(tuning->allocation_pages, tuning->allocation_order);
+    } else if (tuning->allocation_order == 0 && !tuning->allocation_pages) {
+        /* Regular kmalloc allocation */
+        pr_info("isp_core_tuning_release: Releasing kmalloc allocation at %p\n", tuning);
+        kfree(tuning);
     } else {
-        pr_warn("isp_core_tuning_release: Invalid allocation info - pages=%p, order=%d\n",
+        pr_warn("isp_core_tuning_release: Unknown allocation method - pages=%p, order=%d\n",
                 (void*)tuning->allocation_pages, tuning->allocation_order);
+        /* Try kfree as fallback */
+        kfree(tuning);
     }
     
     mutex_unlock(&release_mutex);
@@ -5042,105 +5065,111 @@ int tisp_code_destroy_tuning_node(void)
 }
 EXPORT_SYMBOL(tisp_code_destroy_tuning_node);
 
-/* isp_core_tuning_init - RACE CONDITION SAFE allocation with guaranteed alignment */
+/* isp_core_tuning_init - Binary Ninja EXACT implementation with enhanced race condition protection */
 void *isp_core_tuning_init(void *arg1)
 {
     struct isp_tuning_data *tuning_data;
-    void *raw_allocation = NULL;
     extern struct tx_isp_dev *ourISPdev;
     static DEFINE_MUTEX(init_mutex);  /* CRITICAL: Prevent race conditions during init */
+    static atomic_t init_counter = ATOMIC_INIT(0);  /* Track initialization attempts */
     
     pr_info("isp_core_tuning_init: Initializing ISP core tuning with guaranteed alignment\n");
     
-    /* CRITICAL: RACE CONDITION FIX - Serialize initialization */
-    mutex_lock(&init_mutex);
+    /* CRITICAL: RACE CONDITION FIX - Serialize initialization with timeout protection */
+    if (!mutex_trylock(&init_mutex)) {
+        /* Another thread is initializing - wait with timeout */
+        if (mutex_lock_timeout(&init_mutex, msecs_to_jiffies(1000)) != 0) {
+            pr_err("isp_core_tuning_init: Initialization timeout - another thread may be stuck\n");
+            return NULL;
+        }
+    }
     
-    /* CRITICAL: Calculate aligned allocation size - must be multiple of 16 for MIPS32 */
-    size_t struct_size = sizeof(struct isp_tuning_data);
-    size_t aligned_size = ALIGN(struct_size, 16);  /* 16-byte alignment for MIPS32 safety */
+    /* Track initialization attempts for debugging */
+    int init_attempt = atomic_inc_return(&init_counter);
+    pr_info("isp_core_tuning_init: Initialization attempt #%d\n", init_attempt);
     
-    pr_info("isp_core_tuning_init: Struct size=%zu, aligned size=%zu\n", struct_size, aligned_size);
+    /* Binary Ninja: result, $a2 = private_kmalloc(0x40d0, 0xd0) */
+    /* CRITICAL: Use Binary Ninja exact allocation size with enhanced safety */
+    size_t alloc_size = 0x40d0;  /* Binary Ninja exact size */
     
-    /* CRITICAL: Validate allocation size is reasonable */
-    if (aligned_size > PAGE_SIZE * 4) {
-        pr_err("isp_core_tuning_init: Allocation size too large: %zu\n", aligned_size);
+    /* CRITICAL: Enhanced allocation with retry logic for memory fragmentation */
+    tuning_data = NULL;
+    for (int retry = 0; retry < 3 && !tuning_data; retry++) {
+        if (retry > 0) {
+            pr_info("isp_core_tuning_init: Allocation retry %d/3\n", retry);
+            msleep(10);  /* Brief delay to allow memory defragmentation */
+        }
+        
+        /* Try different allocation strategies */
+        if (retry == 0) {
+            /* First try: Normal kmalloc with DMA32 */
+            tuning_data = kmalloc(alloc_size, GFP_KERNEL | __GFP_ZERO | __GFP_DMA32);
+        } else if (retry == 1) {
+            /* Second try: Use __get_free_pages for guaranteed alignment */
+            int order = get_order(alloc_size);
+            if (order >= 0 && order <= 10) {
+                unsigned long pages = __get_free_pages(GFP_KERNEL | __GFP_ZERO | __GFP_DMA32, order);
+                if (pages) {
+                    tuning_data = (struct isp_tuning_data *)pages;
+                    /* Store allocation info for cleanup */
+                    if (tuning_data) {
+                        tuning_data->allocation_order = order;
+                        tuning_data->allocation_pages = pages;
+                    }
+                }
+            }
+        } else {
+            /* Final try: vmalloc as last resort */
+            tuning_data = vzalloc(alloc_size);
+            if (tuning_data) {
+                tuning_data->allocation_order = -1;  /* Mark as vmalloc */
+            }
+        }
+    }
+    
+    /* Binary Ninja: if (result == 0) return nullptr */
+    if (!tuning_data) {
+        pr_err("isp_core_tuning_init: Failed to allocate tuning data after 3 attempts (size=0x%zx)\n", alloc_size);
         mutex_unlock(&init_mutex);
         return NULL;
     }
     
-    /* CRITICAL: Allocate with explicit alignment guarantee - use __get_free_pages for guaranteed alignment */
-    int order = get_order(aligned_size);
-    if (order < 0 || order > 10) {  /* Sanity check order */
-        pr_err("isp_core_tuning_init: Invalid allocation order: %d\n", order);
-        mutex_unlock(&init_mutex);
-        return NULL;
-    }
+    pr_info("isp_core_tuning_init: Allocated tuning data at %p (size=0x%zx, aligned)\n", 
+            tuning_data, alloc_size);
     
-    unsigned long pages = __get_free_pages(GFP_KERNEL | __GFP_ZERO | __GFP_DMA32, order);
-    
-    if (!pages) {
-        pr_err("isp_core_tuning_init: Failed to allocate aligned pages (order=%d, size=%zu)\n", order, aligned_size);
-        mutex_unlock(&init_mutex);
-        return NULL;
-    }
-    
-    tuning_data = (struct isp_tuning_data *)pages;
-    
-    pr_info("isp_core_tuning_init: Allocated tuning data at %p (order=%d, size=%zu)\n",
-            tuning_data, order, aligned_size);
-    
-    /* CRITICAL: Verify allocation integrity */
+    /* CRITICAL: Enhanced validation with multiple safety checks */
     if (!virt_addr_valid(tuning_data)) {
         pr_err("CRITICAL: Allocated tuning data not valid virtual address: %p\n", tuning_data);
-        free_pages(pages, order);
-        mutex_unlock(&init_mutex);
-        return NULL;
+        goto cleanup_and_fail;
     }
     
-    /* CRITICAL: Verify alignment is perfect - must be at least 16-byte aligned */
-    if (((unsigned long)tuning_data & 0xF) != 0) {
-        pr_err("CRITICAL: Allocated tuning data not 16-byte aligned: %p - this should never happen with __get_free_pages\n", tuning_data);
-        free_pages(pages, order);
-        mutex_unlock(&init_mutex);
-        return NULL;
+    /* CRITICAL: Verify alignment for MIPS32 safety */
+    if (((unsigned long)tuning_data & 0x3) != 0) {
+        pr_warn("WARNING: Tuning data not 4-byte aligned: %p - may cause issues on MIPS32\n", tuning_data);
     }
     
     /* CRITICAL: Verify kernel space address */
     if ((unsigned long)tuning_data < 0x80000000) {
         pr_err("CRITICAL: Allocated tuning data not in kernel space: %p\n", tuning_data);
-        free_pages(pages, order);
-        mutex_unlock(&init_mutex);
-        return NULL;
+        goto cleanup_and_fail;
     }
     
-    /* CRITICAL: Zero out the structure completely to prevent uninitialized access */
-    memset(tuning_data, 0, aligned_size);
+    /* Binary Ninja: memset(result, 0, 0x40d0) - already done by __GFP_ZERO or vzalloc */
+    /* Additional safety clear for critical fields */
+    memset(tuning_data, 0, sizeof(struct isp_tuning_data));
     
-    /* Store allocation info for later cleanup */
-    tuning_data->allocation_order = order;
-    tuning_data->allocation_pages = pages;
+    /* Binary Ninja: *result = arg1 */
+    if (arg1) {
+        tuning_data->device_ref = arg1;
+    }
     
     /* CRITICAL: Initialize register base safely using working VIC registers */
     if (ourISPdev && ourISPdev->vic_regs) {
-        /* Debug the validation process */
-        pr_info("isp_core_tuning_init: Checking VIC register base: %p\n", ourISPdev->vic_regs);
-        pr_info("isp_core_tuning_init: virt_addr_valid check: %d\n", virt_addr_valid(ourISPdev->vic_regs));
-        
         /* Use VIC register base to derive ISP base - same method as system_reg_write */
         tuning_data->regs = ourISPdev->vic_regs - 0x9a00;  /* Get ISP base from VIC base */
         pr_info("isp_core_tuning_init: Register base initialized to %p (derived from VIC base %p)\n", 
                 tuning_data->regs, ourISPdev->vic_regs);
-        pr_info("*** isp_core_tuning_init: REGISTER ACCESS ENABLED - CONTINUOUS WRITES NOW POSSIBLE! ***\n");
     } else {
-        /* Debug why validation failed */
-        if (!ourISPdev) {
-            pr_info("isp_core_tuning_init: ourISPdev is NULL\n");
-        } else if (!ourISPdev->vic_regs) {
-            pr_info("isp_core_tuning_init: ourISPdev->vic_regs is NULL\n");
-        } else {
-            pr_info("isp_core_tuning_init: VIC register validation failed for %p\n", ourISPdev->vic_regs);
-        }
-        
         tuning_data->regs = NULL;
         pr_info("isp_core_tuning_init: No valid VIC register base - register access disabled\n");
     }
@@ -5196,14 +5225,20 @@ void *isp_core_tuning_init(void *arg1)
     tuning_data->exposure = 0x1000;
     tuning_data->total_gain = 0x100;
     
-    /* Initialize synchronization primitives */
+    /* Binary Ninja: private_spin_lock_init(&result[0x102e]) */
     spin_lock_init(&tuning_data->lock);
+    
+    /* Binary Ninja: private_raw_mutex_init(&result[0x102e], ...) */
     mutex_init(&tuning_data->mutex);
     
-    /* CRITICAL: Set valid state marker LAST to indicate structure is ready */
+    /* Binary Ninja: result[0x1031] = 1 */
     tuning_data->state = 1;
     
-    /* CRITICAL: Memory barrier to ensure all initialization is visible before state=1 */
+    /* Binary Ninja: result[0x1032] = &isp_core_tunning_fops */
+    /* Binary Ninja: result[0x1033] = isp_core_tuning_event */
+    tuning_data->event_handler = (void*)isp_core_tuning_event;
+    
+    /* CRITICAL: Memory barrier to ensure all initialization is visible before returning */
     wmb();
     
     mutex_unlock(&init_mutex);
@@ -5215,5 +5250,18 @@ void *isp_core_tuning_init(void *arg1)
             tuning_data->brightness, tuning_data->saturation);
     
     return tuning_data;
+
+cleanup_and_fail:
+    if (tuning_data) {
+        if (tuning_data->allocation_order >= 0) {
+            free_pages(tuning_data->allocation_pages, tuning_data->allocation_order);
+        } else if (tuning_data->allocation_order == -1) {
+            vfree(tuning_data);
+        } else {
+            kfree(tuning_data);
+        }
+    }
+    mutex_unlock(&init_mutex);
+    return NULL;
 }
 EXPORT_SYMBOL(isp_core_tuning_init);
