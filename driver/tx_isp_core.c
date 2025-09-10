@@ -446,6 +446,65 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
+/**
+ * tx_isp_configure_vic_interrupts - CRITICAL: Configure VIC hardware interrupts
+ * This function enables the VIC hardware to generate interrupts on frame completion
+ * This is what was missing - the hardware interrupt enable!
+ */
+static int tx_isp_configure_vic_interrupts(struct tx_isp_dev *isp_dev)
+{
+    void __iomem *vic_regs;
+    u32 reg_val;
+    
+    if (!isp_dev || !isp_dev->vic_regs) {
+        pr_err("tx_isp_configure_vic_interrupts: Invalid ISP device or VIC registers\n");
+        return -EINVAL;
+    }
+    
+    vic_regs = isp_dev->vic_regs;
+    
+    pr_info("*** tx_isp_configure_vic_interrupts: Configuring VIC hardware interrupts ***\n");
+    
+    /* CRITICAL: Enable VIC frame completion interrupts */
+    /* This is the register write that enables hardware interrupt generation */
+    
+    /* VIC Interrupt Enable Register - enable frame done interrupt */
+    reg_val = readl(vic_regs + 0x10);  /* VIC_INT_EN register */
+    reg_val |= 0x1;  /* Enable frame done interrupt bit */
+    writel(reg_val, vic_regs + 0x10);
+    wmb();
+    
+    /* VIC Interrupt Mask Register - unmask frame done interrupt */
+    reg_val = readl(vic_regs + 0x14);  /* VIC_INT_MASK register */
+    reg_val &= ~0x1;  /* Unmask frame done interrupt bit */
+    writel(reg_val, vic_regs + 0x14);
+    wmb();
+    
+    /* VIC Control Register - enable interrupt generation */
+    reg_val = readl(vic_regs + 0x00);  /* VIC_CTRL register */
+    reg_val |= 0x100;  /* Enable interrupt output */
+    writel(reg_val, vic_regs + 0x00);
+    wmb();
+    
+    /* Clear any pending interrupts */
+    writel(0x1, vic_regs + 0x18);  /* VIC_INT_CLR register */
+    wmb();
+    
+    pr_info("*** tx_isp_configure_vic_interrupts: VIC interrupt registers configured ***\n");
+    pr_info("*** VIC_INT_EN: 0x%08x ***\n", readl(vic_regs + 0x10));
+    pr_info("*** VIC_INT_MASK: 0x%08x ***\n", readl(vic_regs + 0x14));
+    pr_info("*** VIC_CTRL: 0x%08x ***\n", readl(vic_regs + 0x00));
+    
+    /* Now enable the system IRQ */
+    pr_info("*** tx_isp_configure_vic_interrupts: Enabling system IRQ %d ***\n", isp_irq_info.irq_number);
+    tx_isp_enable_irq(&isp_irq_info);
+    
+    pr_info("*** tx_isp_configure_vic_interrupts: VIC interrupts fully configured and enabled ***\n");
+    pr_info("*** Hardware should now generate interrupts on frame completion! ***\n");
+    
+    return 0;
+}
+
 /* tx_isp_request_irq - FIXED to use global IRQ info structure */
 static int tx_isp_request_irq(struct platform_device *pdev, void *unused_param)
 {
