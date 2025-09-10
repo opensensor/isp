@@ -543,13 +543,14 @@ static int tx_isp_create_basic_pipeline(struct tx_isp_dev *isp)
     }
 
     /* Setup pipeline */
-    ret = tx_isp_setup_pipeline(isp);
-    if (ret < 0) {
-        pr_err("Failed to setup pipeline: %d\n", ret);
-        tx_isp_vic_device_deinit(isp);
-        tx_isp_csi_device_deinit(isp);
-        return ret;
-    }
+    // TODO
+//    ret = tx_isp_setup_pipeline(isp);
+//    if (ret < 0) {
+//        pr_err("Failed to setup pipeline: %d\n", ret);
+//        tx_isp_vic_device_deinit(isp);
+//        tx_isp_csi_device_deinit(isp);
+//        return ret;
+//    }
 
     pr_info("tx_isp_create_basic_pipeline: Basic pipeline created successfully\n");
     return 0;
