@@ -1367,7 +1367,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(4, vic_regs + 0x0);
 
         /* Wait for unlock completion */
-        timeout = 10000;
+        int timeout = 10000;
         while (timeout > 0 && readl(vic_regs + 0x0) != 0) {
             udelay(1);
             timeout--;
