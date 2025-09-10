@@ -2051,15 +2051,17 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     if (enable) {
         /* Start VIC streaming - CRITICAL FIX: Call tx_isp_vic_start FIRST */
         if (vic_dev->state != 4) { /* Not already streaming */
+
+        	pr_info("VIC enable: state is %d\n",vic_dev->state);
             
-//            /* *** CRITICAL FIX: Call tx_isp_vic_start to set vic_start_ok = 1 *** */
-//            pr_info("*** VIC: CRITICAL FIX - calling tx_isp_vic_start BEFORE streaming ***\n");
-//            ret = tx_isp_vic_start(vic_dev);
-//            if (ret != 0) {
-//                pr_err("VIC: tx_isp_vic_start failed: %d - ABORTING stream start\n", ret);
-//                goto unlock_exit;
-//            }
-//            pr_info("*** VIC: tx_isp_vic_start SUCCESS - vic_start_ok should now be 1 ***\n");
+            /* *** CRITICAL FIX: Call tx_isp_vic_start to set vic_start_ok = 1 *** */
+            pr_info("*** VIC: CRITICAL FIX - calling tx_isp_vic_start BEFORE streaming ***\n");
+            ret = tx_isp_vic_start(vic_dev);
+            if (ret != 0) {
+                pr_err("VIC: tx_isp_vic_start failed: %d - ABORTING stream start\n", ret);
+                goto unlock_exit;
+            }
+            pr_info("*** VIC: tx_isp_vic_start SUCCESS - vic_start_ok should now be 1 ***\n");
             
             /* Now start the streaming */
             pr_info("VIC: Starting streaming - calling ispvic_frame_channel_s_stream(1)\n");
