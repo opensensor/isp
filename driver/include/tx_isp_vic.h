@@ -82,8 +82,8 @@ int sensor_early_init(void *core_dev);
 /* VIC Operation Structures - exported from implementation */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
 
-/* Dynamic timing negotiation function */
-int vic_dynamic_timing_negotiation(struct tx_isp_vic_device *vic_dev);
+/* Dynamic timing negotiation function - implemented in tx_isp_vic_dynamic.c */
+/* int vic_dynamic_timing_negotiation(struct tx_isp_vic_device *vic_dev); */
 
 
 // VIC device structure - simplified without dangerous offset arithmetic
