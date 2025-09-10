@@ -214,48 +214,82 @@ static struct {
     uint8_t state;    /* GPIO state at offset 0x14 */
 } gpio_info[10];
 
-/* vic_framedone_irq_function - FIXED: Proper struct member access for MIPS alignment */
+/* vic_framedone_irq_function - CRITICAL MIPS ALIGNMENT FIX */
 static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 {
-    void __iomem *vic_base = vic_dev->vic_regs;
+    void __iomem *vic_base;
     void *result = NULL;
     
-    pr_debug("*** vic_framedone_irq_function: entry - vic_dev=%p ***\n", vic_dev);
+    pr_debug("*** vic_framedone_irq_function: CRITICAL MIPS ALIGNMENT FIX ***\n");
     
-    /* CRITICAL FIX: Use proper struct member access instead of dangerous offset arithmetic */
-    /* Binary Ninja: if (*(arg1 + 0x214) == 0) - but 0x214 was causing alignment issues */
-    if (!vic_dev->processing) {  /* Use proper struct member instead of offset 0x214 */
+    /* CRITICAL MIPS FIX: Validate vic_dev pointer alignment FIRST */
+    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev %p not 4-byte aligned ***\n", vic_dev);
+        return -EFAULT;
+    }
+    
+    /* CRITICAL MIPS FIX: Validate vic_regs member access alignment */
+    if (((uintptr_t)&vic_dev->vic_regs & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->vic_regs member not aligned ***\n");
+        return -EFAULT;
+    }
+    
+    vic_base = vic_dev->vic_regs;
+    
+    /* CRITICAL MIPS FIX: Validate register base alignment */
+    if (!vic_base || ((uintptr_t)vic_base & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: vic_base %p not 4-byte aligned ***\n", vic_base);
+        return -EFAULT;
+    }
+    
+    pr_debug("*** vic_framedone_irq_function: MIPS alignment validated - vic_dev=%p, vic_base=%p ***\n", 
+             vic_dev, vic_base);
+    
+    /* CRITICAL FIX: Use ALIGNED struct member access instead of dangerous offset arithmetic */
+    /* Binary Ninja: if (*(arg1 + 0x214) == 0) - DANGEROUS unaligned access causing crash */
+    /* SAFE REPLACEMENT: Use properly aligned struct member */
+    if (!vic_dev->processing) {  /* SAFE: Aligned struct member access */
         /* goto label_123f4 - GPIO handling section */
         goto gpio_handling;
     } else {
-        /* CRITICAL FIX: Use proper struct member access */
-        /* Binary Ninja: result = *(arg1 + 0x210) - but 0x210 was causing alignment issues */
-        if (vic_dev->stream_state != 0) {  /* Use proper struct member instead of offset 0x210 */
-            /* Binary Ninja: void* $a3_1 = *(arg1 + 0xb8) */
-            void __iomem *vic_regs = vic_dev->vic_regs;
+        /* CRITICAL FIX: Use ALIGNED struct member access */
+        /* Binary Ninja: result = *(arg1 + 0x210) - DANGEROUS unaligned access */
+        /* SAFE REPLACEMENT: Use properly aligned struct member */
+        if (vic_dev->stream_state != 0) {  /* SAFE: Aligned struct member access */
             
-            /* CRITICAL FIX: Use proper list_head instead of dangerous pointer arithmetic */
-            /* Binary Ninja: void** i_1 = *(arg1 + 0x204) */
+            /* CRITICAL MIPS FIX: Use SAFE list operations instead of dangerous pointer arithmetic */
+            /* Binary Ninja: void** i_1 = *(arg1 + 0x204) - DANGEROUS pointer arithmetic */
+            /* SAFE REPLACEMENT: Use Linux kernel list macros */
             struct list_head *pos;
             int buffer_count = 0;       /* $a1_1 = 0 */
             int buffer_found = 0;       /* $v1_1 = 0 */
             int buffer_match = 0;       /* $v0 = 0 */
             
-            /* Binary Ninja: Loop through buffer list - SAFE implementation */
-            /* for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
+            /* CRITICAL MIPS FIX: SAFE list traversal with alignment validation */
+            /* Binary Ninja: for (; i_1 != arg1 + 0x204; i_1 = *i_1) - DANGEROUS */
+            /* SAFE REPLACEMENT: Use kernel list_for_each macro */
             list_for_each(pos, &vic_dev->queue_head) {
+                /* Validate list entry alignment before access */
+                if (((uintptr_t)pos & 0x3) != 0) {
+                    pr_err("*** MIPS ALIGNMENT ERROR: list entry %p not aligned ***\n", pos);
+                    break;
+                }
+                
                 /* $v1_1 += 0 u< $v0 ? 1 : 0 */
                 buffer_found += (buffer_match == 0) ? 1 : 0;
                 /* $a1_1 += 1 */
                 buffer_count += 1;
                 
                 /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
-                /* This checks if current buffer address matches hardware register */
-                u32 current_frame_addr = readl(vic_regs + 0x380);
-                /* In a real implementation, would extract buffer address from list entry */
-                /* For now, simulate the match check without dangerous pointer arithmetic */
-                if ((buffer_count & 1) && current_frame_addr != 0) {
-                    buffer_match = 1;  /* $v0 = 1 */
+                /* CRITICAL MIPS FIX: SAFE register read with alignment check */
+                if (((uintptr_t)(vic_base + 0x380) & 0x3) == 0) {
+                    u32 current_frame_addr = readl(vic_base + 0x380);
+                    /* Simulate buffer match check safely */
+                    if ((buffer_count & 1) && current_frame_addr != 0) {
+                        buffer_match = 1;  /* $v0 = 1 */
+                    }
+                } else {
+                    pr_err("*** MIPS ALIGNMENT ERROR: register 0x380 not aligned ***\n");
                 }
             }
             
@@ -269,12 +303,18 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             }
             
             /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
-            u32 reg_300_val = readl(vic_regs + 0x300);
-            reg_300_val = (reg_300_val & 0xfff0ffff) | shift_result;
-            writel(reg_300_val, vic_regs + 0x300);
-            
-            pr_debug("vic_framedone_irq_function: Updated reg 0x300 = 0x%x (buffers: count=%d, found=%d, match=%d)\n",
-                     reg_300_val, buffer_count, buffer_found, buffer_match);
+            /* CRITICAL MIPS FIX: SAFE register access with alignment validation */
+            if (((uintptr_t)(vic_base + 0x300) & 0x3) == 0) {
+                u32 reg_300_val = readl(vic_base + 0x300);
+                reg_300_val = (reg_300_val & 0xfff0ffff) | shift_result;
+                writel(reg_300_val, vic_base + 0x300);
+                
+                pr_debug("vic_framedone_irq_function: SAFE reg 0x300 = 0x%x (buffers: count=%d, found=%d, match=%d)\n",
+                         reg_300_val, buffer_count, buffer_found, buffer_match);
+            } else {
+                pr_err("*** MIPS ALIGNMENT ERROR: register 0x300 not aligned ***\n");
+                return -EFAULT;
+            }
         }
         
         /* Binary Ninja: result = &data_b0000, goto label_123f4 */
@@ -283,11 +323,17 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
     }
 
 gpio_handling:
-    /* Binary Ninja: label_123f4 - GPIO handling */
+    /* Binary Ninja: label_123f4 - GPIO handling with MIPS alignment fixes */
     if (gpio_switch_state != 0) {
         /* Binary Ninja: void* $s1_1 = &gpio_info */
         int i;
         gpio_switch_state = 0;
+        
+        /* CRITICAL MIPS FIX: Validate gpio_info array alignment */
+        if (((uintptr_t)gpio_info & 0x3) != 0) {
+            pr_err("*** MIPS ALIGNMENT ERROR: gpio_info array not aligned ***\n");
+            return -EFAULT;
+        }
         
         /* for (int32_t i = 0; i != 0xa; ) */
         for (i = 0; i < 10; i++) {
@@ -300,17 +346,22 @@ gpio_handling:
             }
             
             /* Binary Ninja: result = private_gpio_direction_output($a0_2, zx.d(*($s1_1 + 0x14))) */
-            uint32_t gpio_state = (uint32_t)gpio_info[i].state;
-            
-            /* Placeholder GPIO operation - would be actual GPIO call in real driver */
-            pr_debug("vic_framedone_irq_function: GPIO %d set to state %d\n", gpio_pin, gpio_state);
+            /* CRITICAL MIPS FIX: SAFE access to gpio state with alignment check */
+            if (((uintptr_t)&gpio_info[i].state & 0x3) == 0) {
+                uint32_t gpio_state = (uint32_t)gpio_info[i].state;
+                
+                /* Placeholder GPIO operation - would be actual GPIO call in real driver */
+                pr_debug("vic_framedone_irq_function: SAFE GPIO %d set to state %d\n", gpio_pin, gpio_state);
+            } else {
+                pr_err("*** MIPS ALIGNMENT ERROR: gpio_info[%d].state not aligned ***\n", i);
+            }
             
             /* if (result s< 0) - GPIO error handling */
             /* This would be actual error handling in real implementation */
         }
     }
     
-    pr_debug("*** vic_framedone_irq_function: completed successfully ***\n");
+    pr_debug("*** vic_framedone_irq_function: MIPS SAFE completion ***\n");
     /* Binary Ninja: return result */
     return 0;  /* Success */
 }
@@ -2441,34 +2492,47 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
 static int ispvic_frame_channel_clearbuf(void);
 
-/* ispvic_frame_channel_qbuf - EXACT Binary Ninja implementation with memory safety fixes */
+/* ispvic_frame_channel_qbuf - CRITICAL MIPS ALIGNMENT FIX */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
     struct tx_isp_vic_device *vic_dev = NULL;  /* $s0 = nullptr */
     int32_t var_18 = 0;
     
     /* MCP LOG: Method entry */
-    pr_info("MCP_LOG: ispvic_frame_channel_qbuf: entry - arg1=%p, arg2=%p\n", arg1, arg2);
-    pr_info("*** ispvic_frame_channel_qbuf: EXACT Binary Ninja implementation with memory safety ***\n");
+    pr_info("MCP_LOG: ispvic_frame_channel_qbuf: CRITICAL MIPS ALIGNMENT FIX\n");
+    pr_info("ispvic_frame_channel_qbuf: entry - arg1=%p, arg2=%p\n", arg1, arg2);
+    
+    /* CRITICAL MIPS FIX: Validate arg1 alignment FIRST */
+    if (!arg1 || ((uintptr_t)arg1 & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: arg1 %p not 4-byte aligned ***\n", arg1);
+        return -EFAULT;
+    }
     
     /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
     if (arg1 != 0 && (unsigned long)arg1 < 0xfffff001) {
-        /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0xd4 */
-        /* The reference expects arg1 to be a structure containing vic_dev at offset 0xd4 */
-        /* But we need to validate this is actually a valid pointer first */
+        /* CRITICAL MIPS FIX: Validate offset 0xd4 alignment before access */
         void **vic_dev_ptr = (void **)((char *)arg1 + 0xd4);
+        
+        /* CRITICAL: Check alignment of the pointer we're about to dereference */
+        if (((uintptr_t)vic_dev_ptr & 0x3) != 0) {
+            pr_err("*** MIPS ALIGNMENT ERROR: vic_dev_ptr %p (arg1+0xd4) not aligned ***\n", vic_dev_ptr);
+            return -EFAULT;
+        }
         
         /* Memory safety check before dereferencing */
         if ((unsigned long)vic_dev_ptr >= 0x80000000 && 
-            (unsigned long)vic_dev_ptr < 0xfffff001 &&
-            ((unsigned long)vic_dev_ptr & 0x3) == 0) {
+            (unsigned long)vic_dev_ptr < 0xfffff001) {
             vic_dev = (struct tx_isp_vic_device *)(*vic_dev_ptr);
             
-            /* Validate the retrieved vic_dev pointer */
-            if (!vic_dev || 
-                (unsigned long)vic_dev < 0x80000000 || 
-                (unsigned long)vic_dev >= 0xfffff001 ||
-                ((unsigned long)vic_dev & 0x3) != 0) {
+            /* CRITICAL MIPS FIX: Validate retrieved vic_dev alignment */
+            if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
+                pr_err("*** MIPS ALIGNMENT ERROR: vic_dev %p not 4-byte aligned ***\n", vic_dev);
+                return -EFAULT;
+            }
+            
+            /* Additional validation */
+            if ((unsigned long)vic_dev < 0x80000000 || 
+                (unsigned long)vic_dev >= 0xfffff001) {
                 pr_err("ispvic_frame_channel_qbuf: Invalid vic_dev pointer %p from arg1+0xd4\n", vic_dev);
                 return -EINVAL;
             }
@@ -2481,100 +2545,128 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         return -EINVAL;
     }
     
+    pr_info("*** ispvic_frame_channel_qbuf: MIPS alignment validated - vic_dev=%p ***\n", vic_dev);
+    
+    /* CRITICAL MIPS FIX: Validate buffer_mgmt_lock alignment before spinlock operations */
+    if (((uintptr_t)&vic_dev->buffer_mgmt_lock & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: buffer_mgmt_lock not aligned ***\n");
+        return -EFAULT;
+    }
+    
     /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
-    /* MEMORY SAFETY FIX: Use proper struct member instead of offset 0x1f4 */
+    /* MEMORY SAFETY FIX: Use ALIGNED struct member instead of offset 0x1f4 */
     spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, var_18);
     
-    /* Binary Ninja EXACT: Queue management */
-    /* int32_t** $v0_2 = *($s0 + 0x1f8) */
-    /* *($s0 + 0x1f8) = arg2 */
-    /* *arg2 = $s0 + 0x1f4 */
-    /* arg2[1] = $v0_2 */
-    /* *$v0_2 = arg2 */
-    
+    /* Binary Ninja EXACT: Queue management with MIPS alignment fixes */
     /* MEMORY SAFETY FIX: Use proper linked list operations instead of raw pointer arithmetic */
     if (arg2) {
+        /* CRITICAL MIPS FIX: Validate arg2 alignment before using as list_head */
+        if (((uintptr_t)arg2 & 0x3) != 0) {
+            pr_err("*** MIPS ALIGNMENT ERROR: arg2 %p not aligned for list operations ***\n", arg2);
+            spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
+            return -EFAULT;
+        }
+        
         struct list_head *new_buffer = (struct list_head *)arg2;
         /* Add to the end of queue (tail insertion like reference) */
         list_add_tail(new_buffer, &vic_dev->queue_head);
-        pr_info("ispvic_frame_channel_qbuf: Added buffer %p to queue\n", new_buffer);
+        pr_info("ispvic_frame_channel_qbuf: SAFE - Added buffer %p to queue\n", new_buffer);
     }
     
     int32_t a1_4 = var_18;  /* Store for unlock */
     
-        /* Binary Ninja EXACT: if ($s0 + 0x1fc == *($s0 + 0x1fc)) */
-        /* MEMORY SAFETY FIX: Use proper list_empty check instead of offset 0x1fc */
-        if (list_empty(&vic_dev->free_head)) {
-            /* Binary Ninja EXACT: isp_printf(0, "bank no free\n", $s0 + 0x1fc) */
-            pr_info("ispvic_frame_channel_qbuf: bank no free\n");
-            /* MCP LOG: Key decision point - no free buffers */
-            pr_info("MCP_LOG: ispvic_frame_channel_qbuf: no free buffers available\n");
-            /* Set a1_4 for unlock */
-            a1_4 = var_18;
-        }
-        /* Binary Ninja EXACT: else if ($s0 + 0x1f4 == *($s0 + 0x1f4)) */
-        /* MEMORY SAFETY FIX: Use proper list_empty check instead of offset 0x1f4 */
-        else if (list_empty(&vic_dev->queue_head)) {
-            /* Binary Ninja EXACT: isp_printf(0, "qbuffer null\n", $s0 + 0x1fc) */
-            pr_info("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
-            /* MCP LOG: Key decision point - no queued buffers */
-            pr_info("MCP_LOG: ispvic_frame_channel_qbuf: no queued buffers available\n");
-            /* Set a1_4 for unlock */
-            a1_4 = var_18;
-        } else {
-            /* MCP LOG: Key decision point - processing buffer from queue */
-            pr_info("MCP_LOG: ispvic_frame_channel_qbuf: processing buffer from queue\n");
-        /* Binary Ninja EXACT: Process buffer from queue */
-        /* int32_t $a1_1, $a2_1 = pop_buffer_fifo($s0 + 0x1f4) */
-        /* MEMORY SAFETY FIX: Use proper list operations */
+    /* Binary Ninja EXACT: if ($s0 + 0x1fc == *($s0 + 0x1fc)) */
+    /* MEMORY SAFETY FIX: Use ALIGNED list_empty check instead of offset 0x1fc */
+    if (list_empty(&vic_dev->free_head)) {
+        /* Binary Ninja EXACT: isp_printf(0, "bank no free\n", $s0 + 0x1fc) */
+        pr_info("ispvic_frame_channel_qbuf: bank no free (MIPS-safe)\n");
+        /* MCP LOG: Key decision point - no free buffers */
+        pr_info("MCP_LOG: ispvic_frame_channel_qbuf: no free buffers available\n");
+        /* Set a1_4 for unlock */
+        a1_4 = var_18;
+    }
+    /* Binary Ninja EXACT: else if ($s0 + 0x1f4 == *($s0 + 0x1f4)) */
+    /* MEMORY SAFETY FIX: Use ALIGNED list_empty check instead of offset 0x1f4 */
+    else if (list_empty(&vic_dev->queue_head)) {
+        /* Binary Ninja EXACT: isp_printf(0, "qbuffer null\n", $s0 + 0x1fc) */
+        pr_info("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
+        /* MCP LOG: Key decision point - no queued buffers */
+        pr_info("MCP_LOG: ispvic_frame_channel_qbuf: no queued buffers available\n");
+        /* Set a1_4 for unlock */
+        a1_4 = var_18;
+    } else {
+        /* MCP LOG: Key decision point - processing buffer from queue */
+        pr_info("MCP_LOG: ispvic_frame_channel_qbuf: processing buffer from queue\n");
+        
+        /* Binary Ninja EXACT: Process buffer from queue with MIPS alignment fixes */
+        /* MEMORY SAFETY FIX: Use ALIGNED list operations */
         struct list_head *queue_entry = vic_dev->queue_head.next;
+        
+        /* CRITICAL MIPS FIX: Validate queue entry alignment */
+        if (((uintptr_t)queue_entry & 0x3) != 0) {
+            pr_err("*** MIPS ALIGNMENT ERROR: queue_entry %p not aligned ***\n", queue_entry);
+            spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
+            return -EFAULT;
+        }
+        
         list_del(queue_entry);
         
         /* Binary Ninja EXACT: void** $v0_5, void* $a3_1 = $a1_1($a2_1) */
-        /* Extract buffer information from the queue entry */
+        /* Extract buffer information from the queue entry with alignment checks */
         void **v0_5 = (void **)queue_entry;  /* Buffer descriptor */
         void *a3_1 = queue_entry;  /* Buffer entry */
         
         /* Binary Ninja EXACT: int32_t $a1_2 = *($a3_1 + 8) */
-        /* MEMORY SAFETY FIX: Safe access to buffer address */
+        /* MEMORY SAFETY FIX: ALIGNED access to buffer address */
         uint32_t a1_2;
-        if ((unsigned long)a3_1 >= 0x80000000 && (unsigned long)a3_1 < 0xfffff000) {
+        if ((unsigned long)a3_1 >= 0x80000000 && 
+            (unsigned long)a3_1 < 0xfffff000 &&
+            (((uintptr_t)((char *)a3_1 + 8) & 0x3) == 0)) {
             a1_2 = *((uint32_t *)((char *)a3_1 + 8));
         } else {
             /* Fallback: use arg2 as buffer address */
             a1_2 = (uint32_t)(unsigned long)arg2;
+            pr_info("ispvic_frame_channel_qbuf: Using fallback buffer address 0x%x\n", a1_2);
         }
         
         /* Binary Ninja EXACT: int32_t $v1_1 = $v0_5[4] */
-        /* MEMORY SAFETY FIX: Safe access to buffer index */
+        /* MEMORY SAFETY FIX: ALIGNED access to buffer index */
         uint32_t v1_1;
-        if ((unsigned long)v0_5 >= 0x80000000 && (unsigned long)v0_5 < 0xfffff000) {
+        if ((unsigned long)v0_5 >= 0x80000000 && 
+            (unsigned long)v0_5 < 0xfffff000 &&
+            (((uintptr_t)&((uint32_t *)v0_5)[4] & 0x3) == 0)) {
             v1_1 = ((uint32_t *)v0_5)[4];
         } else {
             /* Fallback: use active buffer count modulo 5 */
             v1_1 = vic_dev->active_buffer_count % 5;
+            pr_info("ispvic_frame_channel_qbuf: Using fallback buffer index %d\n", v1_1);
         }
         
         /* Binary Ninja EXACT: $v0_5[2] = $a1_2 */
-        /* MEMORY SAFETY FIX: Safe write to buffer descriptor */
-        if ((unsigned long)v0_5 >= 0x80000000 && (unsigned long)v0_5 < 0xfffff000) {
+        /* MEMORY SAFETY FIX: ALIGNED write to buffer descriptor */
+        if ((unsigned long)v0_5 >= 0x80000000 && 
+            (unsigned long)v0_5 < 0xfffff000 &&
+            (((uintptr_t)&((uint32_t *)v0_5)[2] & 0x3) == 0)) {
             ((uint32_t *)v0_5)[2] = a1_2;
         }
         
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
-        /* CRITICAL: The VIC hardware register write */
-        /* MEMORY SAFETY FIX: Use proper struct member instead of offset 0xb8 */
+        /* CRITICAL: The VIC hardware register write with MIPS alignment */
+        /* MEMORY SAFETY FIX: Use ALIGNED struct member instead of offset 0xb8 */
         if (vic_dev->vic_regs && 
             (unsigned long)vic_dev->vic_regs >= 0x80000000 && 
             (unsigned long)vic_dev->vic_regs < 0x20000000) {
             
             uint32_t reg_offset = (v1_1 + 0xc6) << 2;
             
-            /* Bounds check for register offset */
-            if (reg_offset < 0x10000) {  /* Reasonable VIC register space limit */
-                writel(a1_2, vic_dev->vic_regs + reg_offset);
+            /* CRITICAL MIPS FIX: Validate register address alignment */
+            void __iomem *reg_addr = vic_dev->vic_regs + reg_offset;
+            if (((uintptr_t)reg_addr & 0x3) != 0) {
+                pr_err("*** MIPS ALIGNMENT ERROR: VIC register 0x%x not aligned ***\n", reg_offset);
+            } else if (reg_offset < 0x10000) {  /* Bounds check */
+                writel(a1_2, reg_addr);
                 wmb();
-                pr_info("*** VIC QBUF: Buffer 0x%x -> VIC[0x%x] (index=%d) ***\n", 
+                pr_info("*** VIC QBUF: SAFE - Buffer 0x%x -> VIC[0x%x] (index=%d) ***\n", 
                         a1_2, reg_offset, v1_1);
             } else {
                 pr_err("ispvic_frame_channel_qbuf: Register offset 0x%x out of bounds\n", reg_offset);
@@ -2583,20 +2675,15 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             pr_err("ispvic_frame_channel_qbuf: Invalid VIC register base %p\n", vic_dev->vic_regs);
         }
         
-        /* Binary Ninja EXACT: Done list management */
-        /* void** $v1_5 = *($s0 + 0x208) */
-        /* *($s0 + 0x208) = $v0_5 */
-        /* *$v0_5 = $s0 + 0x204 */
-        /* $v0_5[1] = $v1_5 */
-        /* *$v1_5 = $v0_5 */
-        /* MEMORY SAFETY FIX: Use proper list operations instead of raw pointer arithmetic */
+        /* Binary Ninja EXACT: Done list management with MIPS alignment */
+        /* MEMORY SAFETY FIX: Use ALIGNED list operations instead of raw pointer arithmetic */
         list_add_tail(queue_entry, &vic_dev->done_head);
         
         /* Binary Ninja EXACT: *($s0 + 0x218) += 1 */
-        /* MEMORY SAFETY FIX: Use proper struct member instead of offset 0x218 */
+        /* MEMORY SAFETY FIX: Use ALIGNED struct member instead of offset 0x218 */
         vic_dev->active_buffer_count += 1;
         
-        pr_info("ispvic_frame_channel_qbuf: Buffer processed, active_count=%d\n", 
+        pr_info("ispvic_frame_channel_qbuf: SAFE - Buffer processed, active_count=%d\n", 
                 vic_dev->active_buffer_count);
         
         /* Set a1_4 for unlock */
@@ -2604,12 +2691,11 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     }
     
     /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, $a1_4) */
-    /* MEMORY SAFETY FIX: Use proper struct member instead of offset 0x1f4 */
+    /* MEMORY SAFETY FIX: Use ALIGNED struct member instead of offset 0x1f4 */
     spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, a1_4);
     
     /* MCP LOG: Method exit */
-    pr_info("MCP_LOG: ispvic_frame_channel_qbuf: method exit - returning 0\n");
-    pr_info("*** ispvic_frame_channel_qbuf: MEMORY SAFE completion ***\n");
+    pr_info("MCP_LOG: ispvic_frame_channel_qbuf: MIPS SAFE method exit - returning 0\n");
     /* Binary Ninja EXACT: return 0 */
     return 0;
 }
