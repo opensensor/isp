@@ -1975,12 +1975,12 @@ int isp_core_tuning_release(struct tx_isp_dev *dev)
         return -EINVAL;
     }
 
-    /* CRITICAL: RACE CONDITION FIX - Serialize release operations with timeout protection */
+    /* CRITICAL: RACE CONDITION FIX - Serialize release operations with proper locking */
     if (!mutex_trylock(&release_mutex)) {
-        /* Another thread is releasing - wait with timeout */
-        if (mutex_lock_timeout(&release_mutex, msecs_to_jiffies(1000)) != 0) {
-            pr_err("isp_core_tuning_release: Release timeout - another thread may be stuck\n");
-            return -EBUSY;
+        /* Another thread is releasing - wait with interruptible lock */
+        if (mutex_lock_interruptible(&release_mutex) != 0) {
+            pr_err("isp_core_tuning_release: Release interrupted - signal received\n");
+            return -EINTR;
         }
     }
     
@@ -5106,11 +5106,11 @@ void *isp_core_tuning_init(void *arg1)
     
     pr_info("isp_core_tuning_init: Initializing ISP core tuning with guaranteed alignment\n");
     
-    /* CRITICAL: RACE CONDITION FIX - Serialize initialization with timeout protection */
+    /* CRITICAL: RACE CONDITION FIX - Serialize initialization with proper locking */
     if (!mutex_trylock(&init_mutex)) {
-        /* Another thread is initializing - wait with timeout */
-        if (mutex_lock_timeout(&init_mutex, msecs_to_jiffies(1000)) != 0) {
-            pr_err("isp_core_tuning_init: Initialization timeout - another thread may be stuck\n");
+        /* Another thread is initializing - wait with interruptible lock */
+        if (mutex_lock_interruptible(&init_mutex) != 0) {
+            pr_err("isp_core_tuning_init: Initialization interrupted - signal received\n");
             return NULL;
         }
     }
