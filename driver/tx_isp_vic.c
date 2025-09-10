@@ -1858,6 +1858,28 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     /* Binary Ninja: void __iomem *vic_base = *(arg1 + 0xb8) */
     vic_base = vic_dev->vic_regs;
     
+    /* CRITICAL FIX: Ensure VIC register base is properly initialized */
+    if (!vic_base) {
+        pr_err("vic_pipo_mdma_enable: VIC register base is NULL - attempting to initialize\n");
+        
+        /* Try to get VIC registers from global ISP device */
+        if (ourISPdev && ourISPdev->vic_regs) {
+            vic_base = ourISPdev->vic_regs;
+            vic_dev->vic_regs = vic_base;
+            pr_info("vic_pipo_mdma_enable: Retrieved VIC registers from ISP device: %p\n", vic_base);
+        } else {
+            /* Last resort: direct mapping */
+            vic_base = ioremap(0x133e0000, 0x10000);
+            if (vic_base) {
+                vic_dev->vic_regs = vic_base;
+                pr_info("vic_pipo_mdma_enable: Direct mapped VIC registers: %p\n", vic_base);
+            } else {
+                pr_err("vic_pipo_mdma_enable: Failed to map VIC registers - ABORTING\n");
+                return;
+            }
+        }
+    }
+    
     /* CRITICAL: Validate VIC register base like Binary Ninja expects */
     if (!vic_base || 
         (unsigned long)vic_base < 0x80000000 ||
