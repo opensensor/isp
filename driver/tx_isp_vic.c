@@ -722,7 +722,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type, sensor_format;
     u32 timeout = 10000;
-    struct clk *isp_clk, *cgu_isp_clk;
+    struct clk *isp_clk, *cgu_isp_clk, *csi_clk;
     void __iomem *cpm_regs;
     int ret;
 
@@ -778,6 +778,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         }
     } else {
         pr_warn("STREAMING: ISP clock not found: %ld\n", PTR_ERR(isp_clk));
+    }
+
+    csi_clk = clk_get(NULL, "csi");
+    if (!IS_ERR(csi_clk)) {
+        ret = clk_prepare_enable(csi_clk);
+        if (ret == 0) {
+            pr_info("STREAMING: csi_clk clock enabled via clk framework\n");
+        } else {
+            pr_err("STREAMING: Failed to enable csi_clk clock: %d\n", ret);
+        }
     }
 
     cgu_isp_clk = clk_get(NULL, "cgu_isp");
