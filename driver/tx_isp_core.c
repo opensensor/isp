@@ -3287,25 +3287,10 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 }
 
 
-                /* CRITICAL: Request and configure ISP interrupts - THIS WAS MISSING! */
-                pr_info("*** tx_isp_core_probe: Requesting ISP interrupts (IRQ 37) ***\n");
-                result = tx_isp_request_irq(pdev, NULL);
-                if (result == 0) {
-                    pr_info("*** tx_isp_core_probe: ISP interrupts registered successfully ***\n");
-                } else {
-                    pr_err("*** tx_isp_core_probe: Failed to register ISP interrupts: %d ***\n", result);
-                    return result;
-                }
-
-                /* CRITICAL: Configure VIC interrupt registers - THIS ENABLES HARDWARE INTERRUPTS! */
-                pr_info("*** tx_isp_core_probe: Configuring VIC interrupt registers ***\n");
-                result = tx_isp_configure_vic_interrupts((struct tx_isp_dev *)core_dev);
-                if (result == 0) {
-                    pr_info("*** tx_isp_core_probe: VIC interrupts configured successfully ***\n");
-                } else {
-                    pr_err("*** tx_isp_core_probe: Failed to configure VIC interrupts: %d ***\n", result);
-                    return result;
-                }
+                /* REMOVED: Duplicate IRQ registration - this was causing multiple handlers for IRQ 37 */
+                /* The main tx_isp_init() function handles IRQ registration with Binary Ninja method */
+                pr_info("*** tx_isp_core_probe: IRQ registration handled by main module (tx_isp_init) ***\n");
+                pr_info("*** tx_isp_core_probe: This prevents duplicate 'tx-isp-core' + 'tx-isp' handlers ***\n");
 
                 /* CRITICAL: Start continuous processing - this generates the register activity your trace captures! */
                 pr_info("*** tx_isp_core_probe: Starting continuous processing system ***\n");
