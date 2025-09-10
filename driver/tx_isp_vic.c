@@ -333,6 +333,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_subdev *sd = dev_id;
     struct tx_isp_vic_device *vic_dev;
+    unsigned long timeout;
     void __iomem *vic_base;
     u32 isr_main, isr_mdma;
     irqreturn_t ret = IRQ_HANDLED;
