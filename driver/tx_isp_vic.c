@@ -19,6 +19,13 @@
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
+/* ISP Register Base Addresses and Sizes - FIX FOR CRASH */
+#define ISP_BASE_ADDR           0x13300000
+#define ISP_FULL_SIZE           0x100000    /* 1MB - covers all ISP registers */
+
+/* Global register mappings - FIX FOR CRASH */
+static void __iomem *isp_full_regs = NULL;
+
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
@@ -746,6 +753,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** tx_isp_vic_start: MIPS validation passed - applying tx_isp_init_vic_registers methodology ***\n");
 
+    /* *** CRASH FIX: Initialize proper memory mapping BEFORE register writes *** */
+    if (!isp_full_regs) {
+        isp_full_regs = ioremap(ISP_BASE_ADDR, ISP_FULL_SIZE);
+        if (!isp_full_regs) {
+            pr_err("ISP: CRASH FIX - Failed to map ISP registers\n");
+            return -ENOMEM;
+        }
+        pr_info("ISP: CRASH FIX - Mapped full ISP register space\n");
+    }
+
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
 
     /* STEP 1: Enable clocks using Linux Clock Framework like tx_isp_init_vic_registers */
@@ -932,7 +949,17 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     
     /* *** MISSING ISP Control registers - from reference trace *** */
     pr_info("*** Writing missing ISP Control registers (0x9804-0x98a8) ***\n");
-    writel(0x3f00, vic_regs + 0x9804);       /* ISP Control register */
+    
+    /* CRASH FIX: Use proper base address for ISP Control registers */
+    /* OLD CRASHING CODE: writel(0x3f00, vic_regs + 0x9804); */
+    /* NEW FIXED CODE: */
+    if (isp_full_regs) {
+        writel(0x3f00, isp_full_regs + 0x9804);
+        pr_info("ISP: CRASH FIX - Successfully wrote to 0x9804\n");
+    } else {
+        pr_err("ISP: CRASH FIX - isp_full_regs not mapped!\n");
+        return -EFAULT;
+    }
     writel(0x7800438, vic_regs + 0x9864);    /* ISP Control register */  
     writel(0xc0000000, vic_regs + 0x987c);   /* ISP Control register */
     writel(0x1, vic_regs + 0x9880);          /* ISP Control register */
