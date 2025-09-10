@@ -240,7 +240,7 @@ static int vic_train_csi_phy(struct tx_isp_vic_device *vic_dev,
                             struct vic_timing_context *ctx)
 {
     void __iomem *vic_regs = vic_dev->vic_regs;
-    u32 phy_config = ctx->current.csi_phy_config;
+    u32 phy_config = ctx->active_params.csi_phy_config;
     int training_cycles = 0;
     bool training_success = false;
     
@@ -271,7 +271,7 @@ static int vic_train_csi_phy(struct tx_isp_vic_device *vic_dev,
             u32 violations = vic_check_constraints(vic_dev);
             if (violations == 0) {
                 training_success = true;
-                ctx->current.csi_phy_config = phy_config;
+                ctx->active_params.csi_phy_config = phy_config;
                 pr_info("VIC PHY TRAINING: Success with config 0x%x after %d cycles\n",
                         phy_config, training_cycles + 1);
                 break;
