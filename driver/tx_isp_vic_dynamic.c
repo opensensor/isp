@@ -431,7 +431,7 @@ int vic_dynamic_timing_negotiation(struct tx_isp_vic_device *vic_dev)
                 pr_warn("VIC DYNAMIC: Validation failed - violations 0x%x, retrying\n",
                         ctx.constraint_violations);
                 /* Fall back to safe parameters and retry */
-                ctx.current = ctx.safe_fallback;
+                ctx.active_params = ctx.safe_fallback;
                 ctx.state = VIC_TIMING_CONSERVATIVE;
             }
             break;
@@ -448,9 +448,9 @@ int vic_dynamic_timing_negotiation(struct tx_isp_vic_device *vic_dev)
     
     if (ctx.state == VIC_TIMING_ACTIVE) {
         pr_info("*** VIC DYNAMIC TIMING NEGOTIATION: SUCCESS ***\n");
-        pr_info("  Final CSI PHY config: 0x%x\n", ctx.current.csi_phy_config);
-        pr_info("  Final core control: 0x%x\n", ctx.current.core_control);
-        pr_info("  Final MIPI config: 0x%x\n", ctx.current.mipi_config);
+        pr_info("  Final CSI PHY config: 0x%x\n", ctx.active_params.csi_phy_config);
+        pr_info("  Final core control: 0x%x\n", ctx.active_params.core_control);
+        pr_info("  Final MIPI config: 0x%x\n", ctx.active_params.mipi_config);
         pr_info("  Negotiation attempts: %d\n", ctx.negotiation_attempts);
         pr_info("  Sensor responsive: %s\n", ctx.sensor_responsive ? "YES" : "NO");
         pr_info("  PHY trained: %s\n", ctx.phy_trained ? "YES" : "NO");
