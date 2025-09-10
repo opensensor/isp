@@ -768,15 +768,27 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* STEP 1: Enable clocks using Linux Clock Framework like tx_isp_init_vic_registers */
     pr_info("*** STREAMING: Enabling ISP clocks using Linux Clock Framework ***\n");
 
-        cgu_isp_clk = clk_get(NULL, "cgu_isp");
-    if (!IS_ERR(cgu_isp_clk)) {
-        ret = clk_prepare_enable(cgu_isp_clk);
-        if (ret == 0) {
-            pr_info("STREAMING: CGU_ISP clock enabled via clk framework\n");
-        } else {
-            pr_err("STREAMING: Failed to enable CGU_ISP clock: %d\n", ret);
-        }
+cgu_isp_clk = clk_get(NULL, "cgu_isp");
+if (!IS_ERR(cgu_isp_clk)) {
+    /* Set clock rate to 100MHz before enabling */
+    ret = clk_set_rate(cgu_isp_clk, 100000000); /* 100MHz in Hz */
+    if (ret) {
+        pr_err("STREAMING: Failed to set CGU_ISP clock rate to 100MHz: %d\n", ret);
+        /* Decide if you want to continue with default rate or fail */
+    } else {
+        unsigned long actual_rate = clk_get_rate(cgu_isp_clk);
+        pr_info("STREAMING: CGU_ISP clock rate set to %lu Hz (requested 100MHz)\n", actual_rate);
     }
+
+    ret = clk_prepare_enable(cgu_isp_clk);
+    if (ret == 0) {
+        pr_info("STREAMING: CGU_ISP clock enabled via clk framework\n");
+    } else {
+        pr_err("STREAMING: Failed to enable CGU_ISP clock: %d\n", ret);
+    }
+} else {
+    pr_warn("STREAMING: CGU_ISP clock not found: %ld\n", PTR_ERR(cgu_isp_clk));
+}
 
     isp_clk = clk_get(NULL, "isp");
     if (!IS_ERR(isp_clk)) {
@@ -809,7 +821,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             pr_err("STREAMING: Failed to enable IPU clock: %d\n", ret);
         }
     }
-   
+
     /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
     pr_info("*** STREAMING: Configuring CPM registers for VIC access ***\n");
     cpm_regs = ioremap(0x10000000, 0x1000);
