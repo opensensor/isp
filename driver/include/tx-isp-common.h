@@ -333,6 +333,11 @@ struct tx_isp_mipi_bus{
 	unsigned int settle_time_apative_en;
 	struct vic_mipi_sensor_ctl mipi_sc;
 	struct vic_mipi_vcrop_del mipi_vcropdel;
+	
+	/* Additional members needed by Binary Ninja VIC implementation */
+	unsigned int mipi_lanes;   /* Number of MIPI lanes */
+	unsigned int clk_pol;      /* Clock polarity */
+	unsigned int data_pol;     /* Data polarity */
 };
 
 struct tx_isp_dvp_bus{
@@ -428,6 +433,18 @@ struct tx_isp_sensor_attribute{
 	unsigned int expo;
 	unsigned int expo_fs;
 	void *priv; /* point to struct tx_isp_sensor_board_info */
+	
+	/* Additional members needed by Binary Ninja VIC implementation */
+	unsigned int hsync_pol;                   /* Horizontal sync polarity */
+	unsigned int vsync_pol;                   /* Vertical sync polarity */
+	unsigned int pclk_pol;                    /* Pixel clock polarity */
+	unsigned int de_pol;                      /* Data enable polarity */
+	unsigned int data_pol;                    /* Data polarity */
+	unsigned int pclk_delay;                  /* Pixel clock delay */
+	unsigned int data_delay;                  /* Data delay */
+	unsigned int fps;                         /* Frame rate */
+	unsigned int integration_time_long;       /* Long integration time for WDR */
+	unsigned int max_integration_time_long;   /* Max long integration time for WDR */
 };
 
 /* define common struct */
