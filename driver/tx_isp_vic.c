@@ -956,6 +956,7 @@ if (!IS_ERR(cgu_isp_clk)) {
     writel(0x54560031, vic_regs + 0x0);      /* First register from reference trace */
     writel(0x7800438, vic_regs + 0x4);       /* Second register from reference trace */
     writel(0x1, vic_regs + 0x8);             /* Third register from reference trace */
+	writel(0x20000, vic_regs + 0x10);   	 /* DVP config register */
     writel(0x80700008, vic_regs + 0xc);      /* Fourth register from reference trace */
     writel(0x1, vic_regs + 0x28);            /* Fifth register from reference trace */
     writel(0x400040, vic_regs + 0x2c);       /* Sixth register from reference trace */
