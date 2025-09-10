@@ -792,7 +792,7 @@ static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 /* VIC sensor operations IOCTL - EXACT Binary Ninja implementation */
 static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 /* VIC core s_stream - EXACT Binary Ninja implementation */  
-int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
+int vic_core_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
 
 /* Frame channel state management */
 struct tx_isp_channel_state {
@@ -2071,7 +2071,7 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
             struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
             if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
                 pr_info("*** MIPS-SAFE: Calling VIC streaming directly ***\n");
-                vic_core_s_stream(&vic_dev->sd, enable);
+                vic_core_s_stream(&vic_dev, enable);
             }
         }
         
@@ -2105,7 +2105,7 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
         if (isp_dev->vic_dev) {
             struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
             if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
-                vic_core_s_stream(&vic_dev->sd, 0);
+                vic_core_s_stream(&vic_dev, 0);
             }
         }
         if (isp_dev->csi_dev) {
@@ -2984,7 +2984,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("*** Channel %d: NOW CALLING VIC STREAMING CHAIN - THIS SHOULD GENERATE REGISTER ACTIVITY! ***\n", channel);
                 
                 // CRITICAL: Call vic_core_s_stream which calls tx_isp_vic_start when streaming
-                ret = vic_core_s_stream(&vic_streaming->sd, 1);
+                ret = vic_core_s_stream(&vic_streaming, 1);
                 
                 pr_info("*** Channel %d: VIC STREAMING RETURNED %d - REGISTER ACTIVITY SHOULD NOW BE VISIBLE! ***\n", channel, ret);
                 
@@ -4733,11 +4733,11 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
     
     if (enable) {
         /* Call vic_core_s_stream which calls tx_isp_vic_start */
-        ret = vic_core_s_stream(sd, enable);
+        ret = vic_core_s_stream(vic_dev, enable);
         pr_info("*** VIC VIDEO STREAMING ENABLE RETURNED %d ***\n", ret);
         return ret;
     } else {
-        return vic_core_s_stream(sd, enable);
+        return vic_core_s_stream(vic_dev, enable);
     }
 }
 

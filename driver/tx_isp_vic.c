@@ -2028,25 +2028,13 @@ static int vic_enable_clocks_non_atomic(struct tx_isp_vic_device *vic_dev)
 
 
 /* CRITICAL MISSING FUNCTION: vic_core_s_stream - FIXED to call tx_isp_vic_start */
-int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
+int vic_core_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 {
-    struct tx_isp_vic_device *vic_dev;
     int ret = 0;
-    
-    if (!sd) {
-        pr_err("VIC s_stream: NULL subdev\n");
-        return -EINVAL;
-    }
-    
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    if (!vic_dev) {
-        pr_err("VIC s_stream: NULL vic_dev\n");
-        return -EINVAL;
-    }
-    
+
     pr_info("VIC s_stream: enable=%d, current_state=%d, vic_start_ok=%d\n", enable, vic_dev->state, vic_start_ok);
     
-    // mutex_lock(&vic_dev->state_lock);
+    mutex_lock(&vic_dev->state_lock);
     
     if (enable) {
         /* Start VIC streaming - CRITICAL FIX: Call tx_isp_vic_start FIRST */
@@ -2094,7 +2082,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
 unlock_exit:
-    // mutex_unlock(&vic_dev->state_lock);
+    mutex_unlock(&vic_dev->state_lock);
     return ret;
 }
 
