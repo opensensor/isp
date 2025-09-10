@@ -953,13 +953,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRASH FIX: Use proper base address for ISP Control registers */
     /* OLD CRASHING CODE: writel(0x3f00, vic_regs + 0x9804); */
     /* NEW FIXED CODE: */
-    if (isp_full_regs) {
-        writel(0x3f00, isp_full_regs + 0x9804);
-        pr_info("ISP: CRASH FIX - Successfully wrote to 0x9804\n");
-    } else {
-        pr_err("ISP: CRASH FIX - isp_full_regs not mapped!\n");
-        return -EFAULT;
-    }
+//    if (isp_full_regs) {
+//        writel(0x3f00, isp_full_regs + 0x9804);
+//        pr_info("ISP: CRASH FIX - Successfully wrote to 0x9804\n");
+//    } else {
+//        pr_err("ISP: CRASH FIX - isp_full_regs not mapped!\n");
+//        return -EFAULT;
+//    }
     writel(0x7800438, vic_regs + 0x9864);    /* ISP Control register */  
     writel(0xc0000000, vic_regs + 0x987c);   /* ISP Control register */
     writel(0x1, vic_regs + 0x9880);          /* ISP Control register */
