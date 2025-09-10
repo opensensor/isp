@@ -4386,46 +4386,30 @@ static int tx_isp_init(void)
         pr_warn("No sensors detected, continuing with basic initialization: %d\n", ret);
     }
     
-    /* *** CRITICAL: Initialize hardware interrupt handling for BOTH IRQs *** */
-    pr_info("*** INITIALIZING HARDWARE INTERRUPTS FOR IRQ 37 AND 38 ***\n");
-    ret = tx_isp_init_hardware_interrupts(ourISPdev);
-    if (ret) {
-        pr_warn("Hardware interrupts not available: %d\n", ret);
-    } else {
-        pr_info("*** HARDWARE INTERRUPT INITIALIZATION COMPLETE ***\n");
-        pr_info("*** SHOULD SEE BOTH IRQ 37 AND 38 IN /proc/interrupts NOW ***\n");
-    }
+    /* *** CRITICAL FIX: Use Binary Ninja tx_isp_request_irq for EXACT stock driver compatibility *** */
+    pr_info("*** USING BINARY NINJA tx_isp_request_irq FOR STOCK DRIVER COMPATIBILITY ***\n");
     
-    /* *** CRITICAL: Register BOTH IRQ handlers for complete interrupt support *** */
-    pr_info("*** REGISTERING BOTH IRQ HANDLERS (37 + 38) FOR COMPLETE INTERRUPT SUPPORT ***\n");
-    
-    /* Register IRQ 37 (isp-m0) - Primary ISP processing */
-    ret = request_threaded_irq(37, 
-                              isp_irq_handle,
-                              isp_irq_thread_handle,   
-                              IRQF_SHARED,             
-                              "isp-m0",                /* Match stock driver name */
-                              ourISPdev);              
-    if (ret != 0) {
-        pr_err("*** FAILED TO REQUEST IRQ 37 (isp-m0): %d ***\n", ret);
+    /* Call Binary Ninja exact interrupt registration using main platform device */
+    ret = tx_isp_request_irq(&tx_isp_platform_device, ourISPdev);
+    if (ret == 0) {
+        pr_info("*** SUCCESS: IRQ %d registered with Binary Ninja method ***\n", ourISPdev->isp_irq);
+        pr_info("*** /proc/interrupts should now show ONLY 'isp-m0' for IRQ 37 ***\n");
     } else {
-        pr_info("*** SUCCESS: IRQ 37 (isp-m0) REGISTERED ***\n");
-        ourISPdev->isp_irq = 37;
-    }
-    
-    /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
-    ret = request_threaded_irq(38, 
-                              isp_irq_handle,          /* Same handlers work for both IRQs */
-                              isp_irq_thread_handle,   
-                              IRQF_SHARED,             
-                              "isp-w02",               /* Match stock driver name */
-                              ourISPdev);              
-    if (ret != 0) {
-        pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
-        pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
-    } else {
-        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
-        ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
+        pr_err("*** Binary Ninja interrupt registration failed: 0x%x ***\n", ret);
+        /* Fallback to manual registration if Binary Ninja method fails */
+        pr_info("*** FALLBACK: Manual IRQ registration ***\n");
+        ret = request_threaded_irq(37, 
+                                  isp_irq_handle,
+                                  isp_irq_thread_handle,   
+                                  IRQF_SHARED,             
+                                  "tx-isp",                /* Use platform device name */
+                                  ourISPdev);              
+        if (ret == 0) {
+            ourISPdev->isp_irq = 37;
+            pr_info("*** FALLBACK SUCCESS: IRQ 37 registered manually ***\n");
+        } else {
+            pr_err("*** FALLBACK FAILED: Manual IRQ registration failed: %d ***\n", ret);
+        }
     }
     
     /* *** CRITICAL: Enable interrupt generation at hardware level *** */
