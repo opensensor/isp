@@ -2459,9 +2459,6 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 }
 EXPORT_SYMBOL(vic_chardev_ioctl);
 
-static struct tx_isp_vic_device *dump_vsd = NULL;
-static void *test_addr = NULL;
-
 /* tx_isp_vic_probe - Matching binary flow with safe struct member access */
 int tx_isp_vic_probe(struct platform_device *pdev)
 {
