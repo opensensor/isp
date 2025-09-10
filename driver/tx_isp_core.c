@@ -3066,8 +3066,31 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
             *((void**)((char*)core_dev + (0x54 * 4))) = channel_array;  /* $v0[0x54] = $v0_4 */
 
-            /* Binary Ninja: *** CRITICAL: isp_core_tuning_init call *** */
-            pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init ***\n");
+            /* Binary Ninja: Global device assignment - MOVE THIS FIRST */
+            ourISPdev = (struct tx_isp_dev *)core_dev;  /* Set global device pointer */
+
+            /* CRITICAL: Set up memory mappings FIRST - this initializes vic_regs */
+            pr_info("*** tx_isp_core_probe: Setting up ISP memory mappings FIRST ***\n");
+            result = tx_isp_init_memory_mappings((struct tx_isp_dev *)core_dev);
+            if (result == 0) {
+                pr_info("*** tx_isp_core_probe: ISP memory mappings initialized successfully ***\n");
+            } else {
+                pr_err("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
+                return result;
+            }
+
+            /* CRITICAL: Create VIC device AFTER memory mappings are set up */
+            pr_info("*** tx_isp_core_probe: Creating VIC device ***\n");
+            result = tx_isp_create_vic_device((struct tx_isp_dev *)core_dev);
+            if (result != 0) {
+                pr_err("*** tx_isp_core_probe: Failed to create VIC device: %d ***\n", result);
+                return result;
+            } else {
+                pr_info("*** tx_isp_core_probe: VIC device created successfully ***\n");
+            }
+
+            /* Binary Ninja: *** CRITICAL: isp_core_tuning_init call - NOW AFTER VIC IS READY *** */
+            pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init (VIC registers now available) ***\n");
             tuning_dev = (void*)isp_core_tuning_init(core_dev);
             *((void**)((char*)core_dev + (0x6f * 4))) = tuning_dev;     /* $v0[0x6f] = $v0_15 */
 
@@ -3086,19 +3109,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 *((void**)((char*)core_dev + (0xc * 4))) = tuning_data; /* $v0[0xc] = tuning_dev (FIXED) */
                 pr_info("*** tx_isp_core_probe: FIXED tuning pointer corruption - using tuning_dev=%p directly ***\n", tuning_data);
                 *((void**)((char*)core_dev + (0xd * 4))) = &isp_tuning_fops; /* $v0[0xd] = &isp_info_proc_fops */
-
-                /* Binary Ninja: Global device assignment */
-                ourISPdev = (struct tx_isp_dev *)core_dev;  /* Set global device pointer */
-
-                /* CRITICAL: Create VIC device BEFORE sensor_early_init */
-                pr_info("*** tx_isp_core_probe: Creating VIC device ***\n");
-                result = tx_isp_create_vic_device((struct tx_isp_dev *)core_dev);
-                if (result != 0) {
-                    pr_err("*** tx_isp_core_probe: Failed to create VIC device: %d ***\n", result);
-                    return result;
-                } else {
-                    pr_info("*** tx_isp_core_probe: VIC device created successfully ***\n");
-                }
 
                 /* Binary Ninja: sensor_early_init($v0) */
                 pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
@@ -3153,14 +3163,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_err("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
                 }
 
-                /* CRITICAL: Set up memory mappings for register access */
-                pr_info("*** tx_isp_core_probe: Setting up ISP memory mappings ***\n");
-                result = tx_isp_init_memory_mappings((struct tx_isp_dev *)core_dev);
-                if (result == 0) {
-                    pr_info("*** tx_isp_core_probe: ISP memory mappings initialized successfully ***\n");
-                } else {
-                    pr_err("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
-                }
 
                 /* CRITICAL: Start continuous processing - this generates the register activity your trace captures! */
                 pr_info("*** tx_isp_core_probe: Starting continuous processing system ***\n");
