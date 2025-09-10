@@ -4612,7 +4612,7 @@ int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
 }
 
 /* ISP Frame Statistics Processing - triggers tuning events */
-static void isp_process_frame_statistics(struct tx_isp_dev *dev)
+void isp_process_frame_statistics(struct tx_isp_dev *dev)
 {
     static uint32_t frame_counter = 0;
     

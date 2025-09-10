@@ -60,6 +60,7 @@ static void destroy_frame_channel_devices(void);
 int __init tx_isp_subdev_platform_init(void);
 void __exit tx_isp_subdev_platform_exit(void);
 int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
+void isp_process_frame_statistics(struct tx_isp_dev *dev);
 
 /* Global I2C client tracking to prevent duplicate creation */
 static struct i2c_client *global_sensor_i2c_client = NULL;
@@ -1820,7 +1821,6 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                 ourISPdev->frame_count = vic_dev->frame_count;
 
                 /* *** CRITICAL: TRIGGER TUNING EVENT PROCESSING FOR CONTINUOUS REGISTER WRITES *** */
-                extern void isp_process_frame_statistics(struct tx_isp_dev *dev);
                 pr_info("*** VIC FRAME DONE: TRIGGERING ISP TUNING EVENT PROCESSING ***\n");
                 // TODO
                 isp_process_frame_statistics(ourISPdev);
