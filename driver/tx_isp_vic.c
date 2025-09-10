@@ -949,7 +949,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     
     /* *** MISSING ISP Control registers - from reference trace *** */
     pr_info("*** Writing missing ISP Control registers (0x9804-0x98a8) ***\n");
-    
+    writel(0x3f00, vic_regs + 0x9804);       /* ISP Control register */
+                                             
     /* CRASH FIX: Use proper base address for ISP Control registers */
     /* OLD CRASHING CODE: writel(0x3f00, vic_regs + 0x9804); */
     /* NEW FIXED CODE: */
