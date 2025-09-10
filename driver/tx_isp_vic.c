@@ -722,7 +722,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type, sensor_format;
     u32 timeout = 10000;
-    struct clk *isp_clk, *cgu_isp_clk, *csi_clk;
+    struct clk *isp_clk, *cgu_isp_clk, *csi_clk, *ipu_clk;
     void __iomem *cpm_regs;
     int ret;
 
@@ -768,6 +768,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* STEP 1: Enable clocks using Linux Clock Framework like tx_isp_init_vic_registers */
     pr_info("*** STREAMING: Enabling ISP clocks using Linux Clock Framework ***\n");
 
+        cgu_isp_clk = clk_get(NULL, "cgu_isp");
+    if (!IS_ERR(cgu_isp_clk)) {
+        ret = clk_prepare_enable(cgu_isp_clk);
+        if (ret == 0) {
+            pr_info("STREAMING: CGU_ISP clock enabled via clk framework\n");
+        } else {
+            pr_err("STREAMING: Failed to enable CGU_ISP clock: %d\n", ret);
+        }
+    }
+
     isp_clk = clk_get(NULL, "isp");
     if (!IS_ERR(isp_clk)) {
         ret = clk_prepare_enable(isp_clk);
@@ -790,16 +800,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         }
     }
 
-    cgu_isp_clk = clk_get(NULL, "cgu_isp");
-    if (!IS_ERR(cgu_isp_clk)) {
-        ret = clk_prepare_enable(cgu_isp_clk);
+    ipu_clk = clk_get(NULL, "ipu");
+    if (!IS_ERR(ipu_clk)) {
+        ret = clk_prepare_enable(ipu_clk);
         if (ret == 0) {
-            pr_info("STREAMING: CGU_ISP clock enabled via clk framework\n");
+            pr_info("STREAMING: IPU clock enabled via clk framework\n");
         } else {
-            pr_err("STREAMING: Failed to enable CGU_ISP clock: %d\n", ret);
+            pr_err("STREAMING: Failed to enable IPU clock: %d\n", ret);
         }
     }
-
+   
     /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
     pr_info("*** STREAMING: Configuring CPM registers for VIC access ***\n");
     cpm_regs = ioremap(0x10000000, 0x1000);
