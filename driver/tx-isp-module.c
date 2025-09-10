@@ -1623,38 +1623,6 @@ static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const cha
     return 0;
 }
 
-// Initialize real hardware interrupt handling - Kernel 3.10 compatible, SDK compatible
-/* tx_isp_enable_irq - CORRECTED Binary Ninja exact implementation */
-void tx_isp_enable_irq(struct tx_isp_dev *isp_dev)
-{
-    if (!isp_dev || isp_dev->isp_irq <= 0) {
-        pr_err("tx_isp_enable_irq: Invalid parameters (dev=%p, irq=%d)\n", 
-               isp_dev, isp_dev ? isp_dev->isp_irq : -1);
-        return;
-    }
-    
-    /* Binary Ninja: return private_enable_irq(*arg1) __tailcall
-     * This means: enable_irq(isp_dev->isp_irq) */
-    if (isp_dev->isp_irq > 0) {
-        enable_irq(isp_dev->isp_irq);
-        pr_info("*** tx_isp_enable_irq: Kernel IRQ %d ENABLED ***\n", isp_dev->isp_irq);
-    } else {
-        pr_err("*** tx_isp_enable_irq: Invalid IRQ number %d ***\n", isp_dev->isp_irq);
-    }
-}
-
-/* tx_isp_disable_irq - CORRECTED Binary Ninja exact implementation */
-void tx_isp_disable_irq(struct tx_isp_dev *isp_dev)
-{
-    pr_info("*** tx_isp_disable_irq: CORRECTED Binary Ninja implementation ***\n");
-    
-    /* Binary Ninja: return private_disable_irq(*arg1) __tailcall
-     * This means: disable_irq(isp_dev->isp_irq) */
-    disable_irq(37);
-    
-    pr_info("*** tx_isp_disable_irq: Kernel IRQ %d DISABLED ***\n", isp_dev->isp_irq);
-}
-
 /* tx_isp_request_irq - EXACT Binary Ninja implementation */
 static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *isp_dev)
 {
