@@ -4856,9 +4856,8 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
         
         sensor_attr = isp_dev->sensor->video.attr;
         /* Binary Ninja: return tx_isp_vic_start($a0) */
-        //return tx_isp_vic_start(vic_dev);
-        return 0;  // TODO
-        
+        return tx_isp_vic_start(vic_dev);
+
     case 0x200000d:  /* Binary Ninja: case 0x200000d */
     case 0x2000010:  /* Binary Ninja: case 0x2000010 */
     case 0x2000011:  /* Binary Ninja: case 0x2000011 */
