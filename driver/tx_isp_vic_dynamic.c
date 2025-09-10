@@ -36,7 +36,7 @@ struct vic_timing_params {
 /* Dynamic timing negotiation context */
 struct vic_timing_context {
     enum vic_timing_state state;
-    struct vic_timing_params current;
+    struct vic_timing_params active_params;
     struct vic_timing_params target;
     struct vic_timing_params safe_fallback;
     int negotiation_attempts;
@@ -53,37 +53,37 @@ static void vic_init_conservative_timing(struct vic_timing_context *ctx,
     pr_info("*** VIC DYNAMIC: Initializing conservative timing parameters ***\n");
     
     /* Conservative CSI PHY settings */
-    ctx->current.csi_phy_config = 0x58090000;  /* Reference driver initial value */
+    ctx->active_params.csi_phy_config = 0x58090000;  /* Reference driver initial value */
     
     /* Conservative core control - start with minimal functionality */
-    ctx->current.core_control = 0x41190000;    /* Reference driver initial value */
+    ctx->active_params.core_control = 0x41190000;    /* Reference driver initial value */
     
     /* Conservative MIPI config based on sensor interface */
     if (sensor_attr->dbus_type == 2) { /* MIPI */
-        ctx->current.mipi_config = 0x20000;    /* Basic MIPI mode */
-        if (sensor_attr->mipi.clk_pol == 2) ctx->current.mipi_config |= 2;
-        if (sensor_attr->mipi.data_pol == 2) ctx->current.mipi_config |= 1;
+        ctx->active_params.mipi_config = 0x20000;    /* Basic MIPI mode */
+        if (sensor_attr->mipi.clk_pol == 2) ctx->active_params.mipi_config |= 2;
+        if (sensor_attr->mipi.data_pol == 2) ctx->active_params.mipi_config |= 1;
     } else {
-        ctx->current.mipi_config = 0;
+        ctx->active_params.mipi_config = 0;
     }
     
     /* Conservative frame timing - use sensor minimums */
-    ctx->current.frame_timing = (sensor_attr->min_integration_time_native << 16) | 
+    ctx->active_params.frame_timing = (sensor_attr->min_integration_time_native << 16) | 
                                sensor_attr->total_width;
     
     /* Conservative integration time */
-    ctx->current.integration_time = sensor_attr->min_integration_time_native;
+    ctx->active_params.integration_time = sensor_attr->min_integration_time_native;
     
     /* Conservative clock ratio */
-    ctx->current.clock_ratio = 0x100010;      /* 1:1 ratio initially */
+    ctx->active_params.clock_ratio = 0x100010;      /* 1:1 ratio initially */
     
-    ctx->current.valid = true;
+    ctx->active_params.valid = true;
     
     /* Store as safe fallback */
-    ctx->safe_fallback = ctx->current;
+    ctx->safe_fallback = ctx->active_params;
     
     pr_info("VIC DYNAMIC: Conservative parameters - CSI=0x%x, Core=0x%x, MIPI=0x%x\n",
-            ctx->current.csi_phy_config, ctx->current.core_control, ctx->current.mipi_config);
+            ctx->active_params.csi_phy_config, ctx->active_params.core_control, ctx->active_params.mipi_config);
 }
 
 /* Apply timing parameters to hardware with validation */
