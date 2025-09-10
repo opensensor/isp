@@ -60,7 +60,6 @@ static void destroy_frame_channel_devices(void);
 int __init tx_isp_subdev_platform_init(void);
 void __exit tx_isp_subdev_platform_exit(void);
 int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
-int vic_dynamic_timing_negotiation(struct tx_isp_vic_device *vic_dev);
 
 /* Global I2C client tracking to prevent duplicate creation */
 static struct i2c_client *global_sensor_i2c_client = NULL;
