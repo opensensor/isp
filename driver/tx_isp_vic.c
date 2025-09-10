@@ -980,16 +980,15 @@ int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
 long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 
 
-/* tx_isp_vic_start - PROPER STATE MACHINE IMPLEMENTATION */
+/* tx_isp_vic_start - DYNAMIC TIMING NEGOTIATION IMPLEMENTATION */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type, sensor_format;
-    u32 timeout = 10000;
     int ret = 0;
 
-    pr_info("*** tx_isp_vic_start: PROPER STATE MACHINE IMPLEMENTATION ***\n");
+    pr_info("*** tx_isp_vic_start: DYNAMIC TIMING NEGOTIATION IMPLEMENTATION ***\n");
 
     if (!vic_dev) {
         pr_err("*** CRITICAL: Invalid vic_dev pointer %p ***\n", vic_dev);
@@ -1002,10 +1001,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
     
-    pr_info("*** VIC STATE MACHINE: Starting proper initialization sequence ***\n");
+    sensor_attr = &vic_dev->sensor_attr;
+    interface_type = sensor_attr->dbus_type;
+    sensor_format = sensor_attr->data_type;
+
+    pr_info("*** VIC DYNAMIC START: Interface=%d, format=0x%x ***\n", interface_type, sensor_format);
 
     /* STEP 1: Clock and Power Domain Setup (must happen first) */
-    pr_info("*** STATE MACHINE STEP 1: Clock and Power Domain Setup ***\n");
+    pr_info("*** DYNAMIC STEP 1: Clock and Power Domain Setup ***\n");
     void __iomem *cpm_regs = ioremap(0x10000000, 0x1000);
     if (cpm_regs) {
         u32 clkgr0 = readl(cpm_regs + 0x20);
@@ -1021,65 +1024,18 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(clkgr1, cpm_regs + 0x28);
         wmb();
 
-        pr_info("STATE MACHINE: Clock domains configured\n");
+        pr_info("DYNAMIC: Clock domains configured\n");
         iounmap(cpm_regs);
     }
 
-    sensor_attr = &vic_dev->sensor_attr;
-    interface_type = sensor_attr->dbus_type;
-    sensor_format = sensor_attr->data_type;
-
-    pr_info("*** STATE MACHINE: Interface=%d, format=0x%x ***\n", interface_type, sensor_format);
-
-    /* STEP 2: Enter CONFIG state (2) */
-    pr_info("*** STATE MACHINE STEP 2: Enter CONFIG state (2) ***\n");
-    writel(2, vic_regs + 0x0);  /* VIC_CONTROL = 2 (CONFIG state) */
-    wmb();
-    
-    /* Wait for config state to be accepted */
-    timeout = 1000;
-    while (timeout > 0 && (readl(vic_regs + 0x0) & 0xF) != 2) {
-        udelay(1);
-        timeout--;
-    }
-    
-    if (timeout == 0) {
-        pr_err("*** STATE MACHINE: Failed to enter CONFIG state ***\n");
-        return -ETIMEDOUT;
-    }
-    pr_info("*** STATE MACHINE: Successfully entered CONFIG state ***\n");
-
-    /* STEP 3: Configure Core Block (0x000-0x018) */
-    pr_info("*** STATE MACHINE STEP 3: Configure Core Block ***\n");
+    /* STEP 2: Basic hardware initialization */
+    pr_info("*** DYNAMIC STEP 2: Basic hardware initialization ***\n");
     
     /* Core configuration - dimensions and interface type */
     writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);    /* Frame dimensions */
     writel(interface_type == 2 ? 3 : interface_type, vic_regs + 0xc);    /* Interface mode */
     writel(sensor_format, vic_regs + 0x14);                              /* Data format */
     wmb();
-    
-    pr_info("STATE MACHINE: Core block configured - dimensions=%dx%d, interface=%d, format=0x%x\n",
-            vic_dev->width, vic_dev->height, interface_type, sensor_format);
-
-    /* STEP 4: Configure MIPI/CSI Block based on interface */
-    pr_info("*** STATE MACHINE STEP 4: Configure MIPI/CSI Block ***\n");
-    
-    if (interface_type == 2) { /* MIPI interface */
-        u32 mipi_config = 0x20000;  /* Base MIPI config */
-        
-        /* Configure MIPI lanes and polarity */
-        if (sensor_attr->mipi.clk_pol == 2) mipi_config |= 2;
-        if (sensor_attr->mipi.data_pol == 2) mipi_config |= 1;
-        if (sensor_attr->wdr_cache) mipi_config |= (sensor_attr->wdr_cache << 31);
-        
-        writel(mipi_config, vic_regs + 0x10);
-        wmb();
-        
-        pr_info("STATE MACHINE: MIPI block configured - config=0x%x\n", mipi_config);
-    }
-
-    /* STEP 5: Configure DMA/Buffer Block (0x080-0x08C, 0x300-0x330) */  
-    pr_info("*** STATE MACHINE STEP 5: Configure DMA/Buffer Block ***\n");
     
     /* DMA buffer configuration */
     writel(0x100010, vic_regs + 0x1a4);     /* DMA config */
@@ -1091,27 +1047,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(vic_dev->width * 2, vic_regs + 0x314);  /* Stride backup */
     wmb();
     
-    pr_info("STATE MACHINE: DMA/Buffer block configured\n");
-
-    /* STEP 6: Configure Frame Timing Block (0x800-0x870) */
-    pr_info("*** STATE MACHINE STEP 6: Configure Frame Timing Block ***\n");
-    
-    /* Integration time and timing parameters */
-    if (sensor_attr->integration_time != 0) {
-        writel((sensor_attr->integration_time << 16) + vic_dev->width, vic_regs + 0x18);
-    }
-    
     /* Sensor timing registers */ 
     writel((sensor_attr->total_width << 16) | sensor_attr->min_integration_time_native, vic_regs + 0x110);
     writel(sensor_attr->max_integration_time_native, vic_regs + 0x114);
     writel(sensor_attr->max_integration_time_short, vic_regs + 0x118);
     writel(sensor_attr->integration_time_limit, vic_regs + 0x11c);
     wmb();
-    
-    pr_info("STATE MACHINE: Frame timing block configured\n");
-
-    /* STEP 7: Configure Processing Block (0x940-0x9F0) */
-    pr_info("*** STATE MACHINE STEP 7: Configure Processing Block ***\n");
     
     /* WDR mode and frame processing */
     u32 wdr_mode = sensor_attr->wdr_cache;
@@ -1125,40 +1066,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x10, vic_regs + 0x1b0);
     wmb();
     
-    pr_info("STATE MACHINE: Processing block configured - wdr_mode=%d, frame_mode=0x%x\n",
-            wdr_mode, frame_mode);
+    pr_info("DYNAMIC: Basic hardware initialization complete\n");
 
-    /* STEP 8: Final configuration before streaming */
-    pr_info("*** STATE MACHINE STEP 8: Final configuration ***\n");
+    /* STEP 3: CRITICAL - Dynamic Timing Negotiation */
+    pr_info("*** DYNAMIC STEP 3: CRITICAL - Dynamic Timing Negotiation ***\n");
     
-    /* Reset VIC to clear any residual state */
-    writel(4, vic_regs + 0x0);  /* Reset */
-    wmb();
-    
-    /* Wait for reset completion */
-    timeout = 1000;
-    while (timeout > 0 && readl(vic_regs + 0x0) != 0) {
-        udelay(1);
-        timeout--;
+    /* This is the key difference - instead of static configuration, 
+     * we use dynamic negotiation to find timing parameters that don't 
+     * violate hardware constraints */
+    ret = vic_dynamic_timing_negotiation(vic_dev);
+    if (ret != 0) {
+        pr_err("*** CRITICAL: Dynamic timing negotiation FAILED: %d ***\n", ret);
+        pr_err("*** This means the hardware rejected all timing parameter combinations ***\n");
+        pr_err("*** The 'control limit err' will likely occur with static parameters ***\n");
+        return ret;
     }
     
-    if (timeout == 0) {
-        pr_warn("STATE MACHINE: Reset timeout, continuing anyway\n");
-    }
-
-    /* STEP 9: Enter STREAMING state (1) */
-    pr_info("*** STATE MACHINE STEP 9: Enter STREAMING state (1) ***\n");
-    writel(1, vic_regs + 0x0);  /* VIC_CONTROL = 1 (STREAMING state) */
-    wmb();
-    
-    /* Verify streaming state */
-    timeout = 1000;
-    u32 control_reg = readl(vic_regs + 0x0);
-    if ((control_reg & 0xF) == 1) {
-        pr_info("*** STATE MACHINE: Successfully entered STREAMING state (control=0x%x) ***\n", control_reg);
-    } else {
-        pr_warn("*** STATE MACHINE: Unexpected control state 0x%x, but continuing ***\n", control_reg);
-    }
+    pr_info("*** DYNAMIC: Timing negotiation SUCCESS - hardware constraints satisfied ***\n");
     /* STEP 10: Interface-specific configuration (allowing runtime variation) */
     pr_info("*** STATE MACHINE STEP 10: Interface-specific final configuration ***\n");
     
