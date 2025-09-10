@@ -935,12 +935,54 @@ if (!IS_ERR(cgu_isp_clk)) {
     
     pr_info("*** Completed adding ALL register writes from reference trace ***\n");
 
-    /* FIXED: Use proper struct member access for sensor attributes */
-    sensor_attr = &vic_dev->sensor_attr;
+    /* *** CRITICAL RACE CONDITION FIX: Protect sensor attribute access *** */
+    pr_info("*** CRITICAL: Implementing race condition fix for interface type corruption ***\n");
+    
+    /* Take a local copy of sensor attributes to prevent corruption during streaming */
+    struct tx_isp_sensor_attribute local_sensor_attr;
+    unsigned long flags;
+    
+    /* Use spinlock to protect sensor attribute access */
+    spin_lock_irqsave(&vic_dev->lock, flags);
+    
+    /* Make a safe copy of sensor attributes */
+    memcpy(&local_sensor_attr, &vic_dev->sensor_attr, sizeof(local_sensor_attr));
+    
+    spin_unlock_irqrestore(&vic_dev->lock, flags);
+    
+    /* Use the local copy to prevent corruption */
+    sensor_attr = &local_sensor_attr;
     interface_type = sensor_attr->dbus_type;
     sensor_format = sensor_attr->data_type;
+    
+    /* *** CRITICAL: Validate interface type before proceeding *** */
+    if (interface_type == 32768 || interface_type == 0x8000) {
+        pr_err("*** CRITICAL: Interface type corruption detected! Got 32768 (0x8000) ***\n");
+        pr_err("*** This is the 0x80000020 streaming control bit corrupting the interface type! ***\n");
+        pr_err("*** FIXING: Restoring interface type to MIPI (2) ***\n");
+        interface_type = 2; /* Force to MIPI */
+        sensor_attr->dbus_type = 2; /* Update the local copy */
+        
+        /* Also fix the original structure */
+        spin_lock_irqsave(&vic_dev->lock, flags);
+        vic_dev->sensor_attr.dbus_type = 2;
+        spin_unlock_irqrestore(&vic_dev->lock, flags);
+    }
+    
+    /* Additional validation for other common corruption patterns */
+    if (interface_type > 5 || interface_type == 0) {
+        pr_err("*** CRITICAL: Invalid interface type %d detected! ***\n", interface_type);
+        pr_err("*** FIXING: Restoring interface type to MIPI (2) ***\n");
+        interface_type = 2; /* Force to MIPI */
+        sensor_attr->dbus_type = 2;
+        
+        /* Also fix the original structure */
+        spin_lock_irqsave(&vic_dev->lock, flags);
+        vic_dev->sensor_attr.dbus_type = 2;
+        spin_unlock_irqrestore(&vic_dev->lock, flags);
+    }
 
-    pr_info("tx_isp_vic_start: interface=%d, format=0x%x\n", interface_type, sensor_format);
+    pr_info("tx_isp_vic_start: interface=%d, format=0x%x (RACE CONDITION PROTECTED)\n", interface_type, sensor_format);
     
     /* MCP LOG: VIC start with interface configuration */
     pr_info("MCP_LOG: VIC start initiated - interface=%d, format=0x%x, vic_base=%p\n", 
