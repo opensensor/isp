@@ -813,7 +813,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* STEP 3: Get VIC registers - should already be mapped by tx_isp_create_vic_device */
-    vic_regs = vic_dev->vic_regs;
+    vic_regs = ourISPdev->vic_regs;
     if (!vic_regs) {
         pr_err("*** CRITICAL: No VIC register base - initialization required first ***\n");
         return -EINVAL;
