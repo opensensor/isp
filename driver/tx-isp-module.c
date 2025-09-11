@@ -1980,7 +1980,7 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 
         /* *** CRITICAL FIX: Initialize VIC hardware interrupts FIRST *** */
         pr_info("*** tx_isp_vic_start: CRITICAL FIX - Initializing VIC hardware interrupts ***\n");
-        ret = tx_isp_vic_hw_init(&vic_dev->sd);
+        int ret = tx_isp_vic_hw_init(&vic_dev->sd);
         if (ret != 0) {
             pr_err("tx_isp_vic_start: VIC hardware interrupt init failed: %d\n", ret);
             return ret;
