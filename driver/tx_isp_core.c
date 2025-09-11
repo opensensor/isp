@@ -3324,7 +3324,16 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_info("*** tx_isp_core_probe: Global ISP device updated with register base ***\n");
                 } else {
                     pr_err("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
-                    return result;
+                }
+
+                /* CRITICAL: Start continuous processing - this generates the register activity your trace captures! */
+                pr_info("*** tx_isp_core_probe: Starting continuous processing system ***\n");
+                result = isp_start_continuous_processing((struct tx_isp_dev *)core_dev);
+                if (result == 0) {
+                    pr_info("*** tx_isp_core_probe: Continuous processing started successfully ***\n");
+                    pr_info("*** YOUR TRACE MODULE SHOULD NOW CAPTURE CONTINUOUS REGISTER WRITES! ***\n");
+                } else {
+                    pr_err("*** tx_isp_core_probe: Failed to start continuous processing: %d ***\n", result);
                 }
                 
                 return 0;
