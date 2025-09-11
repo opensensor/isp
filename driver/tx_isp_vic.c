@@ -1171,15 +1171,15 @@ if (!IS_ERR(cgu_isp_clk)) {
         pr_warn("STREAMING: ISP clock not found: %ld\n", PTR_ERR(isp_clk));
     }
 
-    csi_clk = clk_get(NULL, "csi");
-    if (!IS_ERR(csi_clk)) {
-        ret = clk_prepare_enable(csi_clk);
-        if (ret == 0) {
-            pr_info("STREAMING: csi_clk clock enabled via clk framework\n");
-        } else {
-            pr_err("STREAMING: Failed to enable csi_clk clock: %d\n", ret);
-        }
-    }
+//    csi_clk = clk_get(NULL, "csi");
+//    if (!IS_ERR(csi_clk)) {
+//        ret = clk_prepare_enable(csi_clk);
+//        if (ret == 0) {
+//            pr_info("STREAMING: csi_clk clock enabled via clk framework\n");
+//        } else {
+//            pr_err("STREAMING: Failed to enable csi_clk clock: %d\n", ret);
+//        }
+//    }
 
     ipu_clk = clk_get(NULL, "ipu");
     if (!IS_ERR(ipu_clk)) {
