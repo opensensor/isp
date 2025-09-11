@@ -2260,6 +2260,15 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 
     pr_info("*** tx_isp_vic_probe: Starting VIC device probe ***\n");
 
+    /* Binary allocates 0x21c (540) bytes, but we use proper struct size */
+    vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
+    if (!vic_dev) {
+        pr_err("Failed to allocate vic device\n");
+        return -ENOMEM;  /* Binary returns -1 but -ENOMEM is cleaner */
+    }
+
+    /* Binary explicitly zeros the structure */
+    memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
 
     /* Get subdev pointer */
     sd = &vic_dev->sd;
