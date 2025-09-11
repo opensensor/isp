@@ -1462,6 +1462,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 {
     int ret = 0;
     uint8_t magic = (cmd >> 8) & 0xff;
+    static bool auto_init_done = false;  /* CRITICAL: Prevent repeated auto-initialization */
     
     /* CRITICAL: Binary Ninja reference implementation - proper device structure retrieval */
     /* Reference: $s0 = *(*(*(arg1 + 0x70) + 0xc8) + 0x1bc) */
@@ -1475,9 +1476,9 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
         return -ENODEV;
     }
     
-    /* CRITICAL: Auto-initialize tuning for V4L2 controls if not already enabled */
-    if (magic == 0x56 && dev->tuning_enabled != 3) {
-        pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control\n");
+    /* CRITICAL: Auto-initialize tuning for V4L2 controls ONLY ONCE to prevent init/release cycle */
+    if (magic == 0x56 && dev->tuning_enabled != 3 && !auto_init_done) {
+        pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control (one-time)\n");
         
         /* Initialize tuning_data if not already initialized */
         if (!dev->tuning_data) {
@@ -1490,9 +1491,10 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
             pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
         }
         
-        /* Enable tuning */
+        /* Enable tuning and mark auto-init as done */
         dev->tuning_enabled = 3;
-        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning auto-enabled for V4L2 controls\n");
+        auto_init_done = true;
+        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning auto-enabled for V4L2 controls (permanent)\n");
     }
     
     /* CRITICAL: Check tuning enabled for tuning commands only */
@@ -1563,45 +1565,55 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 
                 pr_info("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
                 
-                    if (enable) {
-                        if (dev->tuning_enabled != 3) {
-                            /* CRITICAL: Initialize tuning_data if not already initialized */
+                /* CRITICAL: Ignore disable commands when auto-initialized to prevent init/release cycle */
+                if (!enable && auto_init_done) {
+                    pr_info("isp_core_tunning_unlocked_ioctl: Ignoring disable command - tuning was auto-initialized\n");
+                    ret = 0;  /* Return success but don't actually disable */
+                    break;
+                }
+                
+                if (enable) {
+                    if (dev->tuning_enabled != 3) {
+                        /* CRITICAL: Initialize tuning_data if not already initialized */
+                        if (!dev->tuning_data) {
+                            pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
+                            
+                            /* Allocate tuning data structure using the reference implementation */
+                            dev->tuning_data = isp_core_tuning_init(dev);
                             if (!dev->tuning_data) {
-                                pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
-                                
-                                /* Allocate tuning data structure using the reference implementation */
-                                dev->tuning_data = isp_core_tuning_init(dev);
-                                if (!dev->tuning_data) {
-                                    pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
-                                    return -ENOMEM;
-                                }
-                                
-                                pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
-                                
-                                /* MCP LOG: Tuning data structure successfully initialized */
-                                pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
-                                pr_info("MCP_LOG: Tuning controls now ready for operation\n");
+                                pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
+                                return -ENOMEM;
                             }
                             
-                            /* CRITICAL: Call tisp_init to trigger hardware initialization - THE MISSING LINK */
-                            pr_info("*** CALLING tisp_init - THIS SHOULD TRIGGER REGISTER ACTIVITY LIKE REFERENCE DRIVER ***\n");
-                            ret = tisp_init(NULL, "default");
-                            if (ret != 0) {
-                                pr_err("isp_core_tunning_unlocked_ioctl: tisp_init failed: %d\n", ret);
-                                return ret;
-                            }
-                            pr_info("*** tisp_init COMPLETED - HARDWARE INITIALIZATION FINISHED ***\n");
+                            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
                             
-                            dev->tuning_enabled = 3;
-                            pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
+                            /* MCP LOG: Tuning data structure successfully initialized */
+                            pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
+                            pr_info("MCP_LOG: Tuning controls now ready for operation\n");
                         }
-                    } else {
-                        if (dev->tuning_enabled == 3) {
-                            isp_core_tuning_release(dev);
-                            dev->tuning_enabled = 0;
-                            pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning disabled\n");
+                        
+                        /* CRITICAL: Call tisp_init to trigger hardware initialization - THE MISSING LINK */
+                        pr_info("*** CALLING tisp_init - THIS SHOULD TRIGGER REGISTER ACTIVITY LIKE REFERENCE DRIVER ***\n");
+                        ret = tisp_init(NULL, "default");
+                        if (ret != 0) {
+                            pr_err("isp_core_tunning_unlocked_ioctl: tisp_init failed: %d\n", ret);
+                            return ret;
                         }
+                        pr_info("*** tisp_init COMPLETED - HARDWARE INITIALIZATION FINISHED ***\n");
+                        
+                        dev->tuning_enabled = 3;
+                        auto_init_done = true;  /* Mark as auto-initialized */
+                        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
                     }
+                } else {
+                    /* Only allow explicit disable if not auto-initialized */
+                    if (dev->tuning_enabled == 3) {
+                        isp_core_tuning_release(dev);
+                        dev->tuning_enabled = 0;
+                        auto_init_done = false;  /* Reset auto-init flag */
+                        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning disabled\n");
+                    }
+                }
                 ret = 0;
                 break;
             }
