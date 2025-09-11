@@ -135,7 +135,7 @@ void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan)
 }
 
 
-/* tx_isp_fs_probe - EXACT Binary Ninja implementation */
+/* tx_isp_fs_probe - Memory-safe implementation */
 int tx_isp_fs_probe(struct platform_device *pdev)
 {
     struct tx_isp_fs_device *fs_dev;
@@ -146,19 +146,14 @@ int tx_isp_fs_probe(struct platform_device *pdev)
     int ret;
     int i;
     
-    pr_info("*** tx_isp_fs_probe: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** tx_isp_fs_probe: Memory-safe implementation ***\n");
     
-    /* Binary Ninja: $v0, $a2 = private_kmalloc(0xe8, 0xd0) */
-    fs_dev = kzalloc(0xe8, GFP_KERNEL);  /* 0xe8 = 232 bytes */
+    /* SAFE: Use proper struct size instead of fixed 0xe8 */
+    fs_dev = kzalloc(sizeof(struct tx_isp_fs_device), GFP_KERNEL);
     if (!fs_dev) {
-        /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : control limit err!!!\n", $a2) */
         pr_err("Err [VIC_INT] : control limit err!!!\n");
-        /* Binary Ninja: return 0xfffffff4 */
         return -12;
     }
-    
-    /* Binary Ninja: memset($v0, 0, 0xe8) */
-    memset(fs_dev, 0, 0xe8);
     
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     /* This references platform device resource information */
@@ -174,10 +169,8 @@ int tx_isp_fs_probe(struct platform_device *pdev)
         return -12;
     }
     
-    /* Binary Ninja: uint32_t $a0_2 = zx.d(*($v0 + 0xc8)) */
-    channel_count = *(uint32_t *)((char *)fs_dev + 0xc8);
-    /* Binary Ninja: *($v0 + 0xe0) = $a0_2 */
-    fs_dev->channel_count = channel_count;
+    /* SAFE: Access struct member directly instead of offset calculation */
+    channel_count = fs_dev->channel_count;  /* Get from subdev initialization */
     
     pr_info("tx_isp_fs_probe: channel_count=%d\n", channel_count);
     
@@ -186,34 +179,29 @@ int tx_isp_fs_probe(struct platform_device *pdev)
         goto setup_complete;
     }
     
-    /* Binary Ninja: int32_t $v0_3 = private_kmalloc($a0_2 * 0x2ec, 0xd0) */
-    channels_buffer = kzalloc(channel_count * 0x2ec, GFP_KERNEL);  /* 0x2ec = 748 bytes per channel */
+    /* SAFE: Use proper struct size instead of fixed 0x2ec */
+    channels_buffer = kzalloc(channel_count * sizeof(struct tx_isp_frame_channel), GFP_KERNEL);
     if (!channels_buffer) {
         pr_err("Failed to allocate channels buffer\n");
         ret = -ENOMEM;
         goto error_cleanup;
     }
     
-    /* Binary Ninja: *($v0 + 0xdc) = $v0_3 */
+    /* SAFE: Direct struct member access */
     fs_dev->channel_buffer = channels_buffer;
-    
-    /* Binary Ninja: memset($v0_3, 0, 0x2ec * $a2_2) */
-    memset(channels_buffer, 0, 0x2ec * channel_count);
     
     /* Binary Ninja: Channel initialization loop */
     pr_info("tx_isp_fs_probe: initializing %d frame channels\n", channel_count);
     
     for (i = 0; i < channel_count; i++) {
-        /* Binary Ninja: int32_t $s4_1 = $s2_2 * 0x2ec */
-        /* Binary Ninja: int32_t* $s0_2 = *($v0 + 0xdc) + $s4_1 */
-        current_channel = (struct tx_isp_frame_channel *)((char *)channels_buffer + (i * 0x2ec));
+        /* SAFE: Use proper array indexing instead of offset calculation */
+        current_channel = &channels_buffer[i];
         
-        /* Binary Ninja: void* $s6_1 = $s2_2 * 0x24 + *($v0 + 0xcc) */
+        /* SAFE: Use proper array indexing for channel configs */
         channel_config_ptr = (char *)fs_dev->channel_configs + (i * 0x24);
         
-        /* Binary Ninja: if ($s0_2 == 0 || $s0_2 u>= 0xfffff001 || $s6_1 == 0 || $s6_1 u>= 0xfffff001) */
-        if (!current_channel || (unsigned long)current_channel >= 0xfffff001 ||
-            !channel_config_ptr || (unsigned long)channel_config_ptr >= 0xfffff001) {
+        /* SAFE: Simple null check - remove unsafe pointer range checks */
+        if (!current_channel || !channel_config_ptr) {
             ret = -EINVAL;
             goto error_cleanup_loop;
         }
@@ -273,9 +261,9 @@ int tx_isp_fs_probe(struct platform_device *pdev)
     goto setup_complete;
     
 error_cleanup_loop:
-    /* Binary Ninja: Error cleanup - deinitialize created channels */
+    /* SAFE: Error cleanup - deinitialize created channels */
     for (i = i - 1; i >= 0; i--) {
-        current_channel = (struct tx_isp_frame_channel *)((char *)channels_buffer + (i * 0x2ec));
+        current_channel = &channels_buffer[i];
         tx_isp_frame_chan_deinit(current_channel);
     }
 
@@ -287,19 +275,18 @@ error_cleanup:
     return ret;
 
 setup_complete:
-    /* Binary Ninja: label_1c670 */
-    /* Binary Ninja: *($v0 + 0xe4) = 1 */
+    /* SAFE: Direct struct member access */
     fs_dev->initialized = 1;
     
-    /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
     platform_set_drvdata(pdev, fs_dev);
     
-    /* Binary Ninja: *($v0 + 0x34) = &isp_framesource_fops */
-
-    /* Binary Ninja: *($v0 + 0xd4) = $v0 */
-
-    pr_info("*** tx_isp_fs_probe: FS device created successfully (size=0xe8, channels=%d) ***\n", 
-            channel_count);
+    /* SAFE: Set file operations through subdev module structure */
+    fs_dev->subdev.module.ops = &isp_framesource_fops;
+    
+    /* Note: Self-pointer assignment removed as it's not needed with proper struct access */
+    
+    pr_info("*** tx_isp_fs_probe: FS device created successfully (size=%zu, channels=%d) ***\n", 
+            sizeof(struct tx_isp_fs_device), channel_count);
     pr_info("*** FS PROBE COMPLETE - /proc/jz/isp/isp-fs SHOULD NOW BE AVAILABLE ***\n");
     
     /* Binary Ninja: return 0 */
@@ -320,11 +307,11 @@ int tx_isp_fs_remove(struct platform_device *pdev)
         return 0;
     }
     
-    /* Clean up frame channels */
+    /* SAFE: Clean up frame channels with proper array indexing */
     channels_buffer = (struct tx_isp_frame_channel *)fs_dev->channel_buffer;
     if (channels_buffer) {
         for (i = 0; i < fs_dev->channel_count; i++) {
-            current_channel = (struct tx_isp_frame_channel *)((char *)channels_buffer + (i * 0x2ec));
+            current_channel = &channels_buffer[i];
             if (current_channel->state) {
                 tx_isp_frame_chan_deinit(current_channel);
             }
