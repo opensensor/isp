@@ -58,46 +58,6 @@ struct vin_device;
 struct frame_source_device;
 
 
-/* VIC device struct from tx_isp.h - corrected version */
-struct vic_device {
-    void __iomem *regs;         // Base registers
-    void __iomem *vic_regs;     // VIC register base (for Binary Ninja compatibility)
-    struct tx_isp_subdev *sd;
-    spinlock_t lock;            // IRQ lock
-    struct mutex state_lock;    // Now should be 32-bit aligned
-
-    // State tracking
-    int state;                  // Track states: 1=INIT, 2=READY, etc
-    int streaming;              // Streaming state flag (for Binary Ninja compatibility)
-    u32 buffer_count;           // Number of buffers (for Binary Ninja compatibility)
-    u32 mdma_en;               // Group 32-bit values together
-    u32 ch0_buf_idx;
-    u32 ch0_sub_get_num;
-    struct completion frame_complete;
-
-    // Status flags (keep these together)
-    bool started;
-    bool processing;
-    u16 pad2;              // Pad to ensure 32-bit alignment
-
-    // Rest unchanged...
-    u32 width;
-    u32 height;
-    u32 stride;
-
-    void (*irq_handler)(void *);
-    void (*irq_disable)(void *);
-    void *irq_priv;
-    int irq_enabled;
-
-    /* Missing members that caused compilation errors */
-    struct tx_isp_sensor_attribute sensor_attr;
-    uint32_t total_errors;
-    uint32_t vic_errors[13];  /* 13 error counters */
-    uint32_t frame_count;     /* Frame counter */
-} __attribute__((aligned(4)));  // Force overall structure alignment
-
-
 struct csi_device {
     char device_name[32];     // 0x00: Device name
     struct device *dev;       // Device pointer
@@ -244,7 +204,7 @@ struct tx_isp_dev {
     volatile u32 vic_irq_enabled;
     struct irq_handler_data *vic_irq_data;
     void __iomem *vic_regs;
-    struct vic_device *vic_dev;
+    struct tx_isp_vic_device *vic_dev;
     struct ddr_device *ddr_dev;
     struct vin_device *vin_dev;
     struct frame_source_device *fs_dev;

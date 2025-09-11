@@ -870,13 +870,13 @@ static int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
 /* Initialize VIC device */
 static int tx_isp_vic_device_init(struct tx_isp_dev *isp)
 {
-    struct vic_device *vic_dev;
+    struct tx_isp_vic_device *vic_dev;
     
     pr_info("Initializing VIC device\n");
     
     /* Allocate VIC device structure if not already present */
     if (!isp->vic_dev) {
-        vic_dev = kzalloc(sizeof(struct vic_device), GFP_KERNEL);
+        vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
         if (!vic_dev) {
             pr_err("Failed to allocate VIC device\n");
             return -ENOMEM;

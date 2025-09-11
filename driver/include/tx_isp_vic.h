@@ -128,10 +128,53 @@ struct tx_isp_vic_device {
     
     // Buffer index array for VIC register mapping
     int buffer_index[5];                // Buffer index array (5 buffers max)
-    
+
+    u32 width;
+    u32 height;
+    u32 stride;
+
+    void (*irq_handler)(void *);
+    void (*irq_disable)(void *);
+    void *irq_priv;
+    int irq_enabled;
+
     // IRQ handling members (added for interrupt registration)
     int irq_number;                     // IRQ number from platform device
     irq_handler_t irq_handler_func;     // IRQ handler function pointer
 };
+
+
+//
+///* VIC device struct from tx_isp.h - corrected version */
+//struct vic_device {
+//    void __iomem *regs;         // Base registers
+//    void __iomem *vic_regs;     // VIC register base (for Binary Ninja compatibility)
+//    struct tx_isp_subdev *sd;
+//    spinlock_t lock;            // IRQ lock
+//    struct mutex state_lock;    // Now should be 32-bit aligned
+//
+//    // State tracking
+//    int state;                  // Track states: 1=INIT, 2=READY, etc
+//    int streaming;              // Streaming state flag (for Binary Ninja compatibility)
+//    u32 buffer_count;           // Number of buffers (for Binary Ninja compatibility)
+//    u32 mdma_en;               // Group 32-bit values together
+//    u32 ch0_buf_idx;
+//    u32 ch0_sub_get_num;
+//    struct completion frame_complete;
+//
+//    // Status flags (keep these together)
+//    bool started;
+//    bool processing;
+//    u16 pad2;              // Pad to ensure 32-bit alignment
+//
+//    // Rest unchanged...
+//
+//
+//    /* Missing members that caused compilation errors */
+//    struct tx_isp_sensor_attribute sensor_attr;
+//    uint32_t total_errors;
+//    uint32_t vic_errors[13];  /* 13 error counters */
+//    uint32_t frame_count;     /* Frame counter */
+//} __attribute__((aligned(4)));  // Force overall structure alignment
 
 #endif /* __TX_ISP_VIC_H__ */

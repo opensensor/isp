@@ -2107,7 +2107,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     
     /* CORRECTED: Use direct VIC device reference */
     if (dev->vic_dev) {
-        struct vic_device *vic_dev = dev->vic_dev;
+        struct tx_isp_vic_device *vic_dev = dev->vic_dev;
         
         if (vic_dev->sd && vic_dev->sd->ops && vic_dev->sd->ops->video && vic_dev->sd->ops->video->s_stream) {
             pr_info("*** Calling VIC s_stream directly: enable=%d ***\n", enable);
@@ -2658,7 +2658,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         
         /* Binary Ninja DMA sync: private_dma_sync_single_for_device(nullptr, var_44, var_40, 2) */
         if (sensor_active && ourISPdev && ourISPdev->vic_dev) {
-            struct vic_device *vic_dev = (struct vic_device *)ourISPdev->vic_dev;
+            struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
             
             /* Update VIC buffer tracking for this dequeue like Binary Ninja */
             if (vic_dev && vic_dev->vic_regs && buf_index < 8) {
