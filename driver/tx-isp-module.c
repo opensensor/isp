@@ -1949,6 +1949,9 @@ static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
 static DEFINE_MUTEX(subdev_init_lock);
 static volatile bool subdev_init_complete = false;
 
+/* Forward declaration for tx_isp_video_s_stream */
+int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable);
+
 /* tx_isp_video_link_stream - FIXED implementation with proper MIPS alignment checks */
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 {
