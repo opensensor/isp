@@ -1585,6 +1585,10 @@ if (!IS_ERR(cgu_isp_clk)) {
     tx_isp_enable_irq(isp_dev);
     pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
 
+    /* *** CRITICAL FIX: Enable VIC hardware interrupts using safe struct access *** */
+    pr_info("*** tx_isp_vic_start: CRITICAL FIX - Enabling VIC hardware interrupts ***\n");
+    tx_vic_enable_irq(vic_dev);
+    pr_info("*** tx_isp_vic_start: VIC hardware interrupts enabled - hw_irq_enabled=%d ***\n", vic_dev->hw_irq_enabled);
     
     pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
     pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
