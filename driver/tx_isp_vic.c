@@ -450,13 +450,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     }
     
     /* FIXED: Use safe struct member access instead of dangerous offset 0xd4 */
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    
-    /* FIXED: Validate vic_dev pointer */
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("isp_vic_interrupt_service_routine: Invalid vic_dev - using safe subdev access\n");
-        return IRQ_HANDLED;
-    }
+    vic_dev = ourISPdev->vic_dev;
     
     /* FIXED: Use safe struct member access instead of offset 0xb8 */
     vic_base = vic_dev->vic_regs;  /* Safe access to VIC register base */
