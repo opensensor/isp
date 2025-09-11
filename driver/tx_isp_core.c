@@ -23,6 +23,8 @@
 static int print_level = ISP_WARN_LEVEL;
 module_param(print_level, int, S_IRUGO);
 MODULE_PARM_DESC(print_level, "isp print level");
+int tx_isp_configure_clocks(struct tx_isp_dev *isp);
+
 
 /* Debug macro for sensor functions */
 #define ISP_DEBUG(fmt, ...) \
@@ -671,7 +673,7 @@ static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp)
 }
 
 /* Configure ISP system clocks */
-static int tx_isp_configure_clocks(struct tx_isp_dev *isp)
+int tx_isp_configure_clocks(struct tx_isp_dev *isp)
 {
     struct clk *cgu_isp;
     struct clk *isp_clk;
