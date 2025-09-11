@@ -1369,7 +1369,7 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     pr_info("*** csi_device_probe: EXACT Binary Ninja tx_isp_csi_probe implementation ***\n");
     
     /* Binary Ninja: private_kmalloc(0x148, 0xd0) */
-    csi_dev = kzalloc(0x148, GFP_KERNEL);
+    csi_dev = kzalloc(sizeof(struct tx_isp_csi_device), GFP_KERNEL);
     if (!csi_dev) {
         pr_err("csi_device_probe: Failed to allocate CSI device (0x148 bytes)\n");
         return -ENOMEM;
