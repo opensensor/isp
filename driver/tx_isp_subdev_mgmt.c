@@ -693,27 +693,14 @@ static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc)
 int tx_isp_vic_device_init(struct tx_isp_dev *isp)
 {
     struct tx_isp_vic_device *vic_dev;
+    vic_dev = ourISPdev->vic_dev;
+    /* Initialize VIC device structure */
+    vic_dev->state = 1; /* INIT state */
+    mutex_init(&vic_dev->state_lock);
+    spin_lock_init(&vic_dev->lock);
+    init_completion(&vic_dev->frame_complete);
 
-    pr_info("Initializing VIC device\n");
-
-    /* Allocate VIC device structure if not already present */
-    if (!isp->vic_dev) {
-        vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
-        if (!vic_dev) {
-            pr_err("Failed to allocate VIC device\n");
-            return -ENOMEM;
-        }
-
-        /* Initialize VIC device structure */
-        vic_dev->state = 1; /* INIT state */
-        mutex_init(&vic_dev->state_lock);
-        spin_lock_init(&vic_dev->lock);
-        init_completion(&vic_dev->frame_complete);
-
-        isp->vic_dev = vic_dev;
-    }
-    
-    pr_info("tx_isp_vic_device_init: VIC device initialized (stub)\n");
+    pr_info("tx_isp_vic_device_init: VIC device initialized\n");
     return 0;
 }
 
