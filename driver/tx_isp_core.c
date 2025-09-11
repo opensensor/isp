@@ -962,7 +962,9 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
             
             /* Binary Ninja: tisp_deinit() */
             pr_info("ispcore_core_ops_init: Calling tisp_deinit()");
-            /* tisp_deinit() call would go here */
+            /* Call tisp_deinit to clean up ISP pipeline components */
+            extern int tisp_deinit(void);
+            tisp_deinit();
             
             /* Binary Ninja: memset(*($s0 + 0x1bc) + 4, 0, 0x40a4) */
             /* Binary Ninja: memset($s0 + 0x1d8, 0, 0x40) */
@@ -1754,7 +1756,9 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
             if (isp_state == 4) {
                 /* Stop video streaming */
                 ISP_INFO("*** ispcore_core_ops_init: Stopping video streaming (state 4) ***\n");
-                /* ispcore_video_s_stream equivalent call would go here */
+                /* Stop video streaming using proper ISP core functions */
+                extern int ispcore_video_s_stream(struct tx_isp_dev *isp, int enable);
+                ispcore_video_s_stream(isp, 0);
             }
             
             if (isp_state == 3) {
@@ -1938,7 +1942,10 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
             ISP_INFO("Channel %d: configuring dimensions %dx%d\n", 
                      i, sensor_attr->total_width, sensor_attr->total_height);
             
-            /* Channel-specific configuration would go here */
+            /* Configure channel-specific parameters based on channel index */
+            isp->channels[i].width = sensor_attr->total_width;
+            isp->channels[i].height = sensor_attr->total_height;
+            isp->channels[i].fmt = (i == 0) ? 1 : i; /* Channel 0 uses format 1, others use channel index */
         }
     }
     
