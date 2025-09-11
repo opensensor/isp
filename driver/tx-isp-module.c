@@ -2815,6 +2815,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             } else {
                 pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
             }
+
+            // Trigger Core Streaming
+            if (ourISPdev && ourISPdev->core_dev) {
+
         } else {
             if (channel == 0) {
                 pr_warn("*** Channel %d: NO SENSOR AVAILABLE FOR STREAMING ***\n", channel);

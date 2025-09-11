@@ -1720,279 +1720,6 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
 }
 
 /**
- * ispcore_core_ops_init - CRITICAL: Initialize ISP Core Operations
- * This is the EXACT reference implementation from Binary Ninja decompilation
- * CRITICAL: tisp_init is called FROM THIS FUNCTION, not from handle_sensor_register
- */
-static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr)
-{
-    void __iomem *isp_regs;
-    u32 reg_val;
-    int ret = 0;
-    
-    if (!isp) {
-        ISP_ERROR("*** ispcore_core_ops_init: Invalid ISP device ***\n");
-        return -EINVAL;
-    }
-    
-    ISP_INFO("*** ispcore_core_ops_init: EXACT Binary Ninja reference implementation ***\n");
-    
-    /* Check ISP state - equivalent to reference check */
-    if (!isp->vic_dev) {
-        ISP_ERROR("*** ispcore_core_ops_init: No VIC device found ***\n");
-        return -EINVAL;
-    }
-    
-    int isp_state = isp->vic_dev->state;
-    ISP_INFO("*** ispcore_core_ops_init: Current ISP state = %d ***\n", isp_state);
-    
-    /* Reference logic: if (arg2 == 0) - arg2 is the second parameter */
-    if (!sensor_attr) {
-        /* Deinitialize path - matches reference when arg2 == 0 */
-        ISP_INFO("*** ispcore_core_ops_init: Deinitialize path (sensor_attr == NULL) ***\n");
-        
-        if (isp_state != 1) {
-            /* Check for state transitions */
-            if (isp_state == 4) {
-                /* Stop video streaming */
-                ISP_INFO("*** ispcore_core_ops_init: Stopping video streaming (state 4) ***\n");
-                /* Stop video streaming using proper ISP core functions */
-                extern int ispcore_video_s_stream(struct tx_isp_dev *isp, int enable);
-                ispcore_video_s_stream(isp, 0);
-            }
-            
-            if (isp_state == 3) {
-                /* Stop kernel thread - matches reference kthread_stop */
-                ISP_INFO("*** ispcore_core_ops_init: Stopping ISP thread (state 3) ***\n");
-                /* Thread stopping logic would go here */
-                isp->vic_dev->state = 2;
-            }
-            
-            /* Call tisp_deinit - matches reference */
-            ISP_INFO("*** ispcore_core_ops_init: Calling tisp_deinit() ***\n");
-            /* tisp_deinit() call would go here */
-            
-            /* Clear memory regions - matches reference memset calls */
-            ISP_INFO("*** ispcore_core_ops_init: Clearing ISP memory regions ***\n");
-        }
-        
-        return 0;
-    }
-    
-    /* CRITICAL: Hardware reset must be performed FIRST - matches reference */
-    ISP_INFO("*** ispcore_core_ops_init: Calling private_reset_tx_isp_module(0) ***\n");
-    ret = tx_isp_hardware_reset(0);
-    if (ret < 0) {
-        ISP_ERROR("*** ispcore_core_ops_init: Hardware reset failed: %d ***\n", ret);
-        return ret;
-    }
-    
-    /* Check ISP state with spinlock - matches reference spinlock usage */
-    unsigned long flags;
-    spin_lock_irqsave(&isp->irq_lock, flags);
-    
-    if (isp->vic_dev->state != 2) {
-        spin_unlock_irqrestore(&isp->irq_lock, flags);
-        ISP_ERROR("*** ispcore_core_ops_init: Invalid ISP state %d (expected 2) ***\n", 
-                  isp->vic_dev->state);
-        return -EINVAL;
-    }
-    
-    spin_unlock_irqrestore(&isp->irq_lock, flags);
-    
-    /* CRITICAL: MISSING HARDWARE INITIALIZATION SEQUENCE FROM REFERENCE LOGS! */
-    ISP_INFO("*** ispcore_core_ops_init: IMPLEMENTING MISSING HARDWARE INITIALIZATION ***\n");
-    
-    if (!isp->vic_regs) {
-        ISP_ERROR("*** ispcore_core_ops_init: No VIC registers mapped ***\n");
-        return -EINVAL;
-    }
-    
-    /* Get ISP register base - VIC regs are at offset 0x9a00 from ISP base */
-    isp_regs = isp->vic_regs - 0x9a00;
-    
-    /* *** CRITICAL: MISSING INITIALIZATION SEQUENCE FROM REFERENCE LOGS *** */
-    ISP_INFO("*** ispcore_core_ops_init: Writing missing ISP control registers ***\n");
-    
-    /* Reference log: ISP isp-m0: [CSI PHY Control] write at offset 0x8: 0x1 -> 0x0 */
-    system_reg_write(0x10022008, 0x0);
-    ISP_INFO("CSI PHY Control[0x8] = 0x0\n");
-    
-    /* Reference log: ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x80700008 -> 0xb5742249 */
-    system_reg_write(0x1002200c, 0xb5742249);
-    ISP_INFO("CSI PHY Control[0xc] = 0xb5742249\n");
-    
-    /* Reference log: ISP isp-m0: [CSI PHY Control] write at offset 0x10: 0x0 -> 0x133 */
-    system_reg_write(0x10022010, 0x133);
-    ISP_INFO("CSI PHY Control[0x10] = 0x133\n");
-    
-    /* Reference log: ISP isp-m0: [CSI PHY Control] write at offset 0x1c: 0x0 -> 0x8 */
-    system_reg_write(0x1002201c, 0x8);
-    ISP_INFO("CSI PHY Control[0x1c] = 0x8\n");
-    
-    /* Reference log: ISP isp-m0: [CSI PHY Control] write at offset 0x30: 0x0 -> 0x8fffffff */
-    system_reg_write(0x10022030, 0x8fffffff);
-    ISP_INFO("CSI PHY Control[0x30] = 0x8fffffff\n");
-    
-    /* Reference log: ISP isp-m0: [CSI PHY Config] write at offset 0x110: 0x80007000 -> 0x92217523 */
-    system_reg_write(0x10022110, 0x92217523);
-    ISP_INFO("CSI PHY Config[0x110] = 0x92217523\n");
-    
-    /* Reference log: ISP isp-m0: [ISP Control] write at offset 0x9804: 0x3f00 -> 0x0 */
-    system_reg_write(0x9804, 0x0);
-    ISP_INFO("ISP Control[0x9804] = 0x0\n");
-    
-    /* Reference log: ISP isp-m0: [VIC Control] write at offset 0x9ac0: 0x200 -> 0x0 */
-    system_reg_write(0x9ac0, 0x0);
-    ISP_INFO("VIC Control[0x9ac0] = 0x0\n");
-    
-    /* Reference log: ISP isp-m0: [VIC Control] write at offset 0x9ac8: 0x200 -> 0x0 */
-    system_reg_write(0x9ac8, 0x0);
-    ISP_INFO("VIC Control[0x9ac8] = 0x0\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb018: 0x40404040 -> 0x24242424 */
-    system_reg_write(0xb018, 0x24242424);
-    ISP_INFO("Core Control[0xb018] = 0x24242424\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb01c: 0x40404040 -> 0x24242424 */
-    system_reg_write(0xb01c, 0x24242424);
-    ISP_INFO("Core Control[0xb01c] = 0x24242424\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb020: 0x40404040 -> 0x24242424 */
-    system_reg_write(0xb020, 0x24242424);
-    ISP_INFO("Core Control[0xb020] = 0x24242424\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb024: 0x404040 -> 0x242424 */
-    system_reg_write(0xb024, 0x242424);
-    ISP_INFO("Core Control[0xb024] = 0x242424\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb028: 0x1000080 -> 0x10d0046 */
-    system_reg_write(0xb028, 0x10d0046);
-    ISP_INFO("Core Control[0xb028] = 0x10d0046\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb02c: 0x1000080 -> 0xe8002f */
-    system_reg_write(0xb02c, 0xe8002f);
-    ISP_INFO("Core Control[0xb02c] = 0xe8002f\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb030: 0x100 -> 0xc50100 */
-    system_reg_write(0xb030, 0xc50100);
-    ISP_INFO("Core Control[0xb030] = 0xc50100\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb034: 0xffff0100 -> 0x1670100 */
-    system_reg_write(0xb034, 0x1670100);
-    ISP_INFO("Core Control[0xb034] = 0x1670100\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb038: 0x1ff00 -> 0x1f001 */
-    system_reg_write(0xb038, 0x1f001);
-    ISP_INFO("Core Control[0xb038] = 0x1f001\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb03c: 0x0 -> 0x46e0000 */
-    system_reg_write(0xb03c, 0x46e0000);
-    ISP_INFO("Core Control[0xb03c] = 0x46e0000\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb040: 0x0 -> 0x46e1000 */
-    system_reg_write(0xb040, 0x46e1000);
-    ISP_INFO("Core Control[0xb040] = 0x46e1000\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb044: 0x0 -> 0x46e2000 */
-    system_reg_write(0xb044, 0x46e2000);
-    ISP_INFO("Core Control[0xb044] = 0x46e2000\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb048: 0x0 -> 0x46e3000 */
-    system_reg_write(0xb048, 0x46e3000);
-    ISP_INFO("Core Control[0xb048] = 0x46e3000\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb04c: 0x103 -> 0x3 */
-    system_reg_write(0xb04c, 0x3);
-    ISP_INFO("Core Control[0xb04c] = 0x3\n");
-    
-    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb078: 0x0 -> 0x10000000 */
-    system_reg_write(0xb078, 0x10000000);
-    ISP_INFO("Core Control[0xb078] = 0x10000000\n");
-    
-    ISP_INFO("*** ispcore_core_ops_init: MISSING HARDWARE INITIALIZATION COMPLETE ***\n");
-    
-    /* CRITICAL: Validate and fix sensor dimensions to prevent memory corruption */
-    if (sensor_attr->total_width > 10000 || sensor_attr->total_height > 10000 ||
-        sensor_attr->total_width == 0 || sensor_attr->total_height == 0) {
-        ISP_ERROR("*** ispcore_core_ops_init: INVALID SENSOR DIMENSIONS! ***\n");
-        ISP_ERROR("*** Original: %dx%d ***\n", 
-                  sensor_attr->total_width, sensor_attr->total_height);
-        
-        /* Fix corrupted dimensions - assume GC2053 sensor */
-        sensor_attr->total_width = 2200;
-        sensor_attr->total_height = 1125;
-        
-        ISP_INFO("*** ispcore_core_ops_init: CORRECTED to %dx%d ***\n",
-                 sensor_attr->total_width, sensor_attr->total_height);
-    }
-    
-    /* Store corrected sensor dimensions in ISP device */
-    isp->sensor_width = sensor_attr->total_width;
-    isp->sensor_height = sensor_attr->total_height;
-    
-    /* Process sensor attributes and configure channels - matches reference logic */
-    ISP_INFO("*** ispcore_core_ops_init: Processing sensor attributes ***\n");
-    
-    /* Channel configuration loop - matches reference */
-    int i;
-    for (i = 0; i < ISP_MAX_CHAN; i++) {
-        if (isp->channels[i].enabled) {
-            /* Configure channel dimensions and format */
-            ISP_INFO("Channel %d: configuring dimensions %dx%d\n", 
-                     i, sensor_attr->total_width, sensor_attr->total_height);
-            
-            /* Configure channel-specific parameters based on channel index */
-            isp->channels[i].width = sensor_attr->total_width;
-            isp->channels[i].height = sensor_attr->total_height;
-            isp->channels[i].fmt = (i == 0) ? 1 : i; /* Channel 0 uses format 1, others use channel index */
-        }
-    }
-    
-    /* Determine var_70_4 value based on chip ID - matches reference switch/case logic */
-    u32 chip_id = sensor_attr->chip_id;
-    int var_70_4 = 0;
-    
-    /* This matches the massive switch/case in the reference decompilation */
-    if (chip_id == 0x310f || chip_id == 0x320f) {
-        var_70_4 = 0x13;
-    } else if (chip_id == 0x2053) {  /* GC2053 */
-        var_70_4 = 0x14;
-    } else if (chip_id >= 0x3000 && chip_id < 0x4000) {
-        /* Most common sensor range */
-        var_70_4 = ((chip_id & 0xff) % 20) + 1;
-    } else {
-        ISP_ERROR("*** ispcore_core_ops_init: Unknown chip ID 0x%x ***\n", chip_id);
-        var_70_4 = 1; /* Default */
-    }
-    
-    ISP_INFO("*** ispcore_core_ops_init: Chip ID 0x%x mapped to var_70_4 = %d ***\n", 
-             chip_id, var_70_4);
-    
-    /* CRITICAL: THIS IS THE KEY CALL - tisp_init is called FROM ispcore_core_ops_init! */
-    ISP_INFO("*** ispcore_core_ops_init: Calling tisp_init() - CRITICAL REFERENCE MATCH ***\n");
-    
-    /* Create the var_78 structure and call tisp_init - matches reference exactly */
-    struct tx_isp_sensor_attribute local_attr = *sensor_attr;
-    ret = tisp_init(&local_attr, isp);
-    if (ret < 0) {
-        ISP_ERROR("*** ispcore_core_ops_init: tisp_init failed: %d ***\n", ret);
-        return ret;
-    }
-    
-    ISP_INFO("*** ispcore_core_ops_init: tisp_init SUCCESS ***\n");
-    
-    /* Start kernel thread - matches reference kthread_run */
-    ISP_INFO("*** ispcore_core_ops_init: Starting ISP processing thread ***\n");
-    
-    /* Set state to 3 (running) - matches reference */
-    isp->vic_dev->state = 3;
-    
-    ISP_INFO("*** ispcore_core_ops_init: ISP CORE INITIALIZATION COMPLETE - STATE 3 ***\n");
-    return 0;
-}
-
-/**
  * tiziano_sync_sensor_attr_validate - Validate and sync sensor attributes
  * This prevents the memory corruption seen in logs (268442625x49968@0)
  */
@@ -3256,11 +2983,19 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
 }
 
 
+/* Platform data structure for safe member access */
+struct tx_isp_platform_data {
+    uint16_t reserved;      /* Padding to offset 2 */
+    uint32_t device_id;     /* Device ID at offset 2 */
+    uint32_t flags;         /* Additional flags */
+    uint32_t version;       /* Version info */
+} __attribute__((packed));
+
 /* tx_isp_core_probe - SAFE implementation using proper struct member access */
 int tx_isp_core_probe(struct platform_device *pdev)
 {
     struct tx_isp_dev *isp_dev;
-    void *s2_1;
+    struct tx_isp_platform_data *platform_data;
     int result;
     uint32_t channel_count;
     void *channel_array;
@@ -3277,7 +3012,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
     /* Initialize device pointer */
     isp_dev->dev = &pdev->dev;
-    s2_1 = pdev->dev.platform_data;
+    platform_data = (struct tx_isp_platform_data *)pdev->dev.platform_data;
 
     /* SAFE: Create proper platform device array */
     pr_info("*** tx_isp_core_probe: SAFE platform device setup ***\n");
@@ -3319,13 +3054,16 @@ int tx_isp_core_probe(struct platform_device *pdev)
     
     pr_info("*** tx_isp_core_probe: Platform devices configured - count=%d ***\n", isp_dev->subdev_count);
 
-    /* Initialize platform data reference */
-    if (!s2_1) {
-        /* Create minimal platform data if none exists */
-        s2_1 = kzalloc(16, GFP_KERNEL);
-        if (s2_1) {
-            *((uint32_t*)((char*)s2_1 + 2)) = 1;  /* Set some valid ID */
-            pdev->dev.platform_data = s2_1;
+    /* SAFE: Initialize platform data reference using proper struct member access */
+    if (!platform_data) {
+        /* Create proper platform data structure if none exists */
+        platform_data = kzalloc(sizeof(struct tx_isp_platform_data), GFP_KERNEL);
+        if (platform_data) {
+            platform_data->device_id = 1;  /* SAFE: Set device ID using struct member */
+            platform_data->flags = 0;
+            platform_data->version = 1;
+            pdev->dev.platform_data = platform_data;
+            pr_info("*** tx_isp_core_probe: Created safe platform data structure ***\n");
         }
     }
 
@@ -3521,7 +3259,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
         result = -ENOMEM;
     } else {
         /* Binary Ninja: Error message with platform data info */
-        uint32_t platform_id = s2_1 ? *((uint32_t*)((char*)s2_1 + 2)) : 0;
+        uint32_t platform_id = platform_data ? platform_data->device_id : 0;
         isp_printf(2, "Failed to init isp module(%d.%d)\n", platform_id, platform_id);
         result = -ENODEV;
     }

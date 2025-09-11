@@ -86,6 +86,7 @@ struct tx_isp_csi_device {
 
 /* Core ISP device structure */
 struct tx_isp_dev {
+    struct tx_isp_subdev sd;        // Base subdev at offset 0
     /* Core device info */
     struct device *dev;
     struct device *tisp_device;
