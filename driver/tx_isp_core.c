@@ -1191,7 +1191,7 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
         pr_info("ispcore_core_ops_init: Chip ID 0x%x mapped to var_70_4 = %d", chip_id, var_70_4);
         
         /* Binary Ninja: tisp_init(&var_78, $s0 + 0x1d8) - CRITICAL CALL */
-        pr_info("ispcore_core_ops_init: Calling tisp_init() - CRITICAL REFERENCE MATCH");
+        //pr_info("ispcore_core_ops_init: Calling tisp_init() - CRITICAL REFERENCE MATCH");
         
 //        struct tx_isp_sensor_attribute local_attr = *sensor_attr;
 //        ret = tisp_init(&local_attr, isp);
@@ -1200,7 +1200,7 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
 //            return ret;
 //        }
 //
-        pr_info("ispcore_core_ops_init: tisp_init SUCCESS");
+        //pr_info("ispcore_core_ops_init: tisp_init SUCCESS");
         
         /* Binary Ninja: Start kernel thread */
         pr_info("ispcore_core_ops_init: Starting ISP processing thread");
