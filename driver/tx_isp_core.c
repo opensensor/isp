@@ -3237,7 +3237,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     
     /* Initialize the subdev that's already the first member of tx_isp_dev */
     isp_dev->sd.isp = isp_dev;  /* Set back-reference */
-    isp_dev->sd.ops = &core_subdev_ops;  /* Set operations */
+    isp_dev->sd.ops = &core_subdev_ops_full;  /* Set operations to the properly configured structure */
     isp_dev->sd.vin_state = TX_ISP_MODULE_INIT;  /* Set initial state */
     
     /* Initialize subdev synchronization */
