@@ -2647,14 +2647,9 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
             }
         }
         
-        /* Also pre-populate queue with one entry to prevent "qbuffer null" */
-        struct list_head *queue_buffer = kzalloc(sizeof(struct list_head) + 32, GFP_KERNEL);
-        if (queue_buffer) {
-            list_add_tail(queue_buffer, &vic_dev->queue_head);
-            pr_info("tx_isp_subdev_pipo: added initial buffer entry to queue_head list\n");
-        }
-        
-        pr_info("tx_isp_subdev_pipo: buffer lists populated - free_head has entries now\n");
+        /* CRITICAL FIX: Don't pre-populate queue - it should start empty and be filled by QBUF calls */
+        /* The "qbuffer null" message is normal when no buffers have been queued yet */
+        pr_info("tx_isp_subdev_pipo: buffer lists initialized - queue starts empty, free_head populated\n");
         
         /* Binary Ninja: Set up function pointers in raw_pipe structure */
         /* *raw_pipe = ispvic_frame_channel_qbuf */
