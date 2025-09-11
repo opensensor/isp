@@ -214,48 +214,78 @@ static struct {
     uint8_t state;    /* GPIO state at offset 0x14 */
 } gpio_info[10];
 
-/* vic_framedone_irq_function - CRITICAL MIPS ALIGNMENT FIX */
+/* vic_framedone_irq_function - CRITICAL NULL POINTER FIX */
 static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
     void *result = NULL;
     
-    pr_debug("*** vic_framedone_irq_function: CRITICAL MIPS ALIGNMENT FIX ***\n");
+    pr_debug("*** vic_framedone_irq_function: CRITICAL NULL POINTER FIX ***\n");
     
-    /* CRITICAL MIPS FIX: Validate vic_dev pointer alignment FIRST */
-    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev %p not 4-byte aligned ***\n", vic_dev);
+    /* CRITICAL FIX: Comprehensive vic_dev validation to prevent crash */
+    if (!vic_dev) {
+        pr_err("*** CRASH FIX: vic_dev is NULL - this is the BadVA 00030296 crash! ***\n");
         return -EFAULT;
     }
     
-    /* CRITICAL MIPS FIX: Validate vic_regs member access alignment */
+    /* CRITICAL FIX: Validate vic_dev is in valid kernel memory range */
+    if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_err("*** CRASH FIX: vic_dev %p outside valid kernel memory range ***\n", vic_dev);
+        return -EFAULT;
+    }
+    
+    /* CRITICAL FIX: Validate vic_dev pointer alignment */
+    if (((uintptr_t)vic_dev & 0x3) != 0) {
+        pr_err("*** CRASH FIX: vic_dev %p not 4-byte aligned ***\n", vic_dev);
+        return -EFAULT;
+    }
+    
+    /* CRITICAL FIX: Validate vic_regs member exists and is accessible */
     if (((uintptr_t)&vic_dev->vic_regs & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->vic_regs member not aligned ***\n");
+        pr_err("*** CRASH FIX: vic_dev->vic_regs member not aligned ***\n");
         return -EFAULT;
     }
     
+    /* CRITICAL FIX: Validate vic_regs pointer before dereferencing */
     vic_base = vic_dev->vic_regs;
-    
-    /* CRITICAL MIPS FIX: Validate register base alignment */
-    if (!vic_base || ((uintptr_t)vic_base & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_base %p not 4-byte aligned ***\n", vic_base);
+    if (!vic_base) {
+        pr_err("*** CRASH FIX: vic_base is NULL - cannot access VIC registers ***\n");
         return -EFAULT;
     }
     
-    pr_debug("*** vic_framedone_irq_function: MIPS alignment validated - vic_dev=%p, vic_base=%p ***\n", 
+    /* CRITICAL FIX: Validate vic_base is in valid I/O memory range */
+    if ((unsigned long)vic_base < 0x10000000 || (unsigned long)vic_base >= 0x20000000) {
+        pr_err("*** CRASH FIX: vic_base %p outside valid I/O memory range ***\n", vic_base);
+        return -EFAULT;
+    }
+    
+    /* CRITICAL FIX: Validate register base alignment */
+    if (((uintptr_t)vic_base & 0x3) != 0) {
+        pr_err("*** CRASH FIX: vic_base %p not 4-byte aligned ***\n", vic_base);
+        return -EFAULT;
+    }
+    
+    pr_debug("*** vic_framedone_irq_function: All validation passed - vic_dev=%p, vic_base=%p ***\n", 
              vic_dev, vic_base);
     
-    /* CRITICAL FIX: Use ALIGNED struct member access instead of dangerous offset arithmetic */
-    /* Binary Ninja: if (*(arg1 + 0x214) == 0) - DANGEROUS unaligned access causing crash */
-    /* SAFE REPLACEMENT: Use properly aligned struct member */
-    if (!vic_dev->processing) {  /* SAFE: Aligned struct member access */
+    /* CRITICAL FIX: Safe access to processing flag with additional validation */
+    /* This prevents the BadVA 00030296 crash by ensuring safe struct member access */
+    if (((uintptr_t)&vic_dev->processing & 0x3) != 0) {
+        pr_err("*** CRASH FIX: processing member not aligned ***\n");
+        return -EFAULT;
+    }
+    
+    if (!vic_dev->processing) {  /* SAFE: Validated struct member access */
         /* goto label_123f4 - GPIO handling section */
         goto gpio_handling;
     } else {
-        /* CRITICAL FIX: Use ALIGNED struct member access */
-        /* Binary Ninja: result = *(arg1 + 0x210) - DANGEROUS unaligned access */
-        /* SAFE REPLACEMENT: Use properly aligned struct member */
-        if (vic_dev->stream_state != 0) {  /* SAFE: Aligned struct member access */
+        /* CRITICAL FIX: Safe access to stream_state with validation */
+        if (((uintptr_t)&vic_dev->stream_state & 0x3) != 0) {
+            pr_err("*** CRASH FIX: stream_state member not aligned ***\n");
+            return -EFAULT;
+        }
+        
+        if (vic_dev->stream_state != 0) {  /* SAFE: Validated struct member access */
             
             /* CRITICAL MIPS FIX: Use SAFE list operations instead of dangerous pointer arithmetic */
             /* Binary Ninja: void** i_1 = *(arg1 + 0x204) - DANGEROUS pointer arithmetic */
@@ -1342,7 +1372,6 @@ if (!IS_ERR(cgu_isp_clk)) {
     writel(0x100, vic_regs + 0xe0);          /* Register from reference trace */
     writel(0x400040, vic_regs + 0xe4);       /* Register from reference trace */
     writel(0xff808000, vic_regs + 0xf0);     /* Register from reference trace */
-    writel(0x10, vic_regs + 0x120);
     wmb();
     
     /* CSI PHY Config registers - from reference trace */
