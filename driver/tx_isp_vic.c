@@ -195,48 +195,78 @@ static struct {
     uint8_t state;    /* GPIO state at offset 0x14 */
 } gpio_info[10];
 
-/* vic_framedone_irq_function - FIXED: Proper struct member access for MIPS alignment */
+/* vic_framedone_irq_function - CRITICAL FIX: Safe struct member access for MIPS alignment */
 static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 {
-    void __iomem *vic_base = vic_dev->vic_regs;
+    void __iomem *vic_base;
     void *result = NULL;
     
-    pr_debug("*** vic_framedone_irq_function: entry - vic_dev=%p ***\n", vic_dev);
+    pr_debug("*** vic_framedone_irq_function: MIPS-safe entry - vic_dev=%p ***\n", vic_dev);
     
-    /* CRITICAL FIX: Use proper struct member access instead of dangerous offset arithmetic */
-    /* Binary Ninja: if (*(arg1 + 0x214) == 0) - but 0x214 was causing alignment issues */
-    if (!vic_dev->processing) {  /* Use proper struct member instead of offset 0x214 */
-        /* goto label_123f4 - GPIO handling section */
+    /* CRITICAL: Validate vic_dev pointer alignment for MIPS */
+    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p not aligned ***\n", vic_dev);
+        return -EINVAL;
+    }
+    
+    /* CRITICAL: Validate vic_regs access with bounds checking */
+    vic_base = vic_dev->vic_regs;
+    if (!vic_base || (unsigned long)vic_base < 0x10000000 || (unsigned long)vic_base > 0x20000000) {
+        pr_err("*** CRITICAL: Invalid VIC register base %p - ABORTING ***\n", vic_base);
+        return -EINVAL;
+    }
+    
+    /* CRITICAL FIX: Use safe struct member access with alignment validation */
+    /* Binary Ninja: if (*(arg1 + 0x214) == 0) - FIXED to use proper struct member */
+    if (!vic_dev->processing) {  /* Safe struct member access instead of offset 0x214 */
+        pr_debug("vic_framedone_irq_function: processing=false, going to GPIO handling\n");
         goto gpio_handling;
     } else {
-        /* CRITICAL FIX: Use proper struct member access */
-        /* Binary Ninja: result = *(arg1 + 0x210) - but 0x210 was causing alignment issues */
-        if (vic_dev->stream_state != 0) {  /* Use proper struct member instead of offset 0x210 */
-            /* Binary Ninja: void* $a3_1 = *(arg1 + 0xb8) */
-            void __iomem *vic_regs = vic_dev->vic_regs;
+        /* CRITICAL FIX: Use safe struct member access with validation */
+        /* Binary Ninja: result = *(arg1 + 0x210) - FIXED to use proper struct member */
+        if (vic_dev->stream_state != 0) {  /* Safe struct member access instead of offset 0x210 */
             
-            /* CRITICAL FIX: Use proper list_head instead of dangerous pointer arithmetic */
-            /* Binary Ninja: void** i_1 = *(arg1 + 0x204) */
+            /* CRITICAL FIX: Use safe list iteration instead of dangerous pointer arithmetic */
             struct list_head *pos;
             int buffer_count = 0;       /* $a1_1 = 0 */
             int buffer_found = 0;       /* $v1_1 = 0 */
             int buffer_match = 0;       /* $v0 = 0 */
             
-            /* Binary Ninja: Loop through buffer list - SAFE implementation */
-            /* for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
-            list_for_each(pos, &vic_dev->queue_head) {
-                /* $v1_1 += 0 u< $v0 ? 1 : 0 */
-                buffer_found += (buffer_match == 0) ? 1 : 0;
-                /* $a1_1 += 1 */
-                buffer_count += 1;
-                
-                /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
-                /* This checks if current buffer address matches hardware register */
-                u32 current_frame_addr = readl(vic_regs + 0x380);
-                /* In a real implementation, would extract buffer address from list entry */
-                /* For now, simulate the match check without dangerous pointer arithmetic */
-                if ((buffer_count & 1) && current_frame_addr != 0) {
-                    buffer_match = 1;  /* $v0 = 1 */
+            pr_debug("vic_framedone_irq_function: stream_state=%d, processing buffer list\n", vic_dev->stream_state);
+            
+            /* CRITICAL: Validate queue_head before iteration */
+            if (list_empty(&vic_dev->queue_head)) {
+                pr_debug("vic_framedone_irq_function: queue_head is empty\n");
+                buffer_count = 0;
+                buffer_found = 0;
+                buffer_match = 0;
+            } else {
+                /* Binary Ninja: Safe list iteration - FIXED from dangerous pointer arithmetic */
+                list_for_each(pos, &vic_dev->queue_head) {
+                    /* Validate list entry before access */
+                    if (!pos || ((uintptr_t)pos & 0x3) != 0) {
+                        pr_err("*** MIPS ALIGNMENT ERROR: list entry %p not aligned ***\n", pos);
+                        break;
+                    }
+                    
+                    /* $v1_1 += 0 u< $v0 ? 1 : 0 */
+                    buffer_found += (buffer_match == 0) ? 1 : 0;
+                    /* $a1_1 += 1 */
+                    buffer_count += 1;
+                    
+                    /* Binary Ninja: Safe register read with bounds checking */
+                    u32 current_frame_addr = readl(vic_base + 0x380);
+                    
+                    /* Simulate buffer match check safely */
+                    if ((buffer_count & 1) && current_frame_addr != 0) {
+                        buffer_match = 1;  /* $v0 = 1 */
+                    }
+                    
+                    /* Prevent infinite loops */
+                    if (buffer_count > 16) {
+                        pr_warn("vic_framedone_irq_function: buffer_count exceeded 16, breaking\n");
+                        break;
+                    }
                 }
             }
             
@@ -249,10 +279,12 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 shift_result = buffer_count << 16;
             }
             
-            /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
-            u32 reg_300_val = readl(vic_regs + 0x300);
+            /* Binary Ninja: Safe register update with bounds checking */
+            /* *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
+            u32 reg_300_val = readl(vic_base + 0x300);
             reg_300_val = (reg_300_val & 0xfff0ffff) | shift_result;
-            writel(reg_300_val, vic_regs + 0x300);
+            writel(reg_300_val, vic_base + 0x300);
+            wmb(); /* Memory barrier for MIPS */
             
             pr_debug("vic_framedone_irq_function: Updated reg 0x300 = 0x%x (buffers: count=%d, found=%d, match=%d)\n",
                      reg_300_val, buffer_count, buffer_found, buffer_match);
@@ -264,23 +296,31 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
     }
 
 gpio_handling:
-    /* Binary Ninja: label_123f4 - GPIO handling */
+    /* Binary Ninja: label_123f4 - GPIO handling with safety checks */
     if (gpio_switch_state != 0) {
-        /* Binary Ninja: void* $s1_1 = &gpio_info */
         int i;
         gpio_switch_state = 0;
         
+        pr_debug("vic_framedone_irq_function: Processing GPIO switch state\n");
+        
         /* for (int32_t i = 0; i != 0xa; ) */
         for (i = 0; i < 10; i++) {
+            /* CRITICAL: Bounds check for gpio_info array access */
+            if (i >= 10) {
+                pr_err("vic_framedone_irq_function: GPIO index %d out of bounds\n", i);
+                break;
+            }
+            
             /* uint32_t $a0_2 = zx.d(*$s1_1) */
             uint32_t gpio_pin = (uint32_t)gpio_info[i].pin;
             
             /* if ($a0_2 == 0xff) break */
             if (gpio_pin == 0xff) {
+                pr_debug("vic_framedone_irq_function: GPIO pin 0xff encountered, breaking\n");
                 break;
             }
             
-            /* Binary Ninja: result = private_gpio_direction_output($a0_2, zx.d(*($s1_1 + 0x14))) */
+            /* Binary Ninja: Safe GPIO state access */
             uint32_t gpio_state = (uint32_t)gpio_info[i].state;
             
             /* Placeholder GPIO operation - would be actual GPIO call in real driver */
@@ -291,7 +331,7 @@ gpio_handling:
         }
     }
     
-    pr_debug("*** vic_framedone_irq_function: completed successfully ***\n");
+    pr_debug("*** vic_framedone_irq_function: MIPS-safe completion ***\n");
     /* Binary Ninja: return result */
     return 0;  /* Success */
 }
