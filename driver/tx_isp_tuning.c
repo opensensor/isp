@@ -1921,14 +1921,15 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 }
 EXPORT_SYMBOL(isp_core_tunning_unlocked_ioctl);
 
-/* tisp_code_tuning_open - Binary Ninja EXACT implementation */
+/* tisp_code_tuning_open - Binary Ninja EXACT implementation - FIXED ALLOCATION */
 int tisp_code_tuning_open(struct inode *inode, struct file *file)
 {
     pr_info("ISP M0 device open called from pid %d\n", current->pid);
     
-    /* REFERENCE DRIVER: Direct implementation from Binary Ninja decompilation */
-    /* uint32_t $v0 = private_kmalloc(0x500c, 0xd0) */
-    void *tuning_buffer = kmalloc(0x500c, GFP_KERNEL | __GFP_DMA32);
+    /* CRITICAL FIX: Use EXACT Binary Ninja reference implementation */
+    /* Binary Ninja: uint32_t $v0 = private_kmalloc(0x500c, 0xd0) */
+    /* FIXED: Use regular kmalloc like reference driver, NOT DMA allocation */
+    void *tuning_buffer = kmalloc(0x500c, GFP_KERNEL);
     
     /* CRITICAL: Verify allocation success */
     if (!tuning_buffer) {
@@ -1943,13 +1944,13 @@ int tisp_code_tuning_open(struct inode *inode, struct file *file)
         return -ENOMEM;
     }
     
-    /* tisp_par_ioctl = $v0 */
+    /* Binary Ninja: tisp_par_ioctl = $v0 */
     tisp_par_ioctl = tuning_buffer;
     
-    /* memset($v0, 0, 0x500c) */
+    /* Binary Ninja: memset($v0, 0, 0x500c) */
     memset(tuning_buffer, 0, 0x500c);
     
-    pr_info("*** REFERENCE DRIVER IMPLEMENTATION ***\n");
+    pr_info("*** REFERENCE DRIVER IMPLEMENTATION - FIXED ALLOCATION ***\n");
     pr_info("ISP M0 tuning buffer allocated: %p (size=0x%x, aligned)\n", tuning_buffer, 0x500c);
     pr_info("tisp_par_ioctl global variable set: %p\n", tisp_par_ioctl);
     
@@ -2051,9 +2052,13 @@ int isp_m0_chardev_release(struct inode *inode, struct file *file)
 
     pr_info("ISP M0 device release called\n");
 
-    /* CRITICAL: file->private_data contains tuning buffer, NOT device */
+    /* CRITICAL FIX: Use EXACT Binary Ninja reference implementation for release */
+    /* Binary Ninja: private_kfree(tisp_par_ioctl); tisp_par_ioctl = 0; return 0 */
     if (tuning_buffer) {
-        pr_info("Freeing tuning buffer: %p\n", tuning_buffer);
+        pr_info("*** REFERENCE DRIVER IMPLEMENTATION - FIXED RELEASE ***\n");
+        pr_info("Freeing tuning buffer: %p using kfree() like reference driver\n", tuning_buffer);
+        
+        /* CRITICAL: Use regular kfree() to match kmalloc() allocation in tisp_code_tuning_open */
         kfree(tuning_buffer);
         file->private_data = NULL;
     }
@@ -2071,7 +2076,7 @@ int isp_m0_chardev_release(struct inode *inode, struct file *file)
         ourISPdev->tuning_enabled = 0;
     }
 
-    pr_info("ISP M0 device released\n");
+    pr_info("ISP M0 device released - allocation/deallocation mismatch FIXED\n");
     return 0;
 }
 EXPORT_SYMBOL(isp_m0_chardev_release);
