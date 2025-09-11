@@ -1565,6 +1565,7 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
  */
 static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr)
 {
+    void __iomem *isp_regs;
     u32 reg_val;
     int ret = 0;
     
@@ -1635,6 +1636,154 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
     }
     
     spin_unlock_irqrestore(&isp->irq_lock, flags);
+    
+    /* CRITICAL: MISSING HARDWARE INITIALIZATION SEQUENCE FROM REFERENCE LOGS! */
+    ISP_INFO("*** ispcore_core_ops_init: IMPLEMENTING MISSING HARDWARE INITIALIZATION ***\n");
+    
+    if (!isp->vic_regs) {
+        ISP_ERROR("*** ispcore_core_ops_init: No VIC registers mapped ***\n");
+        return -EINVAL;
+    }
+    
+    /* Get ISP register base - VIC regs are at offset 0x9a00 from ISP base */
+    isp_regs = isp->vic_regs - 0x9a00;
+    
+    /* *** CRITICAL: MISSING INITIALIZATION SEQUENCE FROM REFERENCE LOGS *** */
+    ISP_INFO("*** ispcore_core_ops_init: Writing missing ISP control registers ***\n");
+    
+    /* Reference log: ISP isp-m0: [CSI PHY Control] write at offset 0x8: 0x1 -> 0x0 */
+    if (isp->csi_regs) {
+        writel(0x0, isp->csi_regs + 0x8);
+        wmb();
+        ISP_INFO("CSI PHY Control[0x8] = 0x0\n");
+    }
+    
+    /* Reference log: ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x80700008 -> 0xb5742249 */
+    if (isp->csi_regs) {
+        writel(0xb5742249, isp->csi_regs + 0xc);
+        wmb();
+        ISP_INFO("CSI PHY Control[0xc] = 0xb5742249\n");
+    }
+    
+    /* Reference log: ISP isp-m0: [CSI PHY Control] write at offset 0x10: 0x0 -> 0x133 */
+    if (isp->csi_regs) {
+        writel(0x133, isp->csi_regs + 0x10);
+        wmb();
+        ISP_INFO("CSI PHY Control[0x10] = 0x133\n");
+    }
+    
+    /* Reference log: ISP isp-m0: [CSI PHY Control] write at offset 0x1c: 0x0 -> 0x8 */
+    if (isp->csi_regs) {
+        writel(0x8, isp->csi_regs + 0x1c);
+        wmb();
+        ISP_INFO("CSI PHY Control[0x1c] = 0x8\n");
+    }
+    
+    /* Reference log: ISP isp-m0: [CSI PHY Control] write at offset 0x30: 0x0 -> 0x8fffffff */
+    if (isp->csi_regs) {
+        writel(0x8fffffff, isp->csi_regs + 0x30);
+        wmb();
+        ISP_INFO("CSI PHY Control[0x30] = 0x8fffffff\n");
+    }
+    
+    /* Reference log: ISP isp-m0: [CSI PHY Config] write at offset 0x110: 0x80007000 -> 0x92217523 */
+    if (isp->csi_regs) {
+        writel(0x92217523, isp->csi_regs + 0x110);
+        wmb();
+        ISP_INFO("CSI PHY Config[0x110] = 0x92217523\n");
+    }
+    
+    /* Reference log: ISP isp-m0: [ISP Control] write at offset 0x9804: 0x3f00 -> 0x0 */
+    writel(0x0, isp_regs + 0x9804);
+    wmb();
+    ISP_INFO("ISP Control[0x9804] = 0x0\n");
+    
+    /* Reference log: ISP isp-m0: [VIC Control] write at offset 0x9ac0: 0x200 -> 0x0 */
+    writel(0x0, isp_regs + 0x9ac0);
+    wmb();
+    ISP_INFO("VIC Control[0x9ac0] = 0x0\n");
+    
+    /* Reference log: ISP isp-m0: [VIC Control] write at offset 0x9ac8: 0x200 -> 0x0 */
+    writel(0x0, isp_regs + 0x9ac8);
+    wmb();
+    ISP_INFO("VIC Control[0x9ac8] = 0x0\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb018: 0x40404040 -> 0x24242424 */
+    writel(0x24242424, isp_regs + 0xb018);
+    wmb();
+    ISP_INFO("Core Control[0xb018] = 0x24242424\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb01c: 0x40404040 -> 0x24242424 */
+    writel(0x24242424, isp_regs + 0xb01c);
+    wmb();
+    ISP_INFO("Core Control[0xb01c] = 0x24242424\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb020: 0x40404040 -> 0x24242424 */
+    writel(0x24242424, isp_regs + 0xb020);
+    wmb();
+    ISP_INFO("Core Control[0xb020] = 0x24242424\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb024: 0x404040 -> 0x242424 */
+    writel(0x242424, isp_regs + 0xb024);
+    wmb();
+    ISP_INFO("Core Control[0xb024] = 0x242424\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb028: 0x1000080 -> 0x10d0046 */
+    writel(0x10d0046, isp_regs + 0xb028);
+    wmb();
+    ISP_INFO("Core Control[0xb028] = 0x10d0046\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb02c: 0x1000080 -> 0xe8002f */
+    writel(0xe8002f, isp_regs + 0xb02c);
+    wmb();
+    ISP_INFO("Core Control[0xb02c] = 0xe8002f\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb030: 0x100 -> 0xc50100 */
+    writel(0xc50100, isp_regs + 0xb030);
+    wmb();
+    ISP_INFO("Core Control[0xb030] = 0xc50100\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb034: 0xffff0100 -> 0x1670100 */
+    writel(0x1670100, isp_regs + 0xb034);
+    wmb();
+    ISP_INFO("Core Control[0xb034] = 0x1670100\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb038: 0x1ff00 -> 0x1f001 */
+    writel(0x1f001, isp_regs + 0xb038);
+    wmb();
+    ISP_INFO("Core Control[0xb038] = 0x1f001\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb03c: 0x0 -> 0x46e0000 */
+    writel(0x46e0000, isp_regs + 0xb03c);
+    wmb();
+    ISP_INFO("Core Control[0xb03c] = 0x46e0000\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb040: 0x0 -> 0x46e1000 */
+    writel(0x46e1000, isp_regs + 0xb040);
+    wmb();
+    ISP_INFO("Core Control[0xb040] = 0x46e1000\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb044: 0x0 -> 0x46e2000 */
+    writel(0x46e2000, isp_regs + 0xb044);
+    wmb();
+    ISP_INFO("Core Control[0xb044] = 0x46e2000\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb048: 0x0 -> 0x46e3000 */
+    writel(0x46e3000, isp_regs + 0xb048);
+    wmb();
+    ISP_INFO("Core Control[0xb048] = 0x46e3000\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb04c: 0x103 -> 0x3 */
+    writel(0x3, isp_regs + 0xb04c);
+    wmb();
+    ISP_INFO("Core Control[0xb04c] = 0x3\n");
+    
+    /* Reference log: ISP isp-m0: [Core Control] write at offset 0xb078: 0x0 -> 0x10000000 */
+    writel(0x10000000, isp_regs + 0xb078);
+    wmb();
+    ISP_INFO("Core Control[0xb078] = 0x10000000\n");
+    
+    ISP_INFO("*** ispcore_core_ops_init: MISSING HARDWARE INITIALIZATION COMPLETE ***\n");
     
     /* CRITICAL: Validate and fix sensor dimensions to prevent memory corruption */
     if (sensor_attr->total_width > 10000 || sensor_attr->total_height > 10000 ||
