@@ -316,6 +316,10 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
 int sensor_init(struct tx_isp_dev *isp_dev);
 void *isp_core_tuning_init(void *arg1);
 int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
+
+void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
+void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
+
 /* IRQ info structure - matches Binary Ninja tx_isp_request_irq layout */
 struct tx_isp_irq_info {
     int irq_number;                    /* IRQ number at offset 0 */
