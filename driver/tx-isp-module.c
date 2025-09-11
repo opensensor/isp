@@ -4278,7 +4278,7 @@ static int tx_isp_init(void)
 
     /* Register VIC subdev with proper ops structure */
     if (ourISPdev->vic_dev) {
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        struct tx_isp_vic_device *vic_dev = &ourISPdev->vic_dev;
         
         /* Set up VIC subdev with ops pointing to vic_subdev_ops */
         vic_dev->sd.ops = &vic_subdev_ops;
@@ -4292,9 +4292,9 @@ static int tx_isp_init(void)
 //                vic_dev->sd.ops->video->s_stream);
     }
     
-    /* Register CSI subdev with proper ops structure */  
+    /* Register CSI subdev with proper ops structure */
     if (ourISPdev->csi_dev) {
-        struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
+        struct tx_isp_csi_device *csi_dev = &ourISPdev->csi_dev;
         
         /* Set up CSI subdev with ops pointing to csi_subdev_ops */
         csi_dev->sd.ops = &csi_subdev_ops;
