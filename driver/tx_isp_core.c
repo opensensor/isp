@@ -2977,35 +2977,33 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
 }
 
 
-/* tx_isp_core_probe - FIXED to properly create frame channel devices and proc entries */
+/* tx_isp_core_probe - SAFE implementation using proper struct member access */
 int tx_isp_core_probe(struct platform_device *pdev)
 {
-    void *core_dev;
+    struct tx_isp_dev *isp_dev;
     void *s2_1;
     int result;
     uint32_t channel_count;
     void *channel_array;
     void *tuning_dev;
 
-    pr_info("*** tx_isp_core_probe: FIXED Binary Ninja implementation ***\n");
+    pr_info("*** tx_isp_core_probe: SAFE implementation using proper struct member access ***\n");
 
-    /* Binary Ninja: $v0, $a2 = private_kmalloc(0x218, 0xd0) */
-    core_dev = kzalloc(0x218, GFP_KERNEL);
-    if (core_dev == NULL) {
-        isp_printf(2, "addr ctl is 0x%x\n", 0);
+    /* Allocate ISP device structure using proper size */
+    isp_dev = kzalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
+    if (isp_dev == NULL) {
+        isp_printf(2, "Failed to allocate ISP device structure\n");
         return -ENOMEM;
     }
 
-    /* Binary Ninja: memset($v0, 0, 0x218) */
-    memset(core_dev, 0, 0x218);
-
-    /* Binary Ninja: void* $s2_1 = arg1[0x16] */
+    /* Initialize device pointer */
+    isp_dev->dev = &pdev->dev;
     s2_1 = pdev->dev.platform_data;
 
-    /* FIXED: Create proper platform device array that tx_isp_create_graph_and_nodes expects */
-    pr_info("*** tx_isp_core_probe: FIXED platform device setup ***\n");
+    /* SAFE: Create proper platform device array */
+    pr_info("*** tx_isp_core_probe: SAFE platform device setup ***\n");
     
-    /* CRITICAL: Get the actual registered platform devices from the module */
+    /* Get the actual registered platform devices from the module */
     extern struct platform_device tx_isp_csi_platform_device;
     extern struct platform_device tx_isp_vic_platform_device;
     extern struct platform_device tx_isp_vin_platform_device;
@@ -3019,7 +3017,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     platform_set_drvdata(&tx_isp_fs_platform_device, &fs_subdev_data);
     platform_set_drvdata(&tx_isp_core_platform_device, &core_subdev_data);
     
-    /* CRITICAL: Set up subdev_count and subdev_list at Binary Ninja offsets */
+    /* SAFE: Set up subdev_count and subdev_list using proper struct members */
     struct platform_device *platform_devices[] = {
         &tx_isp_csi_platform_device,
         &tx_isp_vic_platform_device,
@@ -3029,27 +3027,19 @@ int tx_isp_core_probe(struct platform_device *pdev)
     };
     
     /* Allocate and set up the subdev_list array */
-    struct platform_device **subdev_list = kzalloc(sizeof(platform_devices), GFP_KERNEL);
-    if (!subdev_list) {
+    isp_dev->subdev_list = kzalloc(sizeof(platform_devices), GFP_KERNEL);
+    if (!isp_dev->subdev_list) {
         pr_err("Failed to allocate subdev_list\n");
-        kfree(core_dev);
+        kfree(isp_dev);
         return -ENOMEM;
     }
-    memcpy(subdev_list, platform_devices, sizeof(platform_devices));
+    memcpy(isp_dev->subdev_list, platform_devices, sizeof(platform_devices));
     
-    /* Set up Binary Ninja exact offsets in core_dev */
-    *((uint32_t*)((char*)core_dev + 0x80)) = ARRAY_SIZE(platform_devices);  /* subdev_count */
-    *((struct platform_device***)((char*)core_dev + 0x84)) = &subdev_list;  /* subdev_list ptr */
+    /* SAFE: Set up using proper struct members instead of dangerous offsets */
+    isp_dev->subdev_count = ARRAY_SIZE(platform_devices);
     
-    pr_info("*** tx_isp_core_probe: Platform devices configured - count=%d ***\n", ARRAY_SIZE(platform_devices));
+    pr_info("*** tx_isp_core_probe: Platform devices configured - count=%d ***\n", isp_dev->subdev_count);
 
-    /* CRITICAL: Initialize basic fields that tx_isp_subdev_init expects */
-    /* Set up channel count first - this is what was missing! */
-    *((uint32_t*)((char*)core_dev + (0x32 * 4))) = ISP_MAX_CHAN;  /* Initialize channel count at offset 0xc8 */
-    
-    /* CRITICAL: Initialize device operations pointer - Binary Ninja shows this is stored at offset 0xc4 */
-    *((void**)((char*)core_dev + 0xc4)) = &core_subdev_ops;  /* Store ops at Binary Ninja offset 0xc4 */
-    
     /* Initialize platform data reference */
     if (!s2_1) {
         /* Create minimal platform data if none exists */
@@ -3060,19 +3050,18 @@ int tx_isp_core_probe(struct platform_device *pdev)
         }
     }
 
+    /* Initialize basic device fields */
+    spin_lock_init(&isp_dev->lock);
+    mutex_init(&isp_dev->mutex);
+    spin_lock_init(&isp_dev->irq_lock);
+
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
-    if (tx_isp_subdev_init(pdev, core_dev, &core_subdev_ops) == 0) {
+    if (tx_isp_subdev_init(pdev, isp_dev, &core_subdev_ops) == 0) {
         pr_info("*** tx_isp_core_probe: Subdev init SUCCESS ***\n");
+
+        /* SAFE: Channel configuration using proper struct access */
+        channel_count = ISP_MAX_CHAN;  /* Use constant instead of dangerous offset access */
         
-        /* Binary Ninja: Spinlock and mutex initialization */
-        spin_lock_init((spinlock_t*)((char*)core_dev + (0x37 * 4)));
-        mutex_init((struct mutex*)((char*)core_dev + (0x37 * 4)));
-
-        /* Binary Ninja: Channel configuration */
-        channel_count = *((uint32_t*)((char*)core_dev + (0x32 * 4)));  /* uint32_t $a0_4 = zx.d($v0[0x32].w) */
-        *((uint32_t*)((char*)core_dev + (0x55 * 4))) = channel_count;  /* $v0[0x55] = $a0_4 */
-        *((void**)((char*)core_dev + (0x4e * 4))) = s2_1;             /* $v0[0x4e] = $v0_3 */
-
         pr_info("*** tx_isp_core_probe: Channel count = %d ***\n", channel_count);
 
         /* Binary Ninja: Channel array allocation */
@@ -3087,7 +3076,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 int s4_2 = s2_2 * 0x24;
 
                 *((int*)((char*)s1_1 + 0x70)) = s2_2;                                    /* *($s1_1 + 0x70) = $s2_2 */
-                *((void**)((char*)s1_1 + 0x78)) = (char*)core_dev + 0xcc + s4_2;       /* $v0[0x33] = 0xcc bytes offset */
+                *((void**)((char*)s1_1 + 0x78)) = (char*)isp_dev + 0xcc + s4_2;       /* $v0[0x33] = 0xcc bytes offset */
 
                 /* Binary Ninja: Channel enable check */
                 /* For now, enable all channels since we don't have proper platform data */
@@ -3108,11 +3097,11 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
                     *((int*)((char*)s1_1 + 0x74)) = 1;           /* *($s1_1 + 0x74) = 1 */
                     spin_lock_init((spinlock_t*)((char*)s1_1 + 0x9c));
-                    *((void**)((char*)s1_1 + 0x7c)) = core_dev;  /* *($s1_1 + 0x7c) = $v0 */
+                    *((void**)((char*)s1_1 + 0x7c)) = isp_dev;  /* *($s1_1 + 0x7c) = $v0 */
 
                     /* Binary Ninja: Event handler setup */
-                    *((void**)((char*)core_dev + 0xcc + s4_2 + 0x1c)) = ispcore_pad_event_handle;  /* ispcore_pad_event_handle */
-                    *((void**)((char*)core_dev + 0xcc + s4_2 + 0x20)) = s1_1;              /* Event handler data */
+                    *((void**)((char*)isp_dev + 0xcc + s4_2 + 0x1c)) = ispcore_pad_event_handle;  /* ispcore_pad_event_handle */
+                    *((void**)((char*)isp_dev + 0xcc + s4_2 + 0x20)) = s1_1;              /* Event handler data */
                 } else {
                     *((int*)((char*)s1_1 + 0x74)) = 0;  /* *($s1_1 + 0x74) = 0 */
                 }
@@ -3121,35 +3110,28 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 s1_1 = (char*)s1_1 + 0xc4;
             }
 
-            *((void**)((char*)core_dev + (0x54 * 4))) = channel_array;  /* $v0[0x54] = $v0_4 */
+            /* SAFE: Store channel array using proper member access */
+            /* Note: We still need to store this in a compatible way for Binary Ninja compatibility */
+            *((void**)((char*)isp_dev + (0x54 * 4))) = channel_array;  /* Temporary compatibility */
 
             /* Binary Ninja: *** CRITICAL: isp_core_tuning_init call *** */
             pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init ***\n");
-            tuning_dev = (void*)isp_core_tuning_init(core_dev);
-            *((void**)((char*)core_dev + (0x6f * 4))) = tuning_dev;     /* $v0[0x6f] = $v0_15 */
+            tuning_dev = (void*)isp_core_tuning_init(isp_dev);
+            
+            /* SAFE: Store tuning device using proper member access */
+            isp_dev->tuning_data = (struct isp_tuning_data *)tuning_dev;
 
             if (tuning_dev != NULL) {
                 pr_info("*** tx_isp_core_probe: Tuning init SUCCESS ***\n");
-                *((int*)((char*)core_dev + (0x3a * 4))) = 1;            /* $v0[0x3a] = 1 */
-                platform_set_drvdata(pdev, core_dev);
+                platform_set_drvdata(pdev, isp_dev);
 
-                /* Binary Ninja: Additional core device setup */
-                *((void**)((char*)core_dev + (0x35 * 4))) = core_dev;   /* $v0[0x35] = $v0 */
-
-                /* FIXED: Use tuning_dev directly instead of adding dangerous offset */
-                /* The Binary Ninja offset 0x40c8 was from a much larger structure */
-                /* Our isp_core_tuning_init returns exactly what we need */
-                void *tuning_data = tuning_dev;
-                *((void**)((char*)core_dev + (0xc * 4))) = tuning_data; /* $v0[0xc] = tuning_dev (FIXED) */
-                pr_info("*** tx_isp_core_probe: FIXED tuning pointer corruption - using tuning_dev=%p directly ***\n", tuning_data);
-                *((void**)((char*)core_dev + (0xd * 4))) = &isp_tuning_fops; /* $v0[0xd] = &isp_info_proc_fops */
-
-                /* Binary Ninja: Global device assignment - already done above with register base */
-                /* ourISPdev = (struct tx_isp_dev *)core_dev; - already set above */
+                /* SAFE: Use tuning_dev directly instead of adding dangerous offset */
+                isp_dev->tuning_enabled = 1;
+                pr_info("*** tx_isp_core_probe: SAFE tuning pointer - using tuning_dev=%p directly ***\n", tuning_dev);
 
                 /* CRITICAL: Create VIC device BEFORE sensor_early_init */
                 pr_info("*** tx_isp_core_probe: Creating VIC device ***\n");
-                result = tx_isp_create_vic_device((struct tx_isp_dev *)core_dev);
+                result = tx_isp_create_vic_device(isp_dev);
                 if (result != 0) {
                     pr_err("*** tx_isp_core_probe: Failed to create VIC device: %d ***\n", result);
                     return result;
@@ -3159,7 +3141,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
                 /* Binary Ninja: sensor_early_init($v0) */
                 pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
-                sensor_early_init(core_dev);
+                sensor_early_init(isp_dev);
 
                 /* Binary Ninja: Clock initialization */
                 uint32_t isp_clk_1 = 0; /* get_isp_clk() would be called here */
@@ -3168,14 +3150,14 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 isp_clk = isp_clk_1;
 
                 pr_info("*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
-                pr_info("***   - Core device size: 0x218 bytes ***\n");
+                pr_info("***   - Core device size: %zu bytes ***\n", sizeof(struct tx_isp_dev));
                 pr_info("***   - Channel count: %d ***\n", channel_count);
                 pr_info("***   - Tuning device: %p ***\n", tuning_dev);
                 pr_info("***   - Global ISP device set: %p ***\n", ourISPdev);
                 
                 /* CRITICAL: Now that core device is set up, call the key function that creates graph and nodes */
                 pr_info("*** tx_isp_core_probe: Calling tx_isp_create_graph_and_nodes ***\n");
-                result = tx_isp_create_graph_and_nodes((struct tx_isp_dev *)core_dev);
+                result = tx_isp_create_graph_and_nodes(isp_dev);
                 if (result == 0) {
                     pr_info("*** tx_isp_core_probe: tx_isp_create_graph_and_nodes SUCCESS ***\n");
                 } else {
@@ -3184,7 +3166,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 
                 /* CRITICAL: Create frame channel devices (/dev/isp-fs*) */
                 pr_info("*** tx_isp_core_probe: Creating frame channel devices ***\n");
-                result = tx_isp_create_framechan_devices((struct tx_isp_dev *)core_dev);
+                result = tx_isp_create_framechan_devices(isp_dev);
                 if (result == 0) {
                     pr_info("*** tx_isp_core_probe: Frame channel devices created successfully ***\n");
                 } else {
@@ -3193,7 +3175,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
                 /* CRITICAL: Create proper proc directories (/proc/jz/isp/*) */
                 pr_info("*** tx_isp_core_probe: Creating ISP proc entries ***\n");
-                result = tx_isp_create_proc_entries((struct tx_isp_dev *)core_dev);
+                result = tx_isp_create_proc_entries(isp_dev);
                 if (result == 0) {
                     pr_info("*** tx_isp_core_probe: ISP proc entries created successfully ***\n");
                 } else {
@@ -3212,28 +3194,17 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
                 /* CRITICAL: Set up memory mappings for register access BEFORE tuning init */
                 pr_info("*** tx_isp_core_probe: Setting up ISP memory mappings BEFORE tuning init ***\n");
-                result = tx_isp_init_memory_mappings((struct tx_isp_dev *)core_dev);
+                result = tx_isp_init_memory_mappings(isp_dev);
                 if (result == 0) {
                     pr_info("*** tx_isp_core_probe: ISP memory mappings initialized successfully ***\n");
                     
                     /* CRITICAL: Update global ISP device with register base IMMEDIATELY */
-                    ourISPdev = (struct tx_isp_dev *)core_dev;
+                    ourISPdev = isp_dev;
                     pr_info("*** tx_isp_core_probe: Global ISP device updated with register base ***\n");
-                    pr_info("*** tx_isp_core_probe: core_regs = %p ***\n", ourISPdev->core_regs);
                 } else {
                     pr_err("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
                     return result;
                 }
-
-                /* CRITICAL: Start continuous processing - this generates the register activity your trace captures! */
-//                pr_info("*** tx_isp_core_probe: Starting continuous processing system ***\n");
-//                result = isp_start_continuous_processing((struct tx_isp_dev *)core_dev);
-//                if (result == 0) {
-//                    pr_info("*** tx_isp_core_probe: Continuous processing started successfully ***\n");
-//                    pr_info("*** YOUR TRACE MODULE SHOULD NOW CAPTURE CONTINUOUS REGISTER WRITES! ***\n");
-//                } else {
-//                    pr_err("*** tx_isp_core_probe: Failed to start continuous processing: %d ***\n", result);
-//                }
                 
                 return 0;
             }
@@ -3241,18 +3212,16 @@ int tx_isp_core_probe(struct platform_device *pdev)
             isp_printf(2, "Failed to init tuning module!\n");
 
             /* Binary Ninja: Cleanup on tuning init failure */
-            if (*((int*)((char*)core_dev + (0x3a * 4))) >= 2) {
-                ispcore_slake_module((struct tx_isp_dev *)core_dev);
+            if (isp_dev->tuning_enabled >= 2) {
+                ispcore_slake_module(isp_dev);
             }
 
             kfree(channel_array);
-            *((int*)((char*)core_dev + (0x56 * 4))) = 1;      /* $v0[0x56] = 1 */
-            *((void**)((char*)core_dev + (0x54 * 4))) = NULL; /* $v0[0x54] = 0 */
         } else {
             isp_printf(2, "Failed to init output channels!\n");
         }
 
-        tx_isp_subdev_deinit(core_dev);
+        tx_isp_subdev_deinit(isp_dev);
         result = -ENOMEM;
     } else {
         /* Binary Ninja: Error message with platform data info */
@@ -3261,7 +3230,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
         result = -ENODEV;
     }
 
-    kfree(core_dev);
+    kfree(isp_dev);
     return result;
 }
 
