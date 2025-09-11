@@ -331,54 +331,6 @@ static struct tx_isp_irq_info isp_irq_info = {
     .disable_func = NULL,
 };
 
-/* tx_isp_enable_irq - EXACT Binary Ninja implementation */
-void tx_isp_enable_irq(void *irq_info)
-{
-    if (!irq_info) {
-        pr_err("tx_isp_enable_irq: Invalid IRQ info\n");
-        return;
-    }
-    
-    /* Binary Ninja: return private_enable_irq(*arg1) __tailcall */
-    int irq_number = *((int *)irq_info);  /* *arg1 - get IRQ number from structure */
-    
-    pr_info("*** tx_isp_enable_irq: Enabling IRQ %d ***\n", irq_number);
-    
-    if (irq_number <= 0) {
-        pr_err("*** tx_isp_enable_irq: Invalid IRQ number %d ***\n", irq_number);
-        return;
-    }
-    
-    /* Enable the IRQ */
-    enable_irq(irq_number);
-    
-    pr_info("*** tx_isp_enable_irq: IRQ %d enabled successfully ***\n", irq_number);
-}
-
-/* tx_isp_disable_irq - EXACT Binary Ninja implementation */
-void tx_isp_disable_irq(void *irq_info)
-{
-    if (!irq_info) {
-        pr_err("tx_isp_disable_irq: Invalid IRQ info\n");
-        return;
-    }
-    
-    /* Binary Ninja: return private_disable_irq(*arg1) __tailcall */
-    int irq_number = *((int *)irq_info);  /* *arg1 - get IRQ number from structure */
-    
-    pr_info("*** tx_isp_disable_irq: Disabling IRQ %d ***\n", irq_number);
-    
-    if (irq_number <= 0) {
-        pr_err("*** tx_isp_disable_irq: Invalid IRQ number %d ***\n", irq_number);
-        return;
-    }
-    
-    /* Disable the IRQ */
-    disable_irq(irq_number);
-    
-    pr_info("*** tx_isp_disable_irq: IRQ %d disabled successfully ***\n", irq_number);
-}
-
 void system_reg_write(u32 reg, u32 value);
 
 /* ISP interrupt dispatch system - EXACT Binary Ninja implementation */
