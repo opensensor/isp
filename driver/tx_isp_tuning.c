@@ -4487,13 +4487,9 @@ void *isp_core_tuning_init(void *arg1)
     tuning_data->allocation_pages = pages;
     
     /* CRITICAL: Initialize register base safely */
-    if (ourISPdev && ourISPdev->core_regs && virt_addr_valid(ourISPdev->core_regs)) {
-        tuning_data->regs = ourISPdev->core_regs;
-        pr_info("isp_core_tuning_init: Register base initialized to %p\n", tuning_data->regs);
-    } else {
-        tuning_data->regs = NULL;
-        pr_info("isp_core_tuning_init: No valid register base - register access disabled\n");
-    }
+    tuning_data->regs = ourISPdev->core_regs;
+    pr_info("isp_core_tuning_init: Register base initialized to %p\n", tuning_data->regs);
+
     
     /* Initialize tuning data structure with safe, aligned defaults */
     tuning_data->brightness = 128;
