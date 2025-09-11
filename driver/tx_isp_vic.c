@@ -1074,10 +1074,6 @@ if (!IS_ERR(cgu_isp_clk)) {
     pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
 
 
-    pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
-    tx_isp_enable_irq(isp_dev);
-    pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
-
     /* *** CRITICAL FIX: Initialize VIC hardware interrupts FIRST *** */
     pr_info("*** tx_isp_vic_start: CRITICAL FIX - Initializing VIC hardware interrupts ***\n");
     ret = tx_isp_vic_hw_init(&vic_dev->sd);
@@ -1091,6 +1087,11 @@ if (!IS_ERR(cgu_isp_clk)) {
     pr_info("*** tx_isp_vic_start: CRITICAL FIX - Enabling VIC hardware interrupts ***\n");
     tx_vic_enable_irq(vic_dev);
     pr_info("*** tx_isp_vic_start: VIC hardware interrupts enabled - hw_irq_enabled=%d ***\n", vic_dev->hw_irq_enabled);
+
+
+    pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
+    tx_isp_enable_irq(isp_dev);
+    pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
 
     
     /* Take a local copy of sensor attributes to prevent corruption during streaming */
