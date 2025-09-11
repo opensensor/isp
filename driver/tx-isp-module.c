@@ -4353,6 +4353,9 @@ static int tx_isp_init(void)
     
     /* *** FIXED: USE PROPER STRUCT MEMBER ACCESS INSTEAD OF DANGEROUS OFFSETS *** */
     pr_info("*** POPULATING SUBDEV ARRAY USING SAFE STRUCT MEMBER ACCESS ***\n");
+
+    /* Initialize all subdev pointers to NULL */
+	memset(ourISPdev->subdevs, 0, sizeof(ourISPdev->subdevs));
     
     /* SAFE: Use proper struct member access instead of raw pointer arithmetic */
     if (!ourISPdev->subdevs) {
