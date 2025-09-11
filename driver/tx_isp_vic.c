@@ -184,73 +184,6 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 
-/* CRITICAL FIX: Implement tx_vic_enable_irq and tx_vic_disable_irq using safe struct access */
-void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
-{
-    unsigned long flags;
-    
-    pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Hardware interrupt enable ***\n");
-    
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("tx_vic_enable_irq: Invalid vic_dev parameter\n");
-        return;
-    }
-    
-    /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
-    spin_lock_irqsave(&vic_dev->lock, flags);
-    
-    /* CRITICAL FIX: Use safe struct member access instead of *(dump_vsd_1 + 0x13c) = 1 */
-    if (vic_dev->hw_irq_enabled != 1) {
-        vic_dev->hw_irq_enabled = 1;
-        pr_info("*** tx_vic_enable_irq: Hardware interrupt enable flag SET TO 1 ***\n");
-        
-        /* Binary Ninja: Call hardware enable function if available */
-        if (vic_dev->irq_handler && vic_dev->irq_priv) {
-            vic_dev->irq_handler(vic_dev->irq_priv);
-            pr_info("tx_vic_enable_irq: Called hardware enable function\n");
-        }
-    } else {
-        pr_info("tx_vic_enable_irq: Hardware interrupts already enabled\n");
-    }
-    
-    spin_unlock_irqrestore(&vic_dev->lock, flags);
-    
-    pr_info("*** tx_vic_enable_irq: COMPLETED - hw_irq_enabled=%d ***\n", vic_dev->hw_irq_enabled);
-}
-
-void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
-{
-    unsigned long flags;
-    
-    pr_info("*** tx_vic_disable_irq: Hardware interrupt disable ***\n");
-    
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("tx_vic_disable_irq: Invalid vic_dev parameter\n");
-        return;
-    }
-    
-    /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
-    spin_lock_irqsave(&vic_dev->lock, flags);
-    
-    /* CRITICAL FIX: Use safe struct member access instead of *(dump_vsd_1 + 0x13c) = 0 */
-    if (vic_dev->hw_irq_enabled != 0) {
-        vic_dev->hw_irq_enabled = 0;
-        pr_info("*** tx_vic_disable_irq: Hardware interrupt enable flag SET TO 0 ***\n");
-        
-        /* Binary Ninja: Call hardware disable function if available */
-        if (vic_dev->irq_disable && vic_dev->irq_priv) {
-            vic_dev->irq_disable(vic_dev->irq_priv);
-            pr_info("tx_vic_disable_irq: Called hardware disable function\n");
-        }
-    } else {
-        pr_info("tx_vic_disable_irq: Hardware interrupts already disabled\n");
-    }
-    
-    spin_unlock_irqrestore(&vic_dev->lock, flags);
-    
-    pr_info("*** tx_vic_disable_irq: COMPLETED - hw_irq_enabled=%d ***\n", vic_dev->hw_irq_enabled);
-}
-
 /* Forward declaration for streaming functions */
 int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2);
 
@@ -262,31 +195,18 @@ static struct {
     uint8_t state;    /* GPIO state at offset 0x14 */
 } gpio_info[10];
 
-/* vic_framedone_irq_function - CRITICAL FIX: Safe struct member access for MIPS alignment */
+/* vic_framedone_irq_function - FIXED: Proper struct member access for MIPS alignment */
 static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 {
-    void __iomem *vic_base;
+    void __iomem *vic_base = vic_dev->vic_regs;
     void *result = NULL;
     
-    pr_debug("*** vic_framedone_irq_function: MIPS-safe entry - vic_dev=%p ***\n", vic_dev);
+    pr_debug("*** vic_framedone_irq_function: entry - vic_dev=%p ***\n", vic_dev);
     
-    /* CRITICAL: Validate vic_dev pointer alignment for MIPS */
-    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p not aligned ***\n", vic_dev);
-        return -EINVAL;
-    }
-    
-    /* CRITICAL: Validate vic_regs access with bounds checking */
-    vic_base = vic_dev->vic_regs;
-    if (!vic_base || (unsigned long)vic_base < 0x10000000 || (unsigned long)vic_base > 0x20000000) {
-        pr_err("*** CRITICAL: Invalid VIC register base %p - ABORTING ***\n", vic_base);
-        return -EINVAL;
-    }
-    
-    /* CRITICAL FIX: Use safe struct member access with alignment validation */
-    /* Binary Ninja: if (*(arg1 + 0x214) == 0) - FIXED to use proper struct member */
-    if (!vic_dev->processing) {  /* Safe struct member access instead of offset 0x214 */
-        pr_debug("vic_framedone_irq_function: processing=false, going to GPIO handling\n");
+    /* CRITICAL FIX: Use proper struct member access instead of dangerous offset arithmetic */
+    /* Binary Ninja: if (*(arg1 + 0x214) == 0) - but 0x214 was causing alignment issues */
+    if (!vic_dev->processing) {  /* Use proper struct member instead of offset 0x214 */
+        /* goto label_123f4 - GPIO handling section */
         goto gpio_handling;
     } else {
         /* CRITICAL FIX: Use safe struct member access with validation */
@@ -299,41 +219,21 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             int buffer_found = 0;       /* $v1_1 = 0 */
             int buffer_match = 0;       /* $v0 = 0 */
             
-            pr_debug("vic_framedone_irq_function: stream_state=%d, processing buffer list\n", vic_dev->stream_state);
-            
-            /* CRITICAL: Validate queue_head before iteration */
-            if (list_empty(&vic_dev->queue_head)) {
-                pr_debug("vic_framedone_irq_function: queue_head is empty\n");
-                buffer_count = 0;
-                buffer_found = 0;
-                buffer_match = 0;
-            } else {
-                /* Binary Ninja: Safe list iteration - FIXED from dangerous pointer arithmetic */
-                list_for_each(pos, &vic_dev->queue_head) {
-                    /* Validate list entry before access */
-                    if (!pos || ((uintptr_t)pos & 0x3) != 0) {
-                        pr_err("*** MIPS ALIGNMENT ERROR: list entry %p not aligned ***\n", pos);
-                        break;
-                    }
-                    
-                    /* $v1_1 += 0 u< $v0 ? 1 : 0 */
-                    buffer_found += (buffer_match == 0) ? 1 : 0;
-                    /* $a1_1 += 1 */
-                    buffer_count += 1;
-                    
-                    /* Binary Ninja: Safe register read with bounds checking */
-                    u32 current_frame_addr = readl(vic_base + 0x380);
-                    
-                    /* Simulate buffer match check safely */
-                    if ((buffer_count & 1) && current_frame_addr != 0) {
-                        buffer_match = 1;  /* $v0 = 1 */
-                    }
-                    
-                    /* Prevent infinite loops */
-                    if (buffer_count > 16) {
-                        pr_warn("vic_framedone_irq_function: buffer_count exceeded 16, breaking\n");
-                        break;
-                    }
+            /* Binary Ninja: Loop through buffer list - SAFE implementation */
+            /* for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
+            list_for_each(pos, &vic_dev->queue_head) {
+                /* $v1_1 += 0 u< $v0 ? 1 : 0 */
+                buffer_found += (buffer_match == 0) ? 1 : 0;
+                /* $a1_1 += 1 */
+                buffer_count += 1;
+                
+                /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
+                /* This checks if current buffer address matches hardware register */
+                u32 current_frame_addr = readl(vic_regs + 0x380);
+                /* In a real implementation, would extract buffer address from list entry */
+                /* For now, simulate the match check without dangerous pointer arithmetic */
+                if ((buffer_count & 1) && current_frame_addr != 0) {
+                    buffer_match = 1;  /* $v0 = 1 */
                 }
             }
             
@@ -346,12 +246,10 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 shift_result = buffer_count << 16;
             }
             
-            /* Binary Ninja: Safe register update with bounds checking */
-            /* *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
-            u32 reg_300_val = readl(vic_base + 0x300);
+            /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
+            u32 reg_300_val = readl(vic_regs + 0x300);
             reg_300_val = (reg_300_val & 0xfff0ffff) | shift_result;
-            writel(reg_300_val, vic_base + 0x300);
-            wmb(); /* Memory barrier for MIPS */
+            writel(reg_300_val, vic_regs + 0x300);
             
             pr_debug("vic_framedone_irq_function: Updated reg 0x300 = 0x%x (buffers: count=%d, found=%d, match=%d)\n",
                      reg_300_val, buffer_count, buffer_found, buffer_match);
@@ -363,31 +261,23 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
     }
 
 gpio_handling:
-    /* Binary Ninja: label_123f4 - GPIO handling with safety checks */
+    /* Binary Ninja: label_123f4 - GPIO handling */
     if (gpio_switch_state != 0) {
+        /* Binary Ninja: void* $s1_1 = &gpio_info */
         int i;
         gpio_switch_state = 0;
         
-        pr_debug("vic_framedone_irq_function: Processing GPIO switch state\n");
-        
         /* for (int32_t i = 0; i != 0xa; ) */
         for (i = 0; i < 10; i++) {
-            /* CRITICAL: Bounds check for gpio_info array access */
-            if (i >= 10) {
-                pr_err("vic_framedone_irq_function: GPIO index %d out of bounds\n", i);
-                break;
-            }
-            
             /* uint32_t $a0_2 = zx.d(*$s1_1) */
             uint32_t gpio_pin = (uint32_t)gpio_info[i].pin;
             
             /* if ($a0_2 == 0xff) break */
             if (gpio_pin == 0xff) {
-                pr_debug("vic_framedone_irq_function: GPIO pin 0xff encountered, breaking\n");
                 break;
             }
             
-            /* Binary Ninja: Safe GPIO state access */
+            /* Binary Ninja: result = private_gpio_direction_output($a0_2, zx.d(*($s1_1 + 0x14))) */
             uint32_t gpio_state = (uint32_t)gpio_info[i].state;
             
             /* Placeholder GPIO operation - would be actual GPIO call in real driver */
@@ -398,7 +288,7 @@ gpio_handling:
         }
     }
     
-    pr_debug("*** vic_framedone_irq_function: MIPS-safe completion ***\n");
+    pr_debug("*** vic_framedone_irq_function: completed successfully ***\n");
     /* Binary Ninja: return result */
     return 0;  /* Success */
 }
@@ -432,7 +322,7 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     return 0;  /* Success */
 }
 
-/* isp_vic_interrupt_service_routine - FIXED: Safe struct member access */
+/* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_subdev *sd = dev_id;
@@ -675,66 +565,27 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 static int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 {
     void __iomem *vic_base;
-    struct tx_isp_vic_device *vic_dev;
-    int irq;
-    int ret;
 
-    pr_info("*** tx_isp_vic_hw_init: CRITICAL INTERRUPT CONFIGURATION FIX ***\n");
+    // Initialize VIC hardware
+    vic_base = ioremap(0x10023000, 0x1000);  // Direct map VIC
 
-    vic_dev = ourISPdev->vic_dev;
-    if (!vic_dev) {
-        pr_err("tx_isp_vic_hw_init: No VIC device\n");
-        return -EINVAL;
-    }
-
-    vic_base = vic_dev->vic_regs;
-    if (!vic_base) {
-        pr_err("tx_isp_vic_hw_init: No VIC register base\n");
-        return -EINVAL;
-    }
-
-    pr_info("*** CRITICAL: Configuring VIC interrupt registers for proper interrupt firing ***\n");
-
-    /* STEP 1: Clear all pending interrupts first */
-    writel(0xFFFFFFFF, vic_base + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_base + 0x1f4);  /* Clear MDMA interrupt status */
+    // Clear any pending interrupts first
+    writel(0, vic_base + 0x00);  // Clear ISR
+    writel(0, vic_base + 0x20);  // Clear ISR1
     wmb();
 
-    /* STEP 2: Configure interrupt masks - ENABLE frame done interrupt (bit 0) */
-    /* The logs show VIC start completes but interrupts don't fire - this is the key fix */
-    writel(0xFFFFFFFE, vic_base + 0x1e8);  /* Enable frame done interrupt (bit 0 = 0) */
-    writel(0xFFFFFFFC, vic_base + 0x1ec);  /* Enable MDMA interrupts (bits 0,1 = 0) */
+    // Set up interrupt masks to match OEM
+    writel(0x00000001, vic_base + 0x04);  // IMR
+    wmb();
+    writel(0x00000000, vic_base + 0x24);  // IMR1
     wmb();
 
-    pr_info("*** INTERRUPT MASK FIX: Enabled frame done (0x1e8=0xFFFFFFFE) and MDMA (0x1ec=0xFFFFFFFC) ***\n");
+    // Configure ISP control interrupts
+    writel(0x07800438, vic_base + 0x04);  // IMR
+    wmb();
+    writel(0xb5742249, vic_base + 0x0c);  // IMCR
+    wmb();
 
-    /* STEP 3: Request and register the interrupt handler */
-    irq = vic_dev->irq;
-    if (irq < 0) {
-        pr_err("tx_isp_vic_hw_init: Failed to get IRQ number\n");
-        return irq;
-    }
-
-    ret = request_irq(irq, isp_vic_interrupt_service_routine, 
-                      IRQF_SHARED, "tx-isp-vic", sd);
-    if (ret) {
-        pr_err("tx_isp_vic_hw_init: Failed to request IRQ %d: %d\n", irq, ret);
-        return ret;
-    }
-
-    vic_dev->irq = irq;
-    pr_info("*** CRITICAL: VIC interrupt handler registered - IRQ %d ***\n", irq);
-
-    /* STEP 4: Enable the interrupt at the hardware level */
-    enable_irq(irq);
-    pr_info("*** CRITICAL: VIC hardware interrupt enabled - IRQ %d ***\n", irq);
-
-    /* STEP 5: Verify interrupt configuration */
-    u32 mask_main = readl(vic_base + 0x1e8);
-    u32 mask_mdma = readl(vic_base + 0x1ec);
-    pr_info("*** INTERRUPT VERIFICATION: Main mask=0x%x, MDMA mask=0x%x ***\n", mask_main, mask_mdma);
-
-    pr_info("*** tx_isp_vic_hw_init: INTERRUPT CONFIGURATION COMPLETE - INTERRUPTS SHOULD NOW FIRE ***\n");
     return 0;
 }
 
@@ -1630,6 +1481,31 @@ if (!IS_ERR(cgu_isp_clk)) {
     const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
+
+    /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
+    vic_start_ok = 1;
+    
+    /* CRITICAL: Enable ISP system-level interrupts when VIC streaming starts */
+    extern void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
+    
+    /* FIXED: Use proper VIC-to-ISP device linkage */
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)vic_dev->sd.isp;
+    if (!isp_dev && ourISPdev) {
+        /* Fallback: Use global ISP device if subdev link not set */
+        isp_dev = ourISPdev;
+        pr_info("*** tx_isp_vic_start: Using global ISP device fallback ***\n");
+    }
+    
+    if (isp_dev) {
+        pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
+        tx_isp_enable_irq(isp_dev);
+        pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
+    } else {
+        pr_err("*** tx_isp_vic_start: No ISP device found for interrupt enable ***\n");
+    }
+    
+    pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
+    pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
 
     /* MCP LOG: VIC start completed successfully */
     pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d, interface=%d\n", 
