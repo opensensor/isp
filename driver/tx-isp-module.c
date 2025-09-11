@@ -4917,7 +4917,7 @@ static void tx_vic_disable_irq_complete(struct tx_isp_dev *isp_dev)
 }
 
 /* COMPLETE VIC INTERRUPT ENABLE FUNCTION - FROM tx_vic_enable_irq BINARY NINJA */
-static void tx_vic_enable_irq_complete(struct tx_isp_dev *isp_dev)
+void tx_vic_enable_irq_complete(struct tx_isp_dev *isp_dev)
 {
     struct tx_isp_vic_device *vic_dev;
     unsigned long flags;
@@ -4973,29 +4973,11 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
 }
 
 /* tx_vic_enable_irq - MIPS-SAFE implementation with no dangerous callback access */
-static void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
+void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
     
     pr_info("*** tx_vic_enable_irq: MIPS-SAFE implementation - no dangerous callback access ***\n");
-    
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev pointer alignment */
-    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p not 4-byte aligned ***\n", vic_dev);
-        return;
-    }
-    
-    /* MIPS SAFE: Bounds validation */
-    if ((uintptr_t)vic_dev >= 0xfffff001) {
-        pr_err("*** MIPS ERROR: vic_dev pointer 0x%p out of valid range ***\n", vic_dev);
-        return;
-    }
-    
-    /* MIPS SAFE: Validate lock structure alignment */
-    if (((uintptr_t)&vic_dev->lock & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->lock not aligned ***\n");
-        return;
-    }
     
     /* MIPS SAFE: Use proper struct member access */
     spin_lock_irqsave(&vic_dev->lock, flags);
@@ -5022,7 +5004,7 @@ static void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 }
 
 /* tx_vic_disable_irq - MIPS-SAFE implementation */
-static void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
+void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
     
