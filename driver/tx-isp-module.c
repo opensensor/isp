@@ -1998,9 +1998,59 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
         return -EINVAL;
     }
     
-    /* CRITICAL FIX: Use the properly implemented tx_isp_video_s_stream function */
-    /* This function has all the MIPS alignment checks and safe subdev iteration */
-    pr_info("*** DELEGATING TO MIPS-SAFE tx_isp_video_s_stream IMPLEMENTATION ***\n");
+    /* MIPS-SAFE: Instead of dangerous subdev iteration, directly call known working functions */
+    if (enable) {
+        pr_info("*** MIPS-SAFE: Enabling streaming without risky subdev iteration ***\n");
+        
+        /* SAFE: Call VIC streaming directly if available */
+        if (isp_dev->vic_dev) {
+            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
+                pr_info("*** MIPS-SAFE: Calling VIC streaming directly ***\n");
+                vic_core_s_stream(&vic_dev->sd, enable);
+            }
+        }
+        
+        /* SAFE: Call CSI streaming directly if available */
+        if (isp_dev->csi_dev) {
+            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
+            if (csi_dev && ((uintptr_t)csi_dev & 0x3) == 0) {
+                pr_info("*** MIPS-SAFE: Calling CSI streaming directly ***\n");
+                csi_video_s_stream_impl(&csi_dev->sd, enable);
+            }
+        }
+        
+        /* SAFE: Call sensor streaming directly if available */
+        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
+            isp_dev->sensor->sd.ops->video && isp_dev->sensor->sd.ops->video->s_stream) {
+            if (((uintptr_t)isp_dev->sensor & 0x3) == 0) {
+                pr_info("*** MIPS-SAFE: Calling sensor streaming directly ***\n");
+                isp_dev->sensor->sd.ops->video->s_stream(&isp_dev->sensor->sd, enable);
+            }
+        }
+        
+    } else {
+        pr_info("*** MIPS-SAFE: Disabling streaming without risky subdev iteration ***\n");
+        /* SAFE: Disable streaming on known devices */
+        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
+            isp_dev->sensor->sd.ops->video && isp_dev->sensor->sd.ops->video->s_stream) {
+            if (((uintptr_t)isp_dev->sensor & 0x3) == 0) {
+                isp_dev->sensor->sd.ops->video->s_stream(&isp_dev->sensor->sd, 0);
+            }
+        }
+        if (isp_dev->vic_dev) {
+            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
+                vic_core_s_stream(&vic_dev->sd, 0);
+            }
+        }
+        if (isp_dev->csi_dev) {
+            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
+            if (csi_dev && ((uintptr_t)csi_dev & 0x3) == 0) {
+                csi_video_s_stream_impl(&csi_dev->sd, 0);
+            }
+        }
+    }
     
     return tx_isp_video_s_stream(isp_dev, enable);
 }
