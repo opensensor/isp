@@ -416,12 +416,7 @@ static struct resource tx_isp_resources[] = {
         .start = 0x13300000,           /* T31 ISP base address */
         .end   = 0x133FFFFF,           /* T31 ISP end address */
         .flags = IORESOURCE_MEM,
-    },
-    [1] = {
-        .start = 38,                   /* T31 ISP IRQ 38 (isp-w02) - SECONDARY ISP CHANNEL */
-        .end   = 38,
-        .flags = IORESOURCE_IRQ,
-    },
+    }
 };
 
 struct platform_device tx_isp_platform_device = {
