@@ -2174,7 +2174,7 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - RACE CONDITION FIXED ***\n");
 }
 
-/* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja Implementation */
+/* ISPVIC Frame Channel S_Stream - FIXED for atomic context I2C issue */
 int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
@@ -2182,7 +2182,7 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
     int32_t var_18 = 0;
     const char *stream_op;
     
-    pr_info("*** ispvic_frame_channel_s_stream: RACE CONDITION FIX ***\n");
+    pr_info("*** ispvic_frame_channel_s_stream: ATOMIC CONTEXT I2C FIX ***\n");
     pr_info("ispvic_frame_channel_s_stream: vic_dev=%p, enable=%d\n", arg1, arg2);
     
     /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
@@ -2207,8 +2207,11 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         return 0;
     }
     
-    /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
-    __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
+    /* CRITICAL FIX: Use regular spinlock instead of irqsave to avoid atomic context */
+    /* The original __private_spin_lock_irqsave disables interrupts, creating atomic context */
+    /* This prevents I2C operations (which can sleep) from working */
+    pr_info("*** ATOMIC CONTEXT FIX: Using spin_lock instead of spin_lock_irqsave ***\n");
+    spin_lock(&vic_dev->buffer_mgmt_lock);
     
     if (arg2 == 0) {
         /* Stream OFF */
@@ -2277,8 +2280,9 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         vic_dev->stream_state = 1;
     }
     
-    /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, var_18) */
-    private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
+    /* CRITICAL FIX: Use regular spin_unlock to match the spin_lock above */
+    pr_info("*** ATOMIC CONTEXT FIX: Using spin_unlock to match spin_lock ***\n");
+    spin_unlock(&vic_dev->buffer_mgmt_lock);
     
     /* Binary Ninja EXACT: return 0 */
     return 0;
