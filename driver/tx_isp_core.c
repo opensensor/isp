@@ -448,8 +448,7 @@ static int tx_isp_configure_vic_interrupts(struct tx_isp_dev *isp_dev)
     pr_info("*** VIC_CTRL: 0x%08x ***\n", readl(vic_regs + 0x00));
     
     /* Now enable the system IRQ */
-    pr_info("*** tx_isp_configure_vic_interrupts: Enabling system IRQ %d ***\n", isp_irq_info.irq_number);
-    tx_isp_enable_irq(&isp_irq_info);
+    tx_isp_enable_irq(isp_dev);
     
     pr_info("*** tx_isp_configure_vic_interrupts: VIC interrupts fully configured and enabled ***\n");
     pr_info("*** Hardware should now generate interrupts on frame completion! ***\n");
@@ -497,7 +496,7 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *unused_param)
     isp_irq_info.disable_func = tx_isp_disable_irq;
     
     /* Initially disable the IRQ */
-    tx_isp_disable_irq(&isp_irq_info);
+    //tx_isp_disable_irq(&isp_irq_info);
     
     pr_info("*** tx_isp_request_irq: IRQ %d registered successfully with FIXED global structure ***\n", irq_number);
     pr_info("*** tx_isp_request_irq: This should fix the invalid IRQ number -2142874224 issue! ***\n");
