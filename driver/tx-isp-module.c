@@ -4470,7 +4470,7 @@ static int tx_isp_init(void)
             pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
             
             /* Set global VIC interrupt enable flag */
-            vic_start_ok = 1;
+            vic_start_ok = 0;
             pr_info("*** vic_start_ok SET TO 1 - INTERRUPTS WILL NOW BE PROCESSED! ***\n");
         }
     }
