@@ -952,7 +952,11 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
             /* Binary Ninja: if ($v1_55 == 3) private_kthread_stop(*($s0 + 0x1b8)) */
             if (isp_state == 3) {
                 pr_info("ispcore_core_ops_init: Stopping ISP thread (state 3)");
-                /* Thread stopping logic would go here */
+                /* Stop ISP processing thread using proper VIC device members */
+                if (isp->fw_thread) {
+                    kthread_stop(isp->fw_thread);
+                    isp->fw_thread = NULL;
+                }
                 vic_dev->state = 2;
             }
             
