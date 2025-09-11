@@ -443,7 +443,7 @@ static struct tx_isp_subdev_ops core_subdev_ops = {
 /* Forward declarations */
 static int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
 static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp);
-static int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
+int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
 static int tx_isp_setup_media_links(struct tx_isp_dev *isp);
 static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp);
 static int tx_isp_create_subdev_links(struct tx_isp_dev *isp);
@@ -810,8 +810,7 @@ err_put_cgu_isp:
     return ret;
 }
 
-/* Setup ISP processing pipeline */
-static int tx_isp_setup_pipeline(struct tx_isp_dev *isp)
+int tx_isp_setup_pipeline(struct tx_isp_dev *isp)
 {
     int ret;
     

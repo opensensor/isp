@@ -747,20 +747,6 @@ int tx_isp_vic_device_deinit(struct tx_isp_dev *isp)
     return 0;
 }
 
-/**
- * tx_isp_setup_pipeline - Setup ISP pipeline (stub implementation)
- */
-int tx_isp_setup_pipeline(struct tx_isp_dev *isp)
-{
-    if (!isp) {
-        pr_err("tx_isp_setup_pipeline: Invalid ISP device\n");
-        return -EINVAL;
-    }
-    
-    pr_info("tx_isp_setup_pipeline: ISP pipeline configured (stub)\n");
-    return 0;
-}
-
 /* Export symbols for use by other modules */
 EXPORT_SYMBOL(tx_isp_subdev_register);
 EXPORT_SYMBOL(tx_isp_subdev_unregister);
