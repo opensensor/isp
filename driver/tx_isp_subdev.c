@@ -127,7 +127,7 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
     pr_info("Setting up default links\n");
 
     // Link sensor output -> CSI input
-    if (dev->sensor_sd && dev->csi_dev && dev->csi_dev->sd) {
+    if (dev->sensor_sd && dev->csi_dev && dev->csi_dev.sd) {
         if (!dev->sensor_sd->ops || !dev->sensor_sd->ops->video ||
             !dev->sensor_sd->ops->video->link_setup) {
             pr_err("Sensor subdev missing required ops\n");
@@ -137,7 +137,7 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
         pr_info("Setting up sensor -> CSI link\n");
         ret = dev->sensor_sd->ops->video->link_setup(
             &dev->sensor_sd->outpads[0],
-            &dev->csi_dev->sd->inpads[0],
+            &dev->csi_dev->sd.inpads[0],
             TX_ISP_LINKFLAG_ENABLED
         );
         if (ret && ret != -ENOIOCTLCMD) {
@@ -147,7 +147,7 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
     }
 
     // Link CSI output -> VIC input
-    if (dev->csi_dev && dev->csi_dev->sd && dev->vic_dev) {
+    if (dev->csi_dev && dev->csi_dev.sd && dev->vic_dev) {
         if (!dev->vic_dev->sd.ops || !dev->vic_dev->sd.ops->video ||
             !dev->vic_dev->sd.ops->video->link_setup) {
             pr_err("CSI subdev missing required ops\n");
