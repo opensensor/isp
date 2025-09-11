@@ -5799,11 +5799,45 @@ int vic_event_handler(void *subdev, int event_type, void *data)
     case 0x3000008: { /* TX_ISP_EVENT_FRAME_QBUF - Critical buffer programming! */
         pr_info("*** VIC EVENT: QBUF (0x3000008) - PROGRAMMING BUFFER TO VIC HARDWARE ***\n");
         
-        /* Call Binary Ninja ispvic_frame_channel_qbuf implementation */
+        /* CRITICAL FIX: Process the actual buffer data structure we're now passing */
         if (data) {
-            return ispvic_frame_channel_qbuf(vic_dev, data);
+            struct vic_buffer_data {
+                uint32_t index;
+                uint32_t phys_addr;
+                uint32_t size;
+                uint32_t channel;
+            } *buffer_data = (struct vic_buffer_data *)data;
+            
+            pr_info("*** VIC QBUF: Processing buffer data - index=%d, addr=0x%x, size=%d, channel=%d ***\n",
+                    buffer_data->index, buffer_data->phys_addr, buffer_data->size, buffer_data->channel);
+            
+            /* CRITICAL: Program the buffer directly to VIC hardware */
+            if (vic_dev->vic_regs && buffer_data->index < 8) {
+                u32 buffer_reg_offset = (buffer_data->index + 0xc6) << 2;
+                
+                pr_info("*** VIC QBUF: WRITING BUFFER TO VIC HARDWARE - reg[0x%x] = 0x%x ***\n",
+                        buffer_reg_offset, buffer_data->phys_addr);
+                
+                writel(buffer_data->phys_addr, vic_dev->vic_regs + buffer_reg_offset);
+                wmb();
+                
+                /* Increment frame count to track programmed buffers */
+                vic_dev->frame_count++;
+                
+                pr_info("*** VIC QBUF: BUFFER SUCCESSFULLY PROGRAMMED TO VIC HARDWARE! ***\n");
+                pr_info("*** VIC QBUF: Buffer[%d] addr=0x%x programmed, frame_count=%u ***\n",
+                        buffer_data->index, buffer_data->phys_addr, vic_dev->frame_count);
+                
+                return 0; /* Success - buffer programmed */
+            } else {
+                pr_err("*** VIC QBUF: FAILED - No VIC registers or invalid buffer index %d ***\n", 
+                       buffer_data->index);
+                return -EINVAL;
+            }
+        } else {
+            pr_err("*** VIC QBUF: FAILED - No buffer data provided ***\n");
+            return -EINVAL;
         }
-        return 0;
     }
     case 0x3000003: { /* TX_ISP_EVENT_FRAME_STREAMON - Start VIC streaming */
         pr_info("*** VIC EVENT: STREAM_START (0x3000003) - ACTIVATING VIC HARDWARE ***\n");
