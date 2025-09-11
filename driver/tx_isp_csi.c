@@ -837,16 +837,28 @@ static struct resource tx_isp_csi_resources[] = {
 
 int tx_isp_csi_probe(struct platform_device *pdev)
 {
+    struct tx_isp_subdev *sd = NULL;
     struct csi_device *csi_dev = NULL;
     struct resource *res;
     int32_t ret = 0;
 
     pr_info("*** csi_device_probe: Safe struct member access implementation ***\n");
 
+    /* Allocate tx_isp_subdev structure first */
+    sd = private_kmalloc(sizeof(struct tx_isp_subdev), GFP_KERNEL);
+    if (!sd) {
+        ISP_ERROR("Failed to allocate CSI subdev\n");
+        return -ENOMEM;
+    }
+
+    /* Initialize subdev structure */
+    memset(sd, 0, sizeof(struct tx_isp_subdev));
+
     /* Allocate CSI device structure */
     csi_dev = private_kmalloc(sizeof(struct csi_device), GFP_KERNEL);
     if (!csi_dev) {
         ISP_ERROR("Failed to allocate CSI device\n");
+        private_kfree(sd);
         return -ENOMEM;
     }
 
@@ -855,11 +867,16 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     pr_info("*** CSI device structure initialized: ***\n");
     pr_info("  Size: %zu bytes\n", sizeof(struct csi_device));
 
-    /* Initialize CSI subdev */
-    ret = tx_isp_subdev_init(pdev, (struct tx_isp_subdev *)csi_dev, &csi_subdev_ops);
+    /* Link CSI device to subdev */
+    csi_dev->sd = sd;
+    tx_isp_set_subdevdata(sd, csi_dev);
+
+    /* Initialize CSI subdev with proper subdev structure */
+    ret = tx_isp_subdev_init(pdev, sd, &csi_subdev_ops);
     if (ret != 0) {
         ISP_ERROR("Failed to initialize CSI subdev\n");
         private_kfree(csi_dev);
+        private_kfree(sd);
         return ret;
     }
 
@@ -892,8 +909,8 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     /* SAFE: Initialize mutex using struct member access */
     private_raw_mutex_init(&csi_dev->mutex, "csi_mutex", NULL);
 
-    /* Set platform driver data */
-    private_platform_set_drvdata(pdev, csi_dev);
+    /* Set platform driver data to the subdev, not the csi_dev */
+    private_platform_set_drvdata(pdev, sd);
 
     /* SAFE: Set state using struct member access */
     csi_dev->state = 1;
@@ -914,8 +931,9 @@ int tx_isp_csi_probe(struct platform_device *pdev)
 err_release_mem:
     private_release_mem_region(res->start, resource_size(res));
 err_deinit_subdev:
-    tx_isp_subdev_deinit((struct tx_isp_subdev *)csi_dev);
+    tx_isp_subdev_deinit(sd);
     private_kfree(csi_dev);
+    private_kfree(sd);
     return ret;
 }
 
