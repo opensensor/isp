@@ -2058,9 +2058,6 @@ static inline bool is_valid_kernel_pointer(const void *ptr)
 int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
 {
     int ret = 0;
-    // vic_regs
-    void __iomem *vic_regs;
-    vic_regs = ourISPdev->vic_regs;
     
     pr_info("*** tx_isp_video_s_stream: CORRECTED implementation using direct references - enable=%d ***\n", enable);
     
@@ -2128,32 +2125,6 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             pr_debug("Sensor has no s_stream operation\n");
         }
     }
-
-
-    /* *** MISSING Core Control registers - from reference trace *** */
-    pr_info("*** Writing missing Core Control registers (0xb004-0xb08c) ***\n");
-    writel(0xf001f001, vic_regs + 0xb004);   /* Core Control register */
-    writel(0x40404040, vic_regs + 0xb008);   /* Core Control register */
-    writel(0x40404040, vic_regs + 0xb00c);   /* Core Control register */
-    writel(0x40404040, vic_regs + 0xb010);   /* Core Control register */
-    writel(0x404040, vic_regs + 0xb014);     /* Core Control register */
-    writel(0x40404040, vic_regs + 0xb018);   /* Core Control register */
-    writel(0x40404040, vic_regs + 0xb01c);   /* Core Control register */
-    writel(0x40404040, vic_regs + 0xb020);   /* Core Control register */
-    writel(0x404040, vic_regs + 0xb024);     /* Core Control register */
-    writel(0x1000080, vic_regs + 0xb028);    /* Core Control register */
-    writel(0x1000080, vic_regs + 0xb02c);    /* Core Control register */
-    writel(0x100, vic_regs + 0xb030);        /* Core Control register */
-    writel(0xffff0100, vic_regs + 0xb034);   /* Core Control register */
-    writel(0x1ff00, vic_regs + 0xb038);      /* Core Control register */
-    writel(0x103, vic_regs + 0xb04c);        /* Core Control register */
-    writel(0x3, vic_regs + 0xb050);          /* Core Control register */
-    writel(0x341b, vic_regs + 0xb07c);       /* Core Control register */
-    writel(0x46b0, vic_regs + 0xb080);       /* Core Control register */
-    writel(0x1813, vic_regs + 0xb084);       /* Core Control register */
-    writel(0x10a, vic_regs + 0xb08c);        /* Core Control register */
-    wmb();
-
     
     pr_info("*** tx_isp_video_s_stream: CORRECTED implementation completed successfully ***\n");
     return 0;
