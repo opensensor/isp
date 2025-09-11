@@ -6369,8 +6369,17 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
         // Activate VIC
         if (vic_dev->state == 1) {
             vic_dev->state = 2;
-            // TODO call other activation functions here
-    		int ret = tx_isp_activate_csi_subdev(ourISPdev);
+            // *** CRITICAL: Call the main ISP core activation function - Binary Ninja ispcore_activate_module ***
+            pr_info("*** CALLING tx_isp_ispcore_activate_module_complete - THE MISSING SEQUENCE! ***\n");
+            int ret = tx_isp_ispcore_activate_module_complete(ourISPdev);
+            if (ret != 0) {
+                pr_err("*** tx_isp_ispcore_activate_module_complete FAILED: %d ***\n", ret);
+                return ret;
+            }
+            pr_info("*** tx_isp_ispcore_activate_module_complete SUCCESS - HARDWARE SHOULD NOW BE INITIALIZED! ***\n");
+            
+            // Also activate CSI subdev
+    		ret = tx_isp_activate_csi_subdev(ourISPdev);
     		if (ret) {
         		pr_err("Failed to activate CSI subdev: %d\n", ret);
                 return ret;
