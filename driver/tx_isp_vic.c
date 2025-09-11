@@ -1991,19 +1991,8 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
     
     pr_info("*** ispvic_frame_channel_s_stream: RACE CONDITION FIX ***\n");
     pr_info("ispvic_frame_channel_s_stream: vic_dev=%p, enable=%d\n", arg1, arg2);
-    
-    /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
-    if (arg1 != 0 && (unsigned long)arg1 < 0xfffff001) {
-        /* CRITICAL FIX: arg1 IS the vic_dev structure directly - Binary Ninja uses it directly */
-        vic_dev = (struct tx_isp_vic_device *)arg1;
-        pr_info("ispvic_frame_channel_s_stream: vic_dev retrieved using SAFE access: %p\n", vic_dev);
-    }
-    
-    /* Binary Ninja EXACT: if (arg1 == 0) return 0xffffffea */
-    if (arg1 == 0) {
-        pr_err("%s[%d]: invalid parameter\n", "ispvic_frame_channel_s_stream", __LINE__);
-        return 0xffffffea; /* -EINVAL */
-    }
+
+	vic_dev = ourISPdev->vic_dev;
     
     /* Binary Ninja: Set stream operation string */
     stream_op = (arg2 != 0) ? "streamon" : "streamoff";
