@@ -681,7 +681,7 @@ static int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 
     pr_info("*** tx_isp_vic_hw_init: CRITICAL INTERRUPT CONFIGURATION FIX ***\n");
 
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+    vic_dev = ourISPdev->vic_dev;
     if (!vic_dev) {
         pr_err("tx_isp_vic_hw_init: No VIC device\n");
         return -EINVAL;
@@ -709,7 +709,7 @@ static int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     pr_info("*** INTERRUPT MASK FIX: Enabled frame done (0x1e8=0xFFFFFFFE) and MDMA (0x1ec=0xFFFFFFFC) ***\n");
 
     /* STEP 3: Request and register the interrupt handler */
-    irq = platform_get_irq(to_platform_device(sd->dev), 0);
+    irq = vic_dev->irq;
     if (irq < 0) {
         pr_err("tx_isp_vic_hw_init: Failed to get IRQ number\n");
         return irq;
