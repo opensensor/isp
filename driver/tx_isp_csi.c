@@ -105,11 +105,11 @@ static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
     if (!sd)
         return IRQ_NONE;
 
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = ourISPdev->csi_dev;
     if (!csi_dev)
         return IRQ_NONE;
 
-    csi_base = *(void **)(((char *)csi_dev) + 0x13c);
+    csi_base = csi_dev->csi_regs;
     if (!csi_base)
         return IRQ_NONE;
 
