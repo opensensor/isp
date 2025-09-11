@@ -217,75 +217,22 @@ static struct {
 /* vic_framedone_irq_function - CRITICAL NULL POINTER FIX */
 static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 {
-    void __iomem *vic_base;
+    void __iomem *vic_base = vic_dev->vic_regs;
     void *result = NULL;
     
-    pr_debug("*** vic_framedone_irq_function: CRITICAL NULL POINTER FIX ***\n");
+    pr_debug("*** vic_framedone_irq_function: entry - vic_dev=%p ***\n", vic_dev);
     
-    /* CRITICAL FIX: Comprehensive vic_dev validation to prevent crash */
-    if (!vic_dev) {
-        pr_err("*** CRASH FIX: vic_dev is NULL - this is the BadVA 00030296 crash! ***\n");
-        return -EFAULT;
-    }
-    
-    /* CRITICAL FIX: Validate vic_dev is in valid kernel memory range */
-    if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("*** CRASH FIX: vic_dev %p outside valid kernel memory range ***\n", vic_dev);
-        return -EFAULT;
-    }
-    
-    /* CRITICAL FIX: Validate vic_dev pointer alignment */
-    if (((uintptr_t)vic_dev & 0x3) != 0) {
-        pr_err("*** CRASH FIX: vic_dev %p not 4-byte aligned ***\n", vic_dev);
-        return -EFAULT;
-    }
-    
-    /* CRITICAL FIX: Validate vic_regs member exists and is accessible */
-    if (((uintptr_t)&vic_dev->vic_regs & 0x3) != 0) {
-        pr_err("*** CRASH FIX: vic_dev->vic_regs member not aligned ***\n");
-        return -EFAULT;
-    }
-    
-    /* CRITICAL FIX: Validate vic_regs pointer before dereferencing */
-    vic_base = vic_dev->vic_regs;
-    if (!vic_base) {
-        pr_err("*** CRASH FIX: vic_base is NULL - cannot access VIC registers ***\n");
-        return -EFAULT;
-    }
-    
-    /* CRITICAL FIX: Validate vic_base is in valid I/O memory range */
-    if ((unsigned long)vic_base < 0x10000000 || (unsigned long)vic_base >= 0x20000000) {
-        pr_err("*** CRASH FIX: vic_base %p outside valid I/O memory range ***\n", vic_base);
-        return -EFAULT;
-    }
-    
-    /* CRITICAL FIX: Validate register base alignment */
-    if (((uintptr_t)vic_base & 0x3) != 0) {
-        pr_err("*** CRASH FIX: vic_base %p not 4-byte aligned ***\n", vic_base);
-        return -EFAULT;
-    }
-    
-    pr_debug("*** vic_framedone_irq_function: All validation passed - vic_dev=%p, vic_base=%p ***\n", 
-             vic_dev, vic_base);
-    
-    /* CRITICAL FIX: Safe access to processing flag with additional validation */
-    /* This prevents the BadVA 00030296 crash by ensuring safe struct member access */
-    if (((uintptr_t)&vic_dev->processing & 0x3) != 0) {
-        pr_err("*** CRASH FIX: processing member not aligned ***\n");
-        return -EFAULT;
-    }
-    
-    if (!vic_dev->processing) {  /* SAFE: Validated struct member access */
+    /* CRITICAL FIX: Use proper struct member access instead of dangerous offset arithmetic */
+    /* Binary Ninja: if (*(arg1 + 0x214) == 0) - but 0x214 was causing alignment issues */
+    if (!vic_dev->processing) {  /* Use proper struct member instead of offset 0x214 */
         /* goto label_123f4 - GPIO handling section */
         goto gpio_handling;
     } else {
-        /* CRITICAL FIX: Safe access to stream_state with validation */
-        if (((uintptr_t)&vic_dev->stream_state & 0x3) != 0) {
-            pr_err("*** CRASH FIX: stream_state member not aligned ***\n");
-            return -EFAULT;
-        }
-        
-        if (vic_dev->stream_state != 0) {  /* SAFE: Validated struct member access */
+        /* CRITICAL FIX: Use proper struct member access */
+        /* Binary Ninja: result = *(arg1 + 0x210) - but 0x210 was causing alignment issues */
+        if (vic_dev->stream_state != 0) {  /* Use proper struct member instead of offset 0x210 */
+            /* Binary Ninja: void* $a3_1 = *(arg1 + 0xb8) */
+            void __iomem *vic_regs = vic_dev->vic_regs;
             
             /* CRITICAL MIPS FIX: Use SAFE list operations instead of dangerous pointer arithmetic */
             /* Binary Ninja: void** i_1 = *(arg1 + 0x204) - DANGEROUS pointer arithmetic */
@@ -295,31 +242,21 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             int buffer_found = 0;       /* $v1_1 = 0 */
             int buffer_match = 0;       /* $v0 = 0 */
             
-            /* CRITICAL MIPS FIX: SAFE list traversal with alignment validation */
-            /* Binary Ninja: for (; i_1 != arg1 + 0x204; i_1 = *i_1) - DANGEROUS */
-            /* SAFE REPLACEMENT: Use kernel list_for_each macro */
+            /* Binary Ninja: Loop through buffer list - SAFE implementation */
+            /* for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
             list_for_each(pos, &vic_dev->queue_head) {
-                /* Validate list entry alignment before access */
-                if (((uintptr_t)pos & 0x3) != 0) {
-                    pr_err("*** MIPS ALIGNMENT ERROR: list entry %p not aligned ***\n", pos);
-                    break;
-                }
-                
                 /* $v1_1 += 0 u< $v0 ? 1 : 0 */
                 buffer_found += (buffer_match == 0) ? 1 : 0;
                 /* $a1_1 += 1 */
                 buffer_count += 1;
                 
                 /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
-                /* CRITICAL MIPS FIX: SAFE register read with alignment check */
-                if (((uintptr_t)(vic_base + 0x380) & 0x3) == 0) {
-                    u32 current_frame_addr = readl(vic_base + 0x380);
-                    /* Simulate buffer match check safely */
-                    if ((buffer_count & 1) && current_frame_addr != 0) {
-                        buffer_match = 1;  /* $v0 = 1 */
-                    }
-                } else {
-                    pr_err("*** MIPS ALIGNMENT ERROR: register 0x380 not aligned ***\n");
+                /* This checks if current buffer address matches hardware register */
+                u32 current_frame_addr = readl(vic_regs + 0x380);
+                /* In a real implementation, would extract buffer address from list entry */
+                /* For now, simulate the match check without dangerous pointer arithmetic */
+                if ((buffer_count & 1) && current_frame_addr != 0) {
+                    buffer_match = 1;  /* $v0 = 1 */
                 }
             }
             
@@ -333,18 +270,12 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             }
             
             /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
-            /* CRITICAL MIPS FIX: SAFE register access with alignment validation */
-            if (((uintptr_t)(vic_base + 0x300) & 0x3) == 0) {
-                u32 reg_300_val = readl(vic_base + 0x300);
-                reg_300_val = (reg_300_val & 0xfff0ffff) | shift_result;
-                writel(reg_300_val, vic_base + 0x300);
-                
-                pr_debug("vic_framedone_irq_function: SAFE reg 0x300 = 0x%x (buffers: count=%d, found=%d, match=%d)\n",
-                         reg_300_val, buffer_count, buffer_found, buffer_match);
-            } else {
-                pr_err("*** MIPS ALIGNMENT ERROR: register 0x300 not aligned ***\n");
-                return -EFAULT;
-            }
+            u32 reg_300_val = readl(vic_regs + 0x300);
+            reg_300_val = (reg_300_val & 0xfff0ffff) | shift_result;
+            writel(reg_300_val, vic_regs + 0x300);
+            
+            pr_debug("vic_framedone_irq_function: Updated reg 0x300 = 0x%x (buffers: count=%d, found=%d, match=%d)\n",
+                     reg_300_val, buffer_count, buffer_found, buffer_match);
         }
         
         /* Binary Ninja: result = &data_b0000, goto label_123f4 */
@@ -353,17 +284,11 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
     }
 
 gpio_handling:
-    /* Binary Ninja: label_123f4 - GPIO handling with MIPS alignment fixes */
+    /* Binary Ninja: label_123f4 - GPIO handling */
     if (gpio_switch_state != 0) {
         /* Binary Ninja: void* $s1_1 = &gpio_info */
         int i;
         gpio_switch_state = 0;
-        
-        /* CRITICAL MIPS FIX: Validate gpio_info array alignment */
-        if (((uintptr_t)gpio_info & 0x3) != 0) {
-            pr_err("*** MIPS ALIGNMENT ERROR: gpio_info array not aligned ***\n");
-            return -EFAULT;
-        }
         
         /* for (int32_t i = 0; i != 0xa; ) */
         for (i = 0; i < 10; i++) {
@@ -376,22 +301,17 @@ gpio_handling:
             }
             
             /* Binary Ninja: result = private_gpio_direction_output($a0_2, zx.d(*($s1_1 + 0x14))) */
-            /* CRITICAL MIPS FIX: SAFE access to gpio state with alignment check */
-            if (((uintptr_t)&gpio_info[i].state & 0x3) == 0) {
-                uint32_t gpio_state = (uint32_t)gpio_info[i].state;
-                
-                /* Placeholder GPIO operation - would be actual GPIO call in real driver */
-                pr_debug("vic_framedone_irq_function: SAFE GPIO %d set to state %d\n", gpio_pin, gpio_state);
-            } else {
-                pr_err("*** MIPS ALIGNMENT ERROR: gpio_info[%d].state not aligned ***\n", i);
-            }
+            uint32_t gpio_state = (uint32_t)gpio_info[i].state;
+            
+            /* Placeholder GPIO operation - would be actual GPIO call in real driver */
+            pr_debug("vic_framedone_irq_function: GPIO %d set to state %d\n", gpio_pin, gpio_state);
             
             /* if (result s< 0) - GPIO error handling */
             /* This would be actual error handling in real implementation */
         }
     }
     
-    pr_debug("*** vic_framedone_irq_function: MIPS SAFE completion ***\n");
+    pr_debug("*** vic_framedone_irq_function: completed successfully ***\n");
     /* Binary Ninja: return result */
     return 0;  /* Success */
 }
@@ -434,7 +354,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     u32 isr_main, isr_mdma;
     irqreturn_t ret = IRQ_HANDLED;
     
-    pr_debug("*** isp_vic_interrupt_service_routine: CRITICAL NULL POINTER CRASH FIX ***\n");
+    pr_debug("*** isp_vic_interrupt_service_routine: IRQ %d triggered ***\n", irq);
     
     /* CRITICAL CRASH FIX: Comprehensive dev_id validation to prevent BadVA 00030296 */
     if (!dev_id) {
@@ -458,28 +378,16 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
     if (!sd || (unsigned long)sd >= 0xfffff001) {
-        pr_err("*** CRASH FIX: Invalid sd parameter after validation ***\n");
+        pr_err("isp_vic_interrupt_service_routine: Invalid sd parameter\n");
         return IRQ_HANDLED;
     }
     
     /* CRITICAL CRASH FIX: Safe subdev data access with comprehensive validation */
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     
-    /* CRITICAL CRASH FIX: Comprehensive vic_dev validation */
-    if (!vic_dev) {
-        pr_err("*** CRASH FIX: vic_dev is NULL from tx_isp_get_subdevdata ***\n");
-        return IRQ_HANDLED;
-    }
-    
-    /* CRITICAL CRASH FIX: Validate vic_dev is in valid kernel memory range */
-    if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("*** CRASH FIX: vic_dev %p outside valid kernel memory range ***\n", vic_dev);
-        return IRQ_HANDLED;
-    }
-    
-    /* CRITICAL CRASH FIX: Validate vic_dev pointer alignment */
-    if (((uintptr_t)vic_dev & 0x3) != 0) {
-        pr_err("*** CRASH FIX: vic_dev %p not 4-byte aligned ***\n", vic_dev);
+    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_err("isp_vic_interrupt_service_routine: Invalid vic_dev - using safe subdev access\n");
         return IRQ_HANDLED;
     }
     

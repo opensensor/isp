@@ -293,13 +293,14 @@ static struct tx_isp_subdev_ops core_subdev_ops = {
 /* Forward declarations */
 static int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
 static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp);
-int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
+static int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
+static int tx_isp_setup_media_links(struct tx_isp_dev *isp);
 static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp);
 static int tx_isp_create_subdev_links(struct tx_isp_dev *isp);
 static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link);
-
+static int tx_isp_configure_default_links(struct tx_isp_dev *isp);
 static int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
-int tx_isp_vic_device_init(struct tx_isp_dev *isp);
+static int tx_isp_vic_device_init(struct tx_isp_dev *isp);
 static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
 
@@ -316,25 +317,8 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
 int sensor_init(struct tx_isp_dev *isp_dev);
 void *isp_core_tuning_init(void *arg1);
 int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
-
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
-
-/* IRQ info structure - matches Binary Ninja tx_isp_request_irq layout */
-struct tx_isp_irq_info {
-    int irq_number;                    /* IRQ number at offset 0 */
-    void (*enable_func)(void *);       /* Enable function at offset 4 */
-    void (*disable_func)(void *);      /* Disable function at offset 8 */
-    spinlock_t lock;                   /* Spinlock for IRQ operations */
-};
-
-/* Global IRQ info structure */
-static struct tx_isp_irq_info isp_irq_info = {
-    .irq_number = 37,  /* FIXED: Use correct IRQ number 37 */
-    .enable_func = NULL,
-    .disable_func = NULL,
-};
-
 void system_reg_write(u32 reg, u32 value);
 
 /* ISP interrupt dispatch system - EXACT Binary Ninja implementation */
@@ -687,8 +671,47 @@ err_put_cgu_isp:
     return ret;
 }
 
+/* Setup ISP processing pipeline */
+static int tx_isp_setup_pipeline(struct tx_isp_dev *isp)
+{
+    int ret;
+    
+    pr_info("Setting up ISP processing pipeline: CSI -> VIC -> Output\n");
+    
+    /* Initialize the processing pipeline state */
+    isp->pipeline_state = ISP_PIPELINE_IDLE;
+    
+    /* Configure default data path settings */
+    if (isp->csi_dev) {
+        isp->csi_dev->state = 1; /* INIT state */
+        pr_info("CSI device ready for configuration\n");
+    }
+    
+    if (isp->vic_dev) {
+        isp->vic_dev->state = 1; /* INIT state */
+        pr_info("VIC device ready for configuration\n");
+    }
+    
+    /* Setup media entity links and pads */
+    ret = tx_isp_setup_media_links(isp);
+    if (ret < 0) {
+        pr_err("Failed to setup media links: %d\n", ret);
+        return ret;
+    }
+    
+    /* Configure default link routing */
+    ret = tx_isp_configure_default_links(isp);
+    if (ret < 0) {
+        pr_err("Failed to configure default links: %d\n", ret);
+        return ret;
+    }
+    
+    pr_info("ISP pipeline setup completed\n");
+    return 0;
+}
+
 /* Setup media entity links and pads */
-int tx_isp_setup_media_links(struct tx_isp_dev *isp)
+static int tx_isp_setup_media_links(struct tx_isp_dev *isp)
 {
     int ret;
     
@@ -796,7 +819,7 @@ static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link
 }
 
 /* Configure default link routing */
-int tx_isp_configure_default_links(struct tx_isp_dev *isp)
+static int tx_isp_configure_default_links(struct tx_isp_dev *isp)
 {
     pr_info("Configuring default link routing\n");
     
@@ -841,6 +864,34 @@ static int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
     }
     
     pr_info("Format propagation configured\n");
+    return 0;
+}
+
+/* Initialize VIC device */
+static int tx_isp_vic_device_init(struct tx_isp_dev *isp)
+{
+    struct vic_device *vic_dev;
+    
+    pr_info("Initializing VIC device\n");
+    
+    /* Allocate VIC device structure if not already present */
+    if (!isp->vic_dev) {
+        vic_dev = kzalloc(sizeof(struct vic_device), GFP_KERNEL);
+        if (!vic_dev) {
+            pr_err("Failed to allocate VIC device\n");
+            return -ENOMEM;
+        }
+        
+        /* Initialize VIC device structure */
+        vic_dev->state = 1; /* INIT state */
+        mutex_init(&vic_dev->state_lock);
+        spin_lock_init(&vic_dev->lock);
+        init_completion(&vic_dev->frame_complete);
+        
+        isp->vic_dev = vic_dev;
+    }
+    
+    pr_info("VIC device initialized\n");
     return 0;
 }
 
@@ -2130,44 +2181,15 @@ static const struct file_operations frame_channel_fops = {
 
 
 
-/* lock and mutex interfaces - FIXED for IRQ context issue */
+/* lock and mutex interfaces */
 void __private_spin_lock_irqsave(spinlock_t *lock, unsigned long *flags)
 {
-    /* MCP logging for context debugging */
-    bool in_atomic = in_atomic();
-    bool irqs_disabled = irqs_disabled();
-    bool in_interrupt = in_interrupt();
-    
-    pr_debug("MCP_CONTEXT: __private_spin_lock_irqsave: Before lock - in_atomic=%d, irqs_disabled=%d, in_interrupt=%d\n", 
-             in_atomic, irqs_disabled, in_interrupt);
-    
-    /* CRITICAL FIX: Check if we're already in atomic context */
-    if (in_atomic || irqs_disabled || in_interrupt) {
-        pr_warn("MCP_CONTEXT: __private_spin_lock_irqsave: Already in atomic context - using spin_lock instead of spin_lock_irqsave\n");
-        /* Use regular spinlock to avoid nested IRQ disable */
-        spin_lock(lock);
-        *flags = 0; /* Set flags to 0 to indicate we didn't disable IRQs */
-    } else {
-        /* Safe to disable IRQs */
-        spin_lock_irqsave(lock, *flags);
-        pr_debug("MCP_CONTEXT: __private_spin_lock_irqsave: IRQs disabled, flags=0x%lx\n", *flags);
-    }
+    raw_spin_lock_irqsave(spinlock_check(lock), *flags);
 }
 
 void private_spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags)
 {
-    pr_debug("MCP_CONTEXT: private_spin_unlock_irqrestore: flags=0x%lx\n", flags);
-    
-    /* CRITICAL FIX: Check if we actually disabled IRQs */
-    if (flags == 0) {
-        /* We used regular spin_lock, so use regular spin_unlock */
-        pr_debug("MCP_CONTEXT: private_spin_unlock_irqrestore: Using spin_unlock (no IRQ restore needed)\n");
-        spin_unlock(lock);
-    } else {
-        /* We disabled IRQs, so restore them */
-        spin_unlock_irqrestore(lock, flags);
-        pr_debug("MCP_CONTEXT: private_spin_unlock_irqrestore: IRQs restored\n");
-    }
+    spin_unlock_irqrestore(lock, flags);
 }
 
 /**
@@ -2693,18 +2715,19 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             if ((arg1[7] & 0xff) != 3) /* zx.d(*(arg1 + 7)) != 3 */
                 return 0;
             
-            /* CRITICAL FIX: Remove spinlock to avoid atomic context during I2C operations */
-            /* The original code used __private_spin_lock_irqsave here, but this creates */
-            /* atomic context which prevents I2C operations (which can sleep) from working */
-            ISP_INFO("ispcore_pad_event_handle: FIXED - No spinlock to allow I2C operations in process context");
+            __private_spin_lock_irqsave((char*)s2_1 + 0x9c, &var_58);
             
             if (*((uint32_t*)s2_1 + 0x1d) != 4) { /* *(s2_1 + 0x74) != 4 */
                 tisp_channel_start((uint32_t)arg1[1] & 0xff, NULL); /* zx.d(arg1[1].b) */
                 *((uint32_t*)s2_1 + 0x1d) = 4; /* *(s2_1 + 0x74) = 4 */
+                uint32_t a1_6 = var_58;
                 arg1[7] = 4;
                 result = 0;
+                private_spin_unlock_irqrestore((char*)s2_1 + 0x9c, a1_6);
                 ISP_INFO("ispcore_pad_event_handle: channel started successfully");
             } else {
+                arch_local_irq_restore(var_58);
+                /* Preemption handling */
                 result = 0;
                 ISP_INFO("ispcore_pad_event_handle: channel already started");
             }
@@ -3154,6 +3177,15 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 *((void**)((char*)core_dev + (0xc * 4))) = tuning_data; /* $v0[0xc] = tuning_dev (FIXED) */
                 pr_info("*** tx_isp_core_probe: FIXED tuning pointer corruption - using tuning_dev=%p directly ***\n", tuning_data);
                 *((void**)((char*)core_dev + (0xd * 4))) = &isp_tuning_fops; /* $v0[0xd] = &isp_info_proc_fops */
+                /* CRITICAL: Create VIC device BEFORE sensor_early_init */
+                pr_info("*** tx_isp_core_probe: Creating VIC device ***\n");
+                result = tx_isp_create_vic_device((struct tx_isp_dev *)core_dev);
+                if (result != 0) {
+                    pr_err("*** tx_isp_core_probe: Failed to create VIC device: %d ***\n", result);
+                    return result;
+                } else {
+                    pr_info("*** tx_isp_core_probe: VIC device created successfully ***\n");
+                }
 
                 /* Binary Ninja: sensor_early_init($v0) */
                 pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
@@ -3208,11 +3240,14 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_err("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
                 }
 
-
-                /* REMOVED: Duplicate IRQ registration - this was causing multiple handlers for IRQ 37 */
-                /* The main tx_isp_init() function handles IRQ registration with Binary Ninja method */
-                pr_info("*** tx_isp_core_probe: IRQ registration handled by main module (tx_isp_init) ***\n");
-                pr_info("*** tx_isp_core_probe: This prevents duplicate 'tx-isp-core' + 'tx-isp' handlers ***\n");
+                /* CRITICAL: Set up memory mappings for register access */
+                pr_info("*** tx_isp_core_probe: Setting up ISP memory mappings ***\n");
+                result = tx_isp_init_memory_mappings((struct tx_isp_dev *)core_dev);
+                if (result == 0) {
+                    pr_info("*** tx_isp_core_probe: ISP memory mappings initialized successfully ***\n");
+                } else {
+                    pr_err("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
+                }
 
                 /* CRITICAL: Start continuous processing - this generates the register activity your trace captures! */
                 pr_info("*** tx_isp_core_probe: Starting continuous processing system ***\n");
@@ -3411,23 +3446,6 @@ void private_i2c_set_clientdata(struct i2c_client *client, void *data)
 
 int private_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 {
-    /* MCP logging for context debugging */
-    bool in_atomic = in_atomic();
-    bool irqs_disabled = irqs_disabled();
-    bool in_interrupt = in_interrupt();
-    
-    pr_debug("MCP_CONTEXT: private_i2c_transfer: Before I2C - in_atomic=%d, irqs_disabled=%d, in_interrupt=%d\n", 
-             in_atomic, irqs_disabled, in_interrupt);
-    
-    /* CRITICAL FIX: Check if we're in atomic context before calling I2C */
-    if (in_atomic || irqs_disabled || in_interrupt) {
-        pr_warn("MCP_CONTEXT: private_i2c_transfer: WARNING - I2C called in atomic context! This may cause 'sleeping function called from invalid context'\n");
-        pr_warn("MCP_CONTEXT: private_i2c_transfer: Consider deferring this I2C operation to a workqueue\n");
-        
-        /* Still attempt the I2C transfer but log the dangerous context */
-        pr_warn("MCP_CONTEXT: private_i2c_transfer: Proceeding with I2C transfer despite atomic context\n");
-    }
-    
     return i2c_transfer(adap, msgs, num);
 }
 
