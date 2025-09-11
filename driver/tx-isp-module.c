@@ -990,12 +990,12 @@ static void* find_subdev_link_pad(struct tx_isp_dev *isp_dev, char *name)
     
     if (strstr(name, "csi") && isp_dev->csi_dev) {
         pr_debug("Found CSI device\n");
-        return isp_dev->csi_dev->sd; // Return CSI subdev
+        return &((struct tx_isp_csi_device *)isp_dev->csi_dev)->sd; // Return CSI subdev pointer
     }
     
     if (strstr(name, "vic") && isp_dev->vic_dev) {
         pr_debug("Found VIC device\n");
-        return isp_dev->vic_dev->sd; // Return VIC subdev
+        return &((struct tx_isp_vic_device *)isp_dev->vic_dev)->sd; // Return VIC subdev pointer
     }
     
     pr_debug("Subdev %s not found\n", name);
@@ -1750,6 +1750,9 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
     uint32_t *vic_irq_enable_flag;
+    u32 addr_ctl;
+    u32 reg_val;
+    int timeout;
     int i;
     
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
@@ -1926,8 +1929,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             wmb();
             
             /* Binary Ninja: while (*$v0_70 != 0) */
-            u32 addr_ctl;
-            int timeout = 1000;
+            timeout = 1000;
             while (timeout-- > 0) {
                 addr_ctl = readl(vic_regs + 0x0);
                 if (addr_ctl == 0) {
@@ -1938,7 +1940,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             }
             
             /* Binary Ninja: Final recovery steps */
-            u32 reg_val = readl(vic_regs + 0x104);
+            reg_val = readl(vic_regs + 0x104);
             writel(reg_val, vic_regs + 0x104);  /* Self-write like Binary Ninja */
             
             reg_val = readl(vic_regs + 0x108);
