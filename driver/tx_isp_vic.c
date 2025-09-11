@@ -2032,6 +2032,8 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     struct tx_isp_subdev *sd;
     struct tx_isp_vic_device *vic_dev;
     int ret = 0;
+
+    pr_info("*** vic_pad_event_handler: RACE CONDITION FIX ***\n");
     
     if (!pad || !pad->sd) {
         pr_err("VIC event callback: Invalid pad or subdev\n");

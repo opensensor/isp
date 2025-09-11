@@ -2275,6 +2275,8 @@ EXPORT_SYMBOL(tx_isp_video_s_stream);
 /* Real hardware frame completion detection - SDK compatible */
 static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel)
 {
+
+	pr_info("tx_isp_hardware_frame_done_handler: channel=%d\n", channel);
     if (!isp_dev || channel < 0 || channel >= num_channels) {
         return;
     }
