@@ -1990,15 +1990,6 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
             }
         }
         
-        /* SAFE: Call CSI streaming directly if available */
-        if (isp_dev->csi_dev) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-            if (csi_dev && ((uintptr_t)csi_dev & 0x3) == 0) {
-                pr_info("*** MIPS-SAFE: Calling CSI streaming directly ***\n");
-                csi_video_s_stream_impl(&csi_dev->sd, enable);
-            }
-        }
-        
         /* SAFE: Call sensor streaming directly if available */
         if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
             isp_dev->sensor->sd.ops->video && isp_dev->sensor->sd.ops->video->s_stream) {

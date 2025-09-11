@@ -1071,7 +1071,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* FIXED: Use proper VIC-to-ISP device linkage */
     struct tx_isp_dev *isp_dev = ourISPdev;
-    
+
     pr_info("*** tx_isp_vic_start: EXACT Binary Ninja implementation matching reference trace ***\n");
 
     /* Validate vic_dev structure */
