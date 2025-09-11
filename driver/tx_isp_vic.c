@@ -21,7 +21,7 @@
 
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
-uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
+uint32_t vic_start_ok = 1;  /* Global VIC interrupt enable flag definition */
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 
 /* *** CRITICAL: MISSING FUNCTION - tx_isp_create_vic_device *** */
@@ -2277,7 +2277,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 vic_dev->state = 3; /* ACTIVE but not streaming */
                 pr_info("VIC: Streaming stopped, state -> 3\n");
                 /* Reset vic_start_ok when stopping */
-                vic_start_ok = 0;
+                vic_start_ok = 1;
                 pr_info("VIC: vic_start_ok reset to 0 (interrupts disabled)\n");
             }
         } else {
