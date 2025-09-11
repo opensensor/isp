@@ -1374,6 +1374,15 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     csi_dev->sd.ops = NULL;  /* Would be &csi_subdev_ops in full implementation */
     csi_dev->sd.vin_state = TX_ISP_MODULE_INIT;
     
+    /* *** CRITICAL: Map CSI basic control registers - Binary Ninja 0x10022000 *** */
+    /* Binary Ninja: private_request_mem_region(0x10022000, 0x1000, "Can not support this frame mode!!!\\n") */
+    mem_resource = request_mem_region(0x10022000, 0x1000, "tx-isp-csi");
+    if (!mem_resource) {
+        pr_err("csi_device_probe: Cannot request CSI memory region 0x10022000\n");
+        ret = -EBUSY;
+        goto err_free_dev;
+    }
+    
     /* Binary Ninja: private_ioremap($a0_2, $v0_3[1] + 1 - $a0_2) */
     csi_basic_regs = ioremap(0x10022000, 0x1000);
     if (!csi_basic_regs) {
@@ -2079,30 +2088,30 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     }
     
     /* CORRECTED: Use direct CSI device reference */
-//    if (ourISPdev->csi_dev) {
-//        struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
-//
-//        if (csi_dev->sd.ops && csi_dev->sd.ops->video && csi_dev->sd.ops->video->s_stream) {
-//            pr_info("*** Calling CSI s_stream directly: enable=%d ***\n", enable);
-//            ret = csi_dev->sd.ops->video->s_stream(&csi_dev->sd, enable);
-//
-//            if (ret != 0 && ret != 0xfffffdfd) {
-//                pr_err("CSI s_stream failed: %d\n", ret);
-//                /* Don't return error - try to disable VIC if we were enabling */
-//                if (enable && ourISPdev->vic_dev) {
-//                    struct tx_isp_vic_device *vic_dev = dev->vic_dev;
-//                    if (vic_dev->sd.ops && vic_dev->sd.ops->video &&
-//                        vic_dev->sd.ops->video->s_stream) {
-//                        vic_dev->sd.ops->video->s_stream(&vic_dev->sd, 0);
-//                    }
-//                }
-//                return ret;
-//            }
-//            pr_info("*** CSI s_stream completed: %d ***\n", ret);
-//        } else {
-//            pr_debug("CSI device has no s_stream operation\n");
-//        }
-//    }
+    if (ourISPdev->csi_dev) {
+        struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
+
+        if (csi_dev->sd.ops && csi_dev->sd.ops->video && csi_dev->sd.ops->video->s_stream) {
+            pr_info("*** Calling CSI s_stream directly: enable=%d ***\n", enable);
+            ret = csi_dev->sd.ops->video->s_stream(&csi_dev->sd, enable);
+
+            if (ret != 0 && ret != 0xfffffdfd) {
+                pr_err("CSI s_stream failed: %d\n", ret);
+                /* Don't return error - try to disable VIC if we were enabling */
+                if (enable && ourISPdev->vic_dev) {
+                    struct tx_isp_vic_device *vic_dev = dev->vic_dev;
+                    if (vic_dev->sd.ops && vic_dev->sd.ops->video &&
+                        vic_dev->sd.ops->video->s_stream) {
+                        vic_dev->sd.ops->video->s_stream(&vic_dev->sd, 0);
+                    }
+                }
+                return ret;
+            }
+            pr_info("*** CSI s_stream completed: %d ***\n", ret);
+        } else {
+            pr_debug("CSI device has no s_stream operation\n");
+        }
+    }
     
     /* CORRECTED: Use direct sensor reference */
     if (ourISPdev->sensor) {
