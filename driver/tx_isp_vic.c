@@ -562,7 +562,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 }
 
 /* CRITICAL FIX: Initialize VIC hardware with proper interrupt configuration */
-static int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
+int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 {
     void __iomem *vic_base;
 

@@ -1960,6 +1960,7 @@ static volatile bool subdev_init_complete = false;
 
 /* Forward declaration for tx_isp_video_s_stream */
 int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable);
+int tx_isp_vic_hw_init(struct tx_isp_subdev *sd);
 
 /* tx_isp_video_link_stream - FIXED implementation with proper MIPS alignment checks */
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
