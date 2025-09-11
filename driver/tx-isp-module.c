@@ -2129,19 +2129,21 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     
     /* CORRECTED: Use direct CSI device reference */
     if (dev->csi_dev) {
-        struct csi_device *csi_dev = dev->csi_dev;
+        struct tx_isp_csi_device *csi_dev = dev->csi_dev;
         
-        if (csi_dev->sd && csi_dev->sd->ops && csi_dev->sd->ops->video && csi_dev->sd->ops->video->s_stream) {
+        if (csi_dev->sd.ops && csi_dev->sd.ops->video && csi_dev->sd.ops->video->s_stream) {
             pr_info("*** Calling CSI s_stream directly: enable=%d ***\n", enable);
-            ret = csi_dev->sd->ops->video->s_stream(csi_dev->sd, enable);
+            ret = csi_dev->sd.ops->video->s_stream(&csi_dev->sd, enable);
             
             if (ret != 0 && ret != 0xfffffdfd) {
                 pr_err("CSI s_stream failed: %d\n", ret);
                 /* Don't return error - try to disable VIC if we were enabling */
-                if (enable && dev->vic_dev && dev->vic_dev->sd && 
-                    dev->vic_dev->sd->ops && dev->vic_dev->sd->ops->video && 
-                    dev->vic_dev->sd->ops->video->s_stream) {
-                    dev->vic_dev->sd->ops->video->s_stream(dev->vic_dev->sd, 0);
+                if (enable && dev->vic_dev) {
+                    struct tx_isp_vic_device *vic_dev = dev->vic_dev;
+                    if (vic_dev->sd.ops && vic_dev->sd.ops->video && 
+                        vic_dev->sd.ops->video->s_stream) {
+                        vic_dev->sd.ops->video->s_stream(&vic_dev->sd, 0);
+                    }
                 }
                 return ret;
             }
@@ -2163,13 +2165,19 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
                 pr_err("Sensor s_stream failed: %d\n", ret);
                 /* Rollback: disable CSI and VIC if we were enabling */
                 if (enable) {
-                    if (dev->csi_dev && dev->csi_dev->sd && dev->csi_dev->sd->ops && 
-                        dev->csi_dev->sd->ops->video && dev->csi_dev->sd->ops->video->s_stream) {
-                        dev->csi_dev->sd->ops->video->s_stream(dev->csi_dev->sd, 0);
+                    if (dev->csi_dev) {
+                        struct tx_isp_csi_device *csi_dev = dev->csi_dev;
+                        if (csi_dev->sd.ops && csi_dev->sd.ops->video && 
+                            csi_dev->sd.ops->video->s_stream) {
+                            csi_dev->sd.ops->video->s_stream(&csi_dev->sd, 0);
+                        }
                     }
-                    if (dev->vic_dev && dev->vic_dev->sd && dev->vic_dev->sd->ops && 
-                        dev->vic_dev->sd->ops->video && dev->vic_dev->sd->ops->video->s_stream) {
-                        dev->vic_dev->sd->ops->video->s_stream(dev->vic_dev->sd, 0);
+                    if (dev->vic_dev) {
+                        struct tx_isp_vic_device *vic_dev = dev->vic_dev;
+                        if (vic_dev->sd.ops && vic_dev->sd.ops->video && 
+                            vic_dev->sd.ops->video->s_stream) {
+                            vic_dev->sd.ops->video->s_stream(&vic_dev->sd, 0);
+                        }
                     }
                 }
                 return ret;
