@@ -3144,8 +3144,8 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 pr_info("*** tx_isp_core_probe: FIXED tuning pointer corruption - using tuning_dev=%p directly ***\n", tuning_data);
                 *((void**)((char*)core_dev + (0xd * 4))) = &isp_tuning_fops; /* $v0[0xd] = &isp_info_proc_fops */
 
-                /* Binary Ninja: Global device assignment */
-                ourISPdev = (struct tx_isp_dev *)core_dev;  /* Set global device pointer */
+                /* Binary Ninja: Global device assignment - already done above with register base */
+                /* ourISPdev = (struct tx_isp_dev *)core_dev; - already set above */
 
                 /* CRITICAL: Create VIC device BEFORE sensor_early_init */
                 pr_info("*** tx_isp_core_probe: Creating VIC device ***\n");
@@ -3210,13 +3210,19 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_err("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
                 }
 
-                /* CRITICAL: Set up memory mappings for register access */
-                pr_info("*** tx_isp_core_probe: Setting up ISP memory mappings ***\n");
+                /* CRITICAL: Set up memory mappings for register access BEFORE tuning init */
+                pr_info("*** tx_isp_core_probe: Setting up ISP memory mappings BEFORE tuning init ***\n");
                 result = tx_isp_init_memory_mappings((struct tx_isp_dev *)core_dev);
                 if (result == 0) {
                     pr_info("*** tx_isp_core_probe: ISP memory mappings initialized successfully ***\n");
+                    
+                    /* CRITICAL: Update global ISP device with register base IMMEDIATELY */
+                    ourISPdev = (struct tx_isp_dev *)core_dev;
+                    pr_info("*** tx_isp_core_probe: Global ISP device updated with register base ***\n");
+                    pr_info("*** tx_isp_core_probe: core_regs = %p ***\n", ourISPdev->core_regs);
                 } else {
                     pr_err("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
+                    return result;
                 }
 
                 /* CRITICAL: Start continuous processing - this generates the register activity your trace captures! */
