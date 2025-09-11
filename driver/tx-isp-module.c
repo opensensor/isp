@@ -1735,7 +1735,7 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
 /* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+    struct tx_isp_dev *isp_dev = ourISPdev;
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
@@ -1745,24 +1745,11 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     int timeout;
     int i;
     
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
-    if (!isp_dev || (uintptr_t)isp_dev >= 0xfffff001) {
-        return IRQ_NONE;
-    }
-    
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
-    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-    
-    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
-    if (!vic_dev || (uintptr_t)vic_dev >= 0xfffff001) {
-        return IRQ_NONE;
-    }
-    
+    vic_dev = ourISPdev->vic_dev;
+
     /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
     vic_regs = vic_dev->vic_regs;
-    if (!vic_regs) {
-        return IRQ_NONE;
-    }
     
     /* Get VIC interrupt enable flag at offset +0x13c */
     vic_irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
