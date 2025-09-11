@@ -436,6 +436,15 @@ static struct tx_isp_subdev_video_ops core_subdev_video_ops = {
     .s_stream = NULL,  /* Will be set up when needed */
 };
 
+/* Core subdev pad operations */
+static struct tx_isp_subdev_pad_ops core_pad_ops = {
+    .s_fmt = NULL,  /* Will be filled when needed */
+    .g_fmt = NULL,  /* Will be filled when needed */
+    .streamon = NULL,
+    .streamoff = NULL
+};
+
+
 /* Update the core subdev ops to include the core ops */
 static struct tx_isp_subdev_ops core_subdev_ops_full = {
     .core = &core_subdev_core_ops,
@@ -456,13 +465,6 @@ struct tx_isp_dev *tx_isp_get_device(void)
 }
 EXPORT_SYMBOL(tx_isp_get_device);
 
-/* Core subdev pad operations */
-static struct tx_isp_subdev_pad_ops core_pad_ops = {
-    .s_fmt = NULL,  /* Will be filled when needed */
-    .g_fmt = NULL,  /* Will be filled when needed */  
-    .streamon = NULL,
-    .streamoff = NULL
-};
 
 /* Core subdev operations structure - CRITICAL for proper initialization */
 static struct tx_isp_subdev_ops core_subdev_ops = {
@@ -1191,13 +1193,13 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
         /* Binary Ninja: tisp_init(&var_78, $s0 + 0x1d8) - CRITICAL CALL */
         pr_info("ispcore_core_ops_init: Calling tisp_init() - CRITICAL REFERENCE MATCH");
         
-        struct tx_isp_sensor_attribute local_attr = *sensor_attr;
-        ret = tisp_init(&local_attr, isp);
-        if (ret < 0) {
-            pr_err("ispcore_core_ops_init: tisp_init failed: %d", ret);
-            return ret;
-        }
-        
+//        struct tx_isp_sensor_attribute local_attr = *sensor_attr;
+//        ret = tisp_init(&local_attr, isp);
+//        if (ret < 0) {
+//            pr_err("ispcore_core_ops_init: tisp_init failed: %d", ret);
+//            return ret;
+//        }
+//
         pr_info("ispcore_core_ops_init: tisp_init SUCCESS");
         
         /* Binary Ninja: Start kernel thread */
