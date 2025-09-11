@@ -262,6 +262,156 @@ extern struct tx_isp_dev *ourISPdev;
 /* Global ISP core pointer for Binary Ninja compatibility */
 static struct tx_isp_dev *g_ispcore = NULL;
 
+/* Core subdev operations implementations */
+int tx_isp_core_start(struct tx_isp_subdev *sd)
+{
+    struct tx_isp_dev *isp_dev;
+    int ret = 0;
+    
+    if (!sd) {
+        pr_err("tx_isp_core_start: Invalid subdev\n");
+        return -EINVAL;
+    }
+    
+    isp_dev = sd->isp;
+    if (!isp_dev) {
+        pr_err("tx_isp_core_start: No ISP device\n");
+        return -EINVAL;
+    }
+    
+    pr_info("*** tx_isp_core_start: Starting ISP core processing ***\n");
+    
+    /* Initialize memory mappings if not already done */
+    if (!isp_dev->core_regs) {
+        ret = tx_isp_init_memory_mappings(isp_dev);
+        if (ret < 0) {
+            pr_err("tx_isp_core_start: Failed to initialize memory mappings: %d\n", ret);
+            return ret;
+        }
+    }
+    
+    /* Configure clocks if not already done */
+    if (!isp_dev->isp_clk) {
+        ret = tx_isp_configure_clocks(isp_dev);
+        if (ret < 0) {
+            pr_err("tx_isp_core_start: Failed to configure clocks: %d\n", ret);
+            return ret;
+        }
+    }
+    
+    /* Set up pipeline if not already done */
+    if (isp_dev->pipeline_state == ISP_PIPELINE_IDLE) {
+        ret = tx_isp_setup_pipeline(isp_dev);
+        if (ret < 0) {
+            pr_err("tx_isp_core_start: Failed to setup pipeline: %d\n", ret);
+            return ret;
+        }
+    }
+    
+    /* Start continuous processing */
+    ret = isp_start_continuous_processing(isp_dev);
+    if (ret < 0) {
+        pr_err("tx_isp_core_start: Failed to start continuous processing: %d\n", ret);
+        return ret;
+    }
+    
+    /* Set pipeline to streaming state */
+    isp_dev->pipeline_state = ISP_PIPELINE_STREAMING;
+    
+    pr_info("*** tx_isp_core_start: ISP core started successfully ***\n");
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_core_start);
+
+int tx_isp_core_stop(struct tx_isp_subdev *sd)
+{
+    struct tx_isp_dev *isp_dev;
+    
+    if (!sd) {
+        pr_err("tx_isp_core_stop: Invalid subdev\n");
+        return -EINVAL;
+    }
+    
+    isp_dev = sd->isp;
+    if (!isp_dev) {
+        pr_err("tx_isp_core_stop: No ISP device\n");
+        return -EINVAL;
+    }
+    
+    pr_info("*** tx_isp_core_stop: Stopping ISP core processing ***\n");
+    
+    /* Stop continuous processing */
+    isp_stop_continuous_processing();
+    
+    /* Set pipeline to idle state */
+    isp_dev->pipeline_state = ISP_PIPELINE_IDLE;
+    
+    pr_info("*** tx_isp_core_stop: ISP core stopped successfully ***\n");
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_core_stop);
+
+int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config)
+{
+    struct tx_isp_dev *isp_dev;
+    int ret = 0;
+    
+    if (!sd || !config) {
+        pr_err("tx_isp_core_set_format: Invalid parameters\n");
+        return -EINVAL;
+    }
+    
+    isp_dev = sd->isp;
+    if (!isp_dev) {
+        pr_err("tx_isp_core_set_format: No ISP device\n");
+        return -EINVAL;
+    }
+    
+    pr_info("*** tx_isp_core_set_format: Setting format %dx%d ***\n", 
+            config->width, config->height);
+    
+    /* Store format configuration */
+    isp_dev->width = config->width;
+    isp_dev->height = config->height;
+    isp_dev->format = config->format;
+    
+    /* Update sensor dimensions */
+    isp_dev->sensor_width = config->width;
+    isp_dev->sensor_height = config->height;
+    
+    /* Configure format propagation through pipeline */
+    ret = tx_isp_configure_format_propagation(isp_dev);
+    if (ret < 0) {
+        pr_err("tx_isp_core_set_format: Failed to configure format propagation: %d\n", ret);
+        return ret;
+    }
+    
+    pr_info("*** tx_isp_core_set_format: Format set successfully ***\n");
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_core_set_format);
+
+/* Core subdev operations - matches the pattern used by other devices */
+static struct tx_isp_subdev_core_ops core_subdev_core_ops = {
+    .init = NULL,
+    .reset = NULL,
+    .ioctl = NULL,
+};
+
+/* Core subdev video operations */
+static struct tx_isp_subdev_video_ops core_subdev_video_ops = {
+    .s_stream = NULL,  /* Will be set up when needed */
+};
+
+/* Update the core subdev ops to include the core ops */
+static struct tx_isp_subdev_ops core_subdev_ops_full = {
+    .core = &core_subdev_core_ops,
+    .video = &core_subdev_video_ops,
+    .pad = &core_pad_ops,
+    .sensor = NULL,
+    .internal = NULL
+};
+
 /**
  * tx_isp_get_device - CRITICAL: Get global ISP device pointer
  * This function returns the global ISP device pointer that is needed
@@ -3072,8 +3222,33 @@ int tx_isp_core_probe(struct platform_device *pdev)
     mutex_init(&isp_dev->mutex);
     spin_lock_init(&isp_dev->irq_lock);
 
+    /* CRITICAL: Initialize the core subdev with proper operations */
+    pr_info("*** tx_isp_core_probe: Initializing core subdev with operations ***\n");
+    
+    /* Set up the core subdev operations with our implemented functions */
+    core_subdev_core_ops.init = NULL;  /* Will be set when needed */
+    core_subdev_core_ops.reset = NULL; /* Will be set when needed */
+    core_subdev_core_ops.ioctl = NULL; /* Will be set when needed */
+    
+    /* Update the core subdev ops structure */
+    core_subdev_ops.core = &core_subdev_core_ops;
+    core_subdev_ops.video = &core_subdev_video_ops;
+    core_subdev_ops.pad = &core_pad_ops;
+    
+    /* Initialize the subdev that's already the first member of tx_isp_dev */
+    isp_dev->sd.isp = isp_dev;  /* Set back-reference */
+    isp_dev->sd.ops = &core_subdev_ops;  /* Set operations */
+    isp_dev->sd.vin_state = TX_ISP_MODULE_INIT;  /* Set initial state */
+    
+    /* Initialize subdev synchronization */
+    mutex_init(&isp_dev->sd.lock);
+    
+    pr_info("*** tx_isp_core_probe: Core subdev initialized with ops=%p ***\n", &core_subdev_ops);
+    pr_info("***   - Core ops: start=%p, stop=%p, set_format=%p ***\n", 
+            tx_isp_core_start, tx_isp_core_stop, tx_isp_core_set_format);
+
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
-    if (tx_isp_subdev_init(pdev, isp_dev, &core_subdev_ops) == 0) {
+    if (tx_isp_subdev_init(pdev, &isp_dev->sd, &core_subdev_ops) == 0) {
         pr_info("*** tx_isp_core_probe: Subdev init SUCCESS ***\n");
 
         /* SAFE: Channel configuration using proper struct access */
