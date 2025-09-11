@@ -28,7 +28,7 @@ static void __iomem *isp_full_regs = NULL;
 
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
-uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
+uint32_t vic_start_ok = 1;  /* Global VIC interrupt enable flag definition */
 
 /* Global VIC device reference for interrupt control - Binary Ninja exact match */
 static struct tx_isp_vic_device *dump_vsd = NULL;
@@ -1121,16 +1121,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** tx_isp_vic_start: MIPS validation passed - applying tx_isp_init_vic_registers methodology ***\n");
 
-    /* *** CRASH FIX: Initialize proper memory mapping BEFORE register writes *** */
-//    if (!isp_full_regs) {
-//        isp_full_regs = ioremap(ISP_BASE_ADDR, ISP_FULL_SIZE);
-//        if (!isp_full_regs) {
-//            pr_err("ISP: CRASH FIX - Failed to map ISP registers\n");
-//            return -ENOMEM;
-//        }
-//        pr_info("ISP: CRASH FIX - Mapped full ISP register space\n");
-//    }
-
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
 
     /* STEP 1: Enable clocks using Linux Clock Framework like tx_isp_init_vic_registers */
@@ -1222,134 +1212,19 @@ if (!IS_ERR(cgu_isp_clk)) {
     pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
 
 
-    /* *** ADD REGISTER WRITES FROM REFERENCE TRACE AFTER VIC CLOCK ENABLE *** */
-    pr_info("*** Adding CSI PHY Control register writes from reference trace ***\n");
-    
-    /* CSI PHY Control registers */
-    // writel(0x54560031, vic_regs + 0x0);
-    // writel(0x7800438, vic_regs + 0x4);
-    // writel(0x1, vic_regs + 0x8);
-    // writel(0x80700008, vic_regs + 0xc);
-    // writel(0x1, vic_regs + 0x28);
-    // writel(0x400040, vic_regs + 0x2c);
-    // writel(0x1, vic_regs + 0x90);
-    // writel(0x1, vic_regs + 0x94);
-    // writel(0x30000, vic_regs + 0x98);
-    // writel(0x58050000, vic_regs + 0xa8);
-    // writel(0x58050000, vic_regs + 0xac);
-    // writel(0x40000, vic_regs + 0xc4);
-    // writel(0x400040, vic_regs + 0xc8);
-    // writel(0x100, vic_regs + 0xcc);
-    // writel(0xc, vic_regs + 0xd4);
-    // writel(0xffffff, vic_regs + 0xd8);
-    // writel(0x100, vic_regs + 0xe0);
-    // writel(0x400040, vic_regs + 0xe4);
-    // writel(0xff808000, vic_regs + 0xf0);
-    // wmb();
-    
-    // /* CSI PHY Config registers */
-    // writel(0x80007000, vic_regs + 0x110);
-    // writel(0x777111, vic_regs + 0x114);
-    // wmb();
-    
-    // /* ISP Control registers */
-    // writel(0x3f00, vic_regs + 0x9804);
-    // writel(0x7800438, vic_regs + 0x9864);
-    // writel(0xc0000000, vic_regs + 0x987c);
-    // writel(0x1, vic_regs + 0x9880);
-    // writel(0x1, vic_regs + 0x9884);
-    // writel(0x1010001, vic_regs + 0x9890);
-    // writel(0x1010001, vic_regs + 0x989c);
-    // writel(0x1010001, vic_regs + 0x98a8);
-    // wmb();
-    
-    // /* VIC Control registers */
-    // writel(0x50002d0, vic_regs + 0x9a00);
-    // writel(0x3000300, vic_regs + 0x9a04);
-    // writel(0x50002d0, vic_regs + 0x9a2c);
-    // writel(0x1, vic_regs + 0x9a34);
-    // writel(0x1, vic_regs + 0x9a70);
-    // writel(0x1, vic_regs + 0x9a7c);
-    // writel(0x500, vic_regs + 0x9a80);
-    // writel(0x1, vic_regs + 0x9a88);
-    // writel(0x1, vic_regs + 0x9a94);
-    // writel(0x500, vic_regs + 0x9a98);
-    // writel(0x200, vic_regs + 0x9ac0);
-    // writel(0x200, vic_regs + 0x9ac8);
-    // wmb();
-    
-    // /* Core Control registers */
-    // writel(0xf001f001, vic_regs + 0xb004);
-    // writel(0x40404040, vic_regs + 0xb008);
-    // writel(0x40404040, vic_regs + 0xb00c);
-    // writel(0x40404040, vic_regs + 0xb010);
-    // writel(0x404040, vic_regs + 0xb014);
-    // writel(0x40404040, vic_regs + 0xb018);
-    // writel(0x40404040, vic_regs + 0xb01c);
-    // writel(0x40404040, vic_regs + 0xb020);
-    // writel(0x404040, vic_regs + 0xb024);
-    // writel(0x1000080, vic_regs + 0xb028);
-    // writel(0x1000080, vic_regs + 0xb02c);
-    // writel(0x100, vic_regs + 0xb030);
-    // writel(0xffff0100, vic_regs + 0xb034);
-    // writel(0x1ff00, vic_regs + 0xb038);
-    // writel(0x103, vic_regs + 0xb04c);
-    // writel(0x3, vic_regs + 0xb050);
-    // writel(0x341b, vic_regs + 0xb07c);
-    // writel(0x46b0, vic_regs + 0xb080);
-    // writel(0x1813, vic_regs + 0xb084);
-    // writel(0x10a, vic_regs + 0xb08c);
-    wmb();
-    
-    pr_info("*** Completed adding ALL register writes from reference trace ***\n");
-
-    /* *** CRITICAL RACE CONDITION FIX: Protect sensor attribute access *** */
-    pr_info("*** CRITICAL: Implementing race condition fix for interface type corruption ***\n");
     
     /* Take a local copy of sensor attributes to prevent corruption during streaming */
     struct tx_isp_sensor_attribute local_sensor_attr;
     unsigned long flags;
-    
-    /* Use spinlock to protect sensor attribute access */
-    spin_lock_irqsave(&vic_dev->lock, flags);
+
     
     /* Make a safe copy of sensor attributes */
     memcpy(&local_sensor_attr, &vic_dev->sensor_attr, sizeof(local_sensor_attr));
-    
-    spin_unlock_irqrestore(&vic_dev->lock, flags);
     
     /* Use the local copy to prevent corruption */
     sensor_attr = &local_sensor_attr;
     interface_type = sensor_attr->dbus_type;
     sensor_format = sensor_attr->data_type;
-    
-    /* *** CRITICAL: Validate interface type before proceeding *** */
-    if (interface_type == 32768 || interface_type == 0x8000 || interface_type == 16) {
-        pr_err("*** CRITICAL: Interface type corruption detected! Got %d (0x%x) ***\n", interface_type, interface_type);
-        pr_err("*** This is the 0x80000020 streaming control bit corrupting the interface type! ***\n");
-        pr_err("*** FIXING: Restoring interface type to MIPI (2) ***\n");
-        interface_type = 2; /* Force to MIPI */
-        sensor_attr->dbus_type = 2; /* Update the local copy */
-        
-        /* Also fix the original structure */
-        spin_lock_irqsave(&vic_dev->lock, flags);
-        vic_dev->sensor_attr.dbus_type = 2;
-        spin_unlock_irqrestore(&vic_dev->lock, flags);
-    }
-    
-    /* Additional validation for other common corruption patterns */
-    if (interface_type > 5 || interface_type == 0 || interface_type < 0 || 
-        interface_type == -2113815496) {  /* Handle the negative corruption value */
-        pr_err("*** CRITICAL: Invalid interface type %d detected! ***\n", interface_type);
-        pr_err("*** FIXING: Restoring interface type to MIPI (2) ***\n");
-        interface_type = 2; /* Force to MIPI */
-        sensor_attr->dbus_type = 2;
-        
-        /* Also fix the original structure */
-        spin_lock_irqsave(&vic_dev->lock, flags);
-        vic_dev->sensor_attr.dbus_type = 2;
-        spin_unlock_irqrestore(&vic_dev->lock, flags);
-    }
     
     /* *** CRITICAL FIX: Prevent streaming control bit from corrupting sensor attributes *** */
     /* The issue is that 0x80000020 streaming control value is overwriting sensor_attr memory */
@@ -1409,23 +1284,11 @@ if (!IS_ERR(cgu_isp_clk)) {
     /* CSI PHY Config registers - from reference trace */
     writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
     writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
-	//writel(0x10, vic_regs + 0x120);   	    /* DVP config register */
     wmb();
     
     /* *** MISSING ISP Control registers - from reference trace *** */
     pr_info("*** Writing missing ISP Control registers (0x9804-0x98a8) ***\n");
     writel(0x3f00, vic_regs + 0x9804);       /* ISP Control register */
-
-    /* CRASH FIX: Use proper base address for ISP Control registers */
-    /* OLD CRASHING CODE: writel(0x3f00, vic_regs + 0x9804); */
-    /* NEW FIXED CODE: */
-//    if (isp_full_regs) {
-//        writel(0x3f00, isp_full_regs + 0x9804);
-//        pr_info("ISP: CRASH FIX - Successfully wrote to 0x9804\n");
-//    } else {
-//        pr_err("ISP: CRASH FIX - isp_full_regs not mapped!\n");
-//        return -EFAULT;
-//    }
     writel(0x7800438, vic_regs + 0x9864);    /* ISP Control register */  
     writel(0xc0000000, vic_regs + 0x987c);   /* ISP Control register */
     writel(0x1, vic_regs + 0x9880);          /* ISP Control register */
@@ -1763,9 +1626,6 @@ if (!IS_ERR(cgu_isp_clk)) {
     
     pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
     pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
-
-
-	//vic_dynamic_timing_negotiation(vic_dev);
 
     /* MCP LOG: VIC start completed successfully */
     pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d, interface=%d\n", 
@@ -2460,8 +2320,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 vic_dev->state = 3; /* ACTIVE but not streaming */
                 pr_info("VIC: Streaming stopped, state -> 3\n");
                 /* Reset vic_start_ok when stopping */
-                vic_start_ok = 0;
-                pr_info("VIC: vic_start_ok reset to 0 (interrupts disabled)\n");
+                // vic_start_ok = 0; // TODO
+                //pr_info("VIC: vic_start_ok reset to 0 (interrupts disabled)\n");
             }
         } else {
             pr_info("VIC: Not streaming (state=%d)\n", vic_dev->state);

@@ -402,108 +402,47 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
-/**
- * tx_isp_configure_vic_interrupts - CRITICAL: Configure VIC hardware interrupts
- * This function enables the VIC hardware to generate interrupts on frame completion
- * This is what was missing - the hardware interrupt enable!
- */
-static int tx_isp_configure_vic_interrupts(struct tx_isp_dev *isp_dev)
-{
-    void __iomem *vic_regs;
-    u32 reg_val;
-    
-    if (!isp_dev || !isp_dev->vic_regs) {
-        pr_err("tx_isp_configure_vic_interrupts: Invalid ISP device or VIC registers\n");
-        return -EINVAL;
-    }
-    
-    vic_regs = isp_dev->vic_regs;
-    
-    pr_info("*** tx_isp_configure_vic_interrupts: Configuring VIC hardware interrupts ***\n");
-    
-    /* CRITICAL: Enable VIC frame completion interrupts */
-    /* This is the register write that enables hardware interrupt generation */
-    
-    /* VIC Interrupt Enable Register - enable frame done interrupt */
-    reg_val = readl(vic_regs + 0x10);  /* VIC_INT_EN register */
-    reg_val |= 0x1;  /* Enable frame done interrupt bit */
-    writel(reg_val, vic_regs + 0x10);
-    wmb();
-    
-    /* VIC Interrupt Mask Register - unmask frame done interrupt */
-    reg_val = readl(vic_regs + 0x14);  /* VIC_INT_MASK register */
-    reg_val &= ~0x1;  /* Unmask frame done interrupt bit */
-    writel(reg_val, vic_regs + 0x14);
-    wmb();
-    
-    /* VIC Control Register - enable interrupt generation */
-    reg_val = readl(vic_regs + 0x00);  /* VIC_CTRL register */
-    reg_val |= 0x100;  /* Enable interrupt output */
-    writel(reg_val, vic_regs + 0x00);
-    wmb();
-    
-    /* Clear any pending interrupts */
-    writel(0x1, vic_regs + 0x18);  /* VIC_INT_CLR register */
-    wmb();
-    
-    pr_info("*** tx_isp_configure_vic_interrupts: VIC interrupt registers configured ***\n");
-    pr_info("*** VIC_INT_EN: 0x%08x ***\n", readl(vic_regs + 0x10));
-    pr_info("*** VIC_INT_MASK: 0x%08x ***\n", readl(vic_regs + 0x14));
-    pr_info("*** VIC_CTRL: 0x%08x ***\n", readl(vic_regs + 0x00));
-    
-    /* Now enable the system IRQ */
-    tx_isp_enable_irq(isp_dev);
-    
-    pr_info("*** tx_isp_configure_vic_interrupts: VIC interrupts fully configured and enabled ***\n");
-    pr_info("*** Hardware should now generate interrupts on frame completion! ***\n");
-    
-    return 0;
-}
-
-/* tx_isp_request_irq - FIXED to use global IRQ info structure */
-static int tx_isp_request_irq(struct platform_device *pdev, void *unused_param)
+/* tx_isp_request_irq - EXACT Binary Ninja implementation */
+static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
 {
     int irq_number;
     int ret;
     
-    if (!pdev) {
-        pr_err("tx_isp_request_irq: Invalid platform device\n");
+    if (!pdev || !irq_info) {
+        pr_err("tx_isp_request_irq: Invalid parameters\n");
         return -EINVAL;
     }
     
-    pr_info("*** tx_isp_request_irq: FIXED to use global IRQ info structure ***\n");
-    
-    /* FIXED: Use our global IRQ info structure instead of corrupted parameter */
-    /* The global structure already has the correct IRQ number (37) */
-    irq_number = isp_irq_info.irq_number;
-    
-    pr_info("*** tx_isp_request_irq: Using FIXED IRQ number %d from global structure ***\n", irq_number);
-    
-    if (irq_number <= 0) {
-        pr_err("*** tx_isp_request_irq: Invalid IRQ number %d in global structure ***\n", irq_number);
-        return -EINVAL;
+    /* Binary Ninja: int32_t $v0_1 = private_platform_get_irq(arg1, 0) */
+    irq_number = platform_get_irq(pdev, 0);
+    if (irq_number < 0) {
+        pr_err("tx_isp_request_irq: Failed to get IRQ: %d\n", irq_number);
+        return irq_number;
     }
     
-    /* Initialize the spinlock in our global structure */
-    spin_lock_init(&isp_irq_info.lock);
+    /* Binary Ninja: private_spin_lock_init(arg2) */
+    spin_lock_init((spinlock_t *)irq_info);
     
-    /* Register the threaded IRQ handler using our global structure as dev_id */
+    /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
     ret = request_threaded_irq(irq_number, isp_irq_handle, isp_irq_thread_handle, 
-                               IRQF_SHARED, dev_name(&pdev->dev), &isp_irq_info);
+                               IRQF_SHARED, dev_name(&pdev->dev), irq_info);
     if (ret != 0) {
         pr_err("tx_isp_request_irq: Failed to request IRQ %d: %d\n", irq_number, ret);
         return ret;
     }
     
-    /* Set up the function pointers in our global structure */
-    isp_irq_info.enable_func = tx_isp_enable_irq;
-    isp_irq_info.disable_func = tx_isp_disable_irq;
+    /* Binary Ninja: Store IRQ info in structure */
+    /* arg2[1] = tx_isp_enable_irq */
+    *((void **)((char *)irq_info + 4)) = (void *)tx_isp_enable_irq;
+    /* *arg2 = $v0_1 */
+    *((int *)irq_info) = irq_number;
+    /* arg2[2] = tx_isp_disable_irq */
+    *((void **)((char *)irq_info + 8)) = (void *)tx_isp_disable_irq;
     
-    /* Initially disable the IRQ */
-    //tx_isp_disable_irq(&isp_irq_info);
+    /* Binary Ninja: tx_isp_disable_irq(arg2) - initially disable */
+    tx_isp_disable_irq(irq_info);
     
-    pr_info("*** tx_isp_request_irq: IRQ %d registered successfully with FIXED global structure ***\n", irq_number);
-    pr_info("*** tx_isp_request_irq: This should fix the invalid IRQ number -2142874224 issue! ***\n");
+    pr_info("*** tx_isp_request_irq: IRQ %d registered successfully with dispatch system ***\n", irq_number);
     return 0;
 }
 

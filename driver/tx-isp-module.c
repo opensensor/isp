@@ -794,7 +794,7 @@ static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 /* VIC sensor operations IOCTL - EXACT Binary Ninja implementation */
 static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 /* VIC core s_stream - EXACT Binary Ninja implementation */  
-int vic_core_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
+int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
 
 /* Frame channel state management */
 struct tx_isp_channel_state {
@@ -1998,9 +1998,59 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
         return -EINVAL;
     }
     
-    /* CRITICAL FIX: Use the properly implemented tx_isp_video_s_stream function */
-    /* This function has all the MIPS alignment checks and safe subdev iteration */
-    pr_info("*** DELEGATING TO MIPS-SAFE tx_isp_video_s_stream IMPLEMENTATION ***\n");
+    /* MIPS-SAFE: Instead of dangerous subdev iteration, directly call known working functions */
+    if (enable) {
+        pr_info("*** MIPS-SAFE: Enabling streaming without risky subdev iteration ***\n");
+        
+        /* SAFE: Call VIC streaming directly if available */
+        if (isp_dev->vic_dev) {
+            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
+                pr_info("*** MIPS-SAFE: Calling VIC streaming directly ***\n");
+                vic_core_s_stream(&vic_dev->sd, enable);
+            }
+        }
+        
+        /* SAFE: Call CSI streaming directly if available */
+        if (isp_dev->csi_dev) {
+            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
+            if (csi_dev && ((uintptr_t)csi_dev & 0x3) == 0) {
+                pr_info("*** MIPS-SAFE: Calling CSI streaming directly ***\n");
+                csi_video_s_stream_impl(&csi_dev->sd, enable);
+            }
+        }
+        
+        /* SAFE: Call sensor streaming directly if available */
+        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
+            isp_dev->sensor->sd.ops->video && isp_dev->sensor->sd.ops->video->s_stream) {
+            if (((uintptr_t)isp_dev->sensor & 0x3) == 0) {
+                pr_info("*** MIPS-SAFE: Calling sensor streaming directly ***\n");
+                isp_dev->sensor->sd.ops->video->s_stream(&isp_dev->sensor->sd, enable);
+            }
+        }
+        
+    } else {
+        pr_info("*** MIPS-SAFE: Disabling streaming without risky subdev iteration ***\n");
+        /* SAFE: Disable streaming on known devices */
+        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
+            isp_dev->sensor->sd.ops->video && isp_dev->sensor->sd.ops->video->s_stream) {
+            if (((uintptr_t)isp_dev->sensor & 0x3) == 0) {
+                isp_dev->sensor->sd.ops->video->s_stream(&isp_dev->sensor->sd, 0);
+            }
+        }
+        if (isp_dev->vic_dev) {
+            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
+                vic_core_s_stream(&vic_dev->sd, 0);
+            }
+        }
+        if (isp_dev->csi_dev) {
+            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
+            if (csi_dev && ((uintptr_t)csi_dev & 0x3) == 0) {
+                csi_video_s_stream_impl(&csi_dev->sd, 0);
+            }
+        }
+    }
     
     return tx_isp_video_s_stream(isp_dev, enable);
 }
@@ -2869,7 +2919,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("*** Channel %d: NOW CALLING VIC STREAMING CHAIN - THIS SHOULD GENERATE REGISTER ACTIVITY! ***\n", channel);
                 
                 // CRITICAL: Call vic_core_s_stream which calls tx_isp_vic_start when streaming
-                ret = vic_core_s_stream(&vic_streaming, 1);
+                ret = vic_core_s_stream(&vic_streaming->sd, 1);
                 
                 pr_info("*** Channel %d: VIC STREAMING RETURNED %d - REGISTER ACTIVITY SHOULD NOW BE VISIBLE! ***\n", channel, ret);
                 
@@ -4617,11 +4667,11 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
     
     if (enable) {
         /* Call vic_core_s_stream which calls tx_isp_vic_start */
-        ret = vic_core_s_stream(vic_dev, enable);
+        ret = vic_core_s_stream(sd, enable);
         pr_info("*** VIC VIDEO STREAMING ENABLE RETURNED %d ***\n", ret);
         return ret;
     } else {
-        return vic_core_s_stream(vic_dev, enable);
+        return vic_core_s_stream(sd, enable);
     }
 }
 
@@ -4742,7 +4792,7 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
         sensor_attr = isp_dev->sensor->video.attr;
         /* Binary Ninja: return tx_isp_vic_start($a0) */
         return tx_isp_vic_start(vic_dev);
-
+        
     case 0x200000d:  /* Binary Ninja: case 0x200000d */
     case 0x2000010:  /* Binary Ninja: case 0x2000010 */
     case 0x2000011:  /* Binary Ninja: case 0x2000011 */
