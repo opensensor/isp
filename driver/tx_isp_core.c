@@ -449,7 +449,7 @@ static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp);
 static int tx_isp_create_subdev_links(struct tx_isp_dev *isp);
 static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link);
 static int tx_isp_configure_default_links(struct tx_isp_dev *isp);
-static int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
+int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_init(struct tx_isp_dev *isp);
 static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
@@ -977,7 +977,7 @@ static int tx_isp_configure_default_links(struct tx_isp_dev *isp)
 }
 
 /* Configure format propagation through the pipeline */
-static int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
+int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
 {
     pr_info("Configuring format propagation\n");
     
