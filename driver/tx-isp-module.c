@@ -2138,7 +2138,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             if (ret != 0 && ret != 0xfffffdfd) {
                 pr_err("CSI s_stream failed: %d\n", ret);
                 /* Don't return error - try to disable VIC if we were enabling */
-                if (enable && dev->vic_dev) {
+                if (enable && ourISPdev->vic_dev) {
                     struct tx_isp_vic_device *vic_dev = dev->vic_dev;
                     if (vic_dev->sd.ops && vic_dev->sd.ops->video && 
                         vic_dev->sd.ops->video->s_stream) {
@@ -2166,14 +2166,14 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
                 /* Rollback: disable CSI and VIC if we were enabling */
                 if (enable) {
                     if (ourISPdev->csi_dev) {
-                        struct tx_isp_csi_device *csi_dev = dev->csi_dev;
+                        struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
                         if (csi_dev->sd.ops && csi_dev->sd.ops->video && 
                             csi_dev->sd.ops->video->s_stream) {
                             csi_dev->sd.ops->video->s_stream(&csi_dev->sd, 0);
                         }
                     }
                     if (ourISPdev->vic_dev) {
-                        struct tx_isp_vic_device *vic_dev = dev->vic_dev;
+                        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
                         if (vic_dev->sd.ops && vic_dev->sd.ops->video && 
                             vic_dev->sd.ops->video->s_stream) {
                             vic_dev->sd.ops->video->s_stream(&vic_dev->sd, 0);
@@ -4658,30 +4658,18 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
     
     pr_info("*** vic_sensor_ops_ioctl: FIXED implementation - cmd=0x%x ***\n", cmd);
     
-    /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
-    if (!sd || (uintptr_t)sd >= 0xfffff001) {
-        pr_err("vic_sensor_ops_ioctl: Invalid subdev pointer\n");
-        return 0; /* Binary Ninja returns 0 for invalid subdev */
-    }
-    
     /* FIXED: Use proper struct member access instead of raw pointer arithmetic */
     /* Get ISP device from subdev first */
-    isp_dev = (struct tx_isp_dev *)sd->isp;
+    isp_dev = ourISPdev;
     if (!isp_dev) {
         pr_err("*** vic_sensor_ops_ioctl: No ISP device in subdev->isp ***\n");
         return 0;
     }
     
     /* Get VIC device through proper ISP device structure */
-    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    vic_dev = isp_dev->vic_dev;
     if (!vic_dev) {
         pr_err("*** vic_sensor_ops_ioctl: No VIC device in isp_dev->vic_dev ***\n");
-        return 0;
-    }
-    
-    /* Additional safety check */
-    if ((uintptr_t)vic_dev >= 0xfffff001) {
-        pr_err("*** vic_sensor_ops_ioctl: Invalid VIC device pointer ***\n");
         return 0;
     }
     
