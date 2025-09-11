@@ -58,26 +58,6 @@ struct vin_device;
 struct frame_source_device;
 
 
-struct csi_device {
-    char device_name[32];     // 0x00: Device name
-    struct device *dev;       // Device pointer
-    uint32_t offset_10;       // 0x10: Referenced in init
-    struct IspModule *module_info;  // Module info pointer
-
-    struct tx_isp_subdev *sd;
-
-    // CSI register access - changed to single pointer like VIC
-    void __iomem *cpm_regs;   // CPM registers
-    void __iomem *phy_regs;   // MIPI PHY registers
-    void __iomem *csi_regs;   // Single pointer to mapped csi regs
-    struct resource *phy_res;  // PHY memory resource
-
-    // State management
-    struct clk *clk;
-    struct mutex mutex;       // Synchronization
-    int state;               // CSI state (1=init, 2=enabled)
-    spinlock_t lock;         // Protect register access
-};
 
 /* Core ISP device structure */
 struct tx_isp_dev {
@@ -136,7 +116,7 @@ struct tx_isp_dev {
     struct tx_isp_sensor_win_setting *sensor_window_size;
 
     /* Hardware subsystems */
-    struct csi_device *csi_dev;
+    struct tx_isp_csi_device *csi_dev;
     atomic_t csi_configured;
 
     /* Status tracking */

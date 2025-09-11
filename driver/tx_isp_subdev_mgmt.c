@@ -489,13 +489,13 @@ static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime)
 /* Initialize CSI device */
 static int tx_isp_csi_device_init(struct tx_isp_dev *isp)
 {
-    struct csi_device *csi_dev;
+    struct tx_isp_csi_device *csi_dev;
 
     pr_info("Initializing CSI device\n");
 
     /* Allocate CSI device structure if not already present */
     if (!isp->csi_dev) {
-        csi_dev = kzalloc(sizeof(struct csi_device), GFP_KERNEL);
+        csi_dev = kzalloc(sizeof(struct tx_isp_csi_device), GFP_KERNEL);
         if (!csi_dev) {
             pr_err("Failed to allocate CSI device\n");
             return -ENOMEM;

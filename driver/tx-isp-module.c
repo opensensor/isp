@@ -72,12 +72,27 @@ static DEFINE_MUTEX(i2c_client_mutex);
 // CSI device structure for MIPI interface (based on Binary Ninja analysis)
 struct tx_isp_csi_device {
     struct tx_isp_subdev sd;        // Base subdev at offset 0
-    void __iomem *csi_regs;         // CSI hardware registers
     struct clk *csi_clk;           // CSI clock
     int state;                     // 1=init, 2=active, 3=streaming_off, 4=streaming_on
     struct mutex mlock;            // Mutex for state changes
     int interface_type;            // 1=MIPI interface
     int lanes;                     // Number of MIPI lanes
+
+    char device_name[32];     // 0x00: Device name
+    struct device *dev;       // Device pointer
+    uint32_t offset_10;       // 0x10: Referenced in init
+    struct IspModule *module_info;  // Module info pointer
+
+    // CSI register access - changed to single pointer like VIC
+    void __iomem *cpm_regs;   // CPM registers
+    void __iomem *phy_regs;   // MIPI PHY registers
+    void __iomem *csi_regs;   // Single pointer to mapped csi regs
+    struct resource *phy_res;  // PHY memory resource
+
+    // State management
+    struct clk *clk;
+    struct mutex mutex;       // Synchronization
+    spinlock_t lock;         // Protect register access
 };
 
 /* MIPS-SAFE I2C infrastructure - Fixed for unaligned access crash */
@@ -4597,52 +4612,18 @@ int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable)
 {
     pr_info("*** CSI VIDEO STREAMING %s - MIPS-SAFE implementation ***\n", enable ? "ENABLE" : "DISABLE");
     
-    /* MIPS ALIGNMENT CHECK: Validate sd pointer alignment */
-    if (!sd || ((uintptr_t)sd & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: sd pointer 0x%p not 4-byte aligned ***\n", sd);
-        return -EINVAL;
-    }
-    
-    /* MIPS SAFE: Bounds validation */
-    if ((uintptr_t)sd >= 0xfffff001) {
-        pr_err("*** MIPS ERROR: sd pointer 0x%p out of valid range ***\n", sd);
-        return -EINVAL;
-    }
-    
-    /* MIPS SAFE: Validate ISP device alignment */
-    if (!ourISPdev || ((uintptr_t)ourISPdev & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: ourISPdev pointer 0x%p not aligned ***\n", ourISPdev);
-        return -EINVAL;
-    }
-    
-    /* MIPS SAFE: Instead of dangerous register access, use safe state management */
     if (enable) {
-        /* MIPS SAFE: Set CSI device state if available */
-        if (ourISPdev->csi_dev && ((uintptr_t)ourISPdev->csi_dev & 0x3) == 0) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
-            
-            /* MIPS SAFE: Validate CSI device structure alignment */
-            if (((uintptr_t)csi_dev & 0x3) == 0) {
-                /* MIPS SAFE: Set streaming state without dangerous register access */
-                csi_dev->state = 4; /* Streaming state */
-                pr_info("*** MIPS-SAFE: CSI device state set to streaming (4) ***\n");
-            } else {
-                pr_warn("*** MIPS WARNING: CSI device not aligned ***\n");
-            }
-        }
-        
+        struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
+        csi_dev->state = 4; /* Streaming state */
+        pr_info("*** MIPS-SAFE: CSI device state set to streaming (4) ***\n");
     } else {
         pr_info("*** MIPS-SAFE: CSI streaming disable ***\n");
         
         /* MIPS SAFE: Disable CSI streaming state */
-        if (ourISPdev->csi_dev && ((uintptr_t)ourISPdev->csi_dev & 0x3) == 0) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
-            
-            if (((uintptr_t)csi_dev & 0x3) == 0) {
-                csi_dev->state = 3; /* Non-streaming state */
-                pr_info("*** MIPS-SAFE: CSI device state set to non-streaming (3) ***\n");
-            }
-        }
+            struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
+            csi_dev->state = 3; /* Non-streaming state */
+            pr_info("*** MIPS-SAFE: CSI device state set to non-streaming (3) ***\n");
+
     }
     
     pr_info("*** CSI VIDEO STREAMING: MIPS-SAFE completion - no dangerous register access ***\n");

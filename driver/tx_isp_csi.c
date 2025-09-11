@@ -96,7 +96,7 @@ void csi_write32(u32 reg, u32 val)
 static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
 {
     struct tx_isp_subdev *sd = dev_id;
-    struct csi_device *csi_dev;
+    struct tx_isp_csi_device *csi_dev;
     void __iomem *csi_base;
     u32 status, err1, err2, phy_state;
     irqreturn_t ret = IRQ_NONE;
@@ -105,7 +105,7 @@ static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
     if (!sd)
         return IRQ_NONE;
 
-    csi_dev = (struct csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
     if (!csi_dev)
         return IRQ_NONE;
 
@@ -283,7 +283,7 @@ static int tx_isp_csi_post_streaming_config(struct tx_isp_subdev *sd, void __iom
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_sensor_attribute *attr;
-    struct csi_device *csi_dev;
+    struct tx_isp_csi_device *csi_dev;
     void __iomem *csi_base;
     int ret = 0;
 
@@ -297,7 +297,7 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
     /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0xd4 */
-    csi_dev = (struct csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
     if (!csi_dev) {
         pr_err("CSI device is NULL\n");
         
@@ -425,13 +425,13 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 /* CSI sensor operations IOCTL handler */
 int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
-    struct csi_device *csi_dev;
+    struct tx_isp_csi_device *csi_dev;
 
     if (!sd)
         return -EINVAL;
 
     /* Get the CSI device from the subdevice */
-    csi_dev = (struct csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
     if (!csi_dev) {
         pr_err("CSI device is NULL\n");
         return -EINVAL;
@@ -565,7 +565,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
     void __iomem *csi_base;
     struct tx_isp_sensor_attribute *attr;
-    struct csi_device *csi_dev;
+    struct tx_isp_csi_device *csi_dev;
     u32 data_type;
     u32 format_value = 0;
     int ret = 0;
@@ -577,7 +577,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
 
     /* CRITICAL FIX: Use safe subdev data access */
-    csi_dev = (struct csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
     if (!csi_dev) {
         pr_err("CSI device is NULL\n");
         return -EINVAL;
@@ -917,7 +917,7 @@ return 0;
 /* CSI register dump function for debugging */
 void dump_csi_reg(struct tx_isp_subdev *sd)
 {
-    struct csi_device *csi_dev;
+    struct tx_isp_csi_device *csi_dev;
     void __iomem *csi_base;
 
     if (!sd) {
@@ -925,7 +925,7 @@ void dump_csi_reg(struct tx_isp_subdev *sd)
         return;
     }
 
-    csi_dev = (struct csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
     if (!csi_dev) {
         pr_err("dump_csi_reg: csi_dev is NULL\n");
         return;
@@ -964,7 +964,7 @@ pr_info("========================\n");
 /* CSI error checking function */
 void check_csi_error(struct tx_isp_subdev *sd)
 {
-    struct csi_device *csi_dev;
+    struct tx_isp_csi_device *csi_dev;
     void __iomem *csi_base;
     u32 err1, err2, phy_state;
 
@@ -973,7 +973,7 @@ void check_csi_error(struct tx_isp_subdev *sd)
         return;
     }
 
-    csi_dev = (struct csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
     if (!csi_dev) {
         pr_err("check_csi_error: csi_dev is NULL\n");
         return;
@@ -1035,12 +1035,12 @@ if (!err1 && !err2) {
 /* CSI activation function - matching reference driver */
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
 {
-    struct csi_device *csi_dev;
+    struct tx_isp_csi_device *csi_dev;
     
     if (!sd)
         return -EINVAL;
     
-    csi_dev = (struct csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
     if (!csi_dev) {
         pr_err("CSI device is NULL\n");
         return -EINVAL;
@@ -1060,12 +1060,12 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
 /* CSI slake function - matching reference driver */
 int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
 {
-    struct csi_device *csi_dev;
+    struct tx_isp_csi_device *csi_dev;
     
     if (!sd)
         return -EINVAL;
         
-    csi_dev = (struct csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
     if (!csi_dev) {
         pr_err("CSI device is NULL\n");
         return -EINVAL;
