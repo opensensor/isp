@@ -2109,9 +2109,9 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     if (dev->vic_dev) {
         struct tx_isp_vic_device *vic_dev = dev->vic_dev;
         
-        if (vic_dev->sd && vic_dev->sd->ops && vic_dev->sd->ops->video && vic_dev->sd->ops->video->s_stream) {
+        if (vic_dev->sd.ops && vic_dev->sd.ops->video && vic_dev->sd.ops->video->s_stream) {
             pr_info("*** Calling VIC s_stream directly: enable=%d ***\n", enable);
-            ret = vic_dev->sd->ops->video->s_stream(vic_dev->sd, enable);
+            ret = vic_dev->sd.ops->video->s_stream(&vic_dev->sd, enable);
             
             if (ret != 0 && ret != 0xfffffdfd) {
                 pr_err("VIC s_stream failed: %d\n", ret);
