@@ -60,6 +60,9 @@ static void destroy_frame_channel_devices(void);
 int __init tx_isp_subdev_platform_init(void);
 void __exit tx_isp_subdev_platform_exit(void);
 int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
+void isp_process_frame_statistics(struct tx_isp_dev *dev);
+void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
+void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
 
 /* Global I2C client tracking to prevent duplicate creation */
 static struct i2c_client *global_sensor_i2c_client = NULL;
@@ -1396,15 +1399,6 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     csi_dev->sd.ops = NULL;  /* Would be &csi_subdev_ops in full implementation */
     csi_dev->sd.vin_state = TX_ISP_MODULE_INIT;
     
-    /* *** CRITICAL: Map CSI basic control registers - Binary Ninja 0x10022000 *** */
-    /* Binary Ninja: private_request_mem_region(0x10022000, 0x1000, "Can not support this frame mode!!!\\n") */
-    mem_resource = request_mem_region(0x10022000, 0x1000, "tx-isp-csi");
-    if (!mem_resource) {
-        pr_err("csi_device_probe: Cannot request CSI memory region 0x10022000\n");
-        ret = -EBUSY;
-        goto err_free_dev;
-    }
-    
     /* Binary Ninja: private_ioremap($a0_2, $v0_3[1] + 1 - $a0_2) */
     csi_basic_regs = ioremap(0x10022000, 0x1000);
     if (!csi_basic_regs) {
@@ -1439,12 +1433,6 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     /* Binary Ninja: *($v0 + 0x128) = 1 (initial state) */
     csi_dev->state = 1;
     
-    /* Binary Ninja: *($v0 + 0xd4) = $v0 (self-pointer) */
-    *((void**)((char*)csi_dev + 0xd4)) = csi_dev;
-    
-    /* Connect to ISP device */
-    isp_dev->csi_dev = (struct tx_isp_subdev *)csi_dev;
-    
     /* Binary Ninja: dump_csd = $v0 (global CSI device pointer) */
     /* Store globally for debug access */
     
@@ -1453,8 +1441,7 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     pr_info("  Basic regs (+0xb8): %p (0x10022000)\n", csi_basic_regs);
     pr_info("  ISP CSI regs (+0x13c): %p\n", isp_csi_regs);
     pr_info("  State (+0x128): %d\n", csi_dev->state);
-    pr_info("  Self (+0xd4): %p\n", csi_dev);
-    
+
     pr_info("*** csi_device_probe: Binary Ninja CSI device created successfully ***\n");
     return 0;
     
@@ -1689,6 +1676,9 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
     if (irq_num >= 0) {
         pr_info("*** Platform IRQ found: %d ***\n", irq_num);
         
+        /* CRITICAL FIX: Store IRQ number FIRST before any operations that might fail */
+        isp_dev->isp_irq = irq_num;  /* Store IRQ number immediately */
+        
         /* Binary Ninja: private_spin_lock_init(arg2) */
         spin_lock_init(&isp_dev->lock);
         
@@ -1705,20 +1695,19 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
             pr_err("*** tx_isp_request_irq: flags = 0x%08x, irq = %d, ret = 0x%08x ***\n",
                    IRQF_SHARED | IRQF_ONESHOT, irq_num, ret);
             /* Binary Ninja: *arg2 = 0 */
-            isp_dev->isp_irq = 0;
             /* Binary Ninja: return 0xfffffffc */
             return 0xfffffffc;
         }
         
         /* Binary Ninja: arg2[1] = tx_isp_enable_irq; *arg2 = $v0_1; arg2[2] = tx_isp_disable_irq */
         isp_dev->irq_enable_func = tx_isp_enable_irq;   /* arg2[1] = tx_isp_enable_irq */
-        isp_dev->isp_irq = irq_num;                     /* *arg2 = $v0_1 */
+        /* isp_dev->isp_irq already set above */         /* *arg2 = $v0_1 */
         isp_dev->irq_disable_func = tx_isp_disable_irq; /* arg2[2] = tx_isp_disable_irq */
         
         /* Binary Ninja: tx_isp_disable_irq(arg2) */
         tx_isp_disable_irq(isp_dev);
         
-        pr_info("*** tx_isp_request_irq: IRQ %d registered with Binary Ninja handlers ***\n", irq_num);
+        pr_info("*** tx_isp_request_irq: IRQ %d registered and stored in isp_dev->isp_irq ***\n", irq_num);
         
     } else {
         /* Binary Ninja: *arg2 = 0 */
@@ -1752,6 +1741,8 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
 }
 
 /* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
+
+/* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
@@ -1760,8 +1751,6 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     u32 v1_7, v1_10;
     uint32_t *vic_irq_enable_flag;
     int i;
-
-    pr_info("*** isp_vic_interrupt_service_routine: EXACT Binary Ninja implementation ***\n");
     
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
     if (!isp_dev || (uintptr_t)isp_dev >= 0xfffff001) {
@@ -1963,7 +1952,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         /* Wake up frame channels for all interrupt types */
         for (i = 0; i < num_channels; i++) {
             if (frame_channels[i].state.streaming) {
-                frame_channel_wakeup_waiters(&frame_channels[i]);
+                // frame_channel_wakeup_waiters(&frame_channels[i]);
             }
         }
         
@@ -1996,77 +1985,24 @@ static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
 static DEFINE_MUTEX(subdev_init_lock);
 static volatile bool subdev_init_complete = false;
 
-/* tx_isp_video_link_stream - CRASH-SAFE implementation to prevent kernel panic */
+/* Forward declaration for tx_isp_video_s_stream */
+int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable);
+
+/* tx_isp_video_link_stream - FIXED implementation with proper MIPS alignment checks */
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 {
-    pr_info("*** tx_isp_video_link_stream: CRASH-SAFE implementation - enable=%d ***\n", enable);
-    pr_info("*** MIPS-SAFE: Skipping subdev iteration that caused BadVA: 03e0000c ***\n");
-    pr_info("*** MIPS-SAFE: Processing streaming without risky subdev iteration ***\n");
-    
-    /* CRITICAL CRASH FIX: Do NOT iterate through subdevs array that causes crashes */
-    /* The crash at BadVA: 03e0000c shows we're accessing invalid memory in subdev iteration */
+    pr_info("*** tx_isp_video_link_stream: FIXED MIPS-SAFE implementation - enable=%d ***\n", enable);
     
     if (!isp_dev) {
         pr_err("tx_isp_video_link_stream: Invalid ISP device\n");
         return -EINVAL;
     }
     
-    /* MIPS-SAFE: Instead of dangerous subdev iteration, directly call known working functions */
-    if (enable) {
-        pr_info("*** MIPS-SAFE: Enabling streaming without risky subdev iteration ***\n");
-        
-        /* SAFE: Call VIC streaming directly if available */
-        if (isp_dev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
-                pr_info("*** MIPS-SAFE: Calling VIC streaming directly ***\n");
-                vic_core_s_stream(&vic_dev->sd, enable);
-            }
-        }
-        
-        /* SAFE: Call CSI streaming directly if available */
-        if (isp_dev->csi_dev) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-            if (csi_dev && ((uintptr_t)csi_dev & 0x3) == 0) {
-                pr_info("*** MIPS-SAFE: Calling CSI streaming directly ***\n");
-                csi_video_s_stream_impl(&csi_dev->sd, enable);
-            }
-        }
-        
-        /* SAFE: Call sensor streaming directly if available */
-        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
-            isp_dev->sensor->sd.ops->video && isp_dev->sensor->sd.ops->video->s_stream) {
-            if (((uintptr_t)isp_dev->sensor & 0x3) == 0) {
-                pr_info("*** MIPS-SAFE: Calling sensor streaming directly ***\n");
-                isp_dev->sensor->sd.ops->video->s_stream(&isp_dev->sensor->sd, enable);
-            }
-        }
-        
-    } else {
-        pr_info("*** MIPS-SAFE: Disabling streaming without risky subdev iteration ***\n");
-        /* SAFE: Disable streaming on known devices */
-        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
-            isp_dev->sensor->sd.ops->video && isp_dev->sensor->sd.ops->video->s_stream) {
-            if (((uintptr_t)isp_dev->sensor & 0x3) == 0) {
-                isp_dev->sensor->sd.ops->video->s_stream(&isp_dev->sensor->sd, 0);
-            }
-        }
-        if (isp_dev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
-                vic_core_s_stream(&vic_dev->sd, 0);
-            }
-        }
-        if (isp_dev->csi_dev) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-            if (csi_dev && ((uintptr_t)csi_dev & 0x3) == 0) {
-                csi_video_s_stream_impl(&csi_dev->sd, 0);
-            }
-        }
-    }
+    /* CRITICAL FIX: Use the properly implemented tx_isp_video_s_stream function */
+    /* This function has all the MIPS alignment checks and safe subdev iteration */
+    pr_info("*** DELEGATING TO MIPS-SAFE tx_isp_video_s_stream IMPLEMENTATION ***\n");
     
-    pr_info("*** tx_isp_video_link_stream: CRASH-SAFE completion - no unaligned access attempted ***\n");
-    return 0; /* Always return success to prevent cascade failures */
+    return tx_isp_video_s_stream(isp_dev, enable);
 }
 
 /**
