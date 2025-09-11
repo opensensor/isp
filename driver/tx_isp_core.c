@@ -1114,10 +1114,10 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
             }
             
             /* Binary Ninja: tisp_deinit() */
-            pr_info("ispcore_core_ops_init: Calling tisp_deinit()");
-            /* Call tisp_deinit to clean up ISP pipeline components */
-            extern int tisp_deinit(void);
-            tisp_deinit();
+//            pr_info("ispcore_core_ops_init: Calling tisp_deinit()");
+//            /* Call tisp_deinit to clean up ISP pipeline components */
+//            extern int tisp_deinit(void);
+//            tisp_deinit();
             
             /* Binary Ninja: memset(*($s0 + 0x1bc) + 4, 0, 0x40a4) */
             /* Binary Ninja: memset($s0 + 0x1d8, 0, 0x40) */

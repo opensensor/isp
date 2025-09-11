@@ -747,15 +747,15 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
     }
     
     /* Binary Ninja: sensor_init call - initialize sensor control structure */
-    pr_info("*** CALLING sensor_init - INITIALIZING SENSOR CONTROL STRUCTURE ***\n");
-    int sensor_init_result = sensor_init(isp_dev);
-    if (sensor_init_result != 0) {
-        pr_warn("tisp_init: sensor_init returned %d, continuing anyway\n", sensor_init_result);
-    }
-    
-    pr_info("*** tisp_init: COMPLETE - ALL MISSING HARDWARE REGISTERS NOW WRITTEN! ***\n");
-    pr_info("*** ISP HARDWARE INITIALIZATION NOW MATCHES REFERENCE DRIVER ***\n");
-    pr_info("*** BOTH CORE CONTROL VALUES AND MISSING CSI PHY WRITES FIXED ***\n");
+//    pr_info("*** CALLING sensor_init - INITIALIZING SENSOR CONTROL STRUCTURE ***\n");
+//    int sensor_init_result = sensor_init(isp_dev);
+//    if (sensor_init_result != 0) {
+//        pr_warn("tisp_init: sensor_init returned %d, continuing anyway\n", sensor_init_result);
+//    }
+//
+//    pr_info("*** tisp_init: COMPLETE - ALL MISSING HARDWARE REGISTERS NOW WRITTEN! ***\n");
+//    pr_info("*** ISP HARDWARE INITIALIZATION NOW MATCHES REFERENCE DRIVER ***\n");
+//    pr_info("*** BOTH CORE CONTROL VALUES AND MISSING CSI PHY WRITES FIXED ***\n");
     
     return 0;
 }
