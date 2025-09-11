@@ -2398,7 +2398,6 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 
     pr_info("*** tx_isp_vic_probe: Starting VIC device probe ***\n");
 
-    vic_dev->irq = 38;
 
     /* Get subdev pointer */
     sd = &vic_dev->sd;
@@ -2432,6 +2431,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 
     /* Store global reference (binary uses 'dump_vsd' global) */
     dump_vsd = vic_dev;
+    vic_dev->irq = 38;
 
     /* Set test_addr to point to sensor_attr or appropriate member */
     /* Binary points to offset 0x80 in the structure */
