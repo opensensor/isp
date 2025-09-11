@@ -155,8 +155,8 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
         }
 
         pr_info("Setting up CSI -> VIC link\n");
-        ret = dev->csi_dev->sd->ops->video->link_setup(
-            &dev->csi_dev->sd->outpads[0],
+        ret = dev->csi_dev->sd.ops->video->link_setup(
+            &dev->csi_dev->sd.outpads[0],
             &dev->vic_dev->sd.inpads[0],
             TX_ISP_LINKFLAG_ENABLED
         );
