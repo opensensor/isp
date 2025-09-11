@@ -99,14 +99,14 @@ struct vic_device {
 
 
 struct csi_device {
-    char device_name[32];     // 0x00: Device name
+    char device_name[32];     // Device name
     struct device *dev;       // Device pointer
-    uint32_t offset_10;       // 0x10: Referenced in init
+    uint32_t offset_10;       // Referenced in init
     struct IspModule *module_info;  // Module info pointer
 
     struct tx_isp_subdev *sd;
 
-    // CSI register access - changed to single pointer like VIC
+    // CSI register access
     void __iomem *cpm_regs;   // CPM registers
     void __iomem *phy_regs;   // MIPI PHY registers
     void __iomem *csi_regs;   // Single pointer to mapped csi regs
@@ -117,6 +117,11 @@ struct csi_device {
     struct mutex mutex;       // Synchronization
     int state;               // CSI state (1=init, 2=enabled)
     spinlock_t lock;         // Protect register access
+    
+    // Additional members for safe access (no offset arithmetic)
+    void *file_ops;          // File operations pointer
+    void *self_reference;    // Self-reference pointer
+    struct resource *mem_resource; // Memory resource
 };
 
 /* Core ISP device structure */

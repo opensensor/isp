@@ -109,7 +109,7 @@ static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
     if (!csi_dev)
         return IRQ_NONE;
 
-    csi_base = *(void **)(((char *)csi_dev) + 0x13c);
+    csi_base = csi_dev->csi_regs;
     if (!csi_base)
         return IRQ_NONE;
 
@@ -321,7 +321,7 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
     /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0x13c */
-    csi_base = csi_dev->csi_regs; /* Use struct member instead of *(void **)(((char *)csi_dev) + 0x13c) */
+    csi_base = csi_dev->csi_regs; /* Use struct member instead of offset access */
     if (!csi_base) {
         pr_err("CSI base address is NULL\n");
         return 0xffffffea;
@@ -837,55 +837,85 @@ static struct resource tx_isp_csi_resources[] = {
 
 int tx_isp_csi_probe(struct platform_device *pdev)
 {
-    struct tx_isp_subdev *sd = NULL;
+    struct csi_device *csi_dev = NULL;
     struct resource *res;
     int32_t ret = 0;
 
-    printk("tx_isp_csi_probe\n");
+    pr_info("*** csi_device_probe: Safe struct member access implementation ***\n");
 
-    // Add resources to platform device if not already present
-    if (!platform_get_resource(pdev, IORESOURCE_MEM, 0)) {
-        ret = platform_device_add_resources(pdev, tx_isp_csi_resources,
-                                          ARRAY_SIZE(tx_isp_csi_resources));
-        if (ret) {
-            ISP_ERROR("Failed to add CSI resources\n");
-            return ret;
-        }
-    }
-
-    sd = private_kmalloc(sizeof(struct tx_isp_subdev), GFP_KERNEL);
-    if (!sd) {
-        ISP_ERROR("Failed to allocate CSI subdev\n");
+    /* Allocate CSI device structure */
+    csi_dev = private_kmalloc(sizeof(struct csi_device), GFP_KERNEL);
+    if (!csi_dev) {
+        ISP_ERROR("Failed to allocate CSI device\n");
         return -ENOMEM;
     }
 
-    memset(sd, 0, sizeof(struct tx_isp_subdev));
+    /* Initialize CSI device structure */
+    memset(csi_dev, 0, sizeof(struct csi_device));
+    pr_info("*** CSI device structure initialized: ***\n");
+    pr_info("  Size: %zu bytes\n", sizeof(struct csi_device));
 
-    // Now we can safely get the resource
-    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-    if (!res) {
-        ISP_ERROR("No memory resource specified\n");
-        ret = -ENODEV;
-        goto err_deinit_sd;
+    /* Initialize CSI subdev */
+    ret = tx_isp_subdev_init(pdev, (struct tx_isp_subdev *)csi_dev, &csi_subdev_ops);
+    if (ret != 0) {
+        ISP_ERROR("Failed to initialize CSI subdev\n");
+        private_kfree(csi_dev);
+        return ret;
     }
 
-    sd->base = ioremap(res->start, resource_size(res));
-    if (!sd->base) {
+    /* Request CSI memory region */
+    res = private_request_mem_region(0x10022000, 0x1000, "CSI memory region");
+    if (!res) {
+        ISP_ERROR("Failed to request CSI memory region\n");
+        ret = -EBUSY;
+        goto err_deinit_subdev;
+    }
+
+    /* Map CSI registers */
+    void __iomem *csi_base = private_ioremap(res->start, resource_size(res));
+    if (!csi_base) {
         ISP_ERROR("Failed to map CSI registers\n");
         ret = -ENOMEM;
         goto err_release_mem;
     }
 
-    private_raw_mutex_init(&sd->csi_lock, "csi_lock", NULL);
-    private_platform_set_drvdata(pdev, sd);
+    /* SAFE: Store the mapped CSI registers using struct member access */
+    csi_dev->csi_regs = csi_base;
+    pr_info("*** CSI REGISTERS MAPPED: %p (safe struct member access) ***\n", csi_base);
+
+    /* SAFE: Set file operations using struct member access */
+    csi_dev->file_ops = NULL; /* We don't have isp_csi_fops yet */
+
+    /* SAFE: Store the memory resource using struct member access */
+    csi_dev->mem_resource = res;
+
+    /* SAFE: Initialize mutex using struct member access */
+    private_raw_mutex_init(&csi_dev->mutex, "csi_mutex", NULL);
+
+    /* Set platform driver data */
+    private_platform_set_drvdata(pdev, csi_dev);
+
+    /* SAFE: Set state using struct member access */
+    csi_dev->state = 1;
+    pr_info("  State: 1 (INIT)\n");
+
+    /* SAFE: Set self-reference using struct member access */
+    csi_dev->self_reference = csi_dev;
+    pr_info("*** csi_device_probe: CSI device created successfully with safe struct access ***\n");
+
+    /* Store CSI device in ourISPdev for global access */
+    if (ourISPdev) {
+        ourISPdev->csi_dev = csi_dev;
+        pr_info("CSI device stored in ourISPdev: %p\n", csi_dev);
+    }
 
     return 0;
 
 err_release_mem:
-    release_mem_region(res->start, resource_size(res));
-err_deinit_sd:
-    tx_isp_subdev_deinit(sd);
-    private_kfree(sd);
+    private_release_mem_region(res->start, resource_size(res));
+err_deinit_subdev:
+    tx_isp_subdev_deinit((struct tx_isp_subdev *)csi_dev);
+    private_kfree(csi_dev);
     return ret;
 }
 
