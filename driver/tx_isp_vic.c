@@ -1066,7 +1066,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     struct clk *isp_clk, *cgu_isp_clk, *csi_clk, *ipu_clk;
     void __iomem *cpm_regs;
     int ret;
+    /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
+    vic_start_ok = 1;
 
+    /* FIXED: Use proper VIC-to-ISP device linkage */
+    struct tx_isp_dev *isp_dev = ourISPdev;
+    
     pr_info("*** tx_isp_vic_start: EXACT Binary Ninja implementation matching reference trace ***\n");
 
     /* Validate vic_dev structure */
@@ -1193,7 +1198,7 @@ if (!IS_ERR(cgu_isp_clk)) {
     pr_info("*** tx_isp_vic_start: CRITICAL FIX - Enabling VIC hardware interrupts ***\n");
     tx_vic_enable_irq(vic_dev);
     pr_info("*** tx_isp_vic_start: VIC hardware interrupts enabled - hw_irq_enabled=%d ***\n", vic_dev->hw_irq_enabled);
-    
+
     
     /* Take a local copy of sensor attributes to prevent corruption during streaming */
     struct tx_isp_sensor_attribute local_sensor_attr;
@@ -1583,15 +1588,6 @@ if (!IS_ERR(cgu_isp_clk)) {
     const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
-
-    /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
-    vic_start_ok = 1;
-    
-    /* FIXED: Use proper VIC-to-ISP device linkage */
-    struct tx_isp_dev *isp_dev = ourISPdev;
-
-    pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
-    pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
 
     /* MCP LOG: VIC start completed successfully */
     pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d, interface=%d\n", 
