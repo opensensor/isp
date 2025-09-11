@@ -425,7 +425,7 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     return 0;  /* Success */
 }
 
-/* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
+/* isp_vic_interrupt_service_routine - CRITICAL NULL POINTER CRASH FIX */
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_subdev *sd = dev_id;
@@ -434,20 +434,52 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     u32 isr_main, isr_mdma;
     irqreturn_t ret = IRQ_HANDLED;
     
-    pr_debug("*** isp_vic_interrupt_service_routine: IRQ %d triggered ***\n", irq);
+    pr_debug("*** isp_vic_interrupt_service_routine: CRITICAL NULL POINTER CRASH FIX ***\n");
     
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
-    if (!sd || (unsigned long)sd >= 0xfffff001) {
-        pr_err("isp_vic_interrupt_service_routine: Invalid sd parameter\n");
+    /* CRITICAL CRASH FIX: Comprehensive dev_id validation to prevent BadVA 00030296 */
+    if (!dev_id) {
+        pr_err("*** CRASH FIX: dev_id is NULL - this causes the BadVA 00030296 crash! ***\n");
         return IRQ_HANDLED;
     }
     
-    /* CRITICAL FIX: Use proper subdev data access instead of dangerous offset 0xd4 */
+    /* CRITICAL CRASH FIX: Validate dev_id is in valid kernel memory range */
+    if ((unsigned long)dev_id < 0x80000000 || (unsigned long)dev_id >= 0xfffff001) {
+        pr_err("*** CRASH FIX: dev_id %p outside valid kernel memory range ***\n", dev_id);
+        return IRQ_HANDLED;
+    }
+    
+    /* CRITICAL CRASH FIX: Validate dev_id pointer alignment */
+    if (((uintptr_t)dev_id & 0x3) != 0) {
+        pr_err("*** CRASH FIX: dev_id %p not 4-byte aligned ***\n", dev_id);
+        return IRQ_HANDLED;
+    }
+    
+    sd = dev_id;
+    
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
+        pr_err("*** CRASH FIX: Invalid sd parameter after validation ***\n");
+        return IRQ_HANDLED;
+    }
+    
+    /* CRITICAL CRASH FIX: Safe subdev data access with comprehensive validation */
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     
-    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("isp_vic_interrupt_service_routine: Invalid vic_dev - using safe subdev access\n");
+    /* CRITICAL CRASH FIX: Comprehensive vic_dev validation */
+    if (!vic_dev) {
+        pr_err("*** CRASH FIX: vic_dev is NULL from tx_isp_get_subdevdata ***\n");
+        return IRQ_HANDLED;
+    }
+    
+    /* CRITICAL CRASH FIX: Validate vic_dev is in valid kernel memory range */
+    if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_err("*** CRASH FIX: vic_dev %p outside valid kernel memory range ***\n", vic_dev);
+        return IRQ_HANDLED;
+    }
+    
+    /* CRITICAL CRASH FIX: Validate vic_dev pointer alignment */
+    if (((uintptr_t)vic_dev & 0x3) != 0) {
+        pr_err("*** CRASH FIX: vic_dev %p not 4-byte aligned ***\n", vic_dev);
         return IRQ_HANDLED;
     }
     
