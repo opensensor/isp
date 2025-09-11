@@ -395,6 +395,253 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     return 0;  /* Success */
 }
 
+/* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
+static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
+{
+    struct tx_isp_subdev *sd = dev_id;
+    struct tx_isp_vic_device *vic_dev;
+    void __iomem *vic_base;
+    u32 isr_main, isr_mdma;
+    irqreturn_t ret = IRQ_HANDLED;
+    
+    pr_debug("*** isp_vic_interrupt_service_routine: IRQ %d triggered ***\n", irq);
+    
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
+        pr_err("isp_vic_interrupt_service_routine: Invalid sd parameter\n");
+        return IRQ_HANDLED;
+    }
+    
+    /* CRITICAL FIX: Use proper subdev data access instead of dangerous offset 0xd4 */
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+    
+    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_err("isp_vic_interrupt_service_routine: Invalid vic_dev - using safe subdev access\n");
+        return IRQ_HANDLED;
+    }
+    
+    /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
+    vic_base = sd->base;  /* VIC register base from subdev */
+    if (!vic_base) {
+        pr_err("isp_vic_interrupt_service_routine: No VIC register base\n");
+        return IRQ_HANDLED;
+    }
+    
+    /* Binary Ninja: Read and process interrupt status registers */
+    /* int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
+    u32 isr_mask = readl(vic_base + 0x1e8);
+    u32 isr_status = readl(vic_base + 0x1e0);
+    isr_main = (~isr_mask) & isr_status;
+    
+    /* int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
+    u32 mdma_mask = readl(vic_base + 0x1ec);
+    u32 mdma_status = readl(vic_base + 0x1e4);
+    isr_mdma = (~mdma_mask) & mdma_status;
+    
+    /* Binary Ninja: Store processed interrupts back */
+    /* *($v0_4 + 0x1f0) = $v1_7 */
+    writel(isr_main, vic_base + 0x1f0);
+    /* *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
+    writel(isr_mdma, vic_base + 0x1f4);
+    wmb();
+    
+    pr_debug("isp_vic_interrupt_service_routine: isr_main=0x%x, isr_mdma=0x%x\n", isr_main, isr_mdma);
+    
+    /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
+    if (vic_start_ok != 0) {
+        pr_debug("isp_vic_interrupt_service_routine: vic_start_ok=%d - processing interrupts\n", vic_start_ok);
+        
+        /* Binary Ninja: Frame done interrupt - if (($v1_7 & 1) != 0) */
+        if ((isr_main & 1) != 0) {
+            /* *($s0 + 0x160) += 1 */
+            vic_dev->frame_count += 1;
+            
+            /* CRITICAL: Synchronize ISP device frame counter with VIC frame counter */
+            if (ourISPdev) {
+                ourISPdev->frame_count = vic_dev->frame_count;
+            }
+            
+            pr_info("VIC Frame done interrupt - frame_count=%d (synchronized with ISP)\n", vic_dev->frame_count);
+            /* entry_$a2 = vic_framedone_irq_function($s0) */
+            vic_framedone_irq_function(vic_dev);
+        }
+        
+        /* Binary Ninja: Error interrupt handling */
+        if ((isr_main & 0x200) != 0) {
+            vic_dev->vic_errors[0] += 1;
+            pr_err("Err [VIC_INT] : frame asfifo ovf!!!!!\n");
+        }
+        
+        if ((isr_main & 0x400) != 0) {
+            vic_dev->vic_errors[1] += 1;
+            pr_err("Err [VIC_INT] : hor err ch0 !!!!! 0x3a8 = 0x%08x\n", readl(vic_base + 0x3a8));
+        }
+        
+        if ((isr_main & 0x800) != 0) {
+            vic_dev->vic_errors[2] += 1;
+            pr_err("Err [VIC_INT] : hor err ch1 !!!!!\n");
+        }
+        
+        if ((isr_main & 0x1000) != 0) {
+            vic_dev->vic_errors[2] += 1;
+            pr_err("Err [VIC_INT] : hor err ch2 !!!!!\n");
+        }
+        
+        if ((isr_main & 0x2000) != 0) {
+            vic_dev->vic_errors[2] += 1;
+            pr_err("Err [VIC_INT] : hor err ch3 !!!!!\n");
+        }
+        
+        if ((isr_main & 0x4000) != 0) {
+            vic_dev->vic_errors[3] += 1;
+            pr_err("Err [VIC_INT] : ver err ch0 !!!!!\n");
+        }
+        
+        if ((isr_main & 0x8000) != 0) {
+            vic_dev->vic_errors[2] += 1;
+            pr_err("Err [VIC_INT] : ver err ch1 !!!!!\n");
+        }
+        
+        if ((isr_main & 0x10000) != 0) {
+            vic_dev->vic_errors[2] += 1;
+            pr_err("Err [VIC_INT] : ver err ch2 !!!!!\n");
+        }
+        
+        if ((isr_main & 0x20000) != 0) {
+            vic_dev->vic_errors[2] += 1;
+            pr_err("Err [VIC_INT] : ver err ch3 !!!!!\n");
+        }
+        
+        if ((isr_main & 0x40000) != 0) {
+            vic_dev->vic_errors[4] += 1;
+            pr_err("Err [VIC_INT] : hvf err !!!!!\n");
+        }
+        
+        if ((isr_main & 0x80000) != 0) {
+            vic_dev->vic_errors[5] += 1;
+            pr_err("Err [VIC_INT] : dvp hcomp err!!!!\n");
+        }
+        
+        if ((isr_main & 0x100000) != 0) {
+            vic_dev->vic_errors[6] += 1;
+            pr_err("Err [VIC_INT] : dma syfifo ovf!!!\n");
+        }
+        
+        if ((isr_main & 0x200000) != 0) {
+            vic_dev->vic_errors[7] += 1;
+            pr_err("Err [VIC_INT] : control limit err!!!\n");
+        }
+        
+        if ((isr_main & 0x400000) != 0) {
+            vic_dev->vic_errors[8] += 1;
+            pr_err("Err [VIC_INT] : image syfifo ovf !!!\n");
+        }
+        
+        if ((isr_main & 0x800000) != 0) {
+            vic_dev->vic_errors[9] += 1;
+            pr_err("Err [VIC_INT] : mipi fid asfifo ovf!!!\n");
+        }
+        
+        if ((isr_main & 0x1000000) != 0) {
+            vic_dev->vic_errors[10] += 1;
+            pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
+        }
+        
+        if ((isr_main & 0x2000000) != 0) {
+            vic_dev->vic_errors[2] += 1;
+            pr_err("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
+        }
+        
+        if ((isr_main & 0x4000000) != 0) {
+            vic_dev->vic_errors[2] += 1;
+            pr_err("Err [VIC_INT] : mipi ch2 hcomp err !!!\n");
+        }
+        
+        if ((isr_main & 0x8000000) != 0) {
+            vic_dev->vic_errors[2] += 1;
+            pr_err("Err [VIC_INT] : mipi ch3 hcomp err !!!\n");
+        }
+        
+        if ((isr_main & 0x10000000) != 0) {
+            vic_dev->vic_errors[11] += 1;
+            pr_err("Err [VIC_INT] : mipi ch0 vcomp err !!!\n");
+        }
+        
+        if ((isr_main & 0x20000000) != 0) {
+            vic_dev->vic_errors[2] += 1;
+            pr_err("Err [VIC_INT] : mipi ch1 vcomp err !!!\n");
+        }
+        
+        if ((isr_main & 0x40000000) != 0) {
+            vic_dev->vic_errors[2] += 1;
+            pr_err("Err [VIC_INT] : mipi ch2 vcomp err !!!\n");
+        }
+        
+        if (isr_main & 0x80000000) {
+            vic_dev->vic_errors[2] += 1;
+            pr_err("Err [VIC_INT] : mipi ch3 vcomp err !!!\n");
+        }
+        
+        /* Binary Ninja: MDMA interrupt handling */
+        if ((isr_mdma & 1) != 0) {
+            pr_debug("VIC MDMA channel 0 interrupt\n");
+            vic_mdma_irq_function(vic_dev, 0);
+        }
+        
+        if ((isr_mdma & 2) != 0) {
+            pr_debug("VIC MDMA channel 1 interrupt\n");
+            vic_mdma_irq_function(vic_dev, 1);
+        }
+        
+        if ((isr_mdma & 4) != 0) {
+            pr_err("Err [VIC_INT] : dma arb trans done ovf!!!\n");
+        }
+        
+        if ((isr_mdma & 8) != 0) {
+            vic_dev->vic_errors[12] += 1;
+            pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
+        }
+        
+        /* Binary Ninja: Error recovery handling */
+        /* if (($v1_7 & 0xde00) != 0 && zx.d(vic_start_ok) == 1) */
+        if ((isr_main & 0xde00) != 0 && vic_start_ok == 1) {
+            pr_err("error handler!!!\n");
+            /* **($s0 + 0xb8) = 4 */
+            writel(4, vic_base + 0x0);
+            
+            /* int32_t* $v0_70 = *($s0 + 0xb8) */
+            /* while (*$v0_70 != 0) */
+            u32 ctl_reg;
+            int timeout = 1000;
+            while ((ctl_reg = readl(vic_base + 0x0)) != 0 && timeout > 0) {
+                pr_info("addr ctl is 0x%x\n", ctl_reg);
+                udelay(10);
+                timeout--;
+            }
+            
+            if (timeout == 0) {
+                pr_err("VIC error recovery timeout\n");
+            }
+            
+            /* Recovery register writes */
+            u32 reg_val = readl(vic_base + 0x104);  /* $v0_70[0x41] */
+            writel(reg_val, vic_base + 0x104);
+            
+            reg_val = readl(vic_base + 0x108);
+            writel(reg_val, vic_base + 0x108);
+            
+            /* **($s0 + 0xb8) = 1 */
+            writel(1, vic_base + 0x0);
+        }
+    } else {
+        pr_debug("isp_vic_interrupt_service_routine: vic_start_ok=%d - ignoring interrupts\n", vic_start_ok);
+    }
+    
+    /* Binary Ninja: return 1 */
+    return IRQ_HANDLED;
+}
+
 /* Initialize VIC hardware */
 static int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 {
@@ -2092,185 +2339,23 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     return ret;
 }
 
-
-/* tx_vic_disable_irq - EXACT Binary Ninja implementation */
-static void tx_vic_disable_irq(void)
-{
-    void *dump_vsd_2 = dump_vsd;
-    void *dump_vsd_5 = NULL;
-    int32_t var_18 = 0;
-    struct tx_isp_vic_device *vic_dev;
-    void __iomem *vic_regs;
-    
-    /* Binary Ninja: Validate dump_vsd pointer */
-    if (dump_vsd_2 != 0) {
-        void *dump_vsd_4 = dump_vsd_2;
-        
-        if ((unsigned long)dump_vsd_2 >= 0xfffff001) {
-            dump_vsd_4 = NULL;
-        }
-        
-        dump_vsd_5 = dump_vsd_4;
-    }
-    
-    /* Binary Ninja: if (dump_vsd_5 == 0 || dump_vsd_5 u>= 0xfffff001) return */
-    if (dump_vsd_5 == 0 || (unsigned long)dump_vsd_5 >= 0xfffff001) {
-        pr_debug("tx_vic_disable_irq: Invalid dump_vsd - cannot disable interrupts\n");
-        return;
-    }
-    
-    /* Get VIC device to access hardware registers */
-    vic_dev = (struct tx_isp_vic_device *)dump_vsd_5;
-    vic_regs = vic_dev->vic_regs;
-    
-    /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
-    __private_spin_lock_irqsave((spinlock_t *)((char *)dump_vsd_2 + 0x130), &var_18);
-    
-    /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) - check if interrupts currently enabled */
-    uint32_t *irq_enable_flag = (uint32_t *)((char *)dump_vsd_5 + 0x13c);
-    if (*irq_enable_flag != 0) {
-        /* *** CRITICAL: DISABLE INTERRUPTS AT HARDWARE LEVEL FIRST *** */
-        if (vic_regs && (unsigned long)vic_regs >= 0x80000000) {
-            /* Mask ALL VIC interrupts at hardware level */
-            writel(0xFFFFFFFF, vic_regs + 0x1e8);  /* Mask ALL main interrupts */
-            writel(0xFFFFFFFF, vic_regs + 0x1ec);  /* Mask ALL MDMA interrupts */
-            wmb();
-            pr_info("*** tx_vic_disable_irq: MASKED all VIC hardware interrupts ***\n");
-        }
-        
-        /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 0 - disable interrupts */
-        *irq_enable_flag = 0;
-        vic_start_ok = 0;  /* Global flag that controls interrupt processing */
-        
-        /* Binary Ninja: int32_t $v0_2 = *(dump_vsd_5 + 0x88) - get disable callback */
-        void (*disable_callback)(void *) = *(void (**)(void *))((char *)dump_vsd_5 + 0x88);
-        
-        /* Binary Ninja: if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
-        if (disable_callback != NULL) {
-            disable_callback((char *)dump_vsd_5 + 0x80);
-            pr_debug("tx_vic_disable_irq: Called disable callback\n");
-        }
-        
-        pr_info("*** tx_vic_disable_irq: VIC interrupts DISABLED (vic_start_ok=0) ***\n");
-    } else {
-        pr_debug("tx_vic_disable_irq: Interrupts already disabled\n");
-    }
-    
-    /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
-    private_spin_unlock_irqrestore((spinlock_t *)((char *)dump_vsd_2 + 0x130), var_18);
-}
-
-/* tx_vic_enable_irq - EXACT Binary Ninja implementation */
-static void tx_vic_enable_irq(void)
-{
-    void *dump_vsd_2 = dump_vsd;
-    void *dump_vsd_5 = NULL;
-    int32_t var_18 = 0;
-    struct tx_isp_vic_device *vic_dev;
-    void __iomem *vic_regs;
-    
-    /* Binary Ninja: Validate dump_vsd pointer */
-    if (dump_vsd_2 != 0) {
-        void *dump_vsd_4 = dump_vsd_2;
-        
-        if ((unsigned long)dump_vsd_2 >= 0xfffff001) {
-            dump_vsd_4 = NULL;
-        }
-        
-        dump_vsd_5 = dump_vsd_4;
-    }
-    
-    /* Binary Ninja: if (dump_vsd_5 == 0 || dump_vsd_5 u>= 0xfffff001) return */
-    if (dump_vsd_5 == 0 || (unsigned long)dump_vsd_5 >= 0xfffff001) {
-        pr_debug("tx_vic_enable_irq: Invalid dump_vsd - cannot enable interrupts\n");
-        return;
-    }
-    
-    /* Get VIC device to access hardware registers */
-    vic_dev = (struct tx_isp_vic_device *)dump_vsd_5;
-    vic_regs = vic_dev->vic_regs;
-    
-    /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
-    __private_spin_lock_irqsave((spinlock_t *)((char *)dump_vsd_2 + 0x130), &var_18);
-    
-    /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) - check if already enabled */
-    uint32_t *irq_enable_flag = (uint32_t *)((char *)dump_vsd_5 + 0x13c);
-    if (*irq_enable_flag != 0) {
-        /* Already enabled - do nothing */
-        pr_debug("tx_vic_enable_irq: Interrupts already enabled\n");
-    } else {
-        /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 - enable interrupts */
-        *irq_enable_flag = 1;
-        vic_start_ok = 1;  /* Global flag that controls interrupt processing */
-        
-        /* *** CRITICAL FIX: Enable proper interrupts based on ISR analysis *** */
-        if (vic_regs && (unsigned long)vic_regs >= 0x80000000) {
-            /* Based on ISR Binary Ninja analysis, enable essential interrupts only */
-            /* Main interrupt mask: Enable frame done (bit 0) only initially */
-            writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* Unmask only bit 0 (frame done) */
-            /* MDMA interrupt mask: Enable MDMA channel 0 and 1 (bits 0,1) */  
-            writel(0xFFFFFFFC, vic_regs + 0x1ec);  /* Unmask only bits 0,1 (MDMA ch0,ch1) */
-            wmb();
-            pr_info("*** tx_vic_enable_irq: ENABLED essential VIC interrupts (frame_done + MDMA ch0,ch1) ***\n");
-            pr_info("*** Main mask=0xFFFFFFFE, MDMA mask=0xFFFFFFFC - minimal but functional ***\n");
-        }
-        
-        /* Binary Ninja: int32_t $v0_1 = *(dump_vsd_5 + 0x84) - get enable callback */
-        void (*enable_callback)(void *) = *(void (**)(void *))((char *)dump_vsd_5 + 0x84);
-        
-        /* Binary Ninja: if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
-        if (enable_callback != NULL) {
-            enable_callback((char *)dump_vsd_5 + 0x80);
-            pr_debug("tx_vic_enable_irq: Called enable callback\n");
-        }
-        
-        pr_info("*** tx_vic_enable_irq: VIC interrupts ENABLED (vic_start_ok=1) ***\n");
-    }
-    
-    /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
-    private_spin_unlock_irqrestore((spinlock_t *)((char *)dump_vsd_2 + 0x130), var_18);
-}
-
-/* CRITICAL FIX: Enable clocks BEFORE any atomic operations */
-static int vic_enable_clocks_non_atomic(struct tx_isp_vic_device *vic_dev)
-{
-    struct clk *isp_clk, *cgu_isp_clk;
-    int ret = 0;
-    
-    pr_info("*** ATOMIC CONTEXT FIX: Enabling clocks in NON-ATOMIC context ***\n");
-    
-    /* Enable clocks using Linux Clock Framework - this CAN sleep, so do it first */
-    isp_clk = clk_get(NULL, "isp");
-    if (!IS_ERR(isp_clk)) {
-        ret = clk_prepare_enable(isp_clk);
-        if (ret == 0) {
-            pr_info("STREAMING: ISP clock enabled via clk framework (NON-ATOMIC)\n");
-        } else {
-            pr_err("STREAMING: Failed to enable ISP clock: %d\n", ret);
-        }
-    } else {
-        pr_warn("STREAMING: ISP clock not found: %ld\n", PTR_ERR(isp_clk));
-    }
-
-    cgu_isp_clk = clk_get(NULL, "cgu_isp");
-    if (!IS_ERR(cgu_isp_clk)) {
-        ret = clk_prepare_enable(cgu_isp_clk);
-        if (ret == 0) {
-            pr_info("STREAMING: CGU_ISP clock enabled via clk framework (NON-ATOMIC)\n");
-        } else {
-            pr_err("STREAMING: Failed to enable CGU_ISP clock: %d\n", ret);
-        }
-    }
-    
-    return ret;
-}
-
-
 /* CRITICAL MISSING FUNCTION: vic_core_s_stream - FIXED to call tx_isp_vic_start */
-int vic_core_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
+int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
+    struct tx_isp_vic_device *vic_dev;
     int ret = 0;
-
+    
+    if (!sd) {
+        pr_err("VIC s_stream: NULL subdev\n");
+        return -EINVAL;
+    }
+    
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+    if (!vic_dev) {
+        pr_err("VIC s_stream: NULL vic_dev\n");
+        return -EINVAL;
+    }
+    
     pr_info("VIC s_stream: enable=%d, current_state=%d, vic_start_ok=%d\n", enable, vic_dev->state, vic_start_ok);
     
     //mutex_lock(&vic_dev->state_lock);
@@ -2278,8 +2363,6 @@ int vic_core_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     if (enable) {
         /* Start VIC streaming - CRITICAL FIX: Call tx_isp_vic_start FIRST */
         if (vic_dev->state != 4) { /* Not already streaming */
-
-        	pr_info("VIC enable: state is %d\n",vic_dev->state);
             
             /* *** CRITICAL FIX: Call tx_isp_vic_start to set vic_start_ok = 1 *** */
             pr_info("*** VIC: CRITICAL FIX - calling tx_isp_vic_start BEFORE streaming ***\n");
