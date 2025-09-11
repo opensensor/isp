@@ -2783,6 +2783,17 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("*** CHANNEL %d STREAMON: INITIALIZING AND STARTING SENSOR HARDWARE ***\n", channel);
             pr_info("Channel %d: Found sensor %s for streaming\n",
                     channel, sensor ? sensor->info.name : "(unnamed)");
+
+            // core ops init
+            if (ourISPdev->sd.ops && ourISPdev->sd.ops->core && ourISPdev->sd.ops->core->init) {
+                pr_info("*** Channel %d: CALLING CORE INIT - WRITING INITIALIZATION REGISTERS ***\n", channel);
+                ret = ourISPdev->sd.ops->core->init(&ourISPdev->sd, 1);
+                if (ret) {
+                    pr_err("Channel %d: CORE INIT FAILED: %d\n", channel, ret);
+                } else {
+                    pr_info("*** Channel %d: CORE INIT SUCCESS - INITIALIZATION REGISTERS WRITTEN ***\n", channel);
+                }
+            }
             
             // *** STEP 1: TRIGGER SENSOR HARDWARE INITIALIZATION (sensor_init) ***
             if (sensor && sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
@@ -2891,6 +2902,19 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 }
             } else {
                 pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
+            }
+
+            // Trigger core ops streaming
+            if (ourISPdev && ourISPdev->sd.ops && ourISPdev->sd.ops->video &&
+                ourISPdev->sd.ops->video->s_stream) {
+
+                pr_info("*** Channel %d: NOW CALLING CORE STREAMING - THIS SHOULD TRIGGER MORE REGISTER ACTIVITY! ***\n", channel);
+                ret = ourISPdev->sd.ops->video->s_stream(&ourISPdev->sd, 1);
+                if (ret) {
+                    pr_err("Channel %d: CORE STREAMING FAILED: %d\n", channel, ret);
+                } else {
+                    pr_info("*** Channel %d: CORE STREAMING SUCCESS - ALL HARDWARE SHOULD BE ACTIVE! ***\n", channel);
+                }
             }
 
             // Trigger Core Streaming - using ourISPdev directly as it contains the core functionality
