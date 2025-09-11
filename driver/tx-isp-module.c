@@ -4355,6 +4355,7 @@ static int tx_isp_init(void)
             /* Set global VIC interrupt enable flag */
             vic_start_ok = 1;
             pr_info("*** vic_start_ok SET TO 1 - INTERRUPTS WILL NOW BE PROCESSED! ***\n");
+            tx_vic_enable_irq(vic_dev);
         }
     }
 
