@@ -87,22 +87,14 @@ extern struct tx_isp_subdev_ops vic_subdev_ops;
 struct tx_isp_vic_device {
     /* CRITICAL: Base subdev structure MUST be first for container_of() to work */
     struct tx_isp_subdev sd;                    /* 0x00: Base subdev structure */
-    
-    /* CRITICAL: Padding to reach Binary Ninja expected offsets */
-    char padding_to_b8[0xb8 - sizeof(struct tx_isp_subdev)]; /* Pad to offset 0xb8 */
+
     
     /* CRITICAL: VIC register base at offset 0xb8 (Binary Ninja expects this) */
     void __iomem *vic_regs;                     /* 0xb8: VIC register base */
-    
-    /* CRITICAL: Padding to reach offset 0xd4 for self-pointer */
-    char padding_to_d4[0xd4 - 0xb8 - sizeof(void *)]; /* Pad to offset 0xd4 */
-    
+
     /* CRITICAL: Self-pointer at offset 0xd4 (Binary Ninja expects this) */
     struct tx_isp_vic_device *self;             /* 0xd4: Self-pointer for Binary Ninja compatibility */
-    
-    /* CRITICAL: Padding to reach offset 0xdc for width/height */
-    char padding_to_dc[0xdc - 0xd4 - sizeof(void *)]; /* Pad to offset 0xdc */
-    
+
     /* CRITICAL: Frame dimensions at expected offsets */
     uint32_t width;                             /* 0xdc: Frame width (Binary Ninja expects this) */
     uint32_t height;                            /* 0xe0: Frame height (Binary Ninja expects this) */
@@ -126,16 +118,12 @@ struct tx_isp_vic_device {
     
     /* CRITICAL: Buffer management with proper alignment and expected offsets */
     /* These need to be at specific offsets for Binary Ninja compatibility */
-    char padding_to_1f4[0x1f4 - 0x100];        /* Pad to buffer management lock offset */
     spinlock_t buffer_mgmt_lock;                /* 0x1f4: Buffer management spinlock */
     
-    char padding_to_210[0x210 - 0x1f4 - sizeof(spinlock_t)]; /* Pad to stream state offset */
     int stream_state;                           /* 0x210: Stream state: 0=off, 1=on */
     
-    char padding_to_214[0x214 - 0x210 - sizeof(int)]; /* Pad to processing flag offset */
     bool processing;                            /* 0x214: Processing flag */
     
-    char padding_to_218[0x218 - 0x214 - sizeof(bool)]; /* Pad to active buffer count offset */
     uint32_t active_buffer_count;               /* 0x218: Active buffer count */
     
     /* Additional buffer management */
