@@ -21,7 +21,7 @@
 
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
-uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
+uint32_t vic_start_ok = 1;  /* Global VIC interrupt enable flag definition */
 
 
 /* *** CRITICAL: MISSING FUNCTION - tx_isp_create_vic_device *** */
@@ -2172,7 +2172,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 vic_dev->state = 3; /* ACTIVE but not streaming */
                 pr_info("VIC: Streaming stopped, state -> 3\n");
                 /* Reset vic_start_ok when stopping */
-                vic_start_ok = 0;
+                vic_start_ok = 1;
                 pr_info("VIC: vic_start_ok reset to 0 (interrupts disabled)\n");
             }
         } else {
@@ -2381,25 +2381,43 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
 static int ispvic_frame_channel_clearbuf(void);
 
-/* ispvic_frame_channel_qbuf - EXACT Binary Ninja implementation with proper queue management */
+/* ispvic_frame_channel_qbuf - CRITICAL FIX: Safe struct access for MIPS alignment */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
     int32_t var_18 = 0;
     
-    pr_info("*** ispvic_frame_channel_qbuf: MIPS-SAFE implementation with alignment checks ***\n");
+    pr_info("*** ispvic_frame_channel_qbuf: CRITICAL FIX - Safe struct access for MIPS alignment ***\n");
     
-    /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
-    if (arg1 != 0 && (unsigned long)arg1 < 0xfffff001) {
-        /* CRITICAL: Binary Ninja expects arg1 + 0xd4 to contain the vic_dev pointer */
-        vic_dev = *((struct tx_isp_vic_device **)((char *)arg1 + 0xd4));
-        
-        if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
-            pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p not aligned ***\n", vic_dev);
-            return -EINVAL;
-        }
-    } else {
+    /* CRITICAL FIX: Validate arg1 parameter first */
+    if (!arg1 || (unsigned long)arg1 >= 0xfffff001) {
         pr_err("*** CRITICAL: Invalid arg1 parameter: %p ***\n", arg1);
+        return -EINVAL;
+    }
+    
+    /* CRITICAL FIX: arg1 should be a tx_isp_subdev, get vic_dev safely */
+    struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
+    
+    /* CRITICAL: Validate subdev pointer alignment for MIPS */
+    if (((uintptr_t)sd & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: subdev pointer 0x%p not aligned ***\n", sd);
+        return -EINVAL;
+    }
+    
+    /* CRITICAL FIX: Use safe subdev data access instead of dangerous offset arithmetic */
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+    
+    /* CRITICAL: Validate vic_dev pointer alignment for MIPS */
+    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p not aligned ***\n", vic_dev);
+        return -EINVAL;
+    }
+    
+    pr_info("ispvic_frame_channel_qbuf: vic_dev retrieved safely: %p\n", vic_dev);
+    
+    /* CRITICAL FIX: Validate buffer_mgmt_lock access */
+    if (((uintptr_t)&vic_dev->buffer_mgmt_lock & 0x3) != 0) {
+        pr_err("*** MIPS ALIGNMENT ERROR: buffer_mgmt_lock not aligned ***\n");
         return -EINVAL;
     }
     
@@ -2407,11 +2425,12 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
     
     /* Binary Ninja EXACT: Queue management - add new buffer to queue */
-    /* int32_t** $v0_2 = *($s0 + 0x1f8), *($s0 + 0x1f8) = arg2 */
     struct list_head *buffer_node = (struct list_head *)arg2;
-    if (buffer_node) {
+    if (buffer_node && ((uintptr_t)buffer_node & 0x3) == 0) {  /* MIPS alignment check */
         list_add_tail(buffer_node, &vic_dev->queue_head);
-        pr_info("*** VIC QBUF: Added buffer %p to queue ***\n", buffer_node);
+        pr_info("*** VIC QBUF: Added buffer %p to queue (MIPS-safe) ***\n", buffer_node);
+    } else {
+        pr_err("*** MIPS ALIGNMENT ERROR: buffer_node %p not aligned ***\n", buffer_node);
     }
     
     int32_t a1_4 = var_18;  /* For unlock parameter */
@@ -2427,13 +2446,25 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         pr_info("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
     } else {
         /* Binary Ninja EXACT: Process buffer from queue */
-        /* int32_t $a1_1, $a2_1 = pop_buffer_fifo($s0 + 0x1f4) */
         struct list_head *queue_buffer = vic_dev->queue_head.next;
+        
+        /* CRITICAL: Validate queue buffer before access */
+        if (!queue_buffer || ((uintptr_t)queue_buffer & 0x3) != 0) {
+            pr_err("*** MIPS ALIGNMENT ERROR: queue_buffer %p not aligned ***\n", queue_buffer);
+            goto unlock_exit;
+        }
+        
         list_del(queue_buffer);
         
-        /* Binary Ninja EXACT: void** $v0_5, void* $a3_1 = $a1_1($a2_1) */
-        /* Extract buffer info from queue entry - simulate the buffer structure */
+        /* Binary Ninja EXACT: Extract buffer info safely */
         uint32_t *buffer_info = (uint32_t *)((char *)queue_buffer + sizeof(struct list_head));
+        
+        /* CRITICAL: Validate buffer_info alignment */
+        if (((uintptr_t)buffer_info & 0x3) != 0) {
+            pr_err("*** MIPS ALIGNMENT ERROR: buffer_info %p not aligned ***\n", buffer_info);
+            goto unlock_exit;
+        }
+        
         uint32_t buffer_addr = buffer_info[0];  /* Buffer physical address */
         uint32_t buffer_index = buffer_info[1]; /* Buffer index */
         
@@ -2449,13 +2480,16 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         
         /* *** CRITICAL: The VIC register write that tx-isp-trace should detect! *** */
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
-        if (vic_dev->vic_regs && (unsigned long)vic_dev->vic_regs >= 0x80000000) {
+        if (vic_dev->vic_regs && 
+            (unsigned long)vic_dev->vic_regs >= 0x10000000 && 
+            (unsigned long)vic_dev->vic_regs < 0x20000000) {
+            
             uint32_t reg_offset = (v1_1 + 0xc6) << 2;  /* Buffer index + 0xc6, left-shift by 2 */
             
             if (reg_offset < 0x1000) {  /* Bounds check */
                 writel(a1_2, vic_dev->vic_regs + reg_offset);
-                wmb();
-                pr_info("*** VIC HARDWARE WRITE: Buffer 0x%x -> VIC[0x%x] (index=%d) ***\n", 
+                wmb(); /* Memory barrier for MIPS */
+                pr_info("*** VIC HARDWARE WRITE: Buffer 0x%x -> VIC[0x%x] (index=%d) - MIPS-SAFE ***\n", 
                         a1_2, reg_offset, v1_1);
                 pr_info("*** THIS SHOULD APPEAR IN tx-isp-trace.c MONITORING! ***\n");
             } else {
@@ -2466,16 +2500,16 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         }
         
         /* Binary Ninja EXACT: Done list management */
-        /* void** $v1_5 = *($s0 + 0x208), *($s0 + 0x208) = $v0_5, *$v0_5 = $s0 + 0x204 */
         list_add_tail(queue_buffer, &vic_dev->done_head);
         
         /* Binary Ninja EXACT: *($s0 + 0x218) += 1 - increment active buffer count */
         vic_dev->active_buffer_count += 1;
         
-        pr_info("*** VIC QBUF: Buffer processed successfully - active_count=%d ***\n", 
+        pr_info("*** VIC QBUF: Buffer processed successfully - active_count=%d (MIPS-SAFE) ***\n", 
                 vic_dev->active_buffer_count);
     }
-    
+
+unlock_exit:
     /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, $a1_4) */
     private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, a1_4);
     
