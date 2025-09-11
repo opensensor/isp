@@ -4411,14 +4411,14 @@ static int tx_isp_init(void)
     }
     
     /* *** CRITICAL: Initialize hardware interrupt handling for BOTH IRQs *** */
-    pr_info("*** INITIALIZING HARDWARE INTERRUPTS FOR IRQ 37 AND 38 ***\n");
-    ret = tx_isp_init_hardware_interrupts(ourISPdev);
-    if (ret) {
-        pr_warn("Hardware interrupts not available: %d\n", ret);
-    } else {
-        pr_info("*** HARDWARE INTERRUPT INITIALIZATION COMPLETE ***\n");
-        pr_info("*** SHOULD SEE BOTH IRQ 37 AND 38 IN /proc/interrupts NOW ***\n");
-    }
+//    pr_info("*** INITIALIZING HARDWARE INTERRUPTS FOR IRQ 37 AND 38 ***\n");
+//    ret = tx_isp_init_hardware_interrupts(ourISPdev);
+//    if (ret) {
+//        pr_warn("Hardware interrupts not available: %d\n", ret);
+//    } else {
+//        pr_info("*** HARDWARE INTERRUPT INITIALIZATION COMPLETE ***\n");
+//        pr_info("*** SHOULD SEE BOTH IRQ 37 AND 38 IN /proc/interrupts NOW ***\n");
+//    }
     
     /* *** CRITICAL: Register BOTH IRQ handlers for complete interrupt support *** */
     pr_info("*** REGISTERING BOTH IRQ HANDLERS (37 + 38) FOR COMPLETE INTERRUPT SUPPORT ***\n");
