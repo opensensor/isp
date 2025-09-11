@@ -290,14 +290,8 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     pr_info("*** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***\n");
     pr_info("csi_video_s_stream: sd=%p, enable=%d\n", sd, enable);
 
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) */
-    if (!sd || (unsigned long)sd >= 0xfffff001) {
-        pr_err("%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", __func__, __LINE__);
-        return 0xffffffea; /* -EINVAL */
-    }
-
     /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0xd4 */
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = ourISPdev->csi_dev;
     if (!csi_dev) {
         pr_err("CSI device is NULL\n");
         
@@ -431,7 +425,7 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         return -EINVAL;
 
     /* Get the CSI device from the subdevice */
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = ourISPdev->csi_dev;
     if (!csi_dev) {
         pr_err("CSI device is NULL\n");
         return -EINVAL;
@@ -576,8 +570,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
     if (!sd)
         return -EINVAL;
 
-    /* CRITICAL FIX: Use safe subdev data access */
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = ourISPdev->csi_dev;
     if (!csi_dev) {
         pr_err("CSI device is NULL\n");
         return -EINVAL;
@@ -925,7 +918,7 @@ void dump_csi_reg(struct tx_isp_subdev *sd)
         return;
     }
 
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = ourISPdev->csi_dev;
     if (!csi_dev) {
         pr_err("dump_csi_reg: csi_dev is NULL\n");
         return;
@@ -973,7 +966,7 @@ void check_csi_error(struct tx_isp_subdev *sd)
         return;
     }
 
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = ourISPdev->csi_dev;
     if (!csi_dev) {
         pr_err("check_csi_error: csi_dev is NULL\n");
         return;
@@ -1040,7 +1033,7 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
     if (!sd)
         return -EINVAL;
     
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = ourISPdev->csi_dev;
     if (!csi_dev) {
         pr_err("CSI device is NULL\n");
         return -EINVAL;
@@ -1065,7 +1058,7 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
     if (!sd)
         return -EINVAL;
         
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = ourISPdev->csi_dev;
     if (!csi_dev) {
         pr_err("CSI device is NULL\n");
         return -EINVAL;
