@@ -690,17 +690,15 @@ static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc)
 /**
  * tx_isp_vic_device_init - Initialize VIC device (stub implementation)
  */
-
-/* Initialize VIC device */
 int tx_isp_vic_device_init(struct tx_isp_dev *isp)
 {
-    struct vic_device *vic_dev;
+    struct tx_isp_vic_device *vic_dev;
 
     pr_info("Initializing VIC device\n");
 
     /* Allocate VIC device structure if not already present */
     if (!isp->vic_dev) {
-        vic_dev = kzalloc(sizeof(struct vic_device), GFP_KERNEL);
+        vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
         if (!vic_dev) {
             pr_err("Failed to allocate VIC device\n");
             return -ENOMEM;
@@ -714,11 +712,10 @@ int tx_isp_vic_device_init(struct tx_isp_dev *isp)
 
         isp->vic_dev = vic_dev;
     }
-
-    pr_info("VIC device initialized\n");
+    
+    pr_info("tx_isp_vic_device_init: VIC device initialized (stub)\n");
     return 0;
 }
-
 
 /**
  * tx_isp_csi_device_deinit - Deinitialize CSI device (stub implementation)
