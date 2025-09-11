@@ -754,39 +754,12 @@ int tx_isp_vic_device_deinit(struct tx_isp_dev *isp)
 /* Setup ISP processing pipeline */
 int tx_isp_setup_pipeline(struct tx_isp_dev *isp)
 {
-    int ret;
-
-    pr_info("Setting up ISP processing pipeline: CSI -> VIC -> Output\n");
-
-    /* Initialize the processing pipeline state */
-    isp->pipeline_state = ISP_PIPELINE_IDLE;
-
-    /* Configure default data path settings */
-    if (isp->csi_dev) {
-        isp->csi_dev->state = 1; /* INIT state */
-        pr_info("CSI device ready for configuration\n");
+    if (!isp) {
+        pr_err("tx_isp_setup_pipeline: Invalid ISP device\n");
+        return -EINVAL;
     }
-
-    if (isp->vic_dev) {
-        isp->vic_dev->state = 1; /* INIT state */
-        pr_info("VIC device ready for configuration\n");
-    }
-
-    /* Setup media entity links and pads */
-    ret = tx_isp_setup_media_links(isp);
-    if (ret < 0) {
-        pr_err("Failed to setup media links: %d\n", ret);
-        return ret;
-    }
-
-    /* Configure default link routing */
-    ret = tx_isp_configure_default_links(isp);
-    if (ret < 0) {
-        pr_err("Failed to configure default links: %d\n", ret);
-        return ret;
-    }
-
-    pr_info("ISP pipeline setup completed\n");
+    
+    pr_info("tx_isp_setup_pipeline: ISP pipeline configured (stub)\n");
     return 0;
 }
 
