@@ -25,6 +25,37 @@ module_param(print_level, int, S_IRUGO);
 MODULE_PARM_DESC(print_level, "isp print level");
 int tx_isp_configure_clocks(struct tx_isp_dev *isp);
 
+/* Forward declarations */
+int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
+static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp);
+int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
+static int tx_isp_setup_media_links(struct tx_isp_dev *isp);
+static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp);
+static int tx_isp_create_subdev_links(struct tx_isp_dev *isp);
+static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link);
+static int tx_isp_configure_default_links(struct tx_isp_dev *isp);
+int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
+static int tx_isp_vic_device_init(struct tx_isp_dev *isp);
+static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
+static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
+
+/* Forward declaration for VIC device creation from tx_isp_vic.c */
+extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
+
+/* Critical ISP Core initialization functions - MISSING FROM LOGS! */
+static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
+static int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
+static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
+static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sensor_attr);
+irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id);
+int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
+int sensor_init(struct tx_isp_dev *isp_dev);
+void *isp_core_tuning_init(void *arg1);
+int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
+void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
+void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
+void system_reg_write(u32 reg, u32 value);
+
 
 /* Debug macro for sensor functions */
 #define ISP_DEBUG(fmt, ...) \
@@ -441,37 +472,6 @@ static struct tx_isp_subdev_ops core_subdev_ops = {
     .sensor = NULL,   /* Sensor operations */
     .internal = NULL  /* Internal operations */
 };
-
-/* Forward declarations */
-int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
-static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp);
-int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
-static int tx_isp_setup_media_links(struct tx_isp_dev *isp);
-static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp);
-static int tx_isp_create_subdev_links(struct tx_isp_dev *isp);
-static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link);
-static int tx_isp_configure_default_links(struct tx_isp_dev *isp);
-int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
-static int tx_isp_vic_device_init(struct tx_isp_dev *isp);
-static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
-static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
-
-/* Forward declaration for VIC device creation from tx_isp_vic.c */
-extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
-
-/* Critical ISP Core initialization functions - MISSING FROM LOGS! */
-static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
-static int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
-static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
-static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sensor_attr);
-irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id);
-int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
-int sensor_init(struct tx_isp_dev *isp_dev);
-void *isp_core_tuning_init(void *arg1);
-int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
-void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
-void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
-void system_reg_write(u32 reg, u32 value);
 
 /* ISP interrupt dispatch system - EXACT Binary Ninja implementation */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
