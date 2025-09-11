@@ -229,7 +229,7 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 
                 /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
                 /* This checks if current buffer address matches hardware register */
-                u32 current_frame_addr = readl(vic_regs + 0x380);
+                u32 current_frame_addr = readl(vic_base + 0x380);
                 /* In a real implementation, would extract buffer address from list entry */
                 /* For now, simulate the match check without dangerous pointer arithmetic */
                 if ((buffer_count & 1) && current_frame_addr != 0) {
@@ -247,9 +247,9 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             }
             
             /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
-            u32 reg_300_val = readl(vic_regs + 0x300);
+            u32 reg_300_val = readl(vic_base + 0x300);
             reg_300_val = (reg_300_val & 0xfff0ffff) | shift_result;
-            writel(reg_300_val, vic_regs + 0x300);
+            writel(reg_300_val, vic_base + 0x300);
             
             pr_debug("vic_framedone_irq_function: Updated reg 0x300 = 0x%x (buffers: count=%d, found=%d, match=%d)\n",
                      reg_300_val, buffer_count, buffer_found, buffer_match);
