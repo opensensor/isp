@@ -1399,15 +1399,6 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     csi_dev->sd.ops = NULL;  /* Would be &csi_subdev_ops in full implementation */
     csi_dev->sd.vin_state = TX_ISP_MODULE_INIT;
     
-    /* *** CRITICAL: Map CSI basic control registers - Binary Ninja 0x10022000 *** */
-    /* Binary Ninja: private_request_mem_region(0x10022000, 0x1000, "Can not support this frame mode!!!\\n") */
-    mem_resource = request_mem_region(0x10022000, 0x1000, "tx-isp-csi");
-    if (!mem_resource) {
-        pr_err("csi_device_probe: Cannot request CSI memory region 0x10022000\n");
-        ret = -EBUSY;
-        goto err_free_dev;
-    }
-    
     /* Binary Ninja: private_ioremap($a0_2, $v0_3[1] + 1 - $a0_2) */
     csi_basic_regs = ioremap(0x10022000, 0x1000);
     if (!csi_basic_regs) {
