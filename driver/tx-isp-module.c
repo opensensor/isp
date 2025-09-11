@@ -4965,34 +4965,6 @@ static void tx_vic_disable_irq_complete(struct tx_isp_dev *isp_dev)
     pr_info("*** tx_vic_disable_irq COMPLETE - VIC INTERRUPTS DISABLED ***\n");
 }
 
-/* COMPLETE VIC INTERRUPT ENABLE FUNCTION - FROM tx_vic_enable_irq BINARY NINJA */
-static void tx_vic_enable_irq_complete(struct tx_isp_dev *isp_dev)
-{
-    struct tx_isp_vic_device *vic_dev;
-    unsigned long flags;
-    
-    if (!isp_dev || !isp_dev->vic_dev) {
-        pr_info("VIC interrupt enable: no VIC device\n");
-        return;
-    }
-    
-    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-    
-    pr_info("*** IMPLEMENTING tx_vic_enable_irq FROM BINARY NINJA ***\n");
-    
-    local_irq_save(flags);
-    
-    /* Restore interrupt enable state */
-    if (vic_dev) {
-        vic_dev->state = 2; /* Mark as interrupt-enabled active state */
-        pr_info("VIC interrupt state restored, device in active mode\n");
-    }
-    
-    local_irq_restore(flags);
-    
-    pr_info("*** tx_vic_enable_irq COMPLETE - VIC INTERRUPTS ENABLED ***\n");
-}
-
 /* Simple VIC activation - minimal like reference driver */
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
 {
