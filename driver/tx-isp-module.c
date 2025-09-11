@@ -2816,8 +2816,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
             }
 
-            // Trigger Core Streaming
-            if (ourISPdev && ourISPdev->core_dev) {
+            // Trigger Core Streaming - using ourISPdev directly as it contains the core functionality
+            pr_info("*** Channel %d: Core streaming functionality integrated in main ISP device ***\n", channel);
 
         } else {
             if (channel == 0) {
