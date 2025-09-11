@@ -2255,7 +2255,7 @@ void __private_spin_lock_irqsave(spinlock_t *lock, unsigned long *flags)
         *flags = 0; /* Set flags to 0 to indicate we didn't disable IRQs */
     } else {
         /* Safe to disable IRQs */
-        raw_spin_lock_irqsave(spinlock_check(lock), *flags);
+        spin_lock_irqsave(lock, *flags);
         pr_debug("MCP_CONTEXT: __private_spin_lock_irqsave: IRQs disabled, flags=0x%lx\n", *flags);
     }
 }
@@ -2799,19 +2799,18 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             if ((arg1[7] & 0xff) != 3) /* zx.d(*(arg1 + 7)) != 3 */
                 return 0;
             
-            __private_spin_lock_irqsave((char*)s2_1 + 0x9c, &var_58);
+            /* CRITICAL FIX: Remove spinlock to avoid atomic context during I2C operations */
+            /* The original code used __private_spin_lock_irqsave here, but this creates */
+            /* atomic context which prevents I2C operations (which can sleep) from working */
+            ISP_INFO("ispcore_pad_event_handle: FIXED - No spinlock to allow I2C operations in process context");
             
             if (*((uint32_t*)s2_1 + 0x1d) != 4) { /* *(s2_1 + 0x74) != 4 */
                 tisp_channel_start((uint32_t)arg1[1] & 0xff, NULL); /* zx.d(arg1[1].b) */
                 *((uint32_t*)s2_1 + 0x1d) = 4; /* *(s2_1 + 0x74) = 4 */
-                uint32_t a1_6 = var_58;
                 arg1[7] = 4;
                 result = 0;
-                private_spin_unlock_irqrestore((char*)s2_1 + 0x9c, a1_6);
                 ISP_INFO("ispcore_pad_event_handle: channel started successfully");
             } else {
-                arch_local_irq_restore(var_58);
-                /* Preemption handling */
                 result = 0;
                 ISP_INFO("ispcore_pad_event_handle: channel already started");
             }
