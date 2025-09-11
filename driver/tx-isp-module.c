@@ -2110,8 +2110,8 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             enable ? "ENABLE" : "DISABLE");
     
     /* CORRECTED: Use direct VIC device reference */
-    if (dev->vic_dev) {
-        struct tx_isp_vic_device *vic_dev = dev->vic_dev;
+    if (ourISPdev->vic_dev) {
+        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
         
         if (vic_dev->sd.ops && vic_dev->sd.ops->video && vic_dev->sd.ops->video->s_stream) {
             pr_info("*** Calling VIC s_stream directly: enable=%d ***\n", enable);
@@ -2128,8 +2128,8 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     }
     
     /* CORRECTED: Use direct CSI device reference */
-    if (dev->csi_dev) {
-        struct tx_isp_csi_device *csi_dev = dev->csi_dev;
+    if (ourISPdev->csi_dev) {
+        struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
         
         if (csi_dev->sd.ops && csi_dev->sd.ops->video && csi_dev->sd.ops->video->s_stream) {
             pr_info("*** Calling CSI s_stream directly: enable=%d ***\n", enable);
@@ -2154,8 +2154,8 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     }
     
     /* CORRECTED: Use direct sensor reference */
-    if (dev->sensor) {
-        struct tx_isp_sensor *sensor = dev->sensor;
+    if (ourISPdev->sensor) {
+        struct tx_isp_sensor *sensor = ourISPdev->sensor;
         
         if (sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
             pr_info("*** Calling sensor s_stream directly: enable=%d ***\n", enable);
@@ -2165,14 +2165,14 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
                 pr_err("Sensor s_stream failed: %d\n", ret);
                 /* Rollback: disable CSI and VIC if we were enabling */
                 if (enable) {
-                    if (dev->csi_dev) {
+                    if (ourISPdev->csi_dev) {
                         struct tx_isp_csi_device *csi_dev = dev->csi_dev;
                         if (csi_dev->sd.ops && csi_dev->sd.ops->video && 
                             csi_dev->sd.ops->video->s_stream) {
                             csi_dev->sd.ops->video->s_stream(&csi_dev->sd, 0);
                         }
                     }
-                    if (dev->vic_dev) {
+                    if (ourISPdev->vic_dev) {
                         struct tx_isp_vic_device *vic_dev = dev->vic_dev;
                         if (vic_dev->sd.ops && vic_dev->sd.ops->video && 
                             vic_dev->sd.ops->video->s_stream) {
