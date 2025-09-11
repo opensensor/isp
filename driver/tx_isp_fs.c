@@ -295,11 +295,9 @@ setup_complete:
     platform_set_drvdata(pdev, fs_dev);
     
     /* Binary Ninja: *($v0 + 0x34) = &isp_framesource_fops */
-    *(const struct file_operations **)((char *)&fs_dev->subdev + 0x34) = &isp_framesource_fops;
-    
+
     /* Binary Ninja: *($v0 + 0xd4) = $v0 */
-    *(struct tx_isp_fs_device **)((char *)fs_dev + 0xd4) = fs_dev;  /* Self-pointer */
-    
+
     pr_info("*** tx_isp_fs_probe: FS device created successfully (size=0xe8, channels=%d) ***\n", 
             channel_count);
     pr_info("*** FS PROBE COMPLETE - /proc/jz/isp/isp-fs SHOULD NOW BE AVAILABLE ***\n");

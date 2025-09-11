@@ -1931,13 +1931,6 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
     
-    /* Validate vic_dev structure integrity */
-    if (vic_dev->self != vic_dev) {
-        pr_err("vic_pipo_mdma_enable: VIC device structure corrupted (self=%p, vic_dev=%p)\n", 
-               vic_dev->self, vic_dev);
-        return;
-    }
-    
     /* FIXED: Safe struct member access instead of offset 0xb8 */
     vic_base = vic_dev->vic_regs;
     
@@ -2017,13 +2010,6 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
     }
     
     pr_info("ispvic_frame_channel_s_stream: vic_dev=%p (safely retrieved)\n", vic_dev);
-    
-    /* Validate vic_dev structure integrity */
-    if (vic_dev->self != vic_dev) {
-        pr_err("ispvic_frame_channel_s_stream: VIC device structure corrupted (self=%p, vic_dev=%p)\n", 
-               vic_dev->self, vic_dev);
-        return -EINVAL;
-    }
     
     stream_op = (arg2 != 0) ? "streamon" : "streamoff";
     pr_info("%s[%d]: %s\n", "ispvic_frame_channel_s_stream", __LINE__, stream_op);
@@ -2353,9 +2339,6 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Store global reference (binary uses 'dump_vsd' global) */
     dump_vsd = vic_dev;
 
-    /* Set self-reference (binary sets at offset 0xd4) */
-    vic_dev->self = vic_dev;
-
     /* Set test_addr to point to sensor_attr or appropriate member */
     /* Binary points to offset 0x80 in the structure */
     test_addr = &vic_dev->sensor_attr;  /* Or another member around offset 0x80 */
@@ -2364,7 +2347,6 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     pr_info("VIC device: vic_dev=%p, size=%zu\n", vic_dev, sizeof(struct tx_isp_vic_device));
     pr_info("  sd: %p\n", sd);
     pr_info("  state: %d\n", vic_dev->state);
-    pr_info("  self-ref: %p\n", vic_dev->self);
     pr_info("  test_addr: %p\n", test_addr);
 
     return 0;

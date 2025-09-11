@@ -92,9 +92,6 @@ struct tx_isp_vic_device {
     /* CRITICAL: VIC register base at offset 0xb8 (Binary Ninja expects this) */
     void __iomem *vic_regs;                     /* 0xb8: VIC register base */
 
-    /* CRITICAL: Self-pointer at offset 0xd4 (Binary Ninja expects this) */
-    struct tx_isp_vic_device *self;             /* 0xd4: Self-pointer for Binary Ninja compatibility */
-
     /* CRITICAL: Frame dimensions at expected offsets */
     uint32_t width;                             /* 0xdc: Frame width (Binary Ninja expects this) */
     uint32_t height;                            /* 0xe0: Frame height (Binary Ninja expects this) */
