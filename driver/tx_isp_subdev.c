@@ -147,9 +147,9 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
     }
 
     // Link CSI output -> VIC input
-    if (dev->csi_dev && dev->csi_dev->sd && dev->vic_dev && dev->vic_dev->sd) {
-        if (!dev->csi_dev->sd->ops || !dev->csi_dev->sd->ops->video ||
-            !dev->csi_dev->sd->ops->video->link_setup) {
+    if (dev->csi_dev && dev->csi_dev->sd && dev->vic_dev) {
+        if (!dev->vic_dev->sd.ops || !dev->vic_dev->sd.ops->video ||
+            !dev->vic_dev->sd.ops->video->link_setup) {
             pr_err("CSI subdev missing required ops\n");
             return -EINVAL;
         }
@@ -157,7 +157,7 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
         pr_info("Setting up CSI -> VIC link\n");
         ret = dev->csi_dev->sd->ops->video->link_setup(
             &dev->csi_dev->sd->outpads[0],
-            &dev->vic_dev->sd->inpads[0],
+            &dev->vic_dev->sd.inpads[0],
             TX_ISP_LINKFLAG_ENABLED
         );
         if (ret && ret != -ENOIOCTLCMD) {
@@ -167,16 +167,16 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
     }
 
     // Link VIC outputs to DDR device if present
-    if (dev->vic_dev && dev->vic_dev->sd && dev->ddr_dev && dev->ddr_dev->sd) {
-        if (!dev->vic_dev->sd->ops || !dev->vic_dev->sd->ops->video ||
-            !dev->vic_dev->sd->ops->video->link_setup) {
+    if (dev->vic_dev && dev->ddr_dev && dev->ddr_dev->sd) {
+        if (!dev->vic_dev->sd.ops || !dev->vic_dev->sd.ops->video ||
+            !dev->vic_dev->sd.ops->video->link_setup) {
             pr_err("VIC subdev missing required ops\n");
             return -EINVAL;
         }
 
         pr_info("Setting up VIC -> DDR link\n");
-        ret = dev->vic_dev->sd->ops->video->link_setup(
-            &dev->vic_dev->sd->outpads[0],
+        ret = dev->vic_dev->sd.ops->video->link_setup(
+            &dev->vic_dev->sd.outpads[0],
             &dev->ddr_dev->sd->inpads[0],
             TX_ISP_LINKFLAG_ENABLED
         );
@@ -186,10 +186,10 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
         }
 
         // Link second VIC output if present
-        if (dev->vic_dev->sd->num_outpads > 1) {
+        if (dev->vic_dev->sd.num_outpads > 1) {
             pr_info("Setting up second VIC -> DDR link\n");
-            ret = dev->vic_dev->sd->ops->video->link_setup(
-                &dev->vic_dev->sd->outpads[1],
+            ret = dev->vic_dev->sd.ops->video->link_setup(
+                &dev->vic_dev->sd.outpads[1],
                 &dev->ddr_dev->sd->inpads[0],
                 TX_ISP_LINKFLAG_ENABLED
             );
