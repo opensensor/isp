@@ -4286,7 +4286,7 @@ static int tx_isp_init(void)
         
         /* Set up CSI subdev with ops pointing to csi_subdev_ops */
         csi_dev->sd.ops = &csi_subdev_ops;
-        csi_dev->sd.isp = (void*)ourISPdev;
+        // csi_dev->sd.isp = (void*)ourISPdev;
         
         /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
         //ourISPdev->subdevs[1] = &csi_dev->sd;
