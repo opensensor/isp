@@ -1981,70 +1981,93 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - RACE CONDITION FIXED ***\n");
 }
 
-/* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja Implementation */
+/* ISPVIC Frame Channel S_Stream - FIXED: Safe struct member access */
 int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
     void __iomem *vic_base = NULL;
-    int32_t var_18 = 0;
+    unsigned long flags;
     const char *stream_op;
     
-    pr_info("*** ispvic_frame_channel_s_stream: RACE CONDITION FIX ***\n");
-    pr_info("ispvic_frame_channel_s_stream: vic_dev=%p, enable=%d\n", arg1, arg2);
+    pr_info("*** ispvic_frame_channel_s_stream: SAFE STRUCT ACCESS FIX ***\n");
+    pr_info("ispvic_frame_channel_s_stream: arg1=%p, enable=%d\n", arg1, arg2);
 
-	vic_dev = ourISPdev->vic_dev;
+    /* CRITICAL FIX: Get vic_dev safely from global reference */
+    if (!ourISPdev) {
+        pr_err("ispvic_frame_channel_s_stream: No global ISP device\n");
+        return -EINVAL;
+    }
     
-    /* Binary Ninja: Set stream operation string */
+    /* CRITICAL FIX: Cast vic_dev properly from ISP device */
+    vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
+    if (!vic_dev) {
+        pr_err("ispvic_frame_channel_s_stream: No VIC device in ISP\n");
+        return -EINVAL;
+    }
+    
+    pr_info("ispvic_frame_channel_s_stream: vic_dev=%p (safely retrieved)\n", vic_dev);
+    
+    /* Validate vic_dev structure integrity */
+    if (vic_dev->self != vic_dev) {
+        pr_err("ispvic_frame_channel_s_stream: VIC device structure corrupted (self=%p, vic_dev=%p)\n", 
+               vic_dev->self, vic_dev);
+        return -EINVAL;
+    }
+    
     stream_op = (arg2 != 0) ? "streamon" : "streamoff";
     pr_info("%s[%d]: %s\n", "ispvic_frame_channel_s_stream", __LINE__, stream_op);
     
-    /* Binary Ninja EXACT: if (arg2 == *($s0 + 0x210)) return 0 */
+    /* FIXED: Safe struct member access instead of offset 0x210 */
     if (arg2 == vic_dev->stream_state) {
+        pr_info("ispvic_frame_channel_s_stream: Stream state unchanged (%d)\n", vic_dev->stream_state);
         return 0;
     }
     
-    /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
-    __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
+    /* FIXED: Safe spinlock access instead of offset 0x1f4 */
+    spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
     
     if (arg2 == 0) {
         /* Stream OFF */
-        /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = 0 */
+        /* FIXED: Safe register base access instead of offset 0xb8 */
         vic_base = vic_dev->vic_regs;
         if (vic_base && (unsigned long)vic_base >= 0x80000000) {
             writel(0, vic_base + 0x300);
             wmb();
             pr_info("ispvic_frame_channel_s_stream: Stream OFF - wrote 0 to reg 0x300\n");
+        } else {
+            pr_err("ispvic_frame_channel_s_stream: Invalid VIC register base %p\n", vic_base);
         }
         
-        /* Binary Ninja EXACT: *($s0 + 0x210) = 0 */
+        /* FIXED: Safe struct member access instead of offset 0x210 */
         vic_dev->stream_state = 0;
         
     } else {
         /* Stream ON */
-        /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
         vic_pipo_mdma_enable(vic_dev);
         
-        /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+        /* FIXED: Safe register base and buffer count access */
         vic_base = vic_dev->vic_regs;
         if (vic_base && (unsigned long)vic_base >= 0x80000000) {
+            /* FIXED: Safe struct member access instead of offset 0x218 */
             u32 stream_ctrl = (vic_dev->active_buffer_count << 16) | 0x80000020;
             writel(stream_ctrl, vic_base + 0x300);
             wmb();
             pr_info("ispvic_frame_channel_s_stream: Stream ON - wrote 0x%x to reg 0x300\n", stream_ctrl);
             
-            /* MCP LOG: Stream ON completed */
             pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n", 
                     stream_ctrl, vic_base, 1);
+        } else {
+            pr_err("ispvic_frame_channel_s_stream: Invalid VIC register base %p\n", vic_base);
         }
         
-        /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
+        /* FIXED: Safe struct member access instead of offset 0x210 */
         vic_dev->stream_state = 1;
     }
     
-    /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, var_18) */
-    private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
+    /* FIXED: Safe spinlock access */
+    spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
     
-    /* Binary Ninja EXACT: return 0 */
+    pr_info("*** ispvic_frame_channel_s_stream: SAFE COMPLETION ***\n");
     return 0;
 }
 
