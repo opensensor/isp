@@ -1185,6 +1185,15 @@ if (!IS_ERR(cgu_isp_clk)) {
     pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
 
 
+    pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
+    tx_isp_enable_irq(isp_dev);
+    pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
+
+    /* *** CRITICAL FIX: Enable VIC hardware interrupts using safe struct access *** */
+    pr_info("*** tx_isp_vic_start: CRITICAL FIX - Enabling VIC hardware interrupts ***\n");
+    tx_vic_enable_irq(vic_dev);
+    pr_info("*** tx_isp_vic_start: VIC hardware interrupts enabled - hw_irq_enabled=%d ***\n", vic_dev->hw_irq_enabled);
+    
     
     /* Take a local copy of sensor attributes to prevent corruption during streaming */
     struct tx_isp_sensor_attribute local_sensor_attr;
@@ -1580,16 +1589,7 @@ if (!IS_ERR(cgu_isp_clk)) {
     
     /* FIXED: Use proper VIC-to-ISP device linkage */
     struct tx_isp_dev *isp_dev = ourISPdev;
-    
-    pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
-    tx_isp_enable_irq(isp_dev);
-    pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
 
-    /* *** CRITICAL FIX: Enable VIC hardware interrupts using safe struct access *** */
-    pr_info("*** tx_isp_vic_start: CRITICAL FIX - Enabling VIC hardware interrupts ***\n");
-    tx_vic_enable_irq(vic_dev);
-    pr_info("*** tx_isp_vic_start: VIC hardware interrupts enabled - hw_irq_enabled=%d ***\n", vic_dev->hw_irq_enabled);
-    
     pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
     pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
 
