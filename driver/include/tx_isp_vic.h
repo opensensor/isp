@@ -145,6 +145,7 @@ struct tx_isp_vic_device {
     int buffer_index[5] __attribute__((aligned(4)));                /* Buffer index array (5 buffers max) */
 
     /* IRQ handling members */
+    int irq __attribute__((aligned(4)));                            /* IRQ number - main IRQ member */
     void (*irq_handler)(void *) __attribute__((aligned(4)));
     void (*irq_disable)(void *) __attribute__((aligned(4)));
     void *irq_priv __attribute__((aligned(4)));
