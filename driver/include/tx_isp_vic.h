@@ -97,6 +97,7 @@ struct tx_isp_vic_device {
     struct tx_isp_vic_device *self;     // Self-pointer for reference driver compatibility
     uint32_t width;                     // Frame width
     uint32_t height;                    // Frame height
+    u32 stride;
     uint32_t pixel_format;              // Pixel format
     struct tx_isp_sensor_attribute sensor_attr; // Sensor attributes
     
@@ -128,10 +129,6 @@ struct tx_isp_vic_device {
     
     // Buffer index array for VIC register mapping
     int buffer_index[5];                // Buffer index array (5 buffers max)
-
-    u32 width;
-    u32 height;
-    u32 stride;
 
     void (*irq_handler)(void *);
     void (*irq_disable)(void *);
