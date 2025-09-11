@@ -1917,13 +1917,13 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
+/* VIC PIPO MDMA Enable function - FIXED: Safe struct member access */
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
     u32 width, height, stride;
     
-    pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** vic_pipo_mdma_enable: SAFE STRUCT ACCESS FIX ***\n");
     
     /* CRITICAL: Validate vic_dev structure first */
     if (!vic_dev) {
@@ -1931,10 +1931,17 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
     
-    /* Binary Ninja: void __iomem *vic_base = *(arg1 + 0xb8) */
+    /* Validate vic_dev structure integrity */
+    if (vic_dev->self != vic_dev) {
+        pr_err("vic_pipo_mdma_enable: VIC device structure corrupted (self=%p, vic_dev=%p)\n", 
+               vic_dev->self, vic_dev);
+        return;
+    }
+    
+    /* FIXED: Safe struct member access instead of offset 0xb8 */
     vic_base = vic_dev->vic_regs;
     
-    /* CRITICAL: Validate VIC register base like Binary Ninja expects */
+    /* CRITICAL: Validate VIC register base */
     if (!vic_base || 
         (unsigned long)vic_base < 0x80000000 ||
         (unsigned long)vic_base == 0x735f656d) {
@@ -1942,15 +1949,20 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
     
-    /* Binary Ninja EXACT: int32_t $v1 = *(arg1 + 0xdc) */
+    /* FIXED: Safe struct member access instead of offsets 0xdc and 0xe0 */
     width = vic_dev->width;
-    /* Binary Ninja: height from *(arg1 + 0xe0) */
     height = vic_dev->height;
     
-    pr_info("vic_pipo_mdma_enable: ATOMIC ACCESS - vic_base=%p, dimensions=%dx%d\n", 
+    /* Validate dimensions */
+    if (width == 0 || height == 0 || width > 4096 || height > 4096) {
+        pr_err("vic_pipo_mdma_enable: Invalid dimensions %dx%d\n", width, height);
+        return;
+    }
+    
+    pr_info("vic_pipo_mdma_enable: SAFE ACCESS - vic_base=%p, dimensions=%dx%d\n", 
             vic_base, width, height);
     
-    /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
+    /* Enable MDMA */
     writel(1, vic_base + 0x308);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
@@ -1959,26 +1971,25 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     pr_info("MCP_LOG: VIC PIPO MDMA enabled - base=%p, dimensions=%dx%d\n", 
             vic_base, width, height);
     
-    /* Binary Ninja EXACT: int32_t $v1_1 = $v1 << 1 */
+    /* Calculate stride (width * 2 for 16-bit pixels) */
     stride = width << 1;
     
-    /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
+    /* Set dimensions register */
     writel((width << 16) | height, vic_base + 0x304);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
             (width << 16) | height, width, height);
     
-    /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
+    /* Set stride registers */
     writel(stride, vic_base + 0x310);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
     
-    /* Binary Ninja EXACT: *(result + 0x314) = $v1_1 */
     writel(stride, vic_base + 0x314);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
     
-    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - RACE CONDITION FIXED ***\n");
+    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - SAFE STRUCT ACCESS ***\n");
 }
 
 /* ISPVIC Frame Channel S_Stream - FIXED: Safe struct member access */
