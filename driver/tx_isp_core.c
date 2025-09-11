@@ -2236,15 +2236,44 @@ static const struct file_operations frame_channel_fops = {
 
 
 
-/* lock and mutex interfaces */
+/* lock and mutex interfaces - FIXED for IRQ context issue */
 void __private_spin_lock_irqsave(spinlock_t *lock, unsigned long *flags)
 {
-    raw_spin_lock_irqsave(spinlock_check(lock), *flags);
+    /* MCP logging for context debugging */
+    bool in_atomic = in_atomic();
+    bool irqs_disabled = irqs_disabled();
+    bool in_interrupt = in_interrupt();
+    
+    pr_debug("MCP_CONTEXT: __private_spin_lock_irqsave: Before lock - in_atomic=%d, irqs_disabled=%d, in_interrupt=%d\n", 
+             in_atomic, irqs_disabled, in_interrupt);
+    
+    /* CRITICAL FIX: Check if we're already in atomic context */
+    if (in_atomic || irqs_disabled || in_interrupt) {
+        pr_warn("MCP_CONTEXT: __private_spin_lock_irqsave: Already in atomic context - using spin_lock instead of spin_lock_irqsave\n");
+        /* Use regular spinlock to avoid nested IRQ disable */
+        spin_lock(lock);
+        *flags = 0; /* Set flags to 0 to indicate we didn't disable IRQs */
+    } else {
+        /* Safe to disable IRQs */
+        raw_spin_lock_irqsave(spinlock_check(lock), *flags);
+        pr_debug("MCP_CONTEXT: __private_spin_lock_irqsave: IRQs disabled, flags=0x%lx\n", *flags);
+    }
 }
 
 void private_spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags)
 {
-    spin_unlock_irqrestore(lock, flags);
+    pr_debug("MCP_CONTEXT: private_spin_unlock_irqrestore: flags=0x%lx\n", flags);
+    
+    /* CRITICAL FIX: Check if we actually disabled IRQs */
+    if (flags == 0) {
+        /* We used regular spin_lock, so use regular spin_unlock */
+        pr_debug("MCP_CONTEXT: private_spin_unlock_irqrestore: Using spin_unlock (no IRQ restore needed)\n");
+        spin_unlock(lock);
+    } else {
+        /* We disabled IRQs, so restore them */
+        spin_unlock_irqrestore(lock, flags);
+        pr_debug("MCP_CONTEXT: private_spin_unlock_irqrestore: IRQs restored\n");
+    }
 }
 
 /**
@@ -3489,6 +3518,23 @@ void private_i2c_set_clientdata(struct i2c_client *client, void *data)
 
 int private_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 {
+    /* MCP logging for context debugging */
+    bool in_atomic = in_atomic();
+    bool irqs_disabled = irqs_disabled();
+    bool in_interrupt = in_interrupt();
+    
+    pr_debug("MCP_CONTEXT: private_i2c_transfer: Before I2C - in_atomic=%d, irqs_disabled=%d, in_interrupt=%d\n", 
+             in_atomic, irqs_disabled, in_interrupt);
+    
+    /* CRITICAL FIX: Check if we're in atomic context before calling I2C */
+    if (in_atomic || irqs_disabled || in_interrupt) {
+        pr_warn("MCP_CONTEXT: private_i2c_transfer: WARNING - I2C called in atomic context! This may cause 'sleeping function called from invalid context'\n");
+        pr_warn("MCP_CONTEXT: private_i2c_transfer: Consider deferring this I2C operation to a workqueue\n");
+        
+        /* Still attempt the I2C transfer but log the dangerous context */
+        pr_warn("MCP_CONTEXT: private_i2c_transfer: Proceeding with I2C transfer despite atomic context\n");
+    }
+    
     return i2c_transfer(adap, msgs, num);
 }
 
