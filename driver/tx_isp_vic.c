@@ -184,6 +184,73 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 
+/* CRITICAL FIX: Implement tx_vic_enable_irq and tx_vic_disable_irq using safe struct access */
+void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
+{
+    unsigned long flags;
+    
+    pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Hardware interrupt enable ***\n");
+    
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_err("tx_vic_enable_irq: Invalid vic_dev parameter\n");
+        return;
+    }
+    
+    /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
+    spin_lock_irqsave(&vic_dev->lock, flags);
+    
+    /* CRITICAL FIX: Use safe struct member access instead of *(dump_vsd_1 + 0x13c) = 1 */
+    if (vic_dev->hw_irq_enabled != 1) {
+        vic_dev->hw_irq_enabled = 1;
+        pr_info("*** tx_vic_enable_irq: Hardware interrupt enable flag SET TO 1 ***\n");
+        
+        /* Binary Ninja: Call hardware enable function if available */
+        if (vic_dev->irq_handler && vic_dev->irq_priv) {
+            vic_dev->irq_handler(vic_dev->irq_priv);
+            pr_info("tx_vic_enable_irq: Called hardware enable function\n");
+        }
+    } else {
+        pr_info("tx_vic_enable_irq: Hardware interrupts already enabled\n");
+    }
+    
+    spin_unlock_irqrestore(&vic_dev->lock, flags);
+    
+    pr_info("*** tx_vic_enable_irq: COMPLETED - hw_irq_enabled=%d ***\n", vic_dev->hw_irq_enabled);
+}
+
+void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
+{
+    unsigned long flags;
+    
+    pr_info("*** tx_vic_disable_irq: Hardware interrupt disable ***\n");
+    
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_err("tx_vic_disable_irq: Invalid vic_dev parameter\n");
+        return;
+    }
+    
+    /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
+    spin_lock_irqsave(&vic_dev->lock, flags);
+    
+    /* CRITICAL FIX: Use safe struct member access instead of *(dump_vsd_1 + 0x13c) = 0 */
+    if (vic_dev->hw_irq_enabled != 0) {
+        vic_dev->hw_irq_enabled = 0;
+        pr_info("*** tx_vic_disable_irq: Hardware interrupt enable flag SET TO 0 ***\n");
+        
+        /* Binary Ninja: Call hardware disable function if available */
+        if (vic_dev->irq_disable && vic_dev->irq_priv) {
+            vic_dev->irq_disable(vic_dev->irq_priv);
+            pr_info("tx_vic_disable_irq: Called hardware disable function\n");
+        }
+    } else {
+        pr_info("tx_vic_disable_irq: Hardware interrupts already disabled\n");
+    }
+    
+    spin_unlock_irqrestore(&vic_dev->lock, flags);
+    
+    pr_info("*** tx_vic_disable_irq: COMPLETED - hw_irq_enabled=%d ***\n", vic_dev->hw_irq_enabled);
+}
+
 /* Forward declaration for streaming functions */
 int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2);
 

@@ -43,6 +43,10 @@ extern uint32_t vic_start_ok;  /* Global VIC interrupt enable flag declaration *
 int tx_isp_vic_probe(struct platform_device *pdev);
 int tx_isp_vic_remove(struct platform_device *pdev);
 
+/* VIC interrupt enable/disable functions (matching reference driver names) */
+void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev);
+void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
+
 /* VIC Operations - Use existing vic_device from tx_isp.h */
 int tx_isp_vic_stop(struct tx_isp_subdev *sd);
 int tx_isp_vic_set_buffer(struct tx_isp_subdev *sd, dma_addr_t addr, u32 size);
@@ -147,6 +151,9 @@ struct tx_isp_vic_device {
     int irq_enabled __attribute__((aligned(4)));
     int irq_number __attribute__((aligned(4)));                     /* IRQ number from platform device */
     irq_handler_t irq_handler_func __attribute__((aligned(4)));     /* IRQ handler function pointer */
+    
+    /* CRITICAL FIX: Hardware interrupt enable flag (replaces unsafe offset 0x13c access) */
+    int hw_irq_enabled __attribute__((aligned(4)));                 /* Hardware interrupt enable flag - SAFE replacement for offset 0x13c */
 } __attribute__((aligned(4), packed));
 
 
