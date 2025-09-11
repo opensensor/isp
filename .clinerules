@@ -1,0 +1,29 @@
+# Cline Rules for ISP Driver Project
+
+## Build Environment Rules
+
+### DO NOT ATTEMPT TO BUILD KERNEL MODULES ON THIS MACHINE
+- This development machine (WSL2) is not set up for kernel module compilation
+- The target hardware is MIPS-based T31 SoC running Linux 3.10
+- Building requires cross-compilation toolchain and target kernel headers
+- Focus on code analysis, debugging, and source code fixes instead
+- Any compilation attempts will fail due to missing kernel headers and wrong architecture
+
+### When User Asks About Building:
+- Explain that this is a development/analysis environment only
+- Suggest that building should be done on the target hardware or proper cross-compilation environment
+- Focus on code correctness and static analysis instead
+
+### Acceptable Development Tasks:
+- Code analysis and review
+- Adding forward declarations and fixing compilation errors in source
+- Debugging kernel crashes from logs
+- Implementing missing functions based on Binary Ninja analysis
+- Documentation and code comments
+- Static analysis with tools like clang-tidy
+
+### NOT Acceptable:
+- Running `make` or attempting kernel module compilation
+- Installing kernel headers for wrong architecture
+- Trying to set up cross-compilation without explicit user request
+- Complaining about missing build environment when it's intentional
