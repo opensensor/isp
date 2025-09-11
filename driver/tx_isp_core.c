@@ -3187,43 +3187,45 @@ int tx_isp_core_probe(struct platform_device *pdev)
             struct tx_isp_frame_channel *current_channel = (struct tx_isp_frame_channel *)channel_array;
             
             while (channel_idx < channel_count) {
-                /* SAFE: Initialize channel using proper struct members */
-                current_channel->channel_id = channel_idx;
-                current_channel->isp_dev = isp_dev;
+                /* SAFE: Initialize channel using proper struct members from tx-isp-device.h */
+                /* tx_isp_frame_channel has: misc, name, pad, pad_id, slock, mlock, frame_done, state, active */
                 
-                /* Initialize channel based on index */
-                current_channel->enabled = true;  /* Enable all channels for testing */
+                /* Initialize channel state and basic fields */
+                current_channel->state = 1;  /* INIT state */
+                current_channel->active = 1; /* Active state */
+                current_channel->pad_id = channel_idx;
                 
-                if (current_channel->enabled) {
-                    /* Channel-specific configuration using safe member access */
+                /* Initialize channel name */
+                snprintf(current_channel->name, sizeof(current_channel->name), "framechan%d", channel_idx);
+                
+                /* Initialize synchronization primitives */
+                spin_lock_init(&current_channel->slock);
+                mutex_init(&current_channel->mlock);
+                init_completion(&current_channel->frame_done);
+                
+                /* SAFE: Set up event handler using isp_channel structure instead */
+                if (channel_idx < ISP_MAX_CHAN) {
+                    /* Use isp_channel structure which has the correct members */
+                    isp_dev->channels[channel_idx].channel_id = channel_idx;
+                    isp_dev->channels[channel_idx].enabled = true;
+                    isp_dev->channels[channel_idx].state = 1;  /* INIT state */
+                    isp_dev->channels[channel_idx].dev = &pdev->dev;
+                    
+                    /* Set up event handler using correct member name */
+                    isp_dev->channels[channel_idx].event_hdlr = (struct isp_event_handler *)ispcore_pad_event_handle;
+                    
+                    /* Channel-specific configuration */
                     if (channel_idx == 0) {
                         /* Channel 0 specific configuration */
-                        current_channel->width = 2624;   /* 0x0a40 */
-                        current_channel->height = 8;
-                        current_channel->stride = 128;
-                        current_channel->format = 1;
+                        isp_dev->channels[channel_idx].width = 2624;   /* 0x0a40 */
+                        isp_dev->channels[channel_idx].height = 8;
+                        isp_dev->channels[channel_idx].fmt = 1;
                     } else if (channel_idx == 1) {
                         /* Channel 1 specific configuration */
-                        current_channel->width = 0x780;
-                        current_channel->height = 0x438;
-                        current_channel->format = channel_idx;
-                    } else {
-                        /* Other channels */
-                        current_channel->stride = 0x80;
+                        isp_dev->channels[channel_idx].width = 0x780;
+                        isp_dev->channels[channel_idx].height = 0x438;
+                        isp_dev->channels[channel_idx].fmt = channel_idx;
                     }
-                    
-                    /* Initialize channel state */
-                    current_channel->state = 1;  /* INIT state */
-                    spin_lock_init(&current_channel->slock);
-                    
-                    /* SAFE: Set up event handler using proper channel structure */
-                    if (channel_idx < ISP_MAX_CHAN) {
-                        isp_dev->channels[channel_idx].event_handler = ispcore_pad_event_handle;
-                        isp_dev->channels[channel_idx].event_data = current_channel;
-                        isp_dev->channels[channel_idx].enabled = true;
-                    }
-                } else {
-                    current_channel->state = 0;  /* Disabled */
                 }
                 
                 channel_idx++;
