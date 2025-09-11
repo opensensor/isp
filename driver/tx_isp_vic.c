@@ -2040,12 +2040,12 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
         return -EINVAL;
     }
     
-    sd = pad->sd;
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    if (!vic_dev) {
-        pr_err("VIC event callback: No vic_dev\n");
-        return -EINVAL;
-    }
+//    sd = pad->sd;
+//    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+//    if (!vic_dev) {
+//        pr_err("VIC event callback: No vic_dev\n");
+//        return -EINVAL;
+//    }
     
     pr_info("*** VIC EVENT CALLBACK: cmd=0x%x, data=%p ***\n", cmd, data);
     
@@ -2056,12 +2056,12 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
             /* Handle QBUF event - trigger frame processing */
             if (vic_dev->state == 4) { /* Streaming state */
                 /* Signal frame completion to wake up waiting processes */
-                complete(&vic_dev->frame_complete);
+                //complete(&vic_dev->frame_complete);
                 pr_info("*** VIC: QBUF event processed - frame completion signaled ***\n");
                 ret = 0;
             } else {
                 pr_info("VIC: QBUF event received but not streaming (state=%d) - allowing anyway\n", vic_dev->state);
-                complete(&vic_dev->frame_complete);
+                //complete(&vic_dev->frame_complete);
                 ret = 0;
             }
             break;
