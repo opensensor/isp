@@ -9,6 +9,7 @@
 #include <linux/proc_fs.h>
 #include <linux/slab.h>
 #include "../include/tx_isp.h"
+#include "../include/tx_isp_vic.h"
 #include "../include/tx-isp-debug.h"
 
 /* Subdevice type definitions */
