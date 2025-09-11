@@ -21,7 +21,7 @@
 
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
-uint32_t vic_start_ok = 1;  /* Global VIC interrupt enable flag definition */
+uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 
 /* *** CRITICAL: MISSING FUNCTION - tx_isp_create_vic_device *** */
