@@ -68,33 +68,6 @@ void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
 static struct i2c_client *global_sensor_i2c_client = NULL;
 static DEFINE_MUTEX(i2c_client_mutex);
 
-
-// CSI device structure for MIPI interface (based on Binary Ninja analysis)
-struct tx_isp_csi_device {
-    struct tx_isp_subdev sd;        // Base subdev at offset 0
-    struct clk *csi_clk;           // CSI clock
-    int state;                     // 1=init, 2=active, 3=streaming_off, 4=streaming_on
-    struct mutex mlock;            // Mutex for state changes
-    int interface_type;            // 1=MIPI interface
-    int lanes;                     // Number of MIPI lanes
-
-    char device_name[32];     // 0x00: Device name
-    struct device *dev;       // Device pointer
-    uint32_t offset_10;       // 0x10: Referenced in init
-    struct IspModule *module_info;  // Module info pointer
-
-    // CSI register access - changed to single pointer like VIC
-    void __iomem *cpm_regs;   // CPM registers
-    void __iomem *phy_regs;   // MIPI PHY registers
-    void __iomem *csi_regs;   // Single pointer to mapped csi regs
-    struct resource *phy_res;  // PHY memory resource
-
-    // State management
-    struct clk *clk;
-    struct mutex mutex;       // Synchronization
-    spinlock_t lock;         // Protect register access
-};
-
 /* MIPS-SAFE I2C infrastructure - Fixed for unaligned access crash */
 static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
                                                    struct i2c_board_info *info)
