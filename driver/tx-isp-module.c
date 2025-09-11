@@ -1760,6 +1760,8 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     u32 v1_7, v1_10;
     uint32_t *vic_irq_enable_flag;
     int i;
+
+    pr_info("*** isp_vic_interrupt_service_routine: EXACT Binary Ninja implementation ***\n");
     
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
     if (!isp_dev || (uintptr_t)isp_dev >= 0xfffff001) {
