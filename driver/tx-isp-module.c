@@ -2121,28 +2121,6 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         if (sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
             pr_info("*** Calling sensor s_stream directly: enable=%d ***\n", enable);
             ret = sensor->sd.ops->video->s_stream(&sensor->sd, enable);
-            
-            if (ret != 0 && ret != 0xfffffdfd) {
-                pr_err("Sensor s_stream failed: %d\n", ret);
-                /* Rollback: disable CSI and VIC if we were enabling */
-                if (enable) {
-                    if (ourISPdev->csi_dev) {
-                        struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
-                        if (csi_dev->sd.ops && csi_dev->sd.ops->video && 
-                            csi_dev->sd.ops->video->s_stream) {
-                            csi_dev->sd.ops->video->s_stream(&csi_dev->sd, 0);
-                        }
-                    }
-                    if (ourISPdev->vic_dev) {
-                        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-                        if (vic_dev->sd.ops && vic_dev->sd.ops->video && 
-                            vic_dev->sd.ops->video->s_stream) {
-                            vic_dev->sd.ops->video->s_stream(&vic_dev->sd, 0);
-                        }
-                    }
-                }
-                return ret;
-            }
             pr_info("*** Sensor s_stream completed: %d ***\n", ret);
         } else {
             pr_debug("Sensor has no s_stream operation\n");
