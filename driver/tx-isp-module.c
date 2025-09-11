@@ -2086,6 +2086,12 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             pr_debug("VIC device has no s_stream operation\n");
         }
     }
+
+    if ourISPdev->sd.ops && ourISPdev->sd.ops->video && ourISPdev->sd.ops->video->s_stream {
+        pr_info("*** Calling ISP core s_stream directly: enable=%d ***\n", enable);
+        ret = ourISPdev->sd.ops->video->s_stream(&ourISPdev->sd, enable);
+        pr_info("*** ISP core s_stream completed: %d ***\n", ret);
+    }
     
     /* CORRECTED: Use direct CSI device reference */
     if (ourISPdev->csi_dev) {
