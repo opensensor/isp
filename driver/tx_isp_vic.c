@@ -365,7 +365,7 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     return 0;  /* Success */
 }
 
-/* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
+/* isp_vic_interrupt_service_routine - FIXED: Safe struct member access */
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_subdev *sd = dev_id;
@@ -376,23 +376,23 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     
     pr_debug("*** isp_vic_interrupt_service_routine: IRQ %d triggered ***\n", irq);
     
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
+    /* FIXED: Validate subdev parameter */
     if (!sd || (unsigned long)sd >= 0xfffff001) {
         pr_err("isp_vic_interrupt_service_routine: Invalid sd parameter\n");
         return IRQ_HANDLED;
     }
     
-    /* CRITICAL FIX: Use proper subdev data access instead of dangerous offset 0xd4 */
+    /* FIXED: Use safe struct member access instead of dangerous offset 0xd4 */
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     
-    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
+    /* FIXED: Validate vic_dev pointer */
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
         pr_err("isp_vic_interrupt_service_routine: Invalid vic_dev - using safe subdev access\n");
         return IRQ_HANDLED;
     }
     
-    /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
-    vic_base = sd->base;  /* VIC register base from subdev */
+    /* FIXED: Use safe struct member access instead of offset 0xb8 */
+    vic_base = vic_dev->vic_regs;  /* Safe access to VIC register base */
     if (!vic_base) {
         pr_err("isp_vic_interrupt_service_routine: No VIC register base\n");
         return IRQ_HANDLED;
@@ -422,9 +422,9 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     if (vic_start_ok != 0) {
         pr_debug("isp_vic_interrupt_service_routine: vic_start_ok=%d - processing interrupts\n", vic_start_ok);
         
-        /* Binary Ninja: Frame done interrupt - if (($v1_7 & 1) != 0) */
+        /* FIXED: Frame done interrupt with safe struct member access */
         if ((isr_main & 1) != 0) {
-            /* *($s0 + 0x160) += 1 */
+            /* FIXED: Use safe struct member access instead of offset 0x160 */
             vic_dev->frame_count += 1;
             
             /* CRITICAL: Synchronize ISP device frame counter with VIC frame counter */
@@ -433,7 +433,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             }
             
             pr_info("VIC Frame done interrupt - frame_count=%d (synchronized with ISP)\n", vic_dev->frame_count);
-            /* entry_$a2 = vic_framedone_irq_function($s0) */
+            /* Call frame done handler with safe struct access */
             vic_framedone_irq_function(vic_dev);
         }
         
@@ -573,15 +573,13 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
         }
         
-        /* Binary Ninja: Error recovery handling */
-        /* if (($v1_7 & 0xde00) != 0 && zx.d(vic_start_ok) == 1) */
+        /* FIXED: Error recovery handling with safe struct member access */
         if ((isr_main & 0xde00) != 0 && vic_start_ok == 1) {
             pr_err("error handler!!!\n");
-            /* **($s0 + 0xb8) = 4 */
+            /* FIXED: Use safe VIC register base access */
             writel(4, vic_base + 0x0);
             
-            /* int32_t* $v0_70 = *($s0 + 0xb8) */
-            /* while (*$v0_70 != 0) */
+            /* FIXED: Safe register polling loop */
             u32 ctl_reg;
             int timeout = 1000;
             while ((ctl_reg = readl(vic_base + 0x0)) != 0 && timeout > 0) {
@@ -594,14 +592,14 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                 pr_err("VIC error recovery timeout\n");
             }
             
-            /* Recovery register writes */
-            u32 reg_val = readl(vic_base + 0x104);  /* $v0_70[0x41] */
+            /* Recovery register writes with safe access */
+            u32 reg_val = readl(vic_base + 0x104);
             writel(reg_val, vic_base + 0x104);
             
             reg_val = readl(vic_base + 0x108);
             writel(reg_val, vic_base + 0x108);
             
-            /* **($s0 + 0xb8) = 1 */
+            /* FIXED: Safe VIC register base access */
             writel(1, vic_base + 0x0);
         }
     } else {
