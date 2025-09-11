@@ -6009,7 +6009,6 @@ int vic_event_handler(void *subdev, int event_type, void *data)
 /* ispvic_frame_channel_qbuf - MIPS-SAFE implementation with alignment checks */
 static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *buffer)
 {
-    void *s0;
     unsigned long var_18 = 0;
     unsigned long a1_4;
     void *a3_1;
@@ -6033,13 +6032,6 @@ static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *bu
     /* MIPS SAFE: Validate vic_dev structure bounds */
     if ((uintptr_t)vic_dev >= 0xfffff001) {
         pr_err("*** MIPS ERROR: vic_dev pointer 0x%p out of valid range ***\n", vic_dev);
-        return -EINVAL;
-    }
-    
-    /* MIPS SAFE: Get self pointer with alignment validation */
-    s0 = vic_dev->self;
-    if (!s0 || ((uintptr_t)s0 & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->self pointer 0x%p not aligned ***\n", s0);
         return -EINVAL;
     }
     
