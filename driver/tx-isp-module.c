@@ -418,11 +418,6 @@ static struct resource tx_isp_resources[] = {
         .flags = IORESOURCE_MEM,
     },
     [1] = {
-        .start = 37,                   /* T31 ISP IRQ 37 (isp-m0) - PRIMARY ISP PROCESSING */
-        .end   = 37,
-        .flags = IORESOURCE_IRQ,
-    },
-    [2] = {
         .start = 38,                   /* T31 ISP IRQ 38 (isp-w02) - SECONDARY ISP CHANNEL */
         .end   = 38,
         .flags = IORESOURCE_IRQ,
