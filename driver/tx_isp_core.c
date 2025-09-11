@@ -3232,8 +3232,8 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 current_channel = (struct tx_isp_frame_channel *)((char*)current_channel + 0xc4);
             }
             
-            /* SAFE: Store channel array using proper member access */
-            isp_dev->channel_array = channel_array;
+            /* SAFE: Channel array is stored in the allocated memory, not as a struct member */
+            /* The channels[] array in tx_isp_dev is used directly, channel_array is just working memory */
 
             /* Binary Ninja: *** CRITICAL: isp_core_tuning_init call *** */
             pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init ***\n");
