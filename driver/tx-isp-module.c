@@ -2352,7 +2352,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             
         return 0;
     }
-    case 0xc044560f: { // VIDIOC_QBUF - Queue buffer - MIPS-SAFE implementation
+    case 0xc044560f: { // VIDIOC_QBUF - Queue buffer - FIXED to pass actual buffer data
         struct v4l2_buffer {
             uint32_t index;
             uint32_t type;
@@ -2374,7 +2374,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         } buffer;
         unsigned long flags;
         
-        pr_info("*** Channel %d: QBUF CALLED - MIPS-SAFE implementation ***\n", channel);
+        pr_info("*** Channel %d: QBUF CALLED - FIXED to pass actual buffer data ***\n", channel);
         
         /* MIPS ALIGNMENT CHECK: Validate buffer structure alignment */
         if (((uintptr_t)&buffer & 0x3) != 0) {
@@ -2394,9 +2394,30 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EINVAL;
         }
         
-        pr_info("*** Channel %d: QBUF - Queue buffer index=%d (MIPS-safe) ***\n", channel, buffer.index);
+        pr_info("*** Channel %d: QBUF - Queue buffer index=%d ***\n", channel, buffer.index);
         
-        /* MIPS SAFE: VIC event system with alignment checks */
+        /* CRITICAL FIX: Calculate actual buffer physical address */
+        uint32_t buffer_phys_addr = 0x6300000 + (buffer.index * (state->width * state->height * 2));
+        
+        pr_info("*** Channel %d: CALCULATED BUFFER PHYSICAL ADDRESS: 0x%x ***\n", channel, buffer_phys_addr);
+        
+        /* CRITICAL FIX: Create proper buffer data structure for VIC */
+        struct vic_buffer_data {
+            uint32_t index;
+            uint32_t phys_addr;
+            uint32_t size;
+            uint32_t channel;
+        } vic_buffer_data;
+        
+        vic_buffer_data.index = buffer.index;
+        vic_buffer_data.phys_addr = buffer_phys_addr;
+        vic_buffer_data.size = state->width * state->height * 2; // YUV buffer size
+        vic_buffer_data.channel = channel;
+        
+        pr_info("*** Channel %d: VIC BUFFER DATA: index=%d, addr=0x%x, size=%d ***\n", 
+                channel, vic_buffer_data.index, vic_buffer_data.phys_addr, vic_buffer_data.size);
+        
+        /* MIPS SAFE: VIC event system with actual buffer data */
         if (channel == 0 && ourISPdev && ((uintptr_t)ourISPdev & 0x3) == 0) {
             /* MIPS SAFE: Validate VIC device alignment */
             if (ourISPdev->vic_dev && ((uintptr_t)ourISPdev->vic_dev & 0x3) == 0) {
@@ -2404,15 +2425,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 
                 /* MIPS SAFE: Additional VIC device validation */
                 if (vic_dev_buf && ((uintptr_t)vic_dev_buf & 0x3) == 0) {
-                    pr_info("*** Channel %d: QBUF - USING MIPS-SAFE EVENT SYSTEM ***\n", channel);
-                    pr_info("*** Channel %d: CALLING tx_isp_send_event_to_remote(VIC, 0x3000008, buffer_data) ***\n", channel);
+                    pr_info("*** Channel %d: QBUF - SENDING ACTUAL BUFFER DATA TO VIC ***\n", channel);
+                    pr_info("*** Channel %d: CALLING tx_isp_send_event_to_remote(VIC, 0x3000008, vic_buffer_data) ***\n", channel);
                     
                     /* MIPS SAFE: Validate subdev alignment before event call */
                     if (((uintptr_t)&vic_dev_buf->sd & 0x3) == 0) {
-                        int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &buffer);
+                        /* CRITICAL FIX: Pass actual buffer data instead of v4l2_buffer structure */
+                        int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &vic_buffer_data);
                         
                         if (event_result == 0) {
-                            pr_info("*** Channel %d: QBUF EVENT SUCCESS - MIPS-SAFE! ***\n", channel);
+                            pr_info("*** Channel %d: QBUF EVENT SUCCESS - BUFFER DATA SENT TO VIC! ***\n", channel);
                         } else if (event_result == 0xfffffdfd) {
                             pr_info("*** Channel %d: QBUF EVENT - No VIC callback (MIPS-safe) ***\n", channel);
                         } else {
