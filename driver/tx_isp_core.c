@@ -324,13 +324,13 @@ int tx_isp_core_start(struct tx_isp_subdev *sd)
     }
     
     /* Configure clocks if not already done */
-    if (!isp_dev->isp_clk) {
-        ret = tx_isp_configure_clocks(isp_dev);
-        if (ret < 0) {
-            pr_err("tx_isp_core_start: Failed to configure clocks: %d\n", ret);
-            return ret;
-        }
-    }
+//    if (!isp_dev->isp_clk) {
+//        ret = tx_isp_configure_clocks(isp_dev);
+//        if (ret < 0) {
+//            pr_err("tx_isp_core_start: Failed to configure clocks: %d\n", ret);
+//            return ret;
+//        }
+//    }
     
     /* Set up pipeline if not already done */
     if (isp_dev->pipeline_state == ISP_PIPELINE_IDLE) {
