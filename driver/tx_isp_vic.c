@@ -2659,14 +2659,9 @@ static void vic_adjustment_timer_fn(unsigned long data)
     /* ISP Control registers - relative to isp_base */
     writel(0x0, isp_base + 0x9804);
 
-    /* VIC Control registers - these are actually VIC registers, so relative to vic_regs */
-    writel(0x0, vic_regs + 0x9ac0);  /* Wait, this offset is too large for VIC */
-    writel(0x0, vic_regs + 0x9ac8);  /* These should be relative to isp_base */
-
-    /* Actually, let me recalculate - if vic_regs is at VIC base (0x9a00 offset from ISP),
-       then VIC control at 0x9ac0 would be vic_regs + 0xc0 */
-    writel(0x0, vic_regs + 0xc0);   /* VIC Control 0x9ac0 = VIC base + 0xc0 */
-    writel(0x0, vic_regs + 0xc8);   /* VIC Control 0x9ac8 = VIC base + 0xc8 */
+    /* VIC Control registers - these are working */
+    writel(0x0, isp_base + 0x9ac0);
+    writel(0x0, isp_base + 0x9ac8);
 
     /* Core Control registers - relative to isp_base */
     writel(0x24242424, isp_base + 0xb018);
@@ -2744,7 +2739,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         }
 
                         /* Schedule timer for 210ms from now */
-                        mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(120));
+                        mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(95));
                         pr_info("vic_core_s_stream: Scheduled 10ms adjustment timer\n");
                         adjustment_applied = false;
 
@@ -2756,7 +2751,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                         /* If we're restarting streaming and adjustment hasn't been applied yet */
                         if (!adjustment_applied && timer_initialized) {
-                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(120));
+                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(95));
                             pr_info("vic_core_s_stream: Re-scheduled 210ms adjustment timer\n");
                         }
                     }
