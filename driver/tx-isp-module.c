@@ -4971,7 +4971,7 @@ static void tx_vic_disable_irq_complete(struct tx_isp_dev *isp_dev)
 }
 
 /* ispcore_activate_module - EXACT Binary Ninja implementation that triggers register writes */
-static int ispcore_activate_module(struct tx_isp_dev *isp_dev)
+int ispcore_activate_module(struct tx_isp_dev *isp_dev)
 {
     struct tx_isp_vic_device *vic_dev;
     struct clk **clk_array;
