@@ -2730,19 +2730,20 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         }
 
                         /* Schedule timer for 210ms from now */
-                        mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(97));
+                        mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(110));
                         pr_info("vic_core_s_stream: Scheduled 10ms adjustment timer\n");
                         adjustment_applied = false;
 
                         ret = tx_isp_vic_start(vic_dev);
                         vic_enabled = 1;
+                        msleep(100);
                     } else {
                         ret = 0;
                         pr_info("vic_core_s_stream: tx_isp_vic_progress returned %d\n", ret);
 
                         /* If we're restarting streaming and adjustment hasn't been applied yet */
                         if (!adjustment_applied && timer_initialized) {
-                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(97));
+                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(110));
                             pr_info("vic_core_s_stream: Re-scheduled 210ms adjustment timer\n");
                         }
                     }
