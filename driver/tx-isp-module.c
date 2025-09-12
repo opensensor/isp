@@ -2069,85 +2069,68 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     pr_info("*** tx_isp_video_s_stream: Processing %s request using direct device references ***\n",
             enable ? "ENABLE" : "DISABLE");
     
-    /* CORRECTED: Use direct VIC device reference */
+    /* CRITICAL FIX: Call VIC s_stream FIRST - this triggers tx_isp_vic_start which writes the initialization registers */
     if (ourISPdev->vic_dev) {
         struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
         
         if (vic_dev->sd.ops && vic_dev->sd.ops->video && vic_dev->sd.ops->video->s_stream) {
             pr_info("*** Calling VIC s_stream directly: enable=%d ***\n", enable);
+            pr_info("*** VIC VIDEO STREAMING ENABLE - THIS SHOULD TRIGGER REGISTER WRITES! ***\n");
             ret = vic_dev->sd.ops->video->s_stream(&vic_dev->sd, enable);
             
             if (ret != 0 && ret != 0xfffffdfd) {
                 pr_err("VIC s_stream failed: %d\n", ret);
                 return ret;
             }
+            pr_info("*** VIC VIDEO STREAMING ENABLE RETURNED %d ***\n", ret);
             pr_info("*** VIC s_stream completed: %d ***\n", ret);
         } else {
             pr_debug("VIC device has no s_stream operation\n");
         }
     }
-
-//    if (ourISPdev->sd.ops && ourISPdev->sd.ops->video && ourISPdev->sd.ops->video->s_stream) {
-//        pr_info("*** Calling ISP core s_stream directly: enable=%d ***\n", enable);
-//        ret = ourISPdev->sd.ops->video->s_stream(&ourISPdev->sd, enable);
-//        pr_info("*** ISP core s_stream completed: %d ***\n", ret);
-//    }
     
-    /* CORRECTED: Use direct CSI device reference */
-//    if (ourISPdev->csi_dev) {
-//        struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
-//
-//        if (csi_dev->sd.ops && csi_dev->sd.ops->video && csi_dev->sd.ops->video->s_stream) {
-//            pr_info("*** Calling CSI s_stream directly: enable=%d ***\n", enable);
-//            ret = csi_dev->sd.ops->video->s_stream(&csi_dev->sd, enable);
-//
-//            if (ret != 0 && ret != 0xfffffdfd) {
-//                pr_err("CSI s_stream failed: %d\n", ret);
-//                /* Don't return error - try to disable VIC if we were enabling */
-//                if (enable && ourISPdev->vic_dev) {
-//                    struct tx_isp_vic_device *vic_dev = dev->vic_dev;
-//                    if (vic_dev->sd.ops && vic_dev->sd.ops->video &&
-//                        vic_dev->sd.ops->video->s_stream) {
-//                        vic_dev->sd.ops->video->s_stream(&vic_dev->sd, 0);
-//                    }
-//                }
-//                return ret;
-//            }
-//            pr_info("*** CSI s_stream completed: %d ***\n", ret);
-//        } else {
-//            pr_debug("CSI device has no s_stream operation\n");
-//        }
-//    }
-    
-    /* CORRECTED: Use direct sensor reference */
+    /* CRITICAL FIX: Call sensor s_stream SECOND - this writes the sensor streaming registers (0x3e=0x91) */
     if (ourISPdev->sensor) {
         struct tx_isp_sensor *sensor = ourISPdev->sensor;
         
         if (sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
             pr_info("*** Calling sensor s_stream directly: enable=%d ***\n", enable);
+            pr_info("*** ISP SENSOR WRAPPER s_stream: enable=%d ***\n", enable);
+            pr_info("*** ISP: Setting up ISP-side for sensor %s streaming=%d ***\n",
+                    sensor->info.name, enable);
+            pr_info("ISP: Configuring for MIPI interface\n");
+            pr_info("*** ISP DELEGATING TO REAL SENSOR_S_STREAM: enable=%d ***\n", enable);
+            pr_info("*** CALLING REAL SENSOR DRIVER S_STREAM - THIS WRITES 0x3e=0x91! ***\n");
+            
             ret = sensor->sd.ops->video->s_stream(&sensor->sd, enable);
             
             if (ret != 0 && ret != 0xfffffdfd) {
                 pr_err("Sensor s_stream failed: %d\n", ret);
-                /* Rollback: disable CSI and VIC if we were enabling */
-                if (enable) {
-                    if (ourISPdev->csi_dev) {
-                        struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
-                        if (csi_dev->sd.ops && csi_dev->sd.ops->video && 
-                            csi_dev->sd.ops->video->s_stream) {
-                            csi_dev->sd.ops->video->s_stream(&csi_dev->sd, 0);
-                        }
-                    }
-                    if (ourISPdev->vic_dev) {
-                        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-                        if (vic_dev->sd.ops && vic_dev->sd.ops->video && 
-                            vic_dev->sd.ops->video->s_stream) {
-                            vic_dev->sd.ops->video->s_stream(&vic_dev->sd, 0);
-                        }
+                /* Rollback: disable VIC if we were enabling */
+                if (enable && ourISPdev->vic_dev) {
+                    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
+                    if (vic_dev->sd.ops && vic_dev->sd.ops->video && 
+                        vic_dev->sd.ops->video->s_stream) {
+                        vic_dev->sd.ops->video->s_stream(&vic_dev->sd, 0);
                     }
                 }
                 return ret;
             }
+            pr_info("*** REAL SENSOR DRIVER S_STREAM RETURNED: %d ***\n", ret);
+            pr_info("*** SENSOR STREAMING SUCCESS - NOW CALLING STREAMING REGISTER SEQUENCE! ***\n");
+            
+            /* CRITICAL: After sensor streaming succeeds, write the streaming phase registers */
+            if (ret == 0 && enable) {
+                pr_info("*** CRITICAL: Writing streaming phase registers to MAIN ISP register space AFTER CSI PHY sequence ***\n");
+                pr_info("*** Writing to MAIN ISP base %p (not VIC base) - CORRECT SEQUENCING ***\n", ourISPdev->vic_regs - 0x9a00);
+                
+                /* Call the streaming register function AFTER sensor detection completes */
+                extern void tx_isp_vic_write_streaming_registers_post_csi(void);
+                tx_isp_vic_write_streaming_registers_post_csi();
+                
+                pr_info("*** CRITICAL: All streaming registers written to MAIN ISP register space with CORRECT SEQUENCING ***\n");
+            }
+            
             pr_info("*** Sensor s_stream completed: %d ***\n", ret);
         } else {
             pr_debug("Sensor has no s_stream operation\n");
