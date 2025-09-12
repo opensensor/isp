@@ -978,122 +978,193 @@ int isp_vic_frd_show(struct seq_file *seq, void *v);
 int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
 long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 
+/* CRITICAL: Write CSI PHY registers in CORRECT SEQUENCE matching reference driver */
+void tx_isp_vic_write_csi_phy_sequence(void)
+{
+    void __iomem *csi_base;
+    
+    if (!ourISPdev || !ourISPdev->vic_regs) {
+        pr_err("tx_isp_vic_write_csi_phy_sequence: No ISP registers available\n");
+        return;
+    }
+    
+    /* Use the correct CSI register base - this should map to the CSI PHY registers */
+    csi_base = ourISPdev->vic_regs - 0x9a00;  /* Calculate CSI base from VIC base */
+    
+    pr_info("*** CRITICAL: Writing CSI PHY registers in CORRECT SEQUENCE matching reference driver ***\n");
+    pr_info("*** CSI PHY SEQUENCE: Step 1 - CSI PHY Config registers (0x100-0x1f4) ***\n");
+    
+    /* STEP 1: CSI PHY Config registers - ALL TOGETHER as in reference */
+    writel(0x8a, csi_base + 0x100);
+    writel(0x5, csi_base + 0x104);
+    writel(0x40, csi_base + 0x10c);
+    writel(0xb0, csi_base + 0x110);
+    writel(0xc5, csi_base + 0x114);
+    writel(0x3, csi_base + 0x118);
+    writel(0x20, csi_base + 0x11c);
+    writel(0xf, csi_base + 0x120);
+    writel(0x48, csi_base + 0x124);
+    writel(0xf, csi_base + 0x128);  /* CORRECTED: 0xf not 0x3f */
+    writel(0xf, csi_base + 0x12c);
+    writel(0x88, csi_base + 0x130);
+    writel(0x86, csi_base + 0x138);
+    writel(0x10, csi_base + 0x13c);
+    writel(0x4, csi_base + 0x140);
+    writel(0x1, csi_base + 0x144);
+    writel(0x32, csi_base + 0x148);
+    writel(0x80, csi_base + 0x14c);
+    writel(0x1, csi_base + 0x158);
+    writel(0x60, csi_base + 0x15c);
+    writel(0x1b, csi_base + 0x160);
+    writel(0x18, csi_base + 0x164);
+    writel(0x7f, csi_base + 0x168);
+    writel(0x4b, csi_base + 0x16c);
+    writel(0x3, csi_base + 0x174);
+    writel(0x8a, csi_base + 0x180);
+    writel(0x5, csi_base + 0x184);
+    writel(0x40, csi_base + 0x18c);
+    writel(0xb0, csi_base + 0x190);
+    writel(0xc5, csi_base + 0x194);
+    writel(0x3, csi_base + 0x198);
+    writel(0x9, csi_base + 0x19c);
+    writel(0xf, csi_base + 0x1a0);
+    writel(0x48, csi_base + 0x1a4);
+    writel(0xf, csi_base + 0x1a8);
+    writel(0xf, csi_base + 0x1ac);
+    writel(0x88, csi_base + 0x1b0);
+    writel(0x86, csi_base + 0x1b8);
+    writel(0x10, csi_base + 0x1bc);
+    writel(0x4, csi_base + 0x1c0);
+    writel(0x1, csi_base + 0x1c4);
+    writel(0x32, csi_base + 0x1c8);
+    writel(0x80, csi_base + 0x1cc);
+    writel(0x1, csi_base + 0x1d8);
+    writel(0x60, csi_base + 0x1dc);
+    writel(0x1b, csi_base + 0x1e0);
+    writel(0x18, csi_base + 0x1e4);
+    writel(0x7f, csi_base + 0x1e8);
+    writel(0x4b, csi_base + 0x1ec);
+    writel(0x3, csi_base + 0x1f4);
+    wmb();
+    
+    pr_info("*** CSI PHY SEQUENCE: Step 2 - CSI Lane Config registers (0x200-0x2f4) ***\n");
+    
+    /* STEP 2: CSI Lane Config registers - ALL TOGETHER as in reference */
+    writel(0x8a, csi_base + 0x200);
+    writel(0x5, csi_base + 0x204);
+    writel(0x40, csi_base + 0x20c);
+    writel(0xb0, csi_base + 0x210);
+    writel(0xc5, csi_base + 0x214);
+    writel(0x3, csi_base + 0x218);
+    writel(0x9, csi_base + 0x21c);
+    writel(0xf, csi_base + 0x220);
+    writel(0x48, csi_base + 0x224);
+    writel(0xf, csi_base + 0x228);
+    writel(0xf, csi_base + 0x22c);
+    writel(0x88, csi_base + 0x230);
+    writel(0x86, csi_base + 0x238);
+    writel(0x10, csi_base + 0x23c);
+    writel(0x4, csi_base + 0x240);
+    writel(0x1, csi_base + 0x244);
+    writel(0x32, csi_base + 0x248);
+    writel(0x80, csi_base + 0x24c);
+    writel(0x1, csi_base + 0x258);
+    writel(0x60, csi_base + 0x25c);
+    writel(0x1b, csi_base + 0x260);
+    writel(0x18, csi_base + 0x264);
+    writel(0x7f, csi_base + 0x268);
+    writel(0x4b, csi_base + 0x26c);
+    writel(0x3, csi_base + 0x274);
+    writel(0x8a, csi_base + 0x280);
+    writel(0x5, csi_base + 0x284);
+    writel(0x40, csi_base + 0x28c);
+    writel(0xb0, csi_base + 0x290);
+    writel(0xc5, csi_base + 0x294);
+    writel(0x3, csi_base + 0x298);
+    writel(0x9, csi_base + 0x29c);
+    writel(0xf, csi_base + 0x2a0);
+    writel(0x48, csi_base + 0x2a4);
+    writel(0xf, csi_base + 0x2a8);
+    writel(0xf, csi_base + 0x2ac);
+    writel(0x88, csi_base + 0x2b0);
+    writel(0x86, csi_base + 0x2b8);
+    writel(0x10, csi_base + 0x2bc);
+    writel(0x4, csi_base + 0x2c0);
+    writel(0x1, csi_base + 0x2c4);
+    writel(0x32, csi_base + 0x2c8);
+    writel(0x80, csi_base + 0x2cc);
+    writel(0x1, csi_base + 0x2d8);
+    writel(0x60, csi_base + 0x2dc);
+    writel(0x1b, csi_base + 0x2e0);
+    writel(0x18, csi_base + 0x2e4);
+    writel(0x7f, csi_base + 0x2e8);
+    writel(0x4b, csi_base + 0x2ec);
+    writel(0x3, csi_base + 0x2f4);
+    wmb();
+    
+    pr_info("*** CSI PHY SEQUENCE: Step 3 - Final CSI PHY Control registers (0xc, 0x10) ***\n");
+    
+    /* STEP 3: Final CSI PHY Control registers - LAST as in reference */
+    writel(0x1, csi_base + 0xc);
+    writel(0x1, csi_base + 0x10);  /* CORRECTED: 0x1 not 0x133 */
+    wmb();
+    
+    pr_info("*** CRITICAL: CSI PHY SEQUENCE COMPLETE - NOW MATCHES REFERENCE DRIVER ORDER! ***\n");
+}
+
 /* CRITICAL: Streaming phase register writes - called AFTER CSI PHY sequence completes */
 void tx_isp_vic_write_streaming_registers_post_csi(void)
 {
     void __iomem *main_isp_base;
     
-    if (!ourISPdev || !ourISPdev->core_regs) {
+    if (!ourISPdev || !ourISPdev->vic_regs) {
         pr_err("tx_isp_vic_write_streaming_registers_post_csi: No main ISP registers available\n");
         return;
     }
     
-    main_isp_base = ourISPdev->core_regs;  /* Use MAIN ISP register base */
+    main_isp_base = ourISPdev->vic_regs - 0x9a00;  /* Calculate main ISP base from VIC base */
     pr_info("*** CRITICAL: Writing streaming phase registers to MAIN ISP register space AFTER CSI PHY sequence ***\n");
     pr_info("*** Writing to MAIN ISP base %p (not VIC base) - CORRECT SEQUENCING ***\n", main_isp_base);
+    
+    /* CRITICAL: First write the CSI PHY sequence in correct order */
+    tx_isp_vic_write_csi_phy_sequence();
     
     /* CRITICAL: Add delay to ensure CSI PHY sequence has completed */
     msleep(50);
     
+    /* Now write the streaming phase changes that happen after CSI PHY setup */
+    pr_info("*** STREAMING PHASE: Writing register changes that occur during streaming ***\n");
+    
     /* CSI PHY Control registers - these change values during streaming phase */
-
     writel(0x0, main_isp_base + 0x8);           /* 0x1 -> 0x0 */
-    wmb();
-    
-
     writel(0xb5742249, main_isp_base + 0xc);    /* 0x80700008 -> 0xb5742249 */
-    wmb();
-    
-
-    writel(0x133, main_isp_base + 0x10);        /* 0x0 -> 0x133 - CRITICAL MISSING REGISTER! */
-    wmb();
-    
-
     writel(0x8, main_isp_base + 0x1c);          /* 0x0 -> 0x8 */
-    wmb();
-    
-
     writel(0x8fffffff, main_isp_base + 0x30);   /* 0x0 -> 0x8fffffff */
     wmb();
     
-    /* CSI PHY Config registers - CORRECTED VALUE */
-
-    writel(0x92217523, main_isp_base + 0x110);  /* 0x80007000 -> 0x92217523 (NOT 0x80007523!) */
+    /* CSI PHY Config registers - streaming phase changes */
+    writel(0x80007523, main_isp_base + 0x110);  /* 0x80007000 -> 0x80007523 */
     wmb();
     
     /* ISP Control registers - streaming phase changes */
-
     writel(0x0, main_isp_base + 0x9804);        /* 0x3f00 -> 0x0 */
     wmb();
     
     /* VIC Control registers - streaming phase changes */
-
     writel(0x0, main_isp_base + 0x9ac0);        /* 0x200 -> 0x0 */
-    wmb();
-    
-
     writel(0x0, main_isp_base + 0x9ac8);        /* 0x200 -> 0x0 */
     wmb();
     
-    /* Core Control registers - streaming phase changes - CORRECTED VALUES */
-
+    /* Core Control registers - streaming phase changes */
     writel(0x24242424, main_isp_base + 0xb018); /* 0x40404040 -> 0x24242424 */
-    wmb();
-    
-
     writel(0x24242424, main_isp_base + 0xb01c); /* 0x40404040 -> 0x24242424 */
-    wmb();
-    
-
     writel(0x24242424, main_isp_base + 0xb020); /* 0x40404040 -> 0x24242424 */
-    wmb();
-    
-
     writel(0x242424, main_isp_base + 0xb024);   /* 0x404040 -> 0x242424 */
-    wmb();
-    
-
-    writel(0x10d0046, main_isp_base + 0xb028);  /* 0x1000080 -> 0x10d0046 - MISSING! */
-    wmb();
-    
-
-    writel(0xe8002f, main_isp_base + 0xb02c);   /* 0x1000080 -> 0xe8002f - MISSING! */
-    wmb();
-    
-
-    writel(0xc50100, main_isp_base + 0xb030);   /* 0x100 -> 0xc50100 - MISSING! */
-    wmb();
-    
-
-    writel(0x1670100, main_isp_base + 0xb034);  /* 0xffff0100 -> 0x1670100 - MISSING! */
-    wmb();
-    
-
-    writel(0x1f001, main_isp_base + 0xb038);    /* 0x1ff00 -> 0x1f001 - MISSING! */
-    wmb();
-    
-
     writel(0x46e0000, main_isp_base + 0xb03c);  /* 0x0 -> 0x46e0000 */
-    wmb();
-    
-
     writel(0x46e1000, main_isp_base + 0xb040);  /* 0x0 -> 0x46e1000 */
-    wmb();
-    
-
     writel(0x46e2000, main_isp_base + 0xb044);  /* 0x0 -> 0x46e2000 */
-    wmb();
-    
-
     writel(0x46e3000, main_isp_base + 0xb048);  /* 0x0 -> 0x46e3000 */
-    wmb();
-    
-
     writel(0x3, main_isp_base + 0xb04c);        /* 0x103 -> 0x3 */
-    wmb();
-    
-
-    writel(0x10000000, main_isp_base + 0xb078); /* 0x0 -> 0x10000000 */
     wmb();
     
     pr_info("*** CRITICAL: All streaming registers written to MAIN ISP register space with CORRECT SEQUENCING ***\n");
