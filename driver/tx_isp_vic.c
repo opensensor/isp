@@ -1713,25 +1713,25 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
 
     /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
-    cpm_regs = ioremap(0x10000000, 0x1000);
-    if (cpm_regs) {
-        u32 clkgr0 = readl(cpm_regs + 0x20);
-        u32 clkgr1 = readl(cpm_regs + 0x28);
-
-        /* Enable ISP/VIC clocks */
-        clkgr0 &= ~(1 << 13); // ISP clock
-        clkgr0 &= ~(1 << 21); // Alternative ISP position
-        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
-        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
-
-        writel(clkgr0, cpm_regs + 0x20);
-        writel(clkgr1, cpm_regs + 0x28);
-        wmb();
-        msleep(20);
-
-        pr_info("STREAMING: CPM clocks configured for VIC access\n");
-        iounmap(cpm_regs);
-    }
+//    cpm_regs = ioremap(0x10000000, 0x1000);
+//    if (cpm_regs) {
+//        u32 clkgr0 = readl(cpm_regs + 0x20);
+//        u32 clkgr1 = readl(cpm_regs + 0x28);
+//
+//        /* Enable ISP/VIC clocks */
+//        clkgr0 &= ~(1 << 13); // ISP clock
+//        clkgr0 &= ~(1 << 21); // Alternative ISP position
+//        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
+//        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
+//
+//        writel(clkgr0, cpm_regs + 0x20);
+//        writel(clkgr1, cpm_regs + 0x28);
+//        wmb();
+//        msleep(20);
+//
+//        pr_info("STREAMING: CPM clocks configured for VIC access\n");
+//        iounmap(cpm_regs);
+//    }
 
     /* STEP 3: Get VIC registers - should already be mapped by tx_isp_create_vic_device */
     vic_regs = ourISPdev->vic_regs;
@@ -1789,6 +1789,23 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** PHASE 1: Initial CSI PHY configuration (T+210ms) ***\n");
 
+            /* Binary Ninja EXACT unlock sequence */
+        writel(2, vic_regs + 0x0);
+        wmb();
+        writel(4, vic_regs + 0x0);
+        wmb();
+
+        /* Wait for unlock completion */
+        timeout = 10000;
+        while (timeout > 0) {
+            u32 status = readl(vic_regs + 0x0);
+            if (status == 0) {
+                break;
+            }
+            udelay(1);
+            timeout--;
+        }
+
     /* CSI PHY Control registers - initial modifications */
     writel(0x1, csi_base + 0x8);              /* was 0x1, stays 0x1 but written */
     writel(0xb5742249, csi_base + 0xc);       /* was 0x80700008 -> 0xb5742249 */
@@ -1800,6 +1817,16 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     /* CSI PHY Config register modification */
     writel(0x92217523, csi_base + 0x110);     /* was 0x80007000 -> 0x92217523 */
     wmb();
+
+
+    /***
+ISP isp-m0: [CSI PHY Control] write at offset 0x8: 0x1 -> 0x0 (delta: 210.000 ms)
+ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x80700008 -> 0xb5742249 (delta: 210.000 ms)
+ISP isp-m0: [CSI PHY Control] write at offset 0x10: 0x0 -> 0x133 (delta: 0.000 ms)
+ISP isp-m0: [CSI PHY Control] write at offset 0x1c: 0x0 -> 0x8 (delta: 0.000 ms)
+ISP isp-m0: [CSI PHY Control] write at offset 0x30: 0x0 -> 0x8fffffff (delta: 0.000 ms)
+ISP isp-m0: [CSI PHY Config] write at offset 0x110: 0x80007000 -> 0x92217523 (delta: 210.000 ms)
+*/
 
     /* ISP Control register modification */
     writel(0x0, main_isp_base + 0x9804);      /* was 0x3f00 -> 0x0 */
