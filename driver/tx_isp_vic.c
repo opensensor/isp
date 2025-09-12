@@ -982,14 +982,22 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 static void tx_isp_vic_write_streaming_registers(void)
 {
     void __iomem *core_base;
+    struct tx_isp_vic_device *vic_dev;
     
     if (!ourISPdev || !ourISPdev->core_regs) {
         pr_err("tx_isp_vic_write_streaming_registers: No core registers available\n");
         return;
     }
     
-    core_base = ourISPdev->core_regs;
-    pr_info("*** tx_isp_vic_write_streaming_registers: Writing streaming phase registers ***\n");
+    /* CRITICAL FIX: Use VIC register base, not core_regs */
+    vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_err("tx_isp_vic_write_streaming_registers: No VIC registers available\n");
+        return;
+    }
+    
+    core_base = vic_dev->vic_regs;  /* Use VIC register base instead of core_regs */
+    pr_info("*** tx_isp_vic_write_streaming_registers: Writing streaming phase registers to VIC base %p ***\n", core_base);
     
     /* CSI PHY Control registers - these change values during streaming phase */
     writel(0x0, core_base + 0x8);           /* 0x1 -> 0x0 */
@@ -1026,7 +1034,7 @@ static void tx_isp_vic_write_streaming_registers(void)
     writel(0x10000000, core_base + 0xb078); /* 0x0 -> 0x10000000 */
     
     wmb(); /* Ensure all writes complete */
-    pr_info("*** tx_isp_vic_write_streaming_registers: All streaming registers written ***\n");
+    pr_info("*** tx_isp_vic_write_streaming_registers: All streaming registers written to VIC base ***\n");
 }
 
 
