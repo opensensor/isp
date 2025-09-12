@@ -1719,10 +1719,10 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
         u32 clkgr1 = readl(cpm_regs + 0x28);
 
         /* Enable ISP/VIC clocks */
-        clkgr0 &= ~(1 << 13); // ISP clock
-        clkgr0 &= ~(1 << 21); // Alternative ISP position
-        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
-        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
+        clkgr0 &= ~(0 << 13); // ISP clock
+        clkgr0 &= ~(0 << 21); // Alternative ISP position
+        clkgr0 &= ~(0 << 30); // VIC in CLKGR0
+        clkgr1 &= ~(0 << 30); // VIC in CLKGR1
 
         writel(clkgr0, cpm_regs + 0x20);
         writel(clkgr1, cpm_regs + 0x28);
