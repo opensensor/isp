@@ -1674,6 +1674,7 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     u32 interface_type, sensor_format;
     u32 timeout = 10000;
     void __iomem *cpm_regs;
+    struct clk *isp_clk, *cgu_isp_clk, *csi_clk, *ipu_clk;
     int ret;
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
@@ -1711,6 +1712,18 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     pr_info("*** tx_isp_vic_progress: MIPS validation passed - applying tx_isp_init_vic_registers methodology ***\n");
 
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
+
+    isp_clk = clk_get(NULL, "isp");
+    if (!IS_ERR(isp_clk)) {
+        ret = clk_prepare_enable(isp_clk);
+        if (ret == 0) {
+            pr_info("STREAMING: ISP clock enabled via clk framework\n");
+        } else {
+            pr_err("STREAMING: Failed to enable ISP clock: %d\n", ret);
+        }
+    } else {
+        pr_warn("STREAMING: ISP clock not found: %ld\n", PTR_ERR(isp_clk));
+    }
 
     /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
     cpm_regs = ioremap(0x10000000, 0x1000);
