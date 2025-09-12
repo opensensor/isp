@@ -6246,12 +6246,21 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
         ret = stored_sensor_ops.original_ops->video->s_stream(stored_sensor_ops.sensor_sd, enable);
 
-        pr_info("*** REAL SENSOR DRIVER S_STREAM RETURNED: %d ***\n", ret);
+                pr_info("*** REAL SENSOR DRIVER S_STREAM RETURNED: %d ***\n", ret);
 
         if (ret < 0 && enable) {
             /* If sensor failed to start, rollback ISP state */
             sd->vin_state = TX_ISP_MODULE_INIT;
             pr_err("*** Sensor streaming failed, rolled back ISP state ***\n");
+        } else if (ret == 0 && enable) {
+            /* *** CRITICAL: SENSOR STREAMING SUCCESS - NOW CALL STREAMING REGISTERS! *** */
+            pr_info("*** SENSOR STREAMING SUCCESS - NOW CALLING STREAMING REGISTER SEQUENCE! ***\n");
+            
+            /* CRITICAL: Call the streaming register function AFTER sensor detection completes */
+            extern void tx_isp_vic_write_streaming_registers_post_csi(void);
+            tx_isp_vic_write_streaming_registers_post_csi();
+            
+            pr_info("*** STREAMING REGISTER SEQUENCE COMPLETE - SHOULD NOW MATCH REFERENCE! ***\n");
         }
     } else {
         pr_err("*** ERROR: NO REAL SENSOR DRIVER S_STREAM FUNCTION AVAILABLE! ***\n");
