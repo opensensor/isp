@@ -1729,6 +1729,17 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
         wmb();
         msleep(20);
 
+                /* Enable ISP/VIC clocks */
+        clkgr0 &= ~(1 << 13); // ISP clock
+        clkgr0 &= ~(1 << 21); // Alternative ISP position
+        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
+        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
+
+        writel(clkgr0, cpm_regs + 0x20);
+        writel(clkgr1, cpm_regs + 0x28);
+        wmb();
+        msleep(20);
+
         pr_info("STREAMING: CPM clocks configured for VIC access\n");
         iounmap(cpm_regs);
     }
@@ -1819,33 +1830,33 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
 //    wmb();
 
 
-    /* *** WRITE MISSING REGISTERS TO MATCH REFERENCE TRACE *** */
-    pr_info("*** Writing missing registers to match reference driver trace ***\n");
-    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace */
-    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace */
-    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace */
-
-    /* CSI PHY Control registers - write to VIC register space offsets that match trace */
-    writel(0x54560031, vic_regs + 0x0);      /* First register from reference trace */
-    writel(0x7800438, vic_regs + 0x4);       /* Second register from reference trace */
-    writel(0x1, vic_regs + 0x8);             /* Third register from reference trace */
-    writel(0x80700008, vic_regs + 0xc);      /* Fourth register from reference trace */
-    writel(0x1, vic_regs + 0x28);            /* Fifth register from reference trace */
-    writel(0x400040, vic_regs + 0x2c);       /* Sixth register from reference trace */
-    writel(0x1, vic_regs + 0x90);            /* Seventh register from reference trace */
-    writel(0x1, vic_regs + 0x94);            /* Eighth register from reference trace */
-    writel(0x30000, vic_regs + 0x98);        /* Ninth register from reference trace */
-    writel(0x58050000, vic_regs + 0xa8);     /* Tenth register from reference trace */
-    writel(0x58050000, vic_regs + 0xac);     /* Eleventh register from reference trace */
-    writel(0x40000, vic_regs + 0xc4);        /* Register from reference trace */
-    writel(0x400040, vic_regs + 0xc8);       /* Register from reference trace */
-    writel(0x100, vic_regs + 0xcc);          /* Register from reference trace */
-    writel(0xc, vic_regs + 0xd4);            /* Register from reference trace */
-    writel(0xffffff, vic_regs + 0xd8);       /* Register from reference trace */
-    writel(0x100, vic_regs + 0xe0);          /* Register from reference trace */
-    writel(0x400040, vic_regs + 0xe4);       /* Register from reference trace */
-    writel(0xff808000, vic_regs + 0xf0);     /* Register from reference trace */
-    wmb();
+//    /* *** WRITE MISSING REGISTERS TO MATCH REFERENCE TRACE *** */
+//    pr_info("*** Writing missing registers to match reference driver trace ***\n");
+//    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace */
+//    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace */
+//    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace */
+//
+//    /* CSI PHY Control registers - write to VIC register space offsets that match trace */
+//    writel(0x54560031, vic_regs + 0x0);      /* First register from reference trace */
+//    writel(0x7800438, vic_regs + 0x4);       /* Second register from reference trace */
+//    writel(0x1, vic_regs + 0x8);             /* Third register from reference trace */
+//    writel(0x80700008, vic_regs + 0xc);      /* Fourth register from reference trace */
+//    writel(0x1, vic_regs + 0x28);            /* Fifth register from reference trace */
+//    writel(0x400040, vic_regs + 0x2c);       /* Sixth register from reference trace */
+//    writel(0x1, vic_regs + 0x90);            /* Seventh register from reference trace */
+//    writel(0x1, vic_regs + 0x94);            /* Eighth register from reference trace */
+//    writel(0x30000, vic_regs + 0x98);        /* Ninth register from reference trace */
+//    writel(0x58050000, vic_regs + 0xa8);     /* Tenth register from reference trace */
+//    writel(0x58050000, vic_regs + 0xac);     /* Eleventh register from reference trace */
+//    writel(0x40000, vic_regs + 0xc4);        /* Register from reference trace */
+//    writel(0x400040, vic_regs + 0xc8);       /* Register from reference trace */
+//    writel(0x100, vic_regs + 0xcc);          /* Register from reference trace */
+//    writel(0xc, vic_regs + 0xd4);            /* Register from reference trace */
+//    writel(0xffffff, vic_regs + 0xd8);       /* Register from reference trace */
+//    writel(0x100, vic_regs + 0xe0);          /* Register from reference trace */
+//    writel(0x400040, vic_regs + 0xe4);       /* Register from reference trace */
+//    writel(0xff808000, vic_regs + 0xf0);     /* Register from reference trace */
+//    wmb();
 
     /* CSI PHY Config registers - from reference trace */
     writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
