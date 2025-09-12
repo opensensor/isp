@@ -1389,17 +1389,9 @@ if (!IS_ERR(cgu_isp_clk)) {
 
     ///     struct clk *isp_clk, *cgu_isp_clk, *csi_clk, *ipu_clk;
 
-    // disable ISP clocks
-        clk_disable_unprepare(isp_clk);
-        pr_info("ISP clock disabled\n");
-
-        clk_disable_unprepare(cgu_isp_clk);
-        pr_info("CGU ISP clock disabled\n");
         clk_disable_unprepare(csi_clk);
         pr_info("CSI clock disabled\n");
 
-        clk_disable_unprepare(ipu_clk);
-        pr_info("IPU clock disabled\n");
 
 pr_info("*** 210ms adjustment sequence applied ***\n");
 
