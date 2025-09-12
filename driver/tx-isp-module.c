@@ -6260,7 +6260,7 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
             extern void tx_isp_vic_write_streaming_registers_post_csi(void);
             tx_isp_vic_write_streaming_registers_post_csi();
             
-            pr_info("*** STREAMING REGISTER SEQUENCE COMPLETE - SHOULD NOW MATCH REFERENCE! ***\n");
+
         }
     } else {
         pr_err("*** ERROR: NO REAL SENSOR DRIVER S_STREAM FUNCTION AVAILABLE! ***\n");

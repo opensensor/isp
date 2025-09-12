@@ -996,103 +996,103 @@ void tx_isp_vic_write_streaming_registers_post_csi(void)
     msleep(50);
     
     /* CSI PHY Control registers - these change values during streaming phase */
-    pr_info("*** STREAMING: Writing CSI PHY Control register 0x8: 0x1 -> 0x0 ***\n");
+    
     writel(0x0, main_isp_base + 0x8);           /* 0x1 -> 0x0 */
     wmb();
     
-    pr_info("*** STREAMING: Writing CSI PHY Control register 0xc: 0x80700008 -> 0xb5742249 ***\n");
+
     writel(0xb5742249, main_isp_base + 0xc);    /* 0x80700008 -> 0xb5742249 */
     wmb();
     
-    pr_info("*** STREAMING: Writing CRITICAL MISSING register 0x10: 0x0 -> 0x133 ***\n");
+
     writel(0x133, main_isp_base + 0x10);        /* 0x0 -> 0x133 - CRITICAL MISSING REGISTER! */
     wmb();
     
-    pr_info("*** STREAMING: Writing CSI PHY Control register 0x1c: 0x0 -> 0x8 ***\n");
+
     writel(0x8, main_isp_base + 0x1c);          /* 0x0 -> 0x8 */
     wmb();
     
-    pr_info("*** STREAMING: Writing CSI PHY Control register 0x30: 0x0 -> 0x8fffffff ***\n");
+
     writel(0x8fffffff, main_isp_base + 0x30);   /* 0x0 -> 0x8fffffff */
     wmb();
     
     /* CSI PHY Config registers - CORRECTED VALUE */
-    pr_info("*** STREAMING: Writing CORRECTED CSI PHY Config register 0x110: 0x80007000 -> 0x92217523 ***\n");
+
     writel(0x92217523, main_isp_base + 0x110);  /* 0x80007000 -> 0x92217523 (NOT 0x80007523!) */
     wmb();
     
     /* ISP Control registers - streaming phase changes */
-    pr_info("*** STREAMING: Writing ISP Control register 0x9804: 0x3f00 -> 0x0 ***\n");
+
     writel(0x0, main_isp_base + 0x9804);        /* 0x3f00 -> 0x0 */
     wmb();
     
     /* VIC Control registers - streaming phase changes */
-    pr_info("*** STREAMING: Writing VIC Control register 0x9ac0: 0x200 -> 0x0 ***\n");
+
     writel(0x0, main_isp_base + 0x9ac0);        /* 0x200 -> 0x0 */
     wmb();
     
-    pr_info("*** STREAMING: Writing VIC Control register 0x9ac8: 0x200 -> 0x0 ***\n");
+
     writel(0x0, main_isp_base + 0x9ac8);        /* 0x200 -> 0x0 */
     wmb();
     
     /* Core Control registers - streaming phase changes - CORRECTED VALUES */
-    pr_info("*** STREAMING: Writing Core Control register 0xb018: 0x40404040 -> 0x24242424 ***\n");
+
     writel(0x24242424, main_isp_base + 0xb018); /* 0x40404040 -> 0x24242424 */
     wmb();
     
-    pr_info("*** STREAMING: Writing Core Control register 0xb01c: 0x40404040 -> 0x24242424 ***\n");
+
     writel(0x24242424, main_isp_base + 0xb01c); /* 0x40404040 -> 0x24242424 */
     wmb();
     
-    pr_info("*** STREAMING: Writing Core Control register 0xb020: 0x40404040 -> 0x24242424 ***\n");
+
     writel(0x24242424, main_isp_base + 0xb020); /* 0x40404040 -> 0x24242424 */
     wmb();
     
-    pr_info("*** STREAMING: Writing Core Control register 0xb024: 0x404040 -> 0x242424 ***\n");
+
     writel(0x242424, main_isp_base + 0xb024);   /* 0x404040 -> 0x242424 */
     wmb();
     
-    pr_info("*** STREAMING: Writing MISSING Core Control register 0xb028: 0x1000080 -> 0x10d0046 ***\n");
+
     writel(0x10d0046, main_isp_base + 0xb028);  /* 0x1000080 -> 0x10d0046 - MISSING! */
     wmb();
     
-    pr_info("*** STREAMING: Writing MISSING Core Control register 0xb02c: 0x1000080 -> 0xe8002f ***\n");
+
     writel(0xe8002f, main_isp_base + 0xb02c);   /* 0x1000080 -> 0xe8002f - MISSING! */
     wmb();
     
-    pr_info("*** STREAMING: Writing MISSING Core Control register 0xb030: 0x100 -> 0xc50100 ***\n");
+
     writel(0xc50100, main_isp_base + 0xb030);   /* 0x100 -> 0xc50100 - MISSING! */
     wmb();
     
-    pr_info("*** STREAMING: Writing MISSING Core Control register 0xb034: 0xffff0100 -> 0x1670100 ***\n");
+
     writel(0x1670100, main_isp_base + 0xb034);  /* 0xffff0100 -> 0x1670100 - MISSING! */
     wmb();
     
-    pr_info("*** STREAMING: Writing MISSING Core Control register 0xb038: 0x1ff00 -> 0x1f001 ***\n");
+
     writel(0x1f001, main_isp_base + 0xb038);    /* 0x1ff00 -> 0x1f001 - MISSING! */
     wmb();
     
-    pr_info("*** STREAMING: Writing Core Control register 0xb03c: 0x0 -> 0x46e0000 ***\n");
+
     writel(0x46e0000, main_isp_base + 0xb03c);  /* 0x0 -> 0x46e0000 */
     wmb();
     
-    pr_info("*** STREAMING: Writing Core Control register 0xb040: 0x0 -> 0x46e1000 ***\n");
+
     writel(0x46e1000, main_isp_base + 0xb040);  /* 0x0 -> 0x46e1000 */
     wmb();
     
-    pr_info("*** STREAMING: Writing Core Control register 0xb044: 0x0 -> 0x46e2000 ***\n");
+
     writel(0x46e2000, main_isp_base + 0xb044);  /* 0x0 -> 0x46e2000 */
     wmb();
     
-    pr_info("*** STREAMING: Writing Core Control register 0xb048: 0x0 -> 0x46e3000 ***\n");
+
     writel(0x46e3000, main_isp_base + 0xb048);  /* 0x0 -> 0x46e3000 */
     wmb();
     
-    pr_info("*** STREAMING: Writing Core Control register 0xb04c: 0x103 -> 0x3 ***\n");
+
     writel(0x3, main_isp_base + 0xb04c);        /* 0x103 -> 0x3 */
     wmb();
     
-    pr_info("*** STREAMING: Writing MISSING Core Control register 0xb078: 0x0 -> 0x10000000 ***\n");
+
     writel(0x10000000, main_isp_base + 0xb078); /* 0x0 -> 0x10000000 */
     wmb();
     
@@ -1147,7 +1147,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
 
     /* STEP 1: Enable clocks using Linux Clock Framework like tx_isp_init_vic_registers */
-    pr_info("*** STREAMING: Enabling ISP clocks using Linux Clock Framework ***\n");
+
 
 cgu_isp_clk = clk_get(NULL, "cgu_isp");
 if (!IS_ERR(cgu_isp_clk)) {
@@ -1204,7 +1204,7 @@ if (!IS_ERR(cgu_isp_clk)) {
     }
 
     /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
-    pr_info("*** STREAMING: Configuring CPM registers for VIC access ***\n");
+
     cpm_regs = ioremap(0x10000000, 0x1000);
     if (cpm_regs) {
         u32 clkgr0 = readl(cpm_regs + 0x20);
