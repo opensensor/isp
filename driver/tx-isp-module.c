@@ -590,7 +590,6 @@ extern void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
 /* Forward declarations for hardware initialization functions */
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
-extern int sensor_init(struct tx_isp_dev *isp_dev);
 
 /* Forward declarations for subdev ops structures */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
@@ -614,6 +613,12 @@ extern int tx_isp_fs_platform_init(void);
 extern void tx_isp_fs_platform_exit(void);
 extern int tx_isp_fs_probe(struct platform_device *pdev);
 
+/* CSI module functions */
+extern int tx_isp_csi_module_init(void);
+extern void tx_isp_csi_module_exit(void);
+extern int csi_init_core_control_registers(void);
+extern int csi_core_ops_init(struct tx_isp_subdev *sd, int mode, int sensor_format);
+
 /* V4L2 video device functions */
 extern int tx_isp_v4l2_init(void);
 extern void tx_isp_v4l2_cleanup(void);
@@ -630,26 +635,141 @@ void system_reg_write(u32 reg, u32 value)
 {
     void __iomem *isp_regs = NULL;
     
-    if (!ourISPdev || !ourISPdev->vic_regs) {
-        pr_warn("system_reg_write: No ISP registers available for reg=0x%x val=0x%x\n", reg, value);
+    pr_debug("*** system_reg_write: DEBUGGING - ourISPdev=%p ***\n", ourISPdev);
+    if (ourISPdev) {
+        pr_debug("*** system_reg_write: vic_regs=%p ***\n", ourISPdev->vic_regs);
+    }
+    
+    if (!ourISPdev) {
+        pr_warn("system_reg_write: ourISPdev is NULL! Cannot write reg=0x%x val=0x%x\n", reg, value);
         return;
     }
     
-    /* Map ISP registers based on VIC base (which is at 0x133e0000) */
-    /* ISP core registers are at 0x13300000 = vic_regs - 0xe0000 */
-    isp_regs = ourISPdev->vic_regs - 0xe0000;
+    if (!ourISPdev->vic_regs) {
+        pr_warn("system_reg_write: vic_regs is NULL! Cannot write reg=0x%x val=0x%x\n", reg, value);
+        pr_warn("*** CRITICAL: VIC registers not mapped yet - need to initialize VIC device first! ***\n");
+        
+        /* EMERGENCY FIX: Try to create VIC device if it doesn't exist */
+        if (!ourISPdev->vic_dev) {
+            pr_warn("*** EMERGENCY: Creating VIC device structure for register access ***\n");
+            int ret = tx_isp_create_vic_device(ourISPdev);
+            if (ret) {
+                pr_err("*** EMERGENCY VIC CREATION FAILED: %d ***\n", ret);
+                return;
+            }
+            pr_info("*** EMERGENCY VIC CREATION SUCCESS - retrying register write ***\n");
+        }
+        
+        /* Check again after emergency fix */
+        if (!ourISPdev->vic_regs) {
+            pr_err("system_reg_write: STILL no VIC registers after emergency fix! reg=0x%x val=0x%x\n", reg, value);
+            return;
+        }
+    }
     
-    pr_debug("system_reg_write: Writing ISP reg[0x%x] = 0x%x\n", reg, value);
+    /* Map ISP registers based on VIC base */
+    /* VIC is at 0x10023000, ISP core is at 0x13300000 */
+    isp_regs = ourISPdev->vic_regs - 0x9a00;  /* Calculate ISP base from VIC base */
+    
+    pr_info("*** system_reg_write: SUCCESS - Writing ISP reg[0x%x] = 0x%x (base=%p) ***\n", 
+            reg, value, isp_regs);
     
     /* Write to ISP register with proper offset */
     writel(value, isp_regs + reg);
     wmb();
 }
 
-/* tisp_init - EXACT Binary Ninja implementation - THE MISSING HARDWARE INIT! */
+/* ===== REGISTER ACCESS WRAPPER FUNCTIONS - MISSING LINKER SYMBOLS ===== */
+
+/* isp_write32 - Write to ISP core registers */
+void isp_write32(u32 reg, u32 val)
+{
+    void __iomem *isp_regs = NULL;
+    
+    if (!ourISPdev || !ourISPdev->vic_regs) {
+        pr_warn("isp_write32: No ISP registers available for reg=0x%x val=0x%x\n", reg, val);
+        return;
+    }
+    
+    /* ISP core registers are at 0x13300000, VIC is at 0x133e0000 */
+    isp_regs = ourISPdev->vic_regs - 0xe0000;
+    
+    pr_debug("isp_write32: reg[0x%x] = 0x%x\n", reg, val);
+    writel(val, isp_regs + reg);
+    wmb();
+}
+EXPORT_SYMBOL(isp_write32);
+
+/* isp_read32 - Read from ISP core registers */
+u32 isp_read32(u32 reg)
+{
+    void __iomem *isp_regs = NULL;
+    u32 val = 0;
+    
+    if (!ourISPdev || !ourISPdev->vic_regs) {
+        pr_warn("isp_read32: No ISP registers available for reg=0x%x\n", reg);
+        return 0;
+    }
+    
+    /* ISP core registers are at 0x13300000, VIC is at 0x133e0000 */
+    isp_regs = ourISPdev->vic_regs - 0xe0000;
+    
+    val = readl(isp_regs + reg);
+    pr_debug("isp_read32: reg[0x%x] = 0x%x\n", reg, val);
+    
+    return val;
+}
+EXPORT_SYMBOL(isp_read32);
+
+/* vic_write32 - Write to VIC registers */
+void vic_write32(u32 reg, u32 val)
+{
+    if (!ourISPdev || !ourISPdev->vic_dev) {
+        pr_warn("vic_write32: No VIC device available for reg=0x%x val=0x%x\n", reg, val);
+        return;
+    }
+    
+    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+    if (!vic_dev->vic_regs) {
+        pr_warn("vic_write32: No VIC registers mapped for reg=0x%x val=0x%x\n", reg, val);
+        return;
+    }
+    
+    pr_debug("vic_write32: reg[0x%x] = 0x%x\n", reg, val);
+    writel(val, vic_dev->vic_regs + reg);
+    wmb();
+}
+EXPORT_SYMBOL(vic_write32);
+
+/* vic_read32 - Read from VIC registers */
+u32 vic_read32(u32 reg)
+{
+    u32 val = 0;
+    
+    if (!ourISPdev || !ourISPdev->vic_dev) {
+        pr_warn("vic_read32: No VIC device available for reg=0x%x\n", reg);
+        return 0;
+    }
+    
+    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+    if (!vic_dev->vic_regs) {
+        pr_warn("vic_read32: No VIC registers mapped for reg=0x%x\n", reg);
+        return 0;
+    }
+    
+    val = readl(vic_dev->vic_regs + reg);
+    pr_debug("vic_read32: reg[0x%x] = 0x%x\n", reg, val);
+    
+    return val;
+}
+EXPORT_SYMBOL(vic_read32);
+
+/* tisp_init - FIXED Binary Ninja implementation with proper register access */
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
 {
-    pr_info("*** tisp_init: IMPLEMENTING MISSING HARDWARE REGISTER INITIALIZATION ***\n");
+    void __iomem *isp_regs = NULL;
+    
+    pr_info("*** tisp_init: EXACT Binary Ninja implementation - THE MISSING HARDWARE INIT! ***\n");
     pr_info("*** THIS FUNCTION CONTAINS ALL THE system_reg_write CALLS FROM REFERENCE ***\n");
     
     if (!sensor_attr || !isp_dev) {
@@ -657,8 +777,30 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
         return -EINVAL;
     }
     
+    /* CRITICAL FIX: Map ISP registers directly if VIC registers aren't available */
+    if (isp_dev->vic_regs) {
+        /* Use VIC base to calculate ISP base: ISP core at 0x13300000, VIC at 0x133e0000 */
+        isp_regs = isp_dev->vic_regs - 0xe0000;
+        pr_info("*** Using VIC-based ISP register access: vic_regs=%p, isp_regs=%p ***\n", 
+                isp_dev->vic_regs, isp_regs);
+    } else {
+        /* Direct ISP register mapping as fallback */
+        isp_regs = ioremap(0x13300000, 0x100000);  /* Map ISP core directly */
+        if (!isp_regs) {
+            pr_err("*** CRITICAL ERROR: Cannot map ISP registers directly! ***\n");
+            return -ENODEV;
+        }
+        pr_info("*** Using direct ISP register mapping: isp_regs=%p ***\n", isp_regs);
+    }
+    
+    /* CRITICAL FIX: Safe sensor name access - avoid corrupted pointer dereference */
+    const char *sensor_name = "(unnamed)";
+    if (sensor_attr && ourISPdev && ourISPdev->sensor && ourISPdev->sensor->info.name[0]) {
+        sensor_name = ourISPdev->sensor->info.name;
+    }
+    
     pr_info("tisp_init: Initializing ISP hardware for sensor %s (%dx%d)\n",
-            sensor_attr->name ? sensor_attr->name : "(unnamed)",
+            sensor_name,
             sensor_attr->total_width, sensor_attr->total_height);
     
     /* *** BINARY NINJA REGISTER SEQUENCE - THE MISSING HARDWARE INITIALIZATION! *** */
@@ -758,13 +900,6 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
         pr_info("*** CSI PHY CONFIG REGISTERS WRITTEN ***\n");
     }
     
-    /* Binary Ninja: sensor_init call - initialize sensor control structure */
-    pr_info("*** CALLING sensor_init - INITIALIZING SENSOR CONTROL STRUCTURE ***\n");
-    int sensor_init_result = sensor_init(isp_dev);
-    if (sensor_init_result != 0) {
-        pr_warn("tisp_init: sensor_init returned %d, continuing anyway\n", sensor_init_result);
-    }
-    
     pr_info("*** tisp_init: COMPLETE - ALL MISSING HARDWARE REGISTERS NOW WRITTEN! ***\n");
     pr_info("*** ISP HARDWARE INITIALIZATION NOW MATCHES REFERENCE DRIVER ***\n");
     pr_info("*** BOTH CORE CONTROL VALUES AND MISSING CSI PHY WRITES FIXED ***\n");
@@ -775,7 +910,7 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
 /* CSI function forward declarations */
 static int csi_device_probe(struct tx_isp_dev *isp_dev);
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
-static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag);
+static int csi_core_init_standalone(struct tx_isp_subdev *sd, int init_flag);
 static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *sensor_attr);
 
 // ISP Tuning device support - missing component for /dev/isp-m0
@@ -1071,8 +1206,8 @@ static int tx_isp_activate_csi_subdev(struct tx_isp_dev *isp_dev)
 
 /* ===== CSI STANDALONE METHODS - Binary Ninja Reference Implementations ===== */
 
-/* csi_core_ops_init - Binary Ninja exact implementation */
-static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag)
+/* csi_core_init_standalone - Binary Ninja exact implementation (renamed to avoid conflicts) */
+static int csi_core_init_standalone(struct tx_isp_subdev *sd, int init_flag)
 {
     struct tx_isp_csi_device *csi_dev;
     void __iomem *csi_regs;
@@ -1267,7 +1402,7 @@ static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag)
                 
             } else {
                 /* Unsupported interface type */
-                pr_err("csi_core_ops_init: VIC failed to config DVP mode!(10bits-sensor) interface=%d\n", interface_type);
+                pr_err("csi_core_init_standalone: VIC failed to config DVP mode!(10bits-sensor) interface=%d\n", interface_type);
                 csi_dev->state = 3;
             }
         }
@@ -2012,22 +2147,22 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
     /* MIPS-SAFE: Instead of dangerous subdev iteration, directly call known working functions */
     if (enable) {
         pr_info("*** MIPS-SAFE: Enabling streaming without risky subdev iteration ***\n");
-        
-        /* SAFE: Call VIC streaming directly if available */
-        if (isp_dev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
-                pr_info("*** MIPS-SAFE: Calling VIC streaming directly ***\n");
-                vic_core_s_stream(&vic_dev->sd, enable);
-            }
-        }
-        
+
         /* SAFE: Call CSI streaming directly if available */
         if (isp_dev->csi_dev) {
             struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
             if (csi_dev && ((uintptr_t)csi_dev & 0x3) == 0) {
                 pr_info("*** MIPS-SAFE: Calling CSI streaming directly ***\n");
                 csi_video_s_stream_impl(&csi_dev->sd, enable);
+            }
+        }
+
+        /* SAFE: Call VIC streaming directly if available */
+        if (isp_dev->vic_dev) {
+            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
+                pr_info("*** MIPS-SAFE: Calling VIC streaming directly ***\n");
+                vic_core_s_stream(&vic_dev->sd, enable);
             }
         }
         
@@ -2112,6 +2247,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
 {
     void **subdevs_ptr;    /* $s4 in reference: arg1 + 0x38 */
     int i;
+    int ret = 0;
     
     pr_info("*** tx_isp_video_s_stream: FIXED Binary Ninja implementation - enable=%d ***\n", enable);
     
@@ -2924,25 +3060,39 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_err("Channel %d: SENSOR STREAMING NOT AVAILABLE - VIDEO WILL BE GREEN!\n", channel);
             }
             
-            // *** CRITICAL: TRIGGER VIC STREAMING CHAIN - THIS GENERATES THE REGISTER ACTIVITY! ***
-            if (ourISPdev && ourISPdev->vic_dev) {
-                struct tx_isp_vic_device *vic_streaming = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-                
-                pr_info("*** Channel %d: NOW CALLING VIC STREAMING CHAIN - THIS SHOULD GENERATE REGISTER ACTIVITY! ***\n", channel);
-                
-                // CRITICAL: Call vic_core_s_stream which calls tx_isp_vic_start when streaming
-                ret = vic_core_s_stream(&vic_streaming->sd, 1);
-                
-                pr_info("*** Channel %d: VIC STREAMING RETURNED %d - REGISTER ACTIVITY SHOULD NOW BE VISIBLE! ***\n", channel, ret);
-                
-                if (ret) {
-                    pr_err("Channel %d: VIC streaming failed: %d\n", channel, ret);
-                } else {
-                    pr_info("*** Channel %d: VIC STREAMING SUCCESS - ALL HARDWARE SHOULD BE ACTIVE! ***\n", channel);
-                }
+        // *** CRITICAL: TRIGGER VIC STREAMING CHAIN FIRST - THIS GENERATES THE VIC REGISTER ACTIVITY! ***
+        if (ourISPdev && ourISPdev->vic_dev) {
+            struct tx_isp_vic_device *vic_streaming = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            
+            pr_info("*** Channel %d: CALLING VIC STREAMING CHAIN FIRST - CORRECT REFERENCE ORDER! ***\n", channel);
+            
+            // CRITICAL: Call vic_core_s_stream which calls tx_isp_vic_start when streaming
+            ret = vic_core_s_stream(&vic_streaming->sd, 1);
+            
+            pr_info("*** Channel %d: VIC STREAMING RETURNED %d - VIC REGISTERS NOW CONFIGURED! ***\n", channel, ret);
+            
+            if (ret) {
+                pr_err("Channel %d: VIC streaming failed: %d\n", channel, ret);
             } else {
-                pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
+                pr_info("*** Channel %d: VIC STREAMING SUCCESS - NOW READY FOR CSI PHY CONFIG! ***\n", channel);
             }
+        } else {
+            pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
+        }
+        
+        // *** CRITICAL: NOW CALL BINARY NINJA tisp_init AFTER VIC - CORRECT REFERENCE ORDER! ***
+        pr_info("*** Channel %d: CALLING BINARY NINJA tisp_init AFTER VIC CONFIG - CORRECT TIMING! ***\n", channel);
+        
+        if (sensor && sensor->video.attr) {
+            ret = tisp_init(sensor->video.attr, ourISPdev);
+            if (ret) {
+                pr_err("*** Channel %d: BINARY NINJA tisp_init FAILED: %d ***\n", channel, ret);
+            } else {
+                pr_info("*** Channel %d: BINARY NINJA tisp_init SUCCESS - CSI PHY AFTER VIC! ***\n", channel);
+                pr_info("*** Channel %d: 0xb07c=0x341b, 0xb080=0x46b0, 0xb084=0x1813, 0xb08c=0x10a NOW WRITTEN! ***\n", channel);
+                pr_info("*** Channel %d: CSI PHY CONTROL REGISTERS NOW WRITTEN AFTER VIC CONFIG! ***\n", channel);
+            }
+        }
         } else {
             if (channel == 0) {
                 pr_warn("*** Channel %d: NO SENSOR AVAILABLE FOR STREAMING ***\n", channel);

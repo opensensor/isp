@@ -270,6 +270,122 @@ EXPORT_SYMBOL(tx_isp_subdev_deinit);
 
 static struct tx_isp_subdev_ops fs_subdev_ops = { 0 }; // All fields NULL/0
 
+/* ISP sensor wrapper functions - these delegate to registered sensor drivers */
+static int sensor_init_wrapper(struct tx_isp_subdev *sd, int enable)
+{
+    pr_info("*** ISP SENSOR WRAPPER init: enable=%d ***\n", enable);
+    pr_info("*** ISP: Initializing ISP-side for sensor gc2053 enable=%d ***\n", enable);
+    
+    pr_info("*** ISP DELEGATING TO REAL SENSOR_INIT: enable=%d ***\n", enable);
+    
+    /* FIXED: Use sensor registration system to call real sensor init */
+    extern int tx_isp_call_sensor_init(const char *sensor_name, int enable);
+    return tx_isp_call_sensor_init("gc2053", enable);
+}
+
+static int sensor_g_chip_ident_wrapper(struct tx_isp_subdev *sd, struct tx_isp_chip_ident *chip)
+{
+    pr_info("*** ISP DELEGATING TO REAL SENSOR_G_CHIP_IDENT ***\n");
+    
+    /* FIXED: Use sensor registration system to call real sensor g_chip_ident */
+    extern int tx_isp_call_sensor_g_chip_ident(const char *sensor_name, struct tx_isp_chip_ident *chip);
+    return tx_isp_call_sensor_g_chip_ident("gc2053", chip);
+}
+
+static int sensor_s_stream_wrapper(struct tx_isp_subdev *sd, int enable)
+{
+    pr_info("*** ISP SENSOR WRAPPER s_stream: enable=%d ***\n", enable);
+    pr_info("*** ISP: Setting up ISP-side for sensor gc2053 streaming=%d ***\n", enable);
+    pr_info("ISP: Configuring for MIPI interface\n");
+    
+    pr_info("*** ISP DELEGATING TO REAL SENSOR_S_STREAM: enable=%d ***\n", enable);
+    
+    /* FIXED: Use sensor registration system to call real sensor s_stream */
+    extern int tx_isp_call_sensor_s_stream(const char *sensor_name, int enable);
+    return tx_isp_call_sensor_s_stream("gc2053", enable);
+}
+
+/* Function to call real sensor functions through existing registration system */
+extern int tx_isp_call_sensor_init(const char *sensor_name, int enable)
+{
+    /* Look up sensor in the existing registration system */
+    extern struct tx_isp_dev *ourISPdev;
+    if (!ourISPdev || !ourISPdev->sensor) {
+        pr_err("*** tx_isp_call_sensor_init: No sensor registered ***\n");
+        return -ENODEV;
+    }
+    
+    struct tx_isp_sensor *sensor = ourISPdev->sensor;
+    if (!sensor->sd.ops || !sensor->sd.ops->core || !sensor->sd.ops->core->init) {
+        pr_err("*** tx_isp_call_sensor_init: No sensor init function ***\n");
+        return -ENODEV;
+    }
+    
+    pr_info("*** tx_isp_call_sensor_init: Calling real sensor init for %s ***\n", sensor->info.name);
+    return sensor->sd.ops->core->init(&sensor->sd, enable);
+}
+EXPORT_SYMBOL(tx_isp_call_sensor_init);
+
+extern int tx_isp_call_sensor_g_chip_ident(const char *sensor_name, struct tx_isp_chip_ident *chip)
+{
+    extern struct tx_isp_dev *ourISPdev;
+    if (!ourISPdev || !ourISPdev->sensor) {
+        pr_err("*** tx_isp_call_sensor_g_chip_ident: No sensor registered ***\n");
+        return -ENODEV;
+    }
+    
+    struct tx_isp_sensor *sensor = ourISPdev->sensor;
+    if (!sensor->sd.ops || !sensor->sd.ops->core || !sensor->sd.ops->core->g_chip_ident) {
+        pr_err("*** tx_isp_call_sensor_g_chip_ident: No sensor g_chip_ident function ***\n");
+        return -ENODEV;
+    }
+    
+    pr_info("*** tx_isp_call_sensor_g_chip_ident: Calling real sensor g_chip_ident for %s ***\n", sensor->info.name);
+    return sensor->sd.ops->core->g_chip_ident(&sensor->sd, chip);
+}
+EXPORT_SYMBOL(tx_isp_call_sensor_g_chip_ident);
+
+extern int tx_isp_call_sensor_s_stream(const char *sensor_name, int enable)
+{
+    extern struct tx_isp_dev *ourISPdev;
+    if (!ourISPdev || !ourISPdev->sensor) {
+        pr_err("*** tx_isp_call_sensor_s_stream: No sensor registered ***\n");
+        return -ENODEV;
+    }
+    
+    struct tx_isp_sensor *sensor = ourISPdev->sensor;
+    if (!sensor->sd.ops || !sensor->sd.ops->video || !sensor->sd.ops->video->s_stream) {
+        pr_err("*** tx_isp_call_sensor_s_stream: No sensor s_stream function ***\n");
+        return -ENODEV;
+    }
+    
+    pr_info("*** tx_isp_call_sensor_s_stream: Calling real sensor s_stream for %s - THIS WRITES 0x3e=0x91! ***\n", sensor->info.name);
+    return sensor->sd.ops->video->s_stream(&sensor->sd, enable);
+}
+EXPORT_SYMBOL(tx_isp_call_sensor_s_stream);
+
+/* Sensor wrapper operations structure - using existing registration system */
+static struct tx_isp_subdev_core_ops sensor_wrapper_core_ops = {
+    .init = sensor_init_wrapper,
+    .g_chip_ident = sensor_g_chip_ident_wrapper,
+};
+
+static struct tx_isp_subdev_video_ops sensor_wrapper_video_ops = {
+    .s_stream = sensor_s_stream_wrapper,
+};
+
+static struct tx_isp_subdev_ops sensor_wrapper_ops = {
+    .core = &sensor_wrapper_core_ops,
+    .video = &sensor_wrapper_video_ops,
+};
+
+/* Function to get sensor wrapper ops */
+struct tx_isp_subdev_ops *tx_isp_get_sensor_wrapper_ops(void)
+{
+    return &sensor_wrapper_ops;
+}
+EXPORT_SYMBOL(tx_isp_get_sensor_wrapper_ops);
+
 
 /* Platform driver structures */
 static struct platform_driver tx_isp_csi_driver = {
