@@ -1393,6 +1393,37 @@ msleep(200);
 
 pr_info("*** Applying 210ms streaming adjustment sequence ***\n");
 
+    /* Unlock sequence */
+    writel(2, vic_regs + 0x0);
+    wmb();
+    writel(1, vic_regs + 0x0);
+    wmb();
+
+    /* Binary Ninja: Wait for VIC unlock completion */
+    pr_info("tx_isp_vic_start: Waiting for VIC unlock completion...\n");
+    timeout = 10000;
+    while (timeout > 0) {
+        u32 status = readl(vic_regs + 0x0);
+        if (status == 0) {
+            pr_info("tx_isp_vic_start: VIC unlocked after %d iterations (status=0)\n", 10000 - timeout);
+            break;
+        }
+        udelay(1);
+        timeout--;
+    }
+
+    /* Binary Ninja: Enable VIC processing */
+    writel(1, vic_regs + 0x0);
+    wmb();
+    pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1)\n");
+
+    /* Binary Ninja: Final configuration registers */
+    writel(0x100010, vic_regs + 0x1a4);
+    writel(0x4210, vic_regs + 0x1ac);
+    writel(0x10, vic_regs + 0x1b0);
+    writel(0, vic_regs + 0x1b4);
+    wmb();
+
 // STEP 1: Stop/disable the streaming pipeline
 writel(0x0, csi_base + 0x8);          // Disable CSI PHY
 writel(0x0, main_isp_base + 0x9804);  // Stop ISP Control
