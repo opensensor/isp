@@ -1387,25 +1387,19 @@ if (!IS_ERR(cgu_isp_clk)) {
     wmb();
 
 
+    ///     struct clk *isp_clk, *cgu_isp_clk, *csi_clk, *ipu_clk;
+
     // disable ISP clocks
-    if (ourISPdev->isp_clk) {
-        clk_disable_unprepare(ourISPdev->isp_clk);
+        clk_disable_unprepare(isp_clk);
         pr_info("ISP clock disabled\n");
-    }
-    if (ourISPdev->cgu_isp_clk) {
-        clk_disable_unprepare(ourISPdev->cgu_isp_clk);
+
+        clk_disable_unprepare(cgu_isp_clk);
         pr_info("CGU ISP clock disabled\n");
-    }
-    if (ourISPdev->csi_clk) {
-        clk_disable_unprepare(ourISPdev->csi_clk);
+        clk_disable_unprepare(csi_clk);
         pr_info("CSI clock disabled\n");
-    }
-    if (ourISPdev->ipu_clk) {
-        clk_disable_unprepare(ourISPdev->ipu_clk);
+
+        clk_disable_unprepare(ipu_clk);
         pr_info("IPU clock disabled\n");
-    }
-
-
 
 pr_info("*** 210ms adjustment sequence applied ***\n");
 
