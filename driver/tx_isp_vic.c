@@ -2721,15 +2721,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 if (current_state == 4) {
                     vic_dev->state = 3;
                     pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
-
-                    /* Cancel timer if it's still pending */
-                    if (timer_initialized && timer_pending(&vic_adjustment_timer)) {
-                        del_timer_sync(&vic_adjustment_timer);
-                        pr_info("vic_core_s_stream: Cancelled pending adjustment timer\n");
-                    }
-
-                    /* Reset adjustment flag for next streaming session */
-                    adjustment_applied = false;
                 }
             } else {
                 /* Stream ON */
@@ -2753,7 +2744,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         }
 
                         /* Schedule timer for 210ms from now */
-                        mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(50));
+                        mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(80));
                         pr_info("vic_core_s_stream: Scheduled 10ms adjustment timer\n");
                         adjustment_applied = false;
 
@@ -2765,7 +2756,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                         /* If we're restarting streaming and adjustment hasn't been applied yet */
                         if (!adjustment_applied && timer_initialized) {
-                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(50));
+                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(80));
                             pr_info("vic_core_s_stream: Re-scheduled 210ms adjustment timer\n");
                         }
                     }
