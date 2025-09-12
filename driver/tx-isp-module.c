@@ -1202,55 +1202,6 @@ static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag)
                         }
                     }
                     
-                    /* *** CRITICAL FIX: Add the missing register writes from stock driver *** */
-                    /* These are the writes that appear in stock but not in our driver */
-                    if (isp_dev->vic_regs) {
-                        void __iomem *isp_csi_regs = isp_dev->vic_regs - 0xe0000; /* ISP base from VIC */
-                        
-                        pr_info("*** WRITING MISSING STOCK DRIVER REGISTERS ***\n");
-                        
-                        /* Stock driver CSI PHY Control writes after sensor detection */
-                        writel(0x0, isp_csi_regs + 0x8);     /* CSI PHY Control 0x8: 0x1 -> 0x0 */
-                        writel(0xb5742249, isp_csi_regs + 0xc);  /* CSI PHY Control 0xc: 0x80700008 -> 0xb5742249 */
-                        writel(0x133, isp_csi_regs + 0x10);  /* CSI PHY Control 0x10: 0x0 -> 0x133 */
-                        writel(0x8, isp_csi_regs + 0x1c);    /* CSI PHY Control 0x1c: 0x0 -> 0x8 */
-                        writel(0x8fffffff, isp_csi_regs + 0x30); /* CSI PHY Control 0x30: 0x0 -> 0x8fffffff */
-                        wmb();
-                        
-                        /* Stock driver CSI PHY Config write */
-                        writel(0x92217523, isp_csi_regs + 0x110); /* CSI PHY Config 0x110: 0x80007000 -> 0x92217523 */
-                        wmb();
-                        
-                        /* Stock driver ISP Control register resets */
-                        writel(0x0, isp_csi_regs + 0x9804);  /* ISP Control 0x9804: 0x3f00 -> 0x0 */
-                        wmb();
-                        
-                        /* Stock driver VIC Control register resets */
-                        writel(0x0, isp_csi_regs + 0x9ac0);  /* VIC Control 0x9ac0: 0x200 -> 0x0 */
-                        writel(0x0, isp_csi_regs + 0x9ac8);  /* VIC Control 0x9ac8: 0x200 -> 0x0 */
-                        wmb();
-                        
-                        /* Stock driver Core Control register updates */
-                        writel(0x24242424, isp_csi_regs + 0xb018); /* Core Control 0xb018: 0x40404040 -> 0x24242424 */
-                        writel(0x24242424, isp_csi_regs + 0xb01c); /* Core Control 0xb01c: 0x40404040 -> 0x24242424 */
-                        writel(0x24242424, isp_csi_regs + 0xb020); /* Core Control 0xb020: 0x40404040 -> 0x24242424 */
-                        writel(0x242424, isp_csi_regs + 0xb024);   /* Core Control 0xb024: 0x404040 -> 0x242424 */
-                        writel(0x10d0046, isp_csi_regs + 0xb028);  /* Core Control 0xb028: 0x1000080 -> 0x10d0046 */
-                        writel(0xe8002f, isp_csi_regs + 0xb02c);   /* Core Control 0xb02c: 0x1000080 -> 0xe8002f */
-                        writel(0xc50100, isp_csi_regs + 0xb030);   /* Core Control 0xb030: 0x100 -> 0xc50100 */
-                        writel(0x1670100, isp_csi_regs + 0xb034);  /* Core Control 0xb034: 0xffff0100 -> 0x1670100 */
-                        writel(0x1f001, isp_csi_regs + 0xb038);    /* Core Control 0xb038: 0x1ff00 -> 0x1f001 */
-                        writel(0x46e0000, isp_csi_regs + 0xb03c);  /* Core Control 0xb03c: 0x0 -> 0x46e0000 */
-                        writel(0x46e1000, isp_csi_regs + 0xb040);  /* Core Control 0xb040: 0x0 -> 0x46e1000 */
-                        writel(0x46e2000, isp_csi_regs + 0xb044);  /* Core Control 0xb044: 0x0 -> 0x46e2000 */
-                        writel(0x46e3000, isp_csi_regs + 0xb048);  /* Core Control 0xb048: 0x0 -> 0x46e3000 */
-                        writel(0x3, isp_csi_regs + 0xb04c);        /* Core Control 0xb04c: 0x103 -> 0x3 */
-                        writel(0x10000000, isp_csi_regs + 0xb078); /* Core Control 0xb078: 0x0 -> 0x10000000 */
-                        wmb();
-                        
-                        pr_info("*** MISSING STOCK DRIVER REGISTERS WRITTEN - SHOULD NOW MATCH! ***\n");
-                    }
-                    
                     /* Binary Ninja: Final DVP configuration */
                     if (isp_dev->vic_regs) {
                         void __iomem *isp_csi_regs = isp_dev->vic_regs + 0x200;

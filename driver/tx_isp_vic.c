@@ -1072,6 +1072,26 @@ if (!IS_ERR(cgu_isp_clk)) {
     }
 
     pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
+
+
+    pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
+    tx_isp_enable_irq(isp_dev);
+    pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
+
+    /* *** CRITICAL FIX: Initialize VIC hardware interrupts FIRST *** */
+    pr_info("*** tx_isp_vic_start: CRITICAL FIX - Initializing VIC hardware interrupts ***\n");
+    ret = tx_isp_vic_hw_init(&vic_dev->sd);
+    if (ret != 0) {
+        pr_err("tx_isp_vic_start: VIC hardware interrupt init failed: %d\n", ret);
+        return ret;
+    }
+    pr_info("*** tx_isp_vic_start: VIC hardware interrupts initialized successfully ***\n");
+
+    /* *** CRITICAL FIX: Enable VIC hardware interrupts using safe struct access *** */
+    pr_info("*** tx_isp_vic_start: CRITICAL FIX - Enabling VIC hardware interrupts ***\n");
+    tx_vic_enable_irq(vic_dev);
+    pr_info("*** tx_isp_vic_start: VIC hardware interrupts enabled - hw_irq_enabled=%d ***\n", vic_dev->hw_irq_enabled);
+
     
     /* Take a local copy of sensor attributes to prevent corruption during streaming */
     struct tx_isp_sensor_attribute local_sensor_attr;
@@ -1461,23 +1481,6 @@ if (!IS_ERR(cgu_isp_clk)) {
     const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
-
-    /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
-    vic_start_ok = 1;
-    
-    /* CRITICAL: Enable ISP system-level interrupts when VIC streaming starts */
-    extern void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
-    
-    if (ourISPdev) {
-        pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
-        tx_isp_enable_irq(ourISPdev);
-        pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
-    } else {
-        pr_err("*** tx_isp_vic_start: No ISP device found for interrupt enable ***\n");
-    }
-    
-    pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
-    pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
 
     /* MCP LOG: VIC start completed successfully */
     pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d, interface=%d\n", 

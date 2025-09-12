@@ -42,17 +42,17 @@ struct member access based on our actual driver structures on an as needed basis
 - Standard file system operations
 
 **Usage Guidelines:**
-- MANDATORY: Before implementing any method, use Binary Ninja MCP to search for and decompile the reference method
+- Before implementing most any method, use Binary Ninja MCP to search for and decompile the reference method
 - Query format: Use MCP to decompile the specific method you're about to implement
-- Do NOT attempt unsupported BN MCP operations
+- Do NOT attempt unsupported BN MCP operations, only query and decompile are supported.
 - Always compare your implementation against the Binary Ninja decompiled reference before finalizing
 
 ## When Confused or Stuck
-- STOP and use Binary Ninja MCP to search for and decompile the specific reference method you're implementing
-- Don't guess at method boundaries or logic flow - query the reference with Binary Ninja MCP first
+- Think if this is a moment that you should use Binary Ninja MCP to search for and decompile the specific reference method you're implementing
+- Typically Don't guess at method boundaries or logic flow - query the reference with Binary Ninja MCP first
 - Ask for clarification on which reference methods should be called vs inlined
 - Always get Binary Ninja decompilation before writing any method implementation
-- Adjust the BN implementations to use safe member struct access instead of offset based accesses.
+- MANDATORY: Adjust the BN implementations to use safe member struct access instead of offset based accesses.
 
 ## Quality Checks Before Submitting
 - Verify each method maps to exactly one reference method
