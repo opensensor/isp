@@ -2753,8 +2753,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                             }
 
                             /* Schedule timer for 210ms from now */
-                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(100));
-                            pr_info("vic_core_s_stream: Scheduled 210ms adjustment timer\n");
+                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(10));
+                            pr_info("vic_core_s_stream: Scheduled 10ms adjustment timer\n");
                             adjustment_applied = false;
                         }
                     } else {
