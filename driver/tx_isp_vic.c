@@ -1245,6 +1245,9 @@ if (!IS_ERR(cgu_isp_clk)) {
         pr_err("*** CRITICAL: No VIC register base - initialization required first ***\n");
         return -EINVAL;
     }
+    /* Calculate base addresses for different register blocks */
+    void __iomem *main_isp_base = vic_regs - 0x9a00;  /* Calculate main ISP base from VIC base */
+    void __iomem *csi_base = main_isp_base + 0x10000;  /* CSI base is at ISP base + 0x10000 */
 
     pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
 
