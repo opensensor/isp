@@ -996,7 +996,7 @@ void tx_isp_vic_write_streaming_registers_post_csi(void)
     msleep(50);
     
     /* CSI PHY Control registers - these change values during streaming phase */
-    
+
     writel(0x0, main_isp_base + 0x8);           /* 0x1 -> 0x0 */
     wmb();
     
