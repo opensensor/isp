@@ -1388,38 +1388,51 @@ if (!IS_ERR(cgu_isp_clk)) {
 
     pr_info("*** Completed writing ALL missing initialization registers from reference trace ***\n");
 
-    msleep(200);
+// After your existing initialization code, at the 200ms mark:
+msleep(200);
 
-        // Apply the register sequence
-    writel(0x0, csi_base + 0x8);
-    writel(0xb5742249, csi_base + 0xc);
-    writel(0x133, csi_base + 0x10);
-    writel(0x8, csi_base + 0x1c);
-    writel(0x8fffffff, csi_base + 0x30);
-    writel(0x92217523, csi_base + 0x110);
+pr_info("*** Applying 210ms streaming adjustment sequence ***\n");
 
-    writel(0x0, main_isp_base + 0x9804);
-    writel(0x0, main_isp_base + 0x9ac0);
-    writel(0x0, main_isp_base + 0x9ac8);
+// STEP 1: Stop/disable the streaming pipeline
+writel(0x0, csi_base + 0x8);          // Disable CSI PHY
+writel(0x0, main_isp_base + 0x9804);  // Stop ISP Control
+writel(0x0, main_isp_base + 0x9ac0);  // Clear VIC Control
+writel(0x0, main_isp_base + 0x9ac8);  // Clear VIC Control
+wmb();
 
-    // Core control updates
-    writel(0x24242424, main_isp_base + 0xb018);
-    writel(0x24242424, main_isp_base + 0xb01c);
-    writel(0x24242424, main_isp_base + 0xb020);
-    writel(0x242424, main_isp_base + 0xb024);
-    writel(0x10d0046, main_isp_base + 0xb028);
-    writel(0xe8002f, main_isp_base + 0xb02c);
-    writel(0xc50100, main_isp_base + 0xb030);
-    writel(0x1670100, main_isp_base + 0xb034);
-    writel(0x1f001, main_isp_base + 0xb038);
-    writel(0x46e0000, main_isp_base + 0xb03c);
-    writel(0x46e1000, main_isp_base + 0xb040);
-    writel(0x46e2000, main_isp_base + 0xb044);
-    writel(0x46e3000, main_isp_base + 0xb048);
-    writel(0x3, main_isp_base + 0xb04c);
-    writel(0x10000000, main_isp_base + 0xb078);
-    wmb();
+// STEP 2: Wait for pipeline to stop
+msleep(10);
 
+// STEP 3: Apply new configuration values while stopped
+writel(0xb5742249, csi_base + 0xc);
+writel(0x133, csi_base + 0x10);
+writel(0x8, csi_base + 0x1c);
+writel(0x8fffffff, csi_base + 0x30);
+writel(0x92217523, csi_base + 0x110);
+
+// Core control updates
+writel(0x24242424, main_isp_base + 0xb018);
+writel(0x24242424, main_isp_base + 0xb01c);
+writel(0x24242424, main_isp_base + 0xb020);
+writel(0x242424, main_isp_base + 0xb024);
+writel(0x10d0046, main_isp_base + 0xb028);
+writel(0xe8002f, main_isp_base + 0xb02c);
+writel(0xc50100, main_isp_base + 0xb030);
+writel(0x1670100, main_isp_base + 0xb034);
+writel(0x1f001, main_isp_base + 0xb038);
+writel(0x46e0000, main_isp_base + 0xb03c);
+writel(0x46e1000, main_isp_base + 0xb040);
+writel(0x46e2000, main_isp_base + 0xb044);
+writel(0x46e3000, main_isp_base + 0xb048);
+writel(0x3, main_isp_base + 0xb04c);  // Note: This changes from 0x103 to 0x3
+writel(0x10000000, main_isp_base + 0xb078);
+wmb();
+
+// STEP 4: Re-enable in reverse order (might need to restart streaming)
+// Note: The trace shows these staying at 0, so maybe they don't get re-enabled here
+// Or maybe they get re-enabled by a subsequent command
+
+pr_info("*** 210ms adjustment sequence applied ***\n");
 
     /* ==============================================================================================
      * PHASE 3: VIC initial configuration (T+270ms)
