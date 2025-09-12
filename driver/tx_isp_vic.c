@@ -1386,6 +1386,9 @@ if (!IS_ERR(cgu_isp_clk)) {
     writel(0x1813, vic_regs + 0xb084);       /* Core Control register */
     writel(0x10a, vic_regs + 0xb08c);        /* Core Control register */
     wmb();
+
+
+    ispcore_activate_module(ourISPdev);
     
     pr_info("*** Completed writing ALL missing initialization registers from reference trace ***\n");
 
@@ -1780,7 +1783,6 @@ ISP isp-m0: [CSI PHY Control] write at offset 0x1c: 0x0 -> 0x8 (delta: 0.000 ms)
 ISP isp-m0: [CSI PHY Control] write at offset 0x30: 0x0 -> 0x8fffffff (delta: 0.000 ms)
 ISP isp-m0: [CSI PHY Config] write at offset 0x110: 0x80007000 -> 0x92217523 (delta: 210.000 ms)
 */
-    ispcore_activate_module(ourISPdev);
 
     /* ==============================================================================================
      * PHASE 2: CSI PHY Lane Configuration (massive write sequence)
