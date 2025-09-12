@@ -1391,6 +1391,8 @@ if (!IS_ERR(cgu_isp_clk)) {
 
         clk_disable_unprepare(csi_clk);
         pr_info("CSI clock disabled\n");
+        //enable it again
+        ret = clk_prepare_enable(csi_clk);
 
 
 pr_info("*** 210ms adjustment sequence applied ***\n");
