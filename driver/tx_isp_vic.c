@@ -2739,7 +2739,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         }
 
                         /* Schedule timer for 210ms from now */
-                        mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(95));
+                        mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(105));
                         pr_info("vic_core_s_stream: Scheduled 10ms adjustment timer\n");
                         adjustment_applied = false;
 
@@ -2751,7 +2751,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                         /* If we're restarting streaming and adjustment hasn't been applied yet */
                         if (!adjustment_applied && timer_initialized) {
-                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(95));
+                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(105));
                             pr_info("vic_core_s_stream: Re-scheduled 210ms adjustment timer\n");
                         }
                     }
