@@ -5110,7 +5110,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                     if (csi_result != 0 && csi_result != 0xfffffdfd) {
                         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch1 hcomp err !!!\n", *($s1_2 + 8)) */
                         pr_err("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
-                        break;
+                        return -1;
                     }
                 }
                 
