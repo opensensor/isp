@@ -2626,94 +2626,103 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     return ret;
 }
 
-/* vic_core_s_stream - EXACT Binary Ninja implementation matching reference driver */
+/* Update your vic_core_s_stream to use the correct base addresses */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
     void __iomem *vic_regs = vic_dev->vic_regs;
-    /* Calculate base addresses for different register blocks */
-    void __iomem *main_isp_base = vic_regs - 0x9a00;  /* Calculate main ISP base from VIC base */
-    void __iomem *csi_base = main_isp_base + 0x10000;  /* CSI base is at ISP base + 0x10000 */
 
-    int ret = -EINVAL;  /* 0xffffffea */
-    
+    /* CRITICAL FIX: Use the correct ISP base address */
+    void __iomem *isp_base = vic_regs - 0xe0000;  /* ISP core at 0x13300000 */
+    void __iomem *csi_base = isp_base + 0x10000;  /* CSI at 0x13310000 */
+
+    /* For register writes, we need to add the register offset */
+    /* So for 0x9804, we write to isp_base + 0x9804 */
+    /* For 0xb04c, we write to isp_base + 0xb04c */
+
+    int ret = -EINVAL;
+
     pr_info("vic_core_s_stream: sd=%p, enable=%d\n", sd, enable);
-    
-    /* Binary Ninja: if (arg1 != 0) */
+    pr_info("vic_regs=%p, isp_base=%p, csi_base=%p\n", vic_regs, isp_base, csi_base);
+
     if (sd != NULL) {
-        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
         if ((unsigned long)sd >= 0xfffff001) {
             pr_err("vic_core_s_stream: Invalid sd pointer\n");
             return -EINVAL;
         }
-        
-        /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
-        ret = -EINVAL;  /* 0xffffffea */
-        
-        /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
+
+        ret = -EINVAL;
+
         if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
-            /* Binary Ninja: int32_t $v1_3 = *($s1_1 + 0x128) */
-            int current_state = vic_dev->state;  /* State at offset 0x128 */
-            
-            /* Binary Ninja: if (arg2 == 0) */
+            int current_state = vic_dev->state;
+
             if (enable == 0) {
                 /* Stream OFF */
                 ret = 0;
-                
-                /* Binary Ninja: if ($v1_3 == 4) */
+
                 if (current_state == 4) {
-                    /* Binary Ninja: *($s1_1 + 0x128) = 3 */
                     vic_dev->state = 3;
                     pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
+
                     msleep(200);
 
-pr_info("*** Applying 210ms streaming adjustment - setting hardware to state 3 ***\n");
+                    pr_info("*** Applying 210ms adjustment with CORRECT addressing ***\n");
 
-// STEP 1: Set the hardware state to 3 (stopped) via register 0xb04c
-writel(0x3, main_isp_base + 0xb04c);  // This is the key - set hardware to state 3
-wmb();
+                    /* Use the tisp_channel_stop protocol first */
+                    u32 ch_en = readl(isp_base + 0x9804);
+                    pr_info("Current channel enable: 0x%x\n", ch_en);
 
-// STEP 2: Also update the software state if you have access to vic_dev
-if (vic_dev) {
-    // Assuming offset 0x128 in your structure
-    *((u32 *)((u8 *)vic_dev + 0x128)) = 3;
-}
+                    /* Clear all channel bits to stop */
+                    writel(0x0, isp_base + 0x9804);
+                    wmb();
 
-// STEP 3: Now apply all the register changes while in stopped state
-writel(0x0, csi_base + 0x8);
-writel(0xb5742249, csi_base + 0xc);
-writel(0x133, csi_base + 0x10);
-writel(0x8, csi_base + 0x1c);
-writel(0x8fffffff, csi_base + 0x30);
-writel(0x92217523, csi_base + 0x110);
+                    /* Poll for stop acknowledgment */
+                    int timeout = 100;
+                    u32 status;
+                    while (timeout > 0) {
+                        status = readl(isp_base + 0x9808);
+                        if (status == 0) {
+                            pr_info("Channels stopped, status=0x%x\n", status);
+                            break;
+                        }
+                        msleep(1);
+                        timeout--;
+                    }
 
-writel(0x0, main_isp_base + 0x9804);
-writel(0x0, main_isp_base + 0x9ac0);
-writel(0x0, main_isp_base + 0x9ac8);
+                    /* Now apply the register sequence with CORRECT addresses */
+                    writel(0x3, isp_base + 0xb04c);  /* Set hardware state to 3 */
+                    wmb();
 
-// Core control updates
-writel(0x24242424, main_isp_base + 0xb018);
-writel(0x24242424, main_isp_base + 0xb01c);
-writel(0x24242424, main_isp_base + 0xb020);
-writel(0x242424, main_isp_base + 0xb024);
-writel(0x10d0046, main_isp_base + 0xb028);
-writel(0xe8002f, main_isp_base + 0xb02c);
-writel(0xc50100, main_isp_base + 0xb030);
-writel(0x1670100, main_isp_base + 0xb034);
-writel(0x1f001, main_isp_base + 0xb038);
-writel(0x46e0000, main_isp_base + 0xb03c);
-writel(0x46e1000, main_isp_base + 0xb040);
-writel(0x46e2000, main_isp_base + 0xb044);
-writel(0x46e3000, main_isp_base + 0xb048);
-// Note: Keep it at state 3
-writel(0x10000000, main_isp_base + 0xb078);
-wmb();
+                    /* CSI PHY updates */
+                    writel(0x0, csi_base + 0x8);
+                    writel(0xb5742249, csi_base + 0xc);
+                    writel(0x133, csi_base + 0x10);
+                    writel(0x8, csi_base + 0x1c);
+                    writel(0x8fffffff, csi_base + 0x30);
+                    writel(0x92217523, csi_base + 0x110);
 
-pr_info("*** Hardware set to state 3, registers updated ***\n");
+                    /* VIC Control registers */
+                    writel(0x0, isp_base + 0x9ac0);
+                    writel(0x0, isp_base + 0x9ac8);
 
-// STEP 4: The system might restart streaming automatically, or you might need to
-// trigger it by setting state back to 4 or 0x103
-// This might happen automatically via interrupt or other mechanism
+                    /* Core control updates */
+                    writel(0x24242424, isp_base + 0xb018);
+                    writel(0x24242424, isp_base + 0xb01c);
+                    writel(0x24242424, isp_base + 0xb020);
+                    writel(0x242424, isp_base + 0xb024);
+                    writel(0x10d0046, isp_base + 0xb028);
+                    writel(0xe8002f, isp_base + 0xb02c);
+                    writel(0xc50100, isp_base + 0xb030);
+                    writel(0x1670100, isp_base + 0xb034);
+                    writel(0x1f001, isp_base + 0xb038);
+                    writel(0x46e0000, isp_base + 0xb03c);
+                    writel(0x46e1000, isp_base + 0xb040);
+                    writel(0x46e2000, isp_base + 0xb044);
+                    writel(0x46e3000, isp_base + 0xb048);
+                    writel(0x10000000, isp_base + 0xb078);
+                    wmb();
+
+                    pr_info("*** Register sequence applied with correct addressing ***\n");
                 }
             } else {
                 /* Stream ON */
