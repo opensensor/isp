@@ -2153,6 +2153,18 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     /* Disable VIC interrupts during start */
                     vic_start_ok = 0;
                     
+                    /* CRITICAL: Call CSI sensor ops ioctl to trigger CSI initialization */
+                    /* This matches the reference driver flow where CSI gets initialized during streaming */
+                    if (ourISPdev && ourISPdev->csi_dev) {
+                        pr_info("vic_core_s_stream: Triggering CSI initialization for streaming\n");
+                        /* Call CSI sensor ops ioctl with command 0x200000c to trigger csi_core_ops_init */
+                        if (ourISPdev->csi_dev->ops && ourISPdev->csi_dev->ops->sensor && 
+                            ourISPdev->csi_dev->ops->sensor->ioctl) {
+                            ret = ourISPdev->csi_dev->ops->sensor->ioctl(ourISPdev->csi_dev, 0x200000c, NULL);
+                            pr_info("vic_core_s_stream: CSI sensor ioctl returned %d\n", ret);
+                        }
+                    }
+                    
                     /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
                     ret = tx_isp_vic_start(vic_dev);
                     
