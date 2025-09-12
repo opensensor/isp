@@ -2627,85 +2627,47 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
 }
 
 /* Update your vic_core_s_stream to use the correct base addresses */
+static bool first_stop_after_start = false;
+
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
     void __iomem *vic_regs = vic_dev->vic_regs;
-
-    /* CRITICAL FIX: Use the correct ISP base address */
-    void __iomem *isp_base = vic_regs - 0xe0000;  /* ISP core at 0x13300000 */
-    void __iomem *csi_base = isp_base + 0x10000;  /* CSI at 0x13310000 */
-
-    /* For register writes, we need to add the register offset */
-    /* So for 0x9804, we write to isp_base + 0x9804 */
-    /* For 0xb04c, we write to isp_base + 0xb04c */
+    void __iomem *isp_base = vic_regs - 0xe0000;
+    void __iomem *csi_base = isp_base + 0x10000;
 
     int ret = -EINVAL;
 
     pr_info("vic_core_s_stream: sd=%p, enable=%d\n", sd, enable);
     pr_info("vic_regs=%p, isp_base=%p, csi_base=%p\n", vic_regs, isp_base, csi_base);
 
-    if (sd != NULL) {
-        if ((unsigned long)sd >= 0xfffff001) {
-            pr_err("vic_core_s_stream: Invalid sd pointer\n");
-            return -EINVAL;
-        }
+    if (sd != NULL && vic_dev != NULL) {
+        int current_state = vic_dev->state;
 
-        ret = -EINVAL;
+        if (enable == 0) {
+            /* Stream OFF */
+            ret = 0;
 
-        if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
-            int current_state = vic_dev->state;
+            if (current_state == 4) {
+                vic_dev->state = 3;
+                pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
 
-            if (enable == 0) {
-                /* Stream OFF */
-                ret = 0;
+                /* Apply the 210ms sequence only on first stop after start */
+                if (first_stop_after_start) {
+                    pr_info("*** Applying 210ms adjustment sequence on first stop ***\n");
 
-                if (current_state == 4) {
-                    vic_dev->state = 3;
-                    pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
-
-                    msleep(200);
-
-                    pr_info("*** Applying 210ms adjustment with CORRECT addressing ***\n");
-
-                    /* Use the tisp_channel_stop protocol first */
-                    u32 ch_en = readl(isp_base + 0x9804);
-                    pr_info("Current channel enable: 0x%x\n", ch_en);
-
-                    /* Clear all channel bits to stop */
-                    writel(0x0, isp_base + 0x9804);
-                    wmb();
-
-                    /* Poll for stop acknowledgment */
-                    int timeout = 100;
-                    u32 status;
-                    while (timeout > 0) {
-                        status = readl(isp_base + 0x9808);
-                        if (status == 0) {
-                            pr_info("Channels stopped, status=0x%x\n", status);
-                            break;
-                        }
-                        msleep(1);
-                        timeout--;
-                    }
-
-                    /* Now apply the register sequence with CORRECT addresses */
-                    writel(0x3, isp_base + 0xb04c);  /* Set hardware state to 3 */
-                    wmb();
-
-                    /* CSI PHY updates */
-                    writel(0x0, csi_base + 0x8);
+                    /* Add the missing CSI PHY Control 0x8 write! */
+                    writel(0x0, csi_base + 0x8);  /* CRITICAL: This was missing */
                     writel(0xb5742249, csi_base + 0xc);
                     writel(0x133, csi_base + 0x10);
                     writel(0x8, csi_base + 0x1c);
                     writel(0x8fffffff, csi_base + 0x30);
                     writel(0x92217523, csi_base + 0x110);
 
-                    /* VIC Control registers */
+                    writel(0x0, isp_base + 0x9804);
                     writel(0x0, isp_base + 0x9ac0);
                     writel(0x0, isp_base + 0x9ac8);
 
-                    /* Core control updates */
                     writel(0x24242424, isp_base + 0xb018);
                     writel(0x24242424, isp_base + 0xb01c);
                     writel(0x24242424, isp_base + 0xb020);
@@ -2719,51 +2681,36 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     writel(0x46e1000, isp_base + 0xb040);
                     writel(0x46e2000, isp_base + 0xb044);
                     writel(0x46e3000, isp_base + 0xb048);
+                    writel(0x3, isp_base + 0xb04c);
                     writel(0x10000000, isp_base + 0xb078);
                     wmb();
 
-                    pr_info("*** Register sequence applied with correct addressing ***\n");
+                    pr_info("*** 210ms adjustment sequence completed ***\n");
+                    first_stop_after_start = false;
                 }
-            } else {
-                /* Stream ON */
-                ret = 0;
-                
-                /* Binary Ninja: if ($v1_3 != 4) */
-                if (current_state != 4) {
-                    pr_info("vic_core_s_stream: Stream ON - calling tx_isp_vic_start\n");
-                    
-                    /* Binary Ninja: tx_vic_disable_irq() */
-                    /* Disable VIC interrupts during start */
-                    vic_start_ok = 0;
-                    
-                    
-                    /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
-                    if (vic_enabled == 0) {
-                        ret = tx_isp_vic_start(vic_dev);
-                        vic_enabled = 1;
-                    } else { // TODO call alternative VIC progress function
-                        //ret = tx_isp_vic_progress(vic_dev);
-                        ret = 0;
-                        pr_info("vic_core_s_stream: tx_isp_vic_progress returned %d\n", ret);
-                    }
-                    
-                    /* Binary Ninja: *($s1_1 + 0x128) = 4 */
-                    vic_dev->state = 4;
-                    
-                    /* Binary Ninja: tx_vic_enable_irq() */
-                    /* Enable VIC interrupts after successful start */
-                    vic_start_ok = 1;
-                    
-                    pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
-                    
-                    /* Binary Ninja: return $v0_1 */
-                    return ret;
+            }
+        } else {
+            /* Stream ON */
+            ret = 0;
+
+            if (current_state != 4) {
+                pr_info("vic_core_s_stream: Stream ON - calling tx_isp_vic_start\n");
+
+                if (vic_enabled == 0) {
+                    ret = tx_isp_vic_start(vic_dev);
+                    vic_enabled = 1;
+                    first_stop_after_start = true;  /* Mark for adjustment on next stop */
+                } else {
+                    ret = 0;
                 }
+
+                vic_dev->state = 4;
+                pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
+                return ret;
             }
         }
     }
-    
-    /* Binary Ninja: return $v0 */
+
     return ret;
 }
 
