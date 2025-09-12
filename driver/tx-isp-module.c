@@ -6237,11 +6237,8 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
             pr_err("*** Sensor streaming failed, rolled back ISP state ***\n");
         } else if (ret == 0 && enable) {
             /* *** CRITICAL: SENSOR STREAMING SUCCESS - NOW CALL STREAMING REGISTERS! *** */
-            pr_info("*** SENSOR STREAMING SUCCESS - NOW CALLING STREAMING REGISTER SEQUENCE! ***\n");
-            
-            /* CRITICAL: Call the streaming register function AFTER sensor detection completes */
-            extern void tx_isp_vic_write_streaming_registers_post_csi(void);
-            tx_isp_vic_write_streaming_registers_post_csi();
+            pr_info("*** SENSOR STREAMING SUCCESS - HOOK FOR STREAMING REGISTER SEQUENCE! ***\n");
+
         }
     } else {
         pr_err("*** ERROR: NO REAL SENSOR DRIVER S_STREAM FUNCTION AVAILABLE! ***\n");
