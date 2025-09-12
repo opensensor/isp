@@ -2105,72 +2105,74 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     return ret;
 }
 
-/* CRITICAL MISSING FUNCTION: vic_core_s_stream - FIXED to call tx_isp_vic_start */
+/* vic_core_s_stream - EXACT Binary Ninja implementation matching reference driver */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
-    int ret = 0;
+    int ret = -EINVAL;  /* 0xffffffea */
     
-    if (!sd) {
-        pr_err("VIC s_stream: NULL subdev\n");
-        return -EINVAL;
-    }
+    pr_info("vic_core_s_stream: sd=%p, enable=%d\n", sd, enable);
     
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    if (!vic_dev) {
-        pr_err("VIC s_stream: NULL vic_dev\n");
-        return -EINVAL;
-    }
-    
-    pr_info("VIC s_stream: enable=%d, current_state=%d, vic_start_ok=%d\n", enable, vic_dev->state, vic_start_ok);
-    
-    // mutex_lock(&vic_dev->state_lock);
-    
-    if (enable) {
-        /* Start VIC streaming - CRITICAL FIX: Call tx_isp_vic_start FIRST */
-        if (vic_dev->state != 4) { /* Not already streaming */
+    /* Binary Ninja: if (arg1 != 0) */
+    if (sd != NULL) {
+        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
+        if ((unsigned long)sd >= 0xfffff001) {
+            pr_err("vic_core_s_stream: Invalid sd pointer\n");
+            return -EINVAL;
+        }
+        
+        /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
+        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+        ret = -EINVAL;  /* 0xffffffea */
+        
+        /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
+        if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
+            /* Binary Ninja: int32_t $v1_3 = *($s1_1 + 0x128) */
+            int current_state = vic_dev->state;  /* State at offset 0x128 */
             
-            /* *** CRITICAL FIX: Call tx_isp_vic_start to set vic_start_ok = 1 *** */
-            pr_info("*** VIC: CRITICAL FIX - calling tx_isp_vic_start BEFORE streaming ***\n");
-            ret = tx_isp_vic_start(vic_dev);
-            if (ret != 0) {
-                pr_err("VIC: tx_isp_vic_start failed: %d - ABORTING stream start\n", ret);
-                goto unlock_exit;
-            }
-            pr_info("*** VIC: tx_isp_vic_start SUCCESS - vic_start_ok should now be 1 ***\n");
-            
-            /* Now start the streaming */
-            pr_info("VIC: Starting streaming - calling ispvic_frame_channel_s_stream(1)\n");
-            ret = ispvic_frame_channel_s_stream(vic_dev, 1);
-            if (ret == 0) {
-                vic_dev->state = 4; /* STREAMING state */
-                pr_info("VIC: Streaming started successfully, state -> 4\n");
-                pr_info("*** VIC: STREAMING WITH INTERRUPTS ENABLED (vic_start_ok=%d) ***\n", vic_start_ok);
+            /* Binary Ninja: if (arg2 == 0) */
+            if (enable == 0) {
+                /* Stream OFF */
+                ret = 0;
+                
+                /* Binary Ninja: if ($v1_3 == 4) */
+                if (current_state == 4) {
+                    /* Binary Ninja: *($s1_1 + 0x128) = 3 */
+                    vic_dev->state = 3;
+                    pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
+                }
             } else {
-                pr_err("VIC: ispvic_frame_channel_s_stream failed: %d\n", ret);
+                /* Stream ON */
+                ret = 0;
+                
+                /* Binary Ninja: if ($v1_3 != 4) */
+                if (current_state != 4) {
+                    pr_info("vic_core_s_stream: Stream ON - calling tx_isp_vic_start\n");
+                    
+                    /* Binary Ninja: tx_vic_disable_irq() */
+                    /* Disable VIC interrupts during start */
+                    vic_start_ok = 0;
+                    
+                    /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
+                    ret = tx_isp_vic_start(vic_dev);
+                    
+                    /* Binary Ninja: *($s1_1 + 0x128) = 4 */
+                    vic_dev->state = 4;
+                    
+                    /* Binary Ninja: tx_vic_enable_irq() */
+                    /* Enable VIC interrupts after successful start */
+                    vic_start_ok = 1;
+                    
+                    pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
+                    
+                    /* Binary Ninja: return $v0_1 */
+                    return ret;
+                }
             }
-        } else {
-            pr_info("VIC: Already streaming (state=%d)\n", vic_dev->state);
-        }
-    } else {
-        /* Stop VIC streaming */
-        if (vic_dev->state == 4) { /* Currently streaming */
-            pr_info("VIC: Stopping streaming - calling ispvic_frame_channel_s_stream(0)\n");
-            ret = ispvic_frame_channel_s_stream(vic_dev, 0);
-            if (ret == 0) {
-                vic_dev->state = 3; /* ACTIVE but not streaming */
-                pr_info("VIC: Streaming stopped, state -> 3\n");
-                /* Reset vic_start_ok when stopping */
-                vic_start_ok = 1;
-                pr_info("VIC: vic_start_ok reset to 0 (interrupts disabled)\n");
-            }
-        } else {
-            pr_info("VIC: Not streaming (state=%d)\n", vic_dev->state);
         }
     }
-
-unlock_exit:
-    // mutex_unlock(&vic_dev->state_lock);
+    
+    /* Binary Ninja: return $v0 */
     return ret;
 }
 
