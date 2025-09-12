@@ -2121,14 +2121,8 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             
             /* CRITICAL: After sensor streaming succeeds, write the streaming phase registers */
             if (ret == 0 && enable) {
-                pr_info("*** CRITICAL: Writing streaming phase registers to MAIN ISP register space AFTER CSI PHY sequence ***\n");
-                pr_info("*** Writing to MAIN ISP base %p (not VIC base) - CORRECT SEQUENCING ***\n", ourISPdev->vic_regs - 0x9a00);
-                
-                /* Call the streaming register function AFTER sensor detection completes */
-                extern void tx_isp_vic_write_streaming_registers_post_csi(void);
-                tx_isp_vic_write_streaming_registers_post_csi();
-                
-                pr_info("*** CRITICAL: All streaming registers written to MAIN ISP register space with CORRECT SEQUENCING ***\n");
+                pr_info("*** Another hook spot post streaming register ***\n");
+
             }
             
             pr_info("*** Sensor s_stream completed: %d ***\n", ret);
