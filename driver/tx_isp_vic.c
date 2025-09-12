@@ -1129,6 +1129,38 @@ void tx_isp_vic_write_streaming_registers_post_csi(void)
     pr_info("*** CRITICAL: Writing streaming phase registers in CORRECT ORDER to match reference ***\n");
     pr_info("*** Writing to MAIN ISP base %p and CSI base %p ***\n", main_isp_base, csi_base);
     
+    /* STEP 0: Write initial CSI PHY Control registers FIRST (0x0-0x8c) - MISSING FROM PREVIOUS! */
+    pr_info("*** STEP 0: Initial CSI PHY Control registers (0x0-0x8c) - FIRST IN SEQUENCE ***\n");
+    writel(0x1, csi_base + 0x0);
+    writel(0xe3, csi_base + 0x4);
+    writel(0xa0, csi_base + 0x8);
+    writel(0x83, csi_base + 0xc);
+    writel(0xfa, csi_base + 0x10);
+    writel(0x88, csi_base + 0x1c);
+    writel(0x4e, csi_base + 0x20);
+    writel(0xdd, csi_base + 0x24);
+    writel(0x84, csi_base + 0x28);
+    writel(0x5e, csi_base + 0x2c);
+    writel(0xf0, csi_base + 0x30);
+    writel(0xc0, csi_base + 0x34);
+    writel(0x36, csi_base + 0x38);
+    writel(0xdb, csi_base + 0x3c);
+    writel(0x3, csi_base + 0x40);
+    writel(0x80, csi_base + 0x44);
+    writel(0x10, csi_base + 0x48);
+    writel(0x3, csi_base + 0x54);
+    writel(0xff, csi_base + 0x58);
+    writel(0x42, csi_base + 0x5c);
+    writel(0x1, csi_base + 0x60);
+    writel(0xc0, csi_base + 0x64);
+    writel(0xc0, csi_base + 0x68);
+    writel(0x78, csi_base + 0x6c);
+    writel(0x43, csi_base + 0x70);
+    writel(0x33, csi_base + 0x74);
+    writel(0x1f, csi_base + 0x80);
+    writel(0x61, csi_base + 0x88);
+    wmb();
+    
     /* STEP 1: Write CSI PHY Config registers in CORRECT ORDER (0x100-0x1f4) */
     pr_info("*** STEP 1: CSI PHY Config registers (0x100-0x1f4) - CORRECT ORDER ***\n");
     writel(0x8a, csi_base + 0x100);
