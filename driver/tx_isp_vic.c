@@ -1682,7 +1682,7 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     /* FIXED: Use proper VIC-to-ISP device linkage */
     struct tx_isp_dev *isp_dev = ourISPdev;
 
-    pr_info("*** tx_isp_vic_start: EXACT Binary Ninja implementation matching reference trace ***\n");
+    pr_info("*** tx_isp_vic_progress: EXACT Binary Ninja implementation matching reference trace ***\n");
 
     /* Validate vic_dev structure */
     if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
@@ -1708,7 +1708,7 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    pr_info("*** tx_isp_vic_start: MIPS validation passed - applying tx_isp_init_vic_registers methodology ***\n");
+    pr_info("*** tx_isp_vic_progress: MIPS validation passed - applying tx_isp_init_vic_registers methodology ***\n");
 
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
 
@@ -1740,7 +1740,7 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
+    pr_info("*** tx_isp_vic_progress: VIC register base %p ready for streaming ***\n", vic_regs);
 
     /* Calculate base addresses for different register blocks */
     void __iomem *main_isp_base = vic_regs - 0x9a00;  /* Calculate main ISP base from VIC base */
@@ -1776,7 +1776,7 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     pr_info("*** RACE CONDITION FIX: Using protected sensor attributes - interface=%d, format=0x%x ***\n",
             interface_type, sensor_format);
 
-    pr_info("tx_isp_vic_start: interface=%d, format=0x%x (RACE CONDITION PROTECTED)\n", interface_type, sensor_format);
+    pr_info("tx_isp_vic_progress: interface=%d, format=0x%x (RACE CONDITION PROTECTED)\n", interface_type, sensor_format);
 
     /* MCP LOG: VIC start with interface configuration */
     pr_info("MCP_LOG: VIC start initiated - interface=%d, format=0x%x, vic_base=%p\n",
@@ -2090,26 +2090,26 @@ ISP isp-m0: [CSI PHY Config] write at offset 0x110: 0x80007000 -> 0x92217523 (de
     writel(0x6, csi_base + 0x98cc);         /* was 0x3 -> 0x6 */
     wmb();
 
-    pr_info("*** tx_isp_vic_start: Streaming configuration complete ***\n");
+    pr_info("*** tx_isp_vic_progress: Streaming configuration complete ***\n");
 
     /* Enable ISP system interrupts */
-    pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
+    pr_info("*** tx_isp_vic_progress: Enabling ISP system interrupts ***\n");
     tx_isp_enable_irq(isp_dev);
-    pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
+    pr_info("*** tx_isp_vic_progress: ISP interrupts enabled successfully ***\n");
 
     /* Initialize VIC hardware interrupts */
-    pr_info("*** tx_isp_vic_start: Initializing VIC hardware interrupts ***\n");
+    pr_info("*** tx_isp_vic_progress: Initializing VIC hardware interrupts ***\n");
     ret = tx_isp_vic_hw_init(&vic_dev->sd);
     if (ret != 0) {
-        pr_err("tx_isp_vic_start: VIC hardware interrupt init failed: %d\n", ret);
+        pr_err("tx_isp_vic_progress: VIC hardware interrupt init failed: %d\n", ret);
         return ret;
     }
-    pr_info("*** tx_isp_vic_start: VIC hardware interrupts initialized successfully ***\n");
+    pr_info("*** tx_isp_vic_progress: VIC hardware interrupts initialized successfully ***\n");
 
     /* Log WDR mode */
     const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
         "WDR mode enabled" : "Linear mode enabled";
-    pr_info("tx_isp_vic_start: %s\n", wdr_msg);
+    pr_info("tx_isp_vic_progress: %s\n", wdr_msg);
 
     /* MCP LOG: VIC start completed successfully */
     pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d, interface=%d\n",
