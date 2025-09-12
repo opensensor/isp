@@ -4995,352 +4995,32 @@ static void tx_vic_disable_irq_complete(struct tx_isp_dev *isp_dev)
     pr_info("*** tx_vic_disable_irq COMPLETE - VIC INTERRUPTS DISABLED ***\n");
 }
 
-/* COMPLETE VIC INTERRUPT ENABLE FUNCTION - FROM tx_vic_enable_irq BINARY NINJA */
-void tx_vic_enable_irq_complete(struct tx_isp_dev *isp_dev)
-{
-    struct tx_isp_vic_device *vic_dev;
-    unsigned long flags;
-    
-    if (!isp_dev || !isp_dev->vic_dev) {
-        pr_info("VIC interrupt enable: no VIC device\n");
-        return;
-    }
-    
-    vic_dev = isp_dev->vic_dev;
-    
-    pr_info("*** IMPLEMENTING tx_vic_enable_irq FROM BINARY NINJA ***\n");
-    
-    local_irq_save(flags);
-    
-    /* Restore interrupt enable state */
-    if (vic_dev) {
-        vic_dev->state = 2; /* Mark as interrupt-enabled active state */
-        pr_info("VIC interrupt state restored, device in active mode\n");
-    }
-    
-    local_irq_restore(flags);
-    
-    pr_info("*** tx_vic_enable_irq COMPLETE - VIC INTERRUPTS ENABLED ***\n");
-}
-
-/* tx_isp_ispcore_activate_module_complete - EXACT Binary Ninja ispcore_activate_module implementation */
+/* Simple VIC activation - minimal like reference driver */
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
 {
     struct tx_isp_vic_device *vic_dev;
-    struct clk **clk_array;
-    int clk_count;
-    int i;
-    void *subdev_array;
-    void *current_subdev;
-    int subdev_count;
-    int a2_1;
-    void *v0_6;
-    void *a0_3;
-    void *s2_2;
-    void *s1_2;
     int ret = 0;
     
-    pr_info("*** tx_isp_ispcore_activate_module_complete: EXACT Binary Ninja implementation ***\n");
-    
-    /* Binary Ninja: if (arg1 != 0) */
-    if (isp_dev == NULL) {
-        pr_err("ispcore_activate_module: Invalid ISP device\n");
-        return 0xffffffea; /* Binary Ninja: return 0xffffffea */
+    if (!isp_dev) {
+        return -EINVAL;
     }
     
-    /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
-    if ((uintptr_t)isp_dev >= 0xfffff001) {
-        pr_err("ispcore_activate_module: Invalid ISP device pointer\n");
-        return 0xffffffea;
-    }
-    
-    /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-    
-    /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
-    if (vic_dev == NULL || (uintptr_t)vic_dev >= 0xfffff001) {
-        pr_err("ispcore_activate_module: Invalid VIC device\n");
-        return 0xffffffea;
+    if (!vic_dev || vic_dev->state != 1) {
+        return -EINVAL;
     }
     
-    pr_info("*** ispcore_activate_module: VIC device validated at %p ***\n", vic_dev);
+    /* Enable ISP clocks */
+    if (isp_dev->isp_clk) {
+        clk_prepare_enable(isp_dev->isp_clk);
+    }
     
-    /* Binary Ninja: if (*($s0_1 + 0xe8) == 1) */
+    /* Activate VIC subdev */
     if (vic_dev->state == 1) {
-        pr_info("*** ispcore_activate_module: VIC state is 1, proceeding with activation ***\n");
-        
-        /* *** CRITICAL: CLOCK ENABLING LOOP - Binary Ninja exact implementation *** */
-        /* Binary Ninja: int32_t* $s2_1 = *(arg1 + 0xbc) */
-        /* Binary Ninja: while (i u< *(arg1 + 0xc0)) */
-        pr_info("*** CLOCK ENABLING LOOP: Enabling ISP clocks ***\n");
-        
-        /* Enable ISP main clock */
-        if (isp_dev->isp_clk) {
-            /* Binary Ninja: if (private_clk_get_rate(*$s2_1) != 0xffff) */
-            unsigned long current_rate = clk_get_rate(isp_dev->isp_clk);
-            if (current_rate != 0xffff) {
-                /* Binary Ninja: private_clk_set_rate(*$s2_1, isp_clk) */
-                clk_set_rate(isp_dev->isp_clk, 100000000); /* 100MHz ISP clock */
-                pr_info("ISP clock rate set to 100MHz\n");
-            }
-            
-            /* Binary Ninja: private_clk_enable(*$s2_1) */
-            clk_prepare_enable(isp_dev->isp_clk);
-            pr_info("ISP main clock enabled\n");
-        }
-        
-        /* Enable additional ISP clocks (CGU_ISP, VIC clocks) */
-        struct clk *cgu_isp_clk = clk_get(NULL, "cgu_isp");
-        if (!IS_ERR(cgu_isp_clk)) {
-            clk_prepare_enable(cgu_isp_clk);
-            pr_info("CGU_ISP clock enabled\n");
-            clk_put(cgu_isp_clk);
-        }
-        
-        struct clk *vic_clk = clk_get(NULL, "vic");
-        if (!IS_ERR(vic_clk)) {
-            clk_prepare_enable(vic_clk);
-            pr_info("VIC clock enabled\n");
-            clk_put(vic_clk);
-        }
-        
-        pr_info("*** CLOCK ENABLING COMPLETE ***\n");
-        
-        /* *** CRITICAL: SUBDEVICE ACTIVATION LOOP - Binary Ninja exact implementation *** */
-        /* Binary Ninja: int32_t $a2_1 = 0; while (true) */
-        pr_info("*** SUBDEVICE ACTIVATION LOOP: Activating all subdevices ***\n");
-        
-        a2_1 = 0;
-        /* Binary Ninja: while ($a2_1 u< *($s0_1 + 0x154)) */
-        /* Simulate subdevice count check - in our case we have VIC, CSI, etc. */
-        subdev_count = 4; /* VIC, CSI, VIN, CORE */
-        
-        while (a2_1 < subdev_count) {
-            /* Binary Ninja: void* $v0_6 = $a3_1 + *($s0_1 + 0x150) */
-            /* This accesses subdevice array - we'll use our known subdevices */
-            
-            if (a2_1 == 0 && vic_dev) {
-                /* Activate VIC subdev */
-                /* Binary Ninja: if (*($v0_6 + 0x74) != 1) */
-                if (vic_dev->state != 1) {
-                    pr_err("ispcore_activate_module: VIC subdev not in init state (%d)\n", vic_dev->state);
-                    return 0xffffffff;
-                }
-                
-                /* Binary Ninja: *($v0_6 + 0x74) = 2 */
-                vic_dev->state = 2;
-                pr_info("*** VIC SUBDEV ACTIVATED: state set to 2 ***\n");
-                
-            } else if (a2_1 == 1 && isp_dev->csi_dev) {
-                /* Activate CSI subdev */
-                struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-                if (csi_dev->state != 1) {
-                    pr_err("ispcore_activate_module: CSI subdev not in init state (%d)\n", csi_dev->state);
-                    return 0xffffffff;
-                }
-                csi_dev->state = 2;
-                pr_info("*** CSI SUBDEV ACTIVATED: state set to 2 ***\n");
-                
-            } else {
-                pr_info("*** SUBDEV %d: Activation placeholder ***\n", a2_1);
-            }
-            
-            a2_1 += 1;
-        }
-        
-        pr_info("*** SUBDEVICE ACTIVATION COMPLETE ***\n");
-        
-        /* *** CRITICAL: HARDWARE INITIALIZATION CALL - Binary Ninja 0x40cc function *** */
-        /* Binary Ninja: void* $a0_3 = *($s0_1 + 0x1bc) */
-        /* Binary Ninja: (*($a0_3 + 0x40cc))($a0_3, 0x4000000, 0, $a3_1) */
-        pr_info("*** CALLING HARDWARE INITIALIZATION FUNCTION (Binary Ninja 0x40cc) ***\n");
-        
-        /* This is the CRITICAL call that should trigger the missing register writes! */
-        /* In our implementation, this maps to tisp_init2 which contains the hardware register writes */
-        if (isp_dev->sensor && isp_dev->sensor->video.attr) {
-            pr_info("*** CALLING tisp_init2 - THIS SHOULD WRITE THE MISSING REGISTERS! ***\n");
-            ret = tisp_init2(isp_dev->sensor->video.attr, isp_dev);
-            if (ret != 0) {
-                pr_err("ispcore_activate_module: Hardware initialization failed: %d\n", ret);
-                return 0xffffffff;
-            }
-            pr_info("*** HARDWARE INITIALIZATION COMPLETE - REGISTERS SHOULD NOW BE WRITTEN! ***\n");
-        } else {
-            pr_warn("ispcore_activate_module: No sensor available for hardware init\n");
-        }
-        
-        /* *** CRITICAL: SUBDEV ACTIVATION FUNCTION CALLS - Binary Ninja exact implementation *** */
-        /* Binary Ninja: void* $s2_2 = $s0_1 + 0x38; void* $s1_2 = *$s2_2 */
-        /* Binary Ninja: while (true) loop through subdev array */
-        pr_info("*** SUBDEV ACTIVATION FUNCTION CALLS: Calling activation functions ***\n");
-        
-        /* Call VIC activation function */
-        if (vic_dev && vic_dev->sd.ops && vic_dev->sd.ops->core && vic_dev->sd.ops->core->init) {
-            /* Binary Ninja: int32_t $v0_12 = $v0_11($s1_2) */
-            pr_info("*** CALLING VIC ACTIVATION FUNCTION ***\n");
-            ret = vic_dev->sd.ops->core->init(&vic_dev->sd, 1);
-            
-            /* Binary Ninja: if ($v0_12 != 0 && $v0_12 != 0xfffffdfd) */
-            if (ret != 0 && ret != 0xfffffdfd) {
-                pr_err("ispcore_activate_module: VIC activation failed: %d\n", ret);
-                return 0xffffffff; /* Binary Ninja: break on error */
-            }
-            pr_info("*** VIC ACTIVATION FUNCTION RETURNED: %d ***\n", ret);
-        }
-        
-        /* Call CSI activation function */
-        if (isp_dev->csi_dev) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-            if (csi_dev->sd.ops && csi_dev->sd.ops->core && csi_dev->sd.ops->core->init) {
-                pr_info("*** CALLING CSI ACTIVATION FUNCTION ***\n");
-                ret = csi_dev->sd.ops->core->init(&csi_dev->sd, 1);
-                if (ret != 0 && ret != 0xfffffdfd) {
-                    pr_err("ispcore_activate_module: CSI activation failed: %d\n", ret);
-                    return 0xffffffff;
-                }
-                pr_info("*** CSI ACTIVATION FUNCTION RETURNED: %d ***\n", ret);
-            }
-        }
-        
-        /* Call ISP core activation function */
-        if (isp_dev->sd.ops && isp_dev->sd.ops->core && isp_dev->sd.ops->core->init) {
-            pr_info("*** CALLING ISP CORE ACTIVATION FUNCTION ***\n");
-            ret = isp_dev->sd.ops->core->init(&isp_dev->sd, 1);
-            if (ret != 0 && ret != 0xfffffdfd) {
-                pr_err("ispcore_activate_module: ISP core activation failed: %d\n", ret);
-                return 0xffffffff;
-            }
-            pr_info("*** ISP CORE ACTIVATION FUNCTION RETURNED: %d ***\n", ret);
-        }
-        
-        pr_info("*** SUBDEV ACTIVATION FUNCTION CALLS COMPLETE ***\n");
-        
-        /* Binary Ninja: *($s0_1 + 0xe8) = 2 */
         vic_dev->state = 2;
-        pr_info("*** VIC STATE SET TO 2 (FULLY ACTIVATED) ***\n");
-        
-        /* Binary Ninja: return 0 */
-        pr_info("*** ispcore_activate_module: COMPLETE - ALL HARDWARE SHOULD NOW BE INITIALIZED! ***\n");
-        return 0;
-        
-    } else {
-        pr_info("ispcore_activate_module: VIC state is %d (not 1), skipping activation\n", vic_dev->state);
-        return 0xffffffea;
-    }
-}
-
-/* tx_vic_enable_irq - EXACT Binary Ninja implementation */
-void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
-{
-    unsigned long flags;
-
-    pr_info("*** tx_vic_enable_irq: EXACT Binary Ninja implementation ***\n");
-
-    /* Binary Ninja EXACT: void* dump_vsd_2 = dump_vsd */
-    /* Binary Ninja EXACT: void* const dump_vsd_5 = nullptr */
-    if (vic_dev == NULL) {
-        pr_err("tx_vic_enable_irq: vic_dev is NULL\n");
-        return;
-    }
-
-    /* Binary Ninja EXACT: if (dump_vsd_2 u>= 0xfffff001) dump_vsd_4 = nullptr */
-    if ((unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("tx_vic_enable_irq: vic_dev pointer invalid\n");
-        return;
-    }
-
-    pr_info("tx_vic_enable_irq: vic_dev=%p validated\n", vic_dev);
-
-    /* Binary Ninja EXACT: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
-    /* FIXED: Use safe struct member access instead of offset 0x130 */
-    spin_lock_irqsave(&vic_dev->lock, flags);
-
-    /* Binary Ninja EXACT: if (*(dump_vsd_1 + 0x13c) != 0) */
-    /* FIXED: Use safe struct member access instead of offset 0x13c */
-    if (vic_dev->hw_irq_enabled != 0) {
-        pr_info("tx_vic_enable_irq: VIC interrupts already enabled\n");
-    } else {
-        /* Binary Ninja EXACT: *(dump_vsd_1 + 0x13c) = 1 */
-        /* FIXED: Use safe struct member access instead of offset 0x13c */
-        vic_dev->hw_irq_enabled = 1;
-
-        /* Binary Ninja EXACT: int32_t $v0_1 = *(dump_vsd_5 + 0x84) */
-        /* Binary Ninja EXACT: if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
-        /* This appears to be a callback function call for interrupt setup */
-
-        /* CRITICAL: Actually enable VIC hardware interrupts */
-        if (vic_dev->vic_regs) {
-            /* Enable frame done interrupt */
-            writel(0x1, vic_dev->vic_regs + 0x1e8);  /* Clear interrupt mask */
-            wmb();
-
-            /* Enable MDMA interrupts */
-            writel(0x3, vic_dev->vic_regs + 0x1ec);  /* Enable MDMA channel 0 & 1 */
-            wmb();
-
-            pr_info("*** tx_vic_enable_irq: VIC hardware interrupts enabled ***\n");
-            pr_info("  Frame done interrupt mask cleared\n");
-            pr_info("  MDMA interrupts enabled\n");
-        } else {
-            pr_err("tx_vic_enable_irq: No VIC register base for interrupt enable\n");
-        }
-    }
-
-    /* Binary Ninja EXACT: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
-    /* FIXED: Use safe struct member access instead of offset 0x130 */
-    spin_unlock_irqrestore(&vic_dev->lock, flags);
-
-    pr_info("*** tx_vic_enable_irq: completed successfully ***\n");
-}
-
-/* tx_vic_disable_irq - MIPS-SAFE implementation */
-void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
-{
-    unsigned long flags;
-    
-    pr_info("*** tx_vic_disable_irq: MIPS-SAFE implementation ***\n");
-    
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev pointer alignment */
-    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p not 4-byte aligned ***\n", vic_dev);
-        return;
     }
     
-    /* MIPS SAFE: Bounds validation */
-    if ((uintptr_t)vic_dev >= 0xfffff001) {
-        pr_err("*** MIPS ERROR: vic_dev pointer 0x%p out of valid range ***\n", vic_dev);
-        return;
-    }
-    
-    /* MIPS SAFE: Check for corrupted state before accessing */
-    if (vic_dev->state > 10) {
-        pr_err("*** MIPS ERROR: VIC device state corrupted (%d), cannot safely disable interrupts ***\n", vic_dev->state);
-        pr_err("*** MIPS SAFE: Skipping dangerous spinlock access on corrupted device ***\n");
-        return;
-    }
-    
-    /* MIPS SAFE: Validate lock structure alignment */
-    if (((uintptr_t)&vic_dev->lock & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->lock not aligned ***\n");
-        return;
-    }
-    
-    pr_info("*** MIPS-SAFE: VIC device state=%d, proceeding with safe disable ***\n", vic_dev->state);
-    
-    /* MIPS SAFE: Use proper struct member access with validation */
-    spin_lock_irqsave(&vic_dev->lock, flags);
-    
-    /* MIPS SAFE: Set interrupt disable state using safe bounds checking */
-    if (vic_dev->state >= 0 && vic_dev->state <= 10) {
-        vic_dev->state = 0;  /* Mark as interrupt-disabled state */
-        pr_info("*** MIPS-SAFE: VIC interrupt state set to disabled (0) ***\n");
-    } else {
-        pr_err("*** MIPS ERROR: Cannot set state on corrupted device (state=%d) ***\n", vic_dev->state);
-    }
-    
-    spin_unlock_irqrestore(&vic_dev->lock, flags);
-    
-    pr_info("*** tx_vic_disable_irq: MIPS-SAFE completion ***\n");
+    return ret;
 }
 
 
@@ -6321,17 +6001,8 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
         // Activate VIC
         if (vic_dev->state == 1) {
             vic_dev->state = 2;
-            // *** CRITICAL: Call the main ISP core activation function - Binary Ninja ispcore_activate_module ***
-            pr_info("*** CALLING tx_isp_ispcore_activate_module_complete - THE MISSING SEQUENCE! ***\n");
-            int ret = tx_isp_ispcore_activate_module_complete(ourISPdev);
-            if (ret != 0) {
-                pr_err("*** tx_isp_ispcore_activate_module_complete FAILED: %d ***\n", ret);
-                return ret;
-            }
-            pr_info("*** tx_isp_ispcore_activate_module_complete SUCCESS - HARDWARE SHOULD NOW BE INITIALIZED! ***\n");
-            
-            // Also activate CSI subdev
-    		ret = tx_isp_activate_csi_subdev(ourISPdev);
+            // TODO call other activation functions here
+    		int ret = tx_isp_activate_csi_subdev(ourISPdev);
     		if (ret) {
         		pr_err("Failed to activate CSI subdev: %d\n", ret);
                 return ret;
