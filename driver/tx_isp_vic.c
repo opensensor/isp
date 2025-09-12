@@ -2696,7 +2696,12 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
 /* vic_core_s_stream - EXACT Binary Ninja implementation matching reference driver */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
-    struct tx_isp_vic_device *vic_dev;
+    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
+    void __iomem *vic_regs = vic_dev->vic_regs;
+    /* Calculate base addresses for different register blocks */
+    void __iomem *main_isp_base = vic_regs - 0x9a00;  /* Calculate main ISP base from VIC base */
+    void __iomem *csi_base = main_isp_base + 0x10000;  /* CSI base is at ISP base + 0x10000 */
+
     int ret = -EINVAL;  /* 0xffffffea */
     
     pr_info("vic_core_s_stream: sd=%p, enable=%d\n", sd, enable);
@@ -2710,7 +2715,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         }
         
         /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
-        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
         ret = -EINVAL;  /* 0xffffffea */
         
         /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
@@ -2728,6 +2732,55 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     /* Binary Ninja: *($s1_1 + 0x128) = 3 */
                     vic_dev->state = 3;
                     pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
+                    msleep(200);
+
+pr_info("*** Applying 210ms streaming adjustment - setting hardware to state 3 ***\n");
+
+// STEP 1: Set the hardware state to 3 (stopped) via register 0xb04c
+writel(0x3, main_isp_base + 0xb04c);  // This is the key - set hardware to state 3
+wmb();
+
+// STEP 2: Also update the software state if you have access to vic_dev
+if (vic_dev) {
+    // Assuming offset 0x128 in your structure
+    *((u32 *)((u8 *)vic_dev + 0x128)) = 3;
+}
+
+// STEP 3: Now apply all the register changes while in stopped state
+writel(0x0, csi_base + 0x8);
+writel(0xb5742249, csi_base + 0xc);
+writel(0x133, csi_base + 0x10);
+writel(0x8, csi_base + 0x1c);
+writel(0x8fffffff, csi_base + 0x30);
+writel(0x92217523, csi_base + 0x110);
+
+writel(0x0, main_isp_base + 0x9804);
+writel(0x0, main_isp_base + 0x9ac0);
+writel(0x0, main_isp_base + 0x9ac8);
+
+// Core control updates
+writel(0x24242424, main_isp_base + 0xb018);
+writel(0x24242424, main_isp_base + 0xb01c);
+writel(0x24242424, main_isp_base + 0xb020);
+writel(0x242424, main_isp_base + 0xb024);
+writel(0x10d0046, main_isp_base + 0xb028);
+writel(0xe8002f, main_isp_base + 0xb02c);
+writel(0xc50100, main_isp_base + 0xb030);
+writel(0x1670100, main_isp_base + 0xb034);
+writel(0x1f001, main_isp_base + 0xb038);
+writel(0x46e0000, main_isp_base + 0xb03c);
+writel(0x46e1000, main_isp_base + 0xb040);
+writel(0x46e2000, main_isp_base + 0xb044);
+writel(0x46e3000, main_isp_base + 0xb048);
+// Note: Keep it at state 3
+writel(0x10000000, main_isp_base + 0xb078);
+wmb();
+
+pr_info("*** Hardware set to state 3, registers updated ***\n");
+
+// STEP 4: The system might restart streaming automatically, or you might need to
+// trigger it by setting state back to 4 or 0x103
+// This might happen automatically via interrupt or other mechanism
                 }
             } else {
                 /* Stream ON */
