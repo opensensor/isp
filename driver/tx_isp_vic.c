@@ -1386,6 +1386,80 @@ if (!IS_ERR(cgu_isp_clk)) {
     pr_info("*** Completed writing ALL missing initialization registers from reference trace ***\n");
 
 
+
+    /* ==============================================================================================
+     * PHASE 3: VIC initial configuration (T+270ms)
+     * ==============================================================================================*/
+
+    pr_info("*** PHASE 3: VIC initial configuration (T+270ms) ***\n");
+
+    /* VIC writes labeled as isp-w01 in trace */
+    writel(0x1, vic_regs + 0xc);         /* CSI PHY Control */
+    writel(0x1, vic_regs + 0x10);        /* CSI PHY Control */
+    writel(0x630, vic_regs + 0x14);      /* was 0x200 -> 0x630 */
+    wmb();
+
+    /* ==============================================================================================
+     * PHASE 4: Sensor stream on trigger
+     * This is where "gc2053 stream on" occurs in the trace
+     * ==============================================================================================*/
+
+    pr_info("gc2053 stream on\n");
+
+    /* ==============================================================================================
+     * PHASE 5: VIC streaming configuration (T+470ms)
+     * ==============================================================================================*/
+
+    pr_info("*** PHASE 5: VIC streaming configuration (T+470ms) ***\n");
+
+    /* VIC writes labeled as isp-w02 in trace */
+    writel(0x1, vic_regs + 0x0);         /* Enable VIC */
+    writel(0x1, vic_regs + 0x14);        /* was 0x2 -> 0x1 */
+    writel(0x1, vic_regs + 0x8c);        /* was 0x0 -> 0x1 */
+    writel(0x258, vic_regs + 0x100);     /* was 0x2d0 -> 0x258 */
+    writel(0x0, vic_regs + 0x10c);       /* was 0x2c000 -> 0x0 */
+    writel(0x0, vic_regs + 0x120);       /* was 0x10 -> 0x0 */
+    writel(0xa000a, vic_regs + 0x1a4);   /* was 0x100010 -> 0xa000a */
+    wmb();
+
+    /* CSI PHY Config updates */
+    writel(0x1, csi_base + 0x1d0);       /* was 0x0 -> 0x1 */
+    writel(0x12, csi_base + 0x1d4);      /* was 0x0 -> 0x12 */
+    writel(0x12, csi_base + 0x254);      /* was 0x0 -> 0x12 */
+    wmb();
+
+    /* Additional VIC updates */
+    writel(0x330, vic_regs + 0x14);      /* was 0x630 -> 0x330 */
+    writel(0x20002, vic_regs + 0x40);    /* was 0x0 -> 0x20002 */
+    wmb();
+
+    /* Main ISP updates */
+    writel(0x1, main_isp_base + 0x60);           /* was 0x0 -> 0x1 */
+    writel(0x58810000, main_isp_base + 0xa8);    /* was 0x58050000 -> 0x58810000 */
+    writel(0xffffffff, main_isp_base + 0xb0);    /* was 0x0 -> 0xffffffff */
+    writel(0x3ad80000, main_isp_base + 0x100);   /* CSI PHY Config */
+    writel(0x2b, main_isp_base + 0x104);         /* CSI PHY Config */
+    writel(0x220000, main_isp_base + 0x108);     /* CSI PHY Config */
+    writel(0x220334, main_isp_base + 0x10c);     /* CSI PHY Config */
+    writel(0xd006004e, main_isp_base + 0x987c);  /* was 0xc0000000 -> 0xd006004e */
+    writel(0x1, main_isp_base + 0x98cc);         /* was 0x0 -> 0x1 */
+    writel(0x20740000, main_isp_base + 0xb054);  /* Core Control */
+    writel(0x40, main_isp_base + 0xb058);        /* Core Control */
+    writel(0x18f, main_isp_base + 0xb05c);       /* Core Control */
+    writel(0x3fdb, main_isp_base + 0xb060);      /* Core Control */
+    writel(0x10aa5, main_isp_base + 0xb064);     /* Core Control */
+    writel(0x181d, main_isp_base + 0xb068);      /* Core Control */
+    writel(0x55a, main_isp_base + 0xb070);       /* Core Control */
+    writel(0x5120f, main_isp_base + 0xb074);     /* Core Control */
+    writel(0x1000000e, main_isp_base + 0xb078);  /* was 0x10000000 -> 0x1000000e */
+    writel(0x3fdb, main_isp_base + 0xb07c);      /* Core Control */
+    writel(0x131ca, main_isp_base + 0xb080);     /* Core Control */
+    writel(0x191e, main_isp_base + 0xb084);      /* Core Control */
+    writel(0x55a, main_isp_base + 0xb08c);       /* Core Control */
+    wmb();
+
+
+
     /* Binary Ninja: interface 1=DVP, 2=MIPI, 3=BT601, 4=BT656, 5=BT1120 */
     if (interface_type == 1) {
         /* DVP interface - Binary Ninja implementation */
@@ -1864,77 +1938,6 @@ ISP isp-m0: [CSI PHY Config] write at offset 0x110: 0x80007000 -> 0x92217523 (de
     for (int i = 0; i < sizeof(csi_phy_configs)/sizeof(csi_phy_configs[0]); i++) {
         writel(csi_phy_configs[i].value, csi_base + csi_phy_configs[i].offset);
     }
-    wmb();
-
-    /* ==============================================================================================
-     * PHASE 3: VIC initial configuration (T+270ms)
-     * ==============================================================================================*/
-
-    pr_info("*** PHASE 3: VIC initial configuration (T+270ms) ***\n");
-
-    /* VIC writes labeled as isp-w01 in trace */
-    writel(0x1, vic_regs + 0xc);         /* CSI PHY Control */
-    writel(0x1, vic_regs + 0x10);        /* CSI PHY Control */
-    writel(0x630, vic_regs + 0x14);      /* was 0x200 -> 0x630 */
-    wmb();
-
-    /* ==============================================================================================
-     * PHASE 4: Sensor stream on trigger
-     * This is where "gc2053 stream on" occurs in the trace
-     * ==============================================================================================*/
-
-    pr_info("gc2053 stream on\n");
-
-    /* ==============================================================================================
-     * PHASE 5: VIC streaming configuration (T+470ms)
-     * ==============================================================================================*/
-
-    pr_info("*** PHASE 5: VIC streaming configuration (T+470ms) ***\n");
-
-    /* VIC writes labeled as isp-w02 in trace */
-    writel(0x1, vic_regs + 0x0);         /* Enable VIC */
-    writel(0x1, vic_regs + 0x14);        /* was 0x2 -> 0x1 */
-    writel(0x1, vic_regs + 0x8c);        /* was 0x0 -> 0x1 */
-    writel(0x258, vic_regs + 0x100);     /* was 0x2d0 -> 0x258 */
-    writel(0x0, vic_regs + 0x10c);       /* was 0x2c000 -> 0x0 */
-    writel(0x0, vic_regs + 0x120);       /* was 0x10 -> 0x0 */
-    writel(0xa000a, vic_regs + 0x1a4);   /* was 0x100010 -> 0xa000a */
-    wmb();
-
-    /* CSI PHY Config updates */
-    writel(0x1, csi_base + 0x1d0);       /* was 0x0 -> 0x1 */
-    writel(0x12, csi_base + 0x1d4);      /* was 0x0 -> 0x12 */
-    writel(0x12, csi_base + 0x254);      /* was 0x0 -> 0x12 */
-    wmb();
-
-    /* Additional VIC updates */
-    writel(0x330, vic_regs + 0x14);      /* was 0x630 -> 0x330 */
-    writel(0x20002, vic_regs + 0x40);    /* was 0x0 -> 0x20002 */
-    wmb();
-
-    /* Main ISP updates */
-    writel(0x1, main_isp_base + 0x60);           /* was 0x0 -> 0x1 */
-    writel(0x58810000, main_isp_base + 0xa8);    /* was 0x58050000 -> 0x58810000 */
-    writel(0xffffffff, main_isp_base + 0xb0);    /* was 0x0 -> 0xffffffff */
-    writel(0x3ad80000, main_isp_base + 0x100);   /* CSI PHY Config */
-    writel(0x2b, main_isp_base + 0x104);         /* CSI PHY Config */
-    writel(0x220000, main_isp_base + 0x108);     /* CSI PHY Config */
-    writel(0x220334, main_isp_base + 0x10c);     /* CSI PHY Config */
-    writel(0xd006004e, main_isp_base + 0x987c);  /* was 0xc0000000 -> 0xd006004e */
-    writel(0x1, main_isp_base + 0x98cc);         /* was 0x0 -> 0x1 */
-    writel(0x20740000, main_isp_base + 0xb054);  /* Core Control */
-    writel(0x40, main_isp_base + 0xb058);        /* Core Control */
-    writel(0x18f, main_isp_base + 0xb05c);       /* Core Control */
-    writel(0x3fdb, main_isp_base + 0xb060);      /* Core Control */
-    writel(0x10aa5, main_isp_base + 0xb064);     /* Core Control */
-    writel(0x181d, main_isp_base + 0xb068);      /* Core Control */
-    writel(0x55a, main_isp_base + 0xb070);       /* Core Control */
-    writel(0x5120f, main_isp_base + 0xb074);     /* Core Control */
-    writel(0x1000000e, main_isp_base + 0xb078);  /* was 0x10000000 -> 0x1000000e */
-    writel(0x3fdb, main_isp_base + 0xb07c);      /* Core Control */
-    writel(0x131ca, main_isp_base + 0xb080);     /* Core Control */
-    writel(0x191e, main_isp_base + 0xb084);      /* Core Control */
-    writel(0x55a, main_isp_base + 0xb08c);       /* Core Control */
     wmb();
 
     /* ==============================================================================================
