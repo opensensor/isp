@@ -978,6 +978,57 @@ int isp_vic_frd_show(struct seq_file *seq, void *v);
 int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
 long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 
+/* REFACTORED: Separate streaming phase register writes function */
+static void tx_isp_vic_write_streaming_registers(void)
+{
+    void __iomem *core_base;
+    
+    if (!ourISPdev || !ourISPdev->core_regs) {
+        pr_err("tx_isp_vic_write_streaming_registers: No core registers available\n");
+        return;
+    }
+    
+    core_base = ourISPdev->core_regs;
+    pr_info("*** tx_isp_vic_write_streaming_registers: Writing streaming phase registers ***\n");
+    
+    /* CSI PHY Control registers - these change values during streaming phase */
+    writel(0x0, core_base + 0x8);           /* 0x1 -> 0x0 */
+    writel(0xb5742249, core_base + 0xc);    /* 0x80700008 -> 0xb5742249 */
+    writel(0x133, core_base + 0x10);        /* 0x0 -> 0x133 - CRITICAL MISSING REGISTER! */
+    writel(0x8, core_base + 0x1c);          /* 0x0 -> 0x8 */
+    writel(0x8fffffff, core_base + 0x30);   /* 0x0 -> 0x8fffffff */
+    
+    /* CSI PHY Config registers - CORRECTED VALUE */
+    writel(0x92217523, core_base + 0x110);  /* 0x80007000 -> 0x92217523 (NOT 0x80007523!) */
+    
+    /* ISP Control registers - streaming phase changes */
+    writel(0x0, core_base + 0x9804);        /* 0x3f00 -> 0x0 */
+    
+    /* VIC Control registers - streaming phase changes */
+    writel(0x0, core_base + 0x9ac0);        /* 0x200 -> 0x0 */
+    writel(0x0, core_base + 0x9ac8);        /* 0x200 -> 0x0 */
+    
+    /* Core Control registers - streaming phase changes - CORRECTED VALUES */
+    writel(0x24242424, core_base + 0xb018); /* 0x40404040 -> 0x24242424 */
+    writel(0x24242424, core_base + 0xb01c); /* 0x40404040 -> 0x24242424 */
+    writel(0x24242424, core_base + 0xb020); /* 0x40404040 -> 0x24242424 */
+    writel(0x242424, core_base + 0xb024);   /* 0x404040 -> 0x242424 */
+    writel(0x10d0046, core_base + 0xb028);  /* 0x1000080 -> 0x10d0046 - MISSING! */
+    writel(0xe8002f, core_base + 0xb02c);   /* 0x1000080 -> 0xe8002f - MISSING! */
+    writel(0xc50100, core_base + 0xb030);   /* 0x100 -> 0xc50100 - MISSING! */
+    writel(0x1670100, core_base + 0xb034);  /* 0xffff0100 -> 0x1670100 - MISSING! */
+    writel(0x1f001, core_base + 0xb038);    /* 0x1ff00 -> 0x1f001 - MISSING! */
+    writel(0x46e0000, core_base + 0xb03c);  /* 0x0 -> 0x46e0000 */
+    writel(0x46e1000, core_base + 0xb040);  /* 0x0 -> 0x46e1000 */
+    writel(0x46e2000, core_base + 0xb044);  /* 0x0 -> 0x46e2000 */
+    writel(0x46e3000, core_base + 0xb048);  /* 0x0 -> 0x46e3000 */
+    writel(0x3, core_base + 0xb04c);        /* 0x103 -> 0x3 */
+    writel(0x10000000, core_base + 0xb078); /* 0x0 -> 0x10000000 */
+    
+    wmb(); /* Ensure all writes complete */
+    pr_info("*** tx_isp_vic_write_streaming_registers: All streaming registers written ***\n");
+}
+
 
 /* tx_isp_vic_start - EXACT Binary Ninja implementation matching reference trace */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
@@ -1253,49 +1304,6 @@ if (!IS_ERR(cgu_isp_clk)) {
     
     pr_info("*** Completed writing ALL missing initialization registers from reference trace ***\n");
 
-    /* *** CRITICAL: Add streaming phase register writes that occur after sensor detection *** */
-    /* These registers are written after sensor is detected but before final streaming starts */
-    if (ourISPdev && ourISPdev->core_regs) {
-        void __iomem *core_base = ourISPdev->core_regs;
-        pr_info("*** tx_isp_vic_start: Writing streaming phase registers after sensor detection ***\n");
-        
-        /* CSI PHY Control registers - these change values during streaming phase */
-        writel(0x0, core_base + 0x8);           /* 0x1 -> 0x0 */
-        writel(0xb5742249, core_base + 0xc);    /* 0x80700008 -> 0xb5742249 */
-        writel(0x133, core_base + 0x10);        /* 0x0 -> 0x133 */
-        writel(0x8, core_base + 0x1c);          /* 0x0 -> 0x8 */
-        writel(0x8fffffff, core_base + 0x30);   /* 0x0 -> 0x8fffffff */
-        
-        /* CSI PHY Config registers - value changes during streaming */
-        writel(0x92217523, core_base + 0x110);  /* 0x80007000 -> 0x92217523 */
-        
-        /* ISP Control registers - streaming phase changes */
-        writel(0x0, core_base + 0x9804);        /* 0x3f00 -> 0x0 */
-        
-        /* VIC Control registers - streaming phase changes */
-        writel(0x0, core_base + 0x9ac0);        /* 0x200 -> 0x0 */
-        writel(0x0, core_base + 0x9ac8);        /* 0x200 -> 0x0 */
-        
-        /* Core Control registers - streaming phase changes */
-        writel(0x24242424, core_base + 0xb018); /* 0x40404040 -> 0x24242424 */
-        writel(0x24242424, core_base + 0xb01c); /* 0x40404040 -> 0x24242424 */
-        writel(0x24242424, core_base + 0xb020); /* 0x40404040 -> 0x24242424 */
-        writel(0x242424, core_base + 0xb024);   /* 0x404040 -> 0x242424 */
-        writel(0x10d0046, core_base + 0xb028);  /* 0x1000080 -> 0x10d0046 */
-        writel(0xe8002f, core_base + 0xb02c);   /* 0x1000080 -> 0xe8002f */
-        writel(0xc50100, core_base + 0xb030);   /* 0x100 -> 0xc50100 */
-        writel(0x1670100, core_base + 0xb034);  /* 0xffff0100 -> 0x1670100 */
-        writel(0x1f001, core_base + 0xb038);    /* 0x1ff00 -> 0x1f001 */
-        writel(0x46e0000, core_base + 0xb03c);  /* 0x0 -> 0x46e0000 */
-        writel(0x46e1000, core_base + 0xb040);  /* 0x0 -> 0x46e1000 */
-        writel(0x46e2000, core_base + 0xb044);  /* 0x0 -> 0x46e2000 */
-        writel(0x46e3000, core_base + 0xb048);  /* 0x0 -> 0x46e3000 */
-        writel(0x3, core_base + 0xb04c);        /* 0x103 -> 0x3 */
-        writel(0x10000000, core_base + 0xb078); /* 0x0 -> 0x10000000 */
-        
-        wmb(); /* Ensure all writes complete */
-        pr_info("*** tx_isp_vic_start: Streaming phase registers written - should match OEM sequence ***\n");
-    }
 
     /* Binary Ninja: interface 1=DVP, 2=MIPI, 3=BT601, 4=BT656, 5=BT1120 */
     if (interface_type == 1) {
@@ -2200,6 +2208,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     
                     /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
                     ret = tx_isp_vic_start(vic_dev);
+                    
+                    /* CRITICAL: Write streaming phase registers after VIC start but before final enable */
+                    /* This matches the OEM timing where these registers change during streaming phase */
+                    tx_isp_vic_write_streaming_registers();
                     
                     /* Binary Ninja: *($s1_1 + 0x128) = 4 */
                     vic_dev->state = 4;
