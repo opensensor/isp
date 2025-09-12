@@ -2673,10 +2673,10 @@ static void vic_adjustment_timer_fn(unsigned long data)
     writel(0xc50100, isp_base + 0xb030);
     writel(0x1670100, isp_base + 0xb034);
     writel(0x1f001, isp_base + 0xb038);
-    writel(0x46e0000, isp_base + 0xb03c);
-    writel(0x46e1000, isp_base + 0xb040);
-    writel(0x46e2000, isp_base + 0xb044);
-    writel(0x46e3000, isp_base + 0xb048);
+    writel(0x22c0000, isp_base + 0xb03c);
+    writel(0x22c1000, isp_base + 0xb040);
+    writel(0x22c2000, isp_base + 0xb044);
+    writel(0x22c3000, isp_base + 0xb048);
     writel(0x3, isp_base + 0xb04c);
     writel(0x10000000, isp_base + 0xb078);
     wmb();
@@ -2739,7 +2739,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         }
 
                         /* Schedule timer for 210ms from now */
-                        mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(105));
+                        mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(101));
                         pr_info("vic_core_s_stream: Scheduled 10ms adjustment timer\n");
                         adjustment_applied = false;
 
@@ -2751,7 +2751,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                         /* If we're restarting streaming and adjustment hasn't been applied yet */
                         if (!adjustment_applied && timer_initialized) {
-                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(105));
+                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(101));
                             pr_info("vic_core_s_stream: Re-scheduled 210ms adjustment timer\n");
                         }
                     }
