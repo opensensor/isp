@@ -44,7 +44,6 @@ int tx_isp_vic_probe(struct platform_device *pdev);
 int tx_isp_vic_remove(struct platform_device *pdev);
 
 /* VIC interrupt enable/disable functions (matching reference driver names) */
-void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev);
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
 
 /* VIC Operations - Use existing vic_device from tx_isp.h */

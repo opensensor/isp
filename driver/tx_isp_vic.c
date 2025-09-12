@@ -1125,12 +1125,6 @@ if (!IS_ERR(cgu_isp_clk)) {
         return ret;
     }
     pr_info("*** tx_isp_vic_start: VIC hardware interrupts initialized successfully ***\n");
-
-    /* *** CRITICAL FIX: Enable VIC hardware interrupts using safe struct access *** */
-    pr_info("*** tx_isp_vic_start: CRITICAL FIX - Enabling VIC hardware interrupts ***\n");
-    tx_vic_enable_irq(vic_dev);
-    pr_info("*** tx_isp_vic_start: VIC hardware interrupts enabled - hw_irq_enabled=%d ***\n", vic_dev->hw_irq_enabled);
-
     
     /* Take a local copy of sensor attributes to prevent corruption during streaming */
     struct tx_isp_sensor_attribute local_sensor_attr;

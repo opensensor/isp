@@ -593,7 +593,6 @@ static struct tx_isp_subdev_ops csi_subdev_ops;
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
 int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable);  /* FIXED: Forward declaration for CSI streaming */
 int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
-void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev);
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
 static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *buffer);
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
@@ -4406,7 +4405,6 @@ static int tx_isp_init(void)
             /* Set global VIC interrupt enable flag */
             vic_start_ok = 1;
             pr_info("*** vic_start_ok SET TO 1 - INTERRUPTS WILL NOW BE PROCESSED! ***\n");
-            tx_vic_enable_irq(vic_dev);
         }
     }
 
