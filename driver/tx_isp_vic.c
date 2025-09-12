@@ -2685,7 +2685,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         ret = tx_isp_vic_start(vic_dev);
                         vic_enabled = 1;
                     } else { // TODO call alternative VIC progress function
-                        ret = tx_isp_vic_progress(vic_dev);
+                        //ret = tx_isp_vic_progress(vic_dev);
+                        ret = 0;
                         pr_info("vic_core_s_stream: tx_isp_vic_progress returned %d\n", ret);
                     }
                     
