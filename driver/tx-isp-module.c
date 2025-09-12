@@ -669,6 +669,38 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
     system_reg_write(0xb04c, 0x103);
     system_reg_write(0xb050, 0x3);
     
+
+        // Apply the register sequence
+    writel(0x0, csi_base + 0x8);
+    writel(0xb5742249, csi_base + 0xc);
+    writel(0x133, csi_base + 0x10);
+    writel(0x8, csi_base + 0x1c);
+    writel(0x8fffffff, csi_base + 0x30);
+    writel(0x92217523, csi_base + 0x110);
+    
+    writel(0x0, main_isp_base + 0x9804);
+    writel(0x0, main_isp_base + 0x9ac0);
+    writel(0x0, main_isp_base + 0x9ac8);
+    
+    // Core control updates
+    writel(0x24242424, main_isp_base + 0xb018);
+    writel(0x24242424, main_isp_base + 0xb01c);
+    writel(0x24242424, main_isp_base + 0xb020);
+    writel(0x242424, main_isp_base + 0xb024);
+    writel(0x10d0046, main_isp_base + 0xb028);
+    writel(0xe8002f, main_isp_base + 0xb02c);
+    writel(0xc50100, main_isp_base + 0xb030);
+    writel(0x1670100, main_isp_base + 0xb034);
+    writel(0x1f001, main_isp_base + 0xb038);
+    writel(0x46e0000, main_isp_base + 0xb03c);
+    writel(0x46e1000, main_isp_base + 0xb040);
+    writel(0x46e2000, main_isp_base + 0xb044);
+    writel(0x46e3000, main_isp_base + 0xb048);
+    writel(0x3, main_isp_base + 0xb04c);
+    writel(0x10000000, main_isp_base + 0xb078);
+    wmb();
+
+
     /* CRITICAL: These are the varying registers that must match the reference driver exactly! */
     /* Using the EXACT reference values from the trace provided */
     pr_info("*** WRITING CRITICAL VARYING REGISTERS - USING EXACT REFERENCE VALUES ***\n");
