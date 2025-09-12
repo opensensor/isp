@@ -2647,15 +2647,6 @@ static void vic_adjustment_timer_fn(unsigned long data)
     isp_base = vic_regs - 0xe0000;
 
     pr_info("*** Timer: Applying  streaming adjustment sequence ***\n");
-
-    /* CSI PHY Control registers - write relative to vic_regs like your example */
-    writel(0x0, vic_regs + 0x8);           /* CSI PHY Control offset 0x8 */
-    writel(0xb5742249, vic_regs + 0xc);    /* CSI PHY Control offset 0xc */
-    writel(0x133, vic_regs + 0x10);        /* CSI PHY Control offset 0x10 */
-    writel(0x8, vic_regs + 0x1c);          /* CSI PHY Control offset 0x1c */
-    writel(0x8fffffff, vic_regs + 0x30);   /* CSI PHY Control offset 0x30 */
-    writel(0x92217523, vic_regs + 0x110);  /* CSI PHY Config offset 0x110 */
-
     /* ISP Control registers - relative to isp_base */
     writel(0x0, isp_base + 0x9804);
 
@@ -2739,7 +2730,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         }
 
                         /* Schedule timer for 210ms from now */
-                        mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(101));
+                        mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(97));
                         pr_info("vic_core_s_stream: Scheduled 10ms adjustment timer\n");
                         adjustment_applied = false;
 
@@ -2751,7 +2742,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                         /* If we're restarting streaming and adjustment hasn't been applied yet */
                         if (!adjustment_applied && timer_initialized) {
-                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(101));
+                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(97));
                             pr_info("vic_core_s_stream: Re-scheduled 210ms adjustment timer\n");
                         }
                     }
