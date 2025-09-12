@@ -1138,12 +1138,13 @@ void tx_isp_vic_write_streaming_registers_post_csi(void)
     /* CSI PHY Control registers - these change values during streaming phase */
     writel(0x0, main_isp_base + 0x8);           /* 0x1 -> 0x0 */
     writel(0xb5742249, main_isp_base + 0xc);    /* 0x80700008 -> 0xb5742249 */
+    writel(0x133, main_isp_base + 0x10);        /* 0x0 -> 0x133 - MISSING REGISTER! */
     writel(0x8, main_isp_base + 0x1c);          /* 0x0 -> 0x8 */
     writel(0x8fffffff, main_isp_base + 0x30);   /* 0x0 -> 0x8fffffff */
     wmb();
     
     /* CSI PHY Config registers - streaming phase changes */
-    writel(0x80007523, main_isp_base + 0x110);  /* 0x80007000 -> 0x80007523 */
+    writel(0x92217523, main_isp_base + 0x110);  /* 0x80007000 -> 0x92217523 - CORRECTED VALUE! */
     wmb();
     
     /* ISP Control registers - streaming phase changes */
@@ -1155,16 +1156,22 @@ void tx_isp_vic_write_streaming_registers_post_csi(void)
     writel(0x0, main_isp_base + 0x9ac8);        /* 0x200 -> 0x0 */
     wmb();
     
-    /* Core Control registers - streaming phase changes */
+    /* Core Control registers - streaming phase changes - CORRECTED VALUES FROM REFERENCE! */
     writel(0x24242424, main_isp_base + 0xb018); /* 0x40404040 -> 0x24242424 */
     writel(0x24242424, main_isp_base + 0xb01c); /* 0x40404040 -> 0x24242424 */
     writel(0x24242424, main_isp_base + 0xb020); /* 0x40404040 -> 0x24242424 */
     writel(0x242424, main_isp_base + 0xb024);   /* 0x404040 -> 0x242424 */
+    writel(0x10d0046, main_isp_base + 0xb028);  /* 0x1000080 -> 0x10d0046 - CORRECTED! */
+    writel(0xe8002f, main_isp_base + 0xb02c);   /* 0x1000080 -> 0xe8002f - CORRECTED! */
+    writel(0xc50100, main_isp_base + 0xb030);   /* 0x100 -> 0xc50100 - CORRECTED! */
+    writel(0x1670100, main_isp_base + 0xb034);  /* 0xffff0100 -> 0x1670100 - CORRECTED! */
+    writel(0x1f001, main_isp_base + 0xb038);    /* 0x1ff00 -> 0x1f001 - CORRECTED! */
     writel(0x46e0000, main_isp_base + 0xb03c);  /* 0x0 -> 0x46e0000 */
     writel(0x46e1000, main_isp_base + 0xb040);  /* 0x0 -> 0x46e1000 */
     writel(0x46e2000, main_isp_base + 0xb044);  /* 0x0 -> 0x46e2000 */
     writel(0x46e3000, main_isp_base + 0xb048);  /* 0x0 -> 0x46e3000 */
     writel(0x3, main_isp_base + 0xb04c);        /* 0x103 -> 0x3 */
+    writel(0x10000000, main_isp_base + 0xb078); /* 0x0 -> 0x10000000 - MISSING REGISTER! */
     wmb();
     
     pr_info("*** CRITICAL: All streaming registers written to MAIN ISP register space with CORRECT SEQUENCING ***\n");
