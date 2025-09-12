@@ -2625,10 +2625,67 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     pr_info("*** VIC EVENT CALLBACK: returning %d ***\n", ret);
     return ret;
 }
+/* Global timer and state variables */
+static struct timer_list vic_adjustment_timer;
+static bool timer_initialized = false;
+static bool adjustment_applied = false;
 
-/* Update your vic_core_s_stream to use the correct base addresses */
-static bool first_stop_after_start = false;
+/* Timer callback function */
+static void vic_adjustment_timer_fn(struct timer_list *t)
+{
+    struct tx_isp_vic_device *vic_dev;
+    void __iomem *vic_regs, *isp_base, *csi_base;
 
+    if (!ourISPdev || !ourISPdev->vic_dev) {
+        pr_err("Timer: No VIC device available\n");
+        return;
+    }
+
+    vic_dev = ourISPdev->vic_dev;
+    vic_regs = vic_dev->vic_regs;
+    isp_base = vic_regs - 0xe0000;
+    csi_base = isp_base + 0x10000;
+
+    pr_info("*** Timer: Applying 210ms streaming adjustment sequence ***\n");
+
+    /* CSI PHY Control registers - these were missing! */
+    writel(0x0, csi_base + 0x8);
+    writel(0xb5742249, csi_base + 0xc);
+    writel(0x133, csi_base + 0x10);
+    writel(0x8, csi_base + 0x1c);
+    writel(0x8fffffff, csi_base + 0x30);
+    writel(0x92217523, csi_base + 0x110);
+
+    /* ISP Control registers */
+    writel(0x0, isp_base + 0x9804);
+
+    /* VIC Control registers */
+    writel(0x0, isp_base + 0x9ac0);
+    writel(0x0, isp_base + 0x9ac8);
+
+    /* Core Control registers */
+    writel(0x24242424, isp_base + 0xb018);
+    writel(0x24242424, isp_base + 0xb01c);
+    writel(0x24242424, isp_base + 0xb020);
+    writel(0x242424, isp_base + 0xb024);
+    writel(0x10d0046, isp_base + 0xb028);
+    writel(0xe8002f, isp_base + 0xb02c);
+    writel(0xc50100, isp_base + 0xb030);
+    writel(0x1670100, isp_base + 0xb034);
+    writel(0x1f001, isp_base + 0xb038);
+    writel(0x46e0000, isp_base + 0xb03c);
+    writel(0x46e1000, isp_base + 0xb040);
+    writel(0x46e2000, isp_base + 0xb044);
+    writel(0x46e3000, isp_base + 0xb048);
+    writel(0x3, isp_base + 0xb04c);
+    writel(0x10000000, isp_base + 0xb078);
+    wmb();
+
+    adjustment_applied = true;
+    pr_info("*** Timer: 210ms adjustment sequence completed ***\n");
+}
+
+/* Modified vic_core_s_stream function */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
@@ -2641,77 +2698,92 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     pr_info("vic_core_s_stream: sd=%p, enable=%d\n", sd, enable);
     pr_info("vic_regs=%p, isp_base=%p, csi_base=%p\n", vic_regs, isp_base, csi_base);
 
-    if (sd != NULL && vic_dev != NULL) {
-        int current_state = vic_dev->state;
+    if (sd != NULL) {
+        if ((unsigned long)sd >= 0xfffff001) {
+            pr_err("vic_core_s_stream: Invalid sd pointer\n");
+            return -EINVAL;
+        }
 
-        if (enable == 0) {
-            /* Stream OFF */
-            ret = 0;
+        ret = -EINVAL;
 
-            if (current_state == 4) {
-                vic_dev->state = 3;
-                pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
+        if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
+            int current_state = vic_dev->state;
 
-                /* Apply the 210ms sequence only on first stop after start */
-                if (first_stop_after_start) {
-                    pr_info("*** Applying 210ms adjustment sequence on first stop ***\n");
+            if (enable == 0) {
+                /* Stream OFF */
+                ret = 0;
 
-                    /* Add the missing CSI PHY Control 0x8 write! */
-                    writel(0x0, csi_base + 0x8);  /* CRITICAL: This was missing */
-                    writel(0xb5742249, csi_base + 0xc);
-                    writel(0x133, csi_base + 0x10);
-                    writel(0x8, csi_base + 0x1c);
-                    writel(0x8fffffff, csi_base + 0x30);
-                    writel(0x92217523, csi_base + 0x110);
+                if (current_state == 4) {
+                    vic_dev->state = 3;
+                    pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
 
-                    writel(0x0, isp_base + 0x9804);
-                    writel(0x0, isp_base + 0x9ac0);
-                    writel(0x0, isp_base + 0x9ac8);
+                    /* Cancel timer if it's still pending */
+                    if (timer_initialized && timer_pending(&vic_adjustment_timer)) {
+                        del_timer_sync(&vic_adjustment_timer);
+                        pr_info("vic_core_s_stream: Cancelled pending adjustment timer\n");
+                    }
 
-                    writel(0x24242424, isp_base + 0xb018);
-                    writel(0x24242424, isp_base + 0xb01c);
-                    writel(0x24242424, isp_base + 0xb020);
-                    writel(0x242424, isp_base + 0xb024);
-                    writel(0x10d0046, isp_base + 0xb028);
-                    writel(0xe8002f, isp_base + 0xb02c);
-                    writel(0xc50100, isp_base + 0xb030);
-                    writel(0x1670100, isp_base + 0xb034);
-                    writel(0x1f001, isp_base + 0xb038);
-                    writel(0x46e0000, isp_base + 0xb03c);
-                    writel(0x46e1000, isp_base + 0xb040);
-                    writel(0x46e2000, isp_base + 0xb044);
-                    writel(0x46e3000, isp_base + 0xb048);
-                    writel(0x3, isp_base + 0xb04c);
-                    writel(0x10000000, isp_base + 0xb078);
-                    wmb();
-
-                    pr_info("*** 210ms adjustment sequence completed ***\n");
-                    first_stop_after_start = false;
+                    /* Reset adjustment flag for next streaming session */
+                    adjustment_applied = false;
                 }
-            }
-        } else {
-            /* Stream ON */
-            ret = 0;
+            } else {
+                /* Stream ON */
+                ret = 0;
 
-            if (current_state != 4) {
-                pr_info("vic_core_s_stream: Stream ON - calling tx_isp_vic_start\n");
+                if (current_state != 4) {
+                    pr_info("vic_core_s_stream: Stream ON - calling tx_isp_vic_start\n");
 
-                if (vic_enabled == 0) {
-                    ret = tx_isp_vic_start(vic_dev);
-                    vic_enabled = 1;
-                    first_stop_after_start = true;  /* Mark for adjustment on next stop */
-                } else {
-                    ret = 0;
+                    vic_start_ok = 0;
+
+                    if (vic_enabled == 0) {
+                        ret = tx_isp_vic_start(vic_dev);
+                        vic_enabled = 1;
+
+                        /* Schedule the 210ms adjustment timer */
+                        if (ret == 0) {
+                            if (!timer_initialized) {
+                                timer_setup(&vic_adjustment_timer, vic_adjustment_timer_fn, 0);
+                                timer_initialized = true;
+                                pr_info("vic_core_s_stream: Timer initialized\n");
+                            }
+
+                            /* Schedule timer for 210ms from now */
+                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(210));
+                            pr_info("vic_core_s_stream: Scheduled 210ms adjustment timer\n");
+                            adjustment_applied = false;
+                        }
+                    } else {
+                        ret = 0;
+                        pr_info("vic_core_s_stream: tx_isp_vic_progress returned %d\n", ret);
+
+                        /* If we're restarting streaming and adjustment hasn't been applied yet */
+                        if (!adjustment_applied && timer_initialized) {
+                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(210));
+                            pr_info("vic_core_s_stream: Re-scheduled 210ms adjustment timer\n");
+                        }
+                    }
+
+                    vic_dev->state = 4;
+                    vic_start_ok = 1;
+
+                    pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
+                    return ret;
                 }
-
-                vic_dev->state = 4;
-                pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
-                return ret;
             }
         }
     }
 
     return ret;
+}
+
+/* Cleanup function - call this when unloading the module */
+void vic_cleanup_timer(void)
+{
+    if (timer_initialized) {
+        del_timer_sync(&vic_adjustment_timer);
+        timer_initialized = false;
+        pr_info("VIC adjustment timer cleaned up\n");
+    }
 }
 
 /* Define VIC video operations */
