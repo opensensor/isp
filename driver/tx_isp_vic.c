@@ -2736,7 +2736,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                         ret = tx_isp_vic_start(vic_dev);
                         vic_enabled = 1;
-                        msleep(100);
+                        msleep(50);
                     } else {
                         ret = 0;
                         pr_info("vic_core_s_stream: tx_isp_vic_progress returned %d\n", ret);
