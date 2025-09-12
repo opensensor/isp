@@ -2625,13 +2625,15 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     pr_info("*** VIC EVENT CALLBACK: returning %d ***\n", ret);
     return ret;
 }
+
+
 /* Global timer and state variables */
 static struct timer_list vic_adjustment_timer;
 static bool timer_initialized = false;
 static bool adjustment_applied = false;
 
-/* Timer callback function */
-static void vic_adjustment_timer_fn(struct timer_list *t)
+/* Timer callback function - OLD API for kernel 3.10 */
+static void vic_adjustment_timer_fn(unsigned long data)
 {
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs, *isp_base, *csi_base;
@@ -2648,7 +2650,7 @@ static void vic_adjustment_timer_fn(struct timer_list *t)
 
     pr_info("*** Timer: Applying 210ms streaming adjustment sequence ***\n");
 
-    /* CSI PHY Control registers - these were missing! */
+    /* CSI PHY Control registers */
     writel(0x0, csi_base + 0x8);
     writel(0xb5742249, csi_base + 0xc);
     writel(0x133, csi_base + 0x10);
@@ -2685,7 +2687,7 @@ static void vic_adjustment_timer_fn(struct timer_list *t)
     pr_info("*** Timer: 210ms adjustment sequence completed ***\n");
 }
 
-/* Modified vic_core_s_stream function */
+/* Modified vic_core_s_stream function with OLD timer API */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
@@ -2742,9 +2744,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         /* Schedule the 210ms adjustment timer */
                         if (ret == 0) {
                             if (!timer_initialized) {
-                                timer_setup(&vic_adjustment_timer, vic_adjustment_timer_fn, 0);
+                                /* OLD TIMER API for kernel 3.10 */
+                                init_timer(&vic_adjustment_timer);
+                                vic_adjustment_timer.function = vic_adjustment_timer_fn;
+                                vic_adjustment_timer.data = 0;
                                 timer_initialized = true;
-                                pr_info("vic_core_s_stream: Timer initialized\n");
+                                pr_info("vic_core_s_stream: Timer initialized (kernel 3.10 API)\n");
                             }
 
                             /* Schedule timer for 210ms from now */
@@ -2776,7 +2781,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     return ret;
 }
 
-/* Cleanup function - call this when unloading the module */
+/* Cleanup function remains the same */
 void vic_cleanup_timer(void)
 {
     if (timer_initialized) {
@@ -2785,6 +2790,7 @@ void vic_cleanup_timer(void)
         pr_info("VIC adjustment timer cleaned up\n");
     }
 }
+
 
 /* Define VIC video operations */
 static struct tx_isp_subdev_video_ops vic_video_ops = {
