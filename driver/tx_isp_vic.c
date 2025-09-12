@@ -2158,9 +2158,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     if (ourISPdev && ourISPdev->csi_dev) {
                         pr_info("vic_core_s_stream: Triggering CSI initialization for streaming\n");
                         /* Access CSI operations through the subdev structure */
-                        if (ourISPdev->csi_dev->ops && ourISPdev->csi_dev->ops->sensor && 
-                            ourISPdev->csi_dev->ops->sensor->ioctl) {
-                            ret = ourISPdev->csi_dev->ops->sensor->ioctl(ourISPdev->csi_dev, 0x200000c, NULL);
+                        if (ourISPdev->csi_dev->sd.ops && ourISPdev->csi_dev->sd.ops->sensor && 
+                            ourISPdev->csi_dev->sd.ops->sensor->ioctl) {
+                            ret = ourISPdev->csi_dev->sd.ops->sensor->ioctl(&ourISPdev->csi_dev->sd, 0x200000c, NULL);
                             pr_info("vic_core_s_stream: CSI sensor ioctl returned %d\n", ret);
                         }
                     }
