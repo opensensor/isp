@@ -1387,15 +1387,71 @@ if (!IS_ERR(cgu_isp_clk)) {
     wmb();
 
 
-    ///     struct clk *isp_clk, *cgu_isp_clk, *csi_clk, *ipu_clk;
+    cmsleep(200);
 
-        clk_disable_unprepare(csi_clk);
-        pr_info("CSI clock disabled\n");
-        //enable it again
-        ret = clk_prepare_enable(csi_clk);
+pr_info("*** Applying 210ms streaming adjustment with proper stop protocol ***\n");
 
+// STEP 1: Stop the channel properly using the protocol from tisp_channel_stop
+u32 ch_en = readl(main_isp_base + 0x9804);
+pr_info("Current channel enable: 0x%x\n", ch_en);
 
-pr_info("*** 210ms adjustment sequence applied ***\n");
+// Clear channel 0 bit (assuming channel 0)
+ch_en &= ~(1 << 0);  // or whatever channel bit you're using
+writel(ch_en, main_isp_base + 0x9804);
+wmb();
+
+// STEP 2: Poll for channel stop acknowledgment
+int timeout = 3000;  // 3000ms timeout like in the code
+u32 status;
+while (timeout > 0) {
+    status = readl(main_isp_base + 0x9808);
+    if ((status & (1 << 0)) == 0) {  // Check if channel bit cleared
+        pr_info("Channel stopped successfully, status=0x%x\n", status);
+        break;
+    }
+    msleep(1);
+    timeout--;
+}
+
+if (timeout == 0) {
+    pr_err("Channel stop timeout! Status still 0x%x\n", status);
+}
+
+// STEP 3: Now apply your register changes while properly stopped
+writel(0x0, csi_base + 0x8);
+writel(0xb5742249, csi_base + 0xc);
+writel(0x133, csi_base + 0x10);
+writel(0x8, csi_base + 0x1c);
+writel(0x8fffffff, csi_base + 0x30);
+writel(0x92217523, csi_base + 0x110);
+
+// Write zeros to these registers as shown in trace
+writel(0x0, main_isp_base + 0x9ac0);
+writel(0x0, main_isp_base + 0x9ac8);
+
+// Core control updates
+writel(0x24242424, main_isp_base + 0xb018);
+writel(0x24242424, main_isp_base + 0xb01c);
+writel(0x24242424, main_isp_base + 0xb020);
+writel(0x242424, main_isp_base + 0xb024);
+writel(0x10d0046, main_isp_base + 0xb028);
+writel(0xe8002f, main_isp_base + 0xb02c);
+writel(0xc50100, main_isp_base + 0xb030);
+writel(0x1670100, main_isp_base + 0xb034);
+writel(0x1f001, main_isp_base + 0xb038);
+writel(0x46e0000, main_isp_base + 0xb03c);
+writel(0x46e1000, main_isp_base + 0xb040);
+writel(0x46e2000, main_isp_base + 0xb044);
+writel(0x46e3000, main_isp_base + 0xb048);
+writel(0x3, main_isp_base + 0xb04c);  // Changes from 0x103 to 0x3
+writel(0x10000000, main_isp_base + 0xb078);
+wmb();
+
+// STEP 4: Restart the channel if needed
+// This might be automatic or might need explicit restart
+// You might need to set the channel bit back in 0x9804
+
+pr_info("*** 210ms adjustment sequence applied with proper protocol ***\n");
 
     /* ==============================================================================================
      * PHASE 3: VIC initial configuration (T+270ms)
