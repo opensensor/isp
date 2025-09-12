@@ -2636,7 +2636,7 @@ static bool adjustment_applied = false;
 static void vic_adjustment_timer_fn(unsigned long data)
 {
     struct tx_isp_vic_device *vic_dev;
-    void __iomem *vic_regs, *isp_base, *csi_base;
+    void __iomem *vic_regs, *isp_base;
 
     if (!ourISPdev || !ourISPdev->vic_dev) {
         pr_err("Timer: No VIC device available\n");
@@ -2646,17 +2646,16 @@ static void vic_adjustment_timer_fn(unsigned long data)
     vic_dev = ourISPdev->vic_dev;
     vic_regs = vic_dev->vic_regs;
     isp_base = vic_regs - 0xe0000;
-    csi_base = isp_base + 0x10000;
 
-    pr_info("*** Timer: Applying 210ms streaming adjustment sequence ***\n");
+    pr_info("*** Timer: Applying 10ms streaming adjustment sequence ***\n");
 
-    /* CSI PHY Control registers */
-    writel(0x0, csi_base + 0x8);
-    writel(0xb5742249, csi_base + 0xc);
-    writel(0x133, csi_base + 0x10);
-    writel(0x8, csi_base + 0x1c);
-    writel(0x8fffffff, csi_base + 0x30);
-    writel(0x92217523, csi_base + 0x110);
+    /* CSI PHY Control registers - write to MAIN ISP BASE, not CSI base! */
+    writel(0x0, isp_base + 0x10000 + 0x8);       /* CSI at ISP + 0x10000 */
+    writel(0xb5742249, isp_base + 0x10000 + 0xc);
+    writel(0x133, isp_base + 0x10000 + 0x10);
+    writel(0x8, isp_base + 0x10000 + 0x1c);
+    writel(0x8fffffff, isp_base + 0x10000 + 0x30);
+    writel(0x92217523, isp_base + 0x10000 + 0x110);
 
     /* ISP Control registers */
     writel(0x0, isp_base + 0x9804);
@@ -2684,7 +2683,7 @@ static void vic_adjustment_timer_fn(unsigned long data)
     wmb();
 
     adjustment_applied = true;
-    pr_info("*** Timer: 210ms adjustment sequence completed ***\n");
+    pr_info("*** Timer: 10ms adjustment sequence completed ***\n");
 }
 
 /* Modified vic_core_s_stream function with OLD timer API */
