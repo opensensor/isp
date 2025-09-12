@@ -1305,84 +1305,6 @@ if (!IS_ERR(cgu_isp_clk)) {
     pr_info("MCP_LOG: VIC start initiated - interface=%d, format=0x%x, vic_base=%p\n", 
             interface_type, sensor_format, vic_regs);
 
-
-pr_info("*** Applying 210ms streaming adjustment sequence ***\n");
-
-    /* Unlock sequence */
-    writel(2, vic_regs + 0x0);
-    wmb();
-    writel(1, vic_regs + 0x0);
-    wmb();
-
-    /* Binary Ninja: Wait for VIC unlock completion */
-    pr_info("tx_isp_vic_start: Waiting for VIC unlock completion...\n");
-    timeout = 10000;
-    while (timeout > 0) {
-        u32 status = readl(vic_regs + 0x0);
-        if (status == 0) {
-            pr_info("tx_isp_vic_start: VIC unlocked after %d iterations (status=0)\n", 10000 - timeout);
-            break;
-        }
-        udelay(1);
-        timeout--;
-    }
-
-    /* Binary Ninja: Enable VIC processing */
-    writel(1, vic_regs + 0x0);
-    wmb();
-    pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1)\n");
-
-    /* Binary Ninja: Final configuration registers */
-    writel(0x100010, vic_regs + 0x1a4);
-    writel(0x4210, vic_regs + 0x1ac);
-    writel(0x10, vic_regs + 0x1b0);
-    writel(0, vic_regs + 0x1b4);
-    wmb();
-
-// STEP 1: Stop/disable the streaming pipeline
-writel(0x0, csi_base + 0x8);          // Disable CSI PHY
-writel(0x0, main_isp_base + 0x9804);  // Stop ISP Control
-writel(0x0, main_isp_base + 0x9ac0);  // Clear VIC Control
-writel(0x0, main_isp_base + 0x9ac8);  // Clear VIC Control
-wmb();
-
-// STEP 2: Wait for pipeline to stop
-msleep(10);
-
-// STEP 3: Apply new configuration values while stopped
-writel(0xb5742249, csi_base + 0xc);
-writel(0x133, csi_base + 0x10);
-writel(0x8, csi_base + 0x1c);
-writel(0x8fffffff, csi_base + 0x30);
-writel(0x92217523, csi_base + 0x110);
-
-// Core control updates
-writel(0x24242424, main_isp_base + 0xb018);
-writel(0x24242424, main_isp_base + 0xb01c);
-writel(0x24242424, main_isp_base + 0xb020);
-writel(0x242424, main_isp_base + 0xb024);
-writel(0x10d0046, main_isp_base + 0xb028);
-writel(0xe8002f, main_isp_base + 0xb02c);
-writel(0xc50100, main_isp_base + 0xb030);
-writel(0x1670100, main_isp_base + 0xb034);
-writel(0x1f001, main_isp_base + 0xb038);
-writel(0x46e0000, main_isp_base + 0xb03c);
-writel(0x46e1000, main_isp_base + 0xb040);
-writel(0x46e2000, main_isp_base + 0xb044);
-writel(0x46e3000, main_isp_base + 0xb048);
-writel(0x3, main_isp_base + 0xb04c);  // Note: This changes from 0x103 to 0x3
-writel(0x10000000, main_isp_base + 0xb078);
-wmb();
-
-
-// After your existing initialization code, at the 200ms mark:
-msleep(200);
-
-
-// STEP 4: Re-enable in reverse order (might need to restart streaming)
-// Note: The trace shows these staying at 0, so maybe they don't get re-enabled here
-// Or maybe they get re-enabled by a subsequent command
-
     /* *** WRITE MISSING REGISTERS TO MATCH REFERENCE TRACE *** */
     pr_info("*** Writing missing registers to match reference driver trace ***\n");
     writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace */
@@ -1465,6 +1387,161 @@ msleep(200);
     wmb();
 
     pr_info("*** Completed writing ALL missing initialization registers from reference trace ***\n");
+//
+//// After your existing initialization code, at the 200ms mark:
+//msleep(200);
+//
+//pr_info("*** Applying 210ms streaming adjustment sequence ***\n");
+//
+//    /* Unlock sequence */
+//    writel(2, vic_regs + 0x0);
+//    wmb();
+//    writel(1, vic_regs + 0x0);
+//    wmb();
+//
+//    /* Binary Ninja: Wait for VIC unlock completion */
+//    pr_info("tx_isp_vic_start: Waiting for VIC unlock completion...\n");
+//    timeout = 10000;
+//    while (timeout > 0) {
+//        u32 status = readl(vic_regs + 0x0);
+//        if (status == 0) {
+//            pr_info("tx_isp_vic_start: VIC unlocked after %d iterations (status=0)\n", 10000 - timeout);
+//            break;
+//        }
+//        udelay(1);
+//        timeout--;
+//    }
+//
+//    /* Binary Ninja: Enable VIC processing */
+//    writel(1, vic_regs + 0x0);
+//    wmb();
+//    pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1)\n");
+//
+//    /* Binary Ninja: Final configuration registers */
+//    writel(0x100010, vic_regs + 0x1a4);
+//    writel(0x4210, vic_regs + 0x1ac);
+//    writel(0x10, vic_regs + 0x1b0);
+//    writel(0, vic_regs + 0x1b4);
+//    wmb();
+//
+//// STEP 1: Stop/disable the streaming pipeline
+//writel(0x0, csi_base + 0x8);          // Disable CSI PHY
+//writel(0x0, main_isp_base + 0x9804);  // Stop ISP Control
+//writel(0x0, main_isp_base + 0x9ac0);  // Clear VIC Control
+//writel(0x0, main_isp_base + 0x9ac8);  // Clear VIC Control
+//wmb();
+//
+//// STEP 2: Wait for pipeline to stop
+//msleep(10);
+//
+//// STEP 3: Apply new configuration values while stopped
+//writel(0xb5742249, csi_base + 0xc);
+//writel(0x133, csi_base + 0x10);
+//writel(0x8, csi_base + 0x1c);
+//writel(0x8fffffff, csi_base + 0x30);
+//writel(0x92217523, csi_base + 0x110);
+//
+//// Core control updates
+//writel(0x24242424, main_isp_base + 0xb018);
+//writel(0x24242424, main_isp_base + 0xb01c);
+//writel(0x24242424, main_isp_base + 0xb020);
+//writel(0x242424, main_isp_base + 0xb024);
+//writel(0x10d0046, main_isp_base + 0xb028);
+//writel(0xe8002f, main_isp_base + 0xb02c);
+//writel(0xc50100, main_isp_base + 0xb030);
+//writel(0x1670100, main_isp_base + 0xb034);
+//writel(0x1f001, main_isp_base + 0xb038);
+//writel(0x46e0000, main_isp_base + 0xb03c);
+//writel(0x46e1000, main_isp_base + 0xb040);
+//writel(0x46e2000, main_isp_base + 0xb044);
+//writel(0x46e3000, main_isp_base + 0xb048);
+//writel(0x3, main_isp_base + 0xb04c);  // Note: This changes from 0x103 to 0x3
+//writel(0x10000000, main_isp_base + 0xb078);
+//wmb();
+//
+//// STEP 4: Re-enable in reverse order (might need to restart streaming)
+//// Note: The trace shows these staying at 0, so maybe they don't get re-enabled here
+//// Or maybe they get re-enabled by a subsequent command
+
+        /* *** WRITE MISSING REGISTERS TO MATCH REFERENCE TRACE *** */
+    pr_info("*** Writing missing registers to match reference driver trace ***\n");
+    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace */
+    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace */
+    writel(0x0, vic_regs + 0x14);          /* Third register from reference trace */
+
+    /* CSI PHY Control registers - write to VIC register space offsets that match trace */
+    writel(0x54560031, vic_regs + 0x0);      /* First register from reference trace */
+    writel(0x7800438, vic_regs + 0x4);       /* Second register from reference trace */
+    writel(0x1, vic_regs + 0x8);             /* Third register from reference trace */
+    writel(0x80700008, vic_regs + 0xc);      /* Fourth register from reference trace */
+    writel(0x1, vic_regs + 0x28);            /* Fifth register from reference trace */
+    writel(0x400040, vic_regs + 0x2c);       /* Sixth register from reference trace */
+    writel(0x1, vic_regs + 0x90);            /* Seventh register from reference trace */
+    writel(0x1, vic_regs + 0x94);            /* Eighth register from reference trace */
+    writel(0x30000, vic_regs + 0x98);        /* Ninth register from reference trace */
+    writel(0x58050000, vic_regs + 0xa8);     /* Tenth register from reference trace */
+    writel(0x58050000, vic_regs + 0xac);     /* Eleventh register from reference trace */
+    writel(0x40000, vic_regs + 0xc4);        /* Register from reference trace */
+    writel(0x400040, vic_regs + 0xc8);       /* Register from reference trace */
+    writel(0x100, vic_regs + 0xcc);          /* Register from reference trace */
+    writel(0xc, vic_regs + 0xd4);            /* Register from reference trace */
+    writel(0xffffff, vic_regs + 0xd8);       /* Register from reference trace */
+    writel(0x100, vic_regs + 0xe0);          /* Register from reference trace */
+    writel(0x400040, vic_regs + 0xe4);       /* Register from reference trace */
+    writel(0xff808000, vic_regs + 0xf0);     /* Register from reference trace */
+    wmb();
+
+    /* CSI PHY Config registers - from reference trace */
+    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
+    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
+    wmb();
+
+    /* *** MISSING ISP Control registers - from reference trace *** */
+    pr_info("*** Writing missing ISP Control registers (0x9804-0x98a8) ***\n");
+    writel(0x3f00, vic_regs + 0x9804);       /* ISP Control register */
+    writel(0x7800438, vic_regs + 0x9864);    /* ISP Control register */
+    writel(0xc0000000, vic_regs + 0x987c);   /* ISP Control register */
+    writel(0x1, vic_regs + 0x9880);          /* ISP Control register */
+    writel(0x1, vic_regs + 0x9884);          /* ISP Control register */
+    writel(0x1010001, vic_regs + 0x9890);    /* ISP Control register */
+    writel(0x1010001, vic_regs + 0x989c);    /* ISP Control register */
+    writel(0x1010001, vic_regs + 0x98a8);    /* ISP Control register */
+    wmb();
+
+    /* *** MISSING VIC Control registers - from reference trace *** */
+    pr_info("*** Writing missing VIC Control registers (0x9a00-0x9ac8) ***\n");
+    writel(0x50002d0, vic_regs + 0x9a00);    /* VIC Control register */
+    writel(0x3000300, vic_regs + 0x9a04);    /* VIC Control register */
+    writel(0x50002d0, vic_regs + 0x9a2c);    /* VIC Control register */
+    writel(0x1, vic_regs + 0x9a34);          /* VIC Control register */
+    writel(0x1, vic_regs + 0x9a70);          /* VIC Control register */
+    writel(0x1, vic_regs + 0x9a7c);          /* VIC Control register */
+    writel(0x500, vic_regs + 0x9a80);        /* VIC Control register */
+    writel(0x1, vic_regs + 0x9a88);          /* VIC Control register */
+    writel(0x1, vic_regs + 0x9a94);          /* VIC Control register */
+    writel(0x500, vic_regs + 0x9a98);        /* VIC Control register */
+    writel(0x200, vic_regs + 0x9ac0);        /* VIC Control register */
+    writel(0x200, vic_regs + 0x9ac8);        /* VIC Control register */
+    wmb();
+
+    /* *** MISSING Core Control registers - from reference trace *** */
+    pr_info("*** Writing missing Core Control registers (0xb004-0xb08c) ***\n");
+    writel(0xf001f001, vic_regs + 0xb004);   /* Core Control register */
+    writel(0x24242424, vic_regs + 0xb008);   /* Core Control register */
+    writel(0x24242424, vic_regs + 0xb00c);   /* Core Control register */
+    writel(0x24242424, vic_regs + 0xb010);   /* Core Control register */
+    writel(0x404040, vic_regs + 0xb014);     /* Core Control register */
+    writel(0x24242424, vic_regs + 0xb018);   /* Core Control register */
+    writel(0x24242424, vic_regs + 0xb01c);   /* Core Control register */
+    writel(0x24242424, vic_regs + 0xb020);   /* Core Control register */
+    writel(0x242424, vic_regs + 0xb024);     /* Core Control register */
+    writel(0x1000080, vic_regs + 0xb028);    /* Core Control register */
+    writel(0x1000080, vic_regs + 0xb02c);    /* Core Control register */
+    writel(0x100, vic_regs + 0xb030);        /* Core Control register */
+    writel(0x1670100, vic_regs + 0xb034);   /* Core Control register */
+    writel(0x1f001, vic_regs + 0xb038);      /* Core Control register */
+    writel(0x3, vic_regs + 0xb04c);        /* Core Control register */
+    wmb();
 
 
 pr_info("*** 210ms adjustment sequence applied ***\n");
