@@ -1305,6 +1305,84 @@ if (!IS_ERR(cgu_isp_clk)) {
     pr_info("MCP_LOG: VIC start initiated - interface=%d, format=0x%x, vic_base=%p\n", 
             interface_type, sensor_format, vic_regs);
 
+
+pr_info("*** Applying 210ms streaming adjustment sequence ***\n");
+
+    /* Unlock sequence */
+    writel(2, vic_regs + 0x0);
+    wmb();
+    writel(1, vic_regs + 0x0);
+    wmb();
+
+    /* Binary Ninja: Wait for VIC unlock completion */
+    pr_info("tx_isp_vic_start: Waiting for VIC unlock completion...\n");
+    timeout = 10000;
+    while (timeout > 0) {
+        u32 status = readl(vic_regs + 0x0);
+        if (status == 0) {
+            pr_info("tx_isp_vic_start: VIC unlocked after %d iterations (status=0)\n", 10000 - timeout);
+            break;
+        }
+        udelay(1);
+        timeout--;
+    }
+
+    /* Binary Ninja: Enable VIC processing */
+    writel(1, vic_regs + 0x0);
+    wmb();
+    pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1)\n");
+
+    /* Binary Ninja: Final configuration registers */
+    writel(0x100010, vic_regs + 0x1a4);
+    writel(0x4210, vic_regs + 0x1ac);
+    writel(0x10, vic_regs + 0x1b0);
+    writel(0, vic_regs + 0x1b4);
+    wmb();
+
+// STEP 1: Stop/disable the streaming pipeline
+writel(0x0, csi_base + 0x8);          // Disable CSI PHY
+writel(0x0, main_isp_base + 0x9804);  // Stop ISP Control
+writel(0x0, main_isp_base + 0x9ac0);  // Clear VIC Control
+writel(0x0, main_isp_base + 0x9ac8);  // Clear VIC Control
+wmb();
+
+// STEP 2: Wait for pipeline to stop
+msleep(10);
+
+// STEP 3: Apply new configuration values while stopped
+writel(0xb5742249, csi_base + 0xc);
+writel(0x133, csi_base + 0x10);
+writel(0x8, csi_base + 0x1c);
+writel(0x8fffffff, csi_base + 0x30);
+writel(0x92217523, csi_base + 0x110);
+
+// Core control updates
+writel(0x24242424, main_isp_base + 0xb018);
+writel(0x24242424, main_isp_base + 0xb01c);
+writel(0x24242424, main_isp_base + 0xb020);
+writel(0x242424, main_isp_base + 0xb024);
+writel(0x10d0046, main_isp_base + 0xb028);
+writel(0xe8002f, main_isp_base + 0xb02c);
+writel(0xc50100, main_isp_base + 0xb030);
+writel(0x1670100, main_isp_base + 0xb034);
+writel(0x1f001, main_isp_base + 0xb038);
+writel(0x46e0000, main_isp_base + 0xb03c);
+writel(0x46e1000, main_isp_base + 0xb040);
+writel(0x46e2000, main_isp_base + 0xb044);
+writel(0x46e3000, main_isp_base + 0xb048);
+writel(0x3, main_isp_base + 0xb04c);  // Note: This changes from 0x103 to 0x3
+writel(0x10000000, main_isp_base + 0xb078);
+wmb();
+
+
+// After your existing initialization code, at the 200ms mark:
+msleep(200);
+
+
+// STEP 4: Re-enable in reverse order (might need to restart streaming)
+// Note: The trace shows these staying at 0, so maybe they don't get re-enabled here
+// Or maybe they get re-enabled by a subsequent command
+
     /* *** WRITE MISSING REGISTERS TO MATCH REFERENCE TRACE *** */
     pr_info("*** Writing missing registers to match reference driver trace ***\n");
     writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace */
@@ -1388,80 +1466,6 @@ if (!IS_ERR(cgu_isp_clk)) {
 
     pr_info("*** Completed writing ALL missing initialization registers from reference trace ***\n");
 
-// After your existing initialization code, at the 200ms mark:
-msleep(200);
-
-pr_info("*** Applying 210ms streaming adjustment sequence ***\n");
-
-    /* Unlock sequence */
-    writel(2, vic_regs + 0x0);
-    wmb();
-    writel(1, vic_regs + 0x0);
-    wmb();
-
-    /* Binary Ninja: Wait for VIC unlock completion */
-    pr_info("tx_isp_vic_start: Waiting for VIC unlock completion...\n");
-    timeout = 10000;
-    while (timeout > 0) {
-        u32 status = readl(vic_regs + 0x0);
-        if (status == 0) {
-            pr_info("tx_isp_vic_start: VIC unlocked after %d iterations (status=0)\n", 10000 - timeout);
-            break;
-        }
-        udelay(1);
-        timeout--;
-    }
-
-    /* Binary Ninja: Enable VIC processing */
-    writel(1, vic_regs + 0x0);
-    wmb();
-    pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1)\n");
-
-    /* Binary Ninja: Final configuration registers */
-    writel(0x100010, vic_regs + 0x1a4);
-    writel(0x4210, vic_regs + 0x1ac);
-    writel(0x10, vic_regs + 0x1b0);
-    writel(0, vic_regs + 0x1b4);
-    wmb();
-
-// STEP 1: Stop/disable the streaming pipeline
-writel(0x0, csi_base + 0x8);          // Disable CSI PHY
-writel(0x0, main_isp_base + 0x9804);  // Stop ISP Control
-writel(0x0, main_isp_base + 0x9ac0);  // Clear VIC Control
-writel(0x0, main_isp_base + 0x9ac8);  // Clear VIC Control
-wmb();
-
-// STEP 2: Wait for pipeline to stop
-msleep(10);
-
-// STEP 3: Apply new configuration values while stopped
-writel(0xb5742249, csi_base + 0xc);
-writel(0x133, csi_base + 0x10);
-writel(0x8, csi_base + 0x1c);
-writel(0x8fffffff, csi_base + 0x30);
-writel(0x92217523, csi_base + 0x110);
-
-// Core control updates
-writel(0x24242424, main_isp_base + 0xb018);
-writel(0x24242424, main_isp_base + 0xb01c);
-writel(0x24242424, main_isp_base + 0xb020);
-writel(0x242424, main_isp_base + 0xb024);
-writel(0x10d0046, main_isp_base + 0xb028);
-writel(0xe8002f, main_isp_base + 0xb02c);
-writel(0xc50100, main_isp_base + 0xb030);
-writel(0x1670100, main_isp_base + 0xb034);
-writel(0x1f001, main_isp_base + 0xb038);
-writel(0x46e0000, main_isp_base + 0xb03c);
-writel(0x46e1000, main_isp_base + 0xb040);
-writel(0x46e2000, main_isp_base + 0xb044);
-writel(0x46e3000, main_isp_base + 0xb048);
-writel(0x3, main_isp_base + 0xb04c);  // Note: This changes from 0x103 to 0x3
-writel(0x10000000, main_isp_base + 0xb078);
-wmb();
-
-// STEP 4: Re-enable in reverse order (might need to restart streaming)
-// Note: The trace shows these staying at 0, so maybe they don't get re-enabled here
-// Or maybe they get re-enabled by a subsequent command
 
 pr_info("*** 210ms adjustment sequence applied ***\n");
 
