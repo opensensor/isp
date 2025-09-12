@@ -1004,7 +1004,7 @@ void tx_isp_vic_write_csi_phy_sequence(void)
     writel(0x20, csi_base + 0x11c);
     writel(0xf, csi_base + 0x120);
     writel(0x48, csi_base + 0x124);
-    writel(0xf, csi_base + 0x128);  /* CORRECTED: 0xf not 0x3f */
+    writel(0x3f, csi_base + 0x128);  /* CORRECTED: Should be 0x3f to match reference */
     writel(0xf, csi_base + 0x12c);
     writel(0x88, csi_base + 0x130);
     writel(0x86, csi_base + 0x138);

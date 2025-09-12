@@ -6259,8 +6259,6 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
             /* CRITICAL: Call the streaming register function AFTER sensor detection completes */
             extern void tx_isp_vic_write_streaming_registers_post_csi(void);
             tx_isp_vic_write_streaming_registers_post_csi();
-            
-
         }
     } else {
         pr_err("*** ERROR: NO REAL SENSOR DRIVER S_STREAM FUNCTION AVAILABLE! ***\n");
