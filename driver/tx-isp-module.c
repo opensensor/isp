@@ -1965,38 +1965,17 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd);
 /* tx_isp_video_link_stream - FIXED implementation with proper MIPS alignment checks */
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 {
-    // vic_dev
     pr_info("*** tx_isp_video_link_stream: FIXED MIPS-SAFE implementation - enable=%d ***\n", enable);
     
     if (!isp_dev) {
         pr_err("tx_isp_video_link_stream: Invalid ISP device\n");
         return -EINVAL;
     }
-    struct tx_isp_vic_device *vic_dev = isp_dev->vic_dev;
-
+    
     /* MIPS-SAFE: Instead of dangerous subdev iteration, directly call known working functions */
     if (enable) {
         pr_info("*** MIPS-SAFE: Enabling streaming without risky subdev iteration ***\n");
-
-        /* *** CRITICAL FIX: Initialize VIC hardware interrupts FIRST *** */
-        pr_info("*** tx_isp_vic_start: CRITICAL FIX - Initializing VIC hardware interrupts ***\n");
-        int ret = tx_isp_vic_hw_init(&vic_dev->sd);
-        if (ret != 0) {
-            pr_err("tx_isp_vic_start: VIC hardware interrupt init failed: %d\n", ret);
-            return ret;
-        }
-        pr_info("*** tx_isp_vic_start: VIC hardware interrupts initialized successfully ***\n");
-
-        /* *** CRITICAL FIX: Enable VIC hardware interrupts using safe struct access *** */
-        pr_info("*** tx_isp_vic_start: CRITICAL FIX - Enabling VIC hardware interrupts ***\n");
-        tx_vic_enable_irq(vic_dev);
-        pr_info("*** tx_isp_vic_start: VIC hardware interrupts enabled - hw_irq_enabled=%d ***\n", vic_dev->hw_irq_enabled);
-
-
-        pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
-        tx_isp_enable_irq(isp_dev);
-        pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
-
+        
         /* SAFE: Call VIC streaming directly if available */
         if (isp_dev->vic_dev) {
             struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
@@ -2116,30 +2095,30 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     }
     
     /* CORRECTED: Use direct CSI device reference */
-    if (ourISPdev->csi_dev) {
-        struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
-
-        if (csi_dev->sd.ops && csi_dev->sd.ops->video && csi_dev->sd.ops->video->s_stream) {
-            pr_info("*** Calling CSI s_stream directly: enable=%d ***\n", enable);
-            ret = csi_dev->sd.ops->video->s_stream(&csi_dev->sd, enable);
-
-            if (ret != 0 && ret != 0xfffffdfd) {
-                pr_err("CSI s_stream failed: %d\n", ret);
-                /* Don't return error - try to disable VIC if we were enabling */
-                if (enable && ourISPdev->vic_dev) {
-                    struct tx_isp_vic_device *vic_dev = dev->vic_dev;
-                    if (vic_dev->sd.ops && vic_dev->sd.ops->video &&
-                        vic_dev->sd.ops->video->s_stream) {
-                        vic_dev->sd.ops->video->s_stream(&vic_dev->sd, 0);
-                    }
-                }
-                return ret;
-            }
-            pr_info("*** CSI s_stream completed: %d ***\n", ret);
-        } else {
-            pr_debug("CSI device has no s_stream operation\n");
-        }
-    }
+//    if (ourISPdev->csi_dev) {
+//        struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
+//
+//        if (csi_dev->sd.ops && csi_dev->sd.ops->video && csi_dev->sd.ops->video->s_stream) {
+//            pr_info("*** Calling CSI s_stream directly: enable=%d ***\n", enable);
+//            ret = csi_dev->sd.ops->video->s_stream(&csi_dev->sd, enable);
+//
+//            if (ret != 0 && ret != 0xfffffdfd) {
+//                pr_err("CSI s_stream failed: %d\n", ret);
+//                /* Don't return error - try to disable VIC if we were enabling */
+//                if (enable && ourISPdev->vic_dev) {
+//                    struct tx_isp_vic_device *vic_dev = dev->vic_dev;
+//                    if (vic_dev->sd.ops && vic_dev->sd.ops->video &&
+//                        vic_dev->sd.ops->video->s_stream) {
+//                        vic_dev->sd.ops->video->s_stream(&vic_dev->sd, 0);
+//                    }
+//                }
+//                return ret;
+//            }
+//            pr_info("*** CSI s_stream completed: %d ***\n", ret);
+//        } else {
+//            pr_debug("CSI device has no s_stream operation\n");
+//        }
+//    }
     
     /* CORRECTED: Use direct sensor reference */
     if (ourISPdev->sensor) {
