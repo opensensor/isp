@@ -2632,7 +2632,6 @@ static struct timer_list vic_adjustment_timer;
 static bool timer_initialized = false;
 static bool adjustment_applied = false;
 
-/* Timer callback function - OLD API for kernel 3.10 */
 static void vic_adjustment_timer_fn(unsigned long data)
 {
     struct tx_isp_vic_device *vic_dev;
@@ -2647,24 +2646,29 @@ static void vic_adjustment_timer_fn(unsigned long data)
     vic_regs = vic_dev->vic_regs;
     isp_base = vic_regs - 0xe0000;
 
-    pr_info("*** Timer: Applying 10ms streaming adjustment sequence ***\n");
+    pr_info("*** Timer: Applying 210ms streaming adjustment sequence ***\n");
 
-    /* CSI PHY Control registers - write to MAIN ISP BASE, not CSI base! */
-    writel(0x0, isp_base + 0x10000 + 0x8);       /* CSI at ISP + 0x10000 */
-    writel(0xb5742249, isp_base + 0x10000 + 0xc);
-    writel(0x133, isp_base + 0x10000 + 0x10);
-    writel(0x8, isp_base + 0x10000 + 0x1c);
-    writel(0x8fffffff, isp_base + 0x10000 + 0x30);
-    writel(0x92217523, isp_base + 0x10000 + 0x110);
+    /* CSI PHY Control registers - write relative to vic_regs like your example */
+    writel(0x0, vic_regs + 0x8);           /* CSI PHY Control offset 0x8 */
+    writel(0xb5742249, vic_regs + 0xc);    /* CSI PHY Control offset 0xc */
+    writel(0x133, vic_regs + 0x10);        /* CSI PHY Control offset 0x10 */
+    writel(0x8, vic_regs + 0x1c);          /* CSI PHY Control offset 0x1c */
+    writel(0x8fffffff, vic_regs + 0x30);   /* CSI PHY Control offset 0x30 */
+    writel(0x92217523, vic_regs + 0x110);  /* CSI PHY Config offset 0x110 */
 
-    /* ISP Control registers */
+    /* ISP Control registers - relative to isp_base */
     writel(0x0, isp_base + 0x9804);
 
-    /* VIC Control registers */
-    writel(0x0, isp_base + 0x9ac0);
-    writel(0x0, isp_base + 0x9ac8);
+    /* VIC Control registers - these are actually VIC registers, so relative to vic_regs */
+    writel(0x0, vic_regs + 0x9ac0);  /* Wait, this offset is too large for VIC */
+    writel(0x0, vic_regs + 0x9ac8);  /* These should be relative to isp_base */
 
-    /* Core Control registers */
+    /* Actually, let me recalculate - if vic_regs is at VIC base (0x9a00 offset from ISP),
+       then VIC control at 0x9ac0 would be vic_regs + 0xc0 */
+    writel(0x0, vic_regs + 0xc0);   /* VIC Control 0x9ac0 = VIC base + 0xc0 */
+    writel(0x0, vic_regs + 0xc8);   /* VIC Control 0x9ac8 = VIC base + 0xc8 */
+
+    /* Core Control registers - relative to isp_base */
     writel(0x24242424, isp_base + 0xb018);
     writel(0x24242424, isp_base + 0xb01c);
     writel(0x24242424, isp_base + 0xb020);
@@ -2683,7 +2687,7 @@ static void vic_adjustment_timer_fn(unsigned long data)
     wmb();
 
     adjustment_applied = true;
-    pr_info("*** Timer: 10ms adjustment sequence completed ***\n");
+    pr_info("*** Timer: 210ms adjustment sequence completed ***\n");
 }
 
 /* Modified vic_core_s_stream function with OLD timer API */
@@ -2737,25 +2741,24 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     vic_start_ok = 0;
 
                     if (vic_enabled == 0) {
-                        ret = tx_isp_vic_start(vic_dev);
-                        vic_enabled = 1;
 
                         /* Schedule the 210ms adjustment timer */
-                        if (ret == 0) {
-                            if (!timer_initialized) {
-                                /* OLD TIMER API for kernel 3.10 */
-                                init_timer(&vic_adjustment_timer);
-                                vic_adjustment_timer.function = vic_adjustment_timer_fn;
-                                vic_adjustment_timer.data = 0;
-                                timer_initialized = true;
-                                pr_info("vic_core_s_stream: Timer initialized (kernel 3.10 API)\n");
-                            }
-
-                            /* Schedule timer for 210ms from now */
-                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(10));
-                            pr_info("vic_core_s_stream: Scheduled 10ms adjustment timer\n");
-                            adjustment_applied = false;
+                        if (!timer_initialized) {
+                            /* OLD TIMER API for kernel 3.10 */
+                            init_timer(&vic_adjustment_timer);
+                            vic_adjustment_timer.function = vic_adjustment_timer_fn;
+                            vic_adjustment_timer.data = 0;
+                            timer_initialized = true;
+                            pr_info("vic_core_s_stream: Timer initialized (kernel 3.10 API)\n");
                         }
+
+                        /* Schedule timer for 210ms from now */
+                        mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(10));
+                        pr_info("vic_core_s_stream: Scheduled 10ms adjustment timer\n");
+                        adjustment_applied = false;
+
+                        ret = tx_isp_vic_start(vic_dev);
+                        vic_enabled = 1;
                     } else {
                         ret = 0;
                         pr_info("vic_core_s_stream: tx_isp_vic_progress returned %d\n", ret);
