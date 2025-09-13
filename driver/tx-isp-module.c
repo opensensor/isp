@@ -4221,22 +4221,22 @@ static int tx_isp_init(void)
         ourISPdev->isp_irq = 37;
     }
 
-    /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
-    ret = request_irq(38,
-                      isp_vic_interrupt_service_routine,          /* Same handlers work for both IRQs */
-                      IRQF_ONESHOT,
-                      "isp-w02",               /* Match stock driver name */
-                      sd);
-    if (ret != 0) {
-        pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
-        pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
-    }
+
 
     /* *** CRITICAL: Enable interrupt generation at hardware level *** */
     pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
     if (ourISPdev->vic_dev) {
         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-        
+        /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
+        ret = request_irq(38,
+                  isp_vic_interrupt_service_routine,          /* Same handlers work for both IRQs */
+                  IRQF_ONESHOT,
+                  "isp-w02",               /* Match stock driver name */
+                  vic_dev->sd);
+        if (ret != 0) {
+            pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
+            pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
+        }
         if (vic_dev->vic_regs) {
             pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
             
