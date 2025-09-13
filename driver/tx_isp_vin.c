@@ -308,7 +308,7 @@ int tx_isp_vin_disable_irq(struct tx_isp_vin_device *vin)
  *
  * Based on T30 reference with T31 binary analysis integration
  */
-static int tx_isp_vin_init(struct tx_isp_subdev *sd, int on)
+int tx_isp_vin_init(struct tx_isp_subdev *sd, int on)
 {
     struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
     struct tx_isp_sensor *sensor = vin->active;
@@ -380,7 +380,7 @@ static int tx_isp_vin_init(struct tx_isp_subdev *sd, int on)
  * @sd: Subdev structure
  * @on: Reset flag
  */
-static int tx_isp_vin_reset(struct tx_isp_subdev *sd, int on)
+int tx_isp_vin_reset(struct tx_isp_subdev *sd, int on)
 {
     struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
     struct tx_isp_sensor *sensor = vin->active;
@@ -410,7 +410,7 @@ static int tx_isp_vin_reset(struct tx_isp_subdev *sd, int on)
  *
  * Based on T31 binary analysis with T30 reference patterns
  */
-static int vin_s_stream(struct tx_isp_subdev *sd, int enable)
+int vin_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
     struct tx_isp_sensor *sensor = vin->active;
@@ -485,7 +485,7 @@ static int vin_s_stream(struct tx_isp_subdev *sd, int enable)
  *
  * Based on T30 reference implementation
  */
-static int tx_isp_vin_activate_subdev(struct tx_isp_subdev *sd)
+int tx_isp_vin_activate_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
     
@@ -508,7 +508,7 @@ static int tx_isp_vin_activate_subdev(struct tx_isp_subdev *sd)
  *
  * Based on T30 reference implementation
  */
-static int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
+int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
     
@@ -565,7 +565,7 @@ static int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *
             }
         }
         break;
-    case 0x1000000: /* Special command from binary analysis */
+    case 0x2000000: /* Special command from binary analysis - changed to avoid duplicate */
         if (sensor && is_valid_kernel_pointer(sensor)) {
             if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
                 ret = sensor->sd.ops->core->init(&sensor->sd, 1);
