@@ -2730,6 +2730,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Stream OFF */
                 ret = 0;
                 vic_start_adjustment();
+                ispvic_frame_channel_s_stream(vic_dev, 0);
                 if (current_state == 4) {
                     vic_dev->state = 3;
                     pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
@@ -2740,7 +2741,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                 tx_isp_phy_init(ourISPdev);
                 ret = tx_isp_vic_start(vic_dev);
-
+                ispvic_frame_channel_s_stream(vic_dev, 1);
                 if (current_state != 4) {
                     pr_info("vic_core_s_stream: Stream ON - calling tx_isp_vic_start\n");
 
