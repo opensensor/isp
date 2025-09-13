@@ -600,30 +600,6 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 
     pr_info("*** INTERRUPT MASK FIX: Enabled frame done (0x1e8=0xFFFFFFFE) and MDMA (0x1ec=0xFFFFFFFC) ***\n");
 
-    /* STEP 3: Request and register the interrupt handler */
-    vic_dev->irq = 38;
-    irq = vic_dev->irq;
-    if (irq < 0) {
-        pr_err("tx_isp_vic_hw_init: Failed to get IRQ number\n");
-        return irq;
-    }
-    /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
-    ret = request_irq(38,
-                      isp_vic_interrupt_service_routine,          /* Same handlers work for both IRQs */
-                      IRQF_SHARED,
-                      "isp-w02",               /* Match stock driver name */
-                      sd);
-    if (ret != 0) {
-        pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
-        pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
-    } else {
-        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
-        ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
-    }
-
-    vic_dev->irq = irq;
-    pr_info("*** CRITICAL: VIC interrupt handler registered - IRQ %d ***\n", irq);
-
     /* STEP 4: Enable the interrupt at the hardware level */
     enable_irq(irq);
     pr_info("*** CRITICAL: VIC hardware interrupt enabled - IRQ %d ***\n", irq);
@@ -2916,6 +2892,28 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Store global reference (binary uses 'dump_vsd' global) */
     dump_vsd = vic_dev;
     vic_dev->irq = 38;
+
+    /* STEP 3: Request and register the interrupt handler */
+    irq = vic_dev->irq;
+    if (irq < 0) {
+        pr_err("tx_isp_vic_hw_init: Failed to get IRQ number\n");
+        return irq;
+    }
+    /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
+    ret = request_irq(38,
+                      isp_vic_interrupt_service_routine,          /* Same handlers work for both IRQs */
+                      IRQF_SHARED,
+                      "isp-w02",               /* Match stock driver name */
+                      sd);
+    if (ret != 0) {
+        pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
+        pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
+    } else {
+        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
+        ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
+    }
+
+    pr_info("*** CRITICAL: VIC interrupt handler registered - IRQ %d ***\n", irq);
 
     /* Set test_addr to point to sensor_attr or appropriate member */
     /* Binary points to offset 0x80 in the structure */
