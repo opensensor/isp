@@ -2716,14 +2716,15 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_info("vic_core_s_stream: Stream ON - calling tx_isp_vic_start\n");
 
                     vic_start_ok = 0;
-                    ret = tx_isp_vic_start(vic_dev);
+                    vic_start_adjustment();
+
                     vic_dev->state = 4;
                     vic_start_ok = 1;
 
                     pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
                     return ret;
                 } else {
-                    vic_start_adjustment();
+                    ret = tx_isp_vic_start(vic_dev);
                 }
             }
         }
