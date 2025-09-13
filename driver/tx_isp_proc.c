@@ -7,9 +7,7 @@
 #define TX_ISP_PROC_ISP_DIR "jz/isp"
 #define TX_ISP_PROC_ISP_W00_FILE "isp-w00"
 #define TX_ISP_PROC_ISP_W01_FILE "isp-w01"
-#define TX_ISP_PROC_ISP_W02_FILE "isp-w02_"
 #define TX_ISP_PROC_ISP_FS_FILE "isp-fs"
-#define TX_ISP_PROC_ISP_M0_FILE "isp-m0_"
 #define TX_ISP_PROC_CSI_FILE "isp-m0"
 #define TX_ISP_PROC_VIC_FILE "isp-w02"
 
@@ -439,15 +437,6 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
     }
     pr_info("Created proc entry: /proc/jz/isp/isp-w01\n");
 
-    /* Create /proc/jz/isp/isp-w02 */
-    ctx->isp_w02_entry = proc_create_data(TX_ISP_PROC_ISP_W02_FILE, 0644, ctx->isp_dir,
-                                         &tx_isp_proc_w02_fops, isp);
-    if (!ctx->isp_w02_entry) {
-        pr_err("Failed to create isp-w02 proc entry\n");
-        goto error_remove_w01;
-    }
-    pr_info("Created proc entry: /proc/jz/isp/isp-w02\n");
-
     /* Create /proc/jz/isp/isp-fs - CRITICAL FOR REFERENCE DRIVER COMPATIBILITY */
     ctx->isp_fs_entry = proc_create_data(TX_ISP_PROC_ISP_FS_FILE, 0644, ctx->isp_dir,
                                         &tx_isp_proc_fs_fops, isp);
@@ -456,15 +445,6 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         goto error_remove_w02;
     }
     pr_info("*** CREATED PROC ENTRY: /proc/jz/isp/isp-fs (CRITICAL FOR FS FUNCTIONALITY) ***\n");
-
-    /* Create /proc/jz/isp/isp-m0 - CRITICAL FOR REFERENCE DRIVER COMPATIBILITY */
-    ctx->isp_m0_entry = proc_create_data(TX_ISP_PROC_ISP_M0_FILE, 0644, ctx->isp_dir,
-                                        &tx_isp_proc_m0_fops, isp);
-    if (!ctx->isp_m0_entry) {
-        pr_err("Failed to create isp-m0 proc entry\n");
-        goto error_remove_fs;
-    }
-    pr_info("*** CREATED PROC ENTRY: /proc/jz/isp/isp-m0 (CRITICAL FOR M0 FUNCTIONALITY) ***\n");
 
     /* Create /proc/jz/isp/csi */
     ctx->csi_entry = proc_create_data(TX_ISP_PROC_CSI_FILE, 0644, ctx->isp_dir,
