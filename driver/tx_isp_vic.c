@@ -1314,7 +1314,7 @@ if (!IS_ERR(cgu_isp_clk)) {
     writel(0x3, vic_regs + 0xb050);          /* Core Control register */
     wmb();
 
-    msleep(20);
+    msleep(10);
 
     /* *** CRITICAL TIMING FIX: Write ALL registers in ATOMIC GROUPS to achieve 0.000ms deltas *** */
     pr_info("*** CRITICAL TIMING FIX: Writing registers in atomic groups for 0.000ms deltas ***\n");
