@@ -441,7 +441,7 @@ static struct resource tx_isp_vic_resources[] = {
 };
 
 struct platform_device tx_isp_vic_platform_device = {
-    .name = "tx-isp-vic",
+    .name = "isp-m0",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_vic_resources),
     .resource = tx_isp_vic_resources,

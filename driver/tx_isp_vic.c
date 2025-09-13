@@ -608,7 +608,7 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     }
 
     ret = request_irq(irq, isp_vic_interrupt_service_routine,
-                      IRQF_SHARED, "tx-isp-vic", sd);
+                      IRQF_SHARED, "isp-m0", sd);
     if (ret) {
         pr_err("tx_isp_vic_hw_init: Failed to request IRQ %d: %d\n", irq, ret);
         return ret;
@@ -3197,7 +3197,7 @@ static struct platform_driver tx_isp_vic_platform_driver = {
     .probe = tx_isp_vic_probe,
     .remove = tx_isp_vic_remove,
     .driver = {
-        .name = "tx-isp-vic",
+        .name = "isp-m0",
         .owner = THIS_MODULE,
     },
 };

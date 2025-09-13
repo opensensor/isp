@@ -129,7 +129,7 @@ static struct tx_isp_subdev_desc isp_subdev_descriptors[] = {
         .create_proc_entry = true,
     },
     {
-        .name = "tx-isp-vic", 
+        .name = "isp-m0",
         .type = TX_ISP_SUBDEV_TYPE_SOURCE,  /* VIC is a source in the pipeline CSI->VIC->Core */
         .device_id = 1,
         .src_index = 0,  /* Connect from CSI (not used for sources) */
@@ -658,7 +658,7 @@ static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc)
             csi_data->file_ops = desc->fops;
             data = csi_data;
         }
-    } else if (strcmp(desc->name, "tx-isp-vic") == 0) {
+    } else if (strcmp(desc->name, "isp-m0") == 0) {
         struct isp_subdev_data *vic_data = kzalloc(sizeof(struct isp_subdev_data), GFP_KERNEL);
         if (vic_data) {
             vic_data->device_type = desc->type;
