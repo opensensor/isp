@@ -513,27 +513,35 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
             return IRQ_HANDLED;
         }
         
-        /* SAFE: Call the VIC interrupt handler directly - no dangerous function pointers */
-        extern irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
-        irqreturn_t vic_result = isp_vic_interrupt_service_routine(irq, isp_dev->vic_dev);
-        
-        pr_debug("*** isp_irq_handle: VIC handler returned %d ***\n", vic_result);
-        
-        if (vic_result == IRQ_WAKE_THREAD) {
-            result = IRQ_WAKE_THREAD;
+        /* SAFE: Handle VIC interrupts directly without external function calls */
+        if (vic_dev->vic_regs) {
+            u32 vic_status = readl(vic_dev->vic_regs + 0x1e0);  /* VIC interrupt status */
+            if (vic_status & 0x1) {
+                /* Clear VIC interrupt */
+                writel(0x1, vic_dev->vic_regs + 0x1e0);
+                wmb();
+                pr_debug("*** isp_irq_handle: VIC interrupt cleared ***\n");
+                
+                /* Increment frame counter */
+                vic_dev->frame_count++;
+                
+                /* Signal frame completion if needed */
+                complete(&vic_dev->frame_complete);
+            }
         }
     }
     
-    /* SAFE: Check other subdevices using proper struct member access */
+    /* SAFE: Check CSI device using proper struct member access */
     if (isp_dev->csi_dev) {
-        /* SAFE: Call CSI interrupt handler if it exists */
-        extern irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id);
-        irqreturn_t csi_result = tx_isp_csi_irq_handler(irq, isp_dev->csi_dev);
-        
-        pr_debug("*** isp_irq_handle: CSI handler returned %d ***\n", csi_result);
-        
-        if (csi_result == IRQ_WAKE_THREAD) {
-            result = IRQ_WAKE_THREAD;
+        /* SAFE: Handle CSI interrupts directly without external function calls */
+        if (isp_dev->csi_regs) {
+            u32 csi_status = readl(isp_dev->csi_regs + 0x10);  /* CSI interrupt status */
+            if (csi_status & 0x1) {
+                /* Clear CSI interrupt */
+                writel(0x1, isp_dev->csi_regs + 0x10);
+                wmb();
+                pr_debug("*** isp_irq_handle: CSI interrupt cleared ***\n");
+            }
         }
     }
     
