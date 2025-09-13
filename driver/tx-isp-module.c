@@ -1703,7 +1703,7 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
         isp_dev->irq_disable_func = tx_isp_disable_irq; /* arg2[2] = tx_isp_disable_irq */
         
         /* Binary Ninja: tx_isp_disable_irq(arg2) */
-        tx_isp_disable_irq(isp_dev);
+        //tx_isp_disable_irq(isp_dev);
         
         pr_info("*** tx_isp_request_irq: IRQ %d registered and stored in isp_dev->isp_irq ***\n", irq_num);
         
