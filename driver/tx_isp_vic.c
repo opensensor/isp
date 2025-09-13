@@ -1246,29 +1246,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
 
     /* STEP 1: Enable clocks using Linux Clock Framework like tx_isp_init_vic_registers */
-
-
-cgu_isp_clk = clk_get(NULL, "cgu_isp");
-if (!IS_ERR(cgu_isp_clk)) {
-    /* Set clock rate to 100MHz before enabling */
-    ret = clk_set_rate(cgu_isp_clk, 100000000); /* 100MHz in Hz */
-    if (ret) {
-        pr_err("STREAMING: Failed to set CGU_ISP clock rate to 100MHz: %d\n", ret);
-        /* Decide if you want to continue with default rate or fail */
-    } else {
-        unsigned long actual_rate = clk_get_rate(cgu_isp_clk);
-        pr_info("STREAMING: CGU_ISP clock rate set to %lu Hz (requested 100MHz)\n", actual_rate);
-    }
-
-    ret = clk_prepare_enable(cgu_isp_clk);
-    if (ret == 0) {
-        pr_info("STREAMING: CGU_ISP clock enabled via clk framework\n");
-    } else {
-        pr_err("STREAMING: Failed to enable CGU_ISP clock: %d\n", ret);
-    }
-} else {
-    pr_warn("STREAMING: CGU_ISP clock not found: %ld\n", PTR_ERR(cgu_isp_clk));
-}
+    pr_info("*** STREAMING: Enabling ISP clocks using Linux Clock Framework ***\n");
 
     isp_clk = clk_get(NULL, "isp");
     if (!IS_ERR(isp_clk)) {
@@ -1282,28 +1260,18 @@ if (!IS_ERR(cgu_isp_clk)) {
         pr_warn("STREAMING: ISP clock not found: %ld\n", PTR_ERR(isp_clk));
     }
 
-    csi_clk = clk_get(NULL, "csi");
-    if (!IS_ERR(csi_clk)) {
-        ret = clk_prepare_enable(csi_clk);
+    cgu_isp_clk = clk_get(NULL, "cgu_isp");
+    if (!IS_ERR(cgu_isp_clk)) {
+        ret = clk_prepare_enable(cgu_isp_clk);
         if (ret == 0) {
-            pr_info("STREAMING: csi_clk clock enabled via clk framework\n");
+            pr_info("STREAMING: CGU_ISP clock enabled via clk framework\n");
         } else {
-            pr_err("STREAMING: Failed to enable csi_clk clock: %d\n", ret);
-        }
-    }
-
-    ipu_clk = clk_get(NULL, "ipu");
-    if (!IS_ERR(ipu_clk)) {
-        ret = clk_prepare_enable(ipu_clk);
-        if (ret == 0) {
-            pr_info("STREAMING: IPU clock enabled via clk framework\n");
-        } else {
-            pr_err("STREAMING: Failed to enable IPU clock: %d\n", ret);
+            pr_err("STREAMING: Failed to enable CGU_ISP clock: %d\n", ret);
         }
     }
 
     /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
-
+    pr_info("*** STREAMING: Configuring CPM registers for VIC access ***\n");
     cpm_regs = ioremap(0x10000000, 0x1000);
     if (cpm_regs) {
         u32 clkgr0 = readl(cpm_regs + 0x20);
@@ -1330,59 +1298,13 @@ if (!IS_ERR(cgu_isp_clk)) {
         pr_err("*** CRITICAL: No VIC register base - initialization required first ***\n");
         return -EINVAL;
     }
-    /* Calculate base addresses for different register blocks */
-    void __iomem *main_isp_base = vic_regs - 0x9a00;  /* Calculate main ISP base from VIC base */
-    void __iomem *csi_base = main_isp_base + 0x10000;  /* CSI base is at ISP base + 0x10000 */
-
+    
     pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
 
-
-    pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
-    tx_isp_enable_irq(isp_dev);
-    pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
-
-    /* *** CRITICAL FIX: Initialize VIC hardware interrupts FIRST *** */
-    pr_info("*** tx_isp_vic_start: CRITICAL FIX - Initializing VIC hardware interrupts ***\n");
-    ret = tx_isp_vic_hw_init(&vic_dev->sd);
-    if (ret != 0) {
-        pr_err("tx_isp_vic_start: VIC hardware interrupt init failed: %d\n", ret);
-        return ret;
-    }
-    pr_info("*** tx_isp_vic_start: VIC hardware interrupts initialized successfully ***\n");
-    
-    /* Take a local copy of sensor attributes to prevent corruption during streaming */
-    struct tx_isp_sensor_attribute local_sensor_attr;
-    unsigned long flags;
-
-    
-    /* Make a safe copy of sensor attributes */
-    memcpy(&local_sensor_attr, &vic_dev->sensor_attr, sizeof(local_sensor_attr));
-    
-    /* Use the local copy to prevent corruption */
-    sensor_attr = &local_sensor_attr;
+    /* FIXED: Use proper struct member access for sensor attributes */
+    sensor_attr = &vic_dev->sensor_attr;
     interface_type = sensor_attr->dbus_type;
     sensor_format = sensor_attr->data_type;
-    
-    /* *** CRITICAL FIX: Prevent streaming control bit from corrupting sensor attributes *** */
-    /* The issue is that 0x80000020 streaming control value is overwriting sensor_attr memory */
-    /* We need to ensure sensor_attr is in a protected memory region */
-    pr_info("*** CRITICAL: Protecting sensor attributes from streaming control corruption ***\n");
-    
-    /* Create a completely separate protected copy that can't be overwritten by register operations */
-    static struct tx_isp_sensor_attribute protected_sensor_attr;
-    memcpy(&protected_sensor_attr, sensor_attr, sizeof(protected_sensor_attr));
-    
-    /* Force known good values for MIPI interface */
-    protected_sensor_attr.dbus_type = 2;  /* MIPI */
-    protected_sensor_attr.data_type = 0x2b;  /* RAW10 */
-    
-    /* Use the protected copy */
-    sensor_attr = &protected_sensor_attr;
-    interface_type = 2;  /* Force MIPI */
-    sensor_format = 0x2b;  /* Force RAW10 */
-    
-    pr_info("*** RACE CONDITION FIX: Using protected sensor attributes - interface=%d, format=0x%x ***\n", 
-            interface_type, sensor_format);
 
     pr_info("tx_isp_vic_start: interface=%d, format=0x%x (RACE CONDITION PROTECTED)\n", interface_type, sensor_format);
     
@@ -1469,80 +1391,13 @@ if (!IS_ERR(cgu_isp_clk)) {
     writel(0x1ff00, vic_regs + 0xb038);      /* Core Control register */
     writel(0x103, vic_regs + 0xb04c);        /* Core Control register */
     writel(0x3, vic_regs + 0xb050);          /* Core Control register */
+    writel(0x341b, vic_regs + 0xb07c);       /* Core Control register */
+    writel(0x46b0, vic_regs + 0xb080);       /* Core Control register */
+    writel(0x1813, vic_regs + 0xb084);       /* Core Control register */
+    writel(0x10a, vic_regs + 0xb08c);        /* Core Control register */
     wmb();
-
-    /* ==============================================================================================
-     * PHASE 3: VIC initial configuration (T+270ms)
-     * ==============================================================================================*/
-
-    pr_info("*** PHASE 3: VIC initial configuration (T+270ms) ***\n");
-
-    /* VIC writes labeled as isp-w01 in trace */
-    writel(0x1, vic_regs + 0xc);         /* CSI PHY Control */
-    writel(0x1, vic_regs + 0x10);        /* CSI PHY Control */
-    writel(0x630, vic_regs + 0x14);      /* was 0x200 -> 0x630 */
-    wmb();
-
-    /* ==============================================================================================
-     * PHASE 4: Sensor stream on trigger
-     * This is where "gc2053 stream on" occurs in the trace
-     * ==============================================================================================*/
-
-    pr_info("gc2053 stream on\n");
-
-    /* ==============================================================================================
-     * PHASE 5: VIC streaming configuration (T+470ms)
-     * ==============================================================================================*/
-
-    pr_info("*** PHASE 5: VIC streaming configuration (T+470ms) ***\n");
-
-    /* VIC writes labeled as isp-w02 in trace */
-    writel(0x1, vic_regs + 0x0);         /* Enable VIC */
-    writel(0x1, vic_regs + 0x14);        /* was 0x2 -> 0x1 */
-    writel(0x1, vic_regs + 0x8c);        /* was 0x0 -> 0x1 */
-    writel(0x258, vic_regs + 0x100);     /* was 0x2d0 -> 0x258 */
-    writel(0x0, vic_regs + 0x10c);       /* was 0x2c000 -> 0x0 */
-    writel(0x0, vic_regs + 0x120);       /* was 0x10 -> 0x0 */
-    writel(0xa000a, vic_regs + 0x1a4);   /* was 0x100010 -> 0xa000a */
-    wmb();
-
-    /* CSI PHY Config updates */
-    writel(0x1, csi_base + 0x1d0);       /* was 0x0 -> 0x1 */
-    writel(0x12, csi_base + 0x1d4);      /* was 0x0 -> 0x12 */
-    writel(0x12, csi_base + 0x254);      /* was 0x0 -> 0x12 */
-    wmb();
-
-    /* Additional VIC updates */
-    writel(0x330, vic_regs + 0x14);      /* was 0x630 -> 0x330 */
-    writel(0x20002, vic_regs + 0x40);    /* was 0x0 -> 0x20002 */
-    wmb();
-
-    /* Main ISP updates */
-    writel(0x1, main_isp_base + 0x60);           /* was 0x0 -> 0x1 */
-    writel(0x58810000, main_isp_base + 0xa8);    /* was 0x58050000 -> 0x58810000 */
-    writel(0xffffffff, main_isp_base + 0xb0);    /* was 0x0 -> 0xffffffff */
-    writel(0x3ad80000, main_isp_base + 0x100);   /* CSI PHY Config */
-    writel(0x2b, main_isp_base + 0x104);         /* CSI PHY Config */
-    writel(0x220000, main_isp_base + 0x108);     /* CSI PHY Config */
-    writel(0x220334, main_isp_base + 0x10c);     /* CSI PHY Config */
-    writel(0xd006004e, main_isp_base + 0x987c);  /* was 0xc0000000 -> 0xd006004e */
-    writel(0x1, main_isp_base + 0x98cc);         /* was 0x0 -> 0x1 */
-    writel(0x20740000, main_isp_base + 0xb054);  /* Core Control */
-    writel(0x40, main_isp_base + 0xb058);        /* Core Control */
-    writel(0x18f, main_isp_base + 0xb05c);       /* Core Control */
-    writel(0x3fdb, main_isp_base + 0xb060);      /* Core Control */
-    writel(0x10aa5, main_isp_base + 0xb064);     /* Core Control */
-    writel(0x181d, main_isp_base + 0xb068);      /* Core Control */
-    writel(0x55a, main_isp_base + 0xb070);       /* Core Control */
-    writel(0x5120f, main_isp_base + 0xb074);     /* Core Control */
-    writel(0x1000000e, main_isp_base + 0xb078);  /* was 0x10000000 -> 0x1000000e */
-    writel(0x3fdb, main_isp_base + 0xb07c);      /* Core Control */
-    writel(0x131ca, main_isp_base + 0xb080);     /* Core Control */
-    writel(0x191e, main_isp_base + 0xb084);      /* Core Control */
-    writel(0x55a, main_isp_base + 0xb08c);       /* Core Control */
-    wmb();
-
-
+    
+    pr_info("*** Completed writing ALL missing initialization registers from reference trace ***\n");
 
     /* Binary Ninja: interface 1=DVP, 2=MIPI, 3=BT601, 4=BT656, 5=BT1120 */
     if (interface_type == 1) {
@@ -1806,236 +1661,29 @@ if (!IS_ERR(cgu_isp_clk)) {
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
+    /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
+    vic_start_ok = 1;
+    
+    /* CRITICAL: Enable ISP system-level interrupts when VIC streaming starts */
+    extern void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
+    
+    
+    if (isp_dev) {
+        pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
+        tx_isp_enable_irq(isp_dev);
+        pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
+    } else {
+        pr_err("*** tx_isp_vic_start: No ISP device found for interrupt enable ***\n");
+    }
+    
+    pr_info("*** tx_isp_vic_start: CRITICAL vic_start_ok = 1 SET! ***\n");
+    pr_info("*** VIC interrupts now enabled for processing in isp_vic_interrupt_service_routine ***\n");
+
     /* MCP LOG: VIC start completed successfully */
     pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d, interface=%d\n", 
             vic_start_ok, interface_type);
 
-    /* MCP LOG: VIC start completed - streaming registers will be written later in correct sequence */
-    pr_info("MCP_LOG: VIC start completed - streaming registers deferred to correct sequence position\n");
-
     ret = 0;
-
-exit_func:
-    return ret;
-}
-
-
-/* tx_isp_vic_progress - Implementation that matches trace register values from reference */
-int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
-{
-    void __iomem *vic_regs;
-    struct tx_isp_sensor_attribute *sensor_attr;
-    u32 interface_type, sensor_format;
-    u32 timeout = 10000;
-    void __iomem *cpm_regs;
-    struct clk *isp_clk, *cgu_isp_clk, *csi_clk, *ipu_clk;
-    int ret;
-
-    /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
-    vic_start_ok = 1;
-
-    /* FIXED: Use proper VIC-to-ISP device linkage */
-    struct tx_isp_dev *isp_dev = ourISPdev;
-
-    pr_info("*** tx_isp_vic_progress: EXACT Binary Ninja implementation matching reference trace ***\n");
-
-    /* Validate vic_dev structure */
-    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
-        pr_err("*** CRITICAL: Invalid vic_dev pointer %p ***\n", vic_dev);
-        return -EINVAL;
-    }
-
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev->vic_regs access */
-    if (((uintptr_t)&vic_dev->vic_regs & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->vic_regs member not aligned ***\n");
-        return -EINVAL;
-    }
-
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev->sensor_attr access */
-    if (((uintptr_t)&vic_dev->sensor_attr & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->sensor_attr member not aligned ***\n");
-        return -EINVAL;
-    }
-
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev->width and height access */
-    if (((uintptr_t)&vic_dev->width & 0x3) != 0 || ((uintptr_t)&vic_dev->height & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->width/height members not aligned ***\n");
-        return -EINVAL;
-    }
-
-    pr_info("*** tx_isp_vic_progress: MIPS validation passed - applying tx_isp_init_vic_registers methodology ***\n");
-
-    /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
-
-    /* STEP 3: Get VIC registers - should already be mapped by tx_isp_create_vic_device */
-    vic_regs = ourISPdev->vic_regs;
-    if (!vic_regs) {
-        pr_err("*** CRITICAL: No VIC register base - initialization required first ***\n");
-        return -EINVAL;
-    }
-
-    pr_info("*** tx_isp_vic_progress: VIC register base %p ready for streaming ***\n", vic_regs);
-
-    /* Calculate base addresses for different register blocks */
-    void __iomem *main_isp_base = vic_regs - 0x9a00;  /* Calculate main ISP base from VIC base */
-    void __iomem *csi_base = main_isp_base + 0x10000;  /* CSI base is at ISP base + 0x10000 */
-
-    /* Take a local copy of sensor attributes to prevent corruption during streaming */
-    struct tx_isp_sensor_attribute local_sensor_attr;
-
-    /* Make a safe copy of sensor attributes */
-    memcpy(&local_sensor_attr, &vic_dev->sensor_attr, sizeof(local_sensor_attr));
-
-    /* Use the local copy to prevent corruption */
-    sensor_attr = &local_sensor_attr;
-    interface_type = sensor_attr->dbus_type;
-    sensor_format = sensor_attr->data_type;
-
-    /* *** CRITICAL FIX: Prevent streaming control bit from corrupting sensor attributes *** */
-    pr_info("*** CRITICAL: Protecting sensor attributes from streaming control corruption ***\n");
-
-    /* Create a completely separate protected copy that can't be overwritten by register operations */
-    static struct tx_isp_sensor_attribute protected_sensor_attr;
-    memcpy(&protected_sensor_attr, sensor_attr, sizeof(protected_sensor_attr));
-
-    /* Force known good values for MIPI interface */
-    protected_sensor_attr.dbus_type = 2;  /* MIPI */
-    protected_sensor_attr.data_type = 0x2b;  /* RAW10 */
-
-    /* Use the protected copy */
-    sensor_attr = &protected_sensor_attr;
-    interface_type = 2;  /* Force MIPI */
-    sensor_format = 0x2b;  /* Force RAW10 */
-
-    pr_info("*** RACE CONDITION FIX: Using protected sensor attributes - interface=%d, format=0x%x ***\n",
-            interface_type, sensor_format);
-
-    pr_info("tx_isp_vic_progress: interface=%d, format=0x%x (RACE CONDITION PROTECTED)\n", interface_type, sensor_format);
-
-    /* MCP LOG: VIC start with interface configuration */
-    pr_info("MCP_LOG: VIC start initiated - interface=%d, format=0x%x, vic_base=%p\n",
-            interface_type, sensor_format, vic_regs);
-
-    /* ==============================================================================================
-     * STREAMING SEQUENCE PHASE 1: Initial CSI PHY register writes (before sensor stream on)
-     * These occur at T+210ms in the trace
-     * ==============================================================================================*/
-
-    /* CSI PHY Config registers - from reference trace */
-    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
-    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
-    wmb();
-
-    /***
-ISP isp-m0: [CSI PHY Control] write at offset 0x8: 0x1 -> 0x0 (delta: 210.000 ms)
-ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x80700008 -> 0xb5742249 (delta: 210.000 ms)
-ISP isp-m0: [CSI PHY Control] write at offset 0x10: 0x0 -> 0x133 (delta: 0.000 ms)
-ISP isp-m0: [CSI PHY Control] write at offset 0x1c: 0x0 -> 0x8 (delta: 0.000 ms)
-ISP isp-m0: [CSI PHY Control] write at offset 0x30: 0x0 -> 0x8fffffff (delta: 0.000 ms)
-ISP isp-m0: [CSI PHY Config] write at offset 0x110: 0x80007000 -> 0x92217523 (delta: 210.000 ms)
-*/
-
-    /* ==============================================================================================
-     * PHASE 6: Further streaming adjustments (T+550ms)
-     * ==============================================================================================*/
-
-    pr_info("*** PHASE 6: Further streaming adjustments (T+550ms) ***\n");
-
-    /* Additional VIC adjustments */
-    writel(0x8, vic_regs + 0x8c);        /* was 0x1 -> 0x8 */
-    writel(0x19f, vic_regs + 0x90);      /* was 0x0 -> 0x19f */
-    writel(0x180, vic_regs + 0xa0);      /* was 0x0 -> 0x180 */
-    writel(0x2ae, vic_regs + 0xb0);      /* was 0x0 -> 0x2ae */
-    writel(0x10, vic_regs + 0x120);      /* was 0x0 -> 0x10 */
-    wmb();
-
-    /* CSI PHY Config updates */
-    writel(0x2b, csi_base + 0x1d0);      /* was 0x1 -> 0x2b */
-    writel(0x60, csi_base + 0x250);      /* was 0x0 -> 0x60 */
-    wmb();
-
-    /* More VIC updates */
-    writel(0x300, vic_regs + 0x14);      /* was 0x330 -> 0x300 */
-    writel(0x60008, vic_regs + 0x40);    /* was 0x20002 -> 0x60008 */
-    wmb();
-
-    /* Main ISP updates for streaming */
-    writel(0x59010000, main_isp_base + 0xac);    /* was 0x58050000 -> 0x59010000 */
-    writel(0x2fc80000, main_isp_base + 0x100);   /* was 0x3ad80000 -> 0x2fc80000 */
-    writel(0x1f6, main_isp_base + 0x104);        /* was 0x2b -> 0x1f6 */
-    writel(0x1ed0000, main_isp_base + 0x108);    /* was 0x220000 -> 0x1ed0000 */
-    writel(0x1ed0325, main_isp_base + 0x10c);    /* was 0x220334 -> 0x1ed0325 */
-    writel(0xc0000000, main_isp_base + 0x987c);  /* was 0xd006004e -> 0xc0000000 */
-    writel(0x100000, main_isp_base + 0x98c8);    /* was 0x0 -> 0x100000 */
-    writel(0x3, main_isp_base + 0x98cc);         /* was 0x1 -> 0x3 */
-    writel(0x2e28d2, main_isp_base + 0x98e8);    /* ISP Control */
-    writel(0x2e2c25, main_isp_base + 0x98ec);    /* ISP Control */
-    writel(0x1f00a, main_isp_base + 0xb038);     /* was 0x1f001 -> 0x1f00a */
-    writel(0x1, main_isp_base + 0xb050);         /* was 0x3 -> 0x1 */
-    writel(0x82400273, main_isp_base + 0xb054);  /* was 0x20740000 -> 0x82400273 */
-    writel(0x200, main_isp_base + 0xb058);       /* was 0x40 -> 0x200 */
-    writel(0x61f, main_isp_base + 0xb05c);       /* was 0x18f -> 0x61f */
-    writel(0x43b, main_isp_base + 0xb060);       /* was 0x3fdb -> 0x43b */
-    writel(0x29f, main_isp_base + 0xb064);       /* was 0x10aa5 -> 0x29f */
-    writel(0x71b, main_isp_base + 0xb068);       /* was 0x181d -> 0x71b */
-    writel(0x3f, main_isp_base + 0xb070);        /* was 0x55a -> 0x3f */
-    writel(0x266263, main_isp_base + 0xb074);    /* was 0x5120f -> 0x266263 */
-    writel(0x10000053, main_isp_base + 0xb078);  /* was 0x1000000e -> 0x10000053 */
-    writel(0x12ba, main_isp_base + 0xb07c);      /* was 0x3fdb -> 0x12ba */
-    writel(0xa7a, main_isp_base + 0xb080);       /* was 0x131ca -> 0xa7a */
-    writel(0x71b, main_isp_base + 0xb084);       /* was 0x191e -> 0x71b */
-    writel(0x3f, main_isp_base + 0xb08c);        /* was 0x55a -> 0x3f */
-    wmb();
-
-    /* ==============================================================================================
-     * PHASE 7: Final streaming adjustments (T+650ms and beyond)
-     * ==============================================================================================*/
-
-    pr_info("*** PHASE 7: Final streaming adjustments ***\n");
-
-    /* Final VIC adjustments */
-    writel(0x0, vic_regs + 0x90);        /* was 0x19f -> 0x0 */
-    writel(0xfb, vic_regs + 0xa0);       /* was 0x180 -> 0xfb */
-    writel(0x368, vic_regs + 0xb0);      /* was 0x2ae -> 0x368 */
-    writel(0xc000e, vic_regs + 0x40);    /* was 0x60008 -> 0xc000e */
-    wmb();
-
-    /* Final ISP adjustments */
-    writel(0x18810000, csi_base + 0xa8);    /* was 0x58810000 -> 0x18810000 */
-    writel(0x58050000, csi_base + 0xac);    /* was 0x59010000 -> 0x58050000 */
-    writel(0x0, csi_base + 0x100);          /* was 0x2fc80000 -> 0x0 */
-    writel(0x203, csi_base + 0x104);        /* was 0x1f6 -> 0x203 */
-    writel(0x1f905ab, csi_base + 0x108);    /* was 0x1ed0000 -> 0x1f905ab */
-    writel(0x1fa0000, csi_base + 0x10c);    /* was 0x1ed0325 -> 0x1fa0000 */
-    writel(0x6, csi_base + 0x98cc);         /* was 0x3 -> 0x6 */
-    wmb();
-
-    pr_info("*** tx_isp_vic_progress: Streaming configuration complete ***\n");
-
-    /* Enable ISP system interrupts */
-    pr_info("*** tx_isp_vic_progress: Enabling ISP system interrupts ***\n");
-    tx_isp_enable_irq(isp_dev);
-    pr_info("*** tx_isp_vic_progress: ISP interrupts enabled successfully ***\n");
-
-    /* Initialize VIC hardware interrupts */
-    pr_info("*** tx_isp_vic_progress: Initializing VIC hardware interrupts ***\n");
-    ret = tx_isp_vic_hw_init(&vic_dev->sd);
-    if (ret != 0) {
-        pr_err("tx_isp_vic_progress: VIC hardware interrupt init failed: %d\n", ret);
-        return ret;
-    }
-    pr_info("*** tx_isp_vic_progress: VIC hardware interrupts initialized successfully ***\n");
-
-    /* Log WDR mode */
-    const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
-        "WDR mode enabled" : "Linear mode enabled";
-    pr_info("tx_isp_vic_progress: %s\n", wdr_msg);
-
-    /* MCP LOG: VIC start completed successfully */
-    pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d, interface=%d\n",
-            vic_start_ok, interface_type);
-
-    return 0;
 
 exit_func:
     return ret;
@@ -2078,9 +1726,8 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     switch (cmd) {
         case 0x200000c:
         case 0x200000f:
-            pr_info("*** vic_sensor_ops_ioctl: Starting VIC (cmd=0x%x) - WOULD CALL tx_isp_vic_start ***\n", cmd);
-            // return tx_isp_vic_start(vic_dev);
-            return 0;
+            pr_info("*** vic_sensor_ops_ioctl: Starting VIC (cmd=0x%x) - CALLING tx_isp_vic_start ***\n", cmd);
+            return tx_isp_vic_start(vic_dev);
             
         case 0x200000d:
         case 0x2000010:
