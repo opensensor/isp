@@ -2632,7 +2632,7 @@ static struct timer_list vic_adjustment_timer;
 static bool timer_initialized = false;
 static bool adjustment_applied = false;
 
-static void vic_adjustment_timer_fn(unsigned long data)
+static void vic_start_adjustment(void)
 {
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs, *isp_base;
@@ -2719,34 +2719,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                     if (vic_enabled == 0) {
 
-                        /* Schedule the 210ms adjustment timer */
-                        if (!timer_initialized) {
-                            /* OLD TIMER API for kernel 3.10 */
-                            init_timer(&vic_adjustment_timer);
-                            vic_adjustment_timer.function = vic_adjustment_timer_fn;
-                            vic_adjustment_timer.data = 0;
-                            timer_initialized = true;
-                            pr_info("vic_core_s_stream: Timer initialized (kernel 3.10 API)\n");
-                        }
-
-                        /* Schedule timer for 210ms from now */
-                        mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(110));
-                        pr_info("vic_core_s_stream: Scheduled 10ms adjustment timer\n");
-                        adjustment_applied = false;
-
-                        // ret = tx_isp_vic_start(vic_dev);
+                        vic_start_adjustment();
                         ret = 0;
                         vic_enabled = 1;
                         msleep(50);
                     } else {
                         ret = 0;
                         pr_info("vic_core_s_stream: tx_isp_vic_progress returned %d\n", ret);
-
-                        /* If we're restarting streaming and adjustment hasn't been applied yet */
-                        if (!adjustment_applied && timer_initialized) {
-                            mod_timer(&vic_adjustment_timer, jiffies + msecs_to_jiffies(110));
-                            pr_info("vic_core_s_stream: Re-scheduled 210ms adjustment timer\n");
-                        }
                     }
 
                     vic_dev->state = 4;
