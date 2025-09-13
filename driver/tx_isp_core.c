@@ -1467,13 +1467,13 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
     pr_info("tisp_init: Processing sensor configuration structure (%d bytes)\n", (int)sizeof(*sensor_attr));
 
     /* Binary Ninja: sensor_init(&sensor_ctrl) - MUST BE CALLED FIRST */
-    pr_info("tisp_init: Calling sensor_init(&sensor_ctrl)\n");
-    ret = sensor_init(isp_dev);
-    if (ret) {
-        pr_err("sensor_init failed: %d\n", ret);
-        return ret;
-    }
-    pr_info("sensor_init: Reference driver sensor initialization complete\n");
+//    pr_info("tisp_init: Calling sensor_init(&sensor_ctrl)\n");
+//    ret = sensor_init(isp_dev);
+//    if (ret) {
+//        pr_err("sensor_init failed: %d\n", ret);
+//        return ret;
+//    }
+//    pr_info("sensor_init: Reference driver sensor initialization complete\n");
 
     /* Binary Ninja: system_reg_write(4, arg1[0] << 0x10 | arg1[1]) */
     writel((sensor_attr->total_width << 16) | sensor_attr->total_height, isp_regs + 0x4);
