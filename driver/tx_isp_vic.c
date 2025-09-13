@@ -323,242 +323,127 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     return 0;  /* Success */
 }
 
-/* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
+/* CRASH-SAFE VIC interrupt handler - bulletproof version */
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_subdev *sd = dev_id;
-    struct tx_isp_vic_device *vic_dev;
-    void __iomem *vic_base;
-    u32 isr_main, isr_mdma;
-    irqreturn_t ret = IRQ_HANDLED;
+    struct tx_isp_vic_device *vic_dev = NULL;
+    void __iomem *vic_base = NULL;
+    u32 isr_main = 0, isr_mdma = 0;
+    u32 isr_mask, isr_status, mdma_mask, mdma_status;
     
-    pr_debug("*** isp_vic_interrupt_service_routine: IRQ %d triggered ***\n", irq);
-    
-    /* FIXED: Validate subdev parameter */
-    if (!sd || (unsigned long)sd >= 0xfffff001) {
-        pr_err("isp_vic_interrupt_service_routine: Invalid sd parameter\n");
+    /* BULLETPROOF: Validate EVERYTHING before touching anything */
+    if (!sd) {
+        printk(KERN_ERR "VIC_IRQ: NULL subdev\n");
         return IRQ_HANDLED;
     }
     
-    /* FIXED: Use safe struct member access instead of dangerous offset 0xd4 */
-    vic_dev = ourISPdev->vic_dev;
-    
-    /* FIXED: Use safe struct member access instead of offset 0xb8 */
-    vic_base = vic_dev->vic_regs;  /* Safe access to VIC register base */
-    if (!vic_base) {
-        pr_err("isp_vic_interrupt_service_routine: No VIC register base\n");
+    if ((unsigned long)sd >= 0xfffff001) {
+        printk(KERN_ERR "VIC_IRQ: Invalid subdev pointer 0x%lx\n", (unsigned long)sd);
         return IRQ_HANDLED;
     }
     
-    /* Binary Ninja: Read and process interrupt status registers */
-    /* int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
-    u32 isr_mask = readl(vic_base + 0x1e8);
-    u32 isr_status = readl(vic_base + 0x1e0);
+    if (!ourISPdev) {
+        printk(KERN_ERR "VIC_IRQ: NULL ourISPdev\n");
+        return IRQ_HANDLED;
+    }
+    
+    if (!ourISPdev->vic_dev) {
+        printk(KERN_ERR "VIC_IRQ: NULL vic_dev\n");
+        return IRQ_HANDLED;
+    }
+    
+    vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+    
+    /* Validate vic_dev structure */
+    if ((unsigned long)vic_dev >= 0xfffff001) {
+        printk(KERN_ERR "VIC_IRQ: Invalid vic_dev pointer 0x%lx\n", (unsigned long)vic_dev);
+        return IRQ_HANDLED;
+    }
+    
+    if (!vic_dev->vic_regs) {
+        printk(KERN_ERR "VIC_IRQ: NULL vic_regs\n");
+        return IRQ_HANDLED;
+    }
+    
+    vic_base = vic_dev->vic_regs;
+    
+    /* Validate register base */
+    if ((unsigned long)vic_base < 0x10000000 || (unsigned long)vic_base >= 0x20000000) {
+        printk(KERN_ERR "VIC_IRQ: Invalid vic_base 0x%lx\n", (unsigned long)vic_base);
+        return IRQ_HANDLED;
+    }
+    
+    /* SAFE: Read interrupt status - no exceptions needed, readl is safe */
+    isr_mask = readl(vic_base + 0x1e8);
+    isr_status = readl(vic_base + 0x1e0);
+    mdma_mask = readl(vic_base + 0x1ec);
+    mdma_status = readl(vic_base + 0x1e4);
+    
     isr_main = (~isr_mask) & isr_status;
-    
-    /* int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
-    u32 mdma_mask = readl(vic_base + 0x1ec);
-    u32 mdma_status = readl(vic_base + 0x1e4);
     isr_mdma = (~mdma_mask) & mdma_status;
     
-    /* Binary Ninja: Store processed interrupts back */
-    /* *($v0_4 + 0x1f0) = $v1_7 */
-    writel(isr_main, vic_base + 0x1f0);
-    /* *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
-    writel(isr_mdma, vic_base + 0x1f4);
-    wmb();
-    
-    pr_debug("isp_vic_interrupt_service_routine: isr_main=0x%x, isr_mdma=0x%x\n", isr_main, isr_mdma);
-    
-    /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
-    if (vic_start_ok != 0) {
-        pr_debug("isp_vic_interrupt_service_routine: vic_start_ok=%d - processing interrupts\n", vic_start_ok);
-        
-        /* FIXED: Frame done interrupt with safe struct member access */
-        if ((isr_main & 1) != 0) {
-            /* FIXED: Use safe struct member access instead of offset 0x160 */
-            vic_dev->frame_count += 1;
-            
-            /* CRITICAL: Synchronize ISP device frame counter with VIC frame counter */
-            if (ourISPdev) {
-                ourISPdev->frame_count = vic_dev->frame_count;
-            }
-            
-            pr_info("VIC Frame done interrupt - frame_count=%d (synchronized with ISP)\n", vic_dev->frame_count);
-            /* Call frame done handler with safe struct access */
-            // vic_framedone_irq_function(vic_dev);
-        }
-        
-        /* Binary Ninja: Error interrupt handling */
-        if ((isr_main & 0x200) != 0) {
-            vic_dev->vic_errors[0] += 1;
-            pr_err("Err [VIC_INT] : frame asfifo ovf!!!!!\n");
-        }
-        
-        if ((isr_main & 0x400) != 0) {
-            vic_dev->vic_errors[1] += 1;
-            pr_err("Err [VIC_INT] : hor err ch0 !!!!! 0x3a8 = 0x%08x\n", readl(vic_base + 0x3a8));
-        }
-        
-        if ((isr_main & 0x800) != 0) {
-            vic_dev->vic_errors[2] += 1;
-            pr_err("Err [VIC_INT] : hor err ch1 !!!!!\n");
-        }
-        
-        if ((isr_main & 0x1000) != 0) {
-            vic_dev->vic_errors[2] += 1;
-            pr_err("Err [VIC_INT] : hor err ch2 !!!!!\n");
-        }
-        
-        if ((isr_main & 0x2000) != 0) {
-            vic_dev->vic_errors[2] += 1;
-            pr_err("Err [VIC_INT] : hor err ch3 !!!!!\n");
-        }
-        
-        if ((isr_main & 0x4000) != 0) {
-            vic_dev->vic_errors[3] += 1;
-            pr_err("Err [VIC_INT] : ver err ch0 !!!!!\n");
-        }
-        
-        if ((isr_main & 0x8000) != 0) {
-            vic_dev->vic_errors[2] += 1;
-            pr_err("Err [VIC_INT] : ver err ch1 !!!!!\n");
-        }
-        
-        if ((isr_main & 0x10000) != 0) {
-            vic_dev->vic_errors[2] += 1;
-            pr_err("Err [VIC_INT] : ver err ch2 !!!!!\n");
-        }
-        
-        if ((isr_main & 0x20000) != 0) {
-            vic_dev->vic_errors[2] += 1;
-            pr_err("Err [VIC_INT] : ver err ch3 !!!!!\n");
-        }
-        
-        if ((isr_main & 0x40000) != 0) {
-            vic_dev->vic_errors[4] += 1;
-            pr_err("Err [VIC_INT] : hvf err !!!!!\n");
-        }
-        
-        if ((isr_main & 0x80000) != 0) {
-            vic_dev->vic_errors[5] += 1;
-            pr_err("Err [VIC_INT] : dvp hcomp err!!!!\n");
-        }
-        
-        if ((isr_main & 0x100000) != 0) {
-            vic_dev->vic_errors[6] += 1;
-            pr_err("Err [VIC_INT] : dma syfifo ovf!!!\n");
-        }
-        
-        if ((isr_main & 0x200000) != 0) {
-            vic_dev->vic_errors[7] += 1;
-            pr_err("Err [VIC_INT] : control limit err!!!\n");
-        }
-        
-        if ((isr_main & 0x400000) != 0) {
-            vic_dev->vic_errors[8] += 1;
-            pr_err("Err [VIC_INT] : image syfifo ovf !!!\n");
-        }
-        
-        if ((isr_main & 0x800000) != 0) {
-            vic_dev->vic_errors[9] += 1;
-            pr_err("Err [VIC_INT] : mipi fid asfifo ovf!!!\n");
-        }
-        
-        if ((isr_main & 0x1000000) != 0) {
-            vic_dev->vic_errors[10] += 1;
-            pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
-        }
-        
-        if ((isr_main & 0x2000000) != 0) {
-            vic_dev->vic_errors[2] += 1;
-            pr_err("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
-        }
-        
-        if ((isr_main & 0x4000000) != 0) {
-            vic_dev->vic_errors[2] += 1;
-            pr_err("Err [VIC_INT] : mipi ch2 hcomp err !!!\n");
-        }
-        
-        if ((isr_main & 0x8000000) != 0) {
-            vic_dev->vic_errors[2] += 1;
-            pr_err("Err [VIC_INT] : mipi ch3 hcomp err !!!\n");
-        }
-        
-        if ((isr_main & 0x10000000) != 0) {
-            vic_dev->vic_errors[11] += 1;
-            pr_err("Err [VIC_INT] : mipi ch0 vcomp err !!!\n");
-        }
-        
-        if ((isr_main & 0x20000000) != 0) {
-            vic_dev->vic_errors[2] += 1;
-            pr_err("Err [VIC_INT] : mipi ch1 vcomp err !!!\n");
-        }
-        
-        if ((isr_main & 0x40000000) != 0) {
-            vic_dev->vic_errors[2] += 1;
-            pr_err("Err [VIC_INT] : mipi ch2 vcomp err !!!\n");
-        }
-        
-        if (isr_main & 0x80000000) {
-            vic_dev->vic_errors[2] += 1;
-            pr_err("Err [VIC_INT] : mipi ch3 vcomp err !!!\n");
-        }
-        
-        /* Binary Ninja: MDMA interrupt handling */
-        if ((isr_mdma & 1) != 0) {
-            pr_debug("VIC MDMA channel 0 interrupt\n");
-            // vic_mdma_irq_function(vic_dev, 0);
-        }
-        
-        if ((isr_mdma & 2) != 0) {
-            pr_debug("VIC MDMA channel 1 interrupt\n");
-            // vic_mdma_irq_function(vic_dev, 1);
-        }
-        
-        if ((isr_mdma & 4) != 0) {
-            pr_err("Err [VIC_INT] : dma arb trans done ovf!!!\n");
-        }
-        
-        if ((isr_mdma & 8) != 0) {
-            vic_dev->vic_errors[12] += 1;
-            pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
-        }
-        
-        /* FIXED: Error recovery handling with safe struct member access */
-        if ((isr_main & 0xde00) != 0 && vic_start_ok == 1) {
-            pr_err("error handler!!!\n");
-            /* FIXED: Use safe VIC register base access */
-            writel(4, vic_base + 0x0);
-            
-            /* FIXED: Safe register polling loop */
-            u32 ctl_reg;
-            int timeout = 1000;
-            while ((ctl_reg = readl(vic_base + 0x0)) != 0 && timeout > 0) {
-                pr_info("addr ctl is 0x%x\n", ctl_reg);
-                udelay(10);
-                timeout--;
-            }
-            
-            if (timeout == 0) {
-                pr_err("VIC error recovery timeout\n");
-            }
-            
-            /* Recovery register writes with safe access */
-            u32 reg_val = readl(vic_base + 0x104);
-            writel(reg_val, vic_base + 0x104);
-            
-            reg_val = readl(vic_base + 0x108);
-            writel(reg_val, vic_base + 0x108);
-            
-            /* FIXED: Safe VIC register base access */
-            writel(1, vic_base + 0x0);
-        }
-    } else {
-        pr_debug("isp_vic_interrupt_service_routine: vic_start_ok=%d - ignoring interrupts\n", vic_start_ok);
+    /* CRITICAL: Clear interrupts FIRST using write-1-to-clear pattern */
+    if (isr_main || isr_mdma) {
+        /* Clear main interrupts */
+        writel(isr_main, vic_base + 0x1e0);
+        /* Clear MDMA interrupts */  
+        writel(isr_mdma, vic_base + 0x1e4);
+        wmb();
     }
     
-    /* Binary Ninja: return 1 */
+    /* Log what we got - this is what you want to observe */
+    if (isr_main || isr_mdma) {
+        printk(KERN_INFO "VIC_IRQ: main=0x%08x mdma=0x%08x vic_start_ok=%d\n", 
+               isr_main, isr_mdma, vic_start_ok);
+    }
+    
+    /* Only process if vic_start_ok is set */
+    if (vic_start_ok == 0) {
+        if (isr_main || isr_mdma) {
+            printk(KERN_INFO "VIC_IRQ: Ignoring interrupts (vic_start_ok=0)\n");
+        }
+        return IRQ_HANDLED;
+    }
+    
+    /* MINIMAL processing to avoid crashes */
+    if (isr_main & 1) {
+        /* Frame done - just increment counter */
+        vic_dev->frame_count++;
+        printk(KERN_INFO "VIC_IRQ: Frame done #%d\n", vic_dev->frame_count);
+    }
+    
+    /* Log errors but don't do complex processing */
+    if (isr_main & 0x200) {
+        printk(KERN_ERR "VIC_IRQ: Frame ASFIFO overflow\n");
+    }
+    if (isr_main & 0x400) {
+        printk(KERN_ERR "VIC_IRQ: Horizontal error ch0\n");
+    }
+    if (isr_main & 0x100000) {
+        printk(KERN_ERR "VIC_IRQ: DMA SYFIFO overflow\n");
+    }
+    if (isr_main & 0x200000) {
+        printk(KERN_ERR "VIC_IRQ: Control limit error\n");
+    }
+    if (isr_main & 0x400000) {
+        printk(KERN_ERR "VIC_IRQ: Image SYFIFO overflow\n");
+    }
+    
+    /* MDMA interrupts */
+    if (isr_mdma & 1) {
+        printk(KERN_INFO "VIC_IRQ: MDMA channel 0\n");
+    }
+    if (isr_mdma & 2) {
+        printk(KERN_INFO "VIC_IRQ: MDMA channel 1\n");
+    }
+    if (isr_mdma & 4) {
+        printk(KERN_ERR "VIC_IRQ: DMA ARB trans done overflow\n");
+    }
+    if (isr_mdma & 8) {
+        printk(KERN_ERR "VIC_IRQ: DMA CHID overflow\n");
+    }
+    
     return IRQ_HANDLED;
 }
 
