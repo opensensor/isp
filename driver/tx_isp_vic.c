@@ -2319,63 +2319,76 @@ static void vic_start_adjustment(void)
     pr_info("*** Timer: adjustment sequence completed ***\n");
 }
 
-/* Modified vic_core_s_stream function with OLD timer API */
+
+/* CRITICAL MISSING FUNCTION: vic_core_s_stream - FIXED to call tx_isp_vic_start */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
-    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-    void __iomem *vic_regs = vic_dev->vic_regs;
-    void __iomem *isp_base = vic_regs - 0xe0000;
-    void __iomem *csi_base = isp_base + 0x10000;
-
-    int ret = -EINVAL;
-
-    pr_info("vic_core_s_stream: sd=%p, enable=%d\n", sd, enable);
-    pr_info("vic_regs=%p, isp_base=%p, csi_base=%p\n", vic_regs, isp_base, csi_base);
-
-    if (sd != NULL) {
-        if ((unsigned long)sd >= 0xfffff001) {
-            pr_err("vic_core_s_stream: Invalid sd pointer\n");
-            return -EINVAL;
-        }
-
-        ret = -EINVAL;
-
-        if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
-            int current_state = vic_dev->state;
-
-            if (enable == 0) {
-                /* Stream OFF */
-                ret = 0;
-                vic_start_adjustment();
-                ispvic_frame_channel_s_stream(vic_dev, 0);
-                if (current_state == 4) {
-                    vic_dev->state = 3;
-                    pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
-                }
-            } else {
-                /* Stream ON */
-                ret = 0;
-
-                tx_isp_phy_init(ourISPdev);
-                ret = tx_isp_vic_start(vic_dev);
-                ispvic_frame_channel_s_stream(vic_dev, 1);
-                if (current_state != 4) {
-                    pr_info("vic_core_s_stream: Stream ON - calling tx_isp_vic_start\n");
-
-                    vic_start_ok = 0;
-
-                    vic_dev->state = 4;
-                    vic_start_ok = 1;
-
-                    pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
-                    return ret;
-                }
+    struct tx_isp_vic_device *vic_dev;
+    int ret = 0;
+    
+    if (!sd) {
+        pr_err("VIC s_stream: NULL subdev\n");
+        return -EINVAL;
+    }
+    
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+    if (!vic_dev) {
+        pr_err("VIC s_stream: NULL vic_dev\n");
+        return -EINVAL;
+    }
+    
+    pr_info("VIC s_stream: enable=%d, current_state=%d, vic_start_ok=%d\n", enable, vic_dev->state, vic_start_ok);
+    
+    // mutex_lock(&vic_dev->state_lock);
+    
+    if (enable) {
+        /* Start VIC streaming - CRITICAL FIX: Call tx_isp_vic_start FIRST */
+        if (vic_dev->state != 4) { /* Not already streaming */
+            
+            /* *** CRITICAL FIX: Call tx_isp_vic_start to set vic_start_ok = 1 *** */
+            pr_info("*** VIC: CRITICAL FIX - calling tx_isp_vic_start BEFORE streaming ***\n");
+            ret = tx_isp_vic_start(vic_dev);
+            if (ret != 0) {
+                pr_err("VIC: tx_isp_vic_start failed: %d - ABORTING stream start\n", ret);
+                goto unlock_exit;
             }
+            pr_info("*** VIC: tx_isp_vic_start SUCCESS - vic_start_ok should now be 1 ***\n");
+            
+            /* Now start the streaming */
+            pr_info("VIC: Starting streaming - calling ispvic_frame_channel_s_stream(1)\n");
+            ret = ispvic_frame_channel_s_stream(vic_dev, 1);
+            if (ret == 0) {
+                vic_dev->state = 4; /* STREAMING state */
+                pr_info("VIC: Streaming started successfully, state -> 4\n");
+                pr_info("*** VIC: STREAMING WITH INTERRUPTS ENABLED (vic_start_ok=%d) ***\n", vic_start_ok);
+            } else {
+                pr_err("VIC: ispvic_frame_channel_s_stream failed: %d\n", ret);
+            }
+        } else {
+            pr_info("VIC: Already streaming (state=%d)\n", vic_dev->state);
+        }
+    } else {
+        /* Stop VIC streaming */
+        if (vic_dev->state == 4) { /* Currently streaming */
+            pr_info("VIC: Stopping streaming - calling ispvic_frame_channel_s_stream(0)\n");
+            ret = ispvic_frame_channel_s_stream(vic_dev, 0);
+            if (ret == 0) {
+                vic_dev->state = 3; /* ACTIVE but not streaming */
+                pr_info("VIC: Streaming stopped, state -> 3\n");
+                /* Reset vic_start_ok when stopping */
+                vic_start_ok = 0;
+                pr_info("VIC: vic_start_ok reset to 0 (interrupts disabled)\n");
+            }
+        } else {
+            pr_info("VIC: Not streaming (state=%d)\n", vic_dev->state);
         }
     }
 
+unlock_exit:
+    // mutex_unlock(&vic_dev->state_lock);
     return ret;
 }
+
 
 /* Cleanup function remains the same */
 void vic_cleanup_timer(void)
