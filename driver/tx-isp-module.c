@@ -6303,6 +6303,11 @@ static int sensor_subdev_core_reset(struct tx_isp_subdev *sd, int reset)
 static int sensor_subdev_core_g_chip_ident(struct tx_isp_subdev *sd, struct tx_isp_chip_ident *chip)
 {
     pr_info("*** ISP DELEGATING TO REAL SENSOR_G_CHIP_IDENT ***\n");
+
+    int ret = tx_isp_vic_start(vic_dev);
+    if (ret != 0) {
+        pr_err("tx_isp_vic_start failed: %d\n", ret);
+    }
     
     /* CRITICAL FIX: Delegate to the actual sensor driver's g_chip_ident function */
     if (stored_sensor_ops.original_ops && 

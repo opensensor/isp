@@ -2734,7 +2734,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         pr_info("vic_core_s_stream: Scheduled 10ms adjustment timer\n");
                         adjustment_applied = false;
 
-                        ret = tx_isp_vic_start(vic_dev);
+                        // ret = tx_isp_vic_start(vic_dev);
+                        ret = 0;
                         vic_enabled = 1;
                         msleep(50);
                     } else {
