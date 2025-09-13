@@ -340,17 +340,11 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
     
-    /* CRITICAL FIX: Use proper subdev data access instead of dangerous offset 0xd4 */
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+    /* FIXED: Use safe struct member access instead of dangerous offset 0xd4 */
+    vic_dev = ourISPdev->vic_dev;
     
-    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("isp_vic_interrupt_service_routine: Invalid vic_dev - using safe subdev access\n");
-        return IRQ_HANDLED;
-    }
-    
-    /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
-    vic_base = sd->base;  /* VIC register base from subdev */
+    /* FIXED: Use safe struct member access instead of offset 0xb8 */
+    vic_base = vic_dev->vic_regs;  /* Safe access to VIC register base */
     if (!vic_base) {
         pr_err("isp_vic_interrupt_service_routine: No VIC register base\n");
         return IRQ_HANDLED;
@@ -531,35 +525,35 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
         }
         
-//        /* FIXED: Error recovery handling with safe struct member access */
-//        if ((isr_main & 0xde00) != 0 && vic_start_ok == 1) {
-//            pr_err("error handler!!!\n");
-//            /* FIXED: Use safe VIC register base access */
-//            writel(4, vic_base + 0x0);
-//
-//            /* FIXED: Safe register polling loop */
-//            u32 ctl_reg;
-//            int timeout = 1000;
-//            while ((ctl_reg = readl(vic_base + 0x0)) != 0 && timeout > 0) {
-//                pr_info("addr ctl is 0x%x\n", ctl_reg);
-//                udelay(10);
-//                timeout--;
-//            }
-//
-//            if (timeout == 0) {
-//                pr_err("VIC error recovery timeout\n");
-//            }
-//
-//            /* Recovery register writes with safe access */
-//            u32 reg_val = readl(vic_base + 0x104);
-//            writel(reg_val, vic_base + 0x104);
-//
-//            reg_val = readl(vic_base + 0x108);
-//            writel(reg_val, vic_base + 0x108);
-//
-//            /* FIXED: Safe VIC register base access */
-//            writel(1, vic_base + 0x0);
-//        }
+        /* FIXED: Error recovery handling with safe struct member access */
+        if ((isr_main & 0xde00) != 0 && vic_start_ok == 1) {
+            pr_err("error handler!!!\n");
+            /* FIXED: Use safe VIC register base access */
+            writel(4, vic_base + 0x0);
+            
+            /* FIXED: Safe register polling loop */
+            u32 ctl_reg;
+            int timeout = 1000;
+            while ((ctl_reg = readl(vic_base + 0x0)) != 0 && timeout > 0) {
+                pr_info("addr ctl is 0x%x\n", ctl_reg);
+                udelay(10);
+                timeout--;
+            }
+            
+            if (timeout == 0) {
+                pr_err("VIC error recovery timeout\n");
+            }
+            
+            /* Recovery register writes with safe access */
+            u32 reg_val = readl(vic_base + 0x104);
+            writel(reg_val, vic_base + 0x104);
+            
+            reg_val = readl(vic_base + 0x108);
+            writel(reg_val, vic_base + 0x108);
+            
+            /* FIXED: Safe VIC register base access */
+            writel(1, vic_base + 0x0);
+        }
     } else {
         pr_debug("isp_vic_interrupt_service_routine: vic_start_ok=%d - ignoring interrupts\n", vic_start_ok);
     }
