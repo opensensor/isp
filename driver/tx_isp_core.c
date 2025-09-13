@@ -1058,162 +1058,162 @@ static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp)
 }
 
 /* ===== CRITICAL MISSING FUNCTIONS FROM LOG ANALYSIS ===== */
-
-/**
- * ispcore_core_ops_init - CRITICAL: Initialize ISP Core Operations
- * This is the EXACT reference implementation from Binary Ninja decompilation
- * CRITICAL: tisp_init is called FROM THIS FUNCTION, not from handle_sensor_register
- */
-static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr)
-{
-    void __iomem *isp_regs;
-    u32 reg_val;
-    int ret = 0;
-    struct tx_isp_vic_device *vic_dev;
-    unsigned long flags;
-    u32 chip_id;
-    int var_70_4 = 0;
-    int i;
-    
-    /* Add MCP logging for method entry */
-    pr_info("ispcore_core_ops_init: entry with isp=%p, sensor_attr=%p", isp, sensor_attr);
-    
-    if (!isp) {
-        pr_err("ispcore_core_ops_init: Invalid ISP device");
-        return -EINVAL;
-    }
-    
-    pr_info("ispcore_core_ops_init: EXACT Binary Ninja reference implementation");
-    
-    /* Binary Ninja: void* $s0 = nullptr; if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = arg1[0x35] */
-    vic_dev = isp->vic_dev;
-    if (!vic_dev) {
-        pr_err("ispcore_core_ops_init: No VIC device found");
-        return -EINVAL;
-    }
-    
-    /* Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) */
-    int isp_state = vic_dev->state;
-    pr_info("ispcore_core_ops_init: Current ISP state = %d", isp_state);
-    
-    /* Binary Ninja: if ($v0_3 != 1) */
-    if (isp_state != 1) {
-        /* Binary Ninja: if (arg2 == 0) - deinitialize path */
-        if (!sensor_attr) {
-            pr_info("ispcore_core_ops_init: Deinitialize path (sensor_attr == NULL)");
-            
-            /* Binary Ninja: if ($v1_55 == 3) private_kthread_stop(*($s0 + 0x1b8)) */
-            if (isp_state == 3) {
-                pr_info("ispcore_core_ops_init: Stopping ISP thread (state 3)");
-                /* Stop ISP processing thread using proper VIC device members */
-                if (isp->fw_thread) {
-                    kthread_stop(isp->fw_thread);
-                    isp->fw_thread = NULL;
-                }
-                vic_dev->state = 2;
-            }
-            
-            /* Binary Ninja: tisp_deinit() */
-//            pr_info("ispcore_core_ops_init: Calling tisp_deinit()");
-//            /* Call tisp_deinit to clean up ISP pipeline components */
-//            extern int tisp_deinit(void);
-//            tisp_deinit();
-            
-            /* Binary Ninja: memset(*($s0 + 0x1bc) + 4, 0, 0x40a4) */
-            /* Binary Ninja: memset($s0 + 0x1d8, 0, 0x40) */
-            pr_info("ispcore_core_ops_init: Clearing ISP memory regions");
-            
-            return 0;
-        }
-        
-        /* Binary Ninja: int32_t result_1 = private_reset_tx_isp_module(0) */
-        pr_info("ispcore_core_ops_init: Calling private_reset_tx_isp_module(0)");
-        ret = tx_isp_hardware_reset(0);
-        if (ret != 0) {
-            pr_err("ispcore_core_ops_init: Hardware reset failed: %d", ret);
-            return -EINVAL;
-        }
-        
-        /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0xdc, &var_18) */
-        spin_lock_irqsave(&isp->irq_lock, flags);
-        
-        /* Binary Ninja: if (*($s0 + 0xe8) != 2) */
-        if (vic_dev->state != 2) {
-            spin_unlock_irqrestore(&isp->irq_lock, flags);
-            pr_err("ispcore_core_ops_init: Invalid ISP state %d (expected 2)", vic_dev->state);
-            return -EINVAL;
-        }
-        
-        spin_unlock_irqrestore(&isp->irq_lock, flags);
-        
-        /* Binary Ninja: Validate sensor dimensions */
-        if (sensor_attr->total_width > 10000 || sensor_attr->total_height > 10000 ||
-            sensor_attr->total_width == 0 || sensor_attr->total_height == 0) {
-            pr_err("ispcore_core_ops_init: INVALID SENSOR DIMENSIONS!");
-            pr_err("Original: %dx%d", sensor_attr->total_width, sensor_attr->total_height);
-            
-            /* Fix corrupted dimensions - assume GC2053 sensor */
-            sensor_attr->total_width = 2200;
-            sensor_attr->total_height = 1125;
-            
-            pr_info("ispcore_core_ops_init: CORRECTED to %dx%d",
-                    sensor_attr->total_width, sensor_attr->total_height);
-        }
-        
-        /* Binary Ninja: Store sensor dimensions */
-        isp->sensor_width = sensor_attr->total_width;
-        isp->sensor_height = sensor_attr->total_height;
-        
-        /* Binary Ninja: Channel configuration loop */
-        for (i = 0; i < ISP_MAX_CHAN; i++) {
-            if (isp->channels[i].enabled) {
-                pr_info("Channel %d: configuring dimensions %dx%d", 
-                        i, sensor_attr->total_width, sensor_attr->total_height);
-            }
-        }
-        
-        /* Binary Ninja: Determine var_70_4 value based on chip ID */
-        chip_id = sensor_attr->chip_id;
-        
-        /* Binary Ninja: Massive switch/case logic for chip ID mapping */
-        if (chip_id == 0x310f || chip_id == 0x320f) {
-            var_70_4 = 0x13;
-        } else if (chip_id == 0x2053) {  /* GC2053 */
-            var_70_4 = 0x14;
-        } else if (chip_id >= 0x3000 && chip_id < 0x4000) {
-            /* Most common sensor range */
-            var_70_4 = ((chip_id & 0xff) % 20) + 1;
-        } else {
-            pr_err("ispcore_core_ops_init: Unknown chip ID 0x%x", chip_id);
-            var_70_4 = 1; /* Default */
-        }
-        
-        pr_info("ispcore_core_ops_init: Chip ID 0x%x mapped to var_70_4 = %d", chip_id, var_70_4);
-        
-        /* Binary Ninja: tisp_init(&var_78, $s0 + 0x1d8) - CRITICAL CALL */
-        //pr_info("ispcore_core_ops_init: Calling tisp_init() - CRITICAL REFERENCE MATCH");
-        
-//        struct tx_isp_sensor_attribute local_attr = *sensor_attr;
-//        ret = tisp_init(&local_attr, isp);
-//        if (ret < 0) {
-//            pr_err("ispcore_core_ops_init: tisp_init failed: %d", ret);
-//            return ret;
+//
+///**
+// * ispcore_core_ops_init - CRITICAL: Initialize ISP Core Operations
+// * This is the EXACT reference implementation from Binary Ninja decompilation
+// * CRITICAL: tisp_init is called FROM THIS FUNCTION, not from handle_sensor_register
+// */
+//static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr)
+//{
+//    void __iomem *isp_regs;
+//    u32 reg_val;
+//    int ret = 0;
+//    struct tx_isp_vic_device *vic_dev;
+//    unsigned long flags;
+//    u32 chip_id;
+//    int var_70_4 = 0;
+//    int i;
+//
+//    /* Add MCP logging for method entry */
+//    pr_info("ispcore_core_ops_init: entry with isp=%p, sensor_attr=%p", isp, sensor_attr);
+//
+//    if (!isp) {
+//        pr_err("ispcore_core_ops_init: Invalid ISP device");
+//        return -EINVAL;
+//    }
+//
+//    pr_info("ispcore_core_ops_init: EXACT Binary Ninja reference implementation");
+//
+//    /* Binary Ninja: void* $s0 = nullptr; if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = arg1[0x35] */
+//    vic_dev = isp->vic_dev;
+//    if (!vic_dev) {
+//        pr_err("ispcore_core_ops_init: No VIC device found");
+//        return -EINVAL;
+//    }
+//
+//    /* Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) */
+//    int isp_state = vic_dev->state;
+//    pr_info("ispcore_core_ops_init: Current ISP state = %d", isp_state);
+//
+//    /* Binary Ninja: if ($v0_3 != 1) */
+//    if (isp_state != 1) {
+//        /* Binary Ninja: if (arg2 == 0) - deinitialize path */
+//        if (!sensor_attr) {
+//            pr_info("ispcore_core_ops_init: Deinitialize path (sensor_attr == NULL)");
+//
+//            /* Binary Ninja: if ($v1_55 == 3) private_kthread_stop(*($s0 + 0x1b8)) */
+//            if (isp_state == 3) {
+//                pr_info("ispcore_core_ops_init: Stopping ISP thread (state 3)");
+//                /* Stop ISP processing thread using proper VIC device members */
+//                if (isp->fw_thread) {
+//                    kthread_stop(isp->fw_thread);
+//                    isp->fw_thread = NULL;
+//                }
+//                vic_dev->state = 2;
+//            }
+//
+//            /* Binary Ninja: tisp_deinit() */
+////            pr_info("ispcore_core_ops_init: Calling tisp_deinit()");
+////            /* Call tisp_deinit to clean up ISP pipeline components */
+////            extern int tisp_deinit(void);
+////            tisp_deinit();
+//
+//            /* Binary Ninja: memset(*($s0 + 0x1bc) + 4, 0, 0x40a4) */
+//            /* Binary Ninja: memset($s0 + 0x1d8, 0, 0x40) */
+//            pr_info("ispcore_core_ops_init: Clearing ISP memory regions");
+//
+//            return 0;
 //        }
 //
-        //pr_info("ispcore_core_ops_init: tisp_init SUCCESS");
-        
-        /* Binary Ninja: Start kernel thread */
-        pr_info("ispcore_core_ops_init: Starting ISP processing thread");
-        
-        /* Binary Ninja: *($s0 + 0xe8) = 3 */
-        vic_dev->state = 3;
-        
-        pr_info("ispcore_core_ops_init: ISP CORE INITIALIZATION COMPLETE - STATE 3");
-    }
-    
-    pr_info("ispcore_core_ops_init: exit with result=0");
-    return 0;
-}
+//        /* Binary Ninja: int32_t result_1 = private_reset_tx_isp_module(0) */
+//        pr_info("ispcore_core_ops_init: Calling private_reset_tx_isp_module(0)");
+//        ret = tx_isp_hardware_reset(0);
+//        if (ret != 0) {
+//            pr_err("ispcore_core_ops_init: Hardware reset failed: %d", ret);
+//            return -EINVAL;
+//        }
+//
+//        /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0xdc, &var_18) */
+//        spin_lock_irqsave(&isp->irq_lock, flags);
+//
+//        /* Binary Ninja: if (*($s0 + 0xe8) != 2) */
+//        if (vic_dev->state != 2) {
+//            spin_unlock_irqrestore(&isp->irq_lock, flags);
+//            pr_err("ispcore_core_ops_init: Invalid ISP state %d (expected 2)", vic_dev->state);
+//            return -EINVAL;
+//        }
+//
+//        spin_unlock_irqrestore(&isp->irq_lock, flags);
+//
+//        /* Binary Ninja: Validate sensor dimensions */
+//        if (sensor_attr->total_width > 10000 || sensor_attr->total_height > 10000 ||
+//            sensor_attr->total_width == 0 || sensor_attr->total_height == 0) {
+//            pr_err("ispcore_core_ops_init: INVALID SENSOR DIMENSIONS!");
+//            pr_err("Original: %dx%d", sensor_attr->total_width, sensor_attr->total_height);
+//
+//            /* Fix corrupted dimensions - assume GC2053 sensor */
+//            sensor_attr->total_width = 2200;
+//            sensor_attr->total_height = 1125;
+//
+//            pr_info("ispcore_core_ops_init: CORRECTED to %dx%d",
+//                    sensor_attr->total_width, sensor_attr->total_height);
+//        }
+//
+//        /* Binary Ninja: Store sensor dimensions */
+//        isp->sensor_width = sensor_attr->total_width;
+//        isp->sensor_height = sensor_attr->total_height;
+//
+//        /* Binary Ninja: Channel configuration loop */
+//        for (i = 0; i < ISP_MAX_CHAN; i++) {
+//            if (isp->channels[i].enabled) {
+//                pr_info("Channel %d: configuring dimensions %dx%d",
+//                        i, sensor_attr->total_width, sensor_attr->total_height);
+//            }
+//        }
+//
+//        /* Binary Ninja: Determine var_70_4 value based on chip ID */
+//        chip_id = sensor_attr->chip_id;
+//
+//        /* Binary Ninja: Massive switch/case logic for chip ID mapping */
+//        if (chip_id == 0x310f || chip_id == 0x320f) {
+//            var_70_4 = 0x13;
+//        } else if (chip_id == 0x2053) {  /* GC2053 */
+//            var_70_4 = 0x14;
+//        } else if (chip_id >= 0x3000 && chip_id < 0x4000) {
+//            /* Most common sensor range */
+//            var_70_4 = ((chip_id & 0xff) % 20) + 1;
+//        } else {
+//            pr_err("ispcore_core_ops_init: Unknown chip ID 0x%x", chip_id);
+//            var_70_4 = 1; /* Default */
+//        }
+//
+//        pr_info("ispcore_core_ops_init: Chip ID 0x%x mapped to var_70_4 = %d", chip_id, var_70_4);
+//
+//        /* Binary Ninja: tisp_init(&var_78, $s0 + 0x1d8) - CRITICAL CALL */
+//        //pr_info("ispcore_core_ops_init: Calling tisp_init() - CRITICAL REFERENCE MATCH");
+//
+////        struct tx_isp_sensor_attribute local_attr = *sensor_attr;
+////        ret = tisp_init(&local_attr, isp);
+////        if (ret < 0) {
+////            pr_err("ispcore_core_ops_init: tisp_init failed: %d", ret);
+////            return ret;
+////        }
+////
+//        //pr_info("ispcore_core_ops_init: tisp_init SUCCESS");
+//
+//        /* Binary Ninja: Start kernel thread */
+//        pr_info("ispcore_core_ops_init: Starting ISP processing thread");
+//
+//        /* Binary Ninja: *($s0 + 0xe8) = 3 */
+//        vic_dev->state = 3;
+//
+//        pr_info("ispcore_core_ops_init: ISP CORE INITIALIZATION COMPLETE - STATE 3");
+//    }
+//
+//    pr_info("ispcore_core_ops_init: exit with result=0");
+//    return 0;
+//}
 
 /**
  * ispcore_slake_module - CRITICAL: ISP Core Module Slaking/Initialization
