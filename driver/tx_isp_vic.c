@@ -1365,8 +1365,7 @@ if (!IS_ERR(cgu_isp_clk)) {
     writel(0x22c2000, vic_regs + 0xb044);
     writel(0x22c3000, vic_regs + 0xb048);
     writel(0x103, vic_regs + 0xb04c);
-    writel(0x10000000, isp_base + 0xb078);
-    writel(0x3, vic_regs + 0xb050);
+    writel(0x10000000, vic_regs + 0xb078);
     wmb(); /* Single barrier for entire group */
     
     pr_info("*** TIMING FIX: All register groups written atomically - should show 0.000ms deltas ***\n");
