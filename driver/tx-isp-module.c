@@ -1785,7 +1785,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_info("*** VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
             
             /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-            vic_framedone_irq_function(vic_dev);
+           // vic_framedone_irq_function(vic_dev);
         }
         
         /* Binary Ninja: Error handling for frame asfifo overflow */
@@ -1842,7 +1842,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         }
         
         if ((v1_7 & 0x200000) != 0) {
-            pr_err("Err [VIC_INT] : control limit err!!!\n");
+            pr_err("Err2 [VIC_INT] : control limit err!!!\n");
         }
         
         if ((v1_7 & 0x400000) != 0) {
@@ -1888,13 +1888,13 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         /* Binary Ninja: if (($v1_10 & 1) != 0) */
         if ((v1_10 & 1) != 0) {
             /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 0) */
-            vic_mdma_irq_function(vic_dev, 0);
+            //vic_mdma_irq_function(vic_dev, 0);
         }
         
         /* Binary Ninja: if (($v1_10 & 2) != 0) */
         if ((v1_10 & 2) != 0) {
             /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 1) */
-            vic_mdma_irq_function(vic_dev, 1);
+            //vic_mdma_irq_function(vic_dev, 1);
         }
         
         if ((v1_10 & 4) != 0) {
