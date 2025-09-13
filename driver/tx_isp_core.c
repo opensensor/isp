@@ -342,11 +342,11 @@ int tx_isp_core_start(struct tx_isp_subdev *sd)
     }
     
     /* Start continuous processing */
-    ret = isp_start_continuous_processing(isp_dev);
-    if (ret < 0) {
-        pr_err("tx_isp_core_start: Failed to start continuous processing: %d\n", ret);
-        return ret;
-    }
+//    ret = isp_start_continuous_processing(isp_dev);
+//    if (ret < 0) {
+//        pr_err("tx_isp_core_start: Failed to start continuous processing: %d\n", ret);
+//        return ret;
+//    }
     
     /* Set pipeline to streaming state */
     isp_dev->pipeline_state = ISP_PIPELINE_STREAMING;
@@ -3409,14 +3409,14 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 }
 
                 /* CRITICAL: Start continuous processing - this generates the register activity your trace captures! */
-                pr_info("*** tx_isp_core_probe: Starting continuous processing system ***\n");
-                result = isp_start_continuous_processing(ourISPdev);
-                if (result == 0) {
-                    pr_info("*** tx_isp_core_probe: Continuous processing started successfully ***\n");
-                    pr_info("*** YOUR TRACE MODULE SHOULD NOW CAPTURE CONTINUOUS REGISTER WRITES! ***\n");
-                } else {
-                    pr_err("*** tx_isp_core_probe: Failed to start continuous processing: %d ***\n", result);
-                }
+//                pr_info("*** tx_isp_core_probe: Starting continuous processing system ***\n");
+//                result = isp_start_continuous_processing(ourISPdev);
+//                if (result == 0) {
+//                    pr_info("*** tx_isp_core_probe: Continuous processing started successfully ***\n");
+//                    pr_info("*** YOUR TRACE MODULE SHOULD NOW CAPTURE CONTINUOUS REGISTER WRITES! ***\n");
+//                } else {
+//                    pr_err("*** tx_isp_core_probe: Failed to start continuous processing: %d ***\n", result);
+//                }
                 
                 return 0;
             }
