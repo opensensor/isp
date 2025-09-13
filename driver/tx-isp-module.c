@@ -6304,7 +6304,7 @@ static int sensor_subdev_core_g_chip_ident(struct tx_isp_subdev *sd, struct tx_i
 {
     pr_info("*** ISP DELEGATING TO REAL SENSOR_G_CHIP_IDENT ***\n");
 
-    int ret = tx_isp_vic_start(vic_dev);
+    int ret = tx_isp_vic_start(ourISPdev->vic_dev);
     if (ret != 0) {
         pr_err("tx_isp_vic_start failed: %d\n", ret);
     }
