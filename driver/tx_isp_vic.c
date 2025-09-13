@@ -587,29 +587,23 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 
     pr_info("*** CRITICAL: Configuring VIC interrupt registers for proper interrupt firing ***\n");
 
-    /* STEP 1: Clear all pending interrupts first */
-    writel(0xFFFFFFFF, vic_base + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_base + 0x1f4);  /* Clear MDMA interrupt status */
+    // Clear any pending interrupts first
+    writel(0, vic_base + 0x00);  // Clear ISR
+    writel(0, vic_base + 0x20);  // Clear ISR1
     wmb();
 
-    /* STEP 2: Configure interrupt masks - ENABLE frame done interrupt (bit 0) */
-    /* The logs show VIC start completes but interrupts don't fire - this is the key fix */
-    writel(0xFFFFFFFE, vic_base + 0x1e8);  /* Enable frame done interrupt (bit 0 = 0) */
-    writel(0xFFFFFFFC, vic_base + 0x1ec);  /* Enable MDMA interrupts (bits 0,1 = 0) */
+    // Set up interrupt masks to match OEM
+    writel(0x00000001, vic_base + 0x04);  // IMR
+    wmb();
+    writel(0x00000000, vic_base + 0x24);  // IMR1
     wmb();
 
-    pr_info("*** INTERRUPT MASK FIX: Enabled frame done (0x1e8=0xFFFFFFFE) and MDMA (0x1ec=0xFFFFFFFC) ***\n");
+    // Configure ISP control interrupts
+    writel(0x07800438, vic_base + 0x04);  // IMR
+    wmb();
+    writel(0xb5742249, vic_base + 0x0c);  // IMCR
+    wmb();
 
-    /* STEP 4: Enable the interrupt at the hardware level */
-    enable_irq(irq);
-    pr_info("*** CRITICAL: VIC hardware interrupt enabled - IRQ %d ***\n", irq);
-
-    /* STEP 5: Verify interrupt configuration */
-    u32 mask_main = readl(vic_base + 0x1e8);
-    u32 mask_mdma = readl(vic_base + 0x1ec);
-    pr_info("*** INTERRUPT VERIFICATION: Main mask=0x%x, MDMA mask=0x%x ***\n", mask_main, mask_mdma);
-
-    pr_info("*** tx_isp_vic_hw_init: INTERRUPT CONFIGURATION COMPLETE - INTERRUPTS SHOULD NOW FIRE ***\n");
     return 0;
 }
 
