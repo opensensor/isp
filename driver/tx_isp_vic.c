@@ -2741,7 +2741,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_info("vic_core_s_stream: Stream ON - calling tx_isp_vic_start\n");
 
                     vic_start_ok = 0;
-                    vic_start_adjustment();
                     msleep(100);
                     tx_isp_phy_init(ourISPdev);
 
@@ -2752,6 +2751,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     return ret;
                 } else {
                     ret = tx_isp_vic_start(vic_dev);
+                    vic_start_adjustment();
                 }
             }
         }
