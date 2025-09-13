@@ -2563,9 +2563,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 //            } else {
 //                pr_warn("*** Channel %d: VIC device not available or not aligned ***\n", channel);
 //            }
-        } else {
-            pr_debug("*** Channel %d: Not main channel or ISP device not aligned ***\n", channel);
-        }
+//        } else {
+//            pr_debug("*** Channel %d: Not main channel or ISP device not aligned ***\n", channel);
+//        }
         
         /* MIPS SAFE: Buffer state management with alignment checks */
         if (((uintptr_t)&state->buffer_lock & 0x3) == 0) {
