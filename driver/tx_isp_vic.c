@@ -1294,6 +1294,12 @@ if (!IS_ERR(cgu_isp_clk)) {
     
     pr_info("*** Completed writing ALL missing initialization registers from reference trace ***\n");
 
+    /* *** CRITICAL TIMING FIX: 280ms delay matching reference driver *** */
+    pr_info("*** CRITICAL TIMING FIX: Implementing 280ms delay from reference trace ***\n");
+    pr_info("*** This delay allows hardware to stabilize before next configuration phase ***\n");
+    msleep(280);  /* EXACT 280ms delay from reference driver trace */
+    pr_info("*** 280ms delay complete - proceeding with interface configuration ***\n");
+
     /* Binary Ninja: interface 1=DVP, 2=MIPI, 3=BT601, 4=BT656, 5=BT1120 */
     if (interface_type == 1) {
         /* DVP interface - Binary Ninja implementation */
