@@ -2258,15 +2258,15 @@ static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int c
     pr_debug("Hardware frame completion detected on channel %d\n", channel);
     
     /* Wake up frame waiters with real hardware completion */
-    frame_channel_wakeup_waiters(&frame_channels[channel]);
+    //frame_channel_wakeup_waiters(&frame_channels[channel]);
     
     /* Update frame count for statistics */
     isp_dev->frame_count++;
     
     /* Complete frame operation if completion is available */
-    if (isp_dev->frame_complete.done == 0) {
-        complete(&isp_dev->frame_complete);
-    }
+//    if (isp_dev->frame_complete.done == 0) {
+//        complete(&isp_dev->frame_complete);
+//    }
 }
 
 /* Frame channel implementations removed - handled by FS probe instead */
@@ -5905,21 +5905,21 @@ irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)
     
     pr_debug("*** ISP IP DONE INTERRUPT: Processing complete ***\n");
     
-    /* Handle ISP processing completion - wake up any waiters */
-    if (isp_dev->frame_complete.done == 0) {
-        complete(&isp_dev->frame_complete);
-    }
+//    /* Handle ISP processing completion - wake up any waiters */
+//    if (isp_dev->frame_complete.done == 0) {
+//        complete(&isp_dev->frame_complete);
+//    }
     
     /* Update frame processing statistics */
     isp_dev->frame_count++;
     
     /* Wake up frame channel waiters */
-    int i;
-    for (i = 0; i < num_channels; i++) {
-        if (frame_channels[i].state.streaming) {
-            frame_channel_wakeup_waiters(&frame_channels[i]);
-        }
-    }
+//    int i;
+//    for (i = 0; i < num_channels; i++) {
+//        if (frame_channels[i].state.streaming) {
+//            frame_channel_wakeup_waiters(&frame_channels[i]);
+//        }
+//    }
     
     return IRQ_HANDLED;
 }
