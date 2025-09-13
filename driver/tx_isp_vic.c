@@ -2742,6 +2742,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                     vic_start_ok = 0;
                     vic_start_adjustment();
+                    msleep(100);
                     tx_isp_phy_init(ourISPdev);
 
                     vic_dev->state = 4;
