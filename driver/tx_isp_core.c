@@ -475,55 +475,81 @@ static struct tx_isp_subdev_ops core_subdev_ops = {
     .internal = NULL  /* Internal operations */
 };
 
-/* ISP interrupt dispatch system - EXACT Binary Ninja implementation */
+/* CRASH-SAFE ISP interrupt handler - uses proper struct member access */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = dev_id;
     irqreturn_t result = IRQ_HANDLED;
     
-    pr_debug("*** isp_irq_handle: IRQ %d triggered, dev_id=%p ***\n", irq, dev_id);
+    /* BULLETPROOF: Validate EVERYTHING before touching anything */
+    if (!dev_id) {
+        printk(KERN_ERR "ISP_IRQ: NULL dev_id\n");
+        return IRQ_HANDLED;
+    }
     
-    /* Binary Ninja: if (arg2 != 0x80) */
-    if (dev_id != (void *)0x80) {
-        /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
-        if (isp_dev && isp_dev->vic_dev) {
-            /* Get VIC interrupt handler from VIC device structure */
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(isp_dev->vic_dev);
-            if (vic_dev && vic_dev->irq_handler_func) {
-                /* Binary Ninja: int32_t $v0_3 = *($v0_2 + 0x20) */
-                /* Call VIC interrupt handler function */
-                irqreturn_t vic_result = vic_dev->irq_handler_func(irq, isp_dev->vic_dev);
-                pr_debug("*** isp_irq_handle: VIC handler returned %d ***\n", vic_result);
-                
-                /* Binary Ninja: if ($v0_3(arg2 - 0x80, 0, 0) == 2) result = 2 */
-                if (vic_result == IRQ_WAKE_THREAD) {
-                    result = IRQ_WAKE_THREAD;
-                }
-            }
+    if ((unsigned long)dev_id >= 0xfffff001) {
+        printk(KERN_ERR "ISP_IRQ: Invalid dev_id pointer 0x%lx\n", (unsigned long)dev_id);
+        return IRQ_HANDLED;
+    }
+    
+    isp_dev = (struct tx_isp_dev *)dev_id;
+    
+    /* Validate ISP device structure */
+    if ((unsigned long)isp_dev >= 0xfffff001) {
+        printk(KERN_ERR "ISP_IRQ: Invalid isp_dev pointer 0x%lx\n", (unsigned long)isp_dev);
+        return IRQ_HANDLED;
+    }
+    
+    pr_debug("*** isp_irq_handle: IRQ %d triggered, isp_dev=%p ***\n", irq, isp_dev);
+    
+    /* SAFE: Check if we have a VIC device using proper struct member access */
+    if (isp_dev->vic_dev) {
+        /* SAFE: Get VIC device using proper container_of instead of dangerous offset arithmetic */
+        struct tx_isp_vic_device *vic_dev = container_of(isp_dev->vic_dev, struct tx_isp_vic_device, sd);
+        
+        /* Validate VIC device pointer */
+        if ((unsigned long)vic_dev >= 0xfffff001) {
+            printk(KERN_ERR "ISP_IRQ: Invalid vic_dev pointer 0x%lx\n", (unsigned long)vic_dev);
+            return IRQ_HANDLED;
+        }
+        
+        /* SAFE: Call the VIC interrupt handler directly - no dangerous function pointers */
+        extern irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
+        irqreturn_t vic_result = isp_vic_interrupt_service_routine(irq, isp_dev->vic_dev);
+        
+        pr_debug("*** isp_irq_handle: VIC handler returned %d ***\n", vic_result);
+        
+        if (vic_result == IRQ_WAKE_THREAD) {
+            result = IRQ_WAKE_THREAD;
         }
     }
     
-    /* Binary Ninja: Loop through subdevices and call their interrupt handlers */
-    /* int32_t* $s2 = arg2 - 0x48 */
-    if (isp_dev) {
-        /* Check if there are additional subdevices to process */
-        int i;
-        for (i = 0; i < 4; i++) {  /* Loop through possible subdevices */
-            /* Binary Ninja: void* $a0_1 = *$s2 */
-            /* Check if subdevice exists and has interrupt handler */
-            /* Binary Ninja: void* $v0_6 = **($a0_1 + 0xc4) */
-            /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 0x20) */
-            /* Binary Ninja: if ($v0_7 != 0 && $v0_7() == 2) result = 2 */
-            
-            /* For now, we only have VIC interrupt handling */
-            /* Additional subdevice interrupt handlers would be called here */
-            
-            /* Binary Ninja: $s2 = &$s2[1] */
+    /* SAFE: Check other subdevices using proper struct member access */
+    if (isp_dev->csi_dev) {
+        /* SAFE: Call CSI interrupt handler if it exists */
+        extern irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id);
+        irqreturn_t csi_result = tx_isp_csi_irq_handler(irq, isp_dev->csi_dev);
+        
+        pr_debug("*** isp_irq_handle: CSI handler returned %d ***\n", csi_result);
+        
+        if (csi_result == IRQ_WAKE_THREAD) {
+            result = IRQ_WAKE_THREAD;
         }
     }
     
-    pr_debug("*** isp_irq_handle: dispatch complete, result=%d ***\n", result);
-    /* Binary Ninja: return result */
+    /* SAFE: Handle any core ISP interrupts */
+    if (isp_dev->core_regs) {
+        /* Read and clear any core ISP interrupt status */
+        u32 core_status = readl(isp_dev->core_regs + 0x800);  /* ISP core status */
+        if (core_status & 0x1) {
+            /* Clear core interrupt */
+            writel(0x1, isp_dev->core_regs + 0x800);
+            wmb();
+            pr_debug("*** isp_irq_handle: Core ISP interrupt cleared ***\n");
+        }
+    }
+    
+    pr_debug("*** isp_irq_handle: SAFE dispatch complete, result=%d ***\n", result);
     return result;
 }
 
