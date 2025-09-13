@@ -607,12 +607,18 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
         pr_err("tx_isp_vic_hw_init: Failed to get IRQ number\n");
         return irq;
     }
-
-    ret = request_irq(irq, isp_vic_interrupt_service_routine,
-                      IRQF_SHARED, "isp-w02", sd);
-    if (ret) {
-        pr_err("tx_isp_vic_hw_init: Failed to request IRQ %d: %d\n", irq, ret);
-        return ret;
+    /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
+    ret = request_irq(38,
+                      isp_vic_interrupt_service_routine,          /* Same handlers work for both IRQs */
+                      IRQF_SHARED,
+                      "isp-w02",               /* Match stock driver name */
+                      sd);
+    if (ret != 0) {
+        pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
+        pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
+    } else {
+        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
+        ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
     }
 
     vic_dev->irq = irq;
