@@ -2531,38 +2531,38 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("*** Channel %d: VIC BUFFER DATA: index=%d, addr=0x%x, size=%d ***\n", 
                 channel, vic_buffer_data.index, vic_buffer_data.phys_addr, vic_buffer_data.size);
         
-        /* MIPS SAFE: VIC event system with actual buffer data */
-        if (channel == 0 && ourISPdev && ((uintptr_t)ourISPdev & 0x3) == 0) {
-            /* MIPS SAFE: Validate VIC device alignment */
-            if (ourISPdev->vic_dev && ((uintptr_t)ourISPdev->vic_dev & 0x3) == 0) {
-                struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-                
-                /* MIPS SAFE: Additional VIC device validation */
-                if (vic_dev_buf && ((uintptr_t)vic_dev_buf & 0x3) == 0) {
-                    pr_info("*** Channel %d: QBUF - SENDING ACTUAL BUFFER DATA TO VIC ***\n", channel);
-                    pr_info("*** Channel %d: CALLING tx_isp_send_event_to_remote(VIC, 0x3000008, vic_buffer_data) ***\n", channel);
-                    
-                    /* MIPS SAFE: Validate subdev alignment before event call */
-                    if (((uintptr_t)&vic_dev_buf->sd & 0x3) == 0) {
-                        /* CRITICAL FIX: Pass actual buffer data instead of v4l2_buffer structure */
-                        int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &vic_buffer_data);
-                        
-                        if (event_result == 0) {
-                            pr_info("*** Channel %d: QBUF EVENT SUCCESS - BUFFER DATA SENT TO VIC! ***\n", channel);
-                        } else if (event_result == 0xfffffdfd) {
-                            pr_info("*** Channel %d: QBUF EVENT - No VIC callback (MIPS-safe) ***\n", channel);
-                        } else {
-                            pr_warn("*** Channel %d: QBUF EVENT returned: 0x%x (MIPS-safe) ***\n", channel, event_result);
-                        }
-                    } else {
-                        pr_warn("*** Channel %d: VIC subdev not aligned, skipping event ***\n", channel);
-                    }
-                } else {
-                    pr_warn("*** Channel %d: VIC device not aligned properly ***\n", channel);
-                }
-            } else {
-                pr_warn("*** Channel %d: VIC device not available or not aligned ***\n", channel);
-            }
+//        /* MIPS SAFE: VIC event system with actual buffer data */
+//        if (channel == 0 && ourISPdev && ((uintptr_t)ourISPdev & 0x3) == 0) {
+//            /* MIPS SAFE: Validate VIC device alignment */
+//            if (ourISPdev->vic_dev && ((uintptr_t)ourISPdev->vic_dev & 0x3) == 0) {
+//                struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+//
+//                /* MIPS SAFE: Additional VIC device validation */
+//                if (vic_dev_buf && ((uintptr_t)vic_dev_buf & 0x3) == 0) {
+//                    pr_info("*** Channel %d: QBUF - SENDING ACTUAL BUFFER DATA TO VIC ***\n", channel);
+//                    pr_info("*** Channel %d: CALLING tx_isp_send_event_to_remote(VIC, 0x3000008, vic_buffer_data) ***\n", channel);
+//
+//                    /* MIPS SAFE: Validate subdev alignment before event call */
+//                    if (((uintptr_t)&vic_dev_buf->sd & 0x3) == 0) {
+//                        /* CRITICAL FIX: Pass actual buffer data instead of v4l2_buffer structure */
+//                        int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &vic_buffer_data);
+//
+//                        if (event_result == 0) {
+//                            pr_info("*** Channel %d: QBUF EVENT SUCCESS - BUFFER DATA SENT TO VIC! ***\n", channel);
+//                        } else if (event_result == 0xfffffdfd) {
+//                            pr_info("*** Channel %d: QBUF EVENT - No VIC callback (MIPS-safe) ***\n", channel);
+//                        } else {
+//                            pr_warn("*** Channel %d: QBUF EVENT returned: 0x%x (MIPS-safe) ***\n", channel, event_result);
+//                        }
+//                    } else {
+//                        pr_warn("*** Channel %d: VIC subdev not aligned, skipping event ***\n", channel);
+//                    }
+//                } else {
+//                    pr_warn("*** Channel %d: VIC device not aligned properly ***\n", channel);
+//                }
+//            } else {
+//                pr_warn("*** Channel %d: VIC device not available or not aligned ***\n", channel);
+//            }
         } else {
             pr_debug("*** Channel %d: Not main channel or ISP device not aligned ***\n", channel);
         }
