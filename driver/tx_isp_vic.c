@@ -1201,30 +1201,8 @@ if (!IS_ERR(cgu_isp_clk)) {
 
     pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
 
-
-    pr_info("*** tx_isp_vic_start: Enabling ISP system interrupts ***\n");
-    tx_isp_enable_irq(isp_dev);
-    pr_info("*** tx_isp_vic_start: ISP interrupts enabled successfully ***\n");
-
-    /* *** CRITICAL FIX: Initialize VIC hardware interrupts FIRST *** */
-    pr_info("*** tx_isp_vic_start: CRITICAL FIX - Initializing VIC hardware interrupts ***\n");
-    ret = tx_isp_vic_hw_init(&vic_dev->sd);
-    if (ret != 0) {
-        pr_err("tx_isp_vic_start: VIC hardware interrupt init failed: %d\n", ret);
-        return ret;
-    }
-    pr_info("*** tx_isp_vic_start: VIC hardware interrupts initialized successfully ***\n");
-    
-    /* Take a local copy of sensor attributes to prevent corruption during streaming */
-    struct tx_isp_sensor_attribute local_sensor_attr;
-    unsigned long flags;
-
-    
-    /* Make a safe copy of sensor attributes */
-    memcpy(&local_sensor_attr, &vic_dev->sensor_attr, sizeof(local_sensor_attr));
-    
-    /* Use the local copy to prevent corruption */
-    sensor_attr = &local_sensor_attr;
+    /* FIXED: Use proper struct member access for sensor attributes */
+    sensor_attr = &vic_dev->sensor_attr;
     interface_type = sensor_attr->dbus_type;
     sensor_format = sensor_attr->data_type;
     
@@ -1877,10 +1855,10 @@ ISP isp-m0: [CSI PHY Config] write at offset 0x110: 0x80007000 -> 0x92217523 (de
 
     pr_info("*** tx_isp_vic_progress: Streaming configuration complete ***\n");
 
-    /* Enable ISP system interrupts */
-    pr_info("*** tx_isp_vic_progress: Enabling ISP system interrupts ***\n");
-    tx_isp_enable_irq(isp_dev);
-    pr_info("*** tx_isp_vic_progress: ISP interrupts enabled successfully ***\n");
+    // /* Enable ISP system interrupts */
+    // pr_info("*** tx_isp_vic_progress: Enabling ISP system interrupts ***\n");
+    // tx_isp_enable_irq(isp_dev);
+    // pr_info("*** tx_isp_vic_progress: ISP interrupts enabled successfully ***\n");
 
     /* Initialize VIC hardware interrupts */
     pr_info("*** tx_isp_vic_progress: Initializing VIC hardware interrupts ***\n");
