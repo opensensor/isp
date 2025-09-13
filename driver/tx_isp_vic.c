@@ -2893,28 +2893,6 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     dump_vsd = vic_dev;
     vic_dev->irq = 38;
 
-    /* STEP 3: Request and register the interrupt handler */
-    irq = vic_dev->irq;
-    if (irq < 0) {
-        pr_err("tx_isp_vic_hw_init: Failed to get IRQ number\n");
-        return irq;
-    }
-    /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
-    ret = request_irq(38,
-                      isp_vic_interrupt_service_routine,          /* Same handlers work for both IRQs */
-                      IRQF_SHARED,
-                      "isp-w02",               /* Match stock driver name */
-                      sd);
-    if (ret != 0) {
-        pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
-        pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
-    } else {
-        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
-        ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
-    }
-
-    pr_info("*** CRITICAL: VIC interrupt handler registered - IRQ %d ***\n", irq);
-
     /* Set test_addr to point to sensor_attr or appropriate member */
     /* Binary points to offset 0x80 in the structure */
     test_addr = &vic_dev->sensor_attr;  /* Or another member around offset 0x80 */
