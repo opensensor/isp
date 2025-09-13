@@ -2703,7 +2703,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             if (enable == 0) {
                 /* Stream OFF */
                 ret = 0;
-                vic_start_adjustment();
                 if (current_state == 4) {
                     vic_dev->state = 3;
                     pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
@@ -2722,6 +2721,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                     pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
                     return ret;
+                } else {
+                    vic_start_adjustment();
                 }
             }
         }
