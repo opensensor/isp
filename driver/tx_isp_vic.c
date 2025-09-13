@@ -2672,7 +2672,7 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 
 unlock_exit:
     /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, $a1_4) */
-    private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, a1_4);
+    private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
     
     pr_info("*** ispvic_frame_channel_qbuf: MIPS-SAFE completion ***\n");
     /* Binary Ninja EXACT: return 0 */
