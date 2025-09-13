@@ -601,7 +601,7 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     pr_info("*** INTERRUPT MASK FIX: Enabled frame done (0x1e8=0xFFFFFFFE) and MDMA (0x1ec=0xFFFFFFFC) ***\n");
 
     /* STEP 3: Request and register the interrupt handler */
-    vic_dev->irq = 37;  /* Use primary ISP IRQ */
+    vic_dev->irq = 38;
     irq = vic_dev->irq;
     if (irq < 0) {
         pr_err("tx_isp_vic_hw_init: Failed to get IRQ number\n");
@@ -609,7 +609,7 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     }
 
     ret = request_irq(irq, isp_vic_interrupt_service_routine,
-                      IRQF_SHARED, "isp-m0", sd);
+                      IRQF_SHARED, "isp-w02", sd);
     if (ret) {
         pr_err("tx_isp_vic_hw_init: Failed to request IRQ %d: %d\n", irq, ret);
         return ret;
@@ -3199,7 +3199,7 @@ static struct platform_driver tx_isp_vic_platform_driver = {
     .probe = tx_isp_vic_probe,
     .remove = tx_isp_vic_remove,
     .driver = {
-        .name = "isp-m0",
+        .name = "isp-w02",
         .owner = THIS_MODULE,
     },
 };

@@ -7,11 +7,11 @@
 #define TX_ISP_PROC_ISP_DIR "jz/isp"
 #define TX_ISP_PROC_ISP_W00_FILE "isp-w00"
 #define TX_ISP_PROC_ISP_W01_FILE "isp-w01"
-#define TX_ISP_PROC_ISP_W02_FILE "isp-w02"
+#define TX_ISP_PROC_ISP_W02_FILE "isp-w02_"
 #define TX_ISP_PROC_ISP_FS_FILE "isp-fs"
-#define TX_ISP_PROC_ISP_M0_FILE "isp-m0"
-#define TX_ISP_PROC_CSI_FILE "csi"
-#define TX_ISP_PROC_VIC_FILE "vic"
+#define TX_ISP_PROC_ISP_M0_FILE "isp-m0_"
+#define TX_ISP_PROC_CSI_FILE "isp-m0"
+#define TX_ISP_PROC_VIC_FILE "isp-w02"
 
 struct proc_context {
     struct proc_dir_entry *isp_dir;
