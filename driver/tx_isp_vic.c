@@ -21,7 +21,7 @@
 
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
-uint32_t vic_start_ok = 1;  /* Global VIC interrupt enable flag definition */
+uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 static int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 static int vic_enabled = 0;
@@ -567,25 +567,9 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 {
     void __iomem *vic_base;
-    struct tx_isp_vic_device *vic_dev;
-    int irq;
-    int ret;
 
-    pr_info("*** tx_isp_vic_hw_init: CRITICAL INTERRUPT CONFIGURATION FIX ***\n");
-
-    vic_dev = ourISPdev->vic_dev;
-    if (!vic_dev) {
-        pr_err("tx_isp_vic_hw_init: No VIC device\n");
-        return -EINVAL;
-    }
-
-    vic_base = vic_dev->vic_regs;
-    if (!vic_base) {
-        pr_err("tx_isp_vic_hw_init: No VIC register base\n");
-        return -EINVAL;
-    }
-
-    pr_info("*** CRITICAL: Configuring VIC interrupt registers for proper interrupt firing ***\n");
+    // Initialize VIC hardware
+    vic_base = ioremap(0x10023000, 0x1000);  // Direct map VIC
 
     // Clear any pending interrupts first
     writel(0, vic_base + 0x00);  // Clear ISR
