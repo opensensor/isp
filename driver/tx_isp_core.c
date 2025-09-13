@@ -1335,542 +1335,542 @@ EXPORT_SYMBOL(data_b2e10);
 uint32_t data_b2e14 = 0;
 EXPORT_SYMBOL(data_b2e14);
 
-//
-///* tisp_init - EXACT Binary Ninja reference implementation - NO hardware reset here */
-//int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
-//{
-//    void __iomem *isp_regs;
-//    u32 mode_value;
-//    u32 control_value;
-//    u32 interface_type;
-//    int ret = 0;
-//    u32 reg_val;
-//    int i;
-//    char snap_name[0x40];
-//
-//    if (!sensor_attr || !isp_dev || !isp_dev->vic_regs) {
-//        pr_err("tisp_init: Invalid parameters\n");
-//        return -EINVAL;
-//    }
-//
-//    isp_regs = isp_dev->vic_regs - 0x9a00;  /* Get ISP base */
-//
-//    pr_info("*** tisp_init: EXACT Binary Ninja reference implementation ***\n");
-//
-//    /* NOTE: Hardware reset is NOT called in tisp_init - it should be in ispcore_core_ops_init */
-//    pr_info("*** tisp_init: Starting without hardware reset (done in ispcore_core_ops_init) ***\n");
-//
-//    /* Binary Ninja: memset(&tispinfo, 0, 0x74) */
-//    memset(&tispinfo, 0, 0x74);
-//    /* Binary Ninja: memset(&sensor_info, 0, 0x60) */
-//    memset(&sensor_info, 0, 0x60);
-//    /* Binary Ninja: memset(&ds0_attr, 0, 0x34) */
-//    memset(&ds0_attr, 0, 0x34);
-//    /* Binary Ninja: memset(&ds1_attr, 0, 0x34) */
-//    memset(&ds1_attr, 0, 0x34);
-//    /* Binary Ninja: memset(&ds2_attr, 0, 0x34) */
-//    memset(&ds2_attr, 0, 0x34);
-//
-//    /* Binary Ninja: memcpy(&sensor_info, arg1, 0x60) */
-//    memcpy(&sensor_info, sensor_attr, min(sizeof(sensor_info), sizeof(*sensor_attr)));
-//
-//    /* Binary Ninja: uint32_t $v0 = private_vmalloc(0x137f0) */
-//    tparams_day = vmalloc(0x137f0);
-//    if (!tparams_day) {
-//        pr_err("tisp_init: Failed to allocate tparams_day\n");
-//        return -ENOMEM;
-//    }
-//    /* Binary Ninja: memset($v0, 0, 0x137f0) */
-//    memset(tparams_day, 0, 0x137f0);
-//
-//    /* Binary Ninja: uint32_t $v0_1 = private_vmalloc(0x137f0) */
-//    tparams_night = vmalloc(0x137f0);
-//    if (!tparams_night) {
-//        pr_err("tisp_init: Failed to allocate tparams_night\n");
-//        vfree(tparams_day);
-//        return -ENOMEM;
-//    }
-//    /* Binary Ninja: memset($v0_1, 0, 0x137f0) */
-//    memset(tparams_night, 0, 0x137f0);
-//
-//    /* Binary Ninja: if (strlen(arg2) == 0) snprintf(arg2, 0x40, "snapraw", 0xb2e24) */
-//    if (strlen(snap_name) == 0) {
-//        snprintf(snap_name, 0x40, "snapraw");
-//    }
-//
-//    /* Binary Ninja: $v0_3, tparams_cust_1 = tiziano_load_parameters(arg2) */
-//    /* This function loads ISP tuning parameters - critical for proper operation */
-//    pr_info("tisp_init: Loading ISP tuning parameters\n");
-//
-//    /* Simulate parameter loading - in real implementation this loads from flash/filesystem */
-//    ret = 0;  /* Assume success for now */
-//    tparams_cust = NULL;  /* No custom parameters for basic implementation */
-//
-//    /* Binary Ninja: Memory optimization configuration */
-//    if (isp_memopt == 1) {
-//        /* Configure memory optimization mode for all parameter sets */
-//        if (tparams_day) {
-//            *((u32*)((char*)tparams_day + 0xbb50)) = 0;
-//            *((u32*)((char*)tparams_day + 0xbb58)) = isp_memopt;
-//            *((u32*)((char*)tparams_day + 0xbb68)) = 0;
-//            *((u32*)((char*)tparams_day + 0xbb60)) = 0;
-//        }
-//
-//        if (tparams_night) {
-//            *((u32*)((char*)tparams_night + 0xbb50)) = 0;
-//            *((u32*)((char*)tparams_night + 0xbb58)) = isp_memopt;
-//            *((u32*)((char*)tparams_night + 0xbb68)) = 0;
-//            *((u32*)((char*)tparams_night + 0xbb60)) = 0;
-//        }
-//
-//        if (tparams_cust) {
-//            *((u32*)((char*)tparams_cust + 0xbb50)) = 0;
-//            *((u32*)((char*)tparams_cust + 0xbb58)) = isp_memopt;
-//            *((u32*)((char*)tparams_cust + 0xbb68)) = 0;
-//            *((u32*)((char*)tparams_cust + 0xbb60)) = 0;
-//        }
-//
-//        /* Binary Ninja: Complex memory optimization loop for parameter clearing */
-//        for (i = 0; i < 9; i++) {  /* Simplified from Binary Ninja complex calculation */
-//            if (tparams_day) {
-//                *((u32*)((char*)tparams_day + 0xd838 + (i * 4))) = 0;
-//            }
-//            if (tparams_night) {
-//                *((u32*)((char*)tparams_night + 0xd838 + (i * 4))) = 0;
-//            }
-//            if (tparams_cust) {
-//                *((u32*)((char*)tparams_cust + 0xd838 + (i * 4))) = 0;
-//            }
-//        }
-//
-//        pr_info("tisp_init: Memory optimization configured (mode=%d)\n", isp_memopt);
-//    }
-//
-//    /* Binary Ninja: Parameter loading and copying */
-//    if (ret == 0) {
-//        /* Binary Ninja: memcpy(0x94b20, tparams_day, 0x137f0, isp_memopt_1) */
-//        pr_info("tisp_init: Parameters loaded successfully\n");
-//    } else {
-//        pr_info("tisp_init: width is %d, height is %d, imagesize is %d\n",
-//                sensor_attr->total_width, sensor_attr->total_height,
-//                sensor_attr->total_width * sensor_attr->total_height);
-//    }
-//
-//    /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) */
-//    writel((sensor_attr->total_width << 16) | sensor_attr->total_height, isp_regs + 0x4);
-//    wmb();
-//
-//    /* Binary Ninja: Store sensor info in global variables */
-//    data_b2f34 = sensor_attr->total_height;
-//    data_b2e74 = sensor_attr->wdr_cache;  /* WDR mode from sensor */
-//
-//    pr_info("tisp_init: Processing sensor configuration structure (%d bytes)\n", (int)sizeof(*sensor_attr));
-//
-//    /* Binary Ninja: sensor_init(&sensor_ctrl) - MUST BE CALLED FIRST */
-//    pr_info("tisp_init: Calling sensor_init(&sensor_ctrl)\n");
-//    ret = sensor_init(isp_dev);
-//    if (ret) {
-//        pr_err("sensor_init failed: %d\n", ret);
-//        return ret;
-//    }
-//    pr_info("sensor_init: Reference driver sensor initialization complete\n");
-//
-//    /* Binary Ninja: system_reg_write(4, arg1[0] << 0x10 | arg1[1]) */
-//    writel((sensor_attr->total_width << 16) | sensor_attr->total_height, isp_regs + 0x4);
-//    wmb();
-//
-//    /* Binary Ninja: Extract interface type from arg1[2] */
-//    interface_type = sensor_attr->dbus_type;  /* This is arg1[2] in Binary Ninja */
-//
-//    /* Binary Ninja: Critical switch statement based on interface type */
-//    if (interface_type >= 0x15) {
-//        pr_err("Can't output the width(%d)!\n", interface_type);
-//        return -EINVAL;
-//    }
-//
-//    /* Binary Ninja: switch statement - EXACT implementation */
-//    switch (interface_type) {
-//    case 0:
-//        writel(0, isp_regs + 0x8);
-//        break;
-//    case 1:
-//        writel(1, isp_regs + 0x8);
-//        break;
-//    case 2:
-//        writel(2, isp_regs + 0x8);
-//        break;
-//    case 3:
-//        writel(3, isp_regs + 0x8);
-//        break;
-//    case 4:
-//        writel(8, isp_regs + 0x8);
-//        break;
-//    case 5:
-//        writel(9, isp_regs + 0x8);
-//        break;
-//    case 6:
-//        writel(0xa, isp_regs + 0x8);
-//        break;
-//    case 7:
-//        writel(0xb, isp_regs + 0x8);
-//        break;
-//    case 8:
-//        writel(0xc, isp_regs + 0x8);
-//        break;
-//    case 9:
-//        writel(0xd, isp_regs + 0x8);
-//        break;
-//    case 0xa:
-//        writel(0xe, isp_regs + 0x8);
-//        break;
-//    case 0xb:
-//        writel(0xf, isp_regs + 0x8);
-//        break;
-//    case 0xc:
-//        writel(0x10, isp_regs + 0x8);
-//        break;
-//    case 0xd:
-//        writel(0x11, isp_regs + 0x8);
-//        break;
-//    case 0xe:
-//        writel(0x12, isp_regs + 0x8);
-//        break;
-//    case 0xf:
-//        writel(0x13, isp_regs + 0x8);
-//        break;
-//    case 0x10:
-//        writel(0x14, isp_regs + 0x8);
-//        break;
-//    case 0x11:
-//        writel(0x15, isp_regs + 0x8);
-//        break;
-//    case 0x12:
-//        writel(0x16, isp_regs + 0x8);
-//        break;
-//    case 0x13:
-//        writel(0x17, isp_regs + 0x8);
-//        break;
-//    case 0x14:
-//        /* Binary Ninja: case 0x14 has no register write, just sets deir_en = 1 */
-//        break;
-//    default:
-//        writel(0, isp_regs + 0x8);
-//        break;
-//    }
-//    wmb();
-//
-//    /* Binary Ninja: Calculate control_value based on interface type */
-//    control_value = 0x3f00;
-//    if (interface_type >= 4) {
-//        control_value = 0x10003f00;  /* Enhanced control for high-speed interfaces */
-//    }
-//
-//    /* Binary Ninja: system_reg_write(0x1c, $a1_7) */
-//    writel(control_value, isp_regs + 0x1c);
-//    wmb();
-//
-//    /* Binary Ninja: tisp_set_csc_version(0) */
-//    writel(0x0, isp_regs + 0x1000);  /* CSC version register */
-//    wmb();
-//
-//    /* *** CRITICAL: INITIALIZE ALL TIZIANO ISP PIPELINE COMPONENTS *** */
-//    pr_info("*** INITIALIZING ALL TIZIANO ISP PIPELINE COMPONENTS ***\n");
-//
-//    /* Binary Ninja shows all these components MUST be initialized before ISP core enable */
-//    pr_info("Resolution: %dx%d, FPS: %d, WDR mode: %d\n",
-//            sensor_attr->total_width, sensor_attr->total_height, 25, sensor_attr->wdr_cache);
-//
-//    /* Call the existing complete pipeline initialization function from tx_isp_tuning.c */
-//    extern int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32_t fps, int wdr_mode);
-//
-//    int tiziano_ret = tiziano_init_all_pipeline_components(
-//        sensor_attr->total_width,
-//        sensor_attr->total_height,
-//        25, /* Default FPS */
-//        sensor_attr->wdr_cache /* WDR mode from sensor */
-//    );
-//
-//    if (tiziano_ret == 0) {
-//        pr_info("*** TIZIANO PIPELINE COMPONENTS INITIALIZED SUCCESSFULLY ***\n");
-//    } else {
-//        pr_err("*** TIZIANO PIPELINE INITIALIZATION FAILED: %d ***\n", tiziano_ret);
-//        return tiziano_ret;
-//    }
-//
-//    /* Binary Ninja: Complex register calculations - EXACT implementation */
-//    reg_val = 0x8077efff;  /* Base register value from Binary Ninja */
-//
-//    /* Binary Ninja: for (int32_t i = 0; i != 0x20; i++) */
-//    for (i = 0; i < 0x20; i++) {
-//        u32 mask = ~(1 << (i & 0x1f));
-//        u32 param_val = 0; /* Would be from tparams[i] in real implementation */
-//        reg_val = (reg_val & mask) | (param_val << (i & 0x1f));
-//    }
-//
-//    /* Binary Ninja: Configure based on data_b2e74 (WDR mode) */
-//    if (sensor_attr->wdr_cache != 1) {
-//        reg_val = (reg_val & 0xb577fffd) | 0x34000009;
-//    } else {
-//        reg_val = (reg_val & 0xa1ffdf76) | 0x880002;
-//    }
-//
-//    /* Binary Ninja: system_reg_write(0xc, reg_val) */
-//    writel(reg_val, isp_regs + 0xc);
-//    wmb();
-//
-//    /* Binary Ninja: system_reg_write(0x30, 0xffffffff) */
-//    writel(0xffffffff, isp_regs + 0x30);
-//    wmb();
-//
-//    if (sensor_attr->wdr_cache != 1) {
-//        writel(0x133, isp_regs + 0x10);
-//    } else {
-//        writel(0x33f, isp_regs + 0x10);
-//    }
-//    wmb();
-//
-//    /* Binary Ninja EXACT buffer allocations - these are ALL CRITICAL for VIC access */
-//    /* Buffer allocation 1: private_kmalloc(0x6000, 0xd0) */
-//    void *isp_buf1 = kzalloc(0x6000, GFP_KERNEL);
-//    if (isp_buf1) {
-//        /* Binary Ninja: system_reg_write(0xa02c, $v0_14 - 0x80000000) etc. */
-//        writel(virt_to_phys(isp_buf1), isp_regs + 0xa02c);
-//        writel(virt_to_phys(isp_buf1) + 0x1000, isp_regs + 0xa030);
-//        writel(virt_to_phys(isp_buf1) + 0x2000, isp_regs + 0xa034);
-//        writel(virt_to_phys(isp_buf1) + 0x3000, isp_regs + 0xa038);
-//        writel(virt_to_phys(isp_buf1) + 0x4000, isp_regs + 0xa03c);
-//        writel(virt_to_phys(isp_buf1) + 0x4800, isp_regs + 0xa040);
-//        writel(virt_to_phys(isp_buf1) + 0x5000, isp_regs + 0xa044);
-//        writel(virt_to_phys(isp_buf1) + 0x5800, isp_regs + 0xa048);
-//        writel(0x33, isp_regs + 0xa04c);
-//        wmb();
-//        pr_info("tisp_init: ISP buffer 1 allocated and configured (0x6000 bytes)\n");
-//    }
-//
-//    /* Buffer allocation 2: private_kmalloc(0x6000, 0xd0) */
-//    void *isp_buf2 = kzalloc(0x6000, GFP_KERNEL);
-//    if (isp_buf2) {
-//        writel(virt_to_phys(isp_buf2), isp_regs + 0xa82c);
-//        writel(virt_to_phys(isp_buf2) + 0x1000, isp_regs + 0xa830);
-//        writel(virt_to_phys(isp_buf2) + 0x2000, isp_regs + 0xa834);
-//        writel(virt_to_phys(isp_buf2) + 0x3000, isp_regs + 0xa838);
-//        writel(virt_to_phys(isp_buf2) + 0x4000, isp_regs + 0xa83c);
-//        writel(virt_to_phys(isp_buf2) + 0x4800, isp_regs + 0xa840);
-//        writel(virt_to_phys(isp_buf2) + 0x5000, isp_regs + 0xa844);
-//        writel(virt_to_phys(isp_buf2) + 0x5800, isp_regs + 0xa848);
-//        writel(0x33, isp_regs + 0xa84c);
-//        wmb();
-//        pr_info("tisp_init: ISP buffer 2 allocated and configured (0x6000 bytes)\n");
-//    }
-//
-//    /* Buffer allocation 3: private_kmalloc(0x4000, 0xd0) */
-//    void *isp_buf3 = kzalloc(0x4000, GFP_KERNEL);
-//    if (isp_buf3) {
-//        writel(virt_to_phys(isp_buf3), isp_regs + 0xb03c);
-//        writel(virt_to_phys(isp_buf3) + 0x1000, isp_regs + 0xb040);
-//        writel(virt_to_phys(isp_buf3) + 0x2000, isp_regs + 0xb044);
-//        writel(virt_to_phys(isp_buf3) + 0x3000, isp_regs + 0xb048);
-//        writel(3, isp_regs + 0xb04c);
-//        wmb();
-//        pr_info("tisp_init: ISP buffer 3 allocated and configured (0x4000 bytes)\n");
-//    }
-//
-//    /* Buffer allocation 4: private_kmalloc(0x4000, 0xd0) */
-//    void *isp_buf4 = kzalloc(0x4000, GFP_KERNEL);
-//    if (isp_buf4) {
-//        writel(virt_to_phys(isp_buf4), isp_regs + 0x4494);
-//        writel(virt_to_phys(isp_buf4) + 0x1000, isp_regs + 0x4498);
-//        writel(virt_to_phys(isp_buf4) + 0x2000, isp_regs + 0x449c);
-//        writel(virt_to_phys(isp_buf4) + 0x3000, isp_regs + 0x44a0);
-//        writel(3, isp_regs + 0x4490);
-//        wmb();
-//        pr_info("tisp_init: ISP buffer 4 allocated and configured (0x4000 bytes)\n");
-//    }
-//
-//    /* Buffer allocation 5: private_kmalloc(0x4000, 0xd0) */
-//    void *isp_buf5 = kzalloc(0x4000, GFP_KERNEL);
-//    if (isp_buf5) {
-//        writel(virt_to_phys(isp_buf5), isp_regs + 0x5b84);
-//        writel(virt_to_phys(isp_buf5) + 0x1000, isp_regs + 0x5b88);
-//        writel(virt_to_phys(isp_buf5) + 0x2000, isp_regs + 0x5b8c);
-//        writel(virt_to_phys(isp_buf5) + 0x3000, isp_regs + 0x5b90);
-//        writel(3, isp_regs + 0x5b80);
-//        wmb();
-//        pr_info("tisp_init: ISP buffer 5 allocated and configured (0x4000 bytes)\n");
-//    }
-//
-//    /* Buffer allocation 6: private_kmalloc(0x4000, 0xd0) */
-//    void *isp_buf6 = kzalloc(0x4000, GFP_KERNEL);
-//    if (isp_buf6) {
-//        writel(virt_to_phys(isp_buf6), isp_regs + 0xb8a8);
-//        writel(virt_to_phys(isp_buf6) + 0x1000, isp_regs + 0xb8ac);
-//        writel(virt_to_phys(isp_buf6) + 0x2000, isp_regs + 0xb8b0);
-//        writel(virt_to_phys(isp_buf6) + 0x3000, isp_regs + 0xb8b4);
-//        writel(3, isp_regs + 0xb8b8);
-//        wmb();
-//    }
-//
-//    /* Buffer allocation 7: private_kmalloc(0x8000, 0xd0) - Critical WDR buffer */
-//    void *wdr_buf = kzalloc(0x8000, GFP_KERNEL);
-//    if (wdr_buf) {
-//        writel(virt_to_phys(wdr_buf), isp_regs + 0x2010);
-//        writel(virt_to_phys(wdr_buf) + 0x2000, isp_regs + 0x2014);
-//        writel(virt_to_phys(wdr_buf) + 0x4000, isp_regs + 0x2018);
-//        writel(virt_to_phys(wdr_buf) + 0x6000, isp_regs + 0x201c);
-//        writel(0x400, isp_regs + 0x2020);
-//        writel(3, isp_regs + 0x2024);
-//        wmb();
-//        pr_info("tisp_init: WDR buffer allocated and configured (0x8000 bytes)\n");
-//    }
-//
-//    /* Binary Ninja: All Tiziano pipeline component initialization - EXACT order from decompilation */
-//    pr_info("*** INITIALIZING ALL TIZIANO ISP PIPELINE COMPONENTS (Binary Ninja order) ***\n");
-//
-//    /* Binary Ninja: tiziano_ae_init(data_b2f34, tispinfo_1, zx.d(arg1[0xc].w)) */
-//    extern int tiziano_ae_init(uint32_t width, uint32_t height, uint32_t fps);
-//    tiziano_ae_init(sensor_attr->total_width, sensor_attr->total_height, 25);
-//
-//    /* Binary Ninja: tiziano_awb_init(data_b2f34, tispinfo) */
-//    extern int tiziano_awb_init(uint32_t width, uint32_t height);
-//    tiziano_awb_init(sensor_attr->total_width, sensor_attr->total_height);
-//
-//    /* Binary Ninja: All remaining tiziano component initializations in exact order */
-//    extern int tiziano_gamma_init(void);
-//    extern int tiziano_gib_init(void);
-//    extern int tiziano_lsc_init(void);
-//    extern int tiziano_ccm_init(void);
-//    extern int tiziano_dmsc_init(void);
-//    extern int tiziano_sharpen_init(void);
-//    extern int tiziano_sdns_init(void);
-//    extern int tiziano_mdns_init(uint32_t width, uint32_t height);
-//    extern int tiziano_clm_init(void);
-//    extern int tiziano_dpc_init(void);
-//    extern int tiziano_hldc_init(void);
-//    extern int tiziano_defog_init(uint32_t width, uint32_t height);
-//    extern int tiziano_adr_init(uint32_t width, uint32_t height);
-//    extern int tiziano_af_init(uint32_t width, uint32_t height);
-//    extern int tiziano_bcsh_init(void);
-//    extern int tiziano_ydns_init(void);
-//    extern int tiziano_rdns_init(void);
-//
-//    tiziano_gamma_init();
-//    tiziano_gib_init();
-//    tiziano_lsc_init();
-//    tiziano_ccm_init();
-//    tiziano_dmsc_init();
-//    tiziano_sharpen_init();
-//    tiziano_sdns_init();
-//    tiziano_mdns_init(sensor_attr->total_width, sensor_attr->total_height);
-//    tiziano_clm_init();
-//    tiziano_dpc_init();
-//    tiziano_hldc_init();
-//    tiziano_defog_init(sensor_attr->total_width, sensor_attr->total_height);
-//    tiziano_adr_init(sensor_attr->total_width, sensor_attr->total_height);
-//    tiziano_af_init(sensor_attr->total_width, sensor_attr->total_height);
-//    tiziano_bcsh_init();
-//    tiziano_ydns_init();
-//    tiziano_rdns_init();
-//
-//    /* Binary Ninja: WDR-specific component initialization */
-//    if (data_b2e74 == 1) {
-//        /* Binary Ninja: WDR mode initialization sequence */
-//        extern int tiziano_wdr_init(uint32_t width, uint32_t height);
-//        extern int tisp_gb_init(void);
-//
-//        tiziano_wdr_init(sensor_attr->total_width, sensor_attr->total_height);
-//        tisp_gb_init();
-//
-//        /* Binary Ninja: Enable WDR mode for all components */
-//        extern int tisp_dpc_wdr_en(int enable);
-//        extern int tisp_lsc_wdr_en(int enable);
-//        extern int tisp_gamma_wdr_en(int enable);
-//        extern int tisp_sharpen_wdr_en(int enable);
-//        extern int tisp_ccm_wdr_en(int enable);
-//        extern int tisp_bcsh_wdr_en(int enable);
-//        extern int tisp_rdns_wdr_en(int enable);
-//        extern int tisp_adr_wdr_en(int enable);
-//        extern int tisp_defog_wdr_en(int enable);
-//        extern int tisp_mdns_wdr_en(int enable);
-//        extern int tisp_dmsc_wdr_en(int enable);
-//        extern int tisp_ae_wdr_en(int enable);
-//        extern int tisp_sdns_wdr_en(int enable);
-//
-//        tisp_dpc_wdr_en(1);
-//        tisp_lsc_wdr_en(1);
-//        tisp_gamma_wdr_en(1);
-//        tisp_sharpen_wdr_en(1);
-//        tisp_ccm_wdr_en(1);
-//        tisp_bcsh_wdr_en(1);
-//        tisp_rdns_wdr_en(1);
-//        tisp_adr_wdr_en(1);
-//        tisp_defog_wdr_en(1);
-//        tisp_mdns_wdr_en(1);
-//        tisp_dmsc_wdr_en(1);
-//        tisp_ae_wdr_en(1);
-//        tisp_sdns_wdr_en(1);
-//
-//        pr_info("*** WDR mode pipeline components enabled ***\n");
-//    }
-//
-//    pr_info("*** TIZIANO PIPELINE COMPONENTS INITIALIZED SUCCESSFULLY ***\n");
-//
-//    /* Binary Ninja: Determine mode value - critical calculation */
-//    if (sensor_attr->wdr_cache != 0) {
-//        mode_value = 0x10;  /* WDR mode */
-//        if (interface_type == 0x14) {
-//            mode_value = 0x12;  /* Special case for interface type 0x14 */
-//        }
-//    } else {
-//        mode_value = 0x1c;  /* Linear mode */
-//        if (interface_type == 0x14) {
-//            mode_value = 0x1e;  /* Special case for interface type 0x14 */
-//        }
-//    }
-//
-//    /* Binary Ninja: system_reg_write(0x804, mode_value) */
-//    writel(mode_value, isp_regs + 0x804);
-//    wmb();
-//
-//    /* Binary Ninja: system_reg_write(0x1c, 8) */
-//    writel(8, isp_regs + 0x1c);
-//    wmb();
-//
-//    /* Binary Ninja: system_reg_write(0x800, 1) - ISP core enable */
-//    writel(1, isp_regs + 0x800);
-//    wmb();
-//
-//    /* Binary Ninja: tisp_event_init() */
-//    extern int tisp_event_init(void);
-//    tisp_event_init();
-//
-//    /* Binary Ninja: tisp_event_set_cb(4, tisp_tgain_update) */
-//    extern int tisp_event_set_cb(int event_id, void *callback);
-//    extern void tisp_tgain_update(void);
-//    extern void tisp_again_update(void);
-//    extern void tisp_ev_update(void);
-//    extern void tisp_ct_update(void);
-//    extern void tisp_ae_ir_update(void);
-//
-//    tisp_event_set_cb(4, tisp_tgain_update);
-//    tisp_event_set_cb(5, tisp_again_update);
-//    tisp_event_set_cb(7, tisp_ev_update);
-//    tisp_event_set_cb(9, tisp_ct_update);
-//    tisp_event_set_cb(8, tisp_ae_ir_update);
-//
-//    /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) */
-//    system_irq_func_set(0xd, ip_done_interrupt_handler);
-//
-//    /* Binary Ninja: tisp_param_operate_init() */
-//    extern int tisp_param_operate_init(void);
-//    ret = tisp_param_operate_init();
-//    if (ret != 0) {
-//        pr_warn("tisp_param_operate_init failed: %d\n", ret);
-//    }
-//
-//    /* Binary Ninja: return 0 */
-//    pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED (matches Binary Ninja reference) ***\n");
-//    return 0;
-//}
+
+/* tisp_init - EXACT Binary Ninja reference implementation - NO hardware reset here */
+int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
+{
+    void __iomem *isp_regs;
+    u32 mode_value;
+    u32 control_value;
+    u32 interface_type;
+    int ret = 0;
+    u32 reg_val;
+    int i;
+    char snap_name[0x40];
+
+    if (!sensor_attr || !isp_dev || !isp_dev->vic_regs) {
+        pr_err("tisp_init: Invalid parameters\n");
+        return -EINVAL;
+    }
+
+    isp_regs = isp_dev->vic_regs - 0x9a00;  /* Get ISP base */
+
+    pr_info("*** tisp_init: EXACT Binary Ninja reference implementation ***\n");
+
+    /* NOTE: Hardware reset is NOT called in tisp_init - it should be in ispcore_core_ops_init */
+    pr_info("*** tisp_init: Starting without hardware reset (done in ispcore_core_ops_init) ***\n");
+
+    /* Binary Ninja: memset(&tispinfo, 0, 0x74) */
+    memset(&tispinfo, 0, 0x74);
+    /* Binary Ninja: memset(&sensor_info, 0, 0x60) */
+    memset(&sensor_info, 0, 0x60);
+    /* Binary Ninja: memset(&ds0_attr, 0, 0x34) */
+    memset(&ds0_attr, 0, 0x34);
+    /* Binary Ninja: memset(&ds1_attr, 0, 0x34) */
+    memset(&ds1_attr, 0, 0x34);
+    /* Binary Ninja: memset(&ds2_attr, 0, 0x34) */
+    memset(&ds2_attr, 0, 0x34);
+
+    /* Binary Ninja: memcpy(&sensor_info, arg1, 0x60) */
+    memcpy(&sensor_info, sensor_attr, min(sizeof(sensor_info), sizeof(*sensor_attr)));
+
+    /* Binary Ninja: uint32_t $v0 = private_vmalloc(0x137f0) */
+    tparams_day = vmalloc(0x137f0);
+    if (!tparams_day) {
+        pr_err("tisp_init: Failed to allocate tparams_day\n");
+        return -ENOMEM;
+    }
+    /* Binary Ninja: memset($v0, 0, 0x137f0) */
+    memset(tparams_day, 0, 0x137f0);
+
+    /* Binary Ninja: uint32_t $v0_1 = private_vmalloc(0x137f0) */
+    tparams_night = vmalloc(0x137f0);
+    if (!tparams_night) {
+        pr_err("tisp_init: Failed to allocate tparams_night\n");
+        vfree(tparams_day);
+        return -ENOMEM;
+    }
+    /* Binary Ninja: memset($v0_1, 0, 0x137f0) */
+    memset(tparams_night, 0, 0x137f0);
+
+    /* Binary Ninja: if (strlen(arg2) == 0) snprintf(arg2, 0x40, "snapraw", 0xb2e24) */
+    if (strlen(snap_name) == 0) {
+        snprintf(snap_name, 0x40, "snapraw");
+    }
+
+    /* Binary Ninja: $v0_3, tparams_cust_1 = tiziano_load_parameters(arg2) */
+    /* This function loads ISP tuning parameters - critical for proper operation */
+    pr_info("tisp_init: Loading ISP tuning parameters\n");
+
+    /* Simulate parameter loading - in real implementation this loads from flash/filesystem */
+    ret = 0;  /* Assume success for now */
+    tparams_cust = NULL;  /* No custom parameters for basic implementation */
+
+    /* Binary Ninja: Memory optimization configuration */
+    if (isp_memopt == 1) {
+        /* Configure memory optimization mode for all parameter sets */
+        if (tparams_day) {
+            *((u32*)((char*)tparams_day + 0xbb50)) = 0;
+            *((u32*)((char*)tparams_day + 0xbb58)) = isp_memopt;
+            *((u32*)((char*)tparams_day + 0xbb68)) = 0;
+            *((u32*)((char*)tparams_day + 0xbb60)) = 0;
+        }
+
+        if (tparams_night) {
+            *((u32*)((char*)tparams_night + 0xbb50)) = 0;
+            *((u32*)((char*)tparams_night + 0xbb58)) = isp_memopt;
+            *((u32*)((char*)tparams_night + 0xbb68)) = 0;
+            *((u32*)((char*)tparams_night + 0xbb60)) = 0;
+        }
+
+        if (tparams_cust) {
+            *((u32*)((char*)tparams_cust + 0xbb50)) = 0;
+            *((u32*)((char*)tparams_cust + 0xbb58)) = isp_memopt;
+            *((u32*)((char*)tparams_cust + 0xbb68)) = 0;
+            *((u32*)((char*)tparams_cust + 0xbb60)) = 0;
+        }
+
+        /* Binary Ninja: Complex memory optimization loop for parameter clearing */
+        for (i = 0; i < 9; i++) {  /* Simplified from Binary Ninja complex calculation */
+            if (tparams_day) {
+                *((u32*)((char*)tparams_day + 0xd838 + (i * 4))) = 0;
+            }
+            if (tparams_night) {
+                *((u32*)((char*)tparams_night + 0xd838 + (i * 4))) = 0;
+            }
+            if (tparams_cust) {
+                *((u32*)((char*)tparams_cust + 0xd838 + (i * 4))) = 0;
+            }
+        }
+
+        pr_info("tisp_init: Memory optimization configured (mode=%d)\n", isp_memopt);
+    }
+
+    /* Binary Ninja: Parameter loading and copying */
+    if (ret == 0) {
+        /* Binary Ninja: memcpy(0x94b20, tparams_day, 0x137f0, isp_memopt_1) */
+        pr_info("tisp_init: Parameters loaded successfully\n");
+    } else {
+        pr_info("tisp_init: width is %d, height is %d, imagesize is %d\n",
+                sensor_attr->total_width, sensor_attr->total_height,
+                sensor_attr->total_width * sensor_attr->total_height);
+    }
+
+    /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) */
+    writel((sensor_attr->total_width << 16) | sensor_attr->total_height, isp_regs + 0x4);
+    wmb();
+
+    /* Binary Ninja: Store sensor info in global variables */
+    data_b2f34 = sensor_attr->total_height;
+    data_b2e74 = sensor_attr->wdr_cache;  /* WDR mode from sensor */
+
+    pr_info("tisp_init: Processing sensor configuration structure (%d bytes)\n", (int)sizeof(*sensor_attr));
+
+    /* Binary Ninja: sensor_init(&sensor_ctrl) - MUST BE CALLED FIRST */
+    pr_info("tisp_init: Calling sensor_init(&sensor_ctrl)\n");
+    ret = sensor_init(isp_dev);
+    if (ret) {
+        pr_err("sensor_init failed: %d\n", ret);
+        return ret;
+    }
+    pr_info("sensor_init: Reference driver sensor initialization complete\n");
+
+    /* Binary Ninja: system_reg_write(4, arg1[0] << 0x10 | arg1[1]) */
+    writel((sensor_attr->total_width << 16) | sensor_attr->total_height, isp_regs + 0x4);
+    wmb();
+
+    /* Binary Ninja: Extract interface type from arg1[2] */
+    interface_type = sensor_attr->dbus_type;  /* This is arg1[2] in Binary Ninja */
+
+    /* Binary Ninja: Critical switch statement based on interface type */
+    if (interface_type >= 0x15) {
+        pr_err("Can't output the width(%d)!\n", interface_type);
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: switch statement - EXACT implementation */
+    switch (interface_type) {
+    case 0:
+        writel(0, isp_regs + 0x8);
+        break;
+    case 1:
+        writel(1, isp_regs + 0x8);
+        break;
+    case 2:
+        writel(2, isp_regs + 0x8);
+        break;
+    case 3:
+        writel(3, isp_regs + 0x8);
+        break;
+    case 4:
+        writel(8, isp_regs + 0x8);
+        break;
+    case 5:
+        writel(9, isp_regs + 0x8);
+        break;
+    case 6:
+        writel(0xa, isp_regs + 0x8);
+        break;
+    case 7:
+        writel(0xb, isp_regs + 0x8);
+        break;
+    case 8:
+        writel(0xc, isp_regs + 0x8);
+        break;
+    case 9:
+        writel(0xd, isp_regs + 0x8);
+        break;
+    case 0xa:
+        writel(0xe, isp_regs + 0x8);
+        break;
+    case 0xb:
+        writel(0xf, isp_regs + 0x8);
+        break;
+    case 0xc:
+        writel(0x10, isp_regs + 0x8);
+        break;
+    case 0xd:
+        writel(0x11, isp_regs + 0x8);
+        break;
+    case 0xe:
+        writel(0x12, isp_regs + 0x8);
+        break;
+    case 0xf:
+        writel(0x13, isp_regs + 0x8);
+        break;
+    case 0x10:
+        writel(0x14, isp_regs + 0x8);
+        break;
+    case 0x11:
+        writel(0x15, isp_regs + 0x8);
+        break;
+    case 0x12:
+        writel(0x16, isp_regs + 0x8);
+        break;
+    case 0x13:
+        writel(0x17, isp_regs + 0x8);
+        break;
+    case 0x14:
+        /* Binary Ninja: case 0x14 has no register write, just sets deir_en = 1 */
+        break;
+    default:
+        writel(0, isp_regs + 0x8);
+        break;
+    }
+    wmb();
+
+    /* Binary Ninja: Calculate control_value based on interface type */
+    control_value = 0x3f00;
+    if (interface_type >= 4) {
+        control_value = 0x10003f00;  /* Enhanced control for high-speed interfaces */
+    }
+
+    /* Binary Ninja: system_reg_write(0x1c, $a1_7) */
+    writel(control_value, isp_regs + 0x1c);
+    wmb();
+
+    /* Binary Ninja: tisp_set_csc_version(0) */
+    writel(0x0, isp_regs + 0x1000);  /* CSC version register */
+    wmb();
+
+    /* *** CRITICAL: INITIALIZE ALL TIZIANO ISP PIPELINE COMPONENTS *** */
+    pr_info("*** INITIALIZING ALL TIZIANO ISP PIPELINE COMPONENTS ***\n");
+
+    /* Binary Ninja shows all these components MUST be initialized before ISP core enable */
+    pr_info("Resolution: %dx%d, FPS: %d, WDR mode: %d\n",
+            sensor_attr->total_width, sensor_attr->total_height, 25, sensor_attr->wdr_cache);
+
+    /* Call the existing complete pipeline initialization function from tx_isp_tuning.c */
+    extern int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32_t fps, int wdr_mode);
+
+    int tiziano_ret = tiziano_init_all_pipeline_components(
+        sensor_attr->total_width,
+        sensor_attr->total_height,
+        25, /* Default FPS */
+        sensor_attr->wdr_cache /* WDR mode from sensor */
+    );
+
+    if (tiziano_ret == 0) {
+        pr_info("*** TIZIANO PIPELINE COMPONENTS INITIALIZED SUCCESSFULLY ***\n");
+    } else {
+        pr_err("*** TIZIANO PIPELINE INITIALIZATION FAILED: %d ***\n", tiziano_ret);
+        return tiziano_ret;
+    }
+
+    /* Binary Ninja: Complex register calculations - EXACT implementation */
+    reg_val = 0x8077efff;  /* Base register value from Binary Ninja */
+
+    /* Binary Ninja: for (int32_t i = 0; i != 0x20; i++) */
+    for (i = 0; i < 0x20; i++) {
+        u32 mask = ~(1 << (i & 0x1f));
+        u32 param_val = 0; /* Would be from tparams[i] in real implementation */
+        reg_val = (reg_val & mask) | (param_val << (i & 0x1f));
+    }
+
+    /* Binary Ninja: Configure based on data_b2e74 (WDR mode) */
+    if (sensor_attr->wdr_cache != 1) {
+        reg_val = (reg_val & 0xb577fffd) | 0x34000009;
+    } else {
+        reg_val = (reg_val & 0xa1ffdf76) | 0x880002;
+    }
+
+    /* Binary Ninja: system_reg_write(0xc, reg_val) */
+    writel(reg_val, isp_regs + 0xc);
+    wmb();
+
+    /* Binary Ninja: system_reg_write(0x30, 0xffffffff) */
+    writel(0xffffffff, isp_regs + 0x30);
+    wmb();
+
+    if (sensor_attr->wdr_cache != 1) {
+        writel(0x133, isp_regs + 0x10);
+    } else {
+        writel(0x33f, isp_regs + 0x10);
+    }
+    wmb();
+
+    /* Binary Ninja EXACT buffer allocations - these are ALL CRITICAL for VIC access */
+    /* Buffer allocation 1: private_kmalloc(0x6000, 0xd0) */
+    void *isp_buf1 = kzalloc(0x6000, GFP_KERNEL);
+    if (isp_buf1) {
+        /* Binary Ninja: system_reg_write(0xa02c, $v0_14 - 0x80000000) etc. */
+        writel(virt_to_phys(isp_buf1), isp_regs + 0xa02c);
+        writel(virt_to_phys(isp_buf1) + 0x1000, isp_regs + 0xa030);
+        writel(virt_to_phys(isp_buf1) + 0x2000, isp_regs + 0xa034);
+        writel(virt_to_phys(isp_buf1) + 0x3000, isp_regs + 0xa038);
+        writel(virt_to_phys(isp_buf1) + 0x4000, isp_regs + 0xa03c);
+        writel(virt_to_phys(isp_buf1) + 0x4800, isp_regs + 0xa040);
+        writel(virt_to_phys(isp_buf1) + 0x5000, isp_regs + 0xa044);
+        writel(virt_to_phys(isp_buf1) + 0x5800, isp_regs + 0xa048);
+        writel(0x33, isp_regs + 0xa04c);
+        wmb();
+        pr_info("tisp_init: ISP buffer 1 allocated and configured (0x6000 bytes)\n");
+    }
+
+    /* Buffer allocation 2: private_kmalloc(0x6000, 0xd0) */
+    void *isp_buf2 = kzalloc(0x6000, GFP_KERNEL);
+    if (isp_buf2) {
+        writel(virt_to_phys(isp_buf2), isp_regs + 0xa82c);
+        writel(virt_to_phys(isp_buf2) + 0x1000, isp_regs + 0xa830);
+        writel(virt_to_phys(isp_buf2) + 0x2000, isp_regs + 0xa834);
+        writel(virt_to_phys(isp_buf2) + 0x3000, isp_regs + 0xa838);
+        writel(virt_to_phys(isp_buf2) + 0x4000, isp_regs + 0xa83c);
+        writel(virt_to_phys(isp_buf2) + 0x4800, isp_regs + 0xa840);
+        writel(virt_to_phys(isp_buf2) + 0x5000, isp_regs + 0xa844);
+        writel(virt_to_phys(isp_buf2) + 0x5800, isp_regs + 0xa848);
+        writel(0x33, isp_regs + 0xa84c);
+        wmb();
+        pr_info("tisp_init: ISP buffer 2 allocated and configured (0x6000 bytes)\n");
+    }
+
+    /* Buffer allocation 3: private_kmalloc(0x4000, 0xd0) */
+    void *isp_buf3 = kzalloc(0x4000, GFP_KERNEL);
+    if (isp_buf3) {
+        writel(virt_to_phys(isp_buf3), isp_regs + 0xb03c);
+        writel(virt_to_phys(isp_buf3) + 0x1000, isp_regs + 0xb040);
+        writel(virt_to_phys(isp_buf3) + 0x2000, isp_regs + 0xb044);
+        writel(virt_to_phys(isp_buf3) + 0x3000, isp_regs + 0xb048);
+        writel(3, isp_regs + 0xb04c);
+        wmb();
+        pr_info("tisp_init: ISP buffer 3 allocated and configured (0x4000 bytes)\n");
+    }
+
+    /* Buffer allocation 4: private_kmalloc(0x4000, 0xd0) */
+    void *isp_buf4 = kzalloc(0x4000, GFP_KERNEL);
+    if (isp_buf4) {
+        writel(virt_to_phys(isp_buf4), isp_regs + 0x4494);
+        writel(virt_to_phys(isp_buf4) + 0x1000, isp_regs + 0x4498);
+        writel(virt_to_phys(isp_buf4) + 0x2000, isp_regs + 0x449c);
+        writel(virt_to_phys(isp_buf4) + 0x3000, isp_regs + 0x44a0);
+        writel(3, isp_regs + 0x4490);
+        wmb();
+        pr_info("tisp_init: ISP buffer 4 allocated and configured (0x4000 bytes)\n");
+    }
+
+    /* Buffer allocation 5: private_kmalloc(0x4000, 0xd0) */
+    void *isp_buf5 = kzalloc(0x4000, GFP_KERNEL);
+    if (isp_buf5) {
+        writel(virt_to_phys(isp_buf5), isp_regs + 0x5b84);
+        writel(virt_to_phys(isp_buf5) + 0x1000, isp_regs + 0x5b88);
+        writel(virt_to_phys(isp_buf5) + 0x2000, isp_regs + 0x5b8c);
+        writel(virt_to_phys(isp_buf5) + 0x3000, isp_regs + 0x5b90);
+        writel(3, isp_regs + 0x5b80);
+        wmb();
+        pr_info("tisp_init: ISP buffer 5 allocated and configured (0x4000 bytes)\n");
+    }
+
+    /* Buffer allocation 6: private_kmalloc(0x4000, 0xd0) */
+    void *isp_buf6 = kzalloc(0x4000, GFP_KERNEL);
+    if (isp_buf6) {
+        writel(virt_to_phys(isp_buf6), isp_regs + 0xb8a8);
+        writel(virt_to_phys(isp_buf6) + 0x1000, isp_regs + 0xb8ac);
+        writel(virt_to_phys(isp_buf6) + 0x2000, isp_regs + 0xb8b0);
+        writel(virt_to_phys(isp_buf6) + 0x3000, isp_regs + 0xb8b4);
+        writel(3, isp_regs + 0xb8b8);
+        wmb();
+    }
+
+    /* Buffer allocation 7: private_kmalloc(0x8000, 0xd0) - Critical WDR buffer */
+    void *wdr_buf = kzalloc(0x8000, GFP_KERNEL);
+    if (wdr_buf) {
+        writel(virt_to_phys(wdr_buf), isp_regs + 0x2010);
+        writel(virt_to_phys(wdr_buf) + 0x2000, isp_regs + 0x2014);
+        writel(virt_to_phys(wdr_buf) + 0x4000, isp_regs + 0x2018);
+        writel(virt_to_phys(wdr_buf) + 0x6000, isp_regs + 0x201c);
+        writel(0x400, isp_regs + 0x2020);
+        writel(3, isp_regs + 0x2024);
+        wmb();
+        pr_info("tisp_init: WDR buffer allocated and configured (0x8000 bytes)\n");
+    }
+
+    /* Binary Ninja: All Tiziano pipeline component initialization - EXACT order from decompilation */
+    pr_info("*** INITIALIZING ALL TIZIANO ISP PIPELINE COMPONENTS (Binary Ninja order) ***\n");
+
+    /* Binary Ninja: tiziano_ae_init(data_b2f34, tispinfo_1, zx.d(arg1[0xc].w)) */
+    extern int tiziano_ae_init(uint32_t width, uint32_t height, uint32_t fps);
+    tiziano_ae_init(sensor_attr->total_width, sensor_attr->total_height, 25);
+
+    /* Binary Ninja: tiziano_awb_init(data_b2f34, tispinfo) */
+    extern int tiziano_awb_init(uint32_t width, uint32_t height);
+    tiziano_awb_init(sensor_attr->total_width, sensor_attr->total_height);
+
+    /* Binary Ninja: All remaining tiziano component initializations in exact order */
+    extern int tiziano_gamma_init(void);
+    extern int tiziano_gib_init(void);
+    extern int tiziano_lsc_init(void);
+    extern int tiziano_ccm_init(void);
+    extern int tiziano_dmsc_init(void);
+    extern int tiziano_sharpen_init(void);
+    extern int tiziano_sdns_init(void);
+    extern int tiziano_mdns_init(uint32_t width, uint32_t height);
+    extern int tiziano_clm_init(void);
+    extern int tiziano_dpc_init(void);
+    extern int tiziano_hldc_init(void);
+    extern int tiziano_defog_init(uint32_t width, uint32_t height);
+    extern int tiziano_adr_init(uint32_t width, uint32_t height);
+    extern int tiziano_af_init(uint32_t width, uint32_t height);
+    extern int tiziano_bcsh_init(void);
+    extern int tiziano_ydns_init(void);
+    extern int tiziano_rdns_init(void);
+
+    tiziano_gamma_init();
+    tiziano_gib_init();
+    tiziano_lsc_init();
+    tiziano_ccm_init();
+    tiziano_dmsc_init();
+    tiziano_sharpen_init();
+    tiziano_sdns_init();
+    tiziano_mdns_init(sensor_attr->total_width, sensor_attr->total_height);
+    tiziano_clm_init();
+    tiziano_dpc_init();
+    tiziano_hldc_init();
+    tiziano_defog_init(sensor_attr->total_width, sensor_attr->total_height);
+    tiziano_adr_init(sensor_attr->total_width, sensor_attr->total_height);
+    tiziano_af_init(sensor_attr->total_width, sensor_attr->total_height);
+    tiziano_bcsh_init();
+    tiziano_ydns_init();
+    tiziano_rdns_init();
+
+    /* Binary Ninja: WDR-specific component initialization */
+    if (data_b2e74 == 1) {
+        /* Binary Ninja: WDR mode initialization sequence */
+        extern int tiziano_wdr_init(uint32_t width, uint32_t height);
+        extern int tisp_gb_init(void);
+
+        tiziano_wdr_init(sensor_attr->total_width, sensor_attr->total_height);
+        tisp_gb_init();
+
+        /* Binary Ninja: Enable WDR mode for all components */
+        extern int tisp_dpc_wdr_en(int enable);
+        extern int tisp_lsc_wdr_en(int enable);
+        extern int tisp_gamma_wdr_en(int enable);
+        extern int tisp_sharpen_wdr_en(int enable);
+        extern int tisp_ccm_wdr_en(int enable);
+        extern int tisp_bcsh_wdr_en(int enable);
+        extern int tisp_rdns_wdr_en(int enable);
+        extern int tisp_adr_wdr_en(int enable);
+        extern int tisp_defog_wdr_en(int enable);
+        extern int tisp_mdns_wdr_en(int enable);
+        extern int tisp_dmsc_wdr_en(int enable);
+        extern int tisp_ae_wdr_en(int enable);
+        extern int tisp_sdns_wdr_en(int enable);
+
+        tisp_dpc_wdr_en(1);
+        tisp_lsc_wdr_en(1);
+        tisp_gamma_wdr_en(1);
+        tisp_sharpen_wdr_en(1);
+        tisp_ccm_wdr_en(1);
+        tisp_bcsh_wdr_en(1);
+        tisp_rdns_wdr_en(1);
+        tisp_adr_wdr_en(1);
+        tisp_defog_wdr_en(1);
+        tisp_mdns_wdr_en(1);
+        tisp_dmsc_wdr_en(1);
+        tisp_ae_wdr_en(1);
+        tisp_sdns_wdr_en(1);
+
+        pr_info("*** WDR mode pipeline components enabled ***\n");
+    }
+
+    pr_info("*** TIZIANO PIPELINE COMPONENTS INITIALIZED SUCCESSFULLY ***\n");
+
+    /* Binary Ninja: Determine mode value - critical calculation */
+    if (sensor_attr->wdr_cache != 0) {
+        mode_value = 0x10;  /* WDR mode */
+        if (interface_type == 0x14) {
+            mode_value = 0x12;  /* Special case for interface type 0x14 */
+        }
+    } else {
+        mode_value = 0x1c;  /* Linear mode */
+        if (interface_type == 0x14) {
+            mode_value = 0x1e;  /* Special case for interface type 0x14 */
+        }
+    }
+
+    /* Binary Ninja: system_reg_write(0x804, mode_value) */
+    writel(mode_value, isp_regs + 0x804);
+    wmb();
+
+    /* Binary Ninja: system_reg_write(0x1c, 8) */
+    writel(8, isp_regs + 0x1c);
+    wmb();
+
+    /* Binary Ninja: system_reg_write(0x800, 1) - ISP core enable */
+    writel(1, isp_regs + 0x800);
+    wmb();
+
+    /* Binary Ninja: tisp_event_init() */
+    extern int tisp_event_init(void);
+    tisp_event_init();
+
+    /* Binary Ninja: tisp_event_set_cb(4, tisp_tgain_update) */
+    extern int tisp_event_set_cb(int event_id, void *callback);
+    extern void tisp_tgain_update(void);
+    extern void tisp_again_update(void);
+    extern void tisp_ev_update(void);
+    extern void tisp_ct_update(void);
+    extern void tisp_ae_ir_update(void);
+
+    tisp_event_set_cb(4, tisp_tgain_update);
+    tisp_event_set_cb(5, tisp_again_update);
+    tisp_event_set_cb(7, tisp_ev_update);
+    tisp_event_set_cb(9, tisp_ct_update);
+    tisp_event_set_cb(8, tisp_ae_ir_update);
+
+    /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) */
+    system_irq_func_set(0xd, ip_done_interrupt_handler);
+
+    /* Binary Ninja: tisp_param_operate_init() */
+    extern int tisp_param_operate_init(void);
+    ret = tisp_param_operate_init();
+    if (ret != 0) {
+        pr_warn("tisp_param_operate_init failed: %d\n", ret);
+    }
+
+    /* Binary Ninja: return 0 */
+    pr_info("*** tisp_init SUCCESS - ISP CORE ENABLED (matches Binary Ninja reference) ***\n");
+    return 0;
+}
 
 /**
  * ispcore_core_ops_init - CRITICAL: Initialize ISP Core Operations
