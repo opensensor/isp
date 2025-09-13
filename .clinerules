@@ -1,62 +1,139 @@
-# Cline Rules for C MCP Driver Implementation
+Cline Rules for C MCP Driver Implementation - Video Input Focus
+PRIMARY OBJECTIVE: Video Input (VIN) Implementation
 
-## CRITICAL: Reference Driver Adherence
-- NEVER embed logic from one reference method into another method
-- Each method in our implementation must correspond EXACTLY to one method in the reference driver
-- If reference has method `foo()` and `bar()`, implement them as separate `foo()` and `bar()` - do NOT combine their logic
-- Keep method boundaries identical to reference driver
-- If you're unsure about method structure, ASK to see the reference method before implementing
+Focus Area: Video input (VIN) subsystem - probe/init sequencing, hardware initialization, and data flow
+Priority: VIN-related methods take precedence over other driver components
+Goal: Achieve functional video input initialization matching reference hardware patterns
 
-## Method Implementation Rules
-- One reference method = One implementation method (1:1 mapping)
-- Match the core function signature from reference (return type, parameters, general structure)
-- **Naming flexibility**: Some variances in implementation naming conventions are acceptable, but maintain clarity and consistency
-- **Primary goal**: Match the hardware initialization patterns of the reference driver using Binary Ninja MCP
-- Implement ONLY the logic that belongs to that specific method
-- If reference method calls other methods, your implementation should also call those methods (don't inline)
-- Keep methods focused and single-purpose like the reference
-- Using hard-coded offsets like +0x2c is unsafe and makes our code brittle. Replace the offset-based access with proper
-struct member access based on our actual driver structures on an as needed basis.
+Dual Reference Strategy
 
-## MCP Integration Guidelines
-- Add MCP calls at the SAME points where reference driver would log/report
-- MCP calls are ADDITIONS to reference logic, not replacements
-- Format: `mcp_log_info("method_name: description", data);`
-- Place MCP calls at method entry, key decision points, and method exit
-- Don't let MCP calls change the core logic flow
+T30 Implementation (Primary Reference):
 
-## Code Organization
-- Match reference file structure and method organization patterns
-- Use similar variable naming where practical (some variance acceptable)
-- Preserve reference commenting style and add MCP-specific comments only where needed
-- Keep helper methods separate if reference has them separate
+Located in external/ingenic-sdk/isp/t30
+Use as primary source for complete method implementations
+Contains fewer pre-compiled methods = more visible source code
+Check here FIRST for any VIN-related logic
 
-## Binary Ninja MCP Usage Rules - SUPPORTED OPERATIONS ONLY
-**Supported BN MCP operations:**
-- **Search for method** (query): Find and identify methods in reference driver
-- **Search for data** (query): Locate data structures, variables, constants in reference
-- **Decompile method only**: Get decompiled code for specific methods
 
-**Additional supported tooling:**
-- Reading and searching for files on CLI
-- Standard file system operations
+T31 Binary (Secondary Reference):
 
-**Usage Guidelines:**
-- Before implementing most any method, use Binary Ninja MCP to search for and decompile the reference method
-- Query format: Use MCP to decompile the specific method you're about to implement
-- Do NOT attempt unsupported BN MCP operations, only query and decompile are supported.
-- Always compare your implementation against the Binary Ninja decompiled reference before finalizing
+Use Binary Ninja MCP to decompile T31 binary methods
+Compare with T30 to understand hardware differences
+Validate initialization sequences and register access patterns
+Use for T31-specific hardware details not in T30
 
-## When Confused or Stuck
-- Think if this is a moment that you should use Binary Ninja MCP to search for and decompile the specific reference method you're implementing
-- Typically Don't guess at method boundaries or logic flow - query the reference with Binary Ninja MCP first
-- Ask for clarification on which reference methods should be called vs inlined
-- Always get Binary Ninja decompilation before writing any method implementation
-- MANDATORY: Adjust the BN implementations to use safe member struct access instead of offset based accesses.
 
-## Quality Checks Before Submitting
-- Verify each method maps to exactly one reference method
-- Confirm hardware initialization patterns match reference driver (primary goal)
-- Check that method call chains match reference driver
-- Ensure MCP calls don't disrupt original logic flow
-- Validate that only supported BN MCP operations were used
+
+VIN Implementation Workflow
+
+Identify VIN method in T30 source (grep/search for vin_, video_, probe, init)
+Read complete T30 implementation to understand logic flow
+Use Binary Ninja MCP to decompile corresponding T31 method
+Compare T30 vs T31 to identify:
+
+Common initialization patterns (use these)
+Hardware-specific differences (adapt for T31)
+Missing methods in T30 (implement from T31 binary)
+
+
+Implement with struct-based access (never hard-coded offsets)
+
+VIN-Specific Focus Areas
+Probe/Init Sequence:
+
+Device detection and enumeration
+Resource allocation (memory, DMA, interrupts)
+Clock and power domain setup
+Hardware capability detection
+
+Hardware Initialization:
+
+Register initialization sequences (order matters!)
+DMA setup and buffer allocation
+Interrupt handler registration
+Video format configuration
+Timing and synchronization setup
+
+Data Flow Setup:
+
+Frame buffer management
+DMA descriptor chains
+Interrupt-driven vs polling modes
+Error handling and recovery paths
+
+Method Implementation Rules - VIN Focused
+
+Preserve initialization order: Hardware init sequences are timing-critical
+Match register access patterns: Use same read-modify-write sequences as reference
+Keep probe/init atomic: Don't split probe or init logic across multiple methods
+Implement complete chains: If VIN init calls helper methods, implement those too
+Document hardware dependencies: Add comments for clock, power, or timing requirements
+
+Binary Ninja MCP Usage - VIN Specific
+Supported Operations:
+
+search for method vin_ or video_ to find VIN-related methods
+search for method probe or init for initialization sequences
+decompile method [specific_vin_method] for detailed implementation
+search for data to find VIN-related structures and constants
+
+VIN Analysis Queries:
+
+Search for VIN register definitions and offsets
+Identify VIN-related data structures
+Find interrupt handler registrations
+Locate DMA setup sequences
+
+Struct-Based Access (CRITICAL for VIN)
+
+NEVER use hard-coded offsets like +0x2c in VIN code
+VIN structures are complex - always use proper struct members
+If struct definition is incomplete, extend it based on T30/T31 references
+Document struct members with their hardware purpose (e.g., uint32_t vin_ctrl; // Video input control register)
+
+MCP Integration for VIN Debugging
+
+Add MCP logging at EVERY VIN state change
+Log register values before/after initialization
+Track probe success/failure with detailed reasons
+Monitor frame buffer allocation and DMA setup
+Format: mcp_log_info("vin_init: setting control reg", reg_value);
+
+VIN Implementation Priority Order
+
+Probe method - Device detection and basic setup
+Init method - Full hardware initialization
+Format configuration - Video format/resolution setup
+Buffer management - Frame buffer allocation/management
+Start/Stop streaming - Enable/disable video capture
+Interrupt handlers - Frame completion, errors
+Helper methods - Supporting functions called by above
+
+Quality Checks for VIN Implementation
+
+ Probe sequence matches T30/T31 reference pattern
+ Init performs all required hardware setup in correct order
+ All register accesses use struct members, not offsets
+ DMA and interrupt setup is complete
+ Error paths properly cleanup resources
+ MCP logging covers all state transitions
+ T30 and T31 differences are documented
+ No initialization steps are skipped or combined
+
+When Stuck on VIN Implementation
+
+Check T30 source for complete implementation first
+Use BN MCP to see how T31 binary does it
+Look for similar patterns in other T30 driver files
+Search for VIN-related defines/constants in headers
+Verify struct definitions match hardware layout
+Check if initialization order matters (it usually does for VIN!)
+
+Red Flags to Avoid in VIN Code
+
+Skipping "unimportant looking" register writes (they're all important!)
+Combining multiple initialization steps into one
+Using fixed delays without understanding why
+Ignoring error return codes from hardware
+Not implementing complete probe/init sequences
+Missing interrupt or DMA setup
