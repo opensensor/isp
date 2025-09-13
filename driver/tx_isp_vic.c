@@ -601,6 +601,7 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     pr_info("*** INTERRUPT MASK FIX: Enabled frame done (0x1e8=0xFFFFFFFE) and MDMA (0x1ec=0xFFFFFFFC) ***\n");
 
     /* STEP 3: Request and register the interrupt handler */
+    vic_dev->irq = 37;  /* Use primary ISP IRQ */
     irq = vic_dev->irq;
     if (irq < 0) {
         pr_err("tx_isp_vic_hw_init: Failed to get IRQ number\n");
