@@ -4232,7 +4232,7 @@ static int tx_isp_init(void)
                   isp_vic_interrupt_service_routine,          /* Same handlers work for both IRQs */
                   IRQF_ONESHOT,
                   "isp-w02",               /* Match stock driver name */
-                  vic_dev->sd);
+                  vic_dev);
         if (ret != 0) {
             pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
             pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
