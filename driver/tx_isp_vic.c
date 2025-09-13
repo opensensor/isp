@@ -1130,7 +1130,7 @@ int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
         return -ENODEV;
     }
 
-    csi_base = isp_dev->vic_regs - 0x9a00;  /* Calculate CSI base from VIC base */
+    csi_base = isp_dev->vic_dev->vic_regs - 0x9a00;  /* Calculate CSI base from VIC base */
     if (!csi_base) {
         pr_err("tx_isp_phy_init: No CSI base available\n");
         return -ENODEV;
@@ -2742,7 +2742,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                     vic_start_ok = 0;
                     vic_start_adjustment();
-                    tx_isp_phy_init(vic_dev);
+                    tx_isp_phy_init(ourISPdev);
 
                     vic_dev->state = 4;
                     vic_start_ok = 1;
