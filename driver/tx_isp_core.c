@@ -1337,7 +1337,7 @@ EXPORT_SYMBOL(data_b2e14);
 
 
 /* tisp_init - EXACT Binary Ninja reference implementation - NO hardware reset here */
-int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
+int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
 {
     void __iomem *isp_regs;
     u32 mode_value;
@@ -2009,7 +2009,7 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
     
     /* Create the var_78 structure and call tisp_init - matches reference exactly */
     struct tx_isp_sensor_attribute local_attr = *sensor_attr;
-    ret = tisp_init(&local_attr, isp);
+    ret = tisp_init2(&local_attr, isp);
     if (ret < 0) {
         ISP_ERROR("*** ispcore_core_ops_init: tisp_init failed: %d ***\n", ret);
         return ret;
