@@ -3922,8 +3922,8 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     pr_info("*** ispcore_sync_sensor_attr: Calling tiziano_sync_sensor_attr ***\n");
     tiziano_sync_sensor_attr(stored_attr);
     
-    pr_info("*** ispcore_sync_sensor_attr: SUCCESS ***\n");
-    return 0;
+    pr_info("*** ispcore_sync_sensor_attr: SUCCESS - returning -515 for VIC conversion ***\n");
+    return -515;  /* VIC handler expects -515 and converts it to 0 */
 }
 EXPORT_SYMBOL(ispcore_sync_sensor_attr);
 
