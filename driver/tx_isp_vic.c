@@ -1682,46 +1682,60 @@ if (!IS_ERR(cgu_isp_clk)) {
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
-    /* *** CRITICAL FIX: Write the ACTUAL interrupt-generating register values *** */
-    pr_info("*** CRITICAL FIX: Writing ACTUAL interrupt-generating register values ***\n");
+    /* *** CRITICAL FIX: Follow EXACT reference driver register sequence to prevent control limit error *** */
+    pr_info("*** CRITICAL FIX: Writing EXACT reference driver register sequence ***\n");
     
-    /* STEP 1: Clear any pending interrupts first */
-    writel(0xffffffff, vic_regs + 0x1f0);  /* Clear all interrupt status */
-    wmb();
+    /* STEP 1: Write the EXACT register sequence from working reference driver */
+    /* These are the exact values from the working trace that prevent control limit errors */
     
-    /* STEP 2: Write the ACTUAL interrupt-generating registers that were working */
-    /* These are the exact values that were generating interrupts before */
-    
-    /* First interrupt-generating sequence */
-    writel(0x3130322a, vic_regs + 0x0);      /* This generates interrupts */
-    writel(0x1, vic_regs + 0x4);             /* This was in the working version */
-    writel(0x200, vic_regs + 0x14);          /* This was working */
+    /* Reference trace: ISP isp-w01 sequence */
+    writel(0x3130322a, vic_regs + 0x0);      /* EXACT from reference */
+    writel(0x1, vic_regs + 0x4);             /* EXACT from reference */
+    writel(0x200, vic_regs + 0x14);          /* EXACT from reference */
     wmb();
     
     pr_info("*** WROTE: reg 0x0 = 0x3130322a, reg 0x4 = 0x1, reg 0x14 = 0x200 ***\n");
     
-    /* Second interrupt-generating sequence */
-    writel(0x54560031, vic_regs + 0x0);      /* This generates interrupts */
-    writel(0x7800438, vic_regs + 0x4);       /* This was generating interrupts */
+    /* Reference trace: ISP isp-m0 sequence - CRITICAL missing registers */
+    writel(0x54560031, main_isp_base + 0x0);      /* EXACT from reference */
+    writel(0x7800438, main_isp_base + 0x4);       /* EXACT from reference */
+    writel(0x1, main_isp_base + 0x8);             /* EXACT from reference */
+    writel(0x80700008, main_isp_base + 0xc);      /* EXACT from reference */
+    writel(0x1, main_isp_base + 0x28);            /* EXACT from reference */
+    writel(0x400040, main_isp_base + 0x2c);       /* EXACT from reference */
+    writel(0x1, main_isp_base + 0x90);            /* EXACT from reference */
+    writel(0x1, main_isp_base + 0x94);            /* EXACT from reference */
+    writel(0x30000, main_isp_base + 0x98);        /* EXACT from reference */
+    writel(0x58050000, main_isp_base + 0xa8);     /* EXACT from reference */
+    writel(0x58050000, main_isp_base + 0xac);     /* EXACT from reference */
+    writel(0x40000, main_isp_base + 0xc4);        /* EXACT from reference */
+    writel(0x400040, main_isp_base + 0xc8);       /* EXACT from reference */
+    writel(0x100, main_isp_base + 0xcc);          /* EXACT from reference */
+    writel(0xc, main_isp_base + 0xd4);            /* EXACT from reference */
+    writel(0xffffff, main_isp_base + 0xd8);       /* EXACT from reference */
+    writel(0x100, main_isp_base + 0xe0);          /* EXACT from reference */
+    writel(0x400040, main_isp_base + 0xe4);       /* EXACT from reference */
+    writel(0xff808000, main_isp_base + 0xf0);     /* EXACT from reference */
+    wmb();
+    
+    /* Reference trace: VIC Control registers - CRITICAL missing sequence */
+    writel(0x50002d0, vic_regs + 0x0);            /* EXACT from reference */
+    writel(0x3000300, vic_regs + 0x4);            /* EXACT from reference */
+    writel(0x50002d0, vic_regs + 0x2c);           /* EXACT from reference */
+    writel(0x1, vic_regs + 0x34);                 /* EXACT from reference */
+    writel(0x1, vic_regs + 0x70);                 /* EXACT from reference */
+    writel(0x1, vic_regs + 0x7c);                 /* EXACT from reference */
+    writel(0x500, vic_regs + 0x80);               /* EXACT from reference */
+    writel(0x1, vic_regs + 0x88);                 /* EXACT from reference */
+    writel(0x1, vic_regs + 0x94);                 /* EXACT from reference */
+    writel(0x500, vic_regs + 0x98);               /* EXACT from reference */
+    writel(0x200, vic_regs + 0xc0);               /* EXACT from reference */
+    writel(0x200, vic_regs + 0xc8);               /* EXACT from reference */
     wmb();
     
     pr_info("*** WROTE: reg 0x0 = 0x54560031, reg 0x4 = 0x7800438 ***\n");
     
-    /* STEP 3: Enable VIC interrupt sources */
-    writel(0x1, vic_regs + 0x1f4);  /* Enable frame done interrupt */
-    writel(0x1, vic_regs + 0x1f8);  /* Enable DMA done interrupt */
-    writel(0x1, vic_regs + 0x1fc);  /* Enable error interrupts */
-    wmb();
-    
-    /* STEP 4: Enable VIC interrupt mask - this allows interrupts to be generated */
-    writel(0x7, vic_regs + 0x1ec);  /* Enable frame, DMA, and error interrupt masks */
-    wmb();
-    
-    /* STEP 5: Enable VIC interrupt generation at the VIC hardware level */
-    writel(0x1, vic_regs + 0x1e8);  /* Enable VIC interrupt output to interrupt controller */
-    wmb();
-    
-    pr_info("*** CRITICAL: ACTUAL interrupt-generating values written - should now see IRQ 38 activity ***\n");
+    pr_info("*** CRITICAL: EXACT reference driver register sequence written - control limit error should be FIXED ***\n");
 
     /* *** CRITICAL FIX: Set vic_start_ok ONLY after successful configuration *** */
     vic_start_ok = 1;
