@@ -680,37 +680,98 @@ static int tisp_day_or_night_s_ctrl(uint32_t mode)
     return 0;
 }
 
+/* ISP tuning event definitions - Binary Ninja reference */
+#define ISP_TUNING_EVENT_MODE0      0x1000
+#define ISP_TUNING_EVENT_MODE1      0x1001
+#define ISP_TUNING_EVENT_FRAME      0x1002
+#define ISP_TUNING_EVENT_DN         0x1003
+#define ISP_TUNING_EVENT_FRAME_DONE 0x1004
+#define ISP_TUNING_EVENT_DMA_READY  0x1005
+
 static int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
 {
-      pr_info("isp_core_tuning_event: event=0x%x\n", event);
+    pr_info("isp_core_tuning_event: event=0x%x\n", event);
     if (!dev)
         return -EINVAL;
 
-//    switch (event) {
-//        case ISP_TUNING_EVENT_MODE0:
-//            writel(2, dev->reg_base + 0x40c4);
-//        break;
-//
-//        case ISP_TUNING_EVENT_MODE1:
-//            writel(1, dev->reg_base + 0x40c4);
-//        break;
-//
-//        case ISP_TUNING_EVENT_FRAME:
-//          pr_info("ISP_TUNING_EVENT_FRAME\n");
-//            //isp_frame_done_wakeup();
-//        break;
-//
-//        case ISP_TUNING_EVENT_DN:
-//        {
-//            uint32_t dn_mode = readl(dev->reg_base + 0x40a4);
-//            tisp_day_or_night_s_ctrl(dn_mode); // We'll need this function too
-//            writel(dn_mode, dev->reg_base + 0x40a4);
-//        }
-//        break;
-//
-//        default:
-//            return -EINVAL;
-//    }
+    switch (event) {
+        case ISP_TUNING_EVENT_MODE0:
+            if (dev->core_regs) {
+                writel(2, dev->core_regs + 0x40c4);
+                pr_info("isp_core_tuning_event: Set mode 0\n");
+            }
+            break;
+
+        case ISP_TUNING_EVENT_MODE1:
+            if (dev->core_regs) {
+                writel(1, dev->core_regs + 0x40c4);
+                pr_info("isp_core_tuning_event: Set mode 1\n");
+            }
+            break;
+
+        case ISP_TUNING_EVENT_FRAME:
+            pr_info("*** ISP_TUNING_EVENT_FRAME: Starting frame processing ***\n");
+            /* CRITICAL: This is where frame processing should be triggered */
+            /* In the reference driver, this would start DMA transfer from sensor to buffer */
+            if (dev->core_regs) {
+                /* Trigger frame capture - write to frame control register */
+                writel(1, dev->core_regs + 0x9000);  /* Start frame capture */
+                pr_info("isp_core_tuning_event: Frame capture triggered\n");
+            }
+            break;
+
+        case ISP_TUNING_EVENT_FRAME_DONE:
+            pr_info("*** ISP_TUNING_EVENT_FRAME_DONE: Frame processing complete ***\n");
+            /* CRITICAL: This is where we call the frame sync functions! */
+            extern void isp_frame_done_wakeup(void);
+            isp_frame_done_wakeup();
+            pr_info("isp_core_tuning_event: Frame done wakeup called\n");
+            break;
+
+        case ISP_TUNING_EVENT_DMA_READY:
+            pr_info("*** ISP_TUNING_EVENT_DMA_READY: DMA buffer ready for processing ***\n");
+            /* This event indicates that DMA has transferred frame data to buffer */
+            /* and ISP can now process it */
+            if (dev->core_regs) {
+                /* Enable ISP processing of the DMA buffer */
+                writel(1, dev->core_regs + 0x8000);  /* Enable ISP processing */
+                pr_info("isp_core_tuning_event: ISP processing enabled for DMA buffer\n");
+                
+                /* CRITICAL: Trigger frame transfer from sensor to DMA buffer */
+                /* This is what's missing - we need to copy sensor data to ISP buffer */
+                pr_info("*** TRIGGERING FRAME DATA TRANSFER FROM SENSOR TO DMA BUFFER ***\n");
+                
+                /* Start DMA transfer from sensor interface to processing buffer */
+                writel(1, dev->core_regs + 0x9000);  /* Start frame capture */
+                writel(1, dev->core_regs + 0x9004);  /* Enable DMA transfer */
+                
+                /* Configure DMA buffer addresses for frame data */
+                if (dev->vic_regs) {
+                    /* Set up VIC to capture frame data from sensor */
+                    writel(0x1, dev->vic_regs + 0x0);    /* Enable VIC processing */
+                    writel(0x3, dev->vic_regs + 0xc);    /* MIPI interface mode */
+                    pr_info("isp_core_tuning_event: VIC configured for frame capture\n");
+                }
+                
+                pr_info("*** FRAME DATA TRANSFER INITIATED - SENSOR DATA -> DMA BUFFER ***\n");
+            }
+            break;
+
+        case ISP_TUNING_EVENT_DN:
+        {
+            if (dev->core_regs) {
+                uint32_t dn_mode = readl(dev->core_regs + 0x40a4);
+                tisp_day_or_night_s_ctrl(dn_mode);
+                writel(dn_mode, dev->core_regs + 0x40a4);
+                pr_info("isp_core_tuning_event: Day/night mode updated: %d\n", dn_mode);
+            }
+        }
+        break;
+
+        default:
+            pr_warn("isp_core_tuning_event: Unknown event 0x%x\n", event);
+            return -EINVAL;
+    }
 
     return 0;
 }
