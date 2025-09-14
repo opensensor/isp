@@ -570,7 +570,7 @@ struct platform_device tx_isp_core_platform_device = {
 struct frame_channel_device; /* Forward declare struct */
 static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
 static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data);
-static void vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
+void vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 static irqreturn_t isp_irq_handle(int irq, void *dev_id);
 static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
@@ -5397,94 +5397,6 @@ static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
     
     /* Binary Ninja: return 1 */
     return 1;  /* IRQ_HANDLED */
-}
-
-/* vic_framedone_irq_function - COMPLETE Binary Ninja exact implementation */
-static void vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
-{
-    void *result = (void*)0xb0000;  /* Binary Ninja: result = &data_b0000 */
-    void *a3_1, *a1_2;
-    void **i_1;
-    int a1_1, v1_1, v0;
-    int v1_2;
-    int i;
-
-    pr_info("*** vic_framedone_irq_function: EXACT Binary Ninja implementation ***\n");
-    
-    if (!vic_dev) {
-        return;
-    }
-
-    /* Binary Ninja: result = *(arg1 + 0x210) */
-    result = (void*)(uintptr_t)vic_dev->streaming;
-
-    if (result != 0) {
-        /* Binary Ninja: void* $a3_1 = *(arg1 + 0xb8) */
-        a3_1 = vic_dev->vic_regs;
-        /* Binary Ninja: void** i_1 = *(arg1 + 0x204) */
-        i_1 = (void**)&vic_dev->queue_head;  /* Approximate queue head */
-        a1_1 = 0;
-        v1_1 = 0;
-        v0 = 0;
-
-        /* Binary Ninja: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
-        for (i = 0; i < 16; i++) {  /* Simplified loop */
-            v1_1 += (0 < v0) ? 1 : 0;
-            a1_1 += 1;
-
-            /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
-            if (a3_1 && vic_dev->vic_regs) {
-                u32 vic_addr_reg = readl(vic_dev->vic_regs + 0x380);
-                /* Simplified comparison for buffer matching */
-                v0 = 1;
-            }
-        }
-
-        /* Binary Ninja: int32_t $v1_2 = $v1_1 << 0x10 */
-        v1_2 = v1_1 << 0x10;
-
-        if (v0 == 0) {
-            v1_2 = a1_1 << 0x10;
-        }
-
-        /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
-        if (vic_dev->vic_regs) {
-            u32 reg_300 = readl(vic_dev->vic_regs + 0x300);
-            reg_300 = v1_2 | (reg_300 & 0xfff0ffff);
-            writel(reg_300, vic_dev->vic_regs + 0x300);
-            wmb();
-        }
-
-        result = (void*)0xb0000;
-        goto label_123f4;
-    }
-    
-label_123f4:
-    /* Binary Ninja: if (gpio_switch_state != 0) */
-    if (gpio_switch_state != 0) {
-        void *s1_1 = &gpio_info;
-        gpio_switch_state = 0;
-        
-        /* Binary Ninja: for (int32_t i = 0; i != 0xa; ) */
-        for (i = 0; i < 0xa; i++) {
-            u32 a0_2 = *(u32*)((char*)s1_1 + (i * 2)); /* GPIO pin */
-            
-            /* Binary Ninja: if ($a0_2 == 0xff) break */
-            if (a0_2 == 0xff) {
-                break;
-            }
-            
-            /* Binary Ninja: result = private_gpio_direction_output($a0_2, zx.d(*($s1_1 + 0x14))) */
-            u32 gpio_state = *(u32*)((char*)s1_1 + 0x14 + (i * 2));
-            
-            pr_debug("vic_framedone_irq_function: GPIO %d set to %d\n", a0_2, gpio_state);
-            
-            /* In real implementation: gpio_direction_output(a0_2, gpio_state) */
-            /* Binary Ninja: i += 1; $s1_1 += 2 */
-        }
-    }
-    
-    pr_debug("vic_framedone_irq_function: Frame completion processing complete\n");
 }
 
 /* vic_mdma_irq_function - COMPLETE Binary Ninja exact implementation */

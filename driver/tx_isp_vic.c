@@ -161,7 +161,7 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 }
 
 /* Forward declarations for interrupt functions */
-static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
+int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 
 /* Global data symbol used by reference driver */
@@ -190,7 +190,7 @@ static struct {
 } gpio_info[10];
 
 /* vic_framedone_irq_function - Updated to match BN MCP reference with safe struct access */
-static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
+int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
     void *result = &data_b0000;  /* Return value matching reference */
