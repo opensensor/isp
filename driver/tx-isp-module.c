@@ -4338,6 +4338,22 @@ static int tx_isp_init(void)
         ourISPdev = NULL;
         return ret;
     }
+    
+    /* *** CRITICAL FIX: Set up VIN subdev operations structure *** */
+    if (ourISPdev->vin_dev) {
+        struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
+        
+        /* CRITICAL: Set up VIN subdev with proper ops structure */
+        extern struct tx_isp_subdev_ops vin_subdev_ops;
+        vin_device->sd.ops = &vin_subdev_ops;
+        vin_device->sd.isp = (void *)ourISPdev;
+        
+        pr_info("*** VIN SUBDEV OPS CONFIGURED: core=%p, video=%p, s_stream=%p ***\n",
+                vin_device->sd.ops->core, vin_device->sd.ops->video,
+                vin_device->sd.ops->video ? vin_device->sd.ops->video->s_stream : NULL);
+        
+        pr_info("*** VIN DEVICE FULLY INITIALIZED AND READY FOR STREAMING ***\n");
+    }
 	
     /* Step 2: Register platform device (matches reference) */
     ret = platform_device_register(&tx_isp_platform_device);

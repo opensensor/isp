@@ -116,4 +116,31 @@ int tx_isp_vin_disable_irq(struct tx_isp_vin_device *vin);
 #define VIN_INT_SYNC_ERR     BIT(2)  /* Sync error interrupt */
 #define VIN_INT_DMA_ERR      BIT(3)  /* DMA error interrupt */
 
+/* VIN Hardware Register Definitions - Based on T31 Binary Ninja Analysis */
+#define VIN_CTRL             0x00    /* VIN Control Register */
+#define VIN_STATUS           0x04    /* VIN Status Register */
+#define VIN_FORMAT           0x08    /* VIN Format Register */
+#define VIN_FRAME_SIZE       0x0C    /* VIN Frame Size Register */
+#define VIN_INT_STATUS       0x10    /* VIN Interrupt Status Register */
+#define VIN_INT_MASK         0x14    /* VIN Interrupt Mask Register */
+#define VIN_DMA_ADDR         0x18    /* VIN DMA Address Register */
+#define VIN_DMA_SIZE         0x1C    /* VIN DMA Size Register */
+
+/* VIN Control Register Bits */
+#define VIN_CTRL_EN          BIT(0)  /* VIN Enable */
+#define VIN_CTRL_START       BIT(1)  /* VIN Start */
+#define VIN_CTRL_STOP        BIT(2)  /* VIN Stop */
+#define VIN_CTRL_RST         BIT(3)  /* VIN Reset */
+
+/* VIN Status Register Bits */
+#define STATUS_BUSY          BIT(0)  /* VIN Busy Status */
+#define STATUS_IDLE          BIT(1)  /* VIN Idle Status */
+
+/* VIN Format Types */
+#define FMT_YUV422           0x00    /* YUV422 Format */
+#define FMT_RGB888           0x01    /* RGB888 Format */
+#define FMT_RAW8             0x02    /* RAW8 Format */
+#define FMT_RAW10            0x03    /* RAW10 Format */
+#define FMT_RAW12            0x04    /* RAW12 Format */
+
 #endif /* __TX_ISP_VIN_H__ */

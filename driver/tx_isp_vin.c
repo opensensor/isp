@@ -771,6 +771,9 @@ static struct tx_isp_subdev_ops vin_subdev_ops = {
     .internal = &vin_subdev_internal_ops,
 };
 
+/* Export VIN subdev ops for external access */
+EXPORT_SYMBOL(vin_subdev_ops);
+
 /* ========================================================================
  * VIN Platform Driver Functions
  * ======================================================================== */
