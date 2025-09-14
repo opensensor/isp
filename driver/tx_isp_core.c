@@ -4317,7 +4317,7 @@ int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev)
             /* Step 4: Signal that frame data transfer system is active */
             isp_frame_done_wakeup();
 
-            pr_info("*** isp_trigger_frame_data_transfer: Frame data transfer system activated ***\n");isp_malloc_buffer(
+            pr_info("*** isp_trigger_frame_data_transfer: Frame data transfer system activated ***\n");
             return 0;
         }
         udelay(10);
