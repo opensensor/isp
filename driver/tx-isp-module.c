@@ -2208,24 +2208,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("Channel %d: MMAP allocation - %d buffers of %u bytes each\n",
                        channel, reqbuf.count, buffer_size);
                 
-                /* Allocate buffer tracking structures */
-                int i;
-                for (i = 0; i < reqbuf.count; i++) {
-                    void *buffer_struct = kzalloc(0xd0, GFP_KERNEL);
-                    if (!buffer_struct) {
-                        pr_err("Channel %d: Failed to allocate buffer %d structure\n", channel, i);
-                        /* Clean up previously allocated buffers */
-                        return -ENOMEM;
-                    }
-                    
-                    /* Initialize buffer structure */
-                    *((u32*)buffer_struct + 0) = i;                    /* Buffer index */
-                    *((u32*)buffer_struct + 1) = 1;                    /* Buffer state (allocated) */
-                    *((u32*)buffer_struct + 0x12) = 0;                 /* Flags */
-                    *((void**)buffer_struct + 0x11) = &state->current_buffer; /* Back pointer */
-                    
-                    pr_info("Channel %d: Buffer[%d] allocated (MMAP mode)\n", channel, i);
-                }
+                /* CRITICAL FIX: Don't allocate any actual buffers in driver! */
+                /* The client (libimp) will allocate buffers and pass them via QBUF */
+                pr_info("Channel %d: MMAP mode - %d buffer slots reserved (no early allocation)\n",
+                       channel, reqbuf.count);
+                
+                /* Just track the buffer count - no actual allocation */
                 
             } else if (reqbuf.memory == 2) { /* V4L2_MEMORY_USERPTR - client allocates */
                 pr_info("Channel %d: USERPTR mode - client will provide buffers\n", channel);
