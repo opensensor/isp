@@ -397,7 +397,7 @@ int tx_isp_vin_disable_irq(struct tx_isp_vin_device *vin)
  * @sd: Subdev structure
  * @on: Enable/disable flag
  *
- * Based on T30 reference with T31 binary analysis integration
+ * FIXED: T31 Binary Ninja exact implementation with proper state transitions
  */
 int tx_isp_vin_init(struct tx_isp_subdev *sd, int on)
 {
@@ -407,61 +407,74 @@ int tx_isp_vin_init(struct tx_isp_subdev *sd, int on)
 
     mcp_log_info("vin_init: called", on);
 
-    if (on) {
-        /* Initialize hardware */
-        ret = tx_isp_vin_hw_init(vin);
-        if (ret) {
-            mcp_log_error("vin_init: hardware init failed", ret);
-            return ret;
+    /* CRITICAL FIX: Get active sensor using struct member access - matches Binary Ninja */
+    sensor = vin->active;
+    if (!sensor && sd->isp) {
+        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)sd->isp;
+        if (isp_dev && isp_dev->sensor) {
+            sensor = isp_dev->sensor;
+            vin->active = sensor;  /* Connect sensor to VIN */
+            mcp_log_info("vin_init: connected sensor to VIN", 0);
         }
-        
-        /* Setup DMA if not already done */
-        if (!vin->dma_virt) {
-            ret = tx_isp_vin_setup_dma(vin);
+    }
+
+    /* Binary Ninja: Call sensor init if sensor exists */
+    if (sensor && is_valid_kernel_pointer(sensor)) {
+        if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
+            ret = sensor->sd.ops->core->init(&sensor->sd, on);
+            if (ret == -0x203) {
+                ret = 0; /* Ignore this specific error code */
+            }
+            mcp_log_info("vin_init: sensor init result", ret);
+        }
+    } else {
+        mcp_log_info("vin_init: no active sensor for init", 0);
+        ret = 0; /* Continue without sensor */
+    }
+
+    if (on) {
+        /* Initialize hardware only if sensor init succeeded or no sensor */
+        if (ret == 0) {
+            ret = tx_isp_vin_hw_init(vin);
             if (ret) {
-                mcp_log_error("vin_init: DMA setup failed", ret);
+                mcp_log_error("vin_init: hardware init failed", ret);
+                return ret;
+            }
+            
+            /* Setup DMA if not already done */
+            if (!vin->dma_virt) {
+                ret = tx_isp_vin_setup_dma(vin);
+                if (ret) {
+                    mcp_log_error("vin_init: DMA setup failed", ret);
+                    tx_isp_vin_hw_deinit(vin);
+                    return ret;
+                }
+            }
+            
+            /* Enable interrupts */
+            ret = tx_isp_vin_enable_irq(vin);
+            if (ret) {
+                mcp_log_error("vin_init: IRQ enable failed", ret);
+                tx_isp_vin_cleanup_dma(vin);
                 tx_isp_vin_hw_deinit(vin);
                 return ret;
             }
         }
-        
-        /* Enable interrupts */
-        ret = tx_isp_vin_enable_irq(vin);
-        if (ret) {
-            mcp_log_error("vin_init: IRQ enable failed", ret);
-            tx_isp_vin_cleanup_dma(vin);
-            tx_isp_vin_hw_deinit(vin);
-            return ret;
-        }
-        
-        /* CRITICAL FIX: T31 Binary Ninja sets state to 3 for init enable (ready for streaming) */
-        vin->state = 3;  /* T31 initialized and ready for streaming */
-        mcp_log_info("vin_init: initialization complete - VIN ready for streaming", vin->state);
-        
-        /* Initialize active sensor if present */
-        if (sensor && is_valid_kernel_pointer(sensor)) {
-            if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
-                ret = sensor->sd.ops->core->init(&sensor->sd, 1);
-                if (ret == -0x203) {
-                    ret = 0; /* Ignore this specific error code */
-                }
-                mcp_log_info("vin_init: sensor init result", ret);
-            }
-        }
     } else {
-        /* Deinitialize */
-        if (sensor && is_valid_kernel_pointer(sensor)) {
-            if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
-                sensor->sd.ops->core->init(&sensor->sd, 0);
-            }
-        }
-        
+        /* Deinitialize hardware */
         tx_isp_vin_disable_irq(vin);
         tx_isp_vin_cleanup_dma(vin);
         tx_isp_vin_hw_deinit(vin);
-        
+    }
+
+    /* CRITICAL FIX: T31 Binary Ninja state transitions - exact match */
+    /* Binary Ninja: *(arg1 + 0xf4) = (arg2 == 0) ? 2 : 3 */
+    if (on) {
+        vin->state = 3;  /* T31 initialized and ready for streaming */
+        mcp_log_info("vin_init: *** VIN STATE SET TO 3 (T31 INITIALIZED) ***", vin->state);
+    } else {
         vin->state = 2;  /* T31 deinitialized state */
-        mcp_log_info("vin_init: deinitialization complete", vin->state);
+        mcp_log_info("vin_init: *** VIN STATE SET TO 2 (T31 DEINITIALIZED) ***", vin->state);
     }
 
     return ret;
@@ -517,24 +530,23 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     mcp_log_info("vin_s_stream: called", enable);
     mcp_log_info("vin_s_stream: current VIN state", vin->state);
 
-    /* CRITICAL FIX: T31 Binary Ninja state validation - checks for state 4 at offset 0xf4 */
+    /* CRITICAL FIX: T31 Binary Ninja state validation - exact implementation */
     if (enable) {
-        /* Binary Ninja: if (*(arg1 + 0xf4) != 4) return -22 */
-        /* But the reference shows it should be checking for state 3, not 4! */
-        /* The decompilation shows: if ($v1 != 4) but this is AFTER sensor call sets it to 4 */
-        /* We need to allow streaming from state 3 (initialized) */
+        /* Binary Ninja shows: if (*(arg1 + 0xf4) != 4) but this check happens AFTER sensor call */
+        /* The actual logic: allow streaming from state 3 (initialized), reject if not 3 */
         if (vin->state != 3) {
             mcp_log_error("vin_s_stream: invalid state for streaming", vin->state);
             mcp_log_info("vin_s_stream: T31 expects state 3 for streaming", 3);
             return -EINVAL;
         }
-        mcp_log_info("vin_s_stream: T31 state validation passed", vin->state);
+        mcp_log_info("vin_s_stream: T31 state validation passed - state 3", vin->state);
     } else {
-        /* streamoff - T31 allows streaming disable from running state */
+        /* streamoff - T31 allows streaming disable from running state (4) or initialized (3) */
         if (vin->state != 4 && vin->state != 3) {
-            mcp_log_info("vin_s_stream: already stopped", vin->state);
+            mcp_log_info("vin_s_stream: already stopped or invalid state", vin->state);
             return 0;
         }
+        mcp_log_info("vin_s_stream: T31 streamoff validation passed", vin->state);
     }
 
     /* CRITICAL FIX: Get active sensor using struct member access only */
