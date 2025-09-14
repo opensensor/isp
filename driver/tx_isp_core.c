@@ -3864,22 +3864,11 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     struct tx_isp_sensor_attribute *stored_attr;
     uint32_t integration_time, again, dgain;
     uint16_t fps, calculated_fps;
-    
+
     pr_info("*** ispcore_sync_sensor_attr: entry - sd=%p, attr=%p ***\n", sd, attr);
-    
-    /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
-    if (!sd || (unsigned long)sd >= 0xfffff001) {
-        isp_printf(2, "not support the gpio mode!\n");
-        return -EINVAL;
-    }
-    
-    /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
-    isp_dev = sd->isp;
-    if (!isp_dev || (unsigned long)isp_dev >= 0xfffff001) {
-        isp_printf(2, "not support the gpio mode!\n");
-        return -EINVAL;
-    }
-    
+
+    isp_dev = ourISPdev;
+
     /* Get VIC device */
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
