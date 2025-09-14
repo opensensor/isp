@@ -1668,13 +1668,27 @@ if (!IS_ERR(cgu_isp_clk)) {
         pr_info("*** VIC reset and restarted to clear control limit error ***\n");
     }
 
-    /* *** CRITICAL MISSING PIECE: Trigger frame data transfer after VIC is configured *** */
-    pr_info("*** CRITICAL: Now triggering frame data transfer to start actual frame capture ***\n");
+    /* *** CRITICAL MISSING PIECE: Initialize VIC buffer management BEFORE frame data transfer *** */
+    pr_info("*** CRITICAL: Initializing VIC buffer management system ***\n");
     
     /* Get the ISP device from the VIC device */
     struct tx_isp_dev *isp_dev = ourISPdev;
-    if (isp_dev) {
-        /* Trigger the ISP_TUNING_EVENT_DMA_READY event to start frame capture */
+    if (isp_dev && isp_dev->vic_dev) {
+        /* Create a dummy raw_pipe structure for the call */
+        void *raw_pipe[8] = {NULL}; /* 8 function pointers as per Binary Ninja */
+        
+        /* Call tx_isp_subdev_pipo to initialize VIC buffer management */
+        pr_info("*** CALLING tx_isp_subdev_pipo to initialize VIC buffer management ***\n");
+        int pipo_ret = tx_isp_subdev_pipo(isp_dev->vic_dev, raw_pipe);
+        if (pipo_ret == 0) {
+            pr_info("*** SUCCESS: tx_isp_subdev_pipo completed - VIC buffer management initialized ***\n");
+            pr_info("*** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***\n");
+        } else {
+            pr_err("*** ERROR: tx_isp_subdev_pipo failed: %d ***\n", pipo_ret);
+        }
+        
+        /* Now trigger frame data transfer after buffer management is set up */
+        pr_info("*** Now triggering frame data transfer to start actual frame capture ***\n");
         pr_info("*** Triggering ISP_TUNING_EVENT_DMA_READY to start frame data transfer ***\n");
         
         /* Call the frame data transfer function directly */
@@ -1685,7 +1699,7 @@ if (!IS_ERR(cgu_isp_clk)) {
             pr_err("*** ERROR: Frame data transfer failed: %d ***\n", transfer_ret);
         }
     } else {
-        pr_err("*** ERROR: No ISP device available for frame data transfer ***\n");
+        pr_err("*** ERROR: No ISP device or VIC device available for buffer management ***\n");
     }
 
     ret = 0;
