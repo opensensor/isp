@@ -781,7 +781,7 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
 /* CSI function forward declarations */
 static int csi_device_probe(struct tx_isp_dev *isp_dev);
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
-static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag);
+int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag);
 static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *sensor_attr);
 
 // ISP Tuning device support - missing component for /dev/isp-m0
@@ -1068,7 +1068,7 @@ static int tx_isp_activate_csi_subdev(struct tx_isp_dev *isp_dev)
 /* ===== CSI STANDALONE METHODS - Binary Ninja Reference Implementations ===== */
 
 /* csi_core_ops_init - FIXED Binary Ninja exact implementation with missing register writes */
-static int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag)
+int csi_core_ops_init(struct tx_isp_subdev *sd, int init_flag)
 {
     struct tx_isp_csi_device *csi_dev;
     void __iomem *csi_regs;

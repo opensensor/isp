@@ -3855,37 +3855,6 @@ EXPORT_SYMBOL(private_clk_enable);
 EXPORT_SYMBOL(private_clk_put);
 EXPORT_SYMBOL(private_clk_set_rate);
 
-/* CRITICAL MISSING FUNCTIONS: Sensor attribute synchronization chain */
-
-/* CSI sensor operations sync_sensor_attr - EXACT Binary Ninja implementation */
-int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
-{
-    struct tx_isp_csi_device *csi_dev;
-    
-    pr_info("csi_sensor_ops_sync_sensor_attr: sd=%p, attr=%p\n", sd, attr);
-    
-    if (!sd || (unsigned long)sd >= 0xfffff001) {
-        pr_err("The parameter is invalid!\n");
-        return -EINVAL;
-    }
-    
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
-    if (!csi_dev || (unsigned long)csi_dev >= 0xfffff001) {
-        pr_err("The parameter is invalid!\n");
-        return -EINVAL;
-    }
-    
-    /* Store sensor attributes in ISP device instead of CSI device */
-    if (attr == NULL) {
-        pr_info("csi_sensor_ops_sync_sensor_attr: cleared sensor attributes\n");
-    } else {
-        pr_info("csi_sensor_ops_sync_sensor_attr: copied sensor attributes\n");
-    }
-    
-    pr_info("*** csi_sensor_ops_sync_sensor_attr: SUCCESS ***\n");
-    return 0;
-}
-EXPORT_SYMBOL(csi_sensor_ops_sync_sensor_attr);
 
 /* ispcore_sync_sensor_attr - EXACT Binary Ninja implementation */
 int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
