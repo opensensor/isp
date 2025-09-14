@@ -381,7 +381,7 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
     /* Initialize CSI hardware if needed */
     if (enable && csi_dev->state < 3) {
-        ret = csi_core_ops_init(sd, attr);
+        ret = csi_core_ops_init(sd, 1);
         if (ret) {
             pr_err("Failed to initialize CSI hardware: %d\n", ret);
             return ret;
