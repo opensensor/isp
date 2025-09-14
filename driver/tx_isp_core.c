@@ -1605,98 +1605,127 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
     }
     wmb();
 
-    /* Binary Ninja EXACT buffer allocations - these are ALL CRITICAL for VIC access */
-    /* Buffer allocation 1: private_kmalloc(0x6000, 0xd0) */
-    void *isp_buf1 = kzalloc(0x6000, GFP_KERNEL);
-    if (isp_buf1) {
+    /* FIXED: Use rmem allocation instead of regular kernel memory to prevent exhaustion */
+    /* Buffer allocation 1: Use isp_malloc_buffer for rmem allocation (0x6000 bytes) */
+    void *isp_buf1;
+    dma_addr_t isp_buf1_phys;
+    if (isp_malloc_buffer(isp_dev, 0x6000, &isp_buf1, &isp_buf1_phys) == 0) {
         /* Binary Ninja: system_reg_write(0xa02c, $v0_14 - 0x80000000) etc. */
-        writel(virt_to_phys(isp_buf1), isp_regs + 0xa02c);
-        writel(virt_to_phys(isp_buf1) + 0x1000, isp_regs + 0xa030);
-        writel(virt_to_phys(isp_buf1) + 0x2000, isp_regs + 0xa034);
-        writel(virt_to_phys(isp_buf1) + 0x3000, isp_regs + 0xa038);
-        writel(virt_to_phys(isp_buf1) + 0x4000, isp_regs + 0xa03c);
-        writel(virt_to_phys(isp_buf1) + 0x4800, isp_regs + 0xa040);
-        writel(virt_to_phys(isp_buf1) + 0x5000, isp_regs + 0xa044);
-        writel(virt_to_phys(isp_buf1) + 0x5800, isp_regs + 0xa048);
+        writel(isp_buf1_phys, isp_regs + 0xa02c);
+        writel(isp_buf1_phys + 0x1000, isp_regs + 0xa030);
+        writel(isp_buf1_phys + 0x2000, isp_regs + 0xa034);
+        writel(isp_buf1_phys + 0x3000, isp_regs + 0xa038);
+        writel(isp_buf1_phys + 0x4000, isp_regs + 0xa03c);
+        writel(isp_buf1_phys + 0x4800, isp_regs + 0xa040);
+        writel(isp_buf1_phys + 0x5000, isp_regs + 0xa044);
+        writel(isp_buf1_phys + 0x5800, isp_regs + 0xa048);
         writel(0x33, isp_regs + 0xa04c);
         wmb();
-        pr_info("tisp_init: ISP buffer 1 allocated and configured (0x6000 bytes)\n");
+        pr_info("tisp_init: ISP buffer 1 allocated from rmem and configured (0x6000 bytes)\n");
+    } else {
+        pr_err("tisp_init: Failed to allocate ISP buffer 1 from rmem\n");
+        return -ENOMEM;
     }
 
-    /* Buffer allocation 2: private_kmalloc(0x6000, 0xd0) */
-    void *isp_buf2 = kzalloc(0x6000, GFP_KERNEL);
-    if (isp_buf2) {
-        writel(virt_to_phys(isp_buf2), isp_regs + 0xa82c);
-        writel(virt_to_phys(isp_buf2) + 0x1000, isp_regs + 0xa830);
-        writel(virt_to_phys(isp_buf2) + 0x2000, isp_regs + 0xa834);
-        writel(virt_to_phys(isp_buf2) + 0x3000, isp_regs + 0xa838);
-        writel(virt_to_phys(isp_buf2) + 0x4000, isp_regs + 0xa83c);
-        writel(virt_to_phys(isp_buf2) + 0x4800, isp_regs + 0xa840);
-        writel(virt_to_phys(isp_buf2) + 0x5000, isp_regs + 0xa844);
-        writel(virt_to_phys(isp_buf2) + 0x5800, isp_regs + 0xa848);
+    /* Buffer allocation 2: Use isp_malloc_buffer for rmem allocation (0x6000 bytes) */
+    void *isp_buf2;
+    dma_addr_t isp_buf2_phys;
+    if (isp_malloc_buffer(isp_dev, 0x6000, &isp_buf2, &isp_buf2_phys) == 0) {
+        writel(isp_buf2_phys, isp_regs + 0xa82c);
+        writel(isp_buf2_phys + 0x1000, isp_regs + 0xa830);
+        writel(isp_buf2_phys + 0x2000, isp_regs + 0xa834);
+        writel(isp_buf2_phys + 0x3000, isp_regs + 0xa838);
+        writel(isp_buf2_phys + 0x4000, isp_regs + 0xa83c);
+        writel(isp_buf2_phys + 0x4800, isp_regs + 0xa840);
+        writel(isp_buf2_phys + 0x5000, isp_regs + 0xa844);
+        writel(isp_buf2_phys + 0x5800, isp_regs + 0xa848);
         writel(0x33, isp_regs + 0xa84c);
         wmb();
-        pr_info("tisp_init: ISP buffer 2 allocated and configured (0x6000 bytes)\n");
+        pr_info("tisp_init: ISP buffer 2 allocated from rmem and configured (0x6000 bytes)\n");
+    } else {
+        pr_err("tisp_init: Failed to allocate ISP buffer 2 from rmem\n");
+        return -ENOMEM;
     }
 
-    /* Buffer allocation 3: private_kmalloc(0x4000, 0xd0) */
-    void *isp_buf3 = kzalloc(0x4000, GFP_KERNEL);
-    if (isp_buf3) {
-        writel(virt_to_phys(isp_buf3), isp_regs + 0xb03c);
-        writel(virt_to_phys(isp_buf3) + 0x1000, isp_regs + 0xb040);
-        writel(virt_to_phys(isp_buf3) + 0x2000, isp_regs + 0xb044);
-        writel(virt_to_phys(isp_buf3) + 0x3000, isp_regs + 0xb048);
+    /* Buffer allocation 3: Use isp_malloc_buffer for rmem allocation (0x4000 bytes) */
+    void *isp_buf3;
+    dma_addr_t isp_buf3_phys;
+    if (isp_malloc_buffer(isp_dev, 0x4000, &isp_buf3, &isp_buf3_phys) == 0) {
+        writel(isp_buf3_phys, isp_regs + 0xb03c);
+        writel(isp_buf3_phys + 0x1000, isp_regs + 0xb040);
+        writel(isp_buf3_phys + 0x2000, isp_regs + 0xb044);
+        writel(isp_buf3_phys + 0x3000, isp_regs + 0xb048);
         writel(3, isp_regs + 0xb04c);
         wmb();
-        pr_info("tisp_init: ISP buffer 3 allocated and configured (0x4000 bytes)\n");
+        pr_info("tisp_init: ISP buffer 3 allocated from rmem and configured (0x4000 bytes)\n");
+    } else {
+        pr_err("tisp_init: Failed to allocate ISP buffer 3 from rmem\n");
+        return -ENOMEM;
     }
 
-    /* Buffer allocation 4: private_kmalloc(0x4000, 0xd0) */
-    void *isp_buf4 = kzalloc(0x4000, GFP_KERNEL);
-    if (isp_buf4) {
-        writel(virt_to_phys(isp_buf4), isp_regs + 0x4494);
-        writel(virt_to_phys(isp_buf4) + 0x1000, isp_regs + 0x4498);
-        writel(virt_to_phys(isp_buf4) + 0x2000, isp_regs + 0x449c);
-        writel(virt_to_phys(isp_buf4) + 0x3000, isp_regs + 0x44a0);
+    /* Buffer allocation 4: Use isp_malloc_buffer for rmem allocation (0x4000 bytes) */
+    void *isp_buf4;
+    dma_addr_t isp_buf4_phys;
+    if (isp_malloc_buffer(isp_dev, 0x4000, &isp_buf4, &isp_buf4_phys) == 0) {
+        writel(isp_buf4_phys, isp_regs + 0x4494);
+        writel(isp_buf4_phys + 0x1000, isp_regs + 0x4498);
+        writel(isp_buf4_phys + 0x2000, isp_regs + 0x449c);
+        writel(isp_buf4_phys + 0x3000, isp_regs + 0x44a0);
         writel(3, isp_regs + 0x4490);
         wmb();
-        pr_info("tisp_init: ISP buffer 4 allocated and configured (0x4000 bytes)\n");
+        pr_info("tisp_init: ISP buffer 4 allocated from rmem and configured (0x4000 bytes)\n");
+    } else {
+        pr_err("tisp_init: Failed to allocate ISP buffer 4 from rmem\n");
+        return -ENOMEM;
     }
 
-    /* Buffer allocation 5: private_kmalloc(0x4000, 0xd0) */
-    void *isp_buf5 = kzalloc(0x4000, GFP_KERNEL);
-    if (isp_buf5) {
-        writel(virt_to_phys(isp_buf5), isp_regs + 0x5b84);
-        writel(virt_to_phys(isp_buf5) + 0x1000, isp_regs + 0x5b88);
-        writel(virt_to_phys(isp_buf5) + 0x2000, isp_regs + 0x5b8c);
-        writel(virt_to_phys(isp_buf5) + 0x3000, isp_regs + 0x5b90);
+    /* Buffer allocation 5: Use isp_malloc_buffer for rmem allocation (0x4000 bytes) */
+    void *isp_buf5;
+    dma_addr_t isp_buf5_phys;
+    if (isp_malloc_buffer(isp_dev, 0x4000, &isp_buf5, &isp_buf5_phys) == 0) {
+        writel(isp_buf5_phys, isp_regs + 0x5b84);
+        writel(isp_buf5_phys + 0x1000, isp_regs + 0x5b88);
+        writel(isp_buf5_phys + 0x2000, isp_regs + 0x5b8c);
+        writel(isp_buf5_phys + 0x3000, isp_regs + 0x5b90);
         writel(3, isp_regs + 0x5b80);
         wmb();
-        pr_info("tisp_init: ISP buffer 5 allocated and configured (0x4000 bytes)\n");
+        pr_info("tisp_init: ISP buffer 5 allocated from rmem and configured (0x4000 bytes)\n");
+    } else {
+        pr_err("tisp_init: Failed to allocate ISP buffer 5 from rmem\n");
+        return -ENOMEM;
     }
 
-    /* Buffer allocation 6: private_kmalloc(0x4000, 0xd0) */
-    void *isp_buf6 = kzalloc(0x4000, GFP_KERNEL);
-    if (isp_buf6) {
-        writel(virt_to_phys(isp_buf6), isp_regs + 0xb8a8);
-        writel(virt_to_phys(isp_buf6) + 0x1000, isp_regs + 0xb8ac);
-        writel(virt_to_phys(isp_buf6) + 0x2000, isp_regs + 0xb8b0);
-        writel(virt_to_phys(isp_buf6) + 0x3000, isp_regs + 0xb8b4);
+    /* Buffer allocation 6: Use isp_malloc_buffer for rmem allocation (0x4000 bytes) */
+    void *isp_buf6;
+    dma_addr_t isp_buf6_phys;
+    if (isp_malloc_buffer(isp_dev, 0x4000, &isp_buf6, &isp_buf6_phys) == 0) {
+        writel(isp_buf6_phys, isp_regs + 0xb8a8);
+        writel(isp_buf6_phys + 0x1000, isp_regs + 0xb8ac);
+        writel(isp_buf6_phys + 0x2000, isp_regs + 0xb8b0);
+        writel(isp_buf6_phys + 0x3000, isp_regs + 0xb8b4);
         writel(3, isp_regs + 0xb8b8);
         wmb();
+        pr_info("tisp_init: ISP buffer 6 allocated from rmem and configured (0x4000 bytes)\n");
+    } else {
+        pr_err("tisp_init: Failed to allocate ISP buffer 6 from rmem\n");
+        return -ENOMEM;
     }
 
-    /* Buffer allocation 7: private_kmalloc(0x8000, 0xd0) - Critical WDR buffer */
-    void *wdr_buf = kzalloc(0x8000, GFP_KERNEL);
-    if (wdr_buf) {
-        writel(virt_to_phys(wdr_buf), isp_regs + 0x2010);
-        writel(virt_to_phys(wdr_buf) + 0x2000, isp_regs + 0x2014);
-        writel(virt_to_phys(wdr_buf) + 0x4000, isp_regs + 0x2018);
-        writel(virt_to_phys(wdr_buf) + 0x6000, isp_regs + 0x201c);
+    /* Buffer allocation 7: Use isp_malloc_buffer for rmem allocation (0x8000 bytes) - Critical WDR buffer */
+    void *wdr_buf;
+    dma_addr_t wdr_buf_phys;
+    if (isp_malloc_buffer(isp_dev, 0x8000, &wdr_buf, &wdr_buf_phys) == 0) {
+        writel(wdr_buf_phys, isp_regs + 0x2010);
+        writel(wdr_buf_phys + 0x2000, isp_regs + 0x2014);
+        writel(wdr_buf_phys + 0x4000, isp_regs + 0x2018);
+        writel(wdr_buf_phys + 0x6000, isp_regs + 0x201c);
         writel(0x400, isp_regs + 0x2020);
         writel(3, isp_regs + 0x2024);
         wmb();
-        pr_info("tisp_init: WDR buffer allocated and configured (0x8000 bytes)\n");
+        pr_info("tisp_init: WDR buffer allocated from rmem and configured (0x8000 bytes)\n");
+    } else {
+        pr_err("tisp_init: Failed to allocate WDR buffer from rmem\n");
+        return -ENOMEM;
     }
 
     /* Binary Ninja: All Tiziano pipeline component initialization - EXACT order from decompilation */
