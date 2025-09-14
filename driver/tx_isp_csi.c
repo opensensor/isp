@@ -711,7 +711,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 }
 
 /* csi_set_on_lanes - EXACT Binary Ninja implementation */
-int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
+int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
 {
     struct tx_isp_csi_device *csi_dev;
     void __iomem *csi_base;
