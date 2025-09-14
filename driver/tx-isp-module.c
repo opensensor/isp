@@ -570,7 +570,7 @@ struct platform_device tx_isp_core_platform_device = {
 struct frame_channel_device; /* Forward declare struct */
 static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
 static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data);
-void vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
+int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 static irqreturn_t isp_irq_handle(int irq, void *dev_id);
 static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);

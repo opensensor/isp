@@ -195,7 +195,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
     void __iomem *vic_regs;
     void *result = &data_b0000;  /* Return value matching reference */
 
-    pr_debug("*** vic_framedone_irq_function: entry - vic_dev=%p ***\n", vic_dev);
+    pr_info("*** vic_framedone_irq_function: entry - vic_dev=%p ***\n", vic_dev);
 
     /* Validate vic_dev first */
     if (!vic_dev) {
@@ -205,12 +205,14 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
     /* SAFE: Use proper struct member 'processing' instead of offset 0x214 */
-    if (vic_dev->processing == 0) {
-        /* goto label_123f4 - GPIO handling section */
-        goto label_123f4;
-    } else {
+//    if (vic_dev->processing == 0) {
+//        /* goto label_123f4 - GPIO handling section */
+//        pr_info("vic_framedone_irq_function: Processing not active, skipping frame handling\n");
+//        goto label_123f4;
+//    } else {
         /* Binary Ninja: result = *(arg1 + 0x210) */
         /* SAFE: Use proper struct member 'stream_state' instead of offset 0x210 */
+        pr_info("vic_framedone_irq_function: Stream state: %d\n", vic_dev->stream_state);
         result = (void *)(uintptr_t)vic_dev->stream_state;
 
         if (vic_dev->stream_state != 0) {
@@ -287,10 +289,10 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
     pr_debug("*** VIC->ISP EVENT: Called isp_frame_done_wakeup() ***\n");
         }
 
-        /* Binary Ninja: result = &data_b0000, goto label_123f4 */
-        result = &data_b0000;
-        goto label_123f4;
-    }
+//        /* Binary Ninja: result = &data_b0000, goto label_123f4 */
+//        result = &data_b0000;
+//        goto label_123f4;
+//    }
 
 label_123f4:
     /* Binary Ninja: GPIO handling section */
