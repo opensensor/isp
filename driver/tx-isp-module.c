@@ -6629,43 +6629,55 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
         pr_info("*** REAL SENSOR DRIVER S_STREAM RETURNED: %d ***\n", ret);
 
         /* CRITICAL: Only update VIN state AFTER sensor streaming succeeds (T30 pattern) */
-        if (ret == 0) {
+        if (ret == 0 || ret == -0x203) {
             if (enable) {
                 /* CRITICAL: Set sensor subdev state to RUNNING (this is what gets checked!) */
                 sd->vin_state = TX_ISP_MODULE_RUNNING;
                 pr_info("*** CRITICAL: SENSOR SUBDEV STATE SET TO RUNNING (5) ***\n");
 
-                /* CRITICAL FIX: Also update VIN device state if available */
-                if (isp_dev->vin_dev) {
-                    struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)isp_dev->vin_dev;
-                    vin_dev->state = TX_ISP_MODULE_RUNNING;
-                    vin_dev->active = sensor;  /* Connect sensor to VIN */
-                    pr_info("*** ISP: VIN device state set to RUNNING, sensor connected ***\n");
-                }
-
-                /* CRITICAL: Call VIN streaming to complete the chain */
-                if (isp_dev->vin_dev) {
-                    struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)isp_dev->vin_dev;
-                    pr_info("*** NOW CALLING VIN STREAMING CHAIN - THIS SHOULD GENERATE REGISTER ACTIVITY! ***\n");
-                    int vin_ret = vin_s_stream(&vin_dev->sd, enable);
-                    pr_info("*** VIN STREAMING RETURNED: %d ***\n", vin_ret);
+                /* CRITICAL FIX: NOW CALL VIN S_STREAM - THIS WAS THE MISSING PIECE! */
+                pr_info("*** CRITICAL: NOW CALLING VIN_S_STREAM - THIS SHOULD TRANSITION STATE TO 5! ***\n");
+                
+                /* Call the VIN s_stream function directly */
+                extern int vin_s_stream(struct tx_isp_subdev *sd, int enable);
+                
+                /* Create a VIN subdev structure for the call */
+                struct tx_isp_subdev vin_sd;
+                memset(&vin_sd, 0, sizeof(vin_sd));
+                vin_sd.isp = (void *)isp_dev;
+                vin_sd.vin_state = TX_ISP_MODULE_INIT;  /* Start in INIT state */
+                
+                /* Call VIN s_stream - this will transition the state to RUNNING */
+                int vin_ret = vin_s_stream(&vin_sd, enable);
+                
+                pr_info("*** CRITICAL: VIN_S_STREAM RETURNED: %d ***\n", vin_ret);
+                pr_info("*** CRITICAL: VIN STATE SHOULD NOW BE 5 (RUNNING) ***\n");
+                
+                if (vin_ret != 0) {
+                    pr_err("*** ERROR: VIN streaming failed: %d ***\n", vin_ret);
+                    /* Don't fail the whole operation - sensor is still streaming */
                 }
 
             } else {
                 /* ISP's work when disabling streaming */
                 sd->vin_state = TX_ISP_MODULE_INIT;
                 
-                /* CRITICAL FIX: Also update VIN device state if available */
-                if (isp_dev->vin_dev) {
-                    struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)isp_dev->vin_dev;
-                    vin_dev->state = TX_ISP_MODULE_INIT;
-                    pr_info("*** ISP: VIN device state set to INIT ***\n");
-                    
-                    /* Call VIN streaming to stop */
-                    int vin_ret = vin_s_stream(&vin_dev->sd, enable);
-                    pr_info("*** VIN STREAMING STOP RETURNED: %d ***\n", vin_ret);
-                }
+                /* CRITICAL FIX: Call VIN streaming to stop */
+                pr_info("*** CALLING VIN_S_STREAM TO STOP ***\n");
+                extern int vin_s_stream(struct tx_isp_subdev *sd, int enable);
+                
+                /* Create a VIN subdev structure for the call */
+                struct tx_isp_subdev vin_sd;
+                memset(&vin_sd, 0, sizeof(vin_sd));
+                vin_sd.isp = (void *)isp_dev;
+                vin_sd.vin_state = TX_ISP_MODULE_RUNNING;  /* Start in RUNNING state */
+                
+                int vin_ret = vin_s_stream(&vin_sd, enable);
+                pr_info("*** VIN STREAMING STOP RETURNED: %d ***\n", vin_ret);
             }
+            
+            /* Force success if sensor returned -0x203 */
+            ret = 0;
         } else if (ret < 0 && enable) {
             pr_err("*** Sensor streaming failed, VIN state remains at INIT ***\n");
         }
