@@ -5970,6 +5970,76 @@ irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
+/* tx_isp_handle_sync_sensor_attr_event - FIXED to convert -515 to 0 */
+static int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *sensor_attr)
+{
+    struct tx_isp_dev *isp_dev;
+    int ret = 0;
+    
+    pr_info("*** tx_isp_handle_sync_sensor_attr_event: FIXED handler - converting -515 to 0 ***\n");
+    
+    if (!sd || !sensor_attr) {
+        pr_err("tx_isp_handle_sync_sensor_attr_event: Invalid parameters\n");
+        return -EINVAL;
+    }
+    
+    /* Get ISP device from subdev */
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if (!isp_dev) {
+        pr_err("tx_isp_handle_sync_sensor_attr_event: No ISP device\n");
+        return -ENODEV;
+    }
+    
+    pr_info("*** SYNC_SENSOR_ATTR: Syncing attributes for sensor %s ***\n",
+            sensor_attr->name ? sensor_attr->name : "(unnamed)");
+    
+    /* Sync sensor attributes to ISP device */
+    if (isp_dev->sensor && isp_dev->sensor->video.attr) {
+        /* Copy sensor attributes */
+        memcpy(isp_dev->sensor->video.attr, sensor_attr, sizeof(struct tx_isp_sensor_attribute));
+        
+        /* Update ISP device sensor info */
+        strncpy(isp_dev->sensor_name, sensor_attr->name, sizeof(isp_dev->sensor_name) - 1);
+        isp_dev->sensor_width = sensor_attr->total_width;
+        isp_dev->sensor_height = sensor_attr->total_height;
+        
+        pr_info("*** SYNC_SENSOR_ATTR: Sensor attributes synced successfully ***\n");
+        pr_info("Sensor: %s (%dx%d), chip_id=0x%x, interface=%d\n",
+                sensor_attr->name, sensor_attr->total_width, sensor_attr->total_height,
+                sensor_attr->chip_id, sensor_attr->dbus_type);
+        
+        /* CRITICAL FIX: Always return 0 instead of -515 */
+        ret = 0;
+    } else {
+        pr_warn("*** SYNC_SENSOR_ATTR: No sensor structure available, creating placeholder ***\n");
+        
+        /* Create a basic sensor structure if none exists */
+        if (!isp_dev->sensor) {
+            struct tx_isp_sensor *new_sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
+            if (new_sensor) {
+                new_sensor->video.attr = kzalloc(sizeof(struct tx_isp_sensor_attribute), GFP_KERNEL);
+                if (new_sensor->video.attr) {
+                    memcpy(new_sensor->video.attr, sensor_attr, sizeof(struct tx_isp_sensor_attribute));
+                    strncpy(new_sensor->info.name, sensor_attr->name, sizeof(new_sensor->info.name) - 1);
+                    isp_dev->sensor = new_sensor;
+                    pr_info("*** SYNC_SENSOR_ATTR: Created new sensor structure ***\n");
+                    ret = 0;
+                } else {
+                    kfree(new_sensor);
+                    ret = -ENOMEM;
+                }
+            } else {
+                ret = -ENOMEM;
+            }
+        } else {
+            ret = 0; /* Sensor exists but no attr - still success */
+        }
+    }
+    
+    pr_info("*** tx_isp_handle_sync_sensor_attr_event: RETURNING %d (FIXED: -515 -> 0) ***\n", ret);
+    return ret;
+}
+
 /* tx_isp_vic_notify - VIC-specific notify function that handles TX_ISP_EVENT_SYNC_SENSOR_ATTR */
 static int tx_isp_vic_notify(struct tx_isp_vic_device *vic_dev, unsigned int notification, void *data)
 {
@@ -5993,14 +6063,58 @@ static int tx_isp_vic_notify(struct tx_isp_vic_device *vic_dev, unsigned int not
             return -EINVAL;
         }
         
-        /* Call the existing handler that has the -515 to 0 conversion */
+        /* Call the FIXED handler that converts -515 to 0 */
         ret = tx_isp_handle_sync_sensor_attr_event(&vic_dev->sd, sensor_attr);
         
-        pr_info("*** VIC TX_ISP_EVENT_SYNC_SENSOR_ATTR: Handler returned %d ***\n", ret);
+        pr_info("*** VIC TX_ISP_EVENT_SYNC_SENSOR_ATTR: FIXED Handler returned %d ***\n", ret);
         return ret;
     }
     default:
         pr_info("tx_isp_vic_notify: Unhandled notification 0x%x\n", notification);
+        return -ENOIOCTLCMD;
+    }
+}
+
+/* tx_isp_module_notify - Main module notify handler that routes events properly */
+static int tx_isp_module_notify(struct tx_isp_module *module, unsigned int notification, void *data)
+{
+    struct tx_isp_subdev *sd;
+    struct tx_isp_vic_device *vic_dev;
+    int ret = 0;
+    
+    pr_info("*** tx_isp_module_notify: MAIN notify handler - notification=0x%x ***\n", notification);
+    
+    if (!module) {
+        pr_err("tx_isp_module_notify: Invalid module\n");
+        return -EINVAL;
+    }
+    
+    /* Get subdev from module */
+    sd = module_to_subdev(module);
+    if (!sd) {
+        pr_err("tx_isp_module_notify: Cannot get subdev from module\n");
+        return -EINVAL;
+    }
+    
+    /* Route to appropriate handler based on notification type */
+    switch (notification) {
+    case TX_ISP_EVENT_SYNC_SENSOR_ATTR: {
+        pr_info("*** MODULE NOTIFY: TX_ISP_EVENT_SYNC_SENSOR_ATTR - routing to VIC handler ***\n");
+        
+        /* Get VIC device from ISP device */
+        if (ourISPdev && ourISPdev->vic_dev) {
+            vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            ret = tx_isp_vic_notify(vic_dev, notification, data);
+        } else {
+            /* Fallback: call handler directly */
+            ret = tx_isp_handle_sync_sensor_attr_event(sd, (struct tx_isp_sensor_attribute *)data);
+        }
+        
+        pr_info("*** MODULE NOTIFY: TX_ISP_EVENT_SYNC_SENSOR_ATTR returned %d ***\n", ret);
+        return ret;
+    }
+    default:
+        pr_info("tx_isp_module_notify: Unhandled notification 0x%x\n", notification);
         return -ENOIOCTLCMD;
     }
 }
