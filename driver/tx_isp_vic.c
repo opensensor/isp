@@ -1514,7 +1514,7 @@ if (!IS_ERR(cgu_isp_clk)) {
         /* The logs show frame_data_transfer expects 2200x1125, but VIC is configured for 2200x1418 */
         /* This mismatch causes the control limit error - use the frame transfer dimensions */
         u32 consistent_width = 2200;
-        u32 consistent_height = 1125;  /* Use the height that frame_data_transfer expects */
+        u32 consistent_height = 1418;  /* FIXED: Use correct GC2053 height from sensor */
         u32 consistent_stride = consistent_width * 2;  /* RAW10 = 2 bytes per pixel */
         
         pr_info("*** CRITICAL FIX: Using CONSISTENT dimensions %dx%d to match frame_data_transfer ***\n", 
@@ -1613,8 +1613,8 @@ if (!IS_ERR(cgu_isp_clk)) {
     
     /* If sensor attributes are zero, use the dimensions from the logs */
     if (width == 0 || height == 0) {
-        width = 2200;   /* From logs: "Frame size 2200x1125" */
-        height = 1125;  /* From logs: "Frame size 2200x1125" */
+        width = 2200;   /* GC2053 total width */
+        height = 1418;  /* FIXED: Use correct GC2053 height from sensor */
         pr_info("*** Using actual sensor output dimensions from logs: %dx%d ***\n", width, height);
     } else {
         pr_info("*** Using sensor attribute dimensions: %dx%d ***\n", width, height);
