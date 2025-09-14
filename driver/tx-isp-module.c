@@ -1183,6 +1183,11 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     pr_info("  ISP CSI regs (+0x13c): %p\n", isp_csi_regs);
     pr_info("  State (+0x128): %d\n", csi_dev->state);
 
+    /* *** CRITICAL FIX: LINK CSI DEVICE TO ISP DEVICE *** */
+    pr_info("*** CRITICAL: LINKING CSI DEVICE TO ISP DEVICE ***\n");
+    isp_dev->csi_dev = csi_dev;
+    pr_info("*** CSI DEVICE LINKED: isp_dev->csi_dev = %p ***\n", isp_dev->csi_dev);
+    
     pr_info("*** csi_device_probe: Binary Ninja CSI device created successfully ***\n");
     return 0;
     
