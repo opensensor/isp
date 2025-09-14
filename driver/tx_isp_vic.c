@@ -1482,7 +1482,7 @@ if (!IS_ERR(cgu_isp_clk)) {
         pr_info("tx_isp_vic_start: MIPI registers configured - 0x10=0x%x, 0x18=0x%x\n",
                 final_mipi_config, (integration_time << 16) + vic_dev->width);
 
-        /* *** CRITICAL: Binary Ninja EXACT unlock sequence *** */
+        /* *** CRITICAL: Binary Ninja EXACT unlock sequence - FIXED for control limit error *** */
         /* Binary Ninja: **(arg1 + 0xb8) = 2 */
         writel(2, vic_regs + 0x0);
         wmb();
@@ -1510,12 +1510,8 @@ if (!IS_ERR(cgu_isp_clk)) {
             goto exit_func;
         }
 
-        /* Binary Ninja: *$v0_121 = 1 - Enable VIC processing */
-        writel(1, vic_regs + 0x0);
-        wmb();
-        pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1)\n");
-
-        /* Binary Ninja: Final MIPI configuration registers */
+        /* *** CRITICAL FIX: Set final configuration registers BEFORE enabling VIC *** */
+        /* Binary Ninja: Final MIPI configuration registers - MUST be set before enabling */
         /* *(*(arg1 + 0xb8) + 0x1a4) = 0x100010 */
         writel(0x100010, vic_regs + 0x1a4);
         /* *(*(arg1 + 0xb8) + 0x1ac) = 0x4210 */
@@ -1525,6 +1521,17 @@ if (!IS_ERR(cgu_isp_clk)) {
         /* *(*(arg1 + 0xb8) + 0x1b4) = 0 */
         writel(0, vic_regs + 0x1b4);
         wmb();
+
+        /* *** CRITICAL FIX: Ensure dimensions are set correctly one more time *** */
+        /* The control limit error occurs when dimensions don't match sensor output */
+        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+        writel(vic_dev->width * 2, vic_regs + 0x18);  /* Stride for RAW10 */
+        wmb();
+
+        /* Binary Ninja: *$v0_121 = 1 - Enable VIC processing LAST */
+        writel(1, vic_regs + 0x0);
+        wmb();
+        pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1)\n");
 
         pr_info("tx_isp_vic_start: MIPI interface configured successfully - control limit error should be fixed\n");
 
