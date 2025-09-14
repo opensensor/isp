@@ -955,7 +955,7 @@ int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
 }
 
 
-/* tx_isp_vic_start - FIXED: Control limit error root cause resolution */
+/* tx_isp_vic_start - EXACT Binary Ninja implementation to fix control limit error */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
@@ -966,33 +966,32 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     void __iomem *cpm_regs;
     int ret;
 
-    pr_info("*** tx_isp_vic_start: CONTROL LIMIT ERROR FIX - Following EXACT Binary Ninja sequence ***\n");
+    pr_info("*** tx_isp_vic_start: EXACT Binary Ninja implementation to fix control limit error ***\n");
 
-    /* Validate vic_dev structure */
-    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
-        pr_err("*** CRITICAL: Invalid vic_dev pointer %p ***\n", vic_dev);
+    /* Binary Ninja EXACT: Check if vic_dev->sensor_attr.dbus_type == 1 (DVP interface) */
+    if (!vic_dev) {
+        pr_err("*** CRITICAL: Invalid vic_dev pointer ***\n");
         return -EINVAL;
     }
 
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev->vic_regs access */
-    if (((uintptr_t)&vic_dev->vic_regs & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->vic_regs member not aligned ***\n");
+    /* Get sensor attributes and interface type */
+    sensor_attr = &vic_dev->sensor_attr;
+    interface_type = sensor_attr->dbus_type;
+    sensor_format = sensor_attr->data_type;
+
+    pr_info("*** tx_isp_vic_start: interface=%d, format=0x%x ***\n", interface_type, sensor_format);
+
+    /* Get VIC register base - Binary Ninja: void* $v1 = *(arg1 + 0x110) */
+    vic_regs = vic_dev->vic_regs;
+    if (!vic_regs) {
+        pr_err("*** CRITICAL: No VIC register base ***\n");
         return -EINVAL;
     }
 
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev->sensor_attr access */
-    if (((uintptr_t)&vic_dev->sensor_attr & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->sensor_attr member not aligned ***\n");
-        return -EINVAL;
-    }
-
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev->width and height access */
-    if (((uintptr_t)&vic_dev->width & 0x3) != 0 || ((uintptr_t)&vic_dev->height & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->width/height members not aligned ***\n");
-        return -EINVAL;
-    }
-
-    pr_info("*** tx_isp_vic_start: MIPS validation passed - applying EXACT Binary Ninja sequence ***\n");
+    /* Binary Ninja EXACT: int32_t $v0 = *($v1 + 0x14) - Check interface type */
+    /* This corresponds to checking sensor_attr->dbus_type */
+    
+    pr_info("*** tx_isp_vic_start: Following EXACT Binary Ninja sequence for interface %d ***\n", interface_type);
 
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
 
