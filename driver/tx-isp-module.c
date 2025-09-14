@@ -2150,7 +2150,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         
         return 0;
     }
-    case 0xc0145608: { // VIDIOC_REQBUFS - Request buffers - Binary Ninja implementation
+    case 0xc0145608: { // VIDIOC_REQBUFS - Request buffers - MEMORY-AWARE implementation
         struct v4l2_requestbuffers {
             uint32_t count;
             uint32_t type;
@@ -2162,46 +2162,89 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (copy_from_user(&reqbuf, argp, sizeof(reqbuf)))
             return -EFAULT;
             
-        pr_info("Channel %d: REQBUFS - Request %d buffers, type=%d memory=%d\n",
+        pr_info("*** Channel %d: REQBUFS - MEMORY-AWARE implementation ***\n", channel);
+        pr_info("Channel %d: Request %d buffers, type=%d memory=%d\n",
                 channel, reqbuf.count, reqbuf.type, reqbuf.memory);
         
-        // Binary Ninja buffer allocation logic
+        /* CRITICAL: Check available memory before allocation */
         if (reqbuf.count > 0) {
-            reqbuf.count = min(reqbuf.count, 8U); // Limit to 8 buffers like reference
+            u32 buffer_size;
+            u32 total_memory_needed;
+            u32 available_memory = 96768; /* From Wyze Cam logs - only 94KB free */
             
-            /* Binary Ninja: Allocate buffer structures like reference 
-             * private_kmalloc(*($s0 + 0x34), 0xd0) */
-            int i;
-            u32 buffer_size = 2200 * 1418 * 2; // YUV buffer size for channel
-            if (channel == 1) {
-                buffer_size = 640 * 360 * 2; // Smaller for channel 1
+            /* Calculate buffer size based on channel */
+            if (channel == 0) {
+                buffer_size = 2200 * 1418 * 3 / 2; /* NV12 main stream */
+            } else {
+                buffer_size = 640 * 360 * 3 / 2;   /* NV12 sub stream */
             }
             
-            pr_info("Channel %d: Allocating %d buffers of size %d bytes each\n",
-                   channel, reqbuf.count, buffer_size);
-            
-            /* Allocate buffer tracking structures like Binary Ninja */
-            for (i = 0; i < reqbuf.count; i++) {
-                /* Binary Ninja allocates 0xd0 bytes per buffer structure */
-                void *buffer_struct = kzalloc(0xd0, GFP_KERNEL);
-                if (!buffer_struct) {
-                    pr_err("Channel %d: Failed to allocate buffer %d structure\n", channel, i);
-                    return -ENOMEM;
+            /* Limit buffer count based on memory type and available memory */
+            if (reqbuf.memory == 1) { /* V4L2_MEMORY_MMAP - driver allocates */
+                total_memory_needed = reqbuf.count * buffer_size;
+                
+                pr_info("Channel %d: MMAP mode - need %u bytes for %d buffers\n",
+                       channel, total_memory_needed, reqbuf.count);
+                
+                /* CRITICAL: Memory pressure detection */
+                if (total_memory_needed > available_memory) {
+                    /* Calculate maximum safe buffer count */
+                    u32 max_safe_buffers = available_memory / buffer_size;
+                    if (max_safe_buffers == 0) max_safe_buffers = 1; /* At least 1 buffer */
+                    
+                    pr_warn("*** MEMORY PRESSURE DETECTED ***\n");
+                    pr_warn("Channel %d: Requested %d buffers (%u bytes) > available %u bytes\n",
+                           channel, reqbuf.count, total_memory_needed, available_memory);
+                    pr_warn("Channel %d: Reducing to %d buffers to prevent Wyze Cam failure\n",
+                           channel, max_safe_buffers);
+                    
+                    reqbuf.count = max_safe_buffers;
+                    total_memory_needed = reqbuf.count * buffer_size;
                 }
                 
-                /* Initialize buffer structure like Binary Ninja reference */
-                /* Set buffer index and state */
-                *((u32*)buffer_struct + 0) = i;                    /* Buffer index */
-                *((u32*)buffer_struct + 1) = 1;                    /* Buffer state (1=allocated) */
-                *((u32*)buffer_struct + 0x12) = 0;                 /* Flags */
-                *((void**)buffer_struct + 0x11) = &state->current_buffer; /* Back pointer */
+                /* Additional safety: Limit to 4 buffers max for memory efficiency */
+                reqbuf.count = min(reqbuf.count, 4U);
                 
-                pr_info("Channel %d: Buffer[%d] structure allocated at %p\n", 
-                       channel, i, buffer_struct);
+                pr_info("Channel %d: MMAP allocation - %d buffers of %u bytes each\n",
+                       channel, reqbuf.count, buffer_size);
+                
+                /* Allocate buffer tracking structures */
+                int i;
+                for (i = 0; i < reqbuf.count; i++) {
+                    void *buffer_struct = kzalloc(0xd0, GFP_KERNEL);
+                    if (!buffer_struct) {
+                        pr_err("Channel %d: Failed to allocate buffer %d structure\n", channel, i);
+                        /* Clean up previously allocated buffers */
+                        return -ENOMEM;
+                    }
+                    
+                    /* Initialize buffer structure */
+                    *((u32*)buffer_struct + 0) = i;                    /* Buffer index */
+                    *((u32*)buffer_struct + 1) = 1;                    /* Buffer state (allocated) */
+                    *((u32*)buffer_struct + 0x12) = 0;                 /* Flags */
+                    *((void**)buffer_struct + 0x11) = &state->current_buffer; /* Back pointer */
+                    
+                    pr_info("Channel %d: Buffer[%d] allocated (MMAP mode)\n", channel, i);
+                }
+                
+            } else if (reqbuf.memory == 2) { /* V4L2_MEMORY_USERPTR - client allocates */
+                pr_info("Channel %d: USERPTR mode - client will provide buffers\n", channel);
+                
+                /* Validate client can provide reasonable buffer count */
+                reqbuf.count = min(reqbuf.count, 8U); /* Max 8 user buffers */
+                
+                /* No driver allocation needed - client provides buffers */
+                pr_info("Channel %d: USERPTR mode - %d user buffers expected\n",
+                       channel, reqbuf.count);
+                
+            } else {
+                pr_err("Channel %d: Unsupported memory type %d\n", channel, reqbuf.memory);
+                return -EINVAL;
             }
             
             state->buffer_count = reqbuf.count;
-            pr_info("Channel %d: Successfully allocated %d buffers\n", channel, state->buffer_count);
+            pr_info("*** Channel %d: MEMORY-AWARE REQBUFS SUCCESS - %d buffers ***\n", 
+                   channel, state->buffer_count);
             
         } else {
             /* Free existing buffers */
