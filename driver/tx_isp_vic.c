@@ -177,13 +177,6 @@ struct vic_buffer_entry {
 /* Helper functions - removed conflicting declarations as they're already in SDK headers */
 /* __private_spin_lock_irqsave and private_spin_unlock_irqrestore are defined in txx-funcs.h */
 
-/* GPIO function wrapper to match SDK signature */
-static inline int private_gpio_direction_output(unsigned gpio, int value)
-{
-    /* In real implementation, this would call the actual GPIO subsystem */
-    pr_debug("GPIO: Set pin %u to state %d\n", gpio, value);
-    return 0;  /* Return success for now */
-}
 
 /* Forward declaration for streaming functions */
 int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2);
