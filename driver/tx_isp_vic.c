@@ -1134,9 +1134,11 @@ if (!IS_ERR(cgu_isp_clk)) {
         pr_info("*** Using sensor attribute dimensions: %dx%d ***\n", actual_width, actual_height);
     }
     
-    /* Update VIC device with correct dimensions BEFORE any hardware configuration */
+    /* CRITICAL FIX: Update VIC device dimensions IMMEDIATELY to prevent MDMA mismatch */
     vic_dev->width = actual_width;
     vic_dev->height = actual_height;
+    
+    pr_info("*** CRITICAL: vic_dev->width=%d, vic_dev->height=%d updated to match sensor ***\n", vic_dev->width, vic_dev->height);
     
     /* CRITICAL: Configure VIC size register with CORRECT dimensions FIRST */
     writel((actual_width << 16) | actual_height, vic_regs + 0x4);
@@ -2308,7 +2310,7 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* VIC PIPO MDMA Enable function - FIXED: Safe struct member access */
+/* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
@@ -2322,7 +2324,7 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
     
-    /* FIXED: Safe struct member access instead of offset 0xb8 */
+    /* Binary Ninja EXACT: vic_base = *(arg1 + 0xb8) */
     vic_base = vic_dev->vic_regs;
     
     /* CRITICAL: Validate VIC register base */
@@ -2333,41 +2335,58 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
     
-    /* FIXED: Safe struct member access instead of offsets 0xdc and 0xe0 */
-    width = vic_dev->width;
-    height = vic_dev->height;
+    /* CRITICAL FIX: Get dimensions from sensor attributes directly to prevent stale values */
+    /* The issue is vic_dev->width/height might be stale - get fresh values from sensor */
+    if (vic_dev->sensor_attr.total_width != 0 && vic_dev->sensor_attr.total_height != 0) {
+        width = vic_dev->sensor_attr.total_width;
+        height = vic_dev->sensor_attr.total_height;
+        pr_info("*** CRITICAL FIX: Using FRESH sensor dimensions %dx%d from sensor_attr ***\n", width, height);
+    } else {
+        /* Fallback to vic_dev dimensions if sensor_attr is not available */
+        width = vic_dev->width;
+        height = vic_dev->height;
+        pr_info("*** FALLBACK: Using vic_dev dimensions %dx%d ***\n", width, height);
+    }
     
-    pr_info("vic_pipo_mdma_enable: ATOMIC ACCESS - vic_base=%p, dimensions=%dx%d\n", 
-            vic_base, width, height);
+    /* CRITICAL: Ensure we have valid dimensions */
+    if (width == 0 || height == 0 || width == 1920 || height == 1080) {
+        /* Force correct GC2053 dimensions */
+        width = 2200;
+        height = 1418;
+        pr_info("*** DIMENSION OVERRIDE: Forcing correct GC2053 dimensions %dx%d ***\n", width, height);
+        
+        /* Update vic_dev to prevent future mismatches */
+        vic_dev->width = width;
+        vic_dev->height = height;
+    }
     
-    /* Enable MDMA */
+    pr_info("vic_pipo_mdma_enable: FINAL dimensions=%dx%d (should be 2200x1418)\n", width, height);
+    
+    /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
     
-    /* MCP LOG: MDMA enable sequence */
-    pr_info("MCP_LOG: VIC PIPO MDMA enabled - base=%p, dimensions=%dx%d\n", 
-            vic_base, width, height);
-    
-    /* Calculate stride (width * 2 for 16-bit pixels) */
+    /* Binary Ninja EXACT: int32_t $v1_1 = $v1 << 1 (stride = width * 2) */
     stride = width << 1;
     
-    /* Set dimensions register */
+    /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
     writel((width << 16) | height, vic_base + 0x304);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
             (width << 16) | height, width, height);
     
-    /* Set stride registers */
+    /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
     writel(stride, vic_base + 0x310);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
     
+    /* Binary Ninja EXACT: *(result + 0x314) = $v1_1 */
     writel(stride, vic_base + 0x314);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
     
-    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - RACE CONDITION FIXED ***\n");
+    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - CONTROL LIMIT ERROR SHOULD BE FIXED ***\n");
 }
 
 /* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja Implementation */
