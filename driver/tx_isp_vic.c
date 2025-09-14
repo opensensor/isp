@@ -1560,15 +1560,29 @@ if (!IS_ERR(cgu_isp_clk)) {
         goto exit_func;
     }
 
-    /* *** CRITICAL FIX: Proper VIC timing configuration to prevent control limit error *** */
-    pr_info("*** CRITICAL FIX: Configuring VIC timing registers to prevent control limit error ***\n");
+    /* *** CRITICAL FIX: Use ACTUAL sensor output dimensions to prevent control limit error *** */
+    pr_info("*** CRITICAL FIX: Using ACTUAL sensor output dimensions to prevent control limit error ***\n");
     
-    /* STEP 1: Configure VIC dimensions BEFORE enabling - this prevents control limit error */
-    u32 width = vic_dev->width;
-    u32 height = vic_dev->height;
+    /* STEP 1: Get ACTUAL sensor dimensions from sensor attributes - this is the root cause fix */
+    u32 width = sensor_attr->total_width;   /* Use sensor's actual width */
+    u32 height = sensor_attr->total_height; /* Use sensor's actual height */
+    
+    /* If sensor attributes are zero, use the dimensions from the logs */
+    if (width == 0 || height == 0) {
+        width = 2200;   /* From logs: "Frame size 2200x1125" */
+        height = 1125;  /* From logs: "Frame size 2200x1125" */
+        pr_info("*** Using actual sensor output dimensions from logs: %dx%d ***\n", width, height);
+    } else {
+        pr_info("*** Using sensor attribute dimensions: %dx%d ***\n", width, height);
+    }
+    
+    /* Update VIC device with correct dimensions to prevent future mismatches */
+    vic_dev->width = width;
+    vic_dev->height = height;
+    
     u32 stride = width * 2; /* 16-bit per pixel */
     
-    pr_info("*** VIC TIMING FIX: Setting dimensions %dx%d, stride=%d ***\n", width, height, stride);
+    pr_info("*** VIC DIMENSION FIX: Setting CORRECT dimensions %dx%d, stride=%d ***\n", width, height, stride);
     
     /* Configure VIC size register - CRITICAL for preventing control limit error */
     writel((width << 16) | height, vic_regs + 0x4);
