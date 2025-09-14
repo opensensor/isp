@@ -4070,11 +4070,9 @@ int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
 }
 EXPORT_SYMBOL(tiziano_sync_sensor_attr);
 
-/* private_dma_sync_single_for_device - EXACT Binary Ninja implementation */
-void *private_dma_sync_single_for_device(struct device *dev, dma_addr_t addr, size_t size, enum dma_data_direction dir)
+/* private_dma_sync_single_for_device - EXACT Binary Ninja implementation with correct signature */
+void private_dma_sync_single_for_device(struct device *dev, dma_addr_t addr, size_t size, enum dma_data_direction dir)
 {
-    void *result = NULL;
-    
     pr_debug("*** private_dma_sync_single_for_device: dev=%p, addr=0x%x, size=%zu ***\n", 
              dev, (uint32_t)addr, size);
     
@@ -4083,27 +4081,16 @@ void *private_dma_sync_single_for_device(struct device *dev, dma_addr_t addr, si
         /* In the reference, this accesses a function pointer at offset 0x80 in the device structure */
         /* For now, we'll use the standard Linux DMA sync function */
         dma_sync_single_for_device(dev, addr, size, dir);
-        result = (void *)dev; /* Return device pointer as success indicator */
-    }
-    
-    /* Binary Ninja: if (arg1 == 0 || result == 0) result = nullptr */
-    if (dev == NULL || result == NULL) {
-        result = NULL;
-    } else {
-        /* Binary Ninja: int32_t $t9 = *(result + 0x24) */
-        /* This would call a function pointer, but for now we'll just return success */
         pr_debug("private_dma_sync_single_for_device: DMA sync completed\n");
     }
-    
-    return result;
 }
 EXPORT_SYMBOL(private_dma_sync_single_for_device);
 
-/* private_dma_cache_sync - Additional DMA sync function */
-void private_dma_cache_sync(void *vaddr, size_t size, enum dma_data_direction direction)
+/* private_dma_cache_sync - Additional DMA sync function with correct signature */
+void private_dma_cache_sync(struct device *dev, void *vaddr, size_t size, enum dma_data_direction direction)
 {
-    pr_debug("*** private_dma_cache_sync: vaddr=%p, size=%zu, dir=%d ***\n", 
-             vaddr, size, direction);
+    pr_debug("*** private_dma_cache_sync: dev=%p, vaddr=%p, size=%zu, dir=%d ***\n", 
+             dev, vaddr, size, direction);
     
     if (!vaddr || size == 0) {
         pr_err("private_dma_cache_sync: Invalid parameters\n");
