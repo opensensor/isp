@@ -408,8 +408,10 @@ int tx_isp_vic_wait_frame_done(struct tx_isp_subdev *sd, int channel, int timeou
 {
     int ret;
 
-    if (!sd || channel >= VIC_MAX_CHAN)
+    if (!sd || channel >= VIC_MAX_CHAN) {
+        pr_err("Invalid subdev or channel\n");
         return -EINVAL;
+    }
 
     ret = wait_for_completion_timeout(
         &sd->vic_frame_end_completion[channel],
@@ -471,7 +473,8 @@ int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum)
         if (!capture_buf) {
             pr_err("Failed to allocate DMA buffer\n");
             iounmap(vic_base);
-        return -ENOMEM;
+            return -ENOMEM;
+        }
     }
     // Read original register values
     vic_ctrl = readl(vic_base + 0x7810);
@@ -661,7 +664,6 @@ cleanup:
     iounmap(vic_base);
     return ret;
 }
-}  /* CRITICAL FIX: Close vic_snapraw function here */
 
 /* Move vic_proc_write outside of vic_snapraw */
 static ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
@@ -1682,12 +1684,6 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         
         /* Call the sensor sync function which will return -515 */
         result = vic_sensor_ops_sync_sensor_attr(sd, (struct tx_isp_sensor_attribute *)arg);
-        
-        /* CRITICAL: Convert -515 to 0 for this specific event */
-        if (result == -515) {
-            pr_info("*** CRITICAL FIX: Converting -515 to 0 for TX_ISP_EVENT_SYNC_SENSOR_ATTR ***\n");
-            result = 0;
-        }
         
         pr_info("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR handled successfully, returning %d ***\n", result);
         return result;
