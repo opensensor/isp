@@ -505,8 +505,9 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
         }
     }
     
-    /* Binary Ninja: int32_t $v1 = 4 */
-    v1 = 4;
+    /* CRITICAL FIX: Binary Ninja shows int32_t $v1 = 3 (not 4!) */
+    /* Binary Ninja: int32_t $v1 = 3 */
+    v1 = 3;
     
     /* Binary Ninja: if (arg2 == 0) */
     if (arg2 == 0) {
@@ -592,13 +593,17 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     
     /* Binary Ninja: if (arg2 != 0) */
     if (enable != 0) {
+        /* CRITICAL FIX: VIN can transition from state 3 to 4 for streaming */
+        /* The init function sets state to 3, then streaming sets it to 4 */
         /* Binary Ninja: if ($v1 != 4) goto label_132e4 */
-        if (vin_state != 4) {
-            /* CRITICAL: VIN must be in state 4 for streaming enable */
-            mcp_log_error("vin_s_stream: VIN not in state 4 for streaming enable", vin_state);
-            mcp_log_info("vin_s_stream: Expected state 4, got state", vin_state);
+        if (vin_state != 4 && vin_state != 3) {
+            /* CRITICAL: VIN must be in state 3 or 4 for streaming enable */
+            mcp_log_error("vin_s_stream: VIN not in state 3 or 4 for streaming enable", vin_state);
+            mcp_log_info("vin_s_stream: Expected state 3 or 4, got state", vin_state);
             return -EINVAL;
         }
+        /* Allow streaming from state 3 (after init) or state 4 (already streaming) */
+        mcp_log_info("vin_s_stream: VIN streaming enable from state", vin_state);
     } else {
         /* Binary Ninja: else if ($v1 == 4) */
         if (vin_state == 4) {
@@ -650,12 +655,14 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
 label_132f4:
+    /* CRITICAL FIX: Binary Ninja shows int32_t $v0 = 4; if (arg2 == 0) $v0 = 3 */
+    /* This was the root cause of the infinite loop! */
     /* Binary Ninja: int32_t $v0 = 4; if (arg2 == 0) $v0 = 3 */
     /* Binary Ninja: *($s0_1 + 0xf4) = $v0 */
     if (enable) {
-        /* CRITICAL: Set state to 5 for active streaming - this is what was missing! */
-        vin->state = 5;
-        mcp_log_info("vin_s_stream: *** VIN STATE SET TO 5 (ACTIVE STREAMING) ***", vin->state);
+        /* CRITICAL FIX: Set state to 4 for active streaming (not 5!) */
+        vin->state = 4;
+        mcp_log_info("vin_s_stream: *** VIN STATE SET TO 4 (ACTIVE STREAMING) ***", vin->state);
         
         /* Start VIN hardware */
         if (vin->base && is_valid_kernel_pointer(vin->base)) {
