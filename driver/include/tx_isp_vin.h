@@ -78,6 +78,9 @@ irqreturn_t tx_isp_vin_irq_handler(int irq, void *dev_id);
 int tx_isp_vin_enable_irq(struct tx_isp_vin_device *vin);
 int tx_isp_vin_disable_irq(struct tx_isp_vin_device *vin);
 
+/* VIN Subdev Operations Structure */
+extern struct tx_isp_subdev_ops vin_subdev_ops;
+
 /* VIN States */
 #define VIN_STATE_OFF       0
 #define VIN_STATE_IDLE     1
