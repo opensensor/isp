@@ -8,7 +8,7 @@
 
 /* Forward declarations */
 int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
-int csi_set_on_lanes(struct tx_isp_subdev *sd, int lanes);
+int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
 void dump_csi_reg(struct tx_isp_subdev *sd);
 void check_csi_error(struct tx_isp_subdev *sd);
 extern struct tx_isp_dev *ourISPdev;
@@ -123,11 +123,11 @@ static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
 
     if (err1 || err2) {
         ret = IRQ_HANDLED;
-        
+
         /* Handle protocol errors (ERR1) */
         if (err1) {
             ISP_ERROR("CSI Protocol errors (ERR1): 0x%08x\n", err1);
-            
+
             if (err1 & 0x1) ISP_ERROR("  - SOT Sync Error\n");
             if (err1 & 0x2) ISP_ERROR("  - SOTHS Sync Error\n");
             if (err1 & 0x4) ISP_ERROR("  - ECC Single-bit Error (corrected)\n");
@@ -135,32 +135,32 @@ static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
             if (err1 & 0x10) ISP_ERROR("  - CRC Error\n");
             if (err1 & 0x20) ISP_ERROR("  - Packet Size Error\n");
             if (err1 & 0x40) ISP_ERROR("  - EoTp Error\n");
-            
+
             /* Clear errors by writing back the status */
             writel(err1, csi_base + 0x20);
             wmb();
         }
-        
+
         /* Handle application errors (ERR2) */
         if (err2) {
             ISP_ERROR("CSI Application errors (ERR2): 0x%08x\n", err2);
-            
+
             if (err2 & 0x1) ISP_ERROR("  - Data ID Error\n");
             if (err2 & 0x2) ISP_ERROR("  - Frame Sync Error\n");
             if (err2 & 0x4) ISP_ERROR("  - Frame Data Error\n");
             if (err2 & 0x8) ISP_ERROR("  - Frame Sequence Error\n");
-            
+
             /* Clear errors by writing back the status */
             writel(err2, csi_base + 0x24);
             wmb();
         }
-        
+
         /* Update error state */
         if ((err1 & 0x38) || (err2 & 0xE)) { /* Serious errors */
             pr_err("CSI: Serious errors detected, may need recovery\n");
         }
     }
-    
+
     /* Check for PHY state changes */
     if (phy_state & 0x111) { /* Clock lane or data lanes in stop state */
         /* This is normal during idle periods, only log if debugging */
@@ -272,11 +272,11 @@ static int tx_isp_csi_post_streaming_config(struct tx_isp_subdev *sd, void __iom
     pr_info("=== POST-STREAMING CSI CONFIGURATION DISABLED ===\n");
     pr_info("Configuration disabled to prevent kernel crashes\n");
     pr_info("The spec driver performs this configuration, but our memory mapping differs\n");
-    
+
     /* SAFETY: Do not perform extensive register writes as they cause kernel crashes
      * The issue is that the CSI register space might not be fully accessible
      * or the memory mapping is different from the spec driver */
-    
+
     return 0;
 }
 
@@ -295,12 +295,12 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     csi_dev = ourISPdev->csi_dev;
     if (!csi_dev) {
         pr_err("CSI device is NULL\n");
-        
+
         /* Try to get the CSI device from ourISPdev as a fallback */
         if (ourISPdev && ourISPdev->csi_dev) {
             csi_dev = ourISPdev->csi_dev;
             pr_info("Using CSI device from ourISPdev: %p\n", csi_dev);
-            
+
             /* Update the subdevice data with the CSI device */
             tx_isp_set_subdevdata(sd, csi_dev);
         } else {
@@ -329,7 +329,7 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         /* Try to get the sensor attribute from ourISPdev as a fallback */
         attr = &ourISPdev->sensor_sd->active_sensor->attr;
         pr_info("Using sensor attribute from ourISPdev\n");
-        
+
         /* Copy the sensor to our subdevice */
         sd->active_sensor = ourISPdev->sensor_sd->active_sensor;
     } else if (ourISPdev && ourISPdev->sensor_width > 0 && ourISPdev->sensor_height > 0) {
@@ -339,18 +339,18 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
             pr_err("Failed to allocate sensor structure\n");
             return -ENOMEM;
         }
-        
+
         /* Initialize with default values */
         sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
         sensor->attr.mipi.lans = 2; /* Default to 2 lanes */
         sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10; /* Default to RAW10 */
         sensor->attr.total_width = ourISPdev->sensor_width;
         sensor->attr.total_height = ourISPdev->sensor_height;
-        
+
         /* Store in subdevice */
         sd->active_sensor = sensor;
         attr = &sensor->attr;
-        
+
         pr_info("Created default sensor attribute: %dx%d, MIPI, RAW10, 2 lanes\n",
                 attr->total_width, attr->total_height);
     } else {
@@ -360,18 +360,18 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
             pr_err("Failed to allocate sensor structure\n");
             return -ENOMEM;
         }
-        
+
         /* Initialize with default values */
         sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
         sensor->attr.mipi.lans = 2; /* Default to 2 lanes */
         sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10; /* Default to RAW10 */
         sensor->attr.total_width = 1920;  /* Default to 1080p */
         sensor->attr.total_height = 1080;
-        
+
         /* Store in subdevice */
         sd->active_sensor = sensor;
         attr = &sensor->attr;
-        
+
         pr_info("Created default sensor attribute: 1920x1080, MIPI, RAW10, 2 lanes\n");
     }
 
@@ -391,7 +391,7 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: int32_t $v0_4 = 4, if (arg2 == 0) $v0_4 = 3 */
     if (enable) {
         pr_info("*** CSI STREAMING: Adding isp-w01 CSI PHY Control writes ***\n");
-        
+
         /* CRITICAL FIX: Perform post-streaming CSI hardware configuration safely */
         /* This is the missing piece that the spec driver does after sensor streaming starts */
         ret = tx_isp_csi_post_streaming_config(sd, csi_base, attr);
@@ -399,15 +399,15 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
             pr_err("Failed to perform post-streaming CSI configuration: %d\n", ret);
             return ret;
         }
-        
+
         /* Binary Ninja: *(arg1 + 0x128) = 4 */
         /* CRITICAL FIX: Use safe struct member access instead of offset 0x128 */
         csi_dev->state = 4;
         pr_info("CSI streaming enabled with comprehensive hardware configuration - state=4\n");
     } else {
         pr_info("*** CSI VIDEO STREAMING DISABLE ***\n");
-        
-        /* Binary Ninja: *(arg1 + 0x128) = 3 */  
+
+        /* Binary Ninja: *(arg1 + 0x128) = 3 */
         /* CRITICAL FIX: Use safe struct member access instead of offset 0x128 */
         csi_dev->state = 3;
         pr_info("CSI streaming disabled - state=3\n");
@@ -483,104 +483,104 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
     void __iomem *csi_base;
     struct tx_isp_sensor_attribute *sensor_attr;
     int result = 0xffffffea; /* -EINVAL */
-    
+
     pr_info("*** csi_core_ops_init: EXACT Binary Ninja implementation ***\n");
     pr_info("csi_core_ops_init: sd=%p, enable=%d\n", sd, enable);
-    
+
     /* Binary Ninja: if (arg1 != 0) */
     if (sd != NULL) {
         /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
         if ((unsigned long)sd >= 0xfffff001) {
             return 0xffffffea;
         }
-        
+
         /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
         csi_dev = ourISPdev->csi_dev;
         result = 0xffffffea;
-        
+
         /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
         if (csi_dev != NULL && (unsigned long)csi_dev < 0xfffff001) {
             result = 0;
-            
+
             /* Binary Ninja: if (*($s0_1 + 0x128) s>= 2) */
             if (csi_dev->state >= 2) {
                 int v0_17;
-                
+
                 if (enable == 0) {
                     /* Stream OFF */
                     pr_info("csi_core_ops_init: Disabling CSI (enable=0)\n");
-                    
+
                     /* Binary Ninja: void* $a0_21 = *($s0_1 + 0xb8) */
                     /* *($a0_21 + 8) &= 0xfffffffe */
                     u32 reg_val = readl(csi_dev->csi_regs + 8);
                     writel(reg_val & 0xfffffffe, csi_dev->csi_regs + 8);
                     wmb();
-                    
+
                     /* *($a0_22 + 0xc) &= 0xfffffffe */
                     reg_val = readl(csi_dev->csi_regs + 0xc);
                     writel(reg_val & 0xfffffffe, csi_dev->csi_regs + 0xc);
                     wmb();
-                    
+
                     /* *($a0_23 + 0x10) &= 0xfffffffe */
                     reg_val = readl(csi_dev->csi_regs + 0x10);
                     writel(reg_val & 0xfffffffe, csi_dev->csi_regs + 0x10);
                     wmb();
-                    
+
                     v0_17 = 2;
                 } else {
                     /* Stream ON */
                     pr_info("csi_core_ops_init: Enabling CSI (enable=1)\n");
-                    
+
                     /* Binary Ninja: void* $v1_5 = *($s0_1 + 0x110) */
                     sensor_attr = &ourISPdev->sensor_attr;
-                    
+
                     /* Binary Ninja: int32_t $s2_1 = *($v1_5 + 0x14) */
                     int interface_type = sensor_attr->dbus_type;
-                    
+
                     if (interface_type == 1) {
                         /* MIPI interface configuration */
                         pr_info("*** CRITICAL: CSI MIPI interface configuration ***\n");
-                        
+
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
                         int lanes = sensor_attr->mipi.lans;
                         if (lanes == 0) lanes = 2; /* Default to 2 lanes */
                         writel(lanes - 1, csi_dev->csi_regs + 4);
                         wmb();
                         pr_info("CSI: Set lanes to %d (reg 0x4 = %d)\n", lanes, lanes - 1);
-                        
+
                         /* Binary Ninja: void* $v0_2 = *($s0_1 + 0xb8) */
                         /* *($v0_2 + 8) &= 0xfffffffe */
                         u32 reg_val = readl(csi_dev->csi_regs + 8);
                         writel(reg_val & 0xfffffffe, csi_dev->csi_regs + 8);
                         wmb();
-                        
+
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = 0 */
                         writel(0, csi_dev->csi_regs + 0xc);
                         wmb();
-                        
+
                         /* Binary Ninja: private_msleep(1) */
                         msleep(1);
-                        
+
                         /* Binary Ninja: *($v1_9 + 0x10) &= 0xfffffffe */
                         reg_val = readl(csi_dev->csi_regs + 0x10);
                         writel(reg_val & 0xfffffffe, csi_dev->csi_regs + 0x10);
                         wmb();
-                        
+
                         /* Binary Ninja: private_msleep(1) */
                         msleep(1);
-                        
+
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = $s2_1 */
                         writel(interface_type, csi_dev->csi_regs + 0xc);
                         wmb();
-                        
+
                         /* Binary Ninja: private_msleep(1) */
                         msleep(1);
-                        
+
                         /* *** CRITICAL: PHY timing configuration based on frame rate *** */
                         /* Binary Ninja: void* $v0_7 = *($s0_1 + 0x110) */
                         /* int32_t $v1_10 = *($v0_7 + 0x3c) */
                         int frame_rate = 30; /* Default frame rate */
-                        
+
                         /* Estimate frame rate from sensor configuration */
                         if (ourISPdev->sensor_width > 0 && ourISPdev->sensor_height > 0) {
                             u32 pixel_count = ourISPdev->sensor_width * ourISPdev->sensor_height;
@@ -594,9 +594,9 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                                 frame_rate = 15;
                             }
                         }
-                        
+
                         int phy_timing_value = 1; /* Default */
-                        
+
                         /* Binary Ninja: Frame rate to PHY timing mapping */
                         if (frame_rate >= 80 && frame_rate < 110) {
                             phy_timing_value = 1;
@@ -621,10 +621,10 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         } else if (frame_rate >= 800 && frame_rate < 1000) {
                             phy_timing_value = 11;
                         }
-                        
-                        pr_info("*** CRITICAL: CSI PHY timing configuration - frame_rate=%d, phy_timing=%d ***\n", 
+
+                        pr_info("*** CRITICAL: CSI PHY timing configuration - frame_rate=%d, phy_timing=%d ***\n",
                                 frame_rate, phy_timing_value);
-                        
+
                         /* Binary Ninja: Configure PHY timing registers */
                         void __iomem *phy_base = csi_dev->phy_regs;
                         if (!phy_base) {
@@ -632,56 +632,56 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                             phy_base = ioremap(0x13310000, 0x1000);
                             csi_dev->phy_regs = phy_base;
                         }
-                        
+
                         if (phy_base) {
                             /* Binary Ninja: Configure critical PHY timing registers */
                             u32 current_val = readl(phy_base + 0x160);
                             u32 new_val = (current_val & 0xfffffff0) | (phy_timing_value & 0xf);
                             writel(new_val, phy_base + 0x160);
                             wmb();
-                            
+
                             /* Mirror to other PHY timing registers */
                             writel(new_val, phy_base + 0x1e0);
                             wmb();
                             writel(new_val, phy_base + 0x260);
                             wmb();
-                            
+
                             pr_info("*** CSI PHY timing configured: 0x160=0x%08x, 0x1e0=0x%08x, 0x260=0x%08x ***\n",
                                     readl(phy_base + 0x160), readl(phy_base + 0x1e0), readl(phy_base + 0x260));
-                            
+
                             /* Binary Ninja: Additional PHY configuration */
                             /* *$v0_8 = 0x7d */
                             writel(0x7d, phy_base + 0x0);
                             wmb();
-                            
+
                             /* *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
                             writel(0x3f, phy_base + 0x128);
                             wmb();
-                            
+
                             pr_info("*** CSI PHY base configuration: 0x0=0x7d, 0x128=0x3f ***\n");
                         }
-                        
+
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
                         writel(1, csi_dev->csi_regs + 0x10);
                         wmb();
-                        
+
                         /* Binary Ninja: private_msleep(0xa) */
                         msleep(10);
-                        
+
                         v0_17 = 3;
-                        
+
                         pr_info("*** CRITICAL: CSI MIPI configuration complete - control limit error should be FIXED ***\n");
-                        
+
                     } else if (interface_type == 2) {
                         /* DVP interface */
                         pr_info("CSI: DVP interface configuration\n");
-                        
+
                         /* Binary Ninja: DVP configuration */
                         writel(0, csi_dev->csi_regs + 0xc);
                         wmb();
                         writel(1, csi_dev->csi_regs + 0xc);
                         wmb();
-                        
+
                         if (csi_dev->phy_regs) {
                             writel(0x7d, csi_dev->phy_regs + 0x0);
                             wmb();
@@ -690,58 +690,58 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                             writel(1, csi_dev->phy_regs + 0x2cc);
                             wmb();
                         }
-                        
+
                         v0_17 = 3;
                     } else {
                         pr_err("CSI: Unsupported interface type %d\n", interface_type);
                         v0_17 = 3;
                     }
                 }
-                
+
                 /* Binary Ninja: *($s0_1 + 0x128) = $v0_17 */
                 csi_dev->state = v0_17;
                 pr_info("CSI: State updated to %d\n", v0_17);
-                
+
                 return 0;
             }
         }
     }
-    
+
     return result;
 }
 
 /* csi_set_on_lanes - EXACT Binary Ninja implementation */
-int csi_set_on_lanes(struct tx_isp_subdev *sd, int lanes)
+int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
 {
     struct tx_isp_csi_device *csi_dev;
     void __iomem *csi_base;
     u32 reg_val;
-    
+
     pr_info("*** csi_set_on_lanes: EXACT Binary Ninja implementation ***\n");
     pr_info("csi_set_on_lanes: lanes=%d\n", lanes);
-    
-    if (!sd || !ourISPdev || !ourISPdev->csi_dev) {
+
+    if (!ourISPdev || !ourISPdev->csi_dev) {
         pr_err("csi_set_on_lanes: Invalid parameters\n");
         return -EINVAL;
     }
-    
+
     csi_dev = ourISPdev->csi_dev;
     csi_base = csi_dev->csi_regs;
-    
+
     if (!csi_base) {
         pr_err("csi_set_on_lanes: CSI base is NULL\n");
         return -EINVAL;
     }
-    
+
     /* Binary Ninja: void* $v1 = *(arg1 + 0xb8) */
     /* *($v1 + 4) = ((zx.d(arg2) - 1) & 3) | (*($v1 + 4) & 0xfffffffc) */
     reg_val = readl(csi_base + 4);
     reg_val = (reg_val & 0xfffffffc) | ((lanes - 1) & 3);
     writel(reg_val, csi_base + 4);
     wmb();
-    
+
     pr_info("*** CSI lanes configured: %d lanes (reg 0x4 = 0x%08x) ***\n", lanes, reg_val);
-    
+
     /* Binary Ninja: return 0 */
     return 0;
 }
