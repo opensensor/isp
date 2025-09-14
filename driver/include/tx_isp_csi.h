@@ -10,16 +10,18 @@ int tx_isp_csi_start(struct tx_isp_subdev *sd);
 int tx_isp_csi_stop(struct tx_isp_subdev *sd);
 int tx_isp_csi_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config);
 
-/* CSI Core Operations - EXACT Binary Ninja implementations */
-int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
-int csi_set_on_lanes(struct tx_isp_subdev *sd, int lanes);
-int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);
+/* CSI Core Operations - Match existing SDK implementations */
+int csi_core_ops_init(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
+int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
 
 /* CSI Debug and Utility Functions */
 void dump_csi_reg(struct tx_isp_subdev *sd);
-void check_csi_error(struct tx_isp_subdev *sd);
+int check_csi_error(struct tx_isp_csi_device *csi_dev);
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
 int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd);
+
+/* CSI Video Operations - Remove conflicting declaration */
+/* csi_video_s_stream is static in tx-isp-module.c */
 
 /* CSI States */
 #define CSI_STATE_OFF       0
