@@ -1980,8 +1980,8 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
                   sensor_attr->total_width, sensor_attr->total_height);
         
         /* Fix corrupted dimensions - assume GC2053 sensor */
-        sensor_attr->total_width = 2200;
-        sensor_attr->total_height = 1418;  /* FIXED: Use correct GC2053 height from sensor */
+        sensor_attr->total_width = 1920;
+        sensor_attr->total_height = 1080;  /* FIXED: Use correct GC2053 height from sensor */
         
         ISP_INFO("*** ispcore_core_ops_init: CORRECTED to %dx%d ***\n",
                  sensor_attr->total_width, sensor_attr->total_height);
@@ -2069,8 +2069,8 @@ static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sen
                   sensor_attr->total_width, sensor_attr->total_height);
         
         /* Default to common HD resolution */
-        sensor_attr->total_width = 2200;  /* GC2053 total width */
-        sensor_attr->total_height = 1418; /* GC2053 total height - FIXED to match sensor */
+        sensor_attr->total_width = 1920;  /* GC2053 total width */
+        sensor_attr->total_height = 1080; /* GC2053 total height - FIXED to match sensor */
         
         ISP_INFO("*** CORRECTED DIMENSIONS: %dx%d ***\n",
                  sensor_attr->total_width, sensor_attr->total_height);
@@ -2765,9 +2765,9 @@ static uint32_t msca_ch_en = 0;
 EXPORT_SYMBOL(msca_ch_en);
 
 /* Additional missing global variables referenced in Binary Ninja */
-uint32_t data_b2de8 = 2200;  /* Default channel 0 width */
+uint32_t data_b2de8 = 1920;  /* Default channel 0 width */
 EXPORT_SYMBOL(data_b2de8);
-uint32_t data_b2dec = 1418;  /* Default channel 0 height */
+uint32_t data_b2dec = 1080;  /* Default channel 0 height */
 EXPORT_SYMBOL(data_b2dec);
 uint32_t data_b2db4 = 960;   /* Default channel 1 width */
 EXPORT_SYMBOL(data_b2db4);

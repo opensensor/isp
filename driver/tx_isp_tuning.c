@@ -279,7 +279,7 @@ int tisp_init(void *sensor_info, char *param_name)
         uint32_t height;
         uint32_t fps;
         uint32_t mode;
-    } sensor_params = {2200, 1418, 25, 0}; /* Default sensor parameters */
+    } sensor_params = {1920, 1080, 25, 0}; /* Default sensor parameters */
 
     pr_info("*** tisp_init: INITIALIZING ISP HARDWARE PIPELINE - Binary Ninja EXACT implementation ***\n");
 

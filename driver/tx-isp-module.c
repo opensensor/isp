@@ -903,8 +903,8 @@ int frame_channel_open(struct inode *inode, struct file *file)
     if (fcd->state.width == 0) {
         if (fcd->channel_num == 0) {
             /* Main channel - HD */
-            fcd->state.width = 2200;
-            fcd->state.height = 1418;
+            fcd->state.width = 1920;
+            fcd->state.height = 1080;
             fcd->state.format = 0x3231564e; /* NV12 */
         } else {
             /* Sub channel - smaller */
@@ -1345,8 +1345,8 @@ static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const cha
         struct tx_isp_sensor_attribute sensor_attr = {0};
         sensor_attr.name = sensor_name;
         sensor_attr.chip_id = 0x2053; // GC2053 ID
-        sensor_attr.total_width = 2200;
-        sensor_attr.total_height = 1418;
+        sensor_attr.total_width = 1920;
+        sensor_attr.total_height = 1080;
         sensor_attr.integration_time = 1000; // Default integration time
         sensor_attr.max_again = 0x40000; // Default gain (format .16)
         
@@ -2174,7 +2174,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             
             /* Calculate buffer size based on channel */
             if (channel == 0) {
-                buffer_size = 2200 * 1418 * 3 / 2; /* NV12 main stream */
+                buffer_size = 1920 * 1080 * 3 / 2; /* NV12 main stream */
             } else {
                 buffer_size = 640 * 360 * 3 / 2;   /* NV12 sub stream */
             }
@@ -2401,7 +2401,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Reference waits for completed buffer and returns it
         // For now, return dummy buffer data
         buffer.index = 0;
-        buffer.bytesused = 2200 * 1418 * 3 / 2; // YUV420 size
+        buffer.bytesused = 1920 * 1080 * 3 / 2; // YUV420 size
         buffer.flags = 0x1; // V4L2_BUF_FLAG_MAPPED
         buffer.sequence = 0;
         
@@ -2580,8 +2580,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (ourISPdev && ourISPdev->vic_dev) {
             struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
             if (channel == 0) {
-                vic->width = 2200;
-                vic->height = 1418;
+                vic->width = 1920;
+                vic->height = 1080;
             } else {
                 vic->width = 640;
                 vic->height = 360;
@@ -2906,12 +2906,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Channel %d: Get format, type=%d\n", channel, format.type);
         
         // Set default HD format
-        format.fmt.pix.width = 2200;
-        format.fmt.pix.height = 1418;
+        format.fmt.pix.width = 1920;
+        format.fmt.pix.height = 1080;
         format.fmt.pix.pixelformat = 0x3231564e; // NV12 format
         format.fmt.pix.field = 1; // V4L2_FIELD_NONE
-        format.fmt.pix.bytesperline = 2200;
-        format.fmt.pix.sizeimage = 2200 * 1418 * 3 / 2;
+        format.fmt.pix.bytesperline = 1920;
+        format.fmt.pix.sizeimage = 1920 * 1080 * 3 / 2;
         format.fmt.pix.colorspace = 8; // V4L2_COLORSPACE_REC709
         
         if (copy_to_user(argp, &format, sizeof(format)))
@@ -3298,8 +3298,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     /* SAFE INITIALIZATION: Set up basic sensor attributes for GC2053 */
                     if (strncmp(sensor_name, "gc2053", 6) == 0) {
                         sensor->video.attr->chip_id = 0x2053;
-                        sensor->video.attr->total_width = 2200;
-                        sensor->video.attr->total_height = 1418;
+                        sensor->video.attr->total_width = 1920;
+                        sensor->video.attr->total_height = 1080;
                         sensor->video.attr->dbus_type = 2; // MIPI interface (fixed from DVP)
                         sensor->video.attr->integration_time = 1000;
                         sensor->video.attr->max_again = 0x40000;
@@ -3540,8 +3540,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t addr;   // Physical address (usually 0)
             uint32_t size;   // Calculated buffer size
         } buf_result;
-        uint32_t width = 2200;   // Default HD width
-        uint32_t height = 1418;  // Default HD height
+        uint32_t width = 1920;   // Default HD width
+        uint32_t height = 1080;  // Default HD height
         uint32_t stride_factor;
         uint32_t main_buf;
         uint32_t total_main;
@@ -3591,8 +3591,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t addr;   // Physical buffer address
             uint32_t size;   // Buffer size
         } buf_setup;
-        uint32_t width = 2200;
-        uint32_t height = 1418;
+        uint32_t width = 1920;
+        uint32_t height = 1080;
         uint32_t stride;
         uint32_t frame_size;
         uint32_t uv_offset;
@@ -3643,8 +3643,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t addr;   // WDR buffer address
             uint32_t size;   // WDR buffer size
         } wdr_setup;
-        uint32_t wdr_width = 2200;
-        uint32_t wdr_height = 1418;
+        uint32_t wdr_width = 1920;
+        uint32_t wdr_height = 1080;
         uint32_t wdr_mode = 1; // Linear mode by default
         uint32_t required_size;
         uint32_t stride_lines;
@@ -3686,8 +3686,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t addr;   // WDR buffer address (usually 0)
             uint32_t size;   // Calculated WDR buffer size
         } wdr_result;
-        uint32_t wdr_width = 2200;
-        uint32_t wdr_height = 1418;
+        uint32_t wdr_width = 1920;
+        uint32_t wdr_height = 1080;
         uint32_t wdr_mode = 1; // Linear mode
         uint32_t wdr_size;
         
@@ -6017,7 +6017,7 @@ int vic_event_handler(void *subdev, int event_type, void *data)
             /* Extract buffer information and program to VIC */
             struct v4l2_buffer *buffer_data = (struct v4l2_buffer *)data;
             if (buffer_data && buffer_data->index < 8) {
-                u32 buffer_phys_addr = 0x6300000 + (buffer_data->index * (2200 * 1418 * 2));
+                u32 buffer_phys_addr = 0x6300000 + (buffer_data->index * (1920 * 1080 * 2));
                 u32 buffer_reg_offset = (buffer_data->index + 0xc6) << 2;
                 
                 pr_info("VIC EVENT: Programming buffer[%d] addr=0x%x to VIC reg 0x%x\n",

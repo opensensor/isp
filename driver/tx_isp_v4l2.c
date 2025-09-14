@@ -96,8 +96,8 @@ static int tx_isp_v4l2_s_fmt_vid_cap(struct file *file, void *priv,
     /* Set format parameters based on channel */
     if (dev->channel_num == 0) {
         /* Main channel - full resolution */
-        f->fmt.pix.width = min_t(u32, f->fmt.pix.width, 2200);
-        f->fmt.pix.height = min_t(u32, f->fmt.pix.height, 1418);
+        f->fmt.pix.width = min_t(u32, f->fmt.pix.width, 1920);
+        f->fmt.pix.height = min_t(u32, f->fmt.pix.height, 1080);
     } else {
         /* Sub channel - smaller resolution */
         f->fmt.pix.width = min_t(u32, f->fmt.pix.width, 640);
@@ -531,8 +531,8 @@ static int tx_isp_v4l2_cropcap(struct file *file, void *priv,
     /* Set crop capabilities based on channel */
     cap->bounds.left = 0;
     cap->bounds.top = 0;
-    cap->bounds.width = (dev->channel_num == 0) ? 2200 : 640;
-    cap->bounds.height = (dev->channel_num == 0) ? 1418 : 360;
+    cap->bounds.width = (dev->channel_num == 0) ? 1920 : 640;
+    cap->bounds.height = (dev->channel_num == 0) ? 1080 : 360;
     
     cap->defrect = cap->bounds;
     cap->pixelaspect.numerator = 1;
@@ -726,8 +726,8 @@ static int tx_isp_create_v4l2_device(int channel)
     dev->format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     if (channel == 0) {
         /* Main channel - HD */
-        dev->format.fmt.pix.width = 2200;
-        dev->format.fmt.pix.height = 1418;
+        dev->format.fmt.pix.width = 1920;
+        dev->format.fmt.pix.height = 1080;
     } else {
         /* Sub channel */
         dev->format.fmt.pix.width = 640;

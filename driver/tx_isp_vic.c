@@ -83,8 +83,8 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     }
     
     /* Initialize VIC device dimensions */
-    vic_dev->width = 2200;  /* Default HD width */
-    vic_dev->height = 1418; /* Default HD height */
+    vic_dev->width = 1920;  /* Default HD width */
+    vic_dev->height = 1080; /* Default HD height */
     
     /* Set up VIC subdev structure */
     memset(&vic_dev->sd, 0, sizeof(vic_dev->sd));
@@ -121,8 +121,8 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* Set up sensor attributes with defaults */
     memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
     vic_dev->sensor_attr.dbus_type = 2; /* Default to MIPI */
-    vic_dev->sensor_attr.total_width = 2200;
-    vic_dev->sensor_attr.total_height = 1418;
+    vic_dev->sensor_attr.total_width = 1920;
+    vic_dev->sensor_attr.total_height = 1080;
     vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
     
     /* *** CRITICAL: Link VIC device to ISP core *** */
@@ -174,22 +174,14 @@ struct vic_buffer_entry {
     u32 buffer_addr;
 };
 
-/* Helper functions matching reference driver */
-static inline void __private_spin_lock_irqsave(spinlock_t *lock, unsigned long *flags)
-{
-    spin_lock_irqsave(lock, *flags);
-}
+/* Helper functions - removed conflicting declarations as they're already in SDK headers */
+/* __private_spin_lock_irqsave and private_spin_unlock_irqrestore are defined in txx-funcs.h */
 
-static inline void private_spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags)
-{
-    spin_unlock_irqrestore(lock, flags);
-}
-
-/* Placeholder for GPIO function from reference driver */
-static int private_gpio_direction_output(uint32_t gpio_pin, uint32_t state)
+/* GPIO function wrapper to match SDK signature */
+static inline int private_gpio_direction_output(unsigned gpio, int value)
 {
     /* In real implementation, this would call the actual GPIO subsystem */
-    pr_debug("GPIO: Set pin %d to state %d\n", gpio_pin, state);
+    pr_debug("GPIO: Set pin %u to state %d\n", gpio, value);
     return 0;  /* Return success for now */
 }
 
@@ -1383,8 +1375,8 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     if (vic_dev->width == 0 || vic_dev->height == 0) {
         pr_err("*** CRITICAL: Invalid sensor dimensions %dx%d - will cause control limit error! ***\n", 
                vic_dev->width, vic_dev->height);
-        vic_dev->width = 2200;   /* Set safe defaults */
-        vic_dev->height = 1418;
+        vic_dev->width = 1920;   /* Set safe defaults */
+        vic_dev->height = 1080;
         pr_info("*** Using safe default dimensions 2200x1418 ***\n");
     }
 
@@ -2000,10 +1992,10 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     }
     
     /* CRITICAL: Ensure we have valid dimensions */
-    if (width == 0 || height == 0 || width == 2200 || height == 1418) {
+    if (width == 0 || height == 0 || width == 1920 || height == 1080) {
         /* Force correct GC2053 dimensions */
-        width = 2200;
-        height = 1418;
+        width = 1920;
+        height = 1080;
         pr_info("*** DIMENSION OVERRIDE: Forcing correct GC2053 dimensions %dx%d ***\n", width, height);
         
         /* Update vic_dev to prevent future mismatches */
