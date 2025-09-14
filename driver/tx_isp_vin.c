@@ -129,6 +129,10 @@ int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev)
     memset(&vin_dev->sd, 0, sizeof(vin_dev->sd));
     vin_dev->sd.isp = (void *)isp_dev;
     vin_dev->sd.vin_state = TX_ISP_MODULE_SLAKE;
+    
+    /* CRITICAL FIX: Set VIN subdev operations - this was missing! */
+    vin_dev->sd.ops = &vin_subdev_ops;
+    pr_info("*** VIN subdev operations set: %p ***\n", &vin_subdev_ops);
 
     /* CRITICAL FIX: Connect VIN device to ISP device - this was missing! */
     isp_dev->vin_dev = vin_dev;
