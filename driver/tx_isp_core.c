@@ -4243,21 +4243,21 @@ int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev)
     
     /* Step 2: Wait for VIC to start processing frames */
     /* Check VIC status register to see if frames are being processed */
-    timeout_count = 0;
-    while (timeout_count < 100) {
-        u32 vic_status = readl(vic_regs + 0x0);  /* VIC main status register */
-        if (vic_status == 1) {
-            pr_info("isp_trigger_frame_data_transfer: VIC processing active\n");
-            break;
-        }
-        udelay(100);
-        timeout_count++;
-    }
-    
-    if (timeout_count >= 100) {
-        pr_err("isp_trigger_frame_data_transfer: Timeout waiting for frame start\n");
-        return -ETIMEDOUT;
-    }
+//    timeout_count = 0;
+//    while (timeout_count < 100) {
+//        u32 vic_status = readl(vic_regs + 0x0);  /* VIC main status register */
+//        if (vic_status == 1) {
+//            pr_info("isp_trigger_frame_data_transfer: VIC processing active\n");
+//            break;
+//        }
+//        udelay(100);
+//        timeout_count++;
+//    }
+//
+//    if (timeout_count >= 100) {
+//        pr_err("isp_trigger_frame_data_transfer: Timeout waiting for frame start\n");
+//        return -ETIMEDOUT;
+//    }
     
     /* Step 3: The frame data transfer is now handled by the VIC hardware automatically */
     /* The VIC will continuously capture frames from the sensor and store them in DMA buffers */
