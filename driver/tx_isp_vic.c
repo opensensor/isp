@@ -1295,6 +1295,32 @@ if (!IS_ERR(cgu_isp_clk)) {
         /* MIPI interface - EXACT Binary Ninja implementation to fix control limit error */
         pr_info("tx_isp_vic_start: MIPI interface configuration (interface type 2)\n");
 
+        /* *** CRITICAL FIX: Initialize CSI BEFORE VIC configuration *** */
+        pr_info("*** CRITICAL: Initializing CSI before VIC to prevent control limit error ***\n");
+        
+        /* Call CSI core initialization - this was missing! */
+        if (ourISPdev && ourISPdev->csi_dev) {
+            struct tx_isp_subdev *csi_sd = &ourISPdev->csi_dev->sd;
+            int csi_ret = csi_core_ops_init(csi_sd, 1);
+            if (csi_ret == 0) {
+                pr_info("*** SUCCESS: CSI core initialization complete ***\n");
+            } else {
+                pr_err("*** ERROR: CSI core initialization failed: %d ***\n", csi_ret);
+            }
+            
+            /* Set CSI lanes based on sensor configuration */
+            int lanes = sensor_attr->mipi.lans;
+            if (lanes == 0) lanes = 2; /* Default to 2 lanes */
+            csi_ret = csi_set_on_lanes(csi_sd, lanes);
+            if (csi_ret == 0) {
+                pr_info("*** SUCCESS: CSI lanes configured: %d ***\n", lanes);
+            } else {
+                pr_err("*** ERROR: CSI lane configuration failed: %d ***\n", csi_ret);
+            }
+        } else {
+            pr_err("*** WARNING: No CSI device available for initialization ***\n");
+        }
+
         /* *** CRITICAL FIX: Follow EXACT Binary Ninja sequence to prevent control limit error *** */
         
         /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0xc) = 3 */
