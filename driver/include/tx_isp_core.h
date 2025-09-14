@@ -15,6 +15,10 @@ int tiziano_isp_init(struct tx_isp_sensor_attribute *sensor_attr, char *param_na
 int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr);
 int tiziano_channel_start(int channel_id, struct tx_isp_channel_attr *attr);
 
+/* Event Handling Functions */
+int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
+int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
+
 /* Hardware Reset Functions */
 int tx_isp_hardware_reset(int reset_mode);
 u32 tx_isp_check_reset_status(void);
