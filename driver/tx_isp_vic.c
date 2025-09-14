@@ -1595,40 +1595,41 @@ if (!IS_ERR(cgu_isp_clk)) {
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
-    /* *** CRITICAL FIX: Restore the EXACT register writes that were generating interrupts *** */
-    pr_info("*** CRITICAL FIX: Restoring EXACT interrupt-generating register sequence ***\n");
+    /* *** CRITICAL FIX: Remove problematic register writes that cause control limit error *** */
+    pr_info("*** CRITICAL FIX: Removing problematic register writes that cause control limit error ***\n");
     
-    /* STEP 1: Clear any pending interrupts first */
+    /* The control limit error is caused by writing conflicting values to VIC registers */
+    /* after the VIC has been enabled. We need to avoid overwriting the carefully configured */
+    /* dimension and timing registers that were set during the MIPI configuration. */
+    
+    /* STEP 1: Only clear interrupt status, don't write conflicting register values */
     writel(0xffffffff, vic_regs + 0x1f0);  /* Clear all interrupt status */
     wmb();
     
-    /* STEP 2: Write the EXACT registers that were working before - from the working version */
-    /* These are the registers that were actually generating interrupts */
-    writel(0x3130322a, vic_regs + 0x0);      /* This was in the working version */
-    writel(0x1, vic_regs + 0x4);             /* This was in the working version */
-    writel(0x200, vic_regs + 0x14);          /* This was in the working version */
-    wmb();
+    /* STEP 2: DO NOT write to reg 0x0 and 0x4 - these contain the VIC enable and dimensions */
+    /* The previous code was overwriting the carefully configured dimensions with random values */
+    /* writel(0x3130322a, vic_regs + 0x0); -- REMOVED: This overwrites VIC enable state */
+    /* writel(0x1, vic_regs + 0x4);        -- REMOVED: This overwrites VIC dimensions */
+    /* writel(0x54560031, vic_regs + 0x0); -- REMOVED: This overwrites VIC enable state */
+    /* writel(0x7800438, vic_regs + 0x4);  -- REMOVED: This overwrites VIC dimensions */
     
-    /* STEP 3: The CSI PHY Control registers that enable interrupt generation */
-    writel(0x54560031, vic_regs + 0x0);      /* This was generating interrupts */
-    writel(0x7800438, vic_regs + 0x4);       /* This was generating interrupts */
-    wmb();
+    pr_info("*** CRITICAL: Avoided overwriting VIC enable (0x0) and dimensions (0x4) registers ***\n");
     
-    /* STEP 4: Enable VIC interrupt sources */
+    /* STEP 3: Only enable interrupt sources without touching VIC control registers */
     writel(0x1, vic_regs + 0x1f4);  /* Enable frame done interrupt */
     writel(0x1, vic_regs + 0x1f8);  /* Enable DMA done interrupt */
     writel(0x1, vic_regs + 0x1fc);  /* Enable error interrupts */
     wmb();
     
-    /* STEP 5: Enable VIC interrupt mask - this allows interrupts to be generated */
+    /* STEP 4: Enable VIC interrupt mask - this allows interrupts to be generated */
     writel(0x7, vic_regs + 0x1ec);  /* Enable frame, DMA, and error interrupt masks */
     wmb();
     
-    /* STEP 6: Enable VIC interrupt generation at the VIC hardware level */
+    /* STEP 5: Enable VIC interrupt generation at the VIC hardware level */
     writel(0x1, vic_regs + 0x1e8);  /* Enable VIC interrupt output to interrupt controller */
     wmb();
     
-    pr_info("*** CRITICAL: EXACT interrupt-generating registers restored - should now see IRQ 38 activity ***\n");
+    pr_info("*** CRITICAL: Interrupt sources enabled without overwriting VIC control registers ***\n");
 
     /* *** CRITICAL FIX: Set vic_start_ok ONLY after successful configuration *** */
     vic_start_ok = 1;
