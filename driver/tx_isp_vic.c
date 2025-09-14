@@ -2229,11 +2229,23 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** DISABLING VIC INTERRUPTS DURING INITIALIZATION ***\n");
                 vic_start_ok = 0;  /* Disable interrupt processing */
                 
+                /* CRITICAL FIX: Correct the register base mapping! */
+                /* vic_regs = 0x133e0000 = CSI PHY (isp-w02 in trace) */
+                /* isp_base = 0x13300000 = Main ISP (isp-m0 in trace) - NEEDS SEPARATE MAPPING */
+                void __iomem *main_isp_base = ioremap(0x13300000, 0x100000);  /* Map main ISP separately */
+                void __iomem *vic_w01_base = ioremap(0x10023000, 0x1000);    /* Map isp-w01 separately */
+                
+                if (!main_isp_base || !vic_w01_base) {
+                    pr_err("*** CRITICAL: Failed to map ISP register bases ***\n");
+                    if (main_isp_base) iounmap(main_isp_base);
+                    if (vic_w01_base) iounmap(vic_w01_base);
+                    return -ENOMEM;
+                }
+                
                 /* STEP 1: ISP isp-w02 - Initial CSI PHY Control registers */
                 pr_info("*** STEP 1: ISP isp-w02 - Initial CSI PHY Control registers ***\n");
-                /* CRITICAL FIX: These are CSI PHY registers, not VIC dimension registers! */
-                /* vic_regs is actually the CSI PHY base (isp-w02), not the main VIC registers */
-                writel(0x7800438, vic_regs + 0x4);  /* CSI PHY control register */
+                /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
+                writel(0x7800438, vic_regs + 0x4);
                 writel(0x2, vic_regs + 0xc);
                 writel(0x2, vic_regs + 0x14);
                 writel(0xf00, vic_regs + 0x18);
@@ -2260,7 +2272,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x2d0, vic_regs + 0x100);
                 writel(0x2c000, vic_regs + 0x10c);
                 writel(0x7800000, vic_regs + 0x110);
-                /* CRITICAL FIX: Missing write 28 - ISP isp-w02: [CSI PHY Config] write at offset 0x120: 0x0 -> 0x10 */
                 writel(0x10, vic_regs + 0x120);
                 writel(0x100010, vic_regs + 0x1a4);
                 writel(0x4440, vic_regs + 0x1a8);
@@ -2276,68 +2287,69 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 /* STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) */
                 pr_info("*** STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) ***\n");
-                writel(0x54560031, isp_base + 0x0);
-                writel(0x7800438, isp_base + 0x4);
-                writel(0x1, isp_base + 0x8);
-                writel(0x80700008, isp_base + 0xc);
-                writel(0x1, isp_base + 0x28);
-                writel(0x400040, isp_base + 0x2c);
-                writel(0x1, isp_base + 0x90);
-                writel(0x1, isp_base + 0x94);
-                writel(0x30000, isp_base + 0x98);
-                writel(0x58050000, isp_base + 0xa8);
-                writel(0x58050000, isp_base + 0xac);
-                writel(0x40000, isp_base + 0xc4);
-                writel(0x400040, isp_base + 0xc8);
-                writel(0x100, isp_base + 0xcc);
-                writel(0xc, isp_base + 0xd4);
-                writel(0xffffff, isp_base + 0xd8);
-                writel(0x100, isp_base + 0xe0);
-                writel(0x400040, isp_base + 0xe4);
-                writel(0xff808000, isp_base + 0xf0);
-                writel(0x80007000, isp_base + 0x110);
-                writel(0x777111, isp_base + 0x114);
-                writel(0x3f00, isp_base + 0x9804);
-                writel(0x7800438, isp_base + 0x9864);
-                writel(0xc0000000, isp_base + 0x987c);
-                writel(0x1, isp_base + 0x9880);
-                writel(0x1, isp_base + 0x9884);
-                writel(0x1010001, isp_base + 0x9890);
-                writel(0x1010001, isp_base + 0x989c);
-                writel(0x1010001, isp_base + 0x98a8);
-                writel(0x50002d0, isp_base + 0x9a00);
-                writel(0x3000300, isp_base + 0x9a04);
-                writel(0x50002d0, isp_base + 0x9a2c);
-                writel(0x1, isp_base + 0x9a34);
-                writel(0x1, isp_base + 0x9a70);
-                writel(0x1, isp_base + 0x9a7c);
-                writel(0x500, isp_base + 0x9a80);
-                writel(0x1, isp_base + 0x9a88);
-                writel(0x1, isp_base + 0x9a94);
-                writel(0x500, isp_base + 0x9a98);
-                writel(0x200, isp_base + 0x9ac0);
-                writel(0x200, isp_base + 0x9ac8);
-                writel(0xf001f001, isp_base + 0xb004);
-                writel(0x40404040, isp_base + 0xb008);
-                writel(0x40404040, isp_base + 0xb00c);
-                writel(0x40404040, isp_base + 0xb010);
-                writel(0x404040, isp_base + 0xb014);
-                writel(0x40404040, isp_base + 0xb018);
-                writel(0x40404040, isp_base + 0xb01c);
-                writel(0x40404040, isp_base + 0xb020);
-                writel(0x404040, isp_base + 0xb024);
-                writel(0x1000080, isp_base + 0xb028);
-                writel(0x1000080, isp_base + 0xb02c);
-                writel(0x100, isp_base + 0xb030);
-                writel(0xffff0100, isp_base + 0xb034);
-                writel(0x1ff00, isp_base + 0xb038);
-                writel(0x103, isp_base + 0xb04c);
-                writel(0x3, isp_base + 0xb050);
-                writel(0x1fffff, isp_base + 0xb07c);
-                writel(0x1fffff, isp_base + 0xb080);
-                writel(0x1fffff, isp_base + 0xb084);
-                writel(0x1fdeff, isp_base + 0xb088);
-                writel(0x1fff, isp_base + 0xb08c);
+                /* Use the correct main_isp_base (0x13300000 = isp-m0) */
+                writel(0x54560031, main_isp_base + 0x0);
+                writel(0x7800438, main_isp_base + 0x4);
+                writel(0x1, main_isp_base + 0x8);
+                writel(0x80700008, main_isp_base + 0xc);
+                writel(0x1, main_isp_base + 0x28);
+                writel(0x400040, main_isp_base + 0x2c);
+                writel(0x1, main_isp_base + 0x90);
+                writel(0x1, main_isp_base + 0x94);
+                writel(0x30000, main_isp_base + 0x98);
+                writel(0x58050000, main_isp_base + 0xa8);
+                writel(0x58050000, main_isp_base + 0xac);
+                writel(0x40000, main_isp_base + 0xc4);
+                writel(0x400040, main_isp_base + 0xc8);
+                writel(0x100, main_isp_base + 0xcc);
+                writel(0xc, main_isp_base + 0xd4);
+                writel(0xffffff, main_isp_base + 0xd8);
+                writel(0x100, main_isp_base + 0xe0);
+                writel(0x400040, main_isp_base + 0xe4);
+                writel(0xff808000, main_isp_base + 0xf0);
+                writel(0x80007000, main_isp_base + 0x110);
+                writel(0x777111, main_isp_base + 0x114);
+                writel(0x3f00, main_isp_base + 0x9804);
+                writel(0x7800438, main_isp_base + 0x9864);
+                writel(0xc0000000, main_isp_base + 0x987c);
+                writel(0x1, main_isp_base + 0x9880);
+                writel(0x1, main_isp_base + 0x9884);
+                writel(0x1010001, main_isp_base + 0x9890);
+                writel(0x1010001, main_isp_base + 0x989c);
+                writel(0x1010001, main_isp_base + 0x98a8);
+                writel(0x50002d0, main_isp_base + 0x9a00);
+                writel(0x3000300, main_isp_base + 0x9a04);
+                writel(0x50002d0, main_isp_base + 0x9a2c);
+                writel(0x1, main_isp_base + 0x9a34);
+                writel(0x1, main_isp_base + 0x9a70);
+                writel(0x1, main_isp_base + 0x9a7c);
+                writel(0x500, main_isp_base + 0x9a80);
+                writel(0x1, main_isp_base + 0x9a88);
+                writel(0x1, main_isp_base + 0x9a94);
+                writel(0x500, main_isp_base + 0x9a98);
+                writel(0x200, main_isp_base + 0x9ac0);
+                writel(0x200, main_isp_base + 0x9ac8);
+                writel(0xf001f001, main_isp_base + 0xb004);
+                writel(0x40404040, main_isp_base + 0xb008);
+                writel(0x40404040, main_isp_base + 0xb00c);
+                writel(0x40404040, main_isp_base + 0xb010);
+                writel(0x404040, main_isp_base + 0xb014);
+                writel(0x40404040, main_isp_base + 0xb018);
+                writel(0x40404040, main_isp_base + 0xb01c);
+                writel(0x40404040, main_isp_base + 0xb020);
+                writel(0x404040, main_isp_base + 0xb024);
+                writel(0x1000080, main_isp_base + 0xb028);
+                writel(0x1000080, main_isp_base + 0xb02c);
+                writel(0x100, main_isp_base + 0xb030);
+                writel(0xffff0100, main_isp_base + 0xb034);
+                writel(0x1ff00, main_isp_base + 0xb038);
+                writel(0x103, main_isp_base + 0xb04c);
+                writel(0x3, main_isp_base + 0xb050);
+                writel(0x1fffff, main_isp_base + 0xb07c);
+                writel(0x1fffff, main_isp_base + 0xb080);
+                writel(0x1fffff, main_isp_base + 0xb084);
+                writel(0x1fdeff, main_isp_base + 0xb088);
+                writel(0x1fff, main_isp_base + 0xb08c);
                 wmb();
                 
                 /* STEP 4: Sensor initialization happens naturally through the normal driver flow */
@@ -2347,24 +2359,25 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 /* STEP 5: Apply 280ms delta register changes AFTER sensor detection */
                 pr_info("*** STEP 5: Applying 280ms delta register changes AFTER sensor detection ***\n");
-                writel(0x0, isp_base + 0x9804);        /* 0x3f00 -> 0x0 */
-                writel(0x0, isp_base + 0x9ac0);        /* 0x200 -> 0x0 */
-                writel(0x0, isp_base + 0x9ac8);        /* 0x200 -> 0x0 */
-                writel(0x24242424, isp_base + 0xb018); /* 0x40404040 -> 0x24242424 */
-                writel(0x24242424, isp_base + 0xb01c); /* 0x40404040 -> 0x24242424 */
-                writel(0x24242424, isp_base + 0xb020); /* 0x40404040 -> 0x24242424 */
-                writel(0x242424, isp_base + 0xb024);   /* 0x404040 -> 0x242424 */
-                writel(0x10d0046, isp_base + 0xb028);  /* 0x1000080 -> 0x10d0046 */
-                writel(0xe8002f, isp_base + 0xb02c);   /* 0x1000080 -> 0xe8002f */
-                writel(0xc50100, isp_base + 0xb030);   /* 0x100 -> 0xc50100 */
-                writel(0x1670100, isp_base + 0xb034);  /* 0xffff0100 -> 0x1670100 */
-                writel(0x1f001, isp_base + 0xb038);    /* 0x1ff00 -> 0x1f001 */
-                writel(0x22c0000, isp_base + 0xb03c);  /* 0x0 -> 0x22c0000 */
-                writel(0x22c1000, isp_base + 0xb040);  /* 0x0 -> 0x22c1000 */
-                writel(0x22c2000, isp_base + 0xb044);  /* 0x0 -> 0x22c2000 */
-                writel(0x22c3000, isp_base + 0xb048);  /* 0x0 -> 0x22c3000 */
-                writel(0x3, isp_base + 0xb04c);        /* 0x103 -> 0x3 */
-                writel(0x10000000, isp_base + 0xb078);  /* 0x0 -> 0x10000000 */
+                /* Use the correct main_isp_base (0x13300000 = isp-m0) */
+                writel(0x0, main_isp_base + 0x9804);        /* 0x3f00 -> 0x0 */
+                writel(0x0, main_isp_base + 0x9ac0);        /* 0x200 -> 0x0 */
+                writel(0x0, main_isp_base + 0x9ac8);        /* 0x200 -> 0x0 */
+                writel(0x24242424, main_isp_base + 0xb018); /* 0x40404040 -> 0x24242424 */
+                writel(0x24242424, main_isp_base + 0xb01c); /* 0x40404040 -> 0x24242424 */
+                writel(0x24242424, main_isp_base + 0xb020); /* 0x40404040 -> 0x24242424 */
+                writel(0x242424, main_isp_base + 0xb024);   /* 0x404040 -> 0x242424 */
+                writel(0x10d0046, main_isp_base + 0xb028);  /* 0x1000080 -> 0x10d0046 */
+                writel(0xe8002f, main_isp_base + 0xb02c);   /* 0x1000080 -> 0xe8002f */
+                writel(0xc50100, main_isp_base + 0xb030);   /* 0x100 -> 0xc50100 */
+                writel(0x1670100, main_isp_base + 0xb034);  /* 0xffff0100 -> 0x1670100 */
+                writel(0x1f001, main_isp_base + 0xb038);    /* 0x1ff00 -> 0x1f001 */
+                writel(0x22c0000, main_isp_base + 0xb03c);  /* 0x0 -> 0x22c0000 */
+                writel(0x22c1000, main_isp_base + 0xb040);  /* 0x0 -> 0x22c1000 */
+                writel(0x22c2000, main_isp_base + 0xb044);  /* 0x0 -> 0x22c2000 */
+                writel(0x22c3000, main_isp_base + 0xb048);  /* 0x0 -> 0x22c3000 */
+                writel(0x3, main_isp_base + 0xb04c);        /* 0x103 -> 0x3 */
+                writel(0x10000000, main_isp_base + 0xb078);  /* 0x0 -> 0x10000000 */
                 wmb();
                 
                 /* STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection */
