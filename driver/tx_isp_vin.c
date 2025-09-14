@@ -711,6 +711,8 @@ label_132f4:
 
     /* Binary Ninja: return 0 */
     mcp_log_info("vin_s_stream: final VIN state", vin->state);
+    
+    /* CRITICAL: Prevent infinite recursion by returning immediately after state change */
     return 0;
 }
 
