@@ -4280,6 +4280,39 @@ static int tx_isp_init(void)
     pr_info("*** INITIALIZING SUBDEVICE MANAGEMENT SYSTEM ***\n");
     pr_info("*** REGISTERING SUBDEVICES AT OFFSET 0x38 FOR tx_isp_video_link_stream ***\n");
 
+    /* Register VIC subdev with proper ops structure */
+    if (ourISPdev->vic_dev) {
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        
+        /* Set up VIC subdev with ops pointing to vic_subdev_ops */
+        vic_dev->sd.ops = &vic_subdev_ops;
+
+        /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
+        //ourISPdev->subdevs[0] = &vic_dev->sd;
+        
+        pr_info("*** REGISTERED VIC SUBDEV AT INDEX 0 WITH VIDEO OPS ***\n");
+        pr_info("VIC subdev: %p, ops: %p, video: %p, s_stream: %p\n",
+                &vic_dev->sd, vic_dev->sd.ops, vic_dev->sd.ops->video,
+                vic_dev->sd.ops->video->s_stream);
+    }
+    
+    /* Register CSI subdev with proper ops structure */
+    if (ourISPdev->csi_dev) {
+        struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
+        
+        /* Set up CSI subdev with ops pointing to csi_subdev_ops */
+        csi_dev->sd.ops = &csi_subdev_ops;
+        csi_dev->sd.isp = (void*)ourISPdev;
+        
+        /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
+        //ourISPdev->subdevs[1] = &csi_dev->sd;
+        
+        pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 WITH VIDEO OPS ***\n");
+        pr_info("CSI subdev: %p, ops: %p, video: %p, s_stream: %p\n",
+                &csi_dev->sd, csi_dev->sd.ops, csi_dev->sd.ops->video,
+                csi_dev->sd.ops->video->s_stream);
+    }
+
     /* *** CRITICAL: Register platform devices with proper IRQ setup *** */
     pr_info("*** REGISTERING PLATFORM DEVICES FOR DUAL IRQ SETUP (37 + 38) ***\n");
     
