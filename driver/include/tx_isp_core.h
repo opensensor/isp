@@ -29,6 +29,10 @@ void tx_isp_set_device(struct tx_isp_dev *isp);
 
 int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp);
 
+/* Memory Management Functions */
+int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
+int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
+
 /* Frame Synchronization Functions - CRITICAL for frame data transfer */
 void isp_frame_done_wakeup(void);
 int isp_frame_done_wait(int timeout_ms, uint64_t *frame_count);
