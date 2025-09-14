@@ -2679,7 +2679,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
     void __iomem *vic_regs = vic_dev->vic_regs;
-    void __iomem *isp_base = vic_regs - 0xe0000;
+    void __iomem *isp_base = vic_regs - 0x9a00;  /* Correct ISP base calculation */
     void __iomem *csi_base = isp_base + 0x10000;
 
     int ret = -EINVAL;
@@ -2708,17 +2708,160 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
                 }
             } else {
-                /* Stream ON */
+                /* Stream ON - CRITICAL: Follow EXACT reference driver sub-device sequence */
                 ret = 0;
-
+                
+                pr_info("*** CRITICAL: Following EXACT reference driver sub-device initialization sequence ***\n");
+                
+                /* STEP 1: ISP isp-w02 - Initial CSI PHY Control registers */
+                pr_info("*** STEP 1: ISP isp-w02 - Initial CSI PHY Control registers ***\n");
+                writel(0x7800438, vic_regs + 0x4);
+                writel(0x2, vic_regs + 0xc);
+                writel(0x2, vic_regs + 0x14);
+                writel(0xf00, vic_regs + 0x18);
+                writel(0x800800, vic_regs + 0x60);
+                writel(0x9d09d0, vic_regs + 0x64);
+                writel(0x6002, vic_regs + 0x70);
+                writel(0x7003, vic_regs + 0x74);
+                writel(0xeb8080, vic_regs + 0xc0);
+                writel(0x108080, vic_regs + 0xc4);
+                writel(0x29f06e, vic_regs + 0xc8);
+                writel(0x913622, vic_regs + 0xcc);
+                writel(0x515af0, vic_regs + 0xd0);
+                writel(0xaaa610, vic_regs + 0xd4);
+                writel(0xd21092, vic_regs + 0xd8);
+                writel(0x6acade, vic_regs + 0xdc);
+                writel(0xeb8080, vic_regs + 0xe0);
+                writel(0x108080, vic_regs + 0xe4);
+                writel(0x29f06e, vic_regs + 0xe8);
+                writel(0x913622, vic_regs + 0xec);
+                writel(0x515af0, vic_regs + 0xf0);
+                writel(0xaaa610, vic_regs + 0xf4);
+                writel(0xd21092, vic_regs + 0xf8);
+                writel(0x6acade, vic_regs + 0xfc);
+                writel(0x2d0, vic_regs + 0x100);
+                writel(0x2c000, vic_regs + 0x10c);
+                writel(0x7800000, vic_regs + 0x110);
+                writel(0x10, vic_regs + 0x120);
+                writel(0x100010, vic_regs + 0x1a4);
+                writel(0x4440, vic_regs + 0x1a8);
+                writel(0x10, vic_regs + 0x1b0);
+                wmb();
+                
+                /* STEP 2: ISP isp-w01 - Control registers */
+                pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
+                writel(0x3130322a, vic_regs + 0x0);
+                writel(0x1, vic_regs + 0x4);
+                writel(0x200, vic_regs + 0x14);
+                wmb();
+                
+                /* STEP 3: ISP isp-m0 - Main ISP registers */
+                pr_info("*** STEP 3: ISP isp-m0 - Main ISP registers ***\n");
+                writel(0x54560031, isp_base + 0x0);
+                writel(0x7800438, isp_base + 0x4);
+                writel(0x1, isp_base + 0x8);
+                writel(0x80700008, isp_base + 0xc);
+                writel(0x1, isp_base + 0x28);
+                writel(0x400040, isp_base + 0x2c);
+                writel(0x1, isp_base + 0x90);
+                writel(0x1, isp_base + 0x94);
+                writel(0x30000, isp_base + 0x98);
+                writel(0x58050000, isp_base + 0xa8);
+                writel(0x58050000, isp_base + 0xac);
+                writel(0x40000, isp_base + 0xc4);
+                writel(0x400040, isp_base + 0xc8);
+                writel(0x100, isp_base + 0xcc);
+                writel(0xc, isp_base + 0xd4);
+                writel(0xffffff, isp_base + 0xd8);
+                writel(0x100, isp_base + 0xe0);
+                writel(0x400040, isp_base + 0xe4);
+                writel(0xff808000, isp_base + 0xf0);
+                writel(0x80007000, isp_base + 0x110);
+                writel(0x777111, isp_base + 0x114);
+                writel(0x3f00, isp_base + 0x9804);
+                writel(0x7800438, isp_base + 0x9864);
+                writel(0xc0000000, isp_base + 0x987c);
+                writel(0x1, isp_base + 0x9880);
+                writel(0x1, isp_base + 0x9884);
+                writel(0x1010001, isp_base + 0x9890);
+                writel(0x1010001, isp_base + 0x989c);
+                writel(0x1010001, isp_base + 0x98a8);
+                writel(0x50002d0, isp_base + 0x9a00);
+                writel(0x3000300, isp_base + 0x9a04);
+                writel(0x50002d0, isp_base + 0x9a2c);
+                writel(0x1, isp_base + 0x9a34);
+                writel(0x1, isp_base + 0x9a70);
+                writel(0x1, isp_base + 0x9a7c);
+                writel(0x500, isp_base + 0x9a80);
+                writel(0x1, isp_base + 0x9a88);
+                writel(0x1, isp_base + 0x9a94);
+                writel(0x500, isp_base + 0x9a98);
+                writel(0x200, isp_base + 0x9ac0);
+                writel(0x200, isp_base + 0x9ac8);
+                writel(0xf001f001, isp_base + 0xb004);
+                writel(0x40404040, isp_base + 0xb008);
+                writel(0x40404040, isp_base + 0xb00c);
+                writel(0x40404040, isp_base + 0xb010);
+                writel(0x404040, isp_base + 0xb014);
+                writel(0x40404040, isp_base + 0xb018);
+                writel(0x40404040, isp_base + 0xb01c);
+                writel(0x40404040, isp_base + 0xb020);
+                writel(0x404040, isp_base + 0xb024);
+                writel(0x1000080, isp_base + 0xb028);
+                writel(0x1000080, isp_base + 0xb02c);
+                writel(0x100, isp_base + 0xb030);
+                writel(0xffff0100, isp_base + 0xb034);
+                writel(0x1ff00, isp_base + 0xb038);
+                writel(0x103, isp_base + 0xb04c);
+                writel(0x3, isp_base + 0xb050);
+                wmb();
+                
+                /* STEP 4: ISP isp-csi - Detailed CSI PHY configuration */
+                pr_info("*** STEP 4: ISP isp-csi - Detailed CSI PHY configuration ***\n");
                 tx_isp_phy_init(ourISPdev);
+                
+                /* STEP 5: Wait for sensor detection (280ms delay in reference) */
+                pr_info("*** STEP 5: Waiting for sensor detection (280ms delay) ***\n");
+                msleep(280);
+                
+                /* STEP 6: Apply 280ms delta register changes */
+                pr_info("*** STEP 6: Applying 280ms delta register changes ***\n");
+                writel(0x0, isp_base + 0x9804);
+                writel(0x0, isp_base + 0x9ac0);
+                writel(0x0, isp_base + 0x9ac8);
+                writel(0x24242424, isp_base + 0xb018);
+                writel(0x24242424, isp_base + 0xb01c);
+                writel(0x24242424, isp_base + 0xb020);
+                writel(0x242424, isp_base + 0xb024);
+                writel(0x10d0046, isp_base + 0xb028);
+                writel(0xe8002f, isp_base + 0xb02c);
+                writel(0xc50100, isp_base + 0xb030);
+                writel(0x1670100, isp_base + 0xb034);
+                writel(0x1f001, isp_base + 0xb038);
+                writel(0x22c0000, isp_base + 0xb03c);
+                writel(0x22c1000, isp_base + 0xb040);
+                writel(0x22c2000, isp_base + 0xb044);
+                writel(0x22c3000, isp_base + 0xb048);
+                writel(0x3, isp_base + 0xb04c);
+                writel(0x10000000, isp_base + 0xb078);
+                wmb();
+                
+                /* STEP 7: Final CSI PHY control sequence */
+                pr_info("*** STEP 7: Final CSI PHY control sequence ***\n");
+                writel(0x1, vic_regs + 0xc);
+                writel(0x1, vic_regs + 0x10);
+                writel(0x630, vic_regs + 0x14);
+                wmb();
+                
+                /* STEP 8: Now call VIC start with proper initialization complete */
+                pr_info("*** STEP 8: NOW calling tx_isp_vic_start with proper sub-device initialization ***\n");
                 ret = tx_isp_vic_start(vic_dev);
                 ispvic_frame_channel_s_stream(vic_dev, 1);
+                
                 if (current_state != 4) {
-                    pr_info("vic_core_s_stream: Stream ON - calling tx_isp_vic_start\n");
+                    pr_info("vic_core_s_stream: Stream ON - tx_isp_vic_start called after proper sub-device init\n");
 
                     vic_start_ok = 0;
-
                     vic_dev->state = 4;
                     vic_start_ok = 1;
 
