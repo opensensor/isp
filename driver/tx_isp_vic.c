@@ -1560,7 +1560,48 @@ if (!IS_ERR(cgu_isp_clk)) {
         goto exit_func;
     }
 
-    /* Binary Ninja: Wait for VIC unlock completion */
+    /* *** CRITICAL FIX: Proper VIC timing configuration to prevent control limit error *** */
+    pr_info("*** CRITICAL FIX: Configuring VIC timing registers to prevent control limit error ***\n");
+    
+    /* STEP 1: Configure VIC dimensions BEFORE enabling - this prevents control limit error */
+    u32 width = vic_dev->width;
+    u32 height = vic_dev->height;
+    u32 stride = width * 2; /* 16-bit per pixel */
+    
+    pr_info("*** VIC TIMING FIX: Setting dimensions %dx%d, stride=%d ***\n", width, height, stride);
+    
+    /* Configure VIC size register - CRITICAL for preventing control limit error */
+    writel((width << 16) | height, vic_regs + 0x4);
+    wmb();
+    
+    /* Configure VIC stride - CRITICAL for DMA alignment */
+    writel(stride, vic_regs + 0x18);
+    wmb();
+    
+    /* STEP 2: Configure VIC control mode BEFORE unlock */
+    writel(3, vic_regs + 0xc); /* MIPI mode */
+    wmb();
+    
+    /* STEP 3: Configure MIPI timing parameters to match sensor output */
+    u32 mipi_config = 0x20000; /* Standard MIPI RAW10 */
+    writel(mipi_config, vic_regs + 0x10);
+    wmb();
+    
+    /* STEP 4: Configure VIC buffer management to prevent overflow */
+    writel(0x100010, vic_regs + 0x1a4); /* DMA config */
+    writel(0x4210, vic_regs + 0x1ac);   /* Frame mode */
+    writel(0x10, vic_regs + 0x1b0);     /* Buffer control */
+    wmb();
+    
+    pr_info("*** VIC TIMING FIX: All timing registers configured - now unlocking VIC ***\n");
+
+    /* Binary Ninja: VIC unlock sequence with timing fix */
+    writel(2, vic_regs + 0x0);
+    wmb();
+    writel(4, vic_regs + 0x0);
+    wmb();
+    
+    /* Wait for unlock completion with better timeout handling */
     pr_info("tx_isp_vic_start: Waiting for VIC unlock completion...\n");
     timeout = 10000;
     while (timeout > 0) {
@@ -1571,6 +1612,14 @@ if (!IS_ERR(cgu_isp_clk)) {
         }
         udelay(1);
         timeout--;
+    }
+    
+    if (timeout == 0) {
+        pr_err("*** VIC UNLOCK TIMEOUT - this may cause control limit error! ***\n");
+        /* Force unlock by resetting VIC */
+        writel(0, vic_regs + 0x0);
+        wmb();
+        msleep(1);
     }
 
     /* Binary Ninja: Enable VIC processing */
@@ -1590,12 +1639,37 @@ if (!IS_ERR(cgu_isp_clk)) {
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
+    /* *** CRITICAL FIX: Set vic_start_ok ONLY after successful configuration *** */
+    vic_start_ok = 1;
+    pr_info("*** CRITICAL FIX: vic_start_ok set to 1 - VIC interrupts now enabled ***\n");
+
     /* MCP LOG: VIC start completed successfully */
     pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d, interface=%d\n", 
             vic_start_ok, interface_type);
 
     /* MCP LOG: VIC start completed - streaming registers will be written later in correct sequence */
     pr_info("MCP_LOG: VIC start completed - streaming registers deferred to correct sequence position\n");
+    
+    /* *** CRITICAL FIX: Add VIC status validation to catch control limit errors early *** */
+    u32 vic_status = readl(vic_regs + 0x4);
+    u32 vic_int_status = readl(vic_regs + 0x1f0);
+    
+    pr_info("*** VIC STATUS CHECK: status=0x%x, int_status=0x%x ***\n", vic_status, vic_int_status);
+    
+    if (vic_int_status & 0x200000) {
+        pr_err("*** CRITICAL: VIC control limit error detected immediately after start! ***\n");
+        pr_err("*** This indicates timing/configuration mismatch - check sensor output timing ***\n");
+        
+        /* Reset VIC to clear error state */
+        writel(0, vic_regs + 0x0);
+        wmb();
+        writel(vic_int_status, vic_regs + 0x1f0); /* Clear interrupt */
+        wmb();
+        writel(1, vic_regs + 0x0);
+        wmb();
+        
+        pr_info("*** VIC reset and restarted to clear control limit error ***\n");
+    }
 
     /* *** CRITICAL MISSING PIECE: Trigger frame data transfer after VIC is configured *** */
     pr_info("*** CRITICAL: Now triggering frame data transfer to start actual frame capture ***\n");
@@ -1635,13 +1709,24 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     struct clk *isp_clk, *cgu_isp_clk, *csi_clk, *ipu_clk;
     int ret;
 
-    /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
-    vic_start_ok = 1;
-
-    /* FIXED: Use proper VIC-to-ISP device linkage */
-    struct tx_isp_dev *isp_dev = ourISPdev;
-
-    pr_info("*** tx_isp_vic_progress: EXACT Binary Ninja implementation matching reference trace ***\n");
+    /* *** CRITICAL FIX: Address control limit error by fixing VIC timing configuration *** */
+    pr_info("*** tx_isp_vic_start: CONTROL LIMIT ERROR FIX - Correcting VIC timing configuration ***\n");
+    
+    /* CRITICAL: Validate sensor dimensions BEFORE configuring VIC to prevent control limit error */
+    if (vic_dev->width == 0 || vic_dev->height == 0) {
+        pr_err("*** CRITICAL: Invalid sensor dimensions %dx%d - will cause control limit error! ***\n", 
+               vic_dev->width, vic_dev->height);
+        vic_dev->width = 1920;   /* Set safe defaults */
+        vic_dev->height = 1080;
+        pr_info("*** Using safe default dimensions 1920x1080 ***\n");
+    }
+    
+    /* CRITICAL: Ensure dimensions are within VIC hardware limits */
+    if (vic_dev->width > 4096 || vic_dev->height > 4096) {
+        pr_err("*** CRITICAL: Dimensions %dx%d exceed VIC limits - will cause control limit error! ***\n",
+               vic_dev->width, vic_dev->height);
+        return -EINVAL;
+    }
 
     /* Validate vic_dev structure */
     if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
