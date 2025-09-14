@@ -164,6 +164,35 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 
+/* Global data symbol used by reference driver */
+static char data_b0000[1] = {0};
+
+/* VIC buffer entry structure for safe list handling */
+struct vic_buffer_entry {
+    struct list_head list;
+    u32 reserved;
+    u32 buffer_addr;
+};
+
+/* Helper functions matching reference driver */
+static inline void __private_spin_lock_irqsave(spinlock_t *lock, unsigned long *flags)
+{
+    spin_lock_irqsave(lock, *flags);
+}
+
+static inline void private_spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags)
+{
+    spin_unlock_irqrestore(lock, flags);
+}
+
+/* Placeholder for GPIO function from reference driver */
+static int private_gpio_direction_output(uint32_t gpio_pin, uint32_t state)
+{
+    /* In real implementation, this would call the actual GPIO subsystem */
+    pr_debug("GPIO: Set pin %d to state %d\n", gpio_pin, state);
+    return 0;  /* Return success for now */
+}
+
 /* Forward declaration for streaming functions */
 int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2);
 
