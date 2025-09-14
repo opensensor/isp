@@ -2231,7 +2231,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 /* STEP 1: ISP isp-w02 - Initial CSI PHY Control registers */
                 pr_info("*** STEP 1: ISP isp-w02 - Initial CSI PHY Control registers ***\n");
-                writel(0x7800438, vic_regs + 0x4);
+                /* CRITICAL FIX: These are CSI PHY registers, not VIC dimension registers! */
+                /* vic_regs is actually the CSI PHY base (isp-w02), not the main VIC registers */
+                writel(0x7800438, vic_regs + 0x4);  /* CSI PHY control register */
                 writel(0x2, vic_regs + 0xc);
                 writel(0x2, vic_regs + 0x14);
                 writel(0xf00, vic_regs + 0x18);
