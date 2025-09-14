@@ -447,7 +447,7 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         break;
     case TX_ISP_EVENT_SENSOR_PREPARE_CHANGE:  /* This is the correct event for start */
         /* Start CSI */
-        csi_core_ops_init(sd, NULL);
+        csi_core_ops_init(sd, 1);
         break;
     }
 
