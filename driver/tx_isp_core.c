@@ -2103,8 +2103,8 @@ int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, d
     
     ISP_INFO("*** isp_malloc_buffer: Allocated %d bytes from rmem at virt=%p, phys=0x%08x ***\n",
              size, virt, (uint32_t)phys);
-    ISP_INFO("*** isp_malloc_buffer: rmem usage: %zu/%zu bytes (%.1f%%) ***\n",
-             rmem_offset, isp->rmem_size, (float)rmem_offset * 100.0 / isp->rmem_size);
+    ISP_INFO("*** isp_malloc_buffer: rmem usage: %zu/%zu bytes (%zu%%) ***\n",
+             rmem_offset, isp->rmem_size, (rmem_offset * 100) / isp->rmem_size);
     
     return 0;
 }
