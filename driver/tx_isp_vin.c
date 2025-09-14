@@ -408,7 +408,7 @@ int tx_isp_vin_reset(struct tx_isp_subdev *sd, int on)
  * @sd: Subdev structure
  * @enable: Enable/disable streaming
  *
- * Based on T31 binary analysis with T30 reference patterns
+ * Based on T30 reference implementation - EXACT MATCH
  */
 int vin_s_stream(struct tx_isp_subdev *sd, int enable)
 {
@@ -419,74 +419,68 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
 
     mcp_log_info("vin_s_stream: called", enable);
 
-    if (enable) {
-        /* Check if already streaming */
-        if (vin->state == TX_ISP_MODULE_RUNNING) {
-            mcp_log_info("vin_s_stream: already streaming", vin->state);
-            return 0;
-        }
-        
-        /* CRITICAL FIX: Set VIN state to RUNNING immediately when streaming starts */
-        vin->state = TX_ISP_MODULE_RUNNING;
-        mcp_log_info("vin_s_stream: VIN state set to RUNNING", vin->state);
-        
-        /* Start sensor streaming first */
-        if (sensor && is_valid_kernel_pointer(sensor)) {
-            if (sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
-                ret = sensor->sd.ops->video->s_stream(&sensor->sd, 1);
-                if (ret && ret != -0x203) {
-                    mcp_log_error("vin_s_stream: sensor start failed", ret);
-                    /* Rollback VIN state on sensor failure */
-                    vin->state = TX_ISP_MODULE_INIT;
-                    return ret;
-                }
-                mcp_log_info("vin_s_stream: sensor streaming started", ret);
-            }
-        }
-        
-        /* Start VIN hardware */
-        if (vin->base) {
-            ctrl_val = readl(vin->base + VIN_CTRL);
-            ctrl_val |= VIN_CTRL_START;
-            writel(ctrl_val, vin->base + VIN_CTRL);
-            mcp_log_info("vin_s_stream: VIN hardware started", ctrl_val);
-        } else {
-            mcp_log_info("vin_s_stream: VIN hardware not available, state-only operation", 0);
-        }
-        
-    } else {
-        /* Check if already stopped */
-        if (vin->state != TX_ISP_MODULE_RUNNING) {
-            mcp_log_info("vin_s_stream: already stopped", vin->state);
-            return 0;
-        }
-        
-        /* Stop VIN hardware */
-        if (vin->base) {
-            ctrl_val = readl(vin->base + VIN_CTRL);
-            ctrl_val &= ~VIN_CTRL_START;
-            ctrl_val |= VIN_CTRL_STOP;
-            writel(ctrl_val, vin->base + VIN_CTRL);
-            
-            /* Wait for stop to complete */
-            while (readl(vin->base + VIN_STATUS) & STATUS_BUSY) {
-                udelay(10);
-            }
-            mcp_log_info("vin_s_stream: VIN hardware stopped", ctrl_val);
-        }
-        
-        /* Stop sensor streaming */
-        if (sensor && is_valid_kernel_pointer(sensor)) {
-            if (sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
-                sensor->sd.ops->video->s_stream(&sensor->sd, 0);
-                mcp_log_info("vin_s_stream: sensor streaming stopped", 0);
-            }
-        }
-        
-        vin->state = TX_ISP_MODULE_INIT;
+    /* streamon */
+    if (enable && vin->state == TX_ISP_MODULE_RUNNING) {
+        mcp_log_info("vin_s_stream: already streaming", vin->state);
+        return 0;
     }
 
-    mcp_log_info("vin_s_stream: state transition complete", vin->state);
+    /* streamoff */
+    if (!enable && vin->state != TX_ISP_MODULE_RUNNING) {
+        mcp_log_info("vin_s_stream: already stopped", vin->state);
+        return 0;
+    }
+
+    /* Call sensor streaming first - CRITICAL: This must succeed before state change */
+    if (sensor && is_valid_kernel_pointer(sensor)) {
+        if (sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
+            ret = tx_isp_subdev_call(&sensor->sd, video, s_stream, enable);
+            if (ret && ret != -0x203) {
+                mcp_log_error("vin_s_stream: sensor streaming failed", ret);
+                return ret;
+            }
+            mcp_log_info("vin_s_stream: sensor streaming call completed", ret);
+        }
+    } else {
+        mcp_log_info("vin_s_stream: no active sensor", 0);
+    }
+
+    /* CRITICAL: Only change VIN state AFTER sensor streaming succeeds */
+    if (!ret) {
+        if (enable) {
+            /* Start VIN hardware before setting state */
+            if (vin->base) {
+                ctrl_val = readl(vin->base + VIN_CTRL);
+                ctrl_val |= VIN_CTRL_START;
+                writel(ctrl_val, vin->base + VIN_CTRL);
+                mcp_log_info("vin_s_stream: VIN hardware started", ctrl_val);
+            }
+            
+            /* Set state to RUNNING (5) - THIS IS THE KEY! */
+            vin->state = TX_ISP_MODULE_RUNNING;
+            mcp_log_info("vin_s_stream: *** VIN STATE SET TO RUNNING (5) ***", vin->state);
+        } else {
+            /* Stop VIN hardware */
+            if (vin->base) {
+                ctrl_val = readl(vin->base + VIN_CTRL);
+                ctrl_val &= ~VIN_CTRL_START;
+                ctrl_val |= VIN_CTRL_STOP;
+                writel(ctrl_val, vin->base + VIN_CTRL);
+                
+                /* Wait for stop to complete */
+                while (readl(vin->base + VIN_STATUS) & STATUS_BUSY) {
+                    udelay(10);
+                }
+                mcp_log_info("vin_s_stream: VIN hardware stopped", ctrl_val);
+            }
+            
+            /* Set state back to INIT */
+            vin->state = TX_ISP_MODULE_INIT;
+            mcp_log_info("vin_s_stream: VIN state set to INIT", vin->state);
+        }
+    }
+
+    mcp_log_info("vin_s_stream: final state", vin->state);
     return ret;
 }
 
