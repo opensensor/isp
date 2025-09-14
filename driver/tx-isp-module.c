@@ -1270,29 +1270,6 @@ static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_i
     return 0;
 }
 
-/* csi_set_on_lanes - Binary Ninja implementation */
-static int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
-{
-    void __iomem *csi_regs;
-    
-    if (!csi_dev || !csi_dev->csi_regs) {
-        pr_err("csi_set_on_lanes: Invalid CSI device\n");
-        return -EINVAL;
-    }
-    
-    csi_regs = csi_dev->csi_regs;
-    pr_info("csi_set_on_lanes: Setting %d lanes\n", lanes);
-    
-    /* Configure lane count in CSI registers */
-    writel(lanes, csi_regs + 0x8);
-    wmb();
-    
-    /* Update device state */
-    csi_dev->lanes = lanes;
-    
-    return 0;
-}
-
 /* csi_device_probe - EXACT Binary Ninja implementation (tx_isp_csi_probe) */
 static int csi_device_probe(struct tx_isp_dev *isp_dev)
 {
