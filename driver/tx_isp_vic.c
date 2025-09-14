@@ -270,8 +270,8 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                          reg_val, buffer_index, high_bits, match_found);
             }
                 /* Trigger ISP core frame processing by writing to ISP interrupt register */
-    if (isp_dev->core_regs) {
-        void __iomem *isp_base = isp_dev->core_regs;
+    if (ourISPdev->core_regs) {
+        void __iomem *isp_base = ourISPdev->core_regs;
 
         /* Set frame done bit in ISP interrupt status register */
         /* This will trigger the ISP core interrupt handler (IRQ 37) */
