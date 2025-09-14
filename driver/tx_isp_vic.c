@@ -2225,6 +2225,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 pr_info("*** CRITICAL: Following EXACT reference driver sub-device initialization sequence ***\n");
                 
+                /* CRITICAL FIX: Disable VIC interrupts during initialization to prevent control limit errors */
+                pr_info("*** DISABLING VIC INTERRUPTS DURING INITIALIZATION ***\n");
+                vic_start_ok = 0;  /* Disable interrupt processing */
+                
                 /* STEP 1: ISP isp-w02 - Initial CSI PHY Control registers */
                 pr_info("*** STEP 1: ISP isp-w02 - Initial CSI PHY Control registers ***\n");
                 writel(0x7800438, vic_regs + 0x4);
@@ -2398,9 +2402,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 if (current_state != 4) {
                     pr_info("vic_core_s_stream: Stream ON - tx_isp_vic_start called after proper sub-device init\n");
 
-                    vic_start_ok = 0;
+                    /* CRITICAL FIX: Only enable interrupts AFTER all initialization is complete */
                     vic_dev->state = 4;
-                    vic_start_ok = 1;
+                    wmb();  /* Ensure state is written before enabling interrupts */
+                    vic_start_ok = 1;  /* NOW safe to enable interrupt processing */
+                    pr_info("*** INTERRUPTS RE-ENABLED AFTER COMPLETE INITIALIZATION ***\n");
 
                     pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
                     return ret;

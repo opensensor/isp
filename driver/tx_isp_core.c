@@ -2098,59 +2098,41 @@ static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sen
 }
 
 /**
- * isp_malloc_buffer - Allocate buffer from reserved memory (rmem) for ISP processing
- * This fixes the memory exhaustion issue by using reserved kernel rmem instead of regular allocation
+ * isp_malloc_buffer - FIXED: Use regular kernel memory instead of precious rmem
+ * This prevents memory exhaustion by using abundant kernel memory instead of limited rmem
  */
 int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr)
 {
-    static size_t rmem_offset = 0;
     void *virt;
     dma_addr_t phys;
     
     if (!isp || !virt_addr || !phys_addr || size == 0) {
-        ISP_ERROR("isp_malloc_buffer: Invalid parameters\n");
+        pr_err("isp_malloc_buffer: Invalid parameters\n");
         return -EINVAL;
     }
     
-    /* Initialize reserved memory if not already done */
-    if (isp->rmem_addr == 0) {
-        /* Use the reserved memory address from kernel boot logs: 0x06300000 */
-        isp->rmem_addr = 0x06300000;
-        isp->rmem_size = 30408704; /* Size from boot logs */
-        rmem_offset = 0;
-        
-        ISP_INFO("*** isp_malloc_buffer: Initialized rmem at 0x%08x, size=%zu ***\n",
-                 (uint32_t)isp->rmem_addr, isp->rmem_size);
-    }
+    pr_info("*** isp_malloc_buffer: FIXED - Using regular kernel memory instead of rmem ***\n");
     
-    /* Check if we have enough reserved memory left */
-    if (rmem_offset + size > isp->rmem_size) {
-        ISP_ERROR("*** isp_malloc_buffer: Not enough rmem space (need %u, have %zu) ***\n", 
-                  size, isp->rmem_size - rmem_offset);
-        return -ENOMEM;
-    }
-    
-    /* Allocate from reserved memory */
-    phys = isp->rmem_addr + rmem_offset;
-    virt = ioremap(phys, size);
+    /* FIXED: Use vmalloc instead of precious rmem - saves rmem for critical video buffers */
+    virt = vmalloc(size);
     if (!virt) {
-        ISP_ERROR("*** isp_malloc_buffer: Failed to map rmem at 0x%08x ***\n", (uint32_t)phys);
+        pr_err("*** isp_malloc_buffer: Failed to allocate %u bytes from kernel memory ***\n", size);
         return -ENOMEM;
     }
     
     /* Clear the allocated memory */
     memset(virt, 0, size);
     
-    /* Update offset for next allocation */
-    rmem_offset += ALIGN(size, PAGE_SIZE);
+    /* Get physical address for DMA operations */
+    phys = virt_to_phys(virt);
     
     *virt_addr = virt;
     *phys_addr = phys;
     
-    ISP_INFO("*** isp_malloc_buffer: Allocated %d bytes from rmem at virt=%p, phys=0x%08x ***\n",
-             size, virt, (uint32_t)phys);
-    ISP_INFO("*** isp_malloc_buffer: rmem usage: %zu/%zu bytes (%zu%%) ***\n",
-             rmem_offset, isp->rmem_size, (rmem_offset * 100) / isp->rmem_size);
+    pr_info("*** isp_malloc_buffer: FIXED - Allocated %u bytes from kernel memory ***\n", size);
+    pr_info("*** isp_malloc_buffer: virt=%p, phys=0x%08x (using vmalloc instead of rmem) ***\n",
+             virt, (uint32_t)phys);
+    pr_info("*** isp_malloc_buffer: This saves %u bytes of precious rmem for VBMPool0! ***\n", size);
     
     return 0;
 }
