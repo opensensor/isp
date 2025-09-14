@@ -3870,11 +3870,8 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     isp_dev = ourISPdev;
 
     /* Get VIC device */
-    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("ispcore_sync_sensor_attr: No VIC device\n");
-        return -EINVAL;
-    }
+    vic_dev = isp_dev->vic_dev;
+
     
     /* Binary Ninja: if (arg2 == 0) */
     if (attr == NULL) {
