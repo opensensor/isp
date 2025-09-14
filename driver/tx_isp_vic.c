@@ -662,8 +662,8 @@ cleanup:
     return ret;
 }
 
-static ssize_t vic_proc_write(struct file *file, const char __user *buf,
-                             size_t count, loff_t *ppos)
+/* Move vic_proc_write outside of vic_snapraw */
+static ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 {
     struct tx_isp_subdev *sd = PDE_DATA(file->f_inode);
     char cmd[32];
