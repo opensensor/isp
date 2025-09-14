@@ -5242,7 +5242,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                     /* Binary Ninja: int32_t $v0_12 = $v0_11($s1_2) */
                     /* Call CSI initialization */
                     pr_info("Calling CSI subdevice initialization\n");
-                    int csi_result = csi_core_ops_init(&csi_dev->sd, 1);
+                    int csi_result = csi_core_ops_init(&csi_dev->sd, &tx_sensor->attr);
                     
                     /* Binary Ninja: if ($v0_12 != 0 && $v0_12 != 0xfffffdfd) */
                     if (csi_result != 0 && csi_result != 0xfffffdfd) {
