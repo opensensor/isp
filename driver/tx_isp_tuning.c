@@ -45,6 +45,7 @@
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
 
+int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev);
 /* ===== TIZIANO WDR PROCESSING PIPELINE - Binary Ninja Reference Implementation ===== */
 
 // ISP Tuning device support - missing component for /dev/isp-m0
