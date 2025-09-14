@@ -42,6 +42,9 @@ static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
 /* Forward declaration for VIC device creation from tx_isp_vic.c */
 extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 
+/* Forward declaration for VIN device creation from tx_isp_vin.c */
+extern int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev);
+
 /* Critical ISP Core initialization functions - MISSING FROM LOGS! */
 static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
 static int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
@@ -3529,6 +3532,16 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     return result;
                 } else {
                     pr_info("*** tx_isp_core_probe: VIC device created successfully ***\n");
+                }
+
+                /* CRITICAL: Create VIN device to solve the NULL pointer issue */
+                pr_info("*** tx_isp_core_probe: Creating VIN device ***\n");
+                result = tx_isp_create_vin_device(isp_dev);
+                if (result != 0) {
+                    pr_err("*** tx_isp_core_probe: Failed to create VIN device: %d ***\n", result);
+                    return result;
+                } else {
+                    pr_info("*** tx_isp_core_probe: VIN device created successfully ***\n");
                 }
 
                 /* Binary Ninja: sensor_early_init($v0) */
