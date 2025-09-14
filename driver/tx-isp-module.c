@@ -4344,7 +4344,6 @@ static int tx_isp_init(void)
         struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
         
         /* CRITICAL: Set up VIN subdev with proper ops structure */
-        extern struct tx_isp_subdev_ops vin_subdev_ops;
         vin_device->sd.ops = &vin_subdev_ops;
         vin_device->sd.isp = (void *)ourISPdev;
         
