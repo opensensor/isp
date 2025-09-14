@@ -380,7 +380,7 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
     /* Initialize CSI hardware if needed */
     if (enable && csi_dev->state < 3) {
-        ret = csi_core_ops_init(sd, 1);
+        ret = csi_core_ops_init(sd, attr);
         if (ret) {
             pr_err("Failed to initialize CSI hardware: %d\n", ret);
             return ret;
@@ -446,7 +446,7 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         break;
     case TX_ISP_EVENT_SENSOR_PREPARE_CHANGE:  /* This is the correct event for start */
         /* Start CSI */
-        csi_core_ops_init(sd, 1);
+        csi_core_ops_init(sd, NULL);
         break;
     }
 
