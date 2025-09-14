@@ -2822,10 +2822,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x1fff, isp_base + 0xb08c);
                 wmb();
                 
-                /* STEP 4: Wait for sensor detection and initialization to complete */
-                pr_info("*** STEP 4: Waiting for sensor detection and initialization to complete ***\n");
-                /* This allows the sensor init and detection to happen naturally */
-                /* The sensor driver will be called and will detect the chip */
+                /* STEP 4: Sensor initialization happens naturally through the normal driver flow */
+                pr_info("*** STEP 4: Sensor initialization handled by normal driver flow - NOT duplicating ***\n");
+                /* CRITICAL FIX: Do NOT call sensor initialization here - it's already done by the main driver */
+                /* The sensor s_stream will be called once by the main ISP driver, not by us */
                 
                 /* STEP 5: Apply 280ms delta register changes AFTER sensor detection */
                 pr_info("*** STEP 5: Applying 280ms delta register changes AFTER sensor detection ***\n");
