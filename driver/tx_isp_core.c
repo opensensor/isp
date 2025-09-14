@@ -4256,79 +4256,60 @@ EXPORT_SYMBOL(isp_frame_sync_wakeup);
  * isp_trigger_frame_data_transfer - Transfer frame data from sensor to DMA buffer
  * This function triggers the actual frame capture using the VIC streaming registers
  */
+/* isp_trigger_frame_data_transfer - CRITICAL: Transfer sensor data to ISP buffer */
 int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev)
 {
-    void __iomem *vic_regs;
-    u32 frame_size, buffer_addr;
-    int timeout_count = 0;
-    
+    void __iomem *vic_regs, *isp_base;
+    uint32_t frame_status, buffer_addr;
+    int timeout = 1000;
+
+    pr_info("*** isp_trigger_frame_data_transfer: CRITICAL frame data transfer ***\n");
+
     if (!dev || !dev->vic_regs) {
-        pr_err("isp_trigger_frame_data_transfer: Invalid device or register base\n");
+        pr_err("isp_trigger_frame_data_transfer: No device or VIC registers\n");
         return -EINVAL;
     }
-    
+
     vic_regs = dev->vic_regs;
-    
-    pr_info("*** isp_trigger_frame_data_transfer: Starting frame data transfer ***\n");
-    
-    /* Calculate frame size based on sensor dimensions */
-    u32 width = dev->sensor_width ? dev->sensor_width : 2200;  /* Default GC2053 width */
-    u32 height = dev->sensor_height ? dev->sensor_height : 1418; /* Default GC2053 height - FIXED */
-    frame_size = width * height * 2; /* Assume 16-bit per pixel */
-    
-    pr_info("isp_trigger_frame_data_transfer: Frame size %dx%d = %u bytes\n", 
-            width, height, frame_size);
-    
-    /* Use the same DMA buffer address that was configured during VIC start */
-    buffer_addr = 0x80000000; /* This should match the buffer allocated during init */
-    
-    pr_info("isp_trigger_frame_data_transfer: DMA buffer configured at 0x%x, size=%u\n",
-            buffer_addr, frame_size);
-    
-    /* CRITICAL: Use the actual VIC streaming register sequence that works */
-    /* This matches the register writes from tx_isp_vic_start that successfully configure streaming */
-    
-    /* Step 1: Enable VIC streaming using the working register sequence */
-    pr_info("*** isp_trigger_frame_data_transfer: Starting frame capture sequence ***\n");
-    
-    /* Use register 0x300 which is the main VIC streaming control register */
-    /* This is the same register used in ispvic_frame_channel_s_stream */
-    u32 stream_ctrl = 0x80000020;  /* Enable streaming with buffer management */
-    writel(stream_ctrl, vic_regs + 0x300);
+    isp_base = vic_regs - 0x9a00;
+
+    /* Check if sensor has frame data ready */
+    frame_status = readl(vic_regs + 0x380);
+    if (frame_status == 0) {
+        pr_debug("isp_trigger_frame_data_transfer: No frame data available\n");
+        return -EAGAIN;
+    }
+
+    /* Get current buffer address from VIC */
+    buffer_addr = readl(vic_regs + 0x318);  /* Current DMA buffer */
+    if (buffer_addr == 0) {
+        pr_err("isp_trigger_frame_data_transfer: No DMA buffer configured\n");
+        return -ENOMEM;
+    }
+
+    /* Trigger DMA transfer from sensor to buffer */
+    writel(1, vic_regs + 0x300);  /* Start DMA transfer */
     wmb();
-    
-    pr_info("isp_trigger_frame_data_transfer: VIC streaming enabled (reg 0x300 = 0x%x)\n", stream_ctrl);
-    
-    /* Step 2: Wait for VIC to start processing frames */
-    /* Check VIC status register to see if frames are being processed */
-//    timeout_count = 0;
-//    while (timeout_count < 100) {
-//        u32 vic_status = readl(vic_regs + 0x0);  /* VIC main status register */
-//        if (vic_status == 1) {
-//            pr_info("isp_trigger_frame_data_transfer: VIC processing active\n");
-//            break;
-//        }
-//        udelay(100);
-//        timeout_count++;
-//    }
-//
-//    if (timeout_count >= 100) {
-//        pr_err("isp_trigger_frame_data_transfer: Timeout waiting for frame start\n");
-//        return -ETIMEDOUT;
-//    }
-    
-    /* Step 3: The frame data transfer is now handled by the VIC hardware automatically */
-    /* The VIC will continuously capture frames from the sensor and store them in DMA buffers */
-    /* This is different from a one-shot capture - it's continuous streaming */
-    
-    pr_info("*** isp_trigger_frame_data_transfer: Continuous frame streaming initiated ***\n");
-    pr_info("*** VIC will now continuously capture frames from sensor to DMA buffers ***\n");
-    
-    /* Step 4: Signal that frame data transfer system is active */
-    isp_frame_done_wakeup();
-    
-    pr_info("*** isp_trigger_frame_data_transfer: Frame data transfer system activated ***\n");
-    
-    return 0;
+
+    /* Wait for transfer completion */
+    while (timeout-- > 0) {
+        uint32_t dma_status = readl(vic_regs + 0x300);
+        if ((dma_status & 0x1) == 0) {
+            /* Transfer complete */
+            pr_info("*** Frame data transfer completed successfully ***\n");
+            pr_info("*** isp_trigger_frame_data_transfer: Continuous frame streaming initiated ***\n");
+            pr_info("*** VIC will now continuously capture frames from sensor to DMA buffers ***\n");
+
+            /* Step 4: Signal that frame data transfer system is active */
+            isp_frame_done_wakeup();
+
+            pr_info("*** isp_trigger_frame_data_transfer: Frame data transfer system activated ***\n");
+            return 0;
+        }
+        udelay(10);
+    }
+
+    pr_err("isp_trigger_frame_data_transfer: Transfer timeout\n");
+    return -ETIMEDOUT;
 }
 EXPORT_SYMBOL(isp_trigger_frame_data_transfer);
