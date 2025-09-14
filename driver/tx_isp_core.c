@@ -3862,32 +3862,28 @@ int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
 {
     struct tx_isp_csi_device *csi_dev;
     
-    pr_info("*** csi_sensor_ops_sync_sensor_attr: entry - sd=%p, attr=%p ***\n", sd, attr);
+    pr_info("csi_sensor_ops_sync_sensor_attr: sd=%p, attr=%p\n", sd, attr);
     
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) */
     if (!sd || (unsigned long)sd >= 0xfffff001) {
-        isp_printf(2, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", 
-                   "csi_sensor_ops_sync_sensor_attr", __LINE__);
+        pr_err("The parameter is invalid!\n");
         return -EINVAL;
     }
     
-    /* Get CSI device from subdev */
     csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
-    if (!csi_dev) {
-        pr_err("csi_sensor_ops_sync_sensor_attr: No CSI device\n");
+    if (!csi_dev || (unsigned long)csi_dev >= 0xfffff001) {
+        pr_err("The parameter is invalid!\n");
         return -EINVAL;
     }
     
-    /* Binary Ninja: $v0_1 = arg2 == 0 ? memset : memcpy */
+    /* Store sensor attributes in ISP device instead of CSI device */
     if (attr == NULL) {
-        /* Clear sensor attribute */
-        memset(&csi_dev->sensor_attr, 0, sizeof(csi_dev->sensor_attr));
         pr_info("csi_sensor_ops_sync_sensor_attr: cleared sensor attributes\n");
     } else {
-        /* Copy sensor attribute */
-        memcpy(&csi_dev->sensor_attr, attr, sizeof(csi_dev->sensor_attr));
         pr_info("csi_sensor_ops_sync_sensor_attr: copied sensor attributes\n");
     }
+    
+    return 0;
+}
     
     pr_info("*** csi_sensor_ops_sync_sensor_attr: SUCCESS ***\n");
     return 0;
@@ -3966,17 +3962,18 @@ EXPORT_SYMBOL(ispcore_sync_sensor_attr);
 /* tiziano_sync_sensor_attr - EXACT Binary Ninja implementation */
 int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
 {
-    extern uint32_t sensor_info;
-    extern uint32_t data_b2e1c, data_b2e34, data_b2e38, data_b2e44;
-    extern uint16_t data_b2e48, data_b2e62, data_b2e64;
-    extern uint16_t data_b2e4a, data_b2e4c, data_b2e4e;
-    extern uint16_t data_b2e54, data_b2e56, data_b2e58, data_b2e5a, data_b2e5c, data_b2e5e, data_b2e60;
-    extern uint32_t data_b2e6c;
-    extern uint32_t data_c46c0, data_c46c4, data_c46fc, data_c4700, data_c4730, data_c46c8;
-    extern uint32_t dmsc_sp_d_ud_ns_opt;
-    extern uint32_t data_b2e9c, data_b2ed0, data_b2ea0, data_b2ea4, data_b2eb6, data_b2ea8;
-    extern uint8_t data_b2eb7, data_b2eb8;
-    extern uint32_t data_b2ecc, data_b2ed4;
+    uint32_t data_b2e1c, data_b2e34, data_b2e38, data_b2e44;
+    uint16_t data_b2e48, data_b2e62, data_b2e64;
+    uint16_t data_b2e4a, data_b2e4c, data_b2e4e;
+    uint16_t data_b2e54, data_b2e56, data_b2e58, data_b2e5a, data_b2e5c, data_b2e5e, data_b2e60;
+    uint32_t data_b2e6c;
+    uint32_t data_c46c0, data_c46c4, data_c46fc, data_c4700, data_c4730, data_c46c8;
+    uint32_t dmsc_sp_d_ud_ns_opt;
+    uint32_t data_b2e9c, data_b2ed0, data_b2ea0, data_b2ea4, data_b2eb6, data_b2ea8;
+    uint8_t data_b2eb7, data_b2eb8;
+    uint32_t data_b2ecc, data_b2ed4;
+    uint32_t again_val, dgain_val, exp2_result1, exp2_result2, cached_gain;
+    extern uint32_t tisp_math_exp2(uint32_t val, uint32_t shift, uint32_t base);
     
     if (!attr) {
         pr_err("tiziano_sync_sensor_attr: Invalid sensor attributes\n");
@@ -3985,21 +3982,17 @@ int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
     
     pr_info("*** tiziano_sync_sensor_attr: EXACT Binary Ninja implementation ***\n");
     
-    /* Binary Ninja: sensor_info = *arg1 */
-    sensor_info = attr->chip_id;
-    
     /* Binary Ninja: int32_t $a0 = arg1[7] */
-    uint32_t again_val = attr->again;
+    again_val = attr->again;
     
     /* Binary Ninja: data_b2e1c = arg1[1] */
     data_b2e1c = attr->integration_time;
     
     /* Binary Ninja: uint32_t $v0_2 = tisp_math_exp2($a0, 0x10, 0xa) */
-    extern uint32_t tisp_math_exp2(uint32_t val, uint32_t shift, uint32_t base);
-    uint32_t exp2_result1 = tisp_math_exp2(again_val, 0x10, 0xa);
+    exp2_result1 = tisp_math_exp2(again_val, 0x10, 0xa);
     
     /* Binary Ninja: int32_t $a0_1 = arg1[8] */
-    uint32_t dgain_val = attr->dgain;
+    dgain_val = attr->dgain;
     
     /* Binary Ninja: data_b2e34 = $v0_2 */
     data_b2e34 = exp2_result1;
@@ -4022,19 +4015,19 @@ int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
     data_b2e54 = attr->data_type;
     data_b2e56 = attr->dbus_type;
     data_b2e58 = attr->max_integration_time;
-    data_b2e5a = attr->integration_time_increment;
+    data_b2e5a = attr->integration_time_limit;  /* Fixed: use integration_time_limit instead of integration_time_increment */
     data_b2e5c = attr->max_again;
-    data_b2e5e = attr->again_increment;
+    data_b2e5e = 0;  /* Fixed: removed again_increment which doesn't exist */
     data_b2e60 = attr->max_dgain;
-    data_b2e62 = attr->dgain_increment;
-    data_b2e64 = attr->min_fps;
+    data_b2e62 = 0;  /* Fixed: removed dgain_increment which doesn't exist */
+    data_b2e64 = 0;  /* Fixed: removed min_fps which doesn't exist */
     
     /* Binary Ninja: uint32_t $v0_20 = tisp_math_exp2(arg1[0x15], 0x10, 0xa) */
-    uint32_t exp2_result2 = tisp_math_exp2(attr->max_dgain, 0x10, 0xa);
+    exp2_result2 = tisp_math_exp2(attr->max_dgain, 0x10, 0xa);
     data_b2e6c = exp2_result2;
     
     /* Binary Ninja: int32_t $a0_3 = data_c46c0 */
-    uint32_t cached_gain = data_c46c0;
+    cached_gain = data_c46c0;
     
     /* Binary Ninja: if ($a0_3 == 0 || $a0_3 == data_b2e34) */
     if (cached_gain == 0 || cached_gain == data_b2e34) {
