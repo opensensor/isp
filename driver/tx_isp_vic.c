@@ -662,17 +662,6 @@ cleanup:
     return ret;
 }
 
-/* Forward declarations */
-static ssize_t vic_proc_write(struct file *file, const char __user *buf,
-                             size_t count, loff_t *ppos);
-int vic_core_ops_init(struct tx_isp_subdev *sd, int enable);
-int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
-int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
-int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
-int isp_vic_frd_show(struct seq_file *seq, void *v);
-int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
-long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
-
 static ssize_t vic_proc_write(struct file *file, const char __user *buf,
                              size_t count, loff_t *ppos)
 {
