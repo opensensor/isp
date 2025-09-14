@@ -194,15 +194,15 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
     void *result = &data_b0000;  /* Return value matching reference */
-    
+
     pr_debug("*** vic_framedone_irq_function: entry - vic_dev=%p ***\n", vic_dev);
-    
+
     /* Validate vic_dev first */
     if (!vic_dev) {
         pr_err("vic_framedone_irq_function: NULL vic_dev\n");
         return 0;
     }
-    
+
     /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
     /* SAFE: Use proper struct member 'processing' instead of offset 0x214 */
     if (vic_dev->processing == 0) {
@@ -212,19 +212,19 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: result = *(arg1 + 0x210) */
         /* SAFE: Use proper struct member 'stream_state' instead of offset 0x210 */
         result = (void *)(uintptr_t)vic_dev->stream_state;
-        
+
         if (vic_dev->stream_state != 0) {
             /* Binary Ninja: void* $a3_1 = *(arg1 + 0xb8) */
             /* SAFE: Use vic_regs member instead of offset 0xb8 */
             vic_regs = vic_dev->vic_regs;
-            
+
             /* Binary Ninja: void** i_1 = *(arg1 + 0x204) */
             /* SAFE: Use done_head list instead of offset 0x204 */
             struct list_head *pos;
             int buffer_index = 0;    /* $a1_1 = 0 */
             int high_bits = 0;       /* $v1_1 = 0 */
             int match_found = 0;     /* $v0 = 0 */
-            
+
             /* Binary Ninja: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
             /* SAFE: Iterate through done_head list instead of manual pointer walking */
             list_for_each(pos, &vic_dev->done_head) {
@@ -232,7 +232,7 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 high_bits += (0 < match_found) ? 1 : 0;
                 /* Binary Ninja: $a1_1 += 1 */
                 buffer_index += 1;
-                
+
                 /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
                 /* Check if buffer address matches current frame register */
                 if (vic_regs) {
@@ -244,33 +244,49 @@ static int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                         u32 reserved;
                         u32 buffer_addr;
                     } *entry = container_of(pos, struct vic_buffer_entry, list);
-                    
+
                     if (entry->buffer_addr == current_frame_addr) {
                         match_found = 1;  /* $v0 = 1 */
                     }
                 }
             }
-            
+
             /* Binary Ninja: int32_t $v1_2 = $v1_1 << 0x10 */
             int shifted_value = high_bits << 0x10;
-            
+
             /* Binary Ninja: if ($v0 == 0) */
             if (match_found == 0) {
                 /* $v1_2 = $a1_1 << 0x10 */
                 shifted_value = buffer_index << 0x10;
             }
-            
+
             /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
             if (vic_regs) {
                 u32 reg_val = readl(vic_regs + 0x300);
                 reg_val = shifted_value | (reg_val & 0xfff0ffff);
                 writel(reg_val, vic_regs + 0x300);
-                
+
                 pr_debug("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
                          reg_val, buffer_index, high_bits, match_found);
             }
+                /* Trigger ISP core frame processing by writing to ISP interrupt register */
+    if (isp_dev->core_regs) {
+        void __iomem *isp_base = isp_dev->core_regs;
+
+        /* Set frame done bit in ISP interrupt status register */
+        /* This will trigger the ISP core interrupt handler (IRQ 37) */
+        writel(0x1, isp_base + 0x98b0);  /* ISP frame done interrupt bit */
+        wmb();
+
+        pr_debug("*** VIC->ISP EVENT: Triggered ISP core frame processing (IRQ 37) ***\n");
+    }
+
+    /* Call the ISP frame done wakeup function to notify waiting processes */
+    extern void isp_frame_done_wakeup(void);
+    isp_frame_done_wakeup();
+    pr_debug("*** VIC->ISP EVENT: Called isp_frame_done_wakeup() ***\n");
         }
-        
+
         /* Binary Ninja: result = &data_b0000, goto label_123f4 */
         result = &data_b0000;
         goto label_123f4;
@@ -285,41 +301,41 @@ label_123f4:
             uint8_t pad[19];
             uint8_t state;
         } *gpio_ptr = &gpio_info[0];
-        
+
         gpio_switch_state = 0;
-        
+
         /* Binary Ninja: for (int32_t i = 0; i != 0xa; ) */
         for (int i = 0; i < 0xa; i++) {
             /* Binary Ninja: uint32_t $a0_2 = zx.d(*$s1_1) */
             uint32_t gpio_pin = (uint32_t)gpio_ptr->pin;
-            
+
             /* Binary Ninja: if ($a0_2 == 0xff) break */
             if (gpio_pin == 0xff) {
                 break;
             }
-            
+
             /* Binary Ninja: result = private_gpio_direction_output($a0_2, zx.d(*($s1_1 + 0x14))) */
             uint32_t gpio_state = (uint32_t)gpio_ptr->state;
-            
+
             /* SAFE: Call GPIO function with validated parameters */
             /* In real implementation, would call: private_gpio_direction_output(gpio_pin, gpio_state) */
             int gpio_result = 0; /* Placeholder for actual GPIO call */
-            
+
             /* Binary Ninja: if (result s< 0) */
             if (gpio_result < 0) {
                 pr_err("%s[%d] SET ERR GPIO(%d),STATE(%d),%d\n",
-                       "vic_framedone_irq_function", __LINE__, 
+                       "vic_framedone_irq_function", __LINE__,
                        gpio_pin, gpio_state, gpio_result);
                 return gpio_result;
             }
-            
+
             pr_debug("vic_framedone_irq_function: GPIO %d set to state %d\n", gpio_pin, gpio_state);
-            
+
             /* Move to next GPIO info entry */
             gpio_ptr++;
         }
     }
-    
+
     pr_debug("*** vic_framedone_irq_function: completed successfully ***\n");
     /* Binary Ninja: return result */
     return 0;  /* Return 0 for success matching reference behavior */
