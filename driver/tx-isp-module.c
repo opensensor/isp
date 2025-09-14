@@ -4245,15 +4245,9 @@ static int tx_isp_init(void)
         return ret;
     }
     
-    /* *** CRITICAL FIX: Create and link VIN device structure *** */
-    pr_info("*** CREATING VIN DEVICE STRUCTURE AND LINKING TO ISP CORE ***\n");
-    ret = tx_isp_create_vin_device(ourISPdev);
-    if (ret) {
-        pr_err("Failed to create VIN device structure: %d\n", ret);
-        kfree(ourISPdev);
-        ourISPdev = NULL;
-        return ret;
-    }
+    /* *** CRITICAL FIX: VIN device creation MUST be deferred until after memory mappings *** */
+    pr_info("*** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***\n");
+    pr_info("*** This fixes the 'ISP core registers not available' error ***\n");
     
     /* *** CRITICAL FIX: Set up VIN subdev operations structure *** */
     if (ourISPdev->vin_dev) {
