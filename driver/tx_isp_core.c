@@ -295,23 +295,6 @@ MODULE_PARM_DESC(isp_memopt, "isp memory optimize");
 static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 extern struct tx_isp_dev *ourISPdev;
 
-/* Frame synchronization function - called by tuning event system */
-void isp_frame_done_wakeup(void)
-{
-    pr_info("*** isp_frame_done_wakeup: Frame processing complete - waking up waiters ***\n");
-    
-    /* In a full implementation, this would:
-     * 1. Signal frame completion to waiting processes
-     * 2. Update frame counters
-     * 3. Trigger any registered frame callbacks
-     * 4. Wake up processes waiting on frame completion
-     */
-    
-    /* For now, just log that frame processing is complete */
-    pr_info("*** isp_frame_done_wakeup: Frame sync event processed ***\n");
-}
-EXPORT_SYMBOL(isp_frame_done_wakeup);
-
 /* Global ISP core pointer for Binary Ninja compatibility */
 static struct tx_isp_dev *g_ispcore = NULL;
 
