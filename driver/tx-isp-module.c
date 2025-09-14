@@ -6133,6 +6133,32 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         /* Call Binary Ninja ispvic_frame_channel_s_stream implementation */
         return ispvic_frame_channel_s_stream(vic_dev, 1);
     }
+    case 0x3000004: { /* TX_ISP_EVENT_SYNC_SENSOR_ATTR - Sync sensor attributes */
+        pr_info("*** VIC EVENT: SYNC_SENSOR_ATTR (0x3000004) - SYNCING SENSOR ATTRIBUTES ***\n");
+        
+        /* Handle sensor attribute synchronization */
+        if (data && ourISPdev && ourISPdev->sensor) {
+            struct tx_isp_sensor_attribute *sensor_attr = (struct tx_isp_sensor_attribute *)data;
+            struct tx_isp_sensor *sensor = ourISPdev->sensor;
+            
+            pr_info("*** SYNCING SENSOR ATTRIBUTES: %s (%dx%d) ***\n",
+                    sensor_attr->name ? sensor_attr->name : "(unnamed)",
+                    sensor_attr->total_width, sensor_attr->total_height);
+            
+            /* Copy sensor attributes to device sensor */
+            if (sensor->video.attr) {
+                memcpy(sensor->video.attr, sensor_attr, sizeof(struct tx_isp_sensor_attribute));
+                pr_info("*** SENSOR ATTRIBUTES SYNCED SUCCESSFULLY ***\n");
+                return 0; /* Success */
+            } else {
+                pr_err("*** SENSOR ATTRIBUTES SYNC FAILED: No sensor attr structure ***\n");
+                return -EINVAL;
+            }
+        } else {
+            pr_err("*** SENSOR ATTRIBUTES SYNC FAILED: Invalid parameters ***\n");
+            return -EINVAL;
+        }
+    }
     case 0x3000005: { /* Buffer enqueue event from __enqueue_in_driver */
         pr_info("*** VIC EVENT: BUFFER_ENQUEUE (0x3000005) - HARDWARE BUFFER SETUP ***\n");
         
