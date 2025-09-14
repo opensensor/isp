@@ -1596,6 +1596,26 @@ if (!IS_ERR(cgu_isp_clk)) {
     /* MCP LOG: VIC start completed - streaming registers will be written later in correct sequence */
     pr_info("MCP_LOG: VIC start completed - streaming registers deferred to correct sequence position\n");
 
+    /* *** CRITICAL MISSING PIECE: Trigger frame data transfer after VIC is configured *** */
+    pr_info("*** CRITICAL: Now triggering frame data transfer to start actual frame capture ***\n");
+    
+    /* Get the ISP device from the VIC device */
+    struct tx_isp_dev *isp_dev = ourISPdev;
+    if (isp_dev) {
+        /* Trigger the ISP_TUNING_EVENT_DMA_READY event to start frame capture */
+        pr_info("*** Triggering ISP_TUNING_EVENT_DMA_READY to start frame data transfer ***\n");
+        
+        /* Call the frame data transfer function directly */
+        int transfer_ret = isp_trigger_frame_data_transfer(isp_dev);
+        if (transfer_ret == 0) {
+            pr_info("*** SUCCESS: Frame data transfer initiated - sensor data should now flow to DMA ***\n");
+        } else {
+            pr_err("*** ERROR: Frame data transfer failed: %d ***\n", transfer_ret);
+        }
+    } else {
+        pr_err("*** ERROR: No ISP device available for frame data transfer ***\n");
+    }
+
     ret = 0;
 
 exit_func:
