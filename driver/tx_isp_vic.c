@@ -1593,9 +1593,26 @@ if (!IS_ERR(cgu_isp_clk)) {
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
-    /* *** CRITICAL FIX: NO ADDITIONAL REGISTER WRITES - Keep VIC configuration minimal *** */
-    pr_info("*** CRITICAL FIX: Skipping additional register writes to prevent control limit error ***\n");
-    pr_info("*** VIC configured with minimal essential registers only ***\n");
+    /* *** CRITICAL FIX: Enable ONLY essential VIC interrupts without conflicting registers *** */
+    pr_info("*** CRITICAL FIX: Enabling essential VIC interrupts for frame events ***\n");
+    
+    /* STEP 1: Clear any pending interrupts first */
+    writel(0xffffffff, vic_regs + 0x1f0);  /* Clear all interrupt status */
+    wmb();
+    
+    /* STEP 2: Enable VIC interrupt sources - MINIMAL set only */
+    writel(0x1, vic_regs + 0x1f4);  /* Enable frame done interrupt */
+    wmb();
+    
+    /* STEP 3: Enable VIC interrupt mask - this allows interrupts to be generated */
+    writel(0x1, vic_regs + 0x1ec);  /* Enable frame interrupt mask only */
+    wmb();
+    
+    /* STEP 4: Enable VIC interrupt generation at the VIC hardware level */
+    writel(0x1, vic_regs + 0x1e8);  /* Enable VIC interrupt output to interrupt controller */
+    wmb();
+    
+    pr_info("*** CRITICAL: Essential VIC interrupts enabled - should now generate frame events ***\n");
 
     /* *** CRITICAL FIX: Set vic_start_ok ONLY after successful configuration *** */
     vic_start_ok = 1;
