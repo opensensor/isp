@@ -1593,41 +1593,9 @@ if (!IS_ERR(cgu_isp_clk)) {
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
-    /* STEP 4: CRITICAL - Enable the hardware interrupt line in the interrupt controller */
-    /* This is what was missing - the interrupt line itself needs to be enabled */
-    /* *** WRITE MISSING REGISTERS TO MATCH REFERENCE TRACE *** */
-    pr_info("*** Writing missing registers to match reference driver trace ***\n");
-    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace */
-    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace */
-    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace */
-
-    /* CSI PHY Control registers - write to VIC register space offsets that match trace */
-    writel(0x54560031, vic_regs + 0x0);      /* First register from reference trace */
-    writel(0x7800438, vic_regs + 0x4);       /* Second register from reference trace */
-    
-    /* *** CRITICAL FIX: Enable VIC interrupts AND register interrupt handler *** */
-    pr_info("*** CRITICAL FIX: Enabling VIC interrupts and registering interrupt handler ***\n");
-    
-    /* STEP 1: Clear any pending interrupts first */
-    writel(0xffffffff, vic_regs + 0x1f0);  /* Clear all interrupt status */
-    wmb();
-    
-    /* STEP 2: Enable VIC interrupt sources */
-    writel(0x1, vic_regs + 0x1f4);  /* Enable frame done interrupt */
-    writel(0x1, vic_regs + 0x1f8);  /* Enable DMA done interrupt */
-    writel(0x1, vic_regs + 0x1fc);  /* Enable error interrupts */
-    wmb();
-    
-    /* STEP 3: Enable VIC interrupt mask - this allows interrupts to be generated */
-    writel(0x7, vic_regs + 0x1ec);  /* Enable frame, DMA, and error interrupt masks */
-    wmb();
-    
-    
-    /* STEP 5: Enable VIC interrupt generation at the VIC hardware level */
-    writel(0x1, vic_regs + 0x1e8);  /* Enable VIC interrupt output to interrupt controller */
-    wmb();
-    
-    pr_info("*** CRITICAL: VIC interrupts fully enabled - should now generate frame events ***\n");
+    /* *** CRITICAL FIX: NO ADDITIONAL REGISTER WRITES - Keep VIC configuration minimal *** */
+    pr_info("*** CRITICAL FIX: Skipping additional register writes to prevent control limit error ***\n");
+    pr_info("*** VIC configured with minimal essential registers only ***\n");
 
     /* *** CRITICAL FIX: Set vic_start_ok ONLY after successful configuration *** */
     vic_start_ok = 1;
