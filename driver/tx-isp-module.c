@@ -4268,6 +4268,19 @@ static int tx_isp_init(void)
                 vin_device->sd.ops->video ? vin_device->sd.ops->video->s_stream : NULL);
         
         pr_info("*** VIN DEVICE FULLY INITIALIZED AND READY FOR STREAMING ***\n");
+        
+        /* *** CRITICAL FIX: Initialize VIN immediately to state 3 *** */
+        pr_info("*** CRITICAL: INITIALIZING VIN TO STATE 3 DURING STARTUP ***\n");
+        if (vin_device->sd.ops && vin_device->sd.ops->core && vin_device->sd.ops->core->init) {
+            ret = vin_device->sd.ops->core->init(&vin_device->sd, 1);
+            if (ret) {
+                pr_err("*** CRITICAL: VIN INITIALIZATION FAILED DURING STARTUP: %d ***\n", ret);
+            } else {
+                pr_info("*** CRITICAL: VIN INITIALIZED TO STATE 3 DURING STARTUP - READY FOR STREAMING ***\n");
+            }
+        } else {
+            pr_err("*** CRITICAL: NO VIN INIT FUNCTION AVAILABLE DURING STARTUP ***\n");
+        }
     }
 	
     /* Step 2: Register platform device (matches reference) */
@@ -6626,6 +6639,29 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 sensor->info.name, enable);
 
         if (enable) {
+            /* CRITICAL FIX: Initialize VIN if not already initialized */
+            if (isp_dev->vin_dev) {
+                struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)isp_dev->vin_dev;
+                if (vin_device->state != 3) {
+                    pr_info("*** CRITICAL: VIN NOT INITIALIZED (state=%d), INITIALIZING NOW ***\n", vin_device->state);
+                    
+                    /* Call VIN initialization */
+                    if (vin_device->sd.ops && vin_device->sd.ops->core && vin_device->sd.ops->core->init) {
+                        ret = vin_device->sd.ops->core->init(&vin_device->sd, 1);
+                        if (ret) {
+                            pr_err("*** CRITICAL: VIN INITIALIZATION FAILED: %d ***\n", ret);
+                            return ret;
+                        }
+                        pr_info("*** CRITICAL: VIN INITIALIZED SUCCESSFULLY - STATE NOW 3 ***\n");
+                    } else {
+                        pr_err("*** CRITICAL: NO VIN INIT FUNCTION AVAILABLE ***\n");
+                        return -ENODEV;
+                    }
+                } else {
+                    pr_info("*** VIN ALREADY INITIALIZED (state=%d) ***\n", vin_device->state);
+                }
+            }
+
             /* Any ISP-specific sensor configuration */
             if (sensor->video.attr) {
                 if (sensor->video.attr->dbus_type == 1) {
