@@ -2711,9 +2711,9 @@ static uint32_t msca_ch_en = 0;
 EXPORT_SYMBOL(msca_ch_en);
 
 /* Additional missing global variables referenced in Binary Ninja */
-uint32_t data_b2de8 = 1920;  /* Default channel 0 width */
+uint32_t data_b2de8 = 2200;  /* Default channel 0 width */
 EXPORT_SYMBOL(data_b2de8);
-uint32_t data_b2dec = 1080;  /* Default channel 0 height */ 
+uint32_t data_b2dec = 1418;  /* Default channel 0 height */
 EXPORT_SYMBOL(data_b2dec);
 uint32_t data_b2db4 = 960;   /* Default channel 1 width */
 EXPORT_SYMBOL(data_b2db4);

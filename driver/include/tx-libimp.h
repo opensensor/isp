@@ -395,8 +395,8 @@ struct isp_tuning_ctrl {
 
 struct frame_fmt {
     __u32 type;           // 0x00: type=1
-    __u32 width;          // 0x04: e.g. 0x780 (1920)
-    __u32 height;         // 0x08: e.g. 0x438 (1080)
+    __u32 width;          // 0x04: e.g. 0x780 (2200)
+    __u32 height;         // 0x08: e.g. 0x438 (1418)
     union {               // 0x0C
         __u32 pixelformat;
         char pix_str[4];      // "NV12"

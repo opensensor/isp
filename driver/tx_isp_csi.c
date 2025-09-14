@@ -365,14 +365,14 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
         sensor->attr.mipi.lans = 2; /* Default to 2 lanes */
         sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10; /* Default to RAW10 */
-        sensor->attr.total_width = 1920;  /* Default to 1080p */
-        sensor->attr.total_height = 1080;
+        sensor->attr.total_width = 2200;  /* Default to 1418p */
+        sensor->attr.total_height = 1418;
 
         /* Store in subdevice */
         sd->active_sensor = sensor;
         attr = &sensor->attr;
 
-        pr_info("Created default sensor attribute: 1920x1080, MIPI, RAW10, 2 lanes\n");
+        pr_info("Created default sensor attribute: 2200x1418, MIPI, RAW10, 2 lanes\n");
     }
 
     /* Only handle MIPI sensors */
@@ -588,7 +588,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                                 frame_rate = 60;
                             } else if (pixel_count <= (1280 * 720)) {
                                 frame_rate = 45;
-                            } else if (pixel_count <= (1920 * 1080)) {
+                            } else if (pixel_count <= (2200 * 1418)) {
                                 frame_rate = 30;
                             } else {
                                 frame_rate = 15;

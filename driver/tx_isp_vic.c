@@ -86,8 +86,8 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     }
     
     /* Initialize VIC device dimensions */
-    vic_dev->width = 1920;  /* Default HD width */
-    vic_dev->height = 1080; /* Default HD height */
+    vic_dev->width = 2200;  /* Default HD width */
+    vic_dev->height = 1418; /* Default HD height */
     
     /* Set up VIC subdev structure */
     memset(&vic_dev->sd, 0, sizeof(vic_dev->sd));
@@ -144,8 +144,8 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* Set up sensor attributes with defaults */
     memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
     vic_dev->sensor_attr.dbus_type = 2; /* Default to MIPI */
-    vic_dev->sensor_attr.total_width = 1920;
-    vic_dev->sensor_attr.total_height = 1080;
+    vic_dev->sensor_attr.total_width = 2200;
+    vic_dev->sensor_attr.total_height = 1418;
     vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
     
     /* *** CRITICAL: Link VIC device to ISP core *** */
@@ -1828,28 +1828,9 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     if (vic_dev->width == 0 || vic_dev->height == 0) {
         pr_err("*** CRITICAL: Invalid sensor dimensions %dx%d - will cause control limit error! ***\n", 
                vic_dev->width, vic_dev->height);
-        vic_dev->width = 1920;   /* Set safe defaults */
-        vic_dev->height = 1080;
-        pr_info("*** Using safe default dimensions 1920x1080 ***\n");
-    }
-    
-    /* CRITICAL: Ensure dimensions are within VIC hardware limits */
-    if (vic_dev->width > 4096 || vic_dev->height > 4096) {
-        pr_err("*** CRITICAL: Dimensions %dx%d exceed VIC limits - will cause control limit error! ***\n",
-               vic_dev->width, vic_dev->height);
-        return -EINVAL;
-    }
-
-    /* Validate vic_dev structure */
-    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
-        pr_err("*** CRITICAL: Invalid vic_dev pointer %p ***\n", vic_dev);
-        return -EINVAL;
-    }
-
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev->vic_regs access */
-    if (((uintptr_t)&vic_dev->vic_regs & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->vic_regs member not aligned ***\n");
-        return -EINVAL;
+        vic_dev->width = 2200;   /* Set safe defaults */
+        vic_dev->height = 1418;
+        pr_info("*** Using safe default dimensions 2200x1418 ***\n");
     }
 
     /* MIPS ALIGNMENT CHECK: Validate vic_dev->sensor_attr access */
@@ -2470,7 +2451,7 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     }
     
     /* CRITICAL: Ensure we have valid dimensions */
-    if (width == 0 || height == 0 || width == 1920 || height == 1080) {
+    if (width == 0 || height == 0 || width == 2200 || height == 1418) {
         /* Force correct GC2053 dimensions */
         width = 2200;
         height = 1418;

@@ -27,8 +27,8 @@
 #define TX_ISP_INPUT_PORT_MAX_HEIGHT		4096
 #define TX_ISP_FR_CHANNEL_MAX_WIDTH		2624
 #define TX_ISP_FR_CHANNEL_MAX_HEIGHT		2048
-#define TX_ISP_DS1_CHANNEL_MAX_WIDTH		1920
-#define TX_ISP_DS1_CHANNEL_MAX_HEIGHT		1080
+#define TX_ISP_DS1_CHANNEL_MAX_WIDTH		2200
+#define TX_ISP_DS1_CHANNEL_MAX_HEIGHT		1418
 
 
 /*****************************************************
@@ -226,7 +226,7 @@ typedef enum {
 
 typedef enum {
 	ISP_CLK_960P_MODE = 60000000,
-	ISP_CLK_1080P_MODE = 90000000,
+	ISP_CLK_1418P_MODE = 90000000,
 	ISP_CLK_3M_MODE = 100000000,
 } isp_clk_mode;
 
