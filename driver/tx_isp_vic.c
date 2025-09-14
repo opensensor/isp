@@ -1653,13 +1653,20 @@ if (!IS_ERR(cgu_isp_clk)) {
     
     pr_info("*** VIC TIMING FIX: All timing registers configured - now unlocking VIC ***\n");
 
-    /* Binary Ninja: VIC unlock sequence with timing fix */
+    /* *** CRITICAL FIX: Follow EXACT Binary Ninja unlock sequence to prevent control limit error *** */
+    pr_info("*** CRITICAL FIX: Following EXACT Binary Ninja VIC unlock sequence ***\n");
+    
+    /* Binary Ninja EXACT: **(arg1 + 0xb8) = 2 */
     writel(2, vic_regs + 0x0);
     wmb();
+    pr_info("tx_isp_vic_start: VIC unlock step 1 (reg 0x0 = 2)\n");
+    
+    /* Binary Ninja EXACT: **(arg1 + 0xb8) = 4 */
     writel(4, vic_regs + 0x0);
     wmb();
+    pr_info("tx_isp_vic_start: VIC unlock step 2 (reg 0x0 = 4)\n");
     
-    /* Wait for unlock completion with better timeout handling */
+    /* Binary Ninja EXACT: while (*$v0_121 != 0) nop */
     pr_info("tx_isp_vic_start: Waiting for VIC unlock completion...\n");
     timeout = 10000;
     while (timeout > 0) {
@@ -1673,24 +1680,31 @@ if (!IS_ERR(cgu_isp_clk)) {
     }
     
     if (timeout == 0) {
-        pr_err("*** VIC UNLOCK TIMEOUT - this may cause control limit error! ***\n");
-        /* Force unlock by resetting VIC */
-        writel(0, vic_regs + 0x0);
-        wmb();
-        msleep(1);
+        pr_err("*** CRITICAL: VIC unlock timeout - this WILL cause control limit error! ***\n");
+        ret = -ETIMEDOUT;
+        goto exit_func;
     }
-
-    /* Binary Ninja: Enable VIC processing */
-    writel(1, vic_regs + 0x0);
-    wmb();
-    pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1)\n");
-
-    /* Binary Ninja: Final configuration registers */
+    
+    /* *** CRITICAL: Configure ALL timing registers AFTER unlock but BEFORE enabling *** */
+    pr_info("*** CRITICAL: Configuring timing registers AFTER unlock but BEFORE enabling ***\n");
+    
+    /* Binary Ninja EXACT: Final configuration registers - MUST be set before enabling */
+    /* *(*(arg1 + 0xb8) + 0x1a4) = 0x100010 */
     writel(0x100010, vic_regs + 0x1a4);
+    /* *(*(arg1 + 0xb8) + 0x1ac) = 0x4210 */
     writel(0x4210, vic_regs + 0x1ac);
+    /* *(*(arg1 + 0xb8) + 0x1b0) = 0x10 */
     writel(0x10, vic_regs + 0x1b0);
+    /* *(*(arg1 + 0xb8) + 0x1b4) = 0 */
     writel(0, vic_regs + 0x1b4);
     wmb();
+    
+    pr_info("*** CRITICAL: All timing registers configured - NOW enabling VIC processing ***\n");
+    
+    /* Binary Ninja EXACT: *$v0_121 = 1 - Enable VIC processing LAST */
+    writel(1, vic_regs + 0x0);
+    wmb();
+    pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1) - control limit error should be FIXED\n");
 
     /* Binary Ninja: Log WDR mode */
     const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
