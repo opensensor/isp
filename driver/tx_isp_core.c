@@ -3534,16 +3534,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_info("*** tx_isp_core_probe: VIC device created successfully ***\n");
                 }
 
-                /* CRITICAL: Create VIN device to solve the NULL pointer issue */
-                pr_info("*** tx_isp_core_probe: Creating VIN device ***\n");
-                result = tx_isp_create_vin_device(isp_dev);
-                if (result != 0) {
-                    pr_err("*** tx_isp_core_probe: Failed to create VIN device: %d ***\n", result);
-                    return result;
-                } else {
-                    pr_info("*** tx_isp_core_probe: VIN device created successfully ***\n");
-                }
-
                 /* Binary Ninja: sensor_early_init($v0) */
                 pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
                 sensor_early_init(isp_dev);
@@ -3559,6 +3549,30 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 pr_info("***   - Channel count: %d ***\n", channel_count);
                 pr_info("***   - Tuning device: %p ***\n", tuning_dev);
                 pr_info("***   - Global ISP device set: %p ***\n", ourISPdev);
+                
+                /* CRITICAL: Set up memory mappings for register access FIRST */
+                pr_info("*** tx_isp_core_probe: Setting up ISP memory mappings FIRST ***\n");
+                result = tx_isp_init_memory_mappings(isp_dev);
+                if (result == 0) {
+                    pr_info("*** tx_isp_core_probe: ISP memory mappings initialized successfully ***\n");
+                    
+                    /* CRITICAL: Update global ISP device with register base IMMEDIATELY */
+                    ourISPdev = isp_dev;
+                    pr_info("*** tx_isp_core_probe: Global ISP device updated with register base ***\n");
+                } else {
+                    pr_err("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
+                    return result;
+                }
+
+                /* CRITICAL: Create VIN device AFTER memory mappings are available */
+                pr_info("*** tx_isp_core_probe: Creating VIN device (after memory mappings) ***\n");
+                result = tx_isp_create_vin_device(isp_dev);
+                if (result != 0) {
+                    pr_err("*** tx_isp_core_probe: Failed to create VIN device: %d ***\n", result);
+                    return result;
+                } else {
+                    pr_info("*** tx_isp_core_probe: VIN device created successfully ***\n");
+                }
                 
                 /* CRITICAL: Now that core device is set up, call the key function that creates graph and nodes */
                 pr_info("*** tx_isp_core_probe: Calling tx_isp_create_graph_and_nodes ***\n");
@@ -3595,19 +3609,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_info("*** tx_isp_core_probe: ISP M0 tuning device node created successfully ***\n");
                 } else {
                     pr_err("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
-                }
-
-                /* CRITICAL: Set up memory mappings for register access BEFORE tuning init */
-                pr_info("*** tx_isp_core_probe: Setting up ISP memory mappings BEFORE tuning init ***\n");
-                result = tx_isp_init_memory_mappings(isp_dev);
-                if (result == 0) {
-                    pr_info("*** tx_isp_core_probe: ISP memory mappings initialized successfully ***\n");
-                    
-                    /* CRITICAL: Update global ISP device with register base IMMEDIATELY */
-                    ourISPdev = isp_dev;
-                    pr_info("*** tx_isp_core_probe: Global ISP device updated with register base ***\n");
-                } else {
-                    pr_err("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
                 }
 
                 /* CRITICAL: Start continuous processing - this generates the register activity your trace captures! */
