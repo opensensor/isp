@@ -61,9 +61,9 @@ int tx_isp_vin_stop(struct tx_isp_subdev *sd);
 int tx_isp_vin_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config);
 
 /* VIN Internal Operations - Based on T30 reference */
-int tx_isp_vin_init(struct tx_isp_subdev *sd, int on);
+int tx_isp_vin_init(void* arg1, int32_t arg2);  /* Binary Ninja signature */
 int tx_isp_vin_reset(struct tx_isp_subdev *sd, int on);
-int tx_isp_vin_activate_subdev(struct tx_isp_subdev *sd);
+int tx_isp_vin_activate_subdev(void* arg1);     /* Binary Ninja signature */
 int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd);
 int vin_s_stream(struct tx_isp_subdev *sd, int enable);
 
