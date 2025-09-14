@@ -47,7 +47,7 @@ extern int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev);
 
 /* Critical ISP Core initialization functions - MISSING FROM LOGS! */
 static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
-static int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
+int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
 static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
 static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sensor_attr);
 irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id);
@@ -2055,7 +2055,7 @@ static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sen
  * isp_malloc_buffer - Allocate buffer from reserved memory (rmem) for ISP processing
  * This fixes the memory exhaustion issue by using reserved kernel rmem instead of regular allocation
  */
-static int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr)
+int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr)
 {
     static size_t rmem_offset = 0;
     void *virt;
