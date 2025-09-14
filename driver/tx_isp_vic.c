@@ -648,7 +648,6 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
         filp_close(fp, NULL);
         pos = 0;
     }
-    }
 
 set_fs(old_fs);
 
@@ -662,6 +661,7 @@ cleanup:
     iounmap(vic_base);
     return ret;
 }
+}  /* CRITICAL FIX: Close vic_snapraw function here */
 
 /* Move vic_proc_write outside of vic_snapraw */
 static ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
