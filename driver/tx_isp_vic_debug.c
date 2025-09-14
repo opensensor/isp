@@ -63,41 +63,6 @@ static uint8_t gpio_info[20] = {0xff}; /* GPIO configuration array */
 int vic_framedone_irq_function(struct tx_isp_dev *isp_dev);
 int vic_mdma_irq_function(struct tx_isp_dev *isp_dev, int channel);
 
-/**
- * csi_video_s_stream - EXACT Binary Ninja implementation
- * Controls CSI streaming state
- */
-int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
-{
-    struct tx_isp_csi_device *csi_dev;
-    
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) */
-    if (!sd || (unsigned long)sd >= 0xfffff001) {
-        isp_printf(2, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", 
-                   "csi_video_s_stream", __LINE__);
-        return -EINVAL;
-    }
-    
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
-    if (!csi_dev) {
-        return -EINVAL;
-    }
-    
-    /* For now, process all interface types since we don't have sensor_attr in CSI device */
-    /* In the full implementation, this would check the interface type */
-    
-    /* Binary Ninja: Set streaming state */
-    if (enable) {
-        csi_dev->state = 4; /* STREAMING state */
-        pr_info("*** csi_video_s_stream: CSI streaming ENABLED ***\n");
-    } else {
-        csi_dev->state = 3; /* CONFIGURED state */
-        pr_info("*** csi_video_s_stream: CSI streaming DISABLED ***\n");
-    }
-    
-    return 0;
-}
-EXPORT_SYMBOL(csi_video_s_stream);
 
 /**
  * isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation
