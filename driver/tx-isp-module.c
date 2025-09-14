@@ -4240,6 +4240,16 @@ static int tx_isp_init(void)
         ourISPdev = NULL;
         return ret;
     }
+    
+    /* *** CRITICAL FIX: Create and link VIN device structure *** */
+    pr_info("*** CREATING VIN DEVICE STRUCTURE AND LINKING TO ISP CORE ***\n");
+    ret = tx_isp_create_vin_device(ourISPdev);
+    if (ret) {
+        pr_err("Failed to create VIN device structure: %d\n", ret);
+        kfree(ourISPdev);
+        ourISPdev = NULL;
+        return ret;
+    }
 	
     /* Step 2: Register platform device (matches reference) */
     ret = platform_device_register(&tx_isp_platform_device);
