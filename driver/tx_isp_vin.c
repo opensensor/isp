@@ -66,13 +66,16 @@ static inline bool is_valid_kernel_pointer(const void *ptr)
  * tx_isp_create_vin_device - Create and initialize VIN device structure
  * @isp_dev: ISP device structure
  *
- * This function creates the VIN device structure and links it to the ISP core,
- * matching the pattern used by tx_isp_create_vic_device.
+ * Creates the VIN device structure and connects it to the ISP device.
+ * This is critical for VIN streaming to work properly.
+ *
+ * Returns 0 on success, negative error code on failure
  */
 int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev)
 {
     struct tx_isp_vin_device *vin_dev;
-    struct resource *res;
+    struct resource *mem_resource = NULL;
+    void __iomem *vin_regs = NULL;
     int ret = 0;
 
     if (!isp_dev) {
@@ -85,47 +88,64 @@ int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev)
     /* Allocate VIN device structure */
     vin_dev = kzalloc(sizeof(struct tx_isp_vin_device), GFP_KERNEL);
     if (!vin_dev) {
-        pr_err("tx_isp_create_vin_device: Failed to allocate VIN device (%zu bytes)\n", 
+        pr_err("tx_isp_create_vin_device: Failed to allocate VIN device (size=%zu)\n",
                sizeof(struct tx_isp_vin_device));
         return -ENOMEM;
     }
 
     /* Initialize VIN device structure */
+    memset(vin_dev, 0, sizeof(struct tx_isp_vin_device));
     mutex_init(&vin_dev->mlock);
     INIT_LIST_HEAD(&vin_dev->sensors);
     init_completion(&vin_dev->frame_complete);
     spin_lock_init(&vin_dev->frame_lock);
-    
+
     vin_dev->refcnt = 0;
     vin_dev->active = NULL;
     vin_dev->state = TX_ISP_MODULE_SLAKE;
     vin_dev->frame_count = 0;
 
-    /* Map VIN registers - use fixed address for T31 */
-    vin_dev->base = ioremap(0x13320000, 0x1000);  /* T31 VIN base address */
-    if (!vin_dev->base) {
-        pr_err("tx_isp_create_vin_device: Failed to map VIN registers at 0x13320000\n");
-        kfree(vin_dev);
-        return -ENOMEM;
+    /* Map VIN registers - VIN is part of ISP at base + VIN offset */
+    mem_resource = request_mem_region(0x13300000, 0x10000, "tx-isp-vin");
+    if (!mem_resource) {
+        pr_err("tx_isp_create_vin_device: Cannot request VIN memory region 0x13300000\n");
+        ret = -EBUSY;
+        goto err_free_dev;
     }
 
-    /* Set VIN IRQ - use correct IRQ for T31 VIN device */
-    vin_dev->irq = 37;  /* T31 VIN IRQ number - tx-isp, isp-m0 */
+    vin_regs = ioremap(0x13300000, 0x10000);
+    if (!vin_regs) {
+        pr_err("tx_isp_create_vin_device: Cannot map VIN registers\n");
+        ret = -ENOMEM;
+        goto err_release_mem;
+    }
 
-    /* Initialize subdev structure */
-    vin_dev->sd.isp = isp_dev;
-    vin_dev->sd.ops = &vin_subdev_ops;
-    vin_dev->sd.vin_state = TX_ISP_MODULE_INIT;
-    mutex_init(&vin_dev->sd.lock);
+    vin_dev->base = vin_regs;
+    pr_info("*** VIN REGISTERS MAPPED: 0x13300000 -> %p ***\n", vin_regs);
 
-    /* CRITICAL: Link VIN device to ISP core - this solves the NULL pointer issue */
-    isp_dev->vin_dev = &vin_dev->sd;  /* Set the vin_dev reference */
+    /* Set up VIN IRQ */
+    vin_dev->irq = 37; /* VIN uses IRQ 37 (isp-m0) */
 
-    pr_info("*** tx_isp_create_vin_device: VIN device creation complete ***\n");
-    pr_info("*** tx_isp_create_vin_device: ISP->vin_dev = %p ***\n", isp_dev->vin_dev);
-    pr_info("*** NO MORE 'VIN not available' ERROR SHOULD OCCUR ***\n");
+    /* Initialize VIN subdev structure */
+    memset(&vin_dev->sd, 0, sizeof(vin_dev->sd));
+    vin_dev->sd.isp = (void *)isp_dev;
+    vin_dev->sd.vin_state = TX_ISP_MODULE_SLAKE;
+
+    /* CRITICAL FIX: Connect VIN device to ISP device - this was missing! */
+    isp_dev->vin_dev = vin_dev;
+
+    pr_info("*** VIN DEVICE CREATED AND CONNECTED TO ISP DEVICE ***\n");
+    pr_info("VIN device: %p, base: %p, irq: %d, state: %d\n",
+            vin_dev, vin_dev->base, vin_dev->irq, vin_dev->state);
+    pr_info("*** CRITICAL: isp_dev->vin_dev = %p (should not be null!) ***\n", isp_dev->vin_dev);
 
     return 0;
+
+err_release_mem:
+    release_mem_region(0x13300000, 0x10000);
+err_free_dev:
+    kfree(vin_dev);
+    return ret;
 }
 EXPORT_SYMBOL(tx_isp_create_vin_device);
 
