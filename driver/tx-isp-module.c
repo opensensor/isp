@@ -5970,6 +5970,49 @@ irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
+/* tx_isp_module_notify - CRITICAL: The missing notify function that handles TX_ISP_EVENT_SYNC_SENSOR_ATTR */
+static int tx_isp_module_notify(struct tx_isp_module *module, unsigned int notification, void *data)
+{
+    struct tx_isp_subdev *sd;
+    struct tx_isp_sensor_attribute *sensor_attr;
+    int ret = 0;
+    
+    pr_info("*** tx_isp_module_notify: CRITICAL notify function - notification=0x%x ***\n", notification);
+    
+    if (!module) {
+        pr_err("tx_isp_module_notify: Invalid module\n");
+        return -EINVAL;
+    }
+    
+    /* Get subdev from module */
+    sd = module_to_subdev(module);
+    if (!sd) {
+        pr_err("tx_isp_module_notify: No subdev in module\n");
+        return -EINVAL;
+    }
+    
+    switch (notification) {
+    case TX_ISP_EVENT_SYNC_SENSOR_ATTR: {
+        pr_info("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR: Processing sensor attribute sync ***\n");
+        
+        sensor_attr = (struct tx_isp_sensor_attribute *)data;
+        if (!sensor_attr) {
+            pr_err("TX_ISP_EVENT_SYNC_SENSOR_ATTR: No sensor attributes provided\n");
+            return -EINVAL;
+        }
+        
+        /* Call the existing handler that has the -515 to 0 conversion */
+        ret = tx_isp_handle_sync_sensor_attr_event(sd, sensor_attr);
+        
+        pr_info("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR: Handler returned %d ***\n", ret);
+        return ret;
+    }
+    default:
+        pr_info("tx_isp_module_notify: Unhandled notification 0x%x\n", notification);
+        return -ENOIOCTLCMD;
+    }
+}
+
 /* tx_isp_send_event_to_remote - MIPS-SAFE implementation with VIC event handler integration */
 static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
 {
