@@ -431,8 +431,6 @@ int tx_isp_vic_wait_frame_done(struct tx_isp_subdev *sd, int channel, int timeou
     return ret ? 0 : -ETIMEDOUT;
 }
 
-/* Forward declaration for isp_malloc_buffer */
-int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
 
 int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum)
 {
