@@ -5971,7 +5971,7 @@ irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)
 }
 
 /* tx_isp_handle_sync_sensor_attr_event - FIXED to convert -515 to 0 */
-static int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *sensor_attr)
+int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *sensor_attr)
 {
     struct tx_isp_dev *isp_dev;
     int ret = 0;
