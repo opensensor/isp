@@ -50,10 +50,7 @@ static uint32_t data_b298c = 0;  /* mipi fid asfifo ovf counter */
 static uint32_t data_b2990 = 0;  /* mipi ch0 hcomp err counter */
 static uint32_t data_b2994 = 0;  /* mipi ch0 vcomp err counter */
 static uint32_t data_b2998 = 0;  /* dma chid ovf counter */
-
-/* VIC start control flag - CRITICAL for interrupt processing */
-uint32_t vic_start_ok = 0;
-EXPORT_SYMBOL(vic_start_ok);
+extern uint32_t vic_start_ok;  /* Global VIC interrupt enable flag declaration */
 
 /* GPIO switch state for frame done processing */
 static uint32_t gpio_switch_state = 0;
