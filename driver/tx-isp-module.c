@@ -1293,34 +1293,6 @@ static int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
     return 0;
 }
 
-/* check_csi_error - Binary Ninja implementation */
-static int check_csi_error(struct tx_isp_csi_device *csi_dev)
-{
-    void __iomem *csi_regs;
-    u32 error_status;
-    
-    if (!csi_dev || !csi_dev->csi_regs) {
-        return 0;
-    }
-    
-    csi_regs = csi_dev->csi_regs;
-    
-    /* Read CSI error status register */
-    error_status = readl(csi_regs + 0x14);
-    
-    if (error_status != 0) {
-        pr_warn("CSI error detected: status=0x%x\n", error_status);
-        
-        /* Clear error status */
-        writel(0x0, csi_regs + 0x14);
-        wmb();
-        
-        return -EIO;
-    }
-    
-    return 0;
-}
-
 /* csi_device_probe - EXACT Binary Ninja implementation (tx_isp_csi_probe) */
 static int csi_device_probe(struct tx_isp_dev *isp_dev)
 {
