@@ -4055,7 +4055,7 @@ void private_dma_sync_single_for_device(struct device *dev, dma_addr_t addr, siz
 }
 EXPORT_SYMBOL(private_dma_sync_single_for_device);
 
-/* private_dma_cache_sync - Additional DMA sync function with correct signature */
+/* private_dma_cache_sync - Fixed implementation using standard Linux DMA API */
 void private_dma_cache_sync(struct device *dev, void *vaddr, size_t size, enum dma_data_direction direction)
 {
     pr_debug("*** private_dma_cache_sync: dev=%p, vaddr=%p, size=%zu, dir=%d ***\n", 
@@ -4066,25 +4066,10 @@ void private_dma_cache_sync(struct device *dev, void *vaddr, size_t size, enum d
         return;
     }
     
-    /* Perform cache synchronization based on direction */
-    switch (direction) {
-    case DMA_TO_DEVICE:
-        /* Flush cache to ensure data is written to memory */
-        dma_cache_wback((unsigned long)vaddr, size);
-        break;
-    case DMA_FROM_DEVICE:
-        /* Invalidate cache to ensure fresh data is read */
-        dma_cache_inv((unsigned long)vaddr, size);
-        break;
-    case DMA_BIDIRECTIONAL:
-        /* Flush and invalidate cache */
-        dma_cache_wback_inv((unsigned long)vaddr, size);
-        break;
-    default:
-        pr_warn("private_dma_cache_sync: Unknown DMA direction %d\n", direction);
-        break;
-    }
+    /* Use the standard Linux DMA cache sync function that's available in kernel 3.10 */
+    /* This matches the reference implementation in external/ingenic-sdk/3.10/avpu/t31/avpu_main.c */
+    dma_cache_sync(dev, vaddr, size, direction);
     
-    pr_debug("private_dma_cache_sync: Cache sync completed\n");
+    pr_debug("private_dma_cache_sync: Cache sync completed using dma_cache_sync\n");
 }
 EXPORT_SYMBOL(private_dma_cache_sync);
