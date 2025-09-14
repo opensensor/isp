@@ -45,6 +45,56 @@
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
 
+/* isp_trigger_frame_data_transfer - CRITICAL: Transfer sensor data to ISP buffer */
+int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev)
+{
+    void __iomem *vic_regs, *isp_base;
+    uint32_t frame_status, buffer_addr;
+    int timeout = 1000;
+    
+    pr_info("*** isp_trigger_frame_data_transfer: CRITICAL frame data transfer ***\n");
+    
+    if (!dev || !dev->vic_regs) {
+        pr_err("isp_trigger_frame_data_transfer: No device or VIC registers\n");
+        return -EINVAL;
+    }
+    
+    vic_regs = dev->vic_regs;
+    isp_base = vic_regs - 0x9a00;
+    
+    /* Check if sensor has frame data ready */
+    frame_status = readl(vic_regs + 0x380);
+    if (frame_status == 0) {
+        pr_debug("isp_trigger_frame_data_transfer: No frame data available\n");
+        return -EAGAIN;
+    }
+    
+    /* Get current buffer address from VIC */
+    buffer_addr = readl(vic_regs + 0x318);  /* Current DMA buffer */
+    if (buffer_addr == 0) {
+        pr_err("isp_trigger_frame_data_transfer: No DMA buffer configured\n");
+        return -ENOMEM;
+    }
+    
+    /* Trigger DMA transfer from sensor to buffer */
+    writel(1, vic_regs + 0x300);  /* Start DMA transfer */
+    wmb();
+    
+    /* Wait for transfer completion */
+    while (timeout-- > 0) {
+        uint32_t dma_status = readl(vic_regs + 0x300);
+        if ((dma_status & 0x1) == 0) {
+            /* Transfer complete */
+            pr_info("*** Frame data transfer completed successfully ***\n");
+            return 0;
+        }
+        udelay(10);
+    }
+    
+    pr_err("isp_trigger_frame_data_transfer: Transfer timeout\n");
+    return -ETIMEDOUT;
+}
+
 int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev);
 /* ===== TIZIANO WDR PROCESSING PIPELINE - Binary Ninja Reference Implementation ===== */
 
@@ -2020,23 +2070,8 @@ int tisp_code_tuning_open(struct inode *inode, struct file *file)
 {
     pr_info("ISP M0 device open called from pid %d\n", current->pid);
     
-    /* FIXED: Use rmem allocation instead of kmalloc to prevent memory exhaustion */
-    /* uint32_t $v0 = private_kmalloc(0x500c, 0xd0) - Use rmem instead */
-    extern struct tx_isp_dev *ourISPdev;
-    void *tuning_buffer_virt;
-    dma_addr_t tuning_buffer_phys;
-    
-    if (!ourISPdev) {
-        pr_err("tisp_code_tuning_open: No ISP device available for rmem allocation\n");
-        return -ENODEV;
-    }
-    
-    if (isp_malloc_buffer(ourISPdev, 0x500c, &tuning_buffer_virt, &tuning_buffer_phys) != 0) {
-        pr_err("tisp_code_tuning_open: Failed to allocate tuning buffer from rmem (0x%x bytes)\n", 0x500c);
-        return -ENOMEM;
-    }
-    
-    void *tuning_buffer = tuning_buffer_virt;
+    /* FIXED: Use regular kmalloc instead of precious rmem - tuning buffer doesn't need DMA */
+    void *tuning_buffer = kmalloc(0x500c, GFP_KERNEL);
     
     /* CRITICAL: Verify allocation success */
     if (!tuning_buffer) {
