@@ -74,13 +74,18 @@ static inline bool is_valid_kernel_pointer(const void *ptr)
 int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev)
 {
     struct tx_isp_vin_device *vin_dev;
-    struct resource *mem_resource = NULL;
     void __iomem *vin_regs = NULL;
     int ret = 0;
 
     if (!isp_dev) {
         pr_err("tx_isp_create_vin_device: Invalid ISP device\n");
         return -EINVAL;
+    }
+
+    /* CRITICAL FIX: Check if VIN device already exists to prevent double creation */
+    if (isp_dev->vin_dev) {
+        pr_info("*** tx_isp_create_vin_device: VIN device already exists at %p ***\n", isp_dev->vin_dev);
+        return 0; /* Success - already created */
     }
 
     pr_info("*** tx_isp_create_vin_device: Creating VIN device structure ***\n");
@@ -105,19 +110,13 @@ int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev)
     vin_dev->state = TX_ISP_MODULE_SLAKE;
     vin_dev->frame_count = 0;
 
-    /* Map VIN registers - VIN is part of ISP at base + VIN offset */
-    mem_resource = request_mem_region(0x13300000, 0x10000, "tx-isp-vin");
-    if (!mem_resource) {
-        pr_err("tx_isp_create_vin_device: Cannot request VIN memory region 0x13300000\n");
-        ret = -EBUSY;
-        goto err_free_dev;
-    }
-
+    /* CRITICAL FIX: Use direct ioremap without request_mem_region to avoid EBUSY */
+    /* The memory region might already be claimed by the platform driver */
     vin_regs = ioremap(0x13300000, 0x10000);
     if (!vin_regs) {
         pr_err("tx_isp_create_vin_device: Cannot map VIN registers\n");
         ret = -ENOMEM;
-        goto err_release_mem;
+        goto err_free_dev;
     }
 
     vin_dev->base = vin_regs;
@@ -141,8 +140,6 @@ int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev)
 
     return 0;
 
-err_release_mem:
-    release_mem_region(0x13300000, 0x10000);
 err_free_dev:
     kfree(vin_dev);
     return ret;
