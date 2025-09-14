@@ -1301,7 +1301,7 @@ if (!IS_ERR(cgu_isp_clk)) {
         /* Call CSI core initialization - this was missing! */
         if (ourISPdev && ourISPdev->csi_dev) {
             struct tx_isp_subdev *csi_sd = &ourISPdev->csi_dev->sd;
-            int csi_ret = csi_core_ops_init(csi_sd, sensor_attr);
+            int csi_ret = csi_core_ops_init(csi_sd, 1);
             if (csi_ret == 0) {
                 pr_info("*** SUCCESS: CSI core initialization complete ***\n");
             } else {
