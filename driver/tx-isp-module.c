@@ -5456,58 +5456,55 @@ static void vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
     int a1_1, v1_1, v0;
     int v1_2;
     int i;
+
+    pr_info("*** vic_framedone_irq_function: EXACT Binary Ninja implementation ***\n");
     
     if (!vic_dev) {
         return;
     }
-    
-    /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
-    if (vic_dev->streaming == 0) {
-        goto label_123f4;
-    } else {
-        /* Binary Ninja: result = *(arg1 + 0x210) */
-        result = (void*)(uintptr_t)vic_dev->streaming;
-        
-        if (result != 0) {
-            /* Binary Ninja: void* $a3_1 = *(arg1 + 0xb8) */
-            a3_1 = vic_dev->vic_regs;
-            /* Binary Ninja: void** i_1 = *(arg1 + 0x204) */
-            i_1 = (void**)&vic_dev->queue_head;  /* Approximate queue head */
-            a1_1 = 0;
-            v1_1 = 0;
-            v0 = 0;
-            
-            /* Binary Ninja: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
-            for (i = 0; i < 16; i++) {  /* Simplified loop */
-                v1_1 += (0 < v0) ? 1 : 0;
-                a1_1 += 1;
-                
-                /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
-                if (a3_1 && vic_dev->vic_regs) {
-                    u32 vic_addr_reg = readl(vic_dev->vic_regs + 0x380);
-                    /* Simplified comparison for buffer matching */
-                    v0 = 1;
-                }
+
+    /* Binary Ninja: result = *(arg1 + 0x210) */
+    result = (void*)(uintptr_t)vic_dev->streaming;
+
+    if (result != 0) {
+        /* Binary Ninja: void* $a3_1 = *(arg1 + 0xb8) */
+        a3_1 = vic_dev->vic_regs;
+        /* Binary Ninja: void** i_1 = *(arg1 + 0x204) */
+        i_1 = (void**)&vic_dev->queue_head;  /* Approximate queue head */
+        a1_1 = 0;
+        v1_1 = 0;
+        v0 = 0;
+
+        /* Binary Ninja: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
+        for (i = 0; i < 16; i++) {  /* Simplified loop */
+            v1_1 += (0 < v0) ? 1 : 0;
+            a1_1 += 1;
+
+            /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
+            if (a3_1 && vic_dev->vic_regs) {
+                u32 vic_addr_reg = readl(vic_dev->vic_regs + 0x380);
+                /* Simplified comparison for buffer matching */
+                v0 = 1;
             }
-            
-            /* Binary Ninja: int32_t $v1_2 = $v1_1 << 0x10 */
-            v1_2 = v1_1 << 0x10;
-            
-            if (v0 == 0) {
-                v1_2 = a1_1 << 0x10;
-            }
-            
-            /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
-            if (vic_dev->vic_regs) {
-                u32 reg_300 = readl(vic_dev->vic_regs + 0x300);
-                reg_300 = v1_2 | (reg_300 & 0xfff0ffff);
-                writel(reg_300, vic_dev->vic_regs + 0x300);
-                wmb();
-            }
-            
-            result = (void*)0xb0000;
-            goto label_123f4;
         }
+
+        /* Binary Ninja: int32_t $v1_2 = $v1_1 << 0x10 */
+        v1_2 = v1_1 << 0x10;
+
+        if (v0 == 0) {
+            v1_2 = a1_1 << 0x10;
+        }
+
+        /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
+        if (vic_dev->vic_regs) {
+            u32 reg_300 = readl(vic_dev->vic_regs + 0x300);
+            reg_300 = v1_2 | (reg_300 & 0xfff0ffff);
+            writel(reg_300, vic_dev->vic_regs + 0x300);
+            wmb();
+        }
+
+        result = (void*)0xb0000;
+        goto label_123f4;
     }
     
 label_123f4:
