@@ -1965,6 +1965,23 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     
     pr_info("vic_core_ops_ioctl: cmd=0x%x, arg=%p\n", cmd, arg);
     
+    /* CRITICAL FIX: Handle TX_ISP_EVENT_SYNC_SENSOR_ATTR specifically */
+    if (cmd == TX_ISP_EVENT_SYNC_SENSOR_ATTR) {
+        pr_info("*** CRITICAL FIX: TX_ISP_EVENT_SYNC_SENSOR_ATTR event received ***\n");
+        
+        /* Call the sensor sync function which will return -515 */
+        result = vic_sensor_ops_sync_sensor_attr(sd, (struct tx_isp_sensor_attribute *)arg);
+        
+        /* CRITICAL: Convert -515 to 0 for this specific event */
+        if (result == -515) {
+            pr_info("*** CRITICAL FIX: Converting -515 to 0 for TX_ISP_EVENT_SYNC_SENSOR_ATTR ***\n");
+            result = 0;
+        }
+        
+        pr_info("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR handled successfully, returning %d ***\n", result);
+        return result;
+    }
+    
     if (cmd == 0x1000001) {
         result = -ENOTSUPP;
         if (sd != NULL) {
