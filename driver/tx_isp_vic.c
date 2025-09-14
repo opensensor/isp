@@ -1301,7 +1301,7 @@ if (!IS_ERR(cgu_isp_clk)) {
         /* Call CSI core initialization - this was missing! */
         if (ourISPdev && ourISPdev->csi_dev) {
             struct tx_isp_subdev *csi_sd = &ourISPdev->csi_dev->sd;
-            int csi_ret = csi_core_ops_init(csi_sd, 1);
+            int csi_ret = csi_core_ops_init(csi_sd, sensor_attr);
             if (csi_ret == 0) {
                 pr_info("*** SUCCESS: CSI core initialization complete ***\n");
             } else {
@@ -1311,7 +1311,7 @@ if (!IS_ERR(cgu_isp_clk)) {
             /* Set CSI lanes based on sensor configuration */
             int lanes = sensor_attr->mipi.lans;
             if (lanes == 0) lanes = 2; /* Default to 2 lanes */
-            csi_ret = csi_set_on_lanes(csi_sd, lanes);
+            csi_ret = csi_set_on_lanes(ourISPdev->csi_dev, lanes);
             if (csi_ret == 0) {
                 pr_info("*** SUCCESS: CSI lanes configured: %d ***\n", lanes);
             } else {
