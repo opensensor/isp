@@ -438,7 +438,7 @@ int tx_isp_vic_stop_streaming(struct tx_isp_dev *isp_dev)
     
     /* Clear VIC start flag */
     vic_start_ok = 0;
-    
+
     /* Stop VIC controller */
     writel(0, vic_regs + 0x0);
     wmb();

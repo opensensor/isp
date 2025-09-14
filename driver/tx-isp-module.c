@@ -1533,7 +1533,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_info("*** VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
             
             /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-           // vic_framedone_irq_function(vic_dev);
+            vic_framedone_irq_function(vic_dev);
         }
         
         /* Binary Ninja: Error handling for frame asfifo overflow */
@@ -1652,38 +1652,38 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         if ((v1_10 & 8) != 0) {
             pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
         }
-        
+
         /* Binary Ninja: Error recovery sequence */
-//        if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
-//            pr_err("error handler!!!\n");
-//
-//            /* Binary Ninja: **($s0 + 0xb8) = 4 */
-//            writel(4, vic_regs + 0x0);
-//            wmb();
-//
-//            /* Binary Ninja: while (*$v0_70 != 0) */
-//            timeout = 1000;
-//            while (timeout-- > 0) {
-//                addr_ctl = readl(vic_regs + 0x0);
-//                if (addr_ctl == 0) {
-//                    break;
-//                }
-//                pr_info("addr ctl is 0x%x\n", addr_ctl);
-//                udelay(1);
-//            }
-//
-//            /* Binary Ninja: Final recovery steps */
-//            reg_val = readl(vic_regs + 0x104);
-//            writel(reg_val, vic_regs + 0x104);  /* Self-write like Binary Ninja */
-//
-//            reg_val = readl(vic_regs + 0x108);
-//            writel(reg_val, vic_regs + 0x108);  /* Self-write like Binary Ninja */
-//
-//            /* Binary Ninja: **($s0 + 0xb8) = 1 */
-//            writel(1, vic_regs + 0x0);
-//            wmb();
-//        }
-        
+        if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
+            pr_err("error handler!!!\n");
+
+            /* Binary Ninja: **($s0 + 0xb8) = 4 */
+            writel(4, vic_regs + 0x0);
+            wmb();
+
+            /* Binary Ninja: while (*$v0_70 != 0) */
+            timeout = 1000;
+            while (timeout-- > 0) {
+                addr_ctl = readl(vic_regs + 0x0);
+                if (addr_ctl == 0) {
+                    break;
+                }
+                pr_info("addr ctl is 0x%x\n", addr_ctl);
+                udelay(1);
+            }
+
+            /* Binary Ninja: Final recovery steps */
+            reg_val = readl(vic_regs + 0x104);
+            writel(reg_val, vic_regs + 0x104);  /* Self-write like Binary Ninja */
+
+            reg_val = readl(vic_regs + 0x108);
+            writel(reg_val, vic_regs + 0x108);  /* Self-write like Binary Ninja */
+
+            /* Binary Ninja: **($s0 + 0xb8) = 1 */
+            writel(1, vic_regs + 0x0);
+            wmb();
+        }
+
         /* Wake up frame channels for all interrupt types */
         for (i = 0; i < num_channels; i++) {
             if (frame_channels[i].state.streaming) {
