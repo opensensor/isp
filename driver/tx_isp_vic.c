@@ -19,6 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
+int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev);
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
