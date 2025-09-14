@@ -741,19 +741,13 @@ static int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
                 /* This is what's missing - we need to copy sensor data to ISP buffer */
                 pr_info("*** TRIGGERING FRAME DATA TRANSFER FROM SENSOR TO DMA BUFFER ***\n");
                 
-                /* Start DMA transfer from sensor interface to processing buffer */
-                writel(1, dev->core_regs + 0x9000);  /* Start frame capture */
-                writel(1, dev->core_regs + 0x9004);  /* Enable DMA transfer */
-                
-                /* Configure DMA buffer addresses for frame data */
-                if (dev->vic_regs) {
-                    /* Set up VIC to capture frame data from sensor */
-                    writel(0x1, dev->vic_regs + 0x0);    /* Enable VIC processing */
-                    writel(0x3, dev->vic_regs + 0xc);    /* MIPI interface mode */
-                    pr_info("isp_core_tuning_event: VIC configured for frame capture\n");
+                /* Call the actual frame data transfer implementation */
+                int transfer_ret = isp_trigger_frame_data_transfer(dev);
+                if (transfer_ret == 0) {
+                    pr_info("*** FRAME DATA TRANSFER COMPLETED SUCCESSFULLY ***\n");
+                } else {
+                    pr_err("*** FRAME DATA TRANSFER FAILED: %d ***\n", transfer_ret);
                 }
-                
-                pr_info("*** FRAME DATA TRANSFER INITIATED - SENSOR DATA -> DMA BUFFER ***\n");
             }
             break;
 
