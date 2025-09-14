@@ -6762,9 +6762,23 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
                         vin_ret = vin_device->sd.ops->video->s_stream(&vin_device->sd, enable);
                     } else {
                         pr_err("*** ERROR: VIN subdev or s_stream function not available ***\n");
+                        pr_err("*** VIN DEBUG: vin_device=%p ***\n", vin_device);
+                        if (vin_device) {
+                            pr_err("*** VIN DEBUG: vin_device->sd.ops=%p ***\n", vin_device->sd.ops);
+                            if (vin_device->sd.ops) {
+                                pr_err("*** VIN DEBUG: vin_device->sd.ops->video=%p ***\n", vin_device->sd.ops->video);
+                                if (vin_device->sd.ops->video) {
+                                    pr_err("*** VIN DEBUG: vin_device->sd.ops->video->s_stream=%p ***\n", vin_device->sd.ops->video->s_stream);
+                                }
+                            }
+                        }
                     }
                 } else {
                     pr_err("*** ERROR: ISP device or VIN not available ***\n");
+                    pr_err("*** VIN DEBUG: isp_dev=%p ***\n", isp_dev);
+                    if (isp_dev) {
+                        pr_err("*** VIN DEBUG: isp_dev->vin_dev=%p ***\n", isp_dev->vin_dev);
+                    }
                 }
 
                 pr_info("*** CRITICAL: VIN_S_STREAM RETURNED: %d ***\n", vin_ret);
@@ -6793,9 +6807,23 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
                         vin_ret = vin_device->sd.ops->video->s_stream(&vin_device->sd, enable);
                     } else {
                         pr_err("*** ERROR: VIN subdev or s_stream function not available ***\n");
+                        pr_err("*** VIN DEBUG: vin_device=%p ***\n", vin_device);
+                        if (vin_device) {
+                            pr_err("*** VIN DEBUG: vin_device->sd.ops=%p ***\n", vin_device->sd.ops);
+                            if (vin_device->sd.ops) {
+                                pr_err("*** VIN DEBUG: vin_device->sd.ops->video=%p ***\n", vin_device->sd.ops->video);
+                                if (vin_device->sd.ops->video) {
+                                    pr_err("*** VIN DEBUG: vin_device->sd.ops->video->s_stream=%p ***\n", vin_device->sd.ops->video->s_stream);
+                                }
+                            }
+                        }
                     }
                 } else {
                     pr_err("*** ERROR: ISP device or VIN not available ***\n");
+                    pr_err("*** VIN DEBUG: isp_dev=%p ***\n", isp_dev);
+                    if (isp_dev) {
+                        pr_err("*** VIN DEBUG: isp_dev->vin_dev=%p ***\n", isp_dev->vin_dev);
+                    }
                 }
                 
                 pr_info("*** VIN STREAMING STOP RETURNED: %d ***\n", vin_ret);
