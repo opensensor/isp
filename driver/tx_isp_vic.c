@@ -2202,15 +2202,44 @@ static void vic_start_adjustment(void)
 /* Modified vic_core_s_stream function with OLD timer API */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
-    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-    void __iomem *vic_regs = vic_dev->vic_regs;
-    void __iomem *isp_base = vic_regs - 0x9a00;  /* Correct ISP base calculation */
-    void __iomem *csi_base = isp_base + 0x10000;
-
+    struct tx_isp_vic_device *vic_dev;
+    void __iomem *vic_regs;
+    void __iomem *isp_base;
+    void __iomem *csi_base;
     int ret = -EINVAL;
 
     pr_info("vic_core_s_stream: sd=%p, enable=%d\n", sd, enable);
-    pr_info("vic_regs=%p, isp_base=%p, csi_base=%p\n", vic_regs, isp_base, csi_base);
+
+    /* CRITICAL FIX: Validate and get VIC device safely */
+    if (!sd || !ourISPdev || !ourISPdev->vic_dev) {
+        pr_err("vic_core_s_stream: Invalid parameters - sd=%p, ourISPdev=%p\n", sd, ourISPdev);
+        return -EINVAL;
+    }
+
+    vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
+    if (!vic_dev) {
+        pr_err("vic_core_s_stream: Failed to get VIC device from container_of\n");
+        return -EINVAL;
+    }
+
+    /* CRITICAL FIX: Ensure VIC registers are mapped before use */
+    vic_regs = vic_dev->vic_regs;
+    if (!vic_regs) {
+        pr_err("*** CRITICAL FIX: VIC registers not mapped - mapping now ***\n");
+        vic_regs = ioremap(0x133e0000, 0x10000);
+        if (!vic_regs) {
+            pr_err("vic_core_s_stream: Failed to map VIC registers at 0x133e0000\n");
+            return -ENOMEM;
+        }
+        vic_dev->vic_regs = vic_regs;
+        pr_info("*** VIC registers mapped successfully: %p ***\n", vic_regs);
+    }
+
+    /* Calculate base addresses safely */
+    isp_base = vic_regs - 0x9a00;  /* Correct ISP base calculation */
+    csi_base = isp_base + 0x10000;
+
+    pr_info("vic_core_s_stream: vic_regs=%p, isp_base=%p, csi_base=%p\n", vic_regs, isp_base, csi_base);
 
     if (sd != NULL) {
         if ((unsigned long)sd >= 0xfffff001) {
