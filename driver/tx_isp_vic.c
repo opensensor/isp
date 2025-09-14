@@ -648,16 +648,17 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
         filp_close(fp, NULL);
         pos = 0;
     }
+    }
 
-    set_fs(old_fs);
+set_fs(old_fs);
 
-    // Restore original register values
+    // Restore registers
     writel(vic_ctrl & 0x11111111, vic_base + 0x7810);
     writel(vic_status, vic_base + 0x7814);
     writel(vic_intr | 1, vic_base + 0x7804);
 
 cleanup:
-    dma_free_coherent(sd->dev, buf_size, capture_buf, dma_addr);
+    // Don't free the buffer - it stays allocated for future use
     iounmap(vic_base);
     return ret;
 }
