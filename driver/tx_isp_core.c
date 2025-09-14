@@ -3922,8 +3922,8 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     pr_info("*** ispcore_sync_sensor_attr: Calling tiziano_sync_sensor_attr ***\n");
     tiziano_sync_sensor_attr(stored_attr);
     
-    pr_info("*** ispcore_sync_sensor_attr: SUCCESS - returning -515 for VIC conversion ***\n");
-    return -515;  /* VIC handler expects -515 and converts it to 0 */
+    pr_info("*** ispcore_sync_sensor_attr: SUCCESS ***\n");
+    return 0;  /* Return success directly - no need for the quirky -515 pattern */
 }
 EXPORT_SYMBOL(ispcore_sync_sensor_attr);
 
@@ -3937,13 +3937,7 @@ int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp
     /* Call the actual sync sensor attribute function */
     ret = ispcore_sync_sensor_attr(sd, attr);
     
-    /* CRITICAL FIX: The VIC code expects -515 to be converted to 0 */
-    /* This matches the pattern in vic_core_ops_ioctl where result == -515 returns 0 */
-    if (ret == -515) {
-        pr_info("tx_isp_handle_sync_sensor_attr_event: Converting -515 to 0 (expected behavior)\n");
-        return 0;
-    }
-    
+    /* Now that ispcore_sync_sensor_attr returns 0 directly, no conversion needed */
     pr_info("*** tx_isp_handle_sync_sensor_attr_event: returning %d ***\n", ret);
     return ret;
 }
