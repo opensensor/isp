@@ -110,17 +110,16 @@ int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev)
     vin_dev->state = TX_ISP_MODULE_SLAKE;
     vin_dev->frame_count = 0;
 
-    /* CRITICAL FIX: Use direct ioremap without request_mem_region to avoid EBUSY */
-    /* The memory region might already be claimed by the platform driver */
-    vin_regs = ioremap(0x13300000, 0x10000);
-    if (!vin_regs) {
-        pr_err("tx_isp_create_vin_device: Cannot map VIN registers\n");
+    /* CRITICAL FIX: VIN is part of ISP core on T31 - use ISP core registers instead of separate mapping */
+    /* This prevents memory mapping conflicts that cause crashes */
+    if (isp_dev->core_regs) {
+        vin_dev->base = isp_dev->core_regs;
+        pr_info("*** VIN USING ISP CORE REGISTERS: %p (no separate mapping needed) ***\n", vin_dev->base);
+    } else {
+        pr_err("tx_isp_create_vin_device: ISP core registers not available\n");
         ret = -ENOMEM;
         goto err_free_dev;
     }
-
-    vin_dev->base = vin_regs;
-    pr_info("*** VIN REGISTERS MAPPED: 0x13300000 -> %p ***\n", vin_regs);
 
     /* Set up VIN IRQ */
     vin_dev->irq = 37; /* VIN uses IRQ 37 (isp-m0) */
