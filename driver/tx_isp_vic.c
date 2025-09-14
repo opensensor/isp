@@ -955,7 +955,7 @@ int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
 }
 
 
-/* tx_isp_vic_start - EXACT Binary Ninja implementation to fix control limit error */
+/* tx_isp_vic_start - Following EXACT Binary Ninja flow with reference driver sequences */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
@@ -966,847 +966,356 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     void __iomem *cpm_regs;
     int ret;
 
-    pr_info("*** tx_isp_vic_start: EXACT Binary Ninja implementation to fix control limit error ***\n");
+    pr_info("*** tx_isp_vic_start: Following EXACT Binary Ninja flow ***\n");
 
-    /* Binary Ninja EXACT: Check if vic_dev->sensor_attr.dbus_type == 1 (DVP interface) */
+    /* Binary Ninja: 00010244 void* $v1 = *(arg1 + 0x110) */
     if (!vic_dev) {
         pr_err("*** CRITICAL: Invalid vic_dev pointer ***\n");
         return -EINVAL;
     }
 
-    /* Get sensor attributes and interface type */
+    /* Get sensor attributes - offset 0x110 in Binary Ninja */
     sensor_attr = &vic_dev->sensor_attr;
+    
+    /* Binary Ninja: 0001024c int32_t $v0 = *($v1 + 0x14) - interface type at offset 0x14 */
     interface_type = sensor_attr->dbus_type;
     sensor_format = sensor_attr->data_type;
 
-    pr_info("*** tx_isp_vic_start: interface=%d, format=0x%x ***\n", interface_type, sensor_format);
+    pr_info("*** Interface type: %d, Format: 0x%x ***\n", interface_type, sensor_format);
 
-    /* Get VIC register base - Binary Ninja: void* $v1 = *(arg1 + 0x110) */
+    /* Get VIC register base - offset 0xb8 in Binary Ninja */
     vic_regs = vic_dev->vic_regs;
     if (!vic_regs) {
         pr_err("*** CRITICAL: No VIC register base ***\n");
         return -EINVAL;
     }
 
-    /* Binary Ninja EXACT: int32_t $v0 = *($v1 + 0x14) - Check interface type */
-    /* This corresponds to checking sensor_attr->dbus_type */
-    
-    pr_info("*** tx_isp_vic_start: Following EXACT Binary Ninja sequence for interface %d ***\n", interface_type);
+    /* Calculate base addresses for register blocks */
+    void __iomem *main_isp_base = vic_regs - 0x9a00;
+    void __iomem *csi_base = main_isp_base + 0x10000;
 
-    /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
-
-    /* STEP 1: Enable clocks using Linux Clock Framework like tx_isp_init_vic_registers */
-
-
-cgu_isp_clk = clk_get(NULL, "cgu_isp");
-if (!IS_ERR(cgu_isp_clk)) {
-    /* Set clock rate to 100MHz before enabling */
-    ret = clk_set_rate(cgu_isp_clk, 100000000); /* 100MHz in Hz */
-    if (ret) {
-        pr_err("STREAMING: Failed to set CGU_ISP clock rate to 100MHz: %d\n", ret);
-        /* Decide if you want to continue with default rate or fail */
-    } else {
-        unsigned long actual_rate = clk_get_rate(cgu_isp_clk);
-        pr_info("STREAMING: CGU_ISP clock rate set to %lu Hz (requested 100MHz)\n", actual_rate);
+    /* STEP 1: Enable clocks - Critical for VIC operation */
+    cgu_isp_clk = clk_get(NULL, "cgu_isp");
+    if (!IS_ERR(cgu_isp_clk)) {
+        clk_set_rate(cgu_isp_clk, 100000000);
+        ret = clk_prepare_enable(cgu_isp_clk);
+        if (ret == 0) {
+            pr_info("CGU_ISP clock enabled at 100MHz\n");
+        }
     }
-
-    ret = clk_prepare_enable(cgu_isp_clk);
-    if (ret == 0) {
-        pr_info("STREAMING: CGU_ISP clock enabled via clk framework\n");
-    } else {
-        pr_err("STREAMING: Failed to enable CGU_ISP clock: %d\n", ret);
-    }
-} else {
-    pr_warn("STREAMING: CGU_ISP clock not found: %ld\n", PTR_ERR(cgu_isp_clk));
-}
 
     isp_clk = clk_get(NULL, "isp");
     if (!IS_ERR(isp_clk)) {
-        ret = clk_prepare_enable(isp_clk);
-        if (ret == 0) {
-            pr_info("STREAMING: ISP clock enabled via clk framework\n");
-        } else {
-            pr_err("STREAMING: Failed to enable ISP clock: %d\n", ret);
-        }
-    } else {
-        pr_warn("STREAMING: ISP clock not found: %ld\n", PTR_ERR(isp_clk));
+        clk_prepare_enable(isp_clk);
     }
 
     csi_clk = clk_get(NULL, "csi");
     if (!IS_ERR(csi_clk)) {
-        ret = clk_prepare_enable(csi_clk);
-        if (ret == 0) {
-            pr_info("STREAMING: csi_clk clock enabled via clk framework\n");
-        } else {
-            pr_err("STREAMING: Failed to enable csi_clk clock: %d\n", ret);
-        }
+        clk_prepare_enable(csi_clk);
     }
 
-    ipu_clk = clk_get(NULL, "ipu");
-    if (!IS_ERR(ipu_clk)) {
-        ret = clk_prepare_enable(ipu_clk);
-        if (ret == 0) {
-            pr_info("STREAMING: IPU clock enabled via clk framework\n");
-        } else {
-            pr_err("STREAMING: Failed to enable IPU clock: %d\n", ret);
-        }
-    }
-
-    /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
-
+    /* STEP 2: CPM register setup */
     cpm_regs = ioremap(0x10000000, 0x1000);
     if (cpm_regs) {
         u32 clkgr0 = readl(cpm_regs + 0x20);
         u32 clkgr1 = readl(cpm_regs + 0x28);
-
-        /* Enable ISP/VIC clocks */
-        clkgr0 &= ~(1 << 13); // ISP clock
-        clkgr0 &= ~(1 << 21); // Alternative ISP position
+        
+        clkgr0 &= ~(1 << 13); // ISP
+        clkgr0 &= ~(1 << 21); // Alternative ISP
         clkgr0 &= ~(1 << 30); // VIC in CLKGR0
         clkgr1 &= ~(1 << 30); // VIC in CLKGR1
-
+        
         writel(clkgr0, cpm_regs + 0x20);
         writel(clkgr1, cpm_regs + 0x28);
         wmb();
         msleep(20);
-
-        pr_info("STREAMING: CPM clocks configured for VIC access\n");
         iounmap(cpm_regs);
     }
 
-    /* STEP 3: Get VIC registers - should already be mapped by tx_isp_create_vic_device */
-    vic_regs = vic_dev->vic_regs;
-    if (!vic_regs) {
-        pr_err("*** CRITICAL: No VIC register base - initialization required first ***\n");
-        return -EINVAL;
-    }
-    /* Calculate base addresses for different register blocks */
-    void __iomem *main_isp_base = vic_regs - 0x9a00;  /* Calculate main ISP base from VIC base */
-    void __iomem *csi_base = main_isp_base + 0x10000;  /* CSI base is at ISP base + 0x10000 */
-
-    pr_info("*** tx_isp_vic_start: VIC register base %p ready for streaming ***\n", vic_regs);
-
-    /* FIXED: Use proper struct member access for sensor attributes */
-    sensor_attr = &vic_dev->sensor_attr;
-    interface_type = sensor_attr->dbus_type;
-    sensor_format = sensor_attr->data_type;
-    
-    /* *** CRITICAL FIX: Prevent streaming control bit from corrupting sensor attributes *** */
-    /* The issue is that 0x80000020 streaming control value is overwriting sensor_attr memory */
-    /* We need to ensure sensor_attr is in a protected memory region */
-    pr_info("*** CRITICAL: Protecting sensor attributes from streaming control corruption ***\n");
-    
-    /* Create a completely separate protected copy that can't be overwritten by register operations */
-    static struct tx_isp_sensor_attribute protected_sensor_attr;
-    memcpy(&protected_sensor_attr, sensor_attr, sizeof(protected_sensor_attr));
-    
-    /* Force known good values for MIPI interface */
-    protected_sensor_attr.dbus_type = 2;  /* MIPI */
-    protected_sensor_attr.data_type = 0x2b;  /* RAW10 */
-    
-    /* Use the protected copy */
-    sensor_attr = &protected_sensor_attr;
-    interface_type = 2;  /* Force MIPI */
-    sensor_format = 0x2b;  /* Force RAW10 */
-    
-    pr_info("*** RACE CONDITION FIX: Using protected sensor attributes - interface=%d, format=0x%x ***\n", 
-            interface_type, sensor_format);
-
-    pr_info("tx_isp_vic_start: interface=%d, format=0x%x\n", interface_type, sensor_format);
-    
-    /* MCP LOG: VIC start with interface configuration */
-    pr_info("MCP_LOG: VIC start initiated - interface=%d, format=0x%x, vic_base=%p\n", 
-            interface_type, sensor_format, vic_regs);
-
-    /* *** CRITICAL FIX: Configure VIC with CORRECT dimensions BEFORE any register writes *** */
-    pr_info("*** CRITICAL FIX: Configuring VIC with ACTUAL sensor dimensions BEFORE enabling ***\n");
-    
-    /* Get actual sensor dimensions from sensor attributes FIRST */
-    u32 actual_width = sensor_attr->total_width;
-    u32 actual_height = sensor_attr->total_height;
-    
-    /* Use the dimensions from the logs if sensor attributes are zero */
-    if (actual_width == 0 || actual_height == 0) {
-        actual_width = 2200;   /* From logs: "Frame size 2200x1125" but sensor shows 2200x1418 */
-        actual_height = 1418;  /* From logs: "Dimensions: 2200x1418" */
-        pr_info("*** Using actual sensor dimensions from sync: %dx%d ***\n", actual_width, actual_height);
-    } else {
-        pr_info("*** Using sensor attribute dimensions: %dx%d ***\n", actual_width, actual_height);
-    }
-    
-    /* CRITICAL FIX: Update VIC device dimensions IMMEDIATELY to prevent MDMA mismatch */
-    vic_dev->width = actual_width;
-    vic_dev->height = actual_height;
-    
-    pr_info("*** CRITICAL: vic_dev->width=%d, vic_dev->height=%d updated to match sensor ***\n", vic_dev->width, vic_dev->height);
-    
-    /* CRITICAL: Configure VIC size register with CORRECT dimensions FIRST */
-    writel((actual_width << 16) | actual_height, vic_regs + 0x4);
-    wmb();
-    pr_info("*** CRITICAL: VIC configured with CORRECT dimensions %dx%d BEFORE enabling ***\n", actual_width, actual_height);
-    
-    /* CRITICAL: Configure VIC stride with CORRECT width */
-    u32 actual_stride = actual_width * 2; /* 16-bit per pixel */
-    writel(actual_stride, vic_regs + 0x18);
-    wmb();
-    pr_info("*** CRITICAL: VIC stride configured with CORRECT value %d ***\n", actual_stride);
-    
-    /* CRITICAL: Set VIC to DISABLED state initially to prevent control limit error */
-    writel(0, vic_regs + 0x0);  /* Ensure VIC is disabled during configuration */
-    wmb();
-    
-    /* *** MINIMAL REGISTER CONFIGURATION: Only write essential VIC registers *** */
-    pr_info("*** MINIMAL VIC CONFIGURATION: Writing only essential registers to prevent conflicts ***\n");
-    
-    /* Only write the absolutely essential VIC registers for MIPI operation */
-    /* These are the core VIC registers that must be set for basic operation */
-    
-    /* VIC control mode will be set later in MIPI interface section */
-    /* Dimensions already set above */
-    /* Stride already set above */
-    
-    wmb();
-    pr_info("*** MINIMAL VIC CONFIGURATION: Essential registers written ***\n");
-
-    /* ==============================================================================================
-     * PHASE 3: VIC initial configuration (T+270ms)
-     * ==============================================================================================*/
-
-    pr_info("*** PHASE 3: VIC initial configuration (T+270ms) ***\n");
-
-    /* VIC writes labeled as isp-w01 in trace */
-    writel(0x1, vic_regs + 0xc);         /* CSI PHY Control */
-    writel(0x1, vic_regs + 0x10);        /* CSI PHY Control */
-    writel(0x630, vic_regs + 0x14);      /* was 0x200 -> 0x630 */
-    wmb();
-
-    /* ==============================================================================================
-     * PHASE 4: Sensor stream on trigger
-     * This is where "gc2053 stream on" occurs in the trace
-     * ==============================================================================================*/
-
-    pr_info("gc2053 stream on\n");
-
-    /* ==============================================================================================
-     * PHASE 5: VIC streaming configuration (T+470ms)
-     * ==============================================================================================*/
-
-    pr_info("*** PHASE 5: VIC streaming configuration (T+470ms) ***\n");
-
-    /* VIC writes labeled as isp-w02 in trace */
-    writel(0x1, vic_regs + 0x0);         /* Enable VIC */
-    writel(0x1, vic_regs + 0x14);        /* was 0x2 -> 0x1 */
-    writel(0x1, vic_regs + 0x8c);        /* was 0x0 -> 0x1 */
-    writel(0x258, vic_regs + 0x100);     /* was 0x2d0 -> 0x258 */
-    writel(0x0, vic_regs + 0x10c);       /* was 0x2c000 -> 0x0 */
-    writel(0x0, vic_regs + 0x120);       /* was 0x10 -> 0x0 */
-    writel(0xa000a, vic_regs + 0x1a4);   /* was 0x100010 -> 0xa000a */
-    wmb();
-
-    /* CSI PHY Config updates */
-    writel(0x1, csi_base + 0x1d0);       /* was 0x0 -> 0x1 */
-    writel(0x12, csi_base + 0x1d4);      /* was 0x0 -> 0x12 */
-    writel(0x12, csi_base + 0x254);      /* was 0x0 -> 0x12 */
-    wmb();
-
-    /* Additional VIC updates */
-    writel(0x330, vic_regs + 0x14);      /* was 0x630 -> 0x330 */
-    writel(0x20002, vic_regs + 0x40);    /* was 0x0 -> 0x20002 */
-    wmb();
-
-    /* Main ISP updates */
-    writel(0x1, main_isp_base + 0x60);           /* was 0x0 -> 0x1 */
-    writel(0x58810000, main_isp_base + 0xa8);    /* was 0x58050000 -> 0x58810000 */
-    writel(0xffffffff, main_isp_base + 0xb0);    /* was 0x0 -> 0xffffffff */
-    writel(0x3ad80000, main_isp_base + 0x100);   /* CSI PHY Config */
-    writel(0x2b, main_isp_base + 0x104);         /* CSI PHY Config */
-    writel(0x220000, main_isp_base + 0x108);     /* CSI PHY Config */
-    writel(0x220334, main_isp_base + 0x10c);     /* CSI PHY Config */
-    writel(0xd006004e, main_isp_base + 0x987c);  /* was 0xc0000000 -> 0xd006004e */
-    writel(0x1, main_isp_base + 0x98cc);         /* was 0x0 -> 0x1 */
-    writel(0x20740000, main_isp_base + 0xb054);  /* Core Control */
-    writel(0x40, main_isp_base + 0xb058);        /* Core Control */
-    writel(0x18f, main_isp_base + 0xb05c);       /* Core Control */
-    writel(0x3fdb, main_isp_base + 0xb060);      /* Core Control */
-    writel(0x10aa5, main_isp_base + 0xb064);     /* Core Control */
-    writel(0x181d, main_isp_base + 0xb068);      /* Core Control */
-    writel(0x55a, main_isp_base + 0xb070);       /* Core Control */
-    writel(0x5120f, main_isp_base + 0xb074);     /* Core Control */
-    writel(0x1000000e, main_isp_base + 0xb078);  /* was 0x10000000 -> 0x1000000e */
-    writel(0x3fdb, main_isp_base + 0xb07c);      /* Core Control */
-    writel(0x131ca, main_isp_base + 0xb080);     /* Core Control */
-    writel(0x191e, main_isp_base + 0xb084);      /* Core Control */
-    writel(0x55a, main_isp_base + 0xb08c);       /* Core Control */
-    wmb();
-
-
-
-    /* Binary Ninja: interface 1=DVP, 2=MIPI, 3=BT601, 4=BT656, 5=BT1120 */
+    /* Binary Ninja: Branch on interface type at 00010250 */
     if (interface_type == 1) {
-        /* DVP interface - Binary Ninja implementation */
-        pr_info("tx_isp_vic_start: DVP interface configuration (type 1)\n");
-
-        /* Check flags and apply proper configuration */
-        if (vic_dev->sensor_attr.dbus_type != interface_type) {
-            pr_warn("tx_isp_vic_start: DVP flags mismatch\n");
+        /* DVP interface - Binary Ninja 00010260-000104f8 */
+        pr_info("DVP interface configuration\n");
+        
+        /* Binary Ninja: Check flags at 00010260 */
+        if (sensor_attr->dbus_type != interface_type) {
             writel(0xa000a, vic_regs + 0x1a4);
         } else {
-            pr_info("tx_isp_vic_start: DVP flags match, normal configuration\n");
-            writel(0x20000, vic_regs + 0x10);   /* DVP config register */
-            writel(0x100010, vic_regs + 0x1a4); /* DMA config */
+            writel(0x20000, vic_regs + 0x10);
+            writel(0x100010, vic_regs + 0x1a4);
         }
-
-        /* DVP buffer calculations and configuration */
-        u32 stride_multiplier = 8;
-        if (sensor_format != 0) {
-            if (sensor_format == 1) stride_multiplier = 0xa;
-            else if (sensor_format == 2) stride_multiplier = 0xc;
-            else if (sensor_format == 7) stride_multiplier = 0x10;
-        }
-
-        u32 buffer_calc = stride_multiplier * vic_dev->sensor_attr.integration_time;
-        u32 buffer_size = (buffer_calc >> 5) + ((buffer_calc & 0x1f) ? 1 : 0);
-        writel(buffer_size, vic_regs + 0x100);
+        
+        /* Calculate buffer size - Binary Ninja 000102b8-00010308 */
+        u32 stride_mult = 8;
+        if (sensor_format == 1) stride_mult = 0xa;
+        else if (sensor_format == 2) stride_mult = 0xc;
+        else if (sensor_format == 7) stride_mult = 0x10;
+        
+        u32 buffer_calc = stride_mult * sensor_attr->integration_time;
+        writel((buffer_calc >> 5) + ((buffer_calc & 0x1f) ? 1 : 0), vic_regs + 0x100);
+        
+        /* Binary Ninja: Core DVP registers 00010310-00010338 */
         writel(2, vic_regs + 0xc);
         writel(sensor_format, vic_regs + 0x14);
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
-
-        /* DVP timing and WDR configuration */
-        u32 wdr_mode = vic_dev->sensor_attr.wdr_cache;
-        u32 frame_mode = (wdr_mode == 0) ? 0x4440 : (wdr_mode == 1) ? 0x4140 : 0x4240;
+        
+        /* Frame mode based on WDR - Binary Ninja 00010414-00010478 */
+        u32 wdr_mode = sensor_attr->wdr_cache;
+        u32 frame_mode = (wdr_mode == 0) ? 0x4440 : 
+                        (wdr_mode == 1) ? 0x4140 : 0x4240;
         writel(frame_mode, vic_regs + 0x1ac);
         writel(frame_mode, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
-
-        /* DVP unlock sequence */
+        
+        /* Unlock sequence - Binary Ninja 00010484-00010490 */
         writel(2, vic_regs + 0x0);
         wmb();
         writel(4, vic_regs + 0x0);
         wmb();
-
-        /* DVP unlock key */
-        u32 unlock_key = (vic_dev->sensor_attr.integration_time_apply_delay << 4) | vic_dev->sensor_attr.again_apply_delay;
-        writel(unlock_key, vic_regs + 0x1a0);
-        wmb();
-        pr_info("tx_isp_vic_start: DVP unlock key 0x1a0 = 0x%x\n", unlock_key);
-
-    } else if (interface_type == 2) {
-        /* MIPI interface - EXACT Binary Ninja implementation to fix control limit error */
-        pr_info("tx_isp_vic_start: MIPI interface configuration (interface type 2)\n");
-
-        /* *** CRITICAL FIX: Initialize CSI BEFORE VIC configuration *** */
-        pr_info("*** CRITICAL: Initializing CSI before VIC to prevent control limit error ***\n");
         
-        /* Call CSI core initialization - this was missing! */
-        if (ourISPdev && ourISPdev->csi_dev) {
-            struct tx_isp_subdev *csi_sd = &ourISPdev->csi_dev->sd;
-            int csi_ret = csi_core_ops_init(csi_sd, 1);
-            if (csi_ret == 0) {
-                pr_info("*** SUCCESS: CSI core initialization complete ***\n");
-            } else {
-                pr_err("*** ERROR: CSI core initialization failed: %d ***\n", csi_ret);
-            }
-            
-            /* Set CSI lanes based on sensor configuration */
-            int lanes = sensor_attr->mipi.lans;
-            if (lanes == 0) lanes = 2; /* Default to 2 lanes */
-            csi_ret = csi_set_on_lanes(ourISPdev->csi_dev, lanes);
-            if (csi_ret == 0) {
-                pr_info("*** SUCCESS: CSI lanes configured: %d ***\n", lanes);
-            } else {
-                pr_err("*** ERROR: CSI lane configuration failed: %d ***\n", csi_ret);
-            }
-        } else {
-            pr_err("*** WARNING: No CSI device available for initialization ***\n");
+        /* Wait for unlock - Binary Ninja 000104b8 */
+        while (readl(vic_regs + 0x0) != 0) {
+            udelay(1);
         }
-
-        /* *** CRITICAL FIX: Follow EXACT Binary Ninja sequence to prevent control limit error *** */
         
-        /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0xc) = 3 */
+        /* Enable VIC - Binary Ninja 000107d4 */
+        writel(1, vic_regs + 0x0);
+        
+    } else if (interface_type == 2) {
+        /* MIPI interface - Binary Ninja 000107ec-00010b04 */
+        pr_info("MIPI interface configuration\n");
+        
+        /* Binary Ninja: 000107ec - Set CSI mode */
         writel(3, vic_regs + 0xc);
         wmb();
         
-        /* MCP LOG: Critical MIPI register write */
-        u32 verify_mipi_ctrl = readl(vic_regs + 0xc);
-        pr_info("MCP_LOG: MIPI control register write - wrote 3 to 0xc, readback = 0x%x\n", verify_mipi_ctrl);
-
-        /* *** CRITICAL: Use EXACT Binary Ninja format logic *** */
+        /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
         
-        /* Binary Ninja EXACT format detection logic for sensor_format 0x2b (RAW10) */
         if (sensor_format >= 0x3010) {
             if (sensor_format >= 0x3110) {
                 if (sensor_format >= 0x3200) {
                     if (sensor_format < 0x3210) {
-                        /* 0x3200-0x320f range */
                         mipi_config = 0x20000;
-                    } else if (sensor_format - 0x3300 < 0x10) {
-                        /* 0x3300-0x330f range */
+                    } else if ((sensor_format - 0x3300) < 0x10) {
                         mipi_config = 0x40000;
-                        if (vic_dev->sensor_attr.total_width == 2) {
+                        if (sensor_attr->total_width == 2) {
                             mipi_config = 0x50000;
                         }
                     } else {
-                        pr_info("tx_isp_vic_start: VIC do not support this format %d\n", sensor_format);
+                        pr_err("Format 0x%x not supported\n", sensor_format);
                         return -1;
                     }
                 } else {
-                    /* 0x3110-0x31ff range */
                     mipi_config = 0x20000;
                 }
             } else if (sensor_format >= 0x3100) {
-                /* 0x3100-0x310f range */
-                u32 gpio_mode = vic_dev->sensor_attr.dbus_type;
+                u32 gpio_mode = sensor_attr->dbus_type;
                 if (gpio_mode == 3) {
                     mipi_config = 0;
                 } else if (gpio_mode == 4) {
                     mipi_config = 0x100000;
                 } else {
-                    pr_info("tx_isp_vic_start: VIC failed to config DVP mode!(8bits-sensor)\n");
+                    pr_err("DVP mode config failed\n");
                     return -1;
                 }
-            } else if (sensor_format >= 0x3013) {
-                if (sensor_format < 0x3015) {
-                    /* 0x3013-0x3014 range */
-                    u32 gpio_mode = vic_dev->sensor_attr.dbus_type;
+            } else if (sensor_format >= 0x3013 && sensor_format < 0x3015) {
+                u32 gpio_mode = sensor_attr->dbus_type;
+                if (gpio_mode == 3) {
+                    mipi_config = 0;
+                } else if (gpio_mode == 4) {
+                    mipi_config = 0x100000;
+                } else {
+                    pr_err("DVP mode config failed\n");
+                    return -1;
+                }
+            } else {
+                mipi_config = 0x40000;
+                if (sensor_attr->total_width == 2) {
+                    mipi_config = 0x50000;
+                }
+            }
+        } else if (sensor_format >= 0x300e) {
+            mipi_config = 0x20000;
+        } else if (sensor_format == 0x2011) {
+            mipi_config = 0xc0000;
+        } else if (sensor_format >= 0x2012) {
+            if (sensor_format == 0x3007) {
+                mipi_config = 0x20000;
+            } else if (sensor_format < 0x3008) {
+                if ((sensor_format - 0x3001) < 2) {
+                    u32 gpio_mode = sensor_attr->dbus_type;
                     if (gpio_mode == 3) {
                         mipi_config = 0;
                     } else if (gpio_mode == 4) {
                         mipi_config = 0x100000;
                     } else {
-                        pr_info("tx_isp_vic_start: VIC failed to config DVP mode!(8bits-sensor)\n");
+                        pr_err("DVP mode config failed\n");
                         return -1;
                     }
                 } else {
-                    pr_info("tx_isp_vic_start: VIC do not support this format %d\n", sensor_format);
+                    pr_err("Format 0x%x not supported\n", sensor_format);
                     return -1;
                 }
-            } else {
-                /* 0x3010-0x3012 range */
+            } else if (sensor_format == 0x3008) {
                 mipi_config = 0x40000;
-                if (vic_dev->sensor_attr.total_width == 2) {
+                if (sensor_attr->total_width == 2) {
                     mipi_config = 0x50000;
                 }
-            }
-        } else {
-            /* sensor_format < 0x3010 - This is where 0x2b falls */
-            if (sensor_format >= 0x300e) {
-                /* 0x300e-0x300f range */
+            } else if (sensor_format == 0x300a) {
                 mipi_config = 0x20000;
-            } else if (sensor_format == 0x2011) {
-                /* Exact match for 0x2011 */
-                mipi_config = 0xc0000;
-            } else if (sensor_format >= 0x2012) {
-                /* 0x2012+ range */
-                if (sensor_format == 0x3007) {
-                    mipi_config = 0x20000;
-                } else if (sensor_format < 0x3008) {
-                    if (sensor_format - 0x3001 < 2) {
-                        /* 0x3001-0x3002 range */
-                        u32 gpio_mode = vic_dev->sensor_attr.dbus_type;
-                        if (gpio_mode == 3) {
-                            mipi_config = 0;
-                        } else if (gpio_mode == 4) {
-                            mipi_config = 0x100000;
-                        } else {
-                            pr_info("tx_isp_vic_start: VIC failed to config DVP mode!(8bits-sensor)\n");
-                            return -1;
-                        }
-                    } else {
-                        pr_info("tx_isp_vic_start: VIC do not support this format %d\n", sensor_format);
-                        return -1;
-                    }
-                } else if (sensor_format == 0x3008) {
-                    mipi_config = 0x40000;
-                    if (vic_dev->sensor_attr.total_width == 2) {
-                        mipi_config = 0x50000;
-                    }
-                } else if (sensor_format == 0x300a) {
-                    mipi_config = 0x20000;
-                } else {
-                    pr_info("tx_isp_vic_start: VIC do not support this format %d\n", sensor_format);
-                    return -1;
-                }
             } else {
-                /* sensor_format < 0x2012 - This includes 0x2b (43 decimal) */
-                if (sensor_format == 0x1008) {
-                    mipi_config = 0x80000;
-                } else if (sensor_format >= 0x1009) {
-                    if (sensor_format - 0x2002 >= 4) {
-                        pr_info("tx_isp_vic_start: VIC do not support this format %d\n", sensor_format);
-                        return -1;
-                    }
-                    mipi_config = 0xc0000;
-                } else if (sensor_format == 0x1006) {
-                    mipi_config = 0xa0000;
-                } else {
-                    /* DEFAULT PATH - This is where 0x2b (RAW10) goes */
-                    mipi_config = 0x20000;  /* &data_20000 from Binary Ninja */
-                    pr_info("tx_isp_vic_start: Format 0x%x using default MIPI config 0x20000\n", sensor_format);
-                }
+                pr_err("Format 0x%x not supported\n", sensor_format);
+                return -1;
             }
+        } else if (sensor_format == 0x1008) {
+            mipi_config = 0x80000;
+        } else if (sensor_format >= 0x1009) {
+            if ((sensor_format - 0x2002) >= 4) {
+                pr_err("Format 0x%x not supported\n", sensor_format);
+                return -1;
+            }
+            mipi_config = 0xc0000;
+        } else if (sensor_format == 0x1006) {
+            mipi_config = 0xa0000;
+        } else {
+            /* Default case - includes RAW10 (0x2b) */
+            mipi_config = 0x20000;
         }
-
-        /* Binary Ninja EXACT: Additional configuration flags based on sensor attributes */
-        if (vic_dev->sensor_attr.total_width == 2) {
+        
+        /* Binary Ninja: 00010a08-00010a30 - Apply width/height flags */
+        if (sensor_attr->total_width == 2) {
             mipi_config |= 2;
         }
-        if (vic_dev->sensor_attr.total_height == 2) {
+        if (sensor_attr->total_height == 2) {
             mipi_config |= 1;
         }
-
-        /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
-        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
-        wmb();
-        pr_info("tx_isp_vic_start: Set VIC dimensions: 0x4 = 0x%x (%dx%d)\n", 
-                (vic_dev->width << 16) | vic_dev->height, vic_dev->width, vic_dev->height);
-
-        /* Binary Ninja EXACT: MIPI timing registers */
-        u32 integration_time = vic_dev->sensor_attr.integration_time;
+        
+        /* Binary Ninja: 00010a2c-00010a78 - Integration time and gain */
+        u32 integration_time = sensor_attr->integration_time;
         if (integration_time != 0) {
             writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
-            wmb();
         }
-
-        u32 again_value = vic_dev->sensor_attr.again;
-        if (again_value != 0) {
-            writel(again_value, vic_regs + 0x3c);
-            wmb();
+        
+        u32 again = sensor_attr->again;
+        if (again != 0) {
+            writel(again, vic_regs + 0x3c);
         }
-
-        /* Binary Ninja EXACT: Final timing setup */
-        writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
+        
+        /* Binary Ninja: 00010a90-00010aa8 - Final MIPI config */
+        writel((sensor_attr->total_width << 31) | mipi_config, vic_regs + 0x10);
+        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
         wmb();
-
-        /* Binary Ninja EXACT: VIC register 0x10 with timing flags */
-        /* *(*(arg1 + 0xb8) + 0x10) = *(*(arg1 + 0x110) + 0x28) << 0x1f | $v1_50 */
-        u32 final_mipi_config = (vic_dev->sensor_attr.total_width << 31) | mipi_config;
-        writel(final_mipi_config, vic_regs + 0x10);
-        wmb();
-
-        pr_info("tx_isp_vic_start: MIPI registers configured - 0x10=0x%x, 0x18=0x%x\n",
-                final_mipi_config, (integration_time << 16) + vic_dev->width);
-
-        /* Binary Ninja EXACT: VIC unlock sequence */
-        /* **(arg1 + 0xb8) = 2 */
+        
+        /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence */
         writel(2, vic_regs + 0x0);
         wmb();
-        
-        /* **(arg1 + 0xb8) = 4 */
         writel(4, vic_regs + 0x0);
         wmb();
-
-        /* Binary Ninja EXACT: Wait for unlock completion */
-        /* while (*$v0_121 != 0) nop */
-        timeout = 10000;
-        while (timeout > 0) {
-            u32 status = readl(vic_regs + 0x0);
-            if (status == 0) {
-                pr_info("tx_isp_vic_start: VIC unlocked after %d iterations\n", 10000 - timeout);
-                break;
-            }
+        
+        /* Binary Ninja: 00010acc - Wait for unlock */
+        while (readl(vic_regs + 0x0) != 0) {
             udelay(1);
-            timeout--;
+            if (--timeout == 0) {
+                pr_err("VIC unlock timeout\n");
+                return -ETIMEDOUT;
+            }
         }
         
-        if (timeout == 0) {
-            pr_err("*** CRITICAL: VIC unlock timeout - this WILL cause control limit error! ***\n");
-            ret = -ETIMEDOUT;
-            goto exit_func;
-        }
-
-        /* Binary Ninja EXACT: *$v0_121 = 1 - Enable VIC processing */
+        /* Binary Ninja: 00010ad4 - Enable VIC */
         writel(1, vic_regs + 0x0);
         wmb();
         
-        /* Binary Ninja EXACT: Final MIPI configuration registers */
-        /* *(*(arg1 + 0xb8) + 0x1a4) = 0x100010 */
+        /* Binary Ninja: 00010ae4-00010b04 - Final MIPI registers */
         writel(0x100010, vic_regs + 0x1a4);
-        /* *(*(arg1 + 0xb8) + 0x1ac) = 0x4210 */
         writel(0x4210, vic_regs + 0x1ac);
-        /* *(*(arg1 + 0xb8) + 0x1b0) = 0x10 */
         writel(0x10, vic_regs + 0x1b0);
-        /* *(*(arg1 + 0xb8) + 0x1b4) = 0 */
         writel(0, vic_regs + 0x1b4);
         wmb();
-
-        pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1) with EXACT Binary Ninja sequence\n");
-        pr_info("tx_isp_vic_start: MIPI interface configured successfully - control limit error should be FIXED\n");
-
+        
     } else if (interface_type == 3) {
-        /* BT601 interface */
-        pr_info("tx_isp_vic_start: BT601 interface\n");
-        ret = -ENOTSUPP;
-        goto exit_func;
+        /* BT601 - Binary Ninja 00010688-000107d4 */
+        pr_info("BT601 interface configuration\n");
+        
+        writel(1, vic_regs + 0xc);
+        
+        int gpio_mode = sensor_attr->dbus_type;
+        u32 bt601_config;
+        
+        if (gpio_mode == 0) {
+            bt601_config = 0x800c8000;
+        } else if (gpio_mode == 1) {
+            bt601_config = 0x88060820;
+        } else {
+            pr_err("Unsupported GPIO mode\n");
+            return -1;
+        }
+        
+        writel(bt601_config, vic_regs + 0x10);
+        writel((vic_dev->width << 1) | 0x100000, vic_regs + 0x18);
+        writel(0x30, vic_regs + 0x3c);
+        writel(0x1b8, vic_regs + 0x1c);
+        writel(0x1402d0, vic_regs + 0x30);
+        writel(0x50014, vic_regs + 0x34);
+        writel(0x2d00014, vic_regs + 0x38);
+        writel(0, vic_regs + 0x1a0);
+        writel(0x100010, vic_regs + 0x1a4);
+        writel(0x4440, vic_regs + 0x1ac);
+        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+        
+        writel(2, vic_regs + 0x0);
+        wmb();
+        writel(1, vic_regs + 0x0);
         
     } else if (interface_type == 4) {
-        /* BT656 interface */
-        pr_info("tx_isp_vic_start: BT656 interface\n");
+        /* BT656 - Binary Ninja 000105b0-00010684 */
+        pr_info("BT656 interface configuration\n");
+        
         writel(0, vic_regs + 0xc);
         writel(0x800c0000, vic_regs + 0x10);
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+        writel(vic_dev->width << 1, vic_regs + 0x18);
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
+        writel(0x200, vic_regs + 0x1d0);
+        writel(0x200, vic_regs + 0x1d4);
         
-        /* Unlock sequence */
         writel(2, vic_regs + 0x0);
         wmb();
         writel(1, vic_regs + 0x0);
-        wmb();
-
+        
     } else if (interface_type == 5) {
-        /* BT1120 interface */
-        pr_info("tx_isp_vic_start: BT1120 interface\n");
+        /* BT1120 - Binary Ninja 00010500-00010684 */
+        pr_info("BT1120 interface configuration\n");
+        
         writel(4, vic_regs + 0xc);
         writel(0x800c0000, vic_regs + 0x10);
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+        writel(vic_dev->width << 1, vic_regs + 0x18);
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
         
-        /* Unlock sequence */
         writel(2, vic_regs + 0x0);
         wmb();
         writel(1, vic_regs + 0x0);
-        wmb();
-
+        
     } else {
-        pr_err("tx_isp_vic_start: Unsupported interface type %d\n", interface_type);
-        ret = -EINVAL;
-        goto exit_func;
+        pr_err("Unsupported interface type %d\n", interface_type);
+        return -1;
     }
 
-    /* *** CRITICAL FIX: Use ACTUAL sensor output dimensions to prevent control limit error *** */
-    pr_info("*** CRITICAL FIX: Using ACTUAL sensor output dimensions to prevent control limit error ***\n");
-    
-    /* STEP 1: Get ACTUAL sensor dimensions from sensor attributes - this is the root cause fix */
-    u32 width = sensor_attr->total_width;   /* Use sensor's actual width */
-    u32 height = sensor_attr->total_height; /* Use sensor's actual height */
-    
-    /* If sensor attributes are zero, use the dimensions from the logs */
-    if (width == 0 || height == 0) {
-        width = 2200;   /* GC2053 total width */
-        height = 1418;  /* FIXED: Use correct GC2053 height from sensor */
-        pr_info("*** Using actual sensor output dimensions from logs: %dx%d ***\n", width, height);
+    /* Binary Ninja: 00010b48-00010b74 - Log WDR mode */
+    if (sensor_attr->wdr_cache != 0) {
+        pr_info("tx_isp_vic_start: WDR mode enabled\n");
     } else {
-        pr_info("*** Using sensor attribute dimensions: %dx%d ***\n", width, height);
+        pr_info("tx_isp_vic_start: Linear mode enabled\n");
     }
-    
-    /* Update VIC device with correct dimensions to prevent future mismatches */
-    vic_dev->width = width;
-    vic_dev->height = height;
-    
-    u32 stride = width * 2; /* 16-bit per pixel */
-    
-    pr_info("*** VIC DIMENSION FIX: Setting CORRECT dimensions %dx%d, stride=%d ***\n", width, height, stride);
-    
-    /* Configure VIC size register - CRITICAL for preventing control limit error */
-    writel((width << 16) | height, vic_regs + 0x4);
-    wmb();
-    
-    /* Configure VIC stride - CRITICAL for DMA alignment */
-    writel(stride, vic_regs + 0x18);
-    wmb();
-    
-    /* STEP 2: Configure VIC control mode BEFORE unlock */
-    writel(3, vic_regs + 0xc); /* MIPI mode */
-    wmb();
-    
-    /* STEP 3: Configure MIPI timing parameters to match sensor output */
-    u32 mipi_config = 0x20000; /* Standard MIPI RAW10 */
-    writel(mipi_config, vic_regs + 0x10);
-    wmb();
-    
-    /* STEP 4: Configure VIC buffer management to prevent overflow */
-    writel(0x100010, vic_regs + 0x1a4); /* DMA config */
-    writel(0x4210, vic_regs + 0x1ac);   /* Frame mode */
-    writel(0x10, vic_regs + 0x1b0);     /* Buffer control */
-    wmb();
-    
-    pr_info("*** VIC TIMING FIX: All timing registers configured - now unlocking VIC ***\n");
 
-    /* *** CRITICAL FIX: Follow EXACT Binary Ninja unlock sequence to prevent control limit error *** */
-    pr_info("*** CRITICAL FIX: Following EXACT Binary Ninja VIC unlock sequence ***\n");
-    
-    /* Binary Ninja EXACT: **(arg1 + 0xb8) = 2 */
-    writel(2, vic_regs + 0x0);
-    wmb();
-    pr_info("tx_isp_vic_start: VIC unlock step 1 (reg 0x0 = 2)\n");
-    
-    /* Binary Ninja EXACT: **(arg1 + 0xb8) = 4 */
-    writel(4, vic_regs + 0x0);
-    wmb();
-    pr_info("tx_isp_vic_start: VIC unlock step 2 (reg 0x0 = 4)\n");
-    
-    /* Binary Ninja EXACT: while (*$v0_121 != 0) nop */
-    pr_info("tx_isp_vic_start: Waiting for VIC unlock completion...\n");
-    timeout = 10000;
-    while (timeout > 0) {
-        u32 status = readl(vic_regs + 0x0);
-        if (status == 0) {
-            pr_info("tx_isp_vic_start: VIC unlocked after %d iterations (status=0)\n", 10000 - timeout);
-            break;
-        }
-        udelay(1);
-        timeout--;
-    }
-    
-    if (timeout == 0) {
-        pr_err("*** CRITICAL: VIC unlock timeout - this WILL cause control limit error! ***\n");
-        ret = -ETIMEDOUT;
-        goto exit_func;
-    }
-    
-    /* *** CRITICAL: Configure ALL timing registers AFTER unlock but BEFORE enabling *** */
-    pr_info("*** CRITICAL: Configuring timing registers AFTER unlock but BEFORE enabling ***\n");
-    
-    /* Binary Ninja EXACT: Final configuration registers - MUST be set before enabling */
-    /* *(*(arg1 + 0xb8) + 0x1a4) = 0x100010 */
-    writel(0x100010, vic_regs + 0x1a4);
-    /* *(*(arg1 + 0xb8) + 0x1ac) = 0x4210 */
-    writel(0x4210, vic_regs + 0x1ac);
-    /* *(*(arg1 + 0xb8) + 0x1b0) = 0x10 */
-    writel(0x10, vic_regs + 0x1b0);
-    /* *(*(arg1 + 0xb8) + 0x1b4) = 0 */
-    writel(0, vic_regs + 0x1b4);
-    wmb();
-    
-    pr_info("*** CRITICAL: All timing registers configured - NOW enabling VIC processing ***\n");
-    
-    /* Binary Ninja EXACT: *$v0_121 = 1 - Enable VIC processing LAST */
-    writel(1, vic_regs + 0x0);
-    wmb();
-    pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1) - control limit error should be FIXED\n");
-
-    /* Binary Ninja: Log WDR mode */
-    const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
-        "WDR mode enabled" : "Linear mode enabled";
-    pr_info("tx_isp_vic_start: %s\n", wdr_msg);
-
-    /* *** CRITICAL FIX: Follow EXACT reference driver register sequence to prevent control limit error *** */
-    pr_info("*** CRITICAL FIX: Writing EXACT reference driver register sequence ***\n");
-    
-    /* STEP 1: Write the EXACT register sequence from working reference driver */
-    /* These are the exact values from the working trace that prevent control limit errors */
-    
-    /* Reference trace: ISP isp-w01 sequence */
-    writel(0x3130322a, vic_regs + 0x0);      /* EXACT from reference */
-    writel(0x1, vic_regs + 0x4);             /* EXACT from reference */
-    writel(0x200, vic_regs + 0x14);          /* EXACT from reference */
-    wmb();
-    
-    pr_info("*** WROTE: reg 0x0 = 0x3130322a, reg 0x4 = 0x1, reg 0x14 = 0x200 ***\n");
-    
-    /* Reference trace: ISP isp-m0 sequence - CRITICAL missing registers */
-    writel(0x54560031, main_isp_base + 0x0);      /* EXACT from reference */
-    writel(0x7800438, main_isp_base + 0x4);       /* EXACT from reference */
-    writel(0x1, main_isp_base + 0x8);             /* EXACT from reference */
-    writel(0x80700008, main_isp_base + 0xc);      /* EXACT from reference */
-    writel(0x1, main_isp_base + 0x28);            /* EXACT from reference */
-    writel(0x400040, main_isp_base + 0x2c);       /* EXACT from reference */
-    writel(0x1, main_isp_base + 0x90);            /* EXACT from reference */
-    writel(0x1, main_isp_base + 0x94);            /* EXACT from reference */
-    writel(0x30000, main_isp_base + 0x98);        /* EXACT from reference */
-    writel(0x58050000, main_isp_base + 0xa8);     /* EXACT from reference */
-    writel(0x58050000, main_isp_base + 0xac);     /* EXACT from reference */
-    writel(0x40000, main_isp_base + 0xc4);        /* EXACT from reference */
-    writel(0x400040, main_isp_base + 0xc8);       /* EXACT from reference */
-    writel(0x100, main_isp_base + 0xcc);          /* EXACT from reference */
-    writel(0xc, main_isp_base + 0xd4);            /* EXACT from reference */
-    writel(0xffffff, main_isp_base + 0xd8);       /* EXACT from reference */
-    writel(0x100, main_isp_base + 0xe0);          /* EXACT from reference */
-    writel(0x400040, main_isp_base + 0xe4);       /* EXACT from reference */
-    writel(0xff808000, main_isp_base + 0xf0);     /* EXACT from reference */
-    wmb();
-    
-    /* Reference trace: VIC Control registers - CRITICAL missing sequence */
-    writel(0x50002d0, vic_regs + 0x0);            /* EXACT from reference */
-    writel(0x3000300, vic_regs + 0x4);            /* EXACT from reference */
-    writel(0x50002d0, vic_regs + 0x2c);           /* EXACT from reference */
-    writel(0x1, vic_regs + 0x34);                 /* EXACT from reference */
-    writel(0x1, vic_regs + 0x70);                 /* EXACT from reference */
-    writel(0x1, vic_regs + 0x7c);                 /* EXACT from reference */
-    writel(0x500, vic_regs + 0x80);               /* EXACT from reference */
-    writel(0x1, vic_regs + 0x88);                 /* EXACT from reference */
-    writel(0x1, vic_regs + 0x94);                 /* EXACT from reference */
-    writel(0x500, vic_regs + 0x98);               /* EXACT from reference */
-    writel(0x200, vic_regs + 0xc0);               /* EXACT from reference */
-    writel(0x200, vic_regs + 0xc8);               /* EXACT from reference */
-    wmb();
-    
-    pr_info("*** WROTE: reg 0x0 = 0x54560031, reg 0x4 = 0x7800438 ***\n");
-    
-    pr_info("*** CRITICAL: EXACT reference driver register sequence written - control limit error should be FIXED ***\n");
-
-    /* *** CRITICAL FIX: Set vic_start_ok ONLY after successful configuration *** */
+    /* Binary Ninja: 00010b84 - Set vic_start_ok */
     vic_start_ok = 1;
-    pr_info("*** CRITICAL FIX: vic_start_ok set to 1 - VIC interrupts now enabled ***\n");
+    pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
 
-    /* MCP LOG: VIC start completed successfully */
-    pr_info("MCP_LOG: VIC start completed successfully - vic_start_ok=%d, interface=%d\n", 
-            vic_start_ok, interface_type);
-
-    /* MCP LOG: VIC start completed - streaming registers will be written later in correct sequence */
-    pr_info("MCP_LOG: VIC start completed - streaming registers deferred to correct sequence position\n");
-    
-    /* *** CRITICAL FIX: Add VIC status validation to catch control limit errors early *** */
-    u32 vic_status = readl(vic_regs + 0x4);
-    u32 vic_int_status = readl(vic_regs + 0x1f0);
-    
-    pr_info("*** VIC STATUS CHECK: status=0x%x, int_status=0x%x ***\n", vic_status, vic_int_status);
-    
-    if (vic_int_status & 0x200000) {
-        pr_err("*** CRITICAL: VIC control limit error detected immediately after start! ***\n");
-        pr_err("*** This indicates timing/configuration mismatch - check sensor output timing ***\n");
-        
-        /* Reset VIC to clear error state */
-        writel(0, vic_regs + 0x0);
-        wmb();
-        writel(vic_int_status, vic_regs + 0x1f0); /* Clear interrupt */
-        wmb();
-        writel(1, vic_regs + 0x0);
-        wmb();
-        
-        pr_info("*** VIC reset and restarted to clear control limit error ***\n");
-    }
-
-    /* *** CRITICAL MISSING PIECE: Initialize VIC buffer management BEFORE frame data transfer *** */
-    pr_info("*** CRITICAL: Initializing VIC buffer management system ***\n");
-    
-    /* Get the ISP device from the VIC device */
-    struct tx_isp_dev *isp_dev = ourISPdev;
-    if (isp_dev && isp_dev->vic_dev) {
-        /* Create a dummy raw_pipe structure for the call */
-        void *raw_pipe[8] = {NULL}; /* 8 function pointers as per Binary Ninja */
-        
-        /* Call tx_isp_subdev_pipo to initialize VIC buffer management */
-        pr_info("*** CALLING tx_isp_subdev_pipo to initialize VIC buffer management ***\n");
-        int pipo_ret = tx_isp_subdev_pipo(isp_dev->vic_dev, raw_pipe);
-        if (pipo_ret == 0) {
-            pr_info("*** SUCCESS: tx_isp_subdev_pipo completed - VIC buffer management initialized ***\n");
-            pr_info("*** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***\n");
-        } else {
-            pr_err("*** ERROR: tx_isp_subdev_pipo failed: %d ***\n", pipo_ret);
-        }
-        
-        /* Now trigger frame data transfer after buffer management is set up */
-        pr_info("*** Now triggering frame data transfer to start actual frame capture ***\n");
-        pr_info("*** Triggering ISP_TUNING_EVENT_DMA_READY to start frame data transfer ***\n");
-        
-        /* Call the frame data transfer function directly */
-        int transfer_ret = isp_trigger_frame_data_transfer(isp_dev);
-        if (transfer_ret == 0) {
-            pr_info("*** SUCCESS: Frame data transfer initiated - sensor data should now flow to DMA ***\n");
-        } else {
-            pr_err("*** ERROR: Frame data transfer failed: %d ***\n", transfer_ret);
-        }
-    } else {
-        pr_err("*** ERROR: No ISP device or VIC device available for buffer management ***\n");
-    }
-
-    ret = 0;
-
-exit_func:
-    return ret;
+    return 0;
 }
 
 
