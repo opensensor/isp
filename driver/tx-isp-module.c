@@ -6641,11 +6641,12 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 int vin_ret = -ENODEV;
                 
                 /* Find the VIN subdev in the ISP device */
-                if (isp_dev && isp_dev->vin) {
-                    struct tx_isp_subdev *vin_sd = &isp_dev->vin->sd;
-                    if (vin_sd && vin_sd->ops && vin_sd->ops->video && vin_sd->ops->video->s_stream) {
+                if (isp_dev && isp_dev->vin_dev) {
+                    struct vin_device *vin_device = isp_dev->vin_dev;
+                    if (vin_device && vin_device->sd && vin_device->sd->ops && 
+                        vin_device->sd->ops->video && vin_device->sd->ops->video->s_stream) {
                         pr_info("*** CALLING VIN S_STREAM THROUGH PROPER VIN SUBDEV ***\n");
-                        vin_ret = vin_sd->ops->video->s_stream(vin_sd, enable);
+                        vin_ret = vin_device->sd->ops->video->s_stream(vin_device->sd, enable);
                     } else {
                         pr_err("*** ERROR: VIN subdev or s_stream function not available ***\n");
                     }
@@ -6671,11 +6672,12 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 int vin_ret = -ENODEV;
                 
                 /* Find the VIN subdev in the ISP device */
-                if (isp_dev && isp_dev->vin) {
-                    struct tx_isp_subdev *vin_sd = &isp_dev->vin->sd;
-                    if (vin_sd && vin_sd->ops && vin_sd->ops->video && vin_sd->ops->video->s_stream) {
+                if (isp_dev && isp_dev->vin_dev) {
+                    struct vin_device *vin_device = isp_dev->vin_dev;
+                    if (vin_device && vin_device->sd && vin_device->sd->ops && 
+                        vin_device->sd->ops->video && vin_device->sd->ops->video->s_stream) {
                         pr_info("*** CALLING VIN S_STREAM STOP THROUGH PROPER VIN SUBDEV ***\n");
-                        vin_ret = vin_sd->ops->video->s_stream(vin_sd, enable);
+                        vin_ret = vin_device->sd->ops->video->s_stream(vin_device->sd, enable);
                     } else {
                         pr_err("*** ERROR: VIN subdev or s_stream function not available ***\n");
                     }
