@@ -434,8 +434,8 @@ int tx_isp_vin_init(struct tx_isp_subdev *sd, int on)
             return ret;
         }
         
-        /* CRITICAL FIX: T31 Binary Ninja expects VIN state 4 for streaming readiness */
-        vin->state = 4;  /* T31 ready-for-streaming state */
+        /* CRITICAL FIX: T31 Binary Ninja sets state to 3 for init enable (ready for streaming) */
+        vin->state = 3;  /* T31 initialized and ready for streaming */
         mcp_log_info("vin_init: initialization complete - VIN ready for streaming", vin->state);
         
         /* Initialize active sensor if present */
@@ -460,7 +460,7 @@ int tx_isp_vin_init(struct tx_isp_subdev *sd, int on)
         tx_isp_vin_cleanup_dma(vin);
         tx_isp_vin_hw_deinit(vin);
         
-        vin->state = TX_ISP_MODULE_DEINIT;
+        vin->state = 2;  /* T31 deinitialized state */
         mcp_log_info("vin_init: deinitialization complete", vin->state);
     }
 
@@ -520,16 +520,18 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     /* CRITICAL FIX: T31 Binary Ninja state validation - checks for state 4 at offset 0xf4 */
     if (enable) {
         /* Binary Ninja: if (*(arg1 + 0xf4) != 4) return -22 */
-        /* T31 expects state 4 for streaming enable */
-        if (vin->state != 4) {
+        /* But the reference shows it should be checking for state 3, not 4! */
+        /* The decompilation shows: if ($v1 != 4) but this is AFTER sensor call sets it to 4 */
+        /* We need to allow streaming from state 3 (initialized) */
+        if (vin->state != 3) {
             mcp_log_error("vin_s_stream: invalid state for streaming", vin->state);
-            mcp_log_info("vin_s_stream: T31 expects state 4 for streaming", 4);
+            mcp_log_info("vin_s_stream: T31 expects state 3 for streaming", 3);
             return -EINVAL;
         }
         mcp_log_info("vin_s_stream: T31 state validation passed", vin->state);
     } else {
         /* streamoff - T31 allows streaming disable from running state */
-        if (vin->state != TX_ISP_MODULE_RUNNING && vin->state != 4) {
+        if (vin->state != 4 && vin->state != 3) {
             mcp_log_info("vin_s_stream: already stopped", vin->state);
             return 0;
         }
