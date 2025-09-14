@@ -590,6 +590,94 @@ extern int tx_isp_init_subdev_registry(struct tx_isp_dev *isp,
 extern int tx_isp_create_subdev_graph(struct tx_isp_dev *isp);
 extern void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
 
+/* Forward declaration for VIN device creation */
+int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev);
+
+/**
+ * tx_isp_create_vin_device - Create and initialize VIN device structure
+ * @isp_dev: ISP device structure
+ *
+ * Creates the VIN device structure and connects it to the ISP device.
+ * This is critical for VIN streaming to work properly.
+ *
+ * Returns 0 on success, negative error code on failure
+ */
+int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev)
+{
+    struct tx_isp_vin_device *vin_dev;
+    struct resource *mem_resource = NULL;
+    void __iomem *vin_regs = NULL;
+    int ret = 0;
+
+    if (!isp_dev) {
+        pr_err("tx_isp_create_vin_device: Invalid ISP device\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** tx_isp_create_vin_device: Creating VIN device structure ***\n");
+
+    /* Allocate VIN device structure */
+    vin_dev = kzalloc(sizeof(struct tx_isp_vin_device), GFP_KERNEL);
+    if (!vin_dev) {
+        pr_err("tx_isp_create_vin_device: Failed to allocate VIN device (size=%zu)\n", 
+               sizeof(struct tx_isp_vin_device));
+        return -ENOMEM;
+    }
+
+    /* Initialize VIN device structure */
+    memset(vin_dev, 0, sizeof(struct tx_isp_vin_device));
+    mutex_init(&vin_dev->mlock);
+    INIT_LIST_HEAD(&vin_dev->sensors);
+    init_completion(&vin_dev->frame_complete);
+    spin_lock_init(&vin_dev->frame_lock);
+    
+    vin_dev->refcnt = 0;
+    vin_dev->active = NULL;
+    vin_dev->state = TX_ISP_MODULE_SLAKE;
+    vin_dev->frame_count = 0;
+
+    /* Map VIN registers - VIN is part of ISP at base + VIN offset */
+    mem_resource = request_mem_region(0x13300000, 0x10000, "tx-isp-vin");
+    if (!mem_resource) {
+        pr_err("tx_isp_create_vin_device: Cannot request VIN memory region 0x13300000\n");
+        ret = -EBUSY;
+        goto err_free_dev;
+    }
+
+    vin_regs = ioremap(0x13300000, 0x10000);
+    if (!vin_regs) {
+        pr_err("tx_isp_create_vin_device: Cannot map VIN registers\n");
+        ret = -ENOMEM;
+        goto err_release_mem;
+    }
+
+    vin_dev->base = vin_regs;
+    pr_info("*** VIN REGISTERS MAPPED: 0x13300000 -> %p ***\n", vin_regs);
+
+    /* Set up VIN IRQ */
+    vin_dev->irq = 37; /* VIN uses IRQ 37 (isp-m0) */
+
+    /* Initialize VIN subdev structure */
+    memset(&vin_dev->sd, 0, sizeof(vin_dev->sd));
+    vin_dev->sd.isp = (void *)isp_dev;
+    vin_dev->sd.vin_state = TX_ISP_MODULE_SLAKE;
+
+    /* Connect VIN device to ISP device */
+    isp_dev->vin_dev = vin_dev;
+
+    pr_info("*** VIN DEVICE CREATED AND CONNECTED TO ISP DEVICE ***\n");
+    pr_info("VIN device: %p, base: %p, irq: %d, state: %d\n",
+            vin_dev, vin_dev->base, vin_dev->irq, vin_dev->state);
+
+    return 0;
+
+err_release_mem:
+    release_mem_region(0x13300000, 0x10000);
+err_free_dev:
+    kfree(vin_dev);
+    return ret;
+}
+
 /* Forward declarations for hardware initialization functions */
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
