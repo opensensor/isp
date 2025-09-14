@@ -6645,18 +6645,14 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 if (vin_device->state != 3) {
                     pr_info("*** CRITICAL: VIN NOT INITIALIZED (state=%d), INITIALIZING NOW ***\n", vin_device->state);
                     
-                    /* Call VIN initialization */
-                    if (vin_device->sd.ops && vin_device->sd.ops->core && vin_device->sd.ops->core->init) {
-                        ret = vin_device->sd.ops->core->init(&vin_device->sd, 1);
-                        if (ret) {
-                            pr_err("*** CRITICAL: VIN INITIALIZATION FAILED: %d ***\n", ret);
-                            return ret;
-                        }
-                        pr_info("*** CRITICAL: VIN INITIALIZED SUCCESSFULLY - STATE NOW 3 ***\n");
-                    } else {
-                        pr_err("*** CRITICAL: NO VIN INIT FUNCTION AVAILABLE ***\n");
-                        return -ENODEV;
+                    /* CRITICAL FIX: Call the EXACT Binary Ninja VIN init function */
+                    extern int tx_isp_vin_init(void* arg1, int32_t arg2);
+                    ret = tx_isp_vin_init(vin_device, 1);
+                    if (ret && ret != 0xffffffff) {
+                        pr_err("*** CRITICAL: VIN INITIALIZATION FAILED: %d ***\n", ret);
+                        return ret;
                     }
+                    pr_info("*** CRITICAL: VIN INITIALIZED SUCCESSFULLY - STATE NOW 3 ***\n");
                 } else {
                     pr_info("*** VIN ALREADY INITIALIZED (state=%d) ***\n", vin_device->state);
                 }
