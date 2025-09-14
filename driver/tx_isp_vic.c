@@ -1595,32 +1595,30 @@ if (!IS_ERR(cgu_isp_clk)) {
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
-    /* *** CRITICAL FIX: Restore interrupt registers but avoid overwriting VIC dimensions *** */
-    pr_info("*** CRITICAL FIX: Restoring interrupt registers while protecting VIC configuration ***\n");
+    /* *** CRITICAL FIX: Write the ACTUAL interrupt-generating register values *** */
+    pr_info("*** CRITICAL FIX: Writing ACTUAL interrupt-generating register values ***\n");
     
     /* STEP 1: Clear any pending interrupts first */
     writel(0xffffffff, vic_regs + 0x1f0);  /* Clear all interrupt status */
     wmb();
     
-    /* STEP 2: Write interrupt-generating registers but PRESERVE VIC dimensions */
-    /* Read current VIC dimensions to preserve them */
-    u32 current_dimensions = readl(vic_regs + 0x4);
-    u32 current_enable = readl(vic_regs + 0x0);
+    /* STEP 2: Write the ACTUAL interrupt-generating registers that were working */
+    /* These are the exact values that were generating interrupts before */
     
-    pr_info("*** PRESERVING: VIC enable=0x%x, dimensions=0x%x ***\n", current_enable, current_dimensions);
-    
-    /* Write the interrupt-generating registers that were working */
+    /* First interrupt-generating sequence */
     writel(0x3130322a, vic_regs + 0x0);      /* This generates interrupts */
-    writel(current_dimensions, vic_regs + 0x4); /* PRESERVE dimensions instead of writing 0x1 */
+    writel(0x1, vic_regs + 0x4);             /* This was in the working version */
     writel(0x200, vic_regs + 0x14);          /* This was working */
     wmb();
     
-    /* Write the second set of interrupt registers */
+    pr_info("*** WROTE: reg 0x0 = 0x3130322a, reg 0x4 = 0x1, reg 0x14 = 0x200 ***\n");
+    
+    /* Second interrupt-generating sequence */
     writel(0x54560031, vic_regs + 0x0);      /* This generates interrupts */
-    writel(current_dimensions, vic_regs + 0x4); /* PRESERVE dimensions instead of writing 0x7800438 */
+    writel(0x7800438, vic_regs + 0x4);       /* This was generating interrupts */
     wmb();
     
-    pr_info("*** CRITICAL: Interrupt registers restored while preserving dimensions=0x%x ***\n", current_dimensions);
+    pr_info("*** WROTE: reg 0x0 = 0x54560031, reg 0x4 = 0x7800438 ***\n");
     
     /* STEP 3: Enable VIC interrupt sources */
     writel(0x1, vic_regs + 0x1f4);  /* Enable frame done interrupt */
@@ -1636,11 +1634,7 @@ if (!IS_ERR(cgu_isp_clk)) {
     writel(0x1, vic_regs + 0x1e8);  /* Enable VIC interrupt output to interrupt controller */
     wmb();
     
-    /* STEP 6: Restore the correct VIC enable state */
-    writel(current_enable, vic_regs + 0x0);  /* Restore original enable state */
-    wmb();
-    
-    pr_info("*** CRITICAL: Interrupts enabled while preserving VIC configuration ***\n");
+    pr_info("*** CRITICAL: ACTUAL interrupt-generating values written - should now see IRQ 38 activity ***\n");
 
     /* *** CRITICAL FIX: Set vic_start_ok ONLY after successful configuration *** */
     vic_start_ok = 1;
