@@ -7,7 +7,7 @@
 #include "../include/tx-isp-device.h"
 
 /* Forward declarations */
-int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
+int csi_core_ops_init(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
 void dump_csi_reg(struct tx_isp_subdev *sd);
 void check_csi_error(struct tx_isp_subdev *sd);
 extern struct tx_isp_dev *ourISPdev;
