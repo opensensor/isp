@@ -6635,21 +6635,24 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 sd->vin_state = TX_ISP_MODULE_RUNNING;
                 pr_info("*** CRITICAL: SENSOR SUBDEV STATE SET TO RUNNING (5) ***\n");
 
-                /* CRITICAL FIX: NOW CALL VIN S_STREAM - THIS WAS THE MISSING PIECE! */
+                /* CRITICAL FIX: NOW CALL VIN S_STREAM THROUGH PROPER ISP DEVICE */
                 pr_info("*** CRITICAL: NOW CALLING VIN_S_STREAM - THIS SHOULD TRANSITION STATE TO 5! ***\n");
+
+                int vin_ret = -ENODEV;
                 
-                /* Call the VIN s_stream function directly */
-                extern int vin_s_stream(struct tx_isp_subdev *sd, int enable);
-                
-                /* Create a VIN subdev structure for the call */
-                struct tx_isp_subdev vin_sd;
-                memset(&vin_sd, 0, sizeof(vin_sd));
-                vin_sd.isp = (void *)isp_dev;
-                vin_sd.vin_state = TX_ISP_MODULE_INIT;  /* Start in INIT state */
-                
-                /* Call VIN s_stream - this will transition the state to RUNNING */
-                int vin_ret = vin_s_stream(&vin_sd, enable);
-                
+                /* Find the VIN subdev in the ISP device */
+                if (isp_dev && isp_dev->vin) {
+                    struct tx_isp_subdev *vin_sd = &isp_dev->vin->sd;
+                    if (vin_sd && vin_sd->ops && vin_sd->ops->video && vin_sd->ops->video->s_stream) {
+                        pr_info("*** CALLING VIN S_STREAM THROUGH PROPER VIN SUBDEV ***\n");
+                        vin_ret = vin_sd->ops->video->s_stream(vin_sd, enable);
+                    } else {
+                        pr_err("*** ERROR: VIN subdev or s_stream function not available ***\n");
+                    }
+                } else {
+                    pr_err("*** ERROR: ISP device or VIN not available ***\n");
+                }
+
                 pr_info("*** CRITICAL: VIN_S_STREAM RETURNED: %d ***\n", vin_ret);
                 pr_info("*** CRITICAL: VIN STATE SHOULD NOW BE 5 (RUNNING) ***\n");
                 
@@ -6662,17 +6665,24 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* ISP's work when disabling streaming */
                 sd->vin_state = TX_ISP_MODULE_INIT;
                 
-                /* CRITICAL FIX: Call VIN streaming to stop */
+                /* CRITICAL FIX: Call VIN streaming to stop through proper ISP device */
                 pr_info("*** CALLING VIN_S_STREAM TO STOP ***\n");
-                extern int vin_s_stream(struct tx_isp_subdev *sd, int enable);
                 
-                /* Create a VIN subdev structure for the call */
-                struct tx_isp_subdev vin_sd;
-                memset(&vin_sd, 0, sizeof(vin_sd));
-                vin_sd.isp = (void *)isp_dev;
-                vin_sd.vin_state = TX_ISP_MODULE_RUNNING;  /* Start in RUNNING state */
+                int vin_ret = -ENODEV;
                 
-                int vin_ret = vin_s_stream(&vin_sd, enable);
+                /* Find the VIN subdev in the ISP device */
+                if (isp_dev && isp_dev->vin) {
+                    struct tx_isp_subdev *vin_sd = &isp_dev->vin->sd;
+                    if (vin_sd && vin_sd->ops && vin_sd->ops->video && vin_sd->ops->video->s_stream) {
+                        pr_info("*** CALLING VIN S_STREAM STOP THROUGH PROPER VIN SUBDEV ***\n");
+                        vin_ret = vin_sd->ops->video->s_stream(vin_sd, enable);
+                    } else {
+                        pr_err("*** ERROR: VIN subdev or s_stream function not available ***\n");
+                    }
+                } else {
+                    pr_err("*** ERROR: ISP device or VIN not available ***\n");
+                }
+                
                 pr_info("*** VIN STREAMING STOP RETURNED: %d ***\n", vin_ret);
             }
             
