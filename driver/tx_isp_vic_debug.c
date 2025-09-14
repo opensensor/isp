@@ -105,8 +105,9 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         /* Binary Ninja: if (($v1_7 & 1) != 0) - Frame done interrupt */
         if (int_status1 & 0x1) {
             isp_dev->frame_count++;
+            pr_debug("*** VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", 
+                     isp_dev->frame_count);
             vic_framedone_irq_function(isp_dev);
-            pr_debug("VIC: Frame done interrupt processed\n");
         }
         
         /* Binary Ninja: Error condition processing - EXACT order from decompilation */
@@ -334,6 +335,27 @@ int vic_framedone_irq_function(struct tx_isp_dev *isp_dev)
         buffer_control = (buffer_control & 0xfff0ffff) | 0x10000;
         writel(buffer_control, vic_regs + 0x300);
     }
+    
+    /* *** CRITICAL FIX: Notify ISP core that a frame is ready for processing *** */
+    /* When VIC completes a frame, it must trigger the ISP core interrupt handler */
+    /* This is the missing link between VIC and ISP! */
+    
+    /* Trigger ISP core frame processing by writing to ISP interrupt register */
+    if (isp_dev->base) {
+        void __iomem *isp_base = isp_dev->base;
+        
+        /* Set frame done bit in ISP interrupt status register */
+        /* This will trigger the ISP core interrupt handler (IRQ 37) */
+        writel(0x1, isp_base + 0x98b0);  /* ISP frame done interrupt bit */
+        wmb();
+        
+        pr_debug("*** VIC->ISP EVENT: Triggered ISP core frame processing (IRQ 37) ***\n");
+    }
+    
+    /* Call the ISP frame done wakeup function to notify waiting processes */
+    extern void isp_frame_done_wakeup(void);
+    isp_frame_done_wakeup();
+    pr_debug("*** VIC->ISP EVENT: Called isp_frame_done_wakeup() ***\n");
     
     return 0;
 }
