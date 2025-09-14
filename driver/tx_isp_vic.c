@@ -557,6 +557,7 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
     char filename[64];
     loff_t pos = 0;
     mm_segment_t old_fs;
+    bool using_rmem = false;
 
     if (!sd) {
         pr_err("No VIC or sensor device\n");
@@ -587,13 +588,16 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
     // Use rmem allocation instead of regular DMA allocation
     if (isp_dev && isp_malloc_buffer(isp_dev, buf_size, (void**)&capture_buf, &dma_addr) == 0) {
         pr_info("*** VIC: Using rmem buffer at virt=%p, phys=0x%08x ***\n", capture_buf, (uint32_t)dma_addr);
+        using_rmem = true;
     } else {
         pr_err("Failed to allocate rmem buffer, falling back to DMA\n");
         capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
         if (!capture_buf) {
             pr_err("Failed to allocate DMA buffer\n");
             iounmap(vic_base);
-        return -ENOMEM;
+            return -ENOMEM;
+        }
+        using_rmem = false;
     }
 
     // Read original register values
@@ -652,18 +656,23 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
         pos = 0;
     }
 
-set_fs(old_fs);
+    set_fs(old_fs);
 
     // Restore registers
-    writel(vic_ctrl & 0x11111111, vic_base + 0x7810);
+    writel(vic_ctrl, vic_base + 0x7810);
     writel(vic_status, vic_base + 0x7814);
-    writel(vic_intr | 1, vic_base + 0x7804);
+    writel(vic_intr, vic_base + 0x7804);
 
 cleanup:
-    // Don't free the buffer - it stays allocated for future use
+    // Free buffer if using DMA allocation (not rmem)
+    if (!using_rmem && capture_buf) {
+        dma_free_coherent(sd->dev, buf_size, capture_buf, dma_addr);
+    }
+
     iounmap(vic_base);
     return ret;
 }
+
 
 /* Move vic_proc_write outside of vic_snapraw */
 static ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
