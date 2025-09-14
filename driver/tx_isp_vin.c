@@ -340,32 +340,41 @@ int tx_isp_vin_cleanup_dma(struct tx_isp_vin_device *vin)
 }
 
 /* ========================================================================
- * VIN Interrupt Handling
+ * VIN Interrupt Handling - DISABLED FOR T31
  * ======================================================================== */
 
 /**
- * tx_isp_vin_irq_handler - VIN interrupt handler
- * @irq: Interrupt number
- * @dev_id: Device ID (VIN device structure)
+ * CRITICAL FIX: VIN interrupts are handled by ISP core on T31
+ * 
+ * The T31 VIN is integrated into the ISP core and does not have separate
+ * interrupt handling. Attempting to register VIN interrupts on IRQ 37
+ * causes conflicts with the main ISP interrupt handler and leads to
+ * memory corruption and kernel panics.
+ * 
+ * VIN interrupt processing is handled by the main ISP interrupt handler
+ * in tx_isp_core.c, which then calls VIN-specific handlers as needed.
  */
-irqreturn_t tx_isp_vin_irq_handler(int irq, void *dev_id)
+
+/**
+ * tx_isp_vin_process_interrupts - Process VIN interrupts (called by ISP core)
+ * @vin: VIN device structure
+ * @int_status: Interrupt status from ISP core
+ * 
+ * This function is called by the main ISP interrupt handler to process
+ * VIN-specific interrupts. It does not register its own IRQ handler.
+ */
+int tx_isp_vin_process_interrupts(struct tx_isp_vin_device *vin, u32 int_status)
 {
-    struct tx_isp_vin_device *vin = (struct tx_isp_vin_device *)dev_id;
-    u32 int_status;
     unsigned long flags;
     
-    if (!vin || !vin->base) {
-        return IRQ_NONE;
+    if (!vin) {
+        return -EINVAL;
     }
     
-    /* Read interrupt status */
-    int_status = readl(vin->base + VIN_INT_STATUS);
-    if (!int_status) {
-        return IRQ_NONE;
+    /* Only process if we have VIN-related interrupts */
+    if (!(int_status & (VIN_INT_FRAME_END | VIN_INT_OVERFLOW | VIN_INT_SYNC_ERR | VIN_INT_DMA_ERR))) {
+        return 0;
     }
-    
-    /* Clear interrupt status */
-    writel(int_status, vin->base + VIN_INT_STATUS);
     
     spin_lock_irqsave(&vin->frame_lock, flags);
     
@@ -389,44 +398,52 @@ irqreturn_t tx_isp_vin_irq_handler(int irq, void *dev_id)
     
     spin_unlock_irqrestore(&vin->frame_lock, flags);
     
-    return IRQ_HANDLED;
+    return 1; /* Processed VIN interrupts */
 }
 
 /**
- * tx_isp_vin_enable_irq - Enable VIN interrupts
+ * tx_isp_vin_enable_irq - Enable VIN interrupts (T31: No separate IRQ)
  * @vin: VIN device structure
+ * 
+ * On T31, VIN interrupts are handled by the main ISP core interrupt handler.
+ * This function just enables VIN interrupt generation in hardware.
  */
 int tx_isp_vin_enable_irq(struct tx_isp_vin_device *vin)
 {
-    int ret;
-    
-    if (!vin || vin->irq <= 0) {
+    if (!vin || !vin->base) {
         return -EINVAL;
     }
     
-    ret = request_irq(vin->irq, tx_isp_vin_irq_handler, IRQF_SHARED, 
-                      "tx-isp-vin", vin);
-    if (ret) {
-        mcp_log_error("vin_enable_irq: failed to request IRQ", vin->irq);
-        return ret;
-    }
+    /* CRITICAL FIX: Don't register separate IRQ handler for T31 VIN */
+    /* VIN interrupts are handled by ISP core IRQ handler */
+    mcp_log_info("vin_enable_irq: VIN interrupts handled by ISP core (no separate IRQ)", 0);
     
-    mcp_log_info("vin_enable_irq: IRQ enabled", vin->irq);
+    /* Just enable VIN interrupt generation in hardware */
+    /* The ISP core interrupt handler will process them */
+    writel(VIN_INT_FRAME_END | VIN_INT_OVERFLOW | VIN_INT_SYNC_ERR | VIN_INT_DMA_ERR, 
+           vin->base + VIN_INT_MASK);
+    mcp_log_info("vin_enable_irq: VIN interrupt mask configured", VIN_INT_FRAME_END | VIN_INT_OVERFLOW);
+    
     return 0;
 }
 
 /**
- * tx_isp_vin_disable_irq - Disable VIN interrupts
+ * tx_isp_vin_disable_irq - Disable VIN interrupts (T31: No separate IRQ)
  * @vin: VIN device structure
+ * 
+ * On T31, just disable VIN interrupt generation in hardware.
  */
 int tx_isp_vin_disable_irq(struct tx_isp_vin_device *vin)
 {
-    if (!vin || vin->irq <= 0) {
+    if (!vin || !vin->base) {
         return -EINVAL;
     }
     
-    free_irq(vin->irq, vin);
-    mcp_log_info("vin_disable_irq: IRQ disabled", vin->irq);
+    /* CRITICAL FIX: Don't free IRQ that was never registered */
+    /* Just disable VIN interrupt generation in hardware */
+    writel(0, vin->base + VIN_INT_MASK);
+    mcp_log_info("vin_disable_irq: VIN interrupts disabled in hardware", 0);
+    
     return 0;
 }
 
