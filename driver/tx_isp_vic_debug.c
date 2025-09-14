@@ -59,6 +59,10 @@ EXPORT_SYMBOL(vic_start_ok);
 static uint32_t gpio_switch_state = 0;
 static uint8_t gpio_info[20] = {0xff}; /* GPIO configuration array */
 
+/* Forward declarations for interrupt functions */
+int vic_framedone_irq_function(struct tx_isp_dev *isp_dev);
+int vic_mdma_irq_function(struct tx_isp_dev *isp_dev, int channel);
+
 /**
  * csi_core_ops_init - EXACT Binary Ninja implementation
  * This function performs the complete MIPI PHY initialization that was missing
