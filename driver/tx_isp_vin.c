@@ -1153,3 +1153,6 @@ EXPORT_SYMBOL(tx_isp_vin_driver);
 /* Export the missing VIN functions that were causing the "NO VIN INIT FUNCTION AVAILABLE" error */
 EXPORT_SYMBOL(tx_isp_vin_init);
 EXPORT_SYMBOL(tx_isp_vin_activate_subdev);
+
+/* Export VIN interrupt processing function for ISP core */
+EXPORT_SYMBOL(tx_isp_vin_process_interrupts);
