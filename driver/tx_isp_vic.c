@@ -1595,27 +1595,34 @@ if (!IS_ERR(cgu_isp_clk)) {
         "WDR mode enabled" : "Linear mode enabled";
     pr_info("tx_isp_vic_start: %s\n", wdr_msg);
 
-    /* *** CRITICAL FIX: Remove problematic register writes that cause control limit error *** */
-    pr_info("*** CRITICAL FIX: Removing problematic register writes that cause control limit error ***\n");
+    /* *** CRITICAL FIX: Restore interrupt registers but avoid overwriting VIC dimensions *** */
+    pr_info("*** CRITICAL FIX: Restoring interrupt registers while protecting VIC configuration ***\n");
     
-    /* The control limit error is caused by writing conflicting values to VIC registers */
-    /* after the VIC has been enabled. We need to avoid overwriting the carefully configured */
-    /* dimension and timing registers that were set during the MIPI configuration. */
-    
-    /* STEP 1: Only clear interrupt status, don't write conflicting register values */
+    /* STEP 1: Clear any pending interrupts first */
     writel(0xffffffff, vic_regs + 0x1f0);  /* Clear all interrupt status */
     wmb();
     
-    /* STEP 2: DO NOT write to reg 0x0 and 0x4 - these contain the VIC enable and dimensions */
-    /* The previous code was overwriting the carefully configured dimensions with random values */
-    /* writel(0x3130322a, vic_regs + 0x0); -- REMOVED: This overwrites VIC enable state */
-    /* writel(0x1, vic_regs + 0x4);        -- REMOVED: This overwrites VIC dimensions */
-    /* writel(0x54560031, vic_regs + 0x0); -- REMOVED: This overwrites VIC enable state */
-    /* writel(0x7800438, vic_regs + 0x4);  -- REMOVED: This overwrites VIC dimensions */
+    /* STEP 2: Write interrupt-generating registers but PRESERVE VIC dimensions */
+    /* Read current VIC dimensions to preserve them */
+    u32 current_dimensions = readl(vic_regs + 0x4);
+    u32 current_enable = readl(vic_regs + 0x0);
     
-    pr_info("*** CRITICAL: Avoided overwriting VIC enable (0x0) and dimensions (0x4) registers ***\n");
+    pr_info("*** PRESERVING: VIC enable=0x%x, dimensions=0x%x ***\n", current_enable, current_dimensions);
     
-    /* STEP 3: Only enable interrupt sources without touching VIC control registers */
+    /* Write the interrupt-generating registers that were working */
+    writel(0x3130322a, vic_regs + 0x0);      /* This generates interrupts */
+    writel(current_dimensions, vic_regs + 0x4); /* PRESERVE dimensions instead of writing 0x1 */
+    writel(0x200, vic_regs + 0x14);          /* This was working */
+    wmb();
+    
+    /* Write the second set of interrupt registers */
+    writel(0x54560031, vic_regs + 0x0);      /* This generates interrupts */
+    writel(current_dimensions, vic_regs + 0x4); /* PRESERVE dimensions instead of writing 0x7800438 */
+    wmb();
+    
+    pr_info("*** CRITICAL: Interrupt registers restored while preserving dimensions=0x%x ***\n", current_dimensions);
+    
+    /* STEP 3: Enable VIC interrupt sources */
     writel(0x1, vic_regs + 0x1f4);  /* Enable frame done interrupt */
     writel(0x1, vic_regs + 0x1f8);  /* Enable DMA done interrupt */
     writel(0x1, vic_regs + 0x1fc);  /* Enable error interrupts */
@@ -1629,7 +1636,11 @@ if (!IS_ERR(cgu_isp_clk)) {
     writel(0x1, vic_regs + 0x1e8);  /* Enable VIC interrupt output to interrupt controller */
     wmb();
     
-    pr_info("*** CRITICAL: Interrupt sources enabled without overwriting VIC control registers ***\n");
+    /* STEP 6: Restore the correct VIC enable state */
+    writel(current_enable, vic_regs + 0x0);  /* Restore original enable state */
+    wmb();
+    
+    pr_info("*** CRITICAL: Interrupts enabled while preserving VIC configuration ***\n");
 
     /* *** CRITICAL FIX: Set vic_start_ok ONLY after successful configuration *** */
     vic_start_ok = 1;
@@ -2971,24 +2982,20 @@ static int ispvic_frame_channel_clearbuf(void)
     return 0;
 }
 
-/* tx_isp_subdev_pipo - FIXED for MIPS memory alignment */
+/* tx_isp_subdev_pipo - SAFE struct member access implementation */
 int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
     void **raw_pipe = (void **)arg;
     int i;
-    void **buffer_ptr;
-    void **list_head;
-    uint32_t offset_calc;
     
-    pr_info("*** tx_isp_subdev_pipo: FIXED for MIPS memory alignment ***\n");
+    pr_info("*** tx_isp_subdev_pipo: SAFE struct member access implementation ***\n");
     pr_info("tx_isp_subdev_pipo: entry - sd=%p, arg=%p\n", sd, arg);
     
-    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0xd4 */
+    /* SAFE: Validate parameters */
     if (sd != NULL && (unsigned long)sd < 0xfffff001) {
-        /* Use safe subdev data access method */
         vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-        pr_info("tx_isp_subdev_pipo: vic_dev retrieved using SAFE access: %p\n", vic_dev);
+        pr_info("tx_isp_subdev_pipo: vic_dev retrieved: %p\n", vic_dev);
     }
     
     if (!vic_dev) {
@@ -2996,95 +3003,76 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         return 0;  /* Binary Ninja returns 0 even on error */
     }
     
-    /* CRITICAL FIX: Use safe struct member access - mark processing as enabled */
-    vic_dev->processing = true;
-    pr_info("tx_isp_subdev_pipo: set processing = true (streaming init)\n");
+    /* SAFE: Use proper struct member access instead of offset 0x20c */
+    vic_dev->processing = 1;
+    pr_info("tx_isp_subdev_pipo: set processing = 1 (safe struct access)\n");
     
-    /* Binary Ninja: raw_pipe = arg2 (store globally) */
-    /* Note: In Binary Ninja this is stored in a global variable */
-    
-    /* Binary Ninja: if (arg2 == 0) */
+    /* SAFE: Check if arg is NULL */
     if (arg == NULL) {
-        /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0x214 */
+        /* SAFE: Use proper struct member access instead of offset 0x214 */
         vic_dev->processing = 0;
-        pr_info("tx_isp_subdev_pipo: arg is NULL - set processing = 0\n");
+        pr_info("tx_isp_subdev_pipo: arg is NULL - set processing = 0 (safe struct access)\n");
     } else {
         pr_info("tx_isp_subdev_pipo: arg is not NULL - initializing pipe structures\n");
         
-        /* CRITICAL FIX: Use proper Linux list initialization instead of dangerous offset arithmetic */
+        /* SAFE: Use Linux list initialization instead of manual pointer manipulation */
         INIT_LIST_HEAD(&vic_dev->queue_head);
         INIT_LIST_HEAD(&vic_dev->done_head);
         INIT_LIST_HEAD(&vic_dev->free_head);
         
-        pr_info("tx_isp_subdev_pipo: initialized linked list heads safely\n");
+        pr_info("tx_isp_subdev_pipo: initialized linked list heads (safe Linux API)\n");
         
-        /* CRITICAL FIX: Use safe struct member access for spinlock initialization */
+        /* SAFE: Use proper spinlock initialization */
         spin_lock_init(&vic_dev->buffer_mgmt_lock);
-        pr_info("tx_isp_subdev_pipo: initialized spinlock safely\n");
+        pr_info("tx_isp_subdev_pipo: initialized spinlock\n");
         
-        /* CRITICAL FIX: Initialize some free buffer entries so qbuf can work */
-        /* Binary Ninja reference driver expects at least some free buffers available */
-        for (i = 0; i < 5; i++) {
-            /* Allocate a simple buffer node structure */
-            struct list_head *free_buffer = kzalloc(sizeof(struct list_head) + 32, GFP_KERNEL);
-            if (free_buffer) {
-                /* Add to free list */
-                list_add_tail(free_buffer, &vic_dev->free_head);
-                pr_info("tx_isp_subdev_pipo: added free buffer entry %d to free_head list\n", i);
-            }
-        }
-        
-        /* Also pre-populate queue with one entry to prevent "qbuffer null" */
-        struct list_head *queue_buffer = kzalloc(sizeof(struct list_head) + 32, GFP_KERNEL);
-        if (queue_buffer) {
-            list_add_tail(queue_buffer, &vic_dev->queue_head);
-            pr_info("tx_isp_subdev_pipo: added initial buffer entry to queue_head list\n");
-        }
-        
-        pr_info("tx_isp_subdev_pipo: buffer lists populated - free_head has entries now\n");
-        
-        /* Binary Ninja: Set up function pointers in raw_pipe structure */
-        /* *raw_pipe = ispvic_frame_channel_qbuf */
-        *raw_pipe = (void *)ispvic_frame_channel_qbuf;
-        /* *(raw_pipe_1 + 8) = ispvic_frame_channel_clearbuf */
-        *((void **)((char *)raw_pipe + 8)) = (void *)ispvic_frame_channel_clearbuf;
-        /* *(raw_pipe_1 + 0xc) = ispvic_frame_channel_s_stream */
-        *((void **)((char *)raw_pipe + 0xc)) = (void *)ispvic_frame_channel_s_stream;
-        /* *(raw_pipe_1 + 0x10) = arg1 */
-        *((void **)((char *)raw_pipe + 0x10)) = (void *)sd;
+        /* SAFE: Set function pointers using proper array indexing */
+        raw_pipe[0] = (void *)ispvic_frame_channel_qbuf;
+        raw_pipe[2] = (void *)ispvic_frame_channel_clearbuf;  /* offset 8 / 4 = index 2 */
+        raw_pipe[3] = (void *)ispvic_frame_channel_s_stream;  /* offset 0xc / 4 = index 3 */
+        raw_pipe[4] = (void *)sd;                             /* offset 0x10 / 4 = index 4 */
         
         pr_info("tx_isp_subdev_pipo: set function pointers - qbuf=%p, clearbuf=%p, s_stream=%p, sd=%p\n",
                 ispvic_frame_channel_qbuf, ispvic_frame_channel_clearbuf, 
                 ispvic_frame_channel_s_stream, sd);
         
-        /* CRITICAL FIX: Initialize buffer array safely without dangerous pointer arithmetic */
+        /* SAFE: Initialize buffer structures using proper struct members */
         for (i = 0; i < 5; i++) {
-            /* SAFE: Initialize buffer index using proper array access */
-            vic_dev->buffer_index[i] = i;
-            
-            /* SAFE: Clear VIC register using validated register access */
-            offset_calc = (i + 0xc6) << 2;
-            
-            /* SAFE: Use validated VIC register base with bounds checking */
-            if (vic_dev->vic_regs && 
-                (unsigned long)vic_dev->vic_regs >= 0x10000000 && 
-                (unsigned long)vic_dev->vic_regs < 0x20000000 &&
-                offset_calc < 0x1000) {
-                writel(0, vic_dev->vic_regs + offset_calc);
-            } else {
-                pr_warn("tx_isp_subdev_pipo: Skipping unsafe register write at offset 0x%x\n", offset_calc);
+            /* SAFE: Use proper buffer index array instead of unsafe pointer arithmetic */
+            if (i < sizeof(vic_dev->buffer_index) / sizeof(vic_dev->buffer_index[0])) {
+                vic_dev->buffer_index[i] = i;
             }
             
-            pr_info("tx_isp_subdev_pipo: initialized buffer %d safely, offset_calc=0x%x\n", i, offset_calc);
+            /* SAFE: Create proper buffer entries and add to free list */
+            struct list_head *buffer_entry = kzalloc(sizeof(struct list_head) + 32, GFP_KERNEL);
+            if (buffer_entry) {
+                /* Initialize buffer data */
+                uint32_t *buffer_data = (uint32_t *)((char *)buffer_entry + sizeof(struct list_head));
+                buffer_data[0] = 0;  /* Buffer address */
+                buffer_data[1] = i;  /* Buffer index */
+                buffer_data[2] = 0;  /* Buffer status */
+                
+                /* Add to free list using safe Linux API */
+                list_add_tail(buffer_entry, &vic_dev->free_head);
+                pr_info("tx_isp_subdev_pipo: added buffer entry %d to free list\n", i);
+            }
+            
+            /* SAFE: Clear VIC register using validated register access */
+            uint32_t reg_offset = (i + 0xc6) << 2;
+            if (vic_dev->vic_regs && reg_offset < 0x1000) {
+                writel(0, vic_dev->vic_regs + reg_offset);
+                pr_info("tx_isp_subdev_pipo: cleared VIC register at offset 0x%x for buffer %d\n", reg_offset, i);
+            }
         }
         
-        /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0x214 */
+        pr_info("tx_isp_subdev_pipo: initialized %d buffer structures (safe implementation)\n", i);
+        
+        /* SAFE: Use proper struct member access instead of offset 0x214 */
         vic_dev->processing = 1;
-        pr_info("tx_isp_subdev_pipo: set processing = 1 (pipe enabled)\n");
+        pr_info("tx_isp_subdev_pipo: set processing = 1 (pipe enabled, safe struct access)\n");
     }
     
     pr_info("tx_isp_subdev_pipo: completed successfully, returning 0\n");
-    /* Binary Ninja: return 0 */
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_subdev_pipo);
