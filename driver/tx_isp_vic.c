@@ -419,6 +419,9 @@ int tx_isp_vic_wait_frame_done(struct tx_isp_subdev *sd, int channel, int timeou
     return ret ? 0 : -ETIMEDOUT;
 }
 
+/* Forward declaration for isp_malloc_buffer */
+int isp_malloc_buffer(struct tx_isp_dev *dev, size_t size, void **virt_addr, dma_addr_t *phys_addr);
+
 int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum)
 {
     uint32_t vic_ctrl, vic_status, vic_intr, vic_addr;
@@ -460,7 +463,6 @@ int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum)
     }
 
     // Use rmem allocation instead of regular DMA allocation
-    struct tx_isp_dev *isp_dev = tx_isp_get_device();
     if (isp_dev && isp_malloc_buffer(isp_dev, buf_size, (void**)&capture_buf, &dma_addr) == 0) {
         pr_info("*** VIC: Using rmem buffer at virt=%p, phys=0x%08x ***\n", capture_buf, (uint32_t)dma_addr);
     } else {
@@ -580,7 +582,6 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
     }
 
     // Use rmem allocation instead of regular DMA allocation
-    struct tx_isp_dev *isp_dev = tx_isp_get_device();
     if (isp_dev && isp_malloc_buffer(isp_dev, buf_size, (void**)&capture_buf, &dma_addr) == 0) {
         pr_info("*** VIC: Using rmem buffer at virt=%p, phys=0x%08x ***\n", capture_buf, (uint32_t)dma_addr);
     } else {
@@ -661,6 +662,17 @@ cleanup:
     return ret;
 }
 
+/* Forward declarations */
+static ssize_t vic_proc_write(struct file *file, const char __user *buf,
+                             size_t count, loff_t *ppos);
+int vic_core_ops_init(struct tx_isp_subdev *sd, int enable);
+int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
+int isp_vic_frd_show(struct seq_file *seq, void *v);
+int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
+long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
+
 static ssize_t vic_proc_write(struct file *file, const char __user *buf,
                              size_t count, loff_t *ppos)
 {
@@ -712,15 +724,6 @@ static ssize_t vic_proc_write(struct file *file, const char __user *buf,
 
     return count;
 }
-
-/* Forward declarations */
-int vic_core_ops_init(struct tx_isp_subdev *sd, int enable);
-int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
-int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
-int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
-int isp_vic_frd_show(struct seq_file *seq, void *v);
-int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
-long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 
 /* CRITICAL: Write CSI PHY registers in CORRECT SEQUENCE matching reference driver */
 void tx_isp_vic_write_csi_phy_sequence(void)
@@ -2426,14 +2429,25 @@ static struct tx_isp_subdev_video_ops vic_video_ops = {
     .s_stream = vic_video_s_stream,
 };
 
+/* Forward declarations for functions used in structures */
+extern int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+extern int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
+extern int vic_core_ops_init(struct tx_isp_subdev *sd, int enable);
+extern int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+extern long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
+extern int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
+extern int vic_chardev_open(struct inode *inode, struct file *file);
+extern int vic_chardev_release(struct inode *inode, struct file *file);
+extern ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos);
+
 /* VIC sensor operations structure - MISSING from original implementation */
-static struct tx_isp_subdev_sensor_ops vic_sensor_ops = {
+struct tx_isp_subdev_sensor_ops vic_sensor_ops = {
     .ioctl = vic_sensor_ops_ioctl,                    /* From tx-isp-module.c */
     .sync_sensor_attr = vic_sensor_ops_sync_sensor_attr, /* From tx-isp-module.c */
 };
 
 /* VIC core operations structure - MISSING ioctl registration */
-static struct tx_isp_subdev_core_ops vic_core_ops = {
+struct tx_isp_subdev_core_ops vic_core_ops = {
     .init = vic_core_ops_init,
     .ioctl = vic_core_ops_ioctl,  /* MISSING from original! */
 };
@@ -2448,7 +2462,7 @@ EXPORT_SYMBOL(vic_subdev_ops);
 
 
 /* VIC FRD file operations - EXACT Binary Ninja implementation */
-static const struct file_operations isp_vic_frd_fops = {
+const struct file_operations isp_vic_frd_fops = {
     .owner = THIS_MODULE,
     .llseek = seq_lseek,                /* private_seq_lseek from hex dump */
     .read = seq_read,                   /* private_seq_read from hex dump */
@@ -2458,7 +2472,7 @@ static const struct file_operations isp_vic_frd_fops = {
 };
 
 /* VIC W02 proc file operations - FIXED for proper proc interface */
-static const struct file_operations isp_w02_proc_fops = {
+const struct file_operations isp_w02_proc_fops = {
     .owner = THIS_MODULE,
     .open = vic_chardev_open,
     .release = vic_chardev_release,
