@@ -506,8 +506,8 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
         }
     }
     
-    /* Binary Ninja: int32_t $v1 = 3 */
-    v1 = 3;
+    /* Binary Ninja: int32_t $v1 = 4 */
+    v1 = 4;
     
     /* Binary Ninja: if (arg2 == 0) */
     if (arg2 == 0) {
