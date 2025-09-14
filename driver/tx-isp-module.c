@@ -5970,45 +5970,37 @@ irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
-/* tx_isp_module_notify - CRITICAL: The missing notify function that handles TX_ISP_EVENT_SYNC_SENSOR_ATTR */
-static int tx_isp_module_notify(struct tx_isp_module *module, unsigned int notification, void *data)
+/* tx_isp_vic_notify - VIC-specific notify function that handles TX_ISP_EVENT_SYNC_SENSOR_ATTR */
+static int tx_isp_vic_notify(struct tx_isp_vic_device *vic_dev, unsigned int notification, void *data)
 {
-    struct tx_isp_subdev *sd;
     struct tx_isp_sensor_attribute *sensor_attr;
     int ret = 0;
     
-    pr_info("*** tx_isp_module_notify: CRITICAL notify function - notification=0x%x ***\n", notification);
+    pr_info("*** tx_isp_vic_notify: VIC notify function - notification=0x%x ***\n", notification);
     
-    if (!module) {
-        pr_err("tx_isp_module_notify: Invalid module\n");
-        return -EINVAL;
-    }
-    
-    /* Get subdev from module */
-    sd = module_to_subdev(module);
-    if (!sd) {
-        pr_err("tx_isp_module_notify: No subdev in module\n");
+    if (!vic_dev) {
+        pr_err("tx_isp_vic_notify: Invalid VIC device\n");
         return -EINVAL;
     }
     
     switch (notification) {
     case TX_ISP_EVENT_SYNC_SENSOR_ATTR: {
-        pr_info("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR: Processing sensor attribute sync ***\n");
+        pr_info("*** VIC TX_ISP_EVENT_SYNC_SENSOR_ATTR: Processing sensor attribute sync ***\n");
         
         sensor_attr = (struct tx_isp_sensor_attribute *)data;
         if (!sensor_attr) {
-            pr_err("TX_ISP_EVENT_SYNC_SENSOR_ATTR: No sensor attributes provided\n");
+            pr_err("VIC TX_ISP_EVENT_SYNC_SENSOR_ATTR: No sensor attributes provided\n");
             return -EINVAL;
         }
         
         /* Call the existing handler that has the -515 to 0 conversion */
-        ret = tx_isp_handle_sync_sensor_attr_event(sd, sensor_attr);
+        ret = tx_isp_handle_sync_sensor_attr_event(&vic_dev->sd, sensor_attr);
         
-        pr_info("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR: Handler returned %d ***\n", ret);
+        pr_info("*** VIC TX_ISP_EVENT_SYNC_SENSOR_ATTR: Handler returned %d ***\n", ret);
         return ret;
     }
     default:
-        pr_info("tx_isp_module_notify: Unhandled notification 0x%x\n", notification);
+        pr_info("tx_isp_vic_notify: Unhandled notification 0x%x\n", notification);
         return -ENOIOCTLCMD;
     }
 }
@@ -6126,6 +6118,12 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         
         /* Route to Binary Ninja vic_sensor_ops_ioctl implementation */
         return vic_sensor_ops_ioctl(&vic_dev->sd, event_type, data);
+    }
+    case TX_ISP_EVENT_SYNC_SENSOR_ATTR: { /* TX_ISP_EVENT_SYNC_SENSOR_ATTR - CRITICAL sync sensor attributes */
+        pr_info("*** VIC EVENT: TX_ISP_EVENT_SYNC_SENSOR_ATTR - CALLING VIC NOTIFY HANDLER ***\n");
+        
+        /* Route to VIC notify handler for sensor attribute sync */
+        return tx_isp_vic_notify(vic_dev, event_type, data);
     }
     case 0x3000008: { /* TX_ISP_EVENT_FRAME_QBUF - Critical buffer programming! */
         pr_info("*** VIC EVENT: QBUF (0x3000008) - PROGRAMMING BUFFER TO VIC HARDWARE ***\n");
