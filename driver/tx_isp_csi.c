@@ -719,21 +719,34 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
     pr_info("*** csi_set_on_lanes: EXACT Binary Ninja implementation ***\n");
     pr_info("csi_set_on_lanes: lanes=%d\n", lanes);
 
-    if (!ourISPdev || !ourISPdev->csi_dev) {
-        pr_err("csi_set_on_lanes: Invalid parameters\n");
-        return -EINVAL;
-    }
-
-    csi_dev = ourISPdev->csi_dev;
-    csi_base = csi_dev->csi_regs;
-
-    if (!csi_base) {
-        pr_err("csi_set_on_lanes: CSI base is NULL\n");
+    if (!csi_dev) {
+        pr_err("csi_set_on_lanes: CSI device is NULL\n");
         return -EINVAL;
     }
 
     /* Binary Ninja: void* $v1 = *(arg1 + 0xb8) */
-    /* *($v1 + 4) = ((zx.d(arg2) - 1) & 3) | (*($v1 + 4) & 0xfffffffc) */
+    /* CRITICAL FIX: Ensure CSI base is properly initialized */
+    csi_base = csi_dev->csi_regs;
+    if (!csi_base) {
+        pr_err("csi_set_on_lanes: CSI base is NULL\n");
+        
+        /* Try to initialize CSI registers if not already done */
+        if (!tx_isp_csi_regs) {
+            tx_isp_csi_regs = ioremap(0x10022000, 0x1000);
+            if (!tx_isp_csi_regs) {
+                pr_err("*** ERROR: CSI lane configuration failed: -22 ***\n");
+                return -EINVAL;
+            }
+        }
+        
+        /* Update the CSI device structure */
+        csi_dev->csi_regs = tx_isp_csi_regs;
+        csi_base = csi_dev->csi_regs;
+        
+        pr_info("CSI base address initialized: %p\n", csi_base);
+    }
+
+    /* Binary Ninja: *($v1 + 4) = ((zx.d(arg2) - 1) & 3) | (*($v1 + 4) & 0xfffffffc) */
     reg_val = readl(csi_base + 4);
     reg_val = (reg_val & 0xfffffffc) | ((lanes - 1) & 3);
     writel(reg_val, csi_base + 4);
