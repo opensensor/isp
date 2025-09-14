@@ -2052,40 +2052,65 @@ static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sen
 }
 
 /**
- * isp_malloc_buffer - Allocate DMA-coherent buffer for ISP processing
- * This fixes the missing buffer addresses issue (VIC buffer writes showing 0x0)
+ * isp_malloc_buffer - Allocate buffer from reserved memory (rmem) for ISP processing
+ * This fixes the memory exhaustion issue by using reserved kernel rmem instead of regular allocation
  */
 static int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr)
 {
+    static size_t rmem_offset = 0;
     void *virt;
-    dma_addr_t dma;
+    dma_addr_t phys;
     
     if (!isp || !virt_addr || !phys_addr || size == 0) {
         ISP_ERROR("isp_malloc_buffer: Invalid parameters\n");
         return -EINVAL;
     }
     
-    /* Allocate DMA-coherent memory */
-    virt = dma_alloc_coherent(isp->dev, size, &dma, GFP_KERNEL);
+    /* Initialize reserved memory if not already done */
+    if (isp->rmem_addr == 0) {
+        /* Use the reserved memory address from kernel boot logs: 0x06300000 */
+        isp->rmem_addr = 0x06300000;
+        isp->rmem_size = 30408704; /* Size from boot logs */
+        rmem_offset = 0;
+        
+        ISP_INFO("*** isp_malloc_buffer: Initialized rmem at 0x%08x, size=%zu ***\n",
+                 (uint32_t)isp->rmem_addr, isp->rmem_size);
+    }
+    
+    /* Check if we have enough reserved memory left */
+    if (rmem_offset + size > isp->rmem_size) {
+        ISP_ERROR("*** isp_malloc_buffer: Not enough rmem space (need %u, have %zu) ***\n", 
+                  size, isp->rmem_size - rmem_offset);
+        return -ENOMEM;
+    }
+    
+    /* Allocate from reserved memory */
+    phys = isp->rmem_addr + rmem_offset;
+    virt = ioremap(phys, size);
     if (!virt) {
-        ISP_ERROR("*** isp_malloc_buffer: Failed to allocate %d bytes ***\n", size);
+        ISP_ERROR("*** isp_malloc_buffer: Failed to map rmem at 0x%08x ***\n", (uint32_t)phys);
         return -ENOMEM;
     }
     
     /* Clear the allocated memory */
     memset(virt, 0, size);
     
-    *virt_addr = virt;
-    *phys_addr = dma;
+    /* Update offset for next allocation */
+    rmem_offset += ALIGN(size, PAGE_SIZE);
     
-    ISP_INFO("*** isp_malloc_buffer: Allocated %d bytes at virt=%p, phys=0x%08x ***\n",
-             size, virt, (uint32_t)dma);
+    *virt_addr = virt;
+    *phys_addr = phys;
+    
+    ISP_INFO("*** isp_malloc_buffer: Allocated %d bytes from rmem at virt=%p, phys=0x%08x ***\n",
+             size, virt, (uint32_t)phys);
+    ISP_INFO("*** isp_malloc_buffer: rmem usage: %zu/%zu bytes (%.1f%%) ***\n",
+             rmem_offset, isp->rmem_size, (float)rmem_offset * 100.0 / isp->rmem_size);
     
     return 0;
 }
 
 /**
- * isp_free_buffer - Free DMA-coherent buffer
+ * isp_free_buffer - Free buffer from reserved memory (rmem)
  */
 static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size)
 {
@@ -2094,9 +2119,10 @@ static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t p
         return -EINVAL;
     }
     
-    dma_free_coherent(isp->dev, size, virt_addr, phys_addr);
+    /* For rmem, we just unmap the virtual address */
+    iounmap(virt_addr);
     
-    ISP_INFO("*** isp_free_buffer: Freed %d bytes at virt=%p, phys=0x%08x ***\n",
+    ISP_INFO("*** isp_free_buffer: Freed %d bytes from rmem at virt=%p, phys=0x%08x ***\n",
              size, virt_addr, (uint32_t)phys_addr);
     
     return 0;

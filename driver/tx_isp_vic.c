@@ -459,11 +459,16 @@ int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum)
         return -ENOMEM;
     }
 
-    // Always allocate fresh buffer
-    capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
-    if (!capture_buf) {
-        pr_err("Failed to allocate DMA buffer\n");
-        iounmap(vic_base);
+    // Use rmem allocation instead of regular DMA allocation
+    struct tx_isp_dev *isp_dev = tx_isp_get_device();
+    if (isp_dev && isp_malloc_buffer(isp_dev, buf_size, (void**)&capture_buf, &dma_addr) == 0) {
+        pr_info("*** VIC: Using rmem buffer at virt=%p, phys=0x%08x ***\n", capture_buf, (uint32_t)dma_addr);
+    } else {
+        pr_err("Failed to allocate rmem buffer, falling back to DMA\n");
+        capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
+        if (!capture_buf) {
+            pr_err("Failed to allocate DMA buffer\n");
+            iounmap(vic_base);
         return -ENOMEM;
     }
     // Read original register values
@@ -574,11 +579,16 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
         return -ENOMEM;
     }
 
-    // Allocate DMA-able buffer
-    capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
-    if (!capture_buf) {
-        pr_err("Failed to allocate DMA buffer\n");
-        iounmap(vic_base);
+    // Use rmem allocation instead of regular DMA allocation
+    struct tx_isp_dev *isp_dev = tx_isp_get_device();
+    if (isp_dev && isp_malloc_buffer(isp_dev, buf_size, (void**)&capture_buf, &dma_addr) == 0) {
+        pr_info("*** VIC: Using rmem buffer at virt=%p, phys=0x%08x ***\n", capture_buf, (uint32_t)dma_addr);
+    } else {
+        pr_err("Failed to allocate rmem buffer, falling back to DMA\n");
+        capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
+        if (!capture_buf) {
+            pr_err("Failed to allocate DMA buffer\n");
+            iounmap(vic_base);
         return -ENOMEM;
     }
 
