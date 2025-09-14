@@ -408,18 +408,24 @@ int tx_isp_vin_reset(struct tx_isp_subdev *sd, int on)
  * @sd: Subdev structure
  * @enable: Enable/disable streaming
  *
- * FIXED: Proper state transitions and sensor connection
+ * FIXED: Proper struct-based state validation matching T30/T31 reference
  */
 int vin_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
-    struct tx_isp_sensor *sensor = vin->active;
+    struct tx_isp_sensor *sensor;
     int ret = 0;
     u32 ctrl_val;
 
-    mcp_log_info("vin_s_stream: called", enable);
+    if (!vin) {
+        mcp_log_error("vin_s_stream: invalid VIN device", 0);
+        return -EINVAL;
+    }
 
-    /* CRITICAL FIX: Check current state properly */
+    mcp_log_info("vin_s_stream: called", enable);
+    mcp_log_info("vin_s_stream: current VIN state", vin->state);
+
+    /* CRITICAL FIX: Proper state validation using struct members only */
     if (enable) {
         /* streamon - check if already running */
         if (vin->state == TX_ISP_MODULE_RUNNING) {
@@ -427,7 +433,7 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
             return 0;
         }
         
-        /* CRITICAL FIX: Must be in INIT state to start streaming */
+        /* CRITICAL FIX: Must be in INIT state to start streaming - matches T30 reference */
         if (vin->state != TX_ISP_MODULE_INIT) {
             mcp_log_error("vin_s_stream: invalid state for streaming", vin->state);
             return -EINVAL;
@@ -440,36 +446,43 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
-    /* CRITICAL FIX: Get active sensor from ISP device if not set */
+    /* CRITICAL FIX: Get active sensor using struct member access only */
+    sensor = vin->active;
     if (!sensor && sd->isp) {
         struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)sd->isp;
         if (isp_dev && isp_dev->sensor) {
             sensor = isp_dev->sensor;
-            vin->active = sensor;  /* Connect sensor to VIN */
+            vin->active = sensor;  /* Connect sensor to VIN using struct member */
             mcp_log_info("vin_s_stream: connected sensor to VIN", 0);
         }
     }
 
-    /* Call sensor streaming first - CRITICAL: This must succeed before state change */
-    if (sensor && is_valid_kernel_pointer(sensor)) {
-        if (sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
-            mcp_log_info("vin_s_stream: calling sensor s_stream", enable);
-            ret = sensor->sd.ops->video->s_stream(&sensor->sd, enable);
-            if (ret && ret != -0x203) {
-                mcp_log_error("vin_s_stream: sensor streaming failed", ret);
-                return ret;
-            }
-            mcp_log_info("vin_s_stream: sensor streaming call completed", ret);
-        } else {
-            mcp_log_error("vin_s_stream: sensor has no s_stream function", 0);
-            return -ENODEV;
-        }
-    } else {
+    /* Validate sensor pointer before use */
+    if (!sensor) {
         mcp_log_error("vin_s_stream: no active sensor available", 0);
         return -ENODEV;
     }
 
-    /* CRITICAL: Only change VIN state AFTER sensor streaming succeeds */
+    if (!is_valid_kernel_pointer(sensor)) {
+        mcp_log_error("vin_s_stream: invalid sensor pointer", (u32)sensor);
+        return -EFAULT;
+    }
+
+    /* Call sensor streaming first - matches T30/T31 pattern */
+    if (sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
+        mcp_log_info("vin_s_stream: calling sensor s_stream", enable);
+        ret = sensor->sd.ops->video->s_stream(&sensor->sd, enable);
+        if (ret && ret != -0x203) {
+            mcp_log_error("vin_s_stream: sensor streaming failed", ret);
+            return ret;
+        }
+        mcp_log_info("vin_s_stream: sensor streaming completed", ret);
+    } else {
+        mcp_log_error("vin_s_stream: sensor has no s_stream function", 0);
+        return -ENODEV;
+    }
+
+    /* CRITICAL: Only change VIN state AFTER sensor streaming succeeds - matches T30/T31 */
     if (ret == 0 || ret == -0x203) {
         if (enable) {
             /* Start VIN hardware before setting state */
@@ -480,15 +493,10 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
                 mcp_log_info("vin_s_stream: VIN hardware started", ctrl_val);
             }
             
-            /* CRITICAL FIX: Set state to RUNNING (5) - THIS FIXES THE STATE TRANSITION! */
+            /* CRITICAL FIX: Set VIN state to RUNNING using struct member access */
             vin->state = TX_ISP_MODULE_RUNNING;
-            mcp_log_info("vin_s_stream: *** VIN STATE TRANSITION: INIT -> RUNNING (5) ***", vin->state);
+            mcp_log_info("vin_s_stream: *** VIN STATE: INIT -> RUNNING ***", vin->state);
             
-            /* CRITICAL FIX: Also update sensor subdev state */
-            if (sensor) {
-                sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
-                mcp_log_info("vin_s_stream: sensor subdev state set to RUNNING", sensor->sd.vin_state);
-            }
         } else {
             /* Stop VIN hardware */
             if (vin->base) {
@@ -504,20 +512,14 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
                 mcp_log_info("vin_s_stream: VIN hardware stopped", ctrl_val);
             }
             
-            /* Set state back to INIT */
+            /* Set VIN state back to INIT using struct member access */
             vin->state = TX_ISP_MODULE_INIT;
             mcp_log_info("vin_s_stream: VIN state set to INIT", vin->state);
-            
-            /* Update sensor subdev state */
-            if (sensor) {
-                sensor->sd.vin_state = TX_ISP_MODULE_INIT;
-                mcp_log_info("vin_s_stream: sensor subdev state set to INIT", sensor->sd.vin_state);
-            }
         }
         ret = 0;  /* Force success if sensor returned -0x203 */
     }
 
-    mcp_log_info("vin_s_stream: final state", vin->state);
+    mcp_log_info("vin_s_stream: final VIN state", vin->state);
     return ret;
 }
 
