@@ -1935,7 +1935,7 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
         
         /* Fix corrupted dimensions - assume GC2053 sensor */
         sensor_attr->total_width = 2200;
-        sensor_attr->total_height = 1125;
+        sensor_attr->total_height = 1418;  /* FIXED: Use correct GC2053 height from sensor */
         
         ISP_INFO("*** ispcore_core_ops_init: CORRECTED to %dx%d ***\n",
                  sensor_attr->total_width, sensor_attr->total_height);
@@ -2024,7 +2024,7 @@ static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sen
         
         /* Default to common HD resolution */
         sensor_attr->total_width = 2200;  /* GC2053 total width */
-        sensor_attr->total_height = 1125; /* GC2053 total height */
+        sensor_attr->total_height = 1418; /* GC2053 total height - FIXED to match sensor */
         
         ISP_INFO("*** CORRECTED DIMENSIONS: %dx%d ***\n",
                  sensor_attr->total_width, sensor_attr->total_height);
@@ -4215,7 +4215,7 @@ int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev)
     
     /* Calculate frame size based on sensor dimensions */
     u32 width = dev->sensor_width ? dev->sensor_width : 2200;  /* Default GC2053 width */
-    u32 height = dev->sensor_height ? dev->sensor_height : 1125; /* Default GC2053 height */
+    u32 height = dev->sensor_height ? dev->sensor_height : 1418; /* Default GC2053 height - FIXED */
     frame_size = width * height * 2; /* Assume 16-bit per pixel */
     
     pr_info("isp_trigger_frame_data_transfer: Frame size %dx%d = %u bytes\n", 
