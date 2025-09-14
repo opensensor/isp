@@ -41,12 +41,16 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     
     pr_info("*** tx_isp_create_vic_device: Creating VIC device structure ***\n");
     
-    /* Allocate VIC device structure - same size as Binary Ninja tx_isp_vic_probe (0x21c bytes) */
-    vic_dev = kzalloc(0x21c, GFP_KERNEL);
-    if (!vic_dev) {
-        pr_err("tx_isp_create_vic_device: Failed to allocate VIC device (0x21c bytes)\n");
+    /* FIXED: Use rmem allocation instead of regular kzalloc to prevent memory exhaustion */
+    void *vic_dev_virt;
+    dma_addr_t vic_dev_phys;
+    
+    if (isp_malloc_buffer(isp_dev, 0x21c, &vic_dev_virt, &vic_dev_phys) != 0) {
+        pr_err("tx_isp_create_vic_device: Failed to allocate VIC device from rmem (0x21c bytes)\n");
         return -ENOMEM;
     }
+    
+    vic_dev = (struct tx_isp_vic_device *)vic_dev_virt;
     
     /* Clear the structure */
     memset(vic_dev, 0, 0x21c);
@@ -117,8 +121,14 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* *** CRITICAL: Initialize VIC hardware buffers for QBUF operations *** */
     pr_info("*** CRITICAL: Allocating VIC hardware buffers to prevent 'bank no free' ***\n");
     for (int i = 0; i < 8; i++) {  /* Allocate 8 free buffers like reference driver */
-        /* Allocate buffer descriptor that can hold buffer address + metadata */
-        struct list_head *buffer_desc = kzalloc(sizeof(struct list_head) + 64, GFP_KERNEL);
+        /* FIXED: Use rmem allocation for buffer descriptors to prevent memory exhaustion */
+        void *buffer_desc_virt;
+        dma_addr_t buffer_desc_phys;
+        struct list_head *buffer_desc = NULL;
+        
+        if (isp_malloc_buffer(isp_dev, sizeof(struct list_head) + 64, &buffer_desc_virt, &buffer_desc_phys) == 0) {
+            buffer_desc = (struct list_head *)buffer_desc_virt;
+        }
         if (buffer_desc) {
             /* Initialize the buffer with dummy data for now */
             uint32_t *buffer_data = (uint32_t *)((char *)buffer_desc + sizeof(struct list_head));

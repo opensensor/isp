@@ -1350,24 +1350,27 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
     /* Binary Ninja: memcpy(&sensor_info, arg1, 0x60) */
     memcpy(&sensor_info, sensor_attr, min(sizeof(sensor_info), sizeof(*sensor_attr)));
 
-    /* Binary Ninja: uint32_t $v0 = private_vmalloc(0x137f0) */
-    tparams_day = vmalloc(0x137f0);
-    if (!tparams_day) {
-        pr_err("tisp_init: Failed to allocate tparams_day\n");
+    /* FIXED: Use rmem allocation instead of vmalloc to prevent memory exhaustion */
+    /* Binary Ninja: uint32_t $v0 = private_vmalloc(0x137f0) - Use rmem instead */
+    void *tparams_day_virt;
+    dma_addr_t tparams_day_phys;
+    if (isp_malloc_buffer(isp_dev, 0x137f0, &tparams_day_virt, &tparams_day_phys) != 0) {
+        pr_err("tisp_init: Failed to allocate tparams_day from rmem\n");
         return -ENOMEM;
     }
-    /* Binary Ninja: memset($v0, 0, 0x137f0) */
-    memset(tparams_day, 0, 0x137f0);
+    tparams_day = tparams_day_virt;
+    /* Binary Ninja: memset($v0, 0, 0x137f0) - already cleared by isp_malloc_buffer */
 
-    /* Binary Ninja: uint32_t $v0_1 = private_vmalloc(0x137f0) */
-    tparams_night = vmalloc(0x137f0);
-    if (!tparams_night) {
-        pr_err("tisp_init: Failed to allocate tparams_night\n");
-        vfree(tparams_day);
+    /* Binary Ninja: uint32_t $v0_1 = private_vmalloc(0x137f0) - Use rmem instead */
+    void *tparams_night_virt;
+    dma_addr_t tparams_night_phys;
+    if (isp_malloc_buffer(isp_dev, 0x137f0, &tparams_night_virt, &tparams_night_phys) != 0) {
+        pr_err("tisp_init: Failed to allocate tparams_night from rmem\n");
+        isp_free_buffer(isp_dev, tparams_day_virt, tparams_day_phys, 0x137f0);
         return -ENOMEM;
     }
-    /* Binary Ninja: memset($v0_1, 0, 0x137f0) */
-    memset(tparams_night, 0, 0x137f0);
+    tparams_night = tparams_night_virt;
+    /* Binary Ninja: memset($v0_1, 0, 0x137f0) - already cleared by isp_malloc_buffer */
 
     /* Binary Ninja: if (strlen(arg2) == 0) snprintf(arg2, 0x40, "snapraw", 0xb2e24) */
     if (strlen(snap_name) == 0) {

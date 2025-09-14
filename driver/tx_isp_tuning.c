@@ -2020,9 +2020,23 @@ int tisp_code_tuning_open(struct inode *inode, struct file *file)
 {
     pr_info("ISP M0 device open called from pid %d\n", current->pid);
     
-    /* REFERENCE DRIVER: Direct implementation from Binary Ninja decompilation */
-    /* uint32_t $v0 = private_kmalloc(0x500c, 0xd0) */
-    void *tuning_buffer = kmalloc(0x500c, GFP_KERNEL | __GFP_DMA32);
+    /* FIXED: Use rmem allocation instead of kmalloc to prevent memory exhaustion */
+    /* uint32_t $v0 = private_kmalloc(0x500c, 0xd0) - Use rmem instead */
+    extern struct tx_isp_dev *ourISPdev;
+    void *tuning_buffer_virt;
+    dma_addr_t tuning_buffer_phys;
+    
+    if (!ourISPdev) {
+        pr_err("tisp_code_tuning_open: No ISP device available for rmem allocation\n");
+        return -ENODEV;
+    }
+    
+    if (isp_malloc_buffer(ourISPdev, 0x500c, &tuning_buffer_virt, &tuning_buffer_phys) != 0) {
+        pr_err("tisp_code_tuning_open: Failed to allocate tuning buffer from rmem (0x%x bytes)\n", 0x500c);
+        return -ENOMEM;
+    }
+    
+    void *tuning_buffer = tuning_buffer_virt;
     
     /* CRITICAL: Verify allocation success */
     if (!tuning_buffer) {
