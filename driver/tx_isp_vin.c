@@ -343,8 +343,9 @@ int tx_isp_vin_init(struct tx_isp_subdev *sd, int on)
             return ret;
         }
         
-        vin->state = TX_ISP_MODULE_INIT;
-        mcp_log_info("vin_init: initialization complete", vin->state);
+        /* CRITICAL FIX: T31 Binary Ninja expects VIN state 4 for streaming readiness */
+        vin->state = 4;  /* T31 ready-for-streaming state */
+        mcp_log_info("vin_init: initialization complete - VIN ready for streaming", vin->state);
         
         /* Initialize active sensor if present */
         if (sensor && is_valid_kernel_pointer(sensor)) {
@@ -408,7 +409,7 @@ int tx_isp_vin_reset(struct tx_isp_subdev *sd, int on)
  * @sd: Subdev structure
  * @enable: Enable/disable streaming
  *
- * FIXED: Proper struct-based state validation matching T30/T31 reference
+ * FIXED: T31 Binary Ninja exact implementation with proper state validation
  */
 int vin_s_stream(struct tx_isp_subdev *sd, int enable)
 {
@@ -425,22 +426,19 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     mcp_log_info("vin_s_stream: called", enable);
     mcp_log_info("vin_s_stream: current VIN state", vin->state);
 
-    /* CRITICAL FIX: Proper state validation using struct members only */
+    /* CRITICAL FIX: T31 Binary Ninja state validation - checks for state 4 at offset 0xf4 */
     if (enable) {
-        /* streamon - check if already running */
-        if (vin->state == TX_ISP_MODULE_RUNNING) {
-            mcp_log_info("vin_s_stream: already streaming", vin->state);
-            return 0;
-        }
-        
-        /* CRITICAL FIX: Must be in INIT state to start streaming - matches T30 reference */
-        if (vin->state != TX_ISP_MODULE_INIT) {
+        /* Binary Ninja: if (*(arg1 + 0xf4) != 4) return -22 */
+        /* T31 expects state 4 for streaming enable */
+        if (vin->state != 4) {
             mcp_log_error("vin_s_stream: invalid state for streaming", vin->state);
+            mcp_log_info("vin_s_stream: T31 expects state 4 for streaming", 4);
             return -EINVAL;
         }
+        mcp_log_info("vin_s_stream: T31 state validation passed", vin->state);
     } else {
-        /* streamoff - check if already stopped */
-        if (vin->state != TX_ISP_MODULE_RUNNING) {
+        /* streamoff - T31 allows streaming disable from running state */
+        if (vin->state != TX_ISP_MODULE_RUNNING && vin->state != 4) {
             mcp_log_info("vin_s_stream: already stopped", vin->state);
             return 0;
         }
@@ -482,7 +480,7 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
         return -ENODEV;
     }
 
-    /* CRITICAL: Only change VIN state AFTER sensor streaming succeeds - matches T30/T31 */
+    /* CRITICAL: T31 Binary Ninja state transitions - sets state 4 for enable, 3 for disable */
     if (ret == 0 || ret == -0x203) {
         if (enable) {
             /* Start VIN hardware before setting state */
@@ -493,9 +491,10 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
                 mcp_log_info("vin_s_stream: VIN hardware started", ctrl_val);
             }
             
-            /* CRITICAL FIX: Set VIN state to RUNNING using struct member access */
-            vin->state = TX_ISP_MODULE_RUNNING;
-            mcp_log_info("vin_s_stream: *** VIN STATE: INIT -> RUNNING ***", vin->state);
+            /* CRITICAL FIX: T31 Binary Ninja sets state to 4 for streaming enable */
+            /* Binary Ninja: *(arg1 + 0xf4) = 4 */
+            vin->state = 4;
+            mcp_log_info("vin_s_stream: *** VIN STATE SET TO 4 (T31 STREAMING) ***", vin->state);
             
         } else {
             /* Stop VIN hardware */
@@ -512,9 +511,10 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
                 mcp_log_info("vin_s_stream: VIN hardware stopped", ctrl_val);
             }
             
-            /* Set VIN state back to INIT using struct member access */
-            vin->state = TX_ISP_MODULE_INIT;
-            mcp_log_info("vin_s_stream: VIN state set to INIT", vin->state);
+            /* CRITICAL FIX: T31 Binary Ninja sets state to 3 for streaming disable */
+            /* Binary Ninja: *(arg1 + 0xf4) = 3 */
+            vin->state = 3;
+            mcp_log_info("vin_s_stream: *** VIN STATE SET TO 3 (T31 NON-STREAMING) ***", vin->state);
         }
         ret = 0;  /* Force success if sensor returned -0x203 */
     }
