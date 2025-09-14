@@ -6698,33 +6698,30 @@ static int sensor_subdev_core_g_chip_ident(struct tx_isp_subdev *sd, struct tx_i
 static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_sensor *sensor;
-    struct tx_isp_dev *isp_dev;
+    struct tx_isp_dev *isp_dev = ourISPdev;
     int ret = 0;
 
     pr_info("*** ISP SENSOR WRAPPER s_stream: enable=%d ***\n", enable);
 
     /* STEP 1: Do the ISP's own sensor management work */
-    if (sd && sd->isp) {
-        isp_dev = (struct tx_isp_dev*)sd->isp;
-        sensor = isp_dev->sensor;
-        if (sensor) {
-            pr_info("*** ISP: Setting up ISP-side for sensor %s streaming=%d ***\n",
-                    sensor->info.name, enable);
+    sensor = isp_dev->sensor;
+    if (sensor) {
+        pr_info("*** ISP: Setting up ISP-side for sensor %s streaming=%d ***\n",
+                sensor->info.name, enable);
 
-            if (enable) {
-                /* Any ISP-specific sensor configuration */
-                if (sensor->video.attr) {
-                    if (sensor->video.attr->dbus_type == 1) {
-                        pr_info("ISP: Configuring for DVP interface\n");
-                        /* DVP-specific ISP setup */
-                    } else if (sensor->video.attr->dbus_type == 2) {
-                        pr_info("ISP: Configuring for MIPI interface\n");
-                        /* MIPI-specific ISP setup */
-                    }
+        if (enable) {
+            /* Any ISP-specific sensor configuration */
+            if (sensor->video.attr) {
+                if (sensor->video.attr->dbus_type == 1) {
+                    pr_info("ISP: Configuring for DVP interface\n");
+                    /* DVP-specific ISP setup */
+                } else if (sensor->video.attr->dbus_type == 2) {
+                    pr_info("ISP: Configuring for MIPI interface\n");
+                    /* MIPI-specific ISP setup */
                 }
-            } else {
-                pr_info("ISP: Sensor streaming disabled\n");
             }
+        } else {
+            pr_info("ISP: Sensor streaming disabled\n");
         }
     }
 
