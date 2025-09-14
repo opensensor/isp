@@ -439,18 +439,14 @@ int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum)
         return -ENOMEM;
     }
 
-    // Use rmem allocation instead of regular DMA allocation
-    if (isp_dev && isp_malloc_buffer(isp_dev, buf_size, (void**)&capture_buf, &dma_addr) == 0) {
-        pr_info("*** VIC: Using rmem buffer at virt=%p, phys=0x%08x ***\n", capture_buf, (uint32_t)dma_addr);
-    } else {
-        pr_err("Failed to allocate rmem buffer, falling back to DMA\n");
-        capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
-        if (!capture_buf) {
-            pr_err("Failed to allocate DMA buffer\n");
-            iounmap(vic_base);
-            return -ENOMEM;
-        }
+    // FIXED: Use regular DMA allocation instead of precious rmem
+    capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
+    if (!capture_buf) {
+        pr_err("Failed to allocate DMA buffer\n");
+        iounmap(vic_base);
+        return -ENOMEM;
     }
+    pr_info("*** VIC: Using DMA buffer at virt=%p, phys=0x%08x (FIXED: no more rmem usage) ***\n", capture_buf, (uint32_t)dma_addr);
     // Read original register values
     vic_ctrl = readl(vic_base + 0x7810);
     vic_status = readl(vic_base + 0x7814);
@@ -560,20 +556,15 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
         return -ENOMEM;
     }
 
-    // Use rmem allocation instead of regular DMA allocation
-    if (isp_dev && isp_malloc_buffer(isp_dev, buf_size, (void**)&capture_buf, &dma_addr) == 0) {
-        pr_info("*** VIC: Using rmem buffer at virt=%p, phys=0x%08x ***\n", capture_buf, (uint32_t)dma_addr);
-        using_rmem = true;
-    } else {
-        pr_err("Failed to allocate rmem buffer, falling back to DMA\n");
-        capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
-        if (!capture_buf) {
-            pr_err("Failed to allocate DMA buffer\n");
-            iounmap(vic_base);
-            return -ENOMEM;
-        }
-        using_rmem = false;
+    // FIXED: Use regular DMA allocation instead of precious rmem
+    capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
+    if (!capture_buf) {
+        pr_err("Failed to allocate DMA buffer\n");
+        iounmap(vic_base);
+        return -ENOMEM;
     }
+    using_rmem = false;
+    pr_info("*** VIC: Using DMA buffer at virt=%p, phys=0x%08x (FIXED: no more rmem usage) ***\n", capture_buf, (uint32_t)dma_addr);
 
     // Read original register values
     vic_ctrl = readl(vic_base + 0x7810);

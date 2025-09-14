@@ -1350,27 +1350,25 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
     /* Binary Ninja: memcpy(&sensor_info, arg1, 0x60) */
     memcpy(&sensor_info, sensor_attr, min(sizeof(sensor_info), sizeof(*sensor_attr)));
 
-    /* FIXED: Use rmem allocation instead of vmalloc to prevent memory exhaustion */
-    /* Binary Ninja: uint32_t $v0 = private_vmalloc(0x137f0) - Use rmem instead */
-    void *tparams_day_virt;
-    dma_addr_t tparams_day_phys;
-    if (isp_malloc_buffer(isp_dev, 0x137f0, &tparams_day_virt, &tparams_day_phys) != 0) {
-        pr_err("tisp_init: Failed to allocate tparams_day from rmem\n");
+    /* FIXED: Use regular kernel memory instead of precious rmem to prevent exhaustion */
+    /* Binary Ninja: uint32_t $v0 = private_vmalloc(0x137f0) - Use vmalloc as reference intended */
+    tparams_day = vmalloc(0x137f0);
+    if (!tparams_day) {
+        pr_err("tisp_init: Failed to allocate tparams_day from kernel memory\n");
         return -ENOMEM;
     }
-    tparams_day = tparams_day_virt;
-    /* Binary Ninja: memset($v0, 0, 0x137f0) - already cleared by isp_malloc_buffer */
+    /* Binary Ninja: memset($v0, 0, 0x137f0) */
+    memset(tparams_day, 0, 0x137f0);
 
-    /* Binary Ninja: uint32_t $v0_1 = private_vmalloc(0x137f0) - Use rmem instead */
-    void *tparams_night_virt;
-    dma_addr_t tparams_night_phys;
-    if (isp_malloc_buffer(isp_dev, 0x137f0, &tparams_night_virt, &tparams_night_phys) != 0) {
-        pr_err("tisp_init: Failed to allocate tparams_night from rmem\n");
-        isp_free_buffer(isp_dev, tparams_day_virt, tparams_day_phys, 0x137f0);
+    /* Binary Ninja: uint32_t $v0_1 = private_vmalloc(0x137f0) - Use vmalloc as reference intended */
+    tparams_night = vmalloc(0x137f0);
+    if (!tparams_night) {
+        pr_err("tisp_init: Failed to allocate tparams_night from kernel memory\n");
+        vfree(tparams_day);
         return -ENOMEM;
     }
-    tparams_night = tparams_night_virt;
-    /* Binary Ninja: memset($v0_1, 0, 0x137f0) - already cleared by isp_malloc_buffer */
+    /* Binary Ninja: memset($v0_1, 0, 0x137f0) */
+    memset(tparams_night, 0, 0x137f0);
 
     /* Binary Ninja: if (strlen(arg2) == 0) snprintf(arg2, 0x40, "snapraw", 0xb2e24) */
     if (strlen(snap_name) == 0) {
@@ -1608,11 +1606,15 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
     }
     wmb();
 
-    /* FIXED: Use rmem allocation instead of regular kernel memory to prevent exhaustion */
-    /* Buffer allocation 1: Use isp_malloc_buffer for rmem allocation (0x6000 bytes) */
-    void *isp_buf1;
-    dma_addr_t isp_buf1_phys;
-    if (isp_malloc_buffer(isp_dev, 0x6000, &isp_buf1, &isp_buf1_phys) == 0) {
+    /* FIXED: Use regular kernel memory instead of precious rmem to save memory for VBMPool0 */
+    /* These ISP buffers can use regular memory since they're not part of the critical video path */
+    
+    /* Buffer allocation 1: Use vmalloc for ISP processing buffer (0x6000 bytes) */
+    void *isp_buf1 = vmalloc(0x6000);
+    if (isp_buf1) {
+        dma_addr_t isp_buf1_phys = virt_to_phys(isp_buf1);
+        memset(isp_buf1, 0, 0x6000);
+        
         /* Binary Ninja: system_reg_write(0xa02c, $v0_14 - 0x80000000) etc. */
         writel(isp_buf1_phys, isp_regs + 0xa02c);
         writel(isp_buf1_phys + 0x1000, isp_regs + 0xa030);
@@ -1624,16 +1626,18 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
         writel(isp_buf1_phys + 0x5800, isp_regs + 0xa048);
         writel(0x33, isp_regs + 0xa04c);
         wmb();
-        pr_info("tisp_init: ISP buffer 1 allocated from rmem and configured (0x6000 bytes)\n");
+        pr_info("tisp_init: ISP buffer 1 allocated from kernel memory (0x6000 bytes)\n");
     } else {
-        pr_err("tisp_init: Failed to allocate ISP buffer 1 from rmem\n");
+        pr_err("tisp_init: Failed to allocate ISP buffer 1 from kernel memory\n");
         return -ENOMEM;
     }
 
-    /* Buffer allocation 2: Use isp_malloc_buffer for rmem allocation (0x6000 bytes) */
-    void *isp_buf2;
-    dma_addr_t isp_buf2_phys;
-    if (isp_malloc_buffer(isp_dev, 0x6000, &isp_buf2, &isp_buf2_phys) == 0) {
+    /* Buffer allocation 2: Use vmalloc for ISP processing buffer (0x6000 bytes) */
+    void *isp_buf2 = vmalloc(0x6000);
+    if (isp_buf2) {
+        dma_addr_t isp_buf2_phys = virt_to_phys(isp_buf2);
+        memset(isp_buf2, 0, 0x6000);
+        
         writel(isp_buf2_phys, isp_regs + 0xa82c);
         writel(isp_buf2_phys + 0x1000, isp_regs + 0xa830);
         writel(isp_buf2_phys + 0x2000, isp_regs + 0xa834);
@@ -1644,80 +1648,90 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
         writel(isp_buf2_phys + 0x5800, isp_regs + 0xa848);
         writel(0x33, isp_regs + 0xa84c);
         wmb();
-        pr_info("tisp_init: ISP buffer 2 allocated from rmem and configured (0x6000 bytes)\n");
+        pr_info("tisp_init: ISP buffer 2 allocated from kernel memory (0x6000 bytes)\n");
     } else {
-        pr_err("tisp_init: Failed to allocate ISP buffer 2 from rmem\n");
+        pr_err("tisp_init: Failed to allocate ISP buffer 2 from kernel memory\n");
         return -ENOMEM;
     }
 
-    /* Buffer allocation 3: Use isp_malloc_buffer for rmem allocation (0x4000 bytes) */
-    void *isp_buf3;
-    dma_addr_t isp_buf3_phys;
-    if (isp_malloc_buffer(isp_dev, 0x4000, &isp_buf3, &isp_buf3_phys) == 0) {
+    /* Buffer allocation 3: Use vmalloc for ISP processing buffer (0x4000 bytes) */
+    void *isp_buf3 = vmalloc(0x4000);
+    if (isp_buf3) {
+        dma_addr_t isp_buf3_phys = virt_to_phys(isp_buf3);
+        memset(isp_buf3, 0, 0x4000);
+        
         writel(isp_buf3_phys, isp_regs + 0xb03c);
         writel(isp_buf3_phys + 0x1000, isp_regs + 0xb040);
         writel(isp_buf3_phys + 0x2000, isp_regs + 0xb044);
         writel(isp_buf3_phys + 0x3000, isp_regs + 0xb048);
         writel(3, isp_regs + 0xb04c);
         wmb();
-        pr_info("tisp_init: ISP buffer 3 allocated from rmem and configured (0x4000 bytes)\n");
+        pr_info("tisp_init: ISP buffer 3 allocated from kernel memory (0x4000 bytes)\n");
     } else {
-        pr_err("tisp_init: Failed to allocate ISP buffer 3 from rmem\n");
+        pr_err("tisp_init: Failed to allocate ISP buffer 3 from kernel memory\n");
         return -ENOMEM;
     }
 
-    /* Buffer allocation 4: Use isp_malloc_buffer for rmem allocation (0x4000 bytes) */
-    void *isp_buf4;
-    dma_addr_t isp_buf4_phys;
-    if (isp_malloc_buffer(isp_dev, 0x4000, &isp_buf4, &isp_buf4_phys) == 0) {
+    /* Buffer allocation 4: Use vmalloc for ISP processing buffer (0x4000 bytes) */
+    void *isp_buf4 = vmalloc(0x4000);
+    if (isp_buf4) {
+        dma_addr_t isp_buf4_phys = virt_to_phys(isp_buf4);
+        memset(isp_buf4, 0, 0x4000);
+        
         writel(isp_buf4_phys, isp_regs + 0x4494);
         writel(isp_buf4_phys + 0x1000, isp_regs + 0x4498);
         writel(isp_buf4_phys + 0x2000, isp_regs + 0x449c);
         writel(isp_buf4_phys + 0x3000, isp_regs + 0x44a0);
         writel(3, isp_regs + 0x4490);
         wmb();
-        pr_info("tisp_init: ISP buffer 4 allocated from rmem and configured (0x4000 bytes)\n");
+        pr_info("tisp_init: ISP buffer 4 allocated from kernel memory (0x4000 bytes)\n");
     } else {
-        pr_err("tisp_init: Failed to allocate ISP buffer 4 from rmem\n");
+        pr_err("tisp_init: Failed to allocate ISP buffer 4 from kernel memory\n");
         return -ENOMEM;
     }
 
-    /* Buffer allocation 5: Use isp_malloc_buffer for rmem allocation (0x4000 bytes) */
-    void *isp_buf5;
-    dma_addr_t isp_buf5_phys;
-    if (isp_malloc_buffer(isp_dev, 0x4000, &isp_buf5, &isp_buf5_phys) == 0) {
+    /* Buffer allocation 5: Use vmalloc for ISP processing buffer (0x4000 bytes) */
+    void *isp_buf5 = vmalloc(0x4000);
+    if (isp_buf5) {
+        dma_addr_t isp_buf5_phys = virt_to_phys(isp_buf5);
+        memset(isp_buf5, 0, 0x4000);
+        
         writel(isp_buf5_phys, isp_regs + 0x5b84);
         writel(isp_buf5_phys + 0x1000, isp_regs + 0x5b88);
         writel(isp_buf5_phys + 0x2000, isp_regs + 0x5b8c);
         writel(isp_buf5_phys + 0x3000, isp_regs + 0x5b90);
         writel(3, isp_regs + 0x5b80);
         wmb();
-        pr_info("tisp_init: ISP buffer 5 allocated from rmem and configured (0x4000 bytes)\n");
+        pr_info("tisp_init: ISP buffer 5 allocated from kernel memory (0x4000 bytes)\n");
     } else {
-        pr_err("tisp_init: Failed to allocate ISP buffer 5 from rmem\n");
+        pr_err("tisp_init: Failed to allocate ISP buffer 5 from kernel memory\n");
         return -ENOMEM;
     }
 
-    /* Buffer allocation 6: Use isp_malloc_buffer for rmem allocation (0x4000 bytes) */
-    void *isp_buf6;
-    dma_addr_t isp_buf6_phys;
-    if (isp_malloc_buffer(isp_dev, 0x4000, &isp_buf6, &isp_buf6_phys) == 0) {
+    /* Buffer allocation 6: Use vmalloc for ISP processing buffer (0x4000 bytes) */
+    void *isp_buf6 = vmalloc(0x4000);
+    if (isp_buf6) {
+        dma_addr_t isp_buf6_phys = virt_to_phys(isp_buf6);
+        memset(isp_buf6, 0, 0x4000);
+        
         writel(isp_buf6_phys, isp_regs + 0xb8a8);
         writel(isp_buf6_phys + 0x1000, isp_regs + 0xb8ac);
         writel(isp_buf6_phys + 0x2000, isp_regs + 0xb8b0);
         writel(isp_buf6_phys + 0x3000, isp_regs + 0xb8b4);
         writel(3, isp_regs + 0xb8b8);
         wmb();
-        pr_info("tisp_init: ISP buffer 6 allocated from rmem and configured (0x4000 bytes)\n");
+        pr_info("tisp_init: ISP buffer 6 allocated from kernel memory (0x4000 bytes)\n");
     } else {
-        pr_err("tisp_init: Failed to allocate ISP buffer 6 from rmem\n");
+        pr_err("tisp_init: Failed to allocate ISP buffer 6 from kernel memory\n");
         return -ENOMEM;
     }
 
-    /* Buffer allocation 7: Use isp_malloc_buffer for rmem allocation (0x8000 bytes) - Critical WDR buffer */
-    void *wdr_buf;
-    dma_addr_t wdr_buf_phys;
-    if (isp_malloc_buffer(isp_dev, 0x8000, &wdr_buf, &wdr_buf_phys) == 0) {
+    /* Buffer allocation 7: Use vmalloc for WDR buffer (0x8000 bytes) - Critical WDR buffer */
+    void *wdr_buf = vmalloc(0x8000);
+    if (wdr_buf) {
+        dma_addr_t wdr_buf_phys = virt_to_phys(wdr_buf);
+        memset(wdr_buf, 0, 0x8000);
+        
         writel(wdr_buf_phys, isp_regs + 0x2010);
         writel(wdr_buf_phys + 0x2000, isp_regs + 0x2014);
         writel(wdr_buf_phys + 0x4000, isp_regs + 0x2018);
@@ -1725,9 +1739,9 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
         writel(0x400, isp_regs + 0x2020);
         writel(3, isp_regs + 0x2024);
         wmb();
-        pr_info("tisp_init: WDR buffer allocated from rmem and configured (0x8000 bytes)\n");
+        pr_info("tisp_init: WDR buffer allocated from kernel memory (0x8000 bytes)\n");
     } else {
-        pr_err("tisp_init: Failed to allocate WDR buffer from rmem\n");
+        pr_err("tisp_init: Failed to allocate WDR buffer from kernel memory\n");
         return -ENOMEM;
     }
 
@@ -4303,7 +4317,7 @@ int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev)
             /* Step 4: Signal that frame data transfer system is active */
             isp_frame_done_wakeup();
 
-            pr_info("*** isp_trigger_frame_data_transfer: Frame data transfer system activated ***\n");
+            pr_info("*** isp_trigger_frame_data_transfer: Frame data transfer system activated ***\n");isp_malloc_buffer(
             return 0;
         }
         udelay(10);
