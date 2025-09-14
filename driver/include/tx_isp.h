@@ -54,7 +54,6 @@ struct ddr_device {
     int state;                  // Device state
 };
 
-struct vin_device;
 struct frame_source_device;
 
 
@@ -212,7 +211,7 @@ struct tx_isp_dev {
     void __iomem *vic_regs;
     struct tx_isp_vic_device *vic_dev;
     struct ddr_device *ddr_dev;
-    struct vin_device *vin_dev;
+    struct tx_isp_vin_device *vin_dev;
     struct frame_source_device *fs_dev;
     void __iomem *phy_base;
 

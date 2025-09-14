@@ -662,12 +662,13 @@ int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev)
     vin_dev->sd.isp = (void *)isp_dev;
     vin_dev->sd.vin_state = TX_ISP_MODULE_SLAKE;
 
-    /* Connect VIN device to ISP device */
+    /* CRITICAL FIX: Connect VIN device to ISP device - this was missing! */
     isp_dev->vin_dev = vin_dev;
 
     pr_info("*** VIN DEVICE CREATED AND CONNECTED TO ISP DEVICE ***\n");
     pr_info("VIN device: %p, base: %p, irq: %d, state: %d\n",
             vin_dev, vin_dev->base, vin_dev->irq, vin_dev->state);
+    pr_info("*** CRITICAL: isp_dev->vin_dev = %p (should not be null!) ***\n", isp_dev->vin_dev);
 
     return 0;
 
