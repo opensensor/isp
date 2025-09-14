@@ -765,7 +765,7 @@ static struct tx_isp_subdev_video_ops vin_subdev_video_ops = {
     .s_stream = vin_s_stream,
 };
 
-static struct tx_isp_subdev_ops vin_subdev_ops = {
+struct tx_isp_subdev_ops vin_subdev_ops = {
     .core = &vin_subdev_core_ops,
     .video = &vin_subdev_video_ops,
     .internal = &vin_subdev_internal_ops,
