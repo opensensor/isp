@@ -41,19 +41,12 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     
     pr_info("*** tx_isp_create_vic_device: Creating VIC device structure ***\n");
     
-    /* FIXED: Use rmem allocation instead of regular kzalloc to prevent memory exhaustion */
-    void *vic_dev_virt;
-    dma_addr_t vic_dev_phys;
-    
-    if (isp_malloc_buffer(isp_dev, 0x21c, &vic_dev_virt, &vic_dev_phys) != 0) {
-        pr_err("tx_isp_create_vic_device: Failed to allocate VIC device from rmem (0x21c bytes)\n");
+    /* FIXED: Use regular kernel memory instead of precious rmem for small structures */
+    vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
+    if (!vic_dev) {
+        pr_err("tx_isp_create_vic_device: Failed to allocate VIC device structure\n");
         return -ENOMEM;
     }
-    
-    vic_dev = (struct tx_isp_vic_device *)vic_dev_virt;
-    
-    /* Clear the structure */
-    memset(vic_dev, 0, 0x21c);
     
     pr_info("*** VIC DEVICE ALLOCATED: %p (size=0x21c bytes) ***\n", vic_dev);
     
