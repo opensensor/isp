@@ -1407,9 +1407,11 @@ if (!IS_ERR(cgu_isp_clk)) {
         pr_info("tx_isp_vic_start: DVP unlock key 0x1a0 = 0x%x\n", unlock_key);
 
     } else if (interface_type == 2) {
-        /* MIPI interface - EXACT Binary Ninja implementation */
+        /* MIPI interface - EXACT Binary Ninja implementation to fix control limit error */
         pr_info("tx_isp_vic_start: MIPI interface configuration (interface type 2)\n");
 
+        /* *** CRITICAL FIX: Follow EXACT Binary Ninja sequence to prevent control limit error *** */
+        
         /* Binary Ninja: *(*(arg1 + 0xb8) + 0xc) = 3 */
         writel(3, vic_regs + 0xc);
         wmb();
@@ -1418,69 +1420,28 @@ if (!IS_ERR(cgu_isp_clk)) {
         u32 verify_mipi_ctrl = readl(vic_regs + 0xc);
         pr_info("MCP_LOG: MIPI control register write - wrote 3 to 0xc, readback = 0x%x\n", verify_mipi_ctrl);
 
-        /* EXACT Binary Ninja MIPI format handling */
-        u32 mipi_config = 0x20000; /* Default value */
-
-        /* Binary Ninja format switch based on sensor_format */
+        /* *** CRITICAL: Use EXACT Binary Ninja format logic *** */
+        u32 mipi_config;
+        
+        /* Binary Ninja: For format 0x2b (RAW10), this goes to the default path */
         if (sensor_format >= 0x300e) {
-            /* Standard MIPI RAW path */
-            u32 dbus_type_check = vic_dev->sensor_attr.dbus_type;
-
-            /* Check integration_time_apply_delay for SONY mode */
-            if (vic_dev->sensor_attr.integration_time_apply_delay != 2) {
-                /* Standard MIPI mode */
-                mipi_config = 0x20000;
-                if (dbus_type_check == 0) {
-                    /* OK - standard mode */
-                } else if (dbus_type_check == 1) {
-                    mipi_config = 0x120000; /* Alternative MIPI mode */
-                } else {
-                    pr_err("tx_isp_vic_start: VIC failed to config DVP mode!(10bits-sensor)\n");
-                    ret = -EINVAL;
-                    goto exit_func;
-                }
-            } else {
-                /* SONY MIPI mode */
-                mipi_config = 0x30000;
-                if (dbus_type_check == 0) {
-                    /* OK - SONY standard */
-                } else if (dbus_type_check == 1) {
-                    mipi_config = 0x130000; /* SONY alternative */
-                } else {
-                    pr_err("tx_isp_vic_start: VIC failed to config DVP SONY mode!(10bits-sensor)\n");
-                    ret = -EINVAL;
-                    goto exit_func;
-                }
-            }
-            pr_info("tx_isp_vic_start: MIPI format 0x%x -> config 0x%x (>= 0x300e path)\n",
-                    sensor_format, mipi_config);
+            /* >= 0x300e path - not our case for 0x2b */
+            mipi_config = 0x20000;
+        } else if (sensor_format == 0x2011) {
+            mipi_config = 0xc0000;
+        } else if (sensor_format >= 0x2012) {
+            /* >= 0x2012 path - not our case for 0x2b */
+            mipi_config = 0x20000;
+        } else if (sensor_format == 0x1006) {
+            mipi_config = 0xa0000;
         } else {
-            /* Handle other format ranges */
-            if (sensor_format == 0x2011) {
-                mipi_config = 0xc0000;
-            } else if (sensor_format >= 0x2012) {
-                if (sensor_format == 0x1008) {
-                    mipi_config = 0x80000;
-                } else if (sensor_format >= 0x1009) {
-                    if ((sensor_format - 0x2002) >= 4) {
-                        pr_err("tx_isp_vic_start: VIC do not support this format %d\n", sensor_format);
-                        ret = -EINVAL;
-                        goto exit_func;
-                    }
-                    mipi_config = 0xc0000;
-                } else {
-                    mipi_config = 0x20000;
-                }
-            } else if (sensor_format == 0x1006) {
-                mipi_config = 0xa0000;
-            } else {
-                /* For unknown formats including 0x2b, use default MIPI config */
-                pr_info("tx_isp_vic_start: Unknown/default format 0x%x, using standard MIPI config 0x20000\n", sensor_format);
-                mipi_config = 0x20000;
-            }
+            /* Default path for 0x2b and other unknown formats */
+            /* Binary Ninja: This is the path taken for format 0x2b */
+            mipi_config = 0x20000;  /* &data_20000 from Binary Ninja */
+            pr_info("tx_isp_vic_start: Format 0x%x using default MIPI config 0x20000\n", sensor_format);
         }
 
-        /* Additional configuration flags */
+        /* Binary Ninja: Additional configuration flags based on sensor attributes */
         if (vic_dev->sensor_attr.total_width == 2) {
             mipi_config |= 2;
         }
@@ -1488,7 +1449,14 @@ if (!IS_ERR(cgu_isp_clk)) {
             mipi_config |= 1;
         }
 
-        /* MIPI timing registers */
+        /* *** CRITICAL: Set dimensions BEFORE other registers *** */
+        /* Binary Ninja: *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
+        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+        wmb();
+        pr_info("tx_isp_vic_start: Set VIC dimensions: 0x4 = 0x%x (%dx%d)\n", 
+                (vic_dev->width << 16) | vic_dev->height, vic_dev->width, vic_dev->height);
+
+        /* Binary Ninja: MIPI timing registers */
         u32 integration_time = vic_dev->sensor_attr.integration_time;
         if (integration_time != 0) {
             writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
@@ -1501,51 +1469,64 @@ if (!IS_ERR(cgu_isp_clk)) {
             wmb();
         }
 
-        /* Final timing setup */
+        /* Binary Ninja: Final timing setup */
         writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
         wmb();
 
-        /* VIC register 0x10 with timing flags */
+        /* Binary Ninja: VIC register 0x10 with timing flags */
+        /* *(*(arg1 + 0xb8) + 0x10) = *(*(arg1 + 0x110) + 0x28) << 0x1f | $v1_50 */
         u32 final_mipi_config = (vic_dev->sensor_attr.total_width << 31) | mipi_config;
         writel(final_mipi_config, vic_regs + 0x10);
-        wmb();
-
-        /* Frame dimensions */
-        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
         wmb();
 
         pr_info("tx_isp_vic_start: MIPI registers configured - 0x10=0x%x, 0x18=0x%x\n",
                 final_mipi_config, (integration_time << 16) + vic_dev->width);
 
-        /* Binary Ninja EXACT unlock sequence */
+        /* *** CRITICAL: Binary Ninja EXACT unlock sequence *** */
+        /* Binary Ninja: **(arg1 + 0xb8) = 2 */
         writel(2, vic_regs + 0x0);
         wmb();
+        
+        /* Binary Ninja: **(arg1 + 0xb8) = 4 */
         writel(4, vic_regs + 0x0);
         wmb();
 
-        /* Wait for unlock completion */
+        /* Binary Ninja: Wait for unlock completion */
+        /* while (*$v0_121 != 0) nop */
         timeout = 10000;
         while (timeout > 0) {
             u32 status = readl(vic_regs + 0x0);
             if (status == 0) {
+                pr_info("tx_isp_vic_start: VIC unlocked after %d iterations\n", 10000 - timeout);
                 break;
             }
             udelay(1);
             timeout--;
         }
+        
+        if (timeout == 0) {
+            pr_err("*** CRITICAL: VIC unlock timeout - this WILL cause control limit error! ***\n");
+            ret = -ETIMEDOUT;
+            goto exit_func;
+        }
 
-        /* Enable VIC processing */
+        /* Binary Ninja: *$v0_121 = 1 - Enable VIC processing */
         writel(1, vic_regs + 0x0);
         wmb();
+        pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1)\n");
 
-        /* Final MIPI configuration registers */
+        /* Binary Ninja: Final MIPI configuration registers */
+        /* *(*(arg1 + 0xb8) + 0x1a4) = 0x100010 */
         writel(0x100010, vic_regs + 0x1a4);
+        /* *(*(arg1 + 0xb8) + 0x1ac) = 0x4210 */
         writel(0x4210, vic_regs + 0x1ac);
+        /* *(*(arg1 + 0xb8) + 0x1b0) = 0x10 */
         writel(0x10, vic_regs + 0x1b0);
+        /* *(*(arg1 + 0xb8) + 0x1b4) = 0 */
         writel(0, vic_regs + 0x1b4);
         wmb();
 
-        pr_info("tx_isp_vic_start: MIPI interface configured successfully\n");
+        pr_info("tx_isp_vic_start: MIPI interface configured successfully - control limit error should be fixed\n");
 
     } else if (interface_type == 3) {
         /* BT601 interface */
