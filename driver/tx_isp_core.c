@@ -4346,7 +4346,7 @@ void isp_frame_done_wakeup(void)
     /* Binary Ninja: jump(__wake_up) */
     wake_up(&frame_done_wq);
     
-    pr_debug("isp_frame_done_wakeup: frame_count=%llu, woke up waiters\n", frame_done_cnt);
+    pr_info("isp_frame_done_wakeup: frame_count=%llu, woke up waiters\n", frame_done_cnt);
 }
 EXPORT_SYMBOL(isp_frame_done_wakeup);
 
@@ -4367,17 +4367,20 @@ int isp_frame_done_wait(int timeout_ms, uint64_t *frame_count)
     /* Binary Ninja: frame_done_cond = 0 */
     frame_done_cond = 0;
     
-    pr_debug("isp_frame_done_wait: waiting for frame completion (timeout=%dms)\n", timeout_ms);
+    pr_info("isp_frame_done_wait: waiting for frame completion (timeout=%dms)\n", timeout_ms);
     
     /* Binary Ninja: if (frame_done_cond != 1) */
     if (frame_done_cond != 1) {
         while (true) {
             /* Binary Ninja: prepare_to_wait(&frame_done_wq, &var_38, 1) */
             prepare_to_wait(&frame_done_wq, &wait, TASK_INTERRUPTIBLE);
+
+            pr_info("isp_frame_done_wait: Waiting for frame completion (timeout=%dms)\n", timeout_ms);
             
             /* Binary Ninja: if (frame_done_cond != 1) */
             if (frame_done_cond != 1) {
                 /* Check for signal */
+                pr_info("isp_frame_done_wait: Checking for signal\n");
                 if (signal_pending(current)) {
                     ret = -ERESTARTSYS;
                     break;
@@ -4409,17 +4412,17 @@ int isp_frame_done_wait(int timeout_ms, uint64_t *frame_count)
     
     /* Binary Ninja: result = 0xfffffe00 if ($s0 != 0xfffffe00) */
     if (ret == -ERESTARTSYS) {
-        pr_debug("isp_frame_done_wait: interrupted by signal\n");
+        pr_info("isp_frame_done_wait: interrupted by signal\n");
         return -ERESTARTSYS;
     }
     
     /* Binary Ninja: result = 0xffffff6f if ($s0 != 0) */
     if (ret == 0) {
-        pr_debug("isp_frame_done_wait: timeout waiting for frame\n");
+        pr_info("isp_frame_done_wait: timeout waiting for frame\n");
         return -ETIMEDOUT;
     }
     
-    pr_debug("isp_frame_done_wait: frame completed, count=%llu\n", *frame_count);
+    pr_info("isp_frame_done_wait: frame completed, count=%llu\n", *frame_count);
     return 0;
 }
 EXPORT_SYMBOL(isp_frame_done_wait);
