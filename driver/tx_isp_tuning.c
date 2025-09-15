@@ -4265,7 +4265,7 @@ void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
     /* Clear callback arrays */
     if (isp_irq_initialized) {
         spin_lock_irqsave(&isp_irq_lock, flags);
-        memset(irq_func_cb, 0, sizeof(irq_func_cb));
+        memset(isp_event_func_cb, 0, sizeof(isp_event_func_cb));
         memset(cb, 0, sizeof(cb));
         spin_unlock_irqrestore(&isp_irq_lock, flags);
     }
