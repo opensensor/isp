@@ -4755,6 +4755,8 @@ static int private_reset_tx_isp_module(int arg)
 /* ispcore_interrupt_service_routine_mod - COMPLETE Binary Ninja exact implementation for MIPI
    NOTE: Renamed to avoid duplicate symbol with core's ispcore_interrupt_service_routine.
    isp_irq_handle will call the core implementation (in tx_isp_core.c). */
+volatile int isp_force_core_isr = 0;
+
 irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
@@ -4766,7 +4768,7 @@ irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id)
     int i;
     
     if (!isp_dev || !isp_dev->vic_regs) {
-        pr_debug("ispcore_interrupt_service_routine: Invalid device\n");
+        pr_info("ispcore_interrupt_service_routine: Invalid device\n");
         return IRQ_NONE;
     }
     
@@ -4803,8 +4805,11 @@ irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id)
             pr_info("*** ISP CORE INTERRUPT: bank=%s status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
                     status_legacy ? "legacy(+0xb*)" : "new(+0x98b*)",
                     interrupt_status, status_legacy, status_new);
+        } else if (isp_force_core_isr) {
+            pr_info("*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
+            interrupt_status = 1; /* Force Channel 0 frame-done path */
         } else {
-            pr_debug("*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
+            pr_info("*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
                      status_legacy, status_new);
             return IRQ_HANDLED; /* No interrupt to process */
         }
@@ -4816,7 +4821,7 @@ irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id)
         error_check = readl(isp_regs + 0xc) & 0x40;
         if (error_check == 0) {
             /* Binary Ninja: tisp_lsc_write_lut_datas() - LSC LUT processing */
-            pr_debug("ISP interrupt: LSC LUT processing\n");
+            pr_info("ISP interrupt: LSC LUT processing\n");
         }
     } else {
         /* Error interrupt processing */
@@ -4836,7 +4841,7 @@ irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id)
     
     /* Binary Ninja: Frame sync interrupt processing */
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt */
-        pr_debug("*** ISP CORE: FRAME SYNC INTERRUPT ***\n");
+        pr_info("*** ISP CORE: FRAME SYNC INTERRUPT ***\n");
         
         /* Binary Ninja: private_schedule_work(&fs_work) */
         /* Frame sync work would be scheduled here */
@@ -4850,19 +4855,19 @@ irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id)
     
     /* Binary Ninja: Error interrupt processing */
     if (interrupt_status & 0x200) {  /* Error interrupt type 1 */
-        pr_debug("ISP CORE: Error interrupt type 1\n");
+        pr_info("ISP CORE: Error interrupt type 1\n");
         /* Binary Ninja: exception_handle() */
         /* Error handling would be here */
     }
     
     if (interrupt_status & 0x100) {  /* Error interrupt type 2 */
-        pr_debug("ISP CORE: Error interrupt type 2\n");
+        pr_info("ISP CORE: Error interrupt type 2\n");
         /* Binary Ninja: exception_handle() */
         /* Error handling would be here */
     }
     
     if (interrupt_status & 0x2000) {  /* Additional interrupt type */
-        pr_debug("ISP CORE: Additional interrupt type\n");
+        pr_info("ISP CORE: Additional interrupt type\n");
         /* Binary Ninja: Additional interrupt processing */
     }
     
@@ -4920,7 +4925,7 @@ irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id)
     
     /* Binary Ninja: Channel 2 frame completion */
     if (interrupt_status & 4) {
-        pr_debug("ISP CORE: Channel 2 frame done\n");
+        pr_info("ISP CORE: Channel 2 frame done\n");
         /* Similar processing for channel 2 */
         while ((readl(vic_regs + 0x9b7c) & 1) == 0) {
             /* Channel 2 frame processing */
@@ -4938,12 +4943,12 @@ irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id)
             /* Binary Ninja: if (irq_func_cb[i] != 0) */
             if (irq_func_cb[i] != NULL) {
                 irqreturn_t callback_result = irq_func_cb[i](irq, dev_id);
-                pr_debug("ISP CORE: IRQ callback[%d] returned %d\n", i, callback_result);
+                pr_info("ISP CORE: IRQ callback[%d] returned %d\n", i, callback_result);
             }
         }
     }
     
-    pr_debug("*** ISP CORE INTERRUPT PROCESSING COMPLETE ***\n");
+    pr_info("*** ISP CORE INTERRUPT PROCESSING COMPLETE ***\n");
     
     /* Binary Ninja: return 1 */
     return IRQ_HANDLED;
