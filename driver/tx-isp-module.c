@@ -4741,7 +4741,7 @@ static int private_reset_tx_isp_module(int arg)
 /* ispcore_interrupt_service_routine_mod - COMPLETE Binary Ninja exact implementation for MIPI
    NOTE: Renamed to avoid duplicate symbol with core's ispcore_interrupt_service_routine.
    isp_irq_handle will call the core implementation (in tx_isp_core.c). */
-static irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id)
+irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     struct tx_isp_vic_device *vic_dev;

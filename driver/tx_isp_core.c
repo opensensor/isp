@@ -59,7 +59,7 @@ void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
 void system_reg_write(u32 reg, u32 value);
 int tisp_lsc_write_lut_datas(void);
-
+irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id);
 
 /* Debug macro for sensor functions */
 #define ISP_DEBUG(fmt, ...) \
@@ -637,7 +637,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
     /* Forward to the proper ISP core interrupt service routine */
-    return ispcore_interrupt_service_routine(irq, dev_id);
+    return ispcore_interrupt_service_routine_mod(irq, dev_id);
 }
 
 /* ISP interrupt thread handler - for threaded IRQ processing */
