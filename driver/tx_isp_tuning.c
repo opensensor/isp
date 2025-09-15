@@ -235,6 +235,23 @@ void tiziano_adr_interrupt_static(void);
 int tisp_event_init(void);
 int tisp_param_operate_init(void);
 
+/* system_irq_func_set - Binary Ninja EXACT implementation */
+int system_irq_func_set(int irq_id, void *handler)
+{
+    pr_info("system_irq_func_set: Setting IRQ handler for IRQ %d to %p\n", irq_id, handler);
+    
+    if (irq_id < 0 || irq_id >= 32) {
+        pr_err("system_irq_func_set: Invalid IRQ ID %d\n", irq_id);
+        return -EINVAL;
+    }
+    
+    /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
+    irq_func_cb[irq_id] = (void (*)(void))handler;
+    
+    pr_info("system_irq_func_set: IRQ %d handler set to %p\n", irq_id, handler);
+    return 0;
+}
+
 /* Forward declarations for update functions */
 int tisp_tgain_update(void);
 int tisp_again_update(void);
