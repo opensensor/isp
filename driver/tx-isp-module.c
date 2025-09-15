@@ -4333,16 +4333,29 @@ static int tx_isp_init(void)
             
             pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
             
-            /* CRITICAL FIX: Enable ISP core interrupts too! */
+            /* CRITICAL FIX: Enable ISP core interrupts too! Use core_regs if available */
             pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
-            
-            /* Enable ISP core interrupts at hardware level */
-            writel(0x3FFF, isp_regs + 0xb0);  /* Enable ISP core interrupts */
-            writel(0x0, isp_regs + 0xb4);     /* Clear any pending interrupts */
-            writel(0x3FFF, isp_regs + 0xbc);  /* Unmask all ISP interrupts */
-            wmb();
-            
-            pr_info("*** ISP CORE INTERRUPT REGISTERS ENABLED AT 0xb0/0xbc ***\n");
+            if (ourISPdev->core_regs) {
+                void __iomem *core = ourISPdev->core_regs;
+                /* Enable/unmask core interrupts at the correct base */
+                writel(0x3FFF, core + 0xb0);  /* INT_EN (or equivalent) */
+                writel(0x0000, core + 0xb4);  /* Clear pending status */
+                writel(0x3FFF, core + 0xbc);  /* INT_MASK (unmask) */
+                wmb();
+                pr_info("*** ISP CORE INTERRUPT REGISTERS ENABLED AT core_regs + 0xb0/0xb4/0xbc ***\n");
+            } else {
+                /* Fallback to VIC-relative base if core_regs not mapped */
+                void __iomem *fallback = vic_dev->vic_regs ? (vic_dev->vic_regs - 0x9a00) : NULL;
+                if (fallback) {
+                    writel(0x3FFF, fallback + 0xb0);
+                    writel(0x0000, fallback + 0xb4);
+                    writel(0x3FFF, fallback + 0xbc);
+                    wmb();
+                    pr_info("*** ISP CORE INTERRUPTS ENABLED via VIC-relative base (fallback) ***\n");
+                } else {
+                    pr_warn("*** Unable to enable ISP core interrupts: no valid base ***\n");
+                }
+            }
             pr_info("*** BOTH VIC AND ISP CORE INTERRUPTS NOW ENABLED! ***\n");
             
             /* Set global VIC interrupt enable flag - FIXED: Binary Ninja shows this should be 1 */
@@ -4751,9 +4764,17 @@ static irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     isp_regs = vic_regs - 0x9a00;  /* ISP base from VIC base */
     
     /* *** CRITICAL: Read from ISP core interrupt status registers for MIPI *** */
+    /* Prefer direct core_regs mapping; fall back to VIC-relative if needed */
+    if (isp_dev->core_regs) {
+        isp_regs = isp_dev->core_regs;
+    } else if (vic_dev && vic_dev->vic_regs) {
+        isp_regs = vic_dev->vic_regs - 0x9a00;
+    } else {
+        return IRQ_NONE;
+    }
     /* Binary Ninja: int32_t $s1 = *($v0 + 0xb4); *($v0 + 0xb8) = $s1 */
-    interrupt_status = readl(isp_regs + 0xb4);  /* CORRECTED: Read from ISP base + 0xb4 */
-    writel(interrupt_status, isp_regs + 0xb8);  /* CORRECTED: Clear at ISP base + 0xb8 */
+    interrupt_status = readl(isp_regs + 0xb4);  /* Read from ISP core base + 0xb4 */
+    writel(interrupt_status, isp_regs + 0xb8);  /* Clear at ISP core base + 0xb8 */
     wmb();
     
     if (interrupt_status != 0) {
