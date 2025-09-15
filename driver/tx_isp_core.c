@@ -58,6 +58,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
 void system_reg_write(u32 reg, u32 value);
+int tisp_lsc_write_lut_datas(void);
 
 
 /* Debug macro for sensor functions */
@@ -508,7 +509,6 @@ irqreturn_t ispcore_ip_done_irq_handler(int irq, void *dev_id)
     
     if ((reg_val & 0x40) == 0) {
         /* Binary Ninja: tisp_lsc_write_lut_datas() */
-        extern void tisp_lsc_write_lut_datas(void);
         tisp_lsc_write_lut_datas();
     }
     

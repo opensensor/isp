@@ -2782,7 +2782,7 @@ static int tisp_lsc_judge_gain_update_flag(void)
 }
 
 /* tisp_lsc_write_lut_datas - Binary Ninja EXACT implementation */
-static int tisp_lsc_write_lut_datas(void)
+int tisp_lsc_write_lut_datas(void)
 {
     static uint32_t lsc_count = 0;
     
