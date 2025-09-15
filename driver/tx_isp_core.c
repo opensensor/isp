@@ -634,14 +634,14 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 }
 
 /* ISP interrupt handler - now calls the proper dispatch system */
-irqreturn_t isp_irq_handle(int irq, void *dev_id)
+irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
 {
     /* Forward to the proper ISP core interrupt service routine */
-    return ispcore_interrupt_service_routine_mod(irq, dev_id);
+    return ispcore_interrupt_service_routine(irq, dev_id);
 }
 
 /* ISP interrupt thread handler - for threaded IRQ processing */
-irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
+irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = dev_id;
     
@@ -675,7 +675,7 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
     spin_lock_init((spinlock_t *)irq_info);
     
     /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
-    ret = request_threaded_irq(irq_number, isp_irq_handle, isp_irq_thread_handle, 
+    ret = request_threaded_irq(irq_number, tx_isp_core_irq_handle, tx_isp_core_irq_thread_handle, 
                                IRQF_SHARED, dev_name(&pdev->dev), irq_info);
     if (ret != 0) {
         pr_err("tx_isp_request_irq: Failed to request IRQ %d: %d\n", irq_number, ret);
@@ -691,7 +691,7 @@ irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id)
 {
     /* *** CRITICAL: Use dispatch system instead of direct handling *** */
     pr_debug("*** tx_isp_core_irq_handler: Forwarding to dispatch system ***\n");
-    return isp_irq_handle(irq, dev_id);
+    return tx_isp_core_irq_handle(irq, dev_id);
 }
 
 
