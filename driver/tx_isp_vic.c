@@ -1368,12 +1368,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL: Ensure ISP core (isp-m0) interrupt lines are unmasked and pending is cleared on core base */
     if (ourISPdev && ourISPdev->core_regs) {
         void __iomem *core = ourISPdev->core_regs;
-        u32 pending = readl(core + 0xb4);   /* Read current pending at core + 0xb4 */
-        writel(pending, core + 0xb8);       /* Clear pending at core + 0xb8 */
-        writel(0x3FFF, core + 0xb0);        /* INT_EN (unmask/enable expected interrupt bits) */
-        writel(0x3FFF, core + 0xbc);        /* INT_MASK (mirror/unmask, per core ISR usage) */
+        /* Handle both legacy (+0xb*) and new (+0x98b*) interrupt banks */
+        u32 pend_legacy = readl(core + 0xb4);
+        u32 pend_new    = readl(core + 0x98b4);
+        /* Clear any pending bits in both banks */
+        writel(pend_legacy, core + 0xb8);
+        writel(pend_new,    core + 0x98b8);
+        /* Enable/unmask in both banks */
+        writel(0x3FFF, core + 0xb0);
+        writel(0x3FFF, core + 0xbc);
+        writel(0x3FFF, core + 0x98b0);
+        writel(0x3FFF, core + 0x98bc);
         wmb();
-        pr_info("*** ISP CORE IRQ: core_regs=%p, INT_EN/MASK set, pending cleared (0x%08x) ***\n", core, pending);
+        pr_info("*** ISP CORE IRQ: core_regs=%p, legacy pend=0x%08x, new pend=0x%08x; both banks enabled ***\n",
+                core, pend_legacy, pend_new);
     } else {
         pr_warn("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
     }

@@ -4337,21 +4337,35 @@ static int tx_isp_init(void)
             pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
             if (ourISPdev->core_regs) {
                 void __iomem *core = ourISPdev->core_regs;
-                /* Enable/unmask core interrupts at the correct base */
-                writel(0x3FFF, core + 0xb0);  /* INT_EN (or equivalent) */
-                writel(0x0000, core + 0xb4);  /* Clear pending status */
-                writel(0x3FFF, core + 0xbc);  /* INT_MASK (unmask) */
+                /* Enable/unmask core interrupts at both possible banks (legacy +0xb* and new +0x98b*) */
+                /* Legacy bank */
+                u32 pend_legacy = readl(core + 0xb4);
+                writel(pend_legacy, core + 0xb8);  /* Clear any pending */
+                writel(0x3FFF, core + 0xb0);       /* INT_EN */
+                writel(0x3FFF, core + 0xbc);       /* INT_MASK/UNMASK */
+                /* New bank */
+                u32 pend_new = readl(core + 0x98b4);
+                writel(pend_new, core + 0x98b8);   /* Clear any pending */
+                writel(0x3FFF, core + 0x98b0);     /* INT_EN */
+                writel(0x3FFF, core + 0x98bc);     /* INT_MASK/UNMASK */
                 wmb();
-                pr_info("*** ISP CORE INTERRUPT REGISTERS ENABLED AT core_regs + 0xb0/0xb4/0xbc ***\n");
+                pr_info("*** ISP CORE INTERRUPT REGISTERS ENABLED at legacy(+0xb*) and new(+0x98b*) ***\n");
             } else {
                 /* Fallback to VIC-relative base if core_regs not mapped */
                 void __iomem *fallback = vic_dev->vic_regs ? (vic_dev->vic_regs - 0x9a00) : NULL;
                 if (fallback) {
+                    /* Legacy bank */
+                    u32 pend_legacy = readl(fallback + 0xb4);
+                    writel(pend_legacy, fallback + 0xb8);
                     writel(0x3FFF, fallback + 0xb0);
-                    writel(0x0000, fallback + 0xb4);
                     writel(0x3FFF, fallback + 0xbc);
+                    /* New bank */
+                    u32 pend_new = readl(fallback + 0x98b4);
+                    writel(pend_new, fallback + 0x98b8);
+                    writel(0x3FFF, fallback + 0x98b0);
+                    writel(0x3FFF, fallback + 0x98bc);
                     wmb();
-                    pr_info("*** ISP CORE INTERRUPTS ENABLED via VIC-relative base (fallback) ***\n");
+                    pr_info("*** ISP CORE INTERRUPTS ENABLED via VIC-relative base (legacy+new) ***\n");
                 } else {
                     pr_warn("*** Unable to enable ISP core interrupts: no valid base ***\n");
                 }
