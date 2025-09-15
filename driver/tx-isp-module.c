@@ -5306,7 +5306,7 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
         }
         
         /* Also check ISP core for secondary interrupts */
-        irqreturn_t isp_result = ispcore_interrupt_service_routine(irq, dev_id);
+        irqreturn_t isp_result = ispcore_interrupt_service_routine_mod(irq, dev_id);
         if (isp_result == IRQ_WAKE_THREAD) {
             result = IRQ_WAKE_THREAD;
         }
