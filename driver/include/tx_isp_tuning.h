@@ -14,4 +14,7 @@ int tisp_code_tuning_open(struct inode *inode, struct file *file);
 int tisp_code_create_tuning_node(void);
 int tisp_code_destroy_tuning_node(void);
 
+/* IRQ callback function array - exported for external SDK */
+extern void (*irq_func_cb[32])(void);
+
 #endif //__TX_ISP_TUNING_H__
