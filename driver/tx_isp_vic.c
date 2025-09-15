@@ -269,20 +269,18 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 reg_val = shifted_value | (reg_val & 0xfff0ffff);
                 writel(reg_val, vic_regs + 0x300);
 
-                pr_debug("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
+                pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
                          reg_val, buffer_index, high_bits, match_found);
             }
                 /* Directly invoke ISP core ISR to process frame done when core IRQ not firing */
     extern irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id);
-    if (ourISPdev) {
-        ispcore_interrupt_service_routine_mod(37, ourISPdev);
-        pr_debug("*** VIC->ISP EVENT: Direct call to ISP core ISR executed ***\n");
-    }
+    ispcore_interrupt_service_routine_mod(37, ourISPdev);
+    pr_info("*** VIC->ISP EVENT: Direct call to ISP core ISR executed ***\n");
 
     /* Call the ISP frame done wakeup function to notify waiting processes */
     extern void isp_frame_done_wakeup(void);
     isp_frame_done_wakeup();
-    pr_debug("*** VIC->ISP EVENT: Called isp_frame_done_wakeup() ***\n");
+    pr_info("*** VIC->ISP EVENT: Called isp_frame_done_wakeup() ***\n");
         }
 
 //        /* Binary Ninja: result = &data_b0000, goto label_123f4 */
@@ -327,7 +325,7 @@ label_123f4:
                 return gpio_result;
             }
 
-            pr_debug("vic_framedone_irq_function: GPIO %d set to state %d\n", gpio_pin, gpio_state);
+            pr_info("vic_framedone_irq_function: GPIO %d set to state %d\n", gpio_pin, gpio_state);
 
             /* Move to next GPIO info entry */
             gpio_ptr++;
