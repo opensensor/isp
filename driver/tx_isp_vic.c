@@ -272,16 +272,11 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 pr_debug("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
                          reg_val, buffer_index, high_bits, match_found);
             }
-                /* Trigger ISP core frame processing by writing to ISP interrupt register */
-    if (ourISPdev->core_regs) {
-        void __iomem *isp_base = ourISPdev->core_regs;
-
-        /* Set frame done bit in ISP interrupt status register */
-        /* This will trigger the ISP core interrupt handler (IRQ 37) */
-        writel(0x1, isp_base + 0x98b0);  /* ISP frame done interrupt bit */
-        wmb();
-
-        pr_debug("*** VIC->ISP EVENT: Triggered ISP core frame processing (IRQ 37) ***\n");
+                /* Directly invoke ISP core ISR to process frame done when core IRQ not firing */
+    extern irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id);
+    if (ourISPdev) {
+        ispcore_interrupt_service_routine_mod(37, ourISPdev);
+        pr_debug("*** VIC->ISP EVENT: Direct call to ISP core ISR executed ***\n");
     }
 
     /* Call the ISP frame done wakeup function to notify waiting processes */
