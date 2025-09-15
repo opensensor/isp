@@ -5615,8 +5615,8 @@ label_12898:
     pr_debug("vic_mdma_irq_function: Channel %d MDMA interrupt processing complete\n", channel);
 }
 
-/* ip_done_interrupt_handler - Binary Ninja ISP processing complete interrupt */
-irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)
+/* ip_done_interrupt_handler - Binary Ninja ISP processing complete interrupt (renamed local to avoid SDK symbol clash) */
+static irqreturn_t ispmodule_ip_done_irq_handler(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     

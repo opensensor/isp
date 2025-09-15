@@ -232,28 +232,11 @@ int tisp_sdns_wdr_en(int enable);
 
 /* Forward declarations for event and IRQ functions */
 int tisp_event_set_cb(int event_id, void *callback);
-int system_irq_func_set(int irq_id, void *handler);
 int tisp_adr_process(void);
-void tiziano_adr_interrupt_static(void);
+int tiziano_adr_interrupt_static(void);
 int tisp_event_init(void);
 int tisp_param_operate_init(void);
 
-/* system_irq_func_set - Binary Ninja EXACT implementation */
-int system_irq_func_set(int irq_id, void *handler)
-{
-    pr_info("system_irq_func_set: Setting IRQ handler for IRQ %d to %p\n", irq_id, handler);
-    
-    if (irq_id < 0 || irq_id >= 32) {
-        pr_err("system_irq_func_set: Invalid IRQ ID %d\n", irq_id);
-        return -EINVAL;
-    }
-    
-    /* Binary Ninja: *((arg1 << 2) + &isp_event_func_cb) = arg2 */
-    isp_event_func_cb[irq_id] = (void (*)(void))handler;
-    
-    pr_info("system_irq_func_set: IRQ %d handler set to %p\n", irq_id, handler);
-    return 0;
-}
 
 /* Forward declarations for update functions */
 int tisp_tgain_update(void);
@@ -3924,9 +3907,10 @@ int tisp_adr_process(void)
 }
 
 /* tiziano_adr_interrupt_static - ADR interrupt handler */
-void tiziano_adr_interrupt_static(void)
+int tiziano_adr_interrupt_static(void)
 {
     pr_debug("tiziano_adr_interrupt_static: ADR interrupt received\n");
+    return 0;
 }
 
 /* tiziano_adr_init - Binary Ninja SIMPLIFIED implementation */
@@ -3990,7 +3974,7 @@ int tiziano_adr_init(uint32_t width, uint32_t height)
     }
     
     /* Binary Ninja: Set up interrupt and event callbacks */
-    system_irq_func_set(0x12, tiziano_adr_interrupt_static);
+    tisp_event_set_cb(0x12, tiziano_adr_interrupt_static);
     tisp_event_set_cb(2, tisp_adr_process);
     
     pr_info("tiziano_adr_init: ADR processing initialized successfully\n");
