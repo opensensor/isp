@@ -50,7 +50,7 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
 int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
 static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
 static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sensor_attr);
-irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id);
+irqreturn_t ispcore_ip_done_irq_handler(int irq, void *dev_id);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 int sensor_init(struct tx_isp_dev *isp_dev);
 void *isp_core_tuning_init(void *arg1);
@@ -500,8 +500,8 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
 EXPORT_SYMBOL(system_irq_func_set);
 
 
-/* ip_done_interrupt_handler - EXACT Binary Ninja implementation */
-irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)
+/* ispcore_ip_done_irq_handler - module-specific wrapper to avoid SDK symbol conflict */
+irqreturn_t ispcore_ip_done_irq_handler(int irq, void *dev_id)
 {
     /* Binary Ninja: if ((system_reg_read(0xc) & 0x40) == 0) */
     uint32_t reg_val = system_reg_read(0xc);
@@ -517,7 +517,6 @@ irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)
     /* Binary Ninja: return 2 */
     return IRQ_HANDLED; /* Convert to standard Linux return value */
 }
-EXPORT_SYMBOL(ip_done_interrupt_handler);
 
 /* ispcore_interrupt_service_routine - EXACT Binary Ninja implementation */
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
@@ -2002,7 +2001,7 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
     tisp_event_set_cb(8, tisp_ae_ir_update);
 
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) */
-    system_irq_func_set(0xd, ip_done_interrupt_handler);
+    system_irq_func_set(0xd, ispcore_ip_done_irq_handler);
 
     /* CRITICAL: Enable ISP interrupts - this is what was missing! */
     pr_info("*** tisp_init: Enabling ISP interrupts ***\n");
