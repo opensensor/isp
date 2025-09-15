@@ -248,6 +248,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                     } *entry = container_of(pos, struct vic_buffer_entry, list);
 
                     if (entry->buffer_addr == current_frame_addr) {
+                      
                         match_found = 1;  /* $v0 = 1 */
                     }
                 }

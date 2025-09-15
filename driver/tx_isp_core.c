@@ -430,9 +430,25 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
 }
 EXPORT_SYMBOL(tx_isp_core_set_format);
 
+/* Bridge init to reference ispcore_core_ops_init so it actually runs */
+static int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable)
+{
+    struct tx_isp_dev *isp = sd ? (struct tx_isp_dev *)sd->isp : NULL;
+    struct tx_isp_sensor_attribute *attr = NULL;
+    if (!isp) {
+        ISP_ERROR("core_subdev_core_init_bridge: invalid isp\n");
+        return -EINVAL;
+    }
+    /* When enabling, pass current sensor attributes; when disabling, pass NULL like reference */
+    if (enable && isp->sensor && isp->sensor->video.attr) {
+        attr = isp->sensor->video.attr;
+    }
+    return ispcore_core_ops_init(isp, attr);
+}
+
 /* Core subdev operations - matches the pattern used by other devices */
 static struct tx_isp_subdev_core_ops core_subdev_core_ops = {
-    .init = NULL,
+    .init = core_subdev_core_init_bridge,
     .reset = NULL,
     .ioctl = NULL,
 };
@@ -2172,6 +2188,20 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
     }
     
     ISP_INFO("*** ispcore_core_ops_init: tisp_init SUCCESS ***\n");
+
+    /* Ensure ISP core interrupt registers are enabled on the correct base (core_regs).
+     * Reference ISR reads status at +0xb4 and clears at +0xb8, so enable/mask at +0xb0/+0xbc. */
+    if (isp->core_regs) {
+        void __iomem *core = isp->core_regs;
+        /* Unmask and enable core interrupts (frame done, errors, frame start, etc.) */
+        writel(0x3FFF, core + 0xb0);  /* INT_EN or similar */
+        writel(0x0000, core + 0xb4);  /* Clear any pending status */
+        writel(0x3FFF, core + 0xbc);  /* INT_MASK (0=unmask, or mirrored enable depending on block) */
+        wmb();
+        ISP_INFO("*** ispcore_core_ops_init: ISP core interrupts enabled at core_regs + 0xb0/0xb4/0xbc ***\n");
+    } else {
+        ISP_WARN("*** ispcore_core_ops_init: isp->core_regs is NULL; cannot enable core interrupts here ***\n");
+    }
     
     /* Start kernel thread - matches reference kthread_run */
     ISP_INFO("*** ispcore_core_ops_init: Starting ISP processing thread ***\n");
