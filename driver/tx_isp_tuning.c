@@ -245,8 +245,8 @@ int system_irq_func_set(int irq_id, void *handler)
         return -EINVAL;
     }
     
-    /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
-    irq_func_cb[irq_id] = (void (*)(void))handler;
+    /* Binary Ninja: *((arg1 << 2) + &isp_event_func_cb) = arg2 */
+    isp_event_func_cb[irq_id] = (void (*)(void))handler;
     
     pr_info("system_irq_func_set: IRQ %d handler set to %p\n", irq_id, handler);
     return 0;
@@ -1557,9 +1557,9 @@ struct af_zone_data af_zone_data = {
 /* Event callback function array - Binary Ninja reference */
 static int (*cb[32])(void) = {NULL};
 
-/* IRQ callback function array - Binary Ninja reference */
-void (*irq_func_cb[32])(void) = {NULL};
-EXPORT_SYMBOL(irq_func_cb);
+/* ISP event callback function array - Binary Ninja reference */
+void (*isp_event_func_cb[32])(void) = {NULL};
+EXPORT_SYMBOL(isp_event_func_cb);
 
 /* ISP interrupt state */
 static spinlock_t isp_irq_lock;
@@ -4151,9 +4151,9 @@ static irqreturn_t isp_irq_dispatcher(int irq, void *dev_id)
     
     /* Process each set interrupt bit */
     for (int i = 0; i < 32; i++) {
-        if ((irq_status & (1 << i)) && irq_func_cb[i]) {
+        if ((irq_status & (1 << i)) && isp_event_func_cb[i]) {
             pr_debug("isp_irq_dispatcher: Calling IRQ handler %d\n", i);
-            irq_func_cb[i]();
+            isp_event_func_cb[i]();
             handled = 1;
         }
     }
@@ -4190,7 +4190,7 @@ int tisp_event_init(void)
     pr_info("tisp_event_init: Initializing ISP event system\n");
     
     /* Clear all callback arrays */
-    memset(irq_func_cb, 0, sizeof(irq_func_cb));
+    memset(isp_event_func_cb, 0, sizeof(isp_event_func_cb));
     memset(cb, 0, sizeof(cb));
     
     if (!isp_irq_initialized) {

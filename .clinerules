@@ -60,3 +60,10 @@ struct member access based on our actual driver structures on an as needed basis
 - Check that method call chains match reference driver
 - Ensure MCP calls don't disrupt original logic flow
 - Validate that only supported BN MCP operations were used
+
+## Symbol Naming Conflicts Prevention
+- NEVER use generic names like `irq_func_cb` that may conflict across multiple driver files
+- Use descriptive, module-specific prefixes (e.g., `isp_event_func_cb`, `vic_irq_handlers`, etc.)
+- Before declaring any global symbol, search all driver files to ensure no conflicts
+- When exporting symbols, use unique names that clearly indicate their purpose and origin module
+- If a symbol name conflict is discovered, rename to avoid collision rather than trying to share
