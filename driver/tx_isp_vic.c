@@ -1365,6 +1365,25 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     vic_start_ok = 1;
     pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
 
+    /* CRITICAL: Ensure ISP core (isp-m0) interrupt lines are unmasked and pending is cleared on core base */
+    if (ourISPdev && ourISPdev->core_regs) {
+        void __iomem *core = ourISPdev->core_regs;
+        u32 pending = readl(core + 0xb4);   /* Read current pending at core + 0xb4 */
+        writel(pending, core + 0xb8);       /* Clear pending at core + 0xb8 */
+        writel(0x3FFF, core + 0xb0);        /* INT_EN (unmask/enable expected interrupt bits) */
+        writel(0x3FFF, core + 0xbc);        /* INT_MASK (mirror/unmask, per core ISR usage) */
+        wmb();
+        pr_info("*** ISP CORE IRQ: core_regs=%p, INT_EN/MASK set, pending cleared (0x%08x) ***\n", core, pending);
+    } else {
+        pr_warn("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
+    }
+
+    /* Also enable the kernel IRQ line if it was registered earlier */
+    if (ourISPdev && ourISPdev->isp_irq > 0) {
+        enable_irq(ourISPdev->isp_irq);
+        pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
+    }
+
     return 0;
 }
 
