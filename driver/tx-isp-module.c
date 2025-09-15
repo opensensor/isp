@@ -4738,8 +4738,10 @@ static int private_reset_tx_isp_module(int arg)
     return -ETIMEDOUT; /* Binary Ninja: return 0xffffffff */
 }
 
-/* ispcore_interrupt_service_routine - COMPLETE Binary Ninja exact implementation for MIPI */
-static irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
+/* ispcore_interrupt_service_routine_mod - COMPLETE Binary Ninja exact implementation for MIPI
+   NOTE: Renamed to avoid duplicate symbol with core's ispcore_interrupt_service_routine.
+   isp_irq_handle will call the core implementation (in tx_isp_core.c). */
+static irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     struct tx_isp_vic_device *vic_dev;
@@ -5282,8 +5284,9 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
     
     /* CRITICAL FIX: Route IRQ 37 to ISP core interrupt handler for MIPI data */
     if (irq == 37) {
-        /* This is the ISP core interrupt - route to ispcore_interrupt_service_routine */
-        pr_debug("*** IRQ 37: Routing to ISP CORE interrupt handler ***\n");
+        /* This is the ISP core interrupt - route to core implementation (tx_isp_core.c) */
+        extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
+        pr_debug("*** IRQ 37: Routing to ISP CORE interrupt handler (core file) ***\n");
         result = ispcore_interrupt_service_routine(irq, dev_id);
         
         /* Also check for VIC interrupts on same IRQ */
