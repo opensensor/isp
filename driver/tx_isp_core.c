@@ -297,6 +297,8 @@ extern struct tx_isp_dev *ourISPdev;
 
 /* Global ISP core pointer for Binary Ninja compatibility */
 static struct tx_isp_dev *g_ispcore = NULL;
+uint32_t system_reg_read(u32 reg);
+
 
 /* Core subdev operations implementations */
 int tx_isp_core_start(struct tx_isp_subdev *sd)
@@ -496,6 +498,7 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
     return 0;
 }
 EXPORT_SYMBOL(system_irq_func_set);
+
 
 /* ip_done_interrupt_handler - EXACT Binary Ninja implementation */
 irqreturn_t ip_done_interrupt_handler(int irq, void *dev_id)

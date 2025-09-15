@@ -247,7 +247,7 @@ int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 
 
 /* System register access functions - moved before use */
-static inline uint32_t system_reg_read(u32 reg);
+uint32_t system_reg_read(u32 reg);
 
 /* ISP register base definitions for proper alignment */
 #define ISP_AE_STATE_BASE    0x10000
@@ -440,7 +440,7 @@ static inline u64 ktime_get_real_ns(void)
 
 
 /* System register access functions */
-static inline uint32_t system_reg_read(u32 reg)
+uint32_t system_reg_read(u32 reg)
 {
     extern struct tx_isp_dev *ourISPdev;
     
