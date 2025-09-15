@@ -4788,16 +4788,26 @@ irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id)
     } else {
         return IRQ_NONE;
     }
-    /* Binary Ninja: int32_t $s1 = *($v0 + 0xb4); *($v0 + 0xb8) = $s1 */
-    interrupt_status = readl(isp_regs + 0xb4);  /* Read from ISP core base + 0xb4 */
-    writel(interrupt_status, isp_regs + 0xb8);  /* Clear at ISP core base + 0xb8 */
-    wmb();
-    
-    if (interrupt_status != 0) {
-        pr_info("*** ISP CORE INTERRUPT: status=0x%x (MIPI DATA RECEIVED!) ***\n", interrupt_status);
-    } else {
-        pr_debug("*** ISP CORE INTERRUPT: status=0x%x ***\n", interrupt_status);
-        return IRQ_HANDLED; /* No interrupt to process */
+    /* Support both legacy (+0xb*) and new (+0x98b*) interrupt banks */
+    {
+        u32 status_legacy = readl(isp_regs + 0xb4);
+        u32 status_new    = readl(isp_regs + 0x98b4);
+        interrupt_status  = status_legacy ? status_legacy : status_new;
+        /* Clear pending in the corresponding bank(s) */
+        if (status_legacy)
+            writel(status_legacy, isp_regs + 0xb8);
+        if (status_new)
+            writel(status_new, isp_regs + 0x98b8);
+        wmb();
+        if (interrupt_status != 0) {
+            pr_info("*** ISP CORE INTERRUPT: bank=%s status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
+                    status_legacy ? "legacy(+0xb*)" : "new(+0x98b*)",
+                    interrupt_status, status_legacy, status_new);
+        } else {
+            pr_debug("*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
+                     status_legacy, status_new);
+            return IRQ_HANDLED; /* No interrupt to process */
+        }
     }
     
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
