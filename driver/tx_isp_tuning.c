@@ -54,7 +54,6 @@ static struct cdev isp_tuning_cdev;
 static struct class *isp_tuning_class = NULL;
 static dev_t isp_tuning_devno;
 
-
 /* WDR Global Data Structures - From Binary Ninja Analysis */
 static uint32_t wdr_ev_now = 0;
 static uint32_t wdr_ev_list_deghost = 0;
@@ -1537,8 +1536,6 @@ struct af_zone_data af_zone_data = {
 
 /* ISP IRQ and Event System - Binary Ninja EXACT implementation */
 
-/* IRQ callback function array - Binary Ninja reference */
-static void (*irq_func_cb[32])(void) = {NULL};
 
 /* Event callback function array - Binary Ninja reference */
 static int (*cb[32])(void) = {NULL};
@@ -1546,23 +1543,6 @@ static int (*cb[32])(void) = {NULL};
 /* ISP interrupt state */
 static spinlock_t isp_irq_lock;
 static bool isp_irq_initialized = false;
-
-/* system_irq_func_set - Set IRQ function callback */
-int system_irq_func_set(int irq_id, void *handler)
-{
-    pr_info("system_irq_func_set: Setting IRQ %d handler to %p\n", irq_id, handler);
-    
-    if (irq_id < 0 || irq_id >= 32) {
-        pr_err("system_irq_func_set: Invalid IRQ ID %d\n", irq_id);
-        return -EINVAL;
-    }
-    
-    /* Set the IRQ callback function */
-    irq_func_cb[irq_id] = (void (*)(void))handler;
-    
-    pr_info("system_irq_func_set: IRQ %d callback set to %p\n", irq_id, handler);
-    return 0;
-}
 
 /* ISP M0 IOCTL handler - Binary Ninja EXACT reference implementation */
 int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __user *arg)
