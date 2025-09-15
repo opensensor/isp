@@ -2200,7 +2200,7 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
         wmb();
         ISP_INFO("*** ispcore_core_ops_init: ISP core interrupts enabled at core_regs + 0xb0/0xb4/0xbc ***\n");
     } else {
-        ISP_WARN("*** ispcore_core_ops_init: isp->core_regs is NULL; cannot enable core interrupts here ***\n");
+        ISP_INFO("*** ispcore_core_ops_init: isp->core_regs is NULL; cannot enable core interrupts here ***\n");
     }
     
     /* Start kernel thread - matches reference kthread_run */
