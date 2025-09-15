@@ -1540,6 +1540,9 @@ struct af_zone_data af_zone_data = {
 /* Event callback function array - Binary Ninja reference */
 static int (*cb[32])(void) = {NULL};
 
+/* IRQ callback function array - Binary Ninja reference */
+static void (*irq_func_cb[32])(void) = {NULL};
+
 /* ISP interrupt state */
 static spinlock_t isp_irq_lock;
 static bool isp_irq_initialized = false;
