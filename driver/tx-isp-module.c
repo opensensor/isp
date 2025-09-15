@@ -5285,9 +5285,9 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
     /* CRITICAL FIX: Route IRQ 37 to ISP core interrupt handler for MIPI data */
     if (irq == 37) {
         /* This is the ISP core interrupt - route to core implementation (tx_isp_core.c) */
-        extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
+        // extern irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id);
         pr_debug("*** IRQ 37: Routing to ISP CORE interrupt handler (core file) ***\n");
-        result = ispcore_interrupt_service_routine(irq, dev_id);
+        result = ispcore_interrupt_service_routine_mod(irq, dev_id);
         
         /* Also check for VIC interrupts on same IRQ */
         if (isp_dev->vic_dev) {
