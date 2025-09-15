@@ -547,15 +547,33 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
     
-    /* Binary Ninja: void* $v0 = *(arg1 + 0xb8) */
-    isp_regs = isp_dev->vic_regs - 0x9a00; /* Get ISP base */
-    
-    /* Binary Ninja: int32_t $s1 = *($v0 + 0xb4) */
-    irq_status = readl(isp_regs + 0xb4); /* Read interrupt status */
-    
-    /* Binary Ninja: *($v0 + 0xb8) = $s1 */
-    writel(irq_status, isp_regs + 0xb8); /* Clear interrupt status */
+    /* Select core base: prefer core_regs, fallback to VIC-relative */
+    void __iomem *core_base = NULL;
+    if (isp_dev->core_regs) {
+        core_base = isp_dev->core_regs;
+    } else if (isp_dev->vic_regs) {
+        core_base = isp_dev->vic_regs - 0x9a00;
+    } else {
+        return IRQ_HANDLED;
+    }
+    /* Read both possible interrupt status locations (legacy +0xb4 and new +0x98b4) */
+    u32 status_legacy = readl(core_base + 0xb4);
+    u32 status_new = readl(core_base + 0x98b4);
+    irq_status = status_legacy ? status_legacy : status_new;
+    /* Clear pending at the corresponding clear register */
+    if (status_legacy) {
+        writel(status_legacy, core_base + 0xb8);
+    } else if (status_new) {
+        writel(status_new, core_base + 0x98b8);
+    }
     wmb();
+    if (irq_status != 0) {
+        pr_info("*** ISP CORE IRQ: used %s bank, status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
+                status_legacy ? "legacy(+0xb4/+0xb8)" : "new(+0x98b4/+0x98b8)",
+                irq_status, status_legacy, status_new);
+    } else {
+        pr_debug("*** ISP CORE IRQ: no pending (legacy=0x%08x new=0x%08x) ***\n", status_legacy, status_new);
+    }
     
     pr_debug("*** ispcore_interrupt_service_routine: irq_status=0x%08x ***\n", irq_status);
     
@@ -2193,12 +2211,19 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
      * Reference ISR reads status at +0xb4 and clears at +0xb8, so enable/mask at +0xb0/+0xbc. */
     if (isp->core_regs) {
         void __iomem *core = isp->core_regs;
-        /* Unmask and enable core interrupts (frame done, errors, frame start, etc.) */
-        writel(0x3FFF, core + 0xb0);  /* INT_EN or similar */
-        writel(0x0000, core + 0xb4);  /* Clear any pending status */
-        writel(0x3FFF, core + 0xbc);  /* INT_MASK (0=unmask, or mirrored enable depending on block) */
+        /* Try both legacy and new interrupt banks */
+        /* Legacy bank (+0xb*) */
+        u32 pend_legacy = readl(core + 0xb4);
+        writel(pend_legacy, core + 0xb8);  /* Clear any pending status */
+        writel(0x3FFF, core + 0xb0);       /* Enable */
+        writel(0x3FFF, core + 0xbc);       /* Unmask/mirror */
+        /* New bank (+0x98b*) */
+        u32 pend_new = readl(core + 0x98b4);
+        writel(pend_new, core + 0x98b8);   /* Clear any pending status */
+        writel(0x3FFF, core + 0x98b0);     /* Enable */
+        writel(0x3FFF, core + 0x98bc);     /* Unmask/mirror */
         wmb();
-        ISP_INFO("*** ispcore_core_ops_init: ISP core interrupts enabled at core_regs + 0xb0/0xb4/0xbc ***\n");
+        ISP_INFO("*** ispcore_core_ops_init: ISP core interrupts enabled (legacy:+0xb* and new:+0x98b*) ***\n");
     } else {
         ISP_INFO("*** ispcore_core_ops_init: isp->core_regs is NULL; cannot enable core interrupts here ***\n");
     }
