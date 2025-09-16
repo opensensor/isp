@@ -29,6 +29,12 @@
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
 
+/* CSI State constants - needed for proper state management */
+#define CSI_STATE_OFF       0
+#define CSI_STATE_IDLE      1
+#define CSI_STATE_ACTIVE    2
+#define CSI_STATE_ERROR     3
+
 /* External ISP device reference */
 extern struct tx_isp_dev *ourISPdev;
 #include <linux/platform_device.h>
