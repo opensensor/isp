@@ -4632,34 +4632,126 @@ int tisp_param_operate_init(void)
 }
 
 
-/* Update functions for event callbacks */
+/* Update functions for event callbacks - Enhanced implementations */
 int tisp_tgain_update(void)
 {
     pr_debug("tisp_tgain_update: Updating total gain\n");
+
+    /* Update total gain based on current sensor conditions */
+    extern struct tx_isp_dev *ourISPdev;
+    if (ourISPdev && ourISPdev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+
+        /* Calculate total gain from analog and digital components */
+        uint32_t total_gain = (tuning->max_again * tuning->max_dgain) >> 10;
+        tuning->total_gain = total_gain;
+
+        /* Update hardware gain registers */
+        if (ourISPdev->core_regs) {
+            writel(total_gain, ourISPdev->core_regs + 0xa004);  /* Total gain register */
+        }
+
+        pr_debug("tisp_tgain_update: Total gain updated to 0x%x\n", total_gain);
+    }
+
     return 0;
 }
 
 int tisp_again_update(void)
 {
     pr_debug("tisp_again_update: Updating analog gain\n");
+
+    /* Update analog gain based on AE calculations */
+    extern struct tx_isp_dev *ourISPdev;
+    if (ourISPdev && ourISPdev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+
+        /* Update hardware analog gain register */
+        if (ourISPdev->core_regs) {
+            writel(tuning->max_again, ourISPdev->core_regs + 0xa008);  /* Analog gain register */
+        }
+
+        pr_debug("tisp_again_update: Analog gain updated to 0x%x\n", tuning->max_again);
+    }
+
     return 0;
 }
 
 int tisp_ev_update(void)
 {
     pr_debug("tisp_ev_update: Updating exposure value\n");
+
+    /* Update exposure value and trigger dependent updates */
+    extern struct tx_isp_dev *ourISPdev;
+    extern uint32_t data_9a454;  /* Global EV cache */
+
+    if (ourISPdev && ourISPdev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+
+        /* Update global EV cache for other modules */
+        data_9a454 = tuning->exposure;
+
+        /* Update hardware exposure register */
+        if (ourISPdev->core_regs) {
+            writel(tuning->exposure, ourISPdev->core_regs + 0xa00c);  /* Exposure register */
+        }
+
+        pr_debug("tisp_ev_update: Exposure updated to 0x%x\n", tuning->exposure);
+    }
+
     return 0;
 }
 
 int tisp_ct_update(void)
 {
     pr_debug("tisp_ct_update: Updating color temperature\n");
+
+    /* Update color temperature and trigger CCM updates */
+    extern struct tx_isp_dev *ourISPdev;
+    extern uint32_t data_9a450;  /* Global CT cache */
+
+    if (ourISPdev && ourISPdev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+
+        /* Update global CT cache for other modules */
+        data_9a450 = tuning->wb_temp;
+
+        /* Trigger CCM update based on new CT */
+        extern int tisp_ccm_ct_update(void);
+        tisp_ccm_ct_update();
+
+        pr_debug("tisp_ct_update: Color temperature updated to %dK\n", tuning->wb_temp);
+    }
+
     return 0;
 }
 
 int tisp_ae_ir_update(void)
 {
     pr_debug("tisp_ae_ir_update: Updating AE IR parameters\n");
+
+    /* Update AE IR (infrared) parameters for day/night transitions */
+    extern struct tx_isp_dev *ourISPdev;
+
+    if (ourISPdev && ourISPdev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+
+        /* Update IR cut filter based on light conditions */
+        if (tuning->exposure > 0x8000) {  /* Low light threshold */
+            /* Night mode - disable IR cut filter */
+            if (ourISPdev->core_regs) {
+                writel(0, ourISPdev->core_regs + 0xa010);  /* IR cut disable */
+            }
+            pr_debug("tisp_ae_ir_update: Night mode - IR cut disabled\n");
+        } else {
+            /* Day mode - enable IR cut filter */
+            if (ourISPdev->core_regs) {
+                writel(1, ourISPdev->core_regs + 0xa010);  /* IR cut enable */
+            }
+            pr_debug("tisp_ae_ir_update: Day mode - IR cut enabled\n");
+        }
+    }
+
     return 0;
 }
 
@@ -4782,6 +4874,17 @@ EXPORT_SYMBOL(tiziano_dpc_init);
 EXPORT_SYMBOL(tisp_again_update);
 EXPORT_SYMBOL(tiziano_bcsh_init);
 EXPORT_SYMBOL(tisp_adr_process);
+
+/* Export comprehensive tuning functions */
+EXPORT_SYMBOL(tiziano_gamma_lut_parameter);
+EXPORT_SYMBOL(tiziano_lsc_params_refresh);
+EXPORT_SYMBOL(tiziano_dpc_params_refresh);
+EXPORT_SYMBOL(tiziano_sharpen_params_refresh);
+EXPORT_SYMBOL(tiziano_sdns_params_refresh);
+EXPORT_SYMBOL(tiziano_adr_params_refresh);
+EXPORT_SYMBOL(tisp_dpc_par_refresh);
+EXPORT_SYMBOL(tisp_sharpen_par_refresh);
+EXPORT_SYMBOL(tisp_sdns_par_refresh);
 EXPORT_SYMBOL(tiziano_adr_interrupt_static);
 EXPORT_SYMBOL(tisp_wdr_expTime_updata);
 EXPORT_SYMBOL(tisp_wdr_ev_calculate);
