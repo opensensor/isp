@@ -217,7 +217,7 @@ static uint32_t mdns_std_sta_ass_base[9] = {0x15, 0x25, 0x35, 0x45, 0x55, 0x65, 
 static uint32_t mdns_std_ref_wei_base[9] = {0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90};
 
 /* Function declarations for register refresh functions */
-static int tisp_sdns_all_reg_refresh(uint32_t base_addr);
+static int tisp_sdns_all_reg_refresh(void);
 static int tisp_mdns_all_reg_refresh(uint32_t base_addr);
 static int tisp_mdns_reg_trigger(void);
 
