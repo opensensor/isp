@@ -1761,8 +1761,8 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             }
 
                             /* 2. CCM (Color Correction Matrix) update */
-                            extern int tiziano_ccm_update(uint32_t ct_value, uint32_t sat_value);
-                            int ccm_ret = tiziano_ccm_update(5000, 128);  /* Default CT=5000K, sat=128 */
+                            extern int jz_isp_ccm(void);
+                            int ccm_ret = jz_isp_ccm();  /* Update CCM based on current conditions */
                             if (ccm_ret != 0) {
                                 pr_debug("TUNING: CCM update returned %d\n", ccm_ret);
                             }
