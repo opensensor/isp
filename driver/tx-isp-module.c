@@ -1498,11 +1498,23 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         u32 current_imr = readl(vic_regs + 0x04);
         u32 current_imcr = readl(vic_regs + 0x0c);
 
-        /* CRITICAL FIX: Root cause fixed - CSI PHY now writes to correct base address */
-        /* No longer need interrupt restoration since CSI PHY writes to 0x10022000 (isp-csi) */
-        /* instead of 0x133e0000 (isp-w02) which contains VIC interrupt registers */
-        pr_debug("*** VIC INTERRUPT CHECK: IMR=0x%x, IMCR=0x%x (should remain stable) ***\n",
-                current_imr, current_imcr);
+        /* CRITICAL FIX: Check working VIC interrupt registers (0x1e0/0x1e8) */
+        /* CSI PHY writes to 0x10022000 should not affect these, but check anyway */
+        u32 current_1e0 = readl(vic_regs + 0x1e0);
+        u32 current_1e8 = readl(vic_regs + 0x1e8);
+
+        /* Check if working interrupt registers have been corrupted */
+        if (current_1e0 != 0xffffffff || current_1e8 != 0x0) {
+            pr_info("*** VIC INTERRUPT RESTORE: Working registers corrupted (1e0=0x%x, 1e8=0x%x), restoring ***\n",
+                    current_1e0, current_1e8);
+
+            /* Restore working VIC interrupt register values */
+            writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
+            writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
+            wmb();
+
+            pr_info("*** VIC INTERRUPT RESTORE: Working registers restored ***\n");
+        }
     }
     
     /* Get VIC interrupt enable flag at offset +0x13c */

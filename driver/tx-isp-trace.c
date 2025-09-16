@@ -199,11 +199,16 @@ static void check_region_changes(struct work_struct *work)
                        jiffies_to_msecs(delta_jiffies),
                        jiffies_to_usecs(delta_jiffies) % 1000);
 
-                // CRITICAL FIX: Root cause fixed - CSI PHY now writes to correct base address
-                // CSI PHY writes now go to 0x10022000 (isp-csi) instead of 0x133e0000 (isp-w02)
-                // This prevents conflicts with VIC interrupt registers at 0x04, 0x0c, 0x1e8
-                if ((offset == 0x04 || offset == 0x0c || offset == 0x1e8) && strcmp(region->name, "isp-w02") == 0) {
-                    pr_debug("*** VIC REGISTER CHANGE: Register 0x%x changed (should be rare now) ***\n", offset);
+                // CRITICAL FIX: Monitor working VIC interrupt registers for conflicts
+                // CSI PHY writes should go to 0x10022000 (isp-csi) but monitor for conflicts anyway
+                // Working VIC interrupt registers are at 0x1e0, 0x1e8
+                if ((offset == 0x1e0 || offset == 0x1e8) && strcmp(region->name, "isp-w02") == 0) {
+                    pr_info("*** VIC WORKING REGISTER CONFLICT: Register 0x%x overwritten (VIC interrupt register) ***\n", offset);
+                    pr_info("*** VIC interrupts may be disrupted - restoration needed ***\n");
+
+                    /* Call restoration function */
+                    extern void tx_isp_vic_restore_interrupts(void);
+                    tx_isp_vic_restore_interrupts();
                 }
             }
 
