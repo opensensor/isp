@@ -318,11 +318,7 @@ static struct workqueue_struct *fs_workqueue = NULL;
 static struct work_struct fs_work;
 static void ispcore_irq_fs_work(struct work_struct *work);
 
-/* CSI PHY register protection - prevent corruption */
-static u32 saved_phy_ctrl = 0;
-static u32 saved_phy_data = 0;
-static u32 saved_phy_clk = 0;
-static int phy_protection_enabled = 0;
+
 
 /* CSI PHY register monitoring and recovery function */
 static void check_and_restore_csi_phy_registers(void)
