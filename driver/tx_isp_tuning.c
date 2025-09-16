@@ -4886,6 +4886,10 @@ EXPORT_SYMBOL(tiziano_adr_params_refresh);
 EXPORT_SYMBOL(tisp_dpc_par_refresh);
 EXPORT_SYMBOL(tisp_sharpen_par_refresh);
 EXPORT_SYMBOL(tisp_sdns_par_refresh);
+
+/* Export global variables used across modules */
+EXPORT_SYMBOL(data_9a454);
+EXPORT_SYMBOL(data_9a450);
 EXPORT_SYMBOL(tiziano_adr_interrupt_static);
 EXPORT_SYMBOL(tisp_wdr_expTime_updata);
 EXPORT_SYMBOL(tisp_wdr_ev_calculate);
