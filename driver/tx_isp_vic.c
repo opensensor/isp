@@ -2950,9 +2950,19 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
                     if (reg_offset < 0x1000) {  /* Bounds check */
                         writel(buffer_addr, vic_dev->vic_regs + reg_offset);
                         wmb();
-                        pr_info("*** CRITICAL SUCCESS: Buffer 0x%x programmed to VIC[0x%x] ***\n", 
+                        pr_info("*** CRITICAL SUCCESS: Buffer 0x%x programmed to VIC[0x%x] ***\n",
                                 buffer_addr, reg_offset);
                         pr_info("*** NO MORE 'qbuffer null' - VIC hardware now has buffer! ***\n");
+
+                        /* CRITICAL FIX: Enable VIC interrupts now that buffer is configured */
+                        pr_info("*** VIC INTERNAL QBUF: Checking vic_start_ok status: vic_start_ok=%d ***\n", vic_start_ok);
+                        if (vic_start_ok == 0) {
+                            vic_start_ok = 1;
+                            pr_info("*** CRITICAL: VIC INTERRUPTS NOW ENABLED - buffer configured (internal handler)! ***\n");
+                            pr_info("*** VIC hardware can now safely generate interrupts without control limit errors ***\n");
+                        } else {
+                            pr_info("*** VIC INTERNAL QBUF: VIC interrupts already enabled (vic_start_ok=%d) ***\n", vic_start_ok);
+                        }
                     }
                 }
                 

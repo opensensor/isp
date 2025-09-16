@@ -5816,11 +5816,14 @@ int vic_event_handler(void *subdev, int event_type, void *data)
                 
                 pr_info("*** VIC QBUF: BUFFER SUCCESSFULLY PROGRAMMED TO VIC HARDWARE! ***\n");
 
-                /* CRITICAL FIX: Enable VIC interrupts now that first buffer is configured */
+                /* CRITICAL FIX: Enable VIC interrupts now that buffer is configured */
+                pr_info("*** VIC QBUF: Checking vic_start_ok status: vic_start_ok=%d ***\n", vic_start_ok);
                 if (vic_start_ok == 0) {
                     vic_start_ok = 1;
-                    pr_info("*** CRITICAL: VIC INTERRUPTS NOW ENABLED - first buffer configured! ***\n");
+                    pr_info("*** CRITICAL: VIC INTERRUPTS NOW ENABLED - buffer configured! ***\n");
                     pr_info("*** VIC hardware can now safely generate interrupts without control limit errors ***\n");
+                } else {
+                    pr_info("*** VIC QBUF: VIC interrupts already enabled (vic_start_ok=%d) ***\n", vic_start_ok);
                 }
 
                 pr_info("*** VIC QBUF: Buffer[%d] addr=0x%x programmed, frame_count=%u ***\n",
