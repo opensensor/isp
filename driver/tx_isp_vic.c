@@ -822,17 +822,16 @@ static ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t 
 int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
 {
     void __iomem *csi_base;
-    pr_info("*** tx_isp_phy_init: experimental CSI PHY initialization ***\n");
+    pr_info("*** tx_isp_phy_init: DISABLED - CSI PHY should be configured by CSI module ***\n");
     if (!isp_dev) {
         pr_err("tx_isp_phy_init: No ISP device available\n");
         return -ENODEV;
     }
 
-    csi_base = isp_dev->vic_dev->vic_regs - 0x9a00;  /* Calculate CSI base from VIC base */
-    if (!csi_base) {
-        pr_err("tx_isp_phy_init: No CSI base available\n");
-        return -ENODEV;
-    }
+    /* CRITICAL FIX: Don't do CSI PHY initialization from VIC module */
+    /* This was writing to the wrong base address and conflicting with VIC interrupts */
+    pr_info("*** tx_isp_phy_init: Skipping CSI PHY init - handled by CSI module at correct base address ***\n");
+    return 0;
 
 
       /* ==============================================================================================
@@ -2306,16 +2305,17 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     return -ENOMEM;
                 }
                 
-                /* STEP 1: ISP isp-w02 - Initial CSI PHY Control registers */
-                pr_info("*** STEP 1: ISP isp-w02 - Initial CSI PHY Control registers ***\n");
-                /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
-                /* CRITICAL FIX: Use ACTUAL sensor output dimensions, not total dimensions */
+                /* STEP 1: VIC Configuration - NOT CSI PHY! */
+                pr_info("*** STEP 1: VIC Configuration - using VIC registers only ***\n");
+                /* CRITICAL FIX: vic_regs (0x133e0000) contains VIC interrupt registers - don't overwrite them! */
+                /* CSI PHY configuration should be done by CSI module at 0x10022000 */
                 u32 sensor_width = 1920;   /* ACTUAL sensor output width */
                 u32 sensor_height = 1080;  /* ACTUAL sensor output height */
                 pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", sensor_width, sensor_height);
-                pr_info("*** CRITICAL: All hardware configured for sensor OUTPUT, not sensor TOTAL dimensions ***\n");
-                writel((sensor_width << 16) | sensor_height, vic_regs + 0x4);
-                writel(0x2, vic_regs + 0xc);
+                pr_info("*** CRITICAL: VIC configured for sensor OUTPUT, CSI PHY handled separately ***\n");
+
+                /* CRITICAL FIX: Only write to VIC-specific registers, avoid 0x4, 0xc which are VIC interrupt registers */
+                pr_info("*** CRITICAL: Skipping writes to 0x4, 0xc to preserve VIC interrupt registers ***\n");
                 writel(0x2, vic_regs + 0x14);
                 writel(0xf00, vic_regs + 0x18);
                 writel(0x800800, vic_regs + 0x60);

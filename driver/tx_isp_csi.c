@@ -667,19 +667,20 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         pr_info("*** CRITICAL: CSI PHY timing configuration - frame_rate=%d, phy_timing=%d ***\n",
                                 frame_rate, phy_timing_value);
 
-                        /* CRITICAL FIX: Use CORRECT CSI PHY base address - isp-w02 at 0x133e0000 */
+                        /* CRITICAL FIX: Use CORRECT CSI PHY base address - isp-csi at 0x10022000 */
                         void __iomem *phy_base = NULL;
 
-                        /* The CSI PHY registers are at isp-w02 (0x133e0000), NOT 0x10021000! */
-                        /* This matches the register tracer output: "ISP isp-w02: [CSI PHY Control]" */
-                        phy_base = ioremap(0x133e0000, 0x10000);
+                        /* The CSI PHY registers should be at isp-csi (0x10022000), NOT isp-w02! */
+                        /* Reference trace shows "ISP isp-csi: [CSI PHY Config]" for CSI PHY writes */
+                        /* The isp-w02 region contains VIC interrupt registers that we must not overwrite */
+                        phy_base = ioremap(0x10022000, 0x10000);
                         if (!phy_base) {
-                            pr_err("*** CRITICAL ERROR: Failed to map CSI PHY base at 0x133e0000 (isp-w02) ***\n");
+                            pr_err("*** CRITICAL ERROR: Failed to map CSI PHY base at 0x10022000 (isp-csi) ***\n");
                             return -ENOMEM;
                         }
 
-                        pr_info("*** CRITICAL FIX: CSI PHY base mapped to CORRECT address 0x133e0000 (isp-w02) -> %p ***\n", phy_base);
-                        pr_info("*** This should now match the register tracer output! ***\n");
+                        pr_info("*** CRITICAL FIX: CSI PHY base mapped to CORRECT address 0x10022000 (isp-csi) -> %p ***\n", phy_base);
+                        pr_info("*** This should match reference trace 'ISP isp-csi' output and avoid VIC conflicts! ***\n");
 
                         if (phy_base) {
                             /* Binary Ninja: Configure critical PHY timing registers */

@@ -1498,20 +1498,11 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         u32 current_imr = readl(vic_regs + 0x04);
         u32 current_imcr = readl(vic_regs + 0x0c);
 
-        /* Check if interrupt registers have been corrupted */
-        if (current_imr != 0x07800438 || current_imcr != 0xb5742249) {
-            pr_info("*** VIC INTERRUPT RESTORE: Registers corrupted (IMR=0x%x, IMCR=0x%x), restoring ***\n",
-                    current_imr, current_imcr);
-
-            /* Restore Binary Ninja interrupt register values */
-            writel(0xffffffff, vic_regs + 0x08);  /* Clear interrupt masks first */
-            wmb();
-            writel(0x07800438, vic_regs + 0x04);  /* VIC IMR */
-            writel(0xb5742249, vic_regs + 0x0c);  /* VIC IMCR */
-            wmb();
-
-            pr_info("*** VIC INTERRUPT RESTORE: Registers restored to Binary Ninja values ***\n");
-        }
+        /* CRITICAL FIX: Root cause fixed - CSI PHY now writes to correct base address */
+        /* No longer need interrupt restoration since CSI PHY writes to 0x10022000 (isp-csi) */
+        /* instead of 0x133e0000 (isp-w02) which contains VIC interrupt registers */
+        pr_debug("*** VIC INTERRUPT CHECK: IMR=0x%x, IMCR=0x%x (should remain stable) ***\n",
+                current_imr, current_imcr);
     }
     
     /* Get VIC interrupt enable flag at offset +0x13c */
