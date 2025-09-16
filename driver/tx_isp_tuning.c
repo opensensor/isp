@@ -1924,15 +1924,19 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             pr_info("MCP_LOG: Tuning controls now ready for operation\n");
                         }
                         
-                        /* CRITICAL: ENABLE tisp_init to initialize all tiziano components */
+                        /* CRITICAL: Call the proper tiziano initialization function */
                         /* This is needed to initialize DPC arrays and other ISP pipeline components */
-                        pr_info("*** CALLING tisp_init - REQUIRED to initialize tiziano pipeline components ***\n");
+                        pr_info("*** DEBUG: About to call tiziano_init_all_pipeline_components ***\n");
                         pr_info("*** This will initialize DPC, LSC, CCM, and all other ISP arrays ***\n");
-                        ret = tisp_init(NULL, NULL);  /* Call tisp_init to initialize all components */
+
+                        extern int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32_t fps, int wdr_mode);
+                        ret = tiziano_init_all_pipeline_components(1920, 1080, 25, 0);  /* Initialize all tiziano components */
+
+                        pr_info("*** DEBUG: tiziano_init_all_pipeline_components returned: %d ***\n", ret);
                         if (ret != 0) {
-                            pr_err("*** ERROR: tisp_init failed: %d ***\n", ret);
+                            pr_err("*** ERROR: tiziano_init_all_pipeline_components failed: %d ***\n", ret);
                         } else {
-                            pr_info("*** SUCCESS: tisp_init completed - all tiziano components initialized ***\n");
+                            pr_info("*** SUCCESS: All tiziano components initialized - DPC arrays should now be ready ***\n");
                         }
                         
                         ourISPdev->tuning_enabled = 3;
