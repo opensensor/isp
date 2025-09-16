@@ -416,18 +416,16 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: int32_t $v0_4 = 4, if (arg2 == 0) $v0_4 = 3 */
     if (enable) {
         /* Binary Ninja: *(arg1 + 0x128) = 4 */
-        /* CRITICAL FIX: Use safe struct member access instead of offset 0x128 */
-        /* CRITICAL FIX: State 4 doesn't exist! Use CSI_STATE_ACTIVE (2) for streaming */
-        csi_dev->state = CSI_STATE_ACTIVE;  /* 2 = ACTIVE, not 4 (invalid) */
-        pr_info("CSI streaming enabled with comprehensive hardware configuration - state=%d (ACTIVE)\n", csi_dev->state);
+        /* CRITICAL FIX: Use CORRECT Binary Ninja state 4 for streaming! */
+        csi_dev->state = 4;  /* 4 = STREAMING (Binary Ninja reference) */
+        pr_info("CSI streaming enabled - state=%d (STREAMING)\n", csi_dev->state);
     } else {
         pr_info("*** CSI VIDEO STREAMING DISABLE ***\n");
 
         /* Binary Ninja: *(arg1 + 0x128) = 3 */
-        /* CRITICAL FIX: Use safe struct member access instead of offset 0x128 */
-        /* CRITICAL FIX: State 3 = CSI_STATE_ERROR! Use CSI_STATE_IDLE (1) for disable */
-        csi_dev->state = CSI_STATE_IDLE;  /* 1 = IDLE, not 3 = ERROR */
-        pr_info("CSI streaming disabled - state=%d (IDLE)\n", csi_dev->state);
+        /* CRITICAL FIX: Use CORRECT Binary Ninja state 3 for disable */
+        csi_dev->state = 3;  /* 3 = DISABLED (Binary Ninja reference) */
+        pr_info("CSI streaming disabled - state=%d (DISABLED)\n", csi_dev->state);
     }
 
     /* Binary Ninja: return 0 */
