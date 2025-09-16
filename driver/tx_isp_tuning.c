@@ -1747,14 +1747,18 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 
                 pr_info("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
 
-                /* CRITICAL: Perform continuous tuning operations like reference driver */
+                /* BINARY NINJA REFERENCE: Simple tuning enable acknowledgment */
                 if (enable && ourISPdev->tuning_enabled == 3) {
-                    static int tuning_cycle_count = 0;
-                    tuning_cycle_count++;
+                    /* Binary Ninja shows the reference driver does minimal work here */
+                    /* Just acknowledges the enable request and returns success */
+                    pr_info("*** BINARY NINJA REFERENCE: Tuning enable acknowledged (no heavy operations) ***\n");
 
-                    /* CRITICAL FIX: Don't perform continuous tuning during VIC streaming */
-                    /* This prevents CSI PHY timeouts that disrupt VIC interrupts */
-                    extern uint32_t vic_start_ok;
+                    /* The reference driver does NOT do comprehensive pipeline updates on every call */
+                    /* This was the root cause of CSI PHY register corruption */
+
+                    /* Reference driver behavior: Just return success without heavy processing */
+                    ret = 0;
+                    break;
 
                     /* CRITICAL: Save CSI PHY register state before tuning operations */
                     u32 saved_phy_0 = 0, saved_phy_c = 0, saved_phy_10 = 0, saved_phy_a0 = 0, saved_phy_b0 = 0;
