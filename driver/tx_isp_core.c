@@ -334,14 +334,14 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     pr_info("*** ISP FRAME SYNC WORK: STARTING - Work function is running! ***\n");
     pr_info("*** ISP FRAME SYNC WORK: work=%p, current=%s[%d] ***\n", work, current->comm, current->pid);
 
-    /* CRITICAL FIX: Don't perform CSI PHY changes during VIC streaming */
+    /* CRITICAL FIX: Always increment frame counter for every frame sync event */
+    pr_info("*** ISP FRAME SYNC WORK: Processing frame sync event (vic_start_ok=%d) ***\n", vic_start_ok);
+    pr_info("*** ISP FRAME SYNC WORK: Calling isp_frame_done_wakeup() to increment frame counter ***\n");
+    isp_frame_done_wakeup();
+
+    /* CRITICAL FIX: Skip CSI PHY changes during VIC streaming to prevent interrupt disruption */
     if (vic_start_ok == 1) {
         pr_info("*** ISP FRAME SYNC WORK: VIC streaming active - SKIPPING CSI PHY changes to prevent interrupt disruption ***\n");
-
-        /* CRITICAL FIX: Still increment frame counter even when skipping CSI PHY changes */
-        pr_info("*** ISP FRAME SYNC WORK: Calling isp_frame_done_wakeup() to increment frame counter ***\n");
-        isp_frame_done_wakeup();
-
         pr_info("*** ISP FRAME SYNC WORK: Frame sync work completed (VIC-safe mode) ***\n");
         return;
     }
