@@ -1905,45 +1905,49 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 }
                 
                 if (enable) {
-                    /* CRITICAL: Initialize tuning_data if not already initialized */
-                    if (!dev->tuning_data) {
-                        pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
-
-                        /* Allocate tuning data structure using the reference implementation */
-                        ourISPdev->tuning_data = isp_core_tuning_init(dev);
-                        if (!dev->tuning_data) {
-                            pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
-                            return -ENOMEM;
-                        }
-
-                        pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
-
-                        /* MCP LOG: Tuning data structure successfully initialized */
-                        pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
-                        pr_info("MCP_LOG: Tuning controls now ready for operation\n");
-                    }
-
-                    /* CRITICAL: Always check if tiziano components need initialization */
-                    /* Check if DPC arrays are initialized - if not, initialize all components */
-                    extern uint32_t *dpc_d_m1_dthres_array_now;
-                    if (!dpc_d_m1_dthres_array_now) {
-                        pr_info("*** DEBUG: DPC arrays not initialized - calling tiziano_init_all_pipeline_components ***\n");
-                        pr_info("*** This will initialize DPC, LSC, CCM, and all other ISP arrays ***\n");
-
-                        extern int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32_t fps, int wdr_mode);
-                        ret = tiziano_init_all_pipeline_components(1920, 1080, 25, 0);  /* Initialize all tiziano components */
-
-                        pr_info("*** DEBUG: tiziano_init_all_pipeline_components returned: %d ***\n", ret);
-                        if (ret != 0) {
-                            pr_err("*** ERROR: tiziano_init_all_pipeline_components failed: %d ***\n", ret);
-                        } else {
-                            pr_info("*** SUCCESS: All tiziano components initialized - DPC arrays should now be ready ***\n");
-                        }
-                    } else {
-                        pr_info("*** DEBUG: DPC arrays already initialized - skipping tiziano initialization ***\n");
-                    }
-
                     if (dev->tuning_enabled != 3) {
+                        /* CRITICAL: Initialize tuning_data if not already initialized */
+                        if (!dev->tuning_data) {
+                            pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
+
+                            /* Allocate tuning data structure using the reference implementation */
+                            ourISPdev->tuning_data = isp_core_tuning_init(dev);
+                            if (!dev->tuning_data) {
+                                pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
+                                return -ENOMEM;
+                            }
+
+                            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
+
+                            /* MCP LOG: Tuning data structure successfully initialized */
+                            pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
+                            pr_info("MCP_LOG: Tuning controls now ready for operation\n");
+                        }
+
+                        /* CRITICAL: Call ISP core init through proper subdev operations - ONE TIME ONLY */
+                        /* This should initialize all tiziano components including DPC arrays */
+                        if (ourISPdev->sd.ops && ourISPdev->sd.ops->core && ourISPdev->sd.ops->core->init) {
+                            pr_info("*** DEBUG: CALLING ISP CORE INIT - INITIALIZING ALL TIZIANO COMPONENTS ***\n");
+                            ret = ourISPdev->sd.ops->core->init(&ourISPdev->sd, 1);
+                            if (ret) {
+                                pr_err("*** ERROR: ISP CORE INIT FAILED: %d ***\n", ret);
+                            } else {
+                                pr_info("*** SUCCESS: ISP CORE INIT COMPLETED - ALL TIZIANO COMPONENTS INITIALIZED ***\n");
+                            }
+                        } else {
+                            pr_warn("*** WARNING: ISP core init not available - using fallback initialization ***\n");
+
+                            extern int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32_t fps, int wdr_mode);
+                            ret = tiziano_init_all_pipeline_components(1920, 1080, 25, 0);  /* Fallback initialization */
+
+                            pr_info("*** DEBUG: Fallback tiziano_init_all_pipeline_components returned: %d ***\n", ret);
+                            if (ret != 0) {
+                                pr_err("*** ERROR: Fallback tiziano initialization failed: %d ***\n", ret);
+                            } else {
+                                pr_info("*** SUCCESS: Fallback initialization completed - DPC arrays should now be ready ***\n");
+                            }
+                        }
+
                         ourISPdev->tuning_enabled = 3;
                         auto_init_done = true;  /* Mark as auto-initialized */
                         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
