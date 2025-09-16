@@ -1037,7 +1037,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* Get sensor attributes - offset 0x110 in Binary Ninja */
     sensor_attr = &vic_dev->sensor_attr;
-    
+
+    /* CRITICAL FIX: Initialize actual sensor dimensions for consistent use */
+    actual_width = sensor_attr->total_width;
+    actual_height = sensor_attr->total_height;
+    if (actual_width == 0 || actual_height == 0) {
+        actual_width = vic_dev->width;
+        actual_height = vic_dev->height;
+        pr_warn("*** DIMENSION FIX: Using vic_dev dimensions %dx%d (sensor_attr not available) ***\n",
+                actual_width, actual_height);
+    } else {
+        pr_info("*** DIMENSION FIX: Using sensor dimensions %dx%d for VIC configuration ***\n",
+                actual_width, actual_height);
+    }
+
     /* Binary Ninja: 0001024c int32_t $v0 = *($v1 + 0x14) - interface type at offset 0x14 */
     interface_type = sensor_attr->dbus_type;
     sensor_format = sensor_attr->data_type;
