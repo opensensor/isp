@@ -2497,6 +2497,31 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         pr_err("*** CSI video streaming failed: %d ***\n", csi_video_result);
                     } else {
                         pr_info("*** CSI video streaming successful - CSI state should now be 4 (streaming)! ***\n");
+
+                        /* CRITICAL: NOW perform VIC unlock sequence - CSI is ready and providing MIPI data */
+                        pr_info("*** CRITICAL: Performing VIC unlock sequence NOW that CSI is providing MIPI data ***\n");
+                        writel(2, vic_regs + 0x0);
+                        wmb();
+                        writel(4, vic_regs + 0x0);
+                        wmb();
+
+                        /* Wait for VIC unlock - should work now that CSI PHY is configured */
+                        int unlock_timeout = 1000;
+                        while (readl(vic_regs + 0x0) != 0) {
+                            udelay(1);
+                            if (--unlock_timeout == 0) {
+                                pr_err("VIC unlock timeout AFTER CSI initialization\n");
+                                break;
+                            }
+                        }
+
+                        if (unlock_timeout > 0) {
+                            pr_info("*** VIC unlock successful - VIC hardware ready to process MIPI data! ***\n");
+                            writel(1, vic_regs + 0x0);  /* Enable VIC */
+                            pr_info("*** VIC enabled and ready for streaming ***\n");
+                        } else {
+                            pr_err("*** VIC unlock failed even after CSI initialization ***\n");
+                        }
                     }
                 } else {
                     pr_err("*** WARNING: No CSI device available for initialization ***\n");
