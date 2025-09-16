@@ -806,6 +806,36 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         pr_info("*** CSI PHY Config Lane 1 configured (0x180-0x1f4) ***\n");
 
+                        /* CSI Lane Config registers - Data Lane 0 */
+                        writel(0x8a, csi_base + 0x200);
+                        writel(0x5, csi_base + 0x204);
+                        writel(0x40, csi_base + 0x20c);
+                        writel(0xb0, csi_base + 0x210);
+                        writel(0xc5, csi_base + 0x214);
+                        writel(0x3, csi_base + 0x218);
+                        writel(0x9, csi_base + 0x21c);
+                        writel(0xf, csi_base + 0x220);
+                        writel(0x48, csi_base + 0x224);
+                        writel(0xf, csi_base + 0x228);
+                        writel(0xf, csi_base + 0x22c);
+                        writel(0x88, csi_base + 0x230);
+                        writel(0x86, csi_base + 0x238);
+                        writel(0x10, csi_base + 0x23c);
+                        writel(0x4, csi_base + 0x240);
+                        writel(0x1, csi_base + 0x244);
+                        writel(0x32, csi_base + 0x248);
+                        writel(0x80, csi_base + 0x24c);
+                        writel(0x1, csi_base + 0x258);
+                        writel(0x60, csi_base + 0x25c);
+                        writel(0x1b, csi_base + 0x260);
+                        writel(0x18, csi_base + 0x264);
+                        writel(0x7f, csi_base + 0x268);
+                        writel(0x4b, csi_base + 0x26c);
+                        writel(0x3, csi_base + 0x274);
+                        wmb();
+
+                        pr_info("*** CSI Lane Config Data Lane 0 configured (0x200-0x274) ***\n");
+
                     } else if (interface_type == 2) {
                         /* DVP interface */
                         pr_info("CSI: DVP interface configuration\n");
