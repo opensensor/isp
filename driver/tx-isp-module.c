@@ -1498,22 +1498,27 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         u32 current_imr = readl(vic_regs + 0x04);
         u32 current_imcr = readl(vic_regs + 0x0c);
 
-        /* CRITICAL FIX: Check working VIC interrupt registers (0x1e0/0x1e8) */
-        /* CSI PHY writes to 0x10022000 should not affect these, but check anyway */
-        u32 current_1e0 = readl(vic_regs + 0x1e0);
-        u32 current_1e8 = readl(vic_regs + 0x1e8);
+        /* CRITICAL FIX: Check VIC interrupt registers at correct base (0x10023000) */
+        /* VIC interrupt control is at separate VIC base, not shared region */
+        void __iomem *vic_interrupt_base = ioremap(0x10023000, 0x1000);
+        if (vic_interrupt_base) {
+            u32 current_1e0 = readl(vic_interrupt_base + 0x1e0);
+            u32 current_1e8 = readl(vic_interrupt_base + 0x1e8);
 
-        /* Check if working interrupt registers have been corrupted */
-        if (current_1e0 != 0xffffffff || current_1e8 != 0x0) {
-            pr_info("*** VIC INTERRUPT RESTORE: Working registers corrupted (1e0=0x%x, 1e8=0x%x), restoring ***\n",
-                    current_1e0, current_1e8);
+            /* Check if VIC interrupt registers have been corrupted */
+            if (current_1e0 != 0xffffffff || current_1e8 != 0x0) {
+                pr_info("*** VIC INTERRUPT RESTORE: Registers corrupted (1e0=0x%x, 1e8=0x%x), restoring ***\n",
+                        current_1e0, current_1e8);
 
-            /* Restore working VIC interrupt register values */
-            writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-            writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
-            wmb();
+                /* Restore VIC interrupt register values at correct base */
+                writel(0xffffffff, vic_interrupt_base + 0x1e0);  /* Enable all VIC interrupts */
+                writel(0x0, vic_interrupt_base + 0x1e8);         /* Clear interrupt masks */
+                wmb();
 
-            pr_info("*** VIC INTERRUPT RESTORE: Working registers restored ***\n");
+                pr_info("*** VIC INTERRUPT RESTORE: Registers restored at correct base ***\n");
+            }
+
+            iounmap(vic_interrupt_base);
         }
     }
     
