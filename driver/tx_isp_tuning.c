@@ -1762,9 +1762,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                     bool phy_protection_active = false;
 
-                    /* ===== COMPREHENSIVE ISP TUNING OPERATIONS - SAFE Implementation ===== */
-                    pr_info("*** COMPREHENSIVE TUNING: Performing ALL ISP pipeline updates (cycle %d) ***\n", tuning_cycle_count);
-
                     /* SAFETY: Check if global ISP device is properly initialized */
                     extern struct tx_isp_dev *ourISPdev;
 
