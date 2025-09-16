@@ -1496,9 +1496,9 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     /* Get VIC interrupt enable flag at offset +0x13c */
     vic_irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
     
-    /* CRITICAL FIX: The 0x1e0/0x1e8 registers are CSI PHY registers that change during tuning */
-    /* But we need to keep the original Binary Ninja logic to avoid system hangs */
-    /* The real fix is to make the interrupt handler more robust against CSI PHY changes */
+    /* BINARY NINJA EXACT LOGIC - but with better debugging */
+    /* The issue is not the register addresses - IRQ 38 is firing correctly */
+    /* The issue is that VIC hardware stops generating interrupt status bits */
 
     /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
     /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
@@ -1510,9 +1510,12 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     v1_7 = (~reg_1e8) & reg_1e0;
     v1_10 = (~reg_1ec) & reg_1e4;
 
-    /* DEBUG: Check if these are CSI PHY registers changing due to tuning */
-    pr_debug("*** VIC INTERRUPT DEBUG: vic_regs=%p, 0x1e0=0x%x, 0x1e8=0x%x ***\n",
-            vic_regs, reg_1e0, reg_1e8);
+    /* ENHANCED DEBUG: Show why VIC interrupts stop working */
+    if (v1_7 == 0 && v1_10 == 0) {
+        pr_debug("*** VIC IRQ 38 FIRED: No interrupt bits set - 0x1e0=0x%x, 0x1e8=0x%x ***\n", reg_1e0, reg_1e8);
+    } else {
+        pr_info("*** VIC IRQ 38 ACTIVE: v1_7=0x%x, v1_10=0x%x (0x1e0=0x%x, 0x1e8=0x%x) ***\n", v1_7, v1_10, reg_1e0, reg_1e8);
+    }
     
     /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
     writel(v1_7, vic_regs + 0x1f0);
@@ -1521,10 +1524,9 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     wmb();
     
     /* CRITICAL: Binary Ninja global vic_start_ok flag check */
-    /* IMPROVED: Also check if the CSI PHY registers indicate a stable state */
-    /* If 0x1e0 has the "interrupt disabled" pattern (0x200000), skip processing */
-    if (vic_start_ok != 0 && reg_1e0 != 0x200000) {
-        pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
+    /* Process VIC interrupts when vic_start_ok is enabled AND there are actual interrupt bits */
+    if (vic_start_ok != 0 && (v1_7 != 0 || v1_10 != 0)) {
+        pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x, 0x1e0=0x%x) ***\n", v1_7, v1_10, reg_1e0);
         
         /* Binary Ninja: if (($v1_7 & 1) != 0) */
         if ((v1_7 & 1) != 0) {
@@ -1721,11 +1723,8 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     } else {
         if (vic_start_ok == 0) {
             pr_debug("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled ***\n");
-        } else if (reg_1e0 == 0x200000) {
-            pr_debug("*** VIC INTERRUPT IGNORED: CSI PHY in interrupt-disabled state (0x1e0=0x%x) ***\n", reg_1e0);
-            pr_debug("*** This is likely due to continuous tuning CSI PHY changes ***\n");
-        } else {
-            pr_debug("*** VIC INTERRUPT: Unexpected state - vic_start_ok=%d, 0x1e0=0x%x ***\n", vic_start_ok, reg_1e0);
+        } else if (v1_7 == 0 && v1_10 == 0) {
+            pr_debug("*** VIC INTERRUPT: No pending interrupt bits (0x1e0=0x%x, 0x1e8=0x%x) ***\n", reg_1e0, reg_1e8);
         }
     }
     

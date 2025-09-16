@@ -2554,28 +2554,25 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 wmb();
                 pr_info("*** VIC ROBUST MODE: Enabled to handle CSI PHY timing changes ***\n");
 
-                /* CRITICAL: Re-enable VIC interrupt registers after CSI configuration */
-                /* Keep the original register values but add robustness against CSI PHY changes */
-                pr_info("*** CRITICAL: RE-ENABLING VIC INTERRUPT REGISTERS (0x04, 0x0c) ***\n");
-                pr_info("*** The 0x1e0/0x1e8 registers are CSI PHY, not VIC interrupts! ***\n");
+                /* CRITICAL: Re-enable VIC interrupt registers - KEEP BINARY NINJA VALUES */
+                /* The interrupt routing is correct (IRQ 38), the issue is VIC hardware stops generating interrupts */
+                pr_info("*** CRITICAL: RE-ENABLING VIC INTERRUPT REGISTERS (Binary Ninja values) ***\n");
                 pr_info("*** BEFORE: VIC_IMR(0x04)=0x%x, VIC_IMCR(0x0c)=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
 
-                /* Enable VIC interrupts using the original reference driver values */
-                /* These values are from the Binary Ninja reference driver */
+                /* Enable VIC interrupts using the original Binary Ninja reference driver values */
                 writel(0x07800438, vic_regs + 0x04);  /* VIC IMR - interrupt mask register */
                 writel(0xb5742249, vic_regs + 0x0c);  /* VIC IMCR - interrupt control register */
                 wmb();
 
                 pr_info("*** AFTER: VIC_IMR(0x04)=0x%x, VIC_IMCR(0x0c)=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
 
-                /* Verify the writes took effect */
-                if (readl(vic_regs + 0x04) == 0x07800438 && readl(vic_regs + 0x0c) == 0xb5742249) {
-                    pr_info("*** SUCCESS: VIC interrupt registers enabled properly! ***\n");
-                    pr_info("*** VIC should now be robust against CSI PHY timing changes! ***\n");
+                /* Verify the interrupt enable worked */
+                u32 final_imr = readl(vic_regs + 0x04);
+                if (final_imr & 0x00000001) {
+                    pr_info("*** SUCCESS: VIC frame done interrupt enabled (IMR=0x%x) ***\n", final_imr);
+                    pr_info("*** VIC should now generate frame completion interrupts! ***\n");
                 } else {
-                    pr_err("*** ERROR: VIC interrupt register writes failed! ***\n");
-                    pr_err("*** Expected: IMR=0x07800438, IMCR=0xb5742249 ***\n");
-                    pr_err("*** Actual: IMR=0x%x, IMCR=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
+                    pr_warn("*** WARNING: VIC frame done interrupt may not be enabled (IMR=0x%x) ***\n", final_imr);
                 }
 
                 pr_info("vic_core_s_stream: VIC streaming enabled successfully, state=%d\n", vic_dev->state);
