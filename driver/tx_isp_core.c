@@ -4129,7 +4129,15 @@ int tx_isp_core_probe(struct platform_device *pdev)
 int tx_isp_core_remove(struct platform_device *pdev)
 {
     void *core_dev = platform_get_drvdata(pdev);
-    
+
+    /* Cleanup frame sync workqueue */
+    if (fs_workqueue) {
+        cancel_work_sync(&fs_work);
+        destroy_workqueue(fs_workqueue);
+        fs_workqueue = NULL;
+        pr_info("*** ISP CORE: Frame sync workqueue destroyed ***\n");
+    }
+
     if (core_dev) {
         isp_core_tuning_deinit(core_dev);
         kfree(core_dev);
