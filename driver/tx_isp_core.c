@@ -46,7 +46,7 @@ extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 extern int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev);
 
 /* Critical ISP Core initialization functions - MISSING FROM LOGS! */
-static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
+int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
 int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
 static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
 static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sensor_attr);
@@ -2341,7 +2341,7 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
  * This is the EXACT reference implementation from Binary Ninja decompilation
  * CRITICAL: tisp_init is called FROM THIS FUNCTION, not from handle_sensor_register
  */
-static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr)
+int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr)
 {
     u32 reg_val;
     int ret = 0;
@@ -2534,6 +2534,7 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
     ISP_INFO("*** ispcore_core_ops_init: ISP CORE INITIALIZATION COMPLETE - STATE 3 ***\n");
     return 0;
 }
+EXPORT_SYMBOL(ispcore_core_ops_init);
 
 /**
  * tiziano_sync_sensor_attr_validate - Validate and sync sensor attributes
