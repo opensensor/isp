@@ -1776,17 +1776,96 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                                 pr_debug("TUNING: CCM not initialized yet - skipping CCM update\n");
                             }
 
-                            /* 3. Additional tuning operations to maintain ISP pipeline */
-                            extern int tisp_s_mdns_ratio(int ratio);
-                            extern int tisp_ae_update_zone_data(uint32_t *new_zone_data, size_t data_size);
+                            /* ===== COMPREHENSIVE ISP TUNING OPERATIONS - Binary Ninja Reference ===== */
+                            pr_info("*** COMPREHENSIVE TUNING: Performing ALL ISP pipeline updates (cycle %d) ***\n", tuning_cycle_count);
 
-                            /* Update MDNS (Motion Detection Noise Suppression) */
-                            int mdns_ret = tisp_s_mdns_ratio(128);  /* Default ratio */
-                            if (mdns_ret != 0) {
-                                pr_debug("TUNING: MDNS update returned %d\n", mdns_ret);
+                            /* 1. AE (Auto Exposure) Updates */
+                            extern int tisp_tgain_update(void);
+                            extern int tisp_again_update(void);
+                            extern int tisp_ev_update(void);
+                            extern int tisp_ae_ir_update(void);
+
+                            int ae_ret = tisp_tgain_update();
+                            if (ae_ret == 0) ae_ret = tisp_again_update();
+                            if (ae_ret == 0) ae_ret = tisp_ev_update();
+                            if (ae_ret == 0) ae_ret = tisp_ae_ir_update();
+                            pr_debug("TUNING: AE updates completed: %d\n", ae_ret);
+
+                            /* 2. AWB (Auto White Balance) Updates */
+                            extern int tisp_ct_update(void);
+                            extern int tisp_ccm_ct_update(void);
+                            extern int tisp_ccm_ev_update(void);
+
+                            int awb_ret = tisp_ct_update();
+                            if (awb_ret == 0) awb_ret = tisp_ccm_ct_update();
+                            if (awb_ret == 0) awb_ret = tisp_ccm_ev_update();
+                            pr_debug("TUNING: AWB/CCM updates completed: %d\n", awb_ret);
+
+                            /* 3. Gamma Correction Updates */
+                            extern int tiziano_gamma_lut_parameter(void);
+                            int gamma_ret = tiziano_gamma_lut_parameter();
+                            pr_debug("TUNING: Gamma LUT update completed: %d\n", gamma_ret);
+
+                            /* 4. LSC (Lens Shading Correction) Updates */
+                            extern int tisp_lsc_write_lut_datas(void);
+                            int lsc_ret = tisp_lsc_write_lut_datas();
+                            pr_debug("TUNING: LSC update completed: %d\n", lsc_ret);
+
+                            /* 5. DPC (Dead Pixel Correction) Updates */
+                            extern int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
+                            int dpc_ret = tisp_dpc_par_refresh(dev->tuning_data ? dev->tuning_data->exposure >> 10 : 0x100, 0x20, 0);
+                            pr_debug("TUNING: DPC refresh completed: %d\n", dpc_ret);
+
+                            /* 6. Sharpening Updates */
+                            extern int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
+                            int sharpen_ret = tisp_sharpen_par_refresh(dev->tuning_data ? dev->tuning_data->exposure >> 10 : 0x100, 0x20, 0);
+                            pr_debug("TUNING: Sharpening refresh completed: %d\n", sharpen_ret);
+
+                            /* 7. SDNS (Spatial Denoising) Updates */
+                            extern int tisp_sdns_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
+                            extern int tisp_s_sdns_ratio(int ratio);
+                            int sdns_ret = tisp_sdns_par_refresh(dev->tuning_data ? dev->tuning_data->exposure >> 10 : 0x100, 0x20, 0);
+                            if (sdns_ret == 0) sdns_ret = tisp_s_sdns_ratio(128);
+                            pr_debug("TUNING: SDNS updates completed: %d\n", sdns_ret);
+
+                            /* 8. MDNS (Motion Denoising) Updates */
+                            extern int tisp_s_mdns_ratio(int ratio);
+                            int mdns_ret = tisp_s_mdns_ratio(128);
+                            pr_debug("TUNING: MDNS update completed: %d\n", mdns_ret);
+
+                            /* 9. CCM (Color Correction Matrix) Updates */
+                            extern int jz_isp_ccm(void);
+                            extern int32_t *tiziano_ccm_a_now;
+                            extern uint32_t *cm_ev_list_now;
+                            if (tiziano_ccm_a_now != NULL && cm_ev_list_now != NULL) {
+                                int ccm_ret = jz_isp_ccm();
+                                pr_debug("TUNING: CCM update completed: %d\n", ccm_ret);
+                            } else {
+                                pr_debug("TUNING: CCM not initialized - skipping\n");
                             }
 
-                            /* 3. Basic ISP register refresh to maintain CSI PHY timing */
+                            /* 10. ADR (Adaptive Dynamic Range) Updates */
+                            extern int tisp_adr_process(void);
+                            int adr_ret = tisp_adr_process();
+                            pr_debug("TUNING: ADR process completed: %d\n", adr_ret);
+
+                            /* 11. Parameter Refresh Functions */
+                            extern void tiziano_ccm_params_refresh(void);
+                            extern void tiziano_lsc_params_refresh(void);
+                            extern void tiziano_dpc_params_refresh(void);
+                            extern void tiziano_sharpen_params_refresh(void);
+                            extern void tiziano_sdns_params_refresh(void);
+                            extern void tiziano_adr_params_refresh(void);
+
+                            tiziano_ccm_params_refresh();
+                            tiziano_lsc_params_refresh();
+                            tiziano_dpc_params_refresh();
+                            tiziano_sharpen_params_refresh();
+                            tiziano_sdns_params_refresh();
+                            tiziano_adr_params_refresh();
+                            pr_debug("TUNING: All parameter refresh functions completed\n");
+
+                            /* 12. Critical ISP register refresh to maintain CSI PHY timing */
                             extern void system_reg_write(u32 reg, u32 value);
                             if (dev->core_regs) {
                                 /* Refresh critical ISP timing registers to prevent CSI timeout */
@@ -1795,7 +1874,8 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                                 wmb();
                             }
 
-                            pr_debug("TUNING: Cycle %d comprehensive operations completed\n", tuning_cycle_count);
+                            pr_info("*** COMPREHENSIVE TUNING: Cycle %d ALL ISP pipeline operations completed ***\n", tuning_cycle_count);
+                            pr_info("*** This should maintain proper ISP pipeline control and prevent CSI PHY timeouts ***\n");
                         }
                     }
                 }
