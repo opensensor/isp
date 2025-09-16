@@ -746,6 +746,36 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         pr_info("*** CSI PHY Control registers configured (0x0-0x88) ***\n");
 
+                        /* CSI PHY Config registers - from reference trace */
+                        writel(0x8a, csi_base + 0x100);
+                        writel(0x5, csi_base + 0x104);
+                        writel(0x40, csi_base + 0x10c);
+                        writel(0xb0, csi_base + 0x110);
+                        writel(0xc5, csi_base + 0x114);
+                        writel(0x3, csi_base + 0x118);
+                        writel(0x20, csi_base + 0x11c);
+                        writel(0xf, csi_base + 0x120);
+                        writel(0x48, csi_base + 0x124);
+                        writel(0x3f, csi_base + 0x128);
+                        writel(0xf, csi_base + 0x12c);
+                        writel(0x88, csi_base + 0x130);
+                        writel(0x86, csi_base + 0x138);
+                        writel(0x10, csi_base + 0x13c);
+                        writel(0x4, csi_base + 0x140);
+                        writel(0x1, csi_base + 0x144);
+                        writel(0x32, csi_base + 0x148);
+                        writel(0x80, csi_base + 0x14c);
+                        writel(0x1, csi_base + 0x158);
+                        writel(0x60, csi_base + 0x15c);
+                        writel(0x1b, csi_base + 0x160);
+                        writel(0x18, csi_base + 0x164);
+                        writel(0x7f, csi_base + 0x168);
+                        writel(0x4b, csi_base + 0x16c);
+                        writel(0x3, csi_base + 0x174);
+                        wmb();
+
+                        pr_info("*** CSI PHY Config registers configured (0x100-0x174) ***\n");
+
                     } else if (interface_type == 2) {
                         /* DVP interface */
                         pr_info("CSI: DVP interface configuration\n");
