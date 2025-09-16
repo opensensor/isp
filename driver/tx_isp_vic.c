@@ -1337,8 +1337,22 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x4440, vic_regs + 0x1ac);
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         
+        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
         writel(2, vic_regs + 0x0);
         wmb();
+        writel(4, vic_regs + 0x0);
+        wmb();
+
+        /* Wait for unlock - CRITICAL for preventing control limit errors */
+        timeout = 1000;
+        while (readl(vic_regs + 0x0) != 0) {
+            udelay(1);
+            if (--timeout == 0) {
+                pr_err("BT601 VIC unlock timeout\n");
+                return -ETIMEDOUT;
+            }
+        }
+
         writel(1, vic_regs + 0x0);
         
     } else if (interface_type == 4) {
@@ -1354,10 +1368,24 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x200, vic_regs + 0x1d0);
         writel(0x200, vic_regs + 0x1d4);
         
+        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
         writel(2, vic_regs + 0x0);
         wmb();
+        writel(4, vic_regs + 0x0);
+        wmb();
+
+        /* Wait for unlock - CRITICAL for preventing control limit errors */
+        timeout = 1000;
+        while (readl(vic_regs + 0x0) != 0) {
+            udelay(1);
+            if (--timeout == 0) {
+                pr_err("BT656 VIC unlock timeout\n");
+                return -ETIMEDOUT;
+            }
+        }
+
         writel(1, vic_regs + 0x0);
-        
+
     } else if (interface_type == 5) {
         /* BT1120 - Binary Ninja 00010500-00010684 */
         pr_info("BT1120 interface configuration\n");
@@ -1369,8 +1397,22 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
         
+        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
         writel(2, vic_regs + 0x0);
         wmb();
+        writel(4, vic_regs + 0x0);
+        wmb();
+
+        /* Wait for unlock - CRITICAL for preventing control limit errors */
+        timeout = 1000;
+        while (readl(vic_regs + 0x0) != 0) {
+            udelay(1);
+            if (--timeout == 0) {
+                pr_err("BT1120 VIC unlock timeout\n");
+                return -ETIMEDOUT;
+            }
+        }
+
         writel(1, vic_regs + 0x0);
         
     } else {
@@ -2338,7 +2380,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 /* CRITICAL FIX: Disable VIC interrupts during initialization to prevent control limit errors */
                 pr_info("*** DISABLING VIC INTERRUPTS DURING INITIALIZATION ***\n");
-                vic_start_ok = 1;  /* Disable interrupt processing */
+                vic_start_ok = 0;  /* CRITICAL: Disable interrupt processing during init */
+
+                /* CRITICAL: Stop VIC from processing any data during reconfiguration */
+                writel(0, vic_regs + 0x0);  /* Stop VIC immediately */
+                wmb();
                 
                 /* CRITICAL FIX: Correct the register base mapping! */
                 /* vic_regs = 0x133e0000 = CSI PHY (isp-w02 in trace) */
@@ -2495,23 +2541,23 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection ***\n");
                 void __iomem *csi_phy_base = csi_base;  /* CSI PHY base for detailed config */
                 
-                /* Write the exact ISP isp-csi sequence from the working trace */
-                writel(0x7d, csi_phy_base + 0x0);
-                writel(0xe3, csi_phy_base + 0x4);
-                writel(0xa0, csi_phy_base + 0x8);
-                writel(0x83, csi_phy_base + 0xc);
-                writel(0xfa, csi_phy_base + 0x10);
-                writel(0x88, csi_phy_base + 0x1c);
-                writel(0x4e, csi_phy_base + 0x20);
-                writel(0xdd, csi_phy_base + 0x24);
-                writel(0x84, csi_phy_base + 0x28);
-                writel(0x5e, csi_phy_base + 0x2c);
-                writel(0xf0, csi_phy_base + 0x30);
-                writel(0xc0, csi_phy_base + 0x34);
-                writel(0x36, csi_phy_base + 0x38);
-                writel(0xdb, csi_phy_base + 0x3c);
-                /* Continue with the complete ISP isp-csi sequence... */
-                wmb();
+                // /* Write the exact ISP isp-csi sequence from the working trace */
+                // writel(0x7d, csi_phy_base + 0x0);
+                // writel(0xe3, csi_phy_base + 0x4);
+                // writel(0xa0, csi_phy_base + 0x8);
+                // writel(0x83, csi_phy_base + 0xc);
+                // writel(0xfa, csi_phy_base + 0x10);
+                // writel(0x88, csi_phy_base + 0x1c);
+                // writel(0x4e, csi_phy_base + 0x20);
+                // writel(0xdd, csi_phy_base + 0x24);
+                // writel(0x84, csi_phy_base + 0x28);
+                // writel(0x5e, csi_phy_base + 0x2c);
+                // writel(0xf0, csi_phy_base + 0x30);
+                // writel(0xc0, csi_phy_base + 0x34);
+                // writel(0x36, csi_phy_base + 0x38);
+                // writel(0xdb, csi_phy_base + 0x3c);
+                // /* Continue with the complete ISP isp-csi sequence... */
+                // wmb();
                 
                 /* STEP 7: Final CSI PHY control sequence */
                 pr_info("*** STEP 7: Final CSI PHY control sequence ***\n");
