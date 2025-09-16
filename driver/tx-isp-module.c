@@ -2485,20 +2485,20 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (copy_from_user(&buffer, argp, sizeof(buffer)))
             return -EFAULT;
             
-        pr_debug("Channel %d: DQBUF - dequeue buffer request\n", channel);
-        
-        // Validate buffer type matches channel configuration  
+        pr_info("*** Channel %d: DQBUF - dequeue buffer request ***\n", channel);
+
+        // Validate buffer type matches channel configuration
         if (buffer.type != 1) { // V4L2_BUF_TYPE_VIDEO_CAPTURE
             pr_err("Channel %d: Invalid buffer type %d\n", channel, buffer.type);
             return -EINVAL;
         }
-        
+
         // Auto-start streaming if not already started
         if (!state->streaming) {
             pr_info("Channel %d: Auto-starting streaming for DQBUF\n", channel);
             state->streaming = true;
             state->enabled = true;
-            
+
         }
         
         // Check if real sensor is connected and active
@@ -2511,17 +2511,19 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
         
         /* Binary Ninja DQBUF: Wait for frame completion with proper state checking */
+        pr_info("*** Channel %d: DQBUF waiting for frame completion (timeout=200ms) ***\n", channel);
         ret = wait_event_interruptible_timeout(state->frame_wait,
                                              state->frame_ready || !state->streaming,
                                              msecs_to_jiffies(200)); // 200ms timeout like reference
+        pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, ret);
         
         if (ret == 0) {
-            pr_debug("Channel %d: DQBUF timeout, generating frame\n", channel);
+            pr_info("*** Channel %d: DQBUF timeout, generating frame ***\n", channel);
             spin_lock_irqsave(&state->buffer_lock, flags);
             state->frame_ready = true;
             spin_unlock_irqrestore(&state->buffer_lock, flags);
         } else if (ret < 0) {
-            pr_debug("Channel %d: DQBUF interrupted: %d\n", channel, ret);
+            pr_info("*** Channel %d: DQBUF interrupted: %d ***\n", channel, ret);
             return ret;
         }
         
@@ -2573,29 +2575,29 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Update VIC buffer tracking for this dequeue like Binary Ninja */
             if (vic_dev && vic_dev->vic_regs && buf_index < 8) {
                 u32 buffer_phys_addr = 0x6300000 + (buf_index * (state->width * state->height * 2));
-                
-                pr_debug("Channel %d: DQBUF updating VIC buffer[%d] addr=0x%x\n",
+
+                pr_info("*** Channel %d: DQBUF updating VIC buffer[%d] addr=0x%x ***\n",
                         channel, buf_index, buffer_phys_addr);
-                
+
                 /* Sync DMA for buffer completion like Binary Ninja reference */
                 // In real implementation: dma_sync_single_for_device()
                 wmb(); // Memory barrier for DMA completion
 
             } else {
-                pr_debug("Channel %d: DQBUF - No VIC device or invalid buffer index\n", channel);
+                pr_info("*** Channel %d: DQBUF - No VIC device or invalid buffer index ***\n", channel);
             }
         }
         
         // Mark frame as consumed
         state->frame_ready = false;
         spin_unlock_irqrestore(&state->buffer_lock, flags);
-        
-        pr_debug("Channel %d: DQBUF complete - buffer[%d] seq=%d flags=0x%x\n",
+
+        pr_info("*** Channel %d: DQBUF complete - buffer[%d] seq=%d flags=0x%x ***\n",
                 channel, buffer.index, buffer.sequence - 1, buffer.flags);
-        
+
         if (copy_to_user(argp, &buffer, sizeof(buffer)))
             return -EFAULT;
-            
+
         return 0;
     }
     case 0x80045612: { // VIDIOC_STREAMON - Start streaming
@@ -3079,8 +3081,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         unsigned long flags;
         int ret;
         
-        pr_debug("Channel %d: Frame completion wait\n", channel);
-        
+        pr_info("*** Channel %d: Frame completion wait ***\n", channel);
+
         // Auto-start streaming if needed
         if (!state->streaming) {
             pr_info("Channel %d: Auto-starting streaming for frame wait\n", channel);
@@ -3089,18 +3091,23 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
         
         // Wait for frame with a short timeout
+        pr_info("*** Channel %d: Waiting for frame (timeout=100ms) ***\n", channel);
         ret = wait_event_interruptible_timeout(state->frame_wait,
                                              state->frame_ready || !state->streaming,
                                              msecs_to_jiffies(100));
-        
+
+        pr_info("*** Channel %d: Frame wait returned %d ***\n", channel, ret);
+
         spin_lock_irqsave(&state->buffer_lock, flags);
         if (ret > 0 && state->frame_ready) {
             result = 1; // Frame ready
             state->frame_ready = false; // Consume the frame
+            pr_info("*** Channel %d: Frame was ready, consuming it ***\n", channel);
         } else {
             // Timeout or error - generate a frame
             result = 1;
             state->frame_ready = true;
+            pr_info("*** Channel %d: Frame wait timeout/error, generating frame ***\n", channel);
         }
         spin_unlock_irqrestore(&state->buffer_lock, flags);
         
