@@ -4685,7 +4685,6 @@ int tisp_ct_update(void)
 
     /* Update color temperature and trigger CCM updates */
     extern struct tx_isp_dev *ourISPdev;
-    extern uint32_t data_9a450;  /* Global CT cache */
 
     if (ourISPdev && ourISPdev->tuning_data) {
         struct isp_tuning_data *tuning = ourISPdev->tuning_data;
