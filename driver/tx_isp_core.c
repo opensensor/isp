@@ -361,12 +361,21 @@ static void check_and_restore_csi_phy_registers(void)
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
     extern struct tx_isp_dev *ourISPdev;
+    extern uint32_t vic_start_ok;  /* Check VIC streaming state */
     struct tx_isp_dev *isp_dev = ourISPdev;
     struct i2c_adapter *adapter;
     struct i2c_client *client;
 
     pr_info("*** ISP FRAME SYNC WORK: STARTING - Work function is running! ***\n");
     pr_info("*** ISP FRAME SYNC WORK: work=%p, current=%s[%d] ***\n", work, current->comm, current->pid);
+
+    /* CRITICAL FIX: Don't perform CSI PHY changes during VIC streaming */
+    if (vic_start_ok == 1) {
+        pr_info("*** ISP FRAME SYNC WORK: VIC streaming active - SKIPPING CSI PHY changes to prevent interrupt disruption ***\n");
+        pr_info("*** ISP FRAME SYNC WORK: Frame sync work completed (VIC-safe mode) ***\n");
+        return;
+    }
+
     pr_info("*** ISP FRAME SYNC WORK: Triggering sensor I2C communication ***\n");
 
     /* CRITICAL FIX: Direct I2C communication to resume sensor activity */
@@ -587,24 +596,30 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* check_and_restore_csi_phy_registers(); */
         pr_info("*** ISP CORE: CSI PHY restoration DISABLED to prevent VIC frame disruption ***\n");
 
-        /* Binary Ninja: private_schedule_work(&fs_work) */
-        /* CRITICAL: This triggers sensor I2C communication */
-        pr_info("*** ISP CORE: Frame sync interrupt - checking workqueue status ***\n");
-        pr_info("*** ISP CORE: fs_workqueue = %p, fs_work = %p ***\n", fs_workqueue, &fs_work);
-
-        if (fs_workqueue) {
-            pr_info("*** ISP CORE: Queueing frame sync work on dedicated workqueue ***\n");
-            if (queue_work(fs_workqueue, &fs_work)) {
-                pr_info("*** ISP CORE: Work queued successfully ***\n");
-            } else {
-                pr_warn("*** ISP CORE: Work was already queued ***\n");
-            }
+        /* CRITICAL FIX: Don't schedule frame sync work during VIC streaming */
+        extern uint32_t vic_start_ok;
+        if (vic_start_ok == 1) {
+            pr_info("*** ISP CORE: VIC streaming active - SKIPPING frame sync work to prevent CSI PHY disruption ***\n");
         } else {
-            pr_warn("*** ISP CORE: No dedicated workqueue, using system workqueue ***\n");
-            if (schedule_work(&fs_work)) {
-                pr_info("*** ISP CORE: Work scheduled on system workqueue successfully ***\n");
+            /* Binary Ninja: private_schedule_work(&fs_work) */
+            /* CRITICAL: This triggers sensor I2C communication */
+            pr_info("*** ISP CORE: Frame sync interrupt - checking workqueue status ***\n");
+            pr_info("*** ISP CORE: fs_workqueue = %p, fs_work = %p ***\n", fs_workqueue, &fs_work);
+
+            if (fs_workqueue) {
+                pr_info("*** ISP CORE: Queueing frame sync work on dedicated workqueue ***\n");
+                if (queue_work(fs_workqueue, &fs_work)) {
+                    pr_info("*** ISP CORE: Work queued successfully ***\n");
+                } else {
+                    pr_warn("*** ISP CORE: Work was already queued ***\n");
+                }
             } else {
-                pr_warn("*** ISP CORE: Work was already scheduled on system workqueue ***\n");
+                pr_warn("*** ISP CORE: No dedicated workqueue, using system workqueue ***\n");
+                if (schedule_work(&fs_work)) {
+                    pr_info("*** ISP CORE: Work scheduled on system workqueue successfully ***\n");
+                } else {
+                    pr_warn("*** ISP CORE: Work was already scheduled on system workqueue ***\n");
+                }
             }
         }
         pr_info("*** ISP CORE: Frame sync work scheduled - should trigger sensor I2C ***\n");
