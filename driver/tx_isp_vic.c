@@ -1165,20 +1165,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         wmb();
         
-        /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence */
-        writel(2, vic_regs + 0x0);
-        wmb();
-        writel(4, vic_regs + 0x0);
-        wmb();
-        
-        /* Binary Ninja: 00010acc - Wait for unlock */
-        while (readl(vic_regs + 0x0) != 0) {
-            udelay(1);
-            if (--timeout == 0) {
-                pr_err("VIC unlock timeout\n");
-                return -ETIMEDOUT;
-            }
-        }
+        /* CRITICAL: VIC unlock moved to AFTER CSI initialization - VIC needs MIPI data first */
+        pr_info("*** CRITICAL: VIC unlock sequence DEFERRED until after CSI provides MIPI data ***\n");
         
         /* Binary Ninja: 00010ad4 - Enable VIC */
         writel(1, vic_regs + 0x0);
