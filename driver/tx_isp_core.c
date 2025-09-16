@@ -507,34 +507,89 @@ static volatile int isp_force_core_isr = 0;  /* Force ISP core ISR flag */
 static struct work_struct fs_work;
 static void ispcore_irq_fs_work(struct work_struct *work);
 
+/* CSI PHY register protection - prevent corruption */
+static u32 saved_phy_ctrl = 0;
+static u32 saved_phy_data = 0;
+static u32 saved_phy_clk = 0;
+static int phy_protection_enabled = 0;
+
+/* CSI PHY register monitoring and recovery function */
+static void check_and_restore_csi_phy_registers(void)
+{
+    extern struct tx_isp_dev *ourISPdev;
+
+    if (!phy_protection_enabled || !ourISPdev || !ourISPdev->phy_base) {
+        return;
+    }
+
+    u32 current_ctrl = readl(ourISPdev->phy_base + 0x0);
+    u32 current_data = readl(ourISPdev->phy_base + 0x4);
+    u32 current_clk = readl(ourISPdev->phy_base + 0x8);
+
+    /* Check if registers have been corrupted */
+    if (current_ctrl != saved_phy_ctrl || current_data != saved_phy_data || current_clk != saved_phy_clk) {
+        pr_warn("*** CSI PHY CORRUPTION DETECTED! ***\n");
+        pr_warn("*** CTRL: 0x%08x -> 0x%08x ***\n", saved_phy_ctrl, current_ctrl);
+        pr_warn("*** DATA: 0x%08x -> 0x%08x ***\n", saved_phy_data, current_data);
+        pr_warn("*** CLK:  0x%08x -> 0x%08x ***\n", saved_phy_clk, current_clk);
+
+        /* Restore original values */
+        writel(saved_phy_ctrl, ourISPdev->phy_base + 0x0);
+        writel(saved_phy_data, ourISPdev->phy_base + 0x4);
+        writel(saved_phy_clk, ourISPdev->phy_base + 0x8);
+        wmb();
+
+        pr_info("*** CSI PHY REGISTERS RESTORED ***\n");
+    }
+}
+
 /* Frame sync work function - triggers sensor I2C communication */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
     extern struct tx_isp_dev *ourISPdev;
     struct tx_isp_dev *isp_dev = ourISPdev;
+    struct i2c_adapter *adapter;
+    struct i2c_client *client;
 
     pr_info("*** ISP FRAME SYNC WORK: Triggering sensor I2C communication ***\n");
 
-    /* Binary Ninja: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
-    /* This triggers sensor register updates via I2C */
+    /* CRITICAL FIX: Direct I2C communication to resume sensor activity */
+    /* The sensor IOCTL path may not be working, so try direct I2C */
 
     if (isp_dev && isp_dev->sensor && isp_dev->sensor->sd.ops &&
         isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
 
         pr_info("*** ISP FRAME SYNC WORK: Calling sensor IOCTL for I2C communication ***\n");
 
-        /* Call sensor IOCTL to trigger I2C communication */
-        /* This should resume I2C activity that stalled after init */
-        int ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
-                                                         TX_ISP_EVENT_SENSOR_FPS, NULL);
+        /* Try multiple sensor events to trigger I2C activity */
+        int ret1 = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
+                                                          TX_ISP_EVENT_SENSOR_FPS, NULL);
+        int ret2 = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
+                                                          TX_ISP_EVENT_SENSOR_PREPARE_CHANGE, NULL);
 
-        if (ret == 0) {
-            pr_info("*** ISP FRAME SYNC WORK: Sensor I2C communication successful ***\n");
-        } else {
-            pr_warn("*** ISP FRAME SYNC WORK: Sensor I2C communication failed: %d ***\n", ret);
-        }
+        pr_info("*** ISP FRAME SYNC WORK: Sensor IOCTL results: FPS=%d, PREPARE=%d ***\n", ret1, ret2);
+    }
+
+    /* CRITICAL FIX: Direct I2C communication attempt */
+    /* Try to access I2C bus 0 directly to resume communication */
+    adapter = i2c_get_adapter(0);  /* I2C bus 0 */
+    if (adapter) {
+        pr_info("*** ISP FRAME SYNC WORK: Direct I2C access attempt on bus 0 ***\n");
+
+        /* Try to read from common sensor I2C address (0x37 for GC2053) */
+        struct i2c_msg msg = {
+            .addr = 0x37,
+            .flags = I2C_M_RD,
+            .len = 1,
+            .buf = (u8[]){0}
+        };
+
+        int ret = i2c_transfer(adapter, &msg, 1);
+        pr_info("*** ISP FRAME SYNC WORK: Direct I2C transfer result: %d ***\n", ret);
+
+        i2c_put_adapter(adapter);
     } else {
-        pr_warn("*** ISP FRAME SYNC WORK: No sensor available for I2C communication ***\n");
+        pr_warn("*** ISP FRAME SYNC WORK: Could not get I2C adapter 0 ***\n");
     }
 
     pr_info("*** ISP FRAME SYNC WORK: Frame sync work completed ***\n");
@@ -695,6 +750,9 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     /* Binary Ninja: Frame sync interrupt processing */
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt */
         pr_info("*** ISP CORE: FRAME SYNC INTERRUPT ***\n");
+
+        /* CRITICAL: Check CSI PHY registers for corruption */
+        check_and_restore_csi_phy_registers();
 
         /* Binary Ninja: private_schedule_work(&fs_work) */
         /* CRITICAL: This triggers sensor I2C communication */
@@ -2198,6 +2256,20 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
     /* CRITICAL: Initialize frame sync work queue for sensor I2C communication */
     INIT_WORK(&fs_work, ispcore_irq_fs_work);
     pr_info("*** ISP CORE: Frame sync work queue initialized ***\n");
+
+    /* CRITICAL: CSI PHY register protection - prevent corruption after stream start */
+    pr_info("*** ISP CORE: Setting up CSI PHY register protection ***\n");
+
+    /* Store initial CSI PHY register values for protection */
+    if (ourISPdev && ourISPdev->phy_base) {
+        saved_phy_ctrl = readl(ourISPdev->phy_base + 0x0);
+        saved_phy_data = readl(ourISPdev->phy_base + 0x4);
+        saved_phy_clk = readl(ourISPdev->phy_base + 0x8);
+        phy_protection_enabled = 1;
+
+        pr_info("*** CSI PHY PROTECTION ENABLED: CTRL=0x%08x, DATA=0x%08x, CLK=0x%08x ***\n",
+                saved_phy_ctrl, saved_phy_data, saved_phy_clk);
+    }
 
     /* CRITICAL: Enable ISP interrupts - EXACT Binary Ninja reference implementation */
     pr_info("*** tisp_init: Enabling ISP interrupts (Binary Ninja exact) ***\n");
