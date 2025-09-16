@@ -266,6 +266,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
             if (vic_regs) {
                 u32 reg_val = readl(vic_regs + 0x300);
+                u32 original_reg_val = reg_val;
                 reg_val = shifted_value | (reg_val & 0xfff0ffff);
 
                 /* CRITICAL FIX: Ensure buffer count in register 0x300 is never zero */
@@ -277,8 +278,10 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
                 writel(reg_val, vic_regs + 0x300);
 
-                pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
-                         reg_val, buffer_index, high_bits, match_found);
+                pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (was 0x%x) (buffers: index=%d, high_bits=%d, match=%d)\n",
+                         reg_val, original_reg_val, buffer_index, high_bits, match_found);
+                pr_info("vic_framedone_irq_function: Stream state=%d, active_buffer_count=%d\n",
+                         vic_dev->stream_state, vic_dev->active_buffer_count);
             }
 
             /* CRITICAL: With ISP pipeline enabled, hardware should generate interrupts automatically */
