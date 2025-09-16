@@ -77,15 +77,15 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* Set self-pointer at offset 0xd4 */
     *(void **)((char *)vic_dev + 0xd4) = vic_dev;
     
-    /* *** CRITICAL FIX: Map VIC registers to CORRECT address - separate from CSI PHY *** */
-    pr_info("*** CRITICAL: Mapping VIC registers to CORRECT address 0x10023000 (separate from CSI PHY) ***\n");
-    vic_dev->vic_regs = ioremap(0x10023000, 0x1000); // CORRECT VIC mapping (isp-w01)
+    /* *** CRITICAL FIX: Map VIC registers to SHARED ISP address - VIC and CSI PHY share memory space *** */
+    pr_info("*** CRITICAL: Mapping VIC registers to SHARED ISP address 0x133e0000 (same as CSI PHY) ***\n");
+    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000); // SHARED VIC/CSI PHY mapping (isp-w02)
     if (!vic_dev->vic_regs) {
-        pr_err("tx_isp_create_vic_device: Failed to map VIC registers at 0x10023000\n");
+        pr_err("tx_isp_create_vic_device: Failed to map VIC registers at 0x133e0000\n");
         kfree(vic_dev);
         return -ENOMEM;
     }
-    pr_info("*** VIC registers mapped to CORRECT address: %p (0x10023000) ***\n", vic_dev->vic_regs);
+    pr_info("*** VIC registers mapped to SHARED ISP address: %p (0x133e0000) ***\n", vic_dev->vic_regs);
     
     /* Also store in ISP device for compatibility */
     if (!isp_dev->vic_regs) {
@@ -1037,14 +1037,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* MIPI interface - Binary Ninja 000107ec-00010b04 */
         pr_info("MIPI interface configuration\n");
 
-        /* CRITICAL: Initialize VIC hardware before unlock sequence */
-        pr_info("*** CRITICAL: Initializing VIC hardware at 0x10023000 before unlock ***\n");
-        int init_ret = tx_isp_vic_hw_init(&vic_dev->sd);
-        if (init_ret != 0) {
-            pr_err("VIC hardware initialization failed: %d\n", init_ret);
-            return init_ret;
-        }
-        pr_info("*** VIC hardware initialized successfully ***\n");
+        /* CRITICAL: VIC hardware should already be initialized by platform driver */
+        pr_info("*** VIC hardware should be ready - proceeding with unlock sequence ***\n");
 
         /* Binary Ninja: 000107ec - Set CSI mode */
         writel(3, vic_regs + 0xc);  /* RESTORED: This is VIC mode config, not CSI PHY corruption */
