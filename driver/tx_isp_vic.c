@@ -1024,6 +1024,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     void __iomem *cpm_regs;
     int ret;
 
+    /* CRITICAL FIX: Define actual sensor dimensions for consistent use throughout function */
+    u32 actual_width, actual_height;
+
     pr_info("*** tx_isp_vic_start: Following EXACT Binary Ninja flow ***\n");
 
     /* Binary Ninja: 00010244 void* $v1 = *(arg1 + 0x110) */
