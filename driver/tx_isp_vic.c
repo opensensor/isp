@@ -2583,10 +2583,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x630, vic_regs + 0x14);
                 wmb();
                 
-                /* STEP 8: Now call VIC start with proper initialization complete */
-                pr_info("*** STEP 8: NOW calling tx_isp_vic_start with proper sub-device initialization ***\n");
-                ret = tx_isp_vic_start(vic_dev);
-                ispvic_frame_channel_s_stream(vic_dev, 1);
+                /* STEP 8: VIC initialization complete - VIC start will be triggered by STREAMON */
+                pr_info("*** STEP 8: VIC initialization complete - waiting for STREAMON to trigger VIC start ***\n");
+                /* CRITICAL: Do NOT call tx_isp_vic_start here - it should only be called during STREAMON */
+                /* CRITICAL: Do NOT call ispvic_frame_channel_s_stream here - it should only be called during STREAMON */
+                ret = 0;  /* Return success - VIC is ready for STREAMON */
                 
                 if (current_state != 4) {
                     pr_info("vic_core_s_stream: Stream ON - tx_isp_vic_start called after proper sub-device init\n");
