@@ -121,9 +121,9 @@ int tx_isp_vic_start_streaming(struct tx_isp_dev *isp_dev)
     writel(3, vic_regs + 0xc); /* MIPI mode */
     wmb();
     
-    /* Enable VIC interrupts */
-    writel(0xffffffff, vic_regs + 0x1e0); /* Enable all interrupts */
-    writel(0x0, vic_regs + 0x1e8); /* Clear interrupt masks */
+    /* Enable VIC interrupts using CORRECT VIC registers */
+    writel(0xFFFFFFFF, vic_regs + 0x00); /* Clear any pending interrupts */
+    writel(0x00000003, vic_regs + 0x04); /* Enable frame done and error interrupts */
     wmb();
     
     /* Set VIC start flag - CRITICAL for interrupt processing */
