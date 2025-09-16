@@ -1299,9 +1299,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("tx_isp_vic_start: Linear mode enabled\n");
     }
 
-    /* Binary Ninja: 00010b84 - Set vic_start_ok */
-    vic_start_ok = 1;
-    pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
+    /* CRITICAL FIX: DO NOT set vic_start_ok here - too early! */
+    /* vic_start_ok will be set later after complete pipeline configuration */
+    pr_info("*** VIC start completed - vic_start_ok will be set after pipeline config ***\n");
 
     /* CRITICAL: Enable ISP core interrupt generation - EXACT Binary Ninja reference */
     if (ourISPdev && ourISPdev->core_regs) {
@@ -2538,11 +2538,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_info("vic_core_s_stream: VIC state set to 4 (streaming)\n");
                 }
 
-                /* CRITICAL FIX: Enable VIC interrupts after CSI configuration is complete */
-                /* CSI PHY is now properly configured, VIC can safely process interrupts */
-                vic_start_ok = 1;  /* Enable interrupts - CSI PHY is stable */
-
-                pr_info("*** CRITICAL: VIC INTERRUPTS ENABLED - CSI PHY configured and stable! ***\n");
+                /* CRITICAL FIX: Do NOT enable VIC interrupts yet - wait for complete pipeline setup */
+                /* CSI PHY is configured, but VIC interrupt registers still need to be set */
+                pr_info("*** CRITICAL: CSI PHY configured - VIC interrupt setup next ***\n");
                 pr_info("*** VIC hardware can now safely generate continuous interrupts ***\n");
 
                 /* CRITICAL FIX: Ensure VIC configuration is robust against CSI PHY register changes */
@@ -2578,6 +2576,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_warn("*** Actual: IMR=0x%x, IMCR=0x%x ***\n", actual_imr, actual_imcr);
                     pr_warn("*** VIC interrupts may still work - IRQ 38 routing is correct ***\n");
                 }
+
+                /* CRITICAL FIX: NOW set vic_start_ok=1 after complete pipeline configuration */
+                vic_start_ok = 1;
+                pr_info("*** CRITICAL: vic_start_ok = 1 - VIC interrupts now enabled after complete setup! ***\n");
+                pr_info("*** VIC pipeline fully configured: Sensor->CSI->VIC->ISP chain ready ***\n");
 
                 pr_info("vic_core_s_stream: VIC streaming enabled successfully, state=%d\n", vic_dev->state);
                 return 0;  /* Always return success for streaming enable */
@@ -2904,12 +2907,10 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
                                 buffer_addr, reg_offset);
                         pr_info("*** NO MORE 'qbuffer null' - VIC hardware now has buffer! ***\n");
 
-                        /* CRITICAL FIX: Enable VIC interrupts now that buffer is configured */
+                        /* CRITICAL FIX: Check vic_start_ok status but don't change it here */
                         pr_info("*** VIC INTERNAL QBUF: Checking vic_start_ok status: vic_start_ok=%d ***\n", vic_start_ok);
                         if (vic_start_ok == 0) {
-                            vic_start_ok = 1;
-                            pr_info("*** CRITICAL: VIC INTERRUPTS NOW ENABLED - buffer configured (internal handler)! ***\n");
-                            pr_info("*** VIC hardware can now safely generate interrupts without control limit errors ***\n");
+                            pr_info("*** VIC INTERNAL QBUF: vic_start_ok=0 - interrupts will be enabled after complete pipeline setup ***\n");
                         } else {
                             pr_info("*** VIC INTERNAL QBUF: VIC interrupts already enabled (vic_start_ok=%d) ***\n", vic_start_ok);
                         }
