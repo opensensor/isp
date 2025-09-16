@@ -1747,12 +1747,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             /* CRITICAL: Implement actual tuning operations to prevent CSI PHY timeout */
                             /* The empty implementation was causing CSI hardware to timeout and auto-transition */
 
-                            /* 1. LSC (Lens Shading Correction) update */
-                            extern int tisp_lsc_write_lut_datas(void);
-                            int lsc_ret = tisp_lsc_write_lut_datas();
-                            if (lsc_ret != 0) {
-                                pr_debug("TUNING: LSC update returned %d\n", lsc_ret);
-                            }
+                            /* Old individual tuning calls removed - now using comprehensive tuning below */
 
                             /* 2. CCM (Color Correction Matrix) update */
                             extern int jz_isp_ccm(void);
@@ -2963,9 +2958,6 @@ void tiziano_lsc_params_refresh(void)
     pr_debug("tiziano_lsc_params_refresh: Refreshing LSC parameters\n");
 
     /* Update LSC parameters based on current conditions */
-    extern uint32_t data_9a454;  /* Current EV value */
-    extern uint32_t data_9a450;  /* Current CT value */
-
     /* Update EV and CT caches for LSC calculations */
     if (data_9a454 != 0) {
         uint32_t ev_shifted = data_9a454 >> 10;
