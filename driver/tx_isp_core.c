@@ -614,23 +614,24 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Error handling would go here */
     }
     
-    /* Frame done interrupts (bits 0, 1, 2) */
+    /* CRITICAL: Frame done interrupts (bits 0, 1, 2) - EXACT Binary Ninja implementation */
     if (irq_status & 0x1) {
-        pr_debug("*** ISP Channel 0 Frame Done Interrupt ***\n");
+        pr_info("*** ISP CORE: Channel 0 Frame Done Interrupt DETECTED! ***\n");
         /* Binary Ninja: data_ca584 += 1 */
         /* Channel 0 frame processing */
-        
+
         /* Wake up frame waiters */
         isp_frame_done_wakeup();
+        pr_info("*** ISP CORE: Frame done wakeup called for channel 0 ***\n");
     }
-    
+
     if (irq_status & 0x2) {
-        pr_debug("*** ISP Channel 1 Frame Done Interrupt ***\n");
+        pr_info("*** ISP CORE: Channel 1 Frame Done Interrupt DETECTED! ***\n");
         /* Channel 1 frame processing */
     }
-    
+
     if (irq_status & 0x4) {
-        pr_debug("*** ISP Channel 2 Frame Done Interrupt ***\n");
+        pr_info("*** ISP CORE: Channel 2 Frame Done Interrupt DETECTED! ***\n");
         /* Channel 2 frame processing */
     }
     
