@@ -555,6 +555,7 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     struct i2c_client *client;
 
     pr_info("*** ISP FRAME SYNC WORK: STARTING - Work function is running! ***\n");
+    pr_info("*** ISP FRAME SYNC WORK: work=%p, current=%s[%d] ***\n", work, current->comm, current->pid);
     pr_info("*** ISP FRAME SYNC WORK: Triggering sensor I2C communication ***\n");
 
     /* CRITICAL FIX: Direct I2C communication to resume sensor activity */
@@ -762,12 +763,23 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
         /* Binary Ninja: private_schedule_work(&fs_work) */
         /* CRITICAL: This triggers sensor I2C communication */
+        pr_info("*** ISP CORE: Frame sync interrupt - checking workqueue status ***\n");
+        pr_info("*** ISP CORE: fs_workqueue = %p, fs_work = %p ***\n", fs_workqueue, &fs_work);
+
         if (fs_workqueue) {
             pr_info("*** ISP CORE: Queueing frame sync work on dedicated workqueue ***\n");
-            queue_work(fs_workqueue, &fs_work);
+            if (queue_work(fs_workqueue, &fs_work)) {
+                pr_info("*** ISP CORE: Work queued successfully ***\n");
+            } else {
+                pr_warn("*** ISP CORE: Work was already queued ***\n");
+            }
         } else {
             pr_warn("*** ISP CORE: No dedicated workqueue, using system workqueue ***\n");
-            schedule_work(&fs_work);
+            if (schedule_work(&fs_work)) {
+                pr_info("*** ISP CORE: Work scheduled on system workqueue successfully ***\n");
+            } else {
+                pr_warn("*** ISP CORE: Work was already scheduled on system workqueue ***\n");
+            }
         }
         pr_info("*** ISP CORE: Frame sync work scheduled - should trigger sensor I2C ***\n");
 
@@ -2266,14 +2278,22 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
     system_irq_func_set(0xd, ispcore_ip_done_irq_handler);
 
     /* CRITICAL: Initialize frame sync work queue for sensor I2C communication */
+    pr_info("*** ISP CORE: About to create frame sync workqueue ***\n");
     fs_workqueue = create_singlethread_workqueue("isp_frame_sync");
     if (!fs_workqueue) {
         pr_err("*** ISP CORE: Failed to create frame sync workqueue ***\n");
         return -ENOMEM;
     }
+    pr_info("*** ISP CORE: Frame sync workqueue created successfully at %p ***\n", fs_workqueue);
 
     INIT_WORK(&fs_work, ispcore_irq_fs_work);
+    pr_info("*** ISP CORE: Frame sync work initialized at %p ***\n", &fs_work);
     pr_info("*** ISP CORE: Frame sync work queue initialized with dedicated workqueue ***\n");
+
+    /* Test the work function directly to see if it works */
+    pr_info("*** ISP CORE: Testing frame sync work function directly ***\n");
+    ispcore_irq_fs_work(&fs_work);
+    pr_info("*** ISP CORE: Direct work function test completed ***\n");
 
     /* CRITICAL: CSI PHY register protection - prevent corruption after stream start */
     pr_info("*** ISP CORE: Setting up CSI PHY register protection ***\n");
