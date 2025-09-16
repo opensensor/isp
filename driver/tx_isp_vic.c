@@ -2253,7 +2253,9 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             if (vic_dev->active_buffer_count > 0 && vic_dev->active_buffer_count <= 4) {
                 buffer_count_for_reg = vic_dev->active_buffer_count;  /* Only use if reasonable */
             }
-            u32 stream_ctrl = (buffer_count_for_reg << 16) | 0x80000020;
+            /* CRITICAL FIX: Only use control bits from 0x80000020, replace buffer count portion */
+            u32 control_bits = 0x80000020 & 0x0000ffff;  /* Extract only control bits (0x0020) */
+            u32 stream_ctrl = (buffer_count_for_reg << 16) | control_bits;
             writel(stream_ctrl, vic_base + 0x300);
             wmb();
             pr_info("ispvic_frame_channel_s_stream: Stream ON - wrote 0x%x to reg 0x300 (buffer_count=%d, forced_count=%d)\n",
