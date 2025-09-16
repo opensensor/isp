@@ -2609,6 +2609,18 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
                     extern int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
 
+                    /* CRITICAL FIX: Ensure VIC is fully configured before CSI initialization */
+                    pr_info("*** SYNC FIX: Ensuring VIC-CSI synchronization before CSI init ***\n");
+
+                    /* Set VIC to proper streaming state before CSI connects */
+                    if (vic_dev->state != 4) {
+                        vic_dev->state = 4; /* VIC streaming state */
+                        pr_info("*** SYNC FIX: VIC state set to streaming (4) ***\n");
+                    }
+
+                    /* Small delay to ensure VIC hardware is ready */
+                    udelay(100); /* 100 microseconds */
+
                     pr_info("*** Calling CSI initialization for MIPI interface ***\n");
                     int csi_result = csi_core_ops_init(&csi_dev->sd, 1);
                     if (csi_result != 0 && csi_result != 0xfffffdfd) {
