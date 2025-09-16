@@ -1591,46 +1591,6 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         
         if ((v1_7 & 0x200000) != 0) {
             pr_err("Err2 [VIC_INT] : control limit err!!!\n");
-
-            /* CRITICAL: VIC Control Limit Error Recovery with ACTUAL sensor dimensions */
-            pr_info("*** VIC CONTROL LIMIT ERROR: Attempting recovery with sensor dimensions ***\n");
-
-            /* Get actual sensor dimensions from ISP device */
-            extern struct tx_isp_dev *ourISPdev;
-            struct tx_isp_dev *isp_dev = ourISPdev;
-            u32 width = 1920;   /* Default fallback */
-            u32 height = 1080;  /* Default fallback */
-
-            /* Try to get actual sensor dimensions */
-            if (isp_dev && isp_dev->sensor && isp_dev->sensor->video.attr) {
-                struct tx_isp_sensor_attribute *attr = isp_dev->sensor->video.attr;
-                if (attr->total_width > 0 && attr->total_width < 8192 &&
-                    attr->total_height > 0 && attr->total_height < 8192) {
-                    width = attr->total_width;
-                    height = attr->total_height;
-                    pr_info("*** VIC CONTROL LIMIT ERROR: Using sensor dimensions %dx%d ***\n", width, height);
-                } else {
-                    pr_warn("*** VIC CONTROL LIMIT ERROR: Invalid sensor dimensions %dx%d, using defaults ***\n",
-                            attr->total_width, attr->total_height);
-                }
-            } else {
-                pr_warn("*** VIC CONTROL LIMIT ERROR: No sensor available, using default dimensions ***\n");
-            }
-
-            /* Reset VIC dimensions configuration with actual sensor data */
-            if (vic_regs) {
-                u32 stride = width << 1;  /* width * 2 for 16-bit pixels */
-
-                /* Binary Ninja: Reconfigure VIC dimensions */
-                writel((width << 16) | height, vic_regs + 0x304);
-                writel(1, vic_regs + 0x308);
-                writel(stride, vic_regs + 0x310);
-                writel(stride, vic_regs + 0x314);
-                wmb();
-
-                pr_info("*** VIC CONTROL LIMIT ERROR: Recovery applied - VIC dimensions reset to %dx%d ***\n",
-                        width, height);
-            }
         }
         
         if ((v1_7 & 0x400000) != 0) {

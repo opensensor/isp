@@ -1431,41 +1431,7 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
         pr_info("*** Using safe default dimensions 1920x1080 ***\n");
     }
 
-    /* CRITICAL FIX: Configure VIC dimensions properly to prevent control limit error */
-    /* Binary Ninja: vic_pipo_mdma_enable implementation */
-    void __iomem *vic_regs = vic_dev->vic_regs;
-    if (vic_regs) {
-        u32 width = vic_dev->width;
-        u32 height = vic_dev->height;
-        u32 stride = width << 1;  /* width * 2 for 16-bit pixels */
-
-        pr_info("*** VIC CONTROL LIMIT FIX: Configuring VIC dimensions %dx%d, stride=%d ***\n",
-                width, height, stride);
-
-        /* CRITICAL: Configure VIC dimensions BEFORE any other VIC operations */
-        /* Binary Ninja: *(vic_regs + 0x304) = width << 16 | height */
-        writel((width << 16) | height, vic_regs + 0x304);
-        wmb();
-
-        /* Binary Ninja: *(vic_regs + 0x308) = 1 */
-        writel(1, vic_regs + 0x308);
-        wmb();
-
-        /* Binary Ninja: *(vic_regs + 0x310) = stride */
-        writel(stride, vic_regs + 0x310);
-        wmb();
-
-        /* Binary Ninja: *(vic_regs + 0x314) = stride */
-        writel(stride, vic_regs + 0x314);
-        wmb();
-
-        /* CRITICAL: Also configure basic VIC control registers */
-        writel(0x1, vic_regs + 0x0);    /* VIC enable */
-        writel(0x3, vic_regs + 0xc);    /* MIPI mode */
-        wmb();
-
-        pr_info("*** VIC CONTROL LIMIT FIX: VIC dimensions and control configured ***\n");
-    }
+    /* REMOVED: VIC dimension configuration - not in reference driver */
 
     /* MIPS ALIGNMENT CHECK: Validate vic_dev->sensor_attr access */
     if (((uintptr_t)&vic_dev->sensor_attr & 0x3) != 0) {
@@ -2387,30 +2353,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     return -ENOMEM;
                 }
                 
-                /* STEP 0: CRITICAL - Configure VIC dimensions FIRST to prevent control limit error */
-                pr_info("*** STEP 0: CRITICAL - Configure VIC dimensions FIRST ***\n");
-
-                /* Get actual sensor dimensions */
-                u32 width = 1920;   /* Default fallback */
-                u32 height = 1080;  /* Default fallback */
-                if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->video.attr) {
-                    struct tx_isp_sensor_attribute *attr = ourISPdev->sensor->video.attr;
-                    if (attr->total_width > 0 && attr->total_width < 8192 &&
-                        attr->total_height > 0 && attr->total_height < 8192) {
-                        width = attr->total_width;
-                        height = attr->total_height;
-                        pr_info("*** Using sensor dimensions %dx%d ***\n", width, height);
-                    }
-                }
-
-                /* Configure VIC dimensions BEFORE any other operations */
-                u32 stride = width << 1;
-                writel((width << 16) | height, vic_regs + 0x304);
-                writel(1, vic_regs + 0x308);
-                writel(stride, vic_regs + 0x310);
-                writel(stride, vic_regs + 0x314);
-                wmb();
-                pr_info("*** VIC dimensions configured: %dx%d, stride=%d ***\n", width, height, stride);
+                /* REMOVED: VIC dimension configuration - not in reference driver */
 
                 /* STEP 1: REVERT - Use original working register sequence */
                 pr_info("*** STEP 1: REVERT - Using original working VIC register sequence ***\n");
@@ -2571,12 +2514,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Continue with the complete ISP isp-csi sequence... */
                 wmb();
                 
-                /* STEP 7: Final CSI PHY control sequence */
-                pr_info("*** STEP 7: Final CSI PHY control sequence ***\n");
+                /* STEP 7: DISABLED - This was breaking the working CSI PHY configuration */
+                pr_info("*** STEP 7: DISABLED - Skipping final CSI PHY sequence to preserve working config ***\n");
+                /* DISABLED: These writes were corrupting the working CSI PHY configuration
                 writel(0x1, vic_regs + 0xc);
                 writel(0x1, vic_regs + 0x10);
                 writel(0x630, vic_regs + 0x14);
                 wmb();
+                */
                 
                 /* STEP 8: Now call VIC start with proper initialization complete */
                 pr_info("*** STEP 8: NOW calling tx_isp_vic_start with proper sub-device initialization ***\n");
