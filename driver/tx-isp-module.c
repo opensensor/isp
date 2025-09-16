@@ -28,6 +28,12 @@
 #include "../include/tx_isp_tuning.h"
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
+
+/* External error counters from tx_isp_vic_debug.c */
+extern uint32_t data_b2984;  /* control limit err counter */
+
+/* External ISP device reference */
+extern struct tx_isp_dev *ourISPdev;
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
@@ -1591,6 +1597,19 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         
         if ((v1_7 & 0x200000) != 0) {
             pr_err("Err2 [VIC_INT] : control limit err!!!\n");
+
+            /* CRITICAL FIX: Control limit error indicates VIC-ISP pipeline desync */
+            /* This typically happens after ISP pipeline configuration error */
+            /* Increment control limit error counter for debugging */
+            data_b2984++;
+
+            /* If this is a repeated control limit error, trigger recovery */
+            if (data_b2984 > 3) {
+                pr_info("*** VIC CONTROL LIMIT: Triggering recovery after %d errors ***\n", data_b2984);
+                /* Reset the counter to prevent continuous recovery attempts */
+                data_b2984 = 0;
+                /* The error recovery sequence below will handle the reset */
+            }
         }
         
         if ((v1_7 & 0x400000) != 0) {
@@ -1653,9 +1672,11 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
         }
 
-        /* Binary Ninja: Error recovery sequence */
-        if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
-            pr_err("error handler!!!\n");
+        /* Binary Ninja: Error recovery sequence - FIXED to include control limit error */
+        /* Original mask 0xde00 covers bits 9-15, but control limit error is bit 21 (0x200000) */
+        /* Add 0x200000 to include control limit error in recovery sequence */
+        if ((v1_7 & (0xde00 | 0x200000)) != 0 && *vic_irq_enable_flag == 1) {
+            pr_err("error handler!!! (v1_7=0x%x, including control limit error recovery)\n", v1_7);
 
             /* Binary Ninja: **($s0 + 0xb8) = 4 */
             writel(4, vic_regs + 0x0);
@@ -1682,6 +1703,31 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             /* Binary Ninja: **($s0 + 0xb8) = 1 */
             writel(1, vic_regs + 0x0);
             wmb();
+
+            /* CRITICAL FIX: Re-synchronize VIC-ISP pipeline after control limit error */
+            if ((v1_7 & 0x200000) != 0) {
+                pr_info("*** VIC CONTROL LIMIT RECOVERY: Re-synchronizing VIC-ISP pipeline ***\n");
+
+                /* Re-enable ISP pipeline connection that may have been disrupted */
+                if (ourISPdev && ourISPdev->core_regs) {
+                    void __iomem *core = ourISPdev->core_regs;
+
+                    /* Re-configure ISP pipeline registers to restore VIC connection */
+                    writel(1, core + 0x800);     /* Re-enable ISP pipeline */
+                    writel(0x1c, core + 0x804);  /* Re-configure ISP routing */
+                    writel(8, core + 0x1c);      /* Re-set ISP control mode */
+                    wmb();
+
+                    pr_info("*** VIC CONTROL LIMIT RECOVERY: ISP pipeline re-configured ***\n");
+                }
+
+                /* Clear any pending VIC interrupts that may be stuck */
+                writel(0xffffffff, vic_regs + 0x1f0);  /* Clear interrupt status */
+                writel(0xffffffff, vic_regs + 0x1f4);  /* Clear interrupt status 2 */
+                wmb();
+
+                pr_info("*** VIC CONTROL LIMIT RECOVERY: VIC interrupts cleared ***\n");
+            }
         }
 
         /* Wake up frame channels for all interrupt types */
