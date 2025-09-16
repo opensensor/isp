@@ -2622,6 +2622,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 if (ourISPdev && ourISPdev->csi_dev) {
                     struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
                     extern int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
+                    extern int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);
 
                     pr_info("*** Calling CSI initialization for MIPI interface ***\n");
                     int csi_result = csi_core_ops_init(&csi_dev->sd, 1);
@@ -2630,6 +2631,15 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         pr_err("*** This will cause VIC control limit errors! ***\n");
                     } else {
                         pr_info("*** CSI initialization successful - MIPI interface ready ***\n");
+                    }
+
+                    /* CRITICAL FIX: Call missing CSI video streaming - this was the missing link! */
+                    pr_info("*** CRITICAL: Calling MISSING CSI video streaming - this sets CSI state to 4! ***\n");
+                    int csi_video_result = csi_video_s_stream(&csi_dev->sd, 1);
+                    if (csi_video_result != 0) {
+                        pr_err("*** CSI video streaming failed: %d ***\n", csi_video_result);
+                    } else {
+                        pr_info("*** CSI video streaming successful - CSI state should now be 4 (streaming)! ***\n");
                     }
                 } else {
                     pr_err("*** WARNING: No CSI device available for initialization ***\n");
