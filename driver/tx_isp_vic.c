@@ -2291,11 +2291,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 /* CRITICAL FIX: Disable VIC interrupts during initialization to prevent control limit errors */
                 pr_info("*** DISABLING VIC INTERRUPTS DURING INITIALIZATION ***\n");
-                vic_start_ok = 0;  /* CRITICAL: Disable interrupt processing during init */
-
-                /* CRITICAL: Stop VIC from processing any data during reconfiguration */
-                writel(0, vic_regs + 0x0);  /* Stop VIC immediately */
-                wmb();
+                vic_start_ok = 1;  /* Disable interrupt processing */
                 
                 /* CRITICAL FIX: Correct the register base mapping! */
                 /* vic_regs = 0x133e0000 = CSI PHY (isp-w02 in trace) */

@@ -1492,6 +1492,27 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
     vic_regs = vic_dev->vic_regs;
+
+    /* CRITICAL FIX: Check and restore VIC interrupt registers if corrupted by CSI PHY */
+    if (vic_start_ok == 1) {
+        u32 current_imr = readl(vic_regs + 0x04);
+        u32 current_imcr = readl(vic_regs + 0x0c);
+
+        /* Check if interrupt registers have been corrupted */
+        if (current_imr != 0x07800438 || current_imcr != 0xb5742249) {
+            pr_info("*** VIC INTERRUPT RESTORE: Registers corrupted (IMR=0x%x, IMCR=0x%x), restoring ***\n",
+                    current_imr, current_imcr);
+
+            /* Restore Binary Ninja interrupt register values */
+            writel(0xffffffff, vic_regs + 0x08);  /* Clear interrupt masks first */
+            wmb();
+            writel(0x07800438, vic_regs + 0x04);  /* VIC IMR */
+            writel(0xb5742249, vic_regs + 0x0c);  /* VIC IMCR */
+            wmb();
+
+            pr_info("*** VIC INTERRUPT RESTORE: Registers restored to Binary Ninja values ***\n");
+        }
+    }
     
     /* Get VIC interrupt enable flag at offset +0x13c */
     vic_irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
@@ -1502,20 +1523,8 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
     /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
-    u32 reg_1e0 = readl(vic_regs + 0x1e0);
-    u32 reg_1e8 = readl(vic_regs + 0x1e8);
-    u32 reg_1e4 = readl(vic_regs + 0x1e4);
-    u32 reg_1ec = readl(vic_regs + 0x1ec);
-
-    v1_7 = (~reg_1e8) & reg_1e0;
-    v1_10 = (~reg_1ec) & reg_1e4;
-
-    /* ENHANCED DEBUG: Show why VIC interrupts stop working */
-    if (v1_7 == 0 && v1_10 == 0) {
-        pr_debug("*** VIC IRQ 38 FIRED: No interrupt bits set - 0x1e0=0x%x, 0x1e8=0x%x ***\n", reg_1e0, reg_1e8);
-    } else {
-        pr_info("*** VIC IRQ 38 ACTIVE: v1_7=0x%x, v1_10=0x%x (0x1e0=0x%x, 0x1e8=0x%x) ***\n", v1_7, v1_10, reg_1e0, reg_1e8);
-    }
+    v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
+    v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
     
     /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
     writel(v1_7, vic_regs + 0x1f0);
@@ -1600,16 +1609,6 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         
         if ((v1_7 & 0x200000) != 0) {
             pr_err("Err2 [VIC_INT] : control limit err!!!\n");
-
-            /* Log the error for analysis - root cause should be fixed by buffer management */
-            pr_info("*** VIC CONTROL LIMIT ERROR: (should be rare with buffer fix) ***\n");
-
-            /* CRITICAL FIX: Ensure vic_start_ok remains enabled despite control limit errors */
-            /* Control limit errors can occur during CSI PHY register updates but shouldn't disable interrupts */
-            if (vic_start_ok == 0) {
-                pr_warn("*** CRITICAL: vic_start_ok was disabled by control limit error - re-enabling! ***\n");
-                vic_start_ok = 1;
-            }
         }
         
         if ((v1_7 & 0x400000) != 0) {
@@ -1672,14 +1671,9 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
         }
 
-        /* Binary Ninja: Error recovery sequence - CRITICAL FIX: Include control limit error */
-        /* CRITICAL: 0x200000 (control limit error) must also trigger recovery sequence */
-        if (((v1_7 & 0xde00) != 0 || (v1_7 & 0x200000) != 0) && *vic_irq_enable_flag == 1) {
-            pr_err("error handler!!! (v1_7=0x%x)\n", v1_7);
-
-            /* CRITICAL FIX: Save vic_start_ok state before error recovery */
-            uint32_t saved_vic_start_ok = vic_start_ok;
-            pr_info("*** ERROR RECOVERY: Saving vic_start_ok=%d before recovery ***\n", saved_vic_start_ok);
+        /* Binary Ninja: Error recovery sequence */
+        if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
+            pr_err("error handler!!!\n");
 
             /* Binary Ninja: **($s0 + 0xb8) = 4 */
             writel(4, vic_regs + 0x0);
@@ -1706,12 +1700,6 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             /* Binary Ninja: **($s0 + 0xb8) = 1 */
             writel(1, vic_regs + 0x0);
             wmb();
-
-            /* CRITICAL FIX: Restore vic_start_ok state after error recovery */
-            if (saved_vic_start_ok == 1) {
-                vic_start_ok = 1;
-                pr_info("*** ERROR RECOVERY: Restored vic_start_ok=1 after recovery ***\n");
-            }
         }
 
         /* Wake up frame channels for all interrupt types */
@@ -1722,7 +1710,8 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         }
         
     } else {
-        pr_debug("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled ***\n");
+        pr_warn("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
+        pr_warn("*** This means VIC interrupts are firing but being ignored! ***\n");
     }
     
     /* Binary Ninja: return 1 */
@@ -5864,17 +5853,6 @@ int vic_event_handler(void *subdev, int event_type, void *data)
                 vic_dev->frame_count++;
                 
                 pr_info("*** VIC QBUF: BUFFER SUCCESSFULLY PROGRAMMED TO VIC HARDWARE! ***\n");
-
-                /* CRITICAL FIX: Enable VIC interrupts now that buffer is configured */
-                pr_info("*** VIC QBUF: Checking vic_start_ok status: vic_start_ok=%d ***\n", vic_start_ok);
-                if (vic_start_ok == 0) {
-                    vic_start_ok = 1;
-                    pr_info("*** CRITICAL: VIC INTERRUPTS NOW ENABLED - buffer configured! ***\n");
-                    pr_info("*** VIC hardware can now safely generate interrupts without control limit errors ***\n");
-                } else {
-                    pr_info("*** VIC QBUF: VIC interrupts already enabled (vic_start_ok=%d) ***\n", vic_start_ok);
-                }
-
                 pr_info("*** VIC QBUF: Buffer[%d] addr=0x%x programmed, frame_count=%u ***\n",
                         buffer_data->index, buffer_data->phys_addr, vic_dev->frame_count);
                 

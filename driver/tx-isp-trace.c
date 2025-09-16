@@ -199,11 +199,10 @@ static void check_region_changes(struct work_struct *work)
                        jiffies_to_msecs(delta_jiffies),
                        jiffies_to_usecs(delta_jiffies) % 1000);
 
-                // CRITICAL FIX: Restore VIC interrupts after CSI PHY register writes that conflict with VIC
+                // CRITICAL FIX: Log VIC interrupt register conflicts for debugging
                 if ((offset == 0x04 || offset == 0x0c || offset == 0x1e8) && strcmp(region->name, "isp-w02") == 0) {
-                    extern void tx_isp_vic_restore_interrupts(void);
-                    pr_info("*** CSI PHY CONFLICT: Register 0x%x overwritten, restoring VIC interrupts ***\n", offset);
-                    tx_isp_vic_restore_interrupts();
+                    pr_info("*** CSI PHY CONFLICT DETECTED: Register 0x%x overwritten (VIC interrupt register) ***\n", offset);
+                    pr_info("*** VIC interrupts may be disrupted - restoration needed ***\n");
                 }
             }
 
