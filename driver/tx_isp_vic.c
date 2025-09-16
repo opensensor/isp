@@ -67,15 +67,15 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* Set self-pointer at offset 0xd4 */
     *(void **)((char *)vic_dev + 0xd4) = vic_dev;
     
-    /* *** CRITICAL FIX: Map VIC registers directly to prevent corruption *** */
-    pr_info("*** CRITICAL: Mapping VIC registers directly to prevent corruption ***\n");
-    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000); // VIC W02 mapping
+    /* *** CRITICAL FIX: Map VIC registers to CORRECT address *** */
+    pr_info("*** CRITICAL FIX: Mapping VIC registers to correct address 0x10023000 ***\n");
+    vic_dev->vic_regs = ioremap(0x10023000, 0x1000); // CORRECT VIC register base
     if (!vic_dev->vic_regs) {
-        pr_err("tx_isp_create_vic_device: Failed to map VIC registers at 0x133e0000\n");
+        pr_err("tx_isp_create_vic_device: Failed to map VIC registers at 0x10023000\n");
         kfree(vic_dev);
         return -ENOMEM;
     }
-    pr_info("*** VIC registers mapped successfully: %p ***\n", vic_dev->vic_regs);
+    pr_info("*** VIC registers mapped successfully to CORRECT address: %p ***\n", vic_dev->vic_regs);
     
     /* Also store in ISP device for compatibility */
     if (!isp_dev->vic_regs) {
@@ -2319,17 +2319,17 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    /* CRITICAL FIX: Ensure VIC registers are mapped before use */
+    /* CRITICAL FIX: Ensure VIC registers are mapped to CORRECT address */
     vic_regs = vic_dev->vic_regs;
     if (!vic_regs) {
-        pr_err("*** CRITICAL FIX: VIC registers not mapped - mapping now ***\n");
-        vic_regs = ioremap(0x133e0000, 0x10000);
+        pr_err("*** CRITICAL FIX: VIC registers not mapped - mapping to CORRECT address ***\n");
+        vic_regs = ioremap(0x10023000, 0x1000);  /* CORRECT VIC base address */
         if (!vic_regs) {
-            pr_err("vic_core_s_stream: Failed to map VIC registers at 0x133e0000\n");
+            pr_err("vic_core_s_stream: Failed to map VIC registers at 0x10023000\n");
             return -ENOMEM;
         }
         vic_dev->vic_regs = vic_regs;
-        pr_info("*** VIC registers mapped successfully: %p ***\n", vic_regs);
+        pr_info("*** VIC registers mapped successfully to CORRECT address: %p ***\n", vic_regs);
     }
 
     /* Calculate base addresses safely */
@@ -2381,14 +2381,25 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     return -ENOMEM;
                 }
                 
-                /* STEP 1: ISP isp-w02 - Initial CSI PHY Control registers */
-                pr_info("*** STEP 1: ISP isp-w02 - Initial CSI PHY Control registers ***\n");
-                /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
-                writel(0x7800438, vic_regs + 0x4);
-                writel(0x2, vic_regs + 0xc);
-                writel(0x2, vic_regs + 0x14);
-                writel(0xf00, vic_regs + 0x18);
-                writel(0x800800, vic_regs + 0x60);
+                /* STEP 1: CSI PHY Control registers (FIXED to use correct base) */
+                pr_info("*** STEP 1: CSI PHY Control registers (FIXED - using correct PHY base) ***\n");
+                /* CRITICAL FIX: Use correct CSI PHY base, not VIC base! */
+                void __iomem *csi_phy_base = ourISPdev->phy_base;
+                if (!csi_phy_base) {
+                    csi_phy_base = ioremap(0x10021000, 0x1000);
+                    ourISPdev->phy_base = csi_phy_base;
+                }
+
+                if (csi_phy_base) {
+                    writel(0x7800438, csi_phy_base + 0x4);
+                    writel(0x2, csi_phy_base + 0xc);
+                    writel(0x2, csi_phy_base + 0x14);
+                    writel(0xf00, csi_phy_base + 0x18);
+                    writel(0x800800, csi_phy_base + 0x60);
+                    pr_info("*** CSI PHY registers configured with CORRECT base address ***\n");
+                } else {
+                    pr_err("*** CRITICAL ERROR: Failed to map CSI PHY base ***\n");
+                }
                 writel(0x9d09d0, vic_regs + 0x64);
                 writel(0x6002, vic_regs + 0x70);
                 writel(0x7003, vic_regs + 0x74);

@@ -625,12 +625,15 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         pr_info("*** CRITICAL: CSI PHY timing configuration - frame_rate=%d, phy_timing=%d ***\n",
                                 frame_rate, phy_timing_value);
 
-                        /* Binary Ninja: Configure PHY timing registers */
-                        void __iomem *phy_base = csi_dev->phy_regs;
+                        /* CRITICAL FIX: Use correct PHY base address */
+                        void __iomem *phy_base = ourISPdev->phy_base;  /* Use global PHY base */
                         if (!phy_base) {
-                            /* Map PHY registers if not already mapped */
-                            phy_base = ioremap(0x13310000, 0x1000);
-                            csi_dev->phy_regs = phy_base;
+                            /* CRITICAL: Use correct PHY base address 0x10021000, not 0x13310000 */
+                            phy_base = ioremap(0x10021000, 0x1000);
+                            if (phy_base) {
+                                ourISPdev->phy_base = phy_base;  /* Store in global */
+                                pr_info("*** CRITICAL FIX: PHY base mapped to correct address 0x10021000 ***\n");
+                            }
                         }
 
                         if (phy_base) {
