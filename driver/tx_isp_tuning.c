@@ -1738,11 +1738,46 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     static int tuning_cycle_count = 0;
                     tuning_cycle_count++;
 
-                    /* Perform continuous register updates after initial setup (like reference trace) */
-                    if (tuning_cycle_count > 2) {
-                        pr_info("*** CONTINUOUS TUNING: Performing CSI PHY and Core Control updates (cycle %d) ***\n",
+                    /* CRITICAL FIX: Don't perform continuous tuning during VIC streaming */
+                    /* This prevents CSI PHY timeouts that disrupt VIC interrupts */
+                    extern uint32_t vic_start_ok;
+                    if (vic_start_ok == 1) {
+                        pr_info("*** CONTINUOUS TUNING: VIC streaming active - SKIPPING tuning to prevent CSI PHY timeout (cycle %d) ***\n",
                                 tuning_cycle_count);
+                    } else {
+                        /* Perform continuous register updates after initial setup (like reference trace) */
+                        if (tuning_cycle_count > 2) {
+                            pr_info("*** CONTINUOUS TUNING: Performing CSI PHY and Core Control updates (cycle %d) ***\n",
+                                    tuning_cycle_count);
 
+                            /* CRITICAL: Implement actual tuning operations to prevent CSI PHY timeout */
+                            /* The empty implementation was causing CSI hardware to timeout and auto-transition */
+
+                            /* 1. LSC (Lens Shading Correction) update */
+                            extern int tisp_lsc_write_lut_datas(void);
+                            int lsc_ret = tisp_lsc_write_lut_datas();
+                            if (lsc_ret != 0) {
+                                pr_debug("TUNING: LSC update returned %d\n", lsc_ret);
+                            }
+
+                            /* 2. CCM (Color Correction Matrix) update */
+                            extern int tiziano_ccm_update(uint32_t ct_value, uint32_t sat_value);
+                            int ccm_ret = tiziano_ccm_update(5000, 128);  /* Default CT=5000K, sat=128 */
+                            if (ccm_ret != 0) {
+                                pr_debug("TUNING: CCM update returned %d\n", ccm_ret);
+                            }
+
+                            /* 3. Basic ISP register refresh to maintain CSI PHY timing */
+                            extern void system_reg_write(u32 reg, u32 value);
+                            if (dev->core_regs) {
+                                /* Refresh critical ISP timing registers to prevent CSI timeout */
+                                u32 current_val = readl(dev->core_regs + 0x10);
+                                writel(current_val, dev->core_regs + 0x10);  /* Refresh interrupt enable */
+                                wmb();
+                            }
+
+                            pr_debug("TUNING: Cycle %d operations completed\n", tuning_cycle_count);
+                        }
                     }
                 }
 
