@@ -198,6 +198,13 @@ static void check_region_changes(struct work_struct *work)
                        region->last_values[i], current_val,
                        jiffies_to_msecs(delta_jiffies),
                        jiffies_to_usecs(delta_jiffies) % 1000);
+
+                // CRITICAL FIX: Restore VIC interrupts after CSI PHY register 0x1e8 writes
+                if (offset == 0x1e8 && strcmp(region->name, "isp-w02") == 0) {
+                    extern void tx_isp_vic_restore_interrupts(void);
+                    pr_info("*** CSI PHY CONFLICT: Register 0x1e8 overwritten, restoring VIC interrupts ***\n");
+                    tx_isp_vic_restore_interrupts();
+                }
             }
 
             region->last_values[i] = current_val;

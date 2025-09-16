@@ -174,6 +174,40 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 
+/* VIC interrupt restoration function - called after CSI PHY changes */
+void tx_isp_vic_restore_interrupts(void)
+{
+    extern struct tx_isp_dev *ourISPdev;
+    struct tx_isp_vic_device *vic_dev;
+    void __iomem *vic_regs;
+
+    if (!ourISPdev || !ourISPdev->vic_dev) {
+        return;
+    }
+
+    vic_dev = ourISPdev->vic_dev;
+    vic_regs = vic_dev->vic_regs;
+
+    if (!vic_regs || vic_start_ok != 1) {
+        return; /* VIC not active */
+    }
+
+    pr_info("*** VIC INTERRUPT RESTORE: CSI PHY changes detected, restoring VIC interrupts ***\n");
+
+    /* Clear any pending interrupts first */
+    writel(0, vic_regs + 0x1f0);  /* Clear interrupt status */
+    writel(0, vic_regs + 0x1f4);  /* Clear interrupt status 2 */
+    wmb();
+
+    /* Restore VIC interrupts using the working sequence */
+    writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
+    writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
+    wmb();
+
+    pr_info("*** VIC INTERRUPT RESTORE: VIC interrupts restored after CSI PHY changes ***\n");
+}
+EXPORT_SYMBOL(tx_isp_vic_restore_interrupts);
+
 /* Global data symbol used by reference driver */
 static char data_b0000[1] = {0};
 
@@ -2571,18 +2605,19 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
                 wmb();
 
-                pr_info("*** AFTER: VIC_IMR(0x04)=0x%x, VIC_IMCR(0x0c)=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
+                pr_info("*** AFTER: VIC interrupt registers enabled - 0x1e0=0x%x, 0x1e8=0x%x ***\n",
+                        readl(vic_regs + 0x1e0), readl(vic_regs + 0x1e8));
 
-                /* Verify the writes took effect */
-                u32 actual_imr = readl(vic_regs + 0x04);
-                u32 actual_imcr = readl(vic_regs + 0x0c);
-                if (actual_imr == 0x07800438 && actual_imcr == 0xb5742249) {
-                    pr_info("*** SUCCESS: VIC interrupt registers set to Binary Ninja values! ***\n");
+                /* Verify the working interrupt setup took effect */
+                u32 actual_1e0 = readl(vic_regs + 0x1e0);
+                u32 actual_1e8 = readl(vic_regs + 0x1e8);
+                if (actual_1e0 == 0xffffffff && actual_1e8 == 0x0) {
+                    pr_info("*** SUCCESS: VIC interrupt registers set to working values! ***\n");
                     pr_info("*** VIC should now generate interrupts on IRQ 38 (isp-w02) ***\n");
                 } else {
                     pr_warn("*** WARNING: VIC interrupt register values unexpected ***\n");
-                    pr_warn("*** Expected: IMR=0x07800438, IMCR=0xb5742249 ***\n");
-                    pr_warn("*** Actual: IMR=0x%x, IMCR=0x%x ***\n", actual_imr, actual_imcr);
+                    pr_warn("*** Expected: 0x1e0=0xffffffff, 0x1e8=0x0 ***\n");
+                    pr_warn("*** Actual: 0x1e0=0x%x, 0x1e8=0x%x ***\n", actual_1e0, actual_1e8);
                     pr_warn("*** VIC interrupts may still work - IRQ 38 routing is correct ***\n");
                 }
 
