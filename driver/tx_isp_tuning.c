@@ -3259,7 +3259,7 @@ static void tiziano_ccm_params_refresh(void)
 }
 
 /* jz_isp_ccm - Binary Ninja EXACT implementation */
-static int jz_isp_ccm(void)
+int jz_isp_ccm(void)
 {
     uint32_t ev_value = data_9a454 >> 10;  /* Current EV shifted */
     int32_t ct_value = jz_isp_ccm_parameter_convert();
@@ -4482,6 +4482,7 @@ EXPORT_SYMBOL(tiziano_init_all_pipeline_components);
 
 /* Export all the tiziano pipeline functions */
 EXPORT_SYMBOL(tiziano_ccm_init);
+EXPORT_SYMBOL(jz_isp_ccm);
 EXPORT_SYMBOL(tisp_gb_init);
 EXPORT_SYMBOL(tiziano_sdns_init);
 EXPORT_SYMBOL(tisp_dmsc_wdr_en);
