@@ -3446,13 +3446,21 @@ int tisp_ccm_ct_update(void)
     return 0;  /* No CT update needed */
 }
 
-/* tisp_ccm_ev_update - Update CCM based on exposure value */
+/* tisp_ccm_ev_update - Update CCM based on exposure value - SAFE VERSION */
 int tisp_ccm_ev_update(void)
 {
-    pr_debug("tisp_ccm_ev_update: Updating CCM for exposure value changes\n");
+    pr_debug("tisp_ccm_ev_update: Updating CCM for exposure value changes (safe version)\n");
 
-    /* Get current EV value */
-    uint32_t current_ev = data_9a454 >> 10;
+    /* SAFE: Use global ISP device for EV access */
+    extern struct tx_isp_dev *ourISPdev;
+
+    if (!ourISPdev || !ourISPdev->tuning_data) {
+        pr_debug("tisp_ccm_ev_update: No ISP device or tuning data available\n");
+        return 0;
+    }
+
+    /* Get current EV value from tuning data */
+    uint32_t current_ev = ourISPdev->tuning_data->exposure >> 10;
 
     /* Check if EV has changed significantly */
     uint32_t ev_diff = (data_c52ec >= current_ev) ?
@@ -3462,7 +3470,7 @@ int tisp_ccm_ev_update(void)
         pr_debug("tisp_ccm_ev_update: Significant EV change detected (%u -> %u)\n",
                  data_c52ec, current_ev);
 
-        /* Update EV cache and trigger saturation adjustment */
+        /* Update EV cache */
         data_c52ec = current_ev;
 
         /* Adjust saturation based on EV - higher EV = more saturation */
@@ -3474,7 +3482,11 @@ int tisp_ccm_ev_update(void)
             data_c52fc = 0x100;  /* Normal saturation */
         }
 
-        ccm_real.real = 1;  /* Mark for hardware update */
+        /* Simple hardware update instead of complex CCM operations */
+        if (ourISPdev->core_regs) {
+            writel(data_c52fc, ourISPdev->core_regs + 0x2808);  /* Saturation register */
+            writel(current_ev, ourISPdev->core_regs + 0x280c);  /* EV register */
+        }
 
         return 1;  /* EV updated */
     }
