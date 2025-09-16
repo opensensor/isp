@@ -4679,8 +4679,9 @@ int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable)
         
         /* MIPS SAFE: Disable CSI streaming state */
             struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
-            csi_dev->state = 3; /* Non-streaming state */
-            pr_info("*** MIPS-SAFE: CSI device state set to non-streaming (3) ***\n");
+            /* CRITICAL FIX: State 3 = CSI_STATE_ERROR! Use CSI_STATE_IDLE (1) for disable */
+            csi_dev->state = CSI_STATE_IDLE; /* 1 = IDLE, not 3 = ERROR */
+            pr_info("*** MIPS-SAFE: CSI device state set to IDLE (%d) ***\n", csi_dev->state);
 
     }
     
