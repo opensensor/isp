@@ -278,16 +278,19 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 u32 reg_val = readl(vic_regs + 0x300);
                 u32 original_reg_val = reg_val;
 
-                /* CRITICAL FIX: Preserve existing buffer count to prevent control limit error */
+                /* CRITICAL FIX: Use reasonable buffer count to prevent control limit error */
                 u32 existing_buffer_count = (reg_val >> 16) & 0xffff;
 
-                /* Apply the Binary Ninja logic but preserve buffer count */
+                /* Apply the Binary Ninja logic but use reasonable buffer count */
                 reg_val = shifted_value | (reg_val & 0xfff0ffff);
 
-                /* CRITICAL: Ensure buffer count is never zero - use existing count or minimum 1 */
-                u32 final_buffer_count = (existing_buffer_count > 0) ? existing_buffer_count : 1;
+                /* CRITICAL: Use reasonable buffer count (1-4) instead of preserving potentially wrong values */
+                u32 final_buffer_count = 1;  /* Use simple buffer count of 1 to prevent control limit errors */
+                if (existing_buffer_count > 0 && existing_buffer_count <= 4) {
+                    final_buffer_count = existing_buffer_count;  /* Only preserve if reasonable */
+                }
 
-                /* Force buffer count back into the register */
+                /* Force reasonable buffer count into the register */
                 reg_val = (reg_val & 0xfff0ffff) | (final_buffer_count << 16);
 
                 writel(reg_val, vic_regs + 0x300);
@@ -2245,8 +2248,11 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
                 pr_info("*** CONTROL LIMIT DEBUG: active_buffer_count=%d (non-zero, good) ***\n", vic_dev->active_buffer_count);
             }
 
-            /* ADDITIONAL FIX: Force minimum buffer count in register to prevent hardware control limit error */
-            u32 buffer_count_for_reg = (vic_dev->active_buffer_count > 0) ? vic_dev->active_buffer_count : 1;
+            /* ADDITIONAL FIX: Use reasonable buffer count in register to prevent hardware control limit error */
+            u32 buffer_count_for_reg = 1;  /* Use simple buffer count of 1 to prevent control limit errors */
+            if (vic_dev->active_buffer_count > 0 && vic_dev->active_buffer_count <= 4) {
+                buffer_count_for_reg = vic_dev->active_buffer_count;  /* Only use if reasonable */
+            }
             u32 stream_ctrl = (buffer_count_for_reg << 16) | 0x80000020;
             writel(stream_ctrl, vic_base + 0x300);
             wmb();
