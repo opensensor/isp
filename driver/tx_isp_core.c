@@ -2037,16 +2037,20 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) */
     system_irq_func_set(0xd, ispcore_ip_done_irq_handler);
 
-    /* CRITICAL: Enable ISP interrupts - this is what was missing! */
-    pr_info("*** tisp_init: Enabling ISP interrupts ***\n");
-    
-    /* Enable ISP interrupt mask register - allow ISP interrupts to be generated */
-    writel(0xffffffff, isp_regs + 0x30);  /* Enable all interrupt sources */
+    /* CRITICAL: Enable ISP interrupts - EXACT Binary Ninja reference implementation */
+    pr_info("*** tisp_init: Enabling ISP interrupts (Binary Ninja exact) ***\n");
+
+    /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
+    writel(0xffffffff, isp_regs + 0x30);
     wmb();
-    
-    /* Enable ISP core interrupt enable register */
-    writel(0x1ff, isp_regs + 0x10);  /* Enable frame done, error, and processing interrupts */
+
+    /* Binary Ninja: system_reg_write(0x10, 0x133 or 0x33f) - Enable specific interrupt types */
+    /* Use 0x133 for normal mode, 0x33f for WDR mode */
+    u32 int_enable_val = (data_b2e74 != 1) ? 0x133 : 0x33f;
+    writel(int_enable_val, isp_regs + 0x10);
     wmb();
+
+    pr_info("*** ISP CORE: Interrupt registers enabled - 0x30=0xffffffff, 0x10=0x%x ***\n", int_enable_val);
     
     pr_info("*** tisp_init: ISP interrupts enabled - should now generate interrupts! ***\n");
 
@@ -2207,23 +2211,35 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
     
     ISP_INFO("*** ispcore_core_ops_init: tisp_init SUCCESS ***\n");
 
-    /* Ensure ISP core interrupt registers are enabled on the correct base (core_regs).
-     * Reference ISR reads status at +0xb4 and clears at +0xb8, so enable/mask at +0xb0/+0xbc. */
+    /* CRITICAL: Enable ISP core interrupt registers - EXACT Binary Ninja reference implementation */
     if (isp->core_regs) {
         void __iomem *core = isp->core_regs;
-        /* Try both legacy and new interrupt banks */
-        /* Legacy bank (+0xb*) */
+
+        /* Binary Ninja reference: Enable ISP core interrupts at the hardware level */
+        /* These are the CRITICAL missing registers that prevent ISP core interrupts! */
+
+        /* Clear any pending interrupts first */
         u32 pend_legacy = readl(core + 0xb4);
-        writel(pend_legacy, core + 0xb8);  /* Clear any pending status */
-        writel(0x3FFF, core + 0xb0);       /* Enable */
-        writel(0x3FFF, core + 0xbc);       /* Unmask/mirror */
-        /* New bank (+0x98b*) */
         u32 pend_new = readl(core + 0x98b4);
-        writel(pend_new, core + 0x98b8);   /* Clear any pending status */
-        writel(0x3FFF, core + 0x98b0);     /* Enable */
-        writel(0x3FFF, core + 0x98bc);     /* Unmask/mirror */
+        writel(pend_legacy, core + 0xb8);   /* Clear legacy pending */
+        writel(pend_new, core + 0x98b8);    /* Clear new pending */
+
+        /* CRITICAL: Enable interrupt generation at hardware level */
+        /* Binary Ninja: system_reg_write(0x30, 0xffffffff) */
+        writel(0xffffffff, core + 0x30);    /* Enable all interrupt sources */
+
+        /* Binary Ninja: system_reg_write(0x10, 0x133 or 0x33f) */
+        writel(0x133, core + 0x10);         /* Enable specific interrupt types */
+
+        /* Enable interrupt banks */
+        writel(0x3FFF, core + 0xb0);        /* Legacy enable */
+        writel(0x3FFF, core + 0xbc);        /* Legacy unmask */
+        writel(0x3FFF, core + 0x98b0);      /* New enable */
+        writel(0x3FFF, core + 0x98bc);      /* New unmask */
         wmb();
-        ISP_INFO("*** ispcore_core_ops_init: ISP core interrupts enabled (legacy:+0xb* and new:+0x98b*) ***\n");
+
+        ISP_INFO("*** ISP CORE: Hardware interrupt generation ENABLED (0x30=0xffffffff, 0x10=0x133) ***\n");
+        ISP_INFO("*** ISP CORE: Interrupt banks enabled (legacy+new) - should now generate interrupts! ***\n");
     } else {
         ISP_INFO("*** ispcore_core_ops_init: isp->core_regs is NULL; cannot enable core interrupts here ***\n");
     }

@@ -272,10 +272,25 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
                          reg_val, buffer_index, high_bits, match_found);
             }
-                /* Directly invoke ISP core ISR to process frame done when core IRQ not firing */
-    extern irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id);
-    ispcore_interrupt_service_routine_mod(37, ourISPdev);
-    pr_info("*** VIC->ISP EVENT: Direct call to ISP core ISR executed ***\n");
+
+            /* CRITICAL FIX: Trigger ISP core interrupt generation after VIC frame completion */
+            if (ourISPdev && ourISPdev->core_regs) {
+                void __iomem *core = ourISPdev->core_regs;
+
+                /* Manually trigger ISP core frame done interrupt (bit 0) */
+                u32 current_status = readl(core + 0xb4);
+                writel(current_status | 0x1, core + 0xb4);  /* Set frame done bit */
+                wmb();
+
+                pr_info("*** VIC->ISP TRIGGER: Manually triggered ISP core frame done interrupt ***\n");
+
+                /* Also call ISP core ISR directly as backup */
+                extern irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id);
+                ispcore_interrupt_service_routine_mod(37, ourISPdev);
+                pr_info("*** VIC->ISP EVENT: Direct call to ISP core ISR executed ***\n");
+            } else {
+                pr_warn("*** VIC->ISP: Cannot trigger core interrupt - core_regs not available ***\n");
+            }
 
     /* Call the ISP frame done wakeup function to notify waiting processes */
     extern void isp_frame_done_wakeup(void);
@@ -1358,23 +1373,32 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     vic_start_ok = 1;
     pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
 
-    /* CRITICAL: Ensure ISP core (isp-m0) interrupt lines are unmasked and pending is cleared on core base */
+    /* CRITICAL: Enable ISP core interrupt generation - EXACT Binary Ninja reference */
     if (ourISPdev && ourISPdev->core_regs) {
         void __iomem *core = ourISPdev->core_regs;
-        /* Handle both legacy (+0xb*) and new (+0x98b*) interrupt banks */
+
+        /* Clear any pending interrupts first */
         u32 pend_legacy = readl(core + 0xb4);
         u32 pend_new    = readl(core + 0x98b4);
-        /* Clear any pending bits in both banks */
         writel(pend_legacy, core + 0xb8);
         writel(pend_new,    core + 0x98b8);
-        /* Enable/unmask in both banks */
+
+        /* CRITICAL: Enable ISP core interrupt generation at hardware level */
+        /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
+        writel(0xffffffff, core + 0x30);
+
+        /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
+        writel(0x133, core + 0x10);
+
+        /* Enable interrupt banks */
         writel(0x3FFF, core + 0xb0);
         writel(0x3FFF, core + 0xbc);
         writel(0x3FFF, core + 0x98b0);
         writel(0x3FFF, core + 0x98bc);
         wmb();
-        pr_info("*** ISP CORE IRQ: core_regs=%p, legacy pend=0x%08x, new pend=0x%08x; both banks enabled ***\n",
-                core, pend_legacy, pend_new);
+
+        pr_info("*** ISP CORE: Hardware interrupt generation ENABLED during VIC init ***\n");
+        pr_info("*** ISP CORE: 0x30=0xffffffff, 0x10=0x133, banks enabled - should generate interrupts! ***\n");
     } else {
         pr_warn("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
     }
