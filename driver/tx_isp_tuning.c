@@ -4084,10 +4084,10 @@ static uint32_t dpc_d_m3_dthres_wdr_array[16] = {0xc, 0x12, 0x18, 0x1e, 0x24, 0x
 static uint32_t dpc_d_m3_fthres_wdr_array[16] = {0x6, 0x9, 0xc, 0xf, 0x12, 0x15, 0x18, 0x1b, 0x1e, 0x21, 0x24, 0x27, 0x2a, 0x2d, 0x30, 0x33};
 
 /* DPC current pointers - Binary Ninja reference */
-static uint32_t *dpc_d_m1_dthres_array_now = NULL;
-static uint32_t *dpc_d_m1_fthres_array_now = NULL;
-static uint32_t *dpc_d_m3_dthres_array_now = NULL;
-static uint32_t *dpc_d_m3_fthres_array_now = NULL;
+uint32_t *dpc_d_m1_dthres_array_now = NULL;
+uint32_t *dpc_d_m1_fthres_array_now = NULL;
+uint32_t *dpc_d_m3_dthres_array_now = NULL;
+uint32_t *dpc_d_m3_fthres_array_now = NULL;
 
 /* DPC state variables - Binary Ninja reference */
 static uint32_t data_9ab10 = 0xFFFFFFFF;  /* DPC state cache */
