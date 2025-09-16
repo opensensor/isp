@@ -907,14 +907,8 @@ void tx_isp_vic_write_csi_phy_sequence(void)
     writel(0x3, csi_base + 0x2f4);
     wmb();
     
-    pr_info("*** CSI PHY SEQUENCE: Step 3 - Final CSI PHY Control registers (0xc, 0x10) ***\n");
-    
-    /* STEP 3: Final CSI PHY Control registers - LAST as in reference */
-    writel(0x1, csi_base + 0xc);
-    writel(0x1, csi_base + 0x10);  /* CORRECTED: 0x1 not 0x133 */
-    wmb();
-    
-    pr_info("*** CRITICAL: CSI PHY SEQUENCE COMPLETE - NOW MATCHES REFERENCE DRIVER ORDER! ***\n");
+    pr_info("*** CSI PHY SEQUENCE: SKIPPING conflicting register writes - CSI module handles this! ***\n");
+    pr_info("*** CRITICAL: VIC will NOT overwrite CSI Lane Configuration - letting CSI module handle PHY! ***\n");
 }
 
 int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
