@@ -384,8 +384,9 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
         /* Binary Ninja: *(arg1 + 0x128) = 3 */
         /* CRITICAL FIX: Use safe struct member access instead of offset 0x128 */
-        csi_dev->state = 3;
-        pr_info("CSI streaming disabled - state=3\n");
+        /* CRITICAL FIX: State 3 = CSI_STATE_ERROR! Use CSI_STATE_IDLE (1) for disable */
+        csi_dev->state = CSI_STATE_IDLE;  /* 1 = IDLE, not 3 = ERROR */
+        pr_info("CSI streaming disabled - state=%d (IDLE)\n", csi_dev->state);
     }
 
     /* Binary Ninja: return 0 */
@@ -410,14 +411,18 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     switch (cmd) {
     case TX_ISP_EVENT_SENSOR_RESIZE:  /* This is the correct event for reset */
         /* Reset CSI */
-        if (csi_dev->state >= 3) {
-            csi_dev->state = 3;
+        /* CRITICAL FIX: Don't set to ERROR state (3)! Reset to IDLE (1) */
+        if (csi_dev->state >= CSI_STATE_ACTIVE) {
+            csi_dev->state = CSI_STATE_IDLE;  /* 1 = IDLE, not 3 = ERROR */
+            pr_info("CSI reset to IDLE state due to sensor resize\n");
         }
         break;
     case TX_ISP_EVENT_SENSOR_FPS:
         /* Update FPS */
-        if (csi_dev->state >= 3) {
-            csi_dev->state = 4;
+        /* CRITICAL FIX: Don't check for ERROR state (3)! Check for ACTIVE (2) */
+        if (csi_dev->state >= CSI_STATE_ACTIVE) {
+            /* Stay in ACTIVE state for FPS changes */
+            pr_info("CSI FPS update while in ACTIVE state\n");
         }
         break;
     case TX_ISP_EVENT_SENSOR_PREPARE_CHANGE:  /* This is the correct event for start */
