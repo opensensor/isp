@@ -9,7 +9,7 @@
 #include <linux/wait.h>
 #include <linux/atomic.h>
 #include "../include/tx-isp-debug.h"
-#include "../include/tx-isp-common.h"
+#include "../include/tx_isp_core.h"
 
 /* Frame done tracking variables */
 static atomic64_t frame_done_cnt = ATOMIC64_INIT(0);
