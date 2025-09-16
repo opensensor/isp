@@ -669,24 +669,19 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         pr_info("*** CRITICAL: CSI PHY timing configuration - frame_rate=%d, phy_timing=%d ***\n",
                                 frame_rate, phy_timing_value);
 
-                        /* CRITICAL FIX: Use correct PHY base address */
-                        void __iomem *phy_base = ourISPdev->phy_base;  /* Use global PHY base */
-                        pr_info("*** PHY BASE DEBUG: ourISPdev=%p, phy_base=%p ***\n", ourISPdev, phy_base);
+                        /* CRITICAL FIX: Use CORRECT CSI PHY base address - isp-w02 at 0x133e0000 */
+                        void __iomem *phy_base = NULL;
 
+                        /* The CSI PHY registers are at isp-w02 (0x133e0000), NOT 0x10021000! */
+                        /* This matches the register tracer output: "ISP isp-w02: [CSI PHY Control]" */
+                        phy_base = ioremap(0x133e0000, 0x10000);
                         if (!phy_base) {
-                            pr_warn("*** PHY BASE NULL: Mapping PHY registers at 0x10021000 ***\n");
-                            /* CRITICAL: Use correct PHY base address 0x10021000, not 0x13310000 */
-                            phy_base = ioremap(0x10021000, 0x1000);
-                            if (phy_base) {
-                                ourISPdev->phy_base = phy_base;  /* Store in global */
-                                pr_info("*** CRITICAL FIX: PHY base mapped to correct address 0x10021000 -> %p ***\n", phy_base);
-                            } else {
-                                pr_err("*** CRITICAL ERROR: Failed to map PHY base at 0x10021000 ***\n");
-                                return -ENOMEM;
-                            }
-                        } else {
-                            pr_info("*** PHY BASE OK: Using pre-mapped PHY base %p ***\n", phy_base);
+                            pr_err("*** CRITICAL ERROR: Failed to map CSI PHY base at 0x133e0000 (isp-w02) ***\n");
+                            return -ENOMEM;
                         }
+
+                        pr_info("*** CRITICAL FIX: CSI PHY base mapped to CORRECT address 0x133e0000 (isp-w02) -> %p ***\n", phy_base);
+                        pr_info("*** This should now match the register tracer output! ***\n");
 
                         if (phy_base) {
                             /* Binary Ninja: Configure critical PHY timing registers */
