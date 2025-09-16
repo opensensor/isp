@@ -2116,16 +2116,18 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         pr_info("*** FALLBACK: Using vic_dev dimensions %dx%d ***\n", width, height);
     }
     
-    /* CRITICAL: Ensure we have valid dimensions */
-    if (width == 0 || height == 0 || width == 1920 || height == 1080) {
-        /* Force correct GC2053 dimensions */
-        width = 1920;
-        height = 1080;
-        pr_info("*** DIMENSION OVERRIDE: Forcing correct GC2053 dimensions %dx%d ***\n", width, height);
-        
+    /* CRITICAL: Ensure we have valid dimensions - DO NOT override valid sensor dimensions */
+    if (width == 0 || height == 0) {
+        /* Only override if dimensions are actually invalid (zero) */
+        width = 2200;  /* Correct sensor total width */
+        height = 1418; /* Correct sensor total height */
+        pr_info("*** DIMENSION FIX: Using correct sensor total dimensions %dx%d ***\n", width, height);
+
         /* Update vic_dev to prevent future mismatches */
         vic_dev->width = width;
         vic_dev->height = height;
+    } else {
+        pr_info("*** DIMENSION VALIDATION: Using existing valid dimensions %dx%d ***\n", width, height);
     }
     
     pr_info("vic_pipo_mdma_enable: FINAL dimensions=%dx%d (should be 2200x1418)\n", width, height);
