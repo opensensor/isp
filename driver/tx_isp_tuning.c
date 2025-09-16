@@ -798,14 +798,14 @@ static int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
     switch (event) {
         case ISP_TUNING_EVENT_MODE0:
             if (dev->core_regs) {
-                writel(2, dev->core_regs + 0x40c4);
+                writel(2, ourISPdev->core_regs + 0x40c4);
                 pr_info("isp_core_tuning_event: Set mode 0\n");
             }
             break;
 
         case ISP_TUNING_EVENT_MODE1:
             if (dev->core_regs) {
-                writel(1, dev->core_regs + 0x40c4);
+                writel(1, ourISPdev->core_regs + 0x40c4);
                 pr_info("isp_core_tuning_event: Set mode 1\n");
             }
             break;
@@ -816,7 +816,7 @@ static int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
             /* In the reference driver, this would start DMA transfer from sensor to buffer */
             if (dev->core_regs) {
                 /* Trigger frame capture - write to frame control register */
-                writel(1, dev->core_regs + 0x9000);  /* Start frame capture */
+                writel(1, ourISPdev->core_regs + 0x9000);  /* Start frame capture */
                 pr_info("isp_core_tuning_event: Frame capture triggered\n");
             }
             break;
@@ -835,7 +835,7 @@ static int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
             /* and ISP can now process it */
             if (dev->core_regs) {
                 /* Enable ISP processing of the DMA buffer */
-                writel(1, dev->core_regs + 0x8000);  /* Enable ISP processing */
+                writel(1, ourISPdev->core_regs + 0x8000);  /* Enable ISP processing */
                 pr_info("isp_core_tuning_event: ISP processing enabled for DMA buffer\n");
                 
                 /* CRITICAL: Trigger frame transfer from sensor to DMA buffer */
@@ -857,7 +857,7 @@ static int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
             if (dev->core_regs) {
                 uint32_t dn_mode = readl(dev->core_regs + 0x40a4);
                 tisp_day_or_night_s_ctrl(dn_mode);
-                writel(dn_mode, dev->core_regs + 0x40a4);
+                writel(dn_mode, ourISPdev->core_regs + 0x40a4);
                 pr_info("isp_core_tuning_event: Day/night mode updated: %d\n", dn_mode);
             }
         }
@@ -889,7 +889,7 @@ static int apical_isp_expr_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *
         int32_t enabled;
     } expr_data;
 
-    int ret = tisp_g_ev_attr(ev_buffer, dev->tuning_data);
+    int ret = tisp_g_ev_attr(ev_buffer, ourISPdev->tuning_data);
     if (ret)
         return ret;
 
@@ -913,7 +913,7 @@ static int apical_isp_ev_g_attr(struct tx_isp_dev *dev, struct isp_core_ctrl *ct
         int32_t val[6];  // Based on how many values are copied in decompiled
     } ev_data;
 
-    int ret = tisp_g_ev_attr(ev_buffer, dev->tuning_data);
+    int ret = tisp_g_ev_attr(ev_buffer, ourISPdev->tuning_data);
     if (ret)
         return ret;
 
@@ -991,10 +991,10 @@ static int tiziano_bcsh_update(struct isp_tuning_data *tuning)
     }
 
     // Update hardware registers
-//    writel(tuning->bcsh_saturation_value, dev->reg_base + BCSH_SVALUE_REG);
-//    writel(tuning->bcsh_saturation_max, dev->reg_base + BCSH_SMAX_REG);
-//    writel(tuning->bcsh_saturation_min, dev->reg_base + BCSH_SMIN_REG);
-//    writel(tuning->bcsh_saturation_mult, dev->reg_base + BCSH_SMAX_M_REG);
+//    writel(tuning->bcsh_saturation_value, ourISPdev->reg_base + BCSH_SVALUE_REG);
+//    writel(tuning->bcsh_saturation_max, ourISPdev->reg_base + BCSH_SMAX_REG);
+//    writel(tuning->bcsh_saturation_min, ourISPdev->reg_base + BCSH_SMIN_REG);
+//    writel(tuning->bcsh_saturation_mult, ourISPdev->reg_base + BCSH_SMAX_M_REG);
 
     return 0;
 }
@@ -1126,7 +1126,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
         return -EFAULT;
     }
 
-    tuning = dev->tuning_data;
+    tuning = ourISPdev->tuning_data;
     
     /* CRITICAL: Validate tuning pointer before ANY access */
     if (!tuning) {
@@ -1137,7 +1137,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     /* CRITICAL: Validate tuning pointer is valid kernel memory */
     if (!virt_addr_valid(tuning) || (unsigned long)tuning < 0x80000000) {
         pr_err("apical_isp_core_ops_g_ctrl: Invalid tuning pointer: %p - PREVENTS BadVA CRASH\n", tuning);
-        dev->tuning_data = NULL; /* Clear corrupted pointer */
+        ourISPdev->tuning_data = NULL; /* Clear corrupted pointer */
         return -EFAULT;
     }
     
@@ -1365,7 +1365,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
 
         case 0x8000164:  // ISP_CTRL_BYPASS
-            ctrl->value = dev->bypass_enabled;
+            ctrl->value = ourISPdev->bypass_enabled;
             break;
 
         case 0x980918:  // ISP_CTRL_ANTIFLICKER
@@ -1396,7 +1396,7 @@ out:
 static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
     int ret = 0;
-    struct isp_tuning_data *tuning = dev->tuning_data;
+    struct isp_tuning_data *tuning = ourISPdev->tuning_data;
 
     if (!dev || !tuning) {
         pr_err("No ISP device or tuning data\n");
@@ -1445,7 +1445,7 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
 
         case 0x8000164:  // ISP_CTRL_BYPASS
-            dev->bypass_enabled = !!ctrl->value;
+            ourISPdev->bypass_enabled = !!ctrl->value;
             break;
 
         case 0x980918:  // ISP_CTRL_ANTIFLICKER
@@ -1563,18 +1563,18 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
 //            }
 
             // Store in tuning data
-//            dev->tuning_data->fps_num = fps_data.frame_rate;
-//            dev->tuning_data->fps_den = fps_data.frame_div;
-              dev->tuning_data->fps_num = 25;
-              dev->tuning_data->fps_den = 1;
+//            ourISPdev->tuning_data->fps_num = fps_data.frame_rate;
+//            ourISPdev->tuning_data->fps_den = fps_data.frame_div;
+              ourISPdev->tuning_data->fps_num = 25;
+              ourISPdev->tuning_data->fps_den = 1;
 
             // Update in framesource
 //            ret = set_framesource_fps(fps_data.frame_rate, fps_data.frame_div);
 //
 //            // Handle AE algorithm if enabled
-//            if (ret == 0 && dev->ae_algo_enabled) {
+//            if (ret == 0 && ourISPdev->ae_algo_enabled) {
 //                if (dev->ae_algo_cb)
-//                    dev->ae_algo_cb(dev->ae_priv_data, 0, 0);
+//                    ourISPdev->ae_algo_cb(dev->ae_priv_data, 0, 0);
 //            }
 
             break;
@@ -1649,28 +1649,28 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     }
     
     /* CRITICAL: Auto-initialize tuning for V4L2 controls ONLY ONCE to prevent init/release cycle */
-    if (magic == 0x56 && dev->tuning_enabled != 3 && !auto_init_done) {
+    if (magic == 0x56 && ourISPdev->tuning_enabled != 3 && !auto_init_done) {
         pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control (one-time)\n");
         
         /* Initialize tuning_data if not already initialized */
         if (!dev->tuning_data) {
             pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
-            dev->tuning_data = isp_core_tuning_init(dev);
+            ourISPdev->tuning_data = isp_core_tuning_init(dev);
             if (!dev->tuning_data) {
                 pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
                 return -ENOMEM;
             }
-            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
+            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
         }
         
         /* Enable tuning and mark auto-init as done */
-        dev->tuning_enabled = 3;
+        ourISPdev->tuning_enabled = 3;
         auto_init_done = true;
         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning auto-enabled for V4L2 controls (permanent)\n");
     }
     
     /* CRITICAL: Check tuning enabled for tuning commands only */
-    if (magic == 0x74 && dev->tuning_enabled != 3) {
+    if (magic == 0x74 && ourISPdev->tuning_enabled != 3) {
         pr_err("isp_core_tunning_unlocked_ioctl: Tuning commands require explicit enable (cmd=0x%x)\n", cmd);
         return -ENODEV;
     }
@@ -1738,7 +1738,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 pr_info("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
 
                 /* CRITICAL: Perform continuous tuning operations like reference driver */
-                if (enable && dev->tuning_enabled == 3) {
+                if (enable && ourISPdev->tuning_enabled == 3) {
                     static int tuning_cycle_count = 0;
                     tuning_cycle_count++;
 
@@ -1800,18 +1800,18 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                             /* 5. DPC (Dead Pixel Correction) Updates */
                             extern int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
-                            int dpc_ret = tisp_dpc_par_refresh(dev->tuning_data ? dev->tuning_data->exposure >> 10 : 0x100, 0x20, 0);
+                            int dpc_ret = tisp_dpc_par_refresh(dev->tuning_data ? ourISPdev->tuning_data->exposure >> 10 : 0x100, 0x20, 0);
                             pr_debug("TUNING: DPC refresh completed: %d\n", dpc_ret);
 
                             /* 6. Sharpening Updates */
                             extern int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
-                            int sharpen_ret = tisp_sharpen_par_refresh(dev->tuning_data ? dev->tuning_data->exposure >> 10 : 0x100, 0x20, 0);
+                            int sharpen_ret = tisp_sharpen_par_refresh(dev->tuning_data ? ourISPdev->tuning_data->exposure >> 10 : 0x100, 0x20, 0);
                             pr_debug("TUNING: Sharpening refresh completed: %d\n", sharpen_ret);
 
                             /* 7. SDNS (Spatial Denoising) Updates */
                             extern int tisp_sdns_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
                             extern int tisp_s_sdns_ratio(int ratio);
-                            int sdns_ret = tisp_sdns_par_refresh(dev->tuning_data ? dev->tuning_data->exposure >> 10 : 0x100, 0x20, 0);
+                            int sdns_ret = tisp_sdns_par_refresh(dev->tuning_data ? ourISPdev->tuning_data->exposure >> 10 : 0x100, 0x20, 0);
                             if (sdns_ret == 0) sdns_ret = tisp_s_sdns_ratio(128);
                             pr_debug("TUNING: SDNS updates completed: %d\n", sdns_ret);
 
@@ -1878,13 +1878,13 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
                             
                             /* Allocate tuning data structure using the reference implementation */
-                            dev->tuning_data = isp_core_tuning_init(dev);
+                            ourISPdev->tuning_data = isp_core_tuning_init(dev);
                             if (!dev->tuning_data) {
                                 pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
                                 return -ENOMEM;
                             }
                             
-                            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", dev->tuning_data);
+                            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
                             
                             /* MCP LOG: Tuning data structure successfully initialized */
                             pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
@@ -1897,7 +1897,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         pr_info("*** tisp_init was writing zeros to critical CSI PHY and ISP registers ***\n");
                         ret = 0;  /* Return success without calling tisp_init */
                         
-                        dev->tuning_enabled = 3;
+                        ourISPdev->tuning_enabled = 3;
                         auto_init_done = true;  /* Mark as auto-initialized */
                         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
                     }
@@ -1905,7 +1905,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     /* Only allow explicit disable if not auto-initialized */
                     if (dev->tuning_enabled == 3) {
                         isp_core_tuning_release(dev);
-                        dev->tuning_enabled = 0;
+                        ourISPdev->tuning_enabled = 0;
                         auto_init_done = false;  /* Reset auto-init flag */
                         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning disabled\n");
                     }
@@ -2247,7 +2247,7 @@ EXPORT_SYMBOL(tisp_code_tuning_open);
 
 int isp_core_tuning_release(struct tx_isp_dev *dev)
 {
-    struct isp_tuning_data *tuning = dev->tuning_data;
+    struct isp_tuning_data *tuning = ourISPdev->tuning_data;
 
     pr_info("##### %s %d #####\n", __func__, __LINE__);
 
@@ -2268,7 +2268,7 @@ int isp_core_tuning_release(struct tx_isp_dev *dev)
     }
     
     /* Clear the tuning data reference */
-    dev->tuning_data = NULL;
+    ourISPdev->tuning_data = NULL;
 
     return 0;
 }
@@ -4497,7 +4497,7 @@ static irqreturn_t isp_irq_dispatcher(int irq, void *dev_id)
     spin_unlock_irqrestore(&isp_irq_lock, flags);
     
     /* Clear handled interrupts */
-    writel(irq_status, dev->core_regs + 0x40);
+    writel(irq_status, ourISPdev->core_regs + 0x40);
     
     return handled ? IRQ_HANDLED : IRQ_NONE;
 }
@@ -4567,7 +4567,7 @@ int isp_setup_irq_handling(struct tx_isp_dev *dev)
     
     /* Enable basic ISP interrupts */
     if (dev->core_regs) {
-        writel(0xFFFFFFFF, dev->core_regs + 0x44); /* Enable all ISP interrupts */
+        writel(0xFFFFFFFF, ourISPdev->core_regs + 0x44); /* Enable all ISP interrupts */
         pr_info("isp_setup_irq_handling: ISP interrupts enabled\n");
     }
     
@@ -4589,13 +4589,13 @@ void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
     
     /* Disable ISP interrupts */
     if (dev->core_regs) {
-        writel(0, dev->core_regs + 0x44); /* Disable all ISP interrupts */
+        writel(0, ourISPdev->core_regs + 0x44); /* Disable all ISP interrupts */
     }
     
     /* Free interrupt */
     if (dev->isp_irq > 0) {
         free_irq(dev->isp_irq, dev);
-        pr_info("isp_cleanup_irq_handling: IRQ %d freed\n", dev->isp_irq);
+        pr_info("isp_cleanup_irq_handling: IRQ %d freed\n", ourISPdev->isp_irq);
     }
     
     /* Clear callback arrays */
