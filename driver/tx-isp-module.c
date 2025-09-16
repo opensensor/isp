@@ -2877,14 +2877,25 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         // Continue with full configuration since registers are working
                         // Frame dimensions register 0x4: (width << 16) | height
                         // CRITICAL FIX: Use sensor dimensions instead of vic_dev defaults
-                        iowrite32((sensor_width << 16) | sensor_height,
+                        u32 actual_width = vic_dev->sensor_attr.total_width;
+                        u32 actual_height = vic_dev->sensor_attr.total_height;
+                        if (actual_width == 0 || actual_height == 0) {
+                            actual_width = vic_dev->width;
+                            actual_height = vic_dev->height;
+                            pr_warn("*** DIMENSION FIX: Using vic_dev dimensions %dx%d (sensor_attr not available) ***\n",
+                                    actual_width, actual_height);
+                        } else {
+                            pr_info("*** DIMENSION FIX: Using sensor dimensions %dx%d for VIC register 0x4 ***\n",
+                                    actual_width, actual_height);
+                        }
+                        iowrite32((actual_width << 16) | actual_height,
                                  vic_dev->vic_regs + 0x4);
                         
                         // MIPI configuration register 0x10: Format-specific value
                         iowrite32(0x40000, vic_dev->vic_regs + 0x10);
                         
                         // MIPI stride configuration register 0x18 - use sensor width
-                        iowrite32(sensor_width, vic_dev->vic_regs + 0x18);
+                        iowrite32(actual_width, vic_dev->vic_regs + 0x18);
                         
                         // DMA buffer configuration registers (from reference)
                         iowrite32(0x100010, vic_dev->vic_regs + 0x1a4);  // DMA config
