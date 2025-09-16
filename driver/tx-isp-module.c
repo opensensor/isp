@@ -2949,8 +2949,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("*** Channel %d: Starting frame generation system to prevent video drop ***\n", channel);
 
         /* Start the VIC frame work to generate frames continuously */
-        extern struct delayed_work vic_frame_work;
-        extern void vic_frame_work_function(struct work_struct *work);
 
         /* Initialize and start the frame generation work */
         if (vic_dev && vic_dev->streaming) {
@@ -4140,6 +4138,10 @@ static int tx_isp_init(void)
     spin_lock_init(&ourISPdev->lock);
     ourISPdev->refcnt = 0;
     ourISPdev->is_open = false;
+
+    /* Initialize frame generation work queue */
+    INIT_DELAYED_WORK(&vic_frame_work, vic_frame_work_function);
+    pr_info("*** Frame generation work queue initialized ***\n");
     
     /* *** CRITICAL FIX: Create and link VIC device structure immediately *** */
     pr_info("*** CREATING VIC DEVICE STRUCTURE AND LINKING TO ISP CORE ***\n");
@@ -4567,6 +4569,10 @@ static void tx_isp_exit(void)
     int i;
     
     pr_info("TX ISP driver exiting...\n");
+
+    /* Cancel frame generation work */
+    cancel_delayed_work_sync(&vic_frame_work);
+    pr_info("*** Frame generation work cancelled ***\n");
 
     if (ourISPdev) {
         /* Clean up subdevice graph */
