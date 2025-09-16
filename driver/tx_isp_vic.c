@@ -2615,9 +2615,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_info("vic_core_s_stream: VIC state set to 4 (streaming)\n");
                 }
 
-                /* CRITICAL FIX: ALWAYS enable interrupts on every streaming enable call */
-                vic_start_ok = 1;  /* ALWAYS safe to enable interrupt processing when streaming */
-                pr_info("*** INTERRUPTS ENABLED: vic_start_ok = 1 ***\n");
+                /* CRITICAL FIX: DO NOT enable interrupts until buffers are configured */
+                /* VIC interrupts will be enabled in QBUF when first buffer is programmed */
+                vic_start_ok = 0;  /* Keep disabled until first buffer is ready */
+                pr_info("*** INTERRUPTS DISABLED: vic_start_ok = 0 (will enable after first QBUF) ***\n");
 
                 /* CRITICAL FIX: Ensure VIC configuration is robust against CSI PHY register changes */
                 /* The CSI PHY register updates at delta 170ms can cause control limit errors */
