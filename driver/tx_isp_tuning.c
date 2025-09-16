@@ -1762,12 +1762,18 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                             /* 2. CCM (Color Correction Matrix) update */
                             extern int jz_isp_ccm(void);
+                            extern int32_t *tiziano_ccm_a_now;
+                            extern uint32_t *cm_ev_list_now;
 
-                            /* Update CCM based on current CT and EV conditions */
-                            /* jz_isp_ccm() internally handles parameter refresh and CT/EV processing */
-                            int ccm_ret = jz_isp_ccm();
-                            if (ccm_ret != 0) {
-                                pr_debug("TUNING: CCM update returned %d\n", ccm_ret);
+                            /* CRITICAL: Check if CCM is initialized before calling */
+                            if (tiziano_ccm_a_now != NULL && cm_ev_list_now != NULL) {
+                                /* Update CCM based on current CT and EV conditions */
+                                int ccm_ret = jz_isp_ccm();
+                                if (ccm_ret != 0) {
+                                    pr_debug("TUNING: CCM update returned %d\n", ccm_ret);
+                                }
+                            } else {
+                                pr_debug("TUNING: CCM not initialized yet - skipping CCM update\n");
                             }
 
                             /* 3. Additional tuning operations to maintain ISP pipeline */
@@ -3131,11 +3137,11 @@ static struct {
 } _ccm_d_parameter;
 
 /* CCM pointer arrays - Binary Ninja reference */
-static int32_t *tiziano_ccm_a_now = NULL;
-static int32_t *tiziano_ccm_t_now = NULL; 
-static int32_t *tiziano_ccm_d_now = NULL;
-static uint32_t *cm_ev_list_now = NULL;
-static uint32_t *cm_sat_list_now = NULL;
+int32_t *tiziano_ccm_a_now = NULL;
+int32_t *tiziano_ccm_t_now = NULL;
+int32_t *tiziano_ccm_d_now = NULL;
+uint32_t *cm_ev_list_now = NULL;
+uint32_t *cm_sat_list_now = NULL;
 
 /* CCM state variables - Binary Ninja reference */
 static uint32_t data_9a454 = 0x10000;  /* Current EV */
@@ -3152,6 +3158,12 @@ static uint32_t data_aa47c = 0x1000;    /* DP value 3 */
 static uint32_t data_aa478 = 0x1000;    /* DP value 4 */
 
 static int ccm_wdr_en = 0;
+
+/* tisp_ccm_is_initialized - Check if CCM system is ready */
+int tisp_ccm_is_initialized(void)
+{
+    return (tiziano_ccm_a_now != NULL && cm_ev_list_now != NULL && cm_sat_list_now != NULL);
+}
 
 /* tiziano_ccm_lut_parameter - Binary Ninja EXACT implementation */
 static int tiziano_ccm_lut_parameter(int32_t *ccm_data)
