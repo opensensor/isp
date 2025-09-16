@@ -1758,9 +1758,10 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             /* ===== COMPREHENSIVE ISP TUNING OPERATIONS - SAFE Implementation ===== */
                             pr_info("*** COMPREHENSIVE TUNING: Performing ALL ISP pipeline updates (cycle %d) ***\n", tuning_cycle_count);
 
-                            /* SAFETY: Check if device is properly initialized before proceeding */
-                            if (!dev || !dev->core_regs) {
-                                pr_err("TUNING: Device not properly initialized - skipping comprehensive tuning\n");
+                            /* SAFETY: Check if global ISP device is properly initialized */
+                            extern struct tx_isp_dev *ourISPdev;
+                            if (!ourISPdev || !ourISPdev->core_regs) {
+                                pr_err("TUNING: Global ISP device not properly initialized - skipping comprehensive tuning\n");
                                 goto tuning_complete;
                             }
 
@@ -1852,11 +1853,10 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             pr_debug("TUNING: All parameter refresh functions completed\n");
 
                             /* 12. Critical ISP register refresh to maintain CSI PHY timing */
-                            extern void system_reg_write(u32 reg, u32 value);
-                            if (dev->core_regs) {
+                            if (ourISPdev->core_regs) {
                                 /* Refresh critical ISP timing registers to prevent CSI timeout */
-                                u32 current_val = readl(dev->core_regs + 0x10);
-                                writel(current_val, dev->core_regs + 0x10);  /* Refresh interrupt enable */
+                                u32 current_val = readl(ourISPdev->core_regs + 0x10);
+                                writel(current_val, ourISPdev->core_regs + 0x10);  /* Refresh interrupt enable */
                                 wmb();
                             }
 
