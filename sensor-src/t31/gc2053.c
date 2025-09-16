@@ -50,6 +50,8 @@
 #define SENSOR_OUTPUT_MIN_FPS 5
 #define SENSOR_VERSION "H20230726a"
 
+extern int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
+
 static unsigned char vts0 = 0x05;
 static unsigned char vts1 = 0x8a;
 static unsigned char vtsn0 = 0x05;
@@ -1533,7 +1535,6 @@ static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 
 	ISP_WARNING("*** CALLING TX_ISP_EVENT_SYNC_SENSOR_ATTR ***\n");
 	/* FIXED: Call our properly implemented handler directly instead of using the broken macro */
-	extern int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
 	ret = tx_isp_handle_sync_sensor_attr_event(sd, sensor->video.attr);
 	ISP_WARNING("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR RETURNED: %d ***\n", ret);
 	
@@ -1665,7 +1666,6 @@ static int sensor_set_fps(struct tx_isp_subdev *sd, int fps) {
 	sensor->video.attr->total_height = vts;
 	sensor->video.attr->max_integration_time = vts - 8;
 	/* FIXED: Call our properly implemented handler directly instead of using the broken macro */
-	extern int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
 	ret = tx_isp_handle_sync_sensor_attr_event(sd, sensor->video.attr);
 	return ret;
 }
