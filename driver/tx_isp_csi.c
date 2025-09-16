@@ -133,6 +133,10 @@ static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
     err2 = readl(csi_base + 0x24);  /* ERR2 register */
     phy_state = readl(csi_base + 0x14);  /* PHY_STATE register */
 
+    /* CRITICAL: Log all CSI register states for analysis */
+    pr_info("*** CSI INTERRUPT STATUS: err1=0x%08x, err2=0x%08x, phy_state=0x%08x ***\n",
+            err1, err2, phy_state);
+
 
     if (err1 || err2) {
         ret = IRQ_HANDLED;
@@ -180,6 +184,13 @@ static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
         pr_debug("CSI PHY lanes in stop state: 0x%08x\n", phy_state);
     }
 
+    /* CRITICAL: Log CSI interrupt completion status */
+    if (ret == IRQ_HANDLED) {
+        pr_info("*** CSI INTERRUPT: Handled successfully - errors processed ***\n");
+    } else {
+        pr_info("*** CSI INTERRUPT: No action taken - no errors detected ***\n");
+    }
+
     spin_unlock_irqrestore(&csi_dev->lock, flags);
     return ret;
 }
@@ -206,11 +217,24 @@ static int tx_isp_csi_hw_init(struct tx_isp_subdev *sd)
 int tx_isp_csi_start(struct tx_isp_subdev *sd)
 {
     u32 ctrl;
+    int ret;
 
     if (!sd)
         return -EINVAL;
 
     mutex_lock(&sd->csi_lock);
+
+    /* CRITICAL: Register CSI interrupt handler if not already registered */
+    static int csi_irq_registered = 0;
+    if (!csi_irq_registered) {
+        ret = request_irq(38, tx_isp_csi_irq_handler, IRQF_SHARED, "tx-isp-csi", sd);
+        if (ret == 0) {
+            pr_info("*** CSI INTERRUPT: Handler registered for IRQ 38 ***\n");
+            csi_irq_registered = 1;
+        } else {
+            pr_err("*** CSI INTERRUPT: Failed to register handler for IRQ 38: %d ***\n", ret);
+        }
+    }
 
     /* Enable CSI */
     ctrl = csi_read32(CSI_CTRL);
@@ -219,6 +243,9 @@ int tx_isp_csi_start(struct tx_isp_subdev *sd)
 
     /* Enable interrupts */
     csi_write32(CSI_INT_MASK, ~(INT_ERROR | INT_FRAME_DONE));
+
+    pr_info("*** CSI INTERRUPT: CSI started with interrupts enabled (mask=0x%08x) ***\n",
+            ~(INT_ERROR | INT_FRAME_DONE));
 
     mutex_unlock(&sd->csi_lock);
     return 0;
@@ -682,6 +709,42 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         v0_17 = 3;
 
                         pr_info("*** CRITICAL: CSI MIPI configuration complete - control limit error should be FIXED ***\n");
+
+                        /* CRITICAL: Add missing CSI Lane Configuration from reference driver */
+                        pr_info("*** CRITICAL: Applying MISSING CSI Lane Configuration from reference trace ***\n");
+
+                        /* CSI PHY Control registers - from reference trace at 280ms */
+                        writel(0x7d, csi_base + 0x0);
+                        writel(0xe3, csi_base + 0x4);
+                        writel(0xa0, csi_base + 0x8);
+                        writel(0x83, csi_base + 0xc);
+                        writel(0xfa, csi_base + 0x10);
+                        writel(0x88, csi_base + 0x1c);
+                        writel(0x4e, csi_base + 0x20);
+                        writel(0xdd, csi_base + 0x24);
+                        writel(0x84, csi_base + 0x28);
+                        writel(0x5e, csi_base + 0x2c);
+                        writel(0xf0, csi_base + 0x30);
+                        writel(0xc0, csi_base + 0x34);
+                        writel(0x36, csi_base + 0x38);
+                        writel(0xdb, csi_base + 0x3c);
+                        writel(0x3, csi_base + 0x40);
+                        writel(0x80, csi_base + 0x44);
+                        writel(0x10, csi_base + 0x48);
+                        writel(0x3, csi_base + 0x54);
+                        writel(0xff, csi_base + 0x58);
+                        writel(0x42, csi_base + 0x5c);
+                        writel(0x1, csi_base + 0x60);
+                        writel(0xc0, csi_base + 0x64);
+                        writel(0xc0, csi_base + 0x68);
+                        writel(0x78, csi_base + 0x6c);
+                        writel(0x43, csi_base + 0x70);
+                        writel(0x33, csi_base + 0x74);
+                        writel(0x1f, csi_base + 0x80);
+                        writel(0x61, csi_base + 0x88);
+                        wmb();
+
+                        pr_info("*** CSI PHY Control registers configured (0x0-0x88) ***\n");
 
                     } else if (interface_type == 2) {
                         /* DVP interface */

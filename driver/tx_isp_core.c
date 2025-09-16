@@ -70,9 +70,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
 /* ===== MISSING CONTINUOUS PROCESSING SYSTEM ===== */
 /* This is what generates the continuous register activity that your trace module captures */
-static struct workqueue_struct *isp_processing_workqueue = NULL;
-static struct delayed_work isp_continuous_processing_work;
-static bool isp_processing_enabled = false;
 static struct tx_isp_dev *global_isp_dev = NULL;
 static atomic_t processing_counter = ATOMIC_INIT(0);
 
