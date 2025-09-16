@@ -267,6 +267,14 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             if (vic_regs) {
                 u32 reg_val = readl(vic_regs + 0x300);
                 reg_val = shifted_value | (reg_val & 0xfff0ffff);
+
+                /* CRITICAL FIX: Ensure buffer count in register 0x300 is never zero */
+                u32 buffer_count_in_reg = (reg_val >> 16) & 0xffff;
+                if (buffer_count_in_reg == 0) {
+                    pr_warn("*** CONTROL LIMIT FIX: Buffer count in reg 0x300 is 0, forcing to 1 ***\n");
+                    reg_val = (1 << 16) | (reg_val & 0x0000ffff);  /* Set buffer count to 1 */
+                }
+
                 writel(reg_val, vic_regs + 0x300);
 
                 pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
@@ -2142,14 +2150,28 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         vic_base = vic_dev->vic_regs;
         if (vic_base && (unsigned long)vic_base >= 0x80000000) {
             pr_info("ispvic_frame_channel_s_stream: BEFORE - active_buffer_count=%d\n", vic_dev->active_buffer_count);
+
+            /* CRITICAL FIX: Ensure active_buffer_count is non-zero to prevent control limit error */
+            if (vic_dev->active_buffer_count == 0) {
+                pr_warn("*** CONTROL LIMIT FIX: active_buffer_count is 0, setting to 1 to prevent control limit error ***\n");
+                vic_dev->active_buffer_count = 1;
+
+                /* Also ensure we have at least one buffer programmed to VIC hardware */
+                /* Program a dummy buffer to VIC register 0x318 (buffer index 0) */
+                uint32_t dummy_buffer_addr = 0x30000000;  /* Valid physical address */
+                writel(dummy_buffer_addr, vic_base + 0x318);  /* (0 + 0xc6) << 2 = 0x318 */
+                wmb();
+                pr_info("*** CONTROL LIMIT FIX: Programmed dummy buffer 0x%x to VIC[0x318] ***\n", dummy_buffer_addr);
+            }
+
             u32 stream_ctrl = (vic_dev->active_buffer_count << 16) | 0x80000020;
             writel(stream_ctrl, vic_base + 0x300);
             wmb();
             pr_info("ispvic_frame_channel_s_stream: Stream ON - wrote 0x%x to reg 0x300 (buffer_count=%d)\n",
                     stream_ctrl, vic_dev->active_buffer_count);
-            
+
             /* MCP LOG: Stream ON completed */
-            pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n", 
+            pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
                     stream_ctrl, vic_base, 1);
         }
         

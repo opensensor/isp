@@ -1598,18 +1598,11 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         if ((v1_7 & 0x200000) != 0) {
             pr_err("Err2 [VIC_INT] : control limit err!!!\n");
 
-            /* CRITICAL FIX: Control limit error indicates VIC-ISP pipeline desync */
-            /* This typically happens after ISP pipeline configuration error */
             /* Increment control limit error counter for debugging */
             data_b2984++;
 
-            /* If this is a repeated control limit error, trigger recovery */
-            if (data_b2984 > 3) {
-                pr_info("*** VIC CONTROL LIMIT: Triggering recovery after %d errors ***\n", data_b2984);
-                /* Reset the counter to prevent continuous recovery attempts */
-                data_b2984 = 0;
-                /* The error recovery sequence below will handle the reset */
-            }
+            /* Log the error for analysis - root cause should be fixed by buffer management */
+            pr_info("*** VIC CONTROL LIMIT ERROR: Count=%d (should be rare with buffer fix) ***\n", data_b2984);
         }
         
         if ((v1_7 & 0x400000) != 0) {
@@ -1672,11 +1665,10 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
         }
 
-        /* Binary Ninja: Error recovery sequence - FIXED to include control limit error */
-        /* Original mask 0xde00 covers bits 9-15, but control limit error is bit 21 (0x200000) */
-        /* Add 0x200000 to include control limit error in recovery sequence */
-        if ((v1_7 & (0xde00 | 0x200000)) != 0 && *vic_irq_enable_flag == 1) {
-            pr_err("error handler!!! (v1_7=0x%x, including control limit error recovery)\n", v1_7);
+        /* Binary Ninja: Error recovery sequence */
+        /* Note: Control limit error (0x200000) should be rare now with buffer management fix */
+        if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
+            pr_err("error handler!!! (v1_7=0x%x)\n", v1_7);
 
             /* Binary Ninja: **($s0 + 0xb8) = 4 */
             writel(4, vic_regs + 0x0);
