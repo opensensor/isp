@@ -2557,13 +2557,18 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** CRITICAL: RE-ENABLING VIC INTERRUPT REGISTERS (Binary Ninja values) ***\n");
                 pr_info("*** BEFORE: VIC_IMR(0x04)=0x%x, VIC_IMCR(0x0c)=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
 
-                /* CRITICAL FIX: Clear interrupt masks first, then set correct values */
-                writel(0xffffffff, vic_regs + 0x08);  /* VIC_IMSR - Clear all interrupt masks first */
+                /* CRITICAL FIX: Use the working interrupt enable sequence from earlier today */
+                /* The 0x04/0x0c registers aren't working, so use the 0x1e0/0x1e8 sequence that worked */
+                pr_info("*** CRITICAL: Using working interrupt sequence (0x1e0/0x1e8) instead of broken 0x04/0x0c ***\n");
+
+                /* Clear any pending interrupts first */
+                writel(0, vic_regs + 0x1f0);  /* Clear interrupt status */
+                writel(0, vic_regs + 0x1f4);  /* Clear interrupt status 2 */
                 wmb();
 
-                /* Enable VIC interrupts using the original Binary Ninja reference driver values */
-                writel(0x07800438, vic_regs + 0x04);  /* VIC IMR - interrupt mask register */
-                writel(0xb5742249, vic_regs + 0x0c);  /* VIC IMCR - interrupt control register */
+                /* Enable VIC interrupts using the working sequence */
+                writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
+                writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
                 wmb();
 
                 pr_info("*** AFTER: VIC_IMR(0x04)=0x%x, VIC_IMCR(0x0c)=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
