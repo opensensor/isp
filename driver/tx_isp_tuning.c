@@ -57,6 +57,10 @@ static struct cdev isp_tuning_cdev;
 static struct class *isp_tuning_class = NULL;
 static dev_t isp_tuning_devno;
 
+/* Global ISP State Variables - Used across multiple functions */
+uint32_t data_9a454 = 0x10000;  /* Current EV value - global cache */
+uint32_t data_9a450 = 0x2700;   /* Current CT value - global cache */
+
 /* WDR Global Data Structures - From Binary Ninja Analysis */
 static uint32_t wdr_ev_now = 0;
 static uint32_t wdr_ev_list_deghost = 0;
@@ -3226,9 +3230,7 @@ int32_t *tiziano_ccm_d_now = NULL;
 uint32_t *cm_ev_list_now = NULL;
 uint32_t *cm_sat_list_now = NULL;
 
-/* CCM state variables - Binary Ninja reference */
-uint32_t data_9a454 = 0x10000;  /* Current EV */
-uint32_t data_9a450 = 0x2700;   /* Color temperature */
+/* CCM state variables - Binary Ninja reference - EV and CT moved to top of file */
 static uint32_t data_c52ec = 0;         /* Previous EV */
 static uint32_t data_c52f4 = 0;         /* Previous CT */
 static uint32_t data_c52fc = 0x100;     /* Saturation value */
@@ -3999,8 +4001,6 @@ void tiziano_dpc_params_refresh(void)
     pr_debug("tiziano_dpc_params_refresh: Refreshing DPC parameters\n");
 
     /* Update DPC parameters based on current conditions */
-    extern uint32_t data_9a454;  /* Current EV value */
-
     if (data_9a454 != 0) {
         uint32_t ev_shifted = data_9a454 >> 10;
 
@@ -4159,7 +4159,6 @@ void tiziano_adr_params_refresh(void)
     pr_debug("tiziano_adr_params_refresh: Refreshing ADR parameters\n");
 
     /* Update ADR parameters based on current conditions */
-    extern uint32_t data_9a454;  /* Current EV value */
     extern uint32_t adr_ratio;
     extern uint32_t adr_wdr_en;
 
