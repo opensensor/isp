@@ -555,6 +555,21 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             wmb();
 
             pr_info("ISP CORE: Pipeline configuration reset after error\n");
+
+            /* CRITICAL FIX: Re-enable VIC interrupts after pipeline reset */
+            /* The pipeline reset disables VIC interrupts - we must restore them */
+            if (isp_dev->vic_dev && isp_dev->vic_dev->vic_regs) {
+                void __iomem *vic_regs = isp_dev->vic_dev->vic_regs;
+
+                /* Re-enable VIC interrupt mask register */
+                writel(0x07800438, vic_regs + 0x04);  /* IMR - interrupt mask */
+                wmb();
+                writel(0xb5742249, vic_regs + 0x0c);  /* IMCR - interrupt control */
+                wmb();
+
+                pr_info("*** CRITICAL: VIC interrupts RE-ENABLED after ISP pipeline reset ***\n");
+                pr_info("*** VIC hardware should now generate interrupts again ***\n");
+            }
         }
     }
 
