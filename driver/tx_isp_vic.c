@@ -2586,6 +2586,23 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* CRITICAL: Do NOT call ispvic_frame_channel_s_stream here - it should only be called during STREAMON */
                 ret = 0;  /* Return success - VIC is ready for STREAMON */
                 
+                /* CRITICAL FIX: Check VIC error status before CSI initialization */
+                pr_info("*** CRITICAL: Checking VIC error status before CSI initialization ***\n");
+                if (vic_regs) {
+                    u32 vic_error_84c = readl(vic_regs + 0x84c);
+                    if (vic_error_84c != 0) {
+                        pr_err("*** VIC ERROR DETECTED: Register 0x84c = 0x%x (should be 0) ***\n", vic_error_84c);
+                        pr_err("*** This will cause ISP pipeline configuration error! ***\n");
+
+                        /* Clear VIC error register */
+                        writel(0, vic_regs + 0x84c);
+                        wmb();
+                        pr_info("*** VIC ERROR: Cleared register 0x84c ***\n");
+                    } else {
+                        pr_info("*** VIC ERROR CHECK: Register 0x84c = 0 (good) ***\n");
+                    }
+                }
+
                 /* CRITICAL FIX: Initialize CSI before enabling VIC streaming */
                 pr_info("*** CRITICAL: Initializing CSI before VIC streaming ***\n");
                 if (ourISPdev && ourISPdev->csi_dev) {

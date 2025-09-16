@@ -5314,3 +5314,74 @@ void *isp_core_tuning_init(void *arg1)
     return tuning_data;
 }
 EXPORT_SYMBOL(isp_core_tuning_init);
+
+/* Binary Ninja: dump_vic_reg() - EXACT implementation */
+int dump_vic_reg(void)
+{
+    struct tx_isp_dev *isp_dev = ourISPdev;
+    void __iomem *vic_regs;
+    int result = 0;
+
+    if (!isp_dev || !isp_dev->vic_regs) {
+        pr_err("dump_vic_reg: No VIC registers available\n");
+        return -EINVAL;
+    }
+
+    vic_regs = isp_dev->vic_regs;
+
+    /* Binary Ninja EXACT: for (int32_t i = 0; i != 0x1b4; i += 4) */
+    for (int i = 0; i != 0x1b4; i += 4) {
+        u32 reg_value = readl(vic_regs + i);
+        pr_info("register is 0x%x, value is 0x%x\n", i, reg_value);
+
+        /* Check for critical error registers */
+        if (i == 0x84c && reg_value != 0) {
+            pr_err("*** VIC ERROR: Register 0x84c = 0x%x (should be 0) ***\n", reg_value);
+        }
+    }
+
+    return result;
+}
+
+/* Binary Ninja: check_csi_error() - EXACT implementation */
+void check_csi_error(void)
+{
+    struct tx_isp_dev *isp_dev = ourISPdev;
+    struct tx_isp_csi_device *csi_dev;
+    void __iomem *csi_regs;
+
+    if (!isp_dev || !isp_dev->csi_dev) {
+        pr_err("check_csi_error: No CSI device available\n");
+        return;
+    }
+
+    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
+
+    /* Binary Ninja EXACT: while (true) */
+    while (1) {
+        /* dump_csi_reg(dump_csd) */
+        extern void dump_csi_reg(struct tx_isp_subdev *sd);
+        dump_csi_reg(&csi_dev->sd);
+
+        /* Binary Ninja: void* $v0_2 = *(dump_csd + 0xb8) */
+        csi_regs = csi_dev->csi_regs;
+        if (csi_regs) {
+            /* Binary Ninja: int32_t $a2_1 = *($v0_2 + 0x20) */
+            u32 csi_err1 = readl(csi_regs + 0x20);
+            /* Binary Ninja: int32_t $s3_1 = *($v0_2 + 0x24) */
+            u32 csi_err2 = readl(csi_regs + 0x24);
+
+            /* Binary Ninja: if ($a2_1 != 0) isp_printf(0, "snapraw", $a2_1) */
+            if (csi_err1 != 0) {
+                pr_err("CSI Error 1 (0x20): 0x%x\n", csi_err1);
+            }
+
+            /* Binary Ninja: if ($s3_1 != 0) isp_printf(...) */
+            if (csi_err2 != 0) {
+                pr_err("CSI Error 2 (0x24): 0x%x\n", csi_err2);
+            }
+        }
+
+        msleep(100); /* Add delay to prevent log spam */
+    }
+}
