@@ -2544,11 +2544,23 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                 /* CRITICAL: RE-ENABLE VIC INTERRUPT REGISTERS - they were cleared during initialization! */
                 pr_info("*** CRITICAL: RE-ENABLING VIC INTERRUPT REGISTERS (0x1e0, 0x1e8) ***\n");
+                pr_info("*** BEFORE: 0x1e0=0x%x, 0x1e8=0x%x ***\n", readl(vic_regs + 0x1e0), readl(vic_regs + 0x1e8));
+
                 writel(0xffffffff, vic_regs + 0x1e0); /* Enable all VIC interrupts */
                 writel(0x0, vic_regs + 0x1e8);        /* Clear interrupt masks */
                 writel(0xF, vic_regs + 0x1e4);        /* Enable MDMA interrupts */
                 writel(0x0, vic_regs + 0x1ec);        /* Clear MDMA masks */
                 wmb();
+
+                pr_info("*** AFTER: 0x1e0=0x%x, 0x1e8=0x%x ***\n", readl(vic_regs + 0x1e0), readl(vic_regs + 0x1e8));
+
+                /* Verify the writes took effect */
+                if (readl(vic_regs + 0x1e0) == 0) {
+                    pr_err("*** CRITICAL ERROR: VIC interrupt register 0x1e0 is STILL ZERO after write! ***\n");
+                    pr_err("*** Something is immediately overwriting VIC interrupt registers! ***\n");
+                } else {
+                    pr_info("*** SUCCESS: VIC interrupt registers enabled properly! ***\n");
+                }
 
                 pr_info("*** CRITICAL: VIC INTERRUPTS ENABLED - CSI PHY configured and stable! ***\n");
                 pr_info("*** VIC hardware can now safely generate continuous interrupts ***\n");
