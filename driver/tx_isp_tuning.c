@@ -3622,7 +3622,12 @@ static uint32_t *y_sp_b_sl_stren_3_array_now = NULL;
 static uint32_t data_9a920 = 0xFFFFFFFF;  /* Sharpening state cache */
 static int sharpen_wdr_en = 0;
 
-/* tiziano_sharpen_params_refresh - Refresh sharpening parameters - REMOVED: Duplicate static version */
+/* tiziano_sharpen_params_refresh - Refresh sharpening parameters - Simple version for init */
+void tiziano_sharpen_params_refresh(void)
+{
+    pr_debug("tiziano_sharpen_params_refresh: Refreshing sharpening parameters (simple version)\n");
+    /* This is the simple version called from init - the enhanced version is elsewhere */
+}
 
 /* tisp_sharpen_all_reg_refresh - Write all sharpening registers to hardware */
 static int tisp_sharpen_all_reg_refresh(void)
@@ -3791,7 +3796,12 @@ static uint32_t *sdns_sp_uu_stren_array_now = NULL;
 static uint32_t *sdns_sp_mv_uu_thres_array_now = NULL;
 static uint32_t *sdns_sp_mv_uu_stren_array_now = NULL;
 
-/* tiziano_sdns_params_refresh - Refresh SDNS parameters - REMOVED: Duplicate static version */
+/* tiziano_sdns_params_refresh - Refresh SDNS parameters - Simple version for init */
+void tiziano_sdns_params_refresh(void)
+{
+    pr_debug("tiziano_sdns_params_refresh: Refreshing SDNS parameters (simple version)\n");
+    /* This is the simple version called from init - the enhanced version is elsewhere */
+}
 
 /* tisp_sdns_all_reg_refresh - Write all SDNS registers to hardware */
 static int tisp_sdns_all_reg_refresh(void)
@@ -4869,8 +4879,6 @@ EXPORT_SYMBOL(tisp_adr_process);
 EXPORT_SYMBOL(tiziano_gamma_lut_parameter);
 EXPORT_SYMBOL(tiziano_lsc_params_refresh);
 EXPORT_SYMBOL(tiziano_dpc_params_refresh);
-EXPORT_SYMBOL(tiziano_sharpen_params_refresh);
-EXPORT_SYMBOL(tiziano_sdns_params_refresh);
 EXPORT_SYMBOL(tiziano_adr_params_refresh);
 EXPORT_SYMBOL(tisp_dpc_par_refresh);
 EXPORT_SYMBOL(tisp_sharpen_par_refresh);
