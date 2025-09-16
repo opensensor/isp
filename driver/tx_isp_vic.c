@@ -1275,10 +1275,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         }
         
         /* Binary Ninja: 00010a2c-00010a78 - Integration time and gain */
+        /* CRITICAL FIX: Register 0x18 is a TIMING parameter, NOT a width register! */
+        /* The reference driver sets 0x18 = 0xf00 (3840) and it must stay that way */
+        /* DO NOT overwrite register 0x18 with sensor width - this causes control limit errors */
         u32 integration_time = sensor_attr->integration_time;
-        if (integration_time != 0) {
-            writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
-        }
+        pr_info("*** CRITICAL: Skipping register 0x18 write - it's a timing parameter (0xf00), not width! ***\n");
         
         u32 again = sensor_attr->again;
         if (again != 0) {
