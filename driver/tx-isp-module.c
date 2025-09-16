@@ -4678,8 +4678,9 @@ int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable)
     
     if (enable) {
         struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
-        csi_dev->state = 4; /* Streaming state */
-        pr_info("*** MIPS-SAFE: CSI device state set to streaming (4) ***\n");
+        /* CRITICAL FIX: State 4 doesn't exist! Use CSI_STATE_ACTIVE (2) for streaming */
+        csi_dev->state = CSI_STATE_ACTIVE; /* 2 = ACTIVE, not 4 (invalid) */
+        pr_info("*** MIPS-SAFE: CSI device state set to ACTIVE (%d) ***\n", csi_dev->state);
     } else {
         pr_info("*** MIPS-SAFE: CSI streaming disable ***\n");
         
