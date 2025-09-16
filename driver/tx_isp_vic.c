@@ -23,6 +23,16 @@ int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev);
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
+
+/* Debug function to track vic_start_ok changes */
+static void debug_vic_start_ok_change(int new_value, const char *location, int line)
+{
+    if (vic_start_ok != new_value) {
+        pr_info("*** VIC_START_OK CHANGE: %d -> %d at %s:%d ***\n",
+                vic_start_ok, new_value, location, line);
+    }
+    vic_start_ok = new_value;
+}
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 static int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 static int vic_enabled = 0;

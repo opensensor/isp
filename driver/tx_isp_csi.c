@@ -265,48 +265,6 @@ int tx_isp_csi_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config
     return 0;
 }
 
-/* Post-streaming CSI hardware configuration - RE-ENABLED with safe implementation */
-static int tx_isp_csi_post_streaming_config(struct tx_isp_subdev *sd, void __iomem *csi_base,
-                                           struct tx_isp_sensor_attribute *attr)
-{
-    pr_info("=== POST-STREAMING CSI CONFIGURATION - SAFE IMPLEMENTATION ===\n");
-
-    if (!csi_base || !attr) {
-        pr_err("Invalid parameters for CSI post-streaming config\n");
-        return -EINVAL;
-    }
-
-    /* CRITICAL: This is the missing piece that the reference driver does after sensor streaming starts */
-    /* Perform minimal essential CSI configuration to prevent register conflicts */
-
-    /* Configure CSI for MIPI interface */
-    if (attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {
-        /* Set MIPI lane count */
-        u32 lanes = attr->mipi.lans;
-        if (lanes >= 1 && lanes <= 4) {
-            u32 ctrl = readl(csi_base + 0x4);
-            ctrl = (ctrl & 0xfffffffc) | ((lanes - 1) & 3);
-            writel(ctrl, csi_base + 0x4);
-            wmb();
-            pr_info("CSI post-streaming: MIPI lanes configured to %d\n", lanes);
-        }
-
-        /* Configure CSI timing for sensor dimensions */
-        u32 width = attr->total_width;
-        u32 height = attr->total_height;
-        if (width > 0 && height > 0) {
-            /* Set basic timing parameters */
-            writel(width, csi_base + 0x8);
-            writel(height, csi_base + 0xc);
-            wmb();
-            pr_info("CSI post-streaming: Timing configured for %dx%d\n", width, height);
-        }
-    }
-
-    pr_info("=== POST-STREAMING CSI CONFIGURATION COMPLETE ===\n");
-    return 0;
-}
-
 /* CSI video streaming control - FIXED: MIPS memory alignment */
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
@@ -417,16 +375,6 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
     /* Binary Ninja: int32_t $v0_4 = 4, if (arg2 == 0) $v0_4 = 3 */
     if (enable) {
-        pr_info("*** CSI STREAMING: Adding isp-w01 CSI PHY Control writes ***\n");
-
-        /* CRITICAL FIX: Perform post-streaming CSI hardware configuration safely */
-        /* This is the missing piece that the spec driver does after sensor streaming starts */
-        ret = tx_isp_csi_post_streaming_config(sd, csi_base, attr);
-        if (ret) {
-            pr_err("Failed to perform post-streaming CSI configuration: %d\n", ret);
-            return ret;
-        }
-
         /* Binary Ninja: *(arg1 + 0x128) = 4 */
         /* CRITICAL FIX: Use safe struct member access instead of offset 0x128 */
         csi_dev->state = 4;
