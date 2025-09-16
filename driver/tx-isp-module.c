@@ -2231,13 +2231,29 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
             
             state->buffer_count = reqbuf.count;
-            pr_info("*** Channel %d: MEMORY-AWARE REQBUFS SUCCESS - %d buffers ***\n", 
+
+            /* CRITICAL: Update VIC active_buffer_count for streaming */
+            if (ourISPdev && ourISPdev->vic_dev) {
+                struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                vic->active_buffer_count = reqbuf.count;
+                pr_info("*** Channel %d: VIC active_buffer_count set to %d ***\n",
+                        channel, vic->active_buffer_count);
+            }
+
+            pr_info("*** Channel %d: MEMORY-AWARE REQBUFS SUCCESS - %d buffers ***\n",
                    channel, state->buffer_count);
             
         } else {
             /* Free existing buffers */
             pr_info("Channel %d: Freeing existing buffers\n", channel);
             state->buffer_count = 0;
+
+            /* CRITICAL: Clear VIC active_buffer_count */
+            if (ourISPdev && ourISPdev->vic_dev) {
+                struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                vic->active_buffer_count = 0;
+                pr_info("*** Channel %d: VIC active_buffer_count cleared ***\n", channel);
+            }
         }
         
         if (copy_to_user(argp, &reqbuf, sizeof(reqbuf)))
@@ -2596,13 +2612,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (ourISPdev && ourISPdev->vic_dev) {
             struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
 
-            pr_info("*** CHANNEL %d STREAMON: SETTING UP VIC BUFFERS FIRST ***\n", channel);
+            pr_info("*** CHANNEL %d STREAMON: CHECKING VIC BUFFER SETUP ***\n", channel);
 
-            /* Ensure VIC has proper buffer count for streaming */
+            /* Check if VIC has proper buffer count from REQBUFS */
             if (vic->active_buffer_count == 0) {
-                vic->active_buffer_count = 4;  /* Default buffer count */
-                pr_info("*** CHANNEL %d STREAMON: Set VIC active_buffer_count = %d ***\n",
-                        channel, vic->active_buffer_count);
+                pr_warn("*** CHANNEL %d STREAMON: WARNING - No buffers allocated via REQBUFS! ***\n", channel);
+                pr_warn("*** Client should call REQBUFS before STREAMON ***\n");
             }
 
             /* Ensure VIC dimensions are set */
