@@ -2602,17 +2602,21 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     iounmap(vic_interrupt_base);
                 }
 
-                /* Verify the VIC interrupt setup took effect */
-                u32 actual_1e0 = readl(vic_regs + 0x1e0);
-                u32 actual_1e8 = readl(vic_regs + 0x1e8);
-                if (actual_1e0 == 0xffffffff && actual_1e8 == 0x0) {
-                    pr_info("*** SUCCESS: VIC interrupt registers set to working values! ***\n");
-                    pr_info("*** VIC should now generate interrupts on IRQ 38 (isp-w02) ***\n");
-                } else {
-                    pr_warn("*** WARNING: VIC interrupt register values unexpected ***\n");
-                    pr_warn("*** Expected: 1e0=0xffffffff, 1e8=0x0 ***\n");
-                    pr_warn("*** Actual: 1e0=0x%x, 1e8=0x%x ***\n", actual_1e0, actual_1e8);
-                    pr_warn("*** VIC interrupts may still work - IRQ 38 routing is correct ***\n");
+                /* Verify the VIC interrupt setup took effect using correct base */
+                void __iomem *vic_check_base = ioremap(0x10023000, 0x1000);
+                if (vic_check_base) {
+                    u32 actual_1e0 = readl(vic_check_base + 0x1e0);
+                    u32 actual_1e8 = readl(vic_check_base + 0x1e8);
+                    if (actual_1e0 == 0xffffffff && actual_1e8 == 0x0) {
+                        pr_info("*** SUCCESS: VIC interrupt registers set to working values! ***\n");
+                        pr_info("*** VIC should now generate interrupts on IRQ 38 ***\n");
+                    } else {
+                        pr_warn("*** WARNING: VIC interrupt register values unexpected ***\n");
+                        pr_warn("*** Expected: 1e0=0xffffffff, 1e8=0x0 ***\n");
+                        pr_warn("*** Actual: 1e0=0x%x, 1e8=0x%x ***\n", actual_1e0, actual_1e8);
+                        pr_warn("*** VIC interrupts may still work - IRQ 38 routing is correct ***\n");
+                    }
+                    iounmap(vic_check_base);
                 }
 
                 /* CRITICAL FIX: NOW set vic_start_ok=1 after complete pipeline configuration */
