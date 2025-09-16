@@ -1760,10 +1760,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                             /* SAFETY: Check if global ISP device is properly initialized */
                             extern struct tx_isp_dev *ourISPdev;
-                            if (!ourISPdev || !ourISPdev->core_regs) {
-                                pr_err("TUNING: Global ISP device not properly initialized - skipping comprehensive tuning\n");
-                                goto tuning_complete;
-                            }
 
                             /* 1. AE (Auto Exposure) Updates - WITH NULL CHECKS */
                             extern int tisp_tgain_update(void);
