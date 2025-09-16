@@ -744,7 +744,46 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     system_reg_write(0x9a98, 0x500);
     system_reg_write(0x9ac0, 0x200);
     system_reg_write(0x9ac8, 0x200);
-
+    
+    /* *** CRITICAL: CSI PHY Control registers - THE MISSING PIECES! *** */
+    pr_info("*** WRITING CSI PHY CONTROL REGISTERS - THE MISSING HARDWARE INIT! ***\n");
+    
+    /* ISP M0 CSI PHY Control - from reference driver trace */
+    if (isp_dev->vic_regs) {
+        void __iomem *csi_phy_regs = isp_dev->vic_regs - 0xe0000;  /* CSI at ISP base */
+        
+        /* Reference driver CSI PHY initialization sequence */
+        writel(0x54560031, csi_phy_regs + 0x0);
+        writel(0x7800438, csi_phy_regs + 0x4);
+        writel(0x1, csi_phy_regs + 0x8);
+        writel(0x80700008, csi_phy_regs + 0xc);
+        writel(0x1, csi_phy_regs + 0x28);
+        writel(0x400040, csi_phy_regs + 0x2c);
+        writel(0x1, csi_phy_regs + 0x90);
+        writel(0x1, csi_phy_regs + 0x94);
+        writel(0x30000, csi_phy_regs + 0x98);
+        writel(0x58050000, csi_phy_regs + 0xa8);
+        writel(0x58050000, csi_phy_regs + 0xac);
+        writel(0x40000, csi_phy_regs + 0xc4);
+        writel(0x400040, csi_phy_regs + 0xc8);
+        writel(0x100, csi_phy_regs + 0xcc);
+        writel(0xc, csi_phy_regs + 0xd4);
+        writel(0xffffff, csi_phy_regs + 0xd8);
+        writel(0x100, csi_phy_regs + 0xe0);
+        writel(0x400040, csi_phy_regs + 0xe4);
+        writel(0xff808000, csi_phy_regs + 0xf0);
+        wmb();
+        
+        pr_info("*** CSI PHY CONTROL REGISTERS WRITTEN - THIS WAS MISSING! ***\n");
+        
+        /* CSI PHY Config registers */
+        writel(0x80007000, csi_phy_regs + 0x110);
+        writel(0x777111, csi_phy_regs + 0x114);
+        wmb();
+        
+        pr_info("*** CSI PHY CONFIG REGISTERS WRITTEN ***\n");
+    }
+    
     /* Binary Ninja: sensor_init call - initialize sensor control structure */
     pr_info("*** CALLING sensor_init - INITIALIZING SENSOR CONTROL STRUCTURE ***\n");
     int sensor_init_result = sensor_init(isp_dev);
@@ -1492,43 +1531,10 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
     vic_regs = vic_dev->vic_regs;
-
-    /* CRITICAL FIX: Check and restore VIC interrupt registers if corrupted by CSI PHY */
-    if (vic_start_ok == 1) {
-        u32 current_imr = readl(vic_regs + 0x04);
-        u32 current_imcr = readl(vic_regs + 0x0c);
-
-        /* CRITICAL FIX: Check VIC interrupt registers at correct base (0x10023000) */
-        /* VIC interrupt control is at separate VIC base, not shared region */
-        void __iomem *vic_interrupt_base = ioremap(0x10023000, 0x1000);
-        if (vic_interrupt_base) {
-            u32 current_1e0 = readl(vic_interrupt_base + 0x1e0);
-            u32 current_1e8 = readl(vic_interrupt_base + 0x1e8);
-
-            /* Check if VIC interrupt registers have been corrupted */
-            if (current_1e0 != 0xffffffff || current_1e8 != 0x0) {
-                pr_info("*** VIC INTERRUPT RESTORE: Registers corrupted (1e0=0x%x, 1e8=0x%x), restoring ***\n",
-                        current_1e0, current_1e8);
-
-                /* Restore VIC interrupt register values at correct base */
-                writel(0xffffffff, vic_interrupt_base + 0x1e0);  /* Enable all VIC interrupts */
-                writel(0x0, vic_interrupt_base + 0x1e8);         /* Clear interrupt masks */
-                wmb();
-
-                pr_info("*** VIC INTERRUPT RESTORE: Registers restored at correct base ***\n");
-            }
-
-            iounmap(vic_interrupt_base);
-        }
-    }
     
     /* Get VIC interrupt enable flag at offset +0x13c */
     vic_irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
     
-    /* BINARY NINJA EXACT LOGIC - but with better debugging */
-    /* The issue is not the register addresses - IRQ 38 is firing correctly */
-    /* The issue is that VIC hardware stops generating interrupt status bits */
-
     /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
     /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
     v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
@@ -1541,8 +1547,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     wmb();
     
     /* CRITICAL: Binary Ninja global vic_start_ok flag check */
-    /* Process VIC interrupts when vic_start_ok is enabled */
-    /* The v1_7=0x200000 shows VIC interrupts are working correctly! */
+    /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
     if (vic_start_ok != 0) {
         pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
         
@@ -2942,19 +2947,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
         
-
-        /* CRITICAL FIX: Start frame generation system to prevent video drop */
-        /* This ensures that DQBUF operations will have frames available */
-        pr_info("*** Channel %d: Starting frame generation system to prevent video drop ***\n", channel);
-
-        /* Start the VIC frame work to generate frames continuously */
-
-        /* Initialize and start the frame generation work */
-        if (vic_dev && vic_dev->streaming) {
-            schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(33)); /* 30 FPS */
-            pr_info("*** Channel %d: Frame generation work scheduled (30 FPS) ***\n", channel);
-        }
-
+        
         pr_info("Channel %d: Streaming enabled\n", channel);
         return 0;
     }
