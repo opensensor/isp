@@ -2933,6 +2933,7 @@ static uint32_t lsc_a_lut[2047];  /* Daylight LSC LUT */
 static uint32_t lsc_t_lut[2047];  /* Tungsten LSC LUT */
 static uint32_t lsc_d_lut[2047];  /* D65 LSC LUT */
 static uint32_t lsc_final_lut[2047]; /* Final interpolated LUT */
+static uint32_t *lsc_curr_lut = NULL; /* Current active LUT pointer */
 
 /* LSC state variables - Binary Ninja reference */
 static uint32_t *data_9a420 = NULL;    /* Current mesh strength pointer */
