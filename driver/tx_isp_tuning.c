@@ -148,6 +148,40 @@ static uint32_t data_d7228 = 0;
 /* WDR Data Structure Pointers - From Binary Ninja */
 static void *TizianoWdrFpgaStructMe = NULL;
 static void *data_d94a8 = NULL;
+
+/* ADR (Adaptive Dynamic Range) Variables */
+static uint32_t adr_ratio = 0;
+static uint32_t adr_wdr_en = 0;
+static uint32_t ev_changed = 0;
+static uint32_t histSub_4096_diff = 0;
+static uint32_t *adr_mapb1_list_now = NULL;
+static uint32_t *adr_mapb2_list_now = NULL;
+static uint32_t *adr_mapb3_list_now = NULL;
+static uint32_t *adr_mapb4_list_now = NULL;
+static uint32_t adr_base_values[9] = {0x100, 0x120, 0x140, 0x160, 0x180, 0x1a0, 0x1c0, 0x1e0, 0x200};
+static uint32_t adr_min_thresholds[9] = {0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x100};
+
+/* Global parameter arrays */
+static void *tparams_day = NULL;
+static void *tparams_night = NULL;
+static void *dmsc_sp_d_w_stren_wdr_array = NULL;
+static void *sensor_info = NULL;
+static uint32_t data_b2e1c = 0;
+
+/* Forward declarations for helper functions */
+static int tisp_s_sdns_ratio(int ratio);
+static int tisp_s_mdns_ratio(int ratio);
+static int tisp_ae_param_array_set(int param_id, void *data, int *size);
+static int tisp_ae_trig(void);
+static int tisp_gamma_param_array_set(int param_id, void *data, int *size);
+static uint32_t system_reg_read(uint32_t offset);
+static void system_reg_write(uint32_t offset, uint32_t value);
+static int tiziano_adr_init(void *sensor_info, uint32_t data);
+static int tiziano_adr_params_init(void);
+static int tisp_ae_s_at_list(uint32_t target);
+static int tisp_ae_manual_set(void *param1, void *param2, void *param3, void *param4);
+static int tisp_ae_set_hist_custome(void);
+static int tisp_ae_min_max_set(void *param1, void *param2, void *param3, void *param4);
 static void *data_d94ac = NULL;
 static void *data_d94b0 = NULL;
 static void *data_d94b4 = NULL;
@@ -4750,6 +4784,139 @@ int tisp_s_adr_str_internal(int strength)
     return 0;
 }
 EXPORT_SYMBOL(tisp_s_adr_str_internal);
+
+/* tisp_s_ae_at_list - AE auto-target list control */
+int tisp_s_ae_at_list(uint32_t target_value)
+{
+    uint8_t param_buffer[0x1c];
+    int i;
+
+    pr_info("tisp_s_ae_at_list: Setting AE auto-target to %u\n", target_value);
+
+    /* Binary Ninja shows copying 0x18 bytes from stack arguments */
+    /* This appears to be setting up an AE target list */
+
+    /* Initialize parameter buffer */
+    memset(param_buffer, 0, sizeof(param_buffer));
+
+    /* Set up AE target parameters */
+    for (i = 0; i < 0x18; i++) {
+        param_buffer[i] = (target_value >> (i % 4 * 8)) & 0xff;
+    }
+
+    /* Apply AE target list */
+    tisp_ae_s_at_list(target_value);
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_s_ae_at_list);
+
+/* tisp_s_ae_attr - AE attribute control */
+int tisp_s_ae_attr(void *ae_attr_data)
+{
+    uint8_t param_buffer[0x98];
+    uint8_t temp_buffer[0x88];
+    int i;
+
+    pr_info("tisp_s_ae_attr: Setting AE attributes\n");
+
+    if (!ae_attr_data) {
+        pr_err("tisp_s_ae_attr: NULL AE attribute data\n");
+        return -EINVAL;
+    }
+
+    /* Binary Ninja implementation:
+     * memset(&var_a0, 0, 0x98);
+     * memcpy(&var_a0, &dmsc_sp_d_w_stren_wdr_array, 0x98);
+     * for (int32_t i = 0; i u< 0x88; i += 1)
+     *     var_128[i] = var_90[i];
+     * tisp_ae_manual_set(var_a0, var_9c, var_98, arg1);
+     */
+
+    /* Initialize parameter buffer */
+    memset(param_buffer, 0, sizeof(param_buffer));
+
+    /* Copy from WDR strength array if available */
+    if (dmsc_sp_d_w_stren_wdr_array) {
+        memcpy(param_buffer, dmsc_sp_d_w_stren_wdr_array, sizeof(param_buffer));
+    }
+
+    /* Copy AE attribute data */
+    for (i = 0; i < 0x88; i++) {
+        temp_buffer[i] = ((uint8_t*)ae_attr_data)[i];
+    }
+
+    /* Apply AE manual settings */
+    tisp_ae_manual_set(param_buffer, &temp_buffer[0x24], &temp_buffer[0x20], ae_attr_data);
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_s_ae_attr);
+
+/* tisp_s_ae_hist - AE histogram control */
+int tisp_s_ae_hist(void *hist_data)
+{
+    uint8_t hist_buffer[0x424];
+    int i;
+
+    pr_info("tisp_s_ae_hist: Setting AE histogram\n");
+
+    if (!hist_data) {
+        pr_err("tisp_s_ae_hist: NULL histogram data\n");
+        return -EINVAL;
+    }
+
+    /* Binary Ninja implementation:
+     * for (; i u< 0x41c; i += 1)
+     *     var_428[i] = *(&arg_10 + i);
+     * tisp_ae_set_hist_custome();
+     */
+
+    /* Copy histogram data */
+    for (i = 0; i < 0x41c; i++) {
+        hist_buffer[i] = ((uint8_t*)hist_data)[i];
+    }
+
+    /* Apply custom histogram settings */
+    tisp_ae_set_hist_custome();
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_s_ae_hist);
+
+/* tisp_s_ae_it_max - AE integration time maximum control */
+int tisp_s_ae_it_max(void)
+{
+    uint8_t param_buffer[0x98];
+    uint8_t temp_buffer[0x88];
+    int i;
+
+    pr_info("tisp_s_ae_it_max: Setting AE integration time maximum\n");
+
+    /* Binary Ninja implementation:
+     * memcpy(&var_a0, &dmsc_sp_d_w_stren_wdr_array, 0x98);
+     * for (int32_t i = 0; i u< 0x88; i += 1)
+     *     var_128[i] = var_90[i];
+     * tisp_ae_min_max_set(var_a0, var_9c, var_98, var_94);
+     */
+
+    /* Copy from WDR strength array if available */
+    memset(param_buffer, 0, sizeof(param_buffer));
+    if (dmsc_sp_d_w_stren_wdr_array) {
+        memcpy(param_buffer, dmsc_sp_d_w_stren_wdr_array, sizeof(param_buffer));
+    }
+
+    /* Initialize temp buffer */
+    for (i = 0; i < 0x88; i++) {
+        temp_buffer[i] = param_buffer[i % 0xc];  /* Cycle through first 0xc bytes */
+    }
+
+    /* Apply AE min/max settings */
+    tisp_ae_min_max_set(param_buffer, &temp_buffer[0x24], &temp_buffer[0x20], &temp_buffer[0x1c]);
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_s_ae_it_max);
 
 /* Continuous tuning functions - Based on reference driver trace analysis */
 
