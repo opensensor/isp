@@ -2277,23 +2277,7 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) */
     system_irq_func_set(0xd, ispcore_ip_done_irq_handler);
 
-    /* CRITICAL: Initialize frame sync work queue for sensor I2C communication */
-    pr_info("*** ISP CORE: About to create frame sync workqueue ***\n");
-    fs_workqueue = create_singlethread_workqueue("isp_frame_sync");
-    if (!fs_workqueue) {
-        pr_err("*** ISP CORE: Failed to create frame sync workqueue ***\n");
-        return -ENOMEM;
-    }
-    pr_info("*** ISP CORE: Frame sync workqueue created successfully at %p ***\n", fs_workqueue);
-
-    INIT_WORK(&fs_work, ispcore_irq_fs_work);
-    pr_info("*** ISP CORE: Frame sync work initialized at %p ***\n", &fs_work);
-    pr_info("*** ISP CORE: Frame sync work queue initialized with dedicated workqueue ***\n");
-
-    /* Test the work function directly to see if it works */
-    pr_info("*** ISP CORE: Testing frame sync work function directly ***\n");
-    ispcore_irq_fs_work(&fs_work);
-    pr_info("*** ISP CORE: Direct work function test completed ***\n");
+    /* Frame sync workqueue initialization moved to tx_isp_core_probe() */
 
     /* CRITICAL: CSI PHY register protection - prevent corruption after stream start */
     pr_info("*** ISP CORE: Setting up CSI PHY register protection ***\n");
@@ -4068,7 +4052,25 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 } else {
                     pr_info("*** tx_isp_core_probe: VIN device created successfully ***\n");
                 }
-                
+
+                /* CRITICAL: Initialize frame sync work queue for sensor I2C communication */
+                pr_info("*** tx_isp_core_probe: About to create frame sync workqueue ***\n");
+                fs_workqueue = create_singlethread_workqueue("isp_frame_sync");
+                if (!fs_workqueue) {
+                    pr_err("*** tx_isp_core_probe: Failed to create frame sync workqueue ***\n");
+                    return -ENOMEM;
+                }
+                pr_info("*** tx_isp_core_probe: Frame sync workqueue created successfully at %p ***\n", fs_workqueue);
+
+                INIT_WORK(&fs_work, ispcore_irq_fs_work);
+                pr_info("*** tx_isp_core_probe: Frame sync work initialized at %p ***\n", &fs_work);
+                pr_info("*** tx_isp_core_probe: Frame sync work queue initialized with dedicated workqueue ***\n");
+
+                /* Test the work function directly to see if it works */
+                pr_info("*** tx_isp_core_probe: Testing frame sync work function directly ***\n");
+                ispcore_irq_fs_work(&fs_work);
+                pr_info("*** tx_isp_core_probe: Direct work function test completed ***\n");
+
                 /* CRITICAL: Now that core device is set up, call the key function that creates graph and nodes */
                 pr_info("*** tx_isp_core_probe: Calling tx_isp_create_graph_and_nodes ***\n");
                 result = tx_isp_create_graph_and_nodes(isp_dev);
