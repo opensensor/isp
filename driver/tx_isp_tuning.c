@@ -1749,21 +1749,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                             /* Old individual tuning calls removed - now using comprehensive tuning below */
 
-                            /* 2. CCM (Color Correction Matrix) update */
-                            extern int jz_isp_ccm(void);
-                            extern int32_t *tiziano_ccm_a_now;
-                            extern uint32_t *cm_ev_list_now;
-
-                            /* CRITICAL: Check if CCM is initialized before calling */
-                            if (tiziano_ccm_a_now != NULL && cm_ev_list_now != NULL) {
-                                /* Update CCM based on current CT and EV conditions */
-                                int ccm_ret = jz_isp_ccm();
-                                if (ccm_ret != 0) {
-                                    pr_debug("TUNING: CCM update returned %d\n", ccm_ret);
-                                }
-                            } else {
-                                pr_debug("TUNING: CCM not initialized yet - skipping CCM update\n");
-                            }
+                            /* Old CCM call removed - now using comprehensive tuning below */
 
                             /* ===== COMPREHENSIVE ISP TUNING OPERATIONS - Binary Ninja Reference ===== */
                             pr_info("*** COMPREHENSIVE TUNING: Performing ALL ISP pipeline updates (cycle %d) ***\n", tuning_cycle_count);
