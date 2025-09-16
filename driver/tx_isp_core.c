@@ -564,10 +564,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt */
         pr_info("*** ISP CORE: FRAME SYNC INTERRUPT ***\n");
 
-        /* CRITICAL: DISABLE CSI PHY register restoration during VIC frame processing */
-        /* This was causing CSI PHY writes that disrupted VIC frame done interrupts */
-        /* check_and_restore_csi_phy_registers(); */
-        pr_info("*** ISP CORE: CSI PHY restoration DISABLED to prevent VIC frame disruption ***\n");
+        /* CSI PHY protection system completely removed - no more corruption! */
 
         /* CRITICAL FIX: Don't schedule frame sync work during VIC streaming */
         extern uint32_t vic_start_ok;
