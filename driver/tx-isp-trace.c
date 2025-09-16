@@ -204,11 +204,10 @@ static void check_region_changes(struct work_struct *work)
                 // Working VIC interrupt registers are at 0x1e0, 0x1e8
                 if ((offset == 0x1e0 || offset == 0x1e8) && strcmp(region->name, "isp-w02") == 0) {
                     pr_info("*** VIC WORKING REGISTER CONFLICT: Register 0x%x overwritten (VIC interrupt register) ***\n", offset);
-                    pr_info("*** VIC interrupts may be disrupted - restoration needed ***\n");
+                    pr_info("*** VIC interrupts may be disrupted - restoration will be handled by VIC module ***\n");
 
-                    /* Call restoration function */
-                    extern void tx_isp_vic_restore_interrupts(void);
-                    tx_isp_vic_restore_interrupts();
+                    /* Don't call restoration function directly - creates module dependency */
+                    /* The VIC module's interrupt handler will detect and restore if needed */
                 }
             }
 

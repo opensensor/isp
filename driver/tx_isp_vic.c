@@ -2577,22 +2577,30 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 wmb();
                 pr_info("*** VIC ROBUST MODE: Enabled to handle CSI PHY timing changes ***\n");
 
-                /* CRITICAL: Re-enable VIC interrupt registers - REVERT TO WORKING APPROACH */
-                /* The 0x04/0x0c registers are not responding to writes - use 0x1e0/0x1e8 instead */
-                pr_info("*** CRITICAL: RE-ENABLING VIC INTERRUPT REGISTERS (working 0x1e0/0x1e8 approach) ***\n");
-                pr_info("*** BEFORE: VIC_1e0(0x1e0)=0x%x, VIC_1e8(0x1e8)=0x%x ***\n", readl(vic_regs + 0x1e0), readl(vic_regs + 0x1e8));
+                /* CRITICAL: Re-enable VIC interrupt registers - USE CORRECT VIC BASE */
+                /* The issue is we're using the wrong base address for VIC interrupt control */
+                /* VIC interrupts are at 0x10023000, not 0x133e0000 */
+                void __iomem *vic_interrupt_base = ioremap(0x10023000, 0x1000);
+                if (!vic_interrupt_base) {
+                    pr_err("*** CRITICAL ERROR: Failed to map VIC interrupt base at 0x10023000 ***\n");
+                } else {
+                    pr_info("*** CRITICAL: RE-ENABLING VIC INTERRUPT REGISTERS (correct VIC base 0x10023000) ***\n");
+                    pr_info("*** BEFORE: VIC_1e0(0x1e0)=0x%x, VIC_1e8(0x1e8)=0x%x ***\n",
+                            readl(vic_interrupt_base + 0x1e0), readl(vic_interrupt_base + 0x1e8));
 
-                /* CRITICAL FIX: Use the registers that actually work for VIC interrupts */
-                /* These were working before and generated 6 interrupts initially */
-                pr_info("*** CRITICAL: Using working VIC interrupt registers (0x1e0/0x1e8) ***\n");
+                    /* CRITICAL FIX: Use the correct VIC base address for interrupt control */
+                    pr_info("*** CRITICAL: Using correct VIC interrupt base (0x10023000) ***\n");
 
-                /* Enable VIC interrupts using the working register approach */
-                writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-                writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
-                wmb();
+                    /* Enable VIC interrupts using the correct base address */
+                    writel(0xffffffff, vic_interrupt_base + 0x1e0);  /* Enable all VIC interrupts */
+                    writel(0x0, vic_interrupt_base + 0x1e8);         /* Clear interrupt masks */
+                    wmb();
 
-                pr_info("*** AFTER: VIC_1e0(0x1e0)=0x%x, VIC_1e8(0x1e8)=0x%x ***\n",
-                        readl(vic_regs + 0x1e0), readl(vic_regs + 0x1e8));
+                    pr_info("*** AFTER: VIC_1e0(0x1e0)=0x%x, VIC_1e8(0x1e8)=0x%x ***\n",
+                            readl(vic_interrupt_base + 0x1e0), readl(vic_interrupt_base + 0x1e8));
+
+                    iounmap(vic_interrupt_base);
+                }
 
                 /* Verify the VIC interrupt setup took effect */
                 u32 actual_1e0 = readl(vic_regs + 0x1e0);
