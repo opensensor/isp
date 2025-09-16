@@ -174,36 +174,14 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 
-/* VIC interrupt restoration function - called after CSI PHY changes */
+/* VIC interrupt restoration function - NO LONGER NEEDED */
+/* Root cause fixed: CSI PHY now writes to correct base address (0x10022000) */
+/* instead of conflicting with VIC interrupt registers at 0x133e0000 */
 void tx_isp_vic_restore_interrupts(void)
 {
-    extern struct tx_isp_dev *ourISPdev;
-    struct tx_isp_vic_device *vic_dev;
-    void __iomem *vic_regs;
-
-    if (!ourISPdev || !ourISPdev->vic_dev) {
-        return;
-    }
-
-    vic_dev = ourISPdev->vic_dev;
-    vic_regs = vic_dev->vic_regs;
-
-    if (!vic_regs || vic_start_ok != 1) {
-        return; /* VIC not active */
-    }
-
-    pr_info("*** VIC INTERRUPT RESTORE: CSI PHY changes detected, restoring VIC interrupts ***\n");
-
-    /* Clear any pending interrupts first */
-    writel(0xffffffff, vic_regs + 0x08);  /* VIC_IMSR - Clear all interrupt masks first */
-    wmb();
-
-    /* Restore VIC interrupts using Binary Ninja values */
-    writel(0x07800438, vic_regs + 0x04);  /* VIC IMR - interrupt mask register */
-    writel(0xb5742249, vic_regs + 0x0c);  /* VIC IMCR - interrupt control register */
-    wmb();
-
-    pr_info("*** VIC INTERRUPT RESTORE: VIC interrupts restored after CSI PHY changes ***\n");
+    pr_debug("*** VIC INTERRUPT RESTORE: No longer needed - root cause fixed ***\n");
+    /* CSI PHY writes now go to isp-csi region, not isp-w02 region */
+    /* VIC interrupt registers should remain stable */
 }
 EXPORT_SYMBOL(tx_isp_vic_restore_interrupts);
 
