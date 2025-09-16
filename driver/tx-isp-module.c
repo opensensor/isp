@@ -1496,35 +1496,35 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     /* Get VIC interrupt enable flag at offset +0x13c */
     vic_irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
     
-    /* CRITICAL FIX: Use CORRECT VIC interrupt registers, not CSI PHY registers! */
-    /* The 0x1e0/0x1e8 registers are CSI PHY registers that change during tuning */
-    /* VIC interrupt registers are at 0x04 (IMR) and 0x0c (IMCR) */
-    /* Binary Ninja reference shows VIC interrupts use different register layout */
+    /* CRITICAL FIX: The 0x1e0/0x1e8 registers are CSI PHY registers that change during tuning */
+    /* But we need to keep the original Binary Ninja logic to avoid system hangs */
+    /* The real fix is to make the interrupt handler more robust against CSI PHY changes */
 
-    /* Read VIC interrupt status from correct registers */
-    u32 vic_isr = readl(vic_regs + 0x00);     /* VIC Interrupt Status Register */
-    u32 vic_imr = readl(vic_regs + 0x04);     /* VIC Interrupt Mask Register */
+    /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
+    /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
+    u32 reg_1e0 = readl(vic_regs + 0x1e0);
+    u32 reg_1e8 = readl(vic_regs + 0x1e8);
+    u32 reg_1e4 = readl(vic_regs + 0x1e4);
+    u32 reg_1ec = readl(vic_regs + 0x1ec);
 
-    /* Calculate pending interrupts: status & mask */
-    v1_7 = vic_isr & vic_imr;
-    v1_10 = 0;  /* Secondary interrupt register - simplified for now */
+    v1_7 = (~reg_1e8) & reg_1e0;
+    v1_10 = (~reg_1ec) & reg_1e4;
 
-    /* DEBUG: Show CORRECT VIC interrupt registers */
-    pr_info("*** VIC INTERRUPT DEBUG: vic_regs=%p, ISR=0x%x, IMR=0x%x, pending=0x%x ***\n",
-            vic_regs, vic_isr, vic_imr, v1_7);
+    /* DEBUG: Check if these are CSI PHY registers changing due to tuning */
+    pr_debug("*** VIC INTERRUPT DEBUG: vic_regs=%p, 0x1e0=0x%x, 0x1e8=0x%x ***\n",
+            vic_regs, reg_1e0, reg_1e8);
     
-    /* CRITICAL FIX: Clear VIC interrupt status by writing back the pending bits */
-    /* This is the standard way to acknowledge interrupts in most hardware */
-    if (v1_7 != 0) {
-        writel(v1_7, vic_regs + 0x00);  /* Clear interrupt status */
-        wmb();
-        pr_debug("*** VIC INTERRUPT: Cleared status bits 0x%x ***\n", v1_7);
-    }
+    /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
+    writel(v1_7, vic_regs + 0x1f0);
+    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
+    writel(v1_10, vic_regs + 0x1f4);
+    wmb();
     
-    /* CRITICAL: Check both vic_start_ok flag AND actual interrupt pending */
-    /* Only process if VIC is enabled AND there are actual pending interrupts */
-    if (vic_start_ok != 0 && v1_7 != 0) {
-        pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing pending=0x%x ***\n", v1_7);
+    /* CRITICAL: Binary Ninja global vic_start_ok flag check */
+    /* IMPROVED: Also check if the CSI PHY registers indicate a stable state */
+    /* If 0x1e0 has the "interrupt disabled" pattern (0x200000), skip processing */
+    if (vic_start_ok != 0 && reg_1e0 != 0x200000) {
+        pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
         
         /* Binary Ninja: if (($v1_7 & 1) != 0) */
         if ((v1_7 & 1) != 0) {
@@ -1721,9 +1721,11 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     } else {
         if (vic_start_ok == 0) {
             pr_debug("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled ***\n");
-        } else if (v1_7 == 0) {
-            pr_debug("*** VIC INTERRUPT: No pending interrupts (ISR=0x%x, IMR=0x%x) ***\n",
-                    readl(vic_regs + 0x00), readl(vic_regs + 0x04));
+        } else if (reg_1e0 == 0x200000) {
+            pr_debug("*** VIC INTERRUPT IGNORED: CSI PHY in interrupt-disabled state (0x1e0=0x%x) ***\n", reg_1e0);
+            pr_debug("*** This is likely due to continuous tuning CSI PHY changes ***\n");
+        } else {
+            pr_debug("*** VIC INTERRUPT: Unexpected state - vic_start_ok=%d, 0x1e0=0x%x ***\n", vic_start_ok, reg_1e0);
         }
     }
     
