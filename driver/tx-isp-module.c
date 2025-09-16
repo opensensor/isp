@@ -1500,6 +1500,10 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
     v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
     v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
+
+    /* DEBUG: Check if VIC interrupt registers are actually at the right address */
+    pr_info("*** VIC INTERRUPT DEBUG: vic_regs=%p, 0x1e0=0x%x, 0x1e8=0x%x ***\n",
+            vic_regs, readl(vic_regs + 0x1e0), readl(vic_regs + 0x1e8));
     
     /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
     writel(v1_7, vic_regs + 0x1f0);
