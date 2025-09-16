@@ -29,9 +29,6 @@
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
 
-/* External error counters from tx_isp_vic_debug.c */
-extern uint32_t data_b2984;  /* control limit err counter */
-
 /* External ISP device reference */
 extern struct tx_isp_dev *ourISPdev;
 #include <linux/platform_device.h>
@@ -1598,11 +1595,8 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         if ((v1_7 & 0x200000) != 0) {
             pr_err("Err2 [VIC_INT] : control limit err!!!\n");
 
-            /* Increment control limit error counter for debugging */
-            data_b2984++;
-
             /* Log the error for analysis - root cause should be fixed by buffer management */
-            pr_info("*** VIC CONTROL LIMIT ERROR: Count=%d (should be rare with buffer fix) ***\n", data_b2984);
+            pr_info("*** VIC CONTROL LIMIT ERROR: (should be rare with buffer fix) ***\n");
         }
         
         if ((v1_7 & 0x400000) != 0) {
