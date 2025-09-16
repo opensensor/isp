@@ -198,17 +198,6 @@ static void check_region_changes(struct work_struct *work)
                        region->last_values[i], current_val,
                        jiffies_to_msecs(delta_jiffies),
                        jiffies_to_usecs(delta_jiffies) % 1000);
-
-                // CRITICAL FIX: Monitor working VIC interrupt registers for conflicts
-                // CSI PHY writes should go to 0x10022000 (isp-csi) but monitor for conflicts anyway
-                // Working VIC interrupt registers are at 0x1e0, 0x1e8
-                if ((offset == 0x1e0 || offset == 0x1e8) && strcmp(region->name, "isp-w02") == 0) {
-                    pr_info("*** VIC WORKING REGISTER CONFLICT: Register 0x%x overwritten (VIC interrupt register) ***\n", offset);
-                    pr_info("*** VIC interrupts may be disrupted - restoration will be handled by VIC module ***\n");
-
-                    /* Don't call restoration function directly - creates module dependency */
-                    /* The VIC module's interrupt handler will detect and restore if needed */
-                }
             }
 
             region->last_values[i] = current_val;
