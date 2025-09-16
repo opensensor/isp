@@ -1449,8 +1449,7 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
 
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
 
-    /* STEP 3: Get VIC registers - should already be mapped by tx_isp_create_vic_device */
-    vic_regs = ourISPdev->vic_regs;
+    /* STEP 3: VIC registers should already be set from earlier in function */
     if (!vic_regs) {
         pr_err("*** CRITICAL: No VIC register base - initialization required first ***\n");
         return -EINVAL;
