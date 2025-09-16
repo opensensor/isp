@@ -285,8 +285,8 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 pr_info("*** VIC->ISP TRIGGER: Manually triggered ISP core frame done interrupt ***\n");
 
                 /* Also call ISP core ISR directly as backup */
-                extern irqreturn_t ispcore_interrupt_service_routine_mod(int irq, void *dev_id);
-                ispcore_interrupt_service_routine_mod(37, ourISPdev);
+                extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
+                ispcore_interrupt_service_routine(37, ourISPdev);
                 pr_info("*** VIC->ISP EVENT: Direct call to ISP core ISR executed ***\n");
             } else {
                 pr_warn("*** VIC->ISP: Cannot trigger core interrupt - core_regs not available ***\n");
