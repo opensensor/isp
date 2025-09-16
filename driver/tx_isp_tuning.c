@@ -2846,7 +2846,7 @@ static uint16_t *tiziano_gamma_lut_now = NULL;
 static int gamma_wdr_en = 0;
 
 /* tiziano_gamma_lut_parameter - Binary Ninja EXACT implementation */
-static int tiziano_gamma_lut_parameter(void)
+int tiziano_gamma_lut_parameter(void)
 {
     uint32_t reg_base = 0x40000; /* Binary Ninja shows &data_40000 */
     void __iomem *base_reg = ioremap(0x13340000, 0x10000); /* ISP base + 0x40000 */
@@ -3665,7 +3665,7 @@ static int tisp_sharpen_all_reg_refresh(void)
 }
 
 /* tisp_sharpen_par_refresh - Binary Ninja EXACT implementation */
-static int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write)
+int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write)
 {
     uint32_t prev_value = data_9a920;
     
@@ -3848,7 +3848,7 @@ static int tisp_sdns_intp_reg_refresh(void)
 }
 
 /* tisp_sdns_par_refresh - Binary Ninja EXACT implementation */
-static int tisp_sdns_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write)
+int tisp_sdns_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write)
 {
     uint32_t prev_value = data_9a9c4;
     
@@ -4083,7 +4083,7 @@ static int tisp_dpc_all_reg_refresh(void)
 }
 
 /* tisp_dpc_par_refresh - Binary Ninja EXACT implementation */
-static int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write)
+int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write)
 {
     uint32_t prev_value = data_9ab10;
     
@@ -4175,10 +4175,38 @@ static uint32_t data_ace54 = 0;      /* ADR calculation result */
 static uint32_t param_adr_tool_control_array = 0; /* ADR control */
 
 /* tiziano_adr_params_refresh - Refresh ADR parameters */
-static void tiziano_adr_params_refresh(void)
+void tiziano_adr_params_refresh(void)
 {
     pr_debug("tiziano_adr_params_refresh: Refreshing ADR parameters\n");
+
     /* Update ADR parameters based on current conditions */
+    extern uint32_t data_9a454;  /* Current EV value */
+    extern uint32_t adr_ratio;
+    extern uint32_t adr_wdr_en;
+
+    if (data_9a454 != 0) {
+        uint32_t ev_shifted = data_9a454 >> 10;
+
+        /* Adjust ADR ratio based on exposure */
+        if (ev_shifted < 0x60) {
+            /* Low light - increase ADR for better shadow detail */
+            adr_ratio = 0x180;
+        } else if (ev_shifted > 0x180) {
+            /* Bright light - reduce ADR to prevent over-enhancement */
+            adr_ratio = 0x80;
+        } else {
+            /* Normal light - default ADR */
+            adr_ratio = 0x100;
+        }
+
+        /* Update ADR enable based on conditions */
+        if (adr_wdr_en != 0) {
+            /* WDR mode - more aggressive ADR */
+            adr_ratio = (adr_ratio * 3) >> 1;
+        }
+    }
+
+    pr_debug("tiziano_adr_params_refresh: ADR ratio updated to 0x%x\n", adr_ratio);
 }
 
 /* tisp_adr_set_params - Set ADR parameters to hardware */
