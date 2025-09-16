@@ -500,6 +500,30 @@ static struct tx_isp_subdev_ops core_subdev_ops = {
 /* Global interrupt callback array - EXACT Binary Ninja implementation */
 static irqreturn_t (*irq_func_cb[32])(int irq, void *dev_id) = {0};
 
+/* Missing variable declarations for ISP core interrupt handling */
+static volatile int isp_force_core_isr = 0;  /* Force ISP core ISR flag */
+
+/* Forward declarations for frame channel functions */
+struct frame_channel_state {
+    int streaming;
+};
+
+struct frame_channel {
+    struct frame_channel_state state;
+};
+
+static struct frame_channel frame_channels[3] = {0};  /* Channel 0, 1, 2 */
+
+/* Frame channel wakeup function - placeholder implementation */
+static void frame_channel_wakeup_waiters(struct frame_channel *channel)
+{
+    if (channel) {
+        pr_debug("frame_channel_wakeup_waiters: Waking up waiters for channel\n");
+        /* In full implementation, this would wake up waiting processes */
+        isp_frame_done_wakeup();  /* Call the main frame done wakeup */
+    }
+}
+
 /* system_irq_func_set - EXACT Binary Ninja implementation */
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id))
 {
