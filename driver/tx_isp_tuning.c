@@ -1905,28 +1905,29 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 }
                 
                 if (enable) {
-                    if (dev->tuning_enabled != 3) {
-                        /* CRITICAL: Initialize tuning_data if not already initialized */
+                    /* CRITICAL: Initialize tuning_data if not already initialized */
+                    if (!dev->tuning_data) {
+                        pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
+
+                        /* Allocate tuning data structure using the reference implementation */
+                        ourISPdev->tuning_data = isp_core_tuning_init(dev);
                         if (!dev->tuning_data) {
-                            pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
-                            
-                            /* Allocate tuning data structure using the reference implementation */
-                            ourISPdev->tuning_data = isp_core_tuning_init(dev);
-                            if (!dev->tuning_data) {
-                                pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
-                                return -ENOMEM;
-                            }
-                            
-                            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
-                            
-                            /* MCP LOG: Tuning data structure successfully initialized */
-                            pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
-                            pr_info("MCP_LOG: Tuning controls now ready for operation\n");
+                            pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
+                            return -ENOMEM;
                         }
-                        
-                        /* CRITICAL: Call the proper tiziano initialization function */
-                        /* This is needed to initialize DPC arrays and other ISP pipeline components */
-                        pr_info("*** DEBUG: About to call tiziano_init_all_pipeline_components ***\n");
+
+                        pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
+
+                        /* MCP LOG: Tuning data structure successfully initialized */
+                        pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
+                        pr_info("MCP_LOG: Tuning controls now ready for operation\n");
+                    }
+
+                    /* CRITICAL: Always check if tiziano components need initialization */
+                    /* Check if DPC arrays are initialized - if not, initialize all components */
+                    extern uint32_t *dpc_d_m1_dthres_array_now;
+                    if (!dpc_d_m1_dthres_array_now) {
+                        pr_info("*** DEBUG: DPC arrays not initialized - calling tiziano_init_all_pipeline_components ***\n");
                         pr_info("*** This will initialize DPC, LSC, CCM, and all other ISP arrays ***\n");
 
                         extern int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32_t fps, int wdr_mode);
@@ -1938,7 +1939,11 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         } else {
                             pr_info("*** SUCCESS: All tiziano components initialized - DPC arrays should now be ready ***\n");
                         }
-                        
+                    } else {
+                        pr_info("*** DEBUG: DPC arrays already initialized - skipping tiziano initialization ***\n");
+                    }
+
+                    if (dev->tuning_enabled != 3) {
                         ourISPdev->tuning_enabled = 3;
                         auto_init_done = true;  /* Mark as auto-initialized */
                         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
