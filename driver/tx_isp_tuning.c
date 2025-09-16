@@ -3248,8 +3248,8 @@ uint32_t *cm_ev_list_now = NULL;
 uint32_t *cm_sat_list_now = NULL;
 
 /* CCM state variables - Binary Ninja reference */
-static uint32_t data_9a454 = 0x10000;  /* Current EV */
-static uint32_t data_9a450 = 0x2700;   /* Color temperature */
+uint32_t data_9a454 = 0x10000;  /* Current EV */
+uint32_t data_9a450 = 0x2700;   /* Color temperature */
 static uint32_t data_c52ec = 0;         /* Previous EV */
 static uint32_t data_c52f4 = 0;         /* Previous CT */
 static uint32_t data_c52fc = 0x100;     /* Saturation value */
