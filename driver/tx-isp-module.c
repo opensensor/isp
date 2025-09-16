@@ -1569,6 +1569,13 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
             /* Log the error for analysis - root cause should be fixed by buffer management */
             pr_info("*** VIC CONTROL LIMIT ERROR: (should be rare with buffer fix) ***\n");
+
+            /* CRITICAL FIX: Ensure vic_start_ok remains enabled despite control limit errors */
+            /* Control limit errors can occur during CSI PHY register updates but shouldn't disable interrupts */
+            if (vic_start_ok == 0) {
+                pr_warn("*** CRITICAL: vic_start_ok was disabled by control limit error - re-enabling! ***\n");
+                vic_start_ok = 1;
+            }
         }
         
         if ((v1_7 & 0x400000) != 0) {
@@ -1635,6 +1642,10 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         /* CRITICAL: 0x200000 (control limit error) must also trigger recovery sequence */
         if (((v1_7 & 0xde00) != 0 || (v1_7 & 0x200000) != 0) && *vic_irq_enable_flag == 1) {
             pr_err("error handler!!! (v1_7=0x%x)\n", v1_7);
+
+            /* CRITICAL FIX: Save vic_start_ok state before error recovery */
+            uint32_t saved_vic_start_ok = vic_start_ok;
+            pr_info("*** ERROR RECOVERY: Saving vic_start_ok=%d before recovery ***\n", saved_vic_start_ok);
 
             /* Binary Ninja: **($s0 + 0xb8) = 4 */
             writel(4, vic_regs + 0x0);
