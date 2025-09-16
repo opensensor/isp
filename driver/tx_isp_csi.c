@@ -10,7 +10,6 @@
 int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
 int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
 void dump_csi_reg(struct tx_isp_subdev *sd);
-void check_csi_error(struct tx_isp_subdev *sd);
 extern struct tx_isp_dev *ourISPdev;
 
 
@@ -914,77 +913,6 @@ pr_info("PHY_TIMING_0x260: 0x%08x\n", readl(csi_base + 0x260));
 pr_info("========================\n");
 }
 
-/* CSI error checking function */
-void check_csi_error(struct tx_isp_subdev *sd)
-{
-    struct tx_isp_csi_device *csi_dev;
-    void __iomem *csi_base;
-    u32 err1, err2, phy_state;
-
-    if (!sd) {
-        pr_err("check_csi_error: sd is NULL\n");
-        return;
-    }
-
-    csi_dev = ourISPdev->csi_dev;
-    if (!csi_dev) {
-        pr_err("check_csi_error: csi_dev is NULL\n");
-        return;
-    }
-
-    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0x13c */
-    csi_base = csi_dev->csi_regs;
-    if (!csi_base) {
-        pr_err("check_csi_error: csi_base is NULL\n");
-        return;
-    }
-
-/* Read error registers */
-err1 = readl(csi_base + 0x20);
-err2 = readl(csi_base + 0x24);
-phy_state = readl(csi_base + 0x14);
-
-/* Check for PHY errors */
-if (phy_state & 0x1) {
-    pr_info("CSI PHY: Clock lane in Stop State\n");
-}
-if (phy_state & 0x10) {
-    pr_info("CSI PHY: Data lane 0 in Stop State\n");
-}
-if (phy_state & 0x100) {
-    pr_info("CSI PHY: Data lane 1 in Stop State\n");
-}
-
-/* Check for protocol errors */
-if (err1) {
-    pr_warn("CSI ERR1 (Protocol errors): 0x%08x\n", err1);
-    if (err1 & 0x1) pr_warn("  - SOT Error\n");
-    if (err1 & 0x2) pr_warn("  - SOTHS Error\n");
-    if (err1 & 0x4) pr_warn("  - ECC Single-bit Error\n");
-    if (err1 & 0x8) pr_warn("  - ECC Multi-bit Error\n");
-    if (err1 & 0x10) pr_warn("  - CRC Error\n");
-    if (err1 & 0x20) pr_warn("  - Packet Size Error\n");
-    if (err1 & 0x40) pr_warn("  - ECC Corrected Error\n");
-    
-    /* Clear errors by writing back */
-    writel(err1, csi_base + 0x20);
-}
-
-if (err2) {
-    pr_warn("CSI ERR2 (Application errors): 0x%08x\n", err2);
-    if (err2 & 0x1) pr_warn("  - Data ID Error\n");
-    if (err2 & 0x2) pr_warn("  - Frame Sync Error\n");
-    if (err2 & 0x4) pr_warn("  - Frame Data Error\n");
-    
-    /* Clear errors by writing back */
-    writel(err2, csi_base + 0x24);
-}
-
-if (!err1 && !err2) {
-    pr_info("CSI: No errors detected\n");
-}
-}
-
 /* CSI activation function - matching reference driver */
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
 {
@@ -1040,6 +968,5 @@ EXPORT_SYMBOL(tx_isp_csi_start);
 EXPORT_SYMBOL(tx_isp_csi_stop);
 EXPORT_SYMBOL(tx_isp_csi_set_format);
 EXPORT_SYMBOL(dump_csi_reg);
-EXPORT_SYMBOL(check_csi_error);
 EXPORT_SYMBOL(tx_isp_csi_activate_subdev);
 EXPORT_SYMBOL(tx_isp_csi_slake_subdev);

@@ -16,7 +16,6 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
 
 /* CSI Debug and Utility Functions */
 void dump_csi_reg(struct tx_isp_subdev *sd);
-void check_csi_error(struct tx_isp_subdev *sd);
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
 int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd);
 
