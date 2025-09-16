@@ -1956,6 +1956,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         pr_info("*** DEBUG: tuning_enabled already 3, skipping initialization ***\n");
 
                         /* CRITICAL: Check if DPC arrays are actually initialized */
+                        extern uint32_t *dpc_d_m1_dthres_array_now;
                         if (!dpc_d_m1_dthres_array_now) {
                             pr_err("*** CRITICAL: DPC arrays are NULL even though tuning_enabled=3! ***\n");
                             pr_err("*** FORCING initialization to prevent crash ***\n");
