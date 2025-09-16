@@ -2554,26 +2554,26 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 wmb();
                 pr_info("*** VIC ROBUST MODE: Enabled to handle CSI PHY timing changes ***\n");
 
-                /* CRITICAL: NOW RE-ENABLE VIC INTERRUPT REGISTERS - AFTER CSI Lane Configuration! */
-                pr_info("*** CRITICAL: RE-ENABLING VIC INTERRUPT REGISTERS AFTER CSI LANE CONFIG ***\n");
-                pr_info("*** CSI Lane Config overwrote VIC interrupt registers - restoring them now ***\n");
-                pr_info("*** BEFORE: 0x1e0=0x%x, 0x1e8=0x%x ***\n", readl(vic_regs + 0x1e0), readl(vic_regs + 0x1e8));
+                /* CRITICAL: NOW RE-ENABLE REAL VIC INTERRUPT REGISTERS - AFTER CSI Lane Configuration! */
+                pr_info("*** CRITICAL: RE-ENABLING REAL VIC INTERRUPT REGISTERS (0x04, 0x0c) ***\n");
+                pr_info("*** The 0x1e0/0x1e8 registers are CSI PHY, not VIC interrupts! ***\n");
+                pr_info("*** BEFORE: VIC_IMR(0x04)=0x%x, VIC_IMCR(0x0c)=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
 
-                writel(0xffffffff, vic_regs + 0x1e0); /* Enable all VIC interrupts */
-                writel(0x0, vic_regs + 0x1e8);        /* Clear interrupt masks */
-                writel(0xF, vic_regs + 0x1e4);        /* Enable MDMA interrupts */
-                writel(0x0, vic_regs + 0x1ec);        /* Clear MDMA masks */
+                /* Enable VIC interrupts using the CORRECT registers from reference driver */
+                writel(0x07800438, vic_regs + 0x04);  /* VIC IMR - interrupt mask register */
+                writel(0xb5742249, vic_regs + 0x0c);  /* VIC IMCR - interrupt control register */
                 wmb();
 
-                pr_info("*** AFTER: 0x1e0=0x%x, 0x1e8=0x%x ***\n", readl(vic_regs + 0x1e0), readl(vic_regs + 0x1e8));
+                pr_info("*** AFTER: VIC_IMR(0x04)=0x%x, VIC_IMCR(0x0c)=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
 
                 /* Verify the writes took effect */
-                if (readl(vic_regs + 0x1e0) == 0) {
-                    pr_err("*** CRITICAL ERROR: VIC interrupt register 0x1e0 is STILL ZERO after write! ***\n");
-                    pr_err("*** Something is immediately overwriting VIC interrupt registers! ***\n");
-                } else {
-                    pr_info("*** SUCCESS: VIC interrupt registers enabled properly! ***\n");
+                if (readl(vic_regs + 0x04) == 0x07800438 && readl(vic_regs + 0x0c) == 0xb5742249) {
+                    pr_info("*** SUCCESS: REAL VIC interrupt registers enabled properly! ***\n");
                     pr_info("*** VIC should now generate continuous frame completion interrupts! ***\n");
+                } else {
+                    pr_err("*** ERROR: VIC interrupt register writes failed! ***\n");
+                    pr_err("*** Expected: IMR=0x07800438, IMCR=0xb5742249 ***\n");
+                    pr_err("*** Actual: IMR=0x%x, IMCR=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
                 }
 
                 pr_info("vic_core_s_stream: VIC streaming enabled successfully, state=%d\n", vic_dev->state);
