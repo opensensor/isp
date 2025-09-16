@@ -1924,11 +1924,16 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             pr_info("MCP_LOG: Tuning controls now ready for operation\n");
                         }
                         
-                        /* CRITICAL: DISABLE tisp_init to prevent VIC frame disruption */
-                        /* This was causing CSI PHY Config and ISP Core Control registers to be zeroed */
-                        pr_info("*** SKIPPING tisp_init - DISABLED to prevent VIC frame disruption ***\n");
-                        pr_info("*** tisp_init was writing zeros to critical CSI PHY and ISP registers ***\n");
-                        ret = 0;  /* Return success without calling tisp_init */
+                        /* CRITICAL: ENABLE tisp_init to initialize all tiziano components */
+                        /* This is needed to initialize DPC arrays and other ISP pipeline components */
+                        pr_info("*** CALLING tisp_init - REQUIRED to initialize tiziano pipeline components ***\n");
+                        pr_info("*** This will initialize DPC, LSC, CCM, and all other ISP arrays ***\n");
+                        ret = tisp_init(NULL, NULL);  /* Call tisp_init to initialize all components */
+                        if (ret != 0) {
+                            pr_err("*** ERROR: tisp_init failed: %d ***\n", ret);
+                        } else {
+                            pr_info("*** SUCCESS: tisp_init completed - all tiziano components initialized ***\n");
+                        }
                         
                         ourISPdev->tuning_enabled = 3;
                         auto_init_done = true;  /* Mark as auto-initialized */
