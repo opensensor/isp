@@ -120,7 +120,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     
     /* Set up sensor attributes with defaults */
     memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-    vic_dev->sensor_attr.dbus_type = 2; /* Default to MIPI */
+    vic_dev->sensor_attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI interface (value 1) */
     vic_dev->sensor_attr.total_width = 1920;
     vic_dev->sensor_attr.total_height = 1080;
     vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
@@ -1553,12 +1553,12 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     memcpy(&protected_sensor_attr, sensor_attr, sizeof(protected_sensor_attr));
 
     /* Force known good values for MIPI interface */
-    protected_sensor_attr.dbus_type = 2;  /* MIPI */
+    protected_sensor_attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;  /* MIPI (value 1) */
     protected_sensor_attr.data_type = 0x2b;  /* RAW10 */
 
     /* Use the protected copy */
     sensor_attr = &protected_sensor_attr;
-    interface_type = 2;  /* Force MIPI */
+    interface_type = TX_SENSOR_DATA_INTERFACE_MIPI;  /* Force MIPI (value 1) */
     sensor_format = 0x2b;  /* Force RAW10 */
 
     pr_info("*** RACE CONDITION FIX: Using protected sensor attributes - interface=%d, format=0x%x ***\n",

@@ -1069,7 +1069,7 @@ static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_i
     
     /* Store sensor attributes in CSI device */
     csi_dev->interface_type = sensor_attr->dbus_type;
-    csi_dev->lanes = (sensor_attr->dbus_type == 2) ? 2 : 1; /* MIPI uses 2 lanes, DVP uses 1 */
+    csi_dev->lanes = (sensor_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) ? 2 : 1; /* MIPI uses 2 lanes, DVP uses 1 */
     
     return 0;
 }
@@ -3385,7 +3385,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         sensor->video.attr->chip_id = 0x2053;
                         sensor->video.attr->total_width = 1920;
                         sensor->video.attr->total_height = 1080;
-                        sensor->video.attr->dbus_type = 2; // MIPI interface (fixed from DVP)
+                        sensor->video.attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; // MIPI interface (value 1)
                         sensor->video.attr->integration_time = 1000;
                         sensor->video.attr->max_again = 0x40000;
                         sensor->video.attr->name = sensor_name; /* Safe pointer assignment */
