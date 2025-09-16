@@ -2650,6 +2650,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("*** VIC STATE: state=%d, stream_state=%d, active_buffer_count=%d ***\n",
                     vic->state, vic->stream_state, vic->active_buffer_count);
 
+            /* CRITICAL: Call tx_isp_vic_start FIRST to initialize VIC hardware */
+            extern int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);
+            ret = tx_isp_vic_start(vic);
+            if (ret != 0) {
+                pr_err("Channel %d: Failed to start VIC hardware: %d\n", channel, ret);
+                state->streaming = false;
+                return ret;
+            }
+            pr_info("*** CHANNEL %d STREAMON: VIC hardware started successfully ***\n", channel);
+
             /* NOW call Binary Ninja ispvic_frame_channel_s_stream implementation */
             extern int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
             ret = ispvic_frame_channel_s_stream(vic, 1);
