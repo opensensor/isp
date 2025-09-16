@@ -2557,6 +2557,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** CRITICAL: RE-ENABLING VIC INTERRUPT REGISTERS (Binary Ninja values) ***\n");
                 pr_info("*** BEFORE: VIC_IMR(0x04)=0x%x, VIC_IMCR(0x0c)=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
 
+                /* CRITICAL FIX: Clear interrupt masks first, then set correct values */
+                writel(0xffffffff, vic_regs + 0x08);  /* VIC_IMSR - Clear all interrupt masks first */
+                wmb();
+
                 /* Enable VIC interrupts using the original Binary Ninja reference driver values */
                 writel(0x07800438, vic_regs + 0x04);  /* VIC IMR - interrupt mask register */
                 writel(0xb5742249, vic_regs + 0x0c);  /* VIC IMCR - interrupt control register */
