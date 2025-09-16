@@ -2883,8 +2883,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         iowrite32((actual_width << 16) | actual_height,
                                  vic_dev->vic_regs + 0x4);
                         
-                        // MIPI configuration register 0x10: Format-specific value
-                        iowrite32(0x40000, vic_dev->vic_regs + 0x10);
+                        // CRITICAL FIX: REMOVED conflicting CSI PHY write - would corrupt CSI Lane Configuration!
+                        pr_info("*** CRITICAL: SKIPPING 0x40000 write to offset 0x10 - would overwrite CSI PHY! ***\n");
                         
                         // CRITICAL FIX: Register 0x18 is a TIMING parameter (0xf00), NOT a width register!
                         // DO NOT overwrite register 0x18 with sensor width - this causes control limit errors
