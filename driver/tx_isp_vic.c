@@ -2541,6 +2541,15 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* CRITICAL FIX: Enable VIC interrupts after CSI configuration is complete */
                 /* CSI PHY is now properly configured, VIC can safely process interrupts */
                 vic_start_ok = 1;  /* Enable interrupts - CSI PHY is stable */
+
+                /* CRITICAL: RE-ENABLE VIC INTERRUPT REGISTERS - they were cleared during initialization! */
+                pr_info("*** CRITICAL: RE-ENABLING VIC INTERRUPT REGISTERS (0x1e0, 0x1e8) ***\n");
+                writel(0xffffffff, vic_regs + 0x1e0); /* Enable all VIC interrupts */
+                writel(0x0, vic_regs + 0x1e8);        /* Clear interrupt masks */
+                writel(0xF, vic_regs + 0x1e4);        /* Enable MDMA interrupts */
+                writel(0x0, vic_regs + 0x1ec);        /* Clear MDMA masks */
+                wmb();
+
                 pr_info("*** CRITICAL: VIC INTERRUPTS ENABLED - CSI PHY configured and stable! ***\n");
                 pr_info("*** VIC hardware can now safely generate continuous interrupts ***\n");
 
