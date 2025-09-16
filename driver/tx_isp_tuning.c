@@ -3562,18 +3562,12 @@ static uint32_t *sdns_std_thr2_array_now = NULL;
 static uint32_t *sdns_grad_zx_thres_array_now = NULL;
 static uint32_t *sdns_grad_zy_thres_array_now = NULL;
 static uint32_t *sdns_std_thr1_array_now = NULL;
-static uint32_t *sdns_h_s_1_array_now = NULL;
 static uint32_t *sdns_sharpen_tt_opt_array_now = NULL;
 static uint32_t *sdns_ave_fliter_now = NULL;
 static uint32_t *sdns_sp_uu_thres_array_now = NULL;
 static uint32_t *sdns_sp_uu_stren_array_now = NULL;
 static uint32_t *sdns_sp_mv_uu_thres_array_now = NULL;
 static uint32_t *sdns_sp_mv_uu_stren_array_now = NULL;
-static uint32_t *sdns_ave_thres_array_now = NULL;
-
-/* SDNS state variables - Binary Ninja reference */
-static uint32_t data_9a9c4 = 0xFFFFFFFF;  /* SDNS state cache */
-static int sdns_wdr_en = 0;
 
 /* tiziano_sdns_params_refresh - Refresh SDNS parameters */
 static void tiziano_sdns_params_refresh(void)
@@ -3721,7 +3715,7 @@ static uint32_t mdns_c_false_edg_thres1[16] = {0x2, 0x4, 0x6, 0x8, 0xa, 0xc, 0xe
 static uint32_t mdns_y_ass_wei_adj_value1_wdr[16] = {0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38, 0x3c, 0x40, 0x44};
 static uint32_t mdns_c_false_edg_thres1_wdr[16] = {0x4, 0x6, 0x8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e, 0x20, 0x22};
 
-static int mdns_wdr_en = 0;
+
 
 /* tiziano_mdns_init - MDNS initialization */
 int tiziano_mdns_init(uint32_t width, uint32_t height)
