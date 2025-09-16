@@ -4618,29 +4618,7 @@ EXPORT_SYMBOL(tisp_code_destroy_tuning_node);
 
 /* Implementation of tisp_s_* functions based on Binary Ninja decompilation */
 
-/* system_reg_read - Binary Ninja EXACT implementation */
-static uint32_t system_reg_read(uint32_t offset)
-{
-    /* Binary Ninja: return *(*(mdns_y_pspa_cur_bi_wei0_array + 0xb8) + arg1) */
-    void **base_ptr = (void **)(mdns_y_pspa_cur_bi_wei0_array + 0xb8);
-    if (!base_ptr || !*base_ptr) {
-        pr_err("system_reg_read: Invalid base pointer\n");
-        return 0;
-    }
-    return readl((void __iomem *)*base_ptr + offset);
-}
 
-/* system_reg_write - Binary Ninja EXACT implementation */
-static void system_reg_write(uint32_t offset, uint32_t value)
-{
-    /* Binary Ninja: *(*(mdns_y_pspa_cur_bi_wei0_array + 0xb8) + arg1) = arg2 */
-    void **base_ptr = (void **)(mdns_y_pspa_cur_bi_wei0_array + 0xb8);
-    if (!base_ptr || !*base_ptr) {
-        pr_err("system_reg_write: Invalid base pointer\n");
-        return;
-    }
-    writel(value, (void __iomem *)*base_ptr + offset);
-}
 
 /* tisp_s_sdns_ratio - 2D spatial noise suppression ratio - Binary Ninja EXACT implementation */
 static int tisp_s_sdns_ratio(int ratio)
@@ -4713,7 +4691,7 @@ static int tisp_s_sdns_ratio(int ratio)
     }
 
     /* Refresh all SDNS registers */
-    return tisp_sdns_all_reg_refresh(data_9a9c4 + 0x200);
+    return tisp_sdns_all_reg_refresh();
 }
 
 /* tisp_s_2dns_ratio - 2D noise suppression ratio */
