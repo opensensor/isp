@@ -1412,7 +1412,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 /* tx_isp_vic_progress - Implementation that matches trace register values from reference */
 int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
 {
-    void __iomem *vic_regs;
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type, sensor_format;
     u32 timeout = 10000;
