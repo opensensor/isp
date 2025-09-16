@@ -174,32 +174,33 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 
-/* VIC interrupt restoration function - using working registers */
+/* VIC interrupt restoration function - using correct VIC base */
 void tx_isp_vic_restore_interrupts(void)
 {
     extern struct tx_isp_dev *ourISPdev;
-    struct tx_isp_vic_device *vic_dev;
-    void __iomem *vic_regs;
+    void __iomem *vic_interrupt_base;
 
-    if (!ourISPdev || !ourISPdev->vic_dev) {
-        return;
-    }
-
-    vic_dev = ourISPdev->vic_dev;
-    vic_regs = vic_dev->vic_regs;
-
-    if (!vic_regs || vic_start_ok != 1) {
+    if (!ourISPdev || !ourISPdev->vic_dev || vic_start_ok != 1) {
         return; /* VIC not active */
     }
 
-    pr_info("*** VIC INTERRUPT RESTORE: Restoring working VIC interrupt registers ***\n");
+    pr_info("*** VIC INTERRUPT RESTORE: Restoring VIC interrupt registers at correct base ***\n");
 
-    /* Restore working VIC interrupt register values */
-    writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-    writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
+    /* Use correct VIC base address for interrupt control */
+    vic_interrupt_base = ioremap(0x10023000, 0x1000);
+    if (!vic_interrupt_base) {
+        pr_err("*** VIC INTERRUPT RESTORE: Failed to map VIC interrupt base ***\n");
+        return;
+    }
+
+    /* Restore VIC interrupt register values using correct base */
+    writel(0xffffffff, vic_interrupt_base + 0x1e0);  /* Enable all VIC interrupts */
+    writel(0x0, vic_interrupt_base + 0x1e8);         /* Clear interrupt masks */
     wmb();
 
-    pr_info("*** VIC INTERRUPT RESTORE: Working registers restored ***\n");
+    pr_info("*** VIC INTERRUPT RESTORE: Registers restored at correct base 0x10023000 ***\n");
+
+    iounmap(vic_interrupt_base);
 }
 EXPORT_SYMBOL(tx_isp_vic_restore_interrupts);
 
