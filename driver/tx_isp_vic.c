@@ -2580,11 +2580,20 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x630, vic_regs + 0x14);
                 wmb();
                 
-                /* STEP 8: VIC initialization complete - VIC start will be triggered by STREAMON */
-                pr_info("*** STEP 8: VIC initialization complete - waiting for STREAMON to trigger VIC start ***\n");
-                /* CRITICAL: Do NOT call tx_isp_vic_start here - it should only be called during STREAMON */
-                /* CRITICAL: Do NOT call ispvic_frame_channel_s_stream here - it should only be called during STREAMON */
-                ret = 0;  /* Return success - VIC is ready for STREAMON */
+                /* STEP 8: VIC initialization complete - NOW trigger STREAMON to enable PIPO MDMA */
+                pr_info("*** STEP 8: VIC initialization complete - NOW triggering STREAMON to enable PIPO MDMA ***\n");
+
+                /* CRITICAL: Call ispvic_frame_channel_s_stream to enable VIC PIPO MDMA */
+                /* This is what the reference driver does - it calls vic_pipo_mdma_enable during streaming */
+                pr_info("*** CRITICAL: Calling ispvic_frame_channel_s_stream to enable VIC PIPO MDMA ***\n");
+                int stream_ret = ispvic_frame_channel_s_stream(vic_dev, 1);
+                if (stream_ret == 0) {
+                    pr_info("*** SUCCESS: VIC PIPO MDMA enabled - VIC hardware ready for CSI connection ***\n");
+                } else {
+                    pr_err("*** ERROR: ispvic_frame_channel_s_stream failed: %d ***\n", stream_ret);
+                }
+
+                ret = 0;  /* Return success - VIC is ready for CSI connection */
                 
                 /* CRITICAL FIX: Check VIC error status before CSI initialization */
                 pr_info("*** CRITICAL: Checking VIC error status before CSI initialization ***\n");
@@ -2608,18 +2617,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 if (ourISPdev && ourISPdev->csi_dev) {
                     struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
                     extern int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
-
-                    /* CRITICAL FIX: Ensure VIC is fully configured before CSI initialization */
-                    pr_info("*** SYNC FIX: Ensuring VIC-CSI synchronization before CSI init ***\n");
-
-                    /* Set VIC to proper streaming state before CSI connects */
-                    if (vic_dev->state != 4) {
-                        vic_dev->state = 4; /* VIC streaming state */
-                        pr_info("*** SYNC FIX: VIC state set to streaming (4) ***\n");
-                    }
-
-                    /* Small delay to ensure VIC hardware is ready */
-                    udelay(100); /* 100 microseconds */
 
                     pr_info("*** Calling CSI initialization for MIPI interface ***\n");
                     int csi_result = csi_core_ops_init(&csi_dev->sd, 1);
