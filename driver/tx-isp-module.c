@@ -1672,6 +1672,12 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             /* Binary Ninja: **($s0 + 0xb8) = 1 */
             writel(1, vic_regs + 0x0);
             wmb();
+
+            /* CRITICAL FIX: Restore vic_start_ok state after error recovery */
+            if (saved_vic_start_ok == 1) {
+                vic_start_ok = 1;
+                pr_info("*** ERROR RECOVERY: Restored vic_start_ok=1 after recovery ***\n");
+            }
         }
 
         /* Wake up frame channels for all interrupt types */

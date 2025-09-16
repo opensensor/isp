@@ -2581,6 +2581,15 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     vic_start_ok = 1;  /* NOW safe to enable interrupt processing */
                     pr_info("*** INTERRUPTS RE-ENABLED AFTER COMPLETE INITIALIZATION ***\n");
 
+                    /* CRITICAL FIX: Ensure VIC configuration is robust against CSI PHY register changes */
+                    /* The CSI PHY register updates at delta 170ms can cause control limit errors */
+                    /* Pre-configure VIC to handle these changes gracefully */
+                    u32 vic_ctrl = readl(vic_regs + 0xc);
+                    vic_ctrl |= 0x8;  /* Enable robust mode to handle timing changes */
+                    writel(vic_ctrl, vic_regs + 0xc);
+                    wmb();
+                    pr_info("*** VIC ROBUST MODE: Enabled to handle CSI PHY timing changes ***\n");
+
                     pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
                     return ret;
                 }
