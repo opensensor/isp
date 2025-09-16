@@ -3383,13 +3383,16 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     /* SAFE INITIALIZATION: Set up basic sensor attributes for GC2053 */
                     if (strncmp(sensor_name, "gc2053", 6) == 0) {
                         sensor->video.attr->chip_id = 0x2053;
-                        sensor->video.attr->total_width = 1920;
-                        sensor->video.attr->total_height = 1080;
+                        /* CRITICAL FIX: Use ACTUAL sensor output dimensions, not total dimensions */
+                        /* VIC must be configured to match what sensor actually outputs */
+                        sensor->video.attr->total_width = 1920;   /* Actual output width */
+                        sensor->video.attr->total_height = 1080;  /* Actual output height */
                         sensor->video.attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; // MIPI interface (value 1)
                         sensor->video.attr->integration_time = 1000;
                         sensor->video.attr->max_again = 0x40000;
                         sensor->video.attr->name = sensor_name; /* Safe pointer assignment */
-                        pr_info("*** GC2053 SENSOR ATTRIBUTES CONFIGURED (MIPI interface) ***\n");
+                        pr_info("*** GC2053 SENSOR ATTRIBUTES CONFIGURED: %dx%d output (MIPI interface) ***\n",
+                                sensor->video.attr->total_width, sensor->video.attr->total_height);
                     }
                     
                     /* SAFE INITIALIZATION: Initialize subdev structure */

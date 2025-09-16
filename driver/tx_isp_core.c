@@ -572,28 +572,26 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* check_and_restore_csi_phy_registers(); */
         pr_info("*** ISP CORE: CSI PHY restoration DISABLED to prevent VIC frame disruption ***\n");
 
-        /* CRITICAL FIX: DISABLE frame sync work to prevent CSI PHY register updates */
-        /* The frame sync work triggers sensor I2C communication which causes CSI PHY register changes */
-        /* These register changes at delta 90ms/170ms disrupt VIC interrupts */
-        pr_info("*** ISP CORE: Frame sync interrupt - DISABLING work to prevent CSI PHY disruption ***\n");
-        pr_info("*** ISP CORE: Frame sync work DISABLED to prevent VIC interrupt loss ***\n");
+        /* Binary Ninja: private_schedule_work(&fs_work) */
+        /* CRITICAL: This triggers sensor I2C communication */
+        pr_info("*** ISP CORE: Frame sync interrupt - checking workqueue status ***\n");
+        pr_info("*** ISP CORE: fs_workqueue = %p, fs_work = %p ***\n", fs_workqueue, &fs_work);
 
-        /* DISABLED: Frame sync work scheduling that causes CSI PHY register updates */
-        /* if (fs_workqueue) { */
-        /*     pr_info("*** ISP CORE: Queueing frame sync work on dedicated workqueue ***\n"); */
-        /*     if (queue_work(fs_workqueue, &fs_work)) { */
-        /*         pr_info("*** ISP CORE: Work queued successfully ***\n"); */
-        /*     } else { */
-        /*         pr_warn("*** ISP CORE: Work was already queued ***\n"); */
-        /*     } */
-        /* } else { */
-        /*     pr_warn("*** ISP CORE: No dedicated workqueue, using system workqueue ***\n"); */
-        /*     if (schedule_work(&fs_work)) { */
-        /*         pr_info("*** ISP CORE: Work scheduled on system workqueue successfully ***\n"); */
-        /*     } else { */
-        /*         pr_warn("*** ISP CORE: Work was already scheduled on system workqueue ***\n"); */
-        /*     } */
-        /* } */
+        if (fs_workqueue) {
+            pr_info("*** ISP CORE: Queueing frame sync work on dedicated workqueue ***\n");
+            if (queue_work(fs_workqueue, &fs_work)) {
+                pr_info("*** ISP CORE: Work queued successfully ***\n");
+            } else {
+                pr_warn("*** ISP CORE: Work was already queued ***\n");
+            }
+        } else {
+            pr_warn("*** ISP CORE: No dedicated workqueue, using system workqueue ***\n");
+            if (schedule_work(&fs_work)) {
+                pr_info("*** ISP CORE: Work scheduled on system workqueue successfully ***\n");
+            } else {
+                pr_warn("*** ISP CORE: Work was already scheduled on system workqueue ***\n");
+            }
+        }
         pr_info("*** ISP CORE: Frame sync work scheduled - should trigger sensor I2C ***\n");
 
         /* Binary Ninja: Frame timing measurement */

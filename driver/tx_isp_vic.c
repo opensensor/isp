@@ -92,9 +92,9 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
         isp_dev->vic_regs = vic_dev->vic_regs;
     }
     
-    /* Initialize VIC device dimensions - will be updated with sensor dimensions later */
-    vic_dev->width = 1920;  /* Default HD width - will be overridden */
-    vic_dev->height = 1080; /* Default HD height - will be overridden */
+    /* Initialize VIC device dimensions - CRITICAL: Use actual sensor output dimensions */
+    vic_dev->width = 1920;  /* GC2053 actual output width */
+    vic_dev->height = 1080; /* GC2053 actual output height */
     
     /* Set up VIC subdev structure */
     memset(&vic_dev->sd, 0, sizeof(vic_dev->sd));
@@ -2126,12 +2126,13 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         pr_info("*** FALLBACK: Using vic_dev dimensions %dx%d ***\n", width, height);
     }
     
-    /* CRITICAL: Ensure we have valid dimensions - DO NOT override valid sensor dimensions */
+    /* CRITICAL: Ensure we have valid dimensions - USE ACTUAL SENSOR OUTPUT DIMENSIONS */
     if (width == 0 || height == 0) {
         /* Only override if dimensions are actually invalid (zero) */
-        width = 2200;  /* Correct sensor total width */
-        height = 1418; /* Correct sensor total height */
-        pr_info("*** DIMENSION FIX: Using correct sensor total dimensions %dx%d ***\n", width, height);
+        width = 1920;  /* ACTUAL sensor output width (not total width) */
+        height = 1080; /* ACTUAL sensor output height (not total height) */
+        pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", width, height);
+        pr_info("*** CRITICAL: VIC must match sensor OUTPUT, not sensor TOTAL dimensions ***\n");
 
         /* Update vic_dev to prevent future mismatches */
         vic_dev->width = width;
