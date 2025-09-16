@@ -2532,7 +2532,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 /* STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection */
                 pr_info("*** STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection ***\n");
-                void __iomem *csi_phy_base = csi_base;  /* CSI PHY base for detailed config */
+                /* Reuse csi_phy_base from earlier declaration */
                 
                 /* Write the exact ISP isp-csi sequence from the working trace */
                 writel(0x7d, csi_phy_base + 0x0);
