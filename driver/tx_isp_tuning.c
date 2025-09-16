@@ -5011,7 +5011,7 @@ EXPORT_SYMBOL(tisp_code_destroy_tuning_node);
 
 
 /* tisp_s_sdns_ratio - 2D spatial noise suppression ratio - Binary Ninja EXACT implementation */
-static int tisp_s_sdns_ratio(int ratio)
+int tisp_s_sdns_ratio(int ratio)
 {
     int i;
     uint32_t temp_val;
