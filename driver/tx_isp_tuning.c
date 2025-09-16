@@ -1816,13 +1816,19 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             pr_debug("TUNING: AWB/CCM updates completed: %d\n", awb_ret);
 
                             /* 3. Gamma Correction Updates */
+                            pr_info("*** TUNING DEBUG: Starting Gamma updates ***");
                             extern int tiziano_gamma_lut_parameter(void);
+                            pr_info("*** TUNING DEBUG: About to call tiziano_gamma_lut_parameter ***");
                             int gamma_ret = tiziano_gamma_lut_parameter();
+                            pr_info("*** TUNING DEBUG: tiziano_gamma_lut_parameter completed: %d ***", gamma_ret);
                             pr_debug("TUNING: Gamma LUT update completed: %d\n", gamma_ret);
 
                             /* 4. LSC (Lens Shading Correction) Updates */
+                            pr_info("*** TUNING DEBUG: Starting LSC updates ***");
                             extern int tisp_lsc_write_lut_datas(void);
+                            pr_info("*** TUNING DEBUG: About to call tisp_lsc_write_lut_datas ***");
                             int lsc_ret = tisp_lsc_write_lut_datas();
+                            pr_info("*** TUNING DEBUG: tisp_lsc_write_lut_datas completed: %d ***", lsc_ret);
                             pr_debug("TUNING: LSC update completed: %d\n", lsc_ret);
 
                             /* 5. DPC (Dead Pixel Correction) Updates */
