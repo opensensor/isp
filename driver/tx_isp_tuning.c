@@ -1755,19 +1755,26 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                             /* Old CCM call removed - now using comprehensive tuning below */
 
-                            /* ===== COMPREHENSIVE ISP TUNING OPERATIONS - Binary Ninja Reference ===== */
+                            /* ===== COMPREHENSIVE ISP TUNING OPERATIONS - SAFE Implementation ===== */
                             pr_info("*** COMPREHENSIVE TUNING: Performing ALL ISP pipeline updates (cycle %d) ***\n", tuning_cycle_count);
 
-                            /* 1. AE (Auto Exposure) Updates */
+                            /* SAFETY: Check if device is properly initialized before proceeding */
+                            if (!dev || !dev->core_regs) {
+                                pr_err("TUNING: Device not properly initialized - skipping comprehensive tuning\n");
+                                goto tuning_complete;
+                            }
+
+                            /* 1. AE (Auto Exposure) Updates - WITH NULL CHECKS */
                             extern int tisp_tgain_update(void);
                             extern int tisp_again_update(void);
                             extern int tisp_ev_update(void);
                             extern int tisp_ae_ir_update(void);
 
-                            int ae_ret = tisp_tgain_update();
-                            if (ae_ret == 0) ae_ret = tisp_again_update();
-                            if (ae_ret == 0) ae_ret = tisp_ev_update();
-                            if (ae_ret == 0) ae_ret = tisp_ae_ir_update();
+                            int ae_ret = 0;
+                            if (tisp_tgain_update) ae_ret = tisp_tgain_update();
+                            if (ae_ret == 0 && tisp_again_update) ae_ret = tisp_again_update();
+                            if (ae_ret == 0 && tisp_ev_update) ae_ret = tisp_ev_update();
+                            if (ae_ret == 0 && tisp_ae_ir_update) ae_ret = tisp_ae_ir_update();
                             pr_debug("TUNING: AE updates completed: %d\n", ae_ret);
 
                             /* 2. AWB (Auto White Balance) Updates */
