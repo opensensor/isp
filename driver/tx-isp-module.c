@@ -2886,8 +2886,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         // MIPI configuration register 0x10: Format-specific value
                         iowrite32(0x40000, vic_dev->vic_regs + 0x10);
                         
-                        // MIPI stride configuration register 0x18 - use sensor width
-                        iowrite32(actual_width, vic_dev->vic_regs + 0x18);
+                        // CRITICAL FIX: Register 0x18 is a TIMING parameter (0xf00), NOT a width register!
+                        // DO NOT overwrite register 0x18 with sensor width - this causes control limit errors
+                        // iowrite32(actual_width, vic_dev->vic_regs + 0x18);  // REMOVED - corrupts timing
+                        pr_info("*** CRITICAL: Skipping register 0x18 write - preserving timing parameter 0xf00 ***\n");
                         
                         // DMA buffer configuration registers (from reference)
                         iowrite32(0x100010, vic_dev->vic_regs + 0x1a4);  // DMA config
