@@ -2031,8 +2031,8 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		memcpy((void *) (&(sensor_attr.mipi)), (void *) (&sensor_mipi), sizeof(sensor_mipi));
 		sensor_attr.max_integration_time_native = 0x465 - 8;
 		sensor_attr.integration_time_limit = 0x465 - 8;
-		sensor_attr.total_width = 0x44c * 2;
-		sensor_attr.total_height = 0x465;
+		sensor_attr.total_width = 1920;   /* ACTUAL sensor output width */
+		sensor_attr.total_height = 1080;  /* ACTUAL sensor output height */
 		sensor_attr.max_integration_time = 0x465 - 8;
 		sensor_attr.one_line_expr_in_us = 11;
 		vts0 = 0x04;
