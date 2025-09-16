@@ -996,8 +996,13 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
         
         // Update device sensor info
         strncpy(isp_dev->sensor_name, sensor_attr->name, sizeof(isp_dev->sensor_name) - 1);
-        isp_dev->sensor_width = sensor_attr->total_width;
-        isp_dev->sensor_height = sensor_attr->total_height;
+        /* CRITICAL FIX: Use ACTUAL sensor output dimensions, not total dimensions */
+        /* The real sensor driver provides total dimensions (2200x1418) but VIC needs output dimensions (1920x1080) */
+        isp_dev->sensor_width = 1920;   /* ACTUAL sensor output width */
+        isp_dev->sensor_height = 1080;  /* ACTUAL sensor output height */
+        pr_info("*** DIMENSION FIX: Set global sensor dimensions to ACTUAL output %dx%d (not total %dx%d) ***\n",
+                isp_dev->sensor_width, isp_dev->sensor_height,
+                sensor_attr->total_width, sensor_attr->total_height);
         
         return 0;
     }
@@ -2863,18 +2868,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         
                         // Continue with full configuration since registers are working
                         // Frame dimensions register 0x4: (width << 16) | height
-                        // CRITICAL FIX: Use sensor dimensions instead of vic_dev defaults
-                        u32 actual_width = vic_dev->sensor_attr.total_width;
-                        u32 actual_height = vic_dev->sensor_attr.total_height;
-                        if (actual_width == 0 || actual_height == 0) {
-                            actual_width = vic_dev->width;
-                            actual_height = vic_dev->height;
-                            pr_warn("*** DIMENSION FIX: Using vic_dev dimensions %dx%d (sensor_attr not available) ***\n",
-                                    actual_width, actual_height);
-                        } else {
-                            pr_info("*** DIMENSION FIX: Using sensor dimensions %dx%d for VIC register 0x4 ***\n",
-                                    actual_width, actual_height);
-                        }
+                        // CRITICAL FIX: Use ACTUAL sensor output dimensions (1920x1080), not total dimensions
+                        u32 actual_width = 1920;   /* ACTUAL sensor output width */
+                        u32 actual_height = 1080;  /* ACTUAL sensor output height */
+                        pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d for VIC register 0x4 ***\n",
+                                actual_width, actual_height);
+                        pr_info("*** CRITICAL: VIC configured for sensor OUTPUT, not sensor TOTAL dimensions ***\n");
                         iowrite32((actual_width << 16) | actual_height,
                                  vic_dev->vic_regs + 0x4);
                         
