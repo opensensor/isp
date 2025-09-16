@@ -2876,7 +2876,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         
                         // Continue with full configuration since registers are working
                         // Frame dimensions register 0x4: (width << 16) | height
-                        iowrite32((vic_dev->width << 16) | vic_dev->height,
+                        // CRITICAL FIX: Use sensor dimensions instead of vic_dev defaults
+                        iowrite32((sensor_width << 16) | sensor_height,
                                  vic_dev->vic_regs + 0x4);
                         
                         // MIPI configuration register 0x10: Format-specific value
