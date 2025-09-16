@@ -1504,8 +1504,10 @@ ISP isp-m0: [CSI PHY Config] write at offset 0x110: 0x80007000 -> 0x92217523 (de
     writel(0x10, vic_regs + 0x120);      /* was 0x0 -> 0x10 */
     wmb();
 
-    /* CRITICAL FIX: REMOVED conflicting CSI PHY Config updates from VIC code */
-    pr_info("*** VIC: SKIPPING CSI PHY Config updates - CSI module handles this! ***\n");
+    /* CSI PHY Config updates */
+    writel(0x2b, csi_base + 0x1d0);      /* was 0x1 -> 0x2b */
+    writel(0x60, csi_base + 0x250);      /* was 0x0 -> 0x60 */
+    wmb();
 
     /* More VIC updates */
     writel(0x300, vic_regs + 0x14);      /* was 0x330 -> 0x300 */
@@ -2355,6 +2357,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) ***\n");
                 /* Use the correct main_isp_base (0x13300000 = isp-m0) */
                 writel(0x54560031, main_isp_base + 0x0);
+                writel(0x7800438, main_isp_base + 0x4);
                 /* CRITICAL FIX: Use sensor dimensions instead of hardcoded 1920x1080 */
                 writel((sensor_width << 16) | sensor_height, main_isp_base + 0x4);
                 writel(0x1, main_isp_base + 0x8);
