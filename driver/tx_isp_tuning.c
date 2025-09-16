@@ -1762,9 +1762,22 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                             /* 2. CCM (Color Correction Matrix) update */
                             extern int jz_isp_ccm(void);
-                            int ccm_ret = jz_isp_ccm();  /* Update CCM based on current conditions */
+
+                            /* Update CCM based on current CT and EV conditions */
+                            /* jz_isp_ccm() internally handles parameter refresh and CT/EV processing */
+                            int ccm_ret = jz_isp_ccm();
                             if (ccm_ret != 0) {
                                 pr_debug("TUNING: CCM update returned %d\n", ccm_ret);
+                            }
+
+                            /* 3. Additional tuning operations to maintain ISP pipeline */
+                            extern int tisp_s_mdns_ratio(int ratio);
+                            extern int tisp_ae_update_zone_data(uint32_t *new_zone_data, size_t data_size);
+
+                            /* Update MDNS (Motion Detection Noise Suppression) */
+                            int mdns_ret = tisp_s_mdns_ratio(128);  /* Default ratio */
+                            if (mdns_ret != 0) {
+                                pr_debug("TUNING: MDNS update returned %d\n", mdns_ret);
                             }
 
                             /* 3. Basic ISP register refresh to maintain CSI PHY timing */
@@ -1776,7 +1789,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                                 wmb();
                             }
 
-                            pr_debug("TUNING: Cycle %d operations completed\n", tuning_cycle_count);
+                            pr_debug("TUNING: Cycle %d comprehensive operations completed\n", tuning_cycle_count);
                         }
                     }
                 }
@@ -3249,13 +3262,76 @@ static void jz_isp_ccm_para2reg(void *reg_data, void *param_data)
 }
 
 /* tiziano_ccm_params_refresh - Refresh CCM parameters */
-static void tiziano_ccm_params_refresh(void)
+void tiziano_ccm_params_refresh(void)
 {
     pr_debug("tiziano_ccm_params_refresh: Refreshing CCM parameters\n");
-    
+
     /* Update CCM parameters based on current conditions */
     data_c52ec = data_9a454 >> 10;  /* Update EV cache */
     data_c52f4 = data_9a450;        /* Update CT cache */
+}
+
+/* tisp_ccm_ct_update - Update CCM based on color temperature */
+int tisp_ccm_ct_update(void)
+{
+    pr_debug("tisp_ccm_ct_update: Updating CCM for color temperature changes\n");
+
+    /* Get current color temperature from AWB */
+    int32_t current_ct = jz_isp_ccm_parameter_convert();
+
+    /* Check if CT has changed significantly */
+    uint32_t ct_diff = (data_c52f4 >= current_ct) ?
+                      (data_c52f4 - current_ct) : (current_ct - data_c52f4);
+
+    if (ct_diff > data_c52f8) {  /* CT threshold check */
+        pr_debug("tisp_ccm_ct_update: Significant CT change detected (%d -> %d)\n",
+                 data_c52f4, current_ct);
+
+        /* Update CT cache and trigger CCM interpolation */
+        data_c52f4 = current_ct;
+        tiziano_ct_ccm_interpolation(current_ct, data_c52f8);
+        ccm_real.real = 1;  /* Mark for hardware update */
+
+        return 1;  /* CT updated */
+    }
+
+    return 0;  /* No CT update needed */
+}
+
+/* tisp_ccm_ev_update - Update CCM based on exposure value */
+int tisp_ccm_ev_update(void)
+{
+    pr_debug("tisp_ccm_ev_update: Updating CCM for exposure value changes\n");
+
+    /* Get current EV value */
+    uint32_t current_ev = data_9a454 >> 10;
+
+    /* Check if EV has changed significantly */
+    uint32_t ev_diff = (data_c52ec >= current_ev) ?
+                      (data_c52ec - current_ev) : (current_ev - data_c52ec);
+
+    if (ev_diff > data_c52f0) {  /* EV threshold check */
+        pr_debug("tisp_ccm_ev_update: Significant EV change detected (%u -> %u)\n",
+                 data_c52ec, current_ev);
+
+        /* Update EV cache and trigger saturation adjustment */
+        data_c52ec = current_ev;
+
+        /* Adjust saturation based on EV - higher EV = more saturation */
+        if (current_ev > 0x2000) {
+            data_c52fc = 0x120;  /* High saturation for bright scenes */
+        } else if (current_ev < 0x800) {
+            data_c52fc = 0xE0;   /* Lower saturation for dark scenes */
+        } else {
+            data_c52fc = 0x100;  /* Normal saturation */
+        }
+
+        ccm_real.real = 1;  /* Mark for hardware update */
+
+        return 1;  /* EV updated */
+    }
+
+    return 0;  /* No EV update needed */
 }
 
 /* jz_isp_ccm - Binary Ninja EXACT implementation */
@@ -4483,6 +4559,9 @@ EXPORT_SYMBOL(tiziano_init_all_pipeline_components);
 /* Export all the tiziano pipeline functions */
 EXPORT_SYMBOL(tiziano_ccm_init);
 EXPORT_SYMBOL(jz_isp_ccm);
+EXPORT_SYMBOL(tiziano_ccm_params_refresh);
+EXPORT_SYMBOL(tisp_ccm_ct_update);
+EXPORT_SYMBOL(tisp_ccm_ev_update);
 EXPORT_SYMBOL(tisp_gb_init);
 EXPORT_SYMBOL(tiziano_sdns_init);
 EXPORT_SYMBOL(tisp_dmsc_wdr_en);
