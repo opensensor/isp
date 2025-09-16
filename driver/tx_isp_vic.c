@@ -2542,8 +2542,21 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* CSI PHY is now properly configured, VIC can safely process interrupts */
                 vic_start_ok = 1;  /* Enable interrupts - CSI PHY is stable */
 
-                /* CRITICAL: RE-ENABLE VIC INTERRUPT REGISTERS - they were cleared during initialization! */
-                pr_info("*** CRITICAL: RE-ENABLING VIC INTERRUPT REGISTERS (0x1e0, 0x1e8) ***\n");
+                pr_info("*** CRITICAL: VIC INTERRUPTS ENABLED - CSI PHY configured and stable! ***\n");
+                pr_info("*** VIC hardware can now safely generate continuous interrupts ***\n");
+
+                /* CRITICAL FIX: Ensure VIC configuration is robust against CSI PHY register changes */
+                /* The CSI PHY register updates at delta 170ms can cause control limit errors */
+                /* Pre-configure VIC to handle these changes gracefully */
+                u32 vic_ctrl = readl(vic_regs + 0xc);
+                vic_ctrl |= 0x8;  /* Enable robust mode to handle timing changes */
+                writel(vic_ctrl, vic_regs + 0xc);
+                wmb();
+                pr_info("*** VIC ROBUST MODE: Enabled to handle CSI PHY timing changes ***\n");
+
+                /* CRITICAL: NOW RE-ENABLE VIC INTERRUPT REGISTERS - AFTER CSI Lane Configuration! */
+                pr_info("*** CRITICAL: RE-ENABLING VIC INTERRUPT REGISTERS AFTER CSI LANE CONFIG ***\n");
+                pr_info("*** CSI Lane Config overwrote VIC interrupt registers - restoring them now ***\n");
                 pr_info("*** BEFORE: 0x1e0=0x%x, 0x1e8=0x%x ***\n", readl(vic_regs + 0x1e0), readl(vic_regs + 0x1e8));
 
                 writel(0xffffffff, vic_regs + 0x1e0); /* Enable all VIC interrupts */
@@ -2560,19 +2573,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_err("*** Something is immediately overwriting VIC interrupt registers! ***\n");
                 } else {
                     pr_info("*** SUCCESS: VIC interrupt registers enabled properly! ***\n");
+                    pr_info("*** VIC should now generate continuous frame completion interrupts! ***\n");
                 }
-
-                pr_info("*** CRITICAL: VIC INTERRUPTS ENABLED - CSI PHY configured and stable! ***\n");
-                pr_info("*** VIC hardware can now safely generate continuous interrupts ***\n");
-
-                /* CRITICAL FIX: Ensure VIC configuration is robust against CSI PHY register changes */
-                /* The CSI PHY register updates at delta 170ms can cause control limit errors */
-                /* Pre-configure VIC to handle these changes gracefully */
-                u32 vic_ctrl = readl(vic_regs + 0xc);
-                vic_ctrl |= 0x8;  /* Enable robust mode to handle timing changes */
-                writel(vic_ctrl, vic_regs + 0xc);
-                wmb();
-                pr_info("*** VIC ROBUST MODE: Enabled to handle CSI PHY timing changes ***\n");
 
                 pr_info("vic_core_s_stream: VIC streaming enabled successfully, state=%d\n", vic_dev->state);
                 return 0;  /* Always return success for streaming enable */
