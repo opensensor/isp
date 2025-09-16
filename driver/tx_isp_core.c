@@ -744,21 +744,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             wmb();
 
             pr_info("ISP CORE: Pipeline configuration reset after error\n");
-
-            /* CRITICAL FIX: Notify VIC that ISP pipeline was reset */
-            /* This prevents VIC from getting stuck in control limit error state */
-            if (vic_dev && vic_dev->vic_regs) {
-                pr_info("ISP CORE: Notifying VIC of pipeline reset to prevent control limit errors\n");
-
-                /* Brief VIC reset to re-sync with ISP pipeline */
-                writel(4, vic_dev->vic_regs + 0x0);  /* VIC reset */
-                wmb();
-                udelay(10);  /* Brief delay for reset */
-                writel(1, vic_dev->vic_regs + 0x0);  /* VIC restart */
-                wmb();
-
-                pr_info("ISP CORE: VIC re-synchronized with ISP pipeline\n");
-            }
         }
     }
 

@@ -1695,31 +1695,6 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             /* Binary Ninja: **($s0 + 0xb8) = 1 */
             writel(1, vic_regs + 0x0);
             wmb();
-
-            /* CRITICAL FIX: Re-synchronize VIC-ISP pipeline after control limit error */
-            if ((v1_7 & 0x200000) != 0) {
-                pr_info("*** VIC CONTROL LIMIT RECOVERY: Re-synchronizing VIC-ISP pipeline ***\n");
-
-                /* Re-enable ISP pipeline connection that may have been disrupted */
-                if (ourISPdev && ourISPdev->core_regs) {
-                    void __iomem *core = ourISPdev->core_regs;
-
-                    /* Re-configure ISP pipeline registers to restore VIC connection */
-                    writel(1, core + 0x800);     /* Re-enable ISP pipeline */
-                    writel(0x1c, core + 0x804);  /* Re-configure ISP routing */
-                    writel(8, core + 0x1c);      /* Re-set ISP control mode */
-                    wmb();
-
-                    pr_info("*** VIC CONTROL LIMIT RECOVERY: ISP pipeline re-configured ***\n");
-                }
-
-                /* Clear any pending VIC interrupts that may be stuck */
-                writel(0xffffffff, vic_regs + 0x1f0);  /* Clear interrupt status */
-                writel(0xffffffff, vic_regs + 0x1f4);  /* Clear interrupt status 2 */
-                wmb();
-
-                pr_info("*** VIC CONTROL LIMIT RECOVERY: VIC interrupts cleared ***\n");
-            }
         }
 
         /* Wake up frame channels for all interrupt types */
