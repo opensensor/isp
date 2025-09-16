@@ -739,46 +739,6 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     system_reg_write(0x9ac0, 0x200);
     system_reg_write(0x9ac8, 0x200);
     
-    /* *** CRITICAL: CSI PHY Control registers - THE MISSING PIECES! *** */
-    pr_info("*** WRITING CSI PHY CONTROL REGISTERS - THE MISSING HARDWARE INIT! ***\n");
-    
-    /* ISP M0 CSI PHY Control - from reference driver trace */
-    if (isp_dev->vic_regs) {
-        void __iomem *csi_phy_regs = isp_dev->vic_regs - 0xe0000;  /* CSI at ISP base */
-        
-        /* Reference driver CSI PHY initialization sequence */
-        writel(0x54560031, csi_phy_regs + 0x0);
-        /* CRITICAL FIX: Use dynamic sensor dimensions instead of hardcoded 1920x1080 */
-        writel(sensor_dimensions, csi_phy_regs + 0x4);
-        writel(0x1, csi_phy_regs + 0x8);
-        writel(0x80700008, csi_phy_regs + 0xc);
-        writel(0x1, csi_phy_regs + 0x28);
-        writel(0x400040, csi_phy_regs + 0x2c);
-        writel(0x1, csi_phy_regs + 0x90);
-        writel(0x1, csi_phy_regs + 0x94);
-        writel(0x30000, csi_phy_regs + 0x98);
-        writel(0x58050000, csi_phy_regs + 0xa8);
-        writel(0x58050000, csi_phy_regs + 0xac);
-        writel(0x40000, csi_phy_regs + 0xc4);
-        writel(0x400040, csi_phy_regs + 0xc8);
-        writel(0x100, csi_phy_regs + 0xcc);
-        writel(0xc, csi_phy_regs + 0xd4);
-        writel(0xffffff, csi_phy_regs + 0xd8);
-        writel(0x100, csi_phy_regs + 0xe0);
-        writel(0x400040, csi_phy_regs + 0xe4);
-        writel(0xff808000, csi_phy_regs + 0xf0);
-        wmb();
-        
-        pr_info("*** CSI PHY CONTROL REGISTERS WRITTEN - THIS WAS MISSING! ***\n");
-        
-        /* CSI PHY Config registers */
-        writel(0x80007000, csi_phy_regs + 0x110);
-        writel(0x777111, csi_phy_regs + 0x114);
-        wmb();
-        
-        pr_info("*** CSI PHY CONFIG REGISTERS WRITTEN ***\n");
-    }
-    
     /* Binary Ninja: sensor_init call - initialize sensor control structure */
     pr_info("*** CALLING sensor_init - INITIALIZING SENSOR CONTROL STRUCTURE ***\n");
     int sensor_init_result = sensor_init(isp_dev);

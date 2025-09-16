@@ -2652,16 +2652,16 @@ static int tiziano_gamma_lut_parameter(void)
     pr_info("tiziano_gamma_lut_parameter: Writing gamma LUT to registers\n");
     
     /* Binary Ninja: Loop from i=2 to 0x102, increment by 2 */
-    //for (int32_t i = 2; i < 0x102; i += 2) {
-    //    uint32_t val = (tiziano_gamma_lut_now[i] << 12) | tiziano_gamma_lut_now[i - 2];
+    for (int32_t i = 2; i < 0x102; i += 2) {
+        uint32_t val = (tiziano_gamma_lut_now[i] << 12) | tiziano_gamma_lut_now[i - 2];
         
         /* Write to three gamma channel registers - RGB */
-    //    writel(val, base_reg + (reg_base - 0x40000));           /* R channel */
-    //    writel(val, base_reg + (reg_base - 0x40000) + 0x8000);  /* G channel */
-    //    writel(val, base_reg + (reg_base - 0x40000) + 0x10000); /* B channel */
+        writel(val, base_reg + (reg_base - 0x40000));           /* R channel */
+        writel(val, base_reg + (reg_base - 0x40000) + 0x8000);  /* G channel */
+        writel(val, base_reg + (reg_base - 0x40000) + 0x10000); /* B channel */
         
-    //    reg_base += 4; /* Increment register address */
-    //}
+        reg_base += 4; /* Increment register address */
+    }
     
     iounmap(base_reg);
     pr_info("tiziano_gamma_lut_parameter: Gamma LUT written to hardware\n");
