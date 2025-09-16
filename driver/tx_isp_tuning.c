@@ -1755,21 +1755,40 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     /* CRITICAL FIX: Don't perform continuous tuning during VIC streaming */
                     /* This prevents CSI PHY timeouts that disrupt VIC interrupts */
                     extern uint32_t vic_start_ok;
-                            pr_info("*** CONTINUOUS TUNING: Performing CSI PHY and Core Control updates (cycle %d) ***\n",
-                                    tuning_cycle_count);
 
-                            /* CRITICAL: Implement actual tuning operations to prevent CSI PHY timeout */
-                            /* The empty implementation was causing CSI hardware to timeout and auto-transition */
+                    /* CRITICAL: Save CSI PHY register state before tuning operations */
+                    u32 saved_phy_0 = 0, saved_phy_c = 0, saved_phy_10 = 0, saved_phy_a0 = 0, saved_phy_b0 = 0;
+                    bool phy_protection_active = false;
 
-                            /* Old individual tuning calls removed - now using comprehensive tuning below */
+                    if (ourISPdev && ourISPdev->phy_base && vic_start_ok == 1) {
+                        /* Save critical CSI PHY registers that get corrupted during tuning */
+                        saved_phy_0 = readl(ourISPdev->phy_base + 0x0);
+                        saved_phy_c = readl(ourISPdev->phy_base + 0xc);
+                        saved_phy_10 = readl(ourISPdev->phy_base + 0x10);
+                        saved_phy_a0 = readl(ourISPdev->phy_base + 0xa0);
+                        saved_phy_b0 = readl(ourISPdev->phy_base + 0xb0);
+                        phy_protection_active = true;
 
-                            /* Old CCM call removed - now using comprehensive tuning below */
+                        pr_info("*** CSI PHY PROTECTION: Saved registers before tuning cycle %d ***\n", tuning_cycle_count);
+                        pr_info("*** PHY SAVED: 0x0=0x%x, 0xc=0x%x, 0x10=0x%x, 0xa0=0x%x, 0xb0=0x%x ***\n",
+                                saved_phy_0, saved_phy_c, saved_phy_10, saved_phy_a0, saved_phy_b0);
+                    }
 
-                            /* ===== COMPREHENSIVE ISP TUNING OPERATIONS - SAFE Implementation ===== */
-                            pr_info("*** COMPREHENSIVE TUNING: Performing ALL ISP pipeline updates (cycle %d) ***\n", tuning_cycle_count);
+                    pr_info("*** CONTINUOUS TUNING: Performing CSI PHY and Core Control updates (cycle %d) ***\n",
+                            tuning_cycle_count);
 
-                            /* SAFETY: Check if global ISP device is properly initialized */
-                            extern struct tx_isp_dev *ourISPdev;
+                    /* CRITICAL: Implement actual tuning operations to prevent CSI PHY timeout */
+                    /* The empty implementation was causing CSI hardware to timeout and auto-transition */
+
+                    /* Old individual tuning calls removed - now using comprehensive tuning below */
+
+                    /* Old CCM call removed - now using comprehensive tuning below */
+
+                    /* ===== COMPREHENSIVE ISP TUNING OPERATIONS - SAFE Implementation ===== */
+                    pr_info("*** COMPREHENSIVE TUNING: Performing ALL ISP pipeline updates (cycle %d) ***\n", tuning_cycle_count);
+
+                    /* SAFETY: Check if global ISP device is properly initialized */
+                    extern struct tx_isp_dev *ourISPdev;
 
                             /* 1. AE (Auto Exposure) Updates - WITH NULL CHECKS */
                             pr_info("*** TUNING DEBUG: Starting AE updates ***");
