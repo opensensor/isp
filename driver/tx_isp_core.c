@@ -2095,13 +2095,8 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
 
     /* Frame sync workqueue initialization moved to tx_isp_core_probe() */
 
-    /* CRITICAL FIX: DISABLE CSI PHY protection - it was causing the corruption! */
-    pr_info("*** ISP CORE: CSI PHY protection DISABLED - it was overwriting correct lane configuration ***\n");
-    pr_info("*** The protection system was saving wrong initial values and 'restoring' them every 80ms ***\n");
-    pr_info("*** This was the root cause of CSI PHY corruption that killed VIC interrupts! ***\n");
-
-    /* Keep protection disabled - our CSI Lane Configuration is correct */
-    phy_protection_enabled = 0;  /* DISABLED */
+    /* CSI PHY protection system completely removed - it was the root cause of corruption */
+    pr_info("*** ISP CORE: CSI PHY protection system REMOVED - no more 80ms register corruption! ***\n");
 
     /* CRITICAL: Enable ISP interrupts - EXACT Binary Ninja reference implementation */
     pr_info("*** tisp_init: Enabling ISP interrupts (Binary Ninja exact) ***\n");
