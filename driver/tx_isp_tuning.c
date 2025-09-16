@@ -4595,6 +4595,7 @@ EXPORT_SYMBOL(tiziano_mdns_init);
 EXPORT_SYMBOL(tiziano_gamma_init);
 EXPORT_SYMBOL(tiziano_hldc_init);
 EXPORT_SYMBOL(tisp_ct_update);
+EXPORT_SYMBOL(tisp_s_mdns_ratio);
 EXPORT_SYMBOL(tisp_sdns_wdr_en);
 EXPORT_SYMBOL(tisp_bcsh_wdr_en);
 EXPORT_SYMBOL(tisp_defog_wdr_en);
@@ -4814,7 +4815,7 @@ int tisp_s_2dns_ratio(int ratio)
 EXPORT_SYMBOL(tisp_s_2dns_ratio);
 
 /* tisp_s_mdns_ratio - Motion denoising ratio - Binary Ninja EXACT implementation */
-static int tisp_s_mdns_ratio(int ratio)
+int tisp_s_mdns_ratio(int ratio)
 {
     int i;
     uint32_t temp_val;
