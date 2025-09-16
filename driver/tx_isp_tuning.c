@@ -4879,6 +4879,8 @@ EXPORT_SYMBOL(tisp_adr_process);
 EXPORT_SYMBOL(tiziano_gamma_lut_parameter);
 EXPORT_SYMBOL(tiziano_lsc_params_refresh);
 EXPORT_SYMBOL(tiziano_dpc_params_refresh);
+EXPORT_SYMBOL(tiziano_sharpen_params_refresh);
+EXPORT_SYMBOL(tiziano_sdns_params_refresh);
 EXPORT_SYMBOL(tiziano_adr_params_refresh);
 EXPORT_SYMBOL(tisp_dpc_par_refresh);
 EXPORT_SYMBOL(tisp_sharpen_par_refresh);
