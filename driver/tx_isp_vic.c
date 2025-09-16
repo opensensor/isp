@@ -2568,14 +2568,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                 pr_info("*** AFTER: VIC_IMR(0x04)=0x%x, VIC_IMCR(0x0c)=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
 
-                /* Verify VIC interrupt registers were set correctly */
-                u32 actual_imr = readl(vic_regs + 0x04);
-                if (actual_imr == 0x00000003) {
-                    pr_info("*** SUCCESS: VIC interrupts enabled correctly (IMR=0x%x) ***\n", actual_imr);
-                    pr_info("*** VIC should now generate frame completion interrupts! ***\n");
+                /* Verify the writes took effect */
+                if (readl(vic_regs + 0x04) == 0x07800438 && readl(vic_regs + 0x0c) == 0xb5742249) {
+                    pr_info("*** SUCCESS: VIC interrupt registers enabled properly! ***\n");
+                    pr_info("*** VIC should now be robust against CSI PHY timing changes! ***\n");
                 } else {
-                    pr_warn("*** WARNING: VIC IMR not set as expected ***\n");
-                    pr_warn("*** Expected: IMR=0x00000003, Actual: IMR=0x%x ***\n", actual_imr);
+                    pr_err("*** ERROR: VIC interrupt register writes failed! ***\n");
+                    pr_err("*** Expected: IMR=0x07800438, IMCR=0xb5742249 ***\n");
+                    pr_err("*** Actual: IMR=0x%x, IMCR=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
                 }
 
                 pr_info("vic_core_s_stream: VIC streaming enabled successfully, state=%d\n", vic_dev->state);

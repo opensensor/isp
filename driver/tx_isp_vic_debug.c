@@ -121,9 +121,11 @@ int tx_isp_vic_start_streaming(struct tx_isp_dev *isp_dev)
     writel(3, vic_regs + 0xc); /* MIPI mode */
     wmb();
     
-    /* Enable VIC interrupts using CORRECT VIC registers */
-    writel(0xFFFFFFFF, vic_regs + 0x00); /* Clear any pending interrupts */
-    writel(0x00000003, vic_regs + 0x04); /* Enable frame done and error interrupts */
+    /* Enable VIC interrupts - keep original approach but add note */
+    /* NOTE: These 0x1e0/0x1e8 registers are actually CSI PHY registers */
+    /* But we keep this for compatibility with existing interrupt handler */
+    writel(0xffffffff, vic_regs + 0x1e0); /* Enable all interrupts */
+    writel(0x0, vic_regs + 0x1e8); /* Clear interrupt masks */
     wmb();
     
     /* Set VIC start flag - CRITICAL for interrupt processing */
@@ -163,9 +165,9 @@ int tx_isp_vic_stop_streaming(struct tx_isp_dev *isp_dev)
     writel(0, vic_regs + 0x0);
     wmb();
     
-    /* Disable VIC interrupts using CORRECT VIC registers */
-    writel(0x00000000, vic_regs + 0x04); /* Disable all VIC interrupts */
-    writel(0xFFFFFFFF, vic_regs + 0x00); /* Clear any pending interrupts */
+    /* Disable VIC interrupts - keep original approach */
+    writel(0x0, vic_regs + 0x1e0);
+    writel(0xffffffff, vic_regs + 0x1e8);
     wmb();
     
     pr_info("*** tx_isp_vic_stop_streaming: VIC streaming stopped ***\n");
