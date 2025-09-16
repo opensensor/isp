@@ -377,8 +377,9 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     if (enable) {
         /* Binary Ninja: *(arg1 + 0x128) = 4 */
         /* CRITICAL FIX: Use safe struct member access instead of offset 0x128 */
-        csi_dev->state = 4;
-        pr_info("CSI streaming enabled with comprehensive hardware configuration - state=4\n");
+        /* CRITICAL FIX: State 4 doesn't exist! Use CSI_STATE_ACTIVE (2) for streaming */
+        csi_dev->state = CSI_STATE_ACTIVE;  /* 2 = ACTIVE, not 4 (invalid) */
+        pr_info("CSI streaming enabled with comprehensive hardware configuration - state=%d (ACTIVE)\n", csi_dev->state);
     } else {
         pr_info("*** CSI VIDEO STREAMING DISABLE ***\n");
 
