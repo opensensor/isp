@@ -738,7 +738,7 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     system_reg_write(0x9a98, 0x500);
     system_reg_write(0x9ac0, 0x200);
     system_reg_write(0x9ac8, 0x200);
-    
+
     /* Binary Ninja: sensor_init call - initialize sensor control structure */
     pr_info("*** CALLING sensor_init - INITIALIZING SENSOR CONTROL STRUCTURE ***\n");
     int sensor_init_result = sensor_init(isp_dev);
@@ -1631,9 +1631,9 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
         }
 
-        /* Binary Ninja: Error recovery sequence */
-        /* Note: Control limit error (0x200000) should be rare now with buffer management fix */
-        if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
+        /* Binary Ninja: Error recovery sequence - CRITICAL FIX: Include control limit error */
+        /* CRITICAL: 0x200000 (control limit error) must also trigger recovery sequence */
+        if (((v1_7 & 0xde00) != 0 || (v1_7 & 0x200000) != 0) && *vic_irq_enable_flag == 1) {
             pr_err("error handler!!! (v1_7=0x%x)\n", v1_7);
 
             /* Binary Ninja: **($s0 + 0xb8) = 4 */
