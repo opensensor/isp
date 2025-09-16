@@ -2141,10 +2141,12 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         vic_base = vic_dev->vic_regs;
         if (vic_base && (unsigned long)vic_base >= 0x80000000) {
+            pr_info("ispvic_frame_channel_s_stream: BEFORE - active_buffer_count=%d\n", vic_dev->active_buffer_count);
             u32 stream_ctrl = (vic_dev->active_buffer_count << 16) | 0x80000020;
             writel(stream_ctrl, vic_base + 0x300);
             wmb();
-            pr_info("ispvic_frame_channel_s_stream: Stream ON - wrote 0x%x to reg 0x300\n", stream_ctrl);
+            pr_info("ispvic_frame_channel_s_stream: Stream ON - wrote 0x%x to reg 0x300 (buffer_count=%d)\n",
+                    stream_ctrl, vic_dev->active_buffer_count);
             
             /* MCP LOG: Stream ON completed */
             pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n", 

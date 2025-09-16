@@ -2592,13 +2592,31 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         state->enabled = true;
         state->streaming = true;
 
-        // *** CRITICAL: START VIC STREAMING FIRST (Binary Ninja reference) ***
+        // *** CRITICAL: SETUP VIC BUFFERS BEFORE STREAMING (Binary Ninja reference) ***
         if (ourISPdev && ourISPdev->vic_dev) {
             struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
 
-            pr_info("*** CHANNEL %d STREAMON: STARTING VIC STREAMING (Binary Ninja) ***\n", channel);
+            pr_info("*** CHANNEL %d STREAMON: SETTING UP VIC BUFFERS FIRST ***\n", channel);
 
-            /* Call Binary Ninja ispvic_frame_channel_s_stream implementation */
+            /* Ensure VIC has proper buffer count for streaming */
+            if (vic->active_buffer_count == 0) {
+                vic->active_buffer_count = 4;  /* Default buffer count */
+                pr_info("*** CHANNEL %d STREAMON: Set VIC active_buffer_count = %d ***\n",
+                        channel, vic->active_buffer_count);
+            }
+
+            /* Ensure VIC dimensions are set */
+            if (vic->width == 0 || vic->height == 0) {
+                vic->width = 1920;
+                vic->height = 1080;
+                pr_info("*** CHANNEL %d STREAMON: Set VIC dimensions %dx%d ***\n",
+                        channel, vic->width, vic->height);
+            }
+
+            pr_info("*** VIC STATE: state=%d, stream_state=%d, active_buffer_count=%d ***\n",
+                    vic->state, vic->stream_state, vic->active_buffer_count);
+
+            /* NOW call Binary Ninja ispvic_frame_channel_s_stream implementation */
             extern int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
             ret = ispvic_frame_channel_s_stream(vic, 1);
             if (ret != 0) {
@@ -2608,27 +2626,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
 
             pr_info("*** CHANNEL %d STREAMON: VIC streaming started successfully ***\n", channel);
-        }
-
-        // *** CRITICAL: ENSURE ISP CORE IS INITIALIZED (Binary Ninja reference) ***
-        if (channel == 0 && ourISPdev && ourISPdev->sensor) {
-            sensor = ourISPdev->sensor;
-
-            pr_info("*** CHANNEL %d STREAMON: ENSURING ISP CORE INITIALIZATION ***\n", channel);
-
-            /* Check if ISP core needs initialization */
-            if (sensor->video.attr) {
-                extern int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
-
-                pr_info("*** CHANNEL %d STREAMON: CALLING ispcore_core_ops_init for proper pipeline setup ***\n", channel);
-                ret = ispcore_core_ops_init(ourISPdev, sensor->video.attr);
-                if (ret != 0) {
-                    pr_err("Channel %d: ISP core initialization failed: %d\n", channel, ret);
-                    state->streaming = false;
-                    return ret;
-                }
-                pr_info("*** CHANNEL %d STREAMON: ISP core initialized successfully ***\n", channel);
-            }
         }
 
         // *** CRITICAL: TRIGGER SENSOR HARDWARE INITIALIZATION AND STREAMING ***
