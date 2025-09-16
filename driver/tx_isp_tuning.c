@@ -1741,12 +1741,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     /* CRITICAL FIX: Don't perform continuous tuning during VIC streaming */
                     /* This prevents CSI PHY timeouts that disrupt VIC interrupts */
                     extern uint32_t vic_start_ok;
-                    if (vic_start_ok == 1) {
-                        pr_info("*** CONTINUOUS TUNING: VIC streaming active - SKIPPING tuning to prevent CSI PHY timeout (cycle %d) ***\n",
-                                tuning_cycle_count);
-                    } else {
-                        /* Perform continuous register updates after initial setup (like reference trace) */
-                        if (tuning_cycle_count > 2) {
                             pr_info("*** CONTINUOUS TUNING: Performing CSI PHY and Core Control updates (cycle %d) ***\n",
                                     tuning_cycle_count);
 
@@ -1876,8 +1870,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                             pr_info("*** COMPREHENSIVE TUNING: Cycle %d ALL ISP pipeline operations completed ***\n", tuning_cycle_count);
                             pr_info("*** This should maintain proper ISP pipeline control and prevent CSI PHY timeouts ***\n");
-                        }
-                    }
                 }
 
                 /* CRITICAL: Ignore disable commands when auto-initialized to prevent init/release cycle */
@@ -2965,10 +2957,42 @@ static uint32_t lsc_api_flag = 0;
 static int lsc_wdr_en = 0;
 
 /* tiziano_lsc_params_refresh - Refresh LSC parameters */
-static void tiziano_lsc_params_refresh(void)
+void tiziano_lsc_params_refresh(void)
 {
     pr_debug("tiziano_lsc_params_refresh: Refreshing LSC parameters\n");
+
     /* Update LSC parameters based on current conditions */
+    extern uint32_t data_9a454;  /* Current EV value */
+    extern uint32_t data_9a450;  /* Current CT value */
+
+    /* Update EV and CT caches for LSC calculations */
+    if (data_9a454 != 0) {
+        uint32_t ev_shifted = data_9a454 >> 10;
+        /* Update LSC strength based on EV */
+        if (ev_shifted < 0x40) {
+            lsc_curr_str = 0x900;  /* Higher strength for low light */
+        } else if (ev_shifted > 0x200) {
+            lsc_curr_str = 0x600;  /* Lower strength for bright light */
+        } else {
+            lsc_curr_str = 0x800;  /* Default strength */
+        }
+    }
+
+    /* Update CT-based parameters */
+    if (data_9a450 != 0) {
+        if (data_9a450 < data_9a414) {  /* Below T illuminant */
+            /* Use A illuminant parameters */
+            lsc_curr_lut = lsc_a_lut;
+        } else if (data_9a450 > data_9a418) {  /* Above D illuminant */
+            /* Use D illuminant parameters */
+            lsc_curr_lut = lsc_d_lut;
+        } else {
+            /* Use T illuminant parameters */
+            lsc_curr_lut = lsc_t_lut;
+        }
+    }
+
+    pr_debug("tiziano_lsc_params_refresh: Updated LSC strength=0x%x, CT=%d\n", lsc_curr_str, data_9a450);
 }
 
 /* tisp_lsc_judge_ct_update_flag - Check if CT update is needed */
@@ -3991,10 +4015,41 @@ static uint32_t data_9ab10 = 0xFFFFFFFF;  /* DPC state cache */
 static int dpc_wdr_en = 0;
 
 /* tiziano_dpc_params_refresh - Refresh DPC parameters */
-static void tiziano_dpc_params_refresh(void)
+void tiziano_dpc_params_refresh(void)
 {
     pr_debug("tiziano_dpc_params_refresh: Refreshing DPC parameters\n");
+
     /* Update DPC parameters based on current conditions */
+    extern uint32_t data_9a454;  /* Current EV value */
+
+    if (data_9a454 != 0) {
+        uint32_t ev_shifted = data_9a454 >> 10;
+
+        /* Adjust DPC thresholds based on exposure */
+        if (ev_shifted < 0x80) {
+            /* Low light - more aggressive DPC */
+            for (int i = 0; i < 16; i++) {
+                if (dpc_d_m1_dthres_array_now && i < 16) {
+                    dpc_d_m1_dthres_array_now[i] = dpc_d_m1_dthres_array[i] + 0x20;
+                }
+                if (dpc_d_m1_fthres_array_now && i < 16) {
+                    dpc_d_m1_fthres_array_now[i] = dpc_d_m1_fthres_array[i] + 0x10;
+                }
+            }
+        } else if (ev_shifted > 0x180) {
+            /* Bright light - less aggressive DPC */
+            for (int i = 0; i < 16; i++) {
+                if (dpc_d_m1_dthres_array_now && i < 16) {
+                    dpc_d_m1_dthres_array_now[i] = dpc_d_m1_dthres_array[i] - 0x10;
+                }
+                if (dpc_d_m1_fthres_array_now && i < 16) {
+                    dpc_d_m1_fthres_array_now[i] = dpc_d_m1_fthres_array[i] - 0x08;
+                }
+            }
+        }
+    }
+
+    pr_debug("tiziano_dpc_params_refresh: DPC parameters updated based on EV\n");
 }
 
 /* tisp_dpc_all_reg_refresh - Write all DPC registers to hardware */
