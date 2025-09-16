@@ -6206,11 +6206,10 @@ static void simulate_frame_completion(void)
     }
 }
 
-/* VIC frame generation work function - CRITICAL: Break the frame counter deadlock */
+/* VIC frame generation work function */
 static void vic_frame_work_function(struct work_struct *work)
 {
     struct tx_isp_vic_device *vic_dev;
-    int i;
 
     if (!ourISPdev || !ourISPdev->vic_dev) {
         return;
@@ -6218,26 +6217,18 @@ static void vic_frame_work_function(struct work_struct *work)
 
     vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
 
-    // CRITICAL FIX: Always increment frame counter when streaming to break deadlock
-    if (vic_dev && vic_dev->streaming) {
-        // Increment VIC frame counter
-        vic_dev->frame_count++;
+    // Simple frame generation without recursion
+    if (vic_dev && vic_dev->state == 2 && vic_dev->streaming) {
+        int i;
 
-        // CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02
-        if (ourISPdev) {
-            ourISPdev->frame_count++;
-            pr_debug("*** FRAME HEARTBEAT: ISP frame count = %u (VIC count = %u) ***\n",
-                    ourISPdev->frame_count, vic_dev->frame_count);
-        }
-
-        // Wake up waiting channels to process DQBUF
+        // Wake up waiting channels
         for (i = 0; i < num_channels; i++) {
             if (frame_channels[i].state.streaming) {
                 frame_channel_wakeup_waiters(&frame_channels[i]);
             }
         }
 
-        // Schedule next frame at 30 FPS (33ms interval)
+        // Schedule next frame
         schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(33));
     }
 }
