@@ -265,18 +265,45 @@ int tx_isp_csi_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config
     return 0;
 }
 
-/* Post-streaming CSI hardware configuration - DISABLED due to memory access issues */
+/* Post-streaming CSI hardware configuration - RE-ENABLED with safe implementation */
 static int tx_isp_csi_post_streaming_config(struct tx_isp_subdev *sd, void __iomem *csi_base,
                                            struct tx_isp_sensor_attribute *attr)
 {
-    pr_info("=== POST-STREAMING CSI CONFIGURATION DISABLED ===\n");
-    pr_info("Configuration disabled to prevent kernel crashes\n");
-    pr_info("The spec driver performs this configuration, but our memory mapping differs\n");
+    pr_info("=== POST-STREAMING CSI CONFIGURATION - SAFE IMPLEMENTATION ===\n");
 
-    /* SAFETY: Do not perform extensive register writes as they cause kernel crashes
-     * The issue is that the CSI register space might not be fully accessible
-     * or the memory mapping is different from the spec driver */
+    if (!csi_base || !attr) {
+        pr_err("Invalid parameters for CSI post-streaming config\n");
+        return -EINVAL;
+    }
 
+    /* CRITICAL: This is the missing piece that the reference driver does after sensor streaming starts */
+    /* Perform minimal essential CSI configuration to prevent register conflicts */
+
+    /* Configure CSI for MIPI interface */
+    if (attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {
+        /* Set MIPI lane count */
+        u32 lanes = attr->mipi.lans;
+        if (lanes >= 1 && lanes <= 4) {
+            u32 ctrl = readl(csi_base + 0x4);
+            ctrl = (ctrl & 0xfffffffc) | ((lanes - 1) & 3);
+            writel(ctrl, csi_base + 0x4);
+            wmb();
+            pr_info("CSI post-streaming: MIPI lanes configured to %d\n", lanes);
+        }
+
+        /* Configure CSI timing for sensor dimensions */
+        u32 width = attr->total_width;
+        u32 height = attr->total_height;
+        if (width > 0 && height > 0) {
+            /* Set basic timing parameters */
+            writel(width, csi_base + 0x8);
+            writel(height, csi_base + 0xc);
+            wmb();
+            pr_info("CSI post-streaming: Timing configured for %dx%d\n", width, height);
+        }
+    }
+
+    pr_info("=== POST-STREAMING CSI CONFIGURATION COMPLETE ===\n");
     return 0;
 }
 
