@@ -320,35 +320,7 @@ static void ispcore_irq_fs_work(struct work_struct *work);
 
 
 
-/* CSI PHY register monitoring and recovery function */
-static void check_and_restore_csi_phy_registers(void)
-{
-    extern struct tx_isp_dev *ourISPdev;
 
-    if (!phy_protection_enabled || !ourISPdev || !ourISPdev->phy_base) {
-        return;
-    }
-
-    u32 current_ctrl = readl(ourISPdev->phy_base + 0x0);
-    u32 current_data = readl(ourISPdev->phy_base + 0x4);
-    u32 current_clk = readl(ourISPdev->phy_base + 0x8);
-
-    /* Check if registers have been corrupted */
-    if (current_ctrl != saved_phy_ctrl || current_data != saved_phy_data || current_clk != saved_phy_clk) {
-        pr_warn("*** CSI PHY CORRUPTION DETECTED! ***\n");
-        pr_warn("*** CTRL: 0x%08x -> 0x%08x ***\n", saved_phy_ctrl, current_ctrl);
-        pr_warn("*** DATA: 0x%08x -> 0x%08x ***\n", saved_phy_data, current_data);
-        pr_warn("*** CLK:  0x%08x -> 0x%08x ***\n", saved_phy_clk, current_clk);
-
-        /* Restore original values */
-        writel(saved_phy_ctrl, ourISPdev->phy_base + 0x0);
-        writel(saved_phy_data, ourISPdev->phy_base + 0x4);
-        writel(saved_phy_clk, ourISPdev->phy_base + 0x8);
-        wmb();
-
-        pr_info("*** CSI PHY REGISTERS RESTORED ***\n");
-    }
-}
 
 /* Frame sync work function - triggers sensor I2C communication */
 static void ispcore_irq_fs_work(struct work_struct *work)
