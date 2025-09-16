@@ -2131,6 +2131,20 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
     writel(int_enable_val, isp_regs + 0x10);
     wmb();
 
+    /* CRITICAL: Enable ISP pipeline - Binary Ninja: system_reg_write(0x800, 1) */
+    writel(1, isp_regs + 0x800);
+    wmb();
+
+    /* CRITICAL: Configure ISP routing - Binary Ninja: system_reg_write(0x804, $v0_30) */
+    u32 isp_route_val = (data_b2e74 != 0) ? 0x10 : 0x1c;  /* WDR vs normal mode */
+    writel(isp_route_val, isp_regs + 0x804);
+    wmb();
+
+    /* CRITICAL: Set ISP control mode - Binary Ninja: system_reg_write(0x1c, 8) */
+    writel(8, isp_regs + 0x1c);
+    wmb();
+
+    pr_info("*** ISP CORE: Pipeline ENABLED - 0x800=1, 0x804=0x%x, 0x1c=8 ***\n", isp_route_val);
     pr_info("*** ISP CORE: Interrupt registers enabled - 0x30=0xffffffff, 0x10=0x%x ***\n", int_enable_val);
     
     pr_info("*** tisp_init: ISP interrupts enabled - should now generate interrupts! ***\n");
@@ -2305,6 +2319,16 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
         writel(pend_legacy, core + 0xb8);   /* Clear legacy pending */
         writel(pend_new, core + 0x98b8);    /* Clear new pending */
 
+        /* CRITICAL: Enable ISP pipeline first - this connects VIC to ISP core */
+        /* Binary Ninja: system_reg_write(0x800, 1) - Enable ISP pipeline */
+        writel(1, core + 0x800);
+
+        /* Binary Ninja: system_reg_write(0x804, routing) - Configure ISP routing */
+        writel(0x1c, core + 0x804);         /* Normal mode routing */
+
+        /* Binary Ninja: system_reg_write(0x1c, 8) - Set ISP control mode */
+        writel(8, core + 0x1c);
+
         /* CRITICAL: Enable interrupt generation at hardware level */
         /* Binary Ninja: system_reg_write(0x30, 0xffffffff) */
         writel(0xffffffff, core + 0x30);    /* Enable all interrupt sources */
@@ -2319,8 +2343,9 @@ static int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_at
         writel(0x3FFF, core + 0x98bc);      /* New unmask */
         wmb();
 
+        ISP_INFO("*** ISP CORE: Pipeline ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
         ISP_INFO("*** ISP CORE: Hardware interrupt generation ENABLED (0x30=0xffffffff, 0x10=0x133) ***\n");
-        ISP_INFO("*** ISP CORE: Interrupt banks enabled (legacy+new) - should now generate interrupts! ***\n");
+        ISP_INFO("*** ISP CORE: VIC->ISP pipeline should now generate hardware interrupts! ***\n");
     } else {
         ISP_INFO("*** ispcore_core_ops_init: isp->core_regs is NULL; cannot enable core interrupts here ***\n");
     }
