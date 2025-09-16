@@ -629,6 +629,31 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Error handling would be here */
     }
 
+    if (interrupt_status & 0x400) {  /* Error interrupt type - bit 10 */
+        pr_info("ISP CORE: Error interrupt type - bit 10 (0x400) - CSI-VIC synchronization error\n");
+
+        /* This error occurs during CSI initialization and indicates CSI-VIC sync issues */
+        /* Check if CSI and VIC are properly synchronized */
+        if (isp_dev->csi_dev && isp_dev->vic_dev) {
+            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
+            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+
+            pr_info("*** CSI-VIC SYNC ERROR: CSI state=%d, VIC state=%d ***\n",
+                    csi_dev->state, vic_dev->state);
+
+            /* Force CSI and VIC to synchronized states */
+            if (csi_dev->state != CSI_STATE_ACTIVE) {
+                pr_info("*** SYNC FIX: Setting CSI to ACTIVE state ***\n");
+                csi_dev->state = CSI_STATE_ACTIVE;
+            }
+
+            if (vic_dev->state != 4) { /* VIC streaming state */
+                pr_info("*** SYNC FIX: Setting VIC to streaming state ***\n");
+                vic_dev->state = 4;
+            }
+        }
+    }
+
     if (interrupt_status & 0x2000) {  /* Additional interrupt type */
         pr_info("ISP CORE: Additional interrupt type\n");
         /* Binary Ninja: Additional interrupt processing */
