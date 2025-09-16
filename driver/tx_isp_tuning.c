@@ -1686,14 +1686,11 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             pr_info("MCP_LOG: Tuning controls now ready for operation\n");
                         }
                         
-                        /* CRITICAL: Call tisp_init to trigger hardware initialization - THE MISSING LINK */
-                        pr_info("*** CALLING tisp_init - THIS SHOULD TRIGGER REGISTER ACTIVITY LIKE REFERENCE DRIVER ***\n");
-                        ret = tisp_init(NULL, "default");
-                        if (ret != 0) {
-                            pr_err("isp_core_tunning_unlocked_ioctl: tisp_init failed: %d\n", ret);
-                            return ret;
-                        }
-                        pr_info("*** tisp_init COMPLETED - HARDWARE INITIALIZATION FINISHED ***\n");
+                        /* CRITICAL: DISABLE tisp_init to prevent VIC frame disruption */
+                        /* This was causing CSI PHY Config and ISP Core Control registers to be zeroed */
+                        pr_info("*** SKIPPING tisp_init - DISABLED to prevent VIC frame disruption ***\n");
+                        pr_info("*** tisp_init was writing zeros to critical CSI PHY and ISP registers ***\n");
+                        ret = 0;  /* Return success without calling tisp_init */
                         
                         dev->tuning_enabled = 3;
                         auto_init_done = true;  /* Mark as auto-initialized */
