@@ -2943,7 +2943,21 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
         
-        
+
+        /* CRITICAL FIX: Start frame generation system to prevent video drop */
+        /* This ensures that DQBUF operations will have frames available */
+        pr_info("*** Channel %d: Starting frame generation system to prevent video drop ***\n", channel);
+
+        /* Start the VIC frame work to generate frames continuously */
+        extern struct delayed_work vic_frame_work;
+        extern void vic_frame_work_function(struct work_struct *work);
+
+        /* Initialize and start the frame generation work */
+        if (vic_dev && vic_dev->streaming) {
+            schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(33)); /* 30 FPS */
+            pr_info("*** Channel %d: Frame generation work scheduled (30 FPS) ***\n", channel);
+        }
+
         pr_info("Channel %d: Streaming enabled\n", channel);
         return 0;
     }
