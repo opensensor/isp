@@ -2554,19 +2554,19 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 wmb();
                 pr_info("*** VIC ROBUST MODE: Enabled to handle CSI PHY timing changes ***\n");
 
-                /* CRITICAL: Enable VIC interrupts using CORRECT VIC registers */
-                pr_info("*** CRITICAL: ENABLING VIC INTERRUPT REGISTERS (0x04=IMR, 0x0c=IMCR) ***\n");
+                /* CRITICAL: Re-enable VIC interrupt registers after CSI configuration */
+                /* Keep the original register values but add robustness against CSI PHY changes */
+                pr_info("*** CRITICAL: RE-ENABLING VIC INTERRUPT REGISTERS (0x04, 0x0c) ***\n");
+                pr_info("*** The 0x1e0/0x1e8 registers are CSI PHY, not VIC interrupts! ***\n");
                 pr_info("*** BEFORE: VIC_IMR(0x04)=0x%x, VIC_IMCR(0x0c)=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
 
-                /* Clear any pending interrupts first */
-                writel(0xFFFFFFFF, vic_regs + 0x00);  /* Clear all pending interrupts */
+                /* Enable VIC interrupts using the original reference driver values */
+                /* These values are from the Binary Ninja reference driver */
+                writel(0x07800438, vic_regs + 0x04);  /* VIC IMR - interrupt mask register */
+                writel(0xb5742249, vic_regs + 0x0c);  /* VIC IMCR - interrupt control register */
                 wmb();
 
-                /* Enable VIC frame done and error interrupts */
-                writel(0x00000003, vic_regs + 0x04);  /* VIC IMR - enable frame done (bit 0) and error (bit 1) */
-                wmb();
-
-                pr_info("*** AFTER: VIC_IMR(0x04)=0x%x, VIC_ISR(0x00)=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x00));
+                pr_info("*** AFTER: VIC_IMR(0x04)=0x%x, VIC_IMCR(0x0c)=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
 
                 /* Verify VIC interrupt registers were set correctly */
                 u32 actual_imr = readl(vic_regs + 0x04);
