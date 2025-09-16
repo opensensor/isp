@@ -1590,10 +1590,8 @@ ISP isp-m0: [CSI PHY Config] write at offset 0x110: 0x80007000 -> 0x92217523 (de
     writel(0x10, vic_regs + 0x120);      /* was 0x0 -> 0x10 */
     wmb();
 
-    /* CSI PHY Config updates */
-    writel(0x2b, csi_base + 0x1d0);      /* was 0x1 -> 0x2b */
-    writel(0x60, csi_base + 0x250);      /* was 0x0 -> 0x60 */
-    wmb();
+    /* CRITICAL FIX: REMOVED conflicting CSI PHY Config updates from VIC code */
+    pr_info("*** VIC: SKIPPING CSI PHY Config updates - CSI module handles this! ***\n");
 
     /* More VIC updates */
     writel(0x300, vic_regs + 0x14);      /* was 0x330 -> 0x300 */
