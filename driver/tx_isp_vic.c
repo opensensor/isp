@@ -1442,6 +1442,7 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC CONTROL LIMIT FIX: Configuring VIC dimensions %dx%d, stride=%d ***\n",
                 width, height, stride);
 
+        /* CRITICAL: Configure VIC dimensions BEFORE any other VIC operations */
         /* Binary Ninja: *(vic_regs + 0x304) = width << 16 | height */
         writel((width << 16) | height, vic_regs + 0x304);
         wmb();
@@ -1458,7 +1459,12 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
         writel(stride, vic_regs + 0x314);
         wmb();
 
-        pr_info("*** VIC CONTROL LIMIT FIX: VIC dimensions configured - should prevent control limit error ***\n");
+        /* CRITICAL: Also configure basic VIC control registers */
+        writel(0x1, vic_regs + 0x0);    /* VIC enable */
+        writel(0x3, vic_regs + 0xc);    /* MIPI mode */
+        wmb();
+
+        pr_info("*** VIC CONTROL LIMIT FIX: VIC dimensions and control configured ***\n");
     }
 
     /* MIPS ALIGNMENT CHECK: Validate vic_dev->sensor_attr access */
@@ -2381,6 +2387,31 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     return -ENOMEM;
                 }
                 
+                /* STEP 0: CRITICAL - Configure VIC dimensions FIRST to prevent control limit error */
+                pr_info("*** STEP 0: CRITICAL - Configure VIC dimensions FIRST ***\n");
+
+                /* Get actual sensor dimensions */
+                u32 width = 1920;   /* Default fallback */
+                u32 height = 1080;  /* Default fallback */
+                if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->video.attr) {
+                    struct tx_isp_sensor_attribute *attr = ourISPdev->sensor->video.attr;
+                    if (attr->total_width > 0 && attr->total_width < 8192 &&
+                        attr->total_height > 0 && attr->total_height < 8192) {
+                        width = attr->total_width;
+                        height = attr->total_height;
+                        pr_info("*** Using sensor dimensions %dx%d ***\n", width, height);
+                    }
+                }
+
+                /* Configure VIC dimensions BEFORE any other operations */
+                u32 stride = width << 1;
+                writel((width << 16) | height, vic_regs + 0x304);
+                writel(1, vic_regs + 0x308);
+                writel(stride, vic_regs + 0x310);
+                writel(stride, vic_regs + 0x314);
+                wmb();
+                pr_info("*** VIC dimensions configured: %dx%d, stride=%d ***\n", width, height, stride);
+
                 /* STEP 1: REVERT - Use original working register sequence */
                 pr_info("*** STEP 1: REVERT - Using original working VIC register sequence ***\n");
                 /* REVERT: Use original vic_regs base that was working */
