@@ -2566,13 +2566,17 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                 pr_info("*** AFTER: VIC_IMR(0x04)=0x%x, VIC_IMCR(0x0c)=0x%x ***\n", readl(vic_regs + 0x04), readl(vic_regs + 0x0c));
 
-                /* Verify the interrupt enable worked */
-                u32 final_imr = readl(vic_regs + 0x04);
-                if (final_imr & 0x00000001) {
-                    pr_info("*** SUCCESS: VIC frame done interrupt enabled (IMR=0x%x) ***\n", final_imr);
-                    pr_info("*** VIC should now generate frame completion interrupts! ***\n");
+                /* Verify the writes took effect */
+                u32 actual_imr = readl(vic_regs + 0x04);
+                u32 actual_imcr = readl(vic_regs + 0x0c);
+                if (actual_imr == 0x07800438 && actual_imcr == 0xb5742249) {
+                    pr_info("*** SUCCESS: VIC interrupt registers set to Binary Ninja values! ***\n");
+                    pr_info("*** VIC should now generate interrupts on IRQ 38 (isp-w02) ***\n");
                 } else {
-                    pr_warn("*** WARNING: VIC frame done interrupt may not be enabled (IMR=0x%x) ***\n", final_imr);
+                    pr_warn("*** WARNING: VIC interrupt register values unexpected ***\n");
+                    pr_warn("*** Expected: IMR=0x07800438, IMCR=0xb5742249 ***\n");
+                    pr_warn("*** Actual: IMR=0x%x, IMCR=0x%x ***\n", actual_imr, actual_imcr);
+                    pr_warn("*** VIC interrupts may still work - IRQ 38 routing is correct ***\n");
                 }
 
                 pr_info("vic_core_s_stream: VIC streaming enabled successfully, state=%d\n", vic_dev->state);
