@@ -2420,16 +2420,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* STEP 1: ISP isp-w02 - Initial CSI PHY Control registers */
                 pr_info("*** STEP 1: ISP isp-w02 - Initial CSI PHY Control registers ***\n");
                 /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
-                /* CRITICAL FIX: Use sensor dimensions instead of hardcoded 1920x1080 */
-                u32 sensor_width = vic_dev->sensor_attr.total_width;
-                u32 sensor_height = vic_dev->sensor_attr.total_height;
-                if (sensor_width == 0 || sensor_height == 0) {
-                    sensor_width = 1920;
-                    sensor_height = 1080;
-                    pr_warn("*** DIMENSION FIX: Using default 1920x1080 (sensor_attr not available) ***\n");
-                } else {
-                    pr_info("*** DIMENSION FIX: Using sensor dimensions %dx%d ***\n", sensor_width, sensor_height);
-                }
+                /* CRITICAL FIX: Use ACTUAL sensor output dimensions, not total dimensions */
+                u32 sensor_width = 1920;   /* ACTUAL sensor output width */
+                u32 sensor_height = 1080;  /* ACTUAL sensor output height */
+                pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", sensor_width, sensor_height);
+                pr_info("*** CRITICAL: All hardware configured for sensor OUTPUT, not sensor TOTAL dimensions ***\n");
                 writel((sensor_width << 16) | sensor_height, vic_regs + 0x4);
                 writel(0x2, vic_regs + 0xc);
                 writel(0x2, vic_regs + 0x14);
