@@ -2583,6 +2583,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* STEP 8: VIC initialization complete - NOW trigger STREAMON to enable PIPO MDMA */
                 pr_info("*** STEP 8: VIC initialization complete - NOW triggering STREAMON to enable PIPO MDMA ***\n");
 
+                /* CRITICAL: Wait for ISP pipeline to stabilize before enabling VIC PIPO MDMA */
+                /* The ISP pipeline needs time to stabilize after being enabled to prevent 0x200 errors */
+                pr_info("*** CRITICAL: Waiting for ISP pipeline to stabilize (preventing 0x200 pipeline config error) ***\n");
+                msleep(50);  /* Allow ISP pipeline to fully stabilize */
+
                 /* CRITICAL: Call ispvic_frame_channel_s_stream to enable VIC PIPO MDMA */
                 /* This is what the reference driver does - it calls vic_pipo_mdma_enable during streaming */
                 pr_info("*** CRITICAL: Calling ispvic_frame_channel_s_stream to enable VIC PIPO MDMA ***\n");
