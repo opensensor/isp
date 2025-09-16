@@ -558,8 +558,16 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     /* Stream ON */
                     pr_info("csi_core_ops_init: Enabling CSI (enable=1)\n");
 
-                    /* Binary Ninja: void* $v1_5 = *($s0_1 + 0x110) */
-                    sensor_attr = &ourISPdev->sensor_attr;
+                    /* CRITICAL FIX: Use properly initialized sensor attributes from VIC device */
+                    /* Instead of uninitialized ourISPdev->sensor_attr, use vic_dev->sensor_attr */
+                    if (ourISPdev->vic_dev) {
+                        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
+                        sensor_attr = &vic_dev->sensor_attr;
+                        pr_info("CSI: Using VIC device sensor attributes (dbus_type=%d)\n", sensor_attr->dbus_type);
+                    } else {
+                        pr_err("CSI: No VIC device available for sensor attributes\n");
+                        return 0xffffffea;
+                    }
 
                     /* Binary Ninja: int32_t $s2_1 = *($v1_5 + 0x14) */
                     int interface_type = sensor_attr->dbus_type;
