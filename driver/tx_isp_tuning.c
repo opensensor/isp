@@ -4661,7 +4661,6 @@ int tisp_ev_update(void)
 
     /* Update exposure value and trigger dependent updates */
     extern struct tx_isp_dev *ourISPdev;
-    extern uint32_t data_9a454;  /* Global EV cache */
 
     if (ourISPdev && ourISPdev->tuning_data) {
         struct isp_tuning_data *tuning = ourISPdev->tuning_data;
