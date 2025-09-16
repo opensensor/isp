@@ -799,27 +799,9 @@ void tx_isp_vic_write_csi_phy_sequence(void)
     pr_info("*** CRITICAL: Writing CSI PHY registers in CORRECT SEQUENCE matching reference driver ***\n");
     pr_info("*** CSI PHY SEQUENCE: Step 1 - CSI PHY Config registers (0x100-0x1f4) ***\n");
     
-    /* STEP 1: CSI PHY Config registers - ALL TOGETHER as in reference */
-    writel(0x8a, csi_base + 0x100);
-    writel(0x5, csi_base + 0x104);
-    writel(0x40, csi_base + 0x10c);
-    writel(0xb0, csi_base + 0x110);
-    writel(0xc5, csi_base + 0x114);
-    writel(0x3, csi_base + 0x118);
-    writel(0x20, csi_base + 0x11c);
-    writel(0xf, csi_base + 0x120);
-    writel(0x48, csi_base + 0x124);
-    writel(0x3f, csi_base + 0x128);  /* CORRECTED: Should be 0x3f to match reference */
-    writel(0xf, csi_base + 0x12c);
-    writel(0x88, csi_base + 0x130);
-    writel(0x86, csi_base + 0x138);
-    writel(0x10, csi_base + 0x13c);
-    writel(0x4, csi_base + 0x140);
-    writel(0x1, csi_base + 0x144);
-    writel(0x32, csi_base + 0x148);
-    writel(0x80, csi_base + 0x14c);
-    writel(0x1, csi_base + 0x158);
-    writel(0x60, csi_base + 0x15c);
+    /* CRITICAL FIX: REMOVED conflicting CSI PHY Config writes from VIC code */
+    /* The CSI module handles all CSI PHY configuration - VIC should not interfere */
+    pr_info("*** VIC: SKIPPING CSI PHY Config writes - CSI module handles this! ***\n");
     writel(0x1b, csi_base + 0x160);
     writel(0x18, csi_base + 0x164);
     writel(0x7f, csi_base + 0x168);
