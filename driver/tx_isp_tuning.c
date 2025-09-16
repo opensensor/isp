@@ -49,6 +49,28 @@
 extern void (*isp_event_func_cb[32])(void);
 extern struct tx_isp_dev *ourISPdev;
 
+/* Forward declarations for frame channel management */
+struct frame_channel_device {
+    struct miscdevice miscdev;
+    int channel_num;
+    struct tx_isp_channel_state {
+        bool enabled;
+        bool streaming;
+        int format;
+        int width;
+        int height;
+        int buffer_count;
+        uint32_t sequence;
+        struct frame_buffer current_buffer;
+        spinlock_t buffer_lock;
+        wait_queue_head_t frame_wait;
+        bool frame_ready;
+    } state;
+};
+
+extern struct frame_channel_device *frame_channels;
+extern int num_channels;
+
 int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev);
 /* ===== TIZIANO WDR PROCESSING PIPELINE - Binary Ninja Reference Implementation ===== */
 
@@ -1766,8 +1788,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             pr_debug("*** TUNING: Triggering frame processing to prevent video drop ***\n");
 
                             /* Wake up all frame channels that are waiting for frames */
-                            extern struct frame_channel_device *frame_channels;
-                            extern int num_channels;
                             int i;
 
                             for (i = 0; i < num_channels; i++) {
