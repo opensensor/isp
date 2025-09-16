@@ -82,9 +82,9 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
         isp_dev->vic_regs = vic_dev->vic_regs;
     }
     
-    /* Initialize VIC device dimensions */
-    vic_dev->width = 1920;  /* Default HD width */
-    vic_dev->height = 1080; /* Default HD height */
+    /* Initialize VIC device dimensions - will be updated with sensor dimensions later */
+    vic_dev->width = 1920;  /* Default HD width - will be overridden */
+    vic_dev->height = 1080; /* Default HD height - will be overridden */
     
     /* Set up VIC subdev structure */
     memset(&vic_dev->sd, 0, sizeof(vic_dev->sd));
@@ -1262,7 +1262,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         
         /* Binary Ninja: 00010a90-00010aa8 - Final MIPI config */
         writel((sensor_attr->total_width << 31) | mipi_config, vic_regs + 0x10);
-        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+        writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         wmb();
         
         /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence */
@@ -1310,7 +1310,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         }
         
         writel(bt601_config, vic_regs + 0x10);
-        writel((vic_dev->width << 1) | 0x100000, vic_regs + 0x18);
+        writel((actual_width << 1) | 0x100000, vic_regs + 0x18);
         writel(0x30, vic_regs + 0x3c);
         writel(0x1b8, vic_regs + 0x1c);
         writel(0x1402d0, vic_regs + 0x30);
@@ -1319,7 +1319,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0, vic_regs + 0x1a0);
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
-        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+        writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         
         writel(2, vic_regs + 0x0);
         wmb();
@@ -1331,8 +1331,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         
         writel(0, vic_regs + 0xc);
         writel(0x800c0000, vic_regs + 0x10);
-        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
-        writel(vic_dev->width << 1, vic_regs + 0x18);
+        writel((actual_width << 16) | actual_height, vic_regs + 0x4);
+        writel(actual_width << 1, vic_regs + 0x18);
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
         writel(0x200, vic_regs + 0x1d0);
@@ -1348,8 +1348,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         
         writel(4, vic_regs + 0xc);
         writel(0x800c0000, vic_regs + 0x10);
-        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
-        writel(vic_dev->width << 1, vic_regs + 0x18);
+        writel((actual_width << 16) | actual_height, vic_regs + 0x4);
+        writel(actual_width << 1, vic_regs + 0x18);
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
         
@@ -2391,7 +2391,17 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* STEP 1: ISP isp-w02 - Initial CSI PHY Control registers */
                 pr_info("*** STEP 1: ISP isp-w02 - Initial CSI PHY Control registers ***\n");
                 /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
-                writel(0x7800438, vic_regs + 0x4);
+                /* CRITICAL FIX: Use sensor dimensions instead of hardcoded 1920x1080 */
+                u32 sensor_width = vic_dev->sensor_attr.total_width;
+                u32 sensor_height = vic_dev->sensor_attr.total_height;
+                if (sensor_width == 0 || sensor_height == 0) {
+                    sensor_width = 1920;
+                    sensor_height = 1080;
+                    pr_warn("*** DIMENSION FIX: Using default 1920x1080 (sensor_attr not available) ***\n");
+                } else {
+                    pr_info("*** DIMENSION FIX: Using sensor dimensions %dx%d ***\n", sensor_width, sensor_height);
+                }
+                writel((sensor_width << 16) | sensor_height, vic_regs + 0x4);
                 writel(0x2, vic_regs + 0xc);
                 writel(0x2, vic_regs + 0x14);
                 writel(0xf00, vic_regs + 0x18);
@@ -2435,7 +2445,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) ***\n");
                 /* Use the correct main_isp_base (0x13300000 = isp-m0) */
                 writel(0x54560031, main_isp_base + 0x0);
-                writel(0x7800438, main_isp_base + 0x4);
+                /* CRITICAL FIX: Use sensor dimensions instead of hardcoded 1920x1080 */
+                writel((sensor_width << 16) | sensor_height, main_isp_base + 0x4);
                 writel(0x1, main_isp_base + 0x8);
                 writel(0x80700008, main_isp_base + 0xc);
                 writel(0x1, main_isp_base + 0x28);
@@ -2456,7 +2467,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x80007000, main_isp_base + 0x110);
                 writel(0x777111, main_isp_base + 0x114);
                 writel(0x3f00, main_isp_base + 0x9804);
-                writel(0x7800438, main_isp_base + 0x9864);
+                /* CRITICAL FIX: Use sensor dimensions instead of hardcoded 1920x1080 */
+                writel((sensor_width << 16) | sensor_height, main_isp_base + 0x9864);
                 writel(0xc0000000, main_isp_base + 0x987c);
                 writel(0x1, main_isp_base + 0x9880);
                 writel(0x1, main_isp_base + 0x9884);

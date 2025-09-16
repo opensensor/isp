@@ -705,7 +705,18 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     /* Binary Ninja: ISP Control registers */
     pr_info("*** WRITING ISP CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***\n");
     system_reg_write(0x9804, 0x3f00);
-    system_reg_write(0x9864, 0x7800438);
+    /* CRITICAL FIX: Use dynamic sensor dimensions instead of hardcoded 1920x1080 */
+    /* Get sensor dimensions from VIC device if available */
+    u32 sensor_dimensions = 0x7800438; /* Default 1920x1080 */
+    if (ourISPdev && ourISPdev->vic_dev) {
+        struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        if (vic->sensor_attr.total_width != 0 && vic->sensor_attr.total_height != 0) {
+            sensor_dimensions = (vic->sensor_attr.total_width << 16) | vic->sensor_attr.total_height;
+            pr_info("*** DIMENSION FIX: Using sensor dimensions %dx%d for ISP control ***\n",
+                    vic->sensor_attr.total_width, vic->sensor_attr.total_height);
+        }
+    }
+    system_reg_write(0x9864, sensor_dimensions);
     system_reg_write(0x987c, 0xc0000000);
     system_reg_write(0x9880, 0x1);
     system_reg_write(0x9884, 0x1);
@@ -737,7 +748,8 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
         
         /* Reference driver CSI PHY initialization sequence */
         writel(0x54560031, csi_phy_regs + 0x0);
-        writel(0x7800438, csi_phy_regs + 0x4);
+        /* CRITICAL FIX: Use dynamic sensor dimensions instead of hardcoded 1920x1080 */
+        writel(sensor_dimensions, csi_phy_regs + 0x4);
         writel(0x1, csi_phy_regs + 0x8);
         writel(0x80700008, csi_phy_regs + 0xc);
         writel(0x1, csi_phy_regs + 0x28);
@@ -2870,8 +2882,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         // MIPI configuration register 0x10: Format-specific value
                         iowrite32(0x40000, vic_dev->vic_regs + 0x10);
                         
-                        // MIPI stride configuration register 0x18
-                        iowrite32(vic_dev->width, vic_dev->vic_regs + 0x18);
+                        // MIPI stride configuration register 0x18 - use sensor width
+                        iowrite32(sensor_width, vic_dev->vic_regs + 0x18);
                         
                         // DMA buffer configuration registers (from reference)
                         iowrite32(0x100010, vic_dev->vic_regs + 0x1a4);  // DMA config
