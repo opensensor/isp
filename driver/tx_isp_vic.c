@@ -1037,8 +1037,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* MIPI interface - Binary Ninja 000107ec-00010b04 */
         pr_info("MIPI interface configuration\n");
         
-        /* CRITICAL FIX: REMOVED conflicting CSI PHY write from VIC code */
-        pr_info("*** VIC: SKIPPING CSI mode write - would corrupt CSI PHY register 0xc! ***\n");
+        /* Binary Ninja: 000107ec - Set CSI mode */
+        writel(3, vic_regs + 0xc);  /* RESTORED: This is VIC mode config, not CSI PHY corruption */
+        wmb();
+        pr_info("*** VIC: Set MIPI mode (3) to VIC control register 0xc ***\n");
         
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
