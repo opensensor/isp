@@ -2572,27 +2572,32 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* CRITICAL: Do NOT call ispvic_frame_channel_s_stream here - it should only be called during STREAMON */
                 ret = 0;  /* Return success - VIC is ready for STREAMON */
                 
-                if (current_state != 4) {
-                    pr_info("vic_core_s_stream: Stream ON - tx_isp_vic_start called after proper sub-device init\n");
+                /* CRITICAL FIX: ALWAYS enable interrupts when streaming is enabled */
+                /* This fixes the bug where subsequent calls to vic_core_s_stream would not re-enable interrupts */
+                pr_info("vic_core_s_stream: Stream ON - ensuring VIC interrupts are enabled\n");
 
-                    /* CRITICAL FIX: Only enable interrupts AFTER all initialization is complete */
+                /* Set state to streaming if not already */
+                if (current_state != 4) {
                     vic_dev->state = 4;
                     wmb();  /* Ensure state is written before enabling interrupts */
-                    vic_start_ok = 1;  /* NOW safe to enable interrupt processing */
-                    pr_info("*** INTERRUPTS RE-ENABLED AFTER COMPLETE INITIALIZATION ***\n");
-
-                    /* CRITICAL FIX: Ensure VIC configuration is robust against CSI PHY register changes */
-                    /* The CSI PHY register updates at delta 170ms can cause control limit errors */
-                    /* Pre-configure VIC to handle these changes gracefully */
-                    u32 vic_ctrl = readl(vic_regs + 0xc);
-                    vic_ctrl |= 0x8;  /* Enable robust mode to handle timing changes */
-                    writel(vic_ctrl, vic_regs + 0xc);
-                    wmb();
-                    pr_info("*** VIC ROBUST MODE: Enabled to handle CSI PHY timing changes ***\n");
-
-                    pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
-                    return ret;
+                    pr_info("vic_core_s_stream: VIC state set to 4 (streaming)\n");
                 }
+
+                /* CRITICAL FIX: ALWAYS enable interrupts on every streaming enable call */
+                vic_start_ok = 1;  /* ALWAYS safe to enable interrupt processing when streaming */
+                pr_info("*** INTERRUPTS ENABLED: vic_start_ok = 1 ***\n");
+
+                /* CRITICAL FIX: Ensure VIC configuration is robust against CSI PHY register changes */
+                /* The CSI PHY register updates at delta 170ms can cause control limit errors */
+                /* Pre-configure VIC to handle these changes gracefully */
+                u32 vic_ctrl = readl(vic_regs + 0xc);
+                vic_ctrl |= 0x8;  /* Enable robust mode to handle timing changes */
+                writel(vic_ctrl, vic_regs + 0xc);
+                wmb();
+                pr_info("*** VIC ROBUST MODE: Enabled to handle CSI PHY timing changes ***\n");
+
+                pr_info("vic_core_s_stream: VIC streaming enabled successfully, state=%d\n", vic_dev->state);
+                return 0;  /* Always return success for streaming enable */
             }
         }
     }
