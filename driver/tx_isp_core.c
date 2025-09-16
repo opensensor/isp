@@ -2127,19 +2127,13 @@ int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *i
 
     /* Frame sync workqueue initialization moved to tx_isp_core_probe() */
 
-    /* CRITICAL: CSI PHY register protection - prevent corruption after stream start */
-    pr_info("*** ISP CORE: Setting up CSI PHY register protection ***\n");
+    /* CRITICAL FIX: DISABLE CSI PHY protection - it was causing the corruption! */
+    pr_info("*** ISP CORE: CSI PHY protection DISABLED - it was overwriting correct lane configuration ***\n");
+    pr_info("*** The protection system was saving wrong initial values and 'restoring' them every 80ms ***\n");
+    pr_info("*** This was the root cause of CSI PHY corruption that killed VIC interrupts! ***\n");
 
-    /* Store initial CSI PHY register values for protection */
-    if (ourISPdev && ourISPdev->phy_base) {
-        saved_phy_ctrl = readl(ourISPdev->phy_base + 0x0);
-        saved_phy_data = readl(ourISPdev->phy_base + 0x4);
-        saved_phy_clk = readl(ourISPdev->phy_base + 0x8);
-        phy_protection_enabled = 1;
-
-        pr_info("*** CSI PHY PROTECTION ENABLED: CTRL=0x%08x, DATA=0x%08x, CLK=0x%08x ***\n",
-                saved_phy_ctrl, saved_phy_data, saved_phy_clk);
-    }
+    /* Keep protection disabled - our CSI Lane Configuration is correct */
+    phy_protection_enabled = 0;  /* DISABLED */
 
     /* CRITICAL: Enable ISP interrupts - EXACT Binary Ninja reference implementation */
     pr_info("*** tisp_init: Enabling ISP interrupts (Binary Ninja exact) ***\n");
