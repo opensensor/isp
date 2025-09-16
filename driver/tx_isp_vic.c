@@ -1036,7 +1036,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     } else if (interface_type == 2) {
         /* MIPI interface - Binary Ninja 000107ec-00010b04 */
         pr_info("MIPI interface configuration\n");
-        
+
+        /* CRITICAL: Initialize VIC hardware before unlock sequence */
+        pr_info("*** CRITICAL: Initializing VIC hardware at 0x10023000 before unlock ***\n");
+        int init_ret = tx_isp_vic_hw_init(&vic_dev->sd);
+        if (init_ret != 0) {
+            pr_err("VIC hardware initialization failed: %d\n", init_ret);
+            return init_ret;
+        }
+        pr_info("*** VIC hardware initialized successfully ***\n");
+
         /* Binary Ninja: 000107ec - Set CSI mode */
         writel(3, vic_regs + 0xc);  /* RESTORED: This is VIC mode config, not CSI PHY corruption */
         wmb();
