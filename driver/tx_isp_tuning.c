@@ -1663,6 +1663,16 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
             pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
         }
         
+        /* CRITICAL: Initialize all tiziano components during auto-initialization */
+        pr_info("*** AUTO-INIT: Calling tiziano_init_all_pipeline_components ***\n");
+        extern int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32_t fps, int wdr_mode);
+        int init_ret = tiziano_init_all_pipeline_components(1920, 1080, 25, 0);
+        if (init_ret != 0) {
+            pr_err("*** AUTO-INIT: tiziano_init_all_pipeline_components failed: %d ***\n", init_ret);
+        } else {
+            pr_info("*** AUTO-INIT: All tiziano components initialized successfully ***\n");
+        }
+
         /* Enable tuning and mark auto-init as done */
         ourISPdev->tuning_enabled = 3;
         auto_init_done = true;
