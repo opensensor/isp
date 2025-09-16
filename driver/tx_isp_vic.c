@@ -2519,25 +2519,24 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x10000000, main_isp_base + 0xb078);  /* 0x0 -> 0x10000000 */
                 wmb();
                 
-                /* STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection */
-                pr_info("*** STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection ***\n");
-                /* Reuse csi_phy_base from earlier declaration */
-                
-                /* Write the exact ISP isp-csi sequence from the working trace */
-                writel(0x7d, csi_phy_base + 0x0);
-                writel(0xe3, csi_phy_base + 0x4);
-                writel(0xa0, csi_phy_base + 0x8);
-                writel(0x83, csi_phy_base + 0xc);
-                writel(0xfa, csi_phy_base + 0x10);
-                writel(0x88, csi_phy_base + 0x1c);
-                writel(0x4e, csi_phy_base + 0x20);
-                writel(0xdd, csi_phy_base + 0x24);
-                writel(0x84, csi_phy_base + 0x28);
-                writel(0x5e, csi_phy_base + 0x2c);
-                writel(0xf0, csi_phy_base + 0x30);
-                writel(0xc0, csi_phy_base + 0x34);
-                writel(0x36, csi_phy_base + 0x38);
-                writel(0xdb, csi_phy_base + 0x3c);
+                /* STEP 6: REVERT - Use original working register sequence */
+                pr_info("*** STEP 6: REVERT - Using original working register sequence ***\n");
+
+                /* REVERT: Use original vic_regs base that was working */
+                writel(0x7d, vic_regs + 0x0);
+                writel(0xe3, vic_regs + 0x4);
+                writel(0xa0, vic_regs + 0x8);
+                writel(0x83, vic_regs + 0xc);
+                writel(0xfa, vic_regs + 0x10);
+                writel(0x88, vic_regs + 0x1c);
+                writel(0x4e, vic_regs + 0x20);
+                writel(0xdd, vic_regs + 0x24);
+                writel(0x84, vic_regs + 0x28);
+                writel(0x5e, vic_regs + 0x2c);
+                writel(0xf0, vic_regs + 0x30);
+                writel(0xc0, vic_regs + 0x34);
+                writel(0x36, vic_regs + 0x38);
+                writel(0xdb, vic_regs + 0x3c);
                 /* Continue with the complete ISP isp-csi sequence... */
                 wmb();
                 
