@@ -89,183 +89,6 @@ static uint32_t again_new = 0x400;
 static uint32_t effect_frame = 0;
 static uint32_t effect_count = 0;
 
-/* Continuous processing work function - generates register writes like reference driver */
-static void isp_continuous_processing_work_func(struct work_struct *work)
-{
-    struct tx_isp_dev *isp_dev = global_isp_dev;
-    void __iomem *isp_regs;
-    uint32_t counter = atomic_read(&processing_counter);
-    uint32_t reg_val;
-    int i;
-    
-    if (!isp_dev || !isp_dev->vic_regs || !isp_processing_enabled) {
-        goto reschedule;
-    }
-    
-    isp_regs = isp_dev->vic_regs - 0x9a00;  /* Get ISP base like reference */
-    
-    /* *** CONTINUOUS REGISTER WRITES LIKE REFERENCE DRIVER *** */
-    /* These writes generate the activity your trace module captures */
-    
-    /* Binary Ninja: system_reg_write_ae() calls - Core Control registers */
-    uint32_t core_base = 0xb000;
-    
-    /* Simulate the continuous register patterns from your trace reference */
-    for (i = 0; i < 8; i++) {
-        uint32_t offset = core_base + 0x50 + (i * 4);
-        uint32_t pattern_val = 0x1f00a + (counter * 0x100) + i;
-        
-        /* Mix in time-based variation like the reference trace shows */
-        if (counter % 3 == 0) pattern_val ^= 0x1;
-        if (counter % 5 == 0) pattern_val += 0x100;
-        if (counter % 7 == 0) pattern_val = (pattern_val & 0xfff0ffff) | ((counter & 0xf) << 16);
-        
-        writel(pattern_val, isp_regs + offset);
-        wmb();
-    }
-    
-    /* ISP Control register updates - matches reference trace patterns */
-    uint32_t isp_ctrl_base = 0x9800;
-    reg_val = readl(isp_regs + isp_ctrl_base + 0x7c);
-    reg_val = (reg_val & 0xd04e00ae) | (counter & 0xff);
-    writel(reg_val, isp_regs + isp_ctrl_base + 0x7c);
-    wmb();
-    
-    reg_val = readl(isp_regs + isp_ctrl_base + 0xcc); 
-    reg_val += 1;
-    if (reg_val > 0x18) reg_val = 0xb;
-    writel(reg_val, isp_regs + isp_ctrl_base + 0xcc);
-    wmb();
-    
-    reg_val = readl(isp_regs + isp_ctrl_base + 0xe8);
-    reg_val ^= 0x1;
-    writel(reg_val, isp_regs + isp_ctrl_base + 0xe8);
-    wmb();
-    
-    /* Simulate AE processing from tisp_ae0_process_impl */
-    effect_frame = (effect_frame + 1) % 16;
-    
-    /* Update gain caches with variation */
-    uint32_t base_gain = 0x400 + (counter % 0x200);
-    ae_gain_cache[effect_frame] = base_gain;
-    ae_dg_cache[effect_frame] = base_gain + 0x4;
-    
-    total_gain_new = (ae_gain_cache[effect_frame] * ae_dg_cache[effect_frame]) >> 6;
-    again_new = ae_gain_cache[effect_frame] << 6;
-    
-    /* Generate system_reg_write_ae calls like Binary Ninja shows */
-    if (total_gain_new != total_gain_old || (counter % 10) == 0) {
-        total_gain_old = total_gain_new;
-        
-        /* Write to register 0x1030 or 0x1000 based on mode */
-        uint32_t ae_reg = (counter % 2) ? 0x1030 : 0x1000;
-        writel(total_gain_new, isp_regs + ae_reg);
-        wmb();
-        
-        writel(total_gain_new >> 8, isp_regs + ae_reg + 4);
-        wmb();
-    }
-    
-    if (again_new != again_old || (counter % 12) == 0) {
-        again_old = again_new;
-        
-        /* Write to AE gain registers */
-        writel(again_new, isp_regs + 0x1034);
-        wmb();
-    }
-    
-    /* CRITICAL: DISABLE CSI PHY register updates during VIC frame processing */
-    /* These were causing the CSI PHY Control writes that disrupted VIC frame done interrupts */
-    /* CSI PHY register updates - generates the patterns your trace captures */
-    if (0 && isp_dev->csi_regs) {  /* DISABLED to prevent VIC frame disruption */
-        void __iomem *csi_regs = isp_dev->csi_regs;
-
-        /* These match the CSI PHY Control patterns from your reference trace */
-        uint32_t phy_base_offsets[] = {0x8c, 0x90, 0xa0, 0xb0, 0x14, 0x40};
-        uint32_t phy_patterns[] = {0x8, 0x494, 0xba, 0x2fa, 0x330, 0x1a001c};
-        
-        for (i = 0; i < ARRAY_SIZE(phy_base_offsets); i++) {
-            uint32_t offset = phy_base_offsets[i];
-            uint32_t base_val = phy_patterns[i];
-            
-            /* Add time-based variation like reference trace shows */
-            uint32_t varied_val = base_val;
-            if (counter % 4 == 0) varied_val = (varied_val & ~0xff) | (counter & 0xff);
-            if (counter % 6 == 0) varied_val += 0x100;
-            if (counter % 8 == 0) varied_val = (varied_val ^ 0x4) & 0xffffff;
-            
-            writel(varied_val, csi_regs + offset);
-            wmb();
-            
-            /* Sometimes write back to original - creates delta patterns */
-            if ((counter + i) % 15 == 0) {
-                writel(base_val, csi_regs + offset);
-                wmb();
-            }
-        }
-    }
-    
-    atomic_inc(&processing_counter);
-    
-reschedule:
-    /* Reschedule for next processing cycle - matches reference driver timing */
-    if (isp_processing_enabled) {
-        /* Schedule next processing in 60-90ms to match reference trace timing */
-        unsigned long delay = HZ * (60 + (counter % 30)) / 1000;  /* 60-90ms */
-        schedule_delayed_work(&isp_continuous_processing_work, delay);
-    }
-}
-
-/* Start continuous processing */
-static int isp_start_continuous_processing(struct tx_isp_dev *isp_dev)
-{
-    if (!isp_dev) {
-        pr_err("isp_start_continuous_processing: Invalid ISP device\n");
-        return -EINVAL;
-    }
-    
-    pr_info("*** isp_start_continuous_processing: Starting continuous processing ***\n");
-    
-    global_isp_dev = isp_dev;
-    isp_processing_enabled = true;
-    atomic_set(&processing_counter, 0);
-    
-    if (!isp_processing_workqueue) {
-        isp_processing_workqueue = create_singlethread_workqueue("isp_processing");
-        if (!isp_processing_workqueue) {
-            pr_err("Failed to create ISP processing workqueue\n");
-            return -ENOMEM;
-        }
-    }
-    
-    INIT_DELAYED_WORK(&isp_continuous_processing_work, isp_continuous_processing_work_func);
-    
-    /* Start processing after a short delay */
-    schedule_delayed_work(&isp_continuous_processing_work, HZ / 10);  /* 100ms initial delay */
-    
-    pr_info("*** isp_start_continuous_processing: Continuous processing started ***\n");
-    pr_info("*** This should generate register writes that your trace module captures! ***\n");
-    
-    return 0;
-}
-
-/* Stop continuous processing */
-static void isp_stop_continuous_processing(void)
-{
-    pr_info("*** isp_stop_continuous_processing: Stopping continuous processing ***\n");
-    
-    isp_processing_enabled = false;
-    cancel_delayed_work_sync(&isp_continuous_processing_work);
-    
-    if (isp_processing_workqueue) {
-        destroy_workqueue(isp_processing_workqueue);
-        isp_processing_workqueue = NULL;
-    }
-    
-    global_isp_dev = NULL;
-    
-    pr_info("*** isp_stop_continuous_processing: Continuous processing stopped ***\n");
-}
 
 static int isp_clk = 100000000;
 module_param(isp_clk, int, S_IRUGO);
@@ -348,14 +171,7 @@ int tx_isp_core_start(struct tx_isp_subdev *sd)
             return ret;
         }
     }
-    
-    /* Start continuous processing */
-//    ret = isp_start_continuous_processing(isp_dev);
-//    if (ret < 0) {
-//        pr_err("tx_isp_core_start: Failed to start continuous processing: %d\n", ret);
-//        return ret;
-//    }
-    
+
     /* Set pipeline to streaming state */
     isp_dev->pipeline_state = ISP_PIPELINE_STREAMING;
     
@@ -4108,16 +3924,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 } else {
                     pr_err("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
                 }
-
-                /* CRITICAL: Start continuous processing - this generates the register activity your trace captures! */
-//                pr_info("*** tx_isp_core_probe: Starting continuous processing system ***\n");
-//                result = isp_start_continuous_processing(ourISPdev);
-//                if (result == 0) {
-//                    pr_info("*** tx_isp_core_probe: Continuous processing started successfully ***\n");
-//                    pr_info("*** YOUR TRACE MODULE SHOULD NOW CAPTURE CONTINUOUS REGISTER WRITES! ***\n");
-//                } else {
-//                    pr_err("*** tx_isp_core_probe: Failed to start continuous processing: %d ***\n", result);
-//                }
                 
                 return 0;
             }
