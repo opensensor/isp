@@ -804,8 +804,8 @@ struct frame_channel_device {
     struct tx_isp_channel_state state;
 };
 
-struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
-int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
+static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
+static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 
 /* VIC continuous frame generation work queue */
 static struct delayed_work vic_frame_work;
@@ -6179,22 +6179,46 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
 static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd)
 {
     unsigned long flags;
-    
+
     if (!fcd) {
         return;
     }
-    
+
     pr_debug("Channel %d: Waking up frame waiters\n", fcd->channel_num);
-    
+
     /* Mark frame as ready and wake up waiters */
     spin_lock_irqsave(&fcd->state.buffer_lock, flags);
     fcd->state.frame_ready = true;
     spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
-    
+
     /* Wake up any threads waiting for frame completion */
     wake_up_interruptible(&fcd->state.frame_wait);
-    
+
     pr_debug("Channel %d: Frame ready\n", fcd->channel_num);
+}
+
+/* Public function to wake up all streaming frame channels - for tuning system */
+void tx_isp_wakeup_frame_channels(void)
+{
+    int i;
+
+    pr_debug("*** Waking up all streaming frame channels ***\n");
+
+    for (i = 0; i < num_channels; i++) {
+        struct frame_channel_device *fcd = &frame_channels[i];
+        if (fcd && fcd->state.streaming) {
+            unsigned long flags;
+
+            /* Mark frame as ready and wake up waiters */
+            spin_lock_irqsave(&fcd->state.buffer_lock, flags);
+            if (!fcd->state.frame_ready) {
+                fcd->state.frame_ready = true;
+                wake_up_interruptible(&fcd->state.frame_wait);
+                pr_debug("*** Woke up channel %d for frame processing ***\n", i);
+            }
+            spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
+        }
+    }
 }
 
 /* Simulate frame completion for testing - in real hardware this comes from interrupts */
@@ -6646,6 +6670,9 @@ EXPORT_SYMBOL(tx_isp_vic_platform_device);
 EXPORT_SYMBOL(tx_isp_vin_platform_device);
 EXPORT_SYMBOL(tx_isp_fs_platform_device);
 EXPORT_SYMBOL(tx_isp_core_platform_device);
+
+/* Export frame channel wakeup function for tuning system */
+EXPORT_SYMBOL(tx_isp_wakeup_frame_channels);
 
 module_init(tx_isp_init);
 module_exit(tx_isp_exit);

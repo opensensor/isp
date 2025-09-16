@@ -49,27 +49,8 @@
 extern void (*isp_event_func_cb[32])(void);
 extern struct tx_isp_dev *ourISPdev;
 
-/* Forward declarations for frame channel management */
-struct frame_channel_device {
-    struct miscdevice miscdev;
-    int channel_num;
-    struct tx_isp_channel_state {
-        bool enabled;
-        bool streaming;
-        int format;
-        int width;
-        int height;
-        int buffer_count;
-        uint32_t sequence;
-        struct frame_buffer current_buffer;
-        spinlock_t buffer_lock;
-        wait_queue_head_t frame_wait;
-        bool frame_ready;
-    } state;
-};
-
-extern struct frame_channel_device *frame_channels;
-extern int num_channels;
+/* Forward declaration for frame channel wakeup function */
+extern void tx_isp_wakeup_frame_channels(void);
 
 int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev);
 /* ===== TIZIANO WDR PROCESSING PIPELINE - Binary Ninja Reference Implementation ===== */
@@ -1788,23 +1769,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             pr_debug("*** TUNING: Triggering frame processing to prevent video drop ***\n");
 
                             /* Wake up all frame channels that are waiting for frames */
-                            int i;
-
-                            for (i = 0; i < num_channels; i++) {
-                                struct frame_channel_device *fcd = &frame_channels[i];
-                                if (fcd && fcd->state.streaming) {
-                                    unsigned long flags;
-
-                                    /* Mark frame as ready and wake up waiters */
-                                    spin_lock_irqsave(&fcd->state.buffer_lock, flags);
-                                    if (!fcd->state.frame_ready) {
-                                        fcd->state.frame_ready = true;
-                                        wake_up_interruptible(&fcd->state.frame_wait);
-                                        pr_debug("*** TUNING: Woke up channel %d for frame processing ***\n", i);
-                                    }
-                                    spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
-                                }
-                            }
+                            tx_isp_wakeup_frame_channels();
 
                             /* Increment frame counter for /proc/jz/isp/isp-w02 */
                             ourISPdev->frame_count++;
