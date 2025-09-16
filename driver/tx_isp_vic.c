@@ -2574,6 +2574,24 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* CRITICAL: Do NOT call ispvic_frame_channel_s_stream here - it should only be called during STREAMON */
                 ret = 0;  /* Return success - VIC is ready for STREAMON */
                 
+                /* CRITICAL FIX: Initialize CSI before enabling VIC streaming */
+                pr_info("*** CRITICAL: Initializing CSI before VIC streaming ***\n");
+                if (ourISPdev && ourISPdev->csi_dev) {
+                    struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
+                    extern int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
+
+                    pr_info("*** Calling CSI initialization for MIPI interface ***\n");
+                    int csi_result = csi_core_ops_init(&csi_dev->sd, 1);
+                    if (csi_result != 0 && csi_result != 0xfffffdfd) {
+                        pr_err("*** CSI initialization failed: %d ***\n", csi_result);
+                        pr_err("*** This will cause VIC control limit errors! ***\n");
+                    } else {
+                        pr_info("*** CSI initialization successful - MIPI interface ready ***\n");
+                    }
+                } else {
+                    pr_err("*** WARNING: No CSI device available for initialization ***\n");
+                }
+
                 /* CRITICAL FIX: ALWAYS enable interrupts when streaming is enabled */
                 /* This fixes the bug where subsequent calls to vic_core_s_stream would not re-enable interrupts */
                 pr_info("vic_core_s_stream: Stream ON - ensuring VIC interrupts are enabled\n");
