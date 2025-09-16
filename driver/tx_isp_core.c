@@ -195,11 +195,6 @@ int tx_isp_core_stop(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
     
-    pr_info("*** tx_isp_core_stop: Stopping ISP core processing ***\n");
-    
-    /* Stop continuous processing */
-    isp_stop_continuous_processing();
-    
     /* Set pipeline to idle state */
     isp_dev->pipeline_state = ISP_PIPELINE_IDLE;
     
