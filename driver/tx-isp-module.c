@@ -1524,9 +1524,10 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     wmb();
     
     /* CRITICAL: Binary Ninja global vic_start_ok flag check */
-    /* Process VIC interrupts when vic_start_ok is enabled AND there are actual interrupt bits */
-    if (vic_start_ok != 0 && (v1_7 != 0 || v1_10 != 0)) {
-        pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x, 0x1e0=0x%x) ***\n", v1_7, v1_10, reg_1e0);
+    /* Process VIC interrupts when vic_start_ok is enabled */
+    /* The v1_7=0x200000 shows VIC interrupts are working correctly! */
+    if (vic_start_ok != 0) {
+        pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
         
         /* Binary Ninja: if (($v1_7 & 1) != 0) */
         if ((v1_7 & 1) != 0) {
@@ -1721,11 +1722,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         }
         
     } else {
-        if (vic_start_ok == 0) {
-            pr_debug("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled ***\n");
-        } else if (v1_7 == 0 && v1_10 == 0) {
-            pr_debug("*** VIC INTERRUPT: No pending interrupt bits (0x1e0=0x%x, 0x1e8=0x%x) ***\n", reg_1e0, reg_1e8);
-        }
+        pr_debug("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled ***\n");
     }
     
     /* Binary Ninja: return 1 */
