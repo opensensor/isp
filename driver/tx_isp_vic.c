@@ -2440,10 +2440,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 // /* Continue with the complete ISP isp-csi sequence... */
                 // wmb();
                 
-                /* STEP 7: Final CSI PHY control sequence */
-                pr_info("*** STEP 7: Final CSI PHY control sequence ***\n");
-                writel(0x1, vic_regs + 0xc);
-                writel(0x1, vic_regs + 0x10);
+                /* CRITICAL FIX: REMOVED conflicting CSI PHY writes from VIC code */
+                pr_info("*** STEP 7: SKIPPING CSI PHY writes - VIC should not touch CSI registers! ***\n");
                 writel(0x630, vic_regs + 0x14);
                 wmb();
                 
