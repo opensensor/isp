@@ -1425,11 +1425,41 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     
     /* CRITICAL: Validate sensor dimensions BEFORE configuring VIC to prevent control limit error */
     if (vic_dev->width == 0 || vic_dev->height == 0) {
-        pr_err("*** CRITICAL: Invalid sensor dimensions %dx%d - will cause control limit error! ***\n", 
+        pr_err("*** CRITICAL: Invalid sensor dimensions %dx%d - will cause control limit error! ***\n",
                vic_dev->width, vic_dev->height);
         vic_dev->width = 1920;   /* Set safe defaults */
         vic_dev->height = 1080;
-        pr_info("*** Using safe default dimensions 2200x1418 ***\n");
+        pr_info("*** Using safe default dimensions 1920x1080 ***\n");
+    }
+
+    /* CRITICAL FIX: Configure VIC dimensions properly to prevent control limit error */
+    /* Binary Ninja: vic_pipo_mdma_enable implementation */
+    void __iomem *vic_regs = vic_dev->vic_regs;
+    if (vic_regs) {
+        u32 width = vic_dev->width;
+        u32 height = vic_dev->height;
+        u32 stride = width << 1;  /* width * 2 for 16-bit pixels */
+
+        pr_info("*** VIC CONTROL LIMIT FIX: Configuring VIC dimensions %dx%d, stride=%d ***\n",
+                width, height, stride);
+
+        /* Binary Ninja: *(vic_regs + 0x304) = width << 16 | height */
+        writel((width << 16) | height, vic_regs + 0x304);
+        wmb();
+
+        /* Binary Ninja: *(vic_regs + 0x308) = 1 */
+        writel(1, vic_regs + 0x308);
+        wmb();
+
+        /* Binary Ninja: *(vic_regs + 0x310) = stride */
+        writel(stride, vic_regs + 0x310);
+        wmb();
+
+        /* Binary Ninja: *(vic_regs + 0x314) = stride */
+        writel(stride, vic_regs + 0x314);
+        wmb();
+
+        pr_info("*** VIC CONTROL LIMIT FIX: VIC dimensions configured - should prevent control limit error ***\n");
     }
 
     /* MIPS ALIGNMENT CHECK: Validate vic_dev->sensor_attr access */

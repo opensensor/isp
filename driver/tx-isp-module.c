@@ -1591,6 +1591,26 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         
         if ((v1_7 & 0x200000) != 0) {
             pr_err("Err2 [VIC_INT] : control limit err!!!\n");
+
+            /* CRITICAL: VIC Control Limit Error Recovery */
+            pr_info("*** VIC CONTROL LIMIT ERROR: Attempting recovery ***\n");
+
+            /* Reset VIC dimensions configuration */
+            if (vic_regs) {
+                u32 width = 1920;   /* Safe default width */
+                u32 height = 1080;  /* Safe default height */
+                u32 stride = width << 1;  /* width * 2 for 16-bit pixels */
+
+                /* Binary Ninja: Reconfigure VIC dimensions */
+                writel((width << 16) | height, vic_regs + 0x304);
+                writel(1, vic_regs + 0x308);
+                writel(stride, vic_regs + 0x310);
+                writel(stride, vic_regs + 0x314);
+                wmb();
+
+                pr_info("*** VIC CONTROL LIMIT ERROR: Recovery applied - VIC dimensions reset to %dx%d ***\n",
+                        width, height);
+            }
         }
         
         if ((v1_7 & 0x400000) != 0) {

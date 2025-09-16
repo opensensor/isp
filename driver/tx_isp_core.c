@@ -510,13 +510,34 @@ static void ispcore_irq_fs_work(struct work_struct *work);
 /* Frame sync work function - triggers sensor I2C communication */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
+    extern struct tx_isp_dev *ourISPdev;
+    struct tx_isp_dev *isp_dev = ourISPdev;
+
     pr_info("*** ISP FRAME SYNC WORK: Triggering sensor I2C communication ***\n");
 
     /* Binary Ninja: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
-    /* This would trigger sensor register updates via I2C */
-    /* For now, just log that the work was triggered */
+    /* This triggers sensor register updates via I2C */
 
-    pr_info("*** ISP FRAME SYNC WORK: Sensor I2C communication triggered ***\n");
+    if (isp_dev && isp_dev->sensor && isp_dev->sensor->sd.ops &&
+        isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
+
+        pr_info("*** ISP FRAME SYNC WORK: Calling sensor IOCTL for I2C communication ***\n");
+
+        /* Call sensor IOCTL to trigger I2C communication */
+        /* This should resume I2C activity that stalled after init */
+        int ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
+                                                         TX_ISP_EVENT_SENSOR_FPS, NULL);
+
+        if (ret == 0) {
+            pr_info("*** ISP FRAME SYNC WORK: Sensor I2C communication successful ***\n");
+        } else {
+            pr_warn("*** ISP FRAME SYNC WORK: Sensor I2C communication failed: %d ***\n", ret);
+        }
+    } else {
+        pr_warn("*** ISP FRAME SYNC WORK: No sensor available for I2C communication ***\n");
+    }
+
+    pr_info("*** ISP FRAME SYNC WORK: Frame sync work completed ***\n");
 }
 
 /* Forward declarations for frame channel functions - avoid naming conflicts */
