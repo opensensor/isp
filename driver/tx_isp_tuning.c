@@ -1743,9 +1743,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         pr_info("*** CONTINUOUS TUNING: Performing CSI PHY and Core Control updates (cycle %d) ***\n",
                                 tuning_cycle_count);
 
-                        /* Perform the continuous register updates that the reference driver does */
-                        perform_continuous_csi_phy_tuning(dev);
-                        perform_continuous_core_control_tuning(dev);
                     }
                 }
 
@@ -4875,9 +4872,9 @@ int tisp_s_3dns_ratio(int ratio)
 EXPORT_SYMBOL(tisp_s_3dns_ratio);
 
 /* tisp_sdns_all_reg_refresh - Binary Ninja EXACT implementation */
-static int tisp_sdns_all_reg_refresh(uint32_t base_addr)
+static int tisp_sdns_all_reg_refresh(void)
 {
-    pr_info("tisp_sdns_all_reg_refresh: Refreshing SDNS registers at base 0x%x\n", base_addr);
+    pr_info("tisp_sdns_all_reg_refresh: Refreshing SDNS registers\n");
 
     /* Binary Ninja shows this calls many tisp_sdns_* configuration functions */
     /* For now, implement the key register write that triggers the update */
