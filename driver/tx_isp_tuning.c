@@ -4595,7 +4595,6 @@ EXPORT_SYMBOL(tiziano_mdns_init);
 EXPORT_SYMBOL(tiziano_gamma_init);
 EXPORT_SYMBOL(tiziano_hldc_init);
 EXPORT_SYMBOL(tisp_ct_update);
-EXPORT_SYMBOL(tisp_s_mdns_ratio);
 EXPORT_SYMBOL(tisp_sdns_wdr_en);
 EXPORT_SYMBOL(tisp_bcsh_wdr_en);
 EXPORT_SYMBOL(tisp_defog_wdr_en);
@@ -4948,6 +4947,7 @@ int tisp_s_mdns_ratio(int ratio)
     tisp_mdns_all_reg_refresh(data_9a9d0);
     return tisp_mdns_reg_trigger();
 }
+EXPORT_SYMBOL(tisp_s_mdns_ratio);
 
 /* tisp_s_3dns_ratio - 3D noise suppression ratio */
 int tisp_s_3dns_ratio(int ratio)
