@@ -135,7 +135,10 @@ static int tx_isp_proc_w02_show(struct seq_file *m, void *v)
      */
     seq_printf(m, " %u, 0\n", isp->frame_count);
     seq_printf(m, "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0\n");
-    
+
+    /* Debug: Log what we're outputting */
+    pr_debug("isp-w02 proc: outputting frame_count=%u\n", isp->frame_count);
+
     return 0;
 }
 
@@ -437,6 +440,15 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
     }
     pr_info("Created proc entry: /proc/jz/isp/isp-w01\n");
 
+    /* Create /proc/jz/isp/isp-w02 - CRITICAL: This was missing! */
+    ctx->isp_w02_entry = proc_create_data(TX_ISP_PROC_VIC_FILE, 0644, ctx->isp_dir,
+                                         &tx_isp_proc_w02_fops, isp);
+    if (!ctx->isp_w02_entry) {
+        pr_err("Failed to create isp-w02 proc entry\n");
+        goto error_remove_w01;
+    }
+    pr_info("*** CREATED PROC ENTRY: /proc/jz/isp/isp-w02 (CRITICAL FOR VIC FUNCTIONALITY) ***\n");
+
     /* Create /proc/jz/isp/isp-fs - CRITICAL FOR REFERENCE DRIVER COMPATIBILITY */
     ctx->isp_fs_entry = proc_create_data(TX_ISP_PROC_ISP_FS_FILE, 0644, ctx->isp_dir,
                                         &tx_isp_proc_fs_fops, isp);
@@ -446,8 +458,17 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
     }
     pr_info("*** CREATED PROC ENTRY: /proc/jz/isp/isp-fs (CRITICAL FOR FS FUNCTIONALITY) ***\n");
 
+    /* Create /proc/jz/isp/isp-m0 - CRITICAL MISSING PIECE */
+    ctx->isp_m0_entry = proc_create_data(TX_ISP_PROC_CSI_FILE, 0644, ctx->isp_dir,
+                                        &tx_isp_proc_m0_fops, isp);
+    if (!ctx->isp_m0_entry) {
+        pr_err("Failed to create isp-m0 proc entry\n");
+        goto error_remove_fs;
+    }
+    pr_info("*** CREATED PROC ENTRY: /proc/jz/isp/isp-m0 (CRITICAL FOR M0 FUNCTIONALITY) ***\n");
+
     /* Create /proc/jz/isp/csi */
-    ctx->csi_entry = proc_create_data(TX_ISP_PROC_CSI_FILE, 0644, ctx->isp_dir,
+    ctx->csi_entry = proc_create_data("csi", 0644, ctx->isp_dir,
                                      &tx_isp_proc_csi_fops, isp);
     if (!ctx->csi_entry) {
         pr_err("Failed to create csi proc entry\n");
@@ -456,7 +477,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
     pr_info("Created proc entry: /proc/jz/isp/csi\n");
 
     /* Create /proc/jz/isp/vic */
-    ctx->vic_entry = proc_create_data(TX_ISP_PROC_VIC_FILE, 0644, ctx->isp_dir,
+    ctx->vic_entry = proc_create_data("vic", 0644, ctx->isp_dir,
                                      &tx_isp_proc_vic_fops, isp);
     if (!ctx->vic_entry) {
         pr_err("Failed to create vic proc entry\n");
