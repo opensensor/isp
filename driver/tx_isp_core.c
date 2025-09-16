@@ -174,10 +174,12 @@ static void isp_continuous_processing_work_func(struct work_struct *work)
         wmb();
     }
     
+    /* CRITICAL: DISABLE CSI PHY register updates during VIC frame processing */
+    /* These were causing the CSI PHY Control writes that disrupted VIC frame done interrupts */
     /* CSI PHY register updates - generates the patterns your trace captures */
-    if (isp_dev->csi_regs) {
+    if (0 && isp_dev->csi_regs) {  /* DISABLED to prevent VIC frame disruption */
         void __iomem *csi_regs = isp_dev->csi_regs;
-        
+
         /* These match the CSI PHY Control patterns from your reference trace */
         uint32_t phy_base_offsets[] = {0x8c, 0x90, 0xa0, 0xb0, 0x14, 0x40};
         uint32_t phy_patterns[] = {0x8, 0x494, 0xba, 0x2fa, 0x330, 0x1a001c};
@@ -751,8 +753,10 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt */
         pr_info("*** ISP CORE: FRAME SYNC INTERRUPT ***\n");
 
-        /* CRITICAL: Check CSI PHY registers for corruption */
-        check_and_restore_csi_phy_registers();
+        /* CRITICAL: DISABLE CSI PHY register restoration during VIC frame processing */
+        /* This was causing CSI PHY writes that disrupted VIC frame done interrupts */
+        /* check_and_restore_csi_phy_registers(); */
+        pr_info("*** ISP CORE: CSI PHY restoration DISABLED to prevent VIC frame disruption ***\n");
 
         /* Binary Ninja: private_schedule_work(&fs_work) */
         /* CRITICAL: This triggers sensor I2C communication */
