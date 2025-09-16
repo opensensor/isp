@@ -120,6 +120,7 @@ static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
     err2 = readl(csi_base + 0x24);  /* ERR2 register */
     phy_state = readl(csi_base + 0x14);  /* PHY_STATE register */
 
+
     if (err1 || err2) {
         ret = IRQ_HANDLED;
 
