@@ -67,15 +67,15 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* Set self-pointer at offset 0xd4 */
     *(void **)((char *)vic_dev + 0xd4) = vic_dev;
     
-    /* *** REVERT: Keep original VIC register base - it was working! *** */
-    pr_info("*** REVERT: Mapping VIC registers to ORIGINAL working address 0x133e0000 ***\n");
-    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000); // REVERT to original working base
+    /* *** CRITICAL FIX: Map VIC registers directly to prevent corruption *** */
+    pr_info("*** CRITICAL: Mapping VIC registers directly to prevent corruption ***\n");
+    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000); // VIC W02 mapping
     if (!vic_dev->vic_regs) {
         pr_err("tx_isp_create_vic_device: Failed to map VIC registers at 0x133e0000\n");
         kfree(vic_dev);
         return -ENOMEM;
     }
-    pr_info("*** VIC registers mapped successfully to ORIGINAL address: %p ***\n", vic_dev->vic_regs);
+    pr_info("*** VIC registers mapped successfully: %p ***\n", vic_dev->vic_regs);
     
     /* Also store in ISP device for compatibility */
     if (!isp_dev->vic_regs) {
@@ -2293,14 +2293,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     /* REVERT: Ensure VIC registers are mapped to ORIGINAL working address */
     vic_regs = vic_dev->vic_regs;
     if (!vic_regs) {
-        pr_err("*** REVERT: VIC registers not mapped - mapping to ORIGINAL working address ***\n");
-        vic_regs = ioremap(0x133e0000, 0x10000);  /* REVERT to original working base */
+        pr_err("*** CRITICAL FIX: VIC registers not mapped - mapping now ***\n");
+        vic_regs = ioremap(0x133e0000, 0x10000);
         if (!vic_regs) {
             pr_err("vic_core_s_stream: Failed to map VIC registers at 0x133e0000\n");
             return -ENOMEM;
         }
         vic_dev->vic_regs = vic_regs;
-        pr_info("*** VIC registers mapped successfully to ORIGINAL address: %p ***\n", vic_regs);
+        pr_info("*** VIC registers mapped successfully: %p ***\n", vic_regs);
     }
 
     /* Calculate base addresses safely */
@@ -2352,11 +2352,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     return -ENOMEM;
                 }
                 
-                /* REMOVED: VIC dimension configuration - not in reference driver */
-
-                /* STEP 1: REVERT - Use original working register sequence */
-                pr_info("*** STEP 1: REVERT - Using original working VIC register sequence ***\n");
-                /* REVERT: Use original vic_regs base that was working */
+                /* STEP 1: ISP isp-w02 - Initial CSI PHY Control registers */
+                pr_info("*** STEP 1: ISP isp-w02 - Initial CSI PHY Control registers ***\n");
+                /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
                 writel(0x7800438, vic_regs + 0x4);
                 writel(0x2, vic_regs + 0xc);
                 writel(0x2, vic_regs + 0x14);
@@ -2492,35 +2490,34 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x10000000, main_isp_base + 0xb078);  /* 0x0 -> 0x10000000 */
                 wmb();
                 
-                /* STEP 6: REVERT - Use original working register sequence */
-                pr_info("*** STEP 6: REVERT - Using original working register sequence ***\n");
-
-                /* REVERT: Use original vic_regs base that was working */
-                writel(0x7d, vic_regs + 0x0);
-                writel(0xe3, vic_regs + 0x4);
-                writel(0xa0, vic_regs + 0x8);
-                writel(0x83, vic_regs + 0xc);
-                writel(0xfa, vic_regs + 0x10);
-                writel(0x88, vic_regs + 0x1c);
-                writel(0x4e, vic_regs + 0x20);
-                writel(0xdd, vic_regs + 0x24);
-                writel(0x84, vic_regs + 0x28);
-                writel(0x5e, vic_regs + 0x2c);
-                writel(0xf0, vic_regs + 0x30);
-                writel(0xc0, vic_regs + 0x34);
-                writel(0x36, vic_regs + 0x38);
-                writel(0xdb, vic_regs + 0x3c);
+                /* STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection */
+                pr_info("*** STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection ***\n");
+                void __iomem *csi_phy_base = csi_base;  /* CSI PHY base for detailed config */
+                
+                /* Write the exact ISP isp-csi sequence from the working trace */
+                writel(0x7d, csi_phy_base + 0x0);
+                writel(0xe3, csi_phy_base + 0x4);
+                writel(0xa0, csi_phy_base + 0x8);
+                writel(0x83, csi_phy_base + 0xc);
+                writel(0xfa, csi_phy_base + 0x10);
+                writel(0x88, csi_phy_base + 0x1c);
+                writel(0x4e, csi_phy_base + 0x20);
+                writel(0xdd, csi_phy_base + 0x24);
+                writel(0x84, csi_phy_base + 0x28);
+                writel(0x5e, csi_phy_base + 0x2c);
+                writel(0xf0, csi_phy_base + 0x30);
+                writel(0xc0, csi_phy_base + 0x34);
+                writel(0x36, csi_phy_base + 0x38);
+                writel(0xdb, csi_phy_base + 0x3c);
                 /* Continue with the complete ISP isp-csi sequence... */
                 wmb();
                 
-                /* STEP 7: DISABLED - This was breaking the working CSI PHY configuration */
-                pr_info("*** STEP 7: DISABLED - Skipping final CSI PHY sequence to preserve working config ***\n");
-                /* DISABLED: These writes were corrupting the working CSI PHY configuration
+                /* STEP 7: Final CSI PHY control sequence */
+                pr_info("*** STEP 7: Final CSI PHY control sequence ***\n");
                 writel(0x1, vic_regs + 0xc);
                 writel(0x1, vic_regs + 0x10);
                 writel(0x630, vic_regs + 0x14);
                 wmb();
-                */
                 
                 /* STEP 8: Now call VIC start with proper initialization complete */
                 pr_info("*** STEP 8: NOW calling tx_isp_vic_start with proper sub-device initialization ***\n");
