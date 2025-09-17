@@ -2735,11 +2735,19 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* STEP 8: CRITICAL - Copy real sensor attributes to VIC device before tx_isp_vic_start */
                 pr_info("*** STEP 8: CRITICAL - Synchronizing sensor attributes before VIC start ***\n");
 
-                if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->sensor_attr) {
+                if (ourISPdev && ourISPdev->sensor) {
                     pr_info("*** COPYING REAL SENSOR ATTRIBUTES TO VIC DEVICE ***\n");
 
-                    /* Copy the real sensor attributes from the registered sensor */
-                    memcpy(&vic_dev->sensor_attr, ourISPdev->sensor->sensor_attr, sizeof(vic_dev->sensor_attr));
+                    /* Try video.attr first (pointer), then attr (direct member) */
+                    if (ourISPdev->sensor->video.attr) {
+                        /* Copy from video.attr (pointer to sensor attributes) */
+                        memcpy(&vic_dev->sensor_attr, ourISPdev->sensor->video.attr, sizeof(vic_dev->sensor_attr));
+                        pr_info("*** SENSOR ATTR SYNC: Using video.attr (pointer) ***\n");
+                    } else {
+                        /* Copy from attr (direct member) */
+                        memcpy(&vic_dev->sensor_attr, &ourISPdev->sensor->attr, sizeof(vic_dev->sensor_attr));
+                        pr_info("*** SENSOR ATTR SYNC: Using attr (direct member) ***\n");
+                    }
 
                     pr_info("*** SENSOR ATTR SYNC: dbus_type=%d, total_width=%d, total_height=%d ***\n",
                             vic_dev->sensor_attr.dbus_type,
