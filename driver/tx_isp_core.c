@@ -1551,6 +1551,10 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
         writel(0x1000, core + 0x98bc);      /* New unmask - ONLY frame sync initially */
         wmb();
 
+        /* CRITICAL: Store the correct interrupt mask values for restoration */
+        /* Core Control register writes may overwrite these, so we need to restore them */
+        pr_info("*** ISP CORE: Interrupt masks configured - will restore if overwritten ***\n");
+
         ISP_INFO("*** ISP CORE: Pipeline ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
         ISP_INFO("*** ISP CORE: Hardware interrupt generation ENABLED (0x30=0xffffffff, 0x10=0x133) ***\n");
         ISP_INFO("*** ISP CORE: VIC->ISP pipeline should now generate hardware interrupts! ***\n");
