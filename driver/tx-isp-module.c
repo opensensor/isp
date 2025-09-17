@@ -1761,62 +1761,95 @@ static volatile bool subdev_init_complete = false;
 int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable);
 int tx_isp_vic_hw_init(struct tx_isp_subdev *sd);
 
-/* tx_isp_video_link_stream - FIXED implementation with proper MIPS alignment checks */
+/* tx_isp_video_link_stream - EXACT Binary Ninja reference implementation */
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 {
-    pr_info("*** tx_isp_video_link_stream: FIXED MIPS-SAFE implementation - enable=%d ***\n", enable);
-    
+    struct tx_isp_subdev **subdevs_ptr;    /* $s4 in reference: arg1 + 0x38 */
+    int i;
+    int result;
+
+    pr_info("*** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=%d ***\n", enable);
+
     if (!isp_dev) {
         pr_err("tx_isp_video_link_stream: Invalid ISP device\n");
         return -EINVAL;
     }
-    
-    /* MIPS-SAFE: Instead of dangerous subdev iteration, directly call known working functions */
-    if (enable) {
-        pr_info("*** MIPS-SAFE: Enabling streaming without risky subdev iteration ***\n");
-        
-        /* SAFE: Call VIC streaming directly if available */
-        if (isp_dev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
-                pr_info("*** MIPS-SAFE: Calling VIC streaming directly ***\n");
-                vic_core_s_stream(&vic_dev->sd, enable);
+
+    /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
+    subdevs_ptr = isp_dev->subdevs;  /* Subdev array at offset 0x38 */
+
+    pr_info("*** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***\n");
+
+    /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
+    for (i = 0; i != 0x10; i++) {
+        struct tx_isp_subdev *subdev = subdevs_ptr[i];
+
+        /* Binary Ninja: void* $a0 = *$s4 */
+        if (subdev != 0) {
+            /* Binary Ninja: void* $v0_3 = *(*($a0 + 0xc4) + 4) */
+            if (subdev->ops && subdev->ops->video) {
+                /* Binary Ninja: int32_t $v0_4 = *($v0_3 + 4) */
+                if (subdev->ops->video->s_stream != 0) {
+                    /* SAFETY: Validate function pointer */
+                    if (!is_valid_kernel_pointer(subdev->ops->video->s_stream)) {
+                        pr_debug("tx_isp_video_link_stream: Invalid s_stream function pointer for subdev %d\n", i);
+                        continue; /* i += 1 in reference */
+                    }
+
+                    pr_info("*** BINARY NINJA: Calling subdev %d s_stream (enable=%d) ***\n", i, enable);
+
+                    /* Binary Ninja: int32_t result = $v0_4($a0, arg2) */
+                    result = subdev->ops->video->s_stream(subdev, enable);
+
+                    /* Binary Ninja: if (result == 0) i += 1 */
+                    if (result == 0) {
+                        pr_info("*** BINARY NINJA: Subdev %d s_stream SUCCESS ***\n", i);
+                        continue; /* i += 1 in reference */
+                    } else {
+                        /* Binary Ninja: if (result != 0xfffffdfd) */
+                        if (result != -ENOIOCTLCMD) {
+                            pr_err("*** BINARY NINJA: Subdev %d s_stream FAILED: %d - ROLLING BACK ***\n", i, result);
+
+                            /* Binary Ninja rollback: while (arg1 != $s0_1) */
+                            /* Roll back all previous subdevices */
+                            for (int rollback_i = i - 1; rollback_i >= 0; rollback_i--) {
+                                struct tx_isp_subdev *rollback_subdev = subdevs_ptr[rollback_i];
+
+                                if (rollback_subdev != 0 && rollback_subdev->ops &&
+                                    rollback_subdev->ops->video && rollback_subdev->ops->video->s_stream) {
+
+                                    pr_info("*** BINARY NINJA: Rolling back subdev %d ***\n", rollback_i);
+
+                                    /* Binary Ninja: $v0_7($a0_1, arg2 u< 1 ? 1 : 0) */
+                                    int rollback_enable = (enable < 1) ? 1 : 0;
+                                    rollback_subdev->ops->video->s_stream(rollback_subdev, rollback_enable);
+                                }
+                            }
+
+                            return result;
+                        } else {
+                            pr_debug("tx_isp_video_link_stream: Subdev %d returned ENOIOCTLCMD, continuing\n", i);
+                            continue; /* i += 1 in reference */
+                        }
+                    }
+                } else {
+                    pr_debug("tx_isp_video_link_stream: No s_stream function for subdev %d\n", i);
+                    continue; /* i += 1 in reference */
+                }
+            } else {
+                pr_debug("tx_isp_video_link_stream: No video ops for subdev %d\n", i);
+                continue; /* i += 1 in reference */
             }
-        }
-        
-        /* SAFE: Call sensor streaming directly if available */
-        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
-            isp_dev->sensor->sd.ops->video && isp_dev->sensor->sd.ops->video->s_stream) {
-            if (((uintptr_t)isp_dev->sensor & 0x3) == 0) {
-                pr_info("*** MIPS-SAFE: Calling sensor streaming directly ***\n");
-                isp_dev->sensor->sd.ops->video->s_stream(&isp_dev->sensor->sd, enable);
-            }
-        }
-        
-    } else {
-        pr_info("*** MIPS-SAFE: Disabling streaming without risky subdev iteration ***\n");
-        /* SAFE: Disable streaming on known devices */
-        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
-            isp_dev->sensor->sd.ops->video && isp_dev->sensor->sd.ops->video->s_stream) {
-            if (((uintptr_t)isp_dev->sensor & 0x3) == 0) {
-                isp_dev->sensor->sd.ops->video->s_stream(&isp_dev->sensor->sd, 0);
-            }
-        }
-        if (isp_dev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
-                vic_core_s_stream(&vic_dev->sd, 0);
-            }
-        }
-        if (isp_dev->csi_dev) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-            if (csi_dev && ((uintptr_t)csi_dev & 0x3) == 0) {
-                csi_video_s_stream_impl(&csi_dev->sd, 0);
-            }
+        } else {
+            pr_debug("tx_isp_video_link_stream: Subdev %d is NULL\n", i);
+            continue; /* i += 1 in reference */
         }
     }
-    
-    return tx_isp_video_s_stream(isp_dev, enable);
+
+    pr_info("*** BINARY NINJA: All 16 subdevices processed successfully ***\n");
+
+    /* Binary Ninja: return 0 */
+    return 0;
 }
 
 /**
