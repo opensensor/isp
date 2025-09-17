@@ -1648,6 +1648,53 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
     }
 
+    /* CRITICAL: Add missing ISP/Core register initialization that was removed from vic_core_s_stream */
+    pr_info("*** ADDING MISSING ISP/CORE INITIALIZATION FROM REFERENCE DRIVER ***\n");
+
+    /* ISP Control registers - from reference driver logs */
+    writel((actual_width << 16) | actual_height, main_isp_base + 0x9864);  /* ISP dimensions */
+    writel(0xc0000000, main_isp_base + 0x987c);  /* ISP control */
+    writel(0x1, main_isp_base + 0x9880);  /* ISP enable */
+    writel(0x1, main_isp_base + 0x9884);  /* ISP config */
+    writel(0x1010001, main_isp_base + 0x9890);  /* ISP processing */
+    writel(0x1010001, main_isp_base + 0x989c);  /* ISP processing */
+    writel(0x1010001, main_isp_base + 0x98a8);  /* ISP processing */
+    wmb();
+
+    /* VIC Control registers - from reference driver logs */
+    writel(0x50002d0, main_isp_base + 0x9a00);  /* VIC control */
+    writel(0x3000300, main_isp_base + 0x9a04);  /* VIC config */
+    writel(0x50002d0, main_isp_base + 0x9a2c);  /* VIC control */
+    writel(0x1, main_isp_base + 0x9a34);  /* VIC enable */
+    writel(0x1, main_isp_base + 0x9a70);  /* VIC processing */
+    writel(0x1, main_isp_base + 0x9a7c);  /* VIC processing */
+    writel(0x500, main_isp_base + 0x9a80);  /* VIC config */
+    writel(0x1, main_isp_base + 0x9a88);  /* VIC enable */
+    writel(0x1, main_isp_base + 0x9a94);  /* VIC processing */
+    writel(0x500, main_isp_base + 0x9a98);  /* VIC config */
+    wmb();
+
+    /* Core Control registers - from reference driver logs */
+    writel(0xf001f001, main_isp_base + 0xb004);  /* Core control */
+    writel(0x40404040, main_isp_base + 0xb008);  /* Core config */
+    writel(0x40404040, main_isp_base + 0xb00c);  /* Core config */
+    writel(0x40404040, main_isp_base + 0xb010);  /* Core config */
+    writel(0x404040, main_isp_base + 0xb014);   /* Core config */
+    writel(0x40404040, main_isp_base + 0xb018);  /* Core config */
+    writel(0x40404040, main_isp_base + 0xb01c);  /* Core config */
+    writel(0x40404040, main_isp_base + 0xb020);  /* Core config */
+    writel(0x404040, main_isp_base + 0xb024);   /* Core config */
+    writel(0x1000080, main_isp_base + 0xb028);  /* Core control */
+    writel(0x1000080, main_isp_base + 0xb02c);  /* Core control */
+    writel(0x100, main_isp_base + 0xb030);      /* Core config */
+    writel(0xffff0100, main_isp_base + 0xb034); /* Core config */
+    writel(0x1ff00, main_isp_base + 0xb038);    /* Core config */
+    writel(0x103, main_isp_base + 0xb04c);      /* Core control */
+    writel(0x3, main_isp_base + 0xb050);        /* Core enable */
+    wmb();
+
+    pr_info("*** ISP/CORE INITIALIZATION COMPLETE - should enable interrupts ***\n");
+
     return 0;
 }
 
