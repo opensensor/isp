@@ -879,44 +879,25 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     system_reg_write(0x9ac0, 0x200);
     system_reg_write(0x9ac8, 0x200);
     
-    /* *** CRITICAL: CSI PHY Control registers - THE MISSING PIECES! *** */
-    pr_info("*** WRITING CSI PHY CONTROL REGISTERS - THE MISSING HARDWARE INIT! ***\n");
-    
-    /* ISP M0 CSI PHY Control - from reference driver trace */
-    if (isp_dev->vic_regs) {
-        void __iomem *csi_phy_regs = isp_dev->vic_regs - 0xe0000;  /* CSI at ISP base */
-        
-        /* Reference driver CSI PHY initialization sequence */
-        writel(0x54560031, csi_phy_regs + 0x0);
-        writel(0x7800438, csi_phy_regs + 0x4);
-        writel(0x1, csi_phy_regs + 0x8);
-        writel(0x80700008, csi_phy_regs + 0xc);
-        writel(0x1, csi_phy_regs + 0x28);
-        writel(0x400040, csi_phy_regs + 0x2c);
-        writel(0x1, csi_phy_regs + 0x90);
-        writel(0x1, csi_phy_regs + 0x94);
-        writel(0x30000, csi_phy_regs + 0x98);
-        writel(0x58050000, csi_phy_regs + 0xa8);
-        writel(0x58050000, csi_phy_regs + 0xac);
-        writel(0x40000, csi_phy_regs + 0xc4);
-        writel(0x400040, csi_phy_regs + 0xc8);
-        writel(0x100, csi_phy_regs + 0xcc);
-        writel(0xc, csi_phy_regs + 0xd4);
-        writel(0xffffff, csi_phy_regs + 0xd8);
-        writel(0x100, csi_phy_regs + 0xe0);
-        writel(0x400040, csi_phy_regs + 0xe4);
-        writel(0xff808000, csi_phy_regs + 0xf0);
-        wmb();
-        
-        pr_info("*** CSI PHY CONTROL REGISTERS WRITTEN - THIS WAS MISSING! ***\n");
-        
-        /* CSI PHY Config registers */
-        writel(0x80007000, csi_phy_regs + 0x110);
-        writel(0x777111, csi_phy_regs + 0x114);
-        wmb();
-        
-        pr_info("*** CSI PHY CONFIG REGISTERS WRITTEN ***\n");
-    }
+    /* Binary Ninja: Essential system register writes from tisp_init reference */
+    pr_info("*** BINARY NINJA tisp_init: Essential system register configuration ***\n");
+
+    /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
+    system_reg_write(0x30, 0xffffffff);
+
+    /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types (non-WDR) */
+    system_reg_write(0x10, 0x133);
+
+    /* Binary Ninja: system_reg_write(0x804, 0x1c) - ISP routing configuration */
+    system_reg_write(0x804, 0x1c);
+
+    /* Binary Ninja: system_reg_write(0x1c, 8) - ISP control mode */
+    system_reg_write(0x1c, 8);
+
+    /* Binary Ninja: system_reg_write(0x800, 1) - Enable ISP pipeline */
+    system_reg_write(0x800, 1);
+
+    pr_info("*** BINARY NINJA tisp_init: System registers configured (0x30, 0x10, 0x804, 0x1c, 0x800) ***\n");
     
     /* Binary Ninja: sensor_init call - initialize sensor control structure */
     pr_info("*** CALLING sensor_init - INITIALIZING SENSOR CONTROL STRUCTURE ***\n");
@@ -6748,7 +6729,20 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
         ret = -ENODEV;
         goto err_exit;
     }
-    
+
+    /* *** CRITICAL: Call tisp_init when sensor is successfully registered *** */
+    pr_info("*** CALLING tisp_init FOR REGISTERED SENSOR %s ***\n", sensor->info.name);
+    if (sensor->video.attr) {
+        ret = tisp_init(sensor->video.attr, ourISPdev);
+        if (ret == 0) {
+            pr_info("*** tisp_init SUCCESS - ISP hardware initialized for %s ***\n", sensor->info.name);
+        } else {
+            pr_warn("*** tisp_init FAILED for %s: %d ***\n", sensor->info.name, ret);
+        }
+    } else {
+        pr_warn("*** No sensor attributes available for tisp_init ***\n");
+    }
+
     mutex_unlock(&sensor_register_mutex);
     return 0;
 
