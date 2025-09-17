@@ -524,22 +524,14 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Binary Ninja: data_ca57c += 1 - increment error counter */
         /* Error counter increment would be here */
 
-        /* CRITICAL: Handle specific error types */
+        /* Binary Ninja: Simple error handling - just increment counters, no complex resets */
         if (interrupt_status & 0x200) {
-            pr_info("ISP CORE: Error interrupt type 1 - Pipeline configuration error\n");
-
-            /* CRITICAL: Reset ISP pipeline configuration on error */
-            /* Binary Ninja: Re-configure ISP pipeline registers on error */
-            writel(1, isp_regs + 0x800);     /* Re-enable ISP pipeline */
-            writel(0x1c, isp_regs + 0x804);  /* Re-configure ISP routing */
-            writel(8, isp_regs + 0x1c);      /* Re-set ISP control mode */
-            wmb();
-
-            pr_info("ISP CORE: Pipeline configuration reset after error\n");
-
-            /* CRITICAL FIX: ISP core should NOT manage VIC registers - subdevice isolation */
-            /* Each subdevice manages its own registers independently */
-            pr_info("*** ISP CORE: Pipeline reset complete - VIC manages its own interrupts ***\n");
+            pr_info("ISP CORE: Error interrupt type 1\n");
+            /* Binary Ninja: data_ca578 += 1 - just increment error counter */
+        }
+        if (interrupt_status & 0x100) {
+            pr_info("ISP CORE: Error interrupt type 2\n");
+            /* Binary Ninja: data_ca574 += 1 - just increment error counter */
         }
     }
 
