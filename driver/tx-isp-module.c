@@ -3902,14 +3902,15 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         return -ENODEV;
                     }
                     
-                    /* *** CRITICAL: CONNECT SENSOR TO ISP DEVICE *** */
-                    pr_info("*** CONNECTING SENSOR TO ISP DEVICE ***\n");
-                    pr_info("Before: ourISPdev=%p, ourISPdev->sensor=%p\n", ourISPdev, ourISPdev->sensor);
-                    
-                    ourISPdev->sensor = sensor;
-                    
-                    pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor, sensor->info.name);
-                    pr_info("*** SENSOR SUCCESSFULLY CONNECTED TO ISP DEVICE! ***\n");
+                    /* *** CRITICAL FIX: DO NOT OVERWRITE REAL SENSOR WITH DUMMY STRUCTURE *** */
+                    pr_info("*** SKIPPING SENSOR CONNECTION - REAL SENSOR ALREADY CONNECTED ***\n");
+                    pr_info("Current: ourISPdev=%p, ourISPdev->sensor=%p (REAL SENSOR)\n", ourISPdev, ourISPdev->sensor);
+                    pr_info("Dummy: sensor=%p (%s) - NOT CONNECTING TO PRESERVE REAL SENSOR\n", sensor, sensor->info.name);
+                    pr_info("*** REAL SENSOR PRESERVED - FRAME SYNC WILL WORK CORRECTLY ***\n");
+
+                    /* Free the dummy sensor structure since we're not using it */
+                    kfree(sensor);
+                    sensor = (struct tx_isp_sensor *)ourISPdev->sensor; /* Use real sensor for remaining operations */
                     
                     /* SAFE UPDATE: Update registry with actual subdev pointer */
                     if (reg_sensor) {
