@@ -2908,98 +2908,260 @@ EXPORT_SYMBOL(tiziano_wdr_init);
 
 /* ===== MISSING TIZIANO ISP PIPELINE COMPONENTS - Binary Ninja Reference ===== */
 
-/* tiziano_ae_init - Auto Exposure initialization with FULL AE processing */
+/* AE data structures and globals - Based on decompiled tiziano_ae_init */
+static uint8_t tisp_ae_hist[0x42c];
+static uint8_t tisp_ae_hist_last[0x42c];
+static uint8_t dmsc_sp_d_w_stren_wdr_array_ae[0x98];
+static uint32_t ae_ctrls[4];
+static uint32_t _ae_result = 0x1000;
+static uint32_t _AePointPos_d = 0x10;
+static uint32_t ae_exp_th = 0x8000;
+static uint32_t _flicker_t = 0;
+static uint32_t _deflick_lut[16];
+static uint32_t _nodes_num = 16;
+static uint32_t ae_comp_default = 0x80;
+
+/* AE parameter structures - Based on decompiled code */
+static uint32_t data_b0cfc = 0x1000;
+static uint32_t data_b0d18 = 0x800;
+static uint32_t data_b0d1c = 0x1000;
+static uint32_t data_b0e10 = 0;  /* WDR mode flag */
+static uint32_t data_afcd0 = 0x100;
+static uint32_t data_afcd4 = 0x100;
+static uint32_t data_afcd8 = 0x800;
+static uint32_t data_afce0 = 0x100;
+static uint32_t ta_custom_en = 0;
+
+/* AE parameter addresses - Safe structure-based access */
+static uint32_t *data_d04b8 = &data_b0cfc;
+static uint32_t data_d04bc[6] = {0x0d0b00, 0x040d0b00, 0x080d0b00, 0x0c0d0b00, 0x100d0b00, 0x140d0b00};
+static uint32_t *data_d04c4 = &data_afcd4;
+
+/* AE exposure threshold parameters */
+static uint32_t data_b2ea8 = 0x8000;  /* AE exp threshold */
+static uint32_t data_b2e9c = 0x1000;  /* Min exposure */
+static uint32_t data_b2ea0 = 0x4000;  /* Max exposure */
+static uint32_t data_b2ea4 = 0x400;   /* Min gain */
+static uint32_t data_b2ecc = 0x400;   /* WDR min gain */
+static uint32_t data_b2ed0 = 0x800;   /* WDR min exp */
+static uint32_t data_b2ed4 = 0x2000;  /* WDR max exp */
+
+/* AE deflicker parameters */
+static uint32_t data_b2e56 = 25;      /* FPS numerator */
+static uint32_t data_b2e54 = 1;       /* FPS denominator */
+static uint32_t data_b2e44 = 0x1000;  /* Deflicker base */
+static uint32_t data_b0b28, data_b0b2c, data_b0b30;
+
+/* AE interrupt handlers - Forward declarations */
+static void ae0_interrupt_hist(void);
+static void ae0_interrupt_static(void);
+static void ae1_interrupt_hist(void);
+static void ae1_interrupt_static(void);
+static void tisp_ae0_process(void);
+static void tisp_ae1_process(void);
+
+/* AE processing functions - Forward declarations */
+static void tiziano_ae_params_refresh(void);
+static int tiziano_ae_init_exp_th(void);
+static void tiziano_ae_para_addr(void);
+static void tiziano_ae_set_hardware_param(int param_id, uint32_t *data, int enable);
+static void tisp_set_sensor_integration_time(uint32_t time);
+static void tisp_set_sensor_analog_gain(void);
+static void tisp_set_sensor_integration_time_short(uint32_t time);
+static void tisp_set_sensor_analog_gain_short(void);
+static void tiziano_deflicker_expt(uint32_t flicker_t, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t *lut, uint32_t *nodes);
+static void system_reg_write_ae(uint32_t reg, uint32_t value);
+static void system_irq_func_set(int irq_id, void (*handler)(void));
+static void private_spin_lock_init(int lock_id);
+static uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
+static uint32_t tisp_math_exp2(uint32_t value, uint32_t precision, uint32_t shift);
+
+/* tiziano_ae_init_exp_th - Based on decompiled code with safe memory access */
+static int tiziano_ae_init_exp_th(void)
+{
+    pr_info("tiziano_ae_init_exp_th: Initializing AE exposure thresholds\n");
+    
+    /* Set parameter addresses safely */
+    data_d04b8 = &data_b0cfc;
+    
+    /* Initialize parameter array with safe values */
+    data_d04bc[0] = 0x000d0b00;
+    data_d04bc[1] = 0x040d0b00;
+    data_d04bc[2] = 0x080d0b00;
+    data_d04bc[3] = 0x0c0d0b00;
+    data_d04bc[4] = 0x100d0b00;
+    data_d04bc[5] = 0x140d0b00;
+    
+    /* Check and set AE exposure threshold */
+    if (data_b2ea8 < ae_exp_th) {
+        ae_exp_th = data_b2ea8;
+    }
+    
+    /* Calculate and clamp exposure values using safe math */
+    uint32_t min_exp = tisp_math_exp2(data_b2e9c, 0x10, 0xa);
+    uint32_t max_exp = tisp_math_exp2(data_b2ea0, 0x10, 0xa);
+    
+    if (min_exp >= data_b0cfc) {
+        /* Use default if calculation exceeds limit */
+        min_exp = data_b0cfc;
+    } else {
+        *data_d04b8 = min_exp;
+    }
+    
+    if (max_exp >= data_d04bc[0]) {
+        /* Use default if calculation exceeds limit */
+        max_exp = data_d04bc[0];
+    } else {
+        data_d04bc[0] = max_exp;
+    }
+    
+    /* Apply minimum gain constraints */
+    if (*data_d04c4 < data_b2ea4) {
+        *data_d04c4 = data_b2ea4;
+    }
+    
+    /* Set gain limits with safe bounds checking */
+    uint32_t min_gain = 0x400;
+    uint32_t max_gain = 0x400;
+    
+    if (min_gain < 0x400) min_gain = 0x400;
+    if (max_gain < 0x400) max_gain = 0x400;
+    
+    /* Store calculated values in global cache */
+    data_b0cfc = *data_d04b8;
+    data_afcd4 = *data_d04c4;
+    
+    /* WDR-specific threshold handling */
+    if (data_b0e10 == 1) {
+        pr_info("tiziano_ae_init_exp_th: Configuring WDR exposure thresholds\n");
+        
+        /* WDR minimum exposure threshold */
+        if (data_b2ed0 < data_b0d18) {
+            data_b0d18 = data_b2ed0;
+        }
+        
+        /* WDR maximum exposure calculation */
+        uint32_t wdr_max_exp = tisp_math_exp2(data_b2ed4, 0x10, 0xa);
+        if (wdr_max_exp >= data_b0d1c) {
+            /* Use default */
+        } else {
+            data_b0d1c = wdr_max_exp;
+        }
+        
+        /* WDR gain constraints */
+        if (data_b2ecc < 0x401) {
+            /* Apply minimum gain */
+        } else {
+            data_b2ecc = 0x400;
+        }
+        
+        /* Store WDR values */
+        data_afcd8 = data_b0d18;
+        data_afce0 = data_b0d1c;
+    }
+    
+    pr_info("tiziano_ae_init_exp_th: AE exposure thresholds initialized\n");
+    return 0;
+}
+
+/* tiziano_ae_init - Based on decompiled code with safe memory access */
 int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
 {
     pr_info("tiziano_ae_init: Initializing Auto Exposure (%dx%d@%d)\n", width, height, fps);
     
-    /* CRITICAL: This is where the AE processing should be called to prevent control limit violations */
-    pr_info("*** CRITICAL: Integrating AE processing into initialization to prevent control limit errors ***\n");
+    /* Clear AE histogram data - memset(&tisp_ae_hist, 0, 0x42c) */
+    memset(&tisp_ae_hist, 0, 0x42c);
     
-    /* Binary Ninja system_reg_write_ae shows these register writes */
-    system_reg_write_ae(0xa000, 1);  /* Enable AE block 1 with proper processing */
-    system_reg_write_ae(0xa800, 1);  /* Enable AE block 2 with proper processing */
-    system_reg_write_ae(0x1070, 1);  /* Enable AE block 3 with proper processing */
+    /* Initialize parameter data - __builtin_memcpy with safe values */
+    uint8_t init_data[0x18] = {
+        0x0d, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00,
+        0x90, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00,
+        0x0f, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x00
+    };
+    memcpy(&data_d04bc, init_data, 0x18);
     
-    /* CRITICAL: Initialize AE processing parameters during init to prevent hardware conflicts */
-    pr_info("*** AE PROCESSING: Initializing AE parameters during hardware init ***\n");
+    /* Copy current histogram to last - memcpy(&tisp_ae_hist_last, &tisp_ae_hist, 0x42c) */
+    memcpy(&tisp_ae_hist_last, &tisp_ae_hist, 0x42c);
     
-    /* AE Zone Configuration - Critical for preventing control limit errors */
-    system_reg_write_ae(0xa004, (width >> 4) | ((height >> 4) << 16));  /* AE zone size */
-    system_reg_write_ae(0xa008, 0x88);  /* AE zone weight */
-    system_reg_write_ae(0xa00c, 0x80);  /* AE target luminance */
+    /* Clear WDR strength array - memset(&dmsc_sp_d_w_stren_wdr_array, 0, 0x98) */
+    memset(&dmsc_sp_d_w_stren_wdr_array_ae, 0, 0x98);
     
-    /* AE Convergence Parameters - Prevent rapid changes that cause control limits */
-    system_reg_write_ae(0xa010, 0x10);  /* AE convergence speed - slower to prevent oscillation */
-    system_reg_write_ae(0xa014, 0x08);  /* AE step size - smaller steps */
-    system_reg_write_ae(0xa018, 0x04);  /* AE tolerance - wider tolerance */
+    /* Clear AE controls - memset(&ae_ctrls, 0, 0x10) */
+    memset(&ae_ctrls, 0, 0x10);
     
-    /* AE Gain Limits - Prevent excessive gain changes */
-    system_reg_write_ae(0xa01c, 0x400);  /* Max analog gain */
-    system_reg_write_ae(0xa020, 0x400);  /* Max digital gain */
-    system_reg_write_ae(0xa024, 0x100);  /* Min total gain */
+    /* Call AE parameter refresh */
+    tiziano_ae_params_refresh();
     
-    /* AE Exposure Limits - Prevent exposure changes that trigger control limits */
-    system_reg_write_ae(0xa028, fps * 1000);  /* Max exposure time based on FPS */
-    system_reg_write_ae(0xa02c, 100);         /* Min exposure time */
+    /* Initialize exposure thresholds */
+    tiziano_ae_init_exp_th();
     
-    /* AE Statistics Configuration - Proper histogram setup */
-    system_reg_write_ae(0xa030, 0x100);  /* Histogram bin count */
-    system_reg_write_ae(0xa034, 0x10);   /* Histogram weight */
+    /* Set parameter addresses */
+    tiziano_ae_para_addr();
     
-    /* CRITICAL: AE Processing Algorithm - This is what was missing! */
-    pr_info("*** AE ALGORITHM: Running initial AE processing to establish stable baseline ***\n");
+    /* Store argument parameter */
+    *data_d04c4 = height;  /* Store height parameter */
     
-    /* Initialize AE state variables */
-    uint32_t current_exposure = 0x1000;  /* Default exposure */
-    uint32_t current_gain = 0x100;       /* Default gain */
-    uint32_t target_luma = 0x80;         /* Target luminance */
+    /* Set hardware parameters */
+    tiziano_ae_set_hardware_param(0, (uint32_t*)&data_d04bc[0], 0);
+    tiziano_ae_set_hardware_param(1, (uint32_t*)&dmsc_sp_d_w_stren_wdr_array_ae, 0);
     
-    /* AE Processing Loop - Run a few iterations to establish stable state */
-    for (int ae_iter = 0; ae_iter < 5; ae_iter++) {
-        /* Read current luminance (simulated for init) */
-        uint32_t current_luma = 0x70 + (ae_iter * 4);  /* Simulate convergence */
+    /* Custom AE processing if enabled */
+    if (ta_custom_en == 1) {
+        tisp_set_sensor_integration_time(_ae_result);
+        tisp_set_sensor_analog_gain();
         
-        /* AE Algorithm - Adjust exposure and gain */
-        if (current_luma < target_luma) {
-            /* Too dark - increase exposure or gain */
-            if (current_exposure < (fps * 800)) {  /* Don't exceed frame time */
-                current_exposure = (current_exposure * 110) / 100;  /* Increase by 10% */
-            } else if (current_gain < 0x400) {
-                current_gain = (current_gain * 110) / 100;  /* Increase gain */
-            }
-        } else if (current_luma > target_luma + 0x10) {
-            /* Too bright - decrease exposure or gain */
-            if (current_gain > 0x100) {
-                current_gain = (current_gain * 90) / 100;  /* Decrease gain first */
-            } else if (current_exposure > 200) {
-                current_exposure = (current_exposure * 90) / 100;  /* Decrease exposure */
-            }
+        if (data_b0e10 == 0) {
+            /* Standard mode register writes */
+            uint32_t reg_val = data_afcd4;
+            system_reg_write_ae(3, 0x1030, reg_val << 0x10 | reg_val);
+            system_reg_write_ae(3, 0x1034, reg_val << 0x10 | reg_val);
+        } else if (data_b0e10 == ta_custom_en) {
+            /* WDR mode register writes */
+            uint32_t reg_val = data_afcd4;
+            system_reg_write_ae(3, 0x1000, reg_val << 0x10 | reg_val);
+            system_reg_write_ae(3, 0x1004, reg_val << 0x10 | reg_val);
         }
         
-        /* Apply calculated values to hardware */
-        system_reg_write_ae(0xa040, current_exposure);  /* Set exposure */
-        system_reg_write_ae(0xa044, current_gain);      /* Set gain */
+        /* Calculate AE point position with safe math */
+        uint32_t ae_calc = fix_point_mult3_32(_AePointPos_d, _ae_result << (_AePointPos_d & 0x1f), data_afcd0);
         
-        pr_info("*** AE ITER %d: exposure=0x%x, gain=0x%x, luma=0x%x ***\n", 
-                ae_iter, current_exposure, current_gain, current_luma);
+        /* WDR short exposure handling */
+        if (data_b0e10 == 1) {
+            tisp_set_sensor_integration_time_short(data_afcd8);
+            tisp_set_sensor_analog_gain_short();
+            
+            uint32_t short_val = data_afce0;
+            system_reg_write_ae(3, 0x100c, short_val << 0x10 | short_val);
+            system_reg_write_ae(3, 0x1010, short_val << 0x10 | short_val);
+        }
     }
     
-    /* CRITICAL: AE Stabilization - Set final stable values */
-    system_reg_write_ae(0xa048, 1);  /* Enable AE stabilization mode */
-    system_reg_write_ae(0xa04c, 0);  /* Disable AE rapid changes */
+    /* Set up interrupt handlers */
+    system_irq_func_set(0x1b, ae0_interrupt_hist);
+    system_irq_func_set(0x1a, ae0_interrupt_static);
+    system_irq_func_set(0x1d, ae1_interrupt_hist);
+    system_irq_func_set(0x1c, ae1_interrupt_static);
     
-    /* AE Integration with VIC - Prevent conflicts during streaming */
-    system_reg_write_ae(0xa050, 0x2);  /* AE-VIC coordination mode */
-    system_reg_write_ae(0xa054, 0x1);  /* AE priority during streaming */
+    /* Store deflicker parameters */
+    data_b0b28 = data_b2e44;
+    data_b0b2c = data_b2e56;
+    data_b0b30 = data_b2e54;
     
-    /* CRITICAL: Final AE Enable - Only after all processing is complete */
-    system_reg_write_ae(0xa000, 0x3);  /* Full AE enable with processing */
+    /* Initialize deflicker processing */
+    tiziano_deflicker_expt(_flicker_t, data_b2e44, data_b2e56, data_b2e54, &_deflick_lut[0], &_nodes_num);
     
-    pr_info("*** AE PROCESSING COMPLETE: Stable AE state established during init ***\n");
-    pr_info("*** This should prevent control limit violations during VIC streaming ***\n");
-    pr_info("tiziano_ae_init: AE hardware blocks and processing initialized\n");
+    /* Set event callbacks */
+    tisp_event_set_cb(1, tisp_ae0_process);
+    tisp_event_set_cb(6, tisp_ae1_process);
     
+    /* Initialize spinlocks */
+    private_spin_lock_init(0);
+    private_spin_lock_init(0);
+    
+    /* Set default compensation */
+    ae_comp_default = 0x80;  /* data_b0c18 equivalent */
+    
+    pr_info("tiziano_ae_init: AE initialization complete with safe memory access\n");
     return 0;
 }
 
