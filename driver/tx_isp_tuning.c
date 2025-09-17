@@ -3537,19 +3537,14 @@ static uint8_t tisp_ae_hist[0x42c];
 static uint8_t tisp_ae_hist_last[0x42c];
 static uint8_t dmsc_sp_d_w_stren_wdr_array_ae[0x98];
 static uint32_t ae_ctrls[4];
-static uint32_t _ae_result = 0x1000;
-static uint32_t _AePointPos_d = 0x10;
-static uint32_t ae_exp_th = 0x8000;
-static uint32_t _flicker_t = 0;
-static uint32_t _deflick_lut[16];
-static uint32_t _nodes_num = 16;
+/* Removed duplicate declarations - using struct versions */
 static uint32_t ae_comp_default = 0x80;
 
 /* AE parameter structures - Based on decompiled code */
 static uint32_t data_b0cfc = 0x1000;
 static uint32_t data_b0d18 = 0x800;
 static uint32_t data_b0d1c = 0x1000;
-static uint32_t data_b0e10 = 0;  /* WDR mode flag */
+/* data_b0e10 already declared earlier */
 static uint32_t data_afcd0 = 0x100;
 static uint32_t data_afcd4 = 0x100;
 static uint32_t data_afcd8 = 0x800;
