@@ -2768,14 +2768,15 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         struct v4l2_buffer buffer;
         unsigned long flags;
 
-        pr_info("*** Channel %d: QBUF - EXACT Binary Ninja implementation ***\n", channel);
-        pr_info("*** Channel %d: QBUF DEBUG - VBM integration check ***\n", channel);
+        pr_info("*** Channel %d: QBUF - ENTRY POINT - VBM buffer queue attempt ***\n", channel);
 
         /* Binary Ninja: private_copy_from_user(&var_78, $s2, 0x44) */
         if (copy_from_user(&buffer, argp, sizeof(buffer))) {
             pr_err("*** QBUF: Copy from user failed ***\n");
             return -EFAULT;
         }
+
+        pr_info("*** Channel %d: QBUF - Buffer copied from user successfully ***\n", channel);
 
         pr_info("*** Channel %d: QBUF - Buffer received: index=%d, type=%d, memory=%d ***\n",
                 channel, buffer.index, buffer.type, buffer.memory);
