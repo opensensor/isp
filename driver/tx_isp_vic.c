@@ -77,15 +77,27 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* Set self-pointer at offset 0xd4 */
     *(void **)((char *)vic_dev + 0xd4) = vic_dev;
     
-    /* *** CRITICAL FIX: Map VIC registers to CORRECT VIC address - VIC is at isp-w01 (0x10023000) *** */
-    pr_info("*** CRITICAL: Mapping VIC registers to CORRECT VIC address 0x10023000 (isp-w01) ***\n");
-    vic_dev->vic_regs = ioremap(0x10023000, 0x1000); // CORRECT VIC mapping (isp-w01)
+    /* *** CRITICAL FIX: Map BOTH VIC register spaces - dual VIC architecture *** */
+    pr_info("*** CRITICAL: Mapping DUAL VIC register spaces for complete VIC control ***\n");
+
+    /* Primary VIC space (original CSI PHY shared space) */
+    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);
     if (!vic_dev->vic_regs) {
-        pr_err("tx_isp_create_vic_device: Failed to map VIC registers at 0x10023000\n");
+        pr_err("tx_isp_create_vic_device: Failed to map primary VIC registers at 0x133e0000\n");
         kfree(vic_dev);
         return -ENOMEM;
     }
-    pr_info("*** VIC registers mapped to CORRECT VIC address: %p (0x10023000) ***\n", vic_dev->vic_regs);
+    pr_info("*** Primary VIC registers mapped: %p (0x133e0000) ***\n", vic_dev->vic_regs);
+
+    /* Secondary VIC space (isp-w01 - CSI PHY coordination space) */
+    vic_dev->vic_regs_secondary = ioremap(0x10023000, 0x1000);
+    if (!vic_dev->vic_regs_secondary) {
+        pr_err("tx_isp_create_vic_device: Failed to map secondary VIC registers at 0x10023000\n");
+        iounmap(vic_dev->vic_regs);
+        kfree(vic_dev);
+        return -ENOMEM;
+    }
+    pr_info("*** Secondary VIC registers mapped: %p (0x10023000) ***\n", vic_dev->vic_regs_secondary);
     
     /* Also store in ISP device for compatibility */
     if (!isp_dev->vic_regs) {
@@ -1177,25 +1189,31 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         pr_info("*** VIC UNLOCK: After writing 4, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
-        /* Wait for unlock - Binary Ninja 000104b8 - REFERENCE IMPLEMENTATION WITH CSI PHY COORDINATION */
+        /* Wait for unlock - Binary Ninja 000104b8 - DUAL VIC SPACE COORDINATION */
         timeout = 10000;  /* 10ms timeout */
-        u32 reg_val = readl(vic_regs + 0x0);
 
-        /* CRITICAL: Handle CSI PHY coordination - 0x3130322a is a valid CSI-written value */
-        if (reg_val == 0x3130322a) {
-            pr_info("*** VIC UNLOCK: CSI PHY has written 0x3130322a - this is expected from reference driver ***\n");
-            pr_info("*** VIC UNLOCK: Proceeding with unlock sequence after CSI PHY coordination ***\n");
-        } else {
-            /* Standard unlock wait for other values */
-            while (readl(vic_regs + 0x0) != 0 && readl(vic_regs + 0x0) != 0x3130322a) {
-                udelay(1);
-                if (--timeout == 0) {
-                    reg_val = readl(vic_regs + 0x0);
-                    pr_err("*** CRITICAL: VIC unlock timeout! Register 0x0 = 0x%08x (expected 0x0 or 0x3130322a) ***\n", reg_val);
-                    pr_err("*** This indicates VIC hardware is not responding properly ***\n");
-                    pr_err("*** Continuing anyway to prevent infinite hang ***\n");
-                    break;  /* Continue instead of returning error to prevent hang */
-                }
+        /* CRITICAL: Check CSI PHY coordination in SECONDARY VIC space (0x10023000) */
+        void __iomem *secondary_regs = vic_dev->vic_regs_secondary;
+        u32 secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
+        u32 primary_val = readl(vic_regs + 0x0);
+
+        pr_info("*** VIC UNLOCK: Primary space (0x133e0000) = 0x%08x, Secondary space (0x10023000) = 0x%08x ***\n",
+                primary_val, secondary_val);
+
+        /* Handle CSI PHY coordination - 0x3130322a in secondary space is expected */
+        if (secondary_val == 0x3130322a) {
+            pr_info("*** VIC UNLOCK: CSI PHY coordination complete in secondary space ***\n");
+        }
+
+        /* Wait for primary VIC space unlock */
+        while (readl(vic_regs + 0x0) != 0) {
+            udelay(1);
+            if (--timeout == 0) {
+                primary_val = readl(vic_regs + 0x0);
+                secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
+                pr_err("*** VIC UNLOCK TIMEOUT: Primary=0x%08x, Secondary=0x%08x ***\n", primary_val, secondary_val);
+                pr_err("*** Continuing anyway to prevent infinite hang ***\n");
+                break;  /* Continue instead of returning error to prevent hang */
             }
         }
 
@@ -1346,23 +1364,30 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(4, vic_regs + 0x0);
         wmb();
 
-        /* Binary Ninja: 00010acc - Wait for unlock - REFERENCE WITH CSI PHY COORDINATION */
-        pr_info("*** VIC UNLOCK: Waiting for register 0x0 to become 0 or CSI PHY value (Binary Ninja: coordinated) ***\n");
-        reg_val = readl(vic_regs + 0x0);
+        /* Binary Ninja: 00010acc - Wait for unlock - DUAL VIC SPACE COORDINATION */
+        pr_info("*** VIC UNLOCK: Coordinating between primary and secondary VIC spaces ***\n");
 
-        /* CRITICAL: Handle CSI PHY coordination - 0x3130322a is a valid CSI-written value */
-        if (reg_val == 0x3130322a) {
-            pr_info("*** VIC UNLOCK: CSI PHY coordination complete - register 0x0 = 0x3130322a ***\n");
-        } else {
-            /* Wait for unlock or CSI PHY coordination */
-            timeout = 10000;  /* Add timeout to prevent infinite hang */
-            while (readl(vic_regs + 0x0) != 0 && readl(vic_regs + 0x0) != 0x3130322a) {
-                cpu_relax();  /* Binary Ninja: just "nop" */
-                if (--timeout == 0) {
-                    reg_val = readl(vic_regs + 0x0);
-                    pr_info("*** VIC UNLOCK: Timeout reached, register 0x0 = 0x%08x ***\n", reg_val);
-                    break;  /* Prevent infinite hang */
-                }
+        /* CRITICAL: Check both VIC spaces for coordination */
+        void __iomem *secondary_regs = vic_dev->vic_regs_secondary;
+        u32 secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
+        u32 primary_val = readl(vic_regs + 0x0);
+
+        pr_info("*** VIC UNLOCK: Primary=0x%08x, Secondary=0x%08x ***\n", primary_val, secondary_val);
+
+        /* Handle CSI PHY coordination in secondary space */
+        if (secondary_val == 0x3130322a) {
+            pr_info("*** VIC UNLOCK: CSI PHY coordination complete in secondary space ***\n");
+        }
+
+        /* Wait for primary VIC space unlock with timeout */
+        timeout = 10000;  /* Add timeout to prevent infinite hang */
+        while (readl(vic_regs + 0x0) != 0) {
+            cpu_relax();  /* Binary Ninja: just "nop" */
+            if (--timeout == 0) {
+                primary_val = readl(vic_regs + 0x0);
+                secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
+                pr_info("*** VIC UNLOCK: Timeout - Primary=0x%08x, Secondary=0x%08x ***\n", primary_val, secondary_val);
+                break;  /* Prevent infinite hang */
             }
         }
         pr_info("*** VIC UNLOCK: Register 0x0 became 0 - unlock successful! ***\n");
