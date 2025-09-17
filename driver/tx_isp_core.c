@@ -442,7 +442,11 @@ static void ispcore_irq_fs_work(struct work_struct *work)
         }
     }
 
-    pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation complete ***\n");
+    pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation complete - work finished ***\n");
+
+    /* CRITICAL: Ensure work completion is visible to prevent queue backup */
+    sensor_call_counter++;
+    pr_info("*** ISP FRAME SYNC WORK: Work completion #%d - ready for next interrupt ***\n", sensor_call_counter);
 }
 
 /* Forward declarations for frame channel functions - avoid naming conflicts */
@@ -602,34 +606,24 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt */
         pr_info("*** ISP CORE: FRAME SYNC INTERRUPT ***\n");
 
-        /* CRITICAL FIX: Throttle frame sync work to prevent interrupt storms */
-        /* Only queue work if it's not already pending to prevent CPU timeout */
-        static unsigned long last_work_time = 0;
-        unsigned long current_time = jiffies;
+        /* CRITICAL FIX: Always acknowledge the interrupt, even if work is already queued */
+        /* The key is to let the interrupt return IRQ_HANDLED to prevent interrupt storms */
+        pr_info("*** ISP CORE: Frame sync interrupt - attempting to queue work ***\n");
 
-        /* Throttle to maximum 10 Hz (100ms intervals) to prevent interrupt storm */
-        if (time_after(current_time, last_work_time + msecs_to_jiffies(100))) {
-            pr_info("*** ISP CORE: Frame sync interrupt - processing frame sync work (throttled) ***\n");
-
-            if (fs_workqueue) {
-                pr_info("*** ISP CORE: Queueing frame sync work on dedicated workqueue ***\n");
-                if (queue_work(fs_workqueue, &fs_work)) {
-                    pr_info("*** ISP CORE: Work queued successfully ***\n");
-                    last_work_time = current_time;
-                } else {
-                    pr_debug("*** ISP CORE: Work was already queued - skipping to prevent storm ***\n");
-                }
+        if (fs_workqueue) {
+            if (queue_work(fs_workqueue, &fs_work)) {
+                pr_info("*** ISP CORE: Work queued successfully ***\n");
             } else {
-                pr_warn("*** ISP CORE: No dedicated workqueue, using system workqueue ***\n");
-                if (schedule_work(&fs_work)) {
-                    pr_info("*** ISP CORE: Work scheduled on system workqueue successfully ***\n");
-                    last_work_time = current_time;
-                } else {
-                    pr_debug("*** ISP CORE: Work was already scheduled - skipping to prevent storm ***\n");
-                }
+                pr_info("*** ISP CORE: Work was already queued - acknowledging interrupt anyway ***\n");
+                /* CRITICAL: Don't treat this as an error - just acknowledge the interrupt */
             }
         } else {
-            pr_debug("*** ISP CORE: Frame sync interrupt throttled (too frequent) ***\n");
+            if (schedule_work(&fs_work)) {
+                pr_info("*** ISP CORE: Work scheduled successfully ***\n");
+            } else {
+                pr_info("*** ISP CORE: Work was already scheduled - acknowledging interrupt anyway ***\n");
+                /* CRITICAL: Don't treat this as an error - just acknowledge the interrupt */
+            }
         }
 
         /* Binary Ninja: Frame timing measurement */
