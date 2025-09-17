@@ -1356,6 +1356,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
     pr_info("ispcore_slake_module: ISP MODULE SLAKING COMPLETE - SUCCESS!");
     return 0;
 }
+EXPORT_SYMBOL(ispcore_slake_module);
 
 
 /* Global variables for tisp_init - Binary Ninja exact data structures */
