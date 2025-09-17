@@ -346,10 +346,22 @@ static void ispcore_irq_fs_work(struct work_struct *work)
 
         pr_info("*** ISP FRAME SYNC WORK: Calling sensor IOCTL for I2C communication ***\n");
 
-        /* CRITICAL: Call sensor IOCTL like reference driver does */
-        /* Try sensor FPS event - this is what the reference driver likely does */
+        /* CRITICAL: Get FPS from tuning data and pass to sensor */
+        int fps_value = 0;
+        if (isp_dev->tuning_data) {
+            /* Pack FPS in format expected by sensor: (fps_num << 16) | fps_den */
+            fps_value = (isp_dev->tuning_data->fps_num << 16) | isp_dev->tuning_data->fps_den;
+            pr_info("*** ISP FRAME SYNC WORK: Using FPS %d/%d (packed: 0x%x) ***\n",
+                    isp_dev->tuning_data->fps_num, isp_dev->tuning_data->fps_den, fps_value);
+        } else {
+            /* Default to 25 FPS if no tuning data */
+            fps_value = (25 << 16) | 1;
+            pr_info("*** ISP FRAME SYNC WORK: Using default FPS 25/1 (packed: 0x%x) ***\n", fps_value);
+        }
+
+        /* Call sensor FPS IOCTL with proper FPS value */
         int ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
-                                                         TX_ISP_EVENT_SENSOR_FPS, NULL);
+                                                         TX_ISP_EVENT_SENSOR_FPS, &fps_value);
         pr_info("*** ISP FRAME SYNC WORK: Sensor FPS IOCTL result: %d ***\n", ret);
 
         /* If FPS IOCTL failed, try other sensor events */
