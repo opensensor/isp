@@ -4684,11 +4684,127 @@ int tisp_defog_get_par_cfg(void *out_buf, void *size_buf)
     return 0;
 }
 
-int tisp_rdns_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_adr_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_ccm_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_gamma_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_defog_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+/* Implementation of the third batch of parameter functions */
+
+/* tisp_mdns_get_par_cfg - Binary Ninja EXACT implementation */
+int tisp_mdns_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_mdns_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    char *output_ptr = (char *)out_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
+    /* Binary Ninja: for (int32_t i = 0x180; i != 0x357; i++) */
+    for (int i = 0x180; i < 0x357; i++) {
+        tisp_mdns_param_array_get(i, output_ptr, &temp_size);
+        output_ptr += temp_size;
+        total_size += temp_size;
+    }
+
+    *(int *)size_buf = total_size;
+    pr_debug("tisp_mdns_get_par_cfg: Total size=%d\n", total_size);
+    return 0;
+}
+
+/* tisp_ydns_get_par_cfg - Binary Ninja EXACT implementation */
+int tisp_ydns_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_ydns_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    char *output_ptr = (char *)out_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
+    /* Binary Ninja: for (int32_t i = 0x3e6; i != 0x3f5; i++) */
+    for (int i = 0x3e6; i < 0x3f5; i++) {
+        tisp_ydns_param_array_get(i, output_ptr, &temp_size);
+        output_ptr += temp_size;
+        total_size += temp_size;
+    }
+
+    *(int *)size_buf = total_size;
+    pr_debug("tisp_ydns_get_par_cfg: Total size=%d\n", total_size);
+    return 0;
+}
+
+/* tisp_bcsh_get_par_cfg - Binary Ninja EXACT implementation */
+int tisp_bcsh_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_bcsh_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    char *output_ptr = (char *)out_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
+    /* Binary Ninja: for (int32_t i = 0x3c0; i != 0x3e6; i++) */
+    for (int i = 0x3c0; i < 0x3e6; i++) {
+        tisp_bcsh_param_array_get(i, output_ptr, &temp_size);
+        output_ptr += temp_size;
+        total_size += temp_size;
+    }
+
+    *(int *)size_buf = total_size;
+    pr_debug("tisp_bcsh_get_par_cfg: Total size=%d\n", total_size);
+    return 0;
+}
+
+/* tisp_clm_get_par_cfg - Binary Ninja EXACT implementation */
+int tisp_clm_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_clm_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    char *output_ptr = (char *)out_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
+    /* Binary Ninja: for (int32_t i = 0x357; i != 0x35a; i++) */
+    for (int i = 0x357; i < 0x35a; i++) {
+        tisp_clm_param_array_get(i, output_ptr, &temp_size);
+        output_ptr += temp_size;
+        total_size += temp_size;
+    }
+
+    *(int *)size_buf = total_size;
+    pr_debug("tisp_clm_get_par_cfg: Total size=%d\n", total_size);
+    return 0;
+}
+
+/* tisp_ysp_get_par_cfg - Binary Ninja EXACT implementation */
+int tisp_ysp_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_ysp_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    char *output_ptr = (char *)out_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
+    /* Binary Ninja: for (int32_t i = 0xb5; i != 0xe6; i++) */
+    for (int i = 0xb5; i < 0xe6; i++) {
+        tisp_sharpen_param_array_get(i, output_ptr, &temp_size);
+        output_ptr += temp_size;
+        total_size += temp_size;
+    }
+
+    *(int *)size_buf = total_size;
+    pr_debug("tisp_ysp_get_par_cfg: Total size=%d\n", total_size);
+    return 0;
+}
 int tisp_mdns_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
 int tisp_ydns_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
 int tisp_bcsh_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
