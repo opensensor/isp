@@ -1267,7 +1267,7 @@ static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp)
  * ispcore_slake_module - CRITICAL: ISP Core Module Slaking/Initialization
  * This is the EXACT implementation from Binary Ninja decompilation
  */
-static int ispcore_slake_module(struct tx_isp_dev *isp)
+int ispcore_slake_module(struct tx_isp_dev *isp)
 {
     int ret = 0;
     int i;
