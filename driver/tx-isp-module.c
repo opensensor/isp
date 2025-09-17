@@ -1217,7 +1217,10 @@ struct tx_isp_channel_state {
     int height;
     int buffer_count;
     uint32_t sequence;           /* Frame sequence counter */
-    
+
+    /* CRITICAL FIX: Store real buffer addresses from QBUF operations */
+    uint32_t *buffer_addresses;  /* Array of real buffer addresses from application */
+
     /* Simplified buffer management for now */
     struct frame_buffer current_buffer;     /* Current active buffer */
     spinlock_t buffer_lock;                /* Protect buffer access */
@@ -2700,6 +2703,19 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             
             state->buffer_count = reqbuf.count;
 
+            /* CRITICAL FIX: Allocate buffer address array to store real addresses */
+            if (state->buffer_addresses) {
+                kfree(state->buffer_addresses);
+            }
+            state->buffer_addresses = kzalloc(reqbuf.count * sizeof(uint32_t), GFP_KERNEL);
+            if (!state->buffer_addresses) {
+                pr_err("*** Channel %d: Failed to allocate buffer address array ***\n", channel);
+                state->buffer_count = 0;
+                return -ENOMEM;
+            }
+            pr_info("*** Channel %d: Allocated buffer address array for %d buffers ***\n",
+                    channel, reqbuf.count);
+
             /* Set buffer type from REQBUFS request */
             fcd->buffer_type = reqbuf.type;
 
@@ -2796,9 +2812,28 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
 
-        /* SAFE: Calculate buffer physical address */
+        /* CRITICAL FIX: Use REAL buffer address from application instead of fake address */
         int buffer_size = state->width * state->height * 2;
-        uint32_t buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
+        uint32_t buffer_phys_addr;
+
+        /* Extract real buffer address from v4l2_buffer structure */
+        if (buffer.memory == V4L2_MEMORY_MMAP && buffer.m.offset != 0) {
+            /* Application provided real buffer address via mmap offset */
+            buffer_phys_addr = buffer.m.offset;
+            pr_info("*** Channel %d: QBUF - Using REAL buffer address from mmap offset: 0x%x ***\n",
+                    channel, buffer_phys_addr);
+        } else if (buffer.memory == V4L2_MEMORY_USERPTR && buffer.m.userptr != 0) {
+            /* Application provided real buffer address via userptr */
+            buffer_phys_addr = (uint32_t)buffer.m.userptr;
+            pr_info("*** Channel %d: QBUF - Using REAL buffer address from userptr: 0x%x ***\n",
+                    channel, buffer_phys_addr);
+        } else {
+            /* Fallback to generated address (but log this as an issue) */
+            buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
+            pr_warn("*** Channel %d: QBUF - WARNING: No real buffer address provided, using fallback: 0x%x ***\n",
+                    channel, buffer_phys_addr);
+            pr_warn("*** This may cause green frames - application should provide real buffer addresses! ***\n");
+        }
 
         pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d ***\n",
                 channel, buffer.index, buffer_phys_addr, buffer_size);
@@ -2980,7 +3015,20 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             
             /* Update VIC buffer tracking for this dequeue like Binary Ninja */
             if (vic_dev && vic_dev->vic_regs && buf_index < 8) {
-                u32 buffer_phys_addr = 0x6300000 + (buf_index * (state->width * state->height * 2));
+                /* CRITICAL FIX: Use stored real buffer address instead of generated fake address */
+                u32 buffer_phys_addr;
+
+                /* Try to get the real buffer address that was stored during QBUF */
+                if (state->buffer_addresses && state->buffer_addresses[buf_index] != 0) {
+                    buffer_phys_addr = state->buffer_addresses[buf_index];
+                    pr_info("*** Channel %d: DQBUF using REAL stored buffer address: 0x%x ***\n",
+                            channel, buffer_phys_addr);
+                } else {
+                    /* Fallback to generated address (but this indicates a problem) */
+                    buffer_phys_addr = 0x6300000 + (buf_index * (state->width * state->height * 2));
+                    pr_warn("*** Channel %d: DQBUF using FALLBACK address (no real address stored): 0x%x ***\n",
+                            channel, buffer_phys_addr);
+                }
 
                 pr_info("*** Channel %d: DQBUF updating VIC buffer[%d] addr=0x%x ***\n",
                         channel, buf_index, buffer_phys_addr);
