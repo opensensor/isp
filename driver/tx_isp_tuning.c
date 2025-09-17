@@ -4325,6 +4325,129 @@ int tisp_dpc_get_par_cfg(void *out_buf, void *size_buf)
     return 0;
 }
 
+/* tisp_rdns_get_par_cfg - Binary Ninja EXACT implementation */
+int tisp_rdns_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_rdns_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    char *output_ptr = (char *)out_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
+    /* Binary Ninja: for (int32_t i = 0x432; i != 0x447; i++) */
+    for (int i = 0x432; i < 0x447; i++) {
+        tisp_rdns_param_array_get(i, output_ptr, &temp_size);
+        output_ptr += temp_size;
+        total_size += temp_size;
+    }
+
+    *(int *)size_buf = total_size;
+    pr_debug("tisp_rdns_get_par_cfg: Total size=%d\n", total_size);
+    return 0;
+}
+
+/* tisp_adr_get_par_cfg - Binary Ninja EXACT implementation */
+int tisp_adr_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_adr_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    char *output_ptr = (char *)out_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
+    /* Binary Ninja: for (int32_t i = 0x380; i != 0x3ac; i++) */
+    for (int i = 0x380; i < 0x3ac; i++) {
+        tisp_adr_param_array_get(i, output_ptr, &temp_size);
+        output_ptr += temp_size;
+        total_size += temp_size;
+    }
+
+    *(int *)size_buf = total_size;
+    pr_debug("tisp_adr_get_par_cfg: Total size=%d\n", total_size);
+    return 0;
+}
+
+/* tisp_ccm_get_par_cfg - Binary Ninja EXACT implementation */
+int tisp_ccm_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_ccm_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    char *output_ptr = (char *)out_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
+    /* Binary Ninja: for (int32_t i = 0xa9; i != 0xb5; i++) */
+    for (int i = 0xa9; i < 0xb5; i++) {
+        tisp_ccm_param_array_get(i, output_ptr, &temp_size);
+        output_ptr += temp_size;
+        total_size += temp_size;
+    }
+
+    *(int *)size_buf = total_size;
+    pr_debug("tisp_ccm_get_par_cfg: Total size=%d\n", total_size);
+    return 0;
+}
+
+/* tisp_gamma_get_par_cfg - Binary Ninja EXACT implementation */
+int tisp_gamma_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_gamma_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    char *output_ptr = (char *)out_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
+    /* Binary Ninja: *arg2 = 0; tisp_gamma_param_array_get(0x3c, arg1, &var_18) */
+    *(int *)size_buf = 0;
+    tisp_gamma_param_array_get(0x3c, output_ptr, &temp_size);
+    output_ptr += temp_size;
+    total_size += temp_size;
+
+    /* Binary Ninja: tisp_gamma_param_array_get(0x3d, arg1 + $a1_1, &var_18) */
+    tisp_gamma_param_array_get(0x3d, output_ptr, &temp_size);
+    total_size += temp_size;
+
+    *(int *)size_buf = total_size;
+    pr_debug("tisp_gamma_get_par_cfg: Total size=%d\n", total_size);
+    return 0;
+}
+
+/* tisp_defog_get_par_cfg - Binary Ninja EXACT implementation */
+int tisp_defog_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_defog_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    char *output_ptr = (char *)out_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
+    /* Binary Ninja: for (int32_t i = 0x35a; i != 0x380; i++) */
+    for (int i = 0x35a; i < 0x380; i++) {
+        tisp_defog_param_array_get(i, output_ptr, &temp_size);
+        output_ptr += temp_size;
+        total_size += temp_size;
+    }
+
+    *(int *)size_buf = total_size;
+    pr_debug("tisp_defog_get_par_cfg: Total size=%d\n", total_size);
+    return 0;
+}
+
 int tisp_rdns_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
 int tisp_adr_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
 int tisp_ccm_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
