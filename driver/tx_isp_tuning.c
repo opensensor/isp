@@ -8081,7 +8081,7 @@ int tisp_tgain_update(void)
 
 int tisp_again_update(void)
 {
-    pr_debug("tisp_again_update: Updating analog gain\n");
+    pr_info("tisp_again_update: Updating analog gain with SENSOR I2C communication\n");
 
     /* Update analog gain based on AE calculations */
     extern struct tx_isp_dev *ourISPdev;
@@ -8093,7 +8093,24 @@ int tisp_again_update(void)
             writel(tuning->max_again, ourISPdev->core_regs + 0xa008);  /* Analog gain register */
         }
 
-        pr_debug("tisp_again_update: Analog gain updated to 0x%x\n", tuning->max_again);
+        /* CRITICAL: Send analog gain update to sensor via I2C */
+        if (ourISPdev->sensor && ourISPdev->sensor->sd.ops &&
+            ourISPdev->sensor->sd.ops->sensor && ourISPdev->sensor->sd.ops->sensor->ioctl) {
+
+            int gain_value = tuning->max_again;
+            int sensor_ret = ourISPdev->sensor->sd.ops->sensor->ioctl(
+                &ourISPdev->sensor->sd, TX_ISP_EVENT_SENSOR_AGAIN, &gain_value);
+
+            if (sensor_ret == 0) {
+                pr_info("tisp_again_update: Sensor I2C gain update SUCCESS (gain=0x%x)\n", gain_value);
+            } else {
+                pr_warn("tisp_again_update: Sensor I2C gain update FAILED: %d\n", sensor_ret);
+            }
+        } else {
+            pr_warn("tisp_again_update: No sensor available for I2C communication\n");
+        }
+
+        pr_info("tisp_again_update: Analog gain updated to 0x%x (ISP + sensor)\n", tuning->max_again);
     }
 
     return 0;
