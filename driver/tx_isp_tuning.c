@@ -337,7 +337,6 @@ int tisp_ae_get_y_zone(void *buffer);
 int tisp_ae_get_hist_custome(void *buffer);
 int apical_isp_max_again_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 int apical_isp_max_dgain_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
-int tisp_g_ae_zone_internal(void *buffer);
 
 /* System register access functions - moved before use */
 uint32_t system_reg_read(u32 reg);
@@ -3753,8 +3752,53 @@ int tisp_ae_param_array_get(int param_type, void *buffer, int *size)
     return -1;
 }
 
-int tisp_ae_get_y_zone(void *buffer) { return 0; }
-int tisp_ae_get_hist_custome(void *buffer) { return 0; }
+/* Binary Ninja reference implementations */
+int tisp_get_ae_comp(uint32_t *value)
+{
+    if (value) *value = 0;
+    return 0;
+}
+
+int tisp_g_aeroi_weight(void *buffer)
+{
+    return 0;
+}
+
+int tisp_ae_param_array_get(int param_type, void *buffer, int *size)
+{
+    return 0;
+}
+
+int tisp_ae_get_y_zone(void *buffer)
+{
+    return 0;
+}
+
+int tisp_ae_get_hist_custome(void *buffer)
+{
+    return 0;
+}
+
+int tisp_g_ae_zone(void *buffer)
+{
+    /* Binary Ninja: tisp_ae_get_y_zone(arg1); return 0 */
+    tisp_ae_get_y_zone(buffer);
+    return 0;
+}
+
+int apical_isp_max_again_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
+{
+    /* Binary Ninja reference - return max analog gain */
+    ctrl->value = 0;  // Placeholder
+    return 0;
+}
+
+int apical_isp_max_dgain_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
+{
+    /* Binary Ninja reference - return max digital gain */
+    ctrl->value = 0;  // Placeholder
+    return 0;
+}
 
 int isp_core_tuning_release(struct tx_isp_dev *dev)
 {
