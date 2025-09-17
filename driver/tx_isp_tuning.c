@@ -3614,8 +3614,7 @@ static uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr);
 static uint32_t data_b2ee4(uint32_t log_val, void **var_ptr);
 static int data_b2f04(uint32_t param, int flag);
 static int data_b2f08(uint32_t param, int flag);
-static uint32_t tisp_log2_fixed_to_fixed(void);
-static int system_reg_write(uint32_t reg, uint32_t value);
+/* Note: tisp_log2_fixed_to_fixed and system_reg_write already declared elsewhere */
 
 /* Remove duplicate declarations - using the struct versions defined earlier */
 
