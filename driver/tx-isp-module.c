@@ -3035,8 +3035,17 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 /* CRITICAL FIX: Use stored real buffer address instead of generated fake address */
                 u32 buffer_phys_addr;
 
-                /* Try to get the real buffer address that was stored during QBUF */
-                if (state->buffer_addresses && state->buffer_addresses[buf_index] != 0) {
+                /* CRITICAL DEBUG: Check buffer_addresses array state */
+                pr_info("*** Channel %d: DQBUF DEBUG - buffer_addresses=%p, buffer_count=%d, buf_index=%d ***\n",
+                        channel, state->buffer_addresses, state->buffer_count, buf_index);
+
+                if (state->buffer_addresses && buf_index < state->buffer_count) {
+                    pr_info("*** Channel %d: DQBUF DEBUG - buffer_addresses[%d]=0x%x ***\n",
+                            channel, buf_index, state->buffer_addresses[buf_index]);
+                }
+
+                /* Try to get the real buffer address that was stored during REQBUFS */
+                if (state->buffer_addresses && buf_index < state->buffer_count && state->buffer_addresses[buf_index] != 0) {
                     buffer_phys_addr = state->buffer_addresses[buf_index];
                     pr_info("*** Channel %d: DQBUF using REAL stored buffer address: 0x%x ***\n",
                             channel, buffer_phys_addr);
