@@ -421,12 +421,9 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d, vic_streaming=%d ***\n",
             isp_dev->sensor, isp_dev->streaming_enabled, vic_is_streaming);
 
-    /* CRITICAL FIX: Frame sync work should NOT do FPS control! */
-    /* FPS control belongs in format negotiation (set_fmt), not per-frame processing */
-    pr_info("*** ISP FRAME SYNC WORK: Frame sync processing (no sensor I2C) ***\n");
-
-    /* Frame sync work should only do lightweight per-frame processing */
-    /* Heavy operations like sensor I2C communication belong in initialization/format setting */
+    /* CRITICAL FIX: Frame sync work SHOULD call sensor operations like reference driver! */
+    /* Reference driver ispcore_irq_fs_work calls ispcore_sensor_ops_ioctl for AE/AGC/AWB */
+    pr_info("*** ISP FRAME SYNC WORK: Frame sync processing (calling sensor operations) ***\n");
 
     if (isp_dev->sensor && isp_dev->streaming_enabled) {
         pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (sensor available) ***\n");
