@@ -3108,11 +3108,17 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
         
-        /* Binary Ninja DQBUF: Wait for frame completion with proper state checking */
-        pr_info("*** Channel %d: DQBUF waiting for frame completion (timeout=200ms) ***\n", channel);
-        ret = wait_event_interruptible_timeout(state->frame_wait,
-                                             state->frame_ready || !state->streaming,
-                                             msecs_to_jiffies(200)); // 200ms timeout like reference
+        /* CRITICAL FIX: Check if we're in atomic context before waiting */
+        if (in_atomic() || irqs_disabled()) {
+            pr_warn("*** Channel %d: DQBUF called from atomic context - checking frame without waiting ***\n", channel);
+            ret = state->frame_ready ? 1 : 0;
+        } else {
+            /* Binary Ninja DQBUF: Wait for frame completion with proper state checking */
+            pr_info("*** Channel %d: DQBUF waiting for frame completion (timeout=200ms) ***\n", channel);
+            ret = wait_event_interruptible_timeout(state->frame_wait,
+                                                 state->frame_ready || !state->streaming,
+                                                 msecs_to_jiffies(200)); // 200ms timeout like reference
+        }
         pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, ret);
         
         if (ret == 0) {
