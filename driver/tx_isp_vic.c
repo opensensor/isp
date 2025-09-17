@@ -2368,22 +2368,6 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     return ret;
 }
 
-/* BINARY NINJA REFERENCE: No timer-based adjustment system in reference driver */
-    writel(0xc50100, isp_base + 0xb030);
-    writel(0x1670100, isp_base + 0xb034);
-    writel(0x1f001, isp_base + 0xb038);
-    writel(0x22c0000, isp_base + 0xb03c);
-    writel(0x22c1000, isp_base + 0xb040);
-    writel(0x22c2000, isp_base + 0xb044);
-    writel(0x22c3000, isp_base + 0xb048);
-    writel(0x3, isp_base + 0xb04c);
-    writel(0x10000000, isp_base + 0xb078);
-    wmb();
-
-    adjustment_applied = true;
-    pr_info("*** Timer: adjustment sequence completed ***\n");
-}
-
 /* Modified vic_core_s_stream function with OLD timer API */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
@@ -2439,9 +2423,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             int current_state = vic_dev->state;
 
             if (enable == 0) {
-                /* Stream OFF */
+                /* Stream OFF - BINARY NINJA REFERENCE: No adjustment function */
                 ret = 0;
-                vic_start_adjustment();
                 ispvic_frame_channel_s_stream(vic_dev, 0);
                 if (current_state == 4) {
                     vic_dev->state = 3;
