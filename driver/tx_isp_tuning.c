@@ -1146,7 +1146,16 @@ int tisp_init(void *sensor_info, char *param_name)
     tisp_event_set_cb(8, tisp_ae_ir_update);
 
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) - Set IRQ handler */
-    /* This would set up interrupt handling in real implementation */
+    /* CRITICAL: This sets up the ISP core interrupt handler - missing piece! */
+    extern int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
+    extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
+
+    int irq_ret = system_irq_func_set(0xd, ispcore_interrupt_service_routine);
+    if (irq_ret == 0) {
+        pr_info("*** tisp_init: ISP core interrupt handler registered (index=0xd) ***\n");
+    } else {
+        pr_err("*** tisp_init: Failed to register ISP core interrupt handler: %d ***\n", irq_ret);
+    }
 
     /* Binary Ninja: tisp_param_operate_init() - Final parameter initialization */
     int param_init_ret = tisp_param_operate_init();
