@@ -196,23 +196,21 @@ void tx_isp_vic_restore_interrupts(void)
         return; /* VIC not active */
     }
 
-    pr_info("*** VIC INTERRUPT RESTORE: Restoring VIC interrupt registers at correct base ***\n");
+    pr_info("*** VIC INTERRUPT RESTORE: Restoring VIC interrupt registers in PRIMARY VIC space ***\n");
 
-    /* Use correct VIC base address for interrupt control */
-    vic_interrupt_base = ioremap(0x10023000, 0x1000);
-    if (!vic_interrupt_base) {
-        pr_err("*** VIC INTERRUPT RESTORE: Failed to map VIC interrupt base ***\n");
+    /* CRITICAL: Use PRIMARY VIC space for interrupt control (0x133e0000) */
+    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_err("*** VIC INTERRUPT RESTORE: No primary VIC registers available ***\n");
         return;
     }
 
-    /* Restore VIC interrupt register values using correct base */
-    writel(0xffffffff, vic_interrupt_base + 0x1e0);  /* Enable all VIC interrupts */
-    writel(0x0, vic_interrupt_base + 0x1e8);         /* Clear interrupt masks */
+    /* Restore VIC interrupt register values using PRIMARY VIC space */
+    writel(0xffffffff, vic_dev->vic_regs + 0x1e0);  /* Enable all VIC interrupts */
+    writel(0x0, vic_dev->vic_regs + 0x1e8);         /* Clear interrupt masks */
     wmb();
 
-    pr_info("*** VIC INTERRUPT RESTORE: Registers restored at correct base 0x10023000 ***\n");
-
-    iounmap(vic_interrupt_base);
+    pr_info("*** VIC INTERRUPT RESTORE: Registers restored in PRIMARY VIC space (0x133e0000) ***\n");
 }
 EXPORT_SYMBOL(tx_isp_vic_restore_interrupts);
 
@@ -429,10 +427,17 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 /* CRITICAL FIX: Initialize VIC hardware with proper interrupt configuration */
 int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 {
+    struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
     void __iomem *vic_base;
 
-    // Initialize VIC hardware
-    vic_base = ioremap(0x10023000, 0x1000);  // Direct map VIC
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_err("tx_isp_vic_hw_init: No primary VIC registers available\n");
+        return -EINVAL;
+    }
+
+    // CRITICAL: Use PRIMARY VIC space for interrupt configuration
+    vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
+    pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
 
     // Clear any pending interrupts first
     writel(0, vic_base + 0x00);  // Clear ISR
@@ -451,6 +456,7 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     writel(0xb5742249, vic_base + 0x0c);  // IMCR
     wmb();
 
+    pr_info("*** VIC HW INIT: Interrupt configuration applied to PRIMARY VIC space ***\n");
     return 0;
 }
 
