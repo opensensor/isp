@@ -2260,7 +2260,7 @@ int tisp_blc_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_lsc_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_wdr_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_dpc_get_par_cfg(void *out_buf, void *size_buf);
-int tx_isp_subdev_pipo(void *out_buf, void *size_buf);
+
 int tisp_rdns_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_adr_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_ccm_get_par_cfg(void *out_buf, void *size_buf);
@@ -3096,7 +3096,7 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                                 ret = tisp_dpc_get_par_cfg(&param_ptr[3], &param_ptr[1]);
                                 break;
                             case 5:  /* tx_isp_subdev_pipo */
-                                ret = tx_isp_subdev_pipo(&param_ptr[3], &param_ptr[1]);
+                                ret = tx_isp_subdev_pipo((struct tx_isp_subdev *)&param_ptr[3], &param_ptr[1]);
                                 break;
                             case 6:  /* tisp_rdns_get_par_cfg */
                                 ret = tisp_rdns_get_par_cfg(&param_ptr[3], &param_ptr[1]);
@@ -3429,7 +3429,7 @@ int tisp_blc_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
 int tisp_lsc_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
 int tisp_wdr_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
 int tisp_dpc_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tx_isp_subdev_pipo(void *out_buf, void *size_buf) { return 0; }
+
 int tisp_rdns_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
 int tisp_adr_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
 int tisp_ccm_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
