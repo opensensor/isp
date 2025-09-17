@@ -341,9 +341,30 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                          reg_val, buffer_index, high_bits, match_found);
             }
 
-            /* CRITICAL: With ISP pipeline enabled, hardware should generate interrupts automatically */
-            /* No manual triggering needed - let hardware generate ISP core interrupts */
-            pr_info("*** VIC->ISP: Frame done - ISP pipeline should generate hardware interrupt ***\n");
+            /* CRITICAL: Manually trigger ISP core interrupt for frame sync */
+            /* The hardware pipeline connection requires explicit interrupt triggering */
+            pr_info("*** VIC->ISP: Frame done - triggering ISP core interrupt for frame sync ***\n");
+
+            /* CRITICAL FIX: Trigger ISP core interrupt (IRQ 37) for frame sync */
+            extern struct tx_isp_dev *ourISPdev;
+            if (ourISPdev && ourISPdev->core_regs) {
+                void __iomem *core = ourISPdev->core_regs;
+
+                /* Trigger frame sync interrupt by setting interrupt pending bit */
+                /* Binary Ninja reference: Set frame sync interrupt pending (bit 12 = 0x1000) */
+                u32 current_pending = readl(core + 0xb4);  /* Read current pending */
+                writel(current_pending | 0x1000, core + 0xb4);  /* Set frame sync pending */
+                wmb();
+
+                /* Also trigger in new interrupt bank if available */
+                u32 current_pending_new = readl(core + 0x98b4);
+                writel(current_pending_new | 0x1000, core + 0x98b4);
+                wmb();
+
+                pr_info("*** VIC->ISP: ISP core frame sync interrupt triggered (0x1000) ***\n");
+            } else {
+                pr_warn("*** VIC->ISP: Cannot trigger ISP interrupt - core_regs not available ***\n");
+            }
 
     /* Call the ISP frame done wakeup function to notify waiting processes */
     extern void isp_frame_done_wakeup(void);
