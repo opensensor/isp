@@ -3579,6 +3579,17 @@ int tisp_g_ae_hist(void *buffer)
     return 0;
 }
 
+/* Stub functions for the underlying AE/AF functions - these need Binary Ninja implementations too */
+int tisp_ae_param_array_get(int param_type, void *buffer, int *size)
+{
+    *size = 0x384; /* Set expected size */
+    return 0;
+}
+
+int tisp_ae_get_y_zone(void *buffer) { return 0; }
+int tisp_af_get_zone(void *buffer) { return 0; }
+int tisp_ae_get_hist_custome(void *buffer) { return 0; }
+
 int isp_core_tuning_release(struct tx_isp_dev *dev)
 {
     struct isp_tuning_data *tuning = ourISPdev->tuning_data;
