@@ -383,12 +383,6 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     /* CRITICAL: Reference driver calls sensor IOCTL during streaming - we must do the same! */
     pr_info("*** ISP FRAME SYNC WORK: Triggering sensor I2C communication (REFERENCE DRIVER BEHAVIOR) ***\n");
 
-    /* Binary Ninja: Reference driver calls ispcore_sensor_ops_ioctl during frame sync */
-    if (isp_dev && isp_dev->sensor && isp_dev->sensor->sd.ops &&
-        isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
-
-        pr_info("*** ISP FRAME SYNC WORK: Calling sensor IOCTL for I2C communication ***\n");
-
     /* Binary Ninja: Call ispcore_sensor_ops_ioctl like reference driver */
     pr_info("*** ISP FRAME SYNC WORK: Calling ispcore_sensor_ops_ioctl (REFERENCE DRIVER BEHAVIOR) ***\n");
     int ret = ispcore_sensor_ops_ioctl(isp_dev);
