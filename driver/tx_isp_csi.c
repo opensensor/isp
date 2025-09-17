@@ -693,11 +693,17 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         pr_info("*** isp-w02: %p, isp-w01: %p, isp-m0: %p, isp-csi: %p ***\n",
                                 isp_w02_base, isp_w01_base, isp_m0_base, isp_csi_base);
 
-                        /* PHASE 1: isp-w02 region writes (from reference trace lines 1-31) */
-                        pr_info("*** PHASE 1: isp-w02 CSI PHY Control writes ***\n");
-                        writel(0x7800438, isp_w02_base + 0x4);
-                        writel(0x2, isp_w02_base + 0xc);
-                        writel(0x2, isp_w02_base + 0x14);
+                        /* CRITICAL FIX: Skip CSI PHY writes during streaming restart to preserve VIC interrupts */
+                        extern uint32_t vic_start_ok;
+                        if (vic_start_ok == 1) {
+                            pr_info("*** PHASE 1: SKIPPING isp-w02 CSI PHY Control writes - VIC interrupts already working ***\n");
+                            pr_info("*** CSI PHY writes would overwrite VIC interrupt configuration in shared register space ***\n");
+                        } else {
+                            /* PHASE 1: isp-w02 region writes (from reference trace lines 1-31) */
+                            pr_info("*** PHASE 1: isp-w02 CSI PHY Control writes ***\n");
+                            writel(0x7800438, isp_w02_base + 0x4);
+                            writel(0x2, isp_w02_base + 0xc);
+                            writel(0x2, isp_w02_base + 0x14);
                         writel(0xf00, isp_w02_base + 0x18);
                         writel(0x800800, isp_w02_base + 0x60);
                         writel(0x9d09d0, isp_w02_base + 0x64);
