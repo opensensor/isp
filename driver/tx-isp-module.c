@@ -3655,7 +3655,11 @@ static int sensor_subdev_sensor_ioctl(struct tx_isp_subdev *sd, unsigned int cmd
         stored_sensor_ops.original_ops->sensor->ioctl) {
 
         pr_info("*** sensor_subdev_sensor_ioctl: Calling original sensor IOCTL ***\n");
-        return stored_sensor_ops.original_ops->sensor->ioctl(sd, cmd, arg);
+        /* CRITICAL FIX: Use the original sensor subdev, not the passed-in subdev */
+        /* The passed-in sd is the ISP device sensor subdev, but we need the original gc2053 subdev */
+        pr_info("*** sensor_subdev_sensor_ioctl: Using original sensor subdev %p instead of passed subdev %p ***\n",
+                stored_sensor_ops.sensor_sd, sd);
+        return stored_sensor_ops.original_ops->sensor->ioctl(stored_sensor_ops.sensor_sd, cmd, arg);
     }
 
     pr_warn("*** sensor_subdev_sensor_ioctl: No original sensor IOCTL available ***\n");
