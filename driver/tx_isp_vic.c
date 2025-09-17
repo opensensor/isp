@@ -1581,10 +1581,8 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
      * These occur at T+210ms in the trace
      * ==============================================================================================*/
 
-    /* CSI PHY Config registers - from reference trace */
-    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
-    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
-    wmb();
+    /* CSI PHY Config registers - REMOVED: These should be handled by CSI driver */
+    pr_info("*** VIC: CSI PHY Config registers (0x110, 0x114) now handled by CSI driver ***\n");
 
     /***
 ISP isp-m0: [CSI PHY Control] write at offset 0x8: 0x1 -> 0x0 (delta: 210.000 ms)
@@ -1601,12 +1599,12 @@ ISP isp-m0: [CSI PHY Config] write at offset 0x110: 0x80007000 -> 0x92217523 (de
 
     pr_info("*** PHASE 6: Further streaming adjustments (T+550ms) ***\n");
 
-    /* Additional VIC adjustments */
+    /* Additional VIC adjustments - Only VIC registers */
     writel(0x8, vic_regs + 0x8c);        /* was 0x1 -> 0x8 */
     writel(0x19f, vic_regs + 0x90);      /* was 0x0 -> 0x19f */
     writel(0x180, vic_regs + 0xa0);      /* was 0x0 -> 0x180 */
     writel(0x2ae, vic_regs + 0xb0);      /* was 0x0 -> 0x2ae */
-    writel(0x10, vic_regs + 0x120);      /* was 0x0 -> 0x10 */
+    /* REMOVED: 0x120 is CSI PHY register, handled by CSI driver */
     wmb();
 
     /* CSI PHY Config updates */
@@ -2469,45 +2467,25 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", sensor_width, sensor_height);
                 pr_info("*** CRITICAL: VIC configured for sensor OUTPUT, CSI PHY handled separately ***\n");
 
-                /* CRITICAL FIX: Only write to VIC-specific registers, avoid 0x4, 0xc which are VIC interrupt registers */
-                pr_info("*** CRITICAL: Skipping writes to 0x4, 0xc to preserve VIC interrupt registers ***\n");
-                writel(0x2, vic_regs + 0x14);
-                writel(0xf00, vic_regs + 0x18);
-                writel(0x800800, vic_regs + 0x60);
-                writel(0x9d09d0, vic_regs + 0x64);
-                writel(0x6002, vic_regs + 0x70);
-                writel(0x7003, vic_regs + 0x74);
-                writel(0xeb8080, vic_regs + 0xc0);
-                writel(0x108080, vic_regs + 0xc4);
-                writel(0x29f06e, vic_regs + 0xc8);
-                writel(0x913622, vic_regs + 0xcc);
-                writel(0x515af0, vic_regs + 0xd0);
-                writel(0xaaa610, vic_regs + 0xd4);
-                writel(0xd21092, vic_regs + 0xd8);
-                writel(0x6acade, vic_regs + 0xdc);
-                writel(0xeb8080, vic_regs + 0xe0);
-                writel(0x108080, vic_regs + 0xe4);
-                writel(0x29f06e, vic_regs + 0xe8);
-                writel(0x913622, vic_regs + 0xec);
-                writel(0x515af0, vic_regs + 0xf0);
-                writel(0xaaa610, vic_regs + 0xf4);
-                writel(0xd21092, vic_regs + 0xf8);
-                writel(0x6acade, vic_regs + 0xfc);
-                writel(0x2d0, vic_regs + 0x100);
-                writel(0x2c000, vic_regs + 0x10c);
-                writel(0x7800000, vic_regs + 0x110);
-                writel(0x10, vic_regs + 0x120);
-                writel(0x100010, vic_regs + 0x1a4);
-                writel(0x4440, vic_regs + 0x1a8);
-                writel(0x10, vic_regs + 0x1b0);
+                /* CRITICAL FIX: Only write to VIC-specific registers - CSI PHY registers handled by CSI driver */
+                pr_info("*** VIC: Writing only VIC-specific registers (CSI PHY registers handled by CSI driver) ***\n");
+
+                /* VIC Control and Configuration registers only */
+                writel(0x2, vic_regs + 0x14);    /* VIC stride/control */
+                writel(0xf00, vic_regs + 0x18);  /* VIC configuration */
                 wmb();
+
+                pr_info("*** VIC: CSI PHY register writes removed - no more conflicts with CSI driver ***\n");
                 
-                /* STEP 2: ISP isp-w01 - Control registers */
-                pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
-                writel(0x3130322a, vic_regs + 0x0);
-                writel(0x1, vic_regs + 0x4);
-                writel(0x200, vic_regs + 0x14);
+                /* STEP 2: VIC Control registers - Now writing to correct VIC hardware */
+                pr_info("*** STEP 2: VIC Control registers (now at correct address 0x10023000) ***\n");
+
+                /* VIC-specific control registers only */
+                writel(0x1, vic_regs + 0x0);     /* VIC enable */
+                writel(0x3, vic_regs + 0xc);     /* VIC MIPI mode */
                 wmb();
+
+                pr_info("*** VIC: Now writing to actual VIC hardware instead of CSI PHY ***\n");
                 
                 /* STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) */
                 pr_info("*** STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) ***\n");
