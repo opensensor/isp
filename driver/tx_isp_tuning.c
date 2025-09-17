@@ -5287,7 +5287,7 @@ static int tiziano_wdr_algorithm(void)
     wdr_ev_now_1 = wdr_ev_now;
     v1 = &param_multiValueHigh_software_in_array;
     a0 = &param_multiValueLow_software_in_array;
-    wdr_ev_list_deghost_1 = wdr_ev_list_deghost;
+    wdr_ev_list_deghost_1 = wdr_ev_list_deghost_val;
     t5 = data_b1bcc;
     t1 = data_b1c34;
     v0 = data_b148c;
