@@ -3603,39 +3603,7 @@ void private_spin_lock_init(spinlock_t *lock);
 static uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
 static uint32_t tisp_math_exp2(uint32_t value, uint32_t precision, uint32_t shift);
 
-/* AE parameter structures and arrays - Binary Ninja reference */
-static uint8_t _ae_parameter[0xa8];
-static uint8_t ae_exp_th[0x50];
-static uint8_t _AePointPos[8];
-static uint8_t _exp_parameter[0x2c];
-static uint8_t ae_ev_step[0x14];
-static uint8_t ae_stable_tol[0x10];
-static uint8_t ae0_ev_list[0x28];
-static uint8_t _lum_list[0x28];
-static uint8_t _deflicker_para[0xc];
-static uint8_t _flicker_t[0x18];
-static uint8_t _scene_para[0x2c];
-static uint8_t ae_scene_mode_th[0x10];
-static uint8_t _log2_lut[0x50];
-static uint8_t _weight_lut[0x50];
-static uint8_t _ae_zone_weight[0x384];
-static uint8_t _scene_roui_weight[0x384];
-static uint8_t _scene_roi_weight[0x384];
-static uint8_t ae_comp_param[0x18];
-static uint8_t ae_comp_ev_list[0x28];
-static uint8_t ae_extra_at_list[0x28];
-static uint8_t _ae_result[0x18];
-static uint8_t _ae_stat[0x14];
-static uint8_t _ae_wm_q[0x3c];
-static uint8_t ae1_ev_list[0x28];
-static uint8_t ae1_comp_ev_list[0x28];
-static uint8_t ae0_ev_list_wdr[0x28];
-static uint8_t _lum_list_wdr[0x28];
-static uint8_t _scene_para_wdr[0x2c];
-static uint8_t ae_scene_mode_th_wdr[0x10];
-static uint8_t ae_comp_param_wdr[0x18];
-static uint8_t ae_extra_at_list_wdr[0x28];
-static uint8_t _ae_reg[0x20];
+/* Remove duplicate declarations - using the struct versions defined earlier */
 
 /* AE pointer arrays - Binary Ninja reference */
 static void *IspAe0WmeanParam = NULL;
