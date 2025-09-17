@@ -3194,7 +3194,7 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                                 ret = tisp_adr_get_par_cfg(&param_ptr[3], &param_ptr[1]);
                                 break;
                             case 8:  /* tx_isp_vin_activate_subdev */
-                                ret = tx_isp_vin_activate_subdev(&param_ptr[3], &param_ptr[1]);
+                                ret = tx_isp_vin_activate_subdev(&param_ptr[3]);
                                 break;
                             case 9:  /* tisp_ccm_get_par_cfg */
                                 ret = tisp_ccm_get_par_cfg(&param_ptr[3], &param_ptr[1]);
