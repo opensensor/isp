@@ -385,41 +385,68 @@ static void ispcore_irq_fs_work(struct work_struct *work)
 
     /* Binary Ninja: if ($s5 != 0) */
     if (isp_dev != NULL) {
+        pr_info("*** ISP FRAME SYNC WORK: isp_dev=%p, size=%zu ***\n", isp_dev, sizeof(struct tx_isp_dev));
+
         /* Binary Ninja: int32_t* $s2_1 = $s5 + 0x180 */
         /* SAFETY: Use safe pointer arithmetic with bounds checking */
         if ((char *)isp_dev + 0x180 < (char *)isp_dev + sizeof(struct tx_isp_dev)) {
             int32_t *s2_1 = (int32_t *)((char *)isp_dev + 0x180);
+            pr_info("*** ISP FRAME SYNC WORK: s2_1=%p (offset 0x180) ***\n", s2_1);
 
             /* Binary Ninja: for (int32_t i = 0; i != 7; ) */
             for (int32_t i = 0; i != 7; ) {
+                pr_info("*** ISP FRAME SYNC WORK: Loop i=%d, s2_1=%p ***\n", i, s2_1);
+
                 /* SAFETY: Check pointer validity before dereferencing */
                 if (s2_1 && (char *)s2_1 < (char *)isp_dev + sizeof(struct tx_isp_dev)) {
+                    int32_t s2_1_value = *s2_1;
+                    pr_info("*** ISP FRAME SYNC WORK: *s2_1=%d ***\n", s2_1_value);
+
                     /* Binary Ninja: if (*$s2_1 == 0) */
-                    if (*s2_1 == 0) {
+                    if (s2_1_value == 0) {
+                        pr_info("*** ISP FRAME SYNC WORK: *s2_1 == 0, incrementing i ***\n");
                         i += 1;
                     } else if (i == 5) {
                         /* Binary Ninja: else if (i == 5) */
+                        pr_info("*** ISP FRAME SYNC WORK: i == 5, incrementing i ***\n");
                         i += 1;
                     } else {
+                        pr_info("*** ISP FRAME SYNC WORK: Processing item %d, *s2_1=%d ***\n", i, s2_1_value);
+
                         /* Binary Ninja: var_30 = $s2_1[1] */
                         var_30 = s2_1[1];
+                        pr_info("*** ISP FRAME SYNC WORK: var_30=%d ***\n", var_30);
 
                         /* Binary Ninja: if (*(*($s5 + 0x120) + 0xf0) != 1) */
                         void **s5_120 = (void **)((char *)isp_dev + 0x120);
+                        pr_info("*** ISP FRAME SYNC WORK: s5_120=%p ***\n", s5_120);
+
                         if (s5_120 && *s5_120) {
                             int32_t *condition_ptr = (int32_t *)((char *)*s5_120 + 0xf0);
-                            if (condition_ptr && *condition_ptr != 1) {
-                                i += 1;
-                            } else {
-                                /* Binary Ninja: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
-                                pr_info("*** ISP FRAME SYNC WORK: Calling sensor IOCTL (condition met) ***\n");
-                                ispcore_sensor_ops_ioctl(isp_dev);
+                            pr_info("*** ISP FRAME SYNC WORK: condition_ptr=%p ***\n", condition_ptr);
 
-                                /* Binary Ninja: *$s2_1 = 0 */
-                                *s2_1 = 0;
+                            if (condition_ptr) {
+                                int32_t condition_value = *condition_ptr;
+                                pr_info("*** ISP FRAME SYNC WORK: condition_value=%d ***\n", condition_value);
+
+                                if (condition_value != 1) {
+                                    pr_info("*** ISP FRAME SYNC WORK: Condition not met (%d != 1), incrementing i ***\n", condition_value);
+                                    i += 1;
+                                } else {
+                                    /* Binary Ninja: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
+                                    pr_info("*** ISP FRAME SYNC WORK: Calling sensor IOCTL (condition met) ***\n");
+                                    ispcore_sensor_ops_ioctl(isp_dev);
+
+                                    /* Binary Ninja: *$s2_1 = 0 */
+                                    *s2_1 = 0;
+                                    i += 1;
+                                }
+                            } else {
+                                pr_info("*** ISP FRAME SYNC WORK: condition_ptr is NULL, incrementing i ***\n");
                                 i += 1;
                             }
                         } else {
+                            pr_info("*** ISP FRAME SYNC WORK: s5_120 or *s5_120 is NULL, incrementing i ***\n");
                             i += 1;
                         }
                     }
@@ -427,13 +454,15 @@ static void ispcore_irq_fs_work(struct work_struct *work)
                     /* Binary Ninja: $s2_1 = &$s2_1[2] */
                     s2_1 = &s2_1[2];
                 } else {
-                    /* Safety exit if pointer becomes invalid */
+                    pr_info("*** ISP FRAME SYNC WORK: s2_1 pointer invalid, breaking ***\n");
                     break;
                 }
             }
         } else {
             pr_warn("*** ISP FRAME SYNC WORK: Invalid pointer offset 0x180 ***\n");
         }
+    } else {
+        pr_warn("*** ISP FRAME SYNC WORK: isp_dev is NULL ***\n");
     }
 
     pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation complete ***\n");
