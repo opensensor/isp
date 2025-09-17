@@ -7182,15 +7182,9 @@ static void tisp_set_ae1_ag(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_
         ourISPdev->sensor->sd.ops->sensor && ourISPdev->sensor->sd.ops->sensor->ioctl) {
         
         uint32_t gain_value = data_d04ac;
-        /* CRITICAL FIX: Use original sensor subdev, not ISP device sensor subdev */
-        struct tx_isp_subdev *original_sd = stored_sensor_ops.sensor_sd;
-        if (original_sd) {
-            /* Call sensor IOCTL to set analog gain */
-            ourISPdev->sensor->sd.ops->sensor->ioctl(original_sd,
-                                                    0x980902, &gain_value);
-        } else {
-            pr_warn("No original sensor subdev for analog gain\n");
-        }
+        /* Call sensor IOCTL to set analog gain */
+        ourISPdev->sensor->sd.ops->sensor->ioctl(&ourISPdev->sensor->sd,
+                                                0x980902, &gain_value);
     }
 }
 
