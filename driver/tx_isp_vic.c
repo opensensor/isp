@@ -350,15 +350,14 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             if (ourISPdev && ourISPdev->core_regs) {
                 void __iomem *core = ourISPdev->core_regs;
 
-                /* Trigger frame sync interrupt by setting interrupt pending bit */
+                /* Trigger ONLY frame sync interrupt, clear any error interrupts */
                 /* Binary Ninja reference: Set frame sync interrupt pending (bit 12 = 0x1000) */
-                u32 current_pending = readl(core + 0xb4);  /* Read current pending */
-                writel(current_pending | 0x1000, core + 0xb4);  /* Set frame sync pending */
+                /* CRITICAL: Don't preserve existing error interrupts - only set frame sync */
+                writel(0x1000, core + 0xb4);  /* Set ONLY frame sync pending, clear others */
                 wmb();
 
                 /* Also trigger in new interrupt bank if available */
-                u32 current_pending_new = readl(core + 0x98b4);
-                writel(current_pending_new | 0x1000, core + 0x98b4);
+                writel(0x1000, core + 0x98b4);  /* Set ONLY frame sync pending, clear others */
                 wmb();
 
                 pr_info("*** VIC->ISP: ISP core frame sync interrupt triggered (0x1000) ***\n");
