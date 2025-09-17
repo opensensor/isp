@@ -2735,6 +2735,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("Channel %d: Freeing existing buffers\n", channel);
             state->buffer_count = 0;
 
+            /* CRITICAL FIX: Free buffer address array */
+            if (state->buffer_addresses) {
+                kfree(state->buffer_addresses);
+                state->buffer_addresses = NULL;
+                pr_info("*** Channel %d: Freed buffer address array ***\n", channel);
+            }
+
             /* CRITICAL: Clear VIC active_buffer_count */
             if (ourISPdev && ourISPdev->vic_dev) {
                 struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
