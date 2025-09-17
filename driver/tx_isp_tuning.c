@@ -2254,6 +2254,15 @@ static int major = 0;
 static wait_queue_head_t dumpQueue;
 static uint8_t tispPollValue = 0;
 
+/* File operations structure - Binary Ninja reference */
+static const struct file_operations tisp_fops = {
+    .owner = THIS_MODULE,
+    .open = tisp_code_tuning_open,
+    .release = tisp_code_tuning_release,
+    .unlocked_ioctl = tisp_code_tuning_ioctl,
+    .compat_ioctl = tisp_code_tuning_ioctl,
+};
+
 /* Global AF zone data - Binary Ninja reference implementation */
 struct af_zone_data af_zone_data = {
 	.status = 0,
@@ -3159,6 +3168,384 @@ int tisp_code_tuning_release(struct inode *inode, struct file *file)
     return 0;
 }
 EXPORT_SYMBOL(tisp_code_tuning_release);
+
+/* tisp_code_tuning_ioctl - EXACT Binary Ninja reference implementation */
+long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    /* Binary Ninja: Complete IOCTL handler with all parameter operations */
+
+    void __user *argp = (void __user *)arg;
+    int ret = 0;
+
+    pr_debug("tisp_code_tuning_ioctl: cmd=0x%x, arg=0x%lx\n", cmd, arg);
+
+    /* Binary Ninja: if (zx.d((arg2 u>> 8).b) == 0x74) */
+    if (((cmd >> 8) & 0xFF) == 0x74) {
+        /* Binary Ninja: if ((arg2 & 0xff) u< 0x33) */
+        if ((cmd & 0xFF) < 0x33) {
+            /* Binary Ninja: if (arg2 - 0x20007400 u< 0xa) */
+            if ((cmd - 0x20007400) < 0xa) {
+
+                /* Handle the specific tuning parameter commands */
+                switch (cmd) {
+                    case 0x20007400: /* Get parameter configuration */
+                    {
+                        /* Binary Ninja: Complex copy_from_user and parameter processing */
+                        if (!tisp_par_ioctl) {
+                            pr_err("tisp_code_tuning_ioctl: Parameter buffer not allocated\n");
+                            return -ENOMEM;
+                        }
+
+                        if (copy_from_user(tisp_par_ioctl, argp, 0x500c)) {
+                            pr_err("tisp_code_tuning_ioctl: Failed to copy parameters from user\n");
+                            return -EFAULT;
+                        }
+
+                        /* Binary Ninja: Switch on parameter type */
+                        int *param_ptr = (int *)tisp_par_ioctl;
+                        int param_type = *param_ptr;
+
+                        pr_debug("tisp_code_tuning_ioctl: Get parameter type %d\n", param_type);
+
+                        /* Binary Ninja: Handle each parameter type */
+                        switch (param_type) {
+                            case 0:  /* tisp_top_param_array_get */
+                                ret = tisp_top_param_array_get(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 1:  /* tisp_blc_get_par_cfg */
+                                ret = tisp_blc_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 2:  /* tisp_lsc_get_par_cfg */
+                                ret = tisp_lsc_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 3:  /* tisp_wdr_get_par_cfg */
+                                ret = tisp_wdr_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 4:  /* tisp_dpc_get_par_cfg */
+                                ret = tisp_dpc_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 5:  /* tx_isp_subdev_pipo */
+                                ret = tx_isp_subdev_pipo(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 6:  /* tisp_rdns_get_par_cfg */
+                                ret = tisp_rdns_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 7:  /* tisp_adr_get_par_cfg */
+                                ret = tisp_adr_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 8:  /* tx_isp_vin_activate_subdev */
+                                ret = tx_isp_vin_activate_subdev(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 9:  /* tisp_ccm_get_par_cfg */
+                                ret = tisp_ccm_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 0xa: /* tisp_gamma_get_par_cfg */
+                                ret = tisp_gamma_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 0xb: /* tisp_defog_get_par_cfg */
+                                ret = tisp_defog_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 0xc: /* tisp_mdns_get_par_cfg */
+                                ret = tisp_mdns_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 0xd: /* tisp_ydns_get_par_cfg */
+                                ret = tisp_ydns_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 0xe: /* tisp_bcsh_get_par_cfg */
+                                ret = tisp_bcsh_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 0xf: /* tisp_clm_get_par_cfg */
+                                ret = tisp_clm_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 0x10: /* tisp_ysp_get_par_cfg */
+                                ret = tisp_ysp_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 0x11: /* tisp_sdns_get_par_cfg */
+                                ret = tisp_sdns_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 0x12: /* tisp_af_get_par_cfg */
+                                ret = tisp_af_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 0x13: /* tisp_hldc_get_par_cfg */
+                                ret = tisp_hldc_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 0x14: /* tisp_ae_get_par_cfg */
+                                ret = tisp_ae_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 0x15: /* tisp_awb_get_par_cfg */
+                                ret = tisp_awb_get_par_cfg(&param_ptr[3], &param_ptr[1]);
+                                break;
+                            case 0x16: /* Reserved */
+                                ret = 0;
+                                break;
+                            case 0x17: /* tisp_reg_map_get */
+                                ret = tisp_reg_map_get(param_ptr[2], param_ptr, &param_ptr[1]);
+                                break;
+                            case 0x18: /* tisp_dn_mode_get */
+                                ret = tisp_dn_mode_get(param_ptr, &param_ptr[1]);
+                                break;
+                            default:
+                                pr_warn("tisp_code_tuning_ioctl: Unknown get parameter type %d\n", param_type);
+                                ret = -EINVAL;
+                                break;
+                        }
+
+                        if (ret == 0) {
+                            if (copy_to_user(argp, tisp_par_ioctl, 0x500c)) {
+                                pr_err("tisp_code_tuning_ioctl: Failed to copy parameters to user\n");
+                                return -EFAULT;
+                            }
+                        }
+
+                        return ret;
+                    }
+
+                    case 0x20007401: /* Set parameter configuration */
+                    {
+                        /* Binary Ninja: Complex parameter setting logic */
+                        if (!tisp_par_ioctl) {
+                            pr_err("tisp_code_tuning_ioctl: Parameter buffer not allocated\n");
+                            return -ENOMEM;
+                        }
+
+                        if (copy_from_user(tisp_par_ioctl, argp, 0x500c)) {
+                            pr_err("tisp_code_tuning_ioctl: Failed to copy parameters from user\n");
+                            return -EFAULT;
+                        }
+
+                        /* Binary Ninja: Switch on parameter type for setting */
+                        int *param_ptr = (int *)tisp_par_ioctl;
+                        int param_type = *param_ptr;
+
+                        pr_debug("tisp_code_tuning_ioctl: Set parameter type %d\n", param_type);
+
+                        /* Binary Ninja: if ($a1_8 - 1 u>= 0x18) goto error */
+                        if ((param_type - 1) >= 0x18) {
+                            pr_err("tisp_code_tuning_ioctl: Invalid parameter type %d\n", param_type);
+                            return -EINVAL;
+                        }
+
+                        /* Binary Ninja: Handle each parameter type for setting */
+                        switch (param_type) {
+                            case 1:  /* tisp_blc_set_par_cfg */
+                                ret = tisp_blc_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 2:  /* tisp_lsc_set_par_cfg */
+                                ret = tisp_lsc_set_par_cfg(param_ptr[2], &param_ptr[3]);
+                                break;
+                            case 3:  /* tisp_wdr_set_par_cfg */
+                                ret = tisp_wdr_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 4:  /* tisp_dpc_set_par_cfg */
+                                ret = tisp_dpc_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 5:  /* tisp_gib_set_par_cfg */
+                                ret = tisp_gib_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 6:  /* tisp_rdns_set_par_cfg */
+                                ret = tisp_rdns_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 7:  /* tisp_adr_set_par_cfg */
+                                ret = tisp_adr_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 8:  /* tisp_dmsc_set_par_cfg */
+                                ret = tisp_dmsc_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 9:  /* tisp_ccm_set_par_cfg */
+                                ret = tisp_ccm_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 0xa: /* tisp_gamma_set_par_cfg */
+                                ret = tisp_gamma_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 0xb: /* tisp_defog_set_par_cfg */
+                                ret = tisp_defog_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 0xc: /* tisp_mdns_set_par_cfg */
+                                ret = tisp_mdns_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 0xd: /* tisp_ydns_set_par_cfg */
+                                ret = tisp_ydns_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 0xe: /* tisp_bcsh_set_par_cfg */
+                                ret = tisp_bcsh_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 0xf: /* tisp_clm_set_par_cfg */
+                                ret = tisp_clm_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 0x10: /* tisp_ysp_set_par_cfg */
+                                ret = tisp_ysp_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 0x11: /* tisp_sdns_set_par_cfg */
+                                ret = tisp_sdns_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 0x12: /* tisp_af_set_par_cfg */
+                                ret = tisp_af_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 0x13: /* tisp_hldc_set_par_cfg */
+                                ret = tisp_hldc_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 0x14: /* tisp_ae_set_par_cfg */
+                                ret = tisp_ae_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 0x15: /* tisp_awb_set_par_cfg */
+                                ret = tisp_awb_set_par_cfg(&param_ptr[3]);
+                                break;
+                            case 0x16: /* Reserved */
+                                pr_err("tisp_code_tuning_ioctl: Reserved parameter type 0x16\n");
+                                ret = -EINVAL;
+                                break;
+                            case 0x17: /* tisp_reg_map_set */
+                                ret = tisp_reg_map_set(param_ptr);
+                                break;
+                            case 0x18: /* tisp_dn_mode_set */
+                                ret = tisp_dn_mode_set(param_ptr);
+                                break;
+                            default:
+                                pr_err("tisp_code_tuning_ioctl: Invalid set parameter type %d\n", param_type);
+                                ret = -EINVAL;
+                                break;
+                        }
+
+                        return ret;
+                    }
+
+                    case 0x20007403: /* Get AE info */
+                    {
+                        /* Binary Ninja: tisp_get_ae_info(tisp_par_ioctl) */
+                        if (!tisp_par_ioctl) {
+                            return -ENOMEM;
+                        }
+
+                        ret = tisp_get_ae_info(tisp_par_ioctl);
+
+                        if (ret == 0) {
+                            if (copy_to_user(argp, tisp_par_ioctl, 0x500c)) {
+                                return -EFAULT;
+                            }
+                        }
+
+                        return ret;
+                    }
+
+                    case 0x20007404: /* Set AE info */
+                    {
+                        /* Binary Ninja: Copy from user and call tisp_set_ae_info */
+                        if (!tisp_par_ioctl) {
+                            return -ENOMEM;
+                        }
+
+                        if (copy_from_user(tisp_par_ioctl, argp, 0x500c)) {
+                            return -EFAULT;
+                        }
+
+                        ret = tisp_set_ae_info(tisp_par_ioctl);
+                        return ret;
+                    }
+
+                    case 0x20007406: /* Get AWB info */
+                    {
+                        /* Binary Ninja: tisp_get_awb_info(tisp_par_ioctl) */
+                        if (!tisp_par_ioctl) {
+                            return -ENOMEM;
+                        }
+
+                        ret = tisp_get_awb_info(tisp_par_ioctl);
+
+                        if (ret == 0) {
+                            if (copy_to_user(argp, tisp_par_ioctl, 0x500c)) {
+                                return -EFAULT;
+                            }
+                        }
+
+                        return ret;
+                    }
+
+                    case 0x20007407: /* Set AWB info */
+                    {
+                        /* Binary Ninja: Copy from user and call tisp_set_awb_info */
+                        if (!tisp_par_ioctl) {
+                            return -ENOMEM;
+                        }
+
+                        if (copy_from_user(tisp_par_ioctl, argp, 0x500c)) {
+                            return -EFAULT;
+                        }
+
+                        ret = tisp_set_awb_info(tisp_par_ioctl);
+                        return ret;
+                    }
+
+                    case 0x20007408: /* Special operation with string copy */
+                    {
+                        /* Binary Ninja: Complex operation with memcpy */
+                        if (!tisp_par_ioctl) {
+                            return -ENOMEM;
+                        }
+
+                        if (copy_from_user(tisp_par_ioctl, argp, 0x500c)) {
+                            return -EFAULT;
+                        }
+
+                        int *param_ptr = (int *)tisp_par_ioctl;
+
+                        /* Binary Ninja: *(tisp_par_ioctl_3 + 4) = 0xb */
+                        param_ptr[1] = 0xb;
+
+                        /* Binary Ninja: memcpy(tisp_par_ioctl_3 + 0xc, $a1_11, $a2_2) */
+                        memcpy(&param_ptr[3], "SONY mode", 0xb);
+
+                        if (copy_to_user(argp, tisp_par_ioctl, 0x500c)) {
+                            return -EFAULT;
+                        }
+
+                        return 0;
+                    }
+
+                    case 0x20007409: /* Another special operation */
+                    {
+                        /* Binary Ninja: Similar to 0x20007408 but different string */
+                        if (!tisp_par_ioctl) {
+                            return -ENOMEM;
+                        }
+
+                        if (copy_from_user(tisp_par_ioctl, argp, 0x500c)) {
+                            return -EFAULT;
+                        }
+
+                        int *param_ptr = (int *)tisp_par_ioctl;
+
+                        /* Binary Ninja: *(tisp_par_ioctl_3 + 4) = 0xf */
+                        param_ptr[1] = 0xf;
+
+                        /* Binary Ninja: memcpy with different string */
+                        memcpy(&param_ptr[3], "DVP mode", 0xf);
+
+                        if (copy_to_user(argp, tisp_par_ioctl, 0x500c)) {
+                            return -EFAULT;
+                        }
+
+                        return 0;
+                    }
+
+                    default:
+                        pr_warn("tisp_code_tuning_ioctl: Unknown tuning command 0x%x\n", cmd);
+                        return -EINVAL;
+                }
+
+                return 0;
+            }
+        }
+
+        /* Binary Ninja: Handle other command ranges */
+        pr_warn("tisp_code_tuning_ioctl: Command out of range: 0x%x\n", cmd);
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: Handle non-0x74 commands */
+    pr_warn("tisp_code_tuning_ioctl: Invalid command family: 0x%x\n", cmd);
+    return -EINVAL;
+}
+EXPORT_SYMBOL(tisp_code_tuning_ioctl);
 
 int isp_core_tuning_release(struct tx_isp_dev *dev)
 {
