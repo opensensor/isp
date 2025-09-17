@@ -1703,6 +1703,28 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** ISP/CORE INITIALIZATION COMPLETE - should enable interrupts ***\n");
 
+    /* CRITICAL: Restore working VIC interrupt initialization that was removed */
+    pr_info("*** RESTORING WORKING VIC INTERRUPT INITIALIZATION ***\n");
+
+    /* Enable VIC interrupts - from working version */
+    writel(0xffffffff, vic_regs + 0x1e0); /* Enable all interrupts */
+    writel(0x0, vic_regs + 0x1e8); /* Clear interrupt masks */
+    wmb();
+
+    /* ISP Pipeline connection - from working version */
+    writel(1, main_isp_base + 0x800);      /* VIC->ISP connection enable */
+    writel(0x1c, main_isp_base + 0x804);   /* ISP pipeline config */
+    writel(8, main_isp_base + 0x1c);       /* ISP interrupt config */
+    wmb();
+
+    pr_info("*** ISP PIPELINE: VIC->ISP connection ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
+    pr_info("*** ISP CORE: Hardware interrupt generation ENABLED during VIC init ***\n");
+    pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
+
+    /* Set VIC start flag - CRITICAL for interrupt processing */
+    vic_start_ok = 1;
+    pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
+
     /* Clean up the temporary mapping */
     iounmap(main_isp_base);
 
