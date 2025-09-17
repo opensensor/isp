@@ -2420,6 +2420,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* STEP 1: VIC Configuration - CONSOLIDATED APPROACH */
                 pr_info("*** STEP 1: VIC Configuration - using VIC registers only ***\n");
 
+                /* Declare sensor dimensions at function scope */
+                u32 sensor_width = 1920;   /* ACTUAL sensor output width */
+                u32 sensor_height = 1080;  /* ACTUAL sensor output height */
+
                 /* CRITICAL FIX: Skip ALL VIC register writes during streaming restart */
                 /* Let tx_isp_vic_start handle ALL VIC configuration with clean, consolidated approach */
                 if (vic_start_ok == 1) {
@@ -2428,9 +2432,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 } else {
                     /* Only configure VIC registers during initial startup */
                     pr_info("*** INITIAL VIC CONFIGURATION: Applying basic VIC setup ***\n");
-
-                    u32 sensor_width = 1920;   /* ACTUAL sensor output width */
-                    u32 sensor_height = 1080;  /* ACTUAL sensor output height */
                     pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", sensor_width, sensor_height);
 
                     /* Basic VIC configuration - minimal to prevent conflicts */
