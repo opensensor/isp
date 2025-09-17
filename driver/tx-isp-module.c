@@ -2924,8 +2924,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     channel, state->buffer_addresses, state->buffer_count, buffer.index,
                     (state->buffer_addresses && buffer.index < state->buffer_count) ? state->buffer_addresses[buffer.index] : 0);
 
-            /* CRITICAL FIX: Don't fail QBUF if no buffer structures - VBM might not need them */
-            pr_info("*** Channel %d: QBUF - Continuing without buffer structure (VBM compatibility) ***\n", channel);
+            /* CRITICAL FIX: VBMFillPool expects QBUF to succeed - this is normal initialization */
+            pr_info("*** Channel %d: QBUF - VBM initialization mode (VBMFillPool) ***\n", channel);
         }
 
         /* Reference driver QBUF logic: Set buffer to queued state and add to queue */
@@ -2953,18 +2953,33 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("*** Channel %d: QBUF buffer[%d] QUEUED, data_addr=0x%x, queued_count=%d ***\n",
                     channel, buffer.index, (uint32_t)(uintptr_t)video_buffer->data, state->queued_count);
         } else {
-            /* VBM compatibility: Store buffer info directly in VIC hardware */
-            pr_info("*** Channel %d: QBUF VBM mode - programming VIC directly with buffer_addr=0x%x ***\n",
+            /* VBM compatibility: VBMFillPool is pre-queuing buffers for initialization */
+            pr_info("*** Channel %d: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x%x ***\n",
                     channel, buffer_phys_addr);
 
-            /* CRITICAL: Program VIC register 0x380 with the real buffer address */
+            /* CRITICAL: Store VBM buffer addresses for later use during streaming */
+            if (!state->vbm_buffer_addresses) {
+                state->vbm_buffer_addresses = kzalloc(sizeof(uint32_t) * 16, GFP_KERNEL);
+                state->vbm_buffer_count = 0;
+            }
+
+            if (state->vbm_buffer_addresses && buffer.index < 16) {
+                state->vbm_buffer_addresses[buffer.index] = buffer_phys_addr;
+                if (buffer.index >= state->vbm_buffer_count) {
+                    state->vbm_buffer_count = buffer.index + 1;
+                }
+                pr_info("*** Channel %d: QBUF VBM - Stored buffer[%d] = 0x%x, total_count=%d ***\n",
+                        channel, buffer.index, buffer_phys_addr, state->vbm_buffer_count);
+            }
+
+            /* CRITICAL: Program VIC register 0x380 with the first real buffer address */
             extern struct tx_isp_dev *ourISPdev;
-            if (ourISPdev && ourISPdev->vic_dev) {
+            if (ourISPdev && ourISPdev->vic_dev && buffer.index == 0) {
                 struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
                 if (vic_dev->vic_regs) {
                     writel(buffer_phys_addr, vic_dev->vic_regs + 0x380);
                     wmb();
-                    pr_info("*** Channel %d: QBUF VBM - VIC[0x380] = 0x%x (real buffer address) ***\n",
+                    pr_info("*** Channel %d: QBUF VBM - VIC[0x380] = 0x%x (first real buffer) ***\n",
                             channel, buffer_phys_addr);
                 }
             }
