@@ -404,6 +404,23 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
                 pr_info("*** VIC BUFFER MGMT: Frame complete for buffer_addr=0x%x ***\n", completed_buffer_addr);
 
+                /* CRITICAL FIX: Also wake up frame waiters directly for immediate DQBUF response */
+                extern struct frame_channel_device frame_channels[];
+                extern int num_channels;
+                if (num_channels > 0) {
+                    struct tx_isp_channel_state *state = &frame_channels[0].state;
+
+                    /* Mark frame as ready for immediate DQBUF processing */
+                    unsigned long flags;
+                    spin_lock_irqsave(&state->buffer_lock, flags);
+                    state->frame_ready = true;
+                    spin_unlock_irqrestore(&state->buffer_lock, flags);
+
+                    /* Wake up waiting DQBUF processes immediately */
+                    wake_up_interruptible(&state->frame_wait);
+                    pr_info("*** VIC BUFFER MGMT: Frame ready signaled for immediate DQBUF ***\n");
+                }
+
                 extern int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint32_t buffer_addr);
                 vic_frame_complete_buffer_management(vic_dev, completed_buffer_addr);
             }
