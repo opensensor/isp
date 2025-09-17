@@ -598,8 +598,8 @@ struct sensor_info_struct {
 };
 
 static struct sensor_info_struct sensor_info = {1920, 1080, 25, 0};
-static uint32_t data_b0d54 = {4};  /* Sensor width divisor */
-static uint32_t data_b0d4c = {4};  /* Sensor height divisor */
+static uint32_t data_b0d54 = 4;  /* Sensor width divisor */
+static uint32_t data_b0d4c = 4;  /* Sensor height divisor */
 static uint32_t data_b2e1c = 1080; /* Sensor height */
 static uint32_t data_b0df8 = 0;    /* Initialization flag */
 
@@ -3530,24 +3530,24 @@ static uint32_t data_b2e44 = 0x1000;  /* Deflicker base */
 static uint32_t data_b0b28, data_b0b2c, data_b0b30;
 
 /* AE interrupt handlers - Forward declarations */
-static void ae0_interrupt_hist(void);
-static void ae0_interrupt_static(void);
-static void ae1_interrupt_hist(void);
-static void ae1_interrupt_static(void);
-static void tisp_ae0_process(void);
+static int ae0_interrupt_hist(void);
+static int ae0_interrupt_static(void);
+static int ae1_interrupt_hist(void);
+static int ae1_interrupt_static(void);
+static int tisp_ae0_process(void);
 static void tisp_ae1_process(void);
 
 /* AE processing functions - Forward declarations */
-static void tiziano_ae_params_refresh(void);
+static int tiziano_ae_params_refresh(void);
 static int tiziano_ae_init_exp_th(void);
-static void tiziano_ae_para_addr(void);
-static void tiziano_ae_set_hardware_param(int param_id, uint32_t *data, int enable);
+static void *tiziano_ae_para_addr(void);
+static int tiziano_ae_set_hardware_param(int ae_id, uint8_t *param_array, int update_only);
 static void tisp_set_sensor_integration_time(uint32_t time);
 static void tisp_set_sensor_analog_gain(void);
 static void tisp_set_sensor_integration_time_short(uint32_t time);
 static void tisp_set_sensor_analog_gain_short(void);
-static void tiziano_deflicker_expt(uint32_t flicker_t, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t *lut, uint32_t *nodes);
-static void system_reg_write_ae(uint32_t bank, uint32_t reg, uint32_t value);
+static int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3, uint32_t param4, uint32_t *lut_array, uint32_t *nodes_count);
+static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
 static void system_irq_func_set(int irq_id, void (*handler)(void));
 void private_spin_lock_init(spinlock_t *lock);
 static uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
@@ -7219,12 +7219,12 @@ int tiziano_ae_params_refresh(void)
     uint32_t sensor_height_div = sensor_info.height / 2;
 
     /* Binary Ninja: Update parameter arrays with calculated values */
-    for (int i = 0; i < data_b0d54.d && i < (sizeof(_ae_parameter) / sizeof(uint32_t)); i++) {
-        _ae_parameter.data[i + 4] = sensor_width_div / data_b0d54.d;
+    for (int i = 0; i < data_b0d54 && i < (sizeof(_ae_parameter) / sizeof(uint32_t)); i++) {
+        _ae_parameter.data[i + 4] = sensor_width_div / data_b0d54;
     }
 
-    for (int i = 0; i < data_b0d4c.d && i < (sizeof(_ae_parameter) / sizeof(uint32_t)); i++) {
-        _ae_parameter.data[i + 18] = sensor_height_div / data_b0d4c.d;
+    for (int i = 0; i < data_b0d4c && i < (sizeof(_ae_parameter) / sizeof(uint32_t)); i++) {
+        _ae_parameter.data[i + 18] = sensor_height_div / data_b0d4c;
     }
 
     /* Binary Ninja: Copy WDR parameters */
