@@ -2417,75 +2417,75 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 }
                 
 				
-                /* STEP 1: VIC Configuration - NOT CSI PHY! */
+                /* STEP 1: VIC Configuration - CONSOLIDATED APPROACH */
                 pr_info("*** STEP 1: VIC Configuration - using VIC registers only ***\n");
-                /* CRITICAL FIX: vic_regs (0x133e0000) contains VIC interrupt registers - don't overwrite them! */
-                /* CSI PHY configuration should be done by CSI module at 0x10022000 */
-                u32 sensor_width = 1920;   /* ACTUAL sensor output width */
-                u32 sensor_height = 1080;  /* ACTUAL sensor output height */
-                pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", sensor_width, sensor_height);
-                pr_info("*** CRITICAL: VIC configured for sensor OUTPUT, CSI PHY handled separately ***\n");
 
-                /* CRITICAL FIX: Only write to VIC-specific registers - CSI PHY registers handled by CSI driver */
-                pr_info("*** VIC: Writing only VIC-specific registers (CSI PHY registers handled by CSI driver) ***\n");
-
-                /* VIC Control and Configuration registers only */				                /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
-                writel(0x7800438, vic_regs + 0x4);
-
-                /* CRITICAL FIX: Skip VIC control register writes during streaming restart */
-                /* These writes to 0xc and 0x14 were corrupting VIC interrupt configuration */
+                /* CRITICAL FIX: Skip ALL VIC register writes during streaming restart */
+                /* Let tx_isp_vic_start handle ALL VIC configuration with clean, consolidated approach */
                 if (vic_start_ok == 1) {
-                    pr_info("*** SKIPPING VIC control register writes (0xc, 0x14) - VIC interrupts already working ***\n");
+                    pr_info("*** SKIPPING ALL VIC register writes - VIC interrupts already working ***\n");
+                    pr_info("*** VIC configuration will be handled by tx_isp_vic_start with clean approach ***\n");
                 } else {
-                    /* Binary Ninja: EXACT reference driver VIC register configuration */
-                    writel(0x2, vic_regs + 0xc);
-                    writel(0x2, vic_regs + 0x14);
+                    /* Only configure VIC registers during initial startup */
+                    pr_info("*** INITIAL VIC CONFIGURATION: Applying basic VIC setup ***\n");
+
+                    u32 sensor_width = 1920;   /* ACTUAL sensor output width */
+                    u32 sensor_height = 1080;  /* ACTUAL sensor output height */
+                    pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", sensor_width, sensor_height);
+
+                    /* Basic VIC configuration - minimal to prevent conflicts */
+                    writel(0x7800438, vic_regs + 0x4);  /* Dimensions */
+                    writel(0x2, vic_regs + 0xc);        /* Mode */
+                    writel(0x2, vic_regs + 0x14);       /* Interrupt config */
+                    writel(0xf00, vic_regs + 0x18);     /* Timing */
+                    writel(0x800800, vic_regs + 0x60);  /* Control */
+                    writel(0x9d09d0, vic_regs + 0x64);  /* Control */
+                    writel(0x6002, vic_regs + 0x70);    /* Control */
+                    writel(0x7003, vic_regs + 0x74);    /* Control */
+                    writel(0xeb8080, vic_regs + 0xc0);  /* Control */
+
+                    /* Additional VIC configuration registers - only during initial startup */
+                    writel(0x108080, vic_regs + 0xc4);
+                    writel(0x29f06e, vic_regs + 0xc8);
+                    writel(0x913622, vic_regs + 0xcc);
+                    writel(0x515af0, vic_regs + 0xd0);
+                    writel(0xaaa610, vic_regs + 0xd4);
+                    writel(0xd21092, vic_regs + 0xd8);
+                    writel(0x6acade, vic_regs + 0xdc);
+                    writel(0xeb8080, vic_regs + 0xe0);
+                    writel(0x108080, vic_regs + 0xe4);
+                    writel(0x29f06e, vic_regs + 0xe8);
+                    writel(0x913622, vic_regs + 0xec);
+                    writel(0x515af0, vic_regs + 0xf0);
+                    writel(0xaaa610, vic_regs + 0xf4);
+                    writel(0xd21092, vic_regs + 0xf8);
+                    writel(0x6acade, vic_regs + 0xfc);
+                    writel(0x2d0, vic_regs + 0x100);
+                    writel(0x2c000, vic_regs + 0x10c);
+                    writel(0x7800000, vic_regs + 0x110);
+                    writel(0x10, vic_regs + 0x120);
+                    writel(0x100010, vic_regs + 0x1a4);
+                    writel(0x4440, vic_regs + 0x1a8);
+                    writel(0x10, vic_regs + 0x1b0);
+                    wmb();
+
+                    pr_info("*** INITIAL VIC CONFIGURATION COMPLETE ***\n");
                 }
-
-                writel(0xf00, vic_regs + 0x18);
-                writel(0x800800, vic_regs + 0x60);
-                writel(0x9d09d0, vic_regs + 0x64);
-                writel(0x6002, vic_regs + 0x70);
-                writel(0x7003, vic_regs + 0x74);
-                writel(0xeb8080, vic_regs + 0xc0);
-                writel(0x108080, vic_regs + 0xc4);
-                writel(0x29f06e, vic_regs + 0xc8);
-                writel(0x913622, vic_regs + 0xcc);
-                writel(0x515af0, vic_regs + 0xd0);
-                writel(0xaaa610, vic_regs + 0xd4);
-                writel(0xd21092, vic_regs + 0xd8);
-                writel(0x6acade, vic_regs + 0xdc);
-                writel(0xeb8080, vic_regs + 0xe0);
-                writel(0x108080, vic_regs + 0xe4);
-                writel(0x29f06e, vic_regs + 0xe8);
-                writel(0x913622, vic_regs + 0xec);
-                writel(0x515af0, vic_regs + 0xf0);
-                writel(0xaaa610, vic_regs + 0xf4);
-                writel(0xd21092, vic_regs + 0xf8);
-                writel(0x6acade, vic_regs + 0xfc);
-                writel(0x2d0, vic_regs + 0x100);
-                writel(0x2c000, vic_regs + 0x10c);
-                writel(0x7800000, vic_regs + 0x110);
-
-                /* Binary Ninja: EXACT reference driver register configuration */
-                writel(0x10, vic_regs + 0x120);
-
-                writel(0x100010, vic_regs + 0x1a4);
-                writel(0x4440, vic_regs + 0x1a8);
-                writel(0x10, vic_regs + 0x1b0);
-                wmb();
                 
                 /* STEP 2: ISP isp-w01 - Control registers */
                 pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
 
-                /* Binary Ninja: EXACT reference driver isp-w01 control register */
-                writel(0x3130322a, vic_regs + 0x0);
-
-                writel(0x1, vic_regs + 0x4);
-
-                /* Binary Ninja: EXACT reference driver register configuration */
-                writel(0x200, vic_regs + 0x14);
-                wmb();
+                /* CRITICAL FIX: Skip VIC register writes during streaming restart */
+                if (vic_start_ok == 1) {
+                    pr_info("*** SKIPPING isp-w01 register writes - VIC interrupts already working ***\n");
+                } else {
+                    /* Binary Ninja: EXACT reference driver isp-w01 control register */
+                    writel(0x3130322a, vic_regs + 0x0);
+                    writel(0x1, vic_regs + 0x4);
+                    writel(0x200, vic_regs + 0x14);
+                    wmb();
+                    pr_info("*** INITIAL isp-w01 CONFIGURATION COMPLETE ***\n");
+                }
                 
                 /* STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) */
                 pr_info("*** STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) ***\n");
