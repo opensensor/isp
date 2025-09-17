@@ -1663,38 +1663,7 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
 
     return 0;  /* Success - VIC is now properly configured */
 
-    /***
-ISP isp-m0: [CSI PHY Control] write at offset 0x8: 0x1 -> 0x0 (delta: 210.000 ms)
-ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x80700008 -> 0xb5742249 (delta: 210.000 ms)
-ISP isp-m0: [CSI PHY Control] write at offset 0x10: 0x0 -> 0x133 (delta: 0.000 ms)
-ISP isp-m0: [CSI PHY Control] write at offset 0x1c: 0x0 -> 0x8 (delta: 0.000 ms)
-ISP isp-m0: [CSI PHY Control] write at offset 0x30: 0x0 -> 0x8fffffff (delta: 0.000 ms)
-ISP isp-m0: [CSI PHY Config] write at offset 0x110: 0x80007000 -> 0x92217523 (delta: 210.000 ms)
-*/
 
-    /* ==============================================================================================
-     * PHASE 6: Further streaming adjustments (T+550ms)
-     * ==============================================================================================*/
-
-    pr_info("*** PHASE 6: Further streaming adjustments (T+550ms) ***\n");
-
-    /* Additional VIC adjustments - Only VIC registers */
-    writel(0x8, vic_regs + 0x8c);        /* was 0x1 -> 0x8 */
-    writel(0x19f, vic_regs + 0x90);      /* was 0x0 -> 0x19f */
-    writel(0x180, vic_regs + 0xa0);      /* was 0x0 -> 0x180 */
-    writel(0x2ae, vic_regs + 0xb0);      /* was 0x0 -> 0x2ae */
-    writel(0x10, vic_regs + 0x120);      /* was 0x0 -> 0x10 */
-    wmb();
-
-    /* CSI PHY Config updates */
-    writel(0x2b, csi_base + 0x1d0);      /* was 0x1 -> 0x2b */
-    writel(0x60, csi_base + 0x250);      /* was 0x0 -> 0x60 */
-    wmb();
-
-    /* More VIC updates */
-    writel(0x300, vic_regs + 0x14);      /* was 0x330 -> 0x300 */
-    writel(0x60008, vic_regs + 0x40);    /* was 0x20002 -> 0x60008 */
-    wmb();
 
     /* Main ISP updates for streaming */
     writel(0x59010000, main_isp_base + 0xac);    /* was 0x58050000 -> 0x59010000 */
