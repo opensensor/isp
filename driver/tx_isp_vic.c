@@ -1603,9 +1603,24 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
 
     /* CRITICAL: Binary Ninja reference shows NO ISP core register writes in tx_isp_vic_start! */
-    /* The reference driver ONLY configures VIC registers, not ISP core interrupts */
-    /* ISP core configuration should happen elsewhere, not during VIC start */
-    pr_info("*** VIC START: Following Binary Ninja reference - NO ISP core register writes ***\n");
+    /* But we still need basic pipeline connection - move interrupt config elsewhere */
+    if (ourISPdev && ourISPdev->core_regs) {
+        void __iomem *core = ourISPdev->core_regs;
+
+        /* ESSENTIAL: Enable ISP pipeline connection - this is needed for VIC->ISP communication */
+        /* Binary Ninja: system_reg_write(0x800, 1) - Enable ISP pipeline */
+        writel(1, core + 0x800);
+
+        /* Binary Ninja: system_reg_write(0x804, routing) - Configure ISP routing */
+        writel(0x1c, core + 0x804);
+
+        /* Binary Ninja: system_reg_write(0x1c, 8) - Set ISP control mode */
+        writel(8, core + 0x1c);
+        wmb();
+
+        pr_info("*** ISP PIPELINE: VIC->ISP connection ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
+        pr_info("*** ISP INTERRUPTS: Will be configured during ISP core s_stream, not VIC start ***\n");
+    }
 
     /* Also enable the kernel IRQ line if it was registered earlier */
     if (ourISPdev && ourISPdev->isp_irq > 0) {
