@@ -3587,7 +3587,7 @@ static void tisp_set_sensor_integration_time(uint32_t time);
 static void tisp_set_sensor_analog_gain(void);
 static void tisp_set_sensor_integration_time_short(uint32_t time);
 static void tisp_set_sensor_analog_gain_short(void);
-static int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3, uint32_t param4, uint32_t *lut_array, uint32_t *nodes_count);
+/* tiziano_deflicker_expt implemented as exported function below */
 static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
 static void system_irq_func_set(int irq_id, void (*handler)(void));
 void private_spin_lock_init(spinlock_t *lock);
