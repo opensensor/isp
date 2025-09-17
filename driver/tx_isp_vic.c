@@ -2417,63 +2417,86 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 }
                 
 				
-                /* STEP 1: VIC Configuration - CONSOLIDATED APPROACH */
-                pr_info("*** STEP 1: VIC Configuration - using VIC registers only ***\n");
+                /* STEP 1: VIC Hardware Reset and Clean Configuration */
+                pr_info("*** STEP 1: VIC Hardware Reset and Clean Configuration ***\n");
 
                 /* Declare sensor dimensions at function scope */
                 u32 sensor_width = 1920;   /* ACTUAL sensor output width */
                 u32 sensor_height = 1080;  /* ACTUAL sensor output height */
 
-                /* TARGETED FIX: Allow essential VIC configuration, skip only problematic registers */
-                pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", sensor_width, sensor_height);
-                pr_info("*** CRITICAL: VIC configured for sensor OUTPUT, CSI PHY handled separately ***\n");
+                /* HARDWARE RESET APPROACH: Reset VIC to clean state first */
+                pr_info("*** VIC HARDWARE RESET: Clearing VIC hardware state to prevent control limit errors ***\n");
 
-                /* ESSENTIAL VIC configuration - ALWAYS needed for interrupts to work */
-                pr_info("*** VIC: Writing essential VIC registers for interrupt operation ***\n");
-
-                /* VIC Control and Configuration registers - ESSENTIAL for interrupts */
-                writel(0x7800438, vic_regs + 0x4);      /* Dimensions - ESSENTIAL */
-                writel(0x2, vic_regs + 0xc);            /* Mode - ESSENTIAL */
-                writel(0x2d0, vic_regs + 0x100);        /* Interrupt config - ESSENTIAL */
-                writel(0xf00, vic_regs + 0x18);         /* Timing - ESSENTIAL */
-
-                /* Additional VIC configuration registers - needed for proper operation */
-                writel(0x800800, vic_regs + 0x60);
-                writel(0x9d09d0, vic_regs + 0x64);
-                writel(0x6002, vic_regs + 0x70);
-                writel(0x7003, vic_regs + 0x74);
-                writel(0xeb8080, vic_regs + 0xc0);
-                writel(0x108080, vic_regs + 0xc4);
-                writel(0x29f06e, vic_regs + 0xc8);
-                writel(0x913622, vic_regs + 0xcc);
-                writel(0x515af0, vic_regs + 0xd0);
-                writel(0xaaa610, vic_regs + 0xd4);
-                writel(0xd21092, vic_regs + 0xd8);
-                writel(0x6acade, vic_regs + 0xdc);
-                writel(0xeb8080, vic_regs + 0xe0);
-                writel(0x108080, vic_regs + 0xe4);
-                writel(0x29f06e, vic_regs + 0xe8);
-                writel(0x913622, vic_regs + 0xec);
-                writel(0x515af0, vic_regs + 0xf0);
-                writel(0xaaa610, vic_regs + 0xf4);
-                writel(0xd21092, vic_regs + 0xf8);
-                writel(0x6acade, vic_regs + 0xfc);
-                writel(0x2c000, vic_regs + 0x10c);
-                writel(0x7800000, vic_regs + 0x110);
-                writel(0x10, vic_regs + 0x120);
-                writel(0x100010, vic_regs + 0x1a4);
-                writel(0x4440, vic_regs + 0x1a8);
-                writel(0x10, vic_regs + 0x1b0);
+                /* Step 1: Disable VIC hardware completely */
+                writel(0x0, vic_regs + 0x0);           /* Disable VIC hardware */
                 wmb();
 
-                /* TARGETED PROTECTION: Only skip the specific register that causes control limit errors */
-                if (vic_start_ok == 1) {
-                    pr_info("*** TARGETED PROTECTION: Skipping register 0x14 write to prevent control limit error ***\n");
-                } else {
-                    /* Only write the problematic register during initial startup */
-                    writel(0x2, vic_regs + 0x14);       /* This register causes control limit errors during restart */
-                    pr_info("*** INITIAL STARTUP: Applied register 0x14 configuration ***\n");
-                }
+                /* Step 2: Clear all VIC interrupt status */
+                writel(0xffffffff, vic_regs + 0x1c);   /* Clear all interrupt status bits */
+                wmb();
+
+                /* Step 3: Reset VIC control registers to safe defaults */
+                writel(0x0, vic_regs + 0xc);           /* Clear mode register */
+                writel(0x0, vic_regs + 0x14);          /* Clear interrupt config */
+                wmb();
+
+                pr_info("*** VIC HARDWARE RESET COMPLETE - Now applying clean configuration ***\n");
+
+                /* Step 4: Apply clean VIC configuration in correct order */
+                pr_info("*** CLEAN VIC CONFIGURATION: Applying configuration in hardware-expected order ***\n");
+
+                /* Configure VIC dimensions first */
+                writel((sensor_width << 16) | sensor_height, vic_regs + 0x4);  /* Dimensions: 1920x1080 */
+                wmb();
+
+                /* Configure VIC mode for MIPI interface */
+                writel(0x3, vic_regs + 0xc);            /* MIPI mode (3) */
+                wmb();
+
+                /* Configure VIC interrupt system */
+                writel(0x2d0, vic_regs + 0x100);        /* Interrupt configuration */
+                writel(0x2b, vic_regs + 0x14);          /* Interrupt control - reference driver value */
+                wmb();
+
+                /* Configure VIC timing */
+                writel(0xf00, vic_regs + 0x18);         /* Timing parameters */
+                wmb();
+
+                /* Step 5: Apply essential VIC control registers */
+                writel(0x800800, vic_regs + 0x60);      /* Control register */
+                writel(0x9d09d0, vic_regs + 0x64);      /* Control register */
+                writel(0x6002, vic_regs + 0x70);        /* Control register */
+                writel(0x7003, vic_regs + 0x74);        /* Control register */
+                wmb();
+
+                /* Step 6: Apply VIC color space configuration */
+                writel(0xeb8080, vic_regs + 0xc0);      /* Color space config */
+                writel(0x108080, vic_regs + 0xc4);      /* Color space config */
+                writel(0x29f06e, vic_regs + 0xc8);      /* Color space config */
+                writel(0x913622, vic_regs + 0xcc);      /* Color space config */
+                wmb();
+
+                /* Step 7: Apply VIC processing configuration */
+                writel(0x515af0, vic_regs + 0xd0);      /* Processing config */
+                writel(0xaaa610, vic_regs + 0xd4);      /* Processing config */
+                writel(0xd21092, vic_regs + 0xd8);      /* Processing config */
+                writel(0x6acade, vic_regs + 0xdc);      /* Processing config */
+                wmb();
+
+                /* Step 8: Apply final VIC configuration */
+                writel(0x2c000, vic_regs + 0x10c);      /* Final config */
+                writel(0x7800000, vic_regs + 0x110);    /* Final config */
+                writel(0x10, vic_regs + 0x120);         /* Final config */
+                wmb();
+
+                /* Step 9: Enable VIC hardware in correct sequence */
+                pr_info("*** ENABLING VIC HARDWARE: Using reference driver sequence ***\n");
+                writel(0x2, vic_regs + 0x0);            /* Pre-enable state */
+                wmb();
+                writel(0x1, vic_regs + 0x0);            /* Enable VIC hardware */
+                wmb();
+
+                pr_info("*** VIC HARDWARE RESET AND CONFIGURATION COMPLETE ***\n");
                 
                 /* STEP 2: ISP isp-w01 - Control registers */
                 pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
