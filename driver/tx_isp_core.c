@@ -1569,15 +1569,9 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
             return ret;
         }
 
-        /* CRITICAL FIX: Set sensor FPS during initialization, not during frame sync interrupts */
-        /* This is where FPS control belongs - during setup, not per-frame processing */
-        extern int sensor_fps_control(int fps);
-        ret = sensor_fps_control(25);  /* Set 25 FPS during initialization */
-        if (ret == 0) {
-            ISP_INFO("*** ispcore_core_ops_init: Sensor FPS control set to 25 FPS during initialization ***\n");
-        } else {
-            ISP_WARNING("*** ispcore_core_ops_init: Sensor FPS control failed: %d ***\n", ret);
-        }
+        /* CRITICAL FIX: FPS control moved to after sensor initialization */
+        /* Sensor must be initialized before FPS can be set (HTS registers must be readable) */
+        ISP_INFO("*** ispcore_core_ops_init: FPS control will be set after sensor initialization ***\n");
 
         tisp_initialized = true;
         ISP_INFO("*** ispcore_core_ops_init: tisp_init() completed successfully - MARKED AS INITIALIZED ***\n");
