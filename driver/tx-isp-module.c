@@ -7719,7 +7719,12 @@ int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint
             pr_info("*** VIC BUFFER MGMT: VBM buffer[%d] completed with addr=0x%x ***\n",
                     buffer_index, buffer_addr);
 
-            /* Wake up any waiting DQBUF processes */
+            /* Set frame ready flag and wake up any waiting DQBUF processes */
+            unsigned long flags;
+            spin_lock_irqsave(&state->buffer_lock, flags);
+            state->frame_ready = true;
+            spin_unlock_irqrestore(&state->buffer_lock, flags);
+
             wake_up_interruptible(&state->frame_wait);
 
             /* Program next VBM buffer to VIC register 0x380 for continuous streaming */
