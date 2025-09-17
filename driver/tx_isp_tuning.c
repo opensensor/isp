@@ -3553,12 +3553,12 @@ int tisp_g_ae_zone_internal(void *buffer)
     return 0;
 }
 
-/* tisp_g_af_zone - EXACT Binary Ninja reference implementation */
-int tisp_g_af_zone(void *buffer)
+/* tisp_g_af_zone_buffer - wrapper function for buffer-based calls */
+int tisp_g_af_zone_buffer(void *buffer)
 {
     /* Binary Ninja: tisp_af_get_zone(); return 0 */
 
-    pr_debug("tisp_g_af_zone: entry, buffer=%p\n", buffer);
+    pr_debug("tisp_g_af_zone_buffer: entry, buffer=%p\n", buffer);
 
     tisp_af_get_zone();  // Binary Ninja: function takes no parameters
     return 0;
