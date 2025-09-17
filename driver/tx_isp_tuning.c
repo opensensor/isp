@@ -356,6 +356,27 @@ int tisp_set_csc_version(int version)
 /* Use external system_reg_write from tx-isp-module.c that does real hardware writes */
 extern void system_reg_write(u32 reg, u32 value);
 
+/* AE interrupt wrapper functions to convert signatures from int function(void) to irqreturn_t function(int, void*) */
+irqreturn_t ae0_interrupt_hist_wrapper(int irq, void *dev_id) {
+    ae0_interrupt_hist();
+    return IRQ_HANDLED;
+}
+
+irqreturn_t ae0_interrupt_static_wrapper(int irq, void *dev_id) {
+    ae0_interrupt_static();
+    return IRQ_HANDLED;
+}
+
+irqreturn_t ae1_interrupt_hist_wrapper(int irq, void *dev_id) {
+    ae1_interrupt_hist();
+    return IRQ_HANDLED;
+}
+
+irqreturn_t ae1_interrupt_static_wrapper(int irq, void *dev_id) {
+    ae1_interrupt_static();
+    return IRQ_HANDLED;
+}
+
 /* ===== MISSING SYMBOL IMPLEMENTATIONS - Binary Ninja Reference ===== */
 
 /* Global AE data structures - from Binary Ninja analysis */
@@ -6002,25 +6023,12 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     extern int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3, uint32_t param4, uint32_t *lut_array, uint32_t *nodes_count);
     extern void *tiziano_ae_para_addr(void);
 
-    /* AE interrupt wrapper functions to convert signatures */
-    static irqreturn_t ae0_interrupt_hist_wrapper(int irq, void *dev_id) {
-        ae0_interrupt_hist();
-        return IRQ_HANDLED;
-    }
-    static irqreturn_t ae0_interrupt_static_wrapper(int irq, void *dev_id) {
-        ae0_interrupt_static();
-        return IRQ_HANDLED;
-    }
-    static irqreturn_t ae1_interrupt_hist_wrapper(int irq, void *dev_id) {
-        ae1_interrupt_hist();
-        return IRQ_HANDLED;
-    }
-    static irqreturn_t ae1_interrupt_static_wrapper(int irq, void *dev_id) {
-        ae1_interrupt_static();
-        return IRQ_HANDLED;
-    }
-
     /* Binary Ninja EXACT: system_irq_func_set with proper wrappers */
+    extern irqreturn_t ae0_interrupt_hist_wrapper(int irq, void *dev_id);
+    extern irqreturn_t ae0_interrupt_static_wrapper(int irq, void *dev_id);
+    extern irqreturn_t ae1_interrupt_hist_wrapper(int irq, void *dev_id);
+    extern irqreturn_t ae1_interrupt_static_wrapper(int irq, void *dev_id);
+
     system_irq_func_set(0x1b, ae0_interrupt_hist_wrapper);
     system_irq_func_set(0x1a, ae0_interrupt_static_wrapper);
     system_irq_func_set(0x1d, ae1_interrupt_hist_wrapper);
