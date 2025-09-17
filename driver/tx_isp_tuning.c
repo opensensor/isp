@@ -4792,26 +4792,6 @@ int tisp_dn_mode_get(void *mode_buf, void *size_buf)
     return 0;
 }
 
-/* tisp_g_ae_zone - Binary Ninja EXACT implementation */
-int tisp_g_ae_zone(void *buffer)
-{
-    /* Binary Ninja: tisp_ae_get_y_zone(arg1); return 0 */
-    tisp_ae_get_y_zone(buffer);
-    return 0;
-}
-
-int tisp_ae_get_y_zone(void *buffer)
-{
-    if (!buffer) {
-        pr_err("tisp_ae_get_y_zone: NULL buffer pointer\n");
-        return -EINVAL;
-    }
-
-    pr_debug("tisp_ae_get_y_zone: Getting AE Y zone data (stub)\n");
-    /* Stub implementation - needs Binary Ninja decompilation */
-    return 0;
-}
-
 /* Export symbols for kernel module loading */
 EXPORT_SYMBOL(data_b2e74);
 EXPORT_SYMBOL(tisp_g_af_zone);
