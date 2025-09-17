@@ -3547,6 +3547,63 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
 }
 EXPORT_SYMBOL(tisp_code_tuning_ioctl);
 
+/* Tuning parameter function stubs - Binary Ninja reference implementations needed */
+
+/* These functions need to be implemented based on their Binary Ninja decompilations */
+static int tisp_top_param_array_get(void *out_buf, void *size_buf) { return 0; }
+static int tisp_blc_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_lsc_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_wdr_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_dpc_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tx_isp_subdev_pipo(void *out_buf, void *size_buf) { return 0; }
+static int tisp_rdns_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_adr_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tx_isp_vin_activate_subdev(void *out_buf, void *size_buf) { return 0; }
+static int tisp_ccm_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_gamma_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_defog_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_mdns_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_ydns_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_bcsh_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_clm_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_ysp_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_sdns_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_af_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_hldc_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_ae_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_awb_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+static int tisp_reg_map_get(int reg_addr, void *reg_val, void *size_buf) { return 0; }
+static int tisp_dn_mode_get(void *mode_buf, void *size_buf) { return 0; }
+
+static int tisp_blc_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_lsc_set_par_cfg(int param, void *in_buf) { return 0; }
+static int tisp_wdr_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_dpc_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_gib_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_rdns_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_adr_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_dmsc_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_ccm_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_gamma_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_defog_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_mdns_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_ydns_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_bcsh_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_clm_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_ysp_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_sdns_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_af_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_hldc_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_ae_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_awb_set_par_cfg(void *in_buf) { return 0; }
+static int tisp_reg_map_set(void *in_buf) { return 0; }
+static int tisp_dn_mode_set(void *in_buf) { return 0; }
+
+static int tisp_get_ae_info(void *out_buf) { return 0; }
+static int tisp_set_ae_info(void *in_buf) { return 0; }
+static int tisp_get_awb_info(void *out_buf) { return 0; }
+static int tisp_set_awb_info(void *in_buf) { return 0; }
+
 int isp_core_tuning_release(struct tx_isp_dev *dev)
 {
     struct isp_tuning_data *tuning = ourISPdev->tuning_data;
