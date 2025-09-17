@@ -458,16 +458,9 @@ int tx_isp_vic_stop(struct tx_isp_subdev *sd)
     ctrl |= VIC_CTRL_STOP;
     vic_write32(VIC_CTRL, ctrl);
 
-    /* Wait for stop to complete - FIXED: Added timeout protection */
-    timeout = 10000;  /* 100ms timeout */
+    /* Wait for stop to complete */
     while (vic_read32(VIC_STATUS) & STATUS_BUSY) {
         udelay(10);
-        if (--timeout == 0) {
-            u32 status = vic_read32(VIC_STATUS);
-            pr_err("*** CRITICAL: VIC stop timeout! STATUS = 0x%08x (BUSY bit still set) ***\n", status);
-            pr_err("*** VIC hardware may be stuck - continuing anyway ***\n");
-            break;  /* Continue instead of hanging forever */
-        }
     }
 
     mutex_unlock(&sd->vic_frame_end_lock);
