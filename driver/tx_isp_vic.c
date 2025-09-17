@@ -2575,6 +2575,18 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     vic_start_ok = 1;  /* NOW safe to enable interrupt processing */
                     pr_info("*** INTERRUPTS RE-ENABLED AFTER COMPLETE INITIALIZATION ***\n");
 
+                    /* CRITICAL: Call ispcore_slake_module when VIC state reaches 4 (>= 3) */
+                    pr_info("*** VIC STATE 4: Calling ispcore_slake_module to initialize ISP core ***\n");
+                    extern int ispcore_slake_module(struct tx_isp_dev *isp);
+                    if (ourISPdev) {
+                        int slake_ret = ispcore_slake_module(ourISPdev);
+                        if (slake_ret == 0) {
+                            pr_info("*** ispcore_slake_module SUCCESS - ISP core should now be initialized ***\n");
+                        } else {
+                            pr_err("*** ispcore_slake_module FAILED: %d ***\n", slake_ret);
+                        }
+                    }
+
                     /* CRITICAL: Apply full VIC configuration now that sensor is streaming */
                     pr_info("*** APPLYING FULL VIC CONFIGURATION AFTER SENSOR INITIALIZATION ***\n");
                     tx_isp_vic_apply_full_config(vic_dev);
