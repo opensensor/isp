@@ -341,6 +341,8 @@ int tisp_g_af_zone(void);
 int apical_isp_ae_g_roi(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 int tisp_get_defog_strength(uint32_t *value);
 int tisp_g_dpc_strength(uint32_t *value);
+int tisp_g_drc_strength(uint32_t *value);
+int apical_isp_ae_zone_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 
 /* Forward declarations for file operations */
 int tisp_code_tuning_open(struct inode *inode, struct file *file);
@@ -1783,15 +1785,16 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
                 break;
 
             case 0x80000a2:  // DRC Strength
-                ctrl->value = tuning->drc_strength;
+                tisp_g_drc_strength(&var_98);
+                ctrl->value = var_98;
                 break;
 
-            case 0x8000085:  // Temper Strength
-                ctrl->value = tuning->temper_strength;
+            case 0x8000085:  // Temper Strength - Binary Ninja: return 0
+                ctrl->value = 0;
                 break;
 
-            case 0x8000086:  // Sinter Strength
-                ctrl->value = tuning->sinter_strength;
+            case 0x8000086:  // Sinter Strength - Binary Ninja: return 0
+                ctrl->value = 0;
                 break;
 
             case 0x800002d:  // AE Statistics
@@ -3818,6 +3821,12 @@ int tisp_ae_get_y_zone(void *buffer)
 
 int tisp_ae_get_hist_custome(void *buffer)
 {
+    return 0;
+}
+
+int tisp_g_drc_strength(uint32_t *value)
+{
+    if (value) *value = 0;
     return 0;
 }
 
