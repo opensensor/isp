@@ -2200,13 +2200,16 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             u32 reference_buffer_count = 2;  /* Reference driver uses 2 buffers */
             u32 reference_control_bits = 0x80000020;  /* Exact reference driver control bits */
 
-            /* CRITICAL: Use EXACT reference driver register value to prevent hardware state machine rejection */
-            u32 stream_ctrl = (reference_buffer_count << 16) | (reference_control_bits & 0xFFFF);
+            /* BINARY NINJA EXACT: Use exact reference driver formula to prevent control limit error */
+            /* Binary Ninja: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+            u32 buffer_count = vic_dev->active_buffer_count;
+            u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* EXACT Binary Ninja formula */
             writel(stream_ctrl, vic_base + 0x300);
             wmb();
 
-            pr_info("*** REFERENCE SEQUENCE: Wrote 0x%x to reg 0x300 (exact reference driver value) ***\n", stream_ctrl);
-            pr_info("*** This should prevent control limit error by matching hardware expectations exactly ***\n");
+            pr_info("*** BINARY NINJA EXACT: Wrote 0x%x to reg 0x300 (buffer_count=%d, formula: (count<<16)|0x80000020) ***\n",
+                    stream_ctrl, buffer_count);
+            pr_info("*** This should prevent control limit error by using EXACT Binary Ninja reference driver formula ***\n");
 
             /* MCP LOG: Stream ON completed */
             pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
