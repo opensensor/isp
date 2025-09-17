@@ -2586,12 +2586,18 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x10, vic_regs + 0x1b0);
                 wmb();
                 
-                /* STEP 2: ISP isp-w01 - Control registers */
-                pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
-                writel(0x3130322a, vic_regs + 0x0);
-                writel(0x1, vic_regs + 0x4);
-                writel(0x200, vic_regs + 0x14);
-                wmb();
+                /* CRITICAL FIX: Skip STEP 2 writes during streaming restart */
+                if (vic_start_ok == 1) {
+                    pr_info("*** STEP 2: SKIPPING ISP isp-w01 Control registers - VIC interrupts already working ***\n");
+                    pr_info("*** These writes would overwrite VIC interrupt configuration ***\n");
+                } else {
+                    /* STEP 2: ISP isp-w01 - Control registers */
+                    pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
+                    writel(0x3130322a, vic_regs + 0x0);
+                    writel(0x1, vic_regs + 0x4);
+                    writel(0x200, vic_regs + 0x14);
+                    wmb();
+                }
                 
                 /* STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) */
                 pr_info("*** STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) ***\n");
@@ -2717,12 +2723,19 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Continue with the complete ISP isp-csi sequence... */
                 wmb();
                 
-                /* STEP 7: Final CSI PHY control sequence */
-                pr_info("*** STEP 7: Final CSI PHY control sequence ***\n");
-                writel(0x1, vic_regs + 0xc);
-                writel(0x1, vic_regs + 0x10);
-                writel(0x630, vic_regs + 0x14);
-                wmb();
+                /* CRITICAL FIX: Skip Final CSI PHY control sequence during streaming restart */
+                extern uint32_t vic_start_ok;
+                if (vic_start_ok == 1) {
+                    pr_info("*** STEP 7: SKIPPING Final CSI PHY control sequence - VIC interrupts already working ***\n");
+                    pr_info("*** These writes would overwrite VIC interrupt configuration in shared register space ***\n");
+                } else {
+                    /* STEP 7: Final CSI PHY control sequence */
+                    pr_info("*** STEP 7: Final CSI PHY control sequence ***\n");
+                    writel(0x1, vic_regs + 0xc);
+                    writel(0x1, vic_regs + 0x10);
+                    writel(0x630, vic_regs + 0x14);
+                    wmb();
+                }
                 
                 /* STEP 8: Now call VIC start with proper initialization complete */
                 pr_info("*** STEP 8: NOW calling tx_isp_vic_start with proper sub-device initialization ***\n");
