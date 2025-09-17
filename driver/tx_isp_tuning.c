@@ -2978,20 +2978,7 @@ int tisp_code_tuning_open(struct inode *inode, struct file *file)
 EXPORT_SYMBOL(tisp_code_tuning_open);
 
 
-/* isp_core_tuning_deinit - EXACT Binary Ninja reference implementation */
-void isp_core_tuning_deinit(void *tuning_data)
-{
-    /* Binary Ninja: if (arg1 == 0) return
-     * return private_kfree() __tailcall */
 
-    if (tuning_data == NULL) {
-        return;
-    }
-
-    pr_info("isp_core_tuning_deinit: Freeing tuning data at %p\n", tuning_data);
-    kfree(tuning_data);
-}
-EXPORT_SYMBOL(isp_core_tuning_deinit);
 
 
 
