@@ -362,22 +362,39 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             if (vic_regs) {
                 u32 completed_buffer_addr = readl(vic_regs + 0x380); /* Get current frame buffer address */
 
-                /* CRITICAL FIX: If VIC register 0x380 is 0x0, use VBM buffer cycling */
+                /* CRITICAL FIX: If VIC register 0x380 is 0x0, use REAL VBM buffer addresses */
                 if (completed_buffer_addr == 0x0) {
                     extern struct tx_isp_dev *ourISPdev;
                     if (ourISPdev) {
-                        /* Use frame count to determine which VBM buffer was completed */
-                        static uint32_t vbm_buffer_cycle = 0;
-                        completed_buffer_addr = 0x6300000 + (vbm_buffer_cycle * (1920 * 1080 * 2));
-                        vbm_buffer_cycle = (vbm_buffer_cycle + 1) % 4; /* Cycle through 4 buffers */
+                        /* Get the frame channel state to access VBM buffer addresses */
+                        extern struct frame_channel_device frame_channels[];
+                        extern int num_channels;
 
-                        pr_info("*** VIC BUFFER MGMT: VIC[0x380]=0x0, using VBM buffer addr=0x%x ***\n", completed_buffer_addr);
+                        if (num_channels > 0) {
+                            struct tx_isp_channel_state *state = &frame_channels[0].state;
 
-                        /* Program next buffer to VIC register 0x380 for continuous streaming */
-                        u32 next_buffer_addr = 0x6300000 + (vbm_buffer_cycle * (1920 * 1080 * 2));
-                        writel(next_buffer_addr, vic_regs + 0x380);
-                        wmb();
-                        pr_info("*** VIC BUFFER MGMT: VIC[0x380] = 0x%x (next VBM buffer) ***\n", next_buffer_addr);
+                            /* Use REAL VBM buffer addresses that were stored during QBUF */
+                            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+                                static uint32_t vbm_buffer_cycle = 0;
+                                completed_buffer_addr = state->vbm_buffer_addresses[vbm_buffer_cycle];
+                                vbm_buffer_cycle = (vbm_buffer_cycle + 1) % state->vbm_buffer_count;
+
+                                pr_info("*** VIC BUFFER MGMT: VIC[0x380]=0x0, using REAL VBM buffer addr=0x%x ***\n", completed_buffer_addr);
+
+                                /* Program next REAL VBM buffer to VIC register 0x380 for continuous streaming */
+                                u32 next_buffer_addr = state->vbm_buffer_addresses[vbm_buffer_cycle];
+                                writel(next_buffer_addr, vic_regs + 0x380);
+                                wmb();
+                                pr_info("*** VIC BUFFER MGMT: VIC[0x380] = 0x%x (next REAL VBM buffer) ***\n", next_buffer_addr);
+                            } else {
+                                /* Fallback to hardcoded addresses if VBM addresses not available */
+                                static uint32_t vbm_buffer_cycle = 0;
+                                completed_buffer_addr = 0x6300000 + (vbm_buffer_cycle * (1920 * 1080 * 2));
+                                vbm_buffer_cycle = (vbm_buffer_cycle + 1) % 4;
+
+                                pr_warn("*** VIC BUFFER MGMT: No VBM addresses, using fallback addr=0x%x ***\n", completed_buffer_addr);
+                            }
+                        }
                     }
                 }
 
