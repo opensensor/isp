@@ -332,34 +332,28 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
         return -ENODEV;
     }
 
-    pr_info("*** ispcore_sensor_ops_ioctl: Iterating through subdevices ***\n");
+    pr_info("*** ispcore_sensor_ops_ioctl: Looking for actual sensor device ***\n");
 
-    /* Binary Ninja: Iterate from arg1 + 0x38 to arg1 + 0x78 (subdevices array) */
-    for (i = 0; i < 16; i++) {
-        struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+    /* CRITICAL: Don't iterate through subdevs - call the real sensor directly */
+    /* The real sensor is stored in isp_dev->sensor, not in the subdevs array */
+    if (isp_dev->sensor && isp_dev->sensor->sd.ops &&
+        isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
 
-        if (!sd) {
-            continue;
+        pr_info("*** ispcore_sensor_ops_ioctl: Found real sensor device - calling sensor IOCTL ***\n");
+
+        /* Call the real sensor's IOCTL directly - this triggers I2C communication */
+        result = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, TX_ISP_EVENT_SENSOR_FPS, NULL);
+
+        pr_info("*** ispcore_sensor_ops_ioctl: Real sensor IOCTL result: %d ***\n", result);
+
+        if (result == 0) {
+            pr_info("*** ispcore_sensor_ops_ioctl: Sensor I2C communication successful ***\n");
+        } else {
+            pr_warn("*** ispcore_sensor_ops_ioctl: Sensor I2C communication failed: %d ***\n", result);
         }
-
-        /* Binary Ninja: Check if subdev has sensor ops with IOCTL */
-        if (sd->ops && sd->ops->sensor && sd->ops->sensor->ioctl) {
-            pr_info("*** ispcore_sensor_ops_ioctl: Calling subdev[%d] sensor IOCTL ***\n", i);
-
-            /* Call the subdev's sensor IOCTL - this is safe from work context */
-            result = sd->ops->sensor->ioctl(sd, TX_ISP_EVENT_SENSOR_FPS, NULL);
-
-            pr_info("*** ispcore_sensor_ops_ioctl: Subdev[%d] IOCTL result: %d ***\n", i, result);
-
-            if (result == 0) {
-                /* Success - continue to next subdev */
-                continue;
-            } else if (result != -ENOIOCTLCMD) {
-                /* Real error - break */
-                break;
-            }
-            /* -ENOIOCTLCMD means not supported, continue to next */
-        }
+    } else {
+        pr_warn("*** ispcore_sensor_ops_ioctl: No real sensor device found ***\n");
+        result = -ENODEV;
     }
 
     return (result == -ENOIOCTLCMD) ? 0 : result;
