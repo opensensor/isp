@@ -1263,22 +1263,6 @@ static uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uin
     return fix_point_mult2_32(shift_bits, multiplier, multiplicand);
 }
 
-static int32_t fix_point_mult2_32(int32_t shift_bits, int32_t multiplier, int32_t multiplicand)
-{
-    uint32_t mask = 0xffffffff >> (-shift_bits & 0x1f);
-    uint32_t high_mult = multiplier >> (shift_bits & 0x1f);
-    uint32_t high_cand = multiplicand >> (shift_bits & 0x1f);
-    int32_t low_mult = mask & multiplier;
-    int32_t low_cand = mask & multiplicand;
-
-    uint64_t cross_prod1 = (uint64_t)low_mult * high_cand;
-    uint64_t cross_prod2 = (uint64_t)high_mult * low_cand;
-
-    return (cross_prod1 & 0xffffffff) + cross_prod2 +
-           ((uint64_t)high_mult * high_cand << (shift_bits & 0x1f)) +
-           ((uint64_t)low_mult * low_cand >> (shift_bits & 0x1f));
-}
-
 static int tisp_g_ev_attr(uint32_t *ev_buffer, struct isp_tuning_data *tuning)
 {
     // Fill total gain and exposure values
