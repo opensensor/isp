@@ -48,6 +48,9 @@ extern int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev);
 
 /* Critical ISP Core initialization functions - MISSING FROM LOGS! */
 int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
+
+/* Global flag to prevent multiple tisp_init calls */
+static bool tisp_initialized = false;
 int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
 static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
 static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sensor_attr);
@@ -1518,29 +1521,35 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
     ISP_INFO("*** ispcore_core_ops_init: Chip ID 0x%x mapped to var_70_4 = %d ***\n", 
              chip_id, var_70_4);
     
-    /* CRITICAL FIX: Binary Ninja decompilation shows tisp_init() IS called from ispcore_core_ops_init */
-    ISP_INFO("*** ispcore_core_ops_init: Calling tisp_init() as per Binary Ninja reference ***\n");
+    /* CRITICAL FIX: Only call tisp_init ONCE to prevent interrupt disruption */
+    if (!tisp_initialized) {
+        ISP_INFO("*** ispcore_core_ops_init: Calling tisp_init() for FIRST TIME (Binary Ninja reference) ***\n");
 
-    /* Prepare sensor info structure for tisp_init - Binary Ninja exact format */
-    struct {
-        uint32_t width;
-        uint32_t height;
-        uint32_t fps;
-        uint32_t mode;
-    } sensor_params = {
-        .width = isp->sensor_width ? isp->sensor_width : 1920,
-        .height = isp->sensor_height ? isp->sensor_height : 1080,
-        .fps = 25,
-        .mode = 0
-    };
+        /* Prepare sensor info structure for tisp_init - Binary Ninja exact format */
+        struct {
+            uint32_t width;
+            uint32_t height;
+            uint32_t fps;
+            uint32_t mode;
+        } sensor_params = {
+            .width = isp->sensor_width ? isp->sensor_width : 1920,
+            .height = isp->sensor_height ? isp->sensor_height : 1080,
+            .fps = 25,
+            .mode = 0
+        };
 
-    /* Call tisp_init with sensor parameters - this does the actual ISP core register initialization */
-    ret = tisp_init(&sensor_params, "gc2053");
-    if (ret != 0) {
-        ISP_ERROR("*** ispcore_core_ops_init: tisp_init() failed: %d ***\n", ret);
-        return ret;
+        /* Call tisp_init with sensor parameters - this does the actual ISP core register initialization */
+        ret = tisp_init(&sensor_params, "gc2053");
+        if (ret != 0) {
+            ISP_ERROR("*** ispcore_core_ops_init: tisp_init() failed: %d ***\n", ret);
+            return ret;
+        }
+
+        tisp_initialized = true;
+        ISP_INFO("*** ispcore_core_ops_init: tisp_init() completed successfully - MARKED AS INITIALIZED ***\n");
+    } else {
+        ISP_INFO("*** ispcore_core_ops_init: tisp_init() ALREADY CALLED - SKIPPING to prevent interrupt disruption ***\n");
     }
-    ISP_INFO("*** ispcore_core_ops_init: tisp_init() completed successfully ***\n");
 
     /* CRITICAL: Enable ISP core interrupt registers - EXACT Binary Ninja reference implementation */
     if (isp->core_regs) {
