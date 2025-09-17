@@ -3791,20 +3791,11 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* SAFE: Channel array is stored in the allocated memory, not as a struct member */
             /* The channels[] array in tx_isp_dev is used directly, channel_array is just working memory */
 
-            /* Binary Ninja: *** CRITICAL: isp_core_tuning_init call *** */
-            pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init ***\n");
-            tuning_dev = (void*)isp_core_tuning_init(isp_dev);
-            
-            /* SAFE: Store tuning device using proper member access */
-            isp_dev->tuning_data = (struct isp_tuning_data *)tuning_dev;
+            /* DEFERRED: Tuning initialization moved AFTER memory mappings */
+            void *tuning_dev = NULL;
 
-            if (tuning_dev != NULL) {
-                pr_info("*** tx_isp_core_probe: Tuning init SUCCESS ***\n");
-                platform_set_drvdata(pdev, isp_dev);
-
-                /* SAFE: Use tuning_dev directly instead of adding dangerous offset */
-                isp_dev->tuning_enabled = 1;
-                pr_info("*** tx_isp_core_probe: SAFE tuning pointer - using tuning_dev=%p directly ***\n", tuning_dev);
+            /* Set basic platform data first */
+            platform_set_drvdata(pdev, isp_dev);
 
                 /* CRITICAL: Create VIC device BEFORE sensor_early_init */
                 pr_info("*** tx_isp_core_probe: Creating VIC device ***\n");
@@ -3826,10 +3817,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     isp_clk_1 = isp_clk;
                 isp_clk = isp_clk_1;
 
-                pr_info("*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
+                pr_info("*** tx_isp_core_probe: Basic initialization complete ***\n");
                 pr_info("***   - Core device size: %zu bytes ***\n", sizeof(struct tx_isp_dev));
                 pr_info("***   - Channel count: %d ***\n", channel_count);
-                pr_info("***   - Tuning device: %p ***\n", tuning_dev);
                 pr_info("***   - Global ISP device set: %p ***\n", ourISPdev);
                 
                 /* CRITICAL: Set up memory mappings for register access FIRST */
@@ -3837,10 +3827,32 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 result = tx_isp_init_memory_mappings(isp_dev);
                 if (result == 0) {
                     pr_info("*** tx_isp_core_probe: ISP memory mappings initialized successfully ***\n");
-                    
+
                     /* CRITICAL: Update global ISP device with register base IMMEDIATELY */
                     ourISPdev = isp_dev;
                     pr_info("*** tx_isp_core_probe: Global ISP device updated with register base ***\n");
+
+                    /* NOW initialize tuning system AFTER memory mappings are available */
+                    pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init AFTER memory mappings ***\n");
+                    tuning_dev = (void*)isp_core_tuning_init(isp_dev);
+
+                    /* SAFE: Store tuning device using proper member access */
+                    isp_dev->tuning_data = (struct isp_tuning_data *)tuning_dev;
+
+                    if (tuning_dev != NULL) {
+                        pr_info("*** tx_isp_core_probe: Tuning init SUCCESS (with mapped registers) ***\n");
+
+                        /* SAFE: Use tuning_dev directly instead of adding dangerous offset */
+                        isp_dev->tuning_enabled = 1;
+                        pr_info("*** tx_isp_core_probe: SAFE tuning pointer - using tuning_dev=%p directly ***\n", tuning_dev);
+
+                        /* NOW we can report full success */
+                        pr_info("*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
+                        pr_info("***   - Tuning device: %p ***\n", tuning_dev);
+                    } else {
+                        pr_err("*** tx_isp_core_probe: Tuning init FAILED even with mapped registers ***\n");
+                        return -ENOMEM;
+                    }
                 } else {
                     pr_err("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
                     return result;
