@@ -640,6 +640,28 @@ static uint32_t lsc_mesh_str[0x24/4] = {0};      /* 0x24 bytes = 9 uint32_t valu
 static uint32_t lsc_mesh_str_wdr[0x24/4] = {0};  /* 0x24 bytes = 9 uint32_t values */
 static uint32_t lsc_mean_en = 0;
 
+/* WDR parameter arrays - Binary Ninja reference (basic arrays first) */
+static uint32_t param_wdr_para_array[0x28/4] = {0};
+static uint32_t mdns_c_luma_wei_adj_value0_array[0x80/4] = {0};
+static uint32_t param_wdr_weightLUT02_array[0x80/4] = {0};
+static uint32_t param_wdr_weightLUT12_array[0x80/4] = {0};
+static uint32_t param_wdr_weightLUT22_array[0x80/4] = {0};
+static uint32_t param_wdr_weightLUT21_array[0x80/4] = {0};
+static uint32_t param_wdr_gam_y_array[0x84/4] = {0};
+static uint32_t param_wdr_w_point_weight_x_array[0x10/4] = {0};
+static uint32_t param_wdr_w_point_weight_y_array[0x10/4] = {0};
+static uint32_t param_wdr_w_point_weight_pow_array[0xc/4] = {0};
+static uint32_t param_wdr_detail_th_w_array[0x1c/4] = {0};
+static uint32_t param_wdr_contrast_t_y_mux_array[0x14/4] = {0};
+static uint32_t param_wdr_ct_cl_para_array[0x10/4] = {0};
+static uint32_t param_centre5x5_w_distance_array[0x7c/4] = {0};
+static uint32_t param_wdr_stat_para_array[0x1c/4] = {0};
+static uint32_t param_wdr_degost_para_array[0x34/4] = {0};
+static uint32_t param_wdr_darkLable_array[0x14/4] = {0};
+static uint32_t param_wdr_darkLableN_array[0x10/4] = {0};
+static uint32_t param_wdr_darkWeight_array[0x14/4] = {0};
+static uint32_t param_wdr_thrLable_array[0x6c/4] = {0};
+
 /* Event completion structure */
 static struct completion tevent_info;
 
