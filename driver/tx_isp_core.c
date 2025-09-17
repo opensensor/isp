@@ -380,6 +380,7 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     extern struct tx_isp_dev *ourISPdev;
     extern uint32_t vic_start_ok;  /* Check VIC streaming state */
     struct tx_isp_dev *isp_dev = ourISPdev;
+    static int sensor_call_counter = 0;  /* Rate limit sensor calls */
 
     pr_info("*** ISP FRAME SYNC WORK: STARTING - Work function is running! ***\n");
     pr_info("*** ISP FRAME SYNC WORK: work=%p, current=%s[%d] ***\n", work, current->comm, current->pid);
@@ -389,13 +390,18 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     pr_info("*** ISP FRAME SYNC WORK: Calling isp_frame_done_wakeup() to increment frame counter ***\n");
     isp_frame_done_wakeup();
 
-    /* CRITICAL: Reference driver calls sensor IOCTL during streaming - we must do the same! */
-    pr_info("*** ISP FRAME SYNC WORK: Triggering sensor I2C communication (REFERENCE DRIVER BEHAVIOR) ***\n");
+    /* CRITICAL: Rate limit sensor IOCTL calls to prevent interrupt loops */
+    sensor_call_counter++;
+    if (sensor_call_counter >= 25) {  /* Call sensor every 25 frames (~1 second at 25 FPS) */
+        pr_info("*** ISP FRAME SYNC WORK: Triggering sensor I2C communication (rate limited) ***\n");
 
-    /* Binary Ninja: Call ispcore_sensor_ops_ioctl like reference driver */
-    pr_info("*** ISP FRAME SYNC WORK: Calling ispcore_sensor_ops_ioctl (REFERENCE DRIVER BEHAVIOR) ***\n");
-    int ret = ispcore_sensor_ops_ioctl(isp_dev);
-    pr_info("*** ISP FRAME SYNC WORK: ispcore_sensor_ops_ioctl result: %d ***\n", ret);
+        int ret = ispcore_sensor_ops_ioctl(isp_dev);
+        pr_info("*** ISP FRAME SYNC WORK: ispcore_sensor_ops_ioctl result: %d ***\n", ret);
+
+        sensor_call_counter = 0;  /* Reset counter */
+    } else {
+        pr_debug("*** ISP FRAME SYNC WORK: Skipping sensor call (counter=%d/25) ***\n", sensor_call_counter);
+    }
 
     pr_info("*** ISP FRAME SYNC WORK: Frame sync work completed ***\n");
 }
