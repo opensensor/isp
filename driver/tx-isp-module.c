@@ -662,6 +662,126 @@ void system_reg_write(u32 reg, u32 value)
     wmb();
 }
 
+/* system_reg_write_ae - EXACT Binary Ninja decompiled implementation */
+void system_reg_write_ae(u32 arg1, u32 arg2, u32 arg3)
+{
+    /* Binary Ninja decompiled code:
+     * if (arg1 == 1)
+     *     system_reg_write(0xa000, 1)
+     * else if (arg1 == 2)
+     *     system_reg_write(0xa800, 1)
+     * else if (arg1 == 3)
+     *     system_reg_write(0x1070, 1)
+     * 
+     * return system_reg_write(arg2, arg3) __tailcall
+     */
+    
+    if (arg1 == 1) {
+        system_reg_write(0xa000, 1);  /* Enable AE block 1 */
+    } else if (arg1 == 2) {
+        system_reg_write(0xa800, 1);  /* Enable AE block 2 */
+    } else if (arg1 == 3) {
+        system_reg_write(0x1070, 1);  /* Enable AE block 3 */
+    }
+    
+    /* Tailcall to system_reg_write with remaining args */
+    system_reg_write(arg2, arg3);
+}
+
+/* system_reg_write_af - EXACT Binary Ninja decompiled implementation */
+void system_reg_write_af(u32 arg1, u32 arg2, u32 arg3)
+{
+    /* Binary Ninja decompiled code:
+     * if (arg1 == 1)
+     *     system_reg_write(0xb800, 1)
+     * 
+     * return system_reg_write(arg2, arg3) __tailcall
+     */
+    
+    if (arg1 == 1) {
+        system_reg_write(0xb800, 1);  /* Enable AF block */
+    }
+    
+    /* Tailcall to system_reg_write with remaining args */
+    system_reg_write(arg2, arg3);
+}
+
+/* system_reg_write_awb - EXACT Binary Ninja decompiled implementation */
+void system_reg_write_awb(u32 arg1, u32 arg2, u32 arg3)
+{
+    /* Binary Ninja decompiled code:
+     * if (arg1 == 1)
+     *     system_reg_write(0xb000, 1)
+     * else if (arg1 == 2)
+     *     system_reg_write(0x1800, 1)
+     * 
+     * return system_reg_write(arg2, arg3) __tailcall
+     */
+    
+    if (arg1 == 1) {
+        system_reg_write(0xb000, 1);  /* Enable AWB block 1 */
+    } else if (arg1 == 2) {
+        system_reg_write(0x1800, 1);  /* Enable AWB block 2 */
+    }
+    
+    /* Tailcall to system_reg_write with remaining args */
+    system_reg_write(arg2, arg3);
+}
+
+/* system_reg_write_clm - EXACT Binary Ninja decompiled implementation */
+void system_reg_write_clm(u32 arg1, u32 arg2, u32 arg3)
+{
+    /* Binary Ninja decompiled code:
+     * if (arg1 == 1)
+     *     system_reg_write(0x6800, 1)
+     * 
+     * return system_reg_write(arg2, arg3) __tailcall
+     */
+    
+    if (arg1 == 1) {
+        system_reg_write(0x6800, 1);  /* Enable CLM block */
+    }
+    
+    /* Tailcall to system_reg_write with remaining args */
+    system_reg_write(arg2, arg3);
+}
+
+/* system_reg_write_gb - EXACT Binary Ninja decompiled implementation */
+void system_reg_write_gb(u32 arg1, u32 arg2, u32 arg3)
+{
+    /* Binary Ninja decompiled code:
+     * if (arg1 == 1)
+     *     system_reg_write(0x1070, 1)
+     * 
+     * return system_reg_write(arg2, arg3) __tailcall
+     */
+    
+    if (arg1 == 1) {
+        system_reg_write(0x1070, 1);  /* Enable GB block */
+    }
+    
+    /* Tailcall to system_reg_write with remaining args */
+    system_reg_write(arg2, arg3);
+}
+
+/* system_reg_write_gib - EXACT Binary Ninja decompiled implementation */
+void system_reg_write_gib(u32 arg1, u32 arg2, u32 arg3)
+{
+    /* Binary Ninja decompiled code:
+     * if (arg1 == 1)
+     *     system_reg_write(0x1070, 1)
+     * 
+     * return system_reg_write(arg2, arg3) __tailcall
+     */
+    
+    if (arg1 == 1) {
+        system_reg_write(0x1070, 1);  /* Enable GIB block */
+    }
+    
+    /* Tailcall to system_reg_write with remaining args */
+    system_reg_write(arg2, arg3);
+}
+
 /* tisp_init - EXACT Binary Ninja implementation - THE MISSING HARDWARE INIT! */
 static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
 {
@@ -6656,6 +6776,15 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
     return tx_isp_create_subdev_graph(isp);
 }
 EXPORT_SYMBOL(tx_isp_create_graph_and_nodes);
+
+/* Export system_reg_write functions for use by other modules */
+EXPORT_SYMBOL(system_reg_write);
+EXPORT_SYMBOL(system_reg_write_ae);
+EXPORT_SYMBOL(system_reg_write_af);
+EXPORT_SYMBOL(system_reg_write_awb);
+EXPORT_SYMBOL(system_reg_write_clm);
+EXPORT_SYMBOL(system_reg_write_gb);
+EXPORT_SYMBOL(system_reg_write_gib);
 
 /* Export platform devices for tx_isp_core.c to reference */
 EXPORT_SYMBOL(tx_isp_csi_platform_device);
