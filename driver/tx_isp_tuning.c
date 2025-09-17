@@ -2975,7 +2975,7 @@ static void tisp_set_sensor_analog_gain_short(void);
 static void tiziano_deflicker_expt(uint32_t flicker_t, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t *lut, uint32_t *nodes);
 static void system_reg_write_ae(uint32_t bank, uint32_t reg, uint32_t value);
 static void system_irq_func_set(int irq_id, void (*handler)(void));
-static void private_spin_lock_init(spinlock_t *lock);
+void private_spin_lock_init(spinlock_t *lock);
 static uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
 static uint32_t tisp_math_exp2(uint32_t value, uint32_t precision, uint32_t shift);
 
