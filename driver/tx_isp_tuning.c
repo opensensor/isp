@@ -359,6 +359,12 @@ extern void system_reg_write(u32 reg, u32 value);
 /* External system_irq_func_set from tx_isp_core.c */
 extern int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 
+/* Forward declarations for AE interrupt functions */
+int ae0_interrupt_hist(void);
+int ae0_interrupt_static(void);
+int ae1_interrupt_hist(void);
+int ae1_interrupt_static(void);
+
 /* AE interrupt wrapper functions to convert signatures from int function(void) to irqreturn_t function(int, void*) */
 irqreturn_t ae0_interrupt_hist_wrapper(int irq, void *dev_id) {
     ae0_interrupt_hist();
