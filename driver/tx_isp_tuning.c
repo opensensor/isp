@@ -4792,15 +4792,6 @@ int tisp_dn_mode_get(void *mode_buf, void *size_buf)
     return 0;
 }
 
-/* Missing AE/AF zone functions - Binary Ninja reference implementations */
-
-int tisp_g_af_zone(void)
-{
-    pr_debug("tisp_g_af_zone: Getting AF zone data\n");
-    /* Stub implementation - calls tisp_af_get_zone */
-    return tisp_af_get_zone();
-}
-
 int tisp_g_ae_zone(void *buffer)
 {
     if (!buffer) {
