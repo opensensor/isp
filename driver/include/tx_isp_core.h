@@ -20,7 +20,6 @@ int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp
 int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
 
 /* Hardware Reset Functions */
-int tx_isp_hardware_reset(int reset_mode);
 u32 tx_isp_check_reset_status(void);
 
 /* ISP Device Management */
