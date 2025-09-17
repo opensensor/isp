@@ -2674,48 +2674,30 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             
         return 0;
     }
-    case 0xc044560f: { // VIDIOC_QBUF - Queue buffer - FIXED to pass actual buffer data
-        struct v4l2_buffer {
-            uint32_t index;
-            uint32_t type;
-            uint32_t bytesused;
-            uint32_t flags;
-            uint32_t field;
-            struct timeval timestamp;
-            struct v4l2_timecode timecode;
-            uint32_t sequence;
-            uint32_t memory;
-            union {
-                uint32_t offset;
-                unsigned long userptr;
-                void *planes;
-            } m;
-            uint32_t length;
-            uint32_t reserved2;
-            uint32_t reserved;
-        } buffer;
+    case 0xc044560f: { // VIDIOC_QBUF - Queue buffer - EXACT Binary Ninja reference
+        struct v4l2_buffer buffer;
         unsigned long flags;
-        
-        pr_info("*** Channel %d: QBUF CALLED - FIXED to pass actual buffer data ***\n", channel);
-        
-        /* MIPS ALIGNMENT CHECK: Validate buffer structure alignment */
-        if (((uintptr_t)&buffer & 0x3) != 0) {
-            pr_err("*** MIPS ALIGNMENT ERROR: v4l2_buffer structure not aligned ***\n");
-            return -EFAULT;
-        }
-        
-        /* MIPS SAFE: Copy from user with alignment validation */
+
+        pr_info("*** Channel %d: QBUF - EXACT Binary Ninja implementation ***\n", channel);
+
+        /* Binary Ninja: private_copy_from_user(&var_78, $s2, 0x44) */
         if (copy_from_user(&buffer, argp, sizeof(buffer))) {
-            pr_err("*** MIPS ERROR: Failed to copy buffer data from user ***\n");
+            pr_err("*** QBUF: Copy from user failed ***\n");
             return -EFAULT;
         }
-        
-        /* MIPS SAFE: Validate buffer index bounds */
-        if (buffer.index >= 8) {
-            pr_err("*** MIPS ERROR: Buffer index %d out of range (0-7) ***\n", buffer.index);
+
+        /* Binary Ninja: if (var_74 != *($s0 + 0x24)) - validate buffer type */
+        if (buffer.type != state->buffer_type) {
+            pr_err("*** QBUF: Buffer type mismatch ***\n");
             return -EINVAL;
         }
-        
+
+        /* Binary Ninja: if (arg3 u>= *($s0 + 0x20c)) - validate buffer index */
+        if (buffer.index >= state->buffer_count) {
+            pr_err("*** QBUF: Buffer index %d >= buffer_count %d ***\n", buffer.index, state->buffer_count);
+            return -EINVAL;
+        }
+
         pr_info("*** Channel %d: QBUF - Queue buffer index=%d ***\n", channel, buffer.index);
         
         /* CRITICAL FIX: Calculate actual buffer physical address */
