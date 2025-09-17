@@ -1752,121 +1752,59 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                 /* BINARY NINJA REFERENCE: Simple tuning enable acknowledgment */
                 if (enable && ourISPdev->tuning_enabled == 3) {
-                    /* Binary Ninja shows the reference driver does minimal work here */
-                    /* Just acknowledges the enable request and returns success */
-                    pr_info("*** BINARY NINJA REFERENCE: Tuning enable acknowledged (no heavy operations) ***\n");
+                    /* CRITICAL: VIC-SAFE TUNING OPERATION SEQUENCING */
+                    /* The key insight is that tuning operations must be synchronized with VIC hardware state */
+                    pr_info("*** BINARY NINJA REFERENCE: VIC-safe tuning enable acknowledged ***\n");
 
-                    /* CRITICAL: This is where the reference driver performs continuous CSI PHY register maintenance */
-                    /* The continuous register writes in the reference trace happen during these frequent IOCTL calls */
-
+                    /* CRITICAL FIX: Check VIC hardware state before any register operations */
+                    extern uint32_t vic_start_ok;
                     static u32 tuning_call_count = 0;
                     tuning_call_count++;
 
-                    /* Get register bases for CSI PHY maintenance */
-                    void __iomem *isp_m0_base = ourISPdev->core_regs;      /* 0x13300000 */
-                    void __iomem *isp_w02_base = ourISPdev->vic_regs;      /* 0x133e0000 */
-                    void __iomem *isp_w01_base = ourISPdev->vic_regs2;     /* 0x10023000 */
-
-                    if (isp_m0_base && isp_w02_base && isp_w01_base) {
-                        /* Perform the continuous register updates seen in reference trace */
-                        /* These maintain the interrupt configuration and prevent CSI PHY timeouts */
-
-                        /* Pattern from reference trace: isp-m0 CSI PHY Control updates (lines 287, 341, etc.) */
-                        if (tuning_call_count % 5 == 0) {
+                    /* CRITICAL: Only perform register maintenance when VIC is in stable state */
+                    if (vic_start_ok == 1) {
+                        /* VIC is streaming - use MINIMAL register operations to avoid control limit errors */
+                        pr_debug("*** VIC-SAFE TUNING: VIC streaming active - minimal register operations ***\n");
+                        
+                        /* Only perform essential ISP core register maintenance */
+                        if (ourISPdev->core_regs && (tuning_call_count % 10 == 0)) {
+                            /* Minimal ISP core register refresh - avoid VIC-related registers */
+                            u32 core_status = readl(ourISPdev->core_regs + 0x40);
+                            if (core_status == 0) {
+                                /* Only refresh if ISP core is idle */
+                                writel(0x133, ourISPdev->core_regs + 0x10);
+                                wmb();
+                            }
+                        }
+                    } else {
+                        /* VIC not streaming - safe to perform full register maintenance */
+                        pr_debug("*** VIC-SAFE TUNING: VIC not streaming - full register maintenance allowed ***\n");
+                        
+                        /* Perform the reference driver register patterns only when safe */
+                        void __iomem *isp_m0_base = ourISPdev->core_regs;
+                        if (isp_m0_base && (tuning_call_count % 5 == 0)) {
+                            /* Safe ISP core register updates */
                             u32 current_ac = readl(isp_m0_base + 0xac);
                             if (current_ac == 0x58050000) {
                                 writel(0x59010000, isp_m0_base + 0xac);
-                            } else if (current_ac == 0x59010000) {
-                                writel(0x58090000, isp_m0_base + 0xac);
                             } else {
                                 writel(0x58050000, isp_m0_base + 0xac);
                             }
+                            wmb();
                         }
-
-                        /* Pattern from reference trace: isp-m0 CSI PHY Config updates (lines 317-320, 342-345) */
-                        if (tuning_call_count % 3 == 0) {
-                            u32 base_100 = (tuning_call_count % 2 == 0) ? 0x2de80000 : 0x0;
-                            u32 base_104 = 0x231 + (tuning_call_count & 0xf);
-                            u32 base_108 = 0x2280000 + (tuning_call_count & 0xfffff);
-                            u32 base_10c = 0x22802bc + (tuning_call_count & 0xfff);
-
-                            writel(base_100, isp_m0_base + 0x100);
-                            writel(base_104, isp_m0_base + 0x104);
-                            writel(base_108, isp_m0_base + 0x108);
-                            writel(base_10c, isp_m0_base + 0x10c);
-                        }
-
-                        /* Pattern from reference trace: isp-w02 CSI PHY Control updates (lines 314-315, 337-338) */
-                        /* CRITICAL FIX: Skip CSI PHY writes during streaming restart to preserve VIC interrupts */
-                        extern uint32_t vic_start_ok;
-                        if (vic_start_ok == 1) {
-                            pr_debug("*** TUNING: SKIPPING isp-w02 CSI PHY writes (0xa0, 0xb0) - VIC interrupts already working ***\n");
-                        } else if (tuning_call_count % 2 == 0) {
-                            u32 current_90 = readl(isp_w02_base + 0x90);
-                            u32 current_a0 = readl(isp_w02_base + 0xa0);
-                            u32 current_b0 = readl(isp_w02_base + 0xb0);
-
-                            writel(current_90 + 0x1c4, isp_w02_base + 0x90);
-                            writel(current_a0 + 0x1a6, isp_w02_base + 0xa0);
-                            writel(current_b0 + 0x17c, isp_w02_base + 0xb0);
-                        }
-
-                        /* Pattern from reference trace: isp-w01 CSI PHY Control updates (lines 316, 340) */
-                        /* CRITICAL FIX: Skip isp-w01 register 0x14 writes - this corrupts VIC interrupts */
-                        if (vic_start_ok == 1) {
-                            pr_debug("*** TUNING: SKIPPING isp-w01 register 0x14 write - VIC interrupts already working ***\n");
-                        } else if (tuning_call_count % 7 == 0) {
-                            u32 current_14 = readl(isp_w01_base + 0x14);
-                            u32 current_40 = readl(isp_w01_base + 0x40);
-
-                            if (current_14 == 0x300) {
-                                writel(0x330, isp_w01_base + 0x14);
-                            } else {
-                                writel(0x300, isp_w01_base + 0x14);
-                            }
-
-                            writel(current_40 + 0x6004, isp_w01_base + 0x40);
-                        }
-
-                        /* Pattern from reference trace: ISP Control register updates (lines 346, 321) */
-                        if (tuning_call_count % 4 == 0) {
-                            u32 current_987c = readl(isp_m0_base + 0x987c);
-                            if (current_987c == 0xc0000000) {
-                                writel(0xd00600fb, isp_m0_base + 0x987c);
-                            } else {
-                                writel(0xc0000000, isp_m0_base + 0x987c);
-                            }
-
-                            u32 current_98cc = readl(isp_m0_base + 0x98cc);
-                            writel(current_98cc + 2, isp_m0_base + 0x98cc);
-                        }
-
-                        /* Ensure all register writes are committed */
-                        wmb();
                     }
 
-                    /* CRITICAL FIX: Ensure video buffer flow continues during tuning calls */
-                    /* The userspace "videodrop" function expects frames to be available via dqbuf */
+                    /* CRITICAL: Maintain frame flow without disrupting VIC hardware */
                     if (ourISPdev->vic_dev) {
-                        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-
-                        /* Trigger frame processing to prevent video drop */
-                        if (vic_dev) {
-                            pr_debug("*** TUNING: Triggering frame processing to prevent video drop ***\n");
-
-                            /* Wake up all frame channels that are waiting for frames */
-                            tx_isp_wakeup_frame_channels();
-
-                            /* Increment frame counter for /proc/jz/isp/isp-w02 */
-                            ourISPdev->frame_count++;
-
-                            /* Wake up any processes waiting for frames */
-                            extern void isp_frame_done_wakeup(void);
-                            isp_frame_done_wakeup();
-                        }
+                        /* Gentle frame processing trigger that doesn't disrupt VIC */
+                        extern void isp_frame_done_wakeup(void);
+                        isp_frame_done_wakeup();
+                        
+                        /* Update frame counter for userspace */
+                        ourISPdev->frame_count++;
                     }
 
-                    /* Reference driver behavior: Just return success without heavy processing */
+                    /* BINARY NINJA REFERENCE: Acknowledge tuning enable without heavy operations */
                     ret = 0;
                     break;
 
