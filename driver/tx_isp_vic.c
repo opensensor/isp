@@ -1204,6 +1204,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         pr_info("*** VIC UNLOCK: Unlock sequence completed, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
+        /* CRITICAL: Set vic_start_ok flag to enable interrupt processing - from commit cd076e62 */
+        vic_start_ok = 1;
+        pr_info("*** VIC INTERRUPT: vic_start_ok flag set to 1 - interrupts now enabled ***\n");
+
         /* Enable VIC - Binary Ninja 000107d4 */
         pr_info("*** VIC UNLOCK: Enabling VIC (writing 1 to register 0x0) ***\n");
         writel(1, vic_regs + 0x0);
