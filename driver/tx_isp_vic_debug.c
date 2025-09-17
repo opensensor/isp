@@ -158,8 +158,10 @@ int tx_isp_vic_stop_streaming(struct tx_isp_dev *isp_dev)
     
     pr_info("*** tx_isp_vic_stop_streaming: Stopping VIC streaming ***\n");
     
-    /* Clear VIC start flag */
-    vic_start_ok = 0;
+    /* CRITICAL FIX: Don't reset vic_start_ok during streaming stop */
+    /* This preserves VIC interrupt protection during streaming restart */
+    pr_info("*** KEEPING vic_start_ok=1 to preserve interrupt protection during restart ***\n");
+    /* vic_start_ok = 0; // REMOVED - this was breaking protection during streaming restart */
 
     /* Stop VIC controller */
     writel(0, vic_regs + 0x0);

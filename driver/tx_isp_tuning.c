@@ -1797,7 +1797,11 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         }
 
                         /* Pattern from reference trace: isp-w02 CSI PHY Control updates (lines 314-315, 337-338) */
-                        if (tuning_call_count % 2 == 0) {
+                        /* CRITICAL FIX: Skip CSI PHY writes during streaming restart to preserve VIC interrupts */
+                        extern uint32_t vic_start_ok;
+                        if (vic_start_ok == 1) {
+                            pr_debug("*** TUNING: SKIPPING isp-w02 CSI PHY writes (0xa0, 0xb0) - VIC interrupts already working ***\n");
+                        } else if (tuning_call_count % 2 == 0) {
                             u32 current_90 = readl(isp_w02_base + 0x90);
                             u32 current_a0 = readl(isp_w02_base + 0xa0);
                             u32 current_b0 = readl(isp_w02_base + 0xb0);
