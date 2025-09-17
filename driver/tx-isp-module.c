@@ -2188,7 +2188,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         /* Wake up frame channels for all interrupt types */
         for (i = 0; i < num_channels; i++) {
             if (frame_channels[i].state.streaming) {
-                // frame_channel_wakeup_waiters(&frame_channels[i]);
+                frame_channel_wakeup_waiters(&frame_channels[i]);
             }
         }
         
