@@ -458,9 +458,16 @@ int tx_isp_vic_stop(struct tx_isp_subdev *sd)
     ctrl |= VIC_CTRL_STOP;
     vic_write32(VIC_CTRL, ctrl);
 
-    /* Wait for stop to complete */
+    /* Wait for stop to complete - FIXED: Added timeout protection */
+    timeout = 10000;  /* 100ms timeout */
     while (vic_read32(VIC_STATUS) & STATUS_BUSY) {
         udelay(10);
+        if (--timeout == 0) {
+            u32 status = vic_read32(VIC_STATUS);
+            pr_err("*** CRITICAL: VIC stop timeout! STATUS = 0x%08x (BUSY bit still set) ***\n", status);
+            pr_err("*** VIC hardware may be stuck - continuing anyway ***\n");
+            break;  /* Continue instead of hanging forever */
+        }
     }
 
     mutex_unlock(&sd->vic_frame_end_lock);
@@ -1186,9 +1193,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                 break;  /* Continue instead of returning error to prevent hang */
             }
         }
-        
+
+        pr_info("*** VIC UNLOCK: Unlock sequence completed, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
+
         /* Enable VIC - Binary Ninja 000107d4 */
+        pr_info("*** VIC UNLOCK: Enabling VIC (writing 1 to register 0x0) ***\n");
         writel(1, vic_regs + 0x0);
+        pr_info("*** VIC UNLOCK: VIC enabled, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
         
     } else if (interface_type == 2) {
         /* MIPI interface - Binary Ninja 000107ec-00010b04 */
@@ -1322,8 +1333,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         wmb();
         
-        /* CRITICAL: VIC unlock moved to AFTER CSI initialization - VIC needs MIPI data first */
-        pr_info("*** CRITICAL: VIC unlock sequence DEFERRED until after CSI provides MIPI data ***\n");
+        /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence */
+        writel(2, vic_regs + 0x0);
+        wmb();
+        writel(4, vic_regs + 0x0);
+        wmb();
+        
+        /* Binary Ninja: 00010acc - Wait for unlock */
+        while (readl(vic_regs + 0x0) != 0) {
+            udelay(1);
+            if (--timeout == 0) {
+                pr_err("VIC unlock timeout\n");
+                return -ETIMEDOUT;
+            }
+        }
         
         /* Binary Ninja: 00010ad4 - Enable VIC */
         writel(1, vic_regs + 0x0);
@@ -1369,19 +1392,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* CRITICAL FIX: Complete unlock sequence matching reference driver */
         writel(2, vic_regs + 0x0);
         wmb();
-        writel(4, vic_regs + 0x0);
-        wmb();
-
-        /* Wait for unlock - CRITICAL for preventing control limit errors */
-        timeout = 1000;
-        while (readl(vic_regs + 0x0) != 0) {
-            udelay(1);
-            if (--timeout == 0) {
-                pr_err("BT601 VIC unlock timeout\n");
-                return -ETIMEDOUT;
-            }
-        }
-
         writel(1, vic_regs + 0x0);
         
     } else if (interface_type == 4) {
@@ -1400,19 +1410,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* CRITICAL FIX: Complete unlock sequence matching reference driver */
         writel(2, vic_regs + 0x0);
         wmb();
-        writel(4, vic_regs + 0x0);
-        wmb();
-
-        /* Wait for unlock - CRITICAL for preventing control limit errors */
-        timeout = 1000;
-        while (readl(vic_regs + 0x0) != 0) {
-            udelay(1);
-            if (--timeout == 0) {
-                pr_err("BT656 VIC unlock timeout\n");
-                return -ETIMEDOUT;
-            }
-        }
-
         writel(1, vic_regs + 0x0);
 
     } else if (interface_type == 5) {
@@ -1429,19 +1426,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* CRITICAL FIX: Complete unlock sequence matching reference driver */
         writel(2, vic_regs + 0x0);
         wmb();
-        writel(4, vic_regs + 0x0);
-        wmb();
-
-        /* Wait for unlock - CRITICAL for preventing control limit errors */
-        timeout = 1000;
-        while (readl(vic_regs + 0x0) != 0) {
-            udelay(1);
-            if (--timeout == 0) {
-                pr_err("BT1120 VIC unlock timeout\n");
-                return -ETIMEDOUT;
-            }
-        }
-
         writel(1, vic_regs + 0x0);
         
     } else {
