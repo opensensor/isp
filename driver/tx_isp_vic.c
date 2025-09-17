@@ -2406,13 +2406,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             pr_info("vic_core_s_stream: State != 4, calling tx_isp_vic_start\n");
 
             /* Binary Ninja reference sequence */
-            tx_vic_disable_irq();
+            tx_vic_disable_irq(vic_dev);
             ret = tx_isp_vic_start(vic_dev);
             if (ret == 0) {
                 vic_dev->state = 4;
                 pr_info("vic_core_s_stream: Stream ON - state -> 4\n");
             }
-            tx_vic_enable_irq();
+            /* Note: tx_vic_enable_irq doesn't exist in our driver, VIC interrupts are managed elsewhere */
         } else {
             pr_info("vic_core_s_stream: Already in state 4, no action needed\n");
             ret = 0;
