@@ -2434,29 +2434,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x0, vic_regs + 0x0);           /* Disable VIC hardware */
                 wmb();
 
-                /* Step 2: COMPREHENSIVE interrupt status clearing */
-                /* Clear ALL possible interrupt status registers to eliminate control limit error */
-                writel(0xffffffff, vic_regs + 0x1c);   /* Clear main interrupt status */
-                writel(0xffffffff, vic_regs + 0x20);   /* Clear secondary interrupt status */
-                writel(0xffffffff, vic_regs + 0x1f0);  /* Clear VIC main interrupt status */
-                writel(0xffffffff, vic_regs + 0x1f4);  /* Clear VIC MDMA interrupt status */
+                /* Step 2: Clear interrupt status only */
+                writel(0xffffffff, vic_regs + 0x1c);   /* Clear interrupt status */
                 wmb();
 
                 /* Step 3: Reset VIC control registers to safe defaults */
                 writel(0x0, vic_regs + 0xc);           /* Clear mode register */
                 writel(0x0, vic_regs + 0x14);          /* Clear interrupt config */
                 wmb();
-
-                /* Step 4: BINARY NINJA EXACT interrupt mask configuration */
-                /* Binary Ninja: v1_7 = (~register[0x1e8]) & register[0x1e0] */
-                /* To prevent control limit error (bit 21), we need bit 21 SET in 0x1e8 (mask) */
-                writel(0x0, vic_regs + 0x1e0);         /* Clear raw interrupt status */
-                writel(0x200000, vic_regs + 0x1e8);    /* MASK control limit error (bit 21) */
-                writel(0x0, vic_regs + 0x1e4);         /* Clear MDMA interrupt status */
-                writel(0x0, vic_regs + 0x1ec);         /* Clear MDMA interrupt mask */
-                wmb();
-
-                pr_info("*** BINARY NINJA INTERRUPT MASK: Masked control limit error (bit 21) ***\n");
 
                 pr_info("*** VIC HARDWARE RESET COMPLETE - Now applying clean configuration ***\n");
 
