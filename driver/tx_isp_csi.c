@@ -739,86 +739,92 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         pr_info("*** CRITICAL: CSI MIPI configuration complete - control limit error should be FIXED ***\n");
 
-                        /* Old duplicate code removed - now handled by complete 6-phase initialization above */
-                        /* PHASE 2: isp-w02 CSI PHY Config writes (from reference trace lines 25-31) */
-                        pr_info("*** PHASE 2: isp-w02 CSI PHY Config writes ***\n");
-                        writel(0x2d0, isp_w02_base + 0x100);
-                        writel(0x2c000, isp_w02_base + 0x10c);
-                        writel(0x7800000, isp_w02_base + 0x110);
-                        writel(0x10, isp_w02_base + 0x120);
-                        writel(0x100010, isp_w02_base + 0x1a4);
-                        writel(0x4440, isp_w02_base + 0x1a8);
-                        writel(0x10, isp_w02_base + 0x1b0);
-                        wmb();
+                        /* CRITICAL FIX: Skip ALL CSI PHY phases during streaming restart */
+                        if (vic_start_ok == 1) {
+                            pr_info("*** SKIPPING ALL CSI PHY PHASES - VIC interrupts already working ***\n");
+                            pr_info("*** CSI PHY initialization would disrupt working VIC interrupt configuration ***\n");
+                        } else {
+                            /* Old duplicate code removed - now handled by complete 6-phase initialization above */
+                            /* PHASE 2: isp-w02 CSI PHY Config writes (from reference trace lines 25-31) */
+                            pr_info("*** PHASE 2: isp-w02 CSI PHY Config writes ***\n");
+                            writel(0x2d0, isp_w02_base + 0x100);
+                            writel(0x2c000, isp_w02_base + 0x10c);
+                            writel(0x7800000, isp_w02_base + 0x110);
+                            writel(0x10, isp_w02_base + 0x120);
+                            writel(0x100010, isp_w02_base + 0x1a4);
+                            writel(0x4440, isp_w02_base + 0x1a8);
+                            writel(0x10, isp_w02_base + 0x1b0);
+                            wmb();
 
-                        /* PHASE 3: isp-w01 writes (from reference trace lines 32-34) */
-                        pr_info("*** PHASE 3: isp-w01 CSI PHY Control writes ***\n");
-                        writel(0x3130322a, isp_w01_base + 0x0);
-                        writel(0x1, isp_w01_base + 0x4);
-                        writel(0x200, isp_w01_base + 0x14);
-                        wmb();
+                            /* PHASE 3: isp-w01 writes (from reference trace lines 32-34) */
+                            pr_info("*** PHASE 3: isp-w01 CSI PHY Control writes ***\n");
+                            writel(0x3130322a, isp_w01_base + 0x0);
+                            writel(0x1, isp_w01_base + 0x4);
+                            writel(0x200, isp_w01_base + 0x14);
+                            wmb();
 
-                        /* PHASE 4: isp-m0 writes (from reference trace lines 35-114) */
-                        pr_info("*** PHASE 4: isp-m0 CSI PHY Control writes ***\n");
-                        writel(0x54560031, isp_m0_base + 0x0);
-                        writel(0x7800438, isp_m0_base + 0x4);
-                        writel(0x1, isp_m0_base + 0x8);
-                        writel(0x80700008, isp_m0_base + 0xc);
-                        writel(0x1, isp_m0_base + 0x28);
-                        writel(0x400040, isp_m0_base + 0x2c);
-                        writel(0x1, isp_m0_base + 0x90);
-                        writel(0x1, isp_m0_base + 0x94);
-                        writel(0x30000, isp_m0_base + 0x98);
-                        writel(0x58050000, isp_m0_base + 0xa8);
-                        writel(0x58050000, isp_m0_base + 0xac);
-                        writel(0x40000, isp_m0_base + 0xc4);
-                        writel(0x400040, isp_m0_base + 0xc8);
-                        writel(0x100, isp_m0_base + 0xcc);
-                        writel(0xc, isp_m0_base + 0xd4);
-                        writel(0xffffff, isp_m0_base + 0xd8);
-                        writel(0x100, isp_m0_base + 0xe0);
-                        writel(0x400040, isp_m0_base + 0xe4);
-                        writel(0xff808000, isp_m0_base + 0xf0);
-                        wmb();
+                            /* PHASE 4: isp-m0 writes (from reference trace lines 35-114) */
+                            pr_info("*** PHASE 4: isp-m0 CSI PHY Control writes ***\n");
+                            writel(0x54560031, isp_m0_base + 0x0);
+                            writel(0x7800438, isp_m0_base + 0x4);
+                            writel(0x1, isp_m0_base + 0x8);
+                            writel(0x80700008, isp_m0_base + 0xc);
+                            writel(0x1, isp_m0_base + 0x28);
+                            writel(0x400040, isp_m0_base + 0x2c);
+                            writel(0x1, isp_m0_base + 0x90);
+                            writel(0x1, isp_m0_base + 0x94);
+                            writel(0x30000, isp_m0_base + 0x98);
+                            writel(0x58050000, isp_m0_base + 0xa8);
+                            writel(0x58050000, isp_m0_base + 0xac);
+                            writel(0x40000, isp_m0_base + 0xc4);
+                            writel(0x400040, isp_m0_base + 0xc8);
+                            writel(0x100, isp_m0_base + 0xcc);
+                            writel(0xc, isp_m0_base + 0xd4);
+                            writel(0xffffff, isp_m0_base + 0xd8);
+                            writel(0x100, isp_m0_base + 0xe0);
+                            writel(0x400040, isp_m0_base + 0xe4);
+                            writel(0xff808000, isp_m0_base + 0xf0);
+                            wmb();
 
-                        /* PHASE 5: isp-m0 CSI PHY Config writes */
-                        pr_info("*** PHASE 5: isp-m0 CSI PHY Config writes ***\n");
-                        writel(0x80007000, isp_m0_base + 0x110);
-                        writel(0x777111, isp_m0_base + 0x114);
-                        wmb();
+                            /* PHASE 5: isp-m0 CSI PHY Config writes */
+                            pr_info("*** PHASE 5: isp-m0 CSI PHY Config writes ***\n");
+                            writel(0x80007000, isp_m0_base + 0x110);
+                            writel(0x777111, isp_m0_base + 0x114);
+                            wmb();
 
-                        /* PHASE 6: Replace the old phy_base writes with isp-csi writes */
-                        pr_info("*** PHASE 6: isp-csi CSI PHY Control writes (replacing old phy_base) ***\n");
-                        /* These were the old phy_base writes - now using correct isp_csi_base */
-                        writel(0x7d, isp_csi_base + 0x0);
-                        writel(0xe3, isp_csi_base + 0x4);
-                        writel(0xa0, isp_csi_base + 0x8);
-                        writel(0x83, isp_csi_base + 0xc);
-                        writel(0xfa, isp_csi_base + 0x10);
-                        writel(0x88, isp_csi_base + 0x1c);
-                        writel(0x4e, isp_csi_base + 0x20);
-                        writel(0xdd, isp_csi_base + 0x24);
-                        writel(0x84, isp_csi_base + 0x28);
-                        writel(0x5e, isp_csi_base + 0x2c);
-                        writel(0xf0, isp_csi_base + 0x30);
-                        writel(0xc0, isp_csi_base + 0x34);
-                        writel(0x36, isp_csi_base + 0x38);
-                        writel(0xdb, isp_csi_base + 0x3c);
-                        writel(0x3, isp_csi_base + 0x40);
-                        writel(0x80, isp_csi_base + 0x44);
-                        writel(0x10, isp_csi_base + 0x48);
-                        writel(0x3, isp_csi_base + 0x54);
-                        writel(0xff, isp_csi_base + 0x58);
-                        writel(0x42, isp_csi_base + 0x5c);
-                        writel(0x1, isp_csi_base + 0x60);
-                        writel(0xc0, isp_csi_base + 0x64);
-                        writel(0xc0, isp_csi_base + 0x68);
-                        writel(0x78, isp_csi_base + 0x6c);
-                        writel(0x43, isp_csi_base + 0x70);
-                        writel(0x33, isp_csi_base + 0x74);
-                        writel(0x1f, isp_csi_base + 0x80);
-                        writel(0x61, isp_csi_base + 0x88);
-                        wmb();
+                            /* PHASE 6: Replace the old phy_base writes with isp-csi writes */
+                            pr_info("*** PHASE 6: isp-csi CSI PHY Control writes (replacing old phy_base) ***\n");
+                            /* These were the old phy_base writes - now using correct isp_csi_base */
+                            writel(0x7d, isp_csi_base + 0x0);
+                            writel(0xe3, isp_csi_base + 0x4);
+                            writel(0xa0, isp_csi_base + 0x8);
+                            writel(0x83, isp_csi_base + 0xc);
+                            writel(0xfa, isp_csi_base + 0x10);
+                            writel(0x88, isp_csi_base + 0x1c);
+                            writel(0x4e, isp_csi_base + 0x20);
+                            writel(0xdd, isp_csi_base + 0x24);
+                            writel(0x84, isp_csi_base + 0x28);
+                            writel(0x5e, isp_csi_base + 0x2c);
+                            writel(0xf0, isp_csi_base + 0x30);
+                            writel(0xc0, isp_csi_base + 0x34);
+                            writel(0x36, isp_csi_base + 0x38);
+                            writel(0xdb, isp_csi_base + 0x3c);
+                            writel(0x3, isp_csi_base + 0x40);
+                            writel(0x80, isp_csi_base + 0x44);
+                            writel(0x10, isp_csi_base + 0x48);
+                            writel(0x3, isp_csi_base + 0x54);
+                            writel(0xff, isp_csi_base + 0x58);
+                            writel(0x42, isp_csi_base + 0x5c);
+                            writel(0x1, isp_csi_base + 0x60);
+                            writel(0xc0, isp_csi_base + 0x64);
+                            writel(0xc0, isp_csi_base + 0x68);
+                            writel(0x78, isp_csi_base + 0x6c);
+                            writel(0x43, isp_csi_base + 0x70);
+                            writel(0x33, isp_csi_base + 0x74);
+                            writel(0x1f, isp_csi_base + 0x80);
+                            writel(0x61, isp_csi_base + 0x88);
+                            wmb();
+                        }
 
                         /* Clean up memory mappings */
                         iounmap(isp_w02_base);
