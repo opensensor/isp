@@ -1109,19 +1109,24 @@ static int sensor_set_wdr_mode(int mode) {
     return 0;
 }
 
-static int sensor_fps_control(int fps) {
+int sensor_fps_control(int fps) {
     /* Binary Ninja: Copies sensor parameters and returns FPS control value */
 
     if (!ourISPdev || !ourISPdev->sensor) {
+        pr_warn("sensor_fps_control: No ISP device or sensor available\n");
         return -ENODEV;
     }
 
     /* This would copy sensor timing parameters and configure FPS */
-    pr_debug("sensor_fps_control: fps=%d\n", fps);
+    pr_info("sensor_fps_control: Setting FPS to %d\n", fps);
+
+    /* TODO: Implement actual sensor FPS control here */
+    /* This should call the sensor's FPS setting mechanism */
 
     /* Return success - FPS control configured */
     return 0;
 }
+EXPORT_SYMBOL(sensor_fps_control);
 
 static int sensor_get_id(void) {
     /* Binary Ninja: return zx.d(*(*(g_ispcore + 0x120) + 4)) */
