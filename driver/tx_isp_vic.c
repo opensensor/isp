@@ -1298,9 +1298,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         /* Binary Ninja: EXACT reference driver MIPI mode configuration */
         /* Binary Ninja: 000107ec - Set CSI mode */
-        writel(2, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 2 for MIPI interface */
+        writel(3, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
         wmb();
-        pr_info("*** VIC: Set MIPI mode (2) to VIC control register 0xc - BINARY NINJA EXACT ***\n");
+        pr_info("*** VIC: Set MIPI mode (3) to VIC control register 0xc - BINARY NINJA EXACT ***\n");
 
         /* BINARY NINJA EXACT: All missing register configurations */
 
@@ -1698,8 +1698,8 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     wmb();
 
     /* STEP 3: Configure VIC mode for MIPI interface */
-    pr_info("*** STEP 3: Configuring VIC mode (MIPI=2) ***\n");
-    writel(2, vic_regs + 0xc);  /* MIPI mode (2) - FIXED */
+    pr_info("*** STEP 3: Configuring VIC mode (MIPI=3) ***\n");
+    writel(3, vic_regs + 0xc);  /* MIPI mode (3) - FIXED */
     writel(0x2d0, vic_regs + 0x14);  /* Reference driver interrupt config */
     wmb();
 
@@ -2529,7 +2529,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** MINIMAL VIC CONFIG: Applying only essential registers to prevent control limit errors ***\n");
 
                 /* Step 1: Essential VIC mode and dimensions only */
-                writel(2, vic_regs + 0xc);                                    /* MIPI mode = 2 */
+                writel(3, vic_regs + 0xc);                                    /* MIPI mode = 3 */
                 writel((sensor_width << 16) | sensor_height, vic_regs + 0x4); /* Dimensions */
                 wmb();
 
