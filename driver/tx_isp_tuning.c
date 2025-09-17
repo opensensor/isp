@@ -327,7 +327,7 @@ int tisp_ev_update(void);
 int tisp_ct_update(void);
 int tisp_ae_ir_update(void);
 
-int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
+int tisp_g_ae_zone(void *buffer);  // Binary Ninja: takes buffer parameter
 
 /* Additional function declarations needed for Binary Ninja reference */
 int tisp_get_ae_comp(uint32_t *value);
@@ -337,6 +337,7 @@ int tisp_ae_get_y_zone(void *buffer);
 int tisp_ae_get_hist_custome(void *buffer);
 int apical_isp_max_again_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 int apical_isp_max_dgain_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
+int tisp_g_ae_zone_internal(void *buffer);
 
 /* System register access functions - moved before use */
 uint32_t system_reg_read(u32 reg);
@@ -3433,7 +3434,7 @@ int apical_isp_ae_zone_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl
 
     pr_debug("apical_isp_ae_zone_g_ctrl: entry\n");
 
-    tisp_g_ae_zone_internal(var_390);  // Binary Ninja: internal function call
+    tisp_g_ae_zone(var_390);  // Binary Ninja: tisp_g_ae_zone(&var_390)
 
     /* Binary Ninja: private_copy_to_user(*arg1, &var_390, 0x384) */
     if (copy_to_user((void __user *)ctrl->value, var_390, 0x384)) {
