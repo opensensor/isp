@@ -790,7 +790,7 @@ void system_reg_write_gib(u32 arg1, u32 arg2, u32 arg3)
 }
 
 /* tisp_init - EXACT Binary Ninja implementation - THE MISSING HARDWARE INIT! */
-static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
+int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev)
 {
     pr_info("*** tisp_init: IMPLEMENTING MISSING HARDWARE REGISTER INITIALIZATION ***\n");
     pr_info("*** THIS FUNCTION CONTAINS ALL THE system_reg_write CALLS FROM REFERENCE ***\n");
