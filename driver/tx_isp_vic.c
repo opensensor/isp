@@ -2420,9 +2420,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
+    /* CRITICAL FIX: ourISPdev->vic_dev is already a tx_isp_vic_device pointer */
+    vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
     if (!vic_dev) {
-        pr_err("vic_core_s_stream: Failed to get VIC device from container_of\n");
+        pr_err("vic_core_s_stream: Failed to get VIC device\n");
         return -EINVAL;
     }
 

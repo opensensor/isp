@@ -3686,30 +3686,26 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         
         pr_info("ISP buffer calculation: width=%d height=%d memopt=%d\n",
                 width, height, isp_memopt);
-        
-        // Reference buffer size calculation logic
-        // Based on the decompiled code from reference driver
-        
-        stride_factor = height << 3; // $t0_3 = $a2_9 << 3
-        
-        // Main buffer calculation: (($v0_83 + 7) u>> 3) * $t0_3
-        main_buf = ((width + 7) >> 3) * stride_factor;
-        
-        // Additional buffer: ($a0_29 u>> 1) + $a0_29
-        total_main = (main_buf >> 1) + main_buf;
-        
-        // YUV buffer calculation: (((($v0_83 + 0x1f) u>> 5) + 7) u>> 3) * (((($a2_9 + 0xf) u>> 4) + 1) << 3)
-        yuv_stride = ((((width + 0x1f) >> 5) + 7) >> 3) * ((((height + 0xf) >> 4) + 1) << 3);
-        
-        total_size = total_main + yuv_stride;
-        
-        // Memory optimization affects calculation
-        if (isp_memopt == 0) {
-            uint32_t extra_buf = (((width >> 1) + 7) >> 3) * stride_factor;
-            uint32_t misc_buf = ((((width >> 5) + 7) >> 3) * stride_factor) >> 5;
-            
-            total_size = (yuv_stride << 2) + misc_buf + (extra_buf >> 1) + total_main + extra_buf;
-        }
+
+        // CRITICAL FIX: Use correct RAW10 buffer calculation instead of YUV
+        // RAW10 format: 10 bits per pixel = 1.25 bytes per pixel
+        // Formula: width * height * 1.25 (with proper alignment)
+
+        pr_info("*** BUFFER FIX: Using RAW10 calculation instead of incorrect YUV calculation ***\n");
+
+        // RAW10: 10 bits per pixel, packed format
+        // Each 4 pixels = 5 bytes (4 * 10 bits = 40 bits = 5 bytes)
+        // So: (width * height * 5) / 4
+        uint32_t raw10_pixels = width * height;
+        uint32_t raw10_bytes = (raw10_pixels * 5) / 4;  // 10 bits per pixel = 1.25 bytes
+
+        // Add alignment padding (align to 64-byte boundaries for DMA)
+        uint32_t aligned_size = (raw10_bytes + 63) & ~63;
+
+        total_size = aligned_size;
+
+        pr_info("*** RAW10 BUFFER: %d pixels -> %d bytes -> %d aligned ***\n",
+                raw10_pixels, raw10_bytes, aligned_size);
         
         pr_info("ISP calculated buffer size: %d bytes (0x%x)\n", total_size, total_size);
         
@@ -4387,7 +4383,7 @@ static int tx_isp_init(void)
         // csi_dev->sd.isp = (void*)ourISPdev;
         
         /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
-        //ourISPdev->subdevs[1] = &csi_dev->sd;
+        ourISPdev->subdevs[1] = &csi_dev->sd;
         
         pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 WITH VIDEO OPS ***\n");
         pr_info("CSI subdev: %p, ops: %p, video: %p, s_stream: %p\n",
