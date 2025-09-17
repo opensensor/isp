@@ -3697,8 +3697,30 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         uint32_t result;
         unsigned long flags;
         int ret;
-        
+
         pr_info("*** Channel %d: Frame completion wait ***\n", channel);
+
+        /* CRITICAL FIX: Check if we're in atomic context (interrupt/spinlock held) */
+        if (in_atomic() || irqs_disabled()) {
+            pr_warn("*** Channel %d: Frame wait called from atomic context - returning immediately ***\n", channel);
+
+            /* In atomic context, just check if frame is ready without sleeping */
+            spin_lock_irqsave(&state->buffer_lock, flags);
+            if (state->frame_ready) {
+                result = 1; // Frame ready
+                state->frame_ready = false; // Consume the frame
+                pr_info("*** Channel %d: Frame was ready (atomic context) ***\n", channel);
+            } else {
+                result = 0; // No frame ready
+                pr_info("*** Channel %d: No frame ready (atomic context) ***\n", channel);
+            }
+            spin_unlock_irqrestore(&state->buffer_lock, flags);
+
+            if (copy_to_user(argp, &result, sizeof(result)))
+                return -EFAULT;
+
+            return 0;
+        }
 
         // Auto-start streaming if needed
         if (!state->streaming) {
@@ -3706,8 +3728,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             state->streaming = true;
             state->enabled = true;
         }
-        
-        // Wait for frame with a short timeout
+
+        // Wait for frame with a short timeout (only in non-atomic context)
         pr_info("*** Channel %d: Waiting for frame (timeout=100ms) ***\n", channel);
         ret = wait_event_interruptible_timeout(state->frame_wait,
                                              state->frame_ready || !state->streaming,
@@ -3727,10 +3749,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("*** Channel %d: Frame wait timeout/error, generating frame ***\n", channel);
         }
         spin_unlock_irqrestore(&state->buffer_lock, flags);
-        
+
         if (copy_to_user(argp, &result, sizeof(result)))
             return -EFAULT;
-            
+
         return 0;
     }
     case 0x800456c5: { // Set banks IOCTL (critical for channel enable from decompiled code)
