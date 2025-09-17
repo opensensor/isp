@@ -1730,8 +1730,16 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     /* EXACT Binary Ninja reference implementation - handle critical control commands */
     int ret = 0;
     uint32_t var_98;
+    struct isp_tuning_data *tuning;
 
     if (!dev || !ctrl) {
+        return -EINVAL;
+    }
+
+    /* Get tuning data from device - Binary Ninja reference */
+    tuning = dev->tuning_data;
+    if (!tuning) {
+        pr_err("apical_isp_core_ops_g_ctrl: No tuning data available\n");
         return -EINVAL;
     }
 
@@ -1789,12 +1797,12 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
                 ctrl->value = var_98;
                 break;
 
-            case 0x8000085:  // Temper Strength - Binary Ninja: return 0
-                ctrl->value = 0;
+            case 0x8000085:  // Temper Strength
+                ctrl->value = tuning->temper_strength;
                 break;
 
-            case 0x8000086:  // Sinter Strength - Binary Ninja: return 0
-                ctrl->value = 0;
+            case 0x8000086:  // Sinter Strength
+                ctrl->value = tuning->sinter_strength;
                 break;
 
             case 0x800002d:  // AE Statistics
@@ -1823,10 +1831,10 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
                     uint32_t color_temp;
                 } wb_data;
 
-                wb_data.r_gain = tuning->wb_gains.r;
-                wb_data.g_gain = tuning->wb_gains.g;
-                wb_data.b_gain = tuning->wb_gains.b;
-                wb_data.color_temp = tuning->wb_temp;
+                wb_data.r_gain = 0;  // Binary Ninja: placeholder values
+                wb_data.g_gain = 0;
+                wb_data.b_gain = 0;
+                wb_data.color_temp = 0;
 
 //                if (copy_to_user((void __user *)ctrl->value, &wb_data, sizeof(wb_data))) {
 //                    ret = -EFAULT;
