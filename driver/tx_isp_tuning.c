@@ -1148,9 +1148,9 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) - Set IRQ handler */
     /* CRITICAL: This sets up the ISP processing completion callback - missing piece! */
     extern int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
-    extern irqreturn_t ispcore_ip_done_irq_handler(int irq, void *dev_id);
+    extern irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
 
-    int irq_ret = system_irq_func_set(0xd, ispcore_ip_done_irq_handler);
+    int irq_ret = system_irq_func_set(0xd, ip_done_interrupt_static);
     if (irq_ret == 0) {
         pr_info("*** tisp_init: ISP processing completion callback registered (index=0xd) ***\n");
     } else {
