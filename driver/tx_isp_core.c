@@ -474,7 +474,7 @@ struct isp_core_channel {
     struct isp_core_channel_state state;
 };
 
-static struct isp_core_channel frame_channels[3] = {0};  /* Channel 0, 1, 2 */
+static struct isp_core_channel isp_core_channels[3] = {0};  /* Channel 0, 1, 2 */
 
 /* Frame channel wakeup function - placeholder implementation */
 static void frame_channel_wakeup_waiters(struct isp_core_channel *channel)
@@ -716,8 +716,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             /* This is the CRITICAL event that notifies frame channels of completion */
             if (vic_dev) {
                 /* Wake up channel 0 waiters */
-                if (frame_channels[0].state.streaming) {
-                    frame_channel_wakeup_waiters(&frame_channels[0]);
+                if (isp_core_channels[0].state.streaming) {
+                    frame_channel_wakeup_waiters(&isp_core_channels[0]);
                 }
             }
         }
@@ -740,8 +740,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
                    frame_buffer_addr, frame_info1, frame_info2);
 
             /* Wake up channel 1 waiters */
-            if (frame_channels[1].state.streaming) {
-                frame_channel_wakeup_waiters(&frame_channels[1]);
+            if (isp_core_channels[1].state.streaming) {
+                frame_channel_wakeup_waiters(&isp_core_channels[1]);
             }
         }
     }
