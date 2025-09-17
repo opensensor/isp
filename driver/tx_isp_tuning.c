@@ -1097,8 +1097,10 @@ int tisp_init(void *sensor_info, char *param_name)
             break;
     }
 
-    /* Binary Ninja: system_reg_write(0x1c, $a1_7) - Control register */
-    system_reg_write(0x1c, 0x3f00);
+    /* CRITICAL FIX: ISP control register - enable processing pipeline */
+    /* This register controls the overall ISP processing pipeline operation */
+    system_reg_write(0x1c, 0x3f08);  /* Enable ISP processing pipeline + frame sync */
+    pr_info("*** tisp_init: ISP control register set to enable processing pipeline ***\n");
 
     /* Binary Ninja: Call tisp_set_csc_version(0) */
     tisp_set_csc_version(0);
