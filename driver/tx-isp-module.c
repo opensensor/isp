@@ -6415,36 +6415,7 @@ static void vic_frame_work_function(struct work_struct *work)
     }
 }
 
-/* CRITICAL FIX: Store original sensor ops for proper delegation */
-struct sensor_ops_storage {
-    struct tx_isp_subdev_ops *original_ops;
-    struct tx_isp_subdev *sensor_sd;
-};
-static struct sensor_ops_storage stored_sensor_ops;
 
-/* Sensor operations delegation functions */
-static int sensor_subdev_sensor_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
-{
-    pr_info("*** sensor_subdev_sensor_ioctl: cmd=0x%x, delegating to original sensor ***\n", cmd);
-
-    /* Delegate to original sensor IOCTL if available */
-    if (stored_sensor_ops.original_ops &&
-        stored_sensor_ops.original_ops->sensor &&
-        stored_sensor_ops.original_ops->sensor->ioctl) {
-
-        pr_info("*** sensor_subdev_sensor_ioctl: Calling original sensor IOCTL ***\n");
-        return stored_sensor_ops.original_ops->sensor->ioctl(sd, cmd, arg);
-    }
-
-    pr_warn("*** sensor_subdev_sensor_ioctl: No original sensor IOCTL available ***\n");
-    return -ENOIOCTLCMD;
-}
-
-/* Sensor operations structure that delegates to original sensor */
-static struct tx_isp_subdev_sensor_ops sensor_subdev_sensor_ops = {
-    .ioctl = sensor_subdev_sensor_ioctl,
-    .sync_sensor_attr = NULL,  /* Will add if needed */
-};
 
 /* Sensor subdev operation implementations - FIXED TO DELEGATE TO REAL SENSOR DRIVER */
 static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable)
