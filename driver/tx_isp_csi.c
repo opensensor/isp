@@ -821,7 +821,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         pr_info("*** CSI PHY should now respond properly to register reads/writes ***\n");
 
                         v0_17 = 2;
-                    } else if (interface_type == 2) {
+                    } /* End of if (interface_type == 1) block */
+                    if (interface_type == 2) {
                         /* DVP interface */
                         pr_info("CSI: DVP interface configuration\n");
 
@@ -841,7 +842,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         }
 
                         v0_17 = 3;
-                    } else {
+                    }
+                    if (interface_type != 1 && interface_type != 2) {
                         pr_err("CSI: Unsupported interface type %d\n", interface_type);
                         v0_17 = 3;
                     }
