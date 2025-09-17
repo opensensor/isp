@@ -205,19 +205,20 @@ void tx_isp_vic_restore_interrupts(void)
         return;
     }
 
-    /* Restore VIC interrupt register values using CORRECT VIC registers */
-    pr_info("*** VIC INTERRUPT RESTORE: Using CORRECT VIC registers (0x04/0x0c) ***\n");
+    /* Restore VIC interrupt register values using WORKING ISP-activates configuration */
+    pr_info("*** VIC INTERRUPT RESTORE: Using WORKING ISP-activates configuration (0x1e8/0x1ec) ***\n");
 
-    /* Clear interrupt masks first */
-    writel(0x0, vic_dev->vic_regs + 0x08);  /* Clear VIC_IMSR */
+    /* Clear pending interrupts first */
+    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
+    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
     wmb();
 
-    /* Restore Binary Ninja reference values */
-    writel(0x07800438, vic_dev->vic_regs + 0x04);  /* VIC_IMR */
-    writel(0xb5742249, vic_dev->vic_regs + 0x0c);  /* VIC_IMCR */
+    /* Restore working interrupt masks */
+    writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
+    writel(0xFFFFFFFC, vic_dev->vic_regs + 0x1ec);  /* Enable MDMA interrupts */
     wmb();
 
-    pr_info("*** VIC INTERRUPT RESTORE: CORRECT VIC registers restored (IMR=0x07800438, IMCR=0xb5742249) ***\n");
+    pr_info("*** VIC INTERRUPT RESTORE: WORKING configuration restored (MainMask=0xFFFFFFFE, MDMAMask=0xFFFFFFFC) ***\n");
 }
 EXPORT_SYMBOL(tx_isp_vic_restore_interrupts);
 
@@ -1556,36 +1557,37 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0xffffffff, vic_regs + 0x1f4);  /* Clear pending interrupts */
     wmb();
 
-    /* CRITICAL FIX: Use CORRECT VIC interrupt registers based on git history analysis */
-    pr_info("*** VIC INTERRUPT INIT: Using CORRECT VIC registers (0x04/0x0c) from Binary Ninja reference ***\n");
+    /* CRITICAL FIX: Revert to WORKING ISP-activates interrupt configuration */
+    pr_info("*** VIC INTERRUPT INIT: Using WORKING ISP-activates configuration (0x1e8/0x1ec) ***\n");
 
-    /* Clear interrupt masks first (VIC_IMSR) */
-    writel(0x0, vic_regs + 0x08);  /* Clear all interrupt masks */
+    /* STEP 1: Clear all pending interrupts first (from working version) */
+    writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear main interrupt status */
+    writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
     wmb();
 
-    /* Set VIC interrupt registers to Binary Ninja reference values */
-    writel(0x07800438, vic_regs + 0x04);  /* VIC_IMR - Interrupt Mask Register */
-    writel(0xb5742249, vic_regs + 0x0c);  /* VIC_IMCR - Interrupt Control Register */
+    /* STEP 2: Configure interrupt masks - ENABLE frame done interrupt (from working version) */
+    writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* Enable frame done interrupt (bit 0 = 0) */
+    writel(0xFFFFFFFC, vic_regs + 0x1ec);  /* Enable MDMA interrupts (bits 0,1 = 0) */
     wmb();
 
-    /* DIAGNOSTIC: Read back CORRECT VIC interrupt registers */
-    u32 vic_imr = readl(vic_regs + 0x04);
-    u32 vic_imcr = readl(vic_regs + 0x0c);
-    u32 vic_isr = readl(vic_regs + 0x00);
-    u32 vic_imsr = readl(vic_regs + 0x08);
+    /* DIAGNOSTIC: Read back WORKING VIC interrupt registers */
+    u32 int_mask_main = readl(vic_regs + 0x1e8);
+    u32 int_mask_mdma = readl(vic_regs + 0x1ec);
+    u32 int_status_main = readl(vic_regs + 0x1f0);
+    u32 int_status_mdma = readl(vic_regs + 0x1f4);
 
-    pr_info("*** VIC INTERRUPT DIAGNOSTIC: IMR=0x%08x, IMCR=0x%08x, ISR=0x%08x, IMSR=0x%08x ***\n",
-            vic_imr, vic_imcr, vic_isr, vic_imsr);
+    pr_info("*** VIC INTERRUPT DIAGNOSTIC: MainMask=0x%08x, MDMAMask=0x%08x, MainStatus=0x%08x, MDMAStatus=0x%08x ***\n",
+            int_mask_main, int_mask_mdma, int_status_main, int_status_mdma);
 
-    if (vic_imr != 0x07800438) {
-        pr_warn("*** VIC INTERRUPT WARNING: IMR readback failed (expected 0x07800438, got 0x%08x) ***\n", vic_imr);
+    if (int_mask_main != 0xFFFFFFFE) {
+        pr_warn("*** VIC INTERRUPT WARNING: Main mask readback failed (expected 0xFFFFFFFE, got 0x%08x) ***\n", int_mask_main);
     }
 
-    if (vic_imcr != 0xb5742249) {
-        pr_warn("*** VIC INTERRUPT WARNING: IMCR readback failed (expected 0xb5742249, got 0x%08x) ***\n", vic_imcr);
+    if (int_mask_mdma != 0xFFFFFFFC) {
+        pr_warn("*** VIC INTERRUPT WARNING: MDMA mask readback failed (expected 0xFFFFFFFC, got 0x%08x) ***\n", int_mask_mdma);
     }
 
-    pr_info("*** VIC INTERRUPT INIT: CORRECT VIC interrupt configuration applied (0x04/0x0c) ***\n");
+    pr_info("*** VIC INTERRUPT INIT: WORKING ISP-activates configuration applied (0x1e8/0x1ec) ***\n");
 
     /* CRITICAL: Set vic_start_ok flag to enable interrupt processing */
     vic_start_ok = 1;
