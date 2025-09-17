@@ -1151,6 +1151,30 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("*** tisp_init: CRITICAL FIX - ISP bypass register set to 0x%x (ENABLE image processing) ***\n", bypass_val);
     pr_info("*** tisp_init: Essential modules ENABLED: demosaic, CCM, gamma, AWB, AE, CSC, output ***\n");
 
+    /* CRITICAL FIX: Initialize essential ISP processing modules to prevent Error interrupt type 2 */
+
+    /* Initialize Demosaic module (Raw Bayer -> RGB conversion) */
+    system_reg_write(0x1000, 0x1);   /* Enable demosaic */
+    system_reg_write(0x1004, 0x0);   /* Demosaic pattern: RGGB */
+    pr_info("*** tisp_init: Demosaic module initialized (RGGB pattern) ***\n");
+
+    /* Initialize Color Correction Matrix (CCM) */
+    system_reg_write(0x2000, 0x1);   /* Enable CCM */
+    system_reg_write(0x2004, 0x100); /* CCM R gain */
+    system_reg_write(0x2008, 0x100); /* CCM G gain */
+    system_reg_write(0x200c, 0x100); /* CCM B gain */
+    pr_info("*** tisp_init: Color Correction Matrix initialized ***\n");
+
+    /* Initialize Gamma Correction */
+    system_reg_write(0x3000, 0x1);   /* Enable gamma correction */
+    system_reg_write(0x3004, 0x80);  /* Gamma value (1.0) */
+    pr_info("*** tisp_init: Gamma correction initialized ***\n");
+
+    /* Initialize Color Space Conversion (RGB -> YUV) */
+    system_reg_write(0x4000, 0x1);   /* Enable CSC */
+    system_reg_write(0x4004, 0x1);   /* CSC mode: RGB to YUV420 */
+    pr_info("*** tisp_init: Color Space Conversion initialized (RGB->YUV420) ***\n");
+
     /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupts */
     system_reg_write(0x30, 0xffffffff);
 
