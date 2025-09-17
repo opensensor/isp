@@ -1308,7 +1308,17 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
         /* Binary Ninja: if ($v0 s>= 3) */
         if (isp_state >= 3) {
             pr_info("ispcore_slake_module: ISP state >= 3, calling ispcore_core_ops_init");
-            ret = ispcore_core_ops_init(isp, NULL);  /* NULL sensor_attr as per reference */
+
+            /* Get sensor attributes from the connected sensor */
+            struct tx_isp_sensor_attribute *sensor_attr = NULL;
+            if (isp->sensor && isp->sensor->video.attr) {
+                sensor_attr = isp->sensor->video.attr;
+                pr_info("ispcore_slake_module: Using sensor attributes from connected sensor");
+            } else {
+                pr_warn("ispcore_slake_module: No sensor attributes available, using NULL");
+            }
+
+            ret = ispcore_core_ops_init(isp, sensor_attr);
             if (ret < 0) {
                 pr_err("ispcore_slake_module: ispcore_core_ops_init failed: %d", ret);
                 return ret;
@@ -1445,9 +1455,9 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
     unsigned long flags;
     spin_lock_irqsave(&isp->irq_lock, flags);
     
-    if (isp->vic_dev->state != 2) {
+    if (isp->vic_dev->state < 2) {
         spin_unlock_irqrestore(&isp->irq_lock, flags);
-        ISP_ERROR("*** ispcore_core_ops_init: Invalid ISP state %d (expected 2) ***\n", 
+        ISP_ERROR("*** ispcore_core_ops_init: Invalid ISP state %d (expected >= 2) ***\n",
                   isp->vic_dev->state);
         return -EINVAL;
     }
