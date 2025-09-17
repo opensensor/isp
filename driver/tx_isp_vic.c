@@ -1341,6 +1341,21 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         wmb();
         
+        /* CRITICAL: Re-enable VIC interrupt system before second unlock sequence */
+        pr_info("*** VIC INTERRUPT RE-INIT: Re-enabling VIC interrupts before second unlock ***\n");
+
+        /* Clear any pending interrupts first */
+        writel(0xffffffff, vic_regs + 0x1f0);  /* Clear pending interrupts */
+        writel(0xffffffff, vic_regs + 0x1f4);  /* Clear pending interrupts */
+        wmb();
+
+        /* Re-enable VIC interrupts - critical for unlock to work */
+        writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
+        writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
+        wmb();
+
+        pr_info("*** VIC INTERRUPT RE-INIT: VIC interrupts re-enabled ***\n");
+
         /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
         writel(2, vic_regs + 0x0);
         wmb();
