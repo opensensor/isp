@@ -2424,7 +2424,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     void __iomem *csi_base;
     int ret = -EINVAL;
 
-    pr_info("vic_core_s_stream: sd=%p, enable=%d\n", sd, enable);
+    pr_info("*** vic_core_s_stream: ENTRY - sd=%p, enable=%d ***\n", sd, enable);
 
     /* CRITICAL FIX: Validate and get VIC device safely */
     if (!sd || !ourISPdev || !ourISPdev->vic_dev) {
