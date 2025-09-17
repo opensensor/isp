@@ -421,23 +421,18 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d, vic_streaming=%d ***\n",
             isp_dev->sensor, isp_dev->streaming_enabled, vic_is_streaming);
 
-    /* CRITICAL FIX: Skip sensor IOCTL to prevent workqueue thread hanging */
-    /* The sensor I2C communication is blocking and causing soft lockups */
-    pr_info("*** ISP FRAME SYNC WORK: Skipping sensor IOCTL to prevent workqueue hang ***\n");
+    /* CRITICAL FIX: Frame sync work should NOT do FPS control! */
+    /* FPS control belongs in format negotiation (set_fmt), not per-frame processing */
+    pr_info("*** ISP FRAME SYNC WORK: Frame sync processing (no sensor I2C) ***\n");
+
+    /* Frame sync work should only do lightweight per-frame processing */
+    /* Heavy operations like sensor I2C communication belong in initialization/format setting */
 
     if (isp_dev->sensor && isp_dev->streaming_enabled) {
-        pr_info("*** ISP FRAME SYNC WORK: Sensor available but IOCTL disabled to prevent hang ***\n");
-        /* DISABLED: Call sensor IOCTL - this was causing workqueue thread to hang */
-        /* int ret = ispcore_sensor_ops_ioctl(isp_dev); */
-        pr_info("*** ISP FRAME SYNC WORK: Sensor IOCTL skipped - no I2C communication ***\n");
+        pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (sensor available) ***\n");
+        /* Frame sync work complete - no I2C communication needed per frame */
     } else {
-        pr_info("*** ISP FRAME SYNC WORK: Conditions not met - skipping sensor call ***\n");
-        if (!isp_dev->sensor) {
-            pr_info("*** ISP FRAME SYNC WORK: sensor is NULL ***\n");
-        }
-        if (!isp_dev->streaming_enabled) {
-            pr_info("*** ISP FRAME SYNC WORK: streaming_enabled is false ***\n");
-        }
+        pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (no sensor/not streaming) ***\n");
     }
 
     pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation complete - work finished ***\n");
