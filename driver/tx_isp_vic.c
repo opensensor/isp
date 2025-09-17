@@ -2549,62 +2549,73 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", sensor_width, sensor_height);
                 pr_info("*** CRITICAL: VIC configured for sensor OUTPUT, CSI PHY handled separately ***\n");
 
-                /* CRITICAL FIX: Skip ALL VIC register writes during streaming restart */
+                /* CRITICAL FIX: Only write to VIC-specific registers - CSI PHY registers handled by CSI driver */
+                pr_info("*** VIC: Writing only VIC-specific registers (CSI PHY registers handled by CSI driver) ***\n");
+
+                /* VIC Control and Configuration registers only */				                /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
+                writel(0x7800438, vic_regs + 0x4);
+
+                /* CRITICAL FIX: Skip interrupt-disrupting registers during streaming restart */
                 extern uint32_t vic_start_ok;
                 if (vic_start_ok == 1) {
-                    pr_info("*** STEP 1: SKIPPING ALL VIC register writes - VIC interrupts already working ***\n");
-                    pr_info("*** VIC register writes would overwrite interrupt configuration in shared register space ***\n");
+                    pr_info("*** STEP 1: SKIPPING interrupt-disrupting registers 0xc, 0x10, 0x14 - VIC interrupts already working ***\n");
                 } else {
-                    /* CRITICAL FIX: Only write to VIC-specific registers - CSI PHY registers handled by CSI driver */
-                    pr_info("*** VIC: Writing only VIC-specific registers (CSI PHY registers handled by CSI driver) ***\n");
-
-                    /* VIC Control and Configuration registers only */				                /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
-                    writel(0x7800438, vic_regs + 0x4);
                     writel(0x2, vic_regs + 0xc);
                     writel(0x2, vic_regs + 0x14);
-                    writel(0xf00, vic_regs + 0x18);
-                    writel(0x800800, vic_regs + 0x60);
-                    writel(0x9d09d0, vic_regs + 0x64);
-                    writel(0x6002, vic_regs + 0x70);
-                    writel(0x7003, vic_regs + 0x74);
-                    writel(0xeb8080, vic_regs + 0xc0);
-                    writel(0x108080, vic_regs + 0xc4);
-                    writel(0x29f06e, vic_regs + 0xc8);
-                    writel(0x913622, vic_regs + 0xcc);
-                    writel(0x515af0, vic_regs + 0xd0);
-                    writel(0xaaa610, vic_regs + 0xd4);
-                    writel(0xd21092, vic_regs + 0xd8);
-                    writel(0x6acade, vic_regs + 0xdc);
-                    writel(0xeb8080, vic_regs + 0xe0);
-                    writel(0x108080, vic_regs + 0xe4);
-                    writel(0x29f06e, vic_regs + 0xe8);
-                    writel(0x913622, vic_regs + 0xec);
-                    writel(0x515af0, vic_regs + 0xf0);
-                    writel(0xaaa610, vic_regs + 0xf4);
-                    writel(0xd21092, vic_regs + 0xf8);
-                    writel(0x6acade, vic_regs + 0xfc);
-                    writel(0x2d0, vic_regs + 0x100);
-                    writel(0x2c000, vic_regs + 0x10c);
-                    writel(0x7800000, vic_regs + 0x110);
+                }
+
+                writel(0xf00, vic_regs + 0x18);
+                writel(0x800800, vic_regs + 0x60);
+                writel(0x9d09d0, vic_regs + 0x64);
+                writel(0x6002, vic_regs + 0x70);
+                writel(0x7003, vic_regs + 0x74);
+                writel(0xeb8080, vic_regs + 0xc0);
+                writel(0x108080, vic_regs + 0xc4);
+                writel(0x29f06e, vic_regs + 0xc8);
+                writel(0x913622, vic_regs + 0xcc);
+                writel(0x515af0, vic_regs + 0xd0);
+                writel(0xaaa610, vic_regs + 0xd4);
+                writel(0xd21092, vic_regs + 0xd8);
+                writel(0x6acade, vic_regs + 0xdc);
+                writel(0xeb8080, vic_regs + 0xe0);
+                writel(0x108080, vic_regs + 0xe4);
+                writel(0x29f06e, vic_regs + 0xe8);
+                writel(0x913622, vic_regs + 0xec);
+                writel(0x515af0, vic_regs + 0xf0);
+                writel(0xaaa610, vic_regs + 0xf4);
+                writel(0xd21092, vic_regs + 0xf8);
+                writel(0x6acade, vic_regs + 0xfc);
+                writel(0x2d0, vic_regs + 0x100);
+                writel(0x2c000, vic_regs + 0x10c);
+                writel(0x7800000, vic_regs + 0x110);
+
+                /* CRITICAL FIX: Skip interrupt-disrupting register 0x10 during streaming restart */
+                if (vic_start_ok != 1) {
                     writel(0x10, vic_regs + 0x120);
-                    writel(0x100010, vic_regs + 0x1a4);
-                    writel(0x4440, vic_regs + 0x1a8);
-                    writel(0x10, vic_regs + 0x1b0);
-                    wmb();
                 }
+
+                writel(0x100010, vic_regs + 0x1a4);
+                writel(0x4440, vic_regs + 0x1a8);
+                writel(0x10, vic_regs + 0x1b0);
+                wmb();
                 
-                /* CRITICAL FIX: Skip STEP 2 writes during streaming restart */
+                /* STEP 2: ISP isp-w01 - Control registers */
+                pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
+
+                /* CRITICAL FIX: Skip interrupt-disrupting register 0x0 during streaming restart */
                 if (vic_start_ok == 1) {
-                    pr_info("*** STEP 2: SKIPPING ISP isp-w01 Control registers - VIC interrupts already working ***\n");
-                    pr_info("*** These writes would overwrite VIC interrupt configuration ***\n");
+                    pr_info("*** STEP 2: SKIPPING register 0x0 write - would overwrite VIC control ***\n");
                 } else {
-                    /* STEP 2: ISP isp-w01 - Control registers */
-                    pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
                     writel(0x3130322a, vic_regs + 0x0);
-                    writel(0x1, vic_regs + 0x4);
-                    writel(0x200, vic_regs + 0x14);
-                    wmb();
                 }
+
+                writel(0x1, vic_regs + 0x4);
+
+                /* CRITICAL FIX: Skip interrupt-disrupting register 0x14 during streaming restart */
+                if (vic_start_ok != 1) {
+                    writel(0x200, vic_regs + 0x14);
+                }
+                wmb();
                 
                 /* STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) */
                 pr_info("*** STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) ***\n");
@@ -2730,14 +2741,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Continue with the complete ISP isp-csi sequence... */
                 wmb();
                 
-                /* CRITICAL FIX: Skip Final CSI PHY control sequence during streaming restart */
-                extern uint32_t vic_start_ok;
+                /* STEP 7: Final CSI PHY control sequence */
+                pr_info("*** STEP 7: Final CSI PHY control sequence ***\n");
+
+                /* CRITICAL FIX: Skip interrupt-disrupting registers during streaming restart */
                 if (vic_start_ok == 1) {
-                    pr_info("*** STEP 7: SKIPPING Final CSI PHY control sequence - VIC interrupts already working ***\n");
-                    pr_info("*** These writes would overwrite VIC interrupt configuration in shared register space ***\n");
+                    pr_info("*** STEP 7: SKIPPING interrupt-disrupting registers 0xc, 0x10, 0x14 - VIC interrupts already working ***\n");
                 } else {
-                    /* STEP 7: Final CSI PHY control sequence */
-                    pr_info("*** STEP 7: Final CSI PHY control sequence ***\n");
                     writel(0x1, vic_regs + 0xc);
                     writel(0x1, vic_regs + 0x10);
                     writel(0x630, vic_regs + 0x14);
