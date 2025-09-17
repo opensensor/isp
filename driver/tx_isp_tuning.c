@@ -2975,7 +2975,7 @@ static void tisp_set_sensor_analog_gain_short(void);
 static void tiziano_deflicker_expt(uint32_t flicker_t, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t *lut, uint32_t *nodes);
 static void system_reg_write_ae(uint32_t bank, uint32_t reg, uint32_t value);
 static void system_irq_func_set(int irq_id, void (*handler)(void));
-static void private_spin_lock_init(int lock_id);
+static void private_spin_lock_init(spinlock_t *lock);
 static uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
 static uint32_t tisp_math_exp2(uint32_t value, uint32_t precision, uint32_t shift);
 
@@ -3071,6 +3071,9 @@ static int tiziano_ae_init_exp_th(void)
 int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
 {
     pr_info("tiziano_ae_init: Initializing Auto Exposure (%dx%d@%d) - Binary Ninja EXACT\n", width, height, fps);
+    
+    /* Binary Ninja EXACT: int32_t $a3, int32_t arg_c = $a3 */
+    int32_t arg_c = fps;  /* arg_c corresponds to fps parameter */
     
     /* Binary Ninja EXACT: memset(&tisp_ae_hist, 0, 0x42c) */
     memset(&tisp_ae_hist, 0, 0x42c);
