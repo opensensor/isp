@@ -356,6 +356,9 @@ int tisp_set_csc_version(int version)
 /* Use external system_reg_write from tx-isp-module.c that does real hardware writes */
 extern void system_reg_write(u32 reg, u32 value);
 
+/* External system_irq_func_set from tx_isp_core.c */
+extern int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
+
 /* AE interrupt wrapper functions to convert signatures from int function(void) to irqreturn_t function(int, void*) */
 irqreturn_t ae0_interrupt_hist_wrapper(int irq, void *dev_id) {
     ae0_interrupt_hist();
@@ -1168,7 +1171,6 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) - Set IRQ handler */
     /* CRITICAL: This sets up the ISP processing completion callback - missing piece! */
-    extern int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
     extern irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
 
     int irq_ret = system_irq_func_set(0xd, ip_done_interrupt_static);
