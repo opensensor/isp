@@ -752,8 +752,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Similar processing for channel 2 */
         while ((readl(vic_regs + 0x9b7c) & 1) == 0) {
             /* Channel 2 frame processing */
-            if (frame_channels[2].state.streaming) {
-                frame_channel_wakeup_waiters(&frame_channels[2]);
+            if (isp_core_channels[2].state.streaming) {
+                frame_channel_wakeup_waiters(&isp_core_channels[2]);
             }
         }
     }
