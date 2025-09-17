@@ -2904,6 +2904,21 @@ int tx_isp_vic_remove(struct platform_device *pdev)
     if (res)
         release_mem_region(res->start, resource_size(res));
 
+    /* CRITICAL: Clean up BOTH VIC register mappings */
+    struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+    if (vic_dev) {
+        if (vic_dev->vic_regs) {
+            pr_info("*** VIC REMOVE: Unmapping primary VIC registers ***\n");
+            iounmap(vic_dev->vic_regs);
+            vic_dev->vic_regs = NULL;
+        }
+        if (vic_dev->vic_regs_secondary) {
+            pr_info("*** VIC REMOVE: Unmapping secondary VIC registers ***\n");
+            iounmap(vic_dev->vic_regs_secondary);
+            vic_dev->vic_regs_secondary = NULL;
+        }
+    }
+
     /* Clean up subdev */
     tx_isp_subdev_deinit(sd);
     kfree(sd);
