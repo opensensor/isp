@@ -1640,55 +1640,28 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     /* VIC configuration is now complete - skip duplicate setup code */
     pr_info("*** VIC HARDWARE CONFIGURATION COMPLETE - Proceeding with clock and final setup ***\n");
 
-    /* Calculate base addresses for different register blocks */
-    void __iomem *main_isp_base = vic_regs - 0x9a00;  /* Calculate main ISP base from VIC base */
-    void __iomem *csi_base = main_isp_base + 0x10000;  /* CSI base is at ISP base + 0x10000 */
+    /* STEP 7: Enable ISP clocks - Essential for VIC operation */
+    pr_info("*** STEP 7: Enabling ISP clocks ***\n");
 
-    /* Take a local copy of sensor attributes to prevent corruption during streaming */
-    struct tx_isp_sensor_attribute local_sensor_attr;
+    /* Enable CGU_ISP clock at 100MHz - Required for VIC operation */
+    struct clk *cgu_isp_clk = clk_get(NULL, "cgu_isp");
+    if (!IS_ERR(cgu_isp_clk)) {
+        clk_set_rate(cgu_isp_clk, 100000000);  /* 100MHz */
+        clk_prepare_enable(cgu_isp_clk);
+        pr_info("CGU_ISP clock enabled at 100MHz\n");
+        clk_put(cgu_isp_clk);
+    } else {
+        pr_warn("Failed to get CGU_ISP clock\n");
+    }
 
-    /* Make a safe copy of sensor attributes */
-    memcpy(&local_sensor_attr, &vic_dev->sensor_attr, sizeof(local_sensor_attr));
+    /* STEP 8: Final VIC state setup */
+    pr_info("*** STEP 8: Final VIC state setup ***\n");
+    vic_start_ok = 1;  /* Enable VIC interrupt processing */
 
-    /* Use the local copy to prevent corruption */
-    sensor_attr = &local_sensor_attr;
-    interface_type = sensor_attr->dbus_type;
-    sensor_format = sensor_attr->data_type;
+    pr_info("*** tx_isp_vic_start: REFERENCE DRIVER SEQUENCE COMPLETE ***\n");
+    pr_info("*** VIC hardware should now operate without control limit errors ***\n");
 
-    /* *** CRITICAL FIX: Prevent streaming control bit from corrupting sensor attributes *** */
-    pr_info("*** CRITICAL: Protecting sensor attributes from streaming control corruption ***\n");
-
-    /* Create a completely separate protected copy that can't be overwritten by register operations */
-    static struct tx_isp_sensor_attribute protected_sensor_attr;
-    memcpy(&protected_sensor_attr, sensor_attr, sizeof(protected_sensor_attr));
-
-    /* Force known good values for MIPI interface */
-    protected_sensor_attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;  /* MIPI (value 1) */
-    protected_sensor_attr.data_type = 0x2b;  /* RAW10 */
-
-    /* Use the protected copy */
-    sensor_attr = &protected_sensor_attr;
-    interface_type = TX_SENSOR_DATA_INTERFACE_MIPI;  /* Force MIPI (value 1) */
-    sensor_format = 0x2b;  /* Force RAW10 */
-
-    pr_info("*** RACE CONDITION FIX: Using protected sensor attributes - interface=%d, format=0x%x ***\n",
-            interface_type, sensor_format);
-
-    pr_info("tx_isp_vic_progress: interface=%d, format=0x%x (RACE CONDITION PROTECTED)\n", interface_type, sensor_format);
-
-    /* MCP LOG: VIC start with interface configuration */
-    pr_info("MCP_LOG: VIC start initiated - interface=%d, format=0x%x, vic_base=%p\n",
-            interface_type, sensor_format, vic_regs);
-
-    /* ==============================================================================================
-     * STREAMING SEQUENCE PHASE 1: Initial CSI PHY register writes (before sensor stream on)
-     * These occur at T+210ms in the trace
-     * ==============================================================================================*/
-
-    /* CSI PHY Config registers - from reference trace */
-    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
-    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
-    wmb();
+    return 0;  /* Success - VIC is now properly configured */
 
     /***
 ISP isp-m0: [CSI PHY Control] write at offset 0x8: 0x1 -> 0x0 (delta: 210.000 ms)
