@@ -4563,6 +4563,54 @@ int tisp_lsc_get_par_cfg(void *out_buf, void *size_buf)
     return 0;
 }
 
+/* tisp_wdr_get_par_cfg - Binary Ninja EXACT implementation */
+int tisp_wdr_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_wdr_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    char *output_ptr = (char *)out_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
+    /* Binary Ninja: for (int32_t i = 0x3ff; i != 0x432; i++) */
+    for (int i = 0x3ff; i < 0x432; i++) {
+        tisp_wdr_param_array_get(i, output_ptr, &temp_size);
+        output_ptr += temp_size;
+        total_size += temp_size;
+    }
+
+    *(int *)size_buf = total_size;
+    pr_debug("tisp_wdr_get_par_cfg: Total size=%d\n", total_size);
+    return 0;
+}
+
+/* tisp_dpc_get_par_cfg - Binary Ninja EXACT implementation */
+int tisp_dpc_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_dpc_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    char *output_ptr = (char *)out_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
+    /* Binary Ninja: for (int32_t i = 0xe6; i != 0x105; i++) */
+    for (int i = 0xe6; i < 0x105; i++) {
+        tisp_dpc_param_array_get(i, output_ptr, &temp_size);
+        output_ptr += temp_size;
+        total_size += temp_size;
+    }
+
+    *(int *)size_buf = total_size;
+    pr_debug("tisp_dpc_get_par_cfg: Total size=%d\n", total_size);
+    return 0;
+}
+
 /* Implementation of the third batch of parameter functions */
 
 /* tisp_mdns_get_par_cfg - Binary Ninja EXACT implementation */
