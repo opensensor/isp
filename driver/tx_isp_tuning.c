@@ -885,7 +885,7 @@ int ae0_interrupt_static(void)
     void *buffer_addr = (void *)((ae0_status << 8) & 0x3000) + data_b2f3c;
 
     /* Binary Ninja: DMA cache sync */
-    private_dma_cache_sync(0, buffer_addr, 0x1000, 0);
+    tisp_dma_cache_sync_helper(0, buffer_addr, 0x1000, 0);
 
     /* Binary Ninja: Get AE0 statistics */
     tisp_ae0_get_statistics(buffer_addr, 0xf001f001);
@@ -1219,15 +1219,11 @@ static uint32_t fix_point_div_32(uint32_t shift_bits, uint32_t numerator, uint32
         return 0xFFFFFFFF; /* Return max value on division by zero */
     }
 
-    /* Simple 32-bit fixed point division */
-    uint64_t temp = ((uint64_t)numerator << shift_bits) / denominator;
+    /* Use kernel-safe 64-bit division to avoid __udivdi3 */
+    uint64_t temp = (uint64_t)numerator << shift_bits;
+    uint32_t result = div64_u64(temp, denominator);
 
-    /* Clamp to 32-bit result */
-    if (temp > 0xFFFFFFFF) {
-        return 0xFFFFFFFF;
-    }
-
-    return (uint32_t)temp;
+    return result;
 }
 
 static uint32_t fix_point_mult2_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand)
@@ -1301,9 +1297,10 @@ static int tisp_g_ev_attr(uint32_t *ev_buffer, struct isp_tuning_data *tuning)
     ev_buffer[0x1b] = tuning->fps_num;    // Current FPS numerator
     *(uint16_t*)(&ev_buffer[0x37]) = tuning->fps_den;  // Current FPS denominator
 
-    // Calculate actual frame rate
-    uint32_t actual_fps = ((tuning->fps_den & 0xffff) * 1000000) /
-                         (tuning->fps_den >> 16) / tuning->fps_num;
+    // Calculate actual frame rate using kernel-safe division
+    uint64_t fps_calc = (uint64_t)(tuning->fps_den & 0xffff) * 1000000;
+    uint32_t divisor = (tuning->fps_den >> 16) * tuning->fps_num;
+    uint32_t actual_fps = divisor ? (uint32_t)div64_u64(fps_calc, divisor) : 0;
     ev_buffer[0x1f] = actual_fps;
 
     // Store operating mode
@@ -6955,7 +6952,7 @@ int ae0_interrupt_hist(void)
 
     /* Binary Ninja: private_dma_cache_sync(0, $s0 + data_b2f48, 0x800, 0) */
     void *buffer_addr = (void *)(buffer_offset + data_b2f48);
-    private_dma_cache_sync(0, buffer_addr, 0x800, 0);
+    tisp_dma_cache_sync_helper(0, buffer_addr, 0x800, 0);
 
     /* Binary Ninja: Determine histogram parameters */
     void *hist_base = (void *)data_b2f48;
@@ -6995,7 +6992,7 @@ int ae1_interrupt_static(void)
     void *buffer_addr = (void *)((ae1_status << 8) & 0x3000) + data_b2f54;
 
     /* Binary Ninja: private_dma_cache_sync(0, $s0 + data_b2f54, 0x1000, 0) */
-    private_dma_cache_sync(0, buffer_addr, 0x1000, 0);
+    tisp_dma_cache_sync_helper(0, buffer_addr, 0x1000, 0);
 
     /* Binary Ninja: tisp_ae1_get_statistics($s0 + data_b2f54, 0xf001f001) */
     tisp_ae1_get_statistics(buffer_addr, 0xf001f001);
