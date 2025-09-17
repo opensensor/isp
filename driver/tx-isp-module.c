@@ -7830,6 +7830,25 @@ int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint
         return 0;
     } else {
         pr_warn("*** VIC BUFFER MGMT: No queued buffer found with addr=0x%x ***\n", buffer_addr);
+        pr_warn("*** BUFFER1 ERROR: Buffer completion failed - address mismatch ***\n");
+        pr_warn("*** VIC BUFFER DEBUG: queued_count=%d, completed_count=%d ***\n",
+                state->queued_count, state->completed_count);
+
+        /* Debug: Show all queued buffer addresses */
+        spin_lock(&state->queue_lock);
+        if (!list_empty(&state->queued_buffers)) {
+            struct list_head *pos;
+            int i = 0;
+            pr_warn("*** VIC BUFFER DEBUG: Queued buffer addresses: ***\n");
+            list_for_each(pos, &state->queued_buffers) {
+                struct video_buffer *buf = list_entry(pos, struct video_buffer, list);
+                pr_warn("***   buffer[%d]: addr=0x%x, index=%d ***\n",
+                        i++, (uint32_t)(uintptr_t)buf->data, buf->index);
+            }
+        } else {
+            pr_warn("*** VIC BUFFER DEBUG: No queued buffers available ***\n");
+        }
+        spin_unlock(&state->queue_lock);
 
         /* CRITICAL FIX: Create a dummy completed buffer for VBM compatibility */
         /* This handles the case where VBM is managing buffers directly */
