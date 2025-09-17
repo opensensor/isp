@@ -1302,17 +1302,17 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(reg_100_value, vic_regs + 0x100);
         pr_info("*** BINARY NINJA: reg 0x100 = 0x%x (MIPI calculation) ***\n", reg_100_value);
 
-        /* 4. Register 0x10c - Complex bit field (corrected) */
-        u32 reg_10c_value = 0x0;  /* Start with base for MIPI interface type 1 */
+        /* 4. Register 0x10c - Use hardware-expected value instead of 0x0 */
+        u32 reg_10c_value = 0x2c000;  /* Hardware auto-correction shows this is the expected value */
         writel(reg_10c_value, vic_regs + 0x10c);
-        pr_info("*** BINARY NINJA: reg 0x10c = 0x%x (bit field config) ***\n", reg_10c_value);
+        pr_info("*** BINARY NINJA: reg 0x10c = 0x%x (hardware-expected value) ***\n", reg_10c_value);
 
-        /* 5. Registers 0x110-0x11c - Additional sensor configs */
-        writel(0x0, vic_regs + 0x110);
+        /* 5. Registers 0x110-0x11c - Use hardware-expected values */
+        writel(0x7800000, vic_regs + 0x110);  /* Hardware auto-correction shows this is expected */
         writel(0x0, vic_regs + 0x114);
         writel(0x0, vic_regs + 0x118);
         writel(0x0, vic_regs + 0x11c);
-        pr_info("*** BINARY NINJA: regs 0x110-0x11c configured ***\n");
+        pr_info("*** BINARY NINJA: regs 0x110-0x11c configured with hardware-expected values ***\n");
 
         /* 6. Frame mode registers */
         writel(0x4440, vic_regs + 0x1ac);  /* Binary Ninja default for interface type 1 */
