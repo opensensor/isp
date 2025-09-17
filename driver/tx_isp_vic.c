@@ -1270,10 +1270,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* CRITICAL: VIC hardware should already be initialized by platform driver */
         pr_info("*** VIC hardware should be ready - proceeding with unlock sequence ***\n");
 
-        /* Binary Ninja: 000107ec - Set CSI mode */
-        writel(3, vic_regs + 0xc);  /* RESTORED: This is VIC mode config, not CSI PHY corruption */
-        wmb();
-        pr_info("*** VIC: Set MIPI mode (3) to VIC control register 0xc ***\n");
+        /* CRITICAL FIX: Skip interrupt-disrupting register 0xc during streaming restart */
+        extern uint32_t vic_start_ok;
+        if (vic_start_ok == 1) {
+            pr_info("*** VIC: SKIPPING MIPI mode write to register 0xc - VIC interrupts already working ***\n");
+        } else {
+            /* Binary Ninja: 000107ec - Set CSI mode */
+            writel(3, vic_regs + 0xc);  /* RESTORED: This is VIC mode config, not CSI PHY corruption */
+            wmb();
+            pr_info("*** VIC: Set MIPI mode (3) to VIC control register 0xc ***\n");
+        }
         
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
@@ -1390,29 +1396,45 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         }
         
         /* Binary Ninja: 00010a90-00010aa8 - Final MIPI config */
-        /* CRITICAL FIX: Use actual sensor output width instead of total width to prevent control limit error */
-        writel((actual_width << 31) | mipi_config, vic_regs + 0x10);
+        /* CRITICAL FIX: Skip interrupt-disrupting register 0x10 during streaming restart */
+        if (vic_start_ok == 1) {
+            pr_info("*** VIC: SKIPPING MIPI config write to register 0x10 - VIC interrupts already working ***\n");
+        } else {
+            /* CRITICAL FIX: Use actual sensor output width instead of total width to prevent control limit error */
+            writel((actual_width << 31) | mipi_config, vic_regs + 0x10);
+        }
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         wmb();
         
         /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
-        writel(2, vic_regs + 0x0);
-        wmb();
-        writel(4, vic_regs + 0x0);
-        wmb();
-        
-        /* Binary Ninja: 00010acc - Wait for unlock */
-        while (readl(vic_regs + 0x0) != 0) {
-            udelay(1);
-            if (--timeout == 0) {
-                pr_err("VIC unlock timeout\n");
-                return -ETIMEDOUT;
-            }
+        /* CRITICAL FIX: Skip interrupt-disrupting register 0x0 during streaming restart */
+        if (vic_start_ok == 1) {
+            pr_info("*** VIC: SKIPPING unlock sequence write to register 0x0 - VIC interrupts already working ***\n");
+        } else {
+            writel(2, vic_regs + 0x0);
+            wmb();
         }
-        
-        /* Binary Ninja: 00010ad4 - Enable VIC */
-        writel(1, vic_regs + 0x0);
-        wmb();
+
+        /* CRITICAL FIX: Skip remaining unlock sequence during streaming restart */
+        if (vic_start_ok == 1) {
+            pr_info("*** VIC: SKIPPING remaining unlock sequence - VIC interrupts already working ***\n");
+        } else {
+            writel(4, vic_regs + 0x0);
+            wmb();
+
+            /* Binary Ninja: 00010acc - Wait for unlock */
+            while (readl(vic_regs + 0x0) != 0) {
+                udelay(1);
+                if (--timeout == 0) {
+                    pr_err("VIC unlock timeout\n");
+                    return -ETIMEDOUT;
+                }
+            }
+
+            /* Binary Ninja: 00010ad4 - Enable VIC */
+            writel(1, vic_regs + 0x0);
+            wmb();
+        }
         
         /* Binary Ninja: 00010ae4-00010b04 - Final MIPI registers */
         writel(0x100010, vic_regs + 0x1a4);
