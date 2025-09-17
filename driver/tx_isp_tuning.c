@@ -3034,52 +3034,7 @@ void isp_core_tuning_deinit(void *tuning_data)
 }
 EXPORT_SYMBOL(isp_core_tuning_deinit);
 
-/* isp_core_tuning_event - EXACT Binary Ninja reference implementation */
-int isp_core_tuning_event(void *tuning_data, uint32_t event_type)
-{
-    /* Binary Ninja: Handle specific event types with exact logic */
 
-    if (!tuning_data) {
-        return 0;
-    }
-
-    switch (event_type) {
-        case 0x4000000:  /* Event type 0 */
-            /* Binary Ninja: *(arg1 + 0x40c4) = 2 */
-            *((uint32_t*)tuning_data + 0x40c4/4) = 2;
-            break;
-
-        case 0x4000001:  /* Event type 1 */
-            /* Binary Ninja: *(arg1 + 0x40c4) = 1 */
-            *((uint32_t*)tuning_data + 0x40c4/4) = 1;
-            break;
-
-        case 0x4000002:  /* Frame done event */
-            /* Binary Ninja: isp_frame_done_wakeup() */
-            pr_debug("isp_core_tuning_event: Frame done wakeup\n");
-            /* This would wake up waiting processes */
-            break;
-
-        case 0x4000003:  /* Day/night transition event */
-            /* Binary Ninja: uint32_t $s1_1 = *(arg1 + 0x40a4)
-             * tisp_day_or_night_s_ctrl($s1_1)
-             * *(arg1 + 0x40a4) = $s1_1 */
-            {
-                uint32_t day_night_state = *((uint32_t*)tuning_data + 0x40a4/4);
-                pr_debug("isp_core_tuning_event: Day/night transition, state=%d\n", day_night_state);
-                /* This would call day/night control function */
-                *((uint32_t*)tuning_data + 0x40a4/4) = day_night_state;
-            }
-            break;
-
-        default:
-            pr_debug("isp_core_tuning_event: Unknown event type 0x%x\n", event_type);
-            break;
-    }
-
-    return 0;
-}
-EXPORT_SYMBOL(isp_core_tuning_event);
 
 
 
