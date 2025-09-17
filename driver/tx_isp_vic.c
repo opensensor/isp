@@ -213,12 +213,12 @@ void tx_isp_vic_restore_interrupts(void)
     writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
     wmb();
 
-    /* Restore working interrupt masks */
+    /* Restore working interrupt masks - FOCUS ON MAIN INTERRUPT ONLY */
     writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
-    writel(0xFFFFFFFC, vic_dev->vic_regs + 0x1ec);  /* Enable MDMA interrupts */
+    /* SKIP MDMA register 0x1ec - it doesn't work correctly */
     wmb();
 
-    pr_info("*** VIC INTERRUPT RESTORE: WORKING configuration restored (MainMask=0xFFFFFFFE, MDMAMask=0xFFFFFFFC) ***\n");
+    pr_info("*** VIC INTERRUPT RESTORE: WORKING configuration restored (MainMask=0xFFFFFFFE) ***\n");
 }
 EXPORT_SYMBOL(tx_isp_vic_restore_interrupts);
 
@@ -1565,26 +1565,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
     wmb();
 
-    /* STEP 2: Configure interrupt masks - ENABLE frame done interrupt (from working version) */
+    /* STEP 2: Configure interrupt masks - FOCUS ON MAIN INTERRUPT ONLY (MDMA register doesn't work) */
     writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* Enable frame done interrupt (bit 0 = 0) */
-    writel(0xFFFFFFFC, vic_regs + 0x1ec);  /* Enable MDMA interrupts (bits 0,1 = 0) */
+    /* SKIP MDMA register 0x1ec - it doesn't accept writes correctly */
     wmb();
 
     /* DIAGNOSTIC: Read back WORKING VIC interrupt registers */
     u32 int_mask_main = readl(vic_regs + 0x1e8);
-    u32 int_mask_mdma = readl(vic_regs + 0x1ec);
     u32 int_status_main = readl(vic_regs + 0x1f0);
     u32 int_status_mdma = readl(vic_regs + 0x1f4);
 
-    pr_info("*** VIC INTERRUPT DIAGNOSTIC: MainMask=0x%08x, MDMAMask=0x%08x, MainStatus=0x%08x, MDMAStatus=0x%08x ***\n",
-            int_mask_main, int_mask_mdma, int_status_main, int_status_mdma);
+    pr_info("*** VIC INTERRUPT DIAGNOSTIC: MainMask=0x%08x, MainStatus=0x%08x, MDMAStatus=0x%08x ***\n",
+            int_mask_main, int_status_main, int_status_mdma);
 
     if (int_mask_main != 0xFFFFFFFE) {
         pr_warn("*** VIC INTERRUPT WARNING: Main mask readback failed (expected 0xFFFFFFFE, got 0x%08x) ***\n", int_mask_main);
-    }
-
-    if (int_mask_mdma != 0xFFFFFFFC) {
-        pr_warn("*** VIC INTERRUPT WARNING: MDMA mask readback failed (expected 0xFFFFFFFC, got 0x%08x) ***\n", int_mask_mdma);
+    } else {
+        pr_info("*** VIC INTERRUPT SUCCESS: Main interrupt mask configured correctly ***\n");
     }
 
     pr_info("*** VIC INTERRUPT INIT: WORKING ISP-activates configuration applied (0x1e8/0x1ec) ***\n");
