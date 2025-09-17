@@ -33,6 +33,7 @@
 #include <linux/highmem.h>
 #include <linux/pagemap.h>
 #include <linux/version.h>
+#include <linux/math64.h>
 #include <asm/cacheflush.h>
 #include <asm/page.h>
 #include "../include/tx_isp.h"
@@ -829,7 +830,7 @@ int tiziano_ae_set_hardware_param(int ae_id, uint8_t *param_array, int update_on
 
     if (val_23 < 0xff) {
         special_param = val_25_24 | val_22;
-        special_param |= ((val_23 << 1) / 3) << 8;
+        special_param |= (div_u64((uint64_t)(val_23 << 1), 3)) << 8;
     } else {
         special_param = val_23 << 8 | val_22;
     }
@@ -1572,7 +1573,7 @@ static int tiziano_bcsh_update(struct isp_tuning_data *tuning)
             // Linear interpolation between points
             uint32_t range = ev_high - ev_low;
             uint32_t dist = ev_shifted - ev_low;
-            uint32_t weight = (dist << 8) / range;  // Fixed point 8.8
+            uint32_t weight = range ? (dist << 8) / range : 0;  // Fixed point 8.8
 
             // Interpolate SminListS
             uint32_t v1 = tuning->bcsh_au32SminListS_now[i];
