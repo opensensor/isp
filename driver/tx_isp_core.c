@@ -328,8 +328,6 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     extern struct tx_isp_dev *ourISPdev;
     extern uint32_t vic_start_ok;  /* Check VIC streaming state */
     struct tx_isp_dev *isp_dev = ourISPdev;
-    struct i2c_adapter *adapter;
-    struct i2c_client *client;
 
     pr_info("*** ISP FRAME SYNC WORK: STARTING - Work function is running! ***\n");
     pr_info("*** ISP FRAME SYNC WORK: work=%p, current=%s[%d] ***\n", work, current->comm, current->pid);
@@ -339,52 +337,29 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     pr_info("*** ISP FRAME SYNC WORK: Calling isp_frame_done_wakeup() to increment frame counter ***\n");
     isp_frame_done_wakeup();
 
-    /* CRITICAL FIX: Skip CSI PHY changes during VIC streaming to prevent interrupt disruption */
-    if (vic_start_ok == 1) {
-        pr_info("*** ISP FRAME SYNC WORK: VIC streaming active - SKIPPING CSI PHY changes to prevent interrupt disruption ***\n");
-        pr_info("*** ISP FRAME SYNC WORK: Frame sync work completed (VIC-safe mode) ***\n");
-        return;
-    }
+    /* CRITICAL: Reference driver calls sensor IOCTL during streaming - we must do the same! */
+    pr_info("*** ISP FRAME SYNC WORK: Triggering sensor I2C communication (REFERENCE DRIVER BEHAVIOR) ***\n");
 
-    pr_info("*** ISP FRAME SYNC WORK: Triggering sensor I2C communication ***\n");
-
-    /* CRITICAL FIX: Direct I2C communication to resume sensor activity */
-    /* The sensor IOCTL path may not be working, so try direct I2C */
-
+    /* Binary Ninja: Reference driver calls ispcore_sensor_ops_ioctl during frame sync */
     if (isp_dev && isp_dev->sensor && isp_dev->sensor->sd.ops &&
         isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
 
         pr_info("*** ISP FRAME SYNC WORK: Calling sensor IOCTL for I2C communication ***\n");
 
-        /* Try multiple sensor events to trigger I2C activity */
-        int ret1 = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
-                                                          TX_ISP_EVENT_SENSOR_FPS, NULL);
-        int ret2 = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
-                                                          TX_ISP_EVENT_SENSOR_PREPARE_CHANGE, NULL);
+        /* CRITICAL: Call sensor IOCTL like reference driver does */
+        /* Try sensor FPS event - this is what the reference driver likely does */
+        int ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
+                                                         TX_ISP_EVENT_SENSOR_FPS, NULL);
+        pr_info("*** ISP FRAME SYNC WORK: Sensor FPS IOCTL result: %d ***\n", ret);
 
-        pr_info("*** ISP FRAME SYNC WORK: Sensor IOCTL results: FPS=%d, PREPARE=%d ***\n", ret1, ret2);
-    }
-
-    /* CRITICAL FIX: Direct I2C communication attempt */
-    /* Try to access I2C bus 0 directly to resume communication */
-    adapter = i2c_get_adapter(0);  /* I2C bus 0 */
-    if (adapter) {
-        pr_info("*** ISP FRAME SYNC WORK: Direct I2C access attempt on bus 0 ***\n");
-
-        /* Try to read from common sensor I2C address (0x37 for GC2053) */
-        struct i2c_msg msg = {
-            .addr = 0x37,
-            .flags = I2C_M_RD,
-            .len = 1,
-            .buf = (u8[]){0}
-        };
-
-        int ret = i2c_transfer(adapter, &msg, 1);
-        pr_info("*** ISP FRAME SYNC WORK: Direct I2C transfer result: %d ***\n", ret);
-
-        i2c_put_adapter(adapter);
+        /* If FPS IOCTL failed, try other sensor events */
+        if (ret != 0) {
+            ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
+                                                         TX_ISP_EVENT_SENSOR_PREPARE_CHANGE, NULL);
+            pr_info("*** ISP FRAME SYNC WORK: Sensor PREPARE_CHANGE IOCTL result: %d ***\n", ret);
+        }
     } else {
-        pr_warn("*** ISP FRAME SYNC WORK: Could not get I2C adapter 0 ***\n");
+        pr_warn("*** ISP FRAME SYNC WORK: No sensor IOCTL available - sensor communication may fail ***\n");
     }
 
     pr_info("*** ISP FRAME SYNC WORK: Frame sync work completed ***\n");
