@@ -1614,6 +1614,10 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
         writel(pend_legacy, core + 0xb8);   /* Clear legacy pending */
         writel(pend_new, core + 0x98b8);    /* Clear new pending */
 
+        /* CRITICAL FIX: Clear error status register to prevent green frames */
+        writel(0x0, core + 0xc);            /* Clear error status register */
+        pr_info("*** ISP CORE: Error status register cleared during initialization ***\n");
+
         /* CRITICAL: Enable ISP pipeline first - this connects VIC to ISP core */
         /* Binary Ninja: system_reg_write(0x800, 1) - Enable ISP pipeline */
         writel(1, core + 0x800);
