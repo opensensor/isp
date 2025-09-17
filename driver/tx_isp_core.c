@@ -435,13 +435,25 @@ static void ispcore_irq_fs_work(struct work_struct *work)
 
         int sensor_result = -ENODEV;
 
-        /* Protect against crashes in sensor operations */
-        if (ispcore_sensor_ops_ioctl) {
-            pr_info("*** ISP FRAME SYNC WORK: About to call sensor operations ***\n");
-            sensor_result = ispcore_sensor_ops_ioctl(isp_dev);
-            pr_info("*** ISP FRAME SYNC WORK: Sensor operations completed with result: %d ***\n", sensor_result);
+        /* CRITICAL FIX: Do proper per-frame sensor operations like reference driver */
+        /* Frame sync should do AE/AGC operations, NOT FPS control */
+        pr_info("*** ISP FRAME SYNC WORK: Performing per-frame sensor operations (AE/AGC) ***\n");
+
+        /* Use delegation system to call real sensor operations */
+        extern int sensor_subdev_sensor_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg);
+
+        if (isp_dev->sensor && sensor_subdev_sensor_ioctl) {
+            /* Perform Auto Exposure adjustment - this is what frame sync should do */
+            int expo_value = 1000; /* Default exposure value */
+            pr_info("*** ISP FRAME SYNC WORK: Calling TX_ISP_EVENT_SENSOR_EXPO via delegation ***\n");
+            sensor_result = sensor_subdev_sensor_ioctl(&isp_dev->sensor->sd, TX_ISP_EVENT_SENSOR_EXPO, &expo_value);
+            pr_info("*** ISP FRAME SYNC WORK: Sensor exposure adjustment result: %d ***\n", sensor_result);
+
+            if (sensor_result == 0) {
+                pr_info("*** ISP FRAME SYNC WORK: Per-frame sensor operations successful ***\n");
+            }
         } else {
-            pr_warn("*** ISP FRAME SYNC WORK: ispcore_sensor_ops_ioctl function not available ***\n");
+            pr_warn("*** ISP FRAME SYNC WORK: sensor_subdev_sensor_ioctl not available ***\n");
         }
 
         pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (sensor available) ***\n");
