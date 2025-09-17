@@ -1126,8 +1126,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* CRITICAL FIX: Use CSI format instead of data_type for RAW10 */
     /* sensor_attr->data_type = TX_SENSOR_DATA_TYPE_LINEAR (not what we need) */
-    /* sensor_attr->mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10 (this is what we need) */
-    sensor_format = sensor_attr->mipi_sc.sensor_csi_fmt;  /* TX_SENSOR_RAW10 = 1 */
+    /* sensor_attr->mipi.sensor_csi_fmt = TX_SENSOR_RAW10 (this is what we need) */
+    sensor_format = sensor_attr->mipi.sensor_csi_fmt;  /* TX_SENSOR_RAW10 = 1 */
 
     /* Convert TX_SENSOR_RAW10 (1) to MIPI data type value RAW10 (0x2b) */
     if (sensor_format == TX_SENSOR_RAW10) {
