@@ -24,19 +24,7 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
-/* system_reg_write - EXACT Binary Ninja implementation */
-void system_reg_write(u32 reg, u32 value)
-{
-    extern struct tx_isp_dev *ourISPdev;
-    
-    /* Binary Ninja EXACT: *(*(mdns_y_pspa_cur_bi_wei0_array + 0xb8) + arg1) = arg2 */
-    if (ourISPdev && ourISPdev->core_regs) {
-        writel(value, ourISPdev->core_regs + reg);
-        wmb();
-    }
-    /* Binary Ninja EXACT: return 0 (implicit) */
-}
-EXPORT_SYMBOL(system_reg_write);
+/* system_reg_write is now defined in tx-isp-module.c - removed duplicate */
 
 /* Debug function to track vic_start_ok changes */
 static void debug_vic_start_ok_change(int new_value, const char *location, int line)
