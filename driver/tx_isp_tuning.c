@@ -3549,7 +3549,7 @@ static uint32_t data_afcd0 = 0x100;
 static uint32_t data_afcd4 = 0x100;
 static uint32_t data_afcd8 = 0x800;
 static uint32_t data_afce0 = 0x100;
-static uint32_t ta_custom_en = 0;
+/* ta_custom_en already declared earlier */
 
 /* AE parameter addresses - Safe structure-based access */
 static uint32_t *data_d04b8 = &data_b0cfc;
