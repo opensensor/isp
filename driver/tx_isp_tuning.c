@@ -1106,16 +1106,16 @@ int tisp_init(void *sensor_info, char *param_name)
     /* The 0x00000500 error indicates format/processing configuration issues */
 
     /* Configure input format for raw Bayer sensor data */
-    system_reg_write(0x10, (sensor_info->width << 16) | sensor_info->height);  /* Input frame size */
+    system_reg_write(0x10, (sensor_params.width << 16) | sensor_params.height);  /* Input frame size */
     system_reg_write(0x14, 0x3031);  /* Input format: Raw Bayer RGGB 10-bit */
     pr_info("*** tisp_init: Input format configured - %dx%d Raw Bayer RGGB 10-bit ***\n",
-            sensor_info->width, sensor_info->height);
+            sensor_params.width, sensor_params.height);
 
     /* Configure output format for processed video */
     system_reg_write(0x18, 0x8210);  /* Output format: YUV420 NV12 */
-    system_reg_write(0x20, (sensor_info->width << 16) | sensor_info->height);  /* Output frame size */
+    system_reg_write(0x20, (sensor_params.width << 16) | sensor_params.height);  /* Output frame size */
     pr_info("*** tisp_init: Output format configured - %dx%d YUV420 NV12 ***\n",
-            sensor_info->width, sensor_info->height);
+            sensor_params.width, sensor_params.height);
 
     /* Configure processing pipeline data flow */
     system_reg_write(0x24, 0x1);     /* Enable data flow from input to processing */
