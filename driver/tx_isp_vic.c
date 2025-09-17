@@ -1163,14 +1163,28 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x10, vic_regs + 0x1b0);
         
         /* Unlock sequence - Binary Ninja 00010484-00010490 */
+        pr_info("*** VIC UNLOCK SEQUENCE: Starting unlock sequence ***\n");
+        pr_info("*** VIC UNLOCK: Initial register 0x0 value = 0x%08x ***\n", readl(vic_regs + 0x0));
+
         writel(2, vic_regs + 0x0);
         wmb();
+        pr_info("*** VIC UNLOCK: After writing 2, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
+
         writel(4, vic_regs + 0x0);
         wmb();
+        pr_info("*** VIC UNLOCK: After writing 4, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
         
-        /* Wait for unlock - Binary Ninja 000104b8 */
+        /* Wait for unlock - Binary Ninja 000104b8 - FIXED: Added timeout protection */
+        timeout = 10000;  /* 10ms timeout */
         while (readl(vic_regs + 0x0) != 0) {
             udelay(1);
+            if (--timeout == 0) {
+                u32 reg_val = readl(vic_regs + 0x0);
+                pr_err("*** CRITICAL: VIC unlock timeout! Register 0x0 = 0x%08x (expected 0x0) ***\n", reg_val);
+                pr_err("*** This indicates VIC hardware is not responding properly ***\n");
+                pr_err("*** Continuing anyway to prevent infinite hang ***\n");
+                break;  /* Continue instead of returning error to prevent hang */
+            }
         }
         
         /* Enable VIC - Binary Ninja 000107d4 */
