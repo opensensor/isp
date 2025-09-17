@@ -2509,7 +2509,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                 /* Step 3: BINARY NINJA EXACT VIC control registers */
                 writel(2, vic_regs + 0xc);             /* BINARY NINJA: Mode = 2 for MIPI (not 3!) */
-                writel(0x0, vic_regs + 0x14);          /* Clear interrupt config */
+                /* CRITICAL: Do NOT clear register 0x14 - it contains interrupt config that must be preserved */
+                /* Binary Ninja: *(*(arg1 + 0xb8) + 0x14) = *(*(arg1 + 0x110) + 0x7c) */
                 wmb();
 
                 pr_info("*** BINARY NINJA CRITICAL FIX: Set VIC mode = 2 (MIPI) instead of 3 ***\n");
