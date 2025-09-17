@@ -2929,34 +2929,51 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         /* Reference driver QBUF logic: Set buffer to queued state and add to queue */
-        video_buffer->flags = 1; // Queued state (flags at offset 0x48)
-        video_buffer->data = (void *)(uintptr_t)buffer_phys_addr; // Store buffer address in data pointer
-        video_buffer->index = buffer.index;
-        video_buffer->type = buffer.type;
-        video_buffer->memory = buffer.memory;
+        if (video_buffer) {
+            video_buffer->flags = 1; // Queued state (flags at offset 0x48)
+            video_buffer->data = (void *)(uintptr_t)buffer_phys_addr; // Store buffer address in data pointer
+            video_buffer->index = buffer.index;
+            video_buffer->type = buffer.type;
+            video_buffer->memory = buffer.memory;
 
-        /* CRITICAL: Add buffer to queued_buffers list like reference driver */
-        spin_lock(&state->queue_lock);
+            /* CRITICAL: Add buffer to queued_buffers list like reference driver */
+            spin_lock(&state->queue_lock);
 
-        /* Initialize list entry if not already done */
-        if (video_buffer->list.next == NULL && video_buffer->list.prev == NULL) {
-            INIT_LIST_HEAD(&video_buffer->list);
+            /* Initialize list entry if not already done */
+            if (video_buffer->list.next == NULL && video_buffer->list.prev == NULL) {
+                INIT_LIST_HEAD(&video_buffer->list);
+            }
+
+            /* Add to queued buffers list */
+            list_add_tail(&video_buffer->list, &state->queued_buffers);
+            state->queued_count++;
+
+            spin_unlock(&state->queue_lock);
+
+            pr_info("*** Channel %d: QBUF buffer[%d] QUEUED, data_addr=0x%x, queued_count=%d ***\n",
+                    channel, buffer.index, (uint32_t)(uintptr_t)video_buffer->data, state->queued_count);
+        } else {
+            /* VBM compatibility: Store buffer info directly in VIC hardware */
+            pr_info("*** Channel %d: QBUF VBM mode - programming VIC directly with buffer_addr=0x%x ***\n",
+                    channel, buffer_phys_addr);
+
+            /* CRITICAL: Program VIC register 0x380 with the real buffer address */
+            extern struct tx_isp_dev *ourISPdev;
+            if (ourISPdev && ourISPdev->vic_dev) {
+                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                if (vic_dev->vic_regs) {
+                    writel(buffer_phys_addr, vic_dev->vic_regs + 0x380);
+                    wmb();
+                    pr_info("*** Channel %d: QBUF VBM - VIC[0x380] = 0x%x (real buffer address) ***\n",
+                            channel, buffer_phys_addr);
+                }
+            }
         }
-
-        /* Add to queued buffers list */
-        list_add_tail(&video_buffer->list, &state->queued_buffers);
-        state->queued_count++;
-
-        spin_unlock(&state->queue_lock);
-
-        pr_info("*** Channel %d: QBUF buffer[%d] QUEUED, data_addr=0x%x, queued_count=%d ***\n",
-                channel, buffer.index, (uint32_t)(uintptr_t)video_buffer->data, state->queued_count);
 
         /* CRITICAL: If streaming is active, notify VIC hardware about new buffer */
         if (state->streaming) {
             pr_info("*** Channel %d: QBUF notifying VIC about new queued buffer[%d] ***\n",
                     channel, buffer.index);
-            /* TODO: Call VIC hardware to process the queued buffer */
         }
 
         /* SAFE: Update buffer state management */
