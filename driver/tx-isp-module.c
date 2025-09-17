@@ -1211,58 +1211,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
 /* CRITICAL: VIC frame completion buffer management */
 int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint32_t buffer_addr);
 
-/* Frame channel state management */
-struct tx_isp_channel_state {
-    bool enabled;
-    bool streaming;
-    int format;
-    int width;
-    int height;
-    int buffer_count;
-    uint32_t sequence;           /* Frame sequence counter */
+/* Frame channel state management - struct definitions moved to tx-isp-device.h */
 
-    /* CRITICAL FIX: Store buffer structures like reference driver */
-    uint32_t *buffer_addresses;  /* Array of buffer structure pointers */
-
-    /* VBM buffer management for VBMFillPool compatibility */
-    uint32_t *vbm_buffer_addresses;       /* Array of VBM buffer addresses */
-    int vbm_buffer_count;                 /* Number of VBM buffers */
-
-    /* Reference driver buffer queue management */
-    struct list_head queued_buffers;       /* List of queued buffers (ready for VIC) */
-    struct list_head completed_buffers;    /* List of completed buffers (ready for DQBUF) */
-    spinlock_t queue_lock;                 /* Protect queue access */
-    wait_queue_head_t frame_wait;          /* Wait queue for frame completion */
-    int queued_count;                      /* Number of queued buffers */
-    int completed_count;                   /* Number of completed buffers */
-
-    /* Legacy fields for compatibility */
-    struct frame_buffer current_buffer;     /* Current active buffer */
-    spinlock_t buffer_lock;                /* Protect buffer access */
-    bool frame_ready;                      /* Simple frame ready flag */
-};
-
-// Frame channel devices - create video channel devices like reference
-struct frame_channel_device {
-    struct miscdevice miscdev;
-    int channel_num;
-    struct tx_isp_channel_state state;
-
-    /* Binary Ninja buffer management fields */
-    struct mutex buffer_mutex;           /* Offset 0x28 - private_mutex_lock($s0 + 0x28) */
-    spinlock_t buffer_queue_lock;        /* Offset 0x2c4 - __private_spin_lock_irqsave($s0 + 0x2c4) */
-    void *buffer_queue_head;             /* Offset 0x214 - *($s0 + 0x214) */
-    void *buffer_queue_base;             /* Offset 0x210 - $s0 + 0x210 */
-    int buffer_queue_count;              /* Offset 0x218 - *($s0 + 0x218) */
-    int streaming_flags;                 /* Offset 0x230 - *($s0 + 0x230) & 1 */
-    void *vic_subdev;                    /* Offset 0x2bc - *($s0 + 0x2bc) */
-    int buffer_type;                     /* Offset 0x24 - *($s0 + 0x24) */
-    int field;                           /* Offset 0x3c - *($s0 + 0x3c) */
-    void *buffer_array[64];              /* Buffer array for index lookup */
-};
-
-static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
-static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
+/* Frame channel device instances - make non-static so they can be accessed from other files */
+struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
+int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 
 /* VIC continuous frame generation work queue */
 static struct delayed_work vic_frame_work;
