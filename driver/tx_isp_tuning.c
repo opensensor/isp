@@ -1788,45 +1788,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             return -EINVAL;
     }
 
-    pr_info("Get control: cmd=0x%x value=%d, tuning=%p (SAFELY validated)\n", ctrl->cmd, ctrl->value, tuning);
-
-    // Special case routing for 0x8000024-0x8000027
-    if (ctrl->cmd >= 0x8000024) {
-        switch(ctrl->cmd) {
-            pr_info("Special case routing for 0x8000024-0x8000027\n");
-            pr_info("cmd=0x%x\n", ctrl->cmd);
-            case 0x8000023:  // AE Compensation
-                ctrl->value = tuning->ae_comp;
-            break;
-            case 0x8000024:  // AE ROI
-                ret = apical_isp_ae_g_roi(dev, ctrl);
-            break;
-
-            case 0x8000025:  // Expression
-                ret = apical_isp_expr_g_ctrl(dev, ctrl);
-            break;
-
-            case 0x8000026:  // EV
-                ret = apical_isp_ev_g_attr(dev, ctrl);
-            break;
-
-        case 0x8000027: { // Total Gain
-                // TODO - NOT IMPLEMENTED
-                // Special case that uses tisp_g_ev_attr
-                break;
-        }
-            break;
-
-            case 0x8000028:  // Maximum Analog Gain
-                ctrl->value = tuning->max_again;
-                break;
-
-            case 0x8000029:  // Maximum Digital Gain
-                ctrl->value = tuning->max_dgain;
-                break;
-            case 0x800002c:  // Move state
-                ctrl->value = tuning->move_state;
-                break;
+    return 0;
             case 0x8000039:  // Defog Strength
                 ctrl->value = tuning->defog_strength;
                 break;
@@ -3420,6 +3382,52 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
     return -EINVAL;
 }
 EXPORT_SYMBOL(tisp_code_tuning_ioctl);
+
+/* tisp_code_tuning_open - EXACT Binary Ninja reference implementation */
+int tisp_code_tuning_open(struct inode *inode, struct file *file)
+{
+    /* Binary Ninja: uint32_t $v0 = private_kmalloc(0x500c, 0xd0)
+     * tisp_par_ioctl = $v0
+     * memset($v0, 0, 0x500c)
+     * return 0 */
+
+    pr_info("tisp_code_tuning_open: Opening tuning interface\n");
+
+    /* Allocate parameter buffer - exact size from Binary Ninja */
+    tisp_par_ioctl = kmalloc(0x500c, GFP_KERNEL);
+    if (!tisp_par_ioctl) {
+        pr_err("tisp_code_tuning_open: Failed to allocate parameter buffer\n");
+        return -ENOMEM;
+    }
+
+    /* Clear the buffer */
+    memset(tisp_par_ioctl, 0, 0x500c);
+
+    pr_info("tisp_code_tuning_open: Parameter buffer allocated at %p (size=0x%x)\n",
+            tisp_par_ioctl, 0x500c);
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_code_tuning_open);
+
+/* tisp_code_tuning_release - EXACT Binary Ninja reference implementation */
+int tisp_code_tuning_release(struct inode *inode, struct file *file)
+{
+    /* Binary Ninja: private_kfree(tisp_par_ioctl)
+     * tisp_par_ioctl = 0
+     * return 0 */
+
+    pr_info("tisp_code_tuning_release: Releasing tuning interface\n");
+
+    if (tisp_par_ioctl) {
+        kfree(tisp_par_ioctl);
+        tisp_par_ioctl = NULL;
+        pr_info("tisp_code_tuning_release: Parameter buffer freed\n");
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_code_tuning_release);
 
 /* Tuning parameter function stubs - Binary Ninja reference implementations needed */
 
