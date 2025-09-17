@@ -1130,6 +1130,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* Binary Ninja: 0001024c int32_t $v0 = *($v1 + 0x14) - interface type at offset 0x14 */
     interface_type = sensor_attr->dbus_type;
 
+    pr_info("*** VIC INTERFACE DETECTION: interface_type=%d (MIPI=1, DVP=2) ***\n", interface_type);
+    pr_info("*** SENSOR ATTRIBUTE: dbus_type=%d ***\n", sensor_attr->dbus_type);
+
     /* CRITICAL FIX: Use CSI format instead of data_type for RAW10 */
     /* sensor_attr->data_type = TX_SENSOR_DATA_TYPE_LINEAR (not what we need) */
     /* sensor_attr->mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10 (this is what we need) */
