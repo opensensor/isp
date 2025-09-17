@@ -51,6 +51,14 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
 
 /* Global flag to prevent multiple tisp_init calls */
 static bool tisp_initialized = false;
+
+/* Function to reset tisp initialization flag (for cleanup) */
+void tisp_reset_initialization_flag(void)
+{
+    tisp_initialized = false;
+    pr_info("tisp_reset_initialization_flag: ISP initialization flag reset\n");
+}
+EXPORT_SYMBOL(tisp_reset_initialization_flag);
 int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
 static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
 static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sensor_attr);
@@ -3215,6 +3223,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
 int tx_isp_core_remove(struct platform_device *pdev)
 {
     void *core_dev = platform_get_drvdata(pdev);
+
+    /* Reset tisp initialization flag for clean restart */
+    tisp_reset_initialization_flag();
 
     /* Cleanup frame sync workqueue */
     if (fs_workqueue) {
