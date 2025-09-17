@@ -331,15 +331,24 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 shifted_value = buffer_index << 0x10;
             }
 
-            /* CRITICAL FIX: Preserve control bits 0x80000020 when updating buffer index */
+            /* CRITICAL FIX: Preserve EXACT control bits 0x80000020 when updating buffer index */
             /* The reference driver preserves control bits, we were clearing them! */
             if (vic_regs) {
                 u32 reg_val = readl(vic_regs + 0x300);
-                /* PRESERVE control bits (0x80000020) and only update buffer index in upper 16 bits */
-                reg_val = shifted_value | (reg_val & 0x8000ffff);  /* Keep bit 31 and lower 16 bits */
+                /* PRESERVE EXACT control bits (0x80000020) and only update buffer index in bits 16-19 */
+                /* Clear only the buffer index bits (16-19) and preserve everything else */
+                reg_val = (reg_val & 0xfff0ffff) | shifted_value;  /* Clear bits 16-19, set new buffer index */
+
+                /* FORCE control bits if they were lost */
+                if ((reg_val & 0x80000020) != 0x80000020) {
+                    reg_val |= 0x80000020;  /* Force control bits back on */
+                    pr_warn("*** VIC FRAME DONE: FORCED control bits 0x80000020 back on! ***\n");
+                }
+
                 writel(reg_val, vic_regs + 0x300);
 
-                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (PRESERVED CONTROL BITS) ***\n", reg_val);
+                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (CONTROL BITS: %s) ***\n",
+                        reg_val, (reg_val & 0x80000020) == 0x80000020 ? "PRESERVED" : "LOST");
                 pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
                          reg_val, buffer_index, high_bits, match_found);
             }
