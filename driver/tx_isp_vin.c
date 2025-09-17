@@ -33,6 +33,7 @@
         pr_err("VIN: " msg " = 0x%x\n", val); \
     } while(0)
 
+bool is_valid_kernel_pointer(const void *ptr);
 
 /* ========================================================================
  * VIN Device Creation Function - Matches VIC Pattern
