@@ -2853,49 +2853,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 
                 if (vic_dev->vic_regs) {
                     pr_info("*** Channel %d: VIC unlock sequence now handled by vic_core_s_stream only ***\n", channel);
-                    
-                    if (ctrl_verify == 3) {
-                        pr_info("*** Channel %d: SUCCESS! VIC REGISTERS RESPONDING! ***\n", channel);
-                        
-                        // Continue with full configuration since registers are working
-                        // Frame dimensions register 0x4: (width << 16) | height
-                        // CRITICAL FIX: Use ACTUAL sensor output dimensions (1920x1080), not total dimensions
-                        u32 actual_width = 1920;   /* ACTUAL sensor output width */
-                        u32 actual_height = 1080;  /* ACTUAL sensor output height */
-                        pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d for VIC register 0x4 ***\n",
-                                actual_width, actual_height);
-                        pr_info("*** CRITICAL: VIC configured for sensor OUTPUT, not sensor TOTAL dimensions ***\n");
-                        iowrite32((actual_width << 16) | actual_height,
-                                 vic_dev->vic_regs + 0x4);
-                        
-                        // CRITICAL FIX: REMOVED conflicting CSI PHY write - would corrupt CSI Lane Configuration!
-                        pr_info("*** CRITICAL: SKIPPING 0x40000 write to offset 0x10 - would overwrite CSI PHY! ***\n");
-                        
-                        // CRITICAL FIX: Register 0x18 is a TIMING parameter (0xf00), NOT a width register!
-                        // DO NOT overwrite register 0x18 with sensor width - this causes control limit errors
-                        // iowrite32(actual_width, vic_dev->vic_regs + 0x18);  // REMOVED - corrupts timing
-                        pr_info("*** CRITICAL: Skipping register 0x18 write - preserving timing parameter 0xf00 ***\n");
-                        
-                        // DMA buffer configuration registers (from reference)
-                        iowrite32(0x100010, vic_dev->vic_regs + 0x1a4);  // DMA config
-                        iowrite32(0x4210, vic_dev->vic_regs + 0x1ac);    // Buffer mode
-                        iowrite32(0x10, vic_dev->vic_regs + 0x1b0);      // Buffer control
-                        iowrite32(0, vic_dev->vic_regs + 0x1b4);         // Clear buffer state
-                        
-                        // CRITICAL: Enable MIPI streaming register 0x300 (from reference)
-                        iowrite32((vic_dev->frame_count << 16) | 0x80000020,
-                                 vic_dev->vic_regs + 0x300);
-                        
-                        pr_info("*** Channel %d: VIC FULL CONFIGURATION COMPLETE ***\n", channel);
-                        pr_info("Channel %d: VIC regs: ctrl=0x%x, dim=0x%x, mipi=0x%x, stream=0x%x\n",
-                                channel,
-                                ioread32(vic_dev->vic_regs + 0xc),
-                                ioread32(vic_dev->vic_regs + 0x4),
-                                ioread32(vic_dev->vic_regs + 0x10),
-                                ioread32(vic_dev->vic_regs + 0x300));
-                    } else {
-                        pr_err("*** Channel %d: VIC REGISTERS STILL UNRESPONSIVE (got 0x%x) ***\n", channel, ctrl_verify);
-                    }
                 }
                 
                 vic_dev->streaming = 1;
