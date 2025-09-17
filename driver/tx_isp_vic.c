@@ -2728,9 +2728,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_warn("*** WARNING: No real sensor attributes available, using VIC defaults ***\n");
                 }
 
-                /* STEP 9: Now call VIC start with proper initialization complete */
-                pr_info("*** STEP 9: NOW calling tx_isp_vic_start with proper sub-device initialization ***\n");
-                ret = tx_isp_vic_start(vic_dev);
+                /* STEP 9: Only call VIC start if VIC is not already configured and working */
+                if (current_state != 4) {
+                    pr_info("*** STEP 9: NOW calling tx_isp_vic_start with proper sub-device initialization ***\n");
+                    ret = tx_isp_vic_start(vic_dev);
+                } else {
+                    pr_info("*** STEP 9: VIC already configured (state=4) - SKIPPING reconfiguration to prevent control limit errors ***\n");
+                    ret = 0;  /* Success - VIC is already working */
+                }
                 ispvic_frame_channel_s_stream(vic_dev, 1);
                 
                 if (current_state != 4) {
