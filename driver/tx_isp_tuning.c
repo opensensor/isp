@@ -1160,6 +1160,41 @@ int tisp_init(void *sensor_info, char *param_name)
         pr_info("*** tisp_init: WDR COMPONENTS INITIALIZED ***\n");
     }
 
+    /* Binary Ninja: CRITICAL - Memory buffer allocations for ISP processing */
+    pr_info("*** tisp_init: ALLOCATING ISP PROCESSING BUFFERS ***\n");
+
+    /* Binary Ninja: AE0 buffer allocation (0x6000 bytes) */
+    void *ae0_buffer = kmalloc(0x6000, GFP_KERNEL);
+    if (ae0_buffer != NULL) {
+        dma_addr_t ae0_phys = virt_to_phys(ae0_buffer);
+        system_reg_write(0xa02c, ae0_phys);
+        system_reg_write(0xa030, ae0_phys + 0x1000);
+        system_reg_write(0xa034, ae0_phys + 0x2000);
+        system_reg_write(0xa038, ae0_phys + 0x3000);
+        system_reg_write(0xa03c, ae0_phys + 0x4000);
+        system_reg_write(0xa040, ae0_phys + 0x4800);
+        system_reg_write(0xa044, ae0_phys + 0x5000);
+        system_reg_write(0xa048, ae0_phys + 0x5800);
+        system_reg_write(0xa04c, 0x33);
+        pr_info("*** tisp_init: AE0 buffer allocated at 0x%08x ***\n", (uint32_t)ae0_phys);
+    }
+
+    /* Binary Ninja: AE1 buffer allocation (0x6000 bytes) */
+    void *ae1_buffer = kmalloc(0x6000, GFP_KERNEL);
+    if (ae1_buffer != NULL) {
+        dma_addr_t ae1_phys = virt_to_phys(ae1_buffer);
+        system_reg_write(0xa82c, ae1_phys);
+        system_reg_write(0xa830, ae1_phys + 0x1000);
+        system_reg_write(0xa834, ae1_phys + 0x2000);
+        system_reg_write(0xa838, ae1_phys + 0x3000);
+        system_reg_write(0xa83c, ae1_phys + 0x4000);
+        system_reg_write(0xa840, ae1_phys + 0x4800);
+        system_reg_write(0xa844, ae1_phys + 0x5000);
+        system_reg_write(0xa848, ae1_phys + 0x5800);
+        system_reg_write(0xa84c, 0x33);
+        pr_info("*** tisp_init: AE1 buffer allocated at 0x%08x ***\n", (uint32_t)ae1_phys);
+    }
+
     /* Binary Ninja: Final ISP configuration registers */
     uint32_t isp_mode = (sensor_params.mode >= 4) ? 0x12 : 0x1e;
     system_reg_write(0x804, isp_mode);
