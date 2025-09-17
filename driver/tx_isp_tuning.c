@@ -2360,25 +2360,16 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     static u32 tuning_call_count = 0;
                     tuning_call_count++;
 
-                    /* CRITICAL: Only perform register maintenance when VIC is in stable state */
+                    /* CRITICAL: COMPLETELY DISABLE register writes during VIC streaming */
                     if (vic_start_ok == 1) {
-                        /* VIC is streaming - use MINIMAL register operations to avoid control limit errors */
-                        pr_debug("*** VIC-SAFE TUNING: VIC streaming active - minimal register operations ***\n");
-                        
-                        /* Only perform essential ISP core register maintenance */
-                        if (ourISPdev->core_regs && (tuning_call_count % 10 == 0)) {
-                            /* Minimal ISP core register refresh - avoid VIC-related registers */
-                            u32 core_status = readl(ourISPdev->core_regs + 0x40);
-                            if (core_status == 0) {
-                                /* Only refresh if ISP core is idle */
-                                writel(0x133, ourISPdev->core_regs + 0x10);
-                                wmb();
-                            }
-                        }
+                        /* VIC is streaming - NO register operations to prevent control limit errors */
+                        pr_debug("*** VIC-SAFE TUNING: VIC streaming active - ALL register operations DISABLED ***\n");
+                        pr_debug("*** TUNING: Skipping ALL register writes to prevent VIC interrupt disruption ***\n");
+                        /* COMPLETELY skip all register operations during VIC streaming */
                     } else {
                         /* VIC not streaming - safe to perform full register maintenance */
                         pr_debug("*** VIC-SAFE TUNING: VIC not streaming - full register maintenance allowed ***\n");
-                        
+
                         /* Perform the reference driver register patterns only when safe */
                         void __iomem *isp_m0_base = ourISPdev->core_regs;
                         if (isp_m0_base && (tuning_call_count % 5 == 0)) {
