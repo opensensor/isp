@@ -2503,7 +2503,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             if (enable == 0) {
                 /* Stream OFF */
                 ret = 0;
-                vic_start_adjustment();
                 ispvic_frame_channel_s_stream(vic_dev, 0);
                 if (current_state == 4) {
                     vic_dev->state = 3;
