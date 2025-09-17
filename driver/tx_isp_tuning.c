@@ -1748,7 +1748,7 @@ static void update_af_zone_data(struct af_zone_info *info)
            sizeof(uint32_t) * MAX_AF_ZONES);
 }
 
-static int tisp_af_get_zone(void)
+int tisp_af_get_zone(void)
 {
     int i;
     u32 reg_val;
@@ -4195,15 +4195,6 @@ int tisp_ae_get_y_zone(void *buffer)
         memset(buffer, 0, 0x100);  /* Estimated size */
     }
 
-    return 0;
-}
-
-/* tisp_af_get_zone - Binary Ninja reference implementation needed */
-int tisp_af_get_zone(void)
-{
-    pr_debug("tisp_af_get_zone: entry\n");
-
-    /* For now, return success - actual implementation would read AF zone data */
     return 0;
 }
 
