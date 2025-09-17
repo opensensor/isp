@@ -7465,134 +7465,116 @@ static void system_irq_func_set(int irq_id, void (*handler)(void))
     }
 }
 
-/* Sensor interface functions - Binary Ninja EXACT implementations */
+/* Sensor interface functions - Safe structure-based implementations */
 static int data_b2eec(uint32_t time, void **var_ptr)
 {
-    /* Binary Ninja: sensor_alloc_integration_time wrapper */
+    /* Safe sensor integration time allocation */
     pr_debug("data_b2eec: Allocating integration time %u\n", time);
 
-    extern uint32_t g_ispcore;
-    int32_t var_10 = 0;
-    int32_t result;
-
-    /* Binary Ninja: int32_t $v1_2 = *(*(g_ispcore + 0x120) + 0xd0) */
-    void *ispcore_ptr = (void *)g_ispcore;
-    void *sensor_ops = *(void **)(ispcore_ptr + 0x120);
-    void *alloc_func = *(void **)(sensor_ops + 0xd0);
-
-    if (alloc_func != NULL) {
-        /* Binary Ninja: result = $v1_2(arg1, 0, &var_10) */
-        result = ((int(*)(uint32_t, int, int*))alloc_func)(time, 0, &var_10);
-        /* Binary Ninja: *(arg2 + 0x10) = var_10.w */
-        if (var_ptr) *var_ptr = (void *)(uintptr_t)var_10;
-    } else {
-        /* Binary Ninja: result = arg1 */
-        result = time;
-        if (var_ptr) *var_ptr = (void *)(uintptr_t)time;
+    extern struct tx_isp_dev *ourISPdev;
+    if (!ourISPdev || !ourISPdev->sensor) {
+        pr_err("data_b2eec: No ISP device or sensor available\n");
+        if (var_ptr) *var_ptr = NULL;
+        return time; /* Return input time as fallback */
     }
 
-    return result;
+    /* Use sensor's integration time allocation if available */
+    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->alloc_integration_time) {
+        int result = ourISPdev->sensor->ops->alloc_integration_time(time, var_ptr);
+        return result;
+    }
+
+    /* Fallback: return input time */
+    if (var_ptr) *var_ptr = NULL;
+    return time;
 }
 
 static int data_b2ef0(uint32_t time, void **var_ptr)
 {
-    /* Binary Ninja: sensor_alloc_integration_time_short wrapper */
+    /* Safe sensor short integration time allocation */
     pr_debug("data_b2ef0: Allocating short integration time %u\n", time);
 
-    extern uint32_t g_ispcore;
-    int32_t var_10 = 0;
-    int32_t result;
-
-    /* Similar to data_b2eec but for short exposure */
-    void *ispcore_ptr = (void *)g_ispcore;
-    void *sensor_ops = *(void **)(ispcore_ptr + 0x120);
-    void *alloc_func = *(void **)(sensor_ops + 0xd4); /* Different offset for short */
-
-    if (alloc_func != NULL) {
-        result = ((int(*)(uint32_t, int, int*))alloc_func)(time, 0, &var_10);
-        if (var_ptr) *var_ptr = (void *)(uintptr_t)var_10;
-    } else {
-        result = time;
-        if (var_ptr) *var_ptr = (void *)(uintptr_t)time;
+    extern struct tx_isp_dev *ourISPdev;
+    if (!ourISPdev || !ourISPdev->sensor) {
+        pr_err("data_b2ef0: No ISP device or sensor available\n");
+        if (var_ptr) *var_ptr = NULL;
+        return time;
     }
 
-    return result;
+    /* Use sensor's short integration time allocation if available */
+    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->alloc_integration_time_short) {
+        int result = ourISPdev->sensor->ops->alloc_integration_time_short(time, var_ptr);
+        return result;
+    }
+
+    /* Fallback: return input time */
+    if (var_ptr) *var_ptr = NULL;
+    return time;
 }
 
 static int data_b2ef4(uint32_t param, int flag)
 {
-    /* Binary Ninja: sensor_set_integration_time wrapper */
+    /* Safe sensor integration time setting */
     pr_debug("data_b2ef4: Setting sensor integration time %u, flag %d\n", param, flag);
 
-    extern uint32_t g_ispcore;
-    void *ispcore_ptr = (void *)g_ispcore;
-    void *sensor_ops = *(void **)(ispcore_ptr + 0x120);
-
-    /* Binary Ninja: sensor_set_integration_time logic */
-    uint32_t current_time = *(uint32_t *)(sensor_ops + 0xac);
-    if (param != current_time) {
-        /* Binary Ninja: Update sensor parameters */
-        uint32_t *ec_reg = (uint32_t *)(sensor_ops + 0xec);
-        *ec_reg = (*ec_reg & 0xffff0000) + param;
-        *(uint32_t *)(sensor_ops + 0xac) = param;
-
-        /* Binary Ninja: Set update flags */
-        *(uint32_t *)(ispcore_ptr + 0x198) = 1;
-        *(uint32_t *)(ispcore_ptr + 0x19c) = param;
-        *(uint32_t *)(ispcore_ptr + 0x1b0) = 1;
-        *(uint32_t *)(ispcore_ptr + 0x1b4) = *ec_reg;
+    extern struct tx_isp_dev *ourISPdev;
+    if (!ourISPdev || !ourISPdev->sensor) {
+        pr_err("data_b2ef4: No ISP device or sensor available\n");
+        return -ENODEV;
     }
 
+    /* Use sensor's integration time setting if available */
+    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->set_integration_time) {
+        return ourISPdev->sensor->ops->set_integration_time(param);
+    }
+
+    /* Fallback: just log the operation */
+    pr_debug("data_b2ef4: No sensor set_integration_time operation available\n");
     return 0;
 }
 
 static int data_b2ef8(uint32_t param, int flag)
 {
-    /* Binary Ninja: sensor_set_integration_time_short wrapper */
+    /* Safe sensor short integration time setting */
     pr_debug("data_b2ef8: Setting sensor short integration time %u, flag %d\n", param, flag);
 
-    extern uint32_t g_ispcore;
-    void *ispcore_ptr = (void *)g_ispcore;
-    void *sensor_ops = *(void **)(ispcore_ptr + 0x120);
-
-    /* Similar logic to data_b2ef4 but for short exposure */
-    uint32_t current_time = *(uint32_t *)(sensor_ops + 0xb0); /* Different offset for short */
-    if (param != current_time) {
-        uint32_t *ec_reg = (uint32_t *)(sensor_ops + 0xf0); /* Different register for short */
-        *ec_reg = (*ec_reg & 0xffff0000) + param;
-        *(uint32_t *)(sensor_ops + 0xb0) = param;
-
-        /* Set update flags for short exposure */
-        *(uint32_t *)(ispcore_ptr + 0x1a0) = 1;
-        *(uint32_t *)(ispcore_ptr + 0x1a4) = param;
-        *(uint32_t *)(ispcore_ptr + 0x1b8) = 1;
-        *(uint32_t *)(ispcore_ptr + 0x1bc) = *ec_reg;
+    extern struct tx_isp_dev *ourISPdev;
+    if (!ourISPdev || !ourISPdev->sensor) {
+        pr_err("data_b2ef8: No ISP device or sensor available\n");
+        return -ENODEV;
     }
 
+    /* Use sensor's short integration time setting if available */
+    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->set_integration_time_short) {
+        return ourISPdev->sensor->ops->set_integration_time_short(param);
+    }
+
+    /* Fallback: just log the operation */
+    pr_debug("data_b2ef8: No sensor set_integration_time_short operation available\n");
     return 0;
 }
 
 static uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr)
 {
-    /* Binary Ninja: sensor_alloc_analog_gain wrapper */
+    /* Safe sensor analog gain allocation */
     pr_debug("data_b2ee0: Allocating analog gain log_val %u\n", log_val);
 
-    extern uint32_t g_ispcore;
-    int32_t var_10 = 0;
-    int32_t result;
+    extern struct tx_isp_dev *ourISPdev;
+    if (!ourISPdev || !ourISPdev->sensor) {
+        pr_err("data_b2ee0: No ISP device or sensor available\n");
+        if (var_ptr) *var_ptr = 0;
+        return log_val;
+    }
 
-    /* Binary Ninja: int32_t $v0_2 = *(*(g_ispcore + 0x120) + 0xc0) */
-    void *ispcore_ptr = (void *)g_ispcore;
-    void *sensor_ops = *(void **)(ispcore_ptr + 0x120);
-    void *alloc_func = *(void **)(sensor_ops + 0xc0);
+    /* Use sensor's analog gain allocation if available */
+    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->alloc_analog_gain) {
+        uint32_t result = ourISPdev->sensor->ops->alloc_analog_gain(log_val, var_ptr);
+        return result;
+    }
 
-    /* Binary Ninja: result = $v0_2(arg1, 0x10, &var_10) */
-    result = ((int(*)(uint32_t, int, int*))alloc_func)(log_val, 0x10, &var_10);
-
-    /* Binary Ninja: *arg2 = var_10.w */
-    if (var_ptr) *var_ptr = (int16_t)var_10;
-
-    return result;
+    /* Fallback: return input value */
+    if (var_ptr) *var_ptr = 0;
+    return log_val;
 }
 
 static uint32_t data_b2ee4(uint32_t log_val, void **var_ptr)
