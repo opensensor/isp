@@ -3605,6 +3605,18 @@ void private_spin_lock_init(spinlock_t *lock);
 static uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
 static uint32_t tisp_math_exp2(uint32_t value, uint32_t precision, uint32_t shift);
 
+/* Sensor interface functions - Forward declarations */
+static int data_b2eec(uint32_t time, void **var_ptr);
+static int data_b2ef0(uint32_t time, void **var_ptr);
+static int data_b2ef4(uint32_t param, int flag);
+static int data_b2ef8(uint32_t param, int flag);
+static uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr);
+static uint32_t data_b2ee4(uint32_t log_val, void **var_ptr);
+static int data_b2f04(uint32_t param, int flag);
+static int data_b2f08(uint32_t param, int flag);
+static uint32_t tisp_log2_fixed_to_fixed(void);
+static int system_reg_write(uint32_t reg, uint32_t value);
+
 /* Remove duplicate declarations - using the struct versions defined earlier */
 
 /* Remove duplicate pointer declarations - using the ones defined earlier */
