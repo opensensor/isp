@@ -818,12 +818,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                             wmb();
                         }
 
-                        /* Clean up memory mappings */
-                        iounmap(isp_w02_base);
-                        iounmap(isp_w01_base);
-                        iounmap(isp_m0_base);
-                        iounmap(isp_csi_base);
-
                         pr_info("*** COMPLETE CSI PHY INITIALIZATION: All 6 phases completed successfully ***\n");
                         pr_info("*** CSI PHY should now respond properly to register reads/writes ***\n");
 
@@ -852,6 +846,12 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         pr_err("CSI: Unsupported interface type %d\n", interface_type);
                         v0_17 = 3;
                     }
+
+                    /* Clean up memory mappings */
+                    if (isp_w02_base) iounmap(isp_w02_base);
+                    if (isp_w01_base) iounmap(isp_w01_base);
+                    if (isp_m0_base) iounmap(isp_m0_base);
+                    if (isp_csi_base) iounmap(isp_csi_base);
                 }
 
                 /* Binary Ninja: *($s0_1 + 0x128) = $v0_17 */
