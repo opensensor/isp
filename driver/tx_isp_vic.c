@@ -1392,34 +1392,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         writel(4, vic_regs + 0x0);
         wmb();
-
-        /* Binary Ninja: 00010acc - Wait for unlock - DUAL VIC SPACE COORDINATION */
-        pr_info("*** VIC UNLOCK: Coordinating between primary and secondary VIC spaces ***\n");
-
-        /* CRITICAL: Check both VIC spaces for coordination */
-        void __iomem *secondary_regs = vic_dev->vic_regs_secondary;
-        u32 secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
-        u32 primary_val = readl(vic_regs + 0x0);
-
-        pr_info("*** VIC UNLOCK: Primary=0x%08x, Secondary=0x%08x ***\n", primary_val, secondary_val);
-
-        /* Handle CSI PHY coordination in secondary space */
-        if (secondary_val == 0x3130322a) {
-            pr_info("*** VIC UNLOCK: CSI PHY coordination complete in secondary space ***\n");
-        }
-
-        /* Wait for primary VIC space unlock with timeout */
-        timeout = 10000;  /* Add timeout to prevent infinite hang */
+        
+        /* Binary Ninja: 00010acc - Wait for unlock */
         while (readl(vic_regs + 0x0) != 0) {
-            cpu_relax();  /* Binary Ninja: just "nop" */
+            udelay(1);
             if (--timeout == 0) {
-                primary_val = readl(vic_regs + 0x0);
-                secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
-                pr_info("*** VIC UNLOCK: Timeout - Primary=0x%08x, Secondary=0x%08x ***\n", primary_val, secondary_val);
-                break;  /* Prevent infinite hang */
+                pr_err("VIC unlock timeout\n");
+                return -ETIMEDOUT;
             }
         }
-        pr_info("*** VIC UNLOCK: Register 0x0 became 0 - unlock successful! ***\n");
         
         /* Binary Ninja: 00010ad4 - Enable VIC */
         writel(1, vic_regs + 0x0);
@@ -1513,9 +1494,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("tx_isp_vic_start: Linear mode enabled\n");
     }
 
-    /* CRITICAL FIX: DO NOT set vic_start_ok here - too early! */
-    /* vic_start_ok will be set later after complete pipeline configuration */
-    pr_info("*** VIC start completed - vic_start_ok will be set after pipeline config ***\n");
+    /* Binary Ninja: 00010b84 - Set vic_start_ok */
+    vic_start_ok = 1;
+    pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
 
     /* CRITICAL: Enable ISP core interrupt generation - EXACT Binary Ninja reference */
     if (ourISPdev && ourISPdev->core_regs) {
@@ -1564,47 +1545,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
     }
 
-    /* CRITICAL: Final VIC interrupt initialization - REVERT TO WORKING VERSION */
-    pr_info("*** FINAL VIC INTERRUPT INIT: Reverting to previously working interrupt configuration ***\n");
-
-    /* Clear any pending interrupts first */
-    writel(0xffffffff, vic_regs + 0x1f0);  /* Clear pending interrupts */
-    writel(0xffffffff, vic_regs + 0x1f4);  /* Clear pending interrupts */
-    wmb();
-
-    /* CRITICAL FIX: Revert to WORKING ISP-activates interrupt configuration */
-    pr_info("*** VIC INTERRUPT INIT: Using WORKING ISP-activates configuration (0x1e8/0x1ec) ***\n");
-
-    /* STEP 1: Clear all pending interrupts first (from working version) */
-    writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
-    wmb();
-
-    /* STEP 2: Configure interrupt masks - FOCUS ON MAIN INTERRUPT ONLY (MDMA register doesn't work) */
-    writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* Enable frame done interrupt (bit 0 = 0) */
-    /* SKIP MDMA register 0x1ec - it doesn't accept writes correctly */
-    wmb();
-
-    /* DIAGNOSTIC: Read back WORKING VIC interrupt registers */
-    u32 int_mask_main = readl(vic_regs + 0x1e8);
-    u32 int_status_main = readl(vic_regs + 0x1f0);
-    u32 int_status_mdma = readl(vic_regs + 0x1f4);
-
-    pr_info("*** VIC INTERRUPT DIAGNOSTIC: MainMask=0x%08x, MainStatus=0x%08x, MDMAStatus=0x%08x ***\n",
-            int_mask_main, int_status_main, int_status_mdma);
-
-    if (int_mask_main != 0xFFFFFFFE) {
-        pr_warn("*** VIC INTERRUPT WARNING: Main mask readback failed (expected 0xFFFFFFFE, got 0x%08x) ***\n", int_mask_main);
-    } else {
-        pr_info("*** VIC INTERRUPT SUCCESS: Main interrupt mask configured correctly ***\n");
-    }
-
-    pr_info("*** VIC INTERRUPT INIT: WORKING ISP-activates configuration applied (0x1e8/0x1ec) ***\n");
-
-    /* CRITICAL: Set vic_start_ok flag to enable interrupt processing */
-    vic_start_ok = 1;
-    pr_info("*** FINAL VIC INTERRUPT INIT: ACTUAL VIC interrupts enabled, vic_start_ok=1 ***\n");
-
     return 0;
 }
 
@@ -1612,6 +1552,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 /* tx_isp_vic_progress - Implementation that matches trace register values from reference */
 int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
 {
+    void __iomem *vic_regs;
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type, sensor_format;
     u32 timeout = 10000;
@@ -1648,8 +1589,9 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     pr_info("*** tx_isp_vic_progress: MIPS validation passed - applying tx_isp_init_vic_registers methodology ***\n");
 
     /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
-    void __iomem *vic_regs = ourISPdev->vic_regs;
-    /* STEP 3: VIC registers should already be set from earlier in function */
+
+    /* STEP 3: Get VIC registers - should already be mapped by tx_isp_create_vic_device */
+    vic_regs = ourISPdev->vic_regs;
     if (!vic_regs) {
         pr_err("*** CRITICAL: No VIC register base - initialization required first ***\n");
         return -EINVAL;
@@ -1702,8 +1644,10 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
      * These occur at T+210ms in the trace
      * ==============================================================================================*/
 
-    /* CSI PHY Config registers - REMOVED: These should be handled by CSI driver */
-    pr_info("*** VIC: CSI PHY Config registers (0x110, 0x114) now handled by CSI driver ***\n");
+    /* CSI PHY Config registers - from reference trace */
+    writel(0x80007000, vic_regs + 0x110);    /* CSI PHY Config register */
+    writel(0x777111, vic_regs + 0x114);      /* CSI PHY Config register */
+    wmb();
 
     /***
 ISP isp-m0: [CSI PHY Control] write at offset 0x8: 0x1 -> 0x0 (delta: 210.000 ms)
@@ -1725,7 +1669,7 @@ ISP isp-m0: [CSI PHY Config] write at offset 0x110: 0x80007000 -> 0x92217523 (de
     writel(0x19f, vic_regs + 0x90);      /* was 0x0 -> 0x19f */
     writel(0x180, vic_regs + 0xa0);      /* was 0x0 -> 0x180 */
     writel(0x2ae, vic_regs + 0xb0);      /* was 0x0 -> 0x2ae */
-    /* REMOVED: 0x120 is CSI PHY register, handled by CSI driver */
+    writel(0x10, vic_regs + 0x120);      /* was 0x0 -> 0x10 */
     wmb();
 
     /* CSI PHY Config updates */
@@ -2444,8 +2388,55 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     return ret;
 }
 
-/* SIMPLE WORKING vic_core_s_stream - REVERTED TO ISP-activates WORKING VERSION */
-static bool first_stop_after_start = false;
+/* CRITICAL MISSING FUNCTION: vic_core_s_stream - FIXED to call tx_isp_vic_start */
+/* Global timer and state variables */
+static struct timer_list vic_adjustment_timer;
+static bool timer_initialized = false;
+static bool adjustment_applied = false;
+
+static void vic_start_adjustment(void)
+{
+    struct tx_isp_vic_device *vic_dev;
+    void __iomem *vic_regs, *isp_base;
+
+    if (!ourISPdev || !ourISPdev->vic_dev) {
+        pr_err("Timer: No VIC device available\n");
+        return;
+    }
+
+    vic_dev = ourISPdev->vic_dev;
+    vic_regs = vic_dev->vic_regs;
+    isp_base = vic_regs - 0xe0000;
+
+    pr_info("*** Timer: Applying  streaming adjustment sequence ***\n");
+    /* ISP Control registers - relative to isp_base */
+    writel(0x0, isp_base + 0x9804);
+
+    /* VIC Control registers - these are working */
+    writel(0x0, isp_base + 0x9ac0);
+    writel(0x0, isp_base + 0x9ac8);
+
+    /* Core Control registers - relative to isp_base */
+    writel(0x24242424, isp_base + 0xb018);
+    writel(0x24242424, isp_base + 0xb01c);
+    writel(0x24242424, isp_base + 0xb020);
+    writel(0x242424, isp_base + 0xb024);
+    writel(0x10d0046, isp_base + 0xb028);
+    writel(0xe8002f, isp_base + 0xb02c);
+    writel(0xc50100, isp_base + 0xb030);
+    writel(0x1670100, isp_base + 0xb034);
+    writel(0x1f001, isp_base + 0xb038);
+    writel(0x22c0000, isp_base + 0xb03c);
+    writel(0x22c1000, isp_base + 0xb040);
+    writel(0x22c2000, isp_base + 0xb044);
+    writel(0x22c3000, isp_base + 0xb048);
+    writel(0x3, isp_base + 0xb04c);
+    writel(0x10000000, isp_base + 0xb078);
+    wmb();
+
+    adjustment_applied = true;
+    pr_info("*** Timer: adjustment sequence completed ***\n");
+}
 
 /* Modified vic_core_s_stream function with OLD timer API */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
@@ -2503,6 +2494,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             if (enable == 0) {
                 /* Stream OFF */
                 ret = 0;
+                vic_start_adjustment();
                 ispvic_frame_channel_s_stream(vic_dev, 0);
                 if (current_state == 4) {
                     vic_dev->state = 3;
