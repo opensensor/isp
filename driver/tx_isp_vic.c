@@ -1337,14 +1337,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(4, vic_regs + 0x0);
         wmb();
 
-        /* Binary Ninja: 00010acc - Wait for unlock - EXACT REFERENCE IMPLEMENTATION */
+        /* Binary Ninja: 00010acc - Wait for unlock - EXACT REFERENCE (NO TIMEOUT!) */
+        pr_info("*** VIC UNLOCK: Waiting for register 0x0 to become 0 (Binary Ninja: no timeout) ***\n");
         while (readl(vic_regs + 0x0) != 0) {
-            udelay(1);
-            if (--timeout == 0) {
-                pr_err("VIC unlock timeout\n");
-                return -ETIMEDOUT;
-            }
+            cpu_relax();  /* Binary Ninja: just "nop" - no timeout! */
         }
+        pr_info("*** VIC UNLOCK: Register 0x0 became 0 - unlock successful! ***\n");
         
         /* Binary Ninja: 00010ad4 - Enable VIC */
         writel(1, vic_regs + 0x0);
