@@ -2537,8 +2537,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel((sensor_width << 16) | sensor_height, vic_regs + 0x4);  /* Dimensions: 1920x1080 */
                 wmb();
 
-                /* Configure VIC mode for MIPI interface */
-                writel(0x3, vic_regs + 0xc);            /* MIPI mode (3) */
+                /* CRITICAL FIX: Use mode = 2 for MIPI interface (not 3) to prevent control limit error */
+                writel(0x2, vic_regs + 0xc);            /* MIPI mode (2) - FIXED */
                 wmb();
 
                 /* Configure VIC interrupt system */
