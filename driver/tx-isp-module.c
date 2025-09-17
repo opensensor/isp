@@ -73,6 +73,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 void isp_process_frame_statistics(struct tx_isp_dev *dev);
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
+int tisp_init(void *sensor_info, char *param_name);
 
 /* Global I2C client tracking to prevent duplicate creation */
 static struct i2c_client *global_sensor_i2c_client = NULL;
@@ -6958,19 +6959,6 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
         pr_err("No ISP device available for sensor registration\n");
         ret = -ENODEV;
         goto err_exit;
-    }
-
-    /* *** CRITICAL: Call tisp_init when sensor is successfully registered *** */
-    pr_info("*** CALLING tisp_init FOR REGISTERED SENSOR %s ***\n", sensor->info.name);
-    if (sensor->video.attr) {
-        ret = tisp_init(sensor->video.attr, ourISPdev);
-        if (ret == 0) {
-            pr_info("*** tisp_init SUCCESS - ISP hardware initialized for %s ***\n", sensor->info.name);
-        } else {
-            pr_warn("*** tisp_init FAILED for %s: %d ***\n", sensor->info.name, ret);
-        }
-    } else {
-        pr_warn("*** No sensor attributes available for tisp_init ***\n");
     }
 
     mutex_unlock(&sensor_register_mutex);
