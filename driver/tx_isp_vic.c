@@ -1489,22 +1489,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
     }
 
-    /* CRITICAL: Final VIC interrupt initialization AFTER all CSI PHY writes are complete */
-    pr_info("*** FINAL VIC INTERRUPT INIT: Enabling VIC interrupts after CSI PHY setup complete ***\n");
+    /* CRITICAL: Final VIC interrupt initialization using ACTUAL VIC registers from Binary Ninja */
+    pr_info("*** FINAL VIC INTERRUPT INIT: Enabling ACTUAL VIC interrupts (not CSI PHY) ***\n");
 
-    /* Clear any pending interrupts first */
-    writel(0xffffffff, vic_regs + 0x1f0);  /* Clear pending interrupts */
-    writel(0xffffffff, vic_regs + 0x1f4);  /* Clear pending interrupts */
+    /* Use the ACTUAL VIC interrupt registers from Binary Ninja reference - commit 3f940c93 */
+    /* VIC_IMR (Interrupt Mask Register) at 0x04 */
+    writel(0x07800438, vic_regs + 0x04);
     wmb();
 
-    /* Enable VIC interrupts - this is the final step after all CSI PHY setup */
-    writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-    writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
+    /* VIC_IMCR (Interrupt Control Register) at 0x0c */
+    writel(0xb5742249, vic_regs + 0x0c);
     wmb();
+
+    pr_info("*** VIC INTERRUPT INIT: Set VIC_IMR=0x07800438, VIC_IMCR=0xb5742249 (Binary Ninja values) ***\n");
 
     /* CRITICAL: Set vic_start_ok flag to enable interrupt processing */
     vic_start_ok = 1;
-    pr_info("*** FINAL VIC INTERRUPT INIT: VIC interrupts enabled, vic_start_ok=1 ***\n");
+    pr_info("*** FINAL VIC INTERRUPT INIT: ACTUAL VIC interrupts enabled, vic_start_ok=1 ***\n");
 
     return 0;
 }
