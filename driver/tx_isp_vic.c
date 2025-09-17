@@ -205,12 +205,19 @@ void tx_isp_vic_restore_interrupts(void)
         return;
     }
 
-    /* Restore VIC interrupt register values using PRIMARY VIC space */
-    writel(0xffffffff, vic_dev->vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-    writel(0x0, vic_dev->vic_regs + 0x1e8);         /* Clear interrupt masks */
+    /* Restore VIC interrupt register values using CORRECT VIC registers */
+    pr_info("*** VIC INTERRUPT RESTORE: Using CORRECT VIC registers (0x04/0x0c) ***\n");
+
+    /* Clear interrupt masks first */
+    writel(0x0, vic_dev->vic_regs + 0x08);  /* Clear VIC_IMSR */
     wmb();
 
-    pr_info("*** VIC INTERRUPT RESTORE: Registers restored in PRIMARY VIC space (0x133e0000) ***\n");
+    /* Restore Binary Ninja reference values */
+    writel(0x07800438, vic_dev->vic_regs + 0x04);  /* VIC_IMR */
+    writel(0xb5742249, vic_dev->vic_regs + 0x0c);  /* VIC_IMCR */
+    wmb();
+
+    pr_info("*** VIC INTERRUPT RESTORE: CORRECT VIC registers restored (IMR=0x07800438, IMCR=0xb5742249) ***\n");
 }
 EXPORT_SYMBOL(tx_isp_vic_restore_interrupts);
 
