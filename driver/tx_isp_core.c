@@ -536,7 +536,11 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
 
     /* Binary Ninja: $a0 = *($s0 + 0x15c); if ($a0 == 1) return 1 */
-    /* This is an early exit check - would be at offset 0x15c in device structure */
+    /* Early exit check - prevents processing if device is in certain state */
+    if (vic_dev && vic_dev->state == 1) {
+        pr_debug("*** ISP CORE: Early exit - VIC state 1, skipping interrupt processing ***\n");
+        return IRQ_HANDLED;
+    }
 
     /* *** CRITICAL: MAIN INTERRUPT PROCESSING SECTION *** */
 
