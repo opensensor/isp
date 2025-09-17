@@ -103,6 +103,9 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     if (!isp_dev->vic_regs) {
         isp_dev->vic_regs = vic_dev->vic_regs;
     }
+    if (!isp_dev->vic_regs2) {
+        isp_dev->vic_regs2 = vic_dev->vic_regs_secondary;
+    }
     
     /* Initialize VIC device dimensions - CRITICAL: Use actual sensor output dimensions */
     vic_dev->width = 1920;  /* GC2053 actual output width */
