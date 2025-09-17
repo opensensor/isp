@@ -2542,7 +2542,7 @@ static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int c
     pr_debug("Hardware frame completion detected on channel %d\n", channel);
     
     /* Wake up frame waiters with real hardware completion */
-    //frame_channel_wakeup_waiters(&frame_channels[channel]);
+    frame_channel_wakeup_waiters(&frame_channels[channel]);
     
     /* Update frame count for statistics */
     isp_dev->frame_count++;
