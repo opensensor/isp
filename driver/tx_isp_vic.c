@@ -2564,9 +2564,15 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* VIC Control and Configuration registers only */				                /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
                 writel(0x7800438, vic_regs + 0x4);
 
-                /* Binary Ninja: EXACT reference driver VIC register configuration */
-                writel(0x2, vic_regs + 0xc);
-                writel(0x2, vic_regs + 0x14);
+                /* CRITICAL FIX: Skip VIC control register writes during streaming restart */
+                /* These writes to 0xc and 0x14 were corrupting VIC interrupt configuration */
+                if (vic_start_ok == 1) {
+                    pr_info("*** SKIPPING VIC control register writes (0xc, 0x14) - VIC interrupts already working ***\n");
+                } else {
+                    /* Binary Ninja: EXACT reference driver VIC register configuration */
+                    writel(0x2, vic_regs + 0xc);
+                    writel(0x2, vic_regs + 0x14);
+                }
 
                 writel(0xf00, vic_regs + 0x18);
                 writel(0x800800, vic_regs + 0x60);

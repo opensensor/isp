@@ -1812,7 +1812,10 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         }
 
                         /* Pattern from reference trace: isp-w01 CSI PHY Control updates (lines 316, 340) */
-                        if (tuning_call_count % 7 == 0) {
+                        /* CRITICAL FIX: Skip isp-w01 register 0x14 writes - this corrupts VIC interrupts */
+                        if (vic_start_ok == 1) {
+                            pr_debug("*** TUNING: SKIPPING isp-w01 register 0x14 write - VIC interrupts already working ***\n");
+                        } else if (tuning_call_count % 7 == 0) {
                             u32 current_14 = readl(isp_w01_base + 0x14);
                             u32 current_40 = readl(isp_w01_base + 0x40);
 

@@ -163,9 +163,11 @@ int tx_isp_vic_stop_streaming(struct tx_isp_dev *isp_dev)
     pr_info("*** KEEPING vic_start_ok=1 to preserve interrupt protection during restart ***\n");
     /* vic_start_ok = 0; // REMOVED - this was breaking protection during streaming restart */
 
-    /* Stop VIC controller */
-    writel(0, vic_regs + 0x0);
-    wmb();
+    /* CRITICAL FIX: Don't disable VIC hardware during streaming restart */
+    /* This write to register 0x0 was causing "0x3 -> 0x0" corruption in logs */
+    pr_info("*** SKIPPING VIC hardware disable (register 0x0) to preserve interrupt configuration ***\n");
+    /* writel(0, vic_regs + 0x0); // REMOVED - this was disabling VIC hardware */
+    /* wmb(); */
     
     /* Disable VIC interrupts - keep original approach */
     writel(0x0, vic_regs + 0x1e0);
