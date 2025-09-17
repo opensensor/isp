@@ -4168,36 +4168,6 @@ int tisp_dpc_param_array_get(int param_id, void *out_buf, int *size_buf)
     return 0;
 }
 
-/* Missing AE/AF zone function implementations - Binary Ninja reference stubs */
-
-/* tisp_g_ae_zone - Binary Ninja reference implementation needed */
-int tisp_g_ae_zone(void *buffer)
-{
-    pr_debug("tisp_g_ae_zone: entry, buffer=%p\n", buffer);
-
-    /* For now, return success - actual implementation would read AE zone data */
-    if (buffer) {
-        /* Clear buffer as placeholder */
-        memset(buffer, 0, 0x390);  /* Size from Binary Ninja analysis */
-    }
-
-    return 0;
-}
-
-/* tisp_ae_get_y_zone - Binary Ninja reference implementation needed */
-int tisp_ae_get_y_zone(void *buffer)
-{
-    pr_debug("tisp_ae_get_y_zone: entry, buffer=%p\n", buffer);
-
-    /* For now, return success - actual implementation would read Y zone data */
-    if (buffer) {
-        /* Clear buffer as placeholder */
-        memset(buffer, 0, 0x100);  /* Estimated size */
-    }
-
-    return 0;
-}
-
 /* Stub implementations for remaining parameter array functions */
 /* These need to be implemented based on Binary Ninja decompilations */
 
