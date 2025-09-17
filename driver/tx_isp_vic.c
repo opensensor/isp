@@ -2310,7 +2310,7 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
                 pr_info("*** VIC: Hardware start deferred until userspace provides buffers via QBUF ***\n");
 
                 /* CRITICAL: Release the spinlock before returning to prevent "scheduling while atomic" */
-                __private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, &var_18);
+                private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, &var_18);
                 return 0;  /* Success, but hardware not started yet */
 
 
