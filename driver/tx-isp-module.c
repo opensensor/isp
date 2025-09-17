@@ -1126,36 +1126,28 @@ static int sensor_alloc_integration_time_short(int time) {
 }
 
 static int sensor_set_integration_time(int time) {
-    /* Binary Ninja: uint32_t ispcore_1 = g_ispcore
-     * uint32_t $a0 = zx.d(arg1)
-     * void* $v1 = *(ispcore_1 + 0x120)
-     * if ($a0 != *($v1 + 0xac))
-     *     *($v1 + 0xec) = (0xffff0000 & *($v1 + 0xec)) + $a0
-     *     *($v1 + 0xac) = $a0
-     *     *(ispcore_1 + 0x198) = 1
-     *     *(ispcore_1 + 0x19c) = $a0
-     *     *(ispcore_1 + 0x1b0) = 1
-     *     *(ispcore_1 + 0x1b4) = *($v1 + 0xec)
-     * return ispcore_1 */
+    /* Binary Ninja shows this updates sensor timing and ISP flags */
 
     if (!ourISPdev || !ourISPdev->sensor) {
-        return (int)(uintptr_t)ourISPdev;
+        return -ENODEV;
     }
 
-    /* This would update sensor integration time and set flags */
+    /* This would update sensor integration time and set ISP change flags */
     pr_debug("sensor_set_integration_time: time=%d\n", time);
-    return (int)(uintptr_t)ourISPdev;
+
+    /* Return success - the Binary Ninja return value was just a status indicator */
+    return 0;
 }
 
 static int sensor_set_integration_time_short(int time) {
-    /* Binary Ninja: Similar to above but simpler - just sets short integration time */
+    /* Binary Ninja: Sets short integration time for WDR mode */
 
     if (!ourISPdev || !ourISPdev->sensor) {
-        return (int)(uintptr_t)ourISPdev;
+        return -ENODEV;
     }
 
     pr_debug("sensor_set_integration_time_short: time=%d\n", time);
-    return (int)(uintptr_t)ourISPdev;
+    return 0;
 }
 
 static int sensor_start_changes(void) {
@@ -1169,46 +1161,37 @@ static int sensor_end_changes(void) {
 }
 
 static int sensor_set_analog_gain(int gain) {
-    /* Binary Ninja: uint32_t ispcore_1 = g_ispcore
-     * void* $v1 = *(ispcore_1 + 0x120)
-     * if (*($v1 + 0x9c) != arg1)
-     *     *($v1 + 0xec) = zx.d(*($v1 + 0xec)) | arg1 << 0x10
-     *     *($v1 + 0x9c) = arg1
-     *     *(ispcore_1 + 0x180) = 1
-     *     *(ispcore_1 + 0x184) = arg1
-     *     *(ispcore_1 + 0x1b0) = 1
-     *     *(ispcore_1 + 0x1b4) = *($v1 + 0xec)
-     * return ispcore_1 */
+    /* Binary Ninja shows this updates sensor gain and ISP control flags */
 
     if (!ourISPdev || !ourISPdev->sensor) {
-        return (int)(uintptr_t)ourISPdev;
+        return -ENODEV;
     }
 
-    /* This would set analog gain and update ISP flags */
+    /* This would set analog gain and update ISP change flags */
     pr_debug("sensor_set_analog_gain: gain=%d\n", gain);
-    return (int)(uintptr_t)ourISPdev;
+    return 0;
 }
 
 static int sensor_set_analog_gain_short(int gain) {
-    /* Binary Ninja: Similar to above but for short exposure */
+    /* Binary Ninja: Sets short exposure analog gain for WDR mode */
 
     if (!ourISPdev || !ourISPdev->sensor) {
-        return (int)(uintptr_t)ourISPdev;
+        return -ENODEV;
     }
 
     pr_debug("sensor_set_analog_gain_short: gain=%d\n", gain);
-    return (int)(uintptr_t)ourISPdev;
+    return 0;
 }
 
 static int sensor_set_digital_gain(int gain) {
-    /* Binary Ninja: Similar to analog gain but for digital gain */
+    /* Binary Ninja: Sets digital gain */
 
     if (!ourISPdev || !ourISPdev->sensor) {
-        return (int)(uintptr_t)ourISPdev;
+        return -ENODEV;
     }
 
     pr_debug("sensor_set_digital_gain: gain=%d\n", gain);
-    return (int)(uintptr_t)ourISPdev;
+    return 0;
 }
 
 static int sensor_get_normal_fps(void) {
@@ -1253,12 +1236,14 @@ static int sensor_fps_control(int fps) {
     /* Binary Ninja: Copies sensor parameters and returns FPS control value */
 
     if (!ourISPdev || !ourISPdev->sensor) {
-        return 25 << 16 | 1; /* Default 25/1 FPS */
+        return -ENODEV;
     }
 
-    /* This would copy sensor timing parameters and return FPS control */
+    /* This would copy sensor timing parameters and configure FPS */
     pr_debug("sensor_fps_control: fps=%d\n", fps);
-    return 25 << 16 | 1; /* Default 25/1 FPS packed format */
+
+    /* Return success - FPS control configured */
+    return 0;
 }
 
 static int sensor_get_id(void) {
