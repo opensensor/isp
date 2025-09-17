@@ -42,6 +42,13 @@ extern struct tx_isp_dev *ourISPdev;
 
 /* Remove duplicate - tx_isp_sensor_attribute already defined in SDK */
 
+/* CRITICAL FIX: Store original sensor ops for proper delegation - moved to top for global access */
+struct sensor_ops_storage {
+    struct tx_isp_subdev_ops *original_ops;
+    struct tx_isp_subdev *sensor_sd;
+};
+static struct sensor_ops_storage stored_sensor_ops;
+
 // Simple sensor registration structure
 struct registered_sensor {
     char name[32];
@@ -3627,12 +3634,7 @@ static struct tx_isp_subdev_video_ops csi_video_ops = {
     .s_stream = csi_video_s_stream_impl,
 };
 
-/* CRITICAL FIX: Store original sensor ops for proper delegation */
-struct sensor_ops_storage {
-    struct tx_isp_subdev_ops *original_ops;
-    struct tx_isp_subdev *sensor_sd;
-};
-static struct sensor_ops_storage stored_sensor_ops;
+/* CRITICAL FIX: stored_sensor_ops moved to top of file for global access */
 
 /* Sensor operations delegation functions */
 static int sensor_subdev_sensor_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
@@ -4359,10 +4361,17 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Sensor get control: cmd=0x%x\n", control_arg.cmd);
         
         // Route to sensor IOCTL handler if available
-        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
+        if (isp_dev->sensor && isp_dev->sensor->sd.ops &&
             isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
-            ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, 
-                                                        control_arg.cmd, &control_arg.value);
+            /* CRITICAL FIX: Use original sensor subdev, not ISP device sensor subdev */
+            struct tx_isp_subdev *original_sd = stored_sensor_ops.sensor_sd;
+            if (original_sd) {
+                ret = isp_dev->sensor->sd.ops->sensor->ioctl(original_sd,
+                                                            control_arg.cmd, &control_arg.value);
+            } else {
+                pr_warn("No original sensor subdev for get control\n");
+                ret = -ENODEV;
+            }
             if (ret == 0) {
                 if (copy_to_user(argp, &control_arg, sizeof(control_arg)))
                     return -EFAULT;
@@ -4388,10 +4397,17 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Sensor set control: cmd=0x%x value=%d\n", control_arg.cmd, control_arg.value);
         
         // Route to sensor IOCTL handler if available
-        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
+        if (isp_dev->sensor && isp_dev->sensor->sd.ops &&
             isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
-            ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, 
-                                                        control_arg.cmd, &control_arg.value);
+            /* CRITICAL FIX: Use original sensor subdev, not ISP device sensor subdev */
+            struct tx_isp_subdev *original_sd = stored_sensor_ops.sensor_sd;
+            if (original_sd) {
+                ret = isp_dev->sensor->sd.ops->sensor->ioctl(original_sd,
+                                                            control_arg.cmd, &control_arg.value);
+            } else {
+                pr_warn("No original sensor subdev for set control\n");
+                ret = -ENODEV;
+            }
         } else {
             pr_warn("No sensor IOCTL handler available for cmd=0x%x\n", control_arg.cmd);
             ret = 0; // Return success to avoid breaking callers
