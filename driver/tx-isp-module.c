@@ -4416,15 +4416,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             if (tuning_arg.mode == 1) {
                 // GET operation - sensor should fill the value
                 uint32_t result_value = 0;
-                /* CRITICAL FIX: Use original sensor subdev, not ISP device sensor subdev */
-                struct tx_isp_subdev *original_sd = stored_sensor_ops.sensor_sd;
-                if (original_sd) {
-                    ret = isp_dev->sensor->sd.ops->sensor->ioctl(original_sd,
-                                                               tuning_arg.cmd, &result_value);
-                } else {
-                    pr_warn("No original sensor subdev for tuning GET\n");
-                    ret = -ENODEV;
-                }
+                ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
+                                                           tuning_arg.cmd, &result_value);
                 if (ret == 0 && tuning_arg.data_ptr) {
                     // Copy result back to user
                     if (copy_to_user(tuning_arg.data_ptr, &result_value, sizeof(result_value)))
