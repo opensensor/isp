@@ -351,7 +351,7 @@ int tisp_set_csc_version(int version)
     pr_info("tisp_set_csc_version: Setting CSC version %d\n", version);
     return 0;
 }
-void system_reg_write(u32 reg, u32 value);
+static int system_reg_write(uint32_t reg, uint32_t value);
 
 /* ===== MISSING SYMBOL IMPLEMENTATIONS - Binary Ninja Reference ===== */
 
@@ -7372,7 +7372,7 @@ static void tisp_set_sensor_analog_gain(void)
     pr_debug("tisp_set_sensor_analog_gain: Setting analog gain\n");
 
     /* Binary Ninja: uint32_t $v0_2 = tisp_math_exp2(data_b2ee0(tisp_log2_fixed_to_fixed(), &var_28), 0x10, 0x10) */
-    uint32_t log_result = tisp_log2_fixed_to_fixed();
+    uint32_t log_result = tisp_log2_fixed_to_fixed_simple();
     uint32_t gain_param = data_b2ee0(log_result, &var_28);
     uint32_t v0_2 = tisp_math_exp2(gain_param, 0x10, 0x10);
 
@@ -7432,7 +7432,7 @@ static void tisp_set_sensor_analog_gain_short(void)
     pr_debug("tisp_set_sensor_analog_gain_short: Setting short analog gain\n");
 
     /* Binary Ninja: uint32_t $v0_2 = tisp_math_exp2(data_b2ee4(tisp_log2_fixed_to_fixed(), &var_28), 0x10, 0x10) */
-    uint32_t log_result = tisp_log2_fixed_to_fixed();
+    uint32_t log_result = tisp_log2_fixed_to_fixed_simple();
     uint32_t gain_param = data_b2ee4(log_result, &var_28);
     uint32_t v0_2 = tisp_math_exp2(gain_param, 0x10, 0x10);
 
@@ -7655,10 +7655,10 @@ static int data_b2f08(uint32_t param, int flag)
     return 0;
 }
 
-static uint32_t tisp_log2_fixed_to_fixed(void)
+static uint32_t tisp_log2_fixed_to_fixed_simple(void)
 {
     /* Fixed point log2 conversion */
-    pr_debug("tisp_log2_fixed_to_fixed: Performing log2 conversion\n");
+    pr_debug("tisp_log2_fixed_to_fixed_simple: Performing log2 conversion\n");
     return 0x1000; /* Return default fixed point value */
 }
 
