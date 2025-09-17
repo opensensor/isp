@@ -2903,14 +2903,35 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EINVAL;
         }
 
-        /* Reference driver QBUF logic: Set buffer to queued state */
+        /* Reference driver QBUF logic: Set buffer to queued state and add to queue */
         frame_buffer->state = 1; // Queued state (0x4c = 1 in reference driver)
         frame_buffer->phys_addr = buffer_phys_addr; // Store the buffer address from application
         frame_buffer->bytesused = buffer_size;
         frame_buffer->flags = buffer.flags;
 
-        pr_info("*** Channel %d: QBUF set buffer[%d] to QUEUED state, phys_addr=0x%x ***\n",
-                channel, buffer.index, buffer_phys_addr);
+        /* CRITICAL: Add buffer to queued_buffers list like reference driver */
+        spin_lock(&state->queue_lock);
+
+        /* Initialize list entry if not already done */
+        if (frame_buffer->queue_entry.next == NULL && frame_buffer->queue_entry.prev == NULL) {
+            INIT_LIST_HEAD(&frame_buffer->queue_entry);
+        }
+
+        /* Add to queued buffers list */
+        list_add_tail(&frame_buffer->queue_entry, &state->queued_buffers);
+        state->queued_count++;
+
+        spin_unlock(&state->queue_lock);
+
+        pr_info("*** Channel %d: QBUF buffer[%d] QUEUED, phys_addr=0x%x, queued_count=%d ***\n",
+                channel, buffer.index, buffer_phys_addr, state->queued_count);
+
+        /* CRITICAL: If streaming is active, notify VIC hardware about new buffer */
+        if (state->streaming) {
+            pr_info("*** Channel %d: QBUF notifying VIC about new queued buffer[%d] ***\n",
+                    channel, buffer.index);
+            /* TODO: Call VIC hardware to process the queued buffer */
+        }
 
         /* SAFE: Update buffer state management */
         spin_lock_irqsave(&state->buffer_lock, flags);
