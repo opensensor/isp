@@ -3196,9 +3196,15 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
                     pr_info("*** Channel %d: DQBUF no completed buffers, waiting... ***\n", channel);
 
-                    /* Wait for buffer completion like reference driver */
-                    wait_result = wait_event_interruptible_timeout(state->frame_wait,
-                        !list_empty(&state->completed_buffers), msecs_to_jiffies(200));
+                    /* CRITICAL FIX: Check if we're in atomic context before waiting */
+                    if (in_atomic() || irqs_disabled()) {
+                        pr_warn("*** Channel %d: DQBUF buffer wait called from atomic context - returning immediately ***\n", channel);
+                        wait_result = 0; // Timeout
+                    } else {
+                        /* Wait for buffer completion like reference driver */
+                        wait_result = wait_event_interruptible_timeout(state->frame_wait,
+                            !list_empty(&state->completed_buffers), msecs_to_jiffies(200));
+                    }
 
                     pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, wait_result);
 
