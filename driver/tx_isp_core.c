@@ -393,6 +393,7 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     struct tx_isp_dev *isp_dev = ourISPdev;
     static int sensor_call_counter = 0;
 
+    pr_info("*** ISP FRAME SYNC WORK: ENTRY - Work function is running! ***\n");
     pr_info("*** ISP FRAME SYNC WORK: Safe implementation without dangerous offsets ***\n");
 
     if (!isp_dev) {
@@ -611,13 +612,23 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         pr_info("*** ISP CORE: Frame sync interrupt - attempting to queue work ***\n");
 
         if (fs_workqueue) {
+            pr_info("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
             if (queue_work(fs_workqueue, &fs_work)) {
                 pr_info("*** ISP CORE: Work queued successfully ***\n");
             } else {
                 pr_info("*** ISP CORE: Work was already queued - acknowledging interrupt anyway ***\n");
                 /* CRITICAL: Don't treat this as an error - just acknowledge the interrupt */
+
+                /* DIAGNOSTIC: Try to flush the workqueue to see if work is stuck */
+                static int flush_counter = 0;
+                if (++flush_counter > 100) { /* Every 100 failed queues, try to flush */
+                    pr_warn("*** ISP CORE: Attempting to flush stuck workqueue ***\n");
+                    flush_workqueue(fs_workqueue);
+                    flush_counter = 0;
+                }
             }
         } else {
+            pr_warn("*** ISP CORE: fs_workqueue is NULL - using system workqueue ***\n");
             if (schedule_work(&fs_work)) {
                 pr_info("*** ISP CORE: Work scheduled successfully ***\n");
             } else {
@@ -635,7 +646,21 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: Error interrupt processing */
     if (interrupt_status & 0x200) {  /* Error interrupt type 1 */
-        pr_info("ISP CORE: Error interrupt type 1\n");
+        pr_info("ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR\n");
+
+        /* CRITICAL FIX: This error interrupt indicates pipeline misconfiguration */
+        /* Clear the error condition by reading/clearing error registers */
+        if (isp_regs) {
+            u32 error_status = readl(isp_regs + 0xc);  /* Read error status */
+            pr_info("*** ISP CORE: Error status register 0xc = 0x%x ***\n", error_status);
+
+            /* Clear error bits by writing back */
+            writel(error_status, isp_regs + 0xc);
+            wmb();
+
+            pr_info("*** ISP CORE: Error interrupt cleared ***\n");
+        }
+
         /* Binary Ninja: exception_handle() */
         /* Error handling would be here */
     }
