@@ -7585,7 +7585,7 @@ EXPORT_SYMBOL(tx_isp_wakeup_frame_channels);
 /* CRITICAL: VIC frame completion buffer management - moves buffer from queued to completed */
 int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint32_t buffer_addr)
 {
-    extern struct tx_isp_frame_channel_device frame_channels[2];
+    /* Use the existing frame_channels array - no extern needed since it's in same file */
     struct tx_isp_channel_state *state;
     struct video_buffer *video_buffer = NULL;
     struct list_head *pos, *tmp;
