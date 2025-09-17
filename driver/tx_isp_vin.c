@@ -33,30 +33,6 @@
         pr_err("VIN: " msg " = 0x%x\n", val); \
     } while(0)
 
-/**
- * is_valid_kernel_pointer - Check if pointer is valid for kernel access
- * @ptr: Pointer to validate
- *
- * Returns true if pointer is in valid kernel address space for MIPS
- */
-static inline bool is_valid_kernel_pointer(const void *ptr)
-{
-    unsigned long addr = (unsigned long)ptr;
-    
-    /* MIPS kernel address validation:
-     * KSEG0: 0x80000000-0x9fffffff (cached)
-     * KSEG1: 0xa0000000-0xbfffffff (uncached)
-     * KSEG2: 0xc0000000+ (mapped)
-     * Exclude obvious invalid addresses */
-    return (ptr != NULL &&
-            addr >= 0x80000000 &&
-            addr < 0xfffff001 &&
-            addr != 0xdeadbeef &&
-            addr != 0xbadcafe &&
-            addr != 0x735f656d &&
-            addr != 0x24a70684 &&  /* Address from crash log */
-            addr != 0x24a70688);   /* BadVA from crash log */
-}
 
 /* ========================================================================
  * VIN Device Creation Function - Matches VIC Pattern
