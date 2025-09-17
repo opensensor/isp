@@ -7166,15 +7166,9 @@ static void tisp_set_sensor_integration_time_short(uint32_t integration_time)
     if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->sd.ops &&
         ourISPdev->sensor->sd.ops->sensor && ourISPdev->sensor->sd.ops->sensor->ioctl) {
         
-        /* CRITICAL FIX: Use original sensor subdev, not ISP device sensor subdev */
-        struct tx_isp_subdev *original_sd = stored_sensor_ops.sensor_sd;
-        if (original_sd) {
-            /* Call sensor IOCTL to set integration time */
-            ourISPdev->sensor->sd.ops->sensor->ioctl(original_sd,
-                                                    0x980901, &integration_time);
-        } else {
-            pr_warn("No original sensor subdev for integration time\n");
-        }
+        /* Call sensor IOCTL to set integration time */
+        ourISPdev->sensor->sd.ops->sensor->ioctl(&ourISPdev->sensor->sd,
+                                                0x980901, &integration_time);
     }
 }
 
