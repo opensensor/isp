@@ -821,6 +821,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         pr_info("*** CSI PHY should now respond properly to register reads/writes ***\n");
 
                         v0_17 = 2;
+                    }
                     } else if (interface_type == 2) {
                         /* DVP interface */
                         pr_info("CSI: DVP interface configuration\n");
