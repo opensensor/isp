@@ -2876,15 +2876,27 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d ***\n",
                 channel, buffer.index, buffer_phys_addr, buffer_size);
 
-        /* CRITICAL FIX: Store the real buffer address for later use in DQBUF/VIC */
-        if (state->buffer_addresses && buffer.index < state->buffer_count) {
-            state->buffer_addresses[buffer.index] = buffer_phys_addr;
-            pr_info("*** Channel %d: STORED real buffer address[%d] = 0x%x ***\n",
-                    channel, buffer.index, buffer_phys_addr);
+        /* CRITICAL FIX: Get buffer structure and set state like reference driver */
+        struct frame_buffer *frame_buffer = NULL;
+
+        if (state->buffer_addresses && buffer.index < state->buffer_count && state->buffer_addresses[buffer.index] != 0) {
+            frame_buffer = (struct frame_buffer *)state->buffer_addresses[buffer.index];
+            pr_info("*** Channel %d: QBUF found buffer structure[%d] at %p ***\n",
+                    channel, buffer.index, frame_buffer);
         } else {
-            pr_warn("*** Channel %d: Cannot store buffer address - array not allocated or index invalid ***\n",
-                    channel);
+            pr_warn("*** Channel %d: QBUF no buffer structure found for index %d ***\n",
+                    channel, buffer.index);
+            return -EINVAL;
         }
+
+        /* Reference driver QBUF logic: Set buffer to queued state */
+        frame_buffer->state = 1; // Queued state (0x4c = 1 in reference driver)
+        frame_buffer->phys_addr = buffer_phys_addr; // Store the buffer address from application
+        frame_buffer->bytesused = buffer_size;
+        frame_buffer->flags = buffer.flags;
+
+        pr_info("*** Channel %d: QBUF set buffer[%d] to QUEUED state, phys_addr=0x%x ***\n",
+                channel, buffer.index, buffer_phys_addr);
 
         /* SAFE: Update buffer state management */
         spin_lock_irqsave(&state->buffer_lock, flags);
