@@ -579,6 +579,12 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                     pr_info("*** CSI DEBUG: interface_type = %d (expected 1 for MIPI) ***\n", interface_type);
 
+                    /* Declare memory mapping variables at proper scope */
+                    void __iomem *isp_w02_base = NULL;  /* 0x133e0000 - VIC/CSI PHY shared */
+                    void __iomem *isp_w01_base = NULL;  /* 0x10023000 - VIC control */
+                    void __iomem *isp_m0_base = NULL;   /* 0x13300000 - Main ISP core */
+                    void __iomem *isp_csi_base = NULL;  /* 0x10022000 - CSI control */
+
                     if (interface_type == 1) {
                         /* MIPI interface configuration */
                         pr_info("*** CRITICAL: CSI MIPI interface configuration ***\n");
@@ -669,10 +675,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         /* CRITICAL FIX: Complete CSI PHY initialization sequence from reference trace */
                         /* Reference trace shows CSI PHY writes to 4 different memory regions in sequence */
-                        void __iomem *isp_w02_base = NULL;  /* 0x133e0000 - VIC/CSI PHY shared */
-                        void __iomem *isp_w01_base = NULL;  /* 0x10023000 - VIC control */
-                        void __iomem *isp_m0_base = NULL;   /* 0x13300000 - Main ISP core */
-                        void __iomem *isp_csi_base = NULL;  /* 0x10022000 - CSI control */
 
                         /* Map all required memory regions */
                         isp_w02_base = ioremap(0x133e0000, 0x10000);
