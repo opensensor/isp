@@ -35,7 +35,7 @@ static void debug_vic_start_ok_change(int new_value, const char *location, int l
     }
     vic_start_ok = new_value;
 }
-void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
+void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev);
 static int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 static int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev);
 static int vic_enabled = 0;
