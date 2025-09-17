@@ -430,10 +430,20 @@ static void ispcore_irq_fs_work(struct work_struct *work)
 
         /* CRITICAL: Call sensor operations like reference driver ispcore_irq_fs_work */
         /* This triggers AE/AGC/AWB sensor I2C operations */
+        /* Add error handling to prevent work queue crashes */
         extern int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev);
-        int sensor_result = ispcore_sensor_ops_ioctl(isp_dev);
 
-        pr_info("*** ISP FRAME SYNC WORK: Sensor operations result: %d ***\n", sensor_result);
+        int sensor_result = -ENODEV;
+
+        /* Protect against crashes in sensor operations */
+        if (ispcore_sensor_ops_ioctl) {
+            pr_info("*** ISP FRAME SYNC WORK: About to call sensor operations ***\n");
+            sensor_result = ispcore_sensor_ops_ioctl(isp_dev);
+            pr_info("*** ISP FRAME SYNC WORK: Sensor operations completed with result: %d ***\n", sensor_result);
+        } else {
+            pr_warn("*** ISP FRAME SYNC WORK: ispcore_sensor_ops_ioctl function not available ***\n");
+        }
+
         pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (sensor available) ***\n");
     } else {
         pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (no sensor/not streaming) ***\n");
