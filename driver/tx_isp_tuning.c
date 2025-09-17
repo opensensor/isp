@@ -2724,75 +2724,24 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     ret = 0;
                     break;
 
-                            /* 1. AE (Auto Exposure) Updates - WITH NULL CHECKS */
-                            pr_info("*** TUNING DEBUG: Starting AE updates ***");
-                            extern int tisp_tgain_update(void);
-                            extern int tisp_again_update(void);
-                            extern int tisp_ev_update(void);
-                            extern int tisp_ae_ir_update(void);
+                            /* 1. AE (Auto Exposure) Updates - DISABLED TO PREVENT VIC INTERRUPT DISRUPTION */
+                            /* These continuous register writes disrupt VIC interrupts every ~200ms */
+                            /* The reference driver only calls these via event callbacks, not continuously */
+                            pr_info("*** TUNING DEBUG: SKIPPING AE updates to prevent VIC interrupt disruption ***");
+                            int ae_ret = 0;  /* Success - but skip actual operations */
 
-                            pr_info("*** TUNING DEBUG: About to call tisp_tgain_update ***");
-                            int ae_ret = 0;
-                            if (tisp_tgain_update) ae_ret = tisp_tgain_update();
-                            pr_info("*** TUNING DEBUG: tisp_tgain_update completed: %d ***", ae_ret);
+                            /* 2. AWB (Auto White Balance) Updates - DISABLED TO PREVENT VIC INTERRUPT DISRUPTION */
+                            /* These continuous register writes disrupt VIC interrupts every ~200ms */
+                            pr_info("*** TUNING DEBUG: SKIPPING AWB updates to prevent VIC interrupt disruption ***");
+                            int awb_ret = 0;  /* Success - but skip actual operations */
 
-                            if (ae_ret == 0 && tisp_again_update) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_again_update ***");
-                                ae_ret = tisp_again_update();
-                                pr_info("*** TUNING DEBUG: tisp_again_update completed: %d ***", ae_ret);
-                            }
+                            /* 3. Gamma Correction Updates - DISABLED TO PREVENT VIC INTERRUPT DISRUPTION */
+                            pr_info("*** TUNING DEBUG: SKIPPING Gamma updates to prevent VIC interrupt disruption ***");
+                            int gamma_ret = 0;  /* Success - but skip actual operations */
 
-                            if (ae_ret == 0 && tisp_ev_update) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_ev_update ***");
-                                ae_ret = tisp_ev_update();
-                                pr_info("*** TUNING DEBUG: tisp_ev_update completed: %d ***", ae_ret);
-                            }
-
-                            if (ae_ret == 0 && tisp_ae_ir_update) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_ae_ir_update ***");
-                                ae_ret = tisp_ae_ir_update();
-                                pr_info("*** TUNING DEBUG: tisp_ae_ir_update completed: %d ***", ae_ret);
-                            }
-                            pr_debug("TUNING: AE updates completed: %d\n", ae_ret);
-
-                            /* 2. AWB (Auto White Balance) Updates */
-                            pr_info("*** TUNING DEBUG: Starting AWB updates ***");
-                            extern int tisp_ct_update(void);
-                            extern int tisp_ccm_ct_update(void);
-                            extern int tisp_ccm_ev_update(void);
-
-                            pr_info("*** TUNING DEBUG: About to call tisp_ct_update ***");
-                            int awb_ret = tisp_ct_update();
-                            pr_info("*** TUNING DEBUG: tisp_ct_update completed: %d ***", awb_ret);
-
-                            if (awb_ret == 0) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_ccm_ct_update ***");
-                                awb_ret = tisp_ccm_ct_update();
-                                pr_info("*** TUNING DEBUG: tisp_ccm_ct_update completed: %d ***", awb_ret);
-                            }
-
-                            if (awb_ret == 0) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_ccm_ev_update ***");
-                                awb_ret = tisp_ccm_ev_update();
-                                pr_info("*** TUNING DEBUG: tisp_ccm_ev_update completed: %d ***", awb_ret);
-                            }
-                            pr_debug("TUNING: AWB/CCM updates completed: %d\n", awb_ret);
-
-                            /* 3. Gamma Correction Updates */
-                            pr_info("*** TUNING DEBUG: Starting Gamma updates ***");
-                            extern int tiziano_gamma_lut_parameter(void);
-                            pr_info("*** TUNING DEBUG: About to call tiziano_gamma_lut_parameter ***");
-                            int gamma_ret = tiziano_gamma_lut_parameter();
-                            pr_info("*** TUNING DEBUG: tiziano_gamma_lut_parameter completed: %d ***", gamma_ret);
-                            pr_debug("TUNING: Gamma LUT update completed: %d\n", gamma_ret);
-
-                            /* 4. LSC (Lens Shading Correction) Updates */
-                            pr_info("*** TUNING DEBUG: Starting LSC updates ***");
-                            extern int tisp_lsc_write_lut_datas(void);
-                            pr_info("*** TUNING DEBUG: About to call tisp_lsc_write_lut_datas ***");
-                            int lsc_ret = tisp_lsc_write_lut_datas();
-                            pr_info("*** TUNING DEBUG: tisp_lsc_write_lut_datas completed: %d ***", lsc_ret);
-                            pr_debug("TUNING: LSC update completed: %d\n", lsc_ret);
+                            /* 4. LSC (Lens Shading Correction) Updates - DISABLED TO PREVENT VIC INTERRUPT DISRUPTION */
+                            pr_info("*** TUNING DEBUG: SKIPPING LSC updates to prevent VIC interrupt disruption ***");
+                            int lsc_ret = 0;  /* Success - but skip actual operations */
 
                             /* 5. DPC (Dead Pixel Correction) Updates */
                             extern int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
