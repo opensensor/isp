@@ -339,6 +339,8 @@ int apical_isp_max_again_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ct
 int apical_isp_max_dgain_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 int tisp_g_af_zone(void);
 int apical_isp_ae_g_roi(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
+int tisp_get_defog_strength(uint32_t *value);
+int tisp_g_dpc_strength(uint32_t *value);
 
 /* System register access functions - moved before use */
 uint32_t system_reg_read(u32 reg);
@@ -1765,12 +1767,14 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             case 0x800002c:  // Move state - Binary Ninja: return 0
                 ctrl->value = 0;
                 break;
-            case 0x8000039:  // Defog Strength
-                ctrl->value = tuning->defog_strength;
+            case 0x8000039:  // Defog Strength - Binary Ninja: tisp_get_defog_strength
+                tisp_get_defog_strength(&var_98);
+                ctrl->value = var_98 & 0xff;
                 break;
 
-            case 0x8000062:  // DPC Strength
-                ctrl->value = tuning->dpc_strength;
+            case 0x8000062:  // DPC Strength - Binary Ninja: tisp_g_dpc_strength
+                tisp_g_dpc_strength(&var_98);
+                ctrl->value = var_98;
                 break;
 
             case 0x80000a2:  // DRC Strength
