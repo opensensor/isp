@@ -606,7 +606,6 @@ int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev);
 
 /* Forward declarations for hardware initialization functions */
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
-int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
 extern int sensor_init(struct tx_isp_dev *isp_dev);
 
 /* Forward declarations for subdev ops structures */
@@ -616,7 +615,6 @@ static struct tx_isp_subdev_ops csi_subdev_ops;
 /* Reference driver function declarations - Binary Ninja exact names */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
 int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable);  /* FIXED: Forward declaration for CSI streaming */
-int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
 static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *buffer);
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
@@ -639,7 +637,6 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 /* Forward declaration for hardware initialization */
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 void system_reg_write(u32 reg, u32 value);
-int tisp_init2(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
 
 /* system_reg_write - Helper function to write ISP registers safely */
 void system_reg_write(u32 reg, u32 value)
