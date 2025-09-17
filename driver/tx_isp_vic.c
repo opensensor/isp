@@ -2438,10 +2438,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0xffffffff, vic_regs + 0x1c);   /* Clear interrupt status */
                 wmb();
 
-                /* Step 3: Reset VIC control registers to safe defaults */
-                writel(0x0, vic_regs + 0xc);           /* Clear mode register */
+                /* Step 3: BINARY NINJA EXACT VIC control registers */
+                writel(2, vic_regs + 0xc);             /* BINARY NINJA: Mode = 2 for MIPI (not 3!) */
                 writel(0x0, vic_regs + 0x14);          /* Clear interrupt config */
                 wmb();
+
+                pr_info("*** BINARY NINJA CRITICAL FIX: Set VIC mode = 2 (MIPI) instead of 3 ***\n");
 
                 pr_info("*** VIC HARDWARE RESET COMPLETE - Now applying clean configuration ***\n");
 
