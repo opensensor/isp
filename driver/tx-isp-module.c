@@ -2696,40 +2696,44 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("Channel %d: MMAP allocation - %d buffers of %u bytes each\n",
                        channel, reqbuf.count, buffer_size);
                 
-                /* CRITICAL FIX: Allocate buffer structures like reference driver */
-                pr_info("Channel %d: MMAP mode - allocating %d buffer structures\n",
+                /* CRITICAL FIX: Allocate video_buffer structures like reference driver */
+                pr_info("Channel %d: MMAP mode - allocating %d video_buffer structures\n",
                        channel, reqbuf.count);
 
                 /* Reference driver allocates buffer structures, not DMA buffers */
                 /* The VIC hardware will set the actual DMA addresses later */
                 for (int i = 0; i < reqbuf.count; i++) {
-                    /* Allocate buffer structure like reference driver private_kmalloc */
-                    struct frame_buffer *buffer = kzalloc(sizeof(struct frame_buffer), GFP_KERNEL);
+                    /* Allocate video_buffer structure like reference driver private_kmalloc */
+                    struct video_buffer *buffer = kzalloc(sizeof(struct video_buffer), GFP_KERNEL);
                     if (!buffer) {
-                        pr_err("*** Channel %d: Failed to allocate buffer structure %d ***\n", channel, i);
+                        pr_err("*** Channel %d: Failed to allocate video_buffer structure %d ***\n", channel, i);
 
                         /* Free previously allocated buffer structures */
                         for (int j = 0; j < i; j++) {
-                            /* TODO: Free buffer structures from channel state */
+                            if (state->buffer_addresses && state->buffer_addresses[j] != 0) {
+                                kfree((void *)(uintptr_t)state->buffer_addresses[j]);
+                                state->buffer_addresses[j] = 0;
+                            }
                         }
                         return -ENOMEM;
                     }
 
-                    /* Initialize buffer structure like reference driver */
+                    /* Initialize video_buffer structure like reference driver */
                     buffer->index = i;
                     buffer->type = 1; // V4L2_BUF_TYPE_VIDEO_CAPTURE
                     buffer->memory = 1; // V4L2_MEMORY_MMAP
-                    buffer->length = buffer_size;
-                    buffer->state = 0; // Not queued yet
+                    buffer->flags = 0; // Not queued yet
+                    buffer->status = 0; // Not processed yet
+                    INIT_LIST_HEAD(&buffer->list); // Initialize list head
 
                     /* Store buffer structure in channel state like reference driver */
                     /* Reference: channel_state[(i + channel_buffer_offset + 0x3a) << 2 + 0x24] = buffer */
                     /* For now, store in buffer_addresses array as placeholder */
                     if (state->buffer_addresses) {
-                        state->buffer_addresses[i] = (uint32_t)buffer; /* Store structure pointer */
+                        state->buffer_addresses[i] = (uint32_t)(uintptr_t)buffer; /* Store structure pointer */
                     }
 
-                    pr_info("*** Channel %d: Allocated buffer structure[%d] at %p ***\n",
+                    pr_info("*** Channel %d: Allocated video_buffer structure[%d] at %p ***\n",
                             channel, i, buffer);
                 }
                 
