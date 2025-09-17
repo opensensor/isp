@@ -3522,12 +3522,12 @@ int tisp_g_aeroi_weight(void *buffer)
     return -1;  /* Binary Ninja returns 0xffffffff */
 }
 
-/* tisp_g_ae_zone - EXACT Binary Ninja reference implementation */
-int tisp_g_ae_zone(void *buffer)
+/* tisp_g_ae_zone_internal - EXACT Binary Ninja reference implementation */
+int tisp_g_ae_zone_internal(void *buffer)
 {
     /* Binary Ninja: tisp_ae_get_y_zone(arg1); return 0 */
 
-    pr_debug("tisp_g_ae_zone: entry, buffer=%p\n", buffer);
+    pr_debug("tisp_g_ae_zone_internal: entry, buffer=%p\n", buffer);
 
     tisp_ae_get_y_zone(buffer);
     return 0;
