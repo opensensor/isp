@@ -3498,12 +3498,86 @@ int tisp_set_ae_info(void *in_buf) { return 0; }
 int tisp_get_awb_info(void *out_buf) { return 0; }
 int tisp_set_awb_info(void *in_buf) { return 0; }
 
-/* Additional stub functions for the apical_isp functions */
-int tisp_g_aeroi_weight(void *buffer) { return 0; }
-int tisp_g_ae_zone(void *buffer) { return 0; }
-int tisp_g_af_zone(void *buffer) { return 0; }
-int tisp_g_aezone_weight(void *buffer) { return 0; }
-int tisp_g_ae_hist(void *buffer) { return 0; }
+/* tisp_g_aeroi_weight - EXACT Binary Ninja reference implementation */
+int tisp_g_aeroi_weight(void *buffer)
+{
+    /* Binary Ninja: int32_t var_10 = 0
+     * tisp_ae_param_array_get(0x12, arg1, &var_10)
+     * if (var_10 == 0x384) return 0
+     * isp_printf(2, "bank no free\n", "tisp_g_aeroi_weight")
+     * return 0xffffffff */
+
+    int var_10 = 0;
+
+    pr_debug("tisp_g_aeroi_weight: entry, buffer=%p\n", buffer);
+
+    tisp_ae_param_array_get(0x12, buffer, &var_10);
+
+    if (var_10 == 0x384) {
+        pr_debug("tisp_g_aeroi_weight: success, size=0x384\n");
+        return 0;
+    }
+
+    pr_err("tisp_g_aeroi_weight: bank no free\n");
+    return -1;  /* Binary Ninja returns 0xffffffff */
+}
+
+/* tisp_g_ae_zone - EXACT Binary Ninja reference implementation */
+int tisp_g_ae_zone(void *buffer)
+{
+    /* Binary Ninja: tisp_ae_get_y_zone(arg1); return 0 */
+
+    pr_debug("tisp_g_ae_zone: entry, buffer=%p\n", buffer);
+
+    tisp_ae_get_y_zone(buffer);
+    return 0;
+}
+
+/* tisp_g_af_zone - EXACT Binary Ninja reference implementation */
+int tisp_g_af_zone(void *buffer)
+{
+    /* Binary Ninja: tisp_af_get_zone(); return 0 */
+
+    pr_debug("tisp_g_af_zone: entry, buffer=%p\n", buffer);
+
+    tisp_af_get_zone(buffer);
+    return 0;
+}
+
+/* tisp_g_aezone_weight - EXACT Binary Ninja reference implementation */
+int tisp_g_aezone_weight(void *buffer)
+{
+    /* Binary Ninja: int32_t var_10 = 0
+     * tisp_ae_param_array_get(0x10, arg1, &var_10)
+     * if (var_10 == 0x384) return 0
+     * isp_printf(2, "Failed to allocate vic device\n", "tisp_g_aezone_weight")
+     * return 0xffffffff */
+
+    int var_10 = 0;
+
+    pr_debug("tisp_g_aezone_weight: entry, buffer=%p\n", buffer);
+
+    tisp_ae_param_array_get(0x10, buffer, &var_10);
+
+    if (var_10 == 0x384) {
+        pr_debug("tisp_g_aezone_weight: success, size=0x384\n");
+        return 0;
+    }
+
+    pr_err("tisp_g_aezone_weight: Failed to allocate vic device\n");
+    return -1;  /* Binary Ninja returns 0xffffffff */
+}
+
+/* tisp_g_ae_hist - EXACT Binary Ninja reference implementation */
+int tisp_g_ae_hist(void *buffer)
+{
+    /* Binary Ninja: tisp_ae_get_hist_custome(arg1); return 0 */
+
+    pr_debug("tisp_g_ae_hist: entry, buffer=%p\n", buffer);
+
+    tisp_ae_get_hist_custome(buffer);
+    return 0;
+}
 
 int isp_core_tuning_release(struct tx_isp_dev *dev)
 {
