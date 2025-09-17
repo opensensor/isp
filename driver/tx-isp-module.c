@@ -1811,9 +1811,9 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
         }
 
-        /* Binary Ninja: Error recovery sequence - FIXED to include control limit error */
-        if ((v1_7 & (0xde00 | 0x200000)) != 0 && *vic_irq_enable_flag == 1) {
-            pr_info("*** VIC ERROR RECOVERY: Detected error condition 0x%x, triggering self-healing mechanism ***\n", v1_7);
+        /* Binary Ninja: Error recovery sequence - focus on prevention, not recovery */
+        if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
+            pr_info("*** VIC ERROR RECOVERY: Detected error condition 0x%x (control limit errors should be prevented by proper config) ***\n", v1_7);
             pr_err("error handler!!!\n");
 
             /* Binary Ninja: **($s0 + 0xb8) = 4 */
