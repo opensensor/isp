@@ -4792,16 +4792,12 @@ int tisp_dn_mode_get(void *mode_buf, void *size_buf)
     return 0;
 }
 
+/* tisp_g_ae_zone - Binary Ninja EXACT implementation */
 int tisp_g_ae_zone(void *buffer)
 {
-    if (!buffer) {
-        pr_err("tisp_g_ae_zone: NULL buffer pointer\n");
-        return -EINVAL;
-    }
-
-    pr_debug("tisp_g_ae_zone: Getting AE zone data\n");
-    /* Stub implementation - calls tisp_ae_get_y_zone */
-    return tisp_ae_get_y_zone(buffer);
+    /* Binary Ninja: tisp_ae_get_y_zone(arg1); return 0 */
+    tisp_ae_get_y_zone(buffer);
+    return 0;
 }
 
 int tisp_ae_get_y_zone(void *buffer)
@@ -4812,13 +4808,6 @@ int tisp_ae_get_y_zone(void *buffer)
     }
 
     pr_debug("tisp_ae_get_y_zone: Getting AE Y zone data (stub)\n");
-    /* Stub implementation - needs Binary Ninja decompilation */
-    return 0;
-}
-
-int tisp_af_get_zone(void)
-{
-    pr_debug("tisp_af_get_zone: Getting AF zone data (stub)\n");
     /* Stub implementation - needs Binary Ninja decompilation */
     return 0;
 }
