@@ -2937,6 +2937,9 @@ static uint32_t *data_d04b8 = &data_b0cfc;
 static uint32_t data_d04bc[6] = {0x0d0b00, 0x040d0b00, 0x080d0b00, 0x0c0d0b00, 0x100d0b00, 0x140d0b00};
 static uint32_t *data_d04c4 = &data_afcd4;
 
+/* Missing data_b0c18 variable */
+static uint32_t data_b0c18 = 0x80;  /* AE compensation default */
+
 /* AE exposure threshold parameters */
 static uint32_t data_b2ea8 = 0x8000;  /* AE exp threshold */
 static uint32_t data_b2e9c = 0x1000;  /* Min exposure */
@@ -2970,7 +2973,7 @@ static void tisp_set_sensor_analog_gain(void);
 static void tisp_set_sensor_integration_time_short(uint32_t time);
 static void tisp_set_sensor_analog_gain_short(void);
 static void tiziano_deflicker_expt(uint32_t flicker_t, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t *lut, uint32_t *nodes);
-static void system_reg_write_ae(uint32_t reg, uint32_t value);
+static void system_reg_write_ae(uint32_t bank, uint32_t reg, uint32_t value);
 static void system_irq_func_set(int irq_id, void (*handler)(void));
 static void private_spin_lock_init(int lock_id);
 static uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
