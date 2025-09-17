@@ -2657,6 +2657,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             
             state->buffer_count = reqbuf.count;
 
+            /* Set buffer type from REQBUFS request */
+            fcd->buffer_type = reqbuf.type;
+
             /* CRITICAL: Update VIC active_buffer_count for streaming */
             if (ourISPdev && ourISPdev->vic_dev) {
                 struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
