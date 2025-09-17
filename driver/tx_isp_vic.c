@@ -24,45 +24,17 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
-/* VIC-safe system register write function - prevents control limit errors during tuning operations */
+/* system_reg_write - EXACT Binary Ninja implementation */
 void system_reg_write(u32 reg, u32 value)
 {
     extern struct tx_isp_dev *ourISPdev;
     
-    if (!ourISPdev || !ourISPdev->core_regs) {
-        pr_warn("system_reg_write: No ISP core registers available\n");
-        return;
-    }
-    
-    /* CRITICAL: Check VIC streaming state before register writes */
-    if (vic_start_ok == 1) {
-        /* VIC is streaming - apply VIC-safe register write sequence */
-        pr_info("*** VIC-SAFE REGISTER WRITE: reg=0x%x, value=0x%x (VIC streaming active) ***\n", reg, value);
-        
-        /* CRITICAL FIX: Skip interrupt-disrupting registers during VIC streaming */
-        if ((reg >= 0xb018 && reg <= 0xb024) || 
-            (reg >= 0x98b0 && reg <= 0x98bc) ||
-            (reg >= 0xb0 && reg <= 0xbc)) {
-            pr_info("*** VIC-SAFE: SKIPPING interrupt register 0x%x to preserve VIC interrupts ***\n", reg);
-            return;
-        }
-        
-        /* Apply register write with VIC coordination */
-        writel(value, ourISPdev->core_regs + reg);
-        wmb();
-        
-        /* CRITICAL: Restore VIC interrupt state after potentially disruptive register writes */
-        if (reg >= 0x30 && reg <= 0x3c) {
-            /* Core interrupt control registers - restore VIC interrupts */
-            tx_isp_vic_restore_interrupts();
-            pr_info("*** VIC-SAFE: Restored VIC interrupts after core register write ***\n");
-        }
-    } else {
-        /* VIC not streaming - normal register write */
-        pr_debug("system_reg_write: reg=0x%x, value=0x%x (VIC not streaming)\n", reg, value);
+    /* Binary Ninja EXACT: *(*(mdns_y_pspa_cur_bi_wei0_array + 0xb8) + arg1) = arg2 */
+    if (ourISPdev && ourISPdev->core_regs) {
         writel(value, ourISPdev->core_regs + reg);
         wmb();
     }
+    /* Binary Ninja EXACT: return 0 (implicit) */
 }
 EXPORT_SYMBOL(system_reg_write);
 
