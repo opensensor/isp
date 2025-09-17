@@ -3559,7 +3559,7 @@ int tisp_g_af_zone(void *buffer)
 
     pr_debug("tisp_g_af_zone: entry, buffer=%p\n", buffer);
 
-    tisp_af_get_zone(buffer);
+    tisp_af_get_zone();  // Binary Ninja: function takes no parameters
     return 0;
 }
 
