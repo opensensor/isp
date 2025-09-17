@@ -4805,18 +4805,6 @@ int tisp_ysp_get_par_cfg(void *out_buf, void *size_buf)
     pr_debug("tisp_ysp_get_par_cfg: Total size=%d\n", total_size);
     return 0;
 }
-int tisp_mdns_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_ydns_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_bcsh_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_clm_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_ysp_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_sdns_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_af_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_hldc_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_ae_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_awb_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_reg_map_get(int reg_addr, void *reg_val, void *size_buf) { return 0; }
-int tisp_dn_mode_get(void *mode_buf, void *size_buf) { return 0; }
 
 int tisp_blc_set_par_cfg(void *in_buf) { return 0; }
 int tisp_lsc_set_par_cfg(int param, void *in_buf) { return 0; }
