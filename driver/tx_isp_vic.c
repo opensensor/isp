@@ -1272,9 +1272,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         /* Binary Ninja: EXACT reference driver MIPI mode configuration */
         /* Binary Ninja: 000107ec - Set CSI mode */
-        writel(3, vic_regs + 0xc);  /* VIC mode config for MIPI interface */
+        writel(2, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 2 for MIPI interface */
         wmb();
-        pr_info("*** VIC: Set MIPI mode (3) to VIC control register 0xc ***\n");
+        pr_info("*** VIC: Set MIPI mode (2) to VIC control register 0xc - BINARY NINJA EXACT ***\n");
         
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
