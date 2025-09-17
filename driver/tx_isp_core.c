@@ -374,13 +374,12 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
     return (result == -ENOIOCTLCMD) ? 0 : result;
 }
 
-/* Frame sync work function - EXACT Binary Ninja implementation */
+/* Frame sync work function - Safe implementation without dangerous offsets */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
     extern struct tx_isp_dev *ourISPdev;
-    struct tx_isp_dev *isp_dev = ourISPdev;  /* $s5 = *(mdns_y_pspa_cur_bi_wei0_array + 0xd4) */
-    int32_t var_30 = 0;
-    static int frame_counter = 0;
+    struct tx_isp_dev *isp_dev = ourISPdev;
+    static int sensor_call_counter = 0;
 
     pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation ***\n");
 
