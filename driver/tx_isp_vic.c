@@ -1162,20 +1162,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
         
-        /* CRITICAL: Enable VIC interrupt system BEFORE unlock sequence (from commit history) */
-        pr_info("*** VIC INTERRUPT INIT: Enabling VIC interrupt system before unlock ***\n");
-
-        /* Clear any pending interrupts first - from commit feef0511 */
-        writel(0xffffffff, vic_regs + 0x1f0);  /* Clear pending interrupts */
-        writel(0xffffffff, vic_regs + 0x1f4);  /* Clear pending interrupts */
-        wmb();
-
-        /* Enable VIC interrupts - from commit feef0511 (known working version) */
-        writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-        writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
-        wmb();
-
-        pr_info("*** VIC INTERRUPT INIT: VIC interrupts enabled, starting unlock sequence ***\n");
+        /* VIC interrupt initialization moved to END of function after CSI PHY setup */
+        pr_info("*** VIC INTERRUPT INIT: VIC interrupt setup deferred until after CSI PHY writes ***\n");
 
         /* Unlock sequence - Binary Ninja 00010484-00010490 - EXACT REFERENCE IMPLEMENTATION */
         pr_info("*** VIC UNLOCK SEQUENCE: Starting unlock sequence ***\n");
@@ -1204,9 +1192,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         pr_info("*** VIC UNLOCK: Unlock sequence completed, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
-        /* CRITICAL: Set vic_start_ok flag to enable interrupt processing - from commit cd076e62 */
-        vic_start_ok = 1;
-        pr_info("*** VIC INTERRUPT: vic_start_ok flag set to 1 - interrupts now enabled ***\n");
+        /* vic_start_ok flag setting moved to END of function after CSI PHY setup */
 
         /* Enable VIC - Binary Ninja 000107d4 */
         pr_info("*** VIC UNLOCK: Enabling VIC (writing 1 to register 0x0) ***\n");
@@ -1345,21 +1331,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         wmb();
         
-        /* CRITICAL: Re-enable VIC interrupt system before second unlock sequence */
-        pr_info("*** VIC INTERRUPT RE-INIT: Re-enabling VIC interrupts before second unlock ***\n");
-
-        /* Clear any pending interrupts first */
-        writel(0xffffffff, vic_regs + 0x1f0);  /* Clear pending interrupts */
-        writel(0xffffffff, vic_regs + 0x1f4);  /* Clear pending interrupts */
-        wmb();
-
-        /* Re-enable VIC interrupts - critical for unlock to work */
-        writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-        writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
-        wmb();
-
-        pr_info("*** VIC INTERRUPT RE-INIT: VIC interrupts re-enabled ***\n");
-
         /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
         writel(2, vic_regs + 0x0);
         wmb();
@@ -1517,6 +1488,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         enable_irq(ourISPdev->isp_irq);
         pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
     }
+
+    /* CRITICAL: Final VIC interrupt initialization AFTER all CSI PHY writes are complete */
+    pr_info("*** FINAL VIC INTERRUPT INIT: Enabling VIC interrupts after CSI PHY setup complete ***\n");
+
+    /* Clear any pending interrupts first */
+    writel(0xffffffff, vic_regs + 0x1f0);  /* Clear pending interrupts */
+    writel(0xffffffff, vic_regs + 0x1f4);  /* Clear pending interrupts */
+    wmb();
+
+    /* Enable VIC interrupts - this is the final step after all CSI PHY setup */
+    writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
+    writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
+    wmb();
+
+    /* CRITICAL: Set vic_start_ok flag to enable interrupt processing */
+    vic_start_ok = 1;
+    pr_info("*** FINAL VIC INTERRUPT INIT: VIC interrupts enabled, vic_start_ok=1 ***\n");
 
     return 0;
 }
