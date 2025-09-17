@@ -3781,6 +3781,22 @@ static int create_frame_channel_devices(void)
         // Initialize channel state
         memset(&frame_channels[i].state, 0, sizeof(frame_channels[i].state));
 
+        /* Initialize VBM buffer management fields */
+        frame_channels[i].state.vbm_buffer_addresses = NULL;
+        frame_channels[i].state.vbm_buffer_count = 0;
+        frame_channels[i].state.vbm_buffer_size = 0;
+        spin_lock_init(&frame_channels[i].state.vbm_lock);
+
+        /* Initialize buffer queue management */
+        INIT_LIST_HEAD(&frame_channels[i].state.queued_buffers);
+        INIT_LIST_HEAD(&frame_channels[i].state.completed_buffers);
+        spin_lock_init(&frame_channels[i].state.queue_lock);
+        spin_lock_init(&frame_channels[i].state.buffer_lock);
+        init_waitqueue_head(&frame_channels[i].state.frame_wait);
+        frame_channels[i].state.queued_count = 0;
+        frame_channels[i].state.completed_count = 0;
+        frame_channels[i].state.frame_ready = false;
+
         /* Initialize Binary Ninja buffer management fields */
         mutex_init(&frame_channels[i].buffer_mutex);
         spin_lock_init(&frame_channels[i].buffer_queue_lock);
