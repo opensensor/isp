@@ -51,7 +51,7 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
 int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
 static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
 static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sensor_attr);
-irqreturn_t ispcore_ip_done_irq_handler(int irq, void *dev_id);
+irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 int sensor_init(struct tx_isp_dev *isp_dev);
 void *isp_core_tuning_init(void *arg1);
@@ -472,8 +472,8 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
 EXPORT_SYMBOL(system_irq_func_set);
 
 
-/* ispcore_ip_done_irq_handler - module-specific wrapper to avoid SDK symbol conflict */
-irqreturn_t ispcore_ip_done_irq_handler(int irq, void *dev_id)
+/* ip_done_interrupt_static - EXACT Binary Ninja function name */
+irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
 {
     /* Binary Ninja: if ((system_reg_read(0xc) & 0x40) == 0) */
     uint32_t reg_val = system_reg_read(0xc);
