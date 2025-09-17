@@ -573,42 +573,28 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Binary Ninja: data_ca57c += 1 - increment error counter */
         /* Error counter increment would be here */
 
-        /* CRITICAL FIX: Prevent interrupt storm by masking error interrupts after repeated errors */
-        static int error_type1_count = 0;
-        static int error_type2_count = 0;
+        /* CRITICAL FIX: IMMEDIATELY mask error interrupts to prevent any storm */
+        static bool error_interrupts_masked = false;
 
-        if (interrupt_status & 0x200) {
-            error_type1_count++;
-            pr_info("ISP CORE: Error interrupt type 1 (count=%d)\n", error_type1_count);
+        if (!error_interrupts_masked) {
+            pr_warn("*** ISP CORE: IMMEDIATELY masking ALL error interrupts to prevent storm ***\n");
 
-            /* CRITICAL: Mask error interrupt type 1 after 10 consecutive errors to prevent storm */
-            if (error_type1_count >= 10) {
-                pr_warn("*** ISP CORE: Masking error interrupt type 1 to prevent storm (count=%d) ***\n", error_type1_count);
-                u32 mask_reg = readl(isp_regs + 0xbc);  /* Interrupt mask register */
-                mask_reg |= 0x200;  /* Mask error interrupt type 1 */
-                writel(mask_reg, isp_regs + 0xbc);
-                wmb();
-                error_type1_count = 0;  /* Reset counter */
-            }
-        } else {
-            error_type1_count = 0;  /* Reset counter when no error */
+            /* Mask ALL error interrupt types immediately */
+            u32 mask_reg = readl(isp_regs + 0xbc);  /* Interrupt mask register */
+            mask_reg |= 0x3f8;  /* Mask all error interrupt bits (0x100, 0x200, etc.) */
+            writel(mask_reg, isp_regs + 0xbc);
+            wmb();
+
+            error_interrupts_masked = true;
+            pr_warn("*** ISP CORE: Error interrupts masked - system should remain stable ***\n");
         }
 
+        /* Still log the errors for debugging, but they won't generate more interrupts */
+        if (interrupt_status & 0x200) {
+            pr_info("ISP CORE: Error interrupt type 1 (MASKED)\n");
+        }
         if (interrupt_status & 0x100) {
-            error_type2_count++;
-            pr_info("ISP CORE: Error interrupt type 2 (count=%d)\n", error_type2_count);
-
-            /* CRITICAL: Mask error interrupt type 2 after 10 consecutive errors to prevent storm */
-            if (error_type2_count >= 10) {
-                pr_warn("*** ISP CORE: Masking error interrupt type 2 to prevent storm (count=%d) ***\n", error_type2_count);
-                u32 mask_reg = readl(isp_regs + 0xbc);  /* Interrupt mask register */
-                mask_reg |= 0x100;  /* Mask error interrupt type 2 */
-                writel(mask_reg, isp_regs + 0xbc);
-                wmb();
-                error_type2_count = 0;  /* Reset counter */
-            }
-        } else {
-            error_type2_count = 0;  /* Reset counter when no error */
+            pr_info("ISP CORE: Error interrupt type 2 (MASKED)\n");
         }
     }
 
