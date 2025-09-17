@@ -306,29 +306,11 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
             if (vic_regs) {
                 u32 reg_val = readl(vic_regs + 0x300);
-                u32 original_reg_val = reg_val;
-
-                /* CRITICAL FIX: Use reasonable buffer count to prevent control limit error */
-                u32 existing_buffer_count = (reg_val >> 16) & 0xffff;
-
-                /* Apply the Binary Ninja logic but use reasonable buffer count */
                 reg_val = shifted_value | (reg_val & 0xfff0ffff);
-
-                /* CRITICAL: Use reasonable buffer count (1-4) instead of preserving potentially wrong values */
-                u32 final_buffer_count = 1;  /* Use simple buffer count of 1 to prevent control limit errors */
-                if (existing_buffer_count > 0 && existing_buffer_count <= 4) {
-                    final_buffer_count = existing_buffer_count;  /* Only preserve if reasonable */
-                }
-
-                /* Force reasonable buffer count into the register */
-                reg_val = (reg_val & 0xfff0ffff) | (final_buffer_count << 16);
-
                 writel(reg_val, vic_regs + 0x300);
 
-                pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (was 0x%x) (buffers: index=%d, high_bits=%d, match=%d)\n",
-                         reg_val, original_reg_val, buffer_index, high_bits, match_found);
-                pr_info("vic_framedone_irq_function: Buffer count preserved: existing=%d, final=%d, active_buffer_count=%d\n",
-                         existing_buffer_count, final_buffer_count, vic_dev->active_buffer_count);
+                pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
+                         reg_val, buffer_index, high_bits, match_found);
             }
 
             /* CRITICAL: With ISP pipeline enabled, hardware should generate interrupts automatically */
@@ -812,6 +794,249 @@ static ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t 
 
     return count;
 }
+
+/* CRITICAL: Write CSI PHY registers in CORRECT SEQUENCE matching reference driver */
+void tx_isp_vic_write_csi_phy_sequence(void)
+{
+    void __iomem *csi_base;
+    
+    if (!ourISPdev || !ourISPdev->vic_regs) {
+        pr_err("tx_isp_vic_write_csi_phy_sequence: No ISP registers available\n");
+        return;
+    }
+    
+    /* Use the correct CSI register base - this should map to the CSI PHY registers */
+    csi_base = ourISPdev->vic_regs - 0x9a00;  /* Calculate CSI base from VIC base */
+    
+    pr_info("*** CRITICAL: Writing CSI PHY registers in CORRECT SEQUENCE matching reference driver ***\n");
+    pr_info("*** CSI PHY SEQUENCE: Step 1 - CSI PHY Config registers (0x100-0x1f4) ***\n");
+    
+    /* STEP 1: CSI PHY Config registers - ALL TOGETHER as in reference */
+    writel(0x8a, csi_base + 0x100);
+    writel(0x5, csi_base + 0x104);
+    writel(0x40, csi_base + 0x10c);
+    writel(0xb0, csi_base + 0x110);
+    writel(0xc5, csi_base + 0x114);
+    writel(0x3, csi_base + 0x118);
+    writel(0x20, csi_base + 0x11c);
+    writel(0xf, csi_base + 0x120);
+    writel(0x48, csi_base + 0x124);
+    writel(0x3f, csi_base + 0x128);  /* CORRECTED: Should be 0x3f to match reference */
+    writel(0xf, csi_base + 0x12c);
+    writel(0x88, csi_base + 0x130);
+    writel(0x86, csi_base + 0x138);
+    writel(0x10, csi_base + 0x13c);
+    writel(0x4, csi_base + 0x140);
+    writel(0x1, csi_base + 0x144);
+    writel(0x32, csi_base + 0x148);
+    writel(0x80, csi_base + 0x14c);
+    writel(0x1, csi_base + 0x158);
+    writel(0x60, csi_base + 0x15c);
+    writel(0x1b, csi_base + 0x160);
+    writel(0x18, csi_base + 0x164);
+    writel(0x7f, csi_base + 0x168);
+    writel(0x4b, csi_base + 0x16c);
+    writel(0x3, csi_base + 0x174);
+    writel(0x8a, csi_base + 0x180);
+    writel(0x5, csi_base + 0x184);
+    writel(0x40, csi_base + 0x18c);
+    writel(0xb0, csi_base + 0x190);
+    writel(0xc5, csi_base + 0x194);
+    writel(0x3, csi_base + 0x198);
+    writel(0x9, csi_base + 0x19c);
+    writel(0xf, csi_base + 0x1a0);
+    writel(0x48, csi_base + 0x1a4);
+    writel(0xf, csi_base + 0x1a8);
+    writel(0xf, csi_base + 0x1ac);
+    writel(0x88, csi_base + 0x1b0);
+    writel(0x86, csi_base + 0x1b8);
+    writel(0x10, csi_base + 0x1bc);
+    writel(0x4, csi_base + 0x1c0);
+    writel(0x1, csi_base + 0x1c4);
+    writel(0x32, csi_base + 0x1c8);
+    writel(0x80, csi_base + 0x1cc);
+    writel(0x1, csi_base + 0x1d8);
+    writel(0x60, csi_base + 0x1dc);
+    writel(0x1b, csi_base + 0x1e0);
+    writel(0x18, csi_base + 0x1e4);
+    writel(0x7f, csi_base + 0x1e8);
+    writel(0x4b, csi_base + 0x1ec);
+    writel(0x3, csi_base + 0x1f4);
+    wmb();
+    
+    pr_info("*** CSI PHY SEQUENCE: Step 2 - CSI Lane Config registers (0x200-0x2f4) ***\n");
+    
+    /* STEP 2: CSI Lane Config registers - ALL TOGETHER as in reference */
+    writel(0x8a, csi_base + 0x200);
+    writel(0x5, csi_base + 0x204);
+    writel(0x40, csi_base + 0x20c);
+    writel(0xb0, csi_base + 0x210);
+    writel(0xc5, csi_base + 0x214);
+    writel(0x3, csi_base + 0x218);
+    writel(0x9, csi_base + 0x21c);
+    writel(0xf, csi_base + 0x220);
+    writel(0x48, csi_base + 0x224);
+    writel(0xf, csi_base + 0x228);
+    writel(0xf, csi_base + 0x22c);
+    writel(0x88, csi_base + 0x230);
+    writel(0x86, csi_base + 0x238);
+    writel(0x10, csi_base + 0x23c);
+    writel(0x4, csi_base + 0x240);
+    writel(0x1, csi_base + 0x244);
+    writel(0x32, csi_base + 0x248);
+    writel(0x80, csi_base + 0x24c);
+    writel(0x1, csi_base + 0x258);
+    writel(0x60, csi_base + 0x25c);
+    writel(0x1b, csi_base + 0x260);
+    writel(0x18, csi_base + 0x264);
+    writel(0x7f, csi_base + 0x268);
+    writel(0x4b, csi_base + 0x26c);
+    writel(0x3, csi_base + 0x274);
+    writel(0x8a, csi_base + 0x280);
+    writel(0x5, csi_base + 0x284);
+    writel(0x40, csi_base + 0x28c);
+    writel(0xb0, csi_base + 0x290);
+    writel(0xc5, csi_base + 0x294);
+    writel(0x3, csi_base + 0x298);
+    writel(0x9, csi_base + 0x29c);
+    writel(0xf, csi_base + 0x2a0);
+    writel(0x48, csi_base + 0x2a4);
+    writel(0xf, csi_base + 0x2a8);
+    writel(0xf, csi_base + 0x2ac);
+    writel(0x88, csi_base + 0x2b0);
+    writel(0x86, csi_base + 0x2b8);
+    writel(0x10, csi_base + 0x2bc);
+    writel(0x4, csi_base + 0x2c0);
+    writel(0x1, csi_base + 0x2c4);
+    writel(0x32, csi_base + 0x2c8);
+    writel(0x80, csi_base + 0x2cc);
+    writel(0x1, csi_base + 0x2d8);
+    writel(0x60, csi_base + 0x2dc);
+    writel(0x1b, csi_base + 0x2e0);
+    writel(0x18, csi_base + 0x2e4);
+    writel(0x7f, csi_base + 0x2e8);
+    writel(0x4b, csi_base + 0x2ec);
+    writel(0x3, csi_base + 0x2f4);
+    wmb();
+    
+    pr_info("*** CSI PHY SEQUENCE: Step 3 - Final CSI PHY Control registers (0xc, 0x10) ***\n");
+    
+    /* STEP 3: Final CSI PHY Control registers - LAST as in reference */
+    writel(0x1, csi_base + 0xc);
+    writel(0x1, csi_base + 0x10);  /* CORRECTED: 0x1 not 0x133 */
+    wmb();
+    
+    pr_info("*** CRITICAL: CSI PHY SEQUENCE COMPLETE - NOW MATCHES REFERENCE DRIVER ORDER! ***\n");
+}
+
+int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
+{
+    void __iomem *csi_base;
+    pr_info("*** tx_isp_phy_init: experimental CSI PHY initialization ***\n");
+    if (!isp_dev) {
+        pr_err("tx_isp_phy_init: No ISP device available\n");
+        return -ENODEV;
+    }
+
+    csi_base = isp_dev->vic_dev->vic_regs - 0x9a00;  /* Calculate CSI base from VIC base */
+    if (!csi_base) {
+        pr_err("tx_isp_phy_init: No CSI base available\n");
+        return -ENODEV;
+    }
+
+
+      /* ==============================================================================================
+     * PHASE 2: CSI PHY Lane Configuration (massive write sequence)
+     * These are all new registers being written from 0x0 to various values
+     * ==============================================================================================*/
+
+    pr_info("*** PHASE 2: CSI PHY Lane Configuration ***\n");
+
+    /* CSI PHY Control registers - complete configuration */
+    u8 csi_phy_ctrl_vals[] = {
+        0x7d, 0xe3, 0xa0, 0x83, 0xfa, 0x00, 0x00, 0x88,  /* 0x00-0x1c */
+        0x4e, 0xdd, 0x84, 0x5e, 0xf0, 0xc0, 0x36, 0xdb,  /* 0x20-0x3c */
+        0x03, 0x80, 0x10, 0x00, 0x00, 0x03, 0xff, 0x42,  /* 0x40-0x5c */
+        0x01, 0xc0, 0xc0, 0x78, 0x43, 0x33, 0x00, 0x00,  /* 0x60-0x7c */
+        0x1f, 0x00, 0x61                                   /* 0x80-0x88 */
+    };
+
+    writel(csi_phy_ctrl_vals[0], csi_base + 0x0);
+    writel(csi_phy_ctrl_vals[1], csi_base + 0x4);
+    writel(csi_phy_ctrl_vals[2], csi_base + 0x8);
+    writel(csi_phy_ctrl_vals[3], csi_base + 0xc);
+    writel(csi_phy_ctrl_vals[4], csi_base + 0x10);
+    writel(csi_phy_ctrl_vals[7], csi_base + 0x1c);
+    writel(csi_phy_ctrl_vals[8], csi_base + 0x20);
+    writel(csi_phy_ctrl_vals[9], csi_base + 0x24);
+    writel(csi_phy_ctrl_vals[10], csi_base + 0x28);
+    writel(csi_phy_ctrl_vals[11], csi_base + 0x2c);
+    writel(csi_phy_ctrl_vals[12], csi_base + 0x30);
+    writel(csi_phy_ctrl_vals[13], csi_base + 0x34);
+    writel(csi_phy_ctrl_vals[14], csi_base + 0x38);
+    writel(csi_phy_ctrl_vals[15], csi_base + 0x3c);
+    writel(csi_phy_ctrl_vals[16], csi_base + 0x40);
+    writel(csi_phy_ctrl_vals[17], csi_base + 0x44);
+    writel(csi_phy_ctrl_vals[18], csi_base + 0x48);
+    writel(csi_phy_ctrl_vals[21], csi_base + 0x54);
+    writel(csi_phy_ctrl_vals[22], csi_base + 0x58);
+    writel(csi_phy_ctrl_vals[23], csi_base + 0x5c);
+    writel(csi_phy_ctrl_vals[24], csi_base + 0x60);
+    writel(csi_phy_ctrl_vals[25], csi_base + 0x64);
+    writel(csi_phy_ctrl_vals[26], csi_base + 0x68);
+    writel(csi_phy_ctrl_vals[27], csi_base + 0x6c);
+    writel(csi_phy_ctrl_vals[28], csi_base + 0x70);
+    writel(csi_phy_ctrl_vals[29], csi_base + 0x74);
+    writel(csi_phy_ctrl_vals[32], csi_base + 0x80);
+    writel(csi_phy_ctrl_vals[34], csi_base + 0x88);
+    wmb();
+
+    /* CSI PHY Config registers - complete lane configuration */
+    struct csi_phy_lane_config {
+        u32 offset;
+        u32 value;
+    } csi_phy_configs[] = {
+        /* First lane configuration */
+        {0x100, 0x8a}, {0x104, 0x5}, {0x10c, 0x40}, {0x110, 0xb0},
+        {0x114, 0xc5}, {0x118, 0x3}, {0x11c, 0x20}, {0x120, 0xf},
+        {0x124, 0x48}, {0x128, 0x3f}, {0x12c, 0xf}, {0x130, 0x88},
+        {0x138, 0x86}, {0x13c, 0x10}, {0x140, 0x4}, {0x144, 0x1},
+        {0x148, 0x32}, {0x14c, 0x80}, {0x158, 0x1}, {0x15c, 0x60},
+        {0x160, 0x1b}, {0x164, 0x18}, {0x168, 0x7f}, {0x16c, 0x4b},
+        {0x174, 0x3},
+        /* Second lane configuration */
+        {0x180, 0x8a}, {0x184, 0x5}, {0x18c, 0x40}, {0x190, 0xb0},
+        {0x194, 0xc5}, {0x198, 0x3}, {0x19c, 0x9}, {0x1a0, 0xf},
+        {0x1a4, 0x48}, {0x1a8, 0xf}, {0x1ac, 0xf}, {0x1b0, 0x88},
+        {0x1b8, 0x86}, {0x1bc, 0x10}, {0x1c0, 0x4}, {0x1c4, 0x1},
+        {0x1c8, 0x32}, {0x1cc, 0x80}, {0x1d8, 0x1}, {0x1dc, 0x60},
+        {0x1e0, 0x1b}, {0x1e4, 0x18}, {0x1e8, 0x7f}, {0x1ec, 0x4b},
+        {0x1f4, 0x3},
+        /* Third and fourth lane configurations continue similarly */
+        {0x200, 0x8a}, {0x204, 0x5}, {0x20c, 0x40}, {0x210, 0xb0},
+        {0x214, 0xc5}, {0x218, 0x3}, {0x21c, 0x9}, {0x220, 0xf},
+        {0x224, 0x48}, {0x228, 0xf}, {0x22c, 0xf}, {0x230, 0x88},
+        {0x238, 0x86}, {0x23c, 0x10}, {0x240, 0x4}, {0x244, 0x1},
+        {0x248, 0x32}, {0x24c, 0x80}, {0x258, 0x1}, {0x25c, 0x60},
+        {0x260, 0x1b}, {0x264, 0x18}, {0x268, 0x7f}, {0x26c, 0x4b},
+        {0x274, 0x3},
+        {0x280, 0x8a}, {0x284, 0x5}, {0x28c, 0x40}, {0x290, 0xb0},
+        {0x294, 0xc5}, {0x298, 0x3}, {0x29c, 0x9}, {0x2a0, 0xf},
+        {0x2a4, 0x48}, {0x2a8, 0xf}, {0x2ac, 0xf}, {0x2b0, 0x88},
+        {0x2b8, 0x86}, {0x2bc, 0x10}, {0x2c0, 0x4}, {0x2c4, 0x1},
+        {0x2c8, 0x32}, {0x2cc, 0x80}, {0x2d8, 0x1}, {0x2dc, 0x60},
+        {0x2e0, 0x1b}, {0x2e4, 0x18}, {0x2e8, 0x7f}, {0x2ec, 0x4b},
+        {0x2f4, 0x3}
+    };
+
+    for (int i = 0; i < sizeof(csi_phy_configs)/sizeof(csi_phy_configs[0]); i++) {
+        writel(csi_phy_configs[i].value, csi_base + csi_phy_configs[i].offset);
+    }
+    wmb();
+
+    return 0;
+}
+
 
 /* tx_isp_vic_start - Following EXACT Binary Ninja flow with reference driver sequences */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)

@@ -5027,11 +5027,20 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                 /* Binary Ninja: void* $a0_3 = *($s0_1 + 0x1bc) */
                 /* Binary Ninja: (*($a0_3 + 0x40cc))($a0_3, 0x4000000, 0, $a3_1) */
                 
-                /* CRITICAL: Do NOT call tx_isp_vic_start here - it should only be called during STREAMON */
-                /* This was causing premature VIC start before STREAMON, which doesn't match reference driver */
+                /* This is the CRITICAL call that triggers the register writes! */
+                /* In our implementation, this should call tx_isp_vic_start or similar */
                 if (vic_dev && vic_dev->vic_regs) {
-                    pr_info("*** VIC DEVICE READY - VIC start will be triggered by STREAMON ***\n");
-                    pr_info("*** SKIPPING premature tx_isp_vic_start call to match reference driver ***\n");
+                    pr_info("*** CALLING CRITICAL FUNCTION THAT TRIGGERS REGISTER WRITES ***\n");
+                    
+                    /* This is equivalent to the Binary Ninja function pointer call */
+                    /* It should trigger all the register initialization we see in the logs */
+                    int activation_result = tx_isp_vic_start(vic_dev);
+                    
+                    pr_info("*** CRITICAL FUNCTION RETURNED: %d ***\n", activation_result);
+                    
+                    if (activation_result != 0) {
+                        pr_warn("VIC start returned non-zero: %d\n", activation_result);
+                    }
                 }
                 
                 /* CRITICAL: Subdevice initialization loop */
