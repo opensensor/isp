@@ -1044,108 +1044,242 @@ static int sensor_hw_reset_disable(void) {
 
 static int sensor_hw_reset_enable(void) {
     /* Binary Ninja: return (empty function) */
-    pr_debug("sensor_hw_reset_enable called\n");
     return 0;
 }
 
 static int sensor_alloc_analog_gain(int gain) {
+    /* Binary Ninja: int32_t $v0_2 = *(*(g_ispcore + 0x120) + 0xc0)
+     * int32_t var_10 = 0
+     * int32_t result = $v0_2(arg1, 0x10, &var_10)
+     * *arg2 = var_10.w
+     * return result */
+
+    if (!ourISPdev || !ourISPdev->sensor) {
+        return gain; /* Return input gain as fallback */
+    }
+
+    /* This would call sensor-specific gain allocation function */
+    /* For now, return the allocated gain value */
     pr_debug("sensor_alloc_analog_gain: gain=%d\n", gain);
-    return 0;
+    return gain;
 }
 
 static int sensor_alloc_analog_gain_short(int gain) {
+    /* Binary Ninja: int32_t $v0_2 = *(*(g_ispcore + 0x120) + 0xc4)
+     * int32_t var_10 = 0
+     * int32_t result = $v0_2(arg1, 0x10, &var_10)
+     * *(arg2 + 0xe) = var_10.w
+     * return result */
+
+    if (!ourISPdev || !ourISPdev->sensor) {
+        return gain;
+    }
+
     pr_debug("sensor_alloc_analog_gain_short: gain=%d\n", gain);
-    return 0;
+    return gain;
 }
 
 static int sensor_alloc_digital_gain(int gain) {
+    /* Binary Ninja: int32_t $v0_2 = *(*(g_ispcore + 0x120) + 0xc8)
+     * int32_t var_10 = 0
+     * int32_t result = $v0_2(arg1, 0x10, &var_10)
+     * *(arg2 + 2) = var_10.w
+     * return result */
+
+    if (!ourISPdev || !ourISPdev->sensor) {
+        return gain;
+    }
+
     pr_debug("sensor_alloc_digital_gain: gain=%d\n", gain);
-    return 0;
+    return gain;
 }
 
 static int sensor_alloc_integration_time(int time) {
+    /* Binary Ninja: int32_t $v1_2 = *(*(g_ispcore + 0x120) + 0xd0)
+     * int32_t var_10 = 0
+     * int32_t result
+     * if ($v1_2 != 0)
+     *     result = $v1_2(arg1, 0, &var_10)
+     *     *(arg2 + 0x10) = var_10.w
+     * else
+     *     result = arg1
+     *     *(arg2 + 0x10) = arg1.w
+     * return result */
+
+    if (!ourISPdev || !ourISPdev->sensor) {
+        return time; /* Return input time as fallback */
+    }
+
     pr_debug("sensor_alloc_integration_time: time=%d\n", time);
-    return 0;
+    return time;
 }
 
 static int sensor_alloc_integration_time_short(int time) {
+    /* Binary Ninja: Similar to above but uses offset 0xd4 and stores at arg2 + 0x12 */
+
+    if (!ourISPdev || !ourISPdev->sensor) {
+        return time;
+    }
+
     pr_debug("sensor_alloc_integration_time_short: time=%d\n", time);
-    return 0;
+    return time;
 }
 
 static int sensor_set_integration_time(int time) {
+    /* Binary Ninja: uint32_t ispcore_1 = g_ispcore
+     * uint32_t $a0 = zx.d(arg1)
+     * void* $v1 = *(ispcore_1 + 0x120)
+     * if ($a0 != *($v1 + 0xac))
+     *     *($v1 + 0xec) = (0xffff0000 & *($v1 + 0xec)) + $a0
+     *     *($v1 + 0xac) = $a0
+     *     *(ispcore_1 + 0x198) = 1
+     *     *(ispcore_1 + 0x19c) = $a0
+     *     *(ispcore_1 + 0x1b0) = 1
+     *     *(ispcore_1 + 0x1b4) = *($v1 + 0xec)
+     * return ispcore_1 */
+
+    if (!ourISPdev || !ourISPdev->sensor) {
+        return (int)(uintptr_t)ourISPdev;
+    }
+
+    /* This would update sensor integration time and set flags */
     pr_debug("sensor_set_integration_time: time=%d\n", time);
-    return 0;
+    return (int)(uintptr_t)ourISPdev;
 }
 
 static int sensor_set_integration_time_short(int time) {
+    /* Binary Ninja: Similar to above but simpler - just sets short integration time */
+
+    if (!ourISPdev || !ourISPdev->sensor) {
+        return (int)(uintptr_t)ourISPdev;
+    }
+
     pr_debug("sensor_set_integration_time_short: time=%d\n", time);
-    return 0;
+    return (int)(uintptr_t)ourISPdev;
 }
 
 static int sensor_start_changes(void) {
-    pr_debug("sensor_start_changes called\n");
+    /* Binary Ninja: return (empty function) */
     return 0;
 }
 
 static int sensor_end_changes(void) {
-    pr_debug("sensor_end_changes called\n");
+    /* Binary Ninja: return (empty function) */
     return 0;
 }
 
 static int sensor_set_analog_gain(int gain) {
+    /* Binary Ninja: uint32_t ispcore_1 = g_ispcore
+     * void* $v1 = *(ispcore_1 + 0x120)
+     * if (*($v1 + 0x9c) != arg1)
+     *     *($v1 + 0xec) = zx.d(*($v1 + 0xec)) | arg1 << 0x10
+     *     *($v1 + 0x9c) = arg1
+     *     *(ispcore_1 + 0x180) = 1
+     *     *(ispcore_1 + 0x184) = arg1
+     *     *(ispcore_1 + 0x1b0) = 1
+     *     *(ispcore_1 + 0x1b4) = *($v1 + 0xec)
+     * return ispcore_1 */
+
+    if (!ourISPdev || !ourISPdev->sensor) {
+        return (int)(uintptr_t)ourISPdev;
+    }
+
+    /* This would set analog gain and update ISP flags */
     pr_debug("sensor_set_analog_gain: gain=%d\n", gain);
-    return 0;
+    return (int)(uintptr_t)ourISPdev;
 }
 
 static int sensor_set_analog_gain_short(int gain) {
+    /* Binary Ninja: Similar to above but for short exposure */
+
+    if (!ourISPdev || !ourISPdev->sensor) {
+        return (int)(uintptr_t)ourISPdev;
+    }
+
     pr_debug("sensor_set_analog_gain_short: gain=%d\n", gain);
-    return 0;
+    return (int)(uintptr_t)ourISPdev;
 }
 
 static int sensor_set_digital_gain(int gain) {
+    /* Binary Ninja: Similar to analog gain but for digital gain */
+
+    if (!ourISPdev || !ourISPdev->sensor) {
+        return (int)(uintptr_t)ourISPdev;
+    }
+
     pr_debug("sensor_set_digital_gain: gain=%d\n", gain);
-    return 0;
+    return (int)(uintptr_t)ourISPdev;
 }
 
 static int sensor_get_normal_fps(void) {
+    /* Binary Ninja: int32_t $v0 = *(g_ispcore + 0x12c)
+     * uint32_t $v1 = $v0 u>> 0x10
+     * int32_t $v0_1 = $v0 & 0xffff
+     * return zx.d(((($v1 u% $v0_1) << 8) u/ $v0_1).w + (($v1 u/ $v0_1) << 8).w) */
+
+    if (!ourISPdev || !ourISPdev->sensor) {
+        return 25; /* Default 25 FPS */
+    }
+
+    /* This would calculate FPS from ISP timing registers */
     pr_debug("sensor_get_normal_fps called\n");
     return 25; /* Default 25 FPS */
 }
 
 static int sensor_read_black_pedestal(void) {
-    pr_debug("sensor_read_black_pedestal called\n");
+    /* Binary Ninja: return 0 */
     return 0;
 }
 
 static int sensor_set_mode(int mode) {
+    /* Binary Ninja: Complex function that calls ISP IOCTL and copies sensor parameters */
+
+    if (!ourISPdev || !ourISPdev->sensor) {
+        pr_debug("sensor_set_mode: No ISP device available\n");
+        return -1;
+    }
+
+    /* This would set sensor mode and copy parameters to output structure */
     pr_debug("sensor_set_mode: mode=%d\n", mode);
-    return 0;
+    return mode; /* Return the mode value */
 }
 
 static int sensor_set_wdr_mode(int mode) {
-    pr_debug("sensor_set_wdr_mode: mode=%d\n", mode);
+    /* Binary Ninja: return (empty function) */
     return 0;
 }
 
 static int sensor_fps_control(int fps) {
+    /* Binary Ninja: Copies sensor parameters and returns FPS control value */
+
+    if (!ourISPdev || !ourISPdev->sensor) {
+        return 25 << 16 | 1; /* Default 25/1 FPS */
+    }
+
+    /* This would copy sensor timing parameters and return FPS control */
     pr_debug("sensor_fps_control: fps=%d\n", fps);
-    return 0;
+    return 25 << 16 | 1; /* Default 25/1 FPS packed format */
 }
 
 static int sensor_get_id(void) {
-    pr_debug("sensor_get_id called\n");
-    return 0x2053; /* GC2053 chip ID */
+    /* Binary Ninja: return zx.d(*(*(g_ispcore + 0x120) + 4)) */
+
+    if (!ourISPdev || !ourISPdev->sensor || !ourISPdev->sensor->video.attr) {
+        return 0x2053; /* Default GC2053 chip ID */
+    }
+
+    /* Return sensor chip ID from attributes */
+    return ourISPdev->sensor->video.attr->chip_id;
 }
 
 static int sensor_disable_isp(void) {
-    pr_debug("sensor_disable_isp called\n");
+    /* Binary Ninja: return (empty function) */
     return 0;
 }
 
 static int sensor_get_lines_per_second(void) {
-    pr_debug("sensor_get_lines_per_second called\n");
-    return 27000; /* Default lines per second for 25fps @ 1080p */
+    /* Binary Ninja: return 0 */
+    return 0;
 }
 
 /* CSI function forward declarations */
