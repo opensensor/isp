@@ -3579,11 +3579,158 @@ int tisp_g_ae_hist(void *buffer)
     return 0;
 }
 
-/* Stub functions for the underlying AE/AF functions - these need Binary Ninja implementations too */
+/* tisp_ae_param_array_get - EXACT Binary Ninja reference implementation */
 int tisp_ae_param_array_get(int param_type, void *buffer, int *size)
 {
-    *size = 0x384; /* Set expected size */
-    return 0;
+    /* Binary Ninja: if (arg1 - 1 u>= 0x22) return error */
+    if ((param_type - 1) >= 0x22) {
+        pr_err("tisp_ae_param_array_get: Invalid parameter type %d\n", param_type);
+        return -1;  /* Binary Ninja returns 0xffffffff */
+    }
+
+    void *source_ptr = NULL;
+    int data_size = 0;
+
+    /* Binary Ninja: Large switch statement for all parameter types */
+    switch (param_type) {
+        case 1:   /* _ae_parameter */
+            source_ptr = &_ae_parameter;
+            data_size = 0xa8;
+            break;
+        case 2:   /* ae_exp_th */
+            source_ptr = &ae_exp_th;
+            data_size = 0x50;
+            break;
+        case 3:   /* _AePointPos */
+            source_ptr = &_AePointPos;
+            data_size = 8;
+            break;
+        case 4:   /* _exp_parameter */
+            source_ptr = &_exp_parameter;
+            data_size = 0x2c;
+            break;
+        case 5:   /* ae_ev_step */
+            source_ptr = &ae_ev_step;
+            data_size = 0x14;
+            break;
+        case 6:   /* ae_stable_tol */
+            source_ptr = &ae_stable_tol;
+            data_size = 0x10;
+            break;
+        case 7:   /* ae0_ev_list */
+            source_ptr = &ae0_ev_list;
+            data_size = 0x28;
+            break;
+        case 8:   /* _lum_list */
+            source_ptr = &_lum_list;
+            data_size = 0x28;
+            break;
+        case 0xa: /* _deflicker_para */
+            source_ptr = &_deflicker_para;
+            data_size = 0xc;
+            break;
+        case 0xb: /* _flicker_t */
+            source_ptr = &_flicker_t;
+            data_size = 0x18;
+            break;
+        case 0xc: /* _scene_para */
+            source_ptr = &_scene_para;
+            data_size = 0x2c;
+            break;
+        case 0xd: /* ae_scene_mode_th */
+            source_ptr = &ae_scene_mode_th;
+            data_size = 0x10;
+            break;
+        case 0xe: /* _log2_lut */
+            source_ptr = &_log2_lut;
+            data_size = 0x50;
+            break;
+        case 0xf: /* _weight_lut */
+            source_ptr = &_weight_lut;
+            data_size = 0x50;
+            break;
+        case 0x10: /* _ae_zone_weight - CRITICAL for aezone_weight */
+            source_ptr = &_ae_zone_weight;
+            data_size = 0x384;
+            break;
+        case 0x11: /* _scene_roui_weight */
+            source_ptr = &_scene_roui_weight;
+            data_size = 0x384;
+            break;
+        case 0x12: /* _scene_roi_weight - CRITICAL for aeroi_weight */
+            source_ptr = &_scene_roi_weight;
+            data_size = 0x384;
+            break;
+        case 0x13: /* _ae_result */
+            source_ptr = &_ae_result;
+            data_size = 0x18;
+            break;
+        case 0x14: /* _ae_stat */
+            source_ptr = &_ae_stat;
+            data_size = 0x14;
+            break;
+        case 0x15: /* _ae_wm_q */
+            source_ptr = &_ae_wm_q;
+            data_size = 0x3c;
+            break;
+        case 0x16: /* ae_comp_param */
+            source_ptr = &ae_comp_param;
+            data_size = 0x18;
+            break;
+        case 0x17: /* ae_comp_ev_list */
+            source_ptr = &ae_comp_ev_list;
+            data_size = 0x28;
+            break;
+        case 0x19: /* ae_extra_at_list */
+            source_ptr = &ae_extra_at_list;
+            data_size = 0x28;
+            break;
+        case 0x1a: /* ae1_ev_list */
+            source_ptr = &ae1_ev_list;
+            data_size = 0x28;
+            break;
+        case 0x1b: /* ae0_ev_list_wdr */
+            source_ptr = &ae0_ev_list_wdr;
+            data_size = 0x28;
+            break;
+        case 0x1c: /* _lum_list_wdr */
+            source_ptr = &_lum_list_wdr;
+            data_size = 0x28;
+            break;
+        case 0x1e: /* _scene_para_wdr */
+            source_ptr = &_scene_para_wdr;
+            data_size = 0x2c;
+            break;
+        case 0x1f: /* ae_scene_mode_th_wdr */
+            source_ptr = &ae_scene_mode_th_wdr;
+            data_size = 0x10;
+            break;
+        case 0x20: /* ae_comp_param_wdr */
+            source_ptr = &ae_comp_param_wdr;
+            data_size = 0x18;
+            break;
+        case 0x21: /* ae_extra_at_list_wdr */
+            source_ptr = &ae_extra_at_list_wdr;
+            data_size = 0x28;
+            break;
+        case 0x22: /* ae1_comp_ev_list */
+            source_ptr = &ae1_comp_ev_list;
+            data_size = 0x28;
+            break;
+        default:
+            pr_err("tisp_ae_param_array_get: Unhandled parameter type %d\n", param_type);
+            return -1;
+    }
+
+    if (source_ptr && buffer && size) {
+        /* Binary Ninja: memcpy(arg2, $a1_1, $s1_1); *arg3 = $s1_1 */
+        memcpy(buffer, source_ptr, data_size);
+        *size = data_size;
+        pr_debug("tisp_ae_param_array_get: type=%d, size=%d\n", param_type, data_size);
+        return 0;
+    }
+
+    return -1;
 }
 
 int tisp_ae_get_y_zone(void *buffer) { return 0; }
