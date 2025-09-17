@@ -1218,13 +1218,20 @@ struct tx_isp_channel_state {
     int buffer_count;
     uint32_t sequence;           /* Frame sequence counter */
 
-    /* CRITICAL FIX: Store real buffer addresses from QBUF operations */
-    uint32_t *buffer_addresses;  /* Array of real buffer addresses from application */
+    /* CRITICAL FIX: Store buffer structures like reference driver */
+    uint32_t *buffer_addresses;  /* Array of buffer structure pointers */
 
-    /* Simplified buffer management for now */
+    /* Reference driver buffer queue management */
+    struct list_head queued_buffers;       /* List of queued buffers (ready for VIC) */
+    struct list_head completed_buffers;    /* List of completed buffers (ready for DQBUF) */
+    spinlock_t queue_lock;                 /* Protect queue access */
+    wait_queue_head_t frame_wait;          /* Wait queue for frame completion */
+    int queued_count;                      /* Number of queued buffers */
+    int completed_count;                   /* Number of completed buffers */
+
+    /* Legacy fields for compatibility */
     struct frame_buffer current_buffer;     /* Current active buffer */
     spinlock_t buffer_lock;                /* Protect buffer access */
-    wait_queue_head_t frame_wait;          /* Wait queue for frame completion */
     bool frame_ready;                      /* Simple frame ready flag */
 };
 
