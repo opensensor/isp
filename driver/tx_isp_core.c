@@ -421,18 +421,15 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d, vic_streaming=%d ***\n",
             isp_dev->sensor, isp_dev->streaming_enabled, vic_is_streaming);
 
+    /* CRITICAL FIX: Skip sensor IOCTL to prevent workqueue thread hanging */
+    /* The sensor I2C communication is blocking and causing soft lockups */
+    pr_info("*** ISP FRAME SYNC WORK: Skipping sensor IOCTL to prevent workqueue hang ***\n");
+
     if (isp_dev->sensor && isp_dev->streaming_enabled) {
-        pr_info("*** ISP FRAME SYNC WORK: Conditions met - calling sensor IOCTL ***\n");
-
-        /* Call sensor IOCTL - this matches the Binary Ninja ispcore_sensor_ops_ioctl call */
-        int ret = ispcore_sensor_ops_ioctl(isp_dev);
-        pr_info("*** ISP FRAME SYNC WORK: Sensor IOCTL result: %d ***\n", ret);
-
-        if (ret == 0) {
-            pr_info("*** ISP FRAME SYNC WORK: Sensor I2C communication successful ***\n");
-        } else {
-            pr_warn("*** ISP FRAME SYNC WORK: Sensor I2C communication failed: %d ***\n", ret);
-        }
+        pr_info("*** ISP FRAME SYNC WORK: Sensor available but IOCTL disabled to prevent hang ***\n");
+        /* DISABLED: Call sensor IOCTL - this was causing workqueue thread to hang */
+        /* int ret = ispcore_sensor_ops_ioctl(isp_dev); */
+        pr_info("*** ISP FRAME SYNC WORK: Sensor IOCTL skipped - no I2C communication ***\n");
     } else {
         pr_info("*** ISP FRAME SYNC WORK: Conditions not met - skipping sensor call ***\n");
         if (!isp_dev->sensor) {
