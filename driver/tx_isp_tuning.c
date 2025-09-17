@@ -1715,73 +1715,80 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     }
 
     /* Handle the most common control commands based on Binary Ninja reference */
-    switch (ctrl->cmd) {
-        case 0x8000032:  /* tisp_g_ae_it_max */
-            /* Binary Ninja: tisp_g_ae_it_max(&var_98) */
-            ctrl->value = 100000; /* Default max integration time */
-            return 0;
+    // Special case routing for 0x8000024-0x8000027
+    if (ctrl->cmd >= 0x8000024) {
+        switch(ctrl->cmd) {
+            pr_info("Special case routing for 0x8000024-0x8000027\n");
+            pr_info("cmd=0x%x\n", ctrl->cmd);
+            case 0x8000023:  // AE Compensation
+                ctrl->value = tuning->ae_comp;
+            break;
+            case 0x8000024:  // AE ROI
+                ret = apical_isp_ae_g_roi(dev, ctrl);
+            break;
 
-        case 0x80000a2:  /* tisp_g_drc_strength */
-            /* Binary Ninja: tisp_g_drc_strength(&var_98) */
-            ctrl->value = 128; /* Default DRC strength */
-            return 0;
+            case 0x8000025:  // Expression
+                ret = apical_isp_expr_g_ctrl(dev, ctrl);
+            break;
 
-        case 0x80000e0:  /* Get FPS control */
-            /* Binary Ninja: arg2[1] = *(*(*arg1 + 0xd4) + 0x12c) */
-            if (dev->sensor && dev->sensor->video.attr) {
-                ctrl->value = (25 << 16) | 1; /* 25/1 FPS */
-            } else {
-                ctrl->value = (25 << 16) | 1; /* Default 25/1 FPS */
-            }
-            return 0;
+            case 0x8000026:  // EV
+                ret = apical_isp_ev_g_attr(dev, ctrl);
+            break;
 
-        case 0x80000e1:  /* Get AE state */
-            /* Binary Ninja: arg2[1] = arg1[0x1029] & 1 */
-            ctrl->value = 1; /* AE enabled */
-            return 0;
+        case 0x8000027: { // Total Gain
+                // TODO - NOT IMPLEMENTED
+                // Special case that uses tisp_g_ev_attr
+                break;
+        }
+            break;
 
-        case 0x80000e2:  /* tisp_g_module_control */
-            /* Binary Ninja: tisp_g_module_control(&var_98) */
-            ctrl->value = 0x1; /* Module control flags */
-            return 0;
+            case 0x8000028:  // Maximum Analog Gain
+                ctrl->value = tuning->max_again;
+                break;
 
-        case 0x980900:  /* Get brightness */
-            /* Binary Ninja: arg2[1] = arg1[0x1025] */
-            ctrl->value = 128; /* Default brightness */
-            return 0;
+            case 0x8000029:  // Maximum Digital Gain
+                ctrl->value = tuning->max_dgain;
+                break;
+            case 0x800002c:  // Move state
+                ctrl->value = tuning->move_state;
+                break;
+            case 0x8000039:  // Defog Strength
+                ctrl->value = tuning->defog_strength;
+                break;
 
-        case 0x980901:  /* Get contrast */
-            /* Binary Ninja: arg2[1] = arg1[0x1023] */
-            ctrl->value = 128; /* Default contrast */
-            return 0;
+            case 0x8000062:  // DPC Strength
+                ctrl->value = tuning->dpc_strength;
+                break;
 
-        case 0x980902:  /* Get saturation */
-            /* Binary Ninja: arg2[1] = arg1[0x1024] */
-            ctrl->value = 128; /* Default saturation */
-            return 0;
+            case 0x80000a2:  // DRC Strength
+                ctrl->value = tuning->drc_strength;
+                break;
 
-        case 0x980914:  /* Get vertical flip */
-            /* Binary Ninja: arg2[1] = arg1[0x3ad] */
-            ctrl->value = 0; /* No vertical flip */
-            return 0;
+            case 0x8000085:  // Temper Strength
+                ctrl->value = tuning->temper_strength;
+                break;
 
-        case 0x980915:  /* Get horizontal flip */
-            /* Binary Ninja: arg2[1] = arg1[0x3ac] */
-            ctrl->value = 0; /* No horizontal flip */
-            return 0;
+            case 0x8000086:  // Sinter Strength
+                ctrl->value = tuning->sinter_strength;
+                break;
 
-        case 0x98091b:  /* Get sharpness */
-            /* Binary Ninja: arg2[1] = arg1[0xfdb] */
-            ctrl->value = 128; /* Default sharpness */
-            return 0;
+            case 0x800002d:  // AE Statistics
+                ret = isp_get_ae_state(dev, ctrl);
+                if (ret)
+                    goto out;
+                break;
 
-        default:
-            /* Binary Ninja: return 0xffffffff for unhandled commands */
-            pr_debug("apical_isp_core_ops_g_ctrl: Unhandled cmd=0x%x\n", ctrl->cmd);
-            return -EINVAL;
-    }
+            case 0x8000030:  // AE Zone Info
+                ret = tisp_g_ae_zone(dev, ctrl);
+                if (ret)
+                    goto out;
+                break;
 
-    return 0;
+            case 0x8000031:  // AF Zone Info
+                ret = isp_get_af_zone(dev, ctrl);
+                if (ret)
+                    goto out;
+                break;
             // Special case handlers
             case 0x8000004: {  // White Balance
                 struct {
@@ -1950,6 +1957,7 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     pr_info("Set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
 
     switch (ctrl->cmd) {
+        pr_info("Set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
         case 0x980900:  // Brightness
             tuning->brightness = ctrl->value;
             break;
