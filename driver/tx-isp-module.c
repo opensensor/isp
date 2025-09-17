@@ -3113,37 +3113,55 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 /* CRITICAL FIX: Use stored real buffer address instead of generated fake address */
                 u32 buffer_phys_addr;
 
-                /* CRITICAL FIX: Use reference driver logic for DQBUF */
+                /* CRITICAL FIX: Use reference driver DQBUF logic - wait for completed buffer */
                 struct frame_buffer *frame_buffer = NULL;
 
-                /* Get buffer structure from channel state like reference driver */
-                if (state->buffer_addresses && buf_index < state->buffer_count && state->buffer_addresses[buf_index] != 0) {
-                    frame_buffer = (struct frame_buffer *)state->buffer_addresses[buf_index];
-                    pr_info("*** Channel %d: DQBUF found buffer structure[%d] at %p ***\n",
-                            channel, buf_index, frame_buffer);
-                } else {
-                    pr_warn("*** Channel %d: DQBUF no buffer structure found for index %d ***\n",
-                            channel, buf_index);
-                    return -EINVAL;
+                pr_info("*** Channel %d: DQBUF waiting for completed buffer ***\n", channel);
+
+                /* Reference driver waits for completed buffer using wait_event_interruptible */
+                spin_lock(&state->queue_lock);
+
+                /* Check if there are completed buffers available */
+                if (list_empty(&state->completed_buffers)) {
+                    spin_unlock(&state->queue_lock);
+
+                    pr_info("*** Channel %d: DQBUF no completed buffers, waiting... ***\n", channel);
+
+                    /* Wait for buffer completion like reference driver */
+                    int wait_result = wait_event_interruptible_timeout(state->frame_wait,
+                        !list_empty(&state->completed_buffers), msecs_to_jiffies(200));
+
+                    pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, wait_result);
+
+                    if (wait_result <= 0) {
+                        pr_warn("*** Channel %d: DQBUF timeout or interrupted ***\n", channel);
+                        return wait_result == 0 ? -EAGAIN : wait_result;
+                    }
+
+                    spin_lock(&state->queue_lock);
                 }
 
-                /* CRITICAL: Use __fill_v4l2_buffer logic like reference driver */
-                /* The reference driver calls __fill_v4l2_buffer(buffer, &v4l2_buffer) */
-                /* This fills the v4l2_buffer with the REAL buffer information */
+                /* Get the first completed buffer from the list */
+                if (!list_empty(&state->completed_buffers)) {
+                    struct list_head *first = state->completed_buffers.next;
+                    frame_buffer = list_entry(first, struct frame_buffer, queue_entry);
 
-                /* For now, simulate what __fill_v4l2_buffer does: */
-                /* It copies buffer info and sets the correct physical address */
-                if (frame_buffer->phys_addr != 0) {
+                    /* Remove from completed list */
+                    list_del(first);
+                    state->completed_count--;
+
+                    buf_index = frame_buffer->index;
                     buffer_phys_addr = frame_buffer->phys_addr;
-                    pr_info("*** Channel %d: DQBUF using REAL buffer address from frame_buffer: 0x%x ***\n",
-                            channel, buffer_phys_addr);
+
+                    pr_info("*** Channel %d: DQBUF got completed buffer[%d] phys_addr=0x%x ***\n",
+                            channel, buf_index, buffer_phys_addr);
                 } else {
-                    /* VIC hardware should have set this address, but it's not set yet */
-                    /* Use fallback for now, but this indicates VIC integration issue */
-                    buffer_phys_addr = 0x6300000 + (buf_index * (state->width * state->height * 2));
-                    pr_warn("*** Channel %d: DQBUF VIC has not set buffer address yet, using fallback: 0x%x ***\n",
-                            channel, buffer_phys_addr);
+                    spin_unlock(&state->queue_lock);
+                    pr_warn("*** Channel %d: DQBUF still no completed buffers after wait ***\n", channel);
+                    return -EAGAIN;
                 }
+
+                spin_unlock(&state->queue_lock);
 
                 pr_info("*** Channel %d: DQBUF updating VIC buffer[%d] addr=0x%x ***\n",
                         channel, buf_index, buffer_phys_addr);
