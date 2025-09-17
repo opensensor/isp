@@ -353,34 +353,10 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                          reg_val, buffer_index, high_bits, match_found);
             }
 
-            /* CRITICAL: Manually trigger ISP core interrupt for frame sync */
-            /* The hardware pipeline connection requires explicit interrupt triggering */
-            pr_info("*** VIC->ISP: Frame done - triggering ISP core interrupt for frame sync ***\n");
-
-            /* CRITICAL FIX: Trigger ISP core interrupt (IRQ 37) for frame sync */
-            extern struct tx_isp_dev *ourISPdev;
-            if (ourISPdev && ourISPdev->core_regs) {
-                void __iomem *core = ourISPdev->core_regs;
-
-                /* Trigger ONLY frame sync interrupt, clear any error interrupts */
-                /* Binary Ninja reference: Set frame sync interrupt pending (bit 12 = 0x1000) */
-                /* CRITICAL: Don't preserve existing error interrupts - only set frame sync */
-                writel(0x1000, core + 0xb4);  /* Set ONLY frame sync pending, clear others */
-                wmb();
-
-                /* Also trigger in new interrupt bank if available */
-                writel(0x1000, core + 0x98b4);  /* Set ONLY frame sync pending, clear others */
-                wmb();
-
-                pr_info("*** VIC->ISP: ISP core frame sync interrupt triggered (0x1000) ***\n");
-            } else {
-                pr_warn("*** VIC->ISP: Cannot trigger ISP interrupt - core_regs not available ***\n");
-            }
-
-    /* Call the ISP frame done wakeup function to notify waiting processes */
-    extern void isp_frame_done_wakeup(void);
-    isp_frame_done_wakeup();
-    pr_info("*** VIC->ISP EVENT: Called isp_frame_done_wakeup() ***\n");
+            /* REFERENCE DRIVER: VIC frame done processing complete */
+            /* The reference driver does NOT manually trigger ISP core interrupts */
+            /* ISP core interrupts should be triggered automatically by hardware */
+            pr_info("*** VIC FRAME DONE: Processing complete - hardware should trigger ISP interrupts ***\n");
         }
 
 //        /* Binary Ninja: result = &data_b0000, goto label_123f4 */
