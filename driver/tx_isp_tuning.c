@@ -1751,12 +1751,12 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
         }
             break;
 
-            case 0x8000028:  // Maximum Analog Gain
-                ctrl->value = tuning->max_again;
+            case 0x8000028:  // Maximum Analog Gain - Binary Ninja: apical_isp_max_again_g_ctrl
+                ret = apical_isp_max_again_g_ctrl(dev, ctrl);
                 break;
 
-            case 0x8000029:  // Maximum Digital Gain
-                ctrl->value = tuning->max_dgain;
+            case 0x8000029:  // Maximum Digital Gain - Binary Ninja: apical_isp_max_dgain_g_ctrl
+                ret = apical_isp_max_dgain_g_ctrl(dev, ctrl);
                 break;
             case 0x800002c:  // Move state
                 ctrl->value = tuning->move_state;
