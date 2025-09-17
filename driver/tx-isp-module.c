@@ -1146,21 +1146,11 @@ int sensor_fps_control(int fps) {
         pr_info("sensor_fps_control: Calling registered sensor (%s) IOCTL with FPS=0x%x (%d/1)\n",
                 ourISPdev->sensor->info.name, fps_value, fps);
 
-        /* CRITICAL FIX: Call with the original sensor subdev, not the ISP device sensor subdev */
-        /* The sensor IOCTL expects the original subdev for sd_to_sensor_device to work correctly */
-        struct tx_isp_subdev *original_sd = stored_sensor_ops.sensor_sd;
-        if (original_sd) {
-            pr_info("sensor_fps_control: Using original sensor subdev %p instead of ISP device subdev %p\n",
-                    original_sd, &ourISPdev->sensor->sd);
-
-            /* Call the registered sensor's FPS IOCTL - this communicates with gc2053.ko */
-            result = ourISPdev->sensor->sd.ops->sensor->ioctl(original_sd,
-                                                              TX_ISP_EVENT_SENSOR_FPS,
-                                                              &fps_value);
-        } else {
-            pr_warn("sensor_fps_control: No original sensor subdev available\n");
-            result = -ENODEV;
-        }
+        /* Call the registered sensor's FPS IOCTL - this communicates with gc2053.ko */
+        /* The delegation function will automatically use the correct original sensor subdev */
+        result = ourISPdev->sensor->sd.ops->sensor->ioctl(&ourISPdev->sensor->sd,
+                                                          TX_ISP_EVENT_SENSOR_FPS,
+                                                          &fps_value);
 
         if (result == 0) {
             pr_info("sensor_fps_control: Registered sensor FPS set successfully to %d FPS\n", fps);
@@ -4367,15 +4357,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Route to sensor IOCTL handler if available
         if (isp_dev->sensor && isp_dev->sensor->sd.ops &&
             isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
-            /* CRITICAL FIX: Use original sensor subdev, not ISP device sensor subdev */
-            struct tx_isp_subdev *original_sd = stored_sensor_ops.sensor_sd;
-            if (original_sd) {
-                ret = isp_dev->sensor->sd.ops->sensor->ioctl(original_sd,
-                                                            control_arg.cmd, &control_arg.value);
-            } else {
-                pr_warn("No original sensor subdev for get control\n");
-                ret = -ENODEV;
-            }
+            ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
+                                                        control_arg.cmd, &control_arg.value);
             if (ret == 0) {
                 if (copy_to_user(argp, &control_arg, sizeof(control_arg)))
                     return -EFAULT;
