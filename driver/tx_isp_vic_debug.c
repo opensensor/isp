@@ -118,7 +118,7 @@ int tx_isp_vic_start_streaming(struct tx_isp_dev *isp_dev)
     wmb();
     
     /* Configure VIC control register */
-    writel(3, vic_regs + 0xc); /* MIPI mode */
+    writel(2, vic_regs + 0xc); /* MIPI mode (2, not 3) */
     wmb();
     
     /* Enable VIC interrupts - keep original approach but add note */
