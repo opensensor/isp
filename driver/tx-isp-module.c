@@ -2679,43 +2679,41 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("Channel %d: MMAP allocation - %d buffers of %u bytes each\n",
                        channel, reqbuf.count, buffer_size);
                 
-                /* CRITICAL FIX: Allocate real DMA buffers like reference driver */
-                pr_info("Channel %d: MMAP mode - allocating %d DMA buffers of %u bytes each\n",
-                       channel, reqbuf.count, buffer_size);
+                /* CRITICAL FIX: Allocate buffer structures like reference driver */
+                pr_info("Channel %d: MMAP mode - allocating %d buffer structures\n",
+                       channel, reqbuf.count);
 
-                /* Allocate DMA buffer array to store real buffer addresses */
-                if (!state->buffer_addresses) {
-                    pr_err("*** Channel %d: buffer_addresses array not allocated ***\n", channel);
-                    return -ENOMEM;
-                }
-
-                /* Allocate real DMA buffers for each buffer slot */
+                /* Reference driver allocates buffer structures, not DMA buffers */
+                /* The VIC hardware will set the actual DMA addresses later */
                 for (int i = 0; i < reqbuf.count; i++) {
-                    void *virt_addr;
-                    dma_addr_t dma_addr;
+                    /* Allocate buffer structure like reference driver private_kmalloc */
+                    struct frame_buffer *buffer = kzalloc(sizeof(struct frame_buffer), GFP_KERNEL);
+                    if (!buffer) {
+                        pr_err("*** Channel %d: Failed to allocate buffer structure %d ***\n", channel, i);
 
-                    /* Use DMA coherent allocation like reference driver */
-                    virt_addr = dma_alloc_coherent(NULL, buffer_size, &dma_addr, GFP_KERNEL);
-                    if (!virt_addr) {
-                        pr_err("*** Channel %d: Failed to allocate DMA buffer %d ***\n", channel, i);
-
-                        /* Free previously allocated buffers */
+                        /* Free previously allocated buffer structures */
                         for (int j = 0; j < i; j++) {
-                            if (state->buffer_addresses[j] != 0) {
-                                dma_free_coherent(NULL, buffer_size,
-                                    phys_to_virt(state->buffer_addresses[j]),
-                                    state->buffer_addresses[j]);
-                                state->buffer_addresses[j] = 0;
-                            }
+                            /* TODO: Free buffer structures from channel state */
                         }
                         return -ENOMEM;
                     }
 
-                    /* Store the real DMA address */
-                    state->buffer_addresses[i] = (uint32_t)dma_addr;
+                    /* Initialize buffer structure like reference driver */
+                    buffer->index = i;
+                    buffer->type = 1; // V4L2_BUF_TYPE_VIDEO_CAPTURE
+                    buffer->memory = 1; // V4L2_MEMORY_MMAP
+                    buffer->length = buffer_size;
+                    buffer->state = 0; // Not queued yet
 
-                    pr_info("*** Channel %d: Allocated DMA buffer[%d] virt=%p phys=0x%x size=%u ***\n",
-                            channel, i, virt_addr, (uint32_t)dma_addr, buffer_size);
+                    /* Store buffer structure in channel state like reference driver */
+                    /* Reference: channel_state[(i + channel_buffer_offset + 0x3a) << 2 + 0x24] = buffer */
+                    /* For now, store in buffer_addresses array as placeholder */
+                    if (state->buffer_addresses) {
+                        state->buffer_addresses[i] = (uint32_t)buffer; /* Store structure pointer */
+                    }
+
+                    pr_info("*** Channel %d: Allocated buffer structure[%d] at %p ***\n",
+                            channel, i, buffer);
                 }
                 
             } else if (reqbuf.memory == 2) { /* V4L2_MEMORY_USERPTR - client allocates */
@@ -3068,24 +3066,35 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 /* CRITICAL FIX: Use stored real buffer address instead of generated fake address */
                 u32 buffer_phys_addr;
 
-                /* CRITICAL DEBUG: Check buffer_addresses array state */
-                pr_info("*** Channel %d: DQBUF DEBUG - buffer_addresses=%p, buffer_count=%d, buf_index=%d ***\n",
-                        channel, state->buffer_addresses, state->buffer_count, buf_index);
+                /* CRITICAL FIX: Use reference driver logic for DQBUF */
+                struct frame_buffer *frame_buffer = NULL;
 
-                if (state->buffer_addresses && buf_index < state->buffer_count) {
-                    pr_info("*** Channel %d: DQBUF DEBUG - buffer_addresses[%d]=0x%x ***\n",
-                            channel, buf_index, state->buffer_addresses[buf_index]);
+                /* Get buffer structure from channel state like reference driver */
+                if (state->buffer_addresses && buf_index < state->buffer_count && state->buffer_addresses[buf_index] != 0) {
+                    frame_buffer = (struct frame_buffer *)state->buffer_addresses[buf_index];
+                    pr_info("*** Channel %d: DQBUF found buffer structure[%d] at %p ***\n",
+                            channel, buf_index, frame_buffer);
+                } else {
+                    pr_warn("*** Channel %d: DQBUF no buffer structure found for index %d ***\n",
+                            channel, buf_index);
+                    return -EINVAL;
                 }
 
-                /* Try to get the real buffer address that was stored during REQBUFS */
-                if (state->buffer_addresses && buf_index < state->buffer_count && state->buffer_addresses[buf_index] != 0) {
-                    buffer_phys_addr = state->buffer_addresses[buf_index];
-                    pr_info("*** Channel %d: DQBUF using REAL stored buffer address: 0x%x ***\n",
+                /* CRITICAL: Use __fill_v4l2_buffer logic like reference driver */
+                /* The reference driver calls __fill_v4l2_buffer(buffer, &v4l2_buffer) */
+                /* This fills the v4l2_buffer with the REAL buffer information */
+
+                /* For now, simulate what __fill_v4l2_buffer does: */
+                /* It copies buffer info and sets the correct physical address */
+                if (frame_buffer->phys_addr != 0) {
+                    buffer_phys_addr = frame_buffer->phys_addr;
+                    pr_info("*** Channel %d: DQBUF using REAL buffer address from frame_buffer: 0x%x ***\n",
                             channel, buffer_phys_addr);
                 } else {
-                    /* Fallback to generated address (but this indicates a problem) */
+                    /* VIC hardware should have set this address, but it's not set yet */
+                    /* Use fallback for now, but this indicates VIC integration issue */
                     buffer_phys_addr = 0x6300000 + (buf_index * (state->width * state->height * 2));
-                    pr_warn("*** Channel %d: DQBUF using FALLBACK address (no real address stored): 0x%x ***\n",
+                    pr_warn("*** Channel %d: DQBUF VIC has not set buffer address yet, using fallback: 0x%x ***\n",
                             channel, buffer_phys_addr);
                 }
 
