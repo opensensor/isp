@@ -1090,49 +1090,24 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     void __iomem *csi_base = main_isp_base + 0x10000;
 
     /* STEP 1: Enable clocks - Critical for VIC operation */
-    pr_info("*** CRITICAL: Enabling all VIC-related clocks ***\n");
-
     cgu_isp_clk = clk_get(NULL, "cgu_isp");
     if (!IS_ERR(cgu_isp_clk)) {
         clk_set_rate(cgu_isp_clk, 100000000);
         ret = clk_prepare_enable(cgu_isp_clk);
         if (ret == 0) {
             pr_info("CGU_ISP clock enabled at 100MHz\n");
-        } else {
-            pr_err("Failed to enable CGU_ISP clock: %d\n", ret);
         }
-    } else {
-        pr_err("Failed to get CGU_ISP clock\n");
     }
 
     isp_clk = clk_get(NULL, "isp");
     if (!IS_ERR(isp_clk)) {
-        ret = clk_prepare_enable(isp_clk);
-        if (ret == 0) {
-            pr_info("ISP clock enabled\n");
-        } else {
-            pr_err("Failed to enable ISP clock: %d\n", ret);
-        }
-    } else {
-        pr_err("Failed to get ISP clock\n");
+        clk_prepare_enable(isp_clk);
     }
 
     csi_clk = clk_get(NULL, "csi");
     if (!IS_ERR(csi_clk)) {
-        ret = clk_prepare_enable(csi_clk);
-        if (ret == 0) {
-            pr_info("CSI clock enabled\n");
-        } else {
-            pr_err("Failed to enable CSI clock: %d\n", ret);
-        }
-    } else {
-        pr_err("Failed to get CSI clock\n");
+        clk_prepare_enable(csi_clk);
     }
-
-    /* CRITICAL: Allow clocks to stabilize before VIC hardware access */
-    pr_info("*** Waiting for VIC clocks to stabilize ***\n");
-    udelay(2000);  /* 2ms for clock stabilization */
-    pr_info("*** VIC clocks stabilized - VIC hardware should now respond properly ***\n");
 
     /* STEP 2: CPM register setup */
     cpm_regs = ioremap(0x10000000, 0x1000);
@@ -1351,63 +1326,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         wmb();
         
-        /* CRITICAL FIX: VIC hardware initialization before unlock sequence */
-        pr_info("*** VIC HARDWARE INIT: Preparing VIC hardware for unlock sequence ***\n");
-
-        /* Step 1: Reset VIC hardware to known state */
-        writel(0, vic_regs + 0x0);  /* Clear control register */
-        wmb();
-        udelay(100);  /* Allow reset to complete */
-
-        /* Step 2: Initialize VIC interrupt system */
-        writel(0, vic_regs + 0x1e0);  /* Clear interrupt enables */
-        writel(0xffffffff, vic_regs + 0x1e8);  /* Clear all interrupt flags */
-        wmb();
-
-        /* Step 3: Configure VIC for MIPI mode before unlock */
-        writel(3, vic_regs + 0xc);  /* Set MIPI mode */
-        wmb();
-
-        pr_info("*** VIC HARDWARE INIT: VIC prepared, starting unlock sequence ***\n");
-
-        /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence (now with proper hardware init) */
-        pr_info("*** VIC UNLOCK: Writing unlock sequence (2, then 4) ***\n");
+        /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
         writel(2, vic_regs + 0x0);
         wmb();
-        udelay(10);  /* Allow hardware to process */
-
         writel(4, vic_regs + 0x0);
         wmb();
-        udelay(10);  /* Allow hardware to process */
 
-        pr_info("*** VIC UNLOCK: Unlock sequence written, waiting for hardware response ***\n");
-
-        /* Binary Ninja: 00010acc - Wait for unlock with better error handling */
-        timeout = 10000;  /* Reset timeout counter */
+        /* Binary Ninja: 00010acc - Wait for unlock - EXACT REFERENCE IMPLEMENTATION */
         while (readl(vic_regs + 0x0) != 0) {
             udelay(1);
             if (--timeout == 0) {
-                u32 reg_val = readl(vic_regs + 0x0);
-                pr_err("*** VIC UNLOCK TIMEOUT: Register 0x0 = 0x%08x (expected 0x0) ***\n", reg_val);
-                pr_err("*** VIC UNLOCK TIMEOUT: Hardware may need different initialization ***\n");
-
-                /* Try alternative unlock approach */
-                pr_info("*** VIC UNLOCK: Trying alternative unlock approach ***\n");
-                writel(0, vic_regs + 0x0);  /* Force clear */
-                wmb();
-                udelay(100);
-
-                if (readl(vic_regs + 0x0) == 0) {
-                    pr_info("*** VIC UNLOCK: Alternative approach succeeded ***\n");
-                    break;
-                } else {
-                    pr_err("*** VIC UNLOCK: Alternative approach failed, continuing anyway ***\n");
-                    break;  /* Continue to prevent hang */
-                }
+                pr_err("VIC unlock timeout\n");
+                return -ETIMEDOUT;
             }
         }
-
-        pr_info("*** VIC UNLOCK: Unlock sequence completed, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
         
         /* Binary Ninja: 00010ad4 - Enable VIC */
         writel(1, vic_regs + 0x0);
