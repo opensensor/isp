@@ -388,40 +388,33 @@ static void ispcore_irq_fs_work(struct work_struct *work)
         return;
     }
 
-    /* SAFE: Use proper struct members instead of dangerous offsets */
-    /* The Binary Ninja reference shows conditional sensor calls - let's implement this safely */
+    /* MATCH REFERENCE DRIVER: Check conditions every frame, call sensor when conditions are met */
+    pr_info("*** ISP FRAME SYNC WORK: Checking sensor conditions (like Binary Ninja reference) ***\n");
 
-    sensor_call_counter++;
-    pr_info("*** ISP FRAME SYNC WORK: Counter=%d/25 ***\n", sensor_call_counter);
+    /* Check if sensor is available and streaming is active */
+    pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d ***\n",
+            isp_dev->sensor, isp_dev->streaming_enabled);
 
-    if (sensor_call_counter >= 25) {  /* Every 25 frames (~1 second at 25 FPS) */
-        pr_info("*** ISP FRAME SYNC WORK: Triggering periodic sensor communication ***\n");
+    if (isp_dev->sensor && isp_dev->streaming_enabled) {
+        pr_info("*** ISP FRAME SYNC WORK: Conditions met - calling sensor IOCTL ***\n");
 
-        /* Check if sensor is available and streaming is active */
-        pr_info("*** ISP FRAME SYNC WORK: Checking sensor: %p, streaming_enabled: %d ***\n",
-                isp_dev->sensor, isp_dev->streaming_enabled);
+        /* Call sensor IOCTL - this matches the Binary Ninja ispcore_sensor_ops_ioctl call */
+        int ret = ispcore_sensor_ops_ioctl(isp_dev);
+        pr_info("*** ISP FRAME SYNC WORK: Sensor IOCTL result: %d ***\n", ret);
 
-        if (isp_dev->sensor && isp_dev->streaming_enabled) {
-            pr_info("*** ISP FRAME SYNC WORK: Sensor available and streaming active ***\n");
-
-            /* Call sensor IOCTL safely using proper struct members */
-            int ret = ispcore_sensor_ops_ioctl(isp_dev);
-            pr_info("*** ISP FRAME SYNC WORK: Sensor IOCTL result: %d ***\n", ret);
-
-            if (ret == 0) {
-                pr_info("*** ISP FRAME SYNC WORK: Sensor I2C communication successful ***\n");
-            } else {
-                pr_warn("*** ISP FRAME SYNC WORK: Sensor I2C communication failed: %d ***\n", ret);
-            }
+        if (ret == 0) {
+            pr_info("*** ISP FRAME SYNC WORK: Sensor I2C communication successful ***\n");
         } else {
-            pr_info("*** ISP FRAME SYNC WORK: Sensor not available or streaming not active ***\n");
-            pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d ***\n",
-                    isp_dev->sensor, isp_dev->streaming_enabled);
+            pr_warn("*** ISP FRAME SYNC WORK: Sensor I2C communication failed: %d ***\n", ret);
         }
-
-        sensor_call_counter = 0;  /* Reset counter */
     } else {
-        pr_info("*** ISP FRAME SYNC WORK: Skipping sensor call (counter=%d/25) ***\n", sensor_call_counter);
+        pr_info("*** ISP FRAME SYNC WORK: Conditions not met - skipping sensor call ***\n");
+        if (!isp_dev->sensor) {
+            pr_info("*** ISP FRAME SYNC WORK: sensor is NULL ***\n");
+        }
+        if (!isp_dev->streaming_enabled) {
+            pr_info("*** ISP FRAME SYNC WORK: streaming_enabled is false ***\n");
+        }
     }
 
     pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation complete ***\n");
