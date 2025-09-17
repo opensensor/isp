@@ -619,6 +619,27 @@ static uint32_t data_b0d54 = 4;  /* Sensor width divisor */
 static uint32_t data_b0d4c = 4;  /* Sensor height divisor */
 static uint32_t data_b0df8 = 0;    /* Initialization flag */
 
+/* GB (Green Balance) parameter arrays - Binary Ninja reference */
+static uint32_t tisp_gb_dgain_shift[2] = {0, 0};
+static uint32_t tisp_gb_dgain_rgbir_l[4] = {0x1000, 0x1000, 0x1000, 0x1000};
+static uint32_t tisp_gb_dgain_rgbir_s[4] = {0x1000, 0x1000, 0x1000, 0x1000};
+static uint32_t tisp_gb_blc_offset[0x48/4] = {0};  /* 0x48 bytes = 18 uint32_t values */
+static uint32_t tisp_gb_blc_min_en[2] = {0, 0};
+static uint32_t tisp_gb_blc_min[0x24/4] = {0};     /* 0x24 bytes = 9 uint32_t values */
+
+/* LSC (Lens Shading Correction) parameter arrays - Binary Ninja reference */
+static uint32_t data_9a428 = 0;
+static uint32_t lsc_mesh_scale = 0;
+static uint32_t data_9a424 = 0;
+static uint32_t lsc_mesh_size[2] = {0, 0};
+static uint32_t data_9a410[4] = {0, 0, 0, 0};
+static uint32_t lsc_a_lut[0x1ffc/4];  /* 0x1ffc bytes = 2047 uint32_t values */
+static uint32_t lsc_t_lut[0x1ffc/4];  /* 0x1ffc bytes = 2047 uint32_t values */
+static uint32_t lsc_d_lut[0x1ffc/4];  /* 0x1ffc bytes = 2047 uint32_t values */
+static uint32_t lsc_mesh_str[0x24/4] = {0};      /* 0x24 bytes = 9 uint32_t values */
+static uint32_t lsc_mesh_str_wdr[0x24/4] = {0};  /* 0x24 bytes = 9 uint32_t values */
+static uint32_t lsc_mean_en = 0;
+
 /* Event completion structure */
 static struct completion tevent_info;
 
@@ -3467,14 +3488,140 @@ int apical_isp_af_zone_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl
     return 0;
 }
 
-/* Tuning parameter function stubs - Binary Ninja reference implementations needed */
+/* Helper functions for parameter array access - Binary Ninja reference implementations */
 
-/* These functions need to be implemented based on their Binary Ninja decompilations */
-int tisp_top_param_array_get(void *out_buf, void *size_buf) { return 0; }
-int tisp_blc_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_lsc_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_wdr_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
-int tisp_dpc_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
+/* tisp_g_wdr_en - Binary Ninja EXACT implementation */
+int tisp_g_wdr_en(void *out_buf)
+{
+    extern uint32_t data_b2e74;  /* WDR mode flag from tx_isp_core.c */
+
+    if (!out_buf) {
+        pr_err("tisp_g_wdr_en: NULL output buffer\n");
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: *arg1 = data_b2e74; return 0 */
+    *(uint32_t *)out_buf = data_b2e74;
+    pr_debug("tisp_g_wdr_en: WDR enable = %d\n", data_b2e74);
+    return 0;
+}
+
+/* tisp_gb_param_array_get - Binary Ninja EXACT implementation */
+int tisp_gb_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    /* Binary Ninja: if (arg1 - 0x3f5 u>= 0xa) return error */
+    if ((param_id - 0x3f5) >= 0xa) {
+        pr_err("tisp_gb_param_array_get: Invalid parameter ID 0x%x\n", param_id);
+        return -1;
+    }
+
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_gb_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    void *source_ptr = NULL;
+    int data_size = 0;
+
+    /* Binary Ninja switch statement implementation */
+    switch (param_id) {
+        case 0x3f5:  /* tisp_gb_dgain_shift */
+            source_ptr = &tisp_gb_dgain_shift;
+            data_size = 8;
+            break;
+        case 0x3f6:  /* tisp_gb_dgain_rgbir_l */
+            source_ptr = &tisp_gb_dgain_rgbir_l;
+            data_size = 0x10;
+            break;
+        case 0x3f7:  /* tisp_gb_dgain_rgbir_s */
+            source_ptr = &tisp_gb_dgain_rgbir_s;
+            data_size = 0x10;
+            break;
+        case 0x3f8:  /* BLC offset array 1 */
+            source_ptr = &tisp_gb_blc_offset[0x24];
+            data_size = 0x24;
+            break;
+        case 0x3f9:  /* BLC offset array 2 */
+            source_ptr = &tisp_gb_blc_offset[0x1b];
+            data_size = 0x24;
+            break;
+        case 0x3fa:  /* BLC offset array 3 */
+            source_ptr = &tisp_gb_blc_offset[0x12];
+            data_size = 0x24;
+            break;
+        case 0x3fb:  /* BLC offset array 4 */
+            source_ptr = &tisp_gb_blc_offset[9];
+            data_size = 0x24;
+            break;
+        case 0x3fc:  /* BLC offset array 5 */
+            source_ptr = &tisp_gb_blc_offset[0];
+            data_size = 0x24;
+            break;
+        case 0x3fd:  /* tisp_gb_blc_min_en */
+            source_ptr = &tisp_gb_blc_min_en;
+            data_size = 8;
+            break;
+        case 0x3fe:  /* tisp_gb_blc_min */
+            source_ptr = &tisp_gb_blc_min;
+            data_size = 0x24;
+            break;
+        default:
+            pr_err("tisp_gb_param_array_get: Unhandled parameter ID 0x%x\n", param_id);
+            return -1;
+    }
+
+    /* Binary Ninja: memcpy(arg2, $a1_1, $s0_1); *arg3 = $s0_1 */
+    memcpy(out_buf, source_ptr, data_size);
+    *size_buf = data_size;
+    pr_debug("tisp_gb_param_array_get: ID=0x%x, size=%d\n", param_id, data_size);
+    return 0;
+}
+
+/* Tuning parameter function implementations - Binary Ninja reference implementations */
+
+/* tisp_top_param_array_get - Binary Ninja EXACT implementation */
+int tisp_top_param_array_get(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_top_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: tisp_g_wdr_en(&data_b2e74) */
+    extern uint32_t data_b2e74;
+    tisp_g_wdr_en(&data_b2e74);
+
+    /* Binary Ninja: memcpy(arg1, &sensor_info, 0x60); *arg2 = 0x60 */
+    memcpy(out_buf, &sensor_info, 0x60);
+    *(int *)size_buf = 0x60;
+
+    pr_debug("tisp_top_param_array_get: Copied sensor_info, size=0x60\n");
+    return 0;
+}
+
+/* tisp_blc_get_par_cfg - Binary Ninja EXACT implementation */
+int tisp_blc_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_blc_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    char *output_ptr = (char *)out_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
+    /* Binary Ninja: for (int32_t i = 0x3f5; i != 0x3ff; i++) */
+    for (int i = 0x3f5; i < 0x3ff; i++) {
+        tisp_gb_param_array_get(i, output_ptr, &temp_size);
+        output_ptr += temp_size;
+        total_size += temp_size;
+    }
+
+    *(int *)size_buf = total_size;
+    pr_debug("tisp_blc_get_par_cfg: Total size=%d\n", total_size);
+    return 0;
+}
 
 int tisp_rdns_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
 int tisp_adr_get_par_cfg(void *out_buf, void *size_buf) { return 0; }
