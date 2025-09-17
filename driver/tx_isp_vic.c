@@ -1270,16 +1270,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* CRITICAL: VIC hardware should already be initialized by platform driver */
         pr_info("*** VIC hardware should be ready - proceeding with unlock sequence ***\n");
 
-        /* CRITICAL FIX: Skip interrupt-disrupting register 0xc during streaming restart */
-        extern uint32_t vic_start_ok;
-        if (vic_start_ok == 1) {
-            pr_info("*** VIC: SKIPPING MIPI mode write to register 0xc - VIC interrupts already working ***\n");
-        } else {
-            /* Binary Ninja: 000107ec - Set CSI mode */
-            writel(3, vic_regs + 0xc);  /* RESTORED: This is VIC mode config, not CSI PHY corruption */
-            wmb();
-            pr_info("*** VIC: Set MIPI mode (3) to VIC control register 0xc ***\n");
-        }
+        /* Binary Ninja: EXACT reference driver MIPI mode configuration */
+        /* Binary Ninja: 000107ec - Set CSI mode */
+        writel(3, vic_regs + 0xc);  /* VIC mode config for MIPI interface */
+        wmb();
+        pr_info("*** VIC: Set MIPI mode (3) to VIC control register 0xc ***\n");
         
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
@@ -1395,25 +1390,17 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             writel(again, vic_regs + 0x3c);
         }
         
+        /* Binary Ninja: EXACT reference driver MIPI configuration */
         /* Binary Ninja: 00010a90-00010aa8 - Final MIPI config */
-        /* CRITICAL FIX: Skip interrupt-disrupting register 0x10 during streaming restart */
-        if (vic_start_ok == 1) {
-            pr_info("*** VIC: SKIPPING MIPI config write to register 0x10 - VIC interrupts already working ***\n");
-        } else {
-            /* CRITICAL FIX: Use actual sensor output width instead of total width to prevent control limit error */
-            writel((actual_width << 31) | mipi_config, vic_regs + 0x10);
-        }
+        /* Use actual sensor output width instead of total width to prevent control limit error */
+        writel((actual_width << 31) | mipi_config, vic_regs + 0x10);
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         wmb();
         
         /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
-        /* CRITICAL FIX: Skip interrupt-disrupting register 0x0 during streaming restart */
-        if (vic_start_ok == 1) {
-            pr_info("*** VIC: SKIPPING unlock sequence write to register 0x0 - VIC interrupts already working ***\n");
-        } else {
-            writel(2, vic_regs + 0x0);
-            wmb();
-        }
+        /* Binary Ninja: EXACT reference driver unlock sequence */
+        writel(2, vic_regs + 0x0);
+        wmb();
 
         /* CRITICAL FIX: Skip remaining unlock sequence during streaming restart */
         if (vic_start_ok == 1) {
@@ -2577,14 +2564,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* VIC Control and Configuration registers only */				                /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
                 writel(0x7800438, vic_regs + 0x4);
 
-                /* CRITICAL FIX: Skip interrupt-disrupting registers during streaming restart */
-                extern uint32_t vic_start_ok;
-                if (vic_start_ok == 1) {
-                    pr_info("*** STEP 1: SKIPPING interrupt-disrupting registers 0xc, 0x10, 0x14 - VIC interrupts already working ***\n");
-                } else {
-                    writel(0x2, vic_regs + 0xc);
-                    writel(0x2, vic_regs + 0x14);
-                }
+                /* Binary Ninja: EXACT reference driver VIC register configuration */
+                writel(0x2, vic_regs + 0xc);
+                writel(0x2, vic_regs + 0x14);
 
                 writel(0xf00, vic_regs + 0x18);
                 writel(0x800800, vic_regs + 0x60);
@@ -2611,10 +2593,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x2c000, vic_regs + 0x10c);
                 writel(0x7800000, vic_regs + 0x110);
 
-                /* CRITICAL FIX: Skip interrupt-disrupting register 0x10 during streaming restart */
-                if (vic_start_ok != 1) {
-                    writel(0x10, vic_regs + 0x120);
-                }
+                /* Binary Ninja: EXACT reference driver register configuration */
+                writel(0x10, vic_regs + 0x120);
 
                 writel(0x100010, vic_regs + 0x1a4);
                 writel(0x4440, vic_regs + 0x1a8);
@@ -2624,19 +2604,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* STEP 2: ISP isp-w01 - Control registers */
                 pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
 
-                /* CRITICAL FIX: Skip interrupt-disrupting register 0x0 during streaming restart */
-                if (vic_start_ok == 1) {
-                    pr_info("*** STEP 2: SKIPPING register 0x0 write - would overwrite VIC control ***\n");
-                } else {
-                    writel(0x3130322a, vic_regs + 0x0);
-                }
+                /* Binary Ninja: EXACT reference driver isp-w01 control register */
+                writel(0x3130322a, vic_regs + 0x0);
 
                 writel(0x1, vic_regs + 0x4);
 
-                /* CRITICAL FIX: Skip interrupt-disrupting register 0x14 during streaming restart */
-                if (vic_start_ok != 1) {
-                    writel(0x200, vic_regs + 0x14);
-                }
+                /* Binary Ninja: EXACT reference driver register configuration */
+                writel(0x200, vic_regs + 0x14);
                 wmb();
                 
                 /* STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) */

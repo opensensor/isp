@@ -693,40 +693,34 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         pr_info("*** isp-w02: %p, isp-w01: %p, isp-m0: %p, isp-csi: %p ***\n",
                                 isp_w02_base, isp_w01_base, isp_m0_base, isp_csi_base);
 
-                        /* CRITICAL FIX: Skip CSI PHY writes during streaming restart to preserve VIC interrupts */
-                        extern uint32_t vic_start_ok;
-                        if (vic_start_ok == 1) {
-                            pr_info("*** PHASE 1: SKIPPING isp-w02 CSI PHY Control writes - VIC interrupts already working ***\n");
-                            pr_info("*** CSI PHY writes would overwrite VIC interrupt configuration in shared register space ***\n");
-                        } else {
-                            /* PHASE 1: isp-w02 region writes (from reference trace lines 1-31) */
-                            pr_info("*** PHASE 1: isp-w02 CSI PHY Control writes ***\n");
-                            writel(0x7800438, isp_w02_base + 0x4);
-                            writel(0x2, isp_w02_base + 0xc);
-                            writel(0x2, isp_w02_base + 0x14);
-                            writel(0xf00, isp_w02_base + 0x18);
-                            writel(0x800800, isp_w02_base + 0x60);
-                            writel(0x9d09d0, isp_w02_base + 0x64);
-                            writel(0x6002, isp_w02_base + 0x70);
-                            writel(0x7003, isp_w02_base + 0x74);
-                            writel(0xeb8080, isp_w02_base + 0xc0);
-                            writel(0x108080, isp_w02_base + 0xc4);
-                            writel(0x29f06e, isp_w02_base + 0xc8);
-                            writel(0x913622, isp_w02_base + 0xcc);
-                            writel(0x515af0, isp_w02_base + 0xd0);
-                            writel(0xaaa610, isp_w02_base + 0xd4);
-                            writel(0xd21092, isp_w02_base + 0xd8);
-                            writel(0x6acade, isp_w02_base + 0xdc);
-                            writel(0xeb8080, isp_w02_base + 0xe0);
-                            writel(0x108080, isp_w02_base + 0xe4);
-                            writel(0x29f06e, isp_w02_base + 0xe8);
-                            writel(0x913622, isp_w02_base + 0xec);
-                            writel(0x515af0, isp_w02_base + 0xf0);
-                            writel(0xaaa610, isp_w02_base + 0xf4);
-                            writel(0xd21092, isp_w02_base + 0xf8);
-                            writel(0x6acade, isp_w02_base + 0xfc);
-                            wmb();
-                        }
+                        /* PHASE 1: isp-w02 region writes (from reference trace lines 1-31) */
+                        /* Binary Ninja: EXACT reference driver CSI PHY initialization */
+                        pr_info("*** PHASE 1: isp-w02 CSI PHY Control writes - EXACT Binary Ninja sequence ***\n");
+                        writel(0x7800438, isp_w02_base + 0x4);
+                        writel(0x2, isp_w02_base + 0xc);
+                        writel(0x2, isp_w02_base + 0x14);
+                        writel(0xf00, isp_w02_base + 0x18);
+                        writel(0x800800, isp_w02_base + 0x60);
+                        writel(0x9d09d0, isp_w02_base + 0x64);
+                        writel(0x6002, isp_w02_base + 0x70);
+                        writel(0x7003, isp_w02_base + 0x74);
+                        writel(0xeb8080, isp_w02_base + 0xc0);
+                        writel(0x108080, isp_w02_base + 0xc4);
+                        writel(0x29f06e, isp_w02_base + 0xc8);
+                        writel(0x913622, isp_w02_base + 0xcc);
+                        writel(0x515af0, isp_w02_base + 0xd0);
+                        writel(0xaaa610, isp_w02_base + 0xd4);
+                        writel(0xd21092, isp_w02_base + 0xd8);
+                        writel(0x6acade, isp_w02_base + 0xdc);
+                        writel(0xeb8080, isp_w02_base + 0xe0);
+                        writel(0x108080, isp_w02_base + 0xe4);
+                        writel(0x29f06e, isp_w02_base + 0xe8);
+                        writel(0x913622, isp_w02_base + 0xec);
+                        writel(0x515af0, isp_w02_base + 0xf0);
+                        writel(0xaaa610, isp_w02_base + 0xf4);
+                        writel(0xd21092, isp_w02_base + 0xf8);
+                        writel(0x6acade, isp_w02_base + 0xfc);
+                        wmb();
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
                         writel(1, csi_dev->csi_regs + 0x10);
@@ -739,11 +733,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         pr_info("*** CRITICAL: CSI MIPI configuration complete - control limit error should be FIXED ***\n");
 
-                        /* CRITICAL FIX: Skip ALL CSI PHY phases during streaming restart */
-                        if (vic_start_ok == 1) {
-                            pr_info("*** SKIPPING ALL CSI PHY PHASES - VIC interrupts already working ***\n");
-                            pr_info("*** CSI PHY initialization would disrupt working VIC interrupt configuration ***\n");
-                        } else {
+                        /* Binary Ninja: EXACT reference driver CSI PHY initialization sequence */
                             /* Old duplicate code removed - now handled by complete 6-phase initialization above */
                             /* PHASE 2: isp-w02 CSI PHY Config writes (from reference trace lines 25-31) */
                             pr_info("*** PHASE 2: isp-w02 CSI PHY Config writes ***\n");
@@ -866,7 +856,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                 pr_info("CSI: State updated to %d\n", v0_17);
 
                 return 0;
-            }
         }
     }
 
