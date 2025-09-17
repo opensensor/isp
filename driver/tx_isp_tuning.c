@@ -7327,44 +7327,45 @@ void *tiziano_ae_para_addr(void)
 }
 EXPORT_SYMBOL(tiziano_ae_para_addr);
 
-/* Sensor control functions - Binary Ninja EXACT implementations */
+/* Sensor control functions - Safe structure-based implementations */
 static void tisp_set_sensor_integration_time(uint32_t time)
 {
-    void *var_38;
-    int16_t var_28;
-
     pr_debug("tisp_set_sensor_integration_time: Setting integration time to %u\n", time);
 
-    /* Binary Ninja: if (dmsc_sp_d_w_stren_wdr_array == 0) */
-    if (dmsc_sp_d_w_stren_wdr_array == NULL) {
-        /* Binary Ninja: int32_t $v0_5 = data_b2eec(arg1, &var_38) */
-        int32_t v0_5 = data_b2eec(time, &var_38);
-        _ae_reg.data[0] = v0_5;
+    extern struct tx_isp_dev *ourISPdev;
+    if (!ourISPdev) {
+        pr_err("tisp_set_sensor_integration_time: No ISP device available\n");
+        return;
+    }
 
-        /* Binary Ninja: if (arg1 != $v0_5) */
-        if (time != v0_5) {
-            /* Binary Ninja: int32_t _AePointPos_1 = _AePointPos.d */
-            int32_t AePointPos_1 = _AePointPos.data[0];
+    /* Check WDR mode - use safe structure access */
+    bool wdr_mode = (dmsc_sp_d_w_stren_wdr_array != NULL);
 
-            /* Binary Ninja: int32_t $v0_6 = fix_point_mult2_32(_AePointPos_1, data_d04a0, arg1 << (_AePointPos_1 & 0x1f)) */
-            int32_t v0_6 = fix_point_mult2_32(AePointPos_1, data_d04a0, time << (AePointPos_1 & 0x1f));
+    if (!wdr_mode) {
+        /* Normal mode: allocate and set integration time */
+        void *var_ptr = NULL;
+        int32_t allocated_time = data_b2eec(time, &var_ptr);
+        _ae_reg.data[0] = allocated_time;
 
-            /* Binary Ninja: int32_t _AePointPos_2 = _AePointPos.d */
-            int32_t AePointPos_2 = _AePointPos.data[0];
-
-            /* Binary Ninja: data_d04a0 = fix_point_div_32(_AePointPos_2, $v0_6, $v0_5 << (_AePointPos_2 & 0x1f)) */
-            data_d04a0 = fix_point_div_32(AePointPos_2, v0_6, v0_5 << (AePointPos_2 & 0x1f));
+        if (time != allocated_time) {
+            /* Calculate adjustment using fixed-point math */
+            int32_t point_pos = _AePointPos.data[0];
+            if (point_pos > 0 && point_pos < 32) { /* Safety check for shift amount */
+                int32_t mult_result = fix_point_mult2_32(point_pos, data_d04a0, time << (point_pos & 0x1f));
+                data_d04a0 = fix_point_div_32(point_pos, mult_result, allocated_time << (point_pos & 0x1f));
+            }
         }
 
-        /* Binary Ninja: data_b2ef4(zx.d(var_28), 0) */
-        data_b2ef4((uint32_t)var_28, 0);
+        /* Apply the setting to sensor */
+        data_b2ef4(allocated_time, 0);
         data_c46b8 = _ae_reg.data[0];
     } else {
-        /* Binary Ninja: int32_t $v0_2 = data_b2eec(data_c46b8, &var_38) */
-        int32_t v0_2 = data_b2eec(data_c46b8, &var_38);
-        _ae_reg.data[0] = v0_2;
-        data_c46b8 = v0_2;
-        data_b2ef4((uint32_t)var_28, 0);
+        /* WDR mode: use cached value */
+        void *var_ptr = NULL;
+        int32_t allocated_time = data_b2eec(data_c46b8, &var_ptr);
+        _ae_reg.data[0] = allocated_time;
+        data_c46b8 = allocated_time;
+        data_b2ef4(allocated_time, 0);
     }
 }
 
@@ -7579,74 +7580,66 @@ static uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr)
 
 static uint32_t data_b2ee4(uint32_t log_val, void **var_ptr)
 {
-    /* Binary Ninja: sensor_alloc_analog_gain_short wrapper */
+    /* Safe sensor short analog gain allocation */
     pr_debug("data_b2ee4: Allocating short analog gain log_val %u\n", log_val);
 
-    extern uint32_t g_ispcore;
-    int32_t var_10 = 0;
-    int32_t result;
+    extern struct tx_isp_dev *ourISPdev;
+    if (!ourISPdev || !ourISPdev->sensor) {
+        pr_err("data_b2ee4: No ISP device or sensor available\n");
+        if (var_ptr) *var_ptr = NULL;
+        return log_val;
+    }
 
-    /* Similar to data_b2ee0 but for short exposure gain */
-    void *ispcore_ptr = (void *)g_ispcore;
-    void *sensor_ops = *(void **)(ispcore_ptr + 0x120);
-    void *alloc_func = *(void **)(sensor_ops + 0xc4); /* Different offset for short gain */
+    /* Use sensor's short analog gain allocation if available */
+    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->alloc_analog_gain_short) {
+        uint32_t result = ourISPdev->sensor->ops->alloc_analog_gain_short(log_val, var_ptr);
+        return result;
+    }
 
-    result = ((int(*)(uint32_t, int, int*))alloc_func)(log_val, 0x10, &var_10);
-    if (var_ptr) *var_ptr = (void *)(uintptr_t)var_10;
-
-    return result;
+    /* Fallback: return input value */
+    if (var_ptr) *var_ptr = NULL;
+    return log_val;
 }
 
 static int data_b2f04(uint32_t param, int flag)
 {
-    /* Binary Ninja: sensor_set_analog_gain wrapper */
+    /* Safe sensor analog gain setting */
     pr_debug("data_b2f04: Setting sensor analog gain %u, flag %d\n", param, flag);
 
-    extern uint32_t g_ispcore;
-    void *ispcore_ptr = (void *)g_ispcore;
-    void *sensor_ops = *(void **)(ispcore_ptr + 0x120);
-
-    /* Binary Ninja: sensor_set_analog_gain logic */
-    uint32_t current_gain = *(uint32_t *)(sensor_ops + 0x9c);
-    if (current_gain != param) {
-        /* Binary Ninja: Update gain parameters */
-        uint32_t *ec_reg = (uint32_t *)(sensor_ops + 0xec);
-        *ec_reg = (*ec_reg & 0x0000ffff) | (param << 16);
-        *(uint32_t *)(sensor_ops + 0x9c) = param;
-
-        /* Binary Ninja: Set update flags */
-        *(uint32_t *)(ispcore_ptr + 0x180) = 1;
-        *(uint32_t *)(ispcore_ptr + 0x184) = param;
-        *(uint32_t *)(ispcore_ptr + 0x1b0) = 1;
-        *(uint32_t *)(ispcore_ptr + 0x1b4) = *ec_reg;
+    extern struct tx_isp_dev *ourISPdev;
+    if (!ourISPdev || !ourISPdev->sensor) {
+        pr_err("data_b2f04: No ISP device or sensor available\n");
+        return -ENODEV;
     }
 
+    /* Use sensor's analog gain setting if available */
+    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->set_analog_gain) {
+        return ourISPdev->sensor->ops->set_analog_gain(param);
+    }
+
+    /* Fallback: just log the operation */
+    pr_debug("data_b2f04: No sensor set_analog_gain operation available\n");
     return 0;
 }
 
 static int data_b2f08(uint32_t param, int flag)
 {
-    /* Binary Ninja: sensor_set_analog_gain_short wrapper */
+    /* Safe sensor short analog gain setting */
     pr_debug("data_b2f08: Setting sensor short analog gain %u, flag %d\n", param, flag);
 
-    extern uint32_t g_ispcore;
-    void *ispcore_ptr = (void *)g_ispcore;
-    void *sensor_ops = *(void **)(ispcore_ptr + 0x120);
-
-    /* Similar logic to data_b2f04 but for short exposure gain */
-    uint32_t current_gain = *(uint32_t *)(sensor_ops + 0xa0); /* Different offset for short gain */
-    if (current_gain != param) {
-        uint32_t *ec_reg = (uint32_t *)(sensor_ops + 0xf0); /* Different register for short */
-        *ec_reg = (*ec_reg & 0x0000ffff) | (param << 16);
-        *(uint32_t *)(sensor_ops + 0xa0) = param;
-
-        /* Set update flags for short gain */
-        *(uint32_t *)(ispcore_ptr + 0x188) = 1;
-        *(uint32_t *)(ispcore_ptr + 0x18c) = param;
-        *(uint32_t *)(ispcore_ptr + 0x1b8) = 1;
-        *(uint32_t *)(ispcore_ptr + 0x1bc) = *ec_reg;
+    extern struct tx_isp_dev *ourISPdev;
+    if (!ourISPdev || !ourISPdev->sensor) {
+        pr_err("data_b2f08: No ISP device or sensor available\n");
+        return -ENODEV;
     }
 
+    /* Use sensor's short analog gain setting if available */
+    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->set_analog_gain_short) {
+        return ourISPdev->sensor->ops->set_analog_gain_short(param);
+    }
+
+    /* Fallback: just log the operation */
+    pr_debug("data_b2f08: No sensor set_analog_gain_short operation available\n");
     return 0;
 }
 
