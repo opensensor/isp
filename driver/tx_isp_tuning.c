@@ -338,6 +338,7 @@ int tisp_ae_get_hist_custome(void *buffer);
 int apical_isp_max_again_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 int apical_isp_max_dgain_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 int tisp_g_af_zone(void);
+int apical_isp_ae_g_roi(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 
 /* System register access functions - moved before use */
 uint32_t system_reg_read(u32 reg);
@@ -1761,8 +1762,8 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             case 0x8000029:  // Maximum Digital Gain - Binary Ninja: apical_isp_max_dgain_g_ctrl
                 ret = apical_isp_max_dgain_g_ctrl(dev, ctrl);
                 break;
-            case 0x800002c:  // Move state
-                ctrl->value = tuning->move_state;
+            case 0x800002c:  // Move state - Binary Ninja: return 0
+                ctrl->value = 0;
                 break;
             case 0x8000039:  // Defog Strength
                 ctrl->value = tuning->defog_strength;
