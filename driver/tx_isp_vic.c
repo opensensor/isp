@@ -1602,10 +1602,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     vic_start_ok = 1;
     pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
 
-    /* CRITICAL: Binary Ninja reference shows NO ISP core register writes in tx_isp_vic_start! */
-    /* But we still need basic pipeline connection - move interrupt config elsewhere */
+    /* CRITICAL: Put back essential ISP core interrupt configuration that was working */
+    /* VIC start needs to configure ISP core interrupts for them to work properly */
     if (ourISPdev && ourISPdev->core_regs) {
         void __iomem *core = ourISPdev->core_regs;
+
+        /* Clear any pending interrupts first */
+        u32 pend_legacy = readl(core + 0xb4);
+        u32 pend_new    = readl(core + 0x98b4);
+        writel(pend_legacy, core + 0xb8);
+        writel(pend_new,    core + 0x98b8);
 
         /* ESSENTIAL: Enable ISP pipeline connection - this is needed for VIC->ISP communication */
         /* Binary Ninja: system_reg_write(0x800, 1) - Enable ISP pipeline */
@@ -1616,10 +1622,24 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         /* Binary Ninja: system_reg_write(0x1c, 8) - Set ISP control mode */
         writel(8, core + 0x1c);
+
+        /* CRITICAL: Enable ISP core interrupt generation at hardware level */
+        /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
+        writel(0xffffffff, core + 0x30);
+
+        /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
+        writel(0x133, core + 0x10);
+
+        /* CRITICAL FIX: Enable frame sync + essential interrupts, but MASK error interrupts */
+        /* This allows ISP interrupts to work while preventing error interrupt storms */
+        writel(0x3FFF, core + 0xb0);        /* Legacy enable - all interrupt sources */
+        writel(0x1000, core + 0xbc);        /* Legacy unmask - ONLY frame sync initially */
+        writel(0x3FFF, core + 0x98b0);      /* New enable - all interrupt sources */
+        writel(0x1000, core + 0x98bc);      /* New unmask - ONLY frame sync initially */
         wmb();
 
         pr_info("*** ISP PIPELINE: VIC->ISP connection ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
-        pr_info("*** ISP INTERRUPTS: Will be configured during ISP core s_stream, not VIC start ***\n");
+        pr_info("*** ISP CORE INTERRUPTS: Enabled with frame sync only unmasked to prevent storms ***\n");
     }
 
     /* Also enable the kernel IRQ line if it was registered earlier */
