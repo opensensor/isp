@@ -2832,6 +2832,14 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Binary Ninja: if (var_74 != *($s0 + 0x24)) - validate buffer type */
         pr_info("*** Channel %d: QBUF - Validation: buffer.type=%d, fcd->buffer_type=%d ***\n",
                 channel, buffer.type, fcd->buffer_type);
+
+        /* CRITICAL FIX: Initialize buffer_type if not set (VBM compatibility) */
+        if (fcd->buffer_type == 0) {
+            fcd->buffer_type = buffer.type; /* Accept whatever type VBM is using */
+            pr_info("*** Channel %d: QBUF - Initialized buffer_type to %d for VBM compatibility ***\n",
+                    channel, fcd->buffer_type);
+        }
+
         if (buffer.type != fcd->buffer_type) {
             pr_err("*** QBUF: Buffer type mismatch: got %d, expected %d ***\n", buffer.type, fcd->buffer_type);
             return -EINVAL;
