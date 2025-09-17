@@ -439,29 +439,18 @@ static void ispcore_irq_fs_work(struct work_struct *work)
         /* Frame sync should do AE/AGC operations, NOT FPS control */
         pr_info("*** ISP FRAME SYNC WORK: Performing per-frame sensor operations (AE/AGC) ***\n");
 
-        /* Use proper sensor subdev interface - no exports needed! */
-        if (isp_dev->sensor && isp_dev->sensor->sd.ops && isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
-            /* Perform Auto Exposure adjustment - this is what frame sync should do */
-            int expo_value = 1000; /* Default exposure value */
-            pr_info("*** ISP FRAME SYNC WORK: Calling TX_ISP_EVENT_SENSOR_EXPO via sensor subdev interface ***\n");
-            sensor_result = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, TX_ISP_EVENT_SENSOR_EXPO, &expo_value);
-            pr_info("*** ISP FRAME SYNC WORK: Sensor exposure adjustment result: %d ***\n", sensor_result);
+        /* REFERENCE DRIVER: Call ispcore_sensor_ops_ioctl exactly like reference */
+        /* Binary Ninja: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
+        pr_info("*** ISP FRAME SYNC WORK: Calling ispcore_sensor_ops_ioctl (reference driver) ***\n");
+        sensor_result = ispcore_sensor_ops_ioctl(isp_dev);
+        pr_info("*** ISP FRAME SYNC WORK: ispcore_sensor_ops_ioctl result: %d ***\n", sensor_result);
 
-            if (sensor_result == 0) {
-                pr_info("*** ISP FRAME SYNC WORK: Per-frame sensor operations successful ***\n");
-            }
+        if (sensor_result == 0) {
+            pr_info("*** ISP FRAME SYNC WORK: All sensor operations successful ***\n");
+        } else if (sensor_result == -ENOIOCTLCMD) {
+            pr_info("*** ISP FRAME SYNC WORK: No sensor IOCTL command (normal) ***\n");
         } else {
-            pr_info("*** ISP FRAME SYNC WORK: Sensor subdev interface not available ***\n");
-            pr_info("*** DEBUG: sensor=%p ***\n", isp_dev->sensor);
-            if (isp_dev->sensor) {
-                pr_info("*** DEBUG: sensor->sd.ops=%p ***\n", isp_dev->sensor->sd.ops);
-                if (isp_dev->sensor->sd.ops) {
-                    pr_info("*** DEBUG: sensor->sd.ops->sensor=%p ***\n", isp_dev->sensor->sd.ops->sensor);
-                    if (isp_dev->sensor->sd.ops->sensor) {
-                        pr_info("*** DEBUG: sensor->sd.ops->sensor->ioctl=%p ***\n", isp_dev->sensor->sd.ops->sensor->ioctl);
-                    }
-                }
-            }
+            pr_warn("*** ISP FRAME SYNC WORK: Sensor operations failed: %d ***\n", sensor_result);
         }
 
         pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (sensor available) ***\n");
