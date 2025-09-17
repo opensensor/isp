@@ -3781,12 +3781,7 @@ int tisp_get_ae_comp(uint32_t *value)
     return 0;
 }
 
-int tisp_g_ae_zone(void *buffer)
-{
-    /* Binary Ninja: tisp_ae_get_y_zone(arg1); return 0 */
-    tisp_ae_get_y_zone(buffer);
-    return 0;
-}
+
 
 int apical_isp_max_again_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
@@ -3822,10 +3817,7 @@ int tisp_g_dpc_strength(uint32_t *value)
     return 0;
 }
 
-int tisp_ae_get_y_zone(void *buffer)
-{
-    return 0;
-}
+
 
 int tisp_ae_get_hist_custome(void *buffer)
 {
