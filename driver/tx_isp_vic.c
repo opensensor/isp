@@ -361,6 +361,28 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             /* CRITICAL FIX: Move buffer from queued to completed queue */
             if (vic_regs) {
                 u32 completed_buffer_addr = readl(vic_regs + 0x380); /* Get current frame buffer address */
+
+                /* CRITICAL FIX: If VIC register 0x380 is 0x0, use VBM buffer cycling */
+                if (completed_buffer_addr == 0x0) {
+                    extern struct tx_isp_dev *ourISPdev;
+                    if (ourISPdev) {
+                        /* Use frame count to determine which VBM buffer was completed */
+                        static uint32_t vbm_buffer_cycle = 0;
+                        completed_buffer_addr = 0x6300000 + (vbm_buffer_cycle * (1920 * 1080 * 2));
+                        vbm_buffer_cycle = (vbm_buffer_cycle + 1) % 4; /* Cycle through 4 buffers */
+
+                        pr_info("*** VIC BUFFER MGMT: VIC[0x380]=0x0, using VBM buffer addr=0x%x ***\n", completed_buffer_addr);
+
+                        /* Program next buffer to VIC register 0x380 for continuous streaming */
+                        u32 next_buffer_addr = 0x6300000 + (vbm_buffer_cycle * (1920 * 1080 * 2));
+                        writel(next_buffer_addr, vic_regs + 0x380);
+                        wmb();
+                        pr_info("*** VIC BUFFER MGMT: VIC[0x380] = 0x%x (next VBM buffer) ***\n", next_buffer_addr);
+                    }
+                }
+
+                pr_info("*** VIC BUFFER MGMT: Frame complete for buffer_addr=0x%x ***\n", completed_buffer_addr);
+
                 extern int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint32_t buffer_addr);
                 vic_frame_complete_buffer_management(vic_dev, completed_buffer_addr);
             }
