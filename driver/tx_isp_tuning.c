@@ -3816,11 +3816,11 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
             system_reg_write_ae(3, 0x1004, v0_5 << 0x10 | v0_5);
         }
         
-        /* Binary Ninja EXACT: int32_t _AePointPos_1 = _AePointPos.d */
-        int32_t AePointPos_1 = _AePointPos_d;
-        
-        /* Binary Ninja EXACT: int32_t $v0_6 = fix_point_mult3_32(_AePointPos_1, _ae_result << (_AePointPos_1 & 0x1f), data_afcd0) */
-        int32_t v0_6 = fix_point_mult3_32(AePointPos_1, _ae_result << (AePointPos_1 & 0x1f), data_afcd0);
+        /* Binary Ninja EXACT: int32_t _AePointPos_1 = _AePointPos.data[0] */
+        int32_t AePointPos_1 = _AePointPos.data[0];
+
+        /* Binary Ninja EXACT: int32_t $v0_6 = fix_point_mult3_32(_AePointPos_1, _ae_result.data[0] << (_AePointPos_1 & 0x1f), data_afcd0) */
+        int32_t v0_6 = fix_point_mult3_32(AePointPos_1, _ae_result.data[0] << (AePointPos_1 & 0x1f), data_afcd0);
         
         /* Binary Ninja EXACT: int32_t $v1_2 = data_b0e10 */
         int32_t v1_2 = data_b0e10;
