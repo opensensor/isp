@@ -1637,32 +1637,8 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** REFERENCE VIC CONFIGURATION COMPLETE - Control limit error should be prevented ***\n");
 
-    /* REMOVED: VIC dimension configuration - not in reference driver */
-
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev->sensor_attr access */
-    if (((uintptr_t)&vic_dev->sensor_attr & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->sensor_attr member not aligned ***\n");
-        return -EINVAL;
-    }
-
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev->width and height access */
-    if (((uintptr_t)&vic_dev->width & 0x3) != 0 || ((uintptr_t)&vic_dev->height & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->width/height members not aligned ***\n");
-        return -EINVAL;
-    }
-
-    pr_info("*** tx_isp_vic_progress: MIPS validation passed - applying tx_isp_init_vic_registers methodology ***\n");
-
-    /* *** CRITICAL: Apply successful methodology from tx_isp_init_vic_registers *** */
-
-    /* STEP 3: Get VIC registers - should already be mapped by tx_isp_create_vic_device */
-    vic_regs = ourISPdev->vic_regs;
-    if (!vic_regs) {
-        pr_err("*** CRITICAL: No VIC register base - initialization required first ***\n");
-        return -EINVAL;
-    }
-
-    pr_info("*** tx_isp_vic_progress: VIC register base %p ready for streaming ***\n", vic_regs);
+    /* VIC configuration is now complete - skip duplicate setup code */
+    pr_info("*** VIC HARDWARE CONFIGURATION COMPLETE - Proceeding with clock and final setup ***\n");
 
     /* Calculate base addresses for different register blocks */
     void __iomem *main_isp_base = vic_regs - 0x9a00;  /* Calculate main ISP base from VIC base */
