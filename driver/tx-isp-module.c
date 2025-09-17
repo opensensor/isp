@@ -1224,6 +1224,10 @@ struct tx_isp_channel_state {
     /* CRITICAL FIX: Store buffer structures like reference driver */
     uint32_t *buffer_addresses;  /* Array of buffer structure pointers */
 
+    /* VBM buffer management for VBMFillPool compatibility */
+    uint32_t *vbm_buffer_addresses;       /* Array of VBM buffer addresses */
+    int vbm_buffer_count;                 /* Number of VBM buffers */
+
     /* Reference driver buffer queue management */
     struct list_head queued_buffers;       /* List of queued buffers (ready for VIC) */
     struct list_head completed_buffers;    /* List of completed buffers (ready for DQBUF) */
