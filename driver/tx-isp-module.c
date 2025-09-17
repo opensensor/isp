@@ -2838,6 +2838,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d ***\n",
                 channel, buffer.index, buffer_phys_addr, buffer_size);
 
+        /* CRITICAL FIX: Store the real buffer address for later use in DQBUF/VIC */
+        if (state->buffer_addresses && buffer.index < state->buffer_count) {
+            state->buffer_addresses[buffer.index] = buffer_phys_addr;
+            pr_info("*** Channel %d: STORED real buffer address[%d] = 0x%x ***\n",
+                    channel, buffer.index, buffer_phys_addr);
+        } else {
+            pr_warn("*** Channel %d: Cannot store buffer address - array not allocated or index invalid ***\n",
+                    channel);
+        }
+
         /* SAFE: Update buffer state management */
         spin_lock_irqsave(&state->buffer_lock, flags);
 
