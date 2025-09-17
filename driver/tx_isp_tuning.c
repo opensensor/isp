@@ -1173,7 +1173,7 @@ static int32_t tisp_log2_int_to_fixed(uint32_t value, char precision_bits, char 
            (normalized & 0x7fff) >> ((15 - shift) & 0x1f);
 }
 
-static int32_t tisp_log2_fixed_to_fixed(uint32_t input_val, int32_t in_precision, char out_precision)
+static int32_t tisp_log2_fixed_to_fixed_tuning(uint32_t input_val, int32_t in_precision, char out_precision)
 {
     // Call helper directly with original param signature
     return tisp_log2_int_to_fixed(input_val, out_precision, 0);
@@ -1286,7 +1286,7 @@ static int tisp_g_ev_attr(uint32_t *ev_buffer, struct isp_tuning_data *tuning)
     ev_buffer[1] = tuning->exposure >> 10;            // Normalized exposure value
 
     // Convert exposure to fixed point representation
-    int32_t exp_fixed = tisp_log2_fixed_to_fixed(tuning->exposure, 10, 16);
+    int32_t exp_fixed = tisp_log2_fixed_to_fixed_tuning(tuning->exposure, 10, 16);
     ev_buffer[3] = exp_fixed;
 
     // Calculate exposure vs frame rate compensation
@@ -1299,8 +1299,8 @@ static int tisp_g_ev_attr(uint32_t *ev_buffer, struct isp_tuning_data *tuning)
     ev_buffer[2] = exp_comp;
 
     // Convert gain values to fixed point
-    ev_buffer[4] = tisp_log2_fixed_to_fixed(tuning->max_again, 10, 5);    // Analog gain
-    ev_buffer[5] = tisp_log2_fixed_to_fixed(tuning->max_dgain, 10, 5);    // Digital gain
+    ev_buffer[4] = tisp_log2_fixed_to_fixed_tuning(tuning->max_again, 10, 5);    // Analog gain
+    ev_buffer[5] = tisp_log2_fixed_to_fixed_tuning(tuning->max_dgain, 10, 5);    // Digital gain
     ev_buffer[6] = tuning->exposure & 0xffff;                             // Integration time
 
     // Calculate combined gain
@@ -1308,10 +1308,10 @@ static int tisp_g_ev_attr(uint32_t *ev_buffer, struct isp_tuning_data *tuning)
     ev_buffer[7] = total >> 2;
 
     // Additional gain conversions for min/max values
-    ev_buffer[8] = tisp_log2_fixed_to_fixed(tuning->max_again + 4, 10, 5);   // Max analog gain
-    ev_buffer[9] = tisp_log2_fixed_to_fixed(tuning->max_dgain + 4, 10, 5);   // Max digital gain
-    ev_buffer[10] = tisp_log2_fixed_to_fixed(tuning->max_again >> 1, 10, 5); // Min analog gain (half of max)
-    ev_buffer[11] = tisp_log2_fixed_to_fixed(tuning->max_dgain >> 1, 10, 5); // Min digital gain (half of max)
+    ev_buffer[8] = tisp_log2_fixed_to_fixed_tuning(tuning->max_again + 4, 10, 5);   // Max analog gain
+    ev_buffer[9] = tisp_log2_fixed_to_fixed_tuning(tuning->max_dgain + 4, 10, 5);   // Max digital gain
+    ev_buffer[10] = tisp_log2_fixed_to_fixed_tuning(tuning->max_again >> 1, 10, 5); // Min analog gain (half of max)
+    ev_buffer[11] = tisp_log2_fixed_to_fixed_tuning(tuning->max_dgain >> 1, 10, 5); // Min digital gain (half of max)
 
     // FPS and timing related values
     ev_buffer[0x1b] = tuning->fps_num;    // Current FPS numerator
@@ -3614,6 +3614,7 @@ static uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr);
 static uint32_t data_b2ee4(uint32_t log_val, void **var_ptr);
 static int data_b2f04(uint32_t param, int flag);
 static int data_b2f08(uint32_t param, int flag);
+static uint32_t tisp_log2_fixed_to_fixed(void);
 /* Note: tisp_log2_fixed_to_fixed and system_reg_write already declared elsewhere */
 
 /* Remove duplicate declarations - using the struct versions defined earlier */
@@ -7372,7 +7373,7 @@ static void tisp_set_sensor_analog_gain(void)
     pr_debug("tisp_set_sensor_analog_gain: Setting analog gain\n");
 
     /* Binary Ninja: uint32_t $v0_2 = tisp_math_exp2(data_b2ee0(tisp_log2_fixed_to_fixed(), &var_28), 0x10, 0x10) */
-    uint32_t log_result = tisp_log2_fixed_to_fixed_simple();
+    uint32_t log_result = tisp_log2_fixed_to_fixed();
     uint32_t gain_param = data_b2ee0(log_result, &var_28);
     uint32_t v0_2 = tisp_math_exp2(gain_param, 0x10, 0x10);
 
@@ -7432,7 +7433,7 @@ static void tisp_set_sensor_analog_gain_short(void)
     pr_debug("tisp_set_sensor_analog_gain_short: Setting short analog gain\n");
 
     /* Binary Ninja: uint32_t $v0_2 = tisp_math_exp2(data_b2ee4(tisp_log2_fixed_to_fixed(), &var_28), 0x10, 0x10) */
-    uint32_t log_result = tisp_log2_fixed_to_fixed_simple();
+    uint32_t log_result = tisp_log2_fixed_to_fixed();
     uint32_t gain_param = data_b2ee4(log_result, &var_28);
     uint32_t v0_2 = tisp_math_exp2(gain_param, 0x10, 0x10);
 
@@ -7655,10 +7656,10 @@ static int data_b2f08(uint32_t param, int flag)
     return 0;
 }
 
-static uint32_t tisp_log2_fixed_to_fixed_simple(void)
+static uint32_t tisp_log2_fixed_to_fixed(void)
 {
     /* Fixed point log2 conversion */
-    pr_debug("tisp_log2_fixed_to_fixed_simple: Performing log2 conversion\n");
+    pr_debug("tisp_log2_fixed_to_fixed: Performing log2 conversion\n");
     return 0x1000; /* Return default fixed point value */
 }
 
