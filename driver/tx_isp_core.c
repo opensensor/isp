@@ -346,24 +346,35 @@ static void ispcore_irq_fs_work(struct work_struct *work)
 
         pr_info("*** ISP FRAME SYNC WORK: Calling sensor IOCTL for I2C communication ***\n");
 
-        /* CRITICAL: Get FPS from tuning data and pass to sensor SAFELY */
-        static int fps_value = 0;  /* Static to avoid stack corruption */
+        /* CRITICAL: Get FPS from tuning data and pass to sensor with proper pointer */
+        static int fps_value = (25 << 16) | 1;  /* Static storage with default 25 FPS */
 
-        if (isp_dev->tuning_data) {
+        /* Update FPS value from tuning data if available */
+        if (isp_dev->tuning_data && isp_dev->tuning_data->fps_num > 0 && isp_dev->tuning_data->fps_den > 0) {
             /* Pack FPS in format expected by sensor: (fps_num << 16) | fps_den */
-            fps_value = (isp_dev->tuning_data->fps_num << 16) | isp_dev->tuning_data->fps_den;
-            pr_info("*** ISP FRAME SYNC WORK: Using FPS %d/%d (packed: 0x%x) ***\n",
-                    isp_dev->tuning_data->fps_num, isp_dev->tuning_data->fps_den, fps_value);
-        } else {
-            /* Default to 25 FPS if no tuning data */
-            fps_value = (25 << 16) | 1;
-            pr_info("*** ISP FRAME SYNC WORK: Using default FPS 25/1 (packed: 0x%x) ***\n", fps_value);
+            int new_fps = (isp_dev->tuning_data->fps_num << 16) | isp_dev->tuning_data->fps_den;
+            if (new_fps != fps_value) {
+                fps_value = new_fps;
+                pr_info("*** ISP FRAME SYNC WORK: Updated FPS to %d/%d (packed: 0x%x) ***\n",
+                        isp_dev->tuning_data->fps_num, isp_dev->tuning_data->fps_den, fps_value);
+            }
         }
 
-        /* Call sensor FPS IOCTL with proper FPS value - this triggers I2C writes to 0x41/0x42 */
+        /* Add memory barrier to ensure fps_value is written before use */
+        wmb();
+
+        /* Call sensor FPS IOCTL with pointer to FPS value - this triggers I2C writes to 0x41/0x42 */
         int ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
                                                          TX_ISP_EVENT_SENSOR_FPS, &fps_value);
-        pr_info("*** ISP FRAME SYNC WORK: Sensor FPS IOCTL result: %d ***\n", ret);
+        pr_info("*** ISP FRAME SYNC WORK: Sensor FPS IOCTL result: %d (fps_value=0x%x) ***\n", ret, fps_value);
+
+        /* If FPS IOCTL fails or causes issues, try alternative sensor events */
+        if (ret != 0) {
+            pr_info("*** ISP FRAME SYNC WORK: FPS IOCTL failed, trying alternative sensor events ***\n");
+            ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
+                                                         TX_ISP_EVENT_SENSOR_EXPO, NULL);
+            pr_info("*** ISP FRAME SYNC WORK: Sensor EXPO IOCTL result: %d ***\n", ret);
+        }
 
 
     } else {
