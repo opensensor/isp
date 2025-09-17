@@ -2699,7 +2699,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         /* Binary Ninja: if (var_74 != *($s0 + 0x24)) - validate buffer type */
-        if (buffer.type != state->buffer_type) {
+        if (buffer.type != fcd->buffer_type) {
             pr_err("*** QBUF: Buffer type mismatch ***\n");
             return -EINVAL;
         }
