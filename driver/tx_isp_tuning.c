@@ -14,6 +14,7 @@
 #include <linux/completion.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
+#include <linux/kthread.h>
 #include <linux/ktime.h>
 #include <linux/time.h>
 #include <linux/delay.h>
@@ -314,7 +315,7 @@ int tisp_ae_ir_update(void);
 
 /* Event processing thread function */
 int tisp_event_process_thread(void *data);
-extern int tisp_event_process(void);
+int tisp_event_process(void);
 
 /* Additional function declarations needed for Binary Ninja reference */
 int tisp_get_ae_comp(uint32_t *value);
@@ -729,6 +730,9 @@ static uint32_t ctr_con_par_array[0x1c/4] = {0};
 
 /* Event completion structure */
 static struct completion tevent_info;
+
+/* Event processing thread handle */
+static struct task_struct *tisp_event_thread = NULL;
 
 /* Event queue structures */
 static uint32_t data_b33b0[4];
@@ -1265,9 +1269,10 @@ int tisp_init(void *sensor_info, char *param_name)
     extern int tisp_event_process(void);
 
     /* Create kernel thread to continuously process ISP events */
-    struct task_struct *event_thread = kthread_run(tisp_event_process_thread, NULL, "tisp_events");
-    if (IS_ERR(event_thread)) {
-        pr_err("*** tisp_init: Failed to create event processing thread: %ld ***\n", PTR_ERR(event_thread));
+    tisp_event_thread = kthread_run(tisp_event_process_thread, NULL, "tisp_events");
+    if (IS_ERR(tisp_event_thread)) {
+        pr_err("*** tisp_init: Failed to create event processing thread: %ld ***\n", PTR_ERR(tisp_event_thread));
+        tisp_event_thread = NULL;
     } else {
         pr_info("*** tisp_init: Event processing thread started successfully ***\n");
     }
@@ -7999,6 +8004,67 @@ int isp_trigger_event(int event_id)
 }
 EXPORT_SYMBOL(isp_trigger_event);
 
+/* tisp_event_process - Main event processing function that waits for events */
+int tisp_event_process(void)
+{
+    int ret;
+
+    pr_info("tisp_event_process: Starting event processing loop\n");
+
+    /* Initialize completion if not already done */
+    static int tevent_initialized = 0;
+    if (!tevent_initialized) {
+        init_completion(&tevent_info);
+        tevent_initialized = 1;
+        pr_info("tisp_event_process: Event completion initialized\n");
+    }
+
+    /* Wait for event notification */
+    ret = wait_for_completion_interruptible(&tevent_info);
+    if (ret < 0) {
+        pr_debug("tisp_event_process: Wait interrupted: %d\n", ret);
+        return ret;
+    }
+
+    pr_debug("tisp_event_process: Event received, processing callbacks\n");
+
+    /* Process all registered event callbacks */
+    /* The callbacks (tisp_tgain_update, tisp_again_update, etc.) will be called
+     * by the interrupt handlers via isp_event_dispatcher when events occur */
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_event_process);
+
+/* tisp_event_process_thread - Kernel thread wrapper for event processing */
+int tisp_event_process_thread(void *data)
+{
+    pr_info("tisp_event_process_thread: Event processing thread started\n");
+
+    /* Continuous event processing loop */
+    while (!kthread_should_stop()) {
+        int ret = tisp_event_process();
+
+        if (ret < 0) {
+            if (ret == -ERESTARTSYS) {
+                pr_debug("tisp_event_process_thread: Thread interrupted, continuing\n");
+                continue;
+            } else {
+                pr_err("tisp_event_process_thread: Event processing error: %d\n", ret);
+                msleep(100); /* Brief delay before retry */
+                continue;
+            }
+        }
+
+        /* Brief yield to prevent CPU hogging */
+        cond_resched();
+    }
+
+    pr_info("tisp_event_process_thread: Event processing thread stopping\n");
+    return 0;
+}
+EXPORT_SYMBOL(tisp_event_process_thread);
+
 /* Setup ISP interrupt handling */
 int isp_setup_irq_handling(struct tx_isp_dev *dev)
 {
@@ -8051,6 +8117,13 @@ void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
         pr_info("isp_cleanup_irq_handling: IRQ %d freed\n", ourISPdev->isp_irq);
     }
     
+    /* Stop event processing thread */
+    if (tisp_event_thread) {
+        pr_info("isp_cleanup_irq_handling: Stopping event processing thread\n");
+        kthread_stop(tisp_event_thread);
+        tisp_event_thread = NULL;
+    }
+
     /* Clear callback arrays */
     if (isp_irq_initialized) {
         spin_lock_irqsave(&isp_irq_lock, flags);
