@@ -3760,26 +3760,6 @@ int tisp_get_ae_comp(uint32_t *value)
     return 0;
 }
 
-int tisp_g_aeroi_weight(void *buffer)
-{
-    return 0;
-}
-
-int tisp_ae_param_array_get(int param_type, void *buffer, int *size)
-{
-    return 0;
-}
-
-int tisp_ae_get_y_zone(void *buffer)
-{
-    return 0;
-}
-
-int tisp_ae_get_hist_custome(void *buffer)
-{
-    return 0;
-}
-
 int tisp_g_ae_zone(void *buffer)
 {
     /* Binary Ninja: tisp_ae_get_y_zone(arg1); return 0 */
