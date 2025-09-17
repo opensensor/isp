@@ -2489,14 +2489,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x10, vic_regs + 0x120);         /* Final config */
                 wmb();
 
-                /* Step 9: Enable VIC hardware in correct sequence */
-                pr_info("*** ENABLING VIC HARDWARE: Using reference driver sequence ***\n");
-                writel(0x2, vic_regs + 0x0);            /* Pre-enable state */
-                wmb();
-                writel(0x1, vic_regs + 0x0);            /* Enable VIC hardware */
+                /* Step 9: DEFER VIC hardware enable until after sensor is streaming */
+                pr_info("*** DEFERRING VIC HARDWARE ENABLE: Will enable after sensor starts streaming ***\n");
+                /* Keep VIC hardware disabled during initial configuration */
+                writel(0x0, vic_regs + 0x0);            /* Keep VIC disabled */
                 wmb();
 
-                pr_info("*** VIC HARDWARE RESET AND CONFIGURATION COMPLETE ***\n");
+                pr_info("*** VIC HARDWARE CONFIGURATION COMPLETE (hardware disabled until sensor ready) ***\n");
                 
                 /* STEP 2: ISP isp-w01 - Control registers */
                 pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
@@ -2658,6 +2657,20 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     wmb();  /* Ensure state is written before enabling interrupts */
                     vic_start_ok = 1;  /* NOW safe to enable interrupt processing */
                     pr_info("*** INTERRUPTS RE-ENABLED AFTER COMPLETE INITIALIZATION ***\n");
+
+                    /* DELAYED VIC HARDWARE ENABLE: Now that everything is configured and sensor is streaming */
+                    pr_info("*** DELAYED VIC HARDWARE ENABLE: Enabling VIC hardware after complete initialization ***\n");
+                    void __iomem *vic_regs = vic_dev->vic_regs;
+                    if (vic_regs) {
+                        /* Enable VIC hardware using reference driver sequence */
+                        writel(0x2, vic_regs + 0x0);        /* Pre-enable state */
+                        wmb();
+                        writel(0x1, vic_regs + 0x0);        /* Enable VIC hardware */
+                        wmb();
+                        pr_info("*** VIC HARDWARE NOW ENABLED - Should prevent control limit errors ***\n");
+                    } else {
+                        pr_err("*** ERROR: VIC registers not available for delayed enable ***\n");
+                    }
 
                     pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
                     return ret;
