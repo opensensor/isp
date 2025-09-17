@@ -2848,8 +2848,10 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             tiziano_adr_params_refresh();
                             pr_debug("TUNING: All parameter refresh functions completed\n");
 
-                            /* 12. Critical ISP register refresh to maintain CSI PHY timing */
-                            if (ourISPdev->core_regs) {
+                            /* 12. DISABLED: Critical ISP register refresh - CAUSES VIC INTERRUPT DISRUPTION */
+                            /* The continuous writing to register 0x10 (interrupt enable) disrupts VIC interrupts */
+                            /* This was the root cause of interrupts stalling out during streaming */
+                            if (0 && ourISPdev->core_regs) {
                                 /* Refresh critical ISP timing registers to prevent CSI timeout */
                                 u32 current_val = readl(ourISPdev->core_regs + 0x10);
                                 writel(current_val, ourISPdev->core_regs + 0x10);  /* Refresh interrupt enable */
