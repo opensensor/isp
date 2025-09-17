@@ -1480,13 +1480,6 @@ static int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
     return 0;
 }
 
-
-static int apical_isp_ae_g_roi(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
-{
-    // TODO - NOT IMPLEMENTED
-    return 0;
-}
-
 static int apical_isp_expr_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
     uint32_t ev_buffer[32];
@@ -1789,43 +1782,6 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     }
 
     return 0;
-            case 0x8000039:  // Defog Strength
-                ctrl->value = tuning->defog_strength;
-                break;
-
-            case 0x8000062:  // DPC Strength
-                ctrl->value = tuning->dpc_strength;
-                break;
-
-            case 0x80000a2:  // DRC Strength
-                ctrl->value = tuning->drc_strength;
-                break;
-
-            case 0x8000085:  // Temper Strength
-                ctrl->value = tuning->temper_strength;
-                break;
-
-            case 0x8000086:  // Sinter Strength
-                ctrl->value = tuning->sinter_strength;
-                break;
-
-            case 0x800002d:  // AE Statistics
-                ret = isp_get_ae_state(dev, ctrl);
-                if (ret)
-                    goto out;
-                break;
-
-            case 0x8000030:  // AE Zone Info
-                ret = tisp_g_ae_zone(dev, ctrl);
-                if (ret)
-                    goto out;
-                break;
-
-            case 0x8000031:  // AF Zone Info
-                ret = isp_get_af_zone(dev, ctrl);
-                if (ret)
-                    goto out;
-                break;
             // Special case handlers
             case 0x8000004: {  // White Balance
                 struct {
@@ -3541,6 +3497,13 @@ int tisp_get_ae_info(void *out_buf) { return 0; }
 int tisp_set_ae_info(void *in_buf) { return 0; }
 int tisp_get_awb_info(void *out_buf) { return 0; }
 int tisp_set_awb_info(void *in_buf) { return 0; }
+
+/* Additional stub functions for the apical_isp functions */
+int tisp_g_aeroi_weight(void *buffer) { return 0; }
+int tisp_g_ae_zone(void *buffer) { return 0; }
+int tisp_g_af_zone(void *buffer) { return 0; }
+int tisp_g_aezone_weight(void *buffer) { return 0; }
+int tisp_g_ae_hist(void *buffer) { return 0; }
 
 int isp_core_tuning_release(struct tx_isp_dev *dev)
 {
