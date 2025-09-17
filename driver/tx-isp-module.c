@@ -3053,11 +3053,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     pr_info("*** Channel %d: NOW CONFIGURING VIC REGISTERS (SHOULD WORK!) ***\n", channel);
                     
                     // NOW configure VIC registers - they should be accessible!
-                    // CRITICAL: MIPI interface configuration (reference: interface type 1)
-                    iowrite32(3, vic_dev->vic_regs + 0xc);
+                    // CRITICAL: MIPI interface configuration - MIPI mode is 2, not 3!
+                    iowrite32(2, vic_dev->vic_regs + 0xc);
                     wmb();
                     ctrl_verify = ioread32(vic_dev->vic_regs + 0xc);
-                    pr_info("Channel %d: VIC ctrl reg 0xc = 3 (MIPI mode), verify=0x%x\n", channel, ctrl_verify);
+                    pr_info("Channel %d: VIC ctrl reg 0xc = 2 (MIPI mode), verify=0x%x\n", channel, ctrl_verify);
                     
                     if (ctrl_verify == 3) {
                         pr_info("*** Channel %d: SUCCESS! VIC REGISTERS RESPONDING! ***\n", channel);

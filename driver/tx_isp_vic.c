@@ -1700,8 +1700,8 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     wmb();
 
     /* STEP 3: Configure VIC mode for MIPI interface */
-    pr_info("*** STEP 3: Configuring VIC mode (MIPI=3) ***\n");
-    writel(3, vic_regs + 0xc);  /* MIPI mode (3) - FIXED */
+    pr_info("*** STEP 3: Configuring VIC mode (MIPI=2) ***\n");
+    writel(2, vic_regs + 0xc);  /* MIPI mode (2) - CORRECTED */
     writel(0x2d0, vic_regs + 0x14);  /* Reference driver interrupt config */
     wmb();
 
