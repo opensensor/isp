@@ -1520,7 +1520,7 @@ static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_i
     
     /* Store sensor attributes in CSI device */
     csi_dev->interface_type = sensor_attr->dbus_type;
-    csi_dev->lanes = (sensor_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) ? 2 : 1; /* MIPI uses 2 lanes, DVP uses 1 */
+    csi_dev->lanes = (sensor_attr->dbus_type == 2) ? 2 : 1; /* MIPI=2 uses 2 lanes, DVP=1 uses 1 lane */
     
     return 0;
 }
@@ -6845,12 +6845,16 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
             /* Any ISP-specific sensor configuration */
             if (sensor->video.attr) {
-                if (sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 */
-                    pr_info("ISP: Configuring for MIPI interface\n");
+                /* CRITICAL FIX: Correct interface constants based on sensor logs */
+                /* From sensor logs: (1=DVP, 2=MIPI) */
+                if (sensor->video.attr->dbus_type == 2) {  /* MIPI = 2 */
+                    pr_info("ISP: Configuring for MIPI interface (dbus_type=2)\n");
                     /* MIPI-specific ISP setup */
-                } else if (sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_DVP) {  /* DVP = 2 */
-                    pr_info("ISP: Configuring for DVP interface\n");
+                } else if (sensor->video.attr->dbus_type == 1) {  /* DVP = 1 */
+                    pr_info("ISP: Configuring for DVP interface (dbus_type=1)\n");
                     /* DVP-specific ISP setup */
+                } else {
+                    pr_warn("ISP: Unknown interface type %d, defaulting to MIPI\n", sensor->video.attr->dbus_type);
                 }
             }
         } else {
