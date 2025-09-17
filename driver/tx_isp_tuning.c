@@ -9592,21 +9592,8 @@ static void tisp_set_sensor_analog_gain_short(void)
 
 /* System control functions - Binary Ninja EXACT implementations (already implemented above) */
 
-static void system_irq_func_set(int irq_id, void (*handler)(void))
-{
-    pr_debug("system_irq_func_set: Setting IRQ %d handler\n", irq_id);
-
-    /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
-    /* Store function pointer in IRQ callback table */
-    extern void (*irq_func_cb[])(void);  /* IRQ callback function table */
-
-    if (irq_id >= 0 && irq_id < 32) {  /* Reasonable bounds check */
-        irq_func_cb[irq_id] = handler;
-        pr_debug("system_irq_func_set: IRQ %d handler set to %p\n", irq_id, handler);
-    } else {
-        pr_err("system_irq_func_set: Invalid IRQ ID %d\n", irq_id);
-    }
-}
+/* REMOVED: Static system_irq_func_set implementation - use extern from tx_isp_core.c */
+/* The real system_irq_func_set with proper signature is in tx_isp_core.c */
 
 /* Sensor interface functions - Safe structure-based implementations */
 static int data_b2eec(uint32_t time, void **var_ptr)
