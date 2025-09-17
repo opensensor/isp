@@ -3797,34 +3797,34 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* Set basic platform data first */
             platform_set_drvdata(pdev, isp_dev);
 
-                /* CRITICAL: Create VIC device BEFORE sensor_early_init */
-                pr_info("*** tx_isp_core_probe: Creating VIC device ***\n");
-                result = tx_isp_create_vic_device(isp_dev);
-                if (result != 0) {
-                    pr_err("*** tx_isp_core_probe: Failed to create VIC device: %d ***\n", result);
-                    return result;
-                } else {
-                    pr_info("*** tx_isp_core_probe: VIC device created successfully ***\n");
-                }
+            /* CRITICAL: Create VIC device BEFORE sensor_early_init */
+            pr_info("*** tx_isp_core_probe: Creating VIC device ***\n");
+            result = tx_isp_create_vic_device(isp_dev);
+            if (result != 0) {
+                pr_err("*** tx_isp_core_probe: Failed to create VIC device: %d ***\n", result);
+                return result;
+            } else {
+                pr_info("*** tx_isp_core_probe: VIC device created successfully ***\n");
+            }
 
-                /* Binary Ninja: sensor_early_init($v0) */
-                pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
-                sensor_early_init(isp_dev);
+            /* Binary Ninja: sensor_early_init($v0) */
+            pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
+            sensor_early_init(isp_dev);
 
-                /* Binary Ninja: Clock initialization */
-                uint32_t isp_clk_1 = 0; /* get_isp_clk() would be called here */
-                if (isp_clk_1 == 0)
-                    isp_clk_1 = isp_clk;
-                isp_clk = isp_clk_1;
+            /* Binary Ninja: Clock initialization */
+            uint32_t isp_clk_1 = 0; /* get_isp_clk() would be called here */
+            if (isp_clk_1 == 0)
+                isp_clk_1 = isp_clk;
+            isp_clk = isp_clk_1;
 
-                pr_info("*** tx_isp_core_probe: Basic initialization complete ***\n");
-                pr_info("***   - Core device size: %zu bytes ***\n", sizeof(struct tx_isp_dev));
-                pr_info("***   - Channel count: %d ***\n", channel_count);
-                pr_info("***   - Global ISP device set: %p ***\n", ourISPdev);
-                
-                /* CRITICAL: Set up memory mappings for register access FIRST */
-                pr_info("*** tx_isp_core_probe: Setting up ISP memory mappings FIRST ***\n");
-                result = tx_isp_init_memory_mappings(isp_dev);
+            pr_info("*** tx_isp_core_probe: Basic initialization complete ***\n");
+            pr_info("***   - Core device size: %zu bytes ***\n", sizeof(struct tx_isp_dev));
+            pr_info("***   - Channel count: %d ***\n", channel_count);
+            pr_info("***   - Global ISP device set: %p ***\n", ourISPdev);
+
+            /* CRITICAL: Set up memory mappings for register access FIRST */
+            pr_info("*** tx_isp_core_probe: Setting up ISP memory mappings FIRST ***\n");
+            result = tx_isp_init_memory_mappings(isp_dev);
                 if (result == 0) {
                     pr_info("*** tx_isp_core_probe: ISP memory mappings initialized successfully ***\n");
 
@@ -3922,8 +3922,19 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 } else {
                     pr_err("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
                 }
-                
+
                 return 0;
+
+            kfree(channel_array);
+        } else {
+            isp_printf(2, "Failed to init output channels!\n");
+        }
+    } else {
+        isp_printf(2, "Failed to init isp subdev!\n");
+    }
+
+    kfree(isp_dev);
+    return -ENOMEM;
 }
 
 
