@@ -685,10 +685,16 @@ static int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_
     system_reg_write(0xb00c, 0x40404040);
     system_reg_write(0xb010, 0x40404040);
     system_reg_write(0xb014, 0x404040);
-    system_reg_write(0xb018, 0x40404040);
-    system_reg_write(0xb01c, 0x40404040);
-    system_reg_write(0xb020, 0x40404040);
-    system_reg_write(0xb024, 0x404040);
+
+    /* CRITICAL FIX: Skip interrupt-related Core Control registers to prevent overwriting VIC interrupt config */
+    /* These registers (0xb018, 0xb01c, 0xb020, 0xb024) are overwriting the interrupt configuration */
+    /* that was set up by the VIC initialization, causing interrupts to stop working */
+    pr_info("*** SKIPPING INTERRUPT-RELATED CORE CONTROL REGISTERS (0xb018-0xb024) TO PRESERVE VIC INTERRUPTS ***\n");
+    /* system_reg_write(0xb018, 0x40404040); // SKIPPED - overwrites interrupt config */
+    /* system_reg_write(0xb01c, 0x40404040); // SKIPPED - overwrites interrupt config */
+    /* system_reg_write(0xb020, 0x40404040); // SKIPPED - overwrites interrupt config */
+    /* system_reg_write(0xb024, 0x404040);   // SKIPPED - overwrites interrupt config */
+
     system_reg_write(0xb028, 0x1000080);
     system_reg_write(0xb02c, 0x1000080);
     system_reg_write(0xb030, 0x100);
