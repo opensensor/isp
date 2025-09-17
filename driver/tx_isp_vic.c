@@ -1554,6 +1554,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
     wmb();
 
+    /* DIAGNOSTIC: Read back interrupt configuration to verify hardware response */
+    u32 int_enable = readl(vic_regs + 0x1e0);
+    u32 int_mask = readl(vic_regs + 0x1e8);
+    u32 int_status = readl(vic_regs + 0x1f0);
+    u32 int_pending = readl(vic_regs + 0x1f4);
+
+    pr_info("*** VIC INTERRUPT DIAGNOSTIC: Enable=0x%08x, Mask=0x%08x, Status=0x%08x, Pending=0x%08x ***\n",
+            int_enable, int_mask, int_status, int_pending);
+
+    if (int_enable != 0xffffffff) {
+        pr_warn("*** VIC INTERRUPT WARNING: Enable register readback failed (expected 0xffffffff, got 0x%08x) ***\n", int_enable);
+    }
+
+    if (int_mask != 0x0) {
+        pr_warn("*** VIC INTERRUPT WARNING: Mask register readback failed (expected 0x0, got 0x%08x) ***\n", int_mask);
+    }
+
     pr_info("*** VIC INTERRUPT INIT: Restored working VIC interrupt configuration (0x1e0/0x1e8) ***\n");
 
     /* CRITICAL: Set vic_start_ok flag to enable interrupt processing */
