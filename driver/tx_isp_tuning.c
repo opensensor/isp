@@ -2577,27 +2577,35 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             pr_info("MCP_LOG: Tuning controls now ready for operation\n");
                         }
 
-                        /* CRITICAL: Call ISP core init through proper subdev operations - ONE TIME ONLY */
-                        /* This should initialize all tiziano components including DPC arrays */
-                        if (ourISPdev->sd.ops && ourISPdev->sd.ops->core && ourISPdev->sd.ops->core->init) {
-                            pr_info("*** DEBUG: CALLING ISP CORE INIT - INITIALIZING ALL TIZIANO COMPONENTS ***\n");
-                            ret = ourISPdev->sd.ops->core->init(&ourISPdev->sd, 1);
-                            if (ret) {
-                                pr_err("*** ERROR: ISP CORE INIT FAILED: %d ***\n", ret);
-                            } else {
-                                pr_info("*** SUCCESS: ISP CORE INIT COMPLETED - ALL TIZIANO COMPONENTS INITIALIZED ***\n");
-                            }
+                        /* CRITICAL: PREVENT ISP CORE INIT DURING VIC STREAMING - THIS RESETS ALL HARDWARE! */
+                        extern uint32_t vic_start_ok;
+                        if (vic_start_ok == 1) {
+                            pr_info("*** TUNING SAFETY: VIC streaming active - BLOCKING ISP core init to prevent hardware reset ***\n");
+                            pr_info("*** TUNING SAFETY: ISP core init would reset CSI PHY and kill VIC interrupts ***\n");
+                            ret = 0;  /* Success - but skip the dangerous hardware reset */
                         } else {
-                            pr_warn("*** WARNING: ISP core init not available - using fallback initialization ***\n");
-
-                            extern int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32_t fps, int wdr_mode);
-                            ret = tiziano_init_all_pipeline_components(1920, 1080, 25, 0);  /* Fallback initialization */
-
-                            pr_info("*** DEBUG: Fallback tiziano_init_all_pipeline_components returned: %d ***\n", ret);
-                            if (ret != 0) {
-                                pr_err("*** ERROR: Fallback tiziano initialization failed: %d ***\n", ret);
+                            /* CRITICAL: Call ISP core init through proper subdev operations - ONE TIME ONLY */
+                            /* This should initialize all tiziano components including DPC arrays */
+                            if (ourISPdev->sd.ops && ourISPdev->sd.ops->core && ourISPdev->sd.ops->core->init) {
+                                pr_info("*** DEBUG: CALLING ISP CORE INIT - INITIALIZING ALL TIZIANO COMPONENTS ***\n");
+                                ret = ourISPdev->sd.ops->core->init(&ourISPdev->sd, 1);
+                                if (ret) {
+                                    pr_err("*** ERROR: ISP CORE INIT FAILED: %d ***\n", ret);
+                                } else {
+                                    pr_info("*** SUCCESS: ISP CORE INIT COMPLETED - ALL TIZIANO COMPONENTS INITIALIZED ***\n");
+                                }
                             } else {
-                                pr_info("*** SUCCESS: Fallback initialization completed - DPC arrays should now be ready ***\n");
+                                pr_warn("*** WARNING: ISP core init not available - using fallback initialization ***\n");
+
+                                extern int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32_t fps, int wdr_mode);
+                                ret = tiziano_init_all_pipeline_components(1920, 1080, 25, 0);  /* Fallback initialization */
+
+                                pr_info("*** DEBUG: Fallback tiziano_init_all_pipeline_components returned: %d ***\n", ret);
+                                if (ret != 0) {
+                                    pr_err("*** ERROR: Fallback tiziano initialization failed: %d ***\n", ret);
+                                } else {
+                                    pr_info("*** SUCCESS: Fallback initialization completed - DPC arrays should now be ready ***\n");
+                                }
                             }
                         }
 
