@@ -3260,7 +3260,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     spin_lock(&state->queue_lock);
                 }
 
-                /* Get the first completed buffer from the list */
+                /* Get the first completed buffer from the list OR use VBM buffer cycling */
                 if (!list_empty(&state->completed_buffers)) {
                     struct list_head *first = state->completed_buffers.next;
                     video_buffer = list_entry(first, struct video_buffer, list);
@@ -3274,6 +3274,15 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
                     pr_info("*** Channel %d: DQBUF got completed buffer[%d] data_addr=0x%x ***\n",
                             channel, buf_index, buffer_phys_addr);
+                } else if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+                    /* VBM mode - cycle through VBM buffers */
+                    static uint32_t vbm_dqbuf_cycle = 0;
+                    buf_index = vbm_dqbuf_cycle % state->vbm_buffer_count;
+                    buffer_phys_addr = state->vbm_buffer_addresses[buf_index];
+                    vbm_dqbuf_cycle++;
+
+                    pr_info("*** Channel %d: DQBUF VBM mode - returning buffer[%d] addr=0x%x (cycle=%d) ***\n",
+                            channel, buf_index, buffer_phys_addr, vbm_dqbuf_cycle);
                 } else {
                     spin_unlock(&state->queue_lock);
                     pr_warn("*** Channel %d: DQBUF still no completed buffers after wait ***\n", channel);
