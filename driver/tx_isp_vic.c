@@ -2495,7 +2495,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* CRITICAL FIX: Use sensor dimensions instead of hardcoded 1920x1080 */
                 writel((sensor_width << 16) | sensor_height, main_isp_base + 0x4);
                 writel(0x1, main_isp_base + 0x8);
-                writel(0x80700008, main_isp_base + 0xc);
+                /* CRITICAL FIX: Don't write error code to error status register! */
+                /* Register 0xc is the error status register - clear it instead of setting error code */
+                writel(0x0, main_isp_base + 0xc);  /* Clear error status instead of setting 0x80700008 */
+                pr_info("*** ISP CORE: Error status register cleared (was causing green frames) ***\n");
                 writel(0x1, main_isp_base + 0x28);
                 writel(0x400040, main_isp_base + 0x2c);
                 writel(0x1, main_isp_base + 0x90);
