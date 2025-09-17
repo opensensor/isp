@@ -1569,9 +1569,7 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
             return ret;
         }
 
-        /* CRITICAL FIX: FPS control moved to after sensor initialization */
-        /* Sensor must be initialized before FPS can be set (HTS registers must be readable) */
-        ISP_INFO("*** ispcore_core_ops_init: FPS control will be set after sensor initialization ***\n");
+        /* FPS control is handled through the tuning IOCTL system (IMP_ISP_Tuning_SetSensorFPS) */
 
         tisp_initialized = true;
         ISP_INFO("*** ispcore_core_ops_init: tisp_init() completed successfully - MARKED AS INITIALIZED ***\n");
