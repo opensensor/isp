@@ -335,6 +335,8 @@ int tisp_g_aeroi_weight(void *buffer);
 int tisp_ae_param_array_get(int param_type, void *buffer, int *size);
 int tisp_ae_get_y_zone(void *buffer);
 int tisp_ae_get_hist_custome(void *buffer);
+int apical_isp_max_again_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
+int apical_isp_max_dgain_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 
 /* System register access functions - moved before use */
 uint32_t system_reg_read(u32 reg);
@@ -3751,7 +3753,6 @@ int tisp_ae_param_array_get(int param_type, void *buffer, int *size)
 }
 
 int tisp_ae_get_y_zone(void *buffer) { return 0; }
-int tisp_af_get_zone(void *buffer) { return 0; }
 int tisp_ae_get_hist_custome(void *buffer) { return 0; }
 
 int isp_core_tuning_release(struct tx_isp_dev *dev)
