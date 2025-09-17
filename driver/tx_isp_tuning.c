@@ -691,6 +691,39 @@ static uint32_t wdr_detail_w_in4_list[0x24/4] = {0};
 static uint32_t mdns_y_fspa_ref_fus_wei_224_wdr_array[0x40/4] = {0};
 static uint32_t param_wdr_tool_control_array[0x38/4] = {0};
 
+/* DPC (Dead Pixel Correction) parameter arrays - Binary Ninja reference */
+static uint32_t ctr_md_np_array[0x40/4] = {0};
+static uint32_t ctr_std_np_array[0x40/4] = {0};
+static uint32_t dpc_s_con_par_array[0x14/4] = {0};
+static uint32_t dpc_d_m1_fthres_array[0x24/4] = {0};
+static uint32_t dpc_d_m1_dthres_array[0x24/4] = {0};
+static uint32_t dpc_d_m1_con_par_array[0xc/4] = {0};
+static uint32_t dpc_d_m2_level_array[0x24/4] = {0};
+static uint32_t dpc_d_m2_hthres_array[0x24/4] = {0};
+static uint32_t dpc_d_m2_lthres_array[0x24/4] = {0};
+static uint32_t dpc_d_m2_p0_d1_thres_array[0x24/4] = {0};
+static uint32_t dpc_d_m2_p1_d1_thres_array[0x24/4] = {0};
+static uint32_t dpc_d_m2_p2_d1_thres_array[0x24/4] = {0};
+static uint32_t dpc_d_m2_p3_d1_thres_array[0x24/4] = {0};
+static uint32_t dpc_d_m2_p0_d2_thres_array[0x24/4] = {0};
+static uint32_t dpc_d_m2_p1_d2_thres_array[0x24/4] = {0};
+static uint32_t dpc_d_m2_p2_d2_thres_array[0x24/4] = {0};
+static uint32_t dpc_d_m2_p3_d2_thres_array[0x24/4] = {0};
+static uint32_t dpc_d_m2_con_par_array[0x14/4] = {0};
+static uint32_t dpc_d_m3_fthres_array[0x24/4] = {0};
+static uint32_t dpc_d_m3_dthres_array[0x24/4] = {0};
+static uint32_t dpc_d_m3_con_par_array[0x10/4] = {0};
+static uint32_t dpc_d_cor_par_array[0x2c/4] = {0};
+static uint32_t ctr_stren_array[0x24/4] = {0};
+static uint32_t ctr_md_thres_array[0x24/4] = {0};
+static uint32_t ctr_el_thres_array[0x24/4] = {0};
+static uint32_t ctr_eh_thres_array[0x24/4] = {0};
+static uint32_t dpc_d_m1_fthres_wdr_array[0x24/4] = {0};
+static uint32_t dpc_d_m1_dthres_wdr_array[0x24/4] = {0};
+static uint32_t dpc_d_m3_fthres_wdr_array[0x24/4] = {0};
+static uint32_t dpc_d_m3_dthres_wdr_array[0x24/4] = {0};
+static uint32_t ctr_con_par_array[0x1c/4] = {0};
+
 /* Event completion structure */
 static struct completion tevent_info;
 
