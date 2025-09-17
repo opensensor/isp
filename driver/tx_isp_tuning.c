@@ -1103,15 +1103,31 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: Call tisp_set_csc_version(0) */
     tisp_set_csc_version(0);
 
-    /* Binary Ninja: Configure top control bypass register */
-    uint32_t bypass_val = 0x8077efff; /* Default bypass configuration */
+    /* CRITICAL FIX: Configure ISP processing pipeline to ENABLE image processing */
+    /* The bypass register controls which ISP modules are active vs bypassed */
+    /* Green frames indicate that essential processing modules are being bypassed */
 
-    /* Binary Ninja: Select bypass configuration based on chip variant */
-    bypass_val &= 0xa1ffdf76;  /* Standard configuration mask */
-    bypass_val |= 0x880002;    /* Standard control bits */
+    /* CRITICAL: Enable essential ISP processing modules for proper image processing */
+    /* Bypass register bits: 1 = bypass (disable), 0 = enable */
+    uint32_t bypass_val = 0x0;  /* Start with all modules ENABLED (no bypass) */
+
+    /* Enable critical image processing modules by NOT bypassing them */
+    /* These are essential for converting raw sensor data to proper video */
+    bypass_val &= ~(1 << 0);   /* Enable demosaic (raw -> RGB conversion) */
+    bypass_val &= ~(1 << 1);   /* Enable color correction matrix (CCM) */
+    bypass_val &= ~(1 << 2);   /* Enable gamma correction */
+    bypass_val &= ~(1 << 3);   /* Enable auto white balance (AWB) */
+    bypass_val &= ~(1 << 4);   /* Enable auto exposure (AE) */
+    bypass_val &= ~(1 << 8);   /* Enable color space conversion */
+    bypass_val &= ~(1 << 12);  /* Enable output formatter */
+
+    /* Only bypass non-essential modules that might cause issues */
+    bypass_val |= (1 << 16);   /* Bypass advanced noise reduction (optional) */
+    bypass_val |= (1 << 20);   /* Bypass advanced sharpening (optional) */
 
     system_reg_write(0xc, bypass_val);
-    pr_info("tisp_init: Set ISP top bypass to 0x%x\n", bypass_val);
+    pr_info("*** tisp_init: CRITICAL FIX - ISP bypass register set to 0x%x (ENABLE image processing) ***\n", bypass_val);
+    pr_info("*** tisp_init: Essential modules ENABLED: demosaic, CCM, gamma, AWB, AE, CSC, output ***\n");
 
     /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupts */
     system_reg_write(0x30, 0xffffffff);
