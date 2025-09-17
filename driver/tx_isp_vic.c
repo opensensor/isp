@@ -373,6 +373,10 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                         if (num_channels > 0) {
                             struct tx_isp_channel_state *state = &frame_channels[0].state;
 
+                            /* DEBUG: Show current VBM buffer state */
+                            pr_info("*** VIC BUFFER DEBUG: vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
+                                    state->vbm_buffer_addresses, state->vbm_buffer_count);
+
                             /* Use REAL VBM buffer addresses that were stored during QBUF */
                             if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
                                 static uint32_t vbm_buffer_cycle = 0;
