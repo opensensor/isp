@@ -1633,7 +1633,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     return 0;
-}s
+}
 
 /* VIC sensor operations ioctl - FIXED for MIPS memory alignment */
 int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
