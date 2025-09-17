@@ -5667,7 +5667,7 @@ int tisp_wdr_init(void)
     
     /* Initialize default values for WDR parameters */
     wdr_ev_now = 0x1000;
-    wdr_ev_list_deghost = 0x800;
+    wdr_ev_list_deghost_val = 0x800;
     wdr_block_mean1_end = 0;
     wdr_block_mean1_end_old = 0;
     wdr_block_mean1_th = 0;
