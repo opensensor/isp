@@ -2334,6 +2334,56 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     return ret;
 }
 
+/* CRITICAL MISSING FUNCTION: vic_core_s_stream - FIXED to call tx_isp_vic_start */
+/* Global timer and state variables */
+static struct timer_list vic_adjustment_timer;
+static bool timer_initialized = false;
+static bool adjustment_applied = false;
+
+static void vic_start_adjustment(void)
+{
+    struct tx_isp_vic_device *vic_dev;
+    void __iomem *vic_regs, *isp_base;
+
+    if (!ourISPdev || !ourISPdev->vic_dev) {
+        pr_err("Timer: No VIC device available\n");
+        return;
+    }
+
+    vic_dev = ourISPdev->vic_dev;
+    vic_regs = vic_dev->vic_regs;
+    isp_base = vic_regs - 0xe0000;
+
+    pr_info("*** Timer: Applying  streaming adjustment sequence ***\n");
+    /* ISP Control registers - relative to isp_base */
+    writel(0x0, isp_base + 0x9804);
+
+    /* VIC Control registers - these are working */
+    writel(0x0, isp_base + 0x9ac0);
+    writel(0x0, isp_base + 0x9ac8);
+
+    /* Core Control registers - relative to isp_base */
+    writel(0x24242424, isp_base + 0xb018);
+    writel(0x24242424, isp_base + 0xb01c);
+    writel(0x24242424, isp_base + 0xb020);
+    writel(0x242424, isp_base + 0xb024);
+    writel(0x10d0046, isp_base + 0xb028);
+    writel(0xe8002f, isp_base + 0xb02c);
+    writel(0xc50100, isp_base + 0xb030);
+    writel(0x1670100, isp_base + 0xb034);
+    writel(0x1f001, isp_base + 0xb038);
+    writel(0x22c0000, isp_base + 0xb03c);
+    writel(0x22c1000, isp_base + 0xb040);
+    writel(0x22c2000, isp_base + 0xb044);
+    writel(0x22c3000, isp_base + 0xb048);
+    writel(0x3, isp_base + 0xb04c);
+    writel(0x10000000, isp_base + 0xb078);
+    wmb();
+
+    adjustment_applied = true;
+    pr_info("*** Timer: adjustment sequence completed ***\n");
+}
+
 /* Modified vic_core_s_stream function with OLD timer API */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
