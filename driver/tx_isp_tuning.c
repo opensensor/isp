@@ -3551,6 +3551,17 @@ static uint32_t data_afcd8 = 0x800;
 static uint32_t data_afce0 = 0x100;
 /* ta_custom_en already declared earlier */
 
+/* Additional sensor control variables - Binary Ninja reference */
+static uint32_t data_d04a0 = 0x1000;  /* Integration time parameter */
+static uint32_t data_d04a8 = 0x1000;  /* Short integration time parameter */
+static uint32_t data_d04ac = 0x1000;  /* Short integration gain parameter */
+static uint32_t data_c46b8 = 0;       /* Integration time cache */
+static uint32_t data_c46f8 = 0;       /* Short integration time cache */
+static uint32_t data_c470c = 0;       /* Short exposure mode flag */
+
+/* IRQ callback function table */
+static void (*irq_func_cb[32])(void) = {NULL};
+
 /* AE parameter addresses - Safe structure-based access */
 static uint32_t *data_d04b8 = &data_b0cfc;
 static uint32_t data_d04bc[6] = {0x0d0b00, 0x040d0b00, 0x080d0b00, 0x0c0d0b00, 0x100d0b00, 0x140d0b00};
@@ -3637,8 +3648,8 @@ static int tiziano_ae_init_exp_th(void)
     data_d04bc[5] = 0x140d0b00;
     
     /* Check and set AE exposure threshold */
-    if (data_b2ea8 < ae_exp_th) {
-        ae_exp_th = data_b2ea8;
+    if (data_b2ea8 < ae_exp_th.data[0]) {
+        ae_exp_th.data[0] = data_b2ea8;
     }
     
     /* Calculate and clamp exposure values using safe math */
@@ -3736,12 +3747,16 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     /* Binary Ninja EXACT: memset(&ae_ctrls, 0, 0x10) */
     memset(&ae_ctrls, 0, 0x10);
     
+    /* Forward declarations for exported functions */
+    extern int tiziano_ae_params_refresh(void);
+    extern void *tiziano_ae_para_addr(void);
+
     /* Binary Ninja EXACT: tiziano_ae_params_refresh() */
     tiziano_ae_params_refresh();
-    
+
     /* Binary Ninja EXACT: tiziano_ae_init_exp_th() */
     tiziano_ae_init_exp_th();
-    
+
     /* Binary Ninja EXACT: tiziano_ae_para_addr() */
     (void)tiziano_ae_para_addr();
     
@@ -3760,7 +3775,7 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     /* Binary Ninja EXACT: if (ta_custom_en_1 == 1) */
     if (ta_custom_en_1 == 1) {
         /* Binary Ninja EXACT: tisp_set_sensor_integration_time(_ae_result) */
-        tisp_set_sensor_integration_time(_ae_result);
+        tisp_set_sensor_integration_time(_ae_result.data[0]);
         
         /* Binary Ninja EXACT: tisp_set_sensor_analog_gain() */
         tisp_set_sensor_analog_gain();
@@ -7296,3 +7311,160 @@ void *tiziano_ae_para_addr(void)
     return &dmsc_nor_alias_thres_intp;
 }
 EXPORT_SYMBOL(tiziano_ae_para_addr);
+
+/* Sensor control functions - Binary Ninja EXACT implementations */
+static void tisp_set_sensor_integration_time(uint32_t time)
+{
+    void *var_38;
+    int16_t var_28;
+
+    pr_debug("tisp_set_sensor_integration_time: Setting integration time to %u\n", time);
+
+    /* Binary Ninja: if (dmsc_sp_d_w_stren_wdr_array == 0) */
+    if (dmsc_sp_d_w_stren_wdr_array == NULL) {
+        /* Binary Ninja: int32_t $v0_5 = data_b2eec(arg1, &var_38) */
+        int32_t v0_5 = data_b2eec(time, &var_38);
+        _ae_reg.data[0] = v0_5;
+
+        /* Binary Ninja: if (arg1 != $v0_5) */
+        if (time != v0_5) {
+            /* Binary Ninja: int32_t _AePointPos_1 = _AePointPos.d */
+            int32_t AePointPos_1 = _AePointPos.data[0];
+
+            /* Binary Ninja: int32_t $v0_6 = fix_point_mult2_32(_AePointPos_1, data_d04a0, arg1 << (_AePointPos_1 & 0x1f)) */
+            int32_t v0_6 = fix_point_mult2_32(AePointPos_1, data_d04a0, time << (AePointPos_1 & 0x1f));
+
+            /* Binary Ninja: int32_t _AePointPos_2 = _AePointPos.d */
+            int32_t AePointPos_2 = _AePointPos.data[0];
+
+            /* Binary Ninja: data_d04a0 = fix_point_div_32(_AePointPos_2, $v0_6, $v0_5 << (_AePointPos_2 & 0x1f)) */
+            data_d04a0 = fix_point_div_32(AePointPos_2, v0_6, v0_5 << (AePointPos_2 & 0x1f));
+        }
+
+        /* Binary Ninja: data_b2ef4(zx.d(var_28), 0) */
+        data_b2ef4((uint32_t)var_28, 0);
+        data_c46b8 = _ae_reg.data[0];
+    } else {
+        /* Binary Ninja: int32_t $v0_2 = data_b2eec(data_c46b8, &var_38) */
+        int32_t v0_2 = data_b2eec(data_c46b8, &var_38);
+        _ae_reg.data[0] = v0_2;
+        data_c46b8 = v0_2;
+        data_b2ef4((uint32_t)var_28, 0);
+    }
+}
+
+static void tisp_set_sensor_analog_gain(void)
+{
+    int16_t var_28;
+
+    pr_debug("tisp_set_sensor_analog_gain: Setting analog gain\n");
+
+    /* Binary Ninja: uint32_t $v0_2 = tisp_math_exp2(data_b2ee0(tisp_log2_fixed_to_fixed(), &var_28), 0x10, 0x10) */
+    uint32_t log_result = tisp_log2_fixed_to_fixed();
+    uint32_t gain_param = data_b2ee0(log_result, &var_28);
+    uint32_t v0_2 = tisp_math_exp2(gain_param, 0x10, 0x10);
+
+    /* Binary Ninja: data_b2f04(zx.d(var_28), 0) */
+    data_b2f04((uint32_t)var_28, 0);
+
+    /* Binary Ninja: return $v0_2 u>> 6 */
+    uint32_t final_gain = v0_2 >> 6;
+    pr_debug("tisp_set_sensor_analog_gain: Calculated gain = %u\n", final_gain);
+}
+
+static void tisp_set_sensor_integration_time_short(uint32_t time)
+{
+    void *var_38;
+    int16_t var_26;
+
+    pr_debug("tisp_set_sensor_integration_time_short: Setting short integration time to %u\n", time);
+
+    /* Binary Ninja: if (data_c470c == 0) */
+    if (data_c470c == 0) {
+        /* Binary Ninja: int32_t $v0_5 = data_b2ef0(arg1, &var_38) */
+        int32_t v0_5 = data_b2ef0(time, &var_38);
+        data_d04a8 = v0_5;
+
+        /* Binary Ninja: if (arg1 != $v0_5) */
+        if (time != v0_5) {
+            /* Binary Ninja: int32_t _AePointPos_1 = _AePointPos.d */
+            int32_t AePointPos_1 = _AePointPos.data[0];
+
+            /* Binary Ninja: int32_t $v0_6 = fix_point_mult2_32(_AePointPos_1, data_d04ac, arg1 << (_AePointPos_1 & 0x1f)) */
+            int32_t v0_6 = fix_point_mult2_32(AePointPos_1, data_d04ac, time << (AePointPos_1 & 0x1f));
+
+            /* Binary Ninja: int32_t _AePointPos_2 = _AePointPos.d */
+            int32_t AePointPos_2 = _AePointPos.data[0];
+
+            /* Binary Ninja: data_d04ac = fix_point_div_32(_AePointPos_2, $v0_6, $v0_5 << (_AePointPos_2 & 0x1f)) */
+            data_d04ac = fix_point_div_32(AePointPos_2, v0_6, v0_5 << (AePointPos_2 & 0x1f));
+        }
+
+        /* Binary Ninja: data_b2ef8(zx.d(var_26), 0) */
+        data_b2ef8((uint32_t)var_26, 0);
+        data_c46f8 = data_d04a8;
+    } else {
+        /* Binary Ninja: int32_t $v0_2 = data_b2ef0(data_c46f8, &var_38) */
+        int32_t v0_2 = data_b2ef0(data_c46f8, &var_38);
+        data_d04a8 = v0_2;
+        data_c46f8 = v0_2;
+        data_b2ef8((uint32_t)var_26, 0);
+    }
+}
+
+static void tisp_set_sensor_analog_gain_short(void)
+{
+    void *var_28;
+    int16_t var_1a;
+
+    pr_debug("tisp_set_sensor_analog_gain_short: Setting short analog gain\n");
+
+    /* Binary Ninja: uint32_t $v0_2 = tisp_math_exp2(data_b2ee4(tisp_log2_fixed_to_fixed(), &var_28), 0x10, 0x10) */
+    uint32_t log_result = tisp_log2_fixed_to_fixed();
+    uint32_t gain_param = data_b2ee4(log_result, &var_28);
+    uint32_t v0_2 = tisp_math_exp2(gain_param, 0x10, 0x10);
+
+    /* Binary Ninja: data_b2f08(zx.d(var_1a), 0) */
+    data_b2f08((uint32_t)var_1a, 0);
+
+    /* Binary Ninja: return $v0_2 u>> 6 */
+    uint32_t final_gain = v0_2 >> 6;
+    pr_debug("tisp_set_sensor_analog_gain_short: Calculated short gain = %u\n", final_gain);
+}
+
+/* System control functions - Binary Ninja EXACT implementations */
+static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value)
+{
+    pr_debug("system_reg_write_ae: AE%d reg=0x%x value=0x%x\n", ae_id, reg, value);
+
+    /* Binary Ninja: if (arg1 == 1) */
+    if (ae_id == 1) {
+        /* Binary Ninja: system_reg_write(0xa000, 1) */
+        system_reg_write(0xa000, 1);
+    } else if (ae_id == 2) {
+        /* Binary Ninja: system_reg_write(0xa800, 1) */
+        system_reg_write(0xa800, 1);
+    } else if (ae_id == 3) {
+        /* Binary Ninja: system_reg_write(0x1070, 1) */
+        system_reg_write(0x1070, 1);
+    }
+
+    /* Binary Ninja: return system_reg_write(arg2, arg3) __tailcall */
+    return system_reg_write(reg, value);
+}
+
+static void system_irq_func_set(int irq_id, void (*handler)(void))
+{
+    pr_debug("system_irq_func_set: Setting IRQ %d handler\n", irq_id);
+
+    /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
+    /* Store function pointer in IRQ callback table */
+    extern void (*irq_func_cb[])(void);  /* IRQ callback function table */
+
+    if (irq_id >= 0 && irq_id < 32) {  /* Reasonable bounds check */
+        irq_func_cb[irq_id] = handler;
+        pr_debug("system_irq_func_set: IRQ %d handler set to %p\n", irq_id, handler);
+    } else {
+        pr_err("system_irq_func_set: Invalid IRQ ID %d\n", irq_id);
+    }
+}
