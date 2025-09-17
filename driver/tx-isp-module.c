@@ -1811,8 +1811,9 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
         }
 
-        /* Binary Ninja: Error recovery sequence */
-        if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
+        /* Binary Ninja: Error recovery sequence - FIXED to include control limit error */
+        if ((v1_7 & (0xde00 | 0x200000)) != 0 && *vic_irq_enable_flag == 1) {
+            pr_info("*** VIC ERROR RECOVERY: Detected error condition 0x%x, triggering self-healing mechanism ***\n", v1_7);
             pr_err("error handler!!!\n");
 
             /* Binary Ninja: **($s0 + 0xb8) = 4 */
@@ -5363,34 +5364,20 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
         return IRQ_NONE;
     }
     
-    /* CRITICAL FIX: Route IRQ 37 to ISP core interrupt handler for MIPI data */
+    /* CRITICAL FIX: Proper subdevice interrupt isolation - each IRQ goes to ONE handler only */
     if (irq == 37) {
-        /* This is the ISP core interrupt - route to core implementation (tx_isp_core.c) */
+        /* IRQ 37: ISP CORE ONLY - no VIC interference */
         extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
-        pr_debug("*** IRQ 37: Routing to ISP CORE interrupt handler (core file) ***\n");
+        pr_debug("*** IRQ 37: ISP CORE ONLY (isolated from VIC) ***\n");
         result = ispcore_interrupt_service_routine(irq, dev_id);
-        
-        /* Also check for VIC interrupts on same IRQ */
-        if (isp_dev->vic_dev) {
-            irqreturn_t vic_result = isp_vic_interrupt_service_routine(irq, dev_id);
-            if (vic_result == IRQ_WAKE_THREAD) {
-                result = IRQ_WAKE_THREAD;
-            }
-        }
     } else if (irq == 38) {
-        /* This is the secondary ISP interrupt - also check both handlers */
-        pr_debug("*** IRQ 38: Routing to VIC/ISP secondary handler ***\n");
-        
-        /* Check VIC interrupts first */
+        /* IRQ 38: VIC ONLY - no ISP core interference */
+        pr_debug("*** IRQ 38: VIC ONLY (isolated from ISP core) ***\n");
         if (isp_dev->vic_dev) {
             result = isp_vic_interrupt_service_routine(irq, dev_id);
-        }
-        
-        /* Also check ISP core for secondary interrupts */
-        extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
-        irqreturn_t isp_result = ispcore_interrupt_service_routine(irq, dev_id);
-        if (isp_result == IRQ_WAKE_THREAD) {
-            result = IRQ_WAKE_THREAD;
+        } else {
+            pr_warn("*** IRQ 38: No VIC device available ***\n");
+            result = IRQ_NONE;
         }
     } else {
         pr_warn("*** isp_irq_handle: Unexpected IRQ %d ***\n", irq);

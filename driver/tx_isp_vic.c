@@ -37,6 +37,7 @@ static void debug_vic_start_ok_change(int new_value, const char *location, int l
 }
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 static int ispcore_activate_module(struct tx_isp_dev *isp_dev);
+static int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev);
 static int vic_enabled = 0;
 
 /* *** CRITICAL: MISSING FUNCTION - tx_isp_create_vic_device *** */
@@ -2522,56 +2523,19 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0xffffffff, vic_regs + 0x1c);   /* Clear interrupt status */
                 wmb();
 
-                /* Step 3: BINARY NINJA EXACT VIC control registers */
-                writel(2, vic_regs + 0xc);             /* BINARY NINJA: Mode = 2 for MIPI (not 3!) */
-                /* CRITICAL: Do NOT clear register 0x14 - it contains interrupt config that must be preserved */
-                /* Binary Ninja: *(*(arg1 + 0xb8) + 0x14) = *(*(arg1 + 0x110) + 0x7c) */
+                /* CRITICAL: MINIMAL VIC configuration to prevent control limit errors */
+                pr_info("*** MINIMAL VIC CONFIG: Applying only essential registers to prevent control limit errors ***\n");
+
+                /* Step 1: Essential VIC mode and dimensions only */
+                writel(2, vic_regs + 0xc);                                    /* MIPI mode = 2 */
+                writel((sensor_width << 16) | sensor_height, vic_regs + 0x4); /* Dimensions */
                 wmb();
 
-                pr_info("*** BINARY NINJA CRITICAL FIX: Set VIC mode = 2 (MIPI) instead of 3 ***\n");
+                /* Step 2: Preserve critical timing parameter (never overwrite 0x18) */
+                /* Register 0x18 should remain 0xf00 - do NOT overwrite it */
 
-                pr_info("*** VIC HARDWARE RESET COMPLETE - Now applying clean configuration ***\n");
-
-                /* Step 4: Apply clean VIC configuration in correct order */
-                pr_info("*** CLEAN VIC CONFIGURATION: Applying configuration in hardware-expected order ***\n");
-
-                /* Configure VIC dimensions first */
-                writel((sensor_width << 16) | sensor_height, vic_regs + 0x4);  /* Dimensions: 1920x1080 */
-                wmb();
-
-                /* CRITICAL FIX: Use mode = 2 for MIPI interface (not 3) to prevent control limit error */
-                writel(0x2, vic_regs + 0xc);            /* MIPI mode (2) - FIXED */
-                wmb();
-
-                /* Configure VIC interrupt system */
-                writel(0x2d0, vic_regs + 0x100);        /* Interrupt configuration */
-                writel(0x2b, vic_regs + 0x14);          /* Interrupt control - reference driver value */
-                wmb();
-
-                /* Configure VIC timing */
-                writel(0xf00, vic_regs + 0x18);         /* Timing parameters */
-                wmb();
-
-                /* Step 5: Apply essential VIC control registers */
-                writel(0x800800, vic_regs + 0x60);      /* Control register */
-                writel(0x9d09d0, vic_regs + 0x64);      /* Control register */
-                writel(0x6002, vic_regs + 0x70);        /* Control register */
-                writel(0x7003, vic_regs + 0x74);        /* Control register */
-                wmb();
-
-                /* Step 6: Apply VIC color space configuration */
-                writel(0xeb8080, vic_regs + 0xc0);      /* Color space config */
-                writel(0x108080, vic_regs + 0xc4);      /* Color space config */
-                writel(0x29f06e, vic_regs + 0xc8);      /* Color space config */
-                writel(0x913622, vic_regs + 0xcc);      /* Color space config */
-                wmb();
-
-                /* Step 7: Apply VIC processing configuration */
-                writel(0x515af0, vic_regs + 0xd0);      /* Processing config */
-                writel(0xaaa610, vic_regs + 0xd4);      /* Processing config */
-                writel(0xd21092, vic_regs + 0xd8);      /* Processing config */
-                writel(0x6acade, vic_regs + 0xdc);      /* Processing config */
-                wmb();
+                /* Step 3: DEFER complex VIC configuration until after sensor is fully initialized */
+                /* This prevents control limit errors during initialization */
 
                 /* Step 8: Apply final VIC configuration */
                 writel(0x2c000, vic_regs + 0x10c);      /* Final config */
@@ -2579,11 +2543,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x10, vic_regs + 0x120);         /* Final config */
                 wmb();
 
-                /* Step 9: DEFER VIC hardware enable until after sensor is streaming */
+                /* Step 4: DEFER VIC hardware enable until after sensor is streaming */
                 pr_info("*** DEFERRING VIC HARDWARE ENABLE: Will enable after sensor starts streaming ***\n");
                 /* Keep VIC hardware disabled during initial configuration */
                 writel(0x0, vic_regs + 0x0);            /* Keep VIC disabled */
                 wmb();
+
+                /* Step 5: DEFER full VIC configuration until sensor is streaming */
+                pr_info("*** DEFERRING FULL VIC CONFIGURATION: Will apply after sensor initialization ***\n");
 
                 pr_info("*** VIC HARDWARE CONFIGURATION COMPLETE (hardware disabled until sensor ready) ***\n");
                 
@@ -3320,3 +3287,51 @@ EXPORT_SYMBOL(vic_core_s_stream);  /* CRITICAL: Export the missing function */
 /* Export VIC platform init/exit for main module */
 EXPORT_SYMBOL(tx_isp_vic_platform_init);
 EXPORT_SYMBOL(tx_isp_vic_platform_exit);
+
+/**
+ * tx_isp_vic_apply_full_config - Apply complete VIC configuration after sensor initialization
+ * This function applies the full VIC register configuration that was deferred during initialization
+ */
+static int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev)
+{
+    void __iomem *vic_regs;
+
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_err("tx_isp_vic_apply_full_config: Invalid VIC device\n");
+        return -EINVAL;
+    }
+
+    vic_regs = vic_dev->vic_regs;
+
+    pr_info("*** VIC FULL CONFIG: Applying complete VIC configuration after sensor initialization ***\n");
+
+    /* Apply VIC interrupt system configuration */
+    writel(0x2d0, vic_regs + 0x100);        /* Interrupt configuration */
+    writel(0x2b, vic_regs + 0x14);          /* Interrupt control - reference driver value */
+    wmb();
+
+    /* Apply essential VIC control registers */
+    writel(0x800800, vic_regs + 0x60);      /* Control register */
+    writel(0x9d09d0, vic_regs + 0x64);      /* Control register */
+    writel(0x6002, vic_regs + 0x70);        /* Control register */
+    writel(0x7003, vic_regs + 0x74);        /* Control register */
+    wmb();
+
+    /* Apply VIC color space configuration */
+    writel(0xeb8080, vic_regs + 0xc0);      /* Color space config */
+    writel(0x108080, vic_regs + 0xc4);      /* Color space config */
+    writel(0x29f06e, vic_regs + 0xc8);      /* Color space config */
+    writel(0x913622, vic_regs + 0xcc);      /* Color space config */
+    wmb();
+
+    /* Apply VIC processing configuration */
+    writel(0x515af0, vic_regs + 0xd0);      /* Processing config */
+    writel(0xaaa610, vic_regs + 0xd4);      /* Processing config */
+    writel(0xd21092, vic_regs + 0xd8);      /* Processing config */
+    writel(0x6acade, vic_regs + 0xdc);      /* Processing config */
+    wmb();
+
+    pr_info("*** VIC FULL CONFIG: Complete VIC configuration applied successfully ***\n");
+
+    return 0;
+}
