@@ -586,6 +586,20 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     void __iomem *isp_csi_base = NULL;  /* 0x10022000 - CSI control */
 
                     if (interface_type == 1) {
+                        /* Map all required memory regions for MIPI interface */
+                        isp_w02_base = ioremap(0x133e0000, 0x10000);
+                        isp_w01_base = ioremap(0x10023000, 0x1000);
+                        isp_m0_base = ioremap(0x13300000, 0x100000);
+                        isp_csi_base = ioremap(0x10022000, 0x1000);
+
+                        if (!isp_w02_base || !isp_w01_base || !isp_m0_base || !isp_csi_base) {
+                            pr_err("*** CRITICAL ERROR: Failed to map CSI PHY memory regions ***\n");
+                            if (isp_w02_base) iounmap(isp_w02_base);
+                            if (isp_w01_base) iounmap(isp_w01_base);
+                            if (isp_m0_base) iounmap(isp_m0_base);
+                            if (isp_csi_base) iounmap(isp_csi_base);
+                            return -ENOMEM;
+                        }
                         /* MIPI interface configuration */
                         pr_info("*** CRITICAL: CSI MIPI interface configuration ***\n");
 
