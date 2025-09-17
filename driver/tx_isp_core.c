@@ -615,37 +615,41 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* *** CRITICAL: MAIN INTERRUPT PROCESSING SECTION *** */
 
+    /* CRITICAL DEBUG: Log all interrupt status values to find the real frame sync bit */
+    pr_info("*** ISP CORE: INTERRUPT STATUS DEBUG: 0x%08x ***\n", interrupt_status);
+    pr_info("*** ISP CORE: Checking bits - 0x1000=%s, 0x1=%s, 0x2=%s, 0x4=%s ***\n",
+            (interrupt_status & 0x1000) ? "SET" : "clear",
+            (interrupt_status & 0x1) ? "SET" : "clear",
+            (interrupt_status & 0x2) ? "SET" : "clear",
+            (interrupt_status & 0x4) ? "SET" : "clear");
+
     /* Binary Ninja: Frame sync interrupt processing */
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt */
-        pr_info("*** ISP CORE: FRAME SYNC INTERRUPT ***\n");
+        pr_info("*** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***\n");
 
         /* CRITICAL FIX: Always acknowledge the interrupt, even if work is already queued */
         /* The key is to let the interrupt return IRQ_HANDLED to prevent interrupt storms */
         pr_info("*** ISP CORE: Frame sync interrupt - attempting to queue work ***\n");
 
+        /* REFERENCE DRIVER: Use private_schedule_work like reference driver */
+        /* Binary Ninja: private_schedule_work calls queue_work_on for CPU-specific scheduling */
+        pr_info("*** ISP CORE: Using reference driver work scheduling ***\n");
+
         if (fs_workqueue) {
             pr_info("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
-            if (queue_work(fs_workqueue, &fs_work)) {
-                pr_info("*** ISP CORE: Work queued successfully ***\n");
+            /* REFERENCE DRIVER: Use queue_work_on for CPU 0 like private_schedule_work */
+            if (queue_work_on(0, fs_workqueue, &fs_work)) {
+                pr_info("*** ISP CORE: Work queued successfully on CPU 0 ***\n");
             } else {
                 pr_info("*** ISP CORE: Work was already queued - acknowledging interrupt anyway ***\n");
-                /* CRITICAL: Don't treat this as an error - just acknowledge the interrupt */
-
-                /* DIAGNOSTIC: Try to flush the workqueue to see if work is stuck */
-                static int flush_counter = 0;
-                if (++flush_counter > 100) { /* Every 100 failed queues, try to flush */
-                    pr_warn("*** ISP CORE: Attempting to flush stuck workqueue ***\n");
-                    flush_workqueue(fs_workqueue);
-                    flush_counter = 0;
-                }
             }
         } else {
             pr_warn("*** ISP CORE: fs_workqueue is NULL - using system workqueue ***\n");
-            if (schedule_work(&fs_work)) {
-                pr_info("*** ISP CORE: Work scheduled successfully ***\n");
+            /* REFERENCE DRIVER: Use schedule_work_on for CPU 0 */
+            if (schedule_work_on(0, &fs_work)) {
+                pr_info("*** ISP CORE: Work scheduled successfully on CPU 0 ***\n");
             } else {
                 pr_info("*** ISP CORE: Work was already scheduled - acknowledging interrupt anyway ***\n");
-                /* CRITICAL: Don't treat this as an error - just acknowledge the interrupt */
             }
         }
 
