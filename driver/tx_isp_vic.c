@@ -2810,7 +2810,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
 /* Define VIC video operations */
 static struct tx_isp_subdev_video_ops vic_video_ops = {
-    .s_stream = vic_video_s_stream,
+    .s_stream = vic_core_s_stream,  /* CRITICAL FIX: Use vic_core_s_stream instead of vic_video_s_stream */
 };
 
 /* Forward declarations for functions used in structures */

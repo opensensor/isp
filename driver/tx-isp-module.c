@@ -1798,6 +1798,8 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
                     }
 
                     pr_info("*** BINARY NINJA: Calling subdev %d s_stream (enable=%d) ***\n", i, enable);
+                    pr_info("*** DEBUG: subdev=%p, ops=%p, video=%p, s_stream=%p ***\n",
+                            subdev, subdev->ops, subdev->ops->video, subdev->ops->video->s_stream);
 
                     /* Binary Ninja: int32_t result = $v0_4($a0, arg2) */
                     result = subdev->ops->video->s_stream(subdev, enable);
