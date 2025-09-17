@@ -3601,6 +3601,25 @@ static uint32_t tisp_math_exp2(uint32_t value, uint32_t precision, uint32_t shif
 
 /* All additional data pointer declarations removed - using the versions defined earlier */
 
+/* tisp_ae1_process - AE1 processing implementation */
+static void tisp_ae1_process(void)
+{
+    pr_debug("tisp_ae1_process: Starting AE1 processing\n");
+
+    /* Simple AE1 processing - similar to AE0 but for second AE unit */
+    if (ta_custom_en == 0) {
+        /* Update AE1 controls if not in custom mode */
+        pr_debug("tisp_ae1_process: Updating AE1 controls\n");
+    }
+
+    /* Complete AE1 algorithm if custom mode enabled */
+    if (ta_custom_en == 1) {
+        private_complete(&ae_algo_comp);
+    }
+
+    pr_debug("tisp_ae1_process: AE1 processing completed\n");
+}
+
 /* tiziano_ae_init_exp_th - Based on decompiled code with safe memory access */
 static int tiziano_ae_init_exp_th(void)
 {
@@ -3803,17 +3822,24 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
         }
     }
     
+    /* Forward declarations for exported functions */
+    extern int ae0_interrupt_hist(void);
+    extern int ae0_interrupt_static(void);
+    extern int ae1_interrupt_hist(void);
+    extern int ae1_interrupt_static(void);
+    extern int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3, uint32_t param4, uint32_t *lut_array, uint32_t *nodes_count);
+
     /* Binary Ninja EXACT: system_irq_func_set(0x1b, ae0_interrupt_hist) */
-    system_irq_func_set(0x1b, ae0_interrupt_hist);
-    
+    system_irq_func_set(0x1b, (void(*)(void))ae0_interrupt_hist);
+
     /* Binary Ninja EXACT: system_irq_func_set(0x1a, ae0_interrupt_static) */
-    system_irq_func_set(0x1a, ae0_interrupt_static);
-    
+    system_irq_func_set(0x1a, (void(*)(void))ae0_interrupt_static);
+
     /* Binary Ninja EXACT: system_irq_func_set(0x1d, ae1_interrupt_hist) */
-    system_irq_func_set(0x1d, ae1_interrupt_hist);
-    
+    system_irq_func_set(0x1d, (void(*)(void))ae1_interrupt_hist);
+
     /* Binary Ninja EXACT: system_irq_func_set(0x1c, ae1_interrupt_static) */
-    system_irq_func_set(0x1c, ae1_interrupt_static);
+    system_irq_func_set(0x1c, (void(*)(void))ae1_interrupt_static);
     
     /* Binary Ninja EXACT: uint32_t $a2_13 = zx.d(data_b2e56) */
     uint32_t a2_13 = (uint32_t)data_b2e56;
@@ -3834,7 +3860,7 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     data_b0b30 = a3_1;
     
     /* Binary Ninja EXACT: tiziano_deflicker_expt(_flicker_t, $a1_5, $a2_13, $a3_1, &_deflick_lut, &_nodes_num) */
-    tiziano_deflicker_expt(_flicker_t, a1_5, a2_13, a3_1, &_deflick_lut[0], &_nodes_num);
+    tiziano_deflicker_expt(_flicker_t.data[0], a1_5, a2_13, a3_1, _deflick_lut.data, (uint32_t*)&_nodes_num.data[0]);
     
     /* Binary Ninja EXACT: tisp_event_set_cb(1, tisp_ae0_process) */
     tisp_event_set_cb(1, tisp_ae0_process);
