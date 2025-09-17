@@ -341,13 +341,27 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
 
         pr_info("*** ispcore_sensor_ops_ioctl: Found real sensor device - calling sensor IOCTL ***\n");
 
-        /* Call the real sensor's IOCTL directly - this triggers I2C communication */
-        result = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, TX_ISP_EVENT_SENSOR_FPS, NULL);
+        /* CRITICAL: Sensor expects a valid FPS argument, not NULL */
+        static int fps_value = 25;  /* Default 25 FPS - sensor expects int* */
+
+        /* Update FPS from tuning data if available */
+        if (isp_dev->tuning_data && isp_dev->tuning_data->fps_num > 0 && isp_dev->tuning_data->fps_den > 0) {
+            int new_fps = isp_dev->tuning_data->fps_num / isp_dev->tuning_data->fps_den;
+            if (new_fps != fps_value && new_fps > 0 && new_fps <= 30) {
+                fps_value = new_fps;
+                pr_info("*** ispcore_sensor_ops_ioctl: Updated FPS to %d from tuning data ***\n", fps_value);
+            }
+        }
+
+        pr_info("*** ispcore_sensor_ops_ioctl: Calling sensor with FPS=%d ***\n", fps_value);
+
+        /* Call the real sensor's IOCTL with valid FPS pointer - this triggers I2C communication */
+        result = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, TX_ISP_EVENT_SENSOR_FPS, &fps_value);
 
         pr_info("*** ispcore_sensor_ops_ioctl: Real sensor IOCTL result: %d ***\n", result);
 
         if (result == 0) {
-            pr_info("*** ispcore_sensor_ops_ioctl: Sensor I2C communication successful ***\n");
+            pr_info("*** ispcore_sensor_ops_ioctl: Sensor I2C communication successful - should see I2C writes to 0x41/0x42 ***\n");
         } else {
             pr_warn("*** ispcore_sensor_ops_ioctl: Sensor I2C communication failed: %d ***\n", result);
         }
