@@ -573,14 +573,42 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Binary Ninja: data_ca57c += 1 - increment error counter */
         /* Error counter increment would be here */
 
-        /* Binary Ninja: Simple error handling - just increment counters, no complex resets */
+        /* CRITICAL FIX: Prevent interrupt storm by masking error interrupts after repeated errors */
+        static int error_type1_count = 0;
+        static int error_type2_count = 0;
+
         if (interrupt_status & 0x200) {
-            pr_info("ISP CORE: Error interrupt type 1\n");
-            /* Binary Ninja: data_ca578 += 1 - just increment error counter */
+            error_type1_count++;
+            pr_info("ISP CORE: Error interrupt type 1 (count=%d)\n", error_type1_count);
+
+            /* CRITICAL: Mask error interrupt type 1 after 10 consecutive errors to prevent storm */
+            if (error_type1_count >= 10) {
+                pr_warn("*** ISP CORE: Masking error interrupt type 1 to prevent storm (count=%d) ***\n", error_type1_count);
+                u32 mask_reg = readl(isp_regs + 0xbc);  /* Interrupt mask register */
+                mask_reg |= 0x200;  /* Mask error interrupt type 1 */
+                writel(mask_reg, isp_regs + 0xbc);
+                wmb();
+                error_type1_count = 0;  /* Reset counter */
+            }
+        } else {
+            error_type1_count = 0;  /* Reset counter when no error */
         }
+
         if (interrupt_status & 0x100) {
-            pr_info("ISP CORE: Error interrupt type 2\n");
-            /* Binary Ninja: data_ca574 += 1 - just increment error counter */
+            error_type2_count++;
+            pr_info("ISP CORE: Error interrupt type 2 (count=%d)\n", error_type2_count);
+
+            /* CRITICAL: Mask error interrupt type 2 after 10 consecutive errors to prevent storm */
+            if (error_type2_count >= 10) {
+                pr_warn("*** ISP CORE: Masking error interrupt type 2 to prevent storm (count=%d) ***\n", error_type2_count);
+                u32 mask_reg = readl(isp_regs + 0xbc);  /* Interrupt mask register */
+                mask_reg |= 0x100;  /* Mask error interrupt type 2 */
+                writel(mask_reg, isp_regs + 0xbc);
+                wmb();
+                error_type2_count = 0;  /* Reset counter */
+            }
+        } else {
+            error_type2_count = 0;  /* Reset counter when no error */
         }
     }
 
