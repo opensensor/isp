@@ -4436,8 +4436,15 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             if (tuning_arg.mode == 1) {
                 // GET operation - sensor should fill the value
                 uint32_t result_value = 0;
-                ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
-                                                           tuning_arg.cmd, &result_value);
+                /* CRITICAL FIX: Use original sensor subdev, not ISP device sensor subdev */
+                struct tx_isp_subdev *original_sd = stored_sensor_ops.sensor_sd;
+                if (original_sd) {
+                    ret = isp_dev->sensor->sd.ops->sensor->ioctl(original_sd,
+                                                               tuning_arg.cmd, &result_value);
+                } else {
+                    pr_warn("No original sensor subdev for tuning GET\n");
+                    ret = -ENODEV;
+                }
                 if (ret == 0 && tuning_arg.data_ptr) {
                     // Copy result back to user
                     if (copy_to_user(tuning_arg.data_ptr, &result_value, sizeof(result_value)))
@@ -4450,8 +4457,15 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     if (copy_from_user(&set_value, tuning_arg.data_ptr, sizeof(set_value)))
                         return -EFAULT;
                 }
-                ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
-                                                           tuning_arg.cmd, &set_value);
+                /* CRITICAL FIX: Use original sensor subdev, not ISP device sensor subdev */
+                struct tx_isp_subdev *original_sd = stored_sensor_ops.sensor_sd;
+                if (original_sd) {
+                    ret = isp_dev->sensor->sd.ops->sensor->ioctl(original_sd,
+                                                               tuning_arg.cmd, &set_value);
+                } else {
+                    pr_warn("No original sensor subdev for tuning SET\n");
+                    ret = -ENODEV;
+                }
             }
         } else {
             pr_warn("No sensor available for tuning operation\n");
@@ -7186,9 +7200,15 @@ static void tisp_set_sensor_integration_time_short(uint32_t integration_time)
     if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->sd.ops &&
         ourISPdev->sensor->sd.ops->sensor && ourISPdev->sensor->sd.ops->sensor->ioctl) {
         
-        /* Call sensor IOCTL to set integration time */
-        ourISPdev->sensor->sd.ops->sensor->ioctl(&ourISPdev->sensor->sd, 
-                                                0x980901, &integration_time);
+        /* CRITICAL FIX: Use original sensor subdev, not ISP device sensor subdev */
+        struct tx_isp_subdev *original_sd = stored_sensor_ops.sensor_sd;
+        if (original_sd) {
+            /* Call sensor IOCTL to set integration time */
+            ourISPdev->sensor->sd.ops->sensor->ioctl(original_sd,
+                                                    0x980901, &integration_time);
+        } else {
+            pr_warn("No original sensor subdev for integration time\n");
+        }
     }
 }
 
@@ -7202,9 +7222,15 @@ static void tisp_set_ae1_ag(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_
         ourISPdev->sensor->sd.ops->sensor && ourISPdev->sensor->sd.ops->sensor->ioctl) {
         
         uint32_t gain_value = data_d04ac;
-        /* Call sensor IOCTL to set analog gain */
-        ourISPdev->sensor->sd.ops->sensor->ioctl(&ourISPdev->sensor->sd, 
-                                                0x980902, &gain_value);
+        /* CRITICAL FIX: Use original sensor subdev, not ISP device sensor subdev */
+        struct tx_isp_subdev *original_sd = stored_sensor_ops.sensor_sd;
+        if (original_sd) {
+            /* Call sensor IOCTL to set analog gain */
+            ourISPdev->sensor->sd.ops->sensor->ioctl(original_sd,
+                                                    0x980902, &gain_value);
+        } else {
+            pr_warn("No original sensor subdev for analog gain\n");
+        }
     }
 }
 
