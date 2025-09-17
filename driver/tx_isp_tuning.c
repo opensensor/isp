@@ -7116,3 +7116,95 @@ int tiziano_ae_params_refresh(void)
     return 0;
 }
 EXPORT_SYMBOL(tiziano_ae_params_refresh);
+
+/* tiziano_ae_para_addr - Binary Ninja EXACT implementation */
+void *tiziano_ae_para_addr(void)
+{
+    pr_debug("tiziano_ae_para_addr: Setting up AE parameter addresses\n");
+
+    /* Binary Ninja: Set up main AE parameter pointers */
+    IspAe0WmeanParam = (uint32_t *)&IspAeStatic;
+    data_d4658 = (uint32_t)&data_d0878;
+    data_d465c = (uint32_t)&data_d0bfc;
+    data_d4660 = (uint32_t)&data_d0f80;
+    data_d4664 = (uint32_t)&data_d1304;
+    data_d4668 = (uint32_t)&data_d1688;
+    data_d466c = (uint32_t)&data_d1a0c;
+    data_d4670 = 0xd37a0;  /* Static address from Binary Ninja */
+    data_d4674 = 0xd3b24;  /* Static address from Binary Ninja */
+    data_d4678 = (uint32_t)&_ae_parameter;
+    data_d467c = (uint32_t)&_ae_zone_weight;
+    data_d4680 = (uint32_t)&_exp_parameter;
+    data_d468c = (uint32_t)&_scene_roi_weight;
+    data_d4690 = (uint32_t)&_log2_lut;
+    data_d4694 = (uint32_t)&_weight_lut;
+    data_d4698 = (uint32_t)&_AePointPos;
+    data_d4684 = (uint32_t)&_ae_stat;
+    data_d4688 = (uint32_t)&_scene_roui_weight;
+
+    /* Binary Ninja: Set up DMSC parameter pointers */
+    dmsc_sp_ud_std_stren_intp = (uint32_t *)&_exp_parameter;
+    dmsc_deir_fusion_stren_intp = (uint32_t *)&_ae_result;
+    dmsc_deir_fusion_thres_intp = (uint32_t *)&_ae_reg;
+    dmsc_fc_t2_stren_intp = (uint32_t *)&_ae_wm_q;
+    dmsc_fc_t1_stren_intp = (uint32_t *)&_deflick_lut;
+    dmsc_fc_t1_thres_intp = (uint32_t *)&_deflicker_para;
+    dmsc_fc_alias_stren_intp = (uint32_t *)&ae_ev_step;
+    dmsc_sp_alias_thres_intp = (uint32_t *)&ae_stable_tol;
+    dmsc_sp_ud_brig_thres_intp = (uint32_t *)&data_d1e0c;
+    dmsc_sp_ud_b_stren_intp = (uint32_t *)&_nodes_num;
+    dmsc_sp_d_dark_thres_intp = (uint32_t *)&ae_comp_ev_list;
+    dmsc_sp_d_oe_stren_intp = (uint32_t *)&_ae_parameter;
+    dmsc_fc_t3_stren_intp = (uint32_t *)&_ae_stat;
+    dmsc_sp_ud_dark_thres_intp = (uint32_t *)&_AePointPos;
+    dmsc_sp_d_brig_thres_intp = (uint32_t *)&ae0_ev_list;  /* "KA7-(" from Binary Ninja */
+    dmsc_sp_d_w_stren_intp = (uint32_t *)&ae1_comp_ev_list;
+
+    /* Binary Ninja: Set up WDR/standard mode pointers based on data_b0e10 flag */
+    if (data_b0e10 != 0) {
+        /* WDR mode */
+        dmsc_sp_d_flat_thres_intp = (uint32_t *)&ae0_ev_list_wdr;
+        dmsc_sp_d_flat_stren_intp = (uint32_t *)&_lum_list_wdr;
+        dmsc_sp_d_v2_win5_thres_intp = (uint32_t *)&ae0_ev_list_wdr;  /* "KA7-(" from Binary Ninja */
+        dmsc_rgb_alias_stren_intp = (uint32_t *)&_scene_para_wdr;
+        dmsc_rgb_dir_thres_intp = (uint32_t *)&ae_scene_mode_th_wdr;
+        dmsc_sp_ud_w_stren_intp = (uint32_t *)&ae_comp_param_wdr;
+        dmsc_sp_d_b_stren_intp = (uint32_t *)&ae_extra_at_list_wdr;
+    } else {
+        /* Standard mode */
+        dmsc_sp_d_flat_thres_intp = (uint32_t *)&ae0_ev_list;
+        dmsc_sp_d_flat_stren_intp = (uint32_t *)&_lum_list;
+        dmsc_sp_d_v2_win5_thres_intp = (uint32_t *)&ae0_ev_list;  /* "KA7-(" from Binary Ninja */
+        dmsc_rgb_alias_stren_intp = (uint32_t *)&_scene_para;
+        dmsc_rgb_dir_thres_intp = (uint32_t *)&ae_scene_mode_th;
+        dmsc_sp_ud_w_stren_intp = (uint32_t *)&ae_comp_param;
+        dmsc_sp_d_b_stren_intp = (uint32_t *)&ae_extra_at_list;
+    }
+
+    /* Binary Ninja: Set up additional DMSC pointers */
+    dmsc_nor_alias_thres_intp = (uint32_t *)&data_d220c;
+    dmsc_hvaa_stren_intp = (uint32_t *)&data_d2590;
+    dmsc_hvaa_thres_1_intp = (uint32_t *)&data_d2914;
+    dmsc_aa_thres_1_intp = (uint32_t *)&data_d2c98;
+    dmsc_hv_stren_intp = (uint32_t *)&data_d301c;
+    dmsc_hv_thres_1_intp = (uint32_t *)&data_d33a0;
+    dmsc_alias_thres_2_intp = (uint32_t *)0xd3ea8;  /* Static address from Binary Ninja */
+    dmsc_alias_thres_1_intp = (uint32_t *)0xd422c;  /* Static address from Binary Ninja */
+    dmsc_alias_stren_intp = (uint32_t *)&_ae_parameter;
+    dmsc_alias_dir_thres_intp = (uint32_t *)&_ae_zone_weight;
+    dmsc_uu_stren_intp = (uint32_t *)&_exp_parameter;
+    dmsc_uu_thres_intp = (uint32_t *)&_ae_stat;
+    dmsc_sp_ud_b_stren_wdr_array = (uint32_t *)&_scene_roui_weight;
+
+    /* Binary Ninja: Set up final data pointers */
+    data_c4644 = (uint32_t)&_scene_roi_weight;
+    data_c4648 = (uint32_t)&_log2_lut;
+    data_c464c = (uint32_t)&_weight_lut;
+    data_c4650 = (uint32_t)&_AePointPos;
+
+    pr_debug("tiziano_ae_para_addr: AE parameter addresses configured\n");
+
+    /* Binary Ninja: return &dmsc_nor_alias_thres_intp */
+    return &dmsc_nor_alias_thres_intp;
+}
+EXPORT_SYMBOL(tiziano_ae_para_addr);
