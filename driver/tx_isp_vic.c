@@ -2299,15 +2299,18 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             /* CRITICAL FIX: ALWAYS ensure active_buffer_count is non-zero to prevent control limit error */
             /* Force buffer count to be at least 1 regardless of current value */
             if (vic_dev->active_buffer_count == 0) {
-                pr_warn("*** CONTROL LIMIT FIX: active_buffer_count is 0, setting to 1 to prevent control limit error ***\n");
-                vic_dev->active_buffer_count = 1;
+                pr_info("*** VIC STREAMING: No buffers allocated yet - deferring hardware start until QBUF ***\n");
+                pr_info("*** This prevents control limit error by not starting VIC hardware without valid buffers ***\n");
 
-                /* Also ensure we have at least one buffer programmed to VIC hardware */
-                /* Program a dummy buffer to VIC register 0x318 (buffer index 0) */
-                uint32_t dummy_buffer_addr = 0x30000000;  /* Valid physical address */
-                writel(dummy_buffer_addr, vic_base + 0x318);  /* (0 + 0xc6) << 2 = 0x318 */
-                wmb();
-                pr_info("*** CONTROL LIMIT FIX: Programmed dummy buffer 0x%x to VIC[0x318] ***\n", dummy_buffer_addr);
+                /* Set streaming state but don't start hardware yet */
+                vic_dev->streaming = 1;
+                vic_dev->state = 4; /* STREAMING state */
+
+                /* Skip the VIC hardware start - will be done when buffers are queued */
+                pr_info("*** VIC: Hardware start deferred until userspace provides buffers via QBUF ***\n");
+                return 0;  /* Success, but hardware not started yet */
+
+
             } else {
                 pr_info("*** CONTROL LIMIT DEBUG: active_buffer_count=%d (non-zero, good) ***\n", vic_dev->active_buffer_count);
             }
