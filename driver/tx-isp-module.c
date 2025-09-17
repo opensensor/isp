@@ -3122,7 +3122,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 u32 buffer_phys_addr;
 
                 /* CRITICAL FIX: Use reference driver DQBUF logic - wait for completed buffer */
-                struct frame_buffer *frame_buffer = NULL;
+                struct video_buffer *video_buffer = NULL;
+                int wait_result;
 
                 pr_info("*** Channel %d: DQBUF waiting for completed buffer ***\n", channel);
 
@@ -3136,7 +3137,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     pr_info("*** Channel %d: DQBUF no completed buffers, waiting... ***\n", channel);
 
                     /* Wait for buffer completion like reference driver */
-                    int wait_result = wait_event_interruptible_timeout(state->frame_wait,
+                    wait_result = wait_event_interruptible_timeout(state->frame_wait,
                         !list_empty(&state->completed_buffers), msecs_to_jiffies(200));
 
                     pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, wait_result);
@@ -3152,16 +3153,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 /* Get the first completed buffer from the list */
                 if (!list_empty(&state->completed_buffers)) {
                     struct list_head *first = state->completed_buffers.next;
-                    frame_buffer = list_entry(first, struct frame_buffer, queue_entry);
+                    video_buffer = list_entry(first, struct video_buffer, list);
 
                     /* Remove from completed list */
                     list_del(first);
                     state->completed_count--;
 
-                    buf_index = frame_buffer->index;
-                    buffer_phys_addr = frame_buffer->phys_addr;
+                    buf_index = video_buffer->index;
+                    buffer_phys_addr = (uint32_t)(uintptr_t)video_buffer->data;
 
-                    pr_info("*** Channel %d: DQBUF got completed buffer[%d] phys_addr=0x%x ***\n",
+                    pr_info("*** Channel %d: DQBUF got completed buffer[%d] data_addr=0x%x ***\n",
                             channel, buf_index, buffer_phys_addr);
                 } else {
                     spin_unlock(&state->queue_lock);
@@ -7586,7 +7587,7 @@ int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint
 {
     extern struct tx_isp_frame_channel_device frame_channels[2];
     struct tx_isp_channel_state *state;
-    struct frame_buffer *frame_buffer = NULL;
+    struct video_buffer *video_buffer = NULL;
     struct list_head *pos, *tmp;
     int channel = 0; /* Assume channel 0 for now - could be determined from buffer_addr */
 
@@ -7604,32 +7605,31 @@ int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint
     spin_lock(&state->queue_lock);
 
     list_for_each_safe(pos, tmp, &state->queued_buffers) {
-        struct frame_buffer *buf = list_entry(pos, struct frame_buffer, queue_entry);
+        struct video_buffer *buf = list_entry(pos, struct video_buffer, list);
 
-        if (buf->phys_addr == buffer_addr) {
+        if ((uint32_t)(uintptr_t)buf->data == buffer_addr) {
             /* Found the matching buffer - move from queued to completed */
             list_del(pos);
             state->queued_count--;
 
             /* Update buffer state to completed */
-            buf->state = 2; /* Completed state */
-            buf->sequence = state->sequence++;
-            do_gettimeofday(&buf->timestamp);
+            buf->flags = 2; /* Completed state */
+            buf->status = state->sequence++;
 
             /* Add to completed buffers list */
-            list_add_tail(&buf->queue_entry, &state->completed_buffers);
+            list_add_tail(&buf->list, &state->completed_buffers);
             state->completed_count++;
 
-            frame_buffer = buf;
+            video_buffer = buf;
             break;
         }
     }
 
     spin_unlock(&state->queue_lock);
 
-    if (frame_buffer) {
+    if (video_buffer) {
         pr_info("*** VIC BUFFER MGMT: Moved buffer[%d] from QUEUED to COMPLETED (addr=0x%x) ***\n",
-                frame_buffer->index, buffer_addr);
+                video_buffer->index, buffer_addr);
 
         /* Wake up any processes waiting for completed buffers (DQBUF) */
         wake_up_interruptible(&state->frame_wait);
