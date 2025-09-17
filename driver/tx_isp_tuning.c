@@ -3577,6 +3577,81 @@ int tisp_gb_param_array_get(int param_id, void *out_buf, int *size_buf)
     return 0;
 }
 
+/* tisp_lsc_param_array_get - Binary Ninja EXACT implementation */
+int tisp_lsc_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    /* Binary Ninja: if (arg1 - 0x54 u>= 0xb) return error */
+    if ((param_id - 0x54) >= 0xb) {
+        pr_err("tisp_lsc_param_array_get: Invalid parameter ID 0x%x\n", param_id);
+        return -1;
+    }
+
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_lsc_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    void *source_ptr = NULL;
+    int data_size = 0;
+
+    /* Binary Ninja switch statement implementation */
+    switch (param_id) {
+        case 0x54:  /* data_9a428 */
+            source_ptr = &data_9a428;
+            data_size = 4;
+            break;
+        case 0x55:  /* lsc_mesh_scale */
+            source_ptr = &lsc_mesh_scale;
+            data_size = 4;
+            break;
+        case 0x56:  /* data_9a424 */
+            source_ptr = &data_9a424;
+            data_size = 4;
+            break;
+        case 0x57:  /* lsc_mesh_size */
+            source_ptr = &lsc_mesh_size;
+            data_size = 8;
+            break;
+        case 0x58:  /* data_9a410 */
+            source_ptr = &data_9a410;
+            data_size = 0x10;
+            break;
+        case 0x59:  /* lsc_a_lut */
+            source_ptr = &lsc_a_lut;
+            data_size = 0x1ffc;
+            break;
+        case 0x5a:  /* lsc_t_lut */
+            source_ptr = &lsc_t_lut;
+            data_size = 0x1ffc;
+            break;
+        case 0x5b:  /* lsc_d_lut */
+            source_ptr = &lsc_d_lut;
+            data_size = 0x1ffc;
+            break;
+        case 0x5c:  /* lsc_mesh_str */
+            source_ptr = &lsc_mesh_str;
+            data_size = 0x24;
+            break;
+        case 0x5d:  /* lsc_mesh_str_wdr */
+            source_ptr = &lsc_mesh_str_wdr;
+            data_size = 0x24;
+            break;
+        case 0x5e:  /* lsc_mean_en */
+            source_ptr = &lsc_mean_en;
+            data_size = 4;
+            break;
+        default:
+            pr_err("tisp_lsc_param_array_get: Unhandled parameter ID 0x%x\n", param_id);
+            return -1;
+    }
+
+    /* Binary Ninja: memcpy(arg2, $a1_1, $s0_1); *arg3 = $s0_1 */
+    memcpy(out_buf, source_ptr, data_size);
+    *size_buf = data_size;
+    pr_debug("tisp_lsc_param_array_get: ID=0x%x, size=%d\n", param_id, data_size);
+    return 0;
+}
+
 /* Tuning parameter function implementations - Binary Ninja reference implementations */
 
 /* tisp_top_param_array_get - Binary Ninja EXACT implementation */
