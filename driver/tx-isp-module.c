@@ -809,7 +809,7 @@ static int sensor_get_normal_fps(void);
 static int sensor_read_black_pedestal(void);
 static int sensor_set_mode(int mode);
 static int sensor_set_wdr_mode(int mode);
-static int sensor_fps_control(int fps);
+int sensor_fps_control(int fps);
 static int sensor_get_id(void);
 static int sensor_disable_isp(void);
 static int sensor_get_lines_per_second(void);
