@@ -7655,7 +7655,43 @@ int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint
     /* Get channel state */
     state = &frame_channels[channel].state;
 
-    /* Find the buffer with matching address in queued_buffers list */
+    /* CRITICAL: Check if this is a VBM buffer address first */
+    if (state->vbm_buffer_addresses && buffer_addr != 0) {
+        int buffer_index = -1;
+
+        /* Find which VBM buffer index matches this address */
+        for (int i = 0; i < state->vbm_buffer_count; i++) {
+            if (state->vbm_buffer_addresses[i] == buffer_addr) {
+                buffer_index = i;
+                break;
+            }
+        }
+
+        if (buffer_index >= 0) {
+            pr_info("*** VIC BUFFER MGMT: VBM buffer[%d] completed with addr=0x%x ***\n",
+                    buffer_index, buffer_addr);
+
+            /* Wake up any waiting DQBUF processes */
+            wake_up_interruptible(&state->frame_wait);
+
+            /* Program next VBM buffer to VIC register 0x380 for continuous streaming */
+            int next_index = (buffer_index + 1) % state->vbm_buffer_count;
+            extern struct tx_isp_dev *ourISPdev;
+            if (ourISPdev && ourISPdev->vic_dev) {
+                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                if (vic_dev->vic_regs) {
+                    writel(state->vbm_buffer_addresses[next_index], vic_dev->vic_regs + 0x380);
+                    wmb();
+                    pr_info("*** VIC BUFFER MGMT: VIC[0x380] = 0x%x (next VBM buffer[%d]) ***\n",
+                            state->vbm_buffer_addresses[next_index], next_index);
+                }
+            }
+
+            return 0;
+        }
+    }
+
+    /* Fallback: Find the buffer with matching address in queued_buffers list */
     spin_lock(&state->queue_lock);
 
     list_for_each_safe(pos, tmp, &state->queued_buffers) {
