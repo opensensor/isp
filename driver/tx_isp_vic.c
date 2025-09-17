@@ -76,6 +76,11 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     
     /* Set self-pointer at offset 0xd4 */
     *(void **)((char *)vic_dev + 0xd4) = vic_dev;
+
+    /* CRITICAL FIX: Set NV12 format magic number at offset 0xc to prevent control limit error */
+    /* The VIC interrupt handler checks for 0x3231564e (NV12) at offset 0xc */
+    *(uint32_t *)((char *)vic_dev + 0xc) = 0x3231564e;  /* NV12 format magic number */
+    pr_info("*** VIC DEVICE: Set NV12 format magic number 0x3231564e at offset 0xc ***\n");
     
     /* *** CRITICAL FIX: Map BOTH VIC register spaces - dual VIC architecture *** */
     pr_info("*** CRITICAL: Mapping DUAL VIC register spaces for complete VIC control ***\n");
