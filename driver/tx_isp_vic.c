@@ -1201,11 +1201,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Binary Ninja: Branch on interface type at 00010250 */
-    /* CRITICAL FIX: Reference driver uses interface_type 1=DVP, 2=MIPI */
-    /* But our enum has MIPI=1, DVP=2, so we need to map correctly */
-    if (interface_type == TX_SENSOR_DATA_INTERFACE_DVP) {  /* DVP = 2 in our enum */
-        /* DVP interface - Binary Ninja 00010260-000104f8 */
-        pr_info("DVP interface configuration\n");
+    /* CRITICAL FIX: Use correct enum values - MIPI=1, DVP=2 */
+    if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 */
+        /* MIPI interface - Binary Ninja 00010688-00010a50 */
+        pr_info("MIPI interface configuration\n");
         
         /* Binary Ninja: Check flags at 00010260 */
         if (sensor_attr->dbus_type != interface_type) {

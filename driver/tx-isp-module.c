@@ -6537,12 +6537,12 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
             /* Any ISP-specific sensor configuration */
             if (sensor->video.attr) {
-                if (sensor->video.attr->dbus_type == 1) {
-                    pr_info("ISP: Configuring for DVP interface\n");
-                    /* DVP-specific ISP setup */
-                } else if (sensor->video.attr->dbus_type == 2) {
+                if (sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 */
                     pr_info("ISP: Configuring for MIPI interface\n");
                     /* MIPI-specific ISP setup */
+                } else if (sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_DVP) {  /* DVP = 2 */
+                    pr_info("ISP: Configuring for DVP interface\n");
+                    /* DVP-specific ISP setup */
                 }
             }
         } else {
