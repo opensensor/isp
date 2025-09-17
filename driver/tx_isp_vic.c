@@ -2549,13 +2549,19 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", sensor_width, sensor_height);
                 pr_info("*** CRITICAL: VIC configured for sensor OUTPUT, CSI PHY handled separately ***\n");
 
-                /* CRITICAL FIX: Only write to VIC-specific registers - CSI PHY registers handled by CSI driver */
-                pr_info("*** VIC: Writing only VIC-specific registers (CSI PHY registers handled by CSI driver) ***\n");
+                /* CRITICAL FIX: Skip ALL VIC register writes during streaming restart */
+                extern uint32_t vic_start_ok;
+                if (vic_start_ok == 1) {
+                    pr_info("*** STEP 1: SKIPPING ALL VIC register writes - VIC interrupts already working ***\n");
+                    pr_info("*** VIC register writes would overwrite interrupt configuration in shared register space ***\n");
+                } else {
+                    /* CRITICAL FIX: Only write to VIC-specific registers - CSI PHY registers handled by CSI driver */
+                    pr_info("*** VIC: Writing only VIC-specific registers (CSI PHY registers handled by CSI driver) ***\n");
 
-                /* VIC Control and Configuration registers only */				                /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
-                writel(0x7800438, vic_regs + 0x4);
-                writel(0x2, vic_regs + 0xc);
-                writel(0x2, vic_regs + 0x14);
+                    /* VIC Control and Configuration registers only */				                /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
+                    writel(0x7800438, vic_regs + 0x4);
+                    writel(0x2, vic_regs + 0xc);
+                    writel(0x2, vic_regs + 0x14);
                 writel(0xf00, vic_regs + 0x18);
                 writel(0x800800, vic_regs + 0x60);
                 writel(0x9d09d0, vic_regs + 0x64);
