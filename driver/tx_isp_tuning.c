@@ -6002,17 +6002,29 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     extern int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3, uint32_t param4, uint32_t *lut_array, uint32_t *nodes_count);
     extern void *tiziano_ae_para_addr(void);
 
-    /* Binary Ninja EXACT: system_irq_func_set(0x1b, ae0_interrupt_hist) */
-    system_irq_func_set(0x1b, (void(*)(void))ae0_interrupt_hist);
+    /* AE interrupt wrapper functions to convert signatures */
+    static irqreturn_t ae0_interrupt_hist_wrapper(int irq, void *dev_id) {
+        ae0_interrupt_hist();
+        return IRQ_HANDLED;
+    }
+    static irqreturn_t ae0_interrupt_static_wrapper(int irq, void *dev_id) {
+        ae0_interrupt_static();
+        return IRQ_HANDLED;
+    }
+    static irqreturn_t ae1_interrupt_hist_wrapper(int irq, void *dev_id) {
+        ae1_interrupt_hist();
+        return IRQ_HANDLED;
+    }
+    static irqreturn_t ae1_interrupt_static_wrapper(int irq, void *dev_id) {
+        ae1_interrupt_static();
+        return IRQ_HANDLED;
+    }
 
-    /* Binary Ninja EXACT: system_irq_func_set(0x1a, ae0_interrupt_static) */
-    system_irq_func_set(0x1a, (void(*)(void))ae0_interrupt_static);
-
-    /* Binary Ninja EXACT: system_irq_func_set(0x1d, ae1_interrupt_hist) */
-    system_irq_func_set(0x1d, (void(*)(void))ae1_interrupt_hist);
-
-    /* Binary Ninja EXACT: system_irq_func_set(0x1c, ae1_interrupt_static) */
-    system_irq_func_set(0x1c, (void(*)(void))ae1_interrupt_static);
+    /* Binary Ninja EXACT: system_irq_func_set with proper wrappers */
+    system_irq_func_set(0x1b, ae0_interrupt_hist_wrapper);
+    system_irq_func_set(0x1a, ae0_interrupt_static_wrapper);
+    system_irq_func_set(0x1d, ae1_interrupt_hist_wrapper);
+    system_irq_func_set(0x1c, ae1_interrupt_static_wrapper);
     
     /* Binary Ninja EXACT: uint32_t $a2_13 = zx.d(data_b2e56) */
     uint32_t a2_13 = (uint32_t)data_b2e56;
