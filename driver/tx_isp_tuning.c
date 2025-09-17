@@ -2586,30 +2586,17 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         auto_init_done = true;  /* Mark as auto-initialized */
                         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
                     } else {
-                        pr_info("*** DEBUG: tuning_enabled already 3, skipping initialization ***\n");
-
-                        /* CRITICAL: Check if DPC arrays are actually initialized */
-                        extern uint32_t *dpc_d_m1_dthres_array_now;
-                        if (!dpc_d_m1_dthres_array_now) {
-                            pr_err("*** CRITICAL: DPC arrays are NULL even though tuning_enabled=3! ***\n");
-                            pr_err("*** FORCING initialization to prevent crash ***\n");
-
-                            extern int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32_t fps, int wdr_mode);
-                            ret = tiziano_init_all_pipeline_components(1920, 1080, 25, 0);
-
-                            pr_info("*** FORCED initialization returned: %d ***\n", ret);
-                        } else {
-                            pr_info("*** DEBUG: DPC arrays are properly initialized ***\n");
-                        }
+                        pr_info("*** BINARY NINJA REFERENCE: Tuning already enabled - no action needed ***\n");
+                        ret = 0;  /* Success - tuning already enabled */
                     }
                 } else {
-                    /* Only allow explicit disable if not auto-initialized */
+                    /* BINARY NINJA REFERENCE: Simple tuning disable - no hardware deinitialization */
+                    pr_info("*** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***\n");
                     if (dev->tuning_enabled == 3) {
-                        isp_core_tuning_release(dev);
-                        ourISPdev->tuning_enabled = 0;
-                        auto_init_done = false;  /* Reset auto-init flag */
-                        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning disabled\n");
+                        dev->tuning_enabled = 0;
+                        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning disabled (Binary Ninja reference behavior)\n");
                     }
+                    ret = 0;  /* Success - just disable tuning without hardware reset */
                 }
                 ret = 0;
                 break;
