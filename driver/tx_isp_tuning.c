@@ -3562,9 +3562,6 @@ static uint32_t data_c470c = 0;       /* Short exposure mode flag */
 /* IRQ callback function table */
 static void (*irq_func_cb[32])(void) = {NULL};
 
-/* Global ISP core pointer - Binary Ninja reference */
-extern uint32_t g_ispcore;
-
 /* AE parameter addresses - Safe structure-based access */
 static uint32_t *data_d04b8 = &data_b0cfc;
 static uint32_t data_d04bc[6] = {0x0d0b00, 0x040d0b00, 0x080d0b00, 0x0c0d0b00, 0x100d0b00, 0x140d0b00};
@@ -7480,8 +7477,10 @@ static int data_b2eec(uint32_t time, void **var_ptr)
     }
 
     /* Use sensor's integration time allocation if available */
-    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->alloc_integration_time) {
-        int result = ourISPdev->sensor->ops->alloc_integration_time(time, var_ptr);
+    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time) {
+        unsigned int sensor_it = 0;
+        int result = ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time(time, 0, &sensor_it);
+        if (var_ptr) *var_ptr = (void *)(uintptr_t)sensor_it;
         return result;
     }
 
@@ -7503,8 +7502,10 @@ static int data_b2ef0(uint32_t time, void **var_ptr)
     }
 
     /* Use sensor's short integration time allocation if available */
-    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->alloc_integration_time_short) {
-        int result = ourISPdev->sensor->ops->alloc_integration_time_short(time, var_ptr);
+    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time_short) {
+        unsigned int sensor_it_short = 0;
+        int result = ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time_short(time, 0, &sensor_it_short);
+        if (var_ptr) *var_ptr = (void *)(uintptr_t)sensor_it_short;
         return result;
     }
 
@@ -7524,9 +7525,11 @@ static int data_b2ef4(uint32_t param, int flag)
         return -ENODEV;
     }
 
-    /* Use sensor's integration time setting if available */
-    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->set_integration_time) {
-        return ourISPdev->sensor->ops->set_integration_time(param);
+    /* Set integration time via sensor attribute */
+    if (ourISPdev->sensor) {
+        ourISPdev->sensor->attr.integration_time = param;
+        pr_debug("data_b2ef4: Set sensor integration_time to %u\n", param);
+        return 0;
     }
 
     /* Fallback: just log the operation */
@@ -7545,9 +7548,11 @@ static int data_b2ef8(uint32_t param, int flag)
         return -ENODEV;
     }
 
-    /* Use sensor's short integration time setting if available */
-    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->set_integration_time_short) {
-        return ourISPdev->sensor->ops->set_integration_time_short(param);
+    /* Set short integration time via sensor attribute */
+    if (ourISPdev->sensor) {
+        ourISPdev->sensor->attr.integration_time_short = param;
+        pr_debug("data_b2ef8: Set sensor integration_time_short to %u\n", param);
+        return 0;
     }
 
     /* Fallback: just log the operation */
@@ -7568,8 +7573,10 @@ static uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr)
     }
 
     /* Use sensor's analog gain allocation if available */
-    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->alloc_analog_gain) {
-        uint32_t result = ourISPdev->sensor->ops->alloc_analog_gain(log_val, var_ptr);
+    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_again) {
+        unsigned int sensor_again = 0;
+        uint32_t result = ourISPdev->sensor->attr.sensor_ctrl.alloc_again(log_val, TX_ISP_GAIN_FIXED_POINT, &sensor_again);
+        if (var_ptr) *var_ptr = (int16_t)sensor_again;
         return result;
     }
 
@@ -7591,8 +7598,10 @@ static uint32_t data_b2ee4(uint32_t log_val, void **var_ptr)
     }
 
     /* Use sensor's short analog gain allocation if available */
-    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->alloc_analog_gain_short) {
-        uint32_t result = ourISPdev->sensor->ops->alloc_analog_gain_short(log_val, var_ptr);
+    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_again_short) {
+        unsigned int sensor_again_short = 0;
+        uint32_t result = ourISPdev->sensor->attr.sensor_ctrl.alloc_again_short(log_val, TX_ISP_GAIN_FIXED_POINT, &sensor_again_short);
+        if (var_ptr) *var_ptr = (void *)(uintptr_t)sensor_again_short;
         return result;
     }
 
@@ -7612,9 +7621,11 @@ static int data_b2f04(uint32_t param, int flag)
         return -ENODEV;
     }
 
-    /* Use sensor's analog gain setting if available */
-    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->set_analog_gain) {
-        return ourISPdev->sensor->ops->set_analog_gain(param);
+    /* Set analog gain via sensor attribute */
+    if (ourISPdev->sensor) {
+        ourISPdev->sensor->attr.again = param;
+        pr_debug("data_b2f04: Set sensor again to %u\n", param);
+        return 0;
     }
 
     /* Fallback: just log the operation */
@@ -7633,9 +7644,11 @@ static int data_b2f08(uint32_t param, int flag)
         return -ENODEV;
     }
 
-    /* Use sensor's short analog gain setting if available */
-    if (ourISPdev->sensor->ops && ourISPdev->sensor->ops->set_analog_gain_short) {
-        return ourISPdev->sensor->ops->set_analog_gain_short(param);
+    /* Set short analog gain via sensor attribute - no direct field, use dgain as fallback */
+    if (ourISPdev->sensor) {
+        ourISPdev->sensor->attr.dgain = param; /* Use dgain for short gain */
+        pr_debug("data_b2f08: Set sensor dgain (short gain) to %u\n", param);
+        return 0;
     }
 
     /* Fallback: just log the operation */
