@@ -332,7 +332,9 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             }
 
             /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
-            if (vic_regs) {
+            /* DISABLED: This register write in frame done handler disrupts VIC interrupts */
+            /* The continuous writing to VIC[0x300] every frame was causing interrupt stalls */
+            if (0 && vic_regs) {
                 u32 reg_val = readl(vic_regs + 0x300);
                 reg_val = shifted_value | (reg_val & 0xfff0ffff);
                 writel(reg_val, vic_regs + 0x300);
