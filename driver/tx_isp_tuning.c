@@ -6232,32 +6232,32 @@ int tiziano_gib_init(void)
 }
 
 /* LSC parameter arrays - Binary Ninja reference */
-static uint32_t lsc_mesh_str[64] = {0x800, 0x810, 0x820, 0x830, 0x840, 0x850, 0x860, 0x870, 0x880, 0x890, 0x8a0, 0x8b0, 0x8c0, 0x8d0, 0x8e0, 0x8f0};
-static uint32_t lsc_mesh_str_wdr[64] = {0x900, 0x910, 0x920, 0x930, 0x940, 0x950, 0x960, 0x970, 0x980, 0x990, 0x9a0, 0x9b0, 0x9c0, 0x9d0, 0x9e0, 0x9f0};
+uint32_t lsc_mesh_str[64] = {0x800, 0x810, 0x820, 0x830, 0x840, 0x850, 0x860, 0x870, 0x880, 0x890, 0x8a0, 0x8b0, 0x8c0, 0x8d0, 0x8e0, 0x8f0};
+uint32_t lsc_mesh_str_wdr[64] = {0x900, 0x910, 0x920, 0x930, 0x940, 0x950, 0x960, 0x970, 0x980, 0x990, 0x9a0, 0x9b0, 0x9c0, 0x9d0, 0x9e0, 0x9f0};
 
 /* LSC LUT arrays - simplified 17x17 grid */
-static uint32_t lsc_a_lut[2047];  /* Daylight LSC LUT */
-static uint32_t lsc_t_lut[2047];  /* Tungsten LSC LUT */
-static uint32_t lsc_d_lut[2047];  /* D65 LSC LUT */
+uint32_t lsc_a_lut[2047];  /* Daylight LSC LUT */
+uint32_t lsc_t_lut[2047];  /* Tungsten LSC LUT */
+uint32_t lsc_d_lut[2047];  /* D65 LSC LUT */
 static uint32_t lsc_final_lut[2047]; /* Final interpolated LUT */
 static uint32_t *lsc_curr_lut = NULL; /* Current active LUT pointer */
 
 /* LSC state variables - Binary Ninja reference */
 static uint32_t *data_9a420 = NULL;    /* Current mesh strength pointer */
-static uint32_t data_9a424 = 0x10;     /* LSC configuration */
+uint32_t data_9a424 = 0x10;     /* LSC configuration */
 static uint32_t data_9a404 = 5;        /* LSC update counter */
 static uint32_t lsc_last_str = 0;      /* Last strength value */
 static uint32_t data_9a400 = 1;        /* LSC force update flag */
-static uint32_t lsc_mesh_size = 0x11;  /* 17x17 mesh */
-static uint32_t lsc_mesh_scale = 2;    /* Mesh scaling factor */
-static uint32_t lsc_mean_en = 1;       /* Mean enable flag */
+uint32_t lsc_mesh_size = 0x11;  /* 17x17 mesh */
+uint32_t lsc_mesh_scale = 2;    /* Mesh scaling factor */
+uint32_t lsc_mean_en = 1;       /* Mean enable flag */
 static uint32_t data_9a408 = 0;        /* LSC mode */
 static uint32_t data_9a40c = 0x2700;   /* Current color temperature */
-static uint32_t data_9a410 = 0x1900;   /* A illuminant CT */
+uint32_t data_9a410 = 0x1900;   /* A illuminant CT */
 static uint32_t data_9a414 = 0x3500;   /* T illuminant CT */
 static uint32_t data_9a418 = 0x6500;   /* D illuminant CT */
 static uint32_t data_9a41c = 0x7500;   /* D max CT */
-static uint32_t data_9a428 = 289;      /* 17x17 = 289 points */
+uint32_t data_9a428 = 289;      /* 17x17 = 289 points */
 static uint32_t lsc_curr_str = 0x800;  /* Current strength */
 static uint32_t lsc_ct_update_flag = 0;
 static uint32_t lsc_gain_update_flag = 0;
