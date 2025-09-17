@@ -3383,33 +3383,6 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
 }
 EXPORT_SYMBOL(tisp_code_tuning_ioctl);
 
-/* tisp_code_tuning_open - EXACT Binary Ninja reference implementation */
-int tisp_code_tuning_open(struct inode *inode, struct file *file)
-{
-    /* Binary Ninja: uint32_t $v0 = private_kmalloc(0x500c, 0xd0)
-     * tisp_par_ioctl = $v0
-     * memset($v0, 0, 0x500c)
-     * return 0 */
-
-    pr_info("tisp_code_tuning_open: Opening tuning interface\n");
-
-    /* Allocate parameter buffer - exact size from Binary Ninja */
-    tisp_par_ioctl = kmalloc(0x500c, GFP_KERNEL);
-    if (!tisp_par_ioctl) {
-        pr_err("tisp_code_tuning_open: Failed to allocate parameter buffer\n");
-        return -ENOMEM;
-    }
-
-    /* Clear the buffer */
-    memset(tisp_par_ioctl, 0, 0x500c);
-
-    pr_info("tisp_code_tuning_open: Parameter buffer allocated at %p (size=0x%x)\n",
-            tisp_par_ioctl, 0x500c);
-
-    return 0;
-}
-EXPORT_SYMBOL(tisp_code_tuning_open);
-
 /* tisp_code_tuning_release - EXACT Binary Ninja reference implementation */
 int tisp_code_tuning_release(struct inode *inode, struct file *file)
 {
@@ -3428,6 +3401,90 @@ int tisp_code_tuning_release(struct inode *inode, struct file *file)
     return 0;
 }
 EXPORT_SYMBOL(tisp_code_tuning_release);
+
+/* apical_isp_ae_g_roi.isra.77 - EXACT Binary Ninja reference implementation */
+int apical_isp_ae_g_roi(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
+{
+    /* Binary Ninja: void* $v0, int32_t $a2 = private_kmalloc(0x384, 0xd0) */
+    void *buffer;
+    int result;
+    int i, j;
+    char var_f8[0xe8];
+
+    pr_debug("apical_isp_ae_g_roi: entry\n");
+
+    buffer = kmalloc(0x384, GFP_KERNEL);
+    if (buffer == NULL) {
+        /* Binary Ninja: isp_printf(1, "not support the gpio mode!\n", $a2) */
+        pr_err("apical_isp_ae_g_roi: not support the gpio mode!\n");
+        return -ENOMEM;  /* Binary Ninja returns 0xffffffff */
+    }
+
+    /* Binary Ninja: int32_t result = tisp_g_aeroi_weight($v0) */
+    result = tisp_g_aeroi_weight(buffer);
+
+    if (result == 0) {
+        /* Binary Ninja: Complex nested loop to copy data */
+        int a2_1 = 0;
+
+        for (i = 0; i != 0xe1; i += 0xf) {
+            for (j = 0; j != 0xf; j++) {
+                /* Binary Ninja: char $a0_4 = (*($v0 + (j << 2) + $a2_1)).b */
+                char byte_val = *((char*)buffer + (j << 2) + a2_1);
+                var_f8[j + i] = byte_val;
+            }
+            a2_1 = i << 2;
+        }
+
+        /* Binary Ninja: private_copy_to_user(*arg1, &var_f8, 0xe1) */
+        if (copy_to_user((void __user *)ctrl->value, var_f8, 0xe1)) {
+            result = -EFAULT;
+        }
+    } else {
+        /* Binary Ninja: isp_printf error message */
+        pr_err("apical_isp_ae_g_roi: width/height/imagesize error\n");
+    }
+
+    /* Binary Ninja: private_kfree($v0) */
+    kfree(buffer);
+    return result;
+}
+
+/* apical_isp_ae_zone_g_ctrl.isra.84 - EXACT Binary Ninja reference implementation */
+int apical_isp_ae_zone_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
+{
+    /* Binary Ninja: void var_390; tisp_g_ae_zone(&var_390) */
+    char var_390[0x384];
+
+    pr_debug("apical_isp_ae_zone_g_ctrl: entry\n");
+
+    tisp_g_ae_zone(var_390);
+
+    /* Binary Ninja: private_copy_to_user(*arg1, &var_390, 0x384) */
+    if (copy_to_user((void __user *)ctrl->value, var_390, 0x384)) {
+        return -EFAULT;
+    }
+
+    return 0;
+}
+
+/* apical_isp_af_zone_g_ctrl.isra.85 - EXACT Binary Ninja reference implementation */
+int apical_isp_af_zone_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
+{
+    /* Binary Ninja: tisp_g_af_zone(); void var_390 */
+    char var_390[0x384];
+
+    pr_debug("apical_isp_af_zone_g_ctrl: entry\n");
+
+    tisp_g_af_zone(var_390);
+
+    /* Binary Ninja: private_copy_to_user(*arg1, &var_390, 0x384) */
+    if (copy_to_user((void __user *)ctrl->value, var_390, 0x384)) {
+        return -EFAULT;
+    }
+
+    return 0;
+}
 
 /* Tuning parameter function stubs - Binary Ninja reference implementations needed */
 
