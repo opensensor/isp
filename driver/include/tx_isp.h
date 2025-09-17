@@ -316,4 +316,7 @@ extern struct platform_device tx_isp_vin_platform_device;
 extern struct platform_device tx_isp_fs_platform_device;
 extern struct platform_device tx_isp_core_platform_device;
 
+/* Sensor control functions - defined in tx-isp-module.c */
+int sensor_fps_control(int fps);
+
 #endif /* __TX_ISP_H__ */

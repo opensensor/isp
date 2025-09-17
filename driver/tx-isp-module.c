@@ -1111,20 +1111,42 @@ static int sensor_set_wdr_mode(int mode) {
 
 int sensor_fps_control(int fps) {
     /* Binary Ninja: Copies sensor parameters and returns FPS control value */
+    int result = 0;
 
     if (!ourISPdev || !ourISPdev->sensor) {
         pr_warn("sensor_fps_control: No ISP device or sensor available\n");
         return -ENODEV;
     }
 
-    /* This would copy sensor timing parameters and configure FPS */
     pr_info("sensor_fps_control: Setting FPS to %d\n", fps);
 
-    /* TODO: Implement actual sensor FPS control here */
-    /* This should call the sensor's FPS setting mechanism */
+    /* CRITICAL: Call the actual sensor FPS setting mechanism */
+    /* This matches the Binary Ninja reference - call sensor's TX_ISP_EVENT_SENSOR_FPS IOCTL */
+    if (ourISPdev->sensor->sd.ops &&
+        ourISPdev->sensor->sd.ops->sensor &&
+        ourISPdev->sensor->sd.ops->sensor->ioctl) {
 
-    /* Return success - FPS control configured */
-    return 0;
+        /* Pack FPS in the format the sensor expects: (fps_num << 16) | fps_den */
+        int fps_value = (fps << 16) | 1;  /* fps/1 format */
+
+        pr_info("sensor_fps_control: Calling sensor IOCTL with FPS=0x%x (%d/1)\n", fps_value, fps);
+
+        /* Call the sensor's FPS IOCTL - this does the actual I2C communication */
+        result = ourISPdev->sensor->sd.ops->sensor->ioctl(&ourISPdev->sensor->sd,
+                                                          TX_ISP_EVENT_SENSOR_FPS,
+                                                          &fps_value);
+
+        if (result == 0) {
+            pr_info("sensor_fps_control: Sensor FPS set successfully to %d FPS\n", fps);
+        } else {
+            pr_warn("sensor_fps_control: Sensor FPS setting failed: %d\n", result);
+        }
+    } else {
+        pr_warn("sensor_fps_control: No sensor IOCTL available\n");
+        result = -ENODEV;
+    }
+
+    return result;
 }
 EXPORT_SYMBOL(sensor_fps_control);
 
