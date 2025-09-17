@@ -8136,6 +8136,22 @@ void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
 }
 EXPORT_SYMBOL(isp_cleanup_irq_handling);
 
+/* tisp_event_cleanup - Clean up event processing thread and resources */
+void tisp_event_cleanup(void)
+{
+    pr_info("tisp_event_cleanup: Cleaning up event processing system\n");
+
+    /* Stop event processing thread */
+    if (tisp_event_thread) {
+        pr_info("tisp_event_cleanup: Stopping event processing thread\n");
+        kthread_stop(tisp_event_thread);
+        tisp_event_thread = NULL;
+    }
+
+    pr_info("tisp_event_cleanup: Event processing cleanup complete\n");
+}
+EXPORT_SYMBOL(tisp_event_cleanup);
+
 int tisp_param_operate_init(void)
 {
     pr_info("tisp_param_operate_init: Initializing parameter operations\n");
