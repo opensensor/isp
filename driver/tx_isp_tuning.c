@@ -112,6 +112,7 @@ static uint32_t data_b15a8 = 0;
 static uint32_t data_b1598 = 0;
 static uint32_t data_b159c = 0;
 static uint32_t data_b15ac = 1;
+uint32_t data_b2e74 = 0;  /* WDR mode flag - exported symbol */
 static uint32_t data_b1ee8 = 0x1000;
 static uint32_t data_b1ff8 = 0;
 static uint32_t data_b15a0 = 0;
@@ -4790,6 +4791,50 @@ int tisp_dn_mode_get(void *mode_buf, void *size_buf)
     pr_debug("tisp_dn_mode_get: Stub implementation\n");
     return 0;
 }
+
+/* Missing AE/AF zone functions - Binary Ninja reference implementations */
+
+int tisp_g_af_zone(void)
+{
+    pr_debug("tisp_g_af_zone: Getting AF zone data\n");
+    /* Stub implementation - calls tisp_af_get_zone */
+    return tisp_af_get_zone();
+}
+
+int tisp_g_ae_zone(void *buffer)
+{
+    if (!buffer) {
+        pr_err("tisp_g_ae_zone: NULL buffer pointer\n");
+        return -EINVAL;
+    }
+
+    pr_debug("tisp_g_ae_zone: Getting AE zone data\n");
+    /* Stub implementation - calls tisp_ae_get_y_zone */
+    return tisp_ae_get_y_zone(buffer);
+}
+
+int tisp_ae_get_y_zone(void *buffer)
+{
+    if (!buffer) {
+        pr_err("tisp_ae_get_y_zone: NULL buffer pointer\n");
+        return -EINVAL;
+    }
+
+    pr_debug("tisp_ae_get_y_zone: Getting AE Y zone data (stub)\n");
+    /* Stub implementation - needs Binary Ninja decompilation */
+    return 0;
+}
+
+int tisp_af_get_zone(void)
+{
+    pr_debug("tisp_af_get_zone: Getting AF zone data (stub)\n");
+    /* Stub implementation - needs Binary Ninja decompilation */
+    return 0;
+}
+
+/* Export symbols for kernel module loading */
+EXPORT_SYMBOL(data_b2e74);
+EXPORT_SYMBOL(tisp_g_af_zone);
 
 int tisp_blc_set_par_cfg(void *in_buf) { return 0; }
 int tisp_lsc_set_par_cfg(int param, void *in_buf) { return 0; }
