@@ -327,13 +327,10 @@ int tisp_ev_update(void);
 int tisp_ct_update(void);
 int tisp_ae_ir_update(void);
 
-int tisp_g_ae_zone(void *buffer);  // Binary Ninja: takes buffer parameter
-
 /* Additional function declarations needed for Binary Ninja reference */
 int tisp_get_ae_comp(uint32_t *value);
 int tisp_g_aeroi_weight(void *buffer);
 int tisp_ae_param_array_get(int param_type, void *buffer, int *size);
-int tisp_ae_get_y_zone(void *buffer);
 int tisp_ae_get_hist_custome(void *buffer);
 int apical_isp_max_again_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 int apical_isp_max_dgain_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
