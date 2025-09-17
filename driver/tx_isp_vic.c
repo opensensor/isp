@@ -332,9 +332,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             }
 
             /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
-            /* DISABLED: This register write in frame done handler disrupts VIC interrupts */
-            /* The continuous writing to VIC[0x300] every frame was causing interrupt stalls */
-            if (0 && vic_regs) {
+            if (vic_regs) {
                 u32 reg_val = readl(vic_regs + 0x300);
                 reg_val = shifted_value | (reg_val & 0xfff0ffff);
                 writel(reg_val, vic_regs + 0x300);
@@ -1624,9 +1622,47 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     vic_start_ok = 1;
     pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
 
-    /* REMOVED: ISP core initialization moved to ispcore_core_ops_init() */
-    /* VIC should only handle VIC-specific hardware, not ISP core registers */
-    pr_info("*** VIC STREAMING: ISP core initialization handled by ispcore_core_ops_init() ***\n");
+    /* CRITICAL: Enable ISP core interrupt generation - EXACT Binary Ninja reference */
+    /* This was the missing piece that caused interrupts to stall out */
+    if (ourISPdev && ourISPdev->core_regs) {
+        void __iomem *core = ourISPdev->core_regs;
+
+        /* Clear any pending interrupts first */
+        u32 pend_legacy = readl(core + 0xb4);
+        u32 pend_new    = readl(core + 0x98b4);
+        writel(pend_legacy, core + 0xb8);
+        writel(pend_new,    core + 0x98b8);
+
+        /* CRITICAL: Enable ISP pipeline connection - this is what was missing! */
+        /* Binary Ninja: system_reg_write(0x800, 1) - Enable ISP pipeline */
+        writel(1, core + 0x800);
+
+        /* Binary Ninja: system_reg_write(0x804, routing) - Configure ISP routing */
+        writel(0x1c, core + 0x804);
+
+        /* Binary Ninja: system_reg_write(0x1c, 8) - Set ISP control mode */
+        writel(8, core + 0x1c);
+
+        /* CRITICAL: Enable ISP core interrupt generation at hardware level */
+        /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
+        writel(0xffffffff, core + 0x30);
+
+        /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
+        writel(0x133, core + 0x10);
+
+        /* Enable interrupt banks */
+        writel(0x3FFF, core + 0xb0);
+        writel(0x3FFF, core + 0xbc);
+        writel(0x3FFF, core + 0x98b0);
+        writel(0x3FFF, core + 0x98bc);
+        wmb();
+
+        pr_info("*** ISP PIPELINE: VIC->ISP connection ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
+        pr_info("*** ISP CORE: Hardware interrupt generation ENABLED during VIC init ***\n");
+        pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
+    } else {
+        pr_warn("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
+    }
 
     /* Also enable the kernel IRQ line if it was registered earlier */
     if (ourISPdev && ourISPdev->isp_irq > 0) {
