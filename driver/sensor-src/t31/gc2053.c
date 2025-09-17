@@ -1647,22 +1647,38 @@ static int sensor_set_fps(struct tx_isp_subdev *sd, int fps) {
 
 	hts = ((hts << 8) + val) << 1;
 	vts = clk * (fps & 0xffff) / hts / ((fps & 0xffff0000) >> 16);
-//	vtsn0 = (unsigned char) ((vts & 0x3f00) >> 8);
-//	vtsn1 = (unsigned char) (vts & 0xff);
-	ret = sensor_write(sd, 0x41, (unsigned char) ((vts & 0x3f00) >> 8));
-	ret += sensor_write(sd, 0x42, (unsigned char) (vts & 0xff));
-	if (ret < 0)
-		return -1;
 
+	/* CRITICAL FIX: Update sensor attributes FIRST, then sync, then write I2C registers */
 	sensor->video.fps = fps;
 	sensor->video.attr->max_integration_time_native = vts - 8;
 	sensor->video.attr->integration_time_limit = vts - 8;
 	/* Keep total_height as actual output height, not VTS timing value */
 	sensor->video.attr->total_height = 1080;
 	sensor->video.attr->max_integration_time = vts - 8;
-	/* FIXED: Call our properly implemented handler directly instead of using the broken macro */
+
+	/* CRITICAL FIX: Sync sensor attributes BEFORE I2C writes */
+	ISP_WARNING("sensor_set_fps: Syncing sensor attributes before I2C writes\n");
 	ret = tx_isp_handle_sync_sensor_attr_event(sd, sensor->video.attr);
-	return ret;
+	if (ret != 0) {
+		ISP_WARNING("sensor_set_fps: Attribute sync failed (%d), continuing with I2C writes\n", ret);
+		/* Continue with I2C writes even if sync fails */
+	} else {
+		ISP_WARNING("sensor_set_fps: Attribute sync successful\n");
+	}
+
+	/* Now write the VTS registers to sensor hardware */
+	ISP_WARNING("sensor_set_fps: Writing VTS registers 0x41=0x%02x, 0x42=0x%02x\n",
+	            (unsigned char)((vts & 0x3f00) >> 8), (unsigned char)(vts & 0xff));
+	ret = sensor_write(sd, 0x41, (unsigned char) ((vts & 0x3f00) >> 8));
+	ret += sensor_write(sd, 0x42, (unsigned char) (vts & 0xff));
+	if (ret < 0) {
+		ISP_ERROR("sensor_set_fps: I2C write failed\n");
+		return -1;
+	}
+
+	ISP_WARNING("sensor_set_fps: FPS set to %d successfully (VTS=%d)\n",
+	            (fps >> 16) / (fps & 0xffff), vts);
+	return 0;
 }
 
 static int sensor_set_mode(struct tx_isp_subdev *sd, int value) {
