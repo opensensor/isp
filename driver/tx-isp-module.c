@@ -4239,7 +4239,7 @@ static int tx_isp_init(void)
         vic_dev->sd.ops = &vic_subdev_ops;
 
         /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
-        //ourISPdev->subdevs[0] = &vic_dev->sd;
+        ourISPdev->subdevs[0] = &vic_dev->sd;
         
         pr_info("*** REGISTERED VIC SUBDEV AT INDEX 0 WITH VIDEO OPS ***\n");
         pr_info("VIC subdev: %p, ops: %p, video: %p, s_stream: %p\n",
@@ -4256,7 +4256,7 @@ static int tx_isp_init(void)
         csi_dev->sd.isp = (void*)ourISPdev;
         
         /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
-        //ourISPdev->subdevs[1] = &csi_dev->sd;
+        ourISPdev->subdevs[1] = &csi_dev->sd;
         
         pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 WITH VIDEO OPS ***\n");
         pr_info("CSI subdev: %p, ops: %p, video: %p, s_stream: %p\n",
@@ -4370,7 +4370,7 @@ static int tx_isp_init(void)
         vic_dev->sd.ops = &vic_subdev_ops;
 
         /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
-        //ourISPdev->subdevs[0] = &vic_dev->sd;
+        ourISPdev->subdevs[0] = &vic_dev->sd;
         
         pr_info("*** REGISTERED VIC SUBDEV AT INDEX 0 WITH VIDEO OPS ***\n");
 //        pr_info("VIC subdev: %p, ops: %p, video: %p, s_stream: %p\n",
