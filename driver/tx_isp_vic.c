@@ -2732,8 +2732,25 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     wmb();
                 }
                 
-                /* STEP 8: Now call VIC start with proper initialization complete */
-                pr_info("*** STEP 8: NOW calling tx_isp_vic_start with proper sub-device initialization ***\n");
+                /* STEP 8: CRITICAL - Copy real sensor attributes to VIC device before tx_isp_vic_start */
+                pr_info("*** STEP 8: CRITICAL - Synchronizing sensor attributes before VIC start ***\n");
+
+                if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->sensor_attr) {
+                    pr_info("*** COPYING REAL SENSOR ATTRIBUTES TO VIC DEVICE ***\n");
+
+                    /* Copy the real sensor attributes from the registered sensor */
+                    memcpy(&vic_dev->sensor_attr, ourISPdev->sensor->sensor_attr, sizeof(vic_dev->sensor_attr));
+
+                    pr_info("*** SENSOR ATTR SYNC: dbus_type=%d, total_width=%d, total_height=%d ***\n",
+                            vic_dev->sensor_attr.dbus_type,
+                            vic_dev->sensor_attr.total_width,
+                            vic_dev->sensor_attr.total_height);
+                } else {
+                    pr_warn("*** WARNING: No real sensor attributes available, using VIC defaults ***\n");
+                }
+
+                /* STEP 9: Now call VIC start with proper initialization complete */
+                pr_info("*** STEP 9: NOW calling tx_isp_vic_start with proper sub-device initialization ***\n");
                 ret = tx_isp_vic_start(vic_dev);
                 ispvic_frame_channel_s_stream(vic_dev, 1);
                 
