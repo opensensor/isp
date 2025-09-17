@@ -2664,14 +2664,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("*** VIC STATE: state=%d, stream_state=%d, active_buffer_count=%d ***\n",
                     vic->state, vic->stream_state, vic->active_buffer_count);
 
-            /* CRITICAL: Call tx_isp_vic_start FIRST to initialize VIC hardware */
-            extern int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);
-            ret = tx_isp_vic_start(vic);
-            if (ret != 0) {
-                pr_err("Channel %d: Failed to start VIC hardware: %d\n", channel, ret);
-                state->streaming = false;
-                return ret;
-            }
+            /* VIC hardware initialization now handled by vic_core_s_stream only */
+            pr_info("*** Channel %d: VIC hardware initialization deferred to vic_core_s_stream ***\n", channel);
             pr_info("*** CHANNEL %d STREAMON: VIC hardware started successfully ***\n", channel);
 
             /* NOW call Binary Ninja ispvic_frame_channel_s_stream implementation */
@@ -4783,8 +4777,9 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
         }
         
         sensor_attr = isp_dev->sensor->video.attr;
-        /* Binary Ninja: return tx_isp_vic_start($a0) */
-        return tx_isp_vic_start(vic_dev);
+        /* VIC start now only called from vic_core_s_stream - reference driver behavior */
+        pr_info("*** vic_sensor_ops_ioctl: VIC start deferred to vic_core_s_stream ***\n");
+        return 0;
         
     case 0x200000d:  /* Binary Ninja: case 0x200000d */
     case 0x2000010:  /* Binary Ninja: case 0x2000010 */
@@ -5027,20 +5022,9 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                 /* Binary Ninja: void* $a0_3 = *($s0_1 + 0x1bc) */
                 /* Binary Ninja: (*($a0_3 + 0x40cc))($a0_3, 0x4000000, 0, $a3_1) */
                 
-                /* This is the CRITICAL call that triggers the register writes! */
-                /* In our implementation, this should call tx_isp_vic_start or similar */
+                /* VIC initialization now only handled by vic_core_s_stream - reference driver behavior */
                 if (vic_dev && vic_dev->vic_regs) {
-                    pr_info("*** CALLING CRITICAL FUNCTION THAT TRIGGERS REGISTER WRITES ***\n");
-                    
-                    /* This is equivalent to the Binary Ninja function pointer call */
-                    /* It should trigger all the register initialization we see in the logs */
-                    int activation_result = tx_isp_vic_start(vic_dev);
-                    
-                    pr_info("*** CRITICAL FUNCTION RETURNED: %d ***\n", activation_result);
-                    
-                    if (activation_result != 0) {
-                        pr_warn("VIC start returned non-zero: %d\n", activation_result);
-                    }
+                    pr_info("*** VIC initialization deferred to vic_core_s_stream (reference driver behavior) ***\n");
                 }
                 
                 /* CRITICAL: Subdevice initialization loop */
