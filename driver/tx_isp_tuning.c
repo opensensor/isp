@@ -2254,6 +2254,60 @@ static int major = 0;
 static wait_queue_head_t dumpQueue;
 static uint8_t tispPollValue = 0;
 
+/* Forward declarations for tuning parameter functions */
+int tisp_top_param_array_get(void *out_buf, void *size_buf);
+int tisp_blc_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_lsc_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_wdr_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_dpc_get_par_cfg(void *out_buf, void *size_buf);
+int tx_isp_subdev_pipo(void *out_buf, void *size_buf);
+int tisp_rdns_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_adr_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_ccm_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_gamma_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_defog_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_mdns_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_ydns_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_bcsh_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_clm_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_ysp_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_sdns_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_af_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_hldc_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_ae_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_awb_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_reg_map_get(int reg_addr, void *reg_val, void *size_buf);
+int tisp_dn_mode_get(void *mode_buf, void *size_buf);
+
+int tisp_blc_set_par_cfg(void *in_buf);
+int tisp_lsc_set_par_cfg(int param, void *in_buf);
+int tisp_wdr_set_par_cfg(void *in_buf);
+int tisp_dpc_set_par_cfg(void *in_buf);
+int tisp_gib_set_par_cfg(void *in_buf);
+int tisp_rdns_set_par_cfg(void *in_buf);
+int tisp_adr_set_par_cfg(void *in_buf);
+int tisp_dmsc_set_par_cfg(void *in_buf);
+int tisp_ccm_set_par_cfg(void *in_buf);
+int tisp_gamma_set_par_cfg(void *in_buf);
+int tisp_defog_set_par_cfg(void *in_buf);
+int tisp_mdns_set_par_cfg(void *in_buf);
+int tisp_ydns_set_par_cfg(void *in_buf);
+int tisp_bcsh_set_par_cfg(void *in_buf);
+int tisp_clm_set_par_cfg(void *in_buf);
+int tisp_ysp_set_par_cfg(void *in_buf);
+int tisp_sdns_set_par_cfg(void *in_buf);
+int tisp_af_set_par_cfg(void *in_buf);
+int tisp_hldc_set_par_cfg(void *in_buf);
+int tisp_ae_set_par_cfg(void *in_buf);
+int tisp_awb_set_par_cfg(void *in_buf);
+int tisp_reg_map_set(void *in_buf);
+int tisp_dn_mode_set(void *in_buf);
+
+int tisp_get_ae_info(void *out_buf);
+int tisp_set_ae_info(void *in_buf);
+int tisp_get_awb_info(void *out_buf);
+int tisp_set_awb_info(void *in_buf);
+
 /* File operations structure - Binary Ninja reference */
 static const struct file_operations tisp_fops = {
     .owner = THIS_MODULE,
