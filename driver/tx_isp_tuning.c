@@ -67,7 +67,7 @@ uint32_t data_9a450 = 0x2700;   /* Current CT value - global cache */
 
 /* WDR Global Data Structures - From Binary Ninja Analysis */
 static uint32_t wdr_ev_now = 0;
-/* static uint32_t wdr_ev_list_deghost = 0; - defined later as array */
+static uint32_t wdr_ev_list_deghost_val = 0; /* Single value for calculations */
 static uint32_t wdr_block_mean1_end = 0;
 static uint32_t wdr_block_mean1_end_old = 0;
 static uint32_t wdr_block_mean1_th = 0;
