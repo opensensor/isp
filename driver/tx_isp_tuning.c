@@ -172,8 +172,8 @@ static uint32_t adr_min_thresholds[9] = {0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe
 static void *tparams_day = NULL;
 static void *tparams_night = NULL;
 static void *dmsc_sp_d_w_stren_wdr_array = NULL;
-static void *sensor_info = NULL;
-static uint32_t data_b2e1c = 0;
+static void *sensor_info_ptr = NULL;
+static uint32_t data_b2e1c = 1080; /* Sensor height */
 
 /* SDNS (Spatial Denoising) Variables */
 static uint32_t data_9a9c0 = 0;
@@ -600,7 +600,6 @@ struct sensor_info_struct {
 static struct sensor_info_struct sensor_info = {1920, 1080, 25, 0};
 static uint32_t data_b0d54 = 4;  /* Sensor width divisor */
 static uint32_t data_b0d4c = 4;  /* Sensor height divisor */
-static uint32_t data_b2e1c = 1080; /* Sensor height */
 static uint32_t data_b0df8 = 0;    /* Initialization flag */
 
 /* Event completion structure */
@@ -612,7 +611,7 @@ static uint32_t data_b33b4 = (uint32_t)&data_b33b0;
 static uint32_t data_b33b8 = (uint32_t)&data_b33b0;
 
 /* Helper functions - Forward declarations */
-void private_dma_cache_sync(int direction, void *addr, size_t size, int flags);
+/* private_dma_cache_sync declared in txx-funcs.h */
 void private_complete(struct completion *comp);
 static int tisp_ae0_get_statistics(void *buffer, uint32_t flags);
 static int tisp_ae1_get_statistics(void *buffer, uint32_t flags);
@@ -624,7 +623,8 @@ static int tisp_event_push(void *event);
 static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
 
 /* Helper function implementations */
-void private_dma_cache_sync(int direction, void *addr, size_t size, int flags)
+/* Helper function implementations */
+static void tisp_dma_cache_sync_helper(int direction, void *addr, size_t size, int flags)
 {
     /* DMA cache synchronization - simplified implementation */
     if (addr && size > 0) {
