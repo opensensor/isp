@@ -2699,62 +2699,58 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         pr_info("*** Channel %d: QBUF - Queue buffer index=%d ***\n", channel, buffer.index);
-        
-        /* CRITICAL FIX: Calculate actual buffer physical address */
-        uint32_t buffer_phys_addr = 0x6300000 + (buffer.index * (state->width * state->height * 2));
-        
-        pr_info("*** Channel %d: CALCULATED BUFFER PHYSICAL ADDRESS: 0x%x ***\n", channel, buffer_phys_addr);
-        
-        /* CRITICAL FIX: Create proper buffer data structure for VIC */
-        struct vic_buffer_data {
-            uint32_t index;
-            uint32_t phys_addr;
-            uint32_t size;
-            uint32_t channel;
-        } vic_buffer_data;
-        
-        vic_buffer_data.index = buffer.index;
-        vic_buffer_data.phys_addr = buffer_phys_addr;
-        vic_buffer_data.size = state->width * state->height * 2; // YUV buffer size
-        vic_buffer_data.channel = channel;
-        
-        pr_info("*** Channel %d: VIC BUFFER DATA: index=%d, addr=0x%x, size=%d ***\n", 
-                channel, vic_buffer_data.index, vic_buffer_data.phys_addr, vic_buffer_data.size);
-        
-        /* MIPS SAFE: VIC event system with actual buffer data */
-        if (channel == 0 && ourISPdev && ((uintptr_t)ourISPdev & 0x3) == 0) {
-            /* MIPS SAFE: Validate VIC device alignment */
-            if (ourISPdev->vic_dev && ((uintptr_t)ourISPdev->vic_dev & 0x3) == 0) {
-                struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-                
-                /* MIPS SAFE: Additional VIC device validation */
-                if (vic_dev_buf && ((uintptr_t)vic_dev_buf & 0x3) == 0) {
-                    pr_info("*** Channel %d: QBUF - SENDING ACTUAL BUFFER DATA TO VIC ***\n", channel);
-                    pr_info("*** Channel %d: CALLING tx_isp_send_event_to_remote(VIC, 0x3000008, vic_buffer_data) ***\n", channel);
-                    
-                    /* MIPS SAFE: Validate subdev alignment before event call */
-                    if (((uintptr_t)&vic_dev_buf->sd & 0x3) == 0) {
-                        /* CRITICAL FIX: Pass actual buffer data instead of v4l2_buffer structure */
-                        int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &vic_buffer_data);
-                        
-                        if (event_result == 0) {
-                            pr_info("*** Channel %d: QBUF EVENT SUCCESS - BUFFER DATA SENT TO VIC! ***\n", channel);
-                        } else if (event_result == 0xfffffdfd) {
-                            pr_info("*** Channel %d: QBUF EVENT - No VIC callback (MIPS-safe) ***\n", channel);
-                        } else {
-                            pr_warn("*** Channel %d: QBUF EVENT returned: 0x%x (MIPS-safe) ***\n", channel, event_result);
-                        }
-                    } else {
-                        pr_warn("*** Channel %d: VIC subdev not aligned, skipping event ***\n", channel);
-                    }
-                } else {
-                    pr_warn("*** Channel %d: VIC device not aligned properly ***\n", channel);
-                }
+
+        /* Binary Ninja: Get buffer from array - arg3 = $s0 + ((arg3 + 0x3a) << 2) */
+        /* This accesses the buffer array at offset calculated from buffer index */
+        void **buffer_array_entry = (void **)((char *)fcd + ((buffer.index + 0x3a) << 2));
+        void *buffer_struct = *((void **)((char *)buffer_array_entry + 0x24));
+
+        if (!buffer_struct) {
+            pr_err("*** QBUF: Buffer struct is NULL for index %d ***\n", buffer.index);
+            return -EINVAL;
+        }
+
+        pr_info("*** Channel %d: QBUF - Got buffer struct %p for index %d ***\n", channel, buffer_struct, buffer.index);
+
+        /* Binary Ninja: Set buffer state - *($s1_5 + 0x4c) = 1 */
+        *((int *)((char *)buffer_struct + 0x4c)) = 1;
+
+        /* Binary Ninja: Buffer validation checks */
+        int buffer_field = *((int *)((char *)&buffer + 0x48));  /* var_48 */
+        int buffer_width = *((int *)((char *)&buffer + 0x40));  /* var_40 */
+
+        if (buffer_field != state->field) {
+            pr_err("*** QBUF: Field mismatch ***\n");
+            return -EINVAL;
+        }
+
+        if (buffer_width != state->width) {
+            pr_err("*** QBUF: Width mismatch ***\n");
+            return -EINVAL;
+        }
+
+        /* Binary Ninja: Check buffer flags - if (*($s1_5 + 0x48) != 0) */
+        if (*((int *)((char *)buffer_struct + 0x48)) != 0) {
+            pr_err("*** QBUF: Buffer already in use ***\n");
+            return -EINVAL;
+        }
+
+        /* Binary Ninja: EXACT event call - tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000008, &var_78) */
+        if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
+            struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+
+            pr_info("*** Channel %d: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***\n", channel);
+
+            /* CRITICAL: Pass the raw buffer data, not a custom structure */
+            int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &buffer);
+
+            if (event_result == 0) {
+                pr_info("*** Channel %d: QBUF EVENT SUCCESS ***\n", channel);
+            } else if (event_result == 0xfffffdfd) {
+                pr_info("*** Channel %d: QBUF EVENT - No VIC callback ***\n", channel);
             } else {
-                pr_warn("*** Channel %d: VIC device not available or not aligned ***\n", channel);
+                pr_warn("*** Channel %d: QBUF EVENT returned: 0x%x ***\n", channel, event_result);
             }
-        } else {
-            pr_debug("*** Channel %d: Not main channel or ISP device not aligned ***\n", channel);
         }
         
         /* MIPS SAFE: Buffer state management with alignment checks */
