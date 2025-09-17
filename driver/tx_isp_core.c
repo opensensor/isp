@@ -1543,12 +1543,12 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
         /* Binary Ninja: system_reg_write(0x10, 0x133 or 0x33f) */
         writel(0x133, core + 0x10);         /* Enable specific interrupt types */
 
-        /* CRITICAL FIX: Enable ONLY frame sync interrupts, NOT error interrupts initially */
-        /* This prevents the error interrupt storm that causes 22-second reboots */
-        writel(0x1000, core + 0xb0);        /* Legacy enable - ONLY frame sync (0x1000) */
-        writel(0x1000, core + 0xbc);        /* Legacy unmask - ONLY frame sync (0x1000) */
-        writel(0x1000, core + 0x98b0);      /* New enable - ONLY frame sync (0x1000) */
-        writel(0x1000, core + 0x98bc);      /* New unmask - ONLY frame sync (0x1000) */
+        /* CRITICAL FIX: Enable frame sync + essential interrupts, but MASK error interrupts */
+        /* This allows ISP interrupts to work while preventing error interrupt storms */
+        writel(0x3FFF, core + 0xb0);        /* Legacy enable - all interrupt sources */
+        writel(0x1000, core + 0xbc);        /* Legacy unmask - ONLY frame sync initially */
+        writel(0x3FFF, core + 0x98b0);      /* New enable - all interrupt sources */
+        writel(0x1000, core + 0x98bc);      /* New unmask - ONLY frame sync initially */
         wmb();
 
         ISP_INFO("*** ISP CORE: Pipeline ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
