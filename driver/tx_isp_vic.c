@@ -1201,7 +1201,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Binary Ninja: Branch on interface type at 00010250 */
-    if (interface_type == 1) {
+    /* CRITICAL FIX: Reference driver uses interface_type 1=DVP, 2=MIPI */
+    /* But our enum has MIPI=1, DVP=2, so we need to map correctly */
+    if (interface_type == TX_SENSOR_DATA_INTERFACE_DVP) {  /* DVP = 2 in our enum */
         /* DVP interface - Binary Ninja 00010260-000104f8 */
         pr_info("DVP interface configuration\n");
         
@@ -1287,7 +1289,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(1, vic_regs + 0x0);
         pr_info("*** VIC UNLOCK: VIC enabled, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
         
-    } else if (interface_type == 2) {
+    } else if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 in our enum */
         /* MIPI interface - Binary Ninja 000107ec-00010b04 */
         pr_info("MIPI interface configuration\n");
 
@@ -1514,7 +1516,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0, vic_regs + 0x1b4);
         wmb();
         
-    } else if (interface_type == 3) {
+    } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT601) {
         /* BT601 - Binary Ninja 00010688-000107d4 */
         pr_info("BT601 interface configuration\n");
         
@@ -1549,7 +1551,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         writel(1, vic_regs + 0x0);
         
-    } else if (interface_type == 4) {
+    } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT656) {
         /* BT656 - Binary Ninja 000105b0-00010684 */
         pr_info("BT656 interface configuration\n");
         
@@ -1567,7 +1569,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         writel(1, vic_regs + 0x0);
 
-    } else if (interface_type == 5) {
+    } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT1120) {
         /* BT1120 - Binary Ninja 00010500-00010684 */
         pr_info("BT1120 interface configuration\n");
         
