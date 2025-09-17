@@ -331,12 +331,15 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 shifted_value = buffer_index << 0x10;
             }
 
-            /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
+            /* CRITICAL FIX: Preserve control bits 0x80000020 when updating buffer index */
+            /* The reference driver preserves control bits, we were clearing them! */
             if (vic_regs) {
                 u32 reg_val = readl(vic_regs + 0x300);
-                reg_val = shifted_value | (reg_val & 0xfff0ffff);
+                /* PRESERVE control bits (0x80000020) and only update buffer index in upper 16 bits */
+                reg_val = shifted_value | (reg_val & 0x8000ffff);  /* Keep bit 31 and lower 16 bits */
                 writel(reg_val, vic_regs + 0x300);
 
+                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (PRESERVED CONTROL BITS) ***\n", reg_val);
                 pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
                          reg_val, buffer_index, high_bits, match_found);
             }
