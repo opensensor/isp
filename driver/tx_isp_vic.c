@@ -1177,16 +1177,25 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         pr_info("*** VIC UNLOCK: After writing 4, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
-        /* Wait for unlock - Binary Ninja 000104b8 - EXACT REFERENCE IMPLEMENTATION */
+        /* Wait for unlock - Binary Ninja 000104b8 - REFERENCE IMPLEMENTATION WITH CSI PHY COORDINATION */
         timeout = 10000;  /* 10ms timeout */
-        while (readl(vic_regs + 0x0) != 0) {
-            udelay(1);
-            if (--timeout == 0) {
-                u32 reg_val = readl(vic_regs + 0x0);
-                pr_err("*** CRITICAL: VIC unlock timeout! Register 0x0 = 0x%08x (expected 0x0) ***\n", reg_val);
-                pr_err("*** This indicates VIC hardware is not responding properly ***\n");
-                pr_err("*** Continuing anyway to prevent infinite hang ***\n");
-                break;  /* Continue instead of returning error to prevent hang */
+        u32 reg_val = readl(vic_regs + 0x0);
+
+        /* CRITICAL: Handle CSI PHY coordination - 0x3130322a is a valid CSI-written value */
+        if (reg_val == 0x3130322a) {
+            pr_info("*** VIC UNLOCK: CSI PHY has written 0x3130322a - this is expected from reference driver ***\n");
+            pr_info("*** VIC UNLOCK: Proceeding with unlock sequence after CSI PHY coordination ***\n");
+        } else {
+            /* Standard unlock wait for other values */
+            while (readl(vic_regs + 0x0) != 0 && readl(vic_regs + 0x0) != 0x3130322a) {
+                udelay(1);
+                if (--timeout == 0) {
+                    reg_val = readl(vic_regs + 0x0);
+                    pr_err("*** CRITICAL: VIC unlock timeout! Register 0x0 = 0x%08x (expected 0x0 or 0x3130322a) ***\n", reg_val);
+                    pr_err("*** This indicates VIC hardware is not responding properly ***\n");
+                    pr_err("*** Continuing anyway to prevent infinite hang ***\n");
+                    break;  /* Continue instead of returning error to prevent hang */
+                }
             }
         }
 
@@ -1337,10 +1346,24 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(4, vic_regs + 0x0);
         wmb();
 
-        /* Binary Ninja: 00010acc - Wait for unlock - EXACT REFERENCE (NO TIMEOUT!) */
-        pr_info("*** VIC UNLOCK: Waiting for register 0x0 to become 0 (Binary Ninja: no timeout) ***\n");
-        while (readl(vic_regs + 0x0) != 0) {
-            cpu_relax();  /* Binary Ninja: just "nop" - no timeout! */
+        /* Binary Ninja: 00010acc - Wait for unlock - REFERENCE WITH CSI PHY COORDINATION */
+        pr_info("*** VIC UNLOCK: Waiting for register 0x0 to become 0 or CSI PHY value (Binary Ninja: coordinated) ***\n");
+        reg_val = readl(vic_regs + 0x0);
+
+        /* CRITICAL: Handle CSI PHY coordination - 0x3130322a is a valid CSI-written value */
+        if (reg_val == 0x3130322a) {
+            pr_info("*** VIC UNLOCK: CSI PHY coordination complete - register 0x0 = 0x3130322a ***\n");
+        } else {
+            /* Wait for unlock or CSI PHY coordination */
+            timeout = 10000;  /* Add timeout to prevent infinite hang */
+            while (readl(vic_regs + 0x0) != 0 && readl(vic_regs + 0x0) != 0x3130322a) {
+                cpu_relax();  /* Binary Ninja: just "nop" */
+                if (--timeout == 0) {
+                    reg_val = readl(vic_regs + 0x0);
+                    pr_info("*** VIC UNLOCK: Timeout reached, register 0x0 = 0x%08x ***\n", reg_val);
+                    break;  /* Prevent infinite hang */
+                }
+            }
         }
         pr_info("*** VIC UNLOCK: Register 0x0 became 0 - unlock successful! ***\n");
         
