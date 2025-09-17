@@ -564,7 +564,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             pr_info("ISP interrupt: LSC LUT processing\n");
         }
     } else {
-        /* Error interrupt processing */
+        /* Binary Ninja: Error interrupt processing - EXACT reference behavior */
         u32 error_reg_84c = readl(vic_regs + 0x84c);
         pr_info("ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\n",
                 interrupt_status, (interrupt_status & 0x3f8) >> 3,
@@ -573,36 +573,15 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Binary Ninja: data_ca57c += 1 - increment error counter */
         /* Error counter increment would be here */
 
-        /* CRITICAL FIX: IMMEDIATELY mask error interrupts to prevent any storm */
-        static bool error_interrupts_masked = false;
-
-        if (!error_interrupts_masked) {
-            pr_warn("*** ISP CORE: IMMEDIATELY masking ALL error interrupts to prevent storm ***\n");
-
-            /* Mask ALL error interrupt types immediately */
-            u32 mask_reg = readl(isp_regs + 0xbc);  /* Interrupt mask register */
-            mask_reg |= 0x3f8;  /* Mask all error interrupt bits (0x100, 0x200, etc.) */
-            writel(mask_reg, isp_regs + 0xbc);
-            wmb();
-
-            error_interrupts_masked = true;
-            pr_warn("*** ISP CORE: Error interrupts masked - system should remain stable ***\n");
-        }
-
-        /* Still log the errors for debugging, but they won't generate more interrupts */
-        if (interrupt_status & 0x200) {
-            pr_info("ISP CORE: Error interrupt type 1 (MASKED)\n");
-        }
-        if (interrupt_status & 0x100) {
-            pr_info("ISP CORE: Error interrupt type 2 (MASKED)\n");
-        }
+        /* Binary Ninja: data_ca57c += 1 - increment error counter */
+        /* Error counter increment would be here */
     }
 
     /* Binary Ninja: $a0 = *($s0 + 0x15c); if ($a0 == 1) return 1 */
-    /* Early exit check - prevents processing if device is in certain state */
+    /* CRITICAL: Early exit check - this is what prevents interrupt storms in reference driver! */
     if (vic_dev && vic_dev->state == 1) {
-        pr_debug("*** ISP CORE: Early exit - VIC state 1, skipping interrupt processing ***\n");
-        return IRQ_HANDLED;
+        pr_debug("*** ISP CORE: Binary Ninja early exit - VIC state 1, returning IRQ_HANDLED ***\n");
+        return IRQ_HANDLED;  /* This prevents further interrupt processing! */
     }
 
     /* *** CRITICAL: MAIN INTERRUPT PROCESSING SECTION *** */
