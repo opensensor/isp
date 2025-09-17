@@ -628,17 +628,7 @@ static uint32_t tisp_gb_blc_min_en[2] = {0, 0};
 static uint32_t tisp_gb_blc_min[0x24/4] = {0};     /* 0x24 bytes = 9 uint32_t values */
 
 /* LSC (Lens Shading Correction) parameter arrays - Binary Ninja reference */
-static uint32_t data_9a428 = 0;
-static uint32_t lsc_mesh_scale = 0;
-static uint32_t data_9a424 = 0;
-static uint32_t lsc_mesh_size[2] = {0, 0};
-static uint32_t data_9a410[4] = {0, 0, 0, 0};
-static uint32_t lsc_a_lut[0x1ffc/4];  /* 0x1ffc bytes = 2047 uint32_t values */
-static uint32_t lsc_t_lut[0x1ffc/4];  /* 0x1ffc bytes = 2047 uint32_t values */
-static uint32_t lsc_d_lut[0x1ffc/4];  /* 0x1ffc bytes = 2047 uint32_t values */
-static uint32_t lsc_mesh_str[0x24/4] = {0};      /* 0x24 bytes = 9 uint32_t values */
-static uint32_t lsc_mesh_str_wdr[0x24/4] = {0};  /* 0x24 bytes = 9 uint32_t values */
-static uint32_t lsc_mean_en = 0;
+/* Note: LSC arrays are defined later in the file with actual values */
 
 /* WDR parameter arrays - Binary Ninja reference (basic arrays first) */
 static uint32_t param_wdr_para_array[0x28/4] = {0};
@@ -2338,12 +2328,30 @@ extern uint32_t dpc_d_m1_dthres_wdr_array[16];
 extern uint32_t dpc_d_m3_fthres_wdr_array[16];
 extern uint32_t dpc_d_m3_dthres_wdr_array[16];
 
+/* Forward declarations for LSC arrays defined later in the file */
+extern uint32_t lsc_mesh_str[64];
+extern uint32_t lsc_mesh_str_wdr[64];
+extern uint32_t lsc_a_lut[2047];
+extern uint32_t lsc_t_lut[2047];
+extern uint32_t lsc_d_lut[2047];
+extern uint32_t data_9a428;
+extern uint32_t lsc_mesh_scale;
+extern uint32_t data_9a424;
+extern uint32_t lsc_mesh_size;
+extern uint32_t data_9a410;
+extern uint32_t lsc_mean_en;
+
 /* Additional helper function declarations for remaining parameter arrays */
 int tisp_rdns_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_adr_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_ccm_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_gamma_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_defog_param_array_get(int param_id, void *out_buf, int *size_buf);
+int tisp_mdns_param_array_get(int param_id, void *out_buf, int *size_buf);
+int tisp_ydns_param_array_get(int param_id, void *out_buf, int *size_buf);
+int tisp_bcsh_param_array_get(int param_id, void *out_buf, int *size_buf);
+int tisp_clm_param_array_get(int param_id, void *out_buf, int *size_buf);
+int tisp_sharpen_param_array_get(int param_id, void *out_buf, int *size_buf);
 
 int tisp_rdns_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_adr_get_par_cfg(void *out_buf, void *size_buf);
@@ -4252,6 +4260,51 @@ int tisp_gamma_param_array_get(int param_id, void *out_buf, int *size_buf)
 int tisp_defog_param_array_get(int param_id, void *out_buf, int *size_buf)
 {
     pr_debug("tisp_defog_param_array_get: ID=0x%x (stub)\n", param_id);
+    if (out_buf && size_buf) {
+        *size_buf = 0;
+    }
+    return 0;
+}
+
+int tisp_mdns_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    pr_debug("tisp_mdns_param_array_get: ID=0x%x (stub)\n", param_id);
+    if (out_buf && size_buf) {
+        *size_buf = 0;
+    }
+    return 0;
+}
+
+int tisp_ydns_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    pr_debug("tisp_ydns_param_array_get: ID=0x%x (stub)\n", param_id);
+    if (out_buf && size_buf) {
+        *size_buf = 0;
+    }
+    return 0;
+}
+
+int tisp_bcsh_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    pr_debug("tisp_bcsh_param_array_get: ID=0x%x (stub)\n", param_id);
+    if (out_buf && size_buf) {
+        *size_buf = 0;
+    }
+    return 0;
+}
+
+int tisp_clm_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    pr_debug("tisp_clm_param_array_get: ID=0x%x (stub)\n", param_id);
+    if (out_buf && size_buf) {
+        *size_buf = 0;
+    }
+    return 0;
+}
+
+int tisp_sharpen_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    pr_debug("tisp_sharpen_param_array_get: ID=0x%x (stub)\n", param_id);
     if (out_buf && size_buf) {
         *size_buf = 0;
     }
