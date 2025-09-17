@@ -1159,8 +1159,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Calculate base addresses for register blocks */
-    void __iomem *main_isp_base = vic_regs - 0x9a00;
-    void __iomem *csi_base = main_isp_base + 0x10000;
+    /* CRITICAL FIX: Use correct base addresses from logs */
+    /* vic_regs = 0x133e0000 (ISP isp-w02) */
+    /* main_isp_base = 0x13300000 (ISP isp-m0) */
+    void __iomem *main_isp_base = ioremap(0x13300000, 0x100000);  /* Map ISP isp-m0 directly */
+    void __iomem *csi_base = vic_regs;  /* CSI base is same as vic_regs (ISP isp-w02) */
+
+    if (!main_isp_base) {
+        pr_err("*** CRITICAL: Failed to map main ISP base (0x13300000) ***\n");
+        return -ENOMEM;
+    }
 
     /* STEP 1: Enable clocks - Critical for VIC operation */
     cgu_isp_clk = clk_get(NULL, "cgu_isp");
@@ -1694,6 +1702,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
 
     pr_info("*** ISP/CORE INITIALIZATION COMPLETE - should enable interrupts ***\n");
+
+    /* Clean up the temporary mapping */
+    iounmap(main_isp_base);
 
     return 0;
 }
