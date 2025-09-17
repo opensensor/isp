@@ -1213,6 +1213,56 @@ static int32_t fix_point_div_64(int32_t shift_bits, int32_t scale,
     return quotient;
 }
 
+static uint32_t fix_point_div_32(uint32_t shift_bits, uint32_t numerator, uint32_t denominator)
+{
+    if (denominator == 0) {
+        return 0xFFFFFFFF; /* Return max value on division by zero */
+    }
+
+    /* Simple 32-bit fixed point division */
+    uint64_t temp = ((uint64_t)numerator << shift_bits) / denominator;
+
+    /* Clamp to 32-bit result */
+    if (temp > 0xFFFFFFFF) {
+        return 0xFFFFFFFF;
+    }
+
+    return (uint32_t)temp;
+}
+
+static uint32_t fix_point_mult2_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand)
+{
+    /* Binary Ninja: uint32_t $v1 = 0xffffffff u>> (neg.d(arg1) & 0x1f) */
+    uint32_t mask = 0xffffffff >> ((-shift_bits) & 0x1f);
+
+    /* Binary Ninja: uint32_t $a3 = arg2 u>> (arg1 & 0x1f) */
+    uint32_t high_mult = multiplier >> (shift_bits & 0x1f);
+
+    /* Binary Ninja: uint32_t $t0 = arg3 u>> (arg1 & 0x1f) */
+    uint32_t high_cand = multiplicand >> (shift_bits & 0x1f);
+
+    /* Binary Ninja: int32_t $a1 = $v1 & arg2 */
+    uint32_t low_mult = mask & multiplier;
+
+    /* Binary Ninja: int32_t $a2 = $v1 & arg3 */
+    uint32_t low_cand = mask & multiplicand;
+
+    /* Binary Ninja: Cross products and final calculation */
+    uint64_t cross_prod1 = (uint64_t)low_mult * high_cand;
+    uint64_t cross_prod2 = (uint64_t)high_mult * low_cand;
+
+    /* Binary Ninja: return $lo_1 + (($a3 * $t0) << (arg1 & 0x1f)) + (($a1 * $a2) u>> (arg1 & 0x1f)) */
+    return (cross_prod1 & 0xffffffff) + cross_prod2 +
+           ((uint64_t)high_mult * high_cand << (shift_bits & 0x1f)) +
+           ((uint64_t)low_mult * low_cand >> (shift_bits & 0x1f));
+}
+
+static uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand)
+{
+    /* Binary Ninja: return fix_point_mult2_32(arg1, arg2, arg3)() __tailcall */
+    return fix_point_mult2_32(shift_bits, multiplier, multiplicand);
+}
+
 static int32_t fix_point_mult2_32(int32_t shift_bits, int32_t multiplier, int32_t multiplicand)
 {
     uint32_t mask = 0xffffffff >> (-shift_bits & 0x1f);
