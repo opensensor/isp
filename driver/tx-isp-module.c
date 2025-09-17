@@ -3627,6 +3627,14 @@ static struct sensor_ops_storage stored_sensor_ops;
 static int sensor_subdev_sensor_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     pr_info("*** sensor_subdev_sensor_ioctl: cmd=0x%x, delegating to original sensor ***\n", cmd);
+    pr_info("*** DEBUG: stored_sensor_ops.original_ops=%p ***\n", stored_sensor_ops.original_ops);
+
+    if (stored_sensor_ops.original_ops) {
+        pr_info("*** DEBUG: stored_sensor_ops.original_ops->sensor=%p ***\n", stored_sensor_ops.original_ops->sensor);
+        if (stored_sensor_ops.original_ops->sensor) {
+            pr_info("*** DEBUG: stored_sensor_ops.original_ops->sensor->ioctl=%p ***\n", stored_sensor_ops.original_ops->sensor->ioctl);
+        }
+    }
 
     /* Delegate to original sensor IOCTL if available */
     if (stored_sensor_ops.original_ops &&
@@ -3638,6 +3646,11 @@ static int sensor_subdev_sensor_ioctl(struct tx_isp_subdev *sd, unsigned int cmd
     }
 
     pr_warn("*** sensor_subdev_sensor_ioctl: No original sensor IOCTL available ***\n");
+    pr_warn("*** DEBUG: original_ops=%p, sensor=%p, ioctl=%p ***\n",
+            stored_sensor_ops.original_ops,
+            stored_sensor_ops.original_ops ? stored_sensor_ops.original_ops->sensor : NULL,
+            (stored_sensor_ops.original_ops && stored_sensor_ops.original_ops->sensor) ?
+                stored_sensor_ops.original_ops->sensor->ioctl : NULL);
     return -ENOIOCTLCMD;
 }
 
@@ -6940,6 +6953,13 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
         stored_sensor_ops.original_ops = sd->ops;
         stored_sensor_ops.sensor_sd = sd;
         pr_info("*** STORED ORIGINAL SENSOR OPS FOR DELEGATION ***\n");
+        pr_info("*** DEBUG: original_ops=%p ***\n", stored_sensor_ops.original_ops);
+        pr_info("*** DEBUG: original_ops->core=%p ***\n", stored_sensor_ops.original_ops->core);
+        pr_info("*** DEBUG: original_ops->video=%p ***\n", stored_sensor_ops.original_ops->video);
+        pr_info("*** DEBUG: original_ops->sensor=%p ***\n", stored_sensor_ops.original_ops->sensor);
+        if (stored_sensor_ops.original_ops->sensor) {
+            pr_info("*** DEBUG: original_ops->sensor->ioctl=%p ***\n", stored_sensor_ops.original_ops->sensor->ioctl);
+        }
     }
     
     /* *** CRITICAL FIX: SET UP PROPER SUBDEV OPS STRUCTURE *** */
