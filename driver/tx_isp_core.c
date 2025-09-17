@@ -374,36 +374,69 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
     return (result == -ENOIOCTLCMD) ? 0 : result;
 }
 
-/* Frame sync work function - triggers sensor I2C communication */
+/* Frame sync work function - EXACT Binary Ninja implementation */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
     extern struct tx_isp_dev *ourISPdev;
-    extern uint32_t vic_start_ok;  /* Check VIC streaming state */
-    struct tx_isp_dev *isp_dev = ourISPdev;
-    static int sensor_call_counter = 0;  /* Rate limit sensor calls */
+    struct tx_isp_dev *isp_dev = ourISPdev;  /* $s5 = *(mdns_y_pspa_cur_bi_wei0_array + 0xd4) */
+    int32_t var_30 = 0;
 
-    pr_info("*** ISP FRAME SYNC WORK: STARTING - Work function is running! ***\n");
-    pr_info("*** ISP FRAME SYNC WORK: work=%p, current=%s[%d] ***\n", work, current->comm, current->pid);
+    pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation ***\n");
 
-    /* CRITICAL FIX: Always increment frame counter for every frame sync event */
-    pr_info("*** ISP FRAME SYNC WORK: Processing frame sync event (vic_start_ok=%d) ***\n", vic_start_ok);
-    pr_info("*** ISP FRAME SYNC WORK: Calling isp_frame_done_wakeup() to increment frame counter ***\n");
-    isp_frame_done_wakeup();
+    /* Binary Ninja: if ($s5 != 0) */
+    if (isp_dev != NULL) {
+        /* Binary Ninja: int32_t* $s2_1 = $s5 + 0x180 */
+        /* SAFETY: Use safe pointer arithmetic with bounds checking */
+        if ((char *)isp_dev + 0x180 < (char *)isp_dev + sizeof(struct tx_isp_dev)) {
+            int32_t *s2_1 = (int32_t *)((char *)isp_dev + 0x180);
 
-    /* CRITICAL: Rate limit sensor IOCTL calls to prevent interrupt loops */
-    sensor_call_counter++;
-    if (sensor_call_counter >= 25) {  /* Call sensor every 25 frames (~1 second at 25 FPS) */
-        pr_info("*** ISP FRAME SYNC WORK: Triggering sensor I2C communication (rate limited) ***\n");
+            /* Binary Ninja: for (int32_t i = 0; i != 7; ) */
+            for (int32_t i = 0; i != 7; ) {
+                /* SAFETY: Check pointer validity before dereferencing */
+                if (s2_1 && (char *)s2_1 < (char *)isp_dev + sizeof(struct tx_isp_dev)) {
+                    /* Binary Ninja: if (*$s2_1 == 0) */
+                    if (*s2_1 == 0) {
+                        i += 1;
+                    } else if (i == 5) {
+                        /* Binary Ninja: else if (i == 5) */
+                        i += 1;
+                    } else {
+                        /* Binary Ninja: var_30 = $s2_1[1] */
+                        var_30 = s2_1[1];
 
-        int ret = ispcore_sensor_ops_ioctl(isp_dev);
-        pr_info("*** ISP FRAME SYNC WORK: ispcore_sensor_ops_ioctl result: %d ***\n", ret);
+                        /* Binary Ninja: if (*(*($s5 + 0x120) + 0xf0) != 1) */
+                        void **s5_120 = (void **)((char *)isp_dev + 0x120);
+                        if (s5_120 && *s5_120) {
+                            int32_t *condition_ptr = (int32_t *)((char *)*s5_120 + 0xf0);
+                            if (condition_ptr && *condition_ptr != 1) {
+                                i += 1;
+                            } else {
+                                /* Binary Ninja: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
+                                pr_info("*** ISP FRAME SYNC WORK: Calling sensor IOCTL (condition met) ***\n");
+                                ispcore_sensor_ops_ioctl(isp_dev);
 
-        sensor_call_counter = 0;  /* Reset counter */
-    } else {
-        pr_debug("*** ISP FRAME SYNC WORK: Skipping sensor call (counter=%d/25) ***\n", sensor_call_counter);
+                                /* Binary Ninja: *$s2_1 = 0 */
+                                *s2_1 = 0;
+                                i += 1;
+                            }
+                        } else {
+                            i += 1;
+                        }
+                    }
+
+                    /* Binary Ninja: $s2_1 = &$s2_1[2] */
+                    s2_1 = &s2_1[2];
+                } else {
+                    /* Safety exit if pointer becomes invalid */
+                    break;
+                }
+            }
+        } else {
+            pr_warn("*** ISP FRAME SYNC WORK: Invalid pointer offset 0x180 ***\n");
+        }
     }
 
-    pr_info("*** ISP FRAME SYNC WORK: Frame sync work completed ***\n");
+    pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation complete ***\n");
 }
 
 /* Forward declarations for frame channel functions - avoid naming conflicts */
