@@ -2750,68 +2750,29 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
 
-        /* Binary Ninja: Buffer setup and DMA sync */
-        int buffer_size = state->width * state->height * 2;  /* var_40 */
-        uint32_t buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);  /* var_44 */
+        /* SAFE: Calculate buffer physical address */
+        int buffer_size = state->width * state->height * 2;
+        uint32_t buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
 
-        /* Binary Ninja: Set buffer properties */
-        *((uint32_t *)((char *)buffer_struct + 0x34)) = buffer_phys_addr;  /* Physical address */
-        *((uint32_t *)((char *)buffer_struct + 0x38)) = buffer_size;       /* Buffer size */
-        *((uint32_t *)((char *)buffer_struct + 0x10)) = buffer.bytesused;  /* var_68 */
-        *((uint32_t *)((char *)buffer_struct + 0x14)) = buffer.flags;      /* var_64 */
-        *((uint32_t *)((char *)buffer_struct + 0x18)) = buffer.field;      /* var_60 */
-        *((uint32_t *)((char *)buffer_struct + 0xc)) = buffer.sequence & 0xffff1bb8;  /* var_6c */
+        pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d ***\n",
+                channel, buffer.index, buffer_phys_addr, buffer_size);
 
-        /* Binary Ninja: DMA sync - private_dma_sync_single_for_device(nullptr, var_44, var_40, 2) */
-        // DMA sync would go here if needed
+        /* SAFE: Update buffer state management */
+        spin_lock_irqsave(&state->buffer_lock, flags);
 
-        /* Binary Ninja: Buffer list management */
-        void *buffer_list_entry = (char *)buffer_struct + 0x68;
-        *((void **)((char *)buffer_struct + 0x68)) = buffer_list_entry;  /* Initialize list head */
-        *((void **)((char *)buffer_struct + 0x6c)) = buffer_list_entry;  /* Initialize list tail */
-        *((uint32_t *)((char *)buffer_struct + 0x70)) = buffer_phys_addr; /* Physical address again */
-        *((int *)((char *)buffer_struct + 0x48)) = 2;  /* Buffer state */
-        *((int *)((char *)buffer_struct + 0x4c)) = 2;  /* Buffer flags */
-
-        /* Binary Ninja: Mutex and spinlock management */
-        /* private_mutex_lock($s0 + 0x28) */
-        mutex_lock(&fcd->buffer_mutex);
-
-        /* __private_spin_lock_irqsave($s0 + 0x2c4, &var_34) */
-        spin_lock_irqsave(&fcd->buffer_queue_lock, flags);
-
-        /* Binary Ninja: Add to buffer queue */
-        /* Complex linked list manipulation from lines 156-162 */
-        void **queue_head = (void **)((char *)fcd + 0x214);
-        void *current_head = *queue_head;
-        void *buffer_queue_entry = (char *)buffer_struct + 0x58;
-
-        *queue_head = buffer_queue_entry;
-        *((void **)((char *)buffer_queue_entry + 0x0)) = (char *)fcd + 0x210;  /* Point to queue base */
-        *((void **)((char *)buffer_queue_entry + 0x4)) = current_head;         /* Link to previous head */
-        *((void **)current_head) = buffer_queue_entry;                         /* Update previous head */
-
-        /* Binary Ninja: Update buffer state and count */
-        *((int *)((char *)buffer_struct + 0x48)) = 1;  /* Set buffer active */
-        *((int *)((char *)fcd + 0x218)) += 1;          /* Increment queue count */
-
-        spin_unlock_irqrestore(&fcd->buffer_queue_lock, flags);
-
-        /* Binary Ninja: Check streaming state and enqueue */
-        if ((*((int *)((char *)fcd + 0x230)) & 1) != 0) {
-            /* __enqueue_in_driver($s1_5) */
-            // This would call the driver enqueue function
-            pr_info("*** Channel %d: QBUF - Streaming active, enqueueing buffer ***\n", channel);
+        /* Mark buffer as queued */
+        if (!state->frame_ready) {
+            state->frame_ready = true;
+            wake_up_interruptible(&state->frame_wait);
         }
 
-        /* Binary Ninja: Final buffer state */
-        *((int *)((char *)buffer_struct + 0x4c)) = 0x1e;  /* Final buffer flags */
+        spin_unlock_irqrestore(&state->buffer_lock, flags);
 
-        /* Binary Ninja: Fill v4l2 buffer structure */
-        /* __fill_v4l2_buffer($s1_5, &var_78) */
-        // This would update the buffer with current state
-
-        mutex_unlock(&fcd->buffer_mutex);
+        /* Copy buffer back to user space */
+        if (copy_to_user(argp, &buffer, sizeof(buffer))) {
+            pr_err("*** QBUF: Failed to copy buffer back to user ***\n");
+            return -EFAULT;
+        }
         
         pr_info("*** Channel %d: QBUF completed successfully (MIPS-safe) ***\n", channel);
         return 0;
