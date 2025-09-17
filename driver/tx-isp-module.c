@@ -1205,8 +1205,11 @@ static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 /* Forward declaration for sensor registration handler */
 /* VIC sensor operations IOCTL - EXACT Binary Ninja implementation */
 static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
-/* VIC core s_stream - EXACT Binary Ninja implementation */  
+/* VIC core s_stream - EXACT Binary Ninja implementation */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
+
+/* CRITICAL: VIC frame completion buffer management */
+int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint32_t buffer_addr);
 
 /* Frame channel state management */
 struct tx_isp_channel_state {
@@ -7572,6 +7575,66 @@ EXPORT_SYMBOL(tx_isp_core_platform_device);
 
 /* Export frame channel wakeup function for tuning system */
 EXPORT_SYMBOL(tx_isp_wakeup_frame_channels);
+
+/* CRITICAL: VIC frame completion buffer management - moves buffer from queued to completed */
+int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint32_t buffer_addr)
+{
+    extern struct tx_isp_frame_channel_device frame_channels[2];
+    struct tx_isp_channel_state *state;
+    struct frame_buffer *frame_buffer = NULL;
+    struct list_head *pos, *tmp;
+    int channel = 0; /* Assume channel 0 for now - could be determined from buffer_addr */
+
+    if (!vic_dev) {
+        pr_err("*** VIC BUFFER MGMT: NULL vic_dev ***\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** VIC BUFFER MGMT: Frame complete for buffer_addr=0x%x ***\n", buffer_addr);
+
+    /* Get channel state */
+    state = &frame_channels[channel].state;
+
+    /* Find the buffer with matching address in queued_buffers list */
+    spin_lock(&state->queue_lock);
+
+    list_for_each_safe(pos, tmp, &state->queued_buffers) {
+        struct frame_buffer *buf = list_entry(pos, struct frame_buffer, queue_entry);
+
+        if (buf->phys_addr == buffer_addr) {
+            /* Found the matching buffer - move from queued to completed */
+            list_del(pos);
+            state->queued_count--;
+
+            /* Update buffer state to completed */
+            buf->state = 2; /* Completed state */
+            buf->sequence = state->sequence++;
+            do_gettimeofday(&buf->timestamp);
+
+            /* Add to completed buffers list */
+            list_add_tail(&buf->queue_entry, &state->completed_buffers);
+            state->completed_count++;
+
+            frame_buffer = buf;
+            break;
+        }
+    }
+
+    spin_unlock(&state->queue_lock);
+
+    if (frame_buffer) {
+        pr_info("*** VIC BUFFER MGMT: Moved buffer[%d] from QUEUED to COMPLETED (addr=0x%x) ***\n",
+                frame_buffer->index, buffer_addr);
+
+        /* Wake up any processes waiting for completed buffers (DQBUF) */
+        wake_up_interruptible(&state->frame_wait);
+
+        return 0;
+    } else {
+        pr_warn("*** VIC BUFFER MGMT: No queued buffer found with addr=0x%x ***\n", buffer_addr);
+        return -ENOENT;
+    }
+}
 
 module_init(tx_isp_init);
 module_exit(tx_isp_exit);

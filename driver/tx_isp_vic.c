@@ -357,6 +357,10 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             /* The reference driver does NOT manually trigger ISP core interrupts */
             /* ISP core interrupts should be triggered automatically by hardware */
             pr_info("*** VIC FRAME DONE: Processing complete - hardware should trigger ISP interrupts ***\n");
+
+            /* CRITICAL FIX: Move buffer from queued to completed queue */
+            extern int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint32_t buffer_addr);
+            vic_frame_complete_buffer_management(vic_dev, buffer_addr);
         }
 
 //        /* Binary Ninja: result = &data_b0000, goto label_123f4 */
