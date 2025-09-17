@@ -567,12 +567,18 @@ struct tx_isp_channel_state {
     uint32_t vbm_buffer_size;             /* Size of each VBM buffer */
     spinlock_t vbm_lock;                  /* Protect VBM buffer access */
 
-    /* Buffer management for frame completion */
-    struct list_head queued_buffers;      /* Queued buffer list */
-    struct list_head completed_buffers;   /* Completed buffer list */
-    spinlock_t buffer_lock;               /* Protect buffer lists */
-    struct frame_buffer current_buffer;   /* Current active buffer */
-    bool frame_ready;                     /* Simple frame ready flag */
+    /* Reference driver buffer queue management */
+    struct list_head queued_buffers;       /* List of queued buffers (ready for VIC) */
+    struct list_head completed_buffers;    /* List of completed buffers (ready for DQBUF) */
+    spinlock_t queue_lock;                 /* Protect queue access */
+    wait_queue_head_t frame_wait;          /* Wait queue for frame completion */
+    int queued_count;                      /* Number of queued buffers */
+    int completed_count;                   /* Number of completed buffers */
+
+    /* Legacy fields for compatibility */
+    struct frame_buffer current_buffer;     /* Current active buffer */
+    spinlock_t buffer_lock;                /* Protect buffer access */
+    bool frame_ready;                      /* Simple frame ready flag */
 };
 
 // Frame channel devices - create video channel devices like reference
