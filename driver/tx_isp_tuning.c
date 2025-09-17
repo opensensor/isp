@@ -312,6 +312,10 @@ int tisp_ev_update(void);
 int tisp_ct_update(void);
 int tisp_ae_ir_update(void);
 
+/* Event processing thread function */
+int tisp_event_process_thread(void *data);
+extern int tisp_event_process(void);
+
 /* Additional function declarations needed for Binary Ninja reference */
 int tisp_get_ae_comp(uint32_t *value);
 int tisp_g_aeroi_weight(void *buffer);
@@ -1255,6 +1259,18 @@ int tisp_init(void *sensor_info, char *param_name)
     tisp_event_set_cb(7, tisp_ev_update);
     tisp_event_set_cb(9, tisp_ct_update);
     tisp_event_set_cb(8, tisp_ae_ir_update);
+
+    /* CRITICAL: Start event processing thread for sensor I2C communication */
+    pr_info("*** tisp_init: STARTING EVENT PROCESSING THREAD ***\n");
+    extern int tisp_event_process(void);
+
+    /* Create kernel thread to continuously process ISP events */
+    struct task_struct *event_thread = kthread_run(tisp_event_process_thread, NULL, "tisp_events");
+    if (IS_ERR(event_thread)) {
+        pr_err("*** tisp_init: Failed to create event processing thread: %ld ***\n", PTR_ERR(event_thread));
+    } else {
+        pr_info("*** tisp_init: Event processing thread started successfully ***\n");
+    }
 
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) - Set IRQ handler */
     /* CRITICAL: This sets up the ISP processing completion callback - missing piece! */
