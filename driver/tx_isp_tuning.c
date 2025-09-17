@@ -2348,22 +2348,40 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
 //            wmb();
             break;
         }
-        case 0x80000e0: { // SET FPS
-//            struct {
-//                uint32_t frame_rate;  // fps_num
-//                uint32_t frame_div;   // fps_den
-//            } fps_data;
-//
-//            if (copy_from_user(&fps_data, (void __user *)ctrl->value, sizeof(fps_data))) {
-//                pr_err("Failed to copy FPS data from user\n");
-//                return -EFAULT;
-//            }
+        case 0x80000e0: { // SET FPS - PROPER CLIENT-SIDE FPS CONTROL
+            /* CRITICAL: This is the real FPS control mechanism used by IMP_ISP_Tuning_SetSensorFPS */
+            /* Binary Ninja shows: var_20_1 = arg1 << 0x10 | arg2 (fps_num in high 16, fps_den in low 16) */
 
-            // Store in tuning data
-//            ourISPdev->tuning_data->fps_num = fps_data.frame_rate;
-//            ourISPdev->tuning_data->fps_den = fps_data.frame_div;
-              ourISPdev->tuning_data->fps_num = 25;
-              ourISPdev->tuning_data->fps_den = 1;
+            uint32_t fps_packed = ctrl->value;  /* FPS comes packed as (fps_num << 16) | fps_den */
+            uint32_t fps_num = (fps_packed >> 16) & 0xFFFF;
+            uint32_t fps_den = fps_packed & 0xFFFF;
+
+            pr_info("*** SET FPS: Received packed FPS 0x%x -> %d/%d FPS ***\n", fps_packed, fps_num, fps_den);
+
+            /* Store in tuning data - this is what the client expects */
+            if (ourISPdev && ourISPdev->tuning_data) {
+                ourISPdev->tuning_data->fps_num = fps_num;
+                ourISPdev->tuning_data->fps_den = fps_den;
+
+                pr_info("*** SET FPS: Stored %d/%d in tuning data ***\n", fps_num, fps_den);
+
+                /* CRITICAL: Now call the actual sensor FPS control - this is set_framesource_fps() */
+                extern int sensor_fps_control(int fps);
+                int effective_fps = fps_den > 0 ? fps_num / fps_den : 25;  /* Calculate effective FPS */
+
+                int ret = sensor_fps_control(effective_fps);
+                if (ret == 0) {
+                    pr_info("*** SET FPS: Sensor FPS control successful - %d FPS set ***\n", effective_fps);
+                } else {
+                    pr_warn("*** SET FPS: Sensor FPS control failed: %d ***\n", ret);
+                }
+
+                /* TODO: Call set_framesource_fps(fps_num, fps_den) when available */
+                /* TODO: Trigger AE algorithm update if ae_algo_en == 1 */
+            } else {
+                pr_err("*** SET FPS: No tuning data available ***\n");
+                ret = -ENODEV;
+            }
 
             // Update in framesource
 //            ret = set_framesource_fps(fps_data.frame_rate, fps_data.frame_div);
