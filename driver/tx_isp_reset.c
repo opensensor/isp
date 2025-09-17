@@ -38,7 +38,10 @@ int tx_isp_hardware_reset(int reset_mode)
     volatile u32 *reset_reg_ptr;
     u32 reg_val;
     int i;
-    
+
+    /* Log hardware reset calls for debugging */
+    pr_info("*** TX ISP HARDWARE RESET CALLED: mode=%d ***\n", reset_mode);
+
     pr_info("*** TX ISP HARDWARE RESET: Starting (mode=%d) ***\n", reset_mode);
     
     /* Early exit for non-reset mode (matches reference: if (arg1 != 0) return 0) */

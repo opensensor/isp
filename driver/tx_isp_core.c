@@ -1432,19 +1432,11 @@ static int ispcore_slake_module(struct tx_isp_dev *isp)
     if (isp_state != 1) {
         /* Binary Ninja: if ($v0 s>= 3) */
         if (isp_state >= 3) {
-            /* BINARY NINJA REFERENCE: PREVENT ISP CORE INIT DURING VIC STREAMING */
-            extern uint32_t vic_start_ok;
-            if (vic_start_ok == 1) {
-                pr_info("ispcore_slake_module: VIC streaming active - BLOCKING ISP core init to prevent hardware reset");
-                pr_info("ispcore_slake_module: ISP core init would call tx_isp_hardware_reset() and kill VIC interrupts");
-                /* Skip ISP core init during VIC streaming - this prevents hardware reset */
-            } else {
-                pr_info("ispcore_slake_module: ISP state >= 3, calling ispcore_core_ops_init");
-                ret = ispcore_core_ops_init(isp, NULL);  /* NULL sensor_attr as per reference */
-                if (ret < 0) {
-                    pr_err("ispcore_slake_module: ispcore_core_ops_init failed: %d", ret);
-                    return ret;
-                }
+            pr_info("ispcore_slake_module: ISP state >= 3, calling ispcore_core_ops_init");
+            ret = ispcore_core_ops_init(isp, NULL);  /* NULL sensor_attr as per reference */
+            if (ret < 0) {
+                pr_err("ispcore_slake_module: ispcore_core_ops_init failed: %d", ret);
+                return ret;
             }
         }
         
@@ -1573,19 +1565,12 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
         return 0;
     }
     
-    /* CRITICAL: BLOCK hardware reset during VIC streaming to prevent register corruption */
-    extern uint32_t vic_start_ok;
-    if (vic_start_ok == 1) {
-        ISP_INFO("*** ispcore_core_ops_init: BLOCKING hardware reset - VIC streaming active ***\n");
-        ISP_INFO("*** Hardware reset would corrupt VIC registers and kill interrupts ***\n");
-        /* Skip hardware reset completely during VIC streaming */
-    } else {
-        ISP_INFO("*** ispcore_core_ops_init: Calling private_reset_tx_isp_module(0) ***\n");
-        ret = tx_isp_hardware_reset(0);
-        if (ret < 0) {
-            ISP_ERROR("*** ispcore_core_ops_init: Hardware reset failed: %d ***\n", ret);
-            return ret;
-        }
+    /* CRITICAL: Hardware reset must be performed FIRST - matches reference */
+    ISP_INFO("*** ispcore_core_ops_init: Calling tx_isp_hardware_reset(0) ***\n");
+    ret = tx_isp_hardware_reset(0);
+    if (ret < 0) {
+        ISP_ERROR("*** ispcore_core_ops_init: Hardware reset failed: %d ***\n", ret);
+        return ret;
     }
     
     /* Check ISP state with spinlock - matches reference spinlock usage */

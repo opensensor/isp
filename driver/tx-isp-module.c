@@ -642,18 +642,20 @@ void system_reg_write(u32 reg, u32 value);
 void system_reg_write(u32 reg, u32 value)
 {
     void __iomem *isp_regs = NULL;
-    
+
     if (!ourISPdev || !ourISPdev->vic_regs) {
         pr_warn("system_reg_write: No ISP registers available for reg=0x%x val=0x%x\n", reg, value);
         return;
     }
-    
+
+
+
     /* Map ISP registers based on VIC base (which is at 0x133e0000) */
     /* ISP core registers are at 0x13300000 = vic_regs - 0xe0000 */
     isp_regs = ourISPdev->vic_regs - 0xe0000;
-    
+
     pr_debug("system_reg_write: Writing ISP reg[0x%x] = 0x%x\n", reg, value);
-    
+
     /* Write to ISP register with proper offset */
     writel(value, isp_regs + reg);
     wmb();
