@@ -1644,7 +1644,7 @@ int tx_isp_vic_progress(struct tx_isp_vic_device *vic_dev)
     pr_info("*** STEP 7: Enabling ISP clocks ***\n");
 
     /* Enable CGU_ISP clock at 100MHz - Required for VIC operation */
-    struct clk *cgu_isp_clk = clk_get(NULL, "cgu_isp");
+    cgu_isp_clk = clk_get(NULL, "cgu_isp");
     if (!IS_ERR(cgu_isp_clk)) {
         clk_set_rate(cgu_isp_clk, 100000000);  /* 100MHz */
         clk_prepare_enable(cgu_isp_clk);
