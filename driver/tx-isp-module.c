@@ -4386,15 +4386,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Route to sensor IOCTL handler if available
         if (isp_dev->sensor && isp_dev->sensor->sd.ops &&
             isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
-            /* CRITICAL FIX: Use original sensor subdev, not ISP device sensor subdev */
-            struct tx_isp_subdev *original_sd = stored_sensor_ops.sensor_sd;
-            if (original_sd) {
-                ret = isp_dev->sensor->sd.ops->sensor->ioctl(original_sd,
-                                                            control_arg.cmd, &control_arg.value);
-            } else {
-                pr_warn("No original sensor subdev for set control\n");
-                ret = -ENODEV;
-            }
+            ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
+                                                        control_arg.cmd, &control_arg.value);
         } else {
             pr_warn("No sensor IOCTL handler available for cmd=0x%x\n", control_arg.cmd);
             ret = 0; // Return success to avoid breaking callers
