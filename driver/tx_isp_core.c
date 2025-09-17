@@ -335,7 +335,7 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
     pr_info("*** ispcore_sensor_ops_ioctl: Iterating through subdevices ***\n");
 
     /* Binary Ninja: Iterate from arg1 + 0x38 to arg1 + 0x78 (subdevices array) */
-    for (i = 0; i < TX_ISP_SUBDEV_MAX; i++) {
+    for (i = 0; i < 16; i++) {
         struct tx_isp_subdev *sd = isp_dev->subdevs[i];
 
         if (!sd) {
