@@ -392,10 +392,15 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     /* The Binary Ninja reference shows conditional sensor calls - let's implement this safely */
 
     sensor_call_counter++;
+    pr_info("*** ISP FRAME SYNC WORK: Counter=%d/25 ***\n", sensor_call_counter);
+
     if (sensor_call_counter >= 25) {  /* Every 25 frames (~1 second at 25 FPS) */
         pr_info("*** ISP FRAME SYNC WORK: Triggering periodic sensor communication ***\n");
 
         /* Check if sensor is available and streaming is active */
+        pr_info("*** ISP FRAME SYNC WORK: Checking sensor: %p, streaming_enabled: %d ***\n",
+                isp_dev->sensor, isp_dev->streaming_enabled);
+
         if (isp_dev->sensor && isp_dev->streaming_enabled) {
             pr_info("*** ISP FRAME SYNC WORK: Sensor available and streaming active ***\n");
 
@@ -410,11 +415,13 @@ static void ispcore_irq_fs_work(struct work_struct *work)
             }
         } else {
             pr_info("*** ISP FRAME SYNC WORK: Sensor not available or streaming not active ***\n");
+            pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d ***\n",
+                    isp_dev->sensor, isp_dev->streaming_enabled);
         }
 
         sensor_call_counter = 0;  /* Reset counter */
     } else {
-        pr_debug("*** ISP FRAME SYNC WORK: Skipping sensor call (counter=%d/25) ***\n", sensor_call_counter);
+        pr_info("*** ISP FRAME SYNC WORK: Skipping sensor call (counter=%d/25) ***\n", sensor_call_counter);
     }
 
     pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation complete ***\n");
