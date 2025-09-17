@@ -341,19 +341,20 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
 
         pr_info("*** ispcore_sensor_ops_ioctl: Found real sensor device - calling sensor IOCTL ***\n");
 
-        /* CRITICAL: Sensor expects a valid FPS argument, not NULL */
-        static int fps_value = 25;  /* Default 25 FPS - sensor expects int* */
+        /* CRITICAL: Sensor expects FPS in format (fps_num << 16) | fps_den */
+        static int fps_value = (25 << 16) | 1;  /* Default 25/1 FPS in correct format */
 
         /* Update FPS from tuning data if available */
         if (isp_dev->tuning_data && isp_dev->tuning_data->fps_num > 0 && isp_dev->tuning_data->fps_den > 0) {
-            int new_fps = isp_dev->tuning_data->fps_num / isp_dev->tuning_data->fps_den;
-            if (new_fps != fps_value && new_fps > 0 && new_fps <= 30) {
+            int new_fps = (isp_dev->tuning_data->fps_num << 16) | isp_dev->tuning_data->fps_den;
+            if (new_fps != fps_value) {
                 fps_value = new_fps;
-                pr_info("*** ispcore_sensor_ops_ioctl: Updated FPS to %d from tuning data ***\n", fps_value);
+                pr_info("*** ispcore_sensor_ops_ioctl: Updated FPS to %d/%d (0x%x) from tuning data ***\n",
+                        isp_dev->tuning_data->fps_num, isp_dev->tuning_data->fps_den, fps_value);
             }
         }
 
-        pr_info("*** ispcore_sensor_ops_ioctl: Calling sensor with FPS=%d ***\n", fps_value);
+        pr_info("*** ispcore_sensor_ops_ioctl: Calling sensor with FPS=0x%x (25/1) ***\n", fps_value);
 
         /* Call the real sensor's IOCTL with valid FPS pointer - this triggers I2C communication */
         result = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, TX_ISP_EVENT_SENSOR_FPS, &fps_value);
