@@ -690,21 +690,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         /* CRITICAL FIX: Complete CSI PHY initialization sequence from reference trace */
                         /* Reference trace shows CSI PHY writes to 4 different memory regions in sequence */
 
-                        /* Map all required memory regions */
-                        isp_w02_base = ioremap(0x133e0000, 0x10000);
-                        isp_w01_base = ioremap(0x10023000, 0x1000);
-                        isp_m0_base = ioremap(0x13300000, 0x100000);
-                        isp_csi_base = ioremap(0x10022000, 0x1000);
-
-                        if (!isp_w02_base || !isp_w01_base || !isp_m0_base || !isp_csi_base) {
-                            pr_err("*** CRITICAL ERROR: Failed to map CSI PHY memory regions ***\n");
-                            if (isp_w02_base) iounmap(isp_w02_base);
-                            if (isp_w01_base) iounmap(isp_w01_base);
-                            if (isp_m0_base) iounmap(isp_m0_base);
-                            if (isp_csi_base) iounmap(isp_csi_base);
-                            return -ENOMEM;
-                        }
-
                         pr_info("*** COMPLETE CSI PHY INITIALIZATION: All memory regions mapped ***\n");
                         pr_info("*** isp-w02: %p, isp-w01: %p, isp-m0: %p, isp-csi: %p ***\n",
                                 isp_w02_base, isp_w01_base, isp_m0_base, isp_csi_base);
