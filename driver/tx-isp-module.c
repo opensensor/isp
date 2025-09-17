@@ -4430,15 +4430,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     if (copy_from_user(&set_value, tuning_arg.data_ptr, sizeof(set_value)))
                         return -EFAULT;
                 }
-                /* CRITICAL FIX: Use original sensor subdev, not ISP device sensor subdev */
-                struct tx_isp_subdev *original_sd = stored_sensor_ops.sensor_sd;
-                if (original_sd) {
-                    ret = isp_dev->sensor->sd.ops->sensor->ioctl(original_sd,
-                                                               tuning_arg.cmd, &set_value);
-                } else {
-                    pr_warn("No original sensor subdev for tuning SET\n");
-                    ret = -ENODEV;
-                }
+                ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
+                                                           tuning_arg.cmd, &set_value);
             }
         } else {
             pr_warn("No sensor available for tuning operation\n");
