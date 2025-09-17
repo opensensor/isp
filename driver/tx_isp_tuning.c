@@ -3038,51 +3038,7 @@ EXPORT_SYMBOL(isp_core_tuning_deinit);
 
 
 
-/* tisp_code_tuning_open - EXACT Binary Ninja reference implementation */
-int tisp_code_tuning_open(struct inode *inode, struct file *file)
-{
-    /* Binary Ninja: uint32_t $v0 = private_kmalloc(0x500c, 0xd0)
-     * tisp_par_ioctl = $v0
-     * memset($v0, 0, 0x500c)
-     * return 0 */
 
-    pr_info("tisp_code_tuning_open: Opening tuning interface\n");
-
-    /* Allocate parameter buffer - exact size from Binary Ninja */
-    tisp_par_ioctl = kmalloc(0x500c, GFP_KERNEL);
-    if (!tisp_par_ioctl) {
-        pr_err("tisp_code_tuning_open: Failed to allocate parameter buffer\n");
-        return -ENOMEM;
-    }
-
-    /* Clear the buffer */
-    memset(tisp_par_ioctl, 0, 0x500c);
-
-    pr_info("tisp_code_tuning_open: Parameter buffer allocated at %p (size=0x%x)\n",
-            tisp_par_ioctl, 0x500c);
-
-    return 0;
-}
-EXPORT_SYMBOL(tisp_code_tuning_open);
-
-/* tisp_code_tuning_release - EXACT Binary Ninja reference implementation */
-int tisp_code_tuning_release(struct inode *inode, struct file *file)
-{
-    /* Binary Ninja: private_kfree(tisp_par_ioctl)
-     * tisp_par_ioctl = 0
-     * return 0 */
-
-    pr_info("tisp_code_tuning_release: Releasing tuning interface\n");
-
-    if (tisp_par_ioctl) {
-        kfree(tisp_par_ioctl);
-        tisp_par_ioctl = NULL;
-        pr_info("tisp_code_tuning_release: Parameter buffer freed\n");
-    }
-
-    return 0;
-}
-EXPORT_SYMBOL(tisp_code_tuning_release);
 
 /* tisp_code_tuning_ioctl - EXACT Binary Ninja reference implementation */
 long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
