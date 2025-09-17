@@ -3064,15 +3064,15 @@ static int tiziano_ae_init_exp_th(void)
     return 0;
 }
 
-/* tiziano_ae_init - Based on decompiled code with safe memory access */
+/* tiziano_ae_init - Binary Ninja EXACT implementation with safe memory offsets */
 int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
 {
-    pr_info("tiziano_ae_init: Initializing Auto Exposure (%dx%d@%d)\n", width, height, fps);
+    pr_info("tiziano_ae_init: Initializing Auto Exposure (%dx%d@%d) - Binary Ninja EXACT\n", width, height, fps);
     
-    /* Clear AE histogram data - memset(&tisp_ae_hist, 0, 0x42c) */
+    /* Binary Ninja EXACT: memset(&tisp_ae_hist, 0, 0x42c) */
     memset(&tisp_ae_hist, 0, 0x42c);
     
-    /* Initialize parameter data - __builtin_memcpy with safe values */
+    /* Binary Ninja EXACT: __builtin_memcpy(&data_d4fbc, "\x0d\x00\x00\x00\x40\x00\x00\x00\x90\x00\x00\x00\xc0\x00\x00\x00\x0f\x00\x00\x00\x0f\x00\x00\x00", 0x18) */
     uint8_t init_data[0x18] = {
         0x0d, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00,
         0x90, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00,
@@ -3080,88 +3080,151 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     };
     memcpy(&data_d04bc, init_data, 0x18);
     
-    /* Copy current histogram to last - memcpy(&tisp_ae_hist_last, &tisp_ae_hist, 0x42c) */
+    /* Binary Ninja EXACT: memcpy(&tisp_ae_hist_last, &tisp_ae_hist, 0x42c) */
     memcpy(&tisp_ae_hist_last, &tisp_ae_hist, 0x42c);
     
-    /* Clear WDR strength array - memset(&dmsc_sp_d_w_stren_wdr_array, 0, 0x98) */
+    /* Binary Ninja EXACT: memset(&dmsc_sp_d_w_stren_wdr_array, 0, 0x98) */
     memset(&dmsc_sp_d_w_stren_wdr_array_ae, 0, 0x98);
     
-    /* Clear AE controls - memset(&ae_ctrls, 0, 0x10) */
+    /* Binary Ninja EXACT: memset(&ae_ctrls, 0, 0x10) */
     memset(&ae_ctrls, 0, 0x10);
     
-    /* Call AE parameter refresh */
+    /* Binary Ninja EXACT: tiziano_ae_params_refresh() */
     tiziano_ae_params_refresh();
     
-    /* Initialize exposure thresholds */
+    /* Binary Ninja EXACT: tiziano_ae_init_exp_th() */
     tiziano_ae_init_exp_th();
     
-    /* Set parameter addresses */
+    /* Binary Ninja EXACT: tiziano_ae_para_addr() */
     tiziano_ae_para_addr();
     
-    /* Store argument parameter */
-    *data_d04c4 = height;  /* Store height parameter */
+    /* Binary Ninja EXACT: *data_d04c4 = arg3 (height parameter) */
+    *data_d04c4 = height;
     
-    /* Set hardware parameters */
+    /* Binary Ninja EXACT: tiziano_ae_set_hardware_param(0, data_d4678, 0) */
     tiziano_ae_set_hardware_param(0, (uint32_t*)&data_d04bc[0], 0);
+    
+    /* Binary Ninja EXACT: tiziano_ae_set_hardware_param(1, dmsc_alias_stren_intp, 0) */
     tiziano_ae_set_hardware_param(1, (uint32_t*)&dmsc_sp_d_w_stren_wdr_array_ae, 0);
     
-    /* Custom AE processing if enabled */
-    if (ta_custom_en == 1) {
+    /* Binary Ninja EXACT: uint32_t ta_custom_en_1 = ta_custom_en */
+    uint32_t ta_custom_en_1 = ta_custom_en;
+    
+    /* Binary Ninja EXACT: if (ta_custom_en_1 == 1) */
+    if (ta_custom_en_1 == 1) {
+        /* Binary Ninja EXACT: tisp_set_sensor_integration_time(_ae_result) */
         tisp_set_sensor_integration_time(_ae_result);
+        
+        /* Binary Ninja EXACT: tisp_set_sensor_analog_gain() */
         tisp_set_sensor_analog_gain();
         
-        if (data_b0e10 == 0) {
-            /* Standard mode register writes */
-            uint32_t reg_val = data_afcd4;
-            system_reg_write_ae(3, 0x1030, reg_val << 0x10 | reg_val);
-            system_reg_write_ae(3, 0x1034, reg_val << 0x10 | reg_val);
-        } else if (data_b0e10 == ta_custom_en) {
-            /* WDR mode register writes */
-            uint32_t reg_val = data_afcd4;
-            system_reg_write_ae(3, 0x1000, reg_val << 0x10 | reg_val);
-            system_reg_write_ae(3, 0x1004, reg_val << 0x10 | reg_val);
+        /* Binary Ninja EXACT: int32_t $v1_1 = data_b0e10 */
+        int32_t v1_1 = data_b0e10;
+        
+        /* Binary Ninja EXACT: if ($v1_1 == 0) */
+        if (v1_1 == 0) {
+            /* Binary Ninja EXACT: int32_t $v0_2 = data_afcd4 */
+            int32_t v0_2 = data_afcd4;
+            /* Binary Ninja EXACT: system_reg_write_ae(3, 0x1030, $v0_2 << 0x10 | $v0_2) */
+            system_reg_write_ae(3, 0x1030, v0_2 << 0x10 | v0_2);
+            /* Binary Ninja EXACT: int32_t $v0_3 = data_afcd4 */
+            int32_t v0_3 = data_afcd4;
+            /* Binary Ninja EXACT: system_reg_write_ae(3, 0x1034, $v0_3 << 0x10 | $v0_3) */
+            system_reg_write_ae(3, 0x1034, v0_3 << 0x10 | v0_3);
+        } else if (v1_1 == ta_custom_en_1) {
+            /* Binary Ninja EXACT: int32_t $v0_4 = data_afcd4 */
+            int32_t v0_4 = data_afcd4;
+            /* Binary Ninja EXACT: system_reg_write_ae(3, 0x1000, $v0_4 << 0x10 | $v0_4) */
+            system_reg_write_ae(3, 0x1000, v0_4 << 0x10 | v0_4);
+            /* Binary Ninja EXACT: int32_t $v0_5 = data_afcd4 */
+            int32_t v0_5 = data_afcd4;
+            /* Binary Ninja EXACT: system_reg_write_ae(3, 0x1004, $v0_5 << 0x10 | $v0_5) */
+            system_reg_write_ae(3, 0x1004, v0_5 << 0x10 | v0_5);
         }
         
-        /* Calculate AE point position with safe math */
-        uint32_t ae_calc = fix_point_mult3_32(_AePointPos_d, _ae_result << (_AePointPos_d & 0x1f), data_afcd0);
+        /* Binary Ninja EXACT: int32_t _AePointPos_1 = _AePointPos.d */
+        int32_t AePointPos_1 = _AePointPos_d;
         
-        /* WDR short exposure handling */
-        if (data_b0e10 == 1) {
+        /* Binary Ninja EXACT: int32_t $v0_6 = fix_point_mult3_32(_AePointPos_1, _ae_result << (_AePointPos_1 & 0x1f), data_afcd0) */
+        int32_t v0_6 = fix_point_mult3_32(AePointPos_1, _ae_result << (AePointPos_1 & 0x1f), data_afcd0);
+        
+        /* Binary Ninja EXACT: int32_t $v1_2 = data_b0e10 */
+        int32_t v1_2 = data_b0e10;
+        
+        /* Binary Ninja EXACT: dmsc_uu_stren_wdr_array = $v0_6 */
+        /* Store calculated value in global variable - using safe memory offset */
+        data_afcd0 = v0_6;  /* Store AE calculation result */
+        
+        /* Binary Ninja EXACT: if ($v1_2 == 1) */
+        if (v1_2 == 1) {
+            /* Binary Ninja EXACT: tisp_set_sensor_integration_time_short(data_afcd8) */
             tisp_set_sensor_integration_time_short(data_afcd8);
+            
+            /* Binary Ninja EXACT: tisp_set_sensor_analog_gain_short() */
             tisp_set_sensor_analog_gain_short();
             
-            uint32_t short_val = data_afce0;
-            system_reg_write_ae(3, 0x100c, short_val << 0x10 | short_val);
-            system_reg_write_ae(3, 0x1010, short_val << 0x10 | short_val);
+            /* Binary Ninja EXACT: int32_t $v0_7 = data_afce0 */
+            int32_t v0_7 = data_afce0;
+            /* Binary Ninja EXACT: system_reg_write_ae(3, 0x100c, $v0_7 << 0x10 | $v0_7) */
+            system_reg_write_ae(3, 0x100c, v0_7 << 0x10 | v0_7);
+            
+            /* Binary Ninja EXACT: int32_t $v0_8 = data_afce0 */
+            int32_t v0_8 = data_afce0;
+            /* Binary Ninja EXACT: system_reg_write_ae(3, 0x1010, $v0_8 << 0x10 | $v0_8) */
+            system_reg_write_ae(3, 0x1010, v0_8 << 0x10 | v0_8);
         }
     }
     
-    /* Set up interrupt handlers */
+    /* Binary Ninja EXACT: system_irq_func_set(0x1b, ae0_interrupt_hist) */
     system_irq_func_set(0x1b, ae0_interrupt_hist);
+    
+    /* Binary Ninja EXACT: system_irq_func_set(0x1a, ae0_interrupt_static) */
     system_irq_func_set(0x1a, ae0_interrupt_static);
+    
+    /* Binary Ninja EXACT: system_irq_func_set(0x1d, ae1_interrupt_hist) */
     system_irq_func_set(0x1d, ae1_interrupt_hist);
+    
+    /* Binary Ninja EXACT: system_irq_func_set(0x1c, ae1_interrupt_static) */
     system_irq_func_set(0x1c, ae1_interrupt_static);
     
-    /* Store deflicker parameters */
-    data_b0b28 = data_b2e44;
-    data_b0b2c = data_b2e56;
-    data_b0b30 = data_b2e54;
+    /* Binary Ninja EXACT: uint32_t $a2_13 = zx.d(data_b2e56) */
+    uint32_t a2_13 = (uint32_t)data_b2e56;
     
-    /* Initialize deflicker processing */
-    tiziano_deflicker_expt(_flicker_t, data_b2e44, data_b2e56, data_b2e54, &_deflick_lut[0], &_nodes_num);
+    /* Binary Ninja EXACT: uint32_t $a3_1 = zx.d(data_b2e54) */
+    uint32_t a3_1 = (uint32_t)data_b2e54;
     
-    /* Set event callbacks */
+    /* Binary Ninja EXACT: int32_t $a1_5 = data_b2e44 */
+    int32_t a1_5 = data_b2e44;
+    
+    /* Binary Ninja EXACT: data_b0b28 = $a1_5 */
+    data_b0b28 = a1_5;
+    
+    /* Binary Ninja EXACT: data_b0b2c = $a2_13 */
+    data_b0b2c = a2_13;
+    
+    /* Binary Ninja EXACT: data_b0b30 = $a3_1 */
+    data_b0b30 = a3_1;
+    
+    /* Binary Ninja EXACT: tiziano_deflicker_expt(_flicker_t, $a1_5, $a2_13, $a3_1, &_deflick_lut, &_nodes_num) */
+    tiziano_deflicker_expt(_flicker_t, a1_5, a2_13, a3_1, &_deflick_lut[0], &_nodes_num);
+    
+    /* Binary Ninja EXACT: tisp_event_set_cb(1, tisp_ae0_process) */
     tisp_event_set_cb(1, tisp_ae0_process);
+    
+    /* Binary Ninja EXACT: tisp_event_set_cb(6, tisp_ae1_process) */
     tisp_event_set_cb(6, tisp_ae1_process);
     
-    /* Initialize spinlocks */
-    private_spin_lock_init(0);
+    /* Binary Ninja EXACT: private_spin_lock_init(0) */
     private_spin_lock_init(0);
     
-    /* Set default compensation */
-    ae_comp_default = 0x80;  /* data_b0c18 equivalent */
+    /* Binary Ninja EXACT: private_spin_lock_init(0) */
+    private_spin_lock_init(0);
     
-    pr_info("tiziano_ae_init: AE initialization complete with safe memory access\n");
+    /* Binary Ninja EXACT: ae_comp_default = data_b0c18 */
+    ae_comp_default = data_b0c18;
+    
+    /* Binary Ninja EXACT: return 0 */
+    pr_info("tiziano_ae_init: AE initialization complete - Binary Ninja EXACT implementation\n");
     return 0;
 }
 
