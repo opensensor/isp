@@ -3574,19 +3574,15 @@ static uint32_t data_b2e54 = 1;       /* FPS denominator */
 static uint32_t data_b2e44 = 0x1000;  /* Deflicker base */
 static uint32_t data_b0b28, data_b0b2c, data_b0b30;
 
-/* AE interrupt handlers - Forward declarations */
-static int ae0_interrupt_hist(void);
-static int ae0_interrupt_static(void);
-static int ae1_interrupt_hist(void);
-static int ae1_interrupt_static(void);
-static int tisp_ae0_process(void);
+/* AE interrupt handlers - Forward declarations (implemented as exported functions) */
+/* ae0_interrupt_hist, ae0_interrupt_static, ae1_interrupt_hist, ae1_interrupt_static */
+/* tisp_ae0_process, tiziano_ae_params_refresh, tiziano_ae_para_addr, tiziano_ae_set_hardware_param */
+/* are implemented as exported functions below */
+
 static void tisp_ae1_process(void);
 
 /* AE processing functions - Forward declarations */
-static int tiziano_ae_params_refresh(void);
 static int tiziano_ae_init_exp_th(void);
-static void *tiziano_ae_para_addr(void);
-static int tiziano_ae_set_hardware_param(int ae_id, uint8_t *param_array, int update_only);
 static void tisp_set_sensor_integration_time(uint32_t time);
 static void tisp_set_sensor_analog_gain(void);
 static void tisp_set_sensor_integration_time_short(uint32_t time);
