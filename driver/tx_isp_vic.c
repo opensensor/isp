@@ -2390,6 +2390,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             if (enable == 0) {
                 /* Stream OFF */
                 ret = 0;
+                vic_start_adjustment();
                 ispvic_frame_channel_s_stream(vic_dev, 0);
                 if (current_state == 4) {
                     vic_dev->state = 3;
@@ -2542,208 +2543,75 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* CRITICAL FIX: Do NOT call sensor initialization here - it's already done by the main driver */
                 /* The sensor s_stream will be called once by the main ISP driver, not by us */
                 
-                /* STEP 5: SKIP 280ms delta register changes - DISABLED to prevent ISP core corruption */
-                pr_info("*** STEP 5: SKIPPING 280ms delta register changes - DISABLED to prevent ISP core corruption ***\n");
-                pr_info("*** STEP 5: These register writes were overwriting ISP core control and disabling interrupts ***\n");
-                /* CRITICAL: Do NOT write to ISP Control or Core Control registers */
-                /* These writes were causing:
-                 * - ISP Control register 0x9804: 0x3f00 -> 0x0 (disables ISP routing)
-                 * - VIC Control registers 0x9ac0, 0x9ac8: 0x200 -> 0x0 (disables VIC control)
-                 * - Core Control registers 0xb018-0xb024: 0x40404040 -> 0x24242424 (corrupts core config)
-                 * - Core Control register 0xb04c: 0x103 -> 0x3 (disables interrupt routing)
-                 */
+                /* STEP 5: Apply 280ms delta register changes AFTER sensor detection */
+                pr_info("*** STEP 5: Applying 280ms delta register changes AFTER sensor detection ***\n");
+                /* Use the correct main_isp_base (0x13300000 = isp-m0) */
+                writel(0x0, main_isp_base + 0x9804);        /* 0x3f00 -> 0x0 */
+                writel(0x0, main_isp_base + 0x9ac0);        /* 0x200 -> 0x0 */
+                writel(0x0, main_isp_base + 0x9ac8);        /* 0x200 -> 0x0 */
+                writel(0x24242424, main_isp_base + 0xb018); /* 0x40404040 -> 0x24242424 */
+                writel(0x24242424, main_isp_base + 0xb01c); /* 0x40404040 -> 0x24242424 */
+                writel(0x24242424, main_isp_base + 0xb020); /* 0x40404040 -> 0x24242424 */
+                writel(0x242424, main_isp_base + 0xb024);   /* 0x404040 -> 0x242424 */
+                writel(0x10d0046, main_isp_base + 0xb028);  /* 0x1000080 -> 0x10d0046 */
+                writel(0xe8002f, main_isp_base + 0xb02c);   /* 0x1000080 -> 0xe8002f */
+                writel(0xc50100, main_isp_base + 0xb030);   /* 0x100 -> 0xc50100 */
+                writel(0x1670100, main_isp_base + 0xb034);  /* 0xffff0100 -> 0x1670100 */
+                writel(0x1f001, main_isp_base + 0xb038);    /* 0x1ff00 -> 0x1f001 */
+                writel(0x22c0000, main_isp_base + 0xb03c);  /* 0x0 -> 0x22c0000 */
+                writel(0x22c1000, main_isp_base + 0xb040);  /* 0x0 -> 0x22c1000 */
+                writel(0x22c2000, main_isp_base + 0xb044);  /* 0x0 -> 0x22c2000 */
+                writel(0x22c3000, main_isp_base + 0xb048);  /* 0x0 -> 0x22c3000 */
+                writel(0x3, main_isp_base + 0xb04c);        /* 0x103 -> 0x3 */
+                writel(0x10000000, main_isp_base + 0xb078);  /* 0x0 -> 0x10000000 */
+                wmb();
                 
                 /* STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection */
                 pr_info("*** STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection ***\n");
                 void __iomem *csi_phy_base = csi_base;  /* CSI PHY base for detailed config */
                 
-                // /* Write the exact ISP isp-csi sequence from the working trace */
-                // writel(0x7d, csi_phy_base + 0x0);
-                // writel(0xe3, csi_phy_base + 0x4);
-                // writel(0xa0, csi_phy_base + 0x8);
-                // writel(0x83, csi_phy_base + 0xc);
-                // writel(0xfa, csi_phy_base + 0x10);
-                // writel(0x88, csi_phy_base + 0x1c);
-                // writel(0x4e, csi_phy_base + 0x20);
-                // writel(0xdd, csi_phy_base + 0x24);
-                // writel(0x84, csi_phy_base + 0x28);
-                // writel(0x5e, csi_phy_base + 0x2c);
-                // writel(0xf0, csi_phy_base + 0x30);
-                // writel(0xc0, csi_phy_base + 0x34);
-                // writel(0x36, csi_phy_base + 0x38);
-                // writel(0xdb, csi_phy_base + 0x3c);
-                // /* Continue with the complete ISP isp-csi sequence... */
-                // wmb();
+                /* Write the exact ISP isp-csi sequence from the working trace */
+                writel(0x7d, csi_phy_base + 0x0);
+                writel(0xe3, csi_phy_base + 0x4);
+                writel(0xa0, csi_phy_base + 0x8);
+                writel(0x83, csi_phy_base + 0xc);
+                writel(0xfa, csi_phy_base + 0x10);
+                writel(0x88, csi_phy_base + 0x1c);
+                writel(0x4e, csi_phy_base + 0x20);
+                writel(0xdd, csi_phy_base + 0x24);
+                writel(0x84, csi_phy_base + 0x28);
+                writel(0x5e, csi_phy_base + 0x2c);
+                writel(0xf0, csi_phy_base + 0x30);
+                writel(0xc0, csi_phy_base + 0x34);
+                writel(0x36, csi_phy_base + 0x38);
+                writel(0xdb, csi_phy_base + 0x3c);
+                /* Continue with the complete ISP isp-csi sequence... */
+                wmb();
                 
-                /* CRITICAL FIX: REMOVED conflicting CSI PHY writes from VIC code */
-                pr_info("*** STEP 7: SKIPPING CSI PHY writes - VIC should not touch CSI registers! ***\n");
+                /* STEP 7: Final CSI PHY control sequence */
+                pr_info("*** STEP 7: Final CSI PHY control sequence ***\n");
+                writel(0x1, vic_regs + 0xc);
+                writel(0x1, vic_regs + 0x10);
                 writel(0x630, vic_regs + 0x14);
                 wmb();
                 
-                /* STEP 8: VIC initialization complete - NOW trigger STREAMON to enable PIPO MDMA */
-                pr_info("*** STEP 8: VIC initialization complete - NOW triggering STREAMON to enable PIPO MDMA ***\n");
-
-                /* CRITICAL: Wait for ISP pipeline to stabilize before enabling VIC PIPO MDMA */
-                /* The ISP pipeline needs time to stabilize after being enabled to prevent 0x200 errors */
-                pr_info("*** CRITICAL: Waiting for ISP pipeline to stabilize (preventing 0x200 pipeline config error) ***\n");
-                msleep(50);  /* Allow ISP pipeline to fully stabilize */
-
-                /* CRITICAL: Call ispvic_frame_channel_s_stream to enable VIC PIPO MDMA */
-                /* This is what the reference driver does - it calls vic_pipo_mdma_enable during streaming */
-                pr_info("*** CRITICAL: Calling ispvic_frame_channel_s_stream to enable VIC PIPO MDMA ***\n");
-                int stream_ret = ispvic_frame_channel_s_stream(vic_dev, 1);
-                if (stream_ret == 0) {
-                    pr_info("*** SUCCESS: VIC PIPO MDMA enabled - VIC hardware ready for CSI connection ***\n");
-                } else {
-                    pr_err("*** ERROR: ispvic_frame_channel_s_stream failed: %d ***\n", stream_ret);
-                }
-
-                ret = 0;  /* Return success - VIC is ready for CSI connection */
+                /* STEP 8: Now call VIC start with proper initialization complete */
+                pr_info("*** STEP 8: NOW calling tx_isp_vic_start with proper sub-device initialization ***\n");
+                ret = tx_isp_vic_start(vic_dev);
+                ispvic_frame_channel_s_stream(vic_dev, 1);
                 
-                /* CRITICAL FIX: Check VIC error status before CSI initialization */
-                pr_info("*** CRITICAL: Checking VIC error status before CSI initialization ***\n");
-                if (vic_regs) {
-                    u32 vic_error_84c = readl(vic_regs + 0x84c);
-                    if (vic_error_84c != 0) {
-                        pr_err("*** VIC ERROR DETECTED: Register 0x84c = 0x%x (should be 0) ***\n", vic_error_84c);
-                        pr_err("*** This will cause ISP pipeline configuration error! ***\n");
-
-                        /* Clear VIC error register */
-                        writel(0, vic_regs + 0x84c);
-                        wmb();
-                        pr_info("*** VIC ERROR: Cleared register 0x84c ***\n");
-                    } else {
-                        pr_info("*** VIC ERROR CHECK: Register 0x84c = 0 (good) ***\n");
-                    }
-                }
-
-                /* CRITICAL FIX: Initialize CSI before enabling VIC streaming */
-                pr_info("*** CRITICAL: Initializing CSI before VIC streaming ***\n");
-                if (ourISPdev && ourISPdev->csi_dev) {
-                    struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
-                    extern int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
-                    extern int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);
-
-                    pr_info("*** Calling CSI initialization for MIPI interface ***\n");
-                    int csi_result = csi_core_ops_init(&csi_dev->sd, 1);
-                    if (csi_result != 0 && csi_result != 0xfffffdfd) {
-                        pr_err("*** CSI initialization failed: %d ***\n", csi_result);
-                        pr_err("*** This will cause VIC control limit errors! ***\n");
-                    } else {
-                        pr_info("*** CSI initialization successful - MIPI interface ready ***\n");
-                    }
-
-                    /* CRITICAL FIX: Call missing CSI video streaming - this was the missing link! */
-                    pr_info("*** CRITICAL: Calling MISSING CSI video streaming - this sets CSI state to 4! ***\n");
-                    int csi_video_result = csi_video_s_stream(&csi_dev->sd, 1);
-                    if (csi_video_result != 0) {
-                        pr_err("*** CSI video streaming failed: %d ***\n", csi_video_result);
-                    } else {
-                        pr_info("*** CSI video streaming successful - CSI state should now be 4 (streaming)! ***\n");
-
-                        /* CRITICAL: NOW perform VIC unlock sequence - CSI is ready and providing MIPI data */
-                        pr_info("*** CRITICAL: Performing VIC unlock sequence NOW that CSI is providing MIPI data ***\n");
-                        writel(2, vic_regs + 0x0);
-                        wmb();
-                        writel(4, vic_regs + 0x0);
-                        wmb();
-
-                        /* Wait for VIC unlock - should work now that CSI PHY is configured */
-                        int unlock_timeout = 1000;
-                        while (readl(vic_regs + 0x0) != 0) {
-                            udelay(1);
-                            if (--unlock_timeout == 0) {
-                                pr_err("VIC unlock timeout AFTER CSI initialization\n");
-                                break;
-                            }
-                        }
-
-                        if (unlock_timeout > 0) {
-                            pr_info("*** VIC unlock successful - VIC hardware ready to process MIPI data! ***\n");
-                            writel(1, vic_regs + 0x0);  /* Enable VIC */
-                            pr_info("*** VIC enabled and ready for streaming ***\n");
-                        } else {
-                            pr_err("*** VIC unlock failed even after CSI initialization ***\n");
-                        }
-                    }
-                } else {
-                    pr_err("*** WARNING: No CSI device available for initialization ***\n");
-                }
-
-                /* CRITICAL FIX: ALWAYS enable interrupts when streaming is enabled */
-                /* This fixes the bug where subsequent calls to vic_core_s_stream would not re-enable interrupts */
-                pr_info("vic_core_s_stream: Stream ON - ensuring VIC interrupts are enabled\n");
-
-                /* Set state to streaming if not already */
                 if (current_state != 4) {
+                    pr_info("vic_core_s_stream: Stream ON - tx_isp_vic_start called after proper sub-device init\n");
+
+                    /* CRITICAL FIX: Only enable interrupts AFTER all initialization is complete */
                     vic_dev->state = 4;
                     wmb();  /* Ensure state is written before enabling interrupts */
-                    pr_info("vic_core_s_stream: VIC state set to 4 (streaming)\n");
+                    vic_start_ok = 1;  /* NOW safe to enable interrupt processing */
+                    pr_info("*** INTERRUPTS RE-ENABLED AFTER COMPLETE INITIALIZATION ***\n");
+
+                    pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
+                    return ret;
                 }
-
-                /* CRITICAL FIX: Do NOT enable VIC interrupts yet - wait for complete pipeline setup */
-                /* CSI PHY is configured, but VIC interrupt registers still need to be set */
-                pr_info("*** CRITICAL: CSI PHY configured - VIC interrupt setup next ***\n");
-                pr_info("*** VIC hardware can now safely generate continuous interrupts ***\n");
-
-                /* CRITICAL FIX: Ensure VIC configuration is robust against CSI PHY register changes */
-                /* The CSI PHY register updates at delta 170ms can cause control limit errors */
-                /* Pre-configure VIC to handle these changes gracefully */
-                u32 vic_ctrl = readl(vic_regs + 0xc);
-                vic_ctrl |= 0x8;  /* Enable robust mode to handle timing changes */
-                writel(vic_ctrl, vic_regs + 0xc);
-                wmb();
-                pr_info("*** VIC ROBUST MODE: Enabled to handle CSI PHY timing changes ***\n");
-
-                /* CRITICAL: Re-enable VIC interrupt registers - USE CORRECT VIC BASE */
-                /* The issue is we're using the wrong base address for VIC interrupt control */
-                /* VIC interrupts are at 0x10023000, not 0x133e0000 */
-                void __iomem *vic_interrupt_base = ioremap(0x10023000, 0x1000);
-                if (!vic_interrupt_base) {
-                    pr_err("*** CRITICAL ERROR: Failed to map VIC interrupt base at 0x10023000 ***\n");
-                } else {
-                    pr_info("*** CRITICAL: RE-ENABLING VIC INTERRUPT REGISTERS (correct VIC base 0x10023000) ***\n");
-                    pr_info("*** BEFORE: VIC_1e0(0x1e0)=0x%x, VIC_1e8(0x1e8)=0x%x ***\n",
-                            readl(vic_interrupt_base + 0x1e0), readl(vic_interrupt_base + 0x1e8));
-
-                    /* CRITICAL FIX: Use the correct VIC base address for interrupt control */
-                    pr_info("*** CRITICAL: Using correct VIC interrupt base (0x10023000) ***\n");
-
-                    /* Enable VIC interrupts using the correct base address */
-                    writel(0xffffffff, vic_interrupt_base + 0x1e0);  /* Enable all VIC interrupts */
-                    writel(0x0, vic_interrupt_base + 0x1e8);         /* Clear interrupt masks */
-                    wmb();
-
-                    pr_info("*** AFTER: VIC_1e0(0x1e0)=0x%x, VIC_1e8(0x1e8)=0x%x ***\n",
-                            readl(vic_interrupt_base + 0x1e0), readl(vic_interrupt_base + 0x1e8));
-
-                    iounmap(vic_interrupt_base);
-                }
-
-                /* Verify the VIC interrupt setup took effect using correct base */
-                void __iomem *vic_check_base = ioremap(0x10023000, 0x1000);
-                if (vic_check_base) {
-                    u32 actual_1e0 = readl(vic_check_base + 0x1e0);
-                    u32 actual_1e8 = readl(vic_check_base + 0x1e8);
-                    if (actual_1e0 == 0xffffffff && actual_1e8 == 0x0) {
-                        pr_info("*** SUCCESS: VIC interrupt registers set to working values! ***\n");
-                        pr_info("*** VIC should now generate interrupts on IRQ 38 ***\n");
-                    } else {
-                        pr_warn("*** WARNING: VIC interrupt register values unexpected ***\n");
-                        pr_warn("*** Expected: 1e0=0xffffffff, 1e8=0x0 ***\n");
-                        pr_warn("*** Actual: 1e0=0x%x, 1e8=0x%x ***\n", actual_1e0, actual_1e8);
-                        pr_warn("*** VIC interrupts may still work - IRQ 38 routing is correct ***\n");
-                    }
-                    iounmap(vic_check_base);
-                }
-
-                /* CRITICAL FIX: NOW set vic_start_ok=1 after complete pipeline configuration */
-                vic_start_ok = 1;
-                pr_info("*** CRITICAL: vic_start_ok = 1 - VIC interrupts now enabled after complete setup! ***\n");
-                pr_info("*** VIC pipeline fully configured: Sensor->CSI->VIC->ISP chain ready ***\n");
-
-                pr_info("vic_core_s_stream: VIC streaming enabled successfully, state=%d\n", vic_dev->state);
-                return 0;  /* Always return success for streaming enable */
             }
         }
     }
