@@ -3798,6 +3798,29 @@ int tisp_g_af_zone(void)
     return 0;
 }
 
+/* Additional stub implementations for missing functions */
+int tisp_get_defog_strength(uint32_t *value)
+{
+    if (value) *value = 0;
+    return 0;
+}
+
+int tisp_g_dpc_strength(uint32_t *value)
+{
+    if (value) *value = 0;
+    return 0;
+}
+
+int tisp_ae_get_y_zone(void *buffer)
+{
+    return 0;
+}
+
+int tisp_ae_get_hist_custome(void *buffer)
+{
+    return 0;
+}
+
 int isp_core_tuning_release(struct tx_isp_dev *dev)
 {
     struct isp_tuning_data *tuning = ourISPdev->tuning_data;
