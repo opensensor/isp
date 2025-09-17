@@ -3924,31 +3924,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 }
                 
                 return 0;
-            }
-
-            isp_printf(2, "Failed to init tuning module!\n");
-
-            /* Binary Ninja: Cleanup on tuning init failure */
-            if (isp_dev->tuning_enabled >= 2) {
-                ispcore_slake_module(isp_dev);
-            }
-
-            kfree(channel_array);
-        } else {
-            isp_printf(2, "Failed to init output channels!\n");
-        }
-
-        tx_isp_subdev_deinit(isp_dev);
-        result = -ENOMEM;
-    } else {
-        /* Binary Ninja: Error message with platform data info */
-        uint32_t platform_id = platform_data ? platform_data->device_id : 0;
-        isp_printf(2, "Failed to init isp module(%d.%d)\n", platform_id, platform_id);
-        result = -ENODEV;
-    }
-
-    kfree(isp_dev);
-    return result;
 }
 
 
