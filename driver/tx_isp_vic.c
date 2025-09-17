@@ -1278,13 +1278,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         /* BINARY NINJA CRITICAL: Missing register 0x10c complex configuration */
         /* Binary Ninja: *(*(arg1 + 0xb8) + 0x10c) = complex bit field calculation */
-        u32 reg_10c_value = 0x0;  /* Start with base value */
-        /* This is a complex bit field that combines multiple sensor attributes */
-        /* For now, use a safe default that matches MIPI RAW10 2-lane configuration */
-        reg_10c_value = 0x20000;  /* Basic MIPI configuration bits */
+        /* For GC2053 MIPI RAW10 2-lane: Try to match reference driver bit pattern */
+        u32 reg_10c_value = 0x0;
+
+        /* Based on Binary Ninja bit field analysis for MIPI RAW10 2-lane */
+        /* This combines multiple sensor attributes into a single register */
+        reg_10c_value = 0x1000;  /* Try different bit pattern for MIPI RAW10 */
+
         writel(reg_10c_value, vic_regs + 0x10c);
         wmb();
-        pr_info("*** BINARY NINJA CRITICAL: Set register 0x10c = 0x%x (complex bit field config) ***\n", reg_10c_value);
+        pr_info("*** BINARY NINJA CRITICAL: Set register 0x10c = 0x%x (MIPI RAW10 2-lane config) ***\n", reg_10c_value);
         
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
