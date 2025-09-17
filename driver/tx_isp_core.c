@@ -391,9 +391,22 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     /* MATCH REFERENCE DRIVER: Check conditions every frame, call sensor when conditions are met */
     pr_info("*** ISP FRAME SYNC WORK: Checking sensor conditions (like Binary Ninja reference) ***\n");
 
+    /* CRITICAL FIX: Auto-detect streaming state from VIC hardware */
+    bool vic_is_streaming = false;
+    if (isp_dev->vic_dev) {
+        struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+        vic_is_streaming = (vic->stream_state == 1);  /* VIC stream_state = 1 means streaming */
+
+        /* Auto-set streaming_enabled if VIC is streaming but flag is false */
+        if (vic_is_streaming && !isp_dev->streaming_enabled) {
+            pr_info("*** ISP FRAME SYNC WORK: Auto-setting streaming_enabled=true (VIC is streaming) ***\n");
+            isp_dev->streaming_enabled = true;
+        }
+    }
+
     /* Check if sensor is available and streaming is active */
-    pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d ***\n",
-            isp_dev->sensor, isp_dev->streaming_enabled);
+    pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d, vic_streaming=%d ***\n",
+            isp_dev->sensor, isp_dev->streaming_enabled, vic_is_streaming);
 
     if (isp_dev->sensor && isp_dev->streaming_enabled) {
         pr_info("*** ISP FRAME SYNC WORK: Conditions met - calling sensor IOCTL ***\n");
