@@ -2360,29 +2360,8 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     static u32 tuning_call_count = 0;
                     tuning_call_count++;
 
-                    /* CRITICAL: COMPLETELY DISABLE register writes during VIC streaming */
-                    if (vic_start_ok == 1) {
-                        /* VIC is streaming - NO register operations to prevent control limit errors */
-                        pr_debug("*** VIC-SAFE TUNING: VIC streaming active - ALL register operations DISABLED ***\n");
-                        pr_debug("*** TUNING: Skipping ALL register writes to prevent VIC interrupt disruption ***\n");
-                        /* COMPLETELY skip all register operations during VIC streaming */
-                    } else {
-                        /* VIC not streaming - safe to perform full register maintenance */
-                        pr_debug("*** VIC-SAFE TUNING: VIC not streaming - full register maintenance allowed ***\n");
-
-                        /* Perform the reference driver register patterns only when safe */
-                        void __iomem *isp_m0_base = ourISPdev->core_regs;
-                        if (isp_m0_base && (tuning_call_count % 5 == 0)) {
-                            /* Safe ISP core register updates */
-                            u32 current_ac = readl(isp_m0_base + 0xac);
-                            if (current_ac == 0x58050000) {
-                                writel(0x59010000, isp_m0_base + 0xac);
-                            } else {
-                                writel(0x58050000, isp_m0_base + 0xac);
-                            }
-                            wmb();
-                        }
-                    }
+                    /* Binary Ninja: Exact tuning enable implementation - no custom maintenance code */
+                    pr_debug("isp_core_tunning_unlocked_ioctl: Tuning enabled - Binary Ninja reference implementation\n");
 
                     /* CRITICAL: Maintain frame flow without disrupting VIC hardware */
                     if (ourISPdev->vic_dev) {

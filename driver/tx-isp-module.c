@@ -654,6 +654,14 @@ void system_reg_write(u32 reg, u32 value)
     /* ISP core registers are at 0x13300000 = vic_regs - 0xe0000 */
     isp_regs = ourISPdev->vic_regs - 0xe0000;
 
+    /* CRITICAL: Log all writes to critical registers to find source of 0x0 writes */
+    if ((reg >= 0x100 && reg <= 0x10c) || (reg >= 0xb054 && reg <= 0xb078)) {
+        pr_warn("*** CRITICAL REG WRITE: reg=0x%x value=0x%x ***\n", reg, value);
+        if (value == 0x0) {
+            pr_err("*** FOUND 0x0 WRITE: reg=0x%x - THIS IS THE PROBLEM! ***\n", reg);
+        }
+    }
+
     pr_debug("system_reg_write: Writing ISP reg[0x%x] = 0x%x\n", reg, value);
 
     /* Write to ISP register with proper offset */
