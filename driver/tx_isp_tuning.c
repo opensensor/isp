@@ -4792,6 +4792,14 @@ int tisp_dn_mode_get(void *mode_buf, void *size_buf)
     return 0;
 }
 
+/* tisp_g_af_zone - Binary Ninja EXACT implementation */
+int tisp_g_af_zone(void)
+{
+    /* Binary Ninja: tisp_af_get_zone(); return 0 */
+    tisp_af_get_zone();
+    return 0;
+}
+
 /* Export symbols for kernel module loading */
 EXPORT_SYMBOL(data_b2e74);
 EXPORT_SYMBOL(tisp_g_af_zone);
