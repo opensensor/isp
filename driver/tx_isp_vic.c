@@ -1549,29 +1549,36 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0xffffffff, vic_regs + 0x1f4);  /* Clear pending interrupts */
     wmb();
 
-    /* Enable VIC interrupts - this was the WORKING configuration that generated "VIC IRQ 38 ACTIVE" */
-    writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-    writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
+    /* CRITICAL FIX: Use CORRECT VIC interrupt registers based on git history analysis */
+    pr_info("*** VIC INTERRUPT INIT: Using CORRECT VIC registers (0x04/0x0c) from Binary Ninja reference ***\n");
+
+    /* Clear interrupt masks first (VIC_IMSR) */
+    writel(0x0, vic_regs + 0x08);  /* Clear all interrupt masks */
     wmb();
 
-    /* DIAGNOSTIC: Read back interrupt configuration to verify hardware response */
-    u32 int_enable = readl(vic_regs + 0x1e0);
-    u32 int_mask = readl(vic_regs + 0x1e8);
-    u32 int_status = readl(vic_regs + 0x1f0);
-    u32 int_pending = readl(vic_regs + 0x1f4);
+    /* Set VIC interrupt registers to Binary Ninja reference values */
+    writel(0x07800438, vic_regs + 0x04);  /* VIC_IMR - Interrupt Mask Register */
+    writel(0xb5742249, vic_regs + 0x0c);  /* VIC_IMCR - Interrupt Control Register */
+    wmb();
 
-    pr_info("*** VIC INTERRUPT DIAGNOSTIC: Enable=0x%08x, Mask=0x%08x, Status=0x%08x, Pending=0x%08x ***\n",
-            int_enable, int_mask, int_status, int_pending);
+    /* DIAGNOSTIC: Read back CORRECT VIC interrupt registers */
+    u32 vic_imr = readl(vic_regs + 0x04);
+    u32 vic_imcr = readl(vic_regs + 0x0c);
+    u32 vic_isr = readl(vic_regs + 0x00);
+    u32 vic_imsr = readl(vic_regs + 0x08);
 
-    if (int_enable != 0xffffffff) {
-        pr_warn("*** VIC INTERRUPT WARNING: Enable register readback failed (expected 0xffffffff, got 0x%08x) ***\n", int_enable);
+    pr_info("*** VIC INTERRUPT DIAGNOSTIC: IMR=0x%08x, IMCR=0x%08x, ISR=0x%08x, IMSR=0x%08x ***\n",
+            vic_imr, vic_imcr, vic_isr, vic_imsr);
+
+    if (vic_imr != 0x07800438) {
+        pr_warn("*** VIC INTERRUPT WARNING: IMR readback failed (expected 0x07800438, got 0x%08x) ***\n", vic_imr);
     }
 
-    if (int_mask != 0x0) {
-        pr_warn("*** VIC INTERRUPT WARNING: Mask register readback failed (expected 0x0, got 0x%08x) ***\n", int_mask);
+    if (vic_imcr != 0xb5742249) {
+        pr_warn("*** VIC INTERRUPT WARNING: IMCR readback failed (expected 0xb5742249, got 0x%08x) ***\n", vic_imcr);
     }
 
-    pr_info("*** VIC INTERRUPT INIT: Restored working VIC interrupt configuration (0x1e0/0x1e8) ***\n");
+    pr_info("*** VIC INTERRUPT INIT: CORRECT VIC interrupt configuration applied (0x04/0x0c) ***\n");
 
     /* CRITICAL: Set vic_start_ok flag to enable interrupt processing */
     vic_start_ok = 1;
