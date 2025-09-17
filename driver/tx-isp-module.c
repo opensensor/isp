@@ -2483,8 +2483,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     struct frame_channel_device *fcd;
     struct tx_isp_channel_state *state;
     int channel;
-    
-    pr_info("*** frame_channel_unlocked_ioctl: MIPS-SAFE implementation - cmd=0x%x ***\n", cmd);
+
+    pr_info("*** frame_channel_unlocked_ioctl: ENTRY - cmd=0x%x ***\n", cmd);
+
+    /* Special debug for DQBUF operations */
+    if (cmd == 0xc0445609) {
+        pr_info("*** DQBUF DETECTED: This is a VIDIOC_DQBUF call ***\n");
+    }
     
     /* MIPS ALIGNMENT CHECK: Validate file pointer */
     if (!file || ((uintptr_t)file & 0x3) != 0) {
@@ -2532,7 +2537,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     }
     
     pr_info("*** Frame channel %d IOCTL: MIPS-safe processing - cmd=0x%x ***\n", channel, cmd);
-        
+
+    /* Debug: Check for DQBUF before switch */
+    if (cmd == 0xc0445609) {
+        pr_info("*** DQBUF: About to enter switch statement for VIDIOC_DQBUF ***\n");
+    }
+
     // Add channel enable/disable IOCTLs that IMP_FrameSource_EnableChn uses
     switch (cmd) {
     case 0x40045620: { // Channel enable IOCTL (common pattern)
@@ -2989,6 +2999,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         int ret;
 
         pr_info("*** Channel %d: DQBUF - VBM buffer dequeue request ***\n", channel);
+        pr_info("*** DQBUF DEBUG: This message confirms DQBUF is being called ***\n");
 
         if (copy_from_user(&buffer, argp, sizeof(buffer)))
             return -EFAULT;
