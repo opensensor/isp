@@ -886,7 +886,8 @@ static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value)
             break;
     }
 
-    return system_reg_write(reg, value);
+    system_reg_write(reg, value);
+    return 0;
 }
 
 /* ===== MISSING SYMBOL IMPLEMENTATIONS - EXACT Binary Ninja Reference ===== */
