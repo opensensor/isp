@@ -3494,10 +3494,16 @@ static int create_frame_channel_devices(void)
         frame_channels[i].buffer_queue_base = &frame_channels[i].buffer_queue_base;
         frame_channels[i].buffer_queue_count = 0;
         frame_channels[i].streaming_flags = 0;
-        frame_channels[i].vic_subdev = NULL;
         frame_channels[i].buffer_type = 1;  /* V4L2_BUF_TYPE_VIDEO_CAPTURE */
         frame_channels[i].field = 1;        /* V4L2_FIELD_NONE */
         memset(frame_channels[i].buffer_array, 0, sizeof(frame_channels[i].buffer_array));
+
+        /* Set VIC subdev reference if available */
+        if (ourISPdev && ourISPdev->vic_dev) {
+            frame_channels[i].vic_subdev = &((struct tx_isp_vic_device *)ourISPdev->vic_dev)->sd;
+        } else {
+            frame_channels[i].vic_subdev = NULL;
+        }
         
         ret = misc_register(&frame_channels[i].miscdev);
         if (ret < 0) {
