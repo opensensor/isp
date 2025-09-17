@@ -1162,6 +1162,21 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
         
+        /* CRITICAL: Enable VIC interrupt system BEFORE unlock sequence (from commit history) */
+        pr_info("*** VIC INTERRUPT INIT: Enabling VIC interrupt system before unlock ***\n");
+
+        /* Clear any pending interrupts first - from commit feef0511 */
+        writel(0xffffffff, vic_regs + 0x1f0);  /* Clear pending interrupts */
+        writel(0xffffffff, vic_regs + 0x1f4);  /* Clear pending interrupts */
+        wmb();
+
+        /* Enable VIC interrupts - from commit feef0511 (known working version) */
+        writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
+        writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
+        wmb();
+
+        pr_info("*** VIC INTERRUPT INIT: VIC interrupts enabled, starting unlock sequence ***\n");
+
         /* Unlock sequence - Binary Ninja 00010484-00010490 - EXACT REFERENCE IMPLEMENTATION */
         pr_info("*** VIC UNLOCK SEQUENCE: Starting unlock sequence ***\n");
         pr_info("*** VIC UNLOCK: Initial register 0x0 value = 0x%08x ***\n", readl(vic_regs + 0x0));
