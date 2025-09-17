@@ -1201,6 +1201,52 @@ int tisp_init(void *sensor_info, char *param_name)
     system_reg_write(0x1c, 8);
     system_reg_write(0x800, 1);
 
+    /* Binary Ninja: CRITICAL - Initialize all ISP sub-modules */
+    pr_info("*** tisp_init: INITIALIZING ISP SUB-MODULES ***\n");
+
+    /* Binary Ninja: Initialize all tiziano sub-modules in correct order */
+    tiziano_ae_init(sensor_params.height, sensor_params.width, sensor_params.fps);
+    tiziano_awb_init(sensor_params.height, sensor_params.width);
+    tiziano_gamma_init(sensor_params.width, sensor_params.height, sensor_params.fps);
+    tiziano_gib_init();
+    tiziano_lsc_init();
+    tiziano_ccm_init();
+    tiziano_dmsc_init();
+    tiziano_sharpen_init();
+    tiziano_sdns_init();
+    tiziano_mdns_init(sensor_params.width, sensor_params.height);
+    tiziano_clm_init();
+    tiziano_dpc_init();
+    tiziano_hldc_init();
+    tiziano_defog_init(sensor_params.width, sensor_params.height);
+    tiziano_adr_init(sensor_params.width, sensor_params.height);
+    tiziano_af_init(sensor_params.height, sensor_params.width);
+    tiziano_bcsh_init();
+    tiziano_ydns_init();
+    tiziano_rdns_init();
+
+    /* Binary Ninja: WDR initialization if enabled */
+    if (sensor_params.mode == 1) {  /* WDR mode */
+        pr_info("*** tisp_init: WDR MODE ENABLED - Initializing WDR components ***\n");
+        tiziano_wdr_init(sensor_params.width, sensor_params.height);
+        tisp_gb_init();
+        /* Enable WDR for all sub-modules */
+        tisp_dpc_wdr_en(1);
+        tisp_lsc_wdr_en(1);
+        tisp_gamma_wdr_en(1);
+        tisp_sharpen_wdr_en(1);
+        tisp_ccm_wdr_en(1);
+        tisp_bcsh_wdr_en(1);
+        tisp_rdns_wdr_en(1);
+        tisp_adr_wdr_en(1);
+        tisp_defog_wdr_en(1);
+        tisp_mdns_wdr_en(1);
+        tisp_dmsc_wdr_en(1);
+        tisp_ae_wdr_en(1);
+        tisp_sdns_wdr_en(1);
+        pr_info("*** tisp_init: WDR COMPONENTS INITIALIZED ***\n");
+    }
+
     /* Binary Ninja: Initialize event system and callbacks */
     pr_info("*** tisp_init: INITIALIZING ISP EVENT SYSTEM ***\n");
     tisp_event_init();
