@@ -3743,7 +3743,7 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     tiziano_ae_init_exp_th();
     
     /* Binary Ninja EXACT: tiziano_ae_para_addr() */
-    tiziano_ae_para_addr();
+    (void)tiziano_ae_para_addr();
     
     /* Binary Ninja EXACT: *data_d04c4 = arg3 (height parameter) */
     *data_d04c4 = height;
@@ -3828,6 +3828,7 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     extern int ae1_interrupt_hist(void);
     extern int ae1_interrupt_static(void);
     extern int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3, uint32_t param4, uint32_t *lut_array, uint32_t *nodes_count);
+    extern void *tiziano_ae_para_addr(void);
 
     /* Binary Ninja EXACT: system_irq_func_set(0x1b, ae0_interrupt_hist) */
     system_irq_func_set(0x1b, (void(*)(void))ae0_interrupt_hist);
