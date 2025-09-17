@@ -3263,6 +3263,9 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                     case 0x20007401: /* Set parameter configuration */
                     {
                         /* Binary Ninja: Complex parameter setting logic */
+                        int *param_ptr;
+                        int param_type;
+
                         if (!tisp_par_ioctl) {
                             pr_err("tisp_code_tuning_ioctl: Parameter buffer not allocated\n");
                             return -ENOMEM;
@@ -3274,8 +3277,8 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                         }
 
                         /* Binary Ninja: Switch on parameter type for setting */
-                        int *param_ptr = (int *)tisp_par_ioctl;
-                        int param_type = *param_ptr;
+                        param_ptr = (int *)tisp_par_ioctl;
+                        param_type = *param_ptr;
 
                         pr_debug("tisp_code_tuning_ioctl: Set parameter type %d\n", param_type);
 
