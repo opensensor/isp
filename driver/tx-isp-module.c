@@ -7861,10 +7861,41 @@ int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint
 
         /* CRITICAL FIX: Create a dummy completed buffer for VBM compatibility */
         /* This handles the case where VBM is managing buffers directly */
-        if (buffer_addr != 0x0) {
+        if (buffer_addr != 0x0 && state->vbm_buffer_addresses) {
             pr_info("*** VIC BUFFER MGMT: Creating dummy completed buffer for VBM (addr=0x%x) ***\n", buffer_addr);
 
-            /* Just wake up waiting DQBUF processes - VBM will handle the buffer details */
+            /* Find which VBM buffer index matches this address */
+            int buffer_index = -1;
+            for (int i = 0; i < state->vbm_buffer_count; i++) {
+                if (state->vbm_buffer_addresses[i] == buffer_addr) {
+                    buffer_index = i;
+                    break;
+                }
+            }
+
+            if (buffer_index >= 0) {
+                /* Create a dummy video_buffer for DQBUF compatibility */
+                struct video_buffer *dummy_buffer = kzalloc(sizeof(struct video_buffer), GFP_ATOMIC);
+                if (dummy_buffer) {
+                    dummy_buffer->index = buffer_index;
+                    dummy_buffer->flags = 2; /* Completed state */
+                    dummy_buffer->data = (void *)(uintptr_t)buffer_addr;
+                    dummy_buffer->status = state->sequence++;
+                    dummy_buffer->type = 1; /* V4L2_BUF_TYPE_VIDEO_CAPTURE */
+                    dummy_buffer->memory = 2; /* V4L2_MEMORY_USERPTR */
+
+                    /* Add to completed buffers list */
+                    spin_lock(&state->queue_lock);
+                    list_add_tail(&dummy_buffer->list, &state->completed_buffers);
+                    state->completed_count++;
+                    spin_unlock(&state->queue_lock);
+
+                    pr_info("*** VIC BUFFER MGMT: Created dummy completed buffer[%d] for VBM (addr=0x%x) ***\n",
+                            buffer_index, buffer_addr);
+                }
+            }
+
+            /* Wake up waiting DQBUF processes */
             wake_up_interruptible(&state->frame_wait);
 
             /* Mark frame as ready for immediate DQBUF processing */
