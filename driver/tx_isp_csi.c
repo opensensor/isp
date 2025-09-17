@@ -577,29 +577,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     /* Binary Ninja: int32_t $s2_1 = *($v1_5 + 0x14) */
                     int interface_type = sensor_attr->dbus_type;
 
-                    pr_info("*** CSI DEBUG: interface_type = %d (expected 1 for MIPI) ***\n", interface_type);
-
-                    /* Declare memory mapping variables at proper scope */
-                    void __iomem *isp_w02_base = NULL;  /* 0x133e0000 - VIC/CSI PHY shared */
-                    void __iomem *isp_w01_base = NULL;  /* 0x10023000 - VIC control */
-                    void __iomem *isp_m0_base = NULL;   /* 0x13300000 - Main ISP core */
-                    void __iomem *isp_csi_base = NULL;  /* 0x10022000 - CSI control */
-
                     if (interface_type == 1) {
-                        /* Map all required memory regions for MIPI interface */
-                        isp_w02_base = ioremap(0x133e0000, 0x10000);
-                        isp_w01_base = ioremap(0x10023000, 0x1000);
-                        isp_m0_base = ioremap(0x13300000, 0x100000);
-                        isp_csi_base = ioremap(0x10022000, 0x1000);
-
-                        if (!isp_w02_base || !isp_w01_base || !isp_m0_base || !isp_csi_base) {
-                            pr_err("*** CRITICAL ERROR: Failed to map CSI PHY memory regions ***\n");
-                            if (isp_w02_base) iounmap(isp_w02_base);
-                            if (isp_w01_base) iounmap(isp_w01_base);
-                            if (isp_m0_base) iounmap(isp_m0_base);
-                            if (isp_csi_base) iounmap(isp_csi_base);
-                            return -ENOMEM;
-                        }
                         /* MIPI interface configuration */
                         pr_info("*** CRITICAL: CSI MIPI interface configuration ***\n");
 
@@ -687,41 +665,41 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         pr_info("*** CRITICAL: CSI PHY timing configuration - frame_rate=%d, phy_timing=%d ***\n",
                                 frame_rate, phy_timing_value);
 
-                        /* CRITICAL FIX: Complete CSI PHY initialization sequence from reference trace */
-                        /* Reference trace shows CSI PHY writes to 4 different memory regions in sequence */
+                        /* Binary Ninja: Configure PHY timing registers */
+                        void __iomem *phy_base = csi_dev->phy_regs;
+                        if (!phy_base) {
+                            /* Map PHY registers if not already mapped */
+                            phy_base = ioremap(0x13310000, 0x1000);
+                            csi_dev->phy_regs = phy_base;
+                        }
 
-                        pr_info("*** COMPLETE CSI PHY INITIALIZATION: All memory regions mapped ***\n");
-                        pr_info("*** isp-w02: %p, isp-w01: %p, isp-m0: %p, isp-csi: %p ***\n",
-                                isp_w02_base, isp_w01_base, isp_m0_base, isp_csi_base);
+                        if (phy_base) {
+                            /* Binary Ninja: Configure critical PHY timing registers */
+                            u32 current_val = readl(phy_base + 0x160);
+                            u32 new_val = (current_val & 0xfffffff0) | (phy_timing_value & 0xf);
+                            writel(new_val, phy_base + 0x160);
+                            wmb();
 
-                        /* PHASE 1: isp-w02 region writes (from reference trace lines 1-31) */
-                        /* Binary Ninja: EXACT reference driver CSI PHY initialization */
-                        pr_info("*** PHASE 1: isp-w02 CSI PHY Control writes - EXACT Binary Ninja sequence ***\n");
-                        writel(0x7800438, isp_w02_base + 0x4);
-                        writel(0x2, isp_w02_base + 0xc);
-                        writel(0x2, isp_w02_base + 0x14);
-                        writel(0xf00, isp_w02_base + 0x18);
-                        writel(0x800800, isp_w02_base + 0x60);
-                        writel(0x9d09d0, isp_w02_base + 0x64);
-                        writel(0x6002, isp_w02_base + 0x70);
-                        writel(0x7003, isp_w02_base + 0x74);
-                        writel(0xeb8080, isp_w02_base + 0xc0);
-                        writel(0x108080, isp_w02_base + 0xc4);
-                        writel(0x29f06e, isp_w02_base + 0xc8);
-                        writel(0x913622, isp_w02_base + 0xcc);
-                        writel(0x515af0, isp_w02_base + 0xd0);
-                        writel(0xaaa610, isp_w02_base + 0xd4);
-                        writel(0xd21092, isp_w02_base + 0xd8);
-                        writel(0x6acade, isp_w02_base + 0xdc);
-                        writel(0xeb8080, isp_w02_base + 0xe0);
-                        writel(0x108080, isp_w02_base + 0xe4);
-                        writel(0x29f06e, isp_w02_base + 0xe8);
-                        writel(0x913622, isp_w02_base + 0xec);
-                        writel(0x515af0, isp_w02_base + 0xf0);
-                        writel(0xaaa610, isp_w02_base + 0xf4);
-                        writel(0xd21092, isp_w02_base + 0xf8);
-                        writel(0x6acade, isp_w02_base + 0xfc);
-                        wmb();
+                            /* Mirror to other PHY timing registers */
+                            writel(new_val, phy_base + 0x1e0);
+                            wmb();
+                            writel(new_val, phy_base + 0x260);
+                            wmb();
+
+                            pr_info("*** CSI PHY timing configured: 0x160=0x%08x, 0x1e0=0x%08x, 0x260=0x%08x ***\n",
+                                    readl(phy_base + 0x160), readl(phy_base + 0x1e0), readl(phy_base + 0x260));
+
+                            /* Binary Ninja: Additional PHY configuration */
+                            /* *$v0_8 = 0x7d */
+                            writel(0x7d, phy_base + 0x0);
+                            wmb();
+
+                            /* *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
+                            writel(0x3f, phy_base + 0x128);
+                            wmb();
+
+                            pr_info("*** CSI PHY base configuration: 0x0=0x7d, 0x128=0x3f ***\n");
+                        }
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
                         writel(1, csi_dev->csi_regs + 0x10);
@@ -734,94 +712,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         pr_info("*** CRITICAL: CSI MIPI configuration complete - control limit error should be FIXED ***\n");
 
-                        /* Binary Ninja: EXACT reference driver CSI PHY initialization sequence */
-                            /* Old duplicate code removed - now handled by complete 6-phase initialization above */
-                            /* PHASE 2: isp-w02 CSI PHY Config writes (from reference trace lines 25-31) */
-                            pr_info("*** PHASE 2: isp-w02 CSI PHY Config writes ***\n");
-                            writel(0x2d0, isp_w02_base + 0x100);
-                            writel(0x2c000, isp_w02_base + 0x10c);
-                            writel(0x7800000, isp_w02_base + 0x110);
-                            writel(0x10, isp_w02_base + 0x120);
-                            writel(0x100010, isp_w02_base + 0x1a4);
-                            writel(0x4440, isp_w02_base + 0x1a8);
-                            writel(0x10, isp_w02_base + 0x1b0);
-                            wmb();
-
-                            /* PHASE 3: isp-w01 writes (from reference trace lines 32-34) */
-                            pr_info("*** PHASE 3: isp-w01 CSI PHY Control writes ***\n");
-                            writel(0x3130322a, isp_w01_base + 0x0);
-                            writel(0x1, isp_w01_base + 0x4);
-                            writel(0x200, isp_w01_base + 0x14);
-                            wmb();
-
-                            /* PHASE 4: isp-m0 writes (from reference trace lines 35-114) */
-                            pr_info("*** PHASE 4: isp-m0 CSI PHY Control writes ***\n");
-                            writel(0x54560031, isp_m0_base + 0x0);
-                            writel(0x7800438, isp_m0_base + 0x4);
-                            writel(0x1, isp_m0_base + 0x8);
-                            writel(0x80700008, isp_m0_base + 0xc);
-                            writel(0x1, isp_m0_base + 0x28);
-                            writel(0x400040, isp_m0_base + 0x2c);
-                            writel(0x1, isp_m0_base + 0x90);
-                            writel(0x1, isp_m0_base + 0x94);
-                            writel(0x30000, isp_m0_base + 0x98);
-                            writel(0x58050000, isp_m0_base + 0xa8);
-                            writel(0x58050000, isp_m0_base + 0xac);
-                            writel(0x40000, isp_m0_base + 0xc4);
-                            writel(0x400040, isp_m0_base + 0xc8);
-                            writel(0x100, isp_m0_base + 0xcc);
-                            writel(0xc, isp_m0_base + 0xd4);
-                            writel(0xffffff, isp_m0_base + 0xd8);
-                            writel(0x100, isp_m0_base + 0xe0);
-                            writel(0x400040, isp_m0_base + 0xe4);
-                            writel(0xff808000, isp_m0_base + 0xf0);
-                            wmb();
-
-                            /* PHASE 5: isp-m0 CSI PHY Config writes */
-                            pr_info("*** PHASE 5: isp-m0 CSI PHY Config writes ***\n");
-                            writel(0x80007000, isp_m0_base + 0x110);
-                            writel(0x777111, isp_m0_base + 0x114);
-                            wmb();
-
-                            /* PHASE 6: Replace the old phy_base writes with isp-csi writes */
-                            pr_info("*** PHASE 6: isp-csi CSI PHY Control writes (replacing old phy_base) ***\n");
-                            /* These were the old phy_base writes - now using correct isp_csi_base */
-                            writel(0x7d, isp_csi_base + 0x0);
-                            writel(0xe3, isp_csi_base + 0x4);
-                            writel(0xa0, isp_csi_base + 0x8);
-                            writel(0x83, isp_csi_base + 0xc);
-                            writel(0xfa, isp_csi_base + 0x10);
-                            writel(0x88, isp_csi_base + 0x1c);
-                            writel(0x4e, isp_csi_base + 0x20);
-                            writel(0xdd, isp_csi_base + 0x24);
-                            writel(0x84, isp_csi_base + 0x28);
-                            writel(0x5e, isp_csi_base + 0x2c);
-                            writel(0xf0, isp_csi_base + 0x30);
-                            writel(0xc0, isp_csi_base + 0x34);
-                            writel(0x36, isp_csi_base + 0x38);
-                            writel(0xdb, isp_csi_base + 0x3c);
-                            writel(0x3, isp_csi_base + 0x40);
-                            writel(0x80, isp_csi_base + 0x44);
-                            writel(0x10, isp_csi_base + 0x48);
-                            writel(0x3, isp_csi_base + 0x54);
-                            writel(0xff, isp_csi_base + 0x58);
-                            writel(0x42, isp_csi_base + 0x5c);
-                            writel(0x1, isp_csi_base + 0x60);
-                            writel(0xc0, isp_csi_base + 0x64);
-                            writel(0xc0, isp_csi_base + 0x68);
-                            writel(0x78, isp_csi_base + 0x6c);
-                            writel(0x43, isp_csi_base + 0x70);
-                            writel(0x33, isp_csi_base + 0x74);
-                            writel(0x1f, isp_csi_base + 0x80);
-                            writel(0x61, isp_csi_base + 0x88);
-                            wmb();
-                        }
-
-                        pr_info("*** COMPLETE CSI PHY INITIALIZATION: All 6 phases completed successfully ***\n");
-                        pr_info("*** CSI PHY should now respond properly to register reads/writes ***\n");
-
-                        v0_17 = 2;
-                    }
                     } else if (interface_type == 2) {
                         /* DVP interface */
                         pr_info("CSI: DVP interface configuration\n");
@@ -846,12 +736,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         pr_err("CSI: Unsupported interface type %d\n", interface_type);
                         v0_17 = 3;
                     }
-
-                    /* Clean up memory mappings */
-                    if (isp_w02_base) iounmap(isp_w02_base);
-                    if (isp_w01_base) iounmap(isp_w01_base);
-                    if (isp_m0_base) iounmap(isp_m0_base);
-                    if (isp_csi_base) iounmap(isp_csi_base);
                 }
 
                 /* Binary Ninja: *($s0_1 + 0x128) = $v0_17 */
@@ -861,6 +745,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                 return 0;
             }
         }
+    }
 
     return result;
 }
