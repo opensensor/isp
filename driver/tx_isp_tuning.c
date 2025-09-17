@@ -100,8 +100,8 @@ static uint32_t mdns_y_ass_wei_adj_value1_intp[16];
 static uint32_t mdns_c_false_edg_thres1_intp[16];
 
 /* WDR Control Variables */
-static uint32_t param_wdr_tool_control_array = 0;
-static uint32_t param_wdr_gam_y_array = 0;
+/* static uint32_t param_wdr_tool_control_array = 0; - defined later as array */
+/* static uint32_t param_wdr_gam_y_array = 0; - defined later as array */
 static uint32_t mdns_y_pspa_ref_median_win_opt_array = 0;
 
 /* Binary Ninja Data Section Variables */
@@ -4321,15 +4321,6 @@ int tisp_af_param_array_get(int param_id, void *out_buf, int *size_buf)
 int tisp_hldc_param_array_get(int param_id, void *out_buf, int *size_buf)
 {
     pr_debug("tisp_hldc_param_array_get: ID=0x%x (stub)\n", param_id);
-    if (out_buf && size_buf) {
-        *size_buf = 0;
-    }
-    return 0;
-}
-
-int tisp_ae_param_array_get(int param_id, void *out_buf, int *size_buf)
-{
-    pr_debug("tisp_ae_param_array_get: ID=0x%x (stub)\n", param_id);
     if (out_buf && size_buf) {
         *size_buf = 0;
     }
