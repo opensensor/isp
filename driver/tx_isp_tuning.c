@@ -3801,6 +3801,13 @@ int apical_isp_max_dgain_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ct
     return 0;
 }
 
+int tisp_g_af_zone(void)
+{
+    /* Binary Ninja: tisp_af_get_zone(); return 0 */
+    tisp_af_get_zone();
+    return 0;
+}
+
 int isp_core_tuning_release(struct tx_isp_dev *dev)
 {
     struct isp_tuning_data *tuning = ourISPdev->tuning_data;
