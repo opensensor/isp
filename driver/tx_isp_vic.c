@@ -1090,24 +1090,49 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     void __iomem *csi_base = main_isp_base + 0x10000;
 
     /* STEP 1: Enable clocks - Critical for VIC operation */
+    pr_info("*** CRITICAL: Enabling all VIC-related clocks ***\n");
+
     cgu_isp_clk = clk_get(NULL, "cgu_isp");
     if (!IS_ERR(cgu_isp_clk)) {
         clk_set_rate(cgu_isp_clk, 100000000);
         ret = clk_prepare_enable(cgu_isp_clk);
         if (ret == 0) {
             pr_info("CGU_ISP clock enabled at 100MHz\n");
+        } else {
+            pr_err("Failed to enable CGU_ISP clock: %d\n", ret);
         }
+    } else {
+        pr_err("Failed to get CGU_ISP clock\n");
     }
 
     isp_clk = clk_get(NULL, "isp");
     if (!IS_ERR(isp_clk)) {
-        clk_prepare_enable(isp_clk);
+        ret = clk_prepare_enable(isp_clk);
+        if (ret == 0) {
+            pr_info("ISP clock enabled\n");
+        } else {
+            pr_err("Failed to enable ISP clock: %d\n", ret);
+        }
+    } else {
+        pr_err("Failed to get ISP clock\n");
     }
 
     csi_clk = clk_get(NULL, "csi");
     if (!IS_ERR(csi_clk)) {
-        clk_prepare_enable(csi_clk);
+        ret = clk_prepare_enable(csi_clk);
+        if (ret == 0) {
+            pr_info("CSI clock enabled\n");
+        } else {
+            pr_err("Failed to enable CSI clock: %d\n", ret);
+        }
+    } else {
+        pr_err("Failed to get CSI clock\n");
     }
+
+    /* CRITICAL: Allow clocks to stabilize before VIC hardware access */
+    pr_info("*** Waiting for VIC clocks to stabilize ***\n");
+    udelay(2000);  /* 2ms for clock stabilization */
+    pr_info("*** VIC clocks stabilized - VIC hardware should now respond properly ***\n");
 
     /* STEP 2: CPM register setup */
     cpm_regs = ioremap(0x10000000, 0x1000);
@@ -1162,57 +1187,32 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
         
-        /* CRITICAL FIX: VIC hardware initialization before first unlock sequence */
-        pr_info("*** VIC UNLOCK SEQUENCE: Starting first unlock sequence with hardware init ***\n");
+        /* Unlock sequence - Binary Ninja 00010484-00010490 - EXACT REFERENCE IMPLEMENTATION */
+        pr_info("*** VIC UNLOCK SEQUENCE: Starting unlock sequence ***\n");
         pr_info("*** VIC UNLOCK: Initial register 0x0 value = 0x%08x ***\n", readl(vic_regs + 0x0));
 
-        /* Step 1: Ensure VIC hardware is in clean state */
-        writel(0, vic_regs + 0x0);  /* Clear control register */
-        wmb();
-        udelay(50);  /* Allow hardware to settle */
-
-        /* Step 2: Initialize VIC interrupt system first */
-        writel(0, vic_regs + 0x1e0);  /* Clear interrupt enables */
-        writel(0xffffffff, vic_regs + 0x1e8);  /* Clear all interrupt flags */
-        wmb();
-
-        pr_info("*** VIC UNLOCK: Hardware initialized, starting unlock sequence ***\n");
-
-        /* Unlock sequence - Binary Ninja 00010484-00010490 */
         writel(2, vic_regs + 0x0);
         wmb();
-        udelay(10);  /* Allow hardware to process */
         pr_info("*** VIC UNLOCK: After writing 2, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
         writel(4, vic_regs + 0x0);
         wmb();
-        udelay(10);  /* Allow hardware to process */
         pr_info("*** VIC UNLOCK: After writing 4, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
-        /* Wait for unlock - Binary Ninja 000104b8 - FIXED: Better error handling */
+        /* Wait for unlock - Binary Ninja 000104b8 - EXACT REFERENCE IMPLEMENTATION */
         timeout = 10000;  /* 10ms timeout */
         while (readl(vic_regs + 0x0) != 0) {
             udelay(1);
             if (--timeout == 0) {
                 u32 reg_val = readl(vic_regs + 0x0);
-                pr_err("*** VIC UNLOCK TIMEOUT: Register 0x0 = 0x%08x (expected 0x0) ***\n", reg_val);
-                pr_err("*** VIC UNLOCK: Trying to force unlock ***\n");
-
-                /* Try to force unlock by clearing register */
-                writel(0, vic_regs + 0x0);
-                wmb();
-                udelay(100);
-
-                if (readl(vic_regs + 0x0) == 0) {
-                    pr_info("*** VIC UNLOCK: Force unlock succeeded ***\n");
-                } else {
-                    pr_err("*** VIC UNLOCK: Force unlock failed, continuing anyway ***\n");
-                }
+                pr_err("*** CRITICAL: VIC unlock timeout! Register 0x0 = 0x%08x (expected 0x0) ***\n", reg_val);
+                pr_err("*** This indicates VIC hardware is not responding properly ***\n");
+                pr_err("*** Continuing anyway to prevent infinite hang ***\n");
                 break;  /* Continue instead of returning error to prevent hang */
             }
         }
 
-        pr_info("*** VIC UNLOCK: First unlock sequence completed, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
+        pr_info("*** VIC UNLOCK: Unlock sequence completed, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
         /* Enable VIC - Binary Ninja 000107d4 */
         pr_info("*** VIC UNLOCK: Enabling VIC (writing 1 to register 0x0) ***\n");
