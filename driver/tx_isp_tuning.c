@@ -2352,6 +2352,11 @@ int tisp_ydns_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_bcsh_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_clm_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_sharpen_param_array_get(int param_id, void *out_buf, int *size_buf);
+int tisp_sdns_param_array_get(int param_id, void *out_buf, int *size_buf);
+int tisp_af_param_array_get(int param_id, void *out_buf, int *size_buf);
+int tisp_hldc_param_array_get(int param_id, void *out_buf, int *size_buf);
+int tisp_ae_param_array_get(int param_id, void *out_buf, int *size_buf);
+int tisp_awb_param_array_get(int param_id, void *out_buf, int *size_buf);
 
 int tisp_rdns_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_adr_get_par_cfg(void *out_buf, void *size_buf);
@@ -4305,6 +4310,51 @@ int tisp_clm_param_array_get(int param_id, void *out_buf, int *size_buf)
 int tisp_sharpen_param_array_get(int param_id, void *out_buf, int *size_buf)
 {
     pr_debug("tisp_sharpen_param_array_get: ID=0x%x (stub)\n", param_id);
+    if (out_buf && size_buf) {
+        *size_buf = 0;
+    }
+    return 0;
+}
+
+int tisp_sdns_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    pr_debug("tisp_sdns_param_array_get: ID=0x%x (stub)\n", param_id);
+    if (out_buf && size_buf) {
+        *size_buf = 0;
+    }
+    return 0;
+}
+
+int tisp_af_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    pr_debug("tisp_af_param_array_get: ID=0x%x (stub)\n", param_id);
+    if (out_buf && size_buf) {
+        *size_buf = 0;
+    }
+    return 0;
+}
+
+int tisp_hldc_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    pr_debug("tisp_hldc_param_array_get: ID=0x%x (stub)\n", param_id);
+    if (out_buf && size_buf) {
+        *size_buf = 0;
+    }
+    return 0;
+}
+
+int tisp_ae_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    pr_debug("tisp_ae_param_array_get: ID=0x%x (stub)\n", param_id);
+    if (out_buf && size_buf) {
+        *size_buf = 0;
+    }
+    return 0;
+}
+
+int tisp_awb_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    pr_debug("tisp_awb_param_array_get: ID=0x%x (stub)\n", param_id);
     if (out_buf && size_buf) {
         *size_buf = 0;
     }
