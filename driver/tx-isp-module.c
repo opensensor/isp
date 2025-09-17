@@ -2712,38 +2712,23 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         pr_info("*** Channel %d: QBUF - Queue buffer index=%d ***\n", channel, buffer.index);
 
-        /* Binary Ninja: Get buffer from array - arg3 = $s0 + ((arg3 + 0x3a) << 2) */
-        /* This accesses the buffer array at offset calculated from buffer index */
-        void **buffer_array_entry = (void **)((char *)fcd + ((buffer.index + 0x3a) << 2));
-        void *buffer_struct = *((void **)((char *)buffer_array_entry + 0x24));
+        /* SAFE: Use our buffer array instead of unsafe pointer arithmetic */
+        if (buffer.index >= 64) {
+            pr_err("*** QBUF: Buffer index %d out of range ***\n", buffer.index);
+            return -EINVAL;
+        }
 
+        void *buffer_struct = fcd->buffer_array[buffer.index];
         if (!buffer_struct) {
-            pr_err("*** QBUF: Buffer struct is NULL for index %d ***\n", buffer.index);
+            pr_err("*** QBUF: No buffer allocated for index %d ***\n", buffer.index);
             return -EINVAL;
         }
 
-        pr_info("*** Channel %d: QBUF - Got buffer struct %p for index %d ***\n", channel, buffer_struct, buffer.index);
+        pr_info("*** Channel %d: QBUF - Using buffer struct %p for index %d ***\n", channel, buffer_struct, buffer.index);
 
-        /* Binary Ninja: Set buffer state - *($s1_5 + 0x4c) = 1 */
-        *((int *)((char *)buffer_struct + 0x4c)) = 1;
-
-        /* Binary Ninja: Buffer validation checks */
-        int buffer_field = *((int *)((char *)&buffer + 0x48));  /* var_48 */
-        int buffer_width = *((int *)((char *)&buffer + 0x40));  /* var_40 */
-
-        if (buffer_field != state->field) {
-            pr_err("*** QBUF: Field mismatch ***\n");
-            return -EINVAL;
-        }
-
-        if (buffer_width != state->width) {
-            pr_err("*** QBUF: Width mismatch ***\n");
-            return -EINVAL;
-        }
-
-        /* Binary Ninja: Check buffer flags - if (*($s1_5 + 0x48) != 0) */
-        if (*((int *)((char *)buffer_struct + 0x48)) != 0) {
-            pr_err("*** QBUF: Buffer already in use ***\n");
+        /* SAFE: Basic buffer validation without unsafe field access */
+        if (buffer.field != fcd->field) {
+            pr_err("*** QBUF: Field mismatch: got %d, expected %d ***\n", buffer.field, fcd->field);
             return -EINVAL;
         }
 
@@ -3537,9 +3522,21 @@ static int create_frame_channel_devices(void)
         frame_channels[i].miscdev.minor = MISC_DYNAMIC_MINOR;
         frame_channels[i].miscdev.name = device_name;
         frame_channels[i].miscdev.fops = &frame_channel_fops;
-        
+
         // Initialize channel state
         memset(&frame_channels[i].state, 0, sizeof(frame_channels[i].state));
+
+        /* Initialize Binary Ninja buffer management fields */
+        mutex_init(&frame_channels[i].buffer_mutex);
+        spin_lock_init(&frame_channels[i].buffer_queue_lock);
+        frame_channels[i].buffer_queue_head = &frame_channels[i].buffer_queue_base;
+        frame_channels[i].buffer_queue_base = &frame_channels[i].buffer_queue_base;
+        frame_channels[i].buffer_queue_count = 0;
+        frame_channels[i].streaming_flags = 0;
+        frame_channels[i].vic_subdev = NULL;
+        frame_channels[i].buffer_type = 1;  /* V4L2_BUF_TYPE_VIDEO_CAPTURE */
+        frame_channels[i].field = 1;        /* V4L2_FIELD_NONE */
+        memset(frame_channels[i].buffer_array, 0, sizeof(frame_channels[i].buffer_array));
         
         ret = misc_register(&frame_channels[i].miscdev);
         if (ret < 0) {
