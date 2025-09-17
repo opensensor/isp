@@ -2679,12 +2679,44 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("Channel %d: MMAP allocation - %d buffers of %u bytes each\n",
                        channel, reqbuf.count, buffer_size);
                 
-                /* CRITICAL FIX: Don't allocate any actual buffers in driver! */
-                /* The client (libimp) will allocate buffers and pass them via QBUF */
-                pr_info("Channel %d: MMAP mode - %d buffer slots reserved (no early allocation)\n",
-                       channel, reqbuf.count);
-                
-                /* Just track the buffer count - no actual allocation */
+                /* CRITICAL FIX: Allocate real DMA buffers like reference driver */
+                pr_info("Channel %d: MMAP mode - allocating %d DMA buffers of %u bytes each\n",
+                       channel, reqbuf.count, buffer_size);
+
+                /* Allocate DMA buffer array to store real buffer addresses */
+                if (!state->buffer_addresses) {
+                    pr_err("*** Channel %d: buffer_addresses array not allocated ***\n", channel);
+                    return -ENOMEM;
+                }
+
+                /* Allocate real DMA buffers for each buffer slot */
+                for (int i = 0; i < reqbuf.count; i++) {
+                    void *virt_addr;
+                    dma_addr_t dma_addr;
+
+                    /* Use DMA coherent allocation like reference driver */
+                    virt_addr = dma_alloc_coherent(NULL, buffer_size, &dma_addr, GFP_KERNEL);
+                    if (!virt_addr) {
+                        pr_err("*** Channel %d: Failed to allocate DMA buffer %d ***\n", channel, i);
+
+                        /* Free previously allocated buffers */
+                        for (int j = 0; j < i; j++) {
+                            if (state->buffer_addresses[j] != 0) {
+                                dma_free_coherent(NULL, buffer_size,
+                                    phys_to_virt(state->buffer_addresses[j]),
+                                    state->buffer_addresses[j]);
+                                state->buffer_addresses[j] = 0;
+                            }
+                        }
+                        return -ENOMEM;
+                    }
+
+                    /* Store the real DMA address */
+                    state->buffer_addresses[i] = (uint32_t)dma_addr;
+
+                    pr_info("*** Channel %d: Allocated DMA buffer[%d] virt=%p phys=0x%x size=%u ***\n",
+                            channel, i, virt_addr, (uint32_t)dma_addr, buffer_size);
+                }
                 
             } else if (reqbuf.memory == 2) { /* V4L2_MEMORY_USERPTR - client allocates */
                 pr_info("Channel %d: USERPTR mode - client will provide buffers\n", channel);
@@ -2705,6 +2737,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             /* CRITICAL FIX: Allocate buffer address array to store real addresses */
             if (state->buffer_addresses) {
+                pr_info("*** Channel %d: REQBUFS freeing existing buffer address array ***\n", channel);
                 kfree(state->buffer_addresses);
             }
             state->buffer_addresses = kzalloc(reqbuf.count * sizeof(uint32_t), GFP_KERNEL);
@@ -2713,8 +2746,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 state->buffer_count = 0;
                 return -ENOMEM;
             }
-            pr_info("*** Channel %d: Allocated buffer address array for %d buffers ***\n",
-                    channel, reqbuf.count);
+            pr_info("*** Channel %d: REQBUFS allocated buffer address array for %d buffers at %p ***\n",
+                    channel, reqbuf.count, state->buffer_addresses);
 
             /* Set buffer type from REQBUFS request */
             fcd->buffer_type = reqbuf.type;
