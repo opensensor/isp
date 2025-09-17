@@ -1329,6 +1329,13 @@ int frame_channel_open(struct inode *inode, struct file *file)
     /* Initialize channel state - safe to call multiple times in kernel 3.10 */
     spin_lock_init(&fcd->state.buffer_lock);
     init_waitqueue_head(&fcd->state.frame_wait);
+
+    /* CRITICAL FIX: Initialize buffer queues like reference driver */
+    INIT_LIST_HEAD(&fcd->state.queued_buffers);
+    INIT_LIST_HEAD(&fcd->state.completed_buffers);
+    spin_lock_init(&fcd->state.queue_lock);
+    fcd->state.queued_count = 0;
+    fcd->state.completed_count = 0;
     
     /* Set default format based on channel if not already set */
     if (fcd->state.width == 0) {
