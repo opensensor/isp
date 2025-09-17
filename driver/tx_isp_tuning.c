@@ -5745,7 +5745,7 @@ static void tisp_set_sensor_integration_time_short(uint32_t time);
 static void tisp_set_sensor_analog_gain_short(void);
 /* tiziano_deflicker_expt implemented as exported function below */
 static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
-static void system_irq_func_set(int irq_id, void (*handler)(void));
+/* REMOVED: Conflicting static declaration - use extern from tx_isp_core.c */
 void private_spin_lock_init(spinlock_t *lock);
 static uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
 static uint32_t tisp_math_exp2(uint32_t value, uint32_t precision, uint32_t shift);
