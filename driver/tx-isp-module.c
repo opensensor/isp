@@ -2893,41 +2893,42 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d ***\n",
                 channel, buffer.index, buffer_phys_addr, buffer_size);
 
-        /* CRITICAL FIX: Get buffer structure and set state like reference driver */
-        struct frame_buffer *frame_buffer = NULL;
+        /* CRITICAL FIX: Get video_buffer structure and set state like reference driver */
+        struct video_buffer *video_buffer = NULL;
 
         if (state->buffer_addresses && buffer.index < state->buffer_count && state->buffer_addresses[buffer.index] != 0) {
-            frame_buffer = (struct frame_buffer *)state->buffer_addresses[buffer.index];
-            pr_info("*** Channel %d: QBUF found buffer structure[%d] at %p ***\n",
-                    channel, buffer.index, frame_buffer);
+            video_buffer = (struct video_buffer *)state->buffer_addresses[buffer.index];
+            pr_info("*** Channel %d: QBUF found video_buffer structure[%d] at %p ***\n",
+                    channel, buffer.index, video_buffer);
         } else {
-            pr_warn("*** Channel %d: QBUF no buffer structure found for index %d ***\n",
+            pr_warn("*** Channel %d: QBUF no video_buffer structure found for index %d ***\n",
                     channel, buffer.index);
             return -EINVAL;
         }
 
         /* Reference driver QBUF logic: Set buffer to queued state and add to queue */
-        frame_buffer->state = 1; // Queued state (0x4c = 1 in reference driver)
-        frame_buffer->phys_addr = buffer_phys_addr; // Store the buffer address from application
-        frame_buffer->bytesused = buffer_size;
-        frame_buffer->flags = buffer.flags;
+        video_buffer->flags = 1; // Queued state (flags at offset 0x48)
+        video_buffer->data = (void *)(uintptr_t)buffer_phys_addr; // Store buffer address in data pointer
+        video_buffer->index = buffer.index;
+        video_buffer->type = buffer.type;
+        video_buffer->memory = buffer.memory;
 
         /* CRITICAL: Add buffer to queued_buffers list like reference driver */
         spin_lock(&state->queue_lock);
 
         /* Initialize list entry if not already done */
-        if (frame_buffer->queue_entry.next == NULL && frame_buffer->queue_entry.prev == NULL) {
-            INIT_LIST_HEAD(&frame_buffer->queue_entry);
+        if (video_buffer->list.next == NULL && video_buffer->list.prev == NULL) {
+            INIT_LIST_HEAD(&video_buffer->list);
         }
 
         /* Add to queued buffers list */
-        list_add_tail(&frame_buffer->queue_entry, &state->queued_buffers);
+        list_add_tail(&video_buffer->list, &state->queued_buffers);
         state->queued_count++;
 
         spin_unlock(&state->queue_lock);
 
-        pr_info("*** Channel %d: QBUF buffer[%d] QUEUED, phys_addr=0x%x, queued_count=%d ***\n",
-                channel, buffer.index, buffer_phys_addr, state->queued_count);
+        pr_info("*** Channel %d: QBUF buffer[%d] QUEUED, data_addr=0x%x, queued_count=%d ***\n",
+                channel, buffer.index, (uint32_t)(uintptr_t)video_buffer->data, state->queued_count);
 
         /* CRITICAL: If streaming is active, notify VIC hardware about new buffer */
         if (state->streaming) {
