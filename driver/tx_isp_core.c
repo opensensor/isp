@@ -322,6 +322,49 @@ static void ispcore_irq_fs_work(struct work_struct *work);
 
 
 
+/* Binary Ninja: ispcore_sensor_ops_ioctl - iterate through subdevices safely */
+static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
+{
+    int result = 0;
+    int i;
+
+    if (!isp_dev) {
+        return -ENODEV;
+    }
+
+    pr_info("*** ispcore_sensor_ops_ioctl: Iterating through subdevices ***\n");
+
+    /* Binary Ninja: Iterate from arg1 + 0x38 to arg1 + 0x78 (subdevices array) */
+    for (i = 0; i < TX_ISP_SUBDEV_MAX; i++) {
+        struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+
+        if (!sd) {
+            continue;
+        }
+
+        /* Binary Ninja: Check if subdev has sensor ops with IOCTL */
+        if (sd->ops && sd->ops->sensor && sd->ops->sensor->ioctl) {
+            pr_info("*** ispcore_sensor_ops_ioctl: Calling subdev[%d] sensor IOCTL ***\n", i);
+
+            /* Call the subdev's sensor IOCTL - this is safe from work context */
+            result = sd->ops->sensor->ioctl(sd, TX_ISP_EVENT_SENSOR_FPS, NULL);
+
+            pr_info("*** ispcore_sensor_ops_ioctl: Subdev[%d] IOCTL result: %d ***\n", i, result);
+
+            if (result == 0) {
+                /* Success - continue to next subdev */
+                continue;
+            } else if (result != -ENOIOCTLCMD) {
+                /* Real error - break */
+                break;
+            }
+            /* -ENOIOCTLCMD means not supported, continue to next */
+        }
+    }
+
+    return (result == -ENOIOCTLCMD) ? 0 : result;
+}
+
 /* Frame sync work function - triggers sensor I2C communication */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
@@ -346,40 +389,10 @@ static void ispcore_irq_fs_work(struct work_struct *work)
 
         pr_info("*** ISP FRAME SYNC WORK: Calling sensor IOCTL for I2C communication ***\n");
 
-        /* CRITICAL: Get FPS from tuning data and pass to sensor with proper pointer */
-        static int fps_value = (25 << 16) | 1;  /* Static storage with default 25 FPS */
-
-        /* Update FPS value from tuning data if available */
-        if (isp_dev->tuning_data && isp_dev->tuning_data->fps_num > 0 && isp_dev->tuning_data->fps_den > 0) {
-            /* Pack FPS in format expected by sensor: (fps_num << 16) | fps_den */
-            int new_fps = (isp_dev->tuning_data->fps_num << 16) | isp_dev->tuning_data->fps_den;
-            if (new_fps != fps_value) {
-                fps_value = new_fps;
-                pr_info("*** ISP FRAME SYNC WORK: Updated FPS to %d/%d (packed: 0x%x) ***\n",
-                        isp_dev->tuning_data->fps_num, isp_dev->tuning_data->fps_den, fps_value);
-            }
-        }
-
-        /* Add memory barrier to ensure fps_value is written before use */
-        wmb();
-
-        /* Call sensor FPS IOCTL with pointer to FPS value - this triggers I2C writes to 0x41/0x42 */
-        int ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
-                                                         TX_ISP_EVENT_SENSOR_FPS, &fps_value);
-        pr_info("*** ISP FRAME SYNC WORK: Sensor FPS IOCTL result: %d (fps_value=0x%x) ***\n", ret, fps_value);
-
-        /* If FPS IOCTL fails or causes issues, try alternative sensor events */
-        if (ret != 0) {
-            pr_info("*** ISP FRAME SYNC WORK: FPS IOCTL failed, trying alternative sensor events ***\n");
-            ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
-                                                         TX_ISP_EVENT_SENSOR_EXPO, NULL);
-            pr_info("*** ISP FRAME SYNC WORK: Sensor EXPO IOCTL result: %d ***\n", ret);
-        }
-
-
-    } else {
-        pr_warn("*** ISP FRAME SYNC WORK: No sensor IOCTL available - sensor communication may fail ***\n");
-    }
+    /* Binary Ninja: Call ispcore_sensor_ops_ioctl like reference driver */
+    pr_info("*** ISP FRAME SYNC WORK: Calling ispcore_sensor_ops_ioctl (REFERENCE DRIVER BEHAVIOR) ***\n");
+    int ret = ispcore_sensor_ops_ioctl(isp_dev);
+    pr_info("*** ISP FRAME SYNC WORK: ispcore_sensor_ops_ioctl result: %d ***\n", ret);
 
     pr_info("*** ISP FRAME SYNC WORK: Frame sync work completed ***\n");
 }
