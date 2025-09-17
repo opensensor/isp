@@ -1487,25 +1487,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
     }
 
-    /* CRITICAL: Final VIC interrupt initialization using ACTUAL VIC hardware region */
-    pr_info("*** FINAL VIC INTERRUPT INIT: Writing to ACTUAL VIC hardware (isp-w01 region) ***\n");
+    /* CRITICAL: Final VIC interrupt initialization - REVERT TO WORKING VERSION */
+    pr_info("*** FINAL VIC INTERRUPT INIT: Reverting to previously working interrupt configuration ***\n");
 
-    /* Map the ACTUAL VIC hardware region (isp-w01) for interrupt configuration */
-    void __iomem *actual_vic_regs = ioremap(0x10023000, 0x1000);
-    if (!actual_vic_regs) {
-        pr_err("*** FAILED to map actual VIC hardware region 0x10023000 ***\n");
-        vic_start_ok = 1;  /* Set flag anyway to prevent hangs */
-        return 0;
-    }
-
-    /* Based on reference trace: isp-w01 gets simple values, not complex ones */
-    /* Write simple VIC interrupt enable values to actual VIC hardware */
-    writel(0x1, actual_vic_regs + 0x04);  /* Simple enable value like reference */
+    /* Clear any pending interrupts first */
+    writel(0xffffffff, vic_regs + 0x1f0);  /* Clear pending interrupts */
+    writel(0xffffffff, vic_regs + 0x1f4);  /* Clear pending interrupts */
     wmb();
 
-    pr_info("*** VIC INTERRUPT INIT: Enabled VIC interrupts in actual VIC hardware (isp-w01) ***\n");
+    /* Enable VIC interrupts - this was the WORKING configuration that generated "VIC IRQ 38 ACTIVE" */
+    writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
+    writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
+    wmb();
 
-    iounmap(actual_vic_regs);
+    pr_info("*** VIC INTERRUPT INIT: Restored working VIC interrupt configuration (0x1e0/0x1e8) ***\n");
 
     /* CRITICAL: Set vic_start_ok flag to enable interrupt processing */
     vic_start_ok = 1;
