@@ -2983,38 +2983,69 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         return 0;
     }
     case 0xc0445609: { // VIDIOC_DQBUF - Dequeue buffer
-        struct v4l2_buffer {
-            uint32_t index;
-            uint32_t type;
-            uint32_t bytesused;
-            uint32_t flags;
-            uint32_t field;
-            struct timeval timestamp;
-            struct v4l2_timecode timecode;
-            uint32_t sequence;
-            uint32_t memory;
-            union {
-                uint32_t offset;
-                unsigned long userptr;
-                void *planes;
-            } m;
-            uint32_t length;
-            uint32_t reserved2;
-            uint32_t reserved;
-        } buffer;
-        
+        struct v4l2_buffer buffer;
+        struct tx_isp_channel_state *state = &fcd->state;
+        unsigned long flags;
+        int ret;
+
+        pr_info("*** Channel %d: DQBUF - VBM buffer dequeue request ***\n", channel);
+
         if (copy_from_user(&buffer, argp, sizeof(buffer)))
             return -EFAULT;
-            
-        pr_info("Channel %d: Dequeue buffer request\n", channel);
-        
-        // Reference waits for completed buffer and returns it
-        // For now, return dummy buffer data
-        buffer.index = 0;
-        buffer.bytesused = 1920 * 1080 * 3 / 2; // YUV420 size
-        buffer.flags = 0x1; // V4L2_BUF_FLAG_MAPPED
-        buffer.sequence = 0;
-        
+
+        /* VBM DQBUF: Wait for completed buffer or return immediately if available */
+        spin_lock_irqsave(&state->buffer_lock, flags);
+
+        if (!state->frame_ready) {
+            spin_unlock_irqrestore(&state->buffer_lock, flags);
+
+            /* Wait for frame completion with timeout */
+            ret = wait_event_interruptible_timeout(state->frame_wait,
+                                                   state->frame_ready,
+                                                   msecs_to_jiffies(1000));
+            if (ret <= 0) {
+                pr_warn("*** Channel %d: DQBUF timeout waiting for frame ***\n", channel);
+                return -EAGAIN;
+            }
+
+            spin_lock_irqsave(&state->buffer_lock, flags);
+        }
+
+        /* VBM DQBUF: Return the most recently completed buffer */
+        if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+            static uint32_t dqbuf_cycle = 0;
+
+            buffer.index = dqbuf_cycle;
+            buffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            buffer.bytesused = state->width * state->height * 3 / 2; // YUV420 size
+            buffer.flags = V4L2_BUF_FLAG_DONE;
+            buffer.field = V4L2_FIELD_NONE;
+            buffer.sequence = state->sequence++;
+            buffer.memory = V4L2_MEMORY_MMAP;
+            buffer.m.offset = state->vbm_buffer_addresses[dqbuf_cycle];
+            buffer.length = buffer.bytesused;
+
+            /* Cycle to next buffer */
+            dqbuf_cycle = (dqbuf_cycle + 1) % state->vbm_buffer_count;
+
+            pr_info("*** Channel %d: DQBUF VBM - Returning buffer[%d] addr=0x%x, seq=%d ***\n",
+                    channel, buffer.index, buffer.m.offset, buffer.sequence);
+        } else {
+            /* Fallback for non-VBM mode */
+            buffer.index = 0;
+            buffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            buffer.bytesused = 1920 * 1080 * 3 / 2;
+            buffer.flags = V4L2_BUF_FLAG_DONE;
+            buffer.sequence = state->sequence++;
+
+            pr_warn("*** Channel %d: DQBUF fallback mode ***\n", channel);
+        }
+
+        /* Reset frame ready flag */
+        state->frame_ready = false;
+
+        spin_unlock_irqrestore(&state->buffer_lock, flags);
+
         if (copy_to_user(argp, &buffer, sizeof(buffer)))
             return -EFAULT;
             
