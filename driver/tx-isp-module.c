@@ -2852,42 +2852,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 spin_lock_irqsave(&vic_dev->buffer_lock, flags);
                 
                 if (vic_dev->vic_regs) {
-                    int timeout = 1000;
-                    u32 vic_status;
-                    u32 ctrl_verify;
-                    
-                    pr_info("*** Channel %d: VIC REFERENCE ENABLEMENT SEQUENCE (STREAMON) ***\n", channel);
-                    
-                    // STEP 1: Enable VIC register access mode (write 2 to register 0x0)
-                    iowrite32(2, vic_dev->vic_regs + 0x0);
-                    wmb();
-                    pr_info("Channel %d: VIC enabled register access (wrote 2)\n", channel);
-                    
-                    // STEP 2: Set VIC configuration mode (write 4 to register 0x0)
-                    iowrite32(4, vic_dev->vic_regs + 0x0);
-                    wmb();
-                    pr_info("Channel %d: VIC set config mode (wrote 4)\n", channel);
-                    
-                    // STEP 3: Wait for VIC ready state
-                    while ((vic_status = ioread32(vic_dev->vic_regs + 0x0)) != 0 && timeout--) {
-                        cpu_relax();
-                    }
-                    pr_info("Channel %d: VIC ready wait complete (status=0x%x, timeout=%d)\n",
-                           channel, vic_status, timeout);
-                    
-                    // STEP 4: Start VIC processing (write 1 to register 0x0)
-                    iowrite32(1, vic_dev->vic_regs + 0x0);
-                    wmb();
-                    pr_info("Channel %d: VIC processing started (wrote 1)\n", channel);
-                    
-                    pr_info("*** Channel %d: NOW CONFIGURING VIC REGISTERS (SHOULD WORK!) ***\n", channel);
-                    
-                    // NOW configure VIC registers - they should be accessible!
-                    // CRITICAL: MIPI interface configuration (reference: interface type 1)
-                    iowrite32(3, vic_dev->vic_regs + 0xc);
-                    wmb();
-                    ctrl_verify = ioread32(vic_dev->vic_regs + 0xc);
-                    pr_info("Channel %d: VIC ctrl reg 0xc = 3 (MIPI mode), verify=0x%x\n", channel, ctrl_verify);
+                    pr_info("*** Channel %d: VIC unlock sequence now handled by vic_core_s_stream only ***\n", channel);
                     
                     if (ctrl_verify == 3) {
                         pr_info("*** Channel %d: SUCCESS! VIC REGISTERS RESPONDING! ***\n", channel);
