@@ -1118,10 +1118,17 @@ int sensor_fps_control(int fps) {
         return -ENODEV;
     }
 
-    pr_info("sensor_fps_control: Setting FPS to %d\n", fps);
+    pr_info("sensor_fps_control: Setting FPS to %d via registered sensor\n", fps);
 
-    /* CRITICAL: Call the actual sensor FPS setting mechanism */
-    /* This matches the Binary Ninja reference - call sensor's TX_ISP_EVENT_SENSOR_FPS IOCTL */
+    /* CRITICAL: Store FPS in tuning data first */
+    if (ourISPdev->tuning_data) {
+        ourISPdev->tuning_data->fps_num = fps;
+        ourISPdev->tuning_data->fps_den = 1;
+        pr_info("sensor_fps_control: Stored %d/1 FPS in tuning data\n", fps);
+    }
+
+    /* CRITICAL: Call the registered sensor's FPS IOCTL through the established connection */
+    /* This is the proper way to communicate with the loaded gc2053.ko sensor module */
     if (ourISPdev->sensor->sd.ops &&
         ourISPdev->sensor->sd.ops->sensor &&
         ourISPdev->sensor->sd.ops->sensor->ioctl) {
@@ -1129,20 +1136,21 @@ int sensor_fps_control(int fps) {
         /* Pack FPS in the format the sensor expects: (fps_num << 16) | fps_den */
         int fps_value = (fps << 16) | 1;  /* fps/1 format */
 
-        pr_info("sensor_fps_control: Calling sensor IOCTL with FPS=0x%x (%d/1)\n", fps_value, fps);
+        pr_info("sensor_fps_control: Calling registered sensor (%s) IOCTL with FPS=0x%x (%d/1)\n",
+                ourISPdev->sensor->info.name, fps_value, fps);
 
-        /* Call the sensor's FPS IOCTL - this does the actual I2C communication */
+        /* Call the registered sensor's FPS IOCTL - this communicates with gc2053.ko */
         result = ourISPdev->sensor->sd.ops->sensor->ioctl(&ourISPdev->sensor->sd,
                                                           TX_ISP_EVENT_SENSOR_FPS,
                                                           &fps_value);
 
         if (result == 0) {
-            pr_info("sensor_fps_control: Sensor FPS set successfully to %d FPS\n", fps);
+            pr_info("sensor_fps_control: Registered sensor FPS set successfully to %d FPS\n", fps);
         } else {
-            pr_warn("sensor_fps_control: Sensor FPS setting failed: %d\n", result);
+            pr_warn("sensor_fps_control: Registered sensor FPS setting failed: %d\n", result);
         }
     } else {
-        pr_warn("sensor_fps_control: No sensor IOCTL available\n");
+        pr_warn("sensor_fps_control: No registered sensor IOCTL available\n");
         result = -ENODEV;
     }
 
