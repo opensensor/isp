@@ -1709,6 +1709,8 @@ static int isp_get_af_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
     /* EXACT Binary Ninja reference implementation - handle critical control commands */
+    int ret = 0;
+    uint32_t var_98;
 
     if (!dev || !ctrl) {
         return -EINVAL;
@@ -1720,8 +1722,9 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
         switch(ctrl->cmd) {
             pr_info("Special case routing for 0x8000024-0x8000027\n");
             pr_info("cmd=0x%x\n", ctrl->cmd);
-            case 0x8000023:  // AE Compensation
-                ctrl->value = tuning->ae_comp;
+            case 0x8000023:  // AE Compensation - Binary Ninja: tisp_get_ae_comp(&var_98)
+                tisp_get_ae_comp(&var_98);
+                ctrl->value = var_98 & 0xff;  // Binary Ninja: zx.d(var_98.b)
             break;
             case 0x8000024:  // AE ROI
                 ret = apical_isp_ae_g_roi(dev, ctrl);
@@ -1859,71 +1862,6 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
         goto out;
     }
 
-    switch (ctrl->cmd) {
-        pr_info("Get control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
-        case 0x980900:  // Brightness
-            /* CRITICAL: SAFE access with validation like Binary Ninja reference */
-            if (!access_ok(VERIFY_READ, &tuning->brightness, sizeof(tuning->brightness))) {
-                pr_err("CRITICAL: Cannot access brightness field - PREVENTS BadVA CRASH\n");
-                return -EFAULT;
-            }
-            
-            pr_debug("BCSH: Reading brightness from validated struct member\n");
-            ctrl->value = tuning->brightness;
-            pr_debug("BCSH: Brightness read successfully: %d\n", ctrl->value);
-            break;
-
-        case 0x980901:  // Contrast  
-            /* CRITICAL: SAFE access with validation */
-            if (!access_ok(VERIFY_READ, &tuning->contrast, sizeof(tuning->contrast))) {
-                pr_err("CRITICAL: Cannot access contrast field - PREVENTS BadVA CRASH\n");
-                return -EFAULT;
-            }
-            
-            pr_debug("BCSH: Reading contrast from validated struct member\n");
-            ctrl->value = tuning->contrast;
-            pr_debug("BCSH: Contrast read successfully: %d\n", ctrl->value);
-            break;
-
-        case 0x980902:  // Saturation - CRITICAL FIX for BadVA crash
-            /* CRITICAL: Multiple validation layers to prevent BadVA crash */
-            if (!access_ok(VERIFY_READ, &tuning->saturation, sizeof(tuning->saturation))) {
-                pr_err("CRITICAL: Cannot access saturation field at %p - PREVENTING BadVA CRASH\n", &tuning->saturation);
-                return -EFAULT;
-            }
-            
-            /* Additional safety check - verify field address is reasonable */
-            if ((unsigned long)&tuning->saturation < (unsigned long)tuning || 
-                (unsigned long)&tuning->saturation > (unsigned long)tuning + sizeof(*tuning)) {
-                pr_err("CRITICAL: Saturation field address out of bounds - PREVENTING BadVA CRASH\n");
-                return -EFAULT;
-            }
-            
-            pr_info("CRITICAL: Using SAFE validated struct member access for saturation\n");
-            ctrl->value = tuning->saturation;
-            pr_info("CRITICAL: Saturation read successfully: %d (BadVA crash prevented)\n", ctrl->value);
-            break;
-
-        case 0x98091b:  // Sharpness
-            ctrl->value = tuning->sharpness;
-            break;
-
-        case 0x980914:  // HFLIP
-            ctrl->value = tuning->hflip;
-            break;
-
-        case 0x980915:  // VFLIP
-            ctrl->value = tuning->vflip;
-            break;
-
-        case 0x8000164:  // ISP_CTRL_BYPASS
-            ctrl->value = ourISPdev->bypass_enabled;
-            break;
-
-        case 0x980918:  // ISP_CTRL_ANTIFLICKER
-            ctrl->value = tuning->antiflicker;
-            break;
-
         case 0x8000166:  // ISP_CTRL_SHADING
             ctrl->value = tuning->shading;
             break;
@@ -1957,7 +1895,6 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     pr_info("Set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
 
     switch (ctrl->cmd) {
-        pr_info("Set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
         case 0x980900:  // Brightness
             tuning->brightness = ctrl->value;
             break;
