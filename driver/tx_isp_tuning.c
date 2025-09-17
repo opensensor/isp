@@ -1102,6 +1102,26 @@ int tisp_init(void *sensor_info, char *param_name)
     system_reg_write(0x1c, 0x3f08);  /* Enable ISP processing pipeline + frame sync */
     pr_info("*** tisp_init: ISP control register set to enable processing pipeline ***\n");
 
+    /* CRITICAL FIX: Configure ISP input/output formats to prevent Error interrupt type 2 */
+    /* The 0x00000500 error indicates format/processing configuration issues */
+
+    /* Configure input format for raw Bayer sensor data */
+    system_reg_write(0x10, (sensor_info->width << 16) | sensor_info->height);  /* Input frame size */
+    system_reg_write(0x14, 0x3031);  /* Input format: Raw Bayer RGGB 10-bit */
+    pr_info("*** tisp_init: Input format configured - %dx%d Raw Bayer RGGB 10-bit ***\n",
+            sensor_info->width, sensor_info->height);
+
+    /* Configure output format for processed video */
+    system_reg_write(0x18, 0x8210);  /* Output format: YUV420 NV12 */
+    system_reg_write(0x20, (sensor_info->width << 16) | sensor_info->height);  /* Output frame size */
+    pr_info("*** tisp_init: Output format configured - %dx%d YUV420 NV12 ***\n",
+            sensor_info->width, sensor_info->height);
+
+    /* Configure processing pipeline data flow */
+    system_reg_write(0x24, 0x1);     /* Enable data flow from input to processing */
+    system_reg_write(0x28, 0x1);     /* Enable data flow from processing to output */
+    pr_info("*** tisp_init: ISP data flow configured (input->processing->output) ***\n");
+
     /* Binary Ninja: Call tisp_set_csc_version(0) */
     tisp_set_csc_version(0);
 
