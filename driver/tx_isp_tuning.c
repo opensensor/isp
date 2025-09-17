@@ -3433,7 +3433,7 @@ int apical_isp_ae_zone_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl
 
     pr_debug("apical_isp_ae_zone_g_ctrl: entry\n");
 
-    tisp_g_ae_zone(var_390);
+    tisp_g_ae_zone_internal(var_390);  // Binary Ninja: internal function call
 
     /* Binary Ninja: private_copy_to_user(*arg1, &var_390, 0x384) */
     if (copy_to_user((void __user *)ctrl->value, var_390, 0x384)) {
