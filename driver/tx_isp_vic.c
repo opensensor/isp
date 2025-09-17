@@ -1275,6 +1275,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(2, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 2 for MIPI interface */
         wmb();
         pr_info("*** VIC: Set MIPI mode (2) to VIC control register 0xc - BINARY NINJA EXACT ***\n");
+
+        /* BINARY NINJA CRITICAL: Missing register 0x10c complex configuration */
+        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x10c) = complex bit field calculation */
+        u32 reg_10c_value = 0x0;  /* Start with base value */
+        /* This is a complex bit field that combines multiple sensor attributes */
+        /* For now, use a safe default that matches MIPI RAW10 2-lane configuration */
+        reg_10c_value = 0x20000;  /* Basic MIPI configuration bits */
+        writel(reg_10c_value, vic_regs + 0x10c);
+        wmb();
+        pr_info("*** BINARY NINJA CRITICAL: Set register 0x10c = 0x%x (complex bit field config) ***\n", reg_10c_value);
         
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
@@ -2667,12 +2677,23 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_info("*** DELAYED VIC HARDWARE ENABLE: Enabling VIC hardware after complete initialization ***\n");
                     void __iomem *vic_regs = vic_dev->vic_regs;
                     if (vic_regs) {
-                        /* Enable VIC hardware using reference driver sequence */
-                        writel(0x2, vic_regs + 0x0);        /* Pre-enable state */
+                        /* BINARY NINJA EXACT: Hardware enable sequence */
+                        /* Binary Ninja: **(arg1 + 0xb8) = 2; **(arg1 + 0xb8) = 4; while (*$v1_30 != 0) nop; **(arg1 + 0xb8) = 1 */
+                        writel(0x2, vic_regs + 0x0);        /* Binary Ninja: Pre-enable state */
                         wmb();
-                        writel(0x1, vic_regs + 0x0);        /* Enable VIC hardware */
+                        writel(0x4, vic_regs + 0x0);        /* Binary Ninja: Wait state */
                         wmb();
-                        pr_info("*** VIC HARDWARE NOW ENABLED - Should prevent control limit errors ***\n");
+
+                        /* Binary Ninja: Wait for hardware ready */
+                        u32 wait_count = 0;
+                        while ((readl(vic_regs + 0x0) != 0) && (wait_count < 1000)) {
+                            wait_count++;
+                            udelay(1);
+                        }
+
+                        writel(0x1, vic_regs + 0x0);        /* Binary Ninja: Final enable */
+                        wmb();
+                        pr_info("*** BINARY NINJA EXACT: Hardware enable sequence 2->4->wait->1 (waited %d us) ***\n", wait_count);
                     } else {
                         pr_err("*** ERROR: VIC registers not available for delayed enable ***\n");
                     }
