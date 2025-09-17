@@ -16,19 +16,13 @@
 #include <sensor-common.h>
 #include <sensor-info.h>
 
-/* CRITICAL: Ensure interface constants are correct - fix from logs showing wrong values */
-#ifndef TX_SENSOR_DATA_INTERFACE_DVP
-#define TX_SENSOR_DATA_INTERFACE_DVP 1
-#endif
-#ifndef TX_SENSOR_DATA_INTERFACE_MIPI
-#define TX_SENSOR_DATA_INTERFACE_MIPI 2
-#endif
-
-/* CRITICAL: Force MIPI for GC2053 regardless of parameter */
-#undef TX_SENSOR_DATA_INTERFACE_DVP
-#undef TX_SENSOR_DATA_INTERFACE_MIPI
-#define TX_SENSOR_DATA_INTERFACE_DVP 1
-#define TX_SENSOR_DATA_INTERFACE_MIPI 2
+/* CRITICAL FIX: Remove all conflicting redefinitions */
+/* Use the correct enum values from tx-isp-common.h: MIPI=1, DVP=2 */
+/* CRITICAL FIX: Use correct enum values from tx-isp-common.h */
+/* TX_SENSOR_DATA_INTERFACE_MIPI = 1, TX_SENSOR_DATA_INTERFACE_DVP = 2 */
+/* The sensor driver was incorrectly swapping these values, causing VIC to configure for wrong interface */
+#define TX_SENSOR_DATA_INTERFACE_MIPI 1
+#define TX_SENSOR_DATA_INTERFACE_DVP 2
 
 #define SENSOR_NAME "gc2053"
 #define SENSOR_BUS_TYPE TX_SENSOR_CONTROL_INTERFACE_I2C

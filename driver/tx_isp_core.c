@@ -2357,7 +2357,7 @@ static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sen
     /* Validate interface type */
     if (sensor_attr->dbus_type > 5) {
         ISP_ERROR("*** INVALID INTERFACE TYPE: %d ***\n", sensor_attr->dbus_type);
-        sensor_attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* Default to MIPI (value 1) */
+        sensor_attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* Default to MIPI (correct value from enum) */
         ISP_INFO("*** CORRECTED INTERFACE TYPE: %d (MIPI) ***\n", sensor_attr->dbus_type);
     }
     

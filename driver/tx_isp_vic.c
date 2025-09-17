@@ -153,7 +153,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     
     /* Set up sensor attributes with defaults */
     memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-    vic_dev->sensor_attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI interface (value 1) */
+    vic_dev->sensor_attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI interface (correct value from enum) */
     vic_dev->sensor_attr.total_width = 1920;
     vic_dev->sensor_attr.total_height = 1080;
     vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */

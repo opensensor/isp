@@ -3558,7 +3558,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         /* VIC must be configured to match what sensor actually outputs */
                         sensor->video.attr->total_width = 1920;   /* Actual output width */
                         sensor->video.attr->total_height = 1080;  /* Actual output height */
-                        sensor->video.attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; // MIPI interface (value 1)
+                        sensor->video.attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; // MIPI interface (correct value from enum)
                         sensor->video.attr->integration_time = 1000;
                         sensor->video.attr->max_again = 0x40000;
                         sensor->video.attr->name = sensor_name; /* Safe pointer assignment */
