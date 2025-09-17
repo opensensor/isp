@@ -76,23 +76,7 @@ static uint32_t wdr_exp_ratio_def = 0;
 static uint32_t wdr_s2l_ratio = 0;
 
 /* WDR Parameter Arrays - From Binary Ninja */
-static uint32_t param_multiValueHigh_software_in_array[27];
-static uint32_t param_multiValueLow_software_in_array[27];
-static uint32_t param_computerModle_software_in_array[16];
-static uint32_t param_xy_pix_low_software_in_array[16];
-static uint32_t param_motionThrPara_software_in_array[16];
-static uint32_t param_d_thr_normal_software_in_array[16];
-static uint32_t param_d_thr_normal1_software_in_array[16];
-static uint32_t param_d_thr_normal2_software_in_array[16];
-static uint32_t param_d_thr_normal_min_software_in_array[16];
-static uint32_t param_d_thr_2_software_in_array[16];
-static uint32_t param_x_thr_software_in_array[16];
-static uint32_t param_y_thr_software_in_array[16];
-static uint32_t param_deviationPara_software_in_array[16];
-static uint32_t param_ratioPara_software_in_array[16];
-static uint32_t param_thrPara_software_in_array[16];
-static uint32_t param_wdr_detial_para_software_in_array[16];
-static uint32_t param_wdr_thrLable_array[16];
+/* Note: WDR arrays are defined later in the file with proper sizes */
 
 /* WDR Histogram Arrays */
 static uint32_t wdr_hist_R0[256];
