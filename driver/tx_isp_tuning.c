@@ -353,7 +353,8 @@ int tisp_set_csc_version(int version)
     pr_info("tisp_set_csc_version: Setting CSC version %d\n", version);
     return 0;
 }
-static int system_reg_write(uint32_t reg, uint32_t value);
+/* Use external system_reg_write from tx-isp-module.c that does real hardware writes */
+extern void system_reg_write(u32 reg, u32 value);
 
 /* ===== MISSING SYMBOL IMPLEMENTATIONS - Binary Ninja Reference ===== */
 
@@ -9797,10 +9798,5 @@ static uint32_t tisp_log2_fixed_to_fixed(void)
     return 0x1000; /* Return default fixed point value */
 }
 
-static int system_reg_write(uint32_t reg, uint32_t value)
-{
-    /* System register write */
-    pr_debug("system_reg_write: Writing reg 0x%x = 0x%x\n", reg, value);
-    /* This would write to actual hardware registers */
-    return 0;
-}
+/* REMOVED: Static stub system_reg_write - use external implementation from tx-isp-module.c */
+/* The real system_reg_write() that does actual hardware writes is declared extern */
