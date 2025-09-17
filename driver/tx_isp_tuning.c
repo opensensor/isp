@@ -612,8 +612,8 @@ static uint32_t data_b33b4 = (uint32_t)&data_b33b0;
 static uint32_t data_b33b8 = (uint32_t)&data_b33b0;
 
 /* Helper functions - Forward declarations */
-static void private_dma_cache_sync(int direction, void *addr, size_t size, int flags);
-static void private_complete(struct completion *comp);
+void private_dma_cache_sync(int direction, void *addr, size_t size, int flags);
+void private_complete(struct completion *comp);
 static int tisp_ae0_get_statistics(void *buffer, uint32_t flags);
 static int tisp_ae1_get_statistics(void *buffer, uint32_t flags);
 static int tisp_ae0_get_hist(void *buffer, int mode, int flag);
@@ -624,7 +624,7 @@ static int tisp_event_push(void *event);
 static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
 
 /* Helper function implementations */
-static void private_dma_cache_sync(int direction, void *addr, size_t size, int flags)
+void private_dma_cache_sync(int direction, void *addr, size_t size, int flags)
 {
     /* DMA cache synchronization - simplified implementation */
     if (addr && size > 0) {
@@ -633,7 +633,7 @@ static void private_dma_cache_sync(int direction, void *addr, size_t size, int f
     }
 }
 
-static void private_complete(struct completion *comp)
+void private_complete(struct completion *comp)
 {
     if (comp) {
         complete(comp);
