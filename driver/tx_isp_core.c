@@ -2259,18 +2259,12 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
     ISP_INFO("*** ispcore_core_ops_init: Chip ID 0x%x mapped to var_70_4 = %d ***\n", 
              chip_id, var_70_4);
     
-    /* CRITICAL: THIS IS THE KEY CALL - tisp_init is called FROM ispcore_core_ops_init! */
-    ISP_INFO("*** ispcore_core_ops_init: Calling tisp_init() - CRITICAL REFERENCE MATCH ***\n");
-    
-    /* Create the var_78 structure and call tisp_init - matches reference exactly */
-    struct tx_isp_sensor_attribute local_attr = *sensor_attr;
-    ret = tisp_init2(&local_attr, isp);
-    if (ret < 0) {
-        ISP_ERROR("*** ispcore_core_ops_init: tisp_init failed: %d ***\n", ret);
-        return ret;
-    }
-    
-    ISP_INFO("*** ispcore_core_ops_init: tisp_init SUCCESS ***\n");
+    /* BINARY NINJA REFERENCE: NO tisp_init2 call - this function doesn't exist in reference driver */
+    ISP_INFO("*** ispcore_core_ops_init: BINARY NINJA REFERENCE - no tisp_init call here ***\n");
+
+    /* Reference driver does NOT call tisp_init from ispcore_core_ops_init */
+    /* Hardware initialization should happen elsewhere, not during core ops init */
+    ret = 0;  /* Success - no hardware initialization needed here */
 
     /* CRITICAL: Enable ISP core interrupt registers - EXACT Binary Ninja reference implementation */
     if (isp->core_regs) {
