@@ -609,19 +609,9 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Error counter increment would be here */
     }
 
-    /* Binary Ninja: $a0 = *($s0 + 0x15c); if ($a0 == 1) return 1 */
-    /* CRITICAL FIX: Allow frame sync interrupts even when VIC is streaming! */
-    /* The original early exit was blocking frame sync interrupt processing */
-    if (vic_dev && vic_dev->state == 1) {
-        /* Only exit early for NON-frame-sync interrupts to prevent storms */
-        if ((interrupt_status & 0x1000) == 0) {
-            pr_debug("*** ISP CORE: Binary Ninja early exit - VIC state 1, non-frame-sync interrupt ***\n");
-            return IRQ_HANDLED;  /* Block non-frame-sync interrupts during streaming */
-        } else {
-            pr_info("*** ISP CORE: VIC streaming but FRAME SYNC interrupt - processing! ***\n");
-            /* Continue to frame sync processing below */
-        }
-    }
+    /* REFERENCE DRIVER: No VIC state checking - process all interrupts normally */
+    /* The reference driver doesn't have early exit logic based on VIC state */
+    /* All interrupts should be processed to maintain proper hardware state */
 
     /* *** CRITICAL: MAIN INTERRUPT PROCESSING SECTION *** */
 
