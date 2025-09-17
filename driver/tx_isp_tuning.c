@@ -342,6 +342,11 @@ int apical_isp_ae_g_roi(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl);
 int tisp_get_defog_strength(uint32_t *value);
 int tisp_g_dpc_strength(uint32_t *value);
 
+/* Forward declarations for file operations */
+int tisp_code_tuning_open(struct inode *inode, struct file *file);
+int tisp_code_tuning_release(struct inode *inode, struct file *file);
+long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+
 /* System register access functions - moved before use */
 uint32_t system_reg_read(u32 reg);
 
@@ -1795,8 +1800,8 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
                     goto out;
                 break;
 
-            case 0x8000030:  // AE Zone Info
-                ret = tisp_g_ae_zone(dev, ctrl);
+            case 0x8000030:  // AE Zone Info - Binary Ninja: apical_isp_ae_zone_g_ctrl
+                ret = apical_isp_ae_zone_g_ctrl(dev, ctrl);
                 if (ret)
                     goto out;
                 break;
