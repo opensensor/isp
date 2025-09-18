@@ -3181,19 +3181,19 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
     unsigned long var_18 = 0;
-    
-    pr_info("*** ispvic_frame_channel_qbuf: EVENT-BASED QBUF with pending buffer processing ***\n");
-    
-    /* SAFE: Use global ourISPdev reference instead of unsafe pointer arithmetic */
+    uint32_t buffer_addr, buffer_index;
+
+    pr_info("*** ispvic_frame_channel_qbuf: SAFE VBM buffer queue - arg1=%p, arg2=%p ***\n", arg1, arg2);
+
+    /* SAFE: Use global ISP device reference instead of unsafe pointer arithmetic */
     if (!ourISPdev || !ourISPdev->vic_dev) {
-        pr_info("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
+        pr_info("ispvic_frame_channel_qbuf: qbuffer null - no ISP device\n");
         return 0;
     }
-    
-    /* SAFE: Get VIC device from global ISP device reference */
-    vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
-    if (!vic_dev) {
-        pr_info("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
+
+    vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_info("ispvic_frame_channel_qbuf: qbuffer null - no VIC device\n");
         return 0;
     }
     
