@@ -3676,28 +3676,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         pr_info("*** Channel %d: Frame completion wait ***\n", channel);
 
-        /* CRITICAL FIX: Check if we're in atomic context (interrupt/spinlock held) */
-        if (in_atomic() || irqs_disabled()) {
-            pr_warn("*** Channel %d: Frame wait called from atomic context - returning immediately ***\n", channel);
-
-            /* In atomic context, just check if frame is ready without sleeping */
-            spin_lock_irqsave(&state->buffer_lock, flags);
-            if (state->frame_ready) {
-                result = 1; // Frame ready
-                state->frame_ready = false; // Consume the frame
-                pr_info("*** Channel %d: Frame was ready (atomic context) ***\n", channel);
-            } else {
-                result = 0; // No frame ready
-                pr_info("*** Channel %d: No frame ready (atomic context) ***\n", channel);
-            }
-            spin_unlock_irqrestore(&state->buffer_lock, flags);
-
-            if (copy_to_user(argp, &result, sizeof(result)))
-                return -EFAULT;
-
-            return 0;
-        }
-
         // Auto-start streaming if needed
         if (!state->streaming) {
             pr_info("Channel %d: Auto-starting streaming for frame wait\n", channel);

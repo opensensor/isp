@@ -1924,26 +1924,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     vic_start_ok = 1;
     pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
 
-    /* CRITICAL FIX: Configure VIC DMA for frame capture */
-    /* This is the missing piece that causes VIC[0x380] to remain 0x0 */
-    extern struct frame_channel_device frame_channels[];
-    extern int num_channels;
-    if (num_channels > 0) {
-        struct tx_isp_channel_state *state = &frame_channels[0].state;
-        if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-            /* Configure VIC DMA with the first available buffer */
-            dma_addr_t first_buffer = state->vbm_buffer_addresses[0];
-            int ret_dma = tx_isp_vic_configure_dma(vic_dev, first_buffer, actual_width, actual_height);
-            if (ret_dma == 0) {
-                pr_info("*** VIC DMA: Successfully configured VIC DMA during startup ***\n");
-            } else {
-                pr_err("*** VIC DMA: Failed to configure VIC DMA: %d ***\n", ret_dma);
-            }
-        } else {
-            pr_warn("*** VIC DMA: No VBM buffers available yet - DMA will be configured during QBUF ***\n");
-        }
-    }
-
     /* CRITICAL: Enable ISP core interrupt generation - EXACT Binary Ninja reference */
     /* This was the missing piece that caused interrupts to stall out */
     if (ourISPdev && ourISPdev->core_regs) {
@@ -2936,6 +2916,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                             pr_err("*** ispcore_slake_module FAILED: %d ***\n", slake_ret);
                         }
                     }
+
+                    /* CRITICAL: Apply full VIC configuration now that sensor is streaming */
+                    pr_info("*** APPLYING FULL VIC CONFIGURATION AFTER SENSOR INITIALIZATION ***\n");
+                    tx_isp_vic_apply_full_config(vic_dev);
 
                     /* DELAYED VIC HARDWARE ENABLE: Now that everything is configured and sensor is streaming */
                     pr_info("*** DELAYED VIC HARDWARE ENABLE: Enabling VIC hardware after complete initialization ***\n");
