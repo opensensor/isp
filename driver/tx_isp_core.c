@@ -393,30 +393,36 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
     return (result == -ENOIOCTLCMD) ? 0 : result;
 }
 
-/* Frame sync work function - FIXED to prevent infinite loop */
+/* Frame sync work function - CONTEXT SAFE implementation */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
     extern struct tx_isp_dev *ourISPdev;
     struct tx_isp_dev *isp_dev = ourISPdev;
     static int sensor_call_counter = 0;
 
-    pr_debug("*** ISP FRAME SYNC WORK: ENTRY - Work function is running! ***\n");
+    /* CONTEXT CHECK: Verify we're in process context (can sleep) */
+    if (in_interrupt() || in_atomic()) {
+        pr_err("*** CONTEXT ERROR: Work function called in wrong context! ***\n");
+        pr_err("*** in_interrupt()=%d, in_atomic()=%d ***\n", in_interrupt(), in_atomic());
+        return;
+    }
 
     if (!isp_dev) {
         pr_warn("*** ISP FRAME SYNC WORK: isp_dev is NULL ***\n");
         return;
     }
 
-    /* REFERENCE DRIVER: Minimal frame sync work - just call sensor ops if needed */
+    /* REFERENCE DRIVER: Match exact ispcore_irq_fs_work implementation */
+    /* Work context CAN sleep, so I2C operations are safe here */
     if (isp_dev->sensor && isp_dev->streaming_enabled) {
-        /* Call sensor operations for AE/AGC/AWB - minimal processing */
-        ispcore_sensor_ops_ioctl(isp_dev);
+        /* Reference driver calls ispcore_sensor_ops_ioctl for sensor operations */
+        int ret = ispcore_sensor_ops_ioctl(isp_dev);
+        if (ret != 0 && ret != -ENOIOCTLCMD) {
+            pr_debug("ispcore_irq_fs_work: sensor ops failed: %d\n", ret);
+        }
     }
 
-    /* Increment counter and complete quickly */
     sensor_call_counter++;
-
-    pr_debug("*** ISP FRAME SYNC WORK: Completed #%d ***\n", sensor_call_counter);
 }
 
 /* Forward declarations for frame channel functions - avoid naming conflicts */
