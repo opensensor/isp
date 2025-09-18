@@ -608,8 +608,14 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
     void __iomem *vic_base;
 
-    // Initialize VIC hardware
-    vic_base = ioremap(0x10023000, 0x1000);  // Direct map VIC
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_err("tx_isp_vic_hw_init: No primary VIC registers available\n");
+        return -EINVAL;
+    }
+
+    // CRITICAL: Use PRIMARY VIC space for interrupt configuration
+    vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
+    pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
 
     // Clear any pending interrupts first
     writel(0, vic_base + 0x00);  // Clear ISR
