@@ -1272,6 +1272,11 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
 
     pr_info("*** REFERENCE DRIVER: EXACT CSI MIPI initialization complete ***\n");
     pr_info("*** This should fix VIC[0x380]=0x0 issue by properly routing MIPI data to VIC ***\n");
+
+    /* Clean up memory mappings */
+    iounmap(csi_base);
+    iounmap(phy_base);
+
     return 0;
 }
 
