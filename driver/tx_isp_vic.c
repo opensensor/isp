@@ -221,42 +221,6 @@ static void mips_dma_cache_sync(dma_addr_t addr, size_t size, int direction)
              addr, size, direction);
 }
 
-/* VIC interrupt restoration function - COMPREHENSIVE FIX for both control limit errors and interrupt overwrites */
-void tx_isp_vic_restore_interrupts(void)
-{
-    extern struct tx_isp_dev *ourISPdev;
-    void __iomem *vic_interrupt_base;
-
-    if (!ourISPdev || !ourISPdev->vic_dev || vic_start_ok != 1) {
-        return; /* VIC not active */
-    }
-
-    pr_info("*** VIC INTERRUPT RESTORE: Restoring VIC interrupt registers in PRIMARY VIC space ***\n");
-
-    /* CRITICAL: Use PRIMARY VIC space for interrupt control (0x133e0000) */
-    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_err("*** VIC INTERRUPT RESTORE: No primary VIC registers available ***\n");
-        return;
-    }
-
-    /* Restore VIC interrupt register values using WORKING ISP-activates configuration */
-    pr_info("*** VIC INTERRUPT RESTORE: Using WORKING ISP-activates configuration (0x1e8/0x1ec) ***\n");
-
-    /* Clear pending interrupts first */
-    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
-    wmb();
-
-    /* CRITICAL FIX 3: Restore interrupt masks with protection against overwrites */
-    writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
-    /* SKIP MDMA register 0x1ec - it doesn't work correctly */
-    wmb();
-
-    pr_info("*** VIC INTERRUPT RESTORE: WORKING configuration restored (MainMask=0xFFFFFFFE) ***\n");
-}
-EXPORT_SYMBOL(tx_isp_vic_restore_interrupts);
-
 /* Global data symbol used by reference driver - moved to avoid conflict */
 static char data_b0000_array[1] = {0};
 static void *data_b0000 = &data_b0000_array[0];  /* Return value for vic_framedone_irq_function */
@@ -2730,17 +2694,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
     /* REVERT: Ensure VIC registers are mapped to ORIGINAL working address */
     vic_regs = vic_dev->vic_regs;
-    if (!vic_regs) {
-        pr_err("*** CRITICAL FIX: VIC registers not mapped - mapping now ***\n");
-        vic_regs = ioremap(0x133e0000, 0x10000);
-        if (!vic_regs) {
-            pr_err("vic_core_s_stream: Failed to map VIC registers at 0x133e0000\n");
-            return -ENOMEM;
-        }
-        vic_dev->vic_regs = vic_regs;
-        pr_info("*** VIC registers mapped successfully: %p ***\n", vic_regs);
-    }
-
     /* Calculate base addresses safely */
     isp_base = vic_regs - 0x9a00;  /* Correct ISP base calculation */
     csi_base = isp_base + 0x10000;

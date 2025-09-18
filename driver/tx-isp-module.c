@@ -5107,10 +5107,10 @@ static int tx_isp_init(void)
             pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
             
             /* Enable VIC interrupts - from reference driver */
-            writel(0x3FFFFFFF, vic_dev->vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-            writel(0x0, vic_dev->vic_regs + 0x1e8);         /* Clear interrupt masks */
-            writel(0xF, vic_dev->vic_regs + 0x1e4);         /* Enable MDMA interrupts */
-            writel(0x0, vic_dev->vic_regs + 0x1ec);         /* Clear MDMA masks */
+            writel(0x3FFFFFFF, vic_dev->vic_regs_secondary + 0x1e0);  /* Enable all VIC interrupts */
+            writel(0x0, vic_dev->vic_regs_secondary + 0x1e8);         /* Clear interrupt masks */
+            writel(0xF, vic_dev->vic_regs_secondary + 0x1e4);         /* Enable MDMA interrupts */
+            writel(0x0, vic_dev->vic_regs_secondary + 0x1ec);         /* Clear MDMA masks */
             wmb();
             
             pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
