@@ -1153,9 +1153,9 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
     /* CRITICAL FIX: Use EXISTING memory mappings instead of creating new ones */
     /* This prevents conflicts and ensures we use the same addresses as the rest of the driver */
 
-    /* Get CSI base from the CSI device structure (already mapped) */
-    if (isp_dev->csi_dev && isp_dev->csi_dev->csi_regs) {
-        csi_base = isp_dev->csi_dev->csi_regs;  /* Use existing CSI mapping */
+    /* Get CSI base from the ISP device structure (already mapped) */
+    if (isp_dev->csi_regs) {
+        csi_base = isp_dev->csi_regs;  /* Use existing CSI mapping */
         pr_info("tx_isp_csi_mipi_init: Using existing CSI mapping: %p\n", csi_base);
     } else {
         pr_err("tx_isp_csi_mipi_init: No existing CSI mapping available\n");
@@ -1163,12 +1163,12 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
     }
 
     /* Get PHY base from ISP core registers (PHY is at core_base + offset) */
-    if (isp_dev->isp_regs) {
+    if (isp_dev->core_regs) {
         /* PHY registers are typically at ISP core base + 0x21000 offset */
-        phy_base = isp_dev->isp_regs + 0x21000;  /* Use existing ISP mapping + PHY offset */
-        pr_info("tx_isp_csi_mipi_init: Using existing PHY mapping: %p (isp_regs + 0x21000)\n", phy_base);
+        phy_base = isp_dev->core_regs + 0x21000;  /* Use existing ISP mapping + PHY offset */
+        pr_info("tx_isp_csi_mipi_init: Using existing PHY mapping: %p (core_regs + 0x21000)\n", phy_base);
     } else {
-        pr_err("tx_isp_csi_mipi_init: No existing ISP register mapping available\n");
+        pr_err("tx_isp_csi_mipi_init: No existing ISP core register mapping available\n");
         return -ENODEV;
     }
 
