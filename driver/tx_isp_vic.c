@@ -2857,17 +2857,21 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 } else {
                     pr_info("*** STEP 9: vic_start_ok=%d, state=%d - SKIPPING tx_isp_vic_start to preserve working interrupts ***\n", vic_start_ok, current_state);
 
-                    /* CRITICAL FIX: Even when skipping VIC start, we MUST run CSI MIPI initialization */
-                    /* This is required to configure MIPI PHY to route sensor data to VIC */
-                    pr_info("*** CRITICAL: Running CSI MIPI initialization even though VIC start is skipped ***\n");
-                    pr_info("*** This should fix VIC[0x380]=0x0 by properly configuring MIPI PHY ***\n");
+                    /* CRITICAL FIX: Run the COMPLETE CSI PHY sequence that was originally in vic_start */
+                    /* This is the comprehensive CSI PHY register sequence that was being skipped */
+                    pr_info("*** CRITICAL: Running COMPLETE CSI PHY sequence from original vic_start ***\n");
+                    pr_info("*** This includes the full CSI PHY register configuration (0x100-0x2f4) ***\n");
 
+                    /* Call the original comprehensive CSI PHY sequence */
+                    tx_isp_vic_write_csi_phy_sequence();
+
+                    /* Also run the MIPI initialization for additional configuration */
                     ret = tx_isp_csi_mipi_init(ourISPdev);
                     if (ret) {
                         pr_err("*** CRITICAL: CSI MIPI initialization failed: %d ***\n", ret);
                         pr_err("*** This explains why VIC[0x380] always reads 0x0 ***\n");
                     } else {
-                        pr_info("*** CSI MIPI initialization SUCCESS - VIC[0x380] should now be updated ***\n");
+                        pr_info("*** COMPLETE CSI PHY + MIPI initialization SUCCESS - VIC[0x380] should now be updated ***\n");
                     }
                 }
                 ispvic_frame_channel_s_stream(vic_dev, 1);
