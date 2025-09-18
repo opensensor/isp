@@ -1461,7 +1461,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         while (readl(vic_regs + 0x0) != 0) {
             udelay(1);
         }
-        
+
+        /* SURGICAL FIX: Configure interrupt registers after CSI PHY unlock */
+        pr_info("*** SURGICAL FIX: Configuring VIC interrupt registers ***\n");
+
+        /* Clear any pending interrupts first */
+        writel(0xffffffff, vic_regs + 0x1c);   /* Clear interrupt status */
+        wmb();
+
+        /* Enable VIC interrupts using the working register addresses */
+        writel(0xffffffff, vic_regs + 0x1e0); /* Enable all interrupts */
+        writel(0x0, vic_regs + 0x1e8);        /* Clear interrupt masks */
+        wmb();
+
+        /* Set VIC start flag - CRITICAL for interrupt processing */
+        vic_start_ok = 1;
+        pr_info("*** SURGICAL FIX: vic_start_ok = 1, interrupts enabled ***\n");
+
         /* Enable VIC - Binary Ninja 000107d4 */
         writel(1, vic_regs + 0x0);
         
@@ -2746,7 +2762,23 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x4440, vic_regs + 0x1a8);
                 writel(0x10, vic_regs + 0x1b0);
                 wmb();
-                
+
+                /* SURGICAL FIX: Configure VIC interrupt registers after CSI PHY setup */
+                pr_info("*** SURGICAL FIX: Configuring VIC interrupt system ***\n");
+
+                /* Clear any pending interrupts first */
+                writel(0xffffffff, vic_regs + 0x1c);   /* Clear interrupt status */
+                wmb();
+
+                /* Enable VIC interrupts using the working register addresses */
+                writel(0xffffffff, vic_regs + 0x1e0); /* Enable all interrupts */
+                writel(0x0, vic_regs + 0x1e8);        /* Clear interrupt masks */
+                wmb();
+
+                /* Set VIC start flag - CRITICAL for interrupt processing */
+                vic_start_ok = 1;
+                pr_info("*** SURGICAL FIX: VIC interrupts configured, vic_start_ok = 1 ***\n");
+
                 /* STEP 2: ISP isp-w01 - Control registers */
                 pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
                 writel(0x3130322a, vic_regs + 0x0);
@@ -2880,14 +2912,29 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* STEP 7: Final CSI PHY control sequence */
                 pr_info("*** STEP 7: Final CSI PHY control sequence ***\n");
 
-                /* CRITICAL FIX: Skip interrupt-disrupting registers during streaming restart */
+                /* SURGICAL FIX: Apply CSI PHY control but preserve interrupt configuration */
                 if (vic_start_ok == 1) {
-                    pr_info("*** STEP 7: SKIPPING interrupt-disrupting registers 0xc, 0x10, 0x14 - VIC interrupts already working ***\n");
+                    pr_info("*** STEP 7: VIC interrupts already working - preserving interrupt config ***\n");
+
+                    /* Apply CSI PHY control registers but preserve interrupt registers */
+                    writel(0x1, vic_regs + 0xc);
+                    writel(0x1, vic_regs + 0x10);
+                    writel(0x630, vic_regs + 0x14);
+                    wmb();
+
+                    /* SURGICAL FIX: Restore interrupt configuration after CSI PHY writes */
+                    pr_info("*** SURGICAL FIX: Restoring VIC interrupt configuration ***\n");
+                    writel(0xffffffff, vic_regs + 0x1e0); /* Restore interrupt enable */
+                    writel(0x0, vic_regs + 0x1e8);        /* Restore interrupt masks */
+                    wmb();
+
+                    pr_info("*** STEP 7: CSI PHY control applied with interrupt preservation ***\n");
                 } else {
                     writel(0x1, vic_regs + 0xc);
                     writel(0x1, vic_regs + 0x10);
                     writel(0x630, vic_regs + 0x14);
                     wmb();
+                    pr_info("*** STEP 7: Applied final CSI PHY control registers ***\n");
                 }
                 
                 /* STEP 8: CRITICAL - Copy real sensor attributes to VIC device before tx_isp_vic_start */
