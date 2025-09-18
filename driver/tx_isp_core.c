@@ -675,13 +675,21 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         u32 error_reg_84c = readl(vic_regs + 0x84c);
 
         if (error_code == 0x20 && error_reg_84c == 0x0) {
-            pr_info("ISP CORE: Error 0x20 - VIC status register not initialized\n");
+            pr_info("ISP CORE: Error 0x20 - VIC status register cleared by hardware reset\n");
 
-            /* CRITICAL FIX: Initialize VIC status register to fix error 0x20 */
+            /* CRITICAL FIX: Re-initialize VIC status register to fix error 0x20 */
             writel(0x1, vic_regs + 0x84c);  /* Set VIC processing active */
             wmb();
 
-            pr_info("*** ISP CORE: VIC status register 0x84c initialized - should fix error 0x20 ***\n");
+            /* Also ensure VIC processing is enabled */
+            u32 vic_ctrl = readl(vic_regs + 0x300);
+            if ((vic_ctrl & 0x80000000) == 0) {
+                writel(vic_ctrl | 0x80000020, vic_regs + 0x300);  /* Enable VIC processing */
+                wmb();
+                pr_info("*** ISP CORE: VIC control register also re-enabled ***\n");
+            }
+
+            pr_info("*** ISP CORE: VIC status register 0x84c re-initialized - should fix error 0x20 ***\n");
         } else {
             pr_info("ISP CORE: Error 0x%x - VIC status 0x84c = 0x%x\n", error_code, error_reg_84c);
         }
@@ -1664,6 +1672,14 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
         /* CRITICAL FIX: Clear error status register to prevent green frames */
         writel(0x0, core + 0xc);            /* Clear error status register */
         pr_info("*** ISP CORE: Error status register cleared during initialization ***\n");
+
+        /* CRITICAL FIX: Re-initialize VIC status register after ISP core reset */
+        /* The ISP core reset was clearing our VIC status register, causing error 0x20 */
+        if (ourISPdev && ourISPdev->vic_regs) {
+            writel(0x1, ourISPdev->vic_regs + 0x84c);  /* Set VIC processing active */
+            wmb();
+            pr_info("*** ISP CORE: VIC status register 0x84c re-initialized after core reset ***\n");
+        }
 
         /* CRITICAL: Enable ISP pipeline first - this connects VIC to ISP core */
         /* Binary Ninja: system_reg_write(0x800, 1) - Enable ISP pipeline */
