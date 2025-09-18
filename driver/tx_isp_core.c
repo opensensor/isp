@@ -400,20 +400,14 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     struct tx_isp_dev *isp_dev = ourISPdev;
     static int sensor_call_counter = 0;
 
-    /* CONTEXT CHECK: Verify we're in process context (can sleep) */
-    if (in_interrupt() || in_atomic()) {
-        pr_err("*** CONTEXT ERROR: Work function called in wrong context! ***\n");
-        pr_err("*** in_interrupt()=%d, in_atomic()=%d ***\n", in_interrupt(), in_atomic());
-        return;
-    }
-
     if (!isp_dev) {
         pr_warn("*** ISP FRAME SYNC WORK: isp_dev is NULL ***\n");
         return;
     }
 
     /* REFERENCE DRIVER: Match exact ispcore_irq_fs_work implementation */
-    /* Work context CAN sleep, so I2C operations are safe here */
+
+    /* Call sensor operations for AE/AGC/AWB like reference driver */
     if (isp_dev->sensor && isp_dev->streaming_enabled) {
         /* Reference driver calls ispcore_sensor_ops_ioctl for sensor operations */
         int ret = ispcore_sensor_ops_ioctl(isp_dev);
@@ -3205,10 +3199,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 pr_info("*** tx_isp_core_probe: Frame sync work initialized at %p ***\n", &fs_work);
                 pr_info("*** tx_isp_core_probe: Frame sync work queue initialized with dedicated workqueue ***\n");
 
-                /* Test the work function directly to see if it works */
-                pr_info("*** tx_isp_core_probe: Testing frame sync work function directly ***\n");
-                ispcore_irq_fs_work(&fs_work);
-                pr_info("*** tx_isp_core_probe: Direct work function test completed ***\n");
+                /* CRITICAL FIX: Don't call work function directly during probe - causes sleeping context error */
+                /* Work function should only be called via work queue, not directly */
+                pr_info("*** tx_isp_core_probe: Frame sync work ready - will be called via interrupts ***\n");
 
                 /* CRITICAL: Now that core device is set up, call the key function that creates graph and nodes */
                 pr_info("*** tx_isp_core_probe: Calling tx_isp_create_graph_and_nodes ***\n");
