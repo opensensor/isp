@@ -408,37 +408,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                             u32 vic_status = readl(vic_regs + 0x380);
                             static int qbuf_call_count = 0;
 
-                            /* CRITICAL FIX: Program VIC buffer addresses immediately when VBM buffers are first detected */
-                            static int vic_buffer_setup_attempts = 0;
-
-                            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0 && vic_status == 0x0 && vic_buffer_setup_attempts < 3) {
-                                vic_buffer_setup_attempts++;
-                                pr_info("*** VIC INTERRUPT: VBM buffers detected - programming VIC buffer addresses (attempt %d) ***\n", vic_buffer_setup_attempts);
-
-                                /* Program VBM buffer addresses into VIC registers 0x318-0x328 like reference driver */
-                                for (int i = 0; i < state->vbm_buffer_count && i < 8; i++) {
-                                    u32 buffer_reg = 0x318 + (i * 4);
-                                    writel(state->vbm_buffer_addresses[i], vic_regs + buffer_reg);
-                                    pr_info("*** VIC BUFFER SETUP: VIC[0x%x] = 0x%x (VBM buffer[%d]) ***\n",
-                                            buffer_reg, state->vbm_buffer_addresses[i], i);
-                                }
-                                wmb();
-
-                                /* Update VIC device buffer count to match VBM */
-                                vic_dev->active_buffer_count = state->vbm_buffer_count;
-                                pr_info("*** VIC BUFFER SETUP: Updated VIC active_buffer_count = %d ***\n", vic_dev->active_buffer_count);
-
-                                /* Allow a few attempts to ensure it takes effect */
-
-                                /* CRITICAL: Restart VIC streaming with proper buffer configuration */
-                                /* This is what the reference driver does after programming buffer addresses */
-                                u32 stream_ctrl = (state->vbm_buffer_count << 16) | 0x80000020;
-                                writel(stream_ctrl, vic_regs + 0x300);
-                                wmb();
-                                pr_info("*** VIC BUFFER SETUP: CRITICAL - VIC[0x300] = 0x%x (DMA RESTARTED WITH BUFFERS) ***\n", stream_ctrl);
-
-                                pr_info("*** VIC BUFFER SETUP: VIC DMA should now write to real VBM buffers ***\n");
-                            } else if (vic_status != 0x0) {
+                            /* VIC buffer programming moved to STREAMON where it belongs */ else if (vic_status != 0x0) {
                                 pr_info("*** VIC INTERRUPT: VIC[0x380]=0x%x - VIC hardware is working! ***\n", vic_status);
                             }
 
