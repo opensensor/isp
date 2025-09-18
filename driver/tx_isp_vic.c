@@ -2754,10 +2754,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x40404040, main_isp_base + 0xb00c);
                 writel(0x40404040, main_isp_base + 0xb010);
                 writel(0x404040, main_isp_base + 0xb014);
-                writel(0x40404040, main_isp_base + 0xb018);
-                writel(0x40404040, main_isp_base + 0xb01c);
-                writel(0x40404040, main_isp_base + 0xb020);
-                writel(0x404040, main_isp_base + 0xb024);
+                /* CRITICAL FIX: Skip interrupt-related Core Control registers to preserve VIC interrupts */
+                pr_info("*** MAIN ISP SETUP: Skipping Core Control registers 0xb018-0xb024 to preserve interrupts ***\n");
+                /* writel(0x40404040, main_isp_base + 0xb018); // SKIPPED - kills VIC interrupts */
+                /* writel(0x40404040, main_isp_base + 0xb01c); // SKIPPED - kills VIC interrupts */
+                /* writel(0x40404040, main_isp_base + 0xb020); // SKIPPED - kills VIC interrupts */
+                /* writel(0x404040, main_isp_base + 0xb024);   // SKIPPED - kills VIC interrupts */
                 writel(0x1000080, main_isp_base + 0xb028);
                 writel(0x1000080, main_isp_base + 0xb02c);
                 writel(0x100, main_isp_base + 0xb030);
@@ -2783,10 +2785,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x0, main_isp_base + 0x9804);        /* 0x3f00 -> 0x0 */
                 writel(0x0, main_isp_base + 0x9ac0);        /* 0x200 -> 0x0 */
                 writel(0x0, main_isp_base + 0x9ac8);        /* 0x200 -> 0x0 */
-                writel(0x24242424, main_isp_base + 0xb018); /* 0x40404040 -> 0x24242424 */
-                writel(0x24242424, main_isp_base + 0xb01c); /* 0x40404040 -> 0x24242424 */
-                writel(0x24242424, main_isp_base + 0xb020); /* 0x40404040 -> 0x24242424 */
-                writel(0x242424, main_isp_base + 0xb024);   /* 0x404040 -> 0x242424 */
+                /* CRITICAL FIX: Skip interrupt-related Core Control registers to preserve VIC interrupts */
+                pr_info("*** 280ms DELTA: Skipping Core Control registers 0xb018-0xb024 to preserve interrupts ***\n");
+                /* writel(0x24242424, main_isp_base + 0xb018); // SKIPPED - kills VIC interrupts */
+                /* writel(0x24242424, main_isp_base + 0xb01c); // SKIPPED - kills VIC interrupts */
+                /* writel(0x24242424, main_isp_base + 0xb020); // SKIPPED - kills VIC interrupts */
+                /* writel(0x242424, main_isp_base + 0xb024);   // SKIPPED - kills VIC interrupts */
                 writel(0x10d0046, main_isp_base + 0xb028);  /* 0x1000080 -> 0x10d0046 */
                 writel(0xe8002f, main_isp_base + 0xb02c);   /* 0x1000080 -> 0xe8002f */
                 writel(0xc50100, main_isp_base + 0xb030);   /* 0x100 -> 0xc50100 */
