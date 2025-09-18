@@ -204,7 +204,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     
     return 0;
 }
-EXPORT_SYMBOL(tx_isp_create_vic_device);
+/* EXPORT_SYMBOL(tx_isp_create_vic_device); - REMOVED: Function should not be called */
 
 /* VIC frame completion handler */
 static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
