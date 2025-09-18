@@ -1965,11 +1965,13 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
             
         case 0x2000013:
             pr_info("vic_sensor_ops_ioctl: Resetting and setting VIC register (cmd=0x%x)\n", cmd);
+            /* SURGICAL FIX: Don't write 0 to vic_regs - this corrupts CSI PHY register 0x0 */
             /* Binary Ninja: **($a0 + 0xb8) = 0, then = 4 */
             if (vic_regs) {
-                writel(0, vic_regs);
+                /* SURGICAL FIX: Skip the destructive write of 0 to register 0x0 */
+                /* writel(0, vic_regs);  // REMOVED - this was corrupting CSI PHY register 0x0 */
                 writel(4, vic_regs);
-                pr_info("*** vic_sensor_ops_ioctl: Wrote reset sequence (0, 4) to VIC register base ***\n");
+                pr_info("*** vic_sensor_ops_ioctl: Wrote config sequence (4) to VIC register base (skipped destructive 0) ***\n");
             } else {
                 pr_err("vic_sensor_ops_ioctl: No VIC register base available\n");
             }
