@@ -507,33 +507,28 @@ static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 void system_reg_write(u32 reg, u32 value);
 
 /* system_reg_write - Helper function to write ISP registers safely */
-void system_reg_write(u32 reg, u32 value)
+void system_reg_write(u32 arg1, u32 arg2)
 {
-    void __iomem *isp_regs = NULL;
+    /* Binary Ninja EXACT: *(*(mdns_y_pspa_cur_bi_wei0_array + 0xb8) + arg1) = arg2 */
+    /* mdns_y_pspa_cur_bi_wei0_array is the ISP device structure (ourISPdev) */
+    /* +0xb8 is the register base address offset in the device structure */
 
-    if (!ourISPdev || !ourISPdev->vic_regs) {
-        pr_warn("system_reg_write: No ISP registers available for reg=0x%x val=0x%x\n", reg, value);
+    if (!ourISPdev) {
+        pr_warn("system_reg_write: No ISP device available for reg=0x%x val=0x%x\n", arg1, arg2);
         return;
     }
 
+    /* Binary Ninja: Get register base from ISP device structure at offset 0xb8 */
+    void __iomem *reg_base = ourISPdev->vic_regs;  /* This is at offset 0xb8 in the structure */
 
-
-    /* Map ISP registers based on VIC base (which is at 0x133e0000) */
-    /* ISP core registers are at 0x13300000 = vic_regs - 0xe0000 */
-    isp_regs = ourISPdev->vic_regs - 0xe0000;
-
-    /* CRITICAL: Log all writes to critical registers to find source of 0x0 writes */
-    if ((reg >= 0x100 && reg <= 0x10c) || (reg >= 0xb054 && reg <= 0xb078)) {
-        pr_warn("*** CRITICAL REG WRITE: reg=0x%x value=0x%x ***\n", reg, value);
-        if (value == 0x0) {
-            pr_err("*** FOUND 0x0 WRITE: reg=0x%x - THIS IS THE PROBLEM! ***\n", reg);
-        }
+    if (!reg_base) {
+        pr_warn("system_reg_write: No register base available for reg=0x%x val=0x%x\n", arg1, arg2);
+        return;
     }
 
-    pr_debug("system_reg_write: Writing ISP reg[0x%x] = 0x%x\n", reg, value);
-
-    /* Write to ISP register with proper offset */
-    writel(value, isp_regs + reg);
+    /* Binary Ninja EXACT: Write to register base + offset */
+    pr_info("*** SYSTEM_REG_WRITE: reg[0x%x] = 0x%x (Binary Ninja EXACT) ***\n", arg1, arg2);
+    writel(arg2, reg_base + arg1);
     wmb();
 }
 
