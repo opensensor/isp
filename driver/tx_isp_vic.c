@@ -673,7 +673,7 @@ int tx_isp_vic_stop(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* Configure VIC DMA for frame capture - Based on Binary Ninja reference */
+/* Configure VIC DMA for frame capture - Using ACTUAL working registers from logs */
 int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t addr, u32 width, u32 height)
 {
     void __iomem *vic_regs;
@@ -683,25 +683,22 @@ int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t addr,
 
     vic_regs = vic_dev->vic_regs;
 
-    pr_info("*** VIC DMA CONFIG: Configuring VIC DMA for frame capture ***\n");
+    pr_info("*** VIC DMA CONFIG: Using ACTUAL working VIC registers from logs ***\n");
 
-    /* Configure VIC DMA registers based on Binary Ninja reference */
-    writel(addr, vic_regs + 0x7820);           /* DMA target address */
-    writel(width * 2, vic_regs + 0x7824);      /* DMA stride (RAW10 = 2 bytes/pixel) */
-    writel(height, vic_regs + 0x7828);         /* DMA height */
+    /* Use the SAME registers that vic_pipo_mdma_enable uses successfully */
+    writel((height << 16) | width, vic_regs + 0x304);  /* Dimensions (matches 0x7800438 for 1920x1080) */
+    writel(1, vic_regs + 0x308);                       /* MDMA enable */
+    writel(width * 2, vic_regs + 0x310);               /* Stride (RAW10 = 2 bytes/pixel) */
+    writel(width * 2, vic_regs + 0x314);               /* Stride (duplicate) */
     wmb();
 
-    /* Configure VIC DMA control */
-    u32 vic_ctrl = readl(vic_regs + 0x7810);
-    writel(vic_ctrl | 0x1, vic_regs + 0x7810); /* Enable DMA */
+    /* CRITICAL: Also configure buffer address - this might be what's missing */
+    /* The logs show VIC[0x380] should contain buffer addresses, so maybe we need to program buffer registers */
+    writel(addr, vic_regs + 0x318);                    /* Buffer 0 address */
     wmb();
 
-    /* Start VIC DMA capture */
-    writel(1, vic_regs + 0x7800);              /* Start DMA */
-    wmb();
-
-    pr_info("*** VIC DMA CONFIG: DMA configured - addr=0x%x, stride=%d, height=%d ***\n",
-            (u32)addr, width * 2, height);
+    pr_info("*** VIC DMA CONFIG: Configured with WORKING registers - addr=0x%x, dimensions=%dx%d, stride=%d ***\n",
+            (u32)addr, width, height, width * 2);
 
     return 0;
 }
