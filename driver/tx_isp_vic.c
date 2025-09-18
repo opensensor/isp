@@ -416,20 +416,13 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                                 /* Based on Binary Ninja reference, VIC DMA needs proper configuration */
                                 u32 frame_size = state->width * state->height * 2;  /* RAW10 = 2 bytes/pixel */
 
-                                /* Configure VIC DMA registers for frame capture */
-                                writel(completed_buffer_addr, vic_regs + 0x7820);  /* DMA target address */
-                                writel(state->width * 2, vic_regs + 0x7824);       /* DMA stride (RAW10 = 2 bytes/pixel) */
-                                writel(state->height, vic_regs + 0x7828);          /* DMA height */
-                                wmb();
-
-                                /* Enable VIC DMA capture */
-                                u32 vic_ctrl = readl(vic_regs + 0x7810);
-                                writel(vic_ctrl | 0x1, vic_regs + 0x7810);         /* Enable DMA */
-                                writel(1, vic_regs + 0x7800);                      /* Start DMA capture */
-                                wmb();
-
-                                pr_info("*** VIC DMA FIX: Configured VIC DMA - addr=0x%x, stride=%d, height=%d ***\n",
-                                        completed_buffer_addr, state->width * 2, state->height);
+                                /* CRITICAL FIX: Use proper VIC DMA configuration function */
+                                int ret_dma = tx_isp_vic_configure_dma(vic_dev, completed_buffer_addr, state->width, state->height);
+                                if (ret_dma == 0) {
+                                    pr_info("*** VIC DMA FIX: Successfully configured VIC DMA for next frame ***\n");
+                                } else {
+                                    pr_err("*** VIC DMA FIX: Failed to configure VIC DMA: %d ***\n", ret_dma);
+                                }
 
                                 /* CRITICAL DMA SYNC: Synchronize completed buffer for CPU access */
                                 mips_dma_cache_sync(completed_buffer_addr, frame_size, DMA_FROM_DEVICE);
