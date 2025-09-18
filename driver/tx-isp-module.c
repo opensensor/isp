@@ -526,6 +526,17 @@ void system_reg_write(u32 arg1, u32 arg2)
         return;
     }
 
+    /* SURGICAL FIX: Protect critical CSI PHY registers during streaming */
+    extern uint32_t vic_start_ok;
+    if (vic_start_ok == 1) {
+        /* Check if this write would corrupt critical CSI PHY registers */
+        if (arg1 == 0x1c || arg1 == 0xc || arg1 == 0x100 || arg1 == 0x104 ||
+            arg1 == 0x108 || arg1 == 0x10c) {
+            pr_debug("*** SYSTEM_REG_WRITE: BLOCKED write to CSI PHY reg[0x%x] = 0x%x during streaming ***\n", arg1, arg2);
+            return;  /* Block destructive writes to CSI PHY registers during streaming */
+        }
+    }
+
     /* Binary Ninja EXACT: Write to register base + offset */
     pr_info("*** SYSTEM_REG_WRITE: reg[0x%x] = 0x%x (Binary Ninja EXACT) ***\n", arg1, arg2);
     writel(arg2, reg_base + arg1);
