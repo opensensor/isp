@@ -5883,17 +5883,24 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
     
     /* CRITICAL FIX: Actually enable VIC hardware interrupts */
     /* The callback was causing crashes, but we still need to enable VIC interrupts */
-    if (vic_dev->vic_regs) {
+    if (vic_dev->vic_regs && vic_dev->vic_regs_secondary) {
         pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
 
-        /* Clear any pending interrupts first */
-        writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
-        writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+        /* CRITICAL: Use SECONDARY VIC space for interrupt registers (like last night) */
+        /* Primary VIC (0x133e0000) = main VIC control */
+        /* Secondary VIC (0x10023000) = interrupt control */
+        void __iomem *vic_int_regs = vic_dev->vic_regs_secondary;
+
+        pr_info("*** USING SECONDARY VIC SPACE FOR INTERRUPTS: %p (0x10023000) ***\n", vic_int_regs);
+
+        /* Clear any pending interrupts first - use secondary space */
+        writel(0xFFFFFFFF, vic_int_regs + 0x1f0);  /* Clear main interrupt status */
+        writel(0xFFFFFFFF, vic_int_regs + 0x1f4);  /* Clear MDMA interrupt status */
         wmb();
 
-        /* Enable VIC interrupts - use working configuration */
-        pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
-        writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
+        /* Enable VIC interrupts in SECONDARY space - use working configuration */
+        pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS TO SECONDARY SPACE ***\n");
+        writel(0xFFFFFFFE, vic_int_regs + 0x1e8);  /* Enable frame done interrupt */
         wmb();
 
         pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
