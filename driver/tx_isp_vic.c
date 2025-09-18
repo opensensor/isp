@@ -412,8 +412,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                             static int qbuf_call_count = 0;
 
                             /* VIC buffer programming moved to STREAMON where it belongs */ else if (vic_status != 0x0) {
-                                pr_info("*** VIC INTERRUPT: VIC[0x380]=0x%x - VIC hardware is working! ***\n", vic_status);
-                            }
+                            pr_info("*** VIC INTERRUPT: VIC[0x380]=0x%x - VIC hardware is working! ***\n", vic_status);
 
                             /* Use REAL VBM buffer addresses that were stored during QBUF */
                             if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
@@ -496,12 +495,8 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             }
         }
 
-//        /* Binary Ninja: result = &data_b0000, goto label_123f4 */
-//        result = &data_b0000;
-//        goto label_123f4;
-//    }
 
-    /* Binary Ninja: GPIO handling section (label_123f4 equivalent) */
+label_123f4:
     /* Binary Ninja: GPIO handling section */
     if (gpio_switch_state != 0) {
         /* Binary Ninja: void* $s1_1 = &gpio_info */
