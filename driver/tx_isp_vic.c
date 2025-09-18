@@ -1982,22 +1982,42 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         writel(1, vic_regs + 0x0);
 
+    } else if (interface_type == TX_SENSOR_DATA_INTERFACE_DVP) {
+        /* DVP interface - Binary Ninja equivalent to MIPI for this hardware */
+        pr_info("DVP interface configuration (treating as MIPI)\n");
+
+        /* CRITICAL FIX: DVP interface should be treated like MIPI for this hardware */
+        /* Use the same configuration as MIPI interface */
+        writel(2, vic_regs + 0xc);  /* Mode 2 prevents control limit errors */
+        writel(sensor_format, vic_regs + 0x14);
+        writel((actual_width << 16) | actual_height, vic_regs + 0x4);
+        writel(actual_width << 1, vic_regs + 0x18);
+        writel(0x100010, vic_regs + 0x1a4);
+        writel(0x4440, vic_regs + 0x1ac);
+        writel(0x200, vic_regs + 0x1d0);
+        writel(0x200, vic_regs + 0x1d4);
+
+        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
+        writel(2, vic_regs + 0x0);
+        wmb();
+        writel(1, vic_regs + 0x0);
+
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT1120) {
         /* BT1120 - Binary Ninja 00010500-00010684 */
         pr_info("BT1120 interface configuration\n");
-        
+
         writel(4, vic_regs + 0xc);
         writel(0x800c0000, vic_regs + 0x10);
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         writel(actual_width << 1, vic_regs + 0x18);
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
-        
+
         /* CRITICAL FIX: Complete unlock sequence matching reference driver */
         writel(2, vic_regs + 0x0);
         wmb();
         writel(1, vic_regs + 0x0);
-        
+
     } else {
         pr_err("Unsupported interface type %d\n", interface_type);
         return -1;
