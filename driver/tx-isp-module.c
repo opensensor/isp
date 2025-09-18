@@ -2835,11 +2835,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
 
-        /* CRITICAL: If streaming is active, notify VIC hardware about new buffer */
-        if (state->streaming) {
-            pr_info("*** Channel %d: QBUF notifying VIC about new queued buffer[%d] ***\n",
-                    channel, buffer.index);
-        }
+
 
         /* SAFE: Update buffer state management */
         spin_lock_irqsave(&state->buffer_lock, flags);
