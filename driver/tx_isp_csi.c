@@ -546,6 +546,14 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
     struct tx_isp_sensor_attribute *sensor_attr;
     int result = 0xffffffea; /* -EINVAL */
 
+    /* CRITICAL FIX: Block ALL CSI PHY reconfiguration during active VIC streaming */
+    extern uint32_t vic_start_ok;
+    if (vic_start_ok == 1) {
+        pr_info("*** CSI CORE OPS INIT BLOCKED: VIC streaming active - preventing CSI PHY reconfiguration (enable=%d) ***\n", enable);
+        pr_info("*** CSI PHY remains in current operational state to maintain video pipeline ***\n");
+        return 0;  /* Return success but don't actually reconfigure CSI PHY */
+    }
+
     pr_info("*** csi_core_ops_init: EXACT Binary Ninja implementation ***\n");
     pr_info("csi_core_ops_init: sd=%p, enable=%d\n", sd, enable);
 
