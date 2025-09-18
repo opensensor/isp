@@ -646,55 +646,35 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 void system_reg_write(u32 reg, u32 value);
 
-/* system_reg_write - Binary Ninja MCP function that triggers tracer writes */
+/* system_reg_write - Helper function to write ISP registers safely */
 void system_reg_write(u32 reg, u32 value)
 {
-    void __iomem *target_base = NULL;
-    u32 actual_reg = reg;
-    const char *region_name = "unknown";
+    void __iomem *isp_regs = NULL;
 
-    /* CRITICAL: Binary Ninja uses virtual address 0xecd00000 as base */
-    /* We need to map this to actual hardware addresses that the tracer monitors */
-
-    /* Binary Ninja address mapping to real hardware addresses */
-    if (reg >= 0xecd00000) {
-        /* Remove Binary Ninja virtual base to get real register offset */
-        actual_reg = reg - 0xecd00000;
-    }
-
-    /* Map register ranges to correct hardware bases that tracer monitors */
-    if (actual_reg >= 0x0 && actual_reg <= 0x2FF) {
-        /* CSI PHY registers: 0x10022000 (isp-csi) */
-        target_base = ioremap(0x10022000, 0x1000);
-        region_name = "isp-csi";
-    } else if (actual_reg >= 0x9800 && actual_reg <= 0x9AFF) {
-        /* VIC Control registers: 0x133e0000 (isp-w02) */
-        target_base = ioremap(0x133e0000, 0x10000);
-        region_name = "isp-w02";
-    } else if (actual_reg >= 0xB000 && actual_reg <= 0xB0FF) {
-        /* Core Control registers: 0x13300000 (isp-m0) */
-        target_base = ioremap(0x13300000, 0x100000);
-        region_name = "isp-m0";
-    } else {
-        /* Default to ISP core registers */
-        target_base = ioremap(0x13300000, 0x100000);
-        region_name = "isp-m0";
-    }
-
-    if (!target_base) {
-        pr_err("system_reg_write: Failed to map %s for reg=0x%x\n", region_name, actual_reg);
+    if (!ourISPdev || !ourISPdev->vic_regs) {
+        pr_warn("system_reg_write: No ISP registers available for reg=0x%x val=0x%x\n", reg, value);
         return;
     }
 
-    /* CRITICAL: This write should trigger the tracer system */
-    pr_info("*** SYSTEM_REG_WRITE: %s reg[0x%x] = 0x%x (should trigger tracer) ***\n",
-            region_name, actual_reg, value);
 
-    writel(value, target_base + actual_reg);
+
+    /* Map ISP registers based on VIC base (which is at 0x133e0000) */
+    /* ISP core registers are at 0x13300000 = vic_regs - 0xe0000 */
+    isp_regs = ourISPdev->vic_regs - 0xe0000;
+
+    /* CRITICAL: Log all writes to critical registers to find source of 0x0 writes */
+    if ((reg >= 0x100 && reg <= 0x10c) || (reg >= 0xb054 && reg <= 0xb078)) {
+        pr_warn("*** CRITICAL REG WRITE: reg=0x%x value=0x%x ***\n", reg, value);
+        if (value == 0x0) {
+            pr_err("*** FOUND 0x0 WRITE: reg=0x%x - THIS IS THE PROBLEM! ***\n", reg);
+        }
+    }
+
+    pr_debug("system_reg_write: Writing ISP reg[0x%x] = 0x%x\n", reg, value);
+
+    /* Write to ISP register with proper offset */
+    writel(value, isp_regs + reg);
     wmb();
-
-    /* Unmap to prevent memory leaks */
-    iounmap(target_base);
 }
 
 /* system_reg_write_ae - EXACT Binary Ninja decompiled implementation */
