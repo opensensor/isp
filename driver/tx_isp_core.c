@@ -1395,14 +1395,9 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
     /* Binary Ninja: void* $s0_1 = arg1[0x35] */
     vic_dev = isp->vic_dev;
     if (!vic_dev) {
-        pr_info("ispcore_slake_module: No VIC device found - creating it now");
-        ret = tx_isp_create_vic_device(isp);
-        if (ret != 0) {
-            pr_err("ispcore_slake_module: Failed to create VIC device: %d", ret);
-            return ret;
-        }
-        vic_dev = isp->vic_dev;
-        pr_info("ispcore_slake_module: VIC device created successfully");
+        pr_warn("ispcore_slake_module: No VIC device found - probe may not have run yet");
+        pr_warn("ispcore_slake_module: VIC device will be created by tx_isp_vic_probe");
+        return -EPROBE_DEFER; /* Defer until probe creates the VIC device */
     }
     
     /* Binary Ninja: int32_t $v0 = *($s0_1 + 0xe8) */
