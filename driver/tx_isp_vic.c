@@ -404,6 +404,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
                             /* CRITICAL: Call ispvic_frame_channel_qbuf when VBM buffers first become available */
                             static int vbm_buffers_programmed = 0;
+                            pr_info("*** VIC INTERRUPT DEBUG: Checking VBM buffers - programmed=%d ***\n", vbm_buffers_programmed);
                             if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0 && !vbm_buffers_programmed) {
                                 pr_info("*** VIC INTERRUPT: VBM buffers now available - calling ispvic_frame_channel_qbuf ***\n");
                                 int qbuf_result = ispvic_frame_channel_qbuf(vic_dev, NULL);
@@ -413,6 +414,9 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                                 } else {
                                     pr_err("*** VIC INTERRUPT: Failed to program VIC buffer addresses: %d ***\n", qbuf_result);
                                 }
+                            } else {
+                                pr_info("*** VIC INTERRUPT DEBUG: Condition not met - addr=%p, count=%d, programmed=%d ***\n",
+                                        state->vbm_buffer_addresses, state->vbm_buffer_count, vbm_buffers_programmed);
                             }
 
                             /* Use REAL VBM buffer addresses that were stored during QBUF */
