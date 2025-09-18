@@ -668,6 +668,25 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Pre-frame dequeue work scheduling */
     }
 
+    /* CRITICAL FIX: Handle the persistent ISP error 0x20 */
+    /* Based on logs analysis: error 0x20 occurs when VIC status register 0x84c is 0x0 */
+    if ((interrupt_status & 0x3f8) != 0) {
+        u32 error_code = (interrupt_status & 0x3f8) >> 3;
+        u32 error_reg_84c = readl(vic_regs + 0x84c);
+
+        if (error_code == 0x20 && error_reg_84c == 0x0) {
+            pr_info("ISP CORE: Error 0x20 - VIC status register not initialized\n");
+
+            /* CRITICAL FIX: Initialize VIC status register to fix error 0x20 */
+            writel(0x1, vic_regs + 0x84c);  /* Set VIC processing active */
+            wmb();
+
+            pr_info("*** ISP CORE: VIC status register 0x84c initialized - should fix error 0x20 ***\n");
+        } else {
+            pr_info("ISP CORE: Error 0x%x - VIC status 0x84c = 0x%x\n", error_code, error_reg_84c);
+        }
+    }
+
     /* Binary Ninja: Error interrupt processing */
     if (interrupt_status & 0x200) {  /* Error interrupt type 1 */
         pr_info("ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR\n");
