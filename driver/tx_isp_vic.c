@@ -2493,7 +2493,28 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         /* Stream ON */
         /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
         vic_pipo_mdma_enable(vic_dev);
-        
+
+        /* CRITICAL FIX: Add our VIC DMA configuration after vic_pipo_mdma_enable */
+        /* This is the missing piece - vic_pipo_mdma_enable configures MDMA but not full DMA */
+        extern struct frame_channel_device frame_channels[];
+        extern int num_channels;
+        if (num_channels > 0) {
+            struct tx_isp_channel_state *state = &frame_channels[0].state;
+            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0 && vic_dev->width > 0 && vic_dev->height > 0) {
+                dma_addr_t first_buffer = state->vbm_buffer_addresses[0];
+                int ret_dma = tx_isp_vic_configure_dma(vic_dev, first_buffer, vic_dev->width, vic_dev->height);
+                if (ret_dma == 0) {
+                    pr_info("*** ispvic_frame_channel_s_stream: Successfully configured VIC DMA for streaming ***\n");
+                } else {
+                    pr_err("*** ispvic_frame_channel_s_stream: Failed to configure VIC DMA: %d ***\n", ret_dma);
+                }
+            } else {
+                pr_warn("*** ispvic_frame_channel_s_stream: No VBM buffers or VIC dimensions for DMA config ***\n");
+                pr_warn("*** VBM buffers: %p, count: %d, VIC: %dx%d ***\n",
+                        state->vbm_buffer_addresses, state->vbm_buffer_count, vic_dev->width, vic_dev->height);
+            }
+        }
+
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         vic_base = vic_dev->vic_regs;
         if (vic_base && (unsigned long)vic_base >= 0x80000000) {
