@@ -2548,30 +2548,6 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
                 /* Update VIC buffer count to match VBM buffers */
                 vic_dev->active_buffer_count = state->vbm_buffer_count;
                 pr_info("*** STREAMON: Updated VIC active_buffer_count = %d ***\n", vic_dev->active_buffer_count);
-
-                /* CRITICAL: VIC hardware enable sequence AFTER buffer programming */
-                pr_info("*** STREAMON: Starting VIC hardware enable sequence (2->4->wait->1) ***\n");
-                writel(0x2, vic_dev->vic_regs + 0x0);  /* Pre-enable */
-                wmb();
-                writel(0x4, vic_dev->vic_regs + 0x0);  /* Wait state */
-                wmb();
-
-                /* Wait for hardware ready */
-                u32 timeout = 1000;
-                u32 vic_status;
-                while ((vic_status = readl(vic_dev->vic_regs + 0x0)) != 0) {
-                    udelay(1);
-                    if (--timeout == 0) {
-                        pr_err("*** STREAMON: VIC unlock timeout - register stuck at 0x%x ***\n", vic_status);
-                        break;
-                    }
-                }
-
-                /* Final enable */
-                writel(0x1, vic_dev->vic_regs + 0x0);
-                wmb();
-                pr_info("*** STREAMON: VIC hardware enabled - ready for DMA ***\n");
-
             } else {
                 pr_err("*** STREAMON: VBM buffer allocation failed - VIC DMA will not work ***\n");
                 /* Must unlock before returning */
