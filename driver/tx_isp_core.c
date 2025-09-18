@@ -1338,23 +1338,12 @@ static int tx_isp_vic_device_init(struct tx_isp_dev *isp)
         }
     }
 
-    /* Allocate VIC device structure if not already present */
+    /* *** REMOVED DUPLICATE VIC DEVICE CREATION *** */
+    /* VIC device MUST be created by tx_isp_vic_probe with proper register mapping */
     if (!isp->vic_dev) {
-        vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
-        if (!vic_dev) {
-            pr_err("Failed to allocate VIC device\n");
-            return -ENOMEM;
-        }
-
-        /* Initialize VIC device structure */
-        vic_dev->state = 1; /* INIT state */
-        mutex_init(&vic_dev->state_lock);
-        spin_lock_init(&vic_dev->lock);
-        init_completion(&vic_dev->frame_complete);
-
-        isp->vic_dev = (struct tx_isp_subdev *)&vic_dev->sd;
-
-        pr_warn("*** CREATED BASIC VIC DEVICE WITHOUT REGISTERS - PROBE SHOULD HAVE DONE THIS ***\n");
+        pr_warn("*** WARNING: VIC device not found - probe may not have run yet ***\n");
+        pr_warn("*** VIC device will be created by tx_isp_vic_probe with registers ***\n");
+        return -EPROBE_DEFER; /* Defer until probe creates the VIC device */
     }
 
     pr_info("VIC device initialized\n");
