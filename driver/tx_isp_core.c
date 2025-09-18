@@ -40,7 +40,8 @@ static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
 int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
 
-/* VIC device creation handled by tx_isp_vic_probe - no external function needed */
+/* Forward declaration for VIC device creation from tx_isp_vic.c */
+extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 
 /* Forward declaration for VIN device creation from tx_isp_vin.c */
 extern int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev);
@@ -3195,9 +3196,15 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* Set basic platform data first */
             platform_set_drvdata(pdev, isp_dev);
 
-            /* *** REMOVED DUPLICATE VIC DEVICE CREATION *** */
-            /* VIC device will be created by tx_isp_vic_probe with proper register mapping */
-            pr_info("*** tx_isp_core_probe: VIC device creation deferred to VIC probe ***\n");
+            /* CRITICAL: Create VIC device BEFORE sensor_early_init */
+            pr_info("*** tx_isp_core_probe: Creating VIC device ***\n");
+            result = tx_isp_create_vic_device(isp_dev);
+            if (result != 0) {
+                pr_err("*** tx_isp_core_probe: Failed to create VIC device: %d ***\n", result);
+                return result;
+            } else {
+                pr_info("*** tx_isp_core_probe: VIC device created successfully ***\n");
+            }
 
             /* Binary Ninja: sensor_early_init($v0) */
             pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
