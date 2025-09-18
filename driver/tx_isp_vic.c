@@ -2579,17 +2579,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
-            if (enable == 0) {
-                /* Stream OFF - BINARY NINJA REFERENCE: No adjustment function */
-                ret = 0;
-                ispvic_frame_channel_s_stream(vic_dev, 0);
-                if (current_state == 4) {
-                    vic_dev->state = 3;
-                    pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
-                }
-            } else {
-                /* Stream ON - CRITICAL: Follow EXACT reference driver sub-device sequence */
-                ret = 0;
+    /* Binary Ninja: return $v0 */
+    pr_info("*** BINARY NINJA EXACT: vic_core_s_stream returning %d ***\n", ret);
+    return ret;
+}
                 
                 pr_info("*** CRITICAL: Following EXACT reference driver sub-device initialization sequence ***\n");
                 
