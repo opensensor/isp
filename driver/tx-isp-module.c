@@ -218,145 +218,6 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
     return client;
 }
 
-/* MIPS-SAFE I2C communication test - Fixed for unaligned access */
-static int mips_safe_i2c_test(struct i2c_client *client, const char *sensor_type)
-{
-    struct i2c_adapter *adapter;
-    int test_result = 0;
-    
-    if (!client || ((uintptr_t)client & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: client not properly aligned ***\n");
-        return -EINVAL;
-    }
-    
-    if (!sensor_type) {
-        pr_err("*** MIPS ERROR: sensor_type is NULL ***\n");
-        return -EINVAL;
-    }
-    
-    /* Get I2C adapter from client */
-    adapter = client->adapter;
-    if (!adapter) {
-        pr_err("*** MIPS ERROR: No I2C adapter available ***\n");
-        return -ENODEV;
-    }
-    
-    pr_info("*** MIPS-SAFE I2C TEST FOR %s ***\n", sensor_type);
-    
-    /* *** FIXED: PROPER I2C COMMUNICATION TEST *** */
-    pr_info("*** TESTING I2C COMMUNICATION WITH %s (IMPROVED METHOD) ***\n", sensor_type);
-    {
-        /* Instead of blind read, try sensor-specific register read */
-        if (strncmp(sensor_type, "gc2053", 6) == 0) {
-            /* GC2053-specific I2C test - read chip ID register */
-            unsigned char reg_addr = 0x03; /* GC2053 chip ID register (high byte) */
-            unsigned char chip_id_high = 0;
-            struct i2c_msg msgs[2] = {
-                {
-                    .addr = client->addr,
-                    .flags = 0,
-                    .len = 1,
-                    .buf = &reg_addr
-                },
-                {
-                    .addr = client->addr, 
-                    .flags = I2C_M_RD,
-                    .len = 1,
-                    .buf = &chip_id_high
-                }
-            };
-            
-            test_result = i2c_transfer(adapter, msgs, 2);
-            pr_info("*** I2C GC2053 CHIP ID TEST: result=%d, chip_id_high=0x%02x ***\n", 
-                   test_result, chip_id_high);
-            
-            if (test_result == 2) {
-                if (chip_id_high == 0x20) {
-                    pr_info("*** SUCCESS: GC2053 CHIP ID CONFIRMED (0x20xx) ***\n");
-                } else {
-                    pr_warn("*** WARNING: Unexpected chip ID 0x%02x (expected 0x20) ***\n", chip_id_high);
-                }
-            } else if (test_result < 0) {
-                pr_err("*** FAILED: I2C communication failed: %d ***\n", test_result);
-                pr_err("*** DIAGNOSIS: I2C Error %d indicates hardware issues ***\n", test_result);
-                
-                /* Detailed error analysis */
-                switch (test_result) {
-                case -EIO:
-                    pr_err("*** -EIO: I/O error - check sensor power, I2C bus, connections ***\n");
-                    break;
-                case -EREMOTEIO:
-                    pr_err("*** -EREMOTEIO: No ACK from sensor - wrong address or dead sensor ***\n");
-                    break;
-                case -EOPNOTSUPP:
-                    pr_err("*** -EOPNOTSUPP: I2C adapter doesn't support this operation ***\n");
-                    break;
-                case -ETIMEDOUT:
-                    pr_err("*** -ETIMEDOUT: I2C bus timeout - bus may be hung ***\n");
-                    break;
-                default:
-                    pr_err("*** Unknown I2C error %d ***\n", test_result);
-                    break;
-                }
-                
-                /* Try alternative I2C addresses for GC2053 */
-                pr_info("*** TRYING ALTERNATIVE GC2053 I2C ADDRESSES ***\n");
-                unsigned char alt_addresses[] = {0x37, 0x3c, 0x21, 0x29};
-                int i;
-                for (i = 0; i < ARRAY_SIZE(alt_addresses); i++) {
-                    if (alt_addresses[i] == client->addr) continue; /* Skip original */
-                    
-                    msgs[0].addr = alt_addresses[i];
-                    msgs[1].addr = alt_addresses[i];
-                    
-                    test_result = i2c_transfer(adapter, msgs, 2);
-                    pr_info("*** Testing addr 0x%02x: result=%d, data=0x%02x ***\n", 
-                           alt_addresses[i], test_result, chip_id_high);
-                    
-                    if (test_result == 2) {
-                        pr_info("*** SUCCESS: GC2053 responds at address 0x%02x! ***\n", alt_addresses[i]);
-                        /* Update client address */
-                        client->addr = alt_addresses[i];
-                        break;
-                    }
-                }
-            } else {
-                pr_warn("*** PARTIAL SUCCESS: Got %d messages (expected 2) ***\n", test_result);
-            }
-        } else {
-            /* Generic I2C test for other sensors */
-            pr_info("*** GENERIC I2C TEST FOR %s ***\n", sensor_type);
-            
-            /* Try to read a common register that most sensors have */
-            unsigned char test_reg = 0x00; /* Most sensors have something at register 0x00 */
-            unsigned char test_data = 0;
-            struct i2c_msg msgs[2] = {
-                {
-                    .addr = client->addr,
-                    .flags = 0,
-                    .len = 1,
-                    .buf = &test_reg
-                },
-                {
-                    .addr = client->addr,
-                    .flags = I2C_M_RD, 
-                    .len = 1,
-                    .buf = &test_data
-                }
-            };
-            
-            test_result = i2c_transfer(adapter, msgs, 2);
-            pr_info("*** I2C TEST: result=%d, reg[0x00]=0x%02x ***\n", test_result, test_data);
-            
-            if (test_result < 0) {
-                pr_err("*** I2C COMMUNICATION FAILED: %d ***\n", test_result);
-            }
-        }
-    }
-    
-    return test_result >= 0 ? 0 : test_result;
-}
-
 /* Prepare I2C infrastructure for dynamic sensor registration */
 static int prepare_i2c_infrastructure(struct tx_isp_dev *dev)
 {
@@ -645,8 +506,8 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 void system_reg_write(u32 reg, u32 value);
 
-/* system_reg_write - EXACT Binary Ninja MCP reference implementation */
-void system_reg_write(u32 arg1, u32 arg2)
+/* system_reg_write - Helper function to write ISP registers safely */
+void system_reg_write(u32 reg, u32 value)
 {
     /* Binary Ninja EXACT: *(*(mdns_y_pspa_cur_bi_wei0_array + 0xb8) + arg1) = arg2 */
     /* mdns_y_pspa_cur_bi_wei0_array is the ISP device structure (ourISPdev) */
@@ -2531,12 +2392,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     }
     
     pr_info("*** Frame channel %d IOCTL: MIPS-safe processing - cmd=0x%x ***\n", channel, cmd);
-
-    /* Debug: Check for DQBUF before switch */
-    if (cmd == 0xc0445609) {
-        pr_info("*** DQBUF: About to enter switch statement for VIDIOC_DQBUF ***\n");
-    }
-
+        
     // Add channel enable/disable IOCTLs that IMP_FrameSource_EnableChn uses
     switch (cmd) {
     case 0x40045620: { // Channel enable IOCTL (common pattern)
@@ -3164,17 +3020,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
         
-        /* CRITICAL FIX: Check if we're in atomic context before waiting */
-        if (in_atomic() || irqs_disabled()) {
-            pr_warn("*** Channel %d: DQBUF called from atomic context - checking frame without waiting ***\n", channel);
-            ret = state->frame_ready ? 1 : 0;
-        } else {
-            /* Binary Ninja DQBUF: Wait for frame completion with proper state checking */
-            pr_info("*** Channel %d: DQBUF waiting for frame completion (timeout=200ms) ***\n", channel);
-            ret = wait_event_interruptible_timeout(state->frame_wait,
-                                                 state->frame_ready || !state->streaming,
-                                                 msecs_to_jiffies(200)); // 200ms timeout like reference
-        }
+        /* Binary Ninja DQBUF: Wait for frame completion with proper state checking */
+        pr_info("*** Channel %d: DQBUF waiting for frame completion (timeout=200ms) ***\n", channel);
+        ret = wait_event_interruptible_timeout(state->frame_wait,
+                                             state->frame_ready || !state->streaming,
+                                             msecs_to_jiffies(200)); // 200ms timeout like reference
         pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, ret);
         
         if (ret == 0) {
@@ -7009,7 +6859,6 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
         pr_debug("VIC: Unknown event type: 0x%x\n", event_type);
         return -0x203; /* 0xfffffdfd */
     }
-}
 }
 
 /* Wake up waiters when frame is ready - matches reference driver pattern */
