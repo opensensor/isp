@@ -738,39 +738,9 @@ irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
         return IRQ_NONE;
     }
 
-    /* CRITICAL FIX: Use different register bases for different IRQs */
-    if (irq == 37) {
-        /* IRQ 37: ISP Core registers */
-        if (!isp_dev->core_regs) {
-            return IRQ_NONE;
-        }
-        reg_base = isp_dev->core_regs;
-        interrupt_status = readl(reg_base + 0xb4);
-        if (interrupt_status != 0) {
-            writel(interrupt_status, reg_base + 0xb8);
-            wmb();
-        }
-    } else if (irq == 38) {
-        /* IRQ 38: VIC registers */
-        if (!isp_dev->vic_regs) {
-            return IRQ_NONE;
-        }
-        reg_base = isp_dev->vic_regs;
-        interrupt_status = readl(reg_base + 0xb4);
-        if (interrupt_status != 0) {
-            writel(interrupt_status, reg_base + 0xb8);
-            wmb();
-        }
-    } else {
-        return IRQ_NONE;
-    }
-
-    if (interrupt_status == 0) {
-        return IRQ_NONE;
-    }
-
-    /* TEMPORARY: Return IRQ_HANDLED to prevent continuous interrupts during testing */
-    return IRQ_HANDLED;
+    /* TEMPORARY: DON'T clear interrupts or read registers - just return IRQ_NONE */
+    /* This will test if the interrupt handling itself is causing the soft lockup */
+    return IRQ_NONE;
 }
 
 /* ISP interrupt thread handler - COMPLETELY DISABLED TO TEST SOFT LOCKUP */
