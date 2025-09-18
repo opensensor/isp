@@ -1520,8 +1520,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** BINARY NINJA: reg 0x4 = 0x%x (dimensions %dx%d) ***\n", (width << 16) | height, width, height);
 
         /* 2. Register 0x14 - Interrupt config (from sensor attributes) */
-        writel(0x0, vic_regs + 0x14);  /* Start with safe default */
-        pr_info("*** BINARY NINJA: reg 0x14 = 0x0 (interrupt config) ***\n");
+        /* SURGICAL FIX: Don't write 0x0 to register 0x14 - preserve working CSI PHY config */
+        /* writel(0x0, vic_regs + 0x14);  // REMOVED - this was corrupting CSI PHY register */
+        pr_info("*** BINARY NINJA: reg 0x14 preserved (interrupt config) ***\n");
 
         /* 3. Register 0x100 - Complex calculation for MIPI */
         u32 reg_100_value = 0x1;  /* Basic value for MIPI RAW10 */
