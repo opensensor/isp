@@ -366,7 +366,7 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
             }
         }
 
-        pr_info("*** ispcore_sensor_ops_ioctl: Calling sensor with FPS=0x%x (25/1) ***\n", fps_value);
+        /* Skip the FPS logging since we're now using EXPO instead */
 
         /* CRITICAL FIX: Use supported sensor IOCTL command instead of unsupported FPS command */
         /* The GC2053 sensor doesn't support TX_ISP_EVENT_SENSOR_FPS, causing -515 errors */
