@@ -748,6 +748,51 @@ int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t base_
     wmb();
 
     pr_info("*** VIC DMA CONFIG: CRITICAL - VIC control 0x300 = 0x%x (DMA ENABLED) ***\n", vic_control);
+
+    /* CRITICAL FIX: Configure VIC hardware BEFORE unlock sequence */
+    pr_info("*** VIC DMA CONFIG: Configuring VIC hardware before unlock sequence ***\n");
+
+    /* Configure essential VIC registers for proper hardware operation */
+    writel((1920 << 16) | 1080, vic_regs + 0x4);  /* Dimensions */
+    writel(0x0, vic_regs + 0x14);  /* Interrupt config */
+    writel(0x7800000, vic_regs + 0x110);  /* Hardware expected value */
+    writel(0x0, vic_regs + 0x114);
+    writel(0x0, vic_regs + 0x118);
+    writel(0x0, vic_regs + 0x11c);
+    writel(0x100010, vic_regs + 0x1a4);  /* Control register */
+    wmb();
+
+    /* CRITICAL FIX: Complete VIC hardware unlock sequence before starting */
+    /* Binary Ninja: EXACT reference driver unlock sequence */
+    pr_info("*** VIC DMA CONFIG: Starting VIC hardware unlock sequence ***\n");
+
+    writel(0x2, vic_regs + 0x0);  /* Pre-enable */
+    wmb();
+    writel(0x4, vic_regs + 0x0);  /* Wait state */
+    wmb();
+
+    /* Wait for hardware ready (register should become 0) */
+    u32 timeout = 10000;
+    u32 vic_status;
+    while ((vic_status = readl(vic_regs + 0x0)) != 0) {
+        udelay(1);
+        if (--timeout == 0) {
+            pr_err("*** VIC DMA CONFIG: VIC unlock timeout - register stuck at 0x%x ***\n", vic_status);
+            break;  /* Continue anyway, but log the issue */
+        }
+    }
+
+    if (timeout > 0) {
+        pr_info("*** VIC DMA CONFIG: VIC unlock successful - register 0x0 = 0x0 ***\n");
+    }
+
+    /* NOW start VIC hardware capture */
+    writel(0x1, vic_regs + 0x0);  /* Start VIC hardware capture */
+    wmb();
+
+    /* Verify VIC hardware started */
+    vic_status = readl(vic_regs + 0x0);
+    pr_info("*** VIC DMA CONFIG: CRITICAL - VIC hardware started, register 0x0 = 0x%x ***\n", vic_status);
     pr_info("*** VIC DMA CONFIG: VIC hardware should now capture frames and populate VIC[0x380] ***\n");
 
     return 0;
