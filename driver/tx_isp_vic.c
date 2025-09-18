@@ -383,10 +383,10 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
                 writel(new_reg_val, vic_regs + 0x300);
 
-                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (CONTROL BITS: %s) ***\n",
-                        reg_val, (reg_val & 0x80000020) == 0x80000020 ? "PRESERVED" : "LOST");
-                pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
-                         reg_val, buffer_index, high_bits, match_found);
+                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (BUFFER COUNT PRESERVED: %d) ***\n",
+                        new_reg_val, total_buffer_count);
+                pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: current=%d, total=%d, match=%d)\n",
+                        new_reg_val, current_buffer_index, total_buffer_count, match_found);
             }
 
             /* REFERENCE DRIVER: VIC frame done processing complete */
