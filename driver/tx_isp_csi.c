@@ -89,22 +89,6 @@ void csi_write32(u32 reg, u32 val)
             return;
         }
     }
-
-    /* CRITICAL FIX: Block ALL CSI PHY register writes during active VIC streaming */
-    extern uint32_t vic_start_ok;
-    if (vic_start_ok == 1) {
-        u32 old_val = readl(tx_isp_csi_regs + reg);
-        pr_info("*** CSI WRITE BLOCKED: VIC streaming active - preventing CSI PHY write to 0x%x: 0x%x -> 0x%x ***\n",
-                reg, old_val, val);
-        pr_info("*** CSI PHY register 0x%x remains at 0x%x to maintain video pipeline ***\n", reg, old_val);
-        return;  /* Don't actually write to CSI PHY registers during streaming */
-    }
-
-    /* Log critical CSI PHY writes when not streaming */
-    u32 old_val = readl(tx_isp_csi_regs + reg);
-    pr_info("ISP isp-w02: [CSI PHY Control] write at offset 0x%x: 0x%x -> 0x%x (VIC not streaming - allowing write)\n",
-            reg, old_val, val);
-
     writel(val, tx_isp_csi_regs + reg);
 }
 
@@ -262,21 +246,10 @@ int tx_isp_csi_start(struct tx_isp_subdev *sd)
 /* CSI stop operation */
 int tx_isp_csi_stop(struct tx_isp_subdev *sd)
 {
-    extern uint32_t vic_start_ok;
-
     if (!sd)
         return -EINVAL;
 
-    /* CRITICAL FIX: Don't disable CSI PHY during active VIC streaming */
-    if (vic_start_ok == 1) {
-        pr_info("*** CSI STOP BLOCKED: VIC streaming active - preventing CSI PHY disable that causes green stream ***\n");
-        pr_info("*** CSI PHY remains operational to maintain video pipeline ***\n");
-        return 0;  /* Return success but don't actually stop CSI */
-    }
-
     mutex_lock(&sd->csi_lock);
-
-    pr_info("*** CSI STOP: VIC not streaming - allowing CSI PHY disable ***\n");
 
     /* Disable CSI */
     csi_write32(CSI_CTRL, 0);
@@ -332,7 +305,7 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     void __iomem *csi_base;
     int ret = 0;
 
-    pr_info("*** csi_video_s_stream: CRITICAL FIX - Actually configure CSI PHY hardware ***\n");
+    pr_info("*** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***\n");
     pr_info("csi_video_s_stream: sd=%p, enable=%d\n", sd, enable);
 
     /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0xd4 */
@@ -423,29 +396,12 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     if (attr->dbus_type != TX_SENSOR_DATA_INTERFACE_MIPI)
         return 0;
 
-    /* CRITICAL FIX: Always initialize CSI hardware when enabling */
-    if (enable) {
-        pr_info("*** CSI: Calling csi_core_ops_init - current state=%d ***\n", csi_dev->state);
+    /* Initialize CSI hardware if needed */
+    if (enable && csi_dev->state < 3) {
         ret = csi_core_ops_init(sd, 1);
         if (ret) {
-            pr_err("*** CRITICAL ERROR: CSI PHY configuration failed: %d ***\n", ret);
+            pr_err("Failed to initialize CSI hardware: %d\n", ret);
             return ret;
-        }
-        pr_info("*** CSI PHY HARDWARE CONFIGURATION COMPLETE ***\n");
-    } else {
-        /* CRITICAL FIX: Don't disable CSI during active VIC streaming */
-        extern uint32_t vic_start_ok;
-        if (vic_start_ok == 1) {
-            pr_info("*** CSI DISABLE BLOCKED: VIC streaming active - preventing CSI PHY disable ***\n");
-            pr_info("*** CSI PHY remains operational to maintain video pipeline ***\n");
-            return 0;  /* Return success but don't actually disable CSI */
-        }
-
-        /* Call csi_core_ops_init with enable=0 to disable CSI */
-        pr_info("*** CSI: Calling csi_core_ops_init to disable CSI (VIC not streaming) ***\n");
-        ret = csi_core_ops_init(sd, 0);
-        if (ret) {
-            pr_warn("CSI disable failed: %d (continuing anyway)\n", ret);
         }
     }
 
@@ -481,13 +437,6 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     if (!csi_dev) {
         pr_err("CSI device is NULL\n");
         return -EINVAL;
-    }
-
-    /* CRITICAL FIX: Block CSI state changes during active VIC streaming */
-    extern uint32_t vic_start_ok;
-    if (vic_start_ok == 1) {
-        pr_info("*** CSI EVENT BLOCKED: VIC streaming active - ignoring sensor event 0x%x to prevent CSI PHY disruption ***\n", cmd);
-        return 0;  /* Block all sensor events during streaming */
     }
 
     switch (cmd) {
@@ -545,14 +494,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
     void __iomem *csi_base;
     struct tx_isp_sensor_attribute *sensor_attr;
     int result = 0xffffffea; /* -EINVAL */
-
-    /* CRITICAL FIX: Block ALL CSI PHY reconfiguration during active VIC streaming */
-    extern uint32_t vic_start_ok;
-    if (vic_start_ok == 1) {
-        pr_info("*** CSI CORE OPS INIT BLOCKED: VIC streaming active - preventing CSI PHY reconfiguration (enable=%d) ***\n", enable);
-        pr_info("*** CSI PHY remains in current operational state to maintain video pipeline ***\n");
-        return 0;  /* Return success but don't actually reconfigure CSI PHY */
-    }
 
     pr_info("*** csi_core_ops_init: EXACT Binary Ninja implementation ***\n");
     pr_info("csi_core_ops_init: sd=%p, enable=%d\n", sd, enable);
