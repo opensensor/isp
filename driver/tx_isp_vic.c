@@ -2468,10 +2468,7 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         
     } else {
         /* Stream ON */
-        /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
-        vic_pipo_mdma_enable(vic_dev);
-
-        /* CRITICAL FIX: Allocate VBM-compatible buffers BEFORE starting VIC DMA */
+        /* CRITICAL FIX: Allocate VBM-compatible buffers FIRST, then configure VIC DMA */
         /* Move buffer allocation forward as requested - allocate during STREAMON if not already done */
         extern struct frame_channel_device frame_channels[];
         extern int num_channels;
@@ -2567,6 +2564,11 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
                 return -ENOMEM;
             }
         }
+
+        /* NOW configure VIC DMA with buffer addresses available */
+        /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
+        pr_info("*** STREAMON: Configuring VIC DMA AFTER buffer addresses are programmed ***\n");
+        vic_pipo_mdma_enable(vic_dev);
 
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         vic_base = vic_dev->vic_regs;
