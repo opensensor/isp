@@ -1593,7 +1593,6 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* The reference driver does NOT create any kthread for event processing */
     /* Events are processed on-demand when triggered, not continuously */
-    tisp_event_thread = NULL;
     pr_info("*** tisp_init: Event system ready for on-demand processing (Binary Ninja reference) ***\n")
 
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) - Set IRQ handler */
@@ -8440,12 +8439,7 @@ void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
         pr_info("isp_cleanup_irq_handling: IRQ %d freed\n", ourISPdev->isp_irq);
     }
     
-    /* Stop event processing thread */
-    if (tisp_event_thread) {
-        pr_info("isp_cleanup_irq_handling: Stopping event processing thread\n");
-        kthread_stop(tisp_event_thread);
-        tisp_event_thread = NULL;
-    }
+    /* BINARY NINJA REFERENCE: No event processing thread to stop */
 
     /* Clear callback arrays */
     if (isp_irq_initialized) {
