@@ -2243,27 +2243,22 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     /* Binary Ninja reference shows DMA sync operations are required for proper data transfer */
 
     /* Ensure DMA coherency for VIC buffer operations */
-    /* Access VBM buffers through the global channel state */
-    extern struct tx_isp_channel_state *channel_states[ISP_MAX_CHAN];
-
-    if (channel_states[0] && channel_states[0]->vbm_buffer_addresses && channel_states[0]->vbm_buffer_count > 0) {
-        int i;
+    /* Access ISP device through VIC device structure */
+    if (vic_dev && vic_dev->sd.isp) {
+        struct tx_isp_dev *isp_dev = vic_dev->sd.isp;
         u32 frame_size = width * height * 2;  /* RAW10 data = 2 bytes per pixel */
-        struct tx_isp_channel_state *state = channel_states[0];
 
-        pr_info("*** CRITICAL DMA SYNC: Synchronizing %d VBM buffers for DMA coherency ***\n",
-                state->vbm_buffer_count);
+        /* Use ISP device buffer management if available */
+        if (isp_dev->dma_buf && isp_dev->dma_size > 0) {
+            pr_info("*** CRITICAL DMA SYNC: Synchronizing ISP DMA buffer for coherency ***\n");
 
-        for (i = 0; i < state->vbm_buffer_count; i++) {
-            dma_addr_t buffer_addr = state->vbm_buffer_addresses[i];
+            /* Sync the main ISP DMA buffer */
+            mips_dma_cache_sync(isp_dev->dma_addr, isp_dev->dma_size, DMA_FROM_DEVICE);
 
-            if (buffer_addr != 0) {
-                /* CRITICAL: MIPS-specific DMA cache sync for device access */
-                mips_dma_cache_sync(buffer_addr, frame_size, DMA_FROM_DEVICE);
-
-                pr_info("*** MIPS DMA SYNC: Buffer[%d] addr=0x%x size=%d synced for device ***\n",
-                        i, buffer_addr, frame_size);
-            }
+            pr_info("*** DMA SYNC: ISP buffer addr=0x%x size=%d synced for device ***\n",
+                    isp_dev->dma_addr, isp_dev->dma_size);
+        } else {
+            pr_info("*** DMA SYNC: No ISP DMA buffers available for sync ***\n");
         }
 
         /* Additional cache flush for MIPS coherency */
