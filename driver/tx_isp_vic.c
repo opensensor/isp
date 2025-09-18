@@ -289,6 +289,12 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
     void __iomem *vic_regs;
     void *result = &data_b0000;  /* Return value matching reference */
 
+    /* External declarations */
+    extern struct tx_isp_dev *ourISPdev;
+    extern struct frame_channel_device frame_channels[];
+    extern int num_channels;
+    extern int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint32_t buffer_addr);
+
     pr_info("*** vic_framedone_irq_function: entry - vic_dev=%p ***\n", vic_dev);
 
     /* Validate vic_dev first */
