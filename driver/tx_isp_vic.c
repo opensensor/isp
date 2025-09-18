@@ -2765,6 +2765,37 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_err("*** This explains why VIC[0x380] always reads 0x0 ***\n");
                 } else {
                     pr_info("*** REFERENCE DRIVER CSI MIPI initialization SUCCESS ***\n");
+
+                    /* CRITICAL: Enable VIC to receive data from CSI after PHY is configured */
+                    pr_info("*** CRITICAL: Enabling VIC input to receive CSI data ***\n");
+
+                    /* VIC input enable - connect VIC to CSI data stream */
+                    writel(0x3, vic_regs + 0xc);   /* VIC mode = 3 for MIPI input (from Binary Ninja) */
+                    wmb();
+
+                    /* Force VIC hardware reset and re-enable to start receiving data */
+                    writel(0x2, vic_regs + 0x0);   /* VIC reset */
+                    wmb();
+                    writel(0x4, vic_regs + 0x0);   /* VIC wait state */
+                    wmb();
+
+                    /* Wait for VIC ready */
+                    u32 wait_count = 0;
+                    while ((readl(vic_regs + 0x0) != 0) && (wait_count < 1000)) {
+                        wait_count++;
+                        udelay(1);
+                    }
+
+                    writel(0x1, vic_regs + 0x0);   /* VIC final enable */
+                    wmb();
+
+                    pr_info("*** VIC INPUT ENABLE: VIC reset->wait(%d us)->enable sequence complete ***\n", wait_count);
+
+                    /* Check if VIC is now receiving data */
+                    msleep(10);
+                    u32 vic_380 = readl(vic_regs + 0x380);
+                    pr_info("*** VIC INPUT ENABLE: VIC[0x380] = 0x%08x (should be non-zero if receiving data) ***\n", vic_380);
+
                     pr_info("*** VIC[0x380] should now be updated by hardware with buffer addresses ***\n");
                 }
 
