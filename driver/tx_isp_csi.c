@@ -89,7 +89,23 @@ void csi_write32(u32 reg, u32 val)
             return;
         }
     }
+
+    /* Log critical CSI PHY writes that interfere with VIC interrupts */
+    if (reg == 0x0 || reg == 0x8c) {
+        u32 old_val = readl(tx_isp_csi_regs + reg);
+        pr_info("ISP isp-w02: [CSI PHY Control] write at offset 0x%x: 0x%x -> 0x%x (CRITICAL - may affect VIC interrupts)\n",
+                reg, old_val, val);
+    }
+
     writel(val, tx_isp_csi_regs + reg);
+
+    /* CRITICAL FIX: Restore VIC interrupts immediately after CSI PHY writes that interfere */
+    if (reg == 0x0 || reg == 0x8c) {
+        /* Call VIC interrupt restoration function to counter CSI PHY interference */
+        extern void tx_isp_vic_restore_interrupts(void);
+        tx_isp_vic_restore_interrupts();
+        pr_info("*** CSI PHY INTERFERENCE FIX: VIC interrupts restored after CSI PHY write to 0x%x ***\n", reg);
+    }
 }
 
 /* CSI interrupt handler */

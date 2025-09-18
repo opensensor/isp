@@ -27,7 +27,7 @@ uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 static struct timer_list vic_interrupt_protection_timer;
 static int vic_interrupt_protection_active = 0;
 
-/* Timer callback to restore interrupt registers that get overwritten by tuning system */
+/* Timer callback to restore interrupt registers that get overwritten by CSI PHY writes and tuning system */
 static void vic_interrupt_protection_timer_callback(unsigned long data)
 {
     extern struct tx_isp_dev *ourISPdev;
@@ -36,35 +36,45 @@ static void vic_interrupt_protection_timer_callback(unsigned long data)
         return;
     }
 
-    /* Silently restore interrupt registers without flooding logs */
+    /* CRITICAL: Restore interrupt registers that get overwritten by CSI PHY writes */
     struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
     if (vic_dev && vic_dev->vic_regs) {
-        /* Check if VIC interrupt mask was overwritten */
+        /* Check if VIC interrupt enable was overwritten by CSI PHY writes */
+        u32 current_enable = readl(vic_dev->vic_regs + 0x1e0);
         u32 current_mask = readl(vic_dev->vic_regs + 0x1e8);
-        if (current_mask != 0xFFFFFFFE) {
-            writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);
+
+        /* CRITICAL: CSI PHY writes can reset these registers to 0x0 */
+        if (current_enable == 0x0 || current_mask != 0xFFFFFFFE) {
+            /* Restore VIC interrupt configuration immediately */
+            writel(0x3FFFFFFF, vic_dev->vic_regs + 0x1e0);  /* Enable all VIC interrupts */
+            writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
             wmb();
+            pr_info("*** VIC INTERRUPT PROTECTION: CSI PHY interference detected - VIC interrupts restored ***\n");
         }
 
         /* Check if ISP core interrupt masks were overwritten */
         if (ourISPdev->core_regs) {
             void __iomem *core = ourISPdev->core_regs;
+            u32 legacy_enable = readl(core + 0xb0);
             u32 legacy_mask = readl(core + 0xbc);
+            u32 new_enable = readl(core + 0x98b0);
             u32 new_mask = readl(core + 0x98bc);
 
-            if (legacy_mask != 0x1000) {
-                writel(0x1000, core + 0xbc);
+            /* Restore ISP core interrupt configuration if overwritten */
+            if (legacy_enable != 0x3FFF || legacy_mask != 0x1000 ||
+                new_enable != 0x3FFF || new_mask != 0x1000) {
+                writel(0x3FFF, core + 0xb0);        /* Legacy enable - all interrupt sources */
+                writel(0x1000, core + 0xbc);        /* Legacy unmask - frame sync only */
+                writel(0x3FFF, core + 0x98b0);      /* New enable - all interrupt sources */
+                writel(0x1000, core + 0x98bc);      /* New unmask - frame sync only */
                 wmb();
-            }
-            if (new_mask != 0x1000) {
-                writel(0x1000, core + 0x98bc);
-                wmb();
+                pr_info("*** VIC INTERRUPT PROTECTION: ISP core interrupts restored ***\n");
             }
         }
     }
 
-    /* Reschedule timer for next check (every 100ms) */
-    mod_timer(&vic_interrupt_protection_timer, jiffies + msecs_to_jiffies(100));
+    /* Reschedule timer for next check (every 50ms for faster CSI PHY interference detection) */
+    mod_timer(&vic_interrupt_protection_timer, jiffies + msecs_to_jiffies(50));
 }
 
 /* system_reg_write is now defined in tx-isp-module.c - removed duplicate */
