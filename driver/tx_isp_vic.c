@@ -415,6 +415,21 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                                 pr_err("*** VIC[0x380]=0x0 means VIC hardware is NOT writing frame data to buffers ***\n");
                                 pr_err("*** This indicates MIPI CSI PHY is not routing sensor data to VIC ***\n");
 
+                                /* REFERENCE DRIVER EXACT: Handle VIC[0x380]=0x0 case like reference driver */
+                                /* Binary Ninja shows reference driver updates VIC[0x300] when no buffer matches VIC[0x380] */
+                                pr_info("*** REFERENCE DRIVER BEHAVIOR: VIC[0x380]=0x0, updating VIC[0x300] as per Binary Ninja ***\n");
+
+                                /* Reference driver logic: if ($v0 == 0) $v1_2 = $a1_1 << 0x10 */
+                                /* *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
+                                u32 vic_300_current = readl(vic_regs + 0x300);
+                                u32 buffer_index = vbm_buffer_cycle;  /* Use current buffer index */
+                                u32 vic_300_new = (buffer_index << 16) | (vic_300_current & 0xfff0ffff);
+                                writel(vic_300_new, vic_regs + 0x300);
+                                wmb();
+
+                                pr_info("*** REFERENCE DRIVER EXACT: VIC[0x300] updated from 0x%08x to 0x%08x (buffer_index=%d) ***\n",
+                                        vic_300_current, vic_300_new, buffer_index);
+
                                 /* CRITICAL DMA SYNC: Synchronize completed buffer for CPU access */
                                 u32 frame_size = state->width * state->height * 2;  /* RAW10 = 2 bytes/pixel */
                                 mips_dma_cache_sync(completed_buffer_addr, frame_size, DMA_FROM_DEVICE);
