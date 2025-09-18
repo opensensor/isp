@@ -66,6 +66,11 @@ static dev_t isp_tuning_devno;
 uint32_t data_9a454 = 0x10000;  /* Current EV value - global cache */
 uint32_t data_9a450 = 0x2700;   /* Current CT value - global cache */
 
+/* Global variables for ISP tuning parameters - Binary Ninja tiziano_load_parameters */
+static void *tparams_day = NULL;
+static void *tparams_night = NULL;
+static void *tparams_cust = NULL;
+
 /* WDR Global Data Structures - From Binary Ninja Analysis */
 static uint32_t wdr_ev_now = 0;
 static uint32_t wdr_ev_list_deghost_val = 0; /* Single value for calculations */
