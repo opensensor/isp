@@ -1233,28 +1233,6 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
 
     pr_info("*** REFERENCE DRIVER: PHY frequency setting = %d (sensor_freq=%d) ***\n", phy_freq_setting, sensor_freq);
 
-    /* Initialize CSI PHY control values based on reference driver */
-    csi_phy_ctrl_vals[0] = 0x00000001;  /* PHY enable */
-    csi_phy_ctrl_vals[1] = lanes - 1;   /* Lane configuration */
-    csi_phy_ctrl_vals[2] = 0x00000000;  /* Reset value */
-    csi_phy_ctrl_vals[3] = phy_freq_setting;  /* Frequency setting */
-
-    /* EXACT reference driver PHY register sequence */
-    writel(csi_phy_ctrl_vals[0], phy_base + 0x0);
-    writel(csi_phy_ctrl_vals[1], phy_base + 0x4);
-    writel(csi_phy_ctrl_vals[2], phy_base + 0x8);
-    writel(csi_phy_ctrl_vals[3], phy_base + 0xc);
-    wmb();
-
-    pr_info("*** REFERENCE DRIVER: PHY registers configured ***\n");
-
-    /* Apply PHY lane configurations */
-    for (i = 0; i < ARRAY_SIZE(csi_phy_configs); i++) {
-        writel(csi_phy_configs[i].value, phy_base + csi_phy_configs[i].offset);
-    }
-    wmb();
-
-    /* REPLACE old PHY config with EXACT reference driver sequence */
     /* STEP 3: EXACT reference driver PHY register configuration */
     /* Binary Ninja: Set PHY frequency configuration in register 0x160 */
     phy_config = readl(phy_base + 0x160);
