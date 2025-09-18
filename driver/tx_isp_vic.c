@@ -1172,26 +1172,54 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
     msleep(1);
 
 
-      /* ==============================================================================================
-     * PHASE 2: CSI PHY Lane Configuration (massive write sequence)
-     * These are all new registers being written from 0x0 to various values
-     * ==============================================================================================*/
+    /* Binary Ninja: *($v1_9 + 0x10) &= 0xfffffffe */
+    reg_val = readl(csi_base + 0x10);
+    writel(reg_val & 0xfffffffe, csi_base + 0x10);
+    wmb();
 
-    pr_info("*** PHASE 2: CSI PHY Lane Configuration ***\n");
+    /* Binary Ninja: private_msleep(1) */
+    msleep(1);
 
-    /* CRITICAL: Check if sensor is actually outputting MIPI data */
-    pr_info("*** CRITICAL: Checking if GC2053 sensor is outputting MIPI data ***\n");
-    /* GC2053 should have register 0x3e=0x91 for MIPI streaming */
-    /* If VIC[0x380] is always 0x0, then MIPI data is not reaching VIC */
+    /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = $s2_1 */
+    writel(1, csi_base + 0xc);  /* Set to 1 for MIPI interface */
+    wmb();
 
-    /* CSI PHY Control registers - complete configuration */
-    u8 csi_phy_ctrl_vals[] = {
-        0x7d, 0xe3, 0xa0, 0x83, 0xfa, 0x00, 0x00, 0x88,  /* 0x00-0x1c */
-        0x4e, 0xdd, 0x84, 0x5e, 0xf0, 0xc0, 0x36, 0xdb,  /* 0x20-0x3c */
-        0x03, 0x80, 0x10, 0x00, 0x00, 0x03, 0xff, 0x42,  /* 0x40-0x5c */
-        0x01, 0xc0, 0xc0, 0x78, 0x43, 0x33, 0x00, 0x00,  /* 0x60-0x7c */
-        0x1f, 0x00, 0x61                                   /* 0x80-0x88 */
-    };
+    /* Binary Ninja: private_msleep(1) */
+    msleep(1);
+
+    pr_info("*** REFERENCE DRIVER: CSI register sequence complete ***\n");
+
+    /* STEP 2: EXACT reference driver PHY configuration */
+    /* Get sensor frequency for PHY configuration */
+    int32_t sensor_freq = sensor_attr->mipi.mipi_sc.mipi_crop.sensor_frame_rate;  /* Frame rate as frequency indicator */
+    int32_t phy_freq_setting = 1;  /* Default frequency setting */
+
+    /* Binary Ninja frequency mapping logic */
+    if (sensor_freq >= 80 && sensor_freq < 110) {
+        phy_freq_setting = 1;
+    } else if (sensor_freq >= 110 && sensor_freq < 150) {
+        phy_freq_setting = 2;
+    } else if (sensor_freq >= 150 && sensor_freq < 200) {
+        phy_freq_setting = 3;
+    } else if (sensor_freq >= 200 && sensor_freq < 250) {
+        phy_freq_setting = 4;
+    } else if (sensor_freq >= 250 && sensor_freq < 300) {
+        phy_freq_setting = 5;
+    } else if (sensor_freq >= 300 && sensor_freq < 400) {
+        phy_freq_setting = 6;
+    } else if (sensor_freq >= 400 && sensor_freq < 500) {
+        phy_freq_setting = 7;
+    } else if (sensor_freq >= 500 && sensor_freq < 600) {
+        phy_freq_setting = 8;
+    } else if (sensor_freq >= 600 && sensor_freq < 700) {
+        phy_freq_setting = 9;
+    } else if (sensor_freq >= 700 && sensor_freq < 800) {
+        phy_freq_setting = 10;
+    } else if (sensor_freq >= 800) {
+        phy_freq_setting = 11;
+    }
+
+    pr_info("*** REFERENCE DRIVER: PHY frequency setting = %d (sensor_freq=%d) ***\n", phy_freq_setting, sensor_freq);
 
     writel(csi_phy_ctrl_vals[0], csi_base + 0x0);
     writel(csi_phy_ctrl_vals[1], csi_base + 0x4);
