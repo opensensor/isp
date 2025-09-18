@@ -411,7 +411,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                             u32 vic_status = readl(vic_regs + 0x380);
                             static int qbuf_call_count = 0;
 
-                            /* VIC buffer programming moved to STREAMON where it belongs */ else if (vic_status != 0x0) {
+                            /* VIC buffer programming moved to STREAMON where it belongs */
                             pr_info("*** VIC INTERRUPT: VIC[0x380]=0x%x - VIC hardware is working! ***\n", vic_status);
 
                             /* Use REAL VBM buffer addresses that were stored during QBUF */
