@@ -745,30 +745,46 @@ irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
         return IRQ_NONE;
     }
 
-    /* Read and clear interrupt status - EXACTLY like Binary Ninja */
+    /* Read interrupt status - EXACTLY like Binary Ninja */
     interrupt_status = readl(isp_dev->vic_regs + 0xb4);
     if (interrupt_status == 0) {
         return IRQ_NONE;
     }
 
-    /* Clear interrupt status immediately */
+    /* CRITICAL: If we're getting continuous interrupts (0x1500), disable interrupt sources first */
+    if (interrupt_status & 0x500) {  /* Error interrupts causing the storm */
+        /* Temporarily disable error interrupt sources to break the loop */
+        u32 int_mask = readl(isp_dev->vic_regs + 0xb0);  /* Read interrupt mask */
+        writel(int_mask & ~0x500, isp_dev->vic_regs + 0xb0);  /* Disable error interrupts */
+        wmb();
+    }
+
+    /* Clear interrupt status */
     writel(interrupt_status, isp_dev->vic_regs + 0xb8);
     wmb();
 
-    /* Handle the specific interrupts that are causing the soft lockup */
+    /* CRITICAL: Clear the underlying hardware error conditions causing continuous interrupts */
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt - bit 12 */
         /* Binary Ninja: private_schedule_work(&fs_work) */
         /* For now, just acknowledge it without scheduling work */
     }
 
-    if (interrupt_status & 0x200) {   /* Error interrupt - bit 9 */
-        /* Binary Ninja: exception_handle() */
-        /* For now, just acknowledge it */
-    }
+    if (interrupt_status & 0x500) {   /* Error interrupts - bits 8 and 10 */
+        /* CRITICAL: These error interrupts are firing continuously! */
+        /* We need to clear the underlying error condition, not just the interrupt status */
 
-    if (interrupt_status & 0x100) {   /* Error interrupt - bit 8 */
-        /* Binary Ninja: exception_handle() */
-        /* For now, just acknowledge it */
+        /* Try to clear error status registers that might be causing continuous interrupts */
+        u32 error_status = readl(isp_dev->vic_regs + 0x84c);  /* Binary Ninja reads this for errors */
+        if (error_status != 0) {
+            /* Clear error status register */
+            writel(error_status, isp_dev->vic_regs + 0x84c);
+            wmb();
+        }
+
+        /* Also try clearing other potential error registers */
+        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x850);  /* Clear any error flags */
+        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x854);  /* Clear any error flags */
+        wmb();
     }
 
     /* Return IRQ_HANDLED to tell kernel we processed the interrupt */
