@@ -3405,6 +3405,12 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 
             /* Update buffer count to match ISP DMA buffers */
             vic_dev->active_buffer_count = 4;
+
+            /* CRITICAL FIX: Write VIC[0x300] to actually start DMA capture */
+            u32 vic_control = (4 << 16) | 0x80000020;  /* 4 buffers + enable bits */
+            writel(vic_control, vic_dev->vic_regs + 0x300);
+            wmb();
+            pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC[0x300] = 0x%x (ISP DMA STARTED) ***\n", vic_control);
         } else if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
             /* Fallback to VBM buffers if ISP DMA not available */
             pr_info("*** ispvic_frame_channel_qbuf: Fallback to VBM buffers ***\n");
@@ -3426,8 +3432,13 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             pr_info("*** ispvic_frame_channel_qbuf: SAFE - Programmed %d VIC buffer addresses ***\n",
                     state->vbm_buffer_count);
 
-            /* REMOVED: VIC[0x300] write - reference driver does this during STREAMON */
-            pr_info("*** ispvic_frame_channel_qbuf: Buffer addresses programmed - VIC[0x300] written during STREAMON ***\n");
+            /* CRITICAL FIX: Write VIC[0x300] to actually start DMA capture */
+            /* The reference driver writes VIC[0x300] during QBUF to start DMA */
+            u32 vic_control = (state->vbm_buffer_count << 16) | 0x80000020;  /* Buffer count + enable bits */
+            writel(vic_control, vic_dev->vic_regs + 0x300);
+            wmb();
+            pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC[0x300] = 0x%x (DMA STARTED) ***\n", vic_control);
+            pr_info("*** ispvic_frame_channel_qbuf: VIC hardware should now capture frames and populate VIC[0x380] ***\n");
         } else {
             pr_warn("*** ispvic_frame_channel_qbuf: No VBM buffers available ***\n");
         }
