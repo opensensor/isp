@@ -2543,35 +2543,41 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             /* Binary Ninja: int32_t $v1_3 = *($s1_1 + 0x128) */
             int current_state = vic_dev->state;
 
-    /* REVERT: Ensure VIC registers are mapped to ORIGINAL working address */
-    vic_regs = vic_dev->vic_regs;
-    if (!vic_regs) {
-        pr_err("*** CRITICAL FIX: VIC registers not mapped - mapping now ***\n");
-        vic_regs = ioremap(0x133e0000, 0x10000);
-        if (!vic_regs) {
-            pr_err("vic_core_s_stream: Failed to map VIC registers at 0x133e0000\n");
-            return -ENOMEM;
+            /* Binary Ninja: Stream OFF logic */
+            if (enable == 0) {
+                ret = 0;
+                /* Binary Ninja: if ($v1_3 == 4) *($s1_1 + 0x128) = 3 */
+                if (current_state == 4) {
+                    vic_dev->state = 3;
+                    pr_info("*** BINARY NINJA EXACT: Stream OFF - state 4->3 ***\n");
+                }
+            } else {
+                /* Binary Ninja: Stream ON logic */
+                ret = 0;
+                /* Binary Ninja: if ($v1_3 != 4) */
+                if (current_state != 4) {
+                    pr_info("*** BINARY NINJA EXACT: Stream ON - calling tx_isp_vic_start ***\n");
+
+                    /* Binary Ninja: tx_vic_disable_irq() */
+                    tx_vic_disable_irq(vic_dev);
+
+                    /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
+                    int vic_start_result = tx_isp_vic_start(vic_dev);
+
+                    /* Binary Ninja: *($s1_1 + 0x128) = 4 */
+                    vic_dev->state = 4;
+
+                    /* Binary Ninja: tx_vic_enable_irq() */
+                    tx_vic_enable_irq(vic_dev);
+
+                    pr_info("*** BINARY NINJA EXACT: tx_isp_vic_start returned %d, state->4 ***\n", vic_start_result);
+
+                    /* Binary Ninja: return $v0_1 */
+                    return vic_start_result;
+                }
+            }
         }
-        vic_dev->vic_regs = vic_regs;
-        pr_info("*** VIC registers mapped successfully: %p ***\n", vic_regs);
     }
-
-    /* Calculate base addresses safely */
-    isp_base = vic_regs - 0x9a00;  /* Correct ISP base calculation */
-    csi_base = isp_base + 0x10000;
-
-    pr_info("vic_core_s_stream: vic_regs=%p, isp_base=%p, csi_base=%p\n", vic_regs, isp_base, csi_base);
-
-    if (sd != NULL) {
-        if ((unsigned long)sd >= 0xfffff001) {
-            pr_err("vic_core_s_stream: Invalid sd pointer\n");
-            return -EINVAL;
-        }
-
-        ret = -EINVAL;
-
-        if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
-            int current_state = vic_dev->state;
 
             if (enable == 0) {
                 /* Stream OFF - BINARY NINJA REFERENCE: No adjustment function */
