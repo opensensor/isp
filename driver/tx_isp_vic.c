@@ -363,21 +363,25 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 shifted_value = buffer_index << 0x10;
             }
 
-            /* CRITICAL FIX: Preserve EXACT control bits 0x80000020 when updating buffer index */
-            /* The reference driver preserves control bits, we were clearing them! */
+            /* CRITICAL FIX: Preserve buffer count AND control bits when updating current buffer index */
+            /* The bug was clearing buffer count bits 16-19, but we need to preserve total buffer count */
             if (vic_regs) {
                 u32 reg_val = readl(vic_regs + 0x300);
-                /* PRESERVE EXACT control bits (0x80000020) and only update buffer index in bits 16-19 */
-                /* Clear only the buffer index bits (16-19) and preserve everything else */
-                reg_val = (reg_val & 0xfff0ffff) | shifted_value;  /* Clear bits 16-19, set new buffer index */
+                u32 total_buffer_count = (reg_val >> 16) & 0xf;  /* Extract current buffer count (bits 16-19) */
+                u32 control_bits = reg_val & 0x8000ffff;         /* Preserve control bits and low bits */
+
+                /* PRESERVE total buffer count, only update current buffer index within that count */
+                /* Don't clear buffer count - preserve it and just cycle through available buffers */
+                u32 current_buffer_index = buffer_index % total_buffer_count;  /* Cycle within available buffers */
+                u32 new_reg_val = control_bits | (total_buffer_count << 16);   /* Preserve buffer count */
 
                 /* FORCE control bits if they were lost */
-                if ((reg_val & 0x80000020) != 0x80000020) {
-                    reg_val |= 0x80000020;  /* Force control bits back on */
+                if ((new_reg_val & 0x80000020) != 0x80000020) {
+                    new_reg_val |= 0x80000020;  /* Force control bits back on */
                     pr_warn("*** VIC FRAME DONE: FORCED control bits 0x80000020 back on! ***\n");
                 }
 
-                writel(reg_val, vic_regs + 0x300);
+                writel(new_reg_val, vic_regs + 0x300);
 
                 pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (CONTROL BITS: %s) ***\n",
                         reg_val, (reg_val & 0x80000020) == 0x80000020 ? "PRESERVED" : "LOST");
