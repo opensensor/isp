@@ -5881,11 +5881,43 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         pr_info("*** MIPS-SAFE: VIC already in active interrupt state (state=%d) ***\n", vic_dev->state);
     }
     
-    /* MIPS SAFE: NO CALLBACK FUNCTION ACCESS - this was causing the crash */
-    /* The callback at offset +0x84 was pointing to invalid memory (ffffcc60) */
-    /* Instead, we'll just enable interrupts through the safe state mechanism */
-    pr_info("*** MIPS-SAFE: Skipping dangerous callback function access that caused crash ***\n");
-    pr_info("*** MIPS-SAFE: VIC interrupts enabled through safe state management ***\n");
+    /* CRITICAL FIX: Actually enable VIC hardware interrupts */
+    /* The callback was causing crashes, but we still need to enable VIC interrupts */
+    if (vic_dev->vic_regs) {
+        pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
+
+        /* Clear any pending interrupts first */
+        writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
+        writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+        wmb();
+
+        /* Enable VIC interrupts - use working configuration */
+        pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
+        writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
+        wmb();
+
+        pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
+
+        /* Also enable ISP core interrupt registers for MIPI data */
+        if (ourISPdev && ourISPdev->core_regs) {
+            pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
+            writel(0x3FFF, ourISPdev->core_regs + 0xb0);    /* Legacy interrupt bank */
+            writel(0x3FFF, ourISPdev->core_regs + 0xbc);    /* Legacy interrupt bank */
+            writel(0x3FFF, ourISPdev->core_regs + 0x98b0);  /* New interrupt bank */
+            writel(0x3FFF, ourISPdev->core_regs + 0x98bc);  /* New interrupt bank */
+            wmb();
+            pr_info("*** ISP CORE INTERRUPT REGISTERS ENABLED at legacy(+0xb*) and new(+0x98b*) ***\n");
+        }
+
+        pr_info("*** BOTH VIC AND ISP CORE INTERRUPTS NOW ENABLED! ***\n");
+
+        /* Set vic_start_ok to enable interrupt processing */
+        extern uint32_t vic_start_ok;
+        vic_start_ok = 1;
+        pr_info("*** vic_start_ok SET TO 1 - INTERRUPTS WILL NOW BE PROCESSED! ***\n");
+    } else {
+        pr_warn("*** WARNING: VIC registers not mapped - cannot enable hardware interrupts ***\n");
+    }
     
     /* MIPS SAFE: Use proper struct member access */
     spin_unlock_irqrestore(&vic_dev->lock, flags);
