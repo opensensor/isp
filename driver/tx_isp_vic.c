@@ -613,7 +613,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
-    void __iomem *primary_vic_base, *secondary_vic_base;
+    void __iomem *hardware_vic_base, *trace_vic_base;
 
     if (!vic_dev || !vic_dev->vic_regs || !vic_dev->vic_regs_secondary) {
         pr_err("tx_isp_vic_hw_init: Missing VIC register mappings (primary=%p, secondary=%p)\n",
@@ -622,57 +622,57 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    primary_vic_base = vic_dev->vic_regs;        // 0x133e0000 - CSI PHY coordination
-    secondary_vic_base = vic_dev->vic_regs_secondary;  // 0x10023000 - Hardware interrupts
+    hardware_vic_base = vic_dev->vic_regs;        // 0x10023000 - Hardware interrupts (PRIMARY after swap)
+    trace_vic_base = vic_dev->vic_regs_secondary;  // 0x133e0000 - Trace visibility (SECONDARY after swap)
 
-    pr_info("*** VIC HW INIT: Configuring DUAL VIC architecture ***\n");
-    pr_info("*** Primary VIC (0x133e0000): CSI PHY coordination & trace visibility ***\n");
-    pr_info("*** Secondary VIC (0x10023000): Hardware interrupt generation ***\n");
+    pr_info("*** VIC HW INIT: Configuring SWAPPED DUAL VIC architecture ***\n");
+    pr_info("*** Hardware VIC (0x10023000): Interrupt generation - interrupt handler reads from here ***\n");
+    pr_info("*** Trace VIC (0x133e0000): Trace visibility - trace driver monitors this ***\n");
 
-    // STEP 1: Configure PRIMARY VIC space (0x133e0000) for CSI PHY coordination
-    pr_info("*** STEP 1: Configuring PRIMARY VIC space for CSI PHY coordination ***\n");
+    // STEP 1: Configure HARDWARE VIC space (0x10023000) for interrupt generation
+    pr_info("*** STEP 1: Configuring HARDWARE VIC space for interrupt generation ***\n");
 
     // Clear any pending interrupts first
-    writel(0, primary_vic_base + 0x00);  // Clear ISR
-    writel(0, primary_vic_base + 0x20);  // Clear ISR1
+    writel(0, hardware_vic_base + 0x00);  // Clear ISR
+    writel(0, hardware_vic_base + 0x20);  // Clear ISR1
     wmb();
 
     // Set up interrupt masks to match OEM
-    writel(0x00000001, primary_vic_base + 0x04);  // IMR
+    writel(0x00000001, hardware_vic_base + 0x04);  // IMR
     wmb();
-    writel(0x00000000, primary_vic_base + 0x24);  // IMR1
+    writel(0x00000000, hardware_vic_base + 0x24);  // IMR1
     wmb();
 
     // Configure ISP control interrupts
-    writel(0x07800438, primary_vic_base + 0x04);  // IMR
+    writel(0x07800438, hardware_vic_base + 0x04);  // IMR
     wmb();
-    writel(0xb5742249, primary_vic_base + 0x0c);  // IMCR
+    writel(0xb5742249, hardware_vic_base + 0x0c);  // IMCR
     wmb();
 
-    pr_info("*** PRIMARY VIC space configured - trace driver will detect these writes ***\n");
+    pr_info("*** HARDWARE VIC space configured - interrupt handler will read from here ***\n");
 
-    // STEP 2: Configure SECONDARY VIC space (0x10023000) for hardware interrupts
-    pr_info("*** STEP 2: Configuring SECONDARY VIC space for hardware interrupts ***\n");
+    // STEP 2: Configure TRACE VIC space (0x133e0000) for trace visibility
+    pr_info("*** STEP 2: Configuring TRACE VIC space for trace visibility ***\n");
 
-    // Mirror the same configuration to secondary space for hardware interrupt generation
-    writel(0, secondary_vic_base + 0x00);  // Clear ISR
-    writel(0, secondary_vic_base + 0x20);  // Clear ISR1
+    // Mirror the same configuration to trace space for trace driver visibility
+    writel(0, trace_vic_base + 0x00);  // Clear ISR
+    writel(0, trace_vic_base + 0x20);  // Clear ISR1
     wmb();
 
     // Set up interrupt masks to match OEM
-    writel(0x00000001, secondary_vic_base + 0x04);  // IMR
+    writel(0x00000001, trace_vic_base + 0x04);  // IMR
     wmb();
-    writel(0x00000000, secondary_vic_base + 0x24);  // IMR1
+    writel(0x00000000, trace_vic_base + 0x24);  // IMR1
     wmb();
 
     // Configure ISP control interrupts
-    writel(0x07800438, secondary_vic_base + 0x04);  // IMR
+    writel(0x07800438, trace_vic_base + 0x04);  // IMR
     wmb();
-    writel(0xb5742249, secondary_vic_base + 0x0c);  // IMCR
+    writel(0xb5742249, trace_vic_base + 0x0c);  // IMCR
     wmb();
 
-    pr_info("*** SECONDARY VIC space configured - hardware interrupts should now work ***\n");
-    pr_info("*** VIC HW INIT: DUAL VIC configuration complete - both trace and interrupts enabled ***\n");
+    pr_info("*** TRACE VIC space configured - trace driver will detect these writes ***\n");
+    pr_info("*** VIC HW INIT: SWAPPED DUAL VIC configuration complete - both interrupts and trace enabled ***\n");
 
     /* CRITICAL: Register the VIC interrupt handler - THIS WAS MISSING! */
     int irq = 38;  /* VIC uses IRQ 38 (isp-w02) */
@@ -2651,19 +2651,19 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 
                 /* REFERENCE DRIVER SEQUENCE: Program buffer addresses like ispvic_frame_channel_qbuf */
                 /* Binary Ninja: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
-                pr_info("*** STREAMON: Programming buffer addresses to BOTH VIC spaces ***\n");
+                pr_info("*** STREAMON: Programming buffer addresses to BOTH VIC spaces (SWAPPED MAPPING) ***\n");
                 for (int i = 0; i < state->vbm_buffer_count && i < 8; i++) {
                     u32 buffer_reg = 0x318 + (i * 4);  /* (i + 0xc6) << 2 = 0x318 + i*4 */
 
-                    /* Write to PRIMARY VIC space (0x133e0000) - for trace visibility */
+                    /* Write to HARDWARE VIC space (0x10023000) - for actual functionality */
                     writel(state->vbm_buffer_addresses[i], vic_dev->vic_regs + buffer_reg);
 
-                    /* Write to SECONDARY VIC space (0x10023000) - for hardware functionality */
+                    /* Write to TRACE VIC space (0x133e0000) - for trace visibility */
                     if (vic_dev->vic_regs_secondary) {
                         writel(state->vbm_buffer_addresses[i], vic_dev->vic_regs_secondary + buffer_reg);
                     }
 
-                    pr_info("*** STREAMON: VIC[0x%x] = 0x%x (VBM buffer[%d]) - DUAL VIC WRITE ***\n",
+                    pr_info("*** STREAMON: VIC[0x%x] = 0x%x (VBM buffer[%d]) - SWAPPED DUAL VIC WRITE ***\n",
                             buffer_reg, state->vbm_buffer_addresses[i], i);
                 }
                 wmb();
@@ -2698,10 +2698,10 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             u32 buffer_count = vic_dev->active_buffer_count;
             u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* EXACT Binary Ninja formula */
 
-            /* Write to PRIMARY VIC space (0x133e0000) - for trace visibility */
+            /* Write to HARDWARE VIC space (0x10023000) - for actual functionality */
             writel(stream_ctrl, vic_base + 0x300);
 
-            /* Write to SECONDARY VIC space (0x10023000) - for hardware functionality */
+            /* Write to TRACE VIC space (0x133e0000) - for trace visibility */
             if (vic_dev->vic_regs_secondary) {
                 writel(stream_ctrl, vic_dev->vic_regs_secondary + 0x300);
             }
@@ -2709,7 +2709,7 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 
             pr_info("*** BINARY NINJA EXACT: Wrote 0x%x to reg 0x300 in BOTH VIC spaces (buffer_count=%d) ***\n",
                     stream_ctrl, buffer_count);
-            pr_info("*** DUAL VIC WRITE: Primary (trace) + Secondary (hardware) - should get both functionality ***\n");
+            pr_info("*** SWAPPED DUAL VIC WRITE: Hardware (interrupts) + Trace (visibility) - should get both functionality ***\n");
 
             /* MCP LOG: Stream ON completed */
             pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
