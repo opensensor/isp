@@ -2945,9 +2945,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                         /* Unmap the CSI PHY registers after configuration */
                         iounmap(csi_phy_base);
-                    } else {
-                        pr_err("*** CRITICAL: Failed to map CSI PHY registers - cannot configure CSI PHY! ***\n");
-                    }
+                } else {
+                    pr_err("*** CRITICAL: Failed to map CSI PHY registers - cannot configure CSI PHY! ***\n");
+                }
                 
                 /* STEP 5: Apply 280ms delta register changes AFTER sensor detection */
                 pr_info("*** STEP 5: Applying 280ms delta register changes AFTER sensor detection ***\n");
