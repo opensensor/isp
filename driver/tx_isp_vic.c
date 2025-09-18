@@ -416,6 +416,30 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                                 u32 frame_size = state->width * state->height * 2;  /* RAW10 = 2 bytes/pixel */
                                 mips_dma_cache_sync(completed_buffer_addr, frame_size, DMA_FROM_DEVICE);
 
+                                /* CRITICAL DEBUG: Check if buffer contains actual sensor data */
+                                static int buffer_check_count = 0;
+                                if (buffer_check_count < 5) {  /* Only check first 5 frames */
+                                    void *virt_addr = phys_to_virt(completed_buffer_addr);
+                                    if (virt_addr) {
+                                        u32 *data = (u32 *)virt_addr;
+                                        u32 first_pixels = data[0];
+                                        u32 mid_pixels = data[frame_size/8];  /* Check middle of frame */
+                                        u32 last_pixels = data[frame_size/4 - 1];  /* Check end of frame */
+
+                                        pr_info("*** BUFFER DATA CHECK: Frame %d ***\n", buffer_check_count);
+                                        pr_info("First pixels: 0x%08x, Mid pixels: 0x%08x, Last pixels: 0x%08x\n",
+                                               first_pixels, mid_pixels, last_pixels);
+
+                                        if (first_pixels == 0 && mid_pixels == 0 && last_pixels == 0) {
+                                            pr_err("*** BUFFER IS ALL ZEROS - NO SENSOR DATA! ***\n");
+                                            pr_err("*** This confirms MIPI CSI PHY is not routing sensor data to VIC ***\n");
+                                        } else {
+                                            pr_info("*** BUFFER CONTAINS DATA - MIPI data is reaching VIC ***\n");
+                                        }
+                                        buffer_check_count++;
+                                    }
+                                }
+
                                 /* Program next REAL VBM buffer to VIC register 0x380 for continuous streaming */
                                 u32 next_buffer_addr = state->vbm_buffer_addresses[vbm_buffer_cycle];
 
