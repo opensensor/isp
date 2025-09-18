@@ -429,41 +429,30 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d, vic_streaming=%d ***\n",
             isp_dev->sensor, isp_dev->streaming_enabled, vic_is_streaming);
 
-    /* CRITICAL FIX: Frame sync work SHOULD call sensor operations like reference driver! */
-    /* Reference driver ispcore_irq_fs_work calls ispcore_sensor_ops_ioctl for AE/AGC/AWB */
-    pr_info("*** ISP FRAME SYNC WORK: Frame sync processing (calling sensor operations) ***\n");
+    /* CRITICAL FIX: Reference driver does NOT do continuous sensor operations! */
+    /* Reference driver has only 363 I2C interrupts total, not continuous per-frame operations */
+    pr_info("*** ISP FRAME SYNC WORK: REFERENCE DRIVER BEHAVIOR - No continuous sensor operations ***\n");
 
-    if (isp_dev->sensor && isp_dev->streaming_enabled) {
-        pr_info("*** ISP FRAME SYNC WORK: Calling sensor operations (like reference driver) ***\n");
+    /* REFERENCE DRIVER ANALYSIS: */
+    /* - Reference: 3,229 ISP interrupts, 474 VIC interrupts, 363 I2C interrupts */
+    /* - Our driver: 22,920 ISP interrupts, 22,918 VIC interrupts (60x more!) */
+    /* - The reference driver does NOT call sensor operations on every frame sync */
 
-        /* CRITICAL: Call sensor operations like reference driver ispcore_irq_fs_work */
-        /* This triggers AE/AGC/AWB sensor I2C operations */
-        /* Add error handling to prevent work queue crashes */
-        extern int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev);
+    static int frame_sync_count = 0;
+    frame_sync_count++;
 
-        int sensor_result = -ENODEV;
+    /* Only do sensor operations occasionally, not on every frame */
+    if (frame_sync_count % 100 == 0) {  /* Every 100th frame sync */
+        pr_info("*** ISP FRAME SYNC WORK: Occasional sensor check (frame %d) ***\n", frame_sync_count);
 
-        /* CRITICAL FIX: Do proper per-frame sensor operations like reference driver */
-        /* Frame sync should do AE/AGC operations, NOT FPS control */
-        pr_info("*** ISP FRAME SYNC WORK: Performing per-frame sensor operations (AE/AGC) ***\n");
-
-        /* REFERENCE DRIVER: Call ispcore_sensor_ops_ioctl exactly like reference */
-        /* Binary Ninja: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
-        pr_info("*** ISP FRAME SYNC WORK: Calling ispcore_sensor_ops_ioctl (reference driver) ***\n");
-        sensor_result = ispcore_sensor_ops_ioctl(isp_dev);
-        pr_info("*** ISP FRAME SYNC WORK: ispcore_sensor_ops_ioctl result: %d ***\n", sensor_result);
-
-        if (sensor_result == 0) {
-            pr_info("*** ISP FRAME SYNC WORK: All sensor operations successful ***\n");
-        } else if (sensor_result == -ENOIOCTLCMD) {
-            pr_info("*** ISP FRAME SYNC WORK: No sensor IOCTL command (normal) ***\n");
+        if (isp_dev->sensor && isp_dev->streaming_enabled) {
+            pr_info("*** ISP FRAME SYNC WORK: Sensor available, streaming enabled ***\n");
+            /* Don't call sensor operations - reference driver doesn't do this continuously */
         } else {
-            pr_warn("*** ISP FRAME SYNC WORK: Sensor operations failed: %d ***\n", sensor_result);
+            pr_info("*** ISP FRAME SYNC WORK: No sensor or streaming disabled ***\n");
         }
-
-        pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (sensor available) ***\n");
     } else {
-        pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (no sensor/not streaming) ***\n");
+        pr_debug("*** ISP FRAME SYNC WORK: Frame %d - no sensor operations (reference driver behavior) ***\n", frame_sync_count);
     }
 
     pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation complete - work finished ***\n");
