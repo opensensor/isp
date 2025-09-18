@@ -1647,48 +1647,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* VIC interrupt initialization moved to END of function after CSI PHY setup */
         pr_info("*** VIC INTERRUPT INIT: VIC interrupt setup deferred until after CSI PHY writes ***\n");
 
-        /* CRITICAL: Configure VIC hardware BEFORE unlock sequence */
-        pr_info("*** VIC HARDWARE CONFIG: Configuring complete VIC register set before unlock ***\n");
-
-        /* Configure VIC dimensions and control registers that are required for unlock to work */
-        writel((actual_width << 16) | actual_height, vic_regs + 0x4);
-        writel(0x0, vic_regs + 0x14);  /* Interrupt config */
-        writel(0xf00, vic_regs + 0x18);  /* Timing parameter */
-
-        /* Control registers from reference driver */
-        writel(0x800800, vic_regs + 0x60);
-        writel(0x9d09d0, vic_regs + 0x64);
-        writel(0x6002, vic_regs + 0x70);
-        writel(0x7003, vic_regs + 0x74);
-
-        /* Hardware expected values */
-        writel(0x7800000, vic_regs + 0x110);
-        writel(0x0, vic_regs + 0x114);
-        writel(0x0, vic_regs + 0x118);
-        writel(0x0, vic_regs + 0x11c);
-
-        /* Color space configuration from reference driver */
-        writel(0xeb8080, vic_regs + 0xc0);
-        writel(0x108080, vic_regs + 0xc4);
-        writel(0x29f06e, vic_regs + 0xc8);
-        writel(0x913622, vic_regs + 0xcc);
-
-        /* Processing configuration from reference driver */
-        writel(0x515af0, vic_regs + 0xd0);
-        writel(0xaaa610, vic_regs + 0xd4);
-        writel(0xd21092, vic_regs + 0xd8);
-        writel(0x6acade, vic_regs + 0xdc);
-
-        /* Frame configuration */
-        writel(0x0, vic_regs + 0x1a0);  /* Frame config */
-        writel(0x100010, vic_regs + 0x1a4);  /* Control register */
-        writel(0x4440, vic_regs + 0x1a8);  /* Frame mode */
-        writel(0x4440, vic_regs + 0x1ac);  /* Frame mode */
-        writel(0x10, vic_regs + 0x1b0);
-
-        wmb();
-        pr_info("*** VIC HARDWARE CONFIG: Complete VIC register set configured - unlock should now work ***\n");
-
         /* Unlock sequence - Binary Ninja 00010484-00010490 - EXACT REFERENCE IMPLEMENTATION */
         pr_info("*** VIC UNLOCK SEQUENCE: Starting unlock sequence ***\n");
         pr_info("*** VIC UNLOCK: Initial register 0x0 value = 0x%08x ***\n", readl(vic_regs + 0x0));
@@ -2712,18 +2670,31 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         /* Binary Ninja EXACT STREAMON sequence */
         vic_base = vic_dev->vic_regs;
         if (vic_base && (unsigned long)vic_base >= 0x80000000) {
-            /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+            pr_info("ispvic_frame_channel_s_stream: BEFORE - active_buffer_count=%d\n", vic_dev->active_buffer_count);
+
+            /* CRITICAL FIX: Follow EXACT reference driver buffer management sequence */
+            /* Reference driver ALWAYS starts VIC hardware immediately with proper buffer configuration */
+            pr_info("*** REFERENCE DRIVER SEQUENCE: Starting VIC hardware with exact buffer configuration ***\n");
+
+            /* Binary Ninja EXACT: Use reference driver buffer management values */
+            /* The reference driver uses specific buffer count and control values that prevent control limit errors */
+            u32 reference_buffer_count = 2;  /* Reference driver uses 2 buffers */
+            u32 reference_control_bits = 0x80000020;  /* Exact reference driver control bits */
+
+            /* BINARY NINJA EXACT: Use exact reference driver formula to prevent control limit error */
+            /* Binary Ninja: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
             u32 buffer_count = vic_dev->active_buffer_count;
-            if (buffer_count == 0) buffer_count = 4;  /* Default to 4 buffers */
-            u32 vic_control = (buffer_count << 16) | 0x80000020;
-            writel(vic_control, vic_base + 0x300);
+            u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* EXACT Binary Ninja formula */
+            writel(stream_ctrl, vic_base + 0x300);
             wmb();
 
-            pr_info("*** BINARY NINJA EXACT STREAMON: VIC[0x300] = 0x%x (buffer_count=%d) ***\n", vic_control, buffer_count);
-            pr_info("*** Reference driver writes VIC[0x300] during STREAMON, not QBUF ***\n");
+            pr_info("*** BINARY NINJA EXACT: Wrote 0x%x to reg 0x300 (buffer_count=%d, formula: (count<<16)|0x80000020) ***\n",
+                    stream_ctrl, buffer_count);
+            pr_info("*** This should prevent control limit error by using EXACT Binary Ninja reference driver formula ***\n");
 
             /* MCP LOG: Stream ON completed */
-            pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n", vic_control, vic_base, 1);
+            pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
+                    stream_ctrl, vic_base, 1);
         }
         
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
