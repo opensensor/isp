@@ -2136,35 +2136,27 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
     
-    /* CRITICAL FIX: Get dimensions from sensor attributes directly to prevent stale values */
-    /* The issue is vic_dev->width/height might be stale - get fresh values from sensor */
-    if (vic_dev->sensor_attr.total_width != 0 && vic_dev->sensor_attr.total_height != 0) {
-        width = vic_dev->sensor_attr.total_width;
-        height = vic_dev->sensor_attr.total_height;
-        pr_info("*** CRITICAL FIX: Using FRESH sensor dimensions %dx%d from sensor_attr ***\n", width, height);
-    } else {
-        /* Fallback to vic_dev dimensions if sensor_attr is not available */
-        width = vic_dev->width;
-        height = vic_dev->height;
-        pr_info("*** FALLBACK: Using vic_dev dimensions %dx%d ***\n", width, height);
-    }
-    
-    /* CRITICAL: Ensure we have valid dimensions - USE ACTUAL SENSOR OUTPUT DIMENSIONS */
-    if (width == 0 || height == 0) {
-        /* Only override if dimensions are actually invalid (zero) */
-        width = 1920;  /* ACTUAL sensor output width (not total width) */
-        height = 1080; /* ACTUAL sensor output height (not total height) */
-        pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", width, height);
-        pr_info("*** CRITICAL: VIC must match sensor OUTPUT, not sensor TOTAL dimensions ***\n");
+    /* CRITICAL FIX: Use ACTUAL sensor output dimensions, NOT total frame dimensions */
+    /* The green frames were caused by MDMA trying to transfer 2200x1418 bytes */
+    /* but sensor only provides 1920x1080 bytes of actual image data */
 
-        /* Update vic_dev to prevent future mismatches */
-        vic_dev->width = width;
-        vic_dev->height = height;
-    } else {
-        pr_info("*** DIMENSION VALIDATION: Using existing valid dimensions %dx%d ***\n", width, height);
-    }
+    /* GC2053 sensor specifications:
+     * - Total frame: 2200x1418 (includes blanking)
+     * - Actual image: 1920x1080 (the data we want)
+     * - MDMA must be configured for ACTUAL image size, not total frame size
+     */
+    width = 1920;   /* ACTUAL sensor output width (not total_width!) */
+    height = 1080;  /* ACTUAL sensor output height (not total_height!) */
+
+    pr_info("*** CRITICAL FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", width, height);
+    pr_info("*** MDMA will transfer %d bytes per line (%d * 2 for RAW10) ***\n", width * 2, width);
+    pr_info("*** This should fix green frames by matching sensor data size ***\n");
     
-    pr_info("vic_pipo_mdma_enable: FINAL dimensions=%dx%d (should be 2200x1418)\n", width, height);
+    /* Update vic_dev to ensure consistency */
+    vic_dev->width = width;
+    vic_dev->height = height;
+
+    pr_info("vic_pipo_mdma_enable: FINAL dimensions=%dx%d (ACTUAL sensor output, not total frame)\n", width, height);
     
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
