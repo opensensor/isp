@@ -639,8 +639,15 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             isp_dev->frame_count++;
         }
 
-        /* Binary Ninja: Complex frame processing loop */
+        /* Binary Ninja: Complex frame processing loop - ADD TIMEOUT TO PREVENT SOFT LOCKUP */
+        int timeout_count = 0;
         while ((readl(vic_regs + 0x997c) & 1) == 0) {
+            /* CRITICAL: Add timeout to prevent infinite loop causing soft lockup */
+            if (++timeout_count > 1000) {
+                pr_err("*** SOFT LOCKUP FIX: VIC frame completion timeout - register 0x997c never ready ***\n");
+                break;
+            }
+
             u32 frame_buffer_addr = readl(vic_regs + 0x9974);
             u32 frame_info1 = readl(vic_regs + 0x998c);
             u32 frame_info2 = readl(vic_regs + 0x9990);
@@ -664,8 +671,15 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: Channel 1 frame done */
     if (interrupt_status & 2) {  /* Channel 1 frame done */
-        /* Binary Ninja: Similar processing for channel 1 */
+        /* Binary Ninja: Similar processing for channel 1 - ADD TIMEOUT */
+        int timeout_count = 0;
         while ((readl(vic_regs + 0x9a7c) & 1) == 0) {
+            /* CRITICAL: Add timeout to prevent infinite loop causing soft lockup */
+            if (++timeout_count > 1000) {
+                pr_err("*** SOFT LOCKUP FIX: VIC channel 1 completion timeout - register 0x9a7c never ready ***\n");
+                break;
+            }
+
             u32 frame_buffer_addr = readl(vic_regs + 0x9a74);
             u32 frame_info1 = readl(vic_regs + 0x9a8c);
             u32 frame_info2 = readl(vic_regs + 0x9a90);
@@ -680,8 +694,15 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     /* Binary Ninja: Channel 2 frame completion */
     if (interrupt_status & 4) {
         pr_info("ISP CORE: Channel 2 frame done\n");
-        /* Similar processing for channel 2 */
+        /* Similar processing for channel 2 - ADD TIMEOUT */
+        int timeout_count = 0;
         while ((readl(vic_regs + 0x9b7c) & 1) == 0) {
+            /* CRITICAL: Add timeout to prevent infinite loop causing soft lockup */
+            if (++timeout_count > 1000) {
+                pr_err("*** SOFT LOCKUP FIX: VIC channel 2 completion timeout - register 0x9b7c never ready ***\n");
+                break;
+            }
+
             /* Channel 2 frame processing */
             if (isp_core_channels[2].state.streaming) {
                 frame_channel_wakeup_waiters(&isp_core_channels[2]);
