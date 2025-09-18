@@ -1789,10 +1789,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
         
-        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
-        writel(2, vic_regs + 0x0);
-        wmb();
-        writel(1, vic_regs + 0x0);
+        /* VIC unlock sequence already completed above - no duplicate needed */
         
     } else {
         pr_err("Unsupported interface type %d\n", interface_type);
