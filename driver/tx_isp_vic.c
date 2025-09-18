@@ -1227,17 +1227,18 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
 
     pr_info("*** REFERENCE DRIVER: PHY frequency setting = %d (sensor_freq=%d) ***\n", phy_freq_setting, sensor_freq);
 
-    writel(csi_phy_ctrl_vals[0], csi_base + 0x0);
-    writel(csi_phy_ctrl_vals[1], csi_base + 0x4);
-    writel(csi_phy_ctrl_vals[2], csi_base + 0x8);
-    writel(csi_phy_ctrl_vals[3], csi_base + 0xc);
-    writel(csi_phy_ctrl_vals[4], csi_base + 0x10);
-    writel(csi_phy_ctrl_vals[7], csi_base + 0x1c);
-    writel(csi_phy_ctrl_vals[8], csi_base + 0x20);
-    writel(csi_phy_ctrl_vals[9], csi_base + 0x24);
-    writel(csi_phy_ctrl_vals[10], csi_base + 0x28);
-    writel(csi_phy_ctrl_vals[11], csi_base + 0x2c);
-    writel(csi_phy_ctrl_vals[12], csi_base + 0x30);
+    /* Initialize CSI PHY control values based on reference driver */
+    csi_phy_ctrl_vals[0] = 0x00000001;  /* PHY enable */
+    csi_phy_ctrl_vals[1] = lanes - 1;   /* Lane configuration */
+    csi_phy_ctrl_vals[2] = 0x00000000;  /* Reset value */
+    csi_phy_ctrl_vals[3] = phy_freq_setting;  /* Frequency setting */
+
+    /* EXACT reference driver PHY register sequence */
+    writel(csi_phy_ctrl_vals[0], phy_base + 0x0);
+    writel(csi_phy_ctrl_vals[1], phy_base + 0x4);
+    writel(csi_phy_ctrl_vals[2], phy_base + 0x8);
+    writel(csi_phy_ctrl_vals[3], phy_base + 0xc);
+    wmb();
     writel(csi_phy_ctrl_vals[13], csi_base + 0x34);
     writel(csi_phy_ctrl_vals[14], csi_base + 0x38);
     writel(csi_phy_ctrl_vals[15], csi_base + 0x3c);
