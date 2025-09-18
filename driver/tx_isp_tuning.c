@@ -1443,20 +1443,15 @@ int tisp_init(void *sensor_info, char *param_name)
     /* The bypass register controls which ISP modules are active vs bypassed */
     /* Green frames indicate that essential processing modules are being bypassed */
 
-    /* CRITICAL FIX: Use EXACT reference driver bypass register calculation */
-    /* Binary Ninja: bypass starts at 0x8077efff, gets modified by parameter loop, then conditional logic */
+    /* CRITICAL FIX: Use EXACT reference driver bypass register value from reference-trace.txt */
+    /* Reference trace shows: ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x0 -> 0x80700008 */
+    /* This is the EXACT value the working reference driver uses - not a calculated value */
 
-    uint32_t bypass_val = 0x8077efff;  /* Reference driver initial value */
-
-    /* Binary Ninja: Final conditional bypass modification */
-    /* if (data_b2e74 != 1) { bypass_val = (bypass_val & 0xb577fffd) | 0x34000009; } */
-    /* else { bypass_val = (bypass_val & 0xa1ffdf76) | 0x880002; } */
-
-    /* Use normal mode (not WDR) for GC2053 */
-    bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
+    uint32_t bypass_val = 0x80700008;  /* EXACT reference driver value from trace */
 
     system_reg_write(0xc, bypass_val);
-    pr_info("*** tisp_init: REFERENCE DRIVER bypass register set to 0x%x (exact Binary Ninja logic) ***\n", bypass_val);
+    pr_info("*** tisp_init: PIPELINE FIX - Using EXACT reference driver bypass register 0x%x ***\n", bypass_val);
+    pr_info("*** tisp_init: This should eliminate pipeline configuration error 0x80700008 ***\n");
 
     /* CRITICAL FIX: Configure ISP for NV12 output format */
     /* Application requests NV12 format (0x3231564e) but buffer size mismatch suggests confusion */
