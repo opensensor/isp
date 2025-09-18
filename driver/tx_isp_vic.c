@@ -408,6 +408,9 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                                 vbm_buffer_cycle = (vbm_buffer_cycle + 1) % state->vbm_buffer_count;
 
                                 pr_info("*** VIC BUFFER MGMT: VIC[0x380]=0x0, using REAL VBM buffer addr=0x%x ***\n", completed_buffer_addr);
+                                pr_err("*** CRITICAL: VIC[0x380] should contain current buffer address from hardware ***\n");
+                                pr_err("*** VIC[0x380]=0x0 means VIC hardware is NOT writing frame data to buffers ***\n");
+                                pr_err("*** This indicates MIPI CSI PHY is not routing sensor data to VIC ***\n");
 
                                 /* CRITICAL DMA SYNC: Synchronize completed buffer for CPU access */
                                 u32 frame_size = state->width * state->height * 2;  /* RAW10 = 2 bytes/pixel */
