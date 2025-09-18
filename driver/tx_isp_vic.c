@@ -1601,9 +1601,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         /* Binary Ninja: EXACT reference driver MIPI mode configuration */
         /* Binary Ninja: 000107ec - Set CSI mode */
-        writel(1, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
+        writel(3, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
         wmb();
-        pr_info("*** VIC: Set MIPI mode (1) to VIC control register 0xc - PREVENTS CONTROL LIMIT ERROR ***\n");
+        pr_info("*** VIC: Set MIPI mode (3) to VIC control register 0xc - BINARY NINJA EXACT ***\n");
 
         /* BINARY NINJA EXACT: All missing register configurations */
 
@@ -2448,38 +2448,7 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     writel(stride, vic_base + 0x314);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
-
-    /* CRITICAL MISSING: DMA cache synchronization operations */
-    /* Binary Ninja reference shows DMA sync operations are required for proper data transfer */
-
-    /* Ensure DMA coherency for VIC buffer operations */
-    /* Access ISP device through VIC device structure */
-    if (vic_dev && vic_dev->sd.isp) {
-        struct tx_isp_dev *isp_dev = vic_dev->sd.isp;
-        u32 frame_size = width * height * 2;  /* RAW10 data = 2 bytes per pixel */
-
-        /* Use ISP device buffer management if available */
-        if (isp_dev->dma_buf && isp_dev->dma_size > 0) {
-            pr_info("*** CRITICAL DMA SYNC: Synchronizing ISP DMA buffer for coherency ***\n");
-
-            /* Sync the main ISP DMA buffer */
-            mips_dma_cache_sync(isp_dev->dma_addr, isp_dev->dma_size, DMA_FROM_DEVICE);
-
-            pr_info("*** DMA SYNC: ISP buffer addr=0x%x size=%d synced for device ***\n",
-                    isp_dev->dma_addr, isp_dev->dma_size);
-        } else {
-            pr_info("*** DMA SYNC: No ISP DMA buffers available for sync ***\n");
-        }
-
-        /* Additional cache flush for MIPS coherency */
-        wmb();  /* Write memory barrier */
-        __sync();  /* MIPS cache sync */
-
-        pr_info("*** DMA SYNC COMPLETE: All VBM buffers synchronized for hardware access ***\n");
-    } else {
-        pr_warn("*** WARNING: No VBM buffers available for DMA sync - may cause data corruption ***\n");
-    }
-
+    
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - CONTROL LIMIT ERROR SHOULD BE FIXED ***\n");
 }
 
