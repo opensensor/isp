@@ -518,16 +518,18 @@ void system_reg_write(u32 arg1, u32 arg2)
         return;
     }
 
-    /* Binary Ninja: Get register base from ISP device structure at offset 0xb8 */
-    void __iomem *reg_base = ourISPdev->vic_regs;  /* This is at offset 0xb8 in the structure */
+    /* CRITICAL FIX: system_reg_write should write to ISP base, not VIC base */
+    /* Reference trace shows ISP registers, not VIC registers */
+    void __iomem *vic_base = ourISPdev->vic_regs;  /* VIC base at offset 0xb8 */
+    void __iomem *reg_base = vic_base - 0x9a00;    /* Calculate ISP base from VIC base */
 
-    if (!reg_base) {
-        pr_warn("system_reg_write: No register base available for reg=0x%x val=0x%x\n", arg1, arg2);
+    if (!vic_base) {
+        pr_warn("system_reg_write: No VIC base available for reg=0x%x val=0x%x\n", arg1, arg2);
         return;
     }
 
-    /* Binary Ninja EXACT: Write to register base + offset */
-    pr_info("*** SYSTEM_REG_WRITE: reg[0x%x] = 0x%x (Binary Ninja EXACT) ***\n", arg1, arg2);
+    /* Binary Ninja EXACT: Write to ISP register base + offset */
+    pr_info("*** SYSTEM_REG_WRITE: reg[0x%x] = 0x%x (ISP base, not VIC base) ***\n", arg1, arg2);
     writel(arg2, reg_base + arg1);
     wmb();
 }
