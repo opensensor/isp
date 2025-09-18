@@ -243,13 +243,20 @@ void tx_isp_vic_restore_interrupts(void)
     /* Restore VIC interrupt register values using WORKING ISP-activates configuration */
     pr_info("*** VIC INTERRUPT RESTORE: Using WORKING ISP-activates configuration (0x1e8/0x1ec) ***\n");
 
-    /* Clear pending interrupts first */
-    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+    /* Clear pending interrupts first - DUAL VIC WRITE */
+    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status - PRIMARY */
+    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status - PRIMARY */
+    if (vic_dev->vic_regs_secondary) {
+        writel(0xFFFFFFFF, vic_dev->vic_regs_secondary + 0x1f0);  /* Clear main interrupt status - SECONDARY */
+        writel(0xFFFFFFFF, vic_dev->vic_regs_secondary + 0x1f4);  /* Clear MDMA interrupt status - SECONDARY */
+    }
     wmb();
 
-    /* CRITICAL FIX 3: Restore interrupt masks with protection against overwrites */
-    writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
+    /* CRITICAL FIX 3: Restore interrupt masks with protection against overwrites - DUAL VIC WRITE */
+    writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt - PRIMARY */
+    if (vic_dev->vic_regs_secondary) {
+        writel(0xFFFFFFFE, vic_dev->vic_regs_secondary + 0x1e8);  /* Enable frame done interrupt - SECONDARY */
+    }
     /* SKIP MDMA register 0x1ec - it doesn't work correctly */
     wmb();
 
@@ -605,35 +612,66 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
-    void __iomem *vic_base;
+    void __iomem *primary_vic_base, *secondary_vic_base;
 
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_err("tx_isp_vic_hw_init: No primary VIC registers available\n");
+    if (!vic_dev || !vic_dev->vic_regs || !vic_dev->vic_regs_secondary) {
+        pr_err("tx_isp_vic_hw_init: Missing VIC register mappings (primary=%p, secondary=%p)\n",
+               vic_dev ? vic_dev->vic_regs : NULL,
+               vic_dev ? vic_dev->vic_regs_secondary : NULL);
         return -EINVAL;
     }
 
-    // CRITICAL: Use PRIMARY VIC space for interrupt configuration
-    vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
-    pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
+    primary_vic_base = vic_dev->vic_regs;        // 0x133e0000 - CSI PHY coordination
+    secondary_vic_base = vic_dev->vic_regs_secondary;  // 0x10023000 - Hardware interrupts
+
+    pr_info("*** VIC HW INIT: Configuring DUAL VIC architecture ***\n");
+    pr_info("*** Primary VIC (0x133e0000): CSI PHY coordination & trace visibility ***\n");
+    pr_info("*** Secondary VIC (0x10023000): Hardware interrupt generation ***\n");
+
+    // STEP 1: Configure PRIMARY VIC space (0x133e0000) for CSI PHY coordination
+    pr_info("*** STEP 1: Configuring PRIMARY VIC space for CSI PHY coordination ***\n");
 
     // Clear any pending interrupts first
-    writel(0, vic_base + 0x00);  // Clear ISR
-    writel(0, vic_base + 0x20);  // Clear ISR1
+    writel(0, primary_vic_base + 0x00);  // Clear ISR
+    writel(0, primary_vic_base + 0x20);  // Clear ISR1
     wmb();
 
     // Set up interrupt masks to match OEM
-    writel(0x00000001, vic_base + 0x04);  // IMR
+    writel(0x00000001, primary_vic_base + 0x04);  // IMR
     wmb();
-    writel(0x00000000, vic_base + 0x24);  // IMR1
+    writel(0x00000000, primary_vic_base + 0x24);  // IMR1
     wmb();
 
     // Configure ISP control interrupts
-    writel(0x07800438, vic_base + 0x04);  // IMR
+    writel(0x07800438, primary_vic_base + 0x04);  // IMR
     wmb();
-    writel(0xb5742249, vic_base + 0x0c);  // IMCR
+    writel(0xb5742249, primary_vic_base + 0x0c);  // IMCR
     wmb();
 
-    pr_info("*** VIC HW INIT: Interrupt configuration applied to PRIMARY VIC space ***\n");
+    pr_info("*** PRIMARY VIC space configured - trace driver will detect these writes ***\n");
+
+    // STEP 2: Configure SECONDARY VIC space (0x10023000) for hardware interrupts
+    pr_info("*** STEP 2: Configuring SECONDARY VIC space for hardware interrupts ***\n");
+
+    // Mirror the same configuration to secondary space for hardware interrupt generation
+    writel(0, secondary_vic_base + 0x00);  // Clear ISR
+    writel(0, secondary_vic_base + 0x20);  // Clear ISR1
+    wmb();
+
+    // Set up interrupt masks to match OEM
+    writel(0x00000001, secondary_vic_base + 0x04);  // IMR
+    wmb();
+    writel(0x00000000, secondary_vic_base + 0x24);  // IMR1
+    wmb();
+
+    // Configure ISP control interrupts
+    writel(0x07800438, secondary_vic_base + 0x04);  // IMR
+    wmb();
+    writel(0xb5742249, secondary_vic_base + 0x0c);  // IMCR
+    wmb();
+
+    pr_info("*** SECONDARY VIC space configured - hardware interrupts should now work ***\n");
+    pr_info("*** VIC HW INIT: DUAL VIC configuration complete - both trace and interrupts enabled ***\n");
 
     /* CRITICAL: Register the VIC interrupt handler - THIS WAS MISSING! */
     int irq = 38;  /* VIC uses IRQ 38 (isp-w02) */
@@ -2612,10 +2650,19 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 
                 /* REFERENCE DRIVER SEQUENCE: Program buffer addresses like ispvic_frame_channel_qbuf */
                 /* Binary Ninja: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
+                pr_info("*** STREAMON: Programming buffer addresses to BOTH VIC spaces ***\n");
                 for (int i = 0; i < state->vbm_buffer_count && i < 8; i++) {
                     u32 buffer_reg = 0x318 + (i * 4);  /* (i + 0xc6) << 2 = 0x318 + i*4 */
+
+                    /* Write to PRIMARY VIC space (0x133e0000) - for trace visibility */
                     writel(state->vbm_buffer_addresses[i], vic_dev->vic_regs + buffer_reg);
-                    pr_info("*** STREAMON: VIC[0x%x] = 0x%x (VBM buffer[%d]) - REFERENCE DRIVER EXACT ***\n",
+
+                    /* Write to SECONDARY VIC space (0x10023000) - for hardware functionality */
+                    if (vic_dev->vic_regs_secondary) {
+                        writel(state->vbm_buffer_addresses[i], vic_dev->vic_regs_secondary + buffer_reg);
+                    }
+
+                    pr_info("*** STREAMON: VIC[0x%x] = 0x%x (VBM buffer[%d]) - DUAL VIC WRITE ***\n",
                             buffer_reg, state->vbm_buffer_addresses[i], i);
                 }
                 wmb();
@@ -2649,12 +2696,19 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             /* Binary Ninja: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
             u32 buffer_count = vic_dev->active_buffer_count;
             u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* EXACT Binary Ninja formula */
+
+            /* Write to PRIMARY VIC space (0x133e0000) - for trace visibility */
             writel(stream_ctrl, vic_base + 0x300);
+
+            /* Write to SECONDARY VIC space (0x10023000) - for hardware functionality */
+            if (vic_dev->vic_regs_secondary) {
+                writel(stream_ctrl, vic_dev->vic_regs_secondary + 0x300);
+            }
             wmb();
 
-            pr_info("*** BINARY NINJA EXACT: Wrote 0x%x to reg 0x300 (buffer_count=%d, formula: (count<<16)|0x80000020) ***\n",
+            pr_info("*** BINARY NINJA EXACT: Wrote 0x%x to reg 0x300 in BOTH VIC spaces (buffer_count=%d) ***\n",
                     stream_ctrl, buffer_count);
-            pr_info("*** This should prevent control limit error by using EXACT Binary Ninja reference driver formula ***\n");
+            pr_info("*** DUAL VIC WRITE: Primary (trace) + Secondary (hardware) - should get both functionality ***\n");
 
             /* MCP LOG: Stream ON completed */
             pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
