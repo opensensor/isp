@@ -1292,46 +1292,11 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
     msleep(10);  /* Wait 10ms for PHY to stabilize */
     pr_info("*** BINARY NINJA EXACT: 10ms PHY stabilization delay complete ***\n");
 
-    /* CRITICAL: Read current PHY register values to understand working configuration */
-    pr_info("*** CRITICAL: Reading current PHY register values for analysis ***\n");
-
-    u32 phy_vals[16];
-    int i;
-    for (i = 0; i < 16; i++) {
-        phy_vals[i] = readl(phy_base + (i * 4));
-        pr_info("PHY[0x%02x] = 0x%08x\n", i * 4, phy_vals[i]);
-    }
-
-    /* CRITICAL: Apply EXACT working PHY configuration from reference driver */
-    /* These values should be determined from a working system */
-    pr_info("*** CRITICAL: Applying EXACT working PHY configuration ***\n");
-
-    /* Reset PHY first */
-    writel(0x0, phy_base + 0x0);
-    writel(0x0, phy_base + 0x4);
-    wmb();
-    msleep(1);
-
-    /* Apply working PHY configuration (these need to be the exact values from working system) */
-    writel(0x00000001, phy_base + 0x0);   /* PHY control */
-    writel(0x00000003, phy_base + 0x4);   /* PHY config */
-    writel(0x00000007, phy_base + 0x8);   /* PHY enable */
-    writel(0x0000000f, phy_base + 0xc);   /* PHY timing */
-    wmb();
-
-    /* Enable CSI controller with exact working configuration */
-    writel(0x00000001, csi_base + 0x0);   /* CSI enable */
-    writel(0x00000001, csi_base + 0x8);   /* CSI config */
-    wmb();
-
-    msleep(10);
-
-    pr_info("*** EXACT PHY CONFIGURATION APPLIED - Testing data flow ***\n");
-
-    pr_info("*** REFERENCE DRIVER: EXACT CSI MIPI initialization complete ***\n");
+    pr_info("*** BINARY NINJA EXACT: CSI MIPI initialization complete ***\n");
     pr_info("*** This should fix VIC[0x380]=0x0 issue by properly routing MIPI data to VIC ***\n");
 
-    /* No cleanup needed - using existing memory mappings */
+    /* Cleanup PHY mapping */
+    iounmap(phy_base);
     pr_info("*** CSI MIPI initialization using existing mappings - no cleanup required ***\n");
 
     return 0;
