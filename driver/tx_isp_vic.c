@@ -632,14 +632,8 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
     void __iomem *vic_base;
 
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_err("tx_isp_vic_hw_init: No primary VIC registers available\n");
-        return -EINVAL;
-    }
-
-    // CRITICAL: Use PRIMARY VIC space for interrupt configuration
-    vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
-    pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
+    // Initialize VIC hardware
+    vic_base = ioremap(0x10023000, 0x1000);  // Direct map VIC
 
     // Clear any pending interrupts first
     writel(0, vic_base + 0x00);  // Clear ISR
@@ -1265,17 +1259,6 @@ int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
         return -ENODEV;
     }
 
-    /* CRITICAL DEBUG: Check if MIPI CSI PHY is receiving sensor data */
-    pr_info("*** CRITICAL: Checking MIPI CSI PHY status before configuration ***\n");
-    u32 csi_status = readl(csi_base + 0x8);
-    u32 phy_status = readl(csi_base + 0x14);
-    pr_info("CSI Status: 0x%08x, PHY Status: 0x%08x\n", csi_status, phy_status);
-
-    /* Check if MIPI lanes are receiving data */
-    u32 lane0_status = readl(csi_base + 0x40);
-    u32 lane1_status = readl(csi_base + 0x44);
-    pr_info("MIPI Lane 0 Status: 0x%08x, Lane 1 Status: 0x%08x\n", lane0_status, lane1_status);
-
 
       /* ==============================================================================================
      * PHASE 2: CSI PHY Lane Configuration (massive write sequence)
@@ -1283,11 +1266,6 @@ int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
      * ==============================================================================================*/
 
     pr_info("*** PHASE 2: CSI PHY Lane Configuration ***\n");
-
-    /* CRITICAL: Check if sensor is actually outputting MIPI data */
-    pr_info("*** CRITICAL: Checking if GC2053 sensor is outputting MIPI data ***\n");
-    /* GC2053 should have register 0x3e=0x91 for MIPI streaming */
-    /* If VIC[0x380] is always 0x0, then MIPI data is not reaching VIC */
 
     /* CSI PHY Control registers - complete configuration */
     u8 csi_phy_ctrl_vals[] = {
@@ -1371,33 +1349,6 @@ int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
     }
     wmb();
 
-    /* CRITICAL: After CSI PHY configuration, check if MIPI data is now flowing */
-    pr_info("*** CRITICAL: Checking MIPI CSI PHY status AFTER configuration ***\n");
-    csi_status = readl(csi_base + 0x8);
-    phy_status = readl(csi_base + 0x14);
-    pr_info("POST-CONFIG CSI Status: 0x%08x, PHY Status: 0x%08x\n", csi_status, phy_status);
-
-    lane0_status = readl(csi_base + 0x40);
-    lane1_status = readl(csi_base + 0x44);
-    pr_info("POST-CONFIG MIPI Lane 0: 0x%08x, Lane 1: 0x%08x\n", lane0_status, lane1_status);
-
-    /* Check if MIPI clock is active */
-    u32 mipi_clock = readl(csi_base + 0x14);
-    if (mipi_clock & 0x1) {
-        pr_info("*** MIPI CLOCK: ACTIVE - sensor clock detected ***\n");
-    } else {
-        pr_err("*** MIPI CLOCK: INACTIVE - NO SENSOR CLOCK! This explains VIC[0x380]=0x0 ***\n");
-    }
-
-    /* Check if MIPI data lanes are synchronized */
-    if ((lane0_status & 0x1) && (lane1_status & 0x1)) {
-        pr_info("*** MIPI LANES: SYNCHRONIZED - data should flow to VIC ***\n");
-    } else {
-        pr_err("*** MIPI LANES: NOT SYNCHRONIZED - no data flow to VIC! ***\n");
-        pr_err("*** This explains why VIC[0x380] always reads 0x0 ***\n");
-    }
-
-    pr_info("*** CSI PHY initialization complete - MIPI status checked ***\n");
     return 0;
 }
 
@@ -1566,42 +1517,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         pr_info("*** VIC UNLOCK: After writing 4, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
-        /* Wait for unlock - Binary Ninja 000104b8 - DUAL VIC SPACE COORDINATION */
-        timeout = 10000;  /* 10ms timeout */
-
-        /* CRITICAL: Check CSI PHY coordination in SECONDARY VIC space (0x10023000) */
-        void __iomem *secondary_regs = vic_dev->vic_regs_secondary;
-        u32 secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
-        u32 primary_val = readl(vic_regs + 0x0);
-
-        pr_info("*** VIC UNLOCK: Primary space (0x133e0000) = 0x%08x, Secondary space (0x10023000) = 0x%08x ***\n",
-                primary_val, secondary_val);
-
-        /* Handle CSI PHY coordination - 0x3130322a in secondary space is expected */
-        if (secondary_val == 0x3130322a) {
-            pr_info("*** VIC UNLOCK: CSI PHY coordination complete in secondary space ***\n");
-        }
-
-        /* Wait for primary VIC space unlock */
+        /* Wait for unlock - Binary Ninja 000104b8 */
         while (readl(vic_regs + 0x0) != 0) {
             udelay(1);
-            if (--timeout == 0) {
-                primary_val = readl(vic_regs + 0x0);
-                secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
-                pr_err("*** VIC UNLOCK TIMEOUT: Primary=0x%08x, Secondary=0x%08x ***\n", primary_val, secondary_val);
-                pr_err("*** Continuing anyway to prevent infinite hang ***\n");
-                break;  /* Continue instead of returning error to prevent hang */
-            }
         }
-
-        pr_info("*** VIC UNLOCK: Unlock sequence completed, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
-
-        /* vic_start_ok flag setting moved to END of function after CSI PHY setup */
-
+        
         /* Enable VIC - Binary Ninja 000107d4 */
-        pr_info("*** VIC UNLOCK: Enabling VIC (writing 1 to register 0x0) ***\n");
         writel(1, vic_regs + 0x0);
-        pr_info("*** VIC UNLOCK: VIC enabled, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
         
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 in our enum */
         /* MIPI interface - Binary Ninja 000107ec-00010b04 */
@@ -1783,7 +1705,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* The reference driver sets 0x18 = 0xf00 (3840) and it must stay that way */
         /* DO NOT overwrite register 0x18 with sensor width - this causes control limit errors */
         u32 integration_time = sensor_attr->integration_time;
-        pr_info("*** CRITICAL: Skipping register 0x18 write - it's a timing parameter (0xf00), not width! ***\n");
+        if (integration_time != 0) {
+            writel((integration_time << 16) + vic_dev->width, vic_regs + 0x18);
+        }
         
         u32 again = sensor_attr->again;
         if (again != 0) {
@@ -1801,27 +1725,21 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: EXACT reference driver unlock sequence */
         writel(2, vic_regs + 0x0);
         wmb();
-
-        /* CRITICAL FIX: Skip remaining unlock sequence during streaming restart */
-        if (vic_start_ok == 1) {
-            pr_info("*** VIC: SKIPPING remaining unlock sequence - VIC interrupts already working ***\n");
-        } else {
-            writel(4, vic_regs + 0x0);
-            wmb();
-
-            /* Binary Ninja: 00010acc - Wait for unlock */
-            while (readl(vic_regs + 0x0) != 0) {
-                udelay(1);
-                if (--timeout == 0) {
-                    pr_err("VIC unlock timeout\n");
-                    return -ETIMEDOUT;
-                }
+        writel(4, vic_regs + 0x0);
+        wmb();
+        
+        /* Binary Ninja: 00010acc - Wait for unlock */
+        while (readl(vic_regs + 0x0) != 0) {
+            udelay(1);
+            if (--timeout == 0) {
+                pr_err("VIC unlock timeout\n");
+                return -ETIMEDOUT;
             }
-
-            /* Binary Ninja: 00010ad4 - Enable VIC */
-            writel(1, vic_regs + 0x0);
-            wmb();
         }
+        
+        /* Binary Ninja: 00010ad4 - Enable VIC */
+        writel(1, vic_regs + 0x0);
+        wmb();
         
         /* Binary Ninja: 00010ae4-00010b04 - Final MIPI registers */
         writel(0x100010, vic_regs + 0x1a4);
@@ -2023,8 +1941,8 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     switch (cmd) {
         case 0x200000c:
         case 0x200000f:
-            pr_info("*** vic_sensor_ops_ioctl: VIC start deferred to vic_core_s_stream (cmd=0x%x) ***\n", cmd);
-            return 0;
+            pr_info("*** vic_sensor_ops_ioctl: Starting VIC (cmd=0x%x) - CALLING tx_isp_vic_start ***\n", cmd);
+            return tx_isp_vic_start(vic_dev);
             
         case 0x200000d:
         case 0x2000010:
@@ -2741,78 +2659,56 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     return -ENOMEM;
                 }
                 
-				
-                /* STEP 1: VIC Hardware Reset and Clean Configuration */
-                pr_info("*** STEP 1: VIC Hardware Reset and Clean Configuration ***\n");
-
-                /* Declare sensor dimensions at function scope */
-                u32 sensor_width = 1920;   /* ACTUAL sensor output width */
-                u32 sensor_height = 1080;  /* ACTUAL sensor output height */
-
-                /* HARDWARE RESET APPROACH: Reset VIC to clean state first */
-                pr_info("*** VIC HARDWARE RESET: Clearing VIC hardware state to prevent control limit errors ***\n");
-
-                /* Step 1: Disable VIC hardware completely */
-                writel(0x0, vic_regs + 0x0);           /* Disable VIC hardware */
+                /* STEP 1: ISP isp-w02 - Initial CSI PHY Control registers */
+                pr_info("*** STEP 1: ISP isp-w02 - Initial CSI PHY Control registers ***\n");
+                /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
+                writel(0x7800438, vic_regs + 0x4);
+                writel(0x2, vic_regs + 0xc);
+                writel(0x2, vic_regs + 0x14);
+                writel(0xf00, vic_regs + 0x18);
+                writel(0x800800, vic_regs + 0x60);
+                writel(0x9d09d0, vic_regs + 0x64);
+                writel(0x6002, vic_regs + 0x70);
+                writel(0x7003, vic_regs + 0x74);
+                writel(0xeb8080, vic_regs + 0xc0);
+                writel(0x108080, vic_regs + 0xc4);
+                writel(0x29f06e, vic_regs + 0xc8);
+                writel(0x913622, vic_regs + 0xcc);
+                writel(0x515af0, vic_regs + 0xd0);
+                writel(0xaaa610, vic_regs + 0xd4);
+                writel(0xd21092, vic_regs + 0xd8);
+                writel(0x6acade, vic_regs + 0xdc);
+                writel(0xeb8080, vic_regs + 0xe0);
+                writel(0x108080, vic_regs + 0xe4);
+                writel(0x29f06e, vic_regs + 0xe8);
+                writel(0x913622, vic_regs + 0xec);
+                writel(0x515af0, vic_regs + 0xf0);
+                writel(0xaaa610, vic_regs + 0xf4);
+                writel(0xd21092, vic_regs + 0xf8);
+                writel(0x6acade, vic_regs + 0xfc);
+                writel(0x2d0, vic_regs + 0x100);
+                writel(0x2c000, vic_regs + 0x10c);
+                writel(0x7800000, vic_regs + 0x110);
+                writel(0x10, vic_regs + 0x120);
+                writel(0x100010, vic_regs + 0x1a4);
+                writel(0x4440, vic_regs + 0x1a8);
+                writel(0x10, vic_regs + 0x1b0);
                 wmb();
-
-                /* Step 2: Clear interrupt status only */
-                writel(0xffffffff, vic_regs + 0x1c);   /* Clear interrupt status */
-                wmb();
-
-                /* CRITICAL: MINIMAL VIC configuration to prevent control limit errors */
-                pr_info("*** MINIMAL VIC CONFIG: Applying only essential registers to prevent control limit errors ***\n");
-
-                /* Step 1: Essential VIC mode and dimensions only */
-                writel(3, vic_regs + 0xc);                                    /* MIPI mode = 3 */
-                writel((sensor_width << 16) | sensor_height, vic_regs + 0x4); /* Dimensions */
-                wmb();
-
-                /* Step 2: Preserve critical timing parameter (never overwrite 0x18) */
-                /* Register 0x18 should remain 0xf00 - do NOT overwrite it */
-
-                /* Step 3: DEFER complex VIC configuration until after sensor is fully initialized */
-                /* This prevents control limit errors during initialization */
-
-                /* Step 8: Apply final VIC configuration */
-                writel(0x2c000, vic_regs + 0x10c);      /* Final config */
-                writel(0x7800000, vic_regs + 0x110);    /* Final config */
-                writel(0x10, vic_regs + 0x120);         /* Final config */
-                wmb();
-
-                /* Step 4: DEFER VIC hardware enable until after sensor is streaming */
-                pr_info("*** DEFERRING VIC HARDWARE ENABLE: Will enable after sensor starts streaming ***\n");
-                /* Keep VIC hardware disabled during initial configuration */
-                writel(0x0, vic_regs + 0x0);            /* Keep VIC disabled */
-                wmb();
-
-                /* Step 5: DEFER full VIC configuration until sensor is streaming */
-                pr_info("*** DEFERRING FULL VIC CONFIGURATION: Will apply after sensor initialization ***\n");
-
-                pr_info("*** VIC HARDWARE CONFIGURATION COMPLETE (hardware disabled until sensor ready) ***\n");
                 
                 /* STEP 2: ISP isp-w01 - Control registers */
                 pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
-
-                /* ESSENTIAL isp-w01 configuration - needed for proper ISP operation */
-                writel(0x3130322a, vic_regs + 0x0);     /* Essential isp-w01 control */
-                writel(0x1, vic_regs + 0x4);            /* Essential isp-w01 control */
-                writel(0x200, vic_regs + 0x14);         /* Essential isp-w01 control */
+                writel(0x3130322a, vic_regs + 0x0);
+                writel(0x1, vic_regs + 0x4);
+                writel(0x200, vic_regs + 0x14);
                 wmb();
-                pr_info("*** isp-w01 CONFIGURATION COMPLETE ***\n");
                 
                 /* STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) */
                 pr_info("*** STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) ***\n");
                 /* Use the correct main_isp_base (0x13300000 = isp-m0) */
                 writel(0x54560031, main_isp_base + 0x0);
                 writel(0x7800438, main_isp_base + 0x4);
-                /* CRITICAL FIX: Use sensor dimensions instead of hardcoded 1920x1080 */
-                writel((sensor_width << 16) | sensor_height, main_isp_base + 0x4);
                 writel(0x1, main_isp_base + 0x8);
-                /* CRITICAL FIX: Don't write error code to error status register! */
-                /* Register 0xc is the error status register - clear it instead of setting error code */
-                writel(0x0, main_isp_base + 0xc);  /* Clear error status instead of setting 0x80700008 */
-                pr_info("*** ISP CORE: Error status register cleared (was causing green frames) ***\n");
+                writel(0x80700008, main_isp_base + 0xc);
                 writel(0x1, main_isp_base + 0x28);
                 writel(0x400040, main_isp_base + 0x2c);
                 writel(0x1, main_isp_base + 0x90);
@@ -2831,8 +2727,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x80007000, main_isp_base + 0x110);
                 writel(0x777111, main_isp_base + 0x114);
                 writel(0x3f00, main_isp_base + 0x9804);
-                /* CRITICAL FIX: Use sensor dimensions instead of hardcoded 1920x1080 */
-                writel((sensor_width << 16) | sensor_height, main_isp_base + 0x9864);
+                writel(0x7800438, main_isp_base + 0x9864);
                 writel(0xc0000000, main_isp_base + 0x987c);
                 writel(0x1, main_isp_base + 0x9880);
                 writel(0x1, main_isp_base + 0x9884);
@@ -2856,12 +2751,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x40404040, main_isp_base + 0xb00c);
                 writel(0x40404040, main_isp_base + 0xb010);
                 writel(0x404040, main_isp_base + 0xb014);
-                /* CRITICAL FIX: Skip interrupt-related Core Control registers to preserve VIC interrupts */
-                pr_info("*** MAIN ISP SETUP: Skipping Core Control registers 0xb018-0xb024 to preserve interrupts ***\n");
-                /* writel(0x40404040, main_isp_base + 0xb018); // SKIPPED - kills VIC interrupts */
-                /* writel(0x40404040, main_isp_base + 0xb01c); // SKIPPED - kills VIC interrupts */
-                /* writel(0x40404040, main_isp_base + 0xb020); // SKIPPED - kills VIC interrupts */
-                /* writel(0x404040, main_isp_base + 0xb024);   // SKIPPED - kills VIC interrupts */
+                writel(0x40404040, main_isp_base + 0xb018);
+                writel(0x40404040, main_isp_base + 0xb01c);
+                writel(0x40404040, main_isp_base + 0xb020);
+                writel(0x404040, main_isp_base + 0xb024);
                 writel(0x1000080, main_isp_base + 0xb028);
                 writel(0x1000080, main_isp_base + 0xb02c);
                 writel(0x100, main_isp_base + 0xb030);
@@ -2887,12 +2780,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x0, main_isp_base + 0x9804);        /* 0x3f00 -> 0x0 */
                 writel(0x0, main_isp_base + 0x9ac0);        /* 0x200 -> 0x0 */
                 writel(0x0, main_isp_base + 0x9ac8);        /* 0x200 -> 0x0 */
-                /* CRITICAL FIX: Skip interrupt-related Core Control registers to preserve VIC interrupts */
-                pr_info("*** 280ms DELTA: Skipping Core Control registers 0xb018-0xb024 to preserve interrupts ***\n");
-                /* writel(0x24242424, main_isp_base + 0xb018); // SKIPPED - kills VIC interrupts */
-                /* writel(0x24242424, main_isp_base + 0xb01c); // SKIPPED - kills VIC interrupts */
-                /* writel(0x24242424, main_isp_base + 0xb020); // SKIPPED - kills VIC interrupts */
-                /* writel(0x242424, main_isp_base + 0xb024);   // SKIPPED - kills VIC interrupts */
+                writel(0x24242424, main_isp_base + 0xb018); /* 0x40404040 -> 0x24242424 */
+                writel(0x24242424, main_isp_base + 0xb01c); /* 0x40404040 -> 0x24242424 */
+                writel(0x24242424, main_isp_base + 0xb020); /* 0x40404040 -> 0x24242424 */
+                writel(0x242424, main_isp_base + 0xb024);   /* 0x404040 -> 0x242424 */
                 writel(0x10d0046, main_isp_base + 0xb028);  /* 0x1000080 -> 0x10d0046 */
                 writel(0xe8002f, main_isp_base + 0xb02c);   /* 0x1000080 -> 0xe8002f */
                 writel(0xc50100, main_isp_base + 0xb030);   /* 0x100 -> 0xc50100 */
@@ -2930,51 +2821,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 /* STEP 7: Final CSI PHY control sequence */
                 pr_info("*** STEP 7: Final CSI PHY control sequence ***\n");
-
-                /* CRITICAL FIX: Skip interrupt-disrupting registers during streaming restart */
-                if (vic_start_ok == 1) {
-                    pr_info("*** STEP 7: SKIPPING interrupt-disrupting registers 0xc, 0x10, 0x14 - VIC interrupts already working ***\n");
-                } else {
-                    writel(0x1, vic_regs + 0xc);
-                    writel(0x1, vic_regs + 0x10);
-                    writel(0x630, vic_regs + 0x14);
-                    wmb();
-                }
+                writel(0x1, vic_regs + 0xc);
+                writel(0x1, vic_regs + 0x10);
+                writel(0x630, vic_regs + 0x14);
+                wmb();
                 
-                /* STEP 8: CRITICAL - Copy real sensor attributes to VIC device before tx_isp_vic_start */
-                pr_info("*** STEP 8: CRITICAL - Synchronizing sensor attributes before VIC start ***\n");
-
-                if (ourISPdev && ourISPdev->sensor) {
-                    pr_info("*** COPYING REAL SENSOR ATTRIBUTES TO VIC DEVICE ***\n");
-
-                    /* Try video.attr first (pointer), then attr (direct member) */
-                    if (ourISPdev->sensor->video.attr) {
-                        /* Copy from video.attr (pointer to sensor attributes) */
-                        memcpy(&vic_dev->sensor_attr, ourISPdev->sensor->video.attr, sizeof(vic_dev->sensor_attr));
-                        pr_info("*** SENSOR ATTR SYNC: Using video.attr (pointer) ***\n");
-                    } else {
-                        /* Copy from attr (direct member) */
-                        memcpy(&vic_dev->sensor_attr, &ourISPdev->sensor->attr, sizeof(vic_dev->sensor_attr));
-                        pr_info("*** SENSOR ATTR SYNC: Using attr (direct member) ***\n");
-                    }
-
-                    pr_info("*** SENSOR ATTR SYNC: dbus_type=%d, total_width=%d, total_height=%d ***\n",
-                            vic_dev->sensor_attr.dbus_type,
-                            vic_dev->sensor_attr.total_width,
-                            vic_dev->sensor_attr.total_height);
-                } else {
-                    pr_warn("*** WARNING: No real sensor attributes available, using VIC defaults ***\n");
-                }
-
-                /* STEP 9: CRITICAL FIX - Only call VIC start if VIC interrupts are not already working */
-                /* This prevents the destructive VIC unlock sequence that breaks working interrupts */
-                if (current_state != 4 && vic_start_ok != 1) {
-                    pr_info("*** STEP 9: vic_start_ok=%d, state=%d - calling tx_isp_vic_start ***\n", vic_start_ok, current_state);
-                    ret = tx_isp_vic_start(vic_dev);
-                } else {
-                    pr_info("*** STEP 9: vic_start_ok=%d, state=%d - SKIPPING tx_isp_vic_start to preserve working interrupts ***\n", vic_start_ok, current_state);
-                    ret = 0;  /* Success - VIC is already working */
-                }
+                /* STEP 8: Now call VIC start with proper initialization complete */
+                pr_info("*** STEP 8: NOW calling tx_isp_vic_start with proper sub-device initialization ***\n");
+                ret = tx_isp_vic_start(vic_dev);
                 ispvic_frame_channel_s_stream(vic_dev, 1);
                 
                 if (current_state != 4) {
@@ -2985,47 +2839,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     wmb();  /* Ensure state is written before enabling interrupts */
                     vic_start_ok = 1;  /* NOW safe to enable interrupt processing */
                     pr_info("*** INTERRUPTS RE-ENABLED AFTER COMPLETE INITIALIZATION ***\n");
-
-                    /* CRITICAL: Call ispcore_slake_module when VIC state reaches 4 (>= 3) */
-                    pr_info("*** VIC STATE 4: Calling ispcore_slake_module to initialize ISP core ***\n");
-                    extern int ispcore_slake_module(struct tx_isp_dev *isp);
-                    if (ourISPdev) {
-                        int slake_ret = ispcore_slake_module(ourISPdev);
-                        if (slake_ret == 0) {
-                            pr_info("*** ispcore_slake_module SUCCESS - ISP core should now be initialized ***\n");
-                        } else {
-                            pr_err("*** ispcore_slake_module FAILED: %d ***\n", slake_ret);
-                        }
-                    }
-
-                    /* CRITICAL: Apply full VIC configuration now that sensor is streaming */
-                    pr_info("*** APPLYING FULL VIC CONFIGURATION AFTER SENSOR INITIALIZATION ***\n");
-                    tx_isp_vic_apply_full_config(vic_dev);
-
-                    /* DELAYED VIC HARDWARE ENABLE: Now that everything is configured and sensor is streaming */
-                    pr_info("*** DELAYED VIC HARDWARE ENABLE: Enabling VIC hardware after complete initialization ***\n");
-                    void __iomem *vic_regs = vic_dev->vic_regs;
-                    if (vic_regs) {
-                        /* BINARY NINJA EXACT: Hardware enable sequence */
-                        /* Binary Ninja: **(arg1 + 0xb8) = 2; **(arg1 + 0xb8) = 4; while (*$v1_30 != 0) nop; **(arg1 + 0xb8) = 1 */
-                        writel(0x2, vic_regs + 0x0);        /* Binary Ninja: Pre-enable state */
-                        wmb();
-                        writel(0x4, vic_regs + 0x0);        /* Binary Ninja: Wait state */
-                        wmb();
-
-                        /* Binary Ninja: Wait for hardware ready */
-                        u32 wait_count = 0;
-                        while ((readl(vic_regs + 0x0) != 0) && (wait_count < 1000)) {
-                            wait_count++;
-                            udelay(1);
-                        }
-
-                        writel(0x1, vic_regs + 0x0);        /* Binary Ninja: Final enable */
-                        wmb();
-                        pr_info("*** BINARY NINJA EXACT: Hardware enable sequence 2->4->wait->1 (waited %d us) ***\n", wait_count);
-                    } else {
-                        pr_err("*** ERROR: VIC registers not available for delayed enable ***\n");
-                    }
 
                     pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
                     return ret;
