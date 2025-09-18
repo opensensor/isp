@@ -1721,25 +1721,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         wmb();
         
-        /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
-        /* Binary Ninja: EXACT reference driver unlock sequence */
-        writel(2, vic_regs + 0x0);
-        wmb();
-        writel(4, vic_regs + 0x0);
-        wmb();
-        
-        /* Binary Ninja: 00010acc - Wait for unlock */
-        while (readl(vic_regs + 0x0) != 0) {
-            udelay(1);
-            if (--timeout == 0) {
-                pr_err("VIC unlock timeout\n");
-                return -ETIMEDOUT;
-            }
-        }
-        
-        /* Binary Ninja: 00010ad4 - Enable VIC */
-        writel(1, vic_regs + 0x0);
-        wmb();
+        /* VIC unlock sequence already completed above - no duplicate needed */
+        pr_info("*** BINARY NINJA: VIC unlock sequence already completed ***\n");
         
         /* Binary Ninja: 00010ae4-00010b04 - Final MIPI registers */
         writel(0x100010, vic_regs + 0x1a4);
