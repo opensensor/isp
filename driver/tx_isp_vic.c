@@ -496,8 +496,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
         }
 
 
-label_123f4:
-    /* Binary Ninja: GPIO handling section */
+    /* Binary Ninja: GPIO handling section (label_123f4 equivalent) */
     if (gpio_switch_state != 0) {
         /* Binary Ninja: void* $s1_1 = &gpio_info */
         struct {
