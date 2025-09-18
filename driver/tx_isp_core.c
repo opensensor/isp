@@ -697,7 +697,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             /* Binary Ninja: if (irq_func_cb[i] != 0) */
             if (irq_func_cb[i] != NULL) {
                 irqreturn_t callback_result = irq_func_cb[i](irq, dev_id);
-                pr_info("ISP CORE: IRQ callback[%d] returned %d\n", i, callback_result);
+                /* Binary Ninja: Check callback result but no logging in interrupt context */
             }
         }
     }
@@ -706,24 +706,37 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
-/* ISP interrupt handler - now calls the proper dispatch system */
+/* ISP interrupt handler - MINIMAL hard IRQ handler */
 irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
 {
-    /* Forward to the proper ISP core interrupt service routine */
-    return ispcore_interrupt_service_routine(irq, dev_id);
+    /* Binary Ninja: Hard IRQ handler should be MINIMAL - just check if interrupt is ours */
+    struct tx_isp_dev *isp_dev = dev_id;
+    u32 interrupt_status;
+
+    if (!isp_dev || !isp_dev->vic_regs) {
+        return IRQ_NONE;
+    }
+
+    /* Quick check if interrupt is pending */
+    interrupt_status = readl(isp_dev->vic_regs + 0xb4);
+    if (interrupt_status == 0) {
+        return IRQ_NONE;
+    }
+
+    /* Clear interrupt status quickly */
+    writel(interrupt_status, isp_dev->vic_regs + 0xb8);
+    wmb();
+
+    /* Return IRQ_WAKE_THREAD to run the threaded handler */
+    return IRQ_WAKE_THREAD;
 }
 
-/* ISP interrupt thread handler - for threaded IRQ processing */
+/* ISP interrupt thread handler - ALL complex processing happens here */
 irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = dev_id;
-    
-    pr_debug("*** isp_irq_thread_handle: Thread IRQ %d, dev_id=%p ***\n", irq, dev_id);
-    
-    /* Handle any thread-level interrupt processing here */
-    /* For VIC, most processing is done in the main handler */
-    
-    return IRQ_HANDLED;
+    /* Binary Ninja: Threaded handler does all the complex processing */
+    /* This can sleep, do I/O, call work functions, etc. */
+    return ispcore_interrupt_service_routine(irq, dev_id);
 }
 
 /* tx_isp_request_irq - EXACT Binary Ninja implementation */
