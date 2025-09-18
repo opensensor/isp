@@ -490,7 +490,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 }
 
                 extern int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint32_t buffer_addr);
-                vic_frame_complete_buffer_management(vic_dev, completed_buffer_addr);
+                vic_frame_complete_buffer_management(vic_dev, buffer_addr);
             }
         }
 
