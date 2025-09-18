@@ -2819,6 +2819,20 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         pr_warn("*** WARNING: No global ISP device found - VIC device not linked ***\n");
     }
 
+    /* *** CRITICAL: Register VIC device in subdev array *** */
+    extern struct tx_isp_subdev_ops vic_subdev_ops;
+    if (ourISPdev) {
+        /* Set up VIC subdev with proper ops */
+        vic_dev->sd.ops = &vic_subdev_ops;
+
+        /* Register VIC device in subdev array at index 0 */
+        ourISPdev->subdevs[0] = &vic_dev->sd;
+
+        pr_info("*** VIC PROBE: REGISTERED VIC DEVICE IN SUBDEV ARRAY ***\n");
+        pr_info("  subdevs[0] = %p (VIC subdev with registers)\n", &vic_dev->sd);
+        pr_info("  vic_regs = %p, vic_regs_secondary = %p\n", vic_dev->vic_regs, vic_dev->vic_regs_secondary);
+    }
+
     pr_info("*** tx_isp_vic_probe: VIC device initialized successfully ***\n");
     pr_info("VIC device: vic_dev=%p, size=%zu\n", vic_dev, sizeof(struct tx_isp_vic_device));
     pr_info("  sd: %p\n", sd);
