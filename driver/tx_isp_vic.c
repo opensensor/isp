@@ -1239,24 +1239,8 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
     writel(csi_phy_ctrl_vals[2], phy_base + 0x8);
     writel(csi_phy_ctrl_vals[3], phy_base + 0xc);
     wmb();
-    writel(csi_phy_ctrl_vals[13], csi_base + 0x34);
-    writel(csi_phy_ctrl_vals[14], csi_base + 0x38);
-    writel(csi_phy_ctrl_vals[15], csi_base + 0x3c);
-    writel(csi_phy_ctrl_vals[16], csi_base + 0x40);
-    writel(csi_phy_ctrl_vals[17], csi_base + 0x44);
-    writel(csi_phy_ctrl_vals[18], csi_base + 0x48);
-    writel(csi_phy_ctrl_vals[21], csi_base + 0x54);
-    writel(csi_phy_ctrl_vals[22], csi_base + 0x58);
-    writel(csi_phy_ctrl_vals[23], csi_base + 0x5c);
-    writel(csi_phy_ctrl_vals[24], csi_base + 0x60);
-    writel(csi_phy_ctrl_vals[25], csi_base + 0x64);
-    writel(csi_phy_ctrl_vals[26], csi_base + 0x68);
-    writel(csi_phy_ctrl_vals[27], csi_base + 0x6c);
-    writel(csi_phy_ctrl_vals[28], csi_base + 0x70);
-    writel(csi_phy_ctrl_vals[29], csi_base + 0x74);
-    writel(csi_phy_ctrl_vals[32], csi_base + 0x80);
-    writel(csi_phy_ctrl_vals[34], csi_base + 0x88);
-    wmb();
+
+    pr_info("*** REFERENCE DRIVER: PHY registers configured ***\n");
 
     /* CSI PHY Config registers - complete lane configuration */
     struct csi_phy_lane_config {
