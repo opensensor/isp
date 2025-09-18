@@ -2703,10 +2703,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 /* STEP 2: ISP isp-w01 - Control registers (SECOND in reference) */
                 pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
-                /* CRITICAL FIX: Use isp_base (0x10023000) for isp-w01, NOT vic_regs (0x133e0000) */
-                writel(0x3130322a, isp_base + 0x0);
-                writel(0x1, isp_base + 0x4);
-                writel(0x200, isp_base + 0x14);
+                writel(0x3130322a, vic_regs + 0x0);
+                writel(0x1, vic_regs + 0x4);
+                writel(0x200, vic_regs + 0x14);
                 wmb();
                 
                 /* STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) */
@@ -2797,34 +2796,34 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         pr_info("*** CONFIGURING CSI PHY REGISTERS (isp-csi base=%p) ***\n", csi_phy_base);
 
                         /* CSI PHY Control registers (0x0-0x88) - from reference trace lines 115-142 */
-                        writel(0x7d, csi_phy_base + 0x0);
-                        writel(0xe3, csi_phy_base + 0x4);
-                        writel(0xa0, csi_phy_base + 0x8);
-                        writel(0x83, csi_phy_base + 0xc);
-                        writel(0xfa, csi_phy_base + 0x10);
-                        writel(0x88, csi_phy_base + 0x1c);
-                        writel(0x4e, csi_phy_base + 0x20);
-                        writel(0xdd, csi_phy_base + 0x24);
-                        writel(0x84, csi_phy_base + 0x28);
-                        writel(0x5e, csi_phy_base + 0x2c);
-                        writel(0xf0, csi_phy_base + 0x30);
-                        writel(0xc0, csi_phy_base + 0x34);
-                        writel(0x36, csi_phy_base + 0x38);
-                        writel(0xdb, csi_phy_base + 0x3c);
-                        writel(0x3, csi_phy_base + 0x40);
-                        writel(0x80, csi_phy_base + 0x44);
-                        writel(0x10, csi_phy_base + 0x48);
-                        writel(0x3, csi_phy_base + 0x54);
-                        writel(0xff, csi_phy_base + 0x58);
-                        writel(0x42, csi_phy_base + 0x5c);
-                        writel(0x1, csi_phy_base + 0x60);
-                        writel(0xc0, csi_phy_base + 0x64);
-                        writel(0xc0, csi_phy_base + 0x68);
-                        writel(0x78, csi_phy_base + 0x6c);
-                        writel(0x43, csi_phy_base + 0x70);
-                        writel(0x33, csi_phy_base + 0x74);
-                        writel(0x1f, csi_phy_base + 0x80);
-                        writel(0x61, csi_phy_base + 0x88);
+                        writel(0x7d, csi_base + 0x0);
+                        writel(0xe3, csi_base + 0x4);
+                        writel(0xa0, csi_base + 0x8);
+                        writel(0x83, csi_base + 0xc);
+                        writel(0xfa, csi_base + 0x10);
+                        writel(0x88, csi_base + 0x1c);
+                        writel(0x4e, csi_base + 0x20);
+                        writel(0xdd, csi_base + 0x24);
+                        writel(0x84, csi_base + 0x28);
+                        writel(0x5e, csi_base + 0x2c);
+                        writel(0xf0, csi_base + 0x30);
+                        writel(0xc0, csi_base + 0x34);
+                        writel(0x36, csi_base + 0x38);
+                        writel(0xdb, csi_base + 0x3c);
+                        writel(0x3, csi_base + 0x40);
+                        writel(0x80, csi_base + 0x44);
+                        writel(0x10, csi_base + 0x48);
+                        writel(0x3, csi_base + 0x54);
+                        writel(0xff, csi_base + 0x58);
+                        writel(0x42, csi_base + 0x5c);
+                        writel(0x1, csi_base + 0x60);
+                        writel(0xc0, csi_base + 0x64);
+                        writel(0xc0, csi_base + 0x68);
+                        writel(0x78, csi_base + 0x6c);
+                        writel(0x43, csi_base + 0x70);
+                        writel(0x33, csi_base + 0x74);
+                        writel(0x1f, csi_base + 0x80);
+                        writel(0x61, csi_base + 0x88);
                         wmb();
 
                         pr_info("*** CSI PHY Control registers (0x0-0x88) configured ***\n");
@@ -2973,31 +2972,31 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 /* STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection */
                 pr_info("*** STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection ***\n");
-
+                void __iomem *csi_phy_base = csi_base;  /* CSI PHY base for detailed config */
+                
                 /* Write the exact ISP isp-csi sequence from the working trace */
-                writel(0x7d, csi_base + 0x0);
-                writel(0xe3, csi_base + 0x4);
-                writel(0xa0, csi_base + 0x8);
-                writel(0x83, csi_base + 0xc);
-                writel(0xfa, csi_base + 0x10);
-                writel(0x88, csi_base + 0x1c);
-                writel(0x4e, csi_base + 0x20);
-                writel(0xdd, csi_base + 0x24);
-                writel(0x84, csi_base + 0x28);
-                writel(0x5e, csi_base + 0x2c);
-                writel(0xf0, csi_base + 0x30);
-                writel(0xc0, csi_base + 0x34);
-                writel(0x36, csi_base + 0x38);
-                writel(0xdb, csi_base + 0x3c);
+                writel(0x7d, csi_phy_base + 0x0);
+                writel(0xe3, csi_phy_base + 0x4);
+                writel(0xa0, csi_phy_base + 0x8);
+                writel(0x83, csi_phy_base + 0xc);
+                writel(0xfa, csi_phy_base + 0x10);
+                writel(0x88, csi_phy_base + 0x1c);
+                writel(0x4e, csi_phy_base + 0x20);
+                writel(0xdd, csi_phy_base + 0x24);
+                writel(0x84, csi_phy_base + 0x28);
+                writel(0x5e, csi_phy_base + 0x2c);
+                writel(0xf0, csi_phy_base + 0x30);
+                writel(0xc0, csi_phy_base + 0x34);
+                writel(0x36, csi_phy_base + 0x38);
+                writel(0xdb, csi_phy_base + 0x3c);
                 /* Continue with the complete ISP isp-csi sequence... */
                 wmb();
                 
-                /* STEP 7: Final CSI PHY control sequence (from reference trace lines 243-258) */
+                /* STEP 7: Final CSI PHY control sequence */
                 pr_info("*** STEP 7: Final CSI PHY control sequence ***\n");
-                /* These are the final timing-sensitive register changes */
-                writel(0x1, isp_base + 0xc);   /* isp-w01 register */
-                writel(0x1, isp_base + 0x10);  /* isp-w01 register */
-                writel(0x630, isp_base + 0x14); /* isp-w01 register - timing critical */
+                writel(0x1, vic_regs + 0xc);
+                writel(0x1, vic_regs + 0x10);
+                writel(0x630, vic_regs + 0x14);
                 wmb();
 
                 /* Additional final CSI PHY configuration from reference trace */
