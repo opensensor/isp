@@ -2267,15 +2267,19 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     /* Binary Ninja reference shows DMA sync operations are required for proper data transfer */
 
     /* Ensure DMA coherency for VIC buffer operations */
-    if (vic_dev->vbm_buffer_addresses && vic_dev->vbm_buffer_count > 0) {
+    /* Access VBM buffers through the global channel state */
+    extern struct tx_isp_channel_state *channel_states[ISP_MAX_CHAN];
+
+    if (channel_states[0] && channel_states[0]->vbm_buffer_addresses && channel_states[0]->vbm_buffer_count > 0) {
         int i;
         u32 frame_size = width * height * 2;  /* RAW10 data = 2 bytes per pixel */
+        struct tx_isp_channel_state *state = channel_states[0];
 
         pr_info("*** CRITICAL DMA SYNC: Synchronizing %d VBM buffers for DMA coherency ***\n",
-                vic_dev->vbm_buffer_count);
+                state->vbm_buffer_count);
 
-        for (i = 0; i < vic_dev->vbm_buffer_count; i++) {
-            dma_addr_t buffer_addr = vic_dev->vbm_buffer_addresses[i];
+        for (i = 0; i < state->vbm_buffer_count; i++) {
+            dma_addr_t buffer_addr = state->vbm_buffer_addresses[i];
 
             if (buffer_addr != 0) {
                 /* CRITICAL: MIPS-specific DMA cache sync for device access */
