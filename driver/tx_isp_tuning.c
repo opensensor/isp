@@ -1271,11 +1271,8 @@ int tisp_init(void *sensor_info, char *param_name)
         pr_info("*** tisp_init: AE1 buffer allocated at 0x%08x ***\n", (uint32_t)ae1_phys);
     }
 
-    /* Binary Ninja: Final ISP configuration registers */
-    uint32_t isp_mode = (sensor_params.mode >= 4) ? 0x12 : 0x1e;
-    system_reg_write(0x804, isp_mode);
-    system_reg_write(0x1c, 8);
-    system_reg_write(0x800, 1);
+    /* Binary Ninja: Final ISP configuration registers - REMOVED DUPLICATE */
+    /* This configuration is now handled earlier in the function with reference driver values */
 
     /* Binary Ninja: CRITICAL - Initialize all ISP sub-modules */
     pr_info("*** tisp_init: INITIALIZING ISP SUB-MODULES ***\n");
