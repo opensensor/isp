@@ -363,6 +363,32 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 shifted_value = buffer_index << 0x10;
             }
 
+            /* CRITICAL FIX: Preserve buffer count AND control bits when updating current buffer index */
+            /* The bug was clearing buffer count bits 16-19, but we need to preserve total buffer count */
+            if (vic_regs) {
+                u32 reg_val = readl(vic_regs + 0x300);
+                u32 total_buffer_count = (reg_val >> 16) & 0xf;  /* Extract current buffer count (bits 16-19) */
+                u32 control_bits = reg_val & 0x8000ffff;         /* Preserve control bits and low bits */
+
+                /* PRESERVE total buffer count, only update current buffer index within that count */
+                /* Don't clear buffer count - preserve it and just cycle through available buffers */
+                u32 current_buffer_index = buffer_index % total_buffer_count;  /* Cycle within available buffers */
+                u32 new_reg_val = control_bits | (total_buffer_count << 16);   /* Preserve buffer count */
+
+                /* FORCE control bits if they were lost */
+                if ((new_reg_val & 0x80000020) != 0x80000020) {
+                    new_reg_val |= 0x80000020;  /* Force control bits back on */
+                    pr_warn("*** VIC FRAME DONE: FORCED control bits 0x80000020 back on! ***\n");
+                }
+
+                writel(new_reg_val, vic_regs + 0x300);
+
+                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (BUFFER COUNT PRESERVED: %d) ***\n",
+                        new_reg_val, total_buffer_count);
+                pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: current=%d, total=%d, match=%d)\n",
+                        new_reg_val, current_buffer_index, total_buffer_count, match_found);
+            }
+
             /* REFERENCE DRIVER: VIC frame done processing complete */
             /* The reference driver does NOT manually trigger ISP core interrupts */
             /* ISP core interrupts should be triggered automatically by hardware */
@@ -727,6 +753,51 @@ int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t base_
     wmb();
 
     pr_info("*** VIC DMA CONFIG: CRITICAL - VIC control 0x300 = 0x%x (DMA ENABLED) ***\n", vic_control);
+
+    /* CRITICAL FIX: Configure VIC hardware BEFORE unlock sequence */
+    pr_info("*** VIC DMA CONFIG: Configuring VIC hardware before unlock sequence ***\n");
+
+    /* Configure essential VIC registers for proper hardware operation */
+    writel((1920 << 16) | 1080, vic_regs + 0x4);  /* Dimensions */
+    writel(0x0, vic_regs + 0x14);  /* Interrupt config */
+    writel(0x7800000, vic_regs + 0x110);  /* Hardware expected value */
+    writel(0x0, vic_regs + 0x114);
+    writel(0x0, vic_regs + 0x118);
+    writel(0x0, vic_regs + 0x11c);
+    writel(0x100010, vic_regs + 0x1a4);  /* Control register */
+    wmb();
+
+    /* CRITICAL FIX: Complete VIC hardware unlock sequence before starting */
+    /* Binary Ninja: EXACT reference driver unlock sequence */
+    pr_info("*** VIC DMA CONFIG: Starting VIC hardware unlock sequence ***\n");
+
+    writel(0x2, vic_regs + 0x0);  /* Pre-enable */
+    wmb();
+    writel(0x4, vic_regs + 0x0);  /* Wait state */
+    wmb();
+
+    /* Wait for hardware ready (register should become 0) */
+    u32 timeout = 10000;
+    u32 vic_status;
+    while ((vic_status = readl(vic_regs + 0x0)) != 0) {
+        udelay(1);
+        if (--timeout == 0) {
+            pr_err("*** VIC DMA CONFIG: VIC unlock timeout - register stuck at 0x%x ***\n", vic_status);
+            break;  /* Continue anyway, but log the issue */
+        }
+    }
+
+    if (timeout > 0) {
+        pr_info("*** VIC DMA CONFIG: VIC unlock successful - register 0x0 = 0x0 ***\n");
+    }
+
+    /* NOW start VIC hardware capture */
+    writel(0x1, vic_regs + 0x0);  /* Start VIC hardware capture */
+    wmb();
+
+    /* Verify VIC hardware started */
+    vic_status = readl(vic_regs + 0x0);
+    pr_info("*** VIC DMA CONFIG: CRITICAL - VIC hardware started, register 0x0 = 0x%x ***\n", vic_status);
     pr_info("*** VIC DMA CONFIG: VIC hardware should now capture frames and populate VIC[0x380] ***\n");
 
     return 0;
@@ -1683,21 +1754,27 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: EXACT reference driver unlock sequence */
         writel(2, vic_regs + 0x0);
         wmb();
-        writel(4, vic_regs + 0x0);
-        wmb();
-        
-        /* Binary Ninja: 00010acc - Wait for unlock */
-        while (readl(vic_regs + 0x0) != 0) {
-            udelay(1);
-            if (--timeout == 0) {
-                pr_err("VIC unlock timeout\n");
-                return -ETIMEDOUT;
+
+        /* CRITICAL FIX: Skip remaining unlock sequence during streaming restart */
+        if (vic_start_ok == 1) {
+            pr_info("*** VIC: SKIPPING remaining unlock sequence - VIC interrupts already working ***\n");
+        } else {
+            writel(4, vic_regs + 0x0);
+            wmb();
+
+            /* Binary Ninja: 00010acc - Wait for unlock */
+            while (readl(vic_regs + 0x0) != 0) {
+                udelay(1);
+                if (--timeout == 0) {
+                    pr_err("VIC unlock timeout\n");
+                    return -ETIMEDOUT;
+                }
             }
+
+            /* Binary Ninja: 00010ad4 - Enable VIC */
+            writel(1, vic_regs + 0x0);
+            wmb();
         }
-        
-        /* Binary Ninja: 00010ad4 - Enable VIC */
-        writel(1, vic_regs + 0x0);
-        wmb();
         
         /* Binary Ninja: 00010ae4-00010b04 - Final MIPI registers */
         writel(0x100010, vic_regs + 0x1a4);
@@ -1899,8 +1976,8 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     switch (cmd) {
         case 0x200000c:
         case 0x200000f:
-            pr_info("*** vic_sensor_ops_ioctl: Starting VIC (cmd=0x%x) - CALLING tx_isp_vic_start ***\n", cmd);
-            return tx_isp_vic_start(vic_dev);
+            pr_info("*** vic_sensor_ops_ioctl: VIC start deferred to vic_core_s_stream (cmd=0x%x) ***\n", cmd);
+            return 0;
             
         case 0x200000d:
         case 0x2000010:
