@@ -23,6 +23,9 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
+/* Function declarations */
+int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev);
+
 /* system_reg_write is now defined in tx-isp-module.c - removed duplicate */
 
 /* Debug function to track vic_start_ok changes */
@@ -2775,8 +2778,20 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x10000000, main_isp_base + 0xb078);  /* 0x0 -> 0x10000000 */
                 wmb();
                 
-                /* STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection */
-                pr_info("*** STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection ***\n");
+                /* STEP 6: EXACT reference driver CSI MIPI initialization */
+                pr_info("*** STEP 6: EXACT reference driver CSI MIPI initialization ***\n");
+                pr_info("*** CRITICAL: This should fix VIC[0x380]=0x0 by properly routing MIPI data ***\n");
+
+                /* Call our new EXACT reference driver CSI MIPI initialization */
+                ret = tx_isp_csi_mipi_init(ourISPdev);
+                if (ret) {
+                    pr_err("*** CRITICAL: CSI MIPI initialization failed: %d ***\n", ret);
+                    pr_err("*** This explains why VIC[0x380] always reads 0x0 ***\n");
+                } else {
+                    pr_info("*** REFERENCE DRIVER CSI MIPI initialization SUCCESS ***\n");
+                    pr_info("*** VIC[0x380] should now be updated by hardware with buffer addresses ***\n");
+                }
+
                 void __iomem *csi_phy_base = csi_base;  /* CSI PHY base for detailed config */
                 
                 /* Write the exact ISP isp-csi sequence from the working trace */
