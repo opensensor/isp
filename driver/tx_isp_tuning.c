@@ -1551,7 +1551,7 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: WDR initialization if enabled */
     if (sensor_params.mode == 1) {  /* WDR mode */
         pr_info("*** tisp_init: WDR MODE ENABLED - Initializing WDR components ***\n");
-        tiziano_wdr_init(sensor_params.width, sensor_params.height);
+        tiziano_wdr_init(actual_image_width, actual_image_height);
         tisp_gb_init();
         /* Enable WDR for all sub-modules */
         tisp_dpc_wdr_en(1);
