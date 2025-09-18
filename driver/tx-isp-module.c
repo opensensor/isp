@@ -2744,6 +2744,21 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 vic->active_buffer_count = reqbuf.count;
                 pr_info("*** Channel %d: VIC active_buffer_count set to %d ***\n",
                         channel, vic->active_buffer_count);
+
+                /* CRITICAL FIX: Configure VIC DMA during REQBUFS when buffers are allocated */
+                /* This is the proper place to configure VIC DMA - when we know buffers exist */
+                if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+                    /* Configure VIC DMA with the first available buffer */
+                    dma_addr_t first_buffer = state->vbm_buffer_addresses[0];
+                    int ret_dma = tx_isp_vic_configure_dma(vic, first_buffer, vic->width, vic->height);
+                    if (ret_dma == 0) {
+                        pr_info("*** REQBUFS: Successfully configured VIC DMA during buffer allocation ***\n");
+                    } else {
+                        pr_err("*** REQBUFS: Failed to configure VIC DMA: %d ***\n", ret_dma);
+                    }
+                } else {
+                    pr_info("*** REQBUFS: VBM buffers not yet available - VIC DMA will be configured during QBUF ***\n");
+                }
             }
 
             pr_info("*** Channel %d: MEMORY-AWARE REQBUFS SUCCESS - %d buffers ***\n",
@@ -2951,6 +2966,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 }
                 pr_info("*** Channel %d: QBUF VBM - Stored buffer[%d] = 0x%x, total_count=%d ***\n",
                         channel, buffer.index, buffer_phys_addr, state->vbm_buffer_count);
+
+                /* CRITICAL FIX: Configure VIC DMA when first buffer is queued */
+                /* This is when we have actual buffer addresses available */
+                if (buffer.index == 0 && ourISPdev && ourISPdev->vic_dev) {
+                    struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                    if (vic->width > 0 && vic->height > 0) {
+                        int ret_dma = tx_isp_vic_configure_dma(vic, buffer_phys_addr, vic->width, vic->height);
+                        if (ret_dma == 0) {
+                            pr_info("*** QBUF: Successfully configured VIC DMA with first buffer 0x%x ***\n", buffer_phys_addr);
+                        } else {
+                            pr_err("*** QBUF: Failed to configure VIC DMA: %d ***\n", ret_dma);
+                        }
+                    } else {
+                        pr_warn("*** QBUF: VIC dimensions not set yet - VIC DMA configuration deferred ***\n");
+                    }
+                }
             }
 
             /* CRITICAL: Program VIC register 0x380 with the first real buffer address */
@@ -3372,6 +3403,20 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 vic->height = 1080;
                 pr_info("*** CHANNEL %d STREAMON: Set VIC dimensions %dx%d ***\n",
                         channel, vic->width, vic->height);
+            }
+
+            /* CRITICAL FIX: Configure VIC DMA during STREAMON when everything is ready */
+            /* This ensures VIC DMA is configured with proper dimensions and buffer addresses */
+            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+                dma_addr_t first_buffer = state->vbm_buffer_addresses[0];
+                int ret_dma = tx_isp_vic_configure_dma(vic, first_buffer, vic->width, vic->height);
+                if (ret_dma == 0) {
+                    pr_info("*** STREAMON: Successfully configured VIC DMA for streaming ***\n");
+                } else {
+                    pr_err("*** STREAMON: Failed to configure VIC DMA: %d ***\n", ret_dma);
+                }
+            } else {
+                pr_warn("*** STREAMON: No VBM buffers available for VIC DMA configuration ***\n");
             }
 
             pr_info("*** VIC STATE: state=%d, stream_state=%d, active_buffer_count=%d ***\n",
