@@ -48,32 +48,12 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
 {
     struct tx_isp_vic_device *vic_dev;
     int ret = 0;
-
+    
     if (!isp_dev) {
         pr_err("tx_isp_create_vic_device: Invalid ISP device\n");
         return -EINVAL;
     }
-
-    /* *** CRITICAL FIX: Check if VIC device already exists (created by probe) *** */
-    if (isp_dev->vic_dev) {
-        /* VIC device already exists (likely created by tx_isp_vic_probe) */
-        struct tx_isp_vic_device *existing_vic = container_of((struct tx_isp_subdev *)isp_dev->vic_dev,
-                                                             struct tx_isp_vic_device, sd);
-
-        pr_info("*** tx_isp_create_vic_device: VIC device already exists ***\n");
-        pr_info("  Existing VIC device: %p\n", existing_vic);
-        pr_info("  vic_regs: %p\n", existing_vic->vic_regs);
-        pr_info("  vic_regs_secondary: %p\n", existing_vic->vic_regs_secondary);
-
-        /* Check if the existing VIC device has registers mapped */
-        if (existing_vic->vic_regs && existing_vic->vic_regs_secondary) {
-            pr_info("*** USING EXISTING VIC DEVICE WITH MAPPED REGISTERS ***\n");
-            return 0; /* Success - use existing device */
-        } else {
-            pr_warn("*** EXISTING VIC DEVICE MISSING REGISTERS - WILL REPLACE ***\n");
-        }
-    }
-
+    
     pr_info("*** tx_isp_create_vic_device: Creating VIC device structure ***\n");
     
     /* FIXED: Use regular kernel memory instead of precious rmem for small structures */
@@ -664,9 +644,19 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 
     pr_info("*** VIC HW INIT: Interrupt configuration applied to PRIMARY VIC space ***\n");
 
-    /* CRITICAL FIX: DON'T register duplicate IRQ handler - IRQ 38 already registered in tx-isp-module.c */
-    /* The main module already registers IRQ 38 with proper routing to VIC handler */
-    pr_info("*** VIC HW INIT: IRQ 38 already registered by main module - skipping duplicate registration ***\n");
+    /* CRITICAL: Register the VIC interrupt handler - THIS WAS MISSING! */
+    int irq = 38;  /* VIC uses IRQ 38 (isp-w02) */
+    int ret = request_irq(irq, isp_vic_interrupt_service_routine, IRQF_SHARED, "tx-isp-vic", sd);
+    if (ret == 0) {
+        pr_info("*** VIC HW INIT: Interrupt handler registered for IRQ %d ***\n", irq);
+    } else {
+        pr_err("*** VIC HW INIT: Failed to register interrupt handler for IRQ %d: %d ***\n", irq, ret);
+        return ret;
+    }
+
+    /* Enable the interrupt at hardware level */
+    enable_irq(irq);
+    pr_info("*** VIC HW INIT: Hardware interrupt enabled for IRQ %d ***\n", irq);
 
     return 0;
 }
