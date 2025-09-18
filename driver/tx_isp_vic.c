@@ -2976,20 +2976,20 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection ***\n");
 
                 /* Write the exact ISP isp-csi sequence from the working trace */
-                writel(0x7d, csi_phy_base + 0x0);
-                writel(0xe3, csi_phy_base + 0x4);
-                writel(0xa0, csi_phy_base + 0x8);
-                writel(0x83, csi_phy_base + 0xc);
-                writel(0xfa, csi_phy_base + 0x10);
-                writel(0x88, csi_phy_base + 0x1c);
-                writel(0x4e, csi_phy_base + 0x20);
-                writel(0xdd, csi_phy_base + 0x24);
-                writel(0x84, csi_phy_base + 0x28);
-                writel(0x5e, csi_phy_base + 0x2c);
-                writel(0xf0, csi_phy_base + 0x30);
-                writel(0xc0, csi_phy_base + 0x34);
-                writel(0x36, csi_phy_base + 0x38);
-                writel(0xdb, csi_phy_base + 0x3c);
+                writel(0x7d, csi_base + 0x0);
+                writel(0xe3, csi_base + 0x4);
+                writel(0xa0, csi_base + 0x8);
+                writel(0x83, csi_base + 0xc);
+                writel(0xfa, csi_base + 0x10);
+                writel(0x88, csi_base + 0x1c);
+                writel(0x4e, csi_base + 0x20);
+                writel(0xdd, csi_base + 0x24);
+                writel(0x84, csi_base + 0x28);
+                writel(0x5e, csi_base + 0x2c);
+                writel(0xf0, csi_base + 0x30);
+                writel(0xc0, csi_base + 0x34);
+                writel(0x36, csi_base + 0x38);
+                writel(0xdb, csi_base + 0x3c);
                 /* Continue with the complete ISP isp-csi sequence... */
                 wmb();
                 
