@@ -3223,6 +3223,18 @@ int tx_isp_core_probe(struct platform_device *pdev)
                         /* NOW we can report full success */
                         pr_info("*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
                         pr_info("***   - Tuning device: %p ***\n", tuning_dev);
+
+                        /* CRITICAL FIX: Manually trigger ISP core initialization that's missing from logs */
+                        /* The ispcore_core_ops_init() function is never being called, causing error 0x20 and green frames */
+                        pr_info("*** tx_isp_core_probe: MANUALLY TRIGGERING ispcore_core_ops_init() - MISSING FROM LOGS ***\n");
+
+                        /* Call ispcore_core_ops_init directly since automatic trigger is missing */
+                        int core_init_ret = ispcore_core_ops_init(isp_dev, NULL);
+                        if (core_init_ret < 0) {
+                            pr_err("*** tx_isp_core_probe: ispcore_core_ops_init() FAILED: %d ***\n", core_init_ret);
+                        } else {
+                            pr_info("*** tx_isp_core_probe: ispcore_core_ops_init() SUCCESS - tisp_init() should be called ***\n");
+                        }
                     } else {
                         pr_err("*** tx_isp_core_probe: Tuning init FAILED even with mapped registers ***\n");
                         return -ENOMEM;
