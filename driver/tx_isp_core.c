@@ -689,40 +689,30 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Error handling would be here */
     }
 
-    if (interrupt_status & 0x100) {  /* Status bit 8 - Frame processing completion */
-        /* CRITICAL INSIGHT: This is NOT an error - it's a normal processing status! */
-        /* The error registers are always 0x0, indicating this is completion status */
+    /* Binary Ninja EXACT: Handle bit 9 (0x200) - Processing status */
+    if (interrupt_status & 0x200) {
+        /* Binary Ninja: if (*($s0 + 0x17c) != 0) exception_handle() */
+        /* Binary Ninja: data_ca578 += 1 */
+        static int status_200_count = 0;
+        status_200_count++;
 
-        pr_info("ISP CORE: Frame processing completion status (bit 8)\n");
+        pr_debug("ISP CORE: Status bit 9 (0x200) - count: %d\n", status_200_count);
 
-        /* This interrupt indicates ISP has completed processing a frame */
-        /* No error clearing needed - just acknowledge the status */
+        /* TODO: Check condition at offset 0x17c and call exception_handle() if needed */
+    }
 
-        /* Check if this is related to the green frames issue */
-        if (isp_regs) {
-            /* Read processing status registers for debugging */
-            u32 status_c = readl(isp_regs + 0xc);   /* Main status */
-            u32 status_20 = readl(isp_regs + 0x20); /* Processing status */
-            u32 status_84c = readl(isp_regs + 0x84c); /* Additional status */
+    /* Binary Ninja EXACT: Handle bit 8 (0x100) - Processing status */
+    if (interrupt_status & 0x100) {
+        /* CRITICAL FIX: This is NOT an error - it's normal processing status! */
+        /* Binary Ninja: if (*($s0 + 0x17c) != 0) exception_handle() */
+        /* Binary Ninja: data_ca574 += 1 */
+        static int status_100_count = 0;
+        status_100_count++;
 
-            /* Only log if there are actual error bits set */
-            if (status_c != 0 || status_20 != 0 || status_84c != 0) {
-                pr_info("*** ISP CORE: Status registers - 0xc=0x%x, 0x20=0x%x, 0x84c=0x%x ***\n",
-                        status_c, status_20, status_84c);
+        pr_debug("ISP CORE: Status bit 8 (0x100) - count: %d\n", status_100_count);
 
-                /* Clear any actual error bits */
-                if (status_c != 0) {
-                    writel(status_c, isp_regs + 0xc);
-                    wmb();
-                }
-                if (status_20 != 0) {
-                    writel(status_20, isp_regs + 0x20);
-                    wmb();
-                }
-            }
-        }
-
-        /* This is normal frame processing completion - not an error */
+        /* This is normal frame processing status - NOT an error condition */
+        /* TODO: Check condition at offset 0x17c and call exception_handle() if needed */
     }
 
 
