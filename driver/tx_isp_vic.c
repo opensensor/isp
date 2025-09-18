@@ -37,6 +37,7 @@ static void debug_vic_start_ok_change(int new_value, const char *location, int l
 void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev);
 static int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 static int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev);
+static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);  /* Forward declaration */
 static int vic_enabled = 0;
 
 /* *** CRITICAL: MISSING FUNCTION - tx_isp_create_vic_device *** */
@@ -3213,7 +3214,6 @@ int tx_isp_vic_remove(struct platform_device *pdev)
     return 0;
 }
 /* Forward declarations for callback functions referenced in pipo */
-static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
 static int ispvic_frame_channel_clearbuf(void);
 
 /* ispvic_frame_channel_qbuf - SAFE implementation using proper struct members */
