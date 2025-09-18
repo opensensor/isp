@@ -668,31 +668,23 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Pre-frame dequeue work scheduling */
     }
 
-    /* CRITICAL FIX: Handle the persistent ISP error 0x20 */
-    /* Based on logs analysis: error 0x20 occurs when VIC status register 0x84c is 0x0 */
+    /* BINARY NINJA EXACT: Handle interrupt status like reference driver */
+    /* Reference driver: if (($s1 & 0x3f8) != 0) { read 0x84c, print, increment counter } */
     if ((interrupt_status & 0x3f8) != 0) {
-        u32 error_code = (interrupt_status & 0x3f8) >> 3;
+        /* Binary Ninja: int32_t var_44_1 = *(*(arg1 + 0xb8) + 0x84c) */
         u32 error_reg_84c = readl(vic_regs + 0x84c);
 
-        if (error_code == 0x20 && error_reg_84c == 0x0) {
-            pr_info("ISP CORE: Error 0x20 - VIC status register cleared by hardware reset\n");
+        /* Binary Ninja: isp_printf(1, "ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\n", $s1) */
+        /* This is already done above in our existing log */
 
-            /* CRITICAL FIX: Re-initialize VIC status register to fix error 0x20 */
-            writel(0x1, vic_regs + 0x84c);  /* Set VIC processing active */
-            wmb();
+        /* Binary Ninja: data_ca57c += 1 */
+        static int error_status_count = 0;
+        error_status_count++;
 
-            /* Also ensure VIC processing is enabled */
-            u32 vic_ctrl = readl(vic_regs + 0x300);
-            if ((vic_ctrl & 0x80000000) == 0) {
-                writel(vic_ctrl | 0x80000020, vic_regs + 0x300);  /* Enable VIC processing */
-                wmb();
-                pr_info("*** ISP CORE: VIC control register also re-enabled ***\n");
-            }
+        pr_debug("ISP CORE: Error status count: %d (Binary Ninja: data_ca57c += 1)\n", error_status_count);
 
-            pr_info("*** ISP CORE: VIC status register 0x84c re-initialized - should fix error 0x20 ***\n");
-        } else {
-            pr_info("ISP CORE: Error 0x%x - VIC status 0x84c = 0x%x\n", error_code, error_reg_84c);
-        }
+        /* Binary Ninja: Continue processing - NO special error handling! */
+        /* The reference driver treats this as normal operation, not an error */
     }
 
     /* Binary Ninja: Error interrupt processing */
@@ -1672,14 +1664,6 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
         /* CRITICAL FIX: Clear error status register to prevent green frames */
         writel(0x0, core + 0xc);            /* Clear error status register */
         pr_info("*** ISP CORE: Error status register cleared during initialization ***\n");
-
-        /* CRITICAL FIX: Re-initialize VIC status register after ISP core reset */
-        /* The ISP core reset was clearing our VIC status register, causing error 0x20 */
-        if (ourISPdev && ourISPdev->vic_regs) {
-            writel(0x1, ourISPdev->vic_regs + 0x84c);  /* Set VIC processing active */
-            wmb();
-            pr_info("*** ISP CORE: VIC status register 0x84c re-initialized after core reset ***\n");
-        }
 
         /* CRITICAL: Enable ISP pipeline first - this connects VIC to ISP core */
         /* Binary Ninja: system_reg_write(0x800, 1) - Enable ISP pipeline */

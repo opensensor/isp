@@ -2182,13 +2182,6 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
     
-    /* CRITICAL FIX: Initialize VIC status register 0x84c */
-    /* This register was always 0x0 in logs, causing ISP error 0x20 */
-    /* Based on logs analysis, this should contain VIC processing status */
-    writel(0x1, vic_base + 0x84c);  /* Set VIC processing active status */
-    wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x84c = 0x1 (VIC status - CRITICAL FIX for error 0x20)\n");
-
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - CONTROL LIMIT ERROR SHOULD BE FIXED ***\n");
 }
 
