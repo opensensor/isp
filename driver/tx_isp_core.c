@@ -426,6 +426,8 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     struct tx_isp_dev *isp_dev = ourISPdev;
     static int sensor_call_counter = 0;
 
+    pr_info("*** ISP FRAME SYNC WORK: STARTING (counter=%d) ***\n", sensor_call_counter);
+
     if (!isp_dev) {
         pr_warn("*** ISP FRAME SYNC WORK: isp_dev is NULL ***\n");
         return;
@@ -470,6 +472,7 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     }
 
     sensor_call_counter++;
+    pr_info("*** ISP FRAME SYNC WORK: COMPLETED (counter=%d) ***\n", sensor_call_counter);
 }
 
 /* Forward declarations for frame channel functions - avoid naming conflicts */
@@ -640,8 +643,9 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         static int frame_sync_counter = 0;
         frame_sync_counter++;
 
+        /* TEMPORARY FIX: Disable work queue to test if DQBUF sleeping is the issue */
         /* Queue sensor work item periodically (not every frame) */
-        if ((frame_sync_counter % 8) == 0) {  /* Every 8th frame sync */
+        if (false) {  /* DISABLED - testing if work queue is causing soft lockup */
             fs_work_queue_item(1, frame_sync_counter);  /* Type 1 = sensor operations */
         }
 
