@@ -752,12 +752,11 @@ irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
     return IRQ_WAKE_THREAD;
 }
 
-/* ISP interrupt thread handler - ALL complex processing happens here */
+/* ISP interrupt thread handler - COMPLETELY DISABLED TO TEST SOFT LOCKUP */
 irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id)
 {
-    /* Binary Ninja: Threaded handler does all the complex processing */
-    /* This can sleep, do I/O, call work functions, etc. */
-    return ispcore_interrupt_service_routine(irq, dev_id);
+    /* TEMPORARY: Completely disable ALL interrupt processing to test soft lockup */
+    return IRQ_HANDLED;
 }
 
 /* tx_isp_request_irq - EXACT Binary Ninja implementation */
