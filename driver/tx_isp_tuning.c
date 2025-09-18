@@ -1268,15 +1268,11 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) - Basic ISP config */
     system_reg_write(0x4, (sensor_params.width << 16) | sensor_params.height);
 
-    /* Binary Ninja: Handle different sensor modes - simplified version */
-    switch (sensor_params.mode) {
-        case 0: case 1: case 2: case 3:
-            system_reg_write(0x8, sensor_params.mode);
-            break;
-        default:
-            system_reg_write(0x8, 0); /* Default mode */
-            break;
-    }
+    /* CRITICAL FIX: Register 0x8 is for Bayer pattern, NOT sensor mode */
+    /* Remove incorrect sensor mode configuration that conflicts with Bayer pattern */
+    /* Register 0x8 will be set correctly by the Bayer pattern logic below */
+    pr_info("*** tisp_init: PIPELINE FIX - Skipping incorrect sensor mode write to reg[0x8] ***\n");
+    pr_info("*** tisp_init: Register 0x8 reserved for Bayer pattern configuration ***\n");
 
     /* CRITICAL FIX: ISP control register - enable processing pipeline */
     /* This register controls the overall ISP processing pipeline operation */
