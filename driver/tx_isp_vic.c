@@ -2892,8 +2892,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x80007000, main_isp_base + 0x110);
                 writel(0x777111, main_isp_base + 0x114);
                 writel(0x3f00, main_isp_base + 0x9804);
-                /* CRITICAL FIX: Use sensor dimensions instead of hardcoded 1920x1080 */
-                writel((sensor_width << 16) | sensor_height, main_isp_base + 0x9864);
+                writel(0x7800438, main_isp_base + 0x9864);
                 writel(0xc0000000, main_isp_base + 0x987c);
                 writel(0x1, main_isp_base + 0x9880);
                 writel(0x1, main_isp_base + 0x9884);
@@ -3044,35 +3043,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     wmb();  /* Ensure state is written before enabling interrupts */
                     vic_start_ok = 1;  /* NOW safe to enable interrupt processing */
                     pr_info("*** INTERRUPTS RE-ENABLED AFTER COMPLETE INITIALIZATION ***\n");
-
-                    /* CRITICAL: Apply full VIC configuration now that sensor is streaming */
-                    pr_info("*** APPLYING FULL VIC CONFIGURATION AFTER SENSOR INITIALIZATION ***\n");
-                    tx_isp_vic_apply_full_config(vic_dev);
-
-                    /* DELAYED VIC HARDWARE ENABLE: Now that everything is configured and sensor is streaming */
-                    pr_info("*** DELAYED VIC HARDWARE ENABLE: Enabling VIC hardware after complete initialization ***\n");
-                    void __iomem *vic_regs = vic_dev->vic_regs;
-                    if (vic_regs) {
-                        /* BINARY NINJA EXACT: Hardware enable sequence */
-                        /* Binary Ninja: **(arg1 + 0xb8) = 2; **(arg1 + 0xb8) = 4; while (*$v1_30 != 0) nop; **(arg1 + 0xb8) = 1 */
-                        writel(0x2, vic_regs + 0x0);        /* Binary Ninja: Pre-enable state */
-                        wmb();
-                        writel(0x4, vic_regs + 0x0);        /* Binary Ninja: Wait state */
-                        wmb();
-
-                        /* Binary Ninja: Wait for hardware ready */
-                        u32 wait_count = 0;
-                        while ((readl(vic_regs + 0x0) != 0) && (wait_count < 1000)) {
-                            wait_count++;
-                            udelay(1);
-                        }
-
-                        writel(0x1, vic_regs + 0x0);        /* Binary Ninja: Final enable */
-                        wmb();
-                        pr_info("*** BINARY NINJA EXACT: Hardware enable sequence 2->4->wait->1 (waited %d us) ***\n", wait_count);
-                    } else {
-                        pr_err("*** ERROR: VIC registers not available for delayed enable ***\n");
-                    }
 
                     pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
                     return ret;
