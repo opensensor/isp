@@ -3292,6 +3292,16 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             pr_info("*** ispvic_frame_channel_qbuf: SAFE - Programmed %d VIC buffer addresses ***\n",
                     state->vbm_buffer_count);
 
+            /* CRITICAL: Write VIC control register 0x300 AFTER buffer programming */
+            /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+            u32 buffer_count = state->vbm_buffer_count;
+            u32 vic_control = (buffer_count << 16) | 0x80000020;
+            writel(vic_control, vic_dev->vic_regs + 0x300);
+            wmb();
+
+            pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - Wrote VIC[0x300] = 0x%x after buffer programming ***\n", vic_control);
+            pr_info("*** This enables VIC DMA with %d buffers - VIC hardware should now capture frames ***\n", buffer_count);
+
             /* SAFE: Skip the complex buffer queue management and just return success */
             goto unlock_exit;
         } else {
