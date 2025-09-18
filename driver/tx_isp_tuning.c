@@ -1402,15 +1402,15 @@ int tisp_init(void *sensor_info, char *param_name)
     system_reg_write(0xc, bypass_val);
     pr_info("*** tisp_init: REFERENCE DRIVER bypass register set to 0x%x (exact Binary Ninja logic) ***\n", bypass_val);
 
-    /* CRITICAL FIX: Configure ISP for YUYV output format */
-    /* Application expects YUYV format (4147200 bytes) but ISP outputs NV12 (3133440 bytes) */
-    /* This format mismatch causes green frames - NV12 data interpreted as YUYV */
-    pr_info("*** tisp_init: CONFIGURING ISP FOR YUYV OUTPUT FORMAT ***\n");
+    /* CRITICAL FIX: Configure ISP for NV12 output format */
+    /* Application requests NV12 format (0x3231564e) but buffer size mismatch suggests confusion */
+    /* Let's configure ISP for proper NV12 output and fix the buffer size issue */
+    pr_info("*** tisp_init: CONFIGURING ISP FOR NV12 OUTPUT FORMAT ***\n");
 
-    /* Configure ISP output format for YUYV instead of NV12 */
-    system_reg_write(0x10, 0x422);     /* YUYV 4:2:2 format code */
-    system_reg_write(0x30, 0xffffffff); /* Enable all processing for YUYV conversion */
-    pr_info("*** tisp_init: ISP configured for YUYV 4:2:2 output format ***\n");
+    /* Configure ISP output format for NV12 (4:2:0) */
+    system_reg_write(0x10, 0x133);     /* NV12 format code from reference driver */
+    system_reg_write(0x30, 0xffffffff); /* Enable all processing for NV12 conversion */
+    pr_info("*** tisp_init: ISP configured for NV12 4:2:0 output format ***\n");
 
     /* CRITICAL FIX: Initialize essential ISP processing modules to prevent Error interrupt type 2 */
 

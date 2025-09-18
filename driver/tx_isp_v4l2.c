@@ -84,15 +84,13 @@ static int tx_isp_v4l2_s_fmt_vid_cap(struct file *file, void *priv,
         return -EINVAL;
     }
     
-    /* CRITICAL FIX: Support RAW10 format for application compatibility */
-    /* Validate pixel format - now supporting RAW10 */
-    if (f->fmt.pix.pixelformat != V4L2_PIX_FMT_SRGGB10 &&
-        f->fmt.pix.pixelformat != V4L2_PIX_FMT_NV12 &&
+    /* Validate pixel format */
+    if (f->fmt.pix.pixelformat != V4L2_PIX_FMT_NV12 &&
         f->fmt.pix.pixelformat != V4L2_PIX_FMT_YUYV &&
         f->fmt.pix.pixelformat != 0x3231564e) { /* NV12 alternative format */
-        pr_warn("Channel %d: Unsupported pixel format 0x%x, using RAW10\n",
+        pr_warn("Channel %d: Unsupported pixel format 0x%x, using NV12\n",
                 dev->channel_num, f->fmt.pix.pixelformat);
-        f->fmt.pix.pixelformat = V4L2_PIX_FMT_SRGGB10;  /* Default to RAW10 */
+        f->fmt.pix.pixelformat = V4L2_PIX_FMT_NV12;
     }
     
     /* Set format parameters based on channel */
@@ -340,7 +338,7 @@ static int tx_isp_v4l2_enum_fmt_vid_cap(struct file *file, void *priv,
         return -EINVAL;
     }
     
-    if (f->index >= 3) {
+    if (f->index >= 2) {
         return -EINVAL;
     }
 
@@ -349,14 +347,10 @@ static int tx_isp_v4l2_enum_fmt_vid_cap(struct file *file, void *priv,
 
     switch (f->index) {
     case 0:
-        f->pixelformat = V4L2_PIX_FMT_SRGGB10;
-        strcpy(f->description, "RAW10 RGGB Bayer");
-        break;
-    case 1:
         f->pixelformat = V4L2_PIX_FMT_NV12;
         strcpy(f->description, "NV12 4:2:0");
         break;
-    case 2:
+    case 1:
         f->pixelformat = V4L2_PIX_FMT_YUYV;
         strcpy(f->description, "YUYV 4:2:2");
         break;
@@ -780,12 +774,12 @@ static int tx_isp_create_v4l2_device(int channel)
         dev->format.fmt.pix.width = 640;
         dev->format.fmt.pix.height = 360;
     }
-    dev->format.fmt.pix.pixelformat = V4L2_PIX_FMT_SRGGB10;  /* Default to RAW10 */
+    dev->format.fmt.pix.pixelformat = V4L2_PIX_FMT_NV12;
     dev->format.fmt.pix.field = V4L2_FIELD_NONE;
-    dev->format.fmt.pix.bytesperline = dev->format.fmt.pix.width * 10 / 8;  /* RAW10: 10 bits per pixel */
+    dev->format.fmt.pix.bytesperline = dev->format.fmt.pix.width;
     dev->format.fmt.pix.sizeimage = dev->format.fmt.pix.width *
-                                   dev->format.fmt.pix.height * 10 / 8;  /* RAW10 size */
-    dev->format.fmt.pix.colorspace = V4L2_COLORSPACE_REC709;  /* Standard for RAW Bayer data */
+                                   dev->format.fmt.pix.height * 3 / 2;
+    dev->format.fmt.pix.colorspace = V4L2_COLORSPACE_REC709;
     
     /* Initialize V4L2 device - use ISP device as parent if available */
     ret = v4l2_device_register(ourISPdev ? ourISPdev->dev : NULL, &dev->v4l2_dev);
