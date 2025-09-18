@@ -2858,26 +2858,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Don't return error for VBM mode - continue with VBM buffer handling */
         }
 
-        /* CRITICAL FIX: Program VIC buffer address during QBUF like reference driver */
+        /* Binary Ninja: EXACT event call - tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000008, &var_78) */
         if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
             struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-
-            /* REFERENCE DRIVER EXACT: Program buffer address to VIC register during QBUF */
-            /* Binary Ninja: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2; */
-            if (vic_dev_buf->vic_regs && buffer.index < 8) {
-                u32 buffer_reg_offset = (buffer.index + 0xc6) << 2;  /* EXACT Binary Ninja formula */
-
-                pr_info("*** Channel %d: QBUF - REFERENCE DRIVER: Programming VIC buffer[%d] to reg[0x%x] = 0x%x ***\n",
-                        channel, buffer.index, buffer_reg_offset, (u32)buffer_phys_addr);
-
-                writel((u32)buffer_phys_addr, vic_dev_buf->vic_regs + buffer_reg_offset);
-                wmb();
-
-                pr_info("*** Channel %d: QBUF - VIC buffer address programmed successfully ***\n", channel);
-            } else {
-                pr_warn("*** Channel %d: QBUF - Cannot program VIC buffer: vic_regs=%p, index=%d ***\n",
-                        channel, vic_dev_buf->vic_regs, buffer.index);
-            }
 
             pr_info("*** Channel %d: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***\n", channel);
 
@@ -2918,6 +2901,28 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d ***\n",
                 channel, buffer.index, buffer_phys_addr, buffer_size);
+
+        /* CRITICAL FIX: Program VIC buffer address during QBUF like reference driver */
+        if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
+            struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+
+            /* REFERENCE DRIVER EXACT: Program buffer address to VIC register during QBUF */
+            /* Binary Ninja: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2; */
+            if (vic_dev_buf->vic_regs && buffer.index < 8) {
+                u32 buffer_reg_offset = (buffer.index + 0xc6) << 2;  /* EXACT Binary Ninja formula */
+
+                pr_info("*** Channel %d: QBUF - REFERENCE DRIVER: Programming VIC buffer[%d] to reg[0x%x] = 0x%x ***\n",
+                        channel, buffer.index, buffer_reg_offset, buffer_phys_addr);
+
+                writel(buffer_phys_addr, vic_dev_buf->vic_regs + buffer_reg_offset);
+                wmb();
+
+                pr_info("*** Channel %d: QBUF - VIC buffer address programmed successfully ***\n", channel);
+            } else {
+                pr_warn("*** Channel %d: QBUF - Cannot program VIC buffer: vic_regs=%p, index=%d ***\n",
+                        channel, vic_dev_buf->vic_regs, buffer.index);
+            }
+        }
 
         /* CRITICAL FIX: Get video_buffer structure and set state like reference driver */
         struct video_buffer *video_buffer = NULL;
