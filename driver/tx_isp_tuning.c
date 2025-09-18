@@ -1081,8 +1081,15 @@ int tisp_init(void *sensor_info, char *param_name)
         memcpy(&sensor_params, sensor_info, sizeof(sensor_params));
     }
 
-    pr_info("tisp_init: Using sensor parameters - %dx%d@%d, mode=%d\n",
-            sensor_params.width, sensor_params.height, sensor_params.fps, sensor_params.mode);
+    /* CRITICAL FIX: Use actual sensor IMAGE dimensions, not total frame size */
+    /* GC2053 sensor: total_width=1920, total_height=1080 (actual image) */
+    /* sensor_params contains total frame size (2200x1418) which is WRONG for ISP */
+
+    uint32_t actual_image_width = 1920;   /* GC2053 actual image width */
+    uint32_t actual_image_height = 1080;  /* GC2053 actual image height */
+
+    pr_info("tisp_init: CRITICAL FIX - Using ACTUAL sensor image dimensions %dx%d (not frame size %dx%d)\n",
+            actual_image_width, actual_image_height, sensor_params.width, sensor_params.height);
 
     /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) - Basic ISP config */
     system_reg_write(0x4, (sensor_params.width << 16) | sensor_params.height);
@@ -1131,6 +1138,33 @@ int tisp_init(void *sensor_info, char *param_name)
     system_reg_write(0x800, 1);         /* Enable ISP pipeline */
 
     pr_info("*** tisp_init: REFERENCE DRIVER final configuration - 0x804=0x%x, 0x1c=8, 0x800=1 ***\n", isp_mode);
+
+    /* CRITICAL FIX: Configure ISP with ACTUAL sensor image dimensions */
+    /* This is the missing piece - ISP must know the correct image size */
+
+    /* Binary Ninja: system_reg_write(4, width << 16 | height) */
+    system_reg_write(0x4, (actual_image_width << 16) | actual_image_height);
+    pr_info("*** tisp_init: ISP frame size configured - %dx%d (ACTUAL sensor image) ***\n",
+            actual_image_width, actual_image_height);
+
+    /* CRITICAL FIX: Load ISP tuning parameters from /etc/sensor/ files */
+    /* This is the missing piece - ISP needs tuning parameters for proper image processing */
+
+    pr_info("*** tisp_init: Loading ISP tuning parameters from /etc/sensor/ ***\n");
+
+    /* Load standard tuning file (day/night parameters) */
+    if (load_isp_tuning_file("/etc/sensor/gc2053-t31.bin") != 0) {
+        pr_warn("*** tisp_init: Failed to load standard tuning file - using defaults ***\n");
+    } else {
+        pr_info("*** tisp_init: Standard tuning parameters loaded successfully ***\n");
+    }
+
+    /* Load custom tuning file (custom parameters) */
+    if (load_isp_tuning_file("/etc/sensor/gc2053-cust-t31.bin") != 0) {
+        pr_warn("*** tisp_init: Failed to load custom tuning file - using defaults ***\n");
+    } else {
+        pr_info("*** tisp_init: Custom tuning parameters loaded successfully ***\n");
+    }
 
     /* Binary Ninja: Call tisp_set_csc_version(0) */
     tisp_set_csc_version(0);
