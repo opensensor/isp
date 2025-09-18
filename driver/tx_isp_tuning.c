@@ -1593,7 +1593,7 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* The reference driver does NOT create any kthread for event processing */
     /* Events are processed on-demand when triggered, not continuously */
-    pr_info("*** tisp_init: Event system ready for on-demand processing (Binary Ninja reference) ***\n")
+    pr_info("*** tisp_init: Event system ready for on-demand processing (Binary Ninja reference) ***\n");
 
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) - Set IRQ handler */
     /* CRITICAL: This sets up the ISP processing completion callback - missing piece! */
