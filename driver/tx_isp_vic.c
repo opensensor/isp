@@ -2181,7 +2181,39 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     writel(stride, vic_base + 0x314);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
-    
+
+    /* CRITICAL MISSING: DMA cache synchronization operations */
+    /* Binary Ninja reference shows DMA sync operations are required for proper data transfer */
+
+    /* Ensure DMA coherency for VIC buffer operations */
+    if (vic_dev->vbm_buffer_addresses && vic_dev->vbm_buffer_count > 0) {
+        int i;
+        u32 frame_size = width * height * 2;  /* RAW10 data = 2 bytes per pixel */
+
+        pr_info("*** CRITICAL DMA SYNC: Synchronizing %d VBM buffers for DMA coherency ***\n",
+                vic_dev->vbm_buffer_count);
+
+        for (i = 0; i < vic_dev->vbm_buffer_count; i++) {
+            dma_addr_t buffer_addr = vic_dev->vbm_buffer_addresses[i];
+
+            if (buffer_addr != 0) {
+                /* DMA cache sync for device access - CRITICAL for MIPS architecture */
+                dma_sync_single_for_device(NULL, buffer_addr, frame_size, DMA_FROM_DEVICE);
+
+                pr_info("*** DMA SYNC: Buffer[%d] addr=0x%x size=%d synced for device ***\n",
+                        i, buffer_addr, frame_size);
+            }
+        }
+
+        /* Additional cache flush for MIPS coherency */
+        wmb();  /* Write memory barrier */
+        __sync();  /* MIPS cache sync */
+
+        pr_info("*** DMA SYNC COMPLETE: All VBM buffers synchronized for hardware access ***\n");
+    } else {
+        pr_warn("*** WARNING: No VBM buffers available for DMA sync - may cause data corruption ***\n");
+    }
+
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - CONTROL LIMIT ERROR SHOULD BE FIXED ***\n");
 }
 
