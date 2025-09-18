@@ -585,7 +585,6 @@ struct platform_device tx_isp_core_platform_device = {
 /* Forward declaration for VIC event handler */
 
 /* Forward declarations - Using actual function names from reference driver */
-struct frame_channel_device; /* Forward declare struct */
 static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
 static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data);
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
@@ -7003,13 +7002,14 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
         
         // Don't trigger work queue here to avoid deadlock
         pr_info("VIC: Stream ON event completed\n");
-        
+
         return 0;
     }
     default:
         pr_debug("VIC: Unknown event type: 0x%x\n", event_type);
         return -0x203; /* 0xfffffdfd */
     }
+}
 }
 
 /* Wake up waiters when frame is ready - matches reference driver pattern */

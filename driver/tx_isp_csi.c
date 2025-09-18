@@ -82,18 +82,6 @@ u32 csi_read32(u32 reg)
 
 void csi_write32(u32 reg, u32 val)
 {
-    /* CRITICAL FIX: Prevent CSI PHY register writes during VIC streaming */
-    /* The tuning system was resetting CSI PHY Config registers (0x100-0x10c) to 0x0 */
-    /* This breaks MIPI data flow and causes VIC interrupts to stop working */
-    extern uint32_t vic_start_ok;
-    if (vic_start_ok == 1) {
-        /* Only allow critical CSI control registers, block PHY config registers */
-        if (reg >= 0x100 && reg <= 0x2ff) {
-            pr_debug("*** CSI PROTECTION: Blocked PHY register write 0x%x=0x%x during VIC streaming ***\n", reg, val);
-            return;
-        }
-    }
-
     if (!tx_isp_csi_regs) {
         tx_isp_csi_regs = ioremap(0x10022000, 0x1000);
         if (!tx_isp_csi_regs) {
@@ -716,7 +704,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         pr_info("*** CRITICAL: CSI MIPI configuration complete - control limit error should be FIXED ***\n");
 
-                    } else if (interface_type == TX_SENSOR_DATA_INTERFACE_DVP) {
+                    } else if (interface_type == 2) {
                         /* DVP interface */
                         pr_info("CSI: DVP interface configuration\n");
 

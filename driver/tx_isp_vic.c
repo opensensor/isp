@@ -2912,7 +2912,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x80007000, main_isp_base + 0x110);
                 writel(0x777111, main_isp_base + 0x114);
                 writel(0x3f00, main_isp_base + 0x9804);
-                writel(0x7800438, main_isp_base + 0x9864);
+                /* CRITICAL FIX: Use sensor dimensions instead of hardcoded 1920x1080 */
+                writel((sensor_width << 16) | sensor_height, main_isp_base + 0x9864);
                 writel(0xc0000000, main_isp_base + 0x987c);
                 writel(0x1, main_isp_base + 0x9880);
                 writel(0x1, main_isp_base + 0x9884);
@@ -3045,12 +3046,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_warn("*** WARNING: No real sensor attributes available, using VIC defaults ***\n");
                 }
 
-                /* STEP 9: Only call VIC start if VIC is not already configured and working */
-                if (current_state != 4) {
-                    pr_info("*** STEP 9: NOW calling tx_isp_vic_start with proper sub-device initialization ***\n");
+                /* STEP 9: CRITICAL FIX - Only call VIC start if VIC interrupts are not already working */
+                /* This prevents the destructive VIC unlock sequence that breaks working interrupts */
+                if (current_state != 4 && vic_start_ok != 1) {
+                    pr_info("*** STEP 9: vic_start_ok=%d, state=%d - calling tx_isp_vic_start ***\n", vic_start_ok, current_state);
                     ret = tx_isp_vic_start(vic_dev);
                 } else {
-                    pr_info("*** STEP 9: VIC already configured (state=4) - SKIPPING reconfiguration to prevent control limit errors ***\n");
+                    pr_info("*** STEP 9: vic_start_ok=%d, state=%d - SKIPPING tx_isp_vic_start to preserve working interrupts ***\n", vic_start_ok, current_state);
                     ret = 0;  /* Success - VIC is already working */
                 }
                 ispvic_frame_channel_s_stream(vic_dev, 1);
@@ -3063,6 +3065,47 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     wmb();  /* Ensure state is written before enabling interrupts */
                     vic_start_ok = 1;  /* NOW safe to enable interrupt processing */
                     pr_info("*** INTERRUPTS RE-ENABLED AFTER COMPLETE INITIALIZATION ***\n");
+
+                    /* CRITICAL: Call ispcore_slake_module when VIC state reaches 4 (>= 3) */
+                    pr_info("*** VIC STATE 4: Calling ispcore_slake_module to initialize ISP core ***\n");
+                    extern int ispcore_slake_module(struct tx_isp_dev *isp);
+                    if (ourISPdev) {
+                        int slake_ret = ispcore_slake_module(ourISPdev);
+                        if (slake_ret == 0) {
+                            pr_info("*** ispcore_slake_module SUCCESS - ISP core should now be initialized ***\n");
+                        } else {
+                            pr_err("*** ispcore_slake_module FAILED: %d ***\n", slake_ret);
+                        }
+                    }
+
+                    /* CRITICAL: Apply full VIC configuration now that sensor is streaming */
+                    pr_info("*** APPLYING FULL VIC CONFIGURATION AFTER SENSOR INITIALIZATION ***\n");
+                    tx_isp_vic_apply_full_config(vic_dev);
+
+                    /* DELAYED VIC HARDWARE ENABLE: Now that everything is configured and sensor is streaming */
+                    pr_info("*** DELAYED VIC HARDWARE ENABLE: Enabling VIC hardware after complete initialization ***\n");
+                    void __iomem *vic_regs = vic_dev->vic_regs;
+                    if (vic_regs) {
+                        /* BINARY NINJA EXACT: Hardware enable sequence */
+                        /* Binary Ninja: **(arg1 + 0xb8) = 2; **(arg1 + 0xb8) = 4; while (*$v1_30 != 0) nop; **(arg1 + 0xb8) = 1 */
+                        writel(0x2, vic_regs + 0x0);        /* Binary Ninja: Pre-enable state */
+                        wmb();
+                        writel(0x4, vic_regs + 0x0);        /* Binary Ninja: Wait state */
+                        wmb();
+
+                        /* Binary Ninja: Wait for hardware ready */
+                        u32 wait_count = 0;
+                        while ((readl(vic_regs + 0x0) != 0) && (wait_count < 1000)) {
+                            wait_count++;
+                            udelay(1);
+                        }
+
+                        writel(0x1, vic_regs + 0x0);        /* Binary Ninja: Final enable */
+                        wmb();
+                        pr_info("*** BINARY NINJA EXACT: Hardware enable sequence 2->4->wait->1 (waited %d us) ***\n", wait_count);
+                    } else {
+                        pr_err("*** ERROR: VIC registers not available for delayed enable ***\n");
+                    }
 
                     pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
                     return ret;
