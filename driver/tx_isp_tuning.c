@@ -8458,12 +8458,7 @@ void tisp_event_cleanup(void)
 {
     pr_info("tisp_event_cleanup: Cleaning up event processing system\n");
 
-    /* Stop event processing thread */
-    if (tisp_event_thread) {
-        pr_info("tisp_event_cleanup: Stopping event processing thread\n");
-        kthread_stop(tisp_event_thread);
-        tisp_event_thread = NULL;
-    }
+    /* BINARY NINJA REFERENCE: No event processing thread to stop */
 
     pr_info("tisp_event_cleanup: Event processing cleanup complete\n");
 }
