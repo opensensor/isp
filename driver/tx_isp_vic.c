@@ -2471,19 +2471,60 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
         vic_pipo_mdma_enable(vic_dev);
 
-        /* CRITICAL FIX: Program VBM buffer addresses BEFORE starting VIC DMA */
-        /* This is the reference driver sequence: program buffers first, then start DMA */
+        /* CRITICAL FIX: Allocate VBM-compatible buffers BEFORE starting VIC DMA */
+        /* Move buffer allocation forward as requested - allocate during STREAMON if not already done */
         extern struct frame_channel_device frame_channels[];
         extern int num_channels;
 
         if (num_channels > 0) {
             struct tx_isp_channel_state *state = &frame_channels[0].state;
 
-            pr_info("*** STREAMON: Programming VIC buffer addresses with VBM buffers ***\n");
-            pr_info("*** VBM buffer addresses: %p, count: %d ***\n",
+            pr_info("*** STREAMON: Checking/allocating VBM buffers ***\n");
+            pr_info("*** Current VBM buffer addresses: %p, count: %d ***\n",
                     state->vbm_buffer_addresses, state->vbm_buffer_count);
 
+            /* CRITICAL: Allocate VBM buffers if they don't exist */
+            if (!state->vbm_buffer_addresses || state->vbm_buffer_count == 0) {
+                pr_info("*** STREAMON: Allocating VBM buffers during STREAMON (moved forward) ***\n");
+
+                /* Calculate buffer size: 1920x1080 NV12 = 1920*1080*1.5 = 3110400 bytes */
+                u32 frame_size = 1920 * 1080 * 3 / 2;  /* NV12 format */
+                u32 buffer_count = 4;  /* Standard VBM buffer count */
+
+                /* Allocate VBM buffer addresses array */
+                state->vbm_buffer_addresses = kmalloc(buffer_count * sizeof(u32), GFP_KERNEL);
+                if (!state->vbm_buffer_addresses) {
+                    pr_err("*** STREAMON: Failed to allocate VBM buffer addresses array ***\n");
+                    return -ENOMEM;
+                }
+
+                /* Allocate actual frame buffers */
+                for (int i = 0; i < buffer_count; i++) {
+                    dma_addr_t dma_addr;
+                    void *virt_addr = dma_alloc_coherent(NULL, frame_size, &dma_addr, GFP_KERNEL);
+                    if (!virt_addr) {
+                        pr_err("*** STREAMON: Failed to allocate VBM buffer[%d] ***\n", i);
+                        /* Clean up previously allocated buffers */
+                        for (int j = 0; j < i; j++) {
+                            dma_free_coherent(NULL, frame_size, phys_to_virt(state->vbm_buffer_addresses[j]), state->vbm_buffer_addresses[j]);
+                        }
+                        kfree(state->vbm_buffer_addresses);
+                        state->vbm_buffer_addresses = NULL;
+                        return -ENOMEM;
+                    }
+                    state->vbm_buffer_addresses[i] = dma_addr;
+                    pr_info("*** STREAMON: Allocated VBM buffer[%d] = 0x%x (size=%d) ***\n",
+                            i, dma_addr, frame_size);
+                }
+
+                state->vbm_buffer_count = buffer_count;
+                pr_info("*** STREAMON: VBM buffer allocation complete - %d buffers allocated ***\n", buffer_count);
+            }
+
+            /* Now program VIC buffer addresses with the allocated buffers */
             if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+                pr_info("*** STREAMON: Programming VIC buffer addresses with VBM buffers ***\n");
+
                 /* REFERENCE DRIVER SEQUENCE: Program buffer addresses like ispvic_frame_channel_qbuf */
                 /* Binary Ninja: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
                 for (int i = 0; i < state->vbm_buffer_count && i < 8; i++) {
@@ -2522,7 +2563,8 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
                 pr_info("*** STREAMON: VIC hardware enabled - ready for DMA ***\n");
 
             } else {
-                pr_warn("*** STREAMON: No VBM buffers available - VIC DMA will not work ***\n");
+                pr_err("*** STREAMON: VBM buffer allocation failed - VIC DMA will not work ***\n");
+                return -ENOMEM;
             }
         }
 
