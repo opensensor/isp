@@ -2649,9 +2649,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 pr_info("*** CRITICAL: Following EXACT reference driver sub-device initialization sequence ***\n");
                 
-                /* CRITICAL FIX: Disable VIC interrupts during initialization to prevent control limit errors */
-                pr_info("*** DISABLING VIC INTERRUPTS DURING INITIALIZATION ***\n");
-                vic_start_ok = 1;  /* Disable interrupt processing */
+                /* CRITICAL FIX: Keep VIC interrupts enabled to see real errors */
+                pr_info("*** KEEPING VIC INTERRUPTS ENABLED - NEED TO SEE REAL CONTROL LIMIT ERRORS ***\n");
                 
                 /* CRITICAL FIX: Correct the register base mapping! */
                 /* vic_regs = 0x133e0000 = CSI PHY (isp-w02 in trace) */
@@ -2792,9 +2791,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* This is the massive CSI PHY configuration block from reference trace lines 115-242 */
                 /* The CSI PHY registers are at a different base than basic CSI control registers */
 
-                /* Map the CSI PHY registers - this is separate from basic CSI control at 0x10022000 */
-                void __iomem *csi_phy_base = ioremap(0x10024000, 0x1000);  /* CSI PHY base */
-                if (csi_phy_base) {
+                /* CRITICAL FIX: Use the ACTUAL CSI device base from the driver */
+                /* The CSI PHY configuration should use the existing csi_base mapping */
+                if (csi_base) {
                         pr_info("*** CONFIGURING CSI PHY REGISTERS (isp-csi base=%p) ***\n", csi_phy_base);
 
                         /* CSI PHY Control registers (0x0-0x88) - from reference trace lines 115-142 */
