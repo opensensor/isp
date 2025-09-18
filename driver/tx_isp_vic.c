@@ -1289,38 +1289,37 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
         {0x2f4, 0x3}
     };
 
-    for (int i = 0; i < sizeof(csi_phy_configs)/sizeof(csi_phy_configs[0]); i++) {
-        writel(csi_phy_configs[i].value, csi_base + csi_phy_configs[i].offset);
-    }
+    /* REPLACE old PHY config with EXACT reference driver sequence */
+    /* STEP 3: EXACT reference driver PHY register configuration */
+    /* Binary Ninja: Set PHY frequency configuration in register 0x160 */
+    u32 phy_config = readl(phy_base + 0x160);
+    phy_config = (phy_config & 0xfffffff0) | phy_freq_setting;
+    writel(phy_config, phy_base + 0x160);
     wmb();
 
-    /* CRITICAL: After CSI PHY configuration, check if MIPI data is now flowing */
-    pr_info("*** CRITICAL: Checking MIPI CSI PHY status AFTER configuration ***\n");
-    csi_status = readl(csi_base + 0x8);
-    phy_status = readl(csi_base + 0x14);
-    pr_info("POST-CONFIG CSI Status: 0x%08x, PHY Status: 0x%08x\n", csi_status, phy_status);
+    /* Binary Ninja: Replicate PHY config to other PHY registers */
+    writel(phy_config, phy_base + 0x1e0);  /* PHY register 0x1e0 */
+    writel(phy_config, phy_base + 0x260);  /* PHY register 0x260 */
+    wmb();
 
-    lane0_status = readl(csi_base + 0x40);
-    lane1_status = readl(csi_base + 0x44);
-    pr_info("POST-CONFIG MIPI Lane 0: 0x%08x, Lane 1: 0x%08x\n", lane0_status, lane1_status);
+    /* STEP 4: EXACT reference driver PHY initialization sequence */
+    /* Binary Ninja: *$v0_8 = 0x7d */
+    writel(0x7d, phy_base + 0x0);
+    wmb();
 
-    /* Check if MIPI clock is active */
-    u32 mipi_clock = readl(csi_base + 0x14);
-    if (mipi_clock & 0x1) {
-        pr_info("*** MIPI CLOCK: ACTIVE - sensor clock detected ***\n");
-    } else {
-        pr_err("*** MIPI CLOCK: INACTIVE - NO SENSOR CLOCK! This explains VIC[0x380]=0x0 ***\n");
-    }
+    /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
+    writel(0x3f, phy_base + 0x128);
+    wmb();
 
-    /* Check if MIPI data lanes are synchronized */
-    if ((lane0_status & 0x1) && (lane1_status & 0x1)) {
-        pr_info("*** MIPI LANES: SYNCHRONIZED - data should flow to VIC ***\n");
-    } else {
-        pr_err("*** MIPI LANES: NOT SYNCHRONIZED - no data flow to VIC! ***\n");
-        pr_err("*** This explains why VIC[0x380] always reads 0x0 ***\n");
-    }
+    /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
+    writel(1, csi_base + 0x10);
+    wmb();
 
-    pr_info("*** CSI PHY initialization complete - MIPI status checked ***\n");
+    /* Binary Ninja: private_msleep(0xa) */
+    msleep(10);  /* Wait 10ms for PHY to stabilize */
+
+    pr_info("*** REFERENCE DRIVER: EXACT CSI MIPI initialization complete ***\n");
+    pr_info("*** This should fix VIC[0x380]=0x0 issue by properly routing MIPI data to VIC ***\n");
     return 0;
 }
 
