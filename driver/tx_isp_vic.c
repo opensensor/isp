@@ -677,7 +677,8 @@ int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t base_
 
     /* Configure essential VIC registers for proper hardware operation */
     writel((1920 << 16) | 1080, vic_regs + 0x4);  /* Dimensions */
-    writel(0x0, vic_regs + 0x14);  /* Interrupt config */
+    /* SURGICAL FIX: Don't write 0x0 to register 0x14 - preserve working CSI PHY config */
+    /* writel(0x0, vic_regs + 0x14);  // REMOVED - this was corrupting CSI PHY register */
     writel(0x7800000, vic_regs + 0x110);  /* Hardware expected value */
     writel(0x0, vic_regs + 0x114);
     writel(0x0, vic_regs + 0x118);
