@@ -4928,15 +4928,9 @@ static int tx_isp_init(void)
     INIT_DELAYED_WORK(&vic_frame_work, vic_frame_work_function);
     pr_info("*** Frame generation work queue initialized ***\n");
     
-    /* *** CRITICAL FIX: Create and link VIC device structure immediately *** */
-    pr_info("*** CREATING VIC DEVICE STRUCTURE AND LINKING TO ISP CORE ***\n");
-    ret = tx_isp_create_vic_device(ourISPdev);
-    if (ret) {
-        pr_err("Failed to create VIC device structure: %d\n", ret);
-        kfree(ourISPdev);
-        ourISPdev = NULL;
-        return ret;
-    }
+    /* *** REMOVED DUPLICATE VIC DEVICE CREATION *** */
+    /* VIC device will be created by tx_isp_vic_probe with proper register mapping */
+    pr_info("*** VIC DEVICE CREATION DEFERRED TO PLATFORM DRIVER PROBE ***\n");
     
     /* *** CRITICAL FIX: VIN device creation MUST be deferred until after memory mappings *** */
     pr_info("*** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***\n");
@@ -5012,17 +5006,27 @@ static int tx_isp_init(void)
     /* Register VIC subdev with proper ops structure */
     if (ourISPdev->vic_dev) {
         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-        
+
+        /* Verify this is the VIC device with registers mapped */
+        if (vic_dev->vic_regs && vic_dev->vic_regs_secondary) {
+            pr_info("*** FOUND VIC DEVICE WITH MAPPED REGISTERS - USING FOR SUBDEV ARRAY ***\n");
+            pr_info("  vic_regs: %p, vic_regs_secondary: %p\n", vic_dev->vic_regs, vic_dev->vic_regs_secondary);
+        } else {
+            pr_warn("*** WARNING: VIC DEVICE MISSING REGISTERS - PROBE MAY NOT HAVE RUN YET ***\n");
+        }
+
         /* Set up VIC subdev with ops pointing to vic_subdev_ops */
         vic_dev->sd.ops = &vic_subdev_ops;
 
         /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
         ourISPdev->subdevs[0] = &vic_dev->sd;
-        
+
         pr_info("*** REGISTERED VIC SUBDEV AT INDEX 0 WITH VIDEO OPS ***\n");
         pr_info("VIC subdev: %p, ops: %p, video: %p, s_stream: %p\n",
                 &vic_dev->sd, vic_dev->sd.ops, vic_dev->sd.ops->video,
                 vic_dev->sd.ops->video->s_stream);
+    } else {
+        pr_warn("*** WARNING: NO VIC DEVICE FOUND - PROBE MAY NOT HAVE RUN YET ***\n");
     }
     
     /* Register CSI subdev with proper ops structure */
