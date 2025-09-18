@@ -1647,6 +1647,48 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* VIC interrupt initialization moved to END of function after CSI PHY setup */
         pr_info("*** VIC INTERRUPT INIT: VIC interrupt setup deferred until after CSI PHY writes ***\n");
 
+        /* CRITICAL: Configure VIC hardware BEFORE unlock sequence */
+        pr_info("*** VIC HARDWARE CONFIG: Configuring complete VIC register set before unlock ***\n");
+
+        /* Configure VIC dimensions and control registers that are required for unlock to work */
+        writel((actual_width << 16) | actual_height, vic_regs + 0x4);
+        writel(0x0, vic_regs + 0x14);  /* Interrupt config */
+        writel(0xf00, vic_regs + 0x18);  /* Timing parameter */
+
+        /* Control registers from reference driver */
+        writel(0x800800, vic_regs + 0x60);
+        writel(0x9d09d0, vic_regs + 0x64);
+        writel(0x6002, vic_regs + 0x70);
+        writel(0x7003, vic_regs + 0x74);
+
+        /* Hardware expected values */
+        writel(0x7800000, vic_regs + 0x110);
+        writel(0x0, vic_regs + 0x114);
+        writel(0x0, vic_regs + 0x118);
+        writel(0x0, vic_regs + 0x11c);
+
+        /* Color space configuration from reference driver */
+        writel(0xeb8080, vic_regs + 0xc0);
+        writel(0x108080, vic_regs + 0xc4);
+        writel(0x29f06e, vic_regs + 0xc8);
+        writel(0x913622, vic_regs + 0xcc);
+
+        /* Processing configuration from reference driver */
+        writel(0x515af0, vic_regs + 0xd0);
+        writel(0xaaa610, vic_regs + 0xd4);
+        writel(0xd21092, vic_regs + 0xd8);
+        writel(0x6acade, vic_regs + 0xdc);
+
+        /* Frame configuration */
+        writel(0x0, vic_regs + 0x1a0);  /* Frame config */
+        writel(0x100010, vic_regs + 0x1a4);  /* Control register */
+        writel(0x4440, vic_regs + 0x1a8);  /* Frame mode */
+        writel(0x4440, vic_regs + 0x1ac);  /* Frame mode */
+        writel(0x10, vic_regs + 0x1b0);
+
+        wmb();
+        pr_info("*** VIC HARDWARE CONFIG: Complete VIC register set configured - unlock should now work ***\n");
+
         /* Unlock sequence - Binary Ninja 00010484-00010490 - EXACT REFERENCE IMPLEMENTATION */
         pr_info("*** VIC UNLOCK SEQUENCE: Starting unlock sequence ***\n");
         pr_info("*** VIC UNLOCK: Initial register 0x0 value = 0x%08x ***\n", readl(vic_regs + 0x0));
@@ -1659,22 +1701,42 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         pr_info("*** VIC UNLOCK: After writing 4, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
-        /* Wait for unlock - Binary Ninja 000104b8 */
-        u32 unlock_timeout = 10000;  /* 10ms timeout */
-        while ((readl(vic_regs + 0x0) != 0) && (unlock_timeout > 0)) {
-            udelay(1);
-            unlock_timeout--;
+        /* Wait for unlock - Binary Ninja 000104b8 - DUAL VIC SPACE COORDINATION */
+        timeout = 10000;  /* 10ms timeout */
+
+        /* CRITICAL: Check CSI PHY coordination in SECONDARY VIC space (0x10023000) */
+        void __iomem *secondary_regs = vic_dev->vic_regs_secondary;
+        u32 secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
+        u32 primary_val = readl(vic_regs + 0x0);
+
+        pr_info("*** VIC UNLOCK: Primary space (0x133e0000) = 0x%08x, Secondary space (0x10023000) = 0x%08x ***\n",
+                primary_val, secondary_val);
+
+        /* Handle CSI PHY coordination - 0x3130322a in secondary space is expected */
+        if (secondary_val == 0x3130322a) {
+            pr_info("*** VIC UNLOCK: CSI PHY coordination complete in secondary space ***\n");
         }
 
-        if (unlock_timeout == 0) {
-            pr_err("*** VIC UNLOCK TIMEOUT: Register stuck at 0x%08x - CONTINUING ANYWAY ***\n", readl(vic_regs + 0x0));
-            /* Don't return error - continue with initialization */
-        } else {
-            pr_info("*** VIC UNLOCK SUCCESS: Register cleared after %d us ***\n", 10000 - unlock_timeout);
+        /* Wait for primary VIC space unlock */
+        while (readl(vic_regs + 0x0) != 0) {
+            udelay(1);
+            if (--timeout == 0) {
+                primary_val = readl(vic_regs + 0x0);
+                secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
+                pr_err("*** VIC UNLOCK TIMEOUT: Primary=0x%08x, Secondary=0x%08x ***\n", primary_val, secondary_val);
+                pr_err("*** Continuing anyway to prevent infinite hang ***\n");
+                break;  /* Continue instead of returning error to prevent hang */
+            }
         }
-        
+
+        pr_info("*** VIC UNLOCK: Unlock sequence completed, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
+
+        /* vic_start_ok flag setting moved to END of function after CSI PHY setup */
+
         /* Enable VIC - Binary Ninja 000107d4 */
+        pr_info("*** VIC UNLOCK: Enabling VIC (writing 1 to register 0x0) ***\n");
         writel(1, vic_regs + 0x0);
+        pr_info("*** VIC UNLOCK: VIC enabled, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
         
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 in our enum */
         /* MIPI interface - Binary Ninja 000107ec-00010b04 */
@@ -1871,44 +1933,30 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         
         /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
-        /* CRITICAL: Configure VIC hardware BEFORE unlock sequence */
-        /* Binary Ninja: Missing VIC hardware configuration that must be done first */
-        pr_info("*** VIC HARDWARE CONFIG: Configuring VIC registers before unlock sequence ***\n");
-
-        /* Configure VIC dimensions and control registers */
-        writel((actual_width << 16) | actual_height, vic_regs + 0x4);
-        writel(0x0, vic_regs + 0x14);  /* Interrupt config */
-        writel(0x7800000, vic_regs + 0x110);  /* Hardware expected value */
-        writel(0x0, vic_regs + 0x114);
-        writel(0x0, vic_regs + 0x118);
-        writel(0x0, vic_regs + 0x11c);
-        writel(0x4440, vic_regs + 0x1ac);  /* Frame mode */
-        writel(0x4440, vic_regs + 0x1a8);
-        writel(0x10, vic_regs + 0x1b0);
-        writel(0x0, vic_regs + 0x1a0);  /* Frame config */
-        writel(0x100010, vic_regs + 0x1a4);  /* Control register */
-        wmb();
-        pr_info("*** VIC HARDWARE CONFIG: VIC registers configured - now attempting unlock ***\n");
-
         /* Binary Ninja: EXACT reference driver unlock sequence */
         writel(2, vic_regs + 0x0);
         wmb();
-        writel(4, vic_regs + 0x0);
-        wmb();
 
-        /* Binary Ninja: 00010acc - Wait for unlock */
-        while (readl(vic_regs + 0x0) != 0) {
-            udelay(1);
-            if (--timeout == 0) {
-                pr_err("*** VIC UNLOCK TIMEOUT: Register stuck at 0x%x - VIC hardware not responding ***\n", readl(vic_regs + 0x0));
-                pr_err("*** VIC UNLOCK TIMEOUT: This will cause interrupt system failure ***\n");
-                return -ETIMEDOUT;
+        /* CRITICAL FIX: Skip remaining unlock sequence during streaming restart */
+        if (vic_start_ok == 1) {
+            pr_info("*** VIC: SKIPPING remaining unlock sequence - VIC interrupts already working ***\n");
+        } else {
+            writel(4, vic_regs + 0x0);
+            wmb();
+
+            /* Binary Ninja: 00010acc - Wait for unlock */
+            while (readl(vic_regs + 0x0) != 0) {
+                udelay(1);
+                if (--timeout == 0) {
+                    pr_err("VIC unlock timeout\n");
+                    return -ETIMEDOUT;
+                }
             }
+
+            /* Binary Ninja: 00010ad4 - Enable VIC */
+            writel(1, vic_regs + 0x0);
+            wmb();
         }
-        
-        /* Binary Ninja: 00010ad4 - Enable VIC */
-        writel(1, vic_regs + 0x0);
-        wmb();
         
         /* Binary Ninja: 00010ae4-00010b04 - Final MIPI registers */
         writel(0x100010, vic_regs + 0x1a4);
