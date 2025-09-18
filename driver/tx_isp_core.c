@@ -773,17 +773,32 @@ irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
         /* CRITICAL: These error interrupts are firing continuously! */
         /* We need to clear the underlying error condition, not just the interrupt status */
 
-        /* Try to clear error status registers that might be causing continuous interrupts */
+        /* COMPREHENSIVE: Clear ALL possible error status registers */
         u32 error_status = readl(isp_dev->vic_regs + 0x84c);  /* Binary Ninja reads this for errors */
         if (error_status != 0) {
-            /* Clear error status register */
-            writel(error_status, isp_dev->vic_regs + 0x84c);
+            writel(error_status, isp_dev->vic_regs + 0x84c);  /* Clear by writing back */
             wmb();
         }
 
-        /* Also try clearing other potential error registers */
-        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x850);  /* Clear any error flags */
-        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x854);  /* Clear any error flags */
+        /* Clear other common VIC error registers */
+        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x850);  /* Error flags register 1 */
+        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x854);  /* Error flags register 2 */
+        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x858);  /* Error flags register 3 */
+        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x85c);  /* Error flags register 4 */
+
+        /* Clear FIFO error status registers */
+        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x860);  /* FIFO status */
+        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x864);  /* FIFO error */
+
+        /* Clear frame error status registers */
+        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x870);  /* Frame error status */
+        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x874);  /* Frame sync error */
+
+        wmb();
+
+        /* Re-enable error interrupts after clearing error conditions */
+        u32 int_mask = readl(isp_dev->vic_regs + 0xb0);
+        writel(int_mask | 0x500, isp_dev->vic_regs + 0xb0);  /* Re-enable error interrupts */
         wmb();
     }
 
