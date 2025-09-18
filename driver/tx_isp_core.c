@@ -738,9 +738,41 @@ irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
         return IRQ_NONE;
     }
 
-    /* TEMPORARY: DON'T clear interrupts or read registers - just return IRQ_NONE */
-    /* This will test if the interrupt handling itself is causing the soft lockup */
-    return IRQ_NONE;
+    /* CRITICAL FIX: Handle the specific interrupts that are firing (0x1500) */
+    /* Binary Ninja shows we must handle these interrupts or hardware keeps re-asserting them */
+
+    if (!isp_dev->vic_regs) {
+        return IRQ_NONE;
+    }
+
+    /* Read and clear interrupt status - EXACTLY like Binary Ninja */
+    interrupt_status = readl(isp_dev->vic_regs + 0xb4);
+    if (interrupt_status == 0) {
+        return IRQ_NONE;
+    }
+
+    /* Clear interrupt status immediately */
+    writel(interrupt_status, isp_dev->vic_regs + 0xb8);
+    wmb();
+
+    /* Handle the specific interrupts that are causing the soft lockup */
+    if (interrupt_status & 0x1000) {  /* Frame sync interrupt - bit 12 */
+        /* Binary Ninja: private_schedule_work(&fs_work) */
+        /* For now, just acknowledge it without scheduling work */
+    }
+
+    if (interrupt_status & 0x200) {   /* Error interrupt - bit 9 */
+        /* Binary Ninja: exception_handle() */
+        /* For now, just acknowledge it */
+    }
+
+    if (interrupt_status & 0x100) {   /* Error interrupt - bit 8 */
+        /* Binary Ninja: exception_handle() */
+        /* For now, just acknowledge it */
+    }
+
+    /* Return IRQ_HANDLED to tell kernel we processed the interrupt */
+    return IRQ_HANDLED;
 }
 
 /* ISP interrupt thread handler - COMPLETELY DISABLED TO TEST SOFT LOCKUP */

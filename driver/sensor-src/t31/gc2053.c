@@ -1306,13 +1306,14 @@ int sensor_write(struct tx_isp_subdev *sd, unsigned char reg, unsigned char valu
 		return -ENODEV;
 	}
 	
-	ISP_WARNING("sensor_write: reg=0x%02x val=0x%02x, client=%p, adapter=%s, addr=0x%02x\n",
-	            reg, value, client, client->adapter->name, client->addr);
-	
+	/* CRITICAL FIX: Remove excessive logging that causes 22-second soft lockup */
+	/* Each I2C write was doing 2 log prints × 137 registers = 274 log messages! */
+	/* This was making sensor initialization take 29+ seconds and trigger soft lockup */
+
 	ret = private_i2c_transfer(client->adapter, &msg, 1);
 	if (ret > 0) {
 		ret = 0;
-		ISP_WARNING("sensor_write: reg=0x%02x val=0x%02x SUCCESS\n", reg, value);
+		/* Only log errors, not every successful write */
 	} else {
 		ISP_ERROR("sensor_write: reg=0x%02x val=0x%02x FAILED ret=%d\n", reg, value, ret);
 	}
