@@ -1270,6 +1270,25 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
     /* Binary Ninja: private_msleep(0xa) */
     msleep(10);  /* Wait 10ms for PHY to stabilize */
 
+    /* CRITICAL ADDITION: Enable MIPI PHY hardware after configuration */
+    /* This might be the missing step that enables actual data flow */
+    pr_info("*** CRITICAL: Enabling MIPI PHY hardware after configuration ***\n");
+
+    /* Enable MIPI PHY power and clock */
+    writel(0x1, phy_base + 0x0);   /* PHY power enable */
+    writel(0x1, phy_base + 0x4);   /* PHY clock enable */
+    writel(0x1, phy_base + 0x8);   /* PHY data enable */
+    wmb();
+
+    /* Enable CSI controller */
+    writel(0x1, csi_base + 0x0);   /* CSI controller enable */
+    wmb();
+
+    /* Final synchronization delay */
+    msleep(5);
+
+    pr_info("*** MIPI PHY HARDWARE ENABLED - Data flow should now be active ***\n");
+
     pr_info("*** REFERENCE DRIVER: EXACT CSI MIPI initialization complete ***\n");
     pr_info("*** This should fix VIC[0x380]=0x0 issue by properly routing MIPI data to VIC ***\n");
 
