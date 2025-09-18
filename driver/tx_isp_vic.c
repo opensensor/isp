@@ -2574,6 +2574,8 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 
             } else {
                 pr_err("*** STREAMON: VBM buffer allocation failed - VIC DMA will not work ***\n");
+                /* Must unlock before returning */
+                private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
                 return -ENOMEM;
             }
         }
