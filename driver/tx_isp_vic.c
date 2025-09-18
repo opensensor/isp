@@ -2583,11 +2583,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     pr_info("*** BINARY NINJA EXACT: vic_core_s_stream returning %d ***\n", ret);
     return ret;
 }
-                    return -ENOMEM;
-                }
-                
-				
-                /* STEP 1: VIC Hardware Reset and Clean Configuration */
                 pr_info("*** STEP 1: VIC Hardware Reset and Clean Configuration ***\n");
 
                 /* Declare sensor dimensions at function scope */
