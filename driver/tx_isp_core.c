@@ -633,55 +633,10 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             (interrupt_status & 0x2) ? "SET" : "clear",
             (interrupt_status & 0x4) ? "SET" : "clear");
 
-    /* Binary Ninja: Frame sync interrupt processing */
+    /* Binary Ninja: Frame sync interrupt processing - EXACT reference implementation */
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt */
-        pr_info("*** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***\n");
-
-        /* BINARY NINJA EXACT: Queue work item instead of always scheduling work */
-        /* The reference driver queues work items and only schedules work when needed */
-
-        static int frame_sync_counter = 0;
-        frame_sync_counter++;
-
-        /* TEMPORARY FIX: Disable work queue to test if DQBUF sleeping is the issue */
-        /* Queue sensor work item periodically (not every frame) */
-        if (false) {  /* DISABLED - testing if work queue is causing soft lockup */
-            fs_work_queue_item(1, frame_sync_counter);  /* Type 1 = sensor operations */
-        }
-
-        /* Check if there are any pending work items in the queue */
-        bool has_pending_work = false;
-        for (int i = 0; i < 7; i++) {
-            if (i == 5) continue;  /* Skip slot 5 */
-            if (fs_work_queue[i].state != 0) {
-                has_pending_work = true;
-                break;
-            }
-        }
-
-        /* Only schedule work if there are pending items */
-        if (has_pending_work) {
-            pr_info("*** ISP CORE: Frame sync - scheduling work (pending items found) ***\n");
-
-            if (fs_workqueue) {
-                if (queue_work_on(0, fs_workqueue, &fs_work)) {
-                    pr_info("*** ISP CORE: Work queued successfully on CPU 0 ***\n");
-                } else {
-                    pr_debug("*** ISP CORE: Work was already queued ***\n");
-                }
-            } else {
-                pr_warn("*** ISP CORE: fs_workqueue is NULL - using system workqueue ***\n");
-                schedule_work_on(0, &fs_work);
-            }
-        } else {
-            pr_debug("*** ISP CORE: Frame sync - no pending work items ***\n");
-        }
-
-        /* Binary Ninja: Frame timing measurement */
-        /* Complex timing measurement code would be here */
-
-        /* Binary Ninja: if (isp_ch0_pre_dequeue_time != 0) */
-        /* Pre-frame dequeue work scheduling */
+        /* Binary Ninja: private_schedule_work(&fs_work) */
+        schedule_work(&fs_work);
     }
 
     /* BINARY NINJA EXACT: Handle interrupt status like reference driver */
