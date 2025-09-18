@@ -634,30 +634,43 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt */
         pr_info("*** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***\n");
 
-        /* CRITICAL FIX: Always acknowledge the interrupt, even if work is already queued */
-        /* The key is to let the interrupt return IRQ_HANDLED to prevent interrupt storms */
-        pr_info("*** ISP CORE: Frame sync interrupt - attempting to queue work ***\n");
+        /* BINARY NINJA EXACT: Queue work item instead of always scheduling work */
+        /* The reference driver queues work items and only schedules work when needed */
 
-        /* REFERENCE DRIVER: Use private_schedule_work like reference driver */
-        /* Binary Ninja: private_schedule_work calls queue_work_on for CPU-specific scheduling */
-        pr_info("*** ISP CORE: Using reference driver work scheduling ***\n");
+        static int frame_sync_counter = 0;
+        frame_sync_counter++;
 
-        if (fs_workqueue) {
-            pr_info("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
-            /* REFERENCE DRIVER: Use queue_work_on for CPU 0 like private_schedule_work */
-            if (queue_work_on(0, fs_workqueue, &fs_work)) {
-                pr_info("*** ISP CORE: Work queued successfully on CPU 0 ***\n");
+        /* Queue sensor work item periodically (not every frame) */
+        if ((frame_sync_counter % 8) == 0) {  /* Every 8th frame sync */
+            fs_work_queue_item(1, frame_sync_counter);  /* Type 1 = sensor operations */
+        }
+
+        /* Check if there are any pending work items in the queue */
+        bool has_pending_work = false;
+        for (int i = 0; i < 7; i++) {
+            if (i == 5) continue;  /* Skip slot 5 */
+            if (fs_work_queue[i].state != 0) {
+                has_pending_work = true;
+                break;
+            }
+        }
+
+        /* Only schedule work if there are pending items */
+        if (has_pending_work) {
+            pr_info("*** ISP CORE: Frame sync - scheduling work (pending items found) ***\n");
+
+            if (fs_workqueue) {
+                if (queue_work_on(0, fs_workqueue, &fs_work)) {
+                    pr_info("*** ISP CORE: Work queued successfully on CPU 0 ***\n");
+                } else {
+                    pr_debug("*** ISP CORE: Work was already queued ***\n");
+                }
             } else {
-                pr_info("*** ISP CORE: Work was already queued - acknowledging interrupt anyway ***\n");
+                pr_warn("*** ISP CORE: fs_workqueue is NULL - using system workqueue ***\n");
+                schedule_work_on(0, &fs_work);
             }
         } else {
-            pr_warn("*** ISP CORE: fs_workqueue is NULL - using system workqueue ***\n");
-            /* REFERENCE DRIVER: Use schedule_work_on for CPU 0 */
-            if (schedule_work_on(0, &fs_work)) {
-                pr_info("*** ISP CORE: Work scheduled successfully on CPU 0 ***\n");
-            } else {
-                pr_info("*** ISP CORE: Work was already scheduled - acknowledging interrupt anyway ***\n");
-            }
+            pr_debug("*** ISP CORE: Frame sync - no pending work items ***\n");
         }
 
         /* Binary Ninja: Frame timing measurement */
