@@ -499,7 +499,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 //        goto label_123f4;
 //    }
 
-label_123f4:
+    /* Binary Ninja: GPIO handling section (label_123f4 equivalent) */
     /* Binary Ninja: GPIO handling section */
     if (gpio_switch_state != 0) {
         /* Binary Ninja: void* $s1_1 = &gpio_info */
