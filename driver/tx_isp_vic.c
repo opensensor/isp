@@ -2728,8 +2728,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 pr_info("*** CRITICAL: Following EXACT reference driver sub-device initialization sequence ***\n");
                 
-                /* CRITICAL FIX: Disable VIC interrupts during initialization to prevent control limit errors */
-                vic_start_ok = 1;  
+                /* SURGICAL FIX: Disable VIC interrupts during VIC DMA configuration to prevent conflicts */
+                pr_info("*** SURGICAL FIX: Disabling VIC interrupts during DMA configuration ***\n");
+                vic_start_ok = 0;  /* Disable interrupt processing during configuration */
                 /* CRITICAL FIX: Correct the register base mapping! */
                 /* vic_regs = 0x133e0000 = CSI PHY (isp-w02 in trace) */
                 /* isp_base = 0x13300000 = Main ISP (isp-m0 in trace) - NEEDS SEPARATE MAPPING */
@@ -2779,8 +2780,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x10, vic_regs + 0x1b0);
                 wmb();
 
-                /* SURGICAL FIX: Configure VIC interrupt registers in SECONDARY space */
-                pr_info("*** SURGICAL FIX: Configuring VIC interrupt system in secondary space ***\n");
+                /* SURGICAL FIX: Keep VIC interrupts DISABLED during DMA configuration */
+                pr_info("*** SURGICAL FIX: Keeping VIC interrupts DISABLED during DMA configuration ***\n");
 
                 /* Use vic_w01_base (0x10023000) for interrupt configuration */
                 if (vic_w01_base) {
@@ -2788,19 +2789,18 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     writel(0xffffffff, vic_w01_base + 0x1c);   /* Clear interrupt status */
                     wmb();
 
-                    /* Enable VIC interrupts in the SECONDARY space where interrupt handler reads */
-                    writel(0xffffffff, vic_w01_base + 0x1e0); /* Enable all interrupts */
-                    writel(0x0, vic_w01_base + 0x1e8);        /* Clear interrupt masks */
+                    /* KEEP INTERRUPTS DISABLED during VIC DMA configuration */
+                    writel(0x0, vic_w01_base + 0x1e0);        /* Disable all interrupts during config */
+                    writel(0xffffffff, vic_w01_base + 0x1e8); /* Mask all interrupts during config */
                     wmb();
 
-                    pr_info("*** SURGICAL FIX: VIC interrupts configured in vic_w01_base (0x10023000) ***\n");
+                    pr_info("*** SURGICAL FIX: VIC interrupts DISABLED during configuration ***\n");
                 } else {
                     pr_err("*** SURGICAL FIX: No vic_w01_base available for interrupt config ***\n");
                 }
 
-                /* Set VIC start flag - CRITICAL for interrupt processing */
-                vic_start_ok = 1;
-                pr_info("*** SURGICAL FIX: VIC interrupts configured, vic_start_ok = 1 ***\n");
+                /* Keep VIC start flag DISABLED during configuration */
+                pr_info("*** SURGICAL FIX: vic_start_ok = 0 during DMA configuration ***\n");
 
                 /* STEP 2: ISP isp-w01 - Control registers */
                 pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
@@ -3001,6 +3001,17 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 if (current_state != 4) {
                     pr_info("vic_core_s_stream: Stream ON - tx_isp_vic_start called after proper sub-device init\n");
+
+                    /* SURGICAL FIX: Re-enable VIC interrupts AFTER VIC DMA configuration is complete */
+                    pr_info("*** SURGICAL FIX: Re-enabling VIC interrupts after DMA configuration ***\n");
+
+                    /* Re-enable VIC interrupts in secondary space */
+                    if (vic_w01_base) {
+                        writel(0xffffffff, vic_w01_base + 0x1e0); /* Enable all interrupts */
+                        writel(0x0, vic_w01_base + 0x1e8);        /* Clear interrupt masks */
+                        wmb();
+                        pr_info("*** SURGICAL FIX: VIC hardware interrupts re-enabled ***\n");
+                    }
 
                     /* CRITICAL FIX: Only enable interrupts AFTER all initialization is complete */
                     vic_dev->state = 4;
