@@ -1525,8 +1525,17 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC UNLOCK: After writing 4, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
         /* Wait for unlock - Binary Ninja 000104b8 */
-        while (readl(vic_regs + 0x0) != 0) {
+        u32 unlock_timeout = 10000;  /* 10ms timeout */
+        while ((readl(vic_regs + 0x0) != 0) && (unlock_timeout > 0)) {
             udelay(1);
+            unlock_timeout--;
+        }
+
+        if (unlock_timeout == 0) {
+            pr_err("*** VIC UNLOCK TIMEOUT: Register stuck at 0x%08x - CONTINUING ANYWAY ***\n", readl(vic_regs + 0x0));
+            /* Don't return error - continue with initialization */
+        } else {
+            pr_info("*** VIC UNLOCK SUCCESS: Register cleared after %d us ***\n", 10000 - unlock_timeout);
         }
         
         /* Enable VIC - Binary Ninja 000107d4 */
