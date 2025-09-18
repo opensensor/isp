@@ -410,12 +410,32 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
                             if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0 && vic_status == 0x0 && qbuf_call_count < 5) {
                                 qbuf_call_count++;
-                                pr_info("*** VIC INTERRUPT: VIC[0x380]=0x0 - calling ispvic_frame_channel_qbuf (call %d) ***\n", qbuf_call_count);
-                                int qbuf_result = ispvic_frame_channel_qbuf(vic_dev, NULL);
-                                if (qbuf_result == 0) {
-                                    pr_info("*** VIC INTERRUPT: Successfully programmed VIC buffer addresses (call %d) ***\n", qbuf_call_count);
+                                pr_info("*** VIC INTERRUPT: VIC[0x380]=0x0 - configuring VIC DMA with VBM buffers (call %d) ***\n", qbuf_call_count);
+
+                                /* CRITICAL FIX: Configure VIC DMA with real VBM buffer addresses */
+                                /* Program VBM buffer addresses into VIC registers 0x318-0x328 */
+                                for (int i = 0; i < state->vbm_buffer_count && i < 8; i++) {
+                                    u32 buffer_reg = 0x318 + (i * 4);
+                                    writel(state->vbm_buffer_addresses[i], vic_regs + buffer_reg);
+                                    pr_info("*** VIC DMA: Programmed VIC[0x%x] = 0x%x (VBM buffer[%d]) ***\n",
+                                            buffer_reg, state->vbm_buffer_addresses[i], i);
+                                }
+                                wmb();
+
+                                /* CRITICAL: Program first buffer address into VIC[0x380] to start DMA */
+                                writel(state->vbm_buffer_addresses[0], vic_regs + 0x380);
+                                wmb();
+                                pr_info("*** VIC DMA: CRITICAL - VIC[0x380] = 0x%x (DMA START ADDRESS) ***\n",
+                                        state->vbm_buffer_addresses[0]);
+
+                                /* Verify VIC DMA configuration */
+                                u32 verify_380 = readl(vic_regs + 0x380);
+                                pr_info("*** VIC DMA: Verification - VIC[0x380] readback = 0x%x ***\n", verify_380);
+
+                                if (verify_380 != 0x0) {
+                                    pr_info("*** VIC DMA: SUCCESS - VIC hardware should now capture frames to buffers ***\n");
                                 } else {
-                                    pr_err("*** VIC INTERRUPT: Failed to program VIC buffer addresses: %d (call %d) ***\n", qbuf_result, qbuf_call_count);
+                                    pr_err("*** VIC DMA: FAILED - VIC[0x380] still 0x0 after configuration ***\n");
                                 }
                             } else if (vic_status != 0x0) {
                                 pr_info("*** VIC INTERRUPT: VIC[0x380]=0x%x - VIC hardware is working! ***\n", vic_status);
