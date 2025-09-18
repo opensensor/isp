@@ -396,11 +396,8 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
                 /* CRITICAL FIX: If VIC register 0x380 is 0x0, use REAL VBM buffer addresses */
                 if (completed_buffer_addr == 0x0) {
-                    extern struct tx_isp_dev *ourISPdev;
                     if (ourISPdev) {
                         /* Get the frame channel state to access VBM buffer addresses */
-                        extern struct frame_channel_device frame_channels[];
-                        extern int num_channels;
 
                         if (num_channels > 0) {
                             struct tx_isp_channel_state *state = &frame_channels[0].state;
