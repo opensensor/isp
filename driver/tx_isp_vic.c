@@ -2525,8 +2525,29 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         
     } else {
         /* Stream ON */
-        /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
-        vic_pipo_mdma_enable(vic_dev);
+        /* CRITICAL: Use vic_mdma_enable instead of vic_pipo_mdma_enable */
+        /* Binary Ninja shows vic_mdma_enable programs ALL buffer addresses AND VIC[0x300] */
+        extern struct frame_channel_device frame_channels[];
+        extern int num_channels;
+        if (num_channels > 0) {
+            struct tx_isp_channel_state *state = &frame_channels[0].state;
+            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+                /* Use first VBM buffer as base address for vic_mdma_enable */
+                dma_addr_t base_addr = state->vbm_buffer_addresses[0];
+                int ret = tx_isp_vic_configure_dma(vic_dev, base_addr, vic_dev->width, vic_dev->height);
+                if (ret == 0) {
+                    pr_info("*** ispvic_frame_channel_s_stream: vic_mdma_enable completed - ALL buffers programmed ***\n");
+                } else {
+                    pr_err("ispvic_frame_channel_s_stream: vic_mdma_enable failed: %d\n", ret);
+                }
+            } else {
+                pr_warn("*** ispvic_frame_channel_s_stream: No VBM buffers for vic_mdma_enable - using fallback ***\n");
+                vic_pipo_mdma_enable(vic_dev);
+            }
+        } else {
+            pr_warn("*** ispvic_frame_channel_s_stream: No channels for vic_mdma_enable - using fallback ***\n");
+            vic_pipo_mdma_enable(vic_dev);
+        }
 
         /* CRITICAL FIX: Call ispvic_frame_channel_qbuf to program VIC buffer addresses */
         /* Since VBM system is not calling our QBUF function, we need to call it manually during STREAMON */
