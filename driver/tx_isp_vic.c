@@ -22,14 +22,13 @@
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
-static void *data_b0000 = NULL;  /* Return value for vic_framedone_irq_function */
 
 /* CRITICAL FIX: Interrupt protection mechanism against tuning system overwrites */
 static struct timer_list vic_interrupt_protection_timer;
 static int vic_interrupt_protection_active = 0;
 
 /* Timer callback to restore interrupt registers that get overwritten by tuning system */
-static void vic_interrupt_protection_timer_callback(struct timer_list *t)
+static void vic_interrupt_protection_timer_callback(unsigned long data)
 {
     extern struct tx_isp_dev *ourISPdev;
 
@@ -320,7 +319,10 @@ void tx_isp_vic_restore_interrupts(void)
 
     /* CRITICAL FIX 5: Start interrupt protection timer to prevent future overwrites */
     if (!vic_interrupt_protection_active) {
-        timer_setup(&vic_interrupt_protection_timer, vic_interrupt_protection_timer_callback, 0);
+        /* Use older kernel timer API for compatibility */
+        init_timer(&vic_interrupt_protection_timer);
+        vic_interrupt_protection_timer.function = vic_interrupt_protection_timer_callback;
+        vic_interrupt_protection_timer.data = 0;
         vic_interrupt_protection_active = 1;
         mod_timer(&vic_interrupt_protection_timer, jiffies + msecs_to_jiffies(100));
         pr_info("*** VIC INTERRUPT RESTORE: Protection timer started - will prevent future overwrites ***\n");
@@ -340,8 +342,9 @@ void tx_isp_vic_stop_interrupt_protection(void)
 }
 EXPORT_SYMBOL(tx_isp_vic_restore_interrupts);
 
-/* Global data symbol used by reference driver */
-static char data_b0000[1] = {0};
+/* Global data symbol used by reference driver - moved to avoid conflict */
+static char data_b0000_array[1] = {0};
+static void *data_b0000 = &data_b0000_array[0];  /* Return value for vic_framedone_irq_function */
 
 /* VIC buffer entry structure for safe list handling */
 struct vic_buffer_entry {
