@@ -85,27 +85,28 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     *(uint32_t *)((char *)vic_dev + 0xc) = 0x3231564e;  /* NV12 format magic number */
     pr_info("*** VIC DEVICE: Set NV12 format magic number 0x3231564e at offset 0xc ***\n");
     
-    /* *** CRITICAL FIX: Use ORIGINAL working VIC register mapping *** */
-    pr_info("*** CRITICAL: Using ORIGINAL working VIC register mapping ***\n");
+    /* *** CRITICAL FIX: SWAP VIC register mapping for interrupt handler compatibility *** */
+    pr_info("*** CRITICAL: SWAPPING VIC register mapping - interrupt handler MUST read from hardware space ***\n");
 
-    /* Primary VIC space - REVERT to original working address */
-    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);
+    /* CRITICAL: Primary VIC space MUST be the hardware interrupt space (0x10023000) */
+    /* The interrupt handler reads from vic_dev->vic_regs, so this MUST point to the space that generates interrupts */
+    vic_dev->vic_regs = ioremap(0x10023000, 0x1000);  /* PRIMARY = Hardware interrupts */
     if (!vic_dev->vic_regs) {
-        pr_err("tx_isp_create_vic_device: Failed to map primary VIC registers at 0x133e0000\n");
+        pr_err("tx_isp_create_vic_device: Failed to map primary VIC registers at 0x10023000\n");
         kfree(vic_dev);
         return -ENOMEM;
     }
-    pr_info("*** Primary VIC registers mapped: %p (0x133e0000) ***\n", vic_dev->vic_regs);
+    pr_info("*** Primary VIC registers mapped: %p (0x10023000) - INTERRUPT HANDLER COMPATIBLE ***\n", vic_dev->vic_regs);
 
-    /* Secondary VIC space - keep for compatibility but don't change primary behavior */
-    vic_dev->vic_regs_secondary = ioremap(0x10023000, 0x1000);
+    /* Secondary VIC space is the trace-visible CSI PHY space (0x133e0000) */
+    vic_dev->vic_regs_secondary = ioremap(0x133e0000, 0x10000);  /* SECONDARY = Trace visibility */
     if (!vic_dev->vic_regs_secondary) {
-        pr_err("tx_isp_create_vic_device: Failed to map secondary VIC registers at 0x10023000\n");
+        pr_err("tx_isp_create_vic_device: Failed to map secondary VIC registers at 0x133e0000\n");
         iounmap(vic_dev->vic_regs);
         kfree(vic_dev);
         return -ENOMEM;
     }
-    pr_info("*** Secondary VIC registers mapped: %p (0x10023000) ***\n", vic_dev->vic_regs_secondary);
+    pr_info("*** Secondary VIC registers mapped: %p (0x133e0000) - TRACE VISIBLE ***\n", vic_dev->vic_regs_secondary);
     
     /* Also store in ISP device for compatibility */
     if (!isp_dev->vic_regs) {
