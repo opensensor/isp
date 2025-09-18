@@ -1106,7 +1106,7 @@ void tx_isp_vic_write_csi_phy_sequence(void)
 int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
 {
     void __iomem *csi_base;
-    pr_info("*** tx_isp_phy_init: experimental CSI PHY initialization ***\n");
+    pr_info("*** tx_isp_phy_init: CRITICAL CSI PHY initialization - VIC[0x380] always 0x0 ***\n");
     if (!isp_dev) {
         pr_err("tx_isp_phy_init: No ISP device available\n");
         return -ENODEV;
@@ -1118,6 +1118,17 @@ int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
         return -ENODEV;
     }
 
+    /* CRITICAL DEBUG: Check if MIPI CSI PHY is receiving sensor data */
+    pr_info("*** CRITICAL: Checking MIPI CSI PHY status before configuration ***\n");
+    u32 csi_status = readl(csi_base + 0x8);
+    u32 phy_status = readl(csi_base + 0x14);
+    pr_info("CSI Status: 0x%08x, PHY Status: 0x%08x\n", csi_status, phy_status);
+
+    /* Check if MIPI lanes are receiving data */
+    u32 lane0_status = readl(csi_base + 0x40);
+    u32 lane1_status = readl(csi_base + 0x44);
+    pr_info("MIPI Lane 0 Status: 0x%08x, Lane 1 Status: 0x%08x\n", lane0_status, lane1_status);
+
 
       /* ==============================================================================================
      * PHASE 2: CSI PHY Lane Configuration (massive write sequence)
@@ -1125,6 +1136,11 @@ int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
      * ==============================================================================================*/
 
     pr_info("*** PHASE 2: CSI PHY Lane Configuration ***\n");
+
+    /* CRITICAL: Check if sensor is actually outputting MIPI data */
+    pr_info("*** CRITICAL: Checking if GC2053 sensor is outputting MIPI data ***\n");
+    /* GC2053 should have register 0x3e=0x91 for MIPI streaming */
+    /* If VIC[0x380] is always 0x0, then MIPI data is not reaching VIC */
 
     /* CSI PHY Control registers - complete configuration */
     u8 csi_phy_ctrl_vals[] = {
