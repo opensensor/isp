@@ -2520,28 +2520,28 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     return ret;
 }
 
-/* BINARY NINJA REFERENCE: Simple vic_core_s_stream matching reference driver */
+/* BINARY NINJA EXACT: vic_core_s_stream matching reference driver exactly */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
-    struct tx_isp_vic_device *vic_dev;
-    void __iomem *vic_regs;
-    void __iomem *isp_base;
-    void __iomem *csi_base;
     int ret = -EINVAL;
 
-    pr_info("*** vic_core_s_stream: ENTRY - sd=%p, enable=%d ***\n", sd, enable);
+    pr_info("*** vic_core_s_stream: BINARY NINJA EXACT - sd=%p, enable=%d ***\n", sd, enable);
 
-    /* Validate parameters */
-    if (!sd || !ourISPdev || !ourISPdev->vic_dev) {
-        pr_err("vic_core_s_stream: Invalid parameters - sd=%p, ourISPdev=%p\n", sd, ourISPdev);
-        return -EINVAL;
-    }
+    /* Binary Ninja: if (arg1 != 0) */
+    if (sd != NULL) {
+        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
+        if ((unsigned long)sd >= 0xfffff001) {
+            return -EINVAL;
+        }
 
-    vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-    if (!vic_dev) {
-        pr_err("vic_core_s_stream: Failed to get VIC device\n");
-        return -EINVAL;
-    }
+        /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)sd->isp->vic_dev;
+        ret = -EINVAL;
+
+        /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
+        if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
+            /* Binary Ninja: int32_t $v1_3 = *($s1_1 + 0x128) */
+            int current_state = vic_dev->state;
 
     /* REVERT: Ensure VIC registers are mapped to ORIGINAL working address */
     vic_regs = vic_dev->vic_regs;
