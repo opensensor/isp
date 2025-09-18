@@ -1268,15 +1268,11 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) - Basic ISP config */
     system_reg_write(0x4, (sensor_params.width << 16) | sensor_params.height);
 
-    /* Binary Ninja: Handle different sensor modes - simplified version */
-    switch (sensor_params.mode) {
-        case 0: case 1: case 2: case 3:
-            system_reg_write(0x8, sensor_params.mode);
-            break;
-        default:
-            system_reg_write(0x8, 0); /* Default mode */
-            break;
-    }
+    /* CRITICAL FIX: Register 0x8 is for Bayer pattern, NOT sensor mode */
+    /* Remove incorrect sensor mode configuration that conflicts with Bayer pattern */
+    /* Register 0x8 will be set correctly by the Bayer pattern logic below */
+    pr_info("*** tisp_init: PIPELINE FIX - Skipping incorrect sensor mode write to reg[0x8] ***\n");
+    pr_info("*** tisp_init: Register 0x8 reserved for Bayer pattern configuration ***\n");
 
     /* CRITICAL FIX: ISP control register - enable processing pipeline */
     /* This register controls the overall ISP processing pipeline operation */
@@ -1301,6 +1297,25 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Configure processing pipeline data flow */
     system_reg_write(0x24, 0x1);     /* Enable data flow from input to processing */
     system_reg_write(0x28, 0x1);     /* Enable data flow from processing to output */
+
+    /* CRITICAL FIX: Add missing registers from reference trace lines 40-42 */
+    system_reg_write(0x2c, 0x400040); /* Reference trace: offset 0x2c: 0x0 -> 0x400040 */
+    system_reg_write(0x90, 0x1);      /* Reference trace: offset 0x90: 0x0 -> 0x1 */
+    system_reg_write(0x94, 0x1);      /* Reference trace: offset 0x94: 0x0 -> 0x1 */
+
+    /* Add more missing registers from reference trace lines 43-50 */
+    system_reg_write(0x98, 0x30000);    /* Reference trace: offset 0x98: 0x0 -> 0x30000 */
+    system_reg_write(0xa8, 0x58050000); /* Reference trace: offset 0xa8: 0x0 -> 0x58050000 */
+    system_reg_write(0xac, 0x58050000); /* Reference trace: offset 0xac: 0x0 -> 0x58050000 */
+    system_reg_write(0xc4, 0x40000);    /* Reference trace: offset 0xc4: 0x0 -> 0x40000 */
+    system_reg_write(0xc8, 0x400040);   /* Reference trace: offset 0xc8: 0x0 -> 0x400040 */
+    system_reg_write(0xcc, 0x100);      /* Reference trace: offset 0xcc: 0x0 -> 0x100 */
+    system_reg_write(0xd4, 0xc);        /* Reference trace: offset 0xd4: 0x0 -> 0xc */
+    system_reg_write(0xd8, 0xffffff);   /* Reference trace: offset 0xd8: 0x0 -> 0xffffff */
+
+    pr_info("*** tisp_init: PIPELINE FIX - Added missing registers 0x2c, 0x90, 0x94 from reference trace ***\n");
+    pr_info("*** tisp_init: PIPELINE FIX - Added missing registers 0x98, 0xa8, 0xac, 0xc4, 0xc8, 0xcc, 0xd4, 0xd8 ***\n");
+
     pr_info("*** tisp_init: ISP data flow configured (input->processing->output) ***\n");
 
     /* REFERENCE DRIVER: Final ISP configuration registers (Binary Ninja exact sequence) */
@@ -1315,6 +1330,11 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* CRITICAL FIX: Configure ISP with ACTUAL sensor image dimensions */
     /* This is the missing piece - ISP must know the correct image size */
+
+    /* CRITICAL FIX: Register 0x0 missing from our configuration but present in reference trace */
+    /* Reference trace: ISP isp-m0: [CSI PHY Control] write at offset 0x0: 0x0 -> 0x54560031 */
+    system_reg_write(0x0, 0x54560031);
+    pr_info("*** tisp_init: PIPELINE FIX - Added missing register 0x0 = 0x54560031 (from reference trace) ***\n");
 
     /* Binary Ninja: system_reg_write(4, width << 16 | height) */
     system_reg_write(0x4, (actual_image_width << 16) | actual_image_height);
@@ -1447,20 +1467,15 @@ int tisp_init(void *sensor_info, char *param_name)
     /* The bypass register controls which ISP modules are active vs bypassed */
     /* Green frames indicate that essential processing modules are being bypassed */
 
-    /* CRITICAL FIX: Use EXACT reference driver bypass register calculation */
-    /* Binary Ninja: bypass starts at 0x8077efff, gets modified by parameter loop, then conditional logic */
+    /* CRITICAL FIX: Use EXACT reference driver bypass register value from reference-trace.txt */
+    /* Reference trace shows: ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x0 -> 0x80700008 */
+    /* This is the EXACT value the working reference driver uses - not a calculated value */
 
-    uint32_t bypass_val = 0x8077efff;  /* Reference driver initial value */
-
-    /* Binary Ninja: Final conditional bypass modification */
-    /* if (data_b2e74 != 1) { bypass_val = (bypass_val & 0xb577fffd) | 0x34000009; } */
-    /* else { bypass_val = (bypass_val & 0xa1ffdf76) | 0x880002; } */
-
-    /* Use normal mode (not WDR) for GC2053 */
-    bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
+    uint32_t bypass_val = 0x80700008;  /* EXACT reference driver value from trace */
 
     system_reg_write(0xc, bypass_val);
-    pr_info("*** tisp_init: REFERENCE DRIVER bypass register set to 0x%x (exact Binary Ninja logic) ***\n", bypass_val);
+    pr_info("*** tisp_init: PIPELINE FIX - Using EXACT reference driver bypass register 0x%x ***\n", bypass_val);
+    pr_info("*** tisp_init: This should eliminate pipeline configuration error 0x80700008 ***\n");
 
     /* CRITICAL FIX: Configure ISP for NV12 output format */
     /* Application requests NV12 format (0x3231564e) but buffer size mismatch suggests confusion */
