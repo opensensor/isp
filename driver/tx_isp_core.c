@@ -419,60 +419,11 @@ static void fs_work_queue_item(int type, uint32_t data)
     pr_debug("*** FS WORK QUEUE: Queue full, dropping item type %d ***\n", type);
 }
 
-/* Frame sync work function - EXACT Binary Ninja implementation */
+/* Frame sync work function - DISABLED to test soft lockup */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
-    extern struct tx_isp_dev *ourISPdev;
-    struct tx_isp_dev *isp_dev = ourISPdev;
-    static int sensor_call_counter = 0;
-
-    pr_info("*** ISP FRAME SYNC WORK: STARTING (counter=%d) ***\n", sensor_call_counter);
-
-    if (!isp_dev) {
-        pr_warn("*** ISP FRAME SYNC WORK: isp_dev is NULL ***\n");
-        return;
-    }
-
-    /* BINARY NINJA EXACT: Reference driver implementation */
-    /* Binary Ninja: void* $s5 = *(mdns_y_pspa_cur_bi_wei0_array + 0xd4) */
-    /* This is isp_dev (mdns_y_pspa_cur_bi_wei0_array appears to be the global isp_dev) */
-
-    /* Binary Ninja: for (int32_t i = 0; i != 7; ) */
-    for (int32_t i = 0; i != 7; ) {
-        struct fs_work_queue_item *item = &fs_work_queue[i];
-
-        /* Binary Ninja: if (*$s2_1 == 0) */
-        if (item->state == 0) {
-            i += 1;
-        }
-        /* Binary Ninja: else if (i == 5) */
-        else if (i == 5) {
-            i += 1;  /* Skip item 5 */
-        }
-        else {
-            /* Binary Ninja: if (*(*($s5 + 0x120) + 0xf0) != 1) */
-            /* This is a complex condition check - for now use streaming state */
-            if (!isp_dev->streaming_enabled) {
-                i += 1;
-            }
-            else {
-                pr_debug("*** ISP FRAME SYNC WORK: Processing queue item %d ***\n", i);
-
-                /* Binary Ninja: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
-                int ret = ispcore_sensor_ops_ioctl(isp_dev);
-                if (ret != 0 && ret != -ENOIOCTLCMD) {
-                    pr_debug("ispcore_irq_fs_work: sensor ops failed: %d\n", ret);
-                }
-
-                /* Binary Ninja: *$s2_1 = 0 - clear the queue item after processing */
-                item->state = 0;
-                i += 1;
-            }
-        }
-    }
-
-    sensor_call_counter++;
-    pr_info("*** ISP FRAME SYNC WORK: COMPLETED (counter=%d) ***\n", sensor_call_counter);
+    /* TEMPORARY: Completely disable work function to test if it's causing soft lockup */
+    return;
 }
 
 /* Forward declarations for frame channel functions - avoid naming conflicts */
