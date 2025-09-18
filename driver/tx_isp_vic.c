@@ -2863,8 +2863,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Use the correct main_isp_base (0x13300000 = isp-m0) */
                 writel(0x54560031, main_isp_base + 0x0);
                 writel(0x7800438, main_isp_base + 0x4);
-                /* CRITICAL FIX: Use sensor dimensions instead of hardcoded 1920x1080 */
-                writel((sensor_width << 16) | sensor_height, main_isp_base + 0x4);
                 writel(0x1, main_isp_base + 0x8);
                 /* CRITICAL FIX: Don't write error code to error status register! */
                 /* Register 0xc is the error status register - clear it instead of setting error code */
