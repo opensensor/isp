@@ -412,17 +412,12 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                                 pr_err("*** VIC[0x380]=0x0 means VIC DMA is NOT writing frame data to buffers ***\n");
                                 pr_err("*** This indicates VIC DMA is not properly configured ***\n");
 
-                                /* CRITICAL FIX: Configure VIC DMA to write frame data to memory */
-                                /* Based on Binary Ninja reference, VIC DMA needs proper configuration */
-                                u32 frame_size = state->width * state->height * 2;  /* RAW10 = 2 bytes/pixel */
+                                /* DO NOT configure VIC DMA in interrupt handler - Binary Ninja reference shows */
+                                /* VIC DMA should be configured during STREAMON via ispvic_frame_channel_s_stream */
+                                /* The fact that VIC[0x380] is 0x0 means VIC DMA was not configured during STREAMON */
+                                pr_err("*** VIC DMA ERROR: VIC hardware not capturing frames - DMA should be configured during STREAMON ***\n");
 
-                                /* CRITICAL FIX: Use proper VIC DMA configuration function */
-                                int ret_dma = tx_isp_vic_configure_dma(vic_dev, completed_buffer_addr, state->width, state->height);
-                                if (ret_dma == 0) {
-                                    pr_info("*** VIC DMA FIX: Successfully configured VIC DMA for next frame ***\n");
-                                } else {
-                                    pr_err("*** VIC DMA FIX: Failed to configure VIC DMA: %d ***\n", ret_dma);
-                                }
+                                u32 frame_size = state->width * state->height * 2;  /* RAW10 = 2 bytes/pixel */
 
                                 /* CRITICAL DMA SYNC: Synchronize completed buffer for CPU access */
                                 mips_dma_cache_sync(completed_buffer_addr, frame_size, DMA_FROM_DEVICE);
