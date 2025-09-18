@@ -2811,10 +2811,23 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         ourISPdev->vic_dev = (struct tx_isp_subdev *)&vic_dev->sd;
         vic_dev->sd.isp = (void *)ourISPdev;
 
+        /* *** CRITICAL: Set up ISP device VIC register pointers for interrupt handlers *** */
+        /* This was missing and is why interrupts weren't working! */
+        if (!ourISPdev->vic_regs) {
+            ourISPdev->vic_regs = vic_dev->vic_regs;
+            pr_info("*** CRITICAL: Set ourISPdev->vic_regs = %p ***\n", ourISPdev->vic_regs);
+        }
+        if (!ourISPdev->vic_regs2) {
+            ourISPdev->vic_regs2 = vic_dev->vic_regs_secondary;
+            pr_info("*** CRITICAL: Set ourISPdev->vic_regs2 = %p ***\n", ourISPdev->vic_regs2);
+        }
+
         pr_info("*** CRITICAL: VIC DEVICE LINKED TO GLOBAL ISP DEVICE ***\n");
         pr_info("  ourISPdev->vic_dev = %p (VIC subdev)\n", ourISPdev->vic_dev);
         pr_info("  vic_dev = %p (full VIC device)\n", vic_dev);
         pr_info("  vic_dev->sd.isp = %p (back-reference to ISP)\n", vic_dev->sd.isp);
+        pr_info("  ourISPdev->vic_regs = %p (for interrupt handlers)\n", ourISPdev->vic_regs);
+        pr_info("  ourISPdev->vic_regs2 = %p (for interrupt handlers)\n", ourISPdev->vic_regs2);
     } else {
         pr_warn("*** WARNING: No global ISP device found - VIC device not linked ***\n");
     }
