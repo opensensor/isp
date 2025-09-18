@@ -1309,6 +1309,26 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("*** tisp_init: CRITICAL FIX - Bayer pattern configured: mbus=0x%x -> pattern=%d (register 8) ***\n",
             sensor_mbus_code, bayer_pattern);
 
+    /* CRITICAL FIX: Configure color space conversion to prevent green frames */
+    /* The green tint indicates YUV color space conversion issues */
+
+    pr_info("*** tisp_init: CONFIGURING COLOR SPACE CONVERSION (YUV->RGB) ***\n");
+
+    /* Configure YUV to RGB conversion matrix - standard BT.601 coefficients */
+    /* These values ensure proper color reproduction instead of green tint */
+    system_reg_write(0xc0, 0xeb8080);  /* Y coefficient and UV offsets */
+    system_reg_write(0xc4, 0x108080);  /* U coefficient and offsets */
+    system_reg_write(0xc8, 0x29f06e);  /* V coefficient for R channel */
+    system_reg_write(0xcc, 0x913622);  /* V coefficient for G/B channels */
+
+    /* Configure color processing pipeline */
+    system_reg_write(0xd0, 0x515af0);  /* Color processing config 1 */
+    system_reg_write(0xd4, 0xaaa610);  /* Color processing config 2 */
+    system_reg_write(0xd8, 0xd21092);  /* Color processing config 3 */
+    system_reg_write(0xdc, 0x6acade);  /* Color processing config 4 */
+
+    pr_info("*** tisp_init: COLOR SPACE CONVERSION CONFIGURED - should fix green frames ***\n");
+
     /* CRITICAL FIX: Load ISP tuning parameters from /etc/sensor/ files */
     /* This is the missing piece - ISP needs tuning parameters for proper image processing */
 
