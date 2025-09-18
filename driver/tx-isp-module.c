@@ -1988,6 +1988,7 @@ static volatile bool subdev_init_complete = false;
 /* Forward declaration for tx_isp_video_s_stream */
 int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable);
 int tx_isp_vic_hw_init(struct tx_isp_subdev *sd);
+int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t base_addr, u32 width, u32 height);
 
 /* tx_isp_video_link_stream - EXACT Binary Ninja reference implementation */
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
@@ -2145,6 +2146,36 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     
     pr_info("*** tx_isp_video_s_stream: Processing %s request for subdevs ***\n",
             enable ? "ENABLE" : "DISABLE");
+
+    /* CRITICAL FIX: Configure VIC DMA during STREAMON when everything is ready */
+    if (enable && dev->vic_dev) {
+        struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)dev->vic_dev;
+        extern struct frame_channel_device frame_channels[];
+        extern int num_channels;
+
+        pr_info("*** tx_isp_video_s_stream: CONFIGURING VIC DMA FOR STREAMING ***\n");
+
+        /* Get VBM buffer addresses from channel 0 */
+        if (num_channels > 0) {
+            struct tx_isp_channel_state *state = &frame_channels[0].state;
+
+            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+                /* Configure VIC DMA with real VBM buffer addresses */
+                dma_addr_t first_buffer = state->vbm_buffer_addresses[0];
+                int ret_dma = tx_isp_vic_configure_dma(vic, first_buffer, vic->width, vic->height);
+                if (ret_dma == 0) {
+                    pr_info("*** tx_isp_video_s_stream: Successfully configured VIC DMA for streaming ***\n");
+                    pr_info("*** VIC DMA: Using VBM buffer addresses, count=%d ***\n", state->vbm_buffer_count);
+                } else {
+                    pr_err("*** tx_isp_video_s_stream: Failed to configure VIC DMA: %d ***\n", ret_dma);
+                }
+            } else {
+                pr_warn("*** tx_isp_video_s_stream: No VBM buffers available for VIC DMA configuration ***\n");
+                pr_warn("*** VBM buffer addresses: %p, count: %d ***\n",
+                        state->vbm_buffer_addresses, state->vbm_buffer_count);
+            }
+        }
+    }
     
     /* Reference: for (int32_t i = 0; i != 0x10; ) - loop through 16 subdevs */
     for (i = 0; i != 0x10; i++) {
