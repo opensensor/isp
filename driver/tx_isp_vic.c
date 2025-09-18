@@ -196,6 +196,30 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 
+/* MIPS DMA cache synchronization helper - CRITICAL for proper data transfer */
+static void mips_dma_cache_sync(dma_addr_t addr, size_t size, int direction)
+{
+    /* MIPS architecture requires explicit cache synchronization for DMA coherency */
+
+    if (direction == DMA_FROM_DEVICE) {
+        /* Invalidate cache before device writes to memory */
+        dma_cache_inv((unsigned long)phys_to_virt(addr), size);
+    } else if (direction == DMA_TO_DEVICE) {
+        /* Flush cache before device reads from memory */
+        dma_cache_wback((unsigned long)phys_to_virt(addr), size);
+    } else {
+        /* Bidirectional - flush and invalidate */
+        dma_cache_wback_inv((unsigned long)phys_to_virt(addr), size);
+    }
+
+    /* Memory barrier to ensure cache operations complete */
+    wmb();
+    __sync();
+
+    pr_debug("*** MIPS DMA CACHE SYNC: addr=0x%x size=%d direction=%d ***\n",
+             addr, size, direction);
+}
+
 /* VIC interrupt restoration function - using correct VIC base */
 void tx_isp_vic_restore_interrupts(void)
 {
@@ -2254,10 +2278,10 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
             dma_addr_t buffer_addr = vic_dev->vbm_buffer_addresses[i];
 
             if (buffer_addr != 0) {
-                /* DMA cache sync for device access - CRITICAL for MIPS architecture */
-                dma_sync_single_for_device(NULL, buffer_addr, frame_size, DMA_FROM_DEVICE);
+                /* CRITICAL: MIPS-specific DMA cache sync for device access */
+                mips_dma_cache_sync(buffer_addr, frame_size, DMA_FROM_DEVICE);
 
-                pr_info("*** DMA SYNC: Buffer[%d] addr=0x%x size=%d synced for device ***\n",
+                pr_info("*** MIPS DMA SYNC: Buffer[%d] addr=0x%x size=%d synced for device ***\n",
                         i, buffer_addr, frame_size);
             }
         }
