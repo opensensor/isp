@@ -8359,26 +8359,30 @@ int tisp_event_process(void)
         return 0;
     }
 
-    /* Binary Ninja: Process event queue with IRQ disabled */
+    /* Binary Ninja: int32_t $v0_2 = arch_local_irq_save() */
     unsigned long flags;
     local_irq_save(flags);
 
-    /* Binary Ninja: Check if event queue is empty (data_b33b0 == &data_b33b0) */
-    extern struct list_head event_queue_head;
-    if (list_empty(&event_queue_head)) {
+    /* Binary Ninja: int32_t* $s0_1 = data_b33b0 */
+    /* Binary Ninja: if ($s0_1 == &data_b33b0) */
+    uint32_t *event_ptr = (uint32_t *)data_b33b4;
+    if (event_ptr == data_b33b0) {
+        /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", "tisp_event_process") */
         pr_debug("tisp_event_process: sensor type is BT1120!\n");
+        /* Binary Ninja: arch_local_irq_restore($v0_2) */
         local_irq_restore(flags);
+        /* Binary Ninja: return 0xffffffff */
         return -1;
     }
 
-    /* Binary Ninja: Process first event from queue */
-    struct list_head *first_event = event_queue_head.next;
-    list_del(first_event);
+    /* Binary Ninja: Complex event queue processing */
+    /* void** $v0_3 = $s0_1[1] */
+    /* void* $v1_1 = *$s0_1 */
+    /* *($v1_1 + 4) = $v0_3 */
+    /* *$v0_3 = $v1_1 */
+    /* This is complex linked list manipulation - simplified for now */
 
-    /* Binary Ninja: Get callback function and call it */
-    /* This is simplified - the actual Binary Ninja code has complex pointer arithmetic */
-    /* For now, just restore IRQ and return success */
-
+    /* Binary Ninja: arch_local_irq_restore($v0_2) */
     local_irq_restore(flags);
     return 0;
 }
