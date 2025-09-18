@@ -393,83 +393,30 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
     return (result == -ENOIOCTLCMD) ? 0 : result;
 }
 
-/* Frame sync work function - Safe implementation without dangerous offsets */
+/* Frame sync work function - FIXED to prevent infinite loop */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
     extern struct tx_isp_dev *ourISPdev;
     struct tx_isp_dev *isp_dev = ourISPdev;
     static int sensor_call_counter = 0;
 
-    pr_info("*** ISP FRAME SYNC WORK: ENTRY - Work function is running! ***\n");
-    pr_info("*** ISP FRAME SYNC WORK: Safe implementation without dangerous offsets ***\n");
+    pr_debug("*** ISP FRAME SYNC WORK: ENTRY - Work function is running! ***\n");
 
     if (!isp_dev) {
         pr_warn("*** ISP FRAME SYNC WORK: isp_dev is NULL ***\n");
         return;
     }
 
-    /* MATCH REFERENCE DRIVER: Check conditions every frame, call sensor when conditions are met */
-    pr_info("*** ISP FRAME SYNC WORK: Checking sensor conditions (like Binary Ninja reference) ***\n");
-
-    /* CRITICAL FIX: Auto-detect streaming state from VIC hardware */
-    bool vic_is_streaming = false;
-    if (isp_dev->vic_dev) {
-        struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-        vic_is_streaming = (vic->stream_state == 1);  /* VIC stream_state = 1 means streaming */
-
-        /* Auto-set streaming_enabled if VIC is streaming but flag is false */
-        if (vic_is_streaming && !isp_dev->streaming_enabled) {
-            pr_info("*** ISP FRAME SYNC WORK: Auto-setting streaming_enabled=true (VIC is streaming) ***\n");
-            isp_dev->streaming_enabled = true;
-        }
-    }
-
-    /* Check if sensor is available and streaming is active */
-    pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d, vic_streaming=%d ***\n",
-            isp_dev->sensor, isp_dev->streaming_enabled, vic_is_streaming);
-
-    /* CRITICAL FIX: Frame sync work SHOULD call sensor operations like reference driver! */
-    /* Reference driver ispcore_irq_fs_work calls ispcore_sensor_ops_ioctl for AE/AGC/AWB */
-    pr_info("*** ISP FRAME SYNC WORK: Frame sync processing (calling sensor operations) ***\n");
-
+    /* REFERENCE DRIVER: Minimal frame sync work - just call sensor ops if needed */
     if (isp_dev->sensor && isp_dev->streaming_enabled) {
-        pr_info("*** ISP FRAME SYNC WORK: Calling sensor operations (like reference driver) ***\n");
-
-        /* CRITICAL: Call sensor operations like reference driver ispcore_irq_fs_work */
-        /* This triggers AE/AGC/AWB sensor I2C operations */
-        /* Add error handling to prevent work queue crashes */
-        extern int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev);
-
-        int sensor_result = -ENODEV;
-
-        /* CRITICAL FIX: Do proper per-frame sensor operations like reference driver */
-        /* Frame sync should do AE/AGC operations, NOT FPS control */
-        pr_info("*** ISP FRAME SYNC WORK: Performing per-frame sensor operations (AE/AGC) ***\n");
-
-        /* REFERENCE DRIVER: Call ispcore_sensor_ops_ioctl exactly like reference */
-        /* Binary Ninja: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
-        pr_info("*** ISP FRAME SYNC WORK: Calling ispcore_sensor_ops_ioctl (reference driver) ***\n");
-        sensor_result = ispcore_sensor_ops_ioctl(isp_dev);
-        pr_info("*** ISP FRAME SYNC WORK: ispcore_sensor_ops_ioctl result: %d ***\n", sensor_result);
-
-        if (sensor_result == 0) {
-            pr_info("*** ISP FRAME SYNC WORK: All sensor operations successful ***\n");
-        } else if (sensor_result == -ENOIOCTLCMD) {
-            pr_info("*** ISP FRAME SYNC WORK: No sensor IOCTL command (normal) ***\n");
-        } else {
-            pr_warn("*** ISP FRAME SYNC WORK: Sensor operations failed: %d ***\n", sensor_result);
-        }
-
-        pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (sensor available) ***\n");
-    } else {
-        pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (no sensor/not streaming) ***\n");
+        /* Call sensor operations for AE/AGC/AWB - minimal processing */
+        ispcore_sensor_ops_ioctl(isp_dev);
     }
 
-    pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation complete - work finished ***\n");
-
-    /* CRITICAL: Ensure work completion is visible to prevent queue backup */
+    /* Increment counter and complete quickly */
     sensor_call_counter++;
-    pr_info("*** ISP FRAME SYNC WORK: Work completion #%d - ready for next interrupt ***\n", sensor_call_counter);
+
+    pr_debug("*** ISP FRAME SYNC WORK: Completed #%d ***\n", sensor_call_counter);
 }
 
 /* Forward declarations for frame channel functions - avoid naming conflicts */
