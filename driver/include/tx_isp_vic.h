@@ -157,5 +157,7 @@ struct tx_isp_vic_device {
     int hw_irq_enabled __attribute__((aligned(4)));                 /* Hardware interrupt enable flag - SAFE replacement for offset 0x13c */
 } __attribute__((aligned(4), packed));
 
+/* VIC function declarations */
+int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t addr, u32 width, u32 height);
 
 #endif /* __TX_ISP_VIC_H__ */
