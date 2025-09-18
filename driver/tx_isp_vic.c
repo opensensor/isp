@@ -85,10 +85,10 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     *(uint32_t *)((char *)vic_dev + 0xc) = 0x3231564e;  /* NV12 format magic number */
     pr_info("*** VIC DEVICE: Set NV12 format magic number 0x3231564e at offset 0xc ***\n");
     
-    /* *** CRITICAL FIX: Map BOTH VIC register spaces - dual VIC architecture *** */
-    pr_info("*** CRITICAL: Mapping DUAL VIC register spaces for complete VIC control ***\n");
+    /* *** CRITICAL FIX: Use ORIGINAL working VIC register mapping *** */
+    pr_info("*** CRITICAL: Using ORIGINAL working VIC register mapping ***\n");
 
-    /* Primary VIC space (original CSI PHY shared space) */
+    /* Primary VIC space - REVERT to original working address */
     vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);
     if (!vic_dev->vic_regs) {
         pr_err("tx_isp_create_vic_device: Failed to map primary VIC registers at 0x133e0000\n");
@@ -97,7 +97,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     }
     pr_info("*** Primary VIC registers mapped: %p (0x133e0000) ***\n", vic_dev->vic_regs);
 
-    /* Secondary VIC space (isp-w01 - CSI PHY coordination space) */
+    /* Secondary VIC space - keep for compatibility but don't change primary behavior */
     vic_dev->vic_regs_secondary = ioremap(0x10023000, 0x1000);
     if (!vic_dev->vic_regs_secondary) {
         pr_err("tx_isp_create_vic_device: Failed to map secondary VIC registers at 0x10023000\n");
