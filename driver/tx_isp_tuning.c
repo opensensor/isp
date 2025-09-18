@@ -1392,15 +1392,6 @@ int tisp_init(void *sensor_info, char *param_name)
 
     uint32_t bypass_val = 0x8077efff;  /* Reference driver initial value */
 
-    /* CRITICAL FIX: Use EXACT reference driver bypass register calculation */
-    /* Binary Ninja: bypass starts at 0x8077efff, gets modified by parameter loop, then conditional logic */
-
-    uint32_t bypass_val = 0x8077efff;  /* Reference driver initial value */
-
-    /* Binary Ninja: Apply parameter modifications to bypass register */
-    /* This loop modifies bypass_val based on tuning parameters */
-    /* For now, use simplified logic to enable essential processing only */
-
     /* Binary Ninja: Final conditional bypass modification */
     /* if (data_b2e74 != 1) { bypass_val = (bypass_val & 0xb577fffd) | 0x34000009; } */
     /* else { bypass_val = (bypass_val & 0xa1ffdf76) | 0x880002; } */
