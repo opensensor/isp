@@ -1150,16 +1150,26 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
         return -ENODEV;
     }
 
-    /* CRITICAL FIX: Use correct CSI/PHY base addresses from memory mappings */
-    /* CSI registers are at 0x10022000, PHY registers are at 0x10021000 */
-    csi_base = ioremap(0x10022000, 0x1000);  /* CSI registers */
-    phy_base = ioremap(0x10021000, 0x1000);  /* PHY registers */
+    /* CRITICAL FIX: Use EXISTING memory mappings instead of creating new ones */
+    /* This prevents conflicts and ensures we use the same addresses as the rest of the driver */
 
-    if (!csi_base || !phy_base) {
-        pr_err("tx_isp_csi_mipi_init: Failed to map CSI/PHY registers\n");
-        if (csi_base) iounmap(csi_base);
-        if (phy_base) iounmap(phy_base);
-        return -ENOMEM;
+    /* Get CSI base from the CSI device structure (already mapped) */
+    if (isp_dev->csi_dev && isp_dev->csi_dev->csi_regs) {
+        csi_base = isp_dev->csi_dev->csi_regs;  /* Use existing CSI mapping */
+        pr_info("tx_isp_csi_mipi_init: Using existing CSI mapping: %p\n", csi_base);
+    } else {
+        pr_err("tx_isp_csi_mipi_init: No existing CSI mapping available\n");
+        return -ENODEV;
+    }
+
+    /* Get PHY base from ISP core registers (PHY is at core_base + offset) */
+    if (isp_dev->isp_regs) {
+        /* PHY registers are typically at ISP core base + 0x21000 offset */
+        phy_base = isp_dev->isp_regs + 0x21000;  /* Use existing ISP mapping + PHY offset */
+        pr_info("tx_isp_csi_mipi_init: Using existing PHY mapping: %p (isp_regs + 0x21000)\n", phy_base);
+    } else {
+        pr_err("tx_isp_csi_mipi_init: No existing ISP register mapping available\n");
+        return -ENODEV;
     }
 
     /* Get sensor attributes from VIC device */
@@ -1292,9 +1302,8 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
     pr_info("*** REFERENCE DRIVER: EXACT CSI MIPI initialization complete ***\n");
     pr_info("*** This should fix VIC[0x380]=0x0 issue by properly routing MIPI data to VIC ***\n");
 
-    /* Clean up memory mappings */
-    iounmap(csi_base);
-    iounmap(phy_base);
+    /* No cleanup needed - using existing memory mappings */
+    pr_info("*** CSI MIPI initialization using existing mappings - no cleanup required ***\n");
 
     return 0;
 }
