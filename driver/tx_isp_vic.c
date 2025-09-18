@@ -1138,9 +1138,10 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
 {
     void __iomem *csi_base, *phy_base;
     struct tx_isp_sensor_attribute *sensor_attr;
-    int lanes, interface_type;
-    u32 sensor_fps;
-    int phy_freq_setting;
+    int lanes;
+    u32 reg_val, sensor_freq;
+    int32_t phy_freq_setting;
+    u32 phy_config;
 
     pr_info("*** tx_isp_csi_mipi_init: EXACT reference driver CSI MIPI configuration ***\n");
 
@@ -1154,6 +1155,12 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
 
     /* Get sensor attributes from VIC device */
     sensor_attr = &isp_dev->vic_dev->sensor_attr;
+
+    if (!sensor_attr) {
+        pr_err("tx_isp_csi_mipi_init: No sensor attributes available\n");
+        return -EINVAL;
+    }
+
     lanes = (sensor_attr->mipi.lans > 0) ? sensor_attr->mipi.lans : 2;  /* Default 2 lanes */
 
     pr_info("*** REFERENCE DRIVER CSI MIPI INIT: %d lanes, interface_type=1 ***\n", lanes);
@@ -1197,7 +1204,7 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
     /* STEP 2: EXACT reference driver PHY configuration */
     /* Get sensor frequency for PHY configuration */
     sensor_freq = (sensor_attr->fps > 0) ? sensor_attr->fps : 30;  /* Use sensor FPS as frequency indicator */
-    int32_t phy_freq_setting = 1;  /* Default frequency setting */
+    phy_freq_setting = 1;  /* Default frequency setting */
 
     /* Binary Ninja frequency mapping logic */
     if (sensor_freq >= 80 && sensor_freq < 110) {
