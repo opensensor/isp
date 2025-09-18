@@ -785,7 +785,7 @@ static int tx_isp_create_v4l2_device(int channel)
     dev->format.fmt.pix.bytesperline = dev->format.fmt.pix.width * 10 / 8;  /* RAW10: 10 bits per pixel */
     dev->format.fmt.pix.sizeimage = dev->format.fmt.pix.width *
                                    dev->format.fmt.pix.height * 10 / 8;  /* RAW10 size */
-    dev->format.fmt.pix.colorspace = V4L2_COLORSPACE_RAW;
+    dev->format.fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;  /* Use SRGB for RAW format */
     
     /* Initialize V4L2 device - use ISP device as parent if available */
     ret = v4l2_device_register(ourISPdev ? ourISPdev->dev : NULL, &dev->v4l2_dev);
