@@ -2747,10 +2747,46 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Binary points to offset 0x80 in the structure */
     test_addr = &vic_dev->sensor_attr;  /* Or another member around offset 0x80 */
 
+    /* *** CRITICAL FIX: Map VIC registers - this was missing! *** */
+    pr_info("*** tx_isp_vic_probe: Mapping VIC registers ***\n");
+
+    /* Primary VIC space (original CSI PHY shared space) */
+    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);
+    if (!vic_dev->vic_regs) {
+        pr_err("tx_isp_vic_probe: Failed to map primary VIC registers at 0x133e0000\n");
+        kfree(vic_dev);
+        return -ENOMEM;
+    }
+    pr_info("*** Primary VIC registers mapped: %p (0x133e0000) ***\n", vic_dev->vic_regs);
+
+    /* Secondary VIC space (isp-w01 - CSI PHY coordination space) */
+    vic_dev->vic_regs_secondary = ioremap(0x10023000, 0x1000);
+    if (!vic_dev->vic_regs_secondary) {
+        pr_err("tx_isp_vic_probe: Failed to map secondary VIC registers at 0x10023000\n");
+        iounmap(vic_dev->vic_regs);
+        kfree(vic_dev);
+        return -ENOMEM;
+    }
+    pr_info("*** Secondary VIC registers mapped: %p (0x10023000) ***\n", vic_dev->vic_regs_secondary);
+
+    /* Initialize VIC device dimensions - CRITICAL: Use actual sensor output dimensions */
+    vic_dev->width = 1920;  /* GC2053 actual output width */
+    vic_dev->height = 1080; /* GC2053 actual output height */
+
+    /* Set up sensor attributes with defaults */
+    memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
+    vic_dev->sensor_attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI interface (correct value from enum) */
+    vic_dev->sensor_attr.total_width = 1920;
+    vic_dev->sensor_attr.total_height = 1080;
+    vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
+
     pr_info("*** tx_isp_vic_probe: VIC device initialized successfully ***\n");
     pr_info("VIC device: vic_dev=%p, size=%zu\n", vic_dev, sizeof(struct tx_isp_vic_device));
     pr_info("  sd: %p\n", sd);
     pr_info("  state: %d\n", vic_dev->state);
+    pr_info("  vic_regs: %p\n", vic_dev->vic_regs);
+    pr_info("  vic_regs_secondary: %p\n", vic_dev->vic_regs_secondary);
+    pr_info("  dimensions: %dx%d\n", vic_dev->width, vic_dev->height);
     pr_info("  test_addr: %p\n", test_addr);
 
     return 0;
