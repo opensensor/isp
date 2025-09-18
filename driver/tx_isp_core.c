@@ -393,6 +393,32 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
     return (result == -ENOIOCTLCMD) ? 0 : result;
 }
 
+/* Frame sync work queue item structure - Binary Ninja shows 2-word items */
+struct fs_work_queue_item {
+    uint32_t state;     /* *$s2_1 - item state flag */
+    uint32_t data;      /* $s2_1[1] - item data */
+};
+
+/* Frame sync work queue - EXACT Binary Ninja implementation */
+static struct fs_work_queue_item fs_work_queue[7] = {0};
+
+/* Queue a frame sync work item - Binary Ninja equivalent */
+static void fs_work_queue_item(int type, uint32_t data)
+{
+    /* Find first empty slot (state == 0) */
+    for (int i = 0; i < 7; i++) {
+        if (i == 5) continue;  /* Skip slot 5 like Binary Ninja */
+
+        if (fs_work_queue[i].state == 0) {
+            fs_work_queue[i].state = 1;  /* Mark as pending */
+            fs_work_queue[i].data = data;
+            pr_debug("*** FS WORK QUEUE: Queued item type %d at slot %d ***\n", type, i);
+            return;
+        }
+    }
+    pr_debug("*** FS WORK QUEUE: Queue full, dropping item type %d ***\n", type);
+}
+
 /* Frame sync work function - EXACT Binary Ninja implementation */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
@@ -407,30 +433,39 @@ static void ispcore_irq_fs_work(struct work_struct *work)
 
     /* BINARY NINJA EXACT: Reference driver implementation */
     /* Binary Ninja: void* $s5 = *(mdns_y_pspa_cur_bi_wei0_array + 0xd4) */
-    /* This appears to be isp_dev->something at offset 0xd4 */
+    /* This is isp_dev (mdns_y_pspa_cur_bi_wei0_array appears to be the global isp_dev) */
 
     /* Binary Ninja: for (int32_t i = 0; i != 7; ) */
-    /* The reference driver processes a queue of 7 items */
+    for (int32_t i = 0; i != 7; ) {
+        struct fs_work_queue_item *item = &fs_work_queue[i];
 
-    /* Binary Ninja shows conditional execution based on state checks */
-    /* Only call sensor operations when specific conditions are met */
-
-    if (isp_dev->sensor && isp_dev->streaming_enabled) {
-        /* Binary Ninja: if (*(*($s5 + 0x120) + 0xf0) != 1) */
-        /* This appears to be a state check - only proceed if condition is met */
-
-        /* For now, implement a simple condition to prevent constant execution */
-        /* TODO: Implement the exact Binary Ninja queue-based logic */
-        if ((sensor_call_counter % 10) == 0) {  /* Only every 10th frame sync */
-            pr_debug("*** ISP FRAME SYNC WORK: Calling sensor operations (conditional) ***\n");
-
-            /* Binary Ninja: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
-            int ret = ispcore_sensor_ops_ioctl(isp_dev);
-            if (ret != 0 && ret != -ENOIOCTLCMD) {
-                pr_debug("ispcore_irq_fs_work: sensor ops failed: %d\n", ret);
+        /* Binary Ninja: if (*$s2_1 == 0) */
+        if (item->state == 0) {
+            i += 1;
+        }
+        /* Binary Ninja: else if (i == 5) */
+        else if (i == 5) {
+            i += 1;  /* Skip item 5 */
+        }
+        else {
+            /* Binary Ninja: if (*(*($s5 + 0x120) + 0xf0) != 1) */
+            /* This is a complex condition check - for now use streaming state */
+            if (!isp_dev->streaming_enabled) {
+                i += 1;
             }
+            else {
+                pr_debug("*** ISP FRAME SYNC WORK: Processing queue item %d ***\n", i);
 
-            /* Binary Ninja: *$s2_1 = 0 - clear the queue item after processing */
+                /* Binary Ninja: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
+                int ret = ispcore_sensor_ops_ioctl(isp_dev);
+                if (ret != 0 && ret != -ENOIOCTLCMD) {
+                    pr_debug("ispcore_irq_fs_work: sensor ops failed: %d\n", ret);
+                }
+
+                /* Binary Ninja: *$s2_1 = 0 - clear the queue item after processing */
+                item->state = 0;
+                i += 1;
+            }
         }
     }
 
