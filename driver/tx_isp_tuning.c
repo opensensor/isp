@@ -734,10 +734,11 @@ static struct completion tevent_info;
 
 /* BINARY NINJA REFERENCE: No event processing thread - events processed on-demand */
 
-/* Event queue structures */
+/* Event queue structures - Binary Ninja EXACT */
 static uint32_t data_b33b0[4];
 static uint32_t data_b33b4 = (uint32_t)&data_b33b0;
 static uint32_t data_b33b8 = (uint32_t)&data_b33b0;
+static uint32_t *data_b33bc = (uint32_t *)&data_b33b0;
 
 /* Helper functions - Forward declarations */
 /* private_dma_cache_sync declared in txx-funcs.h */
@@ -8364,9 +8365,10 @@ int tisp_event_process(void)
     local_irq_save(flags);
 
     /* Binary Ninja: int32_t* $s0_1 = data_b33b0 */
+    uint32_t *s0_1 = (uint32_t *)data_b33b4;
+
     /* Binary Ninja: if ($s0_1 == &data_b33b0) */
-    uint32_t *event_ptr = (uint32_t *)data_b33b4;
-    if (event_ptr == data_b33b0) {
+    if (s0_1 == data_b33b0) {
         /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", "tisp_event_process") */
         pr_debug("tisp_event_process: sensor type is BT1120!\n");
         /* Binary Ninja: arch_local_irq_restore($v0_2) */
@@ -8375,12 +8377,44 @@ int tisp_event_process(void)
         return -1;
     }
 
-    /* Binary Ninja: Complex event queue processing */
-    /* void** $v0_3 = $s0_1[1] */
-    /* void* $v1_1 = *$s0_1 */
-    /* *($v1_1 + 4) = $v0_3 */
-    /* *$v0_3 = $v1_1 */
-    /* This is complex linked list manipulation - simplified for now */
+    /* Binary Ninja: void** $v0_3 = $s0_1[1] */
+    void **v0_3 = (void **)s0_1[1];
+    /* Binary Ninja: void* $v1_1 = *$s0_1 */
+    void *v1_1 = (void *)*s0_1;
+    /* Binary Ninja: *($v1_1 + 4) = $v0_3 */
+    *((void **)(v1_1 + 4)) = v0_3;
+    /* Binary Ninja: *$v0_3 = $v1_1 */
+    *v0_3 = v1_1;
+    /* Binary Ninja: *$s0_1 = 0x100100 */
+    *s0_1 = 0x100100;
+    /* Binary Ninja: $s0_1[1] = 0x200200 */
+    s0_1[1] = 0x200200;
+
+    /* Binary Ninja: int32_t $v0_6 = *(($s0_1[2] << 2) + &cb) */
+    int (*v0_6)(void) = cb[s0_1[2]];
+
+    /* Binary Ninja: int32_t** $v1_3 */
+    uint32_t **v1_3;
+
+    /* Binary Ninja: if ($v0_6 == 0) */
+    if (v0_6 == NULL) {
+        /* Binary Ninja: $v1_3 = data_b33bc */
+        v1_3 = (uint32_t **)data_b33bc;
+    } else {
+        /* Binary Ninja: $v0_6($s0_1[4], $s0_1[5], $s0_1[6], $s0_1[7], $s0_1[8], $s0_1[9], $s0_1[0xa], $s0_1[0xb]) */
+        v0_6(); /* Simplified - the actual call has 8 parameters but our callbacks take none */
+        /* Binary Ninja: $v1_3 = data_b33bc */
+        v1_3 = (uint32_t **)data_b33bc;
+    }
+
+    /* Binary Ninja: data_b33bc = $s0_1 */
+    data_b33bc = s0_1;
+    /* Binary Ninja: *$s0_1 = &data_b33b8 */
+    *s0_1 = (uint32_t)&data_b33b8;
+    /* Binary Ninja: $s0_1[1] = $v1_3 */
+    s0_1[1] = (uint32_t)v1_3;
+    /* Binary Ninja: *$v1_3 = $s0_1 */
+    *v1_3 = s0_1;
 
     /* Binary Ninja: arch_local_irq_restore($v0_2) */
     local_irq_restore(flags);
