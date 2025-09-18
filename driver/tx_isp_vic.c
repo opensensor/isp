@@ -1130,31 +1130,46 @@ void tx_isp_vic_write_csi_phy_sequence(void)
     pr_info("*** CRITICAL: CSI PHY SEQUENCE COMPLETE - NOW MATCHES REFERENCE DRIVER ORDER! ***\n");
 }
 
-int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
+/* tx_isp_csi_mipi_init - EXACT reference driver CSI MIPI initialization */
+int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
 {
-    void __iomem *csi_base;
-    pr_info("*** tx_isp_phy_init: CRITICAL CSI PHY initialization - VIC[0x380] always 0x0 ***\n");
-    if (!isp_dev) {
-        pr_err("tx_isp_phy_init: No ISP device available\n");
+    void __iomem *csi_base, *phy_base;
+    struct tx_isp_sensor_attribute *sensor_attr;
+    int lanes;
+
+    pr_info("*** tx_isp_csi_mipi_init: EXACT reference driver CSI MIPI configuration ***\n");
+
+    if (!isp_dev || !isp_dev->vic_dev) {
+        pr_err("tx_isp_csi_mipi_init: No ISP/VIC device available\n");
         return -ENODEV;
     }
 
-    csi_base = isp_dev->vic_dev->vic_regs - 0x9a00;  /* Calculate CSI base from VIC base */
-    if (!csi_base) {
-        pr_err("tx_isp_phy_init: No CSI base available\n");
-        return -ENODEV;
-    }
+    csi_base = isp_dev->vic_dev->vic_regs - 0x9a00;  /* CSI base = VIC base - 0x9a00 */
+    phy_base = csi_base + 0x1000;  /* PHY base = CSI base + 0x1000 */
 
-    /* CRITICAL DEBUG: Check if MIPI CSI PHY is receiving sensor data */
-    pr_info("*** CRITICAL: Checking MIPI CSI PHY status before configuration ***\n");
-    u32 csi_status = readl(csi_base + 0x8);
-    u32 phy_status = readl(csi_base + 0x14);
-    pr_info("CSI Status: 0x%08x, PHY Status: 0x%08x\n", csi_status, phy_status);
+    /* Get sensor attributes for lane configuration */
+    sensor_attr = &isp_dev->sensor_attr;
+    lanes = (sensor_attr->mipi.lans > 0) ? sensor_attr->mipi.lans : 2;  /* Default 2 lanes */
 
-    /* Check if MIPI lanes are receiving data */
-    u32 lane0_status = readl(csi_base + 0x40);
-    u32 lane1_status = readl(csi_base + 0x44);
-    pr_info("MIPI Lane 0 Status: 0x%08x, Lane 1 Status: 0x%08x\n", lane0_status, lane1_status);
+    pr_info("*** REFERENCE DRIVER CSI MIPI INIT: %d lanes, interface_type=1 ***\n", lanes);
+
+    /* STEP 1: EXACT reference driver CSI register sequence for MIPI */
+    /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
+    writel(lanes - 1, csi_base + 0x4);
+    wmb();
+    pr_info("CSI: Set lanes to %d (reg 0x4 = %d)\n", lanes, lanes - 1);
+
+    /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
+    u32 reg_val = readl(csi_base + 0x8);
+    writel(reg_val & 0xfffffffe, csi_base + 0x8);
+    wmb();
+
+    /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = 0 */
+    writel(0, csi_base + 0xc);
+    wmb();
+
+    /* Binary Ninja: private_msleep(1) */
+    msleep(1);
 
 
       /* ==============================================================================================
