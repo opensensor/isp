@@ -583,17 +583,12 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         if (status_new)
             writel(status_new, isp_regs + 0x98b8);
         wmb();
-        if (interrupt_status != 0) {
-            pr_info("*** ISP CORE INTERRUPT: bank=%s status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
-                    status_legacy ? "legacy(+0xb*)" : "new(+0x98b*)",
-                    interrupt_status, status_legacy, status_new);
-        } else if (isp_force_core_isr) {
-            pr_info("*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
-            interrupt_status = 1; /* Force Channel 0 frame-done path */
-        } else {
-            pr_info("*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
-                     status_legacy, status_new);
-            return IRQ_HANDLED; /* No interrupt to process */
+        if (interrupt_status == 0) {
+            if (isp_force_core_isr) {
+                interrupt_status = 1; /* Force Channel 0 frame-done path */
+            } else {
+                return IRQ_HANDLED; /* No interrupt to process */
+            }
         }
     }
 
@@ -625,13 +620,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* *** CRITICAL: MAIN INTERRUPT PROCESSING SECTION *** */
 
-    /* CRITICAL DEBUG: Log all interrupt status values to find the real frame sync bit */
-    pr_info("*** ISP CORE: INTERRUPT STATUS DEBUG: 0x%08x ***\n", interrupt_status);
-    pr_info("*** ISP CORE: Checking bits - 0x1000=%s, 0x1=%s, 0x2=%s, 0x4=%s ***\n",
-            (interrupt_status & 0x1000) ? "SET" : "clear",
-            (interrupt_status & 0x1) ? "SET" : "clear",
-            (interrupt_status & 0x2) ? "SET" : "clear",
-            (interrupt_status & 0x4) ? "SET" : "clear");
+    /* Binary Ninja: Minimal interrupt processing - no excessive logging */
 
     /* Binary Ninja: Frame sync interrupt processing - EXACT reference implementation */
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt */
