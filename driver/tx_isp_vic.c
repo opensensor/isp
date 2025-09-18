@@ -2937,10 +2937,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         }
                     }
 
-                    /* CRITICAL: Apply full VIC configuration now that sensor is streaming */
-                    pr_info("*** APPLYING FULL VIC CONFIGURATION AFTER SENSOR INITIALIZATION ***\n");
-                    tx_isp_vic_apply_full_config(vic_dev);
-
                     /* DELAYED VIC HARDWARE ENABLE: Now that everything is configured and sensor is streaming */
                     pr_info("*** DELAYED VIC HARDWARE ENABLE: Enabling VIC hardware after complete initialization ***\n");
                     void __iomem *vic_regs = vic_dev->vic_regs;
