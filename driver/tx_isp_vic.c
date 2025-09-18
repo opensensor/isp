@@ -405,14 +405,28 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                             /* CRITICAL: Call ispvic_frame_channel_qbuf when VBM buffers first become available */
                             static int vbm_buffers_programmed = 0;
                             pr_info("*** VIC INTERRUPT DEBUG: Checking VBM buffers - programmed=%d ***\n", vbm_buffers_programmed);
-                            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0 && !vbm_buffers_programmed) {
-                                pr_info("*** VIC INTERRUPT: VBM buffers now available - calling ispvic_frame_channel_qbuf ***\n");
+
+                            /* RESET FLAG FOR DEBUGGING - Allow multiple calls to see what's happening */
+                            if (vbm_buffers_programmed > 5) {
+                                vbm_buffers_programmed = 0;  /* Reset after 5 attempts */
+                                pr_info("*** VIC INTERRUPT DEBUG: Reset programmed flag for debugging ***\n");
+                            }
+
+                            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0 && vbm_buffers_programmed < 3) {
+                                vbm_buffers_programmed++;  /* Increment before call */
+                                pr_info("*** VIC INTERRUPT: VBM buffers now available - calling ispvic_frame_channel_qbuf (attempt %d) ***\n", vbm_buffers_programmed);
                                 int qbuf_result = ispvic_frame_channel_qbuf(vic_dev, NULL);
                                 if (qbuf_result == 0) {
-                                    vbm_buffers_programmed = 1;  /* Only call once */
-                                    pr_info("*** VIC INTERRUPT: Successfully programmed VIC buffer addresses ***\n");
+                                    pr_info("*** VIC INTERRUPT: Successfully programmed VIC buffer addresses (attempt %d) ***\n", vbm_buffers_programmed);
+
+                                    /* CRITICAL DEBUG: Check if VIC registers were actually written */
+                                    if (vic_dev->vic_regs) {
+                                        u32 vic_reg_0x318 = readl(vic_dev->vic_regs + 0x318);
+                                        u32 vic_reg_0x31c = readl(vic_dev->vic_regs + 0x31c);
+                                        pr_info("*** VIC INTERRUPT DEBUG: VIC[0x318]=0x%x, VIC[0x31c]=0x%x ***\n", vic_reg_0x318, vic_reg_0x31c);
+                                    }
                                 } else {
-                                    pr_err("*** VIC INTERRUPT: Failed to program VIC buffer addresses: %d ***\n", qbuf_result);
+                                    pr_err("*** VIC INTERRUPT: Failed to program VIC buffer addresses: %d (attempt %d) ***\n", qbuf_result, vbm_buffers_programmed);
                                 }
                             } else {
                                 pr_info("*** VIC INTERRUPT DEBUG: Condition not met - addr=%p, count=%d, programmed=%d ***\n",
