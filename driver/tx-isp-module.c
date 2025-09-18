@@ -2728,7 +2728,26 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         /* CRITICAL FIX: Use REAL buffer address from application instead of fake address */
         int buffer_size = state->width * state->height * 2;
-        uint32_t buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
+        uint32_t buffer_phys_addr;
+
+        /* Extract real buffer address from v4l2_buffer structure */
+        if (buffer.memory == V4L2_MEMORY_MMAP && buffer.m.offset != 0) {
+            /* Application provided real buffer address via mmap offset */
+            buffer_phys_addr = buffer.m.offset;
+            pr_info("*** Channel %d: QBUF - Using REAL buffer address from mmap offset: 0x%x ***\n",
+                    channel, buffer_phys_addr);
+        } else if (buffer.memory == V4L2_MEMORY_USERPTR && buffer.m.userptr != 0) {
+            /* Application provided real buffer address via userptr */
+            buffer_phys_addr = (uint32_t)buffer.m.userptr;
+            pr_info("*** Channel %d: QBUF - Using REAL buffer address from userptr: 0x%x ***\n",
+                    channel, buffer_phys_addr);
+        } else {
+            /* Fallback to generated address (but log this as an issue) */
+            buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
+            pr_warn("*** Channel %d: QBUF - WARNING: No real buffer address provided, using fallback: 0x%x ***\n",
+                    channel, buffer_phys_addr);
+            pr_warn("*** This may cause green frames - application should provide real buffer addresses! ***\n");
+        }
 
         pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d ***\n",
                 channel, buffer.index, buffer_phys_addr, buffer_size);
