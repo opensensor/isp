@@ -409,10 +409,11 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                             static int qbuf_call_count = 0;
 
                             /* CRITICAL FIX: Program VIC buffer addresses immediately when VBM buffers are first detected */
-                            static bool vic_buffers_programmed = false;
+                            static int vic_buffer_setup_attempts = 0;
 
-                            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0 && !vic_buffers_programmed) {
-                                pr_info("*** VIC INTERRUPT: VBM buffers detected - programming VIC buffer addresses immediately ***\n");
+                            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0 && vic_status == 0x0 && vic_buffer_setup_attempts < 3) {
+                                vic_buffer_setup_attempts++;
+                                pr_info("*** VIC INTERRUPT: VBM buffers detected - programming VIC buffer addresses (attempt %d) ***\n", vic_buffer_setup_attempts);
 
                                 /* Program VBM buffer addresses into VIC registers 0x318-0x328 like reference driver */
                                 for (int i = 0; i < state->vbm_buffer_count && i < 8; i++) {
@@ -427,8 +428,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                                 vic_dev->active_buffer_count = state->vbm_buffer_count;
                                 pr_info("*** VIC BUFFER SETUP: Updated VIC active_buffer_count = %d ***\n", vic_dev->active_buffer_count);
 
-                                /* Mark buffers as programmed so we don't repeat this */
-                                vic_buffers_programmed = true;
+                                /* Allow a few attempts to ensure it takes effect */
 
                                 /* CRITICAL: Restart VIC streaming with proper buffer configuration */
                                 /* This is what the reference driver does after programming buffer addresses */
