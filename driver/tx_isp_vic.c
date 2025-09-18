@@ -385,8 +385,16 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
                                 pr_info("*** VIC BUFFER MGMT: VIC[0x380]=0x0, using REAL VBM buffer addr=0x%x ***\n", completed_buffer_addr);
 
+                                /* CRITICAL DMA SYNC: Synchronize completed buffer for CPU access */
+                                u32 frame_size = state->width * state->height * 2;  /* RAW10 = 2 bytes/pixel */
+                                dma_sync_single_for_cpu(NULL, completed_buffer_addr, frame_size, DMA_FROM_DEVICE);
+
                                 /* Program next REAL VBM buffer to VIC register 0x380 for continuous streaming */
                                 u32 next_buffer_addr = state->vbm_buffer_addresses[vbm_buffer_cycle];
+
+                                /* CRITICAL DMA SYNC: Synchronize next buffer for device access */
+                                dma_sync_single_for_device(NULL, next_buffer_addr, frame_size, DMA_FROM_DEVICE);
+
                                 writel(next_buffer_addr, vic_regs + 0x380);
                                 wmb();
                                 pr_info("*** VIC BUFFER MGMT: VIC[0x380] = 0x%x (next REAL VBM buffer) ***\n", next_buffer_addr);
@@ -481,6 +489,55 @@ label_123f4:
 }
 
 /* vic_mdma_irq_function - Binary Ninja implementation for MDMA channel interrupts */
+static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
+{
+    u32 frame_size;
+
+    if (!vic_dev) {
+        pr_err("vic_mdma_irq_function: NULL vic_dev\n");
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
+    if (vic_dev->stream_state == 0) {
+        /* Binary Ninja: int32_t $s0_2 = *(arg1 + 0xdc) * *(arg1 + 0xe0) */
+        frame_size = vic_dev->width * vic_dev->height;
+
+        pr_info("Info[VIC_MDAM_IRQ] : channel[%d] frame done\n", channel);
+
+        /* Binary Ninja: int32_t $s0_3 = $s0_2 << 1 */
+        frame_size = frame_size << 1;  /* RAW10 = 2 bytes per pixel */
+
+        /* CRITICAL DMA SYNC: Handle buffer completion with proper DMA operations */
+        if (vic_dev->vbm_buffer_addresses && vic_dev->vbm_buffer_count > 0) {
+            static int current_buffer_index = 0;
+            dma_addr_t completed_buffer = vic_dev->vbm_buffer_addresses[current_buffer_index];
+
+            /* DMA sync for CPU access to completed buffer */
+            dma_sync_single_for_cpu(NULL, completed_buffer, frame_size, DMA_FROM_DEVICE);
+
+            pr_info("*** VIC MDMA IRQ: Buffer[%d] addr=0x%x completed and synced for CPU ***\n",
+                    current_buffer_index, completed_buffer);
+
+            /* Cycle to next buffer */
+            current_buffer_index = (current_buffer_index + 1) % vic_dev->vbm_buffer_count;
+            dma_addr_t next_buffer = vic_dev->vbm_buffer_addresses[current_buffer_index];
+
+            /* DMA sync for device access to next buffer */
+            dma_sync_single_for_device(NULL, next_buffer, frame_size, DMA_FROM_DEVICE);
+
+            pr_info("*** VIC MDMA IRQ: Next buffer[%d] addr=0x%x synced for device ***\n",
+                    current_buffer_index, next_buffer);
+        }
+
+        /* Binary Ninja: return private_complete(arg1 + 0x148) */
+        complete(&vic_dev->frame_completion);
+        return 0;
+    }
+
+    pr_debug("vic_mdma_irq_function: Stream not active, skipping\n");
+    return 0;
+}
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 {
     void __iomem *vic_base = vic_dev->vic_regs;
