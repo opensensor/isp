@@ -533,28 +533,19 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         frame_size = frame_size << 1;  /* RAW10 = 2 bytes per pixel */
 
         /* CRITICAL DMA SYNC: Handle buffer completion with proper DMA operations */
-        extern struct tx_isp_channel_state *channel_states[ISP_MAX_CHAN];
-        struct tx_isp_channel_state *state = channel_states[0];
+        struct tx_isp_dev *isp_dev = vic_dev->sd.isp;
 
-        if (state && state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-            static int current_buffer_index = 0;
-            dma_addr_t completed_buffer = state->vbm_buffer_addresses[current_buffer_index];
-
+        if (isp_dev && isp_dev->dma_buf && isp_dev->dma_size > 0) {
             /* DMA sync for CPU access to completed buffer */
-            mips_dma_cache_sync(completed_buffer, frame_size, DMA_FROM_DEVICE);
+            mips_dma_cache_sync(isp_dev->dma_addr, frame_size, DMA_FROM_DEVICE);
 
-            pr_info("*** VIC MDMA IRQ: Buffer[%d] addr=0x%x completed and synced for CPU ***\n",
-                    current_buffer_index, completed_buffer);
+            pr_info("*** VIC MDMA IRQ: ISP buffer addr=0x%x completed and synced for CPU ***\n",
+                    isp_dev->dma_addr);
 
-            /* Cycle to next buffer */
-            current_buffer_index = (current_buffer_index + 1) % state->vbm_buffer_count;
-            dma_addr_t next_buffer = state->vbm_buffer_addresses[current_buffer_index];
-
-            /* DMA sync for device access to next buffer */
-            mips_dma_cache_sync(next_buffer, frame_size, DMA_FROM_DEVICE);
-
-            pr_info("*** VIC MDMA IRQ: Next buffer[%d] addr=0x%x synced for device ***\n",
-                    current_buffer_index, next_buffer);
+            /* Signal frame completion */
+            complete(&vic_dev->frame_complete);
+        } else {
+            pr_debug("*** VIC MDMA IRQ: No ISP DMA buffer available for sync ***\n");
         }
 
         /* Binary Ninja: return private_complete(arg1 + 0x148) */
