@@ -393,37 +393,83 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
     return (result == -ENOIOCTLCMD) ? 0 : result;
 }
 
-/* Frame sync work queue item structure - Binary Ninja shows 2-word items */
-struct fs_work_queue_item {
-    uint32_t state;     /* *$s2_1 - item state flag */
-    uint32_t data;      /* $s2_1[1] - item data */
-};
-
-/* Frame sync work queue - EXACT Binary Ninja implementation */
-static struct fs_work_queue_item fs_work_queue[7] = {0};
-
-/* Queue a frame sync work item - Binary Ninja equivalent */
-static void fs_work_queue_item(int type, uint32_t data)
-{
-    /* Find first empty slot (state == 0) */
-    for (int i = 0; i < 7; i++) {
-        if (i == 5) continue;  /* Skip slot 5 like Binary Ninja */
-
-        if (fs_work_queue[i].state == 0) {
-            fs_work_queue[i].state = 1;  /* Mark as pending */
-            fs_work_queue[i].data = data;
-            pr_debug("*** FS WORK QUEUE: Queued item type %d at slot %d ***\n", type, i);
-            return;
-        }
-    }
-    pr_debug("*** FS WORK QUEUE: Queue full, dropping item type %d ***\n", type);
-}
-
-/* Frame sync work function - DISABLED to test soft lockup */
+/* Frame sync work function - Safe implementation without dangerous offsets */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
-    /* TEMPORARY: Completely disable work function to test if it's causing soft lockup */
-    return;
+    extern struct tx_isp_dev *ourISPdev;
+    struct tx_isp_dev *isp_dev = ourISPdev;
+    static int sensor_call_counter = 0;
+
+    pr_info("*** ISP FRAME SYNC WORK: ENTRY - Work function is running! ***\n");
+    pr_info("*** ISP FRAME SYNC WORK: Safe implementation without dangerous offsets ***\n");
+
+    if (!isp_dev) {
+        pr_warn("*** ISP FRAME SYNC WORK: isp_dev is NULL ***\n");
+        return;
+    }
+
+    /* MATCH REFERENCE DRIVER: Check conditions every frame, call sensor when conditions are met */
+    pr_info("*** ISP FRAME SYNC WORK: Checking sensor conditions (like Binary Ninja reference) ***\n");
+
+    /* CRITICAL FIX: Auto-detect streaming state from VIC hardware */
+    bool vic_is_streaming = false;
+    if (isp_dev->vic_dev) {
+        struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+        vic_is_streaming = (vic->stream_state == 1);  /* VIC stream_state = 1 means streaming */
+
+        /* Auto-set streaming_enabled if VIC is streaming but flag is false */
+        if (vic_is_streaming && !isp_dev->streaming_enabled) {
+            pr_info("*** ISP FRAME SYNC WORK: Auto-setting streaming_enabled=true (VIC is streaming) ***\n");
+            isp_dev->streaming_enabled = true;
+        }
+    }
+
+    /* Check if sensor is available and streaming is active */
+    pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d, vic_streaming=%d ***\n",
+            isp_dev->sensor, isp_dev->streaming_enabled, vic_is_streaming);
+
+    /* CRITICAL FIX: Frame sync work SHOULD call sensor operations like reference driver! */
+    /* Reference driver ispcore_irq_fs_work calls ispcore_sensor_ops_ioctl for AE/AGC/AWB */
+    pr_info("*** ISP FRAME SYNC WORK: Frame sync processing (calling sensor operations) ***\n");
+
+    if (isp_dev->sensor && isp_dev->streaming_enabled) {
+        pr_info("*** ISP FRAME SYNC WORK: Calling sensor operations (like reference driver) ***\n");
+
+        /* CRITICAL: Call sensor operations like reference driver ispcore_irq_fs_work */
+        /* This triggers AE/AGC/AWB sensor I2C operations */
+        /* Add error handling to prevent work queue crashes */
+        extern int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev);
+
+        int sensor_result = -ENODEV;
+
+        /* CRITICAL FIX: Do proper per-frame sensor operations like reference driver */
+        /* Frame sync should do AE/AGC operations, NOT FPS control */
+        pr_info("*** ISP FRAME SYNC WORK: Performing per-frame sensor operations (AE/AGC) ***\n");
+
+        /* REFERENCE DRIVER: Call ispcore_sensor_ops_ioctl exactly like reference */
+        /* Binary Ninja: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
+        pr_info("*** ISP FRAME SYNC WORK: Calling ispcore_sensor_ops_ioctl (reference driver) ***\n");
+        sensor_result = ispcore_sensor_ops_ioctl(isp_dev);
+        pr_info("*** ISP FRAME SYNC WORK: ispcore_sensor_ops_ioctl result: %d ***\n", sensor_result);
+
+        if (sensor_result == 0) {
+            pr_info("*** ISP FRAME SYNC WORK: All sensor operations successful ***\n");
+        } else if (sensor_result == -ENOIOCTLCMD) {
+            pr_info("*** ISP FRAME SYNC WORK: No sensor IOCTL command (normal) ***\n");
+        } else {
+            pr_warn("*** ISP FRAME SYNC WORK: Sensor operations failed: %d ***\n", sensor_result);
+        }
+
+        pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (sensor available) ***\n");
+    } else {
+        pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (no sensor/not streaming) ***\n");
+    }
+
+    pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation complete - work finished ***\n");
+
+    /* CRITICAL: Ensure work completion is visible to prevent queue backup */
+    sensor_call_counter++;
+    pr_info("*** ISP FRAME SYNC WORK: Work completion #%d - ready for next interrupt ***\n", sensor_call_counter);
 }
 
 /* Forward declarations for frame channel functions - avoid naming conflicts */
@@ -534,12 +580,17 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         if (status_new)
             writel(status_new, isp_regs + 0x98b8);
         wmb();
-        if (interrupt_status == 0) {
-            if (isp_force_core_isr) {
-                interrupt_status = 1; /* Force Channel 0 frame-done path */
-            } else {
-                return IRQ_HANDLED; /* No interrupt to process */
-            }
+        if (interrupt_status != 0) {
+            pr_info("*** ISP CORE INTERRUPT: bank=%s status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
+                    status_legacy ? "legacy(+0xb*)" : "new(+0x98b*)",
+                    interrupt_status, status_legacy, status_new);
+        } else if (isp_force_core_isr) {
+            pr_info("*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
+            interrupt_status = 1; /* Force Channel 0 frame-done path */
+        } else {
+            pr_info("*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
+                     status_legacy, status_new);
+            return IRQ_HANDLED; /* No interrupt to process */
         }
     }
 
@@ -571,12 +622,49 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* *** CRITICAL: MAIN INTERRUPT PROCESSING SECTION *** */
 
-    /* Binary Ninja: Minimal interrupt processing - no excessive logging */
+    /* CRITICAL DEBUG: Log all interrupt status values to find the real frame sync bit */
+    pr_info("*** ISP CORE: INTERRUPT STATUS DEBUG: 0x%08x ***\n", interrupt_status);
+    pr_info("*** ISP CORE: Checking bits - 0x1000=%s, 0x1=%s, 0x2=%s, 0x4=%s ***\n",
+            (interrupt_status & 0x1000) ? "SET" : "clear",
+            (interrupt_status & 0x1) ? "SET" : "clear",
+            (interrupt_status & 0x2) ? "SET" : "clear",
+            (interrupt_status & 0x4) ? "SET" : "clear");
 
-    /* Binary Ninja: Frame sync interrupt processing - DISABLED to test soft lockup */
+    /* Binary Ninja: Frame sync interrupt processing */
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt */
-        /* TEMPORARY: Disable work scheduling to test if this causes soft lockup */
-        /* schedule_work(&fs_work); */
+        pr_info("*** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***\n");
+
+        /* CRITICAL FIX: Always acknowledge the interrupt, even if work is already queued */
+        /* The key is to let the interrupt return IRQ_HANDLED to prevent interrupt storms */
+        pr_info("*** ISP CORE: Frame sync interrupt - attempting to queue work ***\n");
+
+        /* REFERENCE DRIVER: Use private_schedule_work like reference driver */
+        /* Binary Ninja: private_schedule_work calls queue_work_on for CPU-specific scheduling */
+        pr_info("*** ISP CORE: Using reference driver work scheduling ***\n");
+
+        if (fs_workqueue) {
+            pr_info("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
+            /* REFERENCE DRIVER: Use queue_work_on for CPU 0 like private_schedule_work */
+            if (queue_work_on(0, fs_workqueue, &fs_work)) {
+                pr_info("*** ISP CORE: Work queued successfully on CPU 0 ***\n");
+            } else {
+                pr_info("*** ISP CORE: Work was already queued - acknowledging interrupt anyway ***\n");
+            }
+        } else {
+            pr_warn("*** ISP CORE: fs_workqueue is NULL - using system workqueue ***\n");
+            /* REFERENCE DRIVER: Use schedule_work_on for CPU 0 */
+            if (schedule_work_on(0, &fs_work)) {
+                pr_info("*** ISP CORE: Work scheduled successfully on CPU 0 ***\n");
+            } else {
+                pr_info("*** ISP CORE: Work was already scheduled - acknowledging interrupt anyway ***\n");
+            }
+        }
+
+        /* Binary Ninja: Frame timing measurement */
+        /* Complex timing measurement code would be here */
+
+        /* Binary Ninja: if (isp_ch0_pre_dequeue_time != 0) */
+        /* Pre-frame dequeue work scheduling */
     }
 
     /* BINARY NINJA EXACT: Handle interrupt status like reference driver */
@@ -600,13 +688,35 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: Error interrupt processing */
     if (interrupt_status & 0x200) {  /* Error interrupt type 1 */
-        /* Binary Ninja: if (*($s0 + 0x17c) != 0) exception_handle() */
-        /* Binary Ninja: data_ca578 += 1 */
+        pr_info("ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR\n");
+
+        /* CRITICAL FIX: This error interrupt indicates pipeline misconfiguration */
+        /* Clear the error condition by reading/clearing error registers */
         if (isp_regs) {
-            u32 error_status = readl(isp_regs + 0xc);
+            u32 error_status = readl(isp_regs + 0xc);  /* Read error status */
+            pr_info("*** ISP CORE: Error status register 0xc = 0x%x ***\n", error_status);
+
+            /* Clear error bits by writing back */
             writel(error_status, isp_regs + 0xc);
             wmb();
+
+            pr_info("*** ISP CORE: Error interrupt cleared ***\n");
         }
+
+        /* Binary Ninja: exception_handle() */
+        /* Error handling would be here */
+    }
+
+    /* Binary Ninja EXACT: Handle bit 9 (0x200) - Processing status */
+    if (interrupt_status & 0x200) {
+        /* Binary Ninja: if (*($s0 + 0x17c) != 0) exception_handle() */
+        /* Binary Ninja: data_ca578 += 1 */
+        static int status_200_count = 0;
+        status_200_count++;
+
+        pr_debug("ISP CORE: Status bit 9 (0x200) - count: %d\n", status_200_count);
+
+        /* TODO: Check condition at offset 0x17c and call exception_handle() if needed */
     }
 
     /* Binary Ninja EXACT: Handle bit 8 (0x100) - Processing status */
@@ -639,15 +749,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             isp_dev->frame_count++;
         }
 
-        /* Binary Ninja: Complex frame processing loop - ADD TIMEOUT TO PREVENT SOFT LOCKUP */
-        int timeout_count = 0;
+        /* Binary Ninja: Complex frame processing loop */
         while ((readl(vic_regs + 0x997c) & 1) == 0) {
-            /* CRITICAL: Add timeout to prevent infinite loop causing soft lockup */
-            if (++timeout_count > 1000) {
-                pr_err("*** SOFT LOCKUP FIX: VIC frame completion timeout - register 0x997c never ready ***\n");
-                break;
-            }
-
             u32 frame_buffer_addr = readl(vic_regs + 0x9974);
             u32 frame_info1 = readl(vic_regs + 0x998c);
             u32 frame_info2 = readl(vic_regs + 0x9990);
@@ -671,18 +774,16 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: Channel 1 frame done */
     if (interrupt_status & 2) {  /* Channel 1 frame done */
+        pr_info("*** ISP CORE: CHANNEL 1 FRAME DONE INTERRUPT ***\n");
         /* Binary Ninja: Similar processing for channel 1 - ADD TIMEOUT */
         int timeout_count = 0;
         while ((readl(vic_regs + 0x9a7c) & 1) == 0) {
-            /* CRITICAL: Add timeout to prevent infinite loop causing soft lockup */
-            if (++timeout_count > 1000) {
-                pr_err("*** SOFT LOCKUP FIX: VIC channel 1 completion timeout - register 0x9a7c never ready ***\n");
-                break;
-            }
-
             u32 frame_buffer_addr = readl(vic_regs + 0x9a74);
             u32 frame_info1 = readl(vic_regs + 0x9a8c);
             u32 frame_info2 = readl(vic_regs + 0x9a90);
+
+            pr_info("*** CH1 FRAME COMPLETION: addr=0x%x, info1=0x%x, info2=0x%x ***\n",
+                   frame_buffer_addr, frame_info1, frame_info2);
 
             /* Wake up channel 1 waiters */
             if (isp_core_channels[1].state.streaming) {
@@ -694,15 +795,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     /* Binary Ninja: Channel 2 frame completion */
     if (interrupt_status & 4) {
         pr_info("ISP CORE: Channel 2 frame done\n");
-        /* Similar processing for channel 2 - ADD TIMEOUT */
-        int timeout_count = 0;
+        /* Similar processing for channel 2 */
         while ((readl(vic_regs + 0x9b7c) & 1) == 0) {
-            /* CRITICAL: Add timeout to prevent infinite loop causing soft lockup */
-            if (++timeout_count > 1000) {
-                pr_err("*** SOFT LOCKUP FIX: VIC channel 2 completion timeout - register 0x9b7c never ready ***\n");
-                break;
-            }
-
             /* Channel 2 frame processing */
             if (isp_core_channels[2].state.streaming) {
                 frame_channel_wakeup_waiters(&isp_core_channels[2]);
@@ -718,10 +812,12 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             /* Binary Ninja: if (irq_func_cb[i] != 0) */
             if (irq_func_cb[i] != NULL) {
                 irqreturn_t callback_result = irq_func_cb[i](irq, dev_id);
-                /* Binary Ninja: Check callback result but no logging in interrupt context */
+                pr_info("ISP CORE: IRQ callback[%d] returned %d\n", i, callback_result);
             }
         }
     }
+
+    pr_info("*** ISP CORE INTERRUPT PROCESSING COMPLETE ***\n");
 
     /* Binary Ninja: return 1 */
     return IRQ_HANDLED;
@@ -779,22 +875,6 @@ irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
             writel(error_status, isp_dev->vic_regs + 0x84c);  /* Clear by writing back */
             wmb();
         }
-
-        /* Clear other common VIC error registers */
-        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x850);  /* Error flags register 1 */
-        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x854);  /* Error flags register 2 */
-        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x858);  /* Error flags register 3 */
-        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x85c);  /* Error flags register 4 */
-
-        /* Clear FIFO error status registers */
-        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x860);  /* FIFO status */
-        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x864);  /* FIFO error */
-
-        /* Clear frame error status registers */
-        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x870);  /* Frame error status */
-        writel(0xFFFFFFFF, isp_dev->vic_regs + 0x874);  /* Frame sync error */
-
-        wmb();
 
         /* Re-enable error interrupts after clearing error conditions */
         u32 int_mask = readl(isp_dev->vic_regs + 0xb0);
