@@ -2549,8 +2549,7 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             pr_info("*** VIC[0x300] will be written by ispvic_frame_channel_qbuf after buffer addresses are programmed ***\n");
 
             /* MCP LOG: Stream ON completed */
-            pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
-                    stream_ctrl, vic_base, 1);
+            pr_info("MCP_LOG: VIC MDMA configured - base=%p, state=%d\n", vic_base, 1);
         }
         
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
