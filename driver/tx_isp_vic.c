@@ -23,60 +23,6 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
-/* CRITICAL FIX: Interrupt protection mechanism against tuning system overwrites */
-static struct timer_list vic_interrupt_protection_timer;
-static int vic_interrupt_protection_active = 0;
-
-/* Timer callback to restore interrupt registers that get overwritten by CSI PHY writes and tuning system */
-static void vic_interrupt_protection_timer_callback(unsigned long data)
-{
-    extern struct tx_isp_dev *ourISPdev;
-
-    if (!vic_interrupt_protection_active || !ourISPdev || !ourISPdev->vic_dev || vic_start_ok != 1) {
-        return;
-    }
-
-    /* CRITICAL: Restore interrupt registers that get overwritten by CSI PHY writes */
-    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-    if (vic_dev && vic_dev->vic_regs) {
-        /* Check if VIC interrupt enable was overwritten by CSI PHY writes */
-        u32 current_enable = readl(vic_dev->vic_regs + 0x1e0);
-        u32 current_mask = readl(vic_dev->vic_regs + 0x1e8);
-
-        /* CRITICAL: CSI PHY writes can reset these registers to 0x0 */
-        if (current_enable == 0x0 || current_mask != 0xFFFFFFFE) {
-            /* Restore VIC interrupt configuration immediately */
-            writel(0x3FFFFFFF, vic_dev->vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-            writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
-            wmb();
-            pr_info("*** VIC INTERRUPT PROTECTION: CSI PHY interference detected - VIC interrupts restored ***\n");
-        }
-
-        /* Check if ISP core interrupt masks were overwritten */
-        if (ourISPdev->core_regs) {
-            void __iomem *core = ourISPdev->core_regs;
-            u32 legacy_enable = readl(core + 0xb0);
-            u32 legacy_mask = readl(core + 0xbc);
-            u32 new_enable = readl(core + 0x98b0);
-            u32 new_mask = readl(core + 0x98bc);
-
-            /* Restore ISP core interrupt configuration if overwritten */
-            if (legacy_enable != 0x3FFF || legacy_mask != 0x1000 ||
-                new_enable != 0x3FFF || new_mask != 0x1000) {
-                writel(0x3FFF, core + 0xb0);        /* Legacy enable - all interrupt sources */
-                writel(0x1000, core + 0xbc);        /* Legacy unmask - frame sync only */
-                writel(0x3FFF, core + 0x98b0);      /* New enable - all interrupt sources */
-                writel(0x1000, core + 0x98bc);      /* New unmask - frame sync only */
-                wmb();
-                pr_info("*** VIC INTERRUPT PROTECTION: ISP core interrupts restored ***\n");
-            }
-        }
-    }
-
-    /* Reschedule timer for next check (every 50ms for faster CSI PHY interference detection) */
-    mod_timer(&vic_interrupt_protection_timer, jiffies + msecs_to_jiffies(50));
-}
-
 /* system_reg_write is now defined in tx-isp-module.c - removed duplicate */
 
 /* Debug function to track vic_start_ok changes */
@@ -468,21 +414,6 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                                 int qbuf_result = ispvic_frame_channel_qbuf(vic_dev, NULL);
                                 if (qbuf_result == 0) {
                                     pr_info("*** VIC INTERRUPT: Successfully programmed VIC buffer addresses (call %d) ***\n", qbuf_call_count);
-
-                                    /* DEBUG: Check if VIC registers were actually written */
-                                    if (vic_dev->vic_regs) {
-                                        u32 vic_reg_0x318 = readl(vic_dev->vic_regs + 0x318);
-                                        u32 vic_reg_0x31c = readl(vic_dev->vic_regs + 0x31c);
-                                        u32 vic_reg_0x320 = readl(vic_dev->vic_regs + 0x320);
-                                        u32 vic_reg_0x324 = readl(vic_dev->vic_regs + 0x324);
-                                        u32 vic_reg_0x300 = readl(vic_dev->vic_regs + 0x300);
-                                        pr_info("*** VIC REGISTERS: [0x318]=0x%x [0x31c]=0x%x [0x320]=0x%x [0x324]=0x%x [0x300]=0x%x ***\n",
-                                                vic_reg_0x318, vic_reg_0x31c, vic_reg_0x320, vic_reg_0x324, vic_reg_0x300);
-
-                                        /* Check if VIC[0x380] changed after our programming */
-                                        u32 vic_status_after = readl(vic_regs + 0x380);
-                                        pr_info("*** VIC STATUS: Before=0x%x, After=0x%x ***\n", vic_status, vic_status_after);
-                                    }
                                 } else {
                                     pr_err("*** VIC INTERRUPT: Failed to program VIC buffer addresses: %d (call %d) ***\n", qbuf_result, qbuf_call_count);
                                 }
@@ -1670,9 +1601,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         /* Binary Ninja: EXACT reference driver MIPI mode configuration */
         /* Binary Ninja: 000107ec - Set CSI mode */
-        writel(3, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
+        writel(1, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
         wmb();
-        pr_info("*** VIC: Set MIPI mode (2) to VIC control register 0xc - PREVENTS CONTROL LIMIT ERROR ***\n");
+        pr_info("*** VIC: Set MIPI mode (1) to VIC control register 0xc - PREVENTS CONTROL LIMIT ERROR ***\n");
 
         /* BINARY NINJA EXACT: All missing register configurations */
 
