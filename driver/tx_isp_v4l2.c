@@ -84,13 +84,15 @@ static int tx_isp_v4l2_s_fmt_vid_cap(struct file *file, void *priv,
         return -EINVAL;
     }
     
-    /* Validate pixel format */
-    if (f->fmt.pix.pixelformat != V4L2_PIX_FMT_NV12 && 
+    /* CRITICAL FIX: Support RAW10 format for application compatibility */
+    /* Validate pixel format - now supporting RAW10 */
+    if (f->fmt.pix.pixelformat != V4L2_PIX_FMT_SRGGB10 &&
+        f->fmt.pix.pixelformat != V4L2_PIX_FMT_NV12 &&
         f->fmt.pix.pixelformat != V4L2_PIX_FMT_YUYV &&
         f->fmt.pix.pixelformat != 0x3231564e) { /* NV12 alternative format */
-        pr_warn("Channel %d: Unsupported pixel format 0x%x, using NV12\n",
+        pr_warn("Channel %d: Unsupported pixel format 0x%x, using RAW10\n",
                 dev->channel_num, f->fmt.pix.pixelformat);
-        f->fmt.pix.pixelformat = V4L2_PIX_FMT_NV12;
+        f->fmt.pix.pixelformat = V4L2_PIX_FMT_SRGGB10;  /* Default to RAW10 */
     }
     
     /* Set format parameters based on channel */
