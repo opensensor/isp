@@ -104,17 +104,13 @@ static int tx_isp_v4l2_s_fmt_vid_cap(struct file *file, void *priv,
         f->fmt.pix.height = min_t(u32, f->fmt.pix.height, 360);
     }
     
-    /* Calculate stride and image size based on format */
-    if (f->fmt.pix.pixelformat == V4L2_PIX_FMT_SRGGB10) {
-        /* RAW10 format: 10 bits per pixel = 1.25 bytes per pixel */
-        f->fmt.pix.bytesperline = f->fmt.pix.width * 10 / 8;
-        f->fmt.pix.sizeimage = f->fmt.pix.width * f->fmt.pix.height * 10 / 8;
-    } else if (f->fmt.pix.pixelformat == V4L2_PIX_FMT_YUYV) {
-        f->fmt.pix.bytesperline = f->fmt.pix.width * 2;
+    /* Calculate stride and image size */
+    f->fmt.pix.bytesperline = f->fmt.pix.width;
+    if (f->fmt.pix.pixelformat == V4L2_PIX_FMT_YUYV) {
+        f->fmt.pix.bytesperline *= 2;
         f->fmt.pix.sizeimage = f->fmt.pix.bytesperline * f->fmt.pix.height;
     } else {
         /* NV12 format */
-        f->fmt.pix.bytesperline = f->fmt.pix.width;
         f->fmt.pix.sizeimage = f->fmt.pix.width * f->fmt.pix.height * 3 / 2;
     }
     
