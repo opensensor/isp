@@ -1150,8 +1150,17 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
         return -ENODEV;
     }
 
-    csi_base = isp_dev->vic_dev->vic_regs - 0x9a00;  /* CSI base = VIC base - 0x9a00 */
-    phy_base = csi_base + 0x1000;  /* PHY base = CSI base + 0x1000 */
+    /* CRITICAL FIX: Use correct CSI/PHY base addresses from memory mappings */
+    /* CSI registers are at 0x10022000, PHY registers are at 0x10021000 */
+    csi_base = ioremap(0x10022000, 0x1000);  /* CSI registers */
+    phy_base = ioremap(0x10021000, 0x1000);  /* PHY registers */
+
+    if (!csi_base || !phy_base) {
+        pr_err("tx_isp_csi_mipi_init: Failed to map CSI/PHY registers\n");
+        if (csi_base) iounmap(csi_base);
+        if (phy_base) iounmap(phy_base);
+        return -ENOMEM;
+    }
 
     /* Get sensor attributes from VIC device */
     sensor_attr = &isp_dev->vic_dev->sensor_attr;
