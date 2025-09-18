@@ -3249,20 +3249,46 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     if (num_channels > 0) {
         struct tx_isp_channel_state *state = &frame_channels[0].state;
 
-        /* SAFE: Check if we have VBM buffers available */
-        if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-            /* SAFE: Program VIC buffer addresses using safe array access */
-            int i;
-            for (i = 0; i < state->vbm_buffer_count && i < 8; i++) {
-                /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
-                /* SAFE: Calculate register offset using safe formula */
-                u32 buffer_reg_offset = (i + 0xc6) << 2;
-                buffer_addr = state->vbm_buffer_addresses[i];
+        /* CRITICAL: Use ISP DMA buffer addresses instead of VBM buffer addresses */
+        /* The OSD flicker suggests sensor data is captured but routed to wrong buffers */
+        extern struct tx_isp_dev *ourISPdev;
+        if (ourISPdev && ourISPdev->dma_addr && ourISPdev->dma_size > 0) {
+            /* Use ISP DMA buffer address - this is where VIC should write frame data */
+            u32 isp_dma_addr = (u32)ourISPdev->dma_addr;
+            u32 frame_size = 1920 * 1080 * 2;  /* RAW10 = 2 bytes per pixel */
 
-                pr_info("*** ispvic_frame_channel_qbuf: SAFE VIC buffer[%d] reg[0x%x] = 0x%x ***\n",
+            pr_info("*** ispvic_frame_channel_qbuf: Using ISP DMA buffer instead of VBM buffers ***\n");
+            pr_info("*** ISP DMA: addr=0x%x, size=%d, frame_size=%d ***\n",
+                    isp_dma_addr, ourISPdev->dma_size, frame_size);
+
+            /* Program multiple VIC buffer addresses using ISP DMA buffer with offsets */
+            int i;
+            for (i = 0; i < 4 && i < 8; i++) {
+                /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
+                u32 buffer_reg_offset = (i + 0xc6) << 2;
+                buffer_addr = isp_dma_addr + (i * frame_size);  /* Offset each buffer */
+
+                pr_info("*** ispvic_frame_channel_qbuf: ISP DMA VIC buffer[%d] reg[0x%x] = 0x%x ***\n",
                         i, buffer_reg_offset, buffer_addr);
 
                 /* SAFE: Write to VIC register using proper I/O */
+                writel(buffer_addr, vic_dev->vic_regs + buffer_reg_offset);
+                wmb();
+            }
+
+            /* Update buffer count to match ISP DMA buffers */
+            vic_dev->active_buffer_count = 4;
+        } else if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+            /* Fallback to VBM buffers if ISP DMA not available */
+            pr_info("*** ispvic_frame_channel_qbuf: Fallback to VBM buffers ***\n");
+            int i;
+            for (i = 0; i < state->vbm_buffer_count && i < 8; i++) {
+                u32 buffer_reg_offset = (i + 0xc6) << 2;
+                buffer_addr = state->vbm_buffer_addresses[i];
+
+                pr_info("*** ispvic_frame_channel_qbuf: VBM VIC buffer[%d] reg[0x%x] = 0x%x ***\n",
+                        i, buffer_reg_offset, buffer_addr);
+
                 writel(buffer_addr, vic_dev->vic_regs + buffer_reg_offset);
                 wmb();
             }
