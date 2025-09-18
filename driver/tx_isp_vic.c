@@ -2541,30 +2541,12 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             }
         }
 
-        /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+        /* REMOVED: VIC[0x300] write moved to ispvic_frame_channel_qbuf for correct timing */
+        /* VIC control register should be written AFTER buffer addresses are programmed */
         vic_base = vic_dev->vic_regs;
         if (vic_base && (unsigned long)vic_base >= 0x80000000) {
-            pr_info("ispvic_frame_channel_s_stream: BEFORE - active_buffer_count=%d\n", vic_dev->active_buffer_count);
-
-            /* CRITICAL FIX: Follow EXACT reference driver buffer management sequence */
-            /* Reference driver ALWAYS starts VIC hardware immediately with proper buffer configuration */
-            pr_info("*** REFERENCE DRIVER SEQUENCE: Starting VIC hardware with exact buffer configuration ***\n");
-
-            /* Binary Ninja EXACT: Use reference driver buffer management values */
-            /* The reference driver uses specific buffer count and control values that prevent control limit errors */
-            u32 reference_buffer_count = 2;  /* Reference driver uses 2 buffers */
-            u32 reference_control_bits = 0x80000020;  /* Exact reference driver control bits */
-
-            /* BINARY NINJA EXACT: Use exact reference driver formula to prevent control limit error */
-            /* Binary Ninja: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
-            u32 buffer_count = vic_dev->active_buffer_count;
-            u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* EXACT Binary Ninja formula */
-            writel(stream_ctrl, vic_base + 0x300);
-            wmb();
-
-            pr_info("*** BINARY NINJA EXACT: Wrote 0x%x to reg 0x300 (buffer_count=%d, formula: (count<<16)|0x80000020) ***\n",
-                    stream_ctrl, buffer_count);
-            pr_info("*** This should prevent control limit error by using EXACT Binary Ninja reference driver formula ***\n");
+            pr_info("ispvic_frame_channel_s_stream: VIC MDMA configured - waiting for buffer programming\n");
+            pr_info("*** VIC[0x300] will be written by ispvic_frame_channel_qbuf after buffer addresses are programmed ***\n");
 
             /* MCP LOG: Stream ON completed */
             pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
