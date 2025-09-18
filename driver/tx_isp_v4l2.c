@@ -336,19 +336,23 @@ static int tx_isp_v4l2_enum_fmt_vid_cap(struct file *file, void *priv,
         return -EINVAL;
     }
     
-    if (f->index >= 2) {
+    if (f->index >= 3) {
         return -EINVAL;
     }
-    
+
     f->flags = 0;
     f->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    
+
     switch (f->index) {
     case 0:
+        f->pixelformat = V4L2_PIX_FMT_SRGGB10;
+        strcpy(f->description, "RAW10 RGGB Bayer");
+        break;
+    case 1:
         f->pixelformat = V4L2_PIX_FMT_NV12;
         strcpy(f->description, "NV12 4:2:0");
         break;
-    case 1:
+    case 2:
         f->pixelformat = V4L2_PIX_FMT_YUYV;
         strcpy(f->description, "YUYV 4:2:2");
         break;
