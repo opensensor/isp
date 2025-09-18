@@ -472,7 +472,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                     }
                 }
 
-                pr_info("*** VIC BUFFER MGMT: Frame complete for buffer_addr=0x%x ***\n", buffer_addr);
+                pr_info("*** VIC BUFFER MGMT: Frame complete for buffer_addr=0x%x ***\n", completed_buffer_addr);
 
                 /* CRITICAL FIX: Also wake up frame waiters directly for immediate DQBUF response */
                 if (num_channels > 0) {
