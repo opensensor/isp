@@ -748,8 +748,8 @@ irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
     writel(interrupt_status, isp_dev->vic_regs + 0xb8);
     wmb();
 
-    /* Return IRQ_WAKE_THREAD to run the threaded handler */
-    return IRQ_WAKE_THREAD;
+    /* TEMPORARY: Return IRQ_HANDLED to prevent continuous interrupts during testing */
+    return IRQ_HANDLED;
 }
 
 /* ISP interrupt thread handler - COMPLETELY DISABLED TO TEST SOFT LOCKUP */
