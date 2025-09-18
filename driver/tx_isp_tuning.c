@@ -1392,13 +1392,18 @@ int tisp_init(void *sensor_info, char *param_name)
 
     uint32_t bypass_val = 0x8077efff;  /* Reference driver initial value */
 
-    /* Reference driver conditional bypass modification */
-    /* Binary Ninja: if (data_b2e74 != 1) { bypass = bypass & 0xb577fffd | 0x34000009 } */
-    /* For normal mode (not WDR), apply the reference driver logic */
-    bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
+    /* CRITICAL FIX: Configure ISP for RAW10 PASSTHROUGH mode */
+    /* The application expects RAW10 format, not YUV conversion */
+    /* We need to bypass all ISP processing and output RAW10 directly */
+
+    pr_info("*** tisp_init: CONFIGURING ISP FOR RAW10 PASSTHROUGH MODE ***\n");
+
+    /* Binary Ninja: bypass starts at 0x8077efff, but we need to bypass ALL processing for RAW10 */
+    /* Set bypass register to bypass all processing modules except essential ones */
+    bypass_val = 0xffffffff;  /* Bypass all processing - RAW10 passthrough */
 
     system_reg_write(0xc, bypass_val);
-    pr_info("*** tisp_init: REFERENCE DRIVER bypass register set to 0x%x (exact Binary Ninja logic) ***\n", bypass_val);
+    pr_info("*** tisp_init: RAW10 PASSTHROUGH - bypass register set to 0x%x ***\n", bypass_val);
 
     /* CRITICAL FIX: Initialize essential ISP processing modules to prevent Error interrupt type 2 */
 
