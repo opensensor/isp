@@ -2454,39 +2454,22 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         return 0;
     }
     
-    /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
-    __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
-    
-    if (arg2 == 0) {
-        /* Stream OFF */
-        /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = 0 */
-        vic_base = vic_dev->vic_regs;
-        if (vic_base && (unsigned long)vic_base >= 0x80000000) {
-            writel(0, vic_base + 0x300);
-            wmb();
-            pr_info("ispvic_frame_channel_s_stream: Stream OFF - wrote 0 to reg 0x300\n");
-        }
-        
-        /* Binary Ninja EXACT: *($s0 + 0x210) = 0 */
-        vic_dev->stream_state = 0;
-        
-    } else {
-        /* Stream ON */
-        /* CRITICAL FIX: Allocate VBM-compatible buffers FIRST, then configure VIC DMA */
-        /* Move buffer allocation forward as requested - allocate during STREAMON if not already done */
+    /* CRITICAL FIX: Allocate VBM buffers OUTSIDE spinlock to avoid sleeping in atomic context */
+    if (arg2 != 0) {
+        /* Stream ON - allocate buffers BEFORE acquiring spinlock */
         extern struct frame_channel_device frame_channels[];
         extern int num_channels;
 
         if (num_channels > 0) {
             struct tx_isp_channel_state *state = &frame_channels[0].state;
 
-            pr_info("*** STREAMON: Checking/allocating VBM buffers ***\n");
+            pr_info("*** STREAMON: Checking/allocating VBM buffers (OUTSIDE spinlock) ***\n");
             pr_info("*** Current VBM buffer addresses: %p, count: %d ***\n",
                     state->vbm_buffer_addresses, state->vbm_buffer_count);
 
-            /* CRITICAL: Allocate VBM buffers if they don't exist */
+            /* CRITICAL: Allocate VBM buffers if they don't exist - OUTSIDE spinlock */
             if (!state->vbm_buffer_addresses || state->vbm_buffer_count == 0) {
-                pr_info("*** STREAMON: Allocating VBM buffers during STREAMON (moved forward) ***\n");
+                pr_info("*** STREAMON: Allocating VBM buffers OUTSIDE spinlock (sleeping allowed) ***\n");
 
                 /* Calculate buffer size: 1920x1080 NV12 = 1920*1080*1.5 = 3110400 bytes */
                 u32 frame_size = 1920 * 1080 * 3 / 2;  /* NV12 format */
@@ -2521,6 +2504,32 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
                 state->vbm_buffer_count = buffer_count;
                 pr_info("*** STREAMON: VBM buffer allocation complete - %d buffers allocated ***\n", buffer_count);
             }
+        }
+    }
+
+    /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
+    __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
+
+    if (arg2 == 0) {
+        /* Stream OFF */
+        /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = 0 */
+        vic_base = vic_dev->vic_regs;
+        if (vic_base && (unsigned long)vic_base >= 0x80000000) {
+            writel(0, vic_base + 0x300);
+            wmb();
+            pr_info("ispvic_frame_channel_s_stream: Stream OFF - wrote 0 to reg 0x300\n");
+        }
+
+        /* Binary Ninja EXACT: *($s0 + 0x210) = 0 */
+        vic_dev->stream_state = 0;
+
+    } else {
+        /* Stream ON - buffers already allocated above */
+        extern struct frame_channel_device frame_channels[];
+        extern int num_channels;
+
+        if (num_channels > 0) {
+            struct tx_isp_channel_state *state = &frame_channels[0].state;
 
             /* Now program VIC buffer addresses with the allocated buffers */
             if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
