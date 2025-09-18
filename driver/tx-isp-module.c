@@ -2752,6 +2752,21 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d ***\n",
                 channel, buffer.index, buffer_phys_addr, buffer_size);
 
+        /* CRITICAL FIX: Store VBM buffer addresses for later use during streaming */
+        if (!state->vbm_buffer_addresses) {
+            state->vbm_buffer_addresses = kzalloc(sizeof(uint32_t) * 16, GFP_KERNEL);
+            state->vbm_buffer_count = 0;
+        }
+
+        if (state->vbm_buffer_addresses && buffer.index < 16) {
+            state->vbm_buffer_addresses[buffer.index] = buffer_phys_addr;
+            if (buffer.index >= state->vbm_buffer_count) {
+                state->vbm_buffer_count = buffer.index + 1;
+            }
+            pr_info("*** Channel %d: QBUF VBM - Stored buffer[%d] = 0x%x, total_count=%d ***\n",
+                    channel, buffer.index, buffer_phys_addr, state->vbm_buffer_count);
+        }
+
         /* SAFE: Update buffer state management */
         spin_lock_irqsave(&state->buffer_lock, flags);
 
