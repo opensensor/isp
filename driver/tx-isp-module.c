@@ -2651,39 +2651,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EFAULT;
         }
 
-        pr_info("*** Channel %d: QBUF - Buffer copied from user successfully ***\n", channel);
-
-        pr_info("*** Channel %d: QBUF - Buffer received: index=%d, type=%d, memory=%d ***\n",
-                channel, buffer.index, buffer.type, buffer.memory);
-        pr_info("*** Channel %d: QBUF - Buffer m.offset=0x%x, m.userptr=0x%lx ***\n",
-                channel, buffer.m.offset, buffer.m.userptr);
-
         /* Binary Ninja: if (var_74 != *($s0 + 0x24)) - validate buffer type */
-        pr_info("*** Channel %d: QBUF - Validation: buffer.type=%d, fcd->buffer_type=%d ***\n",
-                channel, buffer.type, fcd->buffer_type);
-
-        /* CRITICAL FIX: Initialize buffer_type if not set (VBM compatibility) */
-        if (fcd->buffer_type == 0) {
-            fcd->buffer_type = buffer.type; /* Accept whatever type VBM is using */
-            pr_info("*** Channel %d: QBUF - Initialized buffer_type to %d for VBM compatibility ***\n",
-                    channel, fcd->buffer_type);
-        }
-
         if (buffer.type != fcd->buffer_type) {
-            pr_err("*** QBUF: Buffer type mismatch: got %d, expected %d ***\n", buffer.type, fcd->buffer_type);
+            pr_err("*** QBUF: Buffer type mismatch ***\n");
             return -EINVAL;
         }
 
         /* Binary Ninja: if (arg3 u>= *($s0 + 0x20c)) - validate buffer index */
-        pr_info("*** Channel %d: QBUF - Validation: buffer.index=%d, state->buffer_count=%d ***\n",
-                channel, buffer.index, state->buffer_count);
-
-        /* CRITICAL FIX: VBM buffers may have buffer_count=0 initially - allow VBM initialization */
-        if (state->buffer_count > 0 && buffer.index >= state->buffer_count) {
+        if (buffer.index >= state->buffer_count) {
             pr_err("*** QBUF: Buffer index %d >= buffer_count %d ***\n", buffer.index, state->buffer_count);
             return -EINVAL;
-        } else if (state->buffer_count == 0) {
-            pr_info("*** Channel %d: QBUF - VBM initialization mode (buffer_count=0) ***\n", channel);
         }
 
         pr_info("*** Channel %d: QBUF - Queue buffer index=%d ***\n", channel, buffer.index);
@@ -2696,16 +2673,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         void *buffer_struct = fcd->buffer_array[buffer.index];
         if (!buffer_struct) {
-            pr_info("*** QBUF: No buffer allocated for index %d - VBM initialization mode ***\n", buffer.index);
-            /* Don't return error for VBM mode - continue with VBM buffer handling */
+            pr_err("*** QBUF: No buffer allocated for index %d ***\n", buffer.index);
+            return -EINVAL;
         }
 
         pr_info("*** Channel %d: QBUF - Using buffer struct %p for index %d ***\n", channel, buffer_struct, buffer.index);
 
         /* SAFE: Basic buffer validation without unsafe field access */
         if (buffer.field != fcd->field) {
-            pr_warn("*** QBUF: Field mismatch: got %d, expected %d - allowing for VBM compatibility ***\n", buffer.field, fcd->field);
-            /* Don't return error for VBM mode - continue with VBM buffer handling */
+            pr_err("*** QBUF: Field mismatch: got %d, expected %d ***\n", buffer.field, fcd->field);
+            return -EINVAL;
         }
 
         /* Binary Ninja: EXACT event call - tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000008, &var_78) */
@@ -2728,152 +2705,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         /* CRITICAL FIX: Use REAL buffer address from application instead of fake address */
         int buffer_size = state->width * state->height * 2;
-        uint32_t buffer_phys_addr;
-
-        /* Extract real buffer address from v4l2_buffer structure */
-        if (buffer.memory == V4L2_MEMORY_MMAP && buffer.m.offset != 0) {
-            /* Application provided real buffer address via mmap offset */
-            buffer_phys_addr = buffer.m.offset;
-            pr_info("*** Channel %d: QBUF - Using REAL buffer address from mmap offset: 0x%x ***\n",
-                    channel, buffer_phys_addr);
-        } else if (buffer.memory == V4L2_MEMORY_USERPTR && buffer.m.userptr != 0) {
-            /* Application provided real buffer address via userptr */
-            buffer_phys_addr = (uint32_t)buffer.m.userptr;
-            pr_info("*** Channel %d: QBUF - Using REAL buffer address from userptr: 0x%x ***\n",
-                    channel, buffer_phys_addr);
-        } else {
-            /* Fallback to generated address (but log this as an issue) */
-            buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
-            pr_warn("*** Channel %d: QBUF - WARNING: No real buffer address provided, using fallback: 0x%x ***\n",
-                    channel, buffer_phys_addr);
-            pr_warn("*** This may cause green frames - application should provide real buffer addresses! ***\n");
-        }
+        uint32_t buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
 
         pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d ***\n",
                 channel, buffer.index, buffer_phys_addr, buffer_size);
-
-        /* CRITICAL FIX: Program VIC buffer address during QBUF like reference driver */
-        if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-
-            /* REFERENCE DRIVER EXACT: Program buffer address to VIC register during QBUF */
-            /* Binary Ninja: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2; */
-            if (vic_dev_buf->vic_regs && buffer.index < 8) {
-                u32 buffer_reg_offset = (buffer.index + 0xc6) << 2;  /* EXACT Binary Ninja formula */
-
-                pr_info("*** Channel %d: QBUF - REFERENCE DRIVER: Programming VIC buffer[%d] to reg[0x%x] = 0x%x ***\n",
-                        channel, buffer.index, buffer_reg_offset, buffer_phys_addr);
-
-                writel(buffer_phys_addr, vic_dev_buf->vic_regs + buffer_reg_offset);
-                wmb();
-
-                pr_info("*** Channel %d: QBUF - VIC buffer address programmed successfully ***\n", channel);
-            } else {
-                pr_warn("*** Channel %d: QBUF - Cannot program VIC buffer: vic_regs=%p, index=%d ***\n",
-                        channel, vic_dev_buf->vic_regs, buffer.index);
-            }
-        }
-
-        /* CRITICAL FIX: Get video_buffer structure and set state like reference driver */
-        struct video_buffer *video_buffer = NULL;
-
-        pr_info("*** Channel %d: QBUF - Buffer structure check: buffer_addresses=%p, buffer_count=%d ***\n",
-                channel, state->buffer_addresses, state->buffer_count);
-
-        if (state->buffer_addresses && buffer.index < state->buffer_count && state->buffer_addresses[buffer.index] != 0) {
-            video_buffer = (struct video_buffer *)state->buffer_addresses[buffer.index];
-            pr_info("*** Channel %d: QBUF found video_buffer structure[%d] at %p ***\n",
-                    channel, buffer.index, video_buffer);
-        } else {
-            pr_warn("*** Channel %d: QBUF no video_buffer structure found for index %d ***\n",
-                    channel, buffer.index);
-            pr_warn("*** Channel %d: QBUF DEBUG - buffer_addresses=%p, buffer_count=%d, buffer_addresses[%d]=0x%x ***\n",
-                    channel, state->buffer_addresses, state->buffer_count, buffer.index,
-                    (state->buffer_addresses && buffer.index < state->buffer_count) ? state->buffer_addresses[buffer.index] : 0);
-
-            /* CRITICAL FIX: VBMFillPool expects QBUF to succeed - this is normal initialization */
-            pr_info("*** Channel %d: QBUF - VBM initialization mode (VBMFillPool) ***\n", channel);
-        }
-
-        /* Reference driver QBUF logic: Set buffer to queued state and add to queue */
-        if (video_buffer) {
-            video_buffer->flags = 1; // Queued state (flags at offset 0x48)
-            video_buffer->data = (void *)(uintptr_t)buffer_phys_addr; // Store buffer address in data pointer
-            video_buffer->index = buffer.index;
-            video_buffer->type = buffer.type;
-            video_buffer->memory = buffer.memory;
-
-            /* CRITICAL: Add buffer to queued_buffers list like reference driver */
-            spin_lock(&state->queue_lock);
-
-            /* Initialize list entry if not already done */
-            if (video_buffer->list.next == NULL && video_buffer->list.prev == NULL) {
-                INIT_LIST_HEAD(&video_buffer->list);
-            }
-
-            /* Add to queued buffers list */
-            list_add_tail(&video_buffer->list, &state->queued_buffers);
-            state->queued_count++;
-
-            spin_unlock(&state->queue_lock);
-
-            pr_info("*** Channel %d: QBUF buffer[%d] QUEUED, data_addr=0x%x, queued_count=%d ***\n",
-                    channel, buffer.index, (uint32_t)(uintptr_t)video_buffer->data, state->queued_count);
-        } else {
-            /* VBM compatibility: VBMFillPool is pre-queuing buffers for initialization */
-            pr_info("*** Channel %d: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x%x ***\n",
-                    channel, buffer_phys_addr);
-            pr_info("*** Channel %d: QBUF VBM mode - About to store VBM buffer address ***\n", channel);
-
-            /* CRITICAL: Store VBM buffer addresses for later use during streaming */
-            if (!state->vbm_buffer_addresses) {
-                state->vbm_buffer_addresses = kzalloc(sizeof(uint32_t) * 16, GFP_KERNEL);
-                state->vbm_buffer_count = 0;
-            }
-
-            if (state->vbm_buffer_addresses && buffer.index < 16) {
-                state->vbm_buffer_addresses[buffer.index] = buffer_phys_addr;
-                if (buffer.index >= state->vbm_buffer_count) {
-                    state->vbm_buffer_count = buffer.index + 1;
-                }
-                pr_info("*** Channel %d: QBUF VBM - Stored buffer[%d] = 0x%x, total_count=%d ***\n",
-                        channel, buffer.index, buffer_phys_addr, state->vbm_buffer_count);
-
-                /* CRITICAL FIX: Configure VIC DMA when first buffer is queued */
-                /* This is when we have actual buffer addresses available */
-                if (buffer.index == 0 && ourISPdev && ourISPdev->vic_dev) {
-                    struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-                    if (vic->width > 0 && vic->height > 0) {
-                        int ret_dma = tx_isp_vic_configure_dma(vic, buffer_phys_addr, vic->width, vic->height);
-                        if (ret_dma == 0) {
-                            pr_info("*** QBUF: Successfully configured VIC DMA with first buffer 0x%x ***\n", buffer_phys_addr);
-                        } else {
-                            pr_err("*** QBUF: Failed to configure VIC DMA: %d ***\n", ret_dma);
-                        }
-                    } else {
-                        pr_warn("*** QBUF: VIC dimensions not set yet - VIC DMA configuration deferred ***\n");
-                    }
-                }
-            }
-
-            /* CRITICAL: Program VIC register 0x380 with the first real buffer address */
-            extern struct tx_isp_dev *ourISPdev;
-            if (ourISPdev && ourISPdev->vic_dev && buffer.index == 0) {
-                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-                if (vic_dev->vic_regs) {
-                    writel(buffer_phys_addr, vic_dev->vic_regs + 0x380);
-                    wmb();
-                    pr_info("*** Channel %d: QBUF VBM - VIC[0x380] = 0x%x (first real buffer) ***\n",
-                            channel, buffer_phys_addr);
-                }
-            }
-        }
-
-        /* CRITICAL: If streaming is active, notify VIC hardware about new buffer */
-        if (state->streaming) {
-            pr_info("*** Channel %d: QBUF notifying VIC about new queued buffer[%d] ***\n",
-                    channel, buffer.index);
-        }
 
         /* SAFE: Update buffer state management */
         spin_lock_irqsave(&state->buffer_lock, flags);
