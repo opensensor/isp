@@ -1309,25 +1309,36 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("*** tisp_init: CRITICAL FIX - Bayer pattern configured: mbus=0x%x -> pattern=%d (register 8) ***\n",
             sensor_mbus_code, bayer_pattern);
 
-    /* CRITICAL FIX: Configure color space conversion to prevent green frames */
-    /* The green tint indicates YUV color space conversion issues */
+    /* CRITICAL FIX: Configure RAW10 Bayer processing pipeline */
+    /* GC2053 outputs RAW10 Bayer data that needs proper demosaicing */
 
-    pr_info("*** tisp_init: CONFIGURING COLOR SPACE CONVERSION (YUV->RGB) ***\n");
+    pr_info("*** tisp_init: CONFIGURING RAW10 BAYER PROCESSING PIPELINE ***\n");
 
-    /* Configure YUV to RGB conversion matrix - standard BT.601 coefficients */
-    /* These values ensure proper color reproduction instead of green tint */
-    system_reg_write(0xc0, 0xeb8080);  /* Y coefficient and UV offsets */
-    system_reg_write(0xc4, 0x108080);  /* U coefficient and offsets */
-    system_reg_write(0xc8, 0x29f06e);  /* V coefficient for R channel */
-    system_reg_write(0xcc, 0x913622);  /* V coefficient for G/B channels */
+    /* Configure RAW10 input format - 10-bit Bayer data processing */
+    system_reg_write(0x14, 0x2b);      /* RAW10 format code (0x2b from MIPI spec) */
+    system_reg_write(0x18, 0x0a0a);    /* 10-bit depth configuration */
 
-    /* Configure color processing pipeline */
-    system_reg_write(0xd0, 0x515af0);  /* Color processing config 1 */
-    system_reg_write(0xd4, 0xaaa610);  /* Color processing config 2 */
-    system_reg_write(0xd8, 0xd21092);  /* Color processing config 3 */
-    system_reg_write(0xdc, 0x6acade);  /* Color processing config 4 */
+    /* Enable demosaic processing for RGGB Bayer pattern */
+    system_reg_write(0x40, 0x1);       /* Enable demosaic module */
+    system_reg_write(0x44, bayer_pattern); /* Set Bayer pattern (1 = RGGB) */
 
-    pr_info("*** tisp_init: COLOR SPACE CONVERSION CONFIGURED - should fix green frames ***\n");
+    /* Configure color correction matrix (CCM) for proper color reproduction */
+    system_reg_write(0x100, 0x100);    /* CCM R-R coefficient (1.0) */
+    system_reg_write(0x104, 0x000);    /* CCM R-G coefficient (0.0) */
+    system_reg_write(0x108, 0x000);    /* CCM R-B coefficient (0.0) */
+    system_reg_write(0x10c, 0x000);    /* CCM G-R coefficient (0.0) */
+    system_reg_write(0x110, 0x100);    /* CCM G-G coefficient (1.0) */
+    system_reg_write(0x114, 0x000);    /* CCM G-B coefficient (0.0) */
+    system_reg_write(0x118, 0x000);    /* CCM B-R coefficient (0.0) */
+    system_reg_write(0x11c, 0x000);    /* CCM B-G coefficient (0.0) */
+    system_reg_write(0x120, 0x100);    /* CCM B-B coefficient (1.0) */
+
+    /* Configure RGB to YUV conversion (final output stage) */
+    system_reg_write(0x200, 0x4d);     /* Y = 0.299*R + 0.587*G + 0.114*B */
+    system_reg_write(0x204, 0x96);     /* U coefficient */
+    system_reg_write(0x208, 0x1d);     /* V coefficient */
+
+    pr_info("*** tisp_init: RAW10 BAYER PROCESSING PIPELINE CONFIGURED ***\n");
 
     /* CRITICAL FIX: Load ISP tuning parameters from /etc/sensor/ files */
     /* This is the missing piece - ISP needs tuning parameters for proper image processing */
