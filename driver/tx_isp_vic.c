@@ -728,8 +728,14 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
     void __iomem *vic_base;
 
-    // Initialize VIC hardware
-    vic_base = ioremap(0x10023000, 0x1000);  // Direct map VIC
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_err("tx_isp_vic_hw_init: No primary VIC registers available\n");
+        return -EINVAL;
+    }
+
+    // CRITICAL: Use PRIMARY VIC space for interrupt configuration
+    vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
+    pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
 
     // Clear any pending interrupts first
     writel(0, vic_base + 0x00);  // Clear ISR
@@ -2886,7 +2892,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x80007000, main_isp_base + 0x110);
                 writel(0x777111, main_isp_base + 0x114);
                 writel(0x3f00, main_isp_base + 0x9804);
-                writel(0x7800438, main_isp_base + 0x9864);
+                /* CRITICAL FIX: Use sensor dimensions instead of hardcoded 1920x1080 */
+                writel((sensor_width << 16) | sensor_height, main_isp_base + 0x9864);
                 writel(0xc0000000, main_isp_base + 0x987c);
                 writel(0x1, main_isp_base + 0x9880);
                 writel(0x1, main_isp_base + 0x9884);
@@ -2934,166 +2941,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** STEP 4: Sensor initialization handled by normal driver flow - NOT duplicating ***\n");
                 /* CRITICAL FIX: Do NOT call sensor initialization here - it's already done by the main driver */
                 /* The sensor s_stream will be called once by the main ISP driver, not by us */
-
-                /* STEP 4.5: CRITICAL MISSING CSI PHY CONFIGURATION - This is what's missing! */
-                pr_info("*** STEP 4.5: CRITICAL CSI PHY CONFIGURATION (isp-csi) - MISSING FROM OUR IMPLEMENTATION ***\n");
-                /* This is the massive CSI PHY configuration block from reference trace lines 115-242 */
-                /* The CSI PHY registers are at a different base than basic CSI control registers */
-
-                /* CRITICAL FIX: Use the ACTUAL CSI device base from the driver */
-                /* The CSI PHY configuration should use the existing csi_base mapping */
-                if (csi_base) {
-                        pr_info("*** CONFIGURING CSI PHY REGISTERS (isp-csi base=%p) ***\n", csi_base);
-
-                        /* CSI PHY Control registers (0x0-0x88) - from reference trace lines 115-142 */
-                        writel(0x7d, csi_base + 0x0);
-                        writel(0xe3, csi_base + 0x4);
-                        writel(0xa0, csi_base + 0x8);
-                        writel(0x83, csi_base + 0xc);
-                        writel(0xfa, csi_base + 0x10);
-                        writel(0x88, csi_base + 0x1c);
-                        writel(0x4e, csi_base + 0x20);
-                        writel(0xdd, csi_base + 0x24);
-                        writel(0x84, csi_base + 0x28);
-                        writel(0x5e, csi_base + 0x2c);
-                        writel(0xf0, csi_base + 0x30);
-                        writel(0xc0, csi_base + 0x34);
-                        writel(0x36, csi_base + 0x38);
-                        writel(0xdb, csi_base + 0x3c);
-                        writel(0x3, csi_base + 0x40);
-                        writel(0x80, csi_base + 0x44);
-                        writel(0x10, csi_base + 0x48);
-                        writel(0x3, csi_base + 0x54);
-                        writel(0xff, csi_base + 0x58);
-                        writel(0x42, csi_base + 0x5c);
-                        writel(0x1, csi_base + 0x60);
-                        writel(0xc0, csi_base + 0x64);
-                        writel(0xc0, csi_base + 0x68);
-                        writel(0x78, csi_base + 0x6c);
-                        writel(0x43, csi_base + 0x70);
-                        writel(0x33, csi_base + 0x74);
-                        writel(0x1f, csi_base + 0x80);
-                        writel(0x61, csi_base + 0x88);
-                        wmb();
-
-                        pr_info("*** CSI PHY Control registers (0x0-0x88) configured ***\n");
-
-                        /* CSI PHY Config registers (0x100-0x1f4) - from reference trace lines 143-192 */
-                        writel(0x8a, csi_base + 0x100);
-                        writel(0x5, csi_base + 0x104);
-                        writel(0x40, csi_base + 0x10c);
-                        writel(0xb0, csi_base + 0x110);
-                        writel(0xc5, csi_base + 0x114);
-                        writel(0x3, csi_base + 0x118);
-                        writel(0x20, csi_base + 0x11c);
-                        writel(0xf, csi_base + 0x120);
-                        writel(0x48, csi_base + 0x124);
-                        writel(0x3f, csi_base + 0x128);
-                        writel(0xf, csi_base + 0x12c);
-                        writel(0x88, csi_base + 0x130);
-                        writel(0x86, csi_base + 0x138);
-                        writel(0x10, csi_base + 0x13c);
-                        writel(0x4, csi_base + 0x140);
-                        writel(0x1, csi_base + 0x144);
-                        writel(0x32, csi_base + 0x148);
-                        writel(0x80, csi_base + 0x14c);
-                        writel(0x1, csi_base + 0x158);
-                        writel(0x60, csi_base + 0x15c);
-                        writel(0x1b, csi_base + 0x160);
-                        writel(0x18, csi_base + 0x164);
-                        writel(0x7f, csi_base + 0x168);
-                        writel(0x4b, csi_base + 0x16c);
-                        writel(0x3, csi_base + 0x174);
-                        writel(0x8a, csi_base + 0x180);
-                        writel(0x5, csi_base + 0x184);
-                        writel(0x40, csi_base + 0x18c);
-                        writel(0xb0, csi_base + 0x190);
-                        writel(0xc5, csi_base + 0x194);
-                        writel(0x3, csi_base + 0x198);
-                        writel(0x9, csi_base + 0x19c);
-                        writel(0xf, csi_base + 0x1a0);
-                        writel(0x48, csi_base + 0x1a4);
-                        writel(0xf, csi_base + 0x1a8);
-                        writel(0xf, csi_base + 0x1ac);
-                        writel(0x88, csi_base + 0x1b0);
-                        writel(0x86, csi_base + 0x1b8);
-                        writel(0x10, csi_base + 0x1bc);
-                        writel(0x4, csi_base + 0x1c0);
-                        writel(0x1, csi_base + 0x1c4);
-                        writel(0x32, csi_base + 0x1c8);
-                        writel(0x80, csi_base + 0x1cc);
-                        writel(0x1, csi_base + 0x1d8);
-                        writel(0x60, csi_base + 0x1dc);
-                        writel(0x1b, csi_base + 0x1e0);
-                        writel(0x18, csi_base + 0x1e4);
-                        writel(0x7f, csi_base + 0x1e8);
-                        writel(0x4b, csi_base + 0x1ec);
-                        writel(0x3, csi_base + 0x1f4);
-                        wmb();
-
-                        pr_info("*** CSI PHY Config registers (0x100-0x1f4) configured ***\n");
-
-                        /* CSI Lane Config registers (0x200-0x2f4) - from reference trace lines 193-242 */
-                        writel(0x8a, csi_base + 0x200);
-                        writel(0x5, csi_base + 0x204);
-                        writel(0x40, csi_base + 0x20c);
-                        writel(0xb0, csi_base + 0x210);
-                        writel(0xc5, csi_base + 0x214);
-                        writel(0x3, csi_base + 0x218);
-                        writel(0x9, csi_base + 0x21c);
-                        writel(0xf, csi_base + 0x220);
-                        writel(0x48, csi_base + 0x224);
-                        writel(0xf, csi_base + 0x228);
-                        writel(0xf, csi_base + 0x22c);
-                        writel(0x88, csi_base + 0x230);
-                        writel(0x86, csi_base + 0x238);
-                        writel(0x10, csi_base + 0x23c);
-                        writel(0x4, csi_base + 0x240);
-                        writel(0x1, csi_base + 0x244);
-                        writel(0x32, csi_base + 0x248);
-                        writel(0x80, csi_base + 0x24c);
-                        writel(0x1, csi_base + 0x258);
-                        writel(0x60, csi_base + 0x25c);
-                        writel(0x1b, csi_base + 0x260);
-                        writel(0x18, csi_base + 0x264);
-                        writel(0x7f, csi_base + 0x268);
-                        writel(0x4b, csi_base + 0x26c);
-                        writel(0x3, csi_base + 0x274);
-                        writel(0x8a, csi_base + 0x280);
-                        writel(0x5, csi_base + 0x284);
-                        writel(0x40, csi_base + 0x28c);
-                        writel(0xb0, csi_base + 0x290);
-                        writel(0xc5, csi_base + 0x294);
-                        writel(0x3, csi_base + 0x298);
-                        writel(0x9, csi_base + 0x29c);
-                        writel(0xf, csi_base + 0x2a0);
-                        writel(0x48, csi_base + 0x2a4);
-                        writel(0xf, csi_base + 0x2a8);
-                        writel(0xf, csi_base + 0x2ac);
-                        writel(0x88, csi_base + 0x2b0);
-                        writel(0x86, csi_base + 0x2b8);
-                        writel(0x10, csi_base + 0x2bc);
-                        writel(0x4, csi_base + 0x2c0);
-                        writel(0x1, csi_base + 0x2c4);
-                        writel(0x32, csi_base + 0x2c8);
-                        writel(0x80, csi_base + 0x2cc);
-                        writel(0x1, csi_base + 0x2d8);
-                        writel(0x60, csi_base + 0x2dc);
-                        writel(0x1b, csi_base + 0x2e0);
-                        writel(0x18, csi_base + 0x2e4);
-                        writel(0x7f, csi_base + 0x2e8);
-                        writel(0x4b, csi_base + 0x2ec);
-                        writel(0x3, csi_base + 0x2f4);
-                        wmb();
-
-                        pr_info("*** CSI Lane Config registers (0x200-0x2f4) configured ***\n");
-                        pr_info("*** COMPLETE CSI PHY CONFIGURATION APPLIED - THIS WAS THE MISSING PIECE! ***\n");
-
-                        /* Unmap the CSI PHY registers after configuration */
-                        iounmap(csi_base);
-                } else {
-                    pr_err("*** CRITICAL: Failed to map CSI PHY registers - cannot configure CSI PHY! ***\n");
-                }
                 
                 /* STEP 5: Apply 280ms delta register changes AFTER sensor detection */
                 pr_info("*** STEP 5: Applying 280ms delta register changes AFTER sensor detection ***\n");
