@@ -368,8 +368,16 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
 
         pr_info("*** ispcore_sensor_ops_ioctl: Calling sensor with FPS=0x%x (25/1) ***\n", fps_value);
 
-        /* Call the real sensor's IOCTL with valid FPS pointer - this triggers I2C communication */
-        result = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, TX_ISP_EVENT_SENSOR_FPS, &fps_value);
+        /* CRITICAL FIX: Use supported sensor IOCTL command instead of unsupported FPS command */
+        /* The GC2053 sensor doesn't support TX_ISP_EVENT_SENSOR_FPS, causing -515 errors */
+        /* Frame sync work should do Auto Exposure (AE) operations instead */
+
+        static int expo_value = 0x300;  /* Default exposure value for AE */
+
+        pr_info("*** ispcore_sensor_ops_ioctl: Calling sensor with EXPO=0x%x (AE operation) ***\n", expo_value);
+
+        /* Call the real sensor's IOCTL with supported EXPO command - this triggers I2C communication */
+        result = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, TX_ISP_EVENT_SENSOR_EXPO, &expo_value);
 
         pr_info("*** ispcore_sensor_ops_ioctl: Real sensor IOCTL result: %d ***\n", result);
 
