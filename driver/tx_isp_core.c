@@ -649,35 +649,13 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: Error interrupt processing */
     if (interrupt_status & 0x200) {  /* Error interrupt type 1 */
-        pr_info("ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR\n");
-
-        /* CRITICAL FIX: This error interrupt indicates pipeline misconfiguration */
-        /* Clear the error condition by reading/clearing error registers */
-        if (isp_regs) {
-            u32 error_status = readl(isp_regs + 0xc);  /* Read error status */
-            pr_info("*** ISP CORE: Error status register 0xc = 0x%x ***\n", error_status);
-
-            /* Clear error bits by writing back */
-            writel(error_status, isp_regs + 0xc);
-            wmb();
-
-            pr_info("*** ISP CORE: Error interrupt cleared ***\n");
-        }
-
-        /* Binary Ninja: exception_handle() */
-        /* Error handling would be here */
-    }
-
-    /* Binary Ninja EXACT: Handle bit 9 (0x200) - Processing status */
-    if (interrupt_status & 0x200) {
         /* Binary Ninja: if (*($s0 + 0x17c) != 0) exception_handle() */
         /* Binary Ninja: data_ca578 += 1 */
-        static int status_200_count = 0;
-        status_200_count++;
-
-        pr_debug("ISP CORE: Status bit 9 (0x200) - count: %d\n", status_200_count);
-
-        /* TODO: Check condition at offset 0x17c and call exception_handle() if needed */
+        if (isp_regs) {
+            u32 error_status = readl(isp_regs + 0xc);
+            writel(error_status, isp_regs + 0xc);
+            wmb();
+        }
     }
 
     /* Binary Ninja EXACT: Handle bit 8 (0x100) - Processing status */
@@ -733,18 +711,13 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Complex callback and state management would be here */
     }
 
-    /* *** CRITICAL: CHANNEL 1 FRAME COMPLETION PROCESSING *** */
+    /* Binary Ninja: Channel 1 frame done */
     if (interrupt_status & 2) {  /* Channel 1 frame done */
-        pr_info("*** ISP CORE: CHANNEL 1 FRAME DONE INTERRUPT ***\n");
-
         /* Binary Ninja: Similar processing for channel 1 */
         while ((readl(vic_regs + 0x9a7c) & 1) == 0) {
             u32 frame_buffer_addr = readl(vic_regs + 0x9a74);
             u32 frame_info1 = readl(vic_regs + 0x9a8c);
             u32 frame_info2 = readl(vic_regs + 0x9a90);
-
-            pr_info("*** CH1 FRAME COMPLETION: addr=0x%x, info1=0x%x, info2=0x%x ***\n",
-                   frame_buffer_addr, frame_info1, frame_info2);
 
             /* Wake up channel 1 waiters */
             if (isp_core_channels[1].state.streaming) {
@@ -777,8 +750,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             }
         }
     }
-
-    pr_info("*** ISP CORE INTERRUPT PROCESSING COMPLETE ***\n");
 
     /* Binary Ninja: return 1 */
     return IRQ_HANDLED;
