@@ -3453,10 +3453,13 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
                 }
             }
 
-            /* NOW start VIC hardware capture */
-            writel(0x1, vic_dev->vic_regs + 0x0);  /* Start VIC hardware capture */
+            /* NOW start VIC hardware capture - DUAL VIC WRITE */
+            writel(0x1, vic_dev->vic_regs + 0x0);  /* Start VIC hardware capture - PRIMARY */
+            if (vic_dev->vic_regs_secondary) {
+                writel(0x1, vic_dev->vic_regs_secondary + 0x0);  /* Start VIC hardware capture - SECONDARY */
+            }
             wmb();
-            pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC hardware started (reg 0x0 = 0x1) ***\n");
+            pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC hardware started (DUAL VIC reg 0x0 = 0x1) ***\n");
         } else if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
             /* Fallback to VBM buffers if ISP DMA not available */
             pr_info("*** ispvic_frame_channel_qbuf: Fallback to VBM buffers ***\n");
