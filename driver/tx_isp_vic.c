@@ -1224,6 +1224,33 @@ int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
     }
     wmb();
 
+    /* CRITICAL: After CSI PHY configuration, check if MIPI data is now flowing */
+    pr_info("*** CRITICAL: Checking MIPI CSI PHY status AFTER configuration ***\n");
+    csi_status = readl(csi_base + 0x8);
+    phy_status = readl(csi_base + 0x14);
+    pr_info("POST-CONFIG CSI Status: 0x%08x, PHY Status: 0x%08x\n", csi_status, phy_status);
+
+    lane0_status = readl(csi_base + 0x40);
+    lane1_status = readl(csi_base + 0x44);
+    pr_info("POST-CONFIG MIPI Lane 0: 0x%08x, Lane 1: 0x%08x\n", lane0_status, lane1_status);
+
+    /* Check if MIPI clock is active */
+    u32 mipi_clock = readl(csi_base + 0x14);
+    if (mipi_clock & 0x1) {
+        pr_info("*** MIPI CLOCK: ACTIVE - sensor clock detected ***\n");
+    } else {
+        pr_err("*** MIPI CLOCK: INACTIVE - NO SENSOR CLOCK! This explains VIC[0x380]=0x0 ***\n");
+    }
+
+    /* Check if MIPI data lanes are synchronized */
+    if ((lane0_status & 0x1) && (lane1_status & 0x1)) {
+        pr_info("*** MIPI LANES: SYNCHRONIZED - data should flow to VIC ***\n");
+    } else {
+        pr_err("*** MIPI LANES: NOT SYNCHRONIZED - no data flow to VIC! ***\n");
+        pr_err("*** This explains why VIC[0x380] always reads 0x0 ***\n");
+    }
+
+    pr_info("*** CSI PHY initialization complete - MIPI status checked ***\n");
     return 0;
 }
 
