@@ -1297,6 +1297,25 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Configure processing pipeline data flow */
     system_reg_write(0x24, 0x1);     /* Enable data flow from input to processing */
     system_reg_write(0x28, 0x1);     /* Enable data flow from processing to output */
+
+    /* CRITICAL FIX: Add missing registers from reference trace lines 40-42 */
+    system_reg_write(0x2c, 0x400040); /* Reference trace: offset 0x2c: 0x0 -> 0x400040 */
+    system_reg_write(0x90, 0x1);      /* Reference trace: offset 0x90: 0x0 -> 0x1 */
+    system_reg_write(0x94, 0x1);      /* Reference trace: offset 0x94: 0x0 -> 0x1 */
+
+    /* Add more missing registers from reference trace lines 43-50 */
+    system_reg_write(0x98, 0x30000);    /* Reference trace: offset 0x98: 0x0 -> 0x30000 */
+    system_reg_write(0xa8, 0x58050000); /* Reference trace: offset 0xa8: 0x0 -> 0x58050000 */
+    system_reg_write(0xac, 0x58050000); /* Reference trace: offset 0xac: 0x0 -> 0x58050000 */
+    system_reg_write(0xc4, 0x40000);    /* Reference trace: offset 0xc4: 0x0 -> 0x40000 */
+    system_reg_write(0xc8, 0x400040);   /* Reference trace: offset 0xc8: 0x0 -> 0x400040 */
+    system_reg_write(0xcc, 0x100);      /* Reference trace: offset 0xcc: 0x0 -> 0x100 */
+    system_reg_write(0xd4, 0xc);        /* Reference trace: offset 0xd4: 0x0 -> 0xc */
+    system_reg_write(0xd8, 0xffffff);   /* Reference trace: offset 0xd8: 0x0 -> 0xffffff */
+
+    pr_info("*** tisp_init: PIPELINE FIX - Added missing registers 0x2c, 0x90, 0x94 from reference trace ***\n");
+    pr_info("*** tisp_init: PIPELINE FIX - Added missing registers 0x98, 0xa8, 0xac, 0xc4, 0xc8, 0xcc, 0xd4, 0xd8 ***\n");
+
     pr_info("*** tisp_init: ISP data flow configured (input->processing->output) ***\n");
 
     /* REFERENCE DRIVER: Final ISP configuration registers (Binary Ninja exact sequence) */
