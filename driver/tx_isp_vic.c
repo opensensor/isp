@@ -1597,8 +1597,22 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x100010, vic_regs + 0x1a4);  /* Binary Ninja exact value */
         pr_info("*** BINARY NINJA: reg 0x1a4 = 0x100010 (control) ***\n");
 
-        /* 9. Hardware enable sequence already completed above - no duplicate needed */
-        pr_info("*** BINARY NINJA: VIC unlock sequence already completed ***\n");
+        /* 9. BINARY NINJA EXACT: Hardware enable sequence */
+        writel(0x2, vic_regs + 0x0);  /* Pre-enable */
+        wmb();
+        writel(0x4, vic_regs + 0x0);  /* Wait state */
+        wmb();
+
+        /* Wait for hardware ready (Binary Ninja: while (*$v1_30 != 0) nop) */
+        u32 wait_count = 0;
+        while ((readl(vic_regs + 0x0) != 0) && (wait_count < 1000)) {
+            wait_count++;
+            udelay(1);
+        }
+
+        writel(0x1, vic_regs + 0x0);  /* Final enable */
+        wmb();
+        pr_info("*** BINARY NINJA EXACT: Hardware sequence 2->4->wait(%d us)->1 ***\n", wait_count);
         
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
@@ -1721,8 +1735,25 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         wmb();
         
-        /* VIC unlock sequence already completed above - no duplicate needed */
-        pr_info("*** BINARY NINJA: VIC unlock sequence already completed ***\n");
+        /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
+        /* Binary Ninja: EXACT reference driver unlock sequence */
+        writel(2, vic_regs + 0x0);
+        wmb();
+        writel(4, vic_regs + 0x0);
+        wmb();
+        
+        /* Binary Ninja: 00010acc - Wait for unlock */
+        while (readl(vic_regs + 0x0) != 0) {
+            udelay(1);
+            if (--timeout == 0) {
+                pr_err("VIC unlock timeout\n");
+                return -ETIMEDOUT;
+            }
+        }
+        
+        /* Binary Ninja: 00010ad4 - Enable VIC */
+        writel(1, vic_regs + 0x0);
+        wmb();
         
         /* Binary Ninja: 00010ae4-00010b04 - Final MIPI registers */
         writel(0x100010, vic_regs + 0x1a4);
@@ -1761,7 +1792,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x4440, vic_regs + 0x1ac);
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         
-        /* VIC unlock sequence already completed above - no duplicate needed */
+        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
+        writel(2, vic_regs + 0x0);
+        wmb();
+        writel(1, vic_regs + 0x0);
         
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT656) {
         /* BT656 - Binary Ninja 000105b0-00010684 */
@@ -1776,7 +1810,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x200, vic_regs + 0x1d0);
         writel(0x200, vic_regs + 0x1d4);
         
-        /* VIC unlock sequence already completed above - no duplicate needed */
+        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
+        writel(2, vic_regs + 0x0);
+        wmb();
+        writel(1, vic_regs + 0x0);
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT1120) {
         /* BT1120 - Binary Ninja 00010500-00010684 */
@@ -1789,7 +1826,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
         
-        /* VIC unlock sequence already completed above - no duplicate needed */
+        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
+        writel(2, vic_regs + 0x0);
+        wmb();
+        writel(1, vic_regs + 0x0);
         
     } else {
         pr_err("Unsupported interface type %d\n", interface_type);
