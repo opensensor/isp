@@ -483,6 +483,13 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         return -EINVAL;
     }
 
+    /* CRITICAL FIX: Block CSI state changes during active VIC streaming */
+    extern uint32_t vic_start_ok;
+    if (vic_start_ok == 1) {
+        pr_info("*** CSI EVENT BLOCKED: VIC streaming active - ignoring sensor event 0x%x to prevent CSI PHY disruption ***\n", cmd);
+        return 0;  /* Block all sensor events during streaming */
+    }
+
     switch (cmd) {
     case TX_ISP_EVENT_SENSOR_RESIZE:  /* This is the correct event for reset */
         /* Reset CSI */
