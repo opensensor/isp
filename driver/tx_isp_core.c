@@ -727,26 +727,47 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
-/* ISP interrupt handler - MINIMAL hard IRQ handler */
+/* ISP interrupt handler - FIXED to handle different IRQ sources correctly */
 irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
 {
-    /* Binary Ninja: Hard IRQ handler should be MINIMAL - just check if interrupt is ours */
     struct tx_isp_dev *isp_dev = dev_id;
     u32 interrupt_status;
+    void __iomem *reg_base;
 
-    if (!isp_dev || !isp_dev->vic_regs) {
+    if (!isp_dev) {
         return IRQ_NONE;
     }
 
-    /* Quick check if interrupt is pending */
-    interrupt_status = readl(isp_dev->vic_regs + 0xb4);
+    /* CRITICAL FIX: Use different register bases for different IRQs */
+    if (irq == 37) {
+        /* IRQ 37: ISP Core registers */
+        if (!isp_dev->core_regs) {
+            return IRQ_NONE;
+        }
+        reg_base = isp_dev->core_regs;
+        interrupt_status = readl(reg_base + 0xb4);
+        if (interrupt_status != 0) {
+            writel(interrupt_status, reg_base + 0xb8);
+            wmb();
+        }
+    } else if (irq == 38) {
+        /* IRQ 38: VIC registers */
+        if (!isp_dev->vic_regs) {
+            return IRQ_NONE;
+        }
+        reg_base = isp_dev->vic_regs;
+        interrupt_status = readl(reg_base + 0xb4);
+        if (interrupt_status != 0) {
+            writel(interrupt_status, reg_base + 0xb8);
+            wmb();
+        }
+    } else {
+        return IRQ_NONE;
+    }
+
     if (interrupt_status == 0) {
         return IRQ_NONE;
     }
-
-    /* Clear interrupt status quickly */
-    writel(interrupt_status, isp_dev->vic_regs + 0xb8);
-    wmb();
 
     /* TEMPORARY: Return IRQ_HANDLED to prevent continuous interrupts during testing */
     return IRQ_HANDLED;
