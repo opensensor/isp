@@ -1197,7 +1197,7 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
 
     /* STEP 2: EXACT reference driver PHY configuration */
     /* Get sensor frequency for PHY configuration */
-    int32_t sensor_freq = sensor_attr->mipi.mipi_sc.mipi_crop.sensor_frame_rate;  /* Frame rate as frequency indicator */
+    sensor_freq = (sensor_attr->fps > 0) ? sensor_attr->fps : 30;  /* Use sensor FPS as frequency indicator */
     int32_t phy_freq_setting = 1;  /* Default frequency setting */
 
     /* Binary Ninja frequency mapping logic */
