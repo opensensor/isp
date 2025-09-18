@@ -2508,24 +2508,24 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         vic_pipo_mdma_enable(vic_dev);
 
         /* CRITICAL FIX: Program VBM buffer addresses BEFORE starting VIC DMA */
+        /* This is the reference driver sequence: program buffers first, then start DMA */
         extern struct frame_channel_device frame_channels[];
         extern int num_channels;
 
         if (num_channels > 0) {
             struct tx_isp_channel_state *state = &frame_channels[0].state;
 
-            pr_info("*** STREAMON: Checking VBM buffer availability ***\n");
+            pr_info("*** STREAMON: Programming VIC buffer addresses with VBM buffers ***\n");
             pr_info("*** VBM buffer addresses: %p, count: %d ***\n",
                     state->vbm_buffer_addresses, state->vbm_buffer_count);
 
             if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-                pr_info("*** STREAMON: Programming VIC buffer addresses with VBM buffers ***\n");
-
-                /* Program VBM buffer addresses into VIC registers 0x318-0x328 */
+                /* REFERENCE DRIVER SEQUENCE: Program buffer addresses like ispvic_frame_channel_qbuf */
+                /* Binary Ninja: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
                 for (int i = 0; i < state->vbm_buffer_count && i < 8; i++) {
-                    u32 buffer_reg = 0x318 + (i * 4);
+                    u32 buffer_reg = 0x318 + (i * 4);  /* (i + 0xc6) << 2 = 0x318 + i*4 */
                     writel(state->vbm_buffer_addresses[i], vic_dev->vic_regs + buffer_reg);
-                    pr_info("*** STREAMON: VIC[0x%x] = 0x%x (VBM buffer[%d]) ***\n",
+                    pr_info("*** STREAMON: VIC[0x%x] = 0x%x (VBM buffer[%d]) - REFERENCE DRIVER EXACT ***\n",
                             buffer_reg, state->vbm_buffer_addresses[i], i);
                 }
                 wmb();
@@ -2533,8 +2533,32 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
                 /* Update VIC buffer count to match VBM buffers */
                 vic_dev->active_buffer_count = state->vbm_buffer_count;
                 pr_info("*** STREAMON: Updated VIC active_buffer_count = %d ***\n", vic_dev->active_buffer_count);
+
+                /* CRITICAL: VIC hardware enable sequence AFTER buffer programming */
+                pr_info("*** STREAMON: Starting VIC hardware enable sequence (2->4->wait->1) ***\n");
+                writel(0x2, vic_dev->vic_regs + 0x0);  /* Pre-enable */
+                wmb();
+                writel(0x4, vic_dev->vic_regs + 0x0);  /* Wait state */
+                wmb();
+
+                /* Wait for hardware ready */
+                u32 timeout = 1000;
+                u32 vic_status;
+                while ((vic_status = readl(vic_dev->vic_regs + 0x0)) != 0) {
+                    udelay(1);
+                    if (--timeout == 0) {
+                        pr_err("*** STREAMON: VIC unlock timeout - register stuck at 0x%x ***\n", vic_status);
+                        break;
+                    }
+                }
+
+                /* Final enable */
+                writel(0x1, vic_dev->vic_regs + 0x0);
+                wmb();
+                pr_info("*** STREAMON: VIC hardware enabled - ready for DMA ***\n");
+
             } else {
-                pr_warn("*** STREAMON: No VBM buffers available - using default configuration ***\n");
+                pr_warn("*** STREAMON: No VBM buffers available - VIC DMA will not work ***\n");
             }
         }
 
