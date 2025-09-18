@@ -673,56 +673,88 @@ int tx_isp_vic_stop(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* Configure VIC DMA for frame capture - Program ALL buffer addresses like reference driver */
-int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t addr, u32 width, u32 height)
+/* Configure VIC DMA for frame capture - EXACT Binary Ninja vic_mdma_enable implementation */
+int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t base_addr, u32 width, u32 height)
 {
     void __iomem *vic_regs;
     extern struct frame_channel_device frame_channels[];
     extern int num_channels;
+    u32 stride, frame_size;
+    u32 buffer_count = 4;  /* Default to 4 buffers like reference */
 
     if (!vic_dev || !vic_dev->vic_regs)
         return -EINVAL;
 
     vic_regs = vic_dev->vic_regs;
 
-    pr_info("*** VIC DMA CONFIG: Programming ALL VIC buffer addresses like reference driver ***\n");
+    pr_info("*** VIC DMA CONFIG: EXACT Binary Ninja vic_mdma_enable implementation ***\n");
 
-    /* Use the SAME registers that vic_pipo_mdma_enable uses successfully */
-    writel((height << 16) | width, vic_regs + 0x304);  /* Dimensions (matches 0x7800438 for 1920x1080) */
+    /* Binary Ninja EXACT: Calculate stride and frame size */
+    stride = width * 2;  /* RAW10 = 2 bytes/pixel */
+    frame_size = stride * height;
+
+    /* Binary Ninja EXACT: Configure MDMA dimensions and stride */
     writel(1, vic_regs + 0x308);                       /* MDMA enable */
-    writel(width * 2, vic_regs + 0x310);               /* Stride (RAW10 = 2 bytes/pixel) */
-    writel(width * 2, vic_regs + 0x314);               /* Stride (duplicate) */
+    writel((width << 16) | height, vic_regs + 0x304);  /* Dimensions */
+    writel(stride, vic_regs + 0x310);                  /* Stride */
+    writel(stride, vic_regs + 0x314);                  /* Stride (duplicate) */
     wmb();
 
-    /* CRITICAL FIX: Program ALL buffer addresses like tx_isp_subdev_pipo does */
-    /* The logs show registers 0x318, 0x31c, 0x320, 0x324, 0x328 are used for buffers 0-4 */
+    /* Binary Ninja EXACT: Program buffer addresses like vic_mdma_enable */
+    /* Get actual VBM buffer addresses if available */
     if (num_channels > 0) {
         struct tx_isp_channel_state *state = &frame_channels[0].state;
         if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-            int i;
-            for (i = 0; i < state->vbm_buffer_count && i < 5; i++) {
-                u32 buffer_reg = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
-                writel(state->vbm_buffer_addresses[i], vic_regs + buffer_reg);
-                pr_info("*** VIC DMA: Programmed buffer[%d] addr=0x%x to reg 0x%x ***\n",
-                        i, state->vbm_buffer_addresses[i], buffer_reg);
+            /* Use actual VBM buffer addresses */
+            writel(state->vbm_buffer_addresses[0], vic_regs + 0x318);  /* Buffer 0 */
+            writel(state->vbm_buffer_addresses[1], vic_regs + 0x31c);  /* Buffer 1 */
+            writel(state->vbm_buffer_addresses[2], vic_regs + 0x320);  /* Buffer 2 */
+            writel(state->vbm_buffer_addresses[3], vic_regs + 0x324);  /* Buffer 3 */
+            if (state->vbm_buffer_count > 4) {
+                writel(state->vbm_buffer_addresses[4], vic_regs + 0x328);  /* Buffer 4 */
             }
-            wmb();
-            pr_info("*** VIC DMA: Programmed %d buffer addresses - VIC hardware should now write to buffers ***\n",
-                    state->vbm_buffer_count);
+            buffer_count = state->vbm_buffer_count;
+            pr_info("*** VIC DMA: Programmed %d VBM buffer addresses ***\n", buffer_count);
         } else {
-            /* Fallback: program just the single buffer address */
-            writel(addr, vic_regs + 0x318);
-            pr_info("*** VIC DMA: Programmed single buffer addr=0x%x to reg 0x318 ***\n", (u32)addr);
-            wmb();
+            /* Fallback: calculate buffer addresses based on frame size */
+            writel(base_addr, vic_regs + 0x318);                    /* Buffer 0 */
+            writel(base_addr + frame_size, vic_regs + 0x31c);       /* Buffer 1 */
+            writel(base_addr + (frame_size * 2), vic_regs + 0x320); /* Buffer 2 */
+            writel(base_addr + (frame_size * 3), vic_regs + 0x324); /* Buffer 3 */
+            writel(base_addr + (frame_size * 4), vic_regs + 0x328); /* Buffer 4 */
+            pr_info("*** VIC DMA: Calculated buffer addresses from base 0x%x ***\n", (u32)base_addr);
         }
     } else {
-        /* Fallback: program just the single buffer address */
-        writel(addr, vic_regs + 0x318);
-        pr_info("*** VIC DMA: Programmed single buffer addr=0x%x to reg 0x318 ***\n", (u32)addr);
-        wmb();
+        /* Fallback: calculate buffer addresses based on frame size */
+        writel(base_addr, vic_regs + 0x318);                    /* Buffer 0 */
+        writel(base_addr + frame_size, vic_regs + 0x31c);       /* Buffer 1 */
+        writel(base_addr + (frame_size * 2), vic_regs + 0x320); /* Buffer 2 */
+        writel(base_addr + (frame_size * 3), vic_regs + 0x324); /* Buffer 3 */
+        writel(base_addr + (frame_size * 4), vic_regs + 0x328); /* Buffer 4 */
+        pr_info("*** VIC DMA: Calculated buffer addresses from base 0x%x ***\n", (u32)base_addr);
     }
 
-    pr_info("*** VIC DMA CONFIG: All buffer addresses programmed - VIC[0x380] should now show completed buffers ***\n");
+    /* Binary Ninja EXACT: Program additional buffer registers (channel 1) */
+    writel(base_addr + frame_size, vic_regs + 0x340);           /* Ch1 Buffer 0 */
+    writel(base_addr + (frame_size * 2), vic_regs + 0x344);     /* Ch1 Buffer 1 */
+    writel(base_addr + (frame_size * 3), vic_regs + 0x348);     /* Ch1 Buffer 2 */
+    writel(base_addr + (frame_size * 4), vic_regs + 0x34c);     /* Ch1 Buffer 3 */
+    writel(base_addr + (frame_size * 5), vic_regs + 0x350);     /* Ch1 Buffer 4 */
+    wmb();
+
+    /* Binary Ninja EXACT: CRITICAL - Write VIC control register 0x300 to start DMA */
+    /* This is the missing piece that actually enables VIC DMA capture */
+    u32 vic_control;
+    if (buffer_count < 8) {
+        vic_control = (buffer_count << 16) | 0x80000020;  /* Buffer count + enable bits */
+    } else {
+        vic_control = 0x80080020;  /* Max buffer mode */
+    }
+    writel(vic_control, vic_regs + 0x300);
+    wmb();
+
+    pr_info("*** VIC DMA CONFIG: CRITICAL - VIC control 0x300 = 0x%x (DMA ENABLED) ***\n", vic_control);
+    pr_info("*** VIC DMA CONFIG: VIC hardware should now capture frames and populate VIC[0x380] ***\n");
 
     return 0;
 }
