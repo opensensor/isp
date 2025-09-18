@@ -5123,25 +5123,13 @@ static int tx_isp_init(void)
     /* *** FIXED: USE PROPER STRUCT MEMBER ACCESS INSTEAD OF DANGEROUS OFFSETS *** */
     pr_info("*** POPULATING SUBDEV ARRAY USING SAFE STRUCT MEMBER ACCESS ***\n");
 
-    /* Register VIC subdev with proper ops structure */
-    if (ourISPdev->vic_dev) {
-        struct tx_isp_vic_device *vic_dev = &ourISPdev->vic_dev;
-        
-        /* Set up VIC subdev with ops pointing to vic_subdev_ops */
-        vic_dev->sd.ops = &vic_subdev_ops;
-
-        /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
-        ourISPdev->subdevs[0] = &vic_dev->sd;
-        
-        pr_info("*** REGISTERED VIC SUBDEV AT INDEX 0 WITH VIDEO OPS ***\n");
-//        pr_info("VIC subdev: %p, ops: %p, video: %p, s_stream: %p\n",
-//                &vic_dev->sd, vic_dev->sd.ops, vic_dev->sd.ops->video,
-//                vic_dev->sd.ops->video->s_stream);
-    }
+    /* *** REMOVED DUPLICATE VIC SUBDEV REGISTRATION *** */
+    /* VIC subdev registration is handled by tx_isp_vic_probe */
+    pr_info("*** VIC SUBDEV REGISTRATION HANDLED BY VIC PROBE ***\n");
     
     /* Register CSI subdev with proper ops structure */
     if (ourISPdev->csi_dev) {
-        struct tx_isp_csi_device *csi_dev = &ourISPdev->csi_dev;
+        struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
         
         /* Set up CSI subdev with ops pointing to csi_subdev_ops */
         csi_dev->sd.ops = &csi_subdev_ops;
