@@ -23,9 +23,6 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
-/* Function declarations */
-int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev);
-
 /* system_reg_write is now defined in tx-isp-module.c - removed duplicate */
 
 /* Debug function to track vic_start_ok changes */
@@ -184,7 +181,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     
     return 0;
 }
-/* EXPORT_SYMBOL(tx_isp_create_vic_device); - REMOVED: Function should not be called */
+EXPORT_SYMBOL(tx_isp_create_vic_device);
 
 /* VIC frame completion handler */
 static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
@@ -414,21 +411,6 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                                 pr_err("*** CRITICAL: VIC[0x380] should contain current buffer address from hardware ***\n");
                                 pr_err("*** VIC[0x380]=0x0 means VIC hardware is NOT writing frame data to buffers ***\n");
                                 pr_err("*** This indicates MIPI CSI PHY is not routing sensor data to VIC ***\n");
-
-                                /* REFERENCE DRIVER EXACT: Handle VIC[0x380]=0x0 case like reference driver */
-                                /* Binary Ninja shows reference driver updates VIC[0x300] when no buffer matches VIC[0x380] */
-                                pr_info("*** REFERENCE DRIVER BEHAVIOR: VIC[0x380]=0x0, updating VIC[0x300] as per Binary Ninja ***\n");
-
-                                /* Reference driver logic: if ($v0 == 0) $v1_2 = $a1_1 << 0x10 */
-                                /* *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
-                                u32 vic_300_current = readl(vic_regs + 0x300);
-                                u32 buffer_index = vbm_buffer_cycle;  /* Use current buffer index */
-                                u32 vic_300_new = (buffer_index << 16) | (vic_300_current & 0xfff0ffff);
-                                writel(vic_300_new, vic_regs + 0x300);
-                                wmb();
-
-                                pr_info("*** REFERENCE DRIVER EXACT: VIC[0x300] updated from 0x%08x to 0x%08x (buffer_index=%d) ***\n",
-                                        vic_300_current, vic_300_new, buffer_index);
 
                                 /* CRITICAL DMA SYNC: Synchronize completed buffer for CPU access */
                                 u32 frame_size = state->width * state->height * 2;  /* RAW10 = 2 bytes/pixel */
@@ -1148,172 +1130,154 @@ void tx_isp_vic_write_csi_phy_sequence(void)
     pr_info("*** CRITICAL: CSI PHY SEQUENCE COMPLETE - NOW MATCHES REFERENCE DRIVER ORDER! ***\n");
 }
 
-/* tx_isp_csi_mipi_init - EXACT reference driver CSI MIPI initialization */
-int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
+int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
 {
-    void __iomem *csi_base, *phy_base;
-    struct tx_isp_sensor_attribute *sensor_attr;
-    int lanes;
-    u32 reg_val, sensor_freq;
-    int32_t phy_freq_setting;
-    u32 phy_config;
-
-    pr_info("*** tx_isp_csi_mipi_init: EXACT reference driver CSI MIPI configuration ***\n");
-
-    if (!isp_dev || !isp_dev->vic_dev) {
-        pr_err("tx_isp_csi_mipi_init: No ISP/VIC device available\n");
+    void __iomem *csi_base;
+    pr_info("*** tx_isp_phy_init: CRITICAL CSI PHY initialization - VIC[0x380] always 0x0 ***\n");
+    if (!isp_dev) {
+        pr_err("tx_isp_phy_init: No ISP device available\n");
         return -ENODEV;
     }
 
-    /* CRITICAL FIX: Use EXISTING memory mappings instead of creating new ones */
-    /* This prevents conflicts and ensures we use the same addresses as the rest of the driver */
+    csi_base = isp_dev->vic_dev->vic_regs - 0x9a00;  /* Calculate CSI base from VIC base */
+    if (!csi_base) {
+        pr_err("tx_isp_phy_init: No CSI base available\n");
+        return -ENODEV;
+    }
 
-    /* Get CSI base from the ISP device structure (already mapped) */
-    if (isp_dev->csi_regs) {
-        csi_base = isp_dev->csi_regs;  /* Use existing CSI mapping */
-        pr_info("tx_isp_csi_mipi_init: Using existing CSI mapping: %p\n", csi_base);
+    /* CRITICAL DEBUG: Check if MIPI CSI PHY is receiving sensor data */
+    pr_info("*** CRITICAL: Checking MIPI CSI PHY status before configuration ***\n");
+    u32 csi_status = readl(csi_base + 0x8);
+    u32 phy_status = readl(csi_base + 0x14);
+    pr_info("CSI Status: 0x%08x, PHY Status: 0x%08x\n", csi_status, phy_status);
+
+    /* Check if MIPI lanes are receiving data */
+    u32 lane0_status = readl(csi_base + 0x40);
+    u32 lane1_status = readl(csi_base + 0x44);
+    pr_info("MIPI Lane 0 Status: 0x%08x, Lane 1 Status: 0x%08x\n", lane0_status, lane1_status);
+
+
+      /* ==============================================================================================
+     * PHASE 2: CSI PHY Lane Configuration (massive write sequence)
+     * These are all new registers being written from 0x0 to various values
+     * ==============================================================================================*/
+
+    pr_info("*** PHASE 2: CSI PHY Lane Configuration ***\n");
+
+    /* CRITICAL: Check if sensor is actually outputting MIPI data */
+    pr_info("*** CRITICAL: Checking if GC2053 sensor is outputting MIPI data ***\n");
+    /* GC2053 should have register 0x3e=0x91 for MIPI streaming */
+    /* If VIC[0x380] is always 0x0, then MIPI data is not reaching VIC */
+
+    /* CSI PHY Control registers - complete configuration */
+    u8 csi_phy_ctrl_vals[] = {
+        0x7d, 0xe3, 0xa0, 0x83, 0xfa, 0x00, 0x00, 0x88,  /* 0x00-0x1c */
+        0x4e, 0xdd, 0x84, 0x5e, 0xf0, 0xc0, 0x36, 0xdb,  /* 0x20-0x3c */
+        0x03, 0x80, 0x10, 0x00, 0x00, 0x03, 0xff, 0x42,  /* 0x40-0x5c */
+        0x01, 0xc0, 0xc0, 0x78, 0x43, 0x33, 0x00, 0x00,  /* 0x60-0x7c */
+        0x1f, 0x00, 0x61                                   /* 0x80-0x88 */
+    };
+
+    writel(csi_phy_ctrl_vals[0], csi_base + 0x0);
+    writel(csi_phy_ctrl_vals[1], csi_base + 0x4);
+    writel(csi_phy_ctrl_vals[2], csi_base + 0x8);
+    writel(csi_phy_ctrl_vals[3], csi_base + 0xc);
+    writel(csi_phy_ctrl_vals[4], csi_base + 0x10);
+    writel(csi_phy_ctrl_vals[7], csi_base + 0x1c);
+    writel(csi_phy_ctrl_vals[8], csi_base + 0x20);
+    writel(csi_phy_ctrl_vals[9], csi_base + 0x24);
+    writel(csi_phy_ctrl_vals[10], csi_base + 0x28);
+    writel(csi_phy_ctrl_vals[11], csi_base + 0x2c);
+    writel(csi_phy_ctrl_vals[12], csi_base + 0x30);
+    writel(csi_phy_ctrl_vals[13], csi_base + 0x34);
+    writel(csi_phy_ctrl_vals[14], csi_base + 0x38);
+    writel(csi_phy_ctrl_vals[15], csi_base + 0x3c);
+    writel(csi_phy_ctrl_vals[16], csi_base + 0x40);
+    writel(csi_phy_ctrl_vals[17], csi_base + 0x44);
+    writel(csi_phy_ctrl_vals[18], csi_base + 0x48);
+    writel(csi_phy_ctrl_vals[21], csi_base + 0x54);
+    writel(csi_phy_ctrl_vals[22], csi_base + 0x58);
+    writel(csi_phy_ctrl_vals[23], csi_base + 0x5c);
+    writel(csi_phy_ctrl_vals[24], csi_base + 0x60);
+    writel(csi_phy_ctrl_vals[25], csi_base + 0x64);
+    writel(csi_phy_ctrl_vals[26], csi_base + 0x68);
+    writel(csi_phy_ctrl_vals[27], csi_base + 0x6c);
+    writel(csi_phy_ctrl_vals[28], csi_base + 0x70);
+    writel(csi_phy_ctrl_vals[29], csi_base + 0x74);
+    writel(csi_phy_ctrl_vals[32], csi_base + 0x80);
+    writel(csi_phy_ctrl_vals[34], csi_base + 0x88);
+    wmb();
+
+    /* CSI PHY Config registers - complete lane configuration */
+    struct csi_phy_lane_config {
+        u32 offset;
+        u32 value;
+    } csi_phy_configs[] = {
+        /* First lane configuration */
+        {0x100, 0x8a}, {0x104, 0x5}, {0x10c, 0x40}, {0x110, 0xb0},
+        {0x114, 0xc5}, {0x118, 0x3}, {0x11c, 0x20}, {0x120, 0xf},
+        {0x124, 0x48}, {0x128, 0x3f}, {0x12c, 0xf}, {0x130, 0x88},
+        {0x138, 0x86}, {0x13c, 0x10}, {0x140, 0x4}, {0x144, 0x1},
+        {0x148, 0x32}, {0x14c, 0x80}, {0x158, 0x1}, {0x15c, 0x60},
+        {0x160, 0x1b}, {0x164, 0x18}, {0x168, 0x7f}, {0x16c, 0x4b},
+        {0x174, 0x3},
+        /* Second lane configuration */
+        {0x180, 0x8a}, {0x184, 0x5}, {0x18c, 0x40}, {0x190, 0xb0},
+        {0x194, 0xc5}, {0x198, 0x3}, {0x19c, 0x9}, {0x1a0, 0xf},
+        {0x1a4, 0x48}, {0x1a8, 0xf}, {0x1ac, 0xf}, {0x1b0, 0x88},
+        {0x1b8, 0x86}, {0x1bc, 0x10}, {0x1c0, 0x4}, {0x1c4, 0x1},
+        {0x1c8, 0x32}, {0x1cc, 0x80}, {0x1d8, 0x1}, {0x1dc, 0x60},
+        {0x1e0, 0x1b}, {0x1e4, 0x18}, {0x1e8, 0x7f}, {0x1ec, 0x4b},
+        {0x1f4, 0x3},
+        /* Third and fourth lane configurations continue similarly */
+        {0x200, 0x8a}, {0x204, 0x5}, {0x20c, 0x40}, {0x210, 0xb0},
+        {0x214, 0xc5}, {0x218, 0x3}, {0x21c, 0x9}, {0x220, 0xf},
+        {0x224, 0x48}, {0x228, 0xf}, {0x22c, 0xf}, {0x230, 0x88},
+        {0x238, 0x86}, {0x23c, 0x10}, {0x240, 0x4}, {0x244, 0x1},
+        {0x248, 0x32}, {0x24c, 0x80}, {0x258, 0x1}, {0x25c, 0x60},
+        {0x260, 0x1b}, {0x264, 0x18}, {0x268, 0x7f}, {0x26c, 0x4b},
+        {0x274, 0x3},
+        {0x280, 0x8a}, {0x284, 0x5}, {0x28c, 0x40}, {0x290, 0xb0},
+        {0x294, 0xc5}, {0x298, 0x3}, {0x29c, 0x9}, {0x2a0, 0xf},
+        {0x2a4, 0x48}, {0x2a8, 0xf}, {0x2ac, 0xf}, {0x2b0, 0x88},
+        {0x2b8, 0x86}, {0x2bc, 0x10}, {0x2c0, 0x4}, {0x2c4, 0x1},
+        {0x2c8, 0x32}, {0x2cc, 0x80}, {0x2d8, 0x1}, {0x2dc, 0x60},
+        {0x2e0, 0x1b}, {0x2e4, 0x18}, {0x2e8, 0x7f}, {0x2ec, 0x4b},
+        {0x2f4, 0x3}
+    };
+
+    for (int i = 0; i < sizeof(csi_phy_configs)/sizeof(csi_phy_configs[0]); i++) {
+        writel(csi_phy_configs[i].value, csi_base + csi_phy_configs[i].offset);
+    }
+    wmb();
+
+    /* CRITICAL: After CSI PHY configuration, check if MIPI data is now flowing */
+    pr_info("*** CRITICAL: Checking MIPI CSI PHY status AFTER configuration ***\n");
+    csi_status = readl(csi_base + 0x8);
+    phy_status = readl(csi_base + 0x14);
+    pr_info("POST-CONFIG CSI Status: 0x%08x, PHY Status: 0x%08x\n", csi_status, phy_status);
+
+    lane0_status = readl(csi_base + 0x40);
+    lane1_status = readl(csi_base + 0x44);
+    pr_info("POST-CONFIG MIPI Lane 0: 0x%08x, Lane 1: 0x%08x\n", lane0_status, lane1_status);
+
+    /* Check if MIPI clock is active */
+    u32 mipi_clock = readl(csi_base + 0x14);
+    if (mipi_clock & 0x1) {
+        pr_info("*** MIPI CLOCK: ACTIVE - sensor clock detected ***\n");
     } else {
-        pr_err("tx_isp_csi_mipi_init: No existing CSI mapping available\n");
-        return -ENODEV;
+        pr_err("*** MIPI CLOCK: INACTIVE - NO SENSOR CLOCK! This explains VIC[0x380]=0x0 ***\n");
     }
 
-    /* CRITICAL FIX: Use CORRECT PHY base address from Binary Ninja reference driver */
-    /* Binary Ninja shows PHY registers at offset 0x13c in device structure, NOT core_regs + 0x21000 */
-    /* Reference driver: *(*($s0_1 + 0x13c) = PHY base */
-
-    /* Map PHY registers at the correct hardware address */
-    /* From Binary Ninja analysis: PHY is at a separate hardware address from CSI */
-    phy_base = ioremap(0x10021000, 0x1000);  /* Map PHY registers separately */
-    if (!phy_base) {
-        pr_err("tx_isp_csi_mipi_init: Failed to map PHY registers at 0x10021000\n");
-        return -ENODEV;
-    }
-    pr_info("tx_isp_csi_mipi_init: Mapped PHY registers: %p (0x10021000)\n", phy_base);
-
-    /* Get sensor attributes from VIC device */
-    sensor_attr = &isp_dev->vic_dev->sensor_attr;
-
-    if (!sensor_attr) {
-        pr_err("tx_isp_csi_mipi_init: No sensor attributes available\n");
-        return -EINVAL;
+    /* Check if MIPI data lanes are synchronized */
+    if ((lane0_status & 0x1) && (lane1_status & 0x1)) {
+        pr_info("*** MIPI LANES: SYNCHRONIZED - data should flow to VIC ***\n");
+    } else {
+        pr_err("*** MIPI LANES: NOT SYNCHRONIZED - no data flow to VIC! ***\n");
+        pr_err("*** This explains why VIC[0x380] always reads 0x0 ***\n");
     }
 
-    lanes = (sensor_attr->mipi.lans > 0) ? sensor_attr->mipi.lans : 2;  /* Default 2 lanes */
-
-    pr_info("*** REFERENCE DRIVER CSI MIPI INIT: %d lanes, interface_type=1 ***\n", lanes);
-
-    /* STEP 1: EXACT Binary Ninja reference driver CSI register sequence for MIPI */
-    /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
-    writel(lanes - 1, csi_base + 0x4);
-    wmb();
-    pr_info("*** BINARY NINJA EXACT: CSI lanes = %d (reg 0x4 = %d) ***\n", lanes, lanes - 1);
-
-    /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
-    reg_val = readl(csi_base + 0x8);
-    writel(reg_val & 0xfffffffe, csi_base + 0x8);
-    wmb();
-    pr_info("*** BINARY NINJA EXACT: CSI reg 0x8 &= 0xfffffffe ***\n");
-
-    /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = 0 */
-    writel(0, csi_base + 0xc);
-    wmb();
-    pr_info("*** BINARY NINJA EXACT: CSI reg 0xc = 0 ***\n");
-
-    /* Binary Ninja: private_msleep(1) */
-    msleep(1);
-
-    /* Binary Ninja: *($v1_9 + 0x10) &= 0xfffffffe */
-    reg_val = readl(csi_base + 0x10);
-    writel(reg_val & 0xfffffffe, csi_base + 0x10);
-    wmb();
-    pr_info("*** BINARY NINJA EXACT: CSI reg 0x10 &= 0xfffffffe ***\n");
-
-    /* Binary Ninja: private_msleep(1) */
-    msleep(1);
-
-    /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = $s2_1 */
-    writel(1, csi_base + 0xc);  /* Set to 1 for MIPI interface */
-    wmb();
-    pr_info("*** BINARY NINJA EXACT: CSI reg 0xc = 1 (MIPI interface) ***\n");
-
-    /* Binary Ninja: private_msleep(1) */
-    msleep(1);
-
-    pr_info("*** BINARY NINJA EXACT: CSI register sequence complete ***\n");
-
-    /* STEP 2: EXACT reference driver PHY configuration */
-    /* Get sensor frequency for PHY configuration */
-    sensor_freq = (sensor_attr->fps > 0) ? sensor_attr->fps : 30;  /* Use sensor FPS as frequency indicator */
-    phy_freq_setting = 1;  /* Default frequency setting */
-
-    /* Binary Ninja frequency mapping logic */
-    if (sensor_freq >= 80 && sensor_freq < 110) {
-        phy_freq_setting = 1;
-    } else if (sensor_freq >= 110 && sensor_freq < 150) {
-        phy_freq_setting = 2;
-    } else if (sensor_freq >= 150 && sensor_freq < 200) {
-        phy_freq_setting = 3;
-    } else if (sensor_freq >= 200 && sensor_freq < 250) {
-        phy_freq_setting = 4;
-    } else if (sensor_freq >= 250 && sensor_freq < 300) {
-        phy_freq_setting = 5;
-    } else if (sensor_freq >= 300 && sensor_freq < 400) {
-        phy_freq_setting = 6;
-    } else if (sensor_freq >= 400 && sensor_freq < 500) {
-        phy_freq_setting = 7;
-    } else if (sensor_freq >= 500 && sensor_freq < 600) {
-        phy_freq_setting = 8;
-    } else if (sensor_freq >= 600 && sensor_freq < 700) {
-        phy_freq_setting = 9;
-    } else if (sensor_freq >= 700 && sensor_freq < 800) {
-        phy_freq_setting = 10;
-    } else if (sensor_freq >= 800) {
-        phy_freq_setting = 11;
-    }
-
-    pr_info("*** REFERENCE DRIVER: PHY frequency setting = %d (sensor_freq=%d) ***\n", phy_freq_setting, sensor_freq);
-
-    /* STEP 3: EXACT Binary Ninja reference driver PHY register configuration */
-    /* Binary Ninja: Set PHY frequency configuration in register 0x160 */
-    phy_config = readl(phy_base + 0x160);
-    phy_config = (phy_config & 0xfffffff0) | phy_freq_setting;
-    writel(phy_config, phy_base + 0x160);
-    wmb();
-    pr_info("*** BINARY NINJA EXACT: PHY reg 0x160 = 0x%08x (freq_setting=%d) ***\n", phy_config, phy_freq_setting);
-
-    /* Binary Ninja: Replicate PHY config to other PHY registers */
-    writel(phy_config, phy_base + 0x1e0);  /* PHY register 0x1e0 */
-    writel(phy_config, phy_base + 0x260);  /* PHY register 0x260 */
-    wmb();
-    pr_info("*** BINARY NINJA EXACT: PHY regs 0x1e0, 0x260 = 0x%08x ***\n", phy_config);
-
-    /* STEP 4: EXACT Binary Ninja reference driver PHY initialization sequence */
-    /* Binary Ninja: *$v0_8 = 0x7d */
-    writel(0x7d, phy_base + 0x0);
-    wmb();
-    pr_info("*** BINARY NINJA EXACT: PHY reg 0x0 = 0x7d ***\n");
-
-    /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
-    writel(0x3f, phy_base + 0x128);
-    wmb();
-    pr_info("*** BINARY NINJA EXACT: PHY reg 0x128 = 0x3f ***\n");
-
-    /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
-    writel(1, csi_base + 0x10);
-    wmb();
-    pr_info("*** BINARY NINJA EXACT: CSI reg 0x10 = 1 (final enable) ***\n");
-
-    /* Binary Ninja: private_msleep(0xa) */
-    msleep(10);  /* Wait 10ms for PHY to stabilize */
-    pr_info("*** BINARY NINJA EXACT: 10ms PHY stabilization delay complete ***\n");
-
-    pr_info("*** BINARY NINJA EXACT: CSI MIPI initialization complete ***\n");
-    pr_info("*** This should fix VIC[0x380]=0x0 issue by properly routing MIPI data to VIC ***\n");
-
-    /* Cleanup PHY mapping */
-    iounmap(phy_base);
-    pr_info("*** CSI MIPI initialization using existing mappings - no cleanup required ***\n");
-
+    pr_info("*** CSI PHY initialization complete - MIPI status checked ***\n");
     return 0;
 }
 
@@ -3063,92 +3027,10 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Binary points to offset 0x80 in the structure */
     test_addr = &vic_dev->sensor_attr;  /* Or another member around offset 0x80 */
 
-    /* *** CRITICAL FIX: Map VIC registers - this was missing! *** */
-    pr_info("*** tx_isp_vic_probe: Mapping VIC registers ***\n");
-
-    /* Primary VIC space (original CSI PHY shared space) */
-    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);
-    if (!vic_dev->vic_regs) {
-        pr_err("tx_isp_vic_probe: Failed to map primary VIC registers at 0x133e0000\n");
-        kfree(vic_dev);
-        return -ENOMEM;
-    }
-    pr_info("*** Primary VIC registers mapped: %p (0x133e0000) ***\n", vic_dev->vic_regs);
-
-    /* Secondary VIC space (isp-w01 - CSI PHY coordination space) */
-    vic_dev->vic_regs_secondary = ioremap(0x10023000, 0x1000);
-    if (!vic_dev->vic_regs_secondary) {
-        pr_err("tx_isp_vic_probe: Failed to map secondary VIC registers at 0x10023000\n");
-        iounmap(vic_dev->vic_regs);
-        kfree(vic_dev);
-        return -ENOMEM;
-    }
-    pr_info("*** Secondary VIC registers mapped: %p (0x10023000) ***\n", vic_dev->vic_regs_secondary);
-
-    /* Initialize VIC device dimensions - CRITICAL: Use actual sensor output dimensions */
-    vic_dev->width = 1920;  /* GC2053 actual output width */
-    vic_dev->height = 1080; /* GC2053 actual output height */
-
-    /* Set up sensor attributes with defaults */
-    memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-    vic_dev->sensor_attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI interface (correct value from enum) */
-    vic_dev->sensor_attr.total_width = 1920;
-    vic_dev->sensor_attr.total_height = 1080;
-    vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
-
-    /* *** CRITICAL FIX: Link this VIC device to the global ISP device *** */
-    /* This ensures there's only ONE VIC device used throughout the system */
-    extern struct tx_isp_dev *ourISPdev;
-    if (ourISPdev) {
-        /* Replace any existing VIC device with this properly initialized one */
-        if (ourISPdev->vic_dev) {
-            pr_info("*** REPLACING EXISTING VIC DEVICE WITH PROBE-CREATED DEVICE ***\n");
-        }
-        ourISPdev->vic_dev = (struct tx_isp_subdev *)&vic_dev->sd;
-        vic_dev->sd.isp = (void *)ourISPdev;
-
-        /* *** CRITICAL: Set up ISP device VIC register pointers for interrupt handlers *** */
-        /* This was missing and is why interrupts weren't working! */
-        if (!ourISPdev->vic_regs) {
-            ourISPdev->vic_regs = vic_dev->vic_regs;
-            pr_info("*** CRITICAL: Set ourISPdev->vic_regs = %p ***\n", ourISPdev->vic_regs);
-        }
-        if (!ourISPdev->vic_regs2) {
-            ourISPdev->vic_regs2 = vic_dev->vic_regs_secondary;
-            pr_info("*** CRITICAL: Set ourISPdev->vic_regs2 = %p ***\n", ourISPdev->vic_regs2);
-        }
-
-        pr_info("*** CRITICAL: VIC DEVICE LINKED TO GLOBAL ISP DEVICE ***\n");
-        pr_info("  ourISPdev->vic_dev = %p (VIC subdev)\n", ourISPdev->vic_dev);
-        pr_info("  vic_dev = %p (full VIC device)\n", vic_dev);
-        pr_info("  vic_dev->sd.isp = %p (back-reference to ISP)\n", vic_dev->sd.isp);
-        pr_info("  ourISPdev->vic_regs = %p (for interrupt handlers)\n", ourISPdev->vic_regs);
-        pr_info("  ourISPdev->vic_regs2 = %p (for interrupt handlers)\n", ourISPdev->vic_regs2);
-    } else {
-        pr_warn("*** WARNING: No global ISP device found - VIC device not linked ***\n");
-    }
-
-    /* *** CRITICAL: Register VIC device in subdev array *** */
-    extern struct tx_isp_subdev_ops vic_subdev_ops;
-    if (ourISPdev) {
-        /* Set up VIC subdev with proper ops */
-        vic_dev->sd.ops = &vic_subdev_ops;
-
-        /* Register VIC device in subdev array at index 0 */
-        ourISPdev->subdevs[0] = &vic_dev->sd;
-
-        pr_info("*** VIC PROBE: REGISTERED VIC DEVICE IN SUBDEV ARRAY ***\n");
-        pr_info("  subdevs[0] = %p (VIC subdev with registers)\n", &vic_dev->sd);
-        pr_info("  vic_regs = %p, vic_regs_secondary = %p\n", vic_dev->vic_regs, vic_dev->vic_regs_secondary);
-    }
-
     pr_info("*** tx_isp_vic_probe: VIC device initialized successfully ***\n");
     pr_info("VIC device: vic_dev=%p, size=%zu\n", vic_dev, sizeof(struct tx_isp_vic_device));
     pr_info("  sd: %p\n", sd);
     pr_info("  state: %d\n", vic_dev->state);
-    pr_info("  vic_regs: %p\n", vic_dev->vic_regs);
-    pr_info("  vic_regs_secondary: %p\n", vic_dev->vic_regs_secondary);
-    pr_info("  dimensions: %dx%d\n", vic_dev->width, vic_dev->height);
     pr_info("  test_addr: %p\n", test_addr);
 
     return 0;

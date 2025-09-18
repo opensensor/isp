@@ -334,114 +334,143 @@ static void ispcore_irq_fs_work(struct work_struct *work);
 
 
 
-/* Binary Ninja: ispcore_sensor_ops_ioctl - lightweight sensor operations */
+/* Binary Ninja: ispcore_sensor_ops_ioctl - iterate through subdevices safely */
 static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
 {
     int result = 0;
+    int i;
 
     if (!isp_dev) {
         return -ENODEV;
     }
 
-    pr_debug("*** ispcore_sensor_ops_ioctl: Quick sensor check ***\n");
+    pr_info("*** ispcore_sensor_ops_ioctl: Looking for actual sensor device ***\n");
 
-    /* CRITICAL FIX: Don't call sensor IOCTL operations that can block */
-    /* The 22-second hang is caused by sensor I2C operations blocking in work context */
-    /* Reference driver likely has different sensor operation handling */
-
+    /* CRITICAL: Don't iterate through subdevs - call the real sensor directly */
+    /* The real sensor is stored in isp_dev->sensor, not in the subdevs array */
     if (isp_dev->sensor && isp_dev->sensor->sd.ops &&
         isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
 
-        pr_debug("*** ispcore_sensor_ops_ioctl: Sensor available but skipping I2C operations ***\n");
+        pr_info("*** ispcore_sensor_ops_ioctl: Found real sensor device - calling sensor IOCTL ***\n");
 
-        /* CRITICAL FIX: Don't call sensor IOCTL from work queue context */
-        /* This prevents the I2C blocking that causes soft lockup */
-        /* Real sensor operations should be done from user context, not interrupt work */
+        /* CRITICAL: Sensor expects FPS in format (fps_num << 16) | fps_den */
+        static int fps_value = (25 << 16) | 1;  /* Default 25/1 FPS in correct format */
 
-        result = 0;  /* Success without actually calling sensor */
-        pr_debug("*** ispcore_sensor_ops_ioctl: Sensor operation simulated (no I2C blocking) ***\n");
+        /* Update FPS from tuning data if available */
+        if (isp_dev->tuning_data && isp_dev->tuning_data->fps_num > 0 && isp_dev->tuning_data->fps_den > 0) {
+            int new_fps = (isp_dev->tuning_data->fps_num << 16) | isp_dev->tuning_data->fps_den;
+            if (new_fps != fps_value) {
+                fps_value = new_fps;
+                pr_info("*** ispcore_sensor_ops_ioctl: Updated FPS to %d/%d (0x%x) from tuning data ***\n",
+                        isp_dev->tuning_data->fps_num, isp_dev->tuning_data->fps_den, fps_value);
+            }
+        }
 
+        /* Skip the FPS logging since we're now using EXPO instead */
+
+        /* CRITICAL FIX: Use supported sensor IOCTL command instead of unsupported FPS command */
+        /* The GC2053 sensor doesn't support TX_ISP_EVENT_SENSOR_FPS, causing -515 errors */
+        /* Frame sync work should do Auto Exposure (AE) operations instead */
+
+        static int expo_value = 0x300;  /* Default exposure value for AE */
+
+        pr_info("*** ispcore_sensor_ops_ioctl: Calling sensor with EXPO=0x%x (AE operation) ***\n", expo_value);
+
+        /* Call the real sensor's IOCTL with supported EXPO command - this triggers I2C communication */
+        result = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, TX_ISP_EVENT_SENSOR_EXPO, &expo_value);
+
+        pr_info("*** ispcore_sensor_ops_ioctl: Real sensor IOCTL result: %d ***\n", result);
+
+        if (result == 0) {
+            pr_info("*** ispcore_sensor_ops_ioctl: Sensor AE operation successful - should see exposure I2C writes ***\n");
+        } else {
+            pr_warn("*** ispcore_sensor_ops_ioctl: Sensor AE operation failed: %d ***\n", result);
+        }
     } else {
-        pr_debug("*** ispcore_sensor_ops_ioctl: No sensor device found ***\n");
+        pr_warn("*** ispcore_sensor_ops_ioctl: No real sensor device found ***\n");
         result = -ENODEV;
     }
 
     return (result == -ENOIOCTLCMD) ? 0 : result;
 }
 
-/* Frame sync work function - EXACT Binary Ninja reference driver implementation */
+/* Frame sync work function - Safe implementation without dangerous offsets */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
     extern struct tx_isp_dev *ourISPdev;
     struct tx_isp_dev *isp_dev = ourISPdev;
-    static int work_counter = 0;
-    int i;
+    static int sensor_call_counter = 0;
 
-    work_counter++;
-    pr_debug("*** ISP FRAME SYNC WORK: Entry #%d - Reference driver implementation ***\n", work_counter);
+    pr_info("*** ISP FRAME SYNC WORK: ENTRY - Work function is running! ***\n");
+    pr_info("*** ISP FRAME SYNC WORK: Safe implementation without dangerous offsets ***\n");
 
     if (!isp_dev) {
         pr_warn("*** ISP FRAME SYNC WORK: isp_dev is NULL ***\n");
         return;
     }
 
-    /* REFERENCE DRIVER: Binary Ninja shows ispcore_irq_fs_work iterates through 7 conditions */
-    /* void* $s5 = *(mdns_y_pspa_cur_bi_wei0_array + 0xd4) */
-    /* int32_t* $s2_1 = $s5 + 0x180 */
-    /* for (int32_t i = 0; i != 7; ) */
+    /* MATCH REFERENCE DRIVER: Check conditions every frame, call sensor when conditions are met */
+    pr_info("*** ISP FRAME SYNC WORK: Checking sensor conditions (like Binary Ninja reference) ***\n");
 
-    /* CRITICAL FIX: Reference driver has condition array at offset 0x180 from some base */
-    /* We'll simulate this with a simple state machine that doesn't call sensor on every frame */
+    /* CRITICAL FIX: Auto-detect streaming state from VIC hardware */
+    bool vic_is_streaming = false;
+    if (isp_dev->vic_dev) {
+        struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+        vic_is_streaming = (vic->stream_state == 1);  /* VIC stream_state = 1 means streaming */
 
-    /* REFERENCE DRIVER: Only call sensor operations when specific conditions are met */
-    /* The reference driver checks: if (*$s2_1 == 0) then skip, else process */
-    /* Most of the time, the conditions are 0 (skip), only occasionally they're set */
-
-    static int condition_states[7] = {0, 0, 0, 0, 0, 0, 0};  /* Reference driver condition array */
-    static int frame_count = 0;
-
-    frame_count++;
-
-    /* CRITICAL FIX: Only set conditions occasionally, not every frame */
-    /* This prevents the continuous sensor I2C calls that cause the 22-second hang */
-    if ((frame_count % 30) == 0) {  /* Only every 30 frames (~1 second at 30fps) */
-        condition_states[2] = 1;  /* Set condition for AE operation */
-        pr_debug("*** ISP FRAME SYNC WORK: Setting AE condition (frame %d) ***\n", frame_count);
+        /* Auto-set streaming_enabled if VIC is streaming but flag is false */
+        if (vic_is_streaming && !isp_dev->streaming_enabled) {
+            pr_info("*** ISP FRAME SYNC WORK: Auto-setting streaming_enabled=true (VIC is streaming) ***\n");
+            isp_dev->streaming_enabled = true;
+        }
     }
 
-    /* REFERENCE DRIVER: Iterate through 7 conditions like Binary Ninja */
-    for (i = 0; i < 7; i++) {
-        if (condition_states[i] == 0) {
-            /* Reference driver: if (*$s2_1 == 0) skip */
-            continue;
+    /* Check if sensor is available and streaming is active */
+    pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d, vic_streaming=%d ***\n",
+            isp_dev->sensor, isp_dev->streaming_enabled, vic_is_streaming);
+
+    /* CRITICAL FIX: Frame sync work SHOULD call sensor operations like reference driver! */
+    /* Reference driver ispcore_irq_fs_work calls ispcore_sensor_ops_ioctl for AE/AGC/AWB */
+    pr_info("*** ISP FRAME SYNC WORK: Frame sync processing (calling sensor operations) ***\n");
+
+    if (isp_dev->sensor && isp_dev->streaming_enabled) {
+        pr_info("*** ISP FRAME SYNC WORK: Calling sensor operations (like reference driver) ***\n");
+
+        /* CRITICAL: Call sensor operations like reference driver ispcore_irq_fs_work */
+        /* This triggers AE/AGC/AWB sensor I2C operations */
+        /* Add error handling to prevent work queue crashes */
+        extern int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev);
+
+        int sensor_result = -ENODEV;
+
+        /* CRITICAL FIX: Do proper per-frame sensor operations like reference driver */
+        /* Frame sync should do AE/AGC operations, NOT FPS control */
+        pr_info("*** ISP FRAME SYNC WORK: Performing per-frame sensor operations (AE/AGC) ***\n");
+
+        /* REFERENCE DRIVER: Call ispcore_sensor_ops_ioctl exactly like reference */
+        /* Binary Ninja: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
+        pr_info("*** ISP FRAME SYNC WORK: Calling ispcore_sensor_ops_ioctl (reference driver) ***\n");
+        sensor_result = ispcore_sensor_ops_ioctl(isp_dev);
+        pr_info("*** ISP FRAME SYNC WORK: ispcore_sensor_ops_ioctl result: %d ***\n", sensor_result);
+
+        if (sensor_result == 0) {
+            pr_info("*** ISP FRAME SYNC WORK: All sensor operations successful ***\n");
+        } else if (sensor_result == -ENOIOCTLCMD) {
+            pr_info("*** ISP FRAME SYNC WORK: No sensor IOCTL command (normal) ***\n");
+        } else {
+            pr_warn("*** ISP FRAME SYNC WORK: Sensor operations failed: %d ***\n", sensor_result);
         }
 
-        if (i == 5) {
-            /* Reference driver: special case for i == 5, just increment */
-            continue;
-        }
-
-        /* REFERENCE DRIVER: Check streaming state before calling sensor */
-        /* if (*(*($s5 + 0x120) + 0xf0) != 1) skip */
-        if (!isp_dev->streaming_enabled) {
-            continue;
-        }
-
-        pr_debug("*** ISP FRAME SYNC WORK: Processing condition %d ***\n", i);
-
-        /* REFERENCE DRIVER: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
-        /* Only call when conditions are met, not every frame */
-        if (i == 2) {  /* AE condition */
-            extern int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev);
-            int result = ispcore_sensor_ops_ioctl(isp_dev);
-            pr_debug("*** ISP FRAME SYNC WORK: Sensor AE operation result: %d ***\n", result);
-        }
-
-        /* REFERENCE DRIVER: *$s2_1 = 0 (clear condition after processing) */
-        condition_states[i] = 0;
+        pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (sensor available) ***\n");
+    } else {
+        pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (no sensor/not streaming) ***\n");
     }
 
-    pr_debug("*** ISP FRAME SYNC WORK: Reference driver implementation complete ***\n");
+    pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation complete - work finished ***\n");
+
+    /* CRITICAL: Ensure work completion is visible to prevent queue backup */
+    sensor_call_counter++;
+    pr_info("*** ISP FRAME SYNC WORK: Work completion #%d - ready for next interrupt ***\n", sensor_call_counter);
 }
 
 /* Forward declarations for frame channel functions - avoid naming conflicts */
@@ -744,11 +773,11 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Complex callback and state management would be here */
     }
 
-    /* Binary Ninja: Channel 1 frame done */
+    /* *** CRITICAL: CHANNEL 1 FRAME COMPLETION PROCESSING *** */
     if (interrupt_status & 2) {  /* Channel 1 frame done */
         pr_info("*** ISP CORE: CHANNEL 1 FRAME DONE INTERRUPT ***\n");
-        /* Binary Ninja: Similar processing for channel 1 - ADD TIMEOUT */
-        int timeout_count = 0;
+
+        /* Binary Ninja: Similar processing for channel 1 */
         while ((readl(vic_regs + 0x9a7c) & 1) == 0) {
             u32 frame_buffer_addr = readl(vic_regs + 0x9a74);
             u32 frame_info1 = readl(vic_regs + 0x9a8c);
@@ -795,73 +824,23 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
-/* ISP interrupt handler - FIXED to handle different IRQ sources correctly */
+/* ISP interrupt handler - now calls the proper dispatch system */
 irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = dev_id;
-    u32 interrupt_status;
-    void __iomem *reg_base;
-
-    if (!isp_dev) {
-        return IRQ_NONE;
-    }
-
-    /* CRITICAL FIX: Handle the specific interrupts that are firing (0x1500) */
-    /* Binary Ninja shows we must handle these interrupts or hardware keeps re-asserting them */
-
-    if (!isp_dev->vic_regs) {
-        return IRQ_NONE;
-    }
-
-    /* Read interrupt status - EXACTLY like Binary Ninja */
-    interrupt_status = readl(isp_dev->vic_regs + 0xb4);
-    if (interrupt_status == 0) {
-        return IRQ_NONE;
-    }
-
-    /* CRITICAL: If we're getting continuous interrupts (0x1500), disable interrupt sources first */
-    if (interrupt_status & 0x500) {  /* Error interrupts causing the storm */
-        /* Temporarily disable error interrupt sources to break the loop */
-        u32 int_mask = readl(isp_dev->vic_regs + 0xb0);  /* Read interrupt mask */
-        writel(int_mask & ~0x500, isp_dev->vic_regs + 0xb0);  /* Disable error interrupts */
-        wmb();
-    }
-
-    /* Clear interrupt status */
-    writel(interrupt_status, isp_dev->vic_regs + 0xb8);
-    wmb();
-
-    /* CRITICAL: Clear the underlying hardware error conditions causing continuous interrupts */
-    if (interrupt_status & 0x1000) {  /* Frame sync interrupt - bit 12 */
-        /* Binary Ninja: private_schedule_work(&fs_work) */
-        /* For now, just acknowledge it without scheduling work */
-    }
-
-    if (interrupt_status & 0x500) {   /* Error interrupts - bits 8 and 10 */
-        /* CRITICAL: These error interrupts are firing continuously! */
-        /* We need to clear the underlying error condition, not just the interrupt status */
-
-        /* COMPREHENSIVE: Clear ALL possible error status registers */
-        u32 error_status = readl(isp_dev->vic_regs + 0x84c);  /* Binary Ninja reads this for errors */
-        if (error_status != 0) {
-            writel(error_status, isp_dev->vic_regs + 0x84c);  /* Clear by writing back */
-            wmb();
-        }
-
-        /* Re-enable error interrupts after clearing error conditions */
-        u32 int_mask = readl(isp_dev->vic_regs + 0xb0);
-        writel(int_mask | 0x500, isp_dev->vic_regs + 0xb0);  /* Re-enable error interrupts */
-        wmb();
-    }
-
-    /* Return IRQ_HANDLED to tell kernel we processed the interrupt */
-    return IRQ_HANDLED;
+    /* Forward to the proper ISP core interrupt service routine */
+    return ispcore_interrupt_service_routine(irq, dev_id);
 }
 
-/* ISP interrupt thread handler - COMPLETELY DISABLED TO TEST SOFT LOCKUP */
+/* ISP interrupt thread handler - for threaded IRQ processing */
 irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id)
 {
-    /* TEMPORARY: Completely disable ALL interrupt processing to test soft lockup */
+    struct tx_isp_dev *isp_dev = dev_id;
+    
+    pr_debug("*** isp_irq_thread_handle: Thread IRQ %d, dev_id=%p ***\n", irq, dev_id);
+    
+    /* Handle any thread-level interrupt processing here */
+    /* For VIC, most processing is done in the main handler */
+    
     return IRQ_HANDLED;
 }
 
@@ -1338,35 +1317,26 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
 static int tx_isp_vic_device_init(struct tx_isp_dev *isp)
 {
     struct tx_isp_vic_device *vic_dev;
-
+    
     pr_info("Initializing VIC device\n");
-
-    /* Check if VIC device already exists (created by probe) */
-    if (isp->vic_dev) {
-        struct tx_isp_vic_device *existing_vic = container_of((struct tx_isp_subdev *)isp->vic_dev,
-                                                             struct tx_isp_vic_device, sd);
-
-        pr_info("*** VIC device already exists (created by probe) ***\n");
-        pr_info("  Existing VIC device: %p\n", existing_vic);
-        pr_info("  vic_regs: %p\n", existing_vic->vic_regs);
-
-        /* Check if the existing VIC device has registers mapped */
-        if (existing_vic->vic_regs && existing_vic->vic_regs_secondary) {
-            pr_info("*** USING EXISTING VIC DEVICE WITH MAPPED REGISTERS ***\n");
-            return 0; /* Success - use existing device */
-        } else {
-            pr_warn("*** EXISTING VIC DEVICE MISSING REGISTERS - WILL REPLACE ***\n");
-        }
-    }
-
-    /* *** REMOVED DUPLICATE VIC DEVICE CREATION *** */
-    /* VIC device MUST be created by tx_isp_vic_probe with proper register mapping */
+    
+    /* Allocate VIC device structure if not already present */
     if (!isp->vic_dev) {
-        pr_warn("*** WARNING: VIC device not found - probe may not have run yet ***\n");
-        pr_warn("*** VIC device will be created by tx_isp_vic_probe with registers ***\n");
-        return -EPROBE_DEFER; /* Defer until probe creates the VIC device */
+        vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
+        if (!vic_dev) {
+            pr_err("Failed to allocate VIC device\n");
+            return -ENOMEM;
+        }
+        
+        /* Initialize VIC device structure */
+        vic_dev->state = 1; /* INIT state */
+        mutex_init(&vic_dev->state_lock);
+        spin_lock_init(&vic_dev->lock);
+        init_completion(&vic_dev->frame_complete);
+        
+        isp->vic_dev = vic_dev;
     }
-
+    
     pr_info("VIC device initialized\n");
     return 0;
 }
@@ -1417,9 +1387,14 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
     /* Binary Ninja: void* $s0_1 = arg1[0x35] */
     vic_dev = isp->vic_dev;
     if (!vic_dev) {
-        pr_warn("ispcore_slake_module: No VIC device found - probe may not have run yet");
-        pr_warn("ispcore_slake_module: VIC device will be created by tx_isp_vic_probe");
-        return -EPROBE_DEFER; /* Defer until probe creates the VIC device */
+        pr_info("ispcore_slake_module: No VIC device found - creating it now");
+        ret = tx_isp_create_vic_device(isp);
+        if (ret != 0) {
+            pr_err("ispcore_slake_module: Failed to create VIC device: %d", ret);
+            return ret;
+        }
+        vic_dev = isp->vic_dev;
+        pr_info("ispcore_slake_module: VIC device created successfully");
     }
     
     /* Binary Ninja: int32_t $v0 = *($s0_1 + 0xe8) */
@@ -3280,9 +3255,10 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 pr_info("*** tx_isp_core_probe: Frame sync work initialized at %p ***\n", &fs_work);
                 pr_info("*** tx_isp_core_probe: Frame sync work queue initialized with dedicated workqueue ***\n");
 
-                /* CRITICAL FIX: Don't call work function directly during probe - causes sleeping context error */
-                /* Work function should only be called via work queue, not directly */
-                pr_info("*** tx_isp_core_probe: Frame sync work ready - will be called via interrupts ***\n");
+                /* Test the work function directly to see if it works */
+                pr_info("*** tx_isp_core_probe: Testing frame sync work function directly ***\n");
+                ispcore_irq_fs_work(&fs_work);
+                pr_info("*** tx_isp_core_probe: Direct work function test completed ***\n");
 
                 /* CRITICAL: Now that core device is set up, call the key function that creates graph and nodes */
                 pr_info("*** tx_isp_core_probe: Calling tx_isp_create_graph_and_nodes ***\n");

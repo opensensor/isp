@@ -76,7 +76,7 @@ static DEFINE_MUTEX(sensor_register_mutex);
 static void destroy_frame_channel_devices(void);
 int __init tx_isp_subdev_platform_init(void);
 void __exit tx_isp_subdev_platform_exit(void);
-/* VIC device creation handled by tx_isp_vic_probe - no external function needed */
+int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 void isp_process_frame_statistics(struct tx_isp_dev *dev);
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
@@ -4928,9 +4928,15 @@ static int tx_isp_init(void)
     INIT_DELAYED_WORK(&vic_frame_work, vic_frame_work_function);
     pr_info("*** Frame generation work queue initialized ***\n");
     
-    /* *** REMOVED DUPLICATE VIC DEVICE CREATION *** */
-    /* VIC device will be created by tx_isp_vic_probe with proper register mapping */
-    pr_info("*** VIC DEVICE CREATION DEFERRED TO PLATFORM DRIVER PROBE ***\n");
+    /* *** CRITICAL FIX: Create and link VIC device structure immediately *** */
+    pr_info("*** CREATING VIC DEVICE STRUCTURE AND LINKING TO ISP CORE ***\n");
+    ret = tx_isp_create_vic_device(ourISPdev);
+    if (ret) {
+        pr_err("Failed to create VIC device structure: %d\n", ret);
+        kfree(ourISPdev);
+        ourISPdev = NULL;
+        return ret;
+    }
     
     /* *** CRITICAL FIX: VIN device creation MUST be deferred until after memory mappings *** */
     pr_info("*** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***\n");
