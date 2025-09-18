@@ -1162,15 +1162,18 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
         return -ENODEV;
     }
 
-    /* Get PHY base from ISP core registers (PHY is at core_base + offset) */
-    if (isp_dev->core_regs) {
-        /* PHY registers are typically at ISP core base + 0x21000 offset */
-        phy_base = isp_dev->core_regs + 0x21000;  /* Use existing ISP mapping + PHY offset */
-        pr_info("tx_isp_csi_mipi_init: Using existing PHY mapping: %p (core_regs + 0x21000)\n", phy_base);
-    } else {
-        pr_err("tx_isp_csi_mipi_init: No existing ISP core register mapping available\n");
+    /* CRITICAL FIX: Use CORRECT PHY base address from Binary Ninja reference driver */
+    /* Binary Ninja shows PHY registers at offset 0x13c in device structure, NOT core_regs + 0x21000 */
+    /* Reference driver: *(*($s0_1 + 0x13c) = PHY base */
+
+    /* Map PHY registers at the correct hardware address */
+    /* From Binary Ninja analysis: PHY is at a separate hardware address from CSI */
+    phy_base = ioremap(0x10021000, 0x1000);  /* Map PHY registers separately */
+    if (!phy_base) {
+        pr_err("tx_isp_csi_mipi_init: Failed to map PHY registers at 0x10021000\n");
         return -ENODEV;
     }
+    pr_info("tx_isp_csi_mipi_init: Mapped PHY registers: %p (0x10021000)\n", phy_base);
 
     /* Get sensor attributes from VIC device */
     sensor_attr = &isp_dev->vic_dev->sensor_attr;
@@ -1184,29 +1187,31 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
 
     pr_info("*** REFERENCE DRIVER CSI MIPI INIT: %d lanes, interface_type=1 ***\n", lanes);
 
-    /* STEP 1: EXACT reference driver CSI register sequence for MIPI */
+    /* STEP 1: EXACT Binary Ninja reference driver CSI register sequence for MIPI */
     /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
     writel(lanes - 1, csi_base + 0x4);
     wmb();
-    pr_info("CSI: Set lanes to %d (reg 0x4 = %d)\n", lanes, lanes - 1);
+    pr_info("*** BINARY NINJA EXACT: CSI lanes = %d (reg 0x4 = %d) ***\n", lanes, lanes - 1);
 
     /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
     reg_val = readl(csi_base + 0x8);
     writel(reg_val & 0xfffffffe, csi_base + 0x8);
     wmb();
+    pr_info("*** BINARY NINJA EXACT: CSI reg 0x8 &= 0xfffffffe ***\n");
 
     /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = 0 */
     writel(0, csi_base + 0xc);
     wmb();
+    pr_info("*** BINARY NINJA EXACT: CSI reg 0xc = 0 ***\n");
 
     /* Binary Ninja: private_msleep(1) */
     msleep(1);
-
 
     /* Binary Ninja: *($v1_9 + 0x10) &= 0xfffffffe */
     reg_val = readl(csi_base + 0x10);
     writel(reg_val & 0xfffffffe, csi_base + 0x10);
     wmb();
+    pr_info("*** BINARY NINJA EXACT: CSI reg 0x10 &= 0xfffffffe ***\n");
 
     /* Binary Ninja: private_msleep(1) */
     msleep(1);
@@ -1214,11 +1219,12 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
     /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = $s2_1 */
     writel(1, csi_base + 0xc);  /* Set to 1 for MIPI interface */
     wmb();
+    pr_info("*** BINARY NINJA EXACT: CSI reg 0xc = 1 (MIPI interface) ***\n");
 
     /* Binary Ninja: private_msleep(1) */
     msleep(1);
 
-    pr_info("*** REFERENCE DRIVER: CSI register sequence complete ***\n");
+    pr_info("*** BINARY NINJA EXACT: CSI register sequence complete ***\n");
 
     /* STEP 2: EXACT reference driver PHY configuration */
     /* Get sensor frequency for PHY configuration */
@@ -1252,33 +1258,39 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
 
     pr_info("*** REFERENCE DRIVER: PHY frequency setting = %d (sensor_freq=%d) ***\n", phy_freq_setting, sensor_freq);
 
-    /* STEP 3: EXACT reference driver PHY register configuration */
+    /* STEP 3: EXACT Binary Ninja reference driver PHY register configuration */
     /* Binary Ninja: Set PHY frequency configuration in register 0x160 */
     phy_config = readl(phy_base + 0x160);
     phy_config = (phy_config & 0xfffffff0) | phy_freq_setting;
     writel(phy_config, phy_base + 0x160);
     wmb();
+    pr_info("*** BINARY NINJA EXACT: PHY reg 0x160 = 0x%08x (freq_setting=%d) ***\n", phy_config, phy_freq_setting);
 
     /* Binary Ninja: Replicate PHY config to other PHY registers */
     writel(phy_config, phy_base + 0x1e0);  /* PHY register 0x1e0 */
     writel(phy_config, phy_base + 0x260);  /* PHY register 0x260 */
     wmb();
+    pr_info("*** BINARY NINJA EXACT: PHY regs 0x1e0, 0x260 = 0x%08x ***\n", phy_config);
 
-    /* STEP 4: EXACT reference driver PHY initialization sequence */
+    /* STEP 4: EXACT Binary Ninja reference driver PHY initialization sequence */
     /* Binary Ninja: *$v0_8 = 0x7d */
     writel(0x7d, phy_base + 0x0);
     wmb();
+    pr_info("*** BINARY NINJA EXACT: PHY reg 0x0 = 0x7d ***\n");
 
     /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
     writel(0x3f, phy_base + 0x128);
     wmb();
+    pr_info("*** BINARY NINJA EXACT: PHY reg 0x128 = 0x3f ***\n");
 
     /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
     writel(1, csi_base + 0x10);
     wmb();
+    pr_info("*** BINARY NINJA EXACT: CSI reg 0x10 = 1 (final enable) ***\n");
 
     /* Binary Ninja: private_msleep(0xa) */
     msleep(10);  /* Wait 10ms for PHY to stabilize */
+    pr_info("*** BINARY NINJA EXACT: 10ms PHY stabilization delay complete ***\n");
 
     /* CRITICAL: Read current PHY register values to understand working configuration */
     pr_info("*** CRITICAL: Reading current PHY register values for analysis ***\n");
