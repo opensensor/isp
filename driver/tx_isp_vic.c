@@ -1761,10 +1761,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x4440, vic_regs + 0x1ac);
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         
-        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
-        writel(2, vic_regs + 0x0);
-        wmb();
-        writel(1, vic_regs + 0x0);
+        /* VIC unlock sequence already completed above - no duplicate needed */
         
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT656) {
         /* BT656 - Binary Ninja 000105b0-00010684 */
@@ -1779,10 +1776,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x200, vic_regs + 0x1d0);
         writel(0x200, vic_regs + 0x1d4);
         
-        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
-        writel(2, vic_regs + 0x0);
-        wmb();
-        writel(1, vic_regs + 0x0);
+        /* VIC unlock sequence already completed above - no duplicate needed */
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT1120) {
         /* BT1120 - Binary Ninja 00010500-00010684 */
