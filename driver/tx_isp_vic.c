@@ -199,24 +199,24 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 /* MIPS DMA cache synchronization helper - CRITICAL for proper data transfer */
 static void mips_dma_cache_sync(dma_addr_t addr, size_t size, int direction)
 {
-    /* MIPS architecture requires explicit cache synchronization for DMA coherency */
+    /* Use standard DMA API instead of MIPS-specific functions */
+    void *virt_addr = phys_to_virt(addr);
 
     if (direction == DMA_FROM_DEVICE) {
         /* Invalidate cache before device writes to memory */
-        dma_cache_inv((unsigned long)phys_to_virt(addr), size);
+        dma_sync_single_for_device(NULL, addr, size, DMA_FROM_DEVICE);
     } else if (direction == DMA_TO_DEVICE) {
         /* Flush cache before device reads from memory */
-        dma_cache_wback((unsigned long)phys_to_virt(addr), size);
+        dma_sync_single_for_device(NULL, addr, size, DMA_TO_DEVICE);
     } else {
         /* Bidirectional - flush and invalidate */
-        dma_cache_wback_inv((unsigned long)phys_to_virt(addr), size);
+        dma_sync_single_for_device(NULL, addr, size, DMA_BIDIRECTIONAL);
     }
 
     /* Memory barrier to ensure cache operations complete */
     wmb();
-    __sync();
 
-    pr_debug("*** MIPS DMA CACHE SYNC: addr=0x%x size=%d direction=%d ***\n",
+    pr_debug("*** DMA CACHE SYNC: addr=0x%x size=%d direction=%d ***\n",
              addr, size, direction);
 }
 
