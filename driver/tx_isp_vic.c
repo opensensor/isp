@@ -2794,9 +2794,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                 /* Map the CSI PHY registers - this is separate from basic CSI control at 0x10022000 */
                 void __iomem *csi_phy_base = ioremap(0x10024000, 0x1000);  /* CSI PHY base */
-                if (!csi_phy_base) {
-                    pr_err("*** CRITICAL: Failed to map CSI PHY registers at 0x10024000 ***\n");
-                } else {
+                if (csi_phy_base) {
                         pr_info("*** CONFIGURING CSI PHY REGISTERS (isp-csi base=%p) ***\n", csi_phy_base);
 
                         /* CSI PHY Control registers (0x0-0x88) - from reference trace lines 115-142 */
