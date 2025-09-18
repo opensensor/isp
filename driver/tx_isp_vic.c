@@ -565,33 +565,6 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     pr_debug("vic_mdma_irq_function: Stream not active, skipping\n");
     return 0;
 }
-static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
-{
-    void __iomem *vic_base = vic_dev->vic_regs;
-    
-    pr_debug("*** vic_mdma_irq_function: channel=%d, vic_dev=%p ***\n", channel, vic_dev);
-    
-    /* MDMA channel interrupt processing */
-    if (channel == 0) {
-        /* Channel 0 MDMA processing */
-        pr_debug("vic_mdma_irq_function: Processing MDMA channel 0 interrupt\n");
-        
-        /* Complete any pending frame operations for channel 0 */
-        complete(&vic_dev->frame_complete);
-        
-        /* Clear channel 0 specific MDMA status if needed */
-        /* This would include hardware-specific register operations */
-    } else if (channel == 1) {
-        /* Channel 1 MDMA processing */
-        pr_debug("vic_mdma_irq_function: Processing MDMA channel 1 interrupt\n");
-        
-        /* Channel 1 specific processing would go here */
-        /* This would include different buffer management or DMA operations */
-    }
-    
-    pr_debug("*** vic_mdma_irq_function: completed for channel %d ***\n", channel);
-    return 0;  /* Success */
-}
 
 /* VIC interrupt handler - Now uses the comprehensive Binary Ninja implementation */
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
