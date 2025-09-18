@@ -1709,9 +1709,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* CRITICAL: VIC hardware should already be initialized by platform driver */
         pr_info("*** VIC hardware should be ready - proceeding with unlock sequence ***\n");
 
-        /* CRITICAL FIX: MIPI mode configuration - use mode 2 to prevent control limit errors */
-        /* Reference trace shows VIC mode = 2 for MIPI interface, not 3 */
-        writel(2, vic_regs + 0xc);  /* CORRECTED: VIC mode = 2 for MIPI interface - prevents control limit error */
+        /* Binary Ninja: EXACT reference driver MIPI mode configuration */
+        /* Binary Ninja: 000107ec - Set CSI mode */
+        writel(3, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
         wmb();
         pr_info("*** VIC: Set MIPI mode (2) to VIC control register 0xc - PREVENTS CONTROL LIMIT ERROR ***\n");
 
