@@ -573,10 +573,10 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: Minimal interrupt processing - no excessive logging */
 
-    /* Binary Ninja: Frame sync interrupt processing - EXACT reference implementation */
+    /* Binary Ninja: Frame sync interrupt processing - DISABLED to test soft lockup */
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt */
-        /* Binary Ninja: private_schedule_work(&fs_work) */
-        schedule_work(&fs_work);
+        /* TEMPORARY: Disable work scheduling to test if this causes soft lockup */
+        /* schedule_work(&fs_work); */
     }
 
     /* BINARY NINJA EXACT: Handle interrupt status like reference driver */
