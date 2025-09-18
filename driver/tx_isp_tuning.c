@@ -1063,6 +1063,117 @@ int tisp_ae0_process(void)
 EXPORT_SYMBOL(tisp_ae0_process);
 
 /* tisp_init - Binary Ninja EXACT implementation - THE MISSING HARDWARE INITIALIZER */
+/* ISP tuning file loading function - based on Binary Ninja tiziano_load_parameters */
+static int load_isp_tuning_file(const char *filename)
+{
+    struct file *fp;
+    mm_segment_t old_fs;
+    loff_t pos = 0;
+    int ret = 0;
+    void *file_buffer = NULL;
+    int file_size;
+
+    pr_info("*** load_isp_tuning_file: Loading %s ***\n", filename);
+
+    /* Open the tuning file */
+    fp = filp_open(filename, O_RDONLY, 0);
+    if (IS_ERR(fp)) {
+        pr_err("*** load_isp_tuning_file: Failed to open %s (error %ld) ***\n",
+               filename, PTR_ERR(fp));
+        return -ENOENT;
+    }
+
+    /* Get file size */
+    file_size = i_size_read(file_inode(fp));
+    if (file_size <= 0) {
+        pr_err("*** load_isp_tuning_file: Invalid file size %d for %s ***\n",
+               file_size, filename);
+        filp_close(fp, NULL);
+        return -EINVAL;
+    }
+
+    pr_info("*** load_isp_tuning_file: File size = %d bytes ***\n", file_size);
+
+    /* Allocate buffer for file data */
+    file_buffer = vmalloc(file_size);
+    if (!file_buffer) {
+        pr_err("*** load_isp_tuning_file: Failed to allocate %d bytes ***\n", file_size);
+        filp_close(fp, NULL);
+        return -ENOMEM;
+    }
+
+    /* Read file data */
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+
+    ret = vfs_read(fp, (char *)file_buffer, file_size, &pos);
+
+    set_fs(old_fs);
+    filp_close(fp, NULL);
+
+    if (ret != file_size) {
+        pr_err("*** load_isp_tuning_file: Read %d bytes, expected %d ***\n", ret, file_size);
+        vfree(file_buffer);
+        return -EIO;
+    }
+
+    /* Binary Ninja: Parse tuning file header and load parameters */
+    /* The file contains day/night tuning parameters at offset 0x18 */
+    if (file_size >= 0x18 + 0x137f0 * 2) {  /* Header + day params + night params */
+        /* Allocate tuning parameter memory if not already done */
+        if (!tparams_day) {
+            tparams_day = vmalloc(0x137f0);
+            if (!tparams_day) {
+                pr_err("*** load_isp_tuning_file: Failed to allocate day params ***\n");
+                vfree(file_buffer);
+                return -ENOMEM;
+            }
+        }
+
+        if (!tparams_night) {
+            tparams_night = vmalloc(0x137f0);
+            if (!tparams_night) {
+                pr_err("*** load_isp_tuning_file: Failed to allocate night params ***\n");
+                vfree(file_buffer);
+                return -ENOMEM;
+            }
+        }
+
+        /* Binary Ninja: memcpy(tparams_day, &file_data[0x18], 0x137f0) */
+        memcpy(tparams_day, (char *)file_buffer + 0x18, 0x137f0);
+
+        /* Binary Ninja: memcpy(tparams_night, &file_data[0x13808], 0x137f0) */
+        memcpy(tparams_night, (char *)file_buffer + 0x13808, 0x137f0);
+
+        pr_info("*** load_isp_tuning_file: Day/night tuning parameters loaded ***\n");
+
+    } else if (strstr(filename, "cust") && file_size >= 0x18 + 0x137f0) {
+        /* Custom tuning file - single parameter set */
+        if (!tparams_cust) {
+            tparams_cust = vmalloc(0x137f0);
+            if (!tparams_cust) {
+                pr_err("*** load_isp_tuning_file: Failed to allocate custom params ***\n");
+                vfree(file_buffer);
+                return -ENOMEM;
+            }
+        }
+
+        /* Binary Ninja: memcpy(tparams_cust, &file_data[0x18], 0x137f0) */
+        memcpy(tparams_cust, (char *)file_buffer + 0x18, 0x137f0);
+
+        pr_info("*** load_isp_tuning_file: Custom tuning parameters loaded ***\n");
+
+    } else {
+        pr_err("*** load_isp_tuning_file: Invalid file format or size ***\n");
+        vfree(file_buffer);
+        return -EINVAL;
+    }
+
+    vfree(file_buffer);
+    pr_info("*** load_isp_tuning_file: Successfully loaded %s ***\n", filename);
+    return 0;
+}
+
 int tisp_init(void *sensor_info, char *param_name)
 {
     extern struct tx_isp_dev *ourISPdev;
