@@ -3199,10 +3199,129 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     
     /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
     __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
-    
-    /* CRITICAL FIX: Handle event-based calls where arg2 might be NULL */
-    /* When called via event system, the buffer data isn't passed as arg2 */
-    /* Instead, we need to check if there are pending buffers in our queue */
+
+    /* CRITICAL: Program VIC buffer addresses using VBM buffers */
+    extern struct frame_channel_device frame_channels[];
+    extern int num_channels;
+
+    if (num_channels > 0) {
+        struct tx_isp_channel_state *state = &frame_channels[0].state;
+
+        /* CRITICAL: Use ISP DMA buffer addresses instead of VBM buffer addresses */
+        /* The OSD flicker suggests sensor data is captured but routed to wrong buffers */
+        extern struct tx_isp_dev *ourISPdev;
+        if (ourISPdev && ourISPdev->dma_addr && ourISPdev->dma_size > 0) {
+            /* Use ISP DMA buffer address - this is where VIC should write frame data */
+            u32 isp_dma_addr = (u32)ourISPdev->dma_addr;
+            u32 frame_size = 1920 * 1080 * 2;  /* RAW10 = 2 bytes per pixel */
+
+            pr_info("*** ispvic_frame_channel_qbuf: Using ISP DMA buffer instead of VBM buffers ***\n");
+            pr_info("*** ISP DMA: addr=0x%x, size=%d, frame_size=%d ***\n",
+                    isp_dma_addr, ourISPdev->dma_size, frame_size);
+
+            /* Program multiple VIC buffer addresses using ISP DMA buffer with offsets */
+            int i;
+            for (i = 0; i < 4 && i < 8; i++) {
+                /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
+                u32 buffer_reg_offset = (i + 0xc6) << 2;
+                buffer_addr = isp_dma_addr + (i * frame_size);  /* Offset each buffer */
+
+                pr_info("*** ispvic_frame_channel_qbuf: ISP DMA VIC buffer[%d] reg[0x%x] = 0x%x ***\n",
+                        i, buffer_reg_offset, buffer_addr);
+
+                /* SAFE: Write to VIC register using proper I/O */
+                writel(buffer_addr, vic_dev->vic_regs + buffer_reg_offset);
+                wmb();
+            }
+
+            /* Update buffer count to match ISP DMA buffers */
+            vic_dev->active_buffer_count = 4;
+
+            /* CRITICAL FIX: Write VIC[0x300] to actually start DMA capture */
+            u32 vic_control = (4 << 16) | 0x80000020;  /* 4 buffers + enable bits */
+            writel(vic_control, vic_dev->vic_regs + 0x300);
+            wmb();
+            pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC[0x300] = 0x%x (ISP DMA STARTED) ***\n", vic_control);
+
+            /* CRITICAL FIX: Complete VIC hardware unlock sequence before starting */
+            pr_info("*** ispvic_frame_channel_qbuf: Starting VIC hardware unlock sequence ***\n");
+
+            writel(0x2, vic_dev->vic_regs + 0x0);  /* Pre-enable */
+            wmb();
+            writel(0x4, vic_dev->vic_regs + 0x0);  /* Wait state */
+            wmb();
+
+            /* Wait for hardware ready (register should become 0) */
+            u32 timeout = 1000;
+            u32 vic_status;
+            while ((vic_status = readl(vic_dev->vic_regs + 0x0)) != 0) {
+                udelay(1);
+                if (--timeout == 0) {
+                    pr_err("*** ispvic_frame_channel_qbuf: VIC unlock timeout - register stuck at 0x%x ***\n", vic_status);
+                    break;
+                }
+            }
+
+            /* NOW start VIC hardware capture */
+            writel(0x1, vic_dev->vic_regs + 0x0);  /* Start VIC hardware capture */
+            wmb();
+            pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC hardware started (reg 0x0 = 0x1) ***\n");
+        } else if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+            /* Fallback to VBM buffers if ISP DMA not available */
+            pr_info("*** ispvic_frame_channel_qbuf: Fallback to VBM buffers ***\n");
+            int i;
+            for (i = 0; i < state->vbm_buffer_count && i < 8; i++) {
+                u32 buffer_reg_offset = (i + 0xc6) << 2;
+                buffer_addr = state->vbm_buffer_addresses[i];
+
+                pr_info("*** ispvic_frame_channel_qbuf: VBM VIC buffer[%d] reg[0x%x] = 0x%x ***\n",
+                        i, buffer_reg_offset, buffer_addr);
+
+                writel(buffer_addr, vic_dev->vic_regs + buffer_reg_offset);
+                wmb();
+            }
+
+            /* SAFE: Update buffer count */
+            vic_dev->active_buffer_count = state->vbm_buffer_count;
+
+            pr_info("*** ispvic_frame_channel_qbuf: SAFE - Programmed %d VIC buffer addresses ***\n",
+                    state->vbm_buffer_count);
+
+            /* CRITICAL FIX: Write VIC[0x300] to actually start DMA capture */
+            /* The reference driver writes VIC[0x300] during QBUF to start DMA */
+            u32 vic_control = (state->vbm_buffer_count << 16) | 0x80000020;  /* Buffer count + enable bits */
+            writel(vic_control, vic_dev->vic_regs + 0x300);
+            wmb();
+            pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC[0x300] = 0x%x (DMA STARTED) ***\n", vic_control);
+
+            /* CRITICAL FIX: Complete VIC hardware unlock sequence before starting */
+            pr_info("*** ispvic_frame_channel_qbuf: Starting VIC hardware unlock sequence ***\n");
+
+            writel(0x2, vic_dev->vic_regs + 0x0);  /* Pre-enable */
+            wmb();
+            writel(0x4, vic_dev->vic_regs + 0x0);  /* Wait state */
+            wmb();
+
+            /* Wait for hardware ready (register should become 0) */
+            u32 timeout = 1000;
+            u32 vic_status;
+            while ((vic_status = readl(vic_dev->vic_regs + 0x0)) != 0) {
+                udelay(1);
+                if (--timeout == 0) {
+                    pr_err("*** ispvic_frame_channel_qbuf: VIC unlock timeout - register stuck at 0x%x ***\n", vic_status);
+                    break;
+                }
+            }
+
+            /* NOW start VIC hardware capture */
+            writel(0x1, vic_dev->vic_regs + 0x0);  /* Start VIC hardware capture */
+            wmb();
+            pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC hardware started (reg 0x0 = 0x1) ***\n");
+            pr_info("*** ispvic_frame_channel_qbuf: VIC hardware should now capture frames and populate VIC[0x380] ***\n");
+        } else {
+            pr_warn("*** ispvic_frame_channel_qbuf: No VBM buffers available ***\n");
+        }
+    }
     
     if (arg2) {
         /* Direct call with buffer data - add to queue */
