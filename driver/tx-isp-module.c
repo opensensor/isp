@@ -5898,9 +5898,10 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         writel(0xFFFFFFFF, vic_int_regs + 0x1f4);  /* Clear MDMA interrupt status */
         wmb();
 
-        /* Enable VIC interrupts in SECONDARY space - use working configuration */
-        pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS TO SECONDARY SPACE ***\n");
-        writel(0xFFFFFFFE, vic_int_regs + 0x1e8);  /* Enable frame done interrupt */
+        /* Enable VIC interrupts - use WORKING configuration from last night */
+        pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS - WORKING CONFIGURATION ***\n");
+        writel(0xffffffff, vic_int_regs + 0x1e0);  /* Enable all interrupts (WORKING) */
+        writel(0x0, vic_int_regs + 0x1e8);         /* Clear interrupt masks (WORKING) */
         wmb();
 
         pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
