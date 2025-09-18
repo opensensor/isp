@@ -1487,12 +1487,12 @@ static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_i
         return -EINVAL;
     }
     
-    pr_info("csi_sensor_ops_sync_sensor_attr: Syncing sensor attributes for interface %d\n", 
+    pr_info("csi_sensor_ops_sync_sensor_attr: Syncing sensor attributes for interface %d\n",
             sensor_attr->dbus_type);
-    
+
     /* Store sensor attributes in CSI device */
     csi_dev->interface_type = sensor_attr->dbus_type;
-    csi_dev->lanes = (sensor_attr->dbus_type == 2) ? 2 : 1; /* MIPI=2 uses 2 lanes, DVP=1 uses 1 lane */
+    csi_dev->lanes = (sensor_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) ? 2 : 1; /* MIPI=1 uses 2 lanes, DVP=2 uses 1 lane */
     
     return 0;
 }
@@ -4278,10 +4278,15 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         /* VIC must be configured to match what sensor actually outputs */
                         sensor->video.attr->total_width = 1920;   /* Actual output width */
                         sensor->video.attr->total_height = 1080;  /* Actual output height */
-                        sensor->video.attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; // MIPI interface (correct value from enum)
+                        sensor->video.attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI = 1 (correct value from enum) */
                         sensor->video.attr->integration_time = 1000;
                         sensor->video.attr->max_again = 0x40000;
                         sensor->video.attr->name = sensor_name; /* Safe pointer assignment */
+
+                        pr_info("*** SENSOR ATTR INIT: Set dbus_type=%d (MIPI), dimensions=%dx%d ***\n",
+                                sensor->video.attr->dbus_type,
+                                sensor->video.attr->total_width,
+                                sensor->video.attr->total_height);
                         pr_info("*** GC2053 SENSOR ATTRIBUTES CONFIGURED: %dx%d output (MIPI interface) ***\n",
                                 sensor->video.attr->total_width, sensor->video.attr->total_height);
                     }
@@ -7257,16 +7262,18 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
             /* Any ISP-specific sensor configuration */
             if (sensor->video.attr) {
-                /* CRITICAL FIX: Correct interface constants based on sensor logs */
-                /* From sensor logs: (1=DVP, 2=MIPI) */
-                if (sensor->video.attr->dbus_type == 2) {  /* MIPI = 2 */
-                    pr_info("ISP: Configuring for MIPI interface (dbus_type=2)\n");
+                /* CRITICAL FIX: Use CORRECT enum values from tx-isp-common.h */
+                /* TX_SENSOR_DATA_INTERFACE_MIPI = 1, TX_SENSOR_DATA_INTERFACE_DVP = 2 */
+                if (sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 */
+                    pr_info("ISP: Configuring for MIPI interface (dbus_type=1)\n");
                     /* MIPI-specific ISP setup */
-                } else if (sensor->video.attr->dbus_type == 1) {  /* DVP = 1 */
-                    pr_info("ISP: Configuring for DVP interface (dbus_type=1)\n");
+                } else if (sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_DVP) {  /* DVP = 2 */
+                    pr_info("ISP: Configuring for DVP interface (dbus_type=2)\n");
                     /* DVP-specific ISP setup */
                 } else {
                     pr_warn("ISP: Unknown interface type %d, defaulting to MIPI\n", sensor->video.attr->dbus_type);
+                    /* Force to MIPI if unknown */
+                    sensor->video.attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
                 }
             }
         } else {

@@ -704,7 +704,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         pr_info("*** CRITICAL: CSI MIPI configuration complete - control limit error should be FIXED ***\n");
 
-                    } else if (interface_type == 2) {
+                    } else if (interface_type == TX_SENSOR_DATA_INTERFACE_DVP) {
                         /* DVP interface */
                         pr_info("CSI: DVP interface configuration\n");
 

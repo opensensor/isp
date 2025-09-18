@@ -1544,7 +1544,7 @@ static int sensor_s_stream(struct tx_isp_subdev *sd, int enable) {
 	int actual_interface = sensor->video.attr->dbus_type;
 	
 	ISP_WARNING("%s: s_stream called with enable=%d\n", SENSOR_NAME, enable);
-	ISP_WARNING("%s: module data_interface=%d, sensor data_interface=%d (1=DVP, 2=MIPI)\n",
+	ISP_WARNING("%s: module data_interface=%d, sensor data_interface=%d (1=MIPI, 2=DVP)\n",
 	            SENSOR_NAME, data_interface, actual_interface);
 	
 	/* Runtime correction: force MIPI if sensor interface type is wrong */
