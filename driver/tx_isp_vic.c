@@ -409,11 +409,29 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
                                 pr_info("*** VIC BUFFER MGMT: VIC[0x380]=0x0, using REAL VBM buffer addr=0x%x ***\n", completed_buffer_addr);
                                 pr_err("*** CRITICAL: VIC[0x380] should contain current buffer address from hardware ***\n");
-                                pr_err("*** VIC[0x380]=0x0 means VIC hardware is NOT writing frame data to buffers ***\n");
-                                pr_err("*** This indicates MIPI CSI PHY is not routing sensor data to VIC ***\n");
+                                pr_err("*** VIC[0x380]=0x0 means VIC DMA is NOT writing frame data to buffers ***\n");
+                                pr_err("*** This indicates VIC DMA is not properly configured ***\n");
+
+                                /* CRITICAL FIX: Configure VIC DMA to write frame data to memory */
+                                /* Based on Binary Ninja reference, VIC DMA needs proper configuration */
+                                u32 frame_size = state->width * state->height * 2;  /* RAW10 = 2 bytes/pixel */
+
+                                /* Configure VIC DMA registers for frame capture */
+                                writel(completed_buffer_addr, vic_regs + 0x7820);  /* DMA target address */
+                                writel(state->width * 2, vic_regs + 0x7824);       /* DMA stride (RAW10 = 2 bytes/pixel) */
+                                writel(state->height, vic_regs + 0x7828);          /* DMA height */
+                                wmb();
+
+                                /* Enable VIC DMA capture */
+                                u32 vic_ctrl = readl(vic_regs + 0x7810);
+                                writel(vic_ctrl | 0x1, vic_regs + 0x7810);         /* Enable DMA */
+                                writel(1, vic_regs + 0x7800);                      /* Start DMA capture */
+                                wmb();
+
+                                pr_info("*** VIC DMA FIX: Configured VIC DMA - addr=0x%x, stride=%d, height=%d ***\n",
+                                        completed_buffer_addr, state->width * 2, state->height);
 
                                 /* CRITICAL DMA SYNC: Synchronize completed buffer for CPU access */
-                                u32 frame_size = state->width * state->height * 2;  /* RAW10 = 2 bytes/pixel */
                                 mips_dma_cache_sync(completed_buffer_addr, frame_size, DMA_FROM_DEVICE);
 
                                 /* CRITICAL DEBUG: Check if buffer contains actual sensor data */
@@ -440,15 +458,9 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                                     }
                                 }
 
-                                /* Program next REAL VBM buffer to VIC register 0x380 for continuous streaming */
-                                u32 next_buffer_addr = state->vbm_buffer_addresses[vbm_buffer_cycle];
-
-                                /* CRITICAL DMA SYNC: Synchronize next buffer for device access */
-                                mips_dma_cache_sync(next_buffer_addr, frame_size, DMA_FROM_DEVICE);
-
-                                writel(next_buffer_addr, vic_regs + 0x380);
-                                wmb();
-                                pr_info("*** VIC BUFFER MGMT: VIC[0x380] = 0x%x (next REAL VBM buffer) ***\n", next_buffer_addr);
+                                /* CRITICAL: VIC register 0x380 is a HARDWARE STATUS register - DO NOT WRITE TO IT */
+                                /* The hardware will populate 0x380 with the completed buffer address when DMA finishes */
+                                pr_info("*** VIC BUFFER MGMT: VIC DMA configured to write to buffer 0x%x ***\n", completed_buffer_addr);
                             } else {
                                 /* Fallback to hardcoded addresses if VBM addresses not available */
                                 static uint32_t vbm_buffer_cycle = 0;
@@ -665,6 +677,39 @@ int tx_isp_vic_stop(struct tx_isp_subdev *sd)
     }
 
     mutex_unlock(&sd->vic_frame_end_lock);
+    return 0;
+}
+
+/* Configure VIC DMA for frame capture - Based on Binary Ninja reference */
+int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t addr, u32 width, u32 height)
+{
+    void __iomem *vic_regs;
+
+    if (!vic_dev || !vic_dev->vic_regs)
+        return -EINVAL;
+
+    vic_regs = vic_dev->vic_regs;
+
+    pr_info("*** VIC DMA CONFIG: Configuring VIC DMA for frame capture ***\n");
+
+    /* Configure VIC DMA registers based on Binary Ninja reference */
+    writel(addr, vic_regs + 0x7820);           /* DMA target address */
+    writel(width * 2, vic_regs + 0x7824);      /* DMA stride (RAW10 = 2 bytes/pixel) */
+    writel(height, vic_regs + 0x7828);         /* DMA height */
+    wmb();
+
+    /* Configure VIC DMA control */
+    u32 vic_ctrl = readl(vic_regs + 0x7810);
+    writel(vic_ctrl | 0x1, vic_regs + 0x7810); /* Enable DMA */
+    wmb();
+
+    /* Start VIC DMA capture */
+    writel(1, vic_regs + 0x7800);              /* Start DMA */
+    wmb();
+
+    pr_info("*** VIC DMA CONFIG: DMA configured - addr=0x%x, stride=%d, height=%d ***\n",
+            (u32)addr, width * 2, height);
+
     return 0;
 }
 
