@@ -2535,7 +2535,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         }
 
         /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)sd->isp->vic_dev;
+        struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
         ret = -EINVAL;
 
         /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
