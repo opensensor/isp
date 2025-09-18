@@ -1261,6 +1261,54 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("*** tisp_init: ISP frame size configured - %dx%d (ACTUAL sensor image) ***\n",
             actual_image_width, actual_image_height);
 
+    /* CRITICAL FIX: Configure Bayer pattern mapping - Binary Ninja mbus_to_bayer_write */
+    /* GC2053 uses V4L2_MBUS_FMT_SRGGB10_1X10 (0x3001) which maps to Bayer pattern 1 */
+    /* This is the missing piece that causes green frames! */
+
+    uint32_t sensor_mbus_code = 0x3001;  /* V4L2_MBUS_FMT_SRGGB10_1X10 for GC2053 */
+    uint32_t bayer_pattern;
+
+    /* Binary Ninja mbus_to_bayer_write switch statement */
+    switch (sensor_mbus_code) {
+        case 0x3001:  /* V4L2_MBUS_FMT_SRGGB10_1X10 - RGGB pattern */
+        case 0x3003:
+        case 0x3004:
+        case 0x3005:
+        case 0x3006:
+        case 0x3007:
+        case 0x3008:
+        case 0x300b:
+            bayer_pattern = 1;  /* RGGB */
+            break;
+        case 0x3002:  /* GRBG pattern */
+        case 0x3009:
+        case 0x300a:
+        case 0x3011:
+            bayer_pattern = 2;
+            break;
+        case 0x300c:  /* GBRG pattern */
+        case 0x300e:
+        case 0x3010:
+        case 0x3013:
+            bayer_pattern = 3;
+            break;
+        case 0x300d:  /* BGGR pattern */
+        case 0x300f:
+        case 0x3012:
+        case 0x3014:
+            bayer_pattern = 0;
+            break;
+        default:
+            bayer_pattern = 1;  /* Default to RGGB for GC2053 */
+            pr_warn("*** tisp_init: Unknown mbus code 0x%x, defaulting to RGGB ***\n", sensor_mbus_code);
+            break;
+    }
+
+    /* Binary Ninja: system_reg_write(8, bayer_pattern) */
+    system_reg_write(0x8, bayer_pattern);
+    pr_info("*** tisp_init: CRITICAL FIX - Bayer pattern configured: mbus=0x%x -> pattern=%d (register 8) ***\n",
+            sensor_mbus_code, bayer_pattern);
+
     /* CRITICAL FIX: Load ISP tuning parameters from /etc/sensor/ files */
     /* This is the missing piece - ISP needs tuning parameters for proper image processing */
 
