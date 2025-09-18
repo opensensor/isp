@@ -3419,18 +3419,27 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             /* Update buffer count to match ISP DMA buffers */
             vic_dev->active_buffer_count = 4;
 
-            /* CRITICAL FIX: Write VIC[0x300] to actually start DMA capture */
+            /* CRITICAL FIX: Write VIC[0x300] to actually start DMA capture - DUAL VIC WRITE */
             u32 vic_control = (4 << 16) | 0x80000020;  /* 4 buffers + enable bits */
-            writel(vic_control, vic_dev->vic_regs + 0x300);
+            writel(vic_control, vic_dev->vic_regs + 0x300);  /* PRIMARY VIC */
+            if (vic_dev->vic_regs_secondary) {
+                writel(vic_control, vic_dev->vic_regs_secondary + 0x300);  /* SECONDARY VIC */
+            }
             wmb();
-            pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC[0x300] = 0x%x (ISP DMA STARTED) ***\n", vic_control);
+            pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC[0x300] = 0x%x (DUAL VIC DMA STARTED) ***\n", vic_control);
 
-            /* CRITICAL FIX: Complete VIC hardware unlock sequence before starting */
-            pr_info("*** ispvic_frame_channel_qbuf: Starting VIC hardware unlock sequence ***\n");
+            /* CRITICAL FIX: Complete VIC hardware unlock sequence before starting - DUAL VIC WRITE */
+            pr_info("*** ispvic_frame_channel_qbuf: Starting VIC hardware unlock sequence (DUAL VIC) ***\n");
 
-            writel(0x2, vic_dev->vic_regs + 0x0);  /* Pre-enable */
+            writel(0x2, vic_dev->vic_regs + 0x0);  /* Pre-enable - PRIMARY */
+            if (vic_dev->vic_regs_secondary) {
+                writel(0x2, vic_dev->vic_regs_secondary + 0x0);  /* Pre-enable - SECONDARY */
+            }
             wmb();
-            writel(0x4, vic_dev->vic_regs + 0x0);  /* Wait state */
+            writel(0x4, vic_dev->vic_regs + 0x0);  /* Wait state - PRIMARY */
+            if (vic_dev->vic_regs_secondary) {
+                writel(0x4, vic_dev->vic_regs_secondary + 0x0);  /* Wait state - SECONDARY */
+            }
             wmb();
 
             /* Wait for hardware ready (register should become 0) */
