@@ -262,10 +262,21 @@ int tx_isp_csi_start(struct tx_isp_subdev *sd)
 /* CSI stop operation */
 int tx_isp_csi_stop(struct tx_isp_subdev *sd)
 {
+    extern uint32_t vic_start_ok;
+
     if (!sd)
         return -EINVAL;
 
+    /* CRITICAL FIX: Don't disable CSI PHY during active VIC streaming */
+    if (vic_start_ok == 1) {
+        pr_info("*** CSI STOP BLOCKED: VIC streaming active - preventing CSI PHY disable that causes green stream ***\n");
+        pr_info("*** CSI PHY remains operational to maintain video pipeline ***\n");
+        return 0;  /* Return success but don't actually stop CSI */
+    }
+
     mutex_lock(&sd->csi_lock);
+
+    pr_info("*** CSI STOP: VIC not streaming - allowing CSI PHY disable ***\n");
 
     /* Disable CSI */
     csi_write32(CSI_CTRL, 0);
@@ -422,8 +433,16 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         }
         pr_info("*** CSI PHY HARDWARE CONFIGURATION COMPLETE ***\n");
     } else {
+        /* CRITICAL FIX: Don't disable CSI during active VIC streaming */
+        extern uint32_t vic_start_ok;
+        if (vic_start_ok == 1) {
+            pr_info("*** CSI DISABLE BLOCKED: VIC streaming active - preventing CSI PHY disable ***\n");
+            pr_info("*** CSI PHY remains operational to maintain video pipeline ***\n");
+            return 0;  /* Return success but don't actually disable CSI */
+        }
+
         /* Call csi_core_ops_init with enable=0 to disable CSI */
-        pr_info("*** CSI: Calling csi_core_ops_init to disable CSI ***\n");
+        pr_info("*** CSI: Calling csi_core_ops_init to disable CSI (VIC not streaming) ***\n");
         ret = csi_core_ops_init(sd, 0);
         if (ret) {
             pr_warn("CSI disable failed: %d (continuing anyway)\n", ret);
