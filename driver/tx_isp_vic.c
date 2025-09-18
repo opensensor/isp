@@ -2494,24 +2494,28 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
         vic_pipo_mdma_enable(vic_dev);
 
-        /* CRITICAL FIX: Add our VIC DMA configuration after vic_pipo_mdma_enable */
-        /* This is the missing piece - vic_pipo_mdma_enable configures MDMA but not full DMA */
+        /* CRITICAL FIX: Call ispvic_frame_channel_qbuf to program VIC buffer addresses */
+        /* Since VBM system is not calling our QBUF function, we need to call it manually during STREAMON */
         extern struct frame_channel_device frame_channels[];
         extern int num_channels;
         if (num_channels > 0) {
             struct tx_isp_channel_state *state = &frame_channels[0].state;
-            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0 && vic_dev->width > 0 && vic_dev->height > 0) {
-                dma_addr_t first_buffer = state->vbm_buffer_addresses[0];
-                int ret_dma = tx_isp_vic_configure_dma(vic_dev, first_buffer, vic_dev->width, vic_dev->height);
-                if (ret_dma == 0) {
-                    pr_info("*** ispvic_frame_channel_s_stream: Successfully configured VIC DMA for streaming ***\n");
+            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+                pr_info("*** ispvic_frame_channel_s_stream: VBM buffers available - calling ispvic_frame_channel_qbuf ***\n");
+                pr_info("*** VBM buffers: %p, count: %d ***\n",
+                        state->vbm_buffer_addresses, state->vbm_buffer_count);
+
+                /* CRITICAL: Call our QBUF function to program VIC buffer addresses */
+                int qbuf_result = ispvic_frame_channel_qbuf(vic_dev, NULL);
+                if (qbuf_result == 0) {
+                    pr_info("*** ispvic_frame_channel_s_stream: Successfully programmed VIC buffer addresses ***\n");
                 } else {
-                    pr_err("*** ispvic_frame_channel_s_stream: Failed to configure VIC DMA: %d ***\n", ret_dma);
+                    pr_err("*** ispvic_frame_channel_s_stream: Failed to program VIC buffer addresses: %d ***\n", qbuf_result);
                 }
             } else {
-                pr_warn("*** ispvic_frame_channel_s_stream: No VBM buffers or VIC dimensions for DMA config ***\n");
-                pr_warn("*** VBM buffers: %p, count: %d, VIC: %dx%d ***\n",
-                        state->vbm_buffer_addresses, state->vbm_buffer_count, vic_dev->width, vic_dev->height);
+                pr_warn("*** ispvic_frame_channel_s_stream: No VBM buffers available for VIC programming ***\n");
+                pr_warn("*** VBM buffers: %p, count: %d ***\n",
+                        state->vbm_buffer_addresses, state->vbm_buffer_count);
             }
         }
 
@@ -3212,33 +3216,67 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
 static int ispvic_frame_channel_clearbuf(void);
 
-/* ispvic_frame_channel_qbuf - FIXED: Handle event-based QBUF calls with pending buffer queue */
+/* ispvic_frame_channel_qbuf - SAFE implementation using proper struct members */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
     unsigned long var_18 = 0;
-    
-    pr_info("*** ispvic_frame_channel_qbuf: EVENT-BASED QBUF with pending buffer processing ***\n");
-    
-    /* SAFE: Use global ourISPdev reference instead of unsafe pointer arithmetic */
+    uint32_t buffer_addr, buffer_index;
+
+    pr_info("*** ispvic_frame_channel_qbuf: SAFE VBM buffer queue - arg1=%p, arg2=%p ***\n", arg1, arg2);
+
+    /* SAFE: Use global ISP device reference instead of unsafe pointer arithmetic */
     if (!ourISPdev || !ourISPdev->vic_dev) {
-        pr_info("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
+        pr_info("ispvic_frame_channel_qbuf: qbuffer null - no ISP device\n");
         return 0;
     }
-    
-    /* SAFE: Get VIC device from global ISP device reference */
-    vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
-    if (!vic_dev) {
-        pr_info("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
+
+    vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_info("ispvic_frame_channel_qbuf: qbuffer null - no VIC device\n");
         return 0;
     }
     
     /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
     __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
-    
-    /* CRITICAL FIX: Handle event-based calls where arg2 might be NULL */
-    /* When called via event system, the buffer data isn't passed as arg2 */
-    /* Instead, we need to check if there are pending buffers in our queue */
+
+    /* CRITICAL: Program VIC buffer addresses using VBM buffers */
+    extern struct frame_channel_device frame_channels[];
+    extern int num_channels;
+
+    if (num_channels > 0) {
+        struct tx_isp_channel_state *state = &frame_channels[0].state;
+
+        /* SAFE: Check if we have VBM buffers available */
+        if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+            /* SAFE: Program VIC buffer addresses using safe array access */
+            int i;
+            for (i = 0; i < state->vbm_buffer_count && i < 8; i++) {
+                /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
+                /* SAFE: Calculate register offset using safe formula */
+                u32 buffer_reg_offset = (i + 0xc6) << 2;
+                buffer_addr = state->vbm_buffer_addresses[i];
+
+                pr_info("*** ispvic_frame_channel_qbuf: SAFE VIC buffer[%d] reg[0x%x] = 0x%x ***\n",
+                        i, buffer_reg_offset, buffer_addr);
+
+                /* SAFE: Write to VIC register using proper I/O */
+                writel(buffer_addr, vic_dev->vic_regs + buffer_reg_offset);
+                wmb();
+            }
+
+            /* SAFE: Update buffer count */
+            vic_dev->active_buffer_count = state->vbm_buffer_count;
+
+            pr_info("*** ispvic_frame_channel_qbuf: SAFE - Programmed %d VIC buffer addresses ***\n",
+                    state->vbm_buffer_count);
+
+            /* SAFE: Skip the complex buffer queue management and just return success */
+            goto unlock_exit;
+        } else {
+            pr_warn("*** ispvic_frame_channel_qbuf: No VBM buffers available ***\n");
+        }
+    }
     
     if (arg2) {
         /* Direct call with buffer data - add to queue */
