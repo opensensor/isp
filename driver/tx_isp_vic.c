@@ -558,7 +558,7 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         }
 
         /* Binary Ninja: return private_complete(arg1 + 0x148) */
-        complete(&vic_dev->frame_completion);
+        complete(&vic_dev->frame_complete);
         return 0;
     }
 
