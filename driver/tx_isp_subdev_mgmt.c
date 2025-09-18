@@ -697,6 +697,24 @@ int tx_isp_vic_device_init(struct tx_isp_dev *isp)
 
     pr_info("Initializing VIC device\n");
 
+    /* Check if VIC device already exists (created by probe) */
+    if (isp->vic_dev) {
+        struct tx_isp_vic_device *existing_vic = container_of((struct tx_isp_subdev *)isp->vic_dev,
+                                                             struct tx_isp_vic_device, sd);
+
+        pr_info("*** VIC device already exists (created by probe) ***\n");
+        pr_info("  Existing VIC device: %p\n", existing_vic);
+        pr_info("  vic_regs: %p\n", existing_vic->vic_regs);
+
+        /* Check if the existing VIC device has registers mapped */
+        if (existing_vic->vic_regs && existing_vic->vic_regs_secondary) {
+            pr_info("*** USING EXISTING VIC DEVICE WITH MAPPED REGISTERS ***\n");
+            return 0; /* Success - use existing device */
+        } else {
+            pr_warn("*** EXISTING VIC DEVICE MISSING REGISTERS - WILL REPLACE ***\n");
+        }
+    }
+
     /* Allocate VIC device structure if not already present */
     if (!isp->vic_dev) {
         vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
@@ -711,7 +729,9 @@ int tx_isp_vic_device_init(struct tx_isp_dev *isp)
         spin_lock_init(&vic_dev->lock);
         init_completion(&vic_dev->frame_complete);
 
-        isp->vic_dev = vic_dev;
+        isp->vic_dev = (struct tx_isp_subdev *)&vic_dev->sd;
+
+        pr_warn("*** CREATED BASIC VIC DEVICE WITHOUT REGISTERS - PROBE SHOULD HAVE DONE THIS ***\n");
     }
 
     pr_info("VIC device initialized\n");

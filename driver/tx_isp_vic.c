@@ -48,12 +48,32 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
 {
     struct tx_isp_vic_device *vic_dev;
     int ret = 0;
-    
+
     if (!isp_dev) {
         pr_err("tx_isp_create_vic_device: Invalid ISP device\n");
         return -EINVAL;
     }
-    
+
+    /* *** CRITICAL FIX: Check if VIC device already exists (created by probe) *** */
+    if (isp_dev->vic_dev) {
+        /* VIC device already exists (likely created by tx_isp_vic_probe) */
+        struct tx_isp_vic_device *existing_vic = container_of((struct tx_isp_subdev *)isp_dev->vic_dev,
+                                                             struct tx_isp_vic_device, sd);
+
+        pr_info("*** tx_isp_create_vic_device: VIC device already exists ***\n");
+        pr_info("  Existing VIC device: %p\n", existing_vic);
+        pr_info("  vic_regs: %p\n", existing_vic->vic_regs);
+        pr_info("  vic_regs_secondary: %p\n", existing_vic->vic_regs_secondary);
+
+        /* Check if the existing VIC device has registers mapped */
+        if (existing_vic->vic_regs && existing_vic->vic_regs_secondary) {
+            pr_info("*** USING EXISTING VIC DEVICE WITH MAPPED REGISTERS ***\n");
+            return 0; /* Success - use existing device */
+        } else {
+            pr_warn("*** EXISTING VIC DEVICE MISSING REGISTERS - WILL REPLACE ***\n");
+        }
+    }
+
     pr_info("*** tx_isp_create_vic_device: Creating VIC device structure ***\n");
     
     /* FIXED: Use regular kernel memory instead of precious rmem for small structures */
@@ -2779,6 +2799,25 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_dev->sensor_attr.total_width = 1920;
     vic_dev->sensor_attr.total_height = 1080;
     vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
+
+    /* *** CRITICAL FIX: Link this VIC device to the global ISP device *** */
+    /* This ensures there's only ONE VIC device used throughout the system */
+    extern struct tx_isp_dev *ourISPdev;
+    if (ourISPdev) {
+        /* Replace any existing VIC device with this properly initialized one */
+        if (ourISPdev->vic_dev) {
+            pr_info("*** REPLACING EXISTING VIC DEVICE WITH PROBE-CREATED DEVICE ***\n");
+        }
+        ourISPdev->vic_dev = (struct tx_isp_subdev *)&vic_dev->sd;
+        vic_dev->sd.isp = (void *)ourISPdev;
+
+        pr_info("*** CRITICAL: VIC DEVICE LINKED TO GLOBAL ISP DEVICE ***\n");
+        pr_info("  ourISPdev->vic_dev = %p (VIC subdev)\n", ourISPdev->vic_dev);
+        pr_info("  vic_dev = %p (full VIC device)\n", vic_dev);
+        pr_info("  vic_dev->sd.isp = %p (back-reference to ISP)\n", vic_dev->sd.isp);
+    } else {
+        pr_warn("*** WARNING: No global ISP device found - VIC device not linked ***\n");
+    }
 
     pr_info("*** tx_isp_vic_probe: VIC device initialized successfully ***\n");
     pr_info("VIC device: vic_dev=%p, size=%zu\n", vic_dev, sizeof(struct tx_isp_vic_device));
