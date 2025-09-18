@@ -382,9 +382,9 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
         pr_info("*** ispcore_sensor_ops_ioctl: Real sensor IOCTL result: %d ***\n", result);
 
         if (result == 0) {
-            pr_info("*** ispcore_sensor_ops_ioctl: Sensor I2C communication successful - should see I2C writes to 0x41/0x42 ***\n");
+            pr_info("*** ispcore_sensor_ops_ioctl: Sensor AE operation successful - should see exposure I2C writes ***\n");
         } else {
-            pr_warn("*** ispcore_sensor_ops_ioctl: Sensor I2C communication failed: %d ***\n", result);
+            pr_warn("*** ispcore_sensor_ops_ioctl: Sensor AE operation failed: %d ***\n", result);
         }
     } else {
         pr_warn("*** ispcore_sensor_ops_ioctl: No real sensor device found ***\n");
