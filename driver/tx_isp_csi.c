@@ -396,12 +396,21 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     if (attr->dbus_type != TX_SENSOR_DATA_INTERFACE_MIPI)
         return 0;
 
-    /* Initialize CSI hardware if needed */
-    if (enable && csi_dev->state < 3) {
+    /* CRITICAL FIX: Always initialize CSI hardware when enabling */
+    if (enable) {
+        pr_info("*** CSI: Calling csi_core_ops_init - current state=%d ***\n", csi_dev->state);
         ret = csi_core_ops_init(sd, 1);
         if (ret) {
-            pr_err("Failed to initialize CSI hardware: %d\n", ret);
+            pr_err("*** CRITICAL ERROR: CSI PHY configuration failed: %d ***\n", ret);
             return ret;
+        }
+        pr_info("*** CSI PHY HARDWARE CONFIGURATION COMPLETE ***\n");
+    } else {
+        /* Call csi_core_ops_init with enable=0 to disable CSI */
+        pr_info("*** CSI: Calling csi_core_ops_init to disable CSI ***\n");
+        ret = csi_core_ops_init(sd, 0);
+        if (ret) {
+            pr_warn("CSI disable failed: %d (continuing anyway)\n", ret);
         }
     }
 
