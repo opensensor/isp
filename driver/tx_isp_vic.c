@@ -664,19 +664,9 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 
     pr_info("*** VIC HW INIT: Interrupt configuration applied to PRIMARY VIC space ***\n");
 
-    /* CRITICAL: Register the VIC interrupt handler - THIS WAS MISSING! */
-    int irq = 38;  /* VIC uses IRQ 38 (isp-w02) */
-    int ret = request_irq(irq, isp_vic_interrupt_service_routine, IRQF_SHARED, "tx-isp-vic", sd);
-    if (ret == 0) {
-        pr_info("*** VIC HW INIT: Interrupt handler registered for IRQ %d ***\n", irq);
-    } else {
-        pr_err("*** VIC HW INIT: Failed to register interrupt handler for IRQ %d: %d ***\n", irq, ret);
-        return ret;
-    }
-
-    /* Enable the interrupt at hardware level */
-    enable_irq(irq);
-    pr_info("*** VIC HW INIT: Hardware interrupt enabled for IRQ %d ***\n", irq);
+    /* CRITICAL FIX: DON'T register duplicate IRQ handler - IRQ 38 already registered in tx-isp-module.c */
+    /* The main module already registers IRQ 38 with proper routing to VIC handler */
+    pr_info("*** VIC HW INIT: IRQ 38 already registered by main module - skipping duplicate registration ***\n");
 
     return 0;
 }

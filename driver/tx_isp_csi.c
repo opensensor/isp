@@ -224,17 +224,9 @@ int tx_isp_csi_start(struct tx_isp_subdev *sd)
 
     mutex_lock(&sd->csi_lock);
 
-    /* CRITICAL: Register CSI interrupt handler if not already registered */
-    static int csi_irq_registered = 0;
-    if (!csi_irq_registered) {
-        ret = request_irq(38, tx_isp_csi_irq_handler, IRQF_SHARED, "tx-isp-csi", sd);
-        if (ret == 0) {
-            pr_info("*** CSI INTERRUPT: Handler registered for IRQ 38 ***\n");
-            csi_irq_registered = 1;
-        } else {
-            pr_err("*** CSI INTERRUPT: Failed to register handler for IRQ 38: %d ***\n", ret);
-        }
-    }
+    /* CRITICAL FIX: DON'T register duplicate IRQ handler - IRQ 38 already registered in tx-isp-module.c */
+    /* The main module already registers IRQ 38 with proper routing to CSI handler */
+    pr_info("*** CSI INTERRUPT: IRQ 38 already registered by main module - skipping duplicate registration ***\n");
 
     /* Enable CSI */
     ctrl = csi_read32(CSI_CTRL);
