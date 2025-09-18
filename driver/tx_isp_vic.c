@@ -673,17 +673,19 @@ int tx_isp_vic_stop(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* Configure VIC DMA for frame capture - Using ACTUAL working registers from logs */
+/* Configure VIC DMA for frame capture - Program ALL buffer addresses like reference driver */
 int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t addr, u32 width, u32 height)
 {
     void __iomem *vic_regs;
+    extern struct frame_channel_device frame_channels[];
+    extern int num_channels;
 
     if (!vic_dev || !vic_dev->vic_regs)
         return -EINVAL;
 
     vic_regs = vic_dev->vic_regs;
 
-    pr_info("*** VIC DMA CONFIG: Using ACTUAL working VIC registers from logs ***\n");
+    pr_info("*** VIC DMA CONFIG: Programming ALL VIC buffer addresses like reference driver ***\n");
 
     /* Use the SAME registers that vic_pipo_mdma_enable uses successfully */
     writel((height << 16) | width, vic_regs + 0x304);  /* Dimensions (matches 0x7800438 for 1920x1080) */
@@ -692,13 +694,35 @@ int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t addr,
     writel(width * 2, vic_regs + 0x314);               /* Stride (duplicate) */
     wmb();
 
-    /* CRITICAL: Also configure buffer address - this might be what's missing */
-    /* The logs show VIC[0x380] should contain buffer addresses, so maybe we need to program buffer registers */
-    writel(addr, vic_regs + 0x318);                    /* Buffer 0 address */
-    wmb();
+    /* CRITICAL FIX: Program ALL buffer addresses like tx_isp_subdev_pipo does */
+    /* The logs show registers 0x318, 0x31c, 0x320, 0x324, 0x328 are used for buffers 0-4 */
+    if (num_channels > 0) {
+        struct tx_isp_channel_state *state = &frame_channels[0].state;
+        if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+            int i;
+            for (i = 0; i < state->vbm_buffer_count && i < 5; i++) {
+                u32 buffer_reg = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+                writel(state->vbm_buffer_addresses[i], vic_regs + buffer_reg);
+                pr_info("*** VIC DMA: Programmed buffer[%d] addr=0x%x to reg 0x%x ***\n",
+                        i, state->vbm_buffer_addresses[i], buffer_reg);
+            }
+            wmb();
+            pr_info("*** VIC DMA: Programmed %d buffer addresses - VIC hardware should now write to buffers ***\n",
+                    state->vbm_buffer_count);
+        } else {
+            /* Fallback: program just the single buffer address */
+            writel(addr, vic_regs + 0x318);
+            pr_info("*** VIC DMA: Programmed single buffer addr=0x%x to reg 0x318 ***\n", (u32)addr);
+            wmb();
+        }
+    } else {
+        /* Fallback: program just the single buffer address */
+        writel(addr, vic_regs + 0x318);
+        pr_info("*** VIC DMA: Programmed single buffer addr=0x%x to reg 0x318 ***\n", (u32)addr);
+        wmb();
+    }
 
-    pr_info("*** VIC DMA CONFIG: Configured with WORKING registers - addr=0x%x, dimensions=%dx%d, stride=%d ***\n",
-            (u32)addr, width, height, width * 2);
+    pr_info("*** VIC DMA CONFIG: All buffer addresses programmed - VIC[0x380] should now show completed buffers ***\n");
 
     return 0;
 }
