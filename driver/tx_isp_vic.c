@@ -402,12 +402,17 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                             pr_info("*** VIC BUFFER DEBUG: vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
                                     state->vbm_buffer_addresses, state->vbm_buffer_count);
 
-                            /* REFERENCE DRIVER EXACT: Call ispvic_frame_channel_qbuf when VBM buffers are available */
-                            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-                                pr_info("*** VIC INTERRUPT: VBM buffers available - calling ispvic_frame_channel_qbuf ***\n");
+                            /* CRITICAL: Only call ispvic_frame_channel_qbuf when VIC[0x380] is 0x0 */
+                            /* This prevents excessive calls and matches reference driver behavior */
+                            u32 vic_status = readl(vic_regs + 0x380);
+                            static int qbuf_call_count = 0;
+
+                            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0 && vic_status == 0x0 && qbuf_call_count < 5) {
+                                qbuf_call_count++;
+                                pr_info("*** VIC INTERRUPT: VIC[0x380]=0x0 - calling ispvic_frame_channel_qbuf (call %d) ***\n", qbuf_call_count);
                                 int qbuf_result = ispvic_frame_channel_qbuf(vic_dev, NULL);
                                 if (qbuf_result == 0) {
-                                    pr_info("*** VIC INTERRUPT: Successfully programmed VIC buffer addresses ***\n");
+                                    pr_info("*** VIC INTERRUPT: Successfully programmed VIC buffer addresses (call %d) ***\n", qbuf_call_count);
 
                                     /* DEBUG: Check if VIC registers were actually written */
                                     if (vic_dev->vic_regs) {
@@ -415,12 +420,19 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                                         u32 vic_reg_0x31c = readl(vic_dev->vic_regs + 0x31c);
                                         u32 vic_reg_0x320 = readl(vic_dev->vic_regs + 0x320);
                                         u32 vic_reg_0x324 = readl(vic_dev->vic_regs + 0x324);
-                                        pr_info("*** VIC REGISTERS: [0x318]=0x%x [0x31c]=0x%x [0x320]=0x%x [0x324]=0x%x ***\n",
-                                                vic_reg_0x318, vic_reg_0x31c, vic_reg_0x320, vic_reg_0x324);
+                                        u32 vic_reg_0x300 = readl(vic_dev->vic_regs + 0x300);
+                                        pr_info("*** VIC REGISTERS: [0x318]=0x%x [0x31c]=0x%x [0x320]=0x%x [0x324]=0x%x [0x300]=0x%x ***\n",
+                                                vic_reg_0x318, vic_reg_0x31c, vic_reg_0x320, vic_reg_0x324, vic_reg_0x300);
+
+                                        /* Check if VIC[0x380] changed after our programming */
+                                        u32 vic_status_after = readl(vic_regs + 0x380);
+                                        pr_info("*** VIC STATUS: Before=0x%x, After=0x%x ***\n", vic_status, vic_status_after);
                                     }
                                 } else {
-                                    pr_err("*** VIC INTERRUPT: Failed to program VIC buffer addresses: %d ***\n", qbuf_result);
+                                    pr_err("*** VIC INTERRUPT: Failed to program VIC buffer addresses: %d (call %d) ***\n", qbuf_result, qbuf_call_count);
                                 }
+                            } else if (vic_status != 0x0) {
+                                pr_info("*** VIC INTERRUPT: VIC[0x380]=0x%x - VIC hardware is working! ***\n", vic_status);
                             }
 
                             /* Use REAL VBM buffer addresses that were stored during QBUF */
@@ -2541,15 +2553,21 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             }
         }
 
-        /* REMOVED: VIC[0x300] write moved to ispvic_frame_channel_qbuf for correct timing */
-        /* VIC control register should be written AFTER buffer addresses are programmed */
+        /* Binary Ninja EXACT STREAMON sequence */
         vic_base = vic_dev->vic_regs;
         if (vic_base && (unsigned long)vic_base >= 0x80000000) {
-            pr_info("ispvic_frame_channel_s_stream: VIC MDMA configured - waiting for buffer programming\n");
-            pr_info("*** VIC[0x300] will be written by ispvic_frame_channel_qbuf after buffer addresses are programmed ***\n");
+            /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+            u32 buffer_count = vic_dev->active_buffer_count;
+            if (buffer_count == 0) buffer_count = 4;  /* Default to 4 buffers */
+            u32 vic_control = (buffer_count << 16) | 0x80000020;
+            writel(vic_control, vic_base + 0x300);
+            wmb();
+
+            pr_info("*** BINARY NINJA EXACT STREAMON: VIC[0x300] = 0x%x (buffer_count=%d) ***\n", vic_control, buffer_count);
+            pr_info("*** Reference driver writes VIC[0x300] during STREAMON, not QBUF ***\n");
 
             /* MCP LOG: Stream ON completed */
-            pr_info("MCP_LOG: VIC MDMA configured - base=%p, state=%d\n", vic_base, 1);
+            pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n", vic_control, vic_base, 1);
         }
         
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
@@ -3299,18 +3317,8 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             pr_info("*** ispvic_frame_channel_qbuf: SAFE - Programmed %d VIC buffer addresses ***\n",
                     state->vbm_buffer_count);
 
-            /* CRITICAL: Write VIC control register 0x300 AFTER buffer programming */
-            /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
-            u32 buffer_count = state->vbm_buffer_count;
-            u32 vic_control = (buffer_count << 16) | 0x80000020;
-            writel(vic_control, vic_dev->vic_regs + 0x300);
-            wmb();
-
-            pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - Wrote VIC[0x300] = 0x%x after buffer programming ***\n", vic_control);
-            pr_info("*** This enables VIC DMA with %d buffers - VIC hardware should now capture frames ***\n", buffer_count);
-
-            /* SAFE: Skip the complex buffer queue management and just return success */
-            goto unlock_exit;
+            /* REMOVED: VIC[0x300] write - reference driver does this during STREAMON */
+            pr_info("*** ispvic_frame_channel_qbuf: Buffer addresses programmed - VIC[0x300] written during STREAMON ***\n");
         } else {
             pr_warn("*** ispvic_frame_channel_qbuf: No VBM buffers available ***\n");
         }
