@@ -1139,6 +1139,9 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
     void __iomem *csi_base, *phy_base;
     struct tx_isp_sensor_attribute *sensor_attr;
     int lanes;
+    u32 reg_val;
+    int32_t sensor_freq;
+    u32 csi_phy_ctrl_vals[4];
 
     pr_info("*** tx_isp_csi_mipi_init: EXACT reference driver CSI MIPI configuration ***\n");
 
@@ -1150,8 +1153,8 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
     csi_base = isp_dev->vic_dev->vic_regs - 0x9a00;  /* CSI base = VIC base - 0x9a00 */
     phy_base = csi_base + 0x1000;  /* PHY base = CSI base + 0x1000 */
 
-    /* Get sensor attributes for lane configuration */
-    sensor_attr = &isp_dev->sensor_attr;
+    /* Get sensor attributes from VIC device */
+    sensor_attr = &isp_dev->vic_dev->sensor_attr;
     lanes = (sensor_attr->mipi.lans > 0) ? sensor_attr->mipi.lans : 2;  /* Default 2 lanes */
 
     pr_info("*** REFERENCE DRIVER CSI MIPI INIT: %d lanes, interface_type=1 ***\n", lanes);
@@ -1163,7 +1166,7 @@ int tx_isp_csi_mipi_init(struct tx_isp_dev *isp_dev)
     pr_info("CSI: Set lanes to %d (reg 0x4 = %d)\n", lanes, lanes - 1);
 
     /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
-    u32 reg_val = readl(csi_base + 0x8);
+    reg_val = readl(csi_base + 0x8);
     writel(reg_val & 0xfffffffe, csi_base + 0x8);
     wmb();
 
