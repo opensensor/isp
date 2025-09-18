@@ -1105,17 +1105,22 @@ int tisp_init(void *sensor_info, char *param_name)
     /* CRITICAL FIX: Configure ISP input/output formats to prevent Error interrupt type 2 */
     /* The 0x00000500 error indicates format/processing configuration issues */
 
+    /* CRITICAL FIX: Use actual image dimensions, not sensor total frame size */
+    /* The sensor outputs 2200x1418 total frame but actual image is 1920x1080 */
+    uint32_t image_width = 1920;   /* Actual image width */
+    uint32_t image_height = 1080;  /* Actual image height */
+
     /* Configure input format for raw Bayer sensor data */
-    system_reg_write(0x10, (sensor_params.width << 16) | sensor_params.height);  /* Input frame size */
-    system_reg_write(0x14, 0x3031);  /* Input format: Raw Bayer RGGB 10-bit */
-    pr_info("*** tisp_init: Input format configured - %dx%d Raw Bayer RGGB 10-bit ***\n",
-            sensor_params.width, sensor_params.height);
+    system_reg_write(0x10, (image_width << 16) | image_height);  /* Input frame size */
+    system_reg_write(0x14, 0x302b);  /* Input format: Raw Bayer RGGB 10-bit (0x2b = RAW10) */
+    pr_info("*** tisp_init: Input format configured - %dx%d Raw Bayer RGGB 10-bit (RAW10) ***\n",
+            image_width, image_height);
 
     /* Configure output format for processed video */
     system_reg_write(0x18, 0x8210);  /* Output format: YUV420 NV12 */
-    system_reg_write(0x20, (sensor_params.width << 16) | sensor_params.height);  /* Output frame size */
+    system_reg_write(0x20, (image_width << 16) | image_height);  /* Output frame size */
     pr_info("*** tisp_init: Output format configured - %dx%d YUV420 NV12 ***\n",
-            sensor_params.width, sensor_params.height);
+            image_width, image_height);
 
     /* Configure processing pipeline data flow */
     system_reg_write(0x24, 0x1);     /* Enable data flow from input to processing */
