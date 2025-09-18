@@ -874,6 +874,19 @@ int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t base_
 
     pr_info("*** VIC DMA CONFIG: CRITICAL - VIC control 0x300 = 0x%x (DMA ENABLED) ***\n", vic_control);
 
+    /* CRITICAL FIX: Configure VIC hardware BEFORE unlock sequence */
+    pr_info("*** VIC DMA CONFIG: Configuring VIC hardware before unlock sequence ***\n");
+
+    /* Configure essential VIC registers for proper hardware operation */
+    writel((1920 << 16) | 1080, vic_regs + 0x4);  /* Dimensions */
+    writel(0x0, vic_regs + 0x14);  /* Interrupt config */
+    writel(0x7800000, vic_regs + 0x110);  /* Hardware expected value */
+    writel(0x0, vic_regs + 0x114);
+    writel(0x0, vic_regs + 0x118);
+    writel(0x0, vic_regs + 0x11c);
+    writel(0x100010, vic_regs + 0x1a4);  /* Control register */
+    wmb();
+
     /* CRITICAL FIX: Complete VIC hardware unlock sequence before starting */
     /* Binary Ninja: EXACT reference driver unlock sequence */
     pr_info("*** VIC DMA CONFIG: Starting VIC hardware unlock sequence ***\n");
@@ -1858,17 +1871,37 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         
         /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
+        /* CRITICAL: Configure VIC hardware BEFORE unlock sequence */
+        /* Binary Ninja: Missing VIC hardware configuration that must be done first */
+        pr_info("*** VIC HARDWARE CONFIG: Configuring VIC registers before unlock sequence ***\n");
+
+        /* Configure VIC dimensions and control registers */
+        writel((actual_width << 16) | actual_height, vic_regs + 0x4);
+        writel(0x0, vic_regs + 0x14);  /* Interrupt config */
+        writel(0x7800000, vic_regs + 0x110);  /* Hardware expected value */
+        writel(0x0, vic_regs + 0x114);
+        writel(0x0, vic_regs + 0x118);
+        writel(0x0, vic_regs + 0x11c);
+        writel(0x4440, vic_regs + 0x1ac);  /* Frame mode */
+        writel(0x4440, vic_regs + 0x1a8);
+        writel(0x10, vic_regs + 0x1b0);
+        writel(0x0, vic_regs + 0x1a0);  /* Frame config */
+        writel(0x100010, vic_regs + 0x1a4);  /* Control register */
+        wmb();
+        pr_info("*** VIC HARDWARE CONFIG: VIC registers configured - now attempting unlock ***\n");
+
         /* Binary Ninja: EXACT reference driver unlock sequence */
         writel(2, vic_regs + 0x0);
         wmb();
         writel(4, vic_regs + 0x0);
         wmb();
-        
+
         /* Binary Ninja: 00010acc - Wait for unlock */
         while (readl(vic_regs + 0x0) != 0) {
             udelay(1);
             if (--timeout == 0) {
-                pr_err("VIC unlock timeout\n");
+                pr_err("*** VIC UNLOCK TIMEOUT: Register stuck at 0x%x - VIC hardware not responding ***\n", readl(vic_regs + 0x0));
+                pr_err("*** VIC UNLOCK TIMEOUT: This will cause interrupt system failure ***\n");
                 return -ETIMEDOUT;
             }
         }
