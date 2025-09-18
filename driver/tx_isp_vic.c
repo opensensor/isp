@@ -363,32 +363,6 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 shifted_value = buffer_index << 0x10;
             }
 
-            /* CRITICAL FIX: Preserve buffer count AND control bits when updating current buffer index */
-            /* The bug was clearing buffer count bits 16-19, but we need to preserve total buffer count */
-            if (vic_regs) {
-                u32 reg_val = readl(vic_regs + 0x300);
-                u32 total_buffer_count = (reg_val >> 16) & 0xf;  /* Extract current buffer count (bits 16-19) */
-                u32 control_bits = reg_val & 0x8000ffff;         /* Preserve control bits and low bits */
-
-                /* PRESERVE total buffer count, only update current buffer index within that count */
-                /* Don't clear buffer count - preserve it and just cycle through available buffers */
-                u32 current_buffer_index = buffer_index % total_buffer_count;  /* Cycle within available buffers */
-                u32 new_reg_val = control_bits | (total_buffer_count << 16);   /* Preserve buffer count */
-
-                /* FORCE control bits if they were lost */
-                if ((new_reg_val & 0x80000020) != 0x80000020) {
-                    new_reg_val |= 0x80000020;  /* Force control bits back on */
-                    pr_warn("*** VIC FRAME DONE: FORCED control bits 0x80000020 back on! ***\n");
-                }
-
-                writel(new_reg_val, vic_regs + 0x300);
-
-                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (BUFFER COUNT PRESERVED: %d) ***\n",
-                        new_reg_val, total_buffer_count);
-                pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: current=%d, total=%d, match=%d)\n",
-                        new_reg_val, current_buffer_index, total_buffer_count, match_found);
-            }
-
             /* REFERENCE DRIVER: VIC frame done processing complete */
             /* The reference driver does NOT manually trigger ISP core interrupts */
             /* ISP core interrupts should be triggered automatically by hardware */
@@ -400,6 +374,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
                 /* CRITICAL FIX: If VIC register 0x380 is 0x0, use REAL VBM buffer addresses */
                 if (completed_buffer_addr == 0x0) {
+                    extern struct tx_isp_dev *ourISPdev;
                     if (ourISPdev) {
                         /* Get the frame channel state to access VBM buffer addresses */
 
@@ -607,15 +582,8 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
     void __iomem *vic_base;
 
-    // CRITICAL: Use PRIMARY VIC space for interrupt configuration
-    // 0x10023000 is for tracer, but VIC unlock needs 0x133e0000 (primary VIC space)
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_err("tx_isp_vic_hw_init: No primary VIC registers available\n");
-        return -EINVAL;
-    }
-
-    vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
-    pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
+    // Initialize VIC hardware
+    vic_base = ioremap(0x10023000, 0x1000);  // Direct map VIC
 
     // Clear any pending interrupts first
     writel(0, vic_base + 0x00);  // Clear ISR
@@ -1573,8 +1541,22 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x100010, vic_regs + 0x1a4);  /* Binary Ninja exact value */
         pr_info("*** BINARY NINJA: reg 0x1a4 = 0x100010 (control) ***\n");
 
-        /* 9. Hardware enable sequence already completed above - no duplicate needed */
-        pr_info("*** BINARY NINJA: VIC unlock sequence already completed ***\n");
+        /* 9. BINARY NINJA EXACT: Hardware enable sequence */
+        writel(0x2, vic_regs + 0x0);  /* Pre-enable */
+        wmb();
+        writel(0x4, vic_regs + 0x0);  /* Wait state */
+        wmb();
+
+        /* Wait for hardware ready (Binary Ninja: while (*$v1_30 != 0) nop) */
+        u32 wait_count = 0;
+        while ((readl(vic_regs + 0x0) != 0) && (wait_count < 1000)) {
+            wait_count++;
+            udelay(1);
+        }
+
+        writel(0x1, vic_regs + 0x0);  /* Final enable */
+        wmb();
+        pr_info("*** BINARY NINJA EXACT: Hardware sequence 2->4->wait(%d us)->1 ***\n", wait_count);
         
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
@@ -1697,8 +1679,25 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         wmb();
         
-        /* VIC unlock sequence already completed above - no duplicate needed */
-        pr_info("*** BINARY NINJA: VIC unlock sequence already completed ***\n");
+        /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
+        /* Binary Ninja: EXACT reference driver unlock sequence */
+        writel(2, vic_regs + 0x0);
+        wmb();
+        writel(4, vic_regs + 0x0);
+        wmb();
+        
+        /* Binary Ninja: 00010acc - Wait for unlock */
+        while (readl(vic_regs + 0x0) != 0) {
+            udelay(1);
+            if (--timeout == 0) {
+                pr_err("VIC unlock timeout\n");
+                return -ETIMEDOUT;
+            }
+        }
+        
+        /* Binary Ninja: 00010ad4 - Enable VIC */
+        writel(1, vic_regs + 0x0);
+        wmb();
         
         /* Binary Ninja: 00010ae4-00010b04 - Final MIPI registers */
         writel(0x100010, vic_regs + 0x1a4);
@@ -1737,7 +1736,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x4440, vic_regs + 0x1ac);
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         
-        /* VIC unlock sequence already completed above - no duplicate needed */
+        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
+        writel(2, vic_regs + 0x0);
+        wmb();
+        writel(1, vic_regs + 0x0);
         
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT656) {
         /* BT656 - Binary Ninja 000105b0-00010684 */
@@ -1752,7 +1754,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x200, vic_regs + 0x1d0);
         writel(0x200, vic_regs + 0x1d4);
         
-        /* VIC unlock sequence already completed above - no duplicate needed */
+        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
+        writel(2, vic_regs + 0x0);
+        wmb();
+        writel(1, vic_regs + 0x0);
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT1120) {
         /* BT1120 - Binary Ninja 00010500-00010684 */
@@ -1765,7 +1770,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
         
-        /* VIC unlock sequence already completed above - no duplicate needed */
+        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
+        writel(2, vic_regs + 0x0);
+        wmb();
+        writel(1, vic_regs + 0x0);
         
     } else {
         pr_err("Unsupported interface type %d\n", interface_type);
