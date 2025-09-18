@@ -1312,6 +1312,11 @@ int tisp_init(void *sensor_info, char *param_name)
     /* CRITICAL FIX: Configure ISP with ACTUAL sensor image dimensions */
     /* This is the missing piece - ISP must know the correct image size */
 
+    /* CRITICAL FIX: Register 0x0 missing from our configuration but present in reference trace */
+    /* Reference trace: ISP isp-m0: [CSI PHY Control] write at offset 0x0: 0x0 -> 0x54560031 */
+    system_reg_write(0x0, 0x54560031);
+    pr_info("*** tisp_init: PIPELINE FIX - Added missing register 0x0 = 0x54560031 (from reference trace) ***\n");
+
     /* Binary Ninja: system_reg_write(4, width << 16 | height) */
     system_reg_write(0x4, (actual_image_width << 16) | actual_image_height);
     pr_info("*** tisp_init: ISP frame size configured - %dx%d (ACTUAL sensor image) ***\n",
