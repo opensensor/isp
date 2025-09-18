@@ -1462,17 +1462,25 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             udelay(1);
         }
 
-        /* SURGICAL FIX: Configure interrupt registers after CSI PHY unlock */
-        pr_info("*** SURGICAL FIX: Configuring VIC interrupt registers ***\n");
+        /* SURGICAL FIX: Configure VIC interrupt registers in SECONDARY space */
+        pr_info("*** SURGICAL FIX: Configuring VIC interrupt registers in secondary space (0x10023000) ***\n");
 
-        /* Clear any pending interrupts first */
-        writel(0xffffffff, vic_regs + 0x1c);   /* Clear interrupt status */
-        wmb();
+        /* Get secondary VIC space for interrupt configuration */
+        void __iomem *secondary_regs = vic_dev->vic_regs_secondary;
+        if (secondary_regs) {
+            /* Clear any pending interrupts first */
+            writel(0xffffffff, secondary_regs + 0x1c);   /* Clear interrupt status */
+            wmb();
 
-        /* Enable VIC interrupts using the working register addresses */
-        writel(0xffffffff, vic_regs + 0x1e0); /* Enable all interrupts */
-        writel(0x0, vic_regs + 0x1e8);        /* Clear interrupt masks */
-        wmb();
+            /* Enable VIC interrupts in the SECONDARY space where interrupt handler reads */
+            writel(0xffffffff, secondary_regs + 0x1e0); /* Enable all interrupts */
+            writel(0x0, secondary_regs + 0x1e8);        /* Clear interrupt masks */
+            wmb();
+
+            pr_info("*** SURGICAL FIX: VIC interrupts configured in secondary space ***\n");
+        } else {
+            pr_err("*** SURGICAL FIX: No secondary VIC space available for interrupt config ***\n");
+        }
 
         /* Set VIC start flag - CRITICAL for interrupt processing */
         vic_start_ok = 1;
@@ -2763,17 +2771,24 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x10, vic_regs + 0x1b0);
                 wmb();
 
-                /* SURGICAL FIX: Configure VIC interrupt registers after CSI PHY setup */
-                pr_info("*** SURGICAL FIX: Configuring VIC interrupt system ***\n");
+                /* SURGICAL FIX: Configure VIC interrupt registers in SECONDARY space */
+                pr_info("*** SURGICAL FIX: Configuring VIC interrupt system in secondary space ***\n");
 
-                /* Clear any pending interrupts first */
-                writel(0xffffffff, vic_regs + 0x1c);   /* Clear interrupt status */
-                wmb();
+                /* Use vic_w01_base (0x10023000) for interrupt configuration */
+                if (vic_w01_base) {
+                    /* Clear any pending interrupts first */
+                    writel(0xffffffff, vic_w01_base + 0x1c);   /* Clear interrupt status */
+                    wmb();
 
-                /* Enable VIC interrupts using the working register addresses */
-                writel(0xffffffff, vic_regs + 0x1e0); /* Enable all interrupts */
-                writel(0x0, vic_regs + 0x1e8);        /* Clear interrupt masks */
-                wmb();
+                    /* Enable VIC interrupts in the SECONDARY space where interrupt handler reads */
+                    writel(0xffffffff, vic_w01_base + 0x1e0); /* Enable all interrupts */
+                    writel(0x0, vic_w01_base + 0x1e8);        /* Clear interrupt masks */
+                    wmb();
+
+                    pr_info("*** SURGICAL FIX: VIC interrupts configured in vic_w01_base (0x10023000) ***\n");
+                } else {
+                    pr_err("*** SURGICAL FIX: No vic_w01_base available for interrupt config ***\n");
+                }
 
                 /* Set VIC start flag - CRITICAL for interrupt processing */
                 vic_start_ok = 1;
@@ -2922,11 +2937,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     writel(0x630, vic_regs + 0x14);
                     wmb();
 
-                    /* SURGICAL FIX: Restore interrupt configuration after CSI PHY writes */
-                    pr_info("*** SURGICAL FIX: Restoring VIC interrupt configuration ***\n");
-                    writel(0xffffffff, vic_regs + 0x1e0); /* Restore interrupt enable */
-                    writel(0x0, vic_regs + 0x1e8);        /* Restore interrupt masks */
-                    wmb();
+                    /* SURGICAL FIX: Restore interrupt configuration in SECONDARY space */
+                    pr_info("*** SURGICAL FIX: Restoring VIC interrupt configuration in secondary space ***\n");
+                    if (vic_w01_base) {
+                        writel(0xffffffff, vic_w01_base + 0x1e0); /* Restore interrupt enable */
+                        writel(0x0, vic_w01_base + 0x1e8);        /* Restore interrupt masks */
+                        wmb();
+                        pr_info("*** SURGICAL FIX: VIC interrupts restored in vic_w01_base ***\n");
+                    }
 
                     pr_info("*** STEP 7: CSI PHY control applied with interrupt preservation ***\n");
                 } else {
