@@ -427,11 +427,11 @@ static void ispcore_irq_fs_work(struct work_struct *work)
 
     frame_count++;
 
-    /* CRITICAL FIX: Only set conditions occasionally, not every frame */
-    /* This prevents the continuous sensor I2C calls that cause the 22-second hang */
-    if ((frame_count % 30) == 0) {  /* Only every 30 frames (~1 second at 30fps) */
+    /* CRITICAL FIX: Enable continuous sensor communication for proper data sync */
+    /* The sensor needs regular I2C communication to sync data with VIC DMA */
+    if ((frame_count % 5) == 0) {  /* Every 5 frames for active sensor communication */
         condition_states[2] = 1;  /* Set condition for AE operation */
-        pr_debug("*** ISP FRAME SYNC WORK: Setting AE condition (frame %d) ***\n", frame_count);
+        pr_info("*** ISP FRAME SYNC WORK: Setting AE condition (frame %d) - ACTIVE SENSOR SYNC ***\n", frame_count);
     }
 
     /* REFERENCE DRIVER: Iterate through 7 conditions like Binary Ninja */
@@ -452,14 +452,14 @@ static void ispcore_irq_fs_work(struct work_struct *work)
             continue;
         }
 
-        pr_debug("*** ISP FRAME SYNC WORK: Processing condition %d ***\n", i);
+        pr_info("*** ISP FRAME SYNC WORK: Processing condition %d ***\n", i);
 
         /* REFERENCE DRIVER: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
         /* Only call when conditions are met, not every frame */
         if (i == 2) {  /* AE condition */
             extern int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev);
             int result = ispcore_sensor_ops_ioctl(isp_dev);
-            pr_debug("*** ISP FRAME SYNC WORK: Sensor AE operation result: %d ***\n", result);
+            pr_info("*** ISP FRAME SYNC WORK: Sensor AE operation result: %d - should trigger I2C writes ***\n", result);
         }
 
         /* REFERENCE DRIVER: *$s2_1 = 0 (clear condition after processing) */
