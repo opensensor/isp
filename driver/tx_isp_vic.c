@@ -873,6 +873,15 @@ int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t base_
     wmb();
 
     pr_info("*** VIC DMA CONFIG: CRITICAL - VIC control 0x300 = 0x%x (DMA ENABLED) ***\n", vic_control);
+
+    /* CRITICAL MISSING STEP: Start VIC hardware after DMA configuration */
+    /* Binary Ninja: Final VIC hardware enable sequence */
+    writel(0x1, vic_regs + 0x0);  /* Start VIC hardware capture */
+    wmb();
+
+    /* Verify VIC hardware started */
+    u32 vic_status = readl(vic_regs + 0x0);
+    pr_info("*** VIC DMA CONFIG: CRITICAL - VIC hardware started, register 0x0 = 0x%x ***\n", vic_status);
     pr_info("*** VIC DMA CONFIG: VIC hardware should now capture frames and populate VIC[0x380] ***\n");
 
     return 0;
@@ -3421,6 +3430,11 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             writel(vic_control, vic_dev->vic_regs + 0x300);
             wmb();
             pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC[0x300] = 0x%x (ISP DMA STARTED) ***\n", vic_control);
+
+            /* CRITICAL MISSING STEP: Start VIC hardware after DMA configuration */
+            writel(0x1, vic_dev->vic_regs + 0x0);  /* Start VIC hardware capture */
+            wmb();
+            pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC hardware started (reg 0x0 = 0x1) ***\n");
         } else if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
             /* Fallback to VBM buffers if ISP DMA not available */
             pr_info("*** ispvic_frame_channel_qbuf: Fallback to VBM buffers ***\n");
@@ -3448,6 +3462,11 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             writel(vic_control, vic_dev->vic_regs + 0x300);
             wmb();
             pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC[0x300] = 0x%x (DMA STARTED) ***\n", vic_control);
+
+            /* CRITICAL MISSING STEP: Start VIC hardware after DMA configuration */
+            writel(0x1, vic_dev->vic_regs + 0x0);  /* Start VIC hardware capture */
+            wmb();
+            pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC hardware started (reg 0x0 = 0x1) ***\n");
             pr_info("*** ispvic_frame_channel_qbuf: VIC hardware should now capture frames and populate VIC[0x380] ***\n");
         } else {
             pr_warn("*** ispvic_frame_channel_qbuf: No VBM buffers available ***\n");

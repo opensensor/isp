@@ -90,22 +90,22 @@ void csi_write32(u32 reg, u32 val)
         }
     }
 
-    /* Log critical CSI PHY writes that interfere with VIC interrupts */
-    if (reg == 0x0 || reg == 0x8c) {
+    /* CRITICAL FIX: Block ALL CSI PHY register writes during active VIC streaming */
+    extern uint32_t vic_start_ok;
+    if (vic_start_ok == 1) {
         u32 old_val = readl(tx_isp_csi_regs + reg);
-        pr_info("ISP isp-w02: [CSI PHY Control] write at offset 0x%x: 0x%x -> 0x%x (CRITICAL - may affect VIC interrupts)\n",
+        pr_info("*** CSI WRITE BLOCKED: VIC streaming active - preventing CSI PHY write to 0x%x: 0x%x -> 0x%x ***\n",
                 reg, old_val, val);
+        pr_info("*** CSI PHY register 0x%x remains at 0x%x to maintain video pipeline ***\n", reg, old_val);
+        return;  /* Don't actually write to CSI PHY registers during streaming */
     }
+
+    /* Log critical CSI PHY writes when not streaming */
+    u32 old_val = readl(tx_isp_csi_regs + reg);
+    pr_info("ISP isp-w02: [CSI PHY Control] write at offset 0x%x: 0x%x -> 0x%x (VIC not streaming - allowing write)\n",
+            reg, old_val, val);
 
     writel(val, tx_isp_csi_regs + reg);
-
-    /* CRITICAL FIX: Restore VIC interrupts immediately after CSI PHY writes that interfere */
-    if (reg == 0x0 || reg == 0x8c) {
-        /* Call VIC interrupt restoration function to counter CSI PHY interference */
-        extern void tx_isp_vic_restore_interrupts(void);
-        tx_isp_vic_restore_interrupts();
-        pr_info("*** CSI PHY INTERFERENCE FIX: VIC interrupts restored after CSI PHY write to 0x%x ***\n", reg);
-    }
 }
 
 /* CSI interrupt handler */
