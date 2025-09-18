@@ -285,7 +285,7 @@ void tx_isp_vic_restore_interrupts(void)
         return; /* VIC not active */
     }
 
-    pr_info("*** VIC INTERRUPT RESTORE: COMPREHENSIVE FIX - Restoring VIC interrupt registers and fixing control limit errors ***\n");
+    pr_info("*** VIC INTERRUPT RESTORE: Restoring VIC interrupt registers in PRIMARY VIC space ***\n");
 
     /* CRITICAL: Use PRIMARY VIC space for interrupt control (0x133e0000) */
     struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
@@ -294,14 +294,8 @@ void tx_isp_vic_restore_interrupts(void)
         return;
     }
 
-    /* CRITICAL FIX 1: Fix VIC control limit errors by setting correct VIC mode */
-    pr_info("*** VIC CONTROL LIMIT FIX: Setting VIC mode to 2 (MIPI) instead of 3 ***\n");
-    writel(2, vic_dev->vic_regs + 0xc);  /* Mode 2 for MIPI interface - prevents control limit error */
-    wmb();
-
-    /* CRITICAL FIX 2: Ensure NV12 format magic number is set to prevent control limit checks */
-    *(uint32_t *)((char *)vic_dev + 0xc) = 0x3231564e;  /* NV12 format magic number */
-    pr_info("*** VIC CONTROL LIMIT FIX: NV12 format magic number verified at vic_dev+0xc ***\n");
+    /* Restore VIC interrupt register values using WORKING ISP-activates configuration */
+    pr_info("*** VIC INTERRUPT RESTORE: Using WORKING ISP-activates configuration (0x1e8/0x1ec) ***\n");
 
     /* Clear pending interrupts first */
     writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
@@ -313,42 +307,7 @@ void tx_isp_vic_restore_interrupts(void)
     /* SKIP MDMA register 0x1ec - it doesn't work correctly */
     wmb();
 
-    /* CRITICAL FIX 4: Also restore ISP core interrupt masks that get overwritten */
-    if (ourISPdev->core_regs) {
-        void __iomem *core = ourISPdev->core_regs;
-
-        /* Restore ISP core interrupt enables that get overwritten by tuning system */
-        writel(0x3FFF, core + 0xb0);        /* Legacy enable - all interrupt sources */
-        writel(0x1000, core + 0xbc);        /* Legacy unmask - frame sync only */
-        writel(0x3FFF, core + 0x98b0);      /* New enable - all interrupt sources */
-        writel(0x1000, core + 0x98bc);      /* New unmask - frame sync only */
-        wmb();
-
-        pr_info("*** VIC INTERRUPT RESTORE: ISP core interrupt masks also restored ***\n");
-    }
-
-    /* CRITICAL FIX 5: Start interrupt protection timer to prevent future overwrites */
-    if (!vic_interrupt_protection_active) {
-        /* Use older kernel timer API for compatibility */
-        init_timer(&vic_interrupt_protection_timer);
-        vic_interrupt_protection_timer.function = vic_interrupt_protection_timer_callback;
-        vic_interrupt_protection_timer.data = 0;
-        vic_interrupt_protection_active = 1;
-        mod_timer(&vic_interrupt_protection_timer, jiffies + msecs_to_jiffies(100));
-        pr_info("*** VIC INTERRUPT RESTORE: Protection timer started - will prevent future overwrites ***\n");
-    }
-
-    pr_info("*** VIC INTERRUPT RESTORE: COMPREHENSIVE FIX applied - control limit errors should stop, interrupts should continue ***\n");
-}
-
-/* Function to stop interrupt protection timer when driver is unloaded */
-void tx_isp_vic_stop_interrupt_protection(void)
-{
-    if (vic_interrupt_protection_active) {
-        del_timer_sync(&vic_interrupt_protection_timer);
-        vic_interrupt_protection_active = 0;
-        pr_info("*** VIC INTERRUPT PROTECTION: Timer stopped ***\n");
-    }
+    pr_info("*** VIC INTERRUPT RESTORE: WORKING configuration restored (MainMask=0xFFFFFFFE) ***\n");
 }
 EXPORT_SYMBOL(tx_isp_vic_restore_interrupts);
 
@@ -2142,8 +2101,8 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     switch (cmd) {
         case 0x200000c:
         case 0x200000f:
-            pr_info("*** vic_sensor_ops_ioctl: Starting VIC (cmd=0x%x) - CALLING tx_isp_vic_start ***\n", cmd);
-            return tx_isp_vic_start(vic_dev);
+            pr_info("*** vic_sensor_ops_ioctl: VIC start deferred to vic_core_s_stream (cmd=0x%x) ***\n", cmd);
+            return 0;
             
         case 0x200000d:
         case 0x2000010:
