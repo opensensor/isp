@@ -1597,22 +1597,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x100010, vic_regs + 0x1a4);  /* Binary Ninja exact value */
         pr_info("*** BINARY NINJA: reg 0x1a4 = 0x100010 (control) ***\n");
 
-        /* 9. BINARY NINJA EXACT: Hardware enable sequence */
-        writel(0x2, vic_regs + 0x0);  /* Pre-enable */
-        wmb();
-        writel(0x4, vic_regs + 0x0);  /* Wait state */
-        wmb();
-
-        /* Wait for hardware ready (Binary Ninja: while (*$v1_30 != 0) nop) */
-        u32 wait_count = 0;
-        while ((readl(vic_regs + 0x0) != 0) && (wait_count < 1000)) {
-            wait_count++;
-            udelay(1);
-        }
-
-        writel(0x1, vic_regs + 0x0);  /* Final enable */
-        wmb();
-        pr_info("*** BINARY NINJA EXACT: Hardware sequence 2->4->wait(%d us)->1 ***\n", wait_count);
+        /* 9. Hardware enable sequence already completed above - no duplicate needed */
+        pr_info("*** BINARY NINJA: VIC unlock sequence already completed ***\n");
         
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
