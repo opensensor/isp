@@ -3454,7 +3454,26 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             wmb();
             pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC[0x300] = 0x%x (ISP DMA STARTED) ***\n", vic_control);
 
-            /* CRITICAL MISSING STEP: Start VIC hardware after DMA configuration */
+            /* CRITICAL FIX: Complete VIC hardware unlock sequence before starting */
+            pr_info("*** ispvic_frame_channel_qbuf: Starting VIC hardware unlock sequence ***\n");
+
+            writel(0x2, vic_dev->vic_regs + 0x0);  /* Pre-enable */
+            wmb();
+            writel(0x4, vic_dev->vic_regs + 0x0);  /* Wait state */
+            wmb();
+
+            /* Wait for hardware ready (register should become 0) */
+            u32 timeout = 1000;
+            u32 vic_status;
+            while ((vic_status = readl(vic_dev->vic_regs + 0x0)) != 0) {
+                udelay(1);
+                if (--timeout == 0) {
+                    pr_err("*** ispvic_frame_channel_qbuf: VIC unlock timeout - register stuck at 0x%x ***\n", vic_status);
+                    break;
+                }
+            }
+
+            /* NOW start VIC hardware capture */
             writel(0x1, vic_dev->vic_regs + 0x0);  /* Start VIC hardware capture */
             wmb();
             pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC hardware started (reg 0x0 = 0x1) ***\n");
@@ -3486,7 +3505,26 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             wmb();
             pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC[0x300] = 0x%x (DMA STARTED) ***\n", vic_control);
 
-            /* CRITICAL MISSING STEP: Start VIC hardware after DMA configuration */
+            /* CRITICAL FIX: Complete VIC hardware unlock sequence before starting */
+            pr_info("*** ispvic_frame_channel_qbuf: Starting VIC hardware unlock sequence ***\n");
+
+            writel(0x2, vic_dev->vic_regs + 0x0);  /* Pre-enable */
+            wmb();
+            writel(0x4, vic_dev->vic_regs + 0x0);  /* Wait state */
+            wmb();
+
+            /* Wait for hardware ready (register should become 0) */
+            u32 timeout = 1000;
+            u32 vic_status;
+            while ((vic_status = readl(vic_dev->vic_regs + 0x0)) != 0) {
+                udelay(1);
+                if (--timeout == 0) {
+                    pr_err("*** ispvic_frame_channel_qbuf: VIC unlock timeout - register stuck at 0x%x ***\n", vic_status);
+                    break;
+                }
+            }
+
+            /* NOW start VIC hardware capture */
             writel(0x1, vic_dev->vic_regs + 0x0);  /* Start VIC hardware capture */
             wmb();
             pr_info("*** ispvic_frame_channel_qbuf: CRITICAL - VIC hardware started (reg 0x0 = 0x1) ***\n");
