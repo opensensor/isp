@@ -507,7 +507,7 @@ static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 void system_reg_write(u32 reg, u32 value);
 
 /* system_reg_write - Helper function to write ISP registers safely */
-void system_reg_write(u32 reg, u32 value)
+void system_reg_write(u32 arg1, u32 arg2)
 {
     /* Binary Ninja EXACT: *(*(mdns_y_pspa_cur_bi_wei0_array + 0xb8) + arg1) = arg2 */
     /* mdns_y_pspa_cur_bi_wei0_array is the ISP device structure (ourISPdev) */
