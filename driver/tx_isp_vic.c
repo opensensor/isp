@@ -3394,6 +3394,24 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Binary Ninja: test_addr = $v0 + 0x80 */
     test_addr = (char *)vic_dev + 0x80;  /* Test address pointer */
 
+    /* CRITICAL: Register VIC interrupt handler for IRQ 38 */
+    {
+        int vic_irq = platform_get_irq(pdev, 0);
+        if (vic_irq > 0) {
+            ret = request_irq(vic_irq, isp_vic_interrupt_service_routine,
+                             IRQF_SHARED, "isp-w02-vic", vic_dev);
+            if (ret == 0) {
+                vic_dev->irq_number = vic_irq;
+                vic_dev->irq = vic_irq;
+                pr_info("*** VIC PROBE: VIC interrupt handler registered for IRQ %d ***\n", vic_irq);
+            } else {
+                pr_err("*** VIC PROBE: Failed to register VIC interrupt handler for IRQ %d: %d ***\n", vic_irq, ret);
+            }
+        } else {
+            pr_err("*** VIC PROBE: Failed to get VIC IRQ number: %d ***\n", vic_irq);
+        }
+    }
+
     /* REMOVED: Manual linking - now handled automatically by tx_isp_subdev_init */
     pr_info("*** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
 
