@@ -9567,77 +9567,9 @@ int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32
 EXPORT_SYMBOL(tiziano_init_all_pipeline_components);
 
 /* Export all the tiziano pipeline functions */
-EXPORT_SYMBOL(tiziano_ccm_init);
-EXPORT_SYMBOL(jz_isp_ccm);
-EXPORT_SYMBOL(tiziano_ccm_params_refresh);
-EXPORT_SYMBOL(tisp_ccm_ct_update);
-EXPORT_SYMBOL(tisp_ccm_ev_update);
-EXPORT_SYMBOL(tiziano_ccm_a_now);
-EXPORT_SYMBOL(cm_ev_list_now);
-EXPORT_SYMBOL(cm_sat_list_now);
-EXPORT_SYMBOL(tisp_gb_init);
-EXPORT_SYMBOL(tiziano_sdns_init);
-EXPORT_SYMBOL(tisp_dmsc_wdr_en);
-EXPORT_SYMBOL(tisp_ae_ir_update);
-EXPORT_SYMBOL(tisp_event_init);
-EXPORT_SYMBOL(tisp_mdns_wdr_en);
-EXPORT_SYMBOL(tiziano_adr_init);
-EXPORT_SYMBOL(tiziano_ae_init);
-EXPORT_SYMBOL(tisp_adr_wdr_en);
-EXPORT_SYMBOL(tiziano_af_init);
-EXPORT_SYMBOL(tiziano_rdns_init);
-EXPORT_SYMBOL(tiziano_defog_init);
-EXPORT_SYMBOL(tisp_ccm_wdr_en);
-EXPORT_SYMBOL(tisp_ae_wdr_en);
-EXPORT_SYMBOL(tisp_wdr_init);
-EXPORT_SYMBOL(tiziano_clm_init);
-EXPORT_SYMBOL(tiziano_gib_init);
-EXPORT_SYMBOL(tisp_lsc_wdr_en);
-EXPORT_SYMBOL(tisp_dpc_wdr_en);
-EXPORT_SYMBOL(tisp_rdns_wdr_en);
-EXPORT_SYMBOL(tisp_tgain_update);
-EXPORT_SYMBOL(tiziano_dmsc_init);
-EXPORT_SYMBOL(tiziano_sharpen_init);
-EXPORT_SYMBOL(tiziano_ydns_init);
-EXPORT_SYMBOL(tiziano_awb_init);
-EXPORT_SYMBOL(tisp_param_operate_init);
-EXPORT_SYMBOL(tisp_ev_update);
-EXPORT_SYMBOL(tiziano_lsc_init);
-EXPORT_SYMBOL(tisp_gamma_wdr_en);
-EXPORT_SYMBOL(tiziano_mdns_init);
-EXPORT_SYMBOL(tiziano_gamma_init);
-EXPORT_SYMBOL(tiziano_hldc_init);
-EXPORT_SYMBOL(tisp_ct_update);
-EXPORT_SYMBOL(tisp_sdns_wdr_en);
-EXPORT_SYMBOL(tisp_bcsh_wdr_en);
-EXPORT_SYMBOL(tisp_defog_wdr_en);
-EXPORT_SYMBOL(tisp_sharpen_wdr_en);
-EXPORT_SYMBOL(tisp_event_set_cb);
-EXPORT_SYMBOL(tiziano_dpc_init);
-EXPORT_SYMBOL(tisp_again_update);
-EXPORT_SYMBOL(tiziano_bcsh_init);
-EXPORT_SYMBOL(tisp_adr_process);
+/* Removed duplicate EXPORT_SYMBOL declarations - functions already exported after their implementations */
 
-/* Export comprehensive tuning functions */
-EXPORT_SYMBOL(tiziano_gamma_lut_parameter);
-EXPORT_SYMBOL(tiziano_lsc_params_refresh);
-EXPORT_SYMBOL(tiziano_dpc_params_refresh);
-EXPORT_SYMBOL(tiziano_sharpen_params_refresh);
-EXPORT_SYMBOL(tiziano_sdns_params_refresh);
-EXPORT_SYMBOL(tiziano_adr_params_refresh);
-EXPORT_SYMBOL(tisp_dpc_par_refresh);
-EXPORT_SYMBOL(tisp_sharpen_par_refresh);
-EXPORT_SYMBOL(tisp_sdns_par_refresh);
-
-/* Export global variables used across modules */
-EXPORT_SYMBOL(data_9a454);
-EXPORT_SYMBOL(data_9a450);
-EXPORT_SYMBOL(tiziano_adr_interrupt_static);
-EXPORT_SYMBOL(tisp_wdr_expTime_updata);
-EXPORT_SYMBOL(tisp_wdr_ev_calculate);
-EXPORT_SYMBOL(tiziano_wdr_fusion1_curve_block_mean1);
-EXPORT_SYMBOL(Tiziano_wdr_fpga);
-EXPORT_SYMBOL(tiziano_wdr_soft_para_out);
+/* Removed duplicate EXPORT_SYMBOL declarations for tuning functions and global variables */
 
 /* File operations structure for ISP M0 character device - Binary Ninja reference */
 static const struct file_operations isp_core_tunning_fops = {
