@@ -8935,32 +8935,6 @@ int tisp_param_operate_init(void)
     return 0;
 }
 
-
-/* tisp_param_operate_deinit - EXACT Binary Ninja implementation */
-int tisp_param_operate_deinit(void)
-{
-    pr_info("tisp_param_operate_deinit: Deinitializing parameter operations\n");
-
-    /* Binary Ninja: tisp_netlink_exit() */
-    tisp_netlink_exit();
-
-    /* Binary Ninja: uint32_t opmsg_1 = opmsg */
-    uint32_t opmsg_1 = (uint32_t)opmsg;
-
-    if (opmsg_1 != 0) {
-        /* Binary Ninja: private_kfree(opmsg_1) */
-        private_kfree((void*)opmsg_1);
-        /* Binary Ninja: opmsg = 0 */
-        opmsg = 0;
-    }
-
-    /* Binary Ninja: tisp_code_destroy_tuning_node() */
-    tisp_code_destroy_tuning_node();
-
-    return 0;
-}
-
-
 /* tisp_netlink_init - EXACT Binary Ninja implementation */
 int tisp_netlink_init(void)
 {
@@ -8978,35 +8952,6 @@ int tisp_netlink_init(void)
     /* Binary Ninja: isp_printf(2, "Can not support this frame mode!!!\n", "tisp_netlink_init") */
     isp_printf(2, "Can not support this frame mode!!!\n", "tisp_netlink_init");
     return 0xffffffff;
-}
-
-
-/* tisp_deinit_free - EXACT Binary Ninja implementation */
-int tisp_deinit_free(void)
-{
-    pr_info("tisp_deinit_free: Freeing deinit resources\n");
-
-    /* Binary Ninja: int32_t $a0 = data_ca490 */
-    uint32_t a0 = data_ca490;
-
-    if (a0 != 0) {
-        /* Binary Ninja: private_kfree($a0) */
-        private_kfree((void*)a0);
-        /* Binary Ninja: data_ca490 = 0 */
-        data_ca490 = 0;
-    }
-
-    /* Binary Ninja: int32_t $a0_1 = data_ca48c */
-    uint32_t a0_1 = data_ca48c;
-
-    if (a0_1 != 0) {
-        /* Binary Ninja: private_kfree($a0_1) */
-        private_kfree((void*)a0_1);
-        /* Binary Ninja: data_ca48c = 0 */
-        data_ca48c = 0;
-    }
-
-    return 0;
 }
 
 
