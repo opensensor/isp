@@ -64,7 +64,7 @@ int vic_mdma_irq_function(struct tx_isp_dev *isp_dev, int channel);
  */
 int vic_mdma_irq_function(struct tx_isp_dev *isp_dev, int channel)
 {
-    pr_debug("*** vic_mdma_irq_function: MDMA channel %d interrupt ***\n", channel);
+    pr_info("*** vic_mdma_irq_function: MDMA channel %d interrupt ***\n", channel);
     
     if (!isp_dev) {
         return -EINVAL;
@@ -96,7 +96,7 @@ int tx_isp_vic_start_streaming(struct tx_isp_dev *isp_dev)
     width = isp_dev->sensor_width;
     height = isp_dev->sensor_height;
     
-    pr_debug("*** tx_isp_vic_start_streaming: Starting VIC streaming %dx%d ***\n", width, height);
+    pr_info("*** tx_isp_vic_start_streaming: Starting VIC streaming %dx%d ***\n", width, height);
     
     /* CRITICAL: Validate dimensions to prevent control limit error */
     if (width == 0 || height == 0 || width > 8192 || height > 8192) {
@@ -135,8 +135,8 @@ int tx_isp_vic_start_streaming(struct tx_isp_dev *isp_dev)
     writel(1, vic_regs + 0x0);
     wmb();
     
-    pr_debug("*** tx_isp_vic_start_streaming: VIC streaming started successfully ***\n");
-    pr_debug("*** vic_start_ok = %d, interrupts enabled ***\n", vic_start_ok);
+    pr_info("*** tx_isp_vic_start_streaming: VIC streaming started successfully ***\n");
+    pr_info("*** vic_start_ok = %d, interrupts enabled ***\n", vic_start_ok);
     
     return 0;
 }
@@ -156,16 +156,16 @@ int tx_isp_vic_stop_streaming(struct tx_isp_dev *isp_dev)
     
     vic_regs = isp_dev->vic_regs;
     
-    pr_debug("*** tx_isp_vic_stop_streaming: Stopping VIC streaming ***\n");
+    pr_info("*** tx_isp_vic_stop_streaming: Stopping VIC streaming ***\n");
     
     /* CRITICAL FIX: Don't reset vic_start_ok during streaming stop */
     /* This preserves VIC interrupt protection during streaming restart */
-    pr_debug("*** KEEPING vic_start_ok=1 to preserve interrupt protection during restart ***\n");
+    pr_info("*** KEEPING vic_start_ok=1 to preserve interrupt protection during restart ***\n");
     /* vic_start_ok = 0; // REMOVED - this was breaking protection during streaming restart */
 
     /* CRITICAL FIX: Don't disable VIC hardware during streaming restart */
     /* This write to register 0x0 was causing "0x3 -> 0x0" corruption in logs */
-    pr_debug("*** SKIPPING VIC hardware disable (register 0x0) to preserve interrupt configuration ***\n");
+    pr_info("*** SKIPPING VIC hardware disable (register 0x0) to preserve interrupt configuration ***\n");
     /* writel(0, vic_regs + 0x0); // REMOVED - this was disabling VIC hardware */
     /* wmb(); */
     
@@ -174,7 +174,7 @@ int tx_isp_vic_stop_streaming(struct tx_isp_dev *isp_dev)
     writel(0xffffffff, vic_regs + 0x1e8);
     wmb();
     
-    pr_debug("*** tx_isp_vic_stop_streaming: VIC streaming stopped ***\n");
+    pr_info("*** tx_isp_vic_stop_streaming: VIC streaming stopped ***\n");
     
     return 0;
 }
@@ -197,14 +197,14 @@ int tx_isp_mipi_phy_status_check(struct tx_isp_dev *isp_dev)
     
     phy_regs = isp_dev->phy_base;
     
-    pr_debug("*** tx_isp_mipi_phy_status_check: Checking MIPI PHY status ***\n");
+    pr_info("*** tx_isp_mipi_phy_status_check: Checking MIPI PHY status ***\n");
     
     /* Check clock lane status */
     clock_status = readl(phy_regs + 0x14);
-    pr_debug("MIPI Clock Lane Status: 0x%08x\n", clock_status);
+    pr_info("MIPI Clock Lane Status: 0x%08x\n", clock_status);
     
     if (clock_status & 0x1) {
-        pr_debug("  - Clock lane: ACTIVE\n");
+        pr_info("  - Clock lane: ACTIVE\n");
     } else {
         pr_err("  - Clock lane: INACTIVE - No clock detected!\n");
     }
@@ -212,16 +212,16 @@ int tx_isp_mipi_phy_status_check(struct tx_isp_dev *isp_dev)
     /* Check data lane status */
     for (i = 0; i < 4; i++) {
         lane_status = readl(phy_regs + 0x40 + (i * 4));
-        pr_debug("MIPI Data Lane %d Status: 0x%08x\n", i, lane_status);
+        pr_info("MIPI Data Lane %d Status: 0x%08x\n", i, lane_status);
         
         if (lane_status & 0x1) {
-            pr_debug("  - Data lane %d: SYNC\n", i);
+            pr_info("  - Data lane %d: SYNC\n", i);
         } else {
             pr_warn("  - Data lane %d: NO SYNC\n", i);
         }
         
         if (lane_status & 0x2) {
-            pr_debug("  - Data lane %d: RECEIVING DATA\n", i);
+            pr_info("  - Data lane %d: RECEIVING DATA\n", i);
         } else {
             pr_warn("  - Data lane %d: NO DATA\n", i);
         }
@@ -229,7 +229,7 @@ int tx_isp_mipi_phy_status_check(struct tx_isp_dev *isp_dev)
     
     /* Check for PHY errors */
     error_status = readl(phy_regs + 0x8c);
-    pr_debug("MIPI PHY Error Status: 0x%08x\n", error_status);
+    pr_info("MIPI PHY Error Status: 0x%08x\n", error_status);
     
     if (error_status & 0x1) {
         pr_err("  - PHY Error: Clock lane error\n");
@@ -246,8 +246,8 @@ int tx_isp_mipi_phy_status_check(struct tx_isp_dev *isp_dev)
     
     /* Check PHY configuration registers */
     uint32_t phy_config = readl(phy_regs + 0x160);
-    pr_debug("MIPI PHY Configuration: 0x%08x\n", phy_config);
-    pr_debug("  - PHY frequency setting: %d\n", phy_config & 0xf);
+    pr_info("MIPI PHY Configuration: 0x%08x\n", phy_config);
+    pr_info("  - PHY frequency setting: %d\n", phy_config & 0xf);
     
     return 0;
 }
@@ -267,19 +267,19 @@ void tx_isp_vic_register_dump(struct tx_isp_dev *isp_dev)
     
     vic_regs = isp_dev->vic_regs;
     
-    pr_debug("*** VIC Register Dump ***\n");
-    pr_debug("VIC_CTRL (0x00):     0x%08x\n", readl(vic_regs + 0x0));
-    pr_debug("VIC_STATUS (0x04):   0x%08x\n", readl(vic_regs + 0x4));
-    pr_debug("VIC_CONFIG (0x0C):   0x%08x\n", readl(vic_regs + 0xc));
-    pr_debug("VIC_SIZE (0x10):     0x%08x\n", readl(vic_regs + 0x10));
-    pr_debug("VIC_STRIDE (0x14):   0x%08x\n", readl(vic_regs + 0x14));
-    pr_debug("VIC_INT_EN (0x1E0):  0x%08x\n", readl(vic_regs + 0x1e0));
-    pr_debug("VIC_INT_MASK (0x1E8): 0x%08x\n", readl(vic_regs + 0x1e8));
-    pr_debug("VIC_INT_STAT (0x1F0): 0x%08x\n", readl(vic_regs + 0x1f0));
-    pr_debug("VIC_BUFFER0 (0x380): 0x%08x\n", readl(vic_regs + 0x380));
-    pr_debug("VIC_BUFFER1 (0x384): 0x%08x\n", readl(vic_regs + 0x384));
-    pr_debug("VIC_BUFFER2 (0x388): 0x%08x\n", readl(vic_regs + 0x388));
-    pr_debug("*** End VIC Register Dump ***\n");
+    pr_info("*** VIC Register Dump ***\n");
+    pr_info("VIC_CTRL (0x00):     0x%08x\n", readl(vic_regs + 0x0));
+    pr_info("VIC_STATUS (0x04):   0x%08x\n", readl(vic_regs + 0x4));
+    pr_info("VIC_CONFIG (0x0C):   0x%08x\n", readl(vic_regs + 0xc));
+    pr_info("VIC_SIZE (0x10):     0x%08x\n", readl(vic_regs + 0x10));
+    pr_info("VIC_STRIDE (0x14):   0x%08x\n", readl(vic_regs + 0x14));
+    pr_info("VIC_INT_EN (0x1E0):  0x%08x\n", readl(vic_regs + 0x1e0));
+    pr_info("VIC_INT_MASK (0x1E8): 0x%08x\n", readl(vic_regs + 0x1e8));
+    pr_info("VIC_INT_STAT (0x1F0): 0x%08x\n", readl(vic_regs + 0x1f0));
+    pr_info("VIC_BUFFER0 (0x380): 0x%08x\n", readl(vic_regs + 0x380));
+    pr_info("VIC_BUFFER1 (0x384): 0x%08x\n", readl(vic_regs + 0x384));
+    pr_info("VIC_BUFFER2 (0x388): 0x%08x\n", readl(vic_regs + 0x388));
+    pr_info("*** End VIC Register Dump ***\n");
 }
 EXPORT_SYMBOL(tx_isp_vic_register_dump);
 
@@ -298,41 +298,41 @@ void tx_isp_debug_frame_capture_status(struct tx_isp_dev *isp_dev)
     
     vic_regs = isp_dev->vic_regs;
     
-    pr_debug("*** Frame Capture Status Debug ***\n");
-    pr_debug("Driver frame count: %u\n", isp_dev->frame_count);
-    pr_debug("VIC start flag: %d\n", vic_start_ok);
+    pr_info("*** Frame Capture Status Debug ***\n");
+    pr_info("Driver frame count: %u\n", isp_dev->frame_count);
+    pr_info("VIC start flag: %d\n", vic_start_ok);
     
     /* Check hardware frame counter if available */
     frame_count_reg = readl(vic_regs + 0x160);
-    pr_debug("Hardware frame count: %u\n", frame_count_reg);
+    pr_info("Hardware frame count: %u\n", frame_count_reg);
     
     /* Check buffer status */
     buffer_status = readl(vic_regs + 0x300);
-    pr_debug("Buffer status: 0x%08x\n", buffer_status);
+    pr_info("Buffer status: 0x%08x\n", buffer_status);
     
     /* Check if VIC is actually receiving data */
     uint32_t vic_status = readl(vic_regs + 0x4);
-    pr_debug("VIC status register: 0x%08x\n", vic_status);
+    pr_info("VIC status register: 0x%08x\n", vic_status);
     
     if (vic_status & 0x1) {
-        pr_debug("  - VIC is ACTIVE\n");
+        pr_info("  - VIC is ACTIVE\n");
     } else {
         pr_warn("  - VIC is INACTIVE - No data flow!\n");
     }
     
     if (vic_status & 0x2) {
-        pr_debug("  - Frame sync detected\n");
+        pr_info("  - Frame sync detected\n");
     } else {
         pr_warn("  - No frame sync - Check sensor output!\n");
     }
     
     /* Error counters */
-    pr_debug("*** Error Counters ***\n");
-    pr_debug("Control limit errors: %u\n", data_b2984);
-    pr_debug("Frame FIFO overflows: %u\n", data_b299c);
-    pr_debug("DMA FIFO overflows: %u\n", data_b2980);
-    pr_debug("MIPI errors: %u\n", data_b2990 + data_b2994);
+    pr_info("*** Error Counters ***\n");
+    pr_info("Control limit errors: %u\n", data_b2984);
+    pr_info("Frame FIFO overflows: %u\n", data_b299c);
+    pr_info("DMA FIFO overflows: %u\n", data_b2980);
+    pr_info("MIPI errors: %u\n", data_b2990 + data_b2994);
     
-    pr_debug("*** End Frame Capture Status ***\n");
+    pr_info("*** End Frame Capture Status ***\n");
 }
 EXPORT_SYMBOL(tx_isp_debug_frame_capture_status);

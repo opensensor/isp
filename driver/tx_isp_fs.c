@@ -44,14 +44,14 @@ static int frame_chan_event(void *data);
 /* FS subdev core operations */
 static int fs_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
-    pr_debug("*** fs_core_ops_init: enable=%d ***\n", enable);
+    pr_info("*** fs_core_ops_init: enable=%d ***\n", enable);
     return 0;
 }
 
 /* FS subdev sensor operations */
 static int fs_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
-    pr_debug("*** fs_sensor_ops_ioctl: cmd=0x%x ***\n", cmd);
+    pr_info("*** fs_sensor_ops_ioctl: cmd=0x%x ***\n", cmd);
     return 0;
 }
 
@@ -74,19 +74,19 @@ static struct tx_isp_subdev_ops fs_subdev_ops = {
 /* Frame source file operations - matching isp_framesource_fops */
 static int fs_chardev_open(struct inode *inode, struct file *file)
 {
-    pr_debug("*** FS device opened ***\n");
+    pr_info("*** FS device opened ***\n");
     return 0;
 }
 
 static int fs_chardev_release(struct inode *inode, struct file *file)
 {
-    pr_debug("*** FS device released ***\n");
+    pr_info("*** FS device released ***\n");
     return 0;
 }
 
 static long fs_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-    pr_debug("*** FS IOCTL: cmd=0x%x arg=0x%lx ***\n", cmd, arg);
+    pr_info("*** FS IOCTL: cmd=0x%x arg=0x%lx ***\n", cmd, arg);
     return 0;
 }
 
@@ -118,7 +118,7 @@ static int frame_chan_event(void *data)
         return -EINVAL;
     }
     
-    pr_debug("*** frame_chan_event: channel=%p, state=%d ***\n", chan, chan->state);
+    pr_info("*** frame_chan_event: channel=%p, state=%d ***\n", chan, chan->state);
     
     /* Signal frame completion - use correct field name */
     complete(&chan->frame_done);
@@ -132,7 +132,7 @@ static int frame_chan_event(void *data)
 /* Frame channel initialization/deinitialization */
 void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan)
 {
-    pr_debug("Deinitializing frame channel\n");
+    pr_info("Deinitializing frame channel\n");
     if (chan->active) {
         misc_deregister(&chan->misc);
     }
@@ -202,7 +202,7 @@ int tx_isp_fs_probe(struct platform_device *pdev)
     fs_dev->channel_buffer = channels_buffer;
     
     /* Binary Ninja: Channel initialization loop */
-    pr_debug("tx_isp_fs_probe: initializing %d frame channels\n", channel_count);
+    pr_info("tx_isp_fs_probe: initializing %d frame channels\n", channel_count);
     
     for (i = 0; i < channel_count; i++) {
         /* SAFE: Use proper array indexing instead of offset calculation */
@@ -260,12 +260,12 @@ int tx_isp_fs_probe(struct platform_device *pdev)
             /* Binary Ninja: $s0_2[0xb4] = 1 */
             current_channel->state = 1;  /* Active state */
             
-            pr_debug("tx_isp_fs_probe: initialized frame channel %d: %s\n",
+            pr_info("tx_isp_fs_probe: initialized frame channel %d: %s\n",
                     i, current_channel->name);
         } else {
             /* Binary Ninja: $s0_2[0xb4] = 0 */
             current_channel->state = 0;  /* Inactive state */
-            pr_debug("tx_isp_fs_probe: channel %d inactive\n", i);
+            pr_info("tx_isp_fs_probe: channel %d inactive\n", i);
         }
     }
     
@@ -312,7 +312,7 @@ int tx_isp_fs_remove(struct platform_device *pdev)
     struct tx_isp_frame_channel *current_channel;
     int i;
     
-    pr_debug("*** tx_isp_fs_remove ***\n");
+    pr_info("*** tx_isp_fs_remove ***\n");
     
     if (!fs_dev) {
         return 0;
@@ -335,7 +335,7 @@ int tx_isp_fs_remove(struct platform_device *pdev)
     
     kfree(fs_dev);
     
-    pr_debug("FS device removed\n");
+    pr_info("FS device removed\n");
     return 0;
 }
 
@@ -357,7 +357,7 @@ int __init tx_isp_fs_platform_init(void)
 {
     int ret;
     
-    pr_debug("*** TX ISP FS PLATFORM DRIVER REGISTRATION ***\n");
+    pr_info("*** TX ISP FS PLATFORM DRIVER REGISTRATION ***\n");
     
     ret = platform_driver_register(&tx_isp_fs_platform_driver);
     if (ret) {
@@ -365,15 +365,15 @@ int __init tx_isp_fs_platform_init(void)
         return ret;
     }
     
-    pr_debug("FS platform driver registered successfully\n");
+    pr_info("FS platform driver registered successfully\n");
     return 0;
 }
 
 void __exit tx_isp_fs_platform_exit(void)
 {
-    pr_debug("*** TX ISP FS PLATFORM DRIVER UNREGISTRATION ***\n");
+    pr_info("*** TX ISP FS PLATFORM DRIVER UNREGISTRATION ***\n");
     platform_driver_unregister(&tx_isp_fs_platform_driver);
-    pr_debug("FS platform driver unregistered\n");
+    pr_info("FS platform driver unregistered\n");
 }
 
 /* Export symbols */

@@ -91,20 +91,20 @@ static void __fill_v4l2_buffer(void *vb, struct v4l2_buffer *buf)
 // CRITICAL FIX: Safe implementation using proper struct member access instead of offset arithmetic
 int tx_isp_send_event_to_remote(struct v4l2_subdev *sd, unsigned int event, void *data)
 {
-    pr_debug("*** tx_isp_send_event_to_remote: SAFE implementation - subdev=%p, event=0x%x ***\n", sd, event);
+    pr_info("*** tx_isp_send_event_to_remote: SAFE implementation - subdev=%p, event=0x%x ***\n", sd, event);
 
     if (sd != NULL) {
         // SAFE: Use proper struct member access instead of unsafe offset arithmetic
         if (sd->ops != NULL) {
-            pr_debug("*** EVENT: subdev ops found at %p ***\n", sd->ops);
+            pr_info("*** EVENT: subdev ops found at %p ***\n", sd->ops);
             
             // SAFE: Check for core ops and event handler
             if (sd->ops->core != NULL && sd->ops->core->ioctl != NULL) {
-                pr_debug("*** EVENT: core ioctl handler found at %p ***\n", sd->ops->core->ioctl);
+                pr_info("*** EVENT: core ioctl handler found at %p ***\n", sd->ops->core->ioctl);
                 
                 // SAFE: Call the ioctl handler with proper parameters
                 int ret = sd->ops->core->ioctl(sd, event, data);
-                pr_debug("*** EVENT: Core ioctl returned %d (0x%x) for event 0x%x ***\n", ret, ret, event);
+                pr_info("*** EVENT: Core ioctl returned %d (0x%x) for event 0x%x ***\n", ret, ret, event);
                 
                 if (ret != -ENOIOCTLCMD) {
                     return ret;
@@ -113,10 +113,10 @@ int tx_isp_send_event_to_remote(struct v4l2_subdev *sd, unsigned int event, void
             
             // SAFE: Try video ops if available
             if (sd->ops->video != NULL && sd->ops->video->s_stream != NULL) {
-                pr_debug("*** EVENT: video ops available ***\n");
+                pr_info("*** EVENT: video ops available ***\n");
                 // For streaming events, call s_stream
                 if (event == 0x3000008 || event == 0x3000006) {
-                    pr_debug("*** EVENT: Handling streaming event via s_stream ***\n");
+                    pr_info("*** EVENT: Handling streaming event via s_stream ***\n");
                     int ret = sd->ops->video->s_stream(sd, 1);
                     return ret;
                 }
@@ -124,7 +124,7 @@ int tx_isp_send_event_to_remote(struct v4l2_subdev *sd, unsigned int event, void
         }
         
         // SAFE: If no ops available, try internal event handling
-        pr_debug("*** EVENT: Using internal safe event handling ***\n");
+        pr_info("*** EVENT: Using internal safe event handling ***\n");
         return 0; // Success - event handled safely
     }
     
@@ -146,7 +146,7 @@ static const struct file_operations fs_channel_ops = {
 int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
     int ret;
 
-    pr_debug("Setting up default links\n");
+    pr_info("Setting up default links\n");
 
     // Link sensor output -> CSI input
     if (dev->sensor_sd && dev->csi_dev) {
@@ -156,7 +156,7 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
             return -EINVAL;
         }
 
-        pr_debug("Setting up sensor -> CSI link\n");
+        pr_info("Setting up sensor -> CSI link\n");
         ret = dev->sensor_sd->ops->video->link_setup(
             &dev->sensor_sd->outpads[0],
             &dev->csi_dev->sd.inpads[0],
@@ -176,7 +176,7 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
             return -EINVAL;
         }
 
-        pr_debug("Setting up CSI -> VIC link\n");
+        pr_info("Setting up CSI -> VIC link\n");
         ret = dev->csi_dev->sd.ops->video->link_setup(
             &dev->csi_dev->sd.outpads[0],
             &dev->vic_dev->sd.inpads[0],
@@ -196,7 +196,7 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
             return -EINVAL;
         }
 
-        pr_debug("Setting up VIC -> DDR link\n");
+        pr_info("Setting up VIC -> DDR link\n");
         ret = dev->vic_dev->sd.ops->video->link_setup(
             &dev->vic_dev->sd.outpads[0],
             &dev->ddr_dev->sd->inpads[0],
@@ -209,7 +209,7 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
 
         // Link second VIC output if present
         if (dev->vic_dev->sd.num_outpads > 1) {
-            pr_debug("Setting up second VIC -> DDR link\n");
+            pr_info("Setting up second VIC -> DDR link\n");
             ret = dev->vic_dev->sd.ops->video->link_setup(
                 &dev->vic_dev->sd.outpads[1],
                 &dev->ddr_dev->sd->inpads[0],
@@ -222,7 +222,7 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
         }
     }
 
-    pr_debug("All default links set up successfully\n");
+    pr_info("All default links set up successfully\n");
     return 0;
 }
 
@@ -254,7 +254,7 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
     /* Binary Ninja: int32_t $s1 = $s5 << 2 */
     int clk_array_size = clk_count << 2;
 
-    pr_debug("isp_subdev_init_clks: Initializing %d clocks\n", clk_count);
+    pr_info("isp_subdev_init_clks: Initializing %d clocks\n", clk_count);
 
     /* Binary Ninja: if ($s5 != 0) */
     if (clk_count != 0) {
@@ -287,7 +287,7 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
                 if (ret == 0) {
                     ret = clk_prepare_enable(cgu_isp_clk);
                     if (ret == 0) {
-                        pr_debug("CGU_ISP clock enabled at 100MHz\n");
+                        pr_info("CGU_ISP clock enabled at 100MHz\n");
                         i++;
                     } else {
                         /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", *$s6_1) */
@@ -314,7 +314,7 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
             if (!IS_ERR(isp_clk)) {
                 ret = clk_prepare_enable(isp_clk);
                 if (ret == 0) {
-                    pr_debug("ISP clock enabled\n");
+                    pr_info("ISP clock enabled\n");
                     i++;
                 } else {
                     isp_printf(2, "sensor type is BT1120!\n", "isp");
@@ -334,7 +334,7 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
             if (!IS_ERR(csi_clk)) {
                 ret = clk_prepare_enable(csi_clk);
                 if (ret == 0) {
-                    pr_debug("CSI clock enabled\n");
+                    pr_info("CSI clock enabled\n");
                     i++;
                 } else {
                     isp_printf(2, "sensor type is BT1120!\n", "csi");
@@ -362,12 +362,12 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
             wmb();
             msleep(20);
             iounmap(cpm_regs);
-            pr_debug("CPM clock gates configured\n");
+            pr_info("CPM clock gates configured\n");
         }
 
         /* Binary Ninja: *(arg1 + 0xbc) = $v0_1 */
         sd->clks = clk_array;
-        pr_debug("isp_subdev_init_clks: Successfully initialized %d clocks\n", clk_count);
+        pr_info("isp_subdev_init_clks: Successfully initialized %d clocks\n", clk_count);
     } else {
         /* Binary Ninja: *(arg1 + 0xbc) = 0 */
         sd->clks = NULL;
@@ -537,7 +537,7 @@ int tx_isp_module_init(struct platform_device *pdev, struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    pr_debug("tx_isp_module_init: Module initialized for %s\n", dev_name(&pdev->dev));
+    pr_info("tx_isp_module_init: Module initialized for %s\n", dev_name(&pdev->dev));
     return 0;
 }
 
@@ -549,7 +549,7 @@ void tx_isp_module_deinit(struct tx_isp_subdev *sd)
         return;
     }
 
-    pr_debug("tx_isp_module_deinit: Module deinitialized\n");
+    pr_info("tx_isp_module_deinit: Module deinitialized\n");
 }
 
 /* tx_isp_request_irq - Binary Ninja stub implementation */
@@ -568,7 +568,7 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         return irq_num;
     }
 
-    pr_debug("tx_isp_request_irq: IRQ %d requested for %s\n", irq_num, dev_name(&pdev->dev));
+    pr_info("tx_isp_request_irq: IRQ %d requested for %s\n", irq_num, dev_name(&pdev->dev));
     return 0;
 }
 
@@ -580,7 +580,7 @@ void tx_isp_free_irq(struct tx_isp_irq_info *irq_info)
         return;
     }
 
-    pr_debug("tx_isp_free_irq: IRQ freed\n");
+    pr_info("tx_isp_free_irq: IRQ freed\n");
 }
 
 static struct tx_isp_subdev_ops fs_subdev_ops = { 0 }; // All fields NULL/0
@@ -628,7 +628,7 @@ int __init tx_isp_subdev_platform_init(void)
 {
     int ret;
     
-    pr_debug("*** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***\n");
+    pr_info("*** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***\n");
     
     /* Register CSI platform driver */
     ret = platform_driver_register(&tx_isp_csi_driver);
@@ -658,7 +658,7 @@ int __init tx_isp_subdev_platform_init(void)
         goto err_unregister_core;
     }
     
-    pr_debug("All ISP subdev platform drivers registered successfully\n");
+    pr_info("All ISP subdev platform drivers registered successfully\n");
     return 0;
     
 err_unregister_core:
@@ -672,7 +672,7 @@ err_unregister_csi:
 
 void __exit tx_isp_subdev_platform_exit(void)
 {
-    pr_debug("*** TX ISP SUBDEV PLATFORM DRIVERS UNREGISTRATION ***\n");
+    pr_info("*** TX ISP SUBDEV PLATFORM DRIVERS UNREGISTRATION ***\n");
     
     /* Unregister all platform drivers in reverse order */
     platform_driver_unregister(&tx_isp_vic_driver);
@@ -680,7 +680,7 @@ void __exit tx_isp_subdev_platform_exit(void)
     platform_driver_unregister(&tx_isp_vin_driver);
     platform_driver_unregister(&tx_isp_csi_driver);
     
-    pr_debug("All ISP subdev platform drivers unregistered\n");
+    pr_info("All ISP subdev platform drivers unregistered\n");
 }
 
 /* Export symbols for main module to call these functions */

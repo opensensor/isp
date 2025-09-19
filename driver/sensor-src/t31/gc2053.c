@@ -2120,7 +2120,7 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		            sensor->info.name[0] ? sensor->info.name : SENSOR_NAME);
 	}
 	
-	pr_debug("probe ok ------->%s\n", SENSOR_NAME);
+	pr_info("probe ok ------->%s\n", SENSOR_NAME);
 	return 0;
 
 err_set_sensor_data_interface:
