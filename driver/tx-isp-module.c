@@ -1822,7 +1822,8 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
-    int i;
+    u32 addr_ctl, reg_val;
+    int timeout, i;
 
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
     if (dev_id == NULL || (unsigned long)dev_id >= 0xfffff001) {
