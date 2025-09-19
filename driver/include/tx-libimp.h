@@ -1007,15 +1007,9 @@ struct frame_entry { // Must match OEM offsets exactly
 #define ISP_AE_HIST_NUM_BINS    (ISP_AE_HIST_BASE + 0x20)
 #define ISP_AE_HIST_DATA        (ISP_AE_HIST_BASE + 0x40)
 
-/* Direction bits */
-#define _IOC_NONE   0U
-#define _IOC_WRITE  1U  /* userspace writing to kernel, aka "IN" */
-#define _IOC_READ   2U  /* userspace reading from kernel, aka "OUT" */
-
-/* Check the direction */
-#define IOC_IN      (_IOC_WRITE << _IOC_DIRSHIFT)
-#define IOC_OUT     (_IOC_READ << _IOC_DIRSHIFT)
-#define IOC_INOUT   (((_IOC_WRITE|_IOC_READ) << _IOC_DIRSHIFT))
+/* REMOVED: Duplicate IOCTL definitions that conflict with kernel headers */
+/* These are already defined in include/uapi/asm-generic/ioctl.h and arch/mips/include/uapi/asm/ioctl.h */
+/* Use the kernel's standard IOCTL definitions instead */
 
 #define BCSH_SVALUE_REG     0x100  // Update with actual register offset
 #define BCSH_SMAX_REG       0x104
