@@ -4995,17 +4995,22 @@ static int tx_isp_init(void)
         return gpio_mode_check;
     }
 
-    /* Allocate ISP device structure */
-    ourISPdev = kzalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
+    /* CRITICAL FIX: Use existing ourISPdev from probe - don't allocate new one! */
     if (!ourISPdev) {
-        pr_err("Failed to allocate ISP device\n");
-        return -ENOMEM;
+        pr_err("CRITICAL ERROR: ourISPdev not set by probe function!\n");
+        return -ENODEV;
     }
 
-    /* Initialize device structure */
-    spin_lock_init(&ourISPdev->lock);
-    ourISPdev->refcnt = 0;
-    ourISPdev->is_open = false;
+    pr_info("*** USING EXISTING ourISPdev FROM PROBE: %p ***\n", ourISPdev);
+    pr_info("*** VIN device should still be linked: %p ***\n", ourISPdev->vin_dev);
+
+    /* Initialize any missing device structure fields */
+    if (!ourISPdev->refcnt) {
+        ourISPdev->refcnt = 0;
+    }
+    if (!ourISPdev->is_open) {
+        ourISPdev->is_open = false;
+    }
 
     /* Initialize frame generation work queue */
     INIT_DELAYED_WORK(&vic_frame_work, vic_frame_work_function);

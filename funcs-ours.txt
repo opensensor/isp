@@ -1,11 +1,3 @@
-JZ_Isp_Ae_Dg2reg
-Tiziano_ae1_fpga
-Tiziano_awb_set_gain
-Tiziano_wdr_fpga
-__enqueue_in_driver
-__fill_v4l2_buffer
-__frame_channel_vb2_streamoff
-__private_spin_lock_irqsave
 ae0_interrupt_hist
 ae0_interrupt_hist_wrapper
 ae0_interrupt_static
@@ -524,9 +516,7 @@ tx_isp_core_irq_thread_handle
 tx_isp_core_probe
 tx_isp_core_remove
 tx_isp_core_set_format
-tx_isp_core_start
 tx_isp_core_stop
-tx_isp_create_basic_pipeline
 tx_isp_create_framechan_devices
 tx_isp_create_graph_and_nodes
 tx_isp_create_misc_device
@@ -536,7 +526,6 @@ tx_isp_create_subdev_link
 tx_isp_create_subdev_links
 tx_isp_create_v4l2_device
 tx_isp_create_vic_device
-tx_isp_create_vin_device
 tx_isp_csi_activate_subdev
 tx_isp_csi_device_deinit
 tx_isp_csi_device_init
@@ -605,7 +594,6 @@ tx_isp_request_irq
 tx_isp_send_event_to_remote
 tx_isp_setup_default_links
 tx_isp_setup_media_links
-tx_isp_setup_pipeline
 tx_isp_subdev_auto_link
 tx_isp_subdev_deinit
 tx_isp_subdev_init
