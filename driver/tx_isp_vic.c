@@ -3448,6 +3448,16 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             /* Update buffer count to match ISP DMA buffers */
             vic_dev->active_buffer_count = 4;
 
+            /* CRITICAL: Set buffer addresses for vic_mdma_enable and isp_vic_cmd_set */
+            /* Create a temporary array with ISP DMA buffer addresses */
+            static dma_addr_t isp_dma_buffers[4];
+            for (int j = 0; j < 4; j++) {
+                isp_dma_buffers[j] = isp_dma_addr + (j * frame_size);
+            }
+            vic_dev->buffer_addresses = isp_dma_buffers;
+            vic_dev->buffer_address_count = 4;
+            pr_info("*** ispvic_frame_channel_qbuf: Set vic_dev->buffer_addresses for ISP DMA ***\n");
+
             /* CRITICAL FIX: Write VIC[0x300] to actually start DMA capture */
             u32 vic_control = (4 << 16) | 0x80000020;  /* 4 buffers + enable bits */
             writel(vic_control, vic_dev->vic_regs + 0x300);
