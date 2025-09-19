@@ -54,7 +54,7 @@ static int tx_isp_create_subdev_link(void *src_subdev, void *dst_subdev,
                                     struct tx_isp_subdev_desc *desc);
 int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
 static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime);
-static int tx_isp_create_basic_pipeline(struct tx_isp_dev *isp);
+/* REMOVED: tx_isp_create_basic_pipeline - not in reference driver */
 static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc);
 
 /* Basic pipeline function declarations */
@@ -304,13 +304,9 @@ int tx_isp_create_subdev_graph(struct tx_isp_dev *isp)
     mutex_lock(&subdev_registry_mutex);
 
     if (subdev_count == 0) {
-        pr_info("tx_isp_create_subdev_graph: No subdevices registered, creating basic setup\n");
-        
-        /* Create basic CSI and VIC setup when no subdevices exist */
-        ret = tx_isp_create_basic_pipeline(isp);
-        if (ret < 0) {
-            pr_err("Failed to create basic pipeline: %d\n", ret);
-        }
+        pr_warn("tx_isp_create_subdev_graph: No subdevices registered - probe functions should have registered them\n");
+        pr_warn("*** REFERENCE DRIVER: All subdevices must be registered by probe functions first ***\n");
+        ret = -ENODEV;  /* No devices available - this indicates probe issue */
         goto unlock;
     }
 
@@ -517,42 +513,10 @@ static int tx_isp_csi_device_init(struct tx_isp_dev *isp)
 }
 
 
-/**
- * tx_isp_create_basic_pipeline - Create basic pipeline when no subdevices are registered
+/* REMOVED: tx_isp_create_basic_pipeline function - not in reference driver
+ * All subdevices should be created by their respective probe functions
+ * and registered through tx_isp_subdev_init, not through manual initialization
  */
-static int tx_isp_create_basic_pipeline(struct tx_isp_dev *isp)
-{
-    int ret;
-
-    pr_info("tx_isp_create_basic_pipeline: Creating basic CSI->VIC pipeline\n");
-
-    /* Initialize CSI device */
-    ret = tx_isp_csi_device_init(isp);
-    if (ret < 0) {
-        pr_err("Failed to initialize CSI device: %d\n", ret);
-        return ret;
-    }
-
-    /* Initialize VIC device */
-    ret = tx_isp_vic_device_init(isp);
-    if (ret < 0) {
-        pr_err("Failed to initialize VIC device: %d\n", ret);
-        tx_isp_csi_device_deinit(isp);
-        return ret;
-    }
-
-    /* Setup pipeline */
-    ret = tx_isp_setup_pipeline(isp);
-    if (ret < 0) {
-        pr_err("Failed to setup pipeline: %d\n", ret);
-        tx_isp_vic_device_deinit(isp);
-        tx_isp_csi_device_deinit(isp);
-        return ret;
-    }
-
-    pr_info("tx_isp_create_basic_pipeline: Basic pipeline created successfully\n");
-    return 0;
-}
 
 /**
  * tx_isp_cleanup_subdev_graph - Clean up the subdevice graph
