@@ -3675,8 +3675,8 @@ EXPORT_SYMBOL(private_math_exp2);
 
 uint32_t private_log2_fixed_to_fixed(uint32_t val, int in_fix_point, uint8_t out_fix_point)
 {
-    /* Call the non-private version */
-    return tisp_log2_fixed_to_fixed_tuning(val, in_fix_point, out_fix_point);
+    /* Call the non-private version with proper parameter conversion */
+    return (uint32_t)tisp_log2_fixed_to_fixed_tuning(val, (int32_t)in_fix_point, (char)out_fix_point);
 }
 EXPORT_SYMBOL(private_log2_fixed_to_fixed);
 
