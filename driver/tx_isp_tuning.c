@@ -514,7 +514,7 @@ int tisp_adr_process(void);
 int tiziano_adr_interrupt_static(void);
 int tisp_event_init(void);
 int tisp_param_operate_init(void);
-
+void tisp_bcsh_saturation(uint8_t saturation);
 
 /* Forward declarations for update functions */
 int tisp_tgain_update(void);
