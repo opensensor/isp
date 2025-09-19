@@ -35,6 +35,7 @@ struct tx_isp_fs_device {
 
 /* Binary Ninja reference global variables */
 static struct tx_isp_fs_device *dump_fsd = NULL;  /* Global FS device pointer */
+extern struct tx_isp_dev *ourISPdev;
 
 
 /* Forward declarations */
