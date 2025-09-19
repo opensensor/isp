@@ -1905,71 +1905,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
 
 }
 
-/**
- * tx_isp_reg_set - EXACT Binary Ninja MCP implementation
- * Address: 0x1f580
- * Sets register bits in a specific range
- */
-int tx_isp_reg_set(struct tx_isp_dev *isp_dev, int reg_offset, int start_bit, int end_bit, int value)
-{
-    int32_t mask = 0;
-    int32_t *reg_addr;
 
-    /* Binary Ninja: Build mask for bit range */
-    for (int i = 0; i < (end_bit - start_bit + 1); i++) {
-        mask += 1 << ((i + start_bit) & 0x1f);
-    }
-
-    /* Binary Ninja: int32_t* $a1 = *(arg1 + 0xb8) + arg2 - SAFE: Get register address */
-    if (!isp_dev || !isp_dev->core_regs) {
-        pr_err("tx_isp_reg_set: Invalid ISP device or core_regs not mapped");
-        return -EINVAL;
-    }
-
-    reg_addr = (int32_t*)((char*)isp_dev->core_regs + reg_offset);
-
-    /* Binary Ninja: *$a1 = arg5 << (arg3 & 0x1f) | (not.d($v0) & *$a1) */
-    *reg_addr = (value << (start_bit & 0x1f)) | ((~mask) & *reg_addr);
-
-    pr_debug("tx_isp_reg_set: reg[0x%x] = 0x%x (bits %d-%d = %d)",
-             reg_offset, *reg_addr, start_bit, end_bit, value);
-
-    return 0;
-}
-
-/**
- * tx_isp_enable_irq - EXACT Binary Ninja MCP implementation
- * Address: 0x1a19c
- */
-int tx_isp_enable_irq(int *irq_num)
-{
-    /* Binary Ninja: return private_enable_irq(*arg1) __tailcall */
-    if (!irq_num) {
-        pr_err("tx_isp_enable_irq: Invalid IRQ number pointer");
-        return -EINVAL;
-    }
-
-    enable_irq(*irq_num);
-    pr_info("tx_isp_enable_irq: Enabled IRQ %d", *irq_num);
-    return 0;
-}
-
-/**
- * tx_isp_disable_irq - EXACT Binary Ninja MCP implementation
- * Address: 0x1a1ac
- */
-int tx_isp_disable_irq(int *irq_num)
-{
-    /* Binary Ninja: return private_disable_irq(*arg1) __tailcall */
-    if (!irq_num) {
-        pr_err("tx_isp_disable_irq: Invalid IRQ number pointer");
-        return -EINVAL;
-    }
-
-    disable_irq(*irq_num);
-    pr_info("tx_isp_disable_irq: Disabled IRQ %d", *irq_num);
-    return 0;
-}
 EXPORT_SYMBOL(ispcore_slake_module);
 
 

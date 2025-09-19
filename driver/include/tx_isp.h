@@ -326,10 +326,8 @@ int tx_isp_sysfs_init(struct tx_isp_dev *isp);
 void tx_isp_sysfs_exit(struct tx_isp_dev *isp);
 irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id);
 
-/* Binary Ninja MCP function declarations */
-int tx_isp_reg_set(struct tx_isp_dev *isp_dev, int reg_offset, int start_bit, int end_bit, int value);
-int tx_isp_enable_irq(int *irq_num);
-int tx_isp_disable_irq(int *irq_num);
+/* Note: tx_isp_reg_set is declared in tx-isp-device.h */
+/* Note: tx_isp_enable_irq and tx_isp_disable_irq are declared in tx-isp-module.c */
 
 void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan);
 void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan);
