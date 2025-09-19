@@ -27,8 +27,7 @@ MODULE_PARM_DESC(print_level, "isp print level");
 int tx_isp_configure_clocks(struct tx_isp_dev *isp);
 
 /* Forward declarations */
-int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
-static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp);
+/* REMOVED: Memory mapping functions - handled by subdevices */
 int tisp_channel_start(int channel, void *attr);
 
 /* Binary Ninja math function forward declarations */
