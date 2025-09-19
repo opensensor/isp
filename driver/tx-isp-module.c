@@ -558,8 +558,6 @@ static int private_reset_tx_isp_module(int arg);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 
 /* Forward declarations for initialization functions */
-extern int tx_isp_vic_platform_init(void);
-extern void tx_isp_vic_platform_exit(void);
 extern int tx_isp_fs_platform_init(void);
 extern void tx_isp_fs_platform_exit(void);
 extern int tx_isp_fs_probe(struct platform_device *pdev);
@@ -2066,7 +2064,6 @@ static volatile bool subdev_init_complete = false;
 
 /* Forward declaration for tx_isp_video_s_stream */
 int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable);
-int tx_isp_vic_hw_init(struct tx_isp_subdev *sd);
 int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t base_addr, u32 width, u32 height);
 
 /* tx_isp_video_link_stream - EXACT Binary Ninja reference implementation */
@@ -5058,12 +5055,22 @@ static int tx_isp_init(void)
             pr_err("*** CRITICAL: NO VIN INIT FUNCTION AVAILABLE DURING STARTUP ***\n");
         }
     }
-	
+
+    /* *** CRITICAL FIX: Register subdev platform drivers BEFORE main platform device *** */
+    /* This ensures VIC/CSI/VIN drivers are available when main probe function runs */
+    pr_info("*** CRITICAL: REGISTERING SUBDEV PLATFORM DRIVERS FIRST ***\n");
+    ret = tx_isp_subdev_platform_init();
+    if (ret) {
+        pr_err("Failed to initialize subdev platform drivers: %d\n", ret);
+        goto err_free_dev;
+    }
+    pr_info("*** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***\n");
+
     /* Step 2: Register platform device (matches reference) */
     ret = platform_device_register(&tx_isp_platform_device);
     if (ret != 0) {
         pr_err("not support the gpio mode!\n");
-        goto err_free_dev;
+        goto err_cleanup_subdev_drivers;
     }
 
     /* Step 3: Register platform driver (matches reference) */
@@ -5071,7 +5078,7 @@ static int tx_isp_init(void)
     if (ret != 0) {
         pr_err("Failed to register platform driver: %d\n", ret);
         platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
+        goto err_cleanup_subdev_drivers;
     }
 
     /* Step 4: Register misc device to create /dev/tx-isp */
@@ -5181,15 +5188,8 @@ static int tx_isp_init(void)
     }
     pr_info("*** FS PLATFORM DRIVER INITIALIZED - /proc/jz/isp/isp-fs SHOULD NOW EXIST ***\n");
 
-    /* *** CRITICAL: Initialize subdev platform drivers (CSI, VIC, VIN, CORE) *** */
-    /* NOTE: VIC driver is registered inside tx_isp_subdev_platform_init() to avoid double registration */
-    ret = tx_isp_subdev_platform_init();
-    if (ret) {
-        pr_err("Failed to initialize subdev platform drivers: %d\n", ret);
-        tx_isp_fs_platform_exit();  /* Clean up FS driver */
-        goto err_cleanup_platforms;
-    }
-    pr_info("*** SUBDEV PLATFORM DRIVERS INITIALIZED - CSI/VIC/VIN/CORE DRIVERS REGISTERED ***\n");
+    /* *** SUBDEV PLATFORM DRIVERS ALREADY REGISTERED EARLIER *** */
+    pr_info("*** SUBDEV PLATFORM DRIVERS ALREADY AVAILABLE - SKIPPING DUPLICATE REGISTRATION ***\n");
 
     /* Build platform device array for the new management system */
     subdev_platforms[0] = &tx_isp_csi_platform_device;
