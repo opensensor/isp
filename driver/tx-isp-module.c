@@ -6880,7 +6880,8 @@ static int __enqueue_in_driver(void *buffer_struct)
     if (s1 && ourISPdev && ourISPdev->vic_dev) {
         /* Get VIC subdev for event routing */
         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-        void *event_data = (char*)buffer_struct + 0x68;  /* Buffer metadata offset */
+        /* SAFE: Use proper struct member instead of unsafe offset */
+        void *event_data = buffer_struct;  /* Use the buffer struct itself as event data */
         
         pr_info("__enqueue_in_driver: Sending BUFFER_ENQUEUE event to VIC\n");
         result = tx_isp_send_event_to_remote(vic_dev, 0x3000005, event_data);
