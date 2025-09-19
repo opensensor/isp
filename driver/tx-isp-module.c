@@ -387,6 +387,7 @@ static struct resource tx_isp_csi_resources[] = {
         .start = 0x10022000,           /* T31 CSI base address */
         .end   = 0x10022FFF,           /* T31 CSI end address */
         .flags = IORESOURCE_MEM,
+        .name = "mipi-phy",            /* EXACT name from stock driver */
     },
     [1] = {
         .start = 38,                   /* T31 CSI IRQ 38 - MATCHES STOCK DRIVER isp-w02 */
