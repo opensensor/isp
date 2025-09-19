@@ -8481,7 +8481,7 @@ int tiziano_awb_init(void)
     tiziano_awb_params_refresh();
 
     /* Binary Ninja: tisp_awb_par_refresh(isp_printf, isp_printf, 1) */
-    tisp_awb_par_refresh(isp_printf, isp_printf, 1);
+    tisp_awb_par_refresh(0, 0, 1);  /* Binary Ninja: pass uint32_t values, not function pointers */
 
     return 0;
 }
@@ -8496,7 +8496,7 @@ int tiziano_af_init(void)
     tiziano_af_params_refresh();
 
     /* Binary Ninja: tisp_af_par_refresh(isp_printf, isp_printf, 1) */
-    tisp_af_par_refresh(isp_printf, isp_printf, 1);
+    tisp_af_par_refresh(0, 0, 1);  /* Binary Ninja: pass uint32_t values, not function pointers */
 
     return 0;
 }
