@@ -717,6 +717,14 @@ static int sensor_get_id(void);
 static int sensor_disable_isp(void);
 static int sensor_get_lines_per_second(void);
 
+/* BCSH and tuning function declarations */
+int tisp_bcsh_brightness(int brightness);
+int tisp_bcsh_contrast(uint8_t contrast);
+int tisp_bcsh_saturation(uint8_t saturation);
+int tisp_bcsh_s_hue(uint8_t hue);
+int tisp_s_awb_start(int r_gain, int b_gain);
+int tisp_s_ev_start(int ev_value);
+
 /* sensor_init - EXACT Binary Ninja implementation - Sets up sensor control structure */
 int sensor_init(struct tx_isp_dev *isp_dev)
 {
@@ -7763,7 +7771,7 @@ static long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, 
     /* Handle sensor-specific IOCTLs */
     switch (cmd) {
         case 0x980900: /* Sensor start */
-            return sensor_start_changes(subdev);
+            return sensor_start_changes();
 
         case 0x980901: /* Set integration time */
             if (arg) {
@@ -7878,7 +7886,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(&sd->sd);
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
     if (!csi_dev) {
         return -EINVAL;
     }
@@ -7920,7 +7928,7 @@ static int ispcore_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd)
     /* Release all sensor resources */
     if (ourISPdev && ourISPdev->sensor) {
         /* Reset sensor state */
-        ourISPdev->sensor->video.vin_state = TX_ISP_MODULE_INIT;
+        ourISPdev->sensor->sd.vin_state = TX_ISP_MODULE_INIT;
 
         /* Clear sensor attributes */
         if (ourISPdev->sensor->video.attr) {
@@ -8000,7 +8008,7 @@ static long ispcore_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd,
     /* Handle ISP core sensor-specific IOCTLs */
     switch (cmd) {
         case 0x800030: /* ISP core sensor start */
-            return sensor_start_changes(sd);
+            return sensor_start_changes();
 
         case 0x800031: /* ISP core sensor stop */
             sd->vin_state = TX_ISP_MODULE_INIT;
@@ -8182,6 +8190,52 @@ int tisp_set_bcsh_hue(int hue)
     return isp_printf(0, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", "tisp_set_bcsh_hue");
 }
 EXPORT_SYMBOL(tisp_set_bcsh_hue);
+
+/* BCSH function implementations - stub implementations for compilation */
+int tisp_bcsh_brightness(int brightness)
+{
+    pr_debug("tisp_bcsh_brightness: brightness=%d (stub implementation)\n", brightness);
+    /* TODO: Implement actual BCSH brightness control */
+    return 0;
+}
+EXPORT_SYMBOL(tisp_bcsh_brightness);
+
+int tisp_bcsh_contrast(uint8_t contrast)
+{
+    pr_debug("tisp_bcsh_contrast: contrast=%d (stub implementation)\n", contrast);
+    /* TODO: Implement actual BCSH contrast control */
+}
+EXPORT_SYMBOL(tisp_bcsh_contrast);
+
+int tisp_bcsh_saturation(uint8_t saturation)
+{
+    pr_debug("tisp_bcsh_saturation: saturation=%d (stub implementation)\n", saturation);
+    /* TODO: Implement actual BCSH saturation control */
+}
+EXPORT_SYMBOL(tisp_bcsh_saturation);
+
+int tisp_bcsh_s_hue(uint8_t hue)
+{
+    pr_debug("tisp_bcsh_s_hue: hue=%d (stub implementation)\n", hue);
+    /* TODO: Implement actual BCSH hue control */
+}
+EXPORT_SYMBOL(tisp_bcsh_s_hue);
+
+int tisp_s_awb_start(int r_gain, int b_gain)
+{
+    pr_debug("tisp_s_awb_start: r_gain=%d, b_gain=%d (stub implementation)\n", r_gain, b_gain);
+    /* TODO: Implement actual AWB start control */
+    return 0;
+}
+EXPORT_SYMBOL(tisp_s_awb_start);
+
+int tisp_s_ev_start(int ev_value)
+{
+    pr_debug("tisp_s_ev_start: ev_value=%d (stub implementation)\n", ev_value);
+    /* TODO: Implement actual EV start control */
+    return 0;
+}
+EXPORT_SYMBOL(tisp_s_ev_start);
 
 /* tisp_set_ae1_ag - Set AE analog gain */
 static void tisp_set_ae1_ag(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
