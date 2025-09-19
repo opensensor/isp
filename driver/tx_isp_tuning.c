@@ -560,11 +560,8 @@ extern void system_reg_write(u32 reg, u32 value);
 /* External system_irq_func_set from tx_isp_core.c */
 extern int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 
-/* Forward declarations for AE interrupt functions */
-int ae0_interrupt_hist(void);
-int ae0_interrupt_static(void);
-int ae1_interrupt_hist(void);
-int ae1_interrupt_static(void);
+/* Forward declarations for AE interrupt functions - removed, implemented below */
+/* ae0_interrupt_hist, ae0_interrupt_static, ae1_interrupt_hist, ae1_interrupt_static - implemented below */
 
 /* AE interrupt wrapper functions to convert signatures from int function(void) to irqreturn_t function(int, void*) */
 irqreturn_t ae0_interrupt_hist_wrapper(int irq, void *dev_id) {
@@ -6535,11 +6532,7 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
         }
     }
     
-    /* Forward declarations for exported functions */
-    extern int ae0_interrupt_hist(void);
-    extern int ae0_interrupt_static(void);
-    extern int ae1_interrupt_hist(void);
-    extern int ae1_interrupt_static(void);
+    /* Forward declarations for exported functions - removed, functions implemented below */
     extern int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3, uint32_t param4, uint32_t *lut_array, uint32_t *nodes_count);
     extern void *tiziano_ae_para_addr(void);
 
