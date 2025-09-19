@@ -249,6 +249,9 @@ static int tisp_ae_exp_th_par_refresh(uint32_t p1, uint32_t p2, int p3) { return
 static int tisp_adr_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
 static int tiziano_ae_exp_th_params_refresh(void) { return 0; }
 static int Tiziano_awb_set_gain(void *p1, uint32_t p2, void *p3) { return 0; }
+static int system_reg_write_gb(int p1, uint32_t addr, uint32_t value) { return 0; }
+static int tisp_gb_blc_again_interp(uint32_t p1, int p2) { return 0; }
+static int tisp_gb_params_refresh(void) { return 0; }
 
 /* Missing variables referenced in functions */
 static uint32_t deir_en = 0;
@@ -319,6 +322,28 @@ static uint32_t _AwbPointPos_1 = 0;
 static uint32_t _awb_mf_para = 0;
 static uint32_t _wb_static = 0;
 static uint32_t ae_ev_value = 0;
+
+/* Channel and MSCA Variables */
+static uint32_t msca_ch_en = 0;
+static uint32_t msca_dmaout_arb = 0;
+static uint32_t ds1_attr = 0;
+static uint32_t ds2_attr = 0;
+static uint32_t ds0_attr = 0;
+static uint32_t tispinfo = 0;
+static uint32_t data_b2f34 = 0;
+static uint32_t data_b2e10 = 0;
+static uint32_t data_b2e14 = 0;
+
+/* GB (Green Balance) Variables */
+static uint32_t *tisp_gb_dgain_shift = NULL;
+static uint32_t gb_init_flag = 0;
+static uint32_t data_aa3e8 = 0;
+static uint32_t data_aa3f0 = 0;
+static uint32_t data_aa3ec = 0;
+static uint32_t data_aa3d8 = 0;
+static uint32_t data_aa3e0 = 0;
+static uint32_t data_aa3dc = 0;
+static uint32_t tisp_gb_blc_ag = 0;
 static uint32_t *mdns_y_sad_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_sta_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_ref_wei_b_min_array_now = NULL;
