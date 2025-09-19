@@ -2193,6 +2193,36 @@ void tisp_deinit_free(void)
     /* Binary Ninja: return result */
 }
 
+/**
+ * tisp_netlink_exit - TISP netlink exit stub
+ * This function should exit the TISP netlink communication system
+ */
+void tisp_netlink_exit(void)
+{
+    pr_info("tisp_netlink_exit: TISP netlink system exited");
+    /* Implementation would go here when available */
+}
+
+/**
+ * tisp_code_destroy_tuning_node - TISP tuning node destruction stub
+ * This function should destroy TISP tuning nodes
+ */
+void tisp_code_destroy_tuning_node(void)
+{
+    pr_info("tisp_code_destroy_tuning_node: TISP tuning nodes destroyed");
+    /* Implementation would go here when available */
+}
+
+/**
+ * tisp_event_push - TISP event push stub
+ * This function should push events to the TISP event system
+ */
+void tisp_event_push(void **event)
+{
+    pr_info("tisp_event_push: TISP event pushed");
+    /* Implementation would go here when available */
+}
+
 
 /**
  * tiziano_sync_sensor_attr_validate - Validate and sync sensor attributes
