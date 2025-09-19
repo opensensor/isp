@@ -7396,6 +7396,8 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
 
         /* *** CRITICAL FIX: INITIALIZE SENSOR ATTRIBUTES WITH PROPER VALUES *** */
         pr_info("*** CRITICAL: INITIALIZING SENSOR ATTRIBUTES ***\n");
+        sensor->attr.name = "gc2053"; /* Sensor name */
+        sensor->attr.chip_id = 0x2053; /* GC2053 chip ID - CRITICAL! */
         sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI interface */
         sensor->attr.max_integration_time_native = 1125 - 8; /* VTS - 8 for GC2053 */
         sensor->attr.integration_time_limit = 1125 - 8;
