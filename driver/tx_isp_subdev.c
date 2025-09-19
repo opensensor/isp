@@ -451,6 +451,10 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
                                            pdev->name);
             if (!sd->mem_res) {
                 /* Binary Ninja: isp_printf(2, "The parameter is invalid!\n", "tx_isp_subdev_init") */
+                pr_err("tx_isp_subdev_init: request_mem_region failed for %s (0x%08x-0x%08x)\n",
+                       dev_name(&pdev->dev), (u32)mem_res->start, (u32)mem_res->end);
+                pr_err("*** MEMORY REGION CONFLICT: Stock driver may still be loaded ***\n");
+                pr_err("*** Please unload stock driver first: rmmod tx_isp_t31 ***\n");
                 isp_printf(2, "The parameter is invalid!\n", "tx_isp_subdev_init");
                 ret = 0xfffffff0;
                 goto cleanup_irq;
@@ -501,10 +505,12 @@ cleanup_regs:
 
 cleanup_mem:
     /* Binary Ninja: private_release_mem_region($a0_15, $s3_2[1] + 1 - $a0_15) */
+    /* Only release memory region if it was successfully requested */
     if (sd->mem_res) {
         release_mem_region(sd->mem_res->start, resource_size(sd->mem_res));
         sd->mem_res = NULL;
     }
+    /* Note: If mem_res is NULL, we used direct ioremap without request_mem_region */
 
 cleanup_irq:
     /* Binary Ninja: tx_isp_free_irq(arg2 + 0x80) */
