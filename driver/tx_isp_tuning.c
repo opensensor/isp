@@ -270,6 +270,30 @@ static uint32_t *defog_str_array_now = NULL;
 static uint32_t defog_str_wdr_array[16] = {0};
 static uint32_t defog_str_array[16] = {0};
 static uint32_t data_9a7e0 = 0xFFFFFFFF;
+
+/* WDR Variables */
+static uint32_t wdr_en = 0;
+static uint32_t wdr_mode = 0;
+static uint32_t wdr_short_th = 0;
+static uint32_t wdr_long_th = 0;
+static uint32_t wdr_combine_short_thr = 0;
+static uint32_t wdr_combine_long_thr = 0;
+static uint32_t wdr_combine_min_weight = 0;
+static uint32_t wdr_combine_max_weight = 0;
+static uint32_t wdr_pixel_avg_max_diff = 0;
+static uint32_t wdr_long_ch_mode = 0;
+static uint32_t wdr_mdtlp_th = 0;
+static uint32_t wdr_mdtl_th = 0;
+static uint32_t wdr_mdtl_dif_th = 0;
+static uint32_t wdr_pixel_avg_max_diff_th = 0;
+static uint32_t wdr_mdts_dif_th = 0;
+static uint32_t wdr_mdts_th = 0;
+static uint32_t wdr_mdtsp_th = 0;
+
+/* CCM Variables */
+static uint32_t *ccm_coef_now = NULL;
+static uint32_t ccm_coef_wdr[9] = {0};
+static uint32_t ccm_coef[9] = {0};
 static uint32_t *mdns_y_sad_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_sta_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_ref_wei_b_min_array_now = NULL;
