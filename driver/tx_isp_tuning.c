@@ -6766,12 +6766,7 @@ int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps)
     return 0;
 }
 
-/* tiziano_gib_init - GIB initialization */
-int tiziano_gib_init(void)
-{
-    pr_debug("tiziano_gib_init: Initializing GIB processing\n");
-    return 0;
-}
+/* tiziano_gib_init - removed duplicate, using Binary Ninja implementation below */
 
 /* LSC parameter arrays - Binary Ninja reference */
 uint32_t lsc_mesh_str[64] = {0x800, 0x810, 0x820, 0x830, 0x840, 0x850, 0x860, 0x870, 0x880, 0x890, 0x8a0, 0x8b0, 0x8c0, 0x8d0, 0x8e0, 0x8f0};
