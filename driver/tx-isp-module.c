@@ -1869,123 +1869,123 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                 /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
                 vic_framedone_irq_function(vic_dev);
             }
-        
-        /* Binary Ninja: Error handling for frame asfifo overflow */
-        if ((v1_7 & 0x200) != 0) {
-            pr_err("Err [VIC_INT] : frame asfifo ovf!!!!!\n");
-        }
-        
-        /* Binary Ninja: Error handling for horizontal errors */
-        if ((v1_7 & 0x400) != 0) {
-            u32 reg_3a8 = readl(vic_regs + 0x3a8);
-            pr_err("Err [VIC_INT] : hor err ch0 !!!!! 0x3a8 = 0x%08x\n", reg_3a8);
-        }
-        
-        if ((v1_7 & 0x800) != 0) {
-            pr_err("Err [VIC_INT] : hor err ch1 !!!!!\n");
-        }
-        
-        if ((v1_7 & 0x1000) != 0) {
-            pr_err("Err [VIC_INT] : hor err ch2 !!!!!\n");
-        }
-        
-        if ((v1_7 & 0x2000) != 0) {
-            pr_err("Err [VIC_INT] : hor err ch3 !!!!!\n");
-        }
-        
-        /* Binary Ninja: Error handling for vertical errors */
-        if ((v1_7 & 0x4000) != 0) {
-            pr_err("Err [VIC_INT] : ver err ch0 !!!!!\n");
-        }
-        
-        if ((v1_7 & 0x8000) != 0) {
-            pr_err("Err [VIC_INT] : ver err ch1 !!!!!\n");
-        }
-        
-        if ((v1_7 & 0x10000) != 0) {
-            pr_err("Err [VIC_INT] : ver err ch2 !!!!!\n");
-        }
-        
-        if ((v1_7 & 0x20000) != 0) {
-            pr_err("Err [VIC_INT] : ver err ch3 !!!!!\n");
-        }
-        
-        /* Binary Ninja: Additional error handling */
-        if ((v1_7 & 0x40000) != 0) {
-            pr_err("Err [VIC_INT] : hvf err !!!!!\n");
-        }
-        
-        if ((v1_7 & 0x80000) != 0) {
-            pr_err("Err [VIC_INT] : dvp hcomp err!!!!\n");
-        }
-        
-        if ((v1_7 & 0x100000) != 0) {
-            pr_err("Err [VIC_INT] : dma syfifo ovf!!!\n");
-        }
-        
-        if ((v1_7 & 0x200000) != 0) {
-            pr_err("Err2 [VIC_INT] : control limit err!!!\n");
-        }
-        
-        if ((v1_7 & 0x400000) != 0) {
-            pr_err("Err [VIC_INT] : image syfifo ovf !!!\n");
-        }
-        
-        if ((v1_7 & 0x800000) != 0) {
-            pr_err("Err [VIC_INT] : mipi fid asfifo ovf!!!\n");
-        }
-        
-        if ((v1_7 & 0x1000000) != 0) {
-            pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
-        }
-        
-        if ((v1_7 & 0x2000000) != 0) {
-            pr_err("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
-        }
-        
-        if ((v1_7 & 0x4000000) != 0) {
-            pr_err("Err [VIC_INT] : mipi ch2 hcomp err !!!\n");
-        }
-        
-        if ((v1_7 & 0x8000000) != 0) {
-            pr_err("Err [VIC_INT] : mipi ch3 hcomp err !!!\n");
-        }
-        
-        if ((v1_7 & 0x10000000) != 0) {
-            pr_err("Err [VIC_INT] : mipi ch0 vcomp err !!!\n");
-        }
-        
-        if ((v1_7 & 0x20000000) != 0) {
-            pr_err("Err [VIC_INT] : mipi ch1 vcomp err !!!\n");
-        }
-        
-        if ((v1_7 & 0x40000000) != 0) {
-            pr_err("Err [VIC_INT] : mipi ch2 vcomp err !!!\n");
-        }
-        
-        if ((v1_7 & 0x80000000) != 0) {
-            pr_err("Err [VIC_INT] : mipi ch3 vcomp err !!!\n");
-        }
-        
-        /* Binary Ninja: if (($v1_10 & 1) != 0) */
-        if ((v1_10 & 1) != 0) {
-            /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 0) */
-            vic_mdma_irq_function(vic_dev, 0);
-        }
 
-        /* Binary Ninja: if (($v1_10 & 2) != 0) */
-        if ((v1_10 & 2) != 0) {
-            /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 1) */
-            vic_mdma_irq_function(vic_dev, 1);
-        }
-        
-        if ((v1_10 & 4) != 0) {
-            pr_err("Err [VIC_INT] : dma arb trans done ovf!!!\n");
-        }
-        
-        if ((v1_10 & 8) != 0) {
-            pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
-        }
+            /* Binary Ninja: Error handling for frame asfifo overflow */
+            if ((v1_7 & 0x200) != 0) {
+                pr_err("Err [VIC_INT] : frame asfifo ovf!!!!!\n");
+            }
+
+            /* Binary Ninja: Error handling for horizontal errors */
+            if ((v1_7 & 0x400) != 0) {
+                u32 reg_3a8 = readl(vic_regs + 0x3a8);
+                pr_err("Err [VIC_INT] : hor err ch0 !!!!! 0x3a8 = 0x%08x\n", reg_3a8);
+            }
+
+            if ((v1_7 & 0x800) != 0) {
+                pr_err("Err [VIC_INT] : hor err ch1 !!!!!\n");
+            }
+
+            if ((v1_7 & 0x1000) != 0) {
+                pr_err("Err [VIC_INT] : hor err ch2 !!!!!\n");
+            }
+
+            if ((v1_7 & 0x2000) != 0) {
+                pr_err("Err [VIC_INT] : hor err ch3 !!!!!\n");
+            }
+
+            /* Binary Ninja: Error handling for vertical errors */
+            if ((v1_7 & 0x4000) != 0) {
+                pr_err("Err [VIC_INT] : ver err ch0 !!!!!\n");
+            }
+
+            if ((v1_7 & 0x8000) != 0) {
+                pr_err("Err [VIC_INT] : ver err ch1 !!!!!\n");
+            }
+
+            if ((v1_7 & 0x10000) != 0) {
+                pr_err("Err [VIC_INT] : ver err ch2 !!!!!\n");
+            }
+
+            if ((v1_7 & 0x20000) != 0) {
+                pr_err("Err [VIC_INT] : ver err ch3 !!!!!\n");
+            }
+
+            /* Binary Ninja: Additional error handling */
+            if ((v1_7 & 0x40000) != 0) {
+                pr_err("Err [VIC_INT] : hvf err !!!!!\n");
+            }
+
+            if ((v1_7 & 0x80000) != 0) {
+                pr_err("Err [VIC_INT] : dvp hcomp err!!!!\n");
+            }
+
+            if ((v1_7 & 0x100000) != 0) {
+                pr_err("Err [VIC_INT] : dma syfifo ovf!!!\n");
+            }
+
+            if ((v1_7 & 0x200000) != 0) {
+                pr_err("Err2 [VIC_INT] : control limit err!!!\n");
+            }
+
+            if ((v1_7 & 0x400000) != 0) {
+                pr_err("Err [VIC_INT] : image syfifo ovf !!!\n");
+            }
+
+            if ((v1_7 & 0x800000) != 0) {
+                pr_err("Err [VIC_INT] : mipi fid asfifo ovf!!!\n");
+            }
+
+            if ((v1_7 & 0x1000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
+            }
+
+            if ((v1_7 & 0x2000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
+            }
+
+            if ((v1_7 & 0x4000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch2 hcomp err !!!\n");
+            }
+
+            if ((v1_7 & 0x8000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch3 hcomp err !!!\n");
+            }
+
+            if ((v1_7 & 0x10000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch0 vcomp err !!!\n");
+            }
+
+            if ((v1_7 & 0x20000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch1 vcomp err !!!\n");
+            }
+
+            if ((v1_7 & 0x40000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch2 vcomp err !!!\n");
+            }
+
+            if ((v1_7 & 0x80000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch3 vcomp err !!!\n");
+            }
+
+            /* Binary Ninja: if (($v1_10 & 1) != 0) */
+            if ((v1_10 & 1) != 0) {
+                /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 0) */
+                vic_mdma_irq_function(vic_dev, 0);
+            }
+
+            /* Binary Ninja: if (($v1_10 & 2) != 0) */
+            if ((v1_10 & 2) != 0) {
+                /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 1) */
+                vic_mdma_irq_function(vic_dev, 1);
+            }
+
+            if ((v1_10 & 4) != 0) {
+                pr_err("Err [VIC_INT] : dma arb trans done ovf!!!\n");
+            }
+
+            if ((v1_10 & 8) != 0) {
+                pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
+            }
 
         /* Binary Ninja: Error recovery sequence - focus on prevention, not recovery */
         if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
