@@ -243,6 +243,33 @@ static uint32_t day_night = 0;
 static uint32_t tiziano_gib_deir_r_m = 0;
 static uint32_t tiziano_gib_deir_g_m = 0;
 static uint32_t tiziano_gib_deir_b_m = 0;
+
+/* Additional missing variables for DMSC, BCSH, DEFOG, WDR */
+static uint32_t dmsc_wdr_en = 0;
+static uint32_t *dmsc_uu_thres_array_now = NULL;
+static uint32_t *dmsc_vv_thres_array_now = NULL;
+static uint32_t *dmsc_uu_slope_array_now = NULL;
+static uint32_t *dmsc_vv_slope_array_now = NULL;
+static uint32_t dmsc_uu_thres_wdr_array[16] = {0};
+static uint32_t dmsc_vv_thres_wdr_array[16] = {0};
+static uint32_t dmsc_uu_slope_wdr_array[16] = {0};
+static uint32_t dmsc_vv_slope_wdr_array[16] = {0};
+static uint32_t dmsc_uu_thres_array[16] = {0};
+static uint32_t dmsc_vv_thres_array[16] = {0};
+static uint32_t dmsc_uu_slope_array[16] = {0};
+static uint32_t dmsc_vv_slope_array[16] = {0};
+static uint32_t data_9a6a0 = 0xFFFFFFFF;
+
+static uint32_t bcsh_wdr_en = 0;
+static uint32_t *bcsh_luma_now = NULL;
+static uint32_t bcsh_luma_wdr[16] = {0};
+static uint32_t bcsh_luma[16] = {0};
+
+static uint32_t defog_wdr_en = 0;
+static uint32_t *defog_str_array_now = NULL;
+static uint32_t defog_str_wdr_array[16] = {0};
+static uint32_t defog_str_array[16] = {0};
+static uint32_t data_9a7e0 = 0xFFFFFFFF;
 static uint32_t *mdns_y_sad_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_sta_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_ref_wei_b_min_array_now = NULL;
