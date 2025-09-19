@@ -2346,14 +2346,7 @@ static int tiziano_bcsh_update(struct isp_tuning_data *tuning)
 }
 
 
-int tisp_bcsh_saturation(struct isp_tuning_data *tuning, uint8_t value)
-{
-    if (!tuning)
-        return -EINVAL;
 
-    tuning->saturation = value;
-    return tiziano_bcsh_update(tuning);
-}
 
 
 // Read AE state from hardware
@@ -2725,9 +2718,7 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
 
         case 0x980902:  // Saturation
-            ret = tisp_bcsh_saturation(tuning, ctrl->value);
-            if (ret)
-                goto out;
+            tisp_bcsh_saturation((uint8_t)ctrl->value);
             break;
 
         case 0x98091b:  // Sharpness
