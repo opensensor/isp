@@ -1991,6 +1991,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
     }
 
+    /* Binary Ninja: vic_start_ok = 1 - Set at the very end after all configuration */
+    vic_start_ok = 1;
+    pr_info("*** VIC start completed - vic_start_ok = 1 (REFERENCE DRIVER EXACT) ***\n");
+
     return 0;
 }
 
