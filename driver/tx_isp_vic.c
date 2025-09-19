@@ -1420,8 +1420,17 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* Get sensor attributes - offset 0x110 in Binary Ninja */
-    sensor_attr = &vic_dev->sensor_attr;
+    /* CRITICAL FIX: Get sensor attributes from the ACTUAL registered sensor */
+    if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->video.attr) {
+        sensor_attr = ourISPdev->sensor->video.attr;
+        pr_info("*** USING REAL SENSOR ATTRIBUTES: sensor_attr=%p, dbus_type=%d ***\n",
+                sensor_attr, sensor_attr->dbus_type);
+    } else {
+        /* Fallback to VIC's own sensor attributes if no real sensor */
+        sensor_attr = &vic_dev->sensor_attr;
+        pr_info("*** FALLBACK: Using VIC sensor attributes: sensor_attr=%p, dbus_type=%d ***\n",
+                sensor_attr, sensor_attr->dbus_type);
+    }
 
     /* DEBUG: Check if sensor_attr is properly initialized */
     pr_info("*** DEBUG: sensor_attr=%p, dbus_type=%d ***\n", sensor_attr, sensor_attr ? sensor_attr->dbus_type : -1);
