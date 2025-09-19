@@ -7720,7 +7720,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Binary Ninja: if ($v1_3 != 4) */
                 if (v1_3 != 4) {
                     /* Binary Ninja: tx_vic_disable_irq() */
-                    tx_vic_disable_irq();
+                    tx_vic_disable_irq(vic_dev);
 
                     /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
                     v0 = tx_isp_vic_start(vic_dev);
