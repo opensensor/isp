@@ -734,7 +734,6 @@ struct wb_gains {
 };
 
 /* AF zone data structure matching Binary Ninja reference */
-#define MAX_AF_ZONES 16
 struct af_zone_data {
 	uint32_t status;
 	uint32_t zone_metrics[MAX_AF_ZONES];

@@ -44,8 +44,6 @@
 #define ISP_CTRL_PROCESS      0x8000164 // Same as bypass, used for process control
 
 #define VIDIOC_GET_SENSOR_INFO   0x40045626
-#define VIDIOC_SET_BUF_INFO      0x800856d4
-#define VIDIOC_GET_BUF_INFO      0x800856d5
 #define ISP_ENABLE_LINKS         0x800456d0
 #define ISP_DESTROY_LINKS        0x800456d1
 #define ISP_ENABLE_ROUTE         0x800456d2
