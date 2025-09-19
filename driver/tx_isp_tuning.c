@@ -261,15 +261,15 @@ int tiziano_wdr_soft_para_out(void);
 
 
 /* Forward declarations for ISP pipeline init functions - EXACT Binary Ninja signatures */
-int tiziano_mdns_init(void);
+int tiziano_mdns_init(uint32_t width, uint32_t height);  /* Binary Ninja: takes arg1, arg2 */
 int tiziano_clm_init(void);
 int tiziano_dpc_init(void);
 int tiziano_hldc_init(void);
 int tiziano_defog_params_init(void);
-int tiziano_defog_init(void);
+int tiziano_defog_init(uint32_t width, uint32_t height);  /* Binary Ninja: takes arg1, arg2 */
 int tiziano_adr_params_init(void);
 int tiziano_adr_init(uint32_t width, uint32_t height);
-int tiziano_af_init(void);
+int tiziano_af_init(uint32_t height, uint32_t width);  /* Binary Ninja: takes arg1, arg2 */
 int tiziano_ae_init_exp_th(void);
 int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps);
 int tiziano_awb_init(void);
@@ -7853,12 +7853,7 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
     return 0;
 }
 
-/* tiziano_clm_init - CLM initialization */
-int tiziano_clm_init(void)
-{
-    pr_debug("tiziano_clm_init: Initializing CLM processing\n");
-    return 0;
-}
+/* tiziano_clm_init - removed duplicate, using Binary Ninja implementation below */
 
 /* DPC parameter arrays - Binary Ninja reference */
 uint32_t dpc_d_m1_dthres_array[16] = {0x8, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50, 0x58, 0x60, 0x68, 0x70, 0x78, 0x80};
@@ -8105,7 +8100,7 @@ static int tisp_adr_set_params(void)
 }
 
 /* tiziano_adr_params_init - Initialize ADR parameters */
-static void tiziano_adr_params_init(void)
+int tiziano_adr_params_init(void)
 {
     pr_debug("tiziano_adr_params_init: Initializing ADR parameter arrays\n");
     
