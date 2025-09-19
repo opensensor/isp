@@ -828,6 +828,20 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     /* Binary Ninja: *($v0 + 0xd4) = $v0 */
     /* Note: self_ptr member not present in current CSI device structure */
 
+    /* CRITICAL: Copy register mapping from subdev to CSI device structure */
+    if (csi_dev->sd.base) {
+        csi_dev->csi_regs = csi_dev->sd.base;
+        pr_info("*** CSI PROBE: Copied register mapping from subdev: %p ***\n", csi_dev->csi_regs);
+
+        /* Also update global ISP device for compatibility */
+        if (ourISPdev && !ourISPdev->csi_regs) {
+            ourISPdev->csi_regs = csi_dev->csi_regs;
+            pr_info("*** CSI PROBE: Updated global ISP device csi_regs: %p ***\n", ourISPdev->csi_regs);
+        }
+    } else {
+        pr_warn("*** CSI PROBE: No register mapping available from tx_isp_subdev_init ***\n");
+    }
+
     return 0;
 }
 
