@@ -3283,10 +3283,12 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         vic_dev->vic_regs = vic_dev->sd.regs;
         pr_info("*** VIC PROBE: Copied register mapping from subdev: %p ***\n", vic_dev->vic_regs);
 
-        /* Also update global ISP device for compatibility */
-        if (ourISPdev && !ourISPdev->vic_regs) {
+        /* CRITICAL FIX: Link this properly initialized VIC device to the global ISP device */
+        if (ourISPdev) {
+            ourISPdev->vic_dev = (struct tx_isp_subdev *)vic_dev;  /* Store the VIC device, not just the subdev */
             ourISPdev->vic_regs = vic_dev->vic_regs;
-            pr_info("*** VIC PROBE: Updated global ISP device vic_regs: %p ***\n", ourISPdev->vic_regs);
+            pr_info("*** VIC PROBE: CRITICAL - Linked VIC device to ourISPdev->vic_dev: %p ***\n", ourISPdev->vic_dev);
+            pr_info("*** VIC PROBE: CRITICAL - Updated global ISP device vic_regs: %p ***\n", ourISPdev->vic_regs);
         }
     } else {
         pr_warn("*** VIC PROBE: No register mapping available from tx_isp_subdev_init ***\n");
