@@ -3206,7 +3206,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
         if (channel_array != NULL) {
             /* SAFE: Clear allocated memory */
-            memset(channel_array, 0, channel_count * channel_struct_size);
+            memset(channel_array, 0, channel_count * sizeof(struct tx_isp_frame_channel));
 
             /* SAFE: Channel initialization loop using proper struct access */
             int channel_idx = 0;
