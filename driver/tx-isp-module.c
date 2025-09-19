@@ -1815,72 +1815,60 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
     return ret;
 }
 
-/* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
-
-/* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
+/* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation with struct member access */
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;  /* Use dev_id parameter */
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
-    uint32_t *vic_irq_enable_flag;
-    u32 addr_ctl;
-    u32 reg_val;
-    int timeout;
     int i;
 
-    /* CRITICAL SAFETY: Validate device pointers before any access */
-    if (!isp_dev || !isp_dev->vic_dev) {
-        pr_err("*** VIC IRQ: Invalid device pointers (isp_dev=%p, vic_dev=%p) ***\n",
-               isp_dev, isp_dev ? isp_dev->vic_dev : NULL);
-        return IRQ_NONE;
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
+    if (dev_id == NULL || (unsigned long)dev_id >= 0xfffff001) {
+        return IRQ_HANDLED;
     }
 
-    vic_dev = isp_dev->vic_dev;
+    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
+    /* SAFE: Use proper struct member access instead of raw offset +0xd4 */
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
 
-    /* CRITICAL SAFETY: Validate VIC registers before access */
-    if (!vic_dev->vic_regs) {
-        pr_err("*** VIC IRQ: Invalid VIC registers pointer ***\n");
-        return IRQ_NONE;
-    }
+    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
+    if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
+        /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
+        /* SAFE: Use proper struct member access instead of raw offset +0xb8 */
+        vic_regs = vic_dev->vic_regs;
 
-    vic_regs = vic_dev->vic_regs;
+        /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
+        /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
+        v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
+        v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
 
-    /* SAFE: Use proper struct member access instead of raw offset */
-    vic_irq_enable_flag = (uint32_t*)&vic_dev->irq_enabled;
-    
-    /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
-    /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
-    v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
-    v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
-    
-    /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
-    writel(v1_7, vic_regs + 0x1f0);
-    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
-    writel(v1_10, vic_regs + 0x1f4);
-    wmb();
-    
-    /* CRITICAL: Binary Ninja global vic_start_ok flag check */
-    /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
-    if (vic_start_ok != 0) {
-        pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
-        
-        /* Binary Ninja: if (($v1_7 & 1) != 0) */
-        if ((v1_7 & 1) != 0) {
-            /* Binary Ninja: *($s0 + 0x160) += 1 */
-            vic_dev->frame_count++;
-            pr_info("*** 2VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
+        /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7; *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
+        writel(v1_7, vic_regs + 0x1f0);
+        writel(v1_10, vic_regs + 0x1f4);
+        wmb();
 
-            /* CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
-            if (ourISPdev) {
-                ourISPdev->frame_count++;
-                pr_info("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", ourISPdev->frame_count);
+        /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
+        if (vic_start_ok != 0) {
+            pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
+
+            /* Binary Ninja: if (($v1_7 & 1) != 0) */
+            if ((v1_7 & 1) != 0) {
+                /* Binary Ninja: *($s0 + 0x160) += 1 */
+                /* SAFE: Use proper struct member access instead of raw offset +0x160 */
+                vic_dev->frame_count++;
+                pr_info("*** VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
+
+                /* CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
+                if (ourISPdev) {
+                    ourISPdev->frame_count++;
+                    pr_info("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", ourISPdev->frame_count);
+                }
+
+                /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
+                vic_framedone_irq_function(vic_dev);
             }
-
-            /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-            vic_framedone_irq_function(vic_dev);
-        }
         
         /* Binary Ninja: Error handling for frame asfifo overflow */
         if ((v1_7 & 0x200) != 0) {
