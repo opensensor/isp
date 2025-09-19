@@ -7745,24 +7745,7 @@ EXPORT_SYMBOL(vic_core_s_stream);
 
 
 
-/* sensor_start_changes - Sensor start changes function */
-static int sensor_start_changes(struct tx_isp_subdev *sd)
-{
-    pr_debug("sensor_start_changes: Applying sensor start changes\n");
 
-    if (!sd || !sd->ops || !sd->ops->sensor) {
-        return -EINVAL;
-    }
-
-    /* Apply sensor-specific start changes */
-    if (sd->ops->sensor->ioctl) {
-        /* Call sensor start IOCTL */
-        sd->ops->sensor->ioctl(sd, 0x980900, NULL);
-    }
-
-    return 0;
-}
-EXPORT_SYMBOL(sensor_start_changes);
 
 /* subdev_sensor_ops_ioctl - EXACT Binary Ninja implementation */
 static long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
@@ -7885,7 +7868,7 @@ static long vic_core_ops_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *a
 EXPORT_SYMBOL(vic_core_ops_ioctl);
 
 /* csi_core_ops_init - CSI core operations initialization */
-static int csi_core_ops_init(struct v4l2_subdev *sd, u32 val)
+int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_csi_device *csi_dev;
 
@@ -7895,13 +7878,13 @@ static int csi_core_ops_init(struct v4l2_subdev *sd, u32 val)
         return -EINVAL;
     }
 
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(&sd->sd);
     if (!csi_dev) {
         return -EINVAL;
     }
 
     /* Initialize CSI core operations */
-    csi_dev->state = 3; /* INITIALIZED state */
+    csi_dev->state = enable ? 4 : 3;
 
     /* Initialize CSI hardware if needed */
     if (csi_dev->csi_regs) {
@@ -7915,109 +7898,11 @@ EXPORT_SYMBOL(csi_core_ops_init);
 
 
 
-/* vic_sensor_ops_sync_sensor_attr - VIC sensor attribute sync */
-static int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
-{
-    struct tx_isp_vic_device *vic_dev;
 
-    pr_debug("vic_sensor_ops_sync_sensor_attr: Syncing sensor attributes\n");
 
-    if (!sd || !attr) {
-        return -EINVAL;
-    }
 
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(&sd->sd);
-    if (!vic_dev) {
-        return -EINVAL;
-    }
 
-    /* Sync sensor attributes to VIC */
-    vic_dev->sensor_attr = attr;
-    vic_dev->width = attr->max_width;
-    vic_dev->height = attr->max_height;
 
-    /* Configure VIC based on sensor attributes */
-    if (attr->mipi.mode == 1) {
-        /* MIPI mode */
-        vic_dev->interface_mode = 1;
-    } else {
-        /* DVP mode */
-        vic_dev->interface_mode = attr->dvp.mode;
-    }
-
-    return 0;
-}
-EXPORT_SYMBOL(vic_sensor_ops_sync_sensor_attr);
-
-/* csi_sensor_ops_sync_sensor_attr - CSI sensor attribute sync */
-static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
-{
-    struct tx_isp_csi_device *csi_dev;
-
-    pr_debug("csi_sensor_ops_sync_sensor_attr: Syncing sensor attributes\n");
-
-    if (!sd || !attr) {
-        return -EINVAL;
-    }
-
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(&sd->sd);
-    if (!csi_dev) {
-        return -EINVAL;
-    }
-
-    /* Sync sensor attributes to CSI */
-    csi_dev->sensor_attr = attr;
-
-    /* Configure CSI based on sensor attributes */
-    if (attr->mipi.mode == 1) {
-        /* Configure MIPI CSI */
-        csi_dev->mipi_lanes = attr->mipi.lanes;
-        csi_dev->mipi_settle_time = attr->mipi.settle_time;
-    }
-
-    return 0;
-}
-EXPORT_SYMBOL(csi_sensor_ops_sync_sensor_attr);
-
-/* csi_sensor_ops_ioctl - CSI sensor operations IOCTL */
-static long csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
-{
-    struct tx_isp_csi_device *csi_dev;
-
-    pr_debug("csi_sensor_ops_ioctl: cmd=0x%x\n", cmd);
-
-    if (!sd) {
-        return -EINVAL;
-    }
-
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(&sd->sd);
-    if (!csi_dev) {
-        return -EINVAL;
-    }
-
-    /* Handle CSI-specific IOCTLs */
-    switch (cmd) {
-        case 0x800010: /* CSI start */
-            csi_dev->state = 4;
-            return 0;
-
-        case 0x800011: /* CSI stop */
-            csi_dev->state = 3;
-            return 0;
-
-        case 0x800012: /* CSI reset */
-            if (csi_dev->csi_regs) {
-                *(uint32_t *)((char *)csi_dev->csi_regs + 0x0) = 0x0;
-                *(uint32_t *)((char *)csi_dev->csi_regs + 0x0) = 0x1;
-            }
-            return 0;
-
-        default:
-            pr_debug("csi_sensor_ops_ioctl: Unsupported cmd 0x%x\n", cmd);
-            return -ENOTTY;
-    }
-}
-EXPORT_SYMBOL(csi_sensor_ops_ioctl);
 
 /* ispcore_core_ops_init - ISP core operations initialization */
 static int ispcore_core_ops_init(struct v4l2_subdev *sd, u32 val)
