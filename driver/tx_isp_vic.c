@@ -1968,6 +1968,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* CRITICAL: Enable ISP core interrupt generation - EXACT Binary Ninja reference */
     /* This was the missing piece that caused interrupts to stall out */
+    pr_info("*** DEBUG: ourISPdev=%p, core_regs=%p ***\n",
+            ourISPdev, ourISPdev ? ourISPdev->core_regs : NULL);
+
     if (ourISPdev && ourISPdev->core_regs) {
         void __iomem *core = ourISPdev->core_regs;
 
@@ -2006,6 +2009,45 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
     } else {
         pr_warn("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
+
+        /* FALLBACK: Try to map ISP core registers directly if global mapping failed */
+        pr_info("*** ISP CORE IRQ: Attempting direct mapping fallback ***\n");
+        void __iomem *core_fallback = ioremap(0x13300000, 0x10000);
+        if (core_fallback) {
+            pr_info("*** ISP CORE IRQ: Direct mapping successful at %p ***\n", core_fallback);
+
+            /* Clear any pending interrupts first */
+            u32 pend_legacy = readl(core_fallback + 0xb4);
+            u32 pend_new    = readl(core_fallback + 0x98b4);
+            writel(pend_legacy, core_fallback + 0xb8);
+            writel(pend_new,    core_fallback + 0x98b8);
+
+            /* CRITICAL: Enable ISP pipeline connection */
+            writel(1, core_fallback + 0x800);
+            writel(0x1c, core_fallback + 0x804);
+            writel(8, core_fallback + 0x1c);
+
+            /* CRITICAL: Enable ISP core interrupt generation at hardware level */
+            writel(0xffffffff, core_fallback + 0x30);
+            writel(0x133, core_fallback + 0x10);
+
+            /* Enable interrupt banks */
+            writel(0x3FFF, core_fallback + 0xb0);
+            writel(0x3FFF, core_fallback + 0xbc);
+            writel(0x3FFF, core_fallback + 0x98b0);
+            writel(0x3FFF, core_fallback + 0x98bc);
+            wmb();
+
+            pr_info("*** ISP CORE IRQ: Direct mapping fallback - ISP core interrupts ENABLED ***\n");
+
+            /* Update global mapping for future use */
+            if (ourISPdev) {
+                ourISPdev->core_regs = core_fallback;
+                pr_info("*** ISP CORE IRQ: Updated global core_regs mapping ***\n");
+            }
+        } else {
+            pr_err("*** ISP CORE IRQ: Direct mapping fallback FAILED ***\n");
+        }
     }
 
     /* Also enable the kernel IRQ line if it was registered earlier */
