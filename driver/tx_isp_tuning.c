@@ -443,13 +443,11 @@ static uint32_t tisp_gb_blc_ag = 0;
 /* Event and Data Variables - removed duplicate, using declarations below */
 
 /* Operation and Netlink Variables */
-static void *opmsg = NULL;
+/* opmsg, nlsk, data_ca490, data_ca48c moved to top of file */
 static void *nlcfg = NULL;
-static void *nlsk = NULL;
 
 /* Memory Management Variables */
-static uint32_t data_ca490 = 0;
-static uint32_t data_ca48c = 0;
+/* data_ca490, data_ca48c moved to top of file */
 static uint32_t data_b2f3c = 0;
 static uint32_t data_b2f54 = 0;
 static uint32_t data_b2f6c = 0;
