@@ -23,12 +23,7 @@ struct tx_isp_subdev_platform_data {
     /* Additional platform-specific data */
 };
 
-/* IRQ info structure */
-struct tx_isp_irq_info {
-    int irq;
-    void *handler;
-    void *data;
-};
+/* IRQ info structure - defined in tx-isp-device.h */
 
 /* Frame channel states */
 #define FRAME_CHAN_INIT    2
