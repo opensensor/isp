@@ -6616,8 +6616,6 @@ static uint16_t tiziano_gamma_lut_wdr[256] = {
 
 static uint16_t *tiziano_gamma_lut_now = NULL;
 static int gamma_wdr_en = 0;
-static uint16_t tiziano_gamma_lut[256] = {0};  /* Linear gamma LUT */
-static uint16_t tiziano_gamma_lut_wdr[256] = {0};  /* WDR gamma LUT */
 
 /* tiziano_gamma_lut_parameter - Binary Ninja EXACT implementation */
 int tiziano_gamma_lut_parameter(void)
