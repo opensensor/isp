@@ -2110,22 +2110,7 @@ int tisp_deinit(void)
 
 
 
-/**
- * tisp_event_exit - TISP event system exit
- * Note: The actual implementation should be in tx_isp_tuning.c where static variables are defined
- */
-void tisp_event_exit(void)
-{
-    pr_info("tisp_event_exit: TISP event system exited");
-    /*
-     * Binary Ninja shows this function should:
-     * 1. Create local variables var_30 = 0 and var_38 = NULL
-     * 2. Call tisp_event_push(&var_38)
-     *
-     * However, since tisp_event_push uses static variables in tx_isp_tuning.c,
-     * this function should be implemented there.
-     */
-}
+
 
 /**
  * tisp_deinit_free - TISP final cleanup
