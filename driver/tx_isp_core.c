@@ -2128,7 +2128,7 @@ int32_t *data_b33b8 = NULL;
 int32_t data_b33b8_base = 0;
 void **data_b33b4 = NULL;
 void *data_b33b0 = NULL;
-struct completion tevent_info;
+/* tevent_info is already declared as static at line 131 */
 
 /**
  * tisp_param_operate_deinit - EXACT Binary Ninja MCP implementation
