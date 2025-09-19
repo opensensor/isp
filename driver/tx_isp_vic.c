@@ -198,7 +198,12 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     
     /* Initialize empty lists - buffers allocated later when needed */
     pr_info("*** VIC: Buffer lists initialized - allocation deferred to prevent memory pressure ***\n");
-    
+
+    /* Initialize buffer addresses for vic_mdma_enable */
+    vic_dev->buffer_addresses = NULL;
+    vic_dev->buffer_address_count = 0;
+    pr_info("*** VIC: Buffer addresses initialized (will be set during buffer allocation) ***\n");
+
     /* REMOVED: VIC no longer maintains its own sensor attributes */
     /* VIC will use the real sensor attributes from ourISPdev->sensor->video.attr */
     pr_info("*** VIC: Will use real sensor attributes instead of maintaining duplicates ***\n");

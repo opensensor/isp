@@ -156,5 +156,7 @@ struct tx_isp_vic_device {
 
 /* VIC function declarations */
 int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t addr, u32 width, u32 height);
+int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_channel,
+                    int buffer_count, dma_addr_t base_addr, int format_type);
 
 #endif /* __TX_ISP_VIC_H__ */
