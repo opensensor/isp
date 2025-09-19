@@ -75,13 +75,7 @@ enum tx_isp_subdev_id {
 #define CSI_DATA_TYPE      0x0010
 #define CSI_LANE_CTRL      0x0014
 
-/* VIN registers */
-#define VIN_CTRL           0x0000
-#define VIN_STATUS         0x0004
-#define VIN_INT_MASK       0x0008
-#define VIN_INT_STATUS     0x000C
-#define VIN_FRAME_SIZE     0x0010
-#define VIN_FORMAT        0x0014
+/* VIN registers - see tx_isp_vin.h for detailed definitions */
 
 /* Control register bit definitions */
 /* ISP_CTRL bits */
