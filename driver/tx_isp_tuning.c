@@ -219,6 +219,22 @@ static int tiziano_set_parameter_clm(void) { return 0; }
 static int tiziano_gib_params_refresh(void) { return 0; }
 static int tiziano_gib_lut_parameter(void) { return 0; }
 static int tiziano_gib_deir_reg(uint32_t *r, uint32_t *g, uint32_t *b) { return 0; }
+static int tiziano_dmsc_params_refresh(void) { return 0; }
+static int tisp_dmsc_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
+static int tiziano_mdns_params_refresh(void) { return 0; }
+static int tisp_mdns_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
+static int tiziano_wdr_params_refresh(void) { return 0; }
+static int tisp_wdr_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
+static int tiziano_bcsh_params_refresh(void) { return 0; }
+static int tiziano_bcsh_lut_parameter(void) { return 0; }
+static int tiziano_defog_params_refresh(void) { return 0; }
+static int tisp_defog_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
+static int tiziano_awb_params_refresh(void) { return 0; }
+static int tisp_awb_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
+static int tiziano_af_params_refresh(void) { return 0; }
+static int tisp_af_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
+static int tisp_ae_exp_th_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
+static int tisp_adr_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
 
 /* Missing variables referenced in functions */
 static uint32_t deir_en = 0;
@@ -8511,7 +8527,7 @@ int tiziano_ae_init_exp_th(void)
     tiziano_ae_exp_th_params_refresh();
 
     /* Binary Ninja: tisp_ae_exp_th_par_refresh(isp_printf, isp_printf, 1) */
-    tisp_ae_exp_th_par_refresh(isp_printf, isp_printf, 1);
+    tisp_ae_exp_th_par_refresh(0, 0, 1);  /* Binary Ninja: pass uint32_t values, not function pointers */
 
     return 0;
 }
@@ -8528,7 +8544,7 @@ int tiziano_adr_params_init(void)
     tiziano_adr_params_refresh();
 
     /* Binary Ninja: tisp_adr_par_refresh(isp_printf, isp_printf, 1) */
-    tisp_adr_par_refresh(isp_printf, isp_printf, 1);
+    tisp_adr_par_refresh(0, 0, 1);  /* Binary Ninja: pass uint32_t values, not function pointers */
 
     return 0;
 }
