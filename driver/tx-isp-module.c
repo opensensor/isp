@@ -530,7 +530,6 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id);
 static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
-static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
 static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel);
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
@@ -1796,26 +1795,7 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
     return 0;
 }
 
-static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
-{
-    int ret;
-    
-    if (!isp_dev) {
-        return -EINVAL;
-    }
-    
-    pr_info("*** USING BINARY NINJA tx_isp_request_irq FOR HARDWARE INTERRUPTS ***\n");
-    
-    /* Call Binary Ninja exact interrupt registration using global platform device */
-    ret = tx_isp_request_irq(&tx_isp_platform_device, isp_dev);
-    if (ret == 0) {
-        pr_info("*** Hardware interrupts initialized with Binary Ninja method (IRQ %d) ***\n", isp_dev->isp_irq);
-    } else {
-        pr_warn("*** Binary Ninja interrupt registration failed: %d ***\n", ret);
-    }
-    
-    return ret;
-}
+
 
 /* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation with struct member access */
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
@@ -5307,33 +5287,23 @@ static int tx_isp_init(void)
         pr_warn("No sensors detected, continuing with basic initialization: %d\n", ret);
     }
     
-    /* *** CRITICAL: Initialize hardware interrupt handling for BOTH IRQs *** */
-    pr_info("*** INITIALIZING HARDWARE INTERRUPTS FOR IRQ 37 AND 38 ***\n");
-    ret = tx_isp_init_hardware_interrupts(ourISPdev);
-    if (ret) {
-        pr_warn("Hardware interrupts not available: %d\n", ret);
-    } else {
-        pr_info("*** HARDWARE INTERRUPT INITIALIZATION COMPLETE ***\n");
-        pr_info("*** SHOULD SEE BOTH IRQ 37 AND 38 IN /proc/interrupts NOW ***\n");
-    }
-    
     /* *** CRITICAL: Register BOTH IRQ handlers for complete interrupt support *** */
     pr_info("*** REGISTERING BOTH IRQ HANDLERS (37 + 38) FOR COMPLETE INTERRUPT SUPPORT ***\n");
-    
+
     /* Register IRQ 37 (isp-m0) - Primary ISP processing */
-    ret = request_threaded_irq(37, 
+    ret = request_threaded_irq(37,
                               isp_irq_handle,
-                              isp_irq_thread_handle,   
-                              IRQF_SHARED,             
+                              isp_irq_thread_handle,
+                              IRQF_SHARED,
                               "isp-m0",                /* Match stock driver name */
-                              ourISPdev);              
+                              ourISPdev);
     if (ret != 0) {
         pr_err("*** FAILED TO REQUEST IRQ 37 (isp-m0): %d ***\n", ret);
     } else {
         pr_info("*** SUCCESS: IRQ 37 (isp-m0) REGISTERED ***\n");
         ourISPdev->isp_irq = 37;
     }
-    
+
     /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
     ret = request_threaded_irq(38,
                               isp_irq_handle,          /* Same handlers work for both IRQs */
