@@ -6,7 +6,7 @@
 #include <linux/i2c.h>
 #include <linux/clk.h>
 #include <linux/vmalloc.h>
-#include <linux/of_reserved_mem.h>
+#include <linux/memblock.h>
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_core.h"
 #include "../include/tx-isp-debug.h"
@@ -29,6 +29,50 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp);
 /* Forward declarations */
 int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
 static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp);
+
+/* Parse rmem boot parameter - Linux 3.10 compatible */
+static int parse_rmem_bootarg(unsigned long *base, unsigned long *size)
+{
+    char *rmem_str;
+    char *size_str, *base_str;
+    char *end_ptr;
+
+    /* Get the rmem boot parameter */
+    rmem_str = strstr(saved_command_line, "rmem=");
+    if (!rmem_str) {
+        pr_warn("parse_rmem_bootarg: rmem boot parameter not found\n");
+        return -ENOENT;
+    }
+
+    /* Skip "rmem=" */
+    rmem_str += 5;
+
+    /* Parse size (e.g., "29M") */
+    size_str = rmem_str;
+    *size = simple_strtoul(size_str, &end_ptr, 10);
+
+    if (*end_ptr == 'M' || *end_ptr == 'm') {
+        *size *= 1024 * 1024;  /* Convert MB to bytes */
+        end_ptr++;
+    } else if (*end_ptr == 'K' || *end_ptr == 'k') {
+        *size *= 1024;  /* Convert KB to bytes */
+        end_ptr++;
+    }
+
+    /* Parse base address (e.g., "@0x6300000") */
+    if (*end_ptr != '@') {
+        pr_err("parse_rmem_bootarg: Invalid rmem format, expected '@' after size\n");
+        return -EINVAL;
+    }
+
+    base_str = end_ptr + 1;  /* Skip '@' */
+    *base = simple_strtoul(base_str, &end_ptr, 0);  /* Auto-detect hex/decimal */
+
+    pr_info("parse_rmem_bootarg: Found rmem=%luM@0x%08lx (size=0x%08lx)\n",
+            *size / (1024 * 1024), *base, *size);
+
+    return 0;
+}
 int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
 static int tx_isp_setup_media_links(struct tx_isp_dev *isp);
 static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp);
@@ -1827,18 +1871,22 @@ void *isp_mem_init(void)
     memset(&ispmem, 0, sizeof(ispmem));
 
     /* Binary Ninja: private_get_isp_priv_mem(&ispmem, &data_b2a64) */
-    /* Use actual reserved memory (rmem) system */
-    extern struct reserved_mem *isp_rmem;
-    if (isp_rmem) {
-        ispmem.ispmem_value = (uint32_t)isp_rmem->base;  /* Actual rmem base address */
-        data_b2a64 = (uint32_t)isp_rmem->size;           /* Actual rmem size */
-        pr_debug("isp_mem_init: Using rmem base=0x%08x, size=0x%08x\n",
-                ispmem.ispmem_value, data_b2a64);
+    /* Parse rmem boot parameter (Linux 3.10 compatible) */
+    unsigned long rmem_base, rmem_size;
+    int rmem_result = parse_rmem_bootarg(&rmem_base, &rmem_size);
+
+    if (rmem_result == 0) {
+        /* Successfully parsed rmem boot parameter */
+        ispmem.ispmem_value = (uint32_t)rmem_base;
+        data_b2a64 = (uint32_t)rmem_size;
+        pr_info("isp_mem_init: Using rmem base=0x%08x, size=0x%08x (%luMB)\n",
+                ispmem.ispmem_value, data_b2a64, rmem_size / (1024 * 1024));
     } else {
-        /* Fallback if rmem not available */
-        ispmem.ispmem_value = 0x1000000;  /* Fallback ISP memory base */
-        data_b2a64 = 0x100000;           /* Fallback memory size */
-        pr_warn("isp_mem_init: No rmem available, using fallback values\n");
+        /* Fallback to hardcoded values if rmem parsing fails */
+        ispmem.ispmem_value = 0x6300000;  /* Default T31 ISP memory base */
+        data_b2a64 = 29 * 1024 * 1024;   /* Default 29MB size */
+        pr_warn("isp_mem_init: Failed to parse rmem, using fallback base=0x%08x, size=0x%08x\n",
+                ispmem.ispmem_value, data_b2a64);
     }
 
     /* Binary Ninja: private_raw_mutex_init(0xb2c00, &$LC0, 0) */
