@@ -8285,7 +8285,7 @@ int tiziano_sdns_init(void)
     tiziano_sdns_params_refresh();
 
     /* Binary Ninja: tisp_sdns_par_refresh(isp_printf, isp_printf, 1) */
-    tisp_sdns_par_refresh(isp_printf, isp_printf, 1);
+    tisp_sdns_par_refresh(0, 0, 1);  /* Binary Ninja: pass uint32_t values, not function pointers */
 
     return 0;
 }
@@ -8316,7 +8316,7 @@ int tiziano_mdns_init(void)
     tiziano_mdns_params_refresh();
 
     /* Binary Ninja: tisp_mdns_par_refresh(isp_printf, isp_printf, 1) */
-    tisp_mdns_par_refresh(isp_printf, isp_printf, 1);
+    tisp_mdns_par_refresh(0, 0, 1);  /* Binary Ninja: pass uint32_t values, not function pointers */
 
     return 0;
 }
@@ -8331,7 +8331,7 @@ int tiziano_wdr_params_init(void)
     tiziano_wdr_params_refresh();
 
     /* Binary Ninja: tisp_wdr_par_refresh(isp_printf, isp_printf, 1) */
-    tisp_wdr_par_refresh(isp_printf, isp_printf, 1);
+    tisp_wdr_par_refresh(0, 0, 1);  /* Binary Ninja: pass uint32_t values, not function pointers */
 
     return 0;
 }
@@ -8438,7 +8438,7 @@ int tiziano_defog_params_init(void)
     tiziano_defog_params_refresh();
 
     /* Binary Ninja: tisp_defog_par_refresh(isp_printf, isp_printf, 1) */
-    tisp_defog_par_refresh(isp_printf, isp_printf, 1);
+    tisp_defog_par_refresh(0, 0, 1);  /* Binary Ninja: pass uint32_t values, not function pointers */
 
     return 0;
 }
