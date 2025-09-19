@@ -293,7 +293,7 @@ setup_complete:
     private_platform_set_drvdata(pdev, fs_dev);
 
     /* Binary Ninja: *($v0 + 0x34) = &isp_framesource_fops */
-    fs_dev->subdev.fops = &isp_framesource_fops;
+    tx_isp_set_subdev_nodeops(&fs_dev->subdev, &isp_framesource_fops);
 
     /* Binary Ninja: *($v0 + 0xd4) = $v0 */
     fs_dev->self_ptr = fs_dev;  /* Self-pointer for validation */
