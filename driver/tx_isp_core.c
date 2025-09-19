@@ -1893,75 +1893,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
     pr_info("ispcore_slake_module: Complete, result=%d", result);
     return result;
 
-    /* STEP 3: Follow Binary Ninja state machine */
-    pr_info("*** STEP 3: Following Binary Ninja state machine ***");
 
-    /* Binary Ninja: Check VIC state */
-    isp_state = vic_dev->state;
-    pr_info("ispcore_slake_module: Current VIC state = %d", isp_state);
-
-    /* Binary Ninja: if (state != 1) */
-    if (isp_state != 1) {
-        /* Binary Ninja: if (state >= 3) */
-        if (isp_state >= 3) {
-            pr_info("ispcore_slake_module: VIC state >= 3, calling ispcore_core_ops_init");
-
-            /* Get sensor attributes from the connected sensor */
-            struct tx_isp_sensor_attribute *sensor_attr = NULL;
-            if (isp->sensor && isp->sensor->video.attr) {
-                sensor_attr = isp->sensor->video.attr;
-                pr_info("ispcore_slake_module: Using sensor attributes from connected sensor");
-            } else {
-                pr_warn("ispcore_slake_module: No sensor attributes available, using NULL");
-            }
-
-            ret = ispcore_core_ops_init(isp, sensor_attr);
-            if (ret < 0) {
-                pr_err("ispcore_slake_module: ispcore_core_ops_init failed: %d", ret);
-                return ret;
-            }
-        }
-        
-        /* Binary Ninja: Channel initialization loop */
-        pr_info("ispcore_slake_module: Initializing channel flags");
-        for (i = 0; i < ISP_MAX_CHAN; i++) {
-            /* Binary Ninja: *($a2_1 + *($s0_1 + 0x150) + 0x74) = 1 */
-            isp->channels[i].enabled = true;  /* Set channel enabled flag */
-            pr_info("Channel %d: enabled", i);
-        }
-        
-        /* Binary Ninja: (*($a0_1 + 0x40cc))($a0_1, 0x4000001, 0) */
-        if (vic_dev) {
-            pr_info("ispcore_slake_module: Calling VIC control function (0x4000001, 0)");
-            /* VIC control call - this would be a VIC register write or control function */
-        }
-        
-        /* Binary Ninja: *($s0_1 + 0xe8) = 1 */
-        vic_dev->state = 1;
-        pr_info("ispcore_slake_module: Set ISP state to INIT (1)");
-        
-        /* Binary Ninja: Subdevice initialization loop */
-        pr_info("ispcore_slake_module: Initializing subdevices");
-        
-        /* Initialize CSI subdevice if present */
-        if (isp->csi_dev) {
-            pr_info("ispcore_slake_module: Initializing CSI subdevice");
-            isp->csi_dev->state = 1;  /* Set CSI to INIT state */
-        }
-        
-        /* Initialize VIC subdevice if present */
-        if (vic_dev) {
-            pr_info("ispcore_slake_module: Initializing VIC subdevice");
-            vic_dev->state = 1;  /* Set VIC to INIT state */
-        }
-        
-        /* Binary Ninja: Clock management loop */
-        pr_info("ispcore_slake_module: Managing ISP clocks");
-        /* The reference has a clock disable loop at the end, but we'll keep clocks enabled for now */
-    }
-    
-    pr_info("ispcore_slake_module: ISP MODULE SLAKING COMPLETE - SUCCESS!");
-    return 0;
 }
 EXPORT_SYMBOL(ispcore_slake_module);
 
