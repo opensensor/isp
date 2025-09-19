@@ -7394,6 +7394,51 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
         sensor->video.attr = &sensor->attr;
         pr_info("*** sensor->video.attr = %p (points to sensor->attr) ***\n", sensor->video.attr);
 
+        /* *** CRITICAL FIX: INITIALIZE SENSOR ATTRIBUTES WITH PROPER VALUES *** */
+        pr_info("*** CRITICAL: INITIALIZING SENSOR ATTRIBUTES ***\n");
+        sensor->attr.dbus_type = 1; /* MIPI interface */
+        sensor->attr.max_integration_time_native = 1125 - 8; /* VTS - 8 for GC2053 */
+        sensor->attr.integration_time_limit = 1125 - 8;
+        sensor->attr.total_width = 2200; /* GC2053 total frame width */
+        sensor->attr.total_height = 1125; /* GC2053 total frame height */
+        sensor->attr.max_integration_time = 1125 - 8;
+        sensor->attr.integration_time_apply_delay = 2;
+        sensor->attr.again_apply_delay = 2;
+        sensor->attr.dgain_apply_delay = 0;
+        sensor->attr.sensor_ctrl.alloc_again = 0;
+        sensor->attr.sensor_ctrl.alloc_dgain = 0;
+        sensor->attr.one_line_expr_in_us = 30; /* Line time in microseconds */
+        sensor->attr.fps = 25; /* 25 FPS */
+        sensor->attr.data_type = TX_SENSOR_DATA_TYPE_LINEAR; /* Linear sensor */
+        sensor->attr.wdr_cache = TX_SENSOR_WDR_CACHE_NO;
+        sensor->attr.mipi.mipi_mode = SENSOR_MIPI_OTHER_MODE;
+        sensor->attr.mipi.clk = 594; /* MIPI clock in MHz */
+        sensor->attr.mipi.lans = 2; /* 2 MIPI lanes */
+        sensor->attr.mipi.settle_time_apative_en = 0;
+        sensor->attr.mipi.image_twidth = 1920; /* Image width */
+        sensor->attr.mipi.image_theight = 1080; /* Image height */
+        sensor->attr.mipi.mipi_crop_start0x = 0;
+        sensor->attr.mipi.mipi_crop_start0y = 0;
+        sensor->attr.mipi.mipi_crop_start1x = 0;
+        sensor->attr.mipi.mipi_crop_start1y = 0;
+        sensor->attr.mipi.mipi_crop_start2x = 0;
+        sensor->attr.mipi.mipi_crop_start2y = 0;
+        sensor->attr.mipi.mipi_crop_start3x = 0;
+        sensor->attr.mipi.mipi_crop_start3y = 0;
+        sensor->attr.mipi.hcrop_diff = 0;
+        sensor->attr.mipi.vcrop_diff = 0;
+        sensor->attr.mipi.line_sync_mode = 0;
+        sensor->attr.mipi.work_start_flag = 0;
+        sensor->attr.mipi.data_type_en = 0;
+        sensor->attr.mipi.data_type_value = 0;
+        sensor->attr.mipi.del_start = 0;
+        sensor->attr.mipi.sensor_frame_mode = TX_SENSOR_DEFAULT_FRAME_MODE;
+        sensor->attr.mipi.sensor_fid_mode = 0;
+        sensor->attr.mipi.sensor_mode = TX_SENSOR_DEFAULT_MODE;
+        pr_info("*** SENSOR ATTRIBUTES INITIALIZED: dbus_type=%d, total=%dx%d, image=%dx%d ***\n",
+                sensor->attr.dbus_type, sensor->attr.total_width, sensor->attr.total_height,
+                sensor->attr.mipi.image_twidth, sensor->attr.mipi.image_theight);
+
         /* *** CRITICAL FIX: ADD SENSOR TO SUBDEV ARRAY FOR tx_isp_video_link_stream *** */
         pr_info("*** CRITICAL: ADDING SENSOR TO SUBDEV ARRAY AT INDEX 2 ***\n");
         ourISPdev->subdevs[2] = sd;  /* Sensor should be subdev 2 (after VIC=0, CSI=1) */
