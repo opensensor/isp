@@ -3237,8 +3237,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 current_channel++;
             }
 
-            /* SAFE: Store channel array reference using existing struct member */
-            isp_dev->frame_chans = (struct tx_isp_frame_channel *)channel_array;
+            /* SAFE: Channel array is stored in local variable - not needed in main device structure */
+            /* The channels[] array in isp_dev is used for ISP channel management */
+            /* The channel_array is used for Binary Ninja compatibility during initialization */
 
             /* Set basic platform data first */
             platform_set_drvdata(pdev, isp_dev);
