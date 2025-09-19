@@ -122,6 +122,10 @@ struct tx_isp_vic_device {
     
     /* Additional buffer management */
     uint32_t buffer_count;                      /* General buffer count */
+
+    /* Buffer addresses for vic_mdma_enable and isp_vic_cmd_set */
+    dma_addr_t *buffer_addresses;               /* Array of buffer addresses */
+    int buffer_address_count;                   /* Number of buffer addresses */
     
     /* Error tracking (properly aligned) */
     uint32_t vic_errors[13] __attribute__((aligned(4)));            /* Error array (13 elements) */
