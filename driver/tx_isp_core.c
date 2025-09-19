@@ -722,8 +722,14 @@ int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg
         result = 0;  /* Other commands return success */
     }
 
-    /* Binary Ninja: Get ISP device from subdev to access subdevs array at offset 0x38 */
-    isp_dev = (struct tx_isp_dev *)((char *)sd - offsetof(struct tx_isp_dev, sd));
+    /* CRITICAL FIX: Use safe method to get ISP device instead of dangerous pointer arithmetic */
+    /* The sd->isp field should point to the main ISP device */
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if (!isp_dev) {
+        /* Fallback: Use global ourISPdev if sd->isp is not set */
+        extern struct tx_isp_dev *ourISPdev;
+        isp_dev = ourISPdev;
+    }
     if (!isp_dev) {
         pr_info("ispcore_core_ops_ioctl: No ISP device found\n");
         goto exit_check;

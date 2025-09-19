@@ -448,7 +448,8 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             pr_info("tx_isp_subdev_init: Memory resource found: start=0x%08x, end=0x%08x, size=0x%08x\n",
                     (u32)mem_res->start, (u32)mem_res->end, (u32)resource_size(mem_res));
         } else {
-            pr_err("tx_isp_subdev_init: No memory resource found for device %s\n", dev_name(&pdev->dev));
+            /* CRITICAL FIX: Memory resources are optional for logical devices like VIN */
+            pr_info("tx_isp_subdev_init: No memory resource for device %s (logical device - OK)\n", dev_name(&pdev->dev));
         }
 
         if (mem_res) {
