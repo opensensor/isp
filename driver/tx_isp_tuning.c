@@ -454,6 +454,15 @@ int tiziano_adr_init(uint32_t width, uint32_t height);
 int tiziano_af_init(uint32_t height, uint32_t width);  /* Binary Ninja: takes arg1, arg2 */
 int tiziano_ae_init_exp_th(void);
 int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps);
+
+/* Forward declarations for missing AE functions */
+int tiziano_ae_params_refresh(void);
+void *tiziano_ae_para_addr(void);
+int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3, uint32_t param4, uint32_t *lut_array, uint32_t *nodes_count);
+
+/* Forward declarations for tuning node functions */
+int tisp_code_create_tuning_node(void);
+int tisp_code_destroy_tuning_node(void);
 int tiziano_awb_init(uint32_t height, uint32_t width);  /* Binary Ninja: takes arg1, arg2 */
 int tiziano_ccm_init(void);
 int tiziano_bcsh_init(void);
