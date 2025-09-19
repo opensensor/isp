@@ -8345,19 +8345,7 @@ int tiziano_g_awb_start(uint32_t *r_gain, uint32_t *b_gain)
     return 0;
 }
 
-/* tiziano_ae_s_ev_start - AE exposure value start function */
-int tiziano_ae_s_ev_start(int32_t ev_value)
-{
-    pr_debug("tiziano_ae_s_ev_start: Setting EV value to %d\n", ev_value);
 
-    /* Store EV value in global AE parameters */
-    ae_ev_value = ev_value;
-
-    /* Apply EV compensation to AE algorithm */
-    tiziano_ae_params_refresh();
-
-    return 0;
-}
 
 /* tisp_channel_start - EXACT Binary Ninja implementation */
 int tisp_channel_start(int channel, void *attr)
