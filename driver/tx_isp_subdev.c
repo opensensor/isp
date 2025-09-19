@@ -8,7 +8,6 @@
 #include "../include/tx_isp_core.h"
 #include "../include/tx_isp_vic.h"
 #include "../include/tx_isp_sysfs.h"
-#include "../include/tx_isp_fs.h"
 
 /* External reference to global ISP device */
 extern struct tx_isp_dev *ourISPdev;
