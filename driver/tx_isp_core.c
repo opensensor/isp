@@ -3666,10 +3666,10 @@ void private_platform_device_unregister(struct platform_device *pdev)
 }
 EXPORT_SYMBOL(private_platform_device_unregister);
 
-uint32_t private_math_exp2(uint32_t val, const unsigned char shift_in, const unsigned char shift_out)
+uint32_t private_math_exp2(uint32_t val, uint32_t shift, uint32_t base)
 {
-    /* Call the non-private version with proper parameter conversion */
-    return tisp_math_exp2(val, (uint32_t)shift_in, (uint32_t)shift_out);
+    /* Call the non-private version - Binary Ninja implementation */
+    return tisp_math_exp2(val, shift, base);
 }
 EXPORT_SYMBOL(private_math_exp2);
 
