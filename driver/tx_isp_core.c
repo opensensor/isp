@@ -33,7 +33,7 @@ int tisp_channel_start(int channel, void *attr);
 
 /* Binary Ninja math function forward declarations */
 uint32_t tisp_math_exp2(uint32_t val, uint32_t shift, uint32_t base);
-uint32_t tisp_log2_fixed_to_fixed_tuning(uint32_t val, int in_fix_point, uint8_t out_fix_point);
+int32_t tisp_log2_fixed_to_fixed_tuning(uint32_t val, int32_t in_fix_point, char out_fix_point);
 
 /* Parse rmem boot parameter - Linux 3.10 compatible */
 static int parse_rmem_bootarg(unsigned long *base, unsigned long *size)

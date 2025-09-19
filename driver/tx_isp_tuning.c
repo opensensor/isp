@@ -2003,6 +2003,7 @@ int32_t tisp_log2_fixed_to_fixed_tuning(uint32_t input_val, int32_t in_precision
     // Call helper directly with original param signature
     return tisp_log2_int_to_fixed(input_val, out_precision, 0);
 }
+EXPORT_SYMBOL(tisp_log2_fixed_to_fixed_tuning);
 
 
 
