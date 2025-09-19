@@ -8247,7 +8247,7 @@ int tisp_bcsh_brightness(int brightness)
 }
 EXPORT_SYMBOL(tisp_bcsh_brightness);
 
-int tisp_bcsh_contrast(uint8_t contrast)
+void tisp_bcsh_contrast(uint8_t contrast)
 {
     pr_debug("tisp_bcsh_contrast: contrast=%d\n", contrast);
 
@@ -8256,13 +8256,10 @@ int tisp_bcsh_contrast(uint8_t contrast)
 
     /* Binary Ninja: tiziano_bcsh_update() */
     tiziano_bcsh_update();
-
-    /* Binary Ninja: return 0 */
-    return 0;
 }
 EXPORT_SYMBOL(tisp_bcsh_contrast);
 
-int tisp_bcsh_saturation(uint8_t saturation)
+void tisp_bcsh_saturation(uint8_t saturation)
 {
     pr_debug("tisp_bcsh_saturation: saturation=%d\n", saturation);
 
@@ -8271,13 +8268,10 @@ int tisp_bcsh_saturation(uint8_t saturation)
 
     /* Binary Ninja: tiziano_bcsh_update() */
     tiziano_bcsh_update();
-
-    /* Binary Ninja: return 0 */
-    return 0;
 }
 EXPORT_SYMBOL(tisp_bcsh_saturation);
 
-int tisp_bcsh_s_hue(uint8_t hue)
+void tisp_bcsh_s_hue(uint8_t hue)
 {
     pr_debug("tisp_bcsh_s_hue: hue=%d\n", hue);
 
@@ -8293,9 +8287,6 @@ int tisp_bcsh_s_hue(uint8_t hue)
 
     /* Binary Ninja: data_9a6fc = $s0.b */
     bcsh_hue_value = (uint8_t)s0;
-
-    /* Binary Ninja: return 0 */
-    return 0;
 }
 EXPORT_SYMBOL(tisp_bcsh_s_hue);
 
