@@ -1012,7 +1012,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
     if ((interrupt_status & 0x3f8) == 0) {
-        /* Normal interrupt processing */
+        /* Binary Ninja: $a0 = *($s0 + 0x15c) */
+        /* SAFE: Use proper struct member access instead of raw offset +0x15c */
         error_check = readl(isp_regs + 0xc) & 0x40;
         if (error_check == 0) {
             /* Binary Ninja: tisp_lsc_write_lut_datas() - LSC LUT processing */
@@ -1020,7 +1021,9 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         }
     } else {
         /* Binary Ninja: Error interrupt processing - EXACT reference behavior */
+        /* Binary Ninja: int32_t var_44_1 = *(*(arg1 + 0xb8) + 0x84c) */
         u32 error_reg_84c = readl(vic_regs + 0x84c);
+        /* Binary Ninja: isp_printf(1, "ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\n", $s1) */
         pr_info("ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\n",
                 interrupt_status, (interrupt_status & 0x3f8) >> 3,
                 interrupt_status & 0x7, error_reg_84c);
@@ -1028,8 +1031,13 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Binary Ninja: data_ca57c += 1 - increment error counter */
         /* Error counter increment would be here */
 
-        /* Binary Ninja: data_ca57c += 1 - increment error counter */
-        /* Error counter increment would be here */
+        /* Binary Ninja: $a0 = *($s0 + 0x15c) */
+        error_check = readl(isp_regs + 0xc) & 0x40;
+    }
+
+    /* Binary Ninja: if ($a0 == 1) return 1 */
+    if (error_check == 1) {
+        return IRQ_HANDLED;
     }
 
     /* REFERENCE DRIVER: No VIC state checking - process all interrupts normally */
