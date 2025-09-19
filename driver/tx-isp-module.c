@@ -7729,7 +7729,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     vic_dev->state = 4;
 
                     /* Binary Ninja: tx_vic_enable_irq() */
-                    tx_vic_enable_irq();
+                    tx_vic_enable_irq(vic_dev);
 
                     return v0;
                 }
