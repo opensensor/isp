@@ -994,7 +994,8 @@ struct frame_entry { // Must match OEM offsets exactly
 #define ISP_EVENT_GAIN_UPDATE      0x80000001
 #define ISP_EVENT_CONTRAST_UPDATE  0x80000002
 
-#define ISP_AE_HIST_BASE        0x1000  // Example offset, need to confirm actual
+/* REMOVED: Duplicate ISP_AE_HIST_BASE definition - using 0x7000 from line 58 */
+/* Use ISP_AE_HIST_BASE from line 58 which matches Binary Ninja reference */
 #define ISP_AE_HIST_CFG0        (ISP_AE_HIST_BASE + 0x00)
 #define ISP_AE_HIST_CFG1        (ISP_AE_HIST_BASE + 0x04)
 #define ISP_AE_HIST_CFG2        (ISP_AE_HIST_BASE + 0x08)
