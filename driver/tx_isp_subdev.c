@@ -551,8 +551,8 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         }
         pr_info("*** LINKED CSI device: %p, regs: %p ***\n", csi_dev, sd->regs);
 
-    } else if (strcmp(dev_name, "tx-isp-vic") == 0) {
-        /* Link VIC device */
+    } else if (strcmp(dev_name, "isp-w02") == 0) {
+        /* Link VIC device - actual device name is "isp-w02" not "tx-isp-vic" */
         struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
         ourISPdev->vic_dev = (struct tx_isp_subdev *)vic_dev;
         vic_dev->vic_regs = sd->regs;  /* Critical: Set VIC registers */
