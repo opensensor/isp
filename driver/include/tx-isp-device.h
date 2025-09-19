@@ -361,7 +361,6 @@ struct tx_isp_subdev {
 
 	/* Clocks */
 	struct clk **clks;
-	unsigned int clk_num;
 
 	/* Synchronization */
 	spinlock_t lock;

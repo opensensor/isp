@@ -8241,6 +8241,65 @@ int tisp_gb_init(void)
     return 0;
 }
 
+/* tisp_s_wdr_init_en - EXACT Binary Ninja implementation */
+int tisp_s_wdr_init_en(int enable)
+{
+    int32_t var_20 = 0;
+    int32_t var_58;
+
+    pr_debug("tisp_s_wdr_init_en: %s WDR initialization\n", enable ? "Enable" : "Disable");
+
+    if (enable != 1) {
+        /* Binary Ninja: tisp_wdr_param_array_get(0x431, &var_58, &var_20) */
+        tisp_wdr_param_array_get(0x431, &var_58, &var_20);
+        var_58 = 2;
+        /* Binary Ninja: tisp_wdr_param_array_set(0x431, &var_58, &var_20) */
+        tisp_wdr_param_array_set(0x431, &var_58, &var_20);
+
+        /* Binary Ninja: *(tparams_day + subdev_sensor_ops_set_input+0x90) = 2 */
+        if (tparams_day) {
+            *((uint32_t*)((char*)tparams_day + 0x34f0)) = 2;
+        }
+        /* Binary Ninja: *(tparams_night + isp_printf + 0x34f0) = 2 */
+        if (tparams_night) {
+            *((uint32_t*)((char*)tparams_night + 0x34f0)) = 2;
+        }
+    } else {
+        /* Binary Ninja: tisp_wdr_param_array_get(0x431, &var_58, &var_20) */
+        tisp_wdr_param_array_get(0x431, &var_58, &var_20);
+        var_58 = 0;
+        /* Binary Ninja: tisp_wdr_param_array_set(0x431, &var_58, &var_20) */
+        tisp_wdr_param_array_set(0x431, &var_58, &var_20);
+
+        /* Binary Ninja: *(tparams_day + subdev_sensor_ops_set_input+0x90) = 0 */
+        if (tparams_day) {
+            *((uint32_t*)((char*)tparams_day + 0x34f0)) = 0;
+        }
+        /* Binary Ninja: *(tparams_night + isp_printf + 0x34f0) = 0 */
+        if (tparams_night) {
+            *((uint32_t*)((char*)tparams_night + 0x34f0)) = 0;
+        }
+    }
+
+    /* Binary Ninja: Enable/disable WDR for all components */
+    tisp_ae_wdr_en(enable);
+    tisp_dpc_wdr_en(enable);
+    tisp_lsc_wdr_en(enable);
+    tisp_gamma_wdr_en(enable);
+    tisp_sharpen_wdr_en(enable);
+    tisp_ccm_wdr_en(enable);
+    tisp_bcsh_wdr_en(enable);
+    tisp_rdns_wdr_en(enable);
+    tisp_adr_wdr_en(enable);
+    tisp_defog_wdr_en(enable);
+    tisp_mdns_wdr_en(enable);
+    tisp_dmsc_wdr_en(enable);
+    tisp_sdns_wdr_en(enable);
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_s_wdr_init_en);
+
 /* WDR enable functions for each component */
 int tisp_dpc_wdr_en(int enable)
 {
