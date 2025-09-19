@@ -10837,6 +10837,7 @@ void tisp_set_sensor_integration_time_short(uint32_t time)
         data_b2ef8((uint32_t)var_26, 0);
     }
 }
+EXPORT_SYMBOL(tisp_set_sensor_integration_time_short);
 
 void tisp_set_sensor_analog_gain_short(void)
 {
@@ -10857,6 +10858,7 @@ void tisp_set_sensor_analog_gain_short(void)
     uint32_t final_gain = v0_2 >> 6;
     pr_debug("tisp_set_sensor_analog_gain_short: Calculated short gain = %u\n", final_gain);
 }
+EXPORT_SYMBOL(tisp_set_sensor_analog_gain_short);
 
 /* System control functions - Binary Ninja EXACT implementations (already implemented above) */
 
