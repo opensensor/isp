@@ -5420,7 +5420,10 @@ err_cleanup_base:
     misc_deregister(&tx_isp_miscdev);
     platform_driver_unregister(&tx_isp_driver);
     platform_device_unregister(&tx_isp_platform_device);
-    
+
+err_cleanup_subdev_drivers:
+    tx_isp_subdev_platform_exit();
+
 err_free_dev:
     kfree(ourISPdev);
     ourISPdev = NULL;
