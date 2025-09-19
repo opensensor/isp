@@ -8354,23 +8354,6 @@ int tiziano_g_awb_start(uint32_t *r_gain, uint32_t *b_gain)
     return 0;
 }
 
-
-/* tisp_s_awb_start - ISP AWB start wrapper */
-int tisp_s_awb_start(uint32_t r_gain, uint32_t b_gain)
-{
-    pr_debug("tisp_s_awb_start: Starting AWB with R=%u, B=%u\n", r_gain, b_gain);
-    return tiziano_s_awb_start(r_gain, b_gain);
-}
-
-
-/* tisp_g_awb_start - ISP AWB get wrapper */
-int tisp_g_awb_start(uint32_t *r_gain, uint32_t *b_gain)
-{
-    pr_debug("tisp_g_awb_start: Getting AWB gains\n");
-    return tiziano_g_awb_start(r_gain, b_gain);
-}
-
-
 /* tiziano_ae_s_ev_start - AE exposure value start function */
 int tiziano_ae_s_ev_start(int32_t ev_value)
 {
