@@ -349,18 +349,26 @@ struct platform_device tx_isp_platform_device = {
     },
 };
 
-/* VIC platform device resources - CORRECTED IRQ */
+/* VIC platform device resources - CORRECTED to match /proc/iomem */
 static struct resource tx_isp_vic_resources[] = {
     [0] = {
-        .start = 0x10023000,           /* T31 VIC base address */
-        .end   = 0x10023FFF,           /* T31 VIC end address */
+        .start = 0x133e0000,           /* T31 VIC base address - MATCHES /proc/iomem */
+        .end   = 0x133effff,           /* T31 VIC end address - MATCHES /proc/iomem */
         .flags = IORESOURCE_MEM,
+        .name = "isp-device",          /* EXACT name from stock driver */
     },
     [1] = {
-        .start = 37,                   /* T31 VIC IRQ 37 - MATCHES STOCK DRIVER isp-m0 */
-        .end   = 37,
+        .start = 38,                   /* T31 VIC IRQ 38 - MATCHES STOCK DRIVER isp-w02 */
+        .end   = 38,
         .flags = IORESOURCE_IRQ,
     },
+};
+
+/* VIC platform data - CRITICAL for tx_isp_subdev_init to work */
+static struct tx_isp_subdev_platform_data vic_pdata = {
+    .interface_type = 1,  /* VIC interface */
+    .clk_num = 2,         /* Number of clocks needed */
+    .sensor_type = 0,     /* Default sensor type */
 };
 
 struct platform_device tx_isp_vic_platform_device = {
@@ -368,6 +376,9 @@ struct platform_device tx_isp_vic_platform_device = {
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_vic_resources),
     .resource = tx_isp_vic_resources,
+    .dev = {
+        .platform_data = &vic_pdata,  /* CRITICAL: Provide platform data */
+    },
 };
 
 /* CSI platform device resources - CORRECTED IRQ */
