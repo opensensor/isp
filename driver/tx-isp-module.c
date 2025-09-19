@@ -4995,22 +4995,17 @@ static int tx_isp_init(void)
         return gpio_mode_check;
     }
 
-    /* CRITICAL FIX: Use existing ourISPdev from probe - don't allocate new one! */
+    /* Allocate ISP device structure */
+    ourISPdev = kzalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
     if (!ourISPdev) {
-        pr_err("CRITICAL ERROR: ourISPdev not set by probe function!\n");
-        return -ENODEV;
+        pr_err("Failed to allocate ISP device\n");
+        return -ENOMEM;
     }
 
-    pr_info("*** USING EXISTING ourISPdev FROM PROBE: %p ***\n", ourISPdev);
-    pr_info("*** VIN device should still be linked: %p ***\n", ourISPdev->vin_dev);
-
-    /* Initialize any missing device structure fields */
-    if (!ourISPdev->refcnt) {
-        ourISPdev->refcnt = 0;
-    }
-    if (!ourISPdev->is_open) {
-        ourISPdev->is_open = false;
-    }
+    /* Initialize device structure */
+    spin_lock_init(&ourISPdev->lock);
+    ourISPdev->refcnt = 0;
+    ourISPdev->is_open = false;
 
     /* Initialize frame generation work queue */
     INIT_DELAYED_WORK(&vic_frame_work, vic_frame_work_function);
@@ -5415,8 +5410,9 @@ err_cleanup_base:
     platform_device_unregister(&tx_isp_platform_device);
     
 err_free_dev:
-    kfree(ourISPdev);
-    ourISPdev = NULL;
+    /* CRITICAL FIX: Don't free ourISPdev here - it's allocated by probe function */
+    /* The probe function will handle cleanup of its own allocation */
+    pr_err("*** tx_isp_init FAILED - ourISPdev allocation managed by probe function ***\n");
     return ret;
 }
 
