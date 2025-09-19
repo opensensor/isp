@@ -698,6 +698,15 @@ void tisp_bcsh_s_hue(uint8_t hue);
 int tisp_s_awb_start(int r_gain, int b_gain);
 int tisp_s_ev_start(int ev_value);
 
+/* Forward declarations for tisp_set_* wrapper functions */
+int tisp_set_brightness(int brightness);
+int tisp_set_contrast(int contrast);
+int tisp_set_saturation(int saturation);
+int tisp_set_bcsh_hue(int hue);
+
+/* Forward declaration for isp_printf function */
+int isp_printf(int level, const char *format, ...);
+
 /* sensor_init - EXACT Binary Ninja implementation - Sets up sensor control structure */
 int sensor_init(struct tx_isp_dev *isp_dev)
 {
