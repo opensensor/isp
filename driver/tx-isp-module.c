@@ -7791,8 +7791,9 @@ static long vic_core_ops_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *a
 
         case 0x800003: /* VIC reset */
             if (vic_dev->vic_regs) {
-                *(uint32_t *)((char *)vic_dev->vic_regs + 0x0) = 0x2;
-                *(uint32_t *)((char *)vic_dev->vic_regs + 0x0) = 0x0;
+                /* SAFE: Use proper register access */
+                writel(0x2, vic_dev->vic_regs + 0x0);
+                writel(0x0, vic_dev->vic_regs + 0x0);
             }
             return 0;
 
