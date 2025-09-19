@@ -282,6 +282,8 @@ void tisp_netlink_exit(void)
 }
 static int tisp_netlink_event_set_cb(void *cb) { return 0; }
 static int tisp_param_operate_process(void) { return 0; }
+int tisp_event_push(void *event);
+
 /* tisp_code_create_tuning_node, tisp_code_destroy_tuning_node - removed stubs, implemented below */
 /**
  * tisp_event_exit - EXACT Binary Ninja MCP implementation
@@ -521,8 +523,6 @@ static uint32_t data_d951c = 0;
 static uint32_t data_d9520 = 0;
 static uint32_t data_d9524 = 0;
 static uint32_t data_d9528 = 0;
-
-int tisp_event_push(void *event);
 
 /* Forward declarations for tiziano functions */
 int tisp_wdr_expTime_updata(void);
