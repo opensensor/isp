@@ -2631,7 +2631,7 @@ int tisp_channel_stop(uint32_t channel_id)
     system_reg_write(channel_base + 0x98, 0);
     
     /* Disable channel in master control register */
-    reg_val = isp_read32(0x9804);
+    reg_val = system_reg_read(0x9804);  /* Use system_reg_read from reference driver */
     reg_val &= ~(1 << channel_id);
     system_reg_write(0x9804, reg_val);
     
