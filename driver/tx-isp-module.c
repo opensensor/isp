@@ -4991,13 +4991,8 @@ static int tx_isp_init(void)
     /* Each subdevice will manage its own memory region per reference driver */
     pr_info("*** REFERENCE DRIVER: Using individual subdevice platform devices only ***\n");
 
-    /* Step 3: Register platform driver (matches reference) */
-    ret = platform_driver_register(&tx_isp_driver);
-    if (ret != 0) {
-        pr_err("Failed to register platform driver: %d\n", ret);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
-    }
+    /* REMOVED: Main ISP platform driver - reference driver only uses individual subdevice drivers */
+    /* Individual subdevice drivers will be registered separately per reference driver */
 
     /* Step 4: Register misc device to create /dev/tx-isp */
     ret = misc_register(&tx_isp_miscdev);
