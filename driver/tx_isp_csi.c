@@ -785,25 +785,16 @@ int tx_isp_csi_probe(struct platform_device *pdev)
         return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
     }
 
-    /* Binary Ninja: private_request_mem_region(0x10022000, 0x1000, "Can not support this frame mode!!!\n") */
-    mem_resource = private_request_mem_region(0x10022000, 0x1000, "Can not support this frame mode!!!\n");
-    if (!mem_resource) {
+    /* FIXED: Use memory mapping from tx_isp_subdev_init instead of duplicate mapping */
+    if (csi_dev->sd.regs) {
+        csi_dev->csi_regs = csi_dev->sd.regs;
+        pr_info("*** CSI PROBE: Using register mapping from tx_isp_subdev_init: %p ***\n", csi_dev->csi_regs);
+    } else {
         /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe") */
         isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe");
         tx_isp_subdev_deinit(&csi_dev->sd);
         private_kfree(csi_dev);
         return -EBUSY;  /* Binary Ninja returns 0xfffffff0 */
-    }
-
-    /* Binary Ninja: private_ioremap($a0, $v0_3[1] + 1 - $a0) */
-    csi_dev->csi_regs = private_ioremap(mem_resource->start, resource_size(mem_resource));
-    if (!csi_dev->csi_regs) {
-        /* Binary Ninja: isp_printf(2, "VIC_CTRL : %08x\n", "tx_isp_csi_probe") */
-        isp_printf(2, "VIC_CTRL : %08x\n", "tx_isp_csi_probe");
-        private_release_mem_region(mem_resource->start, resource_size(mem_resource));
-        tx_isp_subdev_deinit(&csi_dev->sd);
-        private_kfree(csi_dev);
-        return -ENOMEM;  /* Binary Ninja returns 0xfffffffa */
     }
 
     /* Binary Ninja: *($v0 + 0x34) = &isp_csi_fops */
