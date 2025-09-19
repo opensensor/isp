@@ -413,15 +413,9 @@ struct platform_device tx_isp_csi_platform_device = {
     },
 };
 
-/* VIN platform device resources - MATCHES STOCK DRIVER EXACTLY */
+/* VIN platform device resources - VIN is a logical device, no memory region needed */
 static struct resource tx_isp_vin_resources[] = {
     [0] = {
-        .start = 0x13300000,           /* T31 VIN base address - MATCHES STOCK isp-m0 */
-        .end   = 0x1330FFFF,           /* T31 VIN end address */
-        .flags = IORESOURCE_MEM,
-        .name = "isp-device",          /* EXACT name from stock driver */
-    },
-    [1] = {
         .start = 37,                   /* T31 VIN IRQ 37 - MATCHES STOCK DRIVER isp-m0 */
         .end   = 37,
         .flags = IORESOURCE_IRQ,
