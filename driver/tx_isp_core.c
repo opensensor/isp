@@ -964,7 +964,7 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
     return IRQ_HANDLED; /* Convert to standard Linux return value */
 }
 
-/* ispcore_interrupt_service_routine - EXACT Binary Ninja implementation */
+/* ispcore_interrupt_service_routine - EXACT Binary Ninja implementation with struct member access */
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
@@ -975,19 +975,24 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     u32 error_check;
     int i;
 
-    if (!isp_dev || !isp_dev->vic_regs) {
+    if (!isp_dev) {
         pr_info("ispcore_interrupt_service_routine: Invalid device\n");
         return IRQ_NONE;
     }
 
+    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
+    /* SAFE: Use proper struct member access instead of raw offset +0xd4 */
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     if (!vic_dev) {
         return IRQ_NONE;
     }
 
-    /* Binary Ninja: void* $v0 = *(arg1 + 0xb8); void* $s0 = *(arg1 + 0xd4) */
+    /* Binary Ninja: void* $v0 = *(arg1 + 0xb8) */
+    /* SAFE: Use proper struct member access instead of raw offset +0xb8 */
     vic_regs = vic_dev->vic_regs;
-    isp_regs = vic_regs - 0x9a00;  /* ISP base from VIC base */
+    if (!vic_regs) {
+        return IRQ_NONE;
+    }
 
     /* *** CRITICAL: Read from ISP core interrupt status registers for MIPI *** */
     /* Prefer direct core_regs mapping; fall back to VIC-relative if needed */
