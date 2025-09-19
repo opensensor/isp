@@ -12,30 +12,17 @@ struct tx_isp_subdev;
 struct tx_isp_config;
 struct tx_isp_sensor_attribute;
 
-/* VIC Constants */
-#define VIC_MAX_CHAN        2
+/* VIC Constants - REMOVED: Use VIC_MAX_CHAN=6 from tx-isp-device.h to match Binary Ninja reference */
 
-/* VIC Register Definitions */
-#define VIC_CTRL            0x00
-#define VIC_STATUS          0x04
-#define VIC_BUFFER_ADDR     0x08
-#define VIC_FRAME_SIZE      0x0C
-#define VIC_INT_STATUS      0x10
-#define VIC_INT_MASK        0x14
+/* REMOVED: VIC Register Definitions - Use definitions from tx-isp-device.h instead */
+/* The Binary Ninja reference shows VIC registers use larger offsets like 0x300, 0x380, etc. */
+/* Small offsets like 0x00, 0x04 don't match the actual hardware usage */
 
-/* VIC Control Register Bits */
-#define VIC_CTRL_EN         BIT(0)
-#define VIC_CTRL_START      BIT(1)
-#define VIC_CTRL_STOP       BIT(2)
-#define VIC_CTRL_RST        BIT(3)
+/* REMOVED: VIC Control Register Bits - Use definitions from tx-isp-device.h instead */
+/* The bit definitions in tx-isp-device.h match the Binary Ninja reference driver */
 
-/* VIC Status Register Bits */
-#define STATUS_BUSY         BIT(0)
-#define STATUS_IDLE         BIT(1)
-
-/* VIC Interrupt Bits */
-#define INT_FRAME_DONE      BIT(0)
-#define INT_ERROR           BIT(1)
+/* REMOVED: VIC Status and Interrupt Bits - Use definitions from tx-isp-device.h instead */
+/* The bit definitions in tx-isp-device.h match the Binary Ninja reference driver */
 
 extern uint32_t vic_start_ok;  /* Global VIC interrupt enable flag declaration */
 
@@ -108,8 +95,10 @@ struct tx_isp_vic_device {
     u32 stride;                                 /* Line stride */
     uint32_t pixel_format;                      /* Pixel format */
     
-    /* REMOVED: VIC no longer maintains its own sensor attributes */
-    /* VIC will use the real sensor attributes from ourISPdev->sensor->video.attr */
+    /* COMPATIBILITY: Add sensor_attr member for external SDK compatibility */
+    /* NOTE: VIC should use real sensor attributes from ourISPdev->sensor->video.attr */
+    /* This member is kept for compatibility with external SDK code that expects it */
+    struct tx_isp_sensor_attribute sensor_attr __attribute__((aligned(4)));
     
     /* CRITICAL: Synchronization primitives with proper alignment */
     spinlock_t lock __attribute__((aligned(4)));                    /* General spinlock */

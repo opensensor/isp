@@ -129,11 +129,8 @@ extern struct tx_isp_subdev_ops vin_subdev_ops;
 #define VIN_DMA_ADDR         0x18    /* VIN DMA Address Register */
 #define VIN_DMA_SIZE         0x1C    /* VIN DMA Size Register */
 
-/* VIN Control Register Bits */
-#define VIN_CTRL_EN          BIT(0)  /* VIN Enable */
-#define VIN_CTRL_START       BIT(1)  /* VIN Start */
-#define VIN_CTRL_STOP        BIT(2)  /* VIN Stop */
-#define VIN_CTRL_RST         BIT(3)  /* VIN Reset */
+/* REMOVED: VIN Control Register Bits - Use definitions from tx-isp-device.h instead */
+/* The bit definitions in tx-isp-device.h match the Binary Ninja reference driver */
 
 /* VIN Status Register Bits */
 #define STATUS_BUSY          BIT(0)  /* VIN Busy Status */
