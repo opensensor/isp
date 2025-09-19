@@ -8,6 +8,10 @@
 #include "../include/tx_isp_core.h"
 #include "../include/tx_isp_vic.h"
 #include "../include/tx_isp_sysfs.h"
+#include "../include/tx_isp_fs.h"
+
+/* External reference to global ISP device */
+extern struct tx_isp_dev *ourISPdev;
 
 /* Function declarations for Binary Ninja compatibility */
 int tx_isp_module_init(struct platform_device *pdev, struct tx_isp_subdev *sd);
