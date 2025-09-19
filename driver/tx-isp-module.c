@@ -719,9 +719,9 @@ static int sensor_get_lines_per_second(void);
 
 /* BCSH and tuning function declarations */
 int tisp_bcsh_brightness(int brightness);
-int tisp_bcsh_contrast(uint8_t contrast);
-int tisp_bcsh_saturation(uint8_t saturation);
-int tisp_bcsh_s_hue(uint8_t hue);
+void tisp_bcsh_contrast(uint8_t contrast);
+void tisp_bcsh_saturation(uint8_t saturation);
+void tisp_bcsh_s_hue(uint8_t hue);
 int tisp_s_awb_start(int r_gain, int b_gain);
 int tisp_s_ev_start(int ev_value);
 
