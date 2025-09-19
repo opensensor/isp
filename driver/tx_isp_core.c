@@ -3438,15 +3438,8 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 return -ENOMEM;
             }
 
-                /* CRITICAL: Create VIN device AFTER memory mappings are available */
-                pr_info("*** tx_isp_core_probe: Creating VIN device (after memory mappings) ***\n");
-                result = tx_isp_create_vin_device(isp_dev);
-                if (result != 0) {
-                    pr_err("*** tx_isp_core_probe: Failed to create VIN device: %d ***\n", result);
-                    return result;
-                } else {
-                    pr_info("*** tx_isp_core_probe: VIN device created successfully ***\n");
-                }
+                /* REMOVED: VIN device creation - will be handled by subdevice probe per reference driver */
+                pr_info("*** tx_isp_core_probe: VIN device creation deferred to subdevice probe ***\n");
 
                 /* CRITICAL: Initialize frame sync work queue for sensor I2C communication */
                 pr_info("*** tx_isp_core_probe: About to create frame sync workqueue ***\n");
